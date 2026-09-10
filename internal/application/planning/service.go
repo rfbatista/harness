@@ -1,0 +1,125 @@
+// Package planning provides ticket and document use-cases: CRUD plus the
+// many-to-many link between tickets and documents. It is deliberately kept
+// separate from the blueprint service so the planning domain stays isolated.
+package planning
+
+import (
+	"operators-mcp/internal/application/ports"
+	"operators-mcp/internal/domain"
+)
+
+// Service implements ticket/document use-cases over the outbound ports.
+type Service struct {
+	tickets   ports.TicketRepository
+	documents ports.DocumentRepository
+	projects  ports.ProjectRepository
+}
+
+// NewService returns a planning service. projects is used to validate that
+// tickets/documents reference an existing project and share a project on link.
+func NewService(tickets ports.TicketRepository, documents ports.DocumentRepository, projects ports.ProjectRepository) *Service {
+	return &Service{tickets: tickets, documents: documents, projects: projects}
+}
+
+func validTicketStatus(s domain.TicketStatus) bool {
+	switch s {
+	case domain.TicketStatusBacklog, domain.TicketStatusTodo, domain.TicketStatusInProgress, domain.TicketStatusReview, domain.TicketStatusDone:
+		return true
+	}
+	return false
+}
+
+// --- Tickets ---
+
+func (s *Service) CreateTicket(projectID, title, description string, status domain.TicketStatus) (*domain.Ticket, error) {
+	if title == "" {
+		return nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "title is required"}
+	}
+	if s.projects.Get(projectID) == nil {
+		return nil, &domain.StructuredError{Code: "PROJECT_NOT_FOUND", Message: "project not found"}
+	}
+	if status == "" {
+		status = domain.TicketStatusBacklog
+	}
+	if !validTicketStatus(status) {
+		return nil, &domain.StructuredError{Code: "INVALID_STATUS", Message: "invalid ticket status"}
+	}
+	return s.tickets.Create(projectID, title, description, status)
+}
+
+func (s *Service) GetTicket(id string) *domain.Ticket { return s.tickets.Get(id) }
+
+func (s *Service) ListTickets(projectID string) []*domain.Ticket {
+	return s.tickets.ListByProject(projectID)
+}
+
+func (s *Service) UpdateTicket(id, title, description string, status domain.TicketStatus) (*domain.Ticket, error) {
+	if title == "" {
+		return nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "title is required"}
+	}
+	if status == "" {
+		existing := s.tickets.Get(id)
+		if existing == nil {
+			return nil, &domain.StructuredError{Code: "TICKET_NOT_FOUND", Message: "ticket not found"}
+		}
+		status = existing.Status
+	}
+	if !validTicketStatus(status) {
+		return nil, &domain.StructuredError{Code: "INVALID_STATUS", Message: "invalid ticket status"}
+	}
+	return s.tickets.Update(id, title, description, status)
+}
+
+func (s *Service) DeleteTicket(id string) error { return s.tickets.Delete(id) }
+
+// --- Documents ---
+
+func (s *Service) CreateDocument(projectID, title, content string) (*domain.Document, error) {
+	if title == "" {
+		return nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "title is required"}
+	}
+	if s.projects.Get(projectID) == nil {
+		return nil, &domain.StructuredError{Code: "PROJECT_NOT_FOUND", Message: "project not found"}
+	}
+	return s.documents.Create(projectID, title, content)
+}
+
+func (s *Service) GetDocument(id string) *domain.Document { return s.documents.Get(id) }
+
+func (s *Service) ListDocuments(projectID string) []*domain.Document {
+	return s.documents.ListByProject(projectID)
+}
+
+func (s *Service) UpdateDocument(id, title, content string) (*domain.Document, error) {
+	if title == "" {
+		return nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "title is required"}
+	}
+	return s.documents.Update(id, title, content)
+}
+
+func (s *Service) DeleteDocument(id string) error { return s.documents.Delete(id) }
+
+// --- Links ---
+
+func (s *Service) LinkDocument(ticketID, documentID string) error {
+	tk := s.tickets.Get(ticketID)
+	if tk == nil {
+		return &domain.StructuredError{Code: "TICKET_NOT_FOUND", Message: "ticket not found"}
+	}
+	doc := s.documents.Get(documentID)
+	if doc == nil {
+		return &domain.StructuredError{Code: "DOCUMENT_NOT_FOUND", Message: "document not found"}
+	}
+	if tk.ProjectID != doc.ProjectID {
+		return &domain.StructuredError{Code: "CROSS_PROJECT_ACCESS", Message: "ticket and document belong to different projects"}
+	}
+	return s.documents.Link(ticketID, documentID)
+}
+
+func (s *Service) UnlinkDocument(ticketID, documentID string) error {
+	return s.documents.Unlink(ticketID, documentID)
+}
+
+func (s *Service) ListTicketDocuments(ticketID string) []*domain.Document {
+	return s.documents.ListByTicket(ticketID)
+}

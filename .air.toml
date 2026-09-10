@@ -1,0 +1,63 @@
+# Air: rebuild and restart the Go server on source changes.
+# Run with: make air
+# Requires: go install github.com/air-verse/air@latest
+#
+# Loads configuration from .env when started via `make air` (Makefile exports it).
+
+root = "."
+tmp_dir = "tmp"
+
+[build]
+pre_cmd = ["./scripts/dev/kill-stale-api.sh"]
+cmd = "go build -o ./tmp/main ./cmd/server"
+entrypoint = "./scripts/dev/air-entrypoint.sh"
+args_bin = []
+include_ext = ["go", "mod", "sum", "toml"]
+include_dir = ["cmd", "internal"]
+exclude_dir = [
+  "tmp",
+  "vendor",
+  "bin",
+  "build",
+  "web",
+  "web/node_modules",
+  "web/dist",
+  "lib",
+  ".dart_tool",
+  "android",
+  "ios",
+  "macos",
+  "linux",
+  "windows",
+  "internal/adapter/in/ui/static",
+]
+exclude_file = []
+exclude_regex = []
+exclude_unchanged = true
+follow_symlink = false
+log = "tmp/build-errors.log"
+poll = false
+rerun = false
+rerun_delay = 500
+send_interrupt = true
+kill_delay = "3s"
+stop_on_error = false
+delay = 800
+
+[color]
+app = ""
+build = "yellow"
+main = "magenta"
+runner = "green"
+watcher = "cyan"
+
+[log]
+main_only = false
+time = false
+
+[misc]
+clean_on_exit = true
+
+[screen]
+clear_on_rebuild = false
+keep_scroll = true

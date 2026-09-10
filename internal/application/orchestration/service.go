@@ -1,0 +1,796 @@
+package orchestration
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"log/slog"
+	"regexp"
+	"sort"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/rfbatista/llmkit"
+	"github.com/rfbatista/llmkit/approval"
+	"github.com/rfbatista/llmkit/claude"
+
+	"operators-mcp/internal/application/ports"
+	"operators-mcp/internal/domain"
+)
+
+// configResolver is the slice of blueprint.Service the orchestration needs.
+// *blueprint.Service satisfies it.
+type configResolver interface {
+	GetProject(id string) *domain.Project
+	GetRepository(id string) *domain.Repository
+	GetAgent(id string) *domain.Agent
+	ResolveAgentRelations(a *domain.Agent)
+	ListMCPServers() []*domain.MCPServer
+	GetZone(id string) *domain.Zone
+}
+
+// ticketResolver is the slice of the planning ticket store the orchestration
+// needs to validate spawn-into-ticket requests. ports.TicketRepository satisfies it.
+type ticketResolver interface {
+	Get(id string) *domain.Ticket
+}
+
+// workspaceProvisioner is the slice of workspaces.Service the orchestration
+// needs to give each session an isolated git worktree. *workspaces.Service
+// satisfies it.
+type workspaceProvisioner interface {
+	Create(repositoryID, name, branch, baseRef string) (*domain.Workspace, error)
+	Delete(id string) error
+	// Discard is Start's rollback: unlike Delete it also removes the branch,
+	// which is safe here (and only here) because a just-provisioned workspace's
+	// branch is guaranteed to hold zero commits.
+	Discard(id string) error
+}
+
+type StartRequest struct {
+	ProjectID     string   `json:"project_id"`
+	RepositoryID  string   `json:"repository_id,omitempty"`
+	AgentID       string   `json:"agent_id"`
+	ZoneID        string   `json:"zone_id"`
+	TicketID      string   `json:"ticket_id,omitempty"`
+	Task          string   `json:"task"`
+	ModelOverride string   `json:"model"`
+	AllowedTools  []string `json:"allowed_tools"`
+	AutoAccept    string   `json:"auto_accept"` // "off" | "edits" | "all"
+	// BaseBranch is the ref the session's branch is cut from; empty means HEAD.
+	BaseBranch string `json:"base_branch,omitempty"`
+	// Branch is the branch created for the session; empty derives one from Task.
+	Branch string `json:"branch,omitempty"`
+}
+
+type Service struct {
+	runtime    llmkit.Manager
+	broker     *approval.Broker
+	hub        *Hub
+	sessions   ports.SessionRepository
+	bp         configResolver
+	tickets    ticketResolver
+	workspaces workspaceProvisioner
+
+	DefaultEnv []string // test-only: extra env for spawned sessions
+
+	// TaskServerURL returns the per-session task MCP endpoint for a session id.
+	// Injected, so the application layer does not need to know the route.
+	TaskServerURL func(sessionID string) string
+
+	mu       sync.Mutex
+	seq      map[string]int64
+	cleanups map[string]func()
+	// busy marks sessions with a turn in flight: set when a user message is
+	// written to the CLI, cleared by the "result" line that ends the turn. It
+	// exists so a late "system"/init — the CLI emits it after initializing,
+	// which is routinely *after* the initial task was already sent — cannot
+	// report the session as idle while Claude is working on that first turn.
+	busy map[string]bool
+}
+
+func NewService(runtime llmkit.Manager, broker *approval.Broker, hub *Hub, sessions ports.SessionRepository, bp configResolver, tickets ticketResolver, workspaces workspaceProvisioner) *Service {
+	s := &Service{
+		runtime: runtime, broker: broker, hub: hub, sessions: sessions, bp: bp, tickets: tickets,
+		workspaces: workspaces,
+		seq:        map[string]int64{}, cleanups: map[string]func(){}, busy: map[string]bool{},
+	}
+	go s.approvalLoop()
+	go s.expiryLoop()
+	return s
+}
+
+func (s *Service) Start(ctx context.Context, req StartRequest) (*domain.Session, error) {
+	if req.ProjectID == "" {
+		return nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "project_id is required"}
+	}
+	if req.Task == "" {
+		return nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "task is required"}
+	}
+	proj := s.bp.GetProject(req.ProjectID)
+	if proj == nil {
+		return nil, &domain.StructuredError{Code: "PROJECT_NOT_FOUND", Message: "project not found"}
+	}
+
+	var ticket *domain.Ticket
+	if req.TicketID != "" {
+		if s.tickets == nil {
+			return nil, &domain.StructuredError{Code: "TICKET_NOT_FOUND", Message: "tickets are not available"}
+		}
+		tk := s.tickets.Get(req.TicketID)
+		if tk == nil {
+			return nil, &domain.StructuredError{Code: "TICKET_NOT_FOUND", Message: "ticket not found"}
+		}
+		if tk.ProjectID != req.ProjectID {
+			return nil, &domain.StructuredError{Code: "CROSS_PROJECT_ACCESS", Message: "ticket does not belong to project"}
+		}
+		ticket = tk
+	}
+
+	if req.RepositoryID == "" {
+		return nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "repository_id is required"}
+	}
+	repo := s.bp.GetRepository(req.RepositoryID)
+	if repo == nil {
+		return nil, &domain.StructuredError{Code: "REPOSITORY_NOT_FOUND", Message: "repository not found"}
+	}
+	if repo.ProjectID != req.ProjectID {
+		return nil, &domain.StructuredError{Code: "CROSS_PROJECT_ACCESS", Message: "repository does not belong to project"}
+	}
+	if repo.RootDir == "" {
+		return nil, &domain.StructuredError{Code: "INVALID_ROOT", Message: "repository has no root_dir"}
+	}
+	if s.workspaces == nil {
+		return nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "workspaces are not available"}
+	}
+
+	branch := strings.TrimSpace(req.Branch)
+	if branch == "" {
+		branch = defaultBranchName(req.Task)
+	}
+	if err := validateBranchName(branch); err != nil {
+		return nil, err
+	}
+
+	// Agent and skill resolution happen before provisioning: git worktree add
+	// is slow and side-effecting, so a bad agent_id or a broken skill must
+	// fail cheaply instead of creating (and then rolling back) a worktree.
+	var cleanup func()
+	var agent *domain.Agent
+	appendSystem := ""
+	var skillDirs []string
+	if req.AgentID != "" {
+		agent = s.bp.GetAgent(req.AgentID)
+		if agent == nil {
+			return nil, &domain.StructuredError{Code: "AGENT_NOT_FOUND", Message: "agent not found"}
+		}
+		s.bp.ResolveAgentRelations(agent)
+		if agent.Prompt != nil {
+			appendSystem = agent.Prompt.Content
+		}
+		if len(agent.Skills) > 0 {
+			dirs, c, err := resolveSkillDirs(agent.Skills)
+			if err != nil {
+				return nil, fmt.Errorf("resolve skills: %w", err)
+			}
+			if len(dirs) > 0 {
+				skillDirs = dirs
+				cleanup = c
+			}
+		}
+	}
+
+	ws, err := s.workspaces.Create(req.RepositoryID, domain.Slug(branch), branch, req.BaseBranch)
+	if err != nil {
+		if cleanup != nil {
+			cleanup()
+		}
+		return nil, err
+	}
+	// Every failure below this line leaves a worktree and branch behind unless
+	// they are removed, so the rollback is a defer cleared on the success path.
+	// Discard (not Delete): the branch is seconds old and provably has no
+	// commits, so removing it here does not risk losing work, and keeping it
+	// would poison a retry with a stale BRANCH_EXISTS.
+	provisioned := ws
+	defer func() {
+		if provisioned != nil {
+			_ = s.workspaces.Discard(provisioned.ID)
+		}
+	}()
+	workingDir := ws.Path
+
+	permission := parseAutoAccept(req.AutoAccept)
+	// The id is minted here, before applyTaskContext, because the per-session
+	// task MCP server URL is built from it and has to be in the config the
+	// session is spawned with.
+	cfg := llmkit.SessionConfig{
+		ID:           llmkit.NewSessionID(),
+		WorkingDir:   workingDir,
+		Model:        req.ModelOverride,
+		AllowedTools: req.AllowedTools,
+		Permission:   permission,
+		Env:          s.DefaultEnv,
+		AppendSystem: appendSystem,
+		Driver:       claude.Config{SkillDirs: skillDirs},
+	}
+
+	// After the agent's own prompt, so the task brief lands at the end of the
+	// system prompt rather than being overwritten by it.
+	var taskURL string
+	if s.TaskServerURL != nil {
+		taskURL = s.TaskServerURL(cfg.ID)
+	}
+	applyTaskContext(&cfg, ticket, taskURL)
+
+	mcpServers := resolveAttachedMCPServers(agent, s.bp.ListMCPServers())
+
+	for _, m := range mcpServers {
+		cfg.MCPServers = append(cfg.MCPServers, llmkit.MCPServerSpec{
+			Name:      domain.Slug(m.Name),
+			Transport: m.Transport,
+			Command:   m.Command,
+			URL:       m.URL,
+			Args:      m.Args,
+			Env:       m.Env,
+			Headers:   m.Headers,
+		})
+	}
+
+	if req.ZoneID != "" {
+		if z := s.bp.GetZone(req.ZoneID); z != nil {
+			cfg.AddDirs = append(cfg.AddDirs, z.ExplicitPaths...)
+		}
+	}
+
+	sess, err := s.runtime.Start(ctx, cfg)
+	if err != nil {
+		if cleanup != nil {
+			cleanup()
+		}
+		// The library reports a missing agent binary as a typed error; the app
+		// owns its own error codes, so it is translated here into the one the
+		// client already branches on.
+		//
+		// The message is rebuilt from the error's exported fields rather than
+		// taken from its Error() string: the client renders it verbatim to the
+		// user, so it must not leak the library's "llmkit:" namespace, and it
+		// must read identically to claudetext's message for the same condition.
+		var missing *llmkit.BinNotFoundError
+		if errors.As(err, &missing) {
+			return nil, &domain.StructuredError{
+				Code:    "CLAUDE_CLI_NOT_FOUND",
+				Message: fmt.Sprintf("Claude CLI not found (%q). Install it with: %s", missing.Bin, missing.InstallHint),
+			}
+		}
+		return nil, fmt.Errorf("start session: %w", err)
+	}
+	if cleanup != nil {
+		s.mu.Lock()
+		s.cleanups[sess.ID()] = cleanup
+		s.mu.Unlock()
+	}
+
+	// A session started in bypass mode is already running unattended, so it
+	// starts with the gate open — recording anything else would have the UI
+	// offer to "enable" what is already on.
+	autoRun := permission == llmkit.PermissionBypass
+	if autoRun {
+		s.broker.SetAutoRun(sess.ID(), true)
+	}
+
+	created, err := s.sessions.Create(&domain.Session{
+		ID:           sess.ID(),
+		ProjectID:    req.ProjectID,
+		RepositoryID: req.RepositoryID,
+		WorkspaceID:  ws.ID,
+		Branch:       branch,
+		AgentID:      req.AgentID,
+		ZoneID:       req.ZoneID,
+		TicketID:     req.TicketID,
+		Task:         req.Task,
+		WorkingDir:   workingDir,
+		Model:        req.ModelOverride,
+		Status:       domain.SessionStarting,
+		AutoRun:      autoRun,
+	})
+	if err != nil {
+		_ = sess.Stop()
+		s.runCleanup(sess.ID())
+		return nil, fmt.Errorf("persist session: %w", err)
+	}
+	provisioned = nil
+
+	go s.pump(sess)
+
+	// Through Send, not sess.Send: the initial task is the session's first turn
+	// like any other, so it must mark the session busy (otherwise the CLI's
+	// "system"/init line, which lands after this, would report idle mid-turn)
+	// and be recorded as a user_message so the timeline opens with what was
+	// actually asked.
+	if err := s.Send(ctx, sess.ID(), req.Task); err != nil {
+		slog.Error("send initial task failed", "session", sess.ID(), "err", err)
+	}
+	return created, nil
+}
+
+func (s *Service) pump(sess llmkit.Session) {
+	id := sess.ID()
+	for ce := range sess.Events() {
+		ev, status, hasStatus := fromAgentEvent(ce)
+		ev.SessionID = id
+		if st, ok := s.turnBoundary(id, ce); ok {
+			status, hasStatus = st, true
+		}
+
+		logSessionEvent(id, ev)
+
+		if ev.Type == "output_delta" {
+			s.publishDelta(id, ev)
+			continue
+		}
+
+		if cur := s.sessions.Get(id); cur != nil {
+			cost, in, out, last, pend := cur.CostUSD, cur.InputTokens, cur.OutputTokens, cur.LastAction, cur.PendingApprovals
+			switch ev.Type {
+			case "output":
+				if ev.Text != "" {
+					last = truncate(ev.Text, 200)
+				}
+			case "tool_use":
+				last = "tool: " + ev.ToolName
+			case "usage":
+				cost += ev.CostUSD
+				if ev.Usage != nil {
+					in += ev.Usage.InputTokens
+					out += ev.Usage.OutputTokens
+				}
+			}
+			// A dead session has no outstanding decisions: broker.DenyAll has
+			// answered whatever was pending, and a lingering count would leave
+			// the session owing the user a decision forever.
+			if hasStatus && status.IsTerminal() {
+				pend = 0
+			}
+			_ = s.sessions.UpdateMetrics(id, cost, in, out, last, pend)
+		}
+		if hasStatus {
+			_ = s.sessions.UpdateStatus(id, status)
+			ev.Status = status
+		}
+		s.publish(id, ev)
+	}
+	s.runCleanup(id)
+}
+
+// turnBoundary resolves the two statuses that depend on whether a turn is in
+// flight, and keeps the busy flag in step. A "result" line ends the turn and
+// hands control back to the user (idle); a "system"/init line means the CLI is
+// ready, but only reports idle when no turn is already running.
+func (s *Service) turnBoundary(id string, ce llmkit.Event) (domain.SessionStatus, bool) {
+	switch {
+	case ce.Type == llmkit.EventResult:
+		s.setBusy(id, false)
+		return domain.SessionIdle, true
+	case ce.Type == llmkit.EventSystem && ce.Subtype == "init":
+		if s.isBusy(id) {
+			return "", false
+		}
+		return domain.SessionIdle, true
+	default:
+		return "", false
+	}
+}
+
+func (s *Service) setBusy(id string, busy bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if busy {
+		s.busy[id] = true
+		return
+	}
+	delete(s.busy, id)
+}
+
+func (s *Service) isBusy(id string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.busy[id]
+}
+
+// logSessionEvent emits one structured slog line per Claude event. Streaming
+// token deltas are high-volume and logged at Debug; each meaningful message
+// (assistant text, tool use/result, usage, lifecycle) is logged at Info, and
+// errors at Error. Text is truncated so logs stay readable.
+func logSessionEvent(id string, ev SessionEvent) {
+	switch ev.Type {
+	case "output_delta":
+		slog.Debug("claude delta", "session", id, "kind", ev.DeltaKind, "index", ev.Index, "len", len(ev.Text))
+	case "output":
+		slog.Info("claude message", "session", id, "type", ev.Type, "text", truncate(ev.Text, 200))
+	case "tool_use":
+		slog.Info("claude message", "session", id, "type", ev.Type, "tool", ev.ToolName)
+	case "tool_result":
+		slog.Info("claude message", "session", id, "type", ev.Type, "len", len(ev.Text))
+	case "usage":
+		var in, out int
+		if ev.Usage != nil {
+			in, out = ev.Usage.InputTokens, ev.Usage.OutputTokens
+		}
+		slog.Info("claude message", "session", id, "type", ev.Type, "cost_usd", ev.CostUSD, "in", in, "out", out)
+	case "error":
+		slog.Error("claude message", "session", id, "type", ev.Type, "text", truncate(ev.Text, 200))
+	default:
+		slog.Info("claude message", "session", id, "type", ev.Type)
+	}
+}
+
+func (s *Service) approvalLoop() {
+	for req := range s.broker.Requests() {
+		s.handleApproval(req)
+	}
+}
+
+func (s *Service) expiryLoop() {
+	for e := range s.broker.Expiries() {
+		s.handleExpiry(e)
+	}
+}
+
+// handleExpiry retracts an approval nobody can answer any more. It is
+// handleApproval in reverse: the count goes back down, the session leaves
+// waiting_approval, and the timeline records that the request died undecided
+// rather than leaving a decision surface pointing at a dead request.
+//
+// The status goes back to thinking, not idle: the CLI got a tool error and
+// keeps working. A session that actually died gets the truth from its own exit
+// event moments later.
+func (s *Service) handleExpiry(e approval.Expiry) {
+	s.releaseApproval(e.SessionID)
+	s.publish(e.SessionID, SessionEvent{
+		Type:     "approval_expired",
+		Status:   domain.SessionThinking,
+		ToolName: e.ToolName,
+		Text:     e.Reason,
+		Approval: &ApprovalInfo{ReqID: e.ReqID, ToolName: e.ToolName},
+		At:       time.Now(),
+	})
+}
+
+func (s *Service) handleApproval(req approval.Request) {
+	_ = s.sessions.UpdateStatus(req.SessionID, domain.SessionWaitingApproval)
+	if cur := s.sessions.Get(req.SessionID); cur != nil {
+		_ = s.sessions.UpdateMetrics(req.SessionID, cur.CostUSD, cur.InputTokens, cur.OutputTokens, cur.LastAction, cur.PendingApprovals+1)
+	}
+	s.publish(req.SessionID, SessionEvent{
+		Type:     "approval_needed",
+		Status:   domain.SessionWaitingApproval,
+		ToolName: req.ToolName,
+		Approval: &ApprovalInfo{
+			ReqID:     req.ID,
+			ToolName:  req.ToolName,
+			Input:     req.Input,
+			Questions: ParseQuestions(req.ToolName, req.Input),
+		},
+		At: time.Now(),
+	})
+}
+
+// Send writes one user message into the live CLI process, starting a new turn.
+// The message is published as its own "user_message" event — not as "output",
+// which is Claude's own text — so the timeline can tell the two apart.
+func (s *Service) Send(ctx context.Context, id, text string) error {
+	sess, ok := s.runtime.Get(id)
+	if !ok {
+		return &domain.StructuredError{Code: "SESSION_NOT_FOUND", Message: "session not running"}
+	}
+	if err := sess.Send(ctx, text); err != nil {
+		return err
+	}
+	s.setBusy(id, true)
+	_ = s.sessions.UpdateStatus(id, domain.SessionThinking)
+	s.publish(id, SessionEvent{
+		Type:   "user_message",
+		Status: domain.SessionThinking,
+		Text:   text,
+		At:     time.Now(),
+	})
+	return nil
+}
+
+func (s *Service) Resolve(ctx context.Context, id, reqID string, allow bool, msg string) error {
+	text := "denied"
+	if allow {
+		text = "allowed"
+	}
+	return s.decide(id, reqID, approval.Decision{Allow: allow, Message: msg}, text)
+}
+
+// Answer resolves a pending AskUserQuestion request with the user's selections.
+//
+// It is an allow decision like any other — the difference is what the agent
+// reads back: the answers ride on the tool's updated input rather than the
+// decision itself. Skipping a question is not this method; it is a plain
+// Resolve with allow=false, which is what tells the agent the questions went
+// unanswered.
+func (s *Service) Answer(ctx context.Context, id, reqID string, answers, notes map[string]string) error {
+	if len(answers) == 0 {
+		return &domain.StructuredError{Code: "NO_ANSWERS", Message: "no answers provided"}
+	}
+	d := approval.Decision{Allow: true, Answers: answers, Notes: notes}
+	return s.decide(id, reqID, d, answerSummary(answers))
+}
+
+// SetAutoRun opens or closes the session's permission gate while it runs.
+//
+// Switching it on flushes whatever was already waiting: the user has just said
+// they no longer want to make these decisions, so leaving the agent blocked on
+// one would be an odd reading of the switch they flipped. Each flushed request
+// gets the same bookkeeping a manual decision would — the broker had already
+// published them, so a client is still rendering a decision surface for each.
+//
+// AskUserQuestion is never flushed and never auto-allowed. Auto-run grants
+// permission; it cannot answer a question on the user's behalf.
+func (s *Service) SetAutoRun(ctx context.Context, id string, autoRun bool) error {
+	if s.sessions.Get(id) == nil {
+		return &domain.StructuredError{Code: "SESSION_NOT_FOUND", Message: "session not found"}
+	}
+
+	flushed := s.broker.SetAutoRun(id, autoRun)
+	if err := s.sessions.UpdateAutoRun(id, autoRun); err != nil {
+		return err
+	}
+
+	text := "auto-run disabled"
+	if autoRun {
+		text = "auto-run enabled"
+	}
+	// No Status: the gate is not a lifecycle state, and stamping one here would
+	// make the timeline claim a transition that never happened.
+	s.publish(id, SessionEvent{
+		Type:    "auto_run",
+		Text:    text,
+		AutoRun: &autoRun,
+		At:      time.Now(),
+	})
+
+	for _, req := range flushed {
+		s.releaseApproval(id)
+		s.publish(id, SessionEvent{
+			Type:     "approval_resolved",
+			Status:   domain.SessionThinking,
+			Text:     "auto-approved",
+			ToolName: req.ToolName,
+			Approval: &ApprovalInfo{ReqID: req.ID, ToolName: req.ToolName},
+			At:       time.Now(),
+		})
+	}
+	return nil
+}
+
+// decide delivers one decision to the waiting broker and records it. Shared by
+// Resolve and Answer so the two cannot drift on the bookkeeping that follows a
+// decision — which is what actually unblocks the session.
+func (s *Service) decide(id, reqID string, d approval.Decision, text string) error {
+	if err := s.broker.Resolve(id, reqID, d); err != nil {
+		return &domain.StructuredError{Code: "NO_PENDING_APPROVAL", Message: err.Error()}
+	}
+	s.releaseApproval(id)
+	s.publish(id, SessionEvent{
+		Type:     "approval_resolved",
+		Status:   domain.SessionThinking,
+		Text:     text,
+		Approval: &ApprovalInfo{ReqID: reqID},
+		At:       time.Now(),
+	})
+	return nil
+}
+
+// releaseApproval is the bookkeeping every outstanding approval ends with,
+// whether it was decided or expired: one fewer pending decision, and the
+// session back to working rather than idle — idle would wrongly invite the user
+// to type mid-turn.
+func (s *Service) releaseApproval(id string) {
+	if cur := s.sessions.Get(id); cur != nil {
+		pend := cur.PendingApprovals
+		if pend > 0 {
+			pend--
+		}
+		_ = s.sessions.UpdateMetrics(id, cur.CostUSD, cur.InputTokens, cur.OutputTokens, cur.LastAction, pend)
+	}
+	_ = s.sessions.UpdateStatus(id, domain.SessionThinking)
+}
+
+// answerSummary renders the chosen answers for the resolved timeline row.
+// Sorted by question text because map order is random and the row would
+// otherwise reshuffle between a live event and its replay from the log.
+func answerSummary(answers map[string]string) string {
+	questions := make([]string, 0, len(answers))
+	for q := range answers {
+		questions = append(questions, q)
+	}
+	sort.Strings(questions)
+
+	chosen := make([]string, 0, len(questions))
+	for _, q := range questions {
+		if v := answers[q]; v != "" {
+			chosen = append(chosen, v)
+		}
+	}
+	if len(chosen) == 0 {
+		return "answered"
+	}
+	return "answered: " + strings.Join(chosen, "; ")
+}
+
+func (s *Service) Stop(ctx context.Context, id string) error {
+	s.broker.DenyAll(id)
+	if err := s.runtime.Stop(id); err != nil {
+		return &domain.StructuredError{Code: "SESSION_NOT_FOUND", Message: err.Error()}
+	}
+	return nil
+}
+
+// Delete stops the session's runtime if it is still alive, then removes the
+// session and its event log. Deleting a session that was never running (or
+// already stopped) is fine — only a missing record is an error.
+func (s *Service) Delete(ctx context.Context, id string) error {
+	s.broker.DenyAll(id)
+	if _, ok := s.runtime.Get(id); ok {
+		_ = s.runtime.Stop(id)
+	}
+	s.runCleanup(id)
+
+	// Read the workspace before the row is gone.
+	workspaceID := ""
+	if sess := s.sessions.Get(id); sess != nil {
+		workspaceID = sess.WorkspaceID
+	}
+	if err := s.sessions.Delete(id); err != nil {
+		return err
+	}
+	// A worktree that will not go away must not make the session undeletable:
+	// the workspace row survives and stays retryable through delete_workspace.
+	// The branch is never deleted, so committed work outlives the session.
+	if workspaceID != "" && s.workspaces != nil {
+		if err := s.workspaces.Delete(workspaceID); err != nil {
+			slog.Warn("remove session worktree failed", "session", id, "workspace", workspaceID, "err", err)
+		}
+	}
+	s.mu.Lock()
+	delete(s.seq, id)
+	s.mu.Unlock()
+	return nil
+}
+
+func (s *Service) Subscribe(id string) (<-chan SessionEvent, []SessionEvent, func()) {
+	return s.hub.Subscribe(id)
+}
+
+func (s *Service) History(id string, fromSeq int64) []SessionEvent {
+	stored := s.sessions.ListEvents(id, fromSeq)
+	out := make([]SessionEvent, 0, len(stored))
+	for _, e := range stored {
+		var ev SessionEvent
+		if err := json.Unmarshal(e.Payload, &ev); err == nil {
+			out = append(out, ev)
+		}
+	}
+	return out
+}
+
+func (s *Service) Get(id string) *domain.Session { return s.sessions.Get(id) }
+
+func (s *Service) List(f ports.SessionFilter) []*domain.Session { return s.sessions.List(f) }
+
+func (s *Service) publish(sessionID string, ev SessionEvent) {
+	s.mu.Lock()
+	s.seq[sessionID]++
+	ev.Seq = s.seq[sessionID]
+	s.mu.Unlock()
+
+	ev.SessionID = sessionID
+	if ev.At.IsZero() {
+		ev.At = time.Now()
+	}
+	payload, _ := json.Marshal(ev)
+	_ = s.sessions.AppendEvent(sessionID, ev.Seq, ev.Type, payload)
+	s.hub.Publish(sessionID, ev)
+}
+
+// publishDelta streams an ephemeral token-delta event to live subscribers only:
+// no seq, no persistence, not buffered in the replay ring. The persisted
+// consolidated "output" event remains authoritative.
+func (s *Service) publishDelta(sessionID string, ev SessionEvent) {
+	ev.SessionID = sessionID
+	if ev.At.IsZero() {
+		ev.At = time.Now()
+	}
+	s.hub.PublishEphemeral(sessionID, ev)
+}
+
+func (s *Service) runCleanup(id string) {
+	s.mu.Lock()
+	c := s.cleanups[id]
+	delete(s.cleanups, id)
+	delete(s.busy, id)
+	s.mu.Unlock()
+	if c != nil {
+		c()
+	}
+}
+
+func parseAutoAccept(v string) llmkit.PermissionMode {
+	switch v {
+	case "edits":
+		return llmkit.PermissionAcceptEdits
+	case "all":
+		return llmkit.PermissionBypass
+	default:
+		return llmkit.PermissionAsk
+	}
+}
+
+func truncate(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[:n]
+}
+
+// defaultBranchName derives a session's branch from its task when the caller
+// named none. It carries no random suffix, so two identical spawns collide with
+// BRANCH_EXISTS instead of silently sharing a branch; the UI always sends a
+// suffixed name of its own.
+func defaultBranchName(task string) string {
+	slug := domain.Slug(task)
+	if slug == "" {
+		slug = "session"
+	}
+	if len(slug) > 40 {
+		slug = strings.TrimRight(slug[:40], "-")
+	}
+	return "agent/" + slug
+}
+
+// branchNameChars is every character validateBranchName allows in a branch
+// name: alphanumerics plus the punctuation a hierarchical git ref actually
+// needs. It is not a full git refname validator (see git-check-ref-format);
+// it exists to turn the common typos into a branch-shaped error message
+// instead of a raw git failure or an INVALID_NAME that names "workspace name"
+// — a field the caller never saw.
+var branchNameChars = regexp.MustCompile(`^[A-Za-z0-9._/-]+$`)
+
+// branchNameAlnum requires at least one alphanumeric character: branch names
+// built only from the allowed punctuation (e.g. "___") slugify to "", which
+// would otherwise surface downstream as workspaces.Create's INVALID_NAME
+// "workspace name is required" — again a field the caller never named.
+var branchNameAlnum = regexp.MustCompile(`[A-Za-z0-9]`)
+
+// validateBranchName rejects a branch that would otherwise reach git raw
+// (a 500 wrapping git's own error text) or reach workspaces.Create's slug
+// validation, which speaks in terms of "workspace name" rather than "branch".
+func validateBranchName(branch string) error {
+	invalid := &domain.StructuredError{Code: "INVALID_NAME", Message: "branch name is not a valid git branch"}
+	switch {
+	case branch == "":
+		return invalid
+	case strings.ContainsAny(branch, " \t\n\r"):
+		return invalid
+	case strings.Contains(branch, ".."):
+		return invalid
+	case strings.HasPrefix(branch, "/"), strings.HasSuffix(branch, "/"):
+		return invalid
+	case strings.HasPrefix(branch, "-"), strings.HasSuffix(branch, "-"):
+		return invalid
+	case strings.HasSuffix(branch, "."), strings.HasSuffix(branch, ".lock"):
+		return invalid
+	case !branchNameChars.MatchString(branch):
+		return invalid
+	case !branchNameAlnum.MatchString(branch):
+		return invalid
+	}
+	return nil
+}
