@@ -54,6 +54,28 @@ func TestParseFlagsOverrideEnv(t *testing.T) {
 	}
 }
 
+func TestParseDotfilesAgentsDirFromEnv(t *testing.T) {
+	fs := flag.NewFlagSet("test", flag.ContinueOnError)
+	cfg, err := Parse(fs, nil, env(map[string]string{"DOTFILES_AGENTS_DIR": "/Users/me/dotfiles/agents"}))
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if cfg.DotfilesAgentsDir != "/Users/me/dotfiles/agents" {
+		t.Fatalf("env not applied: %+v", cfg)
+	}
+}
+
+func TestParseDotfilesAgentsDirDefaultsEmpty(t *testing.T) {
+	fs := flag.NewFlagSet("test", flag.ContinueOnError)
+	cfg, err := Parse(fs, nil, env(nil))
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if cfg.DotfilesAgentsDir != "" {
+		t.Fatalf("expected empty default, got %q", cfg.DotfilesAgentsDir)
+	}
+}
+
 func TestParseBadEnvFallsBack(t *testing.T) {
 	fs := flag.NewFlagSet("test", flag.ContinueOnError)
 	cfg, err := Parse(fs, nil, env(map[string]string{"APPROVAL_TIMEOUT": "soon", "CLAUDE_LOG_STDOUT": "maybe"}))

@@ -43,8 +43,13 @@ type Config struct {
 	// question before the CLI gives up on it. It is the ceiling on how long a
 	// user may take to answer, so it is measured in hours, not seconds.
 	ApprovalTimeout time.Duration
-	// TUI holds the terminal front-end settings; unused by the server binary.
-	TUI TUIConfig
+	// DotfilesAgentsDir is the path to a dotfiles-style agents/ directory
+	// (agents.json + skills/). When set, Agent/Skill/MCPServer data from it is
+	// read live on every request and merged alongside the database-backed
+	// catalog (config wins on a name collision) — see
+	// internal/adapter/out/configrepo. Empty disables this entirely; the
+	// catalog is then exactly what's in the database, as before.
+	DotfilesAgentsDir string
 }
 
 // loopbackBaseURL is the base URL the spawned claude reaches this process at for

@@ -30,6 +30,7 @@ func Parse(fs *flag.FlagSet, args []string, getenv Getenv) (app.Config, error) {
 	claudeLogStdout := fs.Bool("claude.log-stdout", envBool(getenv, "CLAUDE_LOG_STDOUT", true), "tee each session's raw stdout to the terminal")
 	claudeTextModel := fs.String("claude.text-model", envOr(getenv, "CLAUDE_TEXT_MODEL", ""), "model for the one-shot text utilities (summarize/generate/translate); empty uses the CLI default")
 	approvalTimeout := fs.Duration("approval.timeout", envDuration(getenv, "APPROVAL_TIMEOUT", 24*time.Hour), "how long a session waits for the user to answer an approval or question")
+	dotfilesAgentsDir := fs.String("dotfiles.agents-dir", envOr(getenv, "DOTFILES_AGENTS_DIR", ""), "path to a dotfiles-style agents/ directory (agents.json + skills/) to read Agent/Skill/MCPServer data from live, alongside the database")
 
 	if err := fs.Parse(args); err != nil {
 		return app.Config{}, err
@@ -41,15 +42,16 @@ func Parse(fs *flag.FlagSet, args []string, getenv Getenv) (app.Config, error) {
 	}
 
 	return app.Config{
-		HTTPAddr:        *httpAddr,
-		MCPAddr:         *mcpAddr,
-		DBPath:          *dbPath,
-		DevMode:         *devMode,
-		Root:            root,
-		ClaudeBin:       *claudeBin,
-		ClaudeLogStdout: *claudeLogStdout,
-		ClaudeTextModel: *claudeTextModel,
-		ApprovalTimeout: *approvalTimeout,
+		HTTPAddr:          *httpAddr,
+		MCPAddr:           *mcpAddr,
+		DBPath:            *dbPath,
+		DevMode:           *devMode,
+		Root:              root,
+		ClaudeBin:         *claudeBin,
+		ClaudeLogStdout:   *claudeLogStdout,
+		ClaudeTextModel:   *claudeTextModel,
+		ApprovalTimeout:   *approvalTimeout,
+		DotfilesAgentsDir: *dotfilesAgentsDir,
 	}, nil
 }
 

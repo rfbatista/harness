@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 
 	"go.uber.org/fx"
 
@@ -16,6 +17,7 @@ import (
 
 	"operators-mcp/internal/adapter/in/mcpsession"
 	"operators-mcp/internal/adapter/out/agents/claudetext"
+	"operators-mcp/internal/adapter/out/configrepo"
 	"operators-mcp/internal/adapter/out/filesystem"
 	"operators-mcp/internal/adapter/out/gitcli"
 	"operators-mcp/internal/adapter/out/persistence/sqlite"
@@ -42,10 +44,10 @@ var PersistenceModule = fx.Module("persistence",
 		asPort(sqlite.NewProjectRepository, new(ports.ProjectRepository)),
 		asPort(sqlite.NewRepositoryRepository, new(ports.RepositoryRepository)),
 		asPort(sqlite.NewZoneRepository, new(ports.ZoneRepository)),
-		asPort(sqlite.NewAgentRepository, new(ports.AgentRepository)),
+		newAgentRepository,
 		asPort(sqlite.NewPromptRepository, new(ports.PromptRepository)),
-		asPort(sqlite.NewSkillRepository, new(ports.SkillRepository)),
-		asPort(sqlite.NewMCPServerRepository, new(ports.MCPServerRepository)),
+		newSkillRepository,
+		newMCPServerRepository,
 		asPort(sqlite.NewToolRepository, new(ports.ToolRepository)),
 		asPort(sqlite.NewTaskRepository, new(ports.TaskRepository)),
 		asPort(sqlite.NewTicketRepository, new(ports.TicketRepository)),
@@ -78,6 +80,44 @@ func newDB(lc fx.Lifecycle, cfg Config) (*gorm.DB, error) {
 		},
 	})
 	return db, nil
+}
+
+// newSkillRepository binds the database-backed skill store, merged with a
+// live config-backed one (agents/skills/*/SKILL.md) when
+// Config.DotfilesAgentsDir is set — see internal/adapter/out/configrepo.
+func newSkillRepository(cfg Config, db *gorm.DB) ports.SkillRepository {
+	dbRepo := sqlite.NewSkillRepository(db)
+	if cfg.DotfilesAgentsDir == "" {
+		return dbRepo
+	}
+	cfgRepo := configrepo.NewSkillStore(filepath.Join(cfg.DotfilesAgentsDir, "skills"))
+	return configrepo.MergeSkills(dbRepo, cfgRepo)
+}
+
+// newMCPServerRepository is newSkillRepository's equivalent for MCP servers,
+// read from every agent's resolved .mcp.json.
+func newMCPServerRepository(cfg Config, db *gorm.DB) ports.MCPServerRepository {
+	dbRepo := sqlite.NewMCPServerRepository(db)
+	if cfg.DotfilesAgentsDir == "" {
+		return dbRepo
+	}
+	cfgRepo := configrepo.NewMCPServerStore(filepath.Join(cfg.DotfilesAgentsDir, "agents.json"), cfg.DotfilesAgentsDir)
+	return configrepo.MergeMCPServers(dbRepo, cfgRepo)
+}
+
+// newAgentRepository is newSkillRepository's equivalent for agents.json's
+// "agents" map. It builds its own *configrepo.MCPServerStore rather than
+// depend on newMCPServerRepository's merged result: it needs
+// serverNamesFor's per-agent resolution, not the flattened, merged list.
+func newAgentRepository(cfg Config, db *gorm.DB) ports.AgentRepository {
+	dbRepo := sqlite.NewAgentRepository(db)
+	if cfg.DotfilesAgentsDir == "" {
+		return dbRepo
+	}
+	manifestPath := filepath.Join(cfg.DotfilesAgentsDir, "agents.json")
+	cfgMCP := configrepo.NewMCPServerStore(manifestPath, cfg.DotfilesAgentsDir)
+	cfgRepo := configrepo.NewAgentRepository(manifestPath, cfgMCP)
+	return configrepo.MergeAgents(dbRepo, cfgRepo)
 }
 
 // BlueprintModule provides the filesystem adapters (as their ports) and the

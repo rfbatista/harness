@@ -5,10 +5,11 @@
 -include .env
 export
 
-.PHONY: help build build-tui tui run run-api dev-server test clean web-install web-build web-dev copy-ui deps air stop-api genkit-qwen3-tools genkit-postman-agent
+.PHONY: help build build-tui tui run run-api dev-server test clean web-install web-build web-dev copy-ui deps air stop-api genkit-qwen3-tools genkit-postman-agent build-crap crap install-crap update-crap
 
 BINARY   := bin/server
 TUI_BINARY := bin/coding-pool-tui
+CRAP_BINARY := bin/crap
 WEB_DIR  := web
 UI_STATIC := internal/adapter/in/ui/static
 
@@ -25,6 +26,10 @@ help:
 	@echo "  make air         — hot-reload Go API with Air + .env (use with Flutter in another terminal)"
 	@echo "  make stop-api    — stop Air/tmp/main and free ports 8080 (HTTP) and 8081 (MCP)"
 	@echo "  make test        — run Go tests (contract + integration)"
+	@echo "  make build-crap  — build the standalone CRAP analyzer ($(CRAP_BINARY))"
+	@echo "  make crap        — run the CRAP analyzer (make crap ARGS='--cover=cover.out ./internal/...')"
+	@echo "  make install-crap — install crap globally via 'go install' (into \$$GOBIN or \$$GOPATH/bin)"
+	@echo "  make update-crap — rebuild + reinstall the global crap from the current source"
 	@echo "  make clean       — remove bin/, web/dist/, $(UI_STATIC)/"
 	@echo "  make deps        — install Go deps + web npm deps"
 	@echo ""
@@ -60,6 +65,32 @@ build-tui:
 tui:
 	go run ./cmd/tui
 
+# Build the standalone CRAP (Change Risk Anti-Patterns) analyzer.
+build-crap:
+	go build -o $(CRAP_BINARY) ./cmd/crap
+	@echo "Built $(CRAP_BINARY)"
+
+# Run the CRAP analyzer from source, e.g.:
+#   make crap ARGS='--cover=cover.out ./internal/...'
+crap:
+	go run ./cmd/crap $(ARGS)
+
+# Install crap globally via 'go install' — puts the binary in $GOBIN, or
+# $GOPATH/bin, or ~/go/bin, whichever `go env` resolves. Make sure that
+# directory is on your PATH so the 'crap' command is available anywhere.
+# Under asdf-managed Go, GOBIN sits under the asdf install dir, so this also
+# reshims asdf's golang plugin to pick up the new/updated binary.
+install-crap:
+	go install ./cmd/crap
+	@command -v asdf >/dev/null 2>&1 && asdf reshim golang 2>/dev/null || true
+	@echo "Installed crap to $$(go env GOBIN 2>/dev/null | grep . || echo $$(go env GOPATH)/bin)"
+
+# Update the globally installed crap to match the current source tree.
+# Same as install-crap — 'go install' always rebuilds from source — kept as
+# a separate target so 'make update-crap' reads naturally after a pull.
+update-crap: install-crap
+	@echo "crap is up to date."
+
 # Run HTTP server (UI at /, API at /api, MCP at /mcp).
 run: build
 	./$(BINARY)
@@ -71,14 +102,6 @@ run-api:
 # Run Go server in dev mode (proxies ui://designer to Vite; start Vite with 'make web-dev' first)
 dev-server:
 	go run ./cmd/server --dev
-
-# Run Genkit + Ollama Qwen3 tool-calling test app
-genkit-qwen3-tools:
-	go run ./cmd/genkit-qwen3-tools
-
-# Run Genkit Postman MCP agent app
-genkit-postman-agent:
-	genkit start -- go run ./cmd/genkit-postman-agent
 
 # Stop dev API/MCP processes (Air child, stale go run, or anything on default ports).
 stop-api:
