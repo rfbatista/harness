@@ -28,19 +28,21 @@ func (r *SessionRepository) Create(s *domain.Session) (*domain.Session, error) {
 		}
 	}
 	m := &SessionModel{
-		ID:           id,
-		ProjectID:    s.ProjectID,
-		RepositoryID: s.RepositoryID,
-		AgentID:      s.AgentID,
-		ZoneID:       s.ZoneID,
-		TicketID:     s.TicketID,
-		Task:         s.Task,
-		WorkingDir:   s.WorkingDir,
-		Model:        s.Model,
-		Status:       string(s.Status),
-		AutoRun:      s.AutoRun,
-		WorkspaceID:  s.WorkspaceID,
-		Branch:       s.Branch,
+		ID:              id,
+		ProjectID:       s.ProjectID,
+		RepositoryID:    s.RepositoryID,
+		AgentID:         s.AgentID,
+		ZoneID:          s.ZoneID,
+		TicketID:        s.TicketID,
+		Task:            s.Task,
+		WorkingDir:      s.WorkingDir,
+		Model:           s.Model,
+		Status:          string(s.Status),
+		AutoRun:         s.AutoRun,
+		WorkspaceID:     s.WorkspaceID,
+		Branch:          s.Branch,
+		Interactive:     s.Interactive,
+		ClaudeSessionID: s.ClaudeSessionID,
 	}
 	if err := r.db.Create(m).Error; err != nil {
 		return nil, err
@@ -135,6 +137,20 @@ func (r *SessionRepository) UpdateAutoRun(id string, autoRun bool) error {
 	res := r.db.Model(&SessionModel{}).Where("id = ?", id).Updates(map[string]any{
 		"auto_run":   autoRun,
 		"updated_at": time.Now().UnixMilli(),
+	})
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		return &domain.StructuredError{Code: "SESSION_NOT_FOUND", Message: "session not found"}
+	}
+	return nil
+}
+
+func (r *SessionRepository) UpdateClaudeSessionID(id, claudeSessionID string) error {
+	res := r.db.Model(&SessionModel{}).Where("id = ?", id).Updates(map[string]any{
+		"claude_session_id": claudeSessionID,
+		"updated_at":        time.Now().UnixMilli(),
 	})
 	if res.Error != nil {
 		return res.Error

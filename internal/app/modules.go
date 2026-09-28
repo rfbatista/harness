@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"path/filepath"
 
@@ -15,7 +16,9 @@ import (
 	"github.com/rfbatista/llmkit/claude"
 	"github.com/rfbatista/llmkit/claude/mcpapprove"
 
+	"operators-mcp/internal/adapter/in/httpapi"
 	"operators-mcp/internal/adapter/in/mcpsession"
+	"operators-mcp/internal/adapter/out/agents/claudehome"
 	"operators-mcp/internal/adapter/out/agents/claudetext"
 	"operators-mcp/internal/adapter/out/configrepo"
 	"operators-mcp/internal/adapter/out/filesystem"
@@ -219,6 +222,7 @@ var AgentRuntimeModule = fx.Module("agentruntime",
 		newBroker,
 		newHub,
 		asPort(sqlite.NewSessionRepository, new(ports.SessionRepository)),
+		asPort(newClaudeTranscripts, new(ports.ClaudeTranscripts)),
 		newOrchestrationService,
 	),
 	fx.Invoke(registerRuntimeShutdown),
@@ -256,6 +260,8 @@ func newBroker(m llmkit.Manager) (*approval.Broker, error) {
 	return gated.Approvals(), nil
 }
 
+func newClaudeTranscripts() claudehome.Transcripts { return claudehome.Transcripts{} }
+
 func newHub() *orchestration.Hub { return orchestration.NewHub(256) }
 
 // newOrchestrationService passes *blueprint.Service where the orchestration's
@@ -269,6 +275,7 @@ func newOrchestrationService(
 	bp *blueprint.Service,
 	tickets ports.TicketRepository,
 	ws *workspaces.Service,
+	transcripts ports.ClaudeTranscripts,
 ) *orchestration.Service {
 	svc := orchestration.NewService(runtime, broker, hub, sessions, bp, tickets, ws)
 	base := cfg.loopbackBaseURL()
@@ -277,6 +284,10 @@ func newOrchestrationService(
 	svc.TaskServerURL = func(sessionID string) string {
 		return base + mcpsession.PathPrefix + sessionID
 	}
+	svc.SessionHookURL = func(sessionID string) string {
+		return base + httpapi.InteractiveSessionStartedPath + "?session_id=" + url.QueryEscape(sessionID)
+	}
+	svc.Transcripts = transcripts
 	return svc
 }
 

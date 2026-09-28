@@ -129,6 +129,13 @@ func NewRouter(h *Handler) *echo.Echo {
 	g.POST("/sessions/:id/auto-run", h.handleSessionAutoRun)
 	g.POST("/sessions/:id/stop", h.handleSessionStop)
 
+	// interactive sessions: claude runs in the client's terminal (claude-pane).
+	// Client plumbing with no MCP twin — an agent has no terminal to hand out.
+	g.POST("/start_interactive_session", h.handleStartInteractiveSession)
+	g.POST("/resume_interactive_session", h.handleResumeInteractiveSession)
+	g.POST("/end_interactive_session", h.handleEndInteractiveSession)
+	g.POST("/interactive_session_started", h.handleInteractiveSessionStarted)
+
 	// tickets & documents
 	g.GET("/list_tickets", h.handleListTickets)
 	g.GET("/get_ticket", h.handleGetTicket)

@@ -25,6 +25,16 @@ type StoredEvent struct {
 	At      time.Time
 }
 
+// ClaudeTranscripts answers whether an interactive claude conversation can
+// still be resumed. The CLI keeps each transcript under the directory the
+// conversation ran in, so both the directory and the transcript must exist.
+type ClaudeTranscripts interface {
+	// CanResume returns nil when conversation claudeSessionID, started in dir,
+	// can be resumed; otherwise a StructuredError coded WORKSPACE_MISSING or
+	// SESSION_TRANSCRIPT_MISSING.
+	CanResume(dir, claudeSessionID string) error
+}
+
 // SessionRepository persists sessions and their append-only event log.
 type SessionRepository interface {
 	Create(s *domain.Session) (*domain.Session, error)
@@ -39,6 +49,9 @@ type SessionRepository interface {
 	// readable copy, so a client does not have to replay the event log to
 	// learn the session's current mode.
 	UpdateAutoRun(id string, autoRun bool) error
+	// UpdateClaudeSessionID records which claude conversation an interactive
+	// session resumes into.
+	UpdateClaudeSessionID(id, claudeSessionID string) error
 	AppendEvent(sessionID string, seq int64, typ string, payload []byte) error
 	ListEvents(sessionID string, fromSeq int64) []StoredEvent
 }

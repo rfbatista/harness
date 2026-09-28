@@ -79,6 +79,12 @@ type Service struct {
 	// TaskServerURL returns the per-session task MCP endpoint for a session id.
 	// Injected, so the application layer does not need to know the route.
 	TaskServerURL func(sessionID string) string
+	// SessionHookURL returns where an interactive session's SessionStart hook
+	// reports its conversation id. Nil leaves the hook out.
+	SessionHookURL func(sessionID string) string
+	// Transcripts checks an interactive session can be resumed. Nil skips the
+	// check and lets the CLI report a missing conversation itself.
+	Transcripts ports.ClaudeTranscripts
 
 	mu       sync.Mutex
 	seq      map[string]int64
@@ -109,84 +115,24 @@ func (s *Service) Start(ctx context.Context, req StartRequest) (*domain.Session,
 	if req.Task == "" {
 		return nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "task is required"}
 	}
-	proj := s.bp.GetProject(req.ProjectID)
-	if proj == nil {
-		return nil, &domain.StructuredError{Code: "PROJECT_NOT_FOUND", Message: "project not found"}
-	}
-
-	var ticket *domain.Ticket
-	if req.TicketID != "" {
-		if s.tickets == nil {
-			return nil, &domain.StructuredError{Code: "TICKET_NOT_FOUND", Message: "tickets are not available"}
-		}
-		tk := s.tickets.Get(req.TicketID)
-		if tk == nil {
-			return nil, &domain.StructuredError{Code: "TICKET_NOT_FOUND", Message: "ticket not found"}
-		}
-		if tk.ProjectID != req.ProjectID {
-			return nil, &domain.StructuredError{Code: "CROSS_PROJECT_ACCESS", Message: "ticket does not belong to project"}
-		}
-		ticket = tk
-	}
-
-	if req.RepositoryID == "" {
-		return nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "repository_id is required"}
-	}
-	repo := s.bp.GetRepository(req.RepositoryID)
-	if repo == nil {
-		return nil, &domain.StructuredError{Code: "REPOSITORY_NOT_FOUND", Message: "repository not found"}
-	}
-	if repo.ProjectID != req.ProjectID {
-		return nil, &domain.StructuredError{Code: "CROSS_PROJECT_ACCESS", Message: "repository does not belong to project"}
-	}
-	if repo.RootDir == "" {
-		return nil, &domain.StructuredError{Code: "INVALID_ROOT", Message: "repository has no root_dir"}
-	}
-	if s.workspaces == nil {
-		return nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "workspaces are not available"}
-	}
-
 	branch := strings.TrimSpace(req.Branch)
 	if branch == "" {
 		branch = defaultBranchName(req.Task)
 	}
-	if err := validateBranchName(branch); err != nil {
-		return nil, err
-	}
 
-	// Agent and skill resolution happen before provisioning: git worktree add
-	// is slow and side-effecting, so a bad agent_id or a broken skill must
-	// fail cheaply instead of creating (and then rolling back) a worktree.
-	var cleanup func()
-	var agent *domain.Agent
-	appendSystem := ""
-	var skillDirs []string
-	if req.AgentID != "" {
-		agent = s.bp.GetAgent(req.AgentID)
-		if agent == nil {
-			return nil, &domain.StructuredError{Code: "AGENT_NOT_FOUND", Message: "agent not found"}
-		}
-		s.bp.ResolveAgentRelations(agent)
-		if agent.Prompt != nil {
-			appendSystem = agent.Prompt.Content
-		}
-		if len(agent.Skills) > 0 {
-			dirs, c, err := resolveSkillDirs(agent.Skills)
-			if err != nil {
-				return nil, fmt.Errorf("resolve skills: %w", err)
-			}
-			if len(dirs) > 0 {
-				skillDirs = dirs
-				cleanup = c
-			}
-		}
-	}
-
-	ws, err := s.workspaces.Create(req.RepositoryID, domain.Slug(branch), branch, req.BaseBranch)
+	p, err := s.prepare(prepareInput{
+		ProjectID:    req.ProjectID,
+		RepositoryID: req.RepositoryID,
+		AgentID:      req.AgentID,
+		ZoneID:       req.ZoneID,
+		TicketID:     req.TicketID,
+		Branch:       branch,
+		BaseBranch:   req.BaseBranch,
+		Model:        req.ModelOverride,
+		AllowedTools: req.AllowedTools,
+		AutoAccept:   req.AutoAccept,
+	})
 	if err != nil {
-		if cleanup != nil {
-			cleanup()
-		}
 		return nil, err
 	}
 	// Every failure below this line leaves a worktree and branch behind unless
@@ -194,58 +140,15 @@ func (s *Service) Start(ctx context.Context, req StartRequest) (*domain.Session,
 	// Discard (not Delete): the branch is seconds old and provably has no
 	// commits, so removing it here does not risk losing work, and keeping it
 	// would poison a retry with a stale BRANCH_EXISTS.
-	provisioned := ws
+	provisioned := p.ws
 	defer func() {
 		if provisioned != nil {
 			_ = s.workspaces.Discard(provisioned.ID)
 		}
 	}()
-	workingDir := ws.Path
+	cleanup := p.cleanup
 
-	permission := parseAutoAccept(req.AutoAccept)
-	// The id is minted here, before applyTaskContext, because the per-session
-	// task MCP server URL is built from it and has to be in the config the
-	// session is spawned with.
-	cfg := llmkit.SessionConfig{
-		ID:           llmkit.NewSessionID(),
-		WorkingDir:   workingDir,
-		Model:        req.ModelOverride,
-		AllowedTools: req.AllowedTools,
-		Permission:   permission,
-		Env:          s.DefaultEnv,
-		AppendSystem: appendSystem,
-		Driver:       claude.Config{SkillDirs: skillDirs},
-	}
-
-	// After the agent's own prompt, so the task brief lands at the end of the
-	// system prompt rather than being overwritten by it.
-	var taskURL string
-	if s.TaskServerURL != nil {
-		taskURL = s.TaskServerURL(cfg.ID)
-	}
-	applyTaskContext(&cfg, ticket, taskURL)
-
-	mcpServers := resolveAttachedMCPServers(agent, s.bp.ListMCPServers())
-
-	for _, m := range mcpServers {
-		cfg.MCPServers = append(cfg.MCPServers, llmkit.MCPServerSpec{
-			Name:      domain.Slug(m.Name),
-			Transport: m.Transport,
-			Command:   m.Command,
-			URL:       m.URL,
-			Args:      m.Args,
-			Env:       m.Env,
-			Headers:   m.Headers,
-		})
-	}
-
-	if req.ZoneID != "" {
-		if z := s.bp.GetZone(req.ZoneID); z != nil {
-			cfg.AddDirs = append(cfg.AddDirs, z.ExplicitPaths...)
-		}
-	}
-
-	sess, err := s.runtime.Start(ctx, cfg)
+	sess, err := s.runtime.Start(ctx, p.cfg)
 	if err != nil {
 		if cleanup != nil {
 			cleanup()
@@ -276,7 +179,7 @@ func (s *Service) Start(ctx context.Context, req StartRequest) (*domain.Session,
 	// A session started in bypass mode is already running unattended, so it
 	// starts with the gate open — recording anything else would have the UI
 	// offer to "enable" what is already on.
-	autoRun := permission == llmkit.PermissionBypass
+	autoRun := p.permission == llmkit.PermissionBypass
 	if autoRun {
 		s.broker.SetAutoRun(sess.ID(), true)
 	}
@@ -285,13 +188,13 @@ func (s *Service) Start(ctx context.Context, req StartRequest) (*domain.Session,
 		ID:           sess.ID(),
 		ProjectID:    req.ProjectID,
 		RepositoryID: req.RepositoryID,
-		WorkspaceID:  ws.ID,
-		Branch:       branch,
+		WorkspaceID:  p.ws.ID,
+		Branch:       p.branch,
 		AgentID:      req.AgentID,
 		ZoneID:       req.ZoneID,
 		TicketID:     req.TicketID,
 		Task:         req.Task,
-		WorkingDir:   workingDir,
+		WorkingDir:   p.cfg.WorkingDir,
 		Model:        req.ModelOverride,
 		Status:       domain.SessionStarting,
 		AutoRun:      autoRun,
@@ -314,6 +217,199 @@ func (s *Service) Start(ctx context.Context, req StartRequest) (*domain.Session,
 		slog.Error("send initial task failed", "session", sess.ID(), "err", err)
 	}
 	return created, nil
+}
+
+// prepareInput is what every way of starting a session shares: enough to
+// provision its worktree and build the configuration its CLI runs with.
+type prepareInput struct {
+	// ID is the session id; empty mints one. A caller sets it when it needs
+	// the id before provisioning, e.g. to name the branch after it.
+	ID           string
+	ProjectID    string
+	RepositoryID string
+	AgentID      string
+	ZoneID       string
+	TicketID     string
+	Branch       string
+	BaseBranch   string
+	Model        string
+	AllowedTools []string
+	AutoAccept   string
+}
+
+// prepared is a session whose worktree exists and whose configuration is
+// built, but whose CLI has not been launched yet. Until the caller records it,
+// the worktree has to be discarded and cleanup run on failure.
+type prepared struct {
+	cfg        llmkit.SessionConfig
+	ws         *domain.Workspace
+	branch     string
+	permission llmkit.PermissionMode
+	cleanup    func() // removes the materialized skill plugin dir; nil if none
+}
+
+// prepare validates a start request, provisions the session's worktree and
+// builds its CLI configuration. Start launches the result headless;
+// StartInteractive hands it to a terminal.
+func (s *Service) prepare(in prepareInput) (*prepared, error) {
+	if in.ProjectID == "" {
+		return nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "project_id is required"}
+	}
+	if s.bp.GetProject(in.ProjectID) == nil {
+		return nil, &domain.StructuredError{Code: "PROJECT_NOT_FOUND", Message: "project not found"}
+	}
+
+	var ticket *domain.Ticket
+	if in.TicketID != "" {
+		tk, err := s.ticketIn(in.ProjectID, in.TicketID)
+		if err != nil {
+			return nil, err
+		}
+		ticket = tk
+	}
+
+	if in.RepositoryID == "" {
+		return nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "repository_id is required"}
+	}
+	repo := s.bp.GetRepository(in.RepositoryID)
+	if repo == nil {
+		return nil, &domain.StructuredError{Code: "REPOSITORY_NOT_FOUND", Message: "repository not found"}
+	}
+	if repo.ProjectID != in.ProjectID {
+		return nil, &domain.StructuredError{Code: "CROSS_PROJECT_ACCESS", Message: "repository does not belong to project"}
+	}
+	if repo.RootDir == "" {
+		return nil, &domain.StructuredError{Code: "INVALID_ROOT", Message: "repository has no root_dir"}
+	}
+	if s.workspaces == nil {
+		return nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "workspaces are not available"}
+	}
+	if err := validateBranchName(in.Branch); err != nil {
+		return nil, err
+	}
+
+	// Agent and skill resolution happen before provisioning: git worktree add
+	// is slow and side-effecting, so a bad agent_id or a broken skill must
+	// fail cheaply instead of creating (and then rolling back) a worktree.
+	ag, err := s.resolveAgent(in.AgentID)
+	if err != nil {
+		return nil, err
+	}
+
+	ws, err := s.workspaces.Create(in.RepositoryID, domain.Slug(in.Branch), in.Branch, in.BaseBranch)
+	if err != nil {
+		if ag.cleanup != nil {
+			ag.cleanup()
+		}
+		return nil, err
+	}
+
+	id := in.ID
+	if id == "" {
+		id = llmkit.NewSessionID()
+	}
+	permission := parseAutoAccept(in.AutoAccept)
+	return &prepared{
+		cfg:        s.sessionConfig(id, ws.Path, in.Model, in.AllowedTools, permission, ag, ticket, in.ZoneID),
+		ws:         ws,
+		branch:     in.Branch,
+		permission: permission,
+		cleanup:    ag.cleanup,
+	}, nil
+}
+
+// ticketIn loads a ticket and checks it belongs to the project.
+func (s *Service) ticketIn(projectID, ticketID string) (*domain.Ticket, error) {
+	if s.tickets == nil {
+		return nil, &domain.StructuredError{Code: "TICKET_NOT_FOUND", Message: "tickets are not available"}
+	}
+	tk := s.tickets.Get(ticketID)
+	if tk == nil {
+		return nil, &domain.StructuredError{Code: "TICKET_NOT_FOUND", Message: "ticket not found"}
+	}
+	if tk.ProjectID != projectID {
+		return nil, &domain.StructuredError{Code: "CROSS_PROJECT_ACCESS", Message: "ticket does not belong to project"}
+	}
+	return tk, nil
+}
+
+// resolvedAgent is an agent template made ready to run: its prompt and its
+// skills materialized as a plugin dir.
+type resolvedAgent struct {
+	agent        *domain.Agent // nil for plain claude
+	appendSystem string
+	skillDirs    []string
+	cleanup      func() // removes skillDirs; nil if none
+}
+
+// resolveAgent loads the agent a session runs as. An empty id is plain claude.
+func (s *Service) resolveAgent(agentID string) (resolvedAgent, error) {
+	var r resolvedAgent
+	if agentID == "" {
+		return r, nil
+	}
+	r.agent = s.bp.GetAgent(agentID)
+	if r.agent == nil {
+		return r, &domain.StructuredError{Code: "AGENT_NOT_FOUND", Message: "agent not found"}
+	}
+	s.bp.ResolveAgentRelations(r.agent)
+	if r.agent.Prompt != nil {
+		r.appendSystem = r.agent.Prompt.Content
+	}
+	if len(r.agent.Skills) > 0 {
+		dirs, c, err := resolveSkillDirs(r.agent.Skills)
+		if err != nil {
+			return r, fmt.Errorf("resolve skills: %w", err)
+		}
+		if len(dirs) > 0 {
+			r.skillDirs, r.cleanup = dirs, c
+		}
+	}
+	return r, nil
+}
+
+// sessionConfig builds the CLI configuration shared by headless and
+// interactive sessions: the agent's prompt and skills, the task brief and
+// task MCP server, the agent's MCP servers and the zone's extra dirs.
+func (s *Service) sessionConfig(id, dir, model string, allowedTools []string, permission llmkit.PermissionMode, ag resolvedAgent, ticket *domain.Ticket, zoneID string) llmkit.SessionConfig {
+	cfg := llmkit.SessionConfig{
+		ID:           id,
+		WorkingDir:   dir,
+		Model:        model,
+		AllowedTools: allowedTools,
+		Permission:   permission,
+		Env:          s.DefaultEnv,
+		AppendSystem: ag.appendSystem,
+		Driver:       claude.Config{SkillDirs: ag.skillDirs},
+	}
+
+	// After the agent's own prompt, so the task brief lands at the end of the
+	// system prompt rather than being overwritten by it. The id is minted
+	// before this because the per-session task MCP server URL is built from it.
+	var taskURL string
+	if s.TaskServerURL != nil {
+		taskURL = s.TaskServerURL(id)
+	}
+	applyTaskContext(&cfg, ticket, taskURL)
+
+	for _, m := range resolveAttachedMCPServers(ag.agent, s.bp.ListMCPServers()) {
+		cfg.MCPServers = append(cfg.MCPServers, llmkit.MCPServerSpec{
+			Name:      domain.Slug(m.Name),
+			Transport: m.Transport,
+			Command:   m.Command,
+			URL:       m.URL,
+			Args:      m.Args,
+			Env:       m.Env,
+			Headers:   m.Headers,
+		})
+	}
+
+	if zoneID != "" {
+		if z := s.bp.GetZone(zoneID); z != nil {
+			cfg.AddDirs = append(cfg.AddDirs, z.ExplicitPaths...)
+		}
+	}
+	return cfg
 }
 
 func (s *Service) pump(sess llmkit.Session) {
@@ -482,6 +578,9 @@ func (s *Service) handleApproval(req approval.Request) {
 // The message is published as its own "user_message" event — not as "output",
 // which is Claude's own text — so the timeline can tell the two apart.
 func (s *Service) Send(ctx context.Context, id, text string) error {
+	if err := s.rejectInteractive(id); err != nil {
+		return err
+	}
 	sess, ok := s.runtime.Get(id)
 	if !ok {
 		return &domain.StructuredError{Code: "SESSION_NOT_FOUND", Message: "session not running"}
@@ -537,6 +636,9 @@ func (s *Service) SetAutoRun(ctx context.Context, id string, autoRun bool) error
 	if s.sessions.Get(id) == nil {
 		return &domain.StructuredError{Code: "SESSION_NOT_FOUND", Message: "session not found"}
 	}
+	if err := s.rejectInteractive(id); err != nil {
+		return err
+	}
 
 	flushed := s.broker.SetAutoRun(id, autoRun)
 	if err := s.sessions.UpdateAutoRun(id, autoRun); err != nil {
@@ -574,6 +676,9 @@ func (s *Service) SetAutoRun(ctx context.Context, id string, autoRun bool) error
 // Resolve and Answer so the two cannot drift on the bookkeeping that follows a
 // decision — which is what actually unblocks the session.
 func (s *Service) decide(id, reqID string, d approval.Decision, text string) error {
+	if err := s.rejectInteractive(id); err != nil {
+		return err
+	}
 	if err := s.broker.Resolve(id, reqID, d); err != nil {
 		return &domain.StructuredError{Code: "NO_PENDING_APPROVAL", Message: err.Error()}
 	}
@@ -626,6 +731,9 @@ func answerSummary(answers map[string]string) string {
 }
 
 func (s *Service) Stop(ctx context.Context, id string) error {
+	if err := s.rejectInteractive(id); err != nil {
+		return err
+	}
 	s.broker.DenyAll(id)
 	if err := s.runtime.Stop(id); err != nil {
 		return &domain.StructuredError{Code: "SESSION_NOT_FOUND", Message: err.Error()}

@@ -5,11 +5,12 @@
 -include .env
 export
 
-.PHONY: help build build-tui tui run run-api dev-server test clean web-install web-build web-dev copy-ui deps air stop-api genkit-qwen3-tools genkit-postman-agent build-crap crap install-crap update-crap build-linkedin-mcp linkedin-mcp linkedin-login linkedin-mcpb
+.PHONY: help build build-tui tui run run-api dev-server test clean web-install web-build web-dev copy-ui deps air stop-api genkit-qwen3-tools genkit-postman-agent build-crap crap install-crap update-crap build-linkedin-mcp linkedin-mcp linkedin-login linkedin-mcpb build-claude-pane claude-pane
 
 BINARY   := bin/server
 TUI_BINARY := bin/coding-pool-tui
 CRAP_BINARY := bin/crap
+CLAUDE_PANE_BINARY := bin/claude-pane
 LINKEDIN_BINARY := bin/linkedin-mcp
 LINKEDIN_MCPB_DIR := bin/linkedin-mcpb
 LINKEDIN_MCPB := bin/linkedin-mcp.mcpb
@@ -37,6 +38,8 @@ help:
 	@echo "  make linkedin-mcp — run the LinkedIn MCP server at http://localhost:9090/mcp (ARGS='--headless=false')"
 	@echo "  make build-linkedin-mcp — build the LinkedIn MCP server ($(LINKEDIN_BINARY))"
 	@echo "  make linkedin-mcpb — pack the LinkedIn MCP server as a Claude Desktop extension ($(LINKEDIN_MCPB), macOS)"
+	@echo "  make claude-pane — terminal workbench: projects → tasks → agent sessions as claude panes (needs make air; ARGS='--api URL')"
+	@echo "  make build-claude-pane — build the claude pane host ($(CLAUDE_PANE_BINARY))"
 	@echo "  make clean       — remove bin/, web/dist/, $(UI_STATIC)/"
 	@echo "  make deps        — install Go deps + web npm deps"
 	@echo ""
@@ -73,6 +76,14 @@ tui:
 	go run ./cmd/tui
 
 # Build the standalone CRAP (Change Risk Anti-Patterns) analyzer.
+build-claude-pane:
+	go build -o $(CLAUDE_PANE_BINARY) ./cmd/claude-pane
+	@echo "Built $(CLAUDE_PANE_BINARY)"
+
+# Terminal workbench over the running server (start `make air` first).
+claude-pane:
+	go run ./cmd/claude-pane $(ARGS)
+
 build-crap:
 	go build -o $(CRAP_BINARY) ./cmd/crap
 	@echo "Built $(CRAP_BINARY)"

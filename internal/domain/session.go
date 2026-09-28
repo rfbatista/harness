@@ -56,8 +56,17 @@ type Session struct {
 	// WorkspaceID is the git worktree the session runs in; Branch is the branch
 	// that worktree holds. Both are empty for sessions created before worktree
 	// isolation.
-	WorkspaceID string    `json:"workspace_id,omitempty"`
-	Branch      string    `json:"branch,omitempty"`
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
+	WorkspaceID string `json:"workspace_id,omitempty"`
+	Branch      string `json:"branch,omitempty"`
+	// Interactive sessions run claude in a terminal the server does not own
+	// (a claude-pane): the server provisioned and recorded them, but it cannot
+	// send to, stop or approve for them.
+	Interactive bool `json:"interactive"`
+	// ClaudeSessionID is the claude conversation an interactive session resumes.
+	// It starts equal to ID (the CLI is launched with --session-id ID) and moves
+	// when the conversation does, e.g. after /clear; the CLI's SessionStart hook
+	// reports it.
+	ClaudeSessionID string    `json:"claude_session_id,omitempty"`
+	CreatedAt       time.Time `json:"created_at"`
+	UpdatedAt       time.Time `json:"updated_at"`
 }

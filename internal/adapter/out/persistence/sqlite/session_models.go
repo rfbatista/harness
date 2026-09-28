@@ -25,6 +25,8 @@ type SessionModel struct {
 	AutoRun          bool    `gorm:"column:auto_run"`
 	WorkspaceID      string  `gorm:"column:workspace_id;index"`
 	Branch           string  `gorm:"column:branch"`
+	Interactive      bool    `gorm:"column:interactive"`
+	ClaudeSessionID  string  `gorm:"column:claude_session_id"`
 	CreatedAt        int64   `gorm:"autoCreateTime:milli"`
 	UpdatedAt        int64   `gorm:"autoUpdateTime:milli"`
 }
@@ -54,6 +56,8 @@ func (m *SessionModel) ToDomain() *domain.Session {
 		AutoRun:          m.AutoRun,
 		WorkspaceID:      m.WorkspaceID,
 		Branch:           m.Branch,
+		Interactive:      m.Interactive,
+		ClaudeSessionID:  m.ClaudeSessionID,
 		CreatedAt:        time.UnixMilli(m.CreatedAt),
 		UpdatedAt:        time.UnixMilli(m.UpdatedAt),
 	}

@@ -119,6 +119,30 @@ func TestSessionRepo_CreatePersistsAutoRun(t *testing.T) {
 	}
 }
 
+func TestSessionRepo_InteractiveAndClaudeSessionID(t *testing.T) {
+	r := newTestDB(t)
+	created, err := r.Create(&domain.Session{
+		ID: "s1", ProjectID: "p1", Task: "do", Status: domain.SessionRunning,
+		Interactive: true, ClaudeSessionID: "s1",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !created.Interactive || created.ClaudeSessionID != "s1" {
+		t.Fatalf("create dropped interactive fields: %+v", created)
+	}
+
+	if err := r.UpdateClaudeSessionID("s1", "after-clear"); err != nil {
+		t.Fatal(err)
+	}
+	if got := r.Get("s1"); got == nil || !got.Interactive || got.ClaudeSessionID != "after-clear" {
+		t.Fatalf("claude session id not persisted: %+v", got)
+	}
+	if err := r.UpdateClaudeSessionID("nope", "x"); err == nil {
+		t.Fatal("expected an error for an unknown session")
+	}
+}
+
 func TestSessionRepo_CRUDAndEvents(t *testing.T) {
 	r := newTestDB(t)
 	created, err := r.Create(&domain.Session{ID: "s1", ProjectID: "p1", Task: "do", Status: domain.SessionStarting})

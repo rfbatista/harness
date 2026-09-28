@@ -22,8 +22,9 @@ import (
 )
 
 type fakeResolver struct {
-	proj *domain.Project
-	repo *domain.Repository
+	proj   *domain.Project
+	repo   *domain.Repository
+	agents map[string]*domain.Agent
 }
 
 func (f *fakeResolver) GetProject(id string) *domain.Project {
@@ -39,7 +40,7 @@ func (f *fakeResolver) GetRepository(id string) *domain.Repository {
 	}
 	return nil
 }
-func (f *fakeResolver) GetAgent(id string) *domain.Agent      { return nil }
+func (f *fakeResolver) GetAgent(id string) *domain.Agent      { return f.agents[id] }
 func (f *fakeResolver) ResolveAgentRelations(a *domain.Agent) {}
 func (f *fakeResolver) ListMCPServers() []*domain.MCPServer   { return nil }
 func (f *fakeResolver) GetZone(id string) *domain.Zone        { return nil }
