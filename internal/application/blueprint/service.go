@@ -6,9 +6,12 @@ import (
 	"github.com/rfbatista/harnesskit/skill"
 	"github.com/rfbatista/harnesskit/tool"
 
-	"operators-mcp/internal/application/ports"
 	"operators-mcp/internal/domain"
+	"operators-mcp/internal/ports"
 )
+
+// Service satisfies every driving port of this package, checked at compile time.
+var _ ports.Blueprint = (*Service)(nil)
 
 // Service implements blueprint use cases by delegating to the outbound ports.
 // It is the application (use-case) layer in hexagonal architecture.

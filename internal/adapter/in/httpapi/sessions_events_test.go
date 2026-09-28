@@ -7,7 +7,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 
-	"operators-mcp/internal/application/orchestration"
+	"operators-mcp/internal/ports"
 )
 
 func ctxWith(t *testing.T, target, lastEventID string) echo.Context {
@@ -47,7 +47,7 @@ func TestResumeSeq(t *testing.T) {
 }
 
 func TestReplayFrom(t *testing.T) {
-	events := []orchestration.SessionEvent{
+	events := []ports.SessionEvent{
 		{Seq: 1, Type: "status"},
 		{Seq: 2, Type: "output"},
 		{Seq: 3, Type: "tool_use"},

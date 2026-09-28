@@ -4,13 +4,12 @@ import (
 	"github.com/rfbatista/harnesskit/mcptools"
 
 	"operators-mcp/internal/application/blueprint"
-	"operators-mcp/internal/application/execution"
-	"operators-mcp/internal/application/planning"
+	"operators-mcp/internal/ports"
 )
 
 // Bootstrap registers all built-in tool groups into the tooling service.
 // execSvc may be nil if the execution layer is not configured (e.g. no Genkit API key).
-func Bootstrap(toolingSvc *Service, bpSvc *blueprint.Service, planningSvc *planning.Service, execSvc *execution.Service) {
+func Bootstrap(toolingSvc *Service, bpSvc *blueprint.Service, planningSvc ports.Planning, execSvc ports.TaskRunner) {
 	toolingSvc.Register(ProjectTools(bpSvc)...)
 	toolingSvc.Register(ZoneTools(bpSvc)...)
 	toolingSvc.Register(BoundedContextTools(bpSvc)...)

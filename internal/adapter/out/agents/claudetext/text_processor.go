@@ -11,8 +11,8 @@ import (
 	"strconv"
 	"strings"
 
-	"operators-mcp/internal/application/ports"
 	"operators-mcp/internal/domain"
+	"operators-mcp/internal/ports"
 )
 
 // Ensure each text-processing port has an adapter at compile time.

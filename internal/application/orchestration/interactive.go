@@ -11,32 +11,13 @@ import (
 	"github.com/rfbatista/llmkit/claude"
 
 	"operators-mcp/internal/domain"
+	"operators-mcp/internal/ports"
 )
 
-// InteractiveRequest starts a session that a person drives in a terminal
-// (claude-pane) instead of the server driving it over stream-json. It is
-// always spawned into a task.
-type InteractiveRequest struct {
-	ProjectID    string `json:"project_id"`
-	RepositoryID string `json:"repository_id"`
-	TicketID     string `json:"ticket_id"`
-	AgentID      string `json:"agent_id,omitempty"`
-	ZoneID       string `json:"zone_id,omitempty"`
-	// Prompt is the optional first message; empty opens claude idle.
-	Prompt     string `json:"prompt,omitempty"`
-	Model      string `json:"model,omitempty"`
-	AutoAccept string `json:"auto_accept,omitempty"` // "off" | "edits" | "all"
-	BaseBranch string `json:"base_branch,omitempty"`
-}
-
-// Launch is how the client runs an interactive session's CLI: the claude
-// binary with Args, in Dir, with Env added to its own environment.
-type Launch struct {
-	SessionID string   `json:"session_id"`
-	Dir       string   `json:"dir"`
-	Args      []string `json:"args"`
-	Env       []string `json:"env,omitempty"`
-}
+type (
+	InteractiveRequest = ports.InteractiveRequest
+	Launch             = ports.Launch
+)
 
 // StartInteractive provisions and records a session like Start does — its own
 // worktree, the task brief and task MCP server, the agent's prompt, skills and

@@ -1,6 +1,12 @@
 package tooling
 
-import "github.com/rfbatista/harnesskit/tool"
+import (
+	"github.com/rfbatista/harnesskit/tool"
+
+	"operators-mcp/internal/ports"
+)
+
+var _ ports.ToolRegistry = (*Service)(nil)
 
 // Service is the registry for source-code (built-in) tools. It is an alias for
 // tool.Registry, which owns the implementation: tools are registered at startup

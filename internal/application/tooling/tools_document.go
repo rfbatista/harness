@@ -3,12 +3,12 @@ package tooling
 import (
 	"context"
 
-	"operators-mcp/internal/application/planning"
 	"operators-mcp/internal/domain"
+	"operators-mcp/internal/ports"
 )
 
 // DocumentTools exposes document CRUD and ticket links as MCP tools.
-func DocumentTools(planningSvc *planning.Service) []domain.Tool {
+func DocumentTools(planningSvc ports.DocumentLibrary) []domain.Tool {
 	return []domain.Tool{
 		{
 			Name:        "list_documents",

@@ -3,12 +3,12 @@ package tooling
 import (
 	"context"
 
-	"operators-mcp/internal/application/blueprint"
 	"operators-mcp/internal/domain"
+	"operators-mcp/internal/ports"
 )
 
 // SettingsTools exposes the global key/value app settings.
-func SettingsTools(bpSvc *blueprint.Service) []domain.Tool {
+func SettingsTools(bpSvc ports.SettingsEditor) []domain.Tool {
 	return []domain.Tool{
 		{
 			Name:        "get_settings",

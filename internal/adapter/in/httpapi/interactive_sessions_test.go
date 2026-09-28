@@ -6,14 +6,14 @@ import (
 	"strings"
 	"testing"
 
-	"operators-mcp/internal/application/orchestration"
 	"operators-mcp/internal/domain"
+	"operators-mcp/internal/ports"
 )
 
 type interactiveResp struct {
-	Session domain.Session       `json:"session"`
-	Launch  orchestration.Launch `json:"launch"`
-	Code    string               `json:"code"`
+	Session domain.Session `json:"session"`
+	Launch  ports.Launch   `json:"launch"`
+	Code    string         `json:"code"`
 }
 
 func post(t *testing.T, url, body string) (int, interactiveResp) {

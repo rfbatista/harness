@@ -4,6 +4,13 @@ import (
 	"encoding/json"
 
 	"github.com/rfbatista/llmkit/claude"
+
+	"operators-mcp/internal/ports"
+)
+
+type (
+	Question       = ports.Question
+	QuestionOption = ports.QuestionOption
 )
 
 // AskUserQuestionTool is the CLI's built-in multiple-choice tool. It reaches us
@@ -15,22 +22,6 @@ import (
 // auto-run from answering a question, and re-exported here so there is one
 // spelling of it.
 const AskUserQuestionTool = claude.AskUserQuestionTool
-
-type QuestionOption struct {
-	Label       string `json:"label"`
-	Description string `json:"description,omitempty"`
-	// Preview is optional mockup/snippet content the CLI renders beside the
-	// options. Markdown in a monospace box, per the tool's own contract.
-	Preview string `json:"preview,omitempty"`
-}
-
-type Question struct {
-	// Header is a very short chip label ("Auth method", "Approach").
-	Header      string           `json:"header,omitempty"`
-	Question    string           `json:"question"`
-	MultiSelect bool             `json:"multi_select,omitempty"`
-	Options     []QuestionOption `json:"options"`
-}
 
 // ParseQuestions extracts the questions from an AskUserQuestion tool input.
 //

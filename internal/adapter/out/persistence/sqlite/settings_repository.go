@@ -3,7 +3,7 @@ package sqlite
 import (
 	"errors"
 
-	"operators-mcp/internal/application/ports"
+	"operators-mcp/internal/ports"
 
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"

@@ -16,9 +16,15 @@ import (
 	"github.com/rfbatista/llmkit/approval"
 	"github.com/rfbatista/llmkit/claude"
 
-	"operators-mcp/internal/application/ports"
 	"operators-mcp/internal/domain"
+	"operators-mcp/internal/ports"
 )
+
+// Service satisfies every driving port of this package, checked at compile time.
+var _ ports.Orchestration = (*Service)(nil)
+
+// StartRequest is the headless start request; see ports.StartRequest.
+type StartRequest = ports.StartRequest
 
 // configResolver is the slice of blueprint.Service the orchestration needs.
 // *blueprint.Service satisfies it.
@@ -37,34 +43,6 @@ type ticketResolver interface {
 	Get(id string) *domain.Ticket
 }
 
-// workspaceProvisioner is the slice of workspaces.Service the orchestration
-// needs to give each session an isolated git worktree. *workspaces.Service
-// satisfies it.
-type workspaceProvisioner interface {
-	Create(repositoryID, name, branch, baseRef string) (*domain.Workspace, error)
-	Delete(id string) error
-	// Discard is Start's rollback: unlike Delete it also removes the branch,
-	// which is safe here (and only here) because a just-provisioned workspace's
-	// branch is guaranteed to hold zero commits.
-	Discard(id string) error
-}
-
-type StartRequest struct {
-	ProjectID     string   `json:"project_id"`
-	RepositoryID  string   `json:"repository_id,omitempty"`
-	AgentID       string   `json:"agent_id"`
-	ZoneID        string   `json:"zone_id"`
-	TicketID      string   `json:"ticket_id,omitempty"`
-	Task          string   `json:"task"`
-	ModelOverride string   `json:"model"`
-	AllowedTools  []string `json:"allowed_tools"`
-	AutoAccept    string   `json:"auto_accept"` // "off" | "edits" | "all"
-	// BaseBranch is the ref the session's branch is cut from; empty means HEAD.
-	BaseBranch string `json:"base_branch,omitempty"`
-	// Branch is the branch created for the session; empty derives one from Task.
-	Branch string `json:"branch,omitempty"`
-}
-
 type Service struct {
 	runtime    llmkit.Manager
 	broker     *approval.Broker
@@ -72,7 +50,7 @@ type Service struct {
 	sessions   ports.SessionRepository
 	bp         configResolver
 	tickets    ticketResolver
-	workspaces workspaceProvisioner
+	workspaces ports.WorkspaceProvisioner
 
 	DefaultEnv []string // test-only: extra env for spawned sessions
 
@@ -97,7 +75,7 @@ type Service struct {
 	busy map[string]bool
 }
 
-func NewService(runtime llmkit.Manager, broker *approval.Broker, hub *Hub, sessions ports.SessionRepository, bp configResolver, tickets ticketResolver, workspaces workspaceProvisioner) *Service {
+func NewService(runtime llmkit.Manager, broker *approval.Broker, hub *Hub, sessions ports.SessionRepository, bp configResolver, tickets ticketResolver, workspaces ports.WorkspaceProvisioner) *Service {
 	s := &Service{
 		runtime: runtime, broker: broker, hub: hub, sessions: sessions, bp: bp, tickets: tickets,
 		workspaces: workspaces,

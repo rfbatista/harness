@@ -10,9 +10,9 @@ import (
 	"testing"
 
 	"operators-mcp/internal/adapter/out/persistence/sqlite"
-	"operators-mcp/internal/application/ports"
 	"operators-mcp/internal/application/workspaces"
 	"operators-mcp/internal/domain"
+	"operators-mcp/internal/ports"
 )
 
 // fakeSettings is an in-memory ports.SettingsRepository.

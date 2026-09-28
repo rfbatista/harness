@@ -6,8 +6,8 @@ import (
 
 	"operators-mcp/internal/adapter/out/persistence/sqlite"
 	"operators-mcp/internal/application/planning"
-	"operators-mcp/internal/application/ports"
 	"operators-mcp/internal/domain"
+	"operators-mcp/internal/ports"
 )
 
 func newService(t *testing.T) (*planning.Service, string) {

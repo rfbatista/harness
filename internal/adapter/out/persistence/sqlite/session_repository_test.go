@@ -3,8 +3,8 @@ package sqlite
 import (
 	"testing"
 
-	"operators-mcp/internal/application/ports"
 	"operators-mcp/internal/domain"
+	"operators-mcp/internal/ports"
 )
 
 func newTestDB(t *testing.T) *SessionRepository {

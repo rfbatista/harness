@@ -9,7 +9,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 
-	"operators-mcp/internal/application/orchestration"
+	"operators-mcp/internal/ports"
 )
 
 // InteractiveSessionStartedPath is where an interactive session's SessionStart
@@ -21,7 +21,7 @@ func (h *Handler) handleStartInteractiveSession(c echo.Context) error {
 	if h.orchSvc == nil {
 		return echo.NewHTTPError(http.StatusServiceUnavailable, "orchestration not configured")
 	}
-	var req orchestration.InteractiveRequest
+	var req ports.InteractiveRequest
 	if err := bindJSON(c, &req); err != nil {
 		return err
 	}

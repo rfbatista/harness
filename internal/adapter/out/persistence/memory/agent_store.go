@@ -3,8 +3,8 @@ package memory
 import (
 	"sync"
 
-	"operators-mcp/internal/application/ports"
 	"operators-mcp/internal/domain"
+	"operators-mcp/internal/ports"
 )
 
 // Ensure AgentStore implements ports.AgentRepository at compile time.

@@ -4,16 +4,16 @@ import (
 	"github.com/mark3labs/mcp-go/server"
 	"github.com/rfbatista/harnesskit/mcpbridge"
 
-	"operators-mcp/internal/application/tooling"
 	"operators-mcp/internal/domain"
+	"operators-mcp/internal/ports"
 )
 
 // Schema and error conversion live in harnesskit/mcpbridge. These wrappers keep
 // this package as the single place the rest of the app reaches mcp-go through.
 
 // RegisterTools registers all tools from the tooling registry on the mcp-go server.
-func RegisterTools(s *server.MCPServer, toolingSvc *tooling.Service) {
-	mcpbridge.RegisterRegistry(s, toolingSvc)
+func RegisterTools(s *server.MCPServer, toolingSvc ports.ToolRegistry) {
+	mcpbridge.Register(s, toolingSvc.List())
 }
 
 // RegisterDomainTools registers a plain slice of domain tools on the mcp-go

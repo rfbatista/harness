@@ -9,8 +9,8 @@ import (
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 
-	"operators-mcp/internal/application/orchestration"
 	"operators-mcp/internal/domain"
+	"operators-mcp/internal/ports"
 )
 
 // --- new-session picker -------------------------------------------------------
@@ -152,7 +152,7 @@ func (p *picker) key(m *Model, msg tea.KeyPressMsg) tea.Cmd {
 // start asks the server for a session in the current task and launches it.
 func (m Model) start(agent Agent, repoID, prompt string) tea.Cmd {
 	be := m.be
-	req := orchestration.InteractiveRequest{
+	req := ports.InteractiveRequest{
 		ProjectID:    m.project.ID,
 		RepositoryID: repoID,
 		TicketID:     m.ticket.ID,
@@ -172,7 +172,7 @@ func (m Model) start(agent Agent, repoID, prompt string) tea.Cmd {
 	}
 }
 
-func specOf(l orchestration.Launch) launchSpec {
+func specOf(l ports.Launch) launchSpec {
 	return launchSpec{dir: l.Dir, args: l.Args, env: l.Env}
 }
 

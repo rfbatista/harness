@@ -3,11 +3,11 @@ package tooling
 import (
 	"context"
 
-	"operators-mcp/internal/application/blueprint"
 	"operators-mcp/internal/domain"
+	"operators-mcp/internal/ports"
 )
 
-func AgentTools(bpSvc *blueprint.Service) []domain.Tool {
+func AgentTools(bpSvc ports.AgentCatalog) []domain.Tool {
 	return []domain.Tool{
 		{
 			Name:        "list_agents",

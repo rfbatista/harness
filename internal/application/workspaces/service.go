@@ -8,9 +8,12 @@ import (
 	"path/filepath"
 	"strings"
 
-	"operators-mcp/internal/application/ports"
 	"operators-mcp/internal/domain"
+	"operators-mcp/internal/ports"
 )
+
+// Service satisfies every driving port of this package, checked at compile time.
+var _ ports.Workspaces = (*Service)(nil)
 
 // defaultWorktreesRoot is where worktrees land when workspaces.root is unset: a
 // single folder outside every checkout, so no worktree pollutes a repository.

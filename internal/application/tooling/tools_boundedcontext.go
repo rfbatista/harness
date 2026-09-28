@@ -3,11 +3,11 @@ package tooling
 import (
 	"context"
 
-	"operators-mcp/internal/application/blueprint"
 	"operators-mcp/internal/domain"
+	"operators-mcp/internal/ports"
 )
 
-func BoundedContextTools(bpSvc *blueprint.Service) []domain.Tool {
+func BoundedContextTools(bpSvc ports.BoundedContextCatalog) []domain.Tool {
 	return []domain.Tool{
 		{
 			Name:        "list_bounded_contexts",

@@ -5,7 +5,7 @@ import (
 
 	"go.uber.org/fx"
 
-	"operators-mcp/internal/application/ports"
+	"operators-mcp/internal/ports"
 )
 
 // TestGraphValidates ensures the full dependency graph is satisfiable: every

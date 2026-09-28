@@ -7,20 +7,18 @@ import (
 	"os"
 	"strconv"
 
-	"operators-mcp/internal/application/ports"
-	"operators-mcp/internal/domain"
-
 	"github.com/firebase/genkit/go/ai"
 	"github.com/firebase/genkit/go/genkit"
+
+	"operators-mcp/internal/domain"
+	"operators-mcp/internal/ports"
 )
 
-// RunTaskRequest is the input for dispatching a task to a zone.
-type RunTaskRequest struct {
-	ProjectID   string `json:"project_id"`
-	ZoneID      string `json:"zone_id"`
-	AgentID     string `json:"agent_id,omitempty"`
-	Instruction string `json:"instruction"`
-}
+// Service satisfies every driving port of this package, checked at compile time.
+var _ ports.TaskRunner = (*Service)(nil)
+
+// RunTaskRequest is the task dispatch request; see ports.RunTaskRequest.
+type RunTaskRequest = ports.RunTaskRequest
 
 // Service orchestrates AI task execution within zone boundaries.
 type Service struct {

@@ -4,8 +4,8 @@ import (
 	"sync"
 	"time"
 
-	"operators-mcp/internal/application/ports"
 	"operators-mcp/internal/domain"
+	"operators-mcp/internal/ports"
 )
 
 var _ ports.MCPServerRepository = (*MCPServerStore)(nil)

@@ -3,13 +3,12 @@ package tooling
 import (
 	"context"
 
-	"operators-mcp/internal/application/execution"
-	"operators-mcp/internal/application/ports"
 	"operators-mcp/internal/domain"
+	"operators-mcp/internal/ports"
 )
 
 // TaskTools returns MCP tools for dispatching and querying zone tasks.
-func TaskTools(execSvc *execution.Service) []domain.Tool {
+func TaskTools(execSvc ports.TaskRunner) []domain.Tool {
 	return []domain.Tool{
 		{
 			Name: "dispatch_zone_task",
@@ -41,7 +40,7 @@ Returns the task with its result or error.`,
 			}`),
 			Source: "code",
 			Handler: func(ctx context.Context, args map[string]any) (any, error) {
-				req := execution.RunTaskRequest{
+				req := ports.RunTaskRequest{
 					ProjectID:   getString(args, "project_id", ""),
 					ZoneID:      getString(args, "zone_id", ""),
 					AgentID:     getString(args, "agent_id", ""),

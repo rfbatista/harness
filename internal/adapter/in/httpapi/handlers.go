@@ -6,29 +6,26 @@ import (
 	"github.com/labstack/echo/v4"
 
 	"operators-mcp/internal/adapter/in/mcp"
-	"operators-mcp/internal/application/blueprint"
-	"operators-mcp/internal/application/execution"
-	"operators-mcp/internal/application/orchestration"
-	"operators-mcp/internal/application/planning"
-	"operators-mcp/internal/application/ports"
-	"operators-mcp/internal/application/tooling"
-	"operators-mcp/internal/application/workspaces"
 	"operators-mcp/internal/domain"
+	"operators-mcp/internal/ports"
 )
 
-// Handler exposes blueprint use cases as HTTP endpoints (same contract as MCP tools).
+// Handler serves the application's driving ports as HTTP endpoints (the same
+// contract as the MCP tools). It holds ports, not services, so a test can hand
+// it any implementation.
 type Handler struct {
-	svc           *blueprint.Service
-	toolingSvc    *tooling.Service
-	execSvc       *execution.Service
-	orchSvc       *orchestration.Service
-	planningSvc   *planning.Service
-	workspacesSvc *workspaces.Service
+	svc           ports.Blueprint
+	toolingSvc    ports.ToolRegistry
+	execSvc       ports.TaskRunner
+	orchSvc       ports.Orchestration
+	planningSvc   ports.Planning
+	workspacesSvc ports.WorkspaceManager
 }
 
 // NewHandler returns an HTTP handler that serves /api/list_tree, /api/list_zones, /api/list_projects, etc.
-// execSvc may be nil if the execution layer is not configured.
-func NewHandler(svc *blueprint.Service, toolingSvc *tooling.Service, execSvc *execution.Service, orchSvc *orchestration.Service, planningSvc *planning.Service, workspacesSvc *workspaces.Service) *Handler {
+// execSvc and orchSvc may be nil when those layers are not configured; pass an
+// untyped nil, since a nil pointer in an interface is not nil.
+func NewHandler(svc ports.Blueprint, toolingSvc ports.ToolRegistry, execSvc ports.TaskRunner, orchSvc ports.Orchestration, planningSvc ports.Planning, workspacesSvc ports.WorkspaceManager) *Handler {
 	return &Handler{
 		svc:           svc,
 		toolingSvc:    toolingSvc,
@@ -711,7 +708,7 @@ func (h *Handler) handleCreateTask(c echo.Context) error {
 	if h.execSvc == nil {
 		return echo.NewHTTPError(http.StatusServiceUnavailable, "execution service not configured (set GEMINI_API_KEY)")
 	}
-	var req execution.RunTaskRequest
+	var req ports.RunTaskRequest
 	if err := bindJSON(c, &req); err != nil {
 		return err
 	}

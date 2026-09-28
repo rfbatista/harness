@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"regexp"
 
-	"operators-mcp/internal/application/ports"
 	"operators-mcp/internal/domain"
+	"operators-mcp/internal/ports"
 )
 
 var _ ports.ClaudeTranscripts = Transcripts{}

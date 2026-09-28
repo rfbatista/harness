@@ -7,8 +7,8 @@ import (
 	"sync"
 	"time"
 
-	"operators-mcp/internal/application/orchestration"
 	"operators-mcp/internal/domain"
+	"operators-mcp/internal/ports"
 )
 
 var _ Backend = (*Fake)(nil)
@@ -26,7 +26,7 @@ type Fake struct {
 	Sessions     []domain.Session
 
 	// Launch builds the command line a started or resumed session gets.
-	Launch func(s domain.Session, resume bool) orchestration.Launch
+	Launch func(s domain.Session, resume bool) ports.Launch
 	// Err, when set, is returned by the next call to the named method.
 	Err map[string]error
 
@@ -105,14 +105,14 @@ func (f *Fake) ListSessions(_ context.Context, flt SessionFilter) ([]domain.Sess
 	return out, f.fail("ListSessions")
 }
 
-func (f *Fake) StartSession(_ context.Context, req orchestration.InteractiveRequest) (domain.Session, orchestration.Launch, error) {
+func (f *Fake) StartSession(_ context.Context, req ports.InteractiveRequest) (domain.Session, ports.Launch, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if err := f.fail("StartSession"); err != nil {
-		return domain.Session{}, orchestration.Launch{}, err
+		return domain.Session{}, ports.Launch{}, err
 	}
 	if req.TicketID == "" {
-		return domain.Session{}, orchestration.Launch{}, &APIError{Status: 400, Code: "INVALID_INPUT", Message: "ticket_id is required"}
+		return domain.Session{}, ports.Launch{}, &APIError{Status: 400, Code: "INVALID_INPUT", Message: "ticket_id is required"}
 	}
 	f.seq++
 	s := domain.Session{
@@ -132,18 +132,18 @@ func (f *Fake) StartSession(_ context.Context, req orchestration.InteractiveRequ
 	return s, f.launch(s, false), nil
 }
 
-func (f *Fake) ResumeSession(_ context.Context, id string) (domain.Session, orchestration.Launch, error) {
+func (f *Fake) ResumeSession(_ context.Context, id string) (domain.Session, ports.Launch, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if err := f.fail("ResumeSession"); err != nil {
-		return domain.Session{}, orchestration.Launch{}, err
+		return domain.Session{}, ports.Launch{}, err
 	}
 	i := f.index(id)
 	if i < 0 {
-		return domain.Session{}, orchestration.Launch{}, &APIError{Status: 404, Code: "SESSION_NOT_FOUND", Message: "session not found"}
+		return domain.Session{}, ports.Launch{}, &APIError{Status: 404, Code: "SESSION_NOT_FOUND", Message: "session not found"}
 	}
 	if !f.Sessions[i].Status.IsTerminal() {
-		return domain.Session{}, orchestration.Launch{}, &APIError{Status: 409, Code: "SESSION_ALREADY_RUNNING", Message: "session is still running"}
+		return domain.Session{}, ports.Launch{}, &APIError{Status: 409, Code: "SESSION_ALREADY_RUNNING", Message: "session is still running"}
 	}
 	f.Sessions[i].Status = domain.SessionRunning
 	return f.Sessions[i], f.launch(f.Sessions[i], true), nil
@@ -200,9 +200,9 @@ func (f *Fake) index(id string) int {
 	return -1
 }
 
-func (f *Fake) launch(s domain.Session, resume bool) orchestration.Launch {
+func (f *Fake) launch(s domain.Session, resume bool) ports.Launch {
 	if f.Launch != nil {
 		return f.Launch(s, resume)
 	}
-	return orchestration.Launch{SessionID: s.ID, Args: []string{"-c", "cat"}}
+	return ports.Launch{SessionID: s.ID, Args: []string{"-c", "cat"}}
 }

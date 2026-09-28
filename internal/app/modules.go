@@ -28,11 +28,11 @@ import (
 	"operators-mcp/internal/application/execution"
 	"operators-mcp/internal/application/orchestration"
 	"operators-mcp/internal/application/planning"
-	"operators-mcp/internal/application/ports"
 	"operators-mcp/internal/application/tooling"
 	"operators-mcp/internal/application/workspaces"
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/infra"
+	"operators-mcp/internal/ports"
 
 	"github.com/firebase/genkit/go/genkit"
 	"gorm.io/gorm"

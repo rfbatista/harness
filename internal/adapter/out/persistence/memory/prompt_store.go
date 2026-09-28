@@ -3,8 +3,8 @@ package memory
 import (
 	"sync"
 
-	"operators-mcp/internal/application/ports"
 	"operators-mcp/internal/domain"
+	"operators-mcp/internal/ports"
 )
 
 var _ ports.PromptRepository = (*PromptStore)(nil)

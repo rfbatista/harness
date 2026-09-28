@@ -4,8 +4,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"operators-mcp/internal/application/ports"
 	"operators-mcp/internal/domain"
+	"operators-mcp/internal/ports"
 )
 
 // Ensure lister implements ports.TreeLister at compile time.

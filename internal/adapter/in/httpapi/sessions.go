@@ -10,9 +10,8 @@ import (
 
 	"github.com/labstack/echo/v4"
 
-	"operators-mcp/internal/application/orchestration"
-	"operators-mcp/internal/application/ports"
 	"operators-mcp/internal/domain"
+	"operators-mcp/internal/ports"
 )
 
 func (h *Handler) handleListSessions(c echo.Context) error {
@@ -43,7 +42,7 @@ func (h *Handler) handleCreateSession(c echo.Context) error {
 	if h.orchSvc == nil {
 		return echo.NewHTTPError(http.StatusServiceUnavailable, "orchestration not configured")
 	}
-	var req orchestration.StartRequest
+	var req ports.StartRequest
 	if err := bindJSON(c, &req); err != nil {
 		return err
 	}
@@ -197,7 +196,7 @@ func (h *Handler) handleSessionEvents(c echo.Context) error {
 	}
 }
 
-func writeSSE(w http.ResponseWriter, ev orchestration.SessionEvent) {
+func writeSSE(w http.ResponseWriter, ev ports.SessionEvent) {
 	data, _ := json.Marshal(ev)
 	// Ephemeral events (streaming deltas) carry no seq and are not resumable, so
 	// they omit the SSE id: field. Persisted events always have seq >= 1.
@@ -229,11 +228,11 @@ func resumeSeq(c echo.Context) int64 {
 }
 
 // replayFrom drops buffered events the client has already seen.
-func replayFrom(events []orchestration.SessionEvent, fromSeq int64) []orchestration.SessionEvent {
+func replayFrom(events []ports.SessionEvent, fromSeq int64) []ports.SessionEvent {
 	if fromSeq <= 0 {
 		return events
 	}
-	out := make([]orchestration.SessionEvent, 0, len(events))
+	out := make([]ports.SessionEvent, 0, len(events))
 	for _, ev := range events {
 		if ev.Seq > fromSeq {
 			out = append(out, ev)

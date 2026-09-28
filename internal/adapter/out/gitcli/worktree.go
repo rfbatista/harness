@@ -9,8 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"operators-mcp/internal/application/ports"
 	"operators-mcp/internal/domain"
+	"operators-mcp/internal/ports"
 )
 
 // Ensure WorktreeManager implements ports.WorktreeManager at compile time.

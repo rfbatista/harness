@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"operators-mcp/internal/application/ports"
+	"operators-mcp/internal/ports"
 )
 
 // initRepo creates a throwaway git repository with one commit on branch "main".

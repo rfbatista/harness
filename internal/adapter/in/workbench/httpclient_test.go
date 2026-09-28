@@ -8,12 +8,12 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"operators-mcp/internal/application/orchestration"
 	"operators-mcp/internal/domain"
+	"operators-mcp/internal/ports"
 )
 
 func TestHTTPClient_DecodesListsAndSendsRequests(t *testing.T) {
-	var gotStart orchestration.InteractiveRequest
+	var gotStart ports.InteractiveRequest
 	var gotEnd map[string]any
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/list_projects", func(w http.ResponseWriter, r *http.Request) {
@@ -47,7 +47,7 @@ func TestHTTPClient_DecodesListsAndSendsRequests(t *testing.T) {
 	if err != nil || len(ss) != 1 || !ss[0].Interactive || ss[0].ClaudeSessionID != "c1" {
 		t.Fatalf("ListSessions = %+v, %v", ss, err)
 	}
-	s, l, err := c.StartSession(ctx, orchestration.InteractiveRequest{ProjectID: "p1", TicketID: "t1", Prompt: "hi"})
+	s, l, err := c.StartSession(ctx, ports.InteractiveRequest{ProjectID: "p1", TicketID: "t1", Prompt: "hi"})
 	if err != nil || s.ID != "s2" || l.Dir != "/wt" || len(l.Args) != 2 {
 		t.Fatalf("StartSession = %+v %+v, %v", s, l, err)
 	}

@@ -3,12 +3,12 @@ package tooling
 import (
 	"context"
 
-	"operators-mcp/internal/application/planning"
 	"operators-mcp/internal/domain"
+	"operators-mcp/internal/ports"
 )
 
 // TicketTools exposes ticket CRUD as MCP tools.
-func TicketTools(planningSvc *planning.Service) []domain.Tool {
+func TicketTools(planningSvc ports.TicketBoard) []domain.Tool {
 	return []domain.Tool{
 		{
 			Name:        "list_tickets",

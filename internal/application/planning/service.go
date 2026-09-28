@@ -4,9 +4,12 @@
 package planning
 
 import (
-	"operators-mcp/internal/application/ports"
 	"operators-mcp/internal/domain"
+	"operators-mcp/internal/ports"
 )
+
+// Service satisfies every driving port of this package, checked at compile time.
+var _ ports.Planning = (*Service)(nil)
 
 // Service implements ticket/document use-cases over the outbound ports.
 type Service struct {

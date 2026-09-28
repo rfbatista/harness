@@ -12,8 +12,8 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 
-	"operators-mcp/internal/application/orchestration"
 	"operators-mcp/internal/domain"
+	"operators-mcp/internal/ports"
 )
 
 // run drives the workbench the way the Bubble Tea runtime would: every
@@ -30,7 +30,7 @@ type run struct {
 // its pane runs in place of claude.
 func newRun(t *testing.T, be *Fake, scripts map[string]string) *run {
 	t.Helper()
-	be.Launch = func(s domain.Session, resume bool) orchestration.Launch {
+	be.Launch = func(s domain.Session, resume bool) ports.Launch {
 		key := s.Task
 		if resume {
 			key = "resume"
@@ -39,7 +39,7 @@ func newRun(t *testing.T, be *Fake, scripts map[string]string) *run {
 		if !ok {
 			script = "cat"
 		}
-		return orchestration.Launch{SessionID: s.ID, Args: []string{"-c", script}, Dir: t.TempDir()}
+		return ports.Launch{SessionID: s.ID, Args: []string{"-c", script}, Dir: t.TempDir()}
 	}
 	r := &run{t: t, m: New(be, "/bin/sh"), be: be, msgs: make(chan tea.Msg, 1024)}
 	t.Cleanup(func() {

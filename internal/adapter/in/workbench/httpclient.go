@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"operators-mcp/internal/application/orchestration"
 	"operators-mcp/internal/domain"
+	"operators-mcp/internal/ports"
 )
 
 var _ Backend = (*HTTPClient)(nil)
@@ -87,17 +87,17 @@ func (c *HTTPClient) ListSessions(ctx context.Context, f SessionFilter) ([]domai
 }
 
 type launchResponse struct {
-	Session domain.Session       `json:"session"`
-	Launch  orchestration.Launch `json:"launch"`
+	Session domain.Session `json:"session"`
+	Launch  ports.Launch   `json:"launch"`
 }
 
-func (c *HTTPClient) StartSession(ctx context.Context, req orchestration.InteractiveRequest) (domain.Session, orchestration.Launch, error) {
+func (c *HTTPClient) StartSession(ctx context.Context, req ports.InteractiveRequest) (domain.Session, ports.Launch, error) {
 	var out launchResponse
 	err := c.post(ctx, "/api/start_interactive_session", req, &out)
 	return out.Session, out.Launch, err
 }
 
-func (c *HTTPClient) ResumeSession(ctx context.Context, sessionID string) (domain.Session, orchestration.Launch, error) {
+func (c *HTTPClient) ResumeSession(ctx context.Context, sessionID string) (domain.Session, ports.Launch, error) {
 	var out launchResponse
 	err := c.post(ctx, "/api/resume_interactive_session", map[string]string{"session_id": sessionID}, &out)
 	return out.Session, out.Launch, err

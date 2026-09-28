@@ -8,8 +8,8 @@ package workbench
 import (
 	"context"
 
-	"operators-mcp/internal/application/orchestration"
 	"operators-mcp/internal/domain"
+	"operators-mcp/internal/ports"
 )
 
 // Agent is the slice of an agent template the picker shows.
@@ -35,8 +35,8 @@ type Backend interface {
 	ListTickets(ctx context.Context, projectID string) ([]domain.Ticket, error)
 	ListAgents(ctx context.Context) ([]Agent, error)
 	ListSessions(ctx context.Context, f SessionFilter) ([]domain.Session, error)
-	StartSession(ctx context.Context, req orchestration.InteractiveRequest) (domain.Session, orchestration.Launch, error)
-	ResumeSession(ctx context.Context, sessionID string) (domain.Session, orchestration.Launch, error)
+	StartSession(ctx context.Context, req ports.InteractiveRequest) (domain.Session, ports.Launch, error)
+	ResumeSession(ctx context.Context, sessionID string) (domain.Session, ports.Launch, error)
 	EndSession(ctx context.Context, sessionID string, exitCode int, closed bool) error
 }
 

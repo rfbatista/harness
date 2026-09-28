@@ -4,9 +4,8 @@ import (
 	"context"
 	"time"
 
-	"operators-mcp/internal/application/planning"
-	"operators-mcp/internal/application/ports"
 	"operators-mcp/internal/domain"
+	"operators-mcp/internal/ports"
 )
 
 // SessionTaskToolNames lists the tools SessionTaskTools returns, in order. It is
@@ -25,7 +24,7 @@ var SessionTaskToolNames = []string{
 // The tools take no project or ticket id: the session id travels in the context
 // (see WithSessionID) and every handler resolves the scope from it, so a session
 // can only ever reach its own task and the documents linked to it.
-func SessionTaskTools(planningSvc *planning.Service, sessions ports.SessionRepository) []domain.Tool {
+func SessionTaskTools(planningSvc ports.Planning, sessions ports.SessionRepository) []domain.Tool {
 	return []domain.Tool{
 		{
 			Name:        "get_task",
@@ -136,7 +135,7 @@ type taskScope struct {
 	ticket  *domain.Ticket
 }
 
-func resolveTaskScope(ctx context.Context, planningSvc *planning.Service, sessions ports.SessionRepository) (*taskScope, error) {
+func resolveTaskScope(ctx context.Context, planningSvc ports.Planning, sessions ports.SessionRepository) (*taskScope, error) {
 	id := SessionIDFrom(ctx)
 	if id == "" {
 		return nil, &domain.StructuredError{Code: "SESSION_NOT_FOUND", Message: "no session in context"}
@@ -157,7 +156,7 @@ func resolveTaskScope(ctx context.Context, planningSvc *planning.Service, sessio
 
 // document returns the document only when it is linked to the scoped task, so a
 // session cannot read or edit a document belonging to another task.
-func (s *taskScope) document(planningSvc *planning.Service, documentID string) (*domain.Document, error) {
+func (s *taskScope) document(planningSvc ports.Planning, documentID string) (*domain.Document, error) {
 	if documentID == "" {
 		return nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "document_id is required"}
 	}

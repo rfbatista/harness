@@ -3,8 +3,8 @@ package memory
 import (
 	"sync"
 
-	"operators-mcp/internal/application/ports"
 	"operators-mcp/internal/domain"
+	"operators-mcp/internal/ports"
 )
 
 // Ensure ProjectStore implements ports.ProjectRepository at compile time.

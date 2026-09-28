@@ -5,8 +5,8 @@ import (
 	"encoding/hex"
 	"sync"
 
-	"operators-mcp/internal/application/ports"
 	"operators-mcp/internal/domain"
+	"operators-mcp/internal/ports"
 )
 
 // Ensure Store implements ports.ZoneRepository at compile time.

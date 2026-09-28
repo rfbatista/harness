@@ -3,11 +3,11 @@ package tooling
 import (
 	"context"
 
-	"operators-mcp/internal/application/blueprint"
 	"operators-mcp/internal/domain"
+	"operators-mcp/internal/ports"
 )
 
-func PromptTools(bpSvc *blueprint.Service) []domain.Tool {
+func PromptTools(bpSvc ports.PromptCatalog) []domain.Tool {
 	return []domain.Tool{
 		{
 			Name:        "list_prompts",

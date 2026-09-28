@@ -3,11 +3,11 @@ package tooling
 import (
 	"context"
 
-	"operators-mcp/internal/application/blueprint"
 	"operators-mcp/internal/domain"
+	"operators-mcp/internal/ports"
 )
 
-func TreeTools(bpSvc *blueprint.Service) []domain.Tool {
+func TreeTools(bpSvc ports.PathExplorer) []domain.Tool {
 	return []domain.Tool{
 		{
 			Name:        "list_tree",

@@ -1,8 +1,8 @@
 package sqlite
 
 import (
-	"operators-mcp/internal/application/ports"
 	"operators-mcp/internal/domain"
+	"operators-mcp/internal/ports"
 
 	"gorm.io/gorm"
 )

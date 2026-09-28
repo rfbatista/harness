@@ -3,8 +3,8 @@ package sqlite
 import (
 	"time"
 
-	"operators-mcp/internal/application/ports"
 	"operators-mcp/internal/domain"
+	"operators-mcp/internal/ports"
 
 	"gorm.io/gorm"
 )
