@@ -5,11 +5,14 @@
 -include .env
 export
 
-.PHONY: help build build-tui tui run run-api dev-server test clean web-install web-build web-dev copy-ui deps air stop-api genkit-qwen3-tools genkit-postman-agent build-crap crap install-crap update-crap
+.PHONY: help build build-tui tui run run-api dev-server test clean web-install web-build web-dev copy-ui deps air stop-api genkit-qwen3-tools genkit-postman-agent build-crap crap install-crap update-crap build-linkedin-mcp linkedin-mcp linkedin-login linkedin-mcpb
 
 BINARY   := bin/server
 TUI_BINARY := bin/coding-pool-tui
 CRAP_BINARY := bin/crap
+LINKEDIN_BINARY := bin/linkedin-mcp
+LINKEDIN_MCPB_DIR := bin/linkedin-mcpb
+LINKEDIN_MCPB := bin/linkedin-mcp.mcpb
 WEB_DIR  := web
 UI_STATIC := internal/adapter/in/ui/static
 
@@ -30,6 +33,10 @@ help:
 	@echo "  make crap        — run the CRAP analyzer (make crap ARGS='--cover=cover.out ./internal/...')"
 	@echo "  make install-crap — install crap globally via 'go install' (into \$$GOBIN or \$$GOPATH/bin)"
 	@echo "  make update-crap — rebuild + reinstall the global crap from the current source"
+	@echo "  make linkedin-login — open a browser window to log in to LinkedIn (once, before linkedin-mcp)"
+	@echo "  make linkedin-mcp — run the LinkedIn MCP server at http://localhost:9090/mcp (ARGS='--headless=false')"
+	@echo "  make build-linkedin-mcp — build the LinkedIn MCP server ($(LINKEDIN_BINARY))"
+	@echo "  make linkedin-mcpb — pack the LinkedIn MCP server as a Claude Desktop extension ($(LINKEDIN_MCPB), macOS)"
 	@echo "  make clean       — remove bin/, web/dist/, $(UI_STATIC)/"
 	@echo "  make deps        — install Go deps + web npm deps"
 	@echo ""
@@ -90,6 +97,32 @@ install-crap:
 # a separate target so 'make update-crap' reads naturally after a pull.
 update-crap: install-crap
 	@echo "crap is up to date."
+
+# Standalone LinkedIn MCP server (see cmd/linkedin-mcp/README.md).
+build-linkedin-mcp:
+	go build -o $(LINKEDIN_BINARY) ./cmd/linkedin-mcp
+	@echo "Built $(LINKEDIN_BINARY)"
+
+# Opens a visible browser window; log in by hand. The session is kept in
+# ~/.config/linkedin-mcp/browser-profile.
+linkedin-login:
+	go run ./cmd/linkedin-mcp login $(ARGS)
+
+linkedin-mcp:
+	go run ./cmd/linkedin-mcp serve $(ARGS)
+
+# MCP Bundle for Claude Desktop: a universal macOS binary (arm64 + amd64) next
+# to cmd/linkedin-mcp/mcpb/manifest.json, validated and packed with the mcpb CLI.
+linkedin-mcpb:
+	rm -rf $(LINKEDIN_MCPB_DIR) && mkdir -p $(LINKEDIN_MCPB_DIR)/server
+	GOOS=darwin GOARCH=arm64 go build -o $(LINKEDIN_MCPB_DIR)/linkedin-mcp-arm64 ./cmd/linkedin-mcp
+	GOOS=darwin GOARCH=amd64 go build -o $(LINKEDIN_MCPB_DIR)/linkedin-mcp-amd64 ./cmd/linkedin-mcp
+	lipo -create -output $(LINKEDIN_MCPB_DIR)/server/linkedin-mcp $(LINKEDIN_MCPB_DIR)/linkedin-mcp-arm64 $(LINKEDIN_MCPB_DIR)/linkedin-mcp-amd64
+	rm $(LINKEDIN_MCPB_DIR)/linkedin-mcp-arm64 $(LINKEDIN_MCPB_DIR)/linkedin-mcp-amd64
+	cp cmd/linkedin-mcp/mcpb/manifest.json $(LINKEDIN_MCPB_DIR)/
+	npx -y @anthropic-ai/mcpb validate $(LINKEDIN_MCPB_DIR)/manifest.json
+	npx -y @anthropic-ai/mcpb pack $(LINKEDIN_MCPB_DIR) $(LINKEDIN_MCPB)
+	@echo "Built $(LINKEDIN_MCPB) — double-click it (or drag it into Claude Desktop > Settings > Extensions) to install"
 
 # Run HTTP server (UI at /, API at /api, MCP at /mcp).
 run: build

@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "linkedin": {
+      "type": "stdio",
+      "command": "go",
+      "args": ["run", "./cmd/linkedin-mcp", "stdio"]
+    }
+  }
+}
