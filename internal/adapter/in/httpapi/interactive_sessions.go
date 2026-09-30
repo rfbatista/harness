@@ -88,7 +88,7 @@ func (h *Handler) handleInteractiveSessionStarted(c echo.Context) error {
 		slog.Warn("interactive session hook: bad body", "session", id, "err", err)
 		return c.NoContent(http.StatusOK)
 	}
-	if err := h.orchSvc.RecordClaudeSession(id, hook.SessionID); err != nil {
+	if err := h.orchSvc.RecordClaudeSession(c.Request().Context(), id, hook.SessionID); err != nil {
 		slog.Warn("interactive session hook", "session", id, "source", hook.Source, "err", err)
 	}
 	return c.NoContent(http.StatusOK)

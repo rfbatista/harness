@@ -32,7 +32,7 @@ func newTaskServer(t *testing.T) (baseURL, ticketID string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	tk, err := plan.CreateTicket(proj.ID, "Ship the thing", "", domain.TicketStatusTodo)
+	tk, err := plan.CreateTicket(context.Background(), proj.ID, "Ship the thing", "", domain.TicketStatusTodo)
 	if err != nil {
 		t.Fatal(err)
 	}

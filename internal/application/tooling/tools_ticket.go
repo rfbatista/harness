@@ -20,7 +20,11 @@ func TicketTools(planningSvc ports.TicketBoard) []domain.Tool {
 				if pid == "" {
 					return nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "project_id is required"}
 				}
-				return map[string]any{"tickets": planningSvc.ListTickets(pid)}, nil
+				tickets, err := planningSvc.ListTickets(ctx, pid)
+				if err != nil {
+					return nil, err
+				}
+				return map[string]any{"tickets": tickets}, nil
 			},
 		},
 		{
@@ -29,9 +33,9 @@ func TicketTools(planningSvc ports.TicketBoard) []domain.Tool {
 			InputSchema: schemaFromJSON(`{"type":"object","properties":{"ticket_id":{"type":"string","description":"Ticket ID"}},"required":["ticket_id"]}`),
 			Source:      "code",
 			Handler: func(ctx context.Context, args map[string]any) (any, error) {
-				tk := planningSvc.GetTicket(getString(args, "ticket_id", ""))
-				if tk == nil {
-					return nil, &domain.StructuredError{Code: "TICKET_NOT_FOUND", Message: "ticket not found"}
+				tk, err := planningSvc.GetTicket(ctx, getString(args, "ticket_id", ""))
+				if err != nil {
+					return nil, err
 				}
 				return map[string]any{"ticket": tk}, nil
 			},
@@ -42,7 +46,7 @@ func TicketTools(planningSvc ports.TicketBoard) []domain.Tool {
 			InputSchema: schemaFromJSON(`{"type":"object","properties":{"project_id":{"type":"string","description":"Project ID"},"title":{"type":"string","description":"Ticket title"},"description":{"type":"string","description":"Ticket description"},"status":{"type":"string","enum":["backlog","todo","in_progress","review","done"]}},"required":["project_id","title"]}`),
 			Source:      "code",
 			Handler: func(ctx context.Context, args map[string]any) (any, error) {
-				tk, err := planningSvc.CreateTicket(
+				tk, err := planningSvc.CreateTicket(ctx,
 					getString(args, "project_id", ""),
 					getString(args, "title", ""),
 					getString(args, "description", ""),
@@ -60,7 +64,7 @@ func TicketTools(planningSvc ports.TicketBoard) []domain.Tool {
 			InputSchema: schemaFromJSON(`{"type":"object","properties":{"ticket_id":{"type":"string","description":"Ticket ID"},"title":{"type":"string"},"description":{"type":"string"},"status":{"type":"string","enum":["backlog","todo","in_progress","review","done"]}},"required":["ticket_id","title"]}`),
 			Source:      "code",
 			Handler: func(ctx context.Context, args map[string]any) (any, error) {
-				tk, err := planningSvc.UpdateTicket(
+				tk, err := planningSvc.UpdateTicket(ctx,
 					getString(args, "ticket_id", ""),
 					getString(args, "title", ""),
 					getString(args, "description", ""),
@@ -79,7 +83,7 @@ func TicketTools(planningSvc ports.TicketBoard) []domain.Tool {
 			Source:      "code",
 			Handler: func(ctx context.Context, args map[string]any) (any, error) {
 				id := getString(args, "ticket_id", "")
-				if err := planningSvc.DeleteTicket(id); err != nil {
+				if err := planningSvc.DeleteTicket(ctx, id); err != nil {
 					return nil, err
 				}
 				return map[string]string{"deleted": id}, nil

@@ -147,9 +147,9 @@ func resolveTaskScope(ctx context.Context, planningSvc ports.Planning, sessions 
 	if sess.TicketID == "" {
 		return nil, &domain.StructuredError{Code: "SESSION_HAS_NO_TASK", Message: "this session is not working on a task"}
 	}
-	tk := planningSvc.GetTicket(sess.TicketID)
-	if tk == nil {
-		return nil, &domain.StructuredError{Code: "TICKET_NOT_FOUND", Message: "task not found"}
+	tk, err := planningSvc.GetTicket(ctx, sess.TicketID)
+	if err != nil {
+		return nil, err
 	}
 	return &taskScope{session: sess, ticket: tk}, nil
 }

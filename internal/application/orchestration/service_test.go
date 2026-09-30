@@ -27,23 +27,34 @@ type fakeResolver struct {
 	agents map[string]*domain.Agent
 }
 
-func (f *fakeResolver) GetProject(id string) *domain.Project {
+func (f *fakeResolver) GetProject(_ context.Context, id string) (*domain.Project, error) {
 	if id == "p1" {
-		return f.proj
+		return f.proj, nil
 	}
-	return nil
+	return nil, &domain.StructuredError{Code: "PROJECT_NOT_FOUND", Message: "project not found"}
 }
 
-func (f *fakeResolver) GetRepository(id string) *domain.Repository {
+func (f *fakeResolver) GetRepository(_ context.Context, id string) (*domain.Repository, error) {
 	if id == "r1" {
-		return f.repo
+		return f.repo, nil
 	}
-	return nil
+	return nil, &domain.StructuredError{Code: "REPOSITORY_NOT_FOUND", Message: "repository not found"}
 }
-func (f *fakeResolver) GetAgent(id string) *domain.Agent      { return f.agents[id] }
+func (f *fakeResolver) GetAgent(_ context.Context, id string) (*domain.Agent, error) {
+	if a, ok := f.agents[id]; ok {
+		return a, nil
+	}
+	return nil, &domain.StructuredError{Code: "AGENT_NOT_FOUND", Message: "agent not found"}
+}
+
 func (f *fakeResolver) ResolveAgentRelations(a *domain.Agent) {}
 func (f *fakeResolver) ListMCPServers() []*domain.MCPServer   { return nil }
 func (f *fakeResolver) GetZone(id string) *domain.Zone        { return nil }
+
+// catalogOf serves every catalog read from one fake.
+func catalogOf(f *fakeResolver) Catalog {
+	return Catalog{Projects: f, Repositories: f, Agents: f, MCPServers: f, Zones: f}
+}
 
 type fakeTickets map[string]*domain.Ticket
 
@@ -137,7 +148,7 @@ func newTestServiceWithBin(t *testing.T, bin string) (*Service, *approval.Broker
 		"tk2": {ID: "tk2", ProjectID: "other", Title: "Elsewhere"},
 	}
 	prov := &fakeProvisioner{dir: t.TempDir()}
-	svc := NewService(mgr, broker, hub, repo, res, tickets, prov)
+	svc := NewService(mgr, broker, hub, repo, catalogOf(res), tickets, prov)
 	svc.DefaultEnv = []string{"CLAUDE_FAKE=1"}
 	svc.TaskServerURL = func(sessionID string) string {
 		return testTaskServerBase + sessionID
@@ -184,13 +195,13 @@ func waitForStatus(t *testing.T, svc *Service, id string, want domain.SessionSta
 	t.Helper()
 	deadline := time.After(4 * time.Second)
 	for {
-		if got := svc.Get(id); got != nil && got.Status == want {
+		if got := sessionOf(svc, id); got != nil && got.Status == want {
 			return
 		}
 		select {
 		case <-deadline:
 			var got domain.SessionStatus
-			if s := svc.Get(id); s != nil {
+			if s := sessionOf(svc, id); s != nil {
 				got = s.Status
 			}
 			t.Fatalf("session status = %q, want %q", got, want)
@@ -289,7 +300,7 @@ func TestService_StartWithTicketPersistsLink(t *testing.T) {
 	if d.TicketID != "tk1" {
 		t.Fatalf("returned session ticket_id = %q, want tk1", d.TicketID)
 	}
-	if got := svc.Get(d.ID); got == nil || got.TicketID != "tk1" {
+	if got := sessionOf(svc, d.ID); got == nil || got.TicketID != "tk1" {
 		t.Fatalf("persisted session ticket_id = %+v, want tk1", got)
 	}
 }
@@ -404,7 +415,7 @@ func TestService_DeleteRemovesSessionAndEvents(t *testing.T) {
 	if err := svc.Delete(context.Background(), d.ID); err != nil {
 		t.Fatalf("delete: %v", err)
 	}
-	if got := svc.Get(d.ID); got != nil {
+	if got := sessionOf(svc, d.ID); got != nil {
 		t.Fatalf("session still present after delete: %+v", got)
 	}
 	if hist := svc.History(d.ID, 0); len(hist) != 0 {
@@ -448,7 +459,7 @@ func TestService_DeleteSucceedsWhenWorktreeRemovalFails(t *testing.T) {
 	if err := svc.Delete(context.Background(), d.ID); err != nil {
 		t.Fatalf("Delete = %v, want nil", err)
 	}
-	if svc.Get(d.ID) != nil {
+	if sessionOf(svc, d.ID) != nil {
 		t.Fatal("session should be gone")
 	}
 }
@@ -724,7 +735,7 @@ func TestService_ExpiredApprovalIsRetracted(t *testing.T) {
 		return ev.Type == "approval_needed" && ev.Approval != nil && ev.Approval.ReqID == "req1"
 	}, "approval_needed")
 	waitForStatus(t, svc, d.ID, domain.SessionWaitingApproval)
-	if got := svc.Get(d.ID); got == nil || got.PendingApprovals != 1 {
+	if got := sessionOf(svc, d.ID); got == nil || got.PendingApprovals != 1 {
 		t.Fatalf("pending approvals = %v, want 1", got)
 	}
 
@@ -744,7 +755,7 @@ func TestService_ExpiredApprovalIsRetracted(t *testing.T) {
 	}
 
 	waitForStatus(t, svc, d.ID, domain.SessionThinking)
-	if got := svc.Get(d.ID); got == nil || got.PendingApprovals != 0 {
+	if got := sessionOf(svc, d.ID); got == nil || got.PendingApprovals != 0 {
 		t.Fatalf("pending approvals = %v, want 0", got)
 	}
 
@@ -779,7 +790,7 @@ func TestService_ExitClearsPendingApprovals(t *testing.T) {
 	// finishing on its own; either way the count must be back to zero.
 	deadline := time.After(4 * time.Second)
 	for {
-		got := svc.Get(d.ID)
+		got := sessionOf(svc, d.ID)
 		if got != nil && got.Status.IsTerminal() {
 			if got.PendingApprovals != 0 {
 				t.Fatalf("pending approvals after exit = %d, want 0", got.PendingApprovals)
@@ -991,7 +1002,7 @@ func TestService_SetAutoRunPublishesTheNewState(t *testing.T) {
 	if ev.Status != "" {
 		t.Fatalf("the gate is not a lifecycle state, got status %q", ev.Status)
 	}
-	if got := svc.Get(d.ID); got == nil || !got.AutoRun {
+	if got := sessionOf(svc, d.ID); got == nil || !got.AutoRun {
 		t.Fatalf("session does not report auto-run: %+v", got)
 	}
 
@@ -1003,7 +1014,7 @@ func TestService_SetAutoRunPublishesTheNewState(t *testing.T) {
 	if off.AutoRun == nil || *off.AutoRun {
 		t.Fatalf("switching off did not publish false: %+v", off)
 	}
-	if got := svc.Get(d.ID); got == nil || got.AutoRun {
+	if got := sessionOf(svc, d.ID); got == nil || got.AutoRun {
 		t.Fatalf("session still reports auto-run: %+v", got)
 	}
 }
@@ -1045,7 +1056,7 @@ func TestService_SetAutoRunResolvesFlushedApprovals(t *testing.T) {
 	if ev.Approval == nil || ev.Approval.ReqID != "req1" {
 		t.Fatalf("resolution does not identify the request it answered: %+v", ev)
 	}
-	if got := svc.Get(d.ID); got == nil || got.PendingApprovals != 0 {
+	if got := sessionOf(svc, d.ID); got == nil || got.PendingApprovals != 0 {
 		t.Fatalf("pending approvals not released: %+v", got)
 	}
 }
@@ -1117,4 +1128,13 @@ func awaitEvent(t *testing.T, ch <-chan SessionEvent, typ string) SessionEvent {
 			t.Fatalf("no %s event", typ)
 		}
 	}
+}
+
+// sessionOf is the recorded session with id, or nil when there is none.
+func sessionOf(svc *Service, id string) *domain.Session {
+	sess, err := svc.Get(context.Background(), id)
+	if err != nil {
+		return nil
+	}
+	return sess
 }

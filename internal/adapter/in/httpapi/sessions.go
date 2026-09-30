@@ -18,12 +18,16 @@ func (h *Handler) handleListSessions(c echo.Context) error {
 	if h.orchSvc == nil {
 		return echo.NewHTTPError(http.StatusServiceUnavailable, "orchestration not configured")
 	}
-	return c.JSON(http.StatusOK, map[string]any{"sessions": h.orchSvc.List(ports.SessionFilter{
+	sessions, err := h.orchSvc.List(c.Request().Context(), ports.SessionFilter{
 		ProjectID: c.QueryParam("project_id"),
 		AgentID:   c.QueryParam("agent_id"),
 		TicketID:  c.QueryParam("ticket_id"),
 		Statuses:  parseStatuses(c.QueryParam("status")),
-	})})
+	})
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, map[string]any{"sessions": sessions})
 }
 
 // parseStatuses reads the `status` query param, which accepts a comma-separated
@@ -57,9 +61,9 @@ func (h *Handler) handleGetSession(c echo.Context) error {
 	if h.orchSvc == nil {
 		return echo.NewHTTPError(http.StatusServiceUnavailable, "orchestration not configured")
 	}
-	sess := h.orchSvc.Get(c.Param("id"))
-	if sess == nil {
-		return echo.NewHTTPError(http.StatusNotFound, "session not found")
+	sess, err := h.orchSvc.Get(c.Request().Context(), c.Param("id"))
+	if err != nil {
+		return err
 	}
 	return c.JSON(http.StatusOK, map[string]any{"session": sess})
 }

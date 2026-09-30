@@ -1,9 +1,11 @@
 // Package planning provides ticket and document use-cases: CRUD plus the
 // many-to-many link between tickets and documents. It is deliberately kept
-// separate from the blueprint service so the planning domain stays isolated.
+// separate from the catalog contexts so the planning domain stays isolated.
 package planning
 
 import (
+	"context"
+
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
 )
@@ -34,7 +36,7 @@ func validTicketStatus(s domain.TicketStatus) bool {
 
 // --- Tickets ---
 
-func (s *Service) CreateTicket(projectID, title, description string, status domain.TicketStatus) (*domain.Ticket, error) {
+func (s *Service) CreateTicket(_ context.Context, projectID, title, description string, status domain.TicketStatus) (*domain.Ticket, error) {
 	if title == "" {
 		return nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "title is required"}
 	}
@@ -50,13 +52,19 @@ func (s *Service) CreateTicket(projectID, title, description string, status doma
 	return s.tickets.Create(projectID, title, description, status)
 }
 
-func (s *Service) GetTicket(id string) *domain.Ticket { return s.tickets.Get(id) }
-
-func (s *Service) ListTickets(projectID string) []*domain.Ticket {
-	return s.tickets.ListByProject(projectID)
+func (s *Service) GetTicket(_ context.Context, id string) (*domain.Ticket, error) {
+	tk := s.tickets.Get(id)
+	if tk == nil {
+		return nil, &domain.StructuredError{Code: "TICKET_NOT_FOUND", Message: "ticket not found"}
+	}
+	return tk, nil
 }
 
-func (s *Service) UpdateTicket(id, title, description string, status domain.TicketStatus) (*domain.Ticket, error) {
+func (s *Service) ListTickets(_ context.Context, projectID string) ([]*domain.Ticket, error) {
+	return s.tickets.ListByProject(projectID), nil
+}
+
+func (s *Service) UpdateTicket(_ context.Context, id, title, description string, status domain.TicketStatus) (*domain.Ticket, error) {
 	if title == "" {
 		return nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "title is required"}
 	}
@@ -73,7 +81,7 @@ func (s *Service) UpdateTicket(id, title, description string, status domain.Tick
 	return s.tickets.Update(id, title, description, status)
 }
 
-func (s *Service) DeleteTicket(id string) error { return s.tickets.Delete(id) }
+func (s *Service) DeleteTicket(_ context.Context, id string) error { return s.tickets.Delete(id) }
 
 // --- Documents ---
 

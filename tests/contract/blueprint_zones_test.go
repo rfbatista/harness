@@ -10,7 +10,7 @@ import (
 	"operators-mcp/internal/adapter/out/persistence/memory"
 
 	"github.com/rfbatista/harnesskit/skill"
-	"operators-mcp/internal/application/blueprint"
+	"operators-mcp/internal/app/catalog"
 	"operators-mcp/tests/testhelper"
 )
 
@@ -24,8 +24,8 @@ func TestZones_ListCreateGetUpdateAssignPath(t *testing.T) {
 	mcpServerStore := memory.NewMCPServerStore()
 	pathMatcher := filesystem.NewMatcher()
 	treeLister := filesystem.NewLister()
-	svc := blueprint.NewService(projectStore, nil, zoneStore, agentStore, promptStore, skillStore, mcpServerStore, nil, pathMatcher, treeLister, root)
-	baseURL, cleanup := testhelper.StartMCPServer(t, svc, false)
+	cat := catalog.New(catalog.Deps{Projects: projectStore, Zones: zoneStore, Agents: agentStore, Prompts: promptStore, Skills: skillStore, MCPServers: mcpServerStore, PathMatcher: pathMatcher, TreeLister: treeLister, DefaultRoot: root})
+	baseURL, cleanup := testhelper.StartMCPServer(t, &cat, false)
 	defer cleanup()
 	c := testhelper.NewTestClient(t, baseURL)
 	defer c.Close()
@@ -187,8 +187,8 @@ func TestGetZone_NotFound_StructuredError(t *testing.T) {
 	mcpServerStore := memory.NewMCPServerStore()
 	pathMatcher := filesystem.NewMatcher()
 	treeLister := filesystem.NewLister()
-	svc := blueprint.NewService(projectStore, nil, zoneStore, agentStore, promptStore, skillStore, mcpServerStore, nil, pathMatcher, treeLister, root)
-	baseURL, cleanup := testhelper.StartMCPServer(t, svc, false)
+	cat := catalog.New(catalog.Deps{Projects: projectStore, Zones: zoneStore, Agents: agentStore, Prompts: promptStore, Skills: skillStore, MCPServers: mcpServerStore, PathMatcher: pathMatcher, TreeLister: treeLister, DefaultRoot: root})
+	baseURL, cleanup := testhelper.StartMCPServer(t, &cat, false)
 	defer cleanup()
 	c := testhelper.NewTestClient(t, baseURL)
 	defer c.Close()

@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"operators-mcp/internal/adapter/out/persistence/sqlite"
-	"operators-mcp/internal/application/blueprint"
+	"operators-mcp/internal/app/catalog"
 )
 
 func newMCPHandler(t *testing.T) *Handler {
@@ -17,20 +17,7 @@ func newMCPHandler(t *testing.T) *Handler {
 	if err != nil {
 		t.Fatal(err)
 	}
-	svc := blueprint.NewService(
-		sqlite.NewProjectRepository(db),
-		sqlite.NewRepositoryRepository(db),
-		sqlite.NewZoneRepository(db),
-		sqlite.NewAgentRepository(db),
-		sqlite.NewPromptRepository(db),
-		sqlite.NewSkillRepository(db),
-		sqlite.NewMCPServerRepository(db),
-		sqlite.NewToolRepository(db),
-		nil,
-		nil,
-		"",
-	)
-	return NewHandler(svc, nil, nil, nil, nil, nil)
+	return NewHandler(servicesOf(catalog.New(catalog.SQLiteDeps(db))))
 }
 
 func TestHTTP_ImportMCPServers(t *testing.T) {

@@ -14,7 +14,7 @@ import (
 	"operators-mcp/internal/adapter/in/mcp"
 	"operators-mcp/internal/adapter/in/mcpsession"
 	"operators-mcp/internal/adapter/in/ui"
-	"operators-mcp/internal/application/blueprint"
+	"operators-mcp/internal/app/catalog"
 	"operators-mcp/internal/application/execution"
 	"operators-mcp/internal/application/orchestration"
 	"operators-mcp/internal/application/planning"
@@ -39,14 +39,25 @@ var ServerModule = fx.Module("server",
 
 // registerHTTPServer mounts the UI and JSON API on a mux and serves it,
 // shutting down gracefully when fx stops.
-func registerHTTPServer(lc fx.Lifecycle, cfg Config, bp *blueprint.Service, ts *tooling.Service, exec *execution.Service, orch *orchestration.Service, plan *planning.Service, ws *workspaces.Service, broker *approval.Broker, sessions ports.SessionRepository) error {
+func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, ts *tooling.Service, exec *execution.Service, orch *orchestration.Service, plan *planning.Service, ws *workspaces.Service, broker *approval.Broker, sessions ports.SessionRepository) error {
 	uiHandler, err := ui.SPAHandler(ui.Dist)
 	if err != nil {
 		return err
 	}
 
 	mux := http.NewServeMux()
-	apiRouter := httpapi.NewRouter(httpapi.NewHandler(bp, ts, exec, orch, plan, ws))
+	apiRouter := httpapi.NewRouter(httpapi.NewHandler(httpapi.Services{
+		Projects:     cat.Projects,
+		Architecture: cat.Architecture,
+		Agents:       cat.Agents,
+		Capabilities: cat.Capabilities,
+		Settings:     cat.Settings,
+		Tools:        ts,
+		Tasks:        exec,
+		Sessions:     orch,
+		Planning:     plan,
+		Workspaces:   ws,
+	}))
 	mux.Handle("/api/", apiRouter)
 	mux.Handle(mcpapprove.PathPrefix, mcpapprove.Handler(broker))
 	mux.Handle(mcpsession.PathPrefix, mcpsession.TaskHandler(tooling.SessionTaskTools(plan, sessions)))

@@ -29,10 +29,11 @@ type SessionControl interface {
 	Delete(ctx context.Context, id string) error
 }
 
-// SessionReader reads recorded sessions.
+// SessionReader reads recorded sessions. It is network-safe: tui-client
+// implements it over HTTP, so a missing session is SESSION_NOT_FOUND.
 type SessionReader interface {
-	Get(id string) *domain.Session
-	List(f SessionFilter) []*domain.Session
+	Get(ctx context.Context, id string) (*domain.Session, error)
+	List(ctx context.Context, f SessionFilter) ([]*domain.Session, error)
 }
 
 // SessionStream follows a session's events: live, and replayed from the log.
@@ -44,12 +45,12 @@ type SessionStream interface {
 }
 
 // InteractiveSessions provisions and records sessions whose CLI runs in the
-// client's terminal (claude-pane); the client runs the returned Launch.
+// client's terminal (tui-client); the client runs the returned Launch.
 type InteractiveSessions interface {
 	StartInteractive(ctx context.Context, req InteractiveRequest) (*domain.Session, Launch, error)
 	ResumeInteractive(ctx context.Context, id string) (*domain.Session, Launch, error)
 	EndInteractive(ctx context.Context, id string, exitCode int, closedByUser bool) (*domain.Session, error)
-	RecordClaudeSession(id, claudeSessionID string) error
+	RecordClaudeSession(ctx context.Context, id, claudeSessionID string) error
 }
 
 // Orchestration is the whole session surface, for an adapter that serves all
@@ -80,7 +81,7 @@ type StartRequest struct {
 }
 
 // InteractiveRequest starts a session that a person drives in a terminal
-// (claude-pane) instead of the server driving it over stream-json. It is
+// (tui-client) instead of the server driving it over stream-json. It is
 // always spawned into a task.
 type InteractiveRequest struct {
 	ProjectID    string `json:"project_id"`

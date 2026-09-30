@@ -13,11 +13,11 @@ func (h *Handler) handleListBoundedContexts(c echo.Context) error {
 	if projectID == "" {
 		return echo.NewHTTPError(http.StatusBadRequest, "project_id is required")
 	}
-	return c.JSON(http.StatusOK, map[string]any{"bounded_contexts": h.svc.ListBoundedContexts(projectID)})
+	return c.JSON(http.StatusOK, map[string]any{"bounded_contexts": h.architecture.ListBoundedContexts(projectID)})
 }
 
 func (h *Handler) handleGetBoundedContext(c echo.Context) error {
-	bc := h.svc.GetBoundedContext(c.QueryParam("bounded_context_id"))
+	bc := h.architecture.GetBoundedContext(c.QueryParam("bounded_context_id"))
 	if bc == nil {
 		return echo.NewHTTPError(http.StatusNotFound, "bounded context not found")
 	}
@@ -34,7 +34,7 @@ func (h *Handler) handleCreateBoundedContext(c echo.Context) error {
 	if err := bindJSON(c, &in); err != nil {
 		return err
 	}
-	bc, err := h.svc.CreateBoundedContext(in.ProjectID, in.Name, in.Purpose, in.UbiquitousLanguage)
+	bc, err := h.architecture.CreateBoundedContext(in.ProjectID, in.Name, in.Purpose, in.UbiquitousLanguage)
 	if err != nil {
 		return err
 	}
@@ -51,7 +51,7 @@ func (h *Handler) handleUpdateBoundedContext(c echo.Context) error {
 	if err := bindJSON(c, &in); err != nil {
 		return err
 	}
-	bc, err := h.svc.UpdateBoundedContext(in.BoundedContextID, in.Name, in.Purpose, in.UbiquitousLanguage)
+	bc, err := h.architecture.UpdateBoundedContext(in.BoundedContextID, in.Name, in.Purpose, in.UbiquitousLanguage)
 	if err != nil {
 		return err
 	}
@@ -65,7 +65,7 @@ func (h *Handler) handleDeleteBoundedContext(c echo.Context) error {
 	if err := bindJSON(c, &in); err != nil {
 		return err
 	}
-	if err := h.svc.DeleteBoundedContext(in.BoundedContextID); err != nil {
+	if err := h.architecture.DeleteBoundedContext(in.BoundedContextID); err != nil {
 		return err
 	}
 	return c.NoContent(http.StatusNoContent)
@@ -79,7 +79,7 @@ func (h *Handler) handleAssignZoneToBoundedContext(c echo.Context) error {
 	if err := bindJSON(c, &in); err != nil {
 		return err
 	}
-	zone, err := h.svc.AssignZoneToBoundedContext(in.ZoneID, in.BoundedContextID)
+	zone, err := h.architecture.AssignZoneToBoundedContext(in.ZoneID, in.BoundedContextID)
 	if err != nil {
 		return err
 	}
@@ -93,7 +93,7 @@ func (h *Handler) handleUnassignZoneFromBoundedContext(c echo.Context) error {
 	if err := bindJSON(c, &in); err != nil {
 		return err
 	}
-	zone, err := h.svc.UnassignZoneFromBoundedContext(in.ZoneID)
+	zone, err := h.architecture.UnassignZoneFromBoundedContext(in.ZoneID)
 	if err != nil {
 		return err
 	}

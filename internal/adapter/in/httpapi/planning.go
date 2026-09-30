@@ -15,13 +15,17 @@ func (h *Handler) handleListTickets(c echo.Context) error {
 	if projectID == "" {
 		return echo.NewHTTPError(http.StatusBadRequest, "project_id is required")
 	}
-	return c.JSON(http.StatusOK, map[string]any{"tickets": h.planningSvc.ListTickets(projectID)})
+	tickets, err := h.planningSvc.ListTickets(c.Request().Context(), projectID)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, map[string]any{"tickets": tickets})
 }
 
 func (h *Handler) handleGetTicket(c echo.Context) error {
-	tk := h.planningSvc.GetTicket(c.QueryParam("ticket_id"))
-	if tk == nil {
-		return echo.NewHTTPError(http.StatusNotFound, "ticket not found")
+	tk, err := h.planningSvc.GetTicket(c.Request().Context(), c.QueryParam("ticket_id"))
+	if err != nil {
+		return err
 	}
 	return c.JSON(http.StatusOK, map[string]any{"ticket": tk})
 }
@@ -36,7 +40,7 @@ func (h *Handler) handleCreateTicket(c echo.Context) error {
 	if err := bindJSON(c, &in); err != nil {
 		return err
 	}
-	tk, err := h.planningSvc.CreateTicket(in.ProjectID, in.Title, in.Description, domain.TicketStatus(in.Status))
+	tk, err := h.planningSvc.CreateTicket(c.Request().Context(), in.ProjectID, in.Title, in.Description, domain.TicketStatus(in.Status))
 	if err != nil {
 		return err
 	}
@@ -53,7 +57,7 @@ func (h *Handler) handleUpdateTicket(c echo.Context) error {
 	if err := bindJSON(c, &in); err != nil {
 		return err
 	}
-	tk, err := h.planningSvc.UpdateTicket(in.TicketID, in.Title, in.Description, domain.TicketStatus(in.Status))
+	tk, err := h.planningSvc.UpdateTicket(c.Request().Context(), in.TicketID, in.Title, in.Description, domain.TicketStatus(in.Status))
 	if err != nil {
 		return err
 	}
@@ -67,7 +71,7 @@ func (h *Handler) handleDeleteTicket(c echo.Context) error {
 	if err := bindJSON(c, &in); err != nil {
 		return err
 	}
-	if err := h.planningSvc.DeleteTicket(in.TicketID); err != nil {
+	if err := h.planningSvc.DeleteTicket(c.Request().Context(), in.TicketID); err != nil {
 		return err
 	}
 	return c.NoContent(http.StatusNoContent)

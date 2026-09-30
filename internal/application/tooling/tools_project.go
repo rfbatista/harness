@@ -15,7 +15,11 @@ func ProjectTools(bpSvc ports.ProjectCatalog) []domain.Tool {
 			InputSchema: emptySchema(),
 			Source:      "code",
 			Handler: func(ctx context.Context, args map[string]any) (any, error) {
-				return map[string]any{"projects": bpSvc.ListProjects()}, nil
+				projects, err := bpSvc.ListProjects(ctx)
+				if err != nil {
+					return nil, err
+				}
+				return map[string]any{"projects": projects}, nil
 			},
 		},
 		{
@@ -28,9 +32,9 @@ func ProjectTools(bpSvc ports.ProjectCatalog) []domain.Tool {
 				if id == "" {
 					return nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "project_id is required"}
 				}
-				p := bpSvc.GetProject(id)
-				if p == nil {
-					return nil, &domain.StructuredError{Code: "PROJECT_NOT_FOUND", Message: "project not found"}
+				p, err := bpSvc.GetProject(ctx, id)
+				if err != nil {
+					return nil, err
 				}
 				return map[string]any{"project": p}, nil
 			},
@@ -46,7 +50,7 @@ func ProjectTools(bpSvc ports.ProjectCatalog) []domain.Tool {
 					return nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "root_dir is required"}
 				}
 				name := getString(args, "name", "")
-				p, err := bpSvc.CreateProject(name, rootDir)
+				p, err := bpSvc.CreateProject(ctx, name, rootDir)
 				if err != nil {
 					return nil, err
 				}
@@ -65,7 +69,7 @@ func ProjectTools(bpSvc ports.ProjectCatalog) []domain.Tool {
 				}
 				name := getString(args, "name", "")
 				rootDir := getString(args, "root_dir", "")
-				p, err := bpSvc.UpdateProject(id, name, rootDir)
+				p, err := bpSvc.UpdateProject(ctx, id, name, rootDir)
 				if err != nil {
 					return nil, err
 				}
@@ -82,7 +86,7 @@ func ProjectTools(bpSvc ports.ProjectCatalog) []domain.Tool {
 				if id == "" {
 					return nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "project_id is required"}
 				}
-				if err := bpSvc.DeleteProject(id); err != nil {
+				if err := bpSvc.DeleteProject(ctx, id); err != nil {
 					return nil, err
 				}
 				return map[string]string{"deleted": id}, nil
@@ -99,7 +103,7 @@ func ProjectTools(bpSvc ports.ProjectCatalog) []domain.Tool {
 				if projectID == "" || path == "" {
 					return nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "project_id and path are required"}
 				}
-				p, err := bpSvc.AddIgnoredPath(projectID, path)
+				p, err := bpSvc.AddIgnoredPath(ctx, projectID, path)
 				if err != nil {
 					return nil, err
 				}
@@ -117,7 +121,7 @@ func ProjectTools(bpSvc ports.ProjectCatalog) []domain.Tool {
 				if projectID == "" || path == "" {
 					return nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "project_id and path are required"}
 				}
-				p, err := bpSvc.RemoveIgnoredPath(projectID, path)
+				p, err := bpSvc.RemoveIgnoredPath(ctx, projectID, path)
 				if err != nil {
 					return nil, err
 				}

@@ -1,6 +1,6 @@
 // Package workspaces provides use-cases for repository workspaces: isolated
 // git worktrees materialized on disk and tracked in the database. It is kept
-// separate from the blueprint service so the workspace domain stays isolated.
+// separate from the catalog contexts so the workspace domain stays isolated.
 package workspaces
 
 import (

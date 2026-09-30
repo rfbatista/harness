@@ -10,11 +10,37 @@ import (
 	"operators-mcp/internal/ports"
 )
 
+// Services are the driving ports the HTTP API serves. Any may be nil when that
+// part of the application is not configured — pass an untyped nil, since a nil
+// pointer inside an interface is not nil.
+type Services struct {
+	Projects     ports.Projects
+	Architecture ports.Architecture
+	Agents       interface {
+		ports.AgentCatalog
+		ports.PromptCatalog
+	}
+	Capabilities ports.Capabilities
+	Settings     ports.SettingsEditor
+	Tools        ports.ToolRegistry
+	Tasks        ports.TaskRunner
+	Sessions     ports.Orchestration
+	Planning     ports.Planning
+	Workspaces   ports.WorkspaceManager
+}
+
 // Handler serves the application's driving ports as HTTP endpoints (the same
 // contract as the MCP tools). It holds ports, not services, so a test can hand
 // it any implementation.
 type Handler struct {
-	svc           ports.Blueprint
+	projects     ports.Projects
+	architecture ports.Architecture
+	agents       interface {
+		ports.AgentCatalog
+		ports.PromptCatalog
+	}
+	capabilities  ports.Capabilities
+	settings      ports.SettingsEditor
 	toolingSvc    ports.ToolRegistry
 	execSvc       ports.TaskRunner
 	orchSvc       ports.Orchestration
@@ -23,16 +49,18 @@ type Handler struct {
 }
 
 // NewHandler returns an HTTP handler that serves /api/list_tree, /api/list_zones, /api/list_projects, etc.
-// execSvc and orchSvc may be nil when those layers are not configured; pass an
-// untyped nil, since a nil pointer in an interface is not nil.
-func NewHandler(svc ports.Blueprint, toolingSvc ports.ToolRegistry, execSvc ports.TaskRunner, orchSvc ports.Orchestration, planningSvc ports.Planning, workspacesSvc ports.WorkspaceManager) *Handler {
+func NewHandler(s Services) *Handler {
 	return &Handler{
-		svc:           svc,
-		toolingSvc:    toolingSvc,
-		execSvc:       execSvc,
-		orchSvc:       orchSvc,
-		planningSvc:   planningSvc,
-		workspacesSvc: workspacesSvc,
+		projects:      s.Projects,
+		architecture:  s.Architecture,
+		agents:        s.Agents,
+		capabilities:  s.Capabilities,
+		settings:      s.Settings,
+		toolingSvc:    s.Tools,
+		execSvc:       s.Tasks,
+		orchSvc:       s.Sessions,
+		planningSvc:   s.Planning,
+		workspacesSvc: s.Workspaces,
 	}
 }
 
@@ -51,7 +79,7 @@ func (h *Handler) handleListTools(c echo.Context) error {
 	for _, t := range h.toolingSvc.List() {
 		all = append(all, toolToMap(t.Name, t.Description, t.InputSchema, t.Source, t.ID))
 	}
-	for _, t := range h.svc.ListTools() {
+	for _, t := range h.capabilities.ListTools() {
 		all = append(all, toolToMap(t.Name, t.Description, t.InputSchema, t.Source, t.ID))
 	}
 	return c.JSON(http.StatusOK, map[string]any{"tools": all})
@@ -73,14 +101,17 @@ func toolToMap(name, description string, inputSchema map[string]any, source, id 
 }
 
 func (h *Handler) handleListProjects(c echo.Context) error {
-	projects := h.svc.ListProjects()
+	projects, err := h.projects.ListProjects(c.Request().Context())
+	if err != nil {
+		return err
+	}
 	return c.JSON(http.StatusOK, mcp.ListProjectsOut{Projects: mcp.ProjectsToDTO(projects)})
 }
 
 func (h *Handler) handleGetProject(c echo.Context) error {
-	p := h.svc.GetProject(c.QueryParam("project_id"))
-	if p == nil {
-		return echo.NewHTTPError(http.StatusNotFound, "project not found")
+	p, err := h.projects.GetProject(c.Request().Context(), c.QueryParam("project_id"))
+	if err != nil {
+		return err
 	}
 	return c.JSON(http.StatusOK, mcp.GetProjectOut{Project: mcp.ProjectToDTO(p)})
 }
@@ -90,7 +121,7 @@ func (h *Handler) handleCreateProject(c echo.Context) error {
 	if err := bindJSON(c, &in); err != nil {
 		return err
 	}
-	p, err := h.svc.CreateProject(in.Name, in.RootDir)
+	p, err := h.projects.CreateProject(c.Request().Context(), in.Name, in.RootDir)
 	if err != nil {
 		return err
 	}
@@ -102,7 +133,7 @@ func (h *Handler) handleUpdateProject(c echo.Context) error {
 	if err := bindJSON(c, &in); err != nil {
 		return err
 	}
-	p, err := h.svc.UpdateProject(in.ProjectID, in.Name, in.RootDir)
+	p, err := h.projects.UpdateProject(c.Request().Context(), in.ProjectID, in.Name, in.RootDir)
 	if err != nil {
 		return err
 	}
@@ -114,7 +145,7 @@ func (h *Handler) handleDeleteProject(c echo.Context) error {
 	if err := bindJSON(c, &in); err != nil {
 		return err
 	}
-	if err := h.svc.DeleteProject(in.ProjectID); err != nil {
+	if err := h.projects.DeleteProject(c.Request().Context(), in.ProjectID); err != nil {
 		return err
 	}
 	return c.NoContent(http.StatusNoContent)
@@ -125,7 +156,7 @@ func (h *Handler) handleAddIgnoredPath(c echo.Context) error {
 	if err := bindJSON(c, &in); err != nil {
 		return err
 	}
-	p, err := h.svc.AddIgnoredPath(in.ProjectID, in.Path)
+	p, err := h.projects.AddIgnoredPath(c.Request().Context(), in.ProjectID, in.Path)
 	if err != nil {
 		return err
 	}
@@ -137,7 +168,7 @@ func (h *Handler) handleRemoveIgnoredPath(c echo.Context) error {
 	if err := bindJSON(c, &in); err != nil {
 		return err
 	}
-	p, err := h.svc.RemoveIgnoredPath(in.ProjectID, in.Path)
+	p, err := h.projects.RemoveIgnoredPath(c.Request().Context(), in.ProjectID, in.Path)
 	if err != nil {
 		return err
 	}
@@ -145,7 +176,7 @@ func (h *Handler) handleRemoveIgnoredPath(c echo.Context) error {
 }
 
 func (h *Handler) handleListTree(c echo.Context) error {
-	tree, err := h.svc.ListTree(c.QueryParam("root"), c.QueryParam("project_id"))
+	tree, err := h.architecture.ListTree(c.QueryParam("root"), c.QueryParam("project_id"))
 	if err != nil {
 		return err
 	}
@@ -157,12 +188,12 @@ func (h *Handler) handleListZones(c echo.Context) error {
 	if projectID == "" {
 		return echo.NewHTTPError(http.StatusBadRequest, "project_id is required")
 	}
-	zones := h.svc.ListZones(projectID)
+	zones := h.architecture.ListZones(projectID)
 	return c.JSON(http.StatusOK, mcp.ListZonesOut{Zones: mcp.ZonesToDTO(zones)})
 }
 
 func (h *Handler) handleListMatchingPaths(c echo.Context) error {
-	paths, err := h.svc.ListMatchingPaths(c.QueryParam("root"), c.QueryParam("project_id"), c.QueryParam("pattern"))
+	paths, err := h.architecture.ListMatchingPaths(c.QueryParam("root"), c.QueryParam("project_id"), c.QueryParam("pattern"))
 	if err != nil {
 		return err
 	}
@@ -170,7 +201,7 @@ func (h *Handler) handleListMatchingPaths(c echo.Context) error {
 }
 
 func (h *Handler) handleGetZone(c echo.Context) error {
-	z := h.svc.GetZone(c.QueryParam("zone_id"))
+	z := h.architecture.GetZone(c.QueryParam("zone_id"))
 	if z == nil {
 		return echo.NewHTTPError(http.StatusNotFound, "zone not found")
 	}
@@ -182,7 +213,7 @@ func (h *Handler) handleCreateZone(c echo.Context) error {
 	if err := bindJSON(c, &in); err != nil {
 		return err
 	}
-	z, err := h.svc.CreateZone(in.ProjectID, in.Name, in.Pattern, in.Purpose, mcp.DTOToRules(in.Rules), mcp.DTOToAgents(in.AssignedAgents))
+	z, err := h.architecture.CreateZone(in.ProjectID, in.Name, in.Pattern, in.Purpose, mcp.DTOToRules(in.Rules), mcp.DTOToAgents(in.AssignedAgents))
 	if err != nil {
 		return err
 	}
@@ -194,7 +225,7 @@ func (h *Handler) handleUpdateZone(c echo.Context) error {
 	if err := bindJSON(c, &in); err != nil {
 		return err
 	}
-	z, err := h.svc.UpdateZone(in.ZoneID, in.Name, in.Pattern, in.Purpose, mcp.DTOToRules(in.Rules), mcp.DTOToAgents(in.AssignedAgents))
+	z, err := h.architecture.UpdateZone(in.ZoneID, in.Name, in.Pattern, in.Purpose, mcp.DTOToRules(in.Rules), mcp.DTOToAgents(in.AssignedAgents))
 	if err != nil {
 		return err
 	}
@@ -206,7 +237,7 @@ func (h *Handler) handleAssignPathToZone(c echo.Context) error {
 	if err := bindJSON(c, &in); err != nil {
 		return err
 	}
-	z, err := h.svc.AssignPathToZone(in.ZoneID, in.Path)
+	z, err := h.architecture.AssignPathToZone(in.ZoneID, in.Path)
 	if err != nil {
 		return err
 	}
@@ -218,7 +249,7 @@ func (h *Handler) handleRemovePathFromZone(c echo.Context) error {
 	if err := bindJSON(c, &in); err != nil {
 		return err
 	}
-	z, err := h.svc.UnassignPathFromZone(in.ZoneID, in.Path)
+	z, err := h.architecture.UnassignPathFromZone(in.ZoneID, in.Path)
 	if err != nil {
 		return err
 	}
@@ -228,7 +259,10 @@ func (h *Handler) handleRemovePathFromZone(c echo.Context) error {
 // --- Agent handlers ---
 
 func (h *Handler) handleListAgents(c echo.Context) error {
-	agents := h.svc.ListAgents()
+	agents, err := h.agents.ListAgents(c.Request().Context())
+	if err != nil {
+		return err
+	}
 	out := make([]*mcp.AgentDTO, len(agents))
 	for i, a := range agents {
 		out[i] = mcp.AgentToDTO(a)
@@ -237,9 +271,9 @@ func (h *Handler) handleListAgents(c echo.Context) error {
 }
 
 func (h *Handler) handleGetAgent(c echo.Context) error {
-	a := h.svc.GetAgent(c.QueryParam("agent_id"))
-	if a == nil {
-		return echo.NewHTTPError(http.StatusNotFound, "agent not found")
+	a, err := h.agents.GetAgent(c.Request().Context(), c.QueryParam("agent_id"))
+	if err != nil {
+		return err
 	}
 	return c.JSON(http.StatusOK, mcp.GetAgentOut{Agent: mcp.AgentToDTO(a)})
 }
@@ -249,7 +283,7 @@ func (h *Handler) handleCreateAgent(c echo.Context) error {
 	if err := bindJSON(c, &in); err != nil {
 		return err
 	}
-	a, err := h.svc.CreateAgent(in.Name, in.Description, in.PromptID, in.SkillIDs, in.MCPServerIDs)
+	a, err := h.agents.CreateAgent(c.Request().Context(), in.Name, in.Description, in.PromptID, in.SkillIDs, in.MCPServerIDs)
 	if err != nil {
 		return err
 	}
@@ -261,7 +295,7 @@ func (h *Handler) handleUpdateAgent(c echo.Context) error {
 	if err := bindJSON(c, &in); err != nil {
 		return err
 	}
-	a, err := h.svc.UpdateAgent(in.AgentID, in.Name, in.Description, in.PromptID, in.SkillIDs, in.MCPServerIDs)
+	a, err := h.agents.UpdateAgent(c.Request().Context(), in.AgentID, in.Name, in.Description, in.PromptID, in.SkillIDs, in.MCPServerIDs)
 	if err != nil {
 		return err
 	}
@@ -273,7 +307,7 @@ func (h *Handler) handleDeleteAgent(c echo.Context) error {
 	if err := bindJSON(c, &in); err != nil {
 		return err
 	}
-	if err := h.svc.DeleteAgent(in.AgentID); err != nil {
+	if err := h.agents.DeleteAgent(c.Request().Context(), in.AgentID); err != nil {
 		return err
 	}
 	return c.NoContent(http.StatusNoContent)
@@ -282,12 +316,12 @@ func (h *Handler) handleDeleteAgent(c echo.Context) error {
 // --- Prompt handlers ---
 
 func (h *Handler) handleListPrompts(c echo.Context) error {
-	prompts := h.svc.ListPrompts()
+	prompts := h.agents.ListPrompts()
 	return c.JSON(http.StatusOK, mcp.ListPromptsOut{Prompts: mcp.PromptsToDTO(prompts)})
 }
 
 func (h *Handler) handleGetPrompt(c echo.Context) error {
-	p := h.svc.GetPrompt(c.QueryParam("prompt_id"))
+	p := h.agents.GetPrompt(c.QueryParam("prompt_id"))
 	if p == nil {
 		return echo.NewHTTPError(http.StatusNotFound, "prompt not found")
 	}
@@ -299,7 +333,7 @@ func (h *Handler) handleCreatePrompt(c echo.Context) error {
 	if err := bindJSON(c, &in); err != nil {
 		return err
 	}
-	p, err := h.svc.CreatePrompt(in.Name, in.Description, in.Content)
+	p, err := h.agents.CreatePrompt(in.Name, in.Description, in.Content)
 	if err != nil {
 		return err
 	}
@@ -311,7 +345,7 @@ func (h *Handler) handleUpdatePrompt(c echo.Context) error {
 	if err := bindJSON(c, &in); err != nil {
 		return err
 	}
-	p, err := h.svc.UpdatePrompt(in.PromptID, in.Name, in.Description, in.Content)
+	p, err := h.agents.UpdatePrompt(in.PromptID, in.Name, in.Description, in.Content)
 	if err != nil {
 		return err
 	}
@@ -323,7 +357,7 @@ func (h *Handler) handleDeletePrompt(c echo.Context) error {
 	if err := bindJSON(c, &in); err != nil {
 		return err
 	}
-	if err := h.svc.DeletePrompt(in.PromptID); err != nil {
+	if err := h.agents.DeletePrompt(in.PromptID); err != nil {
 		return err
 	}
 	return c.NoContent(http.StatusNoContent)
@@ -332,12 +366,12 @@ func (h *Handler) handleDeletePrompt(c echo.Context) error {
 // --- Skill handlers ---
 
 func (h *Handler) handleListSkills(c echo.Context) error {
-	skills := h.svc.ListSkills()
+	skills := h.capabilities.ListSkills()
 	return c.JSON(http.StatusOK, mcp.ListSkillsOut{Skills: mcp.SkillsToDTO(skills)})
 }
 
 func (h *Handler) handleGetSkill(c echo.Context) error {
-	skill := h.svc.GetSkill(c.QueryParam("skill_id"))
+	skill := h.capabilities.GetSkill(c.QueryParam("skill_id"))
 	if skill == nil {
 		return echo.NewHTTPError(http.StatusNotFound, "skill not found")
 	}
@@ -349,7 +383,7 @@ func (h *Handler) handleCreateSkill(c echo.Context) error {
 	if err := bindJSON(c, &in); err != nil {
 		return err
 	}
-	skill, err := h.svc.CreateSkill(skillInputFromHTTP(in))
+	skill, err := h.capabilities.CreateSkill(skillInputFromHTTP(in))
 	if err != nil {
 		return err
 	}
@@ -389,7 +423,7 @@ func (h *Handler) handleUpdateSkill(c echo.Context) error {
 	if err := bindJSON(c, &in); err != nil {
 		return err
 	}
-	skill, err := h.svc.UpdateSkill(in.SkillID, skillInputFromUpdateHTTP(in))
+	skill, err := h.capabilities.UpdateSkill(in.SkillID, skillInputFromUpdateHTTP(in))
 	if err != nil {
 		return err
 	}
@@ -401,14 +435,14 @@ func (h *Handler) handleDeleteSkill(c echo.Context) error {
 	if err := bindJSON(c, &in); err != nil {
 		return err
 	}
-	if err := h.svc.DeleteSkill(in.SkillID); err != nil {
+	if err := h.capabilities.DeleteSkill(in.SkillID); err != nil {
 		return err
 	}
 	return c.NoContent(http.StatusNoContent)
 }
 
 func (h *Handler) handleValidateSkillPath(c echo.Context) error {
-	result, err := h.svc.ValidateSkillPath(c.QueryParam("path"))
+	result, err := h.capabilities.ValidateSkillPath(c.QueryParam("path"))
 	if err != nil {
 		return err
 	}
@@ -424,7 +458,7 @@ func (h *Handler) handleValidateSkillPath(c echo.Context) error {
 }
 
 func (h *Handler) handleInspectSkill(c echo.Context) error {
-	result, err := h.svc.InspectSkill(c.QueryParam("path"))
+	result, err := h.capabilities.InspectSkill(c.QueryParam("path"))
 	if err != nil {
 		return err
 	}
@@ -445,7 +479,7 @@ func (h *Handler) handleInspectSkill(c echo.Context) error {
 }
 
 func (h *Handler) handleListSkillFiles(c echo.Context) error {
-	files, err := h.svc.ListSkillFiles(c.QueryParam("skill_id"))
+	files, err := h.capabilities.ListSkillFiles(c.QueryParam("skill_id"))
 	if err != nil {
 		return err
 	}
@@ -457,7 +491,7 @@ func (h *Handler) handlePutSkillFile(c echo.Context) error {
 	if err := bindJSON(c, &in); err != nil {
 		return err
 	}
-	skill, err := h.svc.PutSkillFile(in.SkillID, domain.SkillFile{
+	skill, err := h.capabilities.PutSkillFile(in.SkillID, domain.SkillFile{
 		Path:     in.Path,
 		Dir:      in.Dir,
 		Content:  in.Content,
@@ -474,7 +508,7 @@ func (h *Handler) handleRenameSkillFile(c echo.Context) error {
 	if err := bindJSON(c, &in); err != nil {
 		return err
 	}
-	skill, err := h.svc.RenameSkillFile(in.SkillID, in.OldPath, in.NewPath)
+	skill, err := h.capabilities.RenameSkillFile(in.SkillID, in.OldPath, in.NewPath)
 	if err != nil {
 		return err
 	}
@@ -486,7 +520,7 @@ func (h *Handler) handleDeleteSkillFile(c echo.Context) error {
 	if err := bindJSON(c, &in); err != nil {
 		return err
 	}
-	skill, err := h.svc.DeleteSkillFile(in.SkillID, in.Path)
+	skill, err := h.capabilities.DeleteSkillFile(in.SkillID, in.Path)
 	if err != nil {
 		return err
 	}
@@ -498,7 +532,7 @@ func (h *Handler) handleImportSkillFromPath(c echo.Context) error {
 	if err := bindJSON(c, &in); err != nil {
 		return err
 	}
-	skill, err := h.svc.ImportSkillFromPath(in.Path)
+	skill, err := h.capabilities.ImportSkillFromPath(in.Path)
 	if err != nil {
 		return err
 	}
@@ -510,7 +544,7 @@ func (h *Handler) handlePublishSkill(c echo.Context) error {
 	if err := bindJSON(c, &in); err != nil {
 		return err
 	}
-	skill, err := h.svc.PublishSkill(in.SkillID, in.Force)
+	skill, err := h.capabilities.PublishSkill(in.SkillID, in.Force)
 	if err != nil {
 		return err
 	}
@@ -522,7 +556,7 @@ func (h *Handler) handleUnpublishSkill(c echo.Context) error {
 	if err := bindJSON(c, &in); err != nil {
 		return err
 	}
-	skill, err := h.svc.UnpublishSkill(in.SkillID)
+	skill, err := h.capabilities.UnpublishSkill(in.SkillID)
 	if err != nil {
 		return err
 	}
@@ -530,7 +564,7 @@ func (h *Handler) handleUnpublishSkill(c echo.Context) error {
 }
 
 func (h *Handler) handleGetSettings(c echo.Context) error {
-	settings, err := h.svc.GetSettings()
+	settings, err := h.settings.GetSettings()
 	if err != nil {
 		return err
 	}
@@ -542,7 +576,7 @@ func (h *Handler) handleUpdateSettings(c echo.Context) error {
 	if err := bindJSON(c, &in); err != nil {
 		return err
 	}
-	settings, err := h.svc.UpdateSettings(in.Settings)
+	settings, err := h.settings.UpdateSettings(in.Settings)
 	if err != nil {
 		return err
 	}
@@ -552,12 +586,12 @@ func (h *Handler) handleUpdateSettings(c echo.Context) error {
 // --- MCP Server handlers ---
 
 func (h *Handler) handleListMCPServers(c echo.Context) error {
-	servers := h.svc.ListMCPServers()
+	servers := h.capabilities.ListMCPServers()
 	return c.JSON(http.StatusOK, mcp.ListMCPServersOut{MCPServers: mcp.MCPServersToDTO(servers)})
 }
 
 func (h *Handler) handleGetMCPServer(c echo.Context) error {
-	m := h.svc.GetMCPServer(c.QueryParam("mcp_server_id"))
+	m := h.capabilities.GetMCPServer(c.QueryParam("mcp_server_id"))
 	if m == nil {
 		return echo.NewHTTPError(http.StatusNotFound, "mcp server not found")
 	}
@@ -569,7 +603,7 @@ func (h *Handler) handleCreateMCPServer(c echo.Context) error {
 	if err := bindJSON(c, &in); err != nil {
 		return err
 	}
-	m, err := h.svc.CreateMCPServer(mcpServerInputFromHTTP(in.Name, in.Description, in.Transport, in.Command, in.Args, in.URL, in.Env, in.Headers))
+	m, err := h.capabilities.CreateMCPServer(mcpServerInputFromHTTP(in.Name, in.Description, in.Transport, in.Command, in.Args, in.URL, in.Env, in.Headers))
 	if err != nil {
 		return err
 	}
@@ -581,7 +615,7 @@ func (h *Handler) handleUpdateMCPServer(c echo.Context) error {
 	if err := bindJSON(c, &in); err != nil {
 		return err
 	}
-	m, err := h.svc.UpdateMCPServer(in.MCPServerID, mcpServerInputFromHTTP(in.Name, in.Description, in.Transport, in.Command, in.Args, in.URL, in.Env, in.Headers))
+	m, err := h.capabilities.UpdateMCPServer(in.MCPServerID, mcpServerInputFromHTTP(in.Name, in.Description, in.Transport, in.Command, in.Args, in.URL, in.Env, in.Headers))
 	if err != nil {
 		return err
 	}
@@ -593,7 +627,7 @@ func (h *Handler) handleDeleteMCPServer(c echo.Context) error {
 	if err := bindJSON(c, &in); err != nil {
 		return err
 	}
-	if err := h.svc.DeleteMCPServer(in.MCPServerID); err != nil {
+	if err := h.capabilities.DeleteMCPServer(in.MCPServerID); err != nil {
 		return err
 	}
 	return c.NoContent(http.StatusNoContent)
@@ -610,18 +644,18 @@ func (h *Handler) handleTestMCPServer(c echo.Context) error {
 		Env: in.Env, Headers: in.Headers,
 	}
 	if in.MCPServerID != "" {
-		existing := h.svc.GetMCPServer(in.MCPServerID)
+		existing := h.capabilities.GetMCPServer(in.MCPServerID)
 		if existing == nil {
 			return echo.NewHTTPError(http.StatusNotFound, "mcp server not found")
 		}
 		server = *existing
 	}
-	result, err := h.svc.ProbeMCPServer(c.Request().Context(), server)
+	result, err := h.capabilities.ProbeMCPServer(c.Request().Context(), server)
 	if err != nil {
 		return err
 	}
 	if in.MCPServerID != "" && in.Persist {
-		if _, err := h.svc.UpdateMCPServerProbeResult(in.MCPServerID, result); err != nil {
+		if _, err := h.capabilities.UpdateMCPServerProbeResult(in.MCPServerID, result); err != nil {
 			return err
 		}
 	}
@@ -633,7 +667,7 @@ func (h *Handler) handleImportMCPServers(c echo.Context) error {
 	if err := bindJSON(c, &in); err != nil {
 		return err
 	}
-	servers, err := h.svc.ImportMCPServers(in.Content, in.OnDuplicate)
+	servers, err := h.capabilities.ImportMCPServers(in.Content, in.OnDuplicate)
 	if err != nil {
 		return err
 	}
@@ -650,7 +684,7 @@ func (h *Handler) handleGetTool(c echo.Context) error {
 	if t := h.toolingSvc.Get(id); t != nil {
 		return c.JSON(http.StatusOK, map[string]any{"tool": toolToMap(t.Name, t.Description, t.InputSchema, t.Source, t.ID)})
 	}
-	if t := h.svc.GetTool(id); t != nil {
+	if t := h.capabilities.GetTool(id); t != nil {
 		return c.JSON(http.StatusOK, map[string]any{"tool": toolToMap(t.Name, t.Description, t.InputSchema, t.Source, t.ID)})
 	}
 	return echo.NewHTTPError(http.StatusNotFound, "tool not found")
@@ -665,7 +699,7 @@ func (h *Handler) handleCreateTool(c echo.Context) error {
 	if err := bindJSON(c, &in); err != nil {
 		return err
 	}
-	t, err := h.svc.CreateTool(in.Name, in.Description, in.InputSchema)
+	t, err := h.capabilities.CreateTool(in.Name, in.Description, in.InputSchema)
 	if err != nil {
 		return err
 	}
@@ -682,7 +716,7 @@ func (h *Handler) handleUpdateTool(c echo.Context) error {
 	if err := bindJSON(c, &in); err != nil {
 		return err
 	}
-	t, err := h.svc.UpdateTool(in.ID, in.Name, in.Description, in.InputSchema)
+	t, err := h.capabilities.UpdateTool(in.ID, in.Name, in.Description, in.InputSchema)
 	if err != nil {
 		return err
 	}
@@ -696,7 +730,7 @@ func (h *Handler) handleDeleteTool(c echo.Context) error {
 	if err := bindJSON(c, &in); err != nil {
 		return err
 	}
-	if err := h.svc.DeleteTool(in.ID); err != nil {
+	if err := h.capabilities.DeleteTool(in.ID); err != nil {
 		return err
 	}
 	return c.NoContent(http.StatusNoContent)

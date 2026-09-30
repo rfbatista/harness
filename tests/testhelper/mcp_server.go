@@ -12,27 +12,28 @@ import (
 	"github.com/mark3labs/mcp-go/client/transport"
 	mcplib "github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
+
 	"operators-mcp/internal/adapter/in/mcp"
 	"operators-mcp/internal/adapter/in/ui"
-	"operators-mcp/internal/application/blueprint"
+	"operators-mcp/internal/app/catalog"
 	"operators-mcp/internal/application/tooling"
 )
 
 // StartMCPServer starts an mcp-go server with tools and designer resource on a random port.
 // Returns the base URL (e.g. "http://127.0.0.1:12345") and a cleanup function.
-func StartMCPServer(t *testing.T, svc *blueprint.Service, devMode bool) (baseURL string, cleanup func()) {
-	return StartMCPServerWithDesigner(t, svc, devMode, nil, "")
+func StartMCPServer(t *testing.T, cat *catalog.Catalog, devMode bool) (baseURL string, cleanup func()) {
+	return StartMCPServerWithDesigner(t, cat, devMode, nil, "")
 }
 
 // StartMCPServerWithDesigner is like StartMCPServer but lets you pass custom embedFS and devServerURL
 // for the designer resource. When devMode is false and embedFS is nil, ui.Dist is used.
 // When devMode is true and devServerURL is "", ui.DefaultDevServerURL is used.
-func StartMCPServerWithDesigner(t *testing.T, svc *blueprint.Service, devMode bool, embedFS fs.FS, devServerURL string) (baseURL string, cleanup func()) {
+func StartMCPServerWithDesigner(t *testing.T, cat *catalog.Catalog, devMode bool, embedFS fs.FS, devServerURL string) (baseURL string, cleanup func()) {
 	t.Helper()
 
 	toolingSvc := tooling.NewService()
-	if svc != nil {
-		tooling.Bootstrap(toolingSvc, svc, nil, nil)
+	if cat != nil {
+		tooling.Bootstrap(toolingSvc, cat.Tooling(), nil, nil)
 	}
 
 	s := server.NewMCPServer("test", "0.0.1", server.WithToolCapabilities(true))

@@ -24,7 +24,7 @@ import (
 	"operators-mcp/internal/adapter/out/filesystem"
 	"operators-mcp/internal/adapter/out/gitcli"
 	"operators-mcp/internal/adapter/out/persistence/sqlite"
-	"operators-mcp/internal/application/blueprint"
+	"operators-mcp/internal/app/catalog"
 	"operators-mcp/internal/application/execution"
 	"operators-mcp/internal/application/orchestration"
 	"operators-mcp/internal/application/planning"
@@ -123,44 +123,55 @@ func newAgentRepository(cfg Config, db *gorm.DB) ports.AgentRepository {
 	return configrepo.MergeAgents(dbRepo, cfgRepo)
 }
 
-// BlueprintModule provides the filesystem adapters (as their ports) and the
-// blueprint domain service that ties the repositories together.
-var BlueprintModule = fx.Module("blueprint",
+// CatalogModule provides the filesystem adapters (as their ports) and the five
+// catalog bounded contexts — projects, architecture, agents, capabilities,
+// settings — wired over one event bus by catalog.New.
+var CatalogModule = fx.Module("catalog",
 	fx.Provide(
 		asPort(filesystem.NewMatcher, new(ports.PathMatcher)),
 		asPort(filesystem.NewLister, new(ports.TreeLister)),
 		asPort(skillfs.NewPublisher, new(ports.SkillPublisher)),
-		newBlueprintService,
+		newCatalog,
 	),
 )
 
-// blueprintParams collects the many dependencies of blueprint.NewService into
-// a parameter object so the wiring stays readable.
-type blueprintParams struct {
+// catalogParams collects the driven ports the catalog contexts are built on.
+type catalogParams struct {
 	fx.In
 
-	Projects     ports.ProjectRepository
-	Repositories ports.RepositoryRepository
-	Zones        ports.ZoneRepository
-	Agents       ports.AgentRepository
-	Prompts      ports.PromptRepository
-	Skills       ports.SkillRepository
-	MCPServers   ports.MCPServerRepository
-	Tools        ports.ToolRepository
-	Matcher      ports.PathMatcher
-	Lister       ports.TreeLister
-	Cfg          Config
-	Settings     ports.SettingsRepository
-	Publisher    ports.SkillPublisher
-
+	Projects        ports.ProjectRepository
+	Repositories    ports.RepositoryRepository
+	Zones           ports.ZoneRepository
 	BoundedContexts ports.BoundedContextRepository
+	Agents          ports.AgentRepository
+	Prompts         ports.PromptRepository
+	Skills          ports.SkillRepository
+	MCPServers      ports.MCPServerRepository
+	Tools           ports.ToolRepository
+	Settings        ports.SettingsRepository
+	Publisher       ports.SkillPublisher
+	Matcher         ports.PathMatcher
+	Lister          ports.TreeLister
+	Cfg             Config
 }
 
-func newBlueprintService(p blueprintParams) *blueprint.Service {
-	return blueprint.NewService(
-		p.Projects, p.Repositories, p.Zones, p.Agents, p.Prompts, p.Skills, p.MCPServers, p.Tools,
-		p.Matcher, p.Lister, p.Cfg.Root,
-	).WithPublishing(p.Settings, p.Publisher).WithBoundedContexts(p.BoundedContexts)
+func newCatalog(p catalogParams) catalog.Catalog {
+	return catalog.New(catalog.Deps{
+		Projects:        p.Projects,
+		Repositories:    p.Repositories,
+		Zones:           p.Zones,
+		BoundedContexts: p.BoundedContexts,
+		Agents:          p.Agents,
+		Prompts:         p.Prompts,
+		Skills:          p.Skills,
+		MCPServers:      p.MCPServers,
+		Tools:           p.Tools,
+		Settings:        p.Settings,
+		Publisher:       p.Publisher,
+		PathMatcher:     p.Matcher,
+		TreeLister:      p.Lister,
+		DefaultRoot:     p.Cfg.Root,
+	})
 }
 
 // PlanningModule provides the planning service (tickets and documents).
@@ -182,12 +193,18 @@ func newPlanningService(
 var ExecutionModule = fx.Module("execution",
 	fx.Provide(
 		newGenkit,
-		execution.NewContextResolver,
+		newContextResolver,
 		newFilesystemTools,
 		execution.NewService,
 	),
 	fx.Invoke(execution.RegisterFlows),
 )
+
+// newContextResolver builds the execution context resolver over the catalog
+// contexts it reads.
+func newContextResolver(cat catalog.Catalog) *execution.ContextResolver {
+	return execution.NewContextResolver(cat.Projects, cat.Architecture, cat.Agents)
+}
 
 // newGenkit returns the singleton Genkit instance. Initialization uses a
 // background context because the instance lives for the whole process.
@@ -207,9 +224,9 @@ var ToolingModule = fx.Module("tooling",
 	fx.Provide(newToolingService),
 )
 
-func newToolingService(bp *blueprint.Service, plan *planning.Service, exec *execution.Service) *tooling.Service {
+func newToolingService(cat catalog.Catalog, plan *planning.Service, exec *execution.Service) *tooling.Service {
 	svc := tooling.NewService()
-	tooling.Bootstrap(svc, bp, plan, exec)
+	tooling.Bootstrap(svc, cat.Tooling(), plan, exec)
 	return svc
 }
 
@@ -264,20 +281,26 @@ func newClaudeTranscripts() claudehome.Transcripts { return claudehome.Transcrip
 
 func newHub() *orchestration.Hub { return orchestration.NewHub(256) }
 
-// newOrchestrationService passes *blueprint.Service where the orchestration's
-// configResolver interface is expected (structural satisfaction).
+// newOrchestrationService hands the orchestration the catalog contexts it
+// reads to set sessions up.
 func newOrchestrationService(
 	cfg Config,
 	runtime llmkit.Manager,
 	broker *approval.Broker,
 	hub *orchestration.Hub,
 	sessions ports.SessionRepository,
-	bp *blueprint.Service,
+	cat catalog.Catalog,
 	tickets ports.TicketRepository,
 	ws *workspaces.Service,
 	transcripts ports.ClaudeTranscripts,
 ) *orchestration.Service {
-	svc := orchestration.NewService(runtime, broker, hub, sessions, bp, tickets, ws)
+	svc := orchestration.NewService(runtime, broker, hub, sessions, orchestration.Catalog{
+		Projects:     cat.Projects,
+		Repositories: cat.Projects,
+		Agents:       cat.Agents,
+		MCPServers:   cat.Capabilities,
+		Zones:        cat.Architecture,
+	}, tickets, ws)
 	base := cfg.loopbackBaseURL()
 	// The route belongs to an inbound adapter, so the application layer is
 	// handed the URL rather than importing the adapter to build it.

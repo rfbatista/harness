@@ -77,7 +77,7 @@ func TestStartInteractive_ProvisionsAndRecords(t *testing.T) {
 	if launch.Dir != ws.Path || sess.WorkingDir != ws.Path {
 		t.Fatalf("launch dir %q / working dir %q, want the worktree %q", launch.Dir, sess.WorkingDir, ws.Path)
 	}
-	if got := svc.Get(sess.ID); got == nil || !got.Interactive {
+	if got := sessionOf(svc, sess.ID); got == nil || !got.Interactive {
 		t.Fatalf("not persisted: %+v", got)
 	}
 }
@@ -150,7 +150,7 @@ func TestStartInteractive_NoPromptOpensIdle(t *testing.T) {
 
 func TestStartInteractive_AgentSkillsBecomePluginDir(t *testing.T) {
 	svc, _ := newInteractiveService(t)
-	svc.bp.(*fakeResolver).agents = map[string]*domain.Agent{"a1": {
+	svc.catalog.Agents.(*fakeResolver).agents = map[string]*domain.Agent{"a1": {
 		ID: "a1",
 		Skills: []domain.Skill{{
 			Name:  "Review",
@@ -263,7 +263,7 @@ func TestResumeInteractive_ResumesTheLatestConversation(t *testing.T) {
 	}
 
 	// /clear moved the conversation; the hook reported it.
-	if err := svc.RecordClaudeSession(sess.ID, "after-clear"); err != nil {
+	if err := svc.RecordClaudeSession(context.Background(), sess.ID, "after-clear"); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := svc.EndInteractive(context.Background(), sess.ID, 0, false); err != nil {
@@ -304,7 +304,7 @@ func TestResumeInteractive_MissingTranscript(t *testing.T) {
 	if _, _, err := svc.ResumeInteractive(context.Background(), sess.ID); codeOf(err) != "SESSION_TRANSCRIPT_MISSING" {
 		t.Fatalf("err = %v, want SESSION_TRANSCRIPT_MISSING", err)
 	}
-	if got := svc.Get(sess.ID); got.Status != domain.SessionStopped {
+	if got := sessionOf(svc, sess.ID); got.Status != domain.SessionStopped {
 		t.Fatalf("a failed resume changed the status to %s", got.Status)
 	}
 }
@@ -312,16 +312,16 @@ func TestResumeInteractive_MissingTranscript(t *testing.T) {
 func TestRecordClaudeSession(t *testing.T) {
 	svc, _ := newInteractiveService(t)
 	sess, _ := startInteractive(t, svc, InteractiveRequest{})
-	if err := svc.RecordClaudeSession(sess.ID, "c2"); err != nil {
+	if err := svc.RecordClaudeSession(context.Background(), sess.ID, "c2"); err != nil {
 		t.Fatal(err)
 	}
-	if got := svc.Get(sess.ID); got.ClaudeSessionID != "c2" {
+	if got := sessionOf(svc, sess.ID); got.ClaudeSessionID != "c2" {
 		t.Fatalf("claude session id = %q, want c2", got.ClaudeSessionID)
 	}
-	if err := svc.RecordClaudeSession(sess.ID, ""); codeOf(err) != "INVALID_INPUT" {
+	if err := svc.RecordClaudeSession(context.Background(), sess.ID, ""); codeOf(err) != "INVALID_INPUT" {
 		t.Fatalf("empty id = %v, want INVALID_INPUT", err)
 	}
-	if err := svc.RecordClaudeSession("nope", "c3"); codeOf(err) != "SESSION_NOT_FOUND" {
+	if err := svc.RecordClaudeSession(context.Background(), "nope", "c3"); codeOf(err) != "SESSION_NOT_FOUND" {
 		t.Fatalf("unknown session = %v, want SESSION_NOT_FOUND", err)
 	}
 }

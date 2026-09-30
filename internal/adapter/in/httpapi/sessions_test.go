@@ -26,20 +26,23 @@ import (
 
 type stubResolver struct{ proj *domain.Project }
 
-func (s *stubResolver) GetProject(id string) *domain.Project {
+func (s *stubResolver) GetProject(_ context.Context, id string) (*domain.Project, error) {
 	if id == "p1" {
-		return s.proj
+		return s.proj, nil
 	}
-	return nil
+	return nil, &domain.StructuredError{Code: "PROJECT_NOT_FOUND", Message: "project not found"}
 }
 
-func (s *stubResolver) GetRepository(id string) *domain.Repository {
+func (s *stubResolver) GetRepository(_ context.Context, id string) (*domain.Repository, error) {
 	if id == "r1" {
-		return &domain.Repository{ID: "r1", ProjectID: "p1", Name: "api", RootDir: s.proj.RootDir}
+		return &domain.Repository{ID: "r1", ProjectID: "p1", Name: "api", RootDir: s.proj.RootDir}, nil
 	}
-	return nil
+	return nil, &domain.StructuredError{Code: "REPOSITORY_NOT_FOUND", Message: "repository not found"}
 }
-func (s *stubResolver) GetAgent(id string) *domain.Agent      { return nil }
+func (s *stubResolver) GetAgent(context.Context, string) (*domain.Agent, error) {
+	return nil, &domain.StructuredError{Code: "AGENT_NOT_FOUND", Message: "agent not found"}
+}
+
 func (s *stubResolver) ResolveAgentRelations(a *domain.Agent) {}
 func (s *stubResolver) ListMCPServers() []*domain.MCPServer   { return nil }
 func (s *stubResolver) GetZone(id string) *domain.Zone        { return nil }
@@ -114,8 +117,9 @@ func newSessionTestServerWithBroker(t *testing.T) (*httptest.Server, *approval.B
 	})
 	broker := mgr.Approvals()
 	hub := orchestration.NewHub(64)
+	res := &stubResolver{proj: &domain.Project{ID: "p1", RootDir: t.TempDir()}}
 	svc := orchestration.NewService(mgr, broker, hub, sqlite.NewSessionRepository(db),
-		&stubResolver{proj: &domain.Project{ID: "p1", RootDir: t.TempDir()}},
+		orchestration.Catalog{Projects: res, Repositories: res, Agents: res, MCPServers: res, Zones: res},
 		stubTickets{"tk1": {ID: "tk1", ProjectID: "p1", Title: "Ship the thing"}},
 		&stubProvisioner{dir: t.TempDir()})
 	svc.DefaultEnv = []string{"CLAUDE_FAKE=1"}

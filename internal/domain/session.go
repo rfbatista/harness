@@ -59,7 +59,7 @@ type Session struct {
 	WorkspaceID string `json:"workspace_id,omitempty"`
 	Branch      string `json:"branch,omitempty"`
 	// Interactive sessions run claude in a terminal the server does not own
-	// (a claude-pane): the server provisioned and recorded them, but it cannot
+	// (a tui-client): the server provisioned and recorded them, but it cannot
 	// send to, stop or approve for them.
 	Interactive bool `json:"interactive"`
 	// ClaudeSessionID is the claude conversation an interactive session resumes.

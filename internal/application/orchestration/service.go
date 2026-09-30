@@ -26,15 +26,20 @@ var _ ports.Orchestration = (*Service)(nil)
 // StartRequest is the headless start request; see ports.StartRequest.
 type StartRequest = ports.StartRequest
 
-// configResolver is the slice of blueprint.Service the orchestration needs.
-// *blueprint.Service satisfies it.
-type configResolver interface {
-	GetProject(id string) *domain.Project
-	GetRepository(id string) *domain.Repository
-	GetAgent(id string) *domain.Agent
-	ResolveAgentRelations(a *domain.Agent)
-	ListMCPServers() []*domain.MCPServer
-	GetZone(id string) *domain.Zone
+// Catalog is what the orchestration reads from the catalog contexts to set a
+// session up: its project and repository, the agent it runs as, the MCP
+// servers that agent attaches, and the zone that scopes it.
+type Catalog struct {
+	Projects interface {
+		GetProject(ctx context.Context, id string) (*domain.Project, error)
+	}
+	Repositories ports.RepositoryReader
+	Agents       interface {
+		GetAgent(ctx context.Context, id string) (*domain.Agent, error)
+		ResolveAgentRelations(a *domain.Agent)
+	}
+	MCPServers interface{ ListMCPServers() []*domain.MCPServer }
+	Zones      ports.ZoneReader
 }
 
 // ticketResolver is the slice of the planning ticket store the orchestration
@@ -48,7 +53,7 @@ type Service struct {
 	broker     *approval.Broker
 	hub        *Hub
 	sessions   ports.SessionRepository
-	bp         configResolver
+	catalog    Catalog
 	tickets    ticketResolver
 	workspaces ports.WorkspaceProvisioner
 
@@ -75,9 +80,9 @@ type Service struct {
 	busy map[string]bool
 }
 
-func NewService(runtime llmkit.Manager, broker *approval.Broker, hub *Hub, sessions ports.SessionRepository, bp configResolver, tickets ticketResolver, workspaces ports.WorkspaceProvisioner) *Service {
+func NewService(runtime llmkit.Manager, broker *approval.Broker, hub *Hub, sessions ports.SessionRepository, catalog Catalog, tickets ticketResolver, workspaces ports.WorkspaceProvisioner) *Service {
 	s := &Service{
-		runtime: runtime, broker: broker, hub: hub, sessions: sessions, bp: bp, tickets: tickets,
+		runtime: runtime, broker: broker, hub: hub, sessions: sessions, catalog: catalog, tickets: tickets,
 		workspaces: workspaces,
 		seq:        map[string]int64{}, cleanups: map[string]func(){}, busy: map[string]bool{},
 	}
@@ -233,8 +238,8 @@ func (s *Service) prepare(in prepareInput) (*prepared, error) {
 	if in.ProjectID == "" {
 		return nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "project_id is required"}
 	}
-	if s.bp.GetProject(in.ProjectID) == nil {
-		return nil, &domain.StructuredError{Code: "PROJECT_NOT_FOUND", Message: "project not found"}
+	if _, err := s.catalog.Projects.GetProject(context.TODO(), in.ProjectID); err != nil {
+		return nil, err
 	}
 
 	var ticket *domain.Ticket
@@ -249,9 +254,9 @@ func (s *Service) prepare(in prepareInput) (*prepared, error) {
 	if in.RepositoryID == "" {
 		return nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "repository_id is required"}
 	}
-	repo := s.bp.GetRepository(in.RepositoryID)
-	if repo == nil {
-		return nil, &domain.StructuredError{Code: "REPOSITORY_NOT_FOUND", Message: "repository not found"}
+	repo, err := s.catalog.Repositories.GetRepository(context.TODO(), in.RepositoryID)
+	if err != nil {
+		return nil, err
 	}
 	if repo.ProjectID != in.ProjectID {
 		return nil, &domain.StructuredError{Code: "CROSS_PROJECT_ACCESS", Message: "repository does not belong to project"}
@@ -326,11 +331,12 @@ func (s *Service) resolveAgent(agentID string) (resolvedAgent, error) {
 	if agentID == "" {
 		return r, nil
 	}
-	r.agent = s.bp.GetAgent(agentID)
-	if r.agent == nil {
-		return r, &domain.StructuredError{Code: "AGENT_NOT_FOUND", Message: "agent not found"}
+	a, err := s.catalog.Agents.GetAgent(context.TODO(), agentID)
+	if err != nil {
+		return r, err
 	}
-	s.bp.ResolveAgentRelations(r.agent)
+	r.agent = a
+	s.catalog.Agents.ResolveAgentRelations(r.agent)
 	if r.agent.Prompt != nil {
 		r.appendSystem = r.agent.Prompt.Content
 	}
@@ -370,7 +376,7 @@ func (s *Service) sessionConfig(id, dir, model string, allowedTools []string, pe
 	}
 	applyTaskContext(&cfg, ticket, taskURL)
 
-	for _, m := range resolveAttachedMCPServers(ag.agent, s.bp.ListMCPServers()) {
+	for _, m := range resolveAttachedMCPServers(ag.agent, s.catalog.MCPServers.ListMCPServers()) {
 		cfg.MCPServers = append(cfg.MCPServers, llmkit.MCPServerSpec{
 			Name:      domain.Slug(m.Name),
 			Transport: m.Transport,
@@ -383,7 +389,7 @@ func (s *Service) sessionConfig(id, dir, model string, allowedTools []string, pe
 	}
 
 	if zoneID != "" {
-		if z := s.bp.GetZone(zoneID); z != nil {
+		if z := s.catalog.Zones.GetZone(zoneID); z != nil {
 			cfg.AddDirs = append(cfg.AddDirs, z.ExplicitPaths...)
 		}
 	}
@@ -767,9 +773,17 @@ func (s *Service) History(id string, fromSeq int64) []SessionEvent {
 	return out
 }
 
-func (s *Service) Get(id string) *domain.Session { return s.sessions.Get(id) }
+func (s *Service) Get(_ context.Context, id string) (*domain.Session, error) {
+	sess := s.sessions.Get(id)
+	if sess == nil {
+		return nil, &domain.StructuredError{Code: "SESSION_NOT_FOUND", Message: "session not found"}
+	}
+	return sess, nil
+}
 
-func (s *Service) List(f ports.SessionFilter) []*domain.Session { return s.sessions.List(f) }
+func (s *Service) List(_ context.Context, f ports.SessionFilter) ([]*domain.Session, error) {
+	return s.sessions.List(f), nil
+}
 
 func (s *Service) publish(sessionID string, ev SessionEvent) {
 	s.mu.Lock()

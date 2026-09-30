@@ -8,10 +8,18 @@ import (
 	"testing"
 
 	"operators-mcp/internal/adapter/out/persistence/sqlite"
-	"operators-mcp/internal/application/blueprint"
+	"operators-mcp/internal/app/catalog"
+	"operators-mcp/internal/ports"
 )
 
-func newBoundedContextHandler(t *testing.T) (*Handler, string, *blueprint.Service) {
+// bcFixture is the wired catalog plus the zone repository, for arranging
+// zones directly.
+type bcFixture struct {
+	catalog.Catalog
+	Zones ports.ZoneRepository
+}
+
+func newBoundedContextHandler(t *testing.T) (*Handler, string, bcFixture) {
 	t.Helper()
 	db, err := sqlite.Open(":memory:")
 	if err != nil {
@@ -22,9 +30,10 @@ func newBoundedContextHandler(t *testing.T) (*Handler, string, *blueprint.Servic
 	if err != nil {
 		t.Fatal(err)
 	}
-	svc := blueprint.NewService(projects, nil, sqlite.NewZoneRepository(db), nil, nil, nil, nil, nil, nil, nil, "").
-		WithBoundedContexts(sqlite.NewBoundedContextRepository(db))
-	return &Handler{svc: svc}, p.ID, svc
+	deps := catalog.SQLiteDeps(db)
+	deps.Projects = projects
+	cat := catalog.New(deps)
+	return NewHandler(servicesOf(cat)), p.ID, bcFixture{Catalog: cat, Zones: deps.Zones}
 }
 
 func TestHTTP_CreateAndListBoundedContexts(t *testing.T) {
@@ -119,7 +128,7 @@ func TestHTTP_DeleteBoundedContext_NotFoundCode(t *testing.T) {
 
 func TestHTTP_AssignZoneToBoundedContext(t *testing.T) {
 	h, pid, svc := newBoundedContextHandler(t)
-	bc, err := svc.CreateBoundedContext(pid, "Billing", "", nil)
+	bc, err := svc.Architecture.CreateBoundedContext(pid, "Billing", "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -161,7 +170,7 @@ func TestHTTP_AssignZoneToBoundedContext(t *testing.T) {
 
 func TestHTTP_DeleteBoundedContext_ClearsZone(t *testing.T) {
 	h, pid, svc := newBoundedContextHandler(t)
-	bc, err := svc.CreateBoundedContext(pid, "Billing", "", nil)
+	bc, err := svc.Architecture.CreateBoundedContext(pid, "Billing", "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -169,7 +178,7 @@ func TestHTTP_DeleteBoundedContext_ClearsZone(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.AssignZoneToBoundedContext(zone.ID, bc.ID); err != nil {
+	if _, err := svc.Architecture.AssignZoneToBoundedContext(zone.ID, bc.ID); err != nil {
 		t.Fatal(err)
 	}
 

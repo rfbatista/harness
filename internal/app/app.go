@@ -1,6 +1,6 @@
 // Package app is the composition root for the operators-mcp server. It wires
-// the dependency graph with uber-go/fx: persistence, the blueprint domain
-// service, the Genkit execution layer, the tooling registry, and the inbound
+// the dependency graph with uber-go/fx: persistence, the catalog bounded
+// contexts, the Genkit execution layer, the tooling registry, and the inbound
 // HTTP and MCP servers. Each concern is an fx.Module so it can be tested in
 // isolation, and process lifecycle (listen/shutdown, DB close) lives in fx
 // lifecycle hooks rather than ad-hoc goroutines in main().
@@ -27,7 +27,7 @@ type Config struct {
 	DBPath string
 	// DevMode proxies the designer resource to the Vite dev server instead of the embedded build.
 	DevMode bool
-	// Root is the default project root for blueprint operations (usually the working directory).
+	// Root is the default project root for tree and path operations (usually the working directory).
 	Root string
 	// ClaudeBin is the path to the claude CLI binary (default "claude").
 	ClaudeBin string
@@ -69,7 +69,7 @@ func New(cfg Config) *fx.App {
 		fx.StopTimeout(stopTimeout),
 		fx.Supply(cfg),
 		PersistenceModule,
-		BlueprintModule,
+		CatalogModule,
 		PlanningModule,
 		WorkspacesModule,
 		ExecutionModule,
@@ -90,7 +90,7 @@ func Validate(cfg Config) error {
 	return fx.ValidateApp(
 		fx.Supply(cfg),
 		PersistenceModule,
-		BlueprintModule,
+		CatalogModule,
 		PlanningModule,
 		WorkspacesModule,
 		ExecutionModule,

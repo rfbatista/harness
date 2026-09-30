@@ -1,25 +1,38 @@
 package tooling
 
 import (
-	"github.com/rfbatista/harnesskit/mcptools"
-
 	"context"
 	"testing"
 
+	"github.com/rfbatista/harnesskit/mcptools"
 	"github.com/rfbatista/harnesskit/skillfs"
+
 	"operators-mcp/internal/adapter/out/persistence/sqlite"
-	"operators-mcp/internal/application/blueprint"
+	"operators-mcp/internal/application/capabilities"
+	"operators-mcp/internal/application/settings"
 	"operators-mcp/internal/domain"
 )
 
-func newSettingsToolService(t *testing.T) *blueprint.Service {
+// settingsFixture is the settings and capabilities contexts together: the
+// settings tools edit the publish root the skill tools publish under.
+type settingsFixture struct {
+	Settings *settings.Service
+	Caps     *capabilities.Service
+}
+
+func newSettingsToolService(t *testing.T) settingsFixture {
 	t.Helper()
 	db, err := sqlite.Open(":memory:")
 	if err != nil {
 		t.Fatal(err)
 	}
-	return blueprint.NewService(nil, nil, nil, nil, nil, sqlite.NewSkillRepository(db), nil, nil, nil, nil, "").
-		WithPublishing(sqlite.NewSettingsRepository(db), skillfs.NewPublisher())
+	st := settings.NewService(sqlite.NewSettingsRepository(db), nil)
+	caps := capabilities.NewService(capabilities.Deps{
+		Skills:    sqlite.NewSkillRepository(db),
+		Settings:  st,
+		Publisher: skillfs.NewPublisher(),
+	})
+	return settingsFixture{Settings: st, Caps: caps}
 }
 
 func toolByName(t *testing.T, tools []domain.Tool, name string) domain.Tool {
@@ -35,7 +48,7 @@ func toolByName(t *testing.T, tools []domain.Tool, name string) domain.Tool {
 
 func TestSettingsTools_UpdateThenGet(t *testing.T) {
 	svc := newSettingsToolService(t)
-	tools := SettingsTools(svc)
+	tools := SettingsTools(svc.Settings)
 	root := t.TempDir()
 
 	update := toolByName(t, tools, "update_settings")
@@ -63,10 +76,10 @@ func TestSettingsTools_UpdateThenGet(t *testing.T) {
 func TestSkillTools_PublishAndUnpublish(t *testing.T) {
 	svc := newSettingsToolService(t)
 	root := t.TempDir()
-	if _, err := svc.UpdateSettings(map[string]string{domain.SettingSkillsPublishRoot: root}); err != nil {
+	if _, err := svc.Settings.UpdateSettings(map[string]string{domain.SettingSkillsPublishRoot: root}); err != nil {
 		t.Fatal(err)
 	}
-	skill, err := svc.CreateSkill(domain.SkillInput{
+	skill, err := svc.Caps.CreateSkill(domain.SkillInput{
 		Name:  "demo",
 		Files: []domain.SkillFile{{Path: "SKILL.md", Content: "# demo"}},
 	})
@@ -74,14 +87,14 @@ func TestSkillTools_PublishAndUnpublish(t *testing.T) {
 		t.Fatal(err)
 	}
 	// The tool group comes from harnesskit; this asserts it reaches the real
-	// SQLite repository and the settings-backed publish root through blueprint.
-	tools := mcptools.SkillTools(svc.SkillService())
+	// SQLite repository and the settings-backed publish root through the settings context.
+	tools := mcptools.SkillTools(svc.Caps.SkillService())
 
 	publish := toolByName(t, tools, "publish_skill")
 	if _, err := publish.Handler(context.Background(), map[string]any{"skill_id": skill.ID}); err != nil {
 		t.Fatal(err)
 	}
-	if got := svc.GetSkill(skill.ID); !got.IsPublished() {
+	if got := svc.Caps.GetSkill(skill.ID); !got.IsPublished() {
 		t.Fatal("publish_skill did not publish")
 	}
 
@@ -89,7 +102,7 @@ func TestSkillTools_PublishAndUnpublish(t *testing.T) {
 	if _, err := unpublish.Handler(context.Background(), map[string]any{"skill_id": skill.ID}); err != nil {
 		t.Fatal(err)
 	}
-	if got := svc.GetSkill(skill.ID); got.IsPublished() {
+	if got := svc.Caps.GetSkill(skill.ID); got.IsPublished() {
 		t.Fatal("unpublish_skill did not unpublish")
 	}
 

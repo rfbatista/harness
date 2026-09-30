@@ -1,6 +1,7 @@
 package planning_test
 
 import (
+	"context"
 	"errors"
 	"testing"
 
@@ -51,7 +52,7 @@ func code(err error) string {
 func TestCreateTicket_DefaultsAndValidation(t *testing.T) {
 	svc, pid := newService(t)
 
-	tk, err := svc.CreateTicket(pid, "T", "", "")
+	tk, err := svc.CreateTicket(context.Background(), pid, "T", "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -59,13 +60,13 @@ func TestCreateTicket_DefaultsAndValidation(t *testing.T) {
 		t.Fatalf("want default backlog, got %q", tk.Status)
 	}
 
-	if _, err := svc.CreateTicket(pid, "", "", ""); code(err) != "INVALID_INPUT" {
+	if _, err := svc.CreateTicket(context.Background(), pid, "", "", ""); code(err) != "INVALID_INPUT" {
 		t.Fatalf("want INVALID_INPUT, got %v", err)
 	}
-	if _, err := svc.CreateTicket("nope", "T", "", ""); code(err) != "PROJECT_NOT_FOUND" {
+	if _, err := svc.CreateTicket(context.Background(), "nope", "T", "", ""); code(err) != "PROJECT_NOT_FOUND" {
 		t.Fatalf("want PROJECT_NOT_FOUND, got %v", err)
 	}
-	if _, err := svc.CreateTicket(pid, "T", "", domain.TicketStatus("weird")); code(err) != "INVALID_STATUS" {
+	if _, err := svc.CreateTicket(context.Background(), pid, "T", "", domain.TicketStatus("weird")); code(err) != "INVALID_STATUS" {
 		t.Fatalf("want INVALID_STATUS, got %v", err)
 	}
 }
@@ -74,7 +75,7 @@ func TestUpdateTicket_EmptyStatusKeepsCurrent(t *testing.T) {
 	svc, pid := newService(t)
 
 	// Create a ticket (defaults to backlog).
-	tk, err := svc.CreateTicket(pid, "T", "", "")
+	tk, err := svc.CreateTicket(context.Background(), pid, "T", "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -83,7 +84,7 @@ func TestUpdateTicket_EmptyStatusKeepsCurrent(t *testing.T) {
 	}
 
 	// Update to in_progress with explicit status.
-	updated, err := svc.UpdateTicket(tk.ID, "T", "", domain.TicketStatusInProgress)
+	updated, err := svc.UpdateTicket(context.Background(), tk.ID, "T", "", domain.TicketStatusInProgress)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -92,7 +93,7 @@ func TestUpdateTicket_EmptyStatusKeepsCurrent(t *testing.T) {
 	}
 
 	// Update with empty status should preserve in_progress.
-	updated2, err := svc.UpdateTicket(tk.ID, "T renamed", "", "")
+	updated2, err := svc.UpdateTicket(context.Background(), tk.ID, "T renamed", "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -104,7 +105,7 @@ func TestUpdateTicket_EmptyStatusKeepsCurrent(t *testing.T) {
 	}
 
 	// Update with empty status on missing ticket should return TICKET_NOT_FOUND.
-	if _, err := svc.UpdateTicket("missing-id", "T", "", ""); code(err) != "TICKET_NOT_FOUND" {
+	if _, err := svc.UpdateTicket(context.Background(), "missing-id", "T", "", ""); code(err) != "TICKET_NOT_FOUND" {
 		t.Fatalf("want TICKET_NOT_FOUND, got %v", err)
 	}
 }
@@ -112,7 +113,7 @@ func TestUpdateTicket_EmptyStatusKeepsCurrent(t *testing.T) {
 func TestLinkDocument_CrossProjectRejected(t *testing.T) {
 	svc, pid := newService(t)
 
-	tk, _ := svc.CreateTicket(pid, "T", "", "")
+	tk, _ := svc.CreateTicket(context.Background(), pid, "T", "", "")
 	doc, _ := svc.CreateDocument(pid, "D", "body")
 	if err := svc.LinkDocument(tk.ID, doc.ID); err != nil {
 		t.Fatalf("same-project link should succeed: %v", err)
@@ -141,7 +142,7 @@ func TestLinkDocument_CrossProjectRejected(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	tk2, err := svc2.CreateTicket(p1id, "T2", "", "")
+	tk2, err := svc2.CreateTicket(context.Background(), p1id, "T2", "", "")
 	if err != nil {
 		t.Fatalf("failed to create ticket in project 1: %v", err)
 	}

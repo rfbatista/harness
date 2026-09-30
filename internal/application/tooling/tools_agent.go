@@ -15,7 +15,11 @@ func AgentTools(bpSvc ports.AgentCatalog) []domain.Tool {
 			InputSchema: emptySchema(),
 			Source:      "code",
 			Handler: func(ctx context.Context, args map[string]any) (any, error) {
-				return map[string]any{"agents": bpSvc.ListAgents()}, nil
+				agents, err := bpSvc.ListAgents(ctx)
+				if err != nil {
+					return nil, err
+				}
+				return map[string]any{"agents": agents}, nil
 			},
 		},
 		{
@@ -28,9 +32,9 @@ func AgentTools(bpSvc ports.AgentCatalog) []domain.Tool {
 				if id == "" {
 					return nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "agent_id is required"}
 				}
-				a := bpSvc.GetAgent(id)
-				if a == nil {
-					return nil, &domain.StructuredError{Code: "AGENT_NOT_FOUND", Message: "agent not found"}
+				a, err := bpSvc.GetAgent(ctx, id)
+				if err != nil {
+					return nil, err
 				}
 				return map[string]any{"agent": a}, nil
 			},
@@ -46,7 +50,7 @@ func AgentTools(bpSvc ports.AgentCatalog) []domain.Tool {
 				promptID := getString(args, "prompt_id", "")
 				skillIDs := getStringSliceDefault(args, "skill_ids", []string{})
 				mcpServerIDs := getStringSliceDefault(args, "mcp_server_ids", []string{})
-				a, err := bpSvc.CreateAgent(name, description, promptID, skillIDs, mcpServerIDs)
+				a, err := bpSvc.CreateAgent(ctx, name, description, promptID, skillIDs, mcpServerIDs)
 				if err != nil {
 					return nil, err
 				}
@@ -68,7 +72,7 @@ func AgentTools(bpSvc ports.AgentCatalog) []domain.Tool {
 				promptID := getString(args, "prompt_id", "")
 				skillIDs := getStringSliceDefault(args, "skill_ids", []string{})
 				mcpServerIDs := getStringSliceDefault(args, "mcp_server_ids", []string{})
-				a, err := bpSvc.UpdateAgent(id, name, description, promptID, skillIDs, mcpServerIDs)
+				a, err := bpSvc.UpdateAgent(ctx, id, name, description, promptID, skillIDs, mcpServerIDs)
 				if err != nil {
 					return nil, err
 				}
@@ -85,7 +89,7 @@ func AgentTools(bpSvc ports.AgentCatalog) []domain.Tool {
 				if id == "" {
 					return nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "agent_id is required"}
 				}
-				if err := bpSvc.DeleteAgent(id); err != nil {
+				if err := bpSvc.DeleteAgent(ctx, id); err != nil {
 					return nil, err
 				}
 				return map[string]string{"deleted": id}, nil

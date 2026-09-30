@@ -8,7 +8,7 @@ import (
 
 	mcplib "github.com/mark3labs/mcp-go/mcp"
 	"operators-mcp/internal/adapter/in/ui"
-	"operators-mcp/internal/application/blueprint"
+	"operators-mcp/internal/app/catalog"
 	"operators-mcp/tests/testhelper"
 )
 
@@ -23,8 +23,8 @@ func TestUIProxy_DevModeServesFromVite(t *testing.T) {
 	go srv.ListenAndServe()
 	t.Cleanup(func() { srv.Close() })
 
-	svc := blueprint.NewService(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, "")
-	baseURL, cleanup := testhelper.StartMCPServerWithDesigner(t, svc, true, nil, "http://localhost:5173")
+	cat := catalog.New(catalog.Deps{})
+	baseURL, cleanup := testhelper.StartMCPServerWithDesigner(t, &cat, true, nil, "http://localhost:5173")
 	defer cleanup()
 	c := testhelper.NewTestClient(t, baseURL)
 	defer c.Close()

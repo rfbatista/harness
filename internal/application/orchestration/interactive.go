@@ -33,8 +33,8 @@ func (s *Service) StartInteractive(ctx context.Context, req InteractiveRequest) 
 	// prepare checks the project too, but the ticket is needed first (its
 	// title names the branch), and a missing project must not read as a
 	// ticket that belongs elsewhere.
-	if s.bp.GetProject(req.ProjectID) == nil {
-		return nil, Launch{}, &domain.StructuredError{Code: "PROJECT_NOT_FOUND", Message: "project not found"}
+	if _, err := s.catalog.Projects.GetProject(ctx, req.ProjectID); err != nil {
+		return nil, Launch{}, err
 	}
 	ticket, err := s.ticketIn(req.ProjectID, req.TicketID)
 	if err != nil {
@@ -178,7 +178,7 @@ func (s *Service) EndInteractive(ctx context.Context, id string, exitCode int, c
 // now in. The CLI's SessionStart hook calls it on startup, resume, /clear and
 // compaction; only /clear actually moves the id, but recording every report
 // keeps this independent of which ones do.
-func (s *Service) RecordClaudeSession(id, claudeSessionID string) error {
+func (s *Service) RecordClaudeSession(_ context.Context, id, claudeSessionID string) error {
 	if claudeSessionID == "" {
 		return &domain.StructuredError{Code: "INVALID_INPUT", Message: "claude session id is required"}
 	}

@@ -8,28 +8,25 @@ import (
 	"testing"
 
 	"github.com/rfbatista/harnesskit/skillfs"
+
 	"operators-mcp/internal/adapter/out/persistence/sqlite"
-	"operators-mcp/internal/application/blueprint"
+	"operators-mcp/internal/app/catalog"
 	"operators-mcp/internal/domain"
 )
 
 // newPublishHandler builds a handler whose service has publishing wired, plus
 // the service itself for arranging fixtures directly. The agent repository is
 // real because DeleteSkill unlinks skills from agents.
-func newPublishHandler(t *testing.T) (*Handler, *blueprint.Service) {
+func newPublishHandler(t *testing.T) (*Handler, catalog.Catalog) {
 	t.Helper()
 	db, err := sqlite.Open(":memory:")
 	if err != nil {
 		t.Fatal(err)
 	}
-	svc := blueprint.NewService(
-		nil, nil, nil,
-		sqlite.NewAgentRepository(db),
-		nil,
-		sqlite.NewSkillRepository(db),
-		nil, nil, nil, nil, "",
-	).WithPublishing(sqlite.NewSettingsRepository(db), skillfs.NewPublisher())
-	return NewHandler(svc, nil, nil, nil, nil, nil), svc
+	deps := catalog.SQLiteDeps(db)
+	deps.Publisher = skillfs.NewPublisher()
+	cat := catalog.New(deps)
+	return NewHandler(servicesOf(cat)), cat
 }
 
 func postJSON(t *testing.T, h *Handler, path string, body any) *httptest.ResponseRecorder {
@@ -52,9 +49,9 @@ func getJSON(t *testing.T, h *Handler, path string) *httptest.ResponseRecorder {
 	return rec
 }
 
-func newPublishTestSkill(t *testing.T, svc *blueprint.Service) *domain.Skill {
+func newPublishTestSkill(t *testing.T, svc catalog.Catalog) *domain.Skill {
 	t.Helper()
-	skill, err := svc.CreateSkill(domain.SkillInput{
+	skill, err := svc.Capabilities.CreateSkill(domain.SkillInput{
 		Name:  "demo",
 		Files: []domain.SkillFile{{Path: "SKILL.md", Content: "# demo"}},
 	})
@@ -115,7 +112,7 @@ func TestHTTP_PublishSkill_RootNotSet(t *testing.T) {
 func TestHTTP_PublishSkill_TargetExistsIsConflict(t *testing.T) {
 	h, svc := newPublishHandler(t)
 	root := t.TempDir()
-	if _, err := svc.UpdateSettings(map[string]string{domain.SettingSkillsPublishRoot: root}); err != nil {
+	if _, err := svc.Settings.UpdateSettings(map[string]string{domain.SettingSkillsPublishRoot: root}); err != nil {
 		t.Fatal(err)
 	}
 	skill := newPublishTestSkill(t, svc)

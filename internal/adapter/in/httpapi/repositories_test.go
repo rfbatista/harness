@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"operators-mcp/internal/adapter/out/persistence/sqlite"
-	"operators-mcp/internal/application/blueprint"
+	"operators-mcp/internal/app/catalog"
 )
 
 func newRepositoryHandler(t *testing.T) (*Handler, string) {
@@ -20,8 +20,9 @@ func newRepositoryHandler(t *testing.T) (*Handler, string) {
 	projects := sqlite.NewProjectRepository(db)
 	repos := sqlite.NewRepositoryRepository(db)
 	p, _ := projects.Create("proj", "/tmp/proj")
-	svc := blueprint.NewService(projects, repos, sqlite.NewZoneRepository(db), nil, nil, nil, nil, nil, nil, nil, "")
-	return &Handler{svc: svc}, p.ID
+	deps := catalog.SQLiteDeps(db)
+	deps.Projects, deps.Repositories = projects, repos
+	return NewHandler(servicesOf(catalog.New(deps))), p.ID
 }
 
 func TestHTTP_CreateAndListRepositories(t *testing.T) {

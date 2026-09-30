@@ -1,11 +1,12 @@
 package execution
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
-	"operators-mcp/internal/application/blueprint"
 	"operators-mcp/internal/domain"
+	"operators-mcp/internal/ports"
 )
 
 // ExecutionContext holds the fully resolved state needed for a task execution.
@@ -20,26 +21,29 @@ type ExecutionContext struct {
 	ExplicitPaths []string
 }
 
-// ContextResolver builds ExecutionContext from project + zone identifiers.
+// ContextResolver builds ExecutionContext from project + zone identifiers,
+// reading the projects, architecture and agents contexts.
 type ContextResolver struct {
-	blueprintSvc *blueprint.Service
+	projects ports.ProjectReader
+	zones    ports.ZoneReader
+	agents   ports.AgentResolver
 }
 
-// NewContextResolver returns a resolver backed by the blueprint service.
-func NewContextResolver(svc *blueprint.Service) *ContextResolver {
-	return &ContextResolver{blueprintSvc: svc}
+// NewContextResolver returns a resolver over the three contexts it reads.
+func NewContextResolver(projects ports.ProjectReader, zones ports.ZoneReader, agents ports.AgentResolver) *ContextResolver {
+	return &ContextResolver{projects: projects, zones: zones, agents: agents}
 }
 
 // Resolve builds the full execution context.
 // projectID is required and validated against the zone's project.
 // agentID is optional — if empty, the zone selects the agent.
 func (r *ContextResolver) Resolve(projectID, zoneID, agentID string) (*ExecutionContext, error) {
-	project := r.blueprintSvc.GetProject(projectID)
-	if project == nil {
-		return nil, &domain.StructuredError{Code: "PROJECT_NOT_FOUND", Message: "project not found"}
+	project, err := r.projects.GetProject(context.TODO(), projectID)
+	if err != nil {
+		return nil, err
 	}
 
-	zone := r.blueprintSvc.GetZone(zoneID)
+	zone := r.zones.GetZone(zoneID)
 	if zone == nil {
 		return nil, &domain.StructuredError{Code: "ZONE_NOT_FOUND", Message: "zone not found"}
 	}
@@ -56,7 +60,7 @@ func (r *ContextResolver) Resolve(projectID, zoneID, agentID string) (*Execution
 		return nil, err
 	}
 
-	r.blueprintSvc.ResolveAgentPrompt(agent)
+	r.agents.ResolveAgentPrompt(agent)
 
 	systemPrompt := r.buildSystemPrompt(project, zone, agent)
 
@@ -76,11 +80,7 @@ func (r *ContextResolver) selectAgent(zone *domain.Zone, agentID string) (*domai
 	if agentID != "" {
 		for i := range zone.AssignedAgents {
 			if zone.AssignedAgents[i].ID == agentID {
-				full := r.blueprintSvc.GetAgent(agentID)
-				if full == nil {
-					return nil, &domain.StructuredError{Code: "AGENT_NOT_FOUND", Message: "agent not found"}
-				}
-				return full, nil
+				return r.agents.GetAgent(context.TODO(), agentID)
 			}
 		}
 		return nil, &domain.StructuredError{
@@ -93,11 +93,7 @@ func (r *ContextResolver) selectAgent(zone *domain.Zone, agentID string) (*domai
 	case 0:
 		return nil, &domain.StructuredError{Code: "NO_AGENTS", Message: "zone has no assigned agents"}
 	case 1:
-		full := r.blueprintSvc.GetAgent(zone.AssignedAgents[0].ID)
-		if full == nil {
-			return nil, &domain.StructuredError{Code: "AGENT_NOT_FOUND", Message: "agent not found"}
-		}
-		return full, nil
+		return r.agents.GetAgent(context.TODO(), zone.AssignedAgents[0].ID)
 	default:
 		return nil, &domain.StructuredError{
 			Code:    "MULTIPLE_AGENTS",

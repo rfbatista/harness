@@ -5,7 +5,8 @@ import (
 	"testing"
 
 	"operators-mcp/internal/adapter/out/persistence/sqlite"
-	"operators-mcp/internal/application/blueprint"
+	"operators-mcp/internal/application/architecture"
+	projectsctx "operators-mcp/internal/application/projects"
 	"operators-mcp/internal/domain"
 )
 
@@ -17,8 +18,11 @@ func TestBoundedContextTools_CRUD(t *testing.T) {
 	projects := sqlite.NewProjectRepository(db)
 	p, _ := projects.Create("proj", "/tmp/proj")
 	zones := sqlite.NewZoneRepository(db)
-	svc := blueprint.NewService(projects, nil, zones, nil, nil, nil, nil, nil, nil, nil, "").
-		WithBoundedContexts(sqlite.NewBoundedContextRepository(db))
+	svc := architecture.NewService(architecture.Deps{
+		Zones:           zones,
+		BoundedContexts: sqlite.NewBoundedContextRepository(db),
+		Projects:        projectsctx.NewService(projects, nil, nil),
+	})
 
 	byName := map[string]func(context.Context, map[string]any) (any, error){}
 	for _, tl := range BoundedContextTools(svc) {

@@ -11,13 +11,17 @@ func (h *Handler) handleListRepositories(c echo.Context) error {
 	if projectID == "" {
 		return echo.NewHTTPError(http.StatusBadRequest, "project_id is required")
 	}
-	return c.JSON(http.StatusOK, map[string]any{"repositories": h.svc.ListRepositories(projectID)})
+	repos, err := h.projects.ListRepositories(c.Request().Context(), projectID)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, map[string]any{"repositories": repos})
 }
 
 func (h *Handler) handleGetRepository(c echo.Context) error {
-	repo := h.svc.GetRepository(c.QueryParam("repository_id"))
-	if repo == nil {
-		return echo.NewHTTPError(http.StatusNotFound, "repository not found")
+	repo, err := h.projects.GetRepository(c.Request().Context(), c.QueryParam("repository_id"))
+	if err != nil {
+		return err
 	}
 	return c.JSON(http.StatusOK, map[string]any{"repository": repo})
 }
@@ -33,7 +37,7 @@ func (h *Handler) handleCreateRepository(c echo.Context) error {
 	if err := bindJSON(c, &in); err != nil {
 		return err
 	}
-	repo, err := h.svc.CreateRepository(in.ProjectID, in.Name, in.Description, in.URL, in.RootDir)
+	repo, err := h.projects.CreateRepository(c.Request().Context(), in.ProjectID, in.Name, in.Description, in.URL, in.RootDir)
 	if err != nil {
 		return err
 	}
@@ -51,7 +55,7 @@ func (h *Handler) handleUpdateRepository(c echo.Context) error {
 	if err := bindJSON(c, &in); err != nil {
 		return err
 	}
-	repo, err := h.svc.UpdateRepository(in.RepositoryID, in.Name, in.Description, in.URL, in.RootDir)
+	repo, err := h.projects.UpdateRepository(c.Request().Context(), in.RepositoryID, in.Name, in.Description, in.URL, in.RootDir)
 	if err != nil {
 		return err
 	}
@@ -65,7 +69,7 @@ func (h *Handler) handleDeleteRepository(c echo.Context) error {
 	if err := bindJSON(c, &in); err != nil {
 		return err
 	}
-	if err := h.svc.DeleteRepository(in.RepositoryID); err != nil {
+	if err := h.projects.DeleteRepository(c.Request().Context(), in.RepositoryID); err != nil {
 		return err
 	}
 	return c.NoContent(http.StatusNoContent)
@@ -79,7 +83,7 @@ func (h *Handler) handleAddRepositoryIgnoredPath(c echo.Context) error {
 	if err := bindJSON(c, &in); err != nil {
 		return err
 	}
-	repo, err := h.svc.AddRepositoryIgnoredPath(in.RepositoryID, in.Path)
+	repo, err := h.projects.AddRepositoryIgnoredPath(c.Request().Context(), in.RepositoryID, in.Path)
 	if err != nil {
 		return err
 	}
@@ -94,7 +98,7 @@ func (h *Handler) handleRemoveRepositoryIgnoredPath(c echo.Context) error {
 	if err := bindJSON(c, &in); err != nil {
 		return err
 	}
-	repo, err := h.svc.RemoveRepositoryIgnoredPath(in.RepositoryID, in.Path)
+	repo, err := h.projects.RemoveRepositoryIgnoredPath(c.Request().Context(), in.RepositoryID, in.Path)
 	if err != nil {
 		return err
 	}

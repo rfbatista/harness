@@ -7,7 +7,7 @@ import (
 
 	mcplib "github.com/mark3labs/mcp-go/mcp"
 	"operators-mcp/internal/adapter/in/ui"
-	"operators-mcp/internal/application/blueprint"
+	"operators-mcp/internal/app/catalog"
 	"operators-mcp/tests/testhelper"
 )
 
@@ -15,8 +15,8 @@ import (
 // mode with embedded UI (internal/adapter/in/ui/static populated from web/dist), requesting ui://designer
 // returns HTML. Populate static before running: cp -r web/dist/* internal/adapter/in/ui/static/
 func TestUIEmbed_ServerServesDesignerFromEmbed(t *testing.T) {
-	svc := blueprint.NewService(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, "")
-	baseURL, cleanup := testhelper.StartMCPServer(t, svc, false)
+	cat := catalog.New(catalog.Deps{})
+	baseURL, cleanup := testhelper.StartMCPServer(t, &cat, false)
 	defer cleanup()
 	c := testhelper.NewTestClient(t, baseURL)
 	defer c.Close()

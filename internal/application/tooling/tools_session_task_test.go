@@ -36,7 +36,7 @@ func newTaskToolsFixture(t *testing.T) *taskToolsFixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	tk, err := plan.CreateTicket(proj.ID, "Ship the thing", "with care", domain.TicketStatusInProgress)
+	tk, err := plan.CreateTicket(context.Background(), proj.ID, "Ship the thing", "with care", domain.TicketStatusInProgress)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -152,7 +152,7 @@ func TestSessionTaskTools_UpdateIsPartial(t *testing.T) {
 // A document on another task is out of reach even with a valid id in hand.
 func TestSessionTaskTools_OtherTaskDocumentIsUnreachable(t *testing.T) {
 	f := newTaskToolsFixture(t)
-	other, err := f.plan.CreateTicket(f.projectID, "Elsewhere", "", domain.TicketStatusTodo)
+	other, err := f.plan.CreateTicket(context.Background(), f.projectID, "Elsewhere", "", domain.TicketStatusTodo)
 	if err != nil {
 		t.Fatal(err)
 	}
