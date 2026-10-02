@@ -1,0 +1,25 @@
+{
+  "mcpServers": {
+    "github": {
+      "type": "http",
+      "url": "https://api.githubcopilot.com/mcp/",
+      "headers": {
+        "Authorization": "Bearer ${GITHUB_PERSONAL_ACCESS_TOKEN}"
+      }
+    },
+    "Postman": {
+      "type": "http",
+      "url": "https://mcp.postman.com/minimal",
+      "headers": {
+        "Authorization": "Bearer ${POSTMAN_MCP_TOKEN}"
+      }
+    },
+    "postgres": {
+      "command": "uv",
+      "args": [
+        "run",
+        "postgres-mcp"
+      ]
+    }
+  }
+}

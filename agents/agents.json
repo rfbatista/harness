@@ -1,0 +1,601 @@
+{
+  "settings": {
+    "projects_root": "~/projetos",
+    "load_claude_md": true,
+    "plans_dir": ".claude/plans",
+    "plans_dir_overrides": {},
+    "plan_prompt": "Read the plan at {path} and create a spec from it.",
+    "auto_sync": true
+  },
+  "bundles": {
+    "backend-developer": ["api-and-interface-design", "database-normalization", "postgres-best-practices"],
+    "developer": [
+      "ci-cd-and-automation",
+      "code-review-and-quality",
+      "code-simplification",
+      "crap-metric",
+      "debugging-and-error-recovery",
+      "deprecation-and-migration",
+      "deslope",
+      "doubt-driven-development",
+      "git-commit",
+      "git-workflow-and-versioning",
+      "incremental-implementation",
+      "interview-me",
+      "octocat",
+      "security",
+      "security-and-hardening",
+      "shipping-and-launch",
+      "skill-optimizer",
+      "source-driven-development",
+      "test-driven-development",
+      "using-agent-skills"
+    ],
+    "javascript-developer": [
+      "bundle-splitting",
+      "command-pattern",
+      "compression",
+      "dynamic-import",
+      "factory-pattern",
+      "flyweight-pattern",
+      "gof-design-patterns-typescript",
+      "import-on-interaction",
+      "import-on-visibility",
+      "islands-architecture",
+      "js-performance-patterns",
+      "loading-sequence",
+      "mediator-pattern",
+      "mixin-pattern",
+      "module-pattern",
+      "observer-pattern",
+      "prefetch",
+      "preload",
+      "prototype-pattern",
+      "provider-pattern",
+      "proxy-pattern",
+      "prpl",
+      "route-based",
+      "singleton-pattern",
+      "static-import",
+      "third-party",
+      "tree-shaking",
+      "view-transitions",
+      "virtual-lists",
+      "vite-bundle-optimization"
+    ],
+    "python-developer": ["gof-design-patterns-python"],
+    "react-developer": [
+      "ai-ui-patterns",
+      "client-side-rendering",
+      "compound-pattern",
+      "hoc-pattern",
+      "hooks-pattern",
+      "incremental-static-rendering",
+      "presentational-container-pattern",
+      "progressive-hydration",
+      "react-2026",
+      "react-composition-2026",
+      "react-data-fetching",
+      "react-render-optimization",
+      "react-selective-hydration",
+      "react-server-components",
+      "render-props-pattern",
+      "server-side-rendering",
+      "static-rendering",
+      "streaming-ssr"
+    ],
+    "sales-core": [
+      "active-listening",
+      "adaptability",
+      "asking-effective-questions",
+      "building-rapport",
+      "closing",
+      "competitive-positioning",
+      "discovery",
+      "empathy",
+      "follow-up-discipline",
+      "negotiation",
+      "objection-handling",
+      "pipeline-management",
+      "presentation-skills",
+      "product-knowledge",
+      "qualifying-leads",
+      "resilience",
+      "social-selling",
+      "storytelling",
+      "time-management",
+      "written-communication"
+    ],
+    "sales-strategy": [
+      "ab-test-setup",
+      "analytics-tracking",
+      "competitor-alternatives",
+      "copy-editing",
+      "copywriting",
+      "customer-onboarding",
+      "customer-referrals",
+      "deal-documentation",
+      "deal-review-win-loss",
+      "deal-upselling",
+      "email-sequence",
+      "lead-qualification",
+      "meeting-conversion",
+      "outbound-prospecting",
+      "pricing-negotiation",
+      "sales-enablement-tools",
+      "sales-playbook-scaling",
+      "sales-presentations",
+      "sales-process-optimization",
+      "sales-psychology",
+      "sales-tactics",
+      "territory-account-launch"
+    ],
+    "sales-ai-sdr": [
+      "ab-message-testing",
+      "appointment-booking",
+      "attachment-media-handling",
+      "budget-extraction-qualification",
+      "buying-signal-amplification",
+      "callback-scheduling",
+      "channel-fallback-logic",
+      "channel-preference-detection",
+      "competitive-intelligence-gathering",
+      "competitor-mention-handling",
+      "compliance-handling",
+      "conversation-ab-testing",
+      "conversation-branching",
+      "conversation-compliance-auditing",
+      "conversation-memory",
+      "conversation-pause-intelligence",
+      "conversation-quality-scoring",
+      "conversation-resurrection",
+      "conversation-summarization",
+      "conversation-velocity-optimization",
+      "conversational-flow-management",
+      "cross-sell-upsell-detection",
+      "custom-field-population",
+      "data-enrichment-integration",
+      "decision-maker-identification",
+      "disqualification-messaging",
+      "drip-pacing-intelligence",
+      "duplicate-conversation-prevention",
+      "dynamic-script-generation",
+      "emotional-arc-management",
+      "entity-extraction",
+      "fallback-gracefully",
+      "feedback-loop-integration",
+      "ghost-recovery-sequences",
+      "handoff-detection",
+      "human-in-the-loop-training",
+      "ideal-customer-profile-matching",
+      "intent-detection",
+      "lead-qualification-logic",
+      "legal-compliance-phrase-avoidance",
+      "meeting-confirmation-reminder-logic",
+      "message-deliverability-optimization",
+      "micro-commitment-stacking",
+      "multi-channel-coordination",
+      "multi-stakeholder-thread-management",
+      "multi-turn-context-retention",
+      "multilingual-support",
+      "negative-sentiment-de-escalation",
+      "objection-pattern-learning",
+      "objection-recognition",
+      "out-of-scope-request-handling",
+      "performance-analytics",
+      "persona-classification",
+      "personalization-at-scale",
+      "post-meeting-follow-up-automation",
+      "pricing-discussion-logic",
+      "propensity-scoring-realtime",
+      "prospect-fatigue-detection",
+      "prospect-research-integration",
+      "question-disambiguation",
+      "re-engagement-sequencing",
+      "referral-request-timing",
+      "reply-prediction",
+      "response-confidence-scoring",
+      "response-latency-management",
+      "response-length-calibration",
+      "sales-sentiment-analysis",
+      "scarcity-urgency-calibration",
+      "sentiment-trend-tracking",
+      "social-proof-injection",
+      "spam-bot-detection-avoidance",
+      "time-to-close-prediction",
+      "timezone-awareness",
+      "timing-optimization",
+      "tone-matching",
+      "trigger-event-detection",
+      "urgency-creation",
+      "voicemail-drop-optimization",
+      "warm-transfer-execution",
+      "win-loss-reason-extraction"
+    ],
+    "pm-strategy": [
+      "product-vision",
+      "product-strategy",
+      "north-star-metric",
+      "brainstorm-okrs",
+      "outcome-roadmap",
+      "business-model",
+      "lean-canvas",
+      "startup-canvas",
+      "ansoff-matrix",
+      "swot-analysis",
+      "pestle-analysis",
+      "porters-five-forces",
+      "strategy-red-team",
+      "pre-mortem",
+      "blue-ocean-strategy",
+      "balanced-scorecard",
+      "bcg-growth-share-matrix",
+      "value-chain-analysis",
+      "scenario-planning",
+      "mckinsey-7s-framework"
+    ],
+    "pm-market": [
+      "market-segments",
+      "market-sizing",
+      "beachhead-segment",
+      "ideal-customer-profile",
+      "competitor-analysis",
+      "competitive-battlecard",
+      "positioning-ideas",
+      "value-proposition",
+      "value-prop-statements",
+      "pricing-strategy",
+      "monetization-strategy"
+    ],
+    "pm-discovery": [
+      "interview-script",
+      "summarize-interview",
+      "user-personas",
+      "user-segmentation",
+      "sentiment-analysis",
+      "customer-journey-map",
+      "opportunity-solution-tree",
+      "brainstorm-ideas-new",
+      "brainstorm-ideas-existing",
+      "identify-assumptions-new",
+      "identify-assumptions-existing",
+      "prioritize-assumptions",
+      "brainstorm-experiments-new",
+      "brainstorm-experiments-existing",
+      "ab-test-analysis"
+    ],
+    "pm-delivery": [
+      "create-prd",
+      "job-stories",
+      "user-stories",
+      "wwas",
+      "test-scenarios",
+      "analyze-feature-requests",
+      "prioritize-features",
+      "prioritization-frameworks",
+      "sprint-plan",
+      "retro",
+      "release-notes",
+      "shipping-artifacts",
+      "intended-vs-implemented"
+    ],
+    "pm-growth": [
+      "gtm-strategy",
+      "gtm-motions",
+      "growth-loops",
+      "marketing-ideas",
+      "product-name"
+    ],
+    "pm-analytics": [
+      "metrics-dashboard",
+      "cohort-analysis",
+      "sql-queries",
+      "dummy-dataset"
+    ],
+    "pm-communication": [
+      "summarize-meeting",
+      "stakeholder-map",
+      "grammar-check",
+      "frontend-slides",
+      "draft-nda",
+      "privacy-policy",
+      "review-resume"
+    ],
+    "product-manager": [
+      "@pm-strategy",
+      "@pm-market",
+      "@pm-discovery",
+      "@pm-delivery",
+      "@pm-growth",
+      "@pm-analytics",
+      "@pm-communication"
+    ],
+    "landing-page": [
+      "landing-ideation",
+      "seed-string-direction",
+      "design-critic-loop",
+      "video-motion-design",
+      "remove-ai-tells",
+      "fal-genmedia",
+      "impeccable",
+      "dev-browser",
+      "deslope"
+    ],
+    "go-core": [
+      "golang-how-to",
+      "golang-naming",
+      "golang-code-style",
+      "golang-structs-interfaces",
+      "golang-design-patterns",
+      "golang-error-handling",
+      "golang-context",
+      "golang-data-structures",
+      "golang-safety",
+      "golang-modernize"
+    ],
+    "go-concurrency-performance": [
+      "golang-concurrency",
+      "golang-performance",
+      "golang-benchmark"
+    ],
+    "go-testing-quality": [
+      "golang-testing",
+      "golang-stretchr-testify",
+      "golang-troubleshooting",
+      "golang-lint",
+      "golang-security"
+    ],
+    "go-project": [
+      "golang-project-layout",
+      "golang-dependency-management",
+      "golang-dependency-injection",
+      "golang-documentation",
+      "golang-continuous-integration",
+      "golang-popular-libraries",
+      "golang-stay-updated"
+    ],
+    "go-services": [
+      "golang-database",
+      "golang-grpc",
+      "golang-graphql",
+      "golang-swagger",
+      "golang-observability"
+    ],
+    "go-cli": ["golang-cli", "golang-spf13-cobra", "golang-spf13-viper"],
+    "go-di-frameworks": [
+      "golang-google-wire",
+      "golang-uber-dig",
+      "golang-uber-fx",
+      "golang-samber-do"
+    ],
+    "go-samber": [
+      "golang-samber-lo",
+      "golang-samber-mo",
+      "golang-samber-oops",
+      "golang-samber-ro",
+      "golang-samber-slog",
+      "golang-samber-hot"
+    ],
+    "go-developer": [
+      "@go-core",
+      "@go-concurrency-performance",
+      "@go-testing-quality",
+      "@go-project",
+      "@go-services",
+      "@go-cli",
+      "@go-di-frameworks",
+      "@go-samber"
+    ]
+  },
+  "agents": {
+    "software-architect": {
+      "skills": [
+        "agent-delegation",
+        "clarifying-tickets",
+        "deslope",
+        "documentation-and-adrs",
+        "feature-architecture",
+        "idea-refine",
+        "planning-and-task-breakdown",
+        "software-engineering-best-practices",
+        "spec-driven-development"
+      ],
+      "mcp": "self",
+      "aliases": ["architect"]
+    },
+    "backend-developer": {
+      "skills": ["@backend-developer", "@developer", "@javascript-developer"],
+      "mcp": "self",
+      "aliases": ["backend"]
+    },
+    "node-developer": {
+      "skills": [
+        "node",
+        "typescript-magician",
+        "@backend-developer",
+        "@developer",
+        "@javascript-developer"
+      ],
+      "mcp": "backend-developer"
+    },
+    "python-developer": {
+      "skills": ["@python-developer", "@developer"]
+    },
+    "django-developer": {
+      "skills": [
+        "celery-patterns",
+        "django-extensions",
+        "django-forms",
+        "django-models",
+        "django-templates",
+        "htmx-patterns",
+        "pytest-django-patterns",
+        "systematic-debugging",
+        "@backend-developer",
+        "@python-developer",
+        "@developer"
+      ],
+      "mcp": "backend-developer"
+    },
+    "javascript-developer": {
+      "skills": ["@javascript-developer", "@developer"],
+      "aliases": ["js-developer"]
+    },
+    "react-developer": {
+      "skills": ["@react-developer", "@developer"]
+    },
+    "frontend-developer": {
+      "skills": [
+        "frontend-ui-engineering",
+        "impeccable",
+        "performance-optimization",
+        "userinterface-wiki",
+        "vercel-composition-patterns",
+        "vercel-react-best-practices",
+        "vercel-react-view-transitions",
+        "web-design-guidelines",
+        "@developer",
+        "@react-developer"
+      ],
+      "aliases": ["frontend"]
+    },
+    "flutter-developer": {
+      "skills": [
+        "dart-add-unit-test",
+        "dart-build-cli-app",
+        "dart-collect-coverage",
+        "dart-fix-runtime-errors",
+        "dart-generate-test-mocks",
+        "dart-migrate-to-checks-package",
+        "dart-resolve-package-conflicts",
+        "dart-run-static-analysis",
+        "dart-setup-ffi-assets",
+        "dart-use-ffigen",
+        "dart-use-pattern-matching",
+        "flutter-add-integration-test",
+        "flutter-add-widget-preview",
+        "flutter-add-widget-test",
+        "flutter-apply-architecture-best-practices",
+        "flutter-build-responsive-layout",
+        "flutter-fix-layout-issues",
+        "flutter-implement-json-serialization",
+        "flutter-setup-declarative-routing",
+        "flutter-setup-localization",
+        "flutter-use-http-package",
+        "xcodebuildmcp-cli",
+        "@developer"
+      ],
+      "mcp": "self"
+    },
+    "go-developer": {
+      "skills": ["@go-developer", "@developer", "postgres-best-practices"]
+    },
+    "designer": {
+      "skills": ["design-md", "frontend-slides", "impeccable", "fal-genmedia", "deslope", "@landing-page"],
+      "mcp": "self"
+    },
+    "landing-page-designer": {
+      "skills": ["@landing-page", "design-md"],
+      "mcp": "designer",
+      "aliases": ["landing", "lp"]
+    },
+    "database-manager": {
+      "skills": ["database-normalization", "postgres-best-practices", "deslope"]
+    },
+    "backend-tester": {
+      "skills": ["@developer"]
+    },
+    "frontend-tester": {
+      "skills": [
+        "browser-feature-testing",
+        "browser-testing-with-devtools",
+        "dev-browser",
+        "@developer"
+      ]
+    },
+    "devops": {
+      "skills": ["terraform-style-guide", "@developer"]
+    },
+    "aws-devops": {
+      "skills": ["terraform-style-guide", "@developer"]
+    },
+    "gcp-devops": {
+      "skills": [
+        "bigquery-basics",
+        "cloud-run-basics",
+        "cloud-sql-basics",
+        "firebase-basics",
+        "gcloud",
+        "gke-basics",
+        "google-cloud-networking-observability",
+        "google-cloud-recipe-auth",
+        "google-cloud-recipe-onboarding",
+        "google-cloud-waf-cost-optimization",
+        "google-cloud-waf-operational-excellence",
+        "google-cloud-waf-performance-optimization",
+        "google-cloud-waf-reliability",
+        "google-cloud-waf-security",
+        "google-cloud-waf-sustainability",
+        "workload-manager-basics",
+        "terraform-style-guide",
+        "@developer"
+      ]
+    },
+    "product-manager": {
+      "skills": ["@product-manager", "@developer"]
+    },
+    "marketing": {
+      "skills": [
+        "design-md",
+        "frontend-slides",
+        "impeccable",
+        "fal-genmedia",
+        "instagram-profile-management",
+        "deslope",
+        "@landing-page",
+        "@pm-market",
+        "@pm-growth",
+        "@sales-core",
+        "@sales-strategy"
+      ]
+    },
+    "founder": {
+      "skills": [
+        "agent-delegation",
+        "idea-refine",
+        "interview-me",
+        "fundraising-pitch-deck",
+        "investor-updates",
+        "hiring-founding-team",
+        "cap-table-and-runway",
+        "fal-genmedia",
+        "instagram-profile-management",
+        "deslope",
+        "@product-manager"
+      ]
+    },
+    "ios-developer": {
+      "skills": ["xcodebuildmcp-cli", "@developer"]
+    },
+    "code-reviewer": {
+      "skills": ["@developer", "postgres-best-practices"]
+    },
+    "documentator": {
+      "skills": ["documentation", "snipgrapher", "@developer"]
+    },
+    "random": {
+      "skills": ["context-engineering", "find-skills", "@developer"]
+    },
+    "sales": {
+      "skills": [
+        "frontend-slides",
+        "deslope",
+
+        "@sales-core",
+        "@sales-strategy",
+        "@sales-ai-sdr"
+      ],
+      "aliases": ["sales-agent"]
+    }
+  }
+}

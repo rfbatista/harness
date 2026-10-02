@@ -206,3 +206,8 @@ app.*.symbols
 .gclient_previous_custom_vars
 .gclient_previous_sync_commits
 
+
+# Agent launcher (agents/): generated skill trees, rebuilt by agent_launch.py --sync
+agents/.generated/
+agents/.generated-harness/
+agents/__pycache__/
