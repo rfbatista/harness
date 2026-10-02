@@ -45,7 +45,7 @@ func errorHandler(err error, c echo.Context) {
 			"SKILL_NOT_FOUND", "MCP_SERVER_NOT_FOUND", "TOOL_NOT_FOUND", "TASK_NOT_FOUND",
 			"TICKET_NOT_FOUND", "DOCUMENT_NOT_FOUND", "REPOSITORY_NOT_FOUND", "WORKSPACE_NOT_FOUND",
 			"BOUNDED_CONTEXT_NOT_FOUND", "SESSION_NOT_FOUND", "SKILL_FILE_NOT_FOUND",
-			"WORKSPACE_MISSING", "SESSION_TRANSCRIPT_MISSING":
+			"WORKSPACE_MISSING", "SESSION_TRANSCRIPT_MISSING", "TERMINAL_NOT_FOUND":
 			_ = c.JSON(http.StatusNotFound, errorBody(se.Message, se.Code))
 			return
 		case "INVALID_PATTERN", "INVALID_NAME", "INVALID_ROOT", "INVALID_PATH",
@@ -56,10 +56,11 @@ func errorHandler(err error, c echo.Context) {
 			_ = c.JSON(http.StatusBadRequest, errorBody(se.Message, se.Code))
 			return
 		case "PUBLISH_TARGET_EXISTS", "PUBLISH_SLUG_CONFLICT", "WORKSPACE_EXISTS", "BRANCH_EXISTS",
-			"SESSION_INTERACTIVE", "SESSION_NOT_INTERACTIVE", "SESSION_ALREADY_RUNNING":
+			"SESSION_INTERACTIVE", "SESSION_NOT_INTERACTIVE", "SESSION_ALREADY_RUNNING",
+			"SESSION_RUNS_ON_SERVER", "SESSION_RUNS_ON_TUI", "SESSION_NOT_RUNNING":
 			_ = c.JSON(http.StatusConflict, errorBody(se.Message, se.Code))
 			return
-		case "CLAUDE_CLI_NOT_FOUND":
+		case "CLAUDE_CLI_NOT_FOUND", "AGENT_CLI_NOT_FOUND", "SERVER_HOSTING_UNAVAILABLE":
 			// The request is well-formed; the machine just cannot run agents.
 			_ = c.JSON(http.StatusServiceUnavailable, errorBody(se.Message, se.Code))
 			return

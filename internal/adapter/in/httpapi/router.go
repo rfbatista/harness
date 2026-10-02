@@ -123,6 +123,7 @@ func NewRouter(h *Handler) *echo.Echo {
 	g.GET("/sessions/:id", h.handleGetSession)
 	g.DELETE("/sessions/:id", h.handleDeleteSession)
 	g.GET("/sessions/:id/events", h.handleSessionEvents)
+	g.GET("/sessions/:id/terminal", h.handleSessionTerminal) // WebSocket upgrade
 	g.GET("/sessions/:id/history", h.handleSessionHistory)
 	g.POST("/sessions/:id/messages", h.handleSessionMessages)
 	g.POST("/sessions/:id/approvals/:approvalID", h.handleSessionApproval)

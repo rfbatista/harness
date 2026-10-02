@@ -65,6 +65,10 @@ type Service struct {
 	// SessionHookURL returns where an interactive session's SessionStart hook
 	// reports its conversation id. Nil leaves the hook out.
 	SessionHookURL func(sessionID string) string
+	// Terminals hosts RunnerServer interactive sessions. Nil means this
+	// server does not run agents itself; such sessions answer
+	// SERVER_HOSTING_UNAVAILABLE.
+	Terminals ports.TerminalHost
 	// Transcripts checks an interactive session can be resumed. Nil skips the
 	// check and lets the CLI report a missing conversation itself.
 	Transcripts ports.ClaudeTranscripts
@@ -715,8 +719,11 @@ func answerSummary(answers map[string]string) string {
 }
 
 func (s *Service) Stop(ctx context.Context, id string) error {
-	if err := s.rejectInteractive(id); err != nil {
-		return err
+	if sess := s.sessions.Get(id); sess != nil && sess.Interactive {
+		if sess.RunsOn == domain.RunnerServer {
+			return s.stopHosted(id)
+		}
+		return &domain.StructuredError{Code: "SESSION_RUNS_ON_TUI", Message: "this session runs in the client that started it; close it there"}
 	}
 	s.broker.DenyAll(id)
 	if err := s.runtime.Stop(id); err != nil {
@@ -732,6 +739,11 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 	s.broker.DenyAll(id)
 	if _, ok := s.runtime.Get(id); ok {
 		_ = s.runtime.Stop(id)
+	}
+	if s.Terminals != nil {
+		if t, err := s.Terminals.Attach(id); err == nil {
+			_ = t.Kill()
+		}
 	}
 	s.runCleanup(id)
 

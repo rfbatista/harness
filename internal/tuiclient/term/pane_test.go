@@ -13,7 +13,7 @@ import (
 
 func start(t *testing.T, script string, w, h int) Model {
 	t.Helper()
-	m := New(Options{Command: "/bin/sh", Args: []string{"-c", script}, Width: w, Height: h})
+	m := New(Options{Terminal: shellTerminal(t, script, w, h), Name: "sh", Width: w, Height: h})
 	if err := m.Start(); err != nil {
 		t.Fatalf("Start: %v", err)
 	}

@@ -11,9 +11,9 @@ import (
 )
 
 type interactiveResp struct {
-	Session domain.Session `json:"session"`
-	Launch  ports.Launch   `json:"launch"`
-	Code    string         `json:"code"`
+	Session domain.Session  `json:"session"`
+	Agent   ports.AgentSpec `json:"agent"`
+	Code    string          `json:"code"`
 }
 
 func post(t *testing.T, url, body string) (int, interactiveResp) {
@@ -38,11 +38,11 @@ func TestHTTP_InteractiveSessionLifecycle(t *testing.T) {
 		t.Fatalf("start = %d (%s), want 201", status, started.Code)
 	}
 	id := started.Session.ID
-	if !started.Session.Interactive || started.Launch.SessionID != id || started.Launch.Dir == "" {
+	if !started.Session.Interactive || started.Agent.SessionID != id || started.Agent.Dir == "" {
 		t.Fatalf("start response = %+v", started)
 	}
-	if len(started.Launch.Args) == 0 || started.Launch.Args[len(started.Launch.Args)-1] != "hi" {
-		t.Fatalf("launch args do not end with the prompt: %q", started.Launch.Args)
+	if started.Agent.Kind != "claude" || started.Agent.Prompt != "hi" || started.Agent.Conversation != (ports.Conversation{ID: id}) {
+		t.Fatalf("agent spec = %+v, want claude with the prompt, opening conversation %s", started.Agent, id)
 	}
 
 	// Headless operations are refused with a code the client can branch on.
@@ -78,9 +78,8 @@ func TestHTTP_InteractiveSessionLifecycle(t *testing.T) {
 	if status != http.StatusOK || resumed.Session.Status != domain.SessionRunning {
 		t.Fatalf("resume = %d (%s) %+v", status, resumed.Code, resumed.Session)
 	}
-	i := indexOf(resumed.Launch.Args, "--resume")
-	if i < 0 || resumed.Launch.Args[i+1] != "after-clear" {
-		t.Fatalf("resume args = %q, want --resume after-clear", resumed.Launch.Args)
+	if resumed.Agent.Conversation != (ports.Conversation{ID: "after-clear", Resume: true}) {
+		t.Fatalf("resumed conversation = %+v, want after-clear resumed", resumed.Agent.Conversation)
 	}
 }
 
@@ -116,13 +115,4 @@ func TestHTTP_InteractiveSessionErrors(t *testing.T) {
 	if resp.StatusCode != http.StatusOK {
 		t.Errorf("hook with garbage = %d, want 200", resp.StatusCode)
 	}
-}
-
-func indexOf(s []string, v string) int {
-	for i, x := range s {
-		if x == v {
-			return i
-		}
-	}
-	return -1
 }

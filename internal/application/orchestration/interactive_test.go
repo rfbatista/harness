@@ -8,7 +8,9 @@ import (
 	"strings"
 	"testing"
 
+	"operators-mcp/internal/adapter/out/agents/claudecli"
 	"operators-mcp/internal/domain"
+	"operators-mcp/internal/ports"
 )
 
 const testHookBase = "http://127.0.0.1:8080/api/interactive_session_started?session_id="
@@ -25,16 +27,35 @@ func newInteractiveService(t *testing.T) (*Service, *fakeProvisioner) {
 	return svc, prov
 }
 
-func startInteractive(t *testing.T, svc *Service, req InteractiveRequest) (*domain.Session, Launch) {
+// launched is what a terminal host would run for a spec: the claude command
+// the claudecli agent builds from it, so these tests keep checking the flags a
+// session actually gets.
+type launched struct {
+	SessionID string
+	Dir       string
+	Args      []string
+	Spec      ports.AgentSpec
+}
+
+func launchOf(t *testing.T, spec ports.AgentSpec) launched {
+	t.Helper()
+	cmd, err := claudecli.New("").Command(spec)
+	if err != nil {
+		t.Fatalf("claude command for %+v: %v", spec, err)
+	}
+	return launched{SessionID: spec.SessionID, Dir: cmd.Dir, Args: cmd.Args, Spec: spec}
+}
+
+func startInteractive(t *testing.T, svc *Service, req InteractiveRequest) (*domain.Session, launched) {
 	t.Helper()
 	if req.ProjectID == "" {
 		req.ProjectID, req.RepositoryID, req.TicketID = "p1", "r1", "tk1"
 	}
-	sess, launch, err := svc.StartInteractive(context.Background(), req)
+	sess, spec, err := svc.StartInteractive(context.Background(), req)
 	if err != nil {
 		t.Fatalf("StartInteractive: %v", err)
 	}
-	return sess, launch
+	return sess, launchOf(t, spec)
 }
 
 // flag returns the value after the first occurrence of name in args.
@@ -258,7 +279,7 @@ func TestResumeInteractive_ResumesTheLatestConversation(t *testing.T) {
 	svc, prov := newInteractiveService(t)
 	sess, _ := startInteractive(t, svc, InteractiveRequest{})
 
-	if _, _, err := svc.ResumeInteractive(context.Background(), sess.ID); codeOf(err) != "SESSION_ALREADY_RUNNING" {
+	if _, _, err := svc.ResumeInteractive(context.Background(), ports.ResumeRequest{SessionID: sess.ID}); codeOf(err) != "SESSION_ALREADY_RUNNING" {
 		t.Fatalf("resume of a running session = %v, want SESSION_ALREADY_RUNNING", err)
 	}
 
@@ -270,10 +291,11 @@ func TestResumeInteractive_ResumesTheLatestConversation(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got, launch, err := svc.ResumeInteractive(context.Background(), sess.ID)
+	got, spec, err := svc.ResumeInteractive(context.Background(), ports.ResumeRequest{SessionID: sess.ID})
 	if err != nil {
 		t.Fatal(err)
 	}
+	launch := launchOf(t, spec)
 	if v, _ := flag(launch.Args, "--resume"); v != "after-clear" {
 		t.Errorf("--resume = %q, want after-clear", v)
 	}
@@ -301,7 +323,7 @@ func TestResumeInteractive_MissingTranscript(t *testing.T) {
 		t.Fatal(err)
 	}
 	svc.Transcripts = fakeTranscripts{err: &domain.StructuredError{Code: "SESSION_TRANSCRIPT_MISSING", Message: "gone"}}
-	if _, _, err := svc.ResumeInteractive(context.Background(), sess.ID); codeOf(err) != "SESSION_TRANSCRIPT_MISSING" {
+	if _, _, err := svc.ResumeInteractive(context.Background(), ports.ResumeRequest{SessionID: sess.ID}); codeOf(err) != "SESSION_TRANSCRIPT_MISSING" {
 		t.Fatalf("err = %v, want SESSION_TRANSCRIPT_MISSING", err)
 	}
 	if got := sessionOf(svc, sess.ID); got.Status != domain.SessionStopped {
@@ -332,9 +354,12 @@ func TestInteractiveSessionRejectsHeadlessOperations(t *testing.T) {
 	svc, _ := newInteractiveService(t)
 	sess, _ := startInteractive(t, svc, InteractiveRequest{})
 	ctx := context.Background()
+	// Stop is for the sessions the server runs; the client stops its own.
+	if err := svc.Stop(ctx, sess.ID); codeOf(err) != "SESSION_RUNS_ON_TUI" {
+		t.Errorf("stop = %v, want SESSION_RUNS_ON_TUI", err)
+	}
 	ops := map[string]error{
 		"send":     svc.Send(ctx, sess.ID, "hi"),
-		"stop":     svc.Stop(ctx, sess.ID),
 		"resolve":  svc.Resolve(ctx, sess.ID, "r1", true, ""),
 		"answer":   svc.Answer(ctx, sess.ID, "r1", map[string]string{"q": "a"}, nil),
 		"auto-run": svc.SetAutoRun(ctx, sess.ID, true),

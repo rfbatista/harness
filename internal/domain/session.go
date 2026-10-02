@@ -58,10 +58,14 @@ type Session struct {
 	// isolation.
 	WorkspaceID string `json:"workspace_id,omitempty"`
 	Branch      string `json:"branch,omitempty"`
-	// Interactive sessions run claude in a terminal the server does not own
-	// (a tui-client): the server provisioned and recorded them, but it cannot
-	// send to, stop or approve for them.
+	// Interactive sessions run claude in a terminal a person types into,
+	// rather than being driven by the server over stream-json: the server
+	// cannot send to or approve for them.
 	Interactive bool `json:"interactive"`
+	// RunsOn is where an interactive session's agent runs; RunnerHost names
+	// the machine of a RunnerTUI session. Both are empty for headless ones.
+	RunsOn     Runner `json:"runs_on,omitempty"`
+	RunnerHost string `json:"runner_host,omitempty"`
 	// ClaudeSessionID is the claude conversation an interactive session resumes.
 	// It starts equal to ID (the CLI is launched with --session-id ID) and moves
 	// when the conversation does, e.g. after /clear; the CLI's SessionStart hook
@@ -70,3 +74,18 @@ type Session struct {
 	CreatedAt       time.Time `json:"created_at"`
 	UpdatedAt       time.Time `json:"updated_at"`
 }
+
+// Runner is where an interactive session's agent process runs.
+type Runner string
+
+const (
+	// RunnerServer sessions run on the server's terminal host: they outlive
+	// the client that started them, and any client can attach to them.
+	RunnerServer Runner = "server"
+	// RunnerTUI sessions run inside the tui-client that started them and end
+	// with it; the server only records them.
+	RunnerTUI Runner = "tui"
+)
+
+// Valid reports whether r names a runner.
+func (r Runner) Valid() bool { return r == RunnerServer || r == RunnerTUI }

@@ -37,7 +37,19 @@ func Open(path string) (*gorm.DB, error) {
 	if err := migrateSkillsToFiles(db); err != nil {
 		return nil, fmt.Errorf("sqlite skill files migration: %w", err)
 	}
+	if err := migrateInteractiveRunner(db); err != nil {
+		return nil, fmt.Errorf("sqlite session runner migration: %w", err)
+	}
 	return db, nil
+}
+
+// migrateInteractiveRunner marks interactive sessions recorded before
+// sessions said where they run as RunnerTUI: until then the client ran every
+// one of them. Rows that already say are left alone, so it is safe to re-run.
+func migrateInteractiveRunner(db *gorm.DB) error {
+	return db.Model(&SessionModel{}).
+		Where("interactive = ? AND (runs_on IS NULL OR runs_on = '')", true).
+		Update("runs_on", "tui").Error
 }
 
 // isMemoryDSN reports whether the DSN names an in-memory database, in either

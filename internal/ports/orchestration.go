@@ -44,12 +44,31 @@ type SessionStream interface {
 	History(id string, fromSeq int64) []SessionEvent
 }
 
-// InteractiveSessions provisions and records sessions whose CLI runs in the
-// client's terminal (tui-client); the client runs the returned Launch.
+// InteractiveSessions provisions and records sessions whose CLI runs in a
+// terminal the user types into. The server provisions and records them and
+// returns the AgentSpec to run. A RunnerServer session is spawned on the
+// server's terminal host right away; a RunnerTUI one is the client's to run,
+// and to report the end of with EndInteractive.
 type InteractiveSessions interface {
-	StartInteractive(ctx context.Context, req InteractiveRequest) (*domain.Session, Launch, error)
-	ResumeInteractive(ctx context.Context, id string) (*domain.Session, Launch, error)
+	StartInteractive(ctx context.Context, req InteractiveRequest) (*domain.Session, AgentSpec, error)
+	ResumeInteractive(ctx context.Context, req ResumeRequest) (*domain.Session, AgentSpec, error)
+	// EndInteractive records that a RunnerTUI session's process ended. For a
+	// RunnerServer session it answers SESSION_RUNS_ON_SERVER: the server
+	// ends those itself.
 	EndInteractive(ctx context.Context, id string, exitCode int, closedByUser bool) (*domain.Session, error)
+}
+
+// TerminalAccess attaches to the terminal of a RunnerServer session. It
+// answers SESSION_RUNS_ON_TUI for a session the client runs, and
+// SESSION_NOT_RUNNING once the session has ended.
+type TerminalAccess interface {
+	AttachTerminal(ctx context.Context, sessionID string) (Terminal, error)
+}
+
+// ConversationRecorder records which claude conversation an interactive
+// session is in. The CLI's SessionStart hook drives it over a loopback-only
+// route; clients never call it, so it is not part of InteractiveSessions.
+type ConversationRecorder interface {
 	RecordClaudeSession(ctx context.Context, id, claudeSessionID string) error
 }
 
@@ -61,6 +80,8 @@ type Orchestration interface {
 	SessionReader
 	SessionStream
 	InteractiveSessions
+	ConversationRecorder
+	TerminalAccess
 }
 
 // StartRequest starts a headless session.
@@ -94,15 +115,21 @@ type InteractiveRequest struct {
 	Model      string `json:"model,omitempty"`
 	AutoAccept string `json:"auto_accept,omitempty"` // "off" | "edits" | "all"
 	BaseBranch string `json:"base_branch,omitempty"`
+	// RunsOn is where the agent runs; empty means RunnerTUI. RunnerHost
+	// names the client machine for a RunnerTUI session.
+	RunsOn     domain.Runner `json:"runs_on,omitempty"`
+	RunnerHost string        `json:"runner_host,omitempty"`
+	// Size is the terminal size a RunnerServer session starts at.
+	Size TermSize `json:"size,omitempty"`
 }
 
-// Launch is how the client runs an interactive session's CLI: the claude
-// binary with Args, in Dir, with Env added to its own environment.
-type Launch struct {
-	SessionID string   `json:"session_id"`
-	Dir       string   `json:"dir"`
-	Args      []string `json:"args"`
-	Env       []string `json:"env,omitempty"`
+// ResumeRequest reopens an ended interactive session, on RunsOn — which need
+// not be where it ran before.
+type ResumeRequest struct {
+	SessionID  string        `json:"session_id"`
+	RunsOn     domain.Runner `json:"runs_on,omitempty"`
+	RunnerHost string        `json:"runner_host,omitempty"`
+	Size       TermSize      `json:"size,omitempty"`
 }
 
 // SessionEvent is the unified wire + persistence event.

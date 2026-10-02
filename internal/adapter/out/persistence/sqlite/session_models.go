@@ -27,6 +27,8 @@ type SessionModel struct {
 	Branch           string  `gorm:"column:branch"`
 	Interactive      bool    `gorm:"column:interactive"`
 	ClaudeSessionID  string  `gorm:"column:claude_session_id"`
+	RunsOn           string  `gorm:"column:runs_on;index"`
+	RunnerHost       string  `gorm:"column:runner_host"`
 	CreatedAt        int64   `gorm:"autoCreateTime:milli"`
 	UpdatedAt        int64   `gorm:"autoUpdateTime:milli"`
 }
@@ -58,6 +60,8 @@ func (m *SessionModel) ToDomain() *domain.Session {
 		Branch:           m.Branch,
 		Interactive:      m.Interactive,
 		ClaudeSessionID:  m.ClaudeSessionID,
+		RunsOn:           domain.Runner(m.RunsOn),
+		RunnerHost:       m.RunnerHost,
 		CreatedAt:        time.UnixMilli(m.CreatedAt),
 		UpdatedAt:        time.UnixMilli(m.UpdatedAt),
 	}

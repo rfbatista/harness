@@ -25,6 +25,8 @@ require (
 	gorm.io/gorm v1.31.1
 )
 
+require github.com/coder/websocket v1.8.15
+
 require (
 	github.com/PuerkitoBio/goquery v1.13.0
 	github.com/alecthomas/chroma/v2 v2.14.0 // indirect

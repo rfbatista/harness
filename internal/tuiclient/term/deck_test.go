@@ -34,7 +34,7 @@ func newDeckRun(t *testing.T, cmds ...Command) *deckRun {
 func (r *deckRun) add(script string) Model {
 	r.t.Helper()
 	w, h := r.d.paneSize()
-	p := New(Options{Command: "/bin/sh", Args: []string{"-c", script}, Width: w, Height: h})
+	p := New(Options{Terminal: shellTerminal(r.t, script, w, h), Name: "sh", Width: w, Height: h})
 	if err := p.Start(); err != nil {
 		r.t.Fatal(err)
 	}

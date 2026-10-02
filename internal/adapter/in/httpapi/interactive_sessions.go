@@ -25,28 +25,26 @@ func (h *Handler) handleStartInteractiveSession(c echo.Context) error {
 	if err := bindJSON(c, &req); err != nil {
 		return err
 	}
-	sess, launch, err := h.orchSvc.StartInteractive(c.Request().Context(), req)
+	sess, spec, err := h.orchSvc.StartInteractive(c.Request().Context(), req)
 	if err != nil {
 		return err
 	}
-	return c.JSON(http.StatusCreated, map[string]any{"session": sess, "launch": launch})
+	return c.JSON(http.StatusCreated, map[string]any{"session": sess, "agent": spec})
 }
 
 func (h *Handler) handleResumeInteractiveSession(c echo.Context) error {
 	if h.orchSvc == nil {
 		return echo.NewHTTPError(http.StatusServiceUnavailable, "orchestration not configured")
 	}
-	var req struct {
-		SessionID string `json:"session_id"`
-	}
+	var req ports.ResumeRequest
 	if err := bindJSON(c, &req); err != nil {
 		return err
 	}
-	sess, launch, err := h.orchSvc.ResumeInteractive(c.Request().Context(), req.SessionID)
+	sess, spec, err := h.orchSvc.ResumeInteractive(c.Request().Context(), req)
 	if err != nil {
 		return err
 	}
-	return c.JSON(http.StatusOK, map[string]any{"session": sess, "launch": launch})
+	return c.JSON(http.StatusOK, map[string]any{"session": sess, "agent": spec})
 }
 
 func (h *Handler) handleEndInteractiveSession(c echo.Context) error {

@@ -187,3 +187,55 @@ func TestSessionRepo_CRUDAndEvents(t *testing.T) {
 		t.Fatalf("ListEvents fromSeq bad: %+v", from)
 	}
 }
+
+func TestSessionRepository_Runner(t *testing.T) {
+	db, err := Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	repo := NewSessionRepository(db)
+	s, err := repo.Create(&domain.Session{ID: "s1", Interactive: true, RunsOn: domain.RunnerServer})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s.RunsOn != domain.RunnerServer {
+		t.Fatalf("created RunsOn = %q, want server", s.RunsOn)
+	}
+	if err := repo.UpdateRunner("s1", domain.RunnerTUI, "laptop"); err != nil {
+		t.Fatal(err)
+	}
+	if got := repo.Get("s1"); got.RunsOn != domain.RunnerTUI || got.RunnerHost != "laptop" {
+		t.Fatalf("after UpdateRunner: %q on %q, want tui on laptop", got.RunsOn, got.RunnerHost)
+	}
+	if err := repo.UpdateRunner("missing", domain.RunnerTUI, ""); err == nil {
+		t.Fatal("UpdateRunner on a missing session succeeded")
+	}
+}
+
+// Interactive sessions from before RunsOn existed were all run by the client.
+func TestMigrateInteractiveRunner(t *testing.T) {
+	db, err := Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	repo := NewSessionRepository(db)
+	for _, s := range []*domain.Session{
+		{ID: "legacy", Interactive: true},
+		{ID: "hosted", Interactive: true, RunsOn: domain.RunnerServer},
+		{ID: "headless"},
+	} {
+		if _, err := repo.Create(s); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for range 2 { // idempotent
+		if err := migrateInteractiveRunner(db); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for id, want := range map[string]domain.Runner{"legacy": domain.RunnerTUI, "hosted": domain.RunnerServer, "headless": ""} {
+		if got := repo.Get(id).RunsOn; got != want {
+			t.Errorf("%s RunsOn = %q, want %q", id, got, want)
+		}
+	}
+}

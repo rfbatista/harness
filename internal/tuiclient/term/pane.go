@@ -1,66 +1,64 @@
-// Package term embeds an interactive terminal program, such as the claude
-// CLI, inside a Bubble Tea program.
+// Package term shows running terminals inside a Bubble Tea program: a pane
+// (Model) per terminal, and a tabbed Deck of them.
 //
-// The child runs on a pseudo-terminal, so it behaves exactly as it would in a
-// real terminal. Its output is parsed by an in-memory VT emulator
-// (charmbracelet/x/vt), and View renders the emulator's screen grid. Keys the
-// host forwards to Update are encoded by the emulator and written back into
-// the pseudo-terminal.
+// A pane does not run anything. It attaches to a ports.Terminal — hosted in
+// this process or on the server — and draws a copy of its screen: the
+// snapshot it attached with, then every byte printed after, parsed by a local
+// VT emulator. Keys go the other way as events, and the host encodes them for
+// the modes the program has set.
 package term
 
 import (
-	"errors"
 	"fmt"
-	"os"
-	"os/exec"
-	"path/filepath"
+	"io"
+	"strings"
 	"sync/atomic"
-	"syscall"
-	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/vt"
-	"github.com/creack/pty"
-)
 
-// ErrNotStarted is returned by operations that need a running child.
-var ErrNotStarted = errors.New("term: not started")
+	"operators-mcp/internal/ports"
+)
 
 var nextID atomic.Int64
 
-// Options describes the child process and the pane's initial size.
+// Options is the terminal a pane shows and the pane's initial size.
 type Options struct {
-	Command string
-	Args    []string
-	Env     []string // appended to os.Environ(); TERM defaults to xterm-256color
-	Dir     string
-	// Name labels the pane until the child sets a title; empty uses the
-	// command's name.
+	Terminal ports.Terminal
+	// Name labels the pane until the program sets a title.
 	Name   string
 	Width  int
 	Height int
-	// KillAfter bounds how long Close waits after SIGTERM before SIGKILL.
-	KillAfter time.Duration
 }
 
 // FrameMsg says the pane's screen changed and should be redrawn.
 type FrameMsg struct{ ID int64 }
 
-// ExitedMsg says the child process ended. Err is nil on a clean exit.
+// ExitedMsg says the pane's process ended with Code; Err is set when the
+// code is not zero.
 type ExitedMsg struct {
-	ID  int64
-	Err error
+	ID   int64
+	Code int
+	Err  error
 }
 
-// Model is a Bubble Tea component showing one child process. Copies share the
-// same underlying session, so it is safe to pass by value like any tea model.
+// Model is a Bubble Tea component showing one terminal. Copies share the same
+// attachment, so it is safe to pass by value like any tea model.
 type Model struct {
 	id   int64
 	opts Options
-	s    *session
+	a    *attachment
 }
 
-// New builds a pane. Start launches the child.
+// attachment is a pane's local copy of a terminal's screen.
+type attachment struct {
+	t        ports.Terminal
+	emu      *vt.SafeEmulator
+	sub      atomic.Pointer[ports.Subscription]
+	detached atomic.Bool
+}
+
+// New builds a pane. Start attaches it.
 func New(opts Options) Model {
 	if opts.Width <= 0 {
 		opts.Width = 80
@@ -68,46 +66,110 @@ func New(opts Options) Model {
 	if opts.Height <= 0 {
 		opts.Height = 24
 	}
-	if opts.KillAfter <= 0 {
-		opts.KillAfter = 2 * time.Second
-	}
 	return Model{id: nextID.Add(1), opts: opts}
 }
 
 // ID identifies this pane's messages when several panes coexist.
 func (m Model) ID() int64 { return m.id }
 
-// Start launches the child on a pseudo-terminal sized to the pane.
+// Start attaches to the terminal: its screen as it is now, then everything
+// it prints.
 func (m *Model) Start() error {
-	if m.s != nil {
+	if m.a != nil {
 		return fmt.Errorf("term: already started")
 	}
-	cmd := exec.Command(m.opts.Command, m.opts.Args...)
-	cmd.Dir = m.opts.Dir
-	cmd.Env = append(append(os.Environ(), "TERM=xterm-256color", "COLORTERM=truecolor"), m.opts.Env...)
-
-	ptmx, err := pty.StartWithSize(cmd, &pty.Winsize{
-		Cols: uint16(m.opts.Width),
-		Rows: uint16(m.opts.Height),
-	})
-	if err != nil {
-		return fmt.Errorf("term: start %s: %w", m.opts.Command, err)
+	if m.opts.Terminal == nil {
+		return fmt.Errorf("term: no terminal")
 	}
-	emu := vt.NewSafeEmulator(m.opts.Width, m.opts.Height)
-	m.s = newSession(cmd, ptmx, emu)
-	emu.SetCallbacks(vt.Callbacks{Title: m.s.setTitle}) // before run: not locked
-	m.s.run()
+	a := &attachment{t: m.opts.Terminal, emu: vt.NewSafeEmulator(m.opts.Width, m.opts.Height)}
+	// The local emulator answers terminal queries too; the host already has,
+	// so its answers are drained and dropped.
+	go func() { _, _ = io.Copy(io.Discard, a.emu) }()
+	a.subscribe()
+	m.a = a
 	return nil
+}
+
+// subscribe (re)draws the local screen from a fresh snapshot and follows the
+// output after it.
+func (a *attachment) subscribe() {
+	snap, sub := a.t.Subscribe()
+	if snap.Size.Cols > 0 && snap.Size.Rows > 0 &&
+		(snap.Size.Cols != a.emu.Width() || snap.Size.Rows != a.emu.Height()) {
+		a.emu.Resize(snap.Size.Cols, snap.Size.Rows)
+	}
+	var b strings.Builder
+	if snap.AltScreen {
+		b.WriteString("\x1b[?1049h")
+	}
+	b.WriteString("\x1b[0m\x1b[2J\x1b[H")
+	b.WriteString(strings.ReplaceAll(snap.Screen, "\n", "\r\n"))
+	fmt.Fprintf(&b, "\x1b[0m\x1b[%d;%dH", snap.CursorY+1, snap.CursorX+1)
+	_, _ = a.emu.Write([]byte(b.String()))
+	if old := a.sub.Swap(&sub); old != nil {
+		old.Close()
+	}
 }
 
 // Init starts listening for screen updates.
 func (m Model) Init() tea.Cmd { return m.wait() }
 
+// wait delivers the next output to the local screen. A subscription that
+// closes while the terminal still runs means the pane fell behind: it
+// attaches again for a fresh snapshot.
+func (m Model) wait() tea.Cmd {
+	a, id := m.a, m.id
+	if a == nil {
+		return nil
+	}
+	return func() tea.Msg {
+		for {
+			sub := a.sub.Load()
+			b, ok := <-sub.C
+			if ok {
+				_, _ = a.emu.Write(b)
+				drain(a, sub.C)
+				return FrameMsg{ID: id}
+			}
+			if a.detached.Load() {
+				return nil
+			}
+			select {
+			case <-a.t.Done():
+				a.closeInput()
+				code := a.t.ExitCode()
+				var err error
+				if code != 0 {
+					err = fmt.Errorf("exit status %d", code)
+				}
+				return ExitedMsg{ID: id, Code: code, Err: err}
+			default:
+				a.subscribe()
+			}
+		}
+	}
+}
+
+// drain writes whatever output is already queued, so a burst is one redraw.
+func drain(a *attachment, c <-chan []byte) {
+	for {
+		select {
+		case b, ok := <-c:
+			if !ok {
+				return
+			}
+			_, _ = a.emu.Write(b)
+		default:
+			return
+		}
+	}
+}
+
 // Update handles the pane's own messages, key presses, pastes and resizes.
-// The host decides which keys reach the pane; everything it forwards is sent
-// to the child.
+// The host decides which keys reach the pane; everything it forwards goes to
+// the terminal.
 func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
-	if m.s == nil {
+	if m.a == nil {
 		return m, nil
 	}
 	switch msg := msg.(type) {
@@ -116,14 +178,14 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			return m, m.wait()
 		}
 	case ExitedMsg:
-		// Nothing to re-arm: the child is gone.
+		// Nothing to re-arm: the process is gone.
 	case tea.KeyPressMsg:
-		if !m.s.exited() {
-			sendKey(m.s.emu, msg)
+		if !m.exited() {
+			_ = m.a.t.Key(keyEvent(msg))
 		}
 	case tea.PasteMsg:
-		if !m.s.exited() {
-			m.s.emu.Paste(msg.Content)
+		if !m.exited() {
+			_ = m.a.t.Paste(msg.Content)
 		}
 	case tea.WindowSizeMsg:
 		m.Resize(msg.Width, msg.Height)
@@ -131,93 +193,112 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	return m, nil
 }
 
-// Resize changes the emulator and the pseudo-terminal size; the child gets
-// SIGWINCH and redraws.
+func keyEvent(k tea.KeyPressMsg) ports.KeyEvent {
+	return ports.KeyEvent{
+		Code:        k.Code,
+		Text:        k.Text,
+		Mod:         int(k.Mod),
+		ShiftedCode: k.ShiftedCode,
+		BaseCode:    k.BaseCode,
+		IsRepeat:    k.IsRepeat,
+	}
+}
+
+// Resize sizes the local screen and the terminal; the program gets SIGWINCH
+// and redraws.
 func (m *Model) Resize(width, height int) {
 	if width <= 0 || height <= 0 {
 		return
 	}
 	m.opts.Width, m.opts.Height = width, height
-	if m.s == nil {
+	if m.a == nil {
 		return
 	}
-	m.s.emu.Resize(width, height)
-	_ = pty.Setsize(m.s.ptmx, &pty.Winsize{Cols: uint16(width), Rows: uint16(height)})
+	m.a.emu.Resize(width, height)
+	_ = m.a.t.Resize(ports.TermSize{Cols: width, Rows: height})
 }
 
-// View renders the child's screen as styled text.
+// View renders the terminal's screen as styled text.
 func (m Model) View() string {
-	if m.s == nil {
+	if m.a == nil {
 		return ""
 	}
-	return m.s.emu.Render()
+	return m.a.emu.Render()
 }
 
-// Cursor is the child's cursor, relative to the pane's top-left corner, or
-// nil when the child has exited. Hosts offset it by where they place the pane.
+// Cursor is the program's cursor, relative to the pane's top-left corner, or
+// nil once it has exited. Hosts offset it by where they place the pane.
 func (m Model) Cursor() *tea.Cursor {
-	if m.s == nil || m.s.exited() {
+	if m.a == nil || m.exited() {
 		return nil
 	}
-	p := m.s.emu.CursorPosition()
+	p := m.a.emu.CursorPosition()
 	return tea.NewCursor(p.X, p.Y)
 }
 
-// Title is the window title the child last set (OSC 0/2), else Options.Name,
-// else the command's name. claude uses it for the current task, with a spinner
-// while it works.
+// Title is the window title the program last set (OSC 0/2), else
+// Options.Name. claude uses it for the current task, with a spinner while it
+// works.
 func (m Model) Title() string {
-	if m.s != nil {
-		if t := m.s.title.Load(); t != nil && *t != "" {
-			return *t
+	if m.a != nil {
+		if t := m.a.t.Title(); t != "" {
+			return t
 		}
 	}
-	if m.opts.Name != "" {
-		return m.opts.Name
-	}
-	return filepath.Base(m.opts.Command)
+	return m.opts.Name
 }
 
-// Exited reports whether the child has ended, and with what error.
+func (m Model) exited() bool {
+	select {
+	case <-m.a.t.Done():
+		return true
+	default:
+		return false
+	}
+}
+
+// Exited reports whether the process has ended, and with what error.
 func (m Model) Exited() (bool, error) {
-	if m.s == nil {
+	if m.a == nil || !m.exited() {
 		return false, nil
 	}
-	if !m.s.exited() {
-		return false, nil
+	if code := m.a.t.ExitCode(); code != 0 {
+		return true, fmt.Errorf("exit status %d", code)
 	}
-	return true, m.s.waitErr
+	return true, nil
 }
 
-// Close stops the child: SIGTERM, then SIGKILL after Options.KillAfter. It
-// waits for the pump goroutines to finish. Safe to call more than once.
+// Close stops the terminal's process and detaches. Safe to call more than
+// once.
 func (m Model) Close() error {
-	if m.s == nil {
-		return ErrNotStarted
-	}
-	return m.s.close(m.opts.KillAfter)
-}
-
-func (m Model) wait() tea.Cmd {
-	s, id := m.s, m.id
-	if s == nil {
+	if m.a == nil {
 		return nil
 	}
-	return func() tea.Msg {
-		select {
-		case <-s.frames:
-			return FrameMsg{ID: id}
-		case <-s.done:
-			return ExitedMsg{ID: id, Err: s.waitErr}
-		}
+	err := m.a.t.Kill()
+	if sub := m.a.sub.Load(); sub != nil {
+		sub.Close()
 	}
+	m.a.closeInput()
+	return err
 }
 
-func terminate(p *os.Process, after time.Duration, done <-chan struct{}) {
-	_ = p.Signal(syscall.SIGTERM)
-	select {
-	case <-done:
-	case <-time.After(after):
-		_ = p.Kill()
+// Detach stops showing the terminal and leaves its process running: for a
+// session the server runs, which outlives this client.
+func (m Model) Detach() {
+	if m.a == nil {
+		return
+	}
+	m.a.detached.Store(true)
+	if sub := m.a.sub.Load(); sub != nil {
+		sub.Close()
+	}
+	m.a.closeInput()
+}
+
+// closeInput ends the local emulator's input pipe, and with it the goroutine
+// draining its answers.
+func (a *attachment) closeInput() {
+	if c, ok := a.emu.InputPipe().(io.Closer); ok {
+		_ = c.Close()
 	}
 }

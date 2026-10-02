@@ -52,6 +52,9 @@ type SessionRepository interface {
 	// UpdateClaudeSessionID records which claude conversation an interactive
 	// session resumes into.
 	UpdateClaudeSessionID(id, claudeSessionID string) error
+	// UpdateRunner records where an interactive session now runs; resuming
+	// can move it.
+	UpdateRunner(id string, runsOn domain.Runner, host string) error
 	AppendEvent(sessionID string, seq int64, typ string, payload []byte) error
 	ListEvents(sessionID string, fromSeq int64) []StoredEvent
 }

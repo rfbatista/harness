@@ -4,7 +4,9 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/url"
+	"operators-mcp/internal/app/runtime"
 	"os"
 	"path/filepath"
 
@@ -232,9 +234,13 @@ func newToolingService(cat catalog.Catalog, plan *planning.Service, exec *execut
 
 // AgentRuntimeModule wires the Claude CLI runtime: the permission broker, the
 // session manager, the event hub, the session repository, and the orchestration
-// service. A lifecycle hook stops all sessions on shutdown.
+// service — and the terminal host interactive sessions the server runs live
+// on. Lifecycle hooks stop all sessions on shutdown, and at boot record as
+// stopped the server sessions a previous run left recorded as running.
 var AgentRuntimeModule = fx.Module("agentruntime",
+	runtime.Module,
 	fx.Provide(
+		newRuntimeConfig,
 		newClaudeManager,
 		newBroker,
 		newHub,
@@ -242,8 +248,33 @@ var AgentRuntimeModule = fx.Module("agentruntime",
 		asPort(newClaudeTranscripts, new(ports.ClaudeTranscripts)),
 		newOrchestrationService,
 	),
-	fx.Invoke(registerRuntimeShutdown),
+	fx.Invoke(registerRuntimeShutdown, registerServerSessions),
 )
+
+func newRuntimeConfig(cfg Config) runtime.Config {
+	return runtime.Config{ClaudeBin: cfg.ClaudeBin, Shell: cfg.SessionShell}
+}
+
+// registerServerSessions reconciles the interactive sessions the server runs
+// with its terminal host. At boot none are running, so any recorded as
+// running died with the previous server. On shutdown each is recorded as
+// stopped before the host kills it, so it does not read as failed. Its hooks
+// run inside the host's: the host was built first.
+func registerServerSessions(lc fx.Lifecycle, svc *orchestration.Service) {
+	lc.Append(fx.Hook{
+		OnStart: func(ctx context.Context) error {
+			n, err := svc.StopOrphanedServerSessions(ctx)
+			if n > 0 {
+				slog.Info("stopped server sessions left running by a previous run", "count", n)
+			}
+			return err
+		},
+		OnStop: func(ctx context.Context) error {
+			svc.StopServerSessions(ctx)
+			return nil
+		},
+	})
+}
 
 func newClaudeManager(cfg Config) llmkit.Manager {
 	base := cfg.loopbackBaseURL()
@@ -293,6 +324,7 @@ func newOrchestrationService(
 	tickets ports.TicketRepository,
 	ws *workspaces.Service,
 	transcripts ports.ClaudeTranscripts,
+	terminals ports.TerminalHost,
 ) *orchestration.Service {
 	svc := orchestration.NewService(runtime, broker, hub, sessions, orchestration.Catalog{
 		Projects:     cat.Projects,
@@ -311,6 +343,7 @@ func newOrchestrationService(
 		return base + httpapi.InteractiveSessionStartedPath + "?session_id=" + url.QueryEscape(sessionID)
 	}
 	svc.Transcripts = transcripts
+	svc.Terminals = terminals
 	return svc
 }
 

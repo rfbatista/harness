@@ -12,8 +12,13 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 
+	"operators-mcp/internal/adapter/out/ptyunix"
+	"operators-mcp/internal/adapter/out/shell"
+	"operators-mcp/internal/adapter/out/termhost"
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
+	"operators-mcp/internal/ports/runtimetest"
+	"operators-mcp/internal/tuiclient/tuitest"
 )
 
 // run drives the client the way the Bubble Tea runtime would: every
@@ -21,16 +26,36 @@ import (
 type run struct {
 	t    *testing.T
 	m    Model
-	be   *Fake
+	be   *tuitest.Fake
 	msgs chan tea.Msg
 	quit bool
 }
 
 // scripts maps a session's first message (or "resume") to the shell script
 // its pane runs in place of claude.
-func newRun(t *testing.T, be *Fake, scripts map[string]string) *run {
+func newRun(t *testing.T, be *tuitest.Fake, scripts map[string]string) *run {
 	t.Helper()
-	be.Launch = func(s domain.Session, resume bool) ports.Launch {
+	scripted(t, be, scripts)
+	return startRun(t, be, depsOf(be, newHost(t)))
+}
+
+// newServerRun is a client whose sessions the server runs: be.Server stands
+// in for the server's terminal host, and the client has none of its own.
+func newServerRun(t *testing.T, be *tuitest.Fake, scripts map[string]string) *run {
+	t.Helper()
+	scripted(t, be, scripts)
+	if be.Server == nil {
+		be.Server = newHost(t)
+	}
+	d := depsOf(be, nil)
+	d.RunsOn, d.RunnerHost = domain.RunnerServer, ""
+	return startRun(t, be, d)
+}
+
+// scripted makes sessions run scripts[first message] (or scripts["resume"])
+// in place of claude.
+func scripted(t *testing.T, be *tuitest.Fake, scripts map[string]string) {
+	be.Launch = func(s *domain.Session, resume bool) ports.AgentSpec {
 		key := s.Task
 		if resume {
 			key = "resume"
@@ -39,17 +64,23 @@ func newRun(t *testing.T, be *Fake, scripts map[string]string) *run {
 		if !ok {
 			script = "cat"
 		}
-		return ports.Launch{SessionID: s.ID, Args: []string{"-c", script}, Dir: t.TempDir()}
+		return runtimetest.Spec(s.ID, t.TempDir(), script)
 	}
-	r := &run{t: t, m: New(be, "/bin/sh"), be: be, msgs: make(chan tea.Msg, 1024)}
-	t.Cleanup(func() {
-		for _, d := range r.m.decks {
-			d.CloseAll()
-		}
-	})
+}
+
+func newHost(t *testing.T) *termhost.Host {
+	host := termhost.New(shell.Direct{}, ptyunix.New(), runtimetest.Script{})
+	t.Cleanup(func() { _ = host.Shutdown(context.Background()) })
+	return host
+}
+
+func startRun(t *testing.T, be *tuitest.Fake, d Deps) *run {
+	t.Helper()
+	r := &run{t: t, m: New(d), be: be, msgs: make(chan tea.Msg, 1024)}
+	t.Cleanup(func() { r.m.Shutdown(context.Background()) })
 	r.send(tea.WindowSizeMsg{Width: 100, Height: 20})
 	r.exec(r.m.Init())
-	r.until("projects", func() bool { return len(r.m.projects) > 0 })
+	r.until("projects", func() bool { return !strings.Contains(r.view(), "loading…") })
 	return r
 }
 
@@ -143,17 +174,30 @@ func (r *run) settle() {
 	}
 }
 
-func fixture() *Fake {
-	return &Fake{
-		Projects:     []domain.Project{{ID: "p1", Name: "api", RootDir: "/src/api"}, {ID: "p2", Name: "web", RootDir: "/src/web"}},
-		Repositories: []domain.Repository{{ID: "r1", ProjectID: "p1", Name: "api"}},
-		Tickets: []domain.Ticket{
+// depsOf serves every port from be; sessions run here on host, as /bin/sh
+// scripts in place of claude.
+func depsOf(be *tuitest.Fake, host ports.TerminalHost) Deps {
+	return Deps{
+		Projects: be, Repositories: be, Board: be, Agents: be,
+		Sessions: be, Interactive: be, Terminals: be,
+		RunsOn: domain.RunnerTUI, Host: host, RunnerHost: "laptop",
+	}
+}
+
+func fixture() *tuitest.Fake {
+	return &tuitest.Fake{
+		Projects:     []*domain.Project{{ID: "p1", Name: "api", RootDir: "/src/api"}, {ID: "p2", Name: "web", RootDir: "/src/web"}},
+		Repositories: []*domain.Repository{{ID: "r1", ProjectID: "p1", Name: "api"}},
+		Tickets: []*domain.Ticket{
 			{ID: "t-done", ProjectID: "p1", Title: "Old work", Status: domain.TicketStatusDone},
 			{ID: "t1", ProjectID: "p1", Title: "Fix flaky tests", Status: domain.TicketStatusInProgress, Description: "they flake"},
 		},
-		Agents: []Agent{{ID: "a1", Name: "reviewer", Description: "reviews code"}},
+		Agents: []*domain.Agent{{ID: "a1", Name: "reviewer", Description: "reviews code"}},
 	}
 }
+
+// depth is how many screens are stacked: 1 projects, 2 tasks, 3 a task.
+func (r *run) depth() int { return len(r.m.stack) }
 
 // openTask goes projects → api → its first task (the in-progress one).
 func (r *run) openTask() {
@@ -175,7 +219,7 @@ func (r *run) startSession(prompt string) {
 	r.press("enter")
 }
 
-func TestWorkbench_NavigatesProjectsTasksAndBack(t *testing.T) {
+func TestClient_NavigatesProjectsTasksAndBack(t *testing.T) {
 	r := newRun(t, fixture(), nil)
 	if v := r.view(); !strings.Contains(v, "api") || !strings.Contains(v, "web") {
 		t.Fatalf("projects not listed:\n%s", v)
@@ -197,18 +241,14 @@ func TestWorkbench_NavigatesProjectsTasksAndBack(t *testing.T) {
 		t.Errorf("task screen lacks breadcrumb or description:\n%s", v)
 	}
 	r.press("esc")
-	if r.m.screen != screenTasks {
-		t.Fatalf("esc from task: screen %d, want tasks", r.m.screen)
-	}
+	r.until("back to tasks", func() bool { return r.depth() == 2 })
 	r.press("esc")
-	if r.m.screen != screenProjects {
-		t.Fatalf("esc from tasks: screen %d, want projects", r.m.screen)
-	}
+	r.until("back to projects", func() bool { return r.depth() == 1 })
 	r.press("q")
 	r.until("quit", func() bool { return r.quit })
 }
 
-func TestWorkbench_StartsASessionAsAPane(t *testing.T) {
+func TestClient_StartsASessionAsAPane(t *testing.T) {
 	be := fixture()
 	r := newRun(t, be, map[string]string{"hi": `printf 'agent up\r\n'; cat`})
 	r.openTask()
@@ -229,9 +269,9 @@ func TestWorkbench_StartsASessionAsAPane(t *testing.T) {
 	r.until("echo", r.shows("echo-me"))
 }
 
-func TestWorkbench_AgentPickerAndRepositoryStep(t *testing.T) {
+func TestClient_AgentPickerAndRepositoryStep(t *testing.T) {
 	be := fixture()
-	be.Repositories = append(be.Repositories, domain.Repository{ID: "r2", ProjectID: "p1", Name: "worker"})
+	be.Repositories = append(be.Repositories, &domain.Repository{ID: "r2", ProjectID: "p1", Name: "worker"})
 	r := newRun(t, be, nil)
 	r.openTask()
 
@@ -251,18 +291,19 @@ func TestWorkbench_AgentPickerAndRepositoryStep(t *testing.T) {
 	r.until("pane labelled reviewer", r.shows(" 1 reviewer "))
 }
 
-func TestWorkbench_PanesSurviveLeavingTheTask(t *testing.T) {
+func TestClient_PanesSurviveLeavingTheTask(t *testing.T) {
 	r := newRun(t, fixture(), map[string]string{"one": `printf 'first agent\r\n'; cat`})
 	r.openTask()
 	r.startSession("one")
 	r.until("pane", r.shows("first agent"))
 
 	r.press("prefix", "b")
-	r.until("tasks", func() bool { return r.m.screen == screenTasks })
+	r.until("tasks", func() bool { return r.depth() == 2 })
 	if !strings.Contains(r.view(), "● 1 live") {
 		t.Errorf("task list lacks the live count:\n%s", r.view())
 	}
 	r.press("esc")
+	r.until("projects", func() bool { return r.depth() == 1 })
 	if !strings.Contains(r.view(), "● 1 live") {
 		t.Errorf("project list lacks the live count:\n%s", r.view())
 	}
@@ -276,14 +317,14 @@ func TestWorkbench_PanesSurviveLeavingTheTask(t *testing.T) {
 	}
 }
 
-func TestWorkbench_ExitEndsTheSessionWithItsCode(t *testing.T) {
+func TestClient_ExitEndsTheSessionWithItsCode(t *testing.T) {
 	be := fixture()
 	r := newRun(t, be, map[string]string{"crash": `printf 'bye\r\n'; exit 3`})
 	r.openTask()
 	r.startSession("crash")
 	r.until("end reported", func() bool { return len(be.EndCalls()) > 0 })
 
-	if got := be.EndCalls(); !slices.Equal(got, []EndCall{{SessionID: "s1", ExitCode: 3}}) {
+	if got := be.EndCalls(); !slices.Equal(got, []tuitest.EndCall{{SessionID: "s1", ExitCode: 3}}) {
 		t.Fatalf("EndSession calls = %+v, want s1 exit 3", got)
 	}
 	if s, _ := be.Session("s1"); s.Status != domain.SessionFailed {
@@ -292,7 +333,7 @@ func TestWorkbench_ExitEndsTheSessionWithItsCode(t *testing.T) {
 	r.until("exit mark", r.shows(" 1 claude ✗ "))
 }
 
-func TestWorkbench_CloseEndsTheSessionAsStopped(t *testing.T) {
+func TestClient_CloseEndsTheSessionAsStopped(t *testing.T) {
 	be := fixture()
 	r := newRun(t, be, map[string]string{"x": `printf 'running\r\n'; cat`})
 	r.openTask()
@@ -303,7 +344,7 @@ func TestWorkbench_CloseEndsTheSessionAsStopped(t *testing.T) {
 	r.until("end reported", func() bool { return len(be.EndCalls()) > 0 })
 	r.settle()
 
-	if got := be.EndCalls(); !slices.Equal(got, []EndCall{{SessionID: "s1", Closed: true}}) {
+	if got := be.EndCalls(); !slices.Equal(got, []tuitest.EndCall{{SessionID: "s1", Closed: true}}) {
 		t.Fatalf("EndSession calls = %+v, want exactly one closed end for s1", got)
 	}
 	if s, _ := be.Session("s1"); s.Status != domain.SessionStopped {
@@ -312,9 +353,9 @@ func TestWorkbench_CloseEndsTheSessionAsStopped(t *testing.T) {
 	r.until("empty task", r.shows("No agent sessions open"))
 }
 
-func TestWorkbench_SessionsOverlayResumesAnEndedSession(t *testing.T) {
+func TestClient_SessionsOverlayResumesAnEndedSession(t *testing.T) {
 	be := fixture()
-	be.Sessions = []domain.Session{
+	be.Sessions = []*domain.Session{
 		{ID: "old", ProjectID: "p1", TicketID: "t1", Branch: "agent/fix-flaky-tests-1a2b", Status: domain.SessionStopped, Interactive: true, ClaudeSessionID: "old"},
 		{ID: "bot", ProjectID: "p1", TicketID: "t1", Branch: "agent/headless", Status: domain.SessionDone},
 	}
@@ -331,9 +372,7 @@ func TestWorkbench_SessionsOverlayResumesAnEndedSession(t *testing.T) {
 	}
 
 	r.press("down", "enter")
-	if !strings.Contains(r.view(), "web UI") {
-		t.Errorf("opening a headless session did not explain itself:\n%s", r.view())
-	}
+	r.until("headless explained", r.shows("web UI"))
 	r.press("g", "enter")
 	r.until("resumed pane", r.shows("welcome back"))
 	if s, _ := be.Session("old"); s.Status != domain.SessionRunning {
@@ -344,27 +383,143 @@ func TestWorkbench_SessionsOverlayResumesAnEndedSession(t *testing.T) {
 	}
 }
 
-func TestWorkbench_ShowsAPIErrorsByCode(t *testing.T) {
+func TestClient_ShowsAPIErrorsByCode(t *testing.T) {
 	be := fixture()
-	be.Err = map[string]error{"StartSession": &APIError{Status: 409, Code: "BRANCH_EXISTS", Message: "branch already exists"}}
+	be.Err = map[string]error{"StartInteractive": &domain.StructuredError{Code: "BRANCH_EXISTS", Message: "branch already exists"}}
 	r := newRun(t, be, nil)
 	r.openTask()
 	r.startSession("x")
 	r.until("error", r.shows("a branch for this session already exists"))
-	if r.m.deck().Len() != 0 {
+	if r.m.panes.Deck("t1").Len() != 0 {
 		t.Error("a failed start opened a pane")
 	}
 }
 
-func TestWorkbench_ShutdownEndsOpenSessions(t *testing.T) {
+func TestClient_ShutdownEndsOpenSessions(t *testing.T) {
 	be := fixture()
 	r := newRun(t, be, nil)
 	r.openTask()
 	r.startSession("a")
-	r.until("pane", func() bool { return r.m.deck().Len() == 1 })
+	r.until("pane", func() bool { return r.m.panes.Deck("t1").Len() == 1 })
 
 	r.m.Shutdown(context.Background())
-	if got := be.EndCalls(); !slices.Equal(got, []EndCall{{SessionID: "s1", Closed: true}}) {
+	if got := be.EndCalls(); !slices.Equal(got, []tuitest.EndCall{{SessionID: "s1", Closed: true}}) {
 		t.Fatalf("EndSession calls = %+v, want s1 closed", got)
 	}
+}
+
+func TestClient_LaunchFinishingAfterLeavingTheTaskStillOpensAPane(t *testing.T) {
+	be := fixture()
+	r := newRun(t, be, map[string]string{"late": `printf 'late agent\r\n'; cat`})
+	r.openTask()
+	r.startSession("late")
+	// Leave before the launch comes back: the task screen is gone by the time
+	// its session starts, so only the registry can open the pane.
+	r.press("esc")
+	r.until("session started", func() bool { _, ok := be.Session("s1"); return ok })
+	r.until("pane in the background", func() bool { return r.m.panes.LiveIn("t1") == 1 })
+	r.until("live count", r.shows("● 1 live"))
+
+	r.press("enter")
+	r.until("pane shown on return", r.shows("late agent"))
+}
+
+func TestClient_StackAndQuitKeys(t *testing.T) {
+	r := newRun(t, fixture(), nil)
+	r.press("esc")
+	r.settle()
+	if r.depth() != 1 {
+		t.Fatalf("esc on the root screen changed the stack to %d screens", r.depth())
+	}
+
+	r.openTask()
+	r.send(tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl})
+	r.settle()
+	if r.quit {
+		t.Fatal("ctrl+c on the task screen quit; it belongs to claude there")
+	}
+
+	r.press("esc")
+	r.until("tasks", func() bool { return r.depth() == 2 })
+	r.send(tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl})
+	r.until("quit", func() bool { return r.quit })
+}
+
+func TestClient_SessionsRecordWhereTheyRun(t *testing.T) {
+	be := fixture()
+	r := newRun(t, be, map[string]string{"here": `printf 'local\r\n'; cat`})
+	r.openTask()
+	r.startSession("here")
+	r.until("pane", r.shows("local"))
+	if s, _ := be.Session("s1"); s.RunsOn != domain.RunnerTUI || s.RunnerHost != "laptop" {
+		t.Fatalf("session runs on %q at %q, want tui on laptop", s.RunsOn, s.RunnerHost)
+	}
+}
+
+func TestClient_ServerRunsTheSessionAndRecordsItsEnd(t *testing.T) {
+	be := fixture()
+	r := newServerRun(t, be, map[string]string{"up": `printf 'on the server\r\n'; read x; exit 2`})
+	r.openTask()
+	r.startSession("up")
+	r.until("pane attached to the server's terminal", r.shows("on the server"))
+	if s, _ := be.Session("s1"); s.RunsOn != domain.RunnerServer {
+		t.Fatalf("session runs on %q, want server", s.RunsOn)
+	}
+
+	r.press("enter") // the script reads a line, then exits 2
+	r.until("server recorded the failure", func() bool { s, _ := be.Session("s1"); return s.Status == domain.SessionFailed })
+	r.until("exit mark", r.shows(" 1 claude ✗ "))
+	if calls := be.EndCalls(); len(calls) != 0 {
+		t.Errorf("client ended a session the server runs: %+v", calls)
+	}
+}
+
+func TestClient_ClosingAServerSessionStopsItOnTheServer(t *testing.T) {
+	be := fixture()
+	r := newServerRun(t, be, map[string]string{"x": `printf 'running\r\n'; cat`})
+	r.openTask()
+	r.startSession("x")
+	r.until("pane", r.shows("running"))
+
+	r.press("prefix", "x")
+	r.until("stopped", func() bool { s, _ := be.Session("s1"); return s.Status == domain.SessionStopped })
+	r.until("empty task", r.shows("No agent sessions open"))
+	if calls := be.EndCalls(); len(calls) != 0 {
+		t.Errorf("client ended a session the server runs: %+v", calls)
+	}
+}
+
+func TestClient_QuittingDetachesAndTheNextClientReattaches(t *testing.T) {
+	be := fixture()
+	first := newServerRun(t, be, map[string]string{"keep": `printf 'still here\r\n'; cat`})
+	first.openTask()
+	first.startSession("keep")
+	first.until("pane", first.shows("still here"))
+
+	first.m.Shutdown(context.Background())
+	if s, _ := be.Session("s1"); s.Status != domain.SessionRunning {
+		t.Fatalf("quitting the client ended the server's session: %s", s.Status)
+	}
+	term, err := be.Server.Attach("s1")
+	if err != nil {
+		t.Fatalf("the process died with the client: %v", err)
+	}
+	select {
+	case <-term.Done():
+		t.Fatal("the process died with the client")
+	default:
+	}
+
+	second := newServerRun(t, be, nil)
+	second.until("reattached in the background", func() bool { return second.m.panes.LiveIn("t1") == 1 })
+	second.until("live count", second.shows("● 1 live"))
+	second.press("enter")
+	second.until("tasks", second.shows("Fix flaky tests"))
+	second.press("enter")
+	second.until("the screen it left", second.shows("still here"))
+
+	// Typing reaches the same process.
+	second.typeText("hello again")
+	second.press("enter")
+	second.until("echo", second.shows("hello again"))
 }

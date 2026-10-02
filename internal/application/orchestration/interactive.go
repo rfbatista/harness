@@ -2,7 +2,6 @@ package orchestration
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -14,31 +13,33 @@ import (
 	"operators-mcp/internal/ports"
 )
 
-type (
-	InteractiveRequest = ports.InteractiveRequest
-	Launch             = ports.Launch
-)
+type InteractiveRequest = ports.InteractiveRequest
 
 // StartInteractive provisions and records a session like Start does — its own
 // worktree, the task brief and task MCP server, the agent's prompt, skills and
-// MCP servers — but does not run it. It returns the command line the client
-// runs in a terminal it owns.
-func (s *Service) StartInteractive(ctx context.Context, req InteractiveRequest) (*domain.Session, Launch, error) {
+// MCP servers — and returns the AgentSpec that runs it. A RunnerServer session
+// is spawned on the server's terminal host here; a RunnerTUI one is the
+// client's to run.
+func (s *Service) StartInteractive(ctx context.Context, req InteractiveRequest) (*domain.Session, ports.AgentSpec, error) {
+	runsOn, err := s.runner(req.RunsOn)
+	if err != nil {
+		return nil, ports.AgentSpec{}, err
+	}
 	if req.ProjectID == "" {
-		return nil, Launch{}, &domain.StructuredError{Code: "INVALID_INPUT", Message: "project_id is required"}
+		return nil, ports.AgentSpec{}, &domain.StructuredError{Code: "INVALID_INPUT", Message: "project_id is required"}
 	}
 	if req.TicketID == "" {
-		return nil, Launch{}, &domain.StructuredError{Code: "INVALID_INPUT", Message: "ticket_id is required"}
+		return nil, ports.AgentSpec{}, &domain.StructuredError{Code: "INVALID_INPUT", Message: "ticket_id is required"}
 	}
 	// prepare checks the project too, but the ticket is needed first (its
 	// title names the branch), and a missing project must not read as a
 	// ticket that belongs elsewhere.
 	if _, err := s.catalog.Projects.GetProject(ctx, req.ProjectID); err != nil {
-		return nil, Launch{}, err
+		return nil, ports.AgentSpec{}, err
 	}
 	ticket, err := s.ticketIn(req.ProjectID, req.TicketID)
 	if err != nil {
-		return nil, Launch{}, err
+		return nil, ports.AgentSpec{}, err
 	}
 
 	// A task can hold several sessions at once, so the branch carries part of
@@ -57,34 +58,38 @@ func (s *Service) StartInteractive(ctx context.Context, req InteractiveRequest) 
 		AutoAccept:   req.AutoAccept,
 	})
 	if err != nil {
-		return nil, Launch{}, err
+		return nil, ports.AgentSpec{}, err
 	}
 
-	args, err := s.interactiveArgs(p.cfg, conversation{id: id}, req.Prompt)
+	spec := s.agentSpec(p.cfg, ports.Conversation{ID: id}, req.Prompt)
+	created, err := s.sessions.Create(&domain.Session{
+		ID:              id,
+		ProjectID:       req.ProjectID,
+		RepositoryID:    req.RepositoryID,
+		WorkspaceID:     p.ws.ID,
+		Branch:          p.branch,
+		AgentID:         req.AgentID,
+		ZoneID:          req.ZoneID,
+		TicketID:        req.TicketID,
+		Task:            ticket.Title,
+		WorkingDir:      p.cfg.WorkingDir,
+		Model:           req.Model,
+		Status:          domain.SessionRunning,
+		AutoRun:         p.permission == llmkit.PermissionBypass,
+		Interactive:     true,
+		ClaudeSessionID: id,
+		RunsOn:          runsOn,
+		RunnerHost:      runnerHost(runsOn, req.RunnerHost),
+	})
 	if err == nil {
-		var created *domain.Session
-		created, err = s.sessions.Create(&domain.Session{
-			ID:              id,
-			ProjectID:       req.ProjectID,
-			RepositoryID:    req.RepositoryID,
-			WorkspaceID:     p.ws.ID,
-			Branch:          p.branch,
-			AgentID:         req.AgentID,
-			ZoneID:          req.ZoneID,
-			TicketID:        req.TicketID,
-			Task:            ticket.Title,
-			WorkingDir:      p.cfg.WorkingDir,
-			Model:           req.Model,
-			Status:          domain.SessionRunning,
-			AutoRun:         p.permission == llmkit.PermissionBypass,
-			Interactive:     true,
-			ClaudeSessionID: id,
-		})
-		if err == nil {
-			s.adoptCleanup(id, p.cleanup)
-			s.publish(id, SessionEvent{Type: "status", Status: domain.SessionRunning, Text: "started in a terminal", At: time.Now()})
-			return created, Launch{SessionID: id, Dir: p.cfg.WorkingDir, Args: args, Env: p.cfg.Env}, nil
+		s.adoptCleanup(id, p.cleanup)
+		s.publish(id, SessionEvent{Type: "status", Status: domain.SessionRunning, Text: startedText(runsOn), At: time.Now()})
+		if runsOn == domain.RunnerServer {
+			if err := s.spawn(ctx, id, spec, req.Size); err != nil {
+				return nil, ports.AgentSpec{}, err
+			}
 		}
+		return created, spec, nil
 	}
 	// Not recorded: nothing will ever run in this worktree, and its branch is
 	// seconds old with no commits, so Discard (not Delete) is safe.
@@ -92,7 +97,7 @@ func (s *Service) StartInteractive(ctx context.Context, req InteractiveRequest) 
 		p.cleanup()
 	}
 	_ = s.workspaces.Discard(p.ws.ID)
-	return nil, Launch{}, fmt.Errorf("start interactive session: %w", err)
+	return nil, ports.AgentSpec{}, fmt.Errorf("start interactive session: %w", err)
 }
 
 // ResumeInteractive reopens an ended interactive session's conversation in
@@ -101,13 +106,17 @@ func (s *Service) StartInteractive(ctx context.Context, req InteractiveRequest) 
 //
 // The permission mode is not stored, only whether the session ran unattended:
 // a session that did resumes in bypass mode, any other in the default mode.
-func (s *Service) ResumeInteractive(ctx context.Context, id string) (*domain.Session, Launch, error) {
-	sess, err := s.interactiveSession(id)
+func (s *Service) ResumeInteractive(ctx context.Context, req ports.ResumeRequest) (*domain.Session, ports.AgentSpec, error) {
+	runsOn, err := s.runner(req.RunsOn)
 	if err != nil {
-		return nil, Launch{}, err
+		return nil, ports.AgentSpec{}, err
+	}
+	sess, err := s.interactiveSession(req.SessionID)
+	if err != nil {
+		return nil, ports.AgentSpec{}, err
 	}
 	if !sess.Status.IsTerminal() {
-		return nil, Launch{}, &domain.StructuredError{Code: "SESSION_ALREADY_RUNNING", Message: "session is still running"}
+		return nil, ports.AgentSpec{}, &domain.StructuredError{Code: "SESSION_ALREADY_RUNNING", Message: "session is still running"}
 	}
 	claudeID := sess.ClaudeSessionID
 	if claudeID == "" {
@@ -115,7 +124,7 @@ func (s *Service) ResumeInteractive(ctx context.Context, id string) (*domain.Ses
 	}
 	if s.Transcripts != nil {
 		if err := s.Transcripts.CanResume(sess.WorkingDir, claudeID); err != nil {
-			return nil, Launch{}, err
+			return nil, ports.AgentSpec{}, err
 		}
 	}
 
@@ -125,14 +134,15 @@ func (s *Service) ResumeInteractive(ctx context.Context, id string) (*domain.Ses
 	}
 	ag, err := s.resolveAgent(sess.AgentID)
 	if err != nil {
-		return nil, Launch{}, err
+		return nil, ports.AgentSpec{}, err
 	}
 	permission := llmkit.PermissionAsk
 	if sess.AutoRun {
 		permission = llmkit.PermissionBypass
 	}
 	cfg := s.sessionConfig(sess.ID, sess.WorkingDir, sess.Model, nil, permission, ag, ticket, sess.ZoneID)
-	args, err := s.interactiveArgs(cfg, conversation{id: claudeID, resume: true}, "")
+	spec := s.agentSpec(cfg, ports.Conversation{ID: claudeID, Resume: true}, "")
+	err = s.sessions.UpdateRunner(sess.ID, runsOn, runnerHost(runsOn, req.RunnerHost))
 	if err == nil {
 		err = s.sessions.UpdateStatus(sess.ID, domain.SessionRunning)
 	}
@@ -140,17 +150,80 @@ func (s *Service) ResumeInteractive(ctx context.Context, id string) (*domain.Ses
 		if ag.cleanup != nil {
 			ag.cleanup()
 		}
-		return nil, Launch{}, err
+		return nil, ports.AgentSpec{}, err
 	}
 	s.adoptCleanup(sess.ID, ag.cleanup)
-	s.publish(sess.ID, SessionEvent{Type: "status", Status: domain.SessionRunning, Text: "resumed in a terminal", At: time.Now()})
-	return s.sessions.Get(sess.ID), Launch{SessionID: sess.ID, Dir: sess.WorkingDir, Args: args, Env: cfg.Env}, nil
+	s.publish(sess.ID, SessionEvent{Type: "status", Status: domain.SessionRunning, Text: "resumed" + strings.TrimPrefix(startedText(runsOn), "started"), At: time.Now()})
+	if runsOn == domain.RunnerServer {
+		if err := s.spawn(ctx, sess.ID, spec, req.Size); err != nil {
+			return nil, ports.AgentSpec{}, err
+		}
+	}
+	return s.sessions.Get(sess.ID), spec, nil
 }
 
-// EndInteractive records that an interactive session's CLI is gone: done on a
-// clean exit, failed on any other, stopped when the user closed the terminal.
-// Ending a session that already ended changes nothing.
+// runner checks where a session is asked to run; empty means RunnerTUI, the
+// only place sessions ran before the server could host them.
+func (s *Service) runner(r domain.Runner) (domain.Runner, error) {
+	switch {
+	case r == "":
+		return domain.RunnerTUI, nil
+	case !r.Valid():
+		return "", &domain.StructuredError{Code: "INVALID_INPUT", Message: "runs_on must be server or tui"}
+	case r == domain.RunnerServer && s.Terminals == nil:
+		return "", &domain.StructuredError{Code: "SERVER_HOSTING_UNAVAILABLE", Message: "this server does not run agents itself"}
+	}
+	return r, nil
+}
+
+func runnerHost(r domain.Runner, host string) string {
+	if r == domain.RunnerTUI {
+		return host
+	}
+	return ""
+}
+
+func startedText(r domain.Runner) string {
+	if r == domain.RunnerServer {
+		return "started on the server"
+	}
+	return "started in a terminal"
+}
+
+// spawn runs a RunnerServer session on the server's terminal host. The
+// host's exit callback ends it; if it cannot start, it is ended as failed so
+// it does not linger as running.
+func (s *Service) spawn(ctx context.Context, id string, spec ports.AgentSpec, size ports.TermSize) error {
+	if size.Cols <= 0 || size.Rows <= 0 {
+		size = ports.TermSize{Cols: 120, Rows: 40}
+	}
+	err := s.Terminals.Spawn(ctx, id, spec, size, func(code int) {
+		_, _ = s.end(id, code, false)
+	})
+	if err != nil {
+		_, _ = s.end(id, 127, false)
+		return fmt.Errorf("run the session on the server: %w", err)
+	}
+	return nil
+}
+
+// EndInteractive records that a RunnerTUI session's CLI is gone. The server
+// ends its own sessions, so a RunnerServer one answers SESSION_RUNS_ON_SERVER.
 func (s *Service) EndInteractive(ctx context.Context, id string, exitCode int, closedByUser bool) (*domain.Session, error) {
+	sess, err := s.interactiveSession(id)
+	if err != nil {
+		return nil, err
+	}
+	if sess.RunsOn == domain.RunnerServer {
+		return nil, &domain.StructuredError{Code: "SESSION_RUNS_ON_SERVER", Message: "the server runs this session and ends it itself"}
+	}
+	return s.end(id, exitCode, closedByUser)
+}
+
+// end records that an interactive session's CLI is gone: done on a clean
+// exit, failed on any other, stopped when the user closed it. Ending a
+// session that already ended changes nothing.
+func (s *Service) end(id string, exitCode int, closedByUser bool) (*domain.Session, error) {
 	sess, err := s.interactiveSession(id)
 	if err != nil {
 		return nil, err
@@ -207,7 +280,82 @@ func (s *Service) interactiveSession(id string) (*domain.Session, error) {
 	return sess, nil
 }
 
-// rejectInteractive guards the operations that drive a CLI the server owns.
+// AttachTerminal returns the terminal a RunnerServer session runs on.
+func (s *Service) AttachTerminal(_ context.Context, id string) (ports.Terminal, error) {
+	sess, err := s.interactiveSession(id)
+	if err != nil {
+		return nil, err
+	}
+	if sess.RunsOn != domain.RunnerServer {
+		return nil, &domain.StructuredError{Code: "SESSION_RUNS_ON_TUI", Message: "this session runs in the client that started it"}
+	}
+	notRunning := &domain.StructuredError{Code: "SESSION_NOT_RUNNING", Message: "session is not running"}
+	if sess.Status.IsTerminal() || s.Terminals == nil {
+		return nil, notRunning
+	}
+	t, err := s.Terminals.Attach(id)
+	if err != nil {
+		return nil, notRunning
+	}
+	return t, nil
+}
+
+// stopHosted stops a RunnerServer session: recorded as stopped first, so the
+// exit its kill causes does not read as a failure.
+func (s *Service) stopHosted(id string) error {
+	if _, err := s.end(id, 0, true); err != nil {
+		return err
+	}
+	if s.Terminals == nil {
+		return nil
+	}
+	if t, err := s.Terminals.Attach(id); err == nil {
+		return t.Kill()
+	}
+	return nil
+}
+
+// StopOrphanedServerSessions ends the RunnerServer sessions recorded as
+// running that have no terminal on this server — at boot, every one of them:
+// their processes died with the previous server. It returns how many it
+// ended.
+func (s *Service) StopOrphanedServerSessions(ctx context.Context) (int, error) {
+	running, err := s.List(ctx, ports.SessionFilter{Statuses: []domain.SessionStatus{domain.SessionRunning}})
+	if err != nil {
+		return 0, err
+	}
+	n := 0
+	for _, sess := range running {
+		if !sess.Interactive || sess.RunsOn != domain.RunnerServer {
+			continue
+		}
+		if s.Terminals != nil {
+			if _, err := s.Terminals.Attach(sess.ID); err == nil {
+				continue
+			}
+		}
+		if _, err := s.end(sess.ID, 0, true); err == nil {
+			n++
+		}
+	}
+	return n, nil
+}
+
+// StopServerSessions stops every RunnerServer session still running,
+// recording each as stopped. The server calls it on shutdown.
+func (s *Service) StopServerSessions(ctx context.Context) {
+	running, err := s.List(ctx, ports.SessionFilter{Statuses: []domain.SessionStatus{domain.SessionRunning}})
+	if err != nil {
+		return
+	}
+	for _, sess := range running {
+		if sess.Interactive && sess.RunsOn == domain.RunnerServer {
+			_ = s.stopHosted(sess.ID)
+		}
+	}
+}
+
+// rejectInteractive guards the operations that drive a CLI over stream-json.
 // An interactive session's CLI belongs to a terminal, so they cannot reach it.
 func (s *Service) rejectInteractive(id string) error {
 	if sess := s.sessions.Get(id); sess != nil && sess.Interactive {
@@ -230,116 +378,40 @@ func (s *Service) adoptCleanup(id string, cleanup func()) {
 	}
 }
 
-// conversation says which claude conversation the CLI opens: a new one under
-// id, or an existing one resumed.
-type conversation struct {
-	id     string
-	resume bool
-}
-
-// interactiveArgs is the interactive CLI's argv for cfg. It carries what the
-// headless argv does (llmkit's, which is unexported and hardwired to --print
-// and stream-json) minus the protocol flags and the approval server: in a
-// terminal claude asks its questions itself. It adds the SessionStart hook
-// that reports conversation changes back to the server.
-func (s *Service) interactiveArgs(cfg llmkit.SessionConfig, conv conversation, prompt string) ([]string, error) {
-	var a []string
-	if conv.resume {
-		a = append(a, "--resume", conv.id)
-	} else {
-		a = append(a, "--session-id", conv.id)
-	}
-	if cfg.Model != "" {
-		a = append(a, "--model", cfg.Model)
-	}
-	// --add-dir and --allowedTools take a variable number of values; one
-	// flag per dir and a comma-joined tool list keep them from swallowing
-	// the prompt.
-	for _, d := range cfg.AddDirs {
-		a = append(a, "--add-dir", d)
-	}
-	if len(cfg.MCPServers) > 0 {
-		mcp, err := mcpConfigJSON(cfg.MCPServers)
-		if err != nil {
-			return nil, err
-		}
-		a = append(a, "--mcp-config", mcp)
-	}
-	if len(cfg.AllowedTools) > 0 {
-		a = append(a, "--allowedTools", strings.Join(cfg.AllowedTools, ","))
+// agentSpec is what a terminal host needs to run the interactive CLI for cfg.
+// It carries what the headless session gets, minus the approval server: in a
+// terminal the agent asks its questions itself. HookURL lets the CLI report
+// the conversation it is in; the agent adapter turns all of it into flags.
+func (s *Service) agentSpec(cfg llmkit.SessionConfig, conv ports.Conversation, prompt string) ports.AgentSpec {
+	spec := ports.AgentSpec{
+		Kind:         "claude",
+		SessionID:    cfg.ID,
+		Dir:          cfg.WorkingDir,
+		Model:        cfg.Model,
+		AppendSystem: cfg.AppendSystem,
+		AllowedTools: cfg.AllowedTools,
+		AddDirs:      cfg.AddDirs,
+		Prompt:       prompt,
+		Env:          cfg.Env,
+		Conversation: conv,
 	}
 	switch cfg.Permission {
 	case llmkit.PermissionAcceptEdits:
-		a = append(a, "--permission-mode", "acceptEdits")
+		spec.Permission = "accept_edits"
 	case llmkit.PermissionBypass:
-		a = append(a, "--permission-mode", "bypassPermissions")
+		spec.Permission = "bypass"
+	}
+	for _, sv := range cfg.MCPServers {
+		spec.MCPServers = append(spec.MCPServers, ports.MCPServerSpec{
+			Name: sv.Name, Transport: sv.Transport, Command: sv.Command, URL: sv.URL,
+			Args: sv.Args, Env: sv.Env, Headers: sv.Headers,
+		})
 	}
 	if dc, ok := cfg.Driver.(claude.Config); ok {
-		for _, d := range dc.SkillDirs {
-			a = append(a, "--plugin-dir", d)
-		}
-	}
-	if cfg.AppendSystem != "" {
-		a = append(a, "--append-system-prompt", cfg.AppendSystem)
+		spec.SkillDirs = dc.SkillDirs
 	}
 	if s.SessionHookURL != nil {
-		settings, err := sessionStartHookSettings(s.SessionHookURL(cfg.ID))
-		if err != nil {
-			return nil, err
-		}
-		a = append(a, "--settings", settings)
+		spec.HookURL = s.SessionHookURL(cfg.ID)
 	}
-	if prompt != "" {
-		a = append(a, "--", prompt)
-	}
-	return a, nil
-}
-
-// mcpConfigJSON is the --mcp-config payload for servers, in the shape llmkit
-// writes for headless sessions (its builder is unexported, and also adds the
-// approval server interactive sessions must not have).
-func mcpConfigJSON(servers []llmkit.MCPServerSpec) (string, error) {
-	out := map[string]any{}
-	for _, sv := range servers {
-		entry := map[string]any{}
-		switch sv.Transport {
-		case "http", "streamable-http", "sse":
-			entry["type"] = "http"
-			entry["url"] = sv.URL
-			if len(sv.Headers) > 0 {
-				entry["headers"] = sv.Headers
-			}
-		default: // stdio
-			entry["command"] = sv.Command
-			if len(sv.Args) > 0 {
-				entry["args"] = sv.Args
-			}
-			if len(sv.Env) > 0 {
-				entry["env"] = sv.Env
-			}
-		}
-		out[sv.Name] = entry
-	}
-	b, err := json.Marshal(map[string]any{"mcpServers": out})
-	return string(b), err
-}
-
-// sessionStartHookSettings is a --settings payload whose SessionStart hook
-// posts the hook's input — which names the current conversation — to url.
-// --settings layers over the user's own settings rather than replacing them.
-//
-// The hook must never disturb the session: its stdout would be added to
-// claude's context, so the response is discarded, and a server that is down
-// only costs the five-second timeout.
-func sessionStartHookSettings(url string) (string, error) {
-	cmd := "curl -fsS -m 5 -X POST -H 'Content-Type: application/json' --data-binary @- '" +
-		url + "' >/dev/null 2>&1 || true"
-	b, err := json.Marshal(map[string]any{
-		"hooks": map[string]any{
-			"SessionStart": []any{
-				map[string]any{"hooks": []any{map[string]any{"type": "command", "command": cmd}}},
-			},
-		},
-	})
-	return string(b), err
+	return spec
 }
