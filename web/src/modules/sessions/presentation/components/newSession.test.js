@@ -1,13 +1,23 @@
 import { Codes } from "../../../../shared/domain/errors.js";
 import { mount } from "../../../../shared/testing/alpine.js";
+import { flush } from "../../../../shared/testing/doubles.js";
 import { assert, file, test } from "../../../../shared/testing/test.js";
 import { memoryGateway } from "../../infrastructure/memory-gateway.js";
 import { newSession } from "./newSession.js";
 
 file("sessions/presentation/newSession");
 
-function setup({ defaultRepository = "r1", repositories = { r1: "p1" } } = {}) {
-  const memory = memoryGateway({ projects: ["p1"], repositories });
+const BRANCHES = {
+  r1: [
+    { name: "main", remote: false, isHead: true },
+    { name: "feat/feed", remote: false, isHead: false },
+    { name: "origin/main", remote: true, isHead: false },
+  ],
+  r2: [{ name: "develop", remote: false, isHead: true }],
+};
+
+function setup({ defaultRepository = "r1", repositories = { r1: "p1", r2: "p1" }, branches = BRANCHES } = {}) {
+  const memory = memoryGateway({ projects: ["p1"], repositories, branches });
   const form = document.createElement("form");
   if (defaultRepository !== null) form.dataset.defaultRepository = defaultRepository;
   const mounted = mount(() => newSession({ gateway: memory.gateway })("p1", "t1"), { el: form });
@@ -52,4 +62,42 @@ test("cancel reports back to the page", () => {
   const { instance, dispatched } = setup();
   instance.cancel();
   assert.deepEqual(dispatched, [{ name: "new-session-cancelled", detail: undefined }]);
+});
+
+test("preselects the checked-out branch, and branches off the one chosen", async () => {
+  const { instance, memory, tick } = setup();
+  await flush();
+  tick();
+  assert.deepEqual(instance.localBranches.map((b) => b.name), ["main", "feat/feed"]);
+  assert.deepEqual(instance.remoteBranches.map((b) => b.name), ["origin/main"]);
+  assert.equal(instance.baseBranch, "main");
+
+  const started = [];
+  const realStart = memory.gateway.start;
+  memory.gateway.start = async (req) => (started.push(req), realStart(req));
+  instance.baseBranch = "feat/feed";
+  assert.ok(instance.baseHint.includes("feat/feed"));
+  await instance.submit();
+  assert.equal(started[0].baseBranch, "feat/feed");
+});
+
+test("choosing another repository lists its branches", async () => {
+  const { instance, tick } = setup();
+  await flush();
+  tick();
+  instance.repositoryId = "r2";
+  instance.repositoryChanged();
+  await flush();
+  tick();
+  assert.deepEqual(instance.branches.map((b) => b.name), ["develop"]);
+  assert.equal(instance.baseBranch, "develop");
+});
+
+test("when branches cannot be listed the session still starts, off the checkout", async () => {
+  const { instance, dispatched } = setup({ branches: {} });
+  await flush();
+  assert.equal(instance.branchesFailed, true);
+  assert.ok(instance.baseHint.includes("Could not list"));
+  await instance.submit();
+  assert.equal(dispatched[0].name, "session-created");
 });

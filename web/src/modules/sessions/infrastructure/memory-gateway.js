@@ -13,10 +13,11 @@ import { toSeed } from "./dto.js";
  *   projects?: string[],
  *   sessions?: import("../domain/session.js").Session[],
  *   repositories?: Record<string, string>,  repository id → project id
+ *   branches?: Record<string, { name: string, remote: boolean, isHead: boolean }[]>,  repository id → its branches
  *   now?: () => Date,
  * }} [seed]
  */
-export function memoryGateway({ projects = [], sessions = [], repositories = {}, now = () => new Date() } = {}) {
+export function memoryGateway({ projects = [], sessions = [], repositories = {}, branches = {}, now = () => new Date() } = {}) {
   let nextId = 1;
   const knownProjects = new Set([...projects, ...sessions.map((s) => s.projectId)]);
   /** @type {Map<string, import("../domain/session.js").Session>} */
@@ -76,6 +77,12 @@ export function memoryGateway({ projects = [], sessions = [], repositories = {},
       store.set(session.id, session);
       publish(projectId, { kind: "upsert", session });
       return session;
+    },
+
+    async listBranches(repositoryId) {
+      const list = branches[repositoryId];
+      if (!list) throw new StructuredError(Codes.REPOSITORY_NOT_FOUND, "repository not found", 404);
+      return list;
     },
 
     async stop(sessionId) {

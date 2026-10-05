@@ -206,11 +206,30 @@ templ newSessionForm(form NewSessionForm) {
 			</div>
 			<div class="[ field ]">
 				<label for="new-session-repository">Repository</label>
-				<select id="new-session-repository" x-model="repositoryId">
+				<select id="new-session-repository" x-model="repositoryId" x-on:change="repositoryChanged">
 					for _, r := range form.Repositories {
 						<option value={ r.ID }>{ r.Name }</option>
 					}
 				</select>
+			</div>
+			<div class="[ field ]">
+				<label for="new-session-base">Branch off</label>
+				<select id="new-session-base" x-model="baseBranch" x-bind:disabled="loadingBranches" x-bind:aria-busy="loadingBranches">
+					<option value="">The checked-out branch</option>
+					<optgroup label="Branches">
+						<template x-for="b in localBranches" x-bind:key="b.name">
+							<option x-bind:value="b.name" x-text="b.name"></option>
+						</template>
+					</optgroup>
+					<template x-if="hasRemoteBranches">
+						<optgroup label="Remote branches">
+							<template x-for="b in remoteBranches" x-bind:key="b.name">
+								<option x-bind:value="b.name" x-text="b.name"></option>
+							</template>
+						</optgroup>
+					</template>
+				</select>
+				<span class="[ hint ]" x-text="baseHint"></span>
 			</div>
 			<div class="[ field ]">
 				<label for="new-session-permissions">Permissions</label>

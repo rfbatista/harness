@@ -19,6 +19,12 @@
  * @property {string} agentId       "" runs plain claude
  * @property {string} prompt        the optional first message; "" opens claude waiting for you
  * @property {"off"|"edits"|"all"} autoAccept  which tool calls run without asking
+ * @property {string} [baseBranch]  the branch its worktree branches off; "" means the checkout's HEAD
+ *
+ * @typedef {object} Branch  a ref a session's worktree can branch off
+ * @property {string} name     e.g. main, origin/main
+ * @property {boolean} remote  a remote-tracking ref
+ * @property {boolean} isHead  the branch checked out in the repository
  * @property {{ cols: number, rows: number }} size  the terminal size it starts at
  *
  * @property {(seed: unknown) => { projectId: string, ticketId: string, sessions: Session[] }} decodeSeed
@@ -33,6 +39,9 @@
  *           INVALID_INPUT (no repository), PROJECT_NOT_FOUND, TICKET_NOT_FOUND,
  *           CROSS_PROJECT_ACCESS, CLAUDE_CLI_NOT_FOUND or
  *           SERVER_HOSTING_UNAVAILABLE.
+ * @property {(repositoryId: string) => Promise<Branch[]>} listBranches
+ *           The branches a new session can branch off: local ones, then
+ *           remote ones. Rejects with REPOSITORY_NOT_FOUND.
  * @property {(sessionId: string) => Promise<void>} stop
  *           Stops the session. Rejects with SESSION_NOT_FOUND.
  * @property {(sessionId: string) => Promise<void>} remove

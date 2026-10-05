@@ -17,12 +17,64 @@ export const newSession = ({ gateway }) => (projectId = "", ticketId = "") => ({
   agentId: "",
   repositoryId: "",
   autoAccept: "off",
+  /** @type {import("../../domain/ports.js").Branch[]} */
+  branches: [],
+  baseBranch: "",
+  loadingBranches: false,
+  branchesFailed: false,
   submitting: false,
   error: null,
 
   init() {
     this.repositoryId = this.$el.dataset.defaultRepository ?? "";
     this.$nextTick(() => this.$refs.prompt?.focus());
+    this.loadBranches();
+  },
+
+  get localBranches() {
+    return this.branches.filter((b) => !b.remote);
+  },
+  get remoteBranches() {
+    return this.branches.filter((b) => b.remote);
+  },
+  get hasRemoteBranches() {
+    return this.remoteBranches.length > 0;
+  },
+  /** What the worktree will branch off, in words, under the picker. */
+  get baseHint() {
+    if (this.loadingBranches) return "Loading the repository's branches…";
+    if (this.branchesFailed) return "Could not list the branches; the session branches off what the checkout has checked out.";
+    const head = this.branches.find((b) => b.isHead);
+    if (!this.baseBranch || this.baseBranch === head?.name) return "The session gets its own branch, cut from the branch checked out in the repository.";
+    return `The session gets its own branch, cut from ${this.baseBranch}.`;
+  },
+
+  /** Lists the chosen repository's branches and preselects the checked-out one. */
+  async loadBranches() {
+    const repositoryId = this.repositoryId;
+    this.branches = [];
+    this.baseBranch = "";
+    this.branchesFailed = false;
+    if (!repositoryId) return;
+    this.loadingBranches = true;
+    try {
+      const branches = await gateway.listBranches(repositoryId);
+      if (repositoryId !== this.repositoryId) return; // another repository was chosen meanwhile
+      this.branches = branches;
+      const head = branches.find((b) => b.isHead) ?? branches[0];
+      // Set once the options exist, so the <select> shows it.
+      this.$nextTick(() => {
+        this.baseBranch = head?.name ?? "";
+      });
+    } catch {
+      this.branchesFailed = true;
+    } finally {
+      this.loadingBranches = false;
+    }
+  },
+
+  repositoryChanged() {
+    this.loadBranches();
   },
 
   get cannotSubmit() {
@@ -41,6 +93,7 @@ export const newSession = ({ gateway }) => (projectId = "", ticketId = "") => ({
         agentId: this.agentId,
         prompt: this.prompt.trim(),
         autoAccept: this.autoAccept,
+        baseBranch: this.baseBranch,
         // The size it starts at; the terminal pane resizes it once attached.
         size: { cols: 120, rows: 32 },
       });

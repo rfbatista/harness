@@ -66,7 +66,17 @@ export function toStartBody(req) {
     auto_accept: req.autoAccept,
     runs_on: "server",
     size: req.size,
+    base_branch: req.baseBranch || undefined,
   };
+}
+
+/** GET /api/list_branches → {"branches": [{name, remote, is_head}]} */
+export function toBranches(body) {
+  if (!body || !Array.isArray(body.branches)) bad("expected {branches: [...]}");
+  return body.branches.map((b) => {
+    if (typeof b?.name !== "string" || b.name === "") bad("branch without a name");
+    return Object.freeze({ name: b.name, remote: b.remote === true, isHead: b.is_head === true });
+  });
 }
 
 /** POST /api/start_interactive_session → {"session": {...}, "agent": {...}} */

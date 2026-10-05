@@ -13,6 +13,7 @@ const STATUS = {
   SESSION_NOT_FOUND: 404,
   SESSION_NOT_RUNNING: 409,
   INVALID_INPUT: 400,
+  REPOSITORY_NOT_FOUND: 404,
   CROSS_PROJECT_ACCESS: 400,
 };
 
@@ -33,6 +34,10 @@ export function stubApi(world) {
           ticketId: url.searchParams.get("ticket_id") ?? undefined,
         });
         return jsonResponse(200, { sessions: list.map(toDTO) });
+      }
+      if (method === "GET" && url.pathname === "/api/list_branches") {
+        const list = await gateway.listBranches(url.searchParams.get("repository_id") ?? "");
+        return jsonResponse(200, { branches: list.map((b) => ({ name: b.name, remote: b.remote, is_head: b.isHead })) });
       }
       if (method === "POST" && url.pathname === "/api/start_interactive_session") {
         if (body.runs_on !== "server") return jsonResponse(400, { error: "the web client runs sessions on the server", code: "INVALID_INPUT" });

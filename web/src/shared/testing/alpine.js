@@ -14,6 +14,8 @@ export function mount(component, { el = document.createElement("div") } = {}) {
   Object.defineProperties(instance, {
     $el: { value: el },
     $root: { value: el },
+    // Empty unless a test sets its own (configurable, so it can).
+    $refs: { value: {}, configurable: true, writable: true },
     $dispatch: {
       value: (name, detail) => dispatched.push({ name, detail }),
     },

@@ -88,6 +88,18 @@ export function sessionGatewayContract(name, makeSubject, makeSession) {
     close();
   });
 
+  contract("listBranches lists a repository's branches, local first", async () => {
+    const branches = [
+      { name: "main", remote: false, isHead: true },
+      { name: "feat/x", remote: false, isHead: false },
+      { name: "origin/main", remote: true, isHead: false },
+    ];
+    const { gateway } = makeSubject({ projects: ["p1"], sessions: [], branches: { r1: branches } });
+    const got = await gateway.listBranches("r1");
+    assert.deepEqual(got.map((b) => [b.name, b.remote, b.isHead]), [["main", false, true], ["feat/x", false, false], ["origin/main", true, false]]);
+    await assert.rejects(gateway.listBranches("ghost"), Codes.REPOSITORY_NOT_FOUND);
+  });
+
   contract("decodeSeed reads the API's JSON shape and rejects garbage", () => {
     const { gateway } = makeSubject({ projects: ["p1"], sessions: [] });
     const seed = gateway.decodeSeed({
