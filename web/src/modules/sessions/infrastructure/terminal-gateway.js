@@ -8,17 +8,23 @@ import { toKeyEvent } from "./terminal-keys.js";
 /**
  * @param {{
  *   base: string,
+ *   path?: (id: string) => string,  the socket for an id; a session's terminal by default
  *   location?: { protocol: string, host: string },
  *   WebSocket?: typeof globalThis.WebSocket,
  * }} options
  * @returns {import("../domain/ports.js").TerminalGateway}
  */
-export function terminalGateway({ base, location = globalThis.location, WebSocket = globalThis.WebSocket }) {
+export function terminalGateway({
+  base,
+  path = (id) => `/sessions/${encodeURIComponent(id)}/terminal`,
+  location = globalThis.location,
+  WebSocket = globalThis.WebSocket,
+}) {
   const origin = `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}`;
 
   return {
     attach(sessionId, handlers) {
-      const socket = new WebSocket(`${origin}${base}/sessions/${encodeURIComponent(sessionId)}/terminal`);
+      const socket = new WebSocket(`${origin}${base}${path(sessionId)}`);
       socket.binaryType = "arraybuffer";
       let closed = false;
 

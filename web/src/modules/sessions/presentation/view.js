@@ -65,6 +65,7 @@ export function toDetailView(session, now, agentNames) {
     lastAction: session.lastAction || "Nothing yet.",
     updated: relativeTime(session.updatedAt, now),
     stoppable: !isTerminal(session),
+    repositoryId: session.repositoryId,
     ...terminalView(session),
   };
 }

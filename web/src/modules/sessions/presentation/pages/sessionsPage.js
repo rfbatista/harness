@@ -38,6 +38,8 @@ export const sessionsPage = ({ gateway, clock }) => () => {
     /** The selected session's delete is awaiting confirmation. */
     confirmingDelete: false,
     deleting: false,
+    /** The detail pane's tab: the agent's terminal, or the application run from the worktree. */
+    detailTab: "agent",
 
     // ── what the markup binds ────────────────────────────────────────────
     get groups() {
@@ -65,12 +67,26 @@ export const sessionsPage = ({ gateway, clock }) => () => {
     get showingSession() {
       return !this.creating && this.hasSelection;
     },
+    get showingAgent() {
+      return this.showingSession && this.detailTab === "agent";
+    },
+    get showingApp() {
+      return this.showingSession && this.detailTab === "app";
+    },
     /** The session whose terminal to mount, as a one-item list keyed on its id. */
     get terminalIds() {
-      return this.showingSession && this.selected.terminal === "attach" ? [this.selected.id] : [];
+      return this.showingAgent && this.selected.terminal === "attach" ? [this.selected.id] : [];
     },
     get terminalNote() {
-      return this.showingSession ? this.selected.terminalNote : "";
+      return this.showingAgent ? this.selected.terminalNote : "";
+    },
+    /** The session whose App panel to mount, keyed on its id, with what the panel needs. */
+    get appPanels() {
+      if (!this.showingApp || !this.selected.repositoryId) return [];
+      return [{ key: this.selected.id, sessionId: this.selected.id, repositoryId: this.selected.repositoryId, projectId: this.projectId }];
+    },
+    get appUnavailable() {
+      return this.showingApp && !this.selected.repositoryId;
     },
     get showingNothing() {
       return !this.creating && !this.hasSelection;
@@ -136,6 +152,19 @@ export const sessionsPage = ({ gateway, clock }) => () => {
     },
 
     // ── developer actions ────────────────────────────────────────────────
+    showAgent() {
+      this.detailTab = "agent";
+    },
+    showApp() {
+      this.detailTab = "app";
+    },
+    get agentTabSelected() {
+      return this.detailTab === "agent";
+    },
+    get appTabSelected() {
+      return this.detailTab === "app";
+    },
+
     select(id) {
       this.selectedId = id;
       this.creating = false;

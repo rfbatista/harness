@@ -28,6 +28,25 @@ func (h *Handler) handleSessionTerminal(c echo.Context) error {
 	if err != nil {
 		return err
 	}
+	return serveTerminal(c, t)
+}
+
+// handleRunTerminal attaches a client to an application run's terminal, with
+// the same protocol as a session's; the first snapshot replays the run's
+// output so far.
+func (h *Handler) handleRunTerminal(c echo.Context) error {
+	if h.apps == nil {
+		return echo.NewHTTPError(http.StatusServiceUnavailable, "application runs not configured")
+	}
+	t, err := h.apps.Attach(c.Request().Context(), c.Param("id"))
+	if err != nil {
+		return err
+	}
+	return serveTerminal(c, t)
+}
+
+// serveTerminal upgrades to a WebSocket speaking ports.TerminalMessage over t.
+func serveTerminal(c echo.Context, t ports.Terminal) error {
 	conn, err := websocket.Accept(c.Response(), c.Request(), nil)
 	if err != nil {
 		return nil // Accept has answered the request

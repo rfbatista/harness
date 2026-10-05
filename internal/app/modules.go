@@ -27,6 +27,7 @@ import (
 	"operators-mcp/internal/adapter/out/gitcli"
 	"operators-mcp/internal/adapter/out/persistence/sqlite"
 	"operators-mcp/internal/app/catalog"
+	"operators-mcp/internal/application/apps"
 	"operators-mcp/internal/application/execution"
 	"operators-mcp/internal/application/orchestration"
 	"operators-mcp/internal/application/planning"
@@ -259,9 +260,16 @@ var AgentRuntimeModule = fx.Module("agentruntime",
 		asPort(sqlite.NewSessionRepository, new(ports.SessionRepository)),
 		asPort(newClaudeTranscripts, new(ports.ClaudeTranscripts)),
 		newOrchestrationService,
+		newAppsService,
 	),
 	fx.Invoke(registerRuntimeShutdown, registerServerSessions),
 )
+
+// newAppsService runs applications from session worktrees on the same
+// terminal host the sessions run on, with the repositories' saved commands.
+func newAppsService(orch *orchestration.Service, cat catalog.Catalog, host ports.TerminalHost) *apps.Service {
+	return apps.NewService(orch, cat.Projects, host)
+}
 
 func newRuntimeConfig(cfg Config) runtime.Config {
 	return runtime.Config{ClaudeBin: cfg.ClaudeBin, Shell: cfg.SessionShell}

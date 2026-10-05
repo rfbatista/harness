@@ -18,7 +18,11 @@ type Services struct {
 	// Discovery finds git checkouts on disk; nil answers 503.
 	Discovery ports.RepositoryDiscovery
 	// Env keeps repositories' env files; nil answers 503.
-	Env          ports.RepositoryEnv
+	Env ports.RepositoryEnv
+	// RunCommands keeps repositories' saved run commands; nil answers 503.
+	RunCommands ports.RepositoryRunCommands
+	// Apps runs applications from session worktrees; nil answers 503.
+	Apps         ports.AppRunner
 	Architecture ports.Architecture
 	Agents       interface {
 		ports.AgentCatalog
@@ -40,6 +44,8 @@ type Handler struct {
 	projects     ports.Projects
 	discovery    ports.RepositoryDiscovery
 	env          ports.RepositoryEnv
+	runCommands  ports.RepositoryRunCommands
+	apps         ports.AppRunner
 	architecture ports.Architecture
 	agents       interface {
 		ports.AgentCatalog
@@ -60,6 +66,8 @@ func NewHandler(s Services) *Handler {
 		projects:      s.Projects,
 		discovery:     s.Discovery,
 		env:           s.Env,
+		runCommands:   s.RunCommands,
+		apps:          s.Apps,
 		architecture:  s.Architecture,
 		agents:        s.Agents,
 		capabilities:  s.Capabilities,

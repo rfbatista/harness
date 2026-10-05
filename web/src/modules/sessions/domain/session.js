@@ -7,6 +7,7 @@
  * @typedef {object} Session
  * @property {string} id
  * @property {string} projectId
+ * @property {string} repositoryId      the repository its worktree was cut from; "" for none
  * @property {string} ticketId          the task it works on; "" for none. A task can run several sessions at once.
  * @property {string} task              what the session was asked to do
  * @property {string} agentId           "" when no agent persona is attached

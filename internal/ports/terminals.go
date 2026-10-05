@@ -51,6 +51,9 @@ type TerminalSnapshot struct {
 	AltScreen bool     `json:"alt_screen,omitempty"`
 	Size      TermSize `json:"size"`
 	Title     string   `json:"title,omitempty"`
+	// Log marks Screen as raw output to write as it is (an application
+	// run's log so far), not a rendered screen: no cursor to place.
+	Log bool `json:"log,omitempty"`
 }
 
 // Subscription is a stream of terminal output.

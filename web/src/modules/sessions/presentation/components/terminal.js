@@ -90,6 +90,7 @@ export const terminal = ({ terminals, createScreen, observeResize = resizeObserv
         onExit: (code) => {
           this.state = "exited";
           this.exitCode = code;
+          this.$dispatch("terminal-exited", { id: this.sessionId, code });
         },
         onClosed: () => {
           if (this.state !== "exited") this.state = "closed";

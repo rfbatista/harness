@@ -8,6 +8,7 @@ func servicesOf(cat catalog.Catalog) Services {
 		Projects:     cat.Projects,
 		Discovery:    cat.Projects,
 		Env:          cat.Projects,
+		RunCommands:  cat.Projects,
 		Architecture: cat.Architecture,
 		Agents:       cat.Agents,
 		Capabilities: cat.Capabilities,

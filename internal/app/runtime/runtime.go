@@ -11,6 +11,7 @@ import (
 	"go.uber.org/fx"
 
 	"operators-mcp/internal/adapter/out/agents/claudecli"
+	"operators-mcp/internal/adapter/out/agents/command"
 	"operators-mcp/internal/adapter/out/ptyunix"
 	"operators-mcp/internal/adapter/out/shell"
 	"operators-mcp/internal/adapter/out/termhost"
@@ -49,8 +50,10 @@ func newShell(cfg Config) (ports.Shell, error) {
 
 func newClaude(cfg Config) claudecli.Agent { return claudecli.New(cfg.ClaudeBin) }
 
+// newHost runs claude for sessions, and plain command lines for the
+// application runs started from them (the "command" kind).
 func newHost(lc fx.Lifecycle, sh ports.Shell, pty ports.PTY, agent ports.Agent) *termhost.Host {
-	h := termhost.New(sh, pty, agent)
+	h := termhost.New(sh, pty, agent, command.New())
 	lc.Append(fx.StopHook(func(ctx context.Context) error { return h.Shutdown(ctx) }))
 	return h
 }

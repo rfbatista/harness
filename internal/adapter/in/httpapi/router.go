@@ -43,6 +43,15 @@ func NewRouter(h *Handler, opts ...Option) *echo.Echo {
 	g.POST("/save_repository_env_file", h.handleSaveEnvFile)
 	g.POST("/delete_repository_env_file", h.handleDeleteEnvFile)
 	g.POST("/import_repository_env_file", h.handleImportEnvFile)
+	g.GET("/list_repository_run_commands", h.handleListRunCommands)
+	g.POST("/save_repository_run_command", h.handleSaveRunCommand)
+	g.POST("/delete_repository_run_command", h.handleDeleteRunCommand)
+
+	// application runs: a repository's app run from a session's worktree
+	g.GET("/list_runs", h.handleListRuns)
+	g.POST("/start_run", h.handleStartRun)
+	g.POST("/stop_run", h.handleStopRun)
+	g.GET("/runs/:id/terminal", h.handleRunTerminal) // WebSocket upgrade
 	g.GET("/get_repository", h.handleGetRepository)
 	g.POST("/create_repository", h.handleCreateRepository)
 	g.POST("/update_repository", h.handleUpdateRepository)

@@ -16,6 +16,7 @@ export function toSession(dto) {
     id: dto.id,
     projectId: dto.project_id ?? "",
     ticketId: dto.ticket_id ?? "",
+    repositoryId: dto.repository_id ?? "",
     task: dto.task ?? "",
     agentId: dto.agent_id ?? "",
     status: dto.status,
