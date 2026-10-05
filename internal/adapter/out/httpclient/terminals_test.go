@@ -5,6 +5,7 @@ package httpclient_test
 import (
 	"context"
 	"fmt"
+	"net/http/httptest"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -15,9 +16,11 @@ import (
 
 	"operators-mcp/internal/adapter/in/httpapi"
 	"operators-mcp/internal/adapter/out/httpclient"
+	"operators-mcp/internal/adapter/out/persistence/sqlite"
 	"operators-mcp/internal/adapter/out/ptyunix"
 	"operators-mcp/internal/adapter/out/shell"
 	"operators-mcp/internal/adapter/out/termhost"
+	"operators-mcp/internal/application/projects"
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
 	"operators-mcp/internal/ports/runtimetest"
@@ -169,4 +172,54 @@ func waitScreen(t *testing.T, terms *httpclient.Terminals, id, want string) {
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
+}
+
+// Every channel the client opens carries the token: plain calls, the event
+// feed and the terminal WebSocket.
+func TestTokenOnEveryChannel(t *testing.T) {
+	host := termhost.New(shell.Direct{}, ptyunix.New(), runtimetest.Script{})
+	t.Cleanup(func() { _ = host.Shutdown(context.Background()) })
+	if err := host.Spawn(context.Background(), "s1", runtimetest.Spec("s1", t.TempDir(), "cat"), ports.TermSize{Cols: 80, Rows: 24}, nil); err != nil {
+		t.Fatal(err)
+	}
+	db := openDB(t)
+	projectSvc := projects.NewService(sqlite.NewProjectRepository(db), sqlite.NewRepositoryRepository(db), nil)
+	srv := httptest.NewServer(httpapi.NewRouter(httpapi.NewHandler(httpapi.Services{
+		Projects: projectSvc, Sessions: hostedFeed{hosted{host: host}},
+	}), httpapi.WithToken("s3cret")))
+	defer srv.Close()
+	ctx := context.Background()
+
+	with := httpclient.New(srv.URL, httpclient.WithToken("s3cret"))
+	if err := with.CheckAccess(ctx); err != nil {
+		t.Errorf("with the token, a call = %v", err)
+	}
+	if _, err := httpclient.NewTerminals(with).AttachTerminal(ctx, "s1"); err != nil {
+		t.Errorf("with the token, attach = %v", err)
+	}
+	cctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	if _, err := httpclient.NewEvents(with).FollowProject(cctx, "p1"); err != nil {
+		t.Errorf("with the token, follow = %v", err)
+	}
+
+	without := httpclient.New(srv.URL)
+	if err := without.CheckAccess(ctx); errs.Code(err) != "UNAUTHORIZED" {
+		t.Errorf("without, a call = %v, want UNAUTHORIZED", err)
+	}
+	if _, err := httpclient.NewTerminals(without).AttachTerminal(ctx, "s1"); errs.Code(err) != "UNAUTHORIZED" {
+		t.Errorf("without, attach = %v, want UNAUTHORIZED", err)
+	}
+	if _, err := httpclient.NewEvents(without).FollowProject(ctx, "p1"); errs.Code(err) != "UNAUTHORIZED" {
+		t.Errorf("without, follow = %v, want UNAUTHORIZED", err)
+	}
+}
+
+// hostedFeed adds a feed that never changes to hosted.
+type hostedFeed struct{ hosted }
+
+func (hostedFeed) FollowProject(ctx context.Context, _ string) (<-chan ports.SessionChange, error) {
+	c := make(chan ports.SessionChange)
+	go func() { <-ctx.Done(); close(c) }()
+	return c, nil
 }

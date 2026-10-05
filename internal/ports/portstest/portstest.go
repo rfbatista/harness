@@ -11,6 +11,7 @@ package portstest
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/rfbatista/harnesskit/errs"
 
@@ -261,5 +262,66 @@ func SessionReaderConformance(t *testing.T, newPort func(t *testing.T) (reader p
 		r, _ := newPort(t)
 		_, err := r.Get(ctx, "missing")
 		wantCode(t, err, "SESSION_NOT_FOUND")
+	})
+}
+
+// SessionFeedConformance runs the feed contract. newPort returns a feed, a
+// project, and change, which changes one of the project's sessions and
+// returns its id.
+func SessionFeedConformance(t *testing.T, newPort func(t *testing.T) (feed ports.SessionFeed, projectID string, change func() string)) {
+	t.Run("a change arrives with the session as it is now", func(t *testing.T) {
+		feed, pid, change := newPort(t)
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		changes, err := feed.FollowProject(ctx, pid)
+		if err != nil {
+			t.Fatal(err)
+		}
+		id := change()
+		deadline := time.After(5 * time.Second)
+		for {
+			select {
+			case c, ok := <-changes:
+				if !ok {
+					t.Fatal("the feed closed before the change arrived")
+				}
+				if c.Session.ID != id {
+					continue
+				}
+				if c.Session.ProjectID != pid {
+					t.Fatalf("change for %s carries project %q, want %q", id, c.Session.ProjectID, pid)
+				}
+				return
+			case <-deadline:
+				t.Fatalf("no change for %s", id)
+			}
+		}
+	})
+
+	t.Run("ending the follow closes the channel", func(t *testing.T) {
+		feed, pid, _ := newPort(t)
+		ctx, cancel := context.WithCancel(context.Background())
+		changes, err := feed.FollowProject(ctx, pid)
+		if err != nil {
+			t.Fatal(err)
+		}
+		cancel()
+		deadline := time.After(5 * time.Second)
+		for {
+			select {
+			case _, ok := <-changes:
+				if !ok {
+					return
+				}
+			case <-deadline:
+				t.Fatal("the channel stayed open after the follow ended")
+			}
+		}
+	})
+
+	t.Run("a project is required", func(t *testing.T) {
+		feed, _, _ := newPort(t)
+		_, err := feed.FollowProject(context.Background(), "")
+		wantCode(t, err, "INVALID_INPUT")
 	})
 }

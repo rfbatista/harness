@@ -1,0 +1,65 @@
+/*
+ * Status — a dot plus its word. Color is never the only carrier.
+ * Exceptions: data-state="running|waiting|failed|done|idle|queued|live|
+ * reconnecting|offline"; data-signal (one-shot ring when a state arrives);
+ * data-dot-only (word given elsewhere in the row).
+ */
+
+@layer blocks {
+  .status {
+    --_tone: var(--color-ink-faint);
+
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-xs);
+    min-block-size: 1lh;
+    font-size: var(--text-sm);
+    color: var(--color-ink-muted);
+    white-space: nowrap;
+
+    &::before {
+      content: "";
+      flex-shrink: 0;
+      inline-size: 0.5rem;
+      block-size: 0.5rem;
+      border-radius: var(--radius-round);
+      background: var(--_tone);
+    }
+
+    &:is([data-state="running"], [data-state="live"]) { --_tone: var(--color-signal); }
+    &[data-state="running"] { color: var(--color-ink); }
+    &[data-state="waiting"] { --_tone: var(--color-attention); color: var(--color-attention); }
+    &[data-state="reconnecting"] { --_tone: var(--color-attention); }
+    &:is([data-state="failed"], [data-state="offline"]) {
+      --_tone: var(--color-danger);
+      color: var(--color-danger);
+    }
+
+    &[data-state="idle"]::before {
+      background: transparent;
+      box-shadow: inset 0 0 0 1.5px var(--color-ink-faint);
+    }
+
+    &[data-state="queued"]::before {
+      background: linear-gradient(90deg, var(--color-ink-faint) 50%, transparent 50%);
+      box-shadow: inset 0 0 0 1.5px var(--color-ink-faint);
+    }
+
+    &[data-dot-only] { gap: 0; }
+
+    &[data-signal]::before {
+      animation: status-signal var(--duration-signal) var(--ease-out) 1;
+
+      @media (prefers-reduced-motion: reduce) {
+        animation: none;
+        outline: 2px solid color-mix(in oklch, var(--_tone) 40%, transparent);
+        outline-offset: 2px;
+      }
+    }
+  }
+
+  @keyframes status-signal {
+    from { box-shadow: 0 0 0 0 color-mix(in oklch, var(--_tone) 55%, transparent); }
+    to { box-shadow: 0 0 0 0.45rem transparent; }
+  }
+}

@@ -1,0 +1,58 @@
+/*
+ * Harness web UI — CUBE CSS (https://cube.fyi).
+ *
+ *   global        reset, tokens (generated), element styles: the minimum
+ *                 viable experience, most of the styling
+ *   compositions  skeletal, content-agnostic layout (flow, cluster, …)
+ *   utilities     one job each; design-token utilities are generated
+ *   blocks        small, context-specific components; their exceptions
+ *                 (data-* / ARIA states) live inside each block file
+ *
+ * Cascade layers fix that order regardless of selector specificity.
+ * Conventions: design-system/README.md. Visual spec: DESIGN.md.
+ */
+
+@layer reset, global, compositions, utilities, blocks;
+
+/* Global */
+@import url("./global/reset.css");
+@import url("./global/tokens.css");
+@import url("./global/global.css");
+
+/* Compositions */
+@import url("./compositions/flow.css");
+@import url("./compositions/cluster.css");
+@import url("./compositions/repel.css");
+@import url("./compositions/sidebar.css");
+@import url("./compositions/switcher.css");
+@import url("./compositions/grid.css");
+@import url("./compositions/wrapper.css");
+@import url("./compositions/frame.css");
+
+/* Utilities */
+@import url("./utilities/tokens.css");
+@import url("./utilities/visually-hidden.css");
+@import url("./utilities/truncate.css");
+@import url("./utilities/region.css");
+@import url("./utilities/divide.css");
+@import url("./utilities/flex-item.css");
+
+/* Blocks */
+@import url("./blocks/app-shell.css");
+@import url("./blocks/nav.css");
+@import url("./blocks/toolbar.css");
+@import url("./blocks/pane.css");
+@import url("./blocks/button.css");
+@import url("./blocks/field.css");
+@import url("./blocks/status.css");
+@import url("./blocks/badge.css");
+@import url("./blocks/list.css");
+@import url("./blocks/row.css");
+@import url("./blocks/tabs.css");
+@import url("./blocks/banner.css");
+@import url("./blocks/stream-bar.css");
+@import url("./blocks/transcript.css");
+@import url("./blocks/palette.css");
+@import url("./blocks/toast.css");
+@import url("./blocks/empty.css");
+@import url("./blocks/skeleton.css");

@@ -1,0 +1,52 @@
+/* Modern reset: remove browser inconsistencies, nothing more. */
+
+@layer reset {
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+
+  * {
+    margin: 0;
+  }
+
+  html {
+    -webkit-text-size-adjust: none;
+    text-size-adjust: none;
+  }
+
+  body {
+    min-block-size: 100dvh;
+  }
+
+  img,
+  svg,
+  video,
+  canvas {
+    display: block;
+    max-inline-size: 100%;
+  }
+
+  input,
+  button,
+  textarea,
+  select {
+    font: inherit;
+    color: inherit;
+  }
+
+  button {
+    cursor: pointer;
+  }
+
+  :where(ul, ol)[role="list"],
+  :where(ul, ol)[class] {
+    list-style: none;
+    padding: 0;
+  }
+
+  [hidden] {
+    display: none !important;
+  }
+}

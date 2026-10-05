@@ -179,7 +179,7 @@ func (r *run) settle() {
 func depsOf(be *tuitest.Fake, host ports.TerminalHost) Deps {
 	return Deps{
 		Projects: be, Repositories: be, Board: be, Agents: be,
-		Sessions: be, Interactive: be, Terminals: be,
+		Sessions: be, Interactive: be, Terminals: be, Feed: be,
 		RunsOn: domain.RunnerTUI, Host: host, RunnerHost: "laptop",
 	}
 }
@@ -522,4 +522,67 @@ func TestClient_QuittingDetachesAndTheNextClientReattaches(t *testing.T) {
 	second.typeText("hello again")
 	second.press("enter")
 	second.until("echo", second.shows("hello again"))
+}
+
+// Another client starts and ends a session on a task: the lists here follow
+// without a refresh.
+func TestClient_ListsFollowAnotherClient(t *testing.T) {
+	be := fixture()
+	r := newRun(t, be, nil)
+	r.press("enter")
+	r.until("tasks", r.shows("Fix flaky tests"))
+	r.until("following the project", func() bool { return be.Following("p1") == 1 })
+
+	elsewhere := &domain.Session{ID: "x1", ProjectID: "p1", TicketID: "t1", Branch: "agent/elsewhere", Status: domain.SessionRunning, Interactive: true, RunsOn: domain.RunnerTUI, RunnerHost: "desktop"}
+	be.Put(elsewhere)
+	r.until("count without a refresh", r.shows("1 session"))
+
+	r.press("enter")
+	r.until("task", r.shows("No agent sessions open"))
+	r.press("s")
+	r.until("overlay lists it", r.shows("agent/elsewhere"))
+	r.until("as running", r.shows("running"))
+
+	done := *elsewhere
+	done.Status = domain.SessionDone
+	be.Put(&done)
+	r.until("overlay shows it ended", r.shows("done"))
+}
+
+func TestClient_FollowsOnlyTheProjectYouAreIn(t *testing.T) {
+	be := fixture()
+	r := newRun(t, be, nil)
+	r.settle()
+	if n := be.Following("p1"); n != 0 {
+		t.Fatalf("following p1 from the project list: %d", n)
+	}
+	r.press("enter")
+	r.until("following p1", func() bool { return be.Following("p1") == 1 })
+	r.until("tasks", r.shows("Fix flaky tests"))
+	r.press("enter") // into a task: still p1, still one follow
+	r.until("task", r.shows("No agent sessions open"))
+	r.settle()
+	if n := be.Following("p1"); n != 1 {
+		t.Fatalf("follows of p1 inside a task = %d, want 1", n)
+	}
+	r.press("esc", "esc")
+	r.until("stopped following", func() bool { return be.Following("p1") == 0 })
+}
+
+// A lost stream says so, comes back on its own, and reloads what it missed.
+func TestClient_ReconnectsAndReloadsWhatItMissed(t *testing.T) {
+	be := fixture()
+	r := newRun(t, be, nil)
+	r.press("enter")
+	r.until("tasks", r.shows("Fix flaky tests"))
+	r.until("following", func() bool { return be.Following("p1") == 1 })
+
+	be.DropFollowers("p1")
+	r.until("paused note", r.shows("live updates paused"))
+	// Started while nobody followed: only a reload can show it.
+	be.Put(&domain.Session{ID: "x1", ProjectID: "p1", TicketID: "t1", Status: domain.SessionRunning, Interactive: true})
+
+	r.until("reconnected", func() bool { return be.Following("p1") == 1 })
+	r.until("reloaded", r.shows("1 session"))
+	r.until("note gone", func() bool { return !strings.Contains(r.view(), "live updates paused") })
 }

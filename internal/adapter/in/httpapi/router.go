@@ -9,13 +9,20 @@ import (
 // Read endpoints are GET-only (inputs via query params); write endpoints are
 // POST-only (inputs via JSON body). Each route maps to exactly one handler per
 // method.
-func NewRouter(h *Handler) *echo.Echo {
+func NewRouter(h *Handler, opts ...Option) *echo.Echo {
+	var o options
+	for _, opt := range opts {
+		opt(&o)
+	}
 	e := echo.New()
 	e.HideBanner = true
 	e.HidePort = true
 	e.HTTPErrorHandler = errorHandler
 
 	g := e.Group("/api")
+	if o.token != "" {
+		g.Use(requireToken(o.token))
+	}
 
 	g.GET("/health", h.handleHealthCheck)
 	g.GET("/tools", h.handleListTools)
@@ -122,6 +129,7 @@ func NewRouter(h *Handler) *echo.Echo {
 	g.POST("/sessions", h.handleCreateSession)
 	g.GET("/sessions/:id", h.handleGetSession)
 	g.DELETE("/sessions/:id", h.handleDeleteSession)
+	g.GET("/events", h.handleEvents) // a project's session changes (SSE)
 	g.GET("/sessions/:id/events", h.handleSessionEvents)
 	g.GET("/sessions/:id/terminal", h.handleSessionTerminal) // WebSocket upgrade
 	g.GET("/sessions/:id/history", h.handleSessionHistory)

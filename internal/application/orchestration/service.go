@@ -52,6 +52,7 @@ type Service struct {
 	runtime    llmkit.Manager
 	broker     *approval.Broker
 	hub        *Hub
+	feed       feed // a project's session changes, for its followers
 	sessions   ports.SessionRepository
 	catalog    Catalog
 	tickets    ticketResolver
@@ -747,13 +748,16 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 	}
 	s.runCleanup(id)
 
-	// Read the workspace before the row is gone.
-	workspaceID := ""
+	// Read the workspace and project before the row is gone.
+	workspaceID, projectID := "", ""
 	if sess := s.sessions.Get(id); sess != nil {
-		workspaceID = sess.WorkspaceID
+		workspaceID, projectID = sess.WorkspaceID, sess.ProjectID
 	}
 	if err := s.sessions.Delete(id); err != nil {
 		return err
+	}
+	if projectID != "" {
+		s.feed.send(ports.SessionChange{Session: &domain.Session{ID: id, ProjectID: projectID}, Deleted: true})
 	}
 	// A worktree that will not go away must not make the session undeletable:
 	// the workspace row survives and stays retryable through delete_workspace.
@@ -810,6 +814,7 @@ func (s *Service) publish(sessionID string, ev SessionEvent) {
 	payload, _ := json.Marshal(ev)
 	_ = s.sessions.AppendEvent(sessionID, ev.Seq, ev.Type, payload)
 	s.hub.Publish(sessionID, ev)
+	s.notify(sessionID, ev.Type)
 }
 
 // publishDelta streams an ephemeral token-delta event to live subscribers only:

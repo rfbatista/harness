@@ -1,0 +1,10 @@
+/* One line, ellipsis at the end. Works inside flex and grid items. */
+
+@layer utilities {
+  .truncate {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-inline-size: 0;
+  }
+}

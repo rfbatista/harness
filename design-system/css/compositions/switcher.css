@@ -1,0 +1,25 @@
+/*
+ * Switcher — a row that becomes a column when the container is narrower than
+ * --switcher-threshold. No media queries. More than three items always stack.
+ */
+
+@layer compositions {
+  .switcher {
+    --gutter: var(--space-l);
+    --switcher-threshold: 40rem;
+
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--gutter);
+
+    & > * {
+      flex-grow: 1;
+      flex-basis: calc((var(--switcher-threshold) - 100%) * 999);
+    }
+
+    & > :nth-last-child(n + 4),
+    & > :nth-last-child(n + 4) ~ * {
+      flex-basis: 100%;
+    }
+  }
+}

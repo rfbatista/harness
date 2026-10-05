@@ -1,0 +1,47 @@
+/*
+ * Tabs — an ARIA tablist; state comes from aria-selected.
+ * <div class="tabs" role="tablist"><button role="tab" aria-selected="true">…</button></div>
+ */
+
+@layer blocks {
+  .tabs {
+    display: flex;
+    gap: var(--space-l);
+    padding-inline: var(--space-l);
+    border-block-end: var(--border-width) solid var(--color-line);
+    overflow-x: auto;
+
+    & [role="tab"] {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      gap: var(--space-xs);
+      min-block-size: 2.5rem;
+      padding: 0;
+      border: 0;
+      background: none;
+      color: var(--color-ink-muted);
+      white-space: nowrap;
+
+      &:hover { color: var(--color-ink); }
+
+      &::after {
+        content: "";
+        position: absolute;
+        inset-inline: 0;
+        inset-block-end: -1px;
+        block-size: 2px;
+        background: var(--color-ink);
+        transform: scaleX(0);
+        transition: transform var(--duration-quick) var(--ease-out);
+      }
+
+      &[aria-selected="true"] {
+        color: var(--color-ink);
+        font-weight: var(--weight-medium);
+
+        &::after { transform: scaleX(1); }
+      }
+    }
+  }
+}

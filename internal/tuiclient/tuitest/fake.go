@@ -22,6 +22,7 @@ var (
 	_ ports.SessionReader       = (*Fake)(nil)
 	_ ports.InteractiveSessions = (*Fake)(nil)
 	_ ports.TerminalAccess      = (*Fake)(nil)
+	_ ports.SessionFeed         = (*Fake)(nil)
 )
 
 // errReadOnly answers the catalog writes no screen makes yet.
@@ -51,6 +52,83 @@ type Fake struct {
 
 	Ends []EndCall
 	seq  int
+
+	followers map[string]map[chan ports.SessionChange]struct{} // by project
+}
+
+// FollowProject follows a project's session changes until ctx ends, like the
+// server's feed.
+func (f *Fake) FollowProject(ctx context.Context, projectID string) (<-chan ports.SessionChange, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if err := f.fail("FollowProject"); err != nil {
+		return nil, err
+	}
+	c := make(chan ports.SessionChange, 64)
+	if f.followers == nil {
+		f.followers = map[string]map[chan ports.SessionChange]struct{}{}
+	}
+	if f.followers[projectID] == nil {
+		f.followers[projectID] = map[chan ports.SessionChange]struct{}{}
+	}
+	f.followers[projectID][c] = struct{}{}
+	go func() {
+		<-ctx.Done()
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		f.unfollow(projectID, c)
+	}()
+	return c, nil
+}
+
+// unfollow closes a follower once. Called with f.mu held.
+func (f *Fake) unfollow(projectID string, c chan ports.SessionChange) {
+	if _, ok := f.followers[projectID][c]; ok {
+		delete(f.followers[projectID], c)
+		close(c)
+	}
+}
+
+// notify puts s on its project's feed. Called with f.mu held.
+func (f *Fake) notify(s *domain.Session, deleted bool) {
+	c := *s
+	for ch := range f.followers[s.ProjectID] {
+		select {
+		case ch <- ports.SessionChange{Session: &c, Deleted: deleted}:
+		default:
+			f.unfollow(s.ProjectID, ch)
+		}
+	}
+}
+
+// Put records s as another client would, adding or replacing it, and puts it
+// on the feed.
+func (f *Fake) Put(s *domain.Session) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	c := *s
+	if i := f.index(s.ID); i >= 0 {
+		f.Sessions[i] = &c
+	} else {
+		f.Sessions = append(f.Sessions, &c)
+	}
+	f.notify(&c, false)
+}
+
+// DropFollowers ends every follow of projectID, as a lost connection would.
+func (f *Fake) DropFollowers(projectID string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for c := range f.followers[projectID] {
+		f.unfollow(projectID, c)
+	}
+}
+
+// Following reports how many follows of projectID are open.
+func (f *Fake) Following(projectID string) int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return len(f.followers[projectID])
 }
 
 // EndCall records one EndInteractive call.
@@ -256,6 +334,7 @@ func (f *Fake) StartInteractive(ctx context.Context, req ports.InteractiveReques
 	}
 	s.ClaudeSessionID = s.ID
 	f.Sessions = append(f.Sessions, s)
+	f.notify(s, false)
 	spec := f.launch(s, false)
 	if err := f.spawn(ctx, s, spec, req.Size); err != nil {
 		return nil, ports.AgentSpec{}, err
@@ -306,6 +385,7 @@ func (f *Fake) finish(id string, exitCode int, closed bool) {
 	default:
 		f.Sessions[i].Status = domain.SessionDone
 	}
+	f.notify(f.Sessions[i], false)
 }
 
 // AttachTerminal attaches to a RunnerServer session on the Server host. The
@@ -364,6 +444,7 @@ func (f *Fake) ResumeInteractive(ctx context.Context, req ports.ResumeRequest) (
 		return nil, ports.AgentSpec{}, &domain.StructuredError{Code: "SESSION_ALREADY_RUNNING", Message: "session is still running"}
 	}
 	s.Status = domain.SessionRunning
+	defer f.notify(s, false)
 	s.RunsOn, s.RunnerHost = runsOn, ""
 	if runsOn == domain.RunnerTUI {
 		s.RunnerHost = req.RunnerHost

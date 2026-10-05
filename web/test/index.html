@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Web Tests</title>
+    <link rel="stylesheet" href="../../design-system/css/index.css" />
+  </head>
+  <body>
+    <main class="[ wrapper flow ] [ region ]">
+      <h1>web/ tests</h1>
+      <p id="summary" class="[ status ]" data-state="reconnecting">running…</p>
+      <ol id="failures" class="[ flow ] [ flow-space-m ]" role="list"></ol>
+    </main>
+
+    <script type="module">
+      // Served from the repository root so ../src, ../testdata and the design
+      // system resolve. A Go test (chromedp) reads window.__testResults.
+      import { run } from "../src/shared/testing/test.js";
+
+      const summary = document.getElementById("summary");
+      try {
+        await import("./all.js");
+        const results = await run();
+        window.__testResults = results;
+
+        summary.dataset.state = results.failed ? "failed" : "live";
+        summary.textContent = `${results.passed} passed · ${results.failed} failed`;
+        for (const f of results.failures) {
+          const li = document.createElement("li");
+          li.className = "[ banner ]";
+          li.dataset.tone = "danger";
+          const pre = document.createElement("pre");
+          pre.className = "[ text-xs ]";
+          pre.textContent = `${f.test}\n${f.error}`;
+          li.append(pre);
+          document.getElementById("failures").append(li);
+        }
+      } catch (err) {
+        window.__testResults = { passed: 0, failed: 1, failures: [{ test: "load", error: String(err?.stack ?? err) }] };
+        summary.dataset.state = "failed";
+        summary.textContent = `could not load the tests: ${err}`;
+      }
+    </script>
+  </body>
+</html>

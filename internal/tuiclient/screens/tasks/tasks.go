@@ -12,6 +12,7 @@ import (
 
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
+	"operators-mcp/internal/tuiclient/live"
 	"operators-mcp/internal/tuiclient/nav"
 	"operators-mcp/internal/tuiclient/panes"
 	"operators-mcp/internal/tuiclient/ui"
@@ -77,6 +78,8 @@ func (s *Screen) Init() tea.Cmd { return s.load() }
 
 func (s *Screen) Crumb() string { return s.project.Name }
 
+func (s *Screen) ProjectID() string { return s.project.ID }
+
 func (s *Screen) Capturing() bool { return false }
 
 func (s *Screen) Update(msg tea.Msg) (nav.Screen, tea.Cmd) {
@@ -99,6 +102,14 @@ func (s *Screen) Update(msg tea.Msg) (nav.Screen, tea.Cmd) {
 	case panes.ChangedMsg:
 		if msg.ProjectID == s.project.ID {
 			return s, s.reloadSessions()
+		}
+	case live.ChangeMsg:
+		if msg.ProjectID == s.project.ID {
+			s.recorded = live.Apply(s.recorded, msg.Change, func(*domain.Session) bool { return true })
+		}
+	case live.ResyncMsg:
+		if msg.ProjectID == s.project.ID {
+			return s, s.load()
 		}
 	case tea.KeyPressMsg:
 		return s.key(msg)

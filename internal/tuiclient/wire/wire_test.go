@@ -55,7 +55,7 @@ func fakePorts(be *tuitest.Fake) fx.Option {
 			fx.As(new(ports.ProjectReader)), fx.As(new(ports.RepositoryCatalog)),
 			fx.As(new(ports.TicketBoard)), fx.As(new(ports.AgentCatalog)),
 			fx.As(new(ports.SessionReader)), fx.As(new(ports.InteractiveSessions)),
-			fx.As(new(ports.TerminalAccess)),
+			fx.As(new(ports.TerminalAccess)), fx.As(new(ports.SessionFeed)),
 		),
 	)
 }
@@ -131,5 +131,22 @@ func TestStoppingTheAppStopsTheProgram(t *testing.T) {
 	defer cancel()
 	if err := app.Stop(ctx); err != nil {
 		t.Fatalf("Stop = %v, want the program to quit", err)
+	}
+}
+
+func TestClientFailsStartWithoutTheToken(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/health" {
+			return
+		}
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write([]byte(`{"error":"a valid bearer token is required","code":"UNAUTHORIZED"}`))
+	}))
+	defer srv.Close()
+
+	app := fx.New(fx.Supply(Config{API: srv.URL}), Client, fx.Invoke(func(*httpclient.Client) {}), fx.NopLogger)
+	err := app.Start(context.Background())
+	if err == nil || !strings.Contains(err.Error(), "wants a token") {
+		t.Fatalf("Start = %v, want a failure asking for the token", err)
 	}
 }

@@ -16,6 +16,7 @@ import (
 
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
+	"operators-mcp/internal/tuiclient/live"
 	"operators-mcp/internal/tuiclient/nav"
 	"operators-mcp/internal/tuiclient/panes"
 	"operators-mcp/internal/tuiclient/screens/projects"
@@ -36,6 +37,8 @@ type Deps struct {
 	Interactive  ports.InteractiveSessions
 	// Terminals attaches to sessions the server runs.
 	Terminals ports.TerminalAccess
+	// Feed keeps the lists current; nil leaves them to be refreshed by hand.
+	Feed ports.SessionFeed
 	// RunsOn is where sessions this client starts run; Host runs them when
 	// that is here (RunnerTUI), and RunnerHost names this machine on them.
 	RunsOn     domain.Runner
@@ -50,6 +53,7 @@ type Model struct {
 	stack    []nav.Screen
 	panes    *panes.Registry
 	sessions ports.SessionReader
+	live     *live.Follower // nil without a feed
 
 	width, height int
 	status        string
@@ -76,10 +80,15 @@ func New(d Deps) Model {
 	openProject := func(p *domain.Project) nav.Screen {
 		return tasks.New(d.Board, d.Sessions, reg, p, openTask)
 	}
+	var follower *live.Follower
+	if d.Feed != nil {
+		follower = live.New(d.Feed)
+	}
 	return Model{
 		stack:    []nav.Screen{projects.New(d.Projects, reg, openProject)},
 		panes:    reg,
 		sessions: d.Sessions,
+		live:     follower,
 		width:    80,
 		height:   24,
 	}
@@ -115,6 +124,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if cmd, ok := m.panes.Update(msg); ok {
 		return m, cmd
 	}
+	if m.live != nil {
+		if cmd, ok := m.live.Update(msg); ok {
+			return m, cmd
+		}
+	}
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
@@ -124,13 +138,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case nav.PushMsg:
 		m.stack = append(m.stack, msg.Screen)
 		m.status = ""
-		return m, msg.Screen.Init()
+		return m, tea.Batch(msg.Screen.Init(), m.follow())
 	case nav.PopMsg:
 		if len(m.stack) > 1 {
 			m.stack = m.stack[:len(m.stack)-1]
 		}
 		m.status = ""
-		return m, nil
+		return m, m.follow()
 	case nav.StatusMsg:
 		m.status, m.isErr = msg.Text, msg.Err
 		return m, nil
@@ -144,6 +158,24 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.toTop(msg)
 	}
 	return m.broadcast(msg)
+}
+
+// follow points the live feed at the project of the deepest screen inside
+// one, or at none.
+func (m Model) follow() tea.Cmd {
+	if m.live == nil {
+		return nil
+	}
+	project := ""
+	for _, s := range m.stack {
+		if p, ok := s.(nav.ProjectScoped); ok {
+			project = p.ProjectID()
+		}
+	}
+	if project == m.live.Project() {
+		return nil
+	}
+	return m.live.Follow(project)
 }
 
 func (m Model) toTop(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -195,6 +227,8 @@ func (m Model) header() string {
 		right = ui.Error.Render(m.status)
 	case m.status != "":
 		right = ui.Note.Render(m.status)
+	case m.live != nil && m.live.Lost():
+		right = ui.Error.Render("○ live updates paused, reconnecting…")
 	}
 	gap := m.width - ansi.StringWidth(left) - ansi.StringWidth(right)
 	if gap < 1 {

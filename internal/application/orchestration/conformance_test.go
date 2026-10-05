@@ -15,3 +15,13 @@ func TestSessionReaderConformance(t *testing.T) {
 		return svc, sess
 	})
 }
+
+func TestSessionFeedConformance(t *testing.T) {
+	portstest.SessionFeedConformance(t, func(t *testing.T) (ports.SessionFeed, string, func() string) {
+		svc, _ := newInteractiveService(t)
+		return svc, "p1", func() string {
+			sess, _ := startInteractive(t, svc, InteractiveRequest{})
+			return sess.ID
+		}
+	})
+}

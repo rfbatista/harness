@@ -1,0 +1,21 @@
+/* Cluster — wrapping inline groups: actions, chips, meta. Tune with .gutter-*. */
+
+@layer compositions {
+  .cluster {
+    --gutter: var(--space-s);
+
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--gutter);
+    align-items: center;
+    justify-content: flex-start;
+  }
+
+  .cluster[data-align="start"] {
+    align-items: flex-start;
+  }
+
+  .cluster[data-justify="end"] {
+    justify-content: flex-end;
+  }
+}

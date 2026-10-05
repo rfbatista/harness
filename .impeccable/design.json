@@ -1,0 +1,110 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-02T23:55:00Z",
+  "title": "Design System: Harness",
+  "extensions": {
+    "colorMeta": {
+      "canvas": { "role": "neutral", "displayName": "Console Canvas", "canonical": "oklch(0.985 0.003 190)", "dark": "oklch(0.17 0.006 190)" },
+      "panel": { "role": "neutral", "displayName": "Rail Gray", "canonical": "oklch(0.962 0.005 190)", "dark": "oklch(0.2 0.007 190)" },
+      "raised": { "role": "neutral", "displayName": "Lifted White", "canonical": "oklch(1 0 0)", "dark": "oklch(0.235 0.008 190)" },
+      "sunken": { "role": "neutral", "displayName": "Well", "canonical": "oklch(0.94 0.006 190)", "dark": "oklch(0.145 0.006 190)" },
+      "ink": { "role": "neutral", "displayName": "Ink", "canonical": "oklch(0.22 0.01 190)", "dark": "oklch(0.94 0.006 190)",
+        "tonalRamp": ["oklch(0.15 0.01 190)", "oklch(0.22 0.01 190)", "oklch(0.35 0.012 190)", "oklch(0.45 0.012 190)", "oklch(0.53 0.012 190)", "oklch(0.64 0.012 190)", "oklch(0.8 0.008 190)", "oklch(0.95 0.005 190)"] },
+      "signal": { "role": "primary", "displayName": "Signal Teal", "canonical": "oklch(0.5 0.095 182)", "dark": "oklch(0.78 0.1 182)",
+        "tonalRamp": ["oklch(0.2 0.05 182)", "oklch(0.32 0.07 182)", "oklch(0.44 0.09 182)", "oklch(0.5 0.095 182)", "oklch(0.62 0.1 182)", "oklch(0.72 0.1 182)", "oklch(0.84 0.07 182)", "oklch(0.95 0.03 182)"] },
+      "attention": { "role": "secondary", "displayName": "Waiting Amber", "canonical": "oklch(0.52 0.12 65)", "dark": "oklch(0.81 0.13 75)",
+        "tonalRamp": ["oklch(0.22 0.06 65)", "oklch(0.35 0.09 65)", "oklch(0.45 0.11 65)", "oklch(0.52 0.12 65)", "oklch(0.65 0.13 70)", "oklch(0.75 0.13 75)", "oklch(0.86 0.1 80)", "oklch(0.95 0.04 85)"] },
+      "danger": { "role": "tertiary", "displayName": "Fault Red", "canonical": "oklch(0.52 0.18 27)", "dark": "oklch(0.72 0.16 25)",
+        "tonalRamp": ["oklch(0.22 0.08 27)", "oklch(0.35 0.13 27)", "oklch(0.46 0.17 27)", "oklch(0.52 0.18 27)", "oklch(0.62 0.17 26)", "oklch(0.72 0.16 25)", "oklch(0.84 0.09 25)", "oklch(0.95 0.03 25)"] },
+      "success": { "role": "tertiary", "displayName": "Confirm Green", "canonical": "oklch(0.5 0.11 150)", "dark": "oklch(0.78 0.13 150)" }
+    },
+    "typographyMeta": {
+      "headline": { "displayName": "Headline", "purpose": "Empty-state headlines only." },
+      "title": { "displayName": "Title", "purpose": "Screen title (h1)." },
+      "title-sm": { "displayName": "Title small", "purpose": "Toolbar and pane titles (h2)." },
+      "body": { "displayName": "Body", "purpose": "Rows, controls, prose (68ch max)." },
+      "label": { "displayName": "Label", "purpose": "Field labels, dense rows, pane headers." },
+      "meta": { "displayName": "Meta", "purpose": "Timestamps, counts, group headings, kbd." },
+      "mono": { "displayName": "Mono", "purpose": "Transcripts, paths, codes, keys." }
+    },
+    "shadows": [
+      { "name": "float", "value": "0 1px 2px oklch(0.22 0.01 190 / 0.06), 0 8px 24px -4px oklch(0.22 0.01 190 / 0.14)", "purpose": "Command palette, toasts, popovers. Nothing else." }
+    ],
+    "motion": [
+      { "name": "ease-out", "value": "cubic-bezier(0.25, 1, 0.5, 1)", "purpose": "Default for every state transition." },
+      { "name": "ease-out-expo", "value": "cubic-bezier(0.16, 1, 0.3, 1)", "purpose": "Palette and toast entrances." },
+      { "name": "duration-instant", "value": "90ms", "purpose": "Hover, press." },
+      { "name": "duration-quick", "value": "160ms", "purpose": "Focus, toggles, selection." },
+      { "name": "duration-settle", "value": "240ms", "purpose": "Popovers, palette, toasts." },
+      { "name": "duration-signal", "value": "1200ms", "purpose": "One-shot status ring on state arrival." }
+    ],
+    "breakpoints": [
+      { "name": "shell-collapse", "value": "48rem" },
+      { "name": "detail-pane", "value": "64rem" }
+    ]
+  },
+  "components": [
+    { "name": "Primary Button", "kind": "button", "refersTo": "button-primary", "description": "The one primary action in a region.",
+      "html": "<button class=\"ds-btn ds-btn-primary\">New session <kbd class=\"ds-kbd\">N</kbd></button>",
+      "css": ".ds-btn{display:inline-flex;align-items:center;gap:6px;min-height:32px;padding:0 12px;border-radius:5px;font:500 14px/1 var(--font-sans,system-ui);cursor:pointer;transition:background-color 90ms cubic-bezier(.25,1,.5,1)}.ds-btn-primary{background:var(--color-signal,oklch(.5 .095 182));color:var(--color-signal-ink,oklch(.99 .008 182));border:1px solid var(--color-signal,oklch(.5 .095 182))}.ds-btn-primary:hover{background:var(--color-signal-strong,oklch(.44 .09 182))}.ds-btn:focus-visible{outline:2px solid var(--color-focus,oklch(.5 .095 182));outline-offset:2px}.ds-btn:active{transform:translateY(1px)}.ds-kbd{display:inline-flex;align-items:center;justify-content:center;min-width:20px;height:20px;padding:0 4px;border-radius:3px;background:oklch(0 0 0/.14);font:12px/1 ui-monospace,monospace}" },
+    { "name": "Secondary Button", "kind": "button", "refersTo": "button-secondary", "description": "Default button.",
+      "html": "<button class=\"ds-btn2\">Deny</button>",
+      "css": ".ds-btn2{display:inline-flex;align-items:center;min-height:32px;padding:0 12px;border-radius:5px;border:1px solid var(--color-line-control,oklch(.64 .012 190));background:var(--color-raised,#fff);color:var(--color-ink,oklch(.22 .01 190));font:500 14px/1 var(--font-sans,system-ui);cursor:pointer}.ds-btn2:hover{background:linear-gradient(oklch(.22 .01 190/.05),oklch(.22 .01 190/.05)),var(--color-raised,#fff)}.ds-btn2:focus-visible{outline:2px solid var(--color-focus,oklch(.5 .095 182));outline-offset:2px}" },
+    { "name": "Input", "kind": "input", "refersTo": "input", "description": "Text field with ≥3:1 edge.",
+      "html": "<input class=\"ds-input\" placeholder=\"Reply to session…\" />",
+      "css": ".ds-input{width:100%;min-height:32px;padding:0 8px;border:1px solid var(--color-line-control,oklch(.64 .012 190));border-radius:5px;background:var(--color-raised,#fff);color:var(--color-ink,oklch(.22 .01 190));font:14px var(--font-sans,system-ui);transition:border-color 160ms,box-shadow 160ms}.ds-input::placeholder{color:var(--color-ink-faint,oklch(.53 .012 190))}.ds-input:focus-visible{outline:none;border-color:var(--color-focus,oklch(.5 .095 182));box-shadow:0 0 0 1px var(--color-focus,oklch(.5 .095 182))}" },
+    { "name": "Status", "kind": "chip", "refersTo": "status", "description": "Dot plus word for session state.",
+      "html": "<span class=\"ds-status\" data-state=\"running\">running</span> <span class=\"ds-status\" data-state=\"waiting\">waiting</span> <span class=\"ds-status\" data-state=\"failed\">failed</span> <span class=\"ds-status\" data-state=\"done\">done</span>",
+      "css": ".ds-status{--t:oklch(.53 .012 190);display:inline-flex;align-items:center;gap:6px;margin-right:12px;font:13px var(--font-sans,system-ui);color:var(--color-ink-muted,oklch(.45 .012 190))}.ds-status::before{content:'';width:8px;height:8px;border-radius:999px;background:var(--t)}.ds-status[data-state=running]{--t:oklch(.5 .095 182);color:var(--color-ink,oklch(.22 .01 190))}.ds-status[data-state=waiting]{--t:oklch(.52 .12 65);color:oklch(.52 .12 65)}.ds-status[data-state=failed]{--t:oklch(.52 .18 27);color:oklch(.52 .18 27)}" },
+    { "name": "List Row", "kind": "custom", "refersTo": "row", "description": "Session/ticket row: status, title, meta.",
+      "html": "<div class=\"ds-row\" aria-selected=\"true\"><span>● running</span><span class=\"ds-row-t\">Port tickets screen to httpclient</span><span class=\"ds-row-m\">backend · 14m</span></div>",
+      "css": ".ds-row{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:12px;min-height:36px;padding:0 16px;border-bottom:1px solid var(--color-line,oklch(.9 .006 190));font:14px var(--font-sans,system-ui);color:var(--color-ink,oklch(.22 .01 190))}.ds-row:hover{background:oklch(.22 .01 190/.05)}.ds-row[aria-selected=true]{background:oklch(.5 .095 182/.1)}.ds-row-t{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.ds-row-m{font-size:13px;color:var(--color-ink-faint,oklch(.53 .012 190))}" },
+    { "name": "Navigation Item", "kind": "nav", "refersTo": "nav-item", "description": "Sidebar entry; current page uses aria-current.",
+      "html": "<nav class=\"ds-nav\"><a class=\"ds-nav-i\" aria-current=\"page\" href=\"#\">Sessions <span>4</span></a><a class=\"ds-nav-i\" href=\"#\">Tickets <span>12</span></a></nav>",
+      "css": ".ds-nav{display:flex;flex-direction:column;gap:2px;width:240px;padding:8px;background:var(--color-panel,oklch(.962 .005 190))}.ds-nav-i{display:flex;align-items:center;min-height:32px;padding:0 8px;border-radius:5px;color:var(--color-ink-muted,oklch(.45 .012 190));text-decoration:none;font:14px var(--font-sans,system-ui)}.ds-nav-i span{margin-left:auto;font-size:12px;color:var(--color-ink-faint,oklch(.53 .012 190))}.ds-nav-i:hover{background:oklch(.22 .01 190/.05);color:var(--color-ink,oklch(.22 .01 190))}.ds-nav-i[aria-current=page]{background:oklch(.5 .095 182/.1);color:var(--color-ink,oklch(.22 .01 190));font-weight:500}" },
+    { "name": "Banner", "kind": "custom", "refersTo": "banner", "description": "Inline coded error with next action.",
+      "html": "<div class=\"ds-banner\" role=\"alert\"><span>The ticket was deleted while this session ran.</span><code>TICKET_NOT_FOUND · reopen it from Tickets</code></div>",
+      "css": ".ds-banner{display:flex;flex-direction:column;gap:2px;padding:8px 12px;border:1px solid oklch(.52 .18 27/.35);border-radius:5px;background:oklch(.52 .18 27/.09);font:13px var(--font-sans,system-ui);color:var(--color-ink,oklch(.22 .01 190))}.ds-banner code{font:12px ui-monospace,monospace;color:var(--color-ink-faint,oklch(.53 .012 190))}" }
+  ],
+  "narrative": {
+    "northStar": "The Quiet Console",
+    "overview": "The harness is a room you glance into while agents work. Most of the time nothing needs you, and the screen should look like it: near-monochrome surfaces, small precise type, lists that read like good CLI output. Color is a signal, not a decoration: teal means an agent is working, amber means it is waiting on you, red means it broke. Everything else, including things that finished successfully, recedes to neutral.",
+    "keyCharacteristics": [
+      "Restrained palette: tinted neutrals plus one accent (signal teal) on ≤ 10% of any screen.",
+      "Status always pairs a dot with a word; color is never the only carrier.",
+      "Flat, tonal layering; a shadow appears only on surfaces that float over others.",
+      "Fixed rem type scale, 14px body, one sans and its mono sibling.",
+      "Every Layout primitives do the layout; blocks stay skeletal; state lives in data-* / ARIA attributes.",
+      "Motion is 90–240ms ease-out, state-only, and collapses to instant under prefers-reduced-motion."
+    ],
+    "rules": [
+      { "name": "The Done Goes Quiet Rule", "body": "A finished session is gray, not green. Only running, waiting and failed are colored.", "section": "colors" },
+      { "name": "The One Signal Rule", "body": "Signal teal covers ≤ 10% of any screen. If two primary buttons sit side by side, one is wrong.", "section": "colors" },
+      { "name": "The Word Beside the Dot Rule", "body": "Every colored status ships with its word or an accessible name.", "section": "colors" },
+      { "name": "The No Shouting Rule", "body": "Nothing is larger than 22px, and nothing is uppercase-tracked.", "section": "typography" },
+      { "name": "The Mono Means Machine Rule", "body": "Monospace marks text a machine produced or will parse.", "section": "typography" },
+      { "name": "The Only What Floats Rule", "body": "If it does not overlap other content, it has no shadow.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do compose layout from the Every Layout primitives first and keep blocks to token assignments.",
+      "Do express variants and state through data-* and ARIA attributes in the exceptions layer.",
+      "Do read every color from a semantic role; a raw oklch() outside tokens.css is a bug.",
+      "Do pair every status color with its word, and announce state changes through the stream bar.",
+      "Do show the error code and the next action for every StructuredError.",
+      "Do keep transitions between 90 and 240ms with --ease-out, with reduced-motion fallbacks.",
+      "Do keep text contrast ≥ 4.5:1 and control edges ≥ 3:1 in both themes."
+    ],
+    "donts": [
+      "Don't build busy IDE chrome: dozens of panels, toolbars, icon rows and tabs competing for attention.",
+      "Don't bring back the old designer's Tailwind/daisyUI defaults: stock purple primary, pink secondary.",
+      "Don't color a finished session green on a resting list.",
+      "Don't loop animations to show liveness.",
+      "Don't use border-left / border-right thicker than 1px as a colored accent.",
+      "Don't use gradient text, glassmorphism, neon glows, or green-on-black hacker styling.",
+      "Don't set anything above 22px or use uppercase tracked eyebrows.",
+      "Don't add shadows to surfaces that don't float, or nest a pane inside a pane.",
+      "Don't reach for a modal first.",
+      "Don't restyle native scrollbars, checkboxes or selects beyond theme color."
+    ]
+  }
+}

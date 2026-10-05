@@ -31,6 +31,10 @@ type Config struct {
 	Root string
 	// ClaudeBin is the path to the claude CLI binary (default "claude").
 	ClaudeBin string
+	// APIToken, when set, is the bearer token every /api request must carry
+	// (but /api/health). Empty leaves the API open, which is only safe while
+	// HTTPAddr is loopback; the server warns otherwise.
+	APIToken string
 	// SessionShell is how the interactive sessions the server runs are
 	// started: "direct" or "login" (see runtime.Config).
 	SessionShell string

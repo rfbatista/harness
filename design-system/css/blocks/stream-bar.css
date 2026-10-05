@@ -1,0 +1,29 @@
+/*
+ * Stream bar — is what I see what the server holds? Connection status, a
+ * one-line summary, and the global keys. Mark it aria-live="polite".
+ */
+
+@layer blocks {
+  .stream-bar {
+    display: flex;
+    align-items: center;
+    gap: var(--space-l);
+    min-block-size: 1.75rem;
+    padding-inline: var(--space-l);
+    background: var(--color-panel);
+    border-block-start: var(--border-width) solid var(--color-line);
+    color: var(--color-ink-faint);
+    font-size: var(--text-xs);
+
+    & > * { white-space: nowrap; }
+    & .status { font-size: inherit; }
+
+    & .keys {
+      display: flex;
+      gap: var(--space-m);
+      margin-inline-start: auto;
+
+      @media (width < 48rem) { display: none; }
+    }
+  }
+}

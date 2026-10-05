@@ -1,0 +1,15 @@
+{
+  "$comment": "How a session's status reads on screen. Read by the browser view tests (web/src/modules/sessions/presentation/view.test.js) and, once it exists, the BFF's internal/adapter/in/web/sessions/view_test.go, so first paint and live updates agree.",
+  "cases": [
+    { "status": "starting", "pending_approvals": 0, "state": "running", "word": "starting", "needs_you": false },
+    { "status": "running", "pending_approvals": 0, "state": "running", "word": "running", "needs_you": false },
+    { "status": "thinking", "pending_approvals": 0, "state": "running", "word": "thinking", "needs_you": false },
+    { "status": "running", "pending_approvals": 2, "state": "waiting", "word": "approval", "needs_you": true },
+    { "status": "waiting_approval", "pending_approvals": 1, "state": "waiting", "word": "approval", "needs_you": true },
+    { "status": "idle", "pending_approvals": 0, "state": "waiting", "word": "your turn", "needs_you": true },
+    { "status": "paused", "pending_approvals": 0, "state": "idle", "word": "paused", "needs_you": false },
+    { "status": "done", "pending_approvals": 0, "state": "done", "word": "done", "needs_you": false },
+    { "status": "stopped", "pending_approvals": 0, "state": "done", "word": "stopped", "needs_you": false },
+    { "status": "failed", "pending_approvals": 3, "state": "failed", "word": "failed", "needs_you": false }
+  ]
+}

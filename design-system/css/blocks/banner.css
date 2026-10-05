@@ -1,0 +1,38 @@
+/*
+ * Banner — an inline notice; for API errors it carries the code and next step.
+ * <div class="banner" data-tone="danger"><svg/><div class="flow">…<span class="code">CODE · next</span></div></div>
+ */
+
+@layer blocks {
+  .banner {
+    --_tone: var(--color-ink-muted);
+    --_wash: var(--color-panel);
+
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-s);
+    padding: var(--space-s) var(--space-m);
+    border: var(--border-width) solid color-mix(in oklch, var(--_tone) 35%, transparent);
+    border-radius: var(--radius-sm);
+    background: var(--_wash);
+    font-size: var(--text-sm);
+
+    & > svg {
+      inline-size: 1rem;
+      block-size: 1rem;
+      margin-block-start: 0.125rem;
+      flex-shrink: 0;
+      color: var(--_tone);
+    }
+
+    & .code {
+      font-family: var(--font-mono);
+      font-size: var(--text-xs);
+      color: var(--color-ink-faint);
+    }
+
+    &[data-tone="danger"] { --_tone: var(--color-danger); --_wash: var(--color-danger-wash); }
+    &[data-tone="attention"] { --_tone: var(--color-attention); --_wash: var(--color-attention-wash); }
+    &[data-tone="signal"] { --_tone: var(--color-signal); --_wash: var(--color-signal-wash); }
+  }
+}

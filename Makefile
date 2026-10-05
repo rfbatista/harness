@@ -1,158 +1,44 @@
-# operators-mcp — MCP server + Architecture Designer UI
-# See specs/001-go-react-ui-bridge/quickstart.md for usage.
+# coding_pool — the server (HTTP API on :8080, MCP on :8081) and tui-client,
+# its terminal client. `make` lists the targets.
 
-# Load environment variables from .env when available.
+# .env configures the server (HTTP_ADDR, DB_PATH, CLAUDE_BIN, ...); every
+# variable in it reaches the recipes.
 -include .env
 export
 
-.PHONY: help build build-tui tui run run-api dev-server test clean web-install web-build web-dev copy-ui deps air stop-api genkit-qwen3-tools genkit-postman-agent build-crap crap install-crap update-crap build-linkedin-mcp linkedin-mcp linkedin-login linkedin-mcpb build-tui-client tui-client
+.DEFAULT_GOAL := help
 
-BINARY   := bin/server
-TUI_BINARY := bin/coding-pool-tui
-CRAP_BINARY := bin/crap
-TUI_CLIENT_BINARY := bin/tui-client
-LINKEDIN_BINARY := bin/linkedin-mcp
-LINKEDIN_MCPB_DIR := bin/linkedin-mcpb
-LINKEDIN_MCPB := bin/linkedin-mcp.mcpb
-WEB_DIR  := web
-UI_STATIC := internal/adapter/in/ui/static
+BIN := bin
 
-# Default target
-help:
-	@echo "operators-mcp — targets:"
-	@echo "  make build       — build web UI, copy to embed dir, build Go binary ($(BINARY))"
-	@echo "  make run         — run MCP server (:8081) + HTTP server (:8080 for UI and API). Requires 'make build' first."
-	@echo "  make run-api     — run Go API/MCP from source using .env (no embedded UI build; use with Flutter)"
-	@echo "  make dev-server  — run Go server with --dev (run 'make web-dev' in another terminal for hot-reload)"
-	@echo "  make genkit-qwen3-tools — run Genkit + Ollama Qwen3 tool-calling test app"
-	@echo "  make genkit-postman-agent — run Genkit Postman MCP agent app"
-	@echo "  make web-dev     — start Vite dev server (port 5173)"
-	@echo "  make air         — hot-reload Go API with Air + .env (use with Flutter in another terminal)"
-	@echo "  make stop-api    — stop Air/tmp/main and free ports 8080 (HTTP) and 8081 (MCP)"
-	@echo "  make test        — run Go tests (contract + integration)"
-	@echo "  make build-crap  — build the standalone CRAP analyzer ($(CRAP_BINARY))"
-	@echo "  make crap        — run the CRAP analyzer (make crap ARGS='--cover=cover.out ./internal/...')"
-	@echo "  make install-crap — install crap globally via 'go install' (into \$$GOBIN or \$$GOPATH/bin)"
-	@echo "  make update-crap — rebuild + reinstall the global crap from the current source"
-	@echo "  make linkedin-login — open a browser window to log in to LinkedIn (once, before linkedin-mcp)"
-	@echo "  make linkedin-mcp — run the LinkedIn MCP server at http://localhost:9090/mcp (ARGS='--headless=false')"
-	@echo "  make build-linkedin-mcp — build the LinkedIn MCP server ($(LINKEDIN_BINARY))"
-	@echo "  make linkedin-mcpb — pack the LinkedIn MCP server as a Claude Desktop extension ($(LINKEDIN_MCPB), macOS)"
-	@echo "  make tui-client — terminal client: projects → tasks → agent sessions as claude panes (needs make air; ARGS='--api URL')"
-	@echo "  make build-tui-client — build the terminal client ($(TUI_CLIENT_BINARY))"
-	@echo "  make clean       — remove bin/, web/dist/, $(UI_STATIC)/"
-	@echo "  make deps        — install Go deps + web npm deps"
-	@echo ""
-	@echo "Production: make deps && make build && make run"
-	@echo "Development (Flutter): make air (terminal 1), make web (terminal 2)"
-	@echo "  API base URL (Flutter): http://localhost:8080/api (override with --dart-define=API_BASE_URL=...)"
+# tui-client settings, e.g. `make tui-client RUN=tui API=http://host:8080`.
+# Empty ones keep the client's defaults: the local server, sessions run by it.
+API       ?=
+RUN       ?=
+TOKEN     ?=
+TUI_SHELL ?=
+TUI_FLAGS = $(if $(API),--api $(API)) $(if $(RUN),--run $(RUN)) \
+            $(if $(TOKEN),--token $(TOKEN)) $(if $(TUI_SHELL),--shell $(TUI_SHELL))
 
-# Install Go and web dependencies
-deps:
-	go mod download
-	$(MAKE) web-install
+.PHONY: help air stop-api server run build build-server build-tui-client \
+        tui-client tui-client-bin install-tui-client update-tui-client uninstall-tui-client \
+        test test-race vet check deps clean \
+        crap build-crap install-crap update-crap \
+        linkedin-login linkedin-mcp build-linkedin-mcp linkedin-mcpb
 
-web:
-	flutter run -d web
+help: ## list the targets
+	@awk 'BEGIN {FS = ":.*## "} \
+		/^# ---/ {h = substr($$0, 7); sub(/ -+$$/, "", h); printf "\n%s\n", h} \
+		/^[a-zA-Z_-]+:.*## / {printf "  make %-20s %s\n", $$1, $$2}' $(firstword $(MAKEFILE_LIST))
+	@echo
+	@echo "tui-client settings: API=<url> RUN=server|tui TOKEN=<token> TUI_SHELL=direct|login ARGS=<more flags>"
 
-# Copy web/dist into internal/ui/static for Go embed (required before 'go build')
-copy-ui:
-	@mkdir -p $(UI_STATIC)
-	@cp -r $(WEB_DIR)/dist/* $(UI_STATIC)/
-	@echo "Copied $(WEB_DIR)/dist/ -> $(UI_STATIC)/"
+# --- Server ------------------------------------------------------------------
 
-# Build production binary: web build + copy + go build
-build: 
-	go build -o $(BINARY) ./cmd/server
-	@echo "Built $(BINARY) (production, UI embedded)"
-
-# Build the terminal client.
-build-tui-client:
-	go build -o $(TUI_CLIENT_BINARY) ./cmd/tui-client
-	@echo "Built $(TUI_CLIENT_BINARY)"
-
-# Terminal client over the running server (start `make air` first).
-tui-client:
-	go run ./cmd/tui-client $(ARGS)
-
-build-crap:
-	go build -o $(CRAP_BINARY) ./cmd/crap
-	@echo "Built $(CRAP_BINARY)"
-
-# Run the CRAP analyzer from source, e.g.:
-#   make crap ARGS='--cover=cover.out ./internal/...'
-crap:
-	go run ./cmd/crap $(ARGS)
-
-# Install crap globally via 'go install' — puts the binary in $GOBIN, or
-# $GOPATH/bin, or ~/go/bin, whichever `go env` resolves. Make sure that
-# directory is on your PATH so the 'crap' command is available anywhere.
-# Under asdf-managed Go, GOBIN sits under the asdf install dir, so this also
-# reshims asdf's golang plugin to pick up the new/updated binary.
-install-crap:
-	go install ./cmd/crap
-	@command -v asdf >/dev/null 2>&1 && asdf reshim golang 2>/dev/null || true
-	@echo "Installed crap to $$(go env GOBIN 2>/dev/null | grep . || echo $$(go env GOPATH)/bin)"
-
-# Update the globally installed crap to match the current source tree.
-# Same as install-crap — 'go install' always rebuilds from source — kept as
-# a separate target so 'make update-crap' reads naturally after a pull.
-update-crap: install-crap
-	@echo "crap is up to date."
-
-# Standalone LinkedIn MCP server (see cmd/linkedin-mcp/README.md).
-build-linkedin-mcp:
-	go build -o $(LINKEDIN_BINARY) ./cmd/linkedin-mcp
-	@echo "Built $(LINKEDIN_BINARY)"
-
-# Opens a visible browser window; log in by hand. The session is kept in
-# ~/.config/linkedin-mcp/browser-profile.
-linkedin-login:
-	go run ./cmd/linkedin-mcp login $(ARGS)
-
-linkedin-mcp:
-	go run ./cmd/linkedin-mcp serve $(ARGS)
-
-# MCP Bundle for Claude Desktop: a universal macOS binary (arm64 + amd64) next
-# to cmd/linkedin-mcp/mcpb/manifest.json, validated and packed with the mcpb CLI.
-linkedin-mcpb:
-	rm -rf $(LINKEDIN_MCPB_DIR) && mkdir -p $(LINKEDIN_MCPB_DIR)/server
-	GOOS=darwin GOARCH=arm64 go build -o $(LINKEDIN_MCPB_DIR)/linkedin-mcp-arm64 ./cmd/linkedin-mcp
-	GOOS=darwin GOARCH=amd64 go build -o $(LINKEDIN_MCPB_DIR)/linkedin-mcp-amd64 ./cmd/linkedin-mcp
-	lipo -create -output $(LINKEDIN_MCPB_DIR)/server/linkedin-mcp $(LINKEDIN_MCPB_DIR)/linkedin-mcp-arm64 $(LINKEDIN_MCPB_DIR)/linkedin-mcp-amd64
-	rm $(LINKEDIN_MCPB_DIR)/linkedin-mcp-arm64 $(LINKEDIN_MCPB_DIR)/linkedin-mcp-amd64
-	cp cmd/linkedin-mcp/mcpb/manifest.json $(LINKEDIN_MCPB_DIR)/
-	npx -y @anthropic-ai/mcpb validate $(LINKEDIN_MCPB_DIR)/manifest.json
-	npx -y @anthropic-ai/mcpb pack $(LINKEDIN_MCPB_DIR) $(LINKEDIN_MCPB)
-	@echo "Built $(LINKEDIN_MCPB) — double-click it (or drag it into Claude Desktop > Settings > Extensions) to install"
-
-# Run HTTP server (UI at /, API at /api, MCP at /mcp).
-run: build
-	./$(BINARY)
-
-# Run Go API/MCP using .env (recommended with the Flutter app).
-run-api:
-	go run ./cmd/server
-
-# Run Go server in dev mode (proxies ui://designer to Vite; start Vite with 'make web-dev' first)
-dev-server:
-	go run ./cmd/server --dev
-
-# Stop dev API/MCP processes (Air child, stale go run, or anything on default ports).
-stop-api:
-	@./scripts/dev/kill-stale-api.sh
-	@sleep 0.3
-	@if lsof -nP -iTCP:8080 -sTCP:LISTEN >/dev/null 2>&1; then \
-		echo "Port 8080 still in use:"; lsof -nP -iTCP:8080 -sTCP:LISTEN; exit 1; \
-	fi
-	@echo "API ports 8080/8081 are free."
-
-# Hot-reload Go API/MCP using Air (.env is exported by Makefile).
-air:
+air: ## run the server with hot reload (Air); start here
 	@command -v air >/dev/null 2>&1 || { echo "Install Air: go install github.com/air-verse/air@latest"; exit 1; }
 	@if lsof -nP -iTCP:8080 -sTCP:LISTEN >/dev/null 2>&1; then \
-		echo "Port 8080 in use; stopping stale API processes..."; \
-		$(MAKE) stop-api || true; \
+		echo "Port 8080 in use; stopping stale server processes..."; \
+		$(MAKE) --no-print-directory stop-api || true; \
 	fi
 	@if lsof -nP -iTCP:8080 -sTCP:LISTEN >/dev/null 2>&1; then \
 		echo "Port 8080 is still in use. Stop the other process or run 'make stop-api'."; \
@@ -161,17 +47,122 @@ air:
 	fi
 	air
 
-# Run all Go tests
-test:
-	go test ./...
+server: ## run the server from source, without hot reload
+	go run ./cmd/server $(ARGS)
 
-# Run tests with race detector
-test-race:
-	go test -race ./...
+run: build-server ## build the server binary and run it
+	./$(BIN)/server $(ARGS)
 
-# Remove build artifacts
-clean:
-	rm -rf bin
-	rm -rf $(WEB_DIR)/dist
-	rm -rf $(UI_STATIC)
-	@echo "Cleaned bin/, $(WEB_DIR)/dist/, $(UI_STATIC)/"
+stop-api: ## stop stale server processes and free ports 8080/8081
+	@./scripts/dev/kill-stale-api.sh
+	@sleep 0.3
+	@if lsof -nP -iTCP:8080 -sTCP:LISTEN >/dev/null 2>&1; then \
+		echo "Port 8080 still in use:"; lsof -nP -iTCP:8080 -sTCP:LISTEN; exit 1; \
+	fi
+	@echo "Ports 8080/8081 are free."
+
+# --- tui-client (needs the server running) --------------------------------------
+
+tui-client: ## run tui-client from source (settings below)
+	go run ./cmd/tui-client $(TUI_FLAGS) $(ARGS)
+
+tui-client-bin: build-tui-client ## build tui-client and run the binary
+	./$(BIN)/tui-client $(TUI_FLAGS) $(ARGS)
+
+# go install puts tui-client in $GOBIN, else $GOPATH/bin — the directory
+# `make` prints; it must be on PATH. Under asdf-managed Go it also reshims, so
+# the new binary is picked up. Run from anywhere afterwards:
+#   tui-client [--api URL] [--run server|tui] [--token TOKEN]
+GOBIN_DIR = $$(go env GOBIN | grep . || echo $$(go env GOPATH)/bin)
+
+install-tui-client: ## install tui-client on this machine (go install), to run it from anywhere
+	go install ./cmd/tui-client
+	@command -v asdf >/dev/null 2>&1 && asdf reshim golang 2>/dev/null || true
+	@echo "Installed $(GOBIN_DIR)/tui-client"
+	@command -v tui-client >/dev/null 2>&1 || echo "$(GOBIN_DIR) is not on your PATH: add it to run tui-client from anywhere"
+
+update-tui-client: install-tui-client ## upgrade the installed tui-client to the current source
+
+uninstall-tui-client: ## remove the installed tui-client
+	rm -f $(GOBIN_DIR)/tui-client
+	@command -v asdf >/dev/null 2>&1 && asdf reshim golang 2>/dev/null || true
+	@echo "Removed $(GOBIN_DIR)/tui-client"
+
+# --- Build -------------------------------------------------------------------
+
+build: build-server build-tui-client ## build the server and tui-client into bin/
+
+build-server: ## build bin/server
+	go build -o $(BIN)/server ./cmd/server
+
+build-tui-client: ## build bin/tui-client
+	go build -o $(BIN)/tui-client ./cmd/tui-client
+
+# --- Quality -----------------------------------------------------------------
+
+# ./... would include agents/, whose example files are not part of the module.
+PKGS := ./cmd/... ./internal/... ./tests/...
+
+test: ## run the tests
+	go test $(PKGS)
+
+test-race: ## run the tests with the race detector
+	go test -race $(PKGS)
+
+vet: ## run go vet
+	go vet $(PKGS)
+
+check: ## what to run before calling work done: build, vet, race tests
+	go build $(PKGS)
+	go vet $(PKGS)
+	go test -race $(PKGS)
+
+deps: ## download Go modules
+	go mod download
+
+clean: ## remove build output (bin/, tmp/)
+	rm -rf $(BIN) tmp
+
+# --- Tools: CRAP analyzer ------------------------------------------------------
+
+crap: ## run the CRAP analyzer, e.g. ARGS='--cover=cover.out ./internal/...'
+	go run ./cmd/crap $(ARGS)
+
+build-crap: ## build bin/crap
+	go build -o $(BIN)/crap ./cmd/crap
+
+# Puts crap in $GOBIN (or $GOPATH/bin); that directory must be on PATH. Under
+# asdf-managed Go it also reshims, so the new binary is picked up.
+install-crap: ## install crap globally with go install
+	go install ./cmd/crap
+	@command -v asdf >/dev/null 2>&1 && asdf reshim golang 2>/dev/null || true
+	@echo "Installed crap to $$(go env GOBIN 2>/dev/null | grep . || echo $$(go env GOPATH)/bin)"
+
+update-crap: install-crap ## reinstall crap from the current source
+
+# --- Tools: LinkedIn MCP server (see cmd/linkedin-mcp/README.md) -----------------
+
+linkedin-login: ## log in to LinkedIn in a browser window (once)
+	go run ./cmd/linkedin-mcp login $(ARGS)
+
+linkedin-mcp: ## run the LinkedIn MCP server at http://localhost:9090/mcp
+	go run ./cmd/linkedin-mcp serve $(ARGS)
+
+build-linkedin-mcp: ## build bin/linkedin-mcp
+	go build -o $(BIN)/linkedin-mcp ./cmd/linkedin-mcp
+
+LINKEDIN_MCPB_DIR := $(BIN)/linkedin-mcpb
+
+# A universal macOS binary next to the manifest, validated and packed with the
+# mcpb CLI. Install by double-clicking the .mcpb, or Claude Desktop > Settings >
+# Extensions.
+linkedin-mcpb: ## pack the LinkedIn MCP server as a Claude Desktop extension (macOS)
+	rm -rf $(LINKEDIN_MCPB_DIR) && mkdir -p $(LINKEDIN_MCPB_DIR)/server
+	GOOS=darwin GOARCH=arm64 go build -o $(LINKEDIN_MCPB_DIR)/linkedin-mcp-arm64 ./cmd/linkedin-mcp
+	GOOS=darwin GOARCH=amd64 go build -o $(LINKEDIN_MCPB_DIR)/linkedin-mcp-amd64 ./cmd/linkedin-mcp
+	lipo -create -output $(LINKEDIN_MCPB_DIR)/server/linkedin-mcp $(LINKEDIN_MCPB_DIR)/linkedin-mcp-arm64 $(LINKEDIN_MCPB_DIR)/linkedin-mcp-amd64
+	rm $(LINKEDIN_MCPB_DIR)/linkedin-mcp-arm64 $(LINKEDIN_MCPB_DIR)/linkedin-mcp-amd64
+	cp cmd/linkedin-mcp/mcpb/manifest.json $(LINKEDIN_MCPB_DIR)/
+	npx -y @anthropic-ai/mcpb validate $(LINKEDIN_MCPB_DIR)/manifest.json
+	npx -y @anthropic-ai/mcpb pack $(LINKEDIN_MCPB_DIR) $(BIN)/linkedin-mcp.mcpb
+	@echo "Built $(BIN)/linkedin-mcp.mcpb"

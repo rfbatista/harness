@@ -1,0 +1,47 @@
+/*
+ * Transcript — what an agent actually did.
+ * <div class="transcript"><p class="line" data-kind="tool"><time>…</time><span class="mark">⌁</span><span>…</span></p></div>
+ * Exception: data-kind="user|agent|tool|error|prompt".
+ */
+
+@layer blocks {
+  .transcript {
+    display: flex;
+    flex-direction: column;
+    padding: var(--space-m) var(--space-l);
+    background: var(--color-sunken);
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    line-height: var(--leading-snug);
+    overflow: auto;
+
+    & > .line {
+      display: grid;
+      grid-template-columns: 4.5rem 1.25rem minmax(0, 1fr);
+      gap: var(--space-xs);
+      max-inline-size: none;
+      padding-block: var(--space-3xs);
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+
+    & time,
+    & .mark { color: var(--color-ink-faint); }
+
+    & .mark { text-align: center; }
+
+    & [data-kind="user"] .mark { color: var(--color-signal); }
+    & [data-kind="tool"] { color: var(--color-ink-muted); }
+    & [data-kind="error"],
+    & [data-kind="error"] .mark { color: var(--color-danger); }
+
+    & [data-kind="prompt"] {
+      margin-block: var(--space-xs);
+      padding: var(--space-xs) var(--space-s);
+      border-radius: var(--radius-sm);
+      background: var(--color-attention-wash);
+
+      & .mark { color: var(--color-attention); }
+    }
+  }
+}

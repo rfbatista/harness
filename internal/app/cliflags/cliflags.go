@@ -27,6 +27,7 @@ func Parse(fs *flag.FlagSet, args []string, getenv Getenv) (app.Config, error) {
 	dbPath := fs.String("db", envOr(getenv, "DB_PATH", "data.db"), "SQLite database path (e.g. data.db or :memory:)")
 	devMode := fs.Bool("dev", envBool(getenv, "DEV_MODE", false), "proxy ui://designer to the Vite dev server (run 'make web-dev' separately)")
 	claudeBin := fs.String("claude.bin", envOr(getenv, "CLAUDE_BIN", "claude"), "path to the claude CLI binary")
+	apiToken := fs.String("api.token", envOr(getenv, "CODING_POOL_TOKEN", ""), "bearer token required on /api (but /api/health); empty leaves the API open")
 	sessionShell := fs.String("session.shell", envOr(getenv, "CODING_POOL_SHELL", "direct"), "how interactive sessions the server runs are started: direct, or login to run them through the login shell")
 	claudeLogStdout := fs.Bool("claude.log-stdout", envBool(getenv, "CLAUDE_LOG_STDOUT", true), "tee each session's raw stdout to the terminal")
 	claudeTextModel := fs.String("claude.text-model", envOr(getenv, "CLAUDE_TEXT_MODEL", ""), "model for the one-shot text utilities (summarize/generate/translate); empty uses the CLI default")
@@ -50,6 +51,7 @@ func Parse(fs *flag.FlagSet, args []string, getenv Getenv) (app.Config, error) {
 		Root:              root,
 		ClaudeBin:         *claudeBin,
 		SessionShell:      *sessionShell,
+		APIToken:          *apiToken,
 		ClaudeLogStdout:   *claudeLogStdout,
 		ClaudeTextModel:   *claudeTextModel,
 		ApprovalTimeout:   *approvalTimeout,

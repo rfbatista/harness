@@ -44,6 +44,23 @@ type SessionStream interface {
 	History(id string, fromSeq int64) []SessionEvent
 }
 
+// SessionFeed follows a project's sessions as they change: started, ended,
+// stopped, deleted, waiting on an approval. It is network-safe: tui-client
+// follows it over server-sent events.
+type SessionFeed interface {
+	// FollowProject delivers each change to the project's sessions until ctx
+	// ends, then closes the channel. It also closes early when the follower
+	// falls behind: changes were dropped, so the follower reloads what it
+	// shows and follows again.
+	FollowProject(ctx context.Context, projectID string) (<-chan SessionChange, error)
+}
+
+// SessionChange is one session as it is after a change, or a deleted one.
+type SessionChange struct {
+	Session *domain.Session `json:"session"`
+	Deleted bool            `json:"deleted,omitempty"`
+}
+
 // InteractiveSessions provisions and records sessions whose CLI runs in a
 // terminal the user types into. The server provisions and records them and
 // returns the AgentSpec to run. A RunnerServer session is spawned on the
@@ -79,6 +96,7 @@ type Orchestration interface {
 	SessionControl
 	SessionReader
 	SessionStream
+	SessionFeed
 	InteractiveSessions
 	ConversationRecorder
 	TerminalAccess

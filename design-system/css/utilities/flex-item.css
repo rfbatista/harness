@@ -1,0 +1,8 @@
+/* How one item behaves inside a cluster, repel or flow. */
+
+@layer utilities {
+  /* Fills the row, but wraps before it is crushed below --grow-basis. */
+  .grow { flex: 1 1 var(--grow-basis, 12rem); min-inline-size: 0; }
+  .shrink-0 { flex-shrink: 0; }
+  .push-end { margin-inline-start: auto; }
+}

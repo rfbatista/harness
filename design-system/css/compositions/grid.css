@@ -1,0 +1,12 @@
+/* Grid — auto-filling tracks for genuinely two-dimensional sets. */
+
+@layer compositions {
+  .grid {
+    --gutter: var(--space-l);
+    --grid-min: 16rem;
+
+    display: grid;
+    gap: var(--gutter);
+    grid-template-columns: repeat(auto-fill, minmax(min(var(--grid-min), 100%), 1fr));
+  }
+}

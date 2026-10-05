@@ -1,0 +1,13 @@
+/* Wrapper — a centred, measured column with an inline gutter. */
+
+@layer compositions {
+  .wrapper {
+    --wrapper-max: var(--size-wrapper);
+    --wrapper-gutter: var(--space-l);
+
+    box-sizing: content-box;
+    max-inline-size: var(--wrapper-max);
+    margin-inline: auto;
+    padding-inline: var(--wrapper-gutter);
+  }
+}

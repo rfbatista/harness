@@ -1,0 +1,36 @@
+/*
+ * Toolbar — the header of every screen.
+ * <header class="toolbar"><span class="crumb">…</span><h1>…</h1><div class="actions">…</div></header>
+ */
+
+@layer blocks {
+  .toolbar {
+    position: sticky;
+    inset-block-start: 0;
+    z-index: var(--z-sticky);
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-s) var(--space-m);
+    min-block-size: 2.75rem;
+    padding: var(--space-xs) var(--space-l);
+    background: var(--color-canvas);
+    border-block-end: var(--border-width) solid var(--color-line);
+
+    & h1 {
+      font-size: var(--text-md);
+    }
+
+    & .crumb {
+      color: var(--color-ink-faint);
+      font-size: var(--text-sm);
+    }
+
+    & .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--space-xs);
+      margin-inline-start: auto;
+    }
+  }
+}

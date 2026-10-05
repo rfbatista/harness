@@ -1,0 +1,66 @@
+/*
+ * Command palette — a native <dialog>, the one standing modal.
+ * <dialog class="palette"><input …><div class="results" role="listbox"><div role="option">…</div></div></dialog>
+ */
+
+@layer blocks {
+  .palette {
+    inline-size: min(36rem, calc(100vw - 2rem));
+    max-block-size: min(28rem, 70dvh);
+    margin: 12dvh auto auto;
+    padding: 0;
+    border: var(--border-width) solid var(--color-line-strong);
+    border-radius: var(--radius-md);
+    background: var(--color-raised);
+    color: var(--color-ink);
+    box-shadow: var(--shadow-float);
+    overflow: hidden;
+
+    &[open] {
+      display: flex;
+      flex-direction: column;
+      animation: palette-in var(--duration-settle) var(--ease-out-expo);
+    }
+
+    &::backdrop { background: var(--color-scrim); }
+
+    & > input {
+      min-block-size: 3rem;
+      padding-inline: var(--space-l);
+      border: 0;
+      border-block-end: var(--border-width) solid var(--color-line);
+      border-radius: 0;
+      background: transparent;
+      font-size: var(--text-md);
+
+      &:focus-visible { box-shadow: none; }
+    }
+
+    & .results {
+      flex: 1 1 auto;
+      overflow: auto;
+      padding: var(--space-2xs);
+    }
+
+    & [role="option"] {
+      display: flex;
+      align-items: center;
+      gap: var(--space-s);
+      min-block-size: var(--size-control-md);
+      padding-inline: var(--space-s);
+      border-radius: var(--radius-sm);
+      color: var(--color-ink-muted);
+
+      & > :last-child:not(:first-child) { margin-inline-start: auto; }
+
+      &[aria-selected="true"] {
+        background: var(--color-selected);
+        color: var(--color-ink);
+      }
+    }
+  }
+
+  @keyframes palette-in {
+    from { opacity: 0; transform: translateY(-6px) scale(0.985); }
+  }
+}

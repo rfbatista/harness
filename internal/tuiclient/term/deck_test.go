@@ -113,7 +113,10 @@ func TestDeckSwitchesPanesAndMarksBackgroundOutput(t *testing.T) {
 	}
 
 	// Pane 1 prints while pane 2 is focused: its tab gets the unseen marker.
+	// The marker can come from the frame of "first" arriving after pane 2
+	// took focus, so wait for the late output itself before switching.
 	r.until("unseen marker on tab 1", func() bool { return strings.Contains(r.tabBar(), " 1 sh ● ") })
+	r.until("late output in pane 1", func() bool { return strings.Contains(ansi.Strip(r.d.Panes()[0].View()), "late") })
 
 	r.command(key('1'))
 	if r.d.Active() != 0 {

@@ -1,0 +1,7 @@
+/* Hairline dividers on one edge. */
+
+@layer utilities {
+  .divide-top { border-block-start: var(--border-width) solid var(--color-line); }
+  .divide-bottom { border-block-end: var(--border-width) solid var(--color-line); }
+  .divide-end { border-inline-end: var(--border-width) solid var(--color-line); }
+}

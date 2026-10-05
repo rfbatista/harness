@@ -1,0 +1,35 @@
+/* Toast — a transient report in the bottom-right region. Exception: data-tone. */
+
+@layer blocks {
+  .toast-region {
+    position: fixed;
+    inset-block-end: var(--space-2xl);
+    inset-inline-end: var(--space-l);
+    z-index: var(--z-toast);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-s);
+    inline-size: min(22rem, calc(100vw - 2rem));
+  }
+
+  .toast {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-s);
+    padding: var(--space-s) var(--space-m);
+    border: var(--border-width) solid var(--color-line-strong);
+    border-radius: var(--radius-md);
+    background: var(--color-raised);
+    box-shadow: var(--shadow-float);
+    font-size: var(--text-sm);
+    animation: toast-in var(--duration-settle) var(--ease-out-expo);
+
+    &[data-tone="danger"] {
+      border-color: color-mix(in oklch, var(--color-danger) 45%, var(--color-line-strong));
+    }
+  }
+
+  @keyframes toast-in {
+    from { opacity: 0; transform: translateY(8px); }
+  }
+}

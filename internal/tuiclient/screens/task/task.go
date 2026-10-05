@@ -10,6 +10,7 @@ import (
 
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
+	"operators-mcp/internal/tuiclient/live"
 	"operators-mcp/internal/tuiclient/nav"
 	"operators-mcp/internal/tuiclient/panes"
 	"operators-mcp/internal/tuiclient/ui"
@@ -68,6 +69,8 @@ func (s *Screen) Init() tea.Cmd {
 
 func (s *Screen) Crumb() string { return s.ticket.Title }
 
+func (s *Screen) ProjectID() string { return s.project.ID }
+
 // Capturing is always true: with panes open, ctrl+c belongs to claude.
 func (s *Screen) Capturing() bool { return true }
 
@@ -81,6 +84,17 @@ func (s *Screen) Update(msg tea.Msg) (nav.Screen, tea.Cmd) {
 		}
 		return s, nil
 	case panes.ChangedMsg:
+		if msg.ProjectID == s.project.ID {
+			return s, s.loadSessions()
+		}
+		return s, nil
+	case live.ChangeMsg:
+		if msg.ProjectID == s.project.ID {
+			tid := s.ticket.ID
+			s.recorded = live.Apply(s.recorded, msg.Change, func(x *domain.Session) bool { return x.TicketID == tid })
+		}
+		return s, nil
+	case live.ResyncMsg:
 		if msg.ProjectID == s.project.ID {
 			return s, s.loadSessions()
 		}

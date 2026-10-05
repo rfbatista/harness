@@ -1,0 +1,21 @@
+/*
+ * Flow — vertical rhythm between siblings, owned by the parent.
+ * Uses gap rather than `> * + *` margins so a nested flow never inherits its
+ * parent's rhythm. Tune with a .flow-space-* utility.
+ */
+
+@layer compositions {
+  .flow {
+    --flow-space: var(--space-l);
+
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    gap: var(--flow-space);
+  }
+
+  /* Exception: everything after [data-flow-split] is pushed to the end. */
+  .flow > [data-flow-split] {
+    margin-block-end: auto;
+  }
+}

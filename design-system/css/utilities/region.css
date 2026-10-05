@@ -1,0 +1,7 @@
+/* Region — consistent block padding for a screen section. */
+
+@layer utilities {
+  .region {
+    padding-block: var(--region-space, var(--space-2xl));
+  }
+}

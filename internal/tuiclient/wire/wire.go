@@ -15,6 +15,7 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/rfbatista/harnesskit/errs"
 	"go.uber.org/fx"
 
 	"operators-mcp/internal/adapter/out/httpclient"
@@ -56,6 +57,7 @@ var Client = fx.Module("client",
 		fx.Annotate(httpclient.NewAgents, fx.As(new(ports.AgentCatalog))),
 		fx.Annotate(httpclient.NewSessions, fx.As(new(ports.SessionReader)), fx.As(new(ports.InteractiveSessions))),
 		fx.Annotate(httpclient.NewTerminals, fx.As(new(ports.TerminalAccess))),
+		fx.Annotate(httpclient.NewEvents, fx.As(new(ports.SessionFeed))),
 	),
 )
 
@@ -66,6 +68,12 @@ func newClient(lc fx.Lifecycle, cfg Config) *httpclient.Client {
 		defer cancel()
 		if err := c.Health(ctx); err != nil {
 			return fmt.Errorf("%w\nstart the server first: make air", err)
+		}
+		if err := c.CheckAccess(ctx); err != nil {
+			if errs.Code(err) == "UNAUTHORIZED" {
+				return fmt.Errorf("the server at %s wants a token: pass --token, or set CODING_POOL_TOKEN (make tui-client TOKEN=…)", cfg.API)
+			}
+			return err
 		}
 		return nil
 	}))
@@ -120,6 +128,7 @@ type deps struct {
 	Sessions     ports.SessionReader
 	Interactive  ports.InteractiveSessions
 	Terminals    ports.TerminalAccess
+	Feed         ports.SessionFeed
 	// Host is only there when this client runs sessions (RunnerTUI).
 	Host ports.TerminalHost `optional:"true"`
 }
@@ -133,6 +142,7 @@ func newModel(cfg Config, d deps) app.Model {
 		Sessions:     d.Sessions,
 		Interactive:  d.Interactive,
 		Terminals:    d.Terminals,
+		Feed:         d.Feed,
 		RunsOn:       cfg.RunsOn,
 		Host:         d.Host,
 		RunnerHost:   cfg.RunnerHost,

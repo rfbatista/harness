@@ -59,6 +59,12 @@ func (c *Client) Health(ctx context.Context) error {
 	return c.get(ctx, "/api/health", nil, nil)
 }
 
+// CheckAccess reports whether the server accepts this client's token: it
+// answers UNAUTHORIZED when the server wants one this client lacks.
+func (c *Client) CheckAccess(ctx context.Context) error {
+	return c.get(ctx, "/api/list_projects", nil, nil)
+}
+
 // StatusError is an error response that carries no domain error code, such
 // as a malformed request.
 type StatusError struct {

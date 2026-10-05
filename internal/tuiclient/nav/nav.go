@@ -31,6 +31,12 @@ type Screen interface {
 	Capturing() bool
 }
 
+// ProjectScoped is a screen inside one project. The root follows the live
+// session feed of the project the deepest such screen is in.
+type ProjectScoped interface {
+	ProjectID() string
+}
+
 type (
 	// PushMsg puts a screen on top of the stack.
 	PushMsg struct{ Screen Screen }

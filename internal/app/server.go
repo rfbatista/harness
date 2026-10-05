@@ -57,7 +57,7 @@ func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, ts *to
 		Sessions:     orch,
 		Planning:     plan,
 		Workspaces:   ws,
-	}))
+	}), httpapi.WithToken(cfg.APIToken))
 	mux.Handle("/api/", apiRouter)
 	mux.Handle(mcpapprove.PathPrefix, mcpapprove.Handler(broker))
 	mux.Handle(mcpsession.PathPrefix, mcpsession.TaskHandler(tooling.SessionTaskTools(plan, sessions)))
@@ -75,7 +75,12 @@ func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, ts *to
 					slog.Error("http server stopped", "err", err)
 				}
 			}()
-			slog.Info("HTTP server listening", "addr", srv.Addr, "ui", "/", "api", "/api")
+			slog.Info("HTTP server listening", "addr", srv.Addr, "ui", "/", "api", "/api", "token", cfg.APIToken != "")
+			if exposed(srv.Addr) && cfg.APIToken == "" {
+				slog.Warn("THE API IS OPEN TO THE NETWORK: "+srv.Addr+" listens beyond this machine and no token is set. "+
+					"Anyone who can reach it can read and change projects, start agents, and type into their terminals. "+
+					"Set CODING_POOL_TOKEN (or --api.token), or listen on 127.0.0.1.", "addr", srv.Addr)
+			}
 			return nil
 		},
 		OnStop: func(ctx context.Context) error {
@@ -108,6 +113,10 @@ func registerMCPServer(lc fx.Lifecycle, cfg Config, ts *tooling.Service) {
 				}
 			}()
 			slog.Info("MCP server listening", "addr", cfg.MCPAddr, "path", "/mcp")
+			if exposed(cfg.MCPAddr) {
+				slog.Warn("THE MCP SERVER IS OPEN TO THE NETWORK: "+cfg.MCPAddr+" listens beyond this machine and takes no token. "+
+					"Listen on 127.0.0.1 unless every client that can reach it is trusted.", "addr", cfg.MCPAddr)
+			}
 			return nil
 		},
 		OnStop: func(ctx context.Context) error {
@@ -142,4 +151,18 @@ func designerResourceHandler(devMode bool) func(context.Context, mcplib.ReadReso
 			},
 		}, nil
 	}
+}
+
+// exposed reports whether a listen address reaches beyond this machine: no
+// host (every interface), or a host that is not loopback.
+func exposed(addr string) bool {
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil || host == "" {
+		return true
+	}
+	if host == "localhost" {
+		return false
+	}
+	ip := net.ParseIP(host)
+	return ip == nil || !ip.IsLoopback()
 }

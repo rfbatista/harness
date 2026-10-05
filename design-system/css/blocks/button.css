@@ -1,0 +1,115 @@
+/*
+ * Button — one height, one radius, four variants.
+ * Exceptions: data-variant="primary|ghost|danger", data-size="sm", data-icon,
+ * disabled / aria-disabled, aria-busy.
+ */
+
+@layer blocks {
+  .button {
+    --_bg: var(--color-raised);
+    --_ink: var(--color-ink);
+    --_line: var(--color-line-control);
+    --_veil: var(--color-hover);
+
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-xs);
+    min-block-size: var(--size-control-md);
+    padding-inline: var(--space-m);
+    border: var(--border-width) solid var(--_line);
+    border-radius: var(--radius-sm);
+    background: var(--_bg);
+    color: var(--_ink);
+    font-size: var(--text-base);
+    font-weight: var(--weight-medium);
+    line-height: 1;
+    white-space: nowrap;
+    text-decoration: none;
+    user-select: none;
+    transition: background-color var(--duration-instant) var(--ease-out),
+      transform var(--duration-instant) var(--ease-out);
+
+    &:hover { background: linear-gradient(var(--_veil), var(--_veil)), var(--_bg); }
+    &:active { transform: translateY(1px); }
+
+    & > svg {
+      inline-size: 0.95rem;
+      block-size: 0.95rem;
+      flex-shrink: 0;
+    }
+
+    & > kbd { margin-inline-end: calc(var(--space-2xs) * -1); }
+
+    &[data-variant="primary"] {
+      --_bg: var(--color-signal);
+      --_ink: var(--color-signal-ink);
+      --_line: var(--color-signal);
+      --_veil: oklch(0 0 0 / 0.08);
+    }
+
+    &[data-variant="danger"] {
+      --_bg: var(--color-danger);
+      --_ink: var(--color-danger-ink);
+      --_line: var(--color-danger);
+      --_veil: oklch(0 0 0 / 0.08);
+    }
+
+    &:is([data-variant="primary"], [data-variant="danger"]) > kbd {
+      background: oklch(0 0 0 / 0.14);
+      border-color: transparent;
+      color: inherit;
+    }
+
+    &[data-variant="ghost"] {
+      --_bg: transparent;
+      --_line: transparent;
+      --_ink: var(--color-ink-muted);
+
+      &:hover { --_ink: var(--color-ink); }
+    }
+
+    &[data-size="sm"] {
+      min-block-size: var(--size-control-sm);
+      padding-inline: var(--space-s);
+      font-size: var(--text-sm);
+    }
+
+    &[data-icon] {
+      inline-size: var(--size-control-md);
+      padding: 0;
+
+      &[data-size="sm"] { inline-size: var(--size-control-sm); }
+    }
+
+    &:disabled,
+    &[aria-disabled="true"] {
+      opacity: 0.45;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    &[aria-busy="true"] {
+      color: transparent;
+      pointer-events: none;
+
+      &::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        margin: auto;
+        inline-size: 0.875rem;
+        block-size: 0.875rem;
+        border: 2px solid var(--_ink);
+        border-inline-end-color: transparent;
+        border-radius: var(--radius-round);
+        animation: button-spin 700ms linear infinite;
+      }
+    }
+  }
+
+  @keyframes button-spin {
+    to { transform: rotate(1turn); }
+  }
+}

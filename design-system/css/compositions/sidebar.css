@@ -1,0 +1,40 @@
+/*
+ * Sidebar — an intrinsic side next to a fluid main; wraps when main would drop
+ * below --sidebar-threshold. The side is the first child unless
+ * data-side="end".
+ */
+
+@layer compositions {
+  .with-sidebar {
+    --gutter: 0;
+    --sidebar-target: var(--size-sidebar);
+    --sidebar-threshold: 60%;
+
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--gutter);
+
+    & > :first-child {
+      flex-basis: var(--sidebar-target);
+      flex-grow: 1;
+    }
+
+    & > :last-child {
+      flex-basis: 0;
+      flex-grow: 999;
+      min-inline-size: var(--sidebar-threshold);
+    }
+
+    &[data-side="end"] > :first-child {
+      flex-basis: 0;
+      flex-grow: 999;
+      min-inline-size: var(--sidebar-threshold);
+    }
+
+    &[data-side="end"] > :last-child {
+      flex-basis: var(--sidebar-target);
+      flex-grow: 1;
+      min-inline-size: 0;
+    }
+  }
+}

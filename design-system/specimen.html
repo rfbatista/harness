@@ -1,0 +1,297 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Harness Design System</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible+Mono:wght@400;500;700&family=Atkinson+Hyperlegible+Next:wght@400;500;700&display=swap"
+    />
+    <link rel="stylesheet" href="./css/index.css" />
+    <style>
+      /* Specimen-only scaffolding, not part of the system. */
+      .swatch > span:first-child {
+        display: block;
+        block-size: 2.5rem;
+        border-radius: var(--radius-sm);
+        border: var(--border-width) solid var(--color-line);
+      }
+      .session-screen { display: grid; grid-template-columns: minmax(18rem, 26rem) minmax(0, 1fr); min-block-size: 0; }
+      @media (width < 64rem) { .session-screen { grid-template-columns: minmax(0, 1fr); } .session-screen > :last-child { display: none; } }
+    </style>
+  </head>
+  <body>
+    <!--
+      Class grouping (CUBE): [ block ] [ composition ] [ utilities ] [ token utilities ]
+    -->
+
+    <!-- 1. A real screen: Sessions -->
+    <div class="[ app-shell ]">
+      <nav class="[ nav ]" aria-label="Primary">
+        <div class="[ group ]">
+          <h2>harness</h2>
+          <a href="#" aria-current="page">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M5 7l2 1.5L5 10M8.5 10H11"/></svg>
+            Sessions <span class="[ count ]">4</span>
+          </a>
+          <a href="#">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M3 4h10M3 8h10M3 12h6"/></svg>
+            Tickets <span class="[ count ]">12</span>
+          </a>
+          <a href="#">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="8" cy="5.5" r="2.5"/><path d="M3 13.5c.8-2.4 2.7-3.5 5-3.5s4.2 1.1 5 3.5"/></svg>
+            Agents
+          </a>
+        </div>
+        <div class="[ group ]">
+          <h2>catalog</h2>
+          <a href="#">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M8 2l5.5 3v6L8 14l-5.5-3V5z"/></svg>
+            Skills
+          </a>
+          <a href="#">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="2.5" y="2.5" width="11" height="4" rx="1"/><rect x="2.5" y="9.5" width="11" height="4" rx="1"/></svg>
+            MCP servers
+          </a>
+          <a href="#">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M2.5 4.5h4l1.5 1.5h5.5v6.5h-11z"/></svg>
+            Projects
+          </a>
+        </div>
+      </nav>
+
+      <main class="[ frame ]">
+        <header class="[ toolbar ]">
+          <span class="[ crumb ]">coding_pool /</span>
+          <h1>Sessions</h1>
+          <div class="[ actions ]">
+            <button class="[ button ]" data-variant="ghost" data-size="sm">Filter</button>
+            <button class="[ button ]" data-variant="primary" data-size="sm">New session <kbd>N</kbd></button>
+          </div>
+        </header>
+
+        <div class="[ session-screen ]" data-scroll>
+          <div class="[ list ] [ divide-end ]" role="listbox" aria-label="Sessions">
+            <div class="[ group ]">Needs you <span class="[ badge ]" data-tone="attention">1</span></div>
+            <div class="[ row ]" role="option" aria-selected="true" data-attention tabindex="0">
+              <span class="[ status ]" data-state="waiting" data-signal>waiting</span>
+              <span class="[ title ]">Add SSE feed to orchestration</span>
+              <span class="[ meta ]">reviewer · 2m</span>
+            </div>
+            <div class="[ group ]">Running</div>
+            <div class="[ row ]" role="option" tabindex="-1">
+              <span class="[ status ]" data-state="running">running</span>
+              <span class="[ title ]">Port tickets screen to httpclient</span>
+              <span class="[ meta ]">backend · 14m</span>
+            </div>
+            <div class="[ row ]" role="option" tabindex="-1">
+              <span class="[ status ]" data-state="running">running</span>
+              <span class="[ title ]">Conformance suite for TicketBoard</span>
+              <span class="[ meta ]">tester · 6m</span>
+            </div>
+            <div class="[ group ]">Earlier</div>
+            <div class="[ row ]" role="option" tabindex="-1">
+              <span class="[ status ]" data-state="failed">failed</span>
+              <span class="[ title ]">Bump harnesskit to v0.9</span>
+              <span class="[ meta ]">backend · 1h</span>
+            </div>
+            <div class="[ row ]" role="option" tabindex="-1">
+              <span class="[ status ]" data-state="done">done</span>
+              <span class="[ title ]">Auth middleware for exposed API</span>
+              <span class="[ meta ]">backend · 3h</span>
+            </div>
+            <div class="[ row ]" role="option" tabindex="-1">
+              <span class="[ status ]" data-state="queued">queued</span>
+              <span class="[ title ]">Write docs/TUI.md live section</span>
+              <span class="[ meta ]">writer · not started</span>
+            </div>
+          </div>
+
+          <section class="[ frame ]" aria-label="Session detail">
+            <div class="[ tabs ]" role="tablist">
+              <button role="tab" aria-selected="true">Transcript</button>
+              <button role="tab" aria-selected="false">Diff <span class="[ badge ] [ font-mono ]">+214 −38</span></button>
+              <button role="tab" aria-selected="false">Ticket</button>
+            </div>
+            <div class="[ transcript ]" data-scroll>
+              <p class="[ line ]" data-kind="user"><time>14:02:11</time><span class="[ mark ]">›</span><span>Wire the feed into the TUI live package and cover reconnects.</span></p>
+              <p class="[ line ]" data-kind="agent"><time>14:02:15</time><span class="[ mark ]">·</span><span>Reading internal/application/orchestration/feed.go to see how events fan out.</span></p>
+              <p class="[ line ]" data-kind="tool"><time>14:02:16</time><span class="[ mark ]">⌁</span><span>Read internal/application/orchestration/feed.go (212 lines)</span></p>
+              <p class="[ line ]" data-kind="tool"><time>14:02:40</time><span class="[ mark ]">⌁</span><span>Edit internal/tuiclient/live/live.go  +88 −4</span></p>
+              <p class="[ line ]" data-kind="error"><time>14:03:02</time><span class="[ mark ]">×</span><span>go test ./internal/tuiclient/... FAIL TestReconnect (deadline exceeded)</span></p>
+              <p class="[ line ]" data-kind="agent"><time>14:03:20</time><span class="[ mark ]">·</span><span>The reconnect test waits on a ticker that never fires under the fake clock. Switching it to the injected clock.</span></p>
+              <p class="[ line ]" data-kind="prompt"><time>14:04:05</time><span class="[ mark ]">?</span><span>Allow Bash: make check · <strong>y</strong> allow · <strong>n</strong> deny · <strong>a</strong> always</span></p>
+            </div>
+            <div class="[ cluster ] [ divide-top ] [ pad-block-s pad-inline-l ]">
+              <input class="[ grow ] [ font-mono text-sm ]" placeholder="Reply to session…" aria-label="Reply to session" />
+              <button class="[ button ]" data-variant="primary">Allow <kbd>Y</kbd></button>
+              <button class="[ button ]">Deny</button>
+            </div>
+          </section>
+        </div>
+      </main>
+
+      <footer class="[ stream-bar ]" aria-live="polite">
+        <span class="[ status ]" data-state="live">live · :8080</span>
+        <span>4 sessions · 1 waiting</span>
+        <span class="[ keys ]"><span><kbd>⌘K</kbd> commands</span><span><kbd>J</kbd><kbd>K</kbd> move</span><span><kbd>↵</kbd> open</span></span>
+      </footer>
+    </div>
+
+    <!-- 2. Component sheet -->
+    <div class="[ wrapper flow ] [ region ] [ flow-space-2xl ]">
+      <div class="[ repel ]">
+        <h1>The Quiet Console</h1>
+        <div class="[ cluster ]">
+          <button class="[ button ]" data-size="sm" onclick="document.documentElement.dataset.theme='light'">Light</button>
+          <button class="[ button ]" data-size="sm" onclick="document.documentElement.dataset.theme='dark'">Dark</button>
+          <button class="[ button ]" data-size="sm" data-variant="ghost" onclick="delete document.documentElement.dataset.theme">System</button>
+        </div>
+      </div>
+
+      <section class="[ flow ] [ flow-space-m ]">
+        <h2>Color roles</h2>
+        <div class="[ grid ] [ gutter-m text-xs ]" style="--grid-min: 7rem">
+          <div class="swatch"><span class="[ bg-canvas ]"></span>canvas</div>
+          <div class="swatch"><span class="[ bg-panel ]"></span>panel</div>
+          <div class="swatch"><span class="[ bg-raised ]"></span>raised</div>
+          <div class="swatch"><span class="[ bg-sunken ]"></span>sunken</div>
+          <div class="swatch"><span style="background: var(--color-ink)"></span>ink</div>
+          <div class="swatch"><span style="background: var(--color-ink-muted)"></span>ink-muted</div>
+          <div class="swatch"><span style="background: var(--color-ink-faint)"></span>ink-faint</div>
+          <div class="swatch"><span style="background: var(--color-signal)"></span>signal</div>
+          <div class="swatch"><span style="background: var(--color-attention)"></span>attention</div>
+          <div class="swatch"><span style="background: var(--color-danger)"></span>danger</div>
+          <div class="swatch"><span style="background: var(--color-success)"></span>success</div>
+          <div class="swatch"><span style="background: var(--color-line-control)"></span>line-control</div>
+        </div>
+      </section>
+
+      <section class="[ flow ] [ flow-space-s ]">
+        <h2>Type</h2>
+        <p class="[ text-xl weight-bold ]">Empty-state headline, 22</p>
+        <p class="[ text-lg weight-bold ]">Screen title, 18</p>
+        <p class="[ text-md weight-bold ]">Pane title, 16</p>
+        <p>Body, 14. Sessions keep running when you close the browser; the stream bar tells you whether what you see is what the server holds.</p>
+        <p class="[ text-sm color-ink-muted ]">Label or dense row, 13, muted</p>
+        <p class="[ text-xs color-ink-faint ]">Meta, 12, faint · 14:03:20</p>
+        <p class="[ font-mono text-sm ]">mono 13 · go test ./internal/... ok 2.41s</p>
+      </section>
+
+      <section class="[ flow ] [ flow-space-m ]">
+        <h2>Buttons</h2>
+        <div class="[ cluster ]">
+          <button class="[ button ]" data-variant="primary">Start session</button>
+          <button class="[ button ]">Secondary</button>
+          <button class="[ button ]" data-variant="ghost">Ghost</button>
+          <button class="[ button ]" data-variant="danger">Stop session</button>
+          <button class="[ button ]" disabled>Disabled</button>
+          <button class="[ button ]" data-variant="primary" aria-busy="true">Saving</button>
+          <button class="[ button ]" data-icon aria-label="More"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><circle cx="3.5" cy="8" r="1.3"/><circle cx="8" cy="8" r="1.3"/><circle cx="12.5" cy="8" r="1.3"/></svg></button>
+          <button class="[ button ]" data-size="sm">Small</button>
+        </div>
+      </section>
+
+      <section class="[ flow ] [ flow-space-m ]">
+        <h2>Status and badges</h2>
+        <div class="[ cluster ] [ gutter-l ]">
+          <span class="[ status ]" data-state="running">running</span>
+          <span class="[ status ]" data-state="waiting">waiting</span>
+          <span class="[ status ]" data-state="failed">failed</span>
+          <span class="[ status ]" data-state="done">done</span>
+          <span class="[ status ]" data-state="idle">idle</span>
+          <span class="[ status ]" data-state="queued">queued</span>
+          <span class="[ status ]" data-state="reconnecting">reconnecting</span>
+        </div>
+        <div class="[ cluster ]">
+          <span class="[ badge ]">backend</span>
+          <span class="[ badge ]" data-tone="signal">3 running</span>
+          <span class="[ badge ]" data-tone="attention">needs review</span>
+          <span class="[ badge ]" data-tone="danger">blocked</span>
+          <span class="[ badge ] [ font-mono ]">TICKET_NOT_FOUND</span>
+        </div>
+      </section>
+
+      <section class="[ switcher ]" style="--switcher-threshold: 44rem">
+        <div class="[ flow ]">
+          <h2>Fields</h2>
+          <div class="[ field ]">
+            <label for="f-name">Agent name</label>
+            <input id="f-name" value="reviewer" aria-describedby="f-name-hint" />
+            <span class="[ hint ]" id="f-name-hint">Lowercase, used as the launcher command.</span>
+          </div>
+          <div class="[ field ]">
+            <label for="f-skill">Skill</label>
+            <select id="f-skill"><option>code-review</option><option>impeccable</option></select>
+          </div>
+          <div class="[ field ]">
+            <label for="f-dir">Working directory</label>
+            <input id="f-dir" class="[ font-mono text-sm ]" aria-invalid="true" aria-describedby="f-dir-err" value="~/projects/missing" />
+            <span class="[ error ]" id="f-dir-err">Directory does not exist on the server.</span>
+          </div>
+          <div class="[ field ]" data-inline>
+            <input type="checkbox" id="f-claude" checked />
+            <label for="f-claude">Load CLAUDE.md</label>
+          </div>
+        </div>
+        <div class="[ flow ]">
+          <h2>Banners</h2>
+          <div class="[ banner ]" data-tone="danger" role="alert">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="8" cy="8" r="6"/><path d="M8 4.8v3.6M8 10.8v.1"/></svg>
+            <div class="[ flow ] [ flow-space-3xs ]">
+              <span>The ticket was deleted while this session ran.</span>
+              <span class="[ code ]">TICKET_NOT_FOUND · reopen it from Tickets or detach the session</span>
+            </div>
+          </div>
+          <div class="[ banner ]" data-tone="attention">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M8 2.5l6 11H2z"/><path d="M8 7v2.5"/></svg>
+            <span>Stream reconnecting. Showing data from 14:03:20.</span>
+          </div>
+          <section class="[ pane ]">
+            <header>Inspector <span class="[ push-end ] [ color-ink-faint weight-regular ]">reviewer</span></header>
+            <div class="[ content ] [ flow ] [ flow-space-xs ]">
+              <span class="[ skeleton ]" style="--skeleton-width: 70%"></span>
+              <span class="[ skeleton ]" style="--skeleton-width: 45%"></span>
+              <span class="[ skeleton ]" style="--skeleton-width: 60%"></span>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <section class="[ pane ]">
+        <div class="[ empty ]">
+          <h2>No agents in this project yet</h2>
+          <p>An agent is a persona with skills and MCP servers. Create one here, or import the launcher's <code>agents.json</code>.</p>
+          <div class="[ actions ]">
+            <button class="[ button ]" data-variant="primary">New agent</button>
+            <button class="[ button ]" data-variant="ghost">Import agents.json</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="[ flow ] [ flow-space-m ]">
+        <h2>Command palette and toast</h2>
+        <div class="[ cluster ]">
+          <button class="[ button ]" onclick="document.getElementById('palette').showModal()">Open palette <kbd>⌘K</kbd></button>
+        </div>
+        <div class="[ toast ]" style="max-inline-size: 22rem">
+          <span class="[ status ]" data-state="done" data-dot-only></span>
+          <span>Session <strong>Auth middleware</strong> finished. <a href="#">Open diff</a></span>
+        </div>
+      </section>
+    </div>
+
+    <dialog class="[ palette ]" id="palette" aria-label="Command palette">
+      <input placeholder="Jump to a session, ticket or command…" aria-label="Search commands" autofocus />
+      <div class="[ results ]" role="listbox">
+        <div role="option" aria-selected="true">Open session · Add SSE feed <span class="[ color-ink-faint ]">waiting</span></div>
+        <div role="option">New session <kbd>N</kbd></div>
+        <div role="option">Go to Tickets <kbd>G T</kbd></div>
+        <div role="option">Toggle theme</div>
+      </div>
+    </dialog>
+  </body>
+</html>

@@ -67,6 +67,11 @@ func errorHandler(err error, c echo.Context) {
 		}
 	}
 
+	if se != nil && se.Code == "UNAUTHORIZED" {
+		_ = c.JSON(http.StatusUnauthorized, errorBody(se.Message, se.Code))
+		return
+	}
+
 	var he *echo.HTTPError
 	if errors.As(err, &he) {
 		msg := http.StatusText(he.Code)

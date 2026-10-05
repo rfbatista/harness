@@ -1,6 +1,8 @@
 package httpclient_test
 
 import (
+	"context"
+	"fmt"
 	"net/http/httptest"
 	"os"
 	"testing"
@@ -79,6 +81,29 @@ func TestSessionReaderConformance(t *testing.T) {
 		mgr := claude.New(llmkit.Options{Bin: exe, ApprovalTimeout: time.Hour})
 		svc := orchestration.NewService(mgr, mgr.Approvals(), orchestration.NewHub(16), repo, orchestration.Catalog{}, nil, nil)
 		return httpclient.NewSessions(serve(t, httpapi.Services{Sessions: svc})), rec
+	})
+}
+
+func TestSessionFeedConformance(t *testing.T) {
+	portstest.SessionFeedConformance(t, func(t *testing.T) (ports.SessionFeed, string, func() string) {
+		repo := sqlite.NewSessionRepository(openDB(t))
+		exe, _ := os.Executable()
+		mgr := claude.New(llmkit.Options{Bin: exe, ApprovalTimeout: time.Hour})
+		svc := orchestration.NewService(mgr, mgr.Approvals(), orchestration.NewHub(16), repo, orchestration.Catalog{}, nil, nil)
+		n := 0
+		// A RunnerTUI session the client reports ending: the end is a change.
+		change := func() string {
+			n++
+			id := fmt.Sprintf("s%d", n)
+			if _, err := repo.Create(&domain.Session{ID: id, ProjectID: "p1", Status: domain.SessionRunning, Interactive: true, RunsOn: domain.RunnerTUI}); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := svc.EndInteractive(context.Background(), id, 0, false); err != nil {
+				t.Fatal(err)
+			}
+			return id
+		}
+		return httpclient.NewEvents(serve(t, httpapi.Services{Sessions: svc})), "p1", change
 	})
 }
 
