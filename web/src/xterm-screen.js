@@ -45,6 +45,11 @@ export function createScreen(container, { onKey, onPaste }) {
     draw(snapshot) {
       term.reset();
       term.resize(Math.max(snapshot.cols, 2), Math.max(snapshot.rows, 1));
+      if (snapshot.log) {
+        // An application run's output so far: replayed as printed.
+        term.write(snapshot.screen);
+        return;
+      }
       if (snapshot.altScreen) term.write("\x1b[?1049h");
       term.write(snapshot.screen.replace(/\r?\n/g, "\r\n"));
       term.write(`\x1b[${snapshot.cursorY + 1};${snapshot.cursorX + 1}H`);

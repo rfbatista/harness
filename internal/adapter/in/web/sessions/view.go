@@ -113,14 +113,14 @@ type PageView struct {
 	Task            *domain.Ticket
 	TaskDescription string
 	StatusChoices   []StatusChoice
-	ProjectID   string
-	ProjectName string
-	TaskTitle   string
-	TaskStatus  string
-	Summary     string
-	Groups      []Group
-	Seed        Seed
-	NewSession  NewSessionForm
+	ProjectID       string
+	ProjectName     string
+	TaskTitle       string
+	TaskStatus      string
+	Summary         string
+	Groups          []Group
+	Seed            Seed
+	NewSession      NewSessionForm
 }
 
 // Empty reports a project without sessions.
@@ -158,17 +158,17 @@ func NewPageView(frame shell.Frame, project *domain.Project, task *domain.Ticket
 	}
 
 	return PageView{
-		Frame:       frame,
-		ProjectID:   project.ID,
-		ProjectName: project.Name,
-		TaskTitle:   task.Title,
-		Task:        task,
+		Frame:           frame,
+		ProjectID:       project.ID,
+		ProjectName:     project.Name,
+		TaskTitle:       task.Title,
+		Task:            task,
 		TaskDescription: task.Description,
-		TaskStatus:  StatusLabel(task.Status),
-		Summary:     summary(list),
-		Groups:      views,
-		Seed:        Seed{ProjectID: project.ID, TicketID: task.ID, Sessions: list, AgentNames: names},
-		NewSession:  form,
+		TaskStatus:      StatusLabel(task.Status),
+		Summary:         summary(list),
+		Groups:          views,
+		Seed:            Seed{ProjectID: project.ID, TicketID: task.ID, Sessions: list, AgentNames: names},
+		NewSession:      form,
 	}
 }
 

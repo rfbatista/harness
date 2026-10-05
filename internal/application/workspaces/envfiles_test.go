@@ -16,7 +16,7 @@ func (m memEnvFiles) Put(f *domain.EnvFile) (*domain.EnvFile, error) {
 	m[f.RepositoryID] = append(m[f.RepositoryID], f)
 	return f, nil
 }
-func (m memEnvFiles) Delete(string, string) error         { return nil }
+func (m memEnvFiles) Delete(string, string) error        { return nil }
 func (m memEnvFiles) DeleteByRepository(id string) error { delete(m, id); return nil }
 
 type recordingIO struct {

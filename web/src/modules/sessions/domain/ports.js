@@ -67,6 +67,7 @@
  * @property {number} cols
  * @property {number} rows
  * @property {string} title
+ * @property {boolean} log     screen is raw output to write as printed (an application run's log), with no cursor to place
  *
  * @typedef {object} TerminalHandlers
  * @property {() => void} [onOpen]

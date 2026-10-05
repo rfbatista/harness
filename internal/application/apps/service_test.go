@@ -9,6 +9,7 @@ import (
 	"github.com/rfbatista/harnesskit/errs"
 
 	"operators-mcp/internal/adapter/out/agents/command"
+	"operators-mcp/internal/adapter/out/eventbus"
 	"operators-mcp/internal/adapter/out/ptyunix"
 	"operators-mcp/internal/adapter/out/shell"
 	"operators-mcp/internal/adapter/out/termhost"
@@ -150,4 +151,27 @@ func TestStartRefusals(t *testing.T) {
 
 func lastSegment(p string) string {
 	return p[strings.LastIndex(p, "/")+1:]
+}
+
+func TestDeletingTheSessionStopsItsRuns(t *testing.T) {
+	svc, _ := newRunner(t)
+	ctx := context.Background()
+	bus := eventbus.New()
+	svc.Subscribe(bus)
+	r, err := svc.Start(ctx, "s1", "greet", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	term, _ := svc.Attach(ctx, r.ID)
+	if err := bus.Publish(ctx, domain.SessionDeleted{SessionID: "s1"}); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-term.Done():
+	case <-time.After(5 * time.Second):
+		t.Fatal("the run outlived its session")
+	}
+	if runs, _ := svc.List(ctx, "s1"); len(runs) != 0 {
+		t.Fatalf("runs = %+v", runs)
+	}
 }

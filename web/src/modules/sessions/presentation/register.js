@@ -10,6 +10,7 @@ import { sessionsPage } from "./pages/sessionsPage.js";
  * @param {{
  *   gateway: import("../domain/ports.js").SessionGateway,
  *   terminals: import("../domain/ports.js").TerminalGateway,
+ *   runTerminals?: import("../domain/ports.js").TerminalGateway,  application runs' terminals
  *   createScreen: import("./components/terminal.js").CreateScreen,
  *   clock: import("../../../shared/infrastructure/clock.js").Clock,
  * }} deps
@@ -18,4 +19,6 @@ export function registerSessions(Alpine, deps) {
   Alpine.data("sessionsPage", sessionsPage(deps));
   Alpine.data("sessionsNewSession", newSession(deps));
   Alpine.data("sessionsTerminal", terminal(deps));
+  // The same terminal, on an application run started from a session.
+  if (deps.runTerminals) Alpine.data("sessionsRunTerminal", terminal({ ...deps, terminals: deps.runTerminals }));
 }

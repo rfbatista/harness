@@ -28,9 +28,9 @@ type Agent interface {
 type AgentSpec struct {
 	// Kind picks the Agent adapter: "claude", or "command" for a plain shell
 	// command (an application run).
-	Kind      string `json:"kind"`
+	Kind string `json:"kind"`
 	// Command is the shell command line a "command" agent runs.
-	Command string `json:"command,omitempty"`
+	Command   string `json:"command,omitempty"`
 	SessionID string `json:"session_id"`
 	// Dir is the session's worktree.
 	Dir   string `json:"dir"`

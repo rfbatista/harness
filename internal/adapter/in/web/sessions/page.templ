@@ -159,8 +159,18 @@ templ detail(form NewSessionForm) {
 						</div>
 					</template>
 				</div>
+				<div class="[ tabs ]" role="tablist" aria-label="Session views">
+					<button type="button" role="tab" x-bind:aria-selected="agentTabSelected" x-on:click="showAgent">Agent</button>
+					<button type="button" role="tab" x-bind:aria-selected="appTabSelected" x-on:click="showApp">App</button>
+				</div>
 				<template x-for="sid in terminalIds" x-bind:key="sid">
 					@terminalPane()
+				</template>
+				<template x-for="panel in appPanels" x-bind:key="panel.key">
+					@appPanel()
+				</template>
+				<template x-if="appUnavailable">
+					@components.Empty("No worktree to run from", "This session was not started on a repository, so there is no application to run. Start a session on a repository to run its app beside the agent.")
 				</template>
 				<template x-if="terminalNote">
 					<div class="[ pad-l ]">
@@ -268,6 +278,91 @@ templ terminalPane() {
 			</template>
 		</div>
 	</div>
+}
+
+// appPanel runs the session's repository's application from its worktree:
+// a saved run command or a typed one, its output in a live terminal (keys go
+// through, so Ctrl+C reaches the app). One run is on screen at a time; the
+// session's earlier runs are a click away.
+templ appPanel() {
+	<section class="[ frame ]" aria-label="Application" x-data="runsAppPanel(panel)" x-on:terminal-exited="refresh">
+		<div class="[ flow ] [ flow-space-s pad-l divide-bottom ]">
+			<form class="[ cluster ] [ gutter-xs ]" x-on:submit.prevent="start">
+				<label class="[ visually-hidden ]" for="run-choice">Command</label>
+				<select id="run-choice" x-model="choice" x-bind:disabled="busy">
+					<template x-for="c in commands" x-bind:key="c.name">
+						<option x-bind:value="c.name" x-text="c.name"></option>
+					</template>
+					<option value="">Type a command…</option>
+				</select>
+				<template x-if="typing">
+					<input class="[ grow code ]" aria-label="Command to run" autocomplete="off" spellcheck="false" placeholder="make air" x-model="typed"/>
+				</template>
+				<template x-if="canForget">
+					<span class="[ code color-ink-muted truncate grow ]" x-text="chosenCommand"></span>
+				</template>
+				<button type="submit" class="[ button ]" data-variant="primary" data-size="sm" x-bind:disabled="cannotRun" x-bind:aria-busy="busy">Run</button>
+				<template x-if="canForget">
+					<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-on:click="forget">Remove</button>
+				</template>
+			</form>
+			<template x-if="typing">
+				<form class="[ cluster ] [ gutter-xs text-sm ]" x-on:submit.prevent="save">
+					<label for="run-save-name" class="[ color-ink-muted ]">Save for this repository as</label>
+					<input id="run-save-name" autocomplete="off" placeholder="server" x-model="saveName"/>
+					<button type="submit" class="[ button ]" data-size="sm" x-bind:disabled="cannotSave">Save</button>
+				</form>
+			</template>
+			<template x-if="hasRun">
+				<div class="[ repel ]">
+					<div class="[ cluster ] [ gutter-s text-sm ]">
+						<span class="[ status ]" x-bind:data-state="runStatusState" x-text="runStatusWord"></span>
+						<strong x-text="runLabel"></strong>
+						<span class="[ code color-ink-faint truncate ]" x-text="runCommandLine"></span>
+					</div>
+					<div class="[ cluster ] [ gutter-xs ]">
+						<button type="button" class="[ button ]" data-size="sm" x-bind:disabled="busy" x-on:click="restart">Restart</button>
+						<button type="button" class="[ button ]" data-size="sm" x-show="running" x-bind:disabled="busy" x-on:click="stop">Stop</button>
+					</div>
+				</div>
+			</template>
+			<template x-if="hasHistory">
+				<div class="[ cluster ] [ gutter-xs text-sm ]" role="group" aria-label="Earlier runs">
+					<template x-for="h in history" x-bind:key="h.id">
+						<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-bind:aria-pressed="h.current" x-on:click="show(h.id)">
+							<span class="[ status ]" x-bind:data-state="h.state" x-text="h.label"></span>
+						</button>
+					</template>
+				</div>
+			</template>
+			<template x-if="notice">
+				<p class="[ text-sm color-ink-muted ]" role="status" x-text="notice"></p>
+			</template>
+			<template x-if="error">
+				<div class="[ banner ]" data-tone="danger" role="alert">
+					<div class="[ flow ] [ flow-space-3xs ]">
+						<span x-text="error.message"></span>
+						<span class="[ code ]"><span x-text="error.code"></span> · <span x-text="error.next"></span></span>
+					</div>
+				</div>
+			</template>
+		</div>
+		<template x-for="rid in runIds" x-bind:key="rid">
+			<div class="[ terminal ]" x-data="sessionsRunTerminal(rid)" data-scroll>
+				<div class="[ screen ]" x-ref="screen" x-on:click="focus"></div>
+				<div class="[ bar ]">
+					<span class="[ status ]" x-bind:data-state="statusState" x-text="stateWord">connecting</span>
+					<span class="[ color-ink-faint truncate grow ]">Runs in the session's worktree, with its env files. Keys go to the app.</span>
+					<template x-if="canReconnect">
+						<button type="button" class="[ button ]" data-size="sm" x-on:click="reconnect">Reconnect</button>
+					</template>
+				</div>
+			</div>
+		</template>
+		<template x-if="showsEmpty">
+			@components.Empty("Nothing running", "Pick a saved command or type one, then Run. It runs in this session's worktree, so the agent's changes and the repository's env files are there.")
+		</template>
+	</section>
 }
 
 // taskBand sits under the toolbar, in the task editor's scope: the

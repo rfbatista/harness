@@ -58,6 +58,22 @@ test("connects to the session's terminal socket on the page's origin", () => {
   assert.equal(attach({ protocol: "https:", host: "harness.local" }).socket.url, "wss://harness.local/api/sessions/s%201/terminal");
 });
 
+test("an application run's terminal is another socket path; its log snapshot is marked", () => {
+  const ws = fakeSockets();
+  const snapshots = [];
+  terminalGateway({
+    base: "/api",
+    path: (id) => `/runs/${encodeURIComponent(id)}/terminal`,
+    location: { protocol: "http:", host: "h" },
+    WebSocket: ws.WebSocket,
+  }).attach("run-1", { onSnapshot: (s) => snapshots.push(s), onOutput: () => {} });
+  const socket = ws.latest();
+  assert.equal(socket.url, "ws://h/api/runs/run-1/terminal");
+  socket.open();
+  socket.text({ type: "snapshot", snapshot: { screen: "\x1b[32mok\x1b[0m\r\n", size: { cols: 80, rows: 24 }, log: true } });
+  assert.equal(snapshots[0].log, true);
+});
+
 test("snapshot, output, title and exit arrive as the protocol sends them", () => {
   const { socket, seen } = attach();
   socket.open();
@@ -69,7 +85,7 @@ test("snapshot, output, title and exit arrive as the protocol sends them", () =>
   socket.drop();
 
   assert.equal(seen.opened, 1);
-  assert.deepEqual(seen.snapshots, [{ screen: "hi", cursorX: 2, cursorY: 0, altScreen: false, cols: 100, rows: 30, title: "claude" }]);
+  assert.deepEqual(seen.snapshots, [{ screen: "hi", cursorX: 2, cursorY: 0, altScreen: false, cols: 100, rows: 30, title: "claude", log: false }]);
   assert.equal(seen.output, "more output");
   assert.deepEqual(seen.titles, ["✳ working"]);
   assert.deepEqual(seen.exits, [3]);

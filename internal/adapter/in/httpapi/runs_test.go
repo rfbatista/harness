@@ -30,7 +30,9 @@ func (o oneSession) Get(_ context.Context, id string) (*domain.Session, error) {
 	}
 	return nil, &domain.StructuredError{Code: "SESSION_NOT_FOUND", Message: "session not found"}
 }
-func (oneSession) List(context.Context, ports.SessionFilter) ([]*domain.Session, error) { return nil, nil }
+func (oneSession) List(context.Context, ports.SessionFilter) ([]*domain.Session, error) {
+	return nil, nil
+}
 
 func TestHTTP_RunsStartListAttachStop(t *testing.T) {
 	db, err := sqlite.Open(":memory:")

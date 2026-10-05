@@ -90,5 +90,6 @@ export function toSnapshot(s = {}) {
     cols: s.size?.cols ?? 80,
     rows: s.size?.rows ?? 24,
     title: s.title ?? "",
+    log: s.log === true,
   };
 }

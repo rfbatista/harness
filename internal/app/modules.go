@@ -268,7 +268,9 @@ var AgentRuntimeModule = fx.Module("agentruntime",
 // newAppsService runs applications from session worktrees on the same
 // terminal host the sessions run on, with the repositories' saved commands.
 func newAppsService(orch *orchestration.Service, cat catalog.Catalog, host ports.TerminalHost) *apps.Service {
-	return apps.NewService(orch, cat.Projects, host)
+	svc := apps.NewService(orch, cat.Projects, host)
+	svc.Subscribe(cat.Bus)
+	return svc
 }
 
 func newRuntimeConfig(cfg Config) runtime.Config {
@@ -364,6 +366,7 @@ func newOrchestrationService(
 	}
 	svc.Transcripts = transcripts
 	svc.Terminals = terminals
+	svc.Events = cat.Bus
 	return svc
 }
 

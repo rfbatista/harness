@@ -27,6 +27,11 @@ type SkillDeleted struct{ SkillID string }
 // ordering as SkillDeleted.
 type MCPServerDeleted struct{ ServerID string }
 
+// SessionDeleted: a session is being deleted. It is published before its
+// worktree is removed, so whatever still runs there (an application run)
+// stops first.
+type SessionDeleted struct{ SessionID string }
+
 // SettingsChanged: one setting now has a different value.
 type SettingsChanged struct {
 	Key string
@@ -40,3 +45,4 @@ func (AgentDeleted) EventName() string     { return "agent.deleted" }
 func (SkillDeleted) EventName() string     { return "skill.deleted" }
 func (MCPServerDeleted) EventName() string { return "mcp_server.deleted" }
 func (SettingsChanged) EventName() string  { return "settings.changed" }
+func (SessionDeleted) EventName() string   { return "session.deleted" }

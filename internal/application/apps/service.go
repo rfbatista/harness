@@ -178,6 +178,35 @@ func (s *Service) prune(sessionID string) {
 	}
 }
 
+// Subscribe stops a session's runs when the session is deleted, before its
+// worktree goes.
+func (s *Service) Subscribe(sub ports.EventSubscriber) {
+	ports.On(sub, func(ctx context.Context, ev domain.SessionDeleted) error {
+		s.StopSession(ctx, ev.SessionID)
+		return nil
+	})
+}
+
+// StopSession stops every running run of the session and forgets them all.
+func (s *Service) StopSession(ctx context.Context, sessionID string) {
+	s.mu.Lock()
+	var ids []string
+	for id, r := range s.runs {
+		if r.rec.SessionID == sessionID {
+			ids = append(ids, id)
+		}
+	}
+	s.mu.Unlock()
+	for _, id := range ids {
+		_, _ = s.Stop(ctx, id)
+	}
+	s.mu.Lock()
+	for _, id := range ids {
+		delete(s.runs, id)
+	}
+	s.mu.Unlock()
+}
+
 // List returns the session's runs, newest first.
 func (s *Service) List(_ context.Context, sessionID string) ([]*domain.AppRun, error) {
 	s.mu.Lock()

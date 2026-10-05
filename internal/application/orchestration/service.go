@@ -70,6 +70,9 @@ type Service struct {
 	// server does not run agents itself; such sessions answer
 	// SERVER_HOSTING_UNAVAILABLE.
 	Terminals ports.TerminalHost
+	// Events announces SessionDeleted, so other contexts stop what runs in a
+	// session's worktree before it goes. Nil announces nothing.
+	Events ports.EventPublisher
 	// Transcripts checks an interactive session can be resumed. Nil skips the
 	// check and lets the CLI report a missing conversation itself.
 	Transcripts ports.ClaudeTranscripts
@@ -747,6 +750,11 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 		}
 	}
 	s.runCleanup(id)
+	if s.Events != nil {
+		// What else runs in the worktree stops before it is removed; a failure
+		// there must not keep the session undeletable.
+		_ = s.Events.Publish(ctx, domain.SessionDeleted{SessionID: id})
+	}
 
 	// Read the workspace and project before the row is gone.
 	workspaceID, projectID := "", ""

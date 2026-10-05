@@ -10,6 +10,8 @@ import { feed } from "./shared/infrastructure/feed.js";
 import { preferences } from "./shared/infrastructure/storage.js";
 import { registerShared } from "./shared/presentation/register.js";
 
+import { runsGateway } from "./modules/runs/infrastructure/runs-gateway.js";
+import { registerRuns } from "./modules/runs/presentation/register.js";
 import { projectsGateway } from "./modules/projects/infrastructure/projects-gateway.js";
 import { registerProjects } from "./modules/projects/presentation/register.js";
 import { sessionsGateway } from "./modules/sessions/infrastructure/sessions-gateway.js";
@@ -31,8 +33,11 @@ registerTasks(Alpine, { gateway: tasksGateway(api), navigate, reload });
 registerSessions(Alpine, {
   gateway: sessionsGateway(api, events),
   terminals: terminalGateway({ base: "/api" }),
+  runTerminals: terminalGateway({ base: "/api", path: (id) => `/runs/${encodeURIComponent(id)}/terminal` }),
   createScreen,
   clock: systemClock,
 });
+
+registerRuns(Alpine, { gateway: runsGateway(api) });
 
 Alpine.start();

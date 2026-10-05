@@ -152,6 +152,26 @@ test("the selected live session's terminal is mounted; switching sessions remoun
   instance.destroy();
 });
 
+test("the App tab swaps the agent's terminal for the session's App panel", () => {
+  const { instance, tick } = setup([
+    makeSession({ id: "live", status: "idle" }),
+    makeSession({ id: "loose", status: "idle", repositoryId: "", updatedAt: new Date(T0.getTime() - 60_000) }),
+  ]);
+  tick();
+  assert.ok(instance.agentTabSelected);
+  assert.deepEqual(instance.appPanels, []);
+  instance.showApp();
+  assert.deepEqual(instance.terminalIds, [], "the agent's terminal detaches while the App tab is open");
+  assert.deepEqual(instance.appPanels, [{ key: "live", sessionId: "live", repositoryId: "r1", projectId: "p1" }]);
+  instance.select("loose");
+  assert.deepEqual(instance.appPanels, [], "a session without a repository has no worktree to run from");
+  assert.ok(instance.appUnavailable);
+  instance.showAgent();
+  instance.select("live");
+  assert.deepEqual(instance.terminalIds, ["live"]);
+  instance.destroy();
+});
+
 test("rows show the agent's name", () => {
   const { instance } = setup();
   const row = instance.groups.flatMap((g) => g.rows).find((r) => r.id === "run");
