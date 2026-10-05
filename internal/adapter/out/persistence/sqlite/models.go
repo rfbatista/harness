@@ -540,6 +540,7 @@ type WorkspaceModel struct {
 	Name         string `gorm:"uniqueIndex:idx_workspaces_repo_name"`
 	Branch       string
 	Path         string
+	BaseRef      string `gorm:"column:base_ref"`
 	CreatedAt    time.Time
 }
 
@@ -557,6 +558,7 @@ func (m *WorkspaceModel) ToDomain() *domain.Workspace {
 		Name:         m.Name,
 		Branch:       m.Branch,
 		Path:         m.Path,
+		BaseRef:      m.BaseRef,
 		CreatedAt:    m.CreatedAt,
 	}
 }

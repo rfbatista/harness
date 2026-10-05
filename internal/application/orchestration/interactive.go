@@ -41,6 +41,10 @@ func (s *Service) StartInteractive(ctx context.Context, req InteractiveRequest) 
 	if err != nil {
 		return nil, ports.AgentSpec{}, err
 	}
+	mode, err := domain.ParseSessionMode(req.Mode)
+	if err != nil {
+		return nil, ports.AgentSpec{}, err
+	}
 
 	// A task can hold several sessions at once, so the branch carries part of
 	// the session id: two sessions on one task must never race for one branch.
@@ -56,12 +60,13 @@ func (s *Service) StartInteractive(ctx context.Context, req InteractiveRequest) 
 		BaseBranch:   req.BaseBranch,
 		Model:        req.Model,
 		AutoAccept:   req.AutoAccept,
+		Mode:         mode,
 	})
 	if err != nil {
 		return nil, ports.AgentSpec{}, err
 	}
 
-	spec := s.agentSpec(p.cfg, ports.Conversation{ID: id}, req.Prompt)
+	spec := s.agentSpec(p.cfg, ports.Conversation{ID: id}, modePrompt(mode, ticket, req.Prompt))
 	created, err := s.sessions.Create(&domain.Session{
 		ID:              id,
 		ProjectID:       req.ProjectID,
@@ -81,6 +86,7 @@ func (s *Service) StartInteractive(ctx context.Context, req InteractiveRequest) 
 		RunsOn:          runsOn,
 		RunnerHost:      runnerHost(runsOn, req.RunnerHost),
 		ParentSessionID: req.ParentSessionID,
+		Mode:            mode,
 	})
 	if err == nil {
 		s.adoptCleanup(id, p.cleanup)
@@ -133,7 +139,7 @@ func (s *Service) ResumeInteractive(ctx context.Context, req ports.ResumeRequest
 	if sess.TicketID != "" && s.tickets != nil {
 		ticket = s.tickets.Get(sess.TicketID)
 	}
-	ag, err := s.resolveAgent(sess.AgentID)
+	ag, err := s.resolveAgent(sess.AgentID, sess.Mode)
 	if err != nil {
 		return nil, ports.AgentSpec{}, err
 	}

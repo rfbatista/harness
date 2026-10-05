@@ -2,7 +2,7 @@ import fixture from "../../../../testdata/views/session-status.json" with { type
 import { assert, file, test } from "../../../shared/testing/test.js";
 import { needsYou } from "../domain/session.js";
 import { makeSession, T0 } from "../testing/fixtures.js";
-import { agentLabel, startedBy, statusView, summary, terminalView, toGroupViews } from "./view.js";
+import { agentLabel, runsAs, startedBy, statusView, summary, terminalView, toGroupViews } from "./view.js";
 
 file("sessions/presentation/view");
 
@@ -42,6 +42,11 @@ test("an agent reads as its name, its id when unknown, plain claude without one"
   assert.equal(agentLabel("a1", { a1: "Reviewer" }), "Reviewer");
   assert.equal(agentLabel("gone", { a1: "Reviewer" }), "gone");
   assert.equal(agentLabel("", {}), "plain claude");
+});
+
+test("a session started in a mode reads as its agent in that mode", () => {
+  assert.equal(runsAs(makeSession({ agentId: "a1" }), { a1: "Reviewer" }), "Reviewer");
+  assert.equal(runsAs(makeSession({ agentId: "", mode: "architect" })), "plain claude as architect");
 });
 
 test("summary counts what is waiting", () => {

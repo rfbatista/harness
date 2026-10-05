@@ -407,6 +407,7 @@ func registerRuntimeShutdown(lc fx.Lifecycle, m llmkit.Manager) {
 var WorkspacesModule = fx.Module("workspaces",
 	fx.Provide(
 		asPort(gitcli.NewWorktreeManager, new(ports.WorktreeManager)),
+		asPort(gitcli.NewHistory, new(ports.GitHistory)),
 		newWorkspacesService,
 	),
 )
@@ -418,8 +419,10 @@ func newWorkspacesService(
 	settings ports.SettingsRepository,
 	envFiles ports.EnvFileRepository,
 	envIO ports.EnvFileIO,
+	history ports.GitHistory,
 ) *workspaces.Service {
 	svc := workspaces.NewService(ws, repos, wt, settings)
 	svc.UseEnvFiles(envFiles, envIO)
+	svc.UseHistory(history)
 	return svc
 }

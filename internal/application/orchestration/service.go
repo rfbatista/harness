@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -226,6 +227,7 @@ type prepareInput struct {
 	Model        string
 	AllowedTools []string
 	AutoAccept   string
+	Mode         domain.SessionMode
 }
 
 // prepared is a session whose worktree exists and whose configuration is
@@ -282,7 +284,7 @@ func (s *Service) prepare(in prepareInput) (*prepared, error) {
 	// Agent and skill resolution happen before provisioning: git worktree add
 	// is slow and side-effecting, so a bad agent_id or a broken skill must
 	// fail cheaply instead of creating (and then rolling back) a worktree.
-	ag, err := s.resolveAgent(in.AgentID)
+	ag, err := s.resolveAgent(in.AgentID, in.Mode)
 	if err != nil {
 		return nil, err
 	}
@@ -333,23 +335,28 @@ type resolvedAgent struct {
 	cleanup      func() // removes skillDirs; nil if none
 }
 
-// resolveAgent loads the agent a session runs as. An empty id is plain claude.
-func (s *Service) resolveAgent(agentID string) (resolvedAgent, error) {
+// resolveAgent loads the agent a session runs as, plus the skills its mode
+// brings. An empty id is plain claude.
+func (s *Service) resolveAgent(agentID string, mode domain.SessionMode) (resolvedAgent, error) {
 	var r resolvedAgent
-	if agentID == "" {
-		return r, nil
-	}
-	a, err := s.catalog.Agents.GetAgent(context.TODO(), agentID)
+	skills, err := modeSkills(mode)
 	if err != nil {
 		return r, err
 	}
-	r.agent = a
-	s.catalog.Agents.ResolveAgentRelations(r.agent)
-	if r.agent.Prompt != nil {
-		r.appendSystem = r.agent.Prompt.Content
+	if agentID != "" {
+		a, err := s.catalog.Agents.GetAgent(context.TODO(), agentID)
+		if err != nil {
+			return r, err
+		}
+		r.agent = a
+		s.catalog.Agents.ResolveAgentRelations(r.agent)
+		if r.agent.Prompt != nil {
+			r.appendSystem = r.agent.Prompt.Content
+		}
+		skills = append(slices.Clone(r.agent.Skills), skills...)
 	}
-	if len(r.agent.Skills) > 0 {
-		dirs, c, err := resolveSkillDirs(r.agent.Skills)
+	if len(skills) > 0 {
+		dirs, c, err := resolveSkillDirs(skills)
 		if err != nil {
 			return r, fmt.Errorf("resolve skills: %w", err)
 		}

@@ -37,7 +37,7 @@
       white-space: nowrap;
     }
 
-    &:is([aria-selected="true"], [aria-current="true"]) { background: var(--color-selected); }
+    &:is([aria-selected="true"], [aria-current="true"], [aria-current="page"]) { background: var(--color-selected); }
     &[data-attention] { background: var(--color-attention-wash); }
     &[data-attention][aria-selected="true"] {
       background: color-mix(in oklch, var(--color-attention-wash), var(--color-selected));

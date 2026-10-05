@@ -1,5 +1,6 @@
 // The tasks module's Alpine components.
 
+import { documentWatch } from "./components/documentWatch.js";
 import { newTask } from "./components/newTask.js";
 import { rail, railLink } from "./components/rail.js";
 import { taskEditor } from "./components/taskEditor.js";
@@ -16,6 +17,7 @@ import { taskEditor } from "./components/taskEditor.js";
 export function registerTasks(Alpine, deps) {
   Alpine.data("tasksNewTask", newTask(deps));
   Alpine.data("tasksTaskEditor", taskEditor(deps));
+  Alpine.data("tasksDocumentWatch", documentWatch(deps));
 
   // The rail's per-task activity, shared by the rail and its links.
   Alpine.store("tasksRail", { byTask: {} });

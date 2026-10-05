@@ -43,17 +43,18 @@ func (r *WorkspaceRepository) ListByRepository(repositoryID string) []*domain.Wo
 }
 
 // Create creates a workspace with a generated id.
-func (r *WorkspaceRepository) Create(repositoryID, name, branch, path string) (*domain.Workspace, error) {
+func (r *WorkspaceRepository) Create(w domain.Workspace) (*domain.Workspace, error) {
 	id, err := genID()
 	if err != nil {
 		return nil, err
 	}
 	m := &WorkspaceModel{
 		ID:           id,
-		RepositoryID: repositoryID,
-		Name:         name,
-		Branch:       branch,
-		Path:         path,
+		RepositoryID: w.RepositoryID,
+		Name:         w.Name,
+		Branch:       w.Branch,
+		Path:         w.Path,
+		BaseRef:      w.BaseRef,
 	}
 	if err := r.db.Create(m).Error; err != nil {
 		return nil, err

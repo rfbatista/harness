@@ -33,6 +33,7 @@ export const sessionsPage = ({ gateway, clock, setTimeout = globalThis.setTimeou
     selectedId: null,
     now: clock.now(),
     agentNames: {},
+    repositoryNames: {},
     error: null,
     stopping: false,
     ready: false,
@@ -95,7 +96,26 @@ export const sessionsPage = ({ gateway, clock, setTimeout = globalThis.setTimeou
     /** The session whose App panel to mount, keyed on its id, with what the panel needs. */
     get appPanels() {
       if (!this.showingApp || !this.selected.repositoryId) return [];
-      return [{ key: this.selected.id, sessionId: this.selected.id, repositoryId: this.selected.repositoryId, projectId: this.projectId }];
+      const session = this.sessions.find((s) => s.id === this.selectedId);
+      return [
+        {
+          key: this.selected.id,
+          sessionId: this.selected.id,
+          repositoryId: this.selected.repositoryId,
+          repositoryName: this.repositoryNames[this.selected.repositoryId] ?? "",
+          branch: session?.branch ?? "",
+          worktree: session?.workingDir ?? "",
+          projectId: this.projectId,
+        },
+      ];
+    },
+    /** The selected session's git history page; "" for a session without a worktree. */
+    get historyHref() {
+      const session = this.showingSession ? this.sessions.find((s) => s.id === this.selectedId) : null;
+      if (!session?.workspaceId) return "";
+      const p = encodeURIComponent(this.projectId);
+      const t = encodeURIComponent(this.ticketId);
+      return `/projects/${p}/tasks/${t}/sessions/${encodeURIComponent(session.id)}/history`;
     },
     get appUnavailable() {
       return this.showingApp && !this.selected.repositoryId;
@@ -116,6 +136,7 @@ export const sessionsPage = ({ gateway, clock, setTimeout = globalThis.setTimeou
         this.projectId = seed.projectId;
         this.ticketId = seed.ticketId;
         this.agentNames = seed.agentNames;
+        this.repositoryNames = seed.repositoryNames;
         this.sessions = seed.sessions.filter(ofTask(this.ticketId));
       } catch (err) {
         this.error = describeError(err);

@@ -66,7 +66,7 @@ func startFixtureWith(t *testing.T, autoRun, canStart bool) (start func(args map
 		peers = PeerStarter{}
 	}
 	var tool domain.Tool
-	for _, tl := range SessionTaskTools(plan, sessions, agentList{{ID: "a-rev", Name: "Reviewer"}}, peers) {
+	for _, tl := range SessionTaskTools(plan, sessions, agentList{{ID: "a-rev", Name: "Reviewer"}}, nil, peers) {
 		if tl.Name == "start_task_session" {
 			tool = tl
 		}
@@ -107,6 +107,16 @@ func TestStartTaskSession_StartsAPeerOnTheCallersTask(t *testing.T) {
 	}
 	if req := starter.got[1]; req.RepositoryID != "r-api" || req.AgentID != "" {
 		t.Fatalf("defaults = %+v", req)
+	}
+}
+
+func TestStartTaskSession_PassesTheMode(t *testing.T) {
+	start, starter, _ := startFixture(t, false)
+	if _, err := start(map[string]any{"prompt": "shape the export feature", "mode": "architect"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := starter.got[0].Mode; got != "architect" {
+		t.Fatalf("mode = %q, want architect", got)
 	}
 }
 

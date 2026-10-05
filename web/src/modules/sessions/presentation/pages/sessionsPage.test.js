@@ -13,7 +13,13 @@ file("sessions/presentation/sessionsPage");
 function setup(sessions = [makeSession({ id: "run" }), makeSession({ id: "turn", status: "idle" })]) {
   const memory = memoryGateway({ projects: ["p1"], sessions, now: () => T0 });
   const clock = fixedClock(T0);
-  const el = seededElement({ project_id: "p1", ticket_id: "t1", sessions: sessions.map(toDTO), agent_names: { backend: "Backend dev" } });
+  const el = seededElement({
+    project_id: "p1",
+    ticket_id: "t1",
+    sessions: sessions.map(toDTO),
+    agent_names: { backend: "Backend dev" },
+    repository_names: { r1: "harness" },
+  });
   const mounted = mount(sessionsPage({ gateway: memory.gateway, clock }), { el });
   mounted.instance.init();
   return { ...mounted, memory, clock, el };
@@ -162,7 +168,17 @@ test("the App tab swaps the agent's terminal for the session's App panel", () =>
   assert.deepEqual(instance.appPanels, []);
   instance.showApp();
   assert.deepEqual(instance.terminalIds, [], "the agent's terminal detaches while the App tab is open");
-  assert.deepEqual(instance.appPanels, [{ key: "live", sessionId: "live", repositoryId: "r1", projectId: "p1" }]);
+  assert.deepEqual(instance.appPanels, [
+    {
+      key: "live",
+      sessionId: "live",
+      repositoryId: "r1",
+      repositoryName: "harness",
+      branch: "agent/port-tickets-1a2b3c4d",
+      worktree: "/w/harness/.worktrees/port-tickets",
+      projectId: "p1",
+    },
+  ]);
   instance.select("loose");
   assert.deepEqual(instance.appPanels, [], "a session without a repository has no worktree to run from");
   assert.ok(instance.appUnavailable);
@@ -195,6 +211,21 @@ test("a session started elsewhere arrives live: highlighted for a moment, announ
 
   memory.upsert(makeSession({ id: "other-task", ticketId: "t2", status: "running" }));
   assert.equal(timers.length, 1, "another task's session is not announced here");
+  instance.destroy();
+});
+
+test("a session with a worktree links its git history", () => {
+  const { instance, tick } = setup([
+    makeSession({ id: "on-repo", status: "idle" }),
+    makeSession({ id: "loose", status: "idle", workspaceId: "", updatedAt: new Date(T0.getTime() - 60_000) }),
+  ]);
+  tick();
+  instance.select("on-repo");
+  assert.equal(instance.historyHref, "/projects/p1/tasks/t1/sessions/on-repo/history");
+  instance.select("loose");
+  assert.equal(instance.historyHref, "", "no worktree, no history");
+  instance.startCreating();
+  assert.equal(instance.historyHref, "", "nothing while creating");
   instance.destroy();
 });
 

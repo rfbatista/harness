@@ -69,6 +69,9 @@ type Session struct {
 	// ParentSessionID is the session that started this one on its task
 	// (through the start_task_session tool); empty when a person did.
 	ParentSessionID string `json:"parent_session_id,omitempty"`
+	// Mode is what the session was started to do beyond its agent; it brings
+	// its own skills, and they come back when the session is resumed.
+	Mode SessionMode `json:"mode,omitempty"`
 	// ClaudeSessionID is the claude conversation an interactive session resumes.
 	// It starts equal to ID (the CLI is launched with --session-id ID) and moves
 	// when the conversation does, e.g. after /clear; the CLI's SessionStart hook
@@ -92,3 +95,25 @@ const (
 
 // Valid reports whether r names a runner.
 func (r Runner) Valid() bool { return r == RunnerServer || r == RunnerTUI }
+
+// SessionMode is a way of starting a task session that layers a role on top
+// of whichever agent it runs: its own skills and its own first message.
+type SessionMode string
+
+const (
+	// SessionModeDefault is a session that is only its agent.
+	SessionModeDefault SessionMode = ""
+	// SessionModeArchitect shapes the task into per-application specs and
+	// contracts, kept as task documents, and delegates each to a planning agent.
+	SessionModeArchitect SessionMode = "architect"
+)
+
+// ParseSessionMode reads a mode as clients send it; empty is the default.
+func ParseSessionMode(s string) (SessionMode, error) {
+	switch m := SessionMode(s); m {
+	case SessionModeDefault, SessionModeArchitect:
+		return m, nil
+	default:
+		return "", &StructuredError{Code: "INVALID_INPUT", Message: "unknown session mode " + s + `: use "" or "architect"`}
+	}
+}

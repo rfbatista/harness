@@ -33,6 +33,20 @@ templ Page(v PageView) {
 				</select>
 				<span class="[ color-ink-faint text-sm ]" x-text="summary">{ v.Summary }</span>
 				<div class="[ actions ]">
+					if v.Documents != nil {
+						<a
+							class="[ button ]"
+							data-variant="ghost"
+							data-size="sm"
+							href={ templ.SafeURL(v.Documents.Href) }
+							x-data="tasksDocumentWatch"
+							data-ticket-id={ v.Documents.TicketID }
+							data-signature={ v.Documents.Signature }
+							data-count={ strconv.Itoa(v.Documents.Count) }
+						>
+							Documents <span class="[ badge ]" x-text="count">{ strconv.Itoa(v.Documents.Count) }</span>
+						</a>
+					}
 					<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-on:click="startEditTask">Edit</button>
 					<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-bind:aria-busy="checkingTaskDelete" x-on:click="askDeleteTask">Delete task</button>
 					if v.NewSession.CanStart() {
@@ -138,6 +152,9 @@ templ detail(form NewSessionForm) {
 					<div class="[ repel ]">
 						<h2 x-text="selected.title"></h2>
 						<div class="[ cluster ] [ gutter-xs ]">
+							<template x-if="historyHref">
+								<a class="[ button ]" data-variant="ghost" data-size="sm" x-bind:href="historyHref">Git history</a>
+							</template>
 							<button type="button" class="[ button ]" data-size="sm" x-bind:disabled="cannotStop" x-bind:aria-busy="stopping" x-on:click="stopSelected">Stop</button>
 							<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-bind:disabled="deleting" x-on:click="askDelete">Delete</button>
 						</div>
@@ -202,7 +219,7 @@ templ newSessionForm(form NewSessionForm) {
 		<h2>New session</h2>
 		<div class="[ field ]">
 			<label for="new-session-prompt">First message <span class="[ color-ink-faint weight-regular ]">(optional)</span></label>
-			<textarea id="new-session-prompt" class="[ font-mono text-sm ]" placeholder="What should the agent do on this task? Leave empty to open claude and type in its terminal." x-model="prompt" x-ref="prompt"></textarea>
+			<textarea id="new-session-prompt" class="[ font-mono text-sm ]" x-bind:placeholder="promptPlaceholder" x-model="prompt" x-ref="prompt"></textarea>
 			<span class="[ hint ]">claude starts in a terminal on the server, on this task's branch.</span>
 		</div>
 		<div class="[ switcher ]">
@@ -214,6 +231,14 @@ templ newSessionForm(form NewSessionForm) {
 						<option value={ a.ID }>{ a.Name }</option>
 					}
 				</select>
+			</div>
+			<div class="[ field ]">
+				<label for="new-session-mode">Mode</label>
+				<select id="new-session-mode" x-model="mode">
+					<option value="">Default</option>
+					<option value="architect">Architect</option>
+				</select>
+				<span class="[ hint ]" x-text="modeHint"></span>
 			</div>
 			<div class="[ field ]">
 				<label for="new-session-repository">Repository</label>
@@ -288,6 +313,16 @@ templ terminalPane() {
 templ appPanel() {
 	<section class="[ frame ]" aria-label="Application" x-data="runsAppPanel(panel)" x-on:terminal-exited="refresh">
 		<div class="[ flow ] [ flow-space-s pad-l divide-bottom ]">
+			<div class="[ source ]" aria-label="Where the code comes from">
+				<p>
+					Runs <strong x-text="repositoryLabel"></strong>{ " " }
+					<template x-if="hasBranch">
+						<span>on branch <code x-text="branch"></code>{ " " }</span>
+					</template>
+					— this session's worktree, with the agent's changes, not your own checkout.
+				</p>
+				<p class="[ code color-ink-faint truncate ]" x-text="worktree" x-bind:title="worktree"></p>
+			</div>
 			<form class="[ cluster ] [ gutter-xs ]" x-on:submit.prevent="start">
 				<label class="[ visually-hidden ]" for="run-choice">Command</label>
 				<select id="run-choice" x-model="choice" x-bind:disabled="busy">
@@ -353,7 +388,8 @@ templ appPanel() {
 				<div class="[ screen ]" x-ref="screen" x-on:click="focus"></div>
 				<div class="[ bar ]">
 					<span class="[ status ]" x-bind:data-state="statusState" x-text="stateWord">connecting</span>
-					<span class="[ color-ink-faint truncate grow ]">Runs in the session's worktree, with its env files. Keys go to the app.</span>
+					<span class="[ code color-ink-faint truncate grow ]" x-text="runDir" x-bind:title="runDir"></span>
+					<span class="[ color-ink-faint text-sm ]">keys go to the app</span>
 					<template x-if="canReconnect">
 						<button type="button" class="[ button ]" data-size="sm" x-on:click="reconnect">Reconnect</button>
 					</template>

@@ -7,7 +7,7 @@ import { memoryRuns } from "../infrastructure/memory-gateway.js";
 
 const STATUS = { INVALID_NAME: 400, RUN_NOT_FOUND: 404, RUN_COMMAND_NOT_FOUND: 404, SESSION_NOT_FOUND: 404, INVALID_INPUT: 400 };
 const runDTO = (r) => ({
-  id: r.id, session_id: r.sessionId, name: r.name, command: r.command, status: r.status,
+  id: r.id, session_id: r.sessionId, name: r.name, command: r.command, dir: r.dir, status: r.status,
   exit_code: r.exitCode, started_at: r.startedAt.toISOString(),
 });
 

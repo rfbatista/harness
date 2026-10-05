@@ -52,7 +52,7 @@ export function memoryGateway({ projects = [], sessions = [], repositories = {},
       return [...store.values()].filter((s) => s.projectId === projectId && (!ticketId || s.ticketId === ticketId));
     },
 
-    async start({ projectId, ticketId, repositoryId, agentId, prompt }) {
+    async start({ projectId, ticketId, repositoryId, agentId, prompt, mode }) {
       if (!knownProjects.has(projectId)) {
         throw new StructuredError(Codes.PROJECT_NOT_FOUND, `project ${projectId} not found`, 404);
       }
@@ -66,6 +66,7 @@ export function memoryGateway({ projects = [], sessions = [], repositories = {},
         ticketId: ticketId ?? "",
         task: prompt?.trim() ?? "",
         agentId: agentId ?? "",
+        mode: mode ?? "",
         status: Status.RUNNING,
         pendingApprovals: 0,
         lastAction: "",

@@ -46,6 +46,7 @@ func (r *SessionRepository) Create(s *domain.Session) (*domain.Session, error) {
 		RunsOn:          string(s.RunsOn),
 		RunnerHost:      s.RunnerHost,
 		ParentSessionID: s.ParentSessionID,
+		Mode:            string(s.Mode),
 	}
 	if err := r.db.Create(m).Error; err != nil {
 		return nil, err

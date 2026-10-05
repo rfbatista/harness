@@ -5,6 +5,10 @@ description: Use when receiving any feature request, change request, or product 
 
 # Agent Delegation
 
+> This is the local, file-based version for the `agent` launcher. Task sessions started in
+> architect mode on the harness server use `task-architecture`
+> (`internal/application/orchestration/modes/`), which keeps everything in task documents.
+
 ## Overview
 
 The software-architect **thinks in systems, not in code**. When a feature request arrives — from a PM, a stakeholder, or another agent — the architect's job is to understand the intent, identify every application affected, and produce a high-level spec per application. Each spec defines *what* needs to change and *why*, not *how*. A planning agent then picks up each spec and breaks it into implementable tasks.

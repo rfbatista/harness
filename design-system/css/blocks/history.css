@@ -1,0 +1,153 @@
+/*
+ * History — a repository's commit graph: one row per commit, each with its
+ * slice of the graph (an inline SVG exactly a row high, so the slices join),
+ * the subject with its refs, author, age and short hash. The open commit's
+ * details sit beside it: .facts, .message, .files.
+ * <nav class="history"><a class="commit"><svg class="graph">…</svg>…</a></nav>
+ *
+ * Lanes are coloured by data-lane (0–7), a categorical palette the graph
+ * needs and no other block does; mid lightness reads on both themes.
+ * Exceptions: .commit[aria-current], circle[data-merge] (hollow),
+ * .commit[data-working] (the uncommitted changes: dashed, hollow, italic),
+ * .ref[data-kind=branch|remote|tag|head], .ref[data-head], .ref[data-session],
+ * .ref[data-mine] (the branch of the session whose history this is).
+ */
+
+@layer blocks {
+  .history {
+    --_row: 32px; /* history.RowHeight */
+    --lane-0: oklch(0.7 0.13 250);
+    --lane-1: oklch(0.72 0.14 150);
+    --lane-2: oklch(0.75 0.13 75);
+    --lane-3: oklch(0.68 0.16 25);
+    --lane-4: oklch(0.7 0.14 305);
+    --lane-5: oklch(0.72 0.11 200);
+    --lane-6: oklch(0.74 0.13 110);
+    --lane-7: oklch(0.7 0.14 345);
+
+    & .commit {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr) minmax(0, 9rem) 3rem 4.5rem;
+      align-items: center;
+      gap: var(--space-s);
+      block-size: var(--_row);
+      padding-inline: var(--space-s) var(--space-l);
+      color: var(--color-ink);
+      text-decoration: none;
+      font-size: var(--text-sm);
+
+      &:hover { background: var(--color-hover); }
+      &[aria-current="page"] { background: var(--color-selected); }
+      &:focus-visible { outline-offset: calc(var(--border-focus-width) * -1); }
+    }
+
+    & .graph { display: block; overflow: visible; }
+    & .commit[data-working] {
+      & path { stroke-dasharray: 3 3; }
+      & circle { fill: var(--color-canvas); stroke-dasharray: 2 2; }
+      & .text { font-style: italic; color: var(--color-ink-muted); }
+    }
+    & path { fill: none; stroke-width: 2; stroke: var(--_lane); }
+    & circle {
+      fill: var(--_lane);
+      stroke: var(--_lane);
+      stroke-width: 2;
+
+      &[data-merge] { fill: var(--color-canvas); }
+    }
+    & :is(path, circle) {
+      &[data-lane="0"] { --_lane: var(--lane-0); }
+      &[data-lane="1"] { --_lane: var(--lane-1); }
+      &[data-lane="2"] { --_lane: var(--lane-2); }
+      &[data-lane="3"] { --_lane: var(--lane-3); }
+      &[data-lane="4"] { --_lane: var(--lane-4); }
+      &[data-lane="5"] { --_lane: var(--lane-5); }
+      &[data-lane="6"] { --_lane: var(--lane-6); }
+      &[data-lane="7"] { --_lane: var(--lane-7); }
+    }
+
+    & .subject {
+      display: flex;
+      align-items: center;
+      gap: var(--space-2xs);
+      min-inline-size: 0;
+      overflow: hidden;
+
+      & .ref { flex-shrink: 1; min-inline-size: 3ch; max-inline-size: 16rem; }
+      & .text { flex: 1 1 auto; min-inline-size: 6ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    }
+    & :is(.author, .when, .hash) {
+      overflow: hidden;
+      color: var(--color-ink-faint);
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    & .when { text-align: end; }
+    & .hash { font-family: var(--font-mono); font-size: var(--text-xs); }
+  }
+
+  /* A ref: in a row of the graph, or in the open commit. */
+  .ref {
+    flex: none;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    padding: 0 var(--space-2xs);
+    border: var(--border-width) solid var(--color-line-strong);
+    border-radius: var(--radius-xs);
+    color: var(--color-ink-muted);
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    line-height: 1.5;
+    text-decoration: none;
+    white-space: nowrap;
+
+    &[data-kind="branch"] { border-color: var(--color-signal); color: var(--color-ink); }
+    &[data-kind="tag"] { border-style: dashed; }
+    &[data-kind="remote"] { color: var(--color-ink-faint); }
+    &[data-head] { background: var(--color-signal-wash); }
+    &[data-session] { border-color: var(--color-attention); color: var(--color-ink); }
+    &[data-session]::before { content: "◆ "; color: var(--color-attention); }
+    &[data-mine] { border-width: 2px; background: var(--color-attention-wash); font-weight: var(--weight-medium); }
+  }
+
+  /* The open commit. */
+  .facts {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: var(--space-3xs) var(--space-m);
+    font-size: var(--text-sm);
+
+    & dt { color: var(--color-ink-faint); }
+    & dd { margin: 0; overflow-wrap: anywhere; }
+  }
+
+  .message {
+    max-inline-size: 72ch;
+    white-space: pre-wrap;
+  }
+
+  .files {
+    display: grid;
+    padding: 0;
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+
+    & li {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto auto;
+      gap: var(--space-s);
+      padding-block: var(--space-3xs);
+      border-block-end: var(--border-width) solid var(--color-line);
+    }
+    /* rtl truncates a long path from its start, keeping the file name; the
+       alignment stays physical left. */
+    & .path { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl; text-align: left; }
+    & .state { color: var(--color-ink-faint); }
+    & li[data-state="untracked"] .state,
+    & li[data-state="added"] .state { color: var(--color-success); }
+    & li[data-state="deleted"] .state { color: var(--color-danger); }
+    & li[data-state="conflict"] .state { color: var(--color-attention); }
+    & .added { color: var(--color-success); }
+    & .deleted { color: var(--color-danger); }
+  }
+}

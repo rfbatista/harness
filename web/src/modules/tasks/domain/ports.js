@@ -16,6 +16,8 @@
  *           Rejects with TICKET_NOT_FOUND.
  * @property {(projectId: string, taskId: string) => Promise<{ total: number, live: number }>} countSessions
  *           The task's sessions now, asked right before deleting it.
+ * @property {(taskId: string) => Promise<import("./documents.js").DocumentVersion[]>} listDocumentVersions
+ *           Which documents are linked to the task now, and their versions.
  * @property {(seed: unknown) => Task} decodeTask
  *           Reads the task the page embeds. Throws BAD_RESPONSE when malformed.
  */

@@ -119,6 +119,17 @@ func TestSessionRepo_CreatePersistsAutoRun(t *testing.T) {
 	}
 }
 
+func TestSessionRepo_CreatePersistsMode(t *testing.T) {
+	r := newTestDB(t)
+	created, err := r.Create(&domain.Session{ProjectID: "p1", Task: "do", Status: domain.SessionRunning, Mode: domain.SessionModeArchitect})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := r.Get(created.ID); got == nil || got.Mode != domain.SessionModeArchitect {
+		t.Fatalf("mode not persisted: %+v", got)
+	}
+}
+
 func TestSessionRepo_InteractiveAndClaudeSessionID(t *testing.T) {
 	r := newTestDB(t)
 	created, err := r.Create(&domain.Session{

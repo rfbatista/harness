@@ -1,0 +1,21 @@
+/*
+ * Source — where a run takes its code from: the repository and branch in
+ * words, the worktree's path under them. Quiet, but read before Run.
+ * <div class="source"><p>Runs <strong>api</strong> on branch <code>…</code> …</p><p class="code">/path</p></div>
+ */
+
+@layer blocks {
+  .source {
+    display: grid;
+    gap: var(--space-3xs);
+    padding: var(--space-xs) var(--space-s);
+    border-inline-start: 2px solid var(--color-signal);
+    background: var(--color-sunken);
+    color: var(--color-ink-muted);
+    font-size: var(--text-sm);
+
+    & strong { color: var(--color-ink); font-weight: var(--weight-medium); }
+    & code { color: var(--color-ink); }
+    & .code { font-size: var(--text-xs); }
+  }
+}

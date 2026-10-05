@@ -9,6 +9,7 @@
  * @property {string} sessionId
  * @property {string} name      the saved command's name, or the command line run ad hoc
  * @property {string} command
+ * @property {string} dir       the worktree it runs in
  * @property {RunStatus} status
  * @property {number} exitCode
  * @property {Date} startedAt

@@ -142,6 +142,8 @@ type InteractiveRequest struct {
 	// ParentSessionID is the session starting this one on its own task (the
 	// start_task_session tool); empty when a person starts it.
 	ParentSessionID string `json:"parent_session_id,omitempty"`
+	// Mode layers a role on the agent (see domain.SessionMode); empty is none.
+	Mode string `json:"mode,omitempty"`
 }
 
 // ResumeRequest reopens an ended interactive session, on RunsOn — which need

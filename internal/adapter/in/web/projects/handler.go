@@ -128,7 +128,7 @@ type RepositoriesView struct {
 }
 
 // RepositoryRow is one repository as listed.
-type RepositoryRow struct{ ID, Name, RootDir, Remote, EnvHref string }
+type RepositoryRow struct{ ID, Name, RootDir, Remote, EnvHref, HistoryHref string }
 
 // Seed is what projectsRepositoriesPage starts from, in the API's shape.
 type Seed struct {
@@ -146,7 +146,7 @@ func NewRepositoriesView(frame shell.Frame, project *domain.Project, repos []*do
 	}
 	rows := make([]RepositoryRow, 0, len(repos))
 	for _, r := range repos {
-		rows = append(rows, RepositoryRow{ID: r.ID, Name: repositoryName(r), RootDir: rootDirLabel(r.RootDir), Remote: remoteLabel(r.URL), EnvHref: EnvFilesHref(project.ID, r.ID)})
+		rows = append(rows, RepositoryRow{ID: r.ID, Name: repositoryName(r), RootDir: rootDirLabel(r.RootDir), Remote: remoteLabel(r.URL), EnvHref: EnvFilesHref(project.ID, r.ID), HistoryHref: HistoryHref(project.ID, r.ID)})
 	}
 	return RepositoriesView{
 		Frame:       frame,
@@ -180,4 +180,10 @@ func remoteLabel(u string) string {
 		return "local only"
 	}
 	return u
+}
+
+// HistoryHref is a repository's history page (served by package history,
+// which this one cannot import: history reads tasks, tasks reads projects).
+func HistoryHref(projectID, repositoryID string) string {
+	return "/projects/" + url.PathEscape(projectID) + "/repositories/" + url.PathEscape(repositoryID) + "/history"
 }

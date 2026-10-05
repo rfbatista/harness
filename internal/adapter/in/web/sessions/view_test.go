@@ -101,7 +101,7 @@ func TestSeedIsNeverNull(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(b) != `{"project_id":"p1","ticket_id":"t1","sessions":[],"agent_names":{}}` {
+	if string(b) != `{"project_id":"p1","ticket_id":"t1","sessions":[],"agent_names":{},"repository_names":{}}` {
 		t.Errorf("seed = %s", b)
 	}
 	if !v.Empty() {
@@ -117,6 +117,22 @@ func TestAgentLabel(t *testing.T) {
 	for id, want := range map[string]string{"a1": "Reviewer", "": "plain claude", "gone": "gone"} {
 		if got := AgentLabel(id, names); got != want {
 			t.Errorf("AgentLabel(%q) = %q, want %q", id, got, want)
+		}
+	}
+}
+
+func TestRunsAs(t *testing.T) {
+	names := map[string]string{"a1": "Reviewer"}
+	for _, c := range []struct {
+		s    *domain.Session
+		want string
+	}{
+		{&domain.Session{AgentID: "a1"}, "Reviewer"},
+		{&domain.Session{Mode: domain.SessionModeArchitect}, "plain claude as architect"},
+		{&domain.Session{AgentID: "a1", Mode: domain.SessionModeArchitect}, "Reviewer as architect"},
+	} {
+		if got := RunsAs(c.s, names); got != c.want {
+			t.Errorf("RunsAs(%+v) = %q, want %q", c.s, got, c.want)
 		}
 	}
 }

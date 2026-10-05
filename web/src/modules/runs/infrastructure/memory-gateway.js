@@ -8,9 +8,10 @@ import { Codes, StructuredError } from "../../../shared/domain/errors.js";
  *   sessions?: string[],
  *   commands?: Record<string, { name: string, command: string }[]>,  repository id → saved commands
  *   repositoryOf?: Record<string, string>,  session id → repository id
+ *   dirOf?: Record<string, string>,  session id → its worktree
  * }} [world]
  */
-export function memoryRuns({ sessions = [], commands = {}, repositoryOf = {} } = {}) {
+export function memoryRuns({ sessions = [], commands = {}, repositoryOf = {}, dirOf = {} } = {}) {
   const known = new Set(sessions);
   const runs = [];
   let next = 1;
@@ -58,7 +59,7 @@ export function memoryRuns({ sessions = [], commands = {}, repositoryOf = {} } =
         throw new StructuredError(Codes.INVALID_INPUT, "pick a saved command or type one to run", 400);
       }
       clock += 1000;
-      const run = { id: `run-${next++}`, sessionId, name: name || command, command, status: "running", exitCode: 0, startedAt: new Date(clock) };
+      const run = { id: `run-${next++}`, sessionId, name: name || command, command, dir: dirOf[sessionId] ?? "", status: "running", exitCode: 0, startedAt: new Date(clock) };
       runs.push(run);
       return { ...run };
     },

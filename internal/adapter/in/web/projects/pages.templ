@@ -99,6 +99,7 @@ templ RepositoriesPage(v RepositoriesView) {
 										<span class="[ weight-medium ]">{ r.Name }</span>
 										<span class="[ font-mono text-xs color-ink-faint ]">{ r.RootDir } · { r.Remote }</span>
 									</span>
+									<a class="[ button ]" data-variant="ghost" data-size="sm" href={ templ.SafeURL(r.HistoryHref) }>History</a>
 									<a class="[ button ]" data-variant="ghost" data-size="sm" href={ templ.SafeURL(r.EnvHref) }>Env files</a>
 								</div>
 							}
@@ -110,6 +111,7 @@ templ RepositoriesPage(v RepositoriesView) {
 									<span class="[ font-mono text-xs color-ink-faint ]"><span x-text="r.rootDir"></span> · <span x-text="r.remote"></span></span>
 								</span>
 								<span class="[ cluster ] [ gutter-xs ]">
+									<a class="[ button ]" data-variant="ghost" data-size="sm" x-bind:href="r.historyHref">History</a>
 									<a class="[ button ]" data-variant="ghost" data-size="sm" x-bind:href="r.envHref">Env files</a>
 									<template x-if="!r.confirming">
 										<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-on:click="askRemove(r.id)">Remove</button>

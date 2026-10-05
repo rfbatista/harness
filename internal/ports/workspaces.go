@@ -1,6 +1,10 @@
 package ports
 
-import "operators-mcp/internal/domain"
+import (
+	"context"
+
+	"operators-mcp/internal/domain"
+)
 
 // Driving ports of the workspaces service: git worktrees of a repository.
 // *workspaces.Service satisfies them.
@@ -31,4 +35,29 @@ type WorkspaceProvisioner interface {
 type Workspaces interface {
 	WorkspaceManager
 	WorkspaceProvisioner
+}
+
+// HistoryQuery picks what a repository's history read returns.
+type HistoryQuery struct {
+	// Limit caps the commits, newest first in topological order;
+	// 0 means the default, at most domain.MaxHistory.
+	Limit int
+	// Remotes adds remote-tracking branches to the local ones and tags.
+	Remotes bool
+	// Refs, when set, logs only what these refs reach (a session's branch
+	// and its base) instead of every branch and tag.
+	Refs []string
+}
+
+// RepositoryHistory reads a repository's commit graph: every local branch
+// (agents' session branches among them), tags, optionally remote branches.
+// An unknown repository is REPOSITORY_NOT_FOUND; an unknown commit
+// COMMIT_NOT_FOUND. *workspaces.Service satisfies it.
+type RepositoryHistory interface {
+	RepositoryLog(ctx context.Context, repositoryID string, q HistoryQuery) ([]domain.Commit, error)
+	RepositoryCommit(ctx context.Context, repositoryID, hash string) (*domain.CommitDetail, error)
+	// WorkspaceHistory is a workspace's (a session's worktree) branch beside
+	// its base, up to limit commits, with its uncommitted changes; an unknown
+	// workspace is WORKSPACE_NOT_FOUND.
+	WorkspaceHistory(ctx context.Context, workspaceID string, limit int) (*domain.WorkspaceHistory, error)
 }

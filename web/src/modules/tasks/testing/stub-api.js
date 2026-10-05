@@ -33,6 +33,13 @@ export function stubTasksApi(world) {
           const sessions = memory.sessions.filter((s) => s.ticketId === ticket).map((s, i) => ({ id: `s${i}`, ticket_id: s.ticketId, status: s.status }));
           return jsonResponse(200, { sessions });
         }
+        case "GET /api/list_ticket_documents": {
+          const ticket = url.searchParams.get("ticket_id");
+          const documents = memory.documents
+            .filter((d) => d.ticketId === ticket)
+            .map((d) => ({ id: d.id, project_id: "p1", title: d.id, content: "…", updated_at: d.updatedAt }));
+          return jsonResponse(200, { documents });
+        }
         default:
           return jsonResponse(404, { error: `no route ${url.pathname}` });
       }

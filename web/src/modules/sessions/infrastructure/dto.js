@@ -19,6 +19,7 @@ export function toSession(dto) {
     repositoryId: dto.repository_id ?? "",
     task: dto.task ?? "",
     agentId: dto.agent_id ?? "",
+    mode: dto.mode ?? "",
     status: dto.status,
     pendingApprovals: Number(dto.pending_approvals ?? 0),
     lastAction: dto.last_action ?? "",
@@ -26,6 +27,9 @@ export function toSession(dto) {
     runsOn: dto.runs_on ?? "",
     runnerHost: dto.runner_host ?? "",
     parentSessionId: dto.parent_session_id ?? "",
+    branch: dto.branch ?? "",
+    workspaceId: dto.workspace_id ?? "",
+    workingDir: dto.working_dir ?? "",
     updatedAt,
   });
 }
@@ -44,6 +48,7 @@ export function toSeed(body) {
     ticketId: body.ticket_id ?? "",
     sessions: toSessionList(body),
     agentNames: { ...(body.agent_names ?? {}) },
+    repositoryNames: { ...(body.repository_names ?? {}) },
   };
 }
 
@@ -64,6 +69,7 @@ export function toStartBody(req) {
     ticket_id: req.ticketId,
     repository_id: req.repositoryId,
     agent_id: req.agentId || undefined,
+    mode: req.mode || undefined,
     prompt: req.prompt || undefined,
     auto_accept: req.autoAccept,
     runs_on: "server",

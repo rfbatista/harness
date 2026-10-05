@@ -145,6 +145,7 @@ type SkillPublisher = skill.Publisher
 type WorkspaceRepository interface {
 	Get(id string) *domain.Workspace
 	ListByRepository(repositoryID string) []*domain.Workspace
-	Create(repositoryID, name, branch, path string) (*domain.Workspace, error)
+	// Create records w (its ID is generated) and returns it.
+	Create(w domain.Workspace) (*domain.Workspace, error)
 	Delete(id string) error
 }

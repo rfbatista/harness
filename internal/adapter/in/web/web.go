@@ -18,6 +18,7 @@ import (
 	"github.com/a-h/templ"
 	"github.com/rfbatista/harnesskit/errs"
 
+	"operators-mcp/internal/adapter/in/web/history"
 	"operators-mcp/internal/adapter/in/web/home"
 	"operators-mcp/internal/adapter/in/web/projects"
 	"operators-mcp/internal/adapter/in/web/shell"
@@ -36,6 +37,10 @@ type Deps struct {
 	Repositories ports.RepositoryLister
 	// EnvFiles lists a repository's env files for their page.
 	EnvFiles ports.EnvFileLister
+	// Documents reads a task's documents for its documents page; nil hides it.
+	Documents ports.TicketDocumentReader
+	// History reads repositories' commit graphs for their history pages.
+	History ports.RepositoryHistory
 	// Now defaults to time.Now.
 	Now func() time.Time
 }
@@ -55,10 +60,14 @@ func NewHandler(deps Deps, assets *Assets, fallback http.Handler) http.Handler {
 	homePage := home.Handler{Projects: deps.Projects, Layout: s.layout, Render: render}
 	taskPages := tasks.Handler{
 		Projects: deps.Projects, Tasks: deps.Tasks, Sessions: deps.Sessions,
-		Agents: deps.Agents, Repositories: deps.Repositories,
+		Agents: deps.Agents, Repositories: deps.Repositories, Docs: deps.Documents,
 		Layout: s.layout, Render: render, Now: deps.Now,
 	}
 	projectPages := projects.Handler{Projects: deps.Projects, Repositories: deps.Repositories, EnvFiles: deps.EnvFiles, Layout: s.layout, Render: render}
+	historyPages := history.Handler{
+		Projects: deps.Projects, Repositories: deps.Repositories, History: deps.History, Sessions: deps.Sessions, Tasks: deps.Tasks,
+		Layout: s.layout, Render: render, Now: deps.Now,
+	}
 	toProject := func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/projects/"+url.PathEscape(r.PathValue("project")), http.StatusFound)
 	}
@@ -71,10 +80,16 @@ func NewHandler(deps Deps, assets *Assets, fallback http.Handler) http.Handler {
 	mux.Handle("GET /projects/{project}", s.page(taskPages.Project))
 	mux.Handle("GET /projects/{project}/repositories", s.page(projectPages.RepositoryList))
 	mux.Handle("GET /projects/{project}/repositories/{repository}/env", s.page(projectPages.EnvFileList))
+	mux.Handle("GET /projects/{project}/repositories/{repository}/history", s.page(historyPages.Page))
+	mux.Handle("GET /projects/{project}/repositories/{repository}/history/{commit}", s.page(historyPages.Page))
 	mux.HandleFunc("GET /projects/{project}/{$}", toProject)
 	mux.HandleFunc("GET /projects/{project}/sessions", toProject) // the old page; sessions now live under their task
 	mux.Handle("GET /projects/{project}/tasks/new", s.page(taskPages.New))
 	mux.Handle("GET /projects/{project}/tasks/{task}", s.page(taskPages.Task))
+	mux.Handle("GET /projects/{project}/tasks/{task}/sessions/{session}/history", s.page(historyPages.Session))
+	mux.Handle("GET /projects/{project}/tasks/{task}/sessions/{session}/history/{commit}", s.page(historyPages.Session))
+	mux.Handle("GET /projects/{project}/tasks/{task}/documents", s.page(taskPages.Documents))
+	mux.Handle("GET /projects/{project}/tasks/{task}/documents/{document}", s.page(taskPages.Documents))
 	mux.Handle("/", fallback)
 	return mux
 }

@@ -10,9 +10,10 @@ import { toTask } from "./dto.js";
  *   projects?: string[],
  *   tasks?: import("../domain/task.js").Task[],
  *   sessions?: { ticketId: string, status: string }[],
+ *   documents?: { id: string, ticketId: string, updatedAt: string }[],
  * }} [world]
  */
-export function memoryTasks({ projects = [], tasks = [], sessions = [] } = {}) {
+export function memoryTasks({ projects = [], tasks = [], sessions = [], documents = [] } = {}) {
   const known = new Set([...projects, ...tasks.map((t) => t.projectId)]);
   const store = new Map(tasks.map((t) => [t.id, t]));
   let next = 1;
@@ -47,11 +48,26 @@ export function memoryTasks({ projects = [], tasks = [], sessions = [] } = {}) {
       if (!store.delete(id)) throw new StructuredError(Codes.TICKET_NOT_FOUND, "ticket not found", 404);
     },
 
+    async listDocumentVersions(taskId) {
+      return documents.filter((d) => d.ticketId === taskId).map((d) => ({ id: d.id, version: d.updatedAt }));
+    },
+
     async countSessions(_projectId, taskId) {
       const mine = sessions.filter((s) => s.ticketId === taskId);
       return { total: mine.length, live: mine.filter((s) => !["done", "failed", "stopped"].includes(s.status)).length };
     },
   };
 
-  return { gateway, tasks: () => [...store.values()], sessions };
+  return {
+    gateway,
+    tasks: () => [...store.values()],
+    sessions,
+    documents,
+    /** An agent wrote or rewrote a document on a task. */
+    writeDocument(doc) {
+      const at = documents.findIndex((d) => d.id === doc.id);
+      if (at >= 0) documents[at] = doc;
+      else documents.push(doc);
+    },
+  };
 }

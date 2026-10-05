@@ -68,6 +68,15 @@ type Group struct {
 // IsLive: the session's process is alive (not done, failed or stopped).
 func IsLive(s *domain.Session) bool { return !s.Status.IsTerminal() }
 
+// DocumentsLink is the toolbar's way to the task's documents: how many there
+// are, kept current by the browser (tasksDocumentWatch) as agents write more.
+type DocumentsLink struct {
+	Href      string
+	TicketID  string
+	Count     int
+	Signature string
+}
+
 // Seed is what the browser starts from: the API's JSON shape
 // (GET /api/sessions plus the task), decoded by the sessions gateway.
 // AgentNames lets live updates show an agent's name, as the first paint does.
@@ -76,6 +85,9 @@ type Seed struct {
 	TicketID   string            `json:"ticket_id"`
 	Sessions   []*domain.Session `json:"sessions"`
 	AgentNames map[string]string `json:"agent_names"`
+	// RepositoryNames lets the App tab say which repository a run's code
+	// comes from.
+	RepositoryNames map[string]string `json:"repository_names"`
 }
 
 // Option is one choice in the new-session form.
@@ -120,7 +132,9 @@ type PageView struct {
 	Summary         string
 	Groups          []Group
 	Seed            Seed
-	NewSession      NewSessionForm
+	// Documents links the task's documents page; nil hides it.
+	Documents  *DocumentsLink
+	NewSession NewSessionForm
 }
 
 // Empty reports a project without sessions.
@@ -144,7 +158,9 @@ func NewPageView(frame shell.Frame, project *domain.Project, task *domain.Ticket
 		names[a.ID] = a.Name
 		form.Agents = append(form.Agents, Option{a.ID, a.Name})
 	}
+	repoNames := make(map[string]string, len(repos))
 	for _, r := range repos {
+		repoNames[r.ID] = r.Name
 		form.Repositories = append(form.Repositories, Option{r.ID, r.Name})
 	}
 
@@ -171,7 +187,7 @@ func NewPageView(frame shell.Frame, project *domain.Project, task *domain.Ticket
 		TaskStatus:      StatusLabel(task.Status),
 		Summary:         summary(list),
 		Groups:          views,
-		Seed:            Seed{ProjectID: project.ID, TicketID: task.ID, Sessions: list, AgentNames: names},
+		Seed:            Seed{ProjectID: project.ID, TicketID: task.ID, Sessions: list, AgentNames: names, RepositoryNames: repoNames},
 		NewSession:      form,
 	}
 }
@@ -200,7 +216,7 @@ func toRow(s *domain.Session, selectedID string, agentNames map[string]string, n
 	if title == "" {
 		title = "Untitled session"
 	}
-	agent := AgentLabel(s.AgentID, agentNames)
+	agent := RunsAs(s, agentNames)
 	return Row{
 		ID:        s.ID,
 		Title:     title,
@@ -273,6 +289,21 @@ func AgentLabel(id string, names map[string]string) string {
 		return id
 	}
 }
+
+// RunsAs is how a session's agent reads with the mode it was started in:
+// "Reviewer", "plain claude as architect". The browser's runsAs (view.js)
+// says the same.
+func RunsAs(s *domain.Session, names map[string]string) string {
+	agent := AgentLabel(s.AgentID, names)
+	if s.Mode == domain.SessionModeDefault {
+		return agent
+	}
+	return agent + " as " + string(s.Mode)
+}
+
+// RelativeTime is how long ago then was, as the pages write it: "now",
+// "5m", "3h", "2d".
+func RelativeTime(then, now time.Time) string { return relativeTime(then, now) }
 
 // relativeTime and count mirror web/src/shared/presentation/format.js.
 func relativeTime(then, now time.Time) string {

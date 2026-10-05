@@ -1,6 +1,7 @@
 package ports
 
 import (
+	"context"
 	"errors"
 
 	"operators-mcp/internal/domain"
@@ -25,4 +26,21 @@ type WorktreeManager interface {
 	// few seconds old with no commits — never for session deletion, which
 	// keeps the branch so committed work outlives the session.
 	DeleteBranch(repoRoot, branch string) error
+}
+
+// GitHistory reads a checkout's history (driven; gitcli implements it).
+type GitHistory interface {
+	// Log returns up to q.Limit commits reachable from the local branches,
+	// tags and HEAD (and remote branches with q.Remotes), children before
+	// their parents.
+	Log(ctx context.Context, repoRoot string, q HistoryQuery) ([]domain.Commit, error)
+	// Show returns one commit with its message and changed files, or
+	// COMMIT_NOT_FOUND.
+	Show(ctx context.Context, repoRoot, hash string) (*domain.CommitDetail, error)
+	// Status reads a checkout's HEAD, branch and uncommitted changes; a
+	// directory that is gone is WORKSPACE_MISSING.
+	Status(ctx context.Context, dir string) (*domain.WorktreeStatus, error)
+	// Divergence counts the commits branch has that base lacks (ahead) and
+	// the other way round (behind).
+	Divergence(ctx context.Context, dir, base, branch string) (ahead, behind int, err error)
 }

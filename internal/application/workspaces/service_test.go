@@ -88,14 +88,14 @@ func (f *fakeWorkspaceRepo) ListByRepository(repositoryID string) []*domain.Work
 	return out
 }
 
-func (f *fakeWorkspaceRepo) Create(repositoryID, name, branch, path string) (*domain.Workspace, error) {
+func (f *fakeWorkspaceRepo) Create(in domain.Workspace) (*domain.Workspace, error) {
 	if f.createErr != nil {
 		return nil, f.createErr
 	}
-	id := "ws" + string(rune('0'+f.seq.Add(1)))
-	w := &domain.Workspace{ID: id, RepositoryID: repositoryID, Name: name, Branch: branch, Path: path}
-	f.items[id] = w
-	return w, nil
+	w := in
+	w.ID = "ws" + string(rune('0'+f.seq.Add(1)))
+	f.items[w.ID] = &w
+	return &w, nil
 }
 
 func (f *fakeWorkspaceRepo) Delete(id string) error {

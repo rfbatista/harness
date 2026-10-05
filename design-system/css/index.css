@@ -53,6 +53,9 @@
 @import url("./blocks/tabs.css");
 @import url("./blocks/banner.css");
 @import url("./blocks/brief.css");
+@import url("./blocks/prose.css");
+@import url("./blocks/source.css");
+@import url("./blocks/history.css");
 @import url("./blocks/stream-bar.css");
 @import url("./blocks/transcript.css");
 @import url("./blocks/terminal.css");

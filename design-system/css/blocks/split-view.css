@@ -2,6 +2,8 @@
  * Split view — a list beside the detail of what is selected in it.
  * <div class="split-view"><div class="list">…</div><section>detail</section></div>
  * Below 64rem only the list shows; the detail is reached by opening a row.
+ * Exception: data-wide-list — the list is the main view (a commit graph) and
+ * the detail the narrower side.
  */
 
 @layer blocks {
@@ -9,6 +11,8 @@
     display: grid;
     grid-template-columns: minmax(18rem, 26rem) minmax(0, 1fr);
     min-block-size: 0;
+
+    &[data-wide-list] { grid-template-columns: minmax(0, 1fr) minmax(20rem, 32rem); }
 
     @media (width < 64rem) {
       grid-template-columns: minmax(0, 1fr);

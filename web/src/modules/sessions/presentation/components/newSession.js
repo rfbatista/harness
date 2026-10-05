@@ -15,6 +15,8 @@ export const newSession = ({ gateway }) => (projectId = "", ticketId = "") => ({
   ticketId,
   prompt: "",
   agentId: "",
+  /** "" or "architect": a role on top of the agent. */
+  mode: "",
   repositoryId: "",
   autoAccept: "off",
   /** @type {import("../../domain/ports.js").Branch[]} */
@@ -73,6 +75,20 @@ export const newSession = ({ gateway }) => (projectId = "", ticketId = "") => ({
     }
   },
 
+  get architect() {
+    return this.mode === "architect";
+  },
+  get promptPlaceholder() {
+    return this.architect
+      ? "Optional — the architect starts from the task's title and description. Add anything it should know."
+      : "What should the agent do on this task? Leave empty to open claude and type in its terminal.";
+  },
+  get modeHint() {
+    return this.architect
+      ? "Adds the task-architecture skill: it writes per-application specs as task documents and starts a planning session for each."
+      : "Runs the agent as it is.";
+  },
+
   repositoryChanged() {
     this.loadBranches();
   },
@@ -91,6 +107,7 @@ export const newSession = ({ gateway }) => (projectId = "", ticketId = "") => ({
         ticketId: this.ticketId,
         repositoryId: this.repositoryId,
         agentId: this.agentId,
+        mode: this.mode,
         prompt: this.prompt.trim(),
         autoAccept: this.autoAccept,
         baseBranch: this.baseBranch,

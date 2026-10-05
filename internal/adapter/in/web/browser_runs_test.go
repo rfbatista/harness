@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -48,7 +49,7 @@ func TestAppTabRunsACommandInTheWorktree(t *testing.T) {
 	session := &domain.Session{
 		ID: "s1", ProjectID: "p1", TicketID: "t1", RepositoryID: "r1", Task: "implement this task",
 		Status: domain.SessionIdle, Interactive: true, RunsOn: domain.RunnerServer, UpdatedAt: time.Now(),
-		WorkingDir: t.TempDir(),
+		WorkingDir: t.TempDir(), Branch: "agent/add-sse-feed-1a2b",
 	}
 	sessions := fakeSessions{[]*domain.Session{session}}
 	host := termhost.New(shell.Direct{}, ptyunix.New(), command.Agent{Shell: "/bin/sh"})
@@ -73,7 +74,8 @@ func TestAppTabRunsACommandInTheWorktree(t *testing.T) {
 	rows := `document.querySelector('[aria-label=Application] .terminal .xterm-rows')?.textContent ?? ''`
 	// The ANSI color reaches xterm as a style, not as text.
 	colored := `[...document.querySelectorAll('[aria-label=Application] .xterm-rows span')].some(s => s.textContent.includes('app is up') && [...s.classList].some(c => c.startsWith('xterm-fg-')))`
-	var runState, afterStop string
+	var runState, afterStop, source, worktree string
+	var shot []byte
 	err = chromedp.Run(ctx,
 		chromedp.EmulateViewport(1280, 800),
 		chromedp.Navigate(srv.URL+"/projects/p1/tasks/t1"),
@@ -81,8 +83,11 @@ func TestAppTabRunsACommandInTheWorktree(t *testing.T) {
 		clickButton(`[role=tablist]`, "App"),
 		chromedp.Poll(`!!document.querySelector('[aria-label="Command to run"]')`, nil, chromedp.WithPollingTimeout(5*time.Second)),
 		setField(`[aria-label="Command to run"]`, `printf '\033[32mapp is up\033[0m in %s\n' "$(basename "$PWD")"; sleep 30`, "input"),
+		chromedp.Evaluate(`document.querySelector('[aria-label=Application] .source p').textContent.replace(/\s+/g, ' ').trim()`, &source),
+		chromedp.Evaluate(`document.querySelector('[aria-label=Application] .source .code').textContent`, &worktree),
 		clickButton(`[aria-label=Application]`, "Run"),
 		chromedp.Poll(colored, nil, chromedp.WithPollingTimeout(10*time.Second)),
+		chromedp.FullScreenshot(&shot, 80),
 		clickButton(`[aria-label=Application]`, "Stop"),
 		chromedp.Poll(`document.querySelector('[aria-label=Application] .repel .status')?.textContent === 'stopped'`, nil, chromedp.WithPollingTimeout(10*time.Second)),
 		chromedp.Evaluate(`document.querySelector('[aria-label=Application] .repel .status')?.textContent ?? ''`, &runState),
@@ -92,6 +97,15 @@ func TestAppTabRunsACommandInTheWorktree(t *testing.T) {
 	)
 	if err != nil {
 		t.Fatalf("%v\nJS errors: %v", err, errs.all())
+	}
+	if want := "Runs harness on branch agent/add-sse-feed-1a2b — this session's worktree, with the agent's changes, not your own checkout."; source != want {
+		t.Errorf("source line = %q\nwant          %q", source, want)
+	}
+	if worktree != session.WorkingDir {
+		t.Errorf("worktree = %q, want %q", worktree, session.WorkingDir)
+	}
+	if dir := os.Getenv("WEB_SCREENSHOT_DIR"); dir != "" {
+		_ = os.WriteFile(dir+"/app-tab.jpg", shot, 0o644)
 	}
 	if runState != "stopped" {
 		t.Errorf("run state = %q, want stopped", runState)

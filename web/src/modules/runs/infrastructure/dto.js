@@ -13,6 +13,7 @@ export function toRun(dto) {
     sessionId: dto.session_id ?? "",
     name: dto.name ?? "",
     command: dto.command ?? "",
+    dir: dto.dir ?? "",
     status: dto.status,
     exitCode: Number(dto.exit_code ?? 0),
     startedAt: new Date(dto.started_at),

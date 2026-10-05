@@ -28,6 +28,13 @@ type BoundedContextCatalog interface {
 	UnassignZoneFromBoundedContext(zoneID string) (*domain.Zone, error)
 }
 
+// ArchitectureMap is what a session reads about how its project is carved
+// up: the bounded contexts and the zones that belong to them.
+type ArchitectureMap interface {
+	ListBoundedContexts(projectID string) []*domain.BoundedContext
+	ListZones(projectID string) []*domain.Zone
+}
+
 // PathExplorer reads a project's file tree. root overrides the project's root
 // directory when set.
 type PathExplorer interface {

@@ -1,6 +1,10 @@
 package sqlite
 
-import "testing"
+import (
+	"testing"
+
+	"operators-mcp/internal/domain"
+)
 
 func TestWorkspaceRepo_CRUD(t *testing.T) {
 	db, err := Open(":memory:")
@@ -9,7 +13,7 @@ func TestWorkspaceRepo_CRUD(t *testing.T) {
 	}
 	r := NewWorkspaceRepository(db)
 
-	ws, err := r.Create("r1", "feature-x", "feature-x", "/tmp/wt/feature-x")
+	ws, err := r.Create(domain.Workspace{RepositoryID: "r1", Name: "feature-x", Branch: "feature-x", Path: "/tmp/wt/feature-x"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -28,7 +32,7 @@ func TestWorkspaceRepo_CRUD(t *testing.T) {
 	}
 
 	// Second workspace under the same repository proves one-to-many.
-	if _, err := r.Create("r1", "feature-y", "feature-y", "/tmp/wt/feature-y"); err != nil {
+	if _, err := r.Create(domain.Workspace{RepositoryID: "r1", Name: "feature-y", Branch: "feature-y", Path: "/tmp/wt/feature-y"}); err != nil {
 		t.Fatal(err)
 	}
 	if list := r.ListByRepository("r1"); len(list) != 2 {
@@ -40,10 +44,10 @@ func TestWorkspaceRepo_CRUD(t *testing.T) {
 
 	// The unique index rejects a duplicate name within the same repository,
 	// but allows the same name under another repository.
-	if _, err := r.Create("r1", "feature-x", "other-branch", "/tmp/wt/dup"); err == nil {
+	if _, err := r.Create(domain.Workspace{RepositoryID: "r1", Name: "feature-x", Branch: "other-branch", Path: "/tmp/wt/dup"}); err == nil {
 		t.Fatal("expected error for duplicate name in same repository")
 	}
-	if _, err := r.Create("r2", "feature-x", "feature-x", "/tmp/wt2/feature-x"); err != nil {
+	if _, err := r.Create(domain.Workspace{RepositoryID: "r2", Name: "feature-x", Branch: "feature-x", Path: "/tmp/wt2/feature-x"}); err != nil {
 		t.Fatalf("same name in another repository should work: %v", err)
 	}
 

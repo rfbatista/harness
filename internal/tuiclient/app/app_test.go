@@ -208,11 +208,14 @@ func (r *run) openTask() {
 	r.until("task screen", r.shows("No agent sessions open"))
 }
 
-// startSession opens the picker, keeps plain claude, and starts with prompt.
+// startSession opens the picker, keeps plain claude in the default mode, and
+// starts with prompt.
 func (r *run) startSession(prompt string) {
 	r.t.Helper()
 	r.press("n")
 	r.until("picker", r.shows("plain claude"))
+	r.press("enter")
+	r.until("mode step", r.shows("architect"))
 	r.press("enter")
 	r.until("prompt step", r.shows("First message"))
 	r.typeText(prompt)
@@ -278,6 +281,8 @@ func TestClient_AgentPickerAndRepositoryStep(t *testing.T) {
 	r.press("n")
 	r.until("picker", r.shows("reviewer"))
 	r.press("down", "enter")
+	r.until("mode step", r.shows("architect"))
+	r.press("enter")
 	r.until("repository step", r.shows("worker"))
 	r.press("down", "enter")
 	r.until("prompt step", r.shows("First message"))
@@ -285,10 +290,34 @@ func TestClient_AgentPickerAndRepositoryStep(t *testing.T) {
 	r.until("session", func() bool { _, ok := be.Session("s1"); return ok })
 
 	s, _ := be.Session("s1")
-	if s.AgentID != "a1" || s.RepositoryID != "r2" {
-		t.Fatalf("picked reviewer on worker, got agent %q repo %q", s.AgentID, s.RepositoryID)
+	if s.AgentID != "a1" || s.RepositoryID != "r2" || s.Mode != domain.SessionModeDefault {
+		t.Fatalf("picked reviewer on worker in the default mode, got agent %q repo %q mode %q", s.AgentID, s.RepositoryID, s.Mode)
 	}
 	r.until("pane labelled reviewer", r.shows(" 1 reviewer "))
+}
+
+func TestClient_ArchitectModeStep(t *testing.T) {
+	be := fixture()
+	r := newRun(t, be, nil)
+	r.openTask()
+
+	r.press("n")
+	r.until("picker", r.shows("plain claude"))
+	r.press("enter")
+	r.until("mode step", r.shows("architect"))
+	r.press("down", "enter")
+	r.until("prompt step", r.shows("the architect starts from the task"))
+	r.press("esc")
+	r.until("back to the mode step", r.shows("the agent as it is"))
+	r.press("enter")
+	r.until("prompt step again", r.shows("First message"))
+	r.press("enter")
+	r.until("session", func() bool { _, ok := be.Session("s1"); return ok })
+
+	if s, _ := be.Session("s1"); s.Mode != domain.SessionModeArchitect || s.AgentID != "" {
+		t.Fatalf("picked plain claude as architect, got agent %q mode %q", s.AgentID, s.Mode)
+	}
+	r.until("pane labelled with the mode", r.shows(" 1 claude (architect) "))
 }
 
 func TestClient_PanesSurviveLeavingTheTask(t *testing.T) {

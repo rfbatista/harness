@@ -41,6 +41,12 @@ test("the start request and the created session speak the API's shape", () => {
     toStartBody({ projectId: "p1", ticketId: "t1", repositoryId: "r1", agentId: "", prompt: "go", autoAccept: "off", size: { cols: 120, rows: 32 } }),
     { project_id: "p1", ticket_id: "t1", repository_id: "r1", agent_id: undefined, prompt: "go", auto_accept: "off", runs_on: "server", size: { cols: 120, rows: 32 } },
   );
+  assert.equal(
+    toStartBody({ projectId: "p1", ticketId: "t1", repositoryId: "r1", agentId: "", mode: "architect", prompt: "", autoAccept: "off" }).mode,
+    "architect",
+  );
+  assert.equal(toSession({ ...wire, mode: "architect" }).mode, "architect");
+  assert.equal(toSession(wire).mode, "");
   assert.equal(toCreated({ session: wire }).id, "s1");
   assert.throws(() => toCreated({}), Codes.BAD_RESPONSE);
 });

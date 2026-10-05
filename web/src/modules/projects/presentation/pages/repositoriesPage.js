@@ -37,6 +37,7 @@ export const repositoriesPage = ({ gateway }) => () => ({
       confirming: r.id === this.confirmingId,
       removing: r.id === this.removingId,
       envHref: `/projects/${encodeURIComponent(this.projectId)}/repositories/${encodeURIComponent(r.id)}/env`,
+      historyHref: `/projects/${encodeURIComponent(this.projectId)}/repositories/${encodeURIComponent(r.id)}/history`,
     }));
   },
   /** Found checkouts not added yet, to add with one click. */

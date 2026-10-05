@@ -1,0 +1,228 @@
+package history
+
+import (
+	"strconv"
+
+	"operators-mcp/internal/adapter/in/web/components"
+	"operators-mcp/internal/adapter/in/web/shell"
+)
+
+// Page is a history: a repository's commit graph, every local branch in it
+// (agents' session branches among them), or one session's branch beside its
+// base with its uncommitted changes as the first row; the open commit (or
+// the changes) beside it. Rows are links: opening one keeps the place in
+// the graph (#c-<hash>).
+templ Page(v PageView) {
+	@shell.AppShell(v.Frame) {
+		<main class="[ frame ]">
+			<header class="[ toolbar ]">
+				for _, c := range v.Crumbs {
+					<a class="[ crumb ]" href={ templ.SafeURL(c.Href) }>{ c.Label } /</a>
+				}
+				<h1>{ v.Heading }</h1>
+				<span class="[ color-ink-faint text-sm ]">{ v.Meta }</span>
+				if v.RemotesHref != "" {
+					<div class="[ actions ]">
+						<a class="[ button ]" data-variant="ghost" data-size="sm" href={ templ.SafeURL(v.RemotesHref) } aria-pressed={ strconv.FormatBool(v.Remotes) }>
+							Remote branches
+						</a>
+					</div>
+				}
+			</header>
+			if v.Notice != "" {
+				<div class="[ banner ]" role="status">{ v.Notice }</div>
+			}
+			if len(v.Rows) == 0 && v.Working == nil {
+				<div data-scroll>
+					@components.Empty("No commits yet", "This repository has no history to show.")
+				</div>
+			} else {
+				<div class="[ split-view ]" data-scroll data-wide-list>
+					<nav class="[ history ] [ divide-end ]" aria-label="Commits" data-scroll>
+						if v.Working != nil {
+							@workingRow(v.Working)
+						}
+						for _, r := range v.Rows {
+							@commitRow(r)
+						}
+						if v.MoreHref != "" {
+							<div class="[ pad-l ]">
+								<a class="[ button ]" data-size="sm" href={ templ.SafeURL(v.MoreHref) }>Show more</a>
+							</div>
+						}
+					</nav>
+					if v.Open != nil {
+						@commitDetail(v.Open)
+					} else if v.OpenWorking != nil {
+						@workingDetail(v.OpenWorking)
+					}
+				</div>
+			}
+		</main>
+	}
+}
+
+// workingRow is the uncommitted changes: a hollow dot over the branch tip,
+// joined to it by a dashed line.
+templ workingRow(w *WorkingRow) {
+	<a class="[ commit ]" id={ "c-" + workingID } href={ templ.SafeURL(w.Href) } data-working { currentAttrs(w.Current)... }>
+		@graph(w.Graph)
+		<span class="[ subject ]">
+			<span class="[ text ]">Uncommitted changes</span>
+		</span>
+		<span class="[ author ]">{ w.Summary }</span>
+		<span class="[ when ]">now</span>
+		<span class="[ hash ]"></span>
+	</a>
+}
+
+templ commitRow(r Row) {
+	<a class="[ commit ]" id={ "c-" + r.Short } href={ templ.SafeURL(r.Href) } { currentAttrs(r.Current)... }>
+		@graph(r.Graph)
+		<span class="[ subject ]">
+			for _, ref := range r.Refs {
+				@refBadge(ref, false)
+			}
+			<span class="[ text ]">{ r.Subject }</span>
+		</span>
+		<span class="[ author ]">{ r.Author }</span>
+		<span class="[ when ]">{ r.When }</span>
+		<span class="[ hash ]">{ r.Short }</span>
+	</a>
+}
+
+// graph is the row's slice of the commit graph; the rows' slices join.
+templ graph(g Graph) {
+	<svg class="[ graph ]" width={ strconv.Itoa(g.Width) } height={ strconv.Itoa(RowHeight) } viewBox={ "0 0 " + strconv.Itoa(g.Width) + " " + strconv.Itoa(RowHeight) } aria-hidden="true">
+		for _, l := range g.Lines {
+			<path d={ l.D() } data-lane={ strconv.Itoa(l.Lane) }></path>
+		}
+		<circle cx={ strconv.Itoa(g.Dot.X) } cy={ strconv.Itoa(g.Dot.Y) } r={ strconv.Itoa(g.Dot.R) } data-lane={ strconv.Itoa(g.Dot.Lane) } { mergeAttrs(g.Dot.Merge)... }></circle>
+	</svg>
+}
+
+// refBadge is a branch, remote branch or tag. An agent session's branch is
+// marked; with link (outside a row, which is a link itself) it opens the
+// session's task.
+templ refBadge(ref RefView, link bool) {
+	if ref.TaskHref != "" && link {
+		<a class="[ ref ]" data-kind={ ref.Kind } data-session { mineAttrs(ref.Mine)... } href={ templ.SafeURL(ref.TaskHref) } title={ ref.Name + " — an agent session's branch: open its task" }>{ ref.Name }</a>
+	} else if ref.TaskHref != "" {
+		<span class="[ ref ]" data-kind={ ref.Kind } data-session { mineAttrs(ref.Mine)... } title={ ref.Name + " — an agent session's branch" }>{ ref.Name }</span>
+	} else {
+		<span class="[ ref ]" data-kind={ ref.Kind } title={ ref.Name } { headAttrs(ref.Head)... }>{ ref.Name }</span>
+	}
+}
+
+// workingDetail is the uncommitted changes, open: each file and how it changed.
+templ workingDetail(w *WorkingView) {
+	<article class="[ frame ]" aria-label="Uncommitted changes">
+		<div class="[ flow ] [ flow-space-xs pad-l divide-bottom ]">
+			<h2>Uncommitted changes</h2>
+			<p class="[ text-sm color-ink-muted ]">In the session's worktree, not yet committed by the agent: staged, unstaged and new files.</p>
+		</div>
+		<div class="[ flow ] [ pad-l ]" data-scroll>
+			<p class="[ text-sm color-ink-muted ]">{ w.Summary }</p>
+			<ul class="[ files ]" role="list">
+				for _, f := range w.Files {
+					<li data-state={ f.State }>
+						<span class="[ path ]" title={ f.Path }>{ f.Path }</span>
+						<span class="[ state ]">{ f.State }</span>
+						if f.Binary {
+							<span></span>
+						} else {
+							<span><span class="[ added ]">{ f.Added }</span> <span class="[ deleted ]">{ f.Deleted }</span></span>
+						}
+					</li>
+				}
+			</ul>
+		</div>
+	</article>
+}
+
+templ commitDetail(c *CommitView) {
+	<article class="[ frame ]" aria-label="Commit">
+		<div class="[ flow ] [ flow-space-xs pad-l divide-bottom ]">
+			<h2>{ c.Subject }</h2>
+			if len(c.Refs) > 0 {
+				<div class="[ cluster ] [ gutter-xs ]">
+					for _, ref := range c.Refs {
+						@refBadge(ref, true)
+					}
+				</div>
+			}
+			<dl class="[ facts ]">
+				<dt>Commit</dt>
+				<dd class="[ code ]">{ c.Hash }</dd>
+				<dt>Author</dt>
+				<dd>{ c.Author } <span class="[ color-ink-faint ]">{ "<" + c.Email + ">" }</span></dd>
+				<dt>Date</dt>
+				<dd>{ c.Date }</dd>
+				if len(c.Parents) > 0 {
+					<dt>{ parentLabel(len(c.Parents)) }</dt>
+					<dd class="[ cluster ] [ gutter-xs ]">
+						for _, p := range c.Parents {
+							<a class="[ code ]" href={ templ.SafeURL(p.Href) }>{ p.Short }</a>
+						}
+					</dd>
+				}
+			</dl>
+		</div>
+		<div class="[ flow ] [ pad-l ]" data-scroll>
+			if c.Body != "" {
+				<p class="[ message ]">{ c.Body }</p>
+			}
+			<p class="[ text-sm color-ink-muted ]">{ c.Summary }</p>
+			if len(c.Files) > 0 {
+				<ul class="[ files ]" role="list">
+					for _, f := range c.Files {
+						<li>
+							<span class="[ path ]" title={ f.Path }>{ f.Path }</span>
+							if f.Binary {
+								<span class="[ color-ink-faint ]">binary</span>
+							} else {
+								<span class="[ added ]">{ f.Added }</span>
+								<span class="[ deleted ]">{ f.Deleted }</span>
+							}
+						</li>
+					}
+				</ul>
+			}
+		</div>
+	</article>
+}
+
+func parentLabel(n int) string {
+	if n == 1 {
+		return "Parent"
+	}
+	return "Parents"
+}
+
+func currentAttrs(current bool) templ.Attributes {
+	if current {
+		return templ.Attributes{"aria-current": "page"}
+	}
+	return nil
+}
+
+func mergeAttrs(merge bool) templ.Attributes {
+	if merge {
+		return templ.Attributes{"data-merge": true}
+	}
+	return nil
+}
+
+func headAttrs(head bool) templ.Attributes {
+	if head {
+		return templ.Attributes{"data-head": true, "title": "checked out in the repository"}
+	}
+	return nil
+}
+
+func mineAttrs(mine bool) templ.Attributes {
+	if mine {
+		return templ.Attributes{"data-mine": true}
+	}
+	return nil
+}

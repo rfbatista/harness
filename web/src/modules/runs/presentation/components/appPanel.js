@@ -19,6 +19,10 @@ export const TYPED = "";
 export const appPanel = ({ gateway }) => (panel = {}) => ({
   sessionId: panel.sessionId ?? "",
   repositoryId: panel.repositoryId ?? "",
+  repositoryName: panel.repositoryName ?? "",
+  /** The session's branch and worktree: where its runs take their code from. */
+  branch: panel.branch ?? "",
+  worktree: panel.worktree ?? "",
   /** @type {import("../../domain/run.js").RunCommand[]} */
   commands: [],
   /** @type {import("../../domain/run.js").Run[]} */
@@ -51,6 +55,18 @@ export const appPanel = ({ gateway }) => (panel = {}) => ({
   },
 
   // --- what the markup reads ---
+
+  /** Which repository's code a run uses, by name (its id when the name is unknown). */
+  get repositoryLabel() {
+    return this.repositoryName || this.repositoryId;
+  },
+  get hasBranch() {
+    return this.branch !== "";
+  },
+  /** Where the run on screen runs; the session's worktree until there is one. */
+  get runDir() {
+    return this.run?.dir || this.worktree;
+  },
 
   get typing() {
     return this.choice === TYPED;

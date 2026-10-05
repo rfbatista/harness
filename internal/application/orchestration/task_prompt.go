@@ -67,6 +67,12 @@ shared files, so you do not duplicate or undo their work:
 - mcp__task__list_task_sessions — the other sessions on this task: agent, brief, status, last action, branch, worktree
 - mcp__task__start_task_session — start another session on this task with a prompt (optionally an agent, a repository, a base branch), to hand off or parallelise a well-separated part of the work
 
+To see the project around the task, and who to hand work to:
+
+- mcp__task__list_project_repositories — the project's repositories: its applications
+- mcp__task__list_bounded_contexts — its bounded contexts, with their language and zones
+- mcp__task__list_agents — the agents a session can run as, and what each is for
+
 These tools always act on this task; they take no project or task id.`)
 	return b.String()
 }

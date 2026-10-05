@@ -322,6 +322,7 @@ func (f *Fake) StartInteractive(ctx context.Context, req ports.InteractiveReques
 		RepositoryID: req.RepositoryID,
 		TicketID:     req.TicketID,
 		AgentID:      req.AgentID,
+		Mode:         domain.SessionMode(req.Mode),
 		Task:         req.Prompt,
 		Branch:       fmt.Sprintf("agent/s%d", f.seq),
 		Status:       domain.SessionRunning,

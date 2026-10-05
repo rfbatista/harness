@@ -38,6 +38,13 @@ type TicketReader interface {
 	ListTickets(ctx context.Context, projectID string) ([]*domain.Ticket, error)
 }
 
+// TicketDocumentReader reads the documents linked to a task (written by its
+// agents through create_task_document, or linked by a person): what the
+// task's documents page needs. Planning implements it.
+type TicketDocumentReader interface {
+	ListTicketDocuments(ticketID string) []*domain.Document
+}
+
 // TicketBoard manages a project's tickets (tasks, in the UI). It is
 // network-safe: tui-client implements it over HTTP, so every method takes a
 // context and reports failure, including TICKET_NOT_FOUND, as an error.

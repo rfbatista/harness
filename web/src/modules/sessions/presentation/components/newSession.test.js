@@ -43,6 +43,16 @@ test("starts an interactive session on the page's task and reports it", async ()
   assert.equal((await memory.gateway.list({ projectId: "p1", ticketId: "t1" })).length, 1);
 });
 
+test("architect mode starts from the task without a first message", async () => {
+  const { instance, dispatched } = setup();
+  assert.equal(instance.mode, "", "the default mode runs the agent as it is");
+  instance.mode = "architect";
+  assert.ok(instance.promptPlaceholder.includes("architect starts from the task"));
+  assert.ok(instance.modeHint.includes("task-architecture"));
+  await instance.submit();
+  assert.equal(dispatched[0].detail.session.mode, "architect");
+});
+
 test("a refused start shows the coded error and keeps the draft", async () => {
   const { instance, dispatched } = setup({ repositories: { r1: "another-project" } });
   instance.prompt = "go";

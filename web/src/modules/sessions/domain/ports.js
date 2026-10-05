@@ -17,6 +17,7 @@
  * @property {string} ticketId
  * @property {string} repositoryId  where its worktree is cut
  * @property {string} agentId       "" runs plain claude
+ * @property {""|"architect"} [mode] a role on top of the agent: "architect" shapes the task into specs and delegates them
  * @property {string} prompt        the optional first message; "" opens claude waiting for you
  * @property {"off"|"edits"|"all"} autoAccept  which tool calls run without asking
  * @property {string} [baseBranch]  the branch its worktree branches off; "" means the checkout's HEAD

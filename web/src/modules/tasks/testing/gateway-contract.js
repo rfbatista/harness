@@ -11,6 +11,20 @@ import { makeTask } from "./fixtures.js";
 export function taskGatewayContract(name, makeSubject) {
   const contract = (title, fn) => test(`${name} · ${title}`, fn);
 
+  contract("listDocumentVersions lists the task's documents and their versions", async () => {
+    const { gateway } = makeSubject({
+      projects: ["p1"],
+      tasks: [makeTask()],
+      sessions: [],
+      documents: [
+        { id: "d1", ticketId: "t1", updatedAt: "2026-10-05T12:00:00.123456789-03:00" },
+        { id: "d2", ticketId: "t2", updatedAt: "2026-10-05T12:00:00Z" },
+      ],
+    });
+    assert.deepEqual(await gateway.listDocumentVersions("t1"), [{ id: "d1", version: "2026-10-05T12:00:00.123456789-03:00" }]);
+    assert.deepEqual(await gateway.listDocumentVersions("t9"), []);
+  });
+
   contract("createTask returns the new task", async () => {
     const { gateway } = makeSubject({ projects: ["p1"], tasks: [], sessions: [] });
     const t = await gateway.createTask({ projectId: "p1", title: "  Write docs  ", description: "the TUI section", status: "todo" });

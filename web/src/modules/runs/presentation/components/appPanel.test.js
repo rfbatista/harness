@@ -11,9 +11,12 @@ async function setup(world = {}) {
     sessions: ["s1"],
     repositoryOf: { s1: "r1" },
     commands: { r1: [{ name: "server", command: "make air" }, { name: "web", command: "npm run dev" }] },
+    dirOf: { s1: "/w/api/.worktrees/feed" },
     ...world,
   });
-  const mounted = mount(() => appPanel({ gateway: memory.gateway })({ sessionId: "s1", repositoryId: "r1" }));
+  const mounted = mount(() =>
+    appPanel({ gateway: memory.gateway })({ sessionId: "s1", repositoryId: "r1", repositoryName: "api", branch: "agent/feed-1a2b", worktree: "/w/api/.worktrees/feed" }),
+  );
   await mounted.instance.init();
   return { ...mounted, memory };
 }
@@ -100,4 +103,17 @@ test("reopening the panel shows the session's running run", async () => {
   const again = mount(() => appPanel({ gateway: memory.gateway })({ sessionId: "s1", repositoryId: "r1" }));
   await again.instance.init();
   assert.equal(again.instance.runLabel, "web");
+});
+
+test("says which repository's code a run uses: name, branch, worktree", async () => {
+  const { instance } = await setup();
+  assert.deepEqual([instance.repositoryLabel, instance.branch, instance.hasBranch], ["api", "agent/feed-1a2b", true]);
+  assert.equal(instance.runDir, "/w/api/.worktrees/feed", "before a run, the session's worktree");
+  await instance.start();
+  assert.equal(instance.runDir, "/w/api/.worktrees/feed", "a run says where it runs");
+});
+
+test("without a known name, the repository reads as its id", () => {
+  const { instance } = mount(() => appPanel({ gateway: memoryRuns().gateway })({ sessionId: "s1", repositoryId: "r1" }));
+  assert.deepEqual([instance.repositoryLabel, instance.hasBranch], ["r1", false]);
 });

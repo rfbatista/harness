@@ -21,19 +21,33 @@ type pickerStep int
 
 const (
 	stepAgent pickerStep = iota
+	stepMode
 	stepRepo
 	stepPrompt
 )
 
+// sessionMode is a choice of the picker's mode step.
+type sessionMode struct {
+	mode        domain.SessionMode
+	name, about string
+}
+
+// sessionModes are the picker's mode choices; the first is the default.
+var sessionModes = []sessionMode{
+	{domain.SessionModeDefault, "default", "the agent as it is"},
+	{domain.SessionModeArchitect, "architect", "specs per application as task documents, delegated to planning agents"},
+}
+
 // picker collects what a new session needs: which agent (or plain claude),
-// which repository when the project has more than one, and an optional first
-// message. Enter moves forward a step, esc back one.
+// which mode, which repository when the project has more than one, and an
+// optional first message. Enter moves forward a step, esc back one.
 type picker struct {
 	step    pickerStep
 	loading bool
 
 	agents []*domain.Agent // index 0 is plain claude
 	agent  int
+	mode   int
 	repos  []*domain.Repository
 	repo   int
 	prompt textinput.Model
@@ -99,18 +113,20 @@ func (p *picker) key(s *Screen, msg tea.KeyPressMsg) tea.Cmd {
 	switch k {
 	case "esc":
 		switch {
-		case p.step == stepPrompt && len(p.repos) > 1:
-			p.step = stepRepo
-		case p.step != stepAgent:
-			p.step = stepAgent
-		default:
+		case p.step == stepAgent:
 			s.overlay = nil
+		case p.step == stepPrompt && len(p.repos) <= 1:
+			p.step = stepMode
+		default:
+			p.step--
 		}
 		p.prompt.Blur()
 		return nil
 	case "enter":
 		switch p.step {
 		case stepAgent:
+			p.step = stepMode
+		case stepMode:
 			p.step = stepPrompt
 			if len(p.repos) > 1 {
 				p.step = stepRepo
@@ -119,9 +135,12 @@ func (p *picker) key(s *Screen, msg tea.KeyPressMsg) tea.Cmd {
 			p.step = stepPrompt
 		case stepPrompt:
 			s.overlay = nil
-			return s.start(p.agents[p.agent], p.repos[p.repo].ID, strings.TrimSpace(p.prompt.Value()))
+			return s.start(p.agents[p.agent], sessionModes[p.mode].mode, p.repos[p.repo].ID, strings.TrimSpace(p.prompt.Value()))
 		}
 		if p.step == stepPrompt {
+			if sessionModes[p.mode].mode == domain.SessionModeArchitect {
+				p.prompt.Placeholder = "optional — the architect starts from the task; enter to start"
+			}
 			return p.prompt.Focus()
 		}
 		return nil
@@ -129,6 +148,8 @@ func (p *picker) key(s *Screen, msg tea.KeyPressMsg) tea.Cmd {
 	switch p.step {
 	case stepAgent:
 		p.agent, _ = ui.MoveCursor(k, p.agent, len(p.agents))
+	case stepMode:
+		p.mode, _ = ui.MoveCursor(k, p.mode, len(sessionModes))
 	case stepRepo:
 		p.repo, _ = ui.MoveCursor(k, p.repo, len(p.repos))
 	case stepPrompt:
@@ -140,7 +161,7 @@ func (p *picker) key(s *Screen, msg tea.KeyPressMsg) tea.Cmd {
 }
 
 // start asks the server for a session in this task and launches it.
-func (s *Screen) start(agent *domain.Agent, repoID, prompt string) tea.Cmd {
+func (s *Screen) start(agent *domain.Agent, mode domain.SessionMode, repoID, prompt string) tea.Cmd {
 	runsOn, host := s.panes.Runner()
 	req := ports.InteractiveRequest{
 		ProjectID:    s.project.ID,
@@ -148,6 +169,7 @@ func (s *Screen) start(agent *domain.Agent, repoID, prompt string) tea.Cmd {
 		TicketID:     s.ticket.ID,
 		AgentID:      agent.ID,
 		Prompt:       prompt,
+		Mode:         string(mode),
 		RunsOn:       runsOn,
 		RunnerHost:   host,
 		Size:         s.panes.PaneSize(s.ticket.ID),
@@ -155,6 +177,9 @@ func (s *Screen) start(agent *domain.Agent, repoID, prompt string) tea.Cmd {
 	label := agent.Name
 	if agent.ID == "" {
 		label = "claude"
+	}
+	if mode != domain.SessionModeDefault {
+		label += " (" + string(mode) + ")"
 	}
 	interactive := s.ports.Interactive
 	return tea.Batch(nav.Note("starting…"), s.launch(label, func(ctx context.Context) (*domain.Session, ports.AgentSpec, error) {
@@ -177,6 +202,16 @@ func (p *picker) view(_ *Screen, width, _ int) string {
 		}
 	} else {
 		b.WriteString("    " + p.agents[p.agent].Name + "\n")
+	}
+
+	b.WriteString("\n" + stepTitle("Mode", p.step == stepMode))
+	if p.step == stepMode {
+		for i, m := range sessionModes {
+			row := "    " + ui.Fit(m.name, 24) + "  " + ui.Dim.Render(m.about)
+			b.WriteString(ui.Row(row, i == p.mode, width-2) + "\n")
+		}
+	} else if p.step > stepMode {
+		b.WriteString("    " + sessionModes[p.mode].name + "\n")
 	}
 
 	if len(p.repos) > 1 {

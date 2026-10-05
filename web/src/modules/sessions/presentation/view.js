@@ -23,6 +23,12 @@ export function agentLabel(agentId, agentNames = {}) {
   return agentNames[agentId] || agentId;
 }
 
+/** How a session's agent reads with its mode: "Reviewer", "plain claude as architect". Mirrors RunsAs (view.go). */
+export function runsAs(session, agentNames = {}) {
+  const agent = agentLabel(session.agentId, agentNames);
+  return session.mode ? `${agent} as ${session.mode}` : agent;
+}
+
 /**
  * How the session that started this one reads: its agent, or "another
  * session" when it is not among others; "" when a person started it. The BFF's
@@ -53,7 +59,7 @@ export function toRowView(session, { selectedId, now, agentNames, others = [], f
     title: session.task || "Untitled session",
     state: status.state,
     word: status.word,
-    meta: meta(agentLabel(session.agentId, agentNames), startedBy(session, others, agentNames), relativeTime(session.updatedAt, now)),
+    meta: meta(runsAs(session, agentNames), startedBy(session, others, agentNames), relativeTime(session.updatedAt, now)),
     selected: session.id === selectedId,
     fresh,
     attention: needsYou(session),
@@ -78,7 +84,7 @@ export function toDetailView(session, now, agentNames) {
     title: session.task || "Untitled session",
     state: status.state,
     word: status.word,
-    agent: agentLabel(session.agentId, agentNames),
+    agent: runsAs(session, agentNames),
     lastAction: session.lastAction || "Nothing yet.",
     updated: relativeTime(session.updatedAt, now),
     stoppable: !isTerminal(session),

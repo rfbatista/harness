@@ -21,6 +21,9 @@ var SessionTaskToolNames = []string{
 	"update_task_document",
 	"list_task_sessions",
 	"start_task_session",
+	"list_project_repositories",
+	"list_bounded_contexts",
+	"list_agents",
 }
 
 // MaxLiveTaskSessions caps the sessions running on one task at once, so agents
@@ -41,10 +44,11 @@ type PeerStarter struct {
 // The tools take no project or ticket id: the session id travels in the context
 // (see WithSessionID) and every handler resolves the scope from it, so a session
 // can only ever reach its own task, the documents linked to it, and the
-// sessions sharing it. agents, when set, names the agents those sessions run;
-// start lets a session start peers on its task.
-func SessionTaskTools(planningSvc ports.Planning, sessions ports.SessionRepository, agents ports.AgentLister, start PeerStarter) []domain.Tool {
-	return []domain.Tool{
+// sessions sharing it. agents, when set, names the agents those sessions run
+// and lists them to delegate to; arch, when set, maps the task's project into
+// bounded contexts and zones; start lets a session start peers on its task.
+func SessionTaskTools(planningSvc ports.Planning, sessions ports.SessionRepository, agents ports.AgentLister, arch ports.ArchitectureMap, start PeerStarter) []domain.Tool {
+	return append([]domain.Tool{
 		{
 			Name: "start_task_session",
 			Description: "Start another agent session on this session's task, to hand off or parallelise part of the work. " +
@@ -57,7 +61,8 @@ func SessionTaskTools(planningSvc ports.Planning, sessions ports.SessionReposito
 				`"prompt":{"type":"string","description":"What the new session should do: its first message."},` +
 				`"agent":{"type":"string","description":"The agent to run, by name or id. Default: none (plain claude)."},` +
 				`"repository":{"type":"string","description":"The repository to work in, by name or id. Default: yours."},` +
-				`"base_branch":{"type":"string","description":"The branch its worktree branches off. Default: the repository's default branch."}}}`),
+				`"base_branch":{"type":"string","description":"The branch its worktree branches off. Default: the repository's default branch."},` +
+				`"mode":{"type":"string","enum":["","architect"],"description":"architect: the session shapes its prompt into per-application specs and delegates them. Default: none."}}}`),
 			Source: "code",
 			Handler: func(ctx context.Context, args map[string]any) (any, error) {
 				scope, err := resolveTaskScope(ctx, planningSvc, sessions)
@@ -192,7 +197,7 @@ func SessionTaskTools(planningSvc ports.Planning, sessions ports.SessionReposito
 				return map[string]any{"document": doc}, nil
 			},
 		},
-	}
+	}, sessionProjectTools(planningSvc, sessions, agents, arch, start.Repositories)...)
 }
 
 // peerSession is another session on the same task, as list_task_sessions

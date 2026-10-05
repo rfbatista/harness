@@ -1,0 +1,71 @@
+package tasks
+
+import (
+	"strconv"
+
+	"operators-mcp/internal/adapter/in/web/components"
+	"operators-mcp/internal/adapter/in/web/shell"
+)
+
+// DocumentsPage is a task's documents: the list beside the open one, read
+// as rendered Markdown. tasksDocumentWatch notices documents written after
+// the page loaded (agents write them as they work) and offers a reload.
+templ DocumentsPage(v DocumentsView) {
+	@shell.AppShell(v.Frame) {
+		<main class="[ frame ]" x-data="tasksDocumentWatch" data-ticket-id={ v.Watch.TicketID } data-signature={ v.Watch.Signature } data-count={ strconv.Itoa(v.Watch.Count) }>
+			<header class="[ toolbar ]">
+				<a class="[ crumb ]" href={ templ.SafeURL("/projects/" + v.ProjectID) }>{ v.ProjectName } /</a>
+				<a class="[ crumb ]" href={ templ.SafeURL(v.TaskHref) }>{ v.TaskTitle } /</a>
+				<h1>Documents</h1>
+				<span class="[ color-ink-faint text-sm ]">{ documentCount(len(v.Documents)) }</span>
+			</header>
+			<template x-if="changed">
+				<div class="[ banner ]" role="status">
+					<span class="[ grow ]">This task's documents changed since the page loaded.</span>
+					<button type="button" class="[ button ]" data-size="sm" x-on:click="reload">Reload</button>
+				</div>
+			</template>
+			if len(v.Documents) == 0 {
+				<div data-scroll>
+					@components.Empty("No documents on this task yet", "Agents working on the task write them with create_task_document — plans, findings, handoffs. They show here as they are written.")
+				</div>
+			} else {
+				<div class="[ split-view ]" data-scroll>
+					<nav class="[ list ] [ divide-end ]" aria-label="Documents of this task" style="--row-columns: minmax(0, 1fr) auto">
+						for _, d := range v.Documents {
+							<a class="[ row ]" href={ templ.SafeURL(d.Href) } { documentCurrent(d.Current)... }>
+								<span class="[ title ]">{ d.Title }</span>
+								<span class="[ meta ]">{ d.Updated }</span>
+							</a>
+						}
+					</nav>
+					if v.Open != nil {
+						<article class="[ frame ]" aria-label={ v.Open.Title }>
+							<div class="[ repel ] [ pad-l divide-bottom ]">
+								<h2>{ v.Open.Title }</h2>
+								<span class="[ color-ink-faint text-sm ]">updated { v.Open.Updated }</span>
+							</div>
+							<div class="[ prose ] [ pad-l ]" data-scroll>
+								@v.Open.Body
+							</div>
+						</article>
+					}
+				</div>
+			}
+		</main>
+	}
+}
+
+func documentCount(n int) string {
+	if n == 1 {
+		return "1 document"
+	}
+	return strconv.Itoa(n) + " documents"
+}
+
+func documentCurrent(current bool) templ.Attributes {
+	if current {
+		return templ.Attributes{"aria-current": "page"}
+	}
+	return nil
+}

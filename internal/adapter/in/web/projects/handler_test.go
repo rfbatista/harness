@@ -16,9 +16,9 @@ func TestRepositoriesViewReadsLikeTheBrowser(t *testing.T) {
 	got := []RepositoryRow{}
 	got = append(got, v.Rows...)
 	want := []RepositoryRow{
-		{"r1", "harness", "/src/harness", "git@github.com:me/harness.git", "/projects/p1/repositories/r1/env"},
-		{"r2", "kit", "/src/kit/", "local only", "/projects/p1/repositories/r2/env"},
-		{"r3", "https://example.com/x.git", "no local path: sessions cannot run here", "https://example.com/x.git", "/projects/p1/repositories/r3/env"},
+		{"r1", "harness", "/src/harness", "git@github.com:me/harness.git", "/projects/p1/repositories/r1/env", "/projects/p1/repositories/r1/history"},
+		{"r2", "kit", "/src/kit/", "local only", "/projects/p1/repositories/r2/env", "/projects/p1/repositories/r2/history"},
+		{"r3", "https://example.com/x.git", "no local path: sessions cannot run here", "https://example.com/x.git", "/projects/p1/repositories/r3/env", "/projects/p1/repositories/r3/history"},
 	}
 	for i := range want {
 		if got[i] != want[i] {

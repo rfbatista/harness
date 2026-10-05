@@ -46,6 +46,7 @@ func startPeer(ctx context.Context, scope *taskScope, sessions ports.SessionRepo
 		BaseBranch:      strings.TrimSpace(stringArg(args, "base_branch")),
 		RunsOn:          domain.RunnerServer,
 		ParentSessionID: scope.session.ID,
+		Mode:            strings.TrimSpace(stringArg(args, "mode")),
 		// A peer gets no more than its parent: unattended only if the parent is.
 		AutoAccept: "off",
 	}

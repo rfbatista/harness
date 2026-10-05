@@ -18,9 +18,11 @@ type Handler struct {
 	Sessions     ports.SessionReader
 	Agents       ports.AgentLister
 	Repositories ports.RepositoryLister
-	Layout       shell.Layout
-	Render       shell.Renderer
-	Now          func() time.Time
+	// Docs reads the documents linked to a task; nil hides them.
+	Docs   ports.TicketDocumentReader
+	Layout shell.Layout
+	Render shell.Renderer
+	Now    func() time.Time
 }
 
 // Project serves GET /projects/{project}: the rail, and a prompt to pick a task.
@@ -84,6 +86,15 @@ func (h Handler) Task(w http.ResponseWriter, r *http.Request) error {
 	}
 	frame.Live = true // sessionsPage follows the project's feed
 	view := sessions.NewPageView(frame, project, task, list, agents, repos, h.Now())
+	if h.Docs != nil {
+		docs := h.Docs.ListTicketDocuments(task.ID)
+		view.Documents = &sessions.DocumentsLink{
+			Href:      DocumentsHref(project.ID, task.ID, ""),
+			TicketID:  task.ID,
+			Count:     len(docs),
+			Signature: documentSignature(docs),
+		}
+	}
 	for _, st := range Statuses {
 		view.StatusChoices = append(view.StatusChoices, sessions.StatusChoice{Value: st.Value, Label: st.Label, Selected: st.Value == string(task.Status)})
 	}

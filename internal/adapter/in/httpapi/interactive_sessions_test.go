@@ -28,6 +28,26 @@ func post(t *testing.T, url, body string) (int, interactiveResp) {
 	return resp.StatusCode, out
 }
 
+func TestHTTP_StartInteractiveSessionMode(t *testing.T) {
+	srv := newSessionTestServer(t)
+	defer srv.Close()
+
+	status, started := post(t, srv.URL+"/api/start_interactive_session",
+		`{"project_id":"p1","repository_id":"r1","ticket_id":"tk1","mode":"architect"}`)
+	if status != http.StatusCreated {
+		t.Fatalf("start = %d (%s), want 201", status, started.Code)
+	}
+	if started.Session.Mode != domain.SessionModeArchitect || !strings.Contains(started.Agent.Prompt, "task-architecture") {
+		t.Fatalf("architect start = %+v / prompt %q", started.Session, started.Agent.Prompt)
+	}
+
+	status, refused := post(t, srv.URL+"/api/start_interactive_session",
+		`{"project_id":"p1","repository_id":"r1","ticket_id":"tk1","mode":"wizard"}`)
+	if status != http.StatusBadRequest || refused.Code != "INVALID_INPUT" {
+		t.Fatalf("unknown mode = %d %q, want 400 INVALID_INPUT", status, refused.Code)
+	}
+}
+
 func TestHTTP_InteractiveSessionLifecycle(t *testing.T) {
 	srv := newSessionTestServer(t)
 	defer srv.Close()

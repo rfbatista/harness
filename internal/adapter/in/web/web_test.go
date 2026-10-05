@@ -124,12 +124,14 @@ type world struct {
 	agents   []*domain.Agent
 	repos    []*domain.Repository
 	env      fakeEnv
+	docs     fakeDocs
+	history  ports.RepositoryHistory
 }
 
 func newTestHandler(t *testing.T, w world) http.Handler {
 	t.Helper()
 	fallback := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { io.WriteString(w, "legacy designer") })
-	return NewHandler(Deps{
+	deps := Deps{
 		Projects:     fakeProjects{w.projects},
 		Tasks:        fakeTickets{w.tickets},
 		Sessions:     fakeSessions{w.sessions},
@@ -137,7 +139,14 @@ func newTestHandler(t *testing.T, w world) http.Handler {
 		Repositories: fakeRepos{w.repos},
 		EnvFiles:     w.env,
 		Now:          func() time.Time { return now },
-	}, builtAssets(t), fallback)
+	}
+	if w.docs != nil {
+		deps.Documents = w.docs
+	}
+	if w.history != nil {
+		deps.History = w.history
+	}
+	return NewHandler(deps, builtAssets(t), fallback)
 }
 
 // board is one project with three tasks; the in-progress task runs several
