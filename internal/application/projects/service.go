@@ -19,8 +19,9 @@ var (
 	_ ports.ProjectReader    = (*Service)(nil)
 	_ ports.RepositoryReader = (*Service)(nil)
 
-	_ ports.RepositoryDiscovery = (*Service)(nil)
-	_ ports.RepositoryEnv       = (*Service)(nil)
+	_ ports.RepositoryDiscovery   = (*Service)(nil)
+	_ ports.RepositoryEnv         = (*Service)(nil)
+	_ ports.RepositoryRunCommands = (*Service)(nil)
 )
 
 // Service implements the projects use cases.
@@ -31,7 +32,11 @@ type Service struct {
 	finder       ports.RepositoryFinder     // nil: discovery unavailable
 	envFiles     ports.EnvFileRepository    // nil: env files unavailable
 	envIO        ports.EnvFileIO            // nil: importing from checkouts unavailable
+	runCommands  ports.RunCommandRepository // nil: saved run commands unavailable
 }
+
+// UseRunCommands lets the context keep repositories' saved run commands.
+func (s *Service) UseRunCommands(store ports.RunCommandRepository) { s.runCommands = store }
 
 // UseEnvFiles lets the context keep repositories' env files, and import them
 // from checkouts when io is set.
@@ -126,11 +131,9 @@ func (s *Service) DeleteProject(ctx context.Context, projectID string) error {
 		return errProjectNotFound
 	}
 	if s.repositories != nil {
-		if s.envFiles != nil {
-			for _, r := range s.repositories.ListByProject(projectID) {
-				if err := s.envFiles.DeleteByRepository(r.ID); err != nil {
-					return err
-				}
+		for _, r := range s.repositories.ListByProject(projectID) {
+			if err := s.deleteRepositoryConfig(r.ID); err != nil {
+				return err
 			}
 		}
 		if err := s.repositories.DeleteByProject(projectID); err != nil {
@@ -207,10 +210,63 @@ func (s *Service) DeleteRepository(_ context.Context, id string) error {
 	if err := s.repositories.Delete(id); err != nil {
 		return err
 	}
+	return s.deleteRepositoryConfig(id)
+}
+
+// deleteRepositoryConfig removes what the harness keeps for a repository:
+// its env files and run commands.
+func (s *Service) deleteRepositoryConfig(repositoryID string) error {
 	if s.envFiles != nil {
-		return s.envFiles.DeleteByRepository(id)
+		if err := s.envFiles.DeleteByRepository(repositoryID); err != nil {
+			return err
+		}
+	}
+	if s.runCommands != nil {
+		if err := s.runCommands.DeleteByRepository(repositoryID); err != nil {
+			return err
+		}
 	}
 	return nil
+}
+
+// --- Run commands ---
+
+func (s *Service) runCommandRepository(repositoryID string) error {
+	if s.runCommands == nil || s.repositories == nil {
+		return &domain.StructuredError{Code: "INTERNAL", Message: "run command store not configured"}
+	}
+	if s.repositories.Get(repositoryID) == nil {
+		return &domain.StructuredError{Code: "REPOSITORY_NOT_FOUND", Message: "repository not found"}
+	}
+	return nil
+}
+
+// ListRunCommands returns the repository's saved run commands, by name.
+func (s *Service) ListRunCommands(_ context.Context, repositoryID string) ([]*domain.RunCommand, error) {
+	if err := s.runCommandRepository(repositoryID); err != nil {
+		return nil, err
+	}
+	return s.runCommands.List(repositoryID), nil
+}
+
+// SaveRunCommand creates or replaces the repository's command called name.
+func (s *Service) SaveRunCommand(_ context.Context, repositoryID, name, command string) (*domain.RunCommand, error) {
+	if err := s.runCommandRepository(repositoryID); err != nil {
+		return nil, err
+	}
+	name, command, err := domain.CleanRunCommand(name, command)
+	if err != nil {
+		return nil, err
+	}
+	return s.runCommands.Put(&domain.RunCommand{RepositoryID: repositoryID, Name: name, Command: command})
+}
+
+// DeleteRunCommand removes the repository's command called name.
+func (s *Service) DeleteRunCommand(_ context.Context, repositoryID, name string) error {
+	if err := s.runCommandRepository(repositoryID); err != nil {
+		return err
+	}
+	return s.runCommands.Delete(repositoryID, strings.TrimSpace(name))
 }
 
 // --- Env files ---

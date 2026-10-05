@@ -47,8 +47,10 @@ type Deps struct {
 	// RepositoryFinder lets projects discover git checkouts; nil disables it.
 	RepositoryFinder ports.RepositoryFinder
 	// EnvFiles and EnvFileIO keep repositories' env files; nil disables them.
-	EnvFiles    ports.EnvFileRepository
-	EnvFileIO   ports.EnvFileIO
+	EnvFiles  ports.EnvFileRepository
+	EnvFileIO ports.EnvFileIO
+	// RunCommands keeps repositories' saved run commands; nil disables them.
+	RunCommands ports.RunCommandRepository
 	DefaultRoot string
 	// Bus carries the domain events; nil creates one.
 	Bus *eventbus.Bus
@@ -89,6 +91,9 @@ func New(d Deps) Catalog {
 	}
 	if d.EnvFiles != nil {
 		pr.UseEnvFiles(d.EnvFiles, d.EnvFileIO)
+	}
+	if d.RunCommands != nil {
+		pr.UseRunCommands(d.RunCommands)
 	}
 	arch := architecture.NewService(architecture.Deps{
 		Zones:           d.Zones,

@@ -49,6 +49,7 @@ var PersistenceModule = fx.Module("persistence",
 		asPort(sqlite.NewProjectRepository, new(ports.ProjectRepository)),
 		asPort(sqlite.NewRepositoryRepository, new(ports.RepositoryRepository)),
 		asPort(sqlite.NewEnvFileRepository, new(ports.EnvFileRepository)),
+		asPort(sqlite.NewRunCommandRepository, new(ports.RunCommandRepository)),
 		asPort(sqlite.NewZoneRepository, new(ports.ZoneRepository)),
 		newAgentRepository,
 		asPort(sqlite.NewPromptRepository, new(ports.PromptRepository)),
@@ -160,6 +161,7 @@ type catalogParams struct {
 	Finder          ports.RepositoryFinder
 	EnvFiles        ports.EnvFileRepository
 	EnvFileIO       ports.EnvFileIO
+	RunCommands     ports.RunCommandRepository
 	Cfg             Config
 }
 
@@ -181,6 +183,7 @@ func newCatalog(p catalogParams) catalog.Catalog {
 		RepositoryFinder: p.Finder,
 		EnvFiles:         p.EnvFiles,
 		EnvFileIO:        p.EnvFileIO,
+		RunCommands:      p.RunCommands,
 		DefaultRoot:      p.Cfg.Root,
 	})
 }

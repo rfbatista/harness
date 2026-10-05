@@ -4,6 +4,8 @@ import (
 	"context"
 	"io"
 	"os"
+
+	"operators-mcp/internal/domain"
 )
 
 // The runtime stack an interactive agent runs on, driven ports composed by a
@@ -24,8 +26,11 @@ type Agent interface {
 // what to run and with which agent configuration. It crosses the wire, so the
 // process can be started wherever the session runs.
 type AgentSpec struct {
-	// Kind picks the Agent adapter; "claude" is the one there is.
+	// Kind picks the Agent adapter: "claude", or "command" for a plain shell
+	// command (an application run).
 	Kind      string `json:"kind"`
+	// Command is the shell command line a "command" agent runs.
+	Command string `json:"command,omitempty"`
 	SessionID string `json:"session_id"`
 	// Dir is the session's worktree.
 	Dir   string `json:"dir"`
@@ -119,4 +124,21 @@ type PTYProcess interface {
 	Wait() (exitCode int, err error)
 	// Close releases the terminal device.
 	Close() error
+}
+
+// AppRunner runs a repository's application from a session's worktree, in a
+// terminal on the server, and keeps each run's output so it can be read
+// again. Runs live as long as the server does.
+type AppRunner interface {
+	// Start runs the session's repository's saved command called name, or,
+	// with name empty, the command line given. Starting a saved command that
+	// is already running for the session returns that run.
+	Start(ctx context.Context, sessionID, name, command string) (*domain.AppRun, error)
+	// List returns the session's runs, newest first.
+	List(ctx context.Context, sessionID string) ([]*domain.AppRun, error)
+	// Stop ends a run; RUN_NOT_FOUND when there is none.
+	Stop(ctx context.Context, runID string) (*domain.AppRun, error)
+	// Attach returns the run's terminal; its Subscribe replays the run's
+	// output so far before the live stream.
+	Attach(ctx context.Context, runID string) (Terminal, error)
 }

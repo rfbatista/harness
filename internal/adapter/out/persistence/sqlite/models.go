@@ -231,6 +231,17 @@ type EnvFileModel struct {
 // TableName overrides the table name.
 func (EnvFileModel) TableName() string { return "repository_env_files" }
 
+// RunCommandModel is one saved run command of a repository (domain.RunCommand).
+type RunCommandModel struct {
+	RepositoryID string `gorm:"column:repository_id;primaryKey"`
+	Name         string `gorm:"primaryKey"`
+	Command      string
+	UpdatedAt    time.Time
+}
+
+// TableName overrides the table name.
+func (RunCommandModel) TableName() string { return "repository_run_commands" }
+
 // ToDomain converts the model to a domain.Repository.
 func (m *RepositoryModel) ToDomain() *domain.Repository {
 	if m == nil {

@@ -17,8 +17,10 @@ func TestEnvFilesAreKeptPerRepositoryAndGoWithIt(t *testing.T) {
 		t.Fatal(err)
 	}
 	store := sqlite.NewEnvFileRepository(db)
+	commands := sqlite.NewRunCommandRepository(db)
 	s := NewService(sqlite.NewProjectRepository(db), sqlite.NewRepositoryRepository(db), nil)
 	s.UseEnvFiles(store, gitcli.NewEnvFiles())
+	s.UseRunCommands(commands)
 	ctx := context.Background()
 
 	p, _ := s.CreateProject(ctx, "p", t.TempDir())
@@ -36,12 +38,21 @@ func TestEnvFilesAreKeptPerRepositoryAndGoWithIt(t *testing.T) {
 	if _, err := s.SaveEnvFile(ctx, r.ID, ".env", "A=1"); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := s.SaveRunCommand(ctx, r.ID, "bad/name", "make air"); errs.Code(err) != "INVALID_NAME" {
+		t.Fatalf("bad name: %v", err)
+	}
+	if c, err := s.SaveRunCommand(ctx, r.ID, " server ", " make air "); err != nil || c.Name != "server" || c.Command != "make air" {
+		t.Fatalf("save run command: %+v %v", c, err)
+	}
 
 	if err := s.DeleteRepository(ctx, r.ID); err != nil {
 		t.Fatal(err)
 	}
 	if left := store.List(r.ID); len(left) != 0 {
 		t.Fatalf("env files outlived their repository: %+v", left)
+	}
+	if left := commands.List(r.ID); len(left) != 0 {
+		t.Fatalf("run commands outlived their repository: %+v", left)
 	}
 
 	r2, _ := s.CreateRepository(ctx, p.ID, "web", "", "file:///y", t.TempDir())

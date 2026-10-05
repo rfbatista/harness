@@ -87,6 +87,31 @@ type RepositoryEnv interface {
 	ImportEnvFile(ctx context.Context, repositoryID, path string) (*domain.EnvFile, error)
 }
 
+// RunCommandRepository stores repositories' saved run commands (driven).
+type RunCommandRepository interface {
+	List(repositoryID string) []*domain.RunCommand
+	// Put creates or replaces the command named c.Name.
+	Put(c *domain.RunCommand) (*domain.RunCommand, error)
+	// Delete removes one, or RUN_COMMAND_NOT_FOUND.
+	Delete(repositoryID, name string) error
+	DeleteByRepository(repositoryID string) error
+}
+
+// RunCommandLister reads a repository's saved run commands: what running one
+// needs. RepositoryRunCommands embeds it.
+type RunCommandLister interface {
+	ListRunCommands(ctx context.Context, repositoryID string) ([]*domain.RunCommand, error)
+}
+
+// RepositoryRunCommands manages the named commands that run a repository's
+// application. A bad name is INVALID_NAME; an unknown repository
+// REPOSITORY_NOT_FOUND.
+type RepositoryRunCommands interface {
+	RunCommandLister
+	SaveRunCommand(ctx context.Context, repositoryID, name, command string) (*domain.RunCommand, error)
+	DeleteRunCommand(ctx context.Context, repositoryID, name string) error
+}
+
 // RepositoryLister lists a project's repositories: what a page offering
 // them to pick from needs. RepositoryCatalog embeds it.
 type RepositoryLister interface {
