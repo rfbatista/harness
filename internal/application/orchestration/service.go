@@ -843,6 +843,11 @@ func (s *Service) publishDelta(sessionID string, ev SessionEvent) {
 	s.hub.PublishEphemeral(sessionID, ev)
 }
 
+// Announce records ev on the session's log and fans it out live, exactly as
+// the session's own events are: sequenced, persisted, replayed to late
+// joiners. Other contexts (artifacts) speak on the stream through it.
+func (s *Service) Announce(sessionID string, ev SessionEvent) { s.publish(sessionID, ev) }
+
 func (s *Service) runCleanup(id string) {
 	s.mu.Lock()
 	c := s.cleanups[id]
