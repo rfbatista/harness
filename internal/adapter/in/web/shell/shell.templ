@@ -65,7 +65,10 @@ templ topBar(t TopBar) {
 
 // taskRail is the current project's tasks, grouped like the kanban board.
 templ taskRail(r Rail) {
-	<nav class="[ nav ]" aria-label="Tasks">
+	if r.Seed != nil {
+		@templ.JSONScript("rail-seed", r.Seed)
+	}
+	<nav class="[ nav ]" aria-label="Tasks" { railAttrs(r)... }>
 		if r.NewTaskHref != "" {
 			<a class="[ button ]" data-size="sm" href={ templ.SafeURL(r.NewTaskHref) }>New task</a>
 		}
@@ -83,18 +86,30 @@ templ taskRail(r Rail) {
 	</nav>
 }
 
+// railLink is server-rendered with the task's activity; with a TaskID,
+// tasksRailLink keeps its dot and count live from then on.
 templ railLink(l Link) {
-	<a href={ templ.SafeURL(l.Href) } { currentAttrs(l.Current)... }>
-		<span class="[ label ]">{ l.Label }</span>
-		if l.liveState() != "" {
-			<span class="[ status ]" data-state={ l.liveState() } data-dot-only>
-				<span class="[ visually-hidden ]">{ l.liveWord() }</span>
+	if l.TaskID != "" {
+		<a href={ templ.SafeURL(l.Href) } { currentAttrs(l.Current)... } x-data="tasksRailLink" data-task-id={ l.TaskID }>
+			<span class="[ label ]">{ l.Label }</span>
+			<span class="[ status ]" data-state={ l.liveState() } data-dot-only x-show="hasDot" x-bind:data-state="dotState" { hiddenUnless(l.liveState() != "")... }>
+				<span class="[ visually-hidden ]" x-text="dotWord">{ l.liveWord() }</span>
 			</span>
-		}
-		if l.Live > 0 {
-			<span class="[ count ]" title="live sessions">{ strconv.Itoa(l.Live) }</span>
-		}
-	</a>
+			<span class="[ count ]" title="live sessions" x-show="hasCount" x-text="live" { hiddenUnless(l.Live > 0)... }>{ strconv.Itoa(l.Live) }</span>
+		</a>
+	} else {
+		<a href={ templ.SafeURL(l.Href) } { currentAttrs(l.Current)... }>
+			<span class="[ label ]">{ l.Label }</span>
+			if l.liveState() != "" {
+				<span class="[ status ]" data-state={ l.liveState() } data-dot-only>
+					<span class="[ visually-hidden ]">{ l.liveWord() }</span>
+				</span>
+			}
+			if l.Live > 0 {
+				<span class="[ count ]" title="live sessions">{ strconv.Itoa(l.Live) }</span>
+			}
+		</a>
+	}
 }
 
 // streamBar shows whether the page is live. The page's feed reports its

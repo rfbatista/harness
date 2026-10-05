@@ -148,11 +148,15 @@ func NewPageView(frame shell.Frame, project *domain.Project, task *domain.Ticket
 		form.Repositories = append(form.Repositories, Option{r.ID, r.Name})
 	}
 
+	byID := make(map[string]*domain.Session, len(list))
+	for _, s := range list {
+		byID[s.ID] = s
+	}
 	views := make([]Group, 0, len(groups))
 	for _, g := range groups {
 		rows := make([]Row, 0, len(g.sessions))
 		for _, s := range g.sessions {
-			rows = append(rows, toRow(s, selected, names, now))
+			rows = append(rows, toRow(s, selected, names, now, byID))
 		}
 		views = append(views, Group{Key: g.key, Label: groupLabels[g.key], Tone: groupTones[g.key], Count: len(rows), Rows: rows})
 	}
@@ -177,7 +181,20 @@ func StatusLabel(s domain.TicketStatus) string {
 	return strings.ReplaceAll(string(s), "_", " ")
 }
 
-func toRow(s *domain.Session, selectedID string, agentNames map[string]string, now time.Time) Row {
+// StartedBy is how the session that started s reads — its agent, or
+// "another session" when it is not among others — and "" when a person did.
+// The browser's startedBy (view.js) says the same.
+func StartedBy(s *domain.Session, others map[string]*domain.Session, agentNames map[string]string) string {
+	if s.ParentSessionID == "" {
+		return ""
+	}
+	if p, ok := others[s.ParentSessionID]; ok {
+		return AgentLabel(p.AgentID, agentNames)
+	}
+	return "another session"
+}
+
+func toRow(s *domain.Session, selectedID string, agentNames map[string]string, now time.Time, others map[string]*domain.Session) Row {
 	st := statusOf(s)
 	title := s.Task
 	if title == "" {
@@ -189,7 +206,7 @@ func toRow(s *domain.Session, selectedID string, agentNames map[string]string, n
 		Title:     title,
 		State:     st.State,
 		Word:      st.Word,
-		Meta:      agent + " · " + relativeTime(s.UpdatedAt, now),
+		Meta:      meta(agent, StartedBy(s, others, agentNames), relativeTime(s.UpdatedAt, now)),
 		Selected:  s.ID == selectedID,
 		Attention: NeedsYou(s),
 	}
@@ -277,4 +294,13 @@ func count(n int, noun string) string {
 		return fmt.Sprintf("%d %s", n, noun)
 	}
 	return fmt.Sprintf("%d %ss", n, noun)
+}
+
+// meta is a row's faint line: the agent, who started it (if a session did),
+// and when it last changed.
+func meta(agent, startedBy, when string) string {
+	if startedBy == "" {
+		return agent + " · " + when
+	}
+	return agent + " · started by " + startedBy + " · " + when
 }

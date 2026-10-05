@@ -172,6 +172,32 @@ test("the App tab swaps the agent's terminal for the session's App panel", () =>
   instance.destroy();
 });
 
+test("a session started elsewhere arrives live: highlighted for a moment, announced, naming who started it", async () => {
+  const sessions = [makeSession({ id: "lead", agentId: "backend", status: "running" })];
+  const memory = memoryGateway({ projects: ["p1"], sessions, now: () => T0 });
+  const timers = [];
+  const el = seededElement({ project_id: "p1", ticket_id: "t1", sessions: sessions.map(toDTO), agent_names: { backend: "Backend dev" } });
+  const { instance } = mount(sessionsPage({ gateway: memory.gateway, clock: fixedClock(T0), setTimeout: (fn, ms) => timers.push({ fn, ms }) }), { el });
+  instance.init();
+  await flush();
+
+  memory.upsert(makeSession({ id: "peer", task: "Write the feed tests", status: "running", parentSessionId: "lead" }));
+  const row = instance.groups.flatMap((g) => g.rows).find((r) => r.id === "peer");
+  assert.ok(row, "the new session is in the list");
+  assert.ok(row.fresh);
+  assert.ok(row.meta.includes("started by Backend dev"), row.meta);
+  assert.equal(instance.announcement, "Backend dev started a session: Write the feed tests");
+
+  memory.update("peer", { status: "idle" });
+  assert.equal(timers.length, 1, "a change to a session already listed is not an arrival");
+  timers[0].fn();
+  assert.equal(instance.groups.flatMap((g) => g.rows).find((r) => r.id === "peer").fresh, false);
+
+  memory.upsert(makeSession({ id: "other-task", ticketId: "t2", status: "running" }));
+  assert.equal(timers.length, 1, "another task's session is not announced here");
+  instance.destroy();
+});
+
 test("rows show the agent's name", () => {
   const { instance } = setup();
   const row = instance.groups.flatMap((g) => g.rows).find((r) => r.id === "run");

@@ -65,6 +65,7 @@ session, branch and worktree. Check before starting, and before touching
 shared files, so you do not duplicate or undo their work:
 
 - mcp__task__list_task_sessions — the other sessions on this task: agent, brief, status, last action, branch, worktree
+- mcp__task__start_task_session — start another session on this task with a prompt (optionally an agent, a repository, a base branch), to hand off or parallelise a well-separated part of the work
 
 These tools always act on this task; they take no project or task id.`)
 	return b.String()

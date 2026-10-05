@@ -17,6 +17,7 @@ export function makeSession(overrides = {}) {
     interactive: true,
     runsOn: "server",
     runnerHost: "",
+    parentSessionId: "",
     updatedAt: T0,
     ...overrides,
   });
@@ -37,6 +38,7 @@ export function toDTO(session) {
     interactive: session.interactive,
     runs_on: session.runsOn || undefined,
     runner_host: session.runnerHost || undefined,
+    parent_session_id: session.parentSessionId || undefined,
     updated_at: session.updatedAt.toISOString(),
   };
 }

@@ -1,7 +1,8 @@
 /*
  * Row — the workhorse: sessions, tickets, agents, skills.
  * Columns: status | .title | .meta (override with --row-columns).
- * Exceptions: aria-selected / aria-current, data-attention, data-dense.
+ * Exceptions: aria-selected / aria-current, data-attention, data-dense,
+ * data-fresh (just arrived over the live feed: a wash that fades).
  */
 
 @layer blocks {
@@ -42,9 +43,23 @@
       background: color-mix(in oklch, var(--color-attention-wash), var(--color-selected));
     }
 
+    &[data-fresh] {
+      animation: row-arrived 8s var(--ease-out) both;
+
+      @media (prefers-reduced-motion: reduce) {
+        animation: none;
+        box-shadow: inset 2px 0 0 var(--color-signal);
+      }
+    }
+
     &[data-dense] {
       min-block-size: 1.875rem;
       font-size: var(--text-sm);
     }
+  }
+
+  @keyframes row-arrived {
+    from { background-color: var(--color-signal-wash); box-shadow: inset 2px 0 0 var(--color-signal); }
+    to { box-shadow: inset 2px 0 0 transparent; }
   }
 }

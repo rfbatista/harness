@@ -8,7 +8,7 @@ import { FeedStatus } from "../../../../shared/domain/feed.js";
 import { describeError } from "../../../../shared/presentation/errors.js";
 import { readSeed } from "../../../../shared/presentation/seed.js";
 import { applyChange, byRecent, group, ofTask } from "../../domain/session.js";
-import { summary, toDetailView, toGroupViews } from "../view.js";
+import { startedBy, summary, toDetailView, toGroupViews } from "../view.js";
 
 const TICK_MS = 30_000;
 
@@ -18,7 +18,10 @@ const TICK_MS = 30_000;
  *   clock: import("../../../../shared/infrastructure/clock.js").Clock,
  * }} deps
  */
-export const sessionsPage = ({ gateway, clock }) => () => {
+/** How long a session that arrived over the feed stays highlighted. */
+export const FRESH_MS = 8_000;
+
+export const sessionsPage = ({ gateway, clock, setTimeout = globalThis.setTimeout.bind(globalThis) }) => () => {
   let unfollow = () => {};
   let ticker = null;
 
@@ -40,10 +43,19 @@ export const sessionsPage = ({ gateway, clock }) => () => {
     deleting: false,
     /** The detail pane's tab: the agent's terminal, or the application run from the worktree. */
     detailTab: "agent",
+    /** Sessions that just arrived over the feed (started elsewhere: by an agent, the TUI). */
+    freshIds: [],
+    /** Read out by a polite live region when one arrives. */
+    announcement: "",
 
     // ── what the markup binds ────────────────────────────────────────────
     get groups() {
-      return toGroupViews(this.sessions, { selectedId: this.selectedId, now: this.now, agentNames: this.agentNames });
+      return toGroupViews(this.sessions, {
+        selectedId: this.selectedId,
+        now: this.now,
+        agentNames: this.agentNames,
+        fresh: new Set(this.freshIds),
+      });
     },
     get selected() {
       const session = this.sessions.find((s) => s.id === this.selectedId);
@@ -132,9 +144,22 @@ export const sessionsPage = ({ gateway, clock }) => () => {
 
     // ── feed ─────────────────────────────────────────────────────────────
     apply(change) {
+      const arriving = change.kind === "upsert" && !this.sessions.some((s) => s.id === change.session.id);
       this.sessions = applyChange(this.sessions, change, ofTask(this.ticketId));
+      if (arriving && this.sessions.some((s) => s.id === change.session.id)) this.arrived(change.session);
       this.now = clock.now();
       if (change.kind === "deleted" && change.id === this.selectedId) this.selectedId = null;
+    },
+
+    /** A session started elsewhere joined the task: highlight it for a moment and say so. */
+    arrived(session) {
+      const by = startedBy(session, this.sessions, this.agentNames);
+      const title = session.task || "Untitled session";
+      this.announcement = by ? `${by} started a session: ${title}` : `A session started: ${title}`;
+      this.freshIds = [...this.freshIds, session.id];
+      setTimeout(() => {
+        this.freshIds = this.freshIds.filter((id) => id !== session.id);
+      }, FRESH_MS);
     },
 
     feedStatus(status) {

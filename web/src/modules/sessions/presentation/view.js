@@ -23,6 +23,21 @@ export function agentLabel(agentId, agentNames = {}) {
   return agentNames[agentId] || agentId;
 }
 
+/**
+ * How the session that started this one reads: its agent, or "another
+ * session" when it is not among others; "" when a person started it. The BFF's
+ * StartedBy (view.go) says the same.
+ */
+export function startedBy(session, others, agentNames = {}) {
+  if (!session.parentSessionId) return "";
+  const parent = others.find((s) => s.id === session.parentSessionId);
+  return parent ? agentLabel(parent.agentId, agentNames) : "another session";
+}
+
+function meta(agent, by, when) {
+  return by ? `${agent} · started by ${by} · ${when}` : `${agent} · ${when}`;
+}
+
 const GROUP_LABEL = { "needs-you": "Needs you", active: "Running", finished: "Earlier" };
 
 /** @returns {{ state: string, word: string }} */
@@ -31,26 +46,28 @@ export function statusView(session) {
   return STATUS[session.status];
 }
 
-export function toRowView(session, { selectedId, now, agentNames }) {
+export function toRowView(session, { selectedId, now, agentNames, others = [], fresh = false }) {
   const status = statusView(session);
   return {
     id: session.id,
     title: session.task || "Untitled session",
     state: status.state,
     word: status.word,
-    meta: `${agentLabel(session.agentId, agentNames)} · ${relativeTime(session.updatedAt, now)}`,
+    meta: meta(agentLabel(session.agentId, agentNames), startedBy(session, others, agentNames), relativeTime(session.updatedAt, now)),
     selected: session.id === selectedId,
+    fresh,
     attention: needsYou(session),
   };
 }
 
-export function toGroupViews(sessions, { selectedId, now, agentNames }) {
+/** fresh: the ids of sessions that just arrived over the feed, highlighted for a moment. */
+export function toGroupViews(sessions, { selectedId, now, agentNames, fresh = new Set() }) {
   return group(sessions).map(({ key, sessions: members }) => ({
     key,
     label: GROUP_LABEL[key],
     tone: key === "needs-you" ? "attention" : null,
     count: members.length,
-    rows: members.map((s) => toRowView(s, { selectedId, now, agentNames })),
+    rows: members.map((s) => toRowView(s, { selectedId, now, agentNames, others: sessions, fresh: fresh.has(s.id) })),
   }));
 }
 

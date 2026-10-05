@@ -2,7 +2,7 @@ import fixture from "../../../../testdata/views/session-status.json" with { type
 import { assert, file, test } from "../../../shared/testing/test.js";
 import { needsYou } from "../domain/session.js";
 import { makeSession, T0 } from "../testing/fixtures.js";
-import { agentLabel, statusView, summary, terminalView, toGroupViews } from "./view.js";
+import { agentLabel, startedBy, statusView, summary, terminalView, toGroupViews } from "./view.js";
 
 file("sessions/presentation/view");
 
@@ -47,4 +47,18 @@ test("an agent reads as its name, its id when unknown, plain claude without one"
 test("summary counts what is waiting", () => {
   assert.equal(summary([makeSession({ status: "idle" }), makeSession({ id: "b" })]), "2 sessions · 1 waiting");
   assert.equal(summary([makeSession()]), "1 session");
+});
+
+test("who started a session: its parent's agent, another session, or nobody", () => {
+  const lead = makeSession({ id: "lead", agentId: "backend" });
+  const peer = makeSession({ id: "peer", parentSessionId: "lead" });
+  const orphan = makeSession({ id: "orphan", parentSessionId: "gone" });
+  const names = { backend: "Backend dev" };
+  assert.equal(startedBy(peer, [lead, peer], names), "Backend dev");
+  assert.equal(startedBy(orphan, [lead], names), "another session");
+  assert.equal(startedBy(lead, [lead], names), "");
+  const [row] = toGroupViews([peer, lead], { selectedId: null, now: T0, agentNames: names })
+    .flatMap((g) => g.rows)
+    .filter((r) => r.id === "peer");
+  assert.ok(row.meta.startsWith("Backend dev · started by Backend dev · "), row.meta);
 });

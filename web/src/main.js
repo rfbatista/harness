@@ -17,6 +17,7 @@ import { registerProjects } from "./modules/projects/presentation/register.js";
 import { sessionsGateway } from "./modules/sessions/infrastructure/sessions-gateway.js";
 import { terminalGateway } from "./modules/sessions/infrastructure/terminal-gateway.js";
 import { registerSessions } from "./modules/sessions/presentation/register.js";
+import { railGateway } from "./modules/tasks/infrastructure/rail-gateway.js";
 import { tasksGateway } from "./modules/tasks/infrastructure/tasks-gateway.js";
 import { registerTasks } from "./modules/tasks/presentation/register.js";
 import { createScreen } from "./xterm-screen.js";
@@ -29,7 +30,7 @@ const navigate = (url) => window.location.assign(url);
 const reload = () => window.location.reload();
 
 registerProjects(Alpine, { gateway: projectsGateway(api), navigate });
-registerTasks(Alpine, { gateway: tasksGateway(api), navigate, reload });
+registerTasks(Alpine, { gateway: tasksGateway(api), rail: railGateway(api, events), navigate, reload });
 registerSessions(Alpine, {
   gateway: sessionsGateway(api, events),
   terminals: terminalGateway({ base: "/api" }),

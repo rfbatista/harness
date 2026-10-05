@@ -20,4 +20,22 @@
  *           Reads the task the page embeds. Throws BAD_RESPONSE when malformed.
  */
 
+/**
+ * The rail's live view of the project's sessions. Implemented by
+ * infrastructure/rail-gateway.js (over /api) and
+ * infrastructure/memory-rail.js; both run testing/rail-contract.js.
+ *
+ * @typedef {import("./activity.js").RailSession} RailSession
+ * @typedef {{ kind: "upsert", session: RailSession } | { kind: "deleted", id: string }} RailChange
+ *
+ * @typedef {object} RailGateway
+ * @property {(seed: unknown) => { projectId: string, sessions: RailSession[] }} decodeSeed
+ *           Reads the rail's embedded seed. Throws BAD_RESPONSE when malformed.
+ * @property {(projectId: string) => Promise<RailSession[]>} listSessions
+ *           The project's sessions now: after the feed resyncs.
+ * @property {(projectId: string, onChange: (change: RailChange) => void,
+ *             onStatus: (status: import("../../../shared/domain/feed.js").FeedStatus) => void) => () => void} follow
+ *           Every change to the project's sessions; returns the unfollow.
+ */
+
 export {};

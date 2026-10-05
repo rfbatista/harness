@@ -58,6 +58,7 @@ templ Page(v PageView) {
 					<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-on:click="dismissError">Dismiss</button>
 				</div>
 			</template>
+			<p class="[ visually-hidden ]" role="status" aria-live="polite" x-text="announcement"></p>
 			<div class="[ split-view ]" data-scroll>
 				<div
 					class="[ list ] [ divide-end ]"
@@ -113,7 +114,7 @@ templ liveRows() {
 				<span class="[ badge ]" x-bind:data-tone="group.tone" x-text="group.count"></span>
 			</div>
 			<template x-for="row in group.rows" x-bind:key="row.id">
-				<div class="[ row ]" role="option" x-bind:aria-selected="row.selected" x-bind:data-attention="row.attention" x-on:click="select(row.id)">
+				<div class="[ row ]" role="option" x-bind:aria-selected="row.selected" x-bind:data-attention="row.attention" x-bind:data-fresh="row.fresh" x-on:click="select(row.id)">
 					<span class="[ status ]" x-bind:data-state="row.state" x-text="row.word"></span>
 					<span class="[ title ]" x-text="row.title"></span>
 					<span class="[ meta ]" x-text="row.meta"></span>

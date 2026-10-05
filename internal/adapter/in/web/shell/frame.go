@@ -41,6 +41,24 @@ type Rail struct {
 	Groups      []RailGroup
 	// Empty is shown when a project is selected but has no tasks.
 	Empty string
+	// Seed lets the browser keep the dots and counts live: the project's
+	// sessions, followed over the project's feed. Nil leaves the rail static.
+	Seed *RailSeed
+}
+
+// RailSeed is the project's sessions, as much as the rail needs of each (the
+// API's JSON shape). The tasks module's rail gateway decodes it.
+type RailSeed struct {
+	ProjectID string        `json:"project_id"`
+	Sessions  []RailSession `json:"sessions"`
+}
+
+// RailSession is a session as the rail counts it.
+type RailSession struct {
+	ID               string `json:"id"`
+	TicketID         string `json:"ticket_id,omitempty"`
+	Status           string `json:"status"`
+	PendingApprovals int    `json:"pending_approvals"`
 }
 
 // RailGroup is one kanban column: "in progress", "todo", …
@@ -51,6 +69,8 @@ type RailGroup struct {
 
 // Link is one task in the rail.
 type Link struct {
+	// TaskID ties the link to the live activity; "" keeps it static.
+	TaskID  string
 	Label   string
 	Href    string
 	Current bool
@@ -119,4 +139,21 @@ func (l Link) liveWord() string {
 	default:
 		return ""
 	}
+}
+
+// railAttrs makes the rail live when it has a seed.
+func railAttrs(r Rail) templ.Attributes {
+	if r.Seed == nil {
+		return nil
+	}
+	return templ.Attributes{"x-data": "tasksRail", "data-seed": "rail-seed"}
+}
+
+// hiddenUnless hides an element x-show controls until it has something to
+// show, so the first paint matches what Alpine will render.
+func hiddenUnless(show bool) templ.Attributes {
+	if show {
+		return nil
+	}
+	return templ.Attributes{"style": "display: none"}
 }

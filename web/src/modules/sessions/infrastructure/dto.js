@@ -25,6 +25,7 @@ export function toSession(dto) {
     interactive: dto.interactive === true,
     runsOn: dto.runs_on ?? "",
     runnerHost: dto.runner_host ?? "",
+    parentSessionId: dto.parent_session_id ?? "",
     updatedAt,
   });
 }

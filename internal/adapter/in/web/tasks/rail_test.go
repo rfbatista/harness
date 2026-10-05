@@ -51,3 +51,23 @@ func TestRailWithoutTasksSaysSo(t *testing.T) {
 		t.Fatalf("rail = %+v", rail)
 	}
 }
+
+// The rail carries what the browser needs to keep it live: each link's task,
+// and the project's sessions on tasks.
+func TestRailSeedsTheLiveRail(t *testing.T) {
+	rail := BuildRail("p1",
+		[]*domain.Ticket{{ID: "t1", Title: "Add SSE feed", Status: domain.TicketStatusInProgress}},
+		[]*domain.Session{
+			{ID: "s1", TicketID: "t1", Status: domain.SessionWaitingApproval, PendingApprovals: 1},
+			{ID: "loose", Status: domain.SessionRunning},
+		}, "")
+	if rail.Seed == nil || rail.Seed.ProjectID != "p1" || len(rail.Seed.Sessions) != 1 {
+		t.Fatalf("seed = %+v", rail.Seed)
+	}
+	if s := rail.Seed.Sessions[0]; s.ID != "s1" || s.TicketID != "t1" || s.Status != "waiting_approval" || s.PendingApprovals != 1 {
+		t.Fatalf("seed session = %+v", s)
+	}
+	if id := rail.Groups[0].Links[0].TaskID; id != "t1" {
+		t.Errorf("task id = %q", id)
+	}
+}

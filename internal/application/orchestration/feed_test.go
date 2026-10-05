@@ -98,3 +98,18 @@ func TestFeed_SlowFollowerIsDropped(t *testing.T) {
 		t.Fatalf("read %d changes before the close, want the %d buffered", n, feedBuffer)
 	}
 }
+
+// A session an agent starts (start_task_session) reaches followers as it is
+// created, naming the session that started it.
+func TestFeed_ASessionStartedByAnotherCarriesItsParent(t *testing.T) {
+	svc, _ := newInteractiveService(t)
+	mine := follow(t, svc, "p1")
+	sess, _ := startInteractive(t, svc, InteractiveRequest{ParentSessionID: "parent-1"})
+	got := next(t, mine)
+	if got.Session.ID != sess.ID || got.Session.ParentSessionID != "parent-1" {
+		t.Fatalf("change = %+v", got.Session)
+	}
+	if stored := sessionOf(svc, sess.ID); stored.ParentSessionID != "parent-1" {
+		t.Fatalf("stored parent = %q", stored.ParentSessionID)
+	}
+}

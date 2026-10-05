@@ -80,6 +80,7 @@ func (s *Service) StartInteractive(ctx context.Context, req InteractiveRequest) 
 		ClaudeSessionID: id,
 		RunsOn:          runsOn,
 		RunnerHost:      runnerHost(runsOn, req.RunnerHost),
+		ParentSessionID: req.ParentSessionID,
 	})
 	if err == nil {
 		s.adoptCleanup(id, p.cleanup)

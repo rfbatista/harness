@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"context"
 	"slices"
+	"strconv"
 	"time"
 
 	"operators-mcp/internal/domain"
@@ -19,6 +20,19 @@ var SessionTaskToolNames = []string{
 	"create_task_document",
 	"update_task_document",
 	"list_task_sessions",
+	"start_task_session",
+}
+
+// MaxLiveTaskSessions caps the sessions running on one task at once, so agents
+// starting peers cannot fan out without bound.
+const MaxLiveTaskSessions = 8
+
+// PeerStarter is what start_task_session needs to start a session: the
+// interactive sessions port and the project's repositories. The zero value
+// leaves the tool answering that it is unavailable.
+type PeerStarter struct {
+	Sessions     ports.InteractiveSessions
+	Repositories ports.RepositoryLister
 }
 
 // SessionTaskTools exposes the task a session was spawned into, the documents
@@ -27,9 +41,35 @@ var SessionTaskToolNames = []string{
 // The tools take no project or ticket id: the session id travels in the context
 // (see WithSessionID) and every handler resolves the scope from it, so a session
 // can only ever reach its own task, the documents linked to it, and the
-// sessions sharing it. agents, when set, names the agents those sessions run.
-func SessionTaskTools(planningSvc ports.Planning, sessions ports.SessionRepository, agents ports.AgentLister) []domain.Tool {
+// sessions sharing it. agents, when set, names the agents those sessions run;
+// start lets a session start peers on its task.
+func SessionTaskTools(planningSvc ports.Planning, sessions ports.SessionRepository, agents ports.AgentLister, start PeerStarter) []domain.Tool {
 	return []domain.Tool{
+		{
+			Name: "start_task_session",
+			Description: "Start another agent session on this session's task, to hand off or parallelise part of the work. " +
+				"It runs on the server in its own git worktree and branch, with the task's brief, and sees you through " +
+				"list_task_sessions. Give it a prompt saying exactly what to do and what not to touch. Optionally pick the " +
+				"agent (by name), the repository (by name; default yours) and the branch to cut its worktree from " +
+				"(default the repository's default branch; pass your own branch to build on what you have committed). " +
+				"It gets your permission mode. At most " + strconv.Itoa(MaxLiveTaskSessions) + " sessions run on a task at once.",
+			InputSchema: schemaFromJSON(`{"type":"object","required":["prompt"],"properties":{` +
+				`"prompt":{"type":"string","description":"What the new session should do: its first message."},` +
+				`"agent":{"type":"string","description":"The agent to run, by name or id. Default: none (plain claude)."},` +
+				`"repository":{"type":"string","description":"The repository to work in, by name or id. Default: yours."},` +
+				`"base_branch":{"type":"string","description":"The branch its worktree branches off. Default: the repository's default branch."}}}`),
+			Source: "code",
+			Handler: func(ctx context.Context, args map[string]any) (any, error) {
+				scope, err := resolveTaskScope(ctx, planningSvc, sessions)
+				if err != nil {
+					return nil, err
+				}
+				if start.Sessions == nil {
+					return nil, &domain.StructuredError{Code: "UNAVAILABLE", Message: "starting sessions is not available on this server"}
+				}
+				return startPeer(ctx, scope, sessions, agents, start, args)
+			},
+		},
 		{
 			Name: "list_task_sessions",
 			Description: "List the other agent sessions working on this session's task: which agent, what it was asked, " +

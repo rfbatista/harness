@@ -43,7 +43,7 @@ func newTaskServer(t *testing.T) (baseURL, ticketID string) {
 		t.Fatal(err)
 	}
 
-	srv := httptest.NewServer(TaskHandler(tooling.SessionTaskTools(plan, sessions, nil)))
+	srv := httptest.NewServer(TaskHandler(tooling.SessionTaskTools(plan, sessions, nil, tooling.PeerStarter{})))
 	t.Cleanup(srv.Close)
 	return srv.URL, tk.ID
 }
@@ -151,7 +151,7 @@ func TestTaskHandler_ListsTheOtherSessionsOnTheTask(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	srv := httptest.NewServer(TaskHandler(tooling.SessionTaskTools(plan, sessions, nil)))
+	srv := httptest.NewServer(TaskHandler(tooling.SessionTaskTools(plan, sessions, nil, tooling.PeerStarter{})))
 	t.Cleanup(srv.Close)
 
 	c := dial(t, srv.URL+PathPrefix+"sess-1")

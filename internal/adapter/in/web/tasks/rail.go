@@ -38,6 +38,12 @@ func BuildRail(projectID string, tasks []*domain.Ticket, list []*domain.Session,
 	if len(tasks) == 0 {
 		return shell.Rail{Empty: "No tasks yet."}
 	}
+	seed := &shell.RailSeed{ProjectID: projectID, Sessions: []shell.RailSession{}}
+	for _, s := range list {
+		if s.TicketID != "" {
+			seed.Sessions = append(seed.Sessions, shell.RailSession{ID: s.ID, TicketID: s.TicketID, Status: string(s.Status), PendingApprovals: s.PendingApprovals})
+		}
+	}
 
 	type activity struct {
 		live      int
@@ -61,6 +67,7 @@ func BuildRail(projectID string, tasks []*domain.Ticket, list []*domain.Session,
 	for _, t := range tasks {
 		a := byTask[t.ID]
 		link := shell.Link{
+			TaskID:    t.ID,
 			Label:     t.Title,
 			Href:      Href(projectID, t.ID),
 			Current:   t.ID == currentTaskID,
@@ -74,7 +81,7 @@ func BuildRail(projectID string, tasks []*domain.Ticket, list []*domain.Session,
 		}
 	}
 
-	var rail shell.Rail
+	rail := shell.Rail{Seed: seed}
 	for _, st := range kanban {
 		if links := byStatus[st]; len(links) > 0 {
 			rail.Groups = append(rail.Groups, shell.RailGroup{Label: sessions.StatusLabel(st), Links: links})

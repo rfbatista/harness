@@ -66,6 +66,9 @@ type Session struct {
 	// the machine of a RunnerTUI session. Both are empty for headless ones.
 	RunsOn     Runner `json:"runs_on,omitempty"`
 	RunnerHost string `json:"runner_host,omitempty"`
+	// ParentSessionID is the session that started this one on its task
+	// (through the start_task_session tool); empty when a person did.
+	ParentSessionID string `json:"parent_session_id,omitempty"`
 	// ClaudeSessionID is the claude conversation an interactive session resumes.
 	// It starts equal to ID (the CLI is launched with --session-id ID) and moves
 	// when the conversation does, e.g. after /clear; the CLI's SessionStart hook

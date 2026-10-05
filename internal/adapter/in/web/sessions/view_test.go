@@ -136,3 +136,24 @@ func TestRelativeTimeMatchesTheBrowser(t *testing.T) {
 		}
 	}
 }
+
+func TestStartedByNamesTheParentsAgent(t *testing.T) {
+	lead := &domain.Session{ID: "lead", AgentID: "backend"}
+	others := map[string]*domain.Session{"lead": lead}
+	names := map[string]string{"backend": "Backend dev"}
+	for _, c := range []struct {
+		s    *domain.Session
+		want string
+	}{
+		{&domain.Session{ParentSessionID: "lead"}, "Backend dev"},
+		{&domain.Session{ParentSessionID: "gone"}, "another session"},
+		{lead, ""},
+	} {
+		if got := StartedBy(c.s, others, names); got != c.want {
+			t.Errorf("StartedBy(%+v) = %q, want %q", c.s, got, c.want)
+		}
+	}
+	if got := meta("plain claude", "Backend dev", "now"); got != "plain claude · started by Backend dev · now" {
+		t.Errorf("meta = %q", got)
+	}
+}
