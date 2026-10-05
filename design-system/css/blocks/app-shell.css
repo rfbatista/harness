@@ -1,23 +1,28 @@
-/* App shell — nav rail, the current screen, and the stream bar beneath it. */
+/*
+ * App shell — the top bar across, the task rail and the current screen
+ * beneath it, and the stream bar at the foot of the screen.
+ */
 
 @layer blocks {
   .app-shell {
     display: grid;
     grid-template-columns: var(--size-sidebar) minmax(0, 1fr);
-    grid-template-rows: minmax(0, 1fr) auto;
+    grid-template-rows: auto minmax(0, 1fr) auto;
     grid-template-areas:
+      "top top"
       "nav main"
       "nav stream";
     block-size: 100dvh;
 
-    & > .nav { grid-area: nav; }
+    & > .topbar { grid-area: top; }
+    & > .nav { grid-area: nav; min-block-size: 0; }
     & > main { grid-area: main; min-block-size: 0; }
     & > .stream-bar { grid-area: stream; }
 
     @media (width < 48rem) {
       grid-template-columns: minmax(0, 1fr);
-      grid-template-rows: auto minmax(0, 1fr) auto;
-      grid-template-areas: "nav" "main" "stream";
+      grid-template-rows: auto auto minmax(0, 1fr) auto;
+      grid-template-areas: "top" "nav" "main" "stream";
     }
   }
 }

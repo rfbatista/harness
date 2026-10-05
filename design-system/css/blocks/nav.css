@@ -1,6 +1,9 @@
 /*
- * Nav — the primary rail. Groups of links under quiet headings.
- * <nav class="nav"><div class="group"><h2>…</h2><a aria-current="page">…</a></div></nav>
+ * Nav — the rail: the project's tasks, in groups under quiet headings. A link
+ * is a truncating .label, an optional status dot and an optional .count.
+ * <nav class="nav"><div class="group"><h2>in progress</h2>
+ *   <a aria-current="page"><span class="label">…</span><span class="status" data-dot-only>…</span><span class="count">2</span></a>
+ * </div></nav>
  */
 
 @layer blocks {
@@ -59,8 +62,15 @@
       }
     }
 
+    & .label {
+      flex: 1 1 auto;
+      min-inline-size: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
     & .count {
-      margin-inline-start: auto;
       font-size: var(--text-xs);
       color: var(--color-ink-faint);
     }

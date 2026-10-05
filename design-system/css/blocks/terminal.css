@@ -1,0 +1,44 @@
+/*
+ * Terminal — a session's PTY, drawn by xterm.js, with a one-line bar under it
+ * (connection, window title, reconnect). It fills the space it is given; the
+ * screen element is what xterm fits its rows and columns to.
+ * <div class="terminal"><div class="screen">xterm</div><div class="bar">…</div></div>
+ */
+
+@layer blocks {
+  .terminal {
+    display: flex;
+    flex-direction: column;
+    min-block-size: 0;
+    background: var(--color-sunken);
+
+    & > .screen {
+      flex: 1 1 auto;
+      min-block-size: 12rem;
+      padding: var(--space-s) var(--space-m);
+      overflow: hidden;
+      cursor: text;
+
+      & .xterm {
+        block-size: 100%;
+      }
+
+      & .xterm-viewport {
+        background: transparent !important; /* xterm sets an inline color; the pane owns it */
+      }
+    }
+
+    & > .bar {
+      display: flex;
+      align-items: center;
+      gap: var(--space-m);
+      min-block-size: 2rem;
+      padding-inline: var(--space-m);
+      border-block-start: var(--border-width) solid var(--color-line);
+      background: var(--color-panel);
+      font-size: var(--text-xs);
+
+      & .status { font-size: inherit; }
+    }
+  }
+}

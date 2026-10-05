@@ -1,0 +1,75 @@
+package tasks
+
+import (
+	"operators-mcp/internal/adapter/in/web/components"
+	"operators-mcp/internal/adapter/in/web/projects"
+	"operators-mcp/internal/adapter/in/web/shell"
+)
+
+// ProjectPage is a project with no task open: the rail does the work.
+templ ProjectPage(f shell.Frame, projectID, projectName string, hasTasks bool) {
+	@shell.AppShell(f) {
+		<main class="[ frame ]">
+			<header class="[ toolbar ]">
+				<h1>{ projectName }</h1>
+				<div class="[ actions ]">
+					<a class="[ button ]" data-variant="ghost" data-size="sm" href={ templ.SafeURL(projects.RepositoriesHref(projectID)) }>Repositories</a>
+					<a class="[ button ]" data-variant="primary" data-size="sm" href={ templ.SafeURL(NewTaskHref(projectID)) }>New task</a>
+				</div>
+			</header>
+			if hasTasks {
+				@components.Empty("Pick a task", "Tasks are on the left, by status; a dot marks one with live sessions, amber when one waits on you. A task's sessions open beside it.")
+			} else {
+				@components.Empty("No tasks in this project yet", "A task is a piece of work agents take on, in one or more sessions.") {
+					<div class="[ actions ]">
+						<a class="[ button ]" data-variant="primary" href={ templ.SafeURL(NewTaskHref(projectID)) }>Create a task</a>
+					</div>
+				}
+			}
+		</main>
+	}
+}
+
+// NewTaskPage creates a task in the project.
+templ NewTaskPage(f shell.Frame, projectID, projectName string) {
+	@shell.AppShell(f) {
+		<main class="[ frame ]">
+			<header class="[ toolbar ]">
+				<a class="[ crumb ]" href={ templ.SafeURL("/projects/" + projectID) }>{ projectName } /</a>
+				<h1>New task</h1>
+			</header>
+			<div data-scroll>
+				<form class="[ wrapper flow ] [ region ]" style="--wrapper-max: 44rem" x-data="tasksNewTask" data-project-id={ projectID } x-on:submit.prevent="submit">
+					<div class="[ field ]">
+						<label for="task-title">Title</label>
+						<input id="task-title" autocomplete="off" required autofocus x-model="title" placeholder="Add the SSE feed to orchestration"/>
+					</div>
+					<div class="[ field ]">
+						<label for="task-description">Description <span class="[ color-ink-faint weight-regular ]">(optional)</span></label>
+						<textarea id="task-description" x-model="description" placeholder="What done looks like. Agents get this as their brief."></textarea>
+					</div>
+					<div class="[ field ]">
+						<label for="task-status">Status</label>
+						<select id="task-status" x-model="status">
+							for _, st := range Statuses {
+								<option value={ st.Value }>{ st.Label }</option>
+							}
+						</select>
+					</div>
+					<template x-if="error">
+						<div class="[ banner ]" data-tone="danger" role="alert">
+							<div class="[ flow ] [ flow-space-3xs ]">
+								<span x-text="error.message"></span>
+								<span class="[ code ]"><span x-text="error.code"></span> · <span x-text="error.next"></span></span>
+							</div>
+						</div>
+					</template>
+					<div class="[ cluster ]">
+						<button type="submit" class="[ button ]" data-variant="primary" disabled x-bind:disabled="cannotSubmit" x-bind:aria-busy="submitting">Create task</button>
+						<a class="[ button ]" data-variant="ghost" href={ templ.SafeURL("/projects/" + projectID) }>Cancel</a>
+					</div>
+				</form>
+			</div>
+		</main>
+	}
+}

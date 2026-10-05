@@ -242,9 +242,11 @@ Familiar, exact, and keyboard-first. Every control shares one height (32px, or 2
 - **Field anatomy:** label (13px, 500) → control → hint (12px, faint) or error (12px, red), 4px apart.
 
 ### Navigation
-- **Sidebar** (`.nav`): 15rem `panel` rail, grouped under quiet 12px headings (`harness`, `catalog`). Items are 32px, muted ink with a 16px line icon and an optional count on the right.
-- **Current:** `aria-current="page"` gets the `selected` wash, ink text, 500 weight and a signal-colored icon. No stripes, no pills.
-- **Below 48rem:** the rail becomes a horizontally scrolling top bar; headings hide.
+- **Top bar** (`.topbar`): a 44px `panel` strip across the app: the name, then the project picker, a native `<select>` (styled globally) in a GET form. The picker decides what the rail lists.
+- **Rail** (`.nav`): 15rem `panel` column of the selected project's **tasks**, grouped under quiet 12px kanban headings (`in progress`, `review`, `todo`, `backlog`, `done`). A link is a truncating `.label`, then a status dot (`data-dot-only`: teal running, amber waiting on you) and a `.count` of live sessions.
+- **Current:** `aria-current="page"` gets the `selected` wash and ink text. No stripes, no pills.
+- **Inner list:** a task's own sessions sit in the page's `.split-view` list, beside the selected session's detail. A task can run several sessions at once.
+- **Below 48rem:** the rail becomes a horizontally scrolling bar under the top bar; headings hide.
 
 ### List rows (signature)
 The workhorse for sessions, tickets, agents and skills. Grid columns `status | title | meta` (override with `--row-columns`), 36px high, 16px inline padding, hairline dividers. Sticky `.list > .group` headers in `panel` (e.g. *Needs you / Running / Earlier*). Selection is `aria-selected="true"` (signal wash); rows waiting on the developer add `data-attention` (amber wash). Titles truncate; meta never wraps.
@@ -254,6 +256,9 @@ The workhorse for sessions, tickets, agents and skills. Grid columns `status | t
 
 ### Stream bar (signature)
 A 28px `panel` strip at the foot of the shell, `aria-live="polite"`: connection status, a one-line summary (*4 sessions · 1 waiting*), and the global keyboard hints (hidden below 48rem). It is how the developer knows that what they see is what the server holds.
+
+### Terminal (signature)
+A session's live PTY, drawn by xterm.js in the `sunken` well with the mono family at 13px; the theme is read from the color tokens (canvas converts their OKLCH). Under it, a 32px `panel` bar: the connection status (`live`, `exited (code N)`, `disconnected` with Reconnect) and the window title claude sets. Click anywhere on the screen to type into it.
 
 ### Transcript (signature)
 The `sunken` well where a session's output is read: mono 13px, a grid of `time | mark | text`. Line kinds via `data-kind`: `user` (signal mark ›), `agent` (·), `tool` (muted, ⌁), `error` (red, ×), `prompt` (amber wash, ?) for a permission request awaiting the developer.

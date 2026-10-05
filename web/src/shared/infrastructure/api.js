@@ -7,6 +7,7 @@ import { Codes, StructuredError } from "../domain/errors.js";
  * @typedef {object} ApiClient
  * @property {(path: string, query?: Record<string, string|undefined>, signal?: AbortSignal) => Promise<any>} get
  * @property {(path: string, body?: unknown, signal?: AbortSignal) => Promise<any>} post
+ * @property {(path: string, signal?: AbortSignal) => Promise<any>} del  DELETE, for the routes that use it
  */
 
 /**
@@ -59,6 +60,9 @@ export function apiClient({ base, fetch = globalThis.fetch.bind(globalThis) }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
+    },
+    del(path, signal) {
+      return send(path, { method: "DELETE", signal });
     },
   };
 }

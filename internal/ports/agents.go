@@ -18,12 +18,18 @@ type PromptCatalog interface {
 	DeletePrompt(id string) error
 }
 
+// AgentLister reads agent templates: what a page offering agents to pick
+// from needs. AgentCatalog embeds it.
+type AgentLister interface {
+	ListAgents(ctx context.Context) ([]*domain.Agent, error)
+	GetAgent(ctx context.Context, id string) (*domain.Agent, error)
+}
+
 // AgentCatalog manages agent templates. It is network-safe: tui-client
 // implements it over HTTP, so every method takes a context and reports
 // failure, AGENT_NOT_FOUND included, as an error.
 type AgentCatalog interface {
-	ListAgents(ctx context.Context) ([]*domain.Agent, error)
-	GetAgent(ctx context.Context, id string) (*domain.Agent, error)
+	AgentLister
 	CreateAgent(ctx context.Context, name, description, promptID string, skillIDs, mcpServerIDs []string) (*domain.Agent, error)
 	UpdateAgent(ctx context.Context, id, name, description, promptID string, skillIDs, mcpServerIDs []string) (*domain.Agent, error)
 	DeleteAgent(ctx context.Context, id string) error

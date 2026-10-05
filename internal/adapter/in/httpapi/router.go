@@ -38,6 +38,11 @@ func NewRouter(h *Handler, opts ...Option) *echo.Echo {
 
 	// repositories
 	g.GET("/list_repositories", h.handleListRepositories)
+	g.GET("/find_repositories", h.handleFindRepositories) // git checkouts inside a directory, to choose from
+	g.GET("/list_repository_env_files", h.handleListEnvFiles)
+	g.POST("/save_repository_env_file", h.handleSaveEnvFile)
+	g.POST("/delete_repository_env_file", h.handleDeleteEnvFile)
+	g.POST("/import_repository_env_file", h.handleImportEnvFile)
 	g.GET("/get_repository", h.handleGetRepository)
 	g.POST("/create_repository", h.handleCreateRepository)
 	g.POST("/update_repository", h.handleUpdateRepository)

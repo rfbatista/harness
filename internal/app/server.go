@@ -14,6 +14,7 @@ import (
 	"operators-mcp/internal/adapter/in/mcp"
 	"operators-mcp/internal/adapter/in/mcpsession"
 	"operators-mcp/internal/adapter/in/ui"
+	"operators-mcp/internal/adapter/in/web"
 	"operators-mcp/internal/app/catalog"
 	"operators-mcp/internal/application/execution"
 	"operators-mcp/internal/application/orchestration"
@@ -44,10 +45,19 @@ func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, ts *to
 	if err != nil {
 		return err
 	}
+	assets, err := web.NewAssets()
+	if err != nil {
+		return err
+	}
+	if !assets.Built() {
+		slog.Warn("the web client is not built; pages render without styles or scripts. Run: make web")
+	}
 
 	mux := http.NewServeMux()
 	apiRouter := httpapi.NewRouter(httpapi.NewHandler(httpapi.Services{
 		Projects:     cat.Projects,
+		Discovery:    cat.Projects,
+		Env:          cat.Projects,
 		Architecture: cat.Architecture,
 		Agents:       cat.Agents,
 		Capabilities: cat.Capabilities,
@@ -60,8 +70,10 @@ func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, ts *to
 	}), httpapi.WithToken(cfg.APIToken))
 	mux.Handle("/api/", apiRouter)
 	mux.Handle(mcpapprove.PathPrefix, mcpapprove.Handler(broker))
-	mux.Handle(mcpsession.PathPrefix, mcpsession.TaskHandler(tooling.SessionTaskTools(plan, sessions)))
-	mux.Handle("/", uiHandler)
+	mux.Handle(mcpsession.PathPrefix, mcpsession.TaskHandler(tooling.SessionTaskTools(plan, sessions, cat.Agents)))
+	// The web client owns / and its pages; anything else reaches the legacy
+	// designer SPA until it is retired.
+	mux.Handle("/", web.NewHandler(web.Deps{Projects: cat.Projects, Tasks: plan, Sessions: orch, Agents: cat.Agents, Repositories: cat.Projects, EnvFiles: cat.Projects}, assets, uiHandler))
 
 	srv := &http.Server{Addr: cfg.HTTPAddr, Handler: httpapi.CORSMiddleware(mux)}
 	lc.Append(fx.Hook{

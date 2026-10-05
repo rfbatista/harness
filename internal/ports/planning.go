@@ -31,13 +31,19 @@ type DocumentRepository interface {
 
 // Driving ports of the planning service. *planning.Service satisfies them.
 
+// TicketReader reads a project's tickets: what a page that only shows tasks
+// needs. Network-safe like TicketBoard, which embeds it.
+type TicketReader interface {
+	GetTicket(ctx context.Context, id string) (*domain.Ticket, error)
+	ListTickets(ctx context.Context, projectID string) ([]*domain.Ticket, error)
+}
+
 // TicketBoard manages a project's tickets (tasks, in the UI). It is
 // network-safe: tui-client implements it over HTTP, so every method takes a
 // context and reports failure, including TICKET_NOT_FOUND, as an error.
 type TicketBoard interface {
+	TicketReader
 	CreateTicket(ctx context.Context, projectID, title, description string, status domain.TicketStatus) (*domain.Ticket, error)
-	GetTicket(ctx context.Context, id string) (*domain.Ticket, error)
-	ListTickets(ctx context.Context, projectID string) ([]*domain.Ticket, error)
 	UpdateTicket(ctx context.Context, id, title, description string, status domain.TicketStatus) (*domain.Ticket, error)
 	DeleteTicket(ctx context.Context, id string) error
 }

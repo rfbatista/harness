@@ -8,7 +8,13 @@ import { jsonResponse } from "../../../shared/testing/doubles.js";
 import { memoryGateway } from "../infrastructure/memory-gateway.js";
 import { toDTO } from "./fixtures.js";
 
-const STATUS = { PROJECT_NOT_FOUND: 404, SESSION_NOT_FOUND: 404, SESSION_NOT_RUNNING: 409 };
+const STATUS = {
+  PROJECT_NOT_FOUND: 404,
+  SESSION_NOT_FOUND: 404,
+  SESSION_NOT_RUNNING: 409,
+  INVALID_INPUT: 400,
+  CROSS_PROJECT_ACCESS: 400,
+};
 
 export function stubApi(world) {
   const memory = memoryGateway(world);
@@ -22,13 +28,29 @@ export function stubApi(world) {
     const body = init.body ? JSON.parse(init.body) : {};
     try {
       if (method === "GET" && url.pathname === "/api/sessions") {
-        const list = await gateway.list(url.searchParams.get("project_id") ?? "");
+        const list = await gateway.list({
+          projectId: url.searchParams.get("project_id") ?? "",
+          ticketId: url.searchParams.get("ticket_id") ?? undefined,
+        });
         return jsonResponse(200, { sessions: list.map(toDTO) });
       }
-      let m = url.pathname.match(/^\/api\/sessions\/([^/]+)\/messages$/);
-      if (method === "POST" && m) {
-        await gateway.send(decodeURIComponent(m[1]), body.text);
-        return new Response(null, { status: 202 });
+      if (method === "POST" && url.pathname === "/api/start_interactive_session") {
+        if (body.runs_on !== "server") return jsonResponse(400, { error: "the web client runs sessions on the server", code: "INVALID_INPUT" });
+        const session = await gateway.start({
+          projectId: body.project_id,
+          ticketId: body.ticket_id,
+          repositoryId: body.repository_id,
+          agentId: body.agent_id,
+          prompt: body.prompt,
+          autoAccept: body.auto_accept,
+          size: body.size,
+        });
+        return jsonResponse(201, { session: toDTO(session), agent: {} });
+      }
+      let m = url.pathname.match(/^\/api\/sessions\/([^/]+)$/);
+      if (method === "DELETE" && m) {
+        await gateway.remove(decodeURIComponent(m[1]));
+        return new Response(null, { status: 204 });
       }
       m = url.pathname.match(/^\/api\/sessions\/([^/]+)\/stop$/);
       if (method === "POST" && m) {

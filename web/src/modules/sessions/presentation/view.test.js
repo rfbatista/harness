@@ -2,7 +2,7 @@ import fixture from "../../../../testdata/views/session-status.json" with { type
 import { assert, file, test } from "../../../shared/testing/test.js";
 import { needsYou } from "../domain/session.js";
 import { makeSession, T0 } from "../testing/fixtures.js";
-import { statusView, summary, toGroupViews } from "./view.js";
+import { agentLabel, statusView, summary, terminalView, toGroupViews } from "./view.js";
 
 file("sessions/presentation/view");
 
@@ -19,12 +19,29 @@ test("group views carry labels, counts and the selection", () => {
   const now = new Date(T0.getTime() + 5 * 60_000);
   const groups = toGroupViews(
     [makeSession({ id: "a", status: "idle" }), makeSession({ id: "b", task: "" })],
-    { selectedId: "b", now },
+    { selectedId: "b", now, agentNames: {} },
   );
   assert.deepEqual(groups.map((g) => `${g.label}:${g.count}`), ["Needs you:1", "Running:1"]);
   assert.deepEqual(groups.map((g) => g.tone), ["attention", null]);
   const row = groups[1].rows[0];
   assert.deepEqual([row.title, row.meta, row.selected, row.attention], ["Untitled session", "backend · 5m", true, false]);
+});
+
+test("the detail pane attaches only to a live terminal on the server, and says why otherwise", () => {
+  assert.equal(terminalView(makeSession({ status: "idle" })).terminal, "attach");
+  assert.equal(terminalView(makeSession({ status: "done" })).terminal, "ended");
+  const tui = terminalView(makeSession({ runsOn: "tui", runnerHost: "laptop" }));
+  assert.equal(tui.terminal, "elsewhere");
+  assert.ok(tui.terminalNote.includes("laptop"));
+  const headless = terminalView(makeSession({ interactive: false, runsOn: "", lastAction: "edited go.mod" }));
+  assert.equal(headless.terminal, "headless");
+  assert.ok(headless.terminalNote.includes("edited go.mod"));
+});
+
+test("an agent reads as its name, its id when unknown, plain claude without one", () => {
+  assert.equal(agentLabel("a1", { a1: "Reviewer" }), "Reviewer");
+  assert.equal(agentLabel("gone", { a1: "Reviewer" }), "gone");
+  assert.equal(agentLabel("", {}), "plain claude");
 });
 
 test("summary counts what is waiting", () => {

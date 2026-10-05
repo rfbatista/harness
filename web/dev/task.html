@@ -3,10 +3,11 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Sessions · harness (dev)</title>
+    <title>Add SSE feed · harness (dev)</title>
     <!--
-      Stand-in for what internal/adapter/in/web/sessions/page.templ will render:
-      the server's first paint, the JSON seed, and the Alpine bindings. Served
+      Stand-in for what the server renders for a task (internal/adapter/in/web:
+      shell + sessions/page.templ): the top bar's project picker, the task rail,
+      the task's sessions in the inner list, the JSON seed, the Alpine bindings. Served
       from the repository root; runs on web/dev/main.js (in-memory gateway).
     -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -15,44 +16,65 @@
       rel="stylesheet"
       href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible+Mono:wght@400;500;700&family=Atkinson+Hyperlegible+Next:wght@400;500;700&display=swap"
     />
-    <link rel="stylesheet" href="../../design-system/css/index.css" />
-    <style>
-      /* Page layout for the sessions screen; moves to a design-system block with the BFF. */
-      .session-screen { display: grid; grid-template-columns: minmax(18rem, 26rem) minmax(0, 1fr); min-block-size: 0; }
-      @media (width < 64rem) { .session-screen { grid-template-columns: minmax(0, 1fr); } .session-screen > :last-child { display: none; } }
-    </style>
+    <link rel="stylesheet" href="../src/app.css" />
     <script type="importmap">
-      { "imports": { "alpinejs": "../vendor/alpine-csp.esm.js" } }
+      {
+        "imports": {
+          "alpinejs": "../vendor/alpine-csp.esm.js",
+          "@xterm/xterm": "../vendor/xterm.esm.js",
+          "@xterm/addon-fit": "../vendor/xterm-addon-fit.esm.js"
+        }
+      }
     </script>
     <script type="module" src="./main.js"></script>
   </head>
   <body>
     <div class="[ app-shell ]">
-      <nav class="[ nav ]" aria-label="Primary">
+      <header class="[ topbar ]">
+        <a class="[ brand ]" href="#">harness</a>
+        <form class="[ cluster ] [ gutter-xs ]" method="get" action="#" x-data="projectPicker">
+          <label class="[ visually-hidden ]" for="project-picker">Project</label>
+          <select id="project-picker" name="project">
+            <option value="coding_pool" selected>coding_pool</option>
+            <option value="dotfiles">dotfiles</option>
+          </select>
+        </form>
+      </header>
+
+      <nav class="[ nav ]" aria-label="Tasks">
         <div class="[ group ]">
-          <h2>harness</h2>
-          <a href="#" aria-current="page">Sessions <span class="[ count ]">4</span></a>
-          <a href="#">Tickets</a>
-          <a href="#">Agents</a>
+          <h2>in progress</h2>
+          <a href="#" aria-current="page">
+            <span class="[ label ]">Add SSE feed</span>
+            <span class="[ status ]" data-state="waiting" data-dot-only><span class="[ visually-hidden ]">waiting on you</span></span>
+            <span class="[ count ]">3</span>
+          </a>
+          <a href="#"><span class="[ label ]">Port tickets screen to httpclient</span></a>
+        </div>
+        <div class="[ group ]">
+          <h2>todo</h2>
+          <a href="#"><span class="[ label ]">Write docs/TUI.md live section</span></a>
         </div>
       </nav>
 
-      <main class="[ frame ]" x-data="sessionsPage" data-seed="sessions-seed" @reply-sent="replySent">
+      <main class="[ frame ]" x-data="sessionsPage" data-seed="sessions-seed">
         <script type="application/json" id="sessions-seed">
           {
             "project_id": "coding_pool",
+            "ticket_id": "t-feed",
             "sessions": [
-              { "id": "s-feed", "project_id": "coding_pool", "task": "Add SSE feed to orchestration", "agent_id": "reviewer", "status": "idle", "pending_approvals": 0, "last_action": "Edited internal/tuiclient/live/live.go", "updated_at": "2026-10-02T23:58:00Z" },
-              { "id": "s-port", "project_id": "coding_pool", "task": "Port tickets screen to httpclient", "agent_id": "backend", "status": "running", "pending_approvals": 0, "last_action": "go test ./internal/adapter/out/httpclient/...", "updated_at": "2026-10-02T23:50:00Z" },
-              { "id": "s-suite", "project_id": "coding_pool", "task": "Conformance suite for TicketBoard", "agent_id": "tester", "status": "thinking", "pending_approvals": 0, "updated_at": "2026-10-02T23:40:00Z" },
-              { "id": "s-bump", "project_id": "coding_pool", "task": "Bump harnesskit to v0.9", "agent_id": "backend", "status": "failed", "pending_approvals": 0, "last_action": "dto_golden_test.go failed", "updated_at": "2026-10-02T22:00:00Z" }
+              { "id": "s-feed", "project_id": "coding_pool", "ticket_id": "t-feed", "task": "Add SSE feed to orchestration", "agent_id": "reviewer", "status": "idle", "pending_approvals": 0, "interactive": true, "runs_on": "server", "last_action": "Edited internal/tuiclient/live/live.go", "updated_at": "2026-10-02T23:58:00Z" },
+              { "id": "s-port", "project_id": "coding_pool", "ticket_id": "t-feed", "task": "Port tickets screen to httpclient", "agent_id": "backend", "status": "running", "pending_approvals": 0, "interactive": true, "runs_on": "server", "last_action": "go test ./internal/adapter/out/httpclient/...", "updated_at": "2026-10-02T23:50:00Z" },
+              { "id": "s-suite", "project_id": "coding_pool", "ticket_id": "t-feed", "task": "Conformance suite for TicketBoard", "agent_id": "tester", "status": "thinking", "pending_approvals": 0, "interactive": true, "runs_on": "server", "updated_at": "2026-10-02T23:40:00Z" },
+              { "id": "s-bump", "project_id": "coding_pool", "ticket_id": "t-feed", "task": "Bump harnesskit to v0.9", "agent_id": "backend", "status": "failed", "pending_approvals": 0, "interactive": true, "runs_on": "server", "last_action": "dto_golden_test.go failed", "updated_at": "2026-10-02T22:00:00Z" }
             ]
           }
         </script>
 
         <header class="[ toolbar ]">
-          <span class="[ crumb ]">coding_pool /</span>
-          <h1>Sessions</h1>
+          <a class="[ crumb ]" href="#">coding_pool /</a>
+          <h1>Add SSE feed</h1>
+          <span class="[ badge ]">in progress</span>
           <span class="[ color-ink-faint text-sm ]" x-text="summary">4 sessions · 1 waiting</span>
           <div class="[ actions ]">
             <button class="[ button ]" data-variant="danger" data-size="sm" disabled :disabled="cannotStop" :aria-busy="stopping" @click="stopSelected">
@@ -71,7 +93,7 @@
           </div>
         </template>
 
-        <div class="[ session-screen ]" data-scroll>
+        <div class="[ split-view ]" data-scroll>
           <div
             class="[ list ] [ divide-end ]"
             role="listbox"
@@ -145,22 +167,18 @@
                     <span x-text="selected.updated"></span>
                   </div>
                 </div>
-                <div class="[ transcript ]" data-scroll>
-                  <p class="[ line ]" data-kind="agent"><time>last</time><span class="[ mark ]">·</span><span x-text="selected.lastAction"></span></p>
-                </div>
-                <form
-                  class="[ cluster ] [ divide-top pad-block-s pad-inline-l ]"
-                  x-data="sessionsReplyBox"
-                  x-modelable="sessionId"
-                  x-model="selectedId"
-                  @submit.prevent="send"
-                >
-                  <input class="[ grow ] [ font-mono text-sm ]" placeholder="Reply to session…" aria-label="Reply to session" x-model="draft" :disabled="cannotType" />
-                  <button class="[ button ]" data-variant="primary" type="submit" :disabled="cannotSend" :aria-busy="sending">Send</button>
-                  <template x-if="error">
-                    <span class="[ color-danger text-sm ]" x-text="error.message"></span>
-                  </template>
-                </form>
+                <template x-for="sid in terminalIds" :key="sid">
+                  <div class="[ terminal ]" x-data="sessionsTerminal(sid)" data-scroll>
+                    <div class="[ screen ]" x-ref="screen" @click="focus"></div>
+                    <div class="[ bar ]">
+                      <span class="[ status ]" :data-state="statusState" x-text="stateWord">connecting</span>
+                      <span class="[ color-ink-faint truncate grow ]" x-text="title"></span>
+                    </div>
+                  </div>
+                </template>
+                <template x-if="terminalNote">
+                  <div class="[ pad-l ]"><div class="[ banner ]"><span x-text="terminalNote"></span></div></div>
+                </template>
               </div>
             </template>
             <template x-if="!hasSelection">

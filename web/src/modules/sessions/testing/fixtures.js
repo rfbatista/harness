@@ -7,11 +7,15 @@ export function makeSession(overrides = {}) {
   return Object.freeze({
     id: "s1",
     projectId: "p1",
+    ticketId: "t1",
     task: "Port tickets screen to httpclient",
     agentId: "backend",
     status: "running",
     pendingApprovals: 0,
     lastAction: "",
+    interactive: true,
+    runsOn: "server",
+    runnerHost: "",
     updatedAt: T0,
     ...overrides,
   });
@@ -22,11 +26,15 @@ export function toDTO(session) {
   return {
     id: session.id,
     project_id: session.projectId,
+    ticket_id: session.ticketId || undefined,
     task: session.task,
     agent_id: session.agentId || undefined,
     status: session.status,
     pending_approvals: session.pendingApprovals,
     last_action: session.lastAction || undefined,
+    interactive: session.interactive,
+    runs_on: session.runsOn || undefined,
+    runner_host: session.runnerHost || undefined,
     updated_at: session.updatedAt.toISOString(),
   };
 }

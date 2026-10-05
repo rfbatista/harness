@@ -7,11 +7,15 @@
  * @typedef {object} Session
  * @property {string} id
  * @property {string} projectId
+ * @property {string} ticketId          the task it works on; "" for none. A task can run several sessions at once.
  * @property {string} task              what the session was asked to do
  * @property {string} agentId           "" when no agent persona is attached
  * @property {SessionStatus} status
  * @property {number} pendingApprovals  tool calls waiting for the developer
  * @property {string} lastAction        "" until the agent has done something
+ * @property {boolean} interactive       claude runs in a terminal (a PTY) rather than over stream-json
+ * @property {"server"|"tui"|""} runsOn  where an interactive session's terminal lives; "" when headless
+ * @property {string} runnerHost         the machine of a "tui" session
  * @property {Date} updatedAt
  *
  * @typedef {{ kind: "upsert", session: Session } | { kind: "deleted", id: string }} SessionChange
@@ -50,14 +54,23 @@ export const needsYou = (session) =>
   !isTerminal(session) &&
   (session.status === Status.WAITING_APPROVAL || session.status === Status.IDLE || session.pendingApprovals > 0);
 
-/** Whether a message can be sent: the process is alive. */
-export const acceptsInput = (session) => !isTerminal(session);
+/** The terminal of this session can be attached from here: it runs on the server and is alive. */
+export const hasLiveTerminal = (session) => session.interactive && session.runsOn === "server" && !isTerminal(session);
 
-/** The list after one change from the feed. The changed session moves to the top. */
-export function applyChange(list, change) {
+/**
+ * The list after one change from the feed. The changed session moves to the
+ * top. `keep` says which sessions the list holds (a task page keeps its own
+ * task's): an upsert of any other session leaves it out, so a session that
+ * stops matching drops from the list.
+ */
+export function applyChange(list, change, keep = () => true) {
   if (change.kind === "deleted") return list.filter((s) => s.id !== change.id);
-  return [change.session, ...list.filter((s) => s.id !== change.session.id)];
+  const rest = list.filter((s) => s.id !== change.session.id);
+  return keep(change.session) ? [change.session, ...rest] : rest;
 }
+
+/** The predicate a task's page keeps its sessions with. */
+export const ofTask = (ticketId) => (session) => session.ticketId === ticketId;
 
 /** Most recently updated first. Returns a new array. */
 export const byRecent = (list) => [...list].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());

@@ -2,7 +2,7 @@
 // sessions/view.go; web/testdata/views/session-status.json pins both.
 
 import { count, relativeTime } from "../../../shared/presentation/format.js";
-import { acceptsInput, group, isTerminal, needsYou } from "../domain/session.js";
+import { group, hasLiveTerminal, isTerminal, needsYou } from "../domain/session.js";
 
 /** Domain status → the design system's .status[data-state] and its word. */
 const STATUS = {
@@ -17,6 +17,12 @@ const STATUS = {
   failed: { state: "failed", word: "failed" },
 };
 
+/** How a session's agent reads: its name, its ID when unknown, "plain claude" without one. */
+export function agentLabel(agentId, agentNames = {}) {
+  if (!agentId) return "plain claude";
+  return agentNames[agentId] || agentId;
+}
+
 const GROUP_LABEL = { "needs-you": "Needs you", active: "Running", finished: "Earlier" };
 
 /** @returns {{ state: string, word: string }} */
@@ -25,42 +31,64 @@ export function statusView(session) {
   return STATUS[session.status];
 }
 
-export function toRowView(session, { selectedId, now }) {
+export function toRowView(session, { selectedId, now, agentNames }) {
   const status = statusView(session);
   return {
     id: session.id,
     title: session.task || "Untitled session",
     state: status.state,
     word: status.word,
-    meta: `${session.agentId || "no agent"} · ${relativeTime(session.updatedAt, now)}`,
+    meta: `${agentLabel(session.agentId, agentNames)} · ${relativeTime(session.updatedAt, now)}`,
     selected: session.id === selectedId,
     attention: needsYou(session),
   };
 }
 
-export function toGroupViews(sessions, { selectedId, now }) {
+export function toGroupViews(sessions, { selectedId, now, agentNames }) {
   return group(sessions).map(({ key, sessions: members }) => ({
     key,
     label: GROUP_LABEL[key],
     tone: key === "needs-you" ? "attention" : null,
     count: members.length,
-    rows: members.map((s) => toRowView(s, { selectedId, now })),
+    rows: members.map((s) => toRowView(s, { selectedId, now, agentNames })),
   }));
 }
 
-export function toDetailView(session, now) {
+export function toDetailView(session, now, agentNames) {
   const status = statusView(session);
   return {
     id: session.id,
     title: session.task || "Untitled session",
     state: status.state,
     word: status.word,
-    agent: session.agentId || "no agent",
+    agent: agentLabel(session.agentId, agentNames),
     lastAction: session.lastAction || "Nothing yet.",
     updated: relativeTime(session.updatedAt, now),
-    acceptsInput: acceptsInput(session),
     stoppable: !isTerminal(session),
+    ...terminalView(session),
   };
+}
+
+/**
+ * What the detail pane shows where a terminal would be: the live terminal
+ * ("attach"), or a note on why there is none.
+ * @returns {{ terminal: "attach" | "ended" | "elsewhere" | "headless", terminalNote: string }}
+ */
+export function terminalView(session) {
+  if (hasLiveTerminal(session)) return { terminal: "attach", terminalNote: "" };
+  if (!session.interactive) {
+    return {
+      terminal: "headless",
+      terminalNote: `This session runs without a terminal (it was started over the API). Last action: ${session.lastAction || "none yet"}.`,
+    };
+  }
+  if (session.runsOn === "tui") {
+    return {
+      terminal: "elsewhere",
+      terminalNote: `This session's terminal lives in the TUI on ${session.runnerHost || "another machine"}; attach to it from there.`,
+    };
+  }
+  return { terminal: "ended", terminalNote: "This session has ended; its terminal is gone. Resume it from the TUI, or start a new one." };
 }
 
 export function summary(sessions) {

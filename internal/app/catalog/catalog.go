@@ -44,7 +44,12 @@ type Deps struct {
 	Publisher       ports.SkillPublisher
 	PathMatcher     ports.PathMatcher
 	TreeLister      ports.TreeLister
-	DefaultRoot     string
+	// RepositoryFinder lets projects discover git checkouts; nil disables it.
+	RepositoryFinder ports.RepositoryFinder
+	// EnvFiles and EnvFileIO keep repositories' env files; nil disables them.
+	EnvFiles    ports.EnvFileRepository
+	EnvFileIO   ports.EnvFileIO
+	DefaultRoot string
 	// Bus carries the domain events; nil creates one.
 	Bus *eventbus.Bus
 }
@@ -79,6 +84,12 @@ func New(d Deps) Catalog {
 	ag := agents.NewService(d.Agents, d.Prompts, caps, bus)
 	caps.UseMCPServerUsage(ag)
 	pr := projects.NewService(d.Projects, d.Repositories, bus)
+	if d.RepositoryFinder != nil {
+		pr.UseFinder(d.RepositoryFinder)
+	}
+	if d.EnvFiles != nil {
+		pr.UseEnvFiles(d.EnvFiles, d.EnvFileIO)
+	}
 	arch := architecture.NewService(architecture.Deps{
 		Zones:           d.Zones,
 		BoundedContexts: d.BoundedContexts,

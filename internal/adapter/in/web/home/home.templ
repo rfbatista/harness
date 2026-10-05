@@ -1,0 +1,22 @@
+// Package home is the web client's entry: it opens the first project, or
+// explains how to create one when there is none.
+package home
+
+import (
+	"operators-mcp/internal/adapter/in/web/components"
+	"operators-mcp/internal/adapter/in/web/shell"
+)
+
+// NoProjects is the first-run page.
+templ NoProjects(f shell.Frame) {
+	@shell.AppShell(f) {
+		<main class="[ frame ]">
+			<header class="[ toolbar ]"><h1>Welcome</h1></header>
+			@components.Empty("No projects yet", "A project is a codebase the harness works on: its repositories, its tasks, and the sessions agents run on them.") {
+				<div class="[ actions ]">
+					<a class="[ button ]" data-variant="primary" href="/projects/new">Create a project</a>
+				</div>
+			}
+		</main>
+	}
+}

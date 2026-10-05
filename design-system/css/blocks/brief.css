@@ -1,0 +1,19 @@
+/*
+ * Brief — a task's description under its title: prose as written (line
+ * breaks kept), quieter than the work around it, scrolling when long.
+ * <p class="brief">…</p>
+ */
+
+@layer blocks {
+  .brief {
+    max-inline-size: none;
+    max-block-size: 7.5rem;
+    overflow: auto;
+    padding: var(--space-s) var(--space-l);
+    border-block-end: var(--border-width) solid var(--color-line);
+    background: var(--color-canvas);
+    color: var(--color-ink-muted);
+    font-size: var(--text-sm);
+    white-space: pre-wrap;
+  }
+}

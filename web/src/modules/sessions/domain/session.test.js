@@ -1,6 +1,6 @@
 import { assert, file, test } from "../../../shared/testing/test.js";
 import { makeSession, T0 } from "../testing/fixtures.js";
-import { applyChange, group, needsYou } from "./session.js";
+import { applyChange, group, needsYou, ofTask } from "./session.js";
 
 file("sessions/domain/session");
 
@@ -14,6 +14,19 @@ test("a changed session moves to the top; a deleted one leaves", () => {
   assert.deepEqual(list.map((s) => `${s.id}:${s.status}`), ["b:done", "a:running"]);
   list = applyChange(list, { kind: "deleted", id: "a" });
   assert.deepEqual(list.map((s) => s.id), ["b"]);
+});
+
+test("a task's list keeps only its own sessions, and drops one that stops matching", () => {
+  const mine = makeSession({ id: "mine", ticketId: "t1" });
+  const keep = ofTask("t1");
+  let list = applyChange([mine], { kind: "upsert", session: makeSession({ id: "other", ticketId: "t2" }) }, keep);
+  assert.deepEqual(list.map((s) => s.id), ["mine"], "another task's session is ignored");
+
+  list = applyChange(list, { kind: "upsert", session: makeSession({ id: "second", ticketId: "t1" }) }, keep);
+  assert.deepEqual(list.map((s) => s.id), ["second", "mine"], "a task runs several sessions");
+
+  list = applyChange(list, { kind: "upsert", session: makeSession({ id: "mine", ticketId: "t9" }) }, keep);
+  assert.deepEqual(list.map((s) => s.id), ["second"]);
 });
 
 test("an idle interactive session is the developer's turn; a finished one never is", () => {

@@ -1,0 +1,269 @@
+package projects
+
+import (
+	"operators-mcp/internal/adapter/in/web/components"
+	"operators-mcp/internal/adapter/in/web/shell"
+)
+
+// NewProjectPage creates a project from a directory, with the git
+// repositories found inside it.
+templ NewProjectPage(f shell.Frame) {
+	@shell.AppShell(f) {
+		<main class="[ frame ]">
+			<header class="[ toolbar ]"><h1>New project</h1></header>
+			<div data-scroll>
+				<form class="[ wrapper flow ] [ region ]" style="--wrapper-max: 44rem" x-data="projectsNewProject" x-on:submit.prevent="submit">
+					<p class="[ color-ink-muted ]">A project is a directory the harness works on, usually holding several git repositories: its tasks, and the sessions agents run in those repositories.</p>
+					<div class="[ field ]">
+						<label for="project-root">Directory</label>
+						<div class="[ cluster ]">
+							<input id="project-root" class="[ grow ] [ font-mono text-sm ]" placeholder="/Users/you/src/app" autocomplete="off" required x-model="rootDir" x-on:change="search" x-bind:aria-invalid="!!pathProblem"/>
+							<button type="button" class="[ button ]" x-bind:disabled="cannotSearch" x-bind:aria-busy="searching" x-on:click="search">Find repositories</button>
+						</div>
+						<template x-if="pathProblem">
+							<span class="[ error ]" x-text="pathProblem"></span>
+						</template>
+						<span class="[ hint ]">The absolute path of the project's directory on the machine the server runs on.</span>
+					</div>
+					<div class="[ field ]">
+						<label for="project-name">Name <span class="[ color-ink-faint weight-regular ]">(optional)</span></label>
+						<input id="project-name" autocomplete="off" x-model="name" x-bind:placeholder="namePlaceholder"/>
+					</div>
+					<template x-if="hasFound">
+						<div class="[ pane ]" role="group" aria-label="Repositories to add">
+							<header><span>Repositories found inside</span><span class="[ push-end ] [ color-ink-faint weight-regular ]" x-text="resolvedRoot"></span></header>
+							<template x-for="f in found" x-bind:key="f.path">
+								<label class="[ row ]" style="--row-columns: auto minmax(0, 1fr) auto">
+									<input type="checkbox" x-model="f.selected"/>
+									<span class="[ title ] [ font-mono text-sm ]" x-text="f.relative"></span>
+									<span class="[ meta ] [ truncate ]" x-text="f.remoteLabel"></span>
+								</label>
+							</template>
+						</div>
+					</template>
+					<template x-if="foundNothing">
+						<div class="[ banner ]">
+							<span>No git repositories inside this directory. You can create the project anyway and add repositories later from its Repositories page.</span>
+						</div>
+					</template>
+					<template x-if="error">
+						<div class="[ banner ]" data-tone="danger" role="alert">
+							<div class="[ flow ] [ flow-space-3xs ]">
+								<span x-text="error.message"></span>
+								<span class="[ code ]"><span x-text="error.code"></span> · <span x-text="error.next"></span></span>
+								<template x-if="createdProjectHref">
+									<a x-bind:href="createdProjectHref">The project was created: finish adding its repositories there</a>
+								</template>
+							</div>
+						</div>
+					</template>
+					<div class="[ cluster ]">
+						<button type="submit" class="[ button ]" data-variant="primary" disabled x-bind:disabled="cannotSubmit" x-bind:aria-busy="submitting" x-text="submitLabel">Create project</button>
+						<a class="[ button ]" data-variant="ghost" href="/">Cancel</a>
+					</div>
+				</form>
+			</div>
+		</main>
+	}
+}
+
+// RepositoriesPage lists a project's repositories, adds and removes them.
+templ RepositoriesPage(v RepositoriesView) {
+	@shell.AppShell(v.Frame) {
+		<main class="[ frame ]" x-data="projectsRepositoriesPage" data-seed="repositories-seed">
+			@templ.JSONScript("repositories-seed", v.Seed)
+			<header class="[ toolbar ]">
+				<a class="[ crumb ]" href={ templ.SafeURL("/projects/" + v.ProjectID) }>{ v.ProjectName } /</a>
+				<h1>Repositories</h1>
+			</header>
+			<div data-scroll>
+				<div class="[ wrapper flow ] [ region ]" style="--wrapper-max: 48rem">
+					<p class="[ color-ink-muted ]">The git checkouts this project's sessions run in. Each session gets its own worktree and branch, cut from the repository you pick.</p>
+					<template x-if="error">
+						<div class="[ banner ]" data-tone="danger" role="alert">
+							<div class="[ flow ] [ flow-space-3xs grow ]">
+								<span x-text="error.message"></span>
+								<span class="[ code ]"><span x-text="error.code"></span> · <span x-text="error.next"></span></span>
+							</div>
+							<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-on:click="dismissError">Dismiss</button>
+						</div>
+					</template>
+					<section class="[ pane ]" aria-label="Repositories">
+						<div x-ignore data-ssr>
+							if len(v.Rows) == 0 {
+								@components.Empty("No repositories yet", "Add the project's git checkout below; sessions need one to run in.")
+							}
+							for _, r := range v.Rows {
+								<div class="[ row ]" style="--row-columns: minmax(0, 1fr) auto">
+									<span class="[ flow ] [ flow-space-3xs pad-block-xs ]">
+										<span class="[ weight-medium ]">{ r.Name }</span>
+										<span class="[ font-mono text-xs color-ink-faint ]">{ r.RootDir } · { r.Remote }</span>
+									</span>
+									<a class="[ button ]" data-variant="ghost" data-size="sm" href={ templ.SafeURL(r.EnvHref) }>Env files</a>
+								</div>
+							}
+						</div>
+						<template x-for="r in rows" x-bind:key="r.id">
+							<div class="[ row ]" style="--row-columns: minmax(0, 1fr) auto">
+								<span class="[ flow ] [ flow-space-3xs pad-block-xs ]">
+									<span class="[ weight-medium ]" x-text="r.name"></span>
+									<span class="[ font-mono text-xs color-ink-faint ]"><span x-text="r.rootDir"></span> · <span x-text="r.remote"></span></span>
+								</span>
+								<span class="[ cluster ] [ gutter-xs ]">
+									<a class="[ button ]" data-variant="ghost" data-size="sm" x-bind:href="r.envHref">Env files</a>
+									<template x-if="!r.confirming">
+										<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-on:click="askRemove(r.id)">Remove</button>
+									</template>
+									<template x-if="r.confirming">
+										<span class="[ cluster ] [ gutter-xs ]">
+											<span class="[ text-sm color-danger ]">Remove from the project? The checkout on disk stays.</span>
+											<button type="button" class="[ button ]" data-variant="danger" data-size="sm" x-bind:aria-busy="r.removing" x-on:click="remove(r.id)">Remove</button>
+											<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-on:click="cancelRemove">Keep</button>
+										</span>
+									</template>
+								</span>
+							</div>
+						</template>
+						<template x-if="isEmpty">
+							@components.Empty("No repositories yet", "Add the project's git checkout below; sessions need one to run in.")
+						</template>
+					</section>
+					<template x-if="hasSuggestions">
+						<section class="[ pane ]" aria-label="Found in the project's directory">
+							<header><span>Found in the project's directory, not added yet</span></header>
+							<template x-for="s in suggestions" x-bind:key="s.path">
+								<div class="[ row ]" style="--row-columns: minmax(0, 1fr) auto auto">
+									<span class="[ title ] [ font-mono text-sm ]" x-text="s.relative"></span>
+									<span class="[ meta ] [ truncate ]" x-text="s.remoteLabel"></span>
+									<button type="button" class="[ button ]" data-size="sm" x-bind:aria-busy="s.adding" x-on:click="addFound(s.path)">Add</button>
+								</div>
+							</template>
+						</section>
+					</template>
+					<form class="[ flow ] [ flow-space-m ]" x-on:submit.prevent="add">
+						<h2>Add a repository from elsewhere</h2>
+						<div class="[ field ]">
+							<label for="repo-root">Directory</label>
+							<input id="repo-root" class="[ font-mono text-sm ]" placeholder="/Users/you/src/app" autocomplete="off" x-model="rootDir" x-bind:aria-invalid="!!pathProblem"/>
+							<template x-if="pathProblem">
+								<span class="[ error ]" x-text="pathProblem"></span>
+							</template>
+							<span class="[ hint ]">The absolute path of the git checkout on the machine the server runs on.</span>
+						</div>
+						<div class="[ switcher ]">
+							<div class="[ field ]">
+								<label for="repo-name">Name <span class="[ color-ink-faint weight-regular ]">(optional)</span></label>
+								<input id="repo-name" autocomplete="off" x-model="name" x-bind:placeholder="namePlaceholder"/>
+							</div>
+							<div class="[ field ]">
+								<label for="repo-remote">Git remote <span class="[ color-ink-faint weight-regular ]">(optional)</span></label>
+								<input id="repo-remote" class="[ font-mono text-sm ]" placeholder="git@github.com:you/app.git" autocomplete="off" x-model="remoteUrl"/>
+							</div>
+						</div>
+						<div class="[ cluster ]">
+							<button type="submit" class="[ button ]" data-variant="primary" disabled x-bind:disabled="cannotAdd" x-bind:aria-busy="adding">Add repository</button>
+						</div>
+					</form>
+				</div>
+			</div>
+		</main>
+	}
+}
+
+// EnvFilesPage edits the env files the harness writes into every new session
+// worktree of a repository.
+templ EnvFilesPage(v EnvFilesView) {
+	@shell.AppShell(v.Frame) {
+		<main class="[ frame ]" x-data="projectsEnvFilesPage" data-seed="env-files-seed">
+			@templ.JSONScript("env-files-seed", v.Seed)
+			<header class="[ toolbar ]">
+				<a class="[ crumb ]" href={ templ.SafeURL(RepositoriesHref(v.ProjectID)) }>{ v.ProjectName } / repositories / { v.RepositoryName } /</a>
+				<h1>Env files</h1>
+			</header>
+			<div data-scroll>
+				<div class="[ wrapper flow ] [ region ]" style="--wrapper-max: 52rem">
+					<p class="[ color-ink-muted ]">
+						Files of variables git does not carry, like <code>.env</code>. The harness keeps them and writes them into every new session's worktree of this repository, so the session can run the application. Git is told to ignore them there, so they are never committed. Running sessions keep the copy they started with.
+					</p>
+					<template x-if="error">
+						<div class="[ banner ]" data-tone="danger" role="alert">
+							<div class="[ flow ] [ flow-space-3xs grow ]">
+								<span x-text="error.message"></span>
+								<span class="[ code ]"><span x-text="error.code"></span> · <span x-text="error.next"></span></span>
+							</div>
+							<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-on:click="dismiss">Dismiss</button>
+						</div>
+					</template>
+					<template x-if="notice">
+						<div class="[ banner ]" data-tone="signal" role="status">
+							<span class="[ grow ]" x-text="notice"></span>
+							<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-on:click="dismiss">OK</button>
+						</div>
+					</template>
+					<div x-ignore data-ssr class="[ flow ]">
+						if len(v.Files) == 0 {
+							@components.Empty("No env files yet", "Bring in the repository's .env below, or start an empty one and paste its variables.")
+						}
+						for _, f := range v.Files {
+							<section class="[ pane ]">
+								<header><span class="[ font-mono ]">{ f.Path }</span></header>
+								<pre class="[ pad-m font-mono text-sm ]">{ f.Content }</pre>
+							</section>
+						}
+					</div>
+					<template x-for="f in files" x-bind:key="f.path">
+						<section class="[ pane ]" x-bind:aria-label="f.path">
+							<header>
+								<span class="[ font-mono ]" x-text="f.path"></span>
+								<span class="[ push-end ] [ cluster ] [ gutter-xs ]">
+									<template x-if="!f.confirming">
+										<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-on:click="askRemove(f.path)">Remove</button>
+									</template>
+									<template x-if="f.confirming">
+										<span class="[ cluster ] [ gutter-xs ]">
+											<span class="[ text-sm color-danger weight-regular ]">Remove? New sessions will not get it.</span>
+											<button type="button" class="[ button ]" data-variant="danger" data-size="sm" x-bind:aria-busy="f.removing" x-on:click="remove(f.path)">Remove</button>
+											<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-on:click="cancelRemove">Keep</button>
+										</span>
+									</template>
+								</span>
+							</header>
+							<div class="[ flow ] [ flow-space-s pad-m ]">
+								<textarea class="[ font-mono text-sm ]" spellcheck="false" autocomplete="off" rows="8" x-model="f.draft" x-bind:aria-label="f.path"></textarea>
+								<div class="[ cluster ]">
+									<button type="button" class="[ button ]" data-variant="primary" data-size="sm" x-bind:disabled="cannotSave(f.path)" x-bind:aria-busy="f.saving" x-on:click="save(f.path)">Save</button>
+									<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-bind:disabled="cannotSave(f.path)" x-on:click="revert(f.path)">Revert</button>
+								</div>
+							</div>
+						</section>
+					</template>
+					<template x-if="isEmpty">
+						@components.Empty("No env files yet", "Bring in the repository's .env below, or start an empty one and paste its variables.")
+					</template>
+					<form class="[ flow ] [ flow-space-m ]" x-on:submit.prevent="importFile">
+						<h2>Add an env file</h2>
+						<div class="[ field ]">
+							<label for="env-path">Path in the repository</label>
+							<input id="env-path" class="[ font-mono text-sm ]" placeholder=".env" autocomplete="off" x-model="newPath" x-bind:aria-invalid="!!newPathProblem"/>
+							<template x-if="newPathProblem">
+								<span class="[ error ]" x-text="newPathProblem"></span>
+							</template>
+							<span class="[ hint ]">
+								Import reads the file as it is now in the checkout
+								if v.RootDir != "" {
+									(<code>{ v.RootDir }</code>).
+								} else {
+									.
+								}
+							</span>
+						</div>
+						<div class="[ cluster ]">
+							<button type="submit" class="[ button ]" data-variant="primary" disabled x-bind:disabled="cannotAdd" x-bind:aria-busy="adding">Import from checkout</button>
+							<button type="button" class="[ button ]" disabled x-bind:disabled="cannotAdd" x-on:click="addEmpty">Start empty</button>
+						</div>
+					</form>
+				</div>
+			</div>
+		</main>
+	}
+}

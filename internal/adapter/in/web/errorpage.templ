@@ -1,0 +1,16 @@
+package web
+
+import (
+	"operators-mcp/internal/adapter/in/web/components"
+	"operators-mcp/internal/adapter/in/web/shell"
+)
+
+templ errorPage(f shell.Frame, message, code, next string) {
+	@shell.Document(f) {
+		<main class="[ wrapper flow ] [ region ]">
+			<h1>This page could not be shown</h1>
+			@components.ErrorBanner(message, code, next)
+			<p><a href="/">Back to the start</a></p>
+		</main>
+	}
+}

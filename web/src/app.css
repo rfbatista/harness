@@ -1,0 +1,9 @@
+/*
+ * The web client's stylesheet: the design system, then the vendored terminal
+ * styles. Bundled by `go run ./cmd/webbuild` into static/app.css.
+ * xterm.css is unlayered on purpose: it only styles .xterm, and must win over
+ * the reset inside the terminal.
+ */
+
+@import url("../../design-system/css/index.css");
+@import url("../vendor/xterm.css");

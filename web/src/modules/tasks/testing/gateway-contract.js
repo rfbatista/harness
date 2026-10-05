@@ -1,0 +1,57 @@
+// The TaskGateway contract (../domain/ports.js), run by every implementation.
+
+import { Codes } from "../../../shared/domain/errors.js";
+import { assert, test } from "../../../shared/testing/test.js";
+import { makeTask } from "./fixtures.js";
+
+/**
+ * @param {string} name
+ * @param {(world: { projects: string[], tasks: object[], sessions: object[] }) => { gateway: import("../domain/ports.js").TaskGateway, tasks: () => object[] }} makeSubject
+ */
+export function taskGatewayContract(name, makeSubject) {
+  const contract = (title, fn) => test(`${name} · ${title}`, fn);
+
+  contract("createTask returns the new task", async () => {
+    const { gateway } = makeSubject({ projects: ["p1"], tasks: [], sessions: [] });
+    const t = await gateway.createTask({ projectId: "p1", title: "  Write docs  ", description: "the TUI section", status: "todo" });
+    assert.ok(t.id);
+    assert.deepEqual([t.projectId, t.title, t.description, t.status], ["p1", "Write docs", "the TUI section", "todo"]);
+  });
+
+  contract("createTask refuses a missing title, an unknown status or project", async () => {
+    const { gateway } = makeSubject({ projects: ["p1"], tasks: [], sessions: [] });
+    await assert.rejects(gateway.createTask({ projectId: "p1", title: " ", description: "", status: "todo" }), Codes.INVALID_INPUT);
+    await assert.rejects(gateway.createTask({ projectId: "p1", title: "x", description: "", status: "someday" }), Codes.INVALID_STATUS);
+    await assert.rejects(gateway.createTask({ projectId: "nope", title: "x", description: "", status: "todo" }), Codes.PROJECT_NOT_FOUND);
+  });
+
+  contract("updateTask replaces title, description and status", async () => {
+    const subject = makeSubject({ projects: ["p1"], tasks: [makeTask()], sessions: [] });
+    const t = await subject.gateway.updateTask({ id: "t1", title: "Add the SSE feed", description: "", status: "review" });
+    assert.deepEqual([t.title, t.description, t.status], ["Add the SSE feed", "", "review"]);
+    await assert.rejects(subject.gateway.updateTask({ id: "ghost", title: "x", description: "", status: "todo" }), Codes.TICKET_NOT_FOUND);
+  });
+
+  contract("deleteTask removes it; twice is TICKET_NOT_FOUND", async () => {
+    const subject = makeSubject({ projects: ["p1"], tasks: [makeTask()], sessions: [] });
+    await subject.gateway.deleteTask("t1");
+    assert.deepEqual(subject.tasks(), []);
+    await assert.rejects(subject.gateway.deleteTask("t1"), Codes.TICKET_NOT_FOUND);
+  });
+
+  contract("countSessions counts the task's sessions and the live ones", async () => {
+    const sessions = [
+      { ticketId: "t1", status: "running" },
+      { ticketId: "t1", status: "done" },
+      { ticketId: "t2", status: "running" },
+    ];
+    const { gateway } = makeSubject({ projects: ["p1"], tasks: [makeTask()], sessions });
+    assert.deepEqual(await gateway.countSessions("p1", "t1"), { total: 2, live: 1 });
+  });
+
+  contract("decodeTask reads the API's shape and rejects garbage", () => {
+    const { gateway } = makeSubject({ projects: ["p1"], tasks: [], sessions: [] });
+    assert.equal(gateway.decodeTask({ id: "t1", project_id: "p1", title: "x", status: "done" }).description, "");
+    assert.throws(() => gateway.decodeTask({ id: "t1", status: "later" }), Codes.BAD_RESPONSE);
+  });
+}

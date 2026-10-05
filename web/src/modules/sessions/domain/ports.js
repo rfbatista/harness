@@ -10,20 +10,72 @@
  * @typedef {import("../../../shared/domain/feed.js").FeedStatus} FeedStatus
  *
  * @typedef {object} SessionGateway
- * @property {(seed: unknown) => { projectId: string, sessions: Session[] }} decodeSeed
+ * @typedef {{ projectId: string, ticketId?: string }} SessionFilter
+ *
+ * @typedef {object} StartRequest  an interactive session on a task, run in a PTY on the server
+ * @property {string} projectId
+ * @property {string} ticketId
+ * @property {string} repositoryId  where its worktree is cut
+ * @property {string} agentId       "" runs plain claude
+ * @property {string} prompt        the optional first message; "" opens claude waiting for you
+ * @property {"off"|"edits"|"all"} autoAccept  which tool calls run without asking
+ * @property {{ cols: number, rows: number }} size  the terminal size it starts at
+ *
+ * @property {(seed: unknown) => { projectId: string, ticketId: string, sessions: Session[] }} decodeSeed
  *           Reads the page seed the server embedded (same JSON shape as the
  *           API). Throws BAD_RESPONSE on a malformed seed.
- * @property {(projectId: string, signal?: AbortSignal) => Promise<Session[]>} list
- *           A project's sessions. Rejects with PROJECT_NOT_FOUND.
- * @property {(sessionId: string, text: string) => Promise<void>} send
- *           Sends the developer's next message. Rejects with SESSION_NOT_FOUND
- *           or SESSION_NOT_RUNNING.
+ * @property {(filter: SessionFilter, signal?: AbortSignal) => Promise<Session[]>} list
+ *           A project's sessions, or one task's when ticketId is set.
+ *           Rejects with PROJECT_NOT_FOUND.
+ * @property {(request: StartRequest) => Promise<Session>} start
+ *           Starts an interactive session on the server's terminal host: cuts
+ *           its worktree and branch, then runs claude in a PTY. Rejects with
+ *           INVALID_INPUT (no repository), PROJECT_NOT_FOUND, TICKET_NOT_FOUND,
+ *           CROSS_PROJECT_ACCESS, CLAUDE_CLI_NOT_FOUND or
+ *           SERVER_HOSTING_UNAVAILABLE.
  * @property {(sessionId: string) => Promise<void>} stop
  *           Stops the session. Rejects with SESSION_NOT_FOUND.
+ * @property {(sessionId: string) => Promise<void>} remove
+ *           Deletes the session: stops it if it runs, removes its worktree
+ *           (never its branch) and its record; followers get a deletion.
+ *           Rejects with SESSION_NOT_FOUND.
  * @property {(projectId: string,
  *             onChange: (change: SessionChange) => void,
  *             onStatus: (status: FeedStatus) => void) => () => void} follow
  *           Follows the project's changes until the returned function is called.
+ */
+
+/**
+ * A session's terminal, attached over the socket the server keeps for it.
+ * Implemented by infrastructure/terminal-gateway.js (WebSocket) and
+ * infrastructure/memory-terminals.js (tests and web/dev).
+ *
+ * @typedef {object} TerminalSnapshot  the screen as it is when attaching
+ * @property {string} screen   one line per row, with its styles (SGR sequences)
+ * @property {number} cursorX
+ * @property {number} cursorY
+ * @property {boolean} altScreen
+ * @property {number} cols
+ * @property {number} rows
+ * @property {string} title
+ *
+ * @typedef {object} TerminalHandlers
+ * @property {() => void} [onOpen]
+ * @property {(snapshot: TerminalSnapshot) => void} onSnapshot  first, and again whenever the screen is redrawn from scratch
+ * @property {(bytes: Uint8Array) => void} onOutput              everything printed after the snapshot, in order
+ * @property {(title: string) => void} [onTitle]
+ * @property {(code: number) => void} [onExit]                   the process is gone
+ * @property {() => void} [onClosed]                             the connection ended (after an exit, or dropped)
+ *
+ * @typedef {object} TerminalConnection
+ * @property {(event: KeyboardEvent) => boolean} key  sends a key press; false when it is not one to send (the browser keeps it)
+ * @property {(text: string) => void} paste
+ * @property {(size: { cols: number, rows: number }) => void} resize
+ * @property {() => void} resync                      asks for a fresh snapshot
+ * @property {() => void} close                       detaches; the session keeps running
+ *
+ * @typedef {object} TerminalGateway
+ * @property {(sessionId: string, handlers: TerminalHandlers) => TerminalConnection} attach
  */
 
 export {};

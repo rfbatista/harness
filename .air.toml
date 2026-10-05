@@ -8,20 +8,20 @@ root = "."
 tmp_dir = "tmp"
 
 [build]
-pre_cmd = ["./scripts/dev/kill-stale-api.sh"]
+pre_cmd = ["./scripts/dev/kill-stale-api.sh", "make --no-print-directory web"]
 cmd = "go build -o ./tmp/main ./cmd/server"
 entrypoint = "./scripts/dev/air-entrypoint.sh"
 args_bin = []
-include_ext = ["go", "mod", "sum", "toml"]
-include_dir = ["cmd", "internal"]
+include_ext = ["go", "mod", "sum", "toml", "templ", "js", "css", "json"]
+include_dir = ["cmd", "internal", "web/src", "web/vendor", "design-system/css"]
 exclude_dir = [
   "tmp",
   "vendor",
   "bin",
   "build",
-  "web",
-  "web/node_modules",
-  "web/dist",
+  "web/dev",
+  "web/test",
+  "web/testdata",
   "lib",
   ".dart_tool",
   "android",
@@ -30,9 +30,12 @@ exclude_dir = [
   "linux",
   "windows",
   "internal/adapter/in/ui/static",
+  # webbuild's output: watching it would rebuild in a loop.
+  "internal/adapter/in/web/static",
 ]
 exclude_file = []
-exclude_regex = []
+# templ generate rewrites these on every build; the .templ source is what is watched.
+exclude_regex = ["_templ\\.go$"]
 exclude_unchanged = true
 follow_symlink = false
 log = "tmp/build-errors.log"

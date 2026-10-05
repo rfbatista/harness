@@ -1,0 +1,38 @@
+// Package components holds the templ side of the CUBE blocks in
+// design-system/css/blocks: markup only, parameters in, HTML out.
+package components
+
+// Status is the .status block: a dot plus its word (color is never the only
+// carrier). state is one of the block's data-state values.
+templ Status(state, word string) {
+	<span class="[ status ]" data-state={ state }>{ word }</span>
+}
+
+// Badge is the .badge block; tone is "", "signal", "attention" or "danger".
+templ Badge(text, tone string) {
+	if tone == "" {
+		<span class="[ badge ]">{ text }</span>
+	} else {
+		<span class="[ badge ]" data-tone={ tone }>{ text }</span>
+	}
+}
+
+// Empty is the .empty block: what the thing is, then what to do.
+templ Empty(title, body string) {
+	<div class="[ empty ]">
+		<h2>{ title }</h2>
+		<p>{ body }</p>
+		{ children... }
+	</div>
+}
+
+// ErrorBanner is the .banner block for a coded error: the message, then the
+// code and the next step on the mono .code line.
+templ ErrorBanner(message, code, next string) {
+	<div class="[ banner ]" data-tone="danger" role="alert">
+		<div class="[ flow ] [ flow-space-3xs ]">
+			<span>{ message }</span>
+			<span class="[ code ]">{ code } · { next }</span>
+		</div>
+	</div>
+}

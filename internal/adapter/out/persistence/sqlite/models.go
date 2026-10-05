@@ -219,6 +219,18 @@ type RepositoryModel struct {
 // TableName overrides the table name.
 func (RepositoryModel) TableName() string { return "repositories" }
 
+// EnvFileModel is one env file of a repository (domain.EnvFile), keyed by the
+// repository and the file's path in it.
+type EnvFileModel struct {
+	RepositoryID string `gorm:"column:repository_id;primaryKey"`
+	Path         string `gorm:"primaryKey"`
+	Content      string
+	UpdatedAt    time.Time
+}
+
+// TableName overrides the table name.
+func (EnvFileModel) TableName() string { return "repository_env_files" }
+
 // ToDomain converts the model to a domain.Repository.
 func (m *RepositoryModel) ToDomain() *domain.Repository {
 	if m == nil {

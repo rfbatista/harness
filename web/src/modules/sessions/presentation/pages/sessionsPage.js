@@ -1,12 +1,13 @@
-// The Sessions page: a project's sessions, grouped for triage, followed live,
-// with the selected one's detail beside the list.
+// A task's page: its sessions (a task can run several at once) grouped for
+// triage in the inner list, followed live, with the selected one's detail
+// beside it. It follows the whole project's feed and keeps its task's sessions.
 //
 //   <main x-data="sessionsPage" data-seed="sessions-seed"> … </main>
 
 import { FeedStatus } from "../../../../shared/domain/feed.js";
 import { describeError } from "../../../../shared/presentation/errors.js";
 import { readSeed } from "../../../../shared/presentation/seed.js";
-import { applyChange, byRecent, group } from "../../domain/session.js";
+import { applyChange, byRecent, group, ofTask } from "../../domain/session.js";
 import { summary, toDetailView, toGroupViews } from "../view.js";
 
 const TICK_MS = 30_000;
@@ -23,21 +24,28 @@ export const sessionsPage = ({ gateway, clock }) => () => {
 
   return {
     projectId: "",
+    ticketId: "",
     /** @type {import("../../domain/session.js").Session[]} */
     sessions: [],
     selectedId: null,
     now: clock.now(),
+    agentNames: {},
     error: null,
     stopping: false,
     ready: false,
+    /** The detail pane shows the new-session form. */
+    creating: false,
+    /** The selected session's delete is awaiting confirmation. */
+    confirmingDelete: false,
+    deleting: false,
 
     // ── what the markup binds ────────────────────────────────────────────
     get groups() {
-      return toGroupViews(this.sessions, { selectedId: this.selectedId, now: this.now });
+      return toGroupViews(this.sessions, { selectedId: this.selectedId, now: this.now, agentNames: this.agentNames });
     },
     get selected() {
       const session = this.sessions.find((s) => s.id === this.selectedId);
-      return session ? toDetailView(session, this.now) : null;
+      return session ? toDetailView(session, this.now, this.agentNames) : null;
     },
     get hasSelection() {
       return this.selected !== null;
@@ -51,13 +59,36 @@ export const sessionsPage = ({ gateway, clock }) => () => {
     get cannotStop() {
       return !this.ready || this.stopping || !this.selected?.stoppable;
     },
+    get cannotCreate() {
+      return !this.ready || this.creating;
+    },
+    get showingSession() {
+      return !this.creating && this.hasSelection;
+    },
+    /** The session whose terminal to mount, as a one-item list keyed on its id. */
+    get terminalIds() {
+      return this.showingSession && this.selected.terminal === "attach" ? [this.selected.id] : [];
+    },
+    get terminalNote() {
+      return this.showingSession ? this.selected.terminalNote : "";
+    },
+    get showingNothing() {
+      return !this.creating && !this.hasSelection;
+    },
+    get deleteConsequence() {
+      return this.selected?.stoppable
+        ? "It is still running: it stops now. Its worktree is removed; its branch and commits stay."
+        : "Its record and worktree are removed; its branch and commits stay.";
+    },
 
     // ── lifecycle ────────────────────────────────────────────────────────
     init() {
       try {
         const seed = gateway.decodeSeed(readSeed(this.$el));
         this.projectId = seed.projectId;
-        this.sessions = seed.sessions;
+        this.ticketId = seed.ticketId;
+        this.agentNames = seed.agentNames;
+        this.sessions = seed.sessions.filter(ofTask(this.ticketId));
       } catch (err) {
         this.error = describeError(err);
         return;
@@ -85,7 +116,7 @@ export const sessionsPage = ({ gateway, clock }) => () => {
 
     // ── feed ─────────────────────────────────────────────────────────────
     apply(change) {
-      this.sessions = applyChange(this.sessions, change);
+      this.sessions = applyChange(this.sessions, change, ofTask(this.ticketId));
       this.now = clock.now();
       if (change.kind === "deleted" && change.id === this.selectedId) this.selectedId = null;
     },
@@ -97,7 +128,7 @@ export const sessionsPage = ({ gateway, clock }) => () => {
 
     async reload() {
       try {
-        this.sessions = await gateway.list(this.projectId);
+        this.sessions = await gateway.list({ projectId: this.projectId, ticketId: this.ticketId });
         this.now = clock.now();
       } catch (err) {
         this.error = describeError(err);
@@ -107,6 +138,8 @@ export const sessionsPage = ({ gateway, clock }) => () => {
     // ── developer actions ────────────────────────────────────────────────
     select(id) {
       this.selectedId = id;
+      this.creating = false;
+      this.confirmingDelete = false;
     },
 
     next() {
@@ -123,6 +156,60 @@ export const sessionsPage = ({ gateway, clock }) => () => {
       this.selectedId = order[next];
     },
 
+    // New session: the form is its own component (sessionsNewSession); it
+    // reports back with session-created or new-session-cancelled.
+    startCreating() {
+      if (this.cannotCreate) return;
+      this.confirmingDelete = false;
+      this.creating = true;
+    },
+
+    /** N opens the form, unless the developer is typing in a field. */
+    startCreatingFromKey(event) {
+      if (event.target?.closest?.("input, textarea, select, [contenteditable]")) return;
+      event.preventDefault?.();
+      this.startCreating();
+    },
+
+    cancelCreating() {
+      this.creating = false;
+    },
+
+    /** @param {CustomEvent<{ session: import("../../domain/session.js").Session }>} event */
+    sessionCreated(event) {
+      const { session } = event.detail;
+      // The feed reports it too once it runs; adding it now shows it at once.
+      this.sessions = applyChange(this.sessions, { kind: "upsert", session }, ofTask(this.ticketId));
+      this.selectedId = session.id;
+      this.creating = false;
+      this.error = null;
+    },
+
+    // Delete: ask first, inline, then remove.
+    askDelete() {
+      if (this.hasSelection) this.confirmingDelete = true;
+    },
+
+    cancelDelete() {
+      this.confirmingDelete = false;
+    },
+
+    async deleteSelected() {
+      const id = this.selectedId;
+      if (!id || this.deleting) return;
+      this.deleting = true;
+      try {
+        await gateway.remove(id);
+        this.sessions = applyChange(this.sessions, { kind: "deleted", id });
+        if (this.selectedId === id) this.selectedId = null;
+        this.confirmingDelete = false;
+      } catch (err) {
+        this.error = describeError(err);
+      } finally {
+        this.deleting = false;
+      }
+    },
+
     async stopSelected() {
       if (this.cannotStop) return;
       this.stopping = true;
@@ -133,10 +220,6 @@ export const sessionsPage = ({ gateway, clock }) => () => {
       } finally {
         this.stopping = false;
       }
-    },
-
-    replySent() {
-      this.error = null;
     },
 
     dismissError() {

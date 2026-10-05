@@ -48,6 +48,7 @@ var PersistenceModule = fx.Module("persistence",
 		newDB,
 		asPort(sqlite.NewProjectRepository, new(ports.ProjectRepository)),
 		asPort(sqlite.NewRepositoryRepository, new(ports.RepositoryRepository)),
+		asPort(sqlite.NewEnvFileRepository, new(ports.EnvFileRepository)),
 		asPort(sqlite.NewZoneRepository, new(ports.ZoneRepository)),
 		newAgentRepository,
 		asPort(sqlite.NewPromptRepository, new(ports.PromptRepository)),
@@ -133,6 +134,8 @@ var CatalogModule = fx.Module("catalog",
 		asPort(filesystem.NewMatcher, new(ports.PathMatcher)),
 		asPort(filesystem.NewLister, new(ports.TreeLister)),
 		asPort(skillfs.NewPublisher, new(ports.SkillPublisher)),
+		asPort(gitcli.NewRepositoryFinder, new(ports.RepositoryFinder)),
+		asPort(gitcli.NewEnvFiles, new(ports.EnvFileIO)),
 		newCatalog,
 	),
 )
@@ -154,25 +157,31 @@ type catalogParams struct {
 	Publisher       ports.SkillPublisher
 	Matcher         ports.PathMatcher
 	Lister          ports.TreeLister
+	Finder          ports.RepositoryFinder
+	EnvFiles        ports.EnvFileRepository
+	EnvFileIO       ports.EnvFileIO
 	Cfg             Config
 }
 
 func newCatalog(p catalogParams) catalog.Catalog {
 	return catalog.New(catalog.Deps{
-		Projects:        p.Projects,
-		Repositories:    p.Repositories,
-		Zones:           p.Zones,
-		BoundedContexts: p.BoundedContexts,
-		Agents:          p.Agents,
-		Prompts:         p.Prompts,
-		Skills:          p.Skills,
-		MCPServers:      p.MCPServers,
-		Tools:           p.Tools,
-		Settings:        p.Settings,
-		Publisher:       p.Publisher,
-		PathMatcher:     p.Matcher,
-		TreeLister:      p.Lister,
-		DefaultRoot:     p.Cfg.Root,
+		Projects:         p.Projects,
+		Repositories:     p.Repositories,
+		Zones:            p.Zones,
+		BoundedContexts:  p.BoundedContexts,
+		Agents:           p.Agents,
+		Prompts:          p.Prompts,
+		Skills:           p.Skills,
+		MCPServers:       p.MCPServers,
+		Tools:            p.Tools,
+		Settings:         p.Settings,
+		Publisher:        p.Publisher,
+		PathMatcher:      p.Matcher,
+		TreeLister:       p.Lister,
+		RepositoryFinder: p.Finder,
+		EnvFiles:         p.EnvFiles,
+		EnvFileIO:        p.EnvFileIO,
+		DefaultRoot:      p.Cfg.Root,
 	})
 }
 
@@ -393,6 +402,10 @@ func newWorkspacesService(
 	repos ports.RepositoryRepository,
 	wt ports.WorktreeManager,
 	settings ports.SettingsRepository,
+	envFiles ports.EnvFileRepository,
+	envIO ports.EnvFileIO,
 ) *workspaces.Service {
-	return workspaces.NewService(ws, repos, wt, settings)
+	svc := workspaces.NewService(ws, repos, wt, settings)
+	svc.UseEnvFiles(envFiles, envIO)
+	return svc
 }

@@ -1,0 +1,114 @@
+package shell
+
+import "strconv"
+
+// Document is the HTML page: head, styles, the client bundle, then the body.
+templ Document(f Frame) {
+	<!DOCTYPE html>
+	<html lang="en">
+		<head>
+			<meta charset="utf-8"/>
+			<meta name="viewport" content="width=device-width, initial-scale=1"/>
+			<title>{ f.DocumentTitle() }</title>
+			<link rel="preconnect" href="https://fonts.googleapis.com"/>
+			<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+			<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible+Mono:wght@400;500;700&family=Atkinson+Hyperlegible+Next:wght@400;500;700&display=swap"/>
+			<link rel="stylesheet" href={ f.CSS }/>
+			<script type="module" src={ f.JS }></script>
+		</head>
+		<body>
+			if !f.Built {
+				<div class="[ banner ] [ pad-m ]" data-tone="attention" role="alert">
+					<span>The web client is not built, so this page has no styles or interactivity. Run <code>make web</code> and reload.</span>
+				</div>
+			}
+			{ children... }
+		</body>
+	</html>
+}
+
+// AppShell is the app layout: the top bar, the task rail, the page's main
+// region, and the stream bar.
+templ AppShell(f Frame) {
+	@Document(f) {
+		<div class="[ app-shell ]">
+			@topBar(f.Top)
+			@taskRail(f.Rail)
+			{ children... }
+			@streamBar(f.Live)
+		</div>
+	}
+}
+
+// topBar holds the project picker. It is a GET form, so it works without
+// JavaScript; projectPicker submits it as soon as the choice changes.
+templ topBar(t TopBar) {
+	<header class="[ topbar ]">
+		<a class="[ brand ]" href="/">harness</a>
+		if len(t.Projects) > 0 {
+			<form class="[ cluster ] [ gutter-xs ]" method="get" action="/switch-project" x-data="projectPicker">
+				<label class="[ visually-hidden ]" for="project-picker">Project</label>
+				<select id="project-picker" name="project" x-on:change="go">
+					if t.Current == "" {
+						<option value="" selected disabled>Choose a project…</option>
+					}
+					for _, p := range t.Projects {
+						<option value={ p.ID } { selectedAttrs(p.ID == t.Current)... }>{ p.Name }</option>
+					}
+				</select>
+				<noscript><button type="submit" class="[ button ]" data-size="sm">Open</button></noscript>
+			</form>
+		}
+		<a class="[ button ]" data-variant="ghost" data-size="sm" href="/projects/new">New project</a>
+	</header>
+}
+
+// taskRail is the current project's tasks, grouped like the kanban board.
+templ taskRail(r Rail) {
+	<nav class="[ nav ]" aria-label="Tasks">
+		if r.NewTaskHref != "" {
+			<a class="[ button ]" data-size="sm" href={ templ.SafeURL(r.NewTaskHref) }>New task</a>
+		}
+		if r.Empty != "" {
+			<p class="[ text-sm color-ink-faint pad-inline-s ]">{ r.Empty }</p>
+		}
+		for _, g := range r.Groups {
+			<div class="[ group ]">
+				<h2>{ g.Label }</h2>
+				for _, l := range g.Links {
+					@railLink(l)
+				}
+			</div>
+		}
+	</nav>
+}
+
+templ railLink(l Link) {
+	<a href={ templ.SafeURL(l.Href) } { currentAttrs(l.Current)... }>
+		<span class="[ label ]">{ l.Label }</span>
+		if l.liveState() != "" {
+			<span class="[ status ]" data-state={ l.liveState() } data-dot-only>
+				<span class="[ visually-hidden ]">{ l.liveWord() }</span>
+			</span>
+		}
+		if l.Live > 0 {
+			<span class="[ count ]" title="live sessions">{ strconv.Itoa(l.Live) }</span>
+		}
+	</a>
+}
+
+// streamBar shows whether the page is live. The page's feed reports its
+// status as a `feed-status` window event; streamStatus listens for it.
+templ streamBar(live bool) {
+	<footer class="[ stream-bar ]" aria-live="polite">
+		if live {
+			<span class="[ status ]" data-state="reconnecting" x-data="streamStatus" x-on:feed-status.window="update" x-bind:data-state="state" x-text="label">connecting</span>
+		}
+		<span class="[ keys ]"><span><kbd>J</kbd><kbd>K</kbd> move</span></span>
+		<span class="[ cluster ] [ gutter-2xs ]" x-data="themeToggle">
+			<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-bind:aria-pressed="isLight" x-on:click="light">Light</button>
+			<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-bind:aria-pressed="isDark" x-on:click="dark">Dark</button>
+			<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-bind:aria-pressed="isSystem" x-on:click="system">System</button>
+		</span>
+	</footer>
+}

@@ -25,6 +25,13 @@ type Service struct {
 	repositories ports.RepositoryRepository
 	worktrees    ports.WorktreeManager
 	settings     ports.SettingsRepository
+	envFiles     ports.EnvFileRepository // nil: worktrees get no env files
+	envIO        ports.EnvFileIO
+}
+
+// UseEnvFiles makes every worktree start with its repository's env files.
+func (s *Service) UseEnvFiles(store ports.EnvFileRepository, io ports.EnvFileIO) {
+	s.envFiles, s.envIO = store, io
 }
 
 // NewService returns a workspaces service.
@@ -99,12 +106,31 @@ func (s *Service) Create(repositoryID, name, branch, baseRef string) (*domain.Wo
 		}
 		return nil, err
 	}
+	// git does not carry the repository's env files (they are ignored); the
+	// harness keeps them and writes them in, so the session can run the app.
+	// A worktree missing them would start a session that cannot, so it is
+	// removed instead.
+	if err := s.writeEnvFiles(repositoryID, path); err != nil {
+		_ = s.worktrees.Remove(repo.RootDir, path)
+		return nil, &domain.StructuredError{Code: "ENV_FILE_WRITE_FAILED", Message: "writing the repository's env files into the worktree failed: " + err.Error()}
+	}
 	ws, err := s.workspaces.Create(repositoryID, slug, branch, path)
 	if err != nil {
 		_ = s.worktrees.Remove(repo.RootDir, path)
 		return nil, err
 	}
 	return ws, nil
+}
+
+func (s *Service) writeEnvFiles(repositoryID, worktree string) error {
+	if s.envFiles == nil || s.envIO == nil {
+		return nil
+	}
+	files := s.envFiles.List(repositoryID)
+	if len(files) == 0 {
+		return nil
+	}
+	return s.envIO.Write(worktree, files)
 }
 
 // ListBranches returns the refs a new workspace can be based on.

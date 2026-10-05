@@ -1,0 +1,19 @@
+/*
+ * Split view — a list beside the detail of what is selected in it.
+ * <div class="split-view"><div class="list">…</div><section>detail</section></div>
+ * Below 64rem only the list shows; the detail is reached by opening a row.
+ */
+
+@layer blocks {
+  .split-view {
+    display: grid;
+    grid-template-columns: minmax(18rem, 26rem) minmax(0, 1fr);
+    min-block-size: 0;
+
+    @media (width < 64rem) {
+      grid-template-columns: minmax(0, 1fr);
+
+      & > :last-child { display: none; }
+    }
+  }
+}

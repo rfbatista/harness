@@ -6,6 +6,8 @@ import "operators-mcp/internal/app/catalog"
 func servicesOf(cat catalog.Catalog) Services {
 	return Services{
 		Projects:     cat.Projects,
+		Discovery:    cat.Projects,
+		Env:          cat.Projects,
 		Architecture: cat.Architecture,
 		Agents:       cat.Agents,
 		Capabilities: cat.Capabilities,

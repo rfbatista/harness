@@ -1,0 +1,312 @@
+package sessions
+
+import (
+	"strconv"
+
+	"operators-mcp/internal/adapter/in/web/components"
+	"operators-mcp/internal/adapter/in/web/shell"
+)
+
+// Page is a task: its sessions in the inner list, the selected one's detail
+// beside it. The server renders the first paint inside [data-ssr] and the
+// same rows as an Alpine template; sessionsPage (in the browser) removes the
+// server copy once the template has rendered.
+templ Page(v PageView) {
+	@shell.AppShell(v.Frame) {
+		<main
+			class="[ frame ]"
+			x-data="sessionsPage"
+			data-seed="sessions-seed"
+				x-on:session-created="sessionCreated"
+			x-on:new-session-cancelled="cancelCreating"
+		>
+			@templ.JSONScript("sessions-seed", v.Seed)
+			<div x-data="tasksTaskEditor" data-seed="task-seed">
+			@templ.JSONScript("task-seed", v.Task)
+			<header class="[ toolbar ]">
+				<a class="[ crumb ]" href={ templ.SafeURL("/projects/" + v.ProjectID) }>{ v.ProjectName } /</a>
+				<h1 x-text="title">{ v.TaskTitle }</h1>
+				<select class="[ status-picker ]" aria-label="Task status" x-model="status" x-on:change="changeStatus">
+					for _, st := range v.StatusChoices {
+						<option value={ st.Value } { selectedAttrs(st.Selected)... }>{ st.Label }</option>
+					}
+				</select>
+				<span class="[ color-ink-faint text-sm ]" x-text="summary">{ v.Summary }</span>
+				<div class="[ actions ]">
+					<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-on:click="startEditTask">Edit</button>
+					<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-bind:aria-busy="checkingTaskDelete" x-on:click="askDeleteTask">Delete task</button>
+					if v.NewSession.CanStart() {
+						<button type="button" class="[ button ]" data-variant="primary" data-size="sm" disabled x-bind:disabled="cannotCreate" x-on:click="startCreating">
+							New session <kbd>N</kbd>
+						</button>
+					} else {
+						<a class="[ button ]" data-size="sm" href={ templ.SafeURL("/projects/" + v.ProjectID + "/repositories") }>Add a repository</a>
+						<button type="button" class="[ button ]" data-variant="primary" data-size="sm" disabled title="Add a repository to this project first: a session runs in one.">
+							New session
+						</button>
+					}
+				</div>
+			</header>
+			@taskBand(v)
+			</div>
+			<template x-if="error">
+				<div class="[ banner ] [ pad-s ]" data-tone="danger" role="alert">
+					<div class="[ flow ] [ flow-space-3xs grow ]">
+						<span x-text="error.message"></span>
+						<span class="[ code ]"><span x-text="error.code"></span> · <span x-text="error.next"></span></span>
+					</div>
+					<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-on:click="dismissError">Dismiss</button>
+				</div>
+			</template>
+			<div class="[ split-view ]" data-scroll>
+				<div
+					class="[ list ] [ divide-end ]"
+					role="listbox"
+					aria-label="Sessions of this task"
+					tabindex="0"
+					x-on:keydown.j.prevent="next"
+					x-on:keydown.down.prevent="next"
+					x-on:keydown.k.prevent="previous"
+					x-on:keydown.up.prevent="previous"
+				>
+					@ssrRows(v)
+					@liveRows()
+					<template x-if="isEmpty">
+						@components.Empty("No sessions for this task yet", "A session is an agent working on this task. Start one from the TUI: open the task and press n.")
+					</template>
+				</div>
+				@detail(v.NewSession)
+			</div>
+		</main>
+	}
+}
+
+// ssrRows is the first paint: complete without JavaScript, ignored by Alpine,
+// removed once the live template renders.
+templ ssrRows(v PageView) {
+	<div x-ignore data-ssr role="group">
+		if v.Empty() {
+			@components.Empty("No sessions for this task yet", "A session is an agent working on this task. Start one from the TUI: open the task and press n.")
+		}
+		for _, g := range v.Groups {
+			<div class="[ group ]">
+				{ g.Label }
+				@components.Badge(strconv.Itoa(g.Count), g.Tone)
+			</div>
+			for _, r := range g.Rows {
+				<div class="[ row ]" role="option" aria-selected={ strconv.FormatBool(r.Selected) } { attentionAttrs(r.Attention)... }>
+					@components.Status(r.State, r.Word)
+					<span class="[ title ]">{ r.Title }</span>
+					<span class="[ meta ]">{ r.Meta }</span>
+				</div>
+			}
+		}
+	</div>
+}
+
+// liveRows is the same markup bound to sessionsPage's groups.
+templ liveRows() {
+	<template x-for="group in groups" x-bind:key="group.key">
+		<div role="group">
+			<div class="[ group ]">
+				<span x-text="group.label"></span>
+				<span class="[ badge ]" x-bind:data-tone="group.tone" x-text="group.count"></span>
+			</div>
+			<template x-for="row in group.rows" x-bind:key="row.id">
+				<div class="[ row ]" role="option" x-bind:aria-selected="row.selected" x-bind:data-attention="row.attention" x-on:click="select(row.id)">
+					<span class="[ status ]" x-bind:data-state="row.state" x-text="row.word"></span>
+					<span class="[ title ]" x-text="row.title"></span>
+					<span class="[ meta ]" x-text="row.meta"></span>
+				</div>
+			</template>
+		</div>
+	</template>
+}
+
+// detail is the right-hand pane: the new-session form while creating,
+// otherwise the selected session. Alpine renders it, since it follows the
+// selection.
+templ detail(form NewSessionForm) {
+	<section class="[ frame ]" aria-label="Session detail" x-on:keydown.window.n="startCreatingFromKey">
+		<template x-if="creating">
+			@newSessionForm(form)
+		</template>
+		<template x-if="showingSession">
+			<div class="[ frame ]">
+				<div class="[ flow ] [ flow-space-s pad-l divide-bottom ]">
+					<div class="[ repel ]">
+						<h2 x-text="selected.title"></h2>
+						<div class="[ cluster ] [ gutter-xs ]">
+							<button type="button" class="[ button ]" data-size="sm" x-bind:disabled="cannotStop" x-bind:aria-busy="stopping" x-on:click="stopSelected">Stop</button>
+							<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-bind:disabled="deleting" x-on:click="askDelete">Delete</button>
+						</div>
+					</div>
+					<div class="[ cluster ] [ gutter-m text-sm color-ink-muted ]">
+						<span class="[ status ]" x-bind:data-state="selected.state" x-text="selected.word"></span>
+						<span x-text="selected.agent"></span>
+						<span x-text="selected.updated"></span>
+					</div>
+					<template x-if="confirmingDelete">
+						<div class="[ banner ]" data-tone="danger" role="alertdialog" aria-label="Delete this session?">
+							<div class="[ flow ] [ flow-space-3xs grow ]">
+								<strong>Delete this session?</strong>
+								<span x-text="deleteConsequence"></span>
+							</div>
+							<div class="[ cluster ] [ gutter-xs ]">
+								<button type="button" class="[ button ]" data-variant="danger" data-size="sm" x-bind:aria-busy="deleting" x-on:click="deleteSelected">Delete session</button>
+								<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-on:click="cancelDelete">Keep it</button>
+							</div>
+						</div>
+					</template>
+				</div>
+				<template x-for="sid in terminalIds" x-bind:key="sid">
+					@terminalPane()
+				</template>
+				<template x-if="terminalNote">
+					<div class="[ pad-l ]">
+						<div class="[ banner ]">
+							<span x-text="terminalNote"></span>
+						</div>
+					</div>
+				</template>
+			</div>
+		</template>
+		<template x-if="showingNothing">
+			@components.Empty("Pick a session", "Select one on the left, move with J and K, or start a new one with N.")
+		</template>
+	</section>
+}
+
+// newSessionForm starts an interactive session on this task, in a terminal
+// on the server. The choices are rendered by the server; sessionsNewSession
+// submits them to the API and the page attaches to the new terminal.
+templ newSessionForm(form NewSessionForm) {
+	<form
+		class="[ flow ] [ pad-l ]"
+		x-data="sessionsNewSession(projectId, ticketId)"
+		data-default-repository={ form.DefaultRepository() }
+		x-on:submit.prevent="submit"
+		x-on:keydown.escape="cancel"
+	>
+		<h2>New session</h2>
+		<div class="[ field ]">
+			<label for="new-session-prompt">First message <span class="[ color-ink-faint weight-regular ]">(optional)</span></label>
+			<textarea id="new-session-prompt" class="[ font-mono text-sm ]" placeholder="What should the agent do on this task? Leave empty to open claude and type in its terminal." x-model="prompt" x-ref="prompt"></textarea>
+			<span class="[ hint ]">claude starts in a terminal on the server, on this task's branch.</span>
+		</div>
+		<div class="[ switcher ]">
+			<div class="[ field ]">
+				<label for="new-session-agent">Agent</label>
+				<select id="new-session-agent" x-model="agentId">
+					<option value="">Plain claude</option>
+					for _, a := range form.Agents {
+						<option value={ a.ID }>{ a.Name }</option>
+					}
+				</select>
+			</div>
+			<div class="[ field ]">
+				<label for="new-session-repository">Repository</label>
+				<select id="new-session-repository" x-model="repositoryId">
+					for _, r := range form.Repositories {
+						<option value={ r.ID }>{ r.Name }</option>
+					}
+				</select>
+			</div>
+			<div class="[ field ]">
+				<label for="new-session-permissions">Permissions</label>
+				<select id="new-session-permissions" x-model="autoAccept">
+					<option value="off">Ask me in the terminal</option>
+					<option value="edits">Accept file edits</option>
+					<option value="all">Accept everything</option>
+				</select>
+			</div>
+		</div>
+		<template x-if="error">
+			<div class="[ banner ]" data-tone="danger" role="alert">
+				<div class="[ flow ] [ flow-space-3xs ]">
+					<span x-text="error.message"></span>
+					<span class="[ code ]"><span x-text="error.code"></span> · <span x-text="error.next"></span></span>
+				</div>
+			</div>
+		</template>
+		<div class="[ cluster ]">
+			<button type="submit" class="[ button ]" data-variant="primary" x-bind:disabled="cannotSubmit" x-bind:aria-busy="submitting">Start session</button>
+			<button type="button" class="[ button ]" data-variant="ghost" x-on:click="cancel">Cancel</button>
+		</div>
+	</form>
+}
+
+// terminalPane is the selected session's PTY, drawn by xterm.js. It is
+// mounted once per session (the x-for key), so switching sessions detaches.
+templ terminalPane() {
+	<div class="[ terminal ]" x-data="sessionsTerminal(sid)" data-scroll>
+		<div class="[ screen ]" x-ref="screen" x-on:click="focus"></div>
+		<div class="[ bar ]">
+			<span class="[ status ]" x-bind:data-state="statusState" x-text="stateWord">connecting</span>
+			<span class="[ color-ink-faint truncate grow ]" x-text="title"></span>
+			<template x-if="canReconnect">
+				<button type="button" class="[ button ]" data-size="sm" x-on:click="reconnect">Reconnect</button>
+			</template>
+		</div>
+	</div>
+}
+
+// taskBand sits under the toolbar, in the task editor's scope: the
+// description, the edit form, the delete confirmation, the editor's errors.
+templ taskBand(v PageView) {
+	<template x-if="showsDescription">
+		<p class="[ brief ]" x-text="description">{ v.TaskDescription }</p>
+	</template>
+	<template x-if="editingTask">
+		<form class="[ flow ] [ flow-space-s pad-l divide-bottom ]" x-on:submit.prevent="save" x-on:keydown.escape="cancelEditTask">
+			<div class="[ field ]">
+				<label for="task-edit-title">Title</label>
+				<input id="task-edit-title" autocomplete="off" x-model="draftTitle" x-ref="title"/>
+			</div>
+			<div class="[ field ]">
+				<label for="task-edit-description">Description</label>
+				<textarea id="task-edit-description" x-model="draftDescription"></textarea>
+			</div>
+			<div class="[ cluster ]">
+				<button type="submit" class="[ button ]" data-variant="primary" data-size="sm" x-bind:disabled="cannotSaveTask" x-bind:aria-busy="savingTask">Save</button>
+				<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-on:click="cancelEditTask">Cancel</button>
+			</div>
+		</form>
+	</template>
+	<template x-if="taskDeleteProblem">
+		<div class="[ pad-inline-l pad-block-s ]">
+			<div class="[ banner ]" data-tone="attention" role="alert">
+				<div class="[ flow ] [ flow-space-3xs grow ]">
+					<strong>This task cannot be deleted yet.</strong>
+					<span x-text="taskDeleteProblem"></span>
+				</div>
+				<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-on:click="cancelDeleteTask">OK</button>
+			</div>
+		</div>
+	</template>
+	<template x-if="confirmingTaskDelete">
+		<div class="[ pad-inline-l pad-block-s ]">
+			<div class="[ banner ]" data-tone="danger" role="alertdialog" aria-label="Delete this task?">
+				<div class="[ flow ] [ flow-space-3xs grow ]">
+					<strong>Delete this task?</strong>
+					<span>It has no sessions. Its title and description are removed for good.</span>
+				</div>
+				<div class="[ cluster ] [ gutter-xs ]">
+					<button type="button" class="[ button ]" data-variant="danger" data-size="sm" x-bind:aria-busy="deletingTask" x-on:click="removeTask">Delete task</button>
+					<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-on:click="cancelDeleteTask">Keep it</button>
+				</div>
+			</div>
+		</div>
+	</template>
+	<template x-if="taskError">
+		<div class="[ pad-inline-l pad-block-s ]">
+			<div class="[ banner ]" data-tone="danger" role="alert">
+				<div class="[ flow ] [ flow-space-3xs grow ]">
+					<span x-text="taskError.message"></span>
+					<span class="[ code ]"><span x-text="taskError.code"></span> · <span x-text="taskError.next"></span></span>
+				</div>
+				<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-on:click="dismissTaskError">Dismiss</button>
+			</div>
+		</div>
+	</template>
+}

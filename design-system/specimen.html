@@ -19,8 +19,6 @@
         border-radius: var(--radius-sm);
         border: var(--border-width) solid var(--color-line);
       }
-      .session-screen { display: grid; grid-template-columns: minmax(18rem, 26rem) minmax(0, 1fr); min-block-size: 0; }
-      @media (width < 64rem) { .session-screen { grid-template-columns: minmax(0, 1fr); } .session-screen > :last-child { display: none; } }
     </style>
   </head>
   <body>
@@ -73,7 +71,7 @@
           </div>
         </header>
 
-        <div class="[ session-screen ]" data-scroll>
+        <div class="[ split-view ]" data-scroll>
           <div class="[ list ] [ divide-end ]" role="listbox" aria-label="Sessions">
             <div class="[ group ]">Needs you <span class="[ badge ]" data-tone="attention">1</span></div>
             <div class="[ row ]" role="option" aria-selected="true" data-attention tabindex="0">

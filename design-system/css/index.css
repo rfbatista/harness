@@ -39,9 +39,11 @@
 
 /* Blocks */
 @import url("./blocks/app-shell.css");
+@import url("./blocks/topbar.css");
 @import url("./blocks/nav.css");
 @import url("./blocks/toolbar.css");
 @import url("./blocks/pane.css");
+@import url("./blocks/split-view.css");
 @import url("./blocks/button.css");
 @import url("./blocks/field.css");
 @import url("./blocks/status.css");
@@ -50,8 +52,10 @@
 @import url("./blocks/row.css");
 @import url("./blocks/tabs.css");
 @import url("./blocks/banner.css");
+@import url("./blocks/brief.css");
 @import url("./blocks/stream-bar.css");
 @import url("./blocks/transcript.css");
+@import url("./blocks/terminal.css");
 @import url("./blocks/palette.css");
 @import url("./blocks/toast.css");
 @import url("./blocks/empty.css");

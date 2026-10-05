@@ -2,6 +2,7 @@ package mcpsession
 
 import (
 	"context"
+	"encoding/json"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -42,7 +43,7 @@ func newTaskServer(t *testing.T) (baseURL, ticketID string) {
 		t.Fatal(err)
 	}
 
-	srv := httptest.NewServer(TaskHandler(tooling.SessionTaskTools(plan, sessions)))
+	srv := httptest.NewServer(TaskHandler(tooling.SessionTaskTools(plan, sessions, nil)))
 	t.Cleanup(srv.Close)
 	return srv.URL, tk.ID
 }
@@ -127,5 +128,55 @@ func TestTaskHandler_UnknownSession(t *testing.T) {
 	}
 	if !res.IsError || !strings.Contains(textOf(t, res), "session not found") {
 		t.Fatalf("want a session-not-found tool error, got %+v", res)
+	}
+}
+
+// Over the session's own URL, list_task_sessions shows the other sessions on
+// its task, and nothing identifies the task but the path.
+func TestTaskHandler_ListsTheOtherSessionsOnTheTask(t *testing.T) {
+	db, err := sqlite.Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	projects := sqlite.NewProjectRepository(db)
+	sessions := sqlite.NewSessionRepository(db)
+	plan := planning.NewService(sqlite.NewTicketRepository(db), sqlite.NewDocumentRepository(db), projects)
+	proj, _ := projects.Create("p", t.TempDir())
+	tk, _ := plan.CreateTicket(context.Background(), proj.ID, "Ship the thing", "", domain.TicketStatusTodo)
+	for _, s := range []*domain.Session{
+		{ID: "sess-1", ProjectID: proj.ID, TicketID: tk.ID, Task: "build it", Status: domain.SessionRunning},
+		{ID: "sess-2", ProjectID: proj.ID, TicketID: tk.ID, Task: "review it", Status: domain.SessionIdle, Branch: "feat/review"},
+	} {
+		if _, err := sessions.Create(s); err != nil {
+			t.Fatal(err)
+		}
+	}
+	srv := httptest.NewServer(TaskHandler(tooling.SessionTaskTools(plan, sessions, nil)))
+	t.Cleanup(srv.Close)
+
+	c := dial(t, srv.URL+PathPrefix+"sess-1")
+	var call mcplib.CallToolRequest
+	call.Params.Name = "list_task_sessions"
+	res, err := c.CallTool(context.Background(), call)
+	if err != nil {
+		t.Fatal(err)
+	}
+	txt := textOf(t, res)
+	var out struct {
+		You struct {
+			SessionID string `json:"session_id"`
+		}
+		Sessions []struct {
+			SessionID string `json:"session_id"`
+			Brief     string `json:"brief"`
+			Branch    string `json:"branch"`
+		}
+	}
+	if res.IsError || json.Unmarshal([]byte(txt), &out) != nil {
+		t.Fatalf("want a JSON result, got %s", txt)
+	}
+	if out.You.SessionID != "sess-1" || len(out.Sessions) != 1 ||
+		out.Sessions[0].SessionID != "sess-2" || out.Sessions[0].Brief != "review it" || out.Sessions[0].Branch != "feat/review" {
+		t.Fatalf("want me as you and sess-2 as the only other, got %s", txt)
 	}
 }

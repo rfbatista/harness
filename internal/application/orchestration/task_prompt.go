@@ -10,7 +10,7 @@ import (
 )
 
 // taskServerName is the MCP server exposing the task the session was spawned
-// into and the documents linked to it. The literal matters: taskBrief names its
+// into, the documents linked to it, and the other sessions working on it. The literal matters: taskBrief names its
 // tools as mcp__task__* in the system prompt, and the two have to agree.
 const taskServerName = "task"
 
@@ -59,6 +59,12 @@ sessions left, and write down what the next one will need:
 - mcp__task__read_task_document — one document, with its content
 - mcp__task__create_task_document — a new document, linked to this task for you
 - mcp__task__update_task_document — revise one of them
+
+Other agents may be working on this task at the same time, each in its own
+session, branch and worktree. Check before starting, and before touching
+shared files, so you do not duplicate or undo their work:
+
+- mcp__task__list_task_sessions — the other sessions on this task: agent, brief, status, last action, branch, worktree
 
 These tools always act on this task; they take no project or task id.`)
 	return b.String()

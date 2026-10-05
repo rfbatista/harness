@@ -14,7 +14,11 @@ import (
 // part of the application is not configured — pass an untyped nil, since a nil
 // pointer inside an interface is not nil.
 type Services struct {
-	Projects     ports.Projects
+	Projects ports.Projects
+	// Discovery finds git checkouts on disk; nil answers 503.
+	Discovery ports.RepositoryDiscovery
+	// Env keeps repositories' env files; nil answers 503.
+	Env          ports.RepositoryEnv
 	Architecture ports.Architecture
 	Agents       interface {
 		ports.AgentCatalog
@@ -34,6 +38,8 @@ type Services struct {
 // it any implementation.
 type Handler struct {
 	projects     ports.Projects
+	discovery    ports.RepositoryDiscovery
+	env          ports.RepositoryEnv
 	architecture ports.Architecture
 	agents       interface {
 		ports.AgentCatalog
@@ -52,6 +58,8 @@ type Handler struct {
 func NewHandler(s Services) *Handler {
 	return &Handler{
 		projects:      s.Projects,
+		discovery:     s.Discovery,
+		env:           s.Env,
 		architecture:  s.Architecture,
 		agents:        s.Agents,
 		capabilities:  s.Capabilities,

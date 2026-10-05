@@ -15,11 +15,15 @@ export function toSession(dto) {
   return Object.freeze({
     id: dto.id,
     projectId: dto.project_id ?? "",
+    ticketId: dto.ticket_id ?? "",
     task: dto.task ?? "",
     agentId: dto.agent_id ?? "",
     status: dto.status,
     pendingApprovals: Number(dto.pending_approvals ?? 0),
     lastAction: dto.last_action ?? "",
+    interactive: dto.interactive === true,
+    runsOn: dto.runs_on ?? "",
+    runnerHost: dto.runner_host ?? "",
     updatedAt,
   });
 }
@@ -30,10 +34,15 @@ export function toSessionList(body) {
   return body.sessions.map(toSession);
 }
 
-/** The sessions page seed: {"project_id": "...", "sessions": [...]} */
+/** A task page's seed: {"project_id": "...", "ticket_id": "...", "sessions": [...]} */
 export function toSeed(body) {
   if (!body || typeof body.project_id !== "string") bad("seed without a project_id");
-  return { projectId: body.project_id, sessions: toSessionList(body) };
+  return {
+    projectId: body.project_id,
+    ticketId: body.ticket_id ?? "",
+    sessions: toSessionList(body),
+    agentNames: { ...(body.agent_names ?? {}) },
+  };
 }
 
 /** One `data:` line of GET /api/events: {"session": {...}, "deleted": true?} */
@@ -44,6 +53,26 @@ export function toChange(dto) {
     return { kind: "deleted", id };
   }
   return { kind: "upsert", session: toSession(dto?.session) };
+}
+
+/** POST /api/start_interactive_session body: always run on the server's terminal host. */
+export function toStartBody(req) {
+  return {
+    project_id: req.projectId,
+    ticket_id: req.ticketId,
+    repository_id: req.repositoryId,
+    agent_id: req.agentId || undefined,
+    prompt: req.prompt || undefined,
+    auto_accept: req.autoAccept,
+    runs_on: "server",
+    size: req.size,
+  };
+}
+
+/** POST /api/start_interactive_session → {"session": {...}, "agent": {...}} */
+export function toCreated(body) {
+  if (!body?.session) bad("expected {session: {...}}");
+  return toSession(body.session);
 }
 
 function bad(detail) {

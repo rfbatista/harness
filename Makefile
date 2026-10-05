@@ -19,7 +19,7 @@ TUI_SHELL ?=
 TUI_FLAGS = $(if $(API),--api $(API)) $(if $(RUN),--run $(RUN)) \
             $(if $(TOKEN),--token $(TOKEN)) $(if $(TUI_SHELL),--shell $(TUI_SHELL))
 
-.PHONY: help air stop-api server run build build-server build-tui-client \
+.PHONY: help air stop-api server run build build-server build-tui-client web web-watch design-tokens \
         tui-client tui-client-bin install-tui-client update-tui-client uninstall-tui-client \
         test test-race vet check deps clean \
         crap build-crap install-crap update-crap \
@@ -47,7 +47,7 @@ air: ## run the server with hot reload (Air); start here
 	fi
 	air
 
-server: ## run the server from source, without hot reload
+server: web ## run the server from source, without hot reload
 	go run ./cmd/server $(ARGS)
 
 run: build-server ## build the server binary and run it
@@ -60,6 +60,18 @@ stop-api: ## stop stale server processes and free ports 8080/8081
 		echo "Port 8080 still in use:"; lsof -nP -iTCP:8080 -sTCP:LISTEN; exit 1; \
 	fi
 	@echo "Ports 8080/8081 are free."
+
+# --- Web client (served by the server at http://127.0.0.1:8080) ---------------
+
+web: ## generate templ code and bundle the web client (JS + CSS) into the server
+	go tool templ generate -path internal/adapter/in/web
+	go run ./cmd/webbuild
+
+web-watch: ## rebuild the web bundle on every change (use beside `make air`)
+	go run ./cmd/webbuild -watch
+
+design-tokens: ## regenerate the design system's token CSS from design-system/tokens.json
+	go run ./cmd/designtokens
 
 # --- tui-client (needs the server running) --------------------------------------
 
@@ -92,7 +104,7 @@ uninstall-tui-client: ## remove the installed tui-client
 
 build: build-server build-tui-client ## build the server and tui-client into bin/
 
-build-server: ## build bin/server
+build-server: web ## build bin/server
 	go build -o $(BIN)/server ./cmd/server
 
 build-tui-client: ## build bin/tui-client
@@ -112,7 +124,7 @@ test-race: ## run the tests with the race detector
 vet: ## run go vet
 	go vet $(PKGS)
 
-check: ## what to run before calling work done: build, vet, race tests
+check: web ## what to run before calling work done: build, vet, race tests
 	go build $(PKGS)
 	go vet $(PKGS)
 	go test -race $(PKGS)

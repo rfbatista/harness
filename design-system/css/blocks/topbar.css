@@ -1,0 +1,32 @@
+/*
+ * Top bar — the app's name and the project picker. The picker is a native
+ * <select> in a GET form (styled globally); it decides what the rail lists.
+ * <header class="topbar"><a class="brand" href="/">harness</a><form>…<select>…</form></header>
+ */
+
+@layer blocks {
+  .topbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-s) var(--space-l);
+    min-block-size: 2.75rem;
+    padding: var(--space-xs) var(--space-l);
+    background: var(--color-panel);
+    border-block-end: var(--border-width) solid var(--color-line);
+
+    & .brand {
+      color: var(--color-ink);
+      font-weight: var(--weight-bold);
+      text-decoration: none;
+    }
+
+    & select {
+      inline-size: auto;
+      min-inline-size: 12rem;
+      max-inline-size: 24rem;
+      min-block-size: var(--size-control-sm);
+      font-size: var(--text-sm);
+    }
+  }
+}
