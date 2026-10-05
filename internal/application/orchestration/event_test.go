@@ -2,6 +2,7 @@ package orchestration
 
 import (
 	"bytes"
+	"encoding/json"
 	"log/slog"
 	"strings"
 	"testing"
@@ -85,5 +86,16 @@ func TestLogSessionEvent(t *testing.T) {
 		if !strings.Contains(out, want) {
 			t.Fatalf("missing %q in log output:\n%s", want, out)
 		}
+	}
+}
+
+func TestSessionEvent_ArtifactIsOptional(t *testing.T) {
+	plain, _ := json.Marshal(SessionEvent{Type: "status"})
+	if strings.Contains(string(plain), "artifact") {
+		t.Fatalf("artifact must be omitted when nil: %s", plain)
+	}
+	with, _ := json.Marshal(SessionEvent{Type: "artifact", Text: "first cut", Artifact: &domain.Artifact{ID: "a1", Kind: domain.ArtifactPage, Path: "design/card.html", Revision: 1}})
+	if !strings.Contains(string(with), `"artifact":{"id":"a1"`) || !strings.Contains(string(with), `"type":"artifact"`) {
+		t.Fatalf("artifact event json = %s", with)
 	}
 }
