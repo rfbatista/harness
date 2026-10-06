@@ -6,6 +6,7 @@ import (
 	"github.com/labstack/echo/v4"
 
 	"operators-mcp/internal/domain"
+	"operators-mcp/internal/ports"
 )
 
 // --- Tickets ---
@@ -47,17 +48,25 @@ func (h *Handler) handleCreateTicket(c echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]any{"ticket": tk})
 }
 
+// handleUpdateTicket is a partial update: a key absent from the body (or null)
+// keeps its value. The board sends only ticket_id and status to move a card;
+// an editor sends title and description to save text without moving it.
 func (h *Handler) handleUpdateTicket(c echo.Context) error {
 	var in struct {
-		TicketID    string `json:"ticket_id"`
-		Title       string `json:"title"`
-		Description string `json:"description"`
-		Status      string `json:"status"`
+		TicketID    string  `json:"ticket_id"`
+		Title       *string `json:"title"`
+		Description *string `json:"description"`
+		Status      *string `json:"status"`
 	}
 	if err := bindJSON(c, &in); err != nil {
 		return err
 	}
-	tk, err := h.planningSvc.UpdateTicket(c.Request().Context(), in.TicketID, in.Title, in.Description, domain.TicketStatus(in.Status))
+	patch := ports.TicketPatch{Title: in.Title, Description: in.Description}
+	if in.Status != nil {
+		st := domain.TicketStatus(*in.Status)
+		patch.Status = &st
+	}
+	tk, err := h.planningSvc.PatchTicket(c.Request().Context(), in.TicketID, patch)
 	if err != nil {
 		return err
 	}
