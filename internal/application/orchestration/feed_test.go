@@ -113,3 +113,49 @@ func TestFeed_ASessionStartedByAnotherCarriesItsParent(t *testing.T) {
 		t.Fatalf("stored parent = %q", stored.ParentSessionID)
 	}
 }
+
+var _ ports.TicketAnnouncer = (*Service)(nil)
+
+// A ticket change reaches the project's followers as a ticket message, with
+// no session on it, and never another project's followers.
+func TestFeed_TicketChangesReachTheProjectsFollowers(t *testing.T) {
+	svc, _ := newInteractiveService(t)
+	other := follow(t, svc, "another-project")
+	mine := follow(t, svc, "p1")
+
+	tk := &domain.Ticket{ID: "tk1", ProjectID: "p1", Title: "Ship the thing", Status: domain.TicketStatusReview}
+	svc.AnnounceTicket(tk, false)
+	got := next(t, mine)
+	if got.Session != nil || got.Ticket == nil || got.Ticket.ID != "tk1" || got.Ticket.Status != domain.TicketStatusReview || got.Deleted {
+		t.Fatalf("change = %+v", got)
+	}
+
+	svc.AnnounceTicket(tk, true)
+	if got := next(t, mine); !got.Deleted || got.Ticket == nil || got.Ticket.ID != "tk1" {
+		t.Fatalf("after delete: %+v", got)
+	}
+	select {
+	case c := <-other:
+		t.Fatalf("another project's follower got %+v", c)
+	case <-time.After(100 * time.Millisecond):
+	}
+}
+
+// Ticket and session messages share one stream, in the order they happened.
+func TestFeed_TicketAndSessionChangesInterleaveInOrder(t *testing.T) {
+	svc, _ := newInteractiveService(t)
+	mine := follow(t, svc, "p1")
+	svc.AnnounceTicket(&domain.Ticket{ID: "tk1", ProjectID: "p1", Status: domain.TicketStatusTodo}, false)
+	sess, _ := startInteractive(t, svc, InteractiveRequest{})
+	svc.AnnounceTicket(&domain.Ticket{ID: "tk1", ProjectID: "p1", Status: domain.TicketStatusInProgress}, false)
+
+	if got := next(t, mine); got.Ticket == nil || got.Ticket.Status != domain.TicketStatusTodo {
+		t.Fatalf("1st = %+v", got)
+	}
+	if got := next(t, mine); got.Session == nil || got.Session.ID != sess.ID {
+		t.Fatalf("2nd = %+v", got)
+	}
+	if got := next(t, mine); got.Ticket == nil || got.Ticket.Status != domain.TicketStatusInProgress {
+		t.Fatalf("3rd = %+v", got)
+	}
+}

@@ -72,6 +72,14 @@ type TicketPatcher interface {
 	PatchTicket(ctx context.Context, id string, patch TicketPatch) (*domain.Ticket, error)
 }
 
+// TicketAnnouncer puts a ticket change on the project feed, so the board and
+// the rail move while the developer watches. The orchestration, which owns
+// the feed, implements it; planning calls it after every create, update and
+// delete. deleted marks the ticket's last message.
+type TicketAnnouncer interface {
+	AnnounceTicket(tk *domain.Ticket, deleted bool)
+}
+
 // DocumentLibrary manages a project's documents and their links to tickets.
 type DocumentLibrary interface {
 	CreateDocument(projectID, title, content string) (*domain.Document, error)

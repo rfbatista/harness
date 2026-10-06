@@ -19,13 +19,13 @@ var quietEvents = map[string]bool{
 	"artifact": true, // a publish changes what the session made, not its record
 }
 
-// feed fans session changes out to the followers of each project.
+// feed fans a project's changes (sessions and tickets) out to its followers.
 type feed struct {
 	mu   sync.Mutex
 	subs map[string]map[chan ports.SessionChange]struct{} // by project ID
 }
 
-// FollowProject follows projectID's sessions until ctx ends.
+// FollowProject follows projectID's sessions and tickets until ctx ends.
 func (s *Service) FollowProject(ctx context.Context, projectID string) (<-chan ports.SessionChange, error) {
 	if projectID == "" {
 		return nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "project_id is required"}
@@ -63,7 +63,7 @@ func (f *feed) drop(projectID string, c chan ports.SessionChange) {
 func (f *feed) send(change ports.SessionChange) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	pid := change.Session.ProjectID
+	pid := change.ProjectID()
 	for c := range f.subs[pid] {
 		select {
 		case c <- change:
@@ -83,4 +83,14 @@ func (s *Service) notify(sessionID, eventType string) {
 	if sess := s.sessions.Get(sessionID); sess != nil {
 		s.feed.send(ports.SessionChange{Session: sess})
 	}
+}
+
+// AnnounceTicket puts a ticket change on the project feed, next to the session
+// changes, exactly as planning applied it. Planning calls it after every
+// create, update and delete (ports.TicketAnnouncer).
+func (s *Service) AnnounceTicket(tk *domain.Ticket, deleted bool) {
+	if tk == nil || tk.ProjectID == "" {
+		return
+	}
+	s.feed.send(ports.ProjectChange{Ticket: tk, Deleted: deleted})
 }
