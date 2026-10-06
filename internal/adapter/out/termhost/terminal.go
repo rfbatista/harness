@@ -5,7 +5,6 @@ import (
 	"io"
 	"os"
 	"slices"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -178,28 +177,12 @@ func (t *terminal) Subscribe() (ports.TerminalSnapshot, ports.Subscription) {
 	}
 	t.mu.Unlock()
 
-	snap.Scrollback = renderScrollback(history)
+	snap.Scrollback = uv.Lines(history).Render() // the same renderer as Screen: "\n" between rows
 	if exited {
 		close(c)
 		return snap, ports.Subscription{C: c, Close: func() {}}
 	}
 	return snap, ports.Subscription{C: c, Close: func() { t.unsubscribe(c) }}
-}
-
-// renderScrollback renders history the way the emulator renders the screen:
-// each line styled, lines joined by "\n", oldest first.
-func renderScrollback(history []uv.Line) string {
-	if len(history) == 0 {
-		return ""
-	}
-	var b strings.Builder
-	for i, l := range history {
-		if i > 0 {
-			b.WriteByte('\n')
-		}
-		b.WriteString(l.Render())
-	}
-	return b.String()
 }
 
 func (t *terminal) unsubscribe(c chan []byte) {

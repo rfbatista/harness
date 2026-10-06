@@ -84,10 +84,10 @@ type KeyEvent struct {
 // frames, in order, between them.
 //
 // Server to client: "snapshot" first — the screen with its scrollback — and
-// again whenever the client fell behind and the screen is redrawn from scratch; "title" when the program
-// sets one; "exit" with the code once the process is gone. Client to server:
-// "key", "paste", "resize", and "resync" when the client fell behind and
-// needs a fresh snapshot.
+// again whenever the client fell behind and the screen is redrawn from
+// scratch; "title" when the program sets one; "exit" with the code once the
+// process is gone. Client to server: "key", "paste", "resize", and "resync"
+// when the client fell behind and needs a fresh snapshot.
 type TerminalMessage struct {
 	Type     string            `json:"type"`
 	Snapshot *TerminalSnapshot `json:"snapshot,omitempty"`
