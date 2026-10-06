@@ -5,7 +5,11 @@
 // behind the Agent and App tabs. It tells the page with artifact-published.
 //
 //   <template x-for="panel in designPanels" x-bind:key="panel.key">
-//     <section x-data="sessionsDesignPanel(panel)" x-show="showingDesign"> …
+//     <div x-show="showingDesign"><section x-data="sessionsDesignPanel(panel)"> …
+//
+// The x-show stays outside the panel's x-data: this scope has its own
+// selectedId (an artifact), and a page getter evaluated from inside it would
+// read that instead of the page's selected session.
 
 import { FeedStatus } from "../../../../shared/domain/feed.js";
 import { describeError } from "../../../../shared/presentation/errors.js";
