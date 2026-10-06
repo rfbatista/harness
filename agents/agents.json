@@ -310,6 +310,73 @@
       "@pm-analytics",
       "@pm-communication"
     ],
+    "ux-research": [
+      "affinity-diagram",
+      "behavioural-analytics",
+      "card-sort-analysis",
+      "diary-study-plan",
+      "empathy-map",
+      "jobs-to-be-done",
+      "qual-quant-triangulation",
+      "research-repository",
+      "survey-design",
+      "usability-test-plan"
+    ],
+    "ux-evaluation": [
+      "heuristic-evaluation",
+      "accessibility-audit",
+      "accessibility-test-plan",
+      "click-test-plan",
+      "concept-selection",
+      "prototype-strategy",
+      "user-flow-diagram",
+      "wireframe-spec",
+      "design-critique"
+    ],
+    "ux-laws": [
+      "hicks-law",
+      "fitts-law",
+      "millers-law",
+      "jakobs-law",
+      "teslers-law",
+      "doherty-threshold",
+      "peak-end-rule",
+      "serial-position-effect",
+      "zeigarnik-effect",
+      "von-restorff-effect",
+      "aesthetic-usability",
+      "law-of-proximity",
+      "law-of-similarity",
+      "law-of-common-region",
+      "visual-hierarchy",
+      "platform-conventions"
+    ],
+    "ux-patterns": [
+      "error-handling-ux",
+      "feedback-patterns",
+      "form-design",
+      "loading-states",
+      "navigation-patterns",
+      "onboarding-design",
+      "search-ux",
+      "conversational-ux",
+      "ux-writing"
+    ],
+    "ux-strategy": [
+      "information-architecture",
+      "metrics-definition",
+      "design-principles",
+      "experience-map",
+      "service-blueprint",
+      "design-rationale"
+    ],
+    "ux": [
+      "@ux-research",
+      "@ux-evaluation",
+      "@ux-laws",
+      "@ux-patterns",
+      "@ux-strategy"
+    ],
     "landing-page": [
       "landing-ideation",
       "seed-string-direction",
@@ -493,6 +560,26 @@
     "designer": {
       "skills": ["design-md", "frontend-slides", "impeccable", "fal-genmedia", "deslope", "@landing-page"],
       "mcp": "self"
+    },
+    "ux-designer": {
+      "skills": [
+        "@ux",
+        "interview-script",
+        "summarize-interview",
+        "user-personas",
+        "user-segmentation",
+        "customer-journey-map",
+        "opportunity-solution-tree",
+        "competitor-analysis",
+        "ab-test-setup",
+        "ab-test-analysis",
+        "web-design-guidelines",
+        "userinterface-wiki",
+        "dev-browser",
+        "deslope"
+      ],
+      "mcp": "designer",
+      "aliases": ["ux"]
     },
     "landing-page-designer": {
       "skills": ["@landing-page", "design-md"],
