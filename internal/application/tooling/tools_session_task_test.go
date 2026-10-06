@@ -10,11 +10,13 @@ import (
 	"operators-mcp/internal/adapter/out/persistence/sqlite"
 	"operators-mcp/internal/application/planning"
 	"operators-mcp/internal/domain"
+	"operators-mcp/internal/ports"
 )
 
 type taskToolsFixture struct {
 	tools     map[string]domain.Tool
 	plan      *planning.Service
+	projects  ports.ProjectRepository
 	projectID string
 	ticketID  string
 	sessionID string
@@ -61,7 +63,7 @@ func newTaskToolsFixture(t *testing.T) *taskToolsFixture {
 		}
 	}
 
-	return &taskToolsFixture{tools: byName, plan: plan, projectID: proj.ID, ticketID: tk.ID, sessionID: "sess-1"}
+	return &taskToolsFixture{tools: byName, plan: plan, projects: projects, projectID: proj.ID, ticketID: tk.ID, sessionID: "sess-1"}
 }
 
 func (f *taskToolsFixture) call(t *testing.T, sessionID, tool string, args map[string]any) (any, error) {
@@ -381,7 +383,7 @@ func TestSessionTaskTools_UpdateContentFlipsLegacyToHTML(t *testing.T) {
 
 func TestSessionTaskTools_DescriptionsSayHTML(t *testing.T) {
 	f := newTaskToolsFixture(t)
-	for _, name := range []string{"create_task_document", "update_task_document", "read_task_document"} {
+	for _, name := range []string{"create_task_document", "update_task_document", "read_task_document", "update_project_document", "read_project_document"} {
 		tl := f.tools[name]
 		schema, _ := json.Marshal(tl.InputSchema)
 		text := strings.ToLower(tl.Description + string(schema))

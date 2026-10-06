@@ -19,6 +19,11 @@ var SessionTaskToolNames = []string{
 	"read_task_document",
 	"create_task_document",
 	"update_task_document",
+	"list_project_documents",
+	"read_project_document",
+	"update_project_document",
+	"move_document_to_project",
+	"move_document_to_task",
 	"update_task_status",
 	"list_task_sessions",
 	"start_task_session",
@@ -51,9 +56,9 @@ type ArtifactTooling struct {
 }
 
 // SessionTaskTools exposes the task a session was spawned into (to read, and
-// to move between statuses), the documents linked to that task, the other
-// sessions working on it, and the artifacts those sessions published, as MCP
-// tools.
+// to move between statuses), the documents linked to that task, the project's
+// own documents, the other sessions working on it, and the artifacts those
+// sessions published, as MCP tools.
 //
 // The tools take no project or ticket id: the session id travels in the context
 // (see WithSessionID) and every handler resolves the scope from it, so a session
@@ -201,21 +206,7 @@ func SessionTaskTools(planningSvc ports.Planning, sessions ports.SessionReposito
 				if err != nil {
 					return nil, err
 				}
-				// Partial edit: the use case replaces both fields, so anything the
-				// agent left out is filled back in from the stored document. Only
-				// new content changes the format, to html.
-				content, format := current.Content, domain.DocumentFormat("")
-				if v, ok := args["content"].(string); ok {
-					if !domain.IsHTMLDocument(v) {
-						return nil, notHTML()
-					}
-					content, format = v, domain.DocumentFormatHTML
-				}
-				doc, err := planningSvc.UpdateDocument(current.ID, getString(args, "title", current.Title), content, format)
-				if err != nil {
-					return nil, err
-				}
-				return map[string]any{"document": doc}, nil
+				return reviseAsHTML(planningSvc, current, args)
 			},
 		},
 		{
@@ -242,7 +233,8 @@ func SessionTaskTools(planningSvc ports.Planning, sessions ports.SessionReposito
 				return map[string]any{"task": tk}, nil
 			},
 		},
-	}, sessionProjectTools(planningSvc, sessions, agents, arch, start.Repositories)...)
+	}, sessionDocumentTools(planningSvc, sessions)...)
+	tools = append(tools, sessionProjectTools(planningSvc, sessions, agents, arch, start.Repositories)...)
 	return append(tools, sessionArtifactTools(planningSvc, sessions, artifacts)...)
 }
 
@@ -360,13 +352,14 @@ type documentSummary struct {
 	ID        string                `json:"id"`
 	Title     string                `json:"title"`
 	Format    domain.DocumentFormat `json:"format"`
+	Scope     domain.DocumentScope  `json:"scope"`
 	UpdatedAt time.Time             `json:"updated_at"`
 }
 
 func summarizeDocuments(docs []*domain.Document) []documentSummary {
 	out := make([]documentSummary, 0, len(docs))
 	for _, d := range docs {
-		out = append(out, documentSummary{ID: d.ID, Title: d.Title, Format: d.Format, UpdatedAt: d.UpdatedAt})
+		out = append(out, documentSummary{ID: d.ID, Title: d.Title, Format: d.Format, Scope: d.Scope, UpdatedAt: d.UpdatedAt})
 	}
 	return out
 }
