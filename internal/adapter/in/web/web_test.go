@@ -229,6 +229,25 @@ func TestProjectPagePutsItsTasksOnTheRailAndTheProjectInThePicker(t *testing.T) 
 	}
 }
 
+// The Design tab's half of the Artifacts contract: pages are embedded only in
+// a sandboxed frame without allow-same-origin, titles and notes as text.
+func TestDesignTabEmbedsArtifactsSandboxed(t *testing.T) {
+	body := get(t, newTestHandler(t, board()), "/projects/p1/tasks/t-feed").Body.String()
+	for _, want := range []string{`sessionsDesignPanel(panel)`, `sandbox="allow-scripts"`, `role="tab"`, `x-on:click="showDesign"`, `x-on:artifact-published="artifactPublished"`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("task page lacks %s", want)
+		}
+	}
+	for _, never := range []string{"allow-same-origin", "x-html", "autoplay"} {
+		if strings.Contains(body, never) {
+			t.Errorf("task page must not contain %q", never)
+		}
+	}
+	if n := strings.Count(body, `<iframe`); n != 2 {
+		t.Errorf("expected exactly two iframe templates (page, url), found %d", n)
+	}
+}
+
 func TestTaskPageListsItsSessionsBesideTheDetail(t *testing.T) {
 	rec := get(t, newTestHandler(t, board()), "/projects/p1/tasks/t-feed")
 	body := rec.Body.String()

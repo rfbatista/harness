@@ -9,6 +9,7 @@ import { systemClock } from "../src/shared/infrastructure/clock.js";
 import { preferences } from "../src/shared/infrastructure/storage.js";
 import { registerShared } from "../src/shared/presentation/register.js";
 
+import { memoryArtifacts } from "../src/modules/sessions/infrastructure/memory-artifacts.js";
 import { memoryGateway } from "../src/modules/sessions/infrastructure/memory-gateway.js";
 import { memoryTerminals } from "../src/modules/sessions/infrastructure/memory-terminals.js";
 import { registerSessions } from "../src/modules/sessions/presentation/register.js";
@@ -21,7 +22,8 @@ const memory = memoryGateway({ projects: [seed.projectId], sessions: seed.sessio
 registerShared(Alpine, { prefs: preferences() });
 // A terminal that greets and echoes what you type, in place of the server's PTY.
 const terminals = memoryTerminals({ greeting: "dev terminal: type, and it echoes back" });
-registerSessions(Alpine, { gateway: memory.gateway, terminals: terminals.gateway, createScreen, clock: systemClock });
+const artifacts = memoryArtifacts();
+registerSessions(Alpine, { gateway: memory.gateway, artifacts: artifacts.gateway, terminals: terminals.gateway, createScreen, clock: systemClock });
 
 window.harness = {
   memory,
@@ -31,6 +33,10 @@ window.harness = {
   ask: (id) => memory.update(id, { status: "waiting_approval", pendingApprovals: 1 }),
   drop: () => memory.feedStatus(FeedStatus.PAUSED),
   reconnect: () => memory.feedStatus(FeedStatus.RESYNCED),
+  artifacts,
+  /** Publishes a page into a session, as the agent's publish_artifact tool would. */
+  publish: (id, title = "Hero", path = "hero.html") =>
+    artifacts.publish({ sessionId: id, kind: "page", title, note: "from the console", path, mime: "text/html", sizeBytes: 1 }),
 };
 
 Alpine.start();
