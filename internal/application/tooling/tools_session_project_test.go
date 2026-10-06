@@ -67,7 +67,7 @@ func projectToolsFixture(t *testing.T, deps func(projectID string) projectDeps) 
 	}
 	d := deps(proj.ID)
 	tools := map[string]domain.Tool{}
-	for _, tl := range SessionTaskTools(plan, sessions, d.agents, d.arch, PeerStarter{Repositories: d.repos}) {
+	for _, tl := range SessionTaskTools(plan, sessions, d.agents, d.arch, PeerStarter{Repositories: d.repos}, ArtifactTooling{}) {
 		tools[tl.Name] = tl
 	}
 	return func(name string) (map[string]any, error) {

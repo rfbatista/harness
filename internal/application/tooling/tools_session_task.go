@@ -24,6 +24,9 @@ var SessionTaskToolNames = []string{
 	"list_project_repositories",
 	"list_bounded_contexts",
 	"list_agents",
+	"publish_artifact",
+	"list_task_artifacts",
+	"unpublish_artifact",
 }
 
 // MaxLiveTaskSessions caps the sessions running on one task at once, so agents
@@ -38,17 +41,27 @@ type PeerStarter struct {
 	Repositories ports.RepositoryLister
 }
 
+// ArtifactTooling is what the artifact tools need: the publisher, and how to
+// name an artifact's view route, which belongs to the HTTP adapter. The zero
+// value leaves the tools answering that artifacts are unavailable.
+type ArtifactTooling struct {
+	Publisher ports.ArtifactPublisher
+	ViewURL   func(artifactID string) string
+}
+
 // SessionTaskTools exposes the task a session was spawned into, the documents
-// linked to that task, and the other sessions working on it, as MCP tools.
+// linked to that task, the other sessions working on it, and the artifacts
+// those sessions published, as MCP tools.
 //
 // The tools take no project or ticket id: the session id travels in the context
 // (see WithSessionID) and every handler resolves the scope from it, so a session
 // can only ever reach its own task, the documents linked to it, and the
 // sessions sharing it. agents, when set, names the agents those sessions run
 // and lists them to delegate to; arch, when set, maps the task's project into
-// bounded contexts and zones; start lets a session start peers on its task.
-func SessionTaskTools(planningSvc ports.Planning, sessions ports.SessionRepository, agents ports.AgentLister, arch ports.ArchitectureMap, start PeerStarter) []domain.Tool {
-	return append([]domain.Tool{
+// bounded contexts and zones; start lets a session start peers on its task;
+// artifacts lets it publish what it made to the Design tab.
+func SessionTaskTools(planningSvc ports.Planning, sessions ports.SessionRepository, agents ports.AgentLister, arch ports.ArchitectureMap, start PeerStarter, artifacts ArtifactTooling) []domain.Tool {
+	tools := append([]domain.Tool{
 		{
 			Name: "start_task_session",
 			Description: "Start another agent session on this session's task, to hand off or parallelise part of the work. " +
@@ -198,6 +211,7 @@ func SessionTaskTools(planningSvc ports.Planning, sessions ports.SessionReposito
 			},
 		},
 	}, sessionProjectTools(planningSvc, sessions, agents, arch, start.Repositories)...)
+	return append(tools, sessionArtifactTools(planningSvc, sessions, artifacts)...)
 }
 
 // peerSession is another session on the same task, as list_task_sessions

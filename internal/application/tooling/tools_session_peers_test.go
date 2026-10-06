@@ -50,7 +50,7 @@ func peersFixture(t *testing.T) (call func(sessionID string, args map[string]any
 	}
 
 	var tool domain.Tool
-	for _, tl := range SessionTaskTools(plan, sessions, agentList{{ID: "a-rev", Name: "Reviewer"}}, nil, PeerStarter{}) {
+	for _, tl := range SessionTaskTools(plan, sessions, agentList{{ID: "a-rev", Name: "Reviewer"}}, nil, PeerStarter{}, ArtifactTooling{}) {
 		if tl.Name == "list_task_sessions" {
 			tool = tl
 		}
@@ -134,7 +134,7 @@ func TestListTaskSessions_RefusesWithoutASession(t *testing.T) {
 	db, _ := sqlite.Open(":memory:")
 	projects := sqlite.NewProjectRepository(db)
 	plan := planning.NewService(sqlite.NewTicketRepository(db), sqlite.NewDocumentRepository(db), projects)
-	for _, tl := range SessionTaskTools(plan, sqlite.NewSessionRepository(db), nil, nil, PeerStarter{}) {
+	for _, tl := range SessionTaskTools(plan, sqlite.NewSessionRepository(db), nil, nil, PeerStarter{}, ArtifactTooling{}) {
 		if tl.Name != "list_task_sessions" {
 			continue
 		}

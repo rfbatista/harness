@@ -66,7 +66,7 @@ func startFixtureWith(t *testing.T, autoRun, canStart bool) (start func(args map
 		peers = PeerStarter{}
 	}
 	var tool domain.Tool
-	for _, tl := range SessionTaskTools(plan, sessions, agentList{{ID: "a-rev", Name: "Reviewer"}}, nil, peers) {
+	for _, tl := range SessionTaskTools(plan, sessions, agentList{{ID: "a-rev", Name: "Reviewer"}}, nil, peers, ArtifactTooling{}) {
 		if tl.Name == "start_task_session" {
 			tool = tl
 		}

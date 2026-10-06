@@ -73,6 +73,12 @@ To see the project around the task, and who to hand work to:
 - mcp__task__list_bounded_contexts — its bounded contexts, with their language and zones
 - mcp__task__list_agents — the agents a session can run as, and what each is for
 
+To show what you make to the person in the web UI's Design tab, live, while you keep talking here:
+
+- mcp__task__publish_artifact — publish a file from your worktree (an HTML page or component, an image, a video, any file) or a dev server's loopback URL; publish again to refresh it
+- mcp__task__list_task_artifacts — what every session on this task has published
+- mcp__task__unpublish_artifact — take one of yours down (the file stays)
+
 These tools always act on this task; they take no project or task id.`)
 	return b.String()
 }
