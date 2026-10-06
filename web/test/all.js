@@ -23,6 +23,7 @@ import "../src/modules/sessions/presentation/components/terminal.test.js";
 import "../src/modules/sessions/presentation/pages/sessionsPage.test.js";
 import "../src/modules/sessions/presentation/view.test.js";
 import "../src/modules/tasks/domain/activity.test.js";
+import "../src/modules/tasks/domain/board.test.js";
 import "../src/modules/tasks/domain/documents.test.js";
 import "../src/modules/tasks/domain/task.test.js";
 import "../src/modules/tasks/infrastructure/gateways.test.js";
