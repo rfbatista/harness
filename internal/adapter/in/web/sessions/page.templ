@@ -422,7 +422,7 @@ templ appPanel() {
 // hands it to loadFrame, which sets only src and title. Tab leaves the frame
 // (sequential focus crosses it) and lands on the bar, which says so.
 templ designPanel() {
-	<section class="[ frame ]" aria-label="Design" x-data="sessionsDesignPanel(panel)" x-show="showingDesign">
+	<section class="[ frame ]" aria-label="Design" x-data="sessionsDesignPanel(panel)" x-show="showingDesign" x-on:session-ended.window="sessionEnded">
 		<template x-if="error">
 			<div class="[ banner ] [ pad-s ]" data-tone="danger" role="alert">
 				<div class="[ flow ] [ flow-space-3xs grow ]">
@@ -472,7 +472,7 @@ templ designPanel() {
 							<template x-if="frame.notEmbeddable">
 								<div class="[ pad-l ]">
 									<div class="[ banner ]" data-tone="attention">
-										<span>This dev server is not on this machine, so it is not embedded. The session published: <code x-text="frame.title"></code></span>
+										<span>This dev server is not on this machine, so it is not embedded. The session published <strong x-text="frame.title"></strong> at <code x-text="frame.url"></code>.</span>
 									</div>
 								</div>
 							</template>

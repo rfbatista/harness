@@ -27,6 +27,7 @@ const ENDED = { state: "done", label: "session ended" };
  */
 export const designPanel = ({ artifacts, clock, setTimeout = globalThis.setTimeout.bind(globalThis) }) => (panel = {}) => {
   let unfollow = () => {};
+  let destroyed = false;
 
   return {
     sessionId: panel.sessionId ?? "",
@@ -85,7 +86,8 @@ export const designPanel = ({ artifacts, clock, setTimeout = globalThis.setTimeo
     // ── lifecycle ────────────────────────────────────────────────────────
     async init() {
       await this.load();
-      if (this.live) {
+      // Unmounted while the list was loading (another session picked): no stream to open.
+      if (this.live && !destroyed && !this.ended) {
         unfollow = artifacts.follow(
           this.sessionId,
           (event) => this.onEvent(event),
@@ -95,6 +97,7 @@ export const designPanel = ({ artifacts, clock, setTimeout = globalThis.setTimeo
     },
 
     destroy() {
+      destroyed = true;
       unfollow();
     },
 
@@ -121,6 +124,10 @@ export const designPanel = ({ artifacts, clock, setTimeout = globalThis.setTimeo
         return;
       }
       const { artifact } = event;
+      // The stream replays its history on every connect: a revision the list
+      // already holds (or a staler one) is nothing new to show or announce.
+      const known = this.artifacts.find((a) => a.id === artifact.id);
+      if (known && known.revision >= artifact.revision) return;
       const isNew = !isKnown(this.artifacts, artifact);
       this.artifacts = applyPublish(this.artifacts, artifact);
       this.now = clock.now();
@@ -135,6 +142,15 @@ export const designPanel = ({ artifacts, clock, setTimeout = globalThis.setTimeo
     onStatus(status) {
       this.feed = status;
       if (status === FeedStatus.RESYNCED) this.load();
+    },
+
+    /**
+     * The page saw this session turn terminal on the project feed; the same
+     * end as a done event, for a session whose stream never says it.
+     * @param {CustomEvent<{ id: string }>} event
+     */
+    sessionEnded(event) {
+      if (event.detail?.id === this.sessionId) this.onEvent({ kind: "ended" });
     },
 
     // ── the sandboxed frame ──────────────────────────────────────────────

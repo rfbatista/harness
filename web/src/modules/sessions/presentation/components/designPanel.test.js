@@ -116,6 +116,7 @@ test("an off-machine url is listed but not embedded", async () => {
   assert.equal(instance.current.embed, false);
   assert.equal(instance.current.notEmbeddable, true);
   assert.equal(instance.current.src, "");
+  assert.equal(instance.current.url, "http://example.com/", "the url is shown as text even when not embedded");
   assert.equal(instance.currentKind, "url");
   assert.equal(instance.hasOpenHref, false);
   instance.destroy();
@@ -179,5 +180,47 @@ test("loadFrame fills the frame beside it with the revision's src and title; the
   assert.equal(iframe.getAttribute("src"), "/api/artifacts/a1/view/?rev=2");
   assert.equal(iframe.title, "Hero, revision 2");
   assert.equal(iframe.getAttribute("sandbox"), "allow-scripts", "never loosened");
+  instance.destroy();
+});
+
+test("a replayed or stale revision changes nothing: no card, no highlight, no announcement", async () => {
+  const { instance, memory, dispatched } = await setup();
+  memory.publish(publishInput());
+  const second = memory.publish(publishInput({ note: "tighter" }));
+  await flush();
+  const before = dispatched.length;
+  instance.freshIds = [];
+  instance.onEvent({ kind: "published", artifact: makeArtifact({ id: second.id, sessionId: "s1", revision: 1, note: "first" }) });
+  instance.onEvent({ kind: "published", artifact: makeArtifact({ id: second.id, sessionId: "s1", revision: 2, note: "tighter" }) });
+  assert.equal(dispatched.length, before, "nothing announced");
+  assert.deepEqual(instance.cards.map((c) => [c.revision, c.note, c.fresh]), [["rev 2", "tighter", false]]);
+  assert.deepEqual(instance.frames.map((f) => f.key), [`${second.id}@2`]);
+  instance.destroy();
+});
+
+test("destroyed while loading, it never opens the stream", async () => {
+  const memory = memoryArtifacts({ now: () => A0 });
+  let finish;
+  memory.gateway.list = () => new Promise((resolve) => (finish = resolve));
+  const { instance, dispatched } = mount(() => designPanel({ artifacts: memory.gateway, clock: fixedClock(A0) })({ key: "s1", sessionId: "s1", live: true }));
+  const started = instance.init();
+  instance.destroy();
+  finish([]);
+  await started;
+  memory.publish(publishInput());
+  await flush();
+  assert.equal(instance.cards.length, 0, "nothing followed after destroy");
+  assert.equal(dispatched.length, 0);
+});
+
+test("the page saying the session ended stops the follow, as a done event would", async () => {
+  const { instance, memory } = await setup();
+  instance.sessionEnded({ detail: { id: "other" } });
+  assert.equal(instance.feedState, "live", "another session's end is not this one's");
+  instance.sessionEnded({ detail: { id: "s1" } });
+  assert.deepEqual([instance.feedState, instance.feedWord], ["done", "session ended"]);
+  memory.publish(publishInput());
+  await flush();
+  assert.equal(instance.cards.length, 0, "unfollowed");
   instance.destroy();
 });

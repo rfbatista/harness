@@ -55,6 +55,8 @@ export function toPreviewView(artifact, now) {
     isVideo: artifact.kind === Kind.VIDEO,
     isFile: artifact.kind === Kind.FILE,
     isUrl,
+    /** The url as text, shown even when it is not embedded. */
+    url: artifact.url,
     openHref: isUrl ? src : artifact.src,
     fileName: fileName(artifact),
     size: bytes(artifact.sizeBytes),

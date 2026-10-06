@@ -136,10 +136,16 @@ func TestDesignTabShowsArtifactsLive(t *testing.T) {
 	}
 
 	// Behind the Agent tab, a publish counts on the Design tab and is announced.
+	// The stream replays its history on connect: the artifact already listed
+	// arrives again first and must count for nothing.
 	waitFor(t, "the session stream", func() bool { return api.feed.followers() >= 1 })
 	if err := chromedp.Run(ctx, clickButton(`[role=tablist]`, "Agent")); err != nil {
 		t.Fatal(err)
 	}
+	api.feed.pushRaw(t, map[string]any{
+		"seq": 6, "session_id": "s1", "type": "artifact", "text": "first cut",
+		"artifact": api.list[0], "at": now.Add(-time.Minute).Format(time.RFC3339),
+	})
 	api.feed.pushRaw(t, map[string]any{
 		"seq": 7, "session_id": "s1", "type": "artifact", "text": "the card",
 		"artifact": artifactDTO("a2", "image", "Card", "the card", "design/card.png", 1, now), "at": now.Format(time.RFC3339),

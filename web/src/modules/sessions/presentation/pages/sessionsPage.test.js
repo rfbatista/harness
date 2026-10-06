@@ -57,6 +57,15 @@ test("follows the feed: changes regroup the list, a deleted selection clears", a
   instance.destroy();
 });
 
+test("a session that turns terminal on the feed is announced to its Design panel, so it stops following", () => {
+  const { instance, memory, dispatched } = setup();
+  memory.update("turn", { status: "done" });
+  assert.deepEqual(dispatched.filter((d) => d.name === "session-ended"), [{ name: "session-ended", detail: { id: "turn" } }]);
+  memory.update("run", { status: "idle" });
+  assert.equal(dispatched.filter((d) => d.name === "session-ended").length, 1, "only terminal changes are announced");
+  instance.destroy();
+});
+
 test("reports feed status to the stream bar and reloads after a resync", async () => {
   const { instance, memory, dispatched } = setup();
   await flush();

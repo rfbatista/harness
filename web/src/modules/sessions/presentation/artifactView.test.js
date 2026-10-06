@@ -50,4 +50,5 @@ test("a loopback url is embedded as is; any other url is shown, not embedded", (
   assert.deepEqual([no.isUrl, no.embed, no.notEmbeddable, no.src], [true, false, true, ""]);
   assert.equal(no.embedsUrl, false);
   assert.equal(no.openHref, "", "an off-machine url is not even linked");
+  assert.equal(no.url, "http://example.com/", "but it is shown as text");
 });

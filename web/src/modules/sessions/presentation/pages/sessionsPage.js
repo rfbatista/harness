@@ -7,7 +7,7 @@
 import { FeedStatus } from "../../../../shared/domain/feed.js";
 import { describeError } from "../../../../shared/presentation/errors.js";
 import { readSeed } from "../../../../shared/presentation/seed.js";
-import { applyChange, byRecent, group, ofTask } from "../../domain/session.js";
+import { applyChange, byRecent, group, isTerminal, ofTask } from "../../domain/session.js";
 import { artifactTitle } from "../artifactView.js";
 import { startedBy, summary, toDetailView, toGroupViews } from "../view.js";
 
@@ -187,6 +187,8 @@ export const sessionsPage = ({ gateway, clock, setTimeout = globalThis.setTimeou
       if (arriving && this.sessions.some((s) => s.id === change.session.id)) this.arrived(change.session);
       this.now = clock.now();
       if (change.kind === "deleted" && change.id === this.selectedId) this.selectedId = null;
+      // The session's Design panel follows its own stream; tell it the session is over.
+      if (change.kind === "upsert" && isTerminal(change.session)) this.$dispatch("session-ended", { id: change.session.id });
     },
 
     /** A session started elsewhere joined the task: highlight it for a moment and say so. */
