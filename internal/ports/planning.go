@@ -55,6 +55,23 @@ type TicketBoard interface {
 	DeleteTicket(ctx context.Context, id string) error
 }
 
+// TicketPatch is a partial change to a ticket. A nil field keeps the stored
+// value; a non-nil one replaces it. It is how the kanban board moves a card
+// without touching its text, and how an editor saves text without moving it.
+type TicketPatch struct {
+	Title       *string
+	Description *string
+	Status      *domain.TicketStatus
+}
+
+// TicketPatcher applies a partial change to one ticket. A present blank title
+// is INVALID_INPUT; a present status must be one of the five values, except
+// that an empty one keeps the current status (callers that always send every
+// field rely on it). A patch that changes nothing is a no-op.
+type TicketPatcher interface {
+	PatchTicket(ctx context.Context, id string, patch TicketPatch) (*domain.Ticket, error)
+}
+
 // DocumentLibrary manages a project's documents and their links to tickets.
 type DocumentLibrary interface {
 	CreateDocument(projectID, title, content string) (*domain.Document, error)
@@ -70,5 +87,6 @@ type DocumentLibrary interface {
 // Planning is tickets and documents together.
 type Planning interface {
 	TicketBoard
+	TicketPatcher
 	DocumentLibrary
 }

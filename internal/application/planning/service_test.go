@@ -155,3 +155,80 @@ func TestLinkDocument_CrossProjectRejected(t *testing.T) {
 		t.Fatal("want CROSS_PROJECT_ACCESS for cross-project link")
 	}
 }
+
+func strp(s string) *string                              { return &s }
+func statusp(s domain.TicketStatus) *domain.TicketStatus { return &s }
+
+// A patch changes only the fields it carries: the kanban board's status-only
+// move and the task page's text-only edit both leave the rest alone.
+func TestPatchTicket_OnlyPresentFieldsChange(t *testing.T) {
+	svc, pid := newService(t)
+	tk, err := svc.CreateTicket(context.Background(), pid, "Ship it", "with care", domain.TicketStatusTodo)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	moved, err := svc.PatchTicket(context.Background(), tk.ID, ports.TicketPatch{Status: statusp(domain.TicketStatusReview)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if moved.Status != domain.TicketStatusReview || moved.Title != "Ship it" || moved.Description != "with care" {
+		t.Fatalf("status-only patch touched the text: %+v", moved)
+	}
+
+	edited, err := svc.PatchTicket(context.Background(), tk.ID, ports.TicketPatch{Title: strp("Ship it now"), Description: strp("")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if edited.Title != "Ship it now" || edited.Description != "" || edited.Status != domain.TicketStatusReview {
+		t.Fatalf("text patch moved the card or kept the description: %+v", edited)
+	}
+}
+
+// The same status again is a no-op: the ticket comes back as stored, with its
+// updated_at untouched.
+func TestPatchTicket_SameStatusIsIdempotent(t *testing.T) {
+	svc, pid := newService(t)
+	tk, _ := svc.CreateTicket(context.Background(), pid, "T", "", domain.TicketStatusInProgress)
+
+	again, err := svc.PatchTicket(context.Background(), tk.ID, ports.TicketPatch{Status: statusp(domain.TicketStatusInProgress)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !again.UpdatedAt.Equal(tk.UpdatedAt) || again.Status != tk.Status {
+		t.Fatalf("no-op patch wrote: before %+v after %+v", tk, again)
+	}
+}
+
+func TestPatchTicket_Validation(t *testing.T) {
+	svc, pid := newService(t)
+	tk, _ := svc.CreateTicket(context.Background(), pid, "T", "d", domain.TicketStatusTodo)
+	ctx := context.Background()
+
+	if _, err := svc.PatchTicket(ctx, "", ports.TicketPatch{}); code(err) != "INVALID_INPUT" {
+		t.Fatalf("missing id: want INVALID_INPUT, got %v", err)
+	}
+	if _, err := svc.PatchTicket(ctx, "missing", ports.TicketPatch{Status: statusp(domain.TicketStatusDone)}); code(err) != "TICKET_NOT_FOUND" {
+		t.Fatalf("unknown id: want TICKET_NOT_FOUND, got %v", err)
+	}
+	if _, err := svc.PatchTicket(ctx, tk.ID, ports.TicketPatch{Title: strp("")}); code(err) != "INVALID_INPUT" {
+		t.Fatalf("blank title: want INVALID_INPUT, got %v", err)
+	}
+	if _, err := svc.PatchTicket(ctx, tk.ID, ports.TicketPatch{Title: strp("   ")}); code(err) != "INVALID_INPUT" {
+		t.Fatalf("whitespace title: want INVALID_INPUT, got %v", err)
+	}
+	if _, err := svc.PatchTicket(ctx, tk.ID, ports.TicketPatch{Status: statusp(domain.TicketStatus("weird"))}); code(err) != "INVALID_INPUT" {
+		t.Fatalf("bad status: want INVALID_INPUT, got %v", err)
+	}
+	// A present-but-empty status keeps the current one: the TUI client sends
+	// "status": "" whenever it has none.
+	kept, err := svc.PatchTicket(ctx, tk.ID, ports.TicketPatch{Status: statusp("")})
+	if err != nil || kept.Status != domain.TicketStatusTodo {
+		t.Fatalf("empty status: want todo kept, got %+v, %v", kept, err)
+	}
+	// Nothing above may have written.
+	got, _ := svc.GetTicket(ctx, tk.ID)
+	if got.Title != "T" || got.Description != "d" || got.Status != domain.TicketStatusTodo {
+		t.Fatalf("a rejected patch wrote: %+v", got)
+	}
+}

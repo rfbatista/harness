@@ -5,6 +5,7 @@ package planning
 
 import (
 	"context"
+	"strings"
 
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
@@ -77,6 +78,39 @@ func (s *Service) UpdateTicket(_ context.Context, id, title, description string,
 	}
 	if !validTicketStatus(status) {
 		return nil, &domain.StructuredError{Code: "INVALID_STATUS", Message: "invalid ticket status"}
+	}
+	return s.tickets.Update(id, title, description, status)
+}
+
+// PatchTicket changes only the fields patch carries. It reads the ticket,
+// applies the patch, validates the result and writes it back whole, since the
+// repository replaces every column. An unchanged ticket is not written.
+func (s *Service) PatchTicket(_ context.Context, id string, patch ports.TicketPatch) (*domain.Ticket, error) {
+	if id == "" {
+		return nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "ticket_id is required"}
+	}
+	existing := s.tickets.Get(id)
+	if existing == nil {
+		return nil, &domain.StructuredError{Code: "TICKET_NOT_FOUND", Message: "ticket not found"}
+	}
+	title, description, status := existing.Title, existing.Description, existing.Status
+	if patch.Title != nil {
+		if strings.TrimSpace(*patch.Title) == "" {
+			return nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "title is required"}
+		}
+		title = *patch.Title
+	}
+	if patch.Description != nil {
+		description = *patch.Description
+	}
+	if patch.Status != nil && *patch.Status != "" {
+		if !validTicketStatus(*patch.Status) {
+			return nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "status must be one of backlog, todo, in_progress, review, done"}
+		}
+		status = *patch.Status
+	}
+	if title == existing.Title && description == existing.Description && status == existing.Status {
+		return existing, nil
 	}
 	return s.tickets.Update(id, title, description, status)
 }
