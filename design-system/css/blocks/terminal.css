@@ -23,8 +23,11 @@
         block-size: 100%;
       }
 
-      & .xterm-viewport {
-        background: transparent !important; /* xterm sets an inline color; the pane owns it */
+      /* xterm paints its theme background inline (xterm 6: on the scrollable
+         element; its viewport keeps xterm.css's #000). The pane owns it. */
+      & .xterm-viewport,
+      & .xterm-scrollable-element {
+        background: transparent !important;
       }
     }
 
