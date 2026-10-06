@@ -1,19 +1,29 @@
 // The rail, live. The server renders the project's tasks with each one's
-// dot and count; tasksRail follows the project's session feed and keeps a
-// shared store of per-task activity, and each link (tasksRailLink) binds its
-// dot and count to it — so a session started anywhere (by an agent, the TUI,
-// another tab) shows on the rail as it starts.
+// dot and count; tasksRail follows the project's feed and keeps a shared
+// store of the project's tasks and per-task activity. Each link
+// (tasksRailLink) binds its dot and count to it, and the board (tasksBoard)
+// draws its columns from it — so a session started anywhere, or a task an
+// agent moves from its session, shows as it happens.
 //
-//   <nav x-data="tasksRail" data-seed="rail-seed">
+//   <nav x-data="tasksRail" data-seed="rail-seed" data-reports-feed>
 //     <a x-data="tasksRailLink" data-task-id="t1"> … <span x-show="hasDot" …>
+//
+// data-reports-feed marks the rail as the page's feed (the project page):
+// it then reports the connection to the stream bar as `feed-status`. The
+// task page's own feed reports there instead.
 
 import { FeedStatus } from "../../../../shared/domain/feed.js";
 import { readSeed } from "../../../../shared/presentation/seed.js";
 import { activityByTask, applyRailChange, linkState } from "../../domain/activity.js";
+import { applyTaskChange } from "../../domain/board.js";
 
 /**
- * The store the rail writes and its links read: Alpine.store("tasksRail").
- * @typedef {{ byTask: Record<string, import("../../domain/activity.js").Activity> }} RailStore
+ * The store the rail writes and its links and the board read: Alpine.store("tasksRail").
+ * @typedef {{
+ *   byTask: Record<string, import("../../domain/activity.js").Activity>,
+ *   tasks: import("../../domain/task.js").Task[],
+ *   seeded: boolean,
+ * }} RailStore
  */
 
 /** @param {{ gateway: import("../../domain/ports.js").RailGateway, store: RailStore }} deps */
@@ -23,36 +33,60 @@ export const rail = ({ gateway, store }) => () => {
 
   return {
     projectId: "",
+    /** This rail is the page's feed (the project page): it reports the connection to the stream bar. */
+    reportsFeed: false,
 
     init() {
+      this.reportsFeed = this.$el.dataset.reportsFeed !== undefined;
+      let seed;
       try {
-        const seed = gateway.decodeSeed(readSeed(this.$el));
-        this.projectId = seed.projectId;
-        sessions = seed.sessions;
+        seed = gateway.decodeSeed(readSeed(this.$el));
       } catch {
         return; // the server's rendering stays as it is
       }
+      this.projectId = seed.projectId;
+      sessions = seed.sessions;
+      store.tasks = seed.tasks;
+      store.seeded = true;
       this.recount();
       unfollow = gateway.follow(
         this.projectId,
-        (change) => {
-          sessions = applyRailChange(sessions, change);
-          this.recount();
-        },
-        (status) => {
-          if (status === FeedStatus.RESYNCED) this.resync();
-        },
+        (change) => this.apply(change),
+        (status) => this.feedStatus(status),
       );
     },
 
-    /** Changes were missed while the stream was down: read the sessions again. */
-    async resync() {
-      try {
-        sessions = await gateway.listSessions(this.projectId);
-        this.recount();
-      } catch {
-        // keep what it shows; the next resync tries again
+    feedStatus(status) {
+      if (this.reportsFeed) this.$dispatch("feed-status", status);
+      if (status === FeedStatus.RESYNCED) this.resync();
+    },
+
+    /** One feed change: a task's, or a session's. */
+    apply(change) {
+      if (change.kind === "task-upsert" || change.kind === "task-deleted") {
+        const id = change.kind === "task-deleted" ? change.id : change.task.id;
+        const previous = store.tasks.find((t) => t.id === id) ?? null;
+        store.tasks = applyTaskChange(store.tasks, change);
+        this.$dispatch("task-changed", { change, previous });
+        return;
       }
+      sessions = applyRailChange(sessions, change);
+      this.recount();
+    },
+
+    /**
+     * Changes were missed while the stream was down: read everything again.
+     * Sessions and tasks are refreshed independently, so one list failing
+     * keeps the other current; whatever fails keeps what it shows until the
+     * next resync.
+     */
+    async resync() {
+      const [list, tasks] = await Promise.allSettled([gateway.listSessions(this.projectId), gateway.listTasks(this.projectId)]);
+      if (list.status === "fulfilled") {
+        sessions = list.value;
+        this.recount();
+      }
+      if (tasks.status === "fulfilled") store.tasks = tasks.value;
     },
 
     recount() {

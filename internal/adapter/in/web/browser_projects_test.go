@@ -38,6 +38,10 @@ type fakeProjectsAPI struct {
 }
 
 func (f *fakeProjectsAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path == "/api/events" {
+		http.NotFound(w, r) // the rail's feed is not under test
+		return
+	}
 	if r.URL.Path == "/api/find_repositories" {
 		root := strings.TrimRight(r.URL.Query().Get("root_dir"), "/")
 		f.mu.Lock()

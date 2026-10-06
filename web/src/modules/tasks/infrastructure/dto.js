@@ -16,6 +16,22 @@ export function toTask(dto) {
   });
 }
 
+/**
+ * The tasks of a list that can be read; one the client cannot read (a status
+ * the server knows and this client does not) is left out rather than failing
+ * the whole list, so the rail and the board keep working for the rest.
+ * @returns {import("../domain/task.js").Task[]}
+ */
+export function toTasks(list) {
+  return list.flatMap((dto) => {
+    try {
+      return [toTask(dto)];
+    } catch {
+      return [];
+    }
+  });
+}
+
 function bad(detail) {
   throw new StructuredError(Codes.BAD_RESPONSE, `Unexpected task data: ${detail}.`);
 }

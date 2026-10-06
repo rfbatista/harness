@@ -25,10 +25,19 @@ type Handler struct {
 	Now    func() time.Time
 }
 
-// Project serves GET /projects/{project}: the rail, and a prompt to pick a task.
+// Project serves GET /projects/{project}: the project's tasks as a kanban
+// board, live over the project feed, beside the rail.
 func (h Handler) Project(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	project, err := h.Projects.GetProject(ctx, r.PathValue("project"))
+	if err != nil {
+		return err
+	}
+	list, err := h.Tasks.ListTickets(ctx, project.ID)
+	if err != nil {
+		return err
+	}
+	live, err := h.Sessions.List(ctx, ports.SessionFilter{ProjectID: project.ID})
 	if err != nil {
 		return err
 	}
@@ -36,7 +45,9 @@ func (h Handler) Project(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	return h.Render(w, r, http.StatusOK, ProjectPage(frame, project.ID, project.Name, len(frame.Rail.Groups) > 0))
+	frame.Live = true             // the stream bar shows the connection…
+	frame.Rail.ReportsFeed = true // …which the rail, the page's one feed, reports
+	return h.Render(w, r, http.StatusOK, ProjectPage(frame, project.ID, project.Name, BuildBoard(project.ID, list, live)))
 }
 
 // New serves GET /projects/{project}/tasks/new: the new-task form.

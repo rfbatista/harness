@@ -1,5 +1,6 @@
 // The tasks module's Alpine components.
 
+import { board } from "./components/board.js";
 import { documentWatch } from "./components/documentWatch.js";
 import { newTask } from "./components/newTask.js";
 import { rail, railLink } from "./components/rail.js";
@@ -19,9 +20,10 @@ export function registerTasks(Alpine, deps) {
   Alpine.data("tasksTaskEditor", taskEditor(deps));
   Alpine.data("tasksDocumentWatch", documentWatch(deps));
 
-  // The rail's per-task activity, shared by the rail and its links.
-  Alpine.store("tasksRail", { byTask: {} });
+  // The project's live model, shared by the rail, its links and the board.
+  Alpine.store("tasksRail", { byTask: {}, tasks: [], seeded: false });
   const store = Alpine.store("tasksRail");
   Alpine.data("tasksRail", rail({ gateway: deps.rail, store }));
   Alpine.data("tasksRailLink", railLink({ store }));
+  Alpine.data("tasksBoard", board({ store }));
 }

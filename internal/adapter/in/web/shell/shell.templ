@@ -92,17 +92,17 @@ templ railLink(l Link) {
 	if l.TaskID != "" {
 		<a href={ templ.SafeURL(l.Href) } { currentAttrs(l.Current)... } x-data="tasksRailLink" data-task-id={ l.TaskID }>
 			<span class="[ label ]">{ l.Label }</span>
-			<span class="[ status ]" data-state={ l.liveState() } data-dot-only x-show="hasDot" x-bind:data-state="dotState" { hiddenUnless(l.liveState() != "")... }>
-				<span class="[ visually-hidden ]" x-text="dotWord">{ l.liveWord() }</span>
+			<span class="[ status ]" data-state={ l.LiveState() } data-dot-only x-show="hasDot" x-bind:data-state="dotState" { hiddenUnless(l.LiveState() != "")... }>
+				<span class="[ visually-hidden ]" x-text="dotWord">{ l.LiveWord() }</span>
 			</span>
 			<span class="[ count ]" title="live sessions" x-show="hasCount" x-text="live" { hiddenUnless(l.Live > 0)... }>{ strconv.Itoa(l.Live) }</span>
 		</a>
 	} else {
 		<a href={ templ.SafeURL(l.Href) } { currentAttrs(l.Current)... }>
 			<span class="[ label ]">{ l.Label }</span>
-			if l.liveState() != "" {
-				<span class="[ status ]" data-state={ l.liveState() } data-dot-only>
-					<span class="[ visually-hidden ]">{ l.liveWord() }</span>
+			if l.LiveState() != "" {
+				<span class="[ status ]" data-state={ l.LiveState() } data-dot-only>
+					<span class="[ visually-hidden ]">{ l.LiveWord() }</span>
 				</span>
 			}
 			if l.Live > 0 {

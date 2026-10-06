@@ -214,6 +214,37 @@
       </section>
 
       <section class="[ flow ] [ flow-space-m ]">
+        <h2>Board</h2>
+        <div class="[ board ]" aria-label="Tasks by status" style="padding: 0">
+          <section class="[ column ]" aria-label="Todo">
+            <header><span class="[ label ]">Todo</span><span class="[ badge ]">1</span></header>
+            <div class="[ cards ]">
+              <article class="[ card ]" data-fresh>
+                <a class="[ title ]" href="#">Write docs/TUI.md live section</a>
+                <div class="[ meta ]"></div>
+              </article>
+            </div>
+          </section>
+          <section class="[ column ]" aria-label="In progress">
+            <header><span class="[ label ]">In progress</span><span class="[ badge ]">1</span></header>
+            <div class="[ cards ]">
+              <article class="[ card ]">
+                <a class="[ title ]" href="#">Add SSE feed</a>
+                <div class="[ meta ]">
+                  <span class="[ status ]" data-state="waiting" data-dot-only><span class="[ visually-hidden ]">waiting on you</span></span>
+                  <span class="[ count ]" title="live sessions">3</span>
+                </div>
+              </article>
+            </div>
+          </section>
+          <section class="[ column ]" aria-label="Review">
+            <header><span class="[ label ]">Review</span><span class="[ badge ]">0</span></header>
+            <div class="[ cards ]"><p class="[ none ]">No tasks</p></div>
+          </section>
+        </div>
+      </section>
+
+      <section class="[ flow ] [ flow-space-m ]">
         <h2>Design tab: artifact cards and preview</h2>
         <p class="[ color-ink-muted ]">What a session published, newest first, beside the selected one rendered in a sandboxed frame. The frame never gets <code>allow-same-origin</code>.</p>
         <div class="[ with-sidebar ]" style="--sidebar-target: 16rem; block-size: 22rem; border: 1px solid var(--color-line); border-radius: var(--radius-md); overflow: hidden">

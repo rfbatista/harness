@@ -23,21 +23,27 @@
  */
 
 /**
- * The rail's live view of the project's sessions. Implemented by
- * infrastructure/rail-gateway.js (over /api) and
+ * The project's live view for the rail and the board: its tasks and its
+ * sessions, seeded by the page and followed over the project feed.
+ * Implemented by infrastructure/rail-gateway.js (over /api) and
  * infrastructure/memory-rail.js; both run testing/rail-contract.js.
  *
  * @typedef {import("./activity.js").RailSession} RailSession
  * @typedef {{ kind: "upsert", session: RailSession } | { kind: "deleted", id: string }} RailChange
+ * @typedef {RailChange | import("./board.js").TaskChange} ProjectChange
  *
  * @typedef {object} RailGateway
- * @property {(seed: unknown) => { projectId: string, sessions: RailSession[] }} decodeSeed
+ * @property {(seed: unknown) => { projectId: string, sessions: RailSession[], tasks: Task[] }} decodeSeed
  *           Reads the rail's embedded seed. Throws BAD_RESPONSE when malformed.
  * @property {(projectId: string) => Promise<RailSession[]>} listSessions
  *           The project's sessions now: after the feed resyncs.
- * @property {(projectId: string, onChange: (change: RailChange) => void,
+ * @property {(projectId: string) => Promise<Task[]>} listTasks
+ *           The project's tasks now: after the feed resyncs.
+ * @property {(projectId: string, onChange: (change: ProjectChange) => void,
  *             onStatus: (status: import("../../../shared/domain/feed.js").FeedStatus) => void) => () => void} follow
- *           Every change to the project's sessions; returns the unfollow.
+ *           Every change to the project's sessions and tasks; returns the
+ *           unfollow. Messages of other kinds, or ones it cannot read, are
+ *           not delivered.
  */
 
 export {};

@@ -2,6 +2,7 @@
 
 import { assert, test } from "../../../shared/testing/test.js";
 import { flush } from "../../../shared/testing/doubles.js";
+import { makeTask } from "./fixtures.js";
 
 const session = (id, ticketId, status) => ({ id, ticketId, status, pendingApprovals: 0 });
 
@@ -11,7 +12,7 @@ const session = (id, ticketId, status) => ({ id, ticketId, status, pendingApprov
  */
 export function railGatewayContract(name, makeSubject) {
   const contract = (title, fn) => test(`${name} · ${title}`, fn);
-  const world = () => ({ projectId: "p1", sessions: [session("a", "t1", "running")] });
+  const world = () => ({ projectId: "p1", sessions: [session("a", "t1", "running")], tasks: [makeTask()] });
 
   contract("lists the project's sessions", async () => {
     const { gateway } = makeSubject(world());
@@ -32,6 +33,29 @@ export function railGatewayContract(name, makeSubject) {
 
   contract("decodes the seed the rail embeds", () => {
     const subject = makeSubject(world());
-    assert.deepEqual(subject.gateway.decodeSeed(subject.seed), { projectId: "p1", sessions: [session("a", "t1", "running")] });
+    assert.deepEqual(subject.gateway.decodeSeed(subject.seed), { projectId: "p1", sessions: [session("a", "t1", "running")], tasks: [makeTask()] });
+  });
+
+  contract("a seed task it cannot read is left out; the rest still decode (the server may know a status this client does not)", () => {
+    const subject = makeSubject({ ...world(), tasks: [makeTask(), makeTask({ id: "t-odd", title: "Someday", status: "someday" })] });
+    assert.deepEqual(subject.gateway.decodeSeed(subject.seed).tasks.map((t) => t.id), ["t1"]);
+  });
+
+  contract("lists the project's tasks", async () => {
+    const { gateway } = makeSubject(world());
+    assert.deepEqual(await gateway.listTasks("p1"), [makeTask()]);
+  });
+
+  contract("follows ticket changes beside session changes", async () => {
+    const subject = makeSubject(world());
+    const seen = [];
+    const unfollow = subject.gateway.follow("p1", (c) => seen.push(c), () => {});
+    await flush();
+    const moved = makeTask({ status: "review" });
+    subject.emit({ kind: "task-upsert", task: moved });
+    subject.emit({ kind: "task-deleted", id: "t1" });
+    await flush();
+    assert.deepEqual(seen, [{ kind: "task-upsert", task: moved }, { kind: "task-deleted", id: "t1" }]);
+    unfollow();
   });
 }

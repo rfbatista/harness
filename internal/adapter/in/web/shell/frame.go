@@ -8,6 +8,8 @@ import (
 	"net/http"
 
 	"github.com/a-h/templ"
+
+	"operators-mcp/internal/domain"
 )
 
 // Frame is what the shell needs from a page.
@@ -41,16 +43,25 @@ type Rail struct {
 	Groups      []RailGroup
 	// Empty is shown when a project is selected but has no tasks.
 	Empty string
-	// Seed lets the browser keep the dots and counts live: the project's
-	// sessions, followed over the project's feed. Nil leaves the rail static.
+	// Current is the open task's id, "" when none: the live rail marks it.
+	Current string
+	// ReportsFeed: this rail is the page's feed (the project page), so it
+	// reports the connection to the stream bar. A page with its own feed
+	// (the task page) reports it itself.
+	ReportsFeed bool
+	// Seed lets the browser keep the rail and the board live: the project's
+	// tasks and sessions, followed over the project's feed. Nil leaves the
+	// rail static (no project selected).
 	Seed *RailSeed
 }
 
-// RailSeed is the project's sessions, as much as the rail needs of each (the
-// API's JSON shape). The tasks module's rail gateway decodes it.
+// RailSeed is the project's tasks and sessions, as much as the rail and the
+// board need of each (the API's JSON shapes). The tasks module's rail
+// gateway decodes it.
 type RailSeed struct {
-	ProjectID string        `json:"project_id"`
-	Sessions  []RailSession `json:"sessions"`
+	ProjectID string           `json:"project_id"`
+	Sessions  []RailSession    `json:"sessions"`
+	Tasks     []*domain.Ticket `json:"tasks"`
 }
 
 // RailSession is a session as the rail counts it.
@@ -116,9 +127,10 @@ func selectedAttrs(selected bool) templ.Attributes {
 	return templ.Attributes{}
 }
 
-// liveState is the rail's status dot: amber when a session waits on the
-// developer, teal when one is running, none when the task is quiet.
-func (l Link) liveState() string {
+// LiveState is the task's status dot, on the rail and on the board: amber
+// when a session waits on the developer, teal when one is running, none when
+// the task is quiet.
+func (l Link) LiveState() string {
 	switch {
 	case l.Attention:
 		return "waiting"
@@ -129,8 +141,8 @@ func (l Link) liveState() string {
 	}
 }
 
-// liveWord is the dot's accessible word.
-func (l Link) liveWord() string {
+// LiveWord is the dot's accessible word.
+func (l Link) LiveWord() string {
 	switch {
 	case l.Attention:
 		return "waiting on you"
@@ -146,7 +158,11 @@ func railAttrs(r Rail) templ.Attributes {
 	if r.Seed == nil {
 		return nil
 	}
-	return templ.Attributes{"x-data": "tasksRail", "data-seed": "rail-seed"}
+	attrs := templ.Attributes{"x-data": "tasksRail", "data-seed": "rail-seed"}
+	if r.ReportsFeed {
+		attrs["data-reports-feed"] = ""
+	}
+	return attrs
 }
 
 // hiddenUnless hides an element x-show controls until it has something to
