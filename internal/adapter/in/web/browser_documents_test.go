@@ -1,6 +1,7 @@
 package web
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -8,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/chromedp/cdproto/page"
 	"github.com/chromedp/chromedp"
 )
 
@@ -61,8 +63,9 @@ func TestDocumentsPageInTheBrowser(t *testing.T) {
 }
 
 // TestDocumentsPageFramesHTMLInTheBrowser: an HTML document renders in a
-// sandboxed frame whose script cannot touch the page, the frame has an
-// accessible name, and Tab leaves it for the bar's link.
+// sandboxed frame whose script runs (it reports in by postMessage) but cannot
+// touch the page, the frame has an accessible name, and Tab leaves it for
+// the bar's link.
 func TestDocumentsPageFramesHTMLInTheBrowser(t *testing.T) {
 	assets, err := NewAssets()
 	if err != nil {
@@ -87,9 +90,14 @@ func TestDocumentsPageFramesHTMLInTheBrowser(t *testing.T) {
 	var inlineHeading, tabLeftFrame bool
 	err = chromedp.Run(ctx,
 		chromedp.EmulateViewport(1280, 800),
+		// Installed before any document loads, so the page hears the framed
+		// script report in; the frame's own copy of it is harmless.
+		chromedp.ActionFunc(func(ctx context.Context) error {
+			_, err := page.AddScriptToEvaluateOnNewDocument(`window.__framed = []; addEventListener('message', e => window.__framed.push(e.data))`).Do(ctx)
+			return err
+		}),
 		chromedp.Navigate(srv.URL+"/projects/p1/tasks/t-feed/documents/d-page"),
-		chromedp.Poll(`!!document.querySelector('article iframe')`, nil, chromedp.WithPollingTimeout(10*time.Second)),
-		chromedp.Sleep(500*time.Millisecond), // let the framed script run
+		chromedp.Poll(`(window.__framed || []).includes('ran')`, nil, chromedp.WithPollingTimeout(10*time.Second)), // the framed script ran
 		chromedp.Evaluate(`document.querySelector('article iframe').getAttribute('sandbox')`, &sandbox),
 		chromedp.Evaluate(`document.querySelector('article iframe').getAttribute('title')`, &frameTitle),
 		chromedp.Evaluate(`document.title`, &pageTitle),

@@ -24,7 +24,7 @@ func documentsBoard() world {
 		{ID: "d-notes", ProjectID: "p1", Title: "Handoff notes", UpdatedAt: now.Add(-5 * time.Minute),
 			Content: "Read `feed.go` first.\n\n<script>alert(1)</script>\n\n[click](javascript:alert(2)) and [docs](https://example.com)\n"},
 		{ID: "d-page", ProjectID: "p1", Title: "Plan page", Format: domain.DocumentFormatHTML, UpdatedAt: now.Add(-6 * time.Hour),
-			Content: "<!doctype html>\n<html><head><meta charset=\"utf-8\"><title>Plan page</title></head><body><h1>The page</h1><script>document.title='pwned'</script></body></html>"},
+			Content: "<!doctype html>\n<html><head><meta charset=\"utf-8\"><title>Plan page</title></head><body><h1>The page</h1><script>try{parent.document.title='pwned'}catch(e){}parent.postMessage('ran','*')</script></body></html>"},
 	}}
 	return w
 }
