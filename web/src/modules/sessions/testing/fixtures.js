@@ -36,6 +36,7 @@ export function toDTO(session) {
     repository_id: session.repositoryId || undefined,
     task: session.task,
     agent_id: session.agentId || undefined,
+    mode: session.mode || undefined,
     status: session.status,
     pending_approvals: session.pendingApprovals,
     last_action: session.lastAction || undefined,

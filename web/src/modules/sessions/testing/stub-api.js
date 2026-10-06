@@ -46,6 +46,7 @@ export function stubApi(world) {
           ticketId: body.ticket_id,
           repositoryId: body.repository_id,
           agentId: body.agent_id,
+          mode: body.mode,
           prompt: body.prompt,
           autoAccept: body.auto_accept,
           size: body.size,

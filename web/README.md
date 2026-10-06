@@ -45,7 +45,7 @@ open http://127.0.0.1:8413/web/dev/task.html   # a task page, in memory
 Disable the browser cache (or use a no-cache server) while editing: modules are
 cached aggressively. On the dev page, `window.harness` simulates the server:
 `harness.finish("s-port")`, `harness.ask("s-suite")`, `harness.drop()`,
-`harness.reconnect()`.
+`harness.reconnect()`, `harness.publish("s-feed")`.
 
 ## Adding code
 

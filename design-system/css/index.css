@@ -59,6 +59,8 @@
 @import url("./blocks/stream-bar.css");
 @import url("./blocks/transcript.css");
 @import url("./blocks/terminal.css");
+@import url("./blocks/artifact-card.css");
+@import url("./blocks/preview.css");
 @import url("./blocks/palette.css");
 @import url("./blocks/toast.css");
 @import url("./blocks/empty.css");

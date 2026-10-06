@@ -28,9 +28,10 @@ func (f *sseFeed) followers() int {
 	return len(f.conns)
 }
 
-func (f *sseFeed) push(t *testing.T, change ports.SessionChange) {
+// pushRaw sends any JSON value to every follower, as one data: line.
+func (f *sseFeed) pushRaw(t *testing.T, v any) {
 	t.Helper()
-	b, err := json.Marshal(change)
+	b, err := json.Marshal(v)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -40,6 +41,8 @@ func (f *sseFeed) push(t *testing.T, change ports.SessionChange) {
 		c <- b
 	}
 }
+
+func (f *sseFeed) push(t *testing.T, change ports.SessionChange) { f.pushRaw(t, change) }
 
 func (f *sseFeed) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/event-stream")

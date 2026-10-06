@@ -130,6 +130,7 @@ func TestRunsAs(t *testing.T) {
 		{&domain.Session{AgentID: "a1"}, "Reviewer"},
 		{&domain.Session{Mode: domain.SessionModeArchitect}, "plain claude as architect"},
 		{&domain.Session{AgentID: "a1", Mode: domain.SessionModeArchitect}, "Reviewer as architect"},
+		{&domain.Session{AgentID: "a1", Mode: domain.SessionMode("design")}, "Reviewer as design"},
 	} {
 		if got := RunsAs(c.s, names); got != c.want {
 			t.Errorf("RunsAs(%+v) = %q, want %q", c.s, got, c.want)

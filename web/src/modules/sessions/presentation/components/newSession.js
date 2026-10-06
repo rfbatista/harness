@@ -15,7 +15,7 @@ export const newSession = ({ gateway }) => (projectId = "", ticketId = "") => ({
   ticketId,
   prompt: "",
   agentId: "",
-  /** "" or "architect": a role on top of the agent. */
+  /** "", "architect" or "design": a role on top of the agent. */
   mode: "",
   repositoryId: "",
   autoAccept: "off",
@@ -78,15 +78,18 @@ export const newSession = ({ gateway }) => (projectId = "", ticketId = "") => ({
   get architect() {
     return this.mode === "architect";
   },
+  get design() {
+    return this.mode === "design";
+  },
   get promptPlaceholder() {
-    return this.architect
-      ? "Optional — the architect starts from the task's title and description. Add anything it should know."
-      : "What should the agent do on this task? Leave empty to open claude and type in its terminal.";
+    if (this.architect) return "Optional — the architect starts from the task's title and description. Add anything it should know.";
+    if (this.design) return "What should it design? Components, screens, images or videos: each one it publishes appears in the Design tab.";
+    return "What should the agent do on this task? Leave empty to open claude and type in its terminal.";
   },
   get modeHint() {
-    return this.architect
-      ? "Adds the task-architecture skill: it writes per-application specs as task documents and starts a planning session for each."
-      : "Runs the agent as it is.";
+    if (this.architect) return "Adds the task-architecture skill: it writes per-application specs as task documents and starts a planning session for each.";
+    if (this.design) return "Adds the design skill: the agent publishes pages, images and videos as it works; they show live in the Design tab.";
+    return "Runs the agent as it is.";
   },
 
   repositoryChanged() {

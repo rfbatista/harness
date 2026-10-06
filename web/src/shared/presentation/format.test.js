@@ -1,5 +1,5 @@
 import { assert, file, test } from "../testing/test.js";
-import { count, relativeTime } from "./format.js";
+import { bytes, count, relativeTime } from "./format.js";
 
 file("shared/presentation/format");
 
@@ -16,4 +16,13 @@ test("relative time is compact and never negative", () => {
 test("count pluralizes", () => {
   assert.equal(count(1, "session"), "1 session");
   assert.equal(count(0, "session"), "0 sessions");
+});
+
+test("bytes reads like a file manager", () => {
+  assert.equal(bytes(0), "0 B");
+  assert.equal(bytes(999), "999 B");
+  assert.equal(bytes(1024), "1.0 KB");
+  assert.equal(bytes(1536), "1.5 KB");
+  assert.equal(bytes(3 * 1024 * 1024), "3.0 MB");
+  assert.equal(bytes(2.5 * 1024 ** 3), "2.5 GB");
 });

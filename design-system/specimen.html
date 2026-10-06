@@ -213,6 +213,40 @@
         </div>
       </section>
 
+      <section class="[ flow ] [ flow-space-m ]">
+        <h2>Design tab: artifact cards and preview</h2>
+        <p class="[ color-ink-muted ]">What a session published, newest first, beside the selected one rendered in a sandboxed frame. The frame never gets <code>allow-same-origin</code>.</p>
+        <div class="[ with-sidebar ]" style="--sidebar-target: 16rem; block-size: 22rem; border: 1px solid var(--color-line); border-radius: var(--radius-md); overflow: hidden">
+          <div class="[ list ] [ divide-end ]" role="listbox" aria-label="Artifacts">
+            <div class="[ artifact-card ]" role="option" aria-selected="true" data-fresh>
+              <span class="[ title ]">Pricing card</span><span class="[ badge ]">page</span>
+              <span class="[ note ]">Tighter spacing on the plan names; the CTA now uses the primary button.</span>
+              <span class="[ meta ]"><span>rev 3</span><span>now</span></span>
+            </div>
+            <div class="[ artifact-card ]" role="option" aria-selected="false">
+              <span class="[ title ]">hero.png</span><span class="[ badge ]">image</span>
+              <span class="[ note ]"></span>
+              <span class="[ meta ]"><span>rev 1</span><span>12m</span></span>
+            </div>
+            <div class="[ artifact-card ]" role="option" aria-selected="false">
+              <span class="[ title ]">Storybook</span><span class="[ badge ]">dev server</span>
+              <span class="[ note ]">http://localhost:6006</span>
+              <span class="[ meta ]"><span>rev 1</span><span>1h</span></span>
+            </div>
+          </div>
+          <div class="[ preview ]" data-kind="page">
+            <div class="[ stage ]">
+              <iframe sandbox="allow-scripts" title="Pricing card, revision 3" srcdoc="<p style='font: 14px system-ui; padding: 16px'>Pricing card (specimen)</p>"></iframe>
+            </div>
+            <div class="[ bar ]">
+              <span class="[ status ]" data-state="live">live</span>
+              <span class="[ grow ]">Tab leaves the frame; J and K move the list</span>
+              <a href="#">Open in a new tab</a>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <section class="[ switcher ]" style="--switcher-threshold: 44rem">
         <div class="[ flow ]">
           <h2>Fields</h2>

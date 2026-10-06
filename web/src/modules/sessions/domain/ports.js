@@ -17,7 +17,7 @@
  * @property {string} ticketId
  * @property {string} repositoryId  where its worktree is cut
  * @property {string} agentId       "" runs plain claude
- * @property {""|"architect"} [mode] a role on top of the agent: "architect" shapes the task into specs and delegates them
+ * @property {""|"architect"|"design"} [mode] a role on top of the agent: "architect" shapes the task into specs and delegates them; "design" publishes components and media to the Design tab
  * @property {string} prompt        the optional first message; "" opens claude waiting for you
  * @property {"off"|"edits"|"all"} autoAccept  which tool calls run without asking
  * @property {string} [baseBranch]  the branch its worktree branches off; "" means the checkout's HEAD
@@ -87,6 +87,29 @@
  *
  * @typedef {object} TerminalGateway
  * @property {(sessionId: string, handlers: TerminalHandlers) => TerminalConnection} attach
+ */
+
+/**
+ * A session's published artifacts and the stream that announces them.
+ * Implemented by infrastructure/artifacts-gateway.js (GET /api/artifacts and
+ * the session's SSE stream) and infrastructure/memory-artifacts.js (tests and
+ * web/dev). Both run testing/artifact-contract.js.
+ *
+ * @typedef {import("./artifact.js").Artifact} Artifact
+ * @typedef {{ kind: "published", artifact: Artifact } | { kind: "ended" }} ArtifactEvent
+ *           published: a first publish or a re-publish (compare revision);
+ *           ended: the session is over, no more publishes will come.
+ *
+ * @typedef {object} ArtifactGateway
+ * @property {(sessionId: string, signal?: AbortSignal) => Promise<Artifact[]>} list
+ *           The session's artifacts, most recently updated first. A session
+ *           without any, or an unknown one, lists [].
+ * @property {(sessionId: string,
+ *             onEvent: (event: ArtifactEvent) => void,
+ *             onStatus: (status: FeedStatus) => void) => () => void} follow
+ *           Follows the session's event stream for publishes until the
+ *           returned function is called. Other event types on the stream are
+ *           not delivered.
  */
 
 export {};

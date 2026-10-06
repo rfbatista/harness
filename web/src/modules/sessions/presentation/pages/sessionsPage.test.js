@@ -5,6 +5,7 @@ import { mount, seededElement } from "../../../../shared/testing/alpine.js";
 import { flush } from "../../../../shared/testing/doubles.js";
 import { assert, file, test } from "../../../../shared/testing/test.js";
 import { memoryGateway } from "../../infrastructure/memory-gateway.js";
+import { makeArtifact } from "../../testing/artifact-fixtures.js";
 import { makeSession, T0, toDTO } from "../../testing/fixtures.js";
 import { sessionsPage } from "./sessionsPage.js";
 
@@ -53,6 +54,15 @@ test("follows the feed: changes regroup the list, a deleted selection clears", a
   memory.remove("turn");
   assert.equal(instance.selectedId, null);
   assert.equal(instance.hasSelection, false);
+  instance.destroy();
+});
+
+test("a session that turns terminal on the feed is announced to its Design panel, so it stops following", () => {
+  const { instance, memory, dispatched } = setup();
+  memory.update("turn", { status: "done" });
+  assert.deepEqual(dispatched.filter((d) => d.name === "session-ended"), [{ name: "session-ended", detail: { id: "turn" } }]);
+  memory.update("run", { status: "idle" });
+  assert.equal(dispatched.filter((d) => d.name === "session-ended").length, 1, "only terminal changes are announced");
   instance.destroy();
 });
 
@@ -185,6 +195,46 @@ test("the App tab swaps the agent's terminal for the session's App panel", () =>
   instance.showAgent();
   instance.select("live");
   assert.deepEqual(instance.terminalIds, ["live"]);
+  instance.destroy();
+});
+
+test("the Design tab mounts the panel for the selected session, alive or ended, and the terminal detaches", () => {
+  const { instance, tick } = setup([
+    makeSession({ id: "live", status: "idle" }),
+    makeSession({ id: "over", status: "done", updatedAt: new Date(T0.getTime() - 60_000) }),
+  ]);
+  tick();
+  assert.deepEqual(instance.designPanels, [{ key: "live", sessionId: "live", live: true }], "mounted behind the Agent tab too, so publishes are counted");
+  instance.showDesign();
+  assert.ok(instance.designTabSelected && instance.showingDesign);
+  assert.deepEqual(instance.terminalIds, []);
+  assert.deepEqual(instance.appPanels, []);
+  instance.select("over");
+  assert.deepEqual(instance.designPanels, [{ key: "over", sessionId: "over", live: false }]);
+  instance.startCreating();
+  assert.deepEqual(instance.designPanels, [], "the form replaces the detail");
+  instance.destroy();
+});
+
+test("publishes behind another tab count on the Design tab until it is opened; each one is announced", () => {
+  const { instance, tick } = setup();
+  tick();
+  const hero = makeArtifact({ id: "a1", title: "Hero", revision: 1 });
+  instance.artifactPublished({ detail: { artifact: hero, isNew: true } });
+  assert.equal(instance.designBadge, "1");
+  assert.equal(instance.announcement, "New artifact: Hero");
+  instance.artifactPublished({ detail: { artifact: makeArtifact({ id: "a1", title: "Hero", revision: 2 }), isNew: false } });
+  assert.equal(instance.designBadge, "2");
+  assert.equal(instance.announcement, "Artifact updated: Hero, revision 2");
+  instance.showDesign();
+  assert.equal(instance.designBadge, "", "opening the tab clears the count");
+  instance.artifactPublished({ detail: { artifact: makeArtifact({ id: "a2", title: "Card" }), isNew: true } });
+  assert.equal(instance.designBadge, "", "nothing to count while the tab is in front");
+  instance.showAgent();
+  instance.artifactPublished({ detail: { artifact: makeArtifact({ id: "a3", title: "Late" }), isNew: true } });
+  assert.equal(instance.designBadge, "1");
+  instance.select("run");
+  assert.equal(instance.designBadge, "", "another session, another count");
   instance.destroy();
 });
 
