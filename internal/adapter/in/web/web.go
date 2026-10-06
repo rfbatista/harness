@@ -82,6 +82,9 @@ func NewHandler(deps Deps, assets *Assets, fallback http.Handler) http.Handler {
 	mux.Handle("GET /projects/{project}/repositories/{repository}/env", s.page(projectPages.EnvFileList))
 	mux.Handle("GET /projects/{project}/repositories/{repository}/history", s.page(historyPages.Page))
 	mux.Handle("GET /projects/{project}/repositories/{repository}/history/{commit}", s.page(historyPages.Page))
+	mux.Handle("GET /projects/{project}/documents", s.page(taskPages.ProjectDocuments))
+	mux.Handle("GET /projects/{project}/documents/{document}", s.page(taskPages.ProjectDocuments))
+	mux.Handle("GET /projects/{project}/documents/{document}/view", s.page(taskPages.ProjectDocumentView))
 	mux.HandleFunc("GET /projects/{project}/{$}", toProject)
 	mux.HandleFunc("GET /projects/{project}/sessions", toProject) // the old page; sessions now live under their task
 	mux.Handle("GET /projects/{project}/tasks/new", s.page(taskPages.New))

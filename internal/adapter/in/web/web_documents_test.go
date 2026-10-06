@@ -278,3 +278,143 @@ func TestShellLinksTheProjectDocuments(t *testing.T) {
 		}
 	}
 }
+
+// libraryBoard is documentsBoard plus a project document linked to no task,
+// d-page linked to a second task as well, and another project's document.
+func libraryBoard() world {
+	w := documentsBoard()
+	w.docs[""] = []*domain.Document{
+		{ID: "d-arch", ProjectID: "p1", Title: "Architecture", Format: domain.DocumentFormatMarkdown, Scope: domain.DocumentScopeProject, UpdatedAt: now.Add(-time.Minute), Content: "# Boundaries\n\nOne server."},
+		{ID: "d-far", ProjectID: "p2", Title: "Not ours", Format: domain.DocumentFormatMarkdown, Scope: domain.DocumentScopeProject, UpdatedAt: now},
+	}
+	w.docs["t-docs"] = append(w.docs["t-docs"], w.docs["t-feed"][2]) // d-page, on two tasks
+	return w
+}
+
+func TestProjectDocumentsPageListsProjectDocumentsNewestFirst(t *testing.T) {
+	rec := get(t, newTestHandler(t, libraryBoard()), "/projects/p1/documents")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status %d: %s", rec.Code, rec.Body)
+	}
+	body := rec.Body.String()
+	for _, want := range []string{
+		"2 documents",
+		`aria-label="Documents of this project"`,
+		`href="/projects/p1/documents/d-arch" aria-current="page"`, // newest first, open
+		`href="/projects/p1/documents/d-page"`,
+		"<h1>Boundaries</h1>", // rendered as Markdown
+		"<title>Architecture · coding_pool",
+		"Not linked to a task",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("page lacks %q", want)
+		}
+	}
+	for _, absent := range []string{"d-plan", "d-notes", "Not ours", `x-data="tasksDocumentWatch"`, "tasksDocumentScope"} {
+		if strings.Contains(body, absent) {
+			t.Errorf("page has %q: a task document, another project's document, a watch, or a move on an unlinked document", absent)
+		}
+	}
+	if strings.Index(body, "d-arch") > strings.Index(body, "d-page") {
+		t.Error("documents are not newest first")
+	}
+}
+
+// A document linked to two tasks is one document in the library, and the
+// open one names both tasks, each a link to that task's page with it open,
+// and offers the move back.
+func TestProjectDocumentsPageListsEachDocumentOnceAndNamesItsTasks(t *testing.T) {
+	body := get(t, newTestHandler(t, libraryBoard()), "/projects/p1/documents/d-page").Body.String()
+	if n := strings.Count(body, `href="/projects/p1/documents/d-page"`); n != 1 {
+		t.Fatalf("d-page listed %d times", n)
+	}
+	for _, want := range []string{
+		`href="/projects/p1/tasks/t-feed/documents/d-page"`, "Add SSE feed",
+		`href="/projects/p1/tasks/t-docs/documents/d-page"`, "Write docs",
+		`data-document-id="d-page" data-scope="project" data-title="Plan page" x-data="tasksDocumentScope"`,
+		`aria-label="Move Plan page back to task"`, `>Move back to task</button>`,
+		`data-scope-word x-text="word">Project document</span>`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("page lacks %q", want)
+		}
+	}
+}
+
+func TestProjectDocumentsPageFramesAnHTMLDocument(t *testing.T) {
+	rec := get(t, newTestHandler(t, libraryBoard()), "/projects/p1/documents/d-page")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status %d: %s", rec.Code, rec.Body)
+	}
+	body := rec.Body.String()
+	for _, want := range []string{
+		`<iframe sandbox="allow-scripts" referrerpolicy="no-referrer"`,
+		`src="/projects/p1/documents/d-page/view?v=`,
+		`title="Plan page"`,
+		"leaves the frame",
+		"<title>Plan page · coding_pool",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("page lacks %q", want)
+		}
+	}
+	for _, inline := range []string{"<h1>The page</h1>", "pwned"} {
+		if strings.Contains(body, inline) {
+			t.Errorf("an HTML document's body reached the page inline: %q", inline)
+		}
+	}
+}
+
+func TestProjectDocumentsPageRefusesWhatIsNotAProjectDocumentOfTheProject(t *testing.T) {
+	h := newTestHandler(t, libraryBoard())
+	for _, path := range []string{
+		"/projects/p1/documents/d-plan", // a task document
+		"/projects/p1/documents/d-far",  // another project's
+		"/projects/p1/documents/missing",
+		"/projects/p9/documents",
+	} {
+		if rec := get(t, h, path); rec.Code != http.StatusNotFound {
+			t.Errorf("%s: status %d, want 404", path, rec.Code)
+		}
+	}
+}
+
+func TestProjectDocumentsPageWithNoneSaysHowTheyArrive(t *testing.T) {
+	rec := get(t, newTestHandler(t, documentsBoard()), "/projects/p2/documents")
+	body := rec.Body.String()
+	if rec.Code != http.StatusOK || !strings.Contains(body, "No document has been moved to this project yet") || !strings.Contains(body, "move_document_to_project") {
+		t.Fatalf("status %d:\n%s", rec.Code, body)
+	}
+}
+
+func TestProjectDocumentViewServesTheHTMLUnderTheArtifactCSP(t *testing.T) {
+	w := libraryBoard()
+	rec := get(t, newTestHandler(t, w), "/projects/p1/documents/d-page/view?v=1")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status %d: %s", rec.Code, rec.Body)
+	}
+	if got, want := rec.Body.String(), w.docs["t-feed"][2].Content; got != want {
+		t.Fatalf("body altered:\n%s", got)
+	}
+	for k, want := range map[string]string{
+		"Content-Type":            "text/html; charset=utf-8",
+		"Content-Security-Policy": httpapi.ArtifactCSP,
+		"X-Content-Type-Options":  "nosniff",
+		"Content-Disposition":     "inline",
+		"Cache-Control":           "no-store",
+	} {
+		if got := rec.Header().Get(k); got != want {
+			t.Errorf("%s = %q, want %q", k, got, want)
+		}
+	}
+	for _, path := range []string{
+		"/projects/p1/documents/d-plan/view", // task document
+		"/projects/p1/documents/d-arch/view", // markdown has no page
+		"/projects/p1/documents/d-far/view",  // another project
+		"/projects/p1/documents/missing/view",
+	} {
+		if rec := get(t, newTestHandler(t, w), path); rec.Code != http.StatusNotFound {
+			t.Errorf("%s: status %d, want 404", path, rec.Code)
+		}
+	}
+}
