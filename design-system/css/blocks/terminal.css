@@ -1,8 +1,10 @@
 /*
  * Terminal — a session's PTY, drawn by xterm.js, with a one-line bar under it
  * (connection, window title, reconnect). It fills the space it is given; the
- * screen element is what xterm fits its rows and columns to.
- * <div class="terminal"><div class="screen">xterm</div><div class="bar">…</div></div>
+ * screen element is what xterm fits its rows and columns to. xterm's viewport
+ * scrolls the history; the screen carries data-history while there is some
+ * (set by the screen script), and then keeps xterm's scrollbar on and themed.
+ * <div class="terminal"><div class="screen" data-history>xterm</div><div class="bar">…</div></div>
  */
 
 @layer blocks {
@@ -18,9 +20,32 @@
       padding: var(--space-s) var(--space-m);
       overflow: hidden;
       cursor: text;
+      touch-action: pan-y; /* a vertical pan scrolls the history, not the page */
 
       & .xterm {
         block-size: 100%;
+      }
+
+      /* xterm 6 shows its scrollbar only while scrolling, then fades it. With
+         history behind the screen the pane keeps it on, so a viewer can see
+         there is more above and where they are in it. xterm's own rules are
+         unlayered, hence the !important, as for the background below. */
+      &[data-history] .xterm-scrollable-element > .scrollbar.vertical {
+        opacity: 1 !important;
+        pointer-events: auto !important;
+        transition: none !important;
+      }
+
+      /* The slider in the design's colors, light and dark, as a thin rounded
+         bar in the middle of xterm's track (xterm sizes it inline). */
+      & .xterm-scrollable-element > .scrollbar.vertical > .slider {
+        inline-size: 6px !important;
+        inset-inline-start: 4px !important;
+        border-radius: var(--radius-round);
+        background: var(--color-line-strong) !important;
+
+        &:hover { background: var(--color-line-control) !important; }
+        &.active { background: var(--color-ink-faint) !important; }
       }
 
       /* xterm paints its theme background inline (xterm 6: on the scrollable

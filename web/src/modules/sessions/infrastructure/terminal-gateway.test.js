@@ -85,11 +85,20 @@ test("snapshot, output, title and exit arrive as the protocol sends them", () =>
   socket.drop();
 
   assert.equal(seen.opened, 1);
-  assert.deepEqual(seen.snapshots, [{ screen: "hi", cursorX: 2, cursorY: 0, altScreen: false, cols: 100, rows: 30, title: "claude", log: false }]);
+  assert.deepEqual(seen.snapshots, [{ screen: "hi", scrollback: "", cursorX: 2, cursorY: 0, altScreen: false, cols: 100, rows: 30, title: "claude", log: false }]);
   assert.equal(seen.output, "more output");
   assert.deepEqual(seen.titles, ["✳ working"]);
   assert.deepEqual(seen.exits, [3]);
   assert.equal(seen.closed, 1);
+});
+
+test("a snapshot's scrollback arrives with it; a server that sends none means no history", () => {
+  const { socket, seen } = attach();
+  socket.open();
+  socket.text({ type: "snapshot", snapshot: { screen: "now", scrollback: "older\nold", size: { cols: 80, rows: 24 } } });
+  socket.text({ type: "snapshot", snapshot: { screen: "now", size: { cols: 80, rows: 24 } } });
+  assert.equal(seen.snapshots[0].scrollback, "older\nold");
+  assert.equal(seen.snapshots[1].scrollback, "");
 });
 
 test("keys, pastes, resizes and resyncs go out as protocol messages", () => {

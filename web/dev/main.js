@@ -20,8 +20,12 @@ const seed = memoryGateway().gateway.decodeSeed(JSON.parse(document.getElementBy
 const memory = memoryGateway({ projects: [seed.projectId], sessions: seed.sessions });
 
 registerShared(Alpine, { prefs: preferences() });
-// A terminal that greets and echoes what you type, in place of the server's PTY.
-const terminals = memoryTerminals({ greeting: "dev terminal: type, and it echoes back" });
+// A terminal that greets and echoes what you type, in place of the server's
+// PTY, with history above the screen as the server's snapshot would carry it.
+const terminals = memoryTerminals({
+  greeting: "dev terminal: type, and it echoes back",
+  history: Array.from({ length: 60 }, (_, i) => `\x1b[2m${String(i + 1).padStart(2)}\x1b[0m earlier output, line ${i + 1}`),
+});
 const artifacts = memoryArtifacts();
 registerSessions(Alpine, { gateway: memory.gateway, artifacts: artifacts.gateway, terminals: terminals.gateway, createScreen, clock: systemClock });
 

@@ -84,6 +84,7 @@ export function terminalGateway({
 export function toSnapshot(s = {}) {
   return {
     screen: s.screen ?? "",
+    scrollback: s.scrollback ?? "",
     cursorX: s.cursor_x ?? 0,
     cursorY: s.cursor_y ?? 0,
     altScreen: s.alt_screen === true,

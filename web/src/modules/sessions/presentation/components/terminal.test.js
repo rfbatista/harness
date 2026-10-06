@@ -31,8 +31,8 @@ function fakeScreen() {
   return { screen, create };
 }
 
-function setup() {
-  const terms = memoryTerminals({ greeting: "claude is ready" });
+function setup(history = []) {
+  const terms = memoryTerminals({ greeting: "claude is ready", history });
   const { screen, create } = fakeScreen();
   let resized = null;
   const el = document.createElement("div");
@@ -57,6 +57,12 @@ test("draws the snapshot, then takes the pane's size and focuses", async () => {
   assert.equal(screen.drawn[0].screen, "claude is ready");
   assert.deepEqual(terms.sent.get("s1").at(-1), { type: "resize", size: { cols: 132, rows: 40 } });
   assert.ok(screen.focused > 0, "the terminal takes focus once drawn");
+});
+
+test("the snapshot's history reaches the screen with it, so the screen can draw it above the live rows", async () => {
+  const { screen } = setup(["$ go test ./...", "ok"]);
+  await flush();
+  assert.equal(screen.drawn[0].scrollback, "$ go test ./...\nok");
 });
 
 test("typing goes to the PTY and its output comes back to the screen", async () => {
