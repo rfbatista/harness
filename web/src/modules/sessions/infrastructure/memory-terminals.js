@@ -5,8 +5,11 @@ import { toKeyEvent } from "./terminal-keys.js";
 
 const encoder = new TextEncoder();
 
-/** @param {{ greeting?: string }} [options] */
-export function memoryTerminals({ greeting = "claude is ready" } = {}) {
+/**
+ * @param {{ greeting?: string, history?: string[] }} [options]
+ *        history: lines that scrolled off before attaching, oldest first; the snapshot's scrollback
+ */
+export function memoryTerminals({ greeting = "claude is ready", history = [] } = {}) {
   /** Per session: what the page sent. */
   const sent = new Map();
   const open = new Map();
@@ -19,7 +22,17 @@ export function memoryTerminals({ greeting = "claude is ready" } = {}) {
       open.set(sessionId, handlers);
       queueMicrotask(() => {
         handlers.onOpen?.();
-        handlers.onSnapshot({ screen: greeting, cursorX: greeting.length, cursorY: 0, altScreen: false, cols: 80, rows: 24, title: "" });
+        handlers.onSnapshot({
+          screen: greeting,
+          scrollback: history.join("\n"),
+          cursorX: greeting.length,
+          cursorY: 0,
+          altScreen: false,
+          cols: 80,
+          rows: 24,
+          title: "",
+          log: false,
+        });
       });
       return {
         key(domEvent) {

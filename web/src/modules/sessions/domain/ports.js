@@ -62,6 +62,9 @@
  *
  * @typedef {object} TerminalSnapshot  the screen as it is when attaching
  * @property {string} screen   one line per row, with its styles (SGR sequences)
+ * @property {string} scrollback  the main screen's lines that scrolled off the top, oldest first, rendered
+ *                                like screen; "" when there is no history: the alternate screen, a log, a
+ *                                server that has none, or one that does not send the field yet
  * @property {number} cursorX
  * @property {number} cursorY
  * @property {boolean} altScreen
