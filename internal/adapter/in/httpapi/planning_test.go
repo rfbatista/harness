@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"operators-mcp/internal/adapter/out/persistence/sqlite"
 	"operators-mcp/internal/application/planning"
@@ -223,5 +224,88 @@ func TestHTTP_DocumentFormatOnTheWire(t *testing.T) {
 	list := out["documents"].([]any)
 	if code != 200 || len(list) != 1 || list[0].(map[string]any)["format"] != "html" || list[0].(map[string]any)["updated_at"] == nil {
 		t.Fatalf("list_ticket_documents: %d %v", code, out)
+	}
+}
+
+func TestHTTP_DocumentScopeOnTheWire(t *testing.T) {
+	h, pid := newPlanningHandler(t)
+	router := NewRouter(h)
+	call := func(method, path string, body map[string]any) (int, map[string]any) {
+		t.Helper()
+		var req *http.Request
+		if body != nil {
+			b, _ := json.Marshal(body)
+			req = httptest.NewRequest(method, path, bytes.NewReader(b))
+		} else {
+			req = httptest.NewRequest(method, path, nil)
+		}
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+		var out map[string]any
+		_ = json.Unmarshal(rec.Body.Bytes(), &out)
+		return rec.Code, out
+	}
+	docOf := func(out map[string]any) map[string]any { return out["document"].(map[string]any) }
+
+	// A document created at the project is a project document; scope is explicit when sent.
+	code, out := call(http.MethodPost, "/api/create_document", map[string]any{"project_id": pid, "title": "Architecture", "content": "# a"})
+	if code != 200 || docOf(out)["scope"] != "project" {
+		t.Fatalf("create without scope: %d %v", code, out)
+	}
+	archID := docOf(out)["id"].(string)
+	code, out = call(http.MethodPost, "/api/create_document", map[string]any{"project_id": pid, "title": "Plan", "content": "# p", "scope": "task"})
+	if code != 200 || docOf(out)["scope"] != "task" || docOf(out)["format"] != "markdown" {
+		t.Fatalf("create with scope: %d %v", code, out)
+	}
+	planID := docOf(out)["id"].(string)
+	code, out = call(http.MethodPost, "/api/create_document", map[string]any{"project_id": pid, "title": "X", "scope": "global"})
+	if code != 400 || out["code"] != "INVALID_INPUT" {
+		t.Fatalf("unknown scope on create: %d %v", code, out)
+	}
+
+	// The filter: none lists every document, as today; unknown is INVALID_INPUT.
+	code, out = call(http.MethodGet, "/api/list_documents?project_id="+pid, nil)
+	if code != 200 || len(out["documents"].([]any)) != 2 {
+		t.Fatalf("unfiltered list: %d %v", code, out)
+	}
+	code, out = call(http.MethodGet, "/api/list_documents?project_id="+pid+"&scope=project", nil)
+	list := out["documents"].([]any)
+	if code != 200 || len(list) != 1 || list[0].(map[string]any)["id"] != archID {
+		t.Fatalf("project filter: %d %v", code, out)
+	}
+	code, out = call(http.MethodGet, "/api/list_documents?project_id="+pid+"&scope=global", nil)
+	if code != 400 || out["code"] != "INVALID_INPUT" {
+		t.Fatalf("unknown scope filter: %d %v", code, out)
+	}
+
+	// A move is a new version the task page's watch notices; the link stays;
+	// the same scope again is not a new version.
+	_, out = call(http.MethodPost, "/api/create_ticket", map[string]any{"project_id": pid, "title": "T"})
+	ticketID := out["ticket"].(map[string]any)["id"].(string)
+	call(http.MethodPost, "/api/link_document_to_ticket", map[string]any{"ticket_id": ticketID, "document_id": planID})
+	_, out = call(http.MethodGet, "/api/get_document?document_id="+planID, nil)
+	before := docOf(out)["updated_at"]
+	time.Sleep(2 * time.Millisecond)
+	code, out = call(http.MethodPost, "/api/set_document_scope", map[string]any{"document_id": planID, "scope": "project"})
+	if code != 200 || docOf(out)["scope"] != "project" || docOf(out)["updated_at"] == before {
+		t.Fatalf("set_document_scope: %d %v (before %v)", code, out, before)
+	}
+	after := docOf(out)["updated_at"]
+	code, out = call(http.MethodPost, "/api/set_document_scope", map[string]any{"document_id": planID, "scope": "project"})
+	if code != 200 || docOf(out)["updated_at"] != after {
+		t.Fatalf("idempotent move wrote: %d %v", code, out)
+	}
+	code, out = call(http.MethodGet, "/api/list_ticket_documents?ticket_id="+ticketID, nil)
+	list = out["documents"].([]any)
+	if code != 200 || len(list) != 1 || list[0].(map[string]any)["scope"] != "project" {
+		t.Fatalf("the task lost the moved document: %d %v", code, out)
+	}
+	code, out = call(http.MethodPost, "/api/set_document_scope", map[string]any{"document_id": "missing", "scope": "task"})
+	if code != 404 || out["code"] != "DOCUMENT_NOT_FOUND" {
+		t.Fatalf("missing document: %d %v", code, out)
+	}
+	code, out = call(http.MethodPost, "/api/set_document_scope", map[string]any{"document_id": planID, "scope": "global"})
+	if code != 400 || out["code"] != "INVALID_INPUT" {
+		t.Fatalf("unknown scope: %d %v", code, out)
 	}
 }
