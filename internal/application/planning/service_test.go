@@ -3,6 +3,7 @@ package planning_test
 import (
 	"context"
 	"errors"
+	"sync"
 	"testing"
 
 	"operators-mcp/internal/adapter/out/persistence/sqlite"
@@ -251,5 +252,121 @@ func TestUpdateTicket_IsTheFullPatch(t *testing.T) {
 	}
 	if _, err := svc.UpdateTicket(context.Background(), tk.ID, "", "", ""); code(err) != "INVALID_INPUT" {
 		t.Fatalf("blank title: want INVALID_INPUT, got %v", err)
+	}
+}
+
+// recorder is a ports.TicketAnnouncer that keeps what it was told, in order.
+type recorder struct {
+	mu      sync.Mutex
+	changes []recorded
+}
+
+type recorded struct {
+	ticket  domain.Ticket
+	deleted bool
+}
+
+func (r *recorder) AnnounceTicket(tk *domain.Ticket, deleted bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.changes = append(r.changes, recorded{ticket: *tk, deleted: deleted})
+}
+
+func (r *recorder) all() []recorded {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return append([]recorded(nil), r.changes...)
+}
+
+// Every create, update and delete is announced with the ticket as it is after
+// the change; a patch that changes nothing is not.
+func TestTickets_ChangesAreAnnounced(t *testing.T) {
+	svc, pid := newService(t)
+	rec := &recorder{}
+	svc.Announcer = rec
+	ctx := context.Background()
+
+	tk, err := svc.CreateTicket(ctx, pid, "Ship it", "", domain.TicketStatusTodo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.PatchTicket(ctx, tk.ID, ports.TicketPatch{Status: statusp(domain.TicketStatusInProgress)}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.PatchTicket(ctx, tk.ID, ports.TicketPatch{Status: statusp(domain.TicketStatusInProgress)}); err != nil {
+		t.Fatal(err) // no-op
+	}
+	if _, err := svc.PatchTicket(ctx, tk.ID, ports.TicketPatch{Title: strp("")}); code(err) != "INVALID_INPUT" {
+		t.Fatal(err) // rejected
+	}
+	if _, err := svc.UpdateTicket(ctx, tk.ID, "Ship it now", "d", domain.TicketStatusReview); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.DeleteTicket(ctx, tk.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	got := rec.all()
+	if len(got) != 4 {
+		t.Fatalf("announced %d changes, want create, patch, update, delete: %+v", len(got), got)
+	}
+	if got[0].ticket.ID != tk.ID || got[0].ticket.Status != domain.TicketStatusTodo || got[0].deleted {
+		t.Fatalf("create announced as %+v", got[0])
+	}
+	if got[1].ticket.Status != domain.TicketStatusInProgress || got[1].deleted {
+		t.Fatalf("patch announced as %+v", got[1])
+	}
+	if got[2].ticket.Title != "Ship it now" || got[2].ticket.Status != domain.TicketStatusReview {
+		t.Fatalf("update announced as %+v", got[2])
+	}
+	if !got[3].deleted || got[3].ticket.ID != tk.ID || got[3].ticket.ProjectID != pid {
+		t.Fatalf("delete announced as %+v", got[3])
+	}
+}
+
+// With no announcer (tests, the MCP-only server) nothing is announced and
+// nothing panics.
+func TestTickets_NoAnnouncerIsFine(t *testing.T) {
+	svc, pid := newService(t)
+	tk, err := svc.CreateTicket(context.Background(), pid, "T", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.PatchTicket(context.Background(), tk.ID, ports.TicketPatch{Status: statusp(domain.TicketStatusDone)}); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.DeleteTicket(context.Background(), tk.ID); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// Messages for one ticket arrive in the order the changes were applied: the
+// last one announced is what is stored. Run with -race.
+func TestTickets_ConcurrentPatchesAnnounceInOrder(t *testing.T) {
+	svc, pid := newService(t)
+	rec := &recorder{}
+	svc.Announcer = rec
+	ctx := context.Background()
+	tk, err := svc.CreateTicket(ctx, pid, "T", "", domain.TicketStatusBacklog)
+	if err != nil {
+		t.Fatal(err)
+	}
+	statuses := []domain.TicketStatus{domain.TicketStatusTodo, domain.TicketStatusInProgress, domain.TicketStatusReview, domain.TicketStatusDone}
+	var wg sync.WaitGroup
+	for i := 0; i < 40; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			st := statuses[i%len(statuses)]
+			if _, err := svc.PatchTicket(ctx, tk.ID, ports.TicketPatch{Status: &st}); err != nil {
+				t.Error(err)
+			}
+		}(i)
+	}
+	wg.Wait()
+	stored, _ := svc.GetTicket(ctx, tk.ID)
+	got := rec.all()
+	if last := got[len(got)-1]; last.ticket.Status != stored.Status {
+		t.Fatalf("last announced %s, stored %s", last.ticket.Status, stored.Status)
 	}
 }

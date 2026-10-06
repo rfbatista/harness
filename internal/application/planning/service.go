@@ -6,6 +6,7 @@ package planning
 import (
 	"context"
 	"strings"
+	"sync"
 
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
@@ -19,6 +20,14 @@ type Service struct {
 	tickets   ports.TicketRepository
 	documents ports.DocumentRepository
 	projects  ports.ProjectRepository
+
+	// Announcer puts every ticket change on the project feed. Nil announces
+	// nothing (tests, a server without the feed).
+	Announcer ports.TicketAnnouncer
+
+	// ticketMu serialises write-then-announce on tickets, so the feed carries
+	// a ticket's changes in the order they were applied.
+	ticketMu sync.Mutex
 }
 
 // NewService returns a planning service. projects is used to validate that
@@ -37,6 +46,13 @@ func validTicketStatus(s domain.TicketStatus) bool {
 
 // --- Tickets ---
 
+// announce tells the feed about tk, if anyone is listening.
+func (s *Service) announce(tk *domain.Ticket, deleted bool) {
+	if s.Announcer != nil && tk != nil {
+		s.Announcer.AnnounceTicket(tk, deleted)
+	}
+}
+
 func (s *Service) CreateTicket(_ context.Context, projectID, title, description string, status domain.TicketStatus) (*domain.Ticket, error) {
 	if title == "" {
 		return nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "title is required"}
@@ -50,7 +66,14 @@ func (s *Service) CreateTicket(_ context.Context, projectID, title, description 
 	if !validTicketStatus(status) {
 		return nil, &domain.StructuredError{Code: "INVALID_STATUS", Message: "invalid ticket status"}
 	}
-	return s.tickets.Create(projectID, title, description, status)
+	s.ticketMu.Lock()
+	defer s.ticketMu.Unlock()
+	tk, err := s.tickets.Create(projectID, title, description, status)
+	if err != nil {
+		return nil, err
+	}
+	s.announce(tk, false)
+	return tk, nil
 }
 
 func (s *Service) GetTicket(_ context.Context, id string) (*domain.Ticket, error) {
@@ -79,6 +102,8 @@ func (s *Service) PatchTicket(_ context.Context, id string, patch ports.TicketPa
 	if id == "" {
 		return nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "ticket_id is required"}
 	}
+	s.ticketMu.Lock()
+	defer s.ticketMu.Unlock()
 	existing := s.tickets.Get(id)
 	if existing == nil {
 		return nil, &domain.StructuredError{Code: "TICKET_NOT_FOUND", Message: "ticket not found"}
@@ -102,10 +127,26 @@ func (s *Service) PatchTicket(_ context.Context, id string, patch ports.TicketPa
 	if title == existing.Title && description == existing.Description && status == existing.Status {
 		return existing, nil
 	}
-	return s.tickets.Update(id, title, description, status)
+	tk, err := s.tickets.Update(id, title, description, status)
+	if err != nil {
+		return nil, err
+	}
+	s.announce(tk, false)
+	return tk, nil
 }
 
-func (s *Service) DeleteTicket(_ context.Context, id string) error { return s.tickets.Delete(id) }
+// DeleteTicket removes the ticket and announces it with its last known state,
+// so followers know which project's board loses the card.
+func (s *Service) DeleteTicket(_ context.Context, id string) error {
+	s.ticketMu.Lock()
+	defer s.ticketMu.Unlock()
+	last := s.tickets.Get(id)
+	if err := s.tickets.Delete(id); err != nil {
+		return err
+	}
+	s.announce(last, true)
+	return nil
+}
 
 // --- Documents ---
 
