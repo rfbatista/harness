@@ -31,24 +31,15 @@ func Href(projectID, taskID string) string {
 	return "/projects/" + url.PathEscape(projectID) + "/tasks/" + url.PathEscape(taskID)
 }
 
-// BuildRail groups a project's tasks by status and marks, per task, how many
-// sessions are live and whether one waits on the developer. Sessions without a
-// task are not on the rail.
-func BuildRail(projectID string, tasks []*domain.Ticket, list []*domain.Session, currentTaskID string) shell.Rail {
-	if len(tasks) == 0 {
-		return shell.Rail{Empty: "No tasks yet."}
-	}
-	seed := &shell.RailSeed{ProjectID: projectID, Sessions: []shell.RailSession{}}
-	for _, s := range list {
-		if s.TicketID != "" {
-			seed.Sessions = append(seed.Sessions, shell.RailSession{ID: s.ID, TicketID: s.TicketID, Status: string(s.Status), PendingApprovals: s.PendingApprovals})
-		}
-	}
+// activity is what the rail and the board show per task.
+type activity struct {
+	live      int
+	attention bool
+}
 
-	type activity struct {
-		live      int
-		attention bool
-	}
+// activityByTask counts, per task, the sessions that are live and whether one
+// waits on the developer. Sessions without a task are left out.
+func activityByTask(list []*domain.Session) map[string]activity {
 	byTask := map[string]activity{}
 	for _, s := range list {
 		if s.TicketID == "" {
@@ -61,27 +52,45 @@ func BuildRail(projectID string, tasks []*domain.Ticket, list []*domain.Session,
 		a.attention = a.attention || sessions.NeedsYou(s)
 		byTask[s.TicketID] = a
 	}
+	return byTask
+}
 
+// seed is what the browser starts from: the project's sessions on tasks, and
+// its tasks.
+func seed(projectID string, tasks []*domain.Ticket, list []*domain.Session) *shell.RailSeed {
+	s := &shell.RailSeed{ProjectID: projectID, Sessions: []shell.RailSession{}, Tasks: tasks}
+	if s.Tasks == nil {
+		s.Tasks = []*domain.Ticket{}
+	}
+	for _, x := range list {
+		if x.TicketID != "" {
+			s.Sessions = append(s.Sessions, shell.RailSession{ID: x.ID, TicketID: x.TicketID, Status: string(x.Status), PendingApprovals: x.PendingApprovals})
+		}
+	}
+	return s
+}
+
+// BuildRail groups a project's tasks by status and marks, per task, how many
+// sessions are live and whether one waits on the developer. Sessions without a
+// task are not on the rail. The seed is always there, so the browser follows
+// the project even before its first task.
+func BuildRail(projectID string, tasks []*domain.Ticket, list []*domain.Session, currentTaskID string) shell.Rail {
+	rail := shell.Rail{Seed: seed(projectID, tasks, list), Current: currentTaskID}
+	if len(tasks) == 0 {
+		rail.Empty = "No tasks yet."
+		return rail
+	}
+	byTask := activityByTask(list)
 	byStatus := map[domain.TicketStatus][]shell.Link{}
 	var other []shell.Link
 	for _, t := range tasks {
-		a := byTask[t.ID]
-		link := shell.Link{
-			TaskID:    t.ID,
-			Label:     t.Title,
-			Href:      Href(projectID, t.ID),
-			Current:   t.ID == currentTaskID,
-			Live:      a.live,
-			Attention: a.attention,
-		}
+		link := card(projectID, t, byTask, currentTaskID)
 		if known(t.Status) {
 			byStatus[t.Status] = append(byStatus[t.Status], link)
 		} else {
 			other = append(other, link)
 		}
 	}
-
-	rail := shell.Rail{Seed: seed}
 	for _, st := range kanban {
 		if links := byStatus[st]; len(links) > 0 {
 			rail.Groups = append(rail.Groups, shell.RailGroup{Label: sessions.StatusLabel(st), Links: links})
@@ -91,6 +100,19 @@ func BuildRail(projectID string, tasks []*domain.Ticket, list []*domain.Session,
 		rail.Groups = append(rail.Groups, shell.RailGroup{Label: "other", Links: other})
 	}
 	return rail
+}
+
+// card is a task as the rail links it and the board draws it.
+func card(projectID string, t *domain.Ticket, byTask map[string]activity, currentTaskID string) shell.Link {
+	a := byTask[t.ID]
+	return shell.Link{
+		TaskID:    t.ID,
+		Label:     t.Title,
+		Href:      Href(projectID, t.ID),
+		Current:   t.ID == currentTaskID,
+		Live:      a.live,
+		Attention: a.attention,
+	}
 }
 
 func known(s domain.TicketStatus) bool {

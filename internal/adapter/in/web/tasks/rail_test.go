@@ -71,3 +71,24 @@ func TestRailSeedsTheLiveRail(t *testing.T) {
 		t.Errorf("task id = %q", id)
 	}
 }
+
+// The seed also carries the project's tasks, so the browser can regroup the
+// rail and draw the board without another request; and it is there even
+// with no tasks, so a task created by an agent shows up on an empty project.
+func TestRailSeedCarriesTheTasksEvenWhenThereAreNone(t *testing.T) {
+	tasks := []*domain.Ticket{{ID: "t1", ProjectID: "p1", Title: "Add SSE feed", Status: domain.TicketStatusInProgress}}
+	rail := BuildRail("p1", tasks, nil, "t1")
+	if rail.Seed == nil || len(rail.Seed.Tasks) != 1 || rail.Seed.Tasks[0].ID != "t1" {
+		t.Fatalf("seed = %+v", rail.Seed)
+	}
+	if rail.Current != "t1" {
+		t.Errorf("current = %q", rail.Current)
+	}
+	empty := BuildRail("p1", nil, nil, "")
+	if empty.Seed == nil || empty.Seed.ProjectID != "p1" || len(empty.Seed.Tasks) != 0 || len(empty.Seed.Sessions) != 0 {
+		t.Fatalf("empty seed = %+v", empty.Seed)
+	}
+	if empty.Empty == "" {
+		t.Error("an empty rail still says so")
+	}
+}
