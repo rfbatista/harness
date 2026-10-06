@@ -5,21 +5,16 @@
 //         @feed-status.window="update" :data-state="state" x-text="label"></span>
 
 import { FeedStatus } from "../../domain/feed.js";
-
-const VIEW = {
-  [FeedStatus.CONNECTING]: { state: "reconnecting", label: "connecting" },
-  [FeedStatus.LIVE]: { state: "live", label: "live" },
-  [FeedStatus.PAUSED]: { state: "reconnecting", label: "live updates paused · retrying" },
-};
+import { feedStatusView } from "../feedStatus.js";
 
 export const streamStatus = () => () => ({
   status: FeedStatus.CONNECTING,
 
   get state() {
-    return VIEW[this.status].state;
+    return feedStatusView(this.status).state;
   },
   get label() {
-    return VIEW[this.status].label;
+    return feedStatusView(this.status).label;
   },
 
   /** @param {CustomEvent<string>} event */
