@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -60,32 +61,29 @@ func TestHTTP_Events_StreamsTicketChanges(t *testing.T) {
 	ch <- ports.ProjectChange{Ticket: &domain.Ticket{ID: "tk1", ProjectID: "p1", Title: "Ship it", Status: domain.TicketStatusReview}}
 	ch <- ports.ProjectChange{Session: &domain.Session{ID: "s1", ProjectID: "p1"}}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	req := httptest.NewRequest(http.MethodGet, "/api/events?project_id=p1", nil).WithContext(ctx)
-	rec := httptest.NewRecorder()
-	done := make(chan struct{})
-	go func() {
-		NewRouter(h).ServeHTTP(rec, req)
-		close(done)
-	}()
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) && strings.Count(rec.Body.String(), "data: ") < 2 {
-		time.Sleep(5 * time.Millisecond)
+	srv := httptest.NewServer(NewRouter(h))
+	t.Cleanup(srv.Close)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, srv.URL+"/api/events?project_id=p1", nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
 	}
-	cancel()
-	<-done
+	defer resp.Body.Close()
+	if ct := resp.Header.Get("Content-Type"); ct != "text/event-stream" {
+		t.Fatalf("content-type = %q", ct)
+	}
 
-	if rec.Header().Get("Content-Type") != "text/event-stream" {
-		t.Fatalf("content-type = %q", rec.Header().Get("Content-Type"))
-	}
-	lines := []string{}
-	for _, l := range strings.Split(rec.Body.String(), "\n") {
-		if data, ok := strings.CutPrefix(l, "data: "); ok {
+	var lines []string
+	scan := bufio.NewScanner(resp.Body)
+	for len(lines) < 2 && scan.Scan() {
+		if data, ok := strings.CutPrefix(scan.Text(), "data: "); ok {
 			lines = append(lines, data)
 		}
 	}
 	if len(lines) != 2 {
-		t.Fatalf("data lines = %v", lines)
+		t.Fatalf("data lines = %v (%v)", lines, scan.Err())
 	}
 	var first, second map[string]any
 	_ = json.Unmarshal([]byte(lines[0]), &first)
