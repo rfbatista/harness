@@ -1,0 +1,49 @@
+package sqlite
+
+import (
+	"time"
+
+	"operators-mcp/internal/domain"
+)
+
+// ArtifactModel is the GORM model for domain.Artifact. Target is "path:<path>"
+// or "url:<url>", so the (session, target) unique index holds the identity
+// rule for both kinds without colliding on empty paths.
+type ArtifactModel struct {
+	ID        string `gorm:"primaryKey"`
+	SessionID string `gorm:"column:session_id;index;uniqueIndex:idx_artifacts_session_target"`
+	Target    string `gorm:"column:target;uniqueIndex:idx_artifacts_session_target"`
+	TicketID  string `gorm:"column:ticket_id;index"`
+	ProjectID string `gorm:"column:project_id;index"`
+	Kind      string `gorm:"column:kind"`
+	Title     string `gorm:"column:title"`
+	Note      string `gorm:"column:note"`
+	Path      string `gorm:"column:path"`
+	URL       string `gorm:"column:url"`
+	Mime      string `gorm:"column:mime"`
+	SizeBytes int64  `gorm:"column:size_bytes"`
+	Revision  int    `gorm:"column:revision"`
+	CreatedAt int64  `gorm:"autoCreateTime:milli"`
+	UpdatedAt int64  `gorm:"autoUpdateTime:milli"`
+}
+
+func (ArtifactModel) TableName() string { return "artifacts" }
+
+func artifactTarget(path, url string) string {
+	if url != "" {
+		return "url:" + url
+	}
+	return "path:" + path
+}
+
+func (m *ArtifactModel) ToDomain() *domain.Artifact {
+	if m == nil {
+		return nil
+	}
+	return &domain.Artifact{
+		ID: m.ID, SessionID: m.SessionID, TicketID: m.TicketID, ProjectID: m.ProjectID,
+		Kind: domain.ArtifactKind(m.Kind), Title: m.Title, Note: m.Note, Path: m.Path, URL: m.URL,
+		Mime: m.Mime, SizeBytes: m.SizeBytes, Revision: m.Revision,
+		CreatedAt: time.UnixMilli(m.CreatedAt), UpdatedAt: time.UnixMilli(m.UpdatedAt),
+	}
+}

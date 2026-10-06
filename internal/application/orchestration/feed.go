@@ -16,6 +16,7 @@ const feedBuffer = 256
 // they are not worth a change on the feed.
 var quietEvents = map[string]bool{
 	"output": true, "output_delta": true, "tool_use": true, "tool_result": true,
+	"artifact": true, // a publish changes what the session made, not its record
 }
 
 // feed fans session changes out to the followers of each project.

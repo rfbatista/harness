@@ -28,6 +28,7 @@ import (
 	"operators-mcp/internal/adapter/out/persistence/sqlite"
 	"operators-mcp/internal/app/catalog"
 	"operators-mcp/internal/application/apps"
+	"operators-mcp/internal/application/artifacts"
 	"operators-mcp/internal/application/execution"
 	"operators-mcp/internal/application/orchestration"
 	"operators-mcp/internal/application/planning"
@@ -261,9 +262,20 @@ var AgentRuntimeModule = fx.Module("agentruntime",
 		asPort(newClaudeTranscripts, new(ports.ClaudeTranscripts)),
 		newOrchestrationService,
 		newAppsService,
+		asPort(sqlite.NewArtifactRepository, new(ports.ArtifactRepository)),
+		newArtifactsService,
 	),
 	fx.Invoke(registerRuntimeShutdown, registerServerSessions),
 )
+
+// newArtifactsService records what sessions publish, announces each publish
+// on the session's stream through the orchestration, and drops a session's
+// records when the session is deleted.
+func newArtifactsService(repo ports.ArtifactRepository, sessions ports.SessionRepository, orch *orchestration.Service, cat catalog.Catalog) *artifacts.Service {
+	svc := artifacts.NewService(repo, sessions, orch)
+	svc.Subscribe(cat.Bus)
+	return svc
+}
 
 // newAppsService runs applications from session worktrees on the same
 // terminal host the sessions run on, with the repositories' saved commands.

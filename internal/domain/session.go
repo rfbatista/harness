@@ -106,14 +106,17 @@ const (
 	// SessionModeArchitect shapes the task into per-application specs and
 	// contracts, kept as task documents, and delegates each to a planning agent.
 	SessionModeArchitect SessionMode = "architect"
+	// SessionModeDesign produces components, images and videos and publishes
+	// each one to the Design tab of the web UI as it is made (publish_artifact).
+	SessionModeDesign SessionMode = "design"
 )
 
 // ParseSessionMode reads a mode as clients send it; empty is the default.
 func ParseSessionMode(s string) (SessionMode, error) {
 	switch m := SessionMode(s); m {
-	case SessionModeDefault, SessionModeArchitect:
+	case SessionModeDefault, SessionModeArchitect, SessionModeDesign:
 		return m, nil
 	default:
-		return "", &StructuredError{Code: "INVALID_INPUT", Message: "unknown session mode " + s + `: use "" or "architect"`}
+		return "", &StructuredError{Code: "INVALID_INPUT", Message: "unknown session mode " + s + `: use "", "architect" or "design"`}
 	}
 }

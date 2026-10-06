@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -12,6 +14,7 @@ import (
 	mcplib "github.com/mark3labs/mcp-go/mcp"
 
 	"operators-mcp/internal/adapter/out/persistence/sqlite"
+	"operators-mcp/internal/application/artifacts"
 	"operators-mcp/internal/application/planning"
 	"operators-mcp/internal/application/tooling"
 	"operators-mcp/internal/domain"
@@ -19,7 +22,7 @@ import (
 
 // newTaskServer serves the task tools over HTTP against an in-memory database
 // holding one project, one ticket, and a session spawned into it.
-func newTaskServer(t *testing.T) (baseURL, ticketID string) {
+func newTaskServer(t *testing.T) (baseURL, ticketID, root string) {
 	t.Helper()
 	db, err := sqlite.Open(":memory:")
 	if err != nil {
@@ -37,15 +40,19 @@ func newTaskServer(t *testing.T) (baseURL, ticketID string) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	root = t.TempDir()
 	if _, err := sessions.Create(&domain.Session{
-		ID: "sess-1", ProjectID: proj.ID, TicketID: tk.ID, Task: "go", Status: domain.SessionRunning,
+		ID: "sess-1", ProjectID: proj.ID, TicketID: tk.ID, Task: "go", WorkingDir: root, Status: domain.SessionRunning,
 	}); err != nil {
 		t.Fatal(err)
 	}
 
-	srv := httptest.NewServer(TaskHandler(tooling.SessionTaskTools(plan, sessions, nil, nil, tooling.PeerStarter{})))
+	art := artifacts.NewService(sqlite.NewArtifactRepository(db), sessions, nil)
+	tools := tooling.SessionTaskTools(plan, sessions, nil, nil, tooling.PeerStarter{},
+		tooling.ArtifactTooling{Publisher: art, ViewURL: func(id string) string { return "/api/artifacts/" + id + "/view/" }})
+	srv := httptest.NewServer(TaskHandler(tools))
 	t.Cleanup(srv.Close)
-	return srv.URL, tk.ID
+	return srv.URL, tk.ID, root
 }
 
 func dial(t *testing.T, url string) *client.Client {
@@ -80,7 +87,7 @@ func textOf(t *testing.T, res *mcplib.CallToolResult) string {
 // The session id comes from the request path, so a client that only knows its
 // own URL gets its own task — and can write a document onto it.
 func TestTaskHandler_ScopesBySessionInPath(t *testing.T) {
-	baseURL, _ := newTaskServer(t)
+	baseURL, _, _ := newTaskServer(t)
 	c := dial(t, baseURL+PathPrefix+"sess-1")
 	ctx := context.Background()
 
@@ -117,7 +124,7 @@ func TestTaskHandler_ScopesBySessionInPath(t *testing.T) {
 
 // A path that names no known session resolves to nothing, so the tools refuse.
 func TestTaskHandler_UnknownSession(t *testing.T) {
-	baseURL, _ := newTaskServer(t)
+	baseURL, _, _ := newTaskServer(t)
 	c := dial(t, baseURL+PathPrefix+"ghost")
 
 	var call mcplib.CallToolRequest
@@ -151,7 +158,7 @@ func TestTaskHandler_ListsTheOtherSessionsOnTheTask(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	srv := httptest.NewServer(TaskHandler(tooling.SessionTaskTools(plan, sessions, nil, nil, tooling.PeerStarter{})))
+	srv := httptest.NewServer(TaskHandler(tooling.SessionTaskTools(plan, sessions, nil, nil, tooling.PeerStarter{}, tooling.ArtifactTooling{})))
 	t.Cleanup(srv.Close)
 
 	c := dial(t, srv.URL+PathPrefix+"sess-1")
@@ -178,5 +185,31 @@ func TestTaskHandler_ListsTheOtherSessionsOnTheTask(t *testing.T) {
 	if out.You.SessionID != "sess-1" || len(out.Sessions) != 1 ||
 		out.Sessions[0].SessionID != "sess-2" || out.Sessions[0].Brief != "review it" || out.Sessions[0].Branch != "feat/review" {
 		t.Fatalf("want me as you and sess-2 as the only other, got %s", txt)
+	}
+}
+
+// Over the session's own URL, publishing a worktree file comes back with the
+// view path the UI loads; a refused publish reads as a coded tool error.
+func TestTaskHandler_PublishArtifact(t *testing.T) {
+	baseURL, _, root := newTaskServer(t)
+	os.MkdirAll(filepath.Join(root, "design"), 0o755)
+	os.WriteFile(filepath.Join(root, "design", "card.html"), []byte("<h1>hi</h1>"), 0o644)
+	c := dial(t, baseURL+PathPrefix+"sess-1")
+
+	var call mcplib.CallToolRequest
+	call.Params.Name = "publish_artifact"
+	call.Params.Arguments = map[string]any{"path": "design/card.html", "title": "Card"}
+	res, err := c.CallTool(context.Background(), call)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.IsError || !strings.Contains(textOf(t, res), `"view_url":"/api/artifacts/`) {
+		t.Fatalf("publish = %+v", textOf(t, res))
+	}
+
+	call.Params.Arguments = map[string]any{"path": "../outside.html", "title": "Card"}
+	res, _ = c.CallTool(context.Background(), call)
+	if !res.IsError || !strings.HasPrefix(textOf(t, res), "ARTIFACT_PATH_OUTSIDE_WORKTREE: ") {
+		t.Fatalf("refusal = %+v", textOf(t, res))
 	}
 }

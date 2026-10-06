@@ -1,6 +1,8 @@
 package httpapi
 
 import (
+	"net/http"
+
 	"github.com/labstack/echo/v4"
 )
 
@@ -147,6 +149,16 @@ func NewRouter(h *Handler, opts ...Option) *echo.Echo {
 	g.GET("/sessions/:id/events", h.handleSessionEvents)
 	g.GET("/sessions/:id/terminal", h.handleSessionTerminal) // WebSocket upgrade
 	g.GET("/sessions/:id/history", h.handleSessionHistory)
+
+	// artifacts: what sessions publish for the Design tab. The /view/ routes
+	// are loaded as plain subresources (<img>, <video>, <iframe>), under the
+	// same token rule as the rest of /api.
+	g.GET("/artifacts", h.handleListArtifacts)
+	g.GET("/artifacts/:id", h.handleGetArtifact)
+	g.DELETE("/artifacts/:id", h.handleDeleteArtifact)
+	// GET and HEAD: echo does not fall HEAD back to GET, and curl -I is how headers are checked.
+	g.Match([]string{http.MethodGet, http.MethodHead}, "/artifacts/:id/view", h.handleArtifactViewRedirect) // the slash matters: relative refs resolve under it
+	g.Match([]string{http.MethodGet, http.MethodHead}, "/artifacts/:id/view/*", h.handleArtifactView)
 	g.POST("/sessions/:id/messages", h.handleSessionMessages)
 	g.POST("/sessions/:id/approvals/:approvalID", h.handleSessionApproval)
 	g.POST("/sessions/:id/auto-run", h.handleSessionAutoRun)

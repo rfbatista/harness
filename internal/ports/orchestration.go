@@ -159,7 +159,7 @@ type ResumeRequest struct {
 type SessionEvent struct {
 	Seq       int64                `json:"seq"`
 	SessionID string               `json:"session_id"`
-	Type      string               `json:"type"` // user_message|output|output_delta|tool_use|tool_result|status|approval_needed|approval_resolved|approval_expired|auto_run|usage|done|error
+	Type      string               `json:"type"` // user_message|output|output_delta|tool_use|tool_result|status|approval_needed|approval_resolved|approval_expired|auto_run|usage|done|error|artifact
 	Status    domain.SessionStatus `json:"status,omitempty"`
 	Text      string               `json:"text,omitempty"`
 	ToolName  string               `json:"tool_name,omitempty"`
@@ -172,8 +172,11 @@ type SessionEvent struct {
 	// AutoRun carries the new gate state on an "auto_run" event. A pointer, not
 	// a bool: omitempty would erase the switched-off event, and a client folding
 	// the log would then never see the gate close.
-	AutoRun *bool     `json:"auto_run,omitempty"`
-	At      time.Time `json:"at"`
+	AutoRun *bool `json:"auto_run,omitempty"`
+	// Artifact is the artifact an "artifact" event announces, as published or
+	// re-published (its Revision says which). Nil on every other type.
+	Artifact *domain.Artifact `json:"artifact,omitempty"`
+	At       time.Time        `json:"at"`
 }
 
 type Usage struct {

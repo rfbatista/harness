@@ -19,6 +19,7 @@ var modeFS embed.FS
 // modeSkillNames lists, per mode, the skill directories under modes/ it adds.
 var modeSkillNames = map[domain.SessionMode][]string{
 	domain.SessionModeArchitect: {"task-architecture"},
+	domain.SessionModeDesign:    {"design-artifacts"},
 }
 
 // modeSkills returns the skills a mode adds on top of the session's agent.
@@ -41,17 +42,31 @@ func modeSkills(mode domain.SessionMode) ([]domain.Skill, error) {
 // modePrompt is the first message a mode opens the session with. typed is what
 // the person wrote, if anything; it follows the mode's own instruction.
 func modePrompt(mode domain.SessionMode, tk *domain.Ticket, typed string) string {
-	if mode != domain.SessionModeArchitect || tk == nil {
+	if tk == nil {
+		return typed
+	}
+	var skill, closing string
+	switch mode {
+	case domain.SessionModeArchitect:
+		skill = "task-architecture"
+		closing = "Identify the affected applications, write the contracts and one spec per " +
+			"application as task documents, then delegate each spec to a planning agent with " +
+			"start_task_session. Do not write any local files."
+	case domain.SessionModeDesign:
+		skill = "design-artifacts"
+		closing = "Work under design/ in this worktree. Make each component or screen a self-contained HTML " +
+			"file and publish every result with publish_artifact as soon as it changes, with a one-line note; " +
+			"publish images and videos the same way, and a dev server as its loopback url. The person sees " +
+			"each publish in the Design tab of the web UI — tell them so in one line instead of pasting HTML here."
+	default:
 		return typed
 	}
 	var b strings.Builder
-	b.WriteString("Use the task-architecture skill on task " + tk.ID + ": " + tk.Title + "\n")
+	b.WriteString("Use the " + skill + " skill on task " + tk.ID + ": " + tk.Title + "\n")
 	if d := strings.TrimSpace(tk.Description); d != "" {
 		b.WriteString("\n" + d + "\n")
 	}
-	b.WriteString("\nIdentify the affected applications, write the contracts and one spec per " +
-		"application as task documents, then delegate each spec to a planning agent with " +
-		"start_task_session. Do not write any local files.")
+	b.WriteString("\n" + closing)
 	if typed = strings.TrimSpace(typed); typed != "" {
 		b.WriteString("\n\n" + typed)
 	}

@@ -41,6 +41,12 @@ func TestHTTP_StartInteractiveSessionMode(t *testing.T) {
 		t.Fatalf("architect start = %+v / prompt %q", started.Session, started.Agent.Prompt)
 	}
 
+	status, design := post(t, srv.URL+"/api/start_interactive_session",
+		`{"project_id":"p1","repository_id":"r1","ticket_id":"tk1","mode":"design"}`)
+	if status != http.StatusCreated || design.Session.Mode != domain.SessionModeDesign || !design.Session.Interactive || !strings.Contains(design.Agent.Prompt, "design-artifacts") {
+		t.Fatalf("design start = %d %+v / prompt %q", status, design.Session, design.Agent.Prompt)
+	}
+
 	status, refused := post(t, srv.URL+"/api/start_interactive_session",
 		`{"project_id":"p1","repository_id":"r1","ticket_id":"tk1","mode":"wizard"}`)
 	if status != http.StatusBadRequest || refused.Code != "INVALID_INPUT" {

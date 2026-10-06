@@ -20,6 +20,7 @@ import (
 	"github.com/rfbatista/llmkit/claude/mcpapprove"
 
 	"operators-mcp/internal/adapter/out/persistence/sqlite"
+	"operators-mcp/internal/application/artifacts"
 	"operators-mcp/internal/application/orchestration"
 	"operators-mcp/internal/domain"
 )
@@ -101,7 +102,23 @@ func newSessionTestServer(t *testing.T) *httptest.Server {
 
 // newSessionTestServerWithBroker also hands back the permission broker, so a
 // test can stand in for the CLI's end of a pending decision.
+// sessionTestEnv is the HTTP API over an in-memory orchestration, plus the
+// pieces a test reaches behind the API.
+type sessionTestEnv struct {
+	srv       *httptest.Server
+	broker    *approval.Broker
+	sessions  *sqlite.SessionRepository
+	orch      *orchestration.Service
+	artifacts *artifacts.Service
+}
+
 func newSessionTestServerWithBroker(t *testing.T) (*httptest.Server, *approval.Broker) {
+	t.Helper()
+	env := newSessionTestEnv(t)
+	return env.srv, env.broker
+}
+
+func newSessionTestEnv(t *testing.T) *sessionTestEnv {
 	t.Helper()
 	db, err := sqlite.Open(":memory:")
 	if err != nil {
@@ -118,14 +135,16 @@ func newSessionTestServerWithBroker(t *testing.T) (*httptest.Server, *approval.B
 	broker := mgr.Approvals()
 	hub := orchestration.NewHub(64)
 	res := &stubResolver{proj: &domain.Project{ID: "p1", RootDir: t.TempDir()}}
-	svc := orchestration.NewService(mgr, broker, hub, sqlite.NewSessionRepository(db),
+	sessions := sqlite.NewSessionRepository(db)
+	svc := orchestration.NewService(mgr, broker, hub, sessions,
 		orchestration.Catalog{Projects: res, Repositories: res, Agents: res, MCPServers: res, Zones: res},
 		stubTickets{"tk1": {ID: "tk1", ProjectID: "p1", Title: "Ship the thing"}},
 		&stubProvisioner{dir: t.TempDir()})
 	svc.DefaultEnv = []string{"CLAUDE_FAKE=1"}
 
-	h := &Handler{orchSvc: svc}
-	return httptest.NewServer(NewRouter(h)), broker
+	art := artifacts.NewService(sqlite.NewArtifactRepository(db), sessions, svc)
+	h := &Handler{orchSvc: svc, artifactsSvc: art}
+	return &sessionTestEnv{srv: httptest.NewServer(NewRouter(h)), broker: broker, sessions: sessions, orch: svc, artifacts: art}
 }
 
 func TestHTTP_CreateAndStreamSession(t *testing.T) {

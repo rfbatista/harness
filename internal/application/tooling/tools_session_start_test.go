@@ -2,7 +2,9 @@ package tooling
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/rfbatista/harnesskit/errs"
@@ -66,7 +68,7 @@ func startFixtureWith(t *testing.T, autoRun, canStart bool) (start func(args map
 		peers = PeerStarter{}
 	}
 	var tool domain.Tool
-	for _, tl := range SessionTaskTools(plan, sessions, agentList{{ID: "a-rev", Name: "Reviewer"}}, nil, peers) {
+	for _, tl := range SessionTaskTools(plan, sessions, agentList{{ID: "a-rev", Name: "Reviewer"}}, nil, peers, ArtifactTooling{}) {
 		if tl.Name == "start_task_session" {
 			tool = tl
 		}
@@ -117,6 +119,25 @@ func TestStartTaskSession_PassesTheMode(t *testing.T) {
 	}
 	if got := starter.got[0].Mode; got != "architect" {
 		t.Fatalf("mode = %q, want architect", got)
+	}
+}
+
+func TestStartTaskSession_OffersDesignMode(t *testing.T) {
+	start, starter, _ := startFixture(t, false)
+	if _, err := start(map[string]any{"prompt": "make the card", "mode": "design"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := starter.got[0].Mode; got != "design" {
+		t.Fatalf("mode = %q, want design", got)
+	}
+	for _, tl := range SessionTaskTools(nil, nil, nil, nil, PeerStarter{}, ArtifactTooling{}) {
+		if tl.Name != "start_task_session" {
+			continue
+		}
+		schema, _ := json.Marshal(tl.InputSchema)
+		if !strings.Contains(string(schema), `"design"`) {
+			t.Fatalf("start_task_session schema does not offer design: %s", schema)
+		}
 	}
 }
 
