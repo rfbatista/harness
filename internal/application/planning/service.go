@@ -65,21 +65,11 @@ func (s *Service) ListTickets(_ context.Context, projectID string) ([]*domain.Ti
 	return s.tickets.ListByProject(projectID), nil
 }
 
-func (s *Service) UpdateTicket(_ context.Context, id, title, description string, status domain.TicketStatus) (*domain.Ticket, error) {
-	if title == "" {
-		return nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "title is required"}
-	}
-	if status == "" {
-		existing := s.tickets.Get(id)
-		if existing == nil {
-			return nil, &domain.StructuredError{Code: "TICKET_NOT_FOUND", Message: "ticket not found"}
-		}
-		status = existing.Status
-	}
-	if !validTicketStatus(status) {
-		return nil, &domain.StructuredError{Code: "INVALID_STATUS", Message: "invalid ticket status"}
-	}
-	return s.tickets.Update(id, title, description, status)
+// UpdateTicket replaces every field. It is the patch with every field present,
+// kept for the callers that always send all of them (the TUI client, the
+// browser gateway); an empty status keeps the current one, as it always did.
+func (s *Service) UpdateTicket(ctx context.Context, id, title, description string, status domain.TicketStatus) (*domain.Ticket, error) {
+	return s.PatchTicket(ctx, id, ports.TicketPatch{Title: &title, Description: &description, Status: &status})
 }
 
 // PatchTicket changes only the fields patch carries. It reads the ticket,

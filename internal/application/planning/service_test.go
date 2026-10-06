@@ -232,3 +232,24 @@ func TestPatchTicket_Validation(t *testing.T) {
 		t.Fatalf("a rejected patch wrote: %+v", got)
 	}
 }
+
+// The full-field update every existing caller sends is the patch with every
+// field present. Its invalid-status code follows the HTTP contract.
+func TestUpdateTicket_IsTheFullPatch(t *testing.T) {
+	svc, pid := newService(t)
+	tk, _ := svc.CreateTicket(context.Background(), pid, "T", "d", domain.TicketStatusTodo)
+
+	got, err := svc.UpdateTicket(context.Background(), tk.ID, "T2", "", domain.TicketStatusDone)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Title != "T2" || got.Description != "" || got.Status != domain.TicketStatusDone {
+		t.Fatalf("full update = %+v", got)
+	}
+	if _, err := svc.UpdateTicket(context.Background(), tk.ID, "T2", "", domain.TicketStatus("weird")); code(err) != "INVALID_INPUT" {
+		t.Fatalf("bad status: want INVALID_INPUT, got %v", err)
+	}
+	if _, err := svc.UpdateTicket(context.Background(), tk.ID, "", "", ""); code(err) != "INVALID_INPUT" {
+		t.Fatalf("blank title: want INVALID_INPUT, got %v", err)
+	}
+}
