@@ -5,6 +5,8 @@ package planning
 
 import (
 	"context"
+	"strings"
+	"sync"
 
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
@@ -18,6 +20,14 @@ type Service struct {
 	tickets   ports.TicketRepository
 	documents ports.DocumentRepository
 	projects  ports.ProjectRepository
+
+	// Announcer puts every ticket change on the project feed. Nil announces
+	// nothing (tests, a server without the feed).
+	Announcer ports.TicketAnnouncer
+
+	// ticketMu serialises write-then-announce on tickets, so the feed carries
+	// a ticket's changes in the order they were applied.
+	ticketMu sync.Mutex
 }
 
 // NewService returns a planning service. projects is used to validate that
@@ -36,6 +46,13 @@ func validTicketStatus(s domain.TicketStatus) bool {
 
 // --- Tickets ---
 
+// announce tells the feed about tk, if anyone is listening.
+func (s *Service) announce(tk *domain.Ticket, deleted bool) {
+	if s.Announcer != nil && tk != nil {
+		s.Announcer.AnnounceTicket(tk, deleted)
+	}
+}
+
 func (s *Service) CreateTicket(_ context.Context, projectID, title, description string, status domain.TicketStatus) (*domain.Ticket, error) {
 	if title == "" {
 		return nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "title is required"}
@@ -49,7 +66,14 @@ func (s *Service) CreateTicket(_ context.Context, projectID, title, description 
 	if !validTicketStatus(status) {
 		return nil, &domain.StructuredError{Code: "INVALID_STATUS", Message: "invalid ticket status"}
 	}
-	return s.tickets.Create(projectID, title, description, status)
+	s.ticketMu.Lock()
+	defer s.ticketMu.Unlock()
+	tk, err := s.tickets.Create(projectID, title, description, status)
+	if err != nil {
+		return nil, err
+	}
+	s.announce(tk, false)
+	return tk, nil
 }
 
 func (s *Service) GetTicket(_ context.Context, id string) (*domain.Ticket, error) {
@@ -64,24 +88,65 @@ func (s *Service) ListTickets(_ context.Context, projectID string) ([]*domain.Ti
 	return s.tickets.ListByProject(projectID), nil
 }
 
-func (s *Service) UpdateTicket(_ context.Context, id, title, description string, status domain.TicketStatus) (*domain.Ticket, error) {
-	if title == "" {
-		return nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "title is required"}
-	}
-	if status == "" {
-		existing := s.tickets.Get(id)
-		if existing == nil {
-			return nil, &domain.StructuredError{Code: "TICKET_NOT_FOUND", Message: "ticket not found"}
-		}
-		status = existing.Status
-	}
-	if !validTicketStatus(status) {
-		return nil, &domain.StructuredError{Code: "INVALID_STATUS", Message: "invalid ticket status"}
-	}
-	return s.tickets.Update(id, title, description, status)
+// UpdateTicket replaces every field. It is the patch with every field present,
+// kept for the callers that always send all of them (the TUI client, the
+// browser gateway); an empty status keeps the current one, as it always did.
+func (s *Service) UpdateTicket(ctx context.Context, id, title, description string, status domain.TicketStatus) (*domain.Ticket, error) {
+	return s.PatchTicket(ctx, id, ports.TicketPatch{Title: &title, Description: &description, Status: &status})
 }
 
-func (s *Service) DeleteTicket(_ context.Context, id string) error { return s.tickets.Delete(id) }
+// PatchTicket changes only the fields patch carries. It reads the ticket,
+// applies the patch, validates the result and writes it back whole, since the
+// repository replaces every column. An unchanged ticket is not written.
+func (s *Service) PatchTicket(_ context.Context, id string, patch ports.TicketPatch) (*domain.Ticket, error) {
+	if id == "" {
+		return nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "ticket_id is required"}
+	}
+	s.ticketMu.Lock()
+	defer s.ticketMu.Unlock()
+	existing := s.tickets.Get(id)
+	if existing == nil {
+		return nil, &domain.StructuredError{Code: "TICKET_NOT_FOUND", Message: "ticket not found"}
+	}
+	title, description, status := existing.Title, existing.Description, existing.Status
+	if patch.Title != nil {
+		if strings.TrimSpace(*patch.Title) == "" {
+			return nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "title is required"}
+		}
+		title = *patch.Title
+	}
+	if patch.Description != nil {
+		description = *patch.Description
+	}
+	if patch.Status != nil && *patch.Status != "" {
+		if !validTicketStatus(*patch.Status) {
+			return nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "status must be one of backlog, todo, in_progress, review, done"}
+		}
+		status = *patch.Status
+	}
+	if title == existing.Title && description == existing.Description && status == existing.Status {
+		return existing, nil
+	}
+	tk, err := s.tickets.Update(id, title, description, status)
+	if err != nil {
+		return nil, err
+	}
+	s.announce(tk, false)
+	return tk, nil
+}
+
+// DeleteTicket removes the ticket and announces it with its last known state,
+// so followers know which project's board loses the card.
+func (s *Service) DeleteTicket(_ context.Context, id string) error {
+	s.ticketMu.Lock()
+	defer s.ticketMu.Unlock()
+	last := s.tickets.Get(id)
+	if err := s.tickets.Delete(id); err != nil {
+		return err
+	}
+	s.announce(last, true)
+	return nil
+}
 
 // --- Documents ---
 

@@ -60,6 +60,11 @@ sessions left, and write down what the next one will need:
 - mcp__task__create_task_document — a new document, linked to this task for you
 - mcp__task__update_task_document — revise one of them
 
+Move the task as the work moves, so the board stays true without a person
+dragging the card:
+
+- mcp__task__update_task_status — set this task's status: in_progress when you pick the work up, review when it is ready for a person to look at, done when you are told it is accepted
+
 Other agents may be working on this task at the same time, each in its own
 session, branch and worktree. Check before starting, and before touching
 shared files, so you do not duplicate or undo their work:

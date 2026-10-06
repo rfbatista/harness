@@ -79,3 +79,19 @@ func TestApplyTaskContext_NoAgentPrompt(t *testing.T) {
 		t.Fatalf("unexpected prompt start:\n%s", cfg.AppendSystem)
 	}
 }
+
+// The brief is how an agent learns the tool exists and when to move the task,
+// so the board does not wait for a person to drag the card.
+func TestApplyTaskContext_BriefNamesUpdateTaskStatus(t *testing.T) {
+	cfg := llmkit.SessionConfig{}
+	applyTaskContext(&cfg, &domain.Ticket{ID: "tk1", Title: "Ship the thing"}, "")
+	for _, want := range []string{"mcp__task__update_task_status", "in_progress", "review", "done"} {
+		if !strings.Contains(cfg.AppendSystem, want) {
+			t.Fatalf("brief missing %q:\n%s", want, cfg.AppendSystem)
+		}
+	}
+	// One line per tool, in the style of the others.
+	if !strings.Contains(cfg.AppendSystem, "\n- mcp__task__update_task_status — ") {
+		t.Fatalf("tool line not in the list style:\n%s", cfg.AppendSystem)
+	}
+}

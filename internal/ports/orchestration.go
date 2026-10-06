@@ -44,22 +44,41 @@ type SessionStream interface {
 	History(id string, fromSeq int64) []SessionEvent
 }
 
-// SessionFeed follows a project's sessions as they change: started, ended,
-// stopped, deleted, waiting on an approval. It is network-safe: tui-client
-// follows it over server-sent events.
+// SessionFeed follows a project as it changes: its sessions (started, ended,
+// stopped, deleted, waiting on an approval) and its tickets (created, updated,
+// deleted, from any entry point). It is network-safe: tui-client follows it
+// over server-sent events and keeps only the session changes.
 type SessionFeed interface {
-	// FollowProject delivers each change to the project's sessions until ctx
-	// ends, then closes the channel. It also closes early when the follower
-	// falls behind: changes were dropped, so the follower reloads what it
-	// shows and follows again.
+	// FollowProject delivers each change in the project until ctx ends, then
+	// closes the channel. It also closes early when the follower falls
+	// behind: changes were dropped, so the follower reloads what it shows and
+	// follows again.
 	FollowProject(ctx context.Context, projectID string) (<-chan SessionChange, error)
 }
 
-// SessionChange is one session as it is after a change, or a deleted one.
-type SessionChange struct {
-	Session *domain.Session `json:"session"`
+// ProjectChange is one thing in a project as it is after a change, or a
+// deleted one. Exactly one of Session and Ticket is set; the wire tells them
+// apart by which key is present, so the other must be absent, never null.
+type ProjectChange struct {
+	Session *domain.Session `json:"session,omitempty"`
+	Ticket  *domain.Ticket  `json:"ticket,omitempty"`
 	Deleted bool            `json:"deleted,omitempty"`
 }
+
+// ProjectID is the project whose followers the change is for.
+func (c ProjectChange) ProjectID() string {
+	switch {
+	case c.Session != nil:
+		return c.Session.ProjectID
+	case c.Ticket != nil:
+		return c.Ticket.ProjectID
+	}
+	return ""
+}
+
+// SessionChange is the name the feed had when it carried sessions only. The
+// TUI client still uses it; new code says ProjectChange.
+type SessionChange = ProjectChange
 
 // InteractiveSessions provisions and records sessions whose CLI runs in a
 // terminal the user types into. The server provisions and records them and

@@ -195,12 +195,18 @@ var PlanningModule = fx.Module("planning",
 	fx.Provide(newPlanningService),
 )
 
+// newPlanningService builds the planning service and points its ticket
+// announcements at the orchestration, which owns the project feed the board
+// and the rail follow.
 func newPlanningService(
 	tickets ports.TicketRepository,
 	documents ports.DocumentRepository,
 	projects ports.ProjectRepository,
+	orch *orchestration.Service,
 ) *planning.Service {
-	return planning.NewService(tickets, documents, projects)
+	svc := planning.NewService(tickets, documents, projects)
+	svc.Announcer = orch
+	return svc
 }
 
 // ExecutionModule wires the Genkit-backed execution layer: the LLM client, the
