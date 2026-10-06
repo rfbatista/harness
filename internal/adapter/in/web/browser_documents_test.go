@@ -2,15 +2,20 @@ package web
 
 import (
 	"context"
+	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/chromedp/cdproto/page"
 	"github.com/chromedp/chromedp"
+
+	"operators-mcp/internal/domain"
 )
 
 // TestDocumentsPageInTheBrowser opens a task's documents from its toolbar,
@@ -40,9 +45,9 @@ func TestDocumentsPageInTheBrowser(t *testing.T) {
 	err = chromedp.Run(ctx,
 		chromedp.EmulateViewport(1280, 800),
 		chromedp.Navigate(srv.URL+"/projects/p1/tasks/t-feed"),
-		chromedp.Poll(`!!document.querySelector('a[href$="/documents"]')`, nil, chromedp.WithPollingTimeout(10*time.Second)),
-		chromedp.Evaluate(`document.querySelector('a[href$="/documents"] .badge').textContent`, &count),
-		chromedp.Evaluate(`document.querySelector('a[href$="/documents"]').click()`, nil),
+		chromedp.Poll(`!!document.querySelector('a[href$="/tasks/t-feed/documents"]')`, nil, chromedp.WithPollingTimeout(10*time.Second)),
+		chromedp.Evaluate(`document.querySelector('a[href$="/tasks/t-feed/documents"] .badge').textContent`, &count),
+		chromedp.Evaluate(`document.querySelector('a[href$="/tasks/t-feed/documents"]').click()`, nil),
 		waitForPath(srv.URL+"/projects/p1/tasks/t-feed/documents", &path),
 		chromedp.Poll(`!!document.querySelector('article .prose code')`, nil, chromedp.WithPollingTimeout(5*time.Second)),
 		chromedp.Evaluate(`[...document.querySelectorAll('nav[aria-label="Documents of this task"] a')].find(a => a.textContent.includes('Plan')).click()`, nil),
@@ -124,5 +129,136 @@ func TestDocumentsPageFramesHTMLInTheBrowser(t *testing.T) {
 	}
 	if !tabLeftFrame {
 		t.Errorf("Tab from the frame landed on %q, want the bar's link", afterTab)
+	}
+}
+
+// scopeServer serves the documents pages over a world and answers
+// POST /api/set_document_scope by flipping the document's scope in the world
+// and echoing it, recording every body. The rest of /api is not under test.
+func scopeServer(t *testing.T, w world, assets *Assets) (*httptest.Server, func() []string) {
+	t.Helper()
+	var mu sync.Mutex
+	var bodies []string
+	mux := http.NewServeMux()
+	mux.HandleFunc("POST /api/set_document_scope", func(rw http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		var in struct {
+			DocumentID string `json:"document_id"`
+			Scope      string `json:"scope"`
+		}
+		_ = json.Unmarshal(b, &in)
+		mu.Lock()
+		bodies = append(bodies, string(b))
+		for _, docs := range w.docs {
+			for _, d := range docs {
+				if d.ID == in.DocumentID {
+					d.Scope = domain.DocumentScope(in.Scope)
+				}
+			}
+		}
+		mu.Unlock()
+		rw.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(rw, `{"document":{"id":"`+in.DocumentID+`","project_id":"p1","title":"x","format":"markdown","scope":"`+in.Scope+`","updated_at":"2026-10-02T14:00:01Z"}}`)
+	})
+	mux.Handle("/api/", http.NotFoundHandler())
+	mux.Handle("/", NewHandler(Deps{
+		Projects: fakeProjects{w.projects}, Tasks: fakeTickets{w.tickets}, Sessions: fakeSessions{w.sessions},
+		Agents: fakeAgents{w.agents}, Repositories: fakeRepos{w.repos}, EnvFiles: w.env, Documents: docReader{w.docs, w.tickets},
+		Now: func() time.Time { return now },
+	}, assets, nil))
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	return srv, func() []string { mu.Lock(); defer mu.Unlock(); return append([]string(nil), bodies...) }
+}
+
+// TestDocumentScopeMovesInPlaceInTheBrowser: on the task's documents page the
+// move button sends one set_document_scope for the open document and the
+// page follows without reloading: the word, the list's mark and the label
+// change, and the document stays listed on the task.
+func TestDocumentScopeMovesInPlaceInTheBrowser(t *testing.T) {
+	assets, err := NewAssets()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !assets.Built() {
+		t.Skip("browser test: web client not built; run `make web`")
+	}
+	ctx, errs := browser(t)
+	srv, bodies := scopeServer(t, documentsBoard(), assets)
+
+	var word, label, aria, mark string
+	var stayed, stillListed bool
+	err = chromedp.Run(ctx,
+		chromedp.EmulateViewport(1280, 800),
+		chromedp.Navigate(srv.URL+"/projects/p1/tasks/t-feed/documents/d-plan"),
+		chromedp.Poll(`document.querySelector('[x-data="tasksDocumentScope"] button[type=submit]')?.textContent === 'Move to project'`, nil, chromedp.WithPollingTimeout(10*time.Second)),
+		chromedp.Evaluate(`window.__stayed = true; true`, nil),
+		chromedp.Click(`[x-data="tasksDocumentScope"] button[type=submit]`),
+		chromedp.Poll(`document.querySelector('[x-data="tasksDocumentScope"] button[type=submit]')?.textContent === 'Move back to task'`, nil, chromedp.WithPollingTimeout(10*time.Second)),
+		chromedp.Evaluate(`document.querySelector('[data-scope-word]').textContent`, &word),
+		chromedp.Evaluate(`document.querySelector('[x-data="tasksDocumentScope"] button[type=submit]').textContent`, &label),
+		chromedp.Evaluate(`document.querySelector('[x-data="tasksDocumentScope"] button[type=submit]').getAttribute('aria-label')`, &aria),
+		chromedp.Evaluate(`(m => m && getComputedStyle(m).display !== 'none' ? m.textContent : '')(document.querySelector('a[aria-current="page"] [data-scope-mark]'))`, &mark),
+		chromedp.Evaluate(`window.__stayed === true`, &stayed),
+		chromedp.Evaluate(`!!document.querySelector('nav[aria-label="Documents of this task"] a[href$="/documents/d-plan"]')`, &stillListed),
+	)
+	if err != nil {
+		t.Fatalf("%v\nJS errors: %v", err, errs.all())
+	}
+	if got := bodies(); len(got) != 1 || !strings.Contains(got[0], `"document_id":"d-plan"`) || !strings.Contains(got[0], `"scope":"project"`) {
+		t.Errorf("set_document_scope calls: %q", got)
+	}
+	if word != "Project document" || label != "Move back to task" || aria != "Move Plan back to task" || mark != "project" {
+		t.Errorf("after the move: word %q, label %q, aria %q, mark %q", word, label, aria, mark)
+	}
+	if !stayed || !stillListed {
+		t.Errorf("the page reloaded (%v) or dropped the document (%v)", !stayed, !stillListed)
+	}
+}
+
+// TestProjectDocumentsLibraryInTheBrowser: from a task page, the shell's
+// Documents link opens the library; it lists the project documents, renders
+// the open one, names its task with a link back, and moves it back in place.
+func TestProjectDocumentsLibraryInTheBrowser(t *testing.T) {
+	assets, err := NewAssets()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !assets.Built() {
+		t.Skip("browser test: web client not built; run `make web`")
+	}
+	ctx, errs := browser(t)
+	srv, bodies := scopeServer(t, libraryBoard(), assets)
+
+	var path, heading, fromTask, label string
+	var shot []byte
+	err = chromedp.Run(ctx,
+		chromedp.EmulateViewport(1280, 800),
+		chromedp.Navigate(srv.URL+"/projects/p1/tasks/t-feed"),
+		chromedp.Poll(`!!document.querySelector('nav[aria-label="Tasks"] a[href="/projects/p1/documents"]')`, nil, chromedp.WithPollingTimeout(10*time.Second)),
+		chromedp.Evaluate(`document.querySelector('nav[aria-label="Tasks"] a[href="/projects/p1/documents"]').click()`, nil),
+		waitForPath(srv.URL+"/projects/p1/documents", &path),
+		chromedp.Poll(`!!document.querySelector('article .prose h1')`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Evaluate(`document.querySelector('article .prose h1').textContent`, &heading),
+		chromedp.Evaluate(`[...document.querySelectorAll('nav[aria-label="Documents of this project"] a')].find(a => a.textContent.includes('Plan page')).click()`, nil),
+		waitForPath(srv.URL+"/projects/p1/documents/d-page", &path),
+		chromedp.Poll(`!!document.querySelector('article iframe')`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Evaluate(`document.querySelector('article a[href="/projects/p1/tasks/t-feed/documents/d-page"]').textContent`, &fromTask),
+		chromedp.Click(`[x-data="tasksDocumentScope"] button[type=submit]`),
+		chromedp.Poll(`document.querySelector('[x-data="tasksDocumentScope"] button[type=submit]')?.textContent === 'Move to project'`, nil, chromedp.WithPollingTimeout(10*time.Second)),
+		chromedp.Evaluate(`document.querySelector('[x-data="tasksDocumentScope"] button[type=submit]').textContent`, &label),
+		chromedp.FullScreenshot(&shot, 80),
+	)
+	if err != nil {
+		t.Fatalf("%v\nJS errors: %v", err, errs.all())
+	}
+	if heading != "Boundaries" || fromTask != "Add SSE feed" || label != "Move to project" {
+		t.Errorf("heading %q, from task %q, label %q", heading, fromTask, label)
+	}
+	if got := bodies(); len(got) != 1 || !strings.Contains(got[0], `"document_id":"d-page"`) || !strings.Contains(got[0], `"scope":"task"`) {
+		t.Errorf("set_document_scope calls: %q", got)
+	}
+	if dir := os.Getenv("WEB_SCREENSHOT_DIR"); dir != "" {
+		_ = os.WriteFile(dir+"/project-documents.jpg", shot, 0o644)
 	}
 }

@@ -1,6 +1,7 @@
 // The tasks module's Alpine components.
 
 import { board } from "./components/board.js";
+import { documentScope } from "./components/documentScope.js";
 import { documentWatch } from "./components/documentWatch.js";
 import { newTask } from "./components/newTask.js";
 import { rail } from "./components/rail.js";
@@ -19,6 +20,7 @@ export function registerTasks(Alpine, deps) {
   Alpine.data("tasksNewTask", newTask(deps));
   Alpine.data("tasksTaskEditor", taskEditor(deps));
   Alpine.data("tasksDocumentWatch", documentWatch(deps));
+  Alpine.data("tasksDocumentScope", documentScope(deps));
 
   // The project's live model, shared by the rail, its links and the board.
   Alpine.store("tasksRail", { byTask: {}, tasks: [], seeded: false });

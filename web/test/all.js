@@ -31,6 +31,7 @@ import "../src/modules/tasks/infrastructure/gateways.test.js";
 import "../src/modules/tasks/infrastructure/rail.test.js";
 import "../src/modules/tasks/presentation/boardView.test.js";
 import "../src/modules/tasks/presentation/components/board.test.js";
+import "../src/modules/tasks/presentation/components/documentScope.test.js";
 import "../src/modules/tasks/presentation/components/documentWatch.test.js";
 import "../src/modules/tasks/presentation/components/newTask.test.js";
 import "../src/modules/tasks/presentation/components/rail.test.js";
