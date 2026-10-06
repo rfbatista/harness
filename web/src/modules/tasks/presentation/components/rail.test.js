@@ -3,17 +3,20 @@ import { mount, seededElement } from "../../../../shared/testing/alpine.js";
 import { flush } from "../../../../shared/testing/doubles.js";
 import { assert, file, test } from "../../../../shared/testing/test.js";
 import { memoryRail } from "../../infrastructure/memory-rail.js";
+import { makeTask, taskDTO } from "../../testing/fixtures.js";
 import { rail, railLink } from "./rail.js";
 
 file("tasks/presentation/rail");
 
 const s = (id, ticketId, status, pendingApprovals = 0) => ({ id, ticketId, status, pendingApprovals });
 
-function setup() {
+function setup({ tasks = [makeTask()] } = {}) {
   const seeded = [s("a", "t1", "running")];
-  const memory = memoryRail({ projectId: "p1", sessions: seeded });
-  const store = { byTask: {} };
-  const nav = mount(rail({ gateway: memory.gateway, store }), { el: seededElement({ project_id: "p1", sessions: seeded, tasks: [] }, "rail-seed") });
+  const memory = memoryRail({ projectId: "p1", sessions: seeded, tasks });
+  const store = { byTask: {}, tasks: [], seeded: false };
+  const nav = mount(rail({ gateway: memory.gateway, store }), {
+    el: seededElement({ project_id: "p1", sessions: seeded, tasks: tasks.map(taskDTO) }, "rail-seed"),
+  });
   nav.instance.init();
   const link = (taskId) => {
     const el = document.createElement("a");
@@ -22,7 +25,7 @@ function setup() {
     m.instance.init();
     return m.instance;
   };
-  return { memory, store, nav: nav.instance, link };
+  return { memory, store, nav, link };
 }
 
 test("links start from the seed", () => {
@@ -54,4 +57,54 @@ test("after a resync it reads the sessions again", async () => {
   await flush();
   assert.equal(t1.hasCount, false);
   assert.equal(link("t3").live, 1);
+});
+
+test("the store starts from the seed's tasks", () => {
+  const { store } = setup();
+  assert.deepEqual([store.seeded, store.tasks.map((t) => t.id)], [true, ["t1"]]);
+});
+
+test("a ticket change moves the store's task and is dispatched with what it was before", async () => {
+  const { memory, store, nav } = setup();
+  await flush();
+  const moved = makeTask({ status: "review" });
+  memory.emit({ kind: "task-upsert", task: moved });
+  assert.equal(store.tasks[0].status, "review");
+  assert.deepEqual(nav.dispatched.at(-1), { name: "task-changed", detail: { change: { kind: "task-upsert", task: moved }, previous: makeTask() } });
+  memory.emit({ kind: "task-upsert", task: makeTask({ id: "t2", title: "New", status: "backlog" }) });
+  assert.deepEqual(nav.dispatched.at(-1).detail.previous, null);
+  memory.emit({ kind: "task-deleted", id: "t1" });
+  assert.deepEqual(store.tasks.map((t) => t.id), ["t2"]);
+});
+
+test("after a resync it reads the tasks again too", async () => {
+  const { memory, store } = setup();
+  await flush();
+  memory.replaceTasks([makeTask({ id: "t9", title: "Elsewhere", status: "done" })]);
+  memory.status(FeedStatus.RESYNCED);
+  await flush();
+  assert.deepEqual(store.tasks.map((t) => t.id), ["t9"]);
+});
+
+test("a malformed seed leaves the store unseeded and the server's rendering alone", () => {
+  const memory = memoryRail();
+  const store = { byTask: {}, tasks: [], seeded: false };
+  const nav = mount(rail({ gateway: memory.gateway, store }), { el: seededElement({ project_id: "p1" }, "rail-seed") });
+  nav.instance.init();
+  assert.equal(store.seeded, false);
+});
+
+test("it reports the feed's status to the stream bar only where it is the page's feed", async () => {
+  const quiet = setup();
+  await flush();
+  assert.equal(quiet.nav.dispatched.some((d) => d.name === "feed-status"), false, "the task page's own feed reports there");
+  const seeded = [s("a", "t1", "running")];
+  const memory = memoryRail({ projectId: "p1", sessions: seeded, tasks: [makeTask()] });
+  const el = seededElement({ project_id: "p1", sessions: seeded, tasks: [taskDTO(makeTask())] }, "rail-seed");
+  el.dataset.reportsFeed = "";
+  const nav = mount(rail({ gateway: memory.gateway, store: { byTask: {}, tasks: [], seeded: false } }), { el });
+  nav.instance.init();
+  await flush();
+  memory.status(FeedStatus.PAUSED);
+  assert.deepEqual(nav.dispatched.filter((d) => d.name === "feed-status").map((d) => d.detail), [FeedStatus.LIVE, FeedStatus.PAUSED]);
 });
