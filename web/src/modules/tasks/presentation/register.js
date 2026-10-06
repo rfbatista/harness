@@ -1,5 +1,6 @@
 // The tasks module's Alpine components.
 
+import { board } from "./components/board.js";
 import { documentWatch } from "./components/documentWatch.js";
 import { newTask } from "./components/newTask.js";
 import { rail, railLink } from "./components/rail.js";
@@ -24,4 +25,5 @@ export function registerTasks(Alpine, deps) {
   const store = Alpine.store("tasksRail");
   Alpine.data("tasksRail", rail({ gateway: deps.rail, store }));
   Alpine.data("tasksRailLink", railLink({ store }));
+  Alpine.data("tasksBoard", board({ store }));
 }

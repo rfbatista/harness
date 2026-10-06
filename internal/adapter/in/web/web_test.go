@@ -211,21 +211,56 @@ func TestProjectPagePutsItsTasksOnTheRailAndTheProjectInThePicker(t *testing.T) 
 		`href="/projects/p1/tasks/t-feed"`,
 		`<span class="[ label ]">Add SSE feed</span>`,
 		`data-state="waiting"`, // the feed task waits on the developer
-		`Pick a task`,
+		// The board: its first paint and its live template.
+		`x-data="tasksBoard" data-project-id="p1"`,
+		`x-on:task-changed.window="taskChanged"`,
+		`x-data="streamStatus"`, // the board follows the project feed…
+		`data-reports-feed`,     // …through the rail, which reports it to the stream bar
+		`<script id="rail-seed" type="application/json">`,
+		`"tasks":[{"id":"t-feed"`,
+		`data-ssr`,
+		`x-for="column in columns"`,
+		`x-for="card in column.cards"`,
+		`class="[ card ]" data-task-id="t-feed"`,
+		`class="[ title ]" href="/projects/p1/tasks/t-feed">Add SSE feed</a>`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("project page is missing %q", want)
 		}
 	}
 	if strings.Contains(body, "Elsewhere") {
-		t.Error("another project's task is on the rail")
+		t.Error("another project's task is on the board or the rail")
 	}
-	if strings.Contains(body, `x-data="streamStatus"`) {
-		t.Error("a page without a feed shows a connection status")
+	if strings.Contains(body, "Pick a task") {
+		t.Error("the board replaced the pick-a-task empty state")
+	}
+	// The five columns, in board order, each present even when empty.
+	heads := []string{"Backlog", "Todo", "In progress", "Review", "Done"}
+	last := -1
+	for _, h := range heads {
+		i := strings.Index(body, `<span class="[ label ]">`+h+`</span><span class="[ badge ]">`)
+		if i < 0 || i < last {
+			t.Errorf("column %q missing or out of order (index %d after %d)", h, i, last)
+		}
+		last = i
 	}
 	order := []int{strings.Index(body, "<h2>in progress</h2>"), strings.Index(body, "<h2>todo</h2>"), strings.Index(body, "<h2>done</h2>")}
 	if !(order[0] < order[1] && order[1] < order[2]) {
 		t.Errorf("rail groups are not in kanban order: %v", order)
+	}
+}
+
+func TestProjectWithoutTasksOffersToCreateOneAndStaysLive(t *testing.T) {
+	w := board()
+	w.tickets = nil
+	body := get(t, newTestHandler(t, w), "/projects/p1").Body.String()
+	for _, want := range []string{"No tasks in this project yet", "Create a task", `x-data="tasksBoard"`, `"tasks":[]`, `x-data="streamStatus"`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("empty project page is missing %q", want)
+		}
+	}
+	if strings.Contains(body, `class="[ card ]" data-task-id=`) {
+		t.Error("no cards without tasks") // the live template's card is a template, not a card
 	}
 }
 
@@ -293,6 +328,9 @@ func TestTaskPageListsItsSessionsBesideTheDetail(t *testing.T) {
 		if strings.Contains(body, leak) {
 			t.Errorf("a session of another task leaked into the page: %q", leak)
 		}
+	}
+	if strings.Contains(body, "data-reports-feed") {
+		t.Error("the task page's own feed reports to the stream bar, not the rail")
 	}
 	if regexp.MustCompile(`"sessions":\[\{[^]]*"id":"s1"`).FindString(body) == "" {
 		t.Error("the seed does not carry the task's sessions in the API's shape")

@@ -251,6 +251,9 @@ Familiar, exact, and keyboard-first. Every control shares one height (32px, or 2
 ### List rows (signature)
 The workhorse for sessions, tickets, agents and skills. Grid columns `status | title | meta` (override with `--row-columns`), 36px high, 16px inline padding, hairline dividers. Sticky `.list > .group` headers in `panel` (e.g. *Needs you / Running / Earlier*). Selection is `aria-selected="true"` (signal wash); rows waiting on the developer add `data-attention` (amber wash). Titles truncate; meta never wraps.
 
+### Board (project root)
+`.board` lays the project's tasks out as kanban columns (`.column`, `panel` surface, 8px radius) in board order: Backlog, Todo, In progress, Review, Done, every column present even when empty. Each `.card` (`canvas` surface, 5px radius) is the task's title as a link plus a `.meta` row carrying the rail's dot and live-session count, and a native `<select>` that moves the task. A card that moves or arrives over the feed takes `data-fresh`: the one-shot arrival wash, a static inset line under reduced motion. The board never scrolls the page: it scrolls horizontally inside the screen's scroll region.
+
 ### Status (signature)
 `.status[data-state]` draws an 8px dot plus its word: `running` (signal), `waiting` (amber, amber text), `failed` (red, red text), `done` (faint, filled), `idle` (hollow ring), `queued` (half-filled ring); `live` / `reconnecting` / `offline` for the stream. When a state arrives over SSE, set `data-signal` once: the dot emits a single 1.2s ring, never a loop. Under reduced motion it becomes a static outline.
 

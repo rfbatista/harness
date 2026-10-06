@@ -45,6 +45,10 @@ type Rail struct {
 	Empty string
 	// Current is the open task's id, "" when none: the live rail marks it.
 	Current string
+	// ReportsFeed: this rail is the page's feed (the project page), so it
+	// reports the connection to the stream bar. A page with its own feed
+	// (the task page) reports it itself.
+	ReportsFeed bool
 	// Seed lets the browser keep the rail and the board live: the project's
 	// tasks and sessions, followed over the project's feed. Nil leaves the
 	// rail static (no project selected).
@@ -154,7 +158,11 @@ func railAttrs(r Rail) templ.Attributes {
 	if r.Seed == nil {
 		return nil
 	}
-	return templ.Attributes{"x-data": "tasksRail", "data-seed": "rail-seed"}
+	attrs := templ.Attributes{"x-data": "tasksRail", "data-seed": "rail-seed"}
+	if r.ReportsFeed {
+		attrs["data-reports-feed"] = ""
+	}
+	return attrs
 }
 
 // hiddenUnless hides an element x-show controls until it has something to

@@ -21,6 +21,10 @@ type fakeEnvAPI struct {
 }
 
 func (f *fakeEnvAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path == "/api/events" {
+		http.NotFound(w, r) // the rail's feed is not under test
+		return
+	}
 	var in map[string]string
 	_ = json.NewDecoder(r.Body).Decode(&in)
 	f.mu.Lock()

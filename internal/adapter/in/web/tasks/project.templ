@@ -1,15 +1,19 @@
 package tasks
 
 import (
+	"strconv"
+
 	"operators-mcp/internal/adapter/in/web/components"
 	"operators-mcp/internal/adapter/in/web/projects"
 	"operators-mcp/internal/adapter/in/web/shell"
 )
 
-// ProjectPage is a project with no task open: the rail does the work.
-templ ProjectPage(f shell.Frame, projectID, projectName string, hasTasks bool) {
+// ProjectPage is the project root: its tasks as a kanban board. The server
+// renders the first paint inside [data-ssr]; tasksBoard renders the same
+// columns live from the rail's store and removes the server copy.
+templ ProjectPage(f shell.Frame, projectID, projectName string, b Board) {
 	@shell.AppShell(f) {
-		<main class="[ frame ]">
+		<main class="[ frame ]" x-data="tasksBoard" data-project-id={ projectID } x-on:task-changed.window="taskChanged">
 			<header class="[ toolbar ]">
 				<h1>{ projectName }</h1>
 				<div class="[ actions ]">
@@ -17,17 +21,102 @@ templ ProjectPage(f shell.Frame, projectID, projectName string, hasTasks bool) {
 					<a class="[ button ]" data-variant="primary" data-size="sm" href={ templ.SafeURL(NewTaskHref(projectID)) }>New task</a>
 				</div>
 			</header>
-			if hasTasks {
-				@components.Empty("Pick a task", "Tasks are on the left, by status; a dot marks one with live sessions, amber when one waits on you. A task's sessions open beside it.")
-			} else {
-				@components.Empty("No tasks in this project yet", "A task is a piece of work agents take on, in one or more sessions.") {
-					<div class="[ actions ]">
-						<a class="[ button ]" data-variant="primary" href={ templ.SafeURL(NewTaskHref(projectID)) }>Create a task</a>
+			<template x-if="error">
+				<div class="[ banner ] [ pad-s ]" data-tone="danger" role="alert">
+					<div class="[ flow ] [ flow-space-3xs grow ]">
+						<span x-text="error.message"></span>
+						<span class="[ code ]"><span x-text="error.code"></span> · <span x-text="error.next"></span></span>
 					</div>
-				}
-			}
+					<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-on:click="dismissError">Dismiss</button>
+				</div>
+			</template>
+			<p class="[ visually-hidden ]" role="status" aria-live="polite" x-text="announcement"></p>
+			<div data-scroll>
+				<div x-ignore data-ssr>
+					if b.Empty() {
+						@noTasks(projectID)
+					} else {
+						@ssrBoard(b)
+					}
+				</div>
+				<template x-if="isEmpty">
+					@noTasks(projectID)
+				</template>
+				<template x-if="hasTasks">
+					@liveBoard()
+				</template>
+			</div>
 		</main>
 	}
+}
+
+// noTasks is the empty state: what a task is, and the way to make one.
+templ noTasks(projectID string) {
+	@components.Empty("No tasks in this project yet", "A task is a piece of work agents take on, in one or more sessions.") {
+		<div class="[ actions ]">
+			<a class="[ button ]" data-variant="primary" href={ templ.SafeURL(NewTaskHref(projectID)) }>Create a task</a>
+		</div>
+	}
+}
+
+// ssrBoard is the first paint: complete without JavaScript, ignored by Alpine.
+templ ssrBoard(b Board) {
+	<div class="[ board ]" aria-label="Tasks by status">
+		for _, c := range b.Columns {
+			<section class="[ column ]" aria-label={ c.Label }>
+				<header>
+					<span class="[ label ]">{ c.Label }</span><span class="[ badge ]">{ strconv.Itoa(len(c.Cards)) }</span>
+				</header>
+				<div class="[ cards ]">
+					for _, l := range c.Cards {
+						<article class="[ card ]" data-task-id={ l.TaskID }>
+							<a class="[ title ]" href={ templ.SafeURL(l.Href) }>{ l.Label }</a>
+							<div class="[ meta ]">
+								if l.LiveState() != "" {
+									<span class="[ status ]" data-state={ l.LiveState() } data-dot-only>
+										<span class="[ visually-hidden ]">{ l.LiveWord() }</span>
+									</span>
+								}
+								if l.Live > 0 {
+									<span class="[ count ]" title="live sessions">{ strconv.Itoa(l.Live) }</span>
+								}
+							</div>
+						</article>
+					}
+					if len(c.Cards) == 0 {
+						<p class="[ none ]">No tasks</p>
+					}
+				</div>
+			</section>
+		}
+	</div>
+}
+
+// liveBoard is the same markup bound to tasksBoard's columns.
+templ liveBoard() {
+	<div class="[ board ]" aria-label="Tasks by status">
+		<template x-for="column in columns" x-bind:key="column.status">
+			<section class="[ column ]" x-bind:aria-label="column.label">
+				<header>
+					<span class="[ label ]" x-text="column.label"></span><span class="[ badge ]" x-text="column.count"></span>
+				</header>
+				<div class="[ cards ]">
+					<template x-for="card in column.cards" x-bind:key="card.id">
+						<article class="[ card ]" x-bind:data-task-id="card.id" x-bind:data-fresh="card.fresh">
+							<a class="[ title ]" x-bind:href="card.href" x-text="card.title"></a>
+							<div class="[ meta ]">
+								<span class="[ status ]" data-dot-only x-show="card.hasDot" x-bind:data-state="card.state">
+									<span class="[ visually-hidden ]" x-text="card.word"></span>
+								</span>
+								<span class="[ count ]" title="live sessions" x-show="card.hasCount" x-text="card.live"></span>
+							</div>
+						</article>
+					</template>
+					<p class="[ none ]" x-show="column.isEmpty">No tasks</p>
+				</div>
+			</section>
+		</template>
+	</div>
 }
 
 // NewTaskPage creates a task in the project.
