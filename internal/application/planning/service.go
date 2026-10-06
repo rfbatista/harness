@@ -150,14 +150,20 @@ func (s *Service) DeleteTicket(_ context.Context, id string) error {
 
 // --- Documents ---
 
-func (s *Service) CreateDocument(projectID, title, content string) (*domain.Document, error) {
+func (s *Service) CreateDocument(projectID, title, content string, format domain.DocumentFormat) (*domain.Document, error) {
 	if title == "" {
 		return nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "title is required"}
+	}
+	if format == "" {
+		format = domain.DocumentFormatMarkdown
+	}
+	if !format.Valid() {
+		return nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "format must be markdown or html"}
 	}
 	if s.projects.Get(projectID) == nil {
 		return nil, &domain.StructuredError{Code: "PROJECT_NOT_FOUND", Message: "project not found"}
 	}
-	return s.documents.Create(projectID, title, content)
+	return s.documents.Create(projectID, title, content, format)
 }
 
 func (s *Service) GetDocument(id string) *domain.Document { return s.documents.Get(id) }
@@ -166,11 +172,16 @@ func (s *Service) ListDocuments(projectID string) []*domain.Document {
 	return s.documents.ListByProject(projectID)
 }
 
-func (s *Service) UpdateDocument(id, title, content string) (*domain.Document, error) {
+// UpdateDocument replaces title and content. An empty format keeps the
+// stored one, so callers that never learned about formats are unaffected.
+func (s *Service) UpdateDocument(id, title, content string, format domain.DocumentFormat) (*domain.Document, error) {
 	if title == "" {
 		return nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "title is required"}
 	}
-	return s.documents.Update(id, title, content)
+	if format != "" && !format.Valid() {
+		return nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "format must be markdown or html"}
+	}
+	return s.documents.Update(id, title, content, format)
 }
 
 func (s *Service) DeleteDocument(id string) error { return s.documents.Delete(id) }

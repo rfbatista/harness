@@ -475,6 +475,9 @@ type DocumentModel struct {
 	ID        string `gorm:"primaryKey"`
 	ProjectID string `gorm:"column:project_id;index"`
 	Title     string
+	// Format is markdown or html. The column default covers rows written
+	// before it existed; ToDomain covers an empty value either way.
+	Format    string `gorm:"default:markdown"`
 	Content   string
 	CreatedAt int64 `gorm:"autoCreateTime:milli"`
 	UpdatedAt int64 `gorm:"autoUpdateTime:milli"`
@@ -486,10 +489,15 @@ func (m *DocumentModel) ToDomain() *domain.Document {
 	if m == nil {
 		return nil
 	}
+	format := domain.DocumentFormat(m.Format)
+	if format == "" {
+		format = domain.DocumentFormatMarkdown
+	}
 	return &domain.Document{
 		ID:        m.ID,
 		ProjectID: m.ProjectID,
 		Title:     m.Title,
+		Format:    format,
 		Content:   m.Content,
 		CreatedAt: time.UnixMilli(m.CreatedAt),
 		UpdatedAt: time.UnixMilli(m.UpdatedAt),

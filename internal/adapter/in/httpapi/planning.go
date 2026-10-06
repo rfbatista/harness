@@ -113,7 +113,7 @@ func (h *Handler) handleCreateDocument(c echo.Context) error {
 	if err := bindJSON(c, &in); err != nil {
 		return err
 	}
-	doc, err := h.planningSvc.CreateDocument(in.ProjectID, in.Title, in.Content)
+	doc, err := h.planningSvc.CreateDocument(in.ProjectID, in.Title, in.Content, "")
 	if err != nil {
 		return err
 	}
@@ -129,7 +129,7 @@ func (h *Handler) handleUpdateDocument(c echo.Context) error {
 	if err := bindJSON(c, &in); err != nil {
 		return err
 	}
-	doc, err := h.planningSvc.UpdateDocument(in.DocumentID, in.Title, in.Content)
+	doc, err := h.planningSvc.UpdateDocument(in.DocumentID, in.Title, in.Content, "")
 	if err != nil {
 		return err
 	}

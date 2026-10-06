@@ -156,7 +156,7 @@ func TestSessionTaskTools_OtherTaskDocumentIsUnreachable(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	doc, err := f.plan.CreateDocument(f.projectID, "Secret", "not yours")
+	doc, err := f.plan.CreateDocument(f.projectID, "Secret", "not yours", "")
 	if err != nil {
 		t.Fatal(err)
 	}

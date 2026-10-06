@@ -62,7 +62,7 @@ func TestDocumentRepo_CRUDAndLinks(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	d1, err := docs.Create("p1", "Spec", "# spec")
+	d1, err := docs.Create("p1", "Spec", "# spec", domain.DocumentFormatMarkdown)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -121,5 +121,72 @@ func TestDocumentRepo_CRUDAndLinks(t *testing.T) {
 	}
 	if err := docs.Delete("missing"); err == nil {
 		t.Fatal("expected error deleting missing document")
+	}
+}
+
+func TestDocumentRepo_FormatPersists(t *testing.T) {
+	db, err := Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	docs := NewDocumentRepository(db)
+
+	md, err := docs.Create("p1", "Notes", "# notes", domain.DocumentFormatMarkdown)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if md.Format != domain.DocumentFormatMarkdown {
+		t.Fatalf("markdown create read back %q", md.Format)
+	}
+	page, err := docs.Create("p1", "Plan", "<!doctype html><html><body>plan</body></html>", domain.DocumentFormatHTML)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := docs.Get(page.ID); got.Format != domain.DocumentFormatHTML {
+		t.Fatalf("html create read back %q", got.Format)
+	}
+
+	// An empty format on Update keeps the stored one; a format replaces it.
+	kept, err := docs.Update(page.ID, "Plan v2", "<!doctype html><html><body>v2</body></html>", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if kept.Format != domain.DocumentFormatHTML || kept.Title != "Plan v2" {
+		t.Fatalf("update with no format changed it: %+v", kept)
+	}
+	flipped, err := docs.Update(md.ID, "Notes", "<!doctype html><html><body>notes</body></html>", domain.DocumentFormatHTML)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if flipped.Format != domain.DocumentFormatHTML {
+		t.Fatalf("update with a format did not apply it: %+v", flipped)
+	}
+	for _, d := range docs.ListByProject("p1") {
+		if d.Format == "" {
+			t.Fatalf("listing lost the format: %+v", d)
+		}
+	}
+}
+
+// Rows written before the format column existed (or with an empty value)
+// are Markdown: that is what every document was until now.
+func TestDocumentRepo_LegacyRowsReadAsMarkdown(t *testing.T) {
+	db, err := Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	docs := NewDocumentRepository(db)
+	d, err := docs.Create("p1", "Old", "# old", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d.Format != domain.DocumentFormatMarkdown {
+		t.Fatalf("empty format on create read back %q, want markdown", d.Format)
+	}
+	if err := db.Exec("UPDATE documents SET format = '' WHERE id = ?", d.ID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if got := docs.Get(d.ID); got.Format != domain.DocumentFormatMarkdown {
+		t.Fatalf("legacy empty column read back %q, want markdown", got.Format)
 	}
 }

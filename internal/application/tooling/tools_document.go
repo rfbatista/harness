@@ -46,6 +46,7 @@ func DocumentTools(planningSvc ports.DocumentLibrary) []domain.Tool {
 					getString(args, "project_id", ""),
 					getString(args, "title", ""),
 					getString(args, "content", ""),
+					"",
 				)
 				if err != nil {
 					return nil, err
@@ -63,6 +64,7 @@ func DocumentTools(planningSvc ports.DocumentLibrary) []domain.Tool {
 					getString(args, "document_id", ""),
 					getString(args, "title", ""),
 					getString(args, "content", ""),
+					"",
 				)
 				if err != nil {
 					return nil, err

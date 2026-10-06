@@ -48,12 +48,12 @@ func (r *DocumentRepository) ListByTicket(ticketID string) []*domain.Document {
 	return documentsToDomain(models)
 }
 
-func (r *DocumentRepository) Create(projectID, title, content string) (*domain.Document, error) {
+func (r *DocumentRepository) Create(projectID, title, content string, format domain.DocumentFormat) (*domain.Document, error) {
 	id, err := genID()
 	if err != nil {
 		return nil, err
 	}
-	m := &DocumentModel{ID: id, ProjectID: projectID, Title: title, Content: content}
+	m := &DocumentModel{ID: id, ProjectID: projectID, Title: title, Format: string(format), Content: content}
 	if err := r.db.Create(m).Error; err != nil {
 		return nil, err
 	}
@@ -63,7 +63,9 @@ func (r *DocumentRepository) Create(projectID, title, content string) (*domain.D
 	return m.ToDomain(), nil
 }
 
-func (r *DocumentRepository) Update(id, title, content string) (*domain.Document, error) {
+// Update replaces title and content; format replaces the stored format when
+// set and keeps it when empty.
+func (r *DocumentRepository) Update(id, title, content string, format domain.DocumentFormat) (*domain.Document, error) {
 	var m DocumentModel
 	if err := r.db.First(&m, "id = ?", id).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
@@ -72,6 +74,9 @@ func (r *DocumentRepository) Update(id, title, content string) (*domain.Document
 		return nil, err
 	}
 	updates := map[string]interface{}{"title": title, "content": content}
+	if format != "" {
+		updates["format"] = string(format)
+	}
 	if err := r.db.Model(&m).Updates(updates).Error; err != nil {
 		return nil, err
 	}

@@ -175,6 +175,7 @@ func SessionTaskTools(planningSvc ports.Planning, sessions ports.SessionReposito
 					scope.session.ProjectID,
 					getString(args, "title", ""),
 					getString(args, "content", ""),
+					"",
 				)
 				if err != nil {
 					return nil, err
@@ -205,6 +206,7 @@ func SessionTaskTools(planningSvc ports.Planning, sessions ports.SessionReposito
 					current.ID,
 					getString(args, "title", current.Title),
 					getString(args, "content", current.Content),
+					"",
 				)
 				if err != nil {
 					return nil, err
