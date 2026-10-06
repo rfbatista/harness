@@ -158,7 +158,7 @@ func TestSessionTaskTools_OtherTaskDocumentIsUnreachable(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	doc, err := f.plan.CreateDocument(f.projectID, "Secret", "not yours", "")
+	doc, err := f.plan.CreateDocument(f.projectID, "Secret", "not yours", "", domain.DocumentScopeTask)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -306,7 +306,7 @@ func TestSessionTaskTools_CreateRefusesNonHTML(t *testing.T) {
 	if docs := listed.(map[string]any)["documents"].([]documentSummary); len(docs) != 0 {
 		t.Fatalf("a refused document was stored: %+v", docs)
 	}
-	if all := f.plan.ListDocuments(f.projectID); len(all) != 0 {
+	if all := f.plan.ListDocuments(f.projectID, ""); len(all) != 0 {
 		t.Fatalf("a refused document exists unlinked in the project: %+v", all)
 	}
 }
@@ -350,7 +350,7 @@ func TestSessionTaskTools_UpdateRefusesNonHTMLAndKeepsTheOld(t *testing.T) {
 // so; giving it new content makes it an HTML page.
 func TestSessionTaskTools_UpdateTitleOnlyKeepsFormat(t *testing.T) {
 	f := newTaskToolsFixture(t)
-	legacy, err := f.plan.CreateDocument(f.projectID, "Old notes", "# old", domain.DocumentFormatMarkdown)
+	legacy, err := f.plan.CreateDocument(f.projectID, "Old notes", "# old", domain.DocumentFormatMarkdown, domain.DocumentScopeTask)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -368,7 +368,7 @@ func TestSessionTaskTools_UpdateTitleOnlyKeepsFormat(t *testing.T) {
 
 func TestSessionTaskTools_UpdateContentFlipsLegacyToHTML(t *testing.T) {
 	f := newTaskToolsFixture(t)
-	legacy, _ := f.plan.CreateDocument(f.projectID, "Old notes", "# old", domain.DocumentFormatMarkdown)
+	legacy, _ := f.plan.CreateDocument(f.projectID, "Old notes", "# old", domain.DocumentFormatMarkdown, domain.DocumentScopeTask)
 	_ = f.plan.LinkDocument(f.ticketID, legacy.ID)
 	out, err := f.call(t, f.sessionID, "update_task_document", map[string]any{"document_id": legacy.ID, "content": htmlPage("Old notes", "new")})
 	if err != nil {

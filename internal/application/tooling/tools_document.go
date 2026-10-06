@@ -20,7 +20,7 @@ func DocumentTools(planningSvc ports.DocumentLibrary) []domain.Tool {
 				if pid == "" {
 					return nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "project_id is required"}
 				}
-				return map[string]any{"documents": planningSvc.ListDocuments(pid)}, nil
+				return map[string]any{"documents": planningSvc.ListDocuments(pid, "")}, nil
 			},
 		},
 		{
@@ -47,6 +47,7 @@ func DocumentTools(planningSvc ports.DocumentLibrary) []domain.Tool {
 					getString(args, "title", ""),
 					getString(args, "content", ""),
 					domain.DocumentFormat(getString(args, "format", "")),
+					"",
 				)
 				if err != nil {
 					return nil, err

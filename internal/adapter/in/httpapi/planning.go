@@ -93,7 +93,7 @@ func (h *Handler) handleListDocuments(c echo.Context) error {
 	if projectID == "" {
 		return echo.NewHTTPError(http.StatusBadRequest, "project_id is required")
 	}
-	return c.JSON(http.StatusOK, map[string]any{"documents": h.planningSvc.ListDocuments(projectID)})
+	return c.JSON(http.StatusOK, map[string]any{"documents": h.planningSvc.ListDocuments(projectID, "")})
 }
 
 func (h *Handler) handleGetDocument(c echo.Context) error {
@@ -114,7 +114,7 @@ func (h *Handler) handleCreateDocument(c echo.Context) error {
 	if err := bindJSON(c, &in); err != nil {
 		return err
 	}
-	doc, err := h.planningSvc.CreateDocument(in.ProjectID, in.Title, in.Content, domain.DocumentFormat(in.Format))
+	doc, err := h.planningSvc.CreateDocument(in.ProjectID, in.Title, in.Content, domain.DocumentFormat(in.Format), "")
 	if err != nil {
 		return err
 	}

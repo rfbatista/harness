@@ -177,7 +177,7 @@ func SessionTaskTools(planningSvc ports.Planning, sessions ports.SessionReposito
 				if !domain.IsHTMLDocument(content) {
 					return nil, notHTML()
 				}
-				doc, err := planningSvc.CreateDocument(scope.session.ProjectID, getString(args, "title", ""), content, domain.DocumentFormatHTML)
+				doc, err := planningSvc.CreateDocument(scope.session.ProjectID, getString(args, "title", ""), content, domain.DocumentFormatHTML, domain.DocumentScopeTask)
 				if err != nil {
 					return nil, err
 				}

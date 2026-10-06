@@ -28,12 +28,31 @@ func (r *DocumentRepository) Get(id string) *domain.Document {
 	return m.ToDomain()
 }
 
-func (r *DocumentRepository) ListByProject(projectID string) []*domain.Document {
+// ListByProject lists a project's documents, narrowed to scope when it is
+// set. Under the task scope, rows with no scope count too: they predate it.
+func (r *DocumentRepository) ListByProject(projectID string, scope domain.DocumentScope) []*domain.Document {
+	q := r.db.Where("project_id = ?", projectID)
+	switch scope {
+	case "":
+	case domain.DocumentScopeTask:
+		q = q.Where("scope = ? OR scope = '' OR scope IS NULL", string(scope))
+	default:
+		q = q.Where("scope = ?", string(scope))
+	}
 	var models []DocumentModel
-	if err := r.db.Where("project_id = ?", projectID).Find(&models).Error; err != nil {
+	if err := q.Find(&models).Error; err != nil {
 		return nil
 	}
 	return documentsToDomain(models)
+}
+
+// ListTicketIDsByDocument is the tickets a document is linked to.
+func (r *DocumentRepository) ListTicketIDsByDocument(documentID string) []string {
+	var ids []string
+	if err := r.db.Model(&TicketDocumentModel{}).Where("document_id = ?", documentID).Pluck("ticket_id", &ids).Error; err != nil {
+		return nil
+	}
+	return ids
 }
 
 func (r *DocumentRepository) ListByTicket(ticketID string) []*domain.Document {
@@ -48,12 +67,12 @@ func (r *DocumentRepository) ListByTicket(ticketID string) []*domain.Document {
 	return documentsToDomain(models)
 }
 
-func (r *DocumentRepository) Create(projectID, title, content string, format domain.DocumentFormat) (*domain.Document, error) {
+func (r *DocumentRepository) Create(projectID, title, content string, format domain.DocumentFormat, scope domain.DocumentScope) (*domain.Document, error) {
 	id, err := genID()
 	if err != nil {
 		return nil, err
 	}
-	m := &DocumentModel{ID: id, ProjectID: projectID, Title: title, Format: string(format), Content: content}
+	m := &DocumentModel{ID: id, ProjectID: projectID, Title: title, Format: string(format), Scope: string(scope), Content: content}
 	if err := r.db.Create(m).Error; err != nil {
 		return nil, err
 	}
@@ -78,6 +97,25 @@ func (r *DocumentRepository) Update(id, title, content string, format domain.Doc
 		updates["format"] = string(format)
 	}
 	if err := r.db.Model(&m).Updates(updates).Error; err != nil {
+		return nil, err
+	}
+	if err := r.db.First(&m, "id = ?", id).Error; err != nil {
+		return nil, err
+	}
+	return m.ToDomain(), nil
+}
+
+// SetScope moves a document between task and project scope. Updates bumps
+// updated_at, so the browser's watch signature notices the move.
+func (r *DocumentRepository) SetScope(id string, scope domain.DocumentScope) (*domain.Document, error) {
+	var m DocumentModel
+	if err := r.db.First(&m, "id = ?", id).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, &domain.StructuredError{Code: "DOCUMENT_NOT_FOUND", Message: "document not found"}
+		}
+		return nil, err
+	}
+	if err := r.db.Model(&m).Updates(map[string]interface{}{"scope": string(scope)}).Error; err != nil {
 		return nil, err
 	}
 	if err := r.db.First(&m, "id = ?", id).Error; err != nil {

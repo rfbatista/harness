@@ -150,7 +150,7 @@ func (s *Service) DeleteTicket(_ context.Context, id string) error {
 
 // --- Documents ---
 
-func (s *Service) CreateDocument(projectID, title, content string, format domain.DocumentFormat) (*domain.Document, error) {
+func (s *Service) CreateDocument(projectID, title, content string, format domain.DocumentFormat, scope domain.DocumentScope) (*domain.Document, error) {
 	if title == "" {
 		return nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "title is required"}
 	}
@@ -160,16 +160,41 @@ func (s *Service) CreateDocument(projectID, title, content string, format domain
 	if !format.Valid() {
 		return nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "format must be markdown or html"}
 	}
+	if scope == "" {
+		scope = domain.DocumentScopeProject
+	}
+	if !scope.Valid() {
+		return nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "scope must be task or project"}
+	}
 	if s.projects.Get(projectID) == nil {
 		return nil, &domain.StructuredError{Code: "PROJECT_NOT_FOUND", Message: "project not found"}
 	}
-	return s.documents.Create(projectID, title, content, format)
+	return s.documents.Create(projectID, title, content, format, scope)
 }
 
 func (s *Service) GetDocument(id string) *domain.Document { return s.documents.Get(id) }
 
-func (s *Service) ListDocuments(projectID string) []*domain.Document {
-	return s.documents.ListByProject(projectID)
+// ListDocuments lists a project's documents, one scope or every one. Callers
+// validate the scope at their edge; an unknown one matches nothing.
+func (s *Service) ListDocuments(projectID string, scope domain.DocumentScope) []*domain.Document {
+	return s.documents.ListByProject(projectID, scope)
+}
+
+// SetDocumentScope moves a document between task and project scope. The
+// ticket links stay. The same scope again is a no-op: the document comes
+// back as stored, so updated_at moves only when the scope does.
+func (s *Service) SetDocumentScope(id string, scope domain.DocumentScope) (*domain.Document, error) {
+	if !scope.Valid() {
+		return nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "scope must be task or project"}
+	}
+	existing := s.documents.Get(id)
+	if existing == nil {
+		return nil, &domain.StructuredError{Code: "DOCUMENT_NOT_FOUND", Message: "document not found"}
+	}
+	if existing.Scope == scope {
+		return existing, nil
+	}
+	return s.documents.SetScope(id, scope)
 }
 
 // UpdateDocument replaces title and content. An empty format keeps the
@@ -209,4 +234,16 @@ func (s *Service) UnlinkDocument(ticketID, documentID string) error {
 
 func (s *Service) ListTicketDocuments(ticketID string) []*domain.Document {
 	return s.documents.ListByTicket(ticketID)
+}
+
+// ListDocumentTickets is the tickets a document is linked to, as stored; a
+// link whose ticket is gone is skipped.
+func (s *Service) ListDocumentTickets(documentID string) []*domain.Ticket {
+	var out []*domain.Ticket
+	for _, id := range s.documents.ListTicketIDsByDocument(documentID) {
+		if tk := s.tickets.Get(id); tk != nil {
+			out = append(out, tk)
+		}
+	}
+	return out
 }

@@ -17,14 +17,19 @@ type TicketRepository interface {
 }
 
 // DocumentRepository is the outbound port for persisting and retrieving documents.
-// It also owns the ticket_documents join table via Link/Unlink/ListByTicket.
-// Update keeps the stored format when format is empty.
+// It also owns the ticket_documents join table via Link/Unlink/ListByTicket/
+// ListTicketIDsByDocument. Update keeps the stored format when format is
+// empty. ListByProject narrows to one scope when scope is set and lists every
+// document when it is "". SetScope moves a document between scopes and bumps
+// its updated_at.
 type DocumentRepository interface {
 	Get(id string) *domain.Document
-	ListByProject(projectID string) []*domain.Document
+	ListByProject(projectID string, scope domain.DocumentScope) []*domain.Document
 	ListByTicket(ticketID string) []*domain.Document
-	Create(projectID, title, content string, format domain.DocumentFormat) (*domain.Document, error)
+	ListTicketIDsByDocument(documentID string) []string
+	Create(projectID, title, content string, format domain.DocumentFormat, scope domain.DocumentScope) (*domain.Document, error)
 	Update(id, title, content string, format domain.DocumentFormat) (*domain.Document, error)
+	SetScope(id string, scope domain.DocumentScope) (*domain.Document, error)
 	Delete(id string) error
 	Link(ticketID, documentID string) error
 	Unlink(ticketID, documentID string) error
@@ -82,18 +87,23 @@ type TicketAnnouncer interface {
 }
 
 // DocumentLibrary manages a project's documents and their links to tickets.
-// CreateDocument with an empty format writes markdown; UpdateDocument with an
-// empty format keeps the stored one; any value other than markdown or html
-// is INVALID_INPUT.
+// CreateDocument with an empty format writes markdown and with an empty scope
+// a project document (what the API means by "created at the project");
+// UpdateDocument with an empty format keeps the stored one; any other format
+// or scope is INVALID_INPUT. SetDocumentScope moves a document between task
+// and project scope without touching its ticket links; the same scope again
+// changes nothing. ListDocumentTickets is the tickets a document is linked to.
 type DocumentLibrary interface {
-	CreateDocument(projectID, title, content string, format domain.DocumentFormat) (*domain.Document, error)
+	CreateDocument(projectID, title, content string, format domain.DocumentFormat, scope domain.DocumentScope) (*domain.Document, error)
 	GetDocument(id string) *domain.Document
-	ListDocuments(projectID string) []*domain.Document
+	ListDocuments(projectID string, scope domain.DocumentScope) []*domain.Document
 	UpdateDocument(id, title, content string, format domain.DocumentFormat) (*domain.Document, error)
+	SetDocumentScope(id string, scope domain.DocumentScope) (*domain.Document, error)
 	DeleteDocument(id string) error
 	LinkDocument(ticketID, documentID string) error
 	UnlinkDocument(ticketID, documentID string) error
 	ListTicketDocuments(ticketID string) []*domain.Document
+	ListDocumentTickets(documentID string) []*domain.Ticket
 }
 
 // Planning is tickets and documents together.
