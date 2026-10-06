@@ -53,6 +53,16 @@ test("architect mode starts from the task without a first message", async () => 
   assert.equal(dispatched[0].detail.session.mode, "architect");
 });
 
+test("design mode tells the agent to publish as it goes", async () => {
+  const { instance, dispatched } = setup();
+  instance.mode = "design";
+  assert.ok(instance.design);
+  assert.ok(instance.promptPlaceholder.includes("Design tab"), instance.promptPlaceholder);
+  assert.ok(instance.modeHint.includes("publishes"), instance.modeHint);
+  await instance.submit();
+  assert.equal(dispatched[0].detail.session.mode, "design");
+});
+
 test("a refused start shows the coded error and keeps the draft", async () => {
   const { instance, dispatched } = setup({ repositories: { r1: "another-project" } });
   instance.prompt = "go";

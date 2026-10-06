@@ -47,6 +47,7 @@ test("an agent reads as its name, its id when unknown, plain claude without one"
 test("a session started in a mode reads as its agent in that mode", () => {
   assert.equal(runsAs(makeSession({ agentId: "a1" }), { a1: "Reviewer" }), "Reviewer");
   assert.equal(runsAs(makeSession({ agentId: "", mode: "architect" })), "plain claude as architect");
+  assert.equal(runsAs(makeSession({ agentId: "a1", mode: "design" }), { a1: "Reviewer" }), "Reviewer as design");
 });
 
 test("summary counts what is waiting", () => {

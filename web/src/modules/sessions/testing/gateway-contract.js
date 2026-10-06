@@ -75,6 +75,15 @@ export function sessionGatewayContract(name, makeSubject, makeSession) {
     assert.equal(idle.task, "");
   });
 
+  contract("start keeps the mode it was asked for and refuses an unknown one", async () => {
+    const { gateway } = makeSubject({ projects: ["p1"], sessions: [] });
+    const base = { projectId: "p1", ticketId: "t1", repositoryId: "r1", agentId: "", prompt: "", autoAccept: "off", size: { cols: 80, rows: 24 } };
+    assert.equal((await gateway.start({ ...base, mode: "design" })).mode, "design");
+    assert.equal((await gateway.start({ ...base, mode: "architect" })).mode, "architect");
+    assert.equal((await gateway.start({ ...base })).mode, "");
+    await assert.rejects(gateway.start({ ...base, mode: "painter" }), Codes.INVALID_INPUT);
+  });
+
   contract("remove deletes the session and tells followers", async () => {
     const s = makeSession({ id: "gone", projectId: "p1" });
     const subject = makeSubject({ projects: ["p1"], sessions: [s] });
