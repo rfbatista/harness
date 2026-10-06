@@ -17,6 +17,7 @@ import (
 	"operators-mcp/internal/adapter/in/web"
 	"operators-mcp/internal/app/catalog"
 	"operators-mcp/internal/application/apps"
+	"operators-mcp/internal/application/artifacts"
 	"operators-mcp/internal/application/execution"
 	"operators-mcp/internal/application/orchestration"
 	"operators-mcp/internal/application/planning"
@@ -41,7 +42,7 @@ var ServerModule = fx.Module("server",
 
 // registerHTTPServer mounts the UI and JSON API on a mux and serves it,
 // shutting down gracefully when fx stops.
-func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRunner *apps.Service, ts *tooling.Service, exec *execution.Service, orch *orchestration.Service, plan *planning.Service, ws *workspaces.Service, broker *approval.Broker, sessions ports.SessionRepository) error {
+func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRunner *apps.Service, ts *tooling.Service, exec *execution.Service, orch *orchestration.Service, plan *planning.Service, ws *workspaces.Service, broker *approval.Broker, sessions ports.SessionRepository, art *artifacts.Service) error {
 	uiHandler, err := ui.SPAHandler(ui.Dist)
 	if err != nil {
 		return err
@@ -70,10 +71,13 @@ func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRun
 		Sessions:     orch,
 		Planning:     plan,
 		Workspaces:   ws,
+		Artifacts:    art,
 	}), httpapi.WithToken(cfg.APIToken))
 	mux.Handle("/api/", apiRouter)
 	mux.Handle(mcpapprove.PathPrefix, mcpapprove.Handler(broker))
-	mux.Handle(mcpsession.PathPrefix, mcpsession.TaskHandler(tooling.SessionTaskTools(plan, sessions, cat.Agents, cat.Architecture, tooling.PeerStarter{Sessions: orch, Repositories: cat.Projects}, tooling.ArtifactTooling{})))
+	mux.Handle(mcpsession.PathPrefix, mcpsession.TaskHandler(tooling.SessionTaskTools(plan, sessions, cat.Agents, cat.Architecture,
+		tooling.PeerStarter{Sessions: orch, Repositories: cat.Projects},
+		tooling.ArtifactTooling{Publisher: art, ViewURL: httpapi.ArtifactViewPath})))
 	// The web client owns / and its pages; anything else reaches the legacy
 	// designer SPA until it is retired.
 	mux.Handle("/", web.NewHandler(web.Deps{Projects: cat.Projects, Tasks: plan, Sessions: orch, Agents: cat.Agents, Repositories: cat.Projects, EnvFiles: cat.Projects, Documents: plan, History: ws}, assets, uiHandler))

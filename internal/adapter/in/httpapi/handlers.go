@@ -35,6 +35,8 @@ type Services struct {
 	Sessions     ports.Orchestration
 	Planning     ports.Planning
 	Workspaces   ports.WorkspaceManager
+	// Artifacts records and serves what sessions publish; nil answers 503.
+	Artifacts ports.Artifacts
 }
 
 // Handler serves the application's driving ports as HTTP endpoints (the same
@@ -58,6 +60,7 @@ type Handler struct {
 	orchSvc       ports.Orchestration
 	planningSvc   ports.Planning
 	workspacesSvc ports.WorkspaceManager
+	artifactsSvc  ports.Artifacts
 }
 
 // NewHandler returns an HTTP handler that serves /api/list_tree, /api/list_zones, /api/list_projects, etc.
@@ -77,6 +80,7 @@ func NewHandler(s Services) *Handler {
 		orchSvc:       s.Sessions,
 		planningSvc:   s.Planning,
 		workspacesSvc: s.Workspaces,
+		artifactsSvc:  s.Artifacts,
 	}
 }
 
