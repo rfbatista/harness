@@ -37,7 +37,7 @@ export function stubTasksApi(world) {
           const ticket = url.searchParams.get("ticket_id");
           const documents = memory.documents
             .filter((d) => d.ticketId === ticket)
-            .map((d) => ({ id: d.id, project_id: "p1", title: d.id, content: "…", updated_at: d.updatedAt }));
+            .map((d) => ({ id: d.id, project_id: "p1", title: d.id, format: d.format ?? "markdown", content: "…", updated_at: d.updatedAt }));
           return jsonResponse(200, { documents });
         }
         default:
