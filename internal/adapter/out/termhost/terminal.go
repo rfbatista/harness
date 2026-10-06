@@ -4,6 +4,8 @@ import (
 	"errors"
 	"io"
 	"os"
+	"slices"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -18,6 +20,10 @@ import (
 // defaultSubscriberBuffer is how many output chunks a subscriber may fall
 // behind before it is dropped and must subscribe again for a fresh snapshot.
 const defaultSubscriberBuffer = 1024
+
+// scrollbackLines is how many lines of main-screen history a terminal keeps
+// and hands to a client in its snapshot: the attach protocol's bound.
+const scrollbackLines = 2000
 
 // terminal is one process on a PTY and the goroutines that connect it to the
 // emulator:
@@ -60,6 +66,7 @@ func newTerminal(proc ports.PTYProcess, size ports.TermSize, killAfter time.Dura
 		done:      make(chan struct{}),
 	}
 	t.emu.SetCallbacks(vt.Callbacks{Title: func(s string) { t.title.Store(&s) }}) // before run: not locked
+	t.emu.SetScrollbackSize(scrollbackLines)
 	return t
 }
 
@@ -145,9 +152,12 @@ func (t *terminal) exited() bool {
 	}
 }
 
+// Subscribe takes the screen, its scrollback and the subscription in one
+// step under mu, so the output that follows is exactly what was printed
+// after them. The scrollback is rendered after unlocking: its lines are
+// immutable once stored, so copying the slice is enough.
 func (t *terminal) Subscribe() (ports.TerminalSnapshot, ports.Subscription) {
 	t.mu.Lock()
-	defer t.mu.Unlock()
 	pos := t.emu.CursorPosition()
 	snap := ports.TerminalSnapshot{
 		Screen:    t.emu.Render(),
@@ -157,13 +167,39 @@ func (t *terminal) Subscribe() (ports.TerminalSnapshot, ports.Subscription) {
 		Size:      t.size,
 		Title:     t.Title(),
 	}
+	var history []uv.Line
+	if !snap.AltScreen {
+		history = slices.Clone(t.emu.Scrollback().Lines())
+	}
 	c := make(chan []byte, t.subBuffer)
-	if t.subs == nil { // exited
+	exited := t.subs == nil
+	if !exited {
+		t.subs[c] = struct{}{}
+	}
+	t.mu.Unlock()
+
+	snap.Scrollback = renderScrollback(history)
+	if exited {
 		close(c)
 		return snap, ports.Subscription{C: c, Close: func() {}}
 	}
-	t.subs[c] = struct{}{}
 	return snap, ports.Subscription{C: c, Close: func() { t.unsubscribe(c) }}
+}
+
+// renderScrollback renders history the way the emulator renders the screen:
+// each line styled, lines joined by "\n", oldest first.
+func renderScrollback(history []uv.Line) string {
+	if len(history) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	for i, l := range history {
+		if i > 0 {
+			b.WriteByte('\n')
+		}
+		b.WriteString(l.Render())
+	}
+	return b.String()
 }
 
 func (t *terminal) unsubscribe(c chan []byte) {
