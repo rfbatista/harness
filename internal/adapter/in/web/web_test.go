@@ -233,12 +233,12 @@ func TestProjectPagePutsItsTasksOnTheRailAndTheProjectInThePicker(t *testing.T) 
 // a sandboxed frame without allow-same-origin, titles and notes as text.
 func TestDesignTabEmbedsArtifactsSandboxed(t *testing.T) {
 	body := get(t, newTestHandler(t, board()), "/projects/p1/tasks/t-feed").Body.String()
-	for _, want := range []string{`sessionsDesignPanel(panel)`, `sandbox="allow-scripts"`, `role="tab"`, `x-on:click="showDesign"`, `x-on:artifact-published="artifactPublished"`} {
+	for _, want := range []string{`sessionsDesignPanel(panel)`, `sandbox="allow-scripts" referrerpolicy="no-referrer"></iframe>`, `x-init="loadFrame($el, frame)"`, `role="tab"`, `x-on:click="showDesign"`, `x-on:artifact-published="artifactPublished"`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("task page lacks %s", want)
 		}
 	}
-	for _, never := range []string{"allow-same-origin", "x-html", "autoplay"} {
+	for _, never := range []string{"allow-same-origin", "x-html", "autoplay", `<iframe x-`} {
 		if strings.Contains(body, never) {
 			t.Errorf("task page must not contain %q", never)
 		}

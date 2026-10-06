@@ -771,8 +771,10 @@ func appPanel() templ.Component {
 // artifact rendered beside the list. It stays mounted behind the other tabs
 // (x-show), so its stream keeps counting publishes for the tab's badge.
 // Pages and dev servers are embedded only in a sandboxed frame; titles and
-// notes are text. Tab leaves the frame (sequential focus crosses it) and
-// lands on the bar, which says so.
+// notes are text. The Alpine CSP build refuses directives on an iframe, so
+// the frame is literal markup (sandbox included) and its wrapper's x-init
+// hands it to loadFrame, which sets only src and title. Tab leaves the frame
+// (sequential focus crosses it) and lands on the bar, which says so.
 func designPanel() templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
@@ -802,7 +804,7 @@ func designPanel() templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 62, "</template></div><div class=\"[ preview ]\" x-bind:data-kind=\"currentKind\"><div class=\"[ stage ]\"><template x-for=\"frame in frames\" x-bind:key=\"frame.key\"><div class=\"[ frame ]\"><template x-if=\"frame.isPage\"><iframe sandbox=\"allow-scripts\" referrerpolicy=\"no-referrer\" x-bind:src=\"frame.src\" x-bind:title=\"frame.frameTitle\"></iframe></template><template x-if=\"frame.embedsUrl\"><iframe sandbox=\"allow-scripts\" referrerpolicy=\"no-referrer\" x-bind:src=\"frame.src\" x-bind:title=\"frame.frameTitle\"></iframe></template><template x-if=\"frame.notEmbeddable\"><div class=\"[ pad-l ]\"><div class=\"[ banner ]\" data-tone=\"attention\"><span>This dev server is not on this machine, so it is not embedded. The session published: <code x-text=\"frame.title\"></code></span></div></div></template><template x-if=\"frame.isImage\"><img x-bind:src=\"frame.src\" x-bind:alt=\"frame.title\"></template><template x-if=\"frame.isVideo\"><video controls preload=\"metadata\" x-bind:src=\"frame.src\" x-bind:aria-label=\"frame.frameTitle\"></video></template><template x-if=\"frame.isFile\"><div class=\"[ flow ] [ flow-space-s ]\"><p><a x-bind:href=\"frame.openHref\" x-bind:download=\"frame.fileName\" x-text=\"frame.fileName\"></a></p><p class=\"[ text-sm color-ink-muted ]\"><span x-text=\"frame.size\"></span> · <code x-text=\"frame.mime\"></code></p></div></template></div></template></div><div class=\"[ bar ]\"><span class=\"[ status ]\" x-bind:data-state=\"feedState\" x-text=\"feedWord\">connecting</span> <span class=\"[ grow truncate ]\"><kbd>Tab</kbd> leaves the frame · <kbd>J</kbd> <kbd>K</kbd> move the list</span><template x-if=\"hasOpenHref\"><a x-bind:href=\"currentOpenHref\" target=\"_blank\" rel=\"noopener noreferrer\">Open in a new tab</a></template></div></div></div></section>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 62, "</template></div><div class=\"[ preview ]\" x-bind:data-kind=\"currentKind\"><div class=\"[ stage ]\"><template x-for=\"frame in frames\" x-bind:key=\"frame.key\"><div class=\"[ frame ]\"><template x-if=\"frame.isPage\"><div class=\"[ frame ]\" x-init=\"loadFrame($el, frame)\"><iframe sandbox=\"allow-scripts\" referrerpolicy=\"no-referrer\"></iframe></div></template><template x-if=\"frame.embedsUrl\"><div class=\"[ frame ]\" x-init=\"loadFrame($el, frame)\"><iframe sandbox=\"allow-scripts\" referrerpolicy=\"no-referrer\"></iframe></div></template><template x-if=\"frame.notEmbeddable\"><div class=\"[ pad-l ]\"><div class=\"[ banner ]\" data-tone=\"attention\"><span>This dev server is not on this machine, so it is not embedded. The session published: <code x-text=\"frame.title\"></code></span></div></div></template><template x-if=\"frame.isImage\"><img x-bind:src=\"frame.src\" x-bind:alt=\"frame.title\"></template><template x-if=\"frame.isVideo\"><video controls preload=\"metadata\" x-bind:src=\"frame.src\" x-bind:aria-label=\"frame.frameTitle\"></video></template><template x-if=\"frame.isFile\"><div class=\"[ flow ] [ flow-space-s ]\"><p><a x-bind:href=\"frame.openHref\" x-bind:download=\"frame.fileName\" x-text=\"frame.fileName\"></a></p><p class=\"[ text-sm color-ink-muted ]\"><span x-text=\"frame.size\"></span> · <code x-text=\"frame.mime\"></code></p></div></template></div></template></div><div class=\"[ bar ]\"><span class=\"[ status ]\" x-bind:data-state=\"feedState\" x-text=\"feedWord\">connecting</span> <span class=\"[ grow truncate ]\"><kbd>Tab</kbd> leaves the frame · <kbd>J</kbd> <kbd>K</kbd> move the list</span><template x-if=\"hasOpenHref\"><a x-bind:href=\"currentOpenHref\" target=\"_blank\" rel=\"noopener noreferrer\">Open in a new tab</a></template></div></div></div></section>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -840,7 +842,7 @@ func taskBand(v PageView) templ.Component {
 		var templ_7745c5c3_Var34 string
 		templ_7745c5c3_Var34, templ_7745c5c3_Err = templ.JoinStringErrs(v.TaskDescription)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `sessions/page.templ`, Line: 504, Col: 63}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `sessions/page.templ`, Line: 510, Col: 63}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var34))
 		if templ_7745c5c3_Err != nil {

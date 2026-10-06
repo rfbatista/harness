@@ -417,8 +417,10 @@ templ appPanel() {
 // artifact rendered beside the list. It stays mounted behind the other tabs
 // (x-show), so its stream keeps counting publishes for the tab's badge.
 // Pages and dev servers are embedded only in a sandboxed frame; titles and
-// notes are text. Tab leaves the frame (sequential focus crosses it) and
-// lands on the bar, which says so.
+// notes are text. The Alpine CSP build refuses directives on an iframe, so
+// the frame is literal markup (sandbox included) and its wrapper's x-init
+// hands it to loadFrame, which sets only src and title. Tab leaves the frame
+// (sequential focus crosses it) and lands on the bar, which says so.
 templ designPanel() {
 	<section class="[ frame ]" aria-label="Design" x-data="sessionsDesignPanel(panel)" x-show="showingDesign">
 		<template x-if="error">
@@ -458,10 +460,14 @@ templ designPanel() {
 					<template x-for="frame in frames" x-bind:key="frame.key">
 						<div class="[ frame ]">
 							<template x-if="frame.isPage">
-								<iframe sandbox="allow-scripts" referrerpolicy="no-referrer" x-bind:src="frame.src" x-bind:title="frame.frameTitle"></iframe>
+								<div class="[ frame ]" x-init="loadFrame($el, frame)">
+									<iframe sandbox="allow-scripts" referrerpolicy="no-referrer"></iframe>
+								</div>
 							</template>
 							<template x-if="frame.embedsUrl">
-								<iframe sandbox="allow-scripts" referrerpolicy="no-referrer" x-bind:src="frame.src" x-bind:title="frame.frameTitle"></iframe>
+								<div class="[ frame ]" x-init="loadFrame($el, frame)">
+									<iframe sandbox="allow-scripts" referrerpolicy="no-referrer"></iframe>
+								</div>
 							</template>
 							<template x-if="frame.notEmbeddable">
 								<div class="[ pad-l ]">

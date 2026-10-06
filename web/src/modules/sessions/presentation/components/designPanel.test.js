@@ -168,3 +168,16 @@ test("a failed load shows the coded error and stays empty", async () => {
   assert.equal(instance.error, null);
   instance.destroy();
 });
+
+test("loadFrame fills the frame beside it with the revision's src and title; the sandbox stays as the markup set it", async () => {
+  const { instance } = await setup();
+  const host = document.createElement("div");
+  const iframe = document.createElement("iframe");
+  iframe.setAttribute("sandbox", "allow-scripts");
+  host.append(iframe);
+  instance.loadFrame(host, { src: "/api/artifacts/a1/view/?rev=2", frameTitle: "Hero, revision 2" });
+  assert.equal(iframe.getAttribute("src"), "/api/artifacts/a1/view/?rev=2");
+  assert.equal(iframe.title, "Hero, revision 2");
+  assert.equal(iframe.getAttribute("sandbox"), "allow-scripts", "never loosened");
+  instance.destroy();
+});

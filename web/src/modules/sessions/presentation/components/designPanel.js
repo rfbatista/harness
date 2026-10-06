@@ -137,6 +137,21 @@ export const designPanel = ({ artifacts, clock, setTimeout = globalThis.setTimeo
       if (status === FeedStatus.RESYNCED) this.load();
     },
 
+    // ── the sandboxed frame ──────────────────────────────────────────────
+    /**
+     * Fills the static <iframe sandbox="allow-scripts"> inside `host` with the
+     * revision's src and title. The Alpine CSP build refuses directives on an
+     * iframe, so the markup keeps the frame (and its sandbox) literal and the
+     * wrapper's x-init hands it here. The sandbox attribute is never touched.
+     * @param {HTMLElement} host @param {{ src: string, frameTitle: string }} frame
+     */
+    loadFrame(host, frame) {
+      const iframe = host.querySelector("iframe");
+      if (!iframe) return;
+      iframe.title = frame.frameTitle;
+      iframe.setAttribute("src", frame.src);
+    },
+
     // ── developer actions ────────────────────────────────────────────────
     select(id) {
       this.selectedId = id;
