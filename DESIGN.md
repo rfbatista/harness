@@ -222,7 +222,7 @@ Familiar, exact, and keyboard-first. Every control shares one height (32px, or 2
 - **Secondary** (default): `raised` fill, `line-control` edge, ink text.
 - **Ghost** (`data-variant="ghost"`): no fill or edge, muted ink that brightens on hover. Toolbars and tertiary actions.
 - **Danger** (`data-variant="danger"`): fault red fill. Destructive, irreversible actions only (stop session, delete).
-- **States:** hover lays a 5–8% ink veil over the fill (90ms); active nudges 1px down; `:focus-visible` gets the shared ring; `disabled` / `aria-disabled` drop to 45% opacity; `aria-busy="true"` hides the label behind a spinner without changing width. Icon-only buttons use `data-icon` and need an `aria-label`.
+- **States:** hover lays a 5–8% ink veil over the fill (90ms); active nudges 1px down; `:focus-visible` gets the shared ring; `disabled` / `aria-disabled` drop to 45% opacity; `aria-busy="true"` slides a spinner in beside the label over 240ms, so the label stays readable and the button widens smoothly; on `data-icon` buttons the spinner replaces the icon instead. Icon-only buttons use `data-icon` and need an `aria-label`.
 - **Keyboard hints:** a `<kbd>` inside a button shows its shortcut; on filled variants it turns tonal.
 
 ### Chips (badges)

@@ -112,7 +112,7 @@ An exception is a deviation from a block: a variant or a state. It is written
 .button {
   /* … */
   &[data-variant="primary"] { --_bg: var(--color-signal); }
-  &[aria-busy="true"] { /* spinner */ }
+  &[aria-busy="true"] { /* ring slides in beside the label */ }
 }
 ```
 
