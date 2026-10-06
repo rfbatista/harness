@@ -108,8 +108,9 @@ var now = time.Date(2026, 10, 2, 14, 0, 0, 0, time.UTC)
 func builtAssets(t *testing.T) *Assets {
 	t.Helper()
 	a, err := newAssets(fstest.MapFS{
-		"app.js":  {Data: []byte("console.log('app')")},
-		"app.css": {Data: []byte("body{}")},
+		"app.js":       {Data: []byte("console.log('app')")},
+		"app.css":      {Data: []byte("body{}")},
+		"document.css": {Data: []byte(".prose{}")},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -528,5 +529,23 @@ func TestUnbuiltAssetsSayHowToBuild(t *testing.T) {
 	h := NewHandler(Deps{Projects: fakeProjects{}, Tasks: fakeTickets{}, Sessions: fakeSessions{}}, a, nil)
 	if body := get(t, h, "/").Body.String(); !strings.Contains(body, "make web") {
 		t.Fatalf("missing build hint:\n%s", body)
+	}
+}
+
+// The app bundles are what "built" means; the document stylesheet is
+// optional and its absence must not hide the pages.
+func TestBuiltMeansTheAppBundles(t *testing.T) {
+	a, err := newAssets(fstest.MapFS{
+		"app.js":  {Data: []byte("console.log('app')")},
+		"app.css": {Data: []byte("body{}")},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !a.Built() {
+		t.Fatal("app.js and app.css present, but Built() is false")
+	}
+	if a.URL("document.css") != "/static/document.css" {
+		t.Fatalf("an unbuilt stylesheet has a versioned url: %q", a.URL("document.css"))
 	}
 }

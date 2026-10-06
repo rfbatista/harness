@@ -172,3 +172,11 @@ func TestDocumentsPageTreatsAnEmptyFormatAsMarkdown(t *testing.T) {
 		t.Fatalf("legacy document not rendered as Markdown:\n%s", body)
 	}
 }
+
+// The stylesheet an HTML document may link to match the UI's prose look.
+func TestDocumentStylesheetIsServed(t *testing.T) {
+	rec := get(t, newTestHandler(t, documentsBoard()), "/static/document.css")
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Header().Get("Content-Type"), "text/css") {
+		t.Fatalf("status %d, type %q", rec.Code, rec.Header().Get("Content-Type"))
+	}
+}

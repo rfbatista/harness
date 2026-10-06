@@ -1,8 +1,9 @@
 // Command webbuild bundles the web client with esbuild's Go API, so the
 // toolchain stays Go-only:
 //
-//	web/src/main.js  → internal/adapter/in/web/static/app.js
-//	web/src/app.css  → internal/adapter/in/web/static/app.css (design system + xterm.css)
+//	web/src/main.js       → internal/adapter/in/web/static/app.js
+//	web/src/app.css       → internal/adapter/in/web/static/app.css (design system + xterm.css)
+//	web/src/document.css  → internal/adapter/in/web/static/document.css (what an HTML task document may link)
 //
 // Bare imports resolve to the vendored files in web/vendor (vendors). It also writes
 // web/test/all.js, the list of every *.test.js the browser test page runs.
@@ -75,18 +76,24 @@ func run(watch, dev bool) error {
 	}
 
 	opts := options(root, dev)
+	docOpts := documentOptions(root, dev)
 	if !watch {
-		return report(api.Build(opts))
+		if err := report(api.Build(opts)); err != nil {
+			return err
+		}
+		return report(api.Build(docOpts))
 	}
 
-	opts.Plugins = append(opts.Plugins, rebuildLogger())
-	ctx, ctxErr := api.Context(opts)
-	if ctxErr != nil {
-		return ctxErr
-	}
-	defer ctx.Dispose()
-	if err := ctx.Watch(api.WatchOptions{}); err != nil {
-		return err
+	for _, o := range []api.BuildOptions{opts, docOpts} {
+		o.Plugins = append(o.Plugins, rebuildLogger())
+		ctx, ctxErr := api.Context(o)
+		if ctxErr != nil {
+			return ctxErr
+		}
+		defer ctx.Dispose()
+		if err := ctx.Watch(api.WatchOptions{}); err != nil {
+			return err
+		}
 	}
 	fmt.Println("webbuild: watching web/src, web/vendor and design-system/css (ctrl-c to stop)")
 	stop := make(chan os.Signal, 1)
@@ -119,6 +126,15 @@ func options(root string, dev bool) api.BuildOptions {
 	}
 }
 
+// documentOptions builds the document stylesheet on its own, under its own
+// entry name: the app build names every output "app".
+func documentOptions(root string, dev bool) api.BuildOptions {
+	o := options(root, dev)
+	o.EntryPoints = []string{"web/src/document.css"}
+	o.EntryNames = "document"
+	return o
+}
+
 // report fails the build on any error or warning: a warning in a bundle we
 // ship is a bug we have not looked at yet.
 func report(result api.BuildResult) error {
@@ -129,7 +145,7 @@ func report(result api.BuildResult) error {
 		fmt.Println("wrote", f.Path)
 	}
 	if len(result.OutputFiles) == 0 {
-		fmt.Println("wrote", outDir+"/app.js", outDir+"/app.css")
+		fmt.Println("wrote", outDir+"/*")
 	}
 	return nil
 }

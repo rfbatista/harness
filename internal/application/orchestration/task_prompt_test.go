@@ -110,6 +110,7 @@ func TestApplyTaskContext_BriefSaysDocumentsAreHTML(t *testing.T) {
 		"Markdown is refused",
 		"DOCUMENT_NOT_HTML",
 		"light and dark",
+		"/static/document.css",
 	} {
 		if !strings.Contains(cfg.AppendSystem, want) {
 			t.Errorf("brief missing %q:\n%s", want, cfg.AppendSystem)

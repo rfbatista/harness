@@ -71,7 +71,9 @@ as a page. The minimal shape:
 </html>
 
 Keep styles inline or in <style>; nothing outside the harness origin loads.
-Make it readable in light and dark (color-scheme: light dark, or a
+To match the harness look, link <link rel="stylesheet" href="/static/document.css">
+in <head> and put class="prose" on <body>; it follows the system's light or
+dark scheme. Make it readable in light and dark (color-scheme: light dark, or a
 prefers-color-scheme media query). It renders on the task's documents page
 in a sandboxed frame: scripts run there but cannot reach the harness API.
 Older documents may be Markdown; read_task_document says which.

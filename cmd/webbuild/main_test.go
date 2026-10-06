@@ -39,3 +39,15 @@ func TestOptionsAliasAlpineToTheVendoredBuild(t *testing.T) {
 		}
 	}
 }
+
+// document.css is the stylesheet an HTML task document may link; it is
+// built beside the app bundles, under its own name.
+func TestDocumentStylesheetIsBuilt(t *testing.T) {
+	opts := documentOptions("/repo", false)
+	if len(opts.EntryPoints) != 1 || opts.EntryPoints[0] != "web/src/document.css" || opts.EntryNames != "document" || opts.Outdir != outDir {
+		t.Fatalf("document build options = %+v", opts)
+	}
+	if _, err := os.Stat("../../web/src/document.css"); err != nil {
+		t.Fatalf("web/src/document.css missing: %v", err)
+	}
+}
