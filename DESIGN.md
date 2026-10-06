@@ -260,6 +260,9 @@ A 28px `panel` strip at the foot of the shell, `aria-live="polite"`: connection 
 ### Terminal (signature)
 A session's live PTY, drawn by xterm.js in the `sunken` well with the mono family at 13px; the theme is read from the color tokens (canvas converts their OKLCH). Under it, a 32px `panel` bar: the connection status (`live`, `exited (code N)`, `disconnected` with Reconnect) and the window title claude sets. Click anywhere on the screen to type into it.
 
+### Artifact card and preview (Design tab)
+The Design tab lists what a session published (`.artifact-card` rows in a `.list`: title, a neutral kind badge, the revision's note clamped to two lines, `rev N` and the time) beside `.preview`, which renders the selected one in the `sunken` well: a page or a dev server in an `<iframe sandbox="allow-scripts">` that fills the tab and scrolls inside, an image or video fitted and centred, a file as a download link with its name and size. Under it a 32px `panel` bar: the stream status word, the keyboard way out of the frame (Tab), and an "Open in a new tab" link. A card that arrives over the stream takes the one-shot arrival wash. Video never autoplays. The tab's label carries a count badge while publishes arrive behind another tab.
+
 ### Transcript (signature)
 The `sunken` well where a session's output is read: mono 13px, a grid of `time | mark | text`. Line kinds via `data-kind`: `user` (signal mark ›), `agent` (·), `tool` (muted, ⌁), `error` (red, ×), `prompt` (amber wash, ?) for a permission request awaiting the developer.
 
@@ -280,6 +283,7 @@ The `sunken` well where a session's output is read: mono 13px, a grid of `time |
 - **Do** show the error `code` and the next action whenever the API returns a `StructuredError`, in a `.banner` with its `.code` line.
 - **Do** keep transitions between 90 and 240ms with `--ease-out`, and give every animation a reduced-motion fallback.
 - **Do** keep text contrast ≥ 4.5:1 and control edges ≥ 3:1 in both themes; re-check when adding a surface.
+- **Do** embed agent-produced pages only in `<iframe sandbox="allow-scripts">` and render their titles and notes as text; `allow-same-origin` is never added.
 
 ### Don't:
 - **Don't** build **busy IDE chrome**: dozens of panels, toolbars, icon rows and tabs competing for attention. One job per screen; a second pane must earn its place.

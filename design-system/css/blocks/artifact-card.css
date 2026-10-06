@@ -1,0 +1,71 @@
+/*
+ * Artifact card — one thing a session published, in the Design tab's list:
+ * title, kind, the note for this revision, revision and time.
+ * <div class="artifact-card" role="option" aria-selected="true">
+ *   <span class="title">…</span><span class="badge">page</span>
+ *   <span class="note">…</span><span class="meta"><span>rev 2</span><span>4m</span></span>
+ * </div>
+ * Exceptions: aria-selected; data-fresh (just arrived over the stream).
+ */
+
+@layer blocks {
+  .artifact-card {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    column-gap: var(--space-s);
+    row-gap: var(--space-2xs);
+    padding: var(--space-s) var(--space-l);
+    border-block-end: var(--border-width) solid var(--color-line);
+    color: var(--color-ink);
+    cursor: default;
+    transition: background-color var(--duration-instant) var(--ease-out);
+
+    &:hover { background: var(--color-hover); }
+    &:focus-visible { outline-offset: calc(var(--border-focus-width) * -1); }
+
+    & .title {
+      font-weight: var(--weight-medium);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    & .note {
+      grid-column: 1 / -1;
+      display: -webkit-box;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 2;
+      overflow: hidden;
+      color: var(--color-ink-muted);
+      font-size: var(--text-sm);
+    }
+
+    & .note:empty { display: none; }
+
+    & .meta {
+      grid-column: 1 / -1;
+      display: flex;
+      gap: var(--space-m);
+      color: var(--color-ink-faint);
+      font-size: var(--text-xs);
+      font-variant-numeric: tabular-nums;
+    }
+
+    &[aria-selected="true"] { background: var(--color-selected); }
+
+    &[data-fresh] {
+      animation: artifact-arrived 8s var(--ease-out) both;
+
+      @media (prefers-reduced-motion: reduce) {
+        animation: none;
+        box-shadow: inset 2px 0 0 var(--color-signal);
+      }
+    }
+  }
+
+  @keyframes artifact-arrived {
+    from { background-color: var(--color-signal-wash); box-shadow: inset 2px 0 0 var(--color-signal); }
+    to { box-shadow: inset 2px 0 0 transparent; }
+  }
+}
