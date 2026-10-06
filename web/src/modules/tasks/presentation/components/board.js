@@ -10,16 +10,20 @@
 
 import { Codes, codeOf } from "../../../../shared/domain/errors.js";
 import { describeError } from "../../../../shared/presentation/errors.js";
-import { applyTaskChange } from "../../domain/board.js";
+import { applyTaskChange, describeChange } from "../../domain/board.js";
 import { toColumns } from "../boardView.js";
+
+/** How long a task that arrived or moved over the feed stays highlighted. */
+export const FRESH_MS = 8_000;
 
 /**
  * @param {{
  *   gateway: import("../../domain/ports.js").TaskGateway,
  *   store: import("./rail.js").RailStore,
+ *   setTimeout?: typeof globalThis.setTimeout,
  * }} deps
  */
-export const board = ({ gateway, store }) => () => ({
+export const board = ({ gateway, store, setTimeout = globalThis.setTimeout.bind(globalThis) }) => () => ({
   projectId: "",
   /** The live template has rendered and the server copy is gone. */
   ready: false,
@@ -74,8 +78,24 @@ export const board = ({ gateway, store }) => () => ({
     }
   },
 
-  /** A task changed over the feed (tasksRail dispatched it). Until the feed carries ticket changes there is nothing to do; the markup binds it from the start. */
-  taskChanged() {},
+  /**
+   * A task changed over the feed (tasksRail applied it and dispatched this):
+   * say what happened and highlight the card for a while. The echo of a move
+   * made from this board is neither announced nor highlighted.
+   */
+  taskChanged(event) {
+    const { change, previous } = event.detail;
+    const id = change.kind === "task-deleted" ? change.id : change.task.id;
+    const echo = change.kind === "task-upsert" && this.moves[id] === change.task.status;
+    delete this.moves[id]; // an echo of a move made here, or someone else's change: either way the move is settled
+    if (echo) return;
+    this.announcement = describeChange(previous, change);
+    if (change.kind !== "task-upsert") return;
+    this.freshIds = [...this.freshIds, id];
+    setTimeout(() => {
+      this.freshIds = this.freshIds.filter((x) => x !== id);
+    }, FRESH_MS);
+  },
 
   dismissError() {
     this.error = null;

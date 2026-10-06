@@ -1,9 +1,10 @@
 import { Codes, StructuredError } from "../../../../shared/domain/errors.js";
 import { mount } from "../../../../shared/testing/alpine.js";
+import { manualTimers } from "../../../../shared/testing/doubles.js";
 import { assert, file, test } from "../../../../shared/testing/test.js";
 import { memoryTasks } from "../../infrastructure/memory-gateway.js";
 import { makeTask } from "../../testing/fixtures.js";
-import { board } from "./board.js";
+import { board, FRESH_MS } from "./board.js";
 
 file("tasks/presentation/board");
 
@@ -15,13 +16,17 @@ function setup({ tasks = [makeTask()], seeded = true } = {}) {
   const ssr = document.createElement("div");
   ssr.dataset.ssr = "";
   el.append(ssr);
-  const mounted = mount(board({ gateway: memory.gateway, store }), { el });
+  const timers = manualTimers();
+  const mounted = mount(board({ gateway: memory.gateway, store, setTimeout: timers.setTimeout }), { el });
   mounted.instance.init();
-  return { ...mounted, store, el, memory };
+  return { ...mounted, store, el, memory, timers };
 }
 
 /** The change event a card's select fires. */
 const change = (taskId, value) => ({ target: { dataset: { taskId }, value } });
+
+/** The task-changed event tasksRail dispatches after applying a feed change. */
+const changed = (change, previous) => ({ detail: { change, previous } });
 
 test("renders the store's tasks as columns once seeded, and drops the server's copy", () => {
   const { instance, tick, el } = setup();
@@ -96,4 +101,38 @@ test("a resync during a move does not leave the moved card stale (Review Focus 4
   store.tasks = [makeTask({ status: "in_progress" })]; // the rail resynced from the server, which has not applied the move yet
   await p;
   assert.equal(store.tasks[0].status, "review", "the response is applied on top of the resync");
+});
+
+test("a task moved elsewhere is washed for a while and announced", () => {
+  const { instance, store, timers } = setup();
+  const moved = makeTask({ status: "review" });
+  store.tasks = [moved]; // the rail applied it
+  instance.taskChanged(changed({ kind: "task-upsert", task: moved }, makeTask()));
+  assert.equal(instance.columns[3].cards[0].fresh, true);
+  assert.equal(instance.announcement, "Add SSE feed moved to Review");
+  assert.deepEqual(timers.delays(), [FRESH_MS]);
+  timers.tick();
+  assert.equal(instance.columns[3].cards[0].fresh, false);
+});
+
+test("a task created elsewhere appears washed; a deleted one is announced as removed", () => {
+  const { instance, store } = setup({ tasks: [] });
+  const created = makeTask({ id: "t2", title: "New", status: "backlog" });
+  store.tasks = [created];
+  instance.taskChanged(changed({ kind: "task-upsert", task: created }, null));
+  assert.deepEqual([instance.columns[0].cards[0].fresh, instance.announcement], [true, "New was added to Backlog"]);
+  store.tasks = [];
+  instance.taskChanged(changed({ kind: "task-deleted", id: "t2" }, created));
+  assert.equal(instance.announcement, "New was removed");
+});
+
+test("the feed's echo of this board's own move is neither washed nor announced (Review Focus 5)", async () => {
+  const { instance, store } = setup();
+  await instance.moveTo(change("t1", "review"));
+  instance.taskChanged(changed({ kind: "task-upsert", task: makeTask({ status: "review" }) }, makeTask()));
+  assert.deepEqual([instance.columns[3].cards[0].fresh, instance.announcement], [false, ""]);
+  // Someone else moving it afterwards is news again.
+  store.tasks = [makeTask({ status: "done" })];
+  instance.taskChanged(changed({ kind: "task-upsert", task: makeTask({ status: "done" }) }, makeTask({ status: "review" })));
+  assert.equal(instance.announcement, "Add SSE feed moved to Done");
 });
