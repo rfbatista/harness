@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"operators-mcp/internal/adapter/out/persistence/sqlite"
 	"operators-mcp/internal/application/artifacts"
@@ -117,6 +118,7 @@ func TestListAndUnpublishArtifactTools(t *testing.T) {
 	f.write(t, f.root, "a.html", "a")
 	f.write(t, f.root2, "b.png", "\x89PNG")
 	a, _ := f.call(t, "sess-1", "publish_artifact", map[string]any{"path": "a.html", "title": "A"})
+	time.Sleep(2 * time.Millisecond) // millisecond timestamps: keep "newest first" unambiguous
 	b, _ := f.call(t, "sess-2", "publish_artifact", map[string]any{"path": "b.png", "title": "B"})
 
 	listed, err := f.call(t, "sess-1", "list_task_artifacts", nil)

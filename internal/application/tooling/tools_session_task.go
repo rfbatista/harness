@@ -75,7 +75,7 @@ func SessionTaskTools(planningSvc ports.Planning, sessions ports.SessionReposito
 				`"agent":{"type":"string","description":"The agent to run, by name or id. Default: none (plain claude)."},` +
 				`"repository":{"type":"string","description":"The repository to work in, by name or id. Default: yours."},` +
 				`"base_branch":{"type":"string","description":"The branch its worktree branches off. Default: the repository's default branch."},` +
-				`"mode":{"type":"string","enum":["","architect"],"description":"architect: the session shapes its prompt into per-application specs and delegates them. Default: none."}}}`),
+				`"mode":{"type":"string","enum":["","architect","design"],"description":"architect: the session shapes its prompt into per-application specs and delegates them. design: the session produces components, images and videos and publishes each to the Design tab. Default: none."}}}`),
 			Source: "code",
 			Handler: func(ctx context.Context, args map[string]any) (any, error) {
 				scope, err := resolveTaskScope(ctx, planningSvc, sessions)

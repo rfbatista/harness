@@ -102,3 +102,53 @@ func TestResumeInteractive_KeepsTheModeSkills(t *testing.T) {
 	}
 	pluginSkill(t, launchOf(t, spec), "task-architecture")
 }
+
+func TestStartInteractive_DesignMode(t *testing.T) {
+	svc, _ := newInteractiveService(t)
+	svc.tickets.(fakeTickets)["tk1"].Description = "A pricing card in three states."
+	sess, launch := startInteractive(t, svc, InteractiveRequest{Mode: "design", Prompt: "Start with the hover state."})
+
+	if sess.Mode != domain.SessionModeDesign {
+		t.Fatalf("mode = %q, want design", sess.Mode)
+	}
+	if got := sessionOf(svc, sess.ID); got == nil || got.Mode != domain.SessionModeDesign {
+		t.Fatalf("mode not persisted: %+v", got)
+	}
+	body := pluginSkill(t, launch, "design-artifacts")
+	for _, want := range []string{"name: design-artifacts", "publish_artifact", "design/", "self-contained", "kind", "url", "Design tab"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("design-artifacts SKILL.md lacks %q", want)
+		}
+	}
+	p := launch.Spec.Prompt
+	if !strings.HasPrefix(p, "Use the design-artifacts skill on task tk1: Ship the thing") || !strings.Contains(p, "A pricing card in three states.") ||
+		!strings.Contains(p, "publish_artifact") || !strings.HasSuffix(p, "Start with the hover state.") {
+		t.Errorf("first message = %q", p)
+	}
+	// The design skill must not drag the architect one along.
+	if _, err := os.Stat(filepath.Join(mustFlag(t, launch.Args, "--plugin-dir"), "skills", "task-architecture")); err == nil {
+		t.Error("design mode attached the architect skill")
+	}
+}
+
+func TestResumeInteractive_KeepsTheDesignSkill(t *testing.T) {
+	svc, _ := newInteractiveService(t)
+	sess, _ := startInteractive(t, svc, InteractiveRequest{Mode: "design"})
+	if _, err := svc.EndInteractive(context.Background(), sess.ID, 0, false); err != nil {
+		t.Fatal(err)
+	}
+	_, spec, err := svc.ResumeInteractive(context.Background(), ports.ResumeRequest{SessionID: sess.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	pluginSkill(t, launchOf(t, spec), "design-artifacts")
+}
+
+func mustFlag(t *testing.T, args []string, name string) string {
+	t.Helper()
+	v, ok := flag(args, name)
+	if !ok {
+		t.Fatalf("no %s in %q", name, args)
+	}
+	return v
+}
