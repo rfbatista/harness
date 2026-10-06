@@ -27,6 +27,8 @@ execution agents navigate it.
   scratch notes in the worktree. Every artifact is a task document
   (`create_task_document` / `update_task_document`). Your worktree should end
   the session with a clean `git status`.
+- **Every document is a complete HTML page.** The templates below are the
+  shape; `create_task_document` refuses Markdown.
 - **Never write code** and never edit the repository. You may *read* code to
   understand where a system boundary is; stop there.
 - **Never pick applications or agents from memory.** Read them from the
@@ -71,64 +73,121 @@ execution agents navigate it.
 
 ## Document Formats
 
-Use these exact title prefixes so other sessions can find them in
-`list_task_documents`.
+Every task document is a **complete HTML page** (`create_task_document`
+refuses Markdown with `DOCUMENT_NOT_HTML`). Use these exact title prefixes so
+other sessions can find them in `list_task_documents`, and the same text in
+the page's `<title>`. Copy a template, keep its structure, fill the fields;
+angle-bracket placeholders are written as `&lt;…&gt;` so they show as text.
 
 ### `Spec: <application> — <feature>`
 
-```
-## <Application> (repository: <repository name>)
-
-**Agent:** <agent name from list_agents>
-
-**Why this application is affected:**
-<One paragraph: what the feature requires this application to do differently>
-
-**What changes at the boundary:**
-- <API endpoint added/changed, event emitted, schema updated, etc.>
-- <Observable contracts only, not internal design>
-
-**Bounded contexts involved:** <names from list_bounded_contexts>
-
-**Constraints:**
-- <Non-functional requirements: latency, privacy, backward compatibility>
-- <Anything the planning agent must not break>
-
-**Depends on:**
-- <Contract or spec documents that must be stable first, by title>
+```html
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Spec: <application> — <feature></title>
+<style>
+  :root { color-scheme: light dark; }
+  body { font: 15px/1.5 system-ui, sans-serif; max-width: 72ch; margin: 2rem auto; padding: 0 1rem; }
+  h1, h2 { line-height: 1.25; }
+  dt { font-weight: 600; margin-top: 1rem; }
+  table { border-collapse: collapse; }
+  th, td { border: 1px solid color-mix(in oklab, currentColor 25%, transparent); padding: 0.25rem 0.6rem; text-align: left; }
+  code, pre { font-family: ui-monospace, monospace; font-size: 0.92em; }
+</style>
+</head>
+<body>
+<h1>&lt;Application&gt; <small>(repository: &lt;repository name&gt;)</small></h1>
+<dl>
+  <dt>Agent</dt><dd>&lt;agent name from list_agents&gt;</dd>
+  <dt>Why this application is affected</dt>
+  <dd>&lt;One paragraph: what the feature requires this application to do differently&gt;</dd>
+  <dt>What changes at the boundary</dt>
+  <dd><ul>
+    <li>&lt;API endpoint added/changed, event emitted, schema updated, etc.&gt;</li>
+    <li>&lt;Observable contracts only, not internal design&gt;</li>
+  </ul></dd>
+  <dt>Bounded contexts involved</dt><dd>&lt;names from list_bounded_contexts&gt;</dd>
+  <dt>Constraints</dt>
+  <dd><ul>
+    <li>&lt;Non-functional requirements: latency, privacy, backward compatibility&gt;</li>
+    <li>&lt;Anything the planning agent must not break&gt;</li>
+  </ul></dd>
+  <dt>Depends on</dt>
+  <dd><ul><li>&lt;Contract or spec documents that must be stable first, by title&gt;</li></ul></dd>
+</dl>
+</body>
+</html>
 ```
 
 ### `Contract: <Application A> ↔ <Application B>`
 
-```
-**Type:** REST API | RPC | Event | WebSocket | Shared schema
-
-**Interface:**
-<The shape: endpoint + method, event name + payload, schema fields>
-
-**Owner:** <application that defines and owns it>
-**Consumer:** <application that consumes it and must not change it unilaterally>
-**Status:** draft | stable
+```html
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Contract: <Application A> ↔ <Application B></title>
+<style>
+  :root { color-scheme: light dark; }
+  body { font: 15px/1.5 system-ui, sans-serif; max-width: 72ch; margin: 2rem auto; padding: 0 1rem; }
+  h1, h2 { line-height: 1.25; }
+  dt { font-weight: 600; margin-top: 1rem; }
+  table { border-collapse: collapse; }
+  th, td { border: 1px solid color-mix(in oklab, currentColor 25%, transparent); padding: 0.25rem 0.6rem; text-align: left; }
+  code, pre { font-family: ui-monospace, monospace; font-size: 0.92em; }
+</style>
+</head>
+<body>
+<h1>Contract: &lt;Application A&gt; ↔ &lt;Application B&gt;</h1>
+<dl>
+  <dt>Type</dt><dd>REST API | RPC | Event | WebSocket | Shared schema</dd>
+  <dt>Interface</dt>
+  <dd><pre>&lt;The shape: endpoint + method, event name + payload, schema fields&gt;</pre></dd>
+  <dt>Owner</dt><dd>&lt;application that defines and owns it&gt;</dd>
+  <dt>Consumer</dt><dd>&lt;application that consumes it and must not change it unilaterally&gt;</dd>
+  <dt>Status</dt><dd>draft | stable</dd>
+</dl>
+</body>
+</html>
 ```
 
 ### `Architecture: <feature>`
 
-```
-## Intent
-<The feature in two or three sentences>
-
-## Affected applications
-| Application | Repository | Spec | Agent | Session | Status |
-|---|---|---|---|---|---|
-
-## Contracts
-- <Contract document titles, with status>
-
-## Sequencing
-<What starts first and what waits on which contract>
-
-## Gaps
-<Missing tools, missing agents, open questions — or "none">
+```html
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Architecture: <feature></title>
+<style>
+  :root { color-scheme: light dark; }
+  body { font: 15px/1.5 system-ui, sans-serif; max-width: 72ch; margin: 2rem auto; padding: 0 1rem; }
+  h1, h2 { line-height: 1.25; }
+  dt { font-weight: 600; margin-top: 1rem; }
+  table { border-collapse: collapse; }
+  th, td { border: 1px solid color-mix(in oklab, currentColor 25%, transparent); padding: 0.25rem 0.6rem; text-align: left; }
+  code, pre { font-family: ui-monospace, monospace; font-size: 0.92em; }
+</style>
+</head>
+<body>
+<h1>Architecture: &lt;feature&gt;</h1>
+<h2>Intent</h2>
+<p>&lt;The feature in two or three sentences&gt;</p>
+<h2>Affected applications</h2>
+<table>
+  <thead><tr><th>Application</th><th>Repository</th><th>Spec</th><th>Agent</th><th>Session</th><th>Status</th></tr></thead>
+  <tbody><tr><td></td><td></td><td></td><td></td><td></td><td></td></tr></tbody>
+</table>
+<h2>Contracts</h2>
+<ul><li>&lt;Contract document titles, with status&gt;</li></ul>
+<h2>Sequencing</h2>
+<p>&lt;What starts first and what waits on which contract&gt;</p>
+<h2>Gaps</h2>
+<p>&lt;Missing tools, missing agents, open questions — or "none"&gt;</p>
+</body>
+</html>
 ```
 
 ## Delegating
@@ -142,7 +201,8 @@ For each spec whose dependencies are stable, call `start_task_session`:
   > with read_task_document, plus any Contract documents it depends on. Do not
   > change a contract you consume; if it needs to change, write that in a task
   > document and stop. Write your plan as a task document titled
-  > "Plan: backend — CSV export".
+  > "Plan: backend — CSV export", as an HTML page (create_task_document
+  > takes only HTML).
 
 Then update the overview's table with the returned `session_id` and branch.
 
@@ -179,6 +239,7 @@ diffs line by line.
 | One combined spec for several applications | One spec document and one planning agent per application. |
 | Writing an agent's name in a spec and stopping | Delegation is `start_task_session`; the label alone hands off nothing. |
 | Duplicating documents an earlier session wrote | Read first; `update_task_document` what exists. |
+| Writing a spec in Markdown | Task documents are HTML pages; the tool refuses Markdown. Use the templates above. |
 
 ## Red Flags
 

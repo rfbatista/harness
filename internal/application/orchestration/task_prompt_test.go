@@ -95,3 +95,27 @@ func TestApplyTaskContext_BriefNamesUpdateTaskStatus(t *testing.T) {
 		t.Fatalf("tool line not in the list style:\n%s", cfg.AppendSystem)
 	}
 }
+
+// Documents are HTML pages. The brief is where an agent learns the rule
+// before its first create_task_document, so it does not learn it from a refusal.
+func TestApplyTaskContext_BriefSaysDocumentsAreHTML(t *testing.T) {
+	cfg := llmkit.SessionConfig{}
+	applyTaskContext(&cfg, &domain.Ticket{ID: "tk1", Title: "Ship the thing"}, "")
+	for _, want := range []string{
+		"complete HTML document",
+		"<!doctype html>",
+		"<meta charset=\"utf-8\">",
+		"<title>",
+		"<body>",
+		"Markdown is refused",
+		"DOCUMENT_NOT_HTML",
+		"light and dark",
+	} {
+		if !strings.Contains(cfg.AppendSystem, want) {
+			t.Errorf("brief missing %q:\n%s", want, cfg.AppendSystem)
+		}
+	}
+	if strings.Contains(cfg.AppendSystem, "markdown document") {
+		t.Errorf("brief still describes markdown documents:\n%s", cfg.AppendSystem)
+	}
+}
