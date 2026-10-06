@@ -8,6 +8,7 @@ import { FeedStatus } from "../../../../shared/domain/feed.js";
 import { describeError } from "../../../../shared/presentation/errors.js";
 import { readSeed } from "../../../../shared/presentation/seed.js";
 import { applyChange, byRecent, group, ofTask } from "../../domain/session.js";
+import { artifactTitle } from "../artifactView.js";
 import { startedBy, summary, toDetailView, toGroupViews } from "../view.js";
 
 const TICK_MS = 30_000;
@@ -42,12 +43,14 @@ export const sessionsPage = ({ gateway, clock, setTimeout = globalThis.setTimeou
     /** The selected session's delete is awaiting confirmation. */
     confirmingDelete: false,
     deleting: false,
-    /** The detail pane's tab: the agent's terminal, or the application run from the worktree. */
+    /** The detail pane's tab: the agent's terminal, the application run from the worktree, or what the session designed. */
     detailTab: "agent",
     /** Sessions that just arrived over the feed (started elsewhere: by an agent, the TUI). */
     freshIds: [],
     /** Read out by a polite live region when one arrives. */
     announcement: "",
+    /** Publishes that arrived while the Design tab was not in front. */
+    unseenArtifacts: 0,
 
     // ── what the markup binds ────────────────────────────────────────────
     get groups() {
@@ -119,6 +122,20 @@ export const sessionsPage = ({ gateway, clock, setTimeout = globalThis.setTimeou
     },
     get appUnavailable() {
       return this.showingApp && !this.selected.repositoryId;
+    },
+    get showingDesign() {
+      return this.showingSession && this.detailTab === "design";
+    },
+    /** The session whose Design panel to mount, keyed on its id; mounted whenever a session shows, so publishes are counted behind the other tabs. */
+    get designPanels() {
+      if (!this.showingSession) return [];
+      return [{ key: this.selected.id, sessionId: this.selected.id, live: this.selected.stoppable }];
+    },
+    get designBadge() {
+      return this.unseenArtifacts > 0 ? String(this.unseenArtifacts) : "";
+    },
+    get designTabSelected() {
+      return this.detailTab === "design";
     },
     get showingNothing() {
       return !this.creating && !this.hasSelection;
@@ -204,6 +221,18 @@ export const sessionsPage = ({ gateway, clock, setTimeout = globalThis.setTimeou
     showApp() {
       this.detailTab = "app";
     },
+    showDesign() {
+      this.detailTab = "design";
+      this.unseenArtifacts = 0;
+    },
+
+    /** @param {CustomEvent<{ artifact: import("../../domain/artifact.js").Artifact, isNew: boolean }>} event */
+    artifactPublished(event) {
+      const { artifact, isNew } = event.detail;
+      const title = artifactTitle(artifact);
+      this.announcement = isNew ? `New artifact: ${title}` : `Artifact updated: ${title}, revision ${artifact.revision}`;
+      if (!this.showingDesign) this.unseenArtifacts += 1;
+    },
     get agentTabSelected() {
       return this.detailTab === "agent";
     },
@@ -212,6 +241,7 @@ export const sessionsPage = ({ gateway, clock, setTimeout = globalThis.setTimeou
     },
 
     select(id) {
+      if (id !== this.selectedId) this.unseenArtifacts = 0;
       this.selectedId = id;
       this.creating = false;
       this.confirmingDelete = false;
