@@ -45,6 +45,7 @@ func TestResolveInWorktree(t *testing.T) {
 		"escapes via absolute":        {filepath.Join(outside, "secret.txt"), "", "ARTIFACT_PATH_OUTSIDE_WORKTREE"},
 		"symlink out":                 {"design/leak.txt", "", "ARTIFACT_PATH_OUTSIDE_WORKTREE"},
 		"git internals":               {".git/config", "", "ARTIFACT_PATH_OUTSIDE_WORKTREE"},
+		"git internals, other case":   {".GIT/config", "", "ARTIFACT_PATH_OUTSIDE_WORKTREE"}, // case-insensitive filesystems
 	} {
 		t.Run(name, func(t *testing.T) {
 			abs, rel, err := resolveInWorktree(root, tc.in)

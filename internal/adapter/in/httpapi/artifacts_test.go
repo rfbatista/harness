@@ -144,6 +144,17 @@ func TestHTTP_ArtifactView_HeadersAndSubresources(t *testing.T) {
 	}
 	resp.Body.Close()
 
+	// HEAD answers with the same headers and no body (curl -I, the plan's smoke check).
+	head, err := http.Head(base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	hb, _ := io.ReadAll(head.Body)
+	head.Body.Close()
+	if head.StatusCode != 200 || len(hb) != 0 || head.Header.Get("Content-Security-Policy") != artifactCSP || head.Header.Get("ETag") != `"1"` {
+		t.Fatalf("HEAD = %d body %d bytes, headers %v", head.StatusCode, len(hb), head.Header)
+	}
+
 	resp = get(t, base+"style.css", nil)
 	body, _ = io.ReadAll(resp.Body)
 	resp.Body.Close()

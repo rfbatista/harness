@@ -66,10 +66,11 @@ func resolveInWorktree(root, p string) (abs, rel string, err error) {
 	return real, filepath.ToSlash(r), nil
 }
 
-// underGit reports whether a worktree-relative path has a .git segment.
+// underGit reports whether a worktree-relative path has a .git segment, in
+// any case: on a case-insensitive filesystem .GIT is the same directory.
 func underGit(rel string) bool {
 	for _, seg := range strings.Split(rel, string(filepath.Separator)) {
-		if seg == ".git" {
+		if strings.EqualFold(seg, ".git") {
 			return true
 		}
 	}
