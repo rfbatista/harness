@@ -10,6 +10,8 @@ import "../src/modules/runs/infrastructure/gateways.test.js";
 import "../src/modules/runs/presentation/components/appPanel.test.js";
 import "../src/modules/sessions/domain/artifact.test.js";
 import "../src/modules/sessions/domain/session.test.js";
+import "../src/modules/sessions/infrastructure/artifact-dto.test.js";
+import "../src/modules/sessions/infrastructure/artifacts.test.js";
 import "../src/modules/sessions/infrastructure/dto.test.js";
 import "../src/modules/sessions/infrastructure/gateways.test.js";
 import "../src/modules/sessions/infrastructure/terminal-gateway.test.js";
