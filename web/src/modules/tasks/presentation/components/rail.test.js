@@ -108,3 +108,16 @@ test("it reports the feed's status to the stream bar only where it is the page's
   memory.status(FeedStatus.PAUSED);
   assert.deepEqual(nav.dispatched.filter((d) => d.name === "feed-status").map((d) => d.detail), [FeedStatus.LIVE, FeedStatus.PAUSED]);
 });
+
+test("a resync still refreshes the sessions when the tasks cannot be read, and the other way round", async () => {
+  const { memory, store, link } = setup();
+  await flush();
+  memory.gateway.listTasks = async () => {
+    throw new Error("list_tickets is down");
+  };
+  memory.replace([s("a", "t1", "done"), s("c", "t3", "running")]);
+  memory.status(FeedStatus.RESYNCED);
+  await flush();
+  assert.equal(link("t3").live, 1, "sessions refreshed");
+  assert.deepEqual(store.tasks.map((t) => t.id), ["t1"], "tasks kept as they were");
+});

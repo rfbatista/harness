@@ -66,3 +66,9 @@ test("a message of a kind it does not know, or one it cannot read, is dropped, n
   assert.equal(toProjectChange({ ticket: { id: "t1", status: "someday" } }), null, "an unknown status drops the message (Review Focus 1)");
   assert.equal(toProjectChange({ ticket: { status: "todo" } }), null);
 });
+
+test("listing tasks leaves out one it cannot read instead of failing the whole list", async () => {
+  const fetch = async () => jsonResponse(200, { tickets: [taskDTO(makeTask()), { id: "t-odd", project_id: "p1", title: "Someday", status: "someday" }] });
+  const gateway = railGateway(apiClient({ base: "/api", fetch }), feed({ base: "/api", EventSource: class {} }));
+  assert.deepEqual((await gateway.listTasks("p1")).map((t) => t.id), ["t1"]);
+});

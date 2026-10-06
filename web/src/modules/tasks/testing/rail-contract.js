@@ -36,6 +36,11 @@ export function railGatewayContract(name, makeSubject) {
     assert.deepEqual(subject.gateway.decodeSeed(subject.seed), { projectId: "p1", sessions: [session("a", "t1", "running")], tasks: [makeTask()] });
   });
 
+  contract("a seed task it cannot read is left out; the rest still decode (the server may know a status this client does not)", () => {
+    const subject = makeSubject({ ...world(), tasks: [makeTask(), makeTask({ id: "t-odd", title: "Someday", status: "someday" })] });
+    assert.deepEqual(subject.gateway.decodeSeed(subject.seed).tasks.map((t) => t.id), ["t1"]);
+  });
+
   contract("lists the project's tasks", async () => {
     const { gateway } = makeSubject(world());
     assert.deepEqual(await gateway.listTasks("p1"), [makeTask()]);

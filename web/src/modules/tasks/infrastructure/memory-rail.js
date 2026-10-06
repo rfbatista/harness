@@ -2,7 +2,7 @@
 // contract as the real gateway (../testing/rail-contract.js).
 
 import { FeedStatus } from "../../../shared/domain/feed.js";
-import { toTask } from "./dto.js";
+import { toTasks } from "./dto.js";
 
 /**
  * @param {{
@@ -18,7 +18,7 @@ export function memoryRail({ projectId = "p1", sessions = [], tasks = [] } = {})
 
   /** @type {import("../domain/ports.js").RailGateway} */
   const gateway = {
-    decodeSeed: (seed) => ({ projectId: seed.project_id, sessions: seed.sessions.map((s) => ({ ...s })), tasks: seed.tasks.map(toTask) }),
+    decodeSeed: (seed) => ({ projectId: seed.project_id, sessions: seed.sessions.map((s) => ({ ...s })), tasks: toTasks(seed.tasks) }),
     async listSessions() {
       return [...list];
     },

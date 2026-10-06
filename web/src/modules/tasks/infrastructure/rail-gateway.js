@@ -3,7 +3,7 @@
 // which carries session and ticket changes.
 
 import { Codes, StructuredError } from "../../../shared/domain/errors.js";
-import { toTask } from "./dto.js";
+import { toTask, toTasks } from "./dto.js";
 
 /** A session on the wire (internal/domain/session.go), as much as the rail reads. */
 export function toRailSession(dto) {
@@ -61,7 +61,7 @@ export function railGateway(api, feed) {
       if (!seed || typeof seed.project_id !== "string" || !Array.isArray(seed.sessions) || !Array.isArray(seed.tasks)) {
         bad("rail seed without project_id, sessions and tasks");
       }
-      return { projectId: seed.project_id, sessions: seed.sessions.map(toRailSession), tasks: seed.tasks.map(toTask) };
+      return { projectId: seed.project_id, sessions: seed.sessions.map(toRailSession), tasks: toTasks(seed.tasks) };
     },
     async listSessions(projectId) {
       const body = await api.get("/sessions", { project_id: projectId });
@@ -71,7 +71,7 @@ export function railGateway(api, feed) {
     async listTasks(projectId) {
       const body = await api.get("/list_tickets", { project_id: projectId });
       if (!Array.isArray(body?.tickets)) bad("expected {tickets: [...]}");
-      return body.tickets.map(toTask);
+      return toTasks(body.tickets);
     },
     follow(projectId, onChange, onStatus) {
       return feed.follow(`/events?project_id=${encodeURIComponent(projectId)}`, {

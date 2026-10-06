@@ -74,16 +74,19 @@ export const rail = ({ gateway, store }) => () => {
       this.recount();
     },
 
-    /** Changes were missed while the stream was down: read everything again. */
+    /**
+     * Changes were missed while the stream was down: read everything again.
+     * Sessions and tasks are refreshed independently, so one list failing
+     * keeps the other current; whatever fails keeps what it shows until the
+     * next resync.
+     */
     async resync() {
-      try {
-        const [list, tasks] = await Promise.all([gateway.listSessions(this.projectId), gateway.listTasks(this.projectId)]);
-        sessions = list;
-        store.tasks = tasks;
+      const [list, tasks] = await Promise.allSettled([gateway.listSessions(this.projectId), gateway.listTasks(this.projectId)]);
+      if (list.status === "fulfilled") {
+        sessions = list.value;
         this.recount();
-      } catch {
-        // keep what it shows; the next resync tries again
       }
+      if (tasks.status === "fulfilled") store.tasks = tasks.value;
     },
 
     recount() {
