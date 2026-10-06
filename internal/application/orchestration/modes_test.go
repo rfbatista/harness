@@ -162,3 +162,16 @@ func mustFlag(t *testing.T, args []string, name string) string {
 	}
 	return v
 }
+
+// The architect's specs and contracts are what other tasks build on; its
+// skill says they can be moved to project level, with the tool that does it.
+func TestStartInteractive_ArchitectSkillNamesProjectDocuments(t *testing.T) {
+	svc, _ := newInteractiveService(t)
+	_, launch := startInteractive(t, svc, InteractiveRequest{Mode: "architect"})
+	body := pluginSkill(t, launch, "task-architecture")
+	for _, want := range []string{"mcp__task__move_document_to_project", "mcp__task__list_project_documents", "project level"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("task-architecture SKILL.md lacks %q", want)
+		}
+	}
+}

@@ -29,6 +29,10 @@ execution agents navigate it.
   the session with a clean `git status`.
 - **Every document is a complete HTML page.** The templates below are the
   shape; `create_task_document` refuses Markdown.
+- **Specs and contracts meant to outlive the task go to project level.** Once a
+  contract is `stable`, or a spec describes something later tasks will build
+  on, move it with `mcp__task__move_document_to_project`; read
+  `list_project_documents` first so you build on what is already there.
 - **Never write code** and never edit the repository. You may *read* code to
   understand where a system boundary is; stop there.
 - **Never pick applications or agents from memory.** Read them from the
@@ -45,6 +49,8 @@ execution agents navigate it.
 | `mcp__task__get_task` | Read the task and the documents already linked to it |
 | `mcp__task__list_task_documents` / `read_task_document` | Find and read earlier specs, contracts, notes |
 | `mcp__task__create_task_document` / `update_task_document` | Write and revise specs, contracts, the overview |
+| `mcp__task__list_project_documents` / `read_project_document` | Earlier architecture, conventions and contracts kept at project level, from any task |
+| `mcp__task__move_document_to_project` | Keep a contract or spec other tasks will build on at project level; its link to this task stays |
 | `mcp__task__list_project_repositories` | The project's applications: one repository each |
 | `mcp__task__list_bounded_contexts` | Domain boundaries: purpose, ubiquitous language, zones (paths) |
 | `mcp__task__list_agents` | The agents you can delegate to, with what each is for |
@@ -239,6 +245,7 @@ diffs line by line.
 | One combined spec for several applications | One spec document and one planning agent per application. |
 | Writing an agent's name in a spec and stopping | Delegation is `start_task_session`; the label alone hands off nothing. |
 | Duplicating documents an earlier session wrote | Read first; `update_task_document` what exists. |
+| Leaving a stable contract as a task document | Move it with `move_document_to_project`; the next task's sessions read it from the project. |
 | Writing a spec in Markdown | Task documents are HTML pages; the tool refuses Markdown. Use the templates above. |
 
 ## Red Flags
