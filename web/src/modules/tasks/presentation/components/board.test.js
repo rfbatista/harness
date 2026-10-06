@@ -126,13 +126,128 @@ test("a task created elsewhere appears washed; a deleted one is announced as rem
   assert.equal(instance.announcement, "New was removed");
 });
 
-test("the feed's echo of this board's own move is neither washed nor announced (Review Focus 5)", async () => {
+test("a successful move is confirmed once; the feed's echo of it is neither washed nor announced again (Review Focus 5)", async () => {
   const { instance, store } = setup();
   await instance.moveTo(change("t1", "review"));
+  assert.equal(instance.announcement, "Add SSE feed moved to Review", "the person hears their own move land");
+  instance.announcement = "";
   instance.taskChanged(changed({ kind: "task-upsert", task: makeTask({ status: "review" }) }, makeTask()));
   assert.deepEqual([instance.columns[3].cards[0].fresh, instance.announcement], [false, ""]);
   // Someone else moving it afterwards is news again.
   store.tasks = [makeTask({ status: "done" })];
   instance.taskChanged(changed({ kind: "task-upsert", task: makeTask({ status: "done" }) }, makeTask({ status: "review" })));
   assert.equal(instance.announcement, "Add SSE feed moved to Done");
+});
+
+/** A gateway whose moves the test settles by hand, so echoes and responses can be interleaved. */
+function heldMoves(memory) {
+  const held = [];
+  memory.gateway.moveTask = (id, status) => new Promise((resolve, reject) => held.push({ id, status, resolve, reject }));
+  return {
+    held,
+    /** Settles the oldest unsettled move with the server's answer. */
+    answer: (status) => held.shift().resolve(makeTask({ status })),
+    fail: (err) => held.shift().reject(err),
+  };
+}
+
+/** The rail applied a feed change to the store; now the board hears of it. */
+function feedChange(instance, store, status, previousStatus) {
+  store.tasks = [makeTask({ status })];
+  instance.taskChanged(changed({ kind: "task-upsert", task: makeTask({ status }) }, makeTask({ status: previousStatus })));
+}
+
+test("the echo arriving before the response is still the board's own move", async () => {
+  const { instance, store, memory } = setup();
+  const server = heldMoves(memory);
+  const p = instance.moveTo(change("t1", "review"));
+  feedChange(instance, store, "review", "in_progress");
+  assert.deepEqual([instance.columns[3].cards[0].fresh, instance.announcement], [false, ""]);
+  server.answer("review");
+  await p;
+  assert.deepEqual([store.tasks[0].status, instance.error], ["review", null]);
+});
+
+test("an older move's echo while a newer move is pending keeps the newest status on the card and announces nothing (Review Focus 2)", async () => {
+  const { instance, store, memory } = setup();
+  const server = heldMoves(memory);
+  const first = instance.moveTo(change("t1", "review"));
+  const second = instance.moveTo(change("t1", "done"));
+  feedChange(instance, store, "review", "in_progress"); // the server applied the first move and published it before answering
+  assert.deepEqual([store.tasks[0].status, instance.announcement, instance.freshIds], ["done", "", []], "the card stays where the person put it last");
+  server.answer("review");
+  await first;
+  assert.equal(store.tasks[0].status, "done", "the first response does not snap the card back");
+  feedChange(instance, store, "done", "review");
+  assert.deepEqual([instance.announcement, instance.freshIds], ["", []]);
+  server.answer("done");
+  await second;
+  assert.deepEqual([store.tasks[0].status, instance.error], ["done", null]);
+  assert.equal(instance.announcement, "Add SSE feed moved to Done", "the person hears the move land, once");
+});
+
+test("when both quick moves fail the card goes back to the status the server last confirmed, with an error", async () => {
+  const { instance, store, memory } = setup();
+  const server = heldMoves(memory);
+  const first = instance.moveTo(change("t1", "review"));
+  const second = instance.moveTo(change("t1", "done"));
+  server.fail(new StructuredError(Codes.NETWORK, "The harness server is not reachable."));
+  await first;
+  assert.equal(store.tasks[0].status, "done", "the newer move is still pending");
+  server.fail(new StructuredError(Codes.NETWORK, "The harness server is not reachable."));
+  await second;
+  assert.deepEqual([store.tasks[0].status, instance.error.code], ["in_progress", Codes.NETWORK]);
+});
+
+test("a change by someone else during a move is kept, and the move's failure is still shown", async () => {
+  const { instance, store, memory } = setup();
+  const server = heldMoves(memory);
+  const p = instance.moveTo(change("t1", "review"));
+  feedChange(instance, store, "done", "review"); // an agent moved it meanwhile
+  assert.equal(instance.announcement, "Add SSE feed moved to Done");
+  server.fail(new StructuredError(Codes.INVALID_INPUT, "invalid ticket status", 400));
+  await p;
+  assert.deepEqual([store.tasks[0].status, instance.error.code], ["done", Codes.INVALID_INPUT]);
+});
+
+test("a resync that brought a different status during a failed move is kept", async () => {
+  const { instance, store, memory } = setup();
+  const server = heldMoves(memory);
+  const p = instance.moveTo(change("t1", "review"));
+  store.tasks = [makeTask({ status: "todo" })]; // the rail resynced: the server holds todo
+  server.fail(new StructuredError(Codes.NETWORK, "The harness server is not reachable."));
+  await p;
+  assert.deepEqual([store.tasks[0].status, instance.error.code], ["todo", Codes.NETWORK]);
+});
+
+test("after a move the card's select keeps the focus, in its new column", async () => {
+  const { instance, tick, el, store } = setup();
+  // A board with the card's select rendered, as the live template would.
+  const render = () => {
+    el.querySelectorAll(".card").forEach((c) => c.remove());
+    for (const t of store.tasks) {
+      const card = document.createElement("article");
+      card.className = "card";
+      card.dataset.taskId = t.id;
+      card.dataset.status = t.status;
+      const select = document.createElement("select");
+      select.dataset.taskId = t.id;
+      for (const status of ["in_progress", "review"]) select.append(Object.assign(document.createElement("option"), { value: status }));
+      select.value = t.status;
+      card.append(select);
+      el.append(card);
+    }
+  };
+  render();
+  document.body.append(el);
+  const select = el.querySelector("select");
+  select.focus();
+  assert.equal(document.activeElement, select);
+  select.value = "review";
+  const p = instance.moveTo({ target: select });
+  render(); // Alpine re-rendered: a new select in the new column
+  tick();
+  assert.equal(document.activeElement?.closest(".card")?.dataset.status, "review");
+  await p;
+  el.remove();
 });

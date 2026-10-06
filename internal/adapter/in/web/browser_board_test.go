@@ -104,14 +104,18 @@ func TestMovingACardOnTheBoard(t *testing.T) {
 	defer srv.Close()
 
 	var review, todo []string
+	var focused string
 	err = chromedp.Run(ctx,
 		chromedp.EmulateViewport(1280, 800),
 		chromedp.Navigate(srv.URL+"/projects/p1"),
 		chromedp.Poll(`document.querySelector('[data-ssr]') === null`, nil, chromedp.WithPollingTimeout(10*time.Second)),
+		// A keyboard user: the select has the focus when it changes.
+		chromedp.Evaluate(`document.querySelector('.board .card[data-task-id="t-docs"] select').focus()`, nil),
 		setField(`.board .card[data-task-id="t-docs"] select`, "review", "change"),
 		chromedp.Poll(cardsIn("Review")+`.includes('Write docs')`, nil, chromedp.WithPollingTimeout(5*time.Second)),
 		chromedp.Evaluate(cardsIn("Review"), &review),
 		chromedp.Evaluate(cardsIn("Todo"), &todo),
+		chromedp.Evaluate(`(document.activeElement?.tagName ?? '') + ' ' + (document.activeElement?.closest('.card')?.dataset.taskId ?? '')`, &focused),
 	)
 	if err != nil {
 		t.Fatalf("%v\nAPI:\n%s\nJS errors: %v", err, api.log(), errs.all())
@@ -121,6 +125,9 @@ func TestMovingACardOnTheBoard(t *testing.T) {
 	}
 	if fmt.Sprint(review) != "[Write docs]" || fmt.Sprint(todo) != "[]" {
 		t.Errorf("review %v, todo %v", review, todo)
+	}
+	if focused != "SELECT t-docs" {
+		t.Errorf("after the move the focus is on %q, want the moved card's select", focused)
 	}
 	if e := errs.all(); len(e) > 0 {
 		t.Errorf("JavaScript errors:\n%s", strings.Join(e, "\n"))
