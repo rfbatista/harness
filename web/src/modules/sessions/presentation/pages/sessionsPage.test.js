@@ -224,7 +224,7 @@ test("publishes behind another tab count on the Design tab until it is opened; e
   instance.showAgent();
   instance.artifactPublished({ detail: { artifact: makeArtifact({ id: "a3", title: "Late" }), isNew: true } });
   assert.equal(instance.designBadge, "1");
-  instance.select("turn");
+  instance.select("run");
   assert.equal(instance.designBadge, "", "another session, another count");
   instance.destroy();
 });
