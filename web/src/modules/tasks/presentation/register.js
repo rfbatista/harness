@@ -25,5 +25,5 @@ export function registerTasks(Alpine, deps) {
   const store = Alpine.store("tasksRail");
   Alpine.data("tasksRail", rail({ gateway: deps.rail, store }));
   Alpine.data("tasksRailLink", railLink({ store }));
-  Alpine.data("tasksBoard", board({ store }));
+  Alpine.data("tasksBoard", board({ gateway: deps.gateway, store }));
 }

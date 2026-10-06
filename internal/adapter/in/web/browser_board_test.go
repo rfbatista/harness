@@ -81,3 +81,48 @@ func TestProjectBoardComesAliveInTheBrowser(t *testing.T) {
 		t.Errorf("JavaScript errors:\n%s", strings.Join(e, "\n"))
 	}
 }
+
+// TestMovingACardOnTheBoard: a card's select sends a status-only update and
+// the card lands in the chosen column.
+func TestMovingACardOnTheBoard(t *testing.T) {
+	assets, err := NewAssets()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !assets.Built() {
+		t.Skip("browser test: web client not built; run `make web`")
+	}
+	ctx, errs := browser(t)
+
+	api := &fakeTicketsAPI{tickets: map[string]map[string]string{
+		"t-docs": {"id": "t-docs", "project_id": "p1", "title": "Write docs", "status": "todo"},
+	}}
+	mux := http.NewServeMux()
+	mux.Handle("/api/", api)
+	mux.Handle("/", NewHandler(boardDeps(), assets, nil))
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	var review, todo []string
+	err = chromedp.Run(ctx,
+		chromedp.EmulateViewport(1280, 800),
+		chromedp.Navigate(srv.URL+"/projects/p1"),
+		chromedp.Poll(`document.querySelector('[data-ssr]') === null`, nil, chromedp.WithPollingTimeout(10*time.Second)),
+		setField(`.board .card[data-task-id="t-docs"] select`, "review", "change"),
+		chromedp.Poll(cardsIn("Review")+`.includes('Write docs')`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Evaluate(cardsIn("Review"), &review),
+		chromedp.Evaluate(cardsIn("Todo"), &todo),
+	)
+	if err != nil {
+		t.Fatalf("%v\nAPI:\n%s\nJS errors: %v", err, api.log(), errs.all())
+	}
+	if want := `/api/update_ticket {"status":"review","ticket_id":"t-docs"}`; api.log() != want {
+		t.Errorf("API calls:\n%s\nwant:\n%s", api.log(), want)
+	}
+	if fmt.Sprint(review) != "[Write docs]" || fmt.Sprint(todo) != "[]" {
+		t.Errorf("review %v, todo %v", review, todo)
+	}
+	if e := errs.all(); len(e) > 0 {
+		t.Errorf("JavaScript errors:\n%s", strings.Join(e, "\n"))
+	}
+}

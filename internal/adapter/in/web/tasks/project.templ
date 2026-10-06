@@ -80,6 +80,11 @@ templ ssrBoard(b Board) {
 								if l.Live > 0 {
 									<span class="[ count ]" title="live sessions">{ strconv.Itoa(l.Live) }</span>
 								}
+								<select class="[ status-picker ]" data-task-id={ l.TaskID } aria-label={ "Move " + l.Label + " to" } x-on:change="moveTo">
+									for _, st := range Statuses {
+										<option value={ st.Value } { selectedIf(st.Value == c.Status)... }>{ st.Label }</option>
+									}
+								</select>
 							</div>
 						</article>
 					}
@@ -109,6 +114,11 @@ templ liveBoard() {
 									<span class="[ visually-hidden ]" x-text="card.word"></span>
 								</span>
 								<span class="[ count ]" title="live sessions" x-show="card.hasCount" x-text="card.live"></span>
+								<select class="[ status-picker ]" x-bind:data-task-id="card.id" x-bind:aria-label="card.moveLabel" x-bind:value="card.status" x-on:change="moveTo">
+									for _, st := range Statuses {
+										<option value={ st.Value }>{ st.Label }</option>
+									}
+								</select>
 							</div>
 						</article>
 					</template>
