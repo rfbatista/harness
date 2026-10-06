@@ -63,7 +63,10 @@ templ topBar(t TopBar) {
 	</header>
 }
 
-// taskRail is the current project's tasks, grouped like the kanban board.
+// taskRail is the current project's tasks, grouped like the kanban board. The
+// server renders the groups inside [data-ssr]; tasksRail renders the same
+// groups live from its store and removes the server copy, so a task an agent
+// creates or moves regroups the rail as it happens.
 templ taskRail(r Rail) {
 	if r.Seed != nil {
 		@templ.JSONScript("rail-seed", r.Seed)
@@ -72,44 +75,59 @@ templ taskRail(r Rail) {
 		if r.NewTaskHref != "" {
 			<a class="[ button ]" data-size="sm" href={ templ.SafeURL(r.NewTaskHref) }>New task</a>
 		}
-		if r.Empty != "" {
-			<p class="[ text-sm color-ink-faint pad-inline-s ]">{ r.Empty }</p>
-		}
-		for _, g := range r.Groups {
-			<div class="[ group ]">
-				<h2>{ g.Label }</h2>
-				for _, l := range g.Links {
-					@railLink(l)
-				}
+		if r.Seed != nil {
+			<div x-ignore data-ssr class="[ flow ] [ flow-space-l ]">
+				@railGroups(r)
 			</div>
+			<p class="[ text-sm color-ink-faint pad-inline-s ]" x-show="isEmpty" style="display: none">No tasks yet.</p>
+			<template x-for="group in groups" x-bind:key="group.key">
+				<div class="[ group ]">
+					<h2 x-text="group.label"></h2>
+					<template x-for="link in group.links" x-bind:key="link.id">
+						<a x-bind:href="link.href" x-bind:aria-current="link.current" x-bind:data-task-id="link.id">
+							<span class="[ label ]" x-text="link.label"></span>
+							<span class="[ status ]" data-dot-only x-show="link.hasDot" x-bind:data-state="link.state">
+								<span class="[ visually-hidden ]" x-text="link.word"></span>
+							</span>
+							<span class="[ count ]" title="live sessions" x-show="link.hasCount" x-text="link.live"></span>
+						</a>
+					</template>
+				</div>
+			</template>
+		} else {
+			@railGroups(r)
 		}
 	</nav>
 }
 
-// railLink is server-rendered with the task's activity; with a TaskID,
-// tasksRailLink keeps its dot and count live from then on.
-templ railLink(l Link) {
-	if l.TaskID != "" {
-		<a href={ templ.SafeURL(l.Href) } { currentAttrs(l.Current)... } x-data="tasksRailLink" data-task-id={ l.TaskID }>
-			<span class="[ label ]">{ l.Label }</span>
-			<span class="[ status ]" data-state={ l.LiveState() } data-dot-only x-show="hasDot" x-bind:data-state="dotState" { hiddenUnless(l.LiveState() != "")... }>
-				<span class="[ visually-hidden ]" x-text="dotWord">{ l.LiveWord() }</span>
-			</span>
-			<span class="[ count ]" title="live sessions" x-show="hasCount" x-text="live" { hiddenUnless(l.Live > 0)... }>{ strconv.Itoa(l.Live) }</span>
-		</a>
-	} else {
-		<a href={ templ.SafeURL(l.Href) } { currentAttrs(l.Current)... }>
-			<span class="[ label ]">{ l.Label }</span>
-			if l.LiveState() != "" {
-				<span class="[ status ]" data-state={ l.LiveState() } data-dot-only>
-					<span class="[ visually-hidden ]">{ l.LiveWord() }</span>
-				</span>
-			}
-			if l.Live > 0 {
-				<span class="[ count ]" title="live sessions">{ strconv.Itoa(l.Live) }</span>
-			}
-		</a>
+// railGroups is the server-rendered rail: the empty note or the groups.
+templ railGroups(r Rail) {
+	if r.Empty != "" {
+		<p class="[ text-sm color-ink-faint pad-inline-s ]">{ r.Empty }</p>
 	}
+	for _, g := range r.Groups {
+		<div class="[ group ]">
+			<h2>{ g.Label }</h2>
+			for _, l := range g.Links {
+				@railLink(l)
+			}
+		</div>
+	}
+}
+
+// railLink is one task, server-rendered with its activity.
+templ railLink(l Link) {
+	<a href={ templ.SafeURL(l.Href) } { currentAttrs(l.Current)... } data-task-id={ l.TaskID }>
+		<span class="[ label ]">{ l.Label }</span>
+		if l.LiveState() != "" {
+			<span class="[ status ]" data-state={ l.LiveState() } data-dot-only>
+				<span class="[ visually-hidden ]">{ l.LiveWord() }</span>
+			</span>
+		}
+		if l.Live > 0 {
+			<span class="[ count ]" title="live sessions">{ strconv.Itoa(l.Live) }</span>
+		}
+	</a>
 }
 
 // streamBar shows whether the page is live. The page's feed reports its

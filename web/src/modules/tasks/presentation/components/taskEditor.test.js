@@ -17,13 +17,22 @@ function setup({ task = makeTask(), sessions = [] } = {}) {
   return { ...mounted, memory, visited, reloads: () => reloads };
 }
 
-test("a status change is saved and the page reloads so the rail regroups", async () => {
+test("a status change is saved status-only and the page reloads so the rail regroups", async () => {
   const { instance, memory, reloads } = setup();
   assert.equal(instance.status, "in_progress");
   instance.status = "review";
   await instance.changeStatus();
   assert.equal(memory.tasks()[0].status, "review");
+  assert.deepEqual(memory.calls.at(-1), { updateTask: { id: "t1", status: "review" } });
   assert.equal(reloads(), 1);
+});
+
+test("editing the text does not resend the status", async () => {
+  const { instance, memory } = setup();
+  instance.startEditTask();
+  instance.draftTitle = "Add the SSE feed";
+  await instance.save();
+  assert.deepEqual(memory.calls.at(-1), { updateTask: { id: "t1", title: "Add the SSE feed", description: "Stream session changes to clients." } });
 });
 
 test("a refused status change goes back to the saved one", async () => {

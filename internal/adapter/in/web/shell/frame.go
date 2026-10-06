@@ -158,18 +158,9 @@ func railAttrs(r Rail) templ.Attributes {
 	if r.Seed == nil {
 		return nil
 	}
-	attrs := templ.Attributes{"x-data": "tasksRail", "data-seed": "rail-seed"}
+	attrs := templ.Attributes{"x-data": "tasksRail", "data-seed": "rail-seed", "data-current-task": r.Current}
 	if r.ReportsFeed {
 		attrs["data-reports-feed"] = ""
 	}
 	return attrs
-}
-
-// hiddenUnless hides an element x-show controls until it has something to
-// show, so the first paint matches what Alpine will render.
-func hiddenUnless(show bool) templ.Attributes {
-	if show {
-		return nil
-	}
-	return templ.Attributes{"style": "display: none"}
 }

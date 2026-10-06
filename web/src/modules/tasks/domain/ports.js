@@ -9,9 +9,12 @@
  * @typedef {object} TaskGateway
  * @property {(input: { projectId: string, title: string, description: string, status: TaskStatus }) => Promise<Task>} createTask
  *           Rejects with INVALID_INPUT (no title), INVALID_STATUS or PROJECT_NOT_FOUND.
- * @property {(input: { id: string, title: string, description: string, status: TaskStatus }) => Promise<Task>} updateTask
- *           Replaces title, description and status. Rejects with INVALID_INPUT,
- *           INVALID_STATUS or TICKET_NOT_FOUND.
+ * @property {(input: { id: string, title?: string, description?: string, status?: TaskStatus }) => Promise<Task>} updateTask
+ *           Sends only the keys given; an omitted one keeps its value on the
+ *           server. Rejects with INVALID_INPUT (title given but blank, or an
+ *           unknown status) or TICKET_NOT_FOUND.
+ * @property {(id: string, status: TaskStatus) => Promise<Task>} moveTask
+ *           A status-only update: what the board sends when a card is moved.
  * @property {(id: string) => Promise<void>} deleteTask
  *           Rejects with TICKET_NOT_FOUND.
  * @property {(projectId: string, taskId: string) => Promise<{ total: number, live: number }>} countSessions

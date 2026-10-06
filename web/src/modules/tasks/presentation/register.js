@@ -3,7 +3,7 @@
 import { board } from "./components/board.js";
 import { documentWatch } from "./components/documentWatch.js";
 import { newTask } from "./components/newTask.js";
-import { rail, railLink } from "./components/rail.js";
+import { rail } from "./components/rail.js";
 import { taskEditor } from "./components/taskEditor.js";
 
 /**
@@ -24,6 +24,5 @@ export function registerTasks(Alpine, deps) {
   Alpine.store("tasksRail", { byTask: {}, tasks: [], seeded: false });
   const store = Alpine.store("tasksRail");
   Alpine.data("tasksRail", rail({ gateway: deps.rail, store }));
-  Alpine.data("tasksRailLink", railLink({ store }));
-  Alpine.data("tasksBoard", board({ store }));
+  Alpine.data("tasksBoard", board({ gateway: deps.gateway, store }));
 }

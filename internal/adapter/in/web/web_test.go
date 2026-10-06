@@ -214,6 +214,10 @@ func TestProjectPagePutsItsTasksOnTheRailAndTheProjectInThePicker(t *testing.T) 
 		// The board: its first paint and its live template.
 		`x-data="tasksBoard" data-project-id="p1"`,
 		`x-on:task-changed.window="taskChanged"`,
+		// The rail: its first paint and the live groups it regroups from the store.
+		`data-current-task="" data-reports-feed="" data-seed="rail-seed" x-data="tasksRail"`, // templ renders attribute maps sorted by key
+		`x-for="group in groups"`,
+		`x-for="link in group.links"`,
 		`x-data="streamStatus"`, // the board follows the project feed…
 		`data-reports-feed`,     // …through the rail, which reports it to the stream bar
 		`<script id="rail-seed" type="application/json">`,
@@ -223,6 +227,10 @@ func TestProjectPagePutsItsTasksOnTheRailAndTheProjectInThePicker(t *testing.T) 
 		`x-for="card in column.cards"`,
 		`class="[ card ]" data-task-id="t-feed"`,
 		`class="[ title ]" href="/projects/p1/tasks/t-feed">Add SSE feed</a>`,
+		// Moving a card: the task page's status select, on every card.
+		`<select class="[ status-picker ]" data-task-id="t-feed" aria-label="Move Add SSE feed to" x-on:change="moveTo">`,
+		`<option value="in_progress" selected>In progress</option>`,
+		`x-bind:value="card.status" x-on:change="moveTo"`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("project page is missing %q", want)
@@ -296,6 +304,7 @@ func TestTaskPageListsItsSessionsBesideTheDetail(t *testing.T) {
 		`<option value="in_progress" selected>In progress</option>`,
 		`x-on:click="askDeleteTask"`,
 		`href="/projects/p1/tasks/t-feed" aria-current="page"`,
+		`data-current-task="t-feed"`,
 		`x-data="sessionsPage"`,
 		`x-data="streamStatus"`,
 		`<script id="sessions-seed" type="application/json">`,

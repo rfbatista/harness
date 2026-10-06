@@ -17,6 +17,10 @@ export function memoryTasks({ projects = [], tasks = [], sessions = [], document
   const known = new Set([...projects, ...tasks.map((t) => t.projectId)]);
   const store = new Map(tasks.map((t) => [t.id, t]));
   let next = 1;
+  /** Every updateTask input, as given (only the keys present): what a component sent. */
+  const calls = [];
+  /** A test hook: when set, updateTask throws what it returns. */
+  let refuse = null;
 
   const check = (title, status) => {
     if (!title?.trim()) throw new StructuredError(Codes.INVALID_INPUT, "title is required", 400);
@@ -36,12 +40,24 @@ export function memoryTasks({ projects = [], tasks = [], sessions = [], document
     },
 
     async updateTask({ id, title, description, status }) {
+      calls.push({ updateTask: { id, ...(title !== undefined && { title }), ...(description !== undefined && { description }), ...(status !== undefined && { status }) } });
+      if (refuse) throw refuse();
       const task = store.get(id);
       if (!task) throw new StructuredError(Codes.TICKET_NOT_FOUND, "ticket not found", 404);
-      check(title, status);
-      const updated = Object.freeze({ ...task, title: title.trim(), description: description ?? "", status });
+      if (title !== undefined && !title.trim()) throw new StructuredError(Codes.INVALID_INPUT, "title is required", 400);
+      if (status !== undefined && !isStatus(status)) throw new StructuredError(Codes.INVALID_INPUT, "status must be one of backlog, todo, in_progress, review, done", 400);
+      const updated = Object.freeze({
+        ...task,
+        ...(title !== undefined && { title: title.trim() }),
+        ...(description !== undefined && { description }),
+        ...(status !== undefined && { status }),
+      });
       store.set(id, updated);
       return updated;
+    },
+
+    moveTask(id, status) {
+      return gateway.updateTask({ id, status });
     },
 
     async deleteTask(id) {
@@ -60,6 +76,13 @@ export function memoryTasks({ projects = [], tasks = [], sessions = [], document
 
   return {
     gateway,
+    calls,
+    get refuse() {
+      return refuse;
+    },
+    set refuse(fn) {
+      refuse = fn;
+    },
     tasks: () => [...store.values()],
     sessions,
     documents,

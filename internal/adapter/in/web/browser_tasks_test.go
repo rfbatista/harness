@@ -28,11 +28,13 @@ func setField(selector, value, event string) chromedp.Action {
 }
 
 // fakeTicketsAPI answers the ticket writes and GET /api/sessions the way
-// httpapi does, and records them.
+// httpapi does, and records them. An update is partial, as the server's: a
+// key absent from the body keeps the stored value.
 type fakeTicketsAPI struct {
 	mu       sync.Mutex
 	calls    []string
 	sessions map[string][]map[string]string // ticket id → sessions
+	tickets  map[string]map[string]string   // ticket id → ticket, merged on update
 }
 
 func (f *fakeTicketsAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -53,13 +55,29 @@ func (f *fakeTicketsAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	f.mu.Unlock()
 	switch r.URL.Path {
 	case "/api/create_ticket":
-		_ = json.NewEncoder(w).Encode(map[string]any{"ticket": map[string]string{
-			"id": "t-new", "project_id": in["project_id"], "title": in["title"], "description": in["description"], "status": in["status"],
-		}})
+		tk := map[string]string{"id": "t-new", "project_id": in["project_id"], "title": in["title"], "description": in["description"], "status": in["status"]}
+		f.mu.Lock()
+		f.tickets[tk["id"]] = tk
+		f.mu.Unlock()
+		_ = json.NewEncoder(w).Encode(map[string]any{"ticket": tk})
 	case "/api/update_ticket":
-		_ = json.NewEncoder(w).Encode(map[string]any{"ticket": map[string]string{
-			"id": in["ticket_id"], "project_id": "p1", "title": in["title"], "description": in["description"], "status": in["status"],
-		}})
+		f.mu.Lock()
+		tk := f.tickets[in["ticket_id"]]
+		if tk == nil {
+			tk = map[string]string{"id": in["ticket_id"], "project_id": "p1", "status": "todo"}
+			f.tickets[in["ticket_id"]] = tk
+		}
+		for _, k := range []string{"title", "description", "status"} {
+			if v, ok := in[k]; ok {
+				tk[k] = v
+			}
+		}
+		out := map[string]string{}
+		for k, v := range tk {
+			out[k] = v
+		}
+		f.mu.Unlock()
+		_ = json.NewEncoder(w).Encode(map[string]any{"ticket": out})
 	case "/api/delete_ticket":
 		w.WriteHeader(http.StatusNoContent)
 	default:
@@ -83,9 +101,12 @@ func TestTaskManagementInTheBrowser(t *testing.T) {
 	}
 	ctx, errs := browser(t)
 
-	api := &fakeTicketsAPI{sessions: map[string][]map[string]string{
-		"t-busy": {{"id": "s1", "ticket_id": "t-busy", "status": "running"}},
-	}}
+	api := &fakeTicketsAPI{
+		sessions: map[string][]map[string]string{
+			"t-busy": {{"id": "s1", "ticket_id": "t-busy", "status": "running"}},
+		},
+		tickets: map[string]map[string]string{},
+	}
 	pages := NewHandler(Deps{
 		Projects: fakeProjects{[]*domain.Project{{ID: "p1", Name: "coding_pool"}}},
 		Tasks: fakeTickets{[]*domain.Ticket{
@@ -153,8 +174,8 @@ func TestTaskManagementInTheBrowser(t *testing.T) {
 
 	want := []string{
 		`/api/create_ticket {"description":"The TUI's live section.","project_id":"p1","status":"todo","title":"Write docs"}`,
-		`/api/update_ticket {"description":"The TUI's live section.","status":"todo","ticket_id":"t-new","title":"Write the live docs"}`,
-		`/api/update_ticket {"description":"The TUI's live section.","status":"review","ticket_id":"t-new","title":"Write the live docs"}`,
+		`/api/update_ticket {"description":"The TUI's live section.","ticket_id":"t-new","title":"Write the live docs"}`,
+		`/api/update_ticket {"status":"review","ticket_id":"t-new"}`,
 		`/api/delete_ticket {"ticket_id":"t-new"}`,
 	}
 	if got := api.log(); got != strings.Join(want, "\n") {

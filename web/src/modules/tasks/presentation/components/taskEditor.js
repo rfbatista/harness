@@ -1,6 +1,7 @@
 // The task in the task page's header: its title, status and description,
-// edited in place, and deleted. A status change reloads the page, so the rail
-// regroups the task. A task with sessions is not deleted (they would be left
+// edited in place, and deleted. Each edit sends only what changed: a status
+// change is status-only and reloads the page, so the rail regroups the task;
+// a text edit does not resend the status. A task with sessions is not deleted (they would be left
 // under no task); the editor asks the server right before deleting it.
 //
 //   <div x-data="tasksTaskEditor" data-seed="task-seed"> … </div>
@@ -60,7 +61,7 @@ export const taskEditor = ({ gateway, navigate, reload }) => () => ({
     if (!this.task || this.status === this.task.status) return;
     const previous = this.task.status;
     try {
-      this.task = await gateway.updateTask({ ...this.task, status: this.status });
+      this.task = await gateway.moveTask(this.task.id, this.status);
       reload();
     } catch (err) {
       this.status = previous;
@@ -86,7 +87,7 @@ export const taskEditor = ({ gateway, navigate, reload }) => () => ({
     this.taskError = null;
     try {
       this.task = await gateway.updateTask({
-        ...this.task,
+        id: this.task.id,
         title: this.draftTitle.trim(),
         description: this.draftDescription.trim(),
       });
