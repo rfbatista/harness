@@ -204,3 +204,78 @@ func TestSessionTaskTools_SessionWithoutTask(t *testing.T) {
 	_, err = tools[0].Handler(WithSessionID(context.Background(), "free"), nil)
 	wantCode(t, err, "SESSION_HAS_NO_TASK")
 }
+
+// An agent moves its own task as the work moves; the change is what get_task
+// shows next, in this session and in every other one on the task.
+func TestSessionTaskTools_UpdateTaskStatus(t *testing.T) {
+	f := newTaskToolsFixture(t)
+	out, err := f.call(t, f.sessionID, "update_task_status", map[string]any{"status": "review"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	tk := out.(map[string]any)["task"].(*domain.Ticket)
+	if tk.ID != f.ticketID || tk.Status != domain.TicketStatusReview || tk.Title != "Ship the thing" || tk.Description != "with care" {
+		t.Fatalf("status change touched more than the status: %+v", tk)
+	}
+	got, err := f.call(t, f.sessionID, "get_task", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.(map[string]any)["task"].(*domain.Ticket).Status != domain.TicketStatusReview {
+		t.Fatal("get_task does not see the new status")
+	}
+
+	// The same status again succeeds and changes nothing.
+	again, err := f.call(t, f.sessionID, "update_task_status", map[string]any{"status": "review"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a := again.(map[string]any)["task"].(*domain.Ticket); !a.UpdatedAt.Equal(tk.UpdatedAt) {
+		t.Fatalf("idempotent call wrote: %+v then %+v", tk, a)
+	}
+}
+
+func TestSessionTaskTools_UpdateTaskStatus_Input(t *testing.T) {
+	f := newTaskToolsFixture(t)
+	_, err := f.call(t, f.sessionID, "update_task_status", map[string]any{})
+	wantCode(t, err, "INVALID_INPUT")
+	_, err = f.call(t, f.sessionID, "update_task_status", map[string]any{"status": ""})
+	wantCode(t, err, "INVALID_INPUT")
+	_, err = f.call(t, f.sessionID, "update_task_status", map[string]any{"status": "shipped"})
+	wantCode(t, err, "INVALID_INPUT")
+	_, err = f.call(t, f.sessionID, "update_task_status", map[string]any{"status": 3})
+	wantCode(t, err, "INVALID_INPUT")
+	_, err = f.call(t, "", "update_task_status", map[string]any{"status": "done"})
+	wantCode(t, err, "SESSION_NOT_FOUND")
+}
+
+// There is no task id to pass: one smuggled into the arguments is ignored and
+// the session's own task is the one that moves.
+func TestSessionTaskTools_UpdateTaskStatus_OnlyItsOwnTask(t *testing.T) {
+	f := newTaskToolsFixture(t)
+	other, err := f.plan.CreateTicket(context.Background(), f.projectID, "Elsewhere", "", domain.TicketStatusTodo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, err := f.call(t, f.sessionID, "update_task_status", map[string]any{"status": "done", "task_id": other.ID, "ticket_id": other.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out.(map[string]any)["task"].(*domain.Ticket).ID != f.ticketID {
+		t.Fatal("moved a task other than the session's own")
+	}
+	stillThere, _ := f.plan.GetTicket(context.Background(), other.ID)
+	if stillThere.Status != domain.TicketStatusTodo {
+		t.Fatalf("the other task moved: %+v", stillThere)
+	}
+}
+
+// The task may be deleted while the session runs; the tool then says so.
+func TestSessionTaskTools_UpdateTaskStatus_DeletedTask(t *testing.T) {
+	f := newTaskToolsFixture(t)
+	if err := f.plan.DeleteTicket(context.Background(), f.ticketID); err != nil {
+		t.Fatal(err)
+	}
+	_, err := f.call(t, f.sessionID, "update_task_status", map[string]any{"status": "done"})
+	wantCode(t, err, "TICKET_NOT_FOUND")
+}

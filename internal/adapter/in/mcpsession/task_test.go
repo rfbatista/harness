@@ -213,3 +213,34 @@ func TestTaskHandler_PublishArtifact(t *testing.T) {
 		t.Fatalf("refusal = %+v", textOf(t, res))
 	}
 }
+
+// The status change travels the real MCP transport and comes back as the task.
+func TestTaskHandler_UpdateTaskStatus(t *testing.T) {
+	baseURL, ticketID, _ := newTaskServer(t)
+	c := dial(t, baseURL+PathPrefix+"sess-1")
+
+	var call mcplib.CallToolRequest
+	call.Params.Name = "update_task_status"
+	call.Params.Arguments = map[string]any{"status": "review"}
+	res, err := c.CallTool(context.Background(), call)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.IsError {
+		t.Fatalf("update_task_status failed: %s", textOf(t, res))
+	}
+	text := textOf(t, res)
+	if !strings.Contains(text, `"status":"review"`) || !strings.Contains(text, `"id":"`+ticketID+`"`) {
+		t.Fatalf("result = %s", text)
+	}
+
+	call.Params.Arguments = map[string]any{"status": "shipped"}
+	res, err = c.CallTool(context.Background(), call)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The bridge hands the agent a structured error's message, not its code.
+	if !res.IsError || !strings.Contains(textOf(t, res), "one of backlog, todo, in_progress, review, done") {
+		t.Fatalf("bad status should name the valid statuses, got %s", textOf(t, res))
+	}
+}

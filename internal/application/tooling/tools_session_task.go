@@ -19,6 +19,7 @@ var SessionTaskToolNames = []string{
 	"read_task_document",
 	"create_task_document",
 	"update_task_document",
+	"update_task_status",
 	"list_task_sessions",
 	"start_task_session",
 	"list_project_repositories",
@@ -49,9 +50,10 @@ type ArtifactTooling struct {
 	ViewURL   func(artifactID string) string
 }
 
-// SessionTaskTools exposes the task a session was spawned into, the documents
-// linked to that task, the other sessions working on it, and the artifacts
-// those sessions published, as MCP tools.
+// SessionTaskTools exposes the task a session was spawned into (to read, and
+// to move between statuses), the documents linked to that task, the other
+// sessions working on it, and the artifacts those sessions published, as MCP
+// tools.
 //
 // The tools take no project or ticket id: the session id travels in the context
 // (see WithSessionID) and every handler resolves the scope from it, so a session
@@ -208,6 +210,30 @@ func SessionTaskTools(planningSvc ports.Planning, sessions ports.SessionReposito
 					return nil, err
 				}
 				return map[string]any{"document": doc}, nil
+			},
+		},
+		{
+			Name: "update_task_status",
+			Description: "Set the status of this session's task so the board stays true as the work moves. Move it to in_progress " +
+				"when you pick the work up, to review when it is ready for a person to look at, and to done when you are told it " +
+				"is accepted. Only the status changes. The same status again is fine.",
+			InputSchema: schemaFromJSON(`{"type":"object","required":["status"],"properties":{"status":{"type":"string","enum":["backlog","todo","in_progress","review","done"],"description":"The task's new status."}}}`),
+			Source:      "code",
+			Handler: func(ctx context.Context, args map[string]any) (any, error) {
+				scope, err := resolveTaskScope(ctx, planningSvc, sessions)
+				if err != nil {
+					return nil, err
+				}
+				status := domain.TicketStatus(getString(args, "status", ""))
+				if status == "" {
+					return nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "status is required: one of backlog, todo, in_progress, review, done"}
+				}
+				// The task comes from the session, never from the arguments.
+				tk, err := planningSvc.PatchTicket(ctx, scope.ticket.ID, ports.TicketPatch{Status: &status})
+				if err != nil {
+					return nil, err
+				}
+				return map[string]any{"task": tk}, nil
 			},
 		},
 	}, sessionProjectTools(planningSvc, sessions, agents, arch, start.Repositories)...)
