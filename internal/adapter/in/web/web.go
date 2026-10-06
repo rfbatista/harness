@@ -90,6 +90,7 @@ func NewHandler(deps Deps, assets *Assets, fallback http.Handler) http.Handler {
 	mux.Handle("GET /projects/{project}/tasks/{task}/sessions/{session}/history/{commit}", s.page(historyPages.Session))
 	mux.Handle("GET /projects/{project}/tasks/{task}/documents", s.page(taskPages.Documents))
 	mux.Handle("GET /projects/{project}/tasks/{task}/documents/{document}", s.page(taskPages.Documents))
+	mux.Handle("GET /projects/{project}/tasks/{task}/documents/{document}/view", s.page(taskPages.DocumentView))
 	mux.Handle("/", fallback)
 	return mux
 }

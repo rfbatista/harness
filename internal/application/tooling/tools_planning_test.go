@@ -111,3 +111,56 @@ func TestTicketTools_UpdateIsPartial(t *testing.T) {
 		t.Fatalf("schema still requires more than ticket_id: %s", raw)
 	}
 }
+
+func TestDocumentTools_FormatIsOptionalAndValidated(t *testing.T) {
+	db, err := sqlite.Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	projects := sqlite.NewProjectRepository(db)
+	p, _ := projects.Create("proj", "/tmp/proj")
+	svc := planning.NewService(sqlite.NewTicketRepository(db), sqlite.NewDocumentRepository(db), projects)
+	byName := map[string]domain.Tool{}
+	for _, tl := range DocumentTools(svc) {
+		byName[tl.Name] = tl
+	}
+	ctx := context.Background()
+
+	out, err := byName["create_document"].Handler(ctx, map[string]any{"project_id": p.ID, "title": "Notes", "content": "# n"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	notes := out.(map[string]any)["document"].(*domain.Document)
+	if notes.Format != domain.DocumentFormatMarkdown {
+		t.Fatalf("default format = %q", notes.Format)
+	}
+	out, err = byName["create_document"].Handler(ctx, map[string]any{"project_id": p.ID, "title": "Page", "content": "<!doctype html><html><body></body></html>", "format": "html"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	page := out.(map[string]any)["document"].(*domain.Document)
+	if page.Format != domain.DocumentFormatHTML {
+		t.Fatalf("html format = %q", page.Format)
+	}
+	_, err = byName["create_document"].Handler(ctx, map[string]any{"project_id": p.ID, "title": "X", "format": "pdf"})
+	wantCode(t, err, "INVALID_INPUT")
+
+	out, err = byName["update_document"].Handler(ctx, map[string]any{"document_id": page.ID, "title": "Page 2", "content": page.Content})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := out.(map[string]any)["document"].(*domain.Document); got.Format != domain.DocumentFormatHTML {
+		t.Fatalf("update without format changed it: %+v", got)
+	}
+
+	// The schema advertises the choice and the descriptions no longer say Markdown.
+	schema, _ := json.Marshal(byName["create_document"].InputSchema)
+	if !bytes.Contains(schema, []byte(`"enum":["markdown","html"]`)) {
+		t.Fatalf("create_document schema lacks the format enum: %s", schema)
+	}
+	for _, name := range []string{"create_document", "update_document"} {
+		if d := byName[name].Description; bytes.Contains([]byte(d), []byte("markdown document")) {
+			t.Errorf("%s description still says markdown document: %q", name, d)
+		}
+	}
+}

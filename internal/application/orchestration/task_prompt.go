@@ -56,9 +56,27 @@ sessions left, and write down what the next one will need:
 
 - mcp__task__get_task — this task and the documents linked to it
 - mcp__task__list_task_documents — the linked documents, titles only
-- mcp__task__read_task_document — one document, with its content
+- mcp__task__read_task_document — one document, with its content and format
 - mcp__task__create_task_document — a new document, linked to this task for you
 - mcp__task__update_task_document — revise one of them
+
+A document you write is a complete HTML document, not Markdown.
+Markdown is refused with DOCUMENT_NOT_HTML and nothing is stored; rewrite it
+as a page. The minimal shape:
+
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Plan: …</title><style>/* inline styles */</style></head>
+<body>…</body>
+</html>
+
+Keep styles inline or in <style>; nothing outside the harness origin loads.
+To match the harness look, link <link rel="stylesheet" href="/static/document.css">
+in <head> and put class="prose" on <body>; it follows the system's light or
+dark scheme. Make it readable in light and dark (color-scheme: light dark, or a
+prefers-color-scheme media query). It renders on the task's documents page
+in a sandboxed frame: scripts run there but cannot reach the harness API.
+Older documents may be Markdown; read_task_document says which.
 
 Move the task as the work moves, so the board stays true without a person
 dragging the card:

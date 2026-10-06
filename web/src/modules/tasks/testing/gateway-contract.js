@@ -17,8 +17,9 @@ export function taskGatewayContract(name, makeSubject) {
       tasks: [makeTask()],
       sessions: [],
       documents: [
-        { id: "d1", ticketId: "t1", updatedAt: "2026-10-05T12:00:00.123456789-03:00" },
-        { id: "d2", ticketId: "t2", updatedAt: "2026-10-05T12:00:00Z" },
+        // format rides on the wire; the watcher reads only id and updated_at.
+        { id: "d1", ticketId: "t1", updatedAt: "2026-10-05T12:00:00.123456789-03:00", format: "html" },
+        { id: "d2", ticketId: "t2", updatedAt: "2026-10-05T12:00:00Z", format: "markdown" },
       ],
     });
     assert.deepEqual(await gateway.listDocumentVersions("t1"), [{ id: "d1", version: "2026-10-05T12:00:00.123456789-03:00" }]);

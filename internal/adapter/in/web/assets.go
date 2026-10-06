@@ -9,8 +9,8 @@ import (
 	"strings"
 )
 
-// static holds the bundles `go run ./cmd/webbuild` writes (app.js, app.css
-// and their source maps). They are build output, not source: the directory is
+// static holds the bundles `go run ./cmd/webbuild` writes (app.js, app.css,
+// document.css and their source maps). They are build output, not source: the directory is
 // tracked only through .gitkeep, hence the all: prefix.
 //
 //go:embed all:static
@@ -34,7 +34,7 @@ func NewAssets() (*Assets, error) {
 
 func newAssets(files fs.FS) (*Assets, error) {
 	a := &Assets{files: files, hashes: map[string]string{}}
-	for _, name := range []string{"app.js", "app.css"} {
+	for _, name := range []string{"app.js", "app.css", "document.css"} {
 		data, err := fs.ReadFile(files, name)
 		if err != nil {
 			continue // not built; Built reports it
@@ -45,8 +45,13 @@ func newAssets(files fs.FS) (*Assets, error) {
 	return a, nil
 }
 
-// Built reports whether both bundles are present.
-func (a *Assets) Built() bool { return len(a.hashes) == 2 }
+// Built reports whether the app bundles are present. The document
+// stylesheet is optional: an HTML document may link it, pages never need it.
+func (a *Assets) Built() bool {
+	_, js := a.hashes["app.js"]
+	_, css := a.hashes["app.css"]
+	return js && css
+}
 
 // URL is the cache-busting URL of a bundle: /static/app.js?v=<hash>.
 func (a *Assets) URL(name string) string {

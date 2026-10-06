@@ -146,7 +146,7 @@ func SessionTaskTools(planningSvc ports.Planning, sessions ports.SessionReposito
 		},
 		{
 			Name:        "read_task_document",
-			Description: "Read one document linked to this session's task, including its markdown content.",
+			Description: "Read one document linked to this session's task, including its content and format (html for pages written by task sessions, markdown for older documents).",
 			InputSchema: schemaFromJSON(`{"type":"object","properties":{"document_id":{"type":"string","description":"Document ID"}},"required":["document_id"]}`),
 			Source:      "code",
 			Handler: func(ctx context.Context, args map[string]any) (any, error) {
@@ -162,20 +162,22 @@ func SessionTaskTools(planningSvc ports.Planning, sessions ports.SessionReposito
 			},
 		},
 		{
-			Name:        "create_task_document",
-			Description: "Write a new markdown document and link it to this session's task. Use it to hand plans, findings and decisions to whoever picks the task up next.",
-			InputSchema: schemaFromJSON(`{"type":"object","properties":{"title":{"type":"string","description":"Document title"},"content":{"type":"string","description":"Markdown content"}},"required":["title"]}`),
+			Name: "create_task_document",
+			Description: "Write a new document as a complete HTML page and link it to this session's task. Use it to hand plans, findings and decisions " +
+				"to whoever picks the task up next. content must be an HTML document (<!doctype html>, <html>, <head> with <title> and <meta charset>, <body>; " +
+				"styles inline or in <style>; no external resources). Markdown is refused with DOCUMENT_NOT_HTML. It renders on the task's documents page in a sandboxed frame.",
+			InputSchema: schemaFromJSON(`{"type":"object","properties":{"title":{"type":"string","description":"Document title"},"content":{"type":"string","description":"A complete HTML document: doctype, html, head (title, meta charset), body. Markdown is refused."}},"required":["title","content"]}`),
 			Source:      "code",
 			Handler: func(ctx context.Context, args map[string]any) (any, error) {
 				scope, err := resolveTaskScope(ctx, planningSvc, sessions)
 				if err != nil {
 					return nil, err
 				}
-				doc, err := planningSvc.CreateDocument(
-					scope.session.ProjectID,
-					getString(args, "title", ""),
-					getString(args, "content", ""),
-				)
+				content := getString(args, "content", "")
+				if !domain.IsHTMLDocument(content) {
+					return nil, notHTML()
+				}
+				doc, err := planningSvc.CreateDocument(scope.session.ProjectID, getString(args, "title", ""), content, domain.DocumentFormatHTML)
 				if err != nil {
 					return nil, err
 				}
@@ -187,8 +189,8 @@ func SessionTaskTools(planningSvc ports.Planning, sessions ports.SessionReposito
 		},
 		{
 			Name:        "update_task_document",
-			Description: "Revise a document linked to this session's task. Omitted fields keep their current value.",
-			InputSchema: schemaFromJSON(`{"type":"object","properties":{"document_id":{"type":"string","description":"Document ID"},"title":{"type":"string","description":"New title; omit to keep the current one"},"content":{"type":"string","description":"New markdown content; omit to keep the current one"}},"required":["document_id"]}`),
+			Description: "Revise a document linked to this session's task. Omitted fields keep their current value. New content must be a complete HTML document (Markdown is refused with DOCUMENT_NOT_HTML); it makes an older markdown document an html one.",
+			InputSchema: schemaFromJSON(`{"type":"object","properties":{"document_id":{"type":"string","description":"Document ID"},"title":{"type":"string","description":"New title; omit to keep the current one"},"content":{"type":"string","description":"New content as a complete HTML document; omit to keep the current one"}},"required":["document_id"]}`),
 			Source:      "code",
 			Handler: func(ctx context.Context, args map[string]any) (any, error) {
 				scope, err := resolveTaskScope(ctx, planningSvc, sessions)
@@ -199,13 +201,17 @@ func SessionTaskTools(planningSvc ports.Planning, sessions ports.SessionReposito
 				if err != nil {
 					return nil, err
 				}
-				// Partial edit: the underlying use case replaces both fields, so
-				// anything the agent left out is filled back in from the stored doc.
-				doc, err := planningSvc.UpdateDocument(
-					current.ID,
-					getString(args, "title", current.Title),
-					getString(args, "content", current.Content),
-				)
+				// Partial edit: the use case replaces both fields, so anything the
+				// agent left out is filled back in from the stored document. Only
+				// new content changes the format, to html.
+				content, format := current.Content, domain.DocumentFormat("")
+				if v, ok := args["content"].(string); ok {
+					if !domain.IsHTMLDocument(v) {
+						return nil, notHTML()
+					}
+					content, format = v, domain.DocumentFormatHTML
+				}
+				doc, err := planningSvc.UpdateDocument(current.ID, getString(args, "title", current.Title), content, format)
 				if err != nil {
 					return nil, err
 				}
@@ -349,17 +355,26 @@ func (s *taskScope) document(planningSvc ports.Planning, documentID string) (*do
 }
 
 // documentSummary is a document without its body, for listings that would
-// otherwise flood the agent's context with markdown.
+// otherwise flood the agent's context with pages.
 type documentSummary struct {
-	ID        string    `json:"id"`
-	Title     string    `json:"title"`
-	UpdatedAt time.Time `json:"updated_at"`
+	ID        string                `json:"id"`
+	Title     string                `json:"title"`
+	Format    domain.DocumentFormat `json:"format"`
+	UpdatedAt time.Time             `json:"updated_at"`
 }
 
 func summarizeDocuments(docs []*domain.Document) []documentSummary {
 	out := make([]documentSummary, 0, len(docs))
 	for _, d := range docs {
-		out = append(out, documentSummary{ID: d.ID, Title: d.Title, UpdatedAt: d.UpdatedAt})
+		out = append(out, documentSummary{ID: d.ID, Title: d.Title, Format: d.Format, UpdatedAt: d.UpdatedAt})
 	}
 	return out
+}
+
+// notHTML is the refusal for a task document body that is not an HTML page.
+// It says what to send instead, so an agent learns the rule on first use.
+func notHTML() error {
+	return &domain.StructuredError{Code: "DOCUMENT_NOT_HTML", Message: "content must be a complete HTML document: start with <!doctype html>, " +
+		"then <html> with a <head> (title, meta charset) and a <body>. Markdown and HTML fragments are refused; " +
+		"rewrite the body as an HTML page and send it again."}
 }

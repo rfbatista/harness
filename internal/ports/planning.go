@@ -18,12 +18,13 @@ type TicketRepository interface {
 
 // DocumentRepository is the outbound port for persisting and retrieving documents.
 // It also owns the ticket_documents join table via Link/Unlink/ListByTicket.
+// Update keeps the stored format when format is empty.
 type DocumentRepository interface {
 	Get(id string) *domain.Document
 	ListByProject(projectID string) []*domain.Document
 	ListByTicket(ticketID string) []*domain.Document
-	Create(projectID, title, content string) (*domain.Document, error)
-	Update(id, title, content string) (*domain.Document, error)
+	Create(projectID, title, content string, format domain.DocumentFormat) (*domain.Document, error)
+	Update(id, title, content string, format domain.DocumentFormat) (*domain.Document, error)
 	Delete(id string) error
 	Link(ticketID, documentID string) error
 	Unlink(ticketID, documentID string) error
@@ -81,11 +82,14 @@ type TicketAnnouncer interface {
 }
 
 // DocumentLibrary manages a project's documents and their links to tickets.
+// CreateDocument with an empty format writes markdown; UpdateDocument with an
+// empty format keeps the stored one; any value other than markdown or html
+// is INVALID_INPUT.
 type DocumentLibrary interface {
-	CreateDocument(projectID, title, content string) (*domain.Document, error)
+	CreateDocument(projectID, title, content string, format domain.DocumentFormat) (*domain.Document, error)
 	GetDocument(id string) *domain.Document
 	ListDocuments(projectID string) []*domain.Document
-	UpdateDocument(id, title, content string) (*domain.Document, error)
+	UpdateDocument(id, title, content string, format domain.DocumentFormat) (*domain.Document, error)
 	DeleteDocument(id string) error
 	LinkDocument(ticketID, documentID string) error
 	UnlinkDocument(ticketID, documentID string) error

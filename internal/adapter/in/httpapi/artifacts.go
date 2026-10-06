@@ -16,10 +16,11 @@ import (
 // function rather than importing the adapter to build the route.
 func ArtifactViewPath(id string) string { return "/api/artifacts/" + url.PathEscape(id) + "/view/" }
 
-// artifactCSP sandboxes agent-written HTML served from the harness origin:
+// ArtifactCSP sandboxes agent-written HTML served from the harness origin
+// (artifacts, and the task documents page's HTML documents):
 // scripts may run, nothing may reach the API with the user's credentials.
 // The web UI adds its own <iframe sandbox="allow-scripts">; both halves hold.
-const artifactCSP = "sandbox allow-scripts; default-src 'self' data: blob:; img-src 'self' data: blob:; media-src 'self' data: blob:; " +
+const ArtifactCSP = "sandbox allow-scripts; default-src 'self' data: blob:; img-src 'self' data: blob:; media-src 'self' data: blob:; " +
 	"style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; font-src 'self' data:; connect-src 'none'; frame-ancestors 'self'"
 
 func (h *Handler) handleListArtifacts(c echo.Context) error {
@@ -84,7 +85,7 @@ func (h *Handler) handleArtifactView(c echo.Context) error {
 	hdr.Set("Cache-Control", "no-cache")
 	hdr.Set("X-Content-Type-Options", "nosniff")
 	hdr.Set("Content-Disposition", "inline")
-	hdr.Set("Content-Security-Policy", artifactCSP)
+	hdr.Set("Content-Security-Policy", ArtifactCSP)
 	http.ServeContent(c.Response(), c.Request(), "", f.ModTime, f.Content)
 	return nil
 }

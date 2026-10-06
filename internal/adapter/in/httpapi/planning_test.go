@@ -153,3 +153,75 @@ func TestHTTP_UpdateTicket_Errors(t *testing.T) {
 		})
 	}
 }
+
+func TestHTTP_DocumentFormatOnTheWire(t *testing.T) {
+	h, pid := newPlanningHandler(t)
+	router := NewRouter(h)
+	call := func(method, path string, body map[string]any) (int, map[string]any) {
+		t.Helper()
+		var req *http.Request
+		if body != nil {
+			b, _ := json.Marshal(body)
+			req = httptest.NewRequest(method, path, bytes.NewReader(b))
+		} else {
+			req = httptest.NewRequest(method, path, nil)
+		}
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+		var out map[string]any
+		_ = json.Unmarshal(rec.Body.Bytes(), &out)
+		return rec.Code, out
+	}
+	docOf := func(out map[string]any) map[string]any { return out["document"].(map[string]any) }
+
+	// Omitted format is markdown: existing callers are unaffected.
+	code, out := call(http.MethodPost, "/api/create_document", map[string]any{"project_id": pid, "title": "Notes", "content": "# n"})
+	if code != 200 || docOf(out)["format"] != "markdown" {
+		t.Fatalf("create without format: %d %v", code, out)
+	}
+	notesID := docOf(out)["id"].(string)
+
+	code, out = call(http.MethodPost, "/api/create_document", map[string]any{"project_id": pid, "title": "Page", "content": "<!doctype html><html><body>p</body></html>", "format": "html"})
+	if code != 200 || docOf(out)["format"] != "html" {
+		t.Fatalf("create html: %d %v", code, out)
+	}
+	pageID := docOf(out)["id"].(string)
+
+	code, out = call(http.MethodPost, "/api/create_document", map[string]any{"project_id": pid, "title": "X", "format": "pdf"})
+	if code != 400 || out["code"] != "INVALID_INPUT" {
+		t.Fatalf("unknown format: %d %v", code, out)
+	}
+
+	// update without format keeps html; with one, applies it.
+	code, out = call(http.MethodPost, "/api/update_document", map[string]any{"document_id": pageID, "title": "Page 2", "content": "<!doctype html><html><body>p2</body></html>"})
+	if code != 200 || docOf(out)["format"] != "html" {
+		t.Fatalf("update kept format: %d %v", code, out)
+	}
+	code, out = call(http.MethodPost, "/api/update_document", map[string]any{"document_id": notesID, "title": "Notes", "content": "<!doctype html><html><body>n</body></html>", "format": "html"})
+	if code != 200 || docOf(out)["format"] != "html" {
+		t.Fatalf("update flipped format: %d %v", code, out)
+	}
+
+	// Every read carries it, listings included.
+	code, out = call(http.MethodGet, "/api/get_document?document_id="+pageID, nil)
+	if code != 200 || docOf(out)["format"] != "html" {
+		t.Fatalf("get: %d %v", code, out)
+	}
+	code, out = call(http.MethodGet, "/api/list_documents?project_id="+pid, nil)
+	if code != 200 {
+		t.Fatalf("list_documents: %d %v", code, out)
+	}
+	for _, d := range out["documents"].([]any) {
+		if f := d.(map[string]any)["format"]; f != "markdown" && f != "html" {
+			t.Fatalf("list_documents without format: %v", d)
+		}
+	}
+	_, out = call(http.MethodPost, "/api/create_ticket", map[string]any{"project_id": pid, "title": "T"})
+	ticketID := out["ticket"].(map[string]any)["id"].(string)
+	call(http.MethodPost, "/api/link_document_to_ticket", map[string]any{"ticket_id": ticketID, "document_id": pageID})
+	code, out = call(http.MethodGet, "/api/list_ticket_documents?ticket_id="+ticketID, nil)
+	list := out["documents"].([]any)
+	if code != 200 || len(list) != 1 || list[0].(map[string]any)["format"] != "html" || list[0].(map[string]any)["updated_at"] == nil {
+		t.Fatalf("list_ticket_documents: %d %v", code, out)
+	}
+}

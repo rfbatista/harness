@@ -1,0 +1,24 @@
+/*
+ * The stylesheet an HTML task document may link to look like the UI's prose
+ * (served at /static/document.css; bundled by `go run ./cmd/webbuild`).
+ * Self-contained: reset, tokens, global element styles and the prose block.
+ * It follows prefers-color-scheme: the sandboxed frame cannot see the app's
+ * data-theme. A document opts in with
+ *   <link rel="stylesheet" href="/static/document.css"> and <body class="prose">.
+ */
+
+@layer reset, global, blocks;
+
+@import url("../../design-system/css/global/reset.css");
+@import url("../../design-system/css/global/tokens.css");
+@import url("../../design-system/css/global/global.css");
+@import url("../../design-system/css/blocks/prose.css");
+
+@layer blocks {
+  body {
+    padding: var(--space-l);
+    background: var(--color-canvas);
+    color: var(--color-ink);
+  }
+  body.prose { margin-inline: auto; }
+}

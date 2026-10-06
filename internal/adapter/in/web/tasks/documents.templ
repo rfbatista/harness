@@ -8,8 +8,10 @@ import (
 )
 
 // DocumentsPage is a task's documents: the list beside the open one, read
-// as rendered Markdown. tasksDocumentWatch notices documents written after
-// the page loaded (agents write them as they work) and offers a reload.
+// as rendered Markdown or, for an HTML page, framed from its view route in
+// a sandbox (the body never reaches this page inline). tasksDocumentWatch
+// notices documents written after the page loaded (agents write them as
+// they work) and offers a reload.
 templ DocumentsPage(v DocumentsView) {
 	@shell.AppShell(v.Frame) {
 		<main class="[ frame ]" x-data="tasksDocumentWatch" data-ticket-id={ v.Watch.TicketID } data-signature={ v.Watch.Signature } data-count={ strconv.Itoa(v.Watch.Count) }>
@@ -45,9 +47,21 @@ templ DocumentsPage(v DocumentsView) {
 								<h2>{ v.Open.Title }</h2>
 								<span class="[ color-ink-faint text-sm ]">updated { v.Open.Updated }</span>
 							</div>
-							<div class="[ prose ] [ pad-l ]" data-scroll>
-								@v.Open.Body
-							</div>
+							if v.Open.IsHTML() {
+								<div class="[ preview ] [ frame ]" data-kind="page">
+									<div class="[ stage ]">
+										<iframe sandbox="allow-scripts" referrerpolicy="no-referrer" src={ v.Open.FrameSrc } title={ v.Open.Title }></iframe>
+									</div>
+									<div class="[ bar ]">
+										<span class="[ grow truncate ]"><kbd>Tab</kbd> leaves the frame</span>
+										<a href={ templ.SafeURL(v.Open.FrameSrc) } target="_blank" rel="noopener noreferrer">Open in a new tab</a>
+									</div>
+								</div>
+							} else {
+								<div class="[ prose ] [ pad-l ]" data-scroll>
+									@v.Open.Body
+								</div>
+							}
 						</article>
 					}
 				</div>

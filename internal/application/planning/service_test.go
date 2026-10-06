@@ -115,7 +115,7 @@ func TestLinkDocument_CrossProjectRejected(t *testing.T) {
 	svc, pid := newService(t)
 
 	tk, _ := svc.CreateTicket(context.Background(), pid, "T", "", "")
-	doc, _ := svc.CreateDocument(pid, "D", "body")
+	doc, _ := svc.CreateDocument(pid, "D", "body", domain.DocumentFormatMarkdown)
 	if err := svc.LinkDocument(tk.ID, doc.ID); err != nil {
 		t.Fatalf("same-project link should succeed: %v", err)
 	}
@@ -124,7 +124,7 @@ func TestLinkDocument_CrossProjectRejected(t *testing.T) {
 	}
 
 	// A document in a different project must be rejected.
-	otherDoc, err := svc.CreateDocument("nope", "X", "")
+	otherDoc, err := svc.CreateDocument("nope", "X", "", domain.DocumentFormatMarkdown)
 	if code(err) != "PROJECT_NOT_FOUND" {
 		t.Fatalf("want PROJECT_NOT_FOUND creating doc in missing project, got %v", err)
 	}
@@ -147,7 +147,7 @@ func TestLinkDocument_CrossProjectRejected(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create ticket in project 1: %v", err)
 	}
-	doc2, err := svc2.CreateDocument(p2.ID, "D2", "body2")
+	doc2, err := svc2.CreateDocument(p2.ID, "D2", "body2", domain.DocumentFormatMarkdown)
 	if err != nil {
 		t.Fatalf("failed to create document in project 2: %v", err)
 	}
@@ -368,5 +368,28 @@ func TestTickets_ConcurrentPatchesAnnounceInOrder(t *testing.T) {
 	got := rec.all()
 	if last := got[len(got)-1]; last.ticket.Status != stored.Status {
 		t.Fatalf("last announced %s, stored %s", last.ticket.Status, stored.Status)
+	}
+}
+
+func TestDocumentFormat_DefaultsRefusesAndKeeps(t *testing.T) {
+	svc, pid := newService(t)
+
+	d, err := svc.CreateDocument(pid, "D", "body", "")
+	if err != nil || d.Format != domain.DocumentFormatMarkdown {
+		t.Fatalf("default format: %+v, %v", d, err)
+	}
+	if _, err := svc.CreateDocument(pid, "D", "body", "pdf"); code(err) != "INVALID_INPUT" {
+		t.Fatalf("unknown format on create: %v", err)
+	}
+	page, err := svc.CreateDocument(pid, "P", "<!doctype html><html><body></body></html>", domain.DocumentFormatHTML)
+	if err != nil || page.Format != domain.DocumentFormatHTML {
+		t.Fatalf("html create: %+v, %v", page, err)
+	}
+	kept, err := svc.UpdateDocument(page.ID, "P2", page.Content, "")
+	if err != nil || kept.Format != domain.DocumentFormatHTML {
+		t.Fatalf("update without format: %+v, %v", kept, err)
+	}
+	if _, err := svc.UpdateDocument(page.ID, "P2", page.Content, "docx"); code(err) != "INVALID_INPUT" {
+		t.Fatalf("unknown format on update: %v", err)
 	}
 }

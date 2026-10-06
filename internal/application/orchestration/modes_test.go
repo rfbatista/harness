@@ -36,8 +36,18 @@ func TestStartInteractive_ArchitectMode(t *testing.T) {
 	if got := sessionOf(svc, sess.ID); got == nil || got.Mode != domain.SessionModeArchitect {
 		t.Fatalf("mode not persisted: %+v", got)
 	}
-	if body := pluginSkill(t, launch, "task-architecture"); !strings.Contains(body, "name: task-architecture") {
+	body := pluginSkill(t, launch, "task-architecture")
+	if !strings.Contains(body, "name: task-architecture") {
 		t.Errorf("task-architecture SKILL.md has no frontmatter name:\n%s", body)
+	}
+	// Sessions copy the templates literally, so they must be HTML pages.
+	for _, want := range []string{"<!doctype html>", "<title>Spec: ", "<title>Contract: ", "<title>Architecture: ", "HTML page"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("task-architecture SKILL.md lacks %q: its document templates must be HTML", want)
+		}
+	}
+	if strings.Contains(body, "```\n## <Application>") || strings.Contains(body, "```\n**Type:** REST API") {
+		t.Error("task-architecture SKILL.md still carries Markdown document templates")
 	}
 	prompt := launch.Spec.Prompt
 	for _, want := range []string{"task-architecture skill", "tk1: Ship the thing", "Users export their data as CSV."} {
@@ -115,7 +125,7 @@ func TestStartInteractive_DesignMode(t *testing.T) {
 		t.Fatalf("mode not persisted: %+v", got)
 	}
 	body := pluginSkill(t, launch, "design-artifacts")
-	for _, want := range []string{"name: design-artifacts", "publish_artifact", "design/", "self-contained", "kind", "url", "Design tab"} {
+	for _, want := range []string{"name: design-artifacts", "publish_artifact", "design/", "self-contained", "kind", "url", "Design tab", "HTML page"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("design-artifacts SKILL.md lacks %q", want)
 		}

@@ -32,6 +32,9 @@ person in one line what changed → listen.
   Design tab (rev 3): tighter spacing, hover state." and stop.
 - **Commit nothing unless asked.** The worktree is the working surface.
 - Titles and notes are shown as plain text; keep them short and human.
+- **Notes you leave on the task are HTML pages.** `create_task_document` takes
+  a complete HTML document (doctype, head with title and charset, body) and
+  refuses Markdown. A short self-contained HTML page is enough.
 
 ## Tools
 
@@ -40,7 +43,7 @@ person in one line what changed → listen.
 | `mcp__task__publish_artifact` | Show a worktree file (`path`) or a loopback dev server (`url`) in the Design tab. `title` required; `note` says what changed; `kind` only if inference would be wrong (`page`, `image`, `video`, `url`, `file`). |
 | `mcp__task__list_task_artifacts` | See what this and earlier sessions already published before making more. |
 | `mcp__task__unpublish_artifact` | Take one of your own cards down (the file stays). |
-| `mcp__task__get_task` / `read_task_document` | The brief, and any design notes or specs earlier sessions left. |
+| `mcp__task__get_task` / `read_task_document` | The brief, and any design notes or specs earlier sessions left (documents are HTML pages; older ones may be Markdown). |
 
 `publish_artifact` returns `{artifact_id, revision, kind, view_url}`. Its
 errors name the rule you broke: `ARTIFACT_PATH_OUTSIDE_WORKTREE` (move the

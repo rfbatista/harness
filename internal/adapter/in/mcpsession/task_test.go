@@ -101,7 +101,7 @@ func TestTaskHandler_ScopesBySessionInPath(t *testing.T) {
 
 	var call mcplib.CallToolRequest
 	call.Params.Name = "create_task_document"
-	call.Params.Arguments = map[string]any{"title": "Plan", "content": "step one"}
+	call.Params.Arguments = map[string]any{"title": "Plan", "content": "<!doctype html><html><head><meta charset=\"utf-8\"><title>Plan</title></head><body>step one</body></html>"}
 	res, err := c.CallTool(ctx, call)
 	if err != nil {
 		t.Fatal(err)

@@ -132,7 +132,7 @@ func TestHTTP_ArtifactView_HeadersAndSubresources(t *testing.T) {
 		"Cache-Control":           "no-cache",
 		"X-Content-Type-Options":  "nosniff",
 		"Content-Disposition":     "inline",
-		"Content-Security-Policy": artifactCSP,
+		"Content-Security-Policy": ArtifactCSP,
 	} {
 		if got := resp.Header.Get(k); got != want {
 			t.Errorf("%s = %q, want %q", k, got, want)
@@ -151,14 +151,14 @@ func TestHTTP_ArtifactView_HeadersAndSubresources(t *testing.T) {
 	}
 	hb, _ := io.ReadAll(head.Body)
 	head.Body.Close()
-	if head.StatusCode != 200 || len(hb) != 0 || head.Header.Get("Content-Security-Policy") != artifactCSP || head.Header.Get("ETag") != `"1"` {
+	if head.StatusCode != 200 || len(hb) != 0 || head.Header.Get("Content-Security-Policy") != ArtifactCSP || head.Header.Get("ETag") != `"1"` {
 		t.Fatalf("HEAD = %d body %d bytes, headers %v", head.StatusCode, len(hb), head.Header)
 	}
 
 	resp = get(t, base+"style.css", nil)
 	body, _ = io.ReadAll(resp.Body)
 	resp.Body.Close()
-	if resp.StatusCode != 200 || string(body) != "h1{color:red}" || resp.Header.Get("Content-Type") != "text/css; charset=utf-8" || resp.Header.Get("Content-Security-Policy") != artifactCSP {
+	if resp.StatusCode != 200 || string(body) != "h1{color:red}" || resp.Header.Get("Content-Type") != "text/css; charset=utf-8" || resp.Header.Get("Content-Security-Policy") != ArtifactCSP {
 		t.Fatalf("sibling = %d %s %v", resp.StatusCode, body, resp.Header)
 	}
 
@@ -202,7 +202,7 @@ func TestHTTP_ArtifactView_Range(t *testing.T) {
 	if resp.StatusCode != 206 || string(body) != "2345" || resp.Header.Get("Content-Range") != "bytes 2-5/10" || resp.Header.Get("Accept-Ranges") != "bytes" {
 		t.Fatalf("range = %d %q %v", resp.StatusCode, body, resp.Header)
 	}
-	if resp.Header.Get("Content-Type") != "video/mp4" || resp.Header.Get("Content-Security-Policy") != artifactCSP || resp.Header.Get("X-Content-Type-Options") != "nosniff" {
+	if resp.Header.Get("Content-Type") != "video/mp4" || resp.Header.Get("Content-Security-Policy") != ArtifactCSP || resp.Header.Get("X-Content-Type-Options") != "nosniff" {
 		t.Fatalf("range response lost headers: %v", resp.Header)
 	}
 }
