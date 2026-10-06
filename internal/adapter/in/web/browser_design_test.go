@@ -84,7 +84,7 @@ func TestDesignTabShowsArtifactsLive(t *testing.T) {
 		}}},
 	}, assets, nil)
 	mux := http.NewServeMux()
-	mux.Handle("/api/events", http.NotFoundHandler())              // the project feed is not under test
+	mux.Handle("/api/events", http.NotFoundHandler())               // the project feed is not under test
 	mux.Handle("/api/sessions/s1/terminal", http.NotFoundHandler()) // nor the terminal
 	mux.Handle("/api/", api)
 	mux.Handle("/", pages)
@@ -97,7 +97,7 @@ func TestDesignTabShowsArtifactsLive(t *testing.T) {
 	designTab := `[...document.querySelectorAll('[role=tab]')].find(b => b.textContent.trim().startsWith('Design'))`
 	card := `document.querySelector('[aria-label="Design"] .artifact-card')`
 	var cardTitle, cardKind, agentLine, sandbox, frameSrc string
-	var imgInCard, badgeBefore bool
+	var imgInCard, badgeBefore, panelVisible bool
 	err = chromedp.Run(ctx,
 		chromedp.EmulateViewport(1280, 800),
 		chromedp.Navigate(srv.URL+"/projects/p1/tasks/t1"),
@@ -110,6 +110,7 @@ func TestDesignTabShowsArtifactsLive(t *testing.T) {
 		chromedp.Evaluate(card+`.querySelector('img') !== null`, &imgInCard),
 		chromedp.Evaluate(card+`.querySelector('.badge').textContent`, &cardKind),
 		chromedp.Poll(`!!document.querySelector('[aria-label="Design"] iframe')`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Evaluate(`getComputedStyle(document.querySelector('[aria-label="Design"]')).display !== 'none'`, &panelVisible),
 		chromedp.Evaluate(`document.querySelector('[aria-label="Design"] iframe').getAttribute('sandbox')`, &sandbox),
 		chromedp.Evaluate(`document.querySelector('[aria-label="Design"] iframe').getAttribute('src')`, &frameSrc),
 	)
@@ -127,6 +128,9 @@ func TestDesignTabShowsArtifactsLive(t *testing.T) {
 	}
 	if cardKind != "page" {
 		t.Errorf("kind badge = %q", cardKind)
+	}
+	if !panelVisible {
+		t.Error("the Design panel stays hidden after its tab is selected")
 	}
 	if sandbox != "allow-scripts" {
 		t.Errorf("iframe sandbox = %q, want allow-scripts only", sandbox)

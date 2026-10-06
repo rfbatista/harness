@@ -17,52 +17,52 @@ templ Page(v PageView) {
 			class="[ frame ]"
 			x-data="sessionsPage"
 			data-seed="sessions-seed"
-				x-on:session-created="sessionCreated"
+			x-on:session-created="sessionCreated"
 			x-on:new-session-cancelled="cancelCreating"
 			x-on:artifact-published="artifactPublished"
 		>
 			@templ.JSONScript("sessions-seed", v.Seed)
 			<div x-data="tasksTaskEditor" data-seed="task-seed">
-			@templ.JSONScript("task-seed", v.Task)
-			<header class="[ toolbar ]">
-				<a class="[ crumb ]" href={ templ.SafeURL("/projects/" + v.ProjectID) }>{ v.ProjectName } /</a>
-				<h1 x-text="title">{ v.TaskTitle }</h1>
-				<select class="[ status-picker ]" aria-label="Task status" x-model="status" x-on:change="changeStatus">
-					for _, st := range v.StatusChoices {
-						<option value={ st.Value } { selectedAttrs(st.Selected)... }>{ st.Label }</option>
-					}
-				</select>
-				<span class="[ color-ink-faint text-sm ]" x-text="summary">{ v.Summary }</span>
-				<div class="[ actions ]">
-					if v.Documents != nil {
-						<a
-							class="[ button ]"
-							data-variant="ghost"
-							data-size="sm"
-							href={ templ.SafeURL(v.Documents.Href) }
-							x-data="tasksDocumentWatch"
-							data-ticket-id={ v.Documents.TicketID }
-							data-signature={ v.Documents.Signature }
-							data-count={ strconv.Itoa(v.Documents.Count) }
-						>
-							Documents <span class="[ badge ]" x-text="count">{ strconv.Itoa(v.Documents.Count) }</span>
-						</a>
-					}
-					<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-on:click="startEditTask">Edit</button>
-					<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-bind:aria-busy="checkingTaskDelete" x-on:click="askDeleteTask">Delete task</button>
-					if v.NewSession.CanStart() {
-						<button type="button" class="[ button ]" data-variant="primary" data-size="sm" disabled x-bind:disabled="cannotCreate" x-on:click="startCreating">
-							New session <kbd>N</kbd>
-						</button>
-					} else {
-						<a class="[ button ]" data-size="sm" href={ templ.SafeURL("/projects/" + v.ProjectID + "/repositories") }>Add a repository</a>
-						<button type="button" class="[ button ]" data-variant="primary" data-size="sm" disabled title="Add a repository to this project first: a session runs in one.">
-							New session
-						</button>
-					}
-				</div>
-			</header>
-			@taskBand(v)
+				@templ.JSONScript("task-seed", v.Task)
+				<header class="[ toolbar ]">
+					<a class="[ crumb ]" href={ templ.SafeURL("/projects/" + v.ProjectID) }>{ v.ProjectName } /</a>
+					<h1 x-text="title">{ v.TaskTitle }</h1>
+					<select class="[ status-picker ]" aria-label="Task status" x-model="status" x-on:change="changeStatus">
+						for _, st := range v.StatusChoices {
+							<option value={ st.Value } { selectedAttrs(st.Selected)... }>{ st.Label }</option>
+						}
+					</select>
+					<span class="[ color-ink-faint text-sm ]" x-text="summary">{ v.Summary }</span>
+					<div class="[ actions ]">
+						if v.Documents != nil {
+							<a
+								class="[ button ]"
+								data-variant="ghost"
+								data-size="sm"
+								href={ templ.SafeURL(v.Documents.Href) }
+								x-data="tasksDocumentWatch"
+								data-ticket-id={ v.Documents.TicketID }
+								data-signature={ v.Documents.Signature }
+								data-count={ strconv.Itoa(v.Documents.Count) }
+							>
+								Documents <span class="[ badge ]" x-text="count">{ strconv.Itoa(v.Documents.Count) }</span>
+							</a>
+						}
+						<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-on:click="startEditTask">Edit</button>
+						<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-bind:aria-busy="checkingTaskDelete" x-on:click="askDeleteTask">Delete task</button>
+						if v.NewSession.CanStart() {
+							<button type="button" class="[ button ]" data-variant="primary" data-size="sm" disabled x-bind:disabled="cannotCreate" x-on:click="startCreating">
+								New session <kbd>N</kbd>
+							</button>
+						} else {
+							<a class="[ button ]" data-size="sm" href={ templ.SafeURL("/projects/" + v.ProjectID + "/repositories") }>Add a repository</a>
+							<button type="button" class="[ button ]" data-variant="primary" data-size="sm" disabled title="Add a repository to this project first: a session runs in one.">
+								New session
+							</button>
+						}
+					</div>
+				</header>
+				@taskBand(v)
 			</div>
 			<template x-if="error">
 				<div class="[ banner ] [ pad-s ]" data-tone="danger" role="alert">
@@ -421,86 +421,92 @@ templ appPanel() {
 // the frame is literal markup (sandbox included) and its wrapper's x-init
 // hands it to loadFrame, which sets only src and title. Tab leaves the frame
 // (sequential focus crosses it) and lands on the bar, which says so.
+// The page's showingDesign is read from a wrapper outside the panel's x-data:
+// evaluated on the panel itself, the page's getters would resolve `this`
+// through the panel's scope, whose selectedId (an artifact) shadows the page's
+// (a session), and the panel would never show.
 templ designPanel() {
-	<section class="[ frame ]" aria-label="Design" x-data="sessionsDesignPanel(panel)" x-show="showingDesign" x-on:session-ended.window="sessionEnded">
-		<template x-if="error">
-			<div class="[ banner ] [ pad-s ]" data-tone="danger" role="alert">
-				<div class="[ flow ] [ flow-space-3xs grow ]">
-					<span x-text="error.message"></span>
-					<span class="[ code ]"><span x-text="error.code"></span> · <span x-text="error.next"></span></span>
-				</div>
-				<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-on:click="dismissError">Dismiss</button>
-			</div>
-		</template>
-		<div class="[ with-sidebar ] [ grow ]" style="--sidebar-target: 16rem" data-scroll>
-			<div
-				class="[ list ] [ divide-end ]"
-				role="listbox"
-				aria-label="Artifacts of this session"
-				tabindex="0"
-				x-on:keydown.j.prevent="next"
-				x-on:keydown.down.prevent="next"
-				x-on:keydown.k.prevent="previous"
-				x-on:keydown.up.prevent="previous"
-			>
-				<template x-for="card in cards" x-bind:key="card.id">
-					<div class="[ artifact-card ]" role="option" x-bind:aria-selected="card.selected" x-bind:data-fresh="card.fresh" x-on:click="select(card.id)">
-						<span class="[ title ]" x-text="card.title"></span>
-						<span class="[ badge ]" x-text="card.kindWord"></span>
-						<span class="[ note ]" x-text="card.note"></span>
-						<span class="[ meta ]"><span x-text="card.revision"></span><span x-text="card.updated"></span></span>
+	<div class="[ frame ]" x-show="showingDesign">
+		<section class="[ frame ]" aria-label="Design" x-data="sessionsDesignPanel(panel)" x-on:session-ended.window="sessionEnded">
+			<template x-if="error">
+				<div class="[ banner ] [ pad-s ]" data-tone="danger" role="alert">
+					<div class="[ flow ] [ flow-space-3xs grow ]">
+						<span x-text="error.message"></span>
+						<span class="[ code ]"><span x-text="error.code"></span> · <span x-text="error.next"></span></span>
 					</div>
-				</template>
-				<template x-if="isEmpty">
-					@components.Empty("Nothing published yet", "When the agent publishes a page, an image, a video or a file for you to look at, it appears here and refreshes as it changes. Ask for one in the Agent tab.")
-				</template>
-			</div>
-			<div class="[ preview ]" x-bind:data-kind="currentKind">
-				<div class="[ stage ]">
-					<template x-for="frame in frames" x-bind:key="frame.key">
-						<div class="[ frame ]">
-							<template x-if="frame.isPage">
-								<div class="[ frame ]" x-init="loadFrame($el, frame)">
-									<iframe sandbox="allow-scripts" referrerpolicy="no-referrer"></iframe>
-								</div>
-							</template>
-							<template x-if="frame.embedsUrl">
-								<div class="[ frame ]" x-init="loadFrame($el, frame)">
-									<iframe sandbox="allow-scripts" referrerpolicy="no-referrer"></iframe>
-								</div>
-							</template>
-							<template x-if="frame.notEmbeddable">
-								<div class="[ pad-l ]">
-									<div class="[ banner ]" data-tone="attention">
-										<span>This dev server is not on this machine, so it is not embedded. The session published <strong x-text="frame.title"></strong> at <code x-text="frame.url"></code>.</span>
-									</div>
-								</div>
-							</template>
-							<template x-if="frame.isImage">
-								<img x-bind:src="frame.src" x-bind:alt="frame.title"/>
-							</template>
-							<template x-if="frame.isVideo">
-								<video controls preload="metadata" x-bind:src="frame.src" x-bind:aria-label="frame.frameTitle"></video>
-							</template>
-							<template x-if="frame.isFile">
-								<div class="[ flow ] [ flow-space-s ]">
-									<p><a x-bind:href="frame.openHref" x-bind:download="frame.fileName" x-text="frame.fileName"></a></p>
-									<p class="[ text-sm color-ink-muted ]"><span x-text="frame.size"></span> · <code x-text="frame.mime"></code></p>
-								</div>
-							</template>
+					<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-on:click="dismissError">Dismiss</button>
+				</div>
+			</template>
+			<div class="[ with-sidebar ] [ grow ]" style="--sidebar-target: 16rem" data-scroll>
+				<div
+					class="[ list ] [ divide-end ]"
+					role="listbox"
+					aria-label="Artifacts of this session"
+					tabindex="0"
+					x-on:keydown.j.prevent="next"
+					x-on:keydown.down.prevent="next"
+					x-on:keydown.k.prevent="previous"
+					x-on:keydown.up.prevent="previous"
+				>
+					<template x-for="card in cards" x-bind:key="card.id">
+						<div class="[ artifact-card ]" role="option" x-bind:aria-selected="card.selected" x-bind:data-fresh="card.fresh" x-on:click="select(card.id)">
+							<span class="[ title ]" x-text="card.title"></span>
+							<span class="[ badge ]" x-text="card.kindWord"></span>
+							<span class="[ note ]" x-text="card.note"></span>
+							<span class="[ meta ]"><span x-text="card.revision"></span><span x-text="card.updated"></span></span>
 						</div>
 					</template>
-				</div>
-				<div class="[ bar ]">
-					<span class="[ status ]" x-bind:data-state="feedState" x-text="feedWord">connecting</span>
-					<span class="[ grow truncate ]"><kbd>Tab</kbd> leaves the frame · <kbd>J</kbd> <kbd>K</kbd> move the list</span>
-					<template x-if="hasOpenHref">
-						<a x-bind:href="currentOpenHref" target="_blank" rel="noopener noreferrer">Open in a new tab</a>
+					<template x-if="isEmpty">
+						@components.Empty("Nothing published yet", "When the agent publishes a page, an image, a video or a file for you to look at, it appears here and refreshes as it changes. Ask for one in the Agent tab.")
 					</template>
 				</div>
+				<div class="[ preview ]" x-bind:data-kind="currentKind">
+					<div class="[ stage ]">
+						<template x-for="frame in frames" x-bind:key="frame.key">
+							<div class="[ frame ]">
+								<template x-if="frame.isPage">
+									<div class="[ frame ]" x-init="loadFrame($el, frame)">
+										<iframe sandbox="allow-scripts" referrerpolicy="no-referrer"></iframe>
+									</div>
+								</template>
+								<template x-if="frame.embedsUrl">
+									<div class="[ frame ]" x-init="loadFrame($el, frame)">
+										<iframe sandbox="allow-scripts" referrerpolicy="no-referrer"></iframe>
+									</div>
+								</template>
+								<template x-if="frame.notEmbeddable">
+									<div class="[ pad-l ]">
+										<div class="[ banner ]" data-tone="attention">
+											<span>This dev server is not on this machine, so it is not embedded. The session published <strong x-text="frame.title"></strong> at <code x-text="frame.url"></code>.</span>
+										</div>
+									</div>
+								</template>
+								<template x-if="frame.isImage">
+									<img x-bind:src="frame.src" x-bind:alt="frame.title"/>
+								</template>
+								<template x-if="frame.isVideo">
+									<video controls preload="metadata" x-bind:src="frame.src" x-bind:aria-label="frame.frameTitle"></video>
+								</template>
+								<template x-if="frame.isFile">
+									<div class="[ flow ] [ flow-space-s ]">
+										<p><a x-bind:href="frame.openHref" x-bind:download="frame.fileName" x-text="frame.fileName"></a></p>
+										<p class="[ text-sm color-ink-muted ]"><span x-text="frame.size"></span> · <code x-text="frame.mime"></code></p>
+									</div>
+								</template>
+							</div>
+						</template>
+					</div>
+					<div class="[ bar ]">
+						<span class="[ status ]" x-bind:data-state="feedState" x-text="feedWord">connecting</span>
+						<span class="[ grow truncate ]"><kbd>Tab</kbd> leaves the frame · <kbd>J</kbd> <kbd>K</kbd> move the list</span>
+						<template x-if="hasOpenHref">
+							<a x-bind:href="currentOpenHref" target="_blank" rel="noopener noreferrer">Open in a new tab</a>
+						</template>
+					</div>
+				</div>
 			</div>
-		</div>
-	</section>
+		</section>
+	</div>
 }
 
 // taskBand sits under the toolbar, in the task editor's scope: the

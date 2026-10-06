@@ -75,7 +75,7 @@ func Page(v PageView) templ.Component {
 			var templ_7745c5c3_Var3 templ.SafeURL
 			templ_7745c5c3_Var3, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL("/projects/" + v.ProjectID))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `sessions/page.templ`, Line: 28, Col: 73}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `sessions/page.templ`, Line: 28, Col: 74}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var3))
 			if templ_7745c5c3_Err != nil {
@@ -88,7 +88,7 @@ func Page(v PageView) templ.Component {
 			var templ_7745c5c3_Var4 string
 			templ_7745c5c3_Var4, templ_7745c5c3_Err = templ.JoinStringErrs(v.ProjectName)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `sessions/page.templ`, Line: 28, Col: 91}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `sessions/page.templ`, Line: 28, Col: 92}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var4))
 			if templ_7745c5c3_Err != nil {
@@ -101,7 +101,7 @@ func Page(v PageView) templ.Component {
 			var templ_7745c5c3_Var5 string
 			templ_7745c5c3_Var5, templ_7745c5c3_Err = templ.JoinStringErrs(v.TaskTitle)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `sessions/page.templ`, Line: 29, Col: 36}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `sessions/page.templ`, Line: 29, Col: 37}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var5))
 			if templ_7745c5c3_Err != nil {
@@ -119,7 +119,7 @@ func Page(v PageView) templ.Component {
 				var templ_7745c5c3_Var6 string
 				templ_7745c5c3_Var6, templ_7745c5c3_Err = templ.ResolveAttributeValue(st.Value)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `sessions/page.templ`, Line: 32, Col: 30}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `sessions/page.templ`, Line: 32, Col: 31}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var6)
 				if templ_7745c5c3_Err != nil {
@@ -140,7 +140,7 @@ func Page(v PageView) templ.Component {
 				var templ_7745c5c3_Var7 string
 				templ_7745c5c3_Var7, templ_7745c5c3_Err = templ.JoinStringErrs(st.Label)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `sessions/page.templ`, Line: 32, Col: 77}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `sessions/page.templ`, Line: 32, Col: 78}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var7))
 				if templ_7745c5c3_Err != nil {
@@ -158,7 +158,7 @@ func Page(v PageView) templ.Component {
 			var templ_7745c5c3_Var8 string
 			templ_7745c5c3_Var8, templ_7745c5c3_Err = templ.JoinStringErrs(v.Summary)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `sessions/page.templ`, Line: 35, Col: 74}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `sessions/page.templ`, Line: 35, Col: 75}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var8))
 			if templ_7745c5c3_Err != nil {
@@ -176,7 +176,7 @@ func Page(v PageView) templ.Component {
 				var templ_7745c5c3_Var9 templ.SafeURL
 				templ_7745c5c3_Var9, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL(v.Documents.Href))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `sessions/page.templ`, Line: 42, Col: 45}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `sessions/page.templ`, Line: 42, Col: 46}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var9))
 				if templ_7745c5c3_Err != nil {
@@ -189,7 +189,7 @@ func Page(v PageView) templ.Component {
 				var templ_7745c5c3_Var10 string
 				templ_7745c5c3_Var10, templ_7745c5c3_Err = templ.ResolveAttributeValue(v.Documents.TicketID)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `sessions/page.templ`, Line: 44, Col: 44}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `sessions/page.templ`, Line: 44, Col: 45}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var10)
 				if templ_7745c5c3_Err != nil {
@@ -202,7 +202,7 @@ func Page(v PageView) templ.Component {
 				var templ_7745c5c3_Var11 string
 				templ_7745c5c3_Var11, templ_7745c5c3_Err = templ.ResolveAttributeValue(v.Documents.Signature)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `sessions/page.templ`, Line: 45, Col: 45}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `sessions/page.templ`, Line: 45, Col: 46}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var11)
 				if templ_7745c5c3_Err != nil {
@@ -215,7 +215,7 @@ func Page(v PageView) templ.Component {
 				var templ_7745c5c3_Var12 string
 				templ_7745c5c3_Var12, templ_7745c5c3_Err = templ.ResolveAttributeValue(strconv.Itoa(v.Documents.Count))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `sessions/page.templ`, Line: 46, Col: 51}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `sessions/page.templ`, Line: 46, Col: 52}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var12)
 				if templ_7745c5c3_Err != nil {
@@ -228,7 +228,7 @@ func Page(v PageView) templ.Component {
 				var templ_7745c5c3_Var13 string
 				templ_7745c5c3_Var13, templ_7745c5c3_Err = templ.JoinStringErrs(strconv.Itoa(v.Documents.Count))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `sessions/page.templ`, Line: 48, Col: 89}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `sessions/page.templ`, Line: 48, Col: 90}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var13))
 				if templ_7745c5c3_Err != nil {
@@ -256,7 +256,7 @@ func Page(v PageView) templ.Component {
 				var templ_7745c5c3_Var14 templ.SafeURL
 				templ_7745c5c3_Var14, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL("/projects/" + v.ProjectID + "/repositories"))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `sessions/page.templ`, Line: 58, Col: 109}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `sessions/page.templ`, Line: 58, Col: 110}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var14))
 				if templ_7745c5c3_Err != nil {
@@ -775,6 +775,10 @@ func appPanel() templ.Component {
 // the frame is literal markup (sandbox included) and its wrapper's x-init
 // hands it to loadFrame, which sets only src and title. Tab leaves the frame
 // (sequential focus crosses it) and lands on the bar, which says so.
+// The page's showingDesign is read from a wrapper outside the panel's x-data:
+// evaluated on the panel itself, the page's getters would resolve `this`
+// through the panel's scope, whose selectedId (an artifact) shadows the page's
+// (a session), and the panel would never show.
 func designPanel() templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
@@ -796,7 +800,7 @@ func designPanel() templ.Component {
 			templ_7745c5c3_Var32 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 61, "<section class=\"[ frame ]\" aria-label=\"Design\" x-data=\"sessionsDesignPanel(panel)\" x-show=\"showingDesign\" x-on:session-ended.window=\"sessionEnded\"><template x-if=\"error\"><div class=\"[ banner ] [ pad-s ]\" data-tone=\"danger\" role=\"alert\"><div class=\"[ flow ] [ flow-space-3xs grow ]\"><span x-text=\"error.message\"></span> <span class=\"[ code ]\"><span x-text=\"error.code\"></span> · <span x-text=\"error.next\"></span></span></div><button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" x-on:click=\"dismissError\">Dismiss</button></div></template><div class=\"[ with-sidebar ] [ grow ]\" style=\"--sidebar-target: 16rem\" data-scroll><div class=\"[ list ] [ divide-end ]\" role=\"listbox\" aria-label=\"Artifacts of this session\" tabindex=\"0\" x-on:keydown.j.prevent=\"next\" x-on:keydown.down.prevent=\"next\" x-on:keydown.k.prevent=\"previous\" x-on:keydown.up.prevent=\"previous\"><template x-for=\"card in cards\" x-bind:key=\"card.id\"><div class=\"[ artifact-card ]\" role=\"option\" x-bind:aria-selected=\"card.selected\" x-bind:data-fresh=\"card.fresh\" x-on:click=\"select(card.id)\"><span class=\"[ title ]\" x-text=\"card.title\"></span> <span class=\"[ badge ]\" x-text=\"card.kindWord\"></span> <span class=\"[ note ]\" x-text=\"card.note\"></span> <span class=\"[ meta ]\"><span x-text=\"card.revision\"></span><span x-text=\"card.updated\"></span></span></div></template><template x-if=\"isEmpty\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 61, "<div class=\"[ frame ]\" x-show=\"showingDesign\"><section class=\"[ frame ]\" aria-label=\"Design\" x-data=\"sessionsDesignPanel(panel)\" x-on:session-ended.window=\"sessionEnded\"><template x-if=\"error\"><div class=\"[ banner ] [ pad-s ]\" data-tone=\"danger\" role=\"alert\"><div class=\"[ flow ] [ flow-space-3xs grow ]\"><span x-text=\"error.message\"></span> <span class=\"[ code ]\"><span x-text=\"error.code\"></span> · <span x-text=\"error.next\"></span></span></div><button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" x-on:click=\"dismissError\">Dismiss</button></div></template><div class=\"[ with-sidebar ] [ grow ]\" style=\"--sidebar-target: 16rem\" data-scroll><div class=\"[ list ] [ divide-end ]\" role=\"listbox\" aria-label=\"Artifacts of this session\" tabindex=\"0\" x-on:keydown.j.prevent=\"next\" x-on:keydown.down.prevent=\"next\" x-on:keydown.k.prevent=\"previous\" x-on:keydown.up.prevent=\"previous\"><template x-for=\"card in cards\" x-bind:key=\"card.id\"><div class=\"[ artifact-card ]\" role=\"option\" x-bind:aria-selected=\"card.selected\" x-bind:data-fresh=\"card.fresh\" x-on:click=\"select(card.id)\"><span class=\"[ title ]\" x-text=\"card.title\"></span> <span class=\"[ badge ]\" x-text=\"card.kindWord\"></span> <span class=\"[ note ]\" x-text=\"card.note\"></span> <span class=\"[ meta ]\"><span x-text=\"card.revision\"></span><span x-text=\"card.updated\"></span></span></div></template><template x-if=\"isEmpty\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -804,7 +808,7 @@ func designPanel() templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 62, "</template></div><div class=\"[ preview ]\" x-bind:data-kind=\"currentKind\"><div class=\"[ stage ]\"><template x-for=\"frame in frames\" x-bind:key=\"frame.key\"><div class=\"[ frame ]\"><template x-if=\"frame.isPage\"><div class=\"[ frame ]\" x-init=\"loadFrame($el, frame)\"><iframe sandbox=\"allow-scripts\" referrerpolicy=\"no-referrer\"></iframe></div></template><template x-if=\"frame.embedsUrl\"><div class=\"[ frame ]\" x-init=\"loadFrame($el, frame)\"><iframe sandbox=\"allow-scripts\" referrerpolicy=\"no-referrer\"></iframe></div></template><template x-if=\"frame.notEmbeddable\"><div class=\"[ pad-l ]\"><div class=\"[ banner ]\" data-tone=\"attention\"><span>This dev server is not on this machine, so it is not embedded. The session published <strong x-text=\"frame.title\"></strong> at <code x-text=\"frame.url\"></code>.</span></div></div></template><template x-if=\"frame.isImage\"><img x-bind:src=\"frame.src\" x-bind:alt=\"frame.title\"></template><template x-if=\"frame.isVideo\"><video controls preload=\"metadata\" x-bind:src=\"frame.src\" x-bind:aria-label=\"frame.frameTitle\"></video></template><template x-if=\"frame.isFile\"><div class=\"[ flow ] [ flow-space-s ]\"><p><a x-bind:href=\"frame.openHref\" x-bind:download=\"frame.fileName\" x-text=\"frame.fileName\"></a></p><p class=\"[ text-sm color-ink-muted ]\"><span x-text=\"frame.size\"></span> · <code x-text=\"frame.mime\"></code></p></div></template></div></template></div><div class=\"[ bar ]\"><span class=\"[ status ]\" x-bind:data-state=\"feedState\" x-text=\"feedWord\">connecting</span> <span class=\"[ grow truncate ]\"><kbd>Tab</kbd> leaves the frame · <kbd>J</kbd> <kbd>K</kbd> move the list</span><template x-if=\"hasOpenHref\"><a x-bind:href=\"currentOpenHref\" target=\"_blank\" rel=\"noopener noreferrer\">Open in a new tab</a></template></div></div></div></section>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 62, "</template></div><div class=\"[ preview ]\" x-bind:data-kind=\"currentKind\"><div class=\"[ stage ]\"><template x-for=\"frame in frames\" x-bind:key=\"frame.key\"><div class=\"[ frame ]\"><template x-if=\"frame.isPage\"><div class=\"[ frame ]\" x-init=\"loadFrame($el, frame)\"><iframe sandbox=\"allow-scripts\" referrerpolicy=\"no-referrer\"></iframe></div></template><template x-if=\"frame.embedsUrl\"><div class=\"[ frame ]\" x-init=\"loadFrame($el, frame)\"><iframe sandbox=\"allow-scripts\" referrerpolicy=\"no-referrer\"></iframe></div></template><template x-if=\"frame.notEmbeddable\"><div class=\"[ pad-l ]\"><div class=\"[ banner ]\" data-tone=\"attention\"><span>This dev server is not on this machine, so it is not embedded. The session published <strong x-text=\"frame.title\"></strong> at <code x-text=\"frame.url\"></code>.</span></div></div></template><template x-if=\"frame.isImage\"><img x-bind:src=\"frame.src\" x-bind:alt=\"frame.title\"></template><template x-if=\"frame.isVideo\"><video controls preload=\"metadata\" x-bind:src=\"frame.src\" x-bind:aria-label=\"frame.frameTitle\"></video></template><template x-if=\"frame.isFile\"><div class=\"[ flow ] [ flow-space-s ]\"><p><a x-bind:href=\"frame.openHref\" x-bind:download=\"frame.fileName\" x-text=\"frame.fileName\"></a></p><p class=\"[ text-sm color-ink-muted ]\"><span x-text=\"frame.size\"></span> · <code x-text=\"frame.mime\"></code></p></div></template></div></template></div><div class=\"[ bar ]\"><span class=\"[ status ]\" x-bind:data-state=\"feedState\" x-text=\"feedWord\">connecting</span> <span class=\"[ grow truncate ]\"><kbd>Tab</kbd> leaves the frame · <kbd>J</kbd> <kbd>K</kbd> move the list</span><template x-if=\"hasOpenHref\"><a x-bind:href=\"currentOpenHref\" target=\"_blank\" rel=\"noopener noreferrer\">Open in a new tab</a></template></div></div></div></section></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -842,7 +846,7 @@ func taskBand(v PageView) templ.Component {
 		var templ_7745c5c3_Var34 string
 		templ_7745c5c3_Var34, templ_7745c5c3_Err = templ.JoinStringErrs(v.TaskDescription)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `sessions/page.templ`, Line: 510, Col: 63}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `sessions/page.templ`, Line: 516, Col: 63}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var34))
 		if templ_7745c5c3_Err != nil {
