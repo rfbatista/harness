@@ -1,7 +1,7 @@
 /*
  * Button — one height, one radius, four variants.
  * Exceptions: data-variant="primary|ghost|danger", data-size="sm", data-icon,
- * disabled / aria-disabled, aria-busy.
+ * disabled / aria-disabled, aria-busy (ring slides in; replaces the icon on data-icon).
  */
 
 @layer blocks {
@@ -90,21 +90,44 @@
       transform: none;
     }
 
+    /*
+     * Busy: a ring slides in beside the label. The label stays readable and
+     * the button widens with an eased transition instead of a width jump.
+     * The ring is ::before so no markup changes: at rest it is invisible and
+     * its negative margin cancels its own width plus the flex gap.
+     */
+    &::before {
+      content: "";
+      flex-shrink: 0;
+      inline-size: 0.875rem;
+      block-size: 0.875rem;
+      margin-inline-start: calc((0.875rem + var(--space-xs)) * -1);
+      border: 2px solid var(--_ink);
+      border-inline-end-color: transparent;
+      border-radius: var(--radius-round);
+      opacity: 0;
+      transition: margin-inline-start var(--duration-settle) var(--ease-out-expo),
+        opacity var(--duration-quick) var(--ease-out);
+    }
+
     &[aria-busy="true"] {
-      color: transparent;
       pointer-events: none;
 
-      &::after {
-        content: "";
+      &::before {
+        margin-inline-start: 0;
+        opacity: 1;
+        animation: button-spin 700ms linear infinite;
+      }
+    }
+
+    /* Icon-only buttons have no room beside the icon: the ring replaces it. */
+    &[data-icon][aria-busy="true"] {
+      color: transparent;
+
+      &::before {
         position: absolute;
         inset: 0;
         margin: auto;
-        inline-size: 0.875rem;
-        block-size: 0.875rem;
-        border: 2px solid var(--_ink);
-        border-inline-end-color: transparent;
-        border-radius: var(--radius-round);
-        animation: button-spin 700ms linear infinite;
       }
     }
   }
