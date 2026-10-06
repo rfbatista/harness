@@ -12,7 +12,8 @@ function bad(detail) {
  * @returns {import("../domain/ports.js").TaskGateway}
  */
 export function tasksGateway(api) {
-  return {
+  /** @type {import("../domain/ports.js").TaskGateway} */
+  const gateway = {
     decodeTask: toTask,
 
     async createTask({ projectId, title, description, status }) {
@@ -21,8 +22,16 @@ export function tasksGateway(api) {
     },
 
     async updateTask({ id, title, description, status }) {
-      const body = await api.post("/update_ticket", { ticket_id: id, title, description, status });
-      return toTask(body?.ticket);
+      const body = { ticket_id: id };
+      if (title !== undefined) body.title = title;
+      if (description !== undefined) body.description = description;
+      if (status !== undefined) body.status = status;
+      const res = await api.post("/update_ticket", body);
+      return toTask(res?.ticket);
+    },
+
+    moveTask(id, status) {
+      return gateway.updateTask({ id, status });
     },
 
     async deleteTask(id) {
@@ -45,4 +54,5 @@ export function tasksGateway(api) {
       return { total: sessions.length, live: sessions.filter((s) => !ended.has(s.status)).length };
     },
   };
+  return gateway;
 }

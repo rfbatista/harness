@@ -39,11 +39,15 @@ export function taskGatewayContract(name, makeSubject) {
     await assert.rejects(gateway.createTask({ projectId: "nope", title: "x", description: "", status: "todo" }), Codes.PROJECT_NOT_FOUND);
   });
 
-  contract("updateTask replaces title, description and status", async () => {
+  contract("updateTask sends only what it is given; the rest keeps its value", async () => {
     const subject = makeSubject({ projects: ["p1"], tasks: [makeTask()], sessions: [] });
-    const t = await subject.gateway.updateTask({ id: "t1", title: "Add the SSE feed", description: "", status: "review" });
-    assert.deepEqual([t.title, t.description, t.status], ["Add the SSE feed", "", "review"]);
-    await assert.rejects(subject.gateway.updateTask({ id: "ghost", title: "x", description: "", status: "todo" }), Codes.TICKET_NOT_FOUND);
+    const renamed = await subject.gateway.updateTask({ id: "t1", title: "Add the SSE feed", description: "" });
+    assert.deepEqual([renamed.title, renamed.description, renamed.status], ["Add the SSE feed", "", "in_progress"], "no status sent, status kept");
+    const moved = await subject.gateway.moveTask("t1", "review");
+    assert.deepEqual([moved.title, moved.description, moved.status], ["Add the SSE feed", "", "review"], "a move keeps the text");
+    await assert.rejects(subject.gateway.updateTask({ id: "t1", title: " " }), Codes.INVALID_INPUT);
+    await assert.rejects(subject.gateway.moveTask("t1", "someday"), Codes.INVALID_INPUT);
+    await assert.rejects(subject.gateway.moveTask("ghost", "todo"), Codes.TICKET_NOT_FOUND);
   });
 
   contract("deleteTask removes it; twice is TICKET_NOT_FOUND", async () => {
