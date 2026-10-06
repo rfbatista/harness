@@ -99,7 +99,7 @@ func readInput(ctx context.Context, conn *websocket.Conn, t ports.Terminal, resy
 // streamOutput sends the snapshot, then the output, titles and the exit, from
 // this one goroutine. A subscription dropped for falling behind — here, or in
 // the client, which asks with resync — is replaced by a fresh one, whose
-// snapshot redraws the client's screen.
+// snapshot redraws the client's screen, history included.
 func streamOutput(ctx context.Context, conn *websocket.Conn, t ports.Terminal, resync <-chan struct{}) {
 	snap, sub := t.Subscribe()
 	defer func() { sub.Close() }()

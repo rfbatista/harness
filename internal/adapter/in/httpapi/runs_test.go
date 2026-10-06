@@ -76,8 +76,9 @@ func TestHTTP_RunsStartListAttachStop(t *testing.T) {
 
 	// The terminal socket's first snapshot replays the run's output.
 	deadline := time.Now().Add(5 * time.Second)
-	var screen string
-	for time.Now().Before(deadline) && !strings.Contains(screen, "app is up") {
+	var snap ports.TerminalSnapshot
+	screen := func() string { return snap.Screen }
+	for time.Now().Before(deadline) && !strings.Contains(screen(), "app is up") {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		conn, _, err := websocket.Dial(ctx, "ws"+strings.TrimPrefix(srv.URL, "http")+"/api/runs/"+runID+"/terminal", nil)
 		if err != nil {
@@ -93,12 +94,16 @@ func TestHTTP_RunsStartListAttachStop(t *testing.T) {
 		var m ports.TerminalMessage
 		_ = json.Unmarshal(data, &m)
 		if m.Type == "snapshot" && m.Snapshot != nil {
-			screen = m.Snapshot.Screen
+			snap = *m.Snapshot
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
-	if !strings.Contains(screen, "app is up") {
-		t.Fatalf("snapshot never replayed the output: %q", screen)
+	if !strings.Contains(screen(), "app is up") {
+		t.Fatalf("snapshot never replayed the output: %q", screen())
+	}
+	// A run's snapshot is the whole log in screen; it has no scrollback.
+	if !snap.Log || snap.Scrollback != "" {
+		t.Fatalf("run snapshot: log=%v scrollback=%q, want a log snapshot without scrollback", snap.Log, snap.Scrollback)
 	}
 
 	code, out = post("/api/stop_run", `{"run_id":"`+runID+`"}`)

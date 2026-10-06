@@ -4,6 +4,7 @@ package termhost
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"sync"
 	"testing"
@@ -197,4 +198,137 @@ func TestTerminalConformance(t *testing.T) {
 		term, _ := spawn(t, newHost(t), "conf", script)
 		return term
 	})
+}
+
+// rows splits a rendered screen or scrollback into its text rows, styles
+// stripped and trailing padding trimmed.
+func rows(rendered string) []string {
+	if rendered == "" {
+		return nil
+	}
+	lines := strings.Split(ansi.Strip(rendered), "\n")
+	for i, l := range lines {
+		lines[i] = strings.TrimRight(l, " ")
+	}
+	return lines
+}
+
+// lines is a script printing n numbered lines, "line 1" to "line n", with
+// format as the printf format of each.
+func lines(n int, format string) string {
+	return fmt.Sprintf(`i=1; while [ $i -le %d ]; do printf '%s\r\n' $i; i=$((i+1)); done; `, n, format)
+}
+
+// A client that attaches after output scrolled off the top gets that
+// history in the snapshot: styled like the screen, oldest first, ending on
+// the line just above the first visible row — and nothing of it again in
+// the stream that follows.
+func TestSnapshotCarriesScrollback(t *testing.T) {
+	h := newHost(t)
+	term, _ := spawn(t, h, "sb", lines(30, `\033[1mline %d\033[0m`)+`printf 'done\r\n'; read x; printf 'after\r\n'; sleep 5`)
+	snap := screen(t, term, "done")
+
+	sb := rows(snap.Scrollback)
+	if len(sb) == 0 || sb[0] != "line 1" {
+		t.Fatalf("scrollback rows = %q, want them to start at line 1", sb)
+	}
+	if strings.Contains(snap.Scrollback, "done") {
+		t.Errorf("scrollback repeats the visible screen: %q", sb)
+	}
+	last := sb[len(sb)-1]
+	first := rows(snap.Screen)[0]
+	var n int
+	if _, err := fmt.Sscanf(last, "line %d", &n); err != nil || first != fmt.Sprintf("line %d", n+1) {
+		t.Errorf("last scrollback row %q is not just above the first screen row %q", last, first)
+	}
+	if !strings.Contains(snap.Scrollback, "\x1b[1m") {
+		t.Errorf("scrollback lost its styling: %q", snap.Scrollback)
+	}
+
+	_, sub := term.Subscribe()
+	defer sub.Close()
+	_ = term.Key(ports.KeyEvent{Code: '\r'})
+	var got strings.Builder
+	deadline := time.After(5 * time.Second)
+	for !strings.Contains(got.String(), "after") {
+		select {
+		case b := <-sub.C:
+			got.Write(b)
+		case <-deadline:
+			t.Fatalf("no output after the snapshot: %q", got.String())
+		}
+	}
+	if strings.Contains(got.String(), "line 1") {
+		t.Errorf("the stream repeated scrollback from before the snapshot: %q", got.String())
+	}
+}
+
+func TestScrollbackIsBoundedAtTwoThousandLines(t *testing.T) {
+	h := newHost(t)
+	term, _ := spawn(t, h, "big", lines(2100, `line %d`)+`printf 'done\r\n'; sleep 5`)
+	snap := screen(t, term, "done")
+	sb := rows(snap.Scrollback)
+	if len(sb) != scrollbackLines {
+		t.Fatalf("scrollback has %d rows, want %d", len(sb), scrollbackLines)
+	}
+	last, first := sb[len(sb)-1], rows(snap.Screen)[0]
+	var n int
+	if _, err := fmt.Sscanf(last, "line %d", &n); err != nil || first != fmt.Sprintf("line %d", n+1) {
+		t.Errorf("after trimming, last scrollback row %q is not just above the first screen row %q", last, first)
+	}
+}
+
+// The alternate screen has no history, so a snapshot taken on it omits
+// scrollback; the main screen's history is still there when the program
+// leaves it.
+func TestAltScreenSnapshotOmitsScrollbackAndMainScreenKeepsIt(t *testing.T) {
+	h := newHost(t)
+	term, _ := spawn(t, h, "alt", lines(30, `line %d`)+`printf '\033[?1049h\033[Halt mode\r\n'; read x; printf '\033[?1049l'; printf 'back\r\n'; sleep 5`)
+	snap := screen(t, term, "alt mode")
+	if !snap.AltScreen {
+		t.Fatal("snapshot is not on the alternate screen")
+	}
+	if snap.Scrollback != "" {
+		t.Errorf("alternate screen snapshot carries scrollback: %q", rows(snap.Scrollback))
+	}
+
+	_ = term.Key(ports.KeyEvent{Code: '\r'})
+	snap = screen(t, term, "back")
+	if snap.AltScreen {
+		t.Fatal("snapshot is still on the alternate screen")
+	}
+	if sb := rows(snap.Scrollback); len(sb) == 0 || sb[0] != "line 1" {
+		t.Errorf("main screen lost its history over the alternate screen: %q", sb)
+	}
+}
+
+// Clearing the screen keeps what was on it as history.
+func TestClearScreenMovesRowsIntoScrollback(t *testing.T) {
+	h := newHost(t)
+	term, _ := spawn(t, h, "clr", `printf 'kept\r\n'; printf '\033[2J\033[H'; printf 'fresh\r\n'; sleep 5`)
+	snap := screen(t, term, "fresh")
+	if sb := rows(snap.Scrollback); len(sb) == 0 || sb[0] != "kept" {
+		t.Errorf("scrollback after clear = %q, want the cleared row", sb)
+	}
+	if strings.Contains(ansi.Strip(snap.Screen), "kept") {
+		t.Errorf("the cleared row is still on screen")
+	}
+}
+
+// History keeps the width it had; a resize changes the screen, not it.
+func TestScrollbackSurvivesResize(t *testing.T) {
+	h := newHost(t)
+	term, _ := spawn(t, h, "rsb", lines(30, `line %d`)+`printf 'done\r\n'; sleep 5`)
+	screen(t, term, "done")
+	if err := term.Resize(ports.TermSize{Cols: 100, Rows: 30}); err != nil {
+		t.Fatal(err)
+	}
+	snap, sub := term.Subscribe()
+	sub.Close()
+	if snap.Size != (ports.TermSize{Cols: 100, Rows: 30}) {
+		t.Errorf("size = %+v, want 100x30", snap.Size)
+	}
+	if sb := rows(snap.Scrollback); len(sb) == 0 || sb[0] != "line 1" {
+		t.Errorf("scrollback after resize = %q, want the history kept", sb)
+	}
 }

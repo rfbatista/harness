@@ -45,12 +45,19 @@ type Terminal interface {
 type TerminalSnapshot struct {
 	// Screen is the visible screen, rendered with its styles, one line per
 	// row.
-	Screen    string   `json:"screen"`
-	CursorX   int      `json:"cursor_x"`
-	CursorY   int      `json:"cursor_y"`
-	AltScreen bool     `json:"alt_screen,omitempty"`
-	Size      TermSize `json:"size"`
-	Title     string   `json:"title,omitempty"`
+	Screen string `json:"screen"`
+	// Scrollback is what scrolled off the top of the main screen, rendered
+	// like Screen, oldest line first, the last line being the one just
+	// above the first visible row. At most 2000 lines; absent on the
+	// alternate screen, which has no history, and on Log snapshots, whose
+	// Screen already is the whole output. Lines keep the width they had
+	// when they scrolled off.
+	Scrollback string   `json:"scrollback,omitempty"`
+	CursorX    int      `json:"cursor_x"`
+	CursorY    int      `json:"cursor_y"`
+	AltScreen  bool     `json:"alt_screen,omitempty"`
+	Size       TermSize `json:"size"`
+	Title      string   `json:"title,omitempty"`
 	// Log marks Screen as raw output to write as it is (an application
 	// run's log so far), not a rendered screen: no cursor to place.
 	Log bool `json:"log,omitempty"`
@@ -76,11 +83,11 @@ type KeyEvent struct {
 // over a WebSocket at /api/sessions/:id/terminal. Output travels as binary
 // frames, in order, between them.
 //
-// Server to client: "snapshot" first, and again whenever the client fell
-// behind and the screen is redrawn from scratch; "title" when the program
-// sets one; "exit" with the code once the process is gone. Client to server:
-// "key", "paste", "resize", and "resync" when the client fell behind and
-// needs a fresh snapshot.
+// Server to client: "snapshot" first — the screen with its scrollback — and
+// again whenever the client fell behind and the screen is redrawn from
+// scratch; "title" when the program sets one; "exit" with the code once the
+// process is gone. Client to server: "key", "paste", "resize", and "resync"
+// when the client fell behind and needs a fresh snapshot.
 type TerminalMessage struct {
 	Type     string            `json:"type"`
 	Snapshot *TerminalSnapshot `json:"snapshot,omitempty"`
