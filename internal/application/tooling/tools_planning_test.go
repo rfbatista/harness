@@ -164,3 +164,71 @@ func TestDocumentTools_FormatIsOptionalAndValidated(t *testing.T) {
 		}
 	}
 }
+
+func TestDocumentTools_Scope(t *testing.T) {
+	db, err := sqlite.Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	projects := sqlite.NewProjectRepository(db)
+	p, _ := projects.Create("proj", "/tmp/proj")
+	svc := planning.NewService(sqlite.NewTicketRepository(db), sqlite.NewDocumentRepository(db), projects)
+	byName := map[string]domain.Tool{}
+	for _, tl := range DocumentTools(svc) {
+		byName[tl.Name] = tl
+	}
+	ctx := context.Background()
+	docOf := func(out any) *domain.Document { return out.(map[string]any)["document"].(*domain.Document) }
+	docsOf := func(out any) []*domain.Document { return out.(map[string]any)["documents"].([]*domain.Document) }
+
+	out, err := byName["create_document"].Handler(ctx, map[string]any{"project_id": p.ID, "title": "Arch", "content": "# a"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	arch := docOf(out)
+	if arch.Scope != domain.DocumentScopeProject {
+		t.Fatalf("default scope = %q, want project", arch.Scope)
+	}
+	out, err = byName["create_document"].Handler(ctx, map[string]any{"project_id": p.ID, "title": "Plan", "content": "# p", "scope": "task"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	plan := docOf(out)
+	if plan.Scope != domain.DocumentScopeTask {
+		t.Fatalf("explicit scope = %q", plan.Scope)
+	}
+	_, err = byName["create_document"].Handler(ctx, map[string]any{"project_id": p.ID, "title": "X", "scope": "global"})
+	wantCode(t, err, "INVALID_INPUT")
+
+	out, err = byName["list_documents"].Handler(ctx, map[string]any{"project_id": p.ID, "scope": "project"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if list := docsOf(out); len(list) != 1 || list[0].ID != arch.ID {
+		t.Fatalf("filtered list: %+v", list)
+	}
+	out, _ = byName["list_documents"].Handler(ctx, map[string]any{"project_id": p.ID})
+	if list := docsOf(out); len(list) != 2 {
+		t.Fatalf("unfiltered list: %+v", list)
+	}
+	_, err = byName["list_documents"].Handler(ctx, map[string]any{"project_id": p.ID, "scope": "global"})
+	wantCode(t, err, "INVALID_INPUT")
+
+	out, err = byName["set_document_scope"].Handler(ctx, map[string]any{"document_id": plan.ID, "scope": "project"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := docOf(out); got.ID != plan.ID || got.Scope != domain.DocumentScopeProject {
+		t.Fatalf("set_document_scope: %+v", got)
+	}
+	_, err = byName["set_document_scope"].Handler(ctx, map[string]any{"document_id": "missing", "scope": "task"})
+	wantCode(t, err, "DOCUMENT_NOT_FOUND")
+	_, err = byName["set_document_scope"].Handler(ctx, map[string]any{"document_id": plan.ID, "scope": "global"})
+	wantCode(t, err, "INVALID_INPUT")
+
+	for _, name := range []string{"list_documents", "create_document", "set_document_scope"} {
+		if raw, _ := json.Marshal(byName[name].InputSchema); !bytes.Contains(raw, []byte(`"enum":["task","project"]`)) {
+			t.Errorf("%s schema lacks the scope enum: %s", name, raw)
+		}
+	}
+}

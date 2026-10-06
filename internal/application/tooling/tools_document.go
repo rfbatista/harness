@@ -12,15 +12,19 @@ func DocumentTools(planningSvc ports.DocumentLibrary) []domain.Tool {
 	return []domain.Tool{
 		{
 			Name:        "list_documents",
-			Description: "List documents in a project.",
-			InputSchema: schemaFromJSON(`{"type":"object","properties":{"project_id":{"type":"string","description":"Project ID"}},"required":["project_id"]}`),
+			Description: "List documents in a project. scope narrows to task documents (linked to tickets, written by their sessions) or project documents (architecture, conventions, decisions, readable by every session); omit it for every document.",
+			InputSchema: schemaFromJSON(`{"type":"object","properties":{"project_id":{"type":"string","description":"Project ID"},"scope":{"type":"string","enum":["task","project"],"description":"Only documents of this scope. Default: every document."}},"required":["project_id"]}`),
 			Source:      "code",
 			Handler: func(ctx context.Context, args map[string]any) (any, error) {
 				pid := getString(args, "project_id", "")
 				if pid == "" {
 					return nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "project_id is required"}
 				}
-				return map[string]any{"documents": planningSvc.ListDocuments(pid, "")}, nil
+				scope := domain.DocumentScope(getString(args, "scope", ""))
+				if scope != "" && !scope.Valid() {
+					return nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "scope must be task or project"}
+				}
+				return map[string]any{"documents": planningSvc.ListDocuments(pid, scope)}, nil
 			},
 		},
 		{
@@ -38,8 +42,8 @@ func DocumentTools(planningSvc ports.DocumentLibrary) []domain.Tool {
 		},
 		{
 			Name:        "create_document",
-			Description: "Create a document in a project. It exists standalone until linked to a ticket. format is markdown (default) or html; an html body is a complete HTML page rendered in a sandboxed frame.",
-			InputSchema: schemaFromJSON(`{"type":"object","properties":{"project_id":{"type":"string","description":"Project ID"},"title":{"type":"string","description":"Document title"},"content":{"type":"string","description":"The body, in format"},"format":{"type":"string","enum":["markdown","html"],"description":"Body format. Default: markdown."}},"required":["project_id","title"]}`),
+			Description: "Create a document in a project. It exists standalone until linked to a ticket. format is markdown (default) or html; an html body is a complete HTML page rendered in a sandboxed frame. scope is project (default: the document is the project's, for every session) or task.",
+			InputSchema: schemaFromJSON(`{"type":"object","properties":{"project_id":{"type":"string","description":"Project ID"},"title":{"type":"string","description":"Document title"},"content":{"type":"string","description":"The body, in format"},"format":{"type":"string","enum":["markdown","html"],"description":"Body format. Default: markdown."},"scope":{"type":"string","enum":["task","project"],"description":"project (default) or task."}},"required":["project_id","title"]}`),
 			Source:      "code",
 			Handler: func(ctx context.Context, args map[string]any) (any, error) {
 				doc, err := planningSvc.CreateDocument(
@@ -47,7 +51,7 @@ func DocumentTools(planningSvc ports.DocumentLibrary) []domain.Tool {
 					getString(args, "title", ""),
 					getString(args, "content", ""),
 					domain.DocumentFormat(getString(args, "format", "")),
-					"",
+					domain.DocumentScope(getString(args, "scope", "")),
 				)
 				if err != nil {
 					return nil, err
@@ -67,6 +71,19 @@ func DocumentTools(planningSvc ports.DocumentLibrary) []domain.Tool {
 					getString(args, "content", ""),
 					domain.DocumentFormat(getString(args, "format", "")),
 				)
+				if err != nil {
+					return nil, err
+				}
+				return map[string]any{"document": doc}, nil
+			},
+		},
+		{
+			Name:        "set_document_scope",
+			Description: "Move a document between task and project scope. Its ticket links are untouched: a project document stays listed on the tickets it came from. Idempotent.",
+			InputSchema: schemaFromJSON(`{"type":"object","properties":{"document_id":{"type":"string","description":"Document ID"},"scope":{"type":"string","enum":["task","project"],"description":"The scope to move it to."}},"required":["document_id","scope"]}`),
+			Source:      "code",
+			Handler: func(ctx context.Context, args map[string]any) (any, error) {
+				doc, err := planningSvc.SetDocumentScope(getString(args, "document_id", ""), domain.DocumentScope(getString(args, "scope", "")))
 				if err != nil {
 					return nil, err
 				}
