@@ -237,6 +237,7 @@ func TestTerminalFollowsThemeChangesWhileMounted(t *testing.T) {
 
 	rows := `document.querySelector('.terminal .xterm-rows')?.textContent ?? ''`
 	var atMount, afterToggle, afterOS bool
+	var paneBackground string
 	err := chromedp.Run(ctx,
 		chromedp.EmulateViewport(1280, 800),
 		emulateColorScheme("light"),
@@ -256,12 +257,18 @@ func TestTerminalFollowsThemeChangesWhileMounted(t *testing.T) {
 		emulateColorScheme("dark"),
 		chromedp.Poll(`matchMedia('(prefers-color-scheme: dark)').matches && `+screenMatchesSunken, nil, chromedp.WithPollingTimeout(5*time.Second)),
 		chromedp.Evaluate(screenMatchesSunken, &afterOS),
+
+		// xterm's inline color is neutralised by the pane's CSS; the pane's sunken well shows through.
+		chromedp.Evaluate(`getComputedStyle(document.querySelector('.terminal .xterm-scrollable-element')).backgroundColor`, &paneBackground),
 	)
 	if err != nil {
 		t.Fatalf("%v\nJS errors: %v", err, errs.all())
 	}
 	if !atMount || !afterToggle || !afterOS {
 		t.Errorf("terminal in the sunken well: at mount %v, after the toggle %v, after the OS change %v; want all true", atMount, afterToggle, afterOS)
+	}
+	if paneBackground != "rgba(0, 0, 0, 0)" {
+		t.Errorf("xterm's scrollable element background = %q, want transparent (the pane owns it)", paneBackground)
 	}
 	if e := errs.all(); len(e) > 0 {
 		t.Errorf("JavaScript errors:\n%s", strings.Join(e, "\n"))
