@@ -8,7 +8,10 @@ import (
 )
 
 // TicketTools exposes ticket CRUD as MCP tools.
-func TicketTools(planningSvc ports.TicketBoard) []domain.Tool {
+func TicketTools(planningSvc interface {
+	ports.TicketBoard
+	ports.TicketPatcher
+}) []domain.Tool {
 	return []domain.Tool{
 		{
 			Name:        "list_tickets",
@@ -59,17 +62,27 @@ func TicketTools(planningSvc ports.TicketBoard) []domain.Tool {
 			},
 		},
 		{
-			Name:        "update_ticket",
-			Description: "Update a ticket's title, description, and status.",
-			InputSchema: schemaFromJSON(`{"type":"object","properties":{"ticket_id":{"type":"string","description":"Ticket ID"},"title":{"type":"string"},"description":{"type":"string"},"status":{"type":"string","enum":["backlog","todo","in_progress","review","done"]}},"required":["ticket_id","title"]}`),
+			Name: "update_ticket",
+			Description: "Update a ticket. Fields left out keep their current value: pass only status to move it, only title and/or " +
+				"description to edit its text. title cannot be blank; status is one of backlog, todo, in_progress, review, done.",
+			InputSchema: schemaFromJSON(`{"type":"object","properties":{"ticket_id":{"type":"string","description":"Ticket ID"},"title":{"type":"string","description":"New title; omit to keep the current one"},"description":{"type":"string","description":"New description; omit to keep, pass \"\" to clear"},"status":{"type":"string","enum":["backlog","todo","in_progress","review","done"],"description":"New status; omit to keep the current one"}},"required":["ticket_id"]}`),
 			Source:      "code",
 			Handler: func(ctx context.Context, args map[string]any) (any, error) {
-				tk, err := planningSvc.UpdateTicket(ctx,
-					getString(args, "ticket_id", ""),
-					getString(args, "title", ""),
-					getString(args, "description", ""),
-					domain.TicketStatus(getString(args, "status", "")),
-				)
+				// A key that is absent, or null, keeps its value, as over HTTP.
+				var patch ports.TicketPatch
+				if v, ok := args["title"]; ok && v != nil {
+					s := getString(args, "title", "")
+					patch.Title = &s
+				}
+				if v, ok := args["description"]; ok && v != nil {
+					s := getString(args, "description", "")
+					patch.Description = &s
+				}
+				if v, ok := args["status"]; ok && v != nil {
+					s := domain.TicketStatus(getString(args, "status", ""))
+					patch.Status = &s
+				}
+				tk, err := planningSvc.PatchTicket(ctx, getString(args, "ticket_id", ""), patch)
 				if err != nil {
 					return nil, err
 				}
