@@ -1,6 +1,7 @@
 package web
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -9,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/chromedp/cdproto/emulation"
 	"github.com/chromedp/chromedp"
 	"github.com/coder/websocket"
 
@@ -79,7 +81,10 @@ func (p *fakePTY) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func TestTerminalInTheBrowserTalksToThePTY(t *testing.T) {
+// terminalPage serves the task page with session s1's PTY handled by pty.
+// It skips the test when the web client is not built.
+func terminalPage(t *testing.T, pty http.Handler) *httptest.Server {
+	t.Helper()
 	assets, err := NewAssets()
 	if err != nil {
 		t.Fatal(err)
@@ -87,9 +92,6 @@ func TestTerminalInTheBrowserTalksToThePTY(t *testing.T) {
 	if !assets.Built() {
 		t.Skip("browser test: web client not built; run `make web`")
 	}
-	ctx, errs := browser(t)
-
-	pty := &fakePTY{exit: make(chan int, 1)}
 	pages := NewHandler(Deps{
 		Projects:     fakeProjects{[]*domain.Project{{ID: "p1", Name: "coding_pool"}}},
 		Tasks:        fakeTickets{[]*domain.Ticket{{ID: "t1", ProjectID: "p1", Title: "Add SSE feed", Status: domain.TicketStatusInProgress}}},
@@ -104,11 +106,18 @@ func TestTerminalInTheBrowserTalksToThePTY(t *testing.T) {
 	mux.Handle("/api/sessions/s1/terminal", pty)
 	mux.Handle("/", pages)
 	srv := httptest.NewServer(mux)
-	defer srv.Close()
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+func TestTerminalInTheBrowserTalksToThePTY(t *testing.T) {
+	pty := &fakePTY{exit: make(chan int, 1)}
+	srv := terminalPage(t, pty)
+	ctx, errs := browser(t)
 
 	rows := `document.querySelector('.terminal .xterm-rows')?.textContent ?? ''`
 	var screen, afterTyping, afterEnter, state, bar string
-	err = chromedp.Run(ctx,
+	err := chromedp.Run(ctx,
 		chromedp.EmulateViewport(1280, 800),
 		chromedp.Navigate(srv.URL+"/projects/p1/tasks/t1"),
 		chromedp.Poll(rows+`.includes('hello from the pty')`, nil, chromedp.WithPollingTimeout(10*time.Second)),
@@ -154,6 +163,105 @@ func TestTerminalInTheBrowserTalksToThePTY(t *testing.T) {
 	)
 	if err != nil {
 		t.Fatalf("exit not shown: %v (bar %q)", err, bar)
+	}
+	if e := errs.all(); len(e) > 0 {
+		t.Errorf("JavaScript errors:\n%s", strings.Join(e, "\n"))
+	}
+}
+
+// emulateColorScheme makes the page's prefers-color-scheme media query report
+// scheme ("light" or "dark"); matchMedia listeners fire as on a real OS switch.
+func emulateColorScheme(scheme string) chromedp.Action {
+	return chromedp.ActionFunc(func(ctx context.Context) error {
+		return emulation.SetEmulatedMedia().
+			WithFeatures([]*emulation.MediaFeature{{Name: "prefers-color-scheme", Value: scheme}}).
+			Do(ctx)
+	})
+}
+
+// screenMatchesSunken is true when the color xterm paints its screen with is
+// the page's --color-sunken. xterm writes its theme background inline on its
+// scrollable element; the two are compared pixel for pixel through a canvas,
+// since one is rgba and the other OKLCH.
+const screenMatchesSunken = `(() => {
+	const paint = (css) => {
+		const c = document.createElement('canvas'); c.width = c.height = 1;
+		const x = c.getContext('2d'); x.fillStyle = '#010203'; x.fillStyle = css; x.fillRect(0, 0, 1, 1);
+		return [...x.getImageData(0, 0, 1, 1).data].join(',');
+	};
+	const screen = document.querySelector('.terminal .xterm-scrollable-element');
+	const want = getComputedStyle(document.documentElement).getPropertyValue('--color-sunken');
+	return !!screen && !!screen.style.backgroundColor && paint(screen.style.backgroundColor) === paint(want);
+})()`
+
+// A developer pinned dark on an earlier visit, on a machine whose OS is light.
+// After a refresh the terminal must come up in the pinned theme, not the OS's.
+func TestTerminalComesUpInThePinnedThemeOnRefresh(t *testing.T) {
+	pty := &fakePTY{exit: make(chan int, 1)}
+	srv := terminalPage(t, pty)
+	ctx, errs := browser(t)
+
+	rows := `document.querySelector('.terminal .xterm-rows')?.textContent ?? ''`
+	var pinned string
+	var matches bool
+	err := chromedp.Run(ctx,
+		chromedp.EmulateViewport(1280, 800),
+		emulateColorScheme("light"),
+		chromedp.Navigate(srv.URL+"/projects/p1/tasks/t1"),
+		chromedp.Poll(rows+`.includes('hello from the pty')`, nil, chromedp.WithPollingTimeout(10*time.Second)),
+		// The pin is what themeToggle restores from this browser's storage on the next load.
+		chromedp.Evaluate(`localStorage.setItem('harness:theme', 'dark'); true`, nil),
+		chromedp.Reload(),
+		chromedp.Poll(rows+`.includes('hello from the pty')`, nil, chromedp.WithPollingTimeout(10*time.Second)),
+		chromedp.Poll(`document.documentElement.dataset.theme === 'dark' && `+screenMatchesSunken, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Evaluate(`document.documentElement.dataset.theme ?? ''`, &pinned),
+		chromedp.Evaluate(screenMatchesSunken, &matches),
+	)
+	if err != nil {
+		t.Fatalf("%v\nJS errors: %v", err, errs.all())
+	}
+	if pinned != "dark" || !matches {
+		t.Errorf("after refresh: data-theme=%q, terminal in the sunken well=%v; want dark, true", pinned, matches)
+	}
+	if e := errs.all(); len(e) > 0 {
+		t.Errorf("JavaScript errors:\n%s", strings.Join(e, "\n"))
+	}
+}
+
+// While a terminal is on screen, the theme toggle and the OS preference both
+// change the page; the terminal follows each.
+func TestTerminalFollowsThemeChangesWhileMounted(t *testing.T) {
+	pty := &fakePTY{exit: make(chan int, 1)}
+	srv := terminalPage(t, pty)
+	ctx, errs := browser(t)
+
+	rows := `document.querySelector('.terminal .xterm-rows')?.textContent ?? ''`
+	var atMount, afterToggle, afterOS bool
+	err := chromedp.Run(ctx,
+		chromedp.EmulateViewport(1280, 800),
+		emulateColorScheme("light"),
+		chromedp.Navigate(srv.URL+"/projects/p1/tasks/t1"),
+		chromedp.Poll(rows+`.includes('hello from the pty')`, nil, chromedp.WithPollingTimeout(10*time.Second)),
+		chromedp.Poll(screenMatchesSunken, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Evaluate(screenMatchesSunken, &atMount),
+
+		// The developer pins dark in the stream bar.
+		clickButton(`footer`, "Dark"),
+		chromedp.Poll(`document.documentElement.dataset.theme === 'dark' && `+screenMatchesSunken, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Evaluate(screenMatchesSunken, &afterToggle),
+
+		// Back to following the OS, and the OS turns dark.
+		clickButton(`footer`, "System"),
+		chromedp.Poll(`document.documentElement.dataset.theme === undefined`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		emulateColorScheme("dark"),
+		chromedp.Poll(`matchMedia('(prefers-color-scheme: dark)').matches && `+screenMatchesSunken, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Evaluate(screenMatchesSunken, &afterOS),
+	)
+	if err != nil {
+		t.Fatalf("%v\nJS errors: %v", err, errs.all())
+	}
+	if !atMount || !afterToggle || !afterOS {
+		t.Errorf("terminal in the sunken well: at mount %v, after the toggle %v, after the OS change %v; want all true", atMount, afterToggle, afterOS)
 	}
 	if e := errs.all(); len(e) > 0 {
 		t.Errorf("JavaScript errors:\n%s", strings.Join(e, "\n"))

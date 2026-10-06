@@ -2,20 +2,28 @@
 // library is used. It draws what the server's PTY prints and hands key
 // presses and pastes back; it never interprets input itself (xterm's own
 // onData is ignored), so the server's emulator stays the single source of
-// truth for the terminal's modes.
+// truth for the terminal's modes. Its colors are the design tokens, taken at
+// mount and again on every theme change (screen-theme.js), never xterm's own.
 
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal } from "@xterm/xterm";
+
+import { followTheme, screenColors, screenFont } from "./screen-theme.js";
 
 /** @type {import("./modules/sessions/presentation/components/terminal.js").CreateScreen} */
 export function createScreen(container, { onKey, onPaste }) {
   const term = new Terminal({
     cursorBlink: true,
-    fontFamily: token("--font-mono") || "ui-monospace, monospace",
+    fontFamily: screenFont(),
     fontSize: 13,
     lineHeight: 1.15,
     scrollback: 2000,
-    theme: theme(),
+    theme: screenColors(),
+  });
+  // A pinned theme restored after this screen mounted, a toggle click, the OS
+  // flipping: each re-themes the screen in place.
+  const stopFollowing = followTheme(() => {
+    term.options.theme = screenColors();
   });
   const fitter = new FitAddon();
   term.loadAddon(fitter);
@@ -69,32 +77,9 @@ export function createScreen(container, { onKey, onPaste }) {
     size: () => ({ cols: term.cols, rows: term.rows }),
     focus: () => term.focus(),
     dispose() {
+      stopFollowing();
       container.removeEventListener("paste", paste, true);
       term.dispose();
     },
   };
-}
-
-/** xterm wants plain colors; the design tokens are OKLCH, so let canvas convert them. */
-function theme() {
-  return {
-    background: color("--color-sunken"),
-    foreground: color("--color-ink"),
-    cursor: color("--color-signal"),
-    cursorAccent: color("--color-sunken"),
-    selectionBackground: color("--color-selected"),
-  };
-}
-
-function token(name) {
-  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-}
-
-function color(name) {
-  const value = token(name);
-  if (!value) return undefined;
-  const ctx = document.createElement("canvas").getContext("2d");
-  if (!ctx) return undefined;
-  ctx.fillStyle = value;
-  return ctx.fillStyle;
 }
