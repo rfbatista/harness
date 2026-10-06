@@ -13,7 +13,7 @@ function setup() {
   const seeded = [s("a", "t1", "running")];
   const memory = memoryRail({ projectId: "p1", sessions: seeded });
   const store = { byTask: {} };
-  const nav = mount(rail({ gateway: memory.gateway, store }), { el: seededElement({ project_id: "p1", sessions: seeded }, "rail-seed") });
+  const nav = mount(rail({ gateway: memory.gateway, store }), { el: seededElement({ project_id: "p1", sessions: seeded, tasks: [] }, "rail-seed") });
   nav.instance.init();
   const link = (taskId) => {
     const el = document.createElement("a");
