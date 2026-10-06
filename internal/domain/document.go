@@ -21,8 +21,27 @@ func (f DocumentFormat) Valid() bool {
 	return f == DocumentFormatMarkdown || f == DocumentFormatHTML
 }
 
+// DocumentScope says who a Document is for. A task document belongs to the
+// task(s) it is linked to: what task sessions write by default. A project
+// document is the project's own: architecture, conventions, decisions, specs
+// and contracts that outlive one task. Every session of the project can read
+// it, and it shows on the project's documents page. Moving a document between
+// the two never touches its ticket links, so the task it came from keeps it.
+type DocumentScope string
+
+const (
+	DocumentScopeTask    DocumentScope = "task"
+	DocumentScopeProject DocumentScope = "project"
+)
+
+// Valid reports whether s is one of the two scopes. The empty string is not
+// valid: callers that mean "default" or "every scope" handle it before asking.
+func (s DocumentScope) Valid() bool {
+	return s == DocumentScopeTask || s == DocumentScopeProject
+}
+
 // Document is a titled body stored in the database, scoped to a Project, in
-// the format Format says. Agents read it as context; task sessions write it
+// the format Format says. Scope says whether it is the task's or the project's. Agents read it as context; task sessions write it
 // as HTML pages, people and API clients as Markdown. A document links to zero
 // or more Tickets via the ticket_documents join table and can exist with no
 // ticket at all.
@@ -31,6 +50,7 @@ type Document struct {
 	ProjectID string         `json:"project_id"`
 	Title     string         `json:"title"`
 	Format    DocumentFormat `json:"format"`
+	Scope     DocumentScope  `json:"scope"`
 	Content   string         `json:"content,omitempty"` // in Format
 	CreatedAt time.Time      `json:"created_at"`
 	UpdatedAt time.Time      `json:"updated_at"`

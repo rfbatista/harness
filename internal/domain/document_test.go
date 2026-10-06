@@ -57,3 +57,27 @@ func TestDocumentJSONCarriesFormat(t *testing.T) {
 		t.Fatalf("format missing from the wire: %s", b)
 	}
 }
+
+func TestDocumentScope_Valid(t *testing.T) {
+	for _, s := range []DocumentScope{DocumentScopeTask, DocumentScopeProject} {
+		if !s.Valid() {
+			t.Errorf("%q should be valid", s)
+		}
+	}
+	for _, s := range []DocumentScope{"", "global", "Task"} {
+		if s.Valid() {
+			t.Errorf("%q should not be valid", s)
+		}
+	}
+}
+
+// Every JSON shape the server returns carries the scope, as the contracts say.
+func TestDocument_ScopeIsOnTheWire(t *testing.T) {
+	b, err := json.Marshal(Document{ID: "d1", Scope: DocumentScopeProject})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(b), `"scope":"project"`) {
+		t.Fatalf("scope missing: %s", b)
+	}
+}
