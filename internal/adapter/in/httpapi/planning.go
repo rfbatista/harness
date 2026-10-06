@@ -109,27 +109,31 @@ func (h *Handler) handleCreateDocument(c echo.Context) error {
 		ProjectID string `json:"project_id"`
 		Title     string `json:"title"`
 		Content   string `json:"content"`
+		Format    string `json:"format"` // markdown (default) or html
 	}
 	if err := bindJSON(c, &in); err != nil {
 		return err
 	}
-	doc, err := h.planningSvc.CreateDocument(in.ProjectID, in.Title, in.Content, "")
+	doc, err := h.planningSvc.CreateDocument(in.ProjectID, in.Title, in.Content, domain.DocumentFormat(in.Format))
 	if err != nil {
 		return err
 	}
 	return c.JSON(http.StatusOK, map[string]any{"document": doc})
 }
 
+// handleUpdateDocument replaces title and content; a missing format keeps
+// the stored one.
 func (h *Handler) handleUpdateDocument(c echo.Context) error {
 	var in struct {
 		DocumentID string `json:"document_id"`
 		Title      string `json:"title"`
 		Content    string `json:"content"`
+		Format     string `json:"format"`
 	}
 	if err := bindJSON(c, &in); err != nil {
 		return err
 	}
-	doc, err := h.planningSvc.UpdateDocument(in.DocumentID, in.Title, in.Content, "")
+	doc, err := h.planningSvc.UpdateDocument(in.DocumentID, in.Title, in.Content, domain.DocumentFormat(in.Format))
 	if err != nil {
 		return err
 	}

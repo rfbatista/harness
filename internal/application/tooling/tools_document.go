@@ -38,15 +38,15 @@ func DocumentTools(planningSvc ports.DocumentLibrary) []domain.Tool {
 		},
 		{
 			Name:        "create_document",
-			Description: "Create a markdown document in a project. It exists standalone until linked to a ticket.",
-			InputSchema: schemaFromJSON(`{"type":"object","properties":{"project_id":{"type":"string","description":"Project ID"},"title":{"type":"string","description":"Document title"},"content":{"type":"string","description":"Markdown content"}},"required":["project_id","title"]}`),
+			Description: "Create a document in a project. It exists standalone until linked to a ticket. format is markdown (default) or html; an html body is a complete HTML page rendered in a sandboxed frame.",
+			InputSchema: schemaFromJSON(`{"type":"object","properties":{"project_id":{"type":"string","description":"Project ID"},"title":{"type":"string","description":"Document title"},"content":{"type":"string","description":"The body, in format"},"format":{"type":"string","enum":["markdown","html"],"description":"Body format. Default: markdown."}},"required":["project_id","title"]}`),
 			Source:      "code",
 			Handler: func(ctx context.Context, args map[string]any) (any, error) {
 				doc, err := planningSvc.CreateDocument(
 					getString(args, "project_id", ""),
 					getString(args, "title", ""),
 					getString(args, "content", ""),
-					"",
+					domain.DocumentFormat(getString(args, "format", "")),
 				)
 				if err != nil {
 					return nil, err
@@ -56,15 +56,15 @@ func DocumentTools(planningSvc ports.DocumentLibrary) []domain.Tool {
 		},
 		{
 			Name:        "update_document",
-			Description: "Update a document's title and content.",
-			InputSchema: schemaFromJSON(`{"type":"object","properties":{"document_id":{"type":"string","description":"Document ID"},"title":{"type":"string"},"content":{"type":"string"}},"required":["document_id","title"]}`),
+			Description: "Update a document's title and content. format (markdown or html) is optional; omitted keeps the stored one.",
+			InputSchema: schemaFromJSON(`{"type":"object","properties":{"document_id":{"type":"string","description":"Document ID"},"title":{"type":"string"},"content":{"type":"string"},"format":{"type":"string","enum":["markdown","html"],"description":"Body format; omit to keep the current one."}},"required":["document_id","title"]}`),
 			Source:      "code",
 			Handler: func(ctx context.Context, args map[string]any) (any, error) {
 				doc, err := planningSvc.UpdateDocument(
 					getString(args, "document_id", ""),
 					getString(args, "title", ""),
 					getString(args, "content", ""),
-					"",
+					domain.DocumentFormat(getString(args, "format", "")),
 				)
 				if err != nil {
 					return nil, err
