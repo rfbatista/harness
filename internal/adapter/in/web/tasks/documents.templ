@@ -20,6 +20,9 @@ templ DocumentsPage(v DocumentsView) {
 				<a class="[ crumb ]" href={ templ.SafeURL(v.TaskHref) }>{ v.TaskTitle } /</a>
 				<h1>Documents</h1>
 				<span class="[ color-ink-faint text-sm ]">{ documentCount(len(v.Documents)) }</span>
+				<div class="[ actions ]">
+					<a class="[ button ]" data-variant="ghost" data-size="sm" href={ templ.SafeURL(v.LibraryHref) }>Project documents</a>
+				</div>
 			</header>
 			<template x-if="changed">
 				<div class="[ banner ]" role="status">
@@ -29,14 +32,21 @@ templ DocumentsPage(v DocumentsView) {
 			</template>
 			if len(v.Documents) == 0 {
 				<div data-scroll>
-					@components.Empty("No documents on this task yet", "Agents working on the task write them with create_task_document — plans, findings, handoffs. They show here as they are written.")
+					@components.Empty("No documents on this task yet", "Agents working on the task write them with create_task_document — plans, findings, handoffs. They show here as they are written, and stay here when moved to project level.")
 				</div>
 			} else {
-				<div class="[ split-view ]" data-scroll>
-					<nav class="[ list ] [ divide-end ]" aria-label="Documents of this task" style="--row-columns: minmax(0, 1fr) auto">
+				<div class="[ split-view ]" data-scroll { scopeAttrs(v.Open)... }>
+					<nav class="[ list ] [ divide-end ]" aria-label="Documents of this task" style="--row-columns: minmax(0, 1fr) auto auto">
 						for _, d := range v.Documents {
 							<a class="[ row ]" href={ templ.SafeURL(d.Href) } { documentCurrent(d.Current)... }>
 								<span class="[ title ]">{ d.Title }</span>
+								if d.Current {
+									<span class="[ badge ]" data-scope-mark x-show="isProject" x-text="mark" { hiddenUnless(d.Project)... }>project</span>
+								} else if d.Project {
+									<span class="[ badge ]">project</span>
+								} else {
+									<span></span>
+								}
 								<span class="[ meta ]">{ d.Updated }</span>
 							</a>
 						}
@@ -45,7 +55,9 @@ templ DocumentsPage(v DocumentsView) {
 						<article class="[ frame ]" aria-label={ v.Open.Title }>
 							<div class="[ repel ] [ pad-l divide-bottom ]">
 								<h2>{ v.Open.Title }</h2>
+								<span class="[ badge ]" data-scope-word x-text="word">{ v.Open.ScopeWord() }</span>
 								<span class="[ color-ink-faint text-sm ]">updated { v.Open.Updated }</span>
+								@moveForm(v.Open)
 							</div>
 							if v.Open.IsHTML() {
 								<div class="[ preview ] [ frame ]" data-kind="page">
@@ -82,4 +94,39 @@ func documentCurrent(current bool) templ.Attributes {
 		return templ.Attributes{"aria-current": "page"}
 	}
 	return nil
+}
+
+// moveForm is the move control: a form tasksDocumentScope submits through the
+// gateway, then updates the word, the mark and the label in place.
+templ moveForm(o *OpenDocument) {
+	<form class="[ cluster ]" x-on:submit.prevent="move">
+		<button type="submit" class="[ button ]" data-variant="ghost" data-size="sm" aria-label={ o.MoveAriaLabel() } x-bind:aria-label="ariaLabel" x-bind:disabled="moving" x-bind:aria-busy="moving" x-text="label">{ o.MoveLabel() }</button>
+		<template x-if="error">
+			<div class="[ banner ]" data-tone="danger" role="alert">
+				<div class="[ flow ] [ flow-space-3xs grow ]">
+					<span x-text="error.message"></span>
+					<span class="[ code ]"><span x-text="error.code"></span> · <span x-text="error.next"></span></span>
+				</div>
+				<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-on:click="dismissError">Dismiss</button>
+			</div>
+		</template>
+	</form>
+}
+
+// scopeAttrs puts tasksDocumentScope on the split view when a document is
+// open, seeded with that document.
+func scopeAttrs(o *OpenDocument) templ.Attributes {
+	if o == nil {
+		return nil
+	}
+	return templ.Attributes{"x-data": "tasksDocumentScope", "data-document-id": o.ID, "data-scope": string(o.Scope), "data-title": o.Title}
+}
+
+// hiddenUnless hides the live mark on first paint when the document is not
+// a project document, so the page does not flash it before Alpine runs.
+func hiddenUnless(show bool) templ.Attributes {
+	if show {
+		return nil
+	}
+	return templ.Attributes{"style": "display: none"}
 }

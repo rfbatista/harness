@@ -18,8 +18,9 @@ type Handler struct {
 	Sessions     ports.SessionReader
 	Agents       ports.AgentLister
 	Repositories ports.RepositoryLister
-	// Docs reads the documents linked to a task; nil hides them.
-	Docs   ports.TicketDocumentReader
+	// Docs reads the documents linked to a task and the project's library;
+	// nil hides both.
+	Docs   ports.DocumentReader
 	Layout shell.Layout
 	Render shell.Renderer
 	Now    func() time.Time

@@ -37,8 +37,8 @@ type Deps struct {
 	Repositories ports.RepositoryLister
 	// EnvFiles lists a repository's env files for their page.
 	EnvFiles ports.EnvFileLister
-	// Documents reads a task's documents for its documents page; nil hides it.
-	Documents ports.TicketDocumentReader
+	// Documents reads a task's documents and the project's library; nil hides both.
+	Documents ports.DocumentReader
 	// History reads repositories' commit graphs for their history pages.
 	History ports.RepositoryHistory
 	// Now defaults to time.Now.
@@ -149,6 +149,9 @@ func (s *server) layout(ctx context.Context, title, projectID, taskID string) (s
 	}
 	frame.Rail = tasks.BuildRail(projectID, list, live, taskID)
 	frame.Rail.NewTaskHref = tasks.NewTaskHref(projectID)
+	if s.deps.Documents != nil {
+		frame.Rail.DocumentsHref = tasks.ProjectDocumentsHref(projectID, "")
+	}
 	return frame, nil
 }
 

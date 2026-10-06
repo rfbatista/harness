@@ -40,7 +40,10 @@ type Option struct{ ID, Name string }
 type Rail struct {
 	// NewTaskHref is the new-task page of the selected project; "" with none.
 	NewTaskHref string
-	Groups      []RailGroup
+	// DocumentsHref is the project's documents library; "" when documents
+	// are not served.
+	DocumentsHref string
+	Groups        []RailGroup
 	// Empty is shown when a project is selected but has no tasks.
 	Empty string
 	// Current is the open task's id, "" when none: the live rail marks it.

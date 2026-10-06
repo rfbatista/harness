@@ -29,7 +29,7 @@ func TestDocumentsPageInTheBrowser(t *testing.T) {
 	mux.Handle("/api/", http.NotFoundHandler()) // the watch's polls and terminals are not under test
 	mux.Handle("/", NewHandler(Deps{
 		Projects: fakeProjects{w.projects}, Tasks: fakeTickets{w.tickets}, Sessions: fakeSessions{w.sessions},
-		Agents: fakeAgents{w.agents}, Repositories: fakeRepos{w.repos}, EnvFiles: w.env, Documents: w.docs,
+		Agents: fakeAgents{w.agents}, Repositories: fakeRepos{w.repos}, EnvFiles: w.env, Documents: docReader{w.docs, w.tickets},
 		Now: func() time.Time { return now },
 	}, assets, nil))
 	srv := httptest.NewServer(mux)
@@ -80,7 +80,7 @@ func TestDocumentsPageFramesHTMLInTheBrowser(t *testing.T) {
 	mux.Handle("/api/", http.NotFoundHandler())
 	mux.Handle("/", NewHandler(Deps{
 		Projects: fakeProjects{w.projects}, Tasks: fakeTickets{w.tickets}, Sessions: fakeSessions{w.sessions},
-		Agents: fakeAgents{w.agents}, Repositories: fakeRepos{w.repos}, EnvFiles: w.env, Documents: w.docs,
+		Agents: fakeAgents{w.agents}, Repositories: fakeRepos{w.repos}, EnvFiles: w.env, Documents: docReader{w.docs, w.tickets},
 		Now: func() time.Time { return now },
 	}, assets, nil))
 	srv := httptest.NewServer(mux)

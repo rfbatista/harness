@@ -34,37 +34,137 @@ func DocumentViewHref(projectID, taskID, documentID string, updatedAt time.Time)
 	return DocumentsHref(projectID, taskID, documentID) + "/view?v=" + strconv.FormatInt(updatedAt.UnixMilli(), 10)
 }
 
+// ProjectDocumentsHref is a project's documents library; with documentID,
+// that document open on it.
+func ProjectDocumentsHref(projectID, documentID string) string {
+	href := "/projects/" + url.PathEscape(projectID) + "/documents"
+	if documentID != "" {
+		href += "/" + url.PathEscape(documentID)
+	}
+	return href
+}
+
 // DocumentsView is a task's documents page: the documents linked to the
-// task, newest first, and the open one rendered.
+// task, newest first, and the open one rendered. LibraryHref is the
+// project's documents library.
 type DocumentsView struct {
 	Frame       shell.Frame
 	ProjectID   string
 	ProjectName string
 	TaskHref    string
 	TaskTitle   string
+	LibraryHref string
 	Documents   []DocumentLink
 	Open        *OpenDocument
 	Watch       DocumentWatch
 }
 
-// DocumentLink is one document in the list.
+// DocumentLink is one document in the list. Project marks the ones shared
+// with the project.
 type DocumentLink struct {
 	Title, Href, Updated string
+	Project              bool
 	Current              bool
 }
 
+// TaskRef is a task a document is linked to, as a link to that task's
+// documents page with the document open.
+type TaskRef struct{ Title, Href string }
+
 // OpenDocument is the document being read: a Markdown one rendered into
-// Body, an HTML one framed from FrameSrc. Never both.
+// Body, an HTML one framed from FrameSrc. Never both. Tasks is what it is
+// linked to; the move control needs at least one.
 type OpenDocument struct {
+	ID       string
 	Title    string
 	Updated  string
 	Format   domain.DocumentFormat
+	Scope    domain.DocumentScope
+	Tasks    []TaskRef
 	Body     templ.Component // markdown
 	FrameSrc string          // html
 }
 
 // IsHTML says the open document is a page for the frame.
 func (o *OpenDocument) IsHTML() bool { return o.Format == domain.DocumentFormatHTML }
+
+// IsProject says the open document is the project's.
+func (o *OpenDocument) IsProject() bool { return o.Scope == domain.DocumentScopeProject }
+
+// ScopeWord says the scope in words, as the page shows it.
+func (o *OpenDocument) ScopeWord() string {
+	if o.IsProject() {
+		return "Project document"
+	}
+	return "Task document"
+}
+
+// MoveLabel names the move the page offers on it.
+func (o *OpenDocument) MoveLabel() string {
+	if o.IsProject() {
+		return "Move back to task"
+	}
+	return "Move to project"
+}
+
+// MoveAriaLabel is the button's accessible name: what it does, to which document.
+func (o *OpenDocument) MoveAriaLabel() string {
+	if o.IsProject() {
+		return "Move " + o.Title + " back to task"
+	}
+	return "Move " + o.Title + " to project"
+}
+
+// scopeOf is the document's scope; a row from before scopes existed (or a
+// fake without one) is a task document.
+func scopeOf(d *domain.Document) domain.DocumentScope {
+	if d.Scope == "" {
+		return domain.DocumentScopeTask
+	}
+	return d.Scope
+}
+
+// newestFirst is docs sorted by updated_at, newest first, without touching
+// the caller's slice.
+func newestFirst(docs []*domain.Document) []*domain.Document {
+	docs = slices.Clone(docs)
+	slices.SortStableFunc(docs, func(a, b *domain.Document) int { return b.UpdatedAt.Compare(a.UpdatedAt) })
+	return docs
+}
+
+// openDocument builds the open document: framed from frameSrc when it is an
+// HTML page, otherwise rendered as Markdown (the legacy empty format too),
+// with the tasks it is linked to.
+func (h Handler) openDocument(projectID string, d *domain.Document, updated, frameSrc string) *OpenDocument {
+	open := &OpenDocument{ID: d.ID, Title: titleOf(d), Updated: updated, Format: d.Format, Scope: scopeOf(d)}
+	for _, tk := range h.Docs.ListDocumentTickets(d.ID) {
+		open.Tasks = append(open.Tasks, TaskRef{Title: tk.Title, Href: DocumentsHref(projectID, tk.ID, d.ID)})
+	}
+	if d.Format == domain.DocumentFormatHTML {
+		open.FrameSrc = frameSrc
+	} else {
+		open.Body = renderMarkdown(d.Content)
+	}
+	return open
+}
+
+// serveDocumentPage writes an HTML document's body as its own page under the
+// artifact CSP, for the documents pages' sandboxed frame. A document that is
+// not an HTML page has no page to serve.
+func serveDocumentPage(w http.ResponseWriter, d *domain.Document) error {
+	if d.Format != domain.DocumentFormatHTML {
+		return errs.Newf("DOCUMENT_NOT_FOUND", "document %s is not an HTML page", d.ID)
+	}
+	hdr := w.Header()
+	hdr.Set("Content-Type", "text/html; charset=utf-8")
+	hdr.Set("Content-Security-Policy", httpapi.ArtifactCSP)
+	hdr.Set("X-Content-Type-Options", "nosniff")
+	hdr.Set("Content-Disposition", "inline")
+	hdr.Set("Cache-Control", "no-store")
+	w.WriteHeader(http.StatusOK)
+	_, err := io.WriteString(w, d.Content)
+	return err
+}
 
 // DocumentWatch lets the browser notice documents written after the page
 // was rendered: the task, and a signature of what it shows.
@@ -104,9 +204,7 @@ func (h Handler) taskDocuments(r *http.Request) (*domain.Project, *domain.Ticket
 	if task.ProjectID != project.ID {
 		return nil, nil, nil, errs.Newf("TICKET_NOT_FOUND", "task %s is not in project %s", task.ID, project.Name)
 	}
-	docs := slices.Clone(h.Docs.ListTicketDocuments(task.ID))
-	slices.SortStableFunc(docs, func(a, b *domain.Document) int { return b.UpdatedAt.Compare(a.UpdatedAt) })
-	return project, task, docs, nil
+	return project, task, newestFirst(h.Docs.ListTicketDocuments(task.ID)), nil
 }
 
 // DocumentView serves GET …/documents/{document}/view: the HTML body of a
@@ -126,18 +224,7 @@ func (h Handler) DocumentView(w http.ResponseWriter, r *http.Request) error {
 	if i < 0 {
 		return errs.Newf("DOCUMENT_NOT_FOUND", "document %s is not linked to this task", id)
 	}
-	if docs[i].Format != domain.DocumentFormatHTML {
-		return errs.Newf("DOCUMENT_NOT_FOUND", "document %s is not an HTML page", id)
-	}
-	hdr := w.Header()
-	hdr.Set("Content-Type", "text/html; charset=utf-8")
-	hdr.Set("Content-Security-Policy", httpapi.ArtifactCSP)
-	hdr.Set("X-Content-Type-Options", "nosniff")
-	hdr.Set("Content-Disposition", "inline")
-	hdr.Set("Cache-Control", "no-store")
-	w.WriteHeader(http.StatusOK)
-	_, err = io.WriteString(w, docs[i].Content)
-	return err
+	return serveDocumentPage(w, docs[i])
 }
 
 // Documents serves GET /projects/{project}/tasks/{task}/documents and
@@ -163,21 +250,17 @@ func (h Handler) Documents(w http.ResponseWriter, r *http.Request) error {
 		ProjectName: project.Name,
 		TaskHref:    Href(project.ID, task.ID),
 		TaskTitle:   task.Title,
+		LibraryHref: ProjectDocumentsHref(project.ID, ""),
 		Watch:       DocumentWatch{TicketID: task.ID, Signature: documentSignature(docs), Count: len(docs)},
 	}
 	for _, d := range docs {
 		updated := sessions.RelativeTime(d.UpdatedAt, now)
 		view.Documents = append(view.Documents, DocumentLink{
-			Title: titleOf(d), Href: DocumentsHref(project.ID, task.ID, d.ID), Updated: updated, Current: d.ID == openID,
+			Title: titleOf(d), Href: DocumentsHref(project.ID, task.ID, d.ID), Updated: updated,
+			Project: scopeOf(d) == domain.DocumentScopeProject, Current: d.ID == openID,
 		})
 		if d.ID == openID {
-			open := &OpenDocument{Title: titleOf(d), Updated: updated, Format: d.Format}
-			if d.Format == domain.DocumentFormatHTML {
-				open.FrameSrc = DocumentViewHref(project.ID, task.ID, d.ID, d.UpdatedAt)
-			} else {
-				open.Body = renderMarkdown(d.Content) // markdown, and the legacy empty format
-			}
-			view.Open = open
+			view.Open = h.openDocument(project.ID, d, updated, DocumentViewHref(project.ID, task.ID, d.ID, d.UpdatedAt))
 		}
 	}
 	if view.Open == nil && r.PathValue("document") != "" {

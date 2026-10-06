@@ -51,6 +51,16 @@ type TicketDocumentReader interface {
 	ListTicketDocuments(ticketID string) []*domain.Document
 }
 
+// DocumentReader reads what the documents pages show: a task's linked
+// documents, a project's documents by scope (the project library lists
+// project-scoped ones), and the tasks a document is linked to. Planning
+// implements it.
+type DocumentReader interface {
+	TicketDocumentReader
+	ListDocuments(projectID string, scope domain.DocumentScope) []*domain.Document
+	ListDocumentTickets(documentID string) []*domain.Ticket
+}
+
 // TicketBoard manages a project's tickets (tasks, in the UI). It is
 // network-safe: tui-client implements it over HTTP, so every method takes a
 // context and reports failure, including TICKET_NOT_FOUND, as an error.

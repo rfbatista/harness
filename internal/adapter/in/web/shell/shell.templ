@@ -73,7 +73,12 @@ templ taskRail(r Rail) {
 	}
 	<nav class="[ nav ]" aria-label="Tasks" { railAttrs(r)... }>
 		if r.NewTaskHref != "" {
-			<a class="[ button ]" data-size="sm" href={ templ.SafeURL(r.NewTaskHref) }>New task</a>
+			<div class="[ cluster ]">
+				<a class="[ button ]" data-size="sm" href={ templ.SafeURL(r.NewTaskHref) }>New task</a>
+				if r.DocumentsHref != "" {
+					<a class="[ button ]" data-variant="ghost" data-size="sm" href={ templ.SafeURL(r.DocumentsHref) }>Documents</a>
+				}
+			</div>
 		}
 		if r.Seed != nil {
 			<div x-ignore data-ssr class="[ flow ] [ flow-space-l ]">
