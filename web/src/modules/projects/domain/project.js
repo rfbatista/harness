@@ -7,6 +7,19 @@
  * @property {string} id
  * @property {string} name
  * @property {string} rootDir
+ * @property {string[]} ignoredPaths  hidden from the project's file tree, relative to rootDir
+ *
+ * @typedef {object} ProjectSummary  a project at a glance, as the projects list shows it
+ * @property {Project} project
+ * @property {number} repositoryCount
+ * @property {number} openTaskCount        tasks not done
+ * @property {number} runningSessionCount  sessions not done, failed or stopped
+ * @property {Date|null} lastActivityAt    newest task update or session activity
+ *
+ * @typedef {object} RunningSession  one session that keeps a project from being deleted
+ * @property {string} id
+ * @property {string} ticketId  "" for a session without a task
+ * @property {string} agent     "" when it has none
  *
  * @typedef {object} Repository
  * @property {string} id
@@ -33,8 +46,60 @@ export function baseName(path) {
   return parts.at(-1) || "";
 }
 
-/** A path is usable when it is absolute (/… or ~/… on the server's machine). */
-export const isAbsolutePath = (path) => /^(\/|~\/)/.test(path.trim());
+/** A path is usable when it is absolute (/…, ~ or ~/… on the server's machine, which expands ~). */
+export const isAbsolutePath = (path) => /^(\/|~\/|~$)/.test(path.trim());
+
+/** Orders summaries as the server does: by name ignoring case, then by id. */
+export function byName(a, b) {
+  const x = a.project.name.toLowerCase();
+  const y = b.project.name.toLowerCase();
+  if (x !== y) return x < y ? -1 : 1;
+  return a.project.id < b.project.id ? -1 : a.project.id > b.project.id ? 1 : 0;
+}
+
+/** Whether a summary's project matches the list's filter, by name or directory. */
+export function matchesQuery(summary, query) {
+  const q = query.trim().toLowerCase();
+  if (!q) return true;
+  const { name, rootDir } = summary.project;
+  return name.toLowerCase().includes(q) || rootDir.toLowerCase().includes(q);
+}
+
+/** @param {ProjectSummary[]} summaries */
+export const sessionsRunning = (summaries) => summaries.reduce((n, s) => n + s.runningSessionCount, 0);
+
+/** A delete goes ahead only once the project's name is typed exactly. */
+export function confirmsDelete(typed, name) {
+  return name !== "" && typed.trim() === name;
+}
+
+/**
+ * Why an ignored path is refused, or "" when it is fine: relative to the
+ * project's directory and naming something inside it.
+ */
+export function ignoredPathProblem(path) {
+  const p = path.trim().replace(/\\/g, "/").replace(/\/+$/, "");
+  if (!p) return "Give a path inside the project, like node_modules or web/vendor.";
+  if (p === "." || p.split("/").includes("..")) return "The path must name something inside the project.";
+  return "";
+}
+
+/**
+ * The fields of a settings form that differ from the saved project, trimmed:
+ * what update_project should be sent. An empty field keeps the saved value,
+ * as on the server, so it is never sent.
+ * @param {Project} saved
+ * @param {{ name: string, rootDir: string }} form
+ * @returns {{ name?: string, rootDir?: string }}
+ */
+export function changedFields(saved, form) {
+  const changes = {};
+  const name = form.name.trim();
+  const rootDir = form.rootDir.trim();
+  if (name && name !== saved.name) changes.name = name;
+  if (rootDir && rootDir !== saved.rootDir) changes.rootDir = rootDir;
+  return changes;
+}
 
 /** Found checkouts not yet added to the project (matched by path). */
 export function notYetAdded(found, repositories) {
