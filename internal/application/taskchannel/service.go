@@ -12,6 +12,7 @@ import (
 	"context"
 	"slices"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"operators-mcp/internal/domain"
@@ -67,7 +68,8 @@ type Service struct {
 		GetAgent(ctx context.Context, id string) (*domain.Agent, error)
 	}
 
-	now func() time.Time
+	// clock is the time source; SetClock swaps it while the scheduler runs.
+	clock atomic.Pointer[func() time.Time]
 	// mu serialises read-modify-write of status checks: the scheduler, tool
 	// calls, lifecycle events and delivery callbacks all change them.
 	mu   sync.Mutex
@@ -77,15 +79,19 @@ type Service struct {
 // New returns the channel. Set Delivery, Announcer, Feed, Artifacts and
 // Agents before serving.
 func New(sessions ports.SessionRepository, tickets Tickets, repos Repositories) *Service {
-	return &Service{
+	s := &Service{
 		sessions: sessions, tickets: tickets,
 		messages: repos.Messages, reviews: repos.Reviews, checks: repos.Checks,
-		now: time.Now, kick: make(chan struct{}, 1),
+		kick: make(chan struct{}, 1),
 	}
+	s.SetClock(time.Now)
+	return s
 }
 
 // SetClock replaces the clock (tests).
-func (s *Service) SetClock(now func() time.Time) { s.now = now }
+func (s *Service) SetClock(now func() time.Time) { s.clock.Store(&now) }
+
+func (s *Service) now() time.Time { return (*s.clock.Load())() }
 
 func notFound(code, msg string) error { return &domain.StructuredError{Code: code, Message: msg} }
 func invalid(msg string) error        { return &domain.StructuredError{Code: "INVALID_INPUT", Message: msg} }
