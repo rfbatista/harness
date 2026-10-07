@@ -276,11 +276,22 @@ var AgentRuntimeModule = fx.Module("agentruntime",
 
 // newArtifactsService records what sessions publish, announces each publish
 // on the session's stream through the orchestration, and drops a session's
-// records when the session is deleted.
-func newArtifactsService(repo ports.ArtifactRepository, sessions ports.SessionRepository, orch *orchestration.Service, cat catalog.Catalog) *artifacts.Service {
+// task artifacts when the session is deleted. Copies of project artifacts
+// live in an artifacts/ directory next to the database; an in-memory
+// database gets a temporary one.
+func newArtifactsService(cfg Config, repo ports.ArtifactRepository, sessions ports.SessionRepository, orch *orchestration.Service, cat catalog.Catalog) (*artifacts.Service, error) {
 	svc := artifacts.NewService(repo, sessions, orch)
+	if cfg.DBPath == "" || cfg.DBPath == ":memory:" {
+		dir, err := os.MkdirTemp("", "harness-artifacts-")
+		if err != nil {
+			return nil, err
+		}
+		svc.StoreDir = dir
+	} else {
+		svc.StoreDir = filepath.Join(filepath.Dir(cfg.DBPath), "artifacts")
+	}
 	svc.Subscribe(cat.Bus)
-	return svc
+	return svc, nil
 }
 
 // newAppsService runs applications from session worktrees on the same
