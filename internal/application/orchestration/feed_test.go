@@ -159,3 +159,30 @@ func TestFeed_TicketAndSessionChangesInterleaveInOrder(t *testing.T) {
 		t.Fatalf("3rd = %+v", got)
 	}
 }
+
+// Every open page learns a session came back, and when it can be resumed
+// again, from the project feed alone.
+func TestFeed_ResumeAndEndCarryResumability(t *testing.T) {
+	svc, _ := newInteractiveService(t)
+	sess, _ := startInteractive(t, svc, InteractiveRequest{})
+	if _, err := svc.EndInteractive(context.Background(), sess.ID, 0, false); err != nil {
+		t.Fatal(err)
+	}
+	changes := follow(t, svc, "p1")
+
+	if _, _, err := svc.ResumeInteractive(context.Background(), ports.ResumeRequest{SessionID: sess.ID}); err != nil {
+		t.Fatal(err)
+	}
+	got := next(t, changes).Session
+	if got.ID != sess.ID || got.Status != domain.SessionRunning || got.Resumable || got.ResumeBlocked != "SESSION_ALREADY_RUNNING" {
+		t.Fatalf("after resume = %+v", got)
+	}
+
+	if _, err := svc.EndInteractive(context.Background(), sess.ID, 0, false); err != nil {
+		t.Fatal(err)
+	}
+	got = next(t, changes).Session
+	if got.Status != domain.SessionDone || !got.Resumable || got.ResumeBlocked != "" {
+		t.Fatalf("after end = %+v", got)
+	}
+}
