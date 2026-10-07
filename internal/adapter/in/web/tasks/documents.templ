@@ -14,7 +14,7 @@ import (
 // they work) and offers a reload.
 templ DocumentsPage(v DocumentsView) {
 	@shell.AppShell(v.Frame) {
-		<main class="[ frame ]" x-data="tasksDocumentWatch" data-ticket-id={ v.Watch.TicketID } data-signature={ v.Watch.Signature } data-count={ strconv.Itoa(v.Watch.Count) }>
+		<main class="[ frame ]" x-data="tasksDocumentWatch" x-on:document-moved="moved" data-ticket-id={ v.Watch.TicketID } data-signature={ v.Watch.Signature } data-count={ strconv.Itoa(v.Watch.Count) }>
 			<header class="[ toolbar ]">
 				<a class="[ crumb ]" href={ templ.SafeURL("/projects/" + v.ProjectID) }>{ v.ProjectName } /</a>
 				<a class="[ crumb ]" href={ templ.SafeURL(v.TaskHref) }>{ v.TaskTitle } /</a>

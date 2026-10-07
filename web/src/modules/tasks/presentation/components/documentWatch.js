@@ -2,7 +2,8 @@
 // write them as they work. On the task's toolbar it keeps the documents
 // count current; on the documents page it says the list changed and offers a
 // reload (documents are rendered by the server). It asks every POLL_MS, and
-// only while the tab is visible.
+// only while the tab is visible. A move the person makes on the page
+// (document-moved) is not a change: moved() takes its version as loaded.
 //
 //   <a x-data="tasksDocumentWatch" data-ticket-id="t1" data-signature="…" data-count="2">
 //     Documents <span x-text="count">2</span></a>
@@ -52,6 +53,14 @@ export const documentWatch = ({
       } catch {
         // keep what it shows; the next tick asks again
       }
+    },
+
+    /** @param {{ detail: { id: string, version: string } }} event */
+    moved({ detail }) {
+      const entries = loaded ? loaded.split(",") : [];
+      const others = entries.filter((e) => !e.startsWith(`${detail.id}@`));
+      if (others.length === entries.length) return; // not one of this task's
+      loaded = [...others, `${detail.id}@${detail.version}`].sort().join(",");
     },
 
     reload() {

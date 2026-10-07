@@ -249,16 +249,21 @@ func TestDocumentsPageSaysEachDocumentsScope(t *testing.T) {
 
 // The open document carries the move control: a real button, named for what
 // it does to which document, inside a form the browser submits through the
-// gateway. Its label follows the scope.
+// gateway. Its label follows the scope. The page's watch hears the move, so
+// the person's own move does not read as someone else's change.
 func TestDocumentsPageOffersTheMove(t *testing.T) {
 	body := get(t, newTestHandler(t, documentsBoard()), "/projects/p1/tasks/t-feed/documents/d-page").Body.String()
 	for _, want := range []string{
 		`class="[ split-view ]" data-scroll data-document-id="d-page" data-scope="project" data-title="Plan page" x-data="tasksDocumentScope"`,
 		`x-on:submit.prevent="move"`, `aria-label="Move Plan page back to task"`, `>Move back to task</button>`,
+		`x-data="tasksDocumentWatch" x-on:document-moved="moved"`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("page lacks %q", want)
 		}
+	}
+	if strings.Contains(body, "data-after-task-href") {
+		t.Error("the task page stays where it is after a move; it names no page to go on to")
 	}
 	body = get(t, newTestHandler(t, documentsBoard()), "/projects/p1/tasks/t-feed/documents/d-plan").Body.String()
 	if !strings.Contains(body, `data-scope="task"`) || !strings.Contains(body, `aria-label="Move Plan to project"`) || !strings.Contains(body, `>Move to project</button>`) {
@@ -322,7 +327,8 @@ func TestProjectDocumentsPageListsProjectDocumentsNewestFirst(t *testing.T) {
 
 // A document linked to two tasks is one document in the library, and the
 // open one names both tasks, each a link to that task's page with it open,
-// and offers the move back.
+// and offers the move back. Moved back, it leaves the library, so the page
+// goes on to its first task's page with it open.
 func TestProjectDocumentsPageListsEachDocumentOnceAndNamesItsTasks(t *testing.T) {
 	body := get(t, newTestHandler(t, libraryBoard()), "/projects/p1/documents/d-page").Body.String()
 	if n := strings.Count(body, `href="/projects/p1/documents/d-page"`); n != 1 {
@@ -334,6 +340,7 @@ func TestProjectDocumentsPageListsEachDocumentOnceAndNamesItsTasks(t *testing.T)
 		`data-document-id="d-page" data-scope="project" data-title="Plan page" x-data="tasksDocumentScope"`,
 		`aria-label="Move Plan page back to task"`, `>Move back to task</button>`,
 		`data-scope-word x-text="word">Project document</span>`,
+		`data-after-task-href="/projects/p1/tasks/t-feed/documents/d-page"`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("page lacks %q", want)

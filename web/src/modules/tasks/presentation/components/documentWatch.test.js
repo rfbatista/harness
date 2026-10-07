@@ -65,3 +65,19 @@ test("reload reloads the page", () => {
   instance.reload();
   assert.equal(reloaded(), 1);
 });
+
+test("the person's own move is not a change: the watch takes the moved version as loaded", async () => {
+  const { instance, memory } = setup();
+  const moved = await memory.gateway.setDocumentScope("d1", "project");
+  instance.moved({ detail: moved });
+  await instance.check();
+  assert.deepEqual([instance.count, instance.changed], [1, false]);
+});
+
+test("a document an agent writes after the person's move still marks the page changed", async () => {
+  const { instance, memory } = setup();
+  instance.moved({ detail: await memory.gateway.setDocumentScope("d1", "project") });
+  memory.writeDocument(doc("d2"));
+  await instance.check();
+  assert.deepEqual([instance.count, instance.changed], [2, true]);
+});

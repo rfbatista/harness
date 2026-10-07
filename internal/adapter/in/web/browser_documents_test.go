@@ -244,15 +244,17 @@ func TestProjectDocumentsLibraryInTheBrowser(t *testing.T) {
 		waitForPath(srv.URL+"/projects/p1/documents/d-page", &path),
 		chromedp.Poll(`!!document.querySelector('article iframe')`, nil, chromedp.WithPollingTimeout(5*time.Second)),
 		chromedp.Evaluate(`document.querySelector('article a[href="/projects/p1/tasks/t-feed/documents/d-page"]').textContent`, &fromTask),
-		chromedp.Click(`[x-data="tasksDocumentScope"] button[type=submit]`),
-		chromedp.Poll(`document.querySelector('[x-data="tasksDocumentScope"] button[type=submit]')?.textContent === 'Move to project'`, nil, chromedp.WithPollingTimeout(10*time.Second)),
-		chromedp.Evaluate(`document.querySelector('[x-data="tasksDocumentScope"] button[type=submit]').textContent`, &label),
 		chromedp.FullScreenshot(&shot, 80),
+		chromedp.Evaluate(`document.querySelector('[x-data="tasksDocumentScope"] button[type=submit]').textContent`, &label),
+		// Moved back, the document leaves the library: the page goes on to
+		// its task's page with it open.
+		chromedp.Click(`[x-data="tasksDocumentScope"] button[type=submit]`),
+		waitForPath(srv.URL+"/projects/p1/tasks/t-feed/documents/d-page", &path),
 	)
 	if err != nil {
 		t.Fatalf("%v\nJS errors: %v", err, errs.all())
 	}
-	if heading != "Boundaries" || fromTask != "Add SSE feed" || label != "Move to project" {
+	if heading != "Boundaries" || fromTask != "Add SSE feed" || label != "Move back to task" {
 		t.Errorf("heading %q, from task %q, label %q", heading, fromTask, label)
 	}
 	if got := bodies(); len(got) != 1 || !strings.Contains(got[0], `"document_id":"d-page"`) || !strings.Contains(got[0], `"scope":"task"`) {

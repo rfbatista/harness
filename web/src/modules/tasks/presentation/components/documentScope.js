@@ -1,7 +1,10 @@
 // Moves the open document between task and project scope from a documents
 // page, in place: the scope word, the list's mark and the button's label
-// follow the answer; the document stays in the list. The page's document
-// watch sees the new updated_at on its next poll.
+// follow the answer; the document stays in the list. It dispatches
+// document-moved with the new version, so the page's document watch takes
+// the person's own move as loaded rather than as someone else's change.
+// On the project's library a document moved back to task leaves the list, so
+// the page goes on to data-after-task-href: its task's page, with it open.
 //
 //   <div x-data="tasksDocumentScope" data-document-id="d1" data-scope="task" data-title="Plan">
 //     <span x-text="word">Task document</span>
@@ -10,10 +13,16 @@
 
 import { describeError } from "../../../../shared/presentation/errors.js";
 
-/** @param {{ gateway: import("../../domain/ports.js").TaskGateway }} deps */
-export const documentScope = ({ gateway }) => () => ({
+/**
+ * @param {{
+ *   gateway: import("../../domain/ports.js").TaskGateway,
+ *   navigate: (url: string) => void,
+ * }} deps
+ */
+export const documentScope = ({ gateway, navigate }) => () => ({
   documentId: "",
   title: "",
+  afterTaskHref: "",
   scope: "task",
   moving: false,
   error: null,
@@ -42,8 +51,9 @@ export const documentScope = ({ gateway }) => () => ({
   },
 
   init() {
-    const { documentId = "", scope = "task", title = "" } = this.$el.dataset;
+    const { documentId = "", scope = "task", title = "", afterTaskHref = "" } = this.$el.dataset;
     this.documentId = documentId;
+    this.afterTaskHref = afterTaskHref;
     this.scope = scope;
     this.title = title;
   },
@@ -55,6 +65,8 @@ export const documentScope = ({ gateway }) => () => ({
     try {
       const moved = await gateway.setDocumentScope(this.documentId, this.target);
       this.scope = moved.scope;
+      this.$dispatch("document-moved", { id: moved.id, version: moved.version });
+      if (moved.scope === "task" && this.afterTaskHref) navigate(this.afterTaskHref);
     } catch (err) {
       this.error = describeError(err);
     } finally {

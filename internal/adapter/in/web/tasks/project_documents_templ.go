@@ -380,12 +380,15 @@ func ProjectDocumentsPage(v ProjectDocumentsView) templ.Component {
 }
 
 // libraryScopeAttrs mounts the move component only when the open document
-// has a task to go back to.
+// has a task to go back to. Moved back, the document leaves the library, so
+// the page goes on to its first task's page with it open.
 func libraryScopeAttrs(o *OpenDocument) templ.Attributes {
 	if o == nil || len(o.Tasks) == 0 {
 		return nil
 	}
-	return scopeAttrs(o)
+	attrs := scopeAttrs(o)
+	attrs["data-after-task-href"] = o.Tasks[0].Href
+	return attrs
 }
 
 var _ = templruntime.GeneratedTemplate
