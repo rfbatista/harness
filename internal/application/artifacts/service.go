@@ -8,6 +8,7 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"operators-mcp/internal/domain"
@@ -30,9 +31,18 @@ type Service struct {
 	sessions  ports.SessionRepository
 	announce  ports.SessionAnnouncer // nil: publishes are recorded but not announced
 
-	// MaxSizeBytes caps a published file; zero means DefaultMaxSizeBytes.
+	// MaxSizeBytes caps a published file, and a project artifact's copy as a
+	// whole; zero means DefaultMaxSizeBytes.
 	MaxSizeBytes int64
-	now          func() time.Time
+	// StoreDir is where the harness keeps its copies of artifacts:
+	// <StoreDir>/<id>/r<revision>/ holds the artifact's directory as of that
+	// revision. Empty: no artifact can move to project scope.
+	StoreDir string
+	now      func() time.Time
+
+	// snapMu serializes everything that writes an artifact's row together
+	// with its copy, so a row never names a revision whose copy is not there.
+	snapMu sync.Mutex
 }
 
 // NewService returns the artifacts service. announce may be nil (tests).
@@ -40,12 +50,18 @@ func NewService(repo ports.ArtifactRepository, sessions ports.SessionRepository,
 	return &Service{artifacts: repo, sessions: sessions, announce: announce, now: time.Now}
 }
 
-// Subscribe removes a session's records when the session is deleted. The
-// files stay: they belong to the worktree, whose own removal is the
-// workspaces context's business.
+// Subscribe removes a session's task-scoped records, and any copies they
+// have, when the session is deleted. Project artifacts stay. The worktree
+// files stay too: their removal is the workspaces context's business.
 func (s *Service) Subscribe(sub ports.EventSubscriber) {
 	ports.On(sub, func(_ context.Context, ev domain.SessionDeleted) error {
-		return s.artifacts.DeleteBySession(ev.SessionID)
+		s.snapMu.Lock()
+		defer s.snapMu.Unlock()
+		ids, err := s.artifacts.DeleteTaskScopedBySession(ev.SessionID)
+		for _, id := range ids {
+			s.dropSnapshot(id)
+		}
+		return err
 	})
 }
 
@@ -57,6 +73,10 @@ func (s *Service) maxSize() int64 {
 }
 
 func invalid(msg string) error { return &domain.StructuredError{Code: "INVALID_INPUT", Message: msg} }
+
+func notPromotable(msg string) error {
+	return &domain.StructuredError{Code: "ARTIFACT_NOT_PROMOTABLE", Message: msg}
+}
 
 // Publish records what a session made and tells the session's followers,
 // synchronously: when it returns, the event is on the stream.
@@ -120,7 +140,7 @@ func (s *Service) Publish(_ context.Context, req ports.PublishArtifactRequest) (
 		a.Path, a.SizeBytes = rel, info.Size()
 	}
 
-	saved, err := s.save(a)
+	saved, err := s.save(a, sess.WorkingDir)
 	if err != nil {
 		return nil, err
 	}
@@ -131,14 +151,29 @@ func (s *Service) Publish(_ context.Context, req ports.PublishArtifactRequest) (
 }
 
 // save applies the identity rule: the same session re-publishing the same
-// path or url bumps the revision of the artifact it already has.
-func (s *Service) save(a *domain.Artifact) (*domain.Artifact, error) {
+// path or url bumps the revision of the artifact it already has. When the
+// harness holds a copy of it, the copy is refreshed first, under the new
+// revision, so a refused copy leaves the artifact as it was.
+func (s *Service) save(a *domain.Artifact, worktree string) (*domain.Artifact, error) {
+	s.snapMu.Lock()
+	defer s.snapMu.Unlock()
 	if prev := s.artifacts.FindByTarget(a.SessionID, a.Path, a.URL); prev != nil {
 		prev.Title, prev.Note, prev.Kind, prev.Mime, prev.SizeBytes = a.Title, a.Note, a.Kind, a.Mime, a.SizeBytes
 		prev.Revision++
 		prev.UpdatedAt = s.now()
+		if prev.Snapshot {
+			if err := copyArtifactDir(worktree, prev.Path, s.snapshotRoot(prev.ID, prev.Revision), s.maxSize()); err != nil {
+				return nil, err
+			}
+		}
 		if err := s.artifacts.Update(prev); err != nil {
+			if prev.Snapshot {
+				os.RemoveAll(s.snapshotRoot(prev.ID, prev.Revision))
+			}
 			return nil, err
+		}
+		if prev.Snapshot {
+			s.pruneSnapshots(prev.ID, prev.Revision)
 		}
 		return s.artifacts.Get(prev.ID), nil
 	}
@@ -154,7 +189,106 @@ func (s *Service) Unpublish(_ context.Context, sessionID, artifactID string) err
 	if a.SessionID != sessionID {
 		return &domain.StructuredError{Code: "ARTIFACT_NOT_YOURS", Message: "artifact " + artifactID + " was published by session " + a.SessionID + "; only that session can unpublish it"}
 	}
-	return s.artifacts.Delete(artifactID)
+	if a.Scope == domain.ArtifactScopeProject {
+		return &domain.StructuredError{Code: "ARTIFACT_IN_PROJECT", Message: "artifact " + artifactID + " is kept by the project; move it back to task first, or a person deletes it in the UI"}
+	}
+	return s.delete(artifactID)
+}
+
+// delete removes the record, then the harness's copy if it has one.
+func (s *Service) delete(id string) error {
+	s.snapMu.Lock()
+	defer s.snapMu.Unlock()
+	if err := s.artifacts.Delete(id); err != nil {
+		return err
+	}
+	s.dropSnapshot(id)
+	return nil
+}
+
+// SetArtifactScope moves an artifact between task and project scope. Moving
+// to project copies the artifact's directory into the harness's store unless
+// a copy is already there; moving back keeps the copy. The same scope again
+// returns the artifact as stored and announces nothing.
+func (s *Service) SetArtifactScope(_ context.Context, artifactID string, scope domain.ArtifactScope) (*domain.Artifact, error) {
+	if !scope.Valid() {
+		return nil, invalid("scope must be task or project")
+	}
+	s.snapMu.Lock()
+	defer s.snapMu.Unlock()
+	a := s.artifacts.Get(artifactID)
+	if a == nil {
+		return nil, notFound("artifact not found")
+	}
+	if a.Scope == scope {
+		return a, nil
+	}
+	copied := false
+	if scope == domain.ArtifactScopeProject && !a.Snapshot {
+		if err := s.takeSnapshot(a); err != nil {
+			return nil, err
+		}
+		copied = true
+	}
+	saved, err := s.artifacts.SetScope(a.ID, scope, a.Snapshot || copied)
+	if err != nil {
+		if copied {
+			s.dropSnapshot(a.ID)
+		}
+		return nil, err
+	}
+	if s.announce != nil && s.sessions.Get(saved.SessionID) != nil {
+		s.announce.Announce(saved.SessionID, ports.SessionEvent{Type: "artifact", Artifact: saved, At: s.now()})
+	}
+	return saved, nil
+}
+
+// takeSnapshot makes the harness's first copy of an artifact, from its
+// session's worktree. Every reason it cannot is ARTIFACT_NOT_PROMOTABLE.
+func (s *Service) takeSnapshot(a *domain.Artifact) error {
+	if a.Kind == domain.ArtifactURL || a.Path == "" {
+		return notPromotable("a url artifact cannot move to the project: a dev server dies with its session")
+	}
+	if s.StoreDir == "" {
+		return notPromotable("this server keeps no artifact store")
+	}
+	sess := s.sessions.Get(a.SessionID)
+	if sess == nil || sess.WorkingDir == "" {
+		return notPromotable("the artifact's session and worktree are gone, so there are no bytes to keep")
+	}
+	if err := copyArtifactDir(sess.WorkingDir, a.Path, s.snapshotRoot(a.ID, a.Revision), s.maxSize()); err != nil {
+		return notPromotable("cannot keep a copy of " + a.Path + ": " + err.Error())
+	}
+	return nil
+}
+
+func (s *Service) ListProjectArtifacts(_ context.Context, projectID string) ([]*domain.Artifact, error) {
+	if projectID == "" {
+		return nil, invalid("project id is required")
+	}
+	return s.artifacts.List(ports.ArtifactFilter{ProjectID: projectID, Scope: domain.ArtifactScopeProject}), nil
+}
+
+func (s *Service) snapshotRoot(id string, revision int) string {
+	return filepath.Join(s.StoreDir, id, fmt.Sprintf("r%d", revision))
+}
+
+// pruneSnapshots removes every copy of an artifact but the one at keep.
+func (s *Service) pruneSnapshots(id string, keep int) {
+	entries, _ := os.ReadDir(filepath.Join(s.StoreDir, id))
+	want := filepath.Base(s.snapshotRoot(id, keep))
+	for _, e := range entries {
+		if e.Name() != want {
+			os.RemoveAll(filepath.Join(s.StoreDir, id, e.Name()))
+		}
+	}
+}
+
+func (s *Service) dropSnapshot(id string) {
+	if s.StoreDir == "" || id == "" || strings.ContainsAny(id, `/\.`) {
+		return
+	}
+	os.RemoveAll(filepath.Join(s.StoreDir, id))
 }
 
 func (s *Service) ListTaskArtifacts(_ context.Context, ticketID string) ([]*domain.Artifact, error) {
@@ -173,17 +307,23 @@ func (s *Service) GetArtifact(_ context.Context, id string) (*domain.Artifact, e
 }
 
 func (s *Service) ListArtifacts(_ context.Context, f ports.ArtifactFilter) ([]*domain.Artifact, error) {
-	if f.SessionID == "" && f.TicketID == "" {
-		return nil, invalid("session_id or ticket_id is required")
+	if f.SessionID == "" && f.TicketID == "" && f.ProjectID == "" {
+		return nil, invalid("session_id, ticket_id or project_id is required")
+	}
+	if f.Scope != "" && !f.Scope.Valid() {
+		return nil, invalid("scope must be task or project")
 	}
 	return s.artifacts.List(f), nil
 }
 
-func (s *Service) DeleteArtifact(_ context.Context, id string) error { return s.artifacts.Delete(id) }
+// DeleteArtifact is a person removing an artifact, in either scope.
+func (s *Service) DeleteArtifact(_ context.Context, id string) error { return s.delete(id) }
 
 // OpenArtifactFile opens the artifact's file, or a file relpath away from
-// it, confined to the session worktree. Every refusal is ARTIFACT_NOT_FOUND:
-// the browser asked for a subresource, and a 404 is all it needs.
+// it: from the harness's copy when it holds one, confined to that copy;
+// otherwise from the session worktree, confined to it. Every refusal is
+// ARTIFACT_NOT_FOUND: the browser asked for a subresource, and a 404 is all
+// it needs.
 func (s *Service) OpenArtifactFile(_ context.Context, id, relpath string) (*ports.ArtifactFile, error) {
 	a := s.artifacts.Get(id)
 	if a == nil {
@@ -192,17 +332,26 @@ func (s *Service) OpenArtifactFile(_ context.Context, id, relpath string) (*port
 	if a.Kind == domain.ArtifactURL || a.Path == "" {
 		return nil, notFound("a url artifact has no file to view")
 	}
-	sess := s.sessions.Get(a.SessionID)
-	if sess == nil || sess.WorkingDir == "" {
-		return nil, notFound("the artifact's session has no worktree")
+	var root, target string
+	if a.Snapshot {
+		// The copy's root is the artifact's directory: ".." cannot leave it.
+		root, target = s.snapshotRoot(a.ID, a.Revision), path.Base(a.Path)
+		if relpath != "" {
+			target = path.Clean(relpath)
+		}
+	} else {
+		sess := s.sessions.Get(a.SessionID)
+		if sess == nil || sess.WorkingDir == "" {
+			return nil, notFound("the artifact's session has no worktree")
+		}
+		root, target = sess.WorkingDir, a.Path
+		if relpath != "" {
+			// POSIX join against the artifact's directory; ".." may climb within
+			// the worktree, and resolveInWorktree refuses anything that leaves it.
+			target = path.Join(path.Dir(a.Path), relpath)
+		}
 	}
-	target := a.Path
-	if relpath != "" {
-		// POSIX join against the artifact's directory; ".." may climb within
-		// the worktree, and resolveInWorktree refuses anything that leaves it.
-		target = path.Join(path.Dir(a.Path), relpath)
-	}
-	abs, rel, err := resolveInWorktree(sess.WorkingDir, filepath.FromSlash(target))
+	abs, rel, err := resolveInWorktree(root, filepath.FromSlash(target))
 	if err != nil {
 		return nil, notFound(target + " is not available under this artifact")
 	}
