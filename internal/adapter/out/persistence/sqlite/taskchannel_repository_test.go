@@ -8,7 +8,6 @@ import (
 	"operators-mcp/internal/ports"
 )
 
-
 func TestTaskMessageRepo_ListDeliverQueue(t *testing.T) {
 	db, err := Open(":memory:")
 	if err != nil {
