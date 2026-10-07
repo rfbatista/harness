@@ -264,9 +264,9 @@ func TestStatusCheckViewMatchesTheSharedFixture(t *testing.T) {
 		Cases []struct {
 			State                 domain.StatusCheckState `json:"state"`
 			Every                 int                     `json:"every"`
-			NextIn                *int `json:"next_in"`
-			LastAgo               *int `json:"last_ago"`
-			Fired                 int `json:"fired"`
+			NextIn                *int                    `json:"next_in"`
+			LastAgo               *int                    `json:"last_ago"`
+			Fired                 int                     `json:"fired"`
 			Status, Short, Detail string
 		} `json:"cases"`
 	}
