@@ -15,12 +15,13 @@ import (
 )
 
 type artifactToolsFixture struct {
-	tools    map[string]domain.Tool
-	ticketID string
-	root     string // sess-1's worktree
-	root2    string // sess-2's worktree, same task
-	root3    string // sess-3's worktree, another task of the same project
-	root4    string // sess-4's worktree, a task of another project
+	tools         map[string]domain.Tool
+	ticketID      string
+	otherTicketID string // sess-3's task
+	root          string // sess-1's worktree
+	root2         string // sess-2's worktree, same task
+	root3         string // sess-3's worktree, another task of the same project
+	root4         string // sess-4's worktree, a task of another project
 }
 
 func newArtifactToolsFixture(t *testing.T) *artifactToolsFixture {
@@ -60,7 +61,10 @@ func newArtifactToolsFixture(t *testing.T) *artifactToolsFixture {
 	}
 	art := artifacts.NewService(sqlite.NewArtifactRepository(db), sessions, nil)
 	art.StoreDir = t.TempDir() // moving to project copies the bytes here
-	for _, tl := range SessionTaskTools(plan, sessions, nil, nil, PeerStarter{}, ArtifactTooling{Publisher: art, ViewURL: func(id string) string { return "/api/artifacts/" + id + "/view/" }}, nil) {
+	art.Tickets = plan
+	f.otherTicketID = other.ID
+	tooling := ArtifactTooling{Publisher: art, Attachments: art, ViewURL: func(id string) string { return "/api/artifacts/" + id + "/view/" }}
+	for _, tl := range SessionTaskTools(plan, sessions, nil, nil, PeerStarter{}, tooling, nil) {
 		f.tools[tl.Name] = tl
 	}
 	return f

@@ -43,6 +43,9 @@ func TestDesignAssetsAttachedToTasks_EndToEnd(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = app.Stop(context.Background()) })
+	if orch.Artifacts == nil {
+		t.Fatal("sessions are not briefed about their task's attached assets: the orchestration has no artifact reader")
+	}
 
 	p, err := cat.Projects.CreateProject(ctx, "harness", dir)
 	if err != nil {

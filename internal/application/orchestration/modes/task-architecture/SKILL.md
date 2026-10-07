@@ -35,7 +35,9 @@ execution agents navigate it.
   `list_project_documents` first so you build on what is already there.
   Design assets other tasks reuse live at project level too: read
   `mcp__task__list_project_artifacts` and name in a spec the project assets
-  (logos, palettes, components) the designer should build on.
+  (logos, palettes, components) the designer should build on. Attach the ones
+  this task builds on with `mcp__task__attach_artifact_to_task`, so every
+  delegate sees them in its brief and its Design tab.
 - **Never write code** and never edit the repository. You may *read* code to
   understand where a system boundary is; stop there.
 - **Never pick applications or agents from memory.** Read them from the
@@ -60,6 +62,7 @@ execution agents navigate it.
 | `mcp__task__list_project_documents` / `read_project_document` | Earlier architecture, conventions and contracts kept at project level, from any task |
 | `mcp__task__move_document_to_project` | Keep a contract or spec other tasks will build on at project level; its link to this task stays |
 | `mcp__task__list_project_artifacts` | Logos, palettes, components and reference screens kept at project level, from any task |
+| `mcp__task__attach_artifact_to_task` / `detach_artifact_from_task` | Attach a project asset to this task (delegates are told about it), or detach it |
 | `mcp__task__list_project_repositories` | The project's applications: one repository each |
 | `mcp__task__list_bounded_contexts` | Domain boundaries: purpose, ubiquitous language, zones (paths) |
 | `mcp__task__list_agents` | The agents you can delegate to, with what each is for |

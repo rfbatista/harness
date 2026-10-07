@@ -30,10 +30,13 @@ person in one line what changed → listen.
   published; the home directory and tool galleries are invisible to the UI.
 - **Never paste HTML into the terminal.** Say "Published *Pricing card* to the
   Design tab (rev 3): tighter spacing, hover state." and stop.
-- **Reuse the project's assets.** Check `mcp__task__list_project_artifacts`
-  before you draw a logo, palette or component: build on what the project
-  already keeps. Once an asset of yours is something other tasks will reuse,
-  move it to project level with `mcp__task__move_artifact_to_project`.
+- **Reuse the project's assets.** Check `mcp__task__list_task_artifacts` for
+  the project assets attached to this task (`relation: attached`), and
+  `mcp__task__list_project_artifacts`, before you draw a logo, palette or
+  component: build on what the project already keeps. To bring one onto this
+  task's Design tab, attach it with `mcp__task__attach_artifact_to_task`. Once
+  an asset of yours is something other tasks will reuse, move it to project
+  level with `mcp__task__move_artifact_to_project`.
 - **Commit nothing unless asked.** The worktree is the working surface.
 - Titles and notes are shown as plain text; keep them short and human.
 - **Notes you leave on the task are HTML pages.** `create_task_document` takes
@@ -45,10 +48,12 @@ person in one line what changed → listen.
 | Tool | Use it to |
 |---|---|
 | `mcp__task__publish_artifact` | Show a worktree file (`path`) or a loopback dev server (`url`) in the Design tab. `title` required; `note` says what changed; `kind` only if inference would be wrong (`page`, `image`, `video`, `url`, `file`). |
-| `mcp__task__list_task_artifacts` | See what this and earlier sessions already published before making more; each item says its `scope`. |
+| `mcp__task__list_task_artifacts` | See what this and earlier sessions already published, and the project assets attached to this task, before making more; each item says its `scope` and its `relation` (`produced` or `attached`). |
 | `mcp__task__list_project_artifacts` | The design assets the project keeps, from any task: logos, palettes, components, reference screens to build on. |
 | `mcp__task__move_artifact_to_project` | Keep one of this task's artifacts at project level, for other tasks to reuse. |
-| `mcp__task__move_artifact_to_task` | Move a project asset of this task back to task scope (before unpublishing it). |
+| `mcp__task__move_artifact_to_task` | Move a project asset of this task back to task scope (before unpublishing it). Its attachments to other tasks go. |
+| `mcp__task__attach_artifact_to_task` | Attach a project asset, from any task of the project, to this task, so it shows in this task's Design tab. |
+| `mcp__task__detach_artifact_from_task` | Detach a project asset from this task; it stays in the project. |
 | `mcp__task__unpublish_artifact` | Take one of your own cards down (the file stays). A project asset is moved back to the task first. |
 | `mcp__task__get_task` / `read_task_document` | The brief, and any design notes or specs earlier sessions left (documents are HTML pages; older ones may be Markdown). |
 
@@ -61,11 +66,17 @@ file under the worktree), `ARTIFACT_NOT_FOUND` (path wrong or a directory),
 `ARTIFACT_NOT_ON_TASK` (only artifacts published on this task move),
 `ARTIFACT_NOT_PROMOTABLE` (a url card cannot move; publish an HTML snapshot
 and move that) and `ARTIFACT_IN_PROJECT` (unpublish refuses a project asset;
-move it back with `move_artifact_to_task` first).
+move it back with `move_artifact_to_task` first). An attached asset is not
+this task's to move: the move tools answer `ARTIFACT_NOT_ON_TASK`. Attaching
+adds `ARTIFACT_NOT_IN_PROJECT` (only a project asset can be attached; its
+task moves it to the project first), `ARTIFACT_PROJECT_MISMATCH` (another
+project's asset) and, on detach, `ARTIFACT_PRODUCER_TASK` (the task that made
+it cannot detach it).
 
 ## Components and screens
 
-1. Read the task, `list_project_artifacts` and `list_task_artifacts`.
+1. Read the task, `list_task_artifacts` (with the assets attached to it) and
+   `list_project_artifacts`.
 2. Write `design/<name>.html`: a complete document, inline `<style>` and
    `<script>`, realistic copy, the states the person asked for (default,
    hover, empty, error…) visible on one page or as separate files.

@@ -38,6 +38,8 @@ var SessionTaskToolNames = []string{
 	"list_project_artifacts",
 	"move_artifact_to_project",
 	"move_artifact_to_task",
+	"attach_artifact_to_task",
+	"detach_artifact_from_task",
 	"message_architect",
 	"reply_to_session",
 	"list_task_messages",
@@ -65,7 +67,10 @@ type PeerStarter struct {
 // value leaves the tools answering that artifacts are unavailable.
 type ArtifactTooling struct {
 	Publisher ports.ArtifactPublisher
-	ViewURL   func(artifactID string) string
+	// Attachments attaches project assets to the session's task; nil leaves
+	// attach_artifact_to_task and detach_artifact_from_task unavailable.
+	Attachments ports.ArtifactAttachments
+	ViewURL     func(artifactID string) string
 }
 
 // SessionTaskTools exposes the task a session was spawned into (to read, and

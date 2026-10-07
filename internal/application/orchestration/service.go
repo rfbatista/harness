@@ -86,6 +86,9 @@ type Service struct {
 	// Transcripts checks an interactive session can be resumed. Nil skips the
 	// check and lets the CLI report a missing conversation itself.
 	Transcripts ports.ClaudeTranscripts
+	// Artifacts lists the project assets attached to a session's task, for
+	// its brief. Nil leaves them out.
+	Artifacts ports.ArtifactReader
 
 	mu       sync.Mutex
 	seq      map[string]int64
@@ -409,6 +412,9 @@ func (s *Service) sessionConfig(id, dir, model string, allowedTools []string, pe
 		taskURL = s.TaskServerURL(id)
 	}
 	applyTaskContext(&cfg, ticket, taskURL, role)
+	if section := attachedAssetsSection(s.attachedAssets(ticket)); section != "" {
+		cfg.AppendSystem = appendSection(cfg.AppendSystem, section)
+	}
 
 	for _, m := range resolveAttachedMCPServers(ag.agent, s.catalog.MCPServers.ListMCPServers()) {
 		cfg.MCPServers = append(cfg.MCPServers, llmkit.MCPServerSpec{
