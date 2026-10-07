@@ -203,14 +203,18 @@ func (s *Service) resumeBlock(sess *domain.Session) error {
 	return nil
 }
 
-// withResumability fills sess's Resumable and ResumeBlocked, for a session
-// about to leave the service. Nil stays nil.
+// withResumability fills sess's derived fields — Resumable and
+// ResumeBlocked, and through the Decorator its role — for a session about to
+// leave the service. Nil stays nil.
 func (s *Service) withResumability(sess *domain.Session) *domain.Session {
 	if sess == nil {
 		return nil
 	}
 	sess.ResumeBlocked = errs.Code(s.resumeBlock(sess))
 	sess.Resumable = sess.ResumeBlocked == ""
+	if s.Decorator != nil {
+		s.Decorator.DecorateSessions(sess)
+	}
 	return sess
 }
 

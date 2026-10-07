@@ -17,6 +17,8 @@ const feedBuffer = 256
 var quietEvents = map[string]bool{
 	"output": true, "output_delta": true, "tool_use": true, "tool_result": true,
 	"artifact": true, // a publish changes what the session made, not its record
+	// The architect channel announces its own objects on the feed.
+	"task_message": true, "review_request": true, "status_check": true, "task_status": true,
 }
 
 // feed fans a project's changes (sessions and tickets) out to its followers.
@@ -93,4 +95,14 @@ func (s *Service) AnnounceTicket(tk *domain.Ticket, deleted bool) {
 		return
 	}
 	s.feed.send(ports.ProjectChange{Ticket: tk, Deleted: deleted})
+}
+
+// AnnounceChange puts any change on its project's feed: the architect
+// channel's messages, reviews, status checks and status moves
+// (ports.ProjectChangeSink).
+func (s *Service) AnnounceChange(change ports.ProjectChange) {
+	if change.ProjectID() == "" {
+		return
+	}
+	s.feed.send(change)
 }

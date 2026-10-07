@@ -74,6 +74,15 @@ type Service struct {
 	// Events announces SessionDeleted, so other contexts stop what runs in a
 	// session's worktree before it goes. Nil announces nothing.
 	Events ports.EventPublisher
+	// Roles says what a session is on its task, for the role-aware brief. Nil:
+	// every session is a peer.
+	Roles interface {
+		SessionRole(ctx context.Context, sessionID string) (domain.SessionRole, error)
+	}
+	// Decorator fills a session's derived role fields (role, the task's
+	// architect, its status check) as it leaves the service. Nil leaves them
+	// empty.
+	Decorator ports.SessionDecorator
 	// Transcripts checks an interactive session can be resumed. Nil skips the
 	// check and lets the CLI report a missing conversation itself.
 	Transcripts ports.ClaudeTranscripts
