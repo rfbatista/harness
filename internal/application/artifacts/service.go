@@ -182,6 +182,8 @@ func (s *Service) save(a *domain.Artifact, worktree string) (*domain.Artifact, e
 }
 
 func (s *Service) Unpublish(_ context.Context, sessionID, artifactID string) error {
+	s.snapMu.Lock()
+	defer s.snapMu.Unlock()
 	a := s.artifacts.Get(artifactID)
 	if a == nil {
 		return notFound("artifact not found")
@@ -195,10 +197,9 @@ func (s *Service) Unpublish(_ context.Context, sessionID, artifactID string) err
 	return s.delete(artifactID)
 }
 
-// delete removes the record, then the harness's copy if it has one.
+// delete removes the record, then the harness's copy if it has one. The
+// caller holds snapMu.
 func (s *Service) delete(id string) error {
-	s.snapMu.Lock()
-	defer s.snapMu.Unlock()
 	if err := s.artifacts.Delete(id); err != nil {
 		return err
 	}
@@ -317,7 +318,11 @@ func (s *Service) ListArtifacts(_ context.Context, f ports.ArtifactFilter) ([]*d
 }
 
 // DeleteArtifact is a person removing an artifact, in either scope.
-func (s *Service) DeleteArtifact(_ context.Context, id string) error { return s.delete(id) }
+func (s *Service) DeleteArtifact(_ context.Context, id string) error {
+	s.snapMu.Lock()
+	defer s.snapMu.Unlock()
+	return s.delete(id)
+}
 
 // OpenArtifactFile opens the artifact's file, or a file relpath away from
 // it: from the harness's copy when it holds one, confined to that copy;

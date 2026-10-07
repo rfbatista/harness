@@ -84,9 +84,10 @@ func (h *Handler) handleArtifactViewRedirect(c echo.Context) error {
 }
 
 // handleArtifactView streams the artifact's file, or a file next to it, from
-// the harness's copy or the session worktree. http.ServeContent supplies Content-Length, ranges
-// (video seeks), If-None-Match against the ETag set here, and HEAD. The
-// headers below are set first so ServeContent neither sniffs nor overrides.
+// the harness's copy or the session worktree. http.ServeContent supplies
+// Content-Length, ranges (video seeks), If-None-Match against the ETag set
+// here, and HEAD. The headers below are set first so ServeContent neither
+// sniffs nor overrides.
 func (h *Handler) handleArtifactView(c echo.Context) error {
 	if h.artifactsSvc == nil {
 		return echo.NewHTTPError(http.StatusServiceUnavailable, "artifacts not configured")
