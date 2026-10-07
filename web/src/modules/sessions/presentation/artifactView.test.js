@@ -1,6 +1,6 @@
 import { assert, file, test } from "../../../shared/testing/test.js";
 import { A0, makeArtifact } from "../testing/artifact-fixtures.js";
-import { artifactTitle, kindWord, toCardView, toPreviewView } from "./artifactView.js";
+import { artifactTitle, attachedWord, filterChoices, kindWord, moveBackWarning, toCardView, toPreviewView } from "./artifactView.js";
 
 file("sessions/presentation/artifactView");
 
@@ -19,7 +19,19 @@ test("kinds read as words; url is a dev server", () => {
 
 test("a card carries title, kind, note, revision, time, selection and freshness", () => {
   const card = toCardView(makeArtifact({ id: "a1", revision: 2, note: "tighter" }), { selectedId: "a1", now, fresh: true });
-  assert.deepEqual(card, { id: "a1", title: "Pricing card", kindWord: "page", note: "tighter", revision: "rev 2", updated: "4m", selected: true, fresh: true, scopeMark: "" });
+  assert.deepEqual(card, {
+    id: "a1",
+    title: "Pricing card",
+    kindWord: "page",
+    note: "tighter",
+    revision: "rev 2",
+    updated: "4m",
+    selected: true,
+    fresh: true,
+    scopeMark: "",
+    attachedMark: "",
+    attachedWord: "",
+  });
 });
 
 test("a page preview is a sandboxed frame keyed on its revision, reloaded per revision", () => {
@@ -68,4 +80,34 @@ test("the preview says the scope in words and offers the move that fits", () => 
 test("a dev-server url has no move to the project", () => {
   const url = toPreviewView(makeArtifact({ kind: "url", path: "", url: "http://localhost:5173/" }), now);
   assert.equal(url.canMove, false);
+});
+
+test("on a task's list, a card marks the project assets attached from another task", () => {
+  const logo = makeArtifact({ ticketId: "t1", scope: "project", attachedTicketIds: ["t2", "t3"] });
+  assert.equal(toCardView(logo, { selectedId: "", now, ticketId: "t2" }).attachedMark, "attached");
+  assert.equal(toCardView(logo, { selectedId: "", now, ticketId: "t1" }).attachedMark, "", "its own task made it");
+  assert.equal(toCardView(logo, { selectedId: "", now }).attachedMark, "", "the library is no task's list");
+  assert.equal(toCardView(logo, { selectedId: "", now }).attachedWord, "attached to 2 tasks");
+});
+
+test("attachedWord counts the tasks it is on", () => {
+  assert.equal(attachedWord(makeArtifact()), "");
+  assert.equal(attachedWord(makeArtifact({ attachedTicketIds: ["t2"] })), "attached to 1 task");
+  assert.equal(attachedWord(makeArtifact({ attachedTicketIds: ["t2", "t3"] })), "attached to 2 tasks");
+});
+
+test("a move back asks first only when the asset is attached elsewhere, naming the tasks", () => {
+  assert.equal(moveBackWarning(makeArtifact({ scope: "project" }), "Brand", []), "");
+  assert.equal(
+    moveBackWarning(makeArtifact({ title: "Logo", scope: "project", attachedTicketIds: ["t2", "t3"] }), "Brand", ["Checkout", "Landing"]),
+    "Move Logo back to Brand? It will be detached from 2 tasks: Checkout, Landing.",
+  );
+});
+
+test("a picker's filter matches every typed word, in any case and order", () => {
+  const choices = [{ id: "1", label: "Checkout redesign" }, { id: "2", label: "Landing page" }, { id: "3", label: "Checkout API" }];
+  assert.deepEqual(filterChoices(choices, "").map((c) => c.id), ["1", "2", "3"]);
+  assert.deepEqual(filterChoices(choices, "  CHECK ").map((c) => c.id), ["1", "3"]);
+  assert.deepEqual(filterChoices(choices, "design check").map((c) => c.id), ["1"]);
+  assert.deepEqual(filterChoices(choices, "nothing"), []);
 });
