@@ -3,6 +3,7 @@ package httpclient
 import (
 	"context"
 	"net/url"
+	"time"
 
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
@@ -25,6 +26,32 @@ func (p *Projects) ListProjects(ctx context.Context) ([]*domain.Project, error) 
 		Projects []*domain.Project `json:"projects"`
 	}
 	return out.Projects, p.c.get(ctx, "/api/list_projects", nil, &out)
+}
+
+func (p *Projects) ListProjectSummaries(ctx context.Context) ([]ports.ProjectSummary, error) {
+	var out struct {
+		Summaries []struct {
+			Project             *domain.Project `json:"project"`
+			RepositoryCount     int             `json:"repository_count"`
+			OpenTaskCount       int             `json:"open_task_count"`
+			RunningSessionCount int             `json:"running_session_count"`
+			LastActivityAt      *time.Time      `json:"last_activity_at"`
+		} `json:"summaries"`
+	}
+	if err := p.c.get(ctx, "/api/list_project_summaries", nil, &out); err != nil {
+		return nil, err
+	}
+	list := make([]ports.ProjectSummary, len(out.Summaries))
+	for i, s := range out.Summaries {
+		list[i] = ports.ProjectSummary{
+			Project:             s.Project,
+			RepositoryCount:     s.RepositoryCount,
+			OpenTaskCount:       s.OpenTaskCount,
+			RunningSessionCount: s.RunningSessionCount,
+			LastActivityAt:      s.LastActivityAt,
+		}
+	}
+	return list, nil
 }
 
 func (p *Projects) GetProject(ctx context.Context, projectID string) (*domain.Project, error) {

@@ -107,6 +107,72 @@ func ProjectsConformance(t *testing.T, newPort func(t *testing.T) ports.Projects
 		_, err := p.GetRepository(ctx, "missing")
 		wantCode(t, err, "REPOSITORY_NOT_FOUND")
 	})
+
+	t.Run("create and update refuse a bad name or root", func(t *testing.T) {
+		p := newPort(t)
+		taken, err := p.CreateProject(ctx, "Taken", t.TempDir())
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, err = p.CreateProject(ctx, " ", t.TempDir())
+		wantCode(t, err, "INVALID_INPUT")
+		_, err = p.CreateProject(ctx, "taken", t.TempDir())
+		wantCode(t, err, "PROJECT_NAME_TAKEN")
+		_, err = p.CreateProject(ctx, "other", "relative/dir")
+		wantCode(t, err, "PROJECT_ROOT_INVALID")
+
+		other, err := p.CreateProject(ctx, "Other", t.TempDir())
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, err = p.UpdateProject(ctx, other.ID, "TAKEN", "")
+		wantCode(t, err, "PROJECT_NAME_TAKEN")
+		_, err = p.UpdateProject(ctx, other.ID, "", "/no/such/dir/anywhere")
+		wantCode(t, err, "PROJECT_ROOT_INVALID")
+		_, err = p.UpdateProject(ctx, "", "x", "")
+		wantCode(t, err, "INVALID_INPUT")
+
+		got, err := p.UpdateProject(ctx, taken.ID, "Renamed", "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got.Name != "Renamed" || got.RootDir != taken.RootDir {
+			t.Fatalf("UpdateProject = %+v, want Renamed keeping root %q", got, taken.RootDir)
+		}
+	})
+
+	t.Run("summaries", func(t *testing.T) {
+		p := newPort(t)
+		list, err := p.ListProjectSummaries(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if list == nil || len(list) != 0 {
+			t.Fatalf("ListProjectSummaries on no projects = %#v, want empty, not nil", list)
+		}
+		b, err := p.CreateProject(ctx, "beta", t.TempDir())
+		if err != nil {
+			t.Fatal(err)
+		}
+		a, err := p.CreateProject(ctx, "Alpha", t.TempDir())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := p.CreateRepository(ctx, b.ID, "api", "", "https://example.com/api.git", t.TempDir()); err != nil {
+			t.Fatal(err)
+		}
+		list, err = p.ListProjectSummaries(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(list) != 2 || list[0].Project.ID != a.ID || list[1].Project.ID != b.ID {
+			t.Fatalf("ListProjectSummaries = %+v, want Alpha then beta", list)
+		}
+		if got := list[1]; got.Project.Name != "beta" || got.Project.RootDir != b.RootDir || got.RepositoryCount != 1 ||
+			got.OpenTaskCount != 0 || got.RunningSessionCount != 0 || got.LastActivityAt != nil {
+			t.Fatalf("beta summary = %+v", got)
+		}
+	})
 }
 
 // TicketBoardConformance runs the ticket contract against a TicketBoard from

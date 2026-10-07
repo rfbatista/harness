@@ -77,8 +77,8 @@ func (f fixture) skill(t *testing.T, name string) *domain.Skill {
 
 func TestDeleteProject_RemovesItsRepositoriesZonesAndBoundedContexts(t *testing.T) {
 	f := newFixture(t)
-	p := must[*domain.Project](t)(f.Projects.CreateProject(context.Background(), "proj", "/tmp/proj"))
-	keep := must[*domain.Project](t)(f.Projects.CreateProject(context.Background(), "other", "/tmp/other"))
+	p := must[*domain.Project](t)(f.Projects.CreateProject(context.Background(), "proj", t.TempDir()))
+	keep := must[*domain.Project](t)(f.Projects.CreateProject(context.Background(), "other", t.TempDir()))
 	must[*domain.Repository](t)(f.Projects.CreateRepository(context.Background(), p.ID, "api", "", "https://x/api.git", "/tmp/api"))
 	zone := must[*domain.Zone](t)(f.Architecture.CreateZone(p.ID, "api", "", "", nil, nil))
 	bc := must[*domain.BoundedContext](t)(f.Architecture.CreateBoundedContext(p.ID, "Billing", "", nil))
@@ -100,7 +100,7 @@ func TestDeleteProject_RemovesItsRepositoriesZonesAndBoundedContexts(t *testing.
 
 func TestDeletePrompt_UnlinksAgentsAndZoneRules(t *testing.T) {
 	f := newFixture(t)
-	p := must[*domain.Project](t)(f.Projects.CreateProject(context.Background(), "proj", "/tmp/proj"))
+	p := must[*domain.Project](t)(f.Projects.CreateProject(context.Background(), "proj", t.TempDir()))
 	gone := must[*domain.Prompt](t)(f.Agents.CreatePrompt("style", "", "be terse"))
 	kept := must[*domain.Prompt](t)(f.Agents.CreatePrompt("tests", "", "write tests"))
 	agent := must[*domain.Agent](t)(f.Agents.CreateAgent(context.Background(), "reviewer", "", gone.ID, nil, nil))
@@ -125,7 +125,7 @@ func TestDeletePrompt_UnlinksAgentsAndZoneRules(t *testing.T) {
 
 func TestDeleteAgent_UnassignsItFromZones(t *testing.T) {
 	f := newFixture(t)
-	p := must[*domain.Project](t)(f.Projects.CreateProject(context.Background(), "proj", "/tmp/proj"))
+	p := must[*domain.Project](t)(f.Projects.CreateProject(context.Background(), "proj", t.TempDir()))
 	gone := must[*domain.Agent](t)(f.Agents.CreateAgent(context.Background(), "gone", "", "", nil, nil))
 	kept := must[*domain.Agent](t)(f.Agents.CreateAgent(context.Background(), "kept", "", "", nil, nil))
 	zone := must[*domain.Zone](t)(f.Architecture.CreateZone(p.ID, "api", "", "", nil, []domain.Agent{{ID: gone.ID}, {ID: kept.ID}}))
