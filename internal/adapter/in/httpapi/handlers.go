@@ -15,6 +15,8 @@ import (
 // pointer inside an interface is not nil.
 type Services struct {
 	Projects ports.Projects
+	// ProjectFeed follows the set of projects; nil answers 503.
+	ProjectFeed ports.ProjectCatalogFeed
 	// Discovery finds git checkouts on disk; nil answers 503.
 	Discovery ports.RepositoryDiscovery
 	// Env keeps repositories' env files; nil answers 503.
@@ -47,6 +49,7 @@ type Services struct {
 // it any implementation.
 type Handler struct {
 	projects     ports.Projects
+	projectFeed  ports.ProjectCatalogFeed
 	discovery    ports.RepositoryDiscovery
 	env          ports.RepositoryEnv
 	runCommands  ports.RepositoryRunCommands
@@ -71,6 +74,7 @@ type Handler struct {
 func NewHandler(s Services) *Handler {
 	return &Handler{
 		projects:      s.Projects,
+		projectFeed:   s.ProjectFeed,
 		discovery:     s.Discovery,
 		env:           s.Env,
 		runCommands:   s.RunCommands,

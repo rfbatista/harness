@@ -59,6 +59,7 @@ func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRun
 	mux := http.NewServeMux()
 	apiRouter := httpapi.NewRouter(httpapi.NewHandler(httpapi.Services{
 		Projects:     cat.Projects,
+		ProjectFeed:  cat.Projects,
 		Discovery:    cat.Projects,
 		Env:          cat.Projects,
 		RunCommands:  cat.Projects,

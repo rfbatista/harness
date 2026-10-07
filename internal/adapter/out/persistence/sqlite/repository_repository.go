@@ -163,3 +163,19 @@ func (r *RepositoryRepository) RemoveIgnoredPath(repositoryID, path string) (*do
 	}
 	return m.ToDomain(), nil
 }
+
+// CountByProject counts repositories per project, in one query.
+func (r *RepositoryRepository) CountByProject() (map[string]int, error) {
+	var rows []struct {
+		ProjectID string
+		N         int
+	}
+	if err := r.db.Model(&RepositoryModel{}).Select("project_id, COUNT(*) AS n").Group("project_id").Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+	out := make(map[string]int, len(rows))
+	for _, row := range rows {
+		out[row.ProjectID] = row.N
+	}
+	return out, nil
+}

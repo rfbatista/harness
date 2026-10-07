@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"operators-mcp/internal/domain"
+	"operators-mcp/internal/ports"
 )
 
 // PromptDTO is the MCP/JSON representation of a prompt.
@@ -406,4 +407,34 @@ func TreeNodeToDTO(n *domain.TreeNode) *TreeNodeDTO {
 		IsDir:    n.IsDir,
 		Children: children,
 	}
+}
+
+// ProjectSummaryDTO is one project at a glance on the wire.
+type ProjectSummaryDTO struct {
+	Project             *ProjectDTO `json:"project"`
+	RepositoryCount     int         `json:"repository_count"`
+	OpenTaskCount       int         `json:"open_task_count"`
+	RunningSessionCount int         `json:"running_session_count"`
+	// LastActivityAt is RFC 3339, null when the project has no activity.
+	LastActivityAt *time.Time `json:"last_activity_at"`
+}
+
+// ListProjectSummariesOut is the output for list_project_summaries.
+type ListProjectSummariesOut struct {
+	Summaries []ProjectSummaryDTO `json:"summaries"`
+}
+
+// ProjectSummariesToDTO converts summaries to their wire shape; never nil.
+func ProjectSummariesToDTO(list []ports.ProjectSummary) []ProjectSummaryDTO {
+	out := make([]ProjectSummaryDTO, 0, len(list))
+	for _, s := range list {
+		out = append(out, ProjectSummaryDTO{
+			Project:             ProjectToDTO(s.Project),
+			RepositoryCount:     s.RepositoryCount,
+			OpenTaskCount:       s.OpenTaskCount,
+			RunningSessionCount: s.RunningSessionCount,
+			LastActivityAt:      s.LastActivityAt,
+		})
+	}
+	return out
 }

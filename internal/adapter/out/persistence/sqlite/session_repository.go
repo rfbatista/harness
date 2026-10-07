@@ -200,3 +200,25 @@ func (r *SessionRepository) ListEvents(sessionID string, fromSeq int64) []ports.
 	}
 	return out
 }
+
+// ActivityByProject answers each project's live session count and newest
+// session activity, in one query.
+func (r *SessionRepository) ActivityByProject() (map[string]ports.SessionActivity, error) {
+	var rows []struct {
+		ProjectID string
+		Live      int
+		Last      int64
+	}
+	err := r.db.Model(&SessionModel{}).
+		Select("project_id, SUM(CASE WHEN status NOT IN ? THEN 1 ELSE 0 END) AS live, MAX(updated_at) AS last",
+			[]string{string(domain.SessionDone), string(domain.SessionFailed), string(domain.SessionStopped)}).
+		Group("project_id").Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string]ports.SessionActivity, len(rows))
+	for _, row := range rows {
+		out[row.ProjectID] = ports.SessionActivity{LiveCount: row.Live, LastActivityAt: time.UnixMilli(row.Last)}
+	}
+	return out, nil
+}

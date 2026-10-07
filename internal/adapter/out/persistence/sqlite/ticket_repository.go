@@ -1,6 +1,8 @@
 package sqlite
 
 import (
+	"time"
+
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
 
@@ -85,4 +87,25 @@ func (r *TicketRepository) Delete(id string) error {
 		return err
 	}
 	return r.db.Delete(&m).Error
+}
+
+// ActivityByProject answers each project's open task count and newest
+// update, in one query.
+func (r *TicketRepository) ActivityByProject() (map[string]ports.TaskActivity, error) {
+	var rows []struct {
+		ProjectID string
+		Open      int
+		Last      int64
+	}
+	err := r.db.Model(&TicketModel{}).
+		Select("project_id, SUM(CASE WHEN status <> ? THEN 1 ELSE 0 END) AS open, MAX(updated_at) AS last", string(domain.TicketStatusDone)).
+		Group("project_id").Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string]ports.TaskActivity, len(rows))
+	for _, row := range rows {
+		out[row.ProjectID] = ports.TaskActivity{OpenCount: row.Open, LastUpdatedAt: time.UnixMilli(row.Last)}
+	}
+	return out, nil
 }

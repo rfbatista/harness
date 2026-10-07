@@ -23,8 +23,8 @@ func bindJSON(c echo.Context, v any) error {
 // errorBody renders the {"error": msg} response contract, including the domain
 // error code when there is one so clients can branch on it (e.g.
 // confirm-and-retry on PUBLISH_TARGET_EXISTS) instead of matching message text.
-func errorBody(message, code string) map[string]string {
-	body := map[string]string{"error": message}
+func errorBody(message, code string) map[string]any {
+	body := map[string]any{"error": message}
 	if code != "" {
 		body["code"] = code
 	}
@@ -48,7 +48,7 @@ func errorHandler(err error, c echo.Context) {
 			"TERMINAL_NOT_FOUND", "ENV_FILE_NOT_FOUND",
 			"RUN_NOT_FOUND", "RUN_COMMAND_NOT_FOUND", "ARTIFACT_NOT_FOUND",
 			"MESSAGE_NOT_FOUND", "REVIEW_NOT_FOUND", "STATUS_CHECK_NOT_FOUND", "NO_ARCHITECT":
-			_ = c.JSON(http.StatusNotFound, errorBody(se.Message, se.Code))
+			writeCoded(c, http.StatusNotFound, err, se)
 			return
 		case "INVALID_PATTERN", "INVALID_NAME", "INVALID_ROOT", "INVALID_PATH",
 			"INVALID_INPUT", "INVALID_STATUS", "INVALID_URL",
@@ -56,11 +56,11 @@ func errorHandler(err error, c echo.Context) {
 			"PUBLISH_ROOT_NOT_SET", "SESSION_HAS_NO_TASK", "DOCUMENT_NOT_ON_TASK", "DOCUMENT_NOT_HTML",
 			"NO_ANSWERS", "ENV_FILE_TOO_LARGE",
 			"ARTIFACT_PATH_OUTSIDE_WORKTREE", "ARTIFACT_URL_NOT_LOCAL", "ARTIFACT_TOO_LARGE", "ARTIFACT_KIND_MISMATCH",
-			"ARTIFACT_NOT_PROMOTABLE":
-			_ = c.JSON(http.StatusBadRequest, errorBody(se.Message, se.Code))
+			"ARTIFACT_NOT_PROMOTABLE", "PROJECT_ROOT_INVALID":
+			writeCoded(c, http.StatusBadRequest, err, se)
 			return
 		case "ARTIFACT_NOT_YOURS", "ARCHITECT_ONLY", "TASK_STATUS_OWNED_BY_ARCHITECT", "SESSION_NOT_ON_TASK":
-			_ = c.JSON(http.StatusForbidden, errorBody(se.Message, se.Code))
+			writeCoded(c, http.StatusForbidden, err, se)
 			return
 		case "PUBLISH_TARGET_EXISTS", "PUBLISH_SLUG_CONFLICT", "WORKSPACE_EXISTS", "BRANCH_EXISTS",
 			"SESSION_INTERACTIVE", "SESSION_NOT_INTERACTIVE", "SESSION_ALREADY_RUNNING",
@@ -69,18 +69,19 @@ func errorHandler(err error, c echo.Context) {
 			// gone: a state conflict, not a missing resource.
 			"WORKSPACE_MISSING", "SESSION_TRANSCRIPT_MISSING",
 			"ARTIFACT_IN_PROJECT", "REVIEW_NOT_PENDING",
-			"ARTIFACT_NOT_IN_PROJECT", "ARTIFACT_PROJECT_MISMATCH", "ARTIFACT_PRODUCER_TASK":
-			_ = c.JSON(http.StatusConflict, errorBody(se.Message, se.Code))
+			"ARTIFACT_NOT_IN_PROJECT", "ARTIFACT_PROJECT_MISMATCH", "ARTIFACT_PRODUCER_TASK",
+			"PROJECT_NAME_TAKEN", "PROJECT_HAS_RUNNING_SESSIONS":
+			writeCoded(c, http.StatusConflict, err, se)
 			return
 		case "CLAUDE_CLI_NOT_FOUND", "AGENT_CLI_NOT_FOUND", "SERVER_HOSTING_UNAVAILABLE":
 			// The request is well-formed; the machine just cannot run agents.
-			_ = c.JSON(http.StatusServiceUnavailable, errorBody(se.Message, se.Code))
+			writeCoded(c, http.StatusServiceUnavailable, err, se)
 			return
 		}
 	}
 
 	if se != nil && se.Code == "UNAUTHORIZED" {
-		_ = c.JSON(http.StatusUnauthorized, errorBody(se.Message, se.Code))
+		writeCoded(c, http.StatusUnauthorized, err, se)
 		return
 	}
 
@@ -95,4 +96,15 @@ func errorHandler(err error, c echo.Context) {
 	}
 
 	_ = c.JSON(http.StatusInternalServerError, errorBody(err.Error(), ""))
+}
+
+// writeCoded renders a coded error at status, with its details when it is a
+// *domain.DetailedError; every other error body stays {"error", "code"}.
+func writeCoded(c echo.Context, status int, err error, se *domain.StructuredError) {
+	body := errorBody(se.Message, se.Code)
+	var de *domain.DetailedError
+	if errors.As(err, &de) && de.Details != nil {
+		body["details"] = de.Details
+	}
+	_ = c.JSON(status, body)
 }
