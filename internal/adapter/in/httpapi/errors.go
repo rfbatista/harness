@@ -46,7 +46,8 @@ func errorHandler(err error, c echo.Context) {
 			"TICKET_NOT_FOUND", "DOCUMENT_NOT_FOUND", "REPOSITORY_NOT_FOUND", "WORKSPACE_NOT_FOUND",
 			"BOUNDED_CONTEXT_NOT_FOUND", "SESSION_NOT_FOUND", "SKILL_FILE_NOT_FOUND",
 			"TERMINAL_NOT_FOUND", "ENV_FILE_NOT_FOUND",
-			"RUN_NOT_FOUND", "RUN_COMMAND_NOT_FOUND", "ARTIFACT_NOT_FOUND":
+			"RUN_NOT_FOUND", "RUN_COMMAND_NOT_FOUND", "ARTIFACT_NOT_FOUND",
+			"MESSAGE_NOT_FOUND", "REVIEW_NOT_FOUND", "STATUS_CHECK_NOT_FOUND", "NO_ARCHITECT":
 			_ = c.JSON(http.StatusNotFound, errorBody(se.Message, se.Code))
 			return
 		case "INVALID_PATTERN", "INVALID_NAME", "INVALID_ROOT", "INVALID_PATH",
@@ -58,7 +59,7 @@ func errorHandler(err error, c echo.Context) {
 			"ARTIFACT_NOT_PROMOTABLE":
 			_ = c.JSON(http.StatusBadRequest, errorBody(se.Message, se.Code))
 			return
-		case "ARTIFACT_NOT_YOURS":
+		case "ARTIFACT_NOT_YOURS", "ARCHITECT_ONLY", "TASK_STATUS_OWNED_BY_ARCHITECT", "SESSION_NOT_ON_TASK":
 			_ = c.JSON(http.StatusForbidden, errorBody(se.Message, se.Code))
 			return
 		case "PUBLISH_TARGET_EXISTS", "PUBLISH_SLUG_CONFLICT", "WORKSPACE_EXISTS", "BRANCH_EXISTS",
@@ -67,7 +68,7 @@ func errorHandler(err error, c echo.Context) {
 			// The session exists but its worktree or saved conversation is
 			// gone: a state conflict, not a missing resource.
 			"WORKSPACE_MISSING", "SESSION_TRANSCRIPT_MISSING",
-			"ARTIFACT_IN_PROJECT":
+			"ARTIFACT_IN_PROJECT", "REVIEW_NOT_PENDING":
 			_ = c.JSON(http.StatusConflict, errorBody(se.Message, se.Code))
 			return
 		case "CLAUDE_CLI_NOT_FOUND", "AGENT_CLI_NOT_FOUND", "SERVER_HOSTING_UNAVAILABLE":

@@ -49,7 +49,7 @@ func newTaskServer(t *testing.T) (baseURL, ticketID, root string) {
 
 	art := artifacts.NewService(sqlite.NewArtifactRepository(db), sessions, nil)
 	tools := tooling.SessionTaskTools(plan, sessions, nil, nil, tooling.PeerStarter{},
-		tooling.ArtifactTooling{Publisher: art, ViewURL: func(id string) string { return "/api/artifacts/" + id + "/view/" }})
+		tooling.ArtifactTooling{Publisher: art, ViewURL: func(id string) string { return "/api/artifacts/" + id + "/view/" }}, nil)
 	srv := httptest.NewServer(TaskHandler(tools))
 	t.Cleanup(srv.Close)
 	return srv.URL, tk.ID, root
@@ -158,7 +158,7 @@ func TestTaskHandler_ListsTheOtherSessionsOnTheTask(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	srv := httptest.NewServer(TaskHandler(tooling.SessionTaskTools(plan, sessions, nil, nil, tooling.PeerStarter{}, tooling.ArtifactTooling{})))
+	srv := httptest.NewServer(TaskHandler(tooling.SessionTaskTools(plan, sessions, nil, nil, tooling.PeerStarter{}, tooling.ArtifactTooling{}, nil)))
 	t.Cleanup(srv.Close)
 
 	c := dial(t, srv.URL+PathPrefix+"sess-1")

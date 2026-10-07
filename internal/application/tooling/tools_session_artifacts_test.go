@@ -60,7 +60,7 @@ func newArtifactToolsFixture(t *testing.T) *artifactToolsFixture {
 	}
 	art := artifacts.NewService(sqlite.NewArtifactRepository(db), sessions, nil)
 	art.StoreDir = t.TempDir() // moving to project copies the bytes here
-	for _, tl := range SessionTaskTools(plan, sessions, nil, nil, PeerStarter{}, ArtifactTooling{Publisher: art, ViewURL: func(id string) string { return "/api/artifacts/" + id + "/view/" }}) {
+	for _, tl := range SessionTaskTools(plan, sessions, nil, nil, PeerStarter{}, ArtifactTooling{Publisher: art, ViewURL: func(id string) string { return "/api/artifacts/" + id + "/view/" }}, nil) {
 		f.tools[tl.Name] = tl
 	}
 	return f

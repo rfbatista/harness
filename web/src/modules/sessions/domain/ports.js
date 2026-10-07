@@ -63,6 +63,33 @@
  */
 
 /**
+ * The architect channel on a task: the messages between its architect and
+ * the delegates, and the status-check loops on them. Implemented by
+ * infrastructure/channel-gateway.js (the Web UI contract's routes and the
+ * project feed) and infrastructure/memory-channel.js (tests and web/dev).
+ * Both run testing/channel-contract.js.
+ *
+ * @typedef {import("./channel.js").TaskMessage} TaskMessage
+ * @typedef {import("./channel.js").StatusCheck} StatusCheck
+ * @typedef {{ kind: "message", message: TaskMessage }} ChannelEvent
+ *          a message was sent, or became delivered (compare by id)
+ *
+ * @typedef {object} ChannelGateway
+ * @property {(filter: { ticketId: string, sessionId?: string, since?: Date | null }, signal?: AbortSignal) => Promise<TaskMessage[]>} listMessages
+ *           The task's messages, oldest first: from or to sessionId when set,
+ *           created after since when set.
+ * @property {(delegateSessionId: string, everyMinutes: number) => Promise<StatusCheck>} setStatusCheck
+ *           0 pauses the delegate's loop; a value resumes or retunes it.
+ *           Rejects with STATUS_CHECK_NOT_FOUND (the delegate has no loop: a
+ *           person cannot create one) or INVALID_INPUT (outside 2–240).
+ * @property {(projectId: string,
+ *             onEvent: (event: ChannelEvent) => void,
+ *             onStatus: (status: FeedStatus) => void) => () => void} follow
+ *           Follows the project's task messages until the returned function
+ *           is called. Other feed messages are not delivered.
+ */
+
+/**
  * A session's terminal, attached over the socket the server keeps for it.
  * Implemented by infrastructure/terminal-gateway.js (WebSocket) and
  * infrastructure/memory-terminals.js (tests and web/dev).

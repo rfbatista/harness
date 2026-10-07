@@ -20,6 +20,8 @@ templ Page(v PageView) {
 			x-on:session-created="sessionCreated"
 			x-on:new-session-cancelled="cancelCreating"
 			x-on:artifact-published="artifactPublished"
+			x-on:status-check-changed="statusCheckChanged"
+			x-on:announce="announce"
 			x-on:artifact-moved="artifactMoved"
 		>
 			@templ.JSONScript("sessions-seed", v.Seed)
@@ -65,6 +67,7 @@ templ Page(v PageView) {
 				</header>
 				@taskBand(v)
 			</div>
+			@reviewBand(v)
 			<template x-if="error">
 				<div class="[ banner ] [ pad-s ]" data-tone="danger" role="alert">
 					<div class="[ flow ] [ flow-space-3xs grow ]">
@@ -111,10 +114,15 @@ templ ssrRows(v PageView) {
 				@components.Badge(strconv.Itoa(g.Count), g.Tone)
 			</div>
 			for _, r := range g.Rows {
-				<div class="[ row ]" data-stacked role="option" aria-selected={ strconv.FormatBool(r.Selected) } { attentionAttrs(r.Attention)... }>
+				<div class="[ row ]" data-stacked role="option" aria-selected={ strconv.FormatBool(r.Selected) } { attentionAttrs(r.Attention)... } { roleAttrs(r.Role, r.Depth)... }>
 					@components.Status(r.State, r.Word)
-					<span class="[ title ]">{ r.Title }</span>
-					<span class="[ meta ]">{ r.Meta }</span>
+					<span class="[ title ]">
+						if r.Badge != "" {
+							@components.Badge(r.Badge, "")
+						}
+						{ r.Title }
+					</span>
+					<span class="[ meta ]" title={ r.Meta }>{ r.Meta }</span>
 				</div>
 			}
 		}
@@ -130,10 +138,15 @@ templ liveRows() {
 				<span class="[ badge ]" x-bind:data-tone="group.tone" x-text="group.count"></span>
 			</div>
 			<template x-for="row in group.rows" x-bind:key="row.id">
-				<div class="[ row ]" data-stacked role="option" x-bind:aria-selected="row.selected" x-bind:data-attention="row.attention" x-bind:data-fresh="row.fresh" x-on:click="select(row.id)">
+				<div class="[ row ]" data-stacked role="option" x-bind:aria-selected="row.selected" x-bind:data-attention="row.attention" x-bind:data-fresh="row.fresh" x-bind:data-role="row.roleAttr" x-bind:data-depth="row.depthAttr" x-on:click="select(row.id)">
 					<span class="[ status ]" x-bind:data-state="row.state" x-text="row.word"></span>
-					<span class="[ title ]" x-text="row.title"></span>
-					<span class="[ meta ]" x-text="row.meta"></span>
+					<span class="[ title ]">
+						<template x-if="row.badge">
+							<span><span class="[ badge ]" x-text="row.badge"></span>{ " " }</span>
+						</template>
+						<span x-text="row.title"></span>
+					</span>
+					<span class="[ meta ]" x-bind:title="row.meta" x-text="row.meta"></span>
 					<template x-if="row.resumable">
 						<button type="button" class="[ button action ]" data-variant="ghost" data-size="sm" x-bind:aria-label="row.resumeLabel" x-bind:disabled="cannotResume" x-on:click.stop="resume(row.id)">Resume</button>
 					</template>
@@ -172,6 +185,9 @@ templ detail(form NewSessionForm) {
 						<span x-text="selected.agent"></span>
 						<span x-text="selected.updated"></span>
 					</div>
+					<template x-for="bar in statusCheckBars" x-bind:key="bar.key">
+						@statusCheckBar()
+					</template>
 					<template x-if="confirmingDelete">
 						<div class="[ banner ]" data-tone="danger" role="alertdialog" aria-label="Delete this session?">
 							<div class="[ flow ] [ flow-space-3xs grow ]">
@@ -194,6 +210,7 @@ templ detail(form NewSessionForm) {
 							<span class="[ badge ]" data-tone="signal" x-text="designBadge"></span>
 						</template>
 					</button>
+					@conversationTab()
 				</div>
 				<template x-for="sid in terminalIds" x-bind:key="sid">
 					@terminalPane()
@@ -203,6 +220,9 @@ templ detail(form NewSessionForm) {
 				</template>
 				<template x-for="panel in designPanels" x-bind:key="panel.key">
 					@designPanel()
+				</template>
+				<template x-for="panel in conversationPanels" x-bind:key="panel.key">
+					@conversationPanel()
 				</template>
 				<template x-if="appUnavailable">
 					@components.Empty("No worktree to run from", "This session was not started on a repository, so there is no application to run. Start a session on a repository to run its app beside the agent.")
@@ -474,9 +494,18 @@ templ designPanel() {
 	</div>
 }
 
-// taskBand sits under the toolbar, in the task editor's scope: the
+// taskBand sits under the toolbar, in the task editor's scope: who moved
+// the task's status last and why (seen live, over the feed), the
 // description, the edit form, the delete confirmation, the editor's errors.
 templ taskBand(v PageView) {
+	<template x-if="statusLine">
+		<p class="[ status-change ]">
+			<span x-text="statusLine"></span>
+			<template x-if="statusReason">
+				<span class="[ truncate ]" x-bind:title="statusReason">{ " " }— <span x-text="statusReason"></span></span>
+			</template>
+		</p>
+	</template>
 	<template x-if="showsDescription">
 		<p class="[ brief ]" x-text="description">{ v.TaskDescription }</p>
 	</template>

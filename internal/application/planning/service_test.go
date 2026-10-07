@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"operators-mcp/internal/adapter/out/eventbus"
 	"operators-mcp/internal/adapter/out/persistence/sqlite"
 	"operators-mcp/internal/application/planning"
 	"operators-mcp/internal/domain"
@@ -466,5 +467,75 @@ func TestSetDocumentScope_MovesKeepsLinksAndIsIdempotent(t *testing.T) {
 	}
 	if got := svc.ListDocumentTickets(d.ID); len(got) != 0 {
 		t.Fatalf("a deleted ticket is still listed: %+v", got)
+	}
+}
+
+type decoratorFunc func(...*domain.Ticket)
+
+func (f decoratorFunc) DecorateTickets(tks ...*domain.Ticket) { f(tks...) }
+
+// A status move is recorded with who made it and why, and announced as
+// TicketStatusChanged; a patch that keeps the status records nothing.
+func TestTickets_StatusMovesAreRecordedAndAnnounced(t *testing.T) {
+	db, err := sqlite.Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	projects := sqlite.NewProjectRepository(db)
+	p, _ := projects.Create("proj", "/tmp/proj")
+	svc := planning.NewService(sqlite.NewTicketRepository(db), sqlite.NewDocumentRepository(db), projects)
+	history := sqlite.NewTaskStatusChangeRepository(db)
+	bus := eventbus.New()
+	var seen []domain.TaskStatusChange
+	ports.On(bus, func(_ context.Context, ev domain.TicketStatusChanged) error {
+		seen = append(seen, ev.Change)
+		return nil
+	})
+	svc.StatusHistory, svc.Events = history, bus
+	ctx := context.Background()
+
+	tk, _ := svc.CreateTicket(ctx, p.ID, "Ship it", "", domain.TicketStatusTodo)
+	if _, err := svc.PatchTicket(ctx, tk.ID, ports.TicketPatch{Status: statusp(domain.TicketStatusInProgress), StatusReason: "picked up", BySessionID: "arch"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.PatchTicket(ctx, tk.ID, ports.TicketPatch{Title: strp("Ship it now")}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.UpdateTicket(ctx, tk.ID, "Ship it now", "", domain.TicketStatusReview); err != nil {
+		t.Fatal(err)
+	}
+	h := history.ListByTask(tk.ID)
+	if len(h) != 2 {
+		t.Fatalf("two moves recorded, got %+v", h)
+	}
+	if h[0].By != domain.ChangedBySession || h[0].BySessionID != "arch" || h[0].Reason != "picked up" || h[0].Status != domain.TicketStatusInProgress {
+		t.Errorf("session move: %+v", h[0])
+	}
+	if h[1].By != domain.ChangedByPerson || h[1].BySessionID != "" || h[1].Status != domain.TicketStatusReview {
+		t.Errorf("person move: %+v", h[1])
+	}
+	if len(seen) != 2 || seen[0].ProjectID != p.ID || seen[1].By != domain.ChangedByPerson {
+		t.Errorf("announced: %+v", seen)
+	}
+}
+
+// Every ticket handed out passes through the decorator.
+func TestTickets_AreDecorated(t *testing.T) {
+	svc, pid := newService(t)
+	svc.Decorator = decoratorFunc(func(tks ...*domain.Ticket) {
+		for _, tk := range tks {
+			tk.PendingReviews = 7
+		}
+	})
+	ctx := context.Background()
+	tk, _ := svc.CreateTicket(ctx, pid, "a", "", "")
+	got, _ := svc.GetTicket(ctx, tk.ID)
+	list, _ := svc.ListTickets(ctx, pid)
+	same, _ := svc.PatchTicket(ctx, tk.ID, ports.TicketPatch{})
+	moved, _ := svc.PatchTicket(ctx, tk.ID, ports.TicketPatch{Status: statusp(domain.TicketStatusDone)})
+	for name, x := range map[string]*domain.Ticket{"create": tk, "get": got, "list": list[0], "no-op patch": same, "patch": moved} {
+		if x.PendingReviews != 7 {
+			t.Errorf("%s: not decorated", name)
+		}
 	}
 }

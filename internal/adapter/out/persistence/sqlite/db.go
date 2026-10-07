@@ -28,7 +28,7 @@ func Open(path string) (*gorm.DB, error) {
 		}
 		sqlDB.SetMaxOpenConns(1)
 	}
-	if err := db.AutoMigrate(&ProjectModel{}, &RepositoryModel{}, &ZoneModel{}, &AgentModel{}, &PromptModel{}, &SkillModel{}, &SkillFileModel{}, &SettingModel{}, &MCPServerModel{}, &ToolModel{}, &TaskModel{}, &SessionModel{}, &SessionEventModel{}, &TicketModel{}, &DocumentModel{}, &TicketDocumentModel{}, &WorkspaceModel{}, &BoundedContextModel{}, &EnvFileModel{}, &RunCommandModel{}, &ArtifactModel{}); err != nil {
+	if err := db.AutoMigrate(&ProjectModel{}, &RepositoryModel{}, &ZoneModel{}, &AgentModel{}, &PromptModel{}, &SkillModel{}, &SkillFileModel{}, &SettingModel{}, &MCPServerModel{}, &ToolModel{}, &TaskModel{}, &SessionModel{}, &SessionEventModel{}, &TicketModel{}, &DocumentModel{}, &TicketDocumentModel{}, &WorkspaceModel{}, &BoundedContextModel{}, &EnvFileModel{}, &RunCommandModel{}, &ArtifactModel{}, &TaskMessageModel{}, &ReviewRequestModel{}, &StatusCheckModel{}, &TicketStatusChangeModel{}); err != nil {
 		return nil, fmt.Errorf("sqlite migrate: %w", err)
 	}
 	if err := migrateAgentPromptsToEntities(db); err != nil {

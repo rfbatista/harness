@@ -32,6 +32,7 @@ import (
 	"operators-mcp/internal/application/execution"
 	"operators-mcp/internal/application/orchestration"
 	"operators-mcp/internal/application/planning"
+	"operators-mcp/internal/application/taskchannel"
 	"operators-mcp/internal/application/tooling"
 	"operators-mcp/internal/application/workspaces"
 	"operators-mcp/internal/domain"
@@ -274,6 +275,50 @@ var AgentRuntimeModule = fx.Module("agentruntime",
 	fx.Invoke(registerRuntimeShutdown, registerServerSessions),
 )
 
+// TaskChannelModule wires the architect channel: its tables, the service,
+// the decorators it lends the orchestration and planning, its lifecycle
+// subscriptions, and the status-check scheduler, which runs while the server
+// does.
+var TaskChannelModule = fx.Module("taskchannel",
+	fx.Provide(newTaskChannelService),
+	fx.Invoke(registerTaskChannel),
+)
+
+// newTaskChannelService builds the channel and points the orchestration and
+// planning at it: sessions and tickets leave them decorated with their role
+// fields, status moves are recorded and announced, and the orchestration's
+// role-aware brief asks it for roles.
+func newTaskChannelService(db *gorm.DB, sessions ports.SessionRepository, plan *planning.Service, orch *orchestration.Service, art *artifacts.Service, cat catalog.Catalog) *taskchannel.Service {
+	svc := taskchannel.New(sessions, plan, taskchannel.Repositories{
+		Messages: sqlite.NewTaskMessageRepository(db),
+		Reviews:  sqlite.NewReviewRequestRepository(db),
+		Checks:   sqlite.NewStatusCheckRepository(db),
+	})
+	svc.Delivery, svc.Announcer, svc.Feed, svc.Artifacts, svc.Agents = orch, orch, orch, art, cat.Agents
+	svc.Subscribe(cat.Bus)
+	orch.Roles, orch.Decorator = svc, svc
+	plan.Decorator, plan.Events, plan.StatusHistory = svc, cat.Bus, sqlite.NewTaskStatusChangeRepository(db)
+	return svc
+}
+
+// registerTaskChannel runs the status-check scheduler from start to stop.
+func registerTaskChannel(lc fx.Lifecycle, svc *taskchannel.Service) {
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	lc.Append(fx.Hook{
+		OnStart: func(context.Context) error {
+			svc.Recover()
+			go func() { svc.Run(ctx); close(done) }()
+			return nil
+		},
+		OnStop: func(context.Context) error {
+			cancel()
+			<-done
+			return nil
+		},
+	})
+}
+
 // newArtifactsService records what sessions publish, announces each publish
 // on the session's stream through the orchestration, and drops a session's
 // task artifacts when the session is deleted. Copies of project artifacts
@@ -391,7 +436,7 @@ func newOrchestrationService(
 		return base + mcpsession.PathPrefix + sessionID
 	}
 	svc.SessionHookURL = func(sessionID string) string {
-		return base + httpapi.InteractiveSessionStartedPath + "?session_id=" + url.QueryEscape(sessionID)
+		return base + httpapi.InteractiveSessionHookPath + "?session_id=" + url.QueryEscape(sessionID)
 	}
 	svc.Transcripts = transcripts
 	svc.Terminals = terminals

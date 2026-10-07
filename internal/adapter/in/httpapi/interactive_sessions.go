@@ -12,9 +12,14 @@ import (
 	"operators-mcp/internal/ports"
 )
 
-// InteractiveSessionStartedPath is where an interactive session's SessionStart
-// hook reports its conversation. The app wires it into the orchestration as a
-// URL, so the application layer does not know the route.
+// InteractiveSessionHookPath is where an interactive session's hooks report:
+// SessionStart its conversation, UserPromptSubmit and Stop its turns. The app
+// wires it into the orchestration as a URL, so the application layer does not
+// know the route.
+const InteractiveSessionHookPath = "/api/interactive_session_hook"
+
+// InteractiveSessionStartedPath is the SessionStart-only route sessions
+// launched before the turn hooks still call.
 const InteractiveSessionStartedPath = "/api/interactive_session_started"
 
 func (h *Handler) handleStartInteractiveSession(c echo.Context) error {
@@ -66,28 +71,50 @@ func (h *Handler) handleEndInteractiveSession(c echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]any{"session": sess})
 }
 
-// handleInteractiveSessionStarted receives the claude CLI's SessionStart hook
-// input. It always answers 200: the caller is a hook inside someone's live
-// session, and a failure here must not surface there. Problems are logged.
-func (h *Handler) handleInteractiveSessionStarted(c echo.Context) error {
+// handleInteractiveSessionHook receives the claude CLI's hook input; the
+// event query parameter names the hook (SessionStart when absent, as on the
+// older route). It always answers 200: the caller is a hook inside someone's
+// live session, and a failure here must not surface there. Problems are
+// logged. Only Stop gets a body: the turns the session goes on with, as the
+// hook's decision.
+func (h *Handler) handleInteractiveSessionHook(c echo.Context) error {
 	if !isLoopback(c.Request().RemoteAddr) {
 		return echo.NewHTTPError(http.StatusForbidden, "loopback only")
 	}
 	if h.orchSvc == nil {
 		return c.NoContent(http.StatusOK)
 	}
-	id := c.QueryParam("session_id")
+	ctx := c.Request().Context()
+	id, event := c.QueryParam("session_id"), c.QueryParam("event")
 	var hook struct {
-		SessionID string `json:"session_id"`
-		Source    string `json:"source"`
+		SessionID      string `json:"session_id"`
+		Source         string `json:"source"`
+		StopHookActive bool   `json:"stop_hook_active"`
 	}
 	body, _ := io.ReadAll(io.LimitReader(c.Request().Body, 1<<20))
 	if err := json.Unmarshal(body, &hook); err != nil {
-		slog.Warn("interactive session hook: bad body", "session", id, "err", err)
+		slog.Warn("interactive session hook: bad body", "session", id, "event", event, "err", err)
 		return c.NoContent(http.StatusOK)
 	}
-	if err := h.orchSvc.RecordClaudeSession(c.Request().Context(), id, hook.SessionID); err != nil {
-		slog.Warn("interactive session hook", "session", id, "source", hook.Source, "err", err)
+	switch event {
+	case "", "SessionStart":
+		if err := h.orchSvc.RecordClaudeSession(ctx, id, hook.SessionID); err != nil {
+			slog.Warn("interactive session hook", "session", id, "source", hook.Source, "err", err)
+		}
+	case "UserPromptSubmit":
+		if err := h.orchSvc.TurnStarted(ctx, id); err != nil {
+			slog.Warn("interactive session hook", "session", id, "event", event, "err", err)
+		}
+	case "Stop":
+		next, err := h.orchSvc.TurnEnded(ctx, id, hook.StopHookActive)
+		if err != nil {
+			slog.Warn("interactive session hook", "session", id, "event", event, "err", err)
+		}
+		if next != "" {
+			return c.JSON(http.StatusOK, map[string]string{"decision": "block", "reason": next})
+		}
+	default:
+		slog.Warn("interactive session hook: unknown event", "session", id, "event", event)
 	}
 	return c.NoContent(http.StatusOK)
 }

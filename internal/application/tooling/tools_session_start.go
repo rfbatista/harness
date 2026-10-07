@@ -11,8 +11,10 @@ import (
 
 // startPeer starts a session on the caller's task, on the server, recorded as
 // started by the caller. Arguments name things the way an agent knows them:
-// agents and repositories by name (or id).
-func startPeer(ctx context.Context, scope *taskScope, sessions ports.SessionRepository, agents ports.AgentLister, start PeerStarter, args map[string]any) (any, error) {
+// agents and repositories by name (or id). When the caller is the task's
+// architect, the server starts a status-check loop on the new session inside
+// StartInteractive, and the result carries it.
+func startPeer(ctx context.Context, scope *taskScope, sessions ports.SessionRepository, agents ports.AgentLister, start PeerStarter, channel ports.TaskChannel, args map[string]any) (any, error) {
 	prompt := strings.TrimSpace(stringArg(args, "prompt"))
 	if prompt == "" {
 		return nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "prompt is required: say what the new session should do"}
@@ -27,6 +29,19 @@ func startPeer(ctx context.Context, scope *taskScope, sessions ports.SessionRepo
 	if live >= MaxLiveTaskSessions {
 		return nil, &domain.StructuredError{Code: "TASK_SESSION_LIMIT", Message: strconv.Itoa(live) +
 			" sessions already run on this task (the limit is " + strconv.Itoa(MaxLiveTaskSessions) + "); wait for one to finish or coordinate with them"}
+	}
+
+	// Checked before anything starts, so a bad interval never leaves a session behind.
+	var statusCheckMinutes *int
+	if _, given := args["status_check_minutes"]; given {
+		n, ok := intArg(args, "status_check_minutes")
+		if !ok {
+			return nil, invalidInput("status_check_minutes must be a number of minutes: 0, or between 2 and 240")
+		}
+		if err := domain.ValidStatusCheckMinutes(n); err != nil {
+			return nil, invalidInput("status_check_minutes must be 0, or between 2 and 240")
+		}
+		statusCheckMinutes = &n
 	}
 
 	agent, err := findAgent(ctx, agents, stringArg(args, "agent"))
@@ -48,7 +63,8 @@ func startPeer(ctx context.Context, scope *taskScope, sessions ports.SessionRepo
 		ParentSessionID: scope.session.ID,
 		Mode:            strings.TrimSpace(stringArg(args, "mode")),
 		// A peer gets no more than its parent: unattended only if the parent is.
-		AutoAccept: "off",
+		AutoAccept:         "off",
+		StatusCheckMinutes: statusCheckMinutes,
 	}
 	if scope.session.AutoRun {
 		req.AutoAccept = "all"
@@ -71,7 +87,29 @@ func startPeer(ctx context.Context, scope *taskScope, sessions ports.SessionRepo
 	if agent != nil {
 		out["agent"] = agent.Name
 	}
+	if channel != nil {
+		if role, err := channel.SessionRole(ctx, scope.session.ID); err == nil && role == domain.RoleArchitect {
+			out["status_check"] = statusCheckOf(ctx, channel, scope.ticket.ID, sess.ID)
+		} else if statusCheckMinutes != nil {
+			out["note"] = out["note"].(string) + " status_check_minutes was ignored: only the task's architect gets a status-check loop."
+		}
+	}
 	return out, nil
+}
+
+// statusCheckOf is the loop the server started on a new delegate, or nil when
+// there is none (status_check_minutes 0) or it cannot be read.
+func statusCheckOf(ctx context.Context, channel ports.TaskChannel, taskID, delegateID string) *domain.StatusCheck {
+	checks, err := channel.ListStatusChecks(ctx, taskID)
+	if err != nil {
+		return nil
+	}
+	for _, c := range checks {
+		if c.DelegateSessionID == delegateID {
+			return c
+		}
+	}
+	return nil
 }
 
 // findAgent resolves an agent by id or by name (ignoring case); empty means none.

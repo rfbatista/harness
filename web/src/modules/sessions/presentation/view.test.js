@@ -1,8 +1,10 @@
 import fixture from "../../../../testdata/views/session-status.json" with { type: "json" };
+import checks from "../../../../testdata/views/status-check.json" with { type: "json" };
 import { assert, file, test } from "../../../shared/testing/test.js";
 import { needsYou } from "../domain/session.js";
 import { makeSession, T0 } from "../testing/fixtures.js";
-import { agentLabel, runsAs, startedBy, statusView, summary, terminalView, toDetailView, toGroupViews } from "./view.js";
+import { makeCheck, makeMessage } from "../testing/channel-fixtures.js";
+import { agentLabel, reportView, runsAs, startedBy, statusCheckView, statusView, summary, terminalView, toDetailView, toGroupViews } from "./view.js";
 
 file("sessions/presentation/view");
 
@@ -112,4 +114,68 @@ test("who started a session: its parent's agent, another session, or nobody", ()
     .flatMap((g) => g.rows)
     .filter((r) => r.id === "peer");
   assert.ok(row.meta.startsWith("Backend dev · started by Backend dev · "), row.meta);
+});
+
+test("the architect's group leads, its row badged, its delegates indented (deeper ones capped at 3)", () => {
+  const ago = (m) => new Date(T0.getTime() - m * 60_000);
+  const list = [
+    makeSession({ id: "peer", updatedAt: ago(1) }),
+    makeSession({ id: "arch", role: "architect", mode: "architect", updatedAt: ago(9) }),
+    makeSession({ id: "d1", role: "delegate", parentSessionId: "arch", updatedAt: ago(8) }),
+    makeSession({ id: "d2", role: "delegate", parentSessionId: "d1", updatedAt: ago(7) }),
+    makeSession({ id: "d3", role: "delegate", parentSessionId: "d2", updatedAt: ago(6) }),
+    makeSession({ id: "d4", role: "delegate", parentSessionId: "d3", updatedAt: ago(5) }),
+  ];
+  const groups = toGroupViews(list, { selectedId: null, now: T0, agentNames: {} });
+  assert.deepEqual(groups.map((g) => `${g.key}:${g.label}:${g.count}`), ["architect:Architect:5", "active:Running:1"]);
+  assert.equal(groups[0].tone, null, "the architect is not a call for attention");
+  assert.deepEqual(
+    groups[0].rows.map((r) => [r.id, r.role, r.depth, r.badge]),
+    [["arch", "architect", 0, "architect"], ["d1", "delegate", 1, ""], ["d2", "delegate", 2, ""], ["d3", "delegate", 3, ""], ["d4", "delegate", 3, ""]],
+  );
+  assert.deepEqual([groups[1].rows[0].role, groups[1].rows[0].depth, groups[1].rows[0].badge], ["", 0, ""]);
+  assert.deepEqual([groups[1].rows[0].roleAttr, groups[1].rows[0].depthAttr], [null, null], "a peer's row carries neither attribute");
+  assert.deepEqual([groups[0].rows[0].roleAttr, groups[0].rows[0].depthAttr, groups[0].rows[4].depthAttr], ["architect", null, "3"]);
+});
+
+test("a status check reads the same as on first paint (shared fixture)", () => {
+  const min = (m) => (m === null ? null : new Date(T0.getTime() + m * 60_000));
+  for (const c of checks.cases) {
+    const check = makeCheck({ state: c.state, everyMinutes: c.every, nextAt: min(c.next_in), lastFiredAt: min(c.last_ago === null ? null : -c.last_ago), firedCount: c.fired });
+    const v = statusCheckView(check, T0);
+    assert.deepEqual([v.state, v.short, v.detail], [c.status, c.short, c.detail], `${c.state} every ${c.every}`);
+  }
+});
+
+test("a report reads as its status and age", () => {
+  const ago = (m) => new Date(T0.getTime() - m * 60_000);
+  assert.equal(reportView(makeMessage({ status: "ready_for_review", createdAt: ago(4) }), T0), "ready for review 4m");
+  assert.equal(reportView(makeMessage({ status: "blocked", createdAt: ago(0) }), T0), "blocked now");
+  assert.equal(reportView(makeMessage({ status: "", createdAt: ago(61) }), T0), "reported 1h");
+  assert.equal(reportView(null, T0), "no report yet");
+});
+
+test("a delegate's row says its last report and its next check instead of who started it", () => {
+  const ago = (m) => new Date(T0.getTime() - m * 60_000);
+  const list = [
+    makeSession({ id: "arch", role: "architect", mode: "architect", updatedAt: ago(9) }),
+    makeSession({ id: "d1", role: "delegate", parentSessionId: "arch", statusCheck: makeCheck({ nextAt: new Date(T0.getTime() + 6 * 60_000) }), updatedAt: ago(8) }),
+    makeSession({ id: "d2", role: "delegate", parentSessionId: "d1", updatedAt: ago(7) }),
+  ];
+  const names = { backend: "go-developer" };
+  const metaOf = (opts) => Object.fromEntries(toGroupViews(list, { selectedId: null, now: T0, agentNames: names, ...opts })[0].rows.map((r) => [r.id, r.meta]));
+
+  // Before the messages load: what the server renders too.
+  assert.deepEqual(metaOf({}), {
+    arch: "go-developer as architect · 9m",
+    d1: "go-developer · check in 6m",
+    d2: "go-developer · 7m",
+  });
+  // Loaded: each delegate's last report, or none yet.
+  const messages = [makeMessage({ fromSessionId: "d1", status: "ready_for_review", createdAt: ago(4) })];
+  assert.deepEqual(metaOf({ messages }), {
+    arch: "go-developer as architect · 9m",
+    d1: "go-developer · ready for review 4m · check in 6m",
+    d2: "go-developer · no report yet",
+  });
 });

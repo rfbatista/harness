@@ -74,6 +74,15 @@ type Service struct {
 	// Events announces SessionDeleted, so other contexts stop what runs in a
 	// session's worktree before it goes. Nil announces nothing.
 	Events ports.EventPublisher
+	// Roles says what a session is on its task, for the role-aware brief. Nil:
+	// every session is a peer.
+	Roles interface {
+		SessionRole(ctx context.Context, sessionID string) (domain.SessionRole, error)
+	}
+	// Decorator fills a session's derived role fields (role, the task's
+	// architect, its status check) as it leaves the service. Nil leaves them
+	// empty.
+	Decorator ports.SessionDecorator
 	// Transcripts checks an interactive session can be resumed. Nil skips the
 	// check and lets the CLI report a missing conversation itself.
 	Transcripts ports.ClaudeTranscripts
@@ -87,6 +96,9 @@ type Service struct {
 	// which is routinely *after* the initial task was already sent — cannot
 	// report the session as idle while Claude is working on that first turn.
 	busy map[string]bool
+	// courier holds the turns waiting for a session's turn to end, and what
+	// the server knows of interactive sessions' turns.
+	courier courier
 	// resuming marks sessions a ResumeInteractive call is bringing back, from
 	// its status check until the session is recorded running, so two calls at
 	// once cannot both pass the check.
@@ -233,6 +245,8 @@ type prepareInput struct {
 	AllowedTools []string
 	AutoAccept   string
 	Mode         domain.SessionMode
+	// Role is what the session will be on its task, for the brief; empty is a peer.
+	Role domain.SessionRole
 }
 
 // prepared is a session whose worktree exists and whose configuration is
@@ -308,7 +322,7 @@ func (s *Service) prepare(in prepareInput) (*prepared, error) {
 	}
 	permission := parseAutoAccept(in.AutoAccept)
 	return &prepared{
-		cfg:        s.sessionConfig(id, ws.Path, in.Model, in.AllowedTools, permission, ag, ticket, in.ZoneID),
+		cfg:        s.sessionConfig(id, ws.Path, in.Model, in.AllowedTools, permission, ag, ticket, in.ZoneID, in.Role),
 		ws:         ws,
 		branch:     in.Branch,
 		permission: permission,
@@ -375,7 +389,7 @@ func (s *Service) resolveAgent(agentID string, mode domain.SessionMode) (resolve
 // sessionConfig builds the CLI configuration shared by headless and
 // interactive sessions: the agent's prompt and skills, the task brief and
 // task MCP server, the agent's MCP servers and the zone's extra dirs.
-func (s *Service) sessionConfig(id, dir, model string, allowedTools []string, permission llmkit.PermissionMode, ag resolvedAgent, ticket *domain.Ticket, zoneID string) llmkit.SessionConfig {
+func (s *Service) sessionConfig(id, dir, model string, allowedTools []string, permission llmkit.PermissionMode, ag resolvedAgent, ticket *domain.Ticket, zoneID string, role domain.SessionRole) llmkit.SessionConfig {
 	cfg := llmkit.SessionConfig{
 		ID:           id,
 		WorkingDir:   dir,
@@ -394,7 +408,7 @@ func (s *Service) sessionConfig(id, dir, model string, allowedTools []string, pe
 	if s.TaskServerURL != nil {
 		taskURL = s.TaskServerURL(id)
 	}
-	applyTaskContext(&cfg, ticket, taskURL)
+	applyTaskContext(&cfg, ticket, taskURL, role)
 
 	for _, m := range resolveAttachedMCPServers(ag.agent, s.catalog.MCPServers.ListMCPServers()) {
 		cfg.MCPServers = append(cfg.MCPServers, llmkit.MCPServerSpec{
@@ -461,8 +475,26 @@ func (s *Service) pump(sess llmkit.Session) {
 			ev.Status = status
 		}
 		s.publish(id, ev)
+		if ce.Type == llmkit.EventResult {
+			s.announce(domain.SessionTurnEnded{SessionID: id})
+			s.flushHeadless(id)
+		}
 	}
 	s.runCleanup(id)
+	if sess := s.sessions.Get(id); sess != nil && sess.Status.IsTerminal() {
+		s.announce(domain.SessionEnded{SessionID: id, Status: sess.Status})
+	}
+}
+
+// announce publishes a lifecycle event on the bus. Subscribers react on their
+// own; their failure is logged, never the caller's.
+func (s *Service) announce(ev domain.Event) {
+	if s.Events == nil {
+		return
+	}
+	if err := s.Events.Publish(context.Background(), ev); err != nil {
+		slog.Warn("announce session event", "event", ev.EventName(), "err", err)
+	}
 }
 
 // turnBoundary resolves the two statuses that depend on whether a turn is in
@@ -863,6 +895,7 @@ func (s *Service) runCleanup(id string) {
 	delete(s.cleanups, id)
 	delete(s.busy, id)
 	s.mu.Unlock()
+	s.courier.forget(id)
 	if c != nil {
 		c()
 	}

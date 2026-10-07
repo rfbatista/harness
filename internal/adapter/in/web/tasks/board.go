@@ -1,6 +1,8 @@
 package tasks
 
 import (
+	"strconv"
+
 	"operators-mcp/internal/adapter/in/web/shell"
 	"operators-mcp/internal/domain"
 )
@@ -42,4 +44,13 @@ func (b Board) Empty() bool {
 		}
 	}
 	return true
+}
+
+// reviewsWord is a card's reviews badge: "1 review", "2 reviews". The
+// browser's board (boardView.js) says the same.
+func reviewsWord(n int) string {
+	if n == 1 {
+		return "1 review"
+	}
+	return strconv.Itoa(n) + " reviews"
 }

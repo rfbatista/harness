@@ -78,3 +78,35 @@ test("a task without sessions is deleted after confirming, then the project open
   assert.deepEqual(memory.tasks(), []);
   assert.deepEqual(visited, ["/projects/p1"]);
 });
+
+// ── a status moved elsewhere ──────────────────────────────────────────────
+
+function liveSetup() {
+  const task = makeTask({ architectSessionId: "s-arch" });
+  const memory = memoryTasks({ projects: ["p1"], tasks: [task] });
+  const store = { tasks: [task], statusChanges: {} };
+  const clock = { now: () => new Date("2026-10-02T14:02:00Z") };
+  const el = seededElement(taskDTO(task));
+  const mounted = mount(taskEditor({ gateway: memory.gateway, navigate: () => {}, reload: () => {}, store, clock }), { el });
+  mounted.instance.init();
+  return { ...mounted, store };
+}
+
+test("the architect moving the task shows who, when and why, and the picker follows", () => {
+  const { instance, store } = liveSetup();
+  assert.equal(instance.statusLine, "", "nothing seen yet: a reload starts without it");
+  store.statusChanges = { t1: { taskId: "t1", status: "review", reason: "Server and tools merged", by: "session", bySessionId: "s-arch", at: new Date("2026-10-02T14:00:00Z") } };
+  store.tasks = [makeTask({ status: "review", architectSessionId: "s-arch" })];
+  instance.follow(instance.storedStatus); // what Alpine's $watch on storedStatus does
+  assert.deepEqual([instance.statusLine, instance.statusReason], ["Moved to review by the architect · 2m", "“Server and tools merged”"]);
+  assert.deepEqual([instance.status, instance.task.status], ["review", "review"]);
+  instance.destroy();
+});
+
+test("the picker does not follow the echo of the page's own move", () => {
+  const { instance } = liveSetup();
+  instance.movingStatus = true;
+  instance.follow("done");
+  assert.equal(instance.task.status, "in_progress");
+  instance.destroy();
+});

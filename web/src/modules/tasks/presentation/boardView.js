@@ -1,6 +1,7 @@
 // The board as the markup binds it: columns in board order, each card with
 // the rail's dot and count and the link to its task.
 
+import { count } from "../../../shared/presentation/format.js";
 import { linkState } from "../domain/activity.js";
 import { byStatus } from "../domain/board.js";
 import { STATUSES } from "../domain/task.js";
@@ -23,7 +24,7 @@ export function toColumns(tasks, { projectId, byTask, fresh }) {
 }
 
 function toCard(task, projectId, activity, fresh) {
-  const { state, word } = linkState(activity);
+  const { state, word } = linkState(activity, task.pendingReviews);
   return {
     id: task.id,
     title: task.title,
@@ -36,5 +37,7 @@ function toCard(task, projectId, activity, fresh) {
     hasCount: activity.live > 0,
     fresh,
     moveLabel: `Move ${task.title} to`,
+    reviews: task.pendingReviews > 0 ? count(task.pendingReviews, "review") : "",
+    hasReviews: task.pendingReviews > 0,
   };
 }

@@ -2,6 +2,8 @@
  * Brief — a task's description under its title: prose as written (line
  * breaks kept), quieter than the work around it, scrolling when long.
  * <p class="brief">…</p>
+ * .status-change: who moved the task's status last and why, one line above
+ * it; the reason truncates (its full text is the title).
  */
 
 @layer blocks {
@@ -15,5 +17,17 @@
     color: var(--color-ink-muted);
     font-size: var(--text-sm);
     white-space: pre-wrap;
+  }
+
+  .status-change {
+    display: flex;
+    max-inline-size: none;
+    padding: var(--space-xs) var(--space-l);
+    border-block-end: var(--border-width) solid var(--color-line);
+    color: var(--color-ink-muted);
+    font-size: var(--text-sm);
+    white-space: nowrap;
+
+    & > .truncate { min-inline-size: 0; white-space: pre; }
   }
 }

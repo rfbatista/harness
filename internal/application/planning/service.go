@@ -5,8 +5,10 @@ package planning
 
 import (
 	"context"
+	"log/slog"
 	"strings"
 	"sync"
+	"time"
 
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
@@ -24,6 +26,14 @@ type Service struct {
 	// Announcer puts every ticket change on the project feed. Nil announces
 	// nothing (tests, a server without the feed).
 	Announcer ports.TicketAnnouncer
+	// StatusHistory records every status move, with who made it and why. Nil
+	// records nothing.
+	StatusHistory ports.TaskStatusChangeRepository
+	// Events announces TicketStatusChanged. Nil announces nothing.
+	Events ports.EventPublisher
+	// Decorator fills a ticket's derived fields (its architect, its pending
+	// reviews) before it is returned or announced. Nil leaves them empty.
+	Decorator ports.TicketDecorator
 
 	// ticketMu serialises write-then-announce on tickets, so the feed carries
 	// a ticket's changes in the order they were applied.
@@ -53,6 +63,35 @@ func (s *Service) announce(tk *domain.Ticket, deleted bool) {
 	}
 }
 
+// decorate fills the tickets' derived fields, when a decorator is wired.
+func (s *Service) decorate(tickets ...*domain.Ticket) {
+	if s.Decorator != nil {
+		s.Decorator.DecorateTickets(tickets...)
+	}
+}
+
+// statusMoved records a status move and announces it. A failure to record
+// is logged: the move itself already happened.
+func (s *Service) statusMoved(ctx context.Context, tk *domain.Ticket, patch ports.TicketPatch) {
+	c := domain.TaskStatusChange{
+		TaskID: tk.ID, ProjectID: tk.ProjectID, Status: tk.Status, Reason: patch.StatusReason,
+		BySessionID: patch.BySessionID, By: domain.ChangedByPerson, At: time.Now(),
+	}
+	if c.BySessionID != "" {
+		c.By = domain.ChangedBySession
+	}
+	if s.StatusHistory != nil {
+		if err := s.StatusHistory.Append(&c); err != nil {
+			slog.Warn("record task status change", "ticket", tk.ID, "err", err)
+		}
+	}
+	if s.Events != nil {
+		if err := s.Events.Publish(ctx, domain.TicketStatusChanged{Change: c}); err != nil {
+			slog.Warn("announce task status change", "ticket", tk.ID, "err", err)
+		}
+	}
+}
+
 func (s *Service) CreateTicket(_ context.Context, projectID, title, description string, status domain.TicketStatus) (*domain.Ticket, error) {
 	if title == "" {
 		return nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "title is required"}
@@ -72,6 +111,7 @@ func (s *Service) CreateTicket(_ context.Context, projectID, title, description 
 	if err != nil {
 		return nil, err
 	}
+	s.decorate(tk)
 	s.announce(tk, false)
 	return tk, nil
 }
@@ -81,11 +121,14 @@ func (s *Service) GetTicket(_ context.Context, id string) (*domain.Ticket, error
 	if tk == nil {
 		return nil, &domain.StructuredError{Code: "TICKET_NOT_FOUND", Message: "ticket not found"}
 	}
+	s.decorate(tk)
 	return tk, nil
 }
 
 func (s *Service) ListTickets(_ context.Context, projectID string) ([]*domain.Ticket, error) {
-	return s.tickets.ListByProject(projectID), nil
+	tickets := s.tickets.ListByProject(projectID)
+	s.decorate(tickets...)
+	return tickets, nil
 }
 
 // UpdateTicket replaces every field. It is the patch with every field present,
@@ -98,7 +141,7 @@ func (s *Service) UpdateTicket(ctx context.Context, id, title, description strin
 // PatchTicket changes only the fields patch carries. It reads the ticket,
 // applies the patch, validates the result and writes it back whole, since the
 // repository replaces every column. An unchanged ticket is not written.
-func (s *Service) PatchTicket(_ context.Context, id string, patch ports.TicketPatch) (*domain.Ticket, error) {
+func (s *Service) PatchTicket(ctx context.Context, id string, patch ports.TicketPatch) (*domain.Ticket, error) {
 	if id == "" {
 		return nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "ticket_id is required"}
 	}
@@ -125,13 +168,18 @@ func (s *Service) PatchTicket(_ context.Context, id string, patch ports.TicketPa
 		status = *patch.Status
 	}
 	if title == existing.Title && description == existing.Description && status == existing.Status {
+		s.decorate(existing)
 		return existing, nil
 	}
 	tk, err := s.tickets.Update(id, title, description, status)
 	if err != nil {
 		return nil, err
 	}
+	s.decorate(tk)
 	s.announce(tk, false)
+	if status != existing.Status {
+		s.statusMoved(ctx, tk, patch)
+	}
 	return tk, nil
 }
 

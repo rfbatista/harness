@@ -1,6 +1,6 @@
 ---
 name: task-architecture
-description: Use in a harness task session started in architect mode, or whenever a task is a feature request to shape across applications. The architect identifies the affected applications from the project, writes one spec per application and one contract per interaction as task documents, and delegates each spec to a planning agent through start_task_session. It never plans code, never writes implementation, and never saves anything to local files.
+description: Use in a harness task session started in architect mode, or whenever a task is a feature request to shape across applications. The architect identifies the affected applications from the project, writes one spec per application and one contract per interaction as task documents, and delegates each spec to a planning agent through start_task_session. It then coordinates those delegates: it answers their review requests and status reports, asks the person for review when a decision is theirs, and is the only session that moves the task status. It never plans code, never writes implementation, and never saves anything to local files.
 ---
 
 # Task Architecture
@@ -42,6 +42,11 @@ execution agents navigate it.
   harness (`list_project_repositories`, `list_bounded_contexts`, `list_agents`).
 - **A spec that is written but not delegated is not handed off.** Assignment
   means a running session of the planning agent, started by you.
+- **You are the only session that moves the task status.** Your delegates
+  report to you instead, and their `update_task_status` is refused. Every
+  change you make carries a `reason`.
+- **Never leave a delegate's review request or question unanswered.** A
+  delegate waiting on you is stalled work.
 - If a tool you need does not exist or fails, say so under **Gaps** in the
   overview document and carry on with what you can — do not fall back to files.
 
@@ -59,7 +64,15 @@ execution agents navigate it.
 | `mcp__task__list_bounded_contexts` | Domain boundaries: purpose, ubiquitous language, zones (paths) |
 | `mcp__task__list_agents` | The agents you can delegate to, with what each is for |
 | `mcp__task__list_task_sessions` | Who already works on this task; track delegated sessions |
-| `mcp__task__start_task_session` | Hand a spec to a planning agent in its repository |
+| `mcp__task__start_task_session` | Hand a spec to a planning agent in its repository; `status_check_minutes` sets how often you are woken to check on it |
+| `mcp__task__reply_to_session` | Answer a delegate; on a review request, with a `verdict` |
+| `mcp__task__list_task_messages` | Every message between your delegates and you, to catch up |
+| `mcp__task__request_user_review` | Ask the person to review a plan, a branch, a document or an artifact |
+| `mcp__task__withdraw_user_review` | Withdraw a review request that is no longer needed |
+| `mcp__task__list_review_requests` | The review requests you raised, and where each stands |
+| `mcp__task__set_status_check` | Change or pause the loop that wakes you about a delegate |
+| `mcp__task__list_status_checks` | Every status-check loop on the task |
+| `mcp__task__update_task_status` | Move the task's status, with a `reason`; only you can |
 
 ## The Architect's Loop
 
@@ -78,8 +91,10 @@ execution agents navigate it.
 6. **Write the overview** document.
 7. **Pick a planning agent per spec** from `list_agents`, by its description.
 8. **Delegate** in the order the sequencing rules allow.
-9. **Track and report.** Record each delegated session in the overview; check
-   `list_task_sessions` before telling anyone the work is underway or done.
+9. **Coordinate.** Record each delegated session in the overview, then work
+   the turns your delegates and their status checks send you (see
+   **Coordinating Delegates**). Check `list_task_sessions` before telling
+   anyone the work is underway or done.
 
 ## Document Formats
 
@@ -194,6 +209,8 @@ angle-bracket placeholders are written as `&lt;…&gt;` so they show as text.
 <ul><li>&lt;Contract document titles, with status&gt;</li></ul>
 <h2>Sequencing</h2>
 <p>&lt;What starts first and what waits on which contract&gt;</p>
+<h2>Reviews</h2>
+<ul><li>&lt;Open review requests for the person: subject, the delegate it is about, state — or "none"&gt;</li></ul>
 <h2>Gaps</h2>
 <p>&lt;Missing tools, missing agents, open questions — or "none"&gt;</p>
 </body>
@@ -212,12 +229,61 @@ For each spec whose dependencies are stable, call `start_task_session`:
   > change a contract you consume; if it needs to change, write that in a task
   > document and stop. Write your plan as a task document titled
   > "Plan: backend — CSV export", as an HTML page (create_task_document
-  > takes only HTML).
+  > takes only HTML). When your plan is ready, ask me for review with
+  > message_architect (kind review_request, attach the plan document).
+  > Report status with kind status_report at milestones and when you are
+  > blocked. Do not change the task status.
+- `status_check_minutes`: how often the harness wakes you to check on this
+  session. The default is 10. Use a longer interval for long implementation
+  work, and 0 for a session that needs no follow-up.
 
 Then update the overview's table with the returned `session_id` and branch.
 
 At most 8 sessions run on a task at once (yours included). If you hit the
 limit, delegate the rest later and note it in the overview.
+
+## Coordinating Delegates
+
+Your delegates talk to you directly, and the harness wakes you about them. Each
+of these arrives as a new turn. Treat them as your work queue:
+
+| Turn starts with | Do |
+|---|---|
+| `[task message … · review_request …]` | Read the documents and artifacts it names and judge them against the spec and its contracts. Answer with `reply_to_session`: `verdict: approved`, or `verdict: changes_requested` and what to change. Pass the message id as `in_reply_to`. |
+| `[task message … · status_report …]` | Update the overview's Status column. If the delegate is `blocked`, unblock it with a reply, or ask the person. |
+| `[task message … · question …]` | Answer it with `reply_to_session`, or ask the person if the decision is theirs. |
+| `[… review_response …]` | The person answered one of your review requests. Carry their answer to the delegate it is about, then move the status if it changes. |
+| `[status check …]` | The delegate has not reported for a while. Read `list_task_messages` for it, and ask it for a report with `reply_to_session` if it has gone quiet. If the check says it ended, read what it left and decide the next step. |
+
+A message sent while its recipient is mid-turn goes in when that turn ends; a
+session that is not running reads it later with `list_task_messages`. When you
+come back after a while, read `list_task_messages` and
+`list_review_requests` before acting.
+
+**Ask the person for review** with `request_user_review` when a plan crosses a
+contract, when a decision is theirs to make, or when the work is ready to ship.
+Attach the documents and artifacts, and name the delegate with
+`about_session_id`. Do not send them routine plan approvals you can judge
+against the spec yourself. Withdraw a review that is no longer needed with
+`withdraw_user_review`.
+
+**Status policy.** Only you move the task status, always with
+`update_task_status` and a `reason` saying what happened:
+
+- `in_progress` when the first delegate starts;
+- `review` when you open a review request for the finished work, or every
+  delegate reports `done`;
+- `done` only after the person approves;
+- back to `in_progress` when the person requests changes.
+
+Neither a message, a review request nor a status check moves the status by
+itself.
+
+**Status-check loops.** Each session you start gets a loop that wakes you every
+`status_check_minutes` (default 10). A delegate that reports pushes its next
+check back on its own. Use `set_status_check` to lengthen the interval for long
+implementation work, or pass 0 to pause it while you wait on the person.
+`list_status_checks` shows every loop.
 
 ## Sequencing Rules
 
@@ -237,6 +303,9 @@ assignment; sequencing.
 code; designing screens or components; debugging or running tests; reviewing
 diffs line by line.
 
+Reviewing a delegate's plan against its spec and contracts is architecture.
+Reviewing its diff line by line is not.
+
 ## Common Mistakes
 
 | Mistake | Correction |
@@ -251,6 +320,9 @@ diffs line by line.
 | Duplicating documents an earlier session wrote | Read first; `update_task_document` what exists. |
 | Leaving a stable contract as a task document | Move it with `move_document_to_project`; the next task's sessions read it from the project. |
 | Writing a spec in Markdown | Task documents are HTML pages; the tool refuses Markdown. Use the templates above. |
+| A delegate's review request sits unanswered | Reply with a verdict; it is waiting on you. |
+| Letting a delegate move the task status, or moving it without a reason | Only you move it, with `update_task_status` and a `reason`. |
+| Asking the person to review every plan | Ask only for what needs their decision; judge the rest against the spec. |
 
 ## Red Flags
 

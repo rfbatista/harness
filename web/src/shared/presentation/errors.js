@@ -29,6 +29,9 @@ const NEXT_STEP = {
   [Codes.INVALID_STATUS]: "pick one of the listed statuses",
   [Codes.CROSS_PROJECT_ACCESS]: "pick a repository of this project",
   [Codes.CLAUDE_CLI_NOT_FOUND]: "install the Claude CLI on the server's machine, then retry",
+  [Codes.STATUS_CHECK_NOT_FOUND]: "its loop is gone (the session ended?); the list will refresh",
+  [Codes.REVIEW_NOT_FOUND]: "the architect's request is gone; reload the page",
+  [Codes.REVIEW_NOT_PENDING]: "it was already answered or withdrawn; the list now shows where it stands",
   [Codes.BAD_RESPONSE]: "the server and the web client disagree; reload the page",
 };
 

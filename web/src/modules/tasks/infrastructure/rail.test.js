@@ -4,6 +4,7 @@ import { Codes } from "../../../shared/domain/errors.js";
 import { apiClient } from "../../../shared/infrastructure/api.js";
 import { feed } from "../../../shared/infrastructure/feed.js";
 import { jsonResponse } from "../../../shared/testing/doubles.js";
+import { toTask } from "./dto.js";
 import { assert, file, test } from "../../../shared/testing/test.js";
 import { makeTask, taskDTO } from "../testing/fixtures.js";
 import { railGatewayContract } from "../testing/rail-contract.js";
@@ -71,4 +72,23 @@ test("listing tasks leaves out one it cannot read instead of failing the whole l
   const fetch = async () => jsonResponse(200, { tickets: [taskDTO(makeTask()), { id: "t-odd", project_id: "p1", title: "Someday", status: "someday" }] });
   const gateway = railGateway(apiClient({ base: "/api", fetch }), feed({ base: "/api", EventSource: class {} }));
   assert.deepEqual((await gateway.listTasks("p1")).map((t) => t.id), ["t1"]);
+});
+
+test("a task reads its architect and how many reviews wait on the person; absent, none", () => {
+  const t = toTask({ id: "t1", status: "review", architect_session_id: "s-arch", pending_reviews: 2 });
+  assert.deepEqual([t.architectSessionId, t.pendingReviews], ["s-arch", 2]);
+  const plain = toTask({ id: "t2", status: "todo", architect_session_id: null });
+  assert.deepEqual([plain.architectSessionId, plain.pendingReviews], ["", 0]);
+});
+
+test("a task_status message says who moved the task and why", () => {
+  const { kind, change } = toProjectChange({ task_status: { task_id: "t1", status: "review", reason: "All specs merged", by_session_id: "s-arch", by: "session", at: "2026-10-02T14:00:00Z" } });
+  assert.equal(kind, "task-status");
+  assert.deepEqual(
+    [change.taskId, change.status, change.reason, change.by, change.bySessionId, change.at.toISOString()],
+    ["t1", "review", "All specs merged", "session", "s-arch", "2026-10-02T14:00:00.000Z"],
+  );
+  const person = toProjectChange({ task_status: { task_id: "t1", status: "done", by: "person" } }).change;
+  assert.deepEqual([person.reason, person.bySessionId, person.at], ["", "", null]);
+  assert.equal(toProjectChange({ task_status: { task_id: "t1", status: "done", by: "robot" } }), null, "an unknown author drops it");
 });

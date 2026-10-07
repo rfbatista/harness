@@ -1,10 +1,12 @@
 // The sessions module's Alpine components. Names are global: module
 // components carry the module prefix.
 
+import { conversation } from "./components/conversation.js";
 import { designLibrary } from "./components/designLibrary.js";
 import { designPanel } from "./components/designPanel.js";
 import { newSession } from "./components/newSession.js";
 import { terminal } from "./components/terminal.js";
+import { statusCheck } from "./components/statusCheck.js";
 import { sessionsPage } from "./pages/sessionsPage.js";
 
 /**
@@ -16,10 +18,17 @@ import { sessionsPage } from "./pages/sessionsPage.js";
  *   runTerminals?: import("../domain/ports.js").TerminalGateway,  application runs' terminals
  *   createScreen: import("./components/terminal.js").CreateScreen,
  *   clock: import("../../../shared/infrastructure/clock.js").Clock,
+ *   channel?: import("../domain/ports.js").ChannelGateway,  the architect channel
  * }} deps
  */
 export function registerSessions(Alpine, deps) {
-  Alpine.data("sessionsPage", sessionsPage(deps));
+  // The task's messages between its architect and the delegates, shared by
+  // the page and its Conversation tab.
+  Alpine.store("sessionsChannel", { messages: [], loaded: false });
+  const channelStore = Alpine.store("sessionsChannel");
+  Alpine.data("sessionsPage", sessionsPage({ ...deps, channelStore }));
+  Alpine.data("sessionsConversation", conversation({ ...deps, channelStore }));
+  Alpine.data("sessionsStatusCheck", statusCheck(deps));
   Alpine.data("sessionsNewSession", newSession(deps));
   Alpine.data("sessionsTerminal", terminal(deps));
   Alpine.data("sessionsDesignPanel", designPanel(deps));

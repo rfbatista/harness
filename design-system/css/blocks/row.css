@@ -4,7 +4,9 @@
  * Exceptions: aria-selected / aria-current, data-attention, data-dense,
  * data-fresh (just arrived over the live feed: a wash that fades),
  * data-stacked (two lines for narrow lists: status | title | action, then
- * the meta under the title, truncating; the action keeps its own column).
+ * the meta under the title, truncating; the action keeps its own column),
+ * data-role="architect" (the task's architect: a bolder title), data-depth
+ * (1–3: a delegate indented under its architect, one step per level).
  */
 
 @layer blocks {
@@ -73,6 +75,14 @@
         text-overflow: ellipsis;
       }
     }
+
+    &[data-role="architect"] > .title { font-weight: var(--weight-bold); }
+    & > .title .badge { vertical-align: 1px; }
+
+    &[data-depth] { padding-inline-start: calc(var(--space-l) + var(--_depth, 0) * var(--space-l)); }
+    &[data-depth="1"] { --_depth: 1; }
+    &[data-depth="2"] { --_depth: 2; }
+    &[data-depth="3"] { --_depth: 3; }
 
     &[data-dense] {
       min-block-size: 1.875rem;

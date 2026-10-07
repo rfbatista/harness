@@ -30,9 +30,12 @@ export function activityByTask(sessions) {
   return out;
 }
 
-/** A rail link's dot: the BFF's Link.liveState / liveWord. */
-export function linkState(activity) {
-  if (activity.attention) return { state: "waiting", word: "waiting on you" };
+/**
+ * A rail link's dot: the BFF's Link.liveState / liveWord. Reviews the
+ * architect raised wait on the person as much as a session's prompt does.
+ */
+export function linkState(activity, pendingReviews = 0) {
+  if (activity.attention || pendingReviews > 0) return { state: "waiting", word: "waiting on you" };
   if (activity.live > 0) return { state: "running", word: "running" };
   return { state: "", word: "" };
 }

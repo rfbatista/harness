@@ -83,6 +83,13 @@ type Session struct {
 	ResumeBlocked string    `json:"resume_blocked"`
 	CreatedAt     time.Time `json:"created_at"`
 	UpdatedAt     time.Time `json:"updated_at"`
+
+	// Role, ArchitectSessionID and StatusCheck are derived from the task's
+	// sessions when a session is read, never stored: what the session is on
+	// its task, the task's architect, and the loop checking on it.
+	Role               SessionRole  `json:"role"`
+	ArchitectSessionID *string      `json:"architect_session_id"`
+	StatusCheck        *StatusCheck `json:"status_check"`
 }
 
 // Runner is where an interactive session's agent process runs.

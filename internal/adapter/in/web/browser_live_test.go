@@ -120,7 +120,12 @@ func TestSessionsStartedElsewhereShowUpLive(t *testing.T) {
 	if t1Before != "1" || t2Before != "" {
 		t.Fatalf("rail before: t1=%q t2=%q", t1Before, t2Before)
 	}
-	waitFor(t, "both followers", func() bool { return feed.followers() >= 2 })
+	// The rail and the sessions page follow the project feed over one shared
+	// stream, not one each.
+	waitFor(t, "the page's feed", func() bool { return feed.followers() >= 1 })
+	if n := feed.followers(); n != 1 {
+		t.Fatalf("the page opened %d streams on the project feed, want 1 shared", n)
+	}
 
 	feed.push(t, ports.SessionChange{Session: &domain.Session{
 		ID: "peer", ProjectID: "p1", TicketID: "t1", Task: "Write the feed tests", Status: domain.SessionRunning,

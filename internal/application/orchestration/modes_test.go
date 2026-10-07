@@ -204,3 +204,32 @@ func TestStartInteractive_ArchitectSkillNamesProjectAssets(t *testing.T) {
 		t.Errorf("task-architecture SKILL.md lacks mcp__task__list_project_artifacts")
 	}
 }
+
+// The architect coordinates its delegates and owns the task status: its skill
+// and opening prompt name the channel tools, the turns that wake it, and the
+// rule that only it moves the status, with a reason.
+func TestStartInteractive_ArchitectCoordinatesDelegates(t *testing.T) {
+	svc, _ := newInteractiveService(t)
+	_, launch := startInteractive(t, svc, InteractiveRequest{Mode: "architect"})
+	body := pluginSkill(t, launch, "task-architecture")
+	for _, want := range []string{
+		"mcp__task__reply_to_session", "mcp__task__list_task_messages", "mcp__task__request_user_review",
+		"mcp__task__withdraw_user_review", "mcp__task__list_review_requests", "mcp__task__set_status_check",
+		"mcp__task__list_status_checks", "mcp__task__update_task_status",
+		"[task message", "[status check", "review_response", "verdict", "reason", "status_check_minutes",
+		"## Coordinating Delegates",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("task-architecture SKILL.md lacks %q", want)
+		}
+	}
+	// The prompt it hands each planning agent tells it to report back.
+	if !strings.Contains(body, "message_architect") || !strings.Contains(body, "Do not change the task status") {
+		t.Error("task-architecture delegation prompt does not tell the delegate to report to the architect")
+	}
+	for _, want := range []string{"update_task_status", "reason", "reply_to_session", "request_user_review", "set_status_check", "[status check"} {
+		if !strings.Contains(launch.Spec.Prompt, want) {
+			t.Errorf("architect prompt lacks %q:\n%s", want, launch.Spec.Prompt)
+		}
+	}
+}

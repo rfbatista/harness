@@ -29,8 +29,9 @@ func (Agent) Kind() string { return Kind }
 // Command is the interactive CLI's argv for spec. It carries what the
 // headless argv does (llmkit's, which is unexported and hardwired to --print
 // and stream-json) minus the protocol flags and the approval server: in a
-// terminal claude asks its questions itself. It adds the SessionStart hook
-// that reports conversation changes back to the server.
+// terminal claude asks its questions itself. It adds the hooks that report
+// back to the server: the conversation it is in, and where its turns start
+// and end.
 func (a Agent) Command(spec ports.AgentSpec) (ports.ShellCommand, error) {
 	if spec.Kind != "" && spec.Kind != Kind {
 		return ports.ShellCommand{}, fmt.Errorf("claudecli: cannot run a %q agent", spec.Kind)
@@ -76,7 +77,7 @@ func (a Agent) Command(spec ports.AgentSpec) (ports.ShellCommand, error) {
 		args = append(args, "--append-system-prompt", spec.AppendSystem)
 	}
 	if spec.HookURL != "" {
-		settings, err := sessionStartHookSettings(spec.HookURL)
+		settings, err := sessionHookSettings(spec.HookURL)
 		if err != nil {
 			return ports.ShellCommand{}, err
 		}
@@ -121,21 +122,32 @@ func mcpConfigJSON(servers []ports.MCPServerSpec) (string, error) {
 	return string(b), err
 }
 
-// sessionStartHookSettings is a --settings payload whose SessionStart hook
-// posts the hook's input — which names the current conversation — to url.
+// sessionHookSettings is a --settings payload whose hooks post their input
+// to url, with the hook's name added as event=: SessionStart names the
+// conversation, UserPromptSubmit starts a turn and Stop ends one.
 // --settings layers over the user's own settings rather than replacing them.
 //
-// The hook must never disturb the session: its stdout would be added to
-// claude's context, so the response is discarded, and a server that is down
-// only costs the five-second timeout.
-func sessionStartHookSettings(url string) (string, error) {
-	cmd := "curl -fsS -m 5 -X POST -H 'Content-Type: application/json' --data-binary @- '" +
-		url + "' >/dev/null 2>&1 || true"
+// The hooks must never disturb the session. SessionStart's and
+// UserPromptSubmit's stdout would be added to claude's context, so their
+// response is discarded. Stop's is passed through: it is how the server hands
+// claude turns that waited for this one to end ({"decision":"block",...}),
+// and it is empty otherwise. A server that is down only costs the
+// five-second timeout, and the session goes on as if it had answered nothing.
+func sessionHookSettings(url string) (string, error) {
+	sep := "&"
+	if !strings.Contains(url, "?") {
+		sep = "?"
+	}
+	post := func(event, out string) any {
+		cmd := "curl -fsS -m 5 -X POST -H 'Content-Type: application/json' --data-binary @- '" +
+			url + sep + "event=" + event + "' " + out + " || true"
+		return []any{map[string]any{"hooks": []any{map[string]any{"type": "command", "command": cmd}}}}
+	}
 	b, err := json.Marshal(map[string]any{
 		"hooks": map[string]any{
-			"SessionStart": []any{
-				map[string]any{"hooks": []any{map[string]any{"type": "command", "command": cmd}}},
-			},
+			"SessionStart":     post("SessionStart", ">/dev/null 2>&1"),
+			"UserPromptSubmit": post("UserPromptSubmit", ">/dev/null 2>&1"),
+			"Stop":             post("Stop", "2>/dev/null"),
 		},
 	})
 	return string(b), err

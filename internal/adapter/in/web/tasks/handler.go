@@ -8,6 +8,7 @@ import (
 
 	"operators-mcp/internal/adapter/in/web/sessions"
 	"operators-mcp/internal/adapter/in/web/shell"
+	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
 )
 
@@ -98,15 +99,21 @@ func (h Handler) Task(w http.ResponseWriter, r *http.Request) error {
 	}
 	frame.Live = true // sessionsPage follows the project's feed
 	view := sessions.NewPageView(frame, project, task, list, agents, repos, h.Now())
+	var docs []*domain.Document
 	if h.Docs != nil {
-		docs := h.Docs.ListTicketDocuments(task.ID)
+		docs = h.Docs.ListTicketDocuments(task.ID)
 		view.Documents = &sessions.DocumentsLink{
 			Href:      DocumentsHref(project.ID, task.ID, ""),
 			TicketID:  task.ID,
 			Count:     len(docs),
 			Signature: documentSignature(docs),
 		}
+		view.Seed.DocumentTitles = make(map[string]string, len(docs))
+		for _, d := range docs {
+			view.Seed.DocumentTitles[d.ID] = d.Title
+		}
 	}
+	view.Reviews = reviewsSeed(project.ID, task.ID, list, agents, []*domain.Ticket{task}, docs)
 	for _, st := range Statuses {
 		view.StatusChoices = append(view.StatusChoices, sessions.StatusChoice{Value: st.Value, Label: st.Label, Selected: st.Value == string(task.Status)})
 	}

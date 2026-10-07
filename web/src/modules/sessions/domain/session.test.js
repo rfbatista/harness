@@ -1,6 +1,7 @@
 import { assert, file, test } from "../../../shared/testing/test.js";
 import { makeSession, T0 } from "../testing/fixtures.js";
-import { applyChange, canResume, group, needsYou, ofTask } from "./session.js";
+import roles from "../../../../testdata/views/session-roles.json" with { type: "json" };
+import { applyChange, canResume, displayOrder, group, needsYou, ofTask } from "./session.js";
 
 file("sessions/domain/session");
 
@@ -54,4 +55,26 @@ test("only a session the server marks resumable can be resumed", () => {
   assert.equal(canResume(makeSession({ status: "stopped", resumable: true, resumeBlocked: "" })), true);
   assert.equal(canResume(makeSession({ status: "done", resumable: false, resumeBlocked: "WORKSPACE_MISSING" })), false);
   assert.equal(canResume(makeSession()), false, "a running session is not resumable");
+});
+
+// Roles: the architect and its delegates. The shared fixture pins the order
+// for the BFF too (internal/adapter/in/web/sessions/view_test.go).
+
+const fromFixture = (s) =>
+  makeSession({ id: s.id, role: s.role, parentSessionId: s.parent ?? "", status: s.status, updatedAt: new Date(T0.getTime() - s.ago * 60_000) });
+
+test("the architect leads its group with its delegates under it (shared fixture)", () => {
+  for (const c of roles.cases) {
+    const groups = group(c.sessions.map(fromFixture));
+    assert.deepEqual(
+      groups.map((g) => [g.key, g.sessions.map((s) => [s.id, g.depth?.[s.id] ?? 0])]),
+      c.groups,
+      c.name,
+    );
+  }
+});
+
+test("the display order is the groups' order, for J and K", () => {
+  const c = roles.cases[1];
+  assert.deepEqual(displayOrder(c.sessions.map(fromFixture)), ["arch", "web", "server", "server-tests", "deep", "deeper", "peer"]);
 });

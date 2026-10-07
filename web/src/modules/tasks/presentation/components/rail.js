@@ -28,6 +28,7 @@ const QUIET = Object.freeze({ live: 0, attention: false });
  *   byTask: Record<string, import("../../domain/activity.js").Activity>,
  *   tasks: import("../../domain/task.js").Task[],
  *   seeded: boolean,
+ *   statusChanges?: Record<string, import("../../domain/board.js").StatusChange>,  the latest move per task seen over the feed
  * }} RailStore
  */
 
@@ -54,6 +55,13 @@ export const rail = ({ gateway, store }) => () => {
     },
     get isEmpty() {
       return store.seeded && store.tasks.length === 0;
+    },
+    /** Review requests waiting on the person across the project, for the Reviews link's badge. */
+    get reviewsCount() {
+      return store.tasks.reduce((n, t) => n + (t.pendingReviews ?? 0), 0);
+    },
+    get hasReviews() {
+      return this.reviewsCount > 0;
     },
 
     init() {
@@ -88,6 +96,10 @@ export const rail = ({ gateway, store }) => () => {
 
     /** One feed change: a task's, or a session's. */
     apply(change) {
+      if (change.kind === "task-status") {
+        store.statusChanges = { ...store.statusChanges, [change.change.taskId]: change.change };
+        return;
+      }
       if (change.kind === "task-upsert" || change.kind === "task-deleted") {
         const id = change.kind === "task-deleted" ? change.id : change.task.id;
         const previous = store.tasks.find((t) => t.id === id) ?? null;
@@ -121,7 +133,7 @@ export const rail = ({ gateway, store }) => () => {
     /** A task as the rail links it: its page, its dot and its count. */
     link(task) {
       const activity = store.byTask[task.id] ?? QUIET;
-      const { state, word } = linkState(activity);
+      const { state, word } = linkState(activity, task.pendingReviews);
       return {
         id: task.id,
         href: taskHref(this.projectId, task.id),

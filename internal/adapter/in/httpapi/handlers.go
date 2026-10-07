@@ -37,6 +37,9 @@ type Services struct {
 	Workspaces   ports.WorkspaceManager
 	// Artifacts records and serves what sessions publish; nil answers 503.
 	Artifacts ports.Artifacts
+	// TaskChannel is the person's side of the architect channel: task
+	// messages, review requests, status checks. Nil answers 503.
+	TaskChannel ports.TaskChannelUI
 }
 
 // Handler serves the application's driving ports as HTTP endpoints (the same
@@ -61,6 +64,7 @@ type Handler struct {
 	planningSvc   ports.Planning
 	workspacesSvc ports.WorkspaceManager
 	artifactsSvc  ports.Artifacts
+	channel       ports.TaskChannelUI
 }
 
 // NewHandler returns an HTTP handler that serves /api/list_tree, /api/list_zones, /api/list_projects, etc.
@@ -81,6 +85,7 @@ func NewHandler(s Services) *Handler {
 		planningSvc:   s.Planning,
 		workspacesSvc: s.Workspaces,
 		artifactsSvc:  s.Artifacts,
+		channel:       s.TaskChannel,
 	}
 }
 

@@ -57,12 +57,19 @@ type SessionFeed interface {
 }
 
 // ProjectChange is one thing in a project as it is after a change, or a
-// deleted one. Exactly one of Session and Ticket is set; the wire tells them
-// apart by which key is present, so the other must be absent, never null.
+// deleted one. Exactly one of the pointers is set; the wire tells them apart
+// by which key is present, so the others must be absent, never null.
 type ProjectChange struct {
 	Session *domain.Session `json:"session,omitempty"`
 	Ticket  *domain.Ticket  `json:"ticket,omitempty"`
-	Deleted bool            `json:"deleted,omitempty"`
+	// The architect channel: a message created or delivered, a review request
+	// created or settled, a status check created, changed or fired, a task's
+	// status moved.
+	TaskMessage   *domain.TaskMessage      `json:"task_message,omitempty"`
+	ReviewRequest *domain.ReviewRequest    `json:"review_request,omitempty"`
+	StatusCheck   *StatusCheckEvent        `json:"status_check,omitempty"`
+	TaskStatus    *domain.TaskStatusChange `json:"task_status,omitempty"`
+	Deleted       bool                     `json:"deleted,omitempty"`
 }
 
 // ProjectID is the project whose followers the change is for.
@@ -72,6 +79,14 @@ func (c ProjectChange) ProjectID() string {
 		return c.Session.ProjectID
 	case c.Ticket != nil:
 		return c.Ticket.ProjectID
+	case c.TaskMessage != nil:
+		return c.TaskMessage.ProjectID
+	case c.ReviewRequest != nil:
+		return c.ReviewRequest.ProjectID
+	case c.StatusCheck != nil:
+		return c.StatusCheck.ProjectID
+	case c.TaskStatus != nil:
+		return c.TaskStatus.ProjectID
 	}
 	return ""
 }
@@ -108,6 +123,17 @@ type ConversationRecorder interface {
 	RecordClaudeSession(ctx context.Context, id, claudeSessionID string) error
 }
 
+// TurnHooks follows an interactive session's turns through the CLI's
+// UserPromptSubmit and Stop hooks, which drive them over a loopback-only
+// route. A turn that ends while turns wait in the session's outbox goes on
+// with them: TurnEnded returns the text the Stop hook hands back to claude
+// to continue with ("" lets the session stop). stopHookActive is the hook's
+// own flag: the turn is already a continuation.
+type TurnHooks interface {
+	TurnStarted(ctx context.Context, sessionID string) error
+	TurnEnded(ctx context.Context, sessionID string, stopHookActive bool) (continueWith string, err error)
+}
+
 // Orchestration is the whole session surface, for an adapter that serves all
 // of it (the HTTP API).
 type Orchestration interface {
@@ -118,6 +144,7 @@ type Orchestration interface {
 	SessionFeed
 	InteractiveSessions
 	ConversationRecorder
+	TurnHooks
 	TerminalAccess
 }
 
@@ -163,6 +190,10 @@ type InteractiveRequest struct {
 	ParentSessionID string `json:"parent_session_id,omitempty"`
 	// Mode layers a role on the agent (see domain.SessionMode); empty is none.
 	Mode string `json:"mode,omitempty"`
+	// StatusCheckMinutes is the status-check loop the task's architect wants
+	// on the session it starts: nil for the default (10 minutes), 0 for none,
+	// otherwise 2–240. Ignored when the starter is not the architect.
+	StatusCheckMinutes *int `json:"status_check_minutes,omitempty"`
 }
 
 // ResumeRequest reopens an ended interactive session, on RunsOn — which need
@@ -178,7 +209,7 @@ type ResumeRequest struct {
 type SessionEvent struct {
 	Seq       int64                `json:"seq"`
 	SessionID string               `json:"session_id"`
-	Type      string               `json:"type"` // user_message|output|output_delta|tool_use|tool_result|status|approval_needed|approval_resolved|approval_expired|auto_run|usage|done|error|artifact
+	Type      string               `json:"type"` // user_message|output|output_delta|tool_use|tool_result|status|approval_needed|approval_resolved|approval_expired|auto_run|usage|done|error|artifact|task_message|review_request|status_check|task_status
 	Status    domain.SessionStatus `json:"status,omitempty"`
 	Text      string               `json:"text,omitempty"`
 	ToolName  string               `json:"tool_name,omitempty"`
@@ -195,7 +226,13 @@ type SessionEvent struct {
 	// Artifact is the artifact an "artifact" event announces, as published or
 	// re-published (its Revision says which). Nil on every other type.
 	Artifact *domain.Artifact `json:"artifact,omitempty"`
-	At       time.Time        `json:"at"`
+	// The architect channel's objects, on the event types of the same names
+	// (task_message, review_request, status_check, task_status).
+	TaskMessage   *domain.TaskMessage      `json:"task_message,omitempty"`
+	ReviewRequest *domain.ReviewRequest    `json:"review_request,omitempty"`
+	StatusCheck   *StatusCheckEvent        `json:"status_check,omitempty"`
+	TaskStatus    *domain.TaskStatusChange `json:"task_status,omitempty"`
+	At            time.Time                `json:"at"`
 }
 
 type Usage struct {

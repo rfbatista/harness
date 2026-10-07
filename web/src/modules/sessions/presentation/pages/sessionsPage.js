@@ -8,23 +8,34 @@ import { FeedStatus } from "../../../../shared/domain/feed.js";
 import { describeError } from "../../../../shared/presentation/errors.js";
 import { readSeed } from "../../../../shared/presentation/seed.js";
 import { Codes, codeOf } from "../../../../shared/domain/errors.js";
-import { applyChange, byRecent, group, INITIAL_TERMINAL_SIZE, isTerminal, ofTask } from "../../domain/session.js";
+import { mergeMessages, newestAt, upsertMessage } from "../../domain/channel.js";
+import { applyChange, displayOrder, group, INITIAL_TERMINAL_SIZE, isTerminal, ofTask } from "../../domain/session.js";
 import { artifactTitle } from "../artifactView.js";
-import { startedBy, summary, toDetailView, toGroupViews } from "../view.js";
+import { announceMessage } from "../channelView.js";
+import { agentLabel, startedBy, statusCheckView, summary, toDetailView, toGroupViews } from "../view.js";
 
 const TICK_MS = 30_000;
+
+/** How long a session that arrived over the feed stays highlighted. */
+export const FRESH_MS = 8_000;
+
+/**
+ * The task's messages between its architect and the delegates, shared by the
+ * page and its Conversation tab: Alpine.store("sessionsChannel").
+ * @typedef {{ messages: import("../../domain/channel.js").TaskMessage[], loaded: boolean }} ChannelStore
+ */
 
 /**
  * @param {{
  *   gateway: import("../../domain/ports.js").SessionGateway,
  *   clock: import("../../../../shared/infrastructure/clock.js").Clock,
+ *   channel?: import("../../domain/ports.js").ChannelGateway,  the architect channel; without it the page shows none
+ *   channelStore?: ChannelStore,
  * }} deps
  */
-/** How long a session that arrived over the feed stays highlighted. */
-export const FRESH_MS = 8_000;
-
-export const sessionsPage = ({ gateway, clock, setTimeout = globalThis.setTimeout.bind(globalThis) }) => () => {
+export const sessionsPage = ({ gateway, clock, channel = null, channelStore = { messages: [], loaded: false }, setTimeout = globalThis.setTimeout.bind(globalThis) }) => () => {
   let unfollow = () => {};
+  let unfollowChannel = null;
   let ticker = null;
 
   return {
@@ -54,10 +65,17 @@ export const sessionsPage = ({ gateway, clock, setTimeout = globalThis.setTimeou
     announcement: "",
     /** Publishes that arrived while the Design tab was not in front. */
     unseenArtifacts: 0,
+    /** Messages to or from the selected session that arrived while its Conversation tab was not in front. */
+    unseenMessages: 0,
+    /** Each delegate's last non-zero status-check interval, for Resume after a pause. */
+    lastIntervals: {},
+    /** The task's documents when the page loaded, to name the ones a message links. */
+    documentTitles: {},
 
     // ── what the markup binds ────────────────────────────────────────────
     get groups() {
       return toGroupViews(this.sessions, {
+        messages: channelStore.loaded ? channelStore.messages : undefined,
         selectedId: this.selectedId,
         now: this.now,
         agentNames: this.agentNames,
@@ -151,6 +169,60 @@ export const sessionsPage = ({ gateway, clock, setTimeout = globalThis.setTimeou
     get designTabSelected() {
       return this.detailTab === "design";
     },
+    /** The selected session is the architect or a delegate: it has a conversation to show. */
+    get hasConversation() {
+      return this.showingSession && this.selectedRole() !== "";
+    },
+    get showingConversation() {
+      return this.hasConversation && this.detailTab === "conversation";
+    },
+    /**
+     * The selected delegate's status-check bar, keyed on what a person can
+     * change, so a change from anywhere mounts a fresh one.
+     */
+    get statusCheckBars() {
+      const session = this.showingSession ? this.sessions.find((s) => s.id === this.selectedId) : null;
+      const check = session?.statusCheck;
+      if (!check) return [];
+      const view = statusCheckView(check, this.now);
+      return [
+        {
+          key: `${session.id}:${check.state}:${check.everyMinutes}`,
+          sessionId: session.id,
+          check,
+          remembered: this.lastIntervals[session.id] ?? 0,
+          state: view.state,
+          detail: view.detail,
+        },
+      ];
+    },
+    get conversationTabSelected() {
+      return this.detailTab === "conversation";
+    },
+    get conversationBadge() {
+      return this.unseenMessages > 0 ? String(this.unseenMessages) : "";
+    },
+    /** The Conversation tab's panel, keyed on the session, with what it needs to name people and links. */
+    get conversationPanels() {
+      if (!this.showingConversation) return [];
+      const isArchitect = this.selectedRole() === "architect";
+      const delegates = isArchitect
+        ? this.sessions.filter((s) => s.role === "delegate").map((s) => ({ id: s.id, label: `${agentLabel(s.agentId, this.agentNames)} · ${s.task || "Untitled session"}` }))
+        : [];
+      return [
+        {
+          key: this.selectedId,
+          sessionId: this.selectedId,
+          isArchitect,
+          delegates,
+          sessions: this.sessions,
+          agentNames: this.agentNames,
+          documentTitles: this.documentTitles,
+          projectId: this.projectId,
+          ticketId: this.ticketId,
+        },
+      ];
+    },
     get showingNothing() {
       return !this.creating && !this.hasSelection;
     },
@@ -168,7 +240,9 @@ export const sessionsPage = ({ gateway, clock, setTimeout = globalThis.setTimeou
         this.ticketId = seed.ticketId;
         this.agentNames = seed.agentNames;
         this.repositoryNames = seed.repositoryNames;
+        this.documentTitles = seed.documentTitles;
         this.sessions = seed.sessions.filter(ofTask(this.ticketId));
+        for (const s of this.sessions) this.remember(s.statusCheck);
       } catch (err) {
         this.error = describeError(err);
         return;
@@ -180,6 +254,7 @@ export const sessionsPage = ({ gateway, clock, setTimeout = globalThis.setTimeou
         (change) => this.apply(change),
         (status) => this.feedStatus(status),
       );
+      this.followChannel();
       ticker = setInterval(() => (this.now = clock.now()), TICK_MS);
 
       // Alpine has rendered the live list; drop the server-rendered copy.
@@ -191,7 +266,51 @@ export const sessionsPage = ({ gateway, clock, setTimeout = globalThis.setTimeou
 
     destroy() {
       unfollow();
+      unfollowChannel?.();
       clearInterval(ticker);
+    },
+
+    // ── the architect channel ────────────────────────────────────────────
+    /** The task has an architect: its sessions lead the list and talk over the channel. */
+    get hasArchitect() {
+      return this.sessions.some((s) => s.role === "architect");
+    },
+
+    /**
+     * Once the task has an architect (on load, or when one starts), load its
+     * messages and follow new ones. A task without one never asks.
+     */
+    followChannel() {
+      if (!channel || unfollowChannel || !this.hasArchitect) return;
+      unfollowChannel = channel.follow(
+        this.projectId,
+        (event) => this.channelEvent(event),
+        (status) => status === FeedStatus.RESYNCED && this.loadMessages(newestAt(channelStore.messages)),
+      );
+      this.loadMessages(null);
+    },
+
+    /** Loads the task's messages, or only those after since (after a resync), into the store. */
+    async loadMessages(since) {
+      try {
+        const list = await channel.listMessages({ ticketId: this.ticketId, since });
+        channelStore.messages = mergeMessages(channelStore.messages, list);
+        channelStore.loaded = true;
+      } catch (err) {
+        this.error = describeError(err);
+      }
+    },
+
+    /** @param {import("../../domain/ports.js").ChannelEvent} event */
+    channelEvent({ message }) {
+      if (message.taskId !== this.ticketId) return;
+      const arriving = !channelStore.messages.some((m) => m.id === message.id);
+      channelStore.messages = upsertMessage(channelStore.messages, message);
+      if (!arriving) return; // the same message, now delivered
+      this.announcement = announceMessage(message, { sessions: this.sessions, agentNames: this.agentNames });
+      const role = this.selectedRole();
+      const concernsSelected = role === "architect" || (role === "delegate" && (message.fromSessionId === this.selectedId || message.toSessionId === this.selectedId));
+      if (concernsSelected && !this.showingConversation) this.unseenMessages += 1;
     },
 
     // ── feed ─────────────────────────────────────────────────────────────
@@ -200,11 +319,13 @@ export const sessionsPage = ({ gateway, clock, setTimeout = globalThis.setTimeou
       const arriving = change.kind === "upsert" && !before;
       if (before && isTerminal(before) && !isTerminal(change.session)) this.resumed(change.session);
       this.sessions = applyChange(this.sessions, change, ofTask(this.ticketId));
+      if (change.kind === "upsert") this.remember(change.session.statusCheck);
       if (arriving && this.sessions.some((s) => s.id === change.session.id)) this.arrived(change.session);
       this.now = clock.now();
       if (change.kind === "deleted" && change.id === this.selectedId) this.selectedId = null;
       // The session's Design panel follows its own stream; tell it the session is over.
       if (change.kind === "upsert" && isTerminal(change.session)) this.$dispatch("session-ended", { id: change.session.id });
+      this.followChannel();
     },
 
     /** A session started elsewhere joined the task: highlight it for a moment and say so. */
@@ -248,6 +369,35 @@ export const sessionsPage = ({ gateway, clock, setTimeout = globalThis.setTimeou
       this.detailTab = "design";
       this.unseenArtifacts = 0;
     },
+    showConversation() {
+      this.detailTab = "conversation";
+      this.unseenMessages = 0;
+    },
+
+    /** The selected session's role on the task; "" when none is selected. */
+    /** Another part of the page (the review band) has something to say in the live region. */
+    announce(event) {
+      this.announcement = event.detail.text;
+    },
+
+    /** @param {CustomEvent<{ check: import("../../domain/channel.js").StatusCheck }>} event */
+    statusCheckChanged(event) {
+      this.patchCheck(event.detail.check);
+    },
+
+    /** A delegate's loop changed: its row and header follow before the server's session change does. */
+    patchCheck(check) {
+      this.sessions = this.sessions.map((s) => (s.id === check.delegateSessionId ? Object.freeze({ ...s, statusCheck: check }) : s));
+      this.remember(check);
+    },
+
+    remember(check) {
+      if (check?.everyMinutes > 0) this.lastIntervals = { ...this.lastIntervals, [check.delegateSessionId]: check.everyMinutes };
+    },
+
+    selectedRole() {
+      return this.sessions.find((s) => s.id === this.selectedId)?.role ?? "";
+    },
 
     /** @param {CustomEvent<{ artifact: import("../../domain/artifact.js").Artifact, isNew: boolean }>} event */
     artifactPublished(event) {
@@ -275,8 +425,13 @@ export const sessionsPage = ({ gateway, clock, setTimeout = globalThis.setTimeou
     },
 
     select(id) {
-      if (id !== this.selectedId) this.unseenArtifacts = 0;
+      if (id !== this.selectedId) {
+        this.unseenArtifacts = 0;
+        this.unseenMessages = 0;
+      }
       this.selectedId = id;
+      // A peer has no conversation: fall back to its terminal.
+      if (this.detailTab === "conversation" && this.selectedRole() === "") this.detailTab = "agent";
       this.creating = false;
       this.confirmingDelete = false;
     },
@@ -288,11 +443,11 @@ export const sessionsPage = ({ gateway, clock, setTimeout = globalThis.setTimeou
       this.step(-1);
     },
     step(delta) {
-      const order = group(byRecent(this.sessions)).flatMap((g) => g.sessions.map((s) => s.id));
+      const order = displayOrder(this.sessions);
       if (order.length === 0) return;
       const at = order.indexOf(this.selectedId);
       const next = at === -1 ? 0 : Math.max(0, Math.min(order.length - 1, at + delta));
-      this.selectedId = order[next];
+      this.select(order[next]);
     },
 
     // New session: the form is its own component (sessionsNewSession); it

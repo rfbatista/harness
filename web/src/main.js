@@ -11,10 +11,13 @@ import { preferences } from "./shared/infrastructure/storage.js";
 import { registerShared } from "./shared/presentation/register.js";
 
 import { runsGateway } from "./modules/runs/infrastructure/runs-gateway.js";
+import { reviewsGateway } from "./modules/reviews/infrastructure/reviews-gateway.js";
+import { registerReviews } from "./modules/reviews/presentation/register.js";
 import { registerRuns } from "./modules/runs/presentation/register.js";
 import { projectsGateway } from "./modules/projects/infrastructure/projects-gateway.js";
 import { registerProjects } from "./modules/projects/presentation/register.js";
 import { artifactsGateway } from "./modules/sessions/infrastructure/artifacts-gateway.js";
+import { channelGateway } from "./modules/sessions/infrastructure/channel-gateway.js";
 import { sessionsGateway } from "./modules/sessions/infrastructure/sessions-gateway.js";
 import { terminalGateway } from "./modules/sessions/infrastructure/terminal-gateway.js";
 import { registerSessions } from "./modules/sessions/presentation/register.js";
@@ -35,6 +38,7 @@ registerTasks(Alpine, { gateway: tasksGateway(api), rail: railGateway(api, event
 registerSessions(Alpine, {
   gateway: sessionsGateway(api, events),
   artifacts: artifactsGateway(api, events),
+  channel: channelGateway(api, events),
   terminals: terminalGateway({ base: "/api" }),
   runTerminals: terminalGateway({ base: "/api", path: (id) => `/runs/${encodeURIComponent(id)}/terminal` }),
   createScreen,
@@ -42,5 +46,6 @@ registerSessions(Alpine, {
 });
 
 registerRuns(Alpine, { gateway: runsGateway(api) });
+registerReviews(Alpine, { gateway: reviewsGateway(api, events), clock: systemClock });
 
 Alpine.start();

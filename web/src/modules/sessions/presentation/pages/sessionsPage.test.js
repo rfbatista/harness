@@ -4,8 +4,10 @@ import { fixedClock } from "../../../../shared/infrastructure/clock.js";
 import { mount, seededElement } from "../../../../shared/testing/alpine.js";
 import { flush } from "../../../../shared/testing/doubles.js";
 import { assert, file, test } from "../../../../shared/testing/test.js";
+import { memoryChannel } from "../../infrastructure/memory-channel.js";
 import { memoryGateway } from "../../infrastructure/memory-gateway.js";
 import { makeArtifact } from "../../testing/artifact-fixtures.js";
+import { makeCheck, makeMessage } from "../../testing/channel-fixtures.js";
 import { makeSession, T0, toDTO } from "../../testing/fixtures.js";
 import { sessionsPage } from "./sessionsPage.js";
 
@@ -430,5 +432,113 @@ test("a malformed seed shows an error instead of a broken page", () => {
   const { instance } = mount(sessionsPage({ gateway: memory.gateway, clock: fixedClock(T0) }), { el });
   instance.init();
   assert.equal(instance.error.code, Codes.BAD_RESPONSE);
+  instance.destroy();
+});
+
+// ── the architect channel ─────────────────────────────────────────────────
+
+function architectSetup({ messages = [], sessions } = {}) {
+  sessions ??= [
+    makeSession({ id: "arch", role: "architect", mode: "architect", agentId: "backend" }),
+    makeSession({ id: "d1", role: "delegate", parentSessionId: "arch", agentId: "backend" }),
+  ];
+  const channel = memoryChannel({ messages, now: () => T0 });
+  const channelStore = { messages: [], loaded: false };
+  const memory = memoryGateway({ projects: ["p1"], sessions, now: () => T0 });
+  const el = seededElement({ project_id: "p1", ticket_id: "t1", sessions: sessions.map(toDTO), agent_names: { backend: "go-developer" }, repository_names: {} });
+  const mounted = mount(sessionsPage({ gateway: memory.gateway, clock: fixedClock(T0), channel: channel.gateway, channelStore }), { el });
+  mounted.instance.init();
+  return { ...mounted, memory, channel, channelStore };
+}
+
+test("a task with an architect loads its messages, and a delegate's row says its last report", async () => {
+  const { instance, channelStore } = architectSetup({ messages: [makeMessage({ fromSessionId: "d1", status: "ready_for_review", createdAt: T0 })] });
+  const d1 = () => instance.groups[0].rows.find((r) => r.id === "d1");
+  assert.equal(d1().meta, "go-developer · now", "before the messages load, as the server rendered it");
+  await flush();
+  assert.equal(channelStore.loaded, true);
+  assert.equal(d1().meta, "go-developer · ready for review now");
+  instance.destroy();
+});
+
+test("a new report over the feed updates the delegate's row; another task's message is ignored", async () => {
+  const { instance, channel, channelStore } = architectSetup();
+  await flush();
+  channel.send({ taskId: "t1", fromSessionId: "d1", toSessionId: "arch", kind: "status_report", status: "blocked", body: "Need the port." });
+  channel.send({ taskId: "t9", fromSessionId: "x", toSessionId: "y", kind: "question", body: "Not ours" });
+  await flush();
+  assert.deepEqual(channelStore.messages.map((m) => m.body), ["Need the port."]);
+  assert.equal(instance.groups[0].rows.find((r) => r.id === "d1").meta, "go-developer · blocked now");
+  instance.destroy();
+});
+
+test("a task without an architect never asks for messages, until an architect starts", async () => {
+  const { instance, memory, channelStore } = architectSetup({ sessions: [makeSession({ id: "peer" })], messages: [makeMessage()] });
+  await flush();
+  assert.equal(channelStore.loaded, false);
+  memory.update("peer", { role: "architect", mode: "architect" });
+  await flush();
+  assert.equal(channelStore.loaded, true);
+  assert.equal(channelStore.messages.length, 1);
+  instance.destroy();
+});
+
+test("the Conversation tab shows on the architect and its delegates, not on a peer", async () => {
+  const sessions = [
+    makeSession({ id: "arch", role: "architect", mode: "architect", agentId: "backend" }),
+    makeSession({ id: "d1", role: "delegate", parentSessionId: "arch", agentId: "backend", task: "Build the server" }),
+    makeSession({ id: "peer", agentId: "backend" }),
+  ];
+  const { instance } = architectSetup({ sessions });
+  instance.select("arch");
+  assert.equal(instance.hasConversation, true);
+  instance.showConversation();
+  const [panel] = instance.conversationPanels;
+  assert.deepEqual([panel.key, panel.isArchitect, panel.delegates], ["arch", true, [{ id: "d1", label: "go-developer · Build the server" }]]);
+
+  instance.select("d1");
+  assert.deepEqual([instance.showingConversation, instance.conversationPanels[0].isArchitect], [true, false], "a delegate's own thread");
+
+  instance.select("peer");
+  assert.deepEqual([instance.hasConversation, instance.detailTab], [false, "agent"], "a peer falls back to its terminal");
+  instance.destroy();
+});
+
+test("a message behind another tab badges the Conversation tab and is announced; opening the tab clears it", async () => {
+  const { instance, channel } = architectSetup();
+  await flush();
+  instance.select("d1");
+  const m = channel.send({ taskId: "t1", fromSessionId: "d1", toSessionId: "arch", kind: "status_report", status: "ready_for_review", body: "Ready.", delivered: false, deliveredAt: null });
+  await flush();
+  assert.equal(instance.conversationBadge, "1");
+  assert.equal(instance.announcement, "go-developer reported: ready for review");
+
+  channel.deliver(m.id);
+  await flush();
+  assert.equal(instance.conversationBadge, "1", "the same message delivered is not news");
+
+  instance.showConversation();
+  assert.equal(instance.conversationBadge, "");
+  channel.send({ taskId: "t1", fromSessionId: "arch", toSessionId: "d1", kind: "reply", body: "Go on." });
+  await flush();
+  assert.equal(instance.conversationBadge, "", "nothing is unseen while the tab is in front");
+  instance.destroy();
+});
+
+test("a delegate with a loop gets a status-check bar; a change patches its row at once", async () => {
+  const sessions = [
+    makeSession({ id: "arch", role: "architect", mode: "architect", agentId: "backend" }),
+    makeSession({ id: "d1", role: "delegate", parentSessionId: "arch", agentId: "backend", statusCheck: makeCheck({ everyMinutes: 15, nextAt: new Date(T0.getTime() + 6 * 60_000) }) }),
+  ];
+  const { instance } = architectSetup({ sessions });
+  instance.select("arch");
+  assert.deepEqual(instance.statusCheckBars, [], "the architect has no loop of its own");
+  instance.select("d1");
+  const [bar] = instance.statusCheckBars;
+  assert.deepEqual([bar.key, bar.state, bar.detail, bar.remembered], ["d1:active:15", "running", "checks every 15m · next in 6m · no check yet", 15]);
+
+  instance.statusCheckChanged({ detail: { check: makeCheck({ everyMinutes: 0, state: "paused", nextAt: null }) } });
+  assert.deepEqual([instance.statusCheckBars[0].key, instance.statusCheckBars[0].remembered], ["d1:paused:0", 15], "the interval before the pause is kept for Resume");
+  assert.ok(instance.groups[0].rows.find((r) => r.id === "d1").meta.endsWith("checks paused"));
   instance.destroy();
 });

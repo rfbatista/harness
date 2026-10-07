@@ -51,7 +51,12 @@ func modePrompt(mode domain.SessionMode, tk *domain.Ticket, typed string) string
 		skill = "task-architecture"
 		closing = "Identify the affected applications, write the contracts and one spec per " +
 			"application as task documents, then delegate each spec to a planning agent with " +
-			"start_task_session. Do not write any local files."
+			"start_task_session. Do not write any local files.\n\n" +
+			"You own this task's status: move it with update_task_status and a reason, based on what your " +
+			"delegates report. They report to you; their messages, status checks and the person's review " +
+			"answers arrive as turns starting with [task message …] or [status check …]. Answer each one " +
+			"(reply_to_session), ask the person for review with request_user_review when something needs " +
+			"their eye, and tune loops with set_status_check."
 	case domain.SessionModeDesign:
 		skill = "design-artifacts"
 		closing = "Work under design/ in this worktree. Make each component or screen a self-contained HTML " +

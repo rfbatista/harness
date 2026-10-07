@@ -39,10 +39,38 @@ type SettingsChanged struct {
 	New string
 }
 
-func (ProjectDeleted) EventName() string   { return "project.deleted" }
-func (PromptDeleted) EventName() string    { return "prompt.deleted" }
-func (AgentDeleted) EventName() string     { return "agent.deleted" }
-func (SkillDeleted) EventName() string     { return "skill.deleted" }
-func (MCPServerDeleted) EventName() string { return "mcp_server.deleted" }
-func (SettingsChanged) EventName() string  { return "settings.changed" }
-func (SessionDeleted) EventName() string   { return "session.deleted" }
+// SessionStarted: a session was recorded and is starting. StatusCheckMinutes
+// is what its starter asked for the status-check loop (nil: the default).
+type SessionStarted struct {
+	SessionID          string
+	ProjectID          string
+	TicketID           string
+	ParentSessionID    string
+	Mode               SessionMode
+	StatusCheckMinutes *int
+}
+
+// SessionEnded: a session's process is gone, with Status (done, failed or
+// stopped).
+type SessionEnded struct {
+	SessionID string
+	Status    SessionStatus
+}
+
+// SessionTurnEnded: a session finished a turn and is waiting for input.
+type SessionTurnEnded struct{ SessionID string }
+
+// TicketStatusChanged: a task's status moved.
+type TicketStatusChanged struct{ Change TaskStatusChange }
+
+func (ProjectDeleted) EventName() string      { return "project.deleted" }
+func (PromptDeleted) EventName() string       { return "prompt.deleted" }
+func (AgentDeleted) EventName() string        { return "agent.deleted" }
+func (SkillDeleted) EventName() string        { return "skill.deleted" }
+func (MCPServerDeleted) EventName() string    { return "mcp_server.deleted" }
+func (SettingsChanged) EventName() string     { return "settings.changed" }
+func (SessionDeleted) EventName() string      { return "session.deleted" }
+func (SessionStarted) EventName() string      { return "session.started" }
+func (SessionEnded) EventName() string        { return "session.ended" }
+func (SessionTurnEnded) EventName() string    { return "session.turn_ended" }
+func (TicketStatusChanged) EventName() string { return "ticket.status_changed" }
