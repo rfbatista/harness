@@ -2,6 +2,7 @@ package orchestration
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"strings"
 
@@ -9,6 +10,7 @@ import (
 
 	"operators-mcp/internal/application/tooling"
 	"operators-mcp/internal/domain"
+	"operators-mcp/internal/ports"
 )
 
 // taskServerName is the MCP server exposing the task the session was spawned
@@ -116,7 +118,7 @@ To see the project around the task, and who to hand work to:
 To show what you make to the person in the web UI's Design tab, live, while you keep talking here:
 
 - mcp__task__publish_artifact — publish a file from your worktree (an HTML page or component, an image, a video, any file) or a dev server's loopback URL; publish again to refresh it
-- mcp__task__list_task_artifacts — what every session on this task has published, with each one's scope
+- mcp__task__list_task_artifacts — what every session on this task has published, with each one's scope, and the project assets attached to this task
 - mcp__task__unpublish_artifact — take one of yours down (the file stays); a project asset is moved back to the task first
 
 Some design assets outlive one task: a logo, a palette, a component, a
@@ -130,6 +132,12 @@ published on this task can be moved:
 - mcp__task__list_project_artifacts — the project's design assets, from any task: title, kind, note, revision, task, view URL
 - mcp__task__move_artifact_to_project — make one of this task's artifacts a project asset
 - mcp__task__move_artifact_to_task — move one of them back to this task's scope
+
+A project asset can also be attached to this task, by a person or by you, so
+it shows in this task's Design tab beside what the task produced:
+
+- mcp__task__attach_artifact_to_task — attach a project asset, from any task of this project, to this task
+- mcp__task__detach_artifact_from_task — detach one from this task; it stays in the project
 
 These tools always act on this task; they take no project or task id.`)
 	return b.String()
@@ -220,4 +228,48 @@ func (s *Service) sessionRole(ctx context.Context, id string) domain.SessionRole
 		return domain.RolePeer
 	}
 	return role
+}
+
+// maxAttachedInBrief caps the attached assets a brief lists; the rest are
+// one list_task_artifacts away.
+const maxAttachedInBrief = 20
+
+// attachedAssetsSection tells a session which project assets are attached to
+// its task: one line each, with the task that made it. Empty when none are.
+func attachedAssetsSection(attached []*domain.Artifact) string {
+	if len(attached) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString("## Project assets attached to this task\n\n")
+	b.WriteString("A person or another session attached these project design assets to this task.\n")
+	b.WriteString("Build on them; list_task_artifacts has their view URLs.\n\n")
+	for i, a := range attached {
+		if i == maxAttachedInBrief {
+			fmt.Fprintf(&b, "- +%d more: list_task_artifacts\n", len(attached)-maxAttachedInBrief)
+			break
+		}
+		fmt.Fprintf(&b, "- %s — %s (%s), from task %s\n", a.ID, a.Title, a.Kind, a.TicketID)
+	}
+	return strings.TrimRight(b.String(), "\n")
+}
+
+// attachedAssets is the project assets attached to tk, from another task.
+// A failed lookup leaves them out: the brief is help, not a gate.
+func (s *Service) attachedAssets(tk *domain.Ticket) []*domain.Artifact {
+	if s.Artifacts == nil || tk == nil {
+		return nil
+	}
+	list, err := s.Artifacts.ListArtifacts(context.Background(), ports.ArtifactFilter{TicketID: tk.ID})
+	if err != nil {
+		slog.Warn("list the task's attached assets for its brief", "ticket", tk.ID, "err", err)
+		return nil
+	}
+	var attached []*domain.Artifact
+	for _, a := range list {
+		if a.TicketID != tk.ID {
+			attached = append(attached, a)
+		}
+	}
+	return attached
 }

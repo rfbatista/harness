@@ -61,8 +61,9 @@ func modePrompt(mode domain.SessionMode, tk *domain.Ticket, typed string) string
 		skill = "design-artifacts"
 		closing = "Work under design/ in this worktree. Make each component or screen a self-contained HTML " +
 			"file and publish every result with publish_artifact as soon as it changes, with a one-line note; " +
-			"check list_project_artifacts first and build on the project's assets, and move an asset to project level " +
-			"with move_artifact_to_project once other tasks will reuse it; " +
+			"check list_task_artifacts for the project assets attached to this task and list_project_artifacts first, " +
+			"and build on them (attach_artifact_to_task brings a project asset onto this task); move an asset to project " +
+			"level with move_artifact_to_project once other tasks will reuse it; " +
 			"publish images and videos the same way, and a dev server as its loopback url. The person sees " +
 			"each publish in the Design tab of the web UI — tell them so in one line instead of pasting HTML here."
 	default:

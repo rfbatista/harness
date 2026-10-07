@@ -322,13 +322,14 @@ func registerTaskChannel(lc fx.Lifecycle, svc *taskchannel.Service) {
 // newArtifactsService records what sessions publish, announces each publish
 // on the session's stream and each project-asset change on the project feed
 // through the orchestration, attaches project assets to the tasks planning
-// knows, and drops a session's task artifacts when the session is deleted
+// knows (and lends the orchestration its reader, for the task brief), and drops a session's task artifacts when the session is deleted
 // and a task's attachments when the task is. Copies of project artifacts
 // live in an artifacts/ directory next to the database; an in-memory
 // database gets a temporary one.
 func newArtifactsService(cfg Config, repo ports.ArtifactRepository, sessions ports.SessionRepository, orch *orchestration.Service, plan *planning.Service, cat catalog.Catalog) (*artifacts.Service, error) {
 	svc := artifacts.NewService(repo, sessions, orch)
 	svc.Tickets, svc.Feed = plan, orch
+	orch.Artifacts = svc // a session's brief lists its task's attached assets
 	if cfg.DBPath == "" || cfg.DBPath == ":memory:" {
 		dir, err := os.MkdirTemp("", "harness-artifacts-")
 		if err != nil {

@@ -55,9 +55,11 @@ func sessionArtifactTools(planningSvc ports.Planning, sessions ports.SessionRepo
 		},
 		{
 			Name: "list_task_artifacts",
-			Description: "List what every session on this task has published to the Design tab, newest first: " +
-				"pages, images, videos, files and dev-server URLs, each with its scope (task, or project once it is kept as a " +
-				"project design asset). Use it to see what earlier sessions produced before making more.",
+			Description: "List this task's design assets, newest first: what every session on this task has published to the " +
+				"Design tab (pages, images, videos, files and dev-server URLs), each with its scope (task, or project once it is " +
+				"kept as a project design asset), and the project assets attached to this task. relation says which: produced " +
+				"or attached; attached_ticket_ids names the other tasks a project asset is attached to. Use it to see what " +
+				"earlier sessions produced, and what was attached for you, before making more.",
 			InputSchema: schemaFromJSON(`{"type":"object","properties":{}}`),
 			Source:      "code",
 			Handler: func(ctx context.Context, args map[string]any) (any, error) {
@@ -74,8 +76,13 @@ func sessionArtifactTools(planningSvc ports.Planning, sessions ports.SessionRepo
 				}
 				out := make([]taskArtifact, 0, len(list))
 				for _, a := range list {
+					relation := "produced"
+					if a.TicketID != scope.ticket.ID {
+						relation = "attached"
+					}
 					out = append(out, taskArtifact{ArtifactID: a.ID, SessionID: a.SessionID, Kind: a.Kind, Title: a.Title,
-						Path: a.Path, URL: a.URL, Scope: scopeOf(a), Revision: a.Revision, UpdatedAt: a.UpdatedAt})
+						Path: a.Path, URL: a.URL, Scope: scopeOf(a), Revision: a.Revision, UpdatedAt: a.UpdatedAt,
+						Relation: relation, AttachedTicketIDs: attachedIDs(a)})
 				}
 				return map[string]any{"count": len(out), "artifacts": out}, nil
 			},
@@ -136,6 +143,18 @@ type taskArtifact struct {
 	Scope      domain.ArtifactScope `json:"scope"`
 	Revision   int                  `json:"revision"`
 	UpdatedAt  time.Time            `json:"updated_at"`
+	// Relation is produced (published on this task) or attached (a project
+	// asset of another task, attached to this one).
+	Relation          string   `json:"relation"`
+	AttachedTicketIDs []string `json:"attached_ticket_ids"`
+}
+
+// attachedIDs is the tasks a project asset is attached to, never nil.
+func attachedIDs(a *domain.Artifact) []string {
+	if a.AttachedTicketIDs == nil {
+		return []string{}
+	}
+	return a.AttachedTicketIDs
 }
 
 // codedMessage puts an artifact error's code in front of its message. The
