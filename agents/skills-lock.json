@@ -560,6 +560,12 @@
       "skillPath": "javascript/virtual-lists/SKILL.md",
       "computedHash": "a910a2e96006f952bb740683e3165e4fea4a0d715bfa7ac17a2409076c0d29a8"
     },
+    "visual-explainer": {
+      "source": "nicobailon/visual-explainer",
+      "sourceType": "github",
+      "skillPath": "plugins/visual-explainer/SKILL.md",
+      "computedHash": "0131b50184319150113566d159f9473e03607977a7db19b6f035b6be49519df1"
+    },
     "visual-hierarchy": {
       "source": "owl-listener/designer-skills",
       "sourceType": "github",

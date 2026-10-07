@@ -668,7 +668,7 @@
       "skills": ["@developer", "postgres-best-practices"]
     },
     "documentator": {
-      "skills": ["documentation", "snipgrapher", "@developer"]
+      "skills": ["documentation", "visual-explainer", "snipgrapher", "@developer"]
     },
     "random": {
       "skills": ["context-engineering", "find-skills", "@developer"]
