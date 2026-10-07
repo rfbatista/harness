@@ -45,11 +45,11 @@ func (r *TaskMessageRepository) Create(msg *domain.TaskMessage) (*domain.TaskMes
 }
 
 func (r *TaskMessageRepository) Get(id string) *domain.TaskMessage {
-	var m TaskMessageModel
-	if err := r.db.First(&m, "id = ?", id).Error; err != nil {
+	var ms []TaskMessageModel
+	if err := r.db.Where("id = ?", id).Limit(1).Find(&ms).Error; err != nil || len(ms) == 0 {
 		return nil
 	}
-	return m.ToDomain()
+	return ms[0].ToDomain()
 }
 
 func (r *TaskMessageRepository) List(taskID string, f ports.TaskMessageFilter) []*domain.TaskMessage {
@@ -84,13 +84,13 @@ func (r *TaskMessageRepository) ListQueued() []*domain.TaskMessage {
 }
 
 func (r *TaskMessageRepository) LastReport(fromSessionID string) *domain.TaskMessage {
-	var m TaskMessageModel
+	var ms []TaskMessageModel
 	err := r.db.Where("from_session_id = ? AND kind = ?", fromSessionID, string(domain.MessageStatusReport)).
-		Order("created_at DESC, id DESC").First(&m).Error
-	if err != nil {
+		Order("created_at DESC, id DESC").Limit(1).Find(&ms).Error
+	if err != nil || len(ms) == 0 {
 		return nil
 	}
-	return m.ToDomain()
+	return ms[0].ToDomain()
 }
 
 func (r *TaskMessageRepository) find(q *gorm.DB) []*domain.TaskMessage {
@@ -135,11 +135,11 @@ func (r *ReviewRequestRepository) Create(rr *domain.ReviewRequest) (*domain.Revi
 }
 
 func (r *ReviewRequestRepository) Get(id string) *domain.ReviewRequest {
-	var m ReviewRequestModel
-	if err := r.db.First(&m, "id = ?", id).Error; err != nil {
+	var ms []ReviewRequestModel
+	if err := r.db.Where("id = ?", id).Limit(1).Find(&ms).Error; err != nil || len(ms) == 0 {
 		return nil
 	}
-	return m.ToDomain()
+	return ms[0].ToDomain()
 }
 
 func (r *ReviewRequestRepository) Update(rr *domain.ReviewRequest) error {
@@ -200,11 +200,13 @@ func (r *StatusCheckRepository) Save(c *domain.StatusCheck) error {
 }
 
 func (r *StatusCheckRepository) Get(delegateSessionID string) *domain.StatusCheck {
-	var m StatusCheckModel
-	if err := r.db.First(&m, "delegate_session_id = ?", delegateSessionID).Error; err != nil {
+	// Find, not First: a session with no loop is the common case, and First
+	// logs every miss as an error.
+	var ms []StatusCheckModel
+	if err := r.db.Where("delegate_session_id = ?", delegateSessionID).Limit(1).Find(&ms).Error; err != nil || len(ms) == 0 {
 		return nil
 	}
-	return m.ToDomain()
+	return ms[0].ToDomain()
 }
 
 func (r *StatusCheckRepository) ListByTask(taskID string) []*domain.StatusCheck {
