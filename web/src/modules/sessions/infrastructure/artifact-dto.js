@@ -3,7 +3,7 @@
 // only place that knows the JSON shape and the view route.
 
 import { Codes, StructuredError } from "../../../shared/domain/errors.js";
-import { KINDS } from "../domain/artifact.js";
+import { KINDS, SCOPES, Scope } from "../domain/artifact.js";
 
 /** Where the browser loads an artifact's bytes: GET /api/artifacts/:id/view/ (trailing slash: relative references resolve under it). */
 export const viewPath = (id, base = "/api") => `${base}/artifacts/${encodeURIComponent(id)}/view/`;
@@ -19,6 +19,9 @@ export function toArtifact(dto, base = "/api") {
   if (Number.isNaN(updatedAt.getTime()) || Number.isNaN(createdAt.getTime())) bad(`artifact ${dto.id} has an invalid date`);
   if (dto.kind === "url" && typeof dto.url !== "string") bad(`artifact ${dto.id} is a url without one`);
   const url = dto.kind === "url" ? dto.url : "";
+  // A server from before scopes does not send it: every artifact was a task's then.
+  const scope = dto.scope ?? Scope.TASK;
+  if (!SCOPES.includes(scope)) bad(`artifact ${dto.id} has unknown scope "${scope}"`);
 
   return Object.freeze({
     id: dto.id,
@@ -33,6 +36,7 @@ export function toArtifact(dto, base = "/api") {
     mime: dto.mime ?? "",
     sizeBytes: Number(dto.size_bytes ?? 0),
     revision,
+    scope,
     createdAt,
     updatedAt,
     src: dto.kind === "url" ? url : viewPath(dto.id, base),
@@ -43,6 +47,12 @@ export function toArtifact(dto, base = "/api") {
 export function toArtifactList(body, base = "/api") {
   if (!body || !Array.isArray(body.artifacts)) bad("expected {artifacts: [...]}");
   return body.artifacts.map((dto) => toArtifact(dto, base));
+}
+
+/** POST /api/set_artifact_scope → {"artifact": {...}} */
+export function toMovedArtifact(body, base = "/api") {
+  if (!body?.artifact) bad("expected {artifact: {...}}");
+  return toArtifact(body.artifact, base);
 }
 
 /**

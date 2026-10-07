@@ -107,13 +107,27 @@
  *
  * @typedef {import("./artifact.js").Artifact} Artifact
  * @typedef {{ kind: "published", artifact: Artifact } | { kind: "ended" }} ArtifactEvent
- *           published: a first publish or a re-publish (compare revision);
+ *           published: a first publish, a re-publish (compare revision) or a
+ *           move between scopes (same revision, later updatedAt);
  *           ended: the session is over, no more publishes will come.
  *
  * @typedef {object} ArtifactGateway
  * @property {(sessionId: string, signal?: AbortSignal) => Promise<Artifact[]>} list
  *           The session's artifacts, most recently updated first. A session
  *           without any, or an unknown one, lists [].
+ * @property {(projectId: string, signal?: AbortSignal) => Promise<Artifact[]>} listProject
+ *           The project's project-scoped artifacts, most recently updated
+ *           first, whatever session produced them.
+ * @property {(artifactId: string, scope: import("./artifact.js").ArtifactScope) => Promise<Artifact>} setScope
+ *           Moves an artifact between task and project scope and returns it:
+ *           the same id and revision, a later updatedAt. The same scope again
+ *           changes nothing. The move is announced on the producing session's
+ *           stream as a publish of the moved artifact. Rejects with
+ *           ARTIFACT_NOT_FOUND, INVALID_INPUT (unknown scope) or
+ *           ARTIFACT_NOT_PROMOTABLE (no file to keep: a url, or a session
+ *           whose worktree is gone).
+ * @property {(artifactId: string) => Promise<void>} remove
+ *           Deletes the artifact in either scope. Rejects with ARTIFACT_NOT_FOUND.
  * @property {(sessionId: string,
  *             onEvent: (event: ArtifactEvent) => void,
  *             onStatus: (status: FeedStatus) => void) => () => void} follow

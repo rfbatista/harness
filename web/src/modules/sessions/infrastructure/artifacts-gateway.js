@@ -1,8 +1,8 @@
-// ArtifactGateway over the harness HTTP API: the artifact list route and the
-// `artifact` events on a session's SSE stream (the one interactive sessions
-// already use for status and done).
+// ArtifactGateway over the harness HTTP API: the artifact list route, the
+// scope move, the delete, and the `artifact` events on a session's SSE stream
+// (the one interactive sessions already use for status and done).
 
-import { toArtifactEvent, toArtifactList } from "./artifact-dto.js";
+import { toArtifactEvent, toArtifactList, toMovedArtifact } from "./artifact-dto.js";
 
 /**
  * @param {import("../../../shared/infrastructure/api.js").ApiClient} api
@@ -14,6 +14,18 @@ export function artifactsGateway(api, feed, base = "/api") {
   return {
     async list(sessionId, signal) {
       return toArtifactList(await api.get("/artifacts", { session_id: sessionId }, signal), base);
+    },
+
+    async listProject(projectId, signal) {
+      return toArtifactList(await api.get("/artifacts", { project_id: projectId, scope: "project" }, signal), base);
+    },
+
+    async setScope(artifactId, scope) {
+      return toMovedArtifact(await api.post("/set_artifact_scope", { artifact_id: artifactId, scope }), base);
+    },
+
+    async remove(artifactId) {
+      await api.del(`/artifacts/${encodeURIComponent(artifactId)}`);
     },
 
     follow(sessionId, onEvent, onStatus) {

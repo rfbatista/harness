@@ -17,6 +17,7 @@ export function makeArtifact(overrides = {}) {
     mime: "text/html",
     sizeBytes: 2048,
     revision: 1,
+    scope: "task",
     createdAt: A0,
     updatedAt: A0,
   };
@@ -39,6 +40,7 @@ export function toArtifactDTO(a) {
     mime: a.mime,
     size_bytes: a.sizeBytes,
     revision: a.revision,
+    scope: a.scope,
     created_at: a.createdAt.toISOString(),
     updated_at: a.updatedAt.toISOString(),
   };
