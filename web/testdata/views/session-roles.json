@@ -1,0 +1,57 @@
+{
+  "$comment": "How a task's sessions group when it has an architect: the architect first, its delegates under it depth-first (newest first among siblings), peers in the triage groups. Read by web/src/modules/sessions/domain/session.test.js and internal/adapter/in/web/sessions/view_test.go, so first paint and live updates agree. `ago` is minutes before now; each expected entry is [id, depth].",
+  "cases": [
+    {
+      "name": "no architect: the triage groups as before",
+      "sessions": [
+        { "id": "run", "role": "", "status": "running", "ago": 5 },
+        { "id": "turn", "role": "", "status": "idle", "ago": 9 },
+        { "id": "done", "role": "", "status": "done", "ago": 1 }
+      ],
+      "groups": [
+        ["needs-you", [["turn", 0]]],
+        ["active", [["run", 0]]],
+        ["finished", [["done", 0]]]
+      ]
+    },
+    {
+      "name": "architect first, delegates under it by depth, peers in triage",
+      "sessions": [
+        { "id": "peer", "role": "", "status": "running", "ago": 1 },
+        { "id": "arch", "role": "architect", "status": "idle", "ago": 30 },
+        { "id": "server", "role": "delegate", "parent": "arch", "status": "running", "ago": 20 },
+        { "id": "web", "role": "delegate", "parent": "arch", "status": "idle", "ago": 3 },
+        { "id": "server-tests", "role": "delegate", "parent": "server", "status": "thinking", "ago": 2 },
+        { "id": "deep", "role": "delegate", "parent": "server-tests", "status": "done", "ago": 4 },
+        { "id": "deeper", "role": "delegate", "parent": "deep", "status": "running", "ago": 6 }
+      ],
+      "groups": [
+        ["architect", [["arch", 0], ["web", 1], ["server", 1], ["server-tests", 2], ["deep", 3], ["deeper", 4]]],
+        ["active", [["peer", 0]]]
+      ]
+    },
+    {
+      "name": "a delegate whose parent is gone sits right under the architect",
+      "sessions": [
+        { "id": "arch", "role": "architect", "status": "running", "ago": 10 },
+        { "id": "orphan", "role": "delegate", "parent": "deleted", "status": "running", "ago": 1 },
+        { "id": "child", "role": "delegate", "parent": "arch", "status": "running", "ago": 5 }
+      ],
+      "groups": [
+        ["architect", [["arch", 0], ["orphan", 1], ["child", 1]]]
+      ]
+    },
+    {
+      "name": "an ended architect still leads its group",
+      "sessions": [
+        { "id": "arch", "role": "architect", "status": "done", "ago": 60 },
+        { "id": "child", "role": "delegate", "parent": "arch", "status": "stopped", "ago": 50 },
+        { "id": "peer", "role": "", "status": "done", "ago": 1 }
+      ],
+      "groups": [
+        ["architect", [["arch", 0], ["child", 1]]],
+        ["finished", [["peer", 0]]]
+      ]
+    }
+  ]
+}

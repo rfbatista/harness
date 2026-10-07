@@ -113,3 +113,23 @@ test("who started a session: its parent's agent, another session, or nobody", ()
     .filter((r) => r.id === "peer");
   assert.ok(row.meta.startsWith("Backend dev · started by Backend dev · "), row.meta);
 });
+
+test("the architect's group leads, its row badged, its delegates indented (deeper ones capped at 3)", () => {
+  const ago = (m) => new Date(T0.getTime() - m * 60_000);
+  const list = [
+    makeSession({ id: "peer", updatedAt: ago(1) }),
+    makeSession({ id: "arch", role: "architect", mode: "architect", updatedAt: ago(9) }),
+    makeSession({ id: "d1", role: "delegate", parentSessionId: "arch", updatedAt: ago(8) }),
+    makeSession({ id: "d2", role: "delegate", parentSessionId: "d1", updatedAt: ago(7) }),
+    makeSession({ id: "d3", role: "delegate", parentSessionId: "d2", updatedAt: ago(6) }),
+    makeSession({ id: "d4", role: "delegate", parentSessionId: "d3", updatedAt: ago(5) }),
+  ];
+  const groups = toGroupViews(list, { selectedId: null, now: T0, agentNames: {} });
+  assert.deepEqual(groups.map((g) => `${g.key}:${g.label}:${g.count}`), ["architect:Architect:5", "active:Running:1"]);
+  assert.equal(groups[0].tone, null, "the architect is not a call for attention");
+  assert.deepEqual(
+    groups[0].rows.map((r) => [r.id, r.role, r.depth, r.badge]),
+    [["arch", "architect", 0, "architect"], ["d1", "delegate", 1, ""], ["d2", "delegate", 2, ""], ["d3", "delegate", 3, ""], ["d4", "delegate", 3, ""]],
+  );
+  assert.deepEqual([groups[1].rows[0].role, groups[1].rows[0].depth, groups[1].rows[0].badge], ["", 0, ""]);
+});

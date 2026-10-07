@@ -52,10 +52,18 @@ func NeedsYou(s *domain.Session) bool {
 	return s.Status == domain.SessionWaitingApproval || s.Status == domain.SessionIdle || s.PendingApprovals > 0
 }
 
-// Row is one session in the list.
+// MaxDepth is how far a delegate's row is indented: deeper ones line up at
+// the last step. The browser's MAX_DEPTH (view.js) is the same.
+const MaxDepth = 3
+
+// Row is one session in the list. Role, Depth and Badge place it in the
+// architect's group: the architect badged, its delegates indented.
 type Row struct {
 	ID, Title, State, Word, Meta string
 	Selected, Attention          bool
+	Role                         string
+	Depth                        int
+	Badge                        string
 }
 
 // Group is one triage group with its rows.
@@ -172,7 +180,7 @@ func NewPageView(frame shell.Frame, project *domain.Project, task *domain.Ticket
 	for _, g := range groups {
 		rows := make([]Row, 0, len(g.sessions))
 		for _, s := range g.sessions {
-			rows = append(rows, toRow(s, selected, names, now, byID))
+			rows = append(rows, toRow(s, selected, names, now, byID, g.depth[s.ID]))
 		}
 		views = append(views, Group{Key: g.key, Label: groupLabels[g.key], Tone: groupTones[g.key], Count: len(rows), Rows: rows})
 	}
@@ -210,7 +218,7 @@ func StartedBy(s *domain.Session, others map[string]*domain.Session, agentNames 
 	return "another session"
 }
 
-func toRow(s *domain.Session, selectedID string, agentNames map[string]string, now time.Time, others map[string]*domain.Session) Row {
+func toRow(s *domain.Session, selectedID string, agentNames map[string]string, now time.Time, others map[string]*domain.Session, depth int) Row {
 	st := statusOf(s)
 	title := s.Task
 	if title == "" {
@@ -225,27 +233,54 @@ func toRow(s *domain.Session, selectedID string, agentNames map[string]string, n
 		Meta:      meta(agent, StartedBy(s, others, agentNames), relativeTime(s.UpdatedAt, now)),
 		Selected:  s.ID == selectedID,
 		Attention: NeedsYou(s),
+		Role:      string(s.Role),
+		Depth:     min(depth, MaxDepth),
+		Badge:     badge(s),
 	}
+}
+
+// badge marks the task's architect in the list.
+func badge(s *domain.Session) string {
+	if s.Role == domain.RoleArchitect {
+		return "architect"
+	}
+	return ""
 }
 
 var (
 	groupOrder  = []string{"needs-you", "active", "finished"}
-	groupLabels = map[string]string{"needs-you": "Needs you", "active": "Running", "finished": "Earlier"}
+	groupLabels = map[string]string{"architect": "Architect", "needs-you": "Needs you", "active": "Running", "finished": "Earlier"}
 	groupTones  = map[string]string{"needs-you": "attention"}
 )
 
 type sessionGroup struct {
 	key      string
 	sessions []*domain.Session
+	// depth is how far each session is below the architect, on its group.
+	depth map[string]int
 }
 
-// group sorts most recent first and splits for triage, leaving out empty groups.
+// group sorts most recent first and splits for triage, leaving out empty
+// groups. On a task with an architect, the architect and its delegates lead
+// in their own group. The browser's group (domain/session.js) is the same;
+// web/testdata/views/session-roles.json pins both.
 func group(list []*domain.Session) []sessionGroup {
 	sorted := slices.Clone(list)
 	slices.SortStableFunc(sorted, func(a, b *domain.Session) int { return cmp.Compare(b.UpdatedAt.UnixNano(), a.UpdatedAt.UnixNano()) })
 
+	var out []sessionGroup
+	lead := architectGroup(sorted)
+	if lead != nil {
+		out = append(out, *lead)
+	}
+
 	byKey := map[string][]*domain.Session{}
 	for _, s := range sorted {
+		if lead != nil {
+			if _, ok := lead.depth[s.ID]; ok {
+				continue
+			}
+		}
 		switch {
 		case NeedsYou(s):
 			byKey["needs-you"] = append(byKey["needs-you"], s)
@@ -255,13 +290,64 @@ func group(list []*domain.Session) []sessionGroup {
 			byKey["active"] = append(byKey["active"], s)
 		}
 	}
-	var out []sessionGroup
 	for _, k := range groupOrder {
 		if len(byKey[k]) > 0 {
-			out = append(out, sessionGroup{k, byKey[k]})
+			out = append(out, sessionGroup{key: k, sessions: byKey[k]})
 		}
 	}
 	return out
+}
+
+// architectGroup is the architect and its delegates, depth-first, newest
+// first among siblings (sorted is most recent first). A delegate whose parent
+// is not in the list sits right under the architect. Nil without an architect.
+func architectGroup(sorted []*domain.Session) *sessionGroup {
+	var architect *domain.Session
+	var delegates []*domain.Session
+	for _, s := range sorted {
+		switch {
+		case s.Role == domain.RoleArchitect && architect == nil:
+			architect = s
+		case s.Role == domain.RoleDelegate:
+			delegates = append(delegates, s)
+		}
+	}
+	if architect == nil {
+		return nil
+	}
+	isDelegate := make(map[string]bool, len(delegates))
+	for _, s := range delegates {
+		isDelegate[s.ID] = true
+	}
+	parentOf := func(s *domain.Session) string {
+		if s.ParentSessionID != "" && isDelegate[s.ParentSessionID] {
+			return s.ParentSessionID
+		}
+		return architect.ID
+	}
+
+	g := sessionGroup{key: "architect", depth: map[string]int{}}
+	var visit func(s *domain.Session, d int)
+	visit = func(s *domain.Session, d int) {
+		if _, seen := g.depth[s.ID]; seen {
+			return // a cycle; each session shows once
+		}
+		g.sessions = append(g.sessions, s)
+		g.depth[s.ID] = d
+		for _, child := range delegates {
+			if child.ID != s.ID && parentOf(child) == s.ID {
+				visit(child, d+1)
+			}
+		}
+	}
+	visit(architect, 0)
+	// Delegates on a cycle that never reaches the architect still show, under it.
+	for _, s := range delegates {
+		if _, seen := g.depth[s.ID]; !seen {
+			visit(s, 1)
+		}
+	}
+	return &g
 }
 
 func summary(list []*domain.Session) string {

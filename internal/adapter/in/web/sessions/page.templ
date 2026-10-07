@@ -111,9 +111,14 @@ templ ssrRows(v PageView) {
 				@components.Badge(strconv.Itoa(g.Count), g.Tone)
 			</div>
 			for _, r := range g.Rows {
-				<div class="[ row ]" data-stacked role="option" aria-selected={ strconv.FormatBool(r.Selected) } { attentionAttrs(r.Attention)... }>
+				<div class="[ row ]" data-stacked role="option" aria-selected={ strconv.FormatBool(r.Selected) } { attentionAttrs(r.Attention)... } { roleAttrs(r.Role, r.Depth)... }>
 					@components.Status(r.State, r.Word)
-					<span class="[ title ]">{ r.Title }</span>
+					<span class="[ title ]">
+						if r.Badge != "" {
+							@components.Badge(r.Badge, "")
+						}
+						{ r.Title }
+					</span>
 					<span class="[ meta ]">{ r.Meta }</span>
 				</div>
 			}
@@ -130,9 +135,14 @@ templ liveRows() {
 				<span class="[ badge ]" x-bind:data-tone="group.tone" x-text="group.count"></span>
 			</div>
 			<template x-for="row in group.rows" x-bind:key="row.id">
-				<div class="[ row ]" data-stacked role="option" x-bind:aria-selected="row.selected" x-bind:data-attention="row.attention" x-bind:data-fresh="row.fresh" x-on:click="select(row.id)">
+				<div class="[ row ]" data-stacked role="option" x-bind:aria-selected="row.selected" x-bind:data-attention="row.attention" x-bind:data-fresh="row.fresh" x-bind:data-role="row.role || null" x-bind:data-depth="row.depth || null" x-on:click="select(row.id)">
 					<span class="[ status ]" x-bind:data-state="row.state" x-text="row.word"></span>
-					<span class="[ title ]" x-text="row.title"></span>
+					<span class="[ title ]">
+						<template x-if="row.badge">
+							<span class="[ badge ]" x-text="row.badge"></span>
+						</template>
+						<span x-text="row.title"></span>
+					</span>
 					<span class="[ meta ]" x-text="row.meta"></span>
 					<template x-if="row.resumable">
 						<button type="button" class="[ button action ]" data-variant="ghost" data-size="sm" x-bind:aria-label="row.resumeLabel" x-bind:disabled="cannotResume" x-on:click.stop="resume(row.id)">Resume</button>

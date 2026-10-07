@@ -44,7 +44,7 @@ function meta(agent, by, when) {
   return by ? `${agent} · started by ${by} · ${when}` : `${agent} · ${when}`;
 }
 
-const GROUP_LABEL = { "needs-you": "Needs you", active: "Running", finished: "Earlier" };
+const GROUP_LABEL = { architect: "Architect", "needs-you": "Needs you", active: "Running", finished: "Earlier" };
 
 /** @returns {{ state: string, word: string }} */
 export function statusView(session) {
@@ -52,7 +52,10 @@ export function statusView(session) {
   return STATUS[session.status];
 }
 
-export function toRowView(session, { selectedId, now, agentNames, others = [], fresh = false }) {
+/** How far a delegate's row is indented: deeper ones line up at the last step. */
+export const MAX_DEPTH = 3;
+
+export function toRowView(session, { selectedId, now, agentNames, others = [], fresh = false, depth = 0 }) {
   const status = statusView(session);
   return {
     id: session.id,
@@ -65,17 +68,20 @@ export function toRowView(session, { selectedId, now, agentNames, others = [], f
     attention: needsYou(session),
     resumable: terminalView(session).resumable,
     resumeLabel: `Resume ${session.task || "Untitled session"}`,
+    role: session.role,
+    depth: Math.min(depth, MAX_DEPTH),
+    badge: session.role === "architect" ? "architect" : "",
   };
 }
 
 /** fresh: the ids of sessions that just arrived over the feed, highlighted for a moment. */
 export function toGroupViews(sessions, { selectedId, now, agentNames, fresh = new Set() }) {
-  return group(sessions).map(({ key, sessions: members }) => ({
+  return group(sessions).map(({ key, sessions: members, depth = {} }) => ({
     key,
     label: GROUP_LABEL[key],
     tone: key === "needs-you" ? "attention" : null,
     count: members.length,
-    rows: members.map((s) => toRowView(s, { selectedId, now, agentNames, others: sessions, fresh: fresh.has(s.id) })),
+    rows: members.map((s) => toRowView(s, { selectedId, now, agentNames, others: sessions, fresh: fresh.has(s.id), depth: depth[s.id] ?? 0 })),
   }));
 }
 

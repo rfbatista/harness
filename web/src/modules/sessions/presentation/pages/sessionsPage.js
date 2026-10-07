@@ -8,7 +8,7 @@ import { FeedStatus } from "../../../../shared/domain/feed.js";
 import { describeError } from "../../../../shared/presentation/errors.js";
 import { readSeed } from "../../../../shared/presentation/seed.js";
 import { Codes, codeOf } from "../../../../shared/domain/errors.js";
-import { applyChange, byRecent, group, INITIAL_TERMINAL_SIZE, isTerminal, ofTask } from "../../domain/session.js";
+import { applyChange, displayOrder, group, INITIAL_TERMINAL_SIZE, isTerminal, ofTask } from "../../domain/session.js";
 import { artifactTitle } from "../artifactView.js";
 import { startedBy, summary, toDetailView, toGroupViews } from "../view.js";
 
@@ -288,7 +288,7 @@ export const sessionsPage = ({ gateway, clock, setTimeout = globalThis.setTimeou
       this.step(-1);
     },
     step(delta) {
-      const order = group(byRecent(this.sessions)).flatMap((g) => g.sessions.map((s) => s.id));
+      const order = displayOrder(this.sessions);
       if (order.length === 0) return;
       const at = order.indexOf(this.selectedId);
       const next = at === -1 ? 0 : Math.max(0, Math.min(order.length - 1, at + delta));

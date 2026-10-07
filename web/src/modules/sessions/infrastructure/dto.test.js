@@ -1,6 +1,6 @@
 import { Codes } from "../../../shared/domain/errors.js";
 import { assert, file, test } from "../../../shared/testing/test.js";
-import { toChange, toCreated, toResumeBody, toSeed, toSession, toSessionList, toStartBody } from "./dto.js";
+import { toChange, toCreated, toResumeBody, toSeed, toSession, toSessionList, toStartBody, toStatusCheck } from "./dto.js";
 
 file("sessions/infrastructure/dto");
 
@@ -76,4 +76,51 @@ test("a session says whether it can be resumed, and why not", () => {
 test("the resume request always runs on the server", () => {
   assert.deepEqual(toResumeBody("s1", { cols: 120, rows: 32 }), { session_id: "s1", runs_on: "server", size: { cols: 120, rows: 32 } });
   assert.deepEqual(toResumeBody("s1"), { session_id: "s1", runs_on: "server", size: undefined });
+});
+
+const check = {
+  task_id: "t1",
+  architect_session_id: "arch",
+  delegate_session_id: "s1",
+  every_minutes: 10,
+  next_at: "2026-10-02T14:10:00Z",
+  last_fired_at: "2026-10-02T14:00:00Z",
+  fired_count: 3,
+  state: "active",
+};
+
+test("a session reads its role, its task's architect and its status check", () => {
+  const s = toSession({ ...wire, role: "delegate", architect_session_id: "arch", status_check: check });
+  assert.equal(s.role, "delegate");
+  assert.equal(s.architectSessionId, "arch");
+  assert.deepEqual(s.statusCheck, {
+    taskId: "t1",
+    architectSessionId: "arch",
+    delegateSessionId: "s1",
+    everyMinutes: 10,
+    nextAt: new Date("2026-10-02T14:10:00Z"),
+    lastFiredAt: new Date("2026-10-02T14:00:00Z"),
+    firedCount: 3,
+    state: "active",
+  });
+});
+
+test("a session without the role fields is a peer on a task without an architect", () => {
+  const s = toSession(wire);
+  assert.deepEqual([s.role, s.architectSessionId, s.statusCheck], ["", "", null]);
+  const nulls = toSession({ ...wire, role: "", architect_session_id: null, status_check: null });
+  assert.deepEqual([nulls.role, nulls.architectSessionId, nulls.statusCheck], ["", "", null]);
+});
+
+test("a status check without its times reads them as null; a paused one has no interval", () => {
+  const paused = toStatusCheck({ ...check, every_minutes: 0, next_at: undefined, last_fired_at: undefined, fired_count: 0, state: "paused" });
+  assert.deepEqual([paused.everyMinutes, paused.nextAt, paused.lastFiredAt, paused.state], [0, null, null, "paused"]);
+});
+
+test("an unknown role or a malformed status check is BAD_RESPONSE", () => {
+  assert.throws(() => toSession({ ...wire, role: "overlord" }), Codes.BAD_RESPONSE);
+  assert.throws(() => toStatusCheck({ ...check, state: "sleeping" }), Codes.BAD_RESPONSE);
+  assert.throws(() => toStatusCheck({ ...check, delegate_session_id: "" }), Codes.BAD_RESPONSE);
+  assert.throws(() => toStatusCheck({ ...check, next_at: "soon" }), Codes.BAD_RESPONSE);
+  assert.throws(() => toSession({ ...wire, status_check: { ...check, every_minutes: "ten" } }), Codes.BAD_RESPONSE);
 });

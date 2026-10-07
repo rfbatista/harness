@@ -3,6 +3,7 @@
 // a mismatch is a BAD_RESPONSE, so code past here can trust its data.
 
 import { Codes, StructuredError } from "../../../shared/domain/errors.js";
+import { CHECK_STATES, ROLES } from "../domain/channel.js";
 import { STATUSES } from "../domain/session.js";
 
 /** @returns {import("../domain/session.js").Session} */
@@ -11,6 +12,8 @@ export function toSession(dto) {
   if (!STATUSES.includes(dto.status)) bad(`session ${dto.id} has unknown status "${dto.status}"`);
   const updatedAt = new Date(dto.updated_at);
   if (Number.isNaN(updatedAt.getTime())) bad(`session ${dto.id} has an invalid updated_at`);
+  const role = dto.role ?? "";
+  if (!ROLES.includes(role)) bad(`session ${dto.id} has unknown role "${role}"`);
 
   return Object.freeze({
     id: dto.id,
@@ -28,12 +31,45 @@ export function toSession(dto) {
     runnerHost: dto.runner_host ?? "",
     resumable: dto.resumable === true,
     resumeBlocked: typeof dto.resume_blocked === "string" ? dto.resume_blocked : "",
+    role,
+    architectSessionId: dto.architect_session_id ?? "",
+    statusCheck: dto.status_check ? toStatusCheck(dto.status_check) : null,
     parentSessionId: dto.parent_session_id ?? "",
     branch: dto.branch ?? "",
     workspaceId: dto.workspace_id ?? "",
     workingDir: dto.working_dir ?? "",
     updatedAt,
   });
+}
+
+/**
+ * A status check (domain.StatusCheck): on a delegate's session, in a
+ * `status_check` feed message, and in POST /api/set_status_check's answer.
+ * @returns {import("../domain/channel.js").StatusCheck}
+ */
+export function toStatusCheck(dto) {
+  if (!dto || typeof dto.delegate_session_id !== "string" || dto.delegate_session_id === "") bad("status check without a delegate_session_id");
+  const at = `status check on ${dto.delegate_session_id}`;
+  if (!CHECK_STATES.includes(dto.state)) bad(`${at} has unknown state "${dto.state}"`);
+  if (!Number.isInteger(dto.every_minutes)) bad(`${at} has no every_minutes`);
+  return Object.freeze({
+    taskId: dto.task_id ?? "",
+    architectSessionId: dto.architect_session_id ?? "",
+    delegateSessionId: dto.delegate_session_id,
+    everyMinutes: dto.every_minutes,
+    nextAt: optionalDate(dto.next_at, `${at}: next_at`),
+    lastFiredAt: optionalDate(dto.last_fired_at, `${at}: last_fired_at`),
+    firedCount: Number(dto.fired_count ?? 0),
+    state: dto.state,
+  });
+}
+
+/** An optional RFC 3339 time: null when absent, BAD_RESPONSE when unreadable. */
+export function optionalDate(value, what) {
+  if (value === undefined || value === null || value === "") return null;
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) bad(`${what} is not a time`);
+  return d;
 }
 
 /** GET /api/sessions → {"sessions": [...]} */

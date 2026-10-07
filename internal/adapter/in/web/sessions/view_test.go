@@ -2,7 +2,9 @@ package sessions
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -172,5 +174,83 @@ func TestStartedByNamesTheParentsAgent(t *testing.T) {
 	}
 	if got := meta("plain claude", "Backend dev", "now"); got != "plain claude · started by Backend dev · now" {
 		t.Errorf("meta = %q", got)
+	}
+}
+
+// The browser's domain tests read the same fixture, so the architect's group
+// reads the same on first paint and after a live update.
+func TestGroupingByRoleMatchesTheSharedFixture(t *testing.T) {
+	raw, err := os.ReadFile("../../../../../web/testdata/views/session-roles.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fixture struct {
+		Cases []struct {
+			Name     string `json:"name"`
+			Sessions []struct {
+				ID     string               `json:"id"`
+				Role   domain.SessionRole   `json:"role"`
+				Parent string               `json:"parent"`
+				Status domain.SessionStatus `json:"status"`
+				Ago    int                  `json:"ago"`
+			} `json:"sessions"`
+			Groups [][]json.RawMessage `json:"groups"`
+		} `json:"cases"`
+	}
+	if err := json.Unmarshal(raw, &fixture); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Date(2026, 10, 2, 14, 0, 0, 0, time.UTC)
+	for _, c := range fixture.Cases {
+		var list []*domain.Session
+		for _, s := range c.Sessions {
+			list = append(list, &domain.Session{ID: s.ID, Role: s.Role, ParentSessionID: s.Parent, Status: s.Status, UpdatedAt: now.Add(-time.Duration(s.Ago) * time.Minute)})
+		}
+		var want []string
+		for _, g := range c.Groups {
+			var key string
+			var members [][]any
+			if err := json.Unmarshal(g[0], &key); err != nil {
+				t.Fatal(err)
+			}
+			if err := json.Unmarshal(g[1], &members); err != nil {
+				t.Fatal(err)
+			}
+			for _, m := range members {
+				want = append(want, fmt.Sprintf("%s/%s@%v", key, m[0], m[1]))
+			}
+		}
+		var got []string
+		for _, g := range group(list) {
+			for _, s := range g.sessions {
+				got = append(got, fmt.Sprintf("%s/%s@%d", g.key, s.ID, g.depth[s.ID]))
+			}
+		}
+		if strings.Join(got, " ") != strings.Join(want, " ") {
+			t.Errorf("%s:\n got  %v\n want %v", c.Name, got, want)
+		}
+	}
+}
+
+func TestArchitectRowIsBadgedAndDelegatesIndented(t *testing.T) {
+	now := time.Date(2026, 10, 2, 14, 0, 0, 0, time.UTC)
+	list := []*domain.Session{
+		{ID: "arch", Task: "Shape the work", Role: domain.RoleArchitect, Mode: domain.SessionModeArchitect, Status: domain.SessionRunning, UpdatedAt: now},
+		{ID: "d1", Task: "Server", Role: domain.RoleDelegate, ParentSessionID: "arch", Status: domain.SessionRunning, UpdatedAt: now},
+		{ID: "d2", Task: "Tests", Role: domain.RoleDelegate, ParentSessionID: "d1", Status: domain.SessionRunning, UpdatedAt: now},
+		{ID: "d3", Task: "More", Role: domain.RoleDelegate, ParentSessionID: "d2", Status: domain.SessionRunning, UpdatedAt: now},
+		{ID: "d4", Task: "Deeper", Role: domain.RoleDelegate, ParentSessionID: "d3", Status: domain.SessionRunning, UpdatedAt: now},
+	}
+	v := NewPageView(shell.Frame{}, &domain.Project{ID: "p1"}, &domain.Ticket{ID: "t1"}, list, nil, nil, now)
+	if v.Groups[0].Label != "Architect" || v.Groups[0].Tone != "" {
+		t.Fatalf("first group = %+v, want the Architect group, untoned", v.Groups[0])
+	}
+	var got []string
+	for _, r := range v.Groups[0].Rows {
+		got = append(got, fmt.Sprintf("%s:%s:%d:%s", r.ID, r.Role, r.Depth, r.Badge))
+	}
+	want := "arch:architect:0:architect d1:delegate:1: d2:delegate:2: d3:delegate:3: d4:delegate:3:"
+	if strings.Join(got, " ") != want {
+		t.Errorf("rows = %v, want %s", got, want)
 	}
 }
