@@ -114,7 +114,7 @@ templ ssrRows(v PageView) {
 				@components.Badge(strconv.Itoa(g.Count), g.Tone)
 			</div>
 			for _, r := range g.Rows {
-				<div class="[ row ]" data-stacked role="option" aria-selected={ strconv.FormatBool(r.Selected) } { attentionAttrs(r.Attention)... } { roleAttrs(r.Role, r.Depth)... }>
+				<div class="[ row ]" data-stacked role="option" data-session-id={ r.ID } aria-selected={ strconv.FormatBool(r.Selected) } { attentionAttrs(r.Attention)... } { roleAttrs(r.Role, r.Depth)... }>
 					@components.Status(r.State, r.Word)
 					<span class="[ title ]">
 						if r.Badge != "" {
@@ -138,7 +138,7 @@ templ liveRows() {
 				<span class="[ badge ]" x-bind:data-tone="group.tone" x-text="group.count"></span>
 			</div>
 			<template x-for="row in group.rows" x-bind:key="row.id">
-				<div class="[ row ]" data-stacked role="option" x-bind:aria-selected="row.selected" x-bind:data-attention="row.attention" x-bind:data-fresh="row.fresh" x-bind:data-role="row.roleAttr" x-bind:data-depth="row.depthAttr" x-on:click="select(row.id)">
+				<div class="[ row ]" data-stacked role="option" x-bind:data-session-id="row.id" x-bind:aria-selected="row.selected" x-bind:data-attention="row.attention" x-bind:data-fresh="row.fresh" x-bind:data-role="row.roleAttr" x-bind:data-depth="row.depthAttr" x-on:click="select(row.id)">
 					<span class="[ status ]" x-bind:data-state="row.state" x-text="row.word"></span>
 					<span class="[ title ]">
 						<template x-if="row.badge">
