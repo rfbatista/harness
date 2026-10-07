@@ -245,6 +245,8 @@ type prepareInput struct {
 	AllowedTools []string
 	AutoAccept   string
 	Mode         domain.SessionMode
+	// Role is what the session will be on its task, for the brief; empty is a peer.
+	Role domain.SessionRole
 }
 
 // prepared is a session whose worktree exists and whose configuration is
@@ -320,7 +322,7 @@ func (s *Service) prepare(in prepareInput) (*prepared, error) {
 	}
 	permission := parseAutoAccept(in.AutoAccept)
 	return &prepared{
-		cfg:        s.sessionConfig(id, ws.Path, in.Model, in.AllowedTools, permission, ag, ticket, in.ZoneID),
+		cfg:        s.sessionConfig(id, ws.Path, in.Model, in.AllowedTools, permission, ag, ticket, in.ZoneID, in.Role),
 		ws:         ws,
 		branch:     in.Branch,
 		permission: permission,
@@ -387,7 +389,7 @@ func (s *Service) resolveAgent(agentID string, mode domain.SessionMode) (resolve
 // sessionConfig builds the CLI configuration shared by headless and
 // interactive sessions: the agent's prompt and skills, the task brief and
 // task MCP server, the agent's MCP servers and the zone's extra dirs.
-func (s *Service) sessionConfig(id, dir, model string, allowedTools []string, permission llmkit.PermissionMode, ag resolvedAgent, ticket *domain.Ticket, zoneID string) llmkit.SessionConfig {
+func (s *Service) sessionConfig(id, dir, model string, allowedTools []string, permission llmkit.PermissionMode, ag resolvedAgent, ticket *domain.Ticket, zoneID string, role domain.SessionRole) llmkit.SessionConfig {
 	cfg := llmkit.SessionConfig{
 		ID:           id,
 		WorkingDir:   dir,
@@ -406,7 +408,7 @@ func (s *Service) sessionConfig(id, dir, model string, allowedTools []string, pe
 	if s.TaskServerURL != nil {
 		taskURL = s.TaskServerURL(id)
 	}
-	applyTaskContext(&cfg, ticket, taskURL, domain.RolePeer)
+	applyTaskContext(&cfg, ticket, taskURL, role)
 
 	for _, m := range resolveAttachedMCPServers(ag.agent, s.catalog.MCPServers.ListMCPServers()) {
 		cfg.MCPServers = append(cfg.MCPServers, llmkit.MCPServerSpec{

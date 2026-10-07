@@ -67,6 +67,7 @@ func (s *Service) StartInteractive(ctx context.Context, req InteractiveRequest) 
 		Model:        req.Model,
 		AutoAccept:   req.AutoAccept,
 		Mode:         mode,
+		Role:         s.newSessionRole(ctx, mode, req.ParentSessionID),
 	})
 	if err != nil {
 		return nil, ports.AgentSpec{}, err
@@ -159,7 +160,7 @@ func (s *Service) ResumeInteractive(ctx context.Context, req ports.ResumeRequest
 	if sess.AutoRun {
 		permission = llmkit.PermissionBypass
 	}
-	cfg := s.sessionConfig(sess.ID, sess.WorkingDir, sess.Model, nil, permission, ag, ticket, sess.ZoneID)
+	cfg := s.sessionConfig(sess.ID, sess.WorkingDir, sess.Model, nil, permission, ag, ticket, sess.ZoneID, s.sessionRole(ctx, sess.ID))
 	spec := s.agentSpec(cfg, ports.Conversation{ID: claudeID(sess), Resume: true}, "")
 	err = s.sessions.UpdateRunner(sess.ID, runsOn, runnerHost(runsOn, req.RunnerHost))
 	if err == nil {

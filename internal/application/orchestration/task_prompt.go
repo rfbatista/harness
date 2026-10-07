@@ -1,6 +1,8 @@
 package orchestration
 
 import (
+	"context"
+	"log/slog"
 	"strings"
 
 	"github.com/rfbatista/llmkit"
@@ -182,4 +184,40 @@ are your work queue. Answer each one:
 dragging the card:
 
 - mcp__task__update_task_status — set this task's status: in_progress when you pick the work up, review when it is ready for a person to look at, done when you are told it is accepted`
+}
+
+// newSessionRole is the role a session about to start will have, worked out
+// before it is stored: the architect if it starts in architect mode (it
+// becomes the task's newest), a delegate if the session starting it is the
+// architect or one of its delegates, a peer otherwise. Without a Roles lookup
+// the server has no architect channel, and every session is a peer.
+func (s *Service) newSessionRole(ctx context.Context, mode domain.SessionMode, parentID string) domain.SessionRole {
+	if s.Roles == nil {
+		return domain.RolePeer
+	}
+	if mode == domain.SessionModeArchitect {
+		return domain.RoleArchitect
+	}
+	if parentID == "" {
+		return domain.RolePeer
+	}
+	switch s.sessionRole(ctx, parentID) {
+	case domain.RoleArchitect, domain.RoleDelegate:
+		return domain.RoleDelegate
+	}
+	return domain.RolePeer
+}
+
+// sessionRole is what a stored session is on its task. A failed lookup briefs
+// it as a peer rather than failing its start.
+func (s *Service) sessionRole(ctx context.Context, id string) domain.SessionRole {
+	if s.Roles == nil {
+		return domain.RolePeer
+	}
+	role, err := s.Roles.SessionRole(ctx, id)
+	if err != nil {
+		slog.Warn("session role lookup failed; briefing it as a peer", "session", id, "err", err)
+		return domain.RolePeer
+	}
+	return role
 }
