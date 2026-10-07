@@ -123,6 +123,17 @@ type ConversationRecorder interface {
 	RecordClaudeSession(ctx context.Context, id, claudeSessionID string) error
 }
 
+// TurnHooks follows an interactive session's turns through the CLI's
+// UserPromptSubmit and Stop hooks, which drive them over a loopback-only
+// route. A turn that ends while turns wait in the session's outbox goes on
+// with them: TurnEnded returns the text the Stop hook hands back to claude
+// to continue with ("" lets the session stop). stopHookActive is the hook's
+// own flag: the turn is already a continuation.
+type TurnHooks interface {
+	TurnStarted(ctx context.Context, sessionID string) error
+	TurnEnded(ctx context.Context, sessionID string, stopHookActive bool) (continueWith string, err error)
+}
+
 // Orchestration is the whole session surface, for an adapter that serves all
 // of it (the HTTP API).
 type Orchestration interface {
@@ -133,6 +144,7 @@ type Orchestration interface {
 	SessionFeed
 	InteractiveSessions
 	ConversationRecorder
+	TurnHooks
 	TerminalAccess
 }
 

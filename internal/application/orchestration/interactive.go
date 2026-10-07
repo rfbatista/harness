@@ -46,6 +46,11 @@ func (s *Service) StartInteractive(ctx context.Context, req InteractiveRequest) 
 	if err != nil {
 		return nil, ports.AgentSpec{}, err
 	}
+	if req.StatusCheckMinutes != nil {
+		if err := domain.ValidStatusCheckMinutes(*req.StatusCheckMinutes); err != nil {
+			return nil, ports.AgentSpec{}, err
+		}
+	}
 
 	// A task can hold several sessions at once, so the branch carries part of
 	// the session id: two sessions on one task must never race for one branch.
@@ -91,7 +96,12 @@ func (s *Service) StartInteractive(ctx context.Context, req InteractiveRequest) 
 	})
 	if err == nil {
 		s.adoptCleanup(id, p.cleanup)
+		s.courier.setTurn(id, startTurn(spec))
 		s.publish(id, SessionEvent{Type: "status", Status: domain.SessionRunning, Text: startedText(runsOn), At: time.Now()})
+		// Announced before the CLI runs, so the architect channel has the
+		// session's status-check loop in place when the start returns.
+		s.announce(domain.SessionStarted{SessionID: id, ProjectID: req.ProjectID, TicketID: req.TicketID,
+			ParentSessionID: req.ParentSessionID, Mode: mode, StatusCheckMinutes: req.StatusCheckMinutes})
 		if runsOn == domain.RunnerServer {
 			if err := s.spawn(ctx, id, spec, req.Size); err != nil {
 				return nil, ports.AgentSpec{}, err
@@ -162,6 +172,7 @@ func (s *Service) ResumeInteractive(ctx context.Context, req ports.ResumeRequest
 		return nil, ports.AgentSpec{}, err
 	}
 	s.adoptCleanup(sess.ID, ag.cleanup)
+	s.courier.setTurn(sess.ID, turnIdle) // a resumed conversation waits for its next prompt
 	s.publish(sess.ID, SessionEvent{Type: "status", Status: domain.SessionRunning, Text: "resumed" + strings.TrimPrefix(startedText(runsOn), "started"), At: time.Now()})
 	if runsOn == domain.RunnerServer {
 		if err := s.spawn(ctx, sess.ID, spec, req.Size); err != nil {
@@ -308,6 +319,7 @@ func (s *Service) end(id string, exitCode int, closedByUser bool) (*domain.Sessi
 		return nil, err
 	}
 	s.publish(id, SessionEvent{Type: "done", Status: status, Text: text, At: time.Now()})
+	s.announce(domain.SessionEnded{SessionID: id, Status: status})
 	return s.withResumability(s.sessions.Get(id)), nil
 }
 
@@ -361,7 +373,16 @@ func (s *Service) AttachTerminal(_ context.Context, id string) (ports.Terminal, 
 	if err != nil {
 		return nil, notRunning
 	}
-	return t, nil
+	return inputStamp{Terminal: t, touched: func() { s.courier.touched(id) }}, nil
+}
+
+// startTurn is where a just-launched interactive CLI is: working on its first
+// prompt, or waiting for one.
+func startTurn(spec ports.AgentSpec) turnState {
+	if spec.Prompt != "" {
+		return turnBusy
+	}
+	return turnIdle
 }
 
 // stopHosted stops a RunnerServer session: recorded as stopped first, so the

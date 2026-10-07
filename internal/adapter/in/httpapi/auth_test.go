@@ -43,16 +43,17 @@ func TestToken(t *testing.T) {
 		status             int
 		code               string
 	}{
-		"health is open":             {"GET", "/api/health", "", 200, ""},
-		"the hook route is open":     {"POST", InteractiveSessionStartedPath + "?session_id=x", "", 200, ""},
-		"no token":                   {"GET", "/api/list_projects", "", 401, "UNAUTHORIZED"},
-		"wrong token":                {"GET", "/api/list_projects", "Bearer nope", 401, "UNAUTHORIZED"},
-		"not a bearer":               {"GET", "/api/list_projects", "s3cret", 401, "UNAUTHORIZED"},
-		"right token":                {"GET", "/api/list_projects", "Bearer s3cret", 200, ""},
-		"writes need it too":         {"POST", "/api/create_project", "", 401, "UNAUTHORIZED"},
-		"the terminal needs it":      {"GET", "/api/sessions/x/terminal", "", 401, "UNAUTHORIZED"},
-		"the event feed needs it":    {"GET", "/api/events?project_id=p", "", 401, "UNAUTHORIZED"},
-		"artifact views need it too": {"GET", "/api/artifacts/x/view/", "", 401, "UNAUTHORIZED"},
+		"health is open":              {"GET", "/api/health", "", 200, ""},
+		"the hook route is open":      {"POST", InteractiveSessionStartedPath + "?session_id=x", "", 200, ""},
+		"the turn hook route is open": {"POST", InteractiveSessionHookPath + "?session_id=x&event=Stop", "", 200, ""},
+		"no token":                    {"GET", "/api/list_projects", "", 401, "UNAUTHORIZED"},
+		"wrong token":                 {"GET", "/api/list_projects", "Bearer nope", 401, "UNAUTHORIZED"},
+		"not a bearer":                {"GET", "/api/list_projects", "s3cret", 401, "UNAUTHORIZED"},
+		"right token":                 {"GET", "/api/list_projects", "Bearer s3cret", 200, ""},
+		"writes need it too":          {"POST", "/api/create_project", "", 401, "UNAUTHORIZED"},
+		"the terminal needs it":       {"GET", "/api/sessions/x/terminal", "", 401, "UNAUTHORIZED"},
+		"the event feed needs it":     {"GET", "/api/events?project_id=p", "", 401, "UNAUTHORIZED"},
+		"artifact views need it too":  {"GET", "/api/artifacts/x/view/", "", 401, "UNAUTHORIZED"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			status, code := call(h, tc.method, tc.path, tc.auth)

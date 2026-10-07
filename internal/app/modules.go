@@ -294,7 +294,7 @@ func newTaskChannelService(db *gorm.DB, sessions ports.SessionRepository, plan *
 		Reviews:  sqlite.NewReviewRequestRepository(db),
 		Checks:   sqlite.NewStatusCheckRepository(db),
 	})
-	svc.Announcer, svc.Feed, svc.Artifacts, svc.Agents = orch, orch, art, cat.Agents
+	svc.Delivery, svc.Announcer, svc.Feed, svc.Artifacts, svc.Agents = orch, orch, orch, art, cat.Agents
 	svc.Subscribe(cat.Bus)
 	orch.Roles, orch.Decorator = svc, svc
 	plan.Decorator, plan.Events, plan.StatusHistory = svc, cat.Bus, sqlite.NewTaskStatusChangeRepository(db)
@@ -436,7 +436,7 @@ func newOrchestrationService(
 		return base + mcpsession.PathPrefix + sessionID
 	}
 	svc.SessionHookURL = func(sessionID string) string {
-		return base + httpapi.InteractiveSessionStartedPath + "?session_id=" + url.QueryEscape(sessionID)
+		return base + httpapi.InteractiveSessionHookPath + "?session_id=" + url.QueryEscape(sessionID)
 	}
 	svc.Transcripts = transcripts
 	svc.Terminals = terminals

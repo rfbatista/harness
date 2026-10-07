@@ -96,6 +96,9 @@ type Service struct {
 	// which is routinely *after* the initial task was already sent — cannot
 	// report the session as idle while Claude is working on that first turn.
 	busy map[string]bool
+	// courier holds the turns waiting for a session's turn to end, and what
+	// the server knows of interactive sessions' turns.
+	courier courier
 	// resuming marks sessions a ResumeInteractive call is bringing back, from
 	// its status check until the session is recorded running, so two calls at
 	// once cannot both pass the check.
@@ -470,8 +473,26 @@ func (s *Service) pump(sess llmkit.Session) {
 			ev.Status = status
 		}
 		s.publish(id, ev)
+		if ce.Type == llmkit.EventResult {
+			s.announce(domain.SessionTurnEnded{SessionID: id})
+			s.flushHeadless(id)
+		}
 	}
 	s.runCleanup(id)
+	if sess := s.sessions.Get(id); sess != nil && sess.Status.IsTerminal() {
+		s.announce(domain.SessionEnded{SessionID: id, Status: sess.Status})
+	}
+}
+
+// announce publishes a lifecycle event on the bus. Subscribers react on their
+// own; their failure is logged, never the caller's.
+func (s *Service) announce(ev domain.Event) {
+	if s.Events == nil {
+		return
+	}
+	if err := s.Events.Publish(context.Background(), ev); err != nil {
+		slog.Warn("announce session event", "event", ev.EventName(), "err", err)
+	}
 }
 
 // turnBoundary resolves the two statuses that depend on whether a turn is in
@@ -872,6 +893,7 @@ func (s *Service) runCleanup(id string) {
 	delete(s.cleanups, id)
 	delete(s.busy, id)
 	s.mu.Unlock()
+	s.courier.forget(id)
 	if c != nil {
 		c()
 	}

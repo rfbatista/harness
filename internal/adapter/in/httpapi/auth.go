@@ -23,6 +23,7 @@ func WithToken(token string) Option { return func(o *options) { o.token = token 
 var openRoutes = map[string]bool{
 	"/api/health":                 true,
 	InteractiveSessionStartedPath: true,
+	InteractiveSessionHookPath:    true,
 }
 
 func requireToken(token string) echo.MiddlewareFunc {
