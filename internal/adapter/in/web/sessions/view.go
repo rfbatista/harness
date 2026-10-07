@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"operators-mcp/internal/adapter/in/web/components"
 	"operators-mcp/internal/adapter/in/web/shell"
 	"operators-mcp/internal/domain"
 )
@@ -143,8 +144,13 @@ type PageView struct {
 	Groups          []Group
 	Seed            Seed
 	// Documents links the task's documents page; nil hides it.
-	Documents  *DocumentsLink
-	NewSession NewSessionForm
+	Documents *DocumentsLink
+	// Reviews seeds the review band (reviewsInbox); nil hides it.
+	Reviews *components.ReviewsSeed
+	// PendingReviews is how many requests wait on the person, for the band's
+	// first paint.
+	PendingReviews int
+	NewSession     NewSessionForm
 }
 
 // Empty reports a project without sessions.
@@ -195,6 +201,7 @@ func NewPageView(frame shell.Frame, project *domain.Project, task *domain.Ticket
 		Task:            task,
 		TaskDescription: task.Description,
 		TaskStatus:      StatusLabel(task.Status),
+		PendingReviews:  task.PendingReviews,
 		Summary:         summary(list),
 		Groups:          views,
 		Seed:            Seed{ProjectID: project.ID, TicketID: task.ID, Sessions: list, AgentNames: names, RepositoryNames: repoNames},

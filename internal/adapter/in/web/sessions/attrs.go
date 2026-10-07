@@ -36,3 +36,21 @@ func selectedAttrs(selected bool) templ.Attributes {
 	}
 	return templ.Attributes{}
 }
+
+// bandAttrs paints the review band before the browser reads the requests:
+// amber when some wait on the person, hidden when none do.
+func bandAttrs(pending int) templ.Attributes {
+	if pending > 0 {
+		return templ.Attributes{"data-attention": true}
+	}
+	return templ.Attributes{"hidden": true}
+}
+
+// waitingLine is how many requests wait: "1 review waits on you". The
+// browser's waitingLine (reviews/presentation/view.js) says the same.
+func waitingLine(n int) string {
+	if n == 1 {
+		return "1 review waits on you"
+	}
+	return strconv.Itoa(n) + " reviews wait on you"
+}

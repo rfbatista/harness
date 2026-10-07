@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -19,7 +20,7 @@ import (
 // architectServer serves a task whose architect delegated two sessions, with
 // the architect channel's routes stubbed as the Web UI contract shapes them.
 // A test pushes feed messages through the returned sseFeed.
-func architectServer(t *testing.T, messages []domain.TaskMessage) (*httptest.Server, *sseFeed) {
+func architectServer(t *testing.T, messages []domain.TaskMessage, reviews ...*domain.ReviewRequest) (*httptest.Server, *sseFeed) {
 	t.Helper()
 	if messages == nil {
 		messages = []domain.TaskMessage{} // the server sends [], never null
@@ -37,7 +38,7 @@ func architectServer(t *testing.T, messages []domain.TaskMessage) (*httptest.Ser
 	pages := NewHandler(Deps{
 		Projects: fakeProjects{[]*domain.Project{{ID: "p1", Name: "coding_pool"}}},
 		Tasks: fakeTickets{[]*domain.Ticket{
-			{ID: "t1", ProjectID: "p1", Title: "Architect highlights", Status: domain.TicketStatusInProgress, ArchitectSessionID: &arch},
+			{ID: "t1", ProjectID: "p1", Title: "Architect highlights", Status: domain.TicketStatusInProgress, ArchitectSessionID: &arch, PendingReviews: pendingOf(reviews)},
 		}},
 		Agents:       fakeAgents{[]*domain.Agent{{ID: "a-arch", Name: "software-architect"}, {ID: "a-go", Name: "go-developer"}, {ID: "a-web", Name: "frontend-developer"}}},
 		Repositories: fakeRepos{[]*domain.Repository{{ID: "r1", ProjectID: "p1", Name: "harness"}}},
@@ -76,6 +77,39 @@ func architectServer(t *testing.T, messages []domain.TaskMessage) (*httptest.Ser
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]any{"status_check": check})
 	})
+	var mu sync.Mutex
+	mux.HandleFunc("GET /api/review_requests", func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		defer mu.Unlock()
+		list := []*domain.ReviewRequest{}
+		for _, rv := range reviews {
+			if r.URL.Query().Get("state") == "" || string(rv.State) == r.URL.Query().Get("state") {
+				list = append(list, rv)
+			}
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]any{"review_requests": list})
+	})
+	mux.HandleFunc("POST /api/respond_review_request", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			ReviewID string `json:"review_id"`
+			Decision string `json:"decision"`
+			Note     string `json:"note"`
+		}
+		json.NewDecoder(r.Body).Decode(&body)
+		mu.Lock()
+		defer mu.Unlock()
+		for _, rv := range reviews {
+			if rv.ID == body.ReviewID {
+				now := time.Now()
+				rv.State, rv.ResponseNote, rv.RespondedAt, rv.UpdatedAt = domain.ReviewState(body.Decision), body.Note, &now, now
+				w.Header().Set("Content-Type", "application/json")
+				json.NewEncoder(w).Encode(map[string]any{"review_request": rv, "delivered": false})
+				return
+			}
+		}
+		http.Error(w, `{"error":"no such review","code":"REVIEW_NOT_FOUND"}`, http.StatusNotFound)
+	})
 	mux.HandleFunc("GET /api/artifacts", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.Write([]byte(`{"artifacts":[]}`))
@@ -88,6 +122,16 @@ func architectServer(t *testing.T, messages []domain.TaskMessage) (*httptest.Ser
 		srv.Close()
 	})
 	return srv, feed
+}
+
+func pendingOf(reviews []*domain.ReviewRequest) int {
+	n := 0
+	for _, r := range reviews {
+		if r.State == domain.ReviewPending {
+			n++
+		}
+	}
+	return n
 }
 
 // noBanner fails the test when the page shows an error banner.
@@ -230,6 +274,78 @@ func TestPersonPausesAndResumesADelegatesStatusChecks(t *testing.T) {
 		if !strings.Contains(c.got, c.want) {
 			t.Errorf("%q lacks %q", c.got, c.want)
 		}
+	}
+	noBanner(t, ctx)
+	if e := errs.all(); len(e) > 0 {
+		t.Errorf("JS errors: %v", e)
+	}
+}
+
+// TestPersonAnswersTheArchitectsReviewRequests: the band shows what waits on
+// the person; requesting changes needs a note; an answer settles the request
+// under Earlier reviews and says when the architect will get it.
+func TestPersonAnswersTheArchitectsReviewRequests(t *testing.T) {
+	now := time.Now()
+	review := func(id, subject string, minutes int) *domain.ReviewRequest {
+		at := now.Add(-time.Duration(minutes) * time.Minute)
+		return &domain.ReviewRequest{ID: id, TaskID: "t1", ProjectID: "p1", ArchitectSessionID: "s-arch", AboutSessionID: "s-server",
+			Subject: subject, Body: "Three specs and two contracts.\nPlease check the status authority rule.", DocumentIDs: []string{}, ArtifactIDs: []string{},
+			State: domain.ReviewPending, CreatedAt: at, UpdatedAt: at}
+	}
+	srv, feed := architectServer(t, nil, review("rv1", "Spec set ready for sign-off", 12), review("rv2", "Server API shape", 3))
+	ctx, errs := browser(t)
+
+	band := `(document.querySelector('[aria-label="Review requests"]')?.textContent ?? '').replace(/\s+/g, ' ').trim()`
+	cards := `[...document.querySelectorAll('[aria-label="Review requests"] .review')]`
+	var first, problem, after string
+	if err := chromedp.Run(ctx,
+		chromedp.EmulateViewport(1280, 900),
+		chromedp.Navigate(srv.URL+"/projects/p1/tasks/t1"),
+		chromedp.Poll(cards+`.length === 2`, nil, chromedp.WithPollingTimeout(10*time.Second)),
+		chromedp.Evaluate(band, &first),
+		shot("reviews-band"),
+		// Request changes without a note: stopped at the field.
+		chromedp.Evaluate(cards+`.find(c => c.textContent.includes('Spec set')).querySelectorAll('button')[1].click()`, nil),
+		chromedp.Poll(`!!document.querySelector('[aria-label="Review requests"] textarea[aria-invalid=true]')`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Evaluate(`document.querySelector('[aria-label="Review requests"] textarea[aria-invalid=true]').closest('.field').querySelector('.error').textContent`, &problem),
+		// With a note it is sent.
+		chromedp.SendKeys(`[aria-label="Review requests"] textarea[aria-invalid=true]`, "Split the contract in two.", chromedp.ByQuery),
+		chromedp.Evaluate(cards+`.find(c => c.textContent.includes('Spec set')).querySelectorAll('button')[1].click()`, nil),
+		chromedp.Poll(cards+`.filter(c => !c.closest('details')).length === 1`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Evaluate(`document.querySelector('[aria-label="Review requests"] details summary').click()`, nil),
+		chromedp.Evaluate(band, &after),
+		shot("reviews-answered"),
+	); err != nil {
+		var dump, html string
+		_ = chromedp.Run(ctx, chromedp.Evaluate(band, &dump), chromedp.Evaluate(cards+`[0]?.outerHTML ?? ''`, &html))
+		t.Fatalf("%v\nband: %s\nfirst card: %s\nJS errors: %v", err, dump, html, errs.all())
+	}
+	for _, c := range []struct{ got, want string }{
+		{first, "2 reviews wait on you"},
+		{first, "from the architect · about go-developer · Server: architect channel"},
+		{problem, "Say what should change"},
+		{after, "1 review waits on you"},
+		{after, "Earlier reviews (1)"},
+		{after, "changes requested"},
+		{after, "Your note: Split the contract in two."},
+		{after, "Saved. The architect gets your answer when its current turn ends."},
+	} {
+		if !strings.Contains(c.got, c.want) {
+			t.Errorf("%q lacks %q", c.got, c.want)
+		}
+	}
+
+	// The architect raises another over the feed: it shows and is announced.
+	feed.pushRaw(t, map[string]any{"review_request": review("rv3", "Board badge wording", 0)})
+	var announced string
+	if err := chromedp.Run(ctx,
+		chromedp.Poll(cards+`.filter(c => !c.closest('details')).length === 2`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Evaluate(`document.querySelector('[role=status][aria-live=polite]').textContent`, &announced),
+	); err != nil {
+		t.Fatalf("%v\nJS errors: %v", err, errs.all())
+	}
+	if announced != "The architect asks for your review: Board badge wording" {
+		t.Errorf("announced %q", announced)
 	}
 	noBanner(t, ctx)
 	if e := errs.all(); len(e) > 0 {

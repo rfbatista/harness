@@ -1,0 +1,71 @@
+/*
+ * Review — the requests the task's architect raised for the person. .reviews
+ * is the band under the task header (and the project inbox's list): amber,
+ * because it waits on the person (data-attention), with its own scroll so a
+ * long one never pushes the sessions off screen. .review is one request:
+ * subject, byline, the architect's text, links, then the note and the answer.
+ * Exceptions: data-withdrawn (a request withdrawn while answered: quiet).
+ */
+
+@layer blocks {
+  .reviews {
+    display: grid;
+    gap: var(--space-s);
+    max-block-size: 50vh;
+    overflow-y: auto;
+    padding: var(--space-m) var(--space-l);
+    border-block-end: var(--border-width) solid var(--color-line);
+
+    &[data-attention] { background: var(--color-attention-wash); }
+
+    & .reviews-head {
+      display: flex;
+      align-items: center;
+      gap: var(--space-s);
+      font-size: var(--text-md);
+    }
+
+    & > details > summary {
+      color: var(--color-ink-muted);
+      font-size: var(--text-sm);
+      cursor: pointer;
+    }
+  }
+
+  .review {
+    display: grid;
+    gap: var(--space-2xs);
+    max-inline-size: 68ch;
+    padding-block: var(--space-s);
+
+    & + .review { border-block-start: var(--border-width) solid var(--color-line); }
+
+    & h3 { font-size: var(--text-md); }
+
+    & .meta {
+      color: var(--color-ink-faint);
+      font-size: var(--text-sm);
+    }
+
+    & .body {
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+
+    & .links {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--space-xs) var(--space-m);
+      font-size: var(--text-sm);
+    }
+
+    & .aside {
+      color: var(--color-ink-faint);
+      font-size: var(--text-sm);
+    }
+
+    & textarea { min-block-size: 3.5rem; }
+
+    &[data-withdrawn] { color: var(--color-ink-muted); }
+  }
+}

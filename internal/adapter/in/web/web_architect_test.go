@@ -66,3 +66,41 @@ func sessionsFirstPaint(body string) string {
 	list := body[strings.Index(body, `aria-label="Sessions of this task"`):]
 	return list[:strings.Index(list, `x-for="group in groups"`)]
 }
+
+func TestTaskPagePaintsTheReviewsWaitingOnThePerson(t *testing.T) {
+	w := architectWorld()
+	w.tickets[0].PendingReviews = 2
+	body := get(t, newTestHandler(t, w), "/projects/p1/tasks/t-feed").Body.String()
+	band := body[strings.Index(body, `aria-label="Review requests"`):]
+	band = band[:strings.Index(band, ">")]
+	for _, want := range []string{`x-data="reviewsInbox"`, `data-ticket-id="t-feed"`, `data-pending="2"`, ` data-attention`} {
+		if !strings.Contains(band, want) {
+			t.Errorf("the band %q lacks %s", band, want)
+		}
+	}
+	if strings.Contains(band, " hidden") {
+		t.Errorf("a band with reviews waiting is hidden: %q", band)
+	}
+	for _, want := range []string{
+		"2 reviews wait on you",
+		`<script id="reviews-seed" type="application/json">`,
+		`"s-server":"plain claude · build the server"`,
+		`"t-feed":{"title":"Add SSE feed","href":"/projects/p1/tasks/t-feed"}`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("task page is missing %q", want)
+		}
+	}
+}
+
+func TestTaskPageWithNoReviewsPaintsTheBandHidden(t *testing.T) {
+	body := get(t, newTestHandler(t, board()), "/projects/p1/tasks/t-feed").Body.String()
+	band := body[strings.Index(body, `aria-label="Review requests"`):]
+	band = band[:strings.Index(band, ">")]
+	if !strings.Contains(band, " hidden") || strings.Contains(band, " data-attention") {
+		t.Errorf("a band with nothing waiting should be painted hidden and quiet: %q", band)
+	}
+	if strings.Contains(body, "wait on you") {
+		t.Error("nothing waits, yet the page says something does")
+	}
+}

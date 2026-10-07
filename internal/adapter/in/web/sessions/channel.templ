@@ -1,6 +1,10 @@
 package sessions
 
-import "operators-mcp/internal/adapter/in/web/components"
+import (
+	"strconv"
+
+	"operators-mcp/internal/adapter/in/web/components"
+)
 
 // conversationTab opens the selected session's Conversation: shown on the
 // task's architect and its delegates only. Its badge counts messages that
@@ -117,4 +121,62 @@ templ statusCheckBar() {
 			</div>
 		</template>
 	</div>
+}
+
+// reviewBand is the requests the task's architect raised for the person
+// (reviewsInbox, scoped to the task): pending ones first, amber because they
+// wait on the person, then the settled ones under "Earlier reviews". The
+// server paints how many wait (task.pending_reviews) until the browser has
+// read them; a task with none renders the band hidden, and it appears once
+// the architect raises one. Its announcements go to the page's live region
+// (the announce event), so the page keeps one.
+templ reviewBand(v PageView) {
+	if v.Reviews != nil {
+		@templ.JSONScript("reviews-seed", v.Reviews)
+		<section
+			class="[ reviews ]"
+			aria-label="Review requests"
+			x-data="reviewsInbox"
+			data-seed="reviews-seed"
+			data-ticket-id={ v.Reviews.TicketID }
+			data-pending={ strconv.Itoa(v.PendingReviews) }
+			if v.Task.ArchitectSessionID != nil {
+				data-architect
+			}
+			{ bandAttrs(v.PendingReviews)... }
+			x-bind:hidden="hidesBand"
+			x-bind:data-attention="attentionAttr"
+		>
+			if v.PendingReviews > 0 {
+				<div class="[ flow ] [ flow-space-s ]" x-show="notLoaded">
+					<p class="[ reviews-head ]">
+						@components.Status("waiting", "waiting")
+						<span>{ waitingLine(v.PendingReviews) }</span>
+					</p>
+					<span class="[ skeleton ]" style="--skeleton-width: 50%"></span>
+					<span class="[ skeleton ]" style="--skeleton-width: 80%"></span>
+				</div>
+			}
+			@components.ReviewsError()
+			<template x-if="hasPending">
+				<div class="[ flow ] [ flow-space-2xs ]">
+					<h2 class="[ reviews-head ]" tabindex="-1" data-reviews-heading>
+						<span class="[ status ]" data-state="waiting">waiting</span>
+						<span x-text="headline"></span>
+					</h2>
+					<template x-for="card in pendingCards" x-bind:key="card.id">
+						@components.ReviewCard()
+					</template>
+				</div>
+			</template>
+			<template x-if="hasSettled">
+				<details>
+					<summary x-text="settledLabel"></summary>
+					<template x-for="card in settledCards" x-bind:key="card.id">
+						@components.SettledReviewCard()
+					</template>
+				</details>
+			</template>
+		</section>
+	}
 }

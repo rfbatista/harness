@@ -375,6 +375,11 @@ export const sessionsPage = ({ gateway, clock, channel = null, channelStore = { 
     },
 
     /** The selected session's role on the task; "" when none is selected. */
+    /** Another part of the page (the review band) has something to say in the live region. */
+    announce(event) {
+      this.announcement = event.detail.text;
+    },
+
     /** @param {CustomEvent<{ check: import("../../domain/channel.js").StatusCheck }>} event */
     statusCheckChanged(event) {
       this.patchCheck(event.detail.check);

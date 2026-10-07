@@ -11,6 +11,8 @@ import { preferences } from "./shared/infrastructure/storage.js";
 import { registerShared } from "./shared/presentation/register.js";
 
 import { runsGateway } from "./modules/runs/infrastructure/runs-gateway.js";
+import { reviewsGateway } from "./modules/reviews/infrastructure/reviews-gateway.js";
+import { registerReviews } from "./modules/reviews/presentation/register.js";
 import { registerRuns } from "./modules/runs/presentation/register.js";
 import { projectsGateway } from "./modules/projects/infrastructure/projects-gateway.js";
 import { registerProjects } from "./modules/projects/presentation/register.js";
@@ -44,5 +46,6 @@ registerSessions(Alpine, {
 });
 
 registerRuns(Alpine, { gateway: runsGateway(api) });
+registerReviews(Alpine, { gateway: reviewsGateway(api, events), clock: systemClock });
 
 Alpine.start();

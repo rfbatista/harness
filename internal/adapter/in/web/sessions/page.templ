@@ -21,6 +21,7 @@ templ Page(v PageView) {
 			x-on:new-session-cancelled="cancelCreating"
 			x-on:artifact-published="artifactPublished"
 			x-on:status-check-changed="statusCheckChanged"
+			x-on:announce="announce"
 			x-on:artifact-moved="artifactMoved"
 		>
 			@templ.JSONScript("sessions-seed", v.Seed)
@@ -66,6 +67,7 @@ templ Page(v PageView) {
 				</header>
 				@taskBand(v)
 			</div>
+			@reviewBand(v)
 			<template x-if="error">
 				<div class="[ banner ] [ pad-s ]" data-tone="danger" role="alert">
 					<div class="[ flow ] [ flow-space-3xs grow ]">

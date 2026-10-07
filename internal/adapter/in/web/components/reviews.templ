@@ -1,0 +1,78 @@
+package components
+
+// ReviewCard is one review request the architect raised for the person, bound
+// to reviewsInbox's `card`: its subject, who and what it is about, its links,
+// and the person's answer (a note, required to request changes; Approve or
+// Request changes). One the architect withdrew while the person was writing
+// keeps the note on screen, read-only, until dismissed. The body is the
+// architect's text: x-text, never HTML.
+templ ReviewCard() {
+	<article class="[ review ]" x-bind:data-withdrawn="card.withdrawn">
+		<h3 tabindex="-1" data-review-heading x-text="card.subject"></h3>
+		<p class="[ meta ]"><span x-text="card.byline"></span> · <span x-text="card.age"></span></p>
+		<p class="[ body ]" x-text="card.body"></p>
+		@reviewLinks()
+		<template x-if="card.withdrawn">
+			<div class="[ flow ] [ flow-space-xs ]">
+				<p class="[ aside ]">The architect withdrew this request. Your note was not sent:</p>
+				<p class="[ body ]" x-text="card.draft.note"></p>
+				<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-on:click="dismiss(card.id)">Dismiss</button>
+			</div>
+		</template>
+		<template x-if="!card.withdrawn">
+			<div class="[ flow ] [ flow-space-s ]">
+				<div class="[ field ]">
+					<label x-bind:for="card.noteId">Note <span class="[ color-ink-faint weight-regular ]">(required to request changes)</span></label>
+					<textarea x-bind:id="card.noteId" rows="2" x-model="card.draft.note" x-bind:aria-invalid="card.invalid" x-bind:aria-describedby="card.errorId"></textarea>
+					<span class="[ error ]" x-bind:id="card.errorId" x-text="card.draft.problem"></span>
+				</div>
+				<div class="[ cluster ] [ gutter-xs ]">
+					<button type="button" class="[ button ]" x-bind:data-variant="card.approveVariant" data-size="sm" x-bind:aria-busy="card.draft.busy" x-bind:disabled="card.draft.busy" x-on:click="approve(card.id)">Approve</button>
+					<button type="button" class="[ button ]" data-size="sm" x-bind:disabled="card.draft.busy" x-on:click="requestChanges(card.id)">Request changes</button>
+				</div>
+			</div>
+		</template>
+	</article>
+}
+
+// SettledReviewCard is a request answered or withdrawn: its state in words,
+// and the person's note.
+templ SettledReviewCard() {
+	<article class="[ review ]">
+		<h3 x-text="card.subject"></h3>
+		<p class="[ meta ]"><span x-text="card.stateWord"></span> · <span x-text="card.byline"></span> · <span x-text="card.age"></span></p>
+		<template x-if="card.note">
+			<p class="[ body ]">Your note: <span x-text="card.note"></span></p>
+		</template>
+		<template x-if="card.draft.notice">
+			<p class="[ aside ]" x-text="card.draft.notice"></p>
+		</template>
+		@reviewLinks()
+	</article>
+}
+
+templ reviewLinks() {
+	<template x-if="card.hasLinks">
+		<p class="[ links ]">
+			<template x-for="d in card.documents" x-bind:key="d.id">
+				<a x-bind:href="d.href" x-text="d.title"></a>
+			</template>
+			<template x-for="a in card.artifacts" x-bind:key="a.id">
+				<a x-bind:href="a.href" target="_blank" rel="noopener noreferrer" x-text="a.title"></a>
+			</template>
+		</p>
+	</template>
+}
+
+// ReviewsError is reviewsInbox's coded error, dismissible.
+templ ReviewsError() {
+	<template x-if="error">
+		<div class="[ banner ]" data-tone="danger" role="alert">
+			<div class="[ flow ] [ flow-space-3xs grow ]">
+				<span x-text="error.message"></span>
+				<span class="[ code ]"><span x-text="error.code"></span> · <span x-text="error.next"></span></span>
+			</div>
+			<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-on:click="dismissError">Dismiss</button>
+		</div>
+	</template>
+}
