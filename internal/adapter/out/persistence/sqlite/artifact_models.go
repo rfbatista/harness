@@ -23,6 +23,10 @@ type ArtifactModel struct {
 	Mime      string `gorm:"column:mime"`
 	SizeBytes int64  `gorm:"column:size_bytes"`
 	Revision  int    `gorm:"column:revision"`
+	// Scope is task or project. The column default covers rows written
+	// before it existed; ToDomain covers an empty value either way.
+	Scope     string `gorm:"column:scope;default:task;index"`
+	Snapshot  bool   `gorm:"column:snapshot;default:false"`
 	CreatedAt int64  `gorm:"autoCreateTime:milli"`
 	UpdatedAt int64  `gorm:"autoUpdateTime:milli"`
 }
@@ -40,10 +44,15 @@ func (m *ArtifactModel) ToDomain() *domain.Artifact {
 	if m == nil {
 		return nil
 	}
+	scope := domain.ArtifactScope(m.Scope)
+	if scope == "" {
+		scope = domain.ArtifactScopeTask
+	}
 	return &domain.Artifact{
 		ID: m.ID, SessionID: m.SessionID, TicketID: m.TicketID, ProjectID: m.ProjectID,
 		Kind: domain.ArtifactKind(m.Kind), Title: m.Title, Note: m.Note, Path: m.Path, URL: m.URL,
 		Mime: m.Mime, SizeBytes: m.SizeBytes, Revision: m.Revision,
+		Scope: scope, Snapshot: m.Snapshot,
 		CreatedAt: time.UnixMilli(m.CreatedAt), UpdatedAt: time.UnixMilli(m.UpdatedAt),
 	}
 }

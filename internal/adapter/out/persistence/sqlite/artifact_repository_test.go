@@ -80,10 +80,11 @@ func TestArtifactRepo_UpdateAndListOrder(t *testing.T) {
 	}
 }
 
-func TestArtifactRepo_DeleteAndDeleteBySession(t *testing.T) {
+func TestArtifactRepo_DeleteAndDeleteTaskScopedBySession(t *testing.T) {
 	r := newArtifactRepo(t)
 	a, _ := r.Create(&domain.Artifact{SessionID: "s1", Kind: domain.ArtifactPage, Title: "A", Path: "a.html", Revision: 1})
-	r.Create(&domain.Artifact{SessionID: "s1", Kind: domain.ArtifactPage, Title: "B", Path: "b.html", Revision: 1})
+	b, _ := r.Create(&domain.Artifact{SessionID: "s1", Kind: domain.ArtifactPage, Title: "B", Path: "b.html", Revision: 1})
+	kept, _ := r.Create(&domain.Artifact{SessionID: "s1", Kind: domain.ArtifactPage, Title: "K", Path: "k.html", Revision: 1, Scope: domain.ArtifactScopeProject})
 	r.Create(&domain.Artifact{SessionID: "s2", Kind: domain.ArtifactPage, Title: "C", Path: "c.html", Revision: 1})
 
 	if err := r.Delete(a.ID); err != nil {
@@ -92,13 +93,79 @@ func TestArtifactRepo_DeleteAndDeleteBySession(t *testing.T) {
 	if err := r.Delete(a.ID); err == nil || err.Error() != "ARTIFACT_NOT_FOUND: artifact not found" {
 		t.Fatalf("second delete = %v", err)
 	}
-	if err := r.DeleteBySession("s1"); err != nil {
+	ids, err := r.DeleteTaskScopedBySession("s1")
+	if err != nil {
 		t.Fatal(err)
 	}
-	if left := r.List(ports.ArtifactFilter{SessionID: "s1"}); len(left) != 0 {
-		t.Fatalf("s1 still has %+v", left)
+	if len(ids) != 1 || ids[0] != b.ID {
+		t.Fatalf("deleted ids = %v, want [%s]", ids, b.ID)
+	}
+	if left := r.List(ports.ArtifactFilter{SessionID: "s1"}); len(left) != 1 || left[0].ID != kept.ID {
+		t.Fatalf("s1 should keep only its project artifact, has %+v", left)
 	}
 	if left := r.List(ports.ArtifactFilter{SessionID: "s2"}); len(left) != 1 {
 		t.Fatalf("s2 lost its artifact: %+v", left)
+	}
+}
+
+func TestArtifactRepo_ScopeDefaultsAndFilters(t *testing.T) {
+	r := newArtifactRepo(t)
+	task, _ := r.Create(&domain.Artifact{SessionID: "s1", TicketID: "tk1", ProjectID: "p1", Kind: domain.ArtifactPage, Title: "T", Path: "t.html", Revision: 1})
+	if task.Scope != domain.ArtifactScopeTask || task.Snapshot {
+		t.Fatalf("a new artifact is task-scoped with no snapshot: %+v", task)
+	}
+	// A row written before the column existed has no scope; it reads as task.
+	legacy, _ := r.Create(&domain.Artifact{SessionID: "s1", TicketID: "tk1", ProjectID: "p1", Kind: domain.ArtifactPage, Title: "L", Path: "l.html", Revision: 1})
+	if err := r.db.Exec("UPDATE artifacts SET scope = NULL WHERE id = ?", legacy.ID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if got := r.Get(legacy.ID); got.Scope != domain.ArtifactScopeTask {
+		t.Fatalf("legacy row scope = %q", got.Scope)
+	}
+	proj, _ := r.Create(&domain.Artifact{SessionID: "s2", TicketID: "tk2", ProjectID: "p1", Kind: domain.ArtifactImage, Title: "P", Path: "p.png", Revision: 1,
+		Scope: domain.ArtifactScopeProject, Snapshot: true})
+	r.Create(&domain.Artifact{SessionID: "s3", TicketID: "tk3", ProjectID: "p2", Kind: domain.ArtifactImage, Title: "O", Path: "o.png", Revision: 1, Scope: domain.ArtifactScopeProject})
+
+	if got := r.Get(proj.ID); got.Scope != domain.ArtifactScopeProject || !got.Snapshot {
+		t.Fatalf("project artifact = %+v", got)
+	}
+	if got := r.List(ports.ArtifactFilter{ProjectID: "p1"}); len(got) != 3 {
+		t.Fatalf("project filter = %d artifacts", len(got))
+	}
+	if got := r.List(ports.ArtifactFilter{ProjectID: "p1", Scope: domain.ArtifactScopeProject}); len(got) != 1 || got[0].ID != proj.ID {
+		t.Fatalf("project scope = %+v", got)
+	}
+	if got := r.List(ports.ArtifactFilter{TicketID: "tk1", Scope: domain.ArtifactScopeTask}); len(got) != 2 {
+		t.Fatalf("task scope must count the legacy row, got %+v", got)
+	}
+	if got := r.List(ports.ArtifactFilter{TicketID: "tk1", Scope: domain.ArtifactScopeProject}); len(got) != 0 {
+		t.Fatalf("tk1 has no project artifacts, got %+v", got)
+	}
+}
+
+func TestArtifactRepo_SetScope(t *testing.T) {
+	r := newArtifactRepo(t)
+	a, _ := r.Create(&domain.Artifact{SessionID: "s1", ProjectID: "p1", Kind: domain.ArtifactPage, Title: "A", Path: "a.html", Revision: 3})
+	time.Sleep(2 * time.Millisecond)
+	got, err := r.SetScope(a.ID, domain.ArtifactScopeProject, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Scope != domain.ArtifactScopeProject || !got.Snapshot || got.Revision != 3 || got.Title != "A" {
+		t.Fatalf("set scope = %+v", got)
+	}
+	if !got.UpdatedAt.After(a.UpdatedAt) {
+		t.Fatalf("updated_at must move: %v -> %v", a.UpdatedAt, got.UpdatedAt)
+	}
+	// Update rewrites the snapshot flag and never the scope.
+	got.Snapshot, got.Revision = false, 4
+	if err := r.Update(got); err != nil {
+		t.Fatal(err)
+	}
+	if again := r.Get(a.ID); again.Snapshot || again.Scope != domain.ArtifactScopeProject {
+		t.Fatalf("after update = %+v", again)
+	}
+	if _, err := r.SetScope("ghost", domain.ArtifactScopeTask, false); err == nil || err.Error() != "ARTIFACT_NOT_FOUND: artifact not found" {
+		t.Fatalf("ghost = %v", err)
 	}
 }
