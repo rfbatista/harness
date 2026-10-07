@@ -17,8 +17,11 @@ import (
 // ProjectDesignPage is the project's design assets: the artifacts moved to
 // project level, newest first, beside the selected one rendered as on a
 // session's Design tab (sessions.ArtifactPreview: sandboxed frames, text
-// titles). Each names its task. The bar moves the asset back to its task,
-// where it leaves this list, or deletes it after asking.
+// titles). Each names its task and the tasks it is attached to. The bar
+// attaches it to another task (sessions.PickerDialog), detaches it from one,
+// moves it back to its task (asking first when that detaches it), where it
+// leaves this list, or deletes it after asking. The list follows the project
+// feed; what others change is read out by the polite live region.
 func ProjectDesignPage(v ProjectDesignView) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
@@ -67,7 +70,7 @@ func ProjectDesignPage(v ProjectDesignView) templ.Component {
 			var templ_7745c5c3_Var3 templ.SafeURL
 			templ_7745c5c3_Var3, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL("/projects/" + v.ProjectID))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `tasks/project_design.templ`, Line: 19, Col: 73}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `tasks/project_design.templ`, Line: 22, Col: 73}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var3))
 			if templ_7745c5c3_Err != nil {
@@ -80,13 +83,13 @@ func ProjectDesignPage(v ProjectDesignView) templ.Component {
 			var templ_7745c5c3_Var4 string
 			templ_7745c5c3_Var4, templ_7745c5c3_Err = templ.JoinStringErrs(v.ProjectName)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `tasks/project_design.templ`, Line: 19, Col: 91}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `tasks/project_design.templ`, Line: 22, Col: 91}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var4))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, " /</a><h1>Design assets</h1><span class=\"[ color-ink-faint text-sm ]\" x-text=\"countWord\"></span> <button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" x-on:click=\"reload\">Reload</button></header><template x-if=\"error\"><div class=\"[ pad-inline-l pad-block-s ]\"><div class=\"[ banner ]\" data-tone=\"danger\" role=\"alert\"><div class=\"[ flow ] [ flow-space-3xs grow ]\"><span x-text=\"error.message\"></span> <span class=\"[ code ]\"><span x-text=\"error.code\"></span> · <span x-text=\"error.next\"></span></span></div><button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" x-on:click=\"dismissError\">Dismiss</button></div></div></template><template x-if=\"hasMovedBack\"><div class=\"[ pad-inline-l pad-block-s ]\"><div class=\"[ banner ]\" data-tone=\"signal\" role=\"status\" data-moved-back><span class=\"[ grow ]\"><strong x-text=\"movedBackTitle\"></strong> is back with its task,<template x-if=\"movedBackLinks\"><a x-bind:href=\"movedBackHref\" x-text=\"movedBackTaskTitle\"></a></template><template x-if=\"movedBackUnlinked\"><span x-text=\"movedBackTaskTitle\"></span></template>.</span> <button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" x-on:click=\"dismissMovedBack\">OK</button></div></div></template><template x-if=\"confirmingDelete\"><div class=\"[ pad-inline-l pad-block-s ]\"><div class=\"[ banner ]\" data-tone=\"danger\" role=\"alertdialog\" x-bind:aria-label=\"deleteQuestion\"><div class=\"[ flow ] [ flow-space-3xs grow ]\"><strong x-text=\"deleteQuestion\"></strong> <span>It is removed for good, from the project and from its task.</span></div><div class=\"[ cluster ] [ gutter-xs ]\"><button type=\"button\" class=\"[ button ]\" data-variant=\"danger\" data-size=\"sm\" x-bind:aria-busy=\"busy\" x-on:click=\"confirmDelete\">Delete asset</button> <button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" x-on:click=\"cancelDelete\">Keep it</button></div></div></div></template><template x-if=\"isEmpty\"><div data-scroll>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, " /</a><h1>Design assets</h1><span class=\"[ color-ink-faint text-sm ]\" x-text=\"countWord\"></span> <button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" x-on:click=\"reload\">Reload</button></header><p class=\"[ visually-hidden ]\" role=\"status\" aria-live=\"polite\" x-text=\"announcement\"></p><template x-if=\"error\"><div class=\"[ pad-inline-l pad-block-s ]\"><div class=\"[ banner ]\" data-tone=\"danger\" role=\"alert\"><div class=\"[ flow ] [ flow-space-3xs grow ]\"><span x-text=\"error.message\"></span> <span class=\"[ code ]\"><span x-text=\"error.code\"></span> · <span x-text=\"error.next\"></span></span></div><button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" x-on:click=\"dismissError\">Dismiss</button></div></div></template><template x-if=\"hasMovedBack\"><div class=\"[ pad-inline-l pad-block-s ]\"><div class=\"[ banner ]\" data-tone=\"signal\" role=\"status\" data-moved-back><span class=\"[ grow ]\"><strong x-text=\"movedBackTitle\"></strong> is back with its task,<template x-if=\"movedBackLinks\"><a x-bind:href=\"movedBackHref\" x-text=\"movedBackTaskTitle\"></a></template><template x-if=\"movedBackUnlinked\"><span x-text=\"movedBackTaskTitle\"></span></template>.</span> <button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" x-on:click=\"dismissMovedBack\">OK</button></div></div></template><template x-if=\"confirmingMoveBack\"><div class=\"[ pad-inline-l pad-block-s ]\"><div class=\"[ banner ]\" data-tone=\"danger\" role=\"alertdialog\" x-bind:aria-label=\"moveBackQuestion\"><strong class=\"[ grow ]\" x-text=\"moveBackQuestion\"></strong><div class=\"[ cluster ] [ gutter-xs ]\"><button type=\"button\" class=\"[ button ]\" data-variant=\"danger\" data-size=\"sm\" x-bind:aria-busy=\"currentPending\" x-on:click=\"confirmMoveBack\">Move back</button> <button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" x-on:click=\"cancelMoveBack\">Keep it</button></div></div></div></template><template x-if=\"confirmingDelete\"><div class=\"[ pad-inline-l pad-block-s ]\"><div class=\"[ banner ]\" data-tone=\"danger\" role=\"alertdialog\" x-bind:aria-label=\"deleteQuestion\"><div class=\"[ flow ] [ flow-space-3xs grow ]\"><strong x-text=\"deleteQuestion\"></strong> <span x-text=\"deleteConsequence\">It is removed for good, from the project and from its task.</span></div><div class=\"[ cluster ] [ gutter-xs ]\"><button type=\"button\" class=\"[ button ]\" data-variant=\"danger\" data-size=\"sm\" x-bind:aria-busy=\"currentPending\" x-on:click=\"confirmDelete\">Delete asset</button> <button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" x-on:click=\"cancelDelete\">Keep it</button></div></div></div></template><template x-if=\"isEmpty\"><div data-scroll>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -136,7 +139,7 @@ func ProjectDesignPage(v ProjectDesignView) templ.Component {
 					}()
 				}
 				ctx = templ.InitializeContext(ctx)
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 8, "<template x-if=\"hasCurrentTaskHref\"><span>From <a x-bind:href=\"currentTaskHref\" x-text=\"currentTaskTitle\"></a></span></template><button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" x-bind:aria-busy=\"busy\" x-bind:aria-label=\"moveBackAriaLabel\" x-on:click=\"moveBack\">Move back to task</button> <button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" x-bind:aria-label=\"deleteAriaLabel\" x-on:click=\"askDelete\">Delete</button>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 8, "<template x-if=\"hasCurrentTaskHref\"><span>From <a x-bind:href=\"currentTaskHref\" x-text=\"currentTaskTitle\"></a></span></template><template x-if=\"hasAttachedTasks\"><span class=\"[ cluster ] [ gutter-3xs ]\" data-attached-tasks>Attached to<template x-for=\"task in attachedTasks\" x-bind:key=\"task.id\"><span class=\"[ cluster ] [ gutter-3xs ]\" data-attached-task><template x-if=\"task.linked\"><a x-bind:href=\"task.href\" x-text=\"task.title\"></a></template><template x-if=\"task.unlinked\"><span x-text=\"task.title\"></span></template><button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" x-bind:aria-label=\"task.detachLabel\" x-bind:aria-busy=\"currentPending\" x-on:click=\"detachTask(task.id)\">Detach</button></span></template></span></template><button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" x-bind:aria-busy=\"currentPending\" x-bind:aria-label=\"attachAriaLabel\" x-on:click=\"openAttachPicker\">Attach to a task…</button> <button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" x-bind:aria-busy=\"currentPending\" x-bind:aria-label=\"moveBackAriaLabel\" x-on:click=\"moveBack\">Move back to task</button> <button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" x-bind:aria-label=\"deleteAriaLabel\" x-on:click=\"askDelete\">Delete</button>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -146,7 +149,15 @@ func ProjectDesignPage(v ProjectDesignView) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 9, "</div></main>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 9, "</div>")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = sessions.PickerDialog("Filter tasks…").Render(ctx, templ_7745c5c3_Buffer)
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 10, "</main>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
