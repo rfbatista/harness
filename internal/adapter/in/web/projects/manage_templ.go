@@ -104,7 +104,7 @@ func ListPage(v ListView) templ.Component {
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 7, "</div><template x-if=\"showList\"><div class=\"[ flow ]\"><div class=\"[ field ]\"><label class=\"[ visually-hidden ]\" for=\"projects-filter\">Filter projects</label> <input id=\"projects-filter\" type=\"search\" placeholder=\"Filter by name or directory  /\" autocomplete=\"off\" x-ref=\"filter\" x-model=\"query\" x-on:input=\"filtered\" x-on:keydown.escape.prevent=\"clearFilter\"></div><section class=\"[ pane ]\" aria-label=\"Projects\"><template x-for=\"r in rows\" x-bind:key=\"r.id\"><div class=\"[ row ]\" style=\"--row-columns: minmax(0, 1fr) auto\" x-bind:data-project-id=\"r.id\" x-bind:aria-selected=\"r.selected\" x-bind:data-fresh=\"r.fresh\" x-on:mouseenter=\"select(r.id)\"><span class=\"[ flow ] [ flow-space-3xs pad-block-xs ]\" style=\"min-inline-size: 0\"><span class=\"[ cluster ] [ gutter-s ]\"><a class=\"[ weight-medium ]\" x-bind:href=\"r.href\" x-text=\"r.name\"></a> <span class=\"[ status ]\" x-bind:data-state=\"r.state\" x-text=\"r.word\"></span></span> <span class=\"[ text-sm color-ink-muted ]\" x-text=\"r.meta\"></span> <span class=\"[ truncate ] [ font-mono text-xs color-ink-faint ]\" x-text=\"r.rootDir\"></span></span> <a class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" x-bind:href=\"r.settingsHref\" x-bind:aria-label=\"r.settingsLabel\">Settings</a></div></template><template x-if=\"noMatch\"><p class=\"[ text-sm color-ink-faint ] [ region ]\" style=\"padding: var(--space-m) var(--space-l)\">No project matches the filter. Esc clears it.</p></template></section><p class=\"[ text-sm color-ink-faint ]\" x-text=\"total\"></p></div></template><template x-if=\"showEmpty\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 7, "</div><template x-if=\"showList\"><div class=\"[ flow ]\"><div class=\"[ field ]\"><label class=\"[ visually-hidden ]\" for=\"projects-filter\">Filter projects</label> <input id=\"projects-filter\" type=\"search\" placeholder=\"Filter by name or directory  /\" autocomplete=\"off\" x-ref=\"filter\" x-model=\"query\" x-on:input=\"filtered\" x-on:keydown.escape.prevent=\"clearFilter\"></div><section class=\"[ pane ]\" aria-label=\"Projects\"><template x-for=\"r in rows\" x-bind:key=\"r.id\"><div class=\"[ row ]\" style=\"--row-columns: minmax(0, 1fr) auto\" x-bind:data-project-id=\"r.id\" x-bind:aria-selected=\"r.selected\" x-bind:data-fresh=\"r.fresh\" x-on:mouseenter=\"select(r.id)\"><span class=\"[ flow ] [ flow-space-3xs pad-block-xs ]\" style=\"min-inline-size: 0\"><span class=\"[ cluster ] [ gutter-s ]\"><a class=\"[ title ] [ weight-medium ]\" x-bind:href=\"r.href\" x-text=\"r.name\"></a> <span class=\"[ status ]\" x-bind:data-state=\"r.state\" x-text=\"r.word\"></span></span> <span class=\"[ text-sm color-ink-muted ]\" x-text=\"r.meta\"></span> <span class=\"[ truncate ] [ font-mono text-xs color-ink-faint ]\" x-text=\"r.rootDir\"></span></span> <a class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" x-bind:href=\"r.settingsHref\" x-bind:aria-label=\"r.settingsLabel\">Settings</a></div></template><template x-if=\"noMatch\"><p class=\"[ text-sm color-ink-faint ] [ region ]\" style=\"padding: var(--space-m) var(--space-l)\">No project matches the filter. Esc clears it.</p></template></section><p class=\"[ text-sm color-ink-faint ]\" x-text=\"total\"></p></div></template><template x-if=\"showEmpty\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -191,14 +191,14 @@ func summaryRow(r SummaryRow) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 10, "\"><span class=\"[ flow ] [ flow-space-3xs pad-block-xs ]\" style=\"min-inline-size: 0\"><span class=\"[ cluster ] [ gutter-s ]\"><a class=\"[ weight-medium ]\" href=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 10, "\"><span class=\"[ flow ] [ flow-space-3xs pad-block-xs ]\" style=\"min-inline-size: 0\"><span class=\"[ cluster ] [ gutter-s ]\"><a class=\"[ title ] [ weight-medium ]\" href=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var7 templ.SafeURL
 		templ_7745c5c3_Var7, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL(r.Href))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `projects/manage.templ`, Line: 83, Col: 61}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `projects/manage.templ`, Line: 83, Col: 71}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var7))
 		if templ_7745c5c3_Err != nil {
@@ -211,7 +211,7 @@ func summaryRow(r SummaryRow) templ.Component {
 		var templ_7745c5c3_Var8 string
 		templ_7745c5c3_Var8, templ_7745c5c3_Err = templ.JoinStringErrs(r.Name)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `projects/manage.templ`, Line: 83, Col: 72}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `projects/manage.templ`, Line: 83, Col: 82}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var8))
 		if templ_7745c5c3_Err != nil {

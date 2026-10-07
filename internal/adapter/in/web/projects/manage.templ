@@ -45,7 +45,7 @@ templ ListPage(v ListView) {
 									<div class="[ row ]" style="--row-columns: minmax(0, 1fr) auto" x-bind:data-project-id="r.id" x-bind:aria-selected="r.selected" x-bind:data-fresh="r.fresh" x-on:mouseenter="select(r.id)">
 										<span class="[ flow ] [ flow-space-3xs pad-block-xs ]" style="min-inline-size: 0">
 											<span class="[ cluster ] [ gutter-s ]">
-												<a class="[ weight-medium ]" x-bind:href="r.href" x-text="r.name"></a>
+												<a class="[ title ] [ weight-medium ]" x-bind:href="r.href" x-text="r.name"></a>
 												<span class="[ status ]" x-bind:data-state="r.state" x-text="r.word"></span>
 											</span>
 											<span class="[ text-sm color-ink-muted ]" x-text="r.meta"></span>
@@ -80,7 +80,7 @@ templ summaryRow(r SummaryRow) {
 	<div class="[ row ]" style="--row-columns: minmax(0, 1fr) auto" data-project-id={ r.ID }>
 		<span class="[ flow ] [ flow-space-3xs pad-block-xs ]" style="min-inline-size: 0">
 			<span class="[ cluster ] [ gutter-s ]">
-				<a class="[ weight-medium ]" href={ templ.SafeURL(r.Href) }>{ r.Name }</a>
+				<a class="[ title ] [ weight-medium ]" href={ templ.SafeURL(r.Href) }>{ r.Name }</a>
 				<span class="[ status ]" data-state={ r.State }>{ r.Word }</span>
 			</span>
 			<span class="[ text-sm color-ink-muted ]">{ r.Meta }</span>
