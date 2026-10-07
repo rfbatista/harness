@@ -12,7 +12,7 @@ import { mergeMessages, newestAt, upsertMessage } from "../../domain/channel.js"
 import { applyChange, displayOrder, group, INITIAL_TERMINAL_SIZE, isTerminal, ofTask } from "../../domain/session.js";
 import { artifactTitle } from "../artifactView.js";
 import { announceMessage } from "../channelView.js";
-import { agentLabel, startedBy, summary, toDetailView, toGroupViews } from "../view.js";
+import { agentLabel, startedBy, statusCheckView, summary, toDetailView, toGroupViews } from "../view.js";
 
 const TICK_MS = 30_000;
 
@@ -67,6 +67,8 @@ export const sessionsPage = ({ gateway, clock, channel = null, channelStore = { 
     unseenArtifacts: 0,
     /** Messages to or from the selected session that arrived while its Conversation tab was not in front. */
     unseenMessages: 0,
+    /** Each delegate's last non-zero status-check interval, for Resume after a pause. */
+    lastIntervals: {},
     /** The task's documents when the page loaded, to name the ones a message links. */
     documentTitles: {},
 
@@ -174,6 +176,26 @@ export const sessionsPage = ({ gateway, clock, channel = null, channelStore = { 
     get showingConversation() {
       return this.hasConversation && this.detailTab === "conversation";
     },
+    /**
+     * The selected delegate's status-check bar, keyed on what a person can
+     * change, so a change from anywhere mounts a fresh one.
+     */
+    get statusCheckBars() {
+      const session = this.showingSession ? this.sessions.find((s) => s.id === this.selectedId) : null;
+      const check = session?.statusCheck;
+      if (!check) return [];
+      const view = statusCheckView(check, this.now);
+      return [
+        {
+          key: `${session.id}:${check.state}:${check.everyMinutes}`,
+          sessionId: session.id,
+          check,
+          remembered: this.lastIntervals[session.id] ?? 0,
+          state: view.state,
+          detail: view.detail,
+        },
+      ];
+    },
     get conversationTabSelected() {
       return this.detailTab === "conversation";
     },
@@ -220,6 +242,7 @@ export const sessionsPage = ({ gateway, clock, channel = null, channelStore = { 
         this.repositoryNames = seed.repositoryNames;
         this.documentTitles = seed.documentTitles;
         this.sessions = seed.sessions.filter(ofTask(this.ticketId));
+        for (const s of this.sessions) this.remember(s.statusCheck);
       } catch (err) {
         this.error = describeError(err);
         return;
@@ -296,6 +319,7 @@ export const sessionsPage = ({ gateway, clock, channel = null, channelStore = { 
       const arriving = change.kind === "upsert" && !before;
       if (before && isTerminal(before) && !isTerminal(change.session)) this.resumed(change.session);
       this.sessions = applyChange(this.sessions, change, ofTask(this.ticketId));
+      if (change.kind === "upsert") this.remember(change.session.statusCheck);
       if (arriving && this.sessions.some((s) => s.id === change.session.id)) this.arrived(change.session);
       this.now = clock.now();
       if (change.kind === "deleted" && change.id === this.selectedId) this.selectedId = null;
@@ -351,6 +375,21 @@ export const sessionsPage = ({ gateway, clock, channel = null, channelStore = { 
     },
 
     /** The selected session's role on the task; "" when none is selected. */
+    /** @param {CustomEvent<{ check: import("../../domain/channel.js").StatusCheck }>} event */
+    statusCheckChanged(event) {
+      this.patchCheck(event.detail.check);
+    },
+
+    /** A delegate's loop changed: its row and header follow before the server's session change does. */
+    patchCheck(check) {
+      this.sessions = this.sessions.map((s) => (s.id === check.delegateSessionId ? Object.freeze({ ...s, statusCheck: check }) : s));
+      this.remember(check);
+    },
+
+    remember(check) {
+      if (check?.everyMinutes > 0) this.lastIntervals = { ...this.lastIntervals, [check.delegateSessionId]: check.everyMinutes };
+    },
+
     selectedRole() {
       return this.sessions.find((s) => s.id === this.selectedId)?.role ?? "";
     },

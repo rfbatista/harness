@@ -7,7 +7,7 @@ import { assert, file, test } from "../../../../shared/testing/test.js";
 import { memoryChannel } from "../../infrastructure/memory-channel.js";
 import { memoryGateway } from "../../infrastructure/memory-gateway.js";
 import { makeArtifact } from "../../testing/artifact-fixtures.js";
-import { makeMessage } from "../../testing/channel-fixtures.js";
+import { makeCheck, makeMessage } from "../../testing/channel-fixtures.js";
 import { makeSession, T0, toDTO } from "../../testing/fixtures.js";
 import { sessionsPage } from "./sessionsPage.js";
 
@@ -522,5 +522,23 @@ test("a message behind another tab badges the Conversation tab and is announced;
   channel.send({ taskId: "t1", fromSessionId: "arch", toSessionId: "d1", kind: "reply", body: "Go on." });
   await flush();
   assert.equal(instance.conversationBadge, "", "nothing is unseen while the tab is in front");
+  instance.destroy();
+});
+
+test("a delegate with a loop gets a status-check bar; a change patches its row at once", async () => {
+  const sessions = [
+    makeSession({ id: "arch", role: "architect", mode: "architect", agentId: "backend" }),
+    makeSession({ id: "d1", role: "delegate", parentSessionId: "arch", agentId: "backend", statusCheck: makeCheck({ everyMinutes: 15, nextAt: new Date(T0.getTime() + 6 * 60_000) }) }),
+  ];
+  const { instance } = architectSetup({ sessions });
+  instance.select("arch");
+  assert.deepEqual(instance.statusCheckBars, [], "the architect has no loop of its own");
+  instance.select("d1");
+  const [bar] = instance.statusCheckBars;
+  assert.deepEqual([bar.key, bar.state, bar.detail, bar.remembered], ["d1:active:15", "running", "checks every 15m · next in 6m · no check yet", 15]);
+
+  instance.statusCheckChanged({ detail: { check: makeCheck({ everyMinutes: 0, state: "paused", nextAt: null }) } });
+  assert.deepEqual([instance.statusCheckBars[0].key, instance.statusCheckBars[0].remembered], ["d1:paused:0", 15], "the interval before the pause is kept for Resume");
+  assert.ok(instance.groups[0].rows.find((r) => r.id === "d1").meta.endsWith("checks paused"));
   instance.destroy();
 });

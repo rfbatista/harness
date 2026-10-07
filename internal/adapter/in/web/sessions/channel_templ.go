@@ -83,4 +83,36 @@ func conversationPanel() templ.Component {
 	})
 }
 
+// statusCheckBar is the selected delegate's status-check loop: how often the
+// architect is woken to check on it, and the person's controls
+// (sessionsStatusCheck). An ended loop shows its words only.
+func statusCheckBar() templ.Component {
+	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
+		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
+		if templ_7745c5c3_CtxErr := ctx.Err(); templ_7745c5c3_CtxErr != nil {
+			return templ_7745c5c3_CtxErr
+		}
+		templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
+		if !templ_7745c5c3_IsBuffer {
+			defer func() {
+				templ_7745c5c3_BufErr := templruntime.ReleaseBuffer(templ_7745c5c3_Buffer)
+				if templ_7745c5c3_Err == nil {
+					templ_7745c5c3_Err = templ_7745c5c3_BufErr
+				}
+			}()
+		}
+		ctx = templ.InitializeContext(ctx)
+		templ_7745c5c3_Var3 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var3 == nil {
+			templ_7745c5c3_Var3 = templ.NopComponent
+		}
+		ctx = templ.ClearChildren(ctx)
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "<div class=\"[ check-bar ]\" x-data=\"sessionsStatusCheck(bar)\" role=\"group\" aria-label=\"Status checks\"><span class=\"[ status ]\" x-bind:data-state=\"bar.state\" x-text=\"bar.detail\"></span><template x-if=\"controllable\"><div class=\"[ cluster ] [ gutter-xs ]\"><label class=\"[ visually-hidden ]\" for=\"status-check-interval\">Check every</label> <select id=\"status-check-interval\" x-model=\"minutes\" x-bind:disabled=\"busy\" x-on:change=\"retune\"><template x-for=\"i in intervals\" x-bind:key=\"i.value\"><option x-bind:value=\"i.value\" x-text=\"i.label\"></option></template></select> <button type=\"button\" class=\"[ button ]\" data-size=\"sm\" x-bind:aria-busy=\"busy\" x-bind:disabled=\"busy\" x-on:click=\"toggle\" x-text=\"toggleWord\"></button></div></template><template x-if=\"error\"><div class=\"[ banner ]\" data-tone=\"danger\" role=\"alert\"><div class=\"[ flow ] [ flow-space-3xs grow ]\"><span x-text=\"error.message\"></span> <span class=\"[ code ]\"><span x-text=\"error.code\"></span> · <span x-text=\"error.next\"></span></span></div><button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" x-on:click=\"dismissError\">Dismiss</button></div></template></div>")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		return nil
+	})
+}
+
 var _ = templruntime.GeneratedTemplate

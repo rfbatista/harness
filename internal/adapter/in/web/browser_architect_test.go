@@ -21,6 +21,9 @@ import (
 // A test pushes feed messages through the returned sseFeed.
 func architectServer(t *testing.T, messages []domain.TaskMessage) (*httptest.Server, *sseFeed) {
 	t.Helper()
+	if messages == nil {
+		messages = []domain.TaskMessage{} // the server sends [], never null
+	}
 	assets, err := NewAssets()
 	if err != nil {
 		t.Fatal(err)
@@ -57,6 +60,22 @@ func architectServer(t *testing.T, messages []domain.TaskMessage) (*httptest.Ser
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]any{"messages": messages})
 	})
+	mux.HandleFunc("POST /api/set_status_check", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			DelegateSessionID string `json:"delegate_session_id"`
+			EveryMinutes      int    `json:"every_minutes"`
+		}
+		json.NewDecoder(r.Body).Decode(&body)
+		check := domain.StatusCheck{TaskID: "t1", ArchitectSessionID: arch, DelegateSessionID: body.DelegateSessionID, EveryMinutes: body.EveryMinutes, State: domain.StatusCheckActive}
+		if body.EveryMinutes == 0 {
+			check.State = domain.StatusCheckPaused
+		} else {
+			at := time.Now().Add(time.Duration(body.EveryMinutes)*time.Minute + 30*time.Second)
+			check.NextAt = &at
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]any{"status_check": check})
+	})
 	mux.HandleFunc("GET /api/artifacts", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.Write([]byte(`{"artifacts":[]}`))
@@ -69,6 +88,18 @@ func architectServer(t *testing.T, messages []domain.TaskMessage) (*httptest.Ser
 		srv.Close()
 	})
 	return srv, feed
+}
+
+// noBanner fails the test when the page shows an error banner.
+func noBanner(t *testing.T, ctx context.Context) {
+	t.Helper()
+	var banners []string
+	if err := chromedp.Run(ctx, chromedp.Evaluate(`[...document.querySelectorAll('.banner[role=alert]')].map(b => b.textContent.replace(/\s+/g, ' ').trim())`, &banners)); err != nil {
+		t.Fatal(err)
+	}
+	if len(banners) > 0 {
+		t.Errorf("the page shows an error: %q", banners)
+	}
 }
 
 // shot saves a screenshot for a person to look at when ARCHITECT_SHOTS names
@@ -156,6 +187,51 @@ func TestArchitectLeadsTheTaskAndTalksWithItsDelegates(t *testing.T) {
 	if badge != "" {
 		t.Errorf("the tab is in front, yet its badge says %q", badge)
 	}
+	noBanner(t, ctx)
+	if e := errs.all(); len(e) > 0 {
+		t.Errorf("JS errors: %v", e)
+	}
+}
+
+// TestPersonPausesAndResumesADelegatesStatusChecks: the selected delegate's
+// header shows its loop; Pause and Resume change it, and its row follows.
+func TestPersonPausesAndResumesADelegatesStatusChecks(t *testing.T) {
+	srv, _ := architectServer(t, nil)
+	ctx, errs := browser(t)
+
+	bar := `(document.querySelector('[aria-label="Status checks"]')?.textContent ?? '').replace(/\s+/g, ' ').trim()`
+	serverRow := `[...document.querySelectorAll('[role=listbox] .row')].find(r => r.textContent.includes('Server: architect channel'))`
+	var before, paused, resumed, row string
+	if err := chromedp.Run(ctx,
+		chromedp.EmulateViewport(1280, 800),
+		chromedp.Navigate(srv.URL+"/projects/p1/tasks/t1"),
+		chromedp.Poll(`!!document.querySelector('[role=listbox] .row[data-role=delegate]')`, nil, chromedp.WithPollingTimeout(10*time.Second)),
+		chromedp.Evaluate(serverRow+`.click()`, nil),
+		chromedp.Poll(`!!document.querySelector('[aria-label="Status checks"] button')`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Evaluate(bar, &before),
+		shot("status-check-active"),
+		chromedp.Click(`[aria-label="Status checks"] button`, chromedp.ByQuery),
+		chromedp.Poll(`(`+bar+`).includes('checks paused')`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Evaluate(bar, &paused),
+		chromedp.Evaluate(serverRow+`.querySelector('.meta').textContent`, &row),
+		chromedp.Click(`[aria-label="Status checks"] button`, chromedp.ByQuery),
+		chromedp.Poll(`(`+bar+`).includes('checks every 10m')`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Evaluate(bar, &resumed),
+	); err != nil {
+		t.Fatalf("%v\nJS errors: %v", err, errs.all())
+	}
+	for _, c := range []struct{ got, want string }{
+		{before, "checks every 10m · next in 6m · no check yet"},
+		{before, "Pause"},
+		{paused, "Resume"},
+		{row, "checks paused"},
+		{resumed, "Pause"},
+	} {
+		if !strings.Contains(c.got, c.want) {
+			t.Errorf("%q lacks %q", c.got, c.want)
+		}
+	}
+	noBanner(t, ctx)
 	if e := errs.all(); len(e) > 0 {
 		t.Errorf("JS errors: %v", e)
 	}

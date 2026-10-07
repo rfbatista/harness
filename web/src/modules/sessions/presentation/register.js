@@ -6,6 +6,7 @@ import { designLibrary } from "./components/designLibrary.js";
 import { designPanel } from "./components/designPanel.js";
 import { newSession } from "./components/newSession.js";
 import { terminal } from "./components/terminal.js";
+import { statusCheck } from "./components/statusCheck.js";
 import { sessionsPage } from "./pages/sessionsPage.js";
 
 /**
@@ -27,6 +28,7 @@ export function registerSessions(Alpine, deps) {
   const channelStore = Alpine.store("sessionsChannel");
   Alpine.data("sessionsPage", sessionsPage({ ...deps, channelStore }));
   Alpine.data("sessionsConversation", conversation({ ...deps, channelStore }));
+  Alpine.data("sessionsStatusCheck", statusCheck(deps));
   Alpine.data("sessionsNewSession", newSession(deps));
   Alpine.data("sessionsTerminal", terminal(deps));
   Alpine.data("sessionsDesignPanel", designPanel(deps));

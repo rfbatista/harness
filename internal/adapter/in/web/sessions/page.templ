@@ -20,6 +20,7 @@ templ Page(v PageView) {
 			x-on:session-created="sessionCreated"
 			x-on:new-session-cancelled="cancelCreating"
 			x-on:artifact-published="artifactPublished"
+			x-on:status-check-changed="statusCheckChanged"
 			x-on:artifact-moved="artifactMoved"
 		>
 			@templ.JSONScript("sessions-seed", v.Seed)
@@ -182,6 +183,9 @@ templ detail(form NewSessionForm) {
 						<span x-text="selected.agent"></span>
 						<span x-text="selected.updated"></span>
 					</div>
+					<template x-for="bar in statusCheckBars" x-bind:key="bar.key">
+						@statusCheckBar()
+					</template>
 					<template x-if="confirmingDelete">
 						<div class="[ banner ]" data-tone="danger" role="alertdialog" aria-label="Delete this session?">
 							<div class="[ flow ] [ flow-space-3xs grow ]">
