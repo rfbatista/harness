@@ -175,3 +175,32 @@ func TestStartInteractive_ArchitectSkillNamesProjectDocuments(t *testing.T) {
 		}
 	}
 }
+
+// The designer reuses the project's assets before drawing new ones, and keeps
+// what other tasks will reuse at project level; its skill and opening prompt
+// say so, with the tools.
+func TestStartInteractive_DesignSkillNamesProjectAssets(t *testing.T) {
+	svc, _ := newInteractiveService(t)
+	_, launch := startInteractive(t, svc, InteractiveRequest{Mode: "design"})
+	body := pluginSkill(t, launch, "design-artifacts")
+	for _, want := range []string{"mcp__task__list_project_artifacts", "mcp__task__move_artifact_to_project", "mcp__task__move_artifact_to_task",
+		"ARTIFACT_IN_PROJECT", "ARTIFACT_NOT_PROMOTABLE", "ARTIFACT_NOT_ON_TASK", "project level"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("design-artifacts SKILL.md lacks %q", want)
+		}
+	}
+	for _, want := range []string{"list_project_artifacts", "move_artifact_to_project"} {
+		if !strings.Contains(launch.Spec.Prompt, want) {
+			t.Errorf("design prompt lacks %q:\n%s", want, launch.Spec.Prompt)
+		}
+	}
+}
+
+// The architect points specs at the project's existing design assets.
+func TestStartInteractive_ArchitectSkillNamesProjectAssets(t *testing.T) {
+	svc, _ := newInteractiveService(t)
+	_, launch := startInteractive(t, svc, InteractiveRequest{Mode: "architect"})
+	if body := pluginSkill(t, launch, "task-architecture"); !strings.Contains(body, "mcp__task__list_project_artifacts") {
+		t.Errorf("task-architecture SKILL.md lacks mcp__task__list_project_artifacts")
+	}
+}

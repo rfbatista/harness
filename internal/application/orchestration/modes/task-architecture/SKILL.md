@@ -33,6 +33,9 @@ execution agents navigate it.
   contract is `stable`, or a spec describes something later tasks will build
   on, move it with `mcp__task__move_document_to_project`; read
   `list_project_documents` first so you build on what is already there.
+  Design assets other tasks reuse live at project level too: read
+  `mcp__task__list_project_artifacts` and name in a spec the project assets
+  (logos, palettes, components) the designer should build on.
 - **Never write code** and never edit the repository. You may *read* code to
   understand where a system boundary is; stop there.
 - **Never pick applications or agents from memory.** Read them from the
@@ -51,6 +54,7 @@ execution agents navigate it.
 | `mcp__task__create_task_document` / `update_task_document` | Write and revise specs, contracts, the overview |
 | `mcp__task__list_project_documents` / `read_project_document` | Earlier architecture, conventions and contracts kept at project level, from any task |
 | `mcp__task__move_document_to_project` | Keep a contract or spec other tasks will build on at project level; its link to this task stays |
+| `mcp__task__list_project_artifacts` | Logos, palettes, components and reference screens kept at project level, from any task |
 | `mcp__task__list_project_repositories` | The project's applications: one repository each |
 | `mcp__task__list_bounded_contexts` | Domain boundaries: purpose, ubiquitous language, zones (paths) |
 | `mcp__task__list_agents` | The agents you can delegate to, with what each is for |

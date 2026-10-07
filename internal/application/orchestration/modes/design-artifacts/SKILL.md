@@ -30,6 +30,10 @@ person in one line what changed → listen.
   published; the home directory and tool galleries are invisible to the UI.
 - **Never paste HTML into the terminal.** Say "Published *Pricing card* to the
   Design tab (rev 3): tighter spacing, hover state." and stop.
+- **Reuse the project's assets.** Check `mcp__task__list_project_artifacts`
+  before you draw a logo, palette or component: build on what the project
+  already keeps. Once an asset of yours is something other tasks will reuse,
+  move it to project level with `mcp__task__move_artifact_to_project`.
 - **Commit nothing unless asked.** The worktree is the working surface.
 - Titles and notes are shown as plain text; keep them short and human.
 - **Notes you leave on the task are HTML pages.** `create_task_document` takes
@@ -41,8 +45,11 @@ person in one line what changed → listen.
 | Tool | Use it to |
 |---|---|
 | `mcp__task__publish_artifact` | Show a worktree file (`path`) or a loopback dev server (`url`) in the Design tab. `title` required; `note` says what changed; `kind` only if inference would be wrong (`page`, `image`, `video`, `url`, `file`). |
-| `mcp__task__list_task_artifacts` | See what this and earlier sessions already published before making more. |
-| `mcp__task__unpublish_artifact` | Take one of your own cards down (the file stays). |
+| `mcp__task__list_task_artifacts` | See what this and earlier sessions already published before making more; each item says its `scope`. |
+| `mcp__task__list_project_artifacts` | The design assets the project keeps, from any task: logos, palettes, components, reference screens to build on. |
+| `mcp__task__move_artifact_to_project` | Keep one of this task's artifacts at project level, for other tasks to reuse. |
+| `mcp__task__move_artifact_to_task` | Move a project asset of this task back to task scope (before unpublishing it). |
+| `mcp__task__unpublish_artifact` | Take one of your own cards down (the file stays). A project asset is moved back to the task first. |
 | `mcp__task__get_task` / `read_task_document` | The brief, and any design notes or specs earlier sessions left (documents are HTML pages; older ones may be Markdown). |
 
 `publish_artifact` returns `{artifact_id, revision, kind, view_url}`. Its
@@ -50,11 +57,15 @@ errors name the rule you broke: `ARTIFACT_PATH_OUTSIDE_WORKTREE` (move the
 file under the worktree), `ARTIFACT_NOT_FOUND` (path wrong or a directory),
 `ARTIFACT_URL_NOT_LOCAL` (only `http://localhost:…` / `http://127.0.0.1:…`),
 `ARTIFACT_TOO_LARGE` (the message states the cap; shorten or compress),
-`ARTIFACT_KIND_MISMATCH` (omit `kind`).
+`ARTIFACT_KIND_MISMATCH` (omit `kind`). The scope tools add
+`ARTIFACT_NOT_ON_TASK` (only artifacts published on this task move),
+`ARTIFACT_NOT_PROMOTABLE` (a url card cannot move; publish an HTML snapshot
+and move that) and `ARTIFACT_IN_PROJECT` (unpublish refuses a project asset;
+move it back with `move_artifact_to_task` first).
 
 ## Components and screens
 
-1. Read the task and `list_task_artifacts`.
+1. Read the task, `list_project_artifacts` and `list_task_artifacts`.
 2. Write `design/<name>.html`: a complete document, inline `<style>` and
    `<script>`, realistic copy, the states the person asked for (default,
    hover, empty, error…) visible on one page or as separate files.
@@ -70,6 +81,15 @@ Use the agent's media skills (for example `fal-genmedia`'s `genmedia run …
 `publish_artifact` with that path. Videos stream with range support; keep
 them under the server's size cap (the `ARTIFACT_TOO_LARGE` message tells you
 the number) — a short clip or a lower resolution beats a failed publish.
+
+## Project assets
+
+A logo, a palette, a component or a reference screen that other tasks will
+reuse belongs at project level. `move_artifact_to_project` keeps it there:
+the harness takes its own copy, so it outlives this session and its worktree,
+and the person sees it in the project's design-assets library. Re-publishing
+the same path from this session refreshes that copy while the session lives.
+Leave one-off drafts and explorations as task artifacts.
 
 ## A running dev server
 
@@ -89,3 +109,5 @@ URL card dies with the server.
 | Pasting the component's HTML into the terminal | One line pointing at the Design tab. |
 | Publishing `http://192.168.x.x:3000` | Only loopback URLs are accepted. |
 | `git commit` after each change | Only when the person asks. |
+| Drawing a new logo or palette when the project has one | `list_project_artifacts` first, and build on it. |
+| Unpublishing a project asset | Move it back with `move_artifact_to_task` first, or leave it for the person. |

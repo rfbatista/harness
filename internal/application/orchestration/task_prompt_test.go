@@ -151,3 +151,20 @@ func TestApplyTaskContext_BriefNamesEveryTaskTool(t *testing.T) {
 		}
 	}
 }
+
+// The brief is where an agent learns that some design assets outlive the
+// task, to look for them before making new ones, and which tools move them.
+func TestApplyTaskContext_BriefNamesProjectArtifacts(t *testing.T) {
+	cfg := llmkit.SessionConfig{}
+	applyTaskContext(&cfg, &domain.Ticket{ID: "tk1", Title: "Ship the thing"}, "")
+	for _, want := range []string{
+		"\n- mcp__task__list_project_artifacts — ",
+		"\n- mcp__task__move_artifact_to_project — ",
+		"\n- mcp__task__move_artifact_to_task — ",
+		"project asset", "logo", "palette", "outlive", "Before you make a new\nasset, check list_project_artifacts",
+	} {
+		if !strings.Contains(cfg.AppendSystem, want) {
+			t.Errorf("brief missing %q:\n%s", want, cfg.AppendSystem)
+		}
+	}
+}

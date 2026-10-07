@@ -112,8 +112,20 @@ To see the project around the task, and who to hand work to:
 To show what you make to the person in the web UI's Design tab, live, while you keep talking here:
 
 - mcp__task__publish_artifact — publish a file from your worktree (an HTML page or component, an image, a video, any file) or a dev server's loopback URL; publish again to refresh it
-- mcp__task__list_task_artifacts — what every session on this task has published
-- mcp__task__unpublish_artifact — take one of yours down (the file stays)
+- mcp__task__list_task_artifacts — what every session on this task has published, with each one's scope
+- mcp__task__unpublish_artifact — take one of yours down (the file stays); a project asset is moved back to the task first
+
+Some design assets outlive one task: a logo, a palette, a component, a
+reference screen other tasks will reuse. Those are project assets: the
+harness keeps its own copy, so they outlive this session and its worktree,
+and they show in the project's design-assets library. Before you make a new
+asset, check list_project_artifacts for one to build on. Move an asset there
+once other tasks will reuse it; a dev-server URL cannot move. Only artifacts
+published on this task can be moved:
+
+- mcp__task__list_project_artifacts — the project's design assets, from any task: title, kind, note, revision, task, view URL
+- mcp__task__move_artifact_to_project — make one of this task's artifacts a project asset
+- mcp__task__move_artifact_to_task — move one of them back to this task's scope
 
 These tools always act on this task; they take no project or task id.`)
 	return b.String()
