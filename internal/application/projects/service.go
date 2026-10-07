@@ -223,6 +223,20 @@ func (s *Service) DeleteProject(ctx context.Context, projectID string) error {
 	if projectID == "" {
 		return errProjectIDMissing
 	}
+	if err := s.deleteProject(ctx, projectID); err != nil {
+		return err
+	}
+	if s.events == nil {
+		return nil
+	}
+	// Published outside the write lock: subscribers run synchronously and may
+	// call back into this context.
+	return s.events.Publish(ctx, domain.ProjectDeleted{ProjectID: projectID})
+}
+
+// deleteProject removes the project and its repositories, under the write
+// lock, unless sessions of it are live.
+func (s *Service) deleteProject(ctx context.Context, projectID string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	p := s.projects.Get(projectID)
@@ -246,10 +260,7 @@ func (s *Service) DeleteProject(ctx context.Context, projectID string) error {
 		return err
 	}
 	s.feed.announce(ports.ProjectCatalogChange{Project: &domain.Project{ID: projectID}, Deleted: true})
-	if s.events == nil {
-		return nil
-	}
-	return s.events.Publish(ctx, domain.ProjectDeleted{ProjectID: projectID})
+	return nil
 }
 
 // refuseRunningSessions is PROJECT_HAS_RUNNING_SESSIONS, naming them, when p
