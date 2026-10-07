@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"slices"
 	"strings"
 	"sync"
@@ -285,5 +286,104 @@ func TestDesignTabMovesAnArtifactToTheProjectInTheBrowser(t *testing.T) {
 	}
 	if !strings.Contains(banner, "worktree are gone") || !strings.Contains(banner, "ARTIFACT_NOT_PROMOTABLE") {
 		t.Errorf("refusal banner = %q", banner)
+	}
+}
+
+// TestProjectDesignLibraryInTheBrowser: the rail opens the project's design
+// assets; they list without the task-scoped one, each naming its task, the
+// newest framed in a sandbox, titles as text. Moved back, an asset leaves the
+// list and the banner links its task; deleted after asking, it is gone.
+func TestProjectDesignLibraryInTheBrowser(t *testing.T) {
+	ctx, errs := browser(t)
+	now := time.Now()
+	hostile := `<img src=x onerror="document.title='pwned'">`
+	logo := scopedDTO("a-logo", "page", "Logo", "brand/logo.html", "project", now)
+	logo["ticket_id"] = "t2"
+	api := &scopedArtifactsAPI{list: []map[string]any{
+		logo,
+		scopedDTO("a-card", "page", hostile, "design/card.html", "project", now.Add(-time.Minute)),
+		scopedDTO("a-draft", "page", "Draft", "design/draft.html", "task", now.Add(-2*time.Minute)),
+	}}
+	srv := designServer(t, api)
+	main := `document.querySelector('main[x-data="sessionsDesignLibrary"]')`
+	titles := `[...` + main + `.querySelectorAll('.artifact-card .title')].map(e => e.textContent)`
+
+	var path, sandbox, src, from, count, pageTitle string
+	var shot []byte
+	var cards []string
+	var imgInCard bool
+	err := chromedp.Run(ctx,
+		chromedp.EmulateViewport(1280, 800),
+		chromedp.Navigate(srv.URL+"/projects/p1/tasks/t1"),
+		chromedp.Poll(`!!document.querySelector('nav[aria-label="Tasks"] a[href="/projects/p1/design"]')`, nil, chromedp.WithPollingTimeout(10*time.Second)),
+		chromedp.Evaluate(`document.querySelector('nav[aria-label="Tasks"] a[href="/projects/p1/design"]').click()`, nil),
+		waitForPath(srv.URL+"/projects/p1/design", &path),
+		chromedp.Poll(main+`.querySelectorAll('.artifact-card').length === 2`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Evaluate(titles, &cards),
+		chromedp.Evaluate(main+`.querySelector('.artifact-card [data-task]').textContent.trim()`, &from),
+		chromedp.Evaluate(main+`.querySelector('.artifact-card img') !== null`, &imgInCard),
+		chromedp.Poll(main+`.querySelector('.preview iframe')?.getAttribute('src')`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Evaluate(main+`.querySelector('.preview iframe').getAttribute('sandbox')`, &sandbox),
+		chromedp.Evaluate(main+`.querySelector('.preview iframe').getAttribute('src')`, &src),
+		chromedp.Evaluate(`document.querySelector('header [x-text="countWord"]').textContent`, &count),
+		chromedp.FullScreenshot(&shot, 80),
+		chromedp.Evaluate(`document.title`, &pageTitle),
+	)
+	if err != nil {
+		t.Fatalf("%v\nJS errors: %v", err, errs.all())
+	}
+	if got := fmt.Sprint(cards); got != fmt.Sprint([]string{"Logo", hostile}) || imgInCard {
+		t.Errorf("cards = %s (img in card: %v), want the project's two, newest first, as text", got, imgInCard)
+	}
+	if dir := os.Getenv("WEB_SCREENSHOT_DIR"); dir != "" {
+		_ = os.WriteFile(dir+"/project-design.jpg", shot, 0o644)
+	}
+	if !strings.HasPrefix(pageTitle, "Design assets") {
+		t.Errorf("page title = %q: a title ran as markup?", pageTitle)
+	}
+	if from != "from Brand refresh" || sandbox != "allow-scripts" || src != "/api/artifacts/a-logo/view/?rev=1" || count != "2 assets" {
+		t.Errorf("from %q, sandbox %q, src %q, count %q", from, sandbox, src, count)
+	}
+
+	// Move the logo back to its task: it leaves, the banner links the task.
+	var href, linkText string
+	err = chromedp.Run(ctx,
+		clickButton(`main .preview .bar`, "Move back to task"),
+		chromedp.Poll(`!!document.querySelector('[data-moved-back] a')`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Evaluate(`document.querySelector('[data-moved-back] a').getAttribute('href')`, &href),
+		chromedp.Evaluate(`document.querySelector('[data-moved-back] a').textContent`, &linkText),
+		chromedp.Evaluate(titles, &cards),
+	)
+	if err != nil {
+		t.Fatalf("%v\nJS errors: %v", err, errs.all())
+	}
+	if href != "/projects/p1/tasks/t2" || linkText != "Brand refresh" || len(cards) != 1 {
+		t.Errorf("after the move back: link %q %q, cards %v", href, linkText, cards)
+	}
+
+	// Delete asks first, then the last asset is gone and the page says how they arrive.
+	var question string
+	var empty bool
+	err = chromedp.Run(ctx,
+		clickButton(`main .preview .bar`, "Delete"),
+		chromedp.Poll(`!!document.querySelector('[role=alertdialog]')`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Evaluate(`document.querySelector('[role=alertdialog] strong').textContent`, &question),
+		clickButton(`[role=alertdialog]`, "Delete asset"),
+		chromedp.Poll(`document.body.textContent.includes('No design asset has been moved to this project yet')`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Evaluate(`!document.querySelector('[role=alertdialog]')`, &empty),
+	)
+	if err != nil {
+		t.Fatalf("%v\nJS errors: %v", err, errs.all())
+	}
+	if question != "Delete "+hostile+"?" || !empty {
+		t.Errorf("question %q, dialog closed %v", question, empty)
+	}
+	api.mu.Lock()
+	defer api.mu.Unlock()
+	if got := fmt.Sprint(api.moves); got != "[a-logo→task]" {
+		t.Errorf("set_artifact_scope calls = %s", got)
+	}
+	if len(api.list) != 2 || api.find("a-card") != nil {
+		t.Errorf("after delete the stand-in holds %d artifacts, a-card still there: %v", len(api.list), api.find("a-card") != nil)
 	}
 }

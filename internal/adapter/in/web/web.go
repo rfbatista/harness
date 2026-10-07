@@ -82,6 +82,7 @@ func NewHandler(deps Deps, assets *Assets, fallback http.Handler) http.Handler {
 	mux.Handle("GET /projects/{project}/repositories/{repository}/env", s.page(projectPages.EnvFileList))
 	mux.Handle("GET /projects/{project}/repositories/{repository}/history", s.page(historyPages.Page))
 	mux.Handle("GET /projects/{project}/repositories/{repository}/history/{commit}", s.page(historyPages.Page))
+	mux.Handle("GET /projects/{project}/design", s.page(taskPages.ProjectDesign))
 	mux.Handle("GET /projects/{project}/documents", s.page(taskPages.ProjectDocuments))
 	mux.Handle("GET /projects/{project}/documents/{document}", s.page(taskPages.ProjectDocuments))
 	mux.Handle("GET /projects/{project}/documents/{document}/view", s.page(taskPages.ProjectDocumentView))
@@ -155,6 +156,7 @@ func (s *server) layout(ctx context.Context, title, projectID, taskID string) (s
 	if s.deps.Documents != nil {
 		frame.Rail.DocumentsHref = tasks.ProjectDocumentsHref(projectID, "")
 	}
+	frame.Rail.DesignHref = tasks.ProjectDesignHref(projectID)
 	return frame, nil
 }
 

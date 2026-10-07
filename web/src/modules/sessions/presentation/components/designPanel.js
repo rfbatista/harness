@@ -18,7 +18,7 @@ import { FeedStatus } from "../../../../shared/domain/feed.js";
 import { describeError } from "../../../../shared/presentation/errors.js";
 import { feedStatusView } from "../../../../shared/presentation/feedStatus.js";
 import { applyChange, applyPublish, isNewer, isPublish } from "../../domain/artifact.js";
-import { toCardView, toPreviewView } from "../artifactView.js";
+import { artifactBrowsing, compose } from "./artifactBrowsing.js";
 
 /** How long a card that arrived over the stream stays highlighted. */
 export const FRESH_MS = 8_000;
@@ -36,15 +36,10 @@ export const designPanel = ({ artifacts, clock, setTimeout = globalThis.setTimeo
   let unfollow = () => {};
   let destroyed = false;
 
-  return {
+  return compose(artifactBrowsing(clock), {
     sessionId: panel.sessionId ?? "",
     /** The session is alive: its stream is worth following. */
     live: panel.live === true,
-    /** @type {import("../../domain/artifact.js").Artifact[]} */
-    artifacts: [],
-    selectedId: "",
-    /** The developer picked an artifact by hand; new publishes no longer take the preview. */
-    chosen: false,
     ready: false,
     error: null,
     feed: FeedStatus.CONNECTING,
@@ -52,48 +47,9 @@ export const designPanel = ({ artifacts, clock, setTimeout = globalThis.setTimeo
     moving: false,
     /** The artifact the person is moving: its echo may beat the answer, and is theirs, not news. */
     movingId: "",
-    freshIds: [],
-    now: clock.now(),
-
-    // ── what the markup binds ────────────────────────────────────────────
-    get cards() {
-      const fresh = new Set(this.freshIds);
-      return this.artifacts.map((a) => toCardView(a, { selectedId: this.selectedId, now: this.now, fresh: fresh.has(a.id) }));
-    },
-    get current() {
-      const a = this.artifacts.find((x) => x.id === this.selectedId);
-      return a ? toPreviewView(a, this.now) : null;
-    },
-    get hasCurrent() {
-      return this.current !== null;
-    },
-    /** The preview as a one-item list keyed on id@revision, so a new revision remounts the element. */
-    get frames() {
-      return this.current ? [this.current] : [];
-    },
-    get currentKind() {
-      return this.current?.kind ?? "";
-    },
-    get hasOpenHref() {
-      return (this.current?.openHref ?? "") !== "";
-    },
-    get currentOpenHref() {
-      return this.current?.openHref ?? "";
-    },
-    /** The bar shows the stream's status: this panel follows one. */
     followsFeed: true,
-    get canMoveCurrent() {
-      return this.current?.canMove ?? false;
-    },
-    get currentScopeWord() {
-      return this.current?.scopeWord ?? "";
-    },
-    get currentMoveLabel() {
-      return this.current?.moveLabel ?? "";
-    },
-    get currentMoveAriaLabel() {
-      return this.current?.moveAriaLabel ?? "";
-    },
+
+    // ── what the markup binds (the rest: artifactBrowsing) ───────────────
     get isEmpty() {
       return this.ready && this.artifacts.length === 0;
     },
@@ -129,9 +85,7 @@ export const designPanel = ({ artifacts, clock, setTimeout = globalThis.setTimeo
       try {
         this.artifacts = await artifacts.list(this.sessionId);
         this.now = clock.now();
-        if (!this.artifacts.some((a) => a.id === this.selectedId)) {
-          this.selectedId = this.artifacts[0]?.id ?? "";
-        }
+        this.keepSelection();
       } catch (err) {
         this.error = describeError(err);
       } finally {
@@ -183,38 +137,7 @@ export const designPanel = ({ artifacts, clock, setTimeout = globalThis.setTimeo
       if (event.detail?.id === this.sessionId) this.onEvent({ kind: "ended" });
     },
 
-    // ── the sandboxed frame ──────────────────────────────────────────────
-    /**
-     * Fills the static <iframe sandbox="allow-scripts"> inside `host` with the
-     * revision's src and title. The Alpine CSP build refuses directives on an
-     * iframe, so the markup keeps the frame (and its sandbox) literal and the
-     * wrapper's x-init hands it here. The sandbox attribute is never touched.
-     * @param {HTMLElement} host @param {{ src: string, frameTitle: string }} frame
-     */
-    loadFrame(host, frame) {
-      const iframe = host.querySelector("iframe");
-      if (!iframe) return;
-      iframe.title = frame.frameTitle;
-      iframe.setAttribute("src", frame.src);
-    },
-
     // ── developer actions ────────────────────────────────────────────────
-    select(id) {
-      this.selectedId = id;
-      this.chosen = true;
-    },
-    next() {
-      this.step(1);
-    },
-    previous() {
-      this.step(-1);
-    },
-    step(delta) {
-      if (this.artifacts.length === 0) return;
-      const at = this.artifacts.findIndex((a) => a.id === this.selectedId);
-      const to = at === -1 ? 0 : Math.max(0, Math.min(this.artifacts.length - 1, at + delta));
-      this.select(this.artifacts[to].id);
-    },
     /** Moves the selected artifact to the project, or back to its task. */
     async move() {
       const target = this.current;
@@ -236,5 +159,5 @@ export const designPanel = ({ artifacts, clock, setTimeout = globalThis.setTimeo
     dismissError() {
       this.error = null;
     },
-  };
+  });
 };
