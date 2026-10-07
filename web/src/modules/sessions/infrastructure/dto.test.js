@@ -60,6 +60,9 @@ test("the seed carries agent names for live updates", () => {
 test("feed lines become upserts or deletions", () => {
   assert.equal(toChange({ session: wire }).kind, "upsert");
   assert.deepEqual(toChange({ session: { id: "s1" }, deleted: true }), { kind: "deleted", id: "s1" });
+  // The sessions gateway drops what toChange cannot read: an artifact change is not a session's.
+  assert.throws(() => toChange({ artifact: { id: "a1", kind: "page", revision: 1, scope: "project", attached_ticket_ids: ["t2"], updated_at: "2026-10-07T12:00:00Z" } }), Codes.BAD_RESPONSE);
+  assert.throws(() => toChange({ artifact: { id: "a1" }, deleted: true }), Codes.BAD_RESPONSE);
 });
 
 test("a session says whether it can be resumed, and why not", () => {

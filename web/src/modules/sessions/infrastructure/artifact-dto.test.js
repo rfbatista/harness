@@ -1,7 +1,7 @@
 import { Codes } from "../../../shared/domain/errors.js";
 import { assert, file, test } from "../../../shared/testing/test.js";
 import { makeArtifact, toArtifactDTO } from "../testing/artifact-fixtures.js";
-import { toArtifact, toArtifactEvent, toArtifactList, toMovedArtifact } from "./artifact-dto.js";
+import { toArtifact, toArtifactAnswer, toArtifactEvent, toArtifactList, toProjectArtifactChange } from "./artifact-dto.js";
 
 file("sessions/infrastructure/artifact-dto");
 
@@ -57,7 +57,45 @@ test("scope is read; a server that does not send it reads as task; anything else
 
 test("set_artifact_scope answers {artifact}", () => {
   const dto = toArtifactDTO(makeArtifact({ id: "a1", scope: "project" }));
-  const a = toMovedArtifact({ artifact: dto });
+  const a = toArtifactAnswer({ artifact: dto });
   assert.deepEqual([a.id, a.scope], ["a1", "project"]);
-  assert.throws(() => toMovedArtifact({ document: dto }), Codes.BAD_RESPONSE);
+  assert.throws(() => toArtifactAnswer({ document: dto }), Codes.BAD_RESPONSE);
+});
+
+test("attached_ticket_ids reads as a frozen list; a server from before attachments reads as none", () => {
+  const dto = toArtifactDTO(makeArtifact({ scope: "project", attachedTicketIds: ["t2", "t3"] }));
+  const a = toArtifact(dto);
+  assert.deepEqual(a.attachedTicketIds, ["t2", "t3"]);
+  assert.ok(Object.isFrozen(a.attachedTicketIds));
+  const { attached_ticket_ids: _, ...old } = dto;
+  assert.deepEqual(toArtifact(old).attachedTicketIds, []);
+  assert.deepEqual(toArtifact({ ...dto, attached_ticket_ids: null }).attachedTicketIds, []);
+});
+
+test("malformed attached_ticket_ids is BAD_RESPONSE", () => {
+  const dto = toArtifactDTO(makeArtifact());
+  assert.throws(() => toArtifact({ ...dto, attached_ticket_ids: "t2" }), Codes.BAD_RESPONSE);
+  assert.throws(() => toArtifact({ ...dto, attached_ticket_ids: ["t2", 3] }), Codes.BAD_RESPONSE);
+  assert.throws(() => toArtifact({ ...dto, attached_ticket_ids: [""] }), Codes.BAD_RESPONSE);
+});
+
+test("project feed: an artifact change is changed, its deleted form keeps the ids, other keys are null", () => {
+  const dto = toArtifactDTO(makeArtifact({ id: "a", scope: "project", attachedTicketIds: ["t2"] }));
+  const changed = toProjectArtifactChange({ artifact: dto });
+  assert.equal(changed.kind, "changed");
+  assert.deepEqual(changed.artifact.attachedTicketIds, ["t2"]);
+  assert.equal(changed.artifact.src, "/api/artifacts/a/view/");
+
+  const deleted = toProjectArtifactChange({ artifact: { id: "a", project_id: "p1", ticket_id: "t1", attached_ticket_ids: ["t2"] }, deleted: true });
+  assert.deepEqual(deleted, { kind: "deleted", id: "a", projectId: "p1", ticketId: "t1", attachedTicketIds: ["t2"] });
+
+  assert.equal(toProjectArtifactChange({ session: { id: "s1" } }), null);
+  assert.equal(toProjectArtifactChange({ ticket: { id: "t1" }, deleted: true }), null);
+  assert.equal(toProjectArtifactChange(null), null);
+  assert.equal(toProjectArtifactChange("not json"), null);
+});
+
+test("project feed: an unreadable artifact change is BAD_RESPONSE", () => {
+  assert.throws(() => toProjectArtifactChange({ artifact: { id: "", kind: "page" } }), Codes.BAD_RESPONSE);
+  assert.throws(() => toProjectArtifactChange({ artifact: {}, deleted: true }), Codes.BAD_RESPONSE);
 });

@@ -22,6 +22,7 @@ export function toArtifact(dto, base = "/api") {
   // A server from before scopes does not send it: every artifact was a task's then.
   const scope = dto.scope ?? Scope.TASK;
   if (!SCOPES.includes(scope)) bad(`artifact ${dto.id} has unknown scope "${scope}"`);
+  const attachedTicketIds = toTicketIds(dto.attached_ticket_ids, dto.id);
 
   return Object.freeze({
     id: dto.id,
@@ -37,6 +38,7 @@ export function toArtifact(dto, base = "/api") {
     sizeBytes: Number(dto.size_bytes ?? 0),
     revision,
     scope,
+    attachedTicketIds,
     createdAt,
     updatedAt,
     src: dto.kind === "url" ? url : viewPath(dto.id, base),
@@ -49,10 +51,28 @@ export function toArtifactList(body, base = "/api") {
   return body.artifacts.map((dto) => toArtifact(dto, base));
 }
 
-/** POST /api/set_artifact_scope → {"artifact": {...}} */
-export function toMovedArtifact(body, base = "/api") {
+/** POST /api/set_artifact_scope, /api/attach_artifact_to_ticket and /api/detach_artifact_from_ticket → {"artifact": {...}} */
+export function toArtifactAnswer(body, base = "/api") {
   if (!body?.artifact) bad("expected {artifact: {...}}");
   return toArtifact(body.artifact, base);
+}
+
+/**
+ * One `data:` line of GET /api/events (the project feed).
+ * @returns {import("../domain/ports.js").ProjectArtifactChange | null} null for the feed's other keys
+ */
+export function toProjectArtifactChange(dto, base = "/api") {
+  if (!dto || typeof dto !== "object" || !("artifact" in dto)) return null;
+  if (!dto.deleted) return { kind: "changed", artifact: toArtifact(dto.artifact, base) };
+  const a = dto.artifact;
+  if (typeof a?.id !== "string" || a.id === "") bad("deleted change without an id");
+  return {
+    kind: "deleted",
+    id: a.id,
+    projectId: a.project_id ?? "",
+    ticketId: a.ticket_id ?? "",
+    attachedTicketIds: toTicketIds(a.attached_ticket_ids, a.id),
+  };
 }
 
 /**
@@ -63,6 +83,13 @@ export function toArtifactEvent(dto, base = "/api") {
   if (dto?.type === "artifact") return { kind: "published", artifact: toArtifact(dto.artifact, base) };
   if (dto?.type === "done") return { kind: "ended" };
   return null;
+}
+
+/** attached_ticket_ids: a server from before attachments does not send it, and nothing was attached then. */
+function toTicketIds(ids, artifactId) {
+  if (ids === undefined || ids === null) return Object.freeze([]);
+  if (!Array.isArray(ids) || ids.some((id) => typeof id !== "string" || id === "")) bad(`artifact ${artifactId} has malformed attached_ticket_ids`);
+  return Object.freeze([...ids]);
 }
 
 function bad(detail) {

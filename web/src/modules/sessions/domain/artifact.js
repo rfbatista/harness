@@ -19,6 +19,7 @@
  * @property {number} sizeBytes  0 when kind = url
  * @property {number} revision   1 on first publish; +1 on each re-publish of the same path or url
  * @property {ArtifactScope} scope  a move changes it and updatedAt, never the revision
+ * @property {readonly string[]} attachedTicketIds  the other tasks of the project a project asset is attached to; never its own ticketId, always [] in task scope. Attaching changes neither revision nor updatedAt
  * @property {Date} createdAt
  * @property {Date} updatedAt
  * @property {string} src        where the browser loads it from: the server's view route (page, image, video, file) or the url itself (url)
@@ -63,6 +64,54 @@ export function isPublish(list, artifact) {
 export const applyChange = (list, artifact) => list.map((a) => (a.id === artifact.id ? artifact : a));
 
 export const withoutArtifact = (list, id) => list.filter((a) => a.id !== id);
+
+/**
+ * The incoming artifact is the one to show: a later revision, or the same
+ * revision changed as late or later. An attach or detach bumps neither, so on
+ * a tie the incoming copy (with its attachments) wins.
+ */
+export function isNotOlder(known, incoming) {
+  if (!known) return true;
+  if (incoming.revision !== known.revision) return incoming.revision > known.revision;
+  return incoming.updatedAt.getTime() >= known.updatedAt.getTime();
+}
+
+/**
+ * @typedef {"produced"|"attached"} Relation
+ * @returns {Relation | null} how the task has the artifact: it made it, or the project asset is attached to it
+ */
+export function relationTo(artifact, ticketId) {
+  if (artifact.ticketId === ticketId) return "produced";
+  if (artifact.attachedTicketIds.includes(ticketId)) return "attached";
+  return null;
+}
+
+/** It is one of the task's design assets: produced by it, or attached to it. */
+export const belongsTo = (artifact, ticketId) => relationTo(artifact, ticketId) !== null;
+
+/** The tasks a project asset can still be attached to: not its producer, not one it is already on. */
+export const attachableTasks = (artifact, tasks) => tasks.filter((t) => !belongsTo(artifact, t.id));
+
+/** The project assets the task does not have yet. */
+export const attachableAssets = (assets, ticketId) => assets.filter((a) => !belongsTo(a, ticketId));
+
+/**
+ * The list after a change on the project feed. `keep` says whether the
+ * changed artifact belongs on this list (the library keeps project assets; a
+ * task page keeps its own and its attached ones): it is added or replaced
+ * when it does, dropped when it no longer does. A change older than what the
+ * list holds is ignored.
+ * @param {import("./ports.js").ProjectArtifactChange} change
+ * @param {(artifact: Artifact) => boolean} keep
+ */
+export function applyProjectChange(list, change, keep) {
+  if (change.kind === "deleted") return withoutArtifact(list, change.id);
+  const { artifact } = change;
+  const known = list.find((a) => a.id === artifact.id);
+  if (!isNotOlder(known, artifact)) return list;
+  if (!keep(artifact)) return known ? withoutArtifact(list, artifact.id) : list;
+  return byUpdated([artifact, ...list.filter((a) => a.id !== artifact.id)]);
+}
 
 /** It can move to the project: it has a file to keep. A dev-server url dies with its session. */
 export const isPromotable = (artifact) => artifact.kind !== Kind.URL;

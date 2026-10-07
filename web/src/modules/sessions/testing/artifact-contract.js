@@ -6,7 +6,7 @@ import { Codes } from "../../../shared/domain/errors.js";
 import { FeedStatus } from "../../../shared/domain/feed.js";
 import { flush } from "../../../shared/testing/doubles.js";
 import { assert, test } from "../../../shared/testing/test.js";
-import { A0, makeArtifact } from "./artifact-fixtures.js";
+import { A0, makeArtifact, toArtifactDTO } from "./artifact-fixtures.js";
 
 /**
  * @typedef {object} Subject
@@ -15,7 +15,10 @@ import { A0, makeArtifact } from "./artifact-fixtures.js";
  * @property {(sessionId: string) => void} end  the session ends
  */
 
-/** @param {string} name @param {(world: { artifacts: object[] }) => Subject} makeSubject */
+/**
+ * @param {string} name
+ * @param {(world: { artifacts: object[], tickets?: { id: string, projectId: string }[] }) => Subject} makeSubject
+ */
 export function artifactGatewayContract(name, makeSubject) {
   const contract = (title, fn) => test(`${name} · ${title}`, fn);
   const later = (s) => new Date(A0.getTime() + s * 1000);
@@ -126,6 +129,134 @@ export function artifactGatewayContract(name, makeSubject) {
     await gateway.remove("a");
     assert.deepEqual(await gateway.listProject("p1"), []);
     await assert.rejects(gateway.remove("a"), Codes.ARTIFACT_NOT_FOUND);
+  });
+
+  // ── attachments ───────────────────────────────────────────────────────
+  const TICKETS = [
+    { id: "t1", projectId: "p1" },
+    { id: "t2", projectId: "p1" },
+    { id: "t3", projectId: "p1" },
+    { id: "x1", projectId: "p2" },
+  ];
+  const asset = (overrides = {}) => makeArtifact({ id: "logo", ticketId: "t1", scope: "project", path: "logo.svg", ...overrides });
+
+  contract("listTask is what the task produced, in either scope, and the project assets attached to it, newest first", async () => {
+    const { gateway } = makeSubject({
+      tickets: TICKETS,
+      artifacts: [
+        makeArtifact({ id: "draft", ticketId: "t2", sessionId: "s2", path: "d.html", updatedAt: A0 }),
+        makeArtifact({ id: "kept", ticketId: "t2", sessionId: "s2", path: "k.html", scope: "project", updatedAt: later(2) }),
+        asset({ attachedTicketIds: ["t2"], updatedAt: later(1) }),
+        makeArtifact({ id: "elsewhere", ticketId: "t3", sessionId: "s3", path: "e.html", scope: "project", updatedAt: later(9) }),
+      ],
+    });
+    assert.deepEqual((await gateway.listTask("t2")).map((a) => a.id), ["kept", "logo", "draft"]);
+    assert.deepEqual((await gateway.listTask("t1")).map((a) => a.id), ["logo"]);
+    assert.deepEqual(await gateway.listTask("nobody"), []);
+  });
+
+  contract("attach links a project asset to a task without touching revision or updatedAt; again, or on its own task, changes nothing", async () => {
+    const { gateway } = makeSubject({ tickets: TICKETS, artifacts: [asset({ revision: 2, updatedAt: A0 })] });
+    const attached = await gateway.attach("logo", "t2");
+    assert.deepEqual([...attached.attachedTicketIds], ["t2"]);
+    assert.deepEqual([attached.revision, attached.updatedAt.getTime()], [2, A0.getTime()]);
+    assert.deepEqual([...(await gateway.attach("logo", "t2")).attachedTicketIds], ["t2"], "attaching again");
+    assert.deepEqual([...(await gateway.attach("logo", "t1")).attachedTicketIds], ["t2"], "attaching to the producing task");
+    assert.deepEqual([...(await gateway.attach("logo", "t3")).attachedTicketIds], ["t2", "t3"]);
+    assert.deepEqual((await gateway.listTask("t3")).map((a) => a.id), ["logo"]);
+    assert.deepEqual([...(await gateway.listProject("p1"))[0].attachedTicketIds], ["t2", "t3"], "every listing carries the attachments");
+  });
+
+  contract("attach refuses a missing id, an unknown artifact or task, a task-scope artifact and a task of another project", async () => {
+    const { gateway } = makeSubject({ tickets: TICKETS, artifacts: [asset(), makeArtifact({ id: "draft", path: "d.html" })] });
+    await assert.rejects(gateway.attach("", "t2"), Codes.INVALID_INPUT);
+    await assert.rejects(gateway.attach("logo", ""), Codes.INVALID_INPUT);
+    await assert.rejects(gateway.attach("ghost", "t2"), Codes.ARTIFACT_NOT_FOUND);
+    await assert.rejects(gateway.attach("logo", "nobody"), Codes.TICKET_NOT_FOUND);
+    await assert.rejects(gateway.attach("draft", "t2"), Codes.ARTIFACT_NOT_IN_PROJECT);
+    await assert.rejects(gateway.attach("logo", "x1"), Codes.ARTIFACT_PROJECT_MISMATCH);
+    assert.deepEqual([...(await gateway.listProject("p1"))[0].attachedTicketIds], [], "nothing was attached");
+  });
+
+  contract("detach unlinks a task; one it is not on changes nothing; its own task is ARTIFACT_PRODUCER_TASK", async () => {
+    const { gateway } = makeSubject({ tickets: TICKETS, artifacts: [asset({ attachedTicketIds: ["t2", "t3"] })] });
+    assert.deepEqual([...(await gateway.detach("logo", "t2")).attachedTicketIds], ["t3"]);
+    assert.deepEqual([...(await gateway.detach("logo", "t2")).attachedTicketIds], ["t3"], "detaching again");
+    assert.deepEqual(await gateway.listTask("t2"), []);
+    await assert.rejects(gateway.detach("logo", "t1"), Codes.ARTIFACT_PRODUCER_TASK);
+    await assert.rejects(gateway.detach("ghost", "t3"), Codes.ARTIFACT_NOT_FOUND);
+    await assert.rejects(gateway.detach("logo", ""), Codes.INVALID_INPUT);
+  });
+
+  contract("moving back to the task detaches it everywhere; deleting takes its attachments with it", async () => {
+    const { gateway } = makeSubject({
+      tickets: TICKETS,
+      artifacts: [asset({ attachedTicketIds: ["t2"] }), makeArtifact({ id: "icon", ticketId: "t1", path: "icon.svg", scope: "project", attachedTicketIds: ["t3"] })],
+    });
+    const back = await gateway.setScope("logo", "task");
+    assert.deepEqual([back.scope, [...back.attachedTicketIds]], ["task", []]);
+    assert.deepEqual(await gateway.listTask("t2"), []);
+    const again = await gateway.setScope("logo", "project");
+    assert.deepEqual([...again.attachedTicketIds], [], "moving to the project attaches nothing");
+    await gateway.remove("icon");
+    assert.deepEqual(await gateway.listTask("t3"), []);
+  });
+
+  contract("followProject delivers the project's artifact changes only, reports live, and stops when closed", async () => {
+    const subject = makeSubject({
+      tickets: TICKETS,
+      artifacts: [asset(), makeArtifact({ id: "draft", path: "d.html" }), makeArtifact({ id: "far", projectId: "p2", ticketId: "x1", sessionId: "sx", path: "f.html", scope: "project" })],
+    });
+    const { gateway } = subject;
+    const changes = [];
+    const statuses = [];
+    const close = gateway.followProject("p1", (c) => changes.push(c), (s) => statuses.push(s));
+    await flush();
+    assert.ok(statuses.includes(FeedStatus.LIVE), "reports live once connected");
+
+    await gateway.attach("logo", "t2");
+    await gateway.detach("logo", "t2");
+    await gateway.setScope("draft", "project");
+    await gateway.setScope("far", "task");
+    await gateway.remove("logo");
+    await flush();
+    assert.deepEqual(
+      changes.map((c) => (c.kind === "deleted" ? ["deleted", c.id, c.ticketId] : ["changed", c.artifact.id, c.artifact.scope, c.artifact.attachedTicketIds.join()])),
+      [
+        ["changed", "logo", "project", "t2"],
+        ["changed", "logo", "project", ""],
+        ["changed", "draft", "project", ""],
+        ["deleted", "logo", "t1"],
+      ],
+      "another project's move is not delivered; the feed's session and ticket keys are not either",
+    );
+
+    close();
+    await gateway.attach("draft", "t2");
+    await flush();
+    assert.equal(changes.length, 4, "nothing after close");
+  });
+
+  contract("a re-publish of a project asset is a change on the project feed, attachments kept", async () => {
+    const subject = makeSubject({ tickets: TICKETS, artifacts: [] });
+    const first = subject.publish({ sessionId: "s1", kind: "page", title: "Logo", note: "", path: "logo.html", mime: "text/html", sizeBytes: 1 });
+    await subject.gateway.setScope(first.id, "project");
+    await subject.gateway.attach(first.id, "t2");
+    const changes = [];
+    const close = subject.gateway.followProject("p1", (c) => changes.push(c), () => {});
+    await flush();
+    subject.publish({ sessionId: "s1", kind: "page", title: "Logo", note: "darker", path: "logo.html", mime: "text/html", sizeBytes: 2 });
+    await flush();
+    assert.deepEqual(changes.map((c) => [c.artifact.revision, c.artifact.note, [...c.artifact.attachedTicketIds]]), [[2, "darker", ["t2"]]]);
+    close();
+  });
+
+  contract("decodeArtifacts reads seeded rows in the wire shape; garbage is BAD_RESPONSE", async () => {
+    const { gateway } = makeSubject({ artifacts: [] });
+    const [a] = gateway.decodeArtifacts([toArtifactDTO(asset({ attachedTicketIds: ["t2"] }))]);
+    assert.deepEqual([a.id, a.scope, [...a.attachedTicketIds], a.src], ["logo", "project", ["t2"], "/api/artifacts/logo/view/"]);
+    assert.throws(() => gateway.decodeArtifacts([{ id: "" }]), Codes.BAD_RESPONSE);
+    assert.throws(() => gateway.decodeArtifacts("rows"), Codes.BAD_RESPONSE);
   });
 
   contract("the session's end is delivered as ended", async () => {
