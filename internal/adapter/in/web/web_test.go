@@ -119,14 +119,15 @@ func builtAssets(t *testing.T) *Assets {
 }
 
 type world struct {
-	projects []*domain.Project
-	tickets  []*domain.Ticket
-	sessions []*domain.Session
-	agents   []*domain.Agent
-	repos    []*domain.Repository
-	env      fakeEnv
-	docs     fakeDocs
-	history  ports.RepositoryHistory
+	projects  []*domain.Project
+	tickets   []*domain.Ticket
+	sessions  []*domain.Session
+	agents    []*domain.Agent
+	repos     []*domain.Repository
+	env       fakeEnv
+	docs      fakeDocs
+	history   ports.RepositoryHistory
+	artifacts []*domain.Artifact
 }
 
 func newTestHandler(t *testing.T, w world) http.Handler {
@@ -146,6 +147,9 @@ func newTestHandler(t *testing.T, w world) http.Handler {
 	}
 	if w.history != nil {
 		deps.History = w.history
+	}
+	if w.artifacts != nil {
+		deps.Artifacts = fakeArtifacts{w.artifacts}
 	}
 	return NewHandler(deps, builtAssets(t), fallback)
 }

@@ -21,10 +21,13 @@ type Handler struct {
 	Repositories ports.RepositoryLister
 	// Docs reads the documents linked to a task and the project's library;
 	// nil hides both.
-	Docs   ports.DocumentReader
-	Layout shell.Layout
-	Render shell.Renderer
-	Now    func() time.Time
+	Docs ports.DocumentReader
+	// Artifacts lists the design assets the task page and the design library
+	// seed; nil seeds none.
+	Artifacts ports.ArtifactReader
+	Layout    shell.Layout
+	Render    shell.Renderer
+	Now       func() time.Time
 }
 
 // Project serves GET /projects/{project}: the project's tasks as a kanban
@@ -99,6 +102,14 @@ func (h Handler) Task(w http.ResponseWriter, r *http.Request) error {
 	}
 	frame.Live = true // sessionsPage follows the project's feed
 	view := sessions.NewPageView(frame, project, task, list, agents, repos, h.Now())
+	if view.Seed.Artifacts, err = h.designArtifacts(ctx, ports.ArtifactFilter{TicketID: task.ID}); err != nil {
+		return err
+	}
+	tickets, err := h.Tasks.ListTickets(ctx, project.ID)
+	if err != nil {
+		return err
+	}
+	view.Seed.Tasks = designTasks(tickets, project.ID)
 	var docs []*domain.Document
 	if h.Docs != nil {
 		docs = h.Docs.ListTicketDocuments(task.ID)
