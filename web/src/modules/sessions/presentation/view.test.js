@@ -2,7 +2,7 @@ import fixture from "../../../../testdata/views/session-status.json" with { type
 import { assert, file, test } from "../../../shared/testing/test.js";
 import { needsYou } from "../domain/session.js";
 import { makeSession, T0 } from "../testing/fixtures.js";
-import { agentLabel, runsAs, startedBy, statusView, summary, terminalView, toGroupViews } from "./view.js";
+import { agentLabel, runsAs, startedBy, statusView, summary, terminalView, toDetailView, toGroupViews } from "./view.js";
 
 file("sessions/presentation/view");
 
@@ -36,6 +36,50 @@ test("the detail pane attaches only to a live terminal on the server, and says w
   const headless = terminalView(makeSession({ interactive: false, runsOn: "", lastAction: "edited go.mod" }));
   assert.equal(headless.terminal, "headless");
   assert.ok(headless.terminalNote.includes("edited go.mod"));
+});
+
+test("an ended interactive session offers Resume when the server allows it, and says why not otherwise", () => {
+  const ended = (overrides) => makeSession({ status: "stopped", resumable: false, resumeBlocked: "", ...overrides });
+
+  const resumable = terminalView(ended({ resumable: true }));
+  assert.deepEqual([resumable.terminal, resumable.resumable], ["ended", true]);
+  assert.ok(resumable.terminalNote.includes("Resume it"), resumable.terminalNote);
+
+  const noTree = terminalView(ended({ resumeBlocked: "WORKSPACE_MISSING" }));
+  assert.deepEqual([noTree.terminal, noTree.resumable], ["ended", false]);
+  assert.ok(noTree.terminalNote.includes("worktree was removed"), noTree.terminalNote);
+
+  const noChat = terminalView(ended({ status: "failed", resumeBlocked: "SESSION_TRANSCRIPT_MISSING" }));
+  assert.equal(noChat.resumable, false);
+  assert.ok(noChat.terminalNote.includes("no conversation"), noChat.terminalNote);
+
+  const older = terminalView(ended({}));
+  assert.equal(older.resumable, false, "a server that does not say: no Resume");
+  assert.ok(older.terminalNote.includes("Start a new one"), older.terminalNote);
+  assert.ok(!older.terminalNote.includes("TUI"), "no longer sends the person to the TUI");
+});
+
+test("a TUI session points to the TUI while it runs, and can come back on the server once it ended", () => {
+  const live = terminalView(makeSession({ runsOn: "tui", runnerHost: "laptop" }));
+  assert.deepEqual([live.terminal, live.resumable], ["elsewhere", false]);
+  const over = terminalView(makeSession({ runsOn: "tui", runnerHost: "laptop", status: "done", resumable: true, resumeBlocked: "" }));
+  assert.deepEqual([over.terminal, over.resumable], ["ended", true]);
+});
+
+test("headless and live sessions never offer Resume", () => {
+  assert.equal(terminalView(makeSession({ interactive: false, runsOn: "", status: "done", resumable: false, resumeBlocked: "SESSION_NOT_INTERACTIVE" })).resumable, false);
+  assert.equal(terminalView(makeSession({ status: "running" })).resumable, false);
+  // Advisory even when the server says yes: a session still alive shows its terminal.
+  assert.equal(terminalView(makeSession({ status: "running", resumable: true })).resumable, false);
+});
+
+test("the detail and the row both carry whether Resume shows", () => {
+  const s = makeSession({ id: "r", status: "stopped", resumable: true, resumeBlocked: "" });
+  assert.equal(toDetailView(s, T0, {}).resumable, true);
+  const [group] = toGroupViews([s], { selectedId: null, now: T0, agentNames: {} });
+  assert.equal(group.rows[0].resumable, true);
+  const [running] = toGroupViews([makeSession()], { selectedId: null, now: T0, agentNames: {} });
+  assert.equal(running.rows[0].resumable, false);
 });
 
 test("an agent reads as its name, its id when unknown, plain claude without one", () => {
