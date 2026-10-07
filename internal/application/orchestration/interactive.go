@@ -114,11 +114,21 @@ func (s *Service) StartInteractive(ctx context.Context, req InteractiveRequest) 
 //
 // The permission mode is not stored, only whether the session ran unattended:
 // a session that did resumes in bypass mode, any other in the default mode.
+//
+// Concurrent calls for one session resume it once; the others answer
+// SESSION_ALREADY_RUNNING. A resume is not held to the task's session limit
+// (TASK_SESSION_LIMIT): like starting one from the TUI or the web, it is a
+// person's action, and the limit only bounds the sessions agents start. Once
+// running, it counts toward that limit again.
 func (s *Service) ResumeInteractive(ctx context.Context, req ports.ResumeRequest) (*domain.Session, ports.AgentSpec, error) {
 	runsOn, err := s.runner(req.RunsOn)
 	if err != nil {
 		return nil, ports.AgentSpec{}, err
 	}
+	if !s.claimResume(req.SessionID) {
+		return nil, ports.AgentSpec{}, &domain.StructuredError{Code: "SESSION_ALREADY_RUNNING", Message: "session is being resumed"}
+	}
+	defer s.releaseResume(req.SessionID)
 	sess, err := s.interactiveSession(req.SessionID)
 	if err != nil {
 		return nil, ports.AgentSpec{}, err
@@ -159,6 +169,23 @@ func (s *Service) ResumeInteractive(ctx context.Context, req ports.ResumeRequest
 		}
 	}
 	return s.withResumability(s.sessions.Get(sess.ID)), spec, nil
+}
+
+// claimResume marks id as being resumed; false when another call already is.
+func (s *Service) claimResume(id string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.resuming[id] {
+		return false
+	}
+	s.resuming[id] = true
+	return true
+}
+
+func (s *Service) releaseResume(id string) {
+	s.mu.Lock()
+	delete(s.resuming, id)
+	s.mu.Unlock()
 }
 
 // resumeBlock is the error a resume of sess would answer now, nil when it

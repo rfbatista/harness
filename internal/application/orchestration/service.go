@@ -87,6 +87,10 @@ type Service struct {
 	// which is routinely *after* the initial task was already sent — cannot
 	// report the session as idle while Claude is working on that first turn.
 	busy map[string]bool
+	// resuming marks sessions a ResumeInteractive call is bringing back, from
+	// its status check until the session is recorded running, so two calls at
+	// once cannot both pass the check.
+	resuming map[string]bool
 }
 
 func NewService(runtime llmkit.Manager, broker *approval.Broker, hub *Hub, sessions ports.SessionRepository, catalog Catalog, tickets ticketResolver, workspaces ports.WorkspaceProvisioner) *Service {
@@ -94,6 +98,7 @@ func NewService(runtime llmkit.Manager, broker *approval.Broker, hub *Hub, sessi
 		runtime: runtime, broker: broker, hub: hub, sessions: sessions, catalog: catalog, tickets: tickets,
 		workspaces: workspaces,
 		seq:        map[string]int64{}, cleanups: map[string]func(){}, busy: map[string]bool{},
+		resuming: map[string]bool{},
 	}
 	go s.approvalLoop()
 	go s.expiryLoop()

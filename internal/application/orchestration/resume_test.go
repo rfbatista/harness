@@ -2,8 +2,11 @@ package orchestration
 
 import (
 	"context"
+	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
@@ -113,5 +116,113 @@ func TestResumability_OnReturnedSessions(t *testing.T) {
 	}
 	if resumed.Resumable || resumed.ResumeBlocked != "SESSION_ALREADY_RUNNING" {
 		t.Errorf("resumed: resumable=%v resume_blocked=%q", resumed.Resumable, resumed.ResumeBlocked)
+	}
+}
+
+// gatedTranscripts holds every check while a gate is shut, so concurrent
+// resumes all get past their own status check before any of them marks the
+// session running. Install it before the session starts: the service reads
+// Transcripts from other goroutines (a hosted session's exit, for one).
+type gatedTranscripts struct {
+	mu   sync.Mutex
+	gate chan struct{}
+}
+
+func (g *gatedTranscripts) CanResume(dir, id string) error {
+	g.mu.Lock()
+	gate := g.gate
+	g.mu.Unlock()
+	if gate != nil {
+		<-gate
+	}
+	return nil
+}
+
+func (g *gatedTranscripts) shut() chan struct{} {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.gate = make(chan struct{})
+	return g.gate
+}
+
+// resumeAtOnce resumes the ended sess from n callers at once and returns how
+// many succeeded and the codes the others got. svc.Transcripts must be tr.
+func resumeAtOnce(t *testing.T, svc *Service, tr *gatedTranscripts, sess *domain.Session, req ports.ResumeRequest, n int) (int, []string) {
+	t.Helper()
+	gate := tr.shut()
+	req.SessionID = sess.ID
+	errs := make(chan error, n)
+	var ready sync.WaitGroup
+	ready.Add(n)
+	for range n {
+		go func() {
+			ready.Done()
+			_, _, err := svc.ResumeInteractive(context.Background(), req)
+			errs <- err
+		}()
+	}
+	ready.Wait()
+	time.Sleep(50 * time.Millisecond)
+	close(gate)
+	ok, codes := 0, []string{}
+	for range n {
+		if err := <-errs; err == nil {
+			ok++
+		} else {
+			codes = append(codes, codeOf(err))
+		}
+	}
+	return ok, codes
+}
+
+func TestResumeInteractive_ConcurrentCallsResumeOnce(t *testing.T) {
+	svc, _ := newInteractiveService(t)
+	tr := &gatedTranscripts{}
+	svc.Transcripts = tr
+	sess, _ := startInteractive(t, svc, InteractiveRequest{})
+	if _, err := svc.EndInteractive(context.Background(), sess.ID, 0, false); err != nil {
+		t.Fatal(err)
+	}
+	ok, codes := resumeAtOnce(t, svc, tr, sess, ports.ResumeRequest{}, 8)
+	if ok != 1 {
+		t.Fatalf("%d resumes succeeded, want 1 (others: %v)", ok, codes)
+	}
+	for _, c := range codes {
+		if c != "SESSION_ALREADY_RUNNING" {
+			t.Errorf("losing resume = %q, want SESSION_ALREADY_RUNNING", c)
+		}
+	}
+	if got := sessionOf(svc, sess.ID); got.Status != domain.SessionRunning {
+		t.Errorf("status = %s, want running", got.Status)
+	}
+	resumed := 0
+	for _, ev := range svc.sessions.ListEvents(sess.ID, 0) {
+		if ev.Type == "status" && strings.Contains(string(ev.Payload), `"text":"resumed`) {
+			resumed++
+		}
+	}
+	if resumed != 1 {
+		t.Errorf("%d resumed status events, want 1", resumed)
+	}
+}
+
+// The resumed session is the same session: nothing about it is new.
+func TestResumeInteractive_KeepsTheSession(t *testing.T) {
+	svc, _ := newInteractiveService(t)
+	sess, _ := startInteractive(t, svc, InteractiveRequest{AutoAccept: "all", Mode: "design"})
+	if err := svc.RecordClaudeSession(context.Background(), sess.ID, "c2"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.EndInteractive(context.Background(), sess.ID, 0, false); err != nil {
+		t.Fatal(err)
+	}
+	got, _, err := svc.ResumeInteractive(context.Background(), ports.ResumeRequest{SessionID: sess.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.ID != sess.ID || got.Branch != sess.Branch || got.WorkspaceID != sess.WorkspaceID ||
+		got.WorkingDir != sess.WorkingDir || got.AgentID != sess.AgentID || got.Mode != sess.Mode ||
+		got.AutoRun != sess.AutoRun || got.ClaudeSessionID != "c2" {
+		t.Fatalf("resumed %+v\nstarted %+v", got, sess)
 	}
 }

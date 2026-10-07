@@ -220,3 +220,26 @@ func TestStopServerSessions(t *testing.T) {
 	svc.StopServerSessions(context.Background())
 	waitStatus(t, svc, sess.ID, domain.SessionStopped)
 }
+
+// Two people clicking Resume at once: one agent process starts, and the
+// session it runs in is not ended by the call that lost.
+func TestResume_ConcurrentCallsSpawnOnce(t *testing.T) {
+	svc := newHostedService(t, scriptAgent{script: `printf 'back\r\n'; cat`})
+	tr := &gatedTranscripts{}
+	svc.Transcripts = tr
+	sess := startOnServer(t, svc)
+	if err := svc.Stop(context.Background(), sess.ID); err != nil {
+		t.Fatal(err)
+	}
+	waitStatus(t, svc, sess.ID, domain.SessionStopped)
+
+	ok, codes := resumeAtOnce(t, svc, tr, sess, ports.ResumeRequest{RunsOn: domain.RunnerServer}, 4)
+	if ok != 1 {
+		t.Fatalf("%d resumes succeeded, want 1 (others: %v)", ok, codes)
+	}
+	time.Sleep(100 * time.Millisecond)
+	if got := sessionOf(svc, sess.ID); got.Status != domain.SessionRunning {
+		t.Fatalf("status = %s, want running", got.Status)
+	}
+	screenOf(t, svc, sess.ID, "back")
+}
