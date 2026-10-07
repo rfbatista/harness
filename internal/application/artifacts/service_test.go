@@ -70,6 +70,7 @@ func newFixture(t *testing.T) *fixture {
 		}
 	}
 	f.svc = NewService(f.repo, f.sessions, f.ann)
+	f.svc.StoreDir = t.TempDir()
 	return f
 }
 

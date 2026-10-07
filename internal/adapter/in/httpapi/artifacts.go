@@ -8,6 +8,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 
+	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
 )
 
@@ -28,12 +29,33 @@ func (h *Handler) handleListArtifacts(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusServiceUnavailable, "artifacts not configured")
 	}
 	list, err := h.artifactsSvc.ListArtifacts(c.Request().Context(), ports.ArtifactFilter{
-		SessionID: c.QueryParam("session_id"), TicketID: c.QueryParam("ticket_id"),
+		SessionID: c.QueryParam("session_id"), TicketID: c.QueryParam("ticket_id"), ProjectID: c.QueryParam("project_id"),
+		Scope: domain.ArtifactScope(c.QueryParam("scope")),
 	})
 	if err != nil {
 		return err
 	}
 	return c.JSON(http.StatusOK, map[string]any{"artifacts": list})
+}
+
+// handleSetArtifactScope moves an artifact between task and project scope.
+// Moving to project keeps a copy of its bytes; the same scope again is fine.
+func (h *Handler) handleSetArtifactScope(c echo.Context) error {
+	if h.artifactsSvc == nil {
+		return echo.NewHTTPError(http.StatusServiceUnavailable, "artifacts not configured")
+	}
+	var in struct {
+		ArtifactID string `json:"artifact_id"`
+		Scope      string `json:"scope"`
+	}
+	if err := bindJSON(c, &in); err != nil {
+		return err
+	}
+	a, err := h.artifactsSvc.SetArtifactScope(c.Request().Context(), in.ArtifactID, domain.ArtifactScope(in.Scope))
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, map[string]any{"artifact": a})
 }
 
 func (h *Handler) handleGetArtifact(c echo.Context) error {
@@ -62,9 +84,10 @@ func (h *Handler) handleArtifactViewRedirect(c echo.Context) error {
 }
 
 // handleArtifactView streams the artifact's file, or a file next to it, from
-// the session worktree. http.ServeContent supplies Content-Length, ranges
-// (video seeks), If-None-Match against the ETag set here, and HEAD. The
-// headers below are set first so ServeContent neither sniffs nor overrides.
+// the harness's copy or the session worktree. http.ServeContent supplies
+// Content-Length, ranges (video seeks), If-None-Match against the ETag set
+// here, and HEAD. The headers below are set first so ServeContent neither
+// sniffs nor overrides.
 func (h *Handler) handleArtifactView(c echo.Context) error {
 	if h.artifactsSvc == nil {
 		return echo.NewHTTPError(http.StatusServiceUnavailable, "artifacts not configured")

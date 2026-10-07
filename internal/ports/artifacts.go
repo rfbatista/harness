@@ -8,18 +8,23 @@ import (
 	"operators-mcp/internal/domain"
 )
 
-// ArtifactFilter narrows artifact listings; the HTTP route requires at least one field.
+// ArtifactFilter narrows artifact listings; the HTTP route requires at least
+// one of SessionID, TicketID and ProjectID. Scope narrows any of them; under
+// task, artifacts that predate scopes count too.
 type ArtifactFilter struct {
 	SessionID string
 	TicketID  string
+	ProjectID string
+	Scope     domain.ArtifactScope
 }
 
-// ArtifactRepository persists published artifacts. Files are never stored;
-// only where they are.
+// ArtifactRepository persists published artifacts. Files are never stored
+// here; only where they are, and whether the harness holds a copy.
 type ArtifactRepository interface {
 	// Create stores a new artifact, assigning its ID and timestamps.
 	Create(a *domain.Artifact) (*domain.Artifact, error)
-	// Update rewrites title, note, kind, mime, size, revision and updated_at.
+	// Update rewrites title, note, kind, mime, size, revision, snapshot and
+	// updated_at. Never the scope.
 	Update(a *domain.Artifact) error
 	Get(id string) *domain.Artifact
 	// FindByTarget is the identity rule: one artifact per (session, path) or (session, url).
@@ -28,8 +33,13 @@ type ArtifactRepository interface {
 	List(f ArtifactFilter) []*domain.Artifact
 	// Delete removes the record; a missing one is ARTIFACT_NOT_FOUND.
 	Delete(id string) error
-	// DeleteBySession removes every record of a session (the session is being deleted).
-	DeleteBySession(sessionID string) error
+	// SetScope moves an artifact between scopes, records whether the harness
+	// holds a copy of its bytes, and bumps updated_at. A missing one is
+	// ARTIFACT_NOT_FOUND.
+	SetScope(id string, scope domain.ArtifactScope, snapshot bool) (*domain.Artifact, error)
+	// DeleteTaskScopedBySession removes a session's task-scoped records (the
+	// session is being deleted) and returns their ids; project ones stay.
+	DeleteTaskScopedBySession(sessionID string) ([]string, error)
 }
 
 // PublishArtifactRequest is what a session asks to publish. Exactly one of
@@ -48,11 +58,23 @@ type ArtifactPublisher interface {
 	// Publish records (or re-publishes) an artifact and announces it on the
 	// session's event stream before returning.
 	Publish(ctx context.Context, req PublishArtifactRequest) (*domain.Artifact, error)
-	// Unpublish removes the record only, never the file; only the session
-	// that published it may (ARTIFACT_NOT_YOURS otherwise).
+	// Unpublish removes the record, never the worktree file; only the
+	// session that published it may (ARTIFACT_NOT_YOURS otherwise), and not
+	// while the project keeps it (ARTIFACT_IN_PROJECT: move it back to task
+	// first, or a person deletes it).
 	Unpublish(ctx context.Context, sessionID, artifactID string) error
-	// ListTaskArtifacts is every artifact published on the task, newest first.
+	// ListTaskArtifacts is every artifact published on the task, in either
+	// scope, newest first.
 	ListTaskArtifacts(ctx context.Context, ticketID string) ([]*domain.Artifact, error)
+	// SetArtifactScope moves an artifact between task and project scope.
+	// Moving to project snapshots its directory into harness-owned storage;
+	// a url artifact, or one whose bytes cannot be copied, is
+	// ARTIFACT_NOT_PROMOTABLE. Moving back keeps the copy. The same scope
+	// again changes nothing. A move is announced on the producing session's
+	// stream as an "artifact" event, while that session exists.
+	SetArtifactScope(ctx context.Context, artifactID string, scope domain.ArtifactScope) (*domain.Artifact, error)
+	// ListProjectArtifacts is the project's project-scoped artifacts, newest first.
+	ListProjectArtifacts(ctx context.Context, projectID string) ([]*domain.Artifact, error)
 }
 
 // ArtifactFile is an artifact's bytes, opened for one response. The caller closes Content.
@@ -70,9 +92,10 @@ type ArtifactReader interface {
 	ListArtifacts(ctx context.Context, f ArtifactFilter) ([]*domain.Artifact, error)
 	DeleteArtifact(ctx context.Context, id string) error
 	// OpenArtifactFile opens the artifact's own file (relpath "") or a file
-	// next to it, resolved relative to the artifact's directory and confined
-	// to the session worktree. Outside it, under .git, missing, a directory,
-	// or a url artifact: ARTIFACT_NOT_FOUND.
+	// next to it, resolved relative to the artifact's directory: from the
+	// harness's copy when it holds one (confined to that copy), otherwise
+	// from the session worktree (confined to it). Outside, under .git,
+	// missing, a directory, or a url artifact: ARTIFACT_NOT_FOUND.
 	OpenArtifactFile(ctx context.Context, id, relpath string) (*ArtifactFile, error)
 }
 

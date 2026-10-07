@@ -263,3 +263,104 @@ func TestHTTP_ArtifactEventOnInteractiveSessionStream(t *testing.T) {
 	}
 	t.Fatal("no artifact event on the stream")
 }
+
+type scopeResp struct {
+	Artifact domain.Artifact `json:"artifact"`
+	Code     string          `json:"code"`
+}
+
+func setArtifactScope(t *testing.T, env *sessionTestEnv, body string) (int, scopeResp, string) {
+	t.Helper()
+	resp, err := http.Post(env.srv.URL+"/api/set_artifact_scope", "application/json", strings.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	raw, _ := io.ReadAll(resp.Body)
+	var out scopeResp
+	json.Unmarshal(raw, &out)
+	return resp.StatusCode, out, string(raw)
+}
+
+func TestHTTP_SetArtifactScope(t *testing.T) {
+	env := newSessionTestEnv(t)
+	defer env.srv.Close()
+	sess := startDesignSession(t, env)
+	writeIn(t, sess.WorkingDir, "design/card.html", "<h1>card</h1>")
+	writeIn(t, sess.WorkingDir, "design/style.css", "h1{}")
+	a := publish(t, env, ports.PublishArtifactRequest{SessionID: sess.ID, Path: "design/card.html", Title: "Card"})
+	link := publish(t, env, ports.PublishArtifactRequest{SessionID: sess.ID, URL: "http://localhost:3000", Title: "Dev"})
+
+	status, got, raw := setArtifactScope(t, env, `{"artifact_id":"`+a.ID+`","scope":"project"}`)
+	if status != 200 || got.Artifact.ID != a.ID || got.Artifact.Scope != domain.ArtifactScopeProject || !strings.Contains(raw, `"scope":"project"`) {
+		t.Fatalf("to project = %d %s", status, raw)
+	}
+	if status, got, raw = setArtifactScope(t, env, `{"artifact_id":"`+a.ID+`","scope":"project"}`); status != 200 || got.Artifact.Scope != domain.ArtifactScopeProject {
+		t.Fatalf("same scope again = %d %s", status, raw)
+	}
+
+	// The project's copy is served once the worktree is gone.
+	if err := os.RemoveAll(sess.WorkingDir); err != nil {
+		t.Fatal(err)
+	}
+	for rel, want := range map[string]string{"": "<h1>card</h1>", "style.css": "h1{}"} {
+		resp := get(t, env.srv.URL+"/api/artifacts/"+a.ID+"/view/"+rel, nil)
+		body, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if resp.StatusCode != 200 || string(body) != want {
+			t.Fatalf("view %q = %d %q", rel, resp.StatusCode, body)
+		}
+	}
+
+	resp := get(t, env.srv.URL+"/api/artifacts?project_id=p1&scope=project", nil)
+	var listed struct {
+		Artifacts []domain.Artifact `json:"artifacts"`
+	}
+	json.NewDecoder(resp.Body).Decode(&listed)
+	resp.Body.Close()
+	if resp.StatusCode != 200 || len(listed.Artifacts) != 1 || listed.Artifacts[0].ID != a.ID {
+		t.Fatalf("project list = %d %+v", resp.StatusCode, listed)
+	}
+	resp = get(t, env.srv.URL+"/api/artifacts?session_id="+sess.ID+"&scope=task", nil)
+	body, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != 200 || !strings.Contains(string(body), link.ID) || strings.Contains(string(body), a.ID) || !strings.Contains(string(body), `"scope":"task"`) {
+		t.Fatalf("task list = %d %s", resp.StatusCode, body)
+	}
+	if resp = get(t, env.srv.URL+"/api/artifacts?project_id=p1&scope=global", nil); resp.StatusCode != 400 {
+		t.Fatalf("bad list scope = %d", resp.StatusCode)
+	}
+	resp.Body.Close()
+
+	for name, tc := range map[string]struct {
+		body, code string
+		status     int
+	}{
+		"unknown":   {`{"artifact_id":"ghost","scope":"project"}`, "ARTIFACT_NOT_FOUND", 404},
+		"bad scope": {`{"artifact_id":"` + a.ID + `","scope":"global"}`, "INVALID_INPUT", 400},
+		"url":       {`{"artifact_id":"` + link.ID + `","scope":"project"}`, "ARTIFACT_NOT_PROMOTABLE", 400},
+	} {
+		if status, got, raw := setArtifactScope(t, env, tc.body); status != tc.status || got.Code != tc.code {
+			t.Errorf("%s = %d %s, want %d %s", name, status, raw, tc.status, tc.code)
+		}
+	}
+
+	// A session cannot take down what the project keeps; a person can.
+	if err := env.artifacts.Unpublish(context.Background(), sess.ID, a.ID); err == nil || !strings.Contains(err.Error(), "ARTIFACT_IN_PROJECT") {
+		t.Fatalf("unpublish = %v", err)
+	}
+	req, _ := http.NewRequest("DELETE", env.srv.URL+"/api/artifacts/"+a.ID, nil)
+	dresp, _ := http.DefaultClient.Do(req)
+	dresp.Body.Close()
+	if dresp.StatusCode != 204 {
+		t.Fatalf("delete = %d", dresp.StatusCode)
+	}
+
+	// Back to task, on an artifact still in its worktree.
+	writeIn(t, sess.WorkingDir, "other/b.html", "b")
+	b := publish(t, env, ports.PublishArtifactRequest{SessionID: sess.ID, Path: "other/b.html", Title: "B"})
+	setArtifactScope(t, env, `{"artifact_id":"`+b.ID+`","scope":"project"}`)
+	if status, got, raw := setArtifactScope(t, env, `{"artifact_id":"`+b.ID+`","scope":"task"}`); status != 200 || got.Artifact.Scope != domain.ArtifactScopeTask {
+		t.Fatalf("back to task = %d %s", status, raw)
+	}
+}

@@ -143,6 +143,7 @@ func newSessionTestEnv(t *testing.T) *sessionTestEnv {
 	svc.DefaultEnv = []string{"CLAUDE_FAKE=1"}
 
 	art := artifacts.NewService(sqlite.NewArtifactRepository(db), sessions, svc)
+	art.StoreDir = t.TempDir()
 	h := &Handler{orchSvc: svc, artifactsSvc: art}
 	return &sessionTestEnv{srv: httptest.NewServer(NewRouter(h)), broker: broker, sessions: sessions, orch: svc, artifacts: art}
 }

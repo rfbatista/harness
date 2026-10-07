@@ -156,6 +156,7 @@ func NewRouter(h *Handler, opts ...Option) *echo.Echo {
 	g.GET("/artifacts", h.handleListArtifacts)
 	g.GET("/artifacts/:id", h.handleGetArtifact)
 	g.DELETE("/artifacts/:id", h.handleDeleteArtifact)
+	g.POST("/set_artifact_scope", h.handleSetArtifactScope)
 	// GET and HEAD: echo does not fall HEAD back to GET, and curl -I is how headers are checked.
 	g.Match([]string{http.MethodGet, http.MethodHead}, "/artifacts/:id/view", h.handleArtifactViewRedirect) // the slash matters: relative refs resolve under it
 	g.Match([]string{http.MethodGet, http.MethodHead}, "/artifacts/:id/view/*", h.handleArtifactView)

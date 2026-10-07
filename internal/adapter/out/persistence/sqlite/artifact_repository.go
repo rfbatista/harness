@@ -21,9 +21,14 @@ func (r *ArtifactRepository) Create(a *domain.Artifact) (*domain.Artifact, error
 	if err != nil {
 		return nil, err
 	}
+	scope := a.Scope
+	if scope == "" {
+		scope = domain.ArtifactScopeTask
+	}
 	m := &ArtifactModel{
 		ID: id, SessionID: a.SessionID, Target: artifactTarget(a.Path, a.URL), TicketID: a.TicketID, ProjectID: a.ProjectID,
 		Kind: string(a.Kind), Title: a.Title, Note: a.Note, Path: a.Path, URL: a.URL, Mime: a.Mime, SizeBytes: a.SizeBytes, Revision: a.Revision,
+		Scope: string(scope), Snapshot: a.Snapshot,
 	}
 	if err := r.db.Create(m).Error; err != nil {
 		return nil, err
@@ -38,7 +43,7 @@ func (r *ArtifactRepository) Update(a *domain.Artifact) error {
 	}
 	res := r.db.Model(&ArtifactModel{}).Where("id = ?", a.ID).Updates(map[string]any{
 		"title": a.Title, "note": a.Note, "kind": string(a.Kind), "mime": a.Mime,
-		"size_bytes": a.SizeBytes, "revision": a.Revision, "updated_at": updated.UnixMilli(),
+		"size_bytes": a.SizeBytes, "revision": a.Revision, "snapshot": a.Snapshot, "updated_at": updated.UnixMilli(),
 	})
 	if res.Error != nil {
 		return res.Error
@@ -73,6 +78,17 @@ func (r *ArtifactRepository) List(f ports.ArtifactFilter) []*domain.Artifact {
 	if f.TicketID != "" {
 		q = q.Where("ticket_id = ?", f.TicketID)
 	}
+	if f.ProjectID != "" {
+		q = q.Where("project_id = ?", f.ProjectID)
+	}
+	switch f.Scope {
+	case "":
+	case domain.ArtifactScopeTask:
+		// Rows with no scope count too: they predate it.
+		q = q.Where("scope = ? OR scope = '' OR scope IS NULL", string(f.Scope))
+	default:
+		q = q.Where("scope = ?", string(f.Scope))
+	}
 	var models []ArtifactModel
 	if err := q.Order("updated_at DESC, id ASC").Find(&models).Error; err != nil {
 		return nil
@@ -95,6 +111,39 @@ func (r *ArtifactRepository) Delete(id string) error {
 	return nil
 }
 
-func (r *ArtifactRepository) DeleteBySession(sessionID string) error {
-	return r.db.Delete(&ArtifactModel{}, "session_id = ?", sessionID).Error
+// SetScope moves an artifact between task and project scope and records
+// whether the harness holds a copy of its bytes. It bumps updated_at, so
+// listings and watchers notice the move.
+func (r *ArtifactRepository) SetScope(id string, scope domain.ArtifactScope, snapshot bool) (*domain.Artifact, error) {
+	res := r.db.Model(&ArtifactModel{}).Where("id = ?", id).Updates(map[string]any{
+		"scope": string(scope), "snapshot": snapshot, "updated_at": time.Now().UnixMilli(),
+	})
+	if res.Error != nil {
+		return nil, res.Error
+	}
+	if res.RowsAffected == 0 {
+		return nil, &domain.StructuredError{Code: "ARTIFACT_NOT_FOUND", Message: "artifact not found"}
+	}
+	return r.Get(id), nil
+}
+
+// DeleteTaskScopedBySession removes a session's task-scoped records (the
+// session is being deleted) and returns their ids. Project ones stay.
+func (r *ArtifactRepository) DeleteTaskScopedBySession(sessionID string) ([]string, error) {
+	var ids []string
+	err := r.db.Transaction(func(tx *gorm.DB) error {
+		q := tx.Model(&ArtifactModel{}).Where("session_id = ?", sessionID).
+			Where("scope = ? OR scope = '' OR scope IS NULL", string(domain.ArtifactScopeTask))
+		if err := q.Pluck("id", &ids).Error; err != nil {
+			return err
+		}
+		if len(ids) == 0 {
+			return nil
+		}
+		return tx.Delete(&ArtifactModel{}, "id IN ?", ids).Error
+	})
+	if err != nil {
+		return nil, err
+	}
+	return ids, nil
 }

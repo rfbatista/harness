@@ -80,3 +80,42 @@ func TestArtifactJSON_NullPathAndURL(t *testing.T) {
 		t.Fatalf("round trip = %+v, %v", back, err)
 	}
 }
+
+func TestArtifactScope_Valid(t *testing.T) {
+	for _, s := range []ArtifactScope{ArtifactScopeTask, ArtifactScopeProject} {
+		if !s.Valid() {
+			t.Errorf("%q should be valid", s)
+		}
+	}
+	for _, s := range []ArtifactScope{"", "global", "Task"} {
+		if s.Valid() {
+			t.Errorf("%q should not be valid", s)
+		}
+	}
+}
+
+// The scope is always on the wire, "task" for an artifact that never had one;
+// whether the harness holds a copy is not.
+func TestArtifact_ScopeOnTheWire(t *testing.T) {
+	b, err := json.Marshal(Artifact{ID: "a1", Kind: ArtifactPage, Path: "x.html", Snapshot: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(b), `"scope":"task"`) {
+		t.Fatalf("empty scope should read as task: %s", b)
+	}
+	if strings.Contains(strings.ToLower(string(b)), "snapshot") {
+		t.Fatalf("snapshot leaked onto the wire: %s", b)
+	}
+	b, _ = json.Marshal(Artifact{ID: "a1", Scope: ArtifactScopeProject})
+	var back Artifact
+	if err := json.Unmarshal(b, &back); err != nil {
+		t.Fatal(err)
+	}
+	if back.Scope != ArtifactScopeProject {
+		t.Fatalf("scope lost in the round trip: %q", back.Scope)
+	}
+	if err := json.Unmarshal([]byte(`{"id":"a2"}`), &back); err != nil || back.Scope != ArtifactScopeTask {
+		t.Fatalf("missing scope should read as task: %q %v", back.Scope, err)
+	}
+}
