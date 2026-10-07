@@ -66,7 +66,9 @@
               { "id": "s-feed", "project_id": "coding_pool", "ticket_id": "t-feed", "task": "Add SSE feed to orchestration", "agent_id": "reviewer", "status": "idle", "pending_approvals": 0, "interactive": true, "runs_on": "server", "last_action": "Edited internal/tuiclient/live/live.go", "updated_at": "2026-10-02T23:58:00Z" },
               { "id": "s-port", "project_id": "coding_pool", "ticket_id": "t-feed", "task": "Port tickets screen to httpclient", "agent_id": "backend", "status": "running", "pending_approvals": 0, "interactive": true, "runs_on": "server", "last_action": "go test ./internal/adapter/out/httpclient/...", "updated_at": "2026-10-02T23:50:00Z" },
               { "id": "s-suite", "project_id": "coding_pool", "ticket_id": "t-feed", "task": "Conformance suite for TicketBoard", "agent_id": "tester", "status": "thinking", "pending_approvals": 0, "interactive": true, "runs_on": "server", "updated_at": "2026-10-02T23:40:00Z" },
-              { "id": "s-bump", "project_id": "coding_pool", "ticket_id": "t-feed", "task": "Bump harnesskit to v0.9", "agent_id": "backend", "status": "failed", "pending_approvals": 0, "interactive": true, "runs_on": "server", "last_action": "dto_golden_test.go failed", "updated_at": "2026-10-02T22:00:00Z" }
+              { "id": "s-bump", "project_id": "coding_pool", "ticket_id": "t-feed", "task": "Bump harnesskit to v0.9", "agent_id": "backend", "status": "failed", "pending_approvals": 0, "interactive": true, "runs_on": "server", "last_action": "dto_golden_test.go failed", "resumable": true, "resume_blocked": "", "updated_at": "2026-10-02T22:00:00Z" },
+              { "id": "s-gone", "project_id": "coding_pool", "ticket_id": "t-feed", "task": "Spike: drop the old poller", "agent_id": "backend", "status": "stopped", "pending_approvals": 0, "interactive": true, "runs_on": "server", "resumable": false, "resume_blocked": "WORKSPACE_MISSING", "updated_at": "2026-10-02T21:00:00Z" },
+              { "id": "s-api", "project_id": "coding_pool", "ticket_id": "t-feed", "task": "Nightly dependency audit", "agent_id": "tester", "status": "done", "pending_approvals": 0, "interactive": false, "last_action": "opened 2 issues", "resumable": false, "resume_blocked": "SESSION_NOT_INTERACTIVE", "updated_at": "2026-10-02T20:00:00Z" }
             ]
           }
         </script>
@@ -75,8 +77,11 @@
           <a class="[ crumb ]" href="#">coding_pool /</a>
           <h1>Add SSE feed</h1>
           <span class="[ badge ]">in progress</span>
-          <span class="[ color-ink-faint text-sm ]" x-text="summary">4 sessions · 1 waiting</span>
+          <span class="[ color-ink-faint text-sm ]" x-text="summary">6 sessions · 1 waiting</span>
           <div class="[ actions ]">
+            <template x-if="canResumeSelected">
+              <button class="[ button ]" data-variant="primary" data-size="sm" :disabled="cannotResume" :aria-busy="resumingSelected" @click="resume()">Resume</button>
+            </template>
             <button class="[ button ]" data-variant="danger" data-size="sm" disabled :disabled="cannotStop" :aria-busy="stopping" @click="stopSelected">
               Stop session
             </button>
@@ -142,7 +147,12 @@
                   <div class="[ row ]" role="option" :aria-selected="row.selected" :data-attention="row.attention" @click="select(row.id)">
                     <span class="[ status ]" :data-state="row.state" x-text="row.word"></span>
                     <span class="[ title ]" x-text="row.title"></span>
-                    <span class="[ meta ]" x-text="row.meta"></span>
+                    <span class="[ meta ]">
+                      <span x-text="row.meta"></span>
+                      <template x-if="row.resumable">
+                        <button class="[ button ]" data-variant="ghost" data-size="sm" :aria-label="row.resumeLabel" :disabled="cannotResume" @click.stop="resume(row.id)">Resume</button>
+                      </template>
+                    </span>
                   </div>
                 </template>
               </div>
@@ -177,7 +187,14 @@
                   </div>
                 </template>
                 <template x-if="terminalNote">
-                  <div class="[ pad-l ]"><div class="[ banner ]"><span x-text="terminalNote"></span></div></div>
+                  <div class="[ pad-l ]">
+                    <div class="[ banner ]">
+                      <span class="[ grow ]" x-text="terminalNote"></span>
+                      <template x-if="selected.resumable">
+                        <button class="[ button ]" data-size="sm" :disabled="cannotResume" :aria-busy="resumingSelected" @click="resume()">Resume session</button>
+                      </template>
+                    </div>
+                  </div>
                 </template>
               </div>
             </template>

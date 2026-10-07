@@ -7,7 +7,8 @@
 import { FeedStatus } from "../../../../shared/domain/feed.js";
 import { describeError } from "../../../../shared/presentation/errors.js";
 import { readSeed } from "../../../../shared/presentation/seed.js";
-import { applyChange, byRecent, group, isTerminal, ofTask } from "../../domain/session.js";
+import { Codes, codeOf } from "../../../../shared/domain/errors.js";
+import { applyChange, byRecent, group, INITIAL_TERMINAL_SIZE, isTerminal, ofTask } from "../../domain/session.js";
 import { artifactTitle } from "../artifactView.js";
 import { startedBy, summary, toDetailView, toGroupViews } from "../view.js";
 
@@ -37,6 +38,8 @@ export const sessionsPage = ({ gateway, clock, setTimeout = globalThis.setTimeou
     repositoryNames: {},
     error: null,
     stopping: false,
+    /** The session a resume call is in flight for. */
+    resumingId: null,
     ready: false,
     /** The detail pane shows the new-session form. */
     creating: false,
@@ -76,6 +79,15 @@ export const sessionsPage = ({ gateway, clock, setTimeout = globalThis.setTimeou
     },
     get cannotStop() {
       return !this.ready || this.stopping || !this.selected?.stoppable;
+    },
+    get canResumeSelected() {
+      return this.selected?.resumable === true;
+    },
+    get resumingSelected() {
+      return this.resumingId !== null && this.resumingId === this.selectedId;
+    },
+    get cannotResume() {
+      return !this.ready || this.resumingId !== null;
     },
     get cannotCreate() {
       return !this.ready || this.creating;
@@ -129,7 +141,9 @@ export const sessionsPage = ({ gateway, clock, setTimeout = globalThis.setTimeou
     /** The session whose Design panel to mount, keyed on its id; mounted whenever a session shows, so publishes are counted behind the other tabs. */
     get designPanels() {
       if (!this.showingSession) return [];
-      return [{ key: this.selected.id, sessionId: this.selected.id, live: this.selected.stoppable }];
+      // Keyed on liveness too: the panel reads it once, so a resumed session gets a fresh one that follows again.
+      const live = this.selected.stoppable;
+      return [{ key: `${this.selected.id}:${live ? "live" : "ended"}`, sessionId: this.selected.id, live }];
     },
     get designBadge() {
       return this.unseenArtifacts > 0 ? String(this.unseenArtifacts) : "";
@@ -182,7 +196,9 @@ export const sessionsPage = ({ gateway, clock, setTimeout = globalThis.setTimeou
 
     // ── feed ─────────────────────────────────────────────────────────────
     apply(change) {
-      const arriving = change.kind === "upsert" && !this.sessions.some((s) => s.id === change.session.id);
+      const before = change.kind === "upsert" ? this.sessions.find((s) => s.id === change.session.id) : undefined;
+      const arriving = change.kind === "upsert" && !before;
+      if (before && isTerminal(before) && !isTerminal(change.session)) this.resumed(change.session);
       this.sessions = applyChange(this.sessions, change, ofTask(this.ticketId));
       if (arriving && this.sessions.some((s) => s.id === change.session.id)) this.arrived(change.session);
       this.now = clock.now();
@@ -200,6 +216,11 @@ export const sessionsPage = ({ gateway, clock, setTimeout = globalThis.setTimeou
       setTimeout(() => {
         this.freshIds = this.freshIds.filter((id) => id !== session.id);
       }, FRESH_MS);
+    },
+
+    /** A session came back: here, in another tab, or in the TUI. */
+    resumed(session) {
+      this.announcement = `Session resumed: ${session.task || "Untitled session"}`;
     },
 
     feedStatus(status) {
@@ -326,6 +347,27 @@ export const sessionsPage = ({ gateway, clock, setTimeout = globalThis.setTimeou
         this.error = describeError(err);
       } finally {
         this.stopping = false;
+      }
+    },
+
+    /** Resumes an ended session (the selected one, or a row's) on the server; its terminal attaches once it runs. */
+    async resume(id = this.selectedId) {
+      if (!id || this.resumingId !== null) return;
+      this.resumingId = id;
+      this.select(id);
+      try {
+        const session = await gateway.resume(id, INITIAL_TERMINAL_SIZE);
+        this.sessions = applyChange(this.sessions, { kind: "upsert", session }, ofTask(this.ticketId));
+        this.now = clock.now();
+        this.detailTab = "agent";
+        this.error = null;
+        this.resumed(session);
+      } catch (err) {
+        this.error = describeError(err);
+        // Someone else resumed it first: the list catches up with them.
+        if (codeOf(err) === Codes.SESSION_ALREADY_RUNNING) await this.reload();
+      } finally {
+        this.resumingId = null;
       }
     },
 

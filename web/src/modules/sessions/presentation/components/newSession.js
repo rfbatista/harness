@@ -8,6 +8,7 @@
 //         data-default-repository="r1" x-on:submit.prevent="submit">
 
 import { describeError } from "../../../../shared/presentation/errors.js";
+import { INITIAL_TERMINAL_SIZE } from "../../domain/session.js";
 
 /** @param {{ gateway: import("../../domain/ports.js").SessionGateway }} deps */
 export const newSession = ({ gateway }) => (projectId = "", ticketId = "") => ({
@@ -114,8 +115,7 @@ export const newSession = ({ gateway }) => (projectId = "", ticketId = "") => ({
         prompt: this.prompt.trim(),
         autoAccept: this.autoAccept,
         baseBranch: this.baseBranch,
-        // The size it starts at; the terminal pane resizes it once attached.
-        size: { cols: 120, rows: 32 },
+        size: INITIAL_TERMINAL_SIZE,
       });
       this.$dispatch("session-created", { session });
     } catch (err) {

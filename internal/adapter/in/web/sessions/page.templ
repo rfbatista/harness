@@ -132,7 +132,12 @@ templ liveRows() {
 				<div class="[ row ]" role="option" x-bind:aria-selected="row.selected" x-bind:data-attention="row.attention" x-bind:data-fresh="row.fresh" x-on:click="select(row.id)">
 					<span class="[ status ]" x-bind:data-state="row.state" x-text="row.word"></span>
 					<span class="[ title ]" x-text="row.title"></span>
-					<span class="[ meta ]" x-text="row.meta"></span>
+					<span class="[ meta ]">
+						<span x-text="row.meta"></span>
+						<template x-if="row.resumable">
+							<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-bind:aria-label="row.resumeLabel" x-bind:disabled="cannotResume" x-on:click.stop="resume(row.id)">Resume</button>
+						</template>
+					</span>
 				</div>
 			</template>
 		</div>
@@ -155,6 +160,9 @@ templ detail(form NewSessionForm) {
 						<div class="[ cluster ] [ gutter-xs ]">
 							<template x-if="historyHref">
 								<a class="[ button ]" data-variant="ghost" data-size="sm" x-bind:href="historyHref">Git history</a>
+							</template>
+							<template x-if="selected.resumable">
+								<button type="button" class="[ button ]" data-variant="primary" data-size="sm" x-bind:disabled="cannotResume" x-bind:aria-busy="resumingSelected" x-on:click="resume()">Resume</button>
 							</template>
 							<button type="button" class="[ button ]" data-size="sm" x-bind:disabled="cannotStop" x-bind:aria-busy="stopping" x-on:click="stopSelected">Stop</button>
 							<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-bind:disabled="deleting" x-on:click="askDelete">Delete</button>
@@ -203,7 +211,10 @@ templ detail(form NewSessionForm) {
 				<template x-if="terminalNote">
 					<div class="[ pad-l ]">
 						<div class="[ banner ]">
-							<span x-text="terminalNote"></span>
+							<span class="[ grow ]" x-text="terminalNote"></span>
+							<template x-if="selected.resumable">
+								<button type="button" class="[ button ]" data-size="sm" x-bind:disabled="cannotResume" x-bind:aria-busy="resumingSelected" x-on:click="resume()">Resume session</button>
+							</template>
 						</div>
 					</div>
 				</template>

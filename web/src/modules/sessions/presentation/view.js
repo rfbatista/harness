@@ -2,7 +2,7 @@
 // sessions/view.go; web/testdata/views/session-status.json pins both.
 
 import { count, relativeTime } from "../../../shared/presentation/format.js";
-import { group, hasLiveTerminal, isTerminal, needsYou } from "../domain/session.js";
+import { canResume, group, hasLiveTerminal, isTerminal, needsYou } from "../domain/session.js";
 
 /** Domain status → the design system's .status[data-state] and its word. */
 const STATUS = {
@@ -63,6 +63,8 @@ export function toRowView(session, { selectedId, now, agentNames, others = [], f
     selected: session.id === selectedId,
     fresh,
     attention: needsYou(session),
+    resumable: terminalView(session).resumable,
+    resumeLabel: `Resume ${session.task || "Untitled session"}`,
   };
 }
 
@@ -93,26 +95,46 @@ export function toDetailView(session, now, agentNames) {
   };
 }
 
+/** Why an ended session cannot be resumed, by the server's resume_blocked code. */
+const ENDED_NOTE = {
+  WORKSPACE_MISSING: "This session has ended and its worktree was removed, so it cannot be resumed. Start a new one.",
+  SESSION_TRANSCRIPT_MISSING: "This session has ended and claude kept no conversation for it, so it cannot be resumed. Start a new one.",
+};
+
 /**
  * What the detail pane shows where a terminal would be: the live terminal
- * ("attach"), or a note on why there is none.
- * @returns {{ terminal: "attach" | "ended" | "elsewhere" | "headless", terminalNote: string }}
+ * ("attach"), or a note on why there is none. An ended interactive session
+ * offers Resume when the server says it would be accepted.
+ * @returns {{ terminal: "attach" | "ended" | "elsewhere" | "headless", terminalNote: string, resumable: boolean }}
  */
 export function terminalView(session) {
-  if (hasLiveTerminal(session)) return { terminal: "attach", terminalNote: "" };
+  if (hasLiveTerminal(session)) return { terminal: "attach", terminalNote: "", resumable: false };
   if (!session.interactive) {
     return {
       terminal: "headless",
       terminalNote: `This session runs without a terminal (it was started over the API). Last action: ${session.lastAction || "none yet"}.`,
+      resumable: false,
     };
   }
-  if (session.runsOn === "tui") {
+  if (!isTerminal(session)) {
     return {
       terminal: "elsewhere",
       terminalNote: `This session's terminal lives in the TUI on ${session.runnerHost || "another machine"}; attach to it from there.`,
+      resumable: false,
     };
   }
-  return { terminal: "ended", terminalNote: "This session has ended; its terminal is gone. Resume it from the TUI, or start a new one." };
+  if (canResume(session)) {
+    return {
+      terminal: "ended",
+      terminalNote: "This session has ended; its terminal is gone. Resume it to continue where it stopped, on the same branch and worktree.",
+      resumable: true,
+    };
+  }
+  return {
+    terminal: "ended",
+    terminalNote: ENDED_NOTE[session.resumeBlocked] ?? "This session has ended; its terminal is gone. Start a new one to continue.",
+    resumable: false,
+  };
 }
 
 export function summary(sessions) {

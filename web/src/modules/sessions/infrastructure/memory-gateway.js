@@ -5,7 +5,7 @@
 
 import { Codes, StructuredError } from "../../../shared/domain/errors.js";
 import { FeedStatus } from "../../../shared/domain/feed.js";
-import { MODES, Status } from "../domain/session.js";
+import { isTerminal, MODES, Status } from "../domain/session.js";
 import { toSeed } from "./dto.js";
 
 /**
@@ -28,6 +28,10 @@ export function memoryGateway({ projects = [], sessions = [], repositories = {},
     const session = store.get(sessionId);
     if (!session) throw new StructuredError(Codes.SESSION_NOT_FOUND, `session ${sessionId} not found`, 404);
     return session;
+  }
+
+  function refuse(code, message) {
+    throw new StructuredError(code, message, 409);
   }
 
   function publish(projectId, change) {
@@ -74,6 +78,8 @@ export function memoryGateway({ projects = [], sessions = [], repositories = {},
         interactive: true,
         runsOn: "server",
         runnerHost: "",
+        resumable: false,
+        resumeBlocked: Codes.SESSION_ALREADY_RUNNING,
         updatedAt: now(),
       });
       store.set(session.id, session);
@@ -87,8 +93,29 @@ export function memoryGateway({ projects = [], sessions = [], repositories = {},
       return list;
     },
 
+    async resume(sessionId) {
+      // Checked and updated in one step, so a second resume finds it running.
+      const session = find(sessionId);
+      if (!session.interactive) refuse(Codes.SESSION_NOT_INTERACTIVE, "a headless session has nothing to resume");
+      if (!isTerminal(session)) refuse(Codes.SESSION_ALREADY_RUNNING, `session ${sessionId} is already running`);
+      if (!session.resumable) refuse(session.resumeBlocked || Codes.SESSION_ALREADY_RUNNING, `session ${sessionId} cannot be resumed`);
+      return update(sessionId, {
+        status: Status.RUNNING,
+        runsOn: "server",
+        runnerHost: "",
+        resumable: false,
+        resumeBlocked: Codes.SESSION_ALREADY_RUNNING,
+      });
+    },
+
     async stop(sessionId) {
-      update(sessionId, { status: Status.STOPPED, pendingApprovals: 0 });
+      const { interactive } = find(sessionId);
+      update(sessionId, {
+        status: Status.STOPPED,
+        pendingApprovals: 0,
+        resumable: interactive,
+        resumeBlocked: interactive ? "" : Codes.SESSION_NOT_INTERACTIVE,
+      });
     },
 
     async remove(sessionId) {

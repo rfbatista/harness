@@ -42,4 +42,5 @@ import "../src/shared/infrastructure/feed.test.js";
 import "../src/shared/presentation/components/projectPicker.test.js";
 import "../src/shared/presentation/components/streamStatus.test.js";
 import "../src/shared/presentation/components/themeToggle.test.js";
+import "../src/shared/presentation/errors.test.js";
 import "../src/shared/presentation/format.test.js";
