@@ -32,6 +32,24 @@ func ParseArtifactKind(s string) (ArtifactKind, error) {
 	}
 }
 
+// ArtifactScope says who an Artifact is for, the way DocumentScope does for
+// documents. A task artifact belongs to the session that published it and
+// goes with it. A project artifact is a design asset the project keeps: the
+// harness holds its own copy of the bytes, so it outlives the session and
+// its worktree.
+type ArtifactScope string
+
+const (
+	ArtifactScopeTask    ArtifactScope = "task"
+	ArtifactScopeProject ArtifactScope = "project"
+)
+
+// Valid reports whether s is one of the two scopes. The empty string is not
+// valid: callers that mean "default" or "every scope" handle it before asking.
+func (s ArtifactScope) Valid() bool {
+	return s == ArtifactScopeTask || s == ArtifactScopeProject
+}
+
 // Artifact is something a session produced and explicitly published for the
 // user to look at: a file in the session worktree, or a URL to a dev server
 // on this machine. One artifact per (session, path) or (session, url);
@@ -49,6 +67,10 @@ type Artifact struct {
 	Mime      string // "" when Kind == ArtifactURL
 	SizeBytes int64  // 0 when Kind == ArtifactURL
 	Revision  int    // starts at 1
+	Scope     ArtifactScope
+	// Snapshot is set once the harness holds its own copy of the artifact's
+	// directory; its bytes are served from that copy from then on. Not on the wire.
+	Snapshot  bool
 	CreatedAt time.Time
 	UpdatedAt time.Time
 }
@@ -56,25 +78,29 @@ type Artifact struct {
 // artifactJSON is the wire shape of the Artifacts contract: path and url are
 // null, never "", when absent.
 type artifactJSON struct {
-	ID        string       `json:"id"`
-	SessionID string       `json:"session_id"`
-	TicketID  string       `json:"ticket_id"`
-	ProjectID string       `json:"project_id"`
-	Kind      ArtifactKind `json:"kind"`
-	Title     string       `json:"title"`
-	Note      string       `json:"note"`
-	Path      *string      `json:"path"`
-	URL       *string      `json:"url"`
-	Mime      string       `json:"mime"`
-	SizeBytes int64        `json:"size_bytes"`
-	Revision  int          `json:"revision"`
-	CreatedAt time.Time    `json:"created_at"`
-	UpdatedAt time.Time    `json:"updated_at"`
+	ID        string        `json:"id"`
+	SessionID string        `json:"session_id"`
+	TicketID  string        `json:"ticket_id"`
+	ProjectID string        `json:"project_id"`
+	Kind      ArtifactKind  `json:"kind"`
+	Title     string        `json:"title"`
+	Note      string        `json:"note"`
+	Path      *string       `json:"path"`
+	URL       *string       `json:"url"`
+	Mime      string        `json:"mime"`
+	SizeBytes int64         `json:"size_bytes"`
+	Revision  int           `json:"revision"`
+	Scope     ArtifactScope `json:"scope"`
+	CreatedAt time.Time     `json:"created_at"`
+	UpdatedAt time.Time     `json:"updated_at"`
 }
 
 func (a Artifact) MarshalJSON() ([]byte, error) {
 	w := artifactJSON{ID: a.ID, SessionID: a.SessionID, TicketID: a.TicketID, ProjectID: a.ProjectID, Kind: a.Kind,
-		Title: a.Title, Note: a.Note, Mime: a.Mime, SizeBytes: a.SizeBytes, Revision: a.Revision, CreatedAt: a.CreatedAt, UpdatedAt: a.UpdatedAt}
+		Title: a.Title, Note: a.Note, Mime: a.Mime, SizeBytes: a.SizeBytes, Revision: a.Revision, Scope: a.Scope, CreatedAt: a.CreatedAt, UpdatedAt: a.UpdatedAt}
+	if w.Scope == "" {
+		w.Scope = ArtifactScopeTask
+	}
 	if a.Path != "" {
 		w.Path = &a.Path
 	}
@@ -90,7 +116,10 @@ func (a *Artifact) UnmarshalJSON(b []byte) error {
 		return err
 	}
 	*a = Artifact{ID: w.ID, SessionID: w.SessionID, TicketID: w.TicketID, ProjectID: w.ProjectID, Kind: w.Kind,
-		Title: w.Title, Note: w.Note, Mime: w.Mime, SizeBytes: w.SizeBytes, Revision: w.Revision, CreatedAt: w.CreatedAt, UpdatedAt: w.UpdatedAt}
+		Title: w.Title, Note: w.Note, Mime: w.Mime, SizeBytes: w.SizeBytes, Revision: w.Revision, Scope: w.Scope, CreatedAt: w.CreatedAt, UpdatedAt: w.UpdatedAt}
+	if a.Scope == "" {
+		a.Scope = ArtifactScopeTask
+	}
 	if w.Path != nil {
 		a.Path = *w.Path
 	}
