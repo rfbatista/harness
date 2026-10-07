@@ -43,6 +43,13 @@
  * @property {(repositoryId: string) => Promise<Branch[]>} listBranches
  *           The branches a new session can branch off: local ones, then
  *           remote ones. Rejects with REPOSITORY_NOT_FOUND.
+ * @property {(sessionId: string, size?: { cols: number, rows: number }) => Promise<Session>} resume
+ *           Brings an ended interactive session back on the server's terminal
+ *           host: same id, branch, worktree and conversation. Followers see it
+ *           running again. Rejects with SESSION_NOT_FOUND,
+ *           SESSION_NOT_INTERACTIVE, SESSION_ALREADY_RUNNING (it never ended, or
+ *           someone resumed it first), WORKSPACE_MISSING,
+ *           SESSION_TRANSCRIPT_MISSING or INVALID_INPUT.
  * @property {(sessionId: string) => Promise<void>} stop
  *           Stops the session. Rejects with SESSION_NOT_FOUND.
  * @property {(sessionId: string) => Promise<void>} remove

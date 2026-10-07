@@ -12,6 +12,10 @@ const STATUS = {
   PROJECT_NOT_FOUND: 404,
   SESSION_NOT_FOUND: 404,
   SESSION_NOT_RUNNING: 409,
+  SESSION_NOT_INTERACTIVE: 409,
+  SESSION_ALREADY_RUNNING: 409,
+  WORKSPACE_MISSING: 409,
+  SESSION_TRANSCRIPT_MISSING: 409,
   INVALID_INPUT: 400,
   REPOSITORY_NOT_FOUND: 404,
   CROSS_PROJECT_ACCESS: 400,
@@ -52,6 +56,12 @@ export function stubApi(world) {
           size: body.size,
         });
         return jsonResponse(201, { session: toDTO(session), agent: {} });
+      }
+      if (method === "POST" && url.pathname === "/api/resume_interactive_session") {
+        if (body.runs_on !== "server") return jsonResponse(400, { error: "the web client resumes sessions on the server", code: "INVALID_INPUT" });
+        if (!body.session_id) return jsonResponse(400, { error: "session_id is required", code: "INVALID_INPUT" });
+        const session = await gateway.resume(body.session_id, body.size);
+        return jsonResponse(200, { session: toDTO(session), agent: {} });
       }
       let m = url.pathname.match(/^\/api\/sessions\/([^/]+)$/);
       if (method === "DELETE" && m) {

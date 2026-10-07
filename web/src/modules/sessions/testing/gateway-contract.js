@@ -97,6 +97,59 @@ export function sessionGatewayContract(name, makeSubject, makeSession) {
     close();
   });
 
+  const ended = (overrides = {}) =>
+    makeSession({ projectId: "p1", status: "stopped", interactive: true, runsOn: "server", resumable: true, resumeBlocked: "", ...overrides });
+  const size = { cols: 120, rows: 32 };
+
+  contract("resume brings an ended session back on the server, same id, and puts it on the feed", async () => {
+    const subject = makeSubject({ projects: ["p1"], sessions: [ended({ id: "back", runsOn: "tui", runnerHost: "laptop" })] });
+    const changes = [];
+    const close = subject.gateway.follow("p1", (c) => changes.push(c), () => {});
+    const session = await subject.gateway.resume("back", size);
+    assert.equal(session.id, "back");
+    assert.equal(session.status, "running");
+    assert.equal(session.runsOn, "server", "the web resumes on the server, wherever it ran before");
+    assert.equal(session.resumable, false, "a running session is not resumable");
+    await flush();
+    assert.ok(changes.some((c) => c.kind === "upsert" && c.session.id === "back" && c.session.status === "running"), "followers see it come back");
+    close();
+  });
+
+  contract("a second resume of the same session is SESSION_ALREADY_RUNNING", async () => {
+    const { gateway } = makeSubject({ projects: ["p1"], sessions: [ended({ id: "twice" })] });
+    const [first, second] = await Promise.allSettled([gateway.resume("twice", size), gateway.resume("twice", size)]);
+    assert.equal(first.status, "fulfilled");
+    assert.equal(second.status, "rejected");
+    assert.equal(second.reason.code, Codes.SESSION_ALREADY_RUNNING);
+  });
+
+  contract("resume refuses what cannot come back, with the reason's code", async () => {
+    const { gateway } = makeSubject({
+      projects: ["p1"],
+      sessions: [
+        makeSession({ id: "alive", projectId: "p1", status: "running" }),
+        ended({ id: "headless", interactive: false, runsOn: "", resumable: false, resumeBlocked: "SESSION_NOT_INTERACTIVE" }),
+        ended({ id: "no-tree", resumable: false, resumeBlocked: "WORKSPACE_MISSING" }),
+        ended({ id: "no-chat", resumable: false, resumeBlocked: "SESSION_TRANSCRIPT_MISSING" }),
+      ],
+    });
+    await assert.rejects(gateway.resume("alive", size), Codes.SESSION_ALREADY_RUNNING);
+    await assert.rejects(gateway.resume("headless", size), Codes.SESSION_NOT_INTERACTIVE);
+    await assert.rejects(gateway.resume("no-tree", size), Codes.WORKSPACE_MISSING);
+    await assert.rejects(gateway.resume("no-chat", size), Codes.SESSION_TRANSCRIPT_MISSING);
+    await assert.rejects(gateway.resume("ghost", size), Codes.SESSION_NOT_FOUND);
+  });
+
+  contract("list carries whether each session can be resumed", async () => {
+    const { gateway } = makeSubject({
+      projects: ["p1"],
+      sessions: [ended({ id: "yes" }), ended({ id: "no", resumable: false, resumeBlocked: "WORKSPACE_MISSING" })],
+    });
+    const byId = Object.fromEntries((await gateway.list({ projectId: "p1" })).map((s) => [s.id, s]));
+    assert.deepEqual([byId.yes.resumable, byId.yes.resumeBlocked], [true, ""]);
+    assert.deepEqual([byId.no.resumable, byId.no.resumeBlocked], [false, "WORKSPACE_MISSING"]);
+  });
+
   contract("listBranches lists a repository's branches, local first", async () => {
     const branches = [
       { name: "main", remote: false, isHead: true },
@@ -120,6 +173,7 @@ export function sessionGatewayContract(name, makeSubject, makeSession) {
     assert.equal(seed.ticketId, "t1");
     assert.equal(seed.sessions[0].ticketId, "t1");
     assert.equal(seed.sessions[0].status, "idle");
+    assert.deepEqual([seed.sessions[0].resumable, seed.sessions[0].resumeBlocked], [false, ""]);
     assert.throws(() => gateway.decodeSeed({ sessions: [] }), Codes.BAD_RESPONSE);
   });
 
