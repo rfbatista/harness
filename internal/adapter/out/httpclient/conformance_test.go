@@ -16,6 +16,7 @@ import (
 	"operators-mcp/internal/adapter/out/httpclient"
 	"operators-mcp/internal/adapter/out/persistence/sqlite"
 	"operators-mcp/internal/application/agents"
+	"operators-mcp/internal/application/artifacts/artifactstest"
 	"operators-mcp/internal/application/orchestration"
 	"operators-mcp/internal/application/planning"
 	"operators-mcp/internal/application/projects"
@@ -114,4 +115,11 @@ func openDB(t *testing.T) *gorm.DB {
 		t.Fatal(err)
 	}
 	return db
+}
+
+func TestArtifactAttachmentsConformance(t *testing.T) {
+	portstest.ArtifactAttachmentsConformance(t, func(t *testing.T) (ports.ArtifactAttachments, portstest.AttachmentFixture) {
+		svc, f := artifactstest.New(t)
+		return httpclient.NewArtifacts(serve(t, httpapi.Services{Artifacts: svc})), f
+	})
 }
