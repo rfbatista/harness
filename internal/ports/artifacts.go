@@ -41,6 +41,19 @@ type ArtifactRepository interface {
 	// DeleteTaskScopedBySession removes a session's task-scoped records (the
 	// session is being deleted) and returns their ids; project ones stay.
 	DeleteTaskScopedBySession(sessionID string) ([]string, error)
+
+	// Get, FindByTarget and List fill AttachedTicketIDs, oldest link first.
+	// List with TicketID returns what the task produced and the artifacts
+	// attached to it. Delete, and SetScope to task, drop an artifact's links.
+
+	// Attach links an artifact to a task; changed is false when it already was.
+	// It does not touch updated_at.
+	Attach(artifactID, ticketID string) (changed bool, err error)
+	// Detach unlinks an artifact from a task; changed is false when it was not.
+	Detach(artifactID, ticketID string) (changed bool, err error)
+	// DetachTicket unlinks every artifact from a task (it was deleted) and
+	// returns the ids of those that were linked.
+	DetachTicket(ticketID string) (artifactIDs []string, err error)
 }
 
 // PublishArtifactRequest is what a session asks to publish. Exactly one of
