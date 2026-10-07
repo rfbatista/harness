@@ -22,7 +22,11 @@ const taskServerName = "task"
 //
 // taskServerURL is empty when the host serves no per-session task endpoint; the
 // brief and the allow-list still apply, only the server entry is skipped.
-func applyTaskContext(cfg *llmkit.SessionConfig, tk *domain.Ticket, taskServerURL string) {
+//
+// role is what the session is on its task: a delegate is told to report to the
+// architect instead of moving the status, the architect that it owns the
+// status and how its delegates reach it; a peer gets the brief unchanged.
+func applyTaskContext(cfg *llmkit.SessionConfig, tk *domain.Ticket, taskServerURL string, role domain.SessionRole) {
 	if tk == nil {
 		return
 	}
@@ -36,11 +40,12 @@ func applyTaskContext(cfg *llmkit.SessionConfig, tk *domain.Ticket, taskServerUR
 	for _, name := range tooling.SessionTaskToolNames {
 		cfg.AllowedTools = append(cfg.AllowedTools, llmkit.MCPToolRef(taskServerName, name))
 	}
-	cfg.AppendSystem = appendSection(cfg.AppendSystem, taskBrief(tk))
+	cfg.AppendSystem = appendSection(cfg.AppendSystem, taskBrief(tk, role))
 }
 
 // taskBrief is the block describing the task and the tools that reach it.
-func taskBrief(tk *domain.Ticket) string {
+// Only the paragraph about the task's status depends on role.
+func taskBrief(tk *domain.Ticket, role domain.SessionRole) string {
 	var b strings.Builder
 	b.WriteString("## Your task\n\n")
 	b.WriteString("You are working on task " + tk.ID + ": " + tk.Title + "\n")
@@ -91,10 +96,7 @@ this task stays. Only documents linked to this task can be moved:
 - mcp__task__move_document_to_project — make one of this task's documents a project document
 - mcp__task__move_document_to_task — move one of them back to this task's scope
 
-Move the task as the work moves, so the board stays true without a person
-dragging the card:
-
-- mcp__task__update_task_status — set this task's status: in_progress when you pick the work up, review when it is ready for a person to look at, done when you are told it is accepted
+` + statusSection(role) + `
 
 Other agents may be working on this task at the same time, each in its own
 session, branch and worktree. Check before starting, and before touching
@@ -139,4 +141,45 @@ func appendSection(base, section string) string {
 		return section
 	}
 	return base + "\n\n" + section
+}
+
+// statusSection says who moves the task's status and, when the task has an
+// architect, how a session talks to it.
+func statusSection(role domain.SessionRole) string {
+	switch role {
+	case domain.RoleDelegate:
+		return `This task has an architect: the session that shaped it and delegated your part.
+It owns the task status. Do not call update_task_status; it is refused.
+Talk to the architect instead:
+
+- mcp__task__message_architect — kind review_request when your plan or work is ready for review (attach the documents and artifacts by id); kind status_report at each milestone, when you finish, and as soon as you are blocked (status working, blocked, ready_for_review or done); kind question when you need a decision
+- mcp__task__list_task_messages — your messages with the architect, to catch up on a reply you missed
+
+Its replies arrive as a new turn starting with [task message … · reply …]. A reply
+with verdict changes_requested means: make the changes, then ask for review again.
+Sessions you start on this task also report to the architect.`
+	case domain.RoleArchitect:
+		return `You are this task's architect. You own its status: no other session started
+under you can move it. Move it as the work moves, always with a reason, based on
+what your delegates report:
+
+- mcp__task__update_task_status — set this task's status with a reason: in_progress when the first delegate starts, review when the finished work is ready for the person, done when they accept it
+
+Your delegates report to you. Their messages, the status checks that wake you
+about them, and the person's answers to your review requests arrive as new turns
+starting with [task message …], [status check …] or [review response …]: they
+are your work queue. Answer each one:
+
+- mcp__task__reply_to_session — answer a delegate; on a review_request, with verdict approved or changes_requested
+- mcp__task__list_task_messages — every message between your delegates and you, to catch up
+- mcp__task__request_user_review — ask the person to review a plan, a branch, a document or an artifact when the decision is theirs
+- mcp__task__withdraw_user_review — withdraw a review request that is no longer needed
+- mcp__task__list_review_requests — your review requests and where each stands
+- mcp__task__set_status_check — change how often you are woken about a delegate (2–240 minutes), or 0 to pause
+- mcp__task__list_status_checks — every status-check loop on this task`
+	}
+	return `Move the task as the work moves, so the board stays true without a person
+dragging the card:
+
+- mcp__task__update_task_status — set this task's status: in_progress when you pick the work up, review when it is ready for a person to look at, done when you are told it is accepted`
 }
