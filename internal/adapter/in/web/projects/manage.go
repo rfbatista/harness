@@ -1,7 +1,6 @@
 package projects
 
 import (
-	"context"
 	"net/url"
 	"strconv"
 	"strings"
@@ -10,24 +9,8 @@ import (
 	"operators-mcp/internal/adapter/in/web/sessions"
 	"operators-mcp/internal/adapter/in/web/shell"
 	"operators-mcp/internal/domain"
+	"operators-mcp/internal/ports"
 )
-
-// Summary is a project at a glance, as the server's projects context counts
-// it (contract "Harness server ↔ Web UI — project management" §1). It has
-// the shape of ports.ProjectSummary.
-type Summary struct {
-	Project                                             *domain.Project
-	RepositoryCount, OpenTaskCount, RunningSessionCount int
-	LastActivityAt                                      *time.Time
-}
-
-// SummaryLister lists every project with its counts, sorted by name
-// (ignoring case), then id. The projects context implements it; the pages
-// never count on their own, so first paint and /api/list_project_summaries
-// agree.
-type SummaryLister interface {
-	ListProjectSummaries(ctx context.Context) ([]Summary, error)
-}
 
 // ListHref is the projects list.
 const ListHref = "/projects"
@@ -70,7 +53,7 @@ type SummaryDTO struct {
 // NewListView builds the projects list. Rows read the way
 // web/src/modules/projects/presentation/view.js writes them;
 // web/testdata/views/project-summary.json pins both.
-func NewListView(frame shell.Frame, summaries []Summary, now time.Time) ListView {
+func NewListView(frame shell.Frame, summaries []ports.ProjectSummary, now time.Time) ListView {
 	v := ListView{Frame: frame, Rows: []SummaryRow{}, Seed: ListSeed{Summaries: []SummaryDTO{}}}
 	running := 0
 	for _, s := range summaries {
@@ -98,7 +81,7 @@ func summaryStatus(running int) (state, word string) {
 	return "idle", "idle"
 }
 
-func summaryMeta(s Summary, now time.Time) string {
+func summaryMeta(s ports.ProjectSummary, now time.Time) string {
 	activity := "no activity"
 	if s.LastActivityAt != nil {
 		if ago := sessions.RelativeTime(*s.LastActivityAt, now); ago == "now" {

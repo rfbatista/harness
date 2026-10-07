@@ -8,6 +8,7 @@ import (
 
 	"operators-mcp/internal/adapter/in/web/shell"
 	"operators-mcp/internal/domain"
+	"operators-mcp/internal/ports"
 )
 
 // The projects list reads the same on first paint as live:
@@ -39,12 +40,12 @@ func TestSummaryRowsReadLikeTheBrowser(t *testing.T) {
 	}
 	now := time.Date(2026, 10, 7, 12, 0, 0, 0, time.UTC)
 	for _, c := range fixture.Cases {
-		s := Summary{Project: &domain.Project{ID: "p1", Name: "x"}, RepositoryCount: c.Repos, OpenTaskCount: c.Open, RunningSessionCount: c.Running}
+		s := ports.ProjectSummary{Project: &domain.Project{ID: "p1", Name: "x"}, RepositoryCount: c.Repos, OpenTaskCount: c.Open, RunningSessionCount: c.Running}
 		if c.MinutesAgo != nil {
 			at := now.Add(-time.Duration(*c.MinutesAgo) * time.Minute)
 			s.LastActivityAt = &at
 		}
-		row := NewListView(shell.Frame{}, []Summary{s}, now).Rows[0]
+		row := NewListView(shell.Frame{}, []ports.ProjectSummary{s}, now).Rows[0]
 		if row.State != c.State || row.Word != c.Word || row.Meta != c.Meta {
 			t.Errorf("%+v reads %q %q %q, want %q %q %q", c, row.State, row.Word, row.Meta, c.State, c.Word, c.Meta)
 		}
@@ -58,7 +59,7 @@ func TestSummaryRowsReadLikeTheBrowser(t *testing.T) {
 
 func TestListViewLinksEachProjectAndSeedsTheAPIShape(t *testing.T) {
 	at := time.Date(2026, 10, 7, 11, 0, 0, 0, time.UTC)
-	v := NewListView(shell.Frame{}, []Summary{
+	v := NewListView(shell.Frame{}, []ports.ProjectSummary{
 		{Project: &domain.Project{ID: "p 1", Name: "harness", RootDir: "/src/harness"}, RepositoryCount: 1, LastActivityAt: &at},
 	}, at)
 	if r := v.Rows[0]; r.Href != "/projects/p%201" || r.SettingsHref != "/projects/p%201/settings" || r.RootDir != "/src/harness" {

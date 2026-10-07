@@ -46,7 +46,7 @@ export function stubProjectsApi(world) {
           });
         case "POST /api/delete_project":
           await gateway.deleteProject(body.project_id);
-          return jsonResponse(200, {});
+          return new Response(null, { status: 204 });
         case "POST /api/add_ignored_path":
           return jsonResponse(200, { project: projectDTO(await gateway.addIgnoredPath(body.project_id, body.path)) });
         case "POST /api/remove_ignored_path":

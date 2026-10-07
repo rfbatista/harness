@@ -13,7 +13,6 @@ import (
 
 	"github.com/rfbatista/harnesskit/errs"
 
-	"operators-mcp/internal/adapter/in/web/projects"
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
 )
@@ -133,9 +132,9 @@ type world struct {
 }
 
 // fakeSummaries counts like the projects context: nil leaves /projects unserved.
-type fakeSummaries []projects.Summary
+type fakeSummaries []ports.ProjectSummary
 
-func (f fakeSummaries) ListProjectSummaries(context.Context) ([]projects.Summary, error) {
+func (f fakeSummaries) ListProjectSummaries(context.Context) ([]ports.ProjectSummary, error) {
 	return f, nil
 }
 

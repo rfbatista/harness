@@ -46,7 +46,7 @@ type Deps struct {
 	Artifacts ports.ArtifactReader
 	// ProjectSummaries counts every project for the projects list; nil
 	// leaves /projects unserved and the top bar offers New project instead.
-	ProjectSummaries projects.SummaryLister
+	ProjectSummaries ports.ProjectSummaries
 	// Now defaults to time.Now.
 	Now func() time.Time
 }

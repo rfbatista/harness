@@ -23,7 +23,7 @@ type Handler struct {
 	Repositories ports.RepositoryLister
 	EnvFiles     ports.EnvFileLister
 	// Summaries counts each project for the projects list.
-	Summaries SummaryLister
+	Summaries ports.ProjectSummaries
 	Layout    shell.Layout
 	Render    shell.Renderer
 	Now       func() time.Time

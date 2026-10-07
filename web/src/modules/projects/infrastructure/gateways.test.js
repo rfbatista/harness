@@ -2,7 +2,7 @@
 
 import { apiClient } from "../../../shared/infrastructure/api.js";
 import { feed } from "../../../shared/infrastructure/feed.js";
-import { flush } from "../../../shared/testing/doubles.js";
+import { fakeFetch, flush, jsonResponse } from "../../../shared/testing/doubles.js";
 import { assert, file, test } from "../../../shared/testing/test.js";
 import { projectGatewayContract } from "../testing/gateway-contract.js";
 import { stubProjectsApi } from "../testing/stub-api.js";
@@ -36,4 +36,12 @@ test("http · catalog messages it does not understand are skipped, the stream st
   await flush();
   assert.deepEqual(changes.map((c) => [c.kind, c.project?.name]), [["upsert", "later"]]);
   stop();
+});
+
+test("http · a delete succeeds on any 2xx, with or without a body", async () => {
+  for (const answer of [() => new Response(null, { status: 204 }), () => jsonResponse(200, {})]) {
+    const { fetch, calls } = fakeFetch(answer);
+    await projectsGateway(apiClient({ base: "/api", fetch }), feed({ base: "/api" })).deleteProject("p1");
+    assert.equal(calls[0].init.body, '{"project_id":"p1"}');
+  }
 });
