@@ -39,6 +39,7 @@ export function apiClient({ base, fetch = globalThis.fetch.bind(globalThis) }) {
         body?.code ?? Codes.UNKNOWN,
         body?.error ?? `${res.status} ${res.statusText}`.trim(),
         res.status,
+        body?.details,
       );
     }
     return body;

@@ -1,5 +1,5 @@
 // The browser side of the server's coded error contract
-// (httpapi/errors.go: {"error": msg, "code": CODE}). Code branches on
+// (httpapi/errors.go: {"error": msg, "code": CODE, "details"?}). Code branches on
 // `code`, never on `message`.
 
 /** Codes the web client reacts to. The server owns the full list. */
@@ -11,6 +11,9 @@ export const Codes = Object.freeze({
   WORKSPACE_MISSING: "WORKSPACE_MISSING",
   SESSION_TRANSCRIPT_MISSING: "SESSION_TRANSCRIPT_MISSING",
   PROJECT_NOT_FOUND: "PROJECT_NOT_FOUND",
+  PROJECT_NAME_TAKEN: "PROJECT_NAME_TAKEN",
+  PROJECT_ROOT_INVALID: "PROJECT_ROOT_INVALID",
+  PROJECT_HAS_RUNNING_SESSIONS: "PROJECT_HAS_RUNNING_SESSIONS",
   TICKET_NOT_FOUND: "TICKET_NOT_FOUND",
   DOCUMENT_NOT_FOUND: "DOCUMENT_NOT_FOUND",
   ARTIFACT_NOT_FOUND: "ARTIFACT_NOT_FOUND",
@@ -45,12 +48,15 @@ export class StructuredError extends Error {
    * @param {string} code    stable machine-readable code
    * @param {string} message human-readable, shown as is
    * @param {number} [status] HTTP status, when it came from the API
+   * @param {object} [details] what the error names, for the few codes that carry more
+   *                           (PROJECT_HAS_RUNNING_SESSIONS: {sessions: [...]})
    */
-  constructor(code, message, status) {
+  constructor(code, message, status, details) {
     super(message);
     this.name = "StructuredError";
     this.code = code;
     this.status = status;
+    this.details = details;
   }
 }
 
