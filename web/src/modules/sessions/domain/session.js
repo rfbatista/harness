@@ -22,6 +22,8 @@
  * @property {boolean} interactive       claude runs in a terminal (a PTY) rather than over stream-json
  * @property {"server"|"tui"|""} runsOn  where an interactive session's terminal lives; "" when headless
  * @property {string} runnerHost         the machine of a "tui" session
+ * @property {boolean} resumable         a resume would be accepted now (advisory: the call can still be refused)
+ * @property {string} resumeBlocked      "" when resumable; otherwise the error code saying why not
  * @property {Date} updatedAt
  *
  * @typedef {{ kind: "upsert", session: Session } | { kind: "deleted", id: string }} SessionChange
@@ -65,6 +67,12 @@ export const needsYou = (session) =>
 
 /** The terminal of this session can be attached from here: it runs on the server and is alive. */
 export const hasLiveTerminal = (session) => session.interactive && session.runsOn === "server" && !isTerminal(session);
+
+/** The server says a resume would be accepted now. Advisory: the call can still be refused. */
+export const canResume = (session) => session.resumable === true;
+
+/** The size a terminal starts at before its pane measures it; the pane resizes it once attached. */
+export const INITIAL_TERMINAL_SIZE = Object.freeze({ cols: 120, rows: 32 });
 
 /**
  * The list after one change from the feed. The changed session moves to the

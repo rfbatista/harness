@@ -1,6 +1,6 @@
 import { assert, file, test } from "../../../shared/testing/test.js";
 import { makeSession, T0 } from "../testing/fixtures.js";
-import { applyChange, group, needsYou, ofTask } from "./session.js";
+import { applyChange, canResume, group, needsYou, ofTask } from "./session.js";
 
 file("sessions/domain/session");
 
@@ -48,4 +48,10 @@ test("groups for triage, most recent first, without empty groups", () => {
     [["needs-you", ["turn"]], ["active", ["new-run", "old-run"]], ["finished", ["done"]]],
   );
   assert.deepEqual(group([makeSession({ status: "done" })]).map((g) => g.key), ["finished"]);
+});
+
+test("only a session the server marks resumable can be resumed", () => {
+  assert.equal(canResume(makeSession({ status: "stopped", resumable: true, resumeBlocked: "" })), true);
+  assert.equal(canResume(makeSession({ status: "done", resumable: false, resumeBlocked: "WORKSPACE_MISSING" })), false);
+  assert.equal(canResume(makeSession()), false, "a running session is not resumable");
 });

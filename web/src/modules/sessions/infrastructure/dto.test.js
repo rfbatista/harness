@@ -1,6 +1,6 @@
 import { Codes } from "../../../shared/domain/errors.js";
 import { assert, file, test } from "../../../shared/testing/test.js";
-import { toChange, toCreated, toSeed, toSession, toSessionList, toStartBody } from "./dto.js";
+import { toChange, toCreated, toResumeBody, toSeed, toSession, toSessionList, toStartBody } from "./dto.js";
 
 file("sessions/infrastructure/dto");
 
@@ -60,4 +60,20 @@ test("the seed carries agent names for live updates", () => {
 test("feed lines become upserts or deletions", () => {
   assert.equal(toChange({ session: wire }).kind, "upsert");
   assert.deepEqual(toChange({ session: { id: "s1" }, deleted: true }), { kind: "deleted", id: "s1" });
+});
+
+test("a session says whether it can be resumed, and why not", () => {
+  const ended = toSession({ ...wire, status: "stopped", resumable: true, resume_blocked: "" });
+  assert.deepEqual([ended.resumable, ended.resumeBlocked], [true, ""]);
+  const gone = toSession({ ...wire, status: "done", resumable: false, resume_blocked: "WORKSPACE_MISSING" });
+  assert.deepEqual([gone.resumable, gone.resumeBlocked], [false, "WORKSPACE_MISSING"]);
+  const older = toSession(wire);
+  assert.deepEqual([older.resumable, older.resumeBlocked], [false, ""], "a server without the fields: not resumable, no reason");
+  const odd = toSession({ ...wire, resumable: "yes", resume_blocked: 42 });
+  assert.deepEqual([odd.resumable, odd.resumeBlocked], [false, ""], "anything but true / a string reads as the default");
+});
+
+test("the resume request always runs on the server", () => {
+  assert.deepEqual(toResumeBody("s1", { cols: 120, rows: 32 }), { session_id: "s1", runs_on: "server", size: { cols: 120, rows: 32 } });
+  assert.deepEqual(toResumeBody("s1"), { session_id: "s1", runs_on: "server", size: undefined });
 });

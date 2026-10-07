@@ -26,6 +26,8 @@ export function toSession(dto) {
     interactive: dto.interactive === true,
     runsOn: dto.runs_on ?? "",
     runnerHost: dto.runner_host ?? "",
+    resumable: dto.resumable === true,
+    resumeBlocked: typeof dto.resume_blocked === "string" ? dto.resume_blocked : "",
     parentSessionId: dto.parent_session_id ?? "",
     branch: dto.branch ?? "",
     workspaceId: dto.workspace_id ?? "",
@@ -78,6 +80,11 @@ export function toStartBody(req) {
   };
 }
 
+/** POST /api/resume_interactive_session body: the web client resumes on the server's terminal host. */
+export function toResumeBody(sessionId, size) {
+  return { session_id: sessionId, runs_on: "server", size };
+}
+
 /** GET /api/list_branches → {"branches": [{name, remote, is_head}]} */
 export function toBranches(body) {
   if (!body || !Array.isArray(body.branches)) bad("expected {branches: [...]}");
@@ -87,7 +94,7 @@ export function toBranches(body) {
   });
 }
 
-/** POST /api/start_interactive_session → {"session": {...}, "agent": {...}} */
+/** POST /api/start_interactive_session and /api/resume_interactive_session → {"session": {...}, "agent": {...}} */
 export function toCreated(body) {
   if (!body?.session) bad("expected {session: {...}}");
   return toSession(body.session);
