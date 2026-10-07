@@ -6,6 +6,9 @@ import { fileName, isLoopbackUrl, isPromotable, Kind, relationTo, Scope } from "
 
 const KIND_WORD = { page: "page", image: "image", video: "video", url: "dev server", file: "file" };
 
+/** A task's design assets page: what its sessions made and what is attached to it. */
+export const taskDesignHref = (projectId, ticketId) => `/projects/${encodeURIComponent(projectId)}/tasks/${encodeURIComponent(ticketId)}/design`;
+
 /** How a kind reads on a card. */
 export const kindWord = (kind) => KIND_WORD[kind] ?? kind;
 

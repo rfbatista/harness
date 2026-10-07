@@ -10,7 +10,7 @@ import { readSeed } from "../../../../shared/presentation/seed.js";
 import { Codes, codeOf } from "../../../../shared/domain/errors.js";
 import { mergeMessages, newestAt, upsertMessage } from "../../domain/channel.js";
 import { applyChange, displayOrder, group, INITIAL_TERMINAL_SIZE, isTerminal, ofTask } from "../../domain/session.js";
-import { artifactTitle } from "../artifactView.js";
+import { artifactTitle, taskDesignHref } from "../artifactView.js";
 import { announceMessage } from "../channelView.js";
 import { agentLabel, startedBy, statusCheckView, summary, toDetailView, toGroupViews } from "../view.js";
 
@@ -161,7 +161,7 @@ export const sessionsPage = ({ gateway, clock, channel = null, channelStore = { 
       if (!this.showingSession) return [];
       // Keyed on liveness too: the panel reads it once, so a resumed session gets a fresh one that follows again.
       const live = this.selected.stoppable;
-      return [{ key: `${this.selected.id}:${live ? "live" : "ended"}`, sessionId: this.selected.id, live }];
+      return [{ key: `${this.selected.id}:${live ? "live" : "ended"}`, sessionId: this.selected.id, live, designHref: taskDesignHref(this.projectId, this.ticketId) }];
     },
     get designBadge() {
       return this.unseenArtifacts > 0 ? String(this.unseenArtifacts) : "";

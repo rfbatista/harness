@@ -1,6 +1,6 @@
 import { assert, file, test } from "../../../shared/testing/test.js";
 import { A0, makeArtifact } from "../testing/artifact-fixtures.js";
-import { artifactTitle, attachedWord, filterChoices, kindWord, moveBackWarning, toCardView, toPreviewView } from "./artifactView.js";
+import { artifactTitle, attachedWord, filterChoices, kindWord, moveBackWarning, taskDesignHref, toCardView, toPreviewView } from "./artifactView.js";
 
 file("sessions/presentation/artifactView");
 
@@ -110,4 +110,8 @@ test("a picker's filter matches every typed word, in any case and order", () => 
   assert.deepEqual(filterChoices(choices, "  CHECK ").map((c) => c.id), ["1", "3"]);
   assert.deepEqual(filterChoices(choices, "design check").map((c) => c.id), ["1"]);
   assert.deepEqual(filterChoices(choices, "nothing"), []);
+});
+
+test("a task's design assets page", () => {
+  assert.equal(taskDesignHref("p 1", "t/1"), "/projects/p%201/tasks/t%2F1/design");
 });

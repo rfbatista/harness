@@ -206,13 +206,13 @@ test("the Design tab mounts the panel for the selected session, alive or ended, 
     makeSession({ id: "over", status: "done", updatedAt: new Date(T0.getTime() - 60_000) }),
   ]);
   tick();
-  assert.deepEqual(instance.designPanels, [{ key: "live:live", sessionId: "live", live: true }], "mounted behind the Agent tab too, so publishes are counted");
+  assert.deepEqual(instance.designPanels, [{ key: "live:live", sessionId: "live", live: true, designHref: "/projects/p1/tasks/t1/design" }], "mounted behind the Agent tab too, so publishes are counted");
   instance.showDesign();
   assert.ok(instance.designTabSelected && instance.showingDesign);
   assert.deepEqual(instance.terminalIds, []);
   assert.deepEqual(instance.appPanels, []);
   instance.select("over");
-  assert.deepEqual(instance.designPanels, [{ key: "over:ended", sessionId: "over", live: false }]);
+  assert.deepEqual(instance.designPanels, [{ key: "over:ended", sessionId: "over", live: false, designHref: "/projects/p1/tasks/t1/design" }]);
   instance.startCreating();
   assert.deepEqual(instance.designPanels, [], "the form replaces the detail");
   instance.destroy();
