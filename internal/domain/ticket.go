@@ -24,4 +24,10 @@ type Ticket struct {
 	Status      TicketStatus `json:"status"`
 	CreatedAt   time.Time    `json:"created_at"`
 	UpdatedAt   time.Time    `json:"updated_at"`
+
+	// ArchitectSessionID and PendingReviews are derived when a ticket is
+	// read, never stored: the task's architect session, and how many review
+	// requests it has waiting on the person.
+	ArchitectSessionID *string `json:"architect_session_id"`
+	PendingReviews     int     `json:"pending_reviews"`
 }
