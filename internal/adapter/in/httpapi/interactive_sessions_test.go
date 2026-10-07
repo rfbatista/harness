@@ -122,6 +122,7 @@ func TestHTTP_InteractiveSessionErrors(t *testing.T) {
 		{"/api/start_interactive_session", `{"project_id":"p1","repository_id":"r1","ticket_id":"nope"}`, 404, "TICKET_NOT_FOUND"},
 		{"/api/end_interactive_session", `{"session_id":"nope"}`, 404, "SESSION_NOT_FOUND"},
 		{"/api/resume_interactive_session", `{"session_id":"nope"}`, 404, "SESSION_NOT_FOUND"},
+		{"/api/resume_interactive_session", `{"session_id":"nope","runs_on":"moon"}`, 400, "INVALID_INPUT"},
 	}
 	for _, tc := range cases {
 		status, out := post(t, srv.URL+tc.path, tc.body)
@@ -140,5 +141,57 @@ func TestHTTP_InteractiveSessionErrors(t *testing.T) {
 	resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Errorf("hook with garbage = %d, want 200", resp.StatusCode)
+	}
+}
+
+// The session wire shape says whether a resume would be accepted, and why not.
+func TestHTTP_SessionsCarryResumability(t *testing.T) {
+	srv := newSessionTestServer(t)
+	defer srv.Close()
+
+	_, started := post(t, srv.URL+"/api/start_interactive_session",
+		`{"project_id":"p1","repository_id":"r1","ticket_id":"tk1","prompt":"hi"}`)
+	id := started.Session.ID
+	if started.Session.Resumable || started.Session.ResumeBlocked != "SESSION_ALREADY_RUNNING" {
+		t.Fatalf("running session = resumable %v, blocked %q", started.Session.Resumable, started.Session.ResumeBlocked)
+	}
+	if status, ended := post(t, srv.URL+"/api/end_interactive_session", `{"session_id":"`+id+`","exit_code":0}`); status != http.StatusOK {
+		t.Fatalf("end = %d %s", status, ended.Code)
+	}
+
+	resp, err := http.Get(srv.URL + "/api/sessions?ticket_id=tk1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	var raw struct {
+		Sessions []map[string]any `json:"sessions"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
+		t.Fatal(err)
+	}
+	if len(raw.Sessions) != 1 {
+		t.Fatalf("sessions = %+v", raw.Sessions)
+	}
+	got := raw.Sessions[0]
+	if got["resumable"] != true || got["resume_blocked"] != "" {
+		t.Fatalf("ended session = resumable %v, resume_blocked %#v; want true and \"\" present", got["resumable"], got["resume_blocked"])
+	}
+}
+
+// A headless session has nothing to resume.
+func TestHTTP_ResumeHeadlessSession(t *testing.T) {
+	srv := newSessionTestServer(t)
+	defer srv.Close()
+	status, created := post(t, srv.URL+"/api/sessions", `{"project_id":"p1","repository_id":"r1","task":"hello"}`)
+	if status != http.StatusCreated {
+		t.Fatalf("create = %d %s", status, created.Code)
+	}
+	if created.Session.ResumeBlocked != "SESSION_NOT_INTERACTIVE" {
+		t.Errorf("headless resume_blocked = %q", created.Session.ResumeBlocked)
+	}
+	status, out := post(t, srv.URL+"/api/resume_interactive_session", `{"session_id":"`+created.Session.ID+`"}`)
+	if status != http.StatusConflict || out.Code != "SESSION_NOT_INTERACTIVE" {
+		t.Fatalf("resume headless = %d %q, want 409 SESSION_NOT_INTERACTIVE", status, out.Code)
 	}
 }

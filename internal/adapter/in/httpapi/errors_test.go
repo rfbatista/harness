@@ -21,3 +21,23 @@ func TestErrorHandler_ArtifactScopeCodes(t *testing.T) {
 		}
 	}
 }
+
+// The codes a resume answers, at the statuses the session resume contract
+// fixes.
+func TestErrorHandler_ResumeCodes(t *testing.T) {
+	for code, want := range map[string]int{
+		"SESSION_NOT_FOUND":          http.StatusNotFound,
+		"SESSION_NOT_INTERACTIVE":    http.StatusConflict,
+		"SESSION_ALREADY_RUNNING":    http.StatusConflict,
+		"WORKSPACE_MISSING":          http.StatusConflict,
+		"SESSION_TRANSCRIPT_MISSING": http.StatusConflict,
+		"INVALID_INPUT":              http.StatusBadRequest,
+	} {
+		rec := httptest.NewRecorder()
+		c := echo.New().NewContext(httptest.NewRequest(http.MethodPost, "/", nil), rec)
+		errorHandler(&domain.StructuredError{Code: code, Message: "m"}, c)
+		if rec.Code != want || !strings.Contains(rec.Body.String(), `"code":"`+code+`"`) {
+			t.Errorf("%s = %d %s, want %d", code, rec.Code, rec.Body, want)
+		}
+	}
+}
