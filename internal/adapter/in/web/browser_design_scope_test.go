@@ -1,6 +1,7 @@
 package web
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -15,6 +16,7 @@ import (
 	"github.com/chromedp/chromedp"
 
 	"operators-mcp/internal/domain"
+	"operators-mcp/internal/ports"
 )
 
 // scopedArtifactsAPI stands in for the server's artifact routes with scopes,
@@ -37,6 +39,36 @@ func scopedDTO(id, kind, title, path string, scope string, at time.Time) map[str
 		a["path"], a["url"], a["mime"], a["size_bytes"] = nil, "http://localhost:5173/", "", 0
 	}
 	return a
+}
+
+// seedReader lets the pages seed from the stand-in's list, as the real
+// server seeds from the store its API serves. Only listing is needed.
+type seedReader struct {
+	ports.ArtifactReader
+	api *scopedArtifactsAPI
+}
+
+func (r seedReader) ListArtifacts(_ context.Context, f ports.ArtifactFilter) ([]*domain.Artifact, error) {
+	r.api.mu.Lock()
+	defer r.api.mu.Unlock()
+	out := []*domain.Artifact{}
+	for _, dto := range r.api.list {
+		raw, err := json.Marshal(dto)
+		if err != nil {
+			return nil, err
+		}
+		var a domain.Artifact
+		if err := json.Unmarshal(raw, &a); err != nil {
+			return nil, err
+		}
+		attached := slices.Contains(a.AttachedTicketIDs, f.TicketID)
+		if (f.ProjectID != "" && a.ProjectID != f.ProjectID) || (f.Scope != "" && a.Scope != f.Scope) ||
+			(f.TicketID != "" && a.TicketID != f.TicketID && !attached) {
+			continue
+		}
+		out = append(out, &a)
+	}
+	return out, nil
 }
 
 func (a *scopedArtifactsAPI) find(id string) map[string]any {
@@ -148,6 +180,7 @@ func designServer(t *testing.T, api *scopedArtifactsAPI) *httptest.Server {
 			ID: "s1", ProjectID: "p1", TicketID: "t1", RepositoryID: "r1", Task: "design the pricing page", Mode: domain.SessionMode("design"),
 			Status: domain.SessionIdle, Interactive: true, RunsOn: domain.RunnerServer, UpdatedAt: now,
 		}}},
+		Artifacts: seedReader{api: api},
 	}, assets, nil)
 	mux := http.NewServeMux()
 	mux.Handle("/api/events", http.NotFoundHandler())
