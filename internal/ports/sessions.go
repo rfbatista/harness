@@ -42,6 +42,9 @@ type SessionRepository interface {
 	List(filter SessionFilter) []*domain.Session
 	// Delete removes the session and its event log.
 	Delete(id string) error
+	// ActivityByProject answers each project's live session count and newest
+	// session activity, for every project that has sessions.
+	ActivityByProject() (map[string]SessionActivity, error)
 	UpdateStatus(id string, status domain.SessionStatus) error
 	UpdateMetrics(id string, costUSD float64, inputTokens, outputTokens int, lastAction string, pendingApprovals int) error
 	// UpdateAutoRun records whether the session answers its own permission

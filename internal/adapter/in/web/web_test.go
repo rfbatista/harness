@@ -128,6 +128,14 @@ type world struct {
 	docs      fakeDocs
 	history   ports.RepositoryHistory
 	artifacts []*domain.Artifact
+	summaries fakeSummaries
+}
+
+// fakeSummaries counts like the projects context: nil leaves /projects unserved.
+type fakeSummaries []ports.ProjectSummary
+
+func (f fakeSummaries) ListProjectSummaries(context.Context) ([]ports.ProjectSummary, error) {
+	return f, nil
 }
 
 func newTestHandler(t *testing.T, w world) http.Handler {
@@ -150,6 +158,9 @@ func newTestHandler(t *testing.T, w world) http.Handler {
 	}
 	if w.artifacts != nil {
 		deps.Artifacts = fakeArtifacts{w.artifacts}
+	}
+	if w.summaries != nil {
+		deps.ProjectSummaries = w.summaries
 	}
 	return NewHandler(deps, builtAssets(t), fallback)
 }
@@ -419,6 +430,84 @@ func TestPagesLinkToProjectCreationAndRepositories(t *testing.T) {
 	w.repos = nil
 	if body := get(t, newTestHandler(t, w), "/projects/p1/tasks/t-feed").Body.String(); !strings.Contains(body, `href="/projects/p1/repositories"`) {
 		t.Error("a task page without repositories links to add one")
+	}
+}
+
+func TestProjectsPageListsEveryProjectWithItsCounts(t *testing.T) {
+	w := board()
+	at := now.Add(-2 * time.Minute)
+	w.summaries = fakeSummaries{
+		{Project: w.projects[0], RepositoryCount: 4, OpenTaskCount: 7, RunningSessionCount: 2, LastActivityAt: &at},
+		{Project: w.projects[1]},
+	}
+	rec := get(t, newTestHandler(t, w), "/projects")
+	body := rec.Body.String()
+	if rec.Code != http.StatusOK {
+		t.Fatalf("got %d:\n%s", rec.Code, body)
+	}
+	for _, want := range []string{
+		`<script id="projects-seed" type="application/json">`,
+		`"running_session_count":2`,
+		`href="/projects/p1"`,
+		`href="/projects/p1/settings"`,
+		`data-state="running">2 running<`,
+		`4 repos · 7 open tasks · active 2m ago`,
+		`2 projects · 2 sessions running`,
+		`href="/projects/new"`,                                          // New project, from the toolbar
+		`href="/projects" aria-current="page">Projects</a>`,             // the top bar marks the page
+		`<option value="" selected disabled>Choose a project…</option>`, // no project selected here
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("projects page is missing %q", want)
+		}
+	}
+	empty := world{summaries: fakeSummaries{}}
+	if body := get(t, newTestHandler(t, empty), "/projects").Body.String(); !strings.Contains(body, "No projects yet") || !strings.Contains(body, `{"summaries":[]}`) {
+		t.Error("without projects the page teaches what one is and seeds []")
+	}
+}
+
+func TestTopBarLeadsToTheProjectsListOnceItIsServed(t *testing.T) {
+	w := board()
+	w.summaries = fakeSummaries{}
+	body := get(t, newTestHandler(t, w), "/projects/p1").Body.String()
+	if !strings.Contains(body, `href="/projects">Projects</a>`) || strings.Contains(body, `href="/projects/new">New project</a>`) {
+		t.Error("the top bar links to the projects list, where New project lives, in place of New project")
+	}
+	if !strings.Contains(body, `href="/projects/p1/settings"`) {
+		t.Error("the project page links to its settings")
+	}
+	if rec := get(t, newTestHandler(t, board()), "/projects"); rec.Code == http.StatusOK && !strings.Contains(rec.Body.String(), "legacy designer") {
+		t.Error("without summaries /projects is not served")
+	}
+}
+
+func TestSettingsPageSeedsTheProject(t *testing.T) {
+	w := board()
+	w.projects[0].IgnoredPaths = []string{"node_modules"}
+	rec := get(t, newTestHandler(t, w), "/projects/p1/settings")
+	body := rec.Body.String()
+	if rec.Code != http.StatusOK {
+		t.Fatalf("got %d:\n%s", rec.Code, body)
+	}
+	for _, want := range []string{
+		`<script id="settings-seed" type="application/json">`,
+		`"ignored_paths":["node_modules"]`,
+		`value="coding_pool"`,
+		`>node_modules<`,
+		`href="/projects/p1/repositories"`,
+		`/projects/p1/repositories/r-harness/env`,
+		`data-tone="danger"`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("settings page is missing %q", want)
+		}
+	}
+	if strings.Contains(body, "not ours") {
+		t.Error("another project's repository is linked")
+	}
+	if rec := get(t, newTestHandler(t, board()), "/projects/nope/settings"); rec.Code != http.StatusNotFound {
+		t.Errorf("unknown project: %d", rec.Code)
 	}
 }
 

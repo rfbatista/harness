@@ -44,6 +44,9 @@ type Deps struct {
 	// Artifacts lists the design assets the task pages and the project's
 	// design library seed; nil seeds none.
 	Artifacts ports.ArtifactReader
+	// ProjectSummaries counts every project for the projects list; nil
+	// leaves /projects unserved and the top bar offers New project instead.
+	ProjectSummaries ports.ProjectSummaries
 	// Now defaults to time.Now.
 	Now func() time.Time
 }
@@ -66,7 +69,10 @@ func NewHandler(deps Deps, assets *Assets, fallback http.Handler) http.Handler {
 		Agents: deps.Agents, Repositories: deps.Repositories, Docs: deps.Documents, Artifacts: deps.Artifacts,
 		Layout: s.layout, Render: render, Now: deps.Now,
 	}
-	projectPages := projects.Handler{Projects: deps.Projects, Repositories: deps.Repositories, EnvFiles: deps.EnvFiles, Layout: s.layout, Render: render}
+	projectPages := projects.Handler{
+		Projects: deps.Projects, Repositories: deps.Repositories, EnvFiles: deps.EnvFiles, Summaries: deps.ProjectSummaries,
+		Layout: s.layout, Render: render, Now: deps.Now,
+	}
 	historyPages := history.Handler{
 		Projects: deps.Projects, Repositories: deps.Repositories, History: deps.History, Sessions: deps.Sessions, Tasks: deps.Tasks,
 		Layout: s.layout, Render: render, Now: deps.Now,
@@ -79,8 +85,12 @@ func NewHandler(deps Deps, assets *Assets, fallback http.Handler) http.Handler {
 	mux.Handle("GET /static/", assets.Handler())
 	mux.Handle("GET /{$}", s.page(homePage.Index))
 	mux.HandleFunc("GET /switch-project", switchProject)
+	if deps.ProjectSummaries != nil {
+		mux.Handle("GET /projects", s.page(projectPages.List))
+	}
 	mux.Handle("GET /projects/new", s.page(projectPages.New))
 	mux.Handle("GET /projects/{project}", s.page(taskPages.Project))
+	mux.Handle("GET /projects/{project}/settings", s.page(projectPages.Settings))
 	mux.Handle("GET /projects/{project}/repositories", s.page(projectPages.RepositoryList))
 	mux.Handle("GET /projects/{project}/repositories/{repository}/env", s.page(projectPages.EnvFileList))
 	mux.Handle("GET /projects/{project}/repositories/{repository}/history", s.page(historyPages.Page))
@@ -133,15 +143,18 @@ func switchProject(w http.ResponseWriter, r *http.Request) {
 // selected project's tasks on the rail with their live sessions.
 func (s *server) layout(ctx context.Context, title, projectID, taskID string) (shell.Frame, error) {
 	frame := s.bareFrame(title)
-	projects, err := s.deps.Projects.ListProjects(ctx)
+	all, err := s.deps.Projects.ListProjects(ctx)
 	if err != nil {
 		return shell.Frame{}, err
 	}
-	slices.SortFunc(projects, func(a, b *domain.Project) int {
+	slices.SortFunc(all, func(a, b *domain.Project) int {
 		return cmp.Compare(strings.ToLower(a.Name), strings.ToLower(b.Name))
 	})
 	frame.Top.Current = projectID
-	for _, p := range projects {
+	if s.deps.ProjectSummaries != nil {
+		frame.Top.ProjectsHref = projects.ListHref
+	}
+	for _, p := range all {
 		frame.Top.Projects = append(frame.Top.Projects, shell.Option{ID: p.ID, Name: p.Name})
 	}
 	if projectID == "" {

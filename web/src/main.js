@@ -33,7 +33,7 @@ registerShared(Alpine, { prefs: preferences() });
 const navigate = (url) => window.location.assign(url);
 const reload = () => window.location.reload();
 
-registerProjects(Alpine, { gateway: projectsGateway(api), navigate });
+registerProjects(Alpine, { gateway: projectsGateway(api, events), navigate, clock: systemClock });
 registerTasks(Alpine, { gateway: tasksGateway(api), rail: railGateway(api, events), navigate, reload });
 registerSessions(Alpine, {
   gateway: sessionsGateway(api, events),

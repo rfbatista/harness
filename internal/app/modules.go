@@ -194,7 +194,15 @@ func newCatalog(p catalogParams) catalog.Catalog {
 // PlanningModule provides the planning service (tickets and documents).
 var PlanningModule = fx.Module("planning",
 	fx.Provide(newPlanningService),
+	fx.Invoke(bindProjectActivity),
 )
+
+// bindProjectActivity lets the projects context read its projects' tasks and
+// sessions (summaries, the delete guard). The catalog is built before
+// planning and orchestration, so the read ports are bound late.
+func bindProjectActivity(cat catalog.Catalog, plan *planning.Service, orch *orchestration.Service) {
+	cat.Projects.UseActivity(plan, orch)
+}
 
 // newPlanningService builds the planning service and points its ticket
 // announcements at the orchestration, which owns the project feed the board

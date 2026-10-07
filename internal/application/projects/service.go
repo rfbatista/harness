@@ -6,9 +6,14 @@ package projects
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
+	"sync"
+	"time"
 
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
@@ -22,17 +27,33 @@ var (
 	_ ports.RepositoryDiscovery   = (*Service)(nil)
 	_ ports.RepositoryEnv         = (*Service)(nil)
 	_ ports.RepositoryRunCommands = (*Service)(nil)
+
+	_ ports.ProjectCatalogFeed = (*Service)(nil)
 )
 
 // Service implements the projects use cases.
 type Service struct {
 	projects     ports.ProjectRepository
-	repositories ports.RepositoryRepository // nil: repositories unavailable
-	events       ports.EventPublisher       // nil: deletes are not announced
-	finder       ports.RepositoryFinder     // nil: discovery unavailable
-	envFiles     ports.EnvFileRepository    // nil: env files unavailable
-	envIO        ports.EnvFileIO            // nil: importing from checkouts unavailable
-	runCommands  ports.RunCommandRepository // nil: saved run commands unavailable
+	repositories ports.RepositoryRepository  // nil: repositories unavailable
+	events       ports.EventPublisher        // nil: deletes are not announced
+	finder       ports.RepositoryFinder      // nil: discovery unavailable
+	envFiles     ports.EnvFileRepository     // nil: env files unavailable
+	envIO        ports.EnvFileIO             // nil: importing from checkouts unavailable
+	runCommands  ports.RunCommandRepository  // nil: saved run commands unavailable
+	tasks        ports.TaskActivityReader    // nil: summaries count no tasks
+	sessions     ports.SessionActivityReader // nil: no sessions counted, deletes not guarded
+
+	// mu serialises project writes, so a name is checked and taken at once
+	// and the feed announces changes in the order they were made.
+	mu   sync.Mutex
+	feed *feed
+}
+
+// UseActivity lets the context read the tasks and sessions of its projects:
+// summaries count them, and a project with live sessions is not deleted.
+// Planning and orchestration are built after the catalog, hence the setter.
+func (s *Service) UseActivity(tasks ports.TaskActivityReader, sessions ports.SessionActivityReader) {
+	s.tasks, s.sessions = tasks, sessions
 }
 
 // UseRunCommands lets the context keep repositories' saved run commands.
@@ -95,10 +116,13 @@ func resolveDir(dir string) (string, error) {
 
 // NewService returns the projects context.
 func NewService(projects ports.ProjectRepository, repositories ports.RepositoryRepository, events ports.EventPublisher) *Service {
-	return &Service{projects: projects, repositories: repositories, events: events}
+	return &Service{projects: projects, repositories: repositories, events: events, feed: newFeed()}
 }
 
-var errProjectNotFound = &domain.StructuredError{Code: "PROJECT_NOT_FOUND", Message: "project not found"}
+var (
+	errProjectNotFound  = &domain.StructuredError{Code: "PROJECT_NOT_FOUND", Message: "project not found"}
+	errProjectIDMissing = &domain.StructuredError{Code: "INVALID_INPUT", Message: "project_id is required"}
+)
 
 // ListProjects returns all projects.
 func (s *Service) ListProjects(_ context.Context) ([]*domain.Project, error) {
@@ -114,21 +138,113 @@ func (s *Service) GetProject(_ context.Context, projectID string) (*domain.Proje
 	return p, nil
 }
 
-// CreateProject creates a project with the given name and root directory.
+// CreateProject creates a project. The name is trimmed and must be unused
+// (case-insensitive); the root must be an existing directory, "~" expanded,
+// and is stored cleaned.
 func (s *Service) CreateProject(_ context.Context, name, rootDir string) (*domain.Project, error) {
-	return s.projects.Create(name, rootDir)
+	name, err := domain.CleanProjectName(name)
+	if err != nil {
+		return nil, err
+	}
+	root, err := resolveProjectRoot(rootDir)
+	if err != nil {
+		return nil, err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err := s.nameFree(name, ""); err != nil {
+		return nil, err
+	}
+	return s.announced(s.projects.Create(name, root))
 }
 
-// UpdateProject updates an existing project.
+// UpdateProject renames and/or re-points a project; an empty field keeps its
+// value. The create rules apply only to a field that changes, so a project
+// stored before them (a colliding name, a root that is gone) can still have
+// its other field edited.
 func (s *Service) UpdateProject(_ context.Context, projectID, name, rootDir string) (*domain.Project, error) {
-	return s.projects.Update(projectID, name, rootDir)
+	if projectID == "" {
+		return nil, errProjectIDMissing
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	cur := s.projects.Get(projectID)
+	if cur == nil {
+		return nil, errProjectNotFound
+	}
+	name = strings.TrimSpace(name)
+	if name != "" && !domain.SameProjectName(name, cur.Name) {
+		if err := s.nameFree(name, projectID); err != nil {
+			return nil, err
+		}
+	}
+	rootDir = strings.TrimSpace(rootDir)
+	if rootDir == cur.RootDir {
+		rootDir = ""
+	}
+	if rootDir != "" {
+		root, err := resolveProjectRoot(rootDir)
+		if err != nil {
+			return nil, err
+		}
+		rootDir = root
+	}
+	return s.announced(s.projects.Update(projectID, name, rootDir))
+}
+
+// nameFree is PROJECT_NAME_TAKEN when a project other than exceptID already
+// has name.
+func (s *Service) nameFree(name, exceptID string) error {
+	for _, p := range s.projects.List() {
+		if p.ID != exceptID && domain.SameProjectName(p.Name, name) {
+			return &domain.StructuredError{Code: "PROJECT_NAME_TAKEN", Message: "another project is already called " + p.Name}
+		}
+	}
+	return nil
+}
+
+// resolveProjectRoot is resolveDir answering PROJECT_ROOT_INVALID.
+func resolveProjectRoot(dir string) (string, error) {
+	root, err := resolveDir(dir)
+	if err != nil {
+		var se *domain.StructuredError
+		if errors.As(err, &se) {
+			return "", &domain.StructuredError{Code: "PROJECT_ROOT_INVALID", Message: se.Message}
+		}
+		return "", err
+	}
+	return root, nil
 }
 
 // DeleteProject deletes a project and its repositories, then announces
-// ProjectDeleted so other contexts remove what they scoped to it.
+// ProjectDeleted so other contexts remove what they scoped to it. A project
+// with live sessions is not deleted: PROJECT_HAS_RUNNING_SESSIONS names them.
 func (s *Service) DeleteProject(ctx context.Context, projectID string) error {
-	if s.projects.Get(projectID) == nil {
+	if projectID == "" {
+		return errProjectIDMissing
+	}
+	if err := s.deleteProject(ctx, projectID); err != nil {
+		return err
+	}
+	if s.events == nil {
+		return nil
+	}
+	// Published outside the write lock: subscribers run synchronously and may
+	// call back into this context.
+	return s.events.Publish(ctx, domain.ProjectDeleted{ProjectID: projectID})
+}
+
+// deleteProject removes the project and its repositories, under the write
+// lock, unless sessions of it are live.
+func (s *Service) deleteProject(ctx context.Context, projectID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	p := s.projects.Get(projectID)
+	if p == nil {
 		return errProjectNotFound
+	}
+	if err := s.refuseRunningSessions(ctx, p); err != nil {
+		return err
 	}
 	if s.repositories != nil {
 		for _, r := range s.repositories.ListByProject(projectID) {
@@ -143,20 +259,130 @@ func (s *Service) DeleteProject(ctx context.Context, projectID string) error {
 	if err := s.projects.Delete(projectID); err != nil {
 		return err
 	}
-	if s.events == nil {
+	s.feed.announce(ports.ProjectCatalogChange{Project: &domain.Project{ID: projectID}, Deleted: true})
+	return nil
+}
+
+// refuseRunningSessions is PROJECT_HAS_RUNNING_SESSIONS, naming them, when p
+// has live sessions. The message carries the code and the sessions because
+// MCP clients see only the message.
+func (s *Service) refuseRunningSessions(ctx context.Context, p *domain.Project) error {
+	if s.sessions == nil {
 		return nil
 	}
-	return s.events.Publish(ctx, domain.ProjectDeleted{ProjectID: projectID})
+	live, err := s.sessions.LiveProjectSessions(ctx, p.ID)
+	if err != nil || len(live) == 0 {
+		return err
+	}
+	names := make([]string, len(live))
+	for i, r := range live {
+		names[i] = r.ID
+		if r.TicketID != "" {
+			names[i] += " on task " + r.TicketID
+		}
+		if r.Agent != "" {
+			names[i] += " by " + r.Agent
+		}
+	}
+	noun := "sessions"
+	if len(live) == 1 {
+		noun = "session"
+	}
+	return &domain.DetailedError{
+		StructuredError: &domain.StructuredError{
+			Code: "PROJECT_HAS_RUNNING_SESSIONS",
+			Message: fmt.Sprintf("PROJECT_HAS_RUNNING_SESSIONS: project %q has %d running %s (%s); stop them first",
+				p.Name, len(live), noun, strings.Join(names, ", ")),
+		},
+		Details: map[string]any{"sessions": live},
+	}
+}
+
+// FollowProjects delivers each project created, updated or deleted until ctx
+// ends.
+func (s *Service) FollowProjects(ctx context.Context) (<-chan ports.ProjectCatalogChange, error) {
+	return s.feed.follow(ctx), nil
+}
+
+// ListProjectSummaries returns every project with its repository, open task
+// and live session counts and its last activity, sorted by name.
+func (s *Service) ListProjectSummaries(ctx context.Context) ([]ports.ProjectSummary, error) {
+	repos := map[string]int{}
+	if s.repositories != nil {
+		var err error
+		if repos, err = s.repositories.CountByProject(); err != nil {
+			return nil, err
+		}
+	}
+	var tasks map[string]ports.TaskActivity
+	if s.tasks != nil {
+		var err error
+		if tasks, err = s.tasks.TaskActivityByProject(ctx); err != nil {
+			return nil, err
+		}
+	}
+	var sessions map[string]ports.SessionActivity
+	if s.sessions != nil {
+		var err error
+		if sessions, err = s.sessions.SessionActivityByProject(ctx); err != nil {
+			return nil, err
+		}
+	}
+	list := s.projects.List()
+	out := make([]ports.ProjectSummary, 0, len(list))
+	for _, p := range list {
+		t, se := tasks[p.ID], sessions[p.ID]
+		out = append(out, ports.ProjectSummary{
+			Project:             p,
+			RepositoryCount:     repos[p.ID],
+			OpenTaskCount:       t.OpenCount,
+			RunningSessionCount: se.LiveCount,
+			LastActivityAt:      newest(t.LastUpdatedAt, se.LastActivityAt),
+		})
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		a, b := strings.ToLower(out[i].Project.Name), strings.ToLower(out[j].Project.Name)
+		if a != b {
+			return a < b
+		}
+		return out[i].Project.ID < out[j].Project.ID
+	})
+	return out, nil
+}
+
+// newest is the later of two times, nil when both are zero.
+func newest(a, b time.Time) *time.Time {
+	if b.After(a) {
+		a = b
+	}
+	if a.IsZero() {
+		return nil
+	}
+	return &a
 }
 
 // AddIgnoredPath adds a path to the project's ignored list (hidden in tree view).
 func (s *Service) AddIgnoredPath(_ context.Context, projectID, path string) (*domain.Project, error) {
-	return s.projects.AddIgnoredPath(projectID, path)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.announced(s.projects.AddIgnoredPath(projectID, path))
 }
 
 // RemoveIgnoredPath removes a path from the project's ignored list.
 func (s *Service) RemoveIgnoredPath(_ context.Context, projectID, path string) (*domain.Project, error) {
-	return s.projects.RemoveIgnoredPath(projectID, path)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.announced(s.projects.RemoveIgnoredPath(projectID, path))
+}
+
+// announced puts a written project on the feed and passes the write's result
+// through.
+func (s *Service) announced(p *domain.Project, err error) (*domain.Project, error) {
+	if err != nil {
+		return nil, err
+	}
+	s.feed.announce(ports.ProjectCatalogChange{Project: p})
+	return p, nil
 }
 
 // --- Repositories ---

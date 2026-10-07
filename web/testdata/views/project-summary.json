@@ -1,0 +1,16 @@
+{
+  "$comment": "How a project summary reads on the projects list. Read by the BFF's internal/adapter/in/web/projects/list_test.go (first paint) and web/src/modules/projects/presentation/view.test.js (live), so both agree. minutes_ago is how long before now the project's last activity was; null when there was none.",
+  "cases": [
+    { "repository_count": 0, "open_task_count": 0, "running_session_count": 0, "minutes_ago": null, "state": "idle", "word": "idle", "meta": "no repos · no open tasks · no activity" },
+    { "repository_count": 1, "open_task_count": 1, "running_session_count": 1, "minutes_ago": 0, "state": "running", "word": "1 running", "meta": "1 repo · 1 open task · active now" },
+    { "repository_count": 4, "open_task_count": 7, "running_session_count": 2, "minutes_ago": 2, "state": "running", "word": "2 running", "meta": "4 repos · 7 open tasks · active 2m ago" },
+    { "repository_count": 1, "open_task_count": 12, "running_session_count": 0, "minutes_ago": 180, "state": "idle", "word": "idle", "meta": "1 repo · 12 open tasks · active 3h ago" },
+    { "repository_count": 3, "open_task_count": 0, "running_session_count": 0, "minutes_ago": 4320, "state": "idle", "word": "idle", "meta": "3 repos · no open tasks · active 3d ago" }
+  ],
+  "totals": [
+    { "projects": 0, "running": 0, "line": "no projects" },
+    { "projects": 1, "running": 0, "line": "1 project" },
+    { "projects": 4, "running": 3, "line": "4 projects · 3 sessions running" },
+    { "projects": 2, "running": 1, "line": "2 projects · 1 session running" }
+  ]
+}

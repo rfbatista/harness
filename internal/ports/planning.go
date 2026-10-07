@@ -14,6 +14,9 @@ type TicketRepository interface {
 	Create(projectID, title, description string, status domain.TicketStatus) (*domain.Ticket, error)
 	Update(id, title, description string, status domain.TicketStatus) (*domain.Ticket, error)
 	Delete(id string) error
+	// ActivityByProject answers each project's open task count and newest
+	// update, for every project that has tasks.
+	ActivityByProject() (map[string]TaskActivity, error)
 }
 
 // DocumentRepository is the outbound port for persisting and retrieving documents.

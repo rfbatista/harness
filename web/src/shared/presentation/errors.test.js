@@ -15,3 +15,11 @@ test("a resume refusal says what to do next", () => {
 test("an unknown code falls back to the server log", () => {
   assert.equal(describeError(new Error("boom")).next, "retry, or check the server log");
 });
+
+test("project management refusals say what to do next", () => {
+  for (const code of [Codes.PROJECT_NAME_TAKEN, Codes.PROJECT_ROOT_INVALID, Codes.PROJECT_HAS_RUNNING_SESSIONS]) {
+    const view = describeError(new StructuredError(code, "refused", 409));
+    assert.equal(view.code, code);
+    assert.ok(view.next !== "retry, or check the server log", `${code} has its own next step`);
+  }
+});

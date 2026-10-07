@@ -1,6 +1,7 @@
 /*
  * Pane — a bounded region inside a screen (inspector, detail). Never nested.
  * <section class="pane"><header>…</header><div class="content">…</div></section>
+ * Exception: data-tone="danger" (a danger zone: actions that cannot be undone).
  */
 
 @layer blocks {
@@ -30,6 +31,12 @@
       min-block-size: 0;
       overflow: auto;
       padding: var(--space-m);
+    }
+
+    &[data-tone="danger"] {
+      border-color: var(--color-danger);
+
+      & > header { color: var(--color-danger); }
     }
   }
 }

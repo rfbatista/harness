@@ -29,6 +29,9 @@ type RepositoryRepository interface {
 	Update(id, name, description, url, rootDir string) (*domain.Repository, error)
 	Delete(id string) error
 	DeleteByProject(projectID string) error
+	// CountByProject counts repositories per project id; projects with none
+	// are absent.
+	CountByProject() (map[string]int, error)
 	AddIgnoredPath(repositoryID, path string) (*domain.Repository, error)
 	RemoveIgnoredPath(repositoryID, path string) (*domain.Repository, error)
 }

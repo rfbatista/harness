@@ -32,6 +32,14 @@
       white-space: nowrap;
     }
 
+    /* A row that is not a link itself names its target with one. */
+    & a.title {
+      color: var(--color-ink);
+      text-decoration: none;
+
+      &:hover { text-decoration: underline; }
+    }
+
     & .meta {
       display: flex;
       align-items: center;

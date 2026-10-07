@@ -40,8 +40,11 @@ templ AppShell(f Frame) {
 	}
 }
 
-// topBar holds the project picker. It is a GET form, so it works without
-// JavaScript; projectPicker submits it as soon as the choice changes.
+// topBar holds the project picker and the way to every project: the
+// projects list, where New project lives, or New project itself where the
+// list is not served. The picker is
+// a GET form, so it works without JavaScript; projectPicker submits it as
+// soon as the choice changes.
 templ topBar(t TopBar) {
 	<header class="[ topbar ]">
 		<a class="[ brand ]" href="/">harness</a>
@@ -59,7 +62,11 @@ templ topBar(t TopBar) {
 				<noscript><button type="submit" class="[ button ]" data-size="sm">Open</button></noscript>
 			</form>
 		}
-		<a class="[ button ]" data-variant="ghost" data-size="sm" href="/projects/new">New project</a>
+		if t.ProjectsHref != "" {
+			<a class="[ button ]" data-variant="ghost" data-size="sm" href={ templ.SafeURL(t.ProjectsHref) } { currentAttrs(t.OnProjects)... }>Projects</a>
+		} else {
+			<a class="[ button ]" data-variant="ghost" data-size="sm" href="/projects/new">New project</a>
+		}
 	</header>
 }
 

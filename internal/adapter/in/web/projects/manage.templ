@@ -1,0 +1,258 @@
+package projects
+
+import (
+	"operators-mcp/internal/adapter/in/web/components"
+	"operators-mcp/internal/adapter/in/web/shell"
+)
+
+// ListPage is every project at a glance: whether agents work there now,
+// its repositories, open tasks and last activity. The server renders the
+// first paint inside [data-ssr]; projectsListPage renders the same rows
+// live (web/src/modules/projects/presentation/pages/projectsPage.js).
+templ ListPage(v ListView) {
+	@shell.AppShell(v.Frame) {
+		<main class="[ frame ]" x-data="projectsListPage" data-seed="projects-seed" x-on:keydown.window="key" x-on:visibilitychange.document="onVisibility">
+			@templ.JSONScript("projects-seed", v.Seed)
+			<header class="[ toolbar ]">
+				<h1>Projects</h1>
+				<div class="[ actions ]">
+					<a class="[ button ]" data-size="sm" href="/projects/new">New project</a>
+				</div>
+			</header>
+			<div data-scroll>
+				<div class="[ wrapper flow ] [ region ]" style="--wrapper-max: 56rem">
+					@errorBanner()
+					<div x-ignore data-ssr class="[ flow ]">
+						if len(v.Rows) == 0 {
+							@noProjects()
+						} else {
+							<section class="[ pane ]" aria-label="Projects">
+								for _, r := range v.Rows {
+									@summaryRow(r)
+								}
+							</section>
+							<p class="[ text-sm color-ink-faint ]">{ v.Total }</p>
+						}
+					</div>
+					<template x-if="showList">
+						<div class="[ flow ]">
+							<div class="[ field ]">
+								<label class="[ visually-hidden ]" for="projects-filter">Filter projects</label>
+								<input id="projects-filter" type="search" placeholder="Filter by name or directory  /" autocomplete="off" x-ref="filter" x-model="query" x-on:input="filtered" x-on:keydown.escape.prevent="clearFilter"/>
+							</div>
+							<section class="[ pane ]" aria-label="Projects">
+								<template x-for="r in rows" x-bind:key="r.id">
+									<div class="[ row ]" style="--row-columns: minmax(0, 1fr) auto" x-bind:data-project-id="r.id" x-bind:aria-selected="r.selected" x-bind:data-fresh="r.fresh" x-on:mouseenter="select(r.id)">
+										<span class="[ flow ] [ flow-space-3xs pad-block-xs ]" style="min-inline-size: 0">
+											<span class="[ cluster ] [ gutter-s ]">
+												<a class="[ title ] [ weight-medium ]" x-bind:href="r.href" x-text="r.name"></a>
+												<span class="[ status ]" x-bind:data-state="r.state" x-text="r.word"></span>
+											</span>
+											<span class="[ text-sm color-ink-muted ]" x-text="r.meta"></span>
+											<span class="[ truncate ] [ font-mono text-xs color-ink-faint ]" x-text="r.rootDir"></span>
+										</span>
+										<a class="[ button ]" data-variant="ghost" data-size="sm" x-bind:href="r.settingsHref" x-bind:aria-label="r.settingsLabel">Settings</a>
+									</div>
+								</template>
+								<template x-if="noMatch">
+									<p class="[ text-sm color-ink-faint ] [ region ]" style="padding: var(--space-m) var(--space-l)">No project matches the filter. Esc clears it.</p>
+								</template>
+							</section>
+							<p class="[ text-sm color-ink-faint ]" x-text="total"></p>
+						</div>
+					</template>
+					<template x-if="showEmpty">
+						@noProjects()
+					</template>
+				</div>
+			</div>
+		</main>
+	}
+}
+
+templ noProjects() {
+	@components.Empty("No projects yet", "A project is a directory the harness works on, usually holding several git repositories. Create one to give agents tasks there.")
+}
+
+// summaryRow is one project on the list, server-rendered: its name opens
+// it, Settings its settings.
+templ summaryRow(r SummaryRow) {
+	<div class="[ row ]" style="--row-columns: minmax(0, 1fr) auto" data-project-id={ r.ID }>
+		<span class="[ flow ] [ flow-space-3xs pad-block-xs ]" style="min-inline-size: 0">
+			<span class="[ cluster ] [ gutter-s ]">
+				<a class="[ title ] [ weight-medium ]" href={ templ.SafeURL(r.Href) }>{ r.Name }</a>
+				<span class="[ status ]" data-state={ r.State }>{ r.Word }</span>
+			</span>
+			<span class="[ text-sm color-ink-muted ]">{ r.Meta }</span>
+			<span class="[ truncate ] [ font-mono text-xs color-ink-faint ]">{ r.RootDir }</span>
+		</span>
+		<a class="[ button ]" data-variant="ghost" data-size="sm" href={ templ.SafeURL(r.SettingsHref) } aria-label={ "Settings of " + r.Name }>Settings</a>
+	</div>
+}
+
+// errorBanner shows the component's coded error: what happened, the code,
+// what to do next.
+templ errorBanner() {
+	<template x-if="error">
+		<div class="[ banner ]" data-tone="danger" role="alert">
+			<div class="[ flow ] [ flow-space-3xs grow ]">
+				<span x-text="error.message"></span>
+				<span class="[ code ]"><span x-text="error.code"></span> · <span x-text="error.next"></span></span>
+			</div>
+			<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-on:click="dismissError">Dismiss</button>
+		</div>
+	</template>
+}
+
+// fieldError is a coded error under one field, tied to it by id.
+templ fieldError(id, prop string) {
+	<template x-if={ prop }>
+		<span class="[ error ]" id={ id }><span x-text={ prop + ".message" }></span> <span class="[ font-mono ]" x-text={ prop + ".code" }></span> · <span x-text={ prop + ".next" }></span></span>
+	</template>
+}
+
+// SettingsPage renames, re-points, tunes or deletes one project
+// (projectsSettingsPage, web/src/modules/projects/presentation/pages/settingsPage.js).
+templ SettingsPage(v SettingsView) {
+	@shell.AppShell(v.Frame) {
+		<main class="[ frame ]" x-data="projectsSettingsPage" data-seed="settings-seed">
+			@templ.JSONScript("settings-seed", v.Seed)
+			<header class="[ toolbar ]">
+				<a class="[ crumb ]" href={ templ.SafeURL("/projects/" + v.Project.ID) } x-text="crumb">{ v.Project.Name } /</a>
+				<h1>Settings</h1>
+			</header>
+			<div data-scroll>
+				<div class="[ wrapper flow ] [ region ]" style="--wrapper-max: 44rem">
+					@errorBanner()
+					<template x-if="deletedElsewhere">
+						<div class="[ banner ]" data-tone="attention" role="alert">
+							<span>This project was deleted elsewhere. <a href="/projects">Back to the projects</a></span>
+						</div>
+					</template>
+					<form class="[ flow ] [ flow-space-m ]" aria-labelledby="settings-general" x-on:submit.prevent="save" x-on:keydown.meta.enter.prevent="save" x-on:keydown.ctrl.enter.prevent="save">
+						<h2 id="settings-general">General</h2>
+						<div class="[ field ]">
+							<label for="project-name">Name</label>
+							<input id="project-name" name="name" autocomplete="off" value={ v.Project.Name } x-model="name" x-on:keydown.escape="resetGeneral" x-bind:aria-invalid="nameInvalid" x-bind:aria-describedby="nameDescribedBy"/>
+							@fieldError("project-name-error", "nameError")
+						</div>
+						<div class="[ field ]">
+							<label for="project-root">Directory</label>
+							<input id="project-root" name="root_dir" class="[ font-mono text-sm ]" autocomplete="off" value={ v.Project.RootDir } x-model="rootDir" x-on:keydown.escape="resetGeneral" x-bind:aria-invalid="rootInvalid" x-bind:aria-describedby="rootDescribedBy"/>
+							<template x-if="rootProblem">
+								<span class="[ error ]" x-text="rootProblem"></span>
+							</template>
+							@fieldError("project-root-error", "rootError")
+							<span class="[ hint ]" id="project-root-hint">The absolute path of the project's directory on the machine the server runs on (~ is its user's home). Running sessions keep their worktrees.</span>
+						</div>
+						<div class="[ cluster ]">
+							<button type="submit" class="[ button ]" data-variant="primary" disabled x-bind:disabled="cannotSave" x-bind:aria-busy="saving">Save changes</button>
+							<button type="button" class="[ button ]" data-variant="ghost" x-show="isDirty" style="display: none" x-on:click="resetGeneral">Undo</button>
+							<span class="[ text-sm color-ink-muted ]" role="status" x-text="notice"></span>
+						</div>
+					</form>
+
+					<section class="[ flow ] [ flow-space-m ]" aria-labelledby="settings-ignored">
+						<h2 id="settings-ignored">Ignored paths</h2>
+						<p class="[ text-sm color-ink-muted ]">Hidden from the project's file tree, with everything inside them. Relative to the project's directory.</p>
+						<div x-ignore data-ssr>
+							if len(v.Project.IgnoredPaths) == 0 {
+								<p class="[ text-sm color-ink-faint ]">No ignored paths.</p>
+							} else {
+								<div class="[ pane ]">
+									for _, p := range v.Project.IgnoredPaths {
+										<div class="[ row ]" style="--row-columns: minmax(0, 1fr)">
+											<span class="[ title ] [ font-mono text-sm ]">{ p }</span>
+										</div>
+									}
+								</div>
+							}
+						</div>
+						<template x-if="noIgnored">
+							<p class="[ text-sm color-ink-faint ]">No ignored paths.</p>
+						</template>
+						<template x-if="hasIgnored">
+							<div class="[ pane ]" aria-label="Ignored paths">
+								<template x-for="p in ignoredRows" x-bind:key="p.path">
+									<div class="[ row ]" style="--row-columns: minmax(0, 1fr) auto">
+										<span class="[ title ] [ font-mono text-sm ]" x-text="p.path"></span>
+										<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-bind:aria-label="p.removeLabel" x-bind:aria-busy="p.removing" x-on:click="removeIgnored(p.path)">Remove</button>
+									</div>
+								</template>
+							</div>
+						</template>
+						<form class="[ cluster ] [ gutter-xs ]" x-on:submit.prevent="addIgnored">
+							<label class="[ visually-hidden ]" for="ignored-path">Path to ignore</label>
+							<input id="ignored-path" class="[ grow ] [ font-mono text-sm ]" style="flex: 1 1 10rem" placeholder="dist" autocomplete="off" x-model="ignoredPath" x-bind:aria-invalid="ignoredInvalid" x-bind:aria-describedby="ignoredDescribedBy"/>
+							<button type="submit" class="[ button ]" disabled x-bind:disabled="cannotAddPath" x-bind:aria-busy="addingPath">Add path</button>
+						</form>
+						<template x-if="ignoredError">
+							<span class="[ error ] [ text-sm ]" id="ignored-path-error"><span x-text="ignoredError.message"></span><template x-if="ignoredError.code"><span> <span class="[ font-mono ]" x-text="ignoredError.code"></span> · <span x-text="ignoredError.next"></span></span></template></span>
+						</template>
+					</section>
+
+					<section class="[ flow ] [ flow-space-s ]" aria-labelledby="settings-repositories">
+						<h2 id="settings-repositories">Repositories and env files</h2>
+						<div class="[ pane ]">
+							<a class="[ row ]" href={ templ.SafeURL(v.RepositoriesHref) } style="--row-columns: minmax(0, 1fr) auto">
+								<span class="[ title ]">Repositories</span>
+								<span class="[ meta ]">{ countOrNone(len(v.Repositories), "repository", "repositories") } →</span>
+							</a>
+							for _, r := range v.Repositories {
+								<a class="[ row ]" href={ templ.SafeURL(r.EnvHref) } style="--row-columns: minmax(0, 1fr) auto">
+									<span class="[ title ]">Env files of { r.Name }</span>
+									<span class="[ meta ]">→</span>
+								</a>
+							}
+						</div>
+					</section>
+
+					@dangerZone(v)
+				</div>
+			</div>
+		</main>
+	}
+}
+
+// dangerZone deletes the project once its name is typed; a refusal lists
+// the sessions still running, linked to their tasks.
+templ dangerZone(v SettingsView) {
+	<section class="[ pane ]" data-tone="danger" aria-labelledby="settings-danger">
+		<header><span id="settings-danger">Danger zone</span></header>
+		<div class="[ flow ] [ flow-space-s ]" style="padding: var(--space-l)">
+			<p class="[ text-sm ]">Deleting <b x-text="project.name">{ v.Project.Name }</b> removes its tasks, documents, design assets and session history from the harness. Files on disk stay. This cannot be undone.</p>
+			<template x-if="refusal">
+				<div class="[ banner ]" data-tone="danger" role="alert">
+					<div class="[ flow ] [ flow-space-2xs grow ]">
+						<span x-text="refusal.message"></span>
+						<span class="[ code ]"><span x-text="refusal.code"></span> · <span x-text="refusal.next"></span></span>
+						<ul class="[ flow ] [ flow-space-3xs ]" style="padding-inline-start: 1rem">
+							<template x-for="s in refusal.sessions" x-bind:key="s.id">
+								<li>
+									<template x-if="s.href"><a x-bind:href="s.href" x-text="s.label"></a></template>
+									<template x-if="!s.href"><span x-text="s.label"></span></template>
+									<span class="[ color-ink-faint ]" x-text="s.detail"></span>
+								</li>
+							</template>
+						</ul>
+					</div>
+				</div>
+			</template>
+			<template x-if="!confirmingDelete">
+				<div><button type="button" class="[ button ]" data-variant="danger" disabled x-bind:disabled="cannotAskDelete" x-on:click="askDelete">Delete project…</button></div>
+			</template>
+			<template x-if="confirmingDelete">
+				<form class="[ flow ] [ flow-space-s ]" x-on:submit.prevent="deleteProject" x-on:keydown.escape="cancelDelete">
+					<div class="[ field ]">
+						<label for="confirm-name">Type <span class="[ font-mono ]" x-text="project.name"></span> to confirm</label>
+						<input id="confirm-name" class="[ font-mono text-sm ]" autocomplete="off" spellcheck="false" x-ref="confirmName" x-model="typedName"/>
+					</div>
+					<div class="[ cluster ]">
+						<button type="submit" class="[ button ]" data-variant="danger" x-bind:disabled="!canDelete" x-bind:aria-busy="deleting">Delete <span x-text="project.name"></span></button>
+						<button type="button" class="[ button ]" data-variant="ghost" x-on:click="cancelDelete">Keep it</button>
+					</div>
+				</form>
+			</template>
+		</div>
+	</section>
+}

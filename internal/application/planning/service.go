@@ -15,7 +15,10 @@ import (
 )
 
 // Service satisfies every driving port of this package, checked at compile time.
-var _ ports.Planning = (*Service)(nil)
+var (
+	_ ports.Planning           = (*Service)(nil)
+	_ ports.TaskActivityReader = (*Service)(nil)
+)
 
 // Service implements ticket/document use-cases over the outbound ports.
 type Service struct {
@@ -310,4 +313,10 @@ func (s *Service) ListDocumentTickets(documentID string) []*domain.Ticket {
 		}
 	}
 	return out
+}
+
+// TaskActivityByProject answers each project's open task count and newest
+// task update: what a project summary shows.
+func (s *Service) TaskActivityByProject(_ context.Context) (map[string]ports.TaskActivity, error) {
+	return s.tickets.ActivityByProject()
 }

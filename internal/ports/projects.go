@@ -2,6 +2,7 @@ package ports
 
 import (
 	"context"
+	"time"
 
 	"operators-mcp/internal/domain"
 )
@@ -143,5 +144,78 @@ type RepositoryReader interface {
 // Projects is the whole projects context.
 type Projects interface {
 	ProjectCatalog
+	ProjectSummaries
 	RepositoryCatalog
+}
+
+// ProjectSummary is one project at a glance: what the projects screen lists.
+// Counts are a snapshot at answer time.
+type ProjectSummary struct {
+	Project         *domain.Project
+	RepositoryCount int
+	// OpenTaskCount counts the project's tasks that are not done.
+	OpenTaskCount int
+	// RunningSessionCount counts its live sessions (not done, failed or
+	// stopped).
+	RunningSessionCount int
+	// LastActivityAt is the newest task update or session activity; nil when
+	// the project has neither.
+	LastActivityAt *time.Time
+}
+
+// ProjectSummaries lists every project at a glance, in one call. It is
+// network-safe: tui-client implements it over HTTP.
+type ProjectSummaries interface {
+	// ListProjectSummaries is sorted by name (case-insensitive), then id;
+	// never nil.
+	ListProjectSummaries(ctx context.Context) ([]ProjectSummary, error)
+}
+
+// ProjectCatalogChange is one change to the set of projects: a project
+// created or updated (its ignored paths included), or deleted.
+type ProjectCatalogChange struct {
+	Project *domain.Project
+	Deleted bool
+}
+
+// ProjectCatalogFeed follows the set of projects as it changes.
+type ProjectCatalogFeed interface {
+	// FollowProjects delivers each change, in the order the writes happened,
+	// until ctx ends. The channel closes when ctx ends or when the follower
+	// fell behind; the client then reloads and follows again.
+	FollowProjects(ctx context.Context) (<-chan ProjectCatalogChange, error)
+}
+
+// TaskActivity is a project's tasks at a glance.
+type TaskActivity struct {
+	// OpenCount counts the tasks that are not done.
+	OpenCount int
+	// LastUpdatedAt is the newest task update.
+	LastUpdatedAt time.Time
+}
+
+// TaskActivityReader is what the projects context reads about tasks.
+// Planning implements it.
+type TaskActivityReader interface {
+	// TaskActivityByProject answers for every project that has tasks, keyed
+	// by project id.
+	TaskActivityByProject(ctx context.Context) (map[string]TaskActivity, error)
+}
+
+// SessionActivity is a project's sessions at a glance.
+type SessionActivity struct {
+	// LiveCount counts the sessions that are not done, failed or stopped.
+	LiveCount int
+	// LastActivityAt is the newest session activity.
+	LastActivityAt time.Time
+}
+
+// SessionActivityReader is what the projects context reads about sessions.
+// Orchestration implements it.
+type SessionActivityReader interface {
+	// SessionActivityByProject answers for every project that has sessions,
+	// keyed by project id.
+	SessionActivityByProject(ctx context.Context) (map[string]SessionActivity, error)
+	// LiveProjectSessions names the project's live sessions.
+	LiveProjectSessions(ctx context.Context, projectID string) ([]domain.ProjectSessionRef, error)
 }

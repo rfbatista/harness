@@ -41,8 +41,8 @@ func ProjectTools(bpSvc ports.ProjectCatalog) []domain.Tool {
 		},
 		{
 			Name:        "create_project",
-			Description: "Create a project with a name and root directory. The root is the base path for list_tree, list_matching_paths, and zones.",
-			InputSchema: schemaFromJSON(`{"type":"object","properties":{"name":{"type":"string","description":"Project name"},"root_dir":{"type":"string","description":"Root directory path"}},"required":["root_dir"]}`),
+			Description: "Create a project with a name (unique, case-insensitive) and an existing root directory. The root is the base path for list_tree, list_matching_paths, and zones.",
+			InputSchema: schemaFromJSON(`{"type":"object","properties":{"name":{"type":"string","description":"Project name"},"root_dir":{"type":"string","description":"Root directory path: absolute, or starting with ~/; it must exist"}},"required":["name","root_dir"]}`),
 			Source:      "code",
 			Handler: func(ctx context.Context, args map[string]any) (any, error) {
 				rootDir := getString(args, "root_dir", "")
@@ -78,7 +78,7 @@ func ProjectTools(bpSvc ports.ProjectCatalog) []domain.Tool {
 		},
 		{
 			Name:        "delete_project",
-			Description: "Delete a project by id. All zones belonging to the project are also deleted.",
+			Description: "Delete a project by id. All zones belonging to the project are also deleted. Refused with PROJECT_HAS_RUNNING_SESSIONS while any of its sessions is live.",
 			InputSchema: schemaFromJSON(`{"type":"object","properties":{"project_id":{"type":"string","description":"Project ID"}},"required":["project_id"]}`),
 			Source:      "code",
 			Handler: func(ctx context.Context, args map[string]any) (any, error) {

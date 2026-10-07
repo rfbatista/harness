@@ -31,6 +31,8 @@ func NewRouter(h *Handler, opts ...Option) *echo.Echo {
 
 	// projects
 	g.GET("/list_projects", h.handleListProjects)
+	g.GET("/list_project_summaries", h.handleListProjectSummaries)
+	g.GET("/project_events", h.handleProjectEvents) // the set of projects as it changes (SSE)
 	g.GET("/get_project", h.handleGetProject)
 	g.POST("/create_project", h.handleCreateProject)
 	g.POST("/update_project", h.handleUpdateProject)
