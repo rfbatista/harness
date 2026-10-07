@@ -2,6 +2,7 @@ package ports
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"time"
 
@@ -110,4 +111,51 @@ type Artifacts interface {
 // use it to speak on the stream without owning it.
 type SessionAnnouncer interface {
 	Announce(sessionID string, ev SessionEvent)
+}
+
+// ArtifactChange is an artifact as the project feed carries it: the whole
+// record after a change, or, once deleted, only the ids it had (id,
+// project_id, ticket_id, attached_ticket_ids), so every page that showed it
+// knows to drop it.
+type ArtifactChange struct {
+	Artifact *domain.Artifact
+	removed  bool
+}
+
+// ArtifactUpdated is the feed change for an artifact as it is now.
+func ArtifactUpdated(a *domain.Artifact) ProjectChange {
+	return ProjectChange{Artifact: &ArtifactChange{Artifact: a}}
+}
+
+// ArtifactRemoved is the feed change for an artifact that was deleted; a is
+// the record as it was before.
+func ArtifactRemoved(a *domain.Artifact) ProjectChange {
+	return ProjectChange{Artifact: &ArtifactChange{Artifact: a, removed: true}, Deleted: true}
+}
+
+func (c ArtifactChange) MarshalJSON() ([]byte, error) {
+	if !c.removed {
+		return json.Marshal(c.Artifact)
+	}
+	ids := c.Artifact.AttachedTicketIDs
+	if ids == nil {
+		ids = []string{}
+	}
+	return json.Marshal(struct {
+		ID                string   `json:"id"`
+		ProjectID         string   `json:"project_id"`
+		TicketID          string   `json:"ticket_id"`
+		AttachedTicketIDs []string `json:"attached_ticket_ids"`
+	}{c.Artifact.ID, c.Artifact.ProjectID, c.Artifact.TicketID, ids})
+}
+
+// UnmarshalJSON reads either form; whether it was a deletion is the
+// change's deleted flag.
+func (c *ArtifactChange) UnmarshalJSON(b []byte) error {
+	var a domain.Artifact
+	if err := json.Unmarshal(b, &a); err != nil {
+		return err
+	}
+	*c = ArtifactChange{Artifact: &a}
+	return nil
 }
