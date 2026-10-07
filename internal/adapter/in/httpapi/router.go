@@ -181,6 +181,7 @@ func NewRouter(h *Handler, opts ...Option) *echo.Echo {
 	g.GET("/get_document", h.handleGetDocument)
 	g.POST("/create_document", h.handleCreateDocument)
 	g.POST("/update_document", h.handleUpdateDocument)
+	g.POST("/set_document_scope", h.handleSetDocumentScope)
 	g.POST("/delete_document", h.handleDeleteDocument)
 	g.POST("/link_document_to_ticket", h.handleLinkDocument)
 	g.POST("/unlink_document_from_ticket", h.handleUnlinkDocument)

@@ -6,7 +6,7 @@ import { jsonResponse } from "../../../shared/testing/doubles.js";
 import { memoryTasks } from "../infrastructure/memory-gateway.js";
 import { taskDTO } from "./fixtures.js";
 
-const STATUS = { PROJECT_NOT_FOUND: 404, TICKET_NOT_FOUND: 404, INVALID_INPUT: 400, INVALID_STATUS: 400 };
+const STATUS = { PROJECT_NOT_FOUND: 404, TICKET_NOT_FOUND: 404, DOCUMENT_NOT_FOUND: 404, INVALID_INPUT: 400, INVALID_STATUS: 400 };
 
 export function stubTasksApi(world) {
   const memory = memoryTasks(world);
@@ -37,8 +37,12 @@ export function stubTasksApi(world) {
           const ticket = url.searchParams.get("ticket_id");
           const documents = memory.documents
             .filter((d) => d.ticketId === ticket)
-            .map((d) => ({ id: d.id, project_id: "p1", title: d.id, format: d.format ?? "markdown", content: "…", updated_at: d.updatedAt }));
+            .map((d) => ({ id: d.id, project_id: "p1", title: d.id, format: d.format ?? "markdown", scope: d.scope ?? "task", content: "…", updated_at: d.updatedAt }));
           return jsonResponse(200, { documents });
+        }
+        case "POST /api/set_document_scope": {
+          const moved = await gateway.setDocumentScope(body.document_id, body.scope);
+          return jsonResponse(200, { document: { id: moved.id, project_id: "p1", title: moved.id, format: "html", scope: moved.scope, content: "…", updated_at: moved.version } });
         }
         default:
           return jsonResponse(404, { error: `no route ${url.pathname}` });

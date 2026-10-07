@@ -477,7 +477,11 @@ type DocumentModel struct {
 	Title     string
 	// Format is markdown or html. The column default covers rows written
 	// before it existed; ToDomain covers an empty value either way.
-	Format    string `gorm:"default:markdown"`
+	Format string `gorm:"default:markdown"`
+	// Scope is task or project. The column default covers rows written
+	// before it existed: every document was its task's until then. ToDomain
+	// covers an empty value either way.
+	Scope     string `gorm:"default:task"`
 	Content   string
 	CreatedAt int64 `gorm:"autoCreateTime:milli"`
 	UpdatedAt int64 `gorm:"autoUpdateTime:milli"`
@@ -493,11 +497,16 @@ func (m *DocumentModel) ToDomain() *domain.Document {
 	if format == "" {
 		format = domain.DocumentFormatMarkdown
 	}
+	scope := domain.DocumentScope(m.Scope)
+	if scope == "" {
+		scope = domain.DocumentScopeTask
+	}
 	return &domain.Document{
 		ID:        m.ID,
 		ProjectID: m.ProjectID,
 		Title:     m.Title,
 		Format:    format,
+		Scope:     scope,
 		Content:   m.Content,
 		CreatedAt: time.UnixMilli(m.CreatedAt),
 		UpdatedAt: time.UnixMilli(m.UpdatedAt),

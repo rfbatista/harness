@@ -9,6 +9,7 @@ const NEXT_STEP = {
   [Codes.SESSION_NOT_RUNNING]: "the session has ended; start a new one to continue",
   [Codes.PROJECT_NOT_FOUND]: "pick another project at the top",
   [Codes.TICKET_NOT_FOUND]: "it was deleted; pick a task on the rail",
+  [Codes.DOCUMENT_NOT_FOUND]: "it was deleted; reload the page",
   [Codes.INVALID_ROOT]: "give the absolute path of the project's directory on the server's machine",
   [Codes.INVALID_URL]: "give the repository's git remote, or leave it empty for a local-only one",
   [Codes.REPOSITORY_NOT_FOUND]: "it was already removed; reload the page",

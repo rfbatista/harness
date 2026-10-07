@@ -78,6 +78,19 @@ prefers-color-scheme media query). It renders on the task's documents page
 in a sandboxed frame: scripts run there but cannot reach the harness API.
 Older documents may be Markdown; read_task_document says which.
 
+Some knowledge outlives one task: architecture, conventions, decisions, and
+the specs and contracts other tasks will build on. Those are project
+documents: every session of the project, on any task, can read and revise
+them, and they show on the project's documents page. Move a document there
+once it says something the next task needs, not just this one; its link to
+this task stays. Only documents linked to this task can be moved:
+
+- mcp__task__list_project_documents — the project's documents, titles only
+- mcp__task__read_project_document — one project document, with its content and format
+- mcp__task__update_project_document — revise a project document; new content must be a complete HTML page
+- mcp__task__move_document_to_project — make one of this task's documents a project document
+- mcp__task__move_document_to_task — move one of them back to this task's scope
+
 Move the task as the work moves, so the board stays true without a person
 dragging the card:
 

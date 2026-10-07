@@ -142,7 +142,7 @@ func newTestHandler(t *testing.T, w world) http.Handler {
 		Now:          func() time.Time { return now },
 	}
 	if w.docs != nil {
-		deps.Documents = w.docs
+		deps.Documents = docReader{w.docs, w.tickets}
 	}
 	if w.history != nil {
 		deps.History = w.history

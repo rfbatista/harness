@@ -1,0 +1,91 @@
+package tasks
+
+import (
+	"operators-mcp/internal/adapter/in/web/components"
+	"operators-mcp/internal/adapter/in/web/shell"
+)
+
+// ProjectDocumentsPage is the project's documents library: the project
+// documents beside the open one, read as rendered Markdown or, for an HTML
+// page, framed from its view route in a sandbox. The open document names
+// the tasks it came from and, when it has one, offers the move back; a
+// document linked to no task has nowhere to go back to.
+templ ProjectDocumentsPage(v ProjectDocumentsView) {
+	@shell.AppShell(v.Frame) {
+		<main class="[ frame ]">
+			<header class="[ toolbar ]">
+				<a class="[ crumb ]" href={ templ.SafeURL("/projects/" + v.ProjectID) }>{ v.ProjectName } /</a>
+				<h1>Documents</h1>
+				<span class="[ color-ink-faint text-sm ]">{ documentCount(len(v.Documents)) }</span>
+			</header>
+			if len(v.Documents) == 0 {
+				<div data-scroll>
+					@components.Empty("No document has been moved to this project yet", "Project documents are the knowledge that outlives one task: architecture, conventions, decisions. Move one here with \"Move to project\" on a task's documents page, or let an agent do it with move_document_to_project; the task keeps it too.")
+				</div>
+			} else {
+				<div class="[ split-view ]" data-scroll { libraryScopeAttrs(v.Open)... }>
+					<nav class="[ list ] [ divide-end ]" aria-label="Documents of this project" style="--row-columns: minmax(0, 1fr) auto">
+						for _, d := range v.Documents {
+							<a class="[ row ]" href={ templ.SafeURL(d.Href) } { documentCurrent(d.Current)... }>
+								<span class="[ title ]">{ d.Title }</span>
+								<span class="[ meta ]">{ d.Updated }</span>
+							</a>
+						}
+					</nav>
+					if v.Open != nil {
+						<article class="[ frame ]" aria-label={ v.Open.Title }>
+							<div class="[ repel ] [ pad-l divide-bottom ]">
+								<h2>{ v.Open.Title }</h2>
+								<span class="[ badge ]" data-scope-word x-text="word">{ v.Open.ScopeWord() }</span>
+								<span class="[ color-ink-faint text-sm ]">updated { v.Open.Updated }</span>
+								if len(v.Open.Tasks) > 0 {
+									@moveForm(v.Open)
+								}
+							</div>
+							<p class="[ pad-inline-l text-sm color-ink-muted ]">
+								if len(v.Open.Tasks) == 0 {
+									Not linked to a task.
+								} else {
+									From
+									for i, tk := range v.Open.Tasks {
+										if i > 0 {
+											,
+										}
+										<a href={ templ.SafeURL(tk.Href) }>{ tk.Title }</a>
+									}
+								}
+							</p>
+							if v.Open.IsHTML() {
+								<div class="[ preview ] [ frame ]" data-kind="page">
+									<div class="[ stage ]">
+										<iframe sandbox="allow-scripts" referrerpolicy="no-referrer" src={ v.Open.FrameSrc } title={ v.Open.Title }></iframe>
+									</div>
+									<div class="[ bar ]">
+										<span class="[ grow truncate ]"><kbd>Tab</kbd> leaves the frame</span>
+										<a href={ templ.SafeURL(v.Open.FrameSrc) } target="_blank" rel="noopener noreferrer">Open in a new tab</a>
+									</div>
+								</div>
+							} else {
+								<div class="[ prose ] [ pad-l ]" data-scroll>
+									@v.Open.Body
+								</div>
+							}
+						</article>
+					}
+				</div>
+			}
+		</main>
+	}
+}
+
+// libraryScopeAttrs mounts the move component only when the open document
+// has a task to go back to. Moved back, the document leaves the library, so
+// the page goes on to its first task's page with it open.
+func libraryScopeAttrs(o *OpenDocument) templ.Attributes {
+	if o == nil || len(o.Tasks) == 0 {
+		return nil
+	}
+	attrs := scopeAttrs(o)
+	attrs["data-after-task-href"] = o.Tasks[0].Href
+	return attrs
+}

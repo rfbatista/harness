@@ -26,6 +26,24 @@ export function taskGatewayContract(name, makeSubject) {
     assert.deepEqual(await gateway.listDocumentVersions("t9"), []);
   });
 
+  contract("setDocumentScope moves a document and gives it a new version; the same scope again does not", async () => {
+    const { gateway } = makeSubject({
+      projects: ["p1"],
+      tasks: [makeTask()],
+      sessions: [],
+      documents: [{ id: "d1", ticketId: "t1", updatedAt: "2026-10-05T12:00:00Z", scope: "task" }],
+    });
+    const moved = await gateway.setDocumentScope("d1", "project");
+    assert.deepEqual([moved.id, moved.scope], ["d1", "project"]);
+    assert.ok(moved.version !== "2026-10-05T12:00:00Z", "a move is a new version");
+    assert.deepEqual(await gateway.listDocumentVersions("t1"), [{ id: "d1", version: moved.version }], "the task keeps the moved document");
+    const again = await gateway.setDocumentScope("d1", "project");
+    assert.equal(again.version, moved.version, "the same scope again changes nothing");
+    assert.equal((await gateway.setDocumentScope("d1", "task")).scope, "task");
+    await assert.rejects(gateway.setDocumentScope("ghost", "project"), Codes.DOCUMENT_NOT_FOUND);
+    await assert.rejects(gateway.setDocumentScope("d1", "global"), Codes.INVALID_INPUT);
+  });
+
   contract("createTask returns the new task", async () => {
     const { gateway } = makeSubject({ projects: ["p1"], tasks: [], sessions: [] });
     const t = await gateway.createTask({ projectId: "p1", title: "  Write docs  ", description: "the TUI section", status: "todo" });

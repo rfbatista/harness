@@ -37,8 +37,8 @@ type Deps struct {
 	Repositories ports.RepositoryLister
 	// EnvFiles lists a repository's env files for their page.
 	EnvFiles ports.EnvFileLister
-	// Documents reads a task's documents for its documents page; nil hides it.
-	Documents ports.TicketDocumentReader
+	// Documents reads a task's documents and the project's library; nil hides both.
+	Documents ports.DocumentReader
 	// History reads repositories' commit graphs for their history pages.
 	History ports.RepositoryHistory
 	// Now defaults to time.Now.
@@ -82,6 +82,9 @@ func NewHandler(deps Deps, assets *Assets, fallback http.Handler) http.Handler {
 	mux.Handle("GET /projects/{project}/repositories/{repository}/env", s.page(projectPages.EnvFileList))
 	mux.Handle("GET /projects/{project}/repositories/{repository}/history", s.page(historyPages.Page))
 	mux.Handle("GET /projects/{project}/repositories/{repository}/history/{commit}", s.page(historyPages.Page))
+	mux.Handle("GET /projects/{project}/documents", s.page(taskPages.ProjectDocuments))
+	mux.Handle("GET /projects/{project}/documents/{document}", s.page(taskPages.ProjectDocuments))
+	mux.Handle("GET /projects/{project}/documents/{document}/view", s.page(taskPages.ProjectDocumentView))
 	mux.HandleFunc("GET /projects/{project}/{$}", toProject)
 	mux.HandleFunc("GET /projects/{project}/sessions", toProject) // the old page; sessions now live under their task
 	mux.Handle("GET /projects/{project}/tasks/new", s.page(taskPages.New))
@@ -149,6 +152,9 @@ func (s *server) layout(ctx context.Context, title, projectID, taskID string) (s
 	}
 	frame.Rail = tasks.BuildRail(projectID, list, live, taskID)
 	frame.Rail.NewTaskHref = tasks.NewTaskHref(projectID)
+	if s.deps.Documents != nil {
+		frame.Rail.DocumentsHref = tasks.ProjectDocumentsHref(projectID, "")
+	}
 	return frame, nil
 }
 

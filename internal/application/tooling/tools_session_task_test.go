@@ -10,11 +10,13 @@ import (
 	"operators-mcp/internal/adapter/out/persistence/sqlite"
 	"operators-mcp/internal/application/planning"
 	"operators-mcp/internal/domain"
+	"operators-mcp/internal/ports"
 )
 
 type taskToolsFixture struct {
 	tools     map[string]domain.Tool
 	plan      *planning.Service
+	projects  ports.ProjectRepository
 	projectID string
 	ticketID  string
 	sessionID string
@@ -61,7 +63,7 @@ func newTaskToolsFixture(t *testing.T) *taskToolsFixture {
 		}
 	}
 
-	return &taskToolsFixture{tools: byName, plan: plan, projectID: proj.ID, ticketID: tk.ID, sessionID: "sess-1"}
+	return &taskToolsFixture{tools: byName, plan: plan, projects: projects, projectID: proj.ID, ticketID: tk.ID, sessionID: "sess-1"}
 }
 
 func (f *taskToolsFixture) call(t *testing.T, sessionID, tool string, args map[string]any) (any, error) {
@@ -158,7 +160,7 @@ func TestSessionTaskTools_OtherTaskDocumentIsUnreachable(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	doc, err := f.plan.CreateDocument(f.projectID, "Secret", "not yours", "")
+	doc, err := f.plan.CreateDocument(f.projectID, "Secret", "not yours", "", domain.DocumentScopeTask)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -306,7 +308,7 @@ func TestSessionTaskTools_CreateRefusesNonHTML(t *testing.T) {
 	if docs := listed.(map[string]any)["documents"].([]documentSummary); len(docs) != 0 {
 		t.Fatalf("a refused document was stored: %+v", docs)
 	}
-	if all := f.plan.ListDocuments(f.projectID); len(all) != 0 {
+	if all := f.plan.ListDocuments(f.projectID, ""); len(all) != 0 {
 		t.Fatalf("a refused document exists unlinked in the project: %+v", all)
 	}
 }
@@ -350,7 +352,7 @@ func TestSessionTaskTools_UpdateRefusesNonHTMLAndKeepsTheOld(t *testing.T) {
 // so; giving it new content makes it an HTML page.
 func TestSessionTaskTools_UpdateTitleOnlyKeepsFormat(t *testing.T) {
 	f := newTaskToolsFixture(t)
-	legacy, err := f.plan.CreateDocument(f.projectID, "Old notes", "# old", domain.DocumentFormatMarkdown)
+	legacy, err := f.plan.CreateDocument(f.projectID, "Old notes", "# old", domain.DocumentFormatMarkdown, domain.DocumentScopeTask)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -368,7 +370,7 @@ func TestSessionTaskTools_UpdateTitleOnlyKeepsFormat(t *testing.T) {
 
 func TestSessionTaskTools_UpdateContentFlipsLegacyToHTML(t *testing.T) {
 	f := newTaskToolsFixture(t)
-	legacy, _ := f.plan.CreateDocument(f.projectID, "Old notes", "# old", domain.DocumentFormatMarkdown)
+	legacy, _ := f.plan.CreateDocument(f.projectID, "Old notes", "# old", domain.DocumentFormatMarkdown, domain.DocumentScopeTask)
 	_ = f.plan.LinkDocument(f.ticketID, legacy.ID)
 	out, err := f.call(t, f.sessionID, "update_task_document", map[string]any{"document_id": legacy.ID, "content": htmlPage("Old notes", "new")})
 	if err != nil {
@@ -381,7 +383,7 @@ func TestSessionTaskTools_UpdateContentFlipsLegacyToHTML(t *testing.T) {
 
 func TestSessionTaskTools_DescriptionsSayHTML(t *testing.T) {
 	f := newTaskToolsFixture(t)
-	for _, name := range []string{"create_task_document", "update_task_document", "read_task_document"} {
+	for _, name := range []string{"create_task_document", "update_task_document", "read_task_document", "update_project_document", "read_project_document"} {
 		tl := f.tools[name]
 		schema, _ := json.Marshal(tl.InputSchema)
 		text := strings.ToLower(tl.Description + string(schema))

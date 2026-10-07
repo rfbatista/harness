@@ -88,12 +88,18 @@ func (h *Handler) handleDeleteTicket(c echo.Context) error {
 
 // --- Documents ---
 
+// handleListDocuments lists a project's documents; scope narrows to task or
+// project documents, and an unknown scope is INVALID_INPUT.
 func (h *Handler) handleListDocuments(c echo.Context) error {
 	projectID := c.QueryParam("project_id")
 	if projectID == "" {
 		return echo.NewHTTPError(http.StatusBadRequest, "project_id is required")
 	}
-	return c.JSON(http.StatusOK, map[string]any{"documents": h.planningSvc.ListDocuments(projectID)})
+	scope := domain.DocumentScope(c.QueryParam("scope"))
+	if scope != "" && !scope.Valid() {
+		return &domain.StructuredError{Code: "INVALID_INPUT", Message: "scope must be task or project"}
+	}
+	return c.JSON(http.StatusOK, map[string]any{"documents": h.planningSvc.ListDocuments(projectID, scope)})
 }
 
 func (h *Handler) handleGetDocument(c echo.Context) error {
@@ -104,17 +110,37 @@ func (h *Handler) handleGetDocument(c echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]any{"document": doc})
 }
 
+// handleCreateDocument creates a document at the project: scope defaults to
+// project, format to markdown.
 func (h *Handler) handleCreateDocument(c echo.Context) error {
 	var in struct {
 		ProjectID string `json:"project_id"`
 		Title     string `json:"title"`
 		Content   string `json:"content"`
 		Format    string `json:"format"` // markdown (default) or html
+		Scope     string `json:"scope"`  // project (default) or task
 	}
 	if err := bindJSON(c, &in); err != nil {
 		return err
 	}
-	doc, err := h.planningSvc.CreateDocument(in.ProjectID, in.Title, in.Content, domain.DocumentFormat(in.Format))
+	doc, err := h.planningSvc.CreateDocument(in.ProjectID, in.Title, in.Content, domain.DocumentFormat(in.Format), domain.DocumentScope(in.Scope))
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, map[string]any{"document": doc})
+}
+
+// handleSetDocumentScope moves a document between task and project scope.
+// Ticket links are untouched; the same scope again is fine.
+func (h *Handler) handleSetDocumentScope(c echo.Context) error {
+	var in struct {
+		DocumentID string `json:"document_id"`
+		Scope      string `json:"scope"`
+	}
+	if err := bindJSON(c, &in); err != nil {
+		return err
+	}
+	doc, err := h.planningSvc.SetDocumentScope(in.DocumentID, domain.DocumentScope(in.Scope))
 	if err != nil {
 		return err
 	}

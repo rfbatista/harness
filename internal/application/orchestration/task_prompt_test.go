@@ -120,3 +120,34 @@ func TestApplyTaskContext_BriefSaysDocumentsAreHTML(t *testing.T) {
 		t.Errorf("brief still describes markdown documents:\n%s", cfg.AppendSystem)
 	}
 }
+
+// The brief is where an agent learns that some documents outlive the task,
+// and which tools move and reach them.
+func TestApplyTaskContext_BriefNamesProjectDocuments(t *testing.T) {
+	cfg := llmkit.SessionConfig{}
+	applyTaskContext(&cfg, &domain.Ticket{ID: "tk1", Title: "Ship the thing"}, "")
+	for _, want := range []string{
+		"\n- mcp__task__list_project_documents — ",
+		"\n- mcp__task__read_project_document — ",
+		"\n- mcp__task__update_project_document — ",
+		"\n- mcp__task__move_document_to_project — ",
+		"\n- mcp__task__move_document_to_task — ",
+		"project document", "architecture", "conventions", "decisions", "outlive",
+	} {
+		if !strings.Contains(cfg.AppendSystem, want) {
+			t.Errorf("brief missing %q:\n%s", want, cfg.AppendSystem)
+		}
+	}
+}
+
+// Every tool on the task server is named in the brief, in the list style,
+// so the two never drift apart.
+func TestApplyTaskContext_BriefNamesEveryTaskTool(t *testing.T) {
+	cfg := llmkit.SessionConfig{}
+	applyTaskContext(&cfg, &domain.Ticket{ID: "tk1", Title: "Ship the thing"}, "")
+	for _, name := range tooling.SessionTaskToolNames {
+		if !strings.Contains(cfg.AppendSystem, "\n- mcp__task__"+name+" — ") {
+			t.Errorf("brief does not list mcp__task__%s", name)
+		}
+	}
+}

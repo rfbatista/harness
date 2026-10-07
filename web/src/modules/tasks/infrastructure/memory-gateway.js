@@ -10,7 +10,7 @@ import { toTask } from "./dto.js";
  *   projects?: string[],
  *   tasks?: import("../domain/task.js").Task[],
  *   sessions?: { ticketId: string, status: string }[],
- *   documents?: { id: string, ticketId: string, updatedAt: string }[],
+ *   documents?: { id: string, ticketId: string, updatedAt: string, scope?: "task" | "project" }[],
  * }} [world]
  */
 export function memoryTasks({ projects = [], tasks = [], sessions = [], documents = [] } = {}) {
@@ -66,6 +66,17 @@ export function memoryTasks({ projects = [], tasks = [], sessions = [], document
 
     async listDocumentVersions(taskId) {
       return documents.filter((d) => d.ticketId === taskId).map((d) => ({ id: d.id, version: d.updatedAt }));
+    },
+
+    async setDocumentScope(documentId, scope) {
+      if (scope !== "task" && scope !== "project") throw new StructuredError(Codes.INVALID_INPUT, "scope must be task or project", 400);
+      const doc = documents.find((d) => d.id === documentId);
+      if (!doc) throw new StructuredError(Codes.DOCUMENT_NOT_FOUND, "document not found", 404);
+      if ((doc.scope ?? "task") !== scope) {
+        doc.scope = scope;
+        doc.updatedAt = new Date(Date.parse(doc.updatedAt) + 1000).toISOString(); // a move is a new version
+      }
+      return { id: doc.id, version: doc.updatedAt, scope: doc.scope ?? "task" };
     },
 
     async countSessions(_projectId, taskId) {

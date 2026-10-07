@@ -21,6 +21,10 @@
  *           The task's sessions now, asked right before deleting it.
  * @property {(taskId: string) => Promise<import("./documents.js").DocumentVersion[]>} listDocumentVersions
  *           Which documents are linked to the task now, and their versions.
+ * @property {(documentId: string, scope: "task" | "project") => Promise<import("./documents.js").DocumentVersion & { scope: "task" | "project" }>} setDocumentScope
+ *           Moves a document between task and project scope; the task keeps
+ *           it. The same scope again changes nothing. Rejects with
+ *           DOCUMENT_NOT_FOUND or INVALID_INPUT (unknown scope).
  * @property {(seed: unknown) => Task} decodeTask
  *           Reads the task the page embeds. Throws BAD_RESPONSE when malformed.
  */

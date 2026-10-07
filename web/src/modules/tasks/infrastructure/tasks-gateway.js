@@ -47,6 +47,13 @@ export function tasksGateway(api) {
       });
     },
 
+    async setDocumentScope(documentId, scope) {
+      const body = await api.post("/set_document_scope", { document_id: documentId, scope });
+      const d = body?.document;
+      if (typeof d?.id !== "string" || typeof d.updated_at !== "string" || typeof d.scope !== "string") bad("document without id, updated_at or scope");
+      return { id: d.id, version: d.updated_at, scope: d.scope };
+    },
+
     async countSessions(projectId, taskId) {
       const body = await api.get("/sessions", { project_id: projectId, ticket_id: taskId });
       const sessions = Array.isArray(body?.sessions) ? body.sessions : [];
