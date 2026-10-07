@@ -2,7 +2,7 @@
 // the preview of the selected one. Pure; no DOM.
 
 import { bytes, relativeTime } from "../../../shared/presentation/format.js";
-import { fileName, isLoopbackUrl, Kind } from "../domain/artifact.js";
+import { fileName, isLoopbackUrl, isPromotable, Kind, Scope } from "../domain/artifact.js";
 
 const KIND_WORD = { page: "page", image: "image", video: "video", url: "dev server", file: "file" };
 
@@ -24,6 +24,8 @@ export function toCardView(artifact, { selectedId, now, fresh = false }) {
     updated: relativeTime(artifact.updatedAt, now),
     selected: artifact.id === selectedId,
     fresh,
+    /** The list's mark on a project artifact; nothing on a task one. */
+    scopeMark: artifact.scope === Scope.PROJECT ? "project" : "",
   };
 }
 
@@ -64,5 +66,21 @@ export function toPreviewView(artifact, now) {
     revision: artifact.revision,
     updated: relativeTime(artifact.updatedAt, now),
     note: artifact.note,
+    ...scopeView(artifact, title),
+  };
+}
+
+/** The scope in words (never by colour alone) and the move that fits it. */
+function scopeView(artifact, title) {
+  const isProject = artifact.scope === Scope.PROJECT;
+  return {
+    scope: artifact.scope,
+    isProject,
+    scopeWord: isProject ? "Project asset" : "Task asset",
+    /** Back to task always; to the project only with a file to keep. */
+    canMove: isProject || isPromotable(artifact),
+    moveTarget: isProject ? Scope.TASK : Scope.PROJECT,
+    moveLabel: isProject ? "Move back to task" : "Move to project",
+    moveAriaLabel: isProject ? `Move ${title} back to task` : `Move ${title} to project`,
   };
 }

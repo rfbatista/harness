@@ -3,6 +3,9 @@
 // Mounted once per session (the x-for key) and kept mounted across tab
 // switches (x-show), so the stream stays open and the page can count publishes
 // behind the Agent and App tabs. It tells the page with artifact-published.
+// The selected artifact moves between task and project from the bar; a move,
+// the person's or an agent's, changes the card in place and is not a publish:
+// an agent's is told with artifact-moved, the person's own not at all.
 //
 //   <template x-for="panel in designPanels" x-bind:key="panel.key">
 //     <div x-show="showingDesign"><section x-data="sessionsDesignPanel(panel)"> …
@@ -14,7 +17,7 @@
 import { FeedStatus } from "../../../../shared/domain/feed.js";
 import { describeError } from "../../../../shared/presentation/errors.js";
 import { feedStatusView } from "../../../../shared/presentation/feedStatus.js";
-import { applyPublish, isKnown } from "../../domain/artifact.js";
+import { applyChange, applyPublish, isNewer, isPublish } from "../../domain/artifact.js";
 import { toCardView, toPreviewView } from "../artifactView.js";
 
 /** How long a card that arrived over the stream stays highlighted. */
@@ -46,6 +49,9 @@ export const designPanel = ({ artifacts, clock, setTimeout = globalThis.setTimeo
     error: null,
     feed: FeedStatus.CONNECTING,
     ended: false,
+    moving: false,
+    /** The artifact the person is moving: its echo may beat the answer, and is theirs, not news. */
+    movingId: "",
     freshIds: [],
     now: clock.now(),
 
@@ -73,6 +79,20 @@ export const designPanel = ({ artifacts, clock, setTimeout = globalThis.setTimeo
     },
     get currentOpenHref() {
       return this.current?.openHref ?? "";
+    },
+    /** The bar shows the stream's status: this panel follows one. */
+    followsFeed: true,
+    get canMoveCurrent() {
+      return this.current?.canMove ?? false;
+    },
+    get currentScopeWord() {
+      return this.current?.scopeWord ?? "";
+    },
+    get currentMoveLabel() {
+      return this.current?.moveLabel ?? "";
+    },
+    get currentMoveAriaLabel() {
+      return this.current?.moveAriaLabel ?? "";
     },
     get isEmpty() {
       return this.ready && this.artifacts.length === 0;
@@ -128,11 +148,17 @@ export const designPanel = ({ artifacts, clock, setTimeout = globalThis.setTimeo
         return;
       }
       const { artifact } = event;
-      // The stream replays its history on every connect: a revision the list
-      // already holds (or a staler one) is nothing new to show or announce.
+      // The stream replays its history on every connect, and echoes the
+      // person's own move: what the list already holds (or something staler)
+      // is nothing new to show or announce.
       const known = this.artifacts.find((a) => a.id === artifact.id);
-      if (known && known.revision >= artifact.revision) return;
-      const isNew = !isKnown(this.artifacts, artifact);
+      if (!isNewer(known, artifact)) return;
+      if (!isPublish(this.artifacts, artifact)) {
+        this.artifacts = applyChange(this.artifacts, artifact);
+        if (artifact.id !== this.movingId) this.$dispatch("artifact-moved", { artifact });
+        return;
+      }
+      const isNew = !known;
       this.artifacts = applyPublish(this.artifacts, artifact);
       this.now = clock.now();
       if ((isNew && !this.chosen) || !this.selectedId) this.selectedId = artifact.id;
@@ -188,6 +214,24 @@ export const designPanel = ({ artifacts, clock, setTimeout = globalThis.setTimeo
       const at = this.artifacts.findIndex((a) => a.id === this.selectedId);
       const to = at === -1 ? 0 : Math.max(0, Math.min(this.artifacts.length - 1, at + delta));
       this.select(this.artifacts[to].id);
+    },
+    /** Moves the selected artifact to the project, or back to its task. */
+    async move() {
+      const target = this.current;
+      if (this.moving || !target?.canMove) return;
+      this.moving = true;
+      this.movingId = target.id;
+      this.error = null;
+      try {
+        const moved = await artifacts.setScope(target.id, target.moveTarget);
+        const known = this.artifacts.find((a) => a.id === moved.id);
+        if (isNewer(known, moved)) this.artifacts = applyChange(this.artifacts, moved);
+      } catch (err) {
+        this.error = describeError(err);
+      } finally {
+        this.moving = false;
+        this.movingId = "";
+      }
     },
     dismissError() {
       this.error = null;

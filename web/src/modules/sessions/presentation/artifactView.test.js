@@ -19,7 +19,7 @@ test("kinds read as words; url is a dev server", () => {
 
 test("a card carries title, kind, note, revision, time, selection and freshness", () => {
   const card = toCardView(makeArtifact({ id: "a1", revision: 2, note: "tighter" }), { selectedId: "a1", now, fresh: true });
-  assert.deepEqual(card, { id: "a1", title: "Pricing card", kindWord: "page", note: "tighter", revision: "rev 2", updated: "4m", selected: true, fresh: true });
+  assert.deepEqual(card, { id: "a1", title: "Pricing card", kindWord: "page", note: "tighter", revision: "rev 2", updated: "4m", selected: true, fresh: true, scopeMark: "" });
 });
 
 test("a page preview is a sandboxed frame keyed on its revision, reloaded per revision", () => {
@@ -51,4 +51,21 @@ test("a loopback url is embedded as is; any other url is shown, not embedded", (
   assert.equal(no.embedsUrl, false);
   assert.equal(no.openHref, "", "an off-machine url is not even linked");
   assert.equal(no.url, "http://example.com/", "but it is shown as text");
+});
+
+test("a card marks a project artifact; a task one carries no mark", () => {
+  assert.equal(toCardView(makeArtifact({ scope: "project" }), { selectedId: "", now }).scopeMark, "project");
+  assert.equal(toCardView(makeArtifact(), { selectedId: "", now }).scopeMark, "");
+});
+
+test("the preview says the scope in words and offers the move that fits", () => {
+  const task = toPreviewView(makeArtifact({ title: "Hero" }), now);
+  assert.deepEqual([task.scopeWord, task.canMove, task.moveTarget, task.moveLabel, task.moveAriaLabel], ["Task asset", true, "project", "Move to project", "Move Hero to project"]);
+  const project = toPreviewView(makeArtifact({ title: "Hero", scope: "project" }), now);
+  assert.deepEqual([project.scopeWord, project.canMove, project.moveTarget, project.moveLabel, project.moveAriaLabel], ["Project asset", true, "task", "Move back to task", "Move Hero back to task"]);
+});
+
+test("a dev-server url has no move to the project", () => {
+  const url = toPreviewView(makeArtifact({ kind: "url", path: "", url: "http://localhost:5173/" }), now);
+  assert.equal(url.canMove, false);
 });

@@ -1,3 +1,4 @@
+import { Codes, StructuredError } from "../../../../shared/domain/errors.js";
 import { FeedStatus } from "../../../../shared/domain/feed.js";
 import { fixedClock } from "../../../../shared/infrastructure/clock.js";
 import { mount } from "../../../../shared/testing/alpine.js";
@@ -222,5 +223,76 @@ test("the page saying the session ended stops the follow, as a done event would"
   memory.publish(publishInput());
   await flush();
   assert.equal(instance.cards.length, 0, "unfollowed");
+  instance.destroy();
+});
+
+test("moving the selected artifact turns its scope over in place; the stream's echo neither flashes nor tells the page", async () => {
+  const older = makeArtifact({ id: "old", updatedAt: new Date(A0.getTime() - 60_000) });
+  const newer = makeArtifact({ id: "new", path: "n.html", updatedAt: A0 });
+  const { instance, dispatched } = await setup({ artifacts: [older, newer] });
+  instance.select("old");
+  assert.deepEqual([instance.current.moveLabel, instance.canMoveCurrent], ["Move to project", true]);
+  const before = dispatched.length;
+  await instance.move();
+  await flush();
+  assert.deepEqual(instance.cards.map((c) => [c.id, c.scopeMark, c.fresh]), [["new", "", false], ["old", "project", false]], "in place, not re-sorted");
+  assert.deepEqual([instance.current.id, instance.current.scopeWord, instance.current.moveLabel], ["old", "Project asset", "Move back to task"]);
+  assert.equal(dispatched.length, before, "the person's own move is not news");
+  assert.equal(instance.moving, false);
+  await instance.move();
+  assert.equal(instance.current.scopeWord, "Task asset", "and back");
+  instance.destroy();
+});
+
+test("an agent's move shows live: the card re-badges without a highlight, the selection stays, the page hears a move", async () => {
+  const a = makeArtifact({ id: "a", updatedAt: A0 });
+  const b = makeArtifact({ id: "b", path: "b.html", updatedAt: new Date(A0.getTime() - 1000) });
+  const { instance, memory, dispatched } = await setup({ artifacts: [a, b] });
+  instance.select("a");
+  await memory.gateway.setScope("b", "project");
+  await flush();
+  assert.deepEqual(instance.cards.map((c) => [c.id, c.scopeMark, c.fresh]), [["a", "", false], ["b", "project", false]]);
+  assert.equal(instance.current.id, "a");
+  assert.equal(dispatched.filter((d) => d.name === "artifact-published").length, 0, "not a publish");
+  const moved = dispatched.find((d) => d.name === "artifact-moved");
+  assert.deepEqual([moved.detail.artifact.id, moved.detail.artifact.scope], ["b", "project"]);
+  instance.destroy();
+});
+
+test("a re-publish of a project artifact is still a publish", async () => {
+  const { instance, memory, dispatched } = await setup();
+  const first = memory.publish(publishInput());
+  await flush();
+  await memory.gateway.setScope(first.id, "project");
+  memory.publish(publishInput({ note: "tighter" }));
+  await flush();
+  assert.deepEqual(instance.cards.map((c) => [c.revision, c.scopeMark]), [["rev 2", "project"]]);
+  assert.equal(dispatched.filter((d) => d.name === "artifact-published").length, 2);
+  instance.destroy();
+});
+
+test("a refused move reads as the server put it, with what to do next; nothing moves", async () => {
+  const memory = memoryArtifacts({ artifacts: [makeArtifact({ id: "a" })], now: () => A0 });
+  const refusing = {
+    ...memory.gateway,
+    setScope: async () => {
+      throw new StructuredError(Codes.ARTIFACT_NOT_PROMOTABLE, "the artifact's session and worktree are gone, so there are no bytes to keep", 409);
+    },
+  };
+  const { instance } = mount(() => designPanel({ artifacts: refusing, clock: fixedClock(A0), setTimeout: () => {} })({ key: "s1", sessionId: "s1", live: false }), {
+    el: document.createElement("section"),
+  });
+  await instance.init();
+  await instance.move();
+  assert.equal(instance.error.code, Codes.ARTIFACT_NOT_PROMOTABLE);
+  assert.ok(instance.error.message.includes("worktree are gone"));
+  assert.equal(instance.current.scopeWord, "Task asset");
+  assert.equal(instance.moving, false);
+  instance.destroy();
+});
+
+test("a dev-server url offers no move", async () => {
+  const { instance } = await setup({ artifacts: [makeArtifact({ id: "u", kind: "url", path: "", url: "http://localhost:5173/" })] });
+  assert.equal(instance.canMoveCurrent, false);
   instance.destroy();
 });

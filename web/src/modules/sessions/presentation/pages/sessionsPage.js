@@ -256,6 +256,17 @@ export const sessionsPage = ({ gateway, clock, setTimeout = globalThis.setTimeou
       this.announcement = isNew ? `New artifact: ${title}` : `Artifact updated: ${title}, revision ${artifact.revision}`;
       if (!this.showingDesign) this.unseenArtifacts += 1;
     },
+
+    /**
+     * A move between task and project: announced, not counted; there is
+     * nothing new to look at.
+     * @param {CustomEvent<{ artifact: import("../../domain/artifact.js").Artifact }>} event
+     */
+    artifactMoved(event) {
+      const { artifact } = event.detail;
+      this.announcement = `${artifact.scope === "project" ? "Moved to project" : "Moved back to task"}: ${artifactTitle(artifact)}`;
+    },
+
     get agentTabSelected() {
       return this.detailTab === "agent";
     },
