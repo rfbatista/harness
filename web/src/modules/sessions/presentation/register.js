@@ -16,10 +16,15 @@ import { sessionsPage } from "./pages/sessionsPage.js";
  *   runTerminals?: import("../domain/ports.js").TerminalGateway,  application runs' terminals
  *   createScreen: import("./components/terminal.js").CreateScreen,
  *   clock: import("../../../shared/infrastructure/clock.js").Clock,
+ *   channel?: import("../domain/ports.js").ChannelGateway,  the architect channel
  * }} deps
  */
 export function registerSessions(Alpine, deps) {
-  Alpine.data("sessionsPage", sessionsPage(deps));
+  // The task's messages between its architect and the delegates, shared by
+  // the page and its Conversation tab.
+  Alpine.store("sessionsChannel", { messages: [], loaded: false });
+  const channelStore = Alpine.store("sessionsChannel");
+  Alpine.data("sessionsPage", sessionsPage({ ...deps, channelStore }));
   Alpine.data("sessionsNewSession", newSession(deps));
   Alpine.data("sessionsTerminal", terminal(deps));
   Alpine.data("sessionsDesignPanel", designPanel(deps));

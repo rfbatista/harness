@@ -254,3 +254,60 @@ func TestArchitectRowIsBadgedAndDelegatesIndented(t *testing.T) {
 		t.Errorf("rows = %v, want %s", got, want)
 	}
 }
+
+func TestStatusCheckViewMatchesTheSharedFixture(t *testing.T) {
+	raw, err := os.ReadFile("../../../../../web/testdata/views/status-check.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fixture struct {
+		Cases []struct {
+			State                 domain.StatusCheckState `json:"state"`
+			Every                 int                     `json:"every"`
+			NextIn                *int `json:"next_in"`
+			LastAgo               *int `json:"last_ago"`
+			Fired                 int `json:"fired"`
+			Status, Short, Detail string
+		} `json:"cases"`
+	}
+	if err := json.Unmarshal(raw, &fixture); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Date(2026, 10, 2, 14, 0, 0, 0, time.UTC)
+	at := func(m *int, sign int) *time.Time {
+		if m == nil {
+			return nil
+		}
+		t := now.Add(time.Duration(sign**m) * time.Minute)
+		return &t
+	}
+	for _, c := range fixture.Cases {
+		check := &domain.StatusCheck{State: c.State, EveryMinutes: c.Every, NextAt: at(c.NextIn, 1), LastFiredAt: at(c.LastAgo, -1), FiredCount: c.Fired}
+		got := StatusCheckOf(check, now)
+		if got != (CheckView{c.Status, c.Short, c.Detail}) {
+			t.Errorf("%s every %d: got %+v, want {%s %s %s}", c.State, c.Every, got, c.Status, c.Short, c.Detail)
+		}
+	}
+}
+
+func TestDelegateRowSaysItsNextCheckInsteadOfWhoStartedIt(t *testing.T) {
+	now := time.Date(2026, 10, 2, 14, 0, 0, 0, time.UTC)
+	next := now.Add(6 * time.Minute)
+	list := []*domain.Session{
+		{ID: "arch", AgentID: "go", Role: domain.RoleArchitect, Mode: domain.SessionModeArchitect, Status: domain.SessionRunning, UpdatedAt: now.Add(-9 * time.Minute)},
+		{ID: "d1", AgentID: "go", Role: domain.RoleDelegate, ParentSessionID: "arch", Status: domain.SessionRunning, UpdatedAt: now.Add(-8 * time.Minute),
+			StatusCheck: &domain.StatusCheck{State: domain.StatusCheckActive, EveryMinutes: 10, NextAt: &next}},
+		{ID: "d2", AgentID: "go", Role: domain.RoleDelegate, ParentSessionID: "d1", Status: domain.SessionRunning, UpdatedAt: now.Add(-7 * time.Minute)},
+	}
+	v := NewPageView(shell.Frame{}, &domain.Project{ID: "p1"}, &domain.Ticket{ID: "t1"}, list, []*domain.Agent{{ID: "go", Name: "go-developer"}}, nil, now)
+	got := map[string]string{}
+	for _, r := range v.Groups[0].Rows {
+		got[r.ID] = r.Meta
+	}
+	want := map[string]string{"arch": "go-developer as architect · 9m", "d1": "go-developer · check in 6m", "d2": "go-developer · 7m"}
+	for id, m := range want {
+		if got[id] != m {
+			t.Errorf("%s meta = %q, want %q", id, got[id], m)
+		}
+	}
+}

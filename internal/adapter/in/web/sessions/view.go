@@ -230,13 +230,65 @@ func toRow(s *domain.Session, selectedID string, agentNames map[string]string, n
 		Title:     title,
 		State:     st.State,
 		Word:      st.Word,
-		Meta:      meta(agent, StartedBy(s, others, agentNames), relativeTime(s.UpdatedAt, now)),
+		Meta:      rowMeta(s, agent, others, agentNames, now),
 		Selected:  s.ID == selectedID,
 		Attention: NeedsYou(s),
 		Role:      string(s.Role),
 		Depth:     min(depth, MaxDepth),
 		Badge:     badge(s),
 	}
+}
+
+// rowMeta is a row's faint line. A delegate's says its status check instead
+// of who started it (the tree shows that); the browser adds its last report
+// once the task's messages have loaded (delegateMeta in view.js).
+func rowMeta(s *domain.Session, agent string, others map[string]*domain.Session, agentNames map[string]string, now time.Time) string {
+	if s.Role != domain.RoleDelegate {
+		return meta(agent, StartedBy(s, others, agentNames), relativeTime(s.UpdatedAt, now))
+	}
+	if s.StatusCheck != nil {
+		return agent + " · " + StatusCheckOf(s.StatusCheck, now).Short
+	}
+	return agent + " · " + relativeTime(s.UpdatedAt, now)
+}
+
+// CheckView is a status-check loop as the page shows it: the .status state,
+// the row's short word and the header's detail.
+type CheckView struct{ State, Short, Detail string }
+
+var checkStates = map[domain.StatusCheckState]string{
+	domain.StatusCheckActive: "running",
+	domain.StatusCheckPaused: "idle",
+	domain.StatusCheckEnded:  "done",
+}
+
+// StatusCheckOf is how a loop reads at now. The browser's statusCheckView
+// (view.js) says the same; web/testdata/views/status-check.json pins both.
+func StatusCheckOf(c *domain.StatusCheck, now time.Time) CheckView {
+	last := "no check yet"
+	if c.LastFiredAt != nil {
+		ago := relativeTime(*c.LastFiredAt, now) + " ago"
+		if ago == "now ago" {
+			ago = "just now"
+		}
+		last = "last " + ago + " · " + count(c.FiredCount, "check")
+	}
+	if c.State != domain.StatusCheckActive {
+		word := "checks ended"
+		if c.State == domain.StatusCheckPaused {
+			word = "checks paused"
+		}
+		return CheckView{checkStates[c.State], word, word + " · " + last}
+	}
+	next := ""
+	if c.NextAt != nil && c.NextAt.Sub(now) >= time.Minute {
+		next = relativeTime(now, *c.NextAt)
+	}
+	every := relativeTime(time.Time{}, time.Time{}.Add(c.Every()))
+	if next == "" {
+		return CheckView{checkStates[c.State], "check due", "checks every " + every + " · next due now · " + last}
+	}
+	return CheckView{checkStates[c.State], "check in " + next, "checks every " + every + " · next in " + next + " · " + last}
 }
 
 // badge marks the task's architect in the list.

@@ -1,0 +1,11 @@
+{
+  "$comment": "How a delegate's status-check loop reads on its row and in its header. Read by web/src/modules/sessions/presentation/view.test.js and internal/adapter/in/web/sessions/view_test.go. Times are minutes from now: next_in ahead, last_ago behind; null when absent.",
+  "cases": [
+    { "state": "active", "every": 10, "next_in": 6, "last_ago": 4, "fired": 3, "status": "running", "short": "check in 6m", "detail": "checks every 10m · next in 6m · last 4m ago · 3 checks" },
+    { "state": "active", "every": 10, "next_in": 0, "last_ago": null, "fired": 0, "status": "running", "short": "check due", "detail": "checks every 10m · next due now · no check yet" },
+    { "state": "active", "every": 120, "next_in": 90, "last_ago": 30, "fired": 1, "status": "running", "short": "check in 1h", "detail": "checks every 2h · next in 1h · last 30m ago · 1 check" },
+    { "state": "active", "every": 5, "next_in": null, "last_ago": null, "fired": 0, "status": "running", "short": "check due", "detail": "checks every 5m · next due now · no check yet" },
+    { "state": "paused", "every": 0, "next_in": null, "last_ago": 12, "fired": 2, "status": "idle", "short": "checks paused", "detail": "checks paused · last 12m ago · 2 checks" },
+    { "state": "ended", "every": 10, "next_in": null, "last_ago": 1, "fired": 7, "status": "done", "short": "checks ended", "detail": "checks ended · last 1m ago · 7 checks" }
+  ]
+}

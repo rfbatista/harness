@@ -8,23 +8,33 @@ import { FeedStatus } from "../../../../shared/domain/feed.js";
 import { describeError } from "../../../../shared/presentation/errors.js";
 import { readSeed } from "../../../../shared/presentation/seed.js";
 import { Codes, codeOf } from "../../../../shared/domain/errors.js";
+import { mergeMessages, newestAt, upsertMessage } from "../../domain/channel.js";
 import { applyChange, displayOrder, group, INITIAL_TERMINAL_SIZE, isTerminal, ofTask } from "../../domain/session.js";
 import { artifactTitle } from "../artifactView.js";
 import { startedBy, summary, toDetailView, toGroupViews } from "../view.js";
 
 const TICK_MS = 30_000;
 
+/** How long a session that arrived over the feed stays highlighted. */
+export const FRESH_MS = 8_000;
+
+/**
+ * The task's messages between its architect and the delegates, shared by the
+ * page and its Conversation tab: Alpine.store("sessionsChannel").
+ * @typedef {{ messages: import("../../domain/channel.js").TaskMessage[], loaded: boolean }} ChannelStore
+ */
+
 /**
  * @param {{
  *   gateway: import("../../domain/ports.js").SessionGateway,
  *   clock: import("../../../../shared/infrastructure/clock.js").Clock,
+ *   channel?: import("../../domain/ports.js").ChannelGateway,  the architect channel; without it the page shows none
+ *   channelStore?: ChannelStore,
  * }} deps
  */
-/** How long a session that arrived over the feed stays highlighted. */
-export const FRESH_MS = 8_000;
-
-export const sessionsPage = ({ gateway, clock, setTimeout = globalThis.setTimeout.bind(globalThis) }) => () => {
+export const sessionsPage = ({ gateway, clock, channel = null, channelStore = { messages: [], loaded: false }, setTimeout = globalThis.setTimeout.bind(globalThis) }) => () => {
   let unfollow = () => {};
+  let unfollowChannel = null;
   let ticker = null;
 
   return {
@@ -58,6 +68,7 @@ export const sessionsPage = ({ gateway, clock, setTimeout = globalThis.setTimeou
     // ── what the markup binds ────────────────────────────────────────────
     get groups() {
       return toGroupViews(this.sessions, {
+        messages: channelStore.loaded ? channelStore.messages : undefined,
         selectedId: this.selectedId,
         now: this.now,
         agentNames: this.agentNames,
@@ -180,6 +191,7 @@ export const sessionsPage = ({ gateway, clock, setTimeout = globalThis.setTimeou
         (change) => this.apply(change),
         (status) => this.feedStatus(status),
       );
+      this.followChannel();
       ticker = setInterval(() => (this.now = clock.now()), TICK_MS);
 
       // Alpine has rendered the live list; drop the server-rendered copy.
@@ -191,7 +203,45 @@ export const sessionsPage = ({ gateway, clock, setTimeout = globalThis.setTimeou
 
     destroy() {
       unfollow();
+      unfollowChannel?.();
       clearInterval(ticker);
+    },
+
+    // ── the architect channel ────────────────────────────────────────────
+    /** The task has an architect: its sessions lead the list and talk over the channel. */
+    get hasArchitect() {
+      return this.sessions.some((s) => s.role === "architect");
+    },
+
+    /**
+     * Once the task has an architect (on load, or when one starts), load its
+     * messages and follow new ones. A task without one never asks.
+     */
+    followChannel() {
+      if (!channel || unfollowChannel || !this.hasArchitect) return;
+      unfollowChannel = channel.follow(
+        this.projectId,
+        (event) => this.channelEvent(event),
+        (status) => status === FeedStatus.RESYNCED && this.loadMessages(newestAt(channelStore.messages)),
+      );
+      this.loadMessages(null);
+    },
+
+    /** Loads the task's messages, or only those after since (after a resync), into the store. */
+    async loadMessages(since) {
+      try {
+        const list = await channel.listMessages({ ticketId: this.ticketId, since });
+        channelStore.messages = mergeMessages(channelStore.messages, list);
+        channelStore.loaded = true;
+      } catch (err) {
+        this.error = describeError(err);
+      }
+    },
+
+    /** @param {import("../../domain/ports.js").ChannelEvent} event */
+    channelEvent({ message }) {
+      if (message.taskId !== this.ticketId) return;
+      channelStore.messages = upsertMessage(channelStore.messages, message);
     },
 
     // ── feed ─────────────────────────────────────────────────────────────
@@ -205,6 +255,7 @@ export const sessionsPage = ({ gateway, clock, setTimeout = globalThis.setTimeou
       if (change.kind === "deleted" && change.id === this.selectedId) this.selectedId = null;
       // The session's Design panel follows its own stream; tell it the session is over.
       if (change.kind === "upsert" && isTerminal(change.session)) this.$dispatch("session-ended", { id: change.session.id });
+      this.followChannel();
     },
 
     /** A session started elsewhere joined the task: highlight it for a moment and say so. */

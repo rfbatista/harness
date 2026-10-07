@@ -2,6 +2,7 @@
 // sessions/view.go; web/testdata/views/session-status.json pins both.
 
 import { count, relativeTime } from "../../../shared/presentation/format.js";
+import { lastReportOf } from "../domain/channel.js";
 import { canResume, group, hasLiveTerminal, isTerminal, needsYou } from "../domain/session.js";
 
 /** Domain status → the design system's .status[data-state] and its word. */
@@ -55,14 +56,21 @@ export function statusView(session) {
 /** How far a delegate's row is indented: deeper ones line up at the last step. */
 export const MAX_DEPTH = 3;
 
-export function toRowView(session, { selectedId, now, agentNames, others = [], fresh = false, depth = 0 }) {
+/**
+ * messages: the task's messages once loaded (undefined before), for a
+ * delegate's last report.
+ */
+export function toRowView(session, { selectedId, now, agentNames, others = [], fresh = false, depth = 0, messages }) {
   const status = statusView(session);
   return {
     id: session.id,
     title: session.task || "Untitled session",
     state: status.state,
     word: status.word,
-    meta: meta(runsAs(session, agentNames), startedBy(session, others, agentNames), relativeTime(session.updatedAt, now)),
+    meta:
+      session.role === "delegate"
+        ? delegateMeta(session, { now, agentNames, messages })
+        : meta(runsAs(session, agentNames), startedBy(session, others, agentNames), relativeTime(session.updatedAt, now)),
     selected: session.id === selectedId,
     fresh,
     attention: needsYou(session),
@@ -75,14 +83,68 @@ export function toRowView(session, { selectedId, now, agentNames, others = [], f
 }
 
 /** fresh: the ids of sessions that just arrived over the feed, highlighted for a moment. */
-export function toGroupViews(sessions, { selectedId, now, agentNames, fresh = new Set() }) {
+export function toGroupViews(sessions, { selectedId, now, agentNames, fresh = new Set(), messages }) {
   return group(sessions).map(({ key, sessions: members, depth = {} }) => ({
     key,
     label: GROUP_LABEL[key],
     tone: key === "needs-you" ? "attention" : null,
     count: members.length,
-    rows: members.map((s) => toRowView(s, { selectedId, now, agentNames, others: sessions, fresh: fresh.has(s.id), depth: depth[s.id] ?? 0 })),
+    rows: members.map((s) => toRowView(s, { selectedId, now, agentNames, others: sessions, fresh: fresh.has(s.id), depth: depth[s.id] ?? 0, messages })),
   }));
+}
+
+/**
+ * A delegate's faint line: its agent, its last report (once the messages are
+ * loaded) and its status check. Who started it shows in the tree, so it is
+ * not repeated; when it changed shows only when nothing else does. The BFF's
+ * delegateMeta (view.go) renders the same before the messages load.
+ */
+function delegateMeta(session, { now, agentNames, messages }) {
+  const parts = [runsAs(session, agentNames)];
+  if (messages) parts.push(reportView(lastReportOf(messages, session.id), now));
+  if (session.statusCheck) parts.push(statusCheckView(session.statusCheck, now).short);
+  if (parts.length === 1) parts.push(relativeTime(session.updatedAt, now));
+  return parts.join(" · ");
+}
+
+const REPORT_WORD = { working: "working", blocked: "blocked", ready_for_review: "ready for review", done: "done" };
+
+/** A delegate's last report as its row says it: "ready for review 4m"; "no report yet". */
+export function reportView(report, now) {
+  if (!report) return "no report yet";
+  return `${REPORT_WORD[report.status] ?? "reported"} ${relativeTime(report.createdAt, now)}`;
+}
+
+/** How long until then, as the meta column writes it: "6m", "1h"; "" when it is due. */
+function until(then, now) {
+  if (!then || then.getTime() - now.getTime() < 60_000) return "";
+  return relativeTime(now, then);
+}
+
+const CHECK_STATE = { active: "running", paused: "idle", ended: "done" };
+
+/**
+ * A status-check loop as the page shows it: the .status state, the row's
+ * short word, and the header's detail. The BFF's StatusCheckView (view.go)
+ * says the same; web/testdata/views/status-check.json pins both.
+ * @param {import("../domain/channel.js").StatusCheck} check
+ * @returns {{ state: string, short: string, detail: string }}
+ */
+export function statusCheckView(check, now) {
+  const last = check.lastFiredAt
+    ? `last ${relativeTime(check.lastFiredAt, now) === "now" ? "just now" : `${relativeTime(check.lastFiredAt, now)} ago`} · ${count(check.firedCount, "check")}`
+    : "no check yet";
+  if (check.state !== "active") {
+    const word = check.state === "paused" ? "checks paused" : "checks ended";
+    return { state: CHECK_STATE[check.state], short: word, detail: `${word} · ${last}` };
+  }
+  const next = until(check.nextAt, now);
+  const every = relativeTime(new Date(0), new Date(check.everyMinutes * 60_000));
+  return {
+    state: CHECK_STATE.active,
+    short: next ? `check in ${next}` : "check due",
+    detail: `checks every ${every} · ${next ? `next in ${next}` : "next due now"} · ${last}`,
+  };
 }
 
 export function toDetailView(session, now, agentNames) {

@@ -10,6 +10,7 @@ import { preferences } from "../src/shared/infrastructure/storage.js";
 import { registerShared } from "../src/shared/presentation/register.js";
 
 import { memoryArtifacts } from "../src/modules/sessions/infrastructure/memory-artifacts.js";
+import { memoryChannel } from "../src/modules/sessions/infrastructure/memory-channel.js";
 import { memoryGateway } from "../src/modules/sessions/infrastructure/memory-gateway.js";
 import { memoryTerminals } from "../src/modules/sessions/infrastructure/memory-terminals.js";
 import { registerSessions } from "../src/modules/sessions/presentation/register.js";
@@ -27,7 +28,8 @@ const terminals = memoryTerminals({
   history: Array.from({ length: 60 }, (_, i) => `\x1b[2m${String(i + 1).padStart(2)}\x1b[0m earlier output, line ${i + 1}`),
 });
 const artifacts = memoryArtifacts();
-registerSessions(Alpine, { gateway: memory.gateway, artifacts: artifacts.gateway, terminals: terminals.gateway, createScreen, clock: systemClock });
+const channel = memoryChannel({ projectId: seed.projectId });
+registerSessions(Alpine, { gateway: memory.gateway, artifacts: artifacts.gateway, channel: channel.gateway, terminals: terminals.gateway, createScreen, clock: systemClock });
 
 window.harness = {
   memory,
@@ -38,6 +40,7 @@ window.harness = {
   drop: () => memory.feedStatus(FeedStatus.PAUSED),
   reconnect: () => memory.feedStatus(FeedStatus.RESYNCED),
   artifacts,
+  channel,
   /** Publishes a page into a session, as the agent's publish_artifact tool would. */
   publish: (id, title = "Hero", path = "hero.html") =>
     artifacts.publish({ sessionId: id, kind: "page", title, note: "from the console", path, mime: "text/html", sizeBytes: 1 }),
