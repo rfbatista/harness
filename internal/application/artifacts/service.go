@@ -31,6 +31,13 @@ type Service struct {
 	sessions  ports.SessionRepository
 	announce  ports.SessionAnnouncer // nil: publishes are recorded but not announced
 
+	// Tickets finds the task an artifact is attached to. Nil: nothing can be
+	// attached.
+	Tickets ports.TicketReader
+	// Feed announces project-asset changes on the project feed. Nil: they
+	// are stored but not announced.
+	Feed ports.ProjectChangeSink
+
 	// MaxSizeBytes caps a published file, and a project artifact's copy as a
 	// whole; zero means DefaultMaxSizeBytes.
 	MaxSizeBytes int64
@@ -63,6 +70,27 @@ func (s *Service) Subscribe(sub ports.EventSubscriber) {
 		}
 		return err
 	})
+	// A deleted task loses its attachments; the assets stay in the project.
+	ports.On(sub, func(_ context.Context, ev domain.TicketDeleted) error {
+		s.snapMu.Lock()
+		defer s.snapMu.Unlock()
+		ids, err := s.artifacts.DetachTicket(ev.TicketID)
+		for _, id := range ids {
+			if a := s.artifacts.Get(id); a != nil {
+				s.announceFeed(ports.ArtifactUpdated(a))
+			}
+		}
+		return err
+	})
+}
+
+// announceFeed puts a project-asset change on the project feed. Callers hold
+// snapMu and have stored the change, so the feed carries an artifact's
+// changes in the order they were applied.
+func (s *Service) announceFeed(c ports.ProjectChange) {
+	if s.Feed != nil {
+		s.Feed.AnnounceChange(c)
+	}
 }
 
 func (s *Service) maxSize() int64 {
@@ -175,7 +203,11 @@ func (s *Service) save(a *domain.Artifact, worktree string) (*domain.Artifact, e
 		if prev.Snapshot {
 			s.pruneSnapshots(prev.ID, prev.Revision)
 		}
-		return s.artifacts.Get(prev.ID), nil
+		saved := s.artifacts.Get(prev.ID)
+		if saved != nil && saved.Scope == domain.ArtifactScopeProject {
+			s.announceFeed(ports.ArtifactUpdated(saved))
+		}
+		return saved, nil
 	}
 	a.Revision = 1
 	return s.artifacts.Create(a)
@@ -241,6 +273,8 @@ func (s *Service) SetArtifactScope(_ context.Context, artifactID string, scope d
 	if s.announce != nil && s.sessions.Get(saved.SessionID) != nil {
 		s.announce.Announce(saved.SessionID, ports.SessionEvent{Type: "artifact", Artifact: saved, At: s.now()})
 	}
+	// Either way the project library and attached tasks' pages change.
+	s.announceFeed(ports.ArtifactUpdated(saved))
 	return saved, nil
 }
 
@@ -317,11 +351,66 @@ func (s *Service) ListArtifacts(_ context.Context, f ports.ArtifactFilter) ([]*d
 	return s.artifacts.List(f), nil
 }
 
-// DeleteArtifact is a person removing an artifact, in either scope.
+// DeleteArtifact is a person removing an artifact, in either scope. A
+// project asset's deletion goes on the project feed with the ids it had.
 func (s *Service) DeleteArtifact(_ context.Context, id string) error {
 	s.snapMu.Lock()
 	defer s.snapMu.Unlock()
-	return s.delete(id)
+	last := s.artifacts.Get(id)
+	if err := s.delete(id); err != nil {
+		return err
+	}
+	if last != nil && last.Scope == domain.ArtifactScopeProject {
+		s.announceFeed(ports.ArtifactRemoved(last))
+	}
+	return nil
+}
+
+func (s *Service) AttachArtifactToTicket(ctx context.Context, artifactID, ticketID string) (*domain.Artifact, error) {
+	return s.link(ctx, artifactID, ticketID, (*domain.Artifact).CheckAttach, s.artifacts.Attach)
+}
+
+func (s *Service) DetachArtifactFromTicket(ctx context.Context, artifactID, ticketID string) (*domain.Artifact, error) {
+	return s.link(ctx, artifactID, ticketID, (*domain.Artifact).CheckDetach, s.artifacts.Detach)
+}
+
+// link applies an attach or a detach: check is the domain rule, apply the
+// repository write. A no-op returns the artifact as stored and says nothing.
+func (s *Service) link(ctx context.Context, artifactID, ticketID string,
+	check func(*domain.Artifact, string, string) (bool, error), apply func(string, string) (bool, error)) (*domain.Artifact, error) {
+	artifactID, ticketID = strings.TrimSpace(artifactID), strings.TrimSpace(ticketID)
+	if artifactID == "" || ticketID == "" {
+		return nil, invalid("artifact_id and ticket_id are required")
+	}
+	s.snapMu.Lock()
+	defer s.snapMu.Unlock()
+	a := s.artifacts.Get(artifactID)
+	if a == nil {
+		return nil, notFound("artifact not found")
+	}
+	if s.Tickets == nil {
+		return nil, &domain.StructuredError{Code: "TICKET_NOT_FOUND", Message: "this server cannot look tasks up"}
+	}
+	tk, err := s.Tickets.GetTicket(ctx, ticketID)
+	if err != nil {
+		return nil, err
+	}
+	noop, err := check(a, tk.ID, tk.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	if noop {
+		return a, nil
+	}
+	if _, err := apply(a.ID, tk.ID); err != nil {
+		return nil, err
+	}
+	saved := s.artifacts.Get(a.ID)
+	if saved == nil {
+		return nil, notFound("artifact not found")
+	}
+	s.announceFeed(ports.ArtifactUpdated(saved))
+	return saved, nil
 }
 
 // OpenArtifactFile opens the artifact's file, or a file relpath away from

@@ -78,7 +78,7 @@ type ArtifactPublisher interface {
 	// first, or a person deletes it).
 	Unpublish(ctx context.Context, sessionID, artifactID string) error
 	// ListTaskArtifacts is every artifact published on the task, in either
-	// scope, newest first.
+	// scope, and every project artifact attached to it, newest first.
 	ListTaskArtifacts(ctx context.Context, ticketID string) ([]*domain.Artifact, error)
 	// SetArtifactScope moves an artifact between task and project scope.
 	// Moving to project snapshots its directory into harness-owned storage;
@@ -113,10 +113,25 @@ type ArtifactReader interface {
 	OpenArtifactFile(ctx context.Context, id, relpath string) (*ArtifactFile, error)
 }
 
+// ArtifactAttachments links a project artifact to other tasks of its
+// project, the way a document is linked to tickets. Both are idempotent: the
+// producing task and an attached one are no-ops on attach, a task that is not
+// attached is a no-op on detach. A blank id is INVALID_INPUT; a missing
+// artifact or task is ARTIFACT_NOT_FOUND or TICKET_NOT_FOUND; a task of
+// another project is ARTIFACT_PROJECT_MISMATCH; attaching a task artifact is
+// ARTIFACT_NOT_IN_PROJECT; detaching the producing task is
+// ARTIFACT_PRODUCER_TASK. A change is stored, then announced on the project
+// feed, then returned as stored.
+type ArtifactAttachments interface {
+	AttachArtifactToTicket(ctx context.Context, artifactID, ticketID string) (*domain.Artifact, error)
+	DetachArtifactFromTicket(ctx context.Context, artifactID, ticketID string) (*domain.Artifact, error)
+}
+
 // Artifacts is the whole artifact surface.
 type Artifacts interface {
 	ArtifactPublisher
 	ArtifactReader
+	ArtifactAttachments
 }
 
 // SessionAnnouncer puts a persisted event on a session's stream: sequenced,

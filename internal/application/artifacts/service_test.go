@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/rfbatista/harnesskit/errs"
+	"gorm.io/gorm"
 
 	"operators-mcp/internal/adapter/out/persistence/sqlite"
 	"operators-mcp/internal/domain"
@@ -46,6 +47,7 @@ func (b *fakeBus) fire(t *testing.T, ev domain.Event) {
 
 type fixture struct {
 	svc      *Service
+	db       *gorm.DB
 	repo     *sqlite.ArtifactRepository
 	sessions *sqlite.SessionRepository
 	ann      *fakeAnnouncer
@@ -59,7 +61,7 @@ func newFixture(t *testing.T) *fixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	f := &fixture{repo: sqlite.NewArtifactRepository(db), sessions: sqlite.NewSessionRepository(db), ann: &fakeAnnouncer{}, root: t.TempDir(), root2: t.TempDir()}
+	f := &fixture{db: db, repo: sqlite.NewArtifactRepository(db), sessions: sqlite.NewSessionRepository(db), ann: &fakeAnnouncer{}, root: t.TempDir(), root2: t.TempDir()}
 	for _, s := range []*domain.Session{
 		{ID: "s1", ProjectID: "p1", TicketID: "tk1", Task: "design", WorkingDir: f.root, Status: domain.SessionRunning, Interactive: true},
 		{ID: "s2", ProjectID: "p1", TicketID: "tk1", Task: "design", WorkingDir: f.root2, Status: domain.SessionRunning},
