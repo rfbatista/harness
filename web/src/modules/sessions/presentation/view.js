@@ -64,6 +64,7 @@ export function toRowView(session, { selectedId, now, agentNames, others = [], f
     fresh,
     attention: needsYou(session),
     resumable: terminalView(session).resumable,
+    resumeLabel: `Resume ${session.task || "Untitled session"}`,
   };
 }
 

@@ -325,6 +325,7 @@ test("resume brings the selected ended session back: its terminal mounts on the 
   instance.select("over");
   instance.showDesign();
   assert.equal(instance.selected.resumable, true);
+  assert.equal(instance.canResumeSelected, true);
   assert.deepEqual(instance.terminalIds, []);
 
   const resuming = instance.resume();

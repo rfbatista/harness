@@ -78,6 +78,7 @@ test("the detail and the row both carry whether Resume shows", () => {
   assert.equal(toDetailView(s, T0, {}).resumable, true);
   const [group] = toGroupViews([s], { selectedId: null, now: T0, agentNames: {} });
   assert.equal(group.rows[0].resumable, true);
+  assert.equal(group.rows[0].resumeLabel, "Resume Port tickets screen to httpclient", "the row's button names its session");
   const [running] = toGroupViews([makeSession()], { selectedId: null, now: T0, agentNames: {} });
   assert.equal(running.rows[0].resumable, false);
 });

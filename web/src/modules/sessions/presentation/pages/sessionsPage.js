@@ -80,6 +80,9 @@ export const sessionsPage = ({ gateway, clock, setTimeout = globalThis.setTimeou
     get cannotStop() {
       return !this.ready || this.stopping || !this.selected?.stoppable;
     },
+    get canResumeSelected() {
+      return this.selected?.resumable === true;
+    },
     get resumingSelected() {
       return this.resumingId !== null && this.resumingId === this.selectedId;
     },
