@@ -11,6 +11,8 @@
  * @property {string} title
  * @property {string} description
  * @property {TaskStatus} status
+ * @property {string} architectSessionId  the task's architect session; "" when it has none
+ * @property {number} pendingReviews      review requests the architect raised that wait on the person
  */
 
 /** The statuses in board order, with how they read. */

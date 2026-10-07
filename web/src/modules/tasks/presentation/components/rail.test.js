@@ -122,3 +122,12 @@ test("it reports the feed's status to the stream bar only where it is the page's
   memory.status(FeedStatus.PAUSED);
   assert.deepEqual(nav.dispatched.filter((d) => d.name === "feed-status").map((d) => d.detail), [FeedStatus.LIVE, FeedStatus.PAUSED]);
 });
+
+test("the Reviews link counts what waits on the person across the project, live", async () => {
+  const { memory, nav, link } = setup({ tasks: [makeTask({ id: "t1", pendingReviews: 2 }), makeTask({ id: "t2", status: "todo" })], sessions: [] });
+  assert.deepEqual([nav.instance.reviewsCount, nav.instance.hasReviews], [2, true]);
+  assert.deepEqual([link("t1").state, link("t1").word], ["waiting", "waiting on you"], "the task's dot says it waits on the person");
+  // The server follows every review event with the ticket, its count recomputed.
+  memory.emit({ kind: "task-upsert", task: makeTask({ id: "t1", pendingReviews: 0 }) });
+  assert.deepEqual([nav.instance.reviewsCount, nav.instance.hasReviews, link("t1").hasDot], [0, false, false]);
+});

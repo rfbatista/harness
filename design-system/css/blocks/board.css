@@ -64,6 +64,7 @@
 
     & .card .meta {
       display: flex;
+      flex-wrap: wrap; /* a reviews badge and the select share a narrow card */
       align-items: center;
       gap: var(--space-s);
       min-block-size: var(--size-control-sm);

@@ -5,6 +5,7 @@
  * long one never pushes the sessions off screen. .review is one request:
  * subject, byline, the architect's text, links, then the note and the answer.
  * Exceptions: data-withdrawn (a request withdrawn while answered: quiet).
+ * .reviews-inbox: the project inbox's scroll region, one .reviews per task.
  */
 
 @layer blocks {
@@ -30,6 +31,11 @@
       font-size: var(--text-sm);
       cursor: pointer;
     }
+  }
+
+  .reviews-inbox > .reviews {
+    max-block-size: none;
+    overflow: visible;
   }
 
   .review {

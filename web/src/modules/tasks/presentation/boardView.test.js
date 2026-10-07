@@ -13,3 +13,11 @@ test("columns in board order, cards with the rail's dot and count, and their lin
   const [docs] = cols[1].cards;
   assert.deepEqual([docs.href, docs.hasDot, docs.hasCount, docs.fresh, docs.moveLabel], ["/projects/p%2F1/tasks/t%202", false, false, true, "Move Write <docs> to"]);
 });
+
+test("a card with reviews waiting on the person says how many, in amber, and its dot says it waits on you", () => {
+  const cols = toColumns([makeTask({ id: "t1", pendingReviews: 2 }), makeTask({ id: "t2", pendingReviews: 1 }), makeTask({ id: "t3" })], { projectId: "p1", byTask: {}, fresh: new Set() });
+  const cards = Object.fromEntries(cols[2].cards.map((c) => [c.id, c]));
+  assert.deepEqual([cards.t1.reviews, cards.t1.hasReviews, cards.t1.state, cards.t1.word], ["2 reviews", true, "waiting", "waiting on you"]);
+  assert.equal(cards.t2.reviews, "1 review");
+  assert.deepEqual([cards.t3.reviews, cards.t3.hasReviews, cards.t3.hasDot], ["", false, false]);
+});

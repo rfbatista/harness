@@ -21,6 +21,11 @@ var kanban = []domain.TicketStatus{
 	domain.TicketStatusDone,
 }
 
+// ReviewsHref is the project's review inbox.
+func ReviewsHref(projectID string) string {
+	return "/projects/" + url.PathEscape(projectID) + "/reviews"
+}
+
 // NewTaskHref is the project's new-task page.
 func NewTaskHref(projectID string) string {
 	return "/projects/" + url.PathEscape(projectID) + "/tasks/new"
@@ -80,6 +85,9 @@ func BuildRail(projectID string, tasks []*domain.Ticket, list []*domain.Session,
 		rail.Empty = "No tasks yet."
 		return rail
 	}
+	for _, t := range tasks {
+		rail.Reviews += t.PendingReviews
+	}
 	byTask := activityByTask(list)
 	byStatus := map[domain.TicketStatus][]shell.Link{}
 	var other []shell.Link
@@ -111,7 +119,8 @@ func card(projectID string, t *domain.Ticket, byTask map[string]activity, curren
 		Href:      Href(projectID, t.ID),
 		Current:   t.ID == currentTaskID,
 		Live:      a.live,
-		Attention: a.attention,
+		Attention: a.attention || t.PendingReviews > 0,
+		Reviews:   t.PendingReviews,
 	}
 }
 

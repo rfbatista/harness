@@ -35,3 +35,9 @@ test("feed changes add, replace and remove sessions", () => {
   list = applyRailChange(list, { kind: "deleted", id: "b" });
   assert.deepEqual(list.map((x) => x.id), ["a"]);
 });
+
+test("reviews waiting on the person make the dot say so, even with no session waiting", () => {
+  assert.deepEqual(linkState({ live: 1, attention: false }, 1), { state: "waiting", word: "waiting on you" });
+  assert.deepEqual(linkState({ live: 0, attention: false }, 2), { state: "waiting", word: "waiting on you" });
+  assert.deepEqual(linkState({ live: 1, attention: false }, 0), { state: "running", word: "running" });
+});

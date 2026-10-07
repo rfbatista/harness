@@ -375,6 +375,12 @@ func ssrBoard(b Board) templ.Component {
 						return templ_7745c5c3_Err
 					}
 				}
+				if l.Reviews > 0 {
+					templ_7745c5c3_Err = components.Badge(reviewsWord(l.Reviews), "attention").Render(ctx, templ_7745c5c3_Buffer)
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+				}
 				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 25, "<select class=\"[ status-picker ]\" data-task-id=\"")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
@@ -382,7 +388,7 @@ func ssrBoard(b Board) templ.Component {
 				var templ_7745c5c3_Var20 string
 				templ_7745c5c3_Var20, templ_7745c5c3_Err = templ.ResolveAttributeValue(l.TaskID)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `tasks/project.templ`, Line: 83, Col: 65}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `tasks/project.templ`, Line: 86, Col: 65}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var20)
 				if templ_7745c5c3_Err != nil {
@@ -395,7 +401,7 @@ func ssrBoard(b Board) templ.Component {
 				var templ_7745c5c3_Var21 string
 				templ_7745c5c3_Var21, templ_7745c5c3_Err = templ.ResolveAttributeValue("Move " + l.Label + " to")
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `tasks/project.templ`, Line: 83, Col: 106}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `tasks/project.templ`, Line: 86, Col: 106}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var21)
 				if templ_7745c5c3_Err != nil {
@@ -413,7 +419,7 @@ func ssrBoard(b Board) templ.Component {
 					var templ_7745c5c3_Var22 string
 					templ_7745c5c3_Var22, templ_7745c5c3_Err = templ.ResolveAttributeValue(st.Value)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `tasks/project.templ`, Line: 85, Col: 34}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `tasks/project.templ`, Line: 88, Col: 34}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var22)
 					if templ_7745c5c3_Err != nil {
@@ -434,7 +440,7 @@ func ssrBoard(b Board) templ.Component {
 					var templ_7745c5c3_Var23 string
 					templ_7745c5c3_Var23, templ_7745c5c3_Err = templ.JoinStringErrs(st.Label)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `tasks/project.templ`, Line: 85, Col: 87}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `tasks/project.templ`, Line: 88, Col: 87}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var23))
 					if templ_7745c5c3_Err != nil {
@@ -491,7 +497,7 @@ func liveBoard() templ.Component {
 			templ_7745c5c3_Var24 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 36, "<div class=\"[ board ]\" aria-label=\"Tasks by status\"><template x-for=\"column in columns\" x-bind:key=\"column.status\"><section class=\"[ column ]\" x-bind:aria-label=\"column.label\"><header><span class=\"[ label ]\" x-text=\"column.label\"></span><span class=\"[ badge ]\" x-text=\"column.count\"></span></header><div class=\"[ cards ]\"><template x-for=\"card in column.cards\" x-bind:key=\"card.id\"><article class=\"[ card ]\" x-bind:data-task-id=\"card.id\" x-bind:data-fresh=\"card.fresh\"><a class=\"[ title ]\" x-bind:href=\"card.href\" x-text=\"card.title\"></a><div class=\"[ meta ]\"><span class=\"[ status ]\" data-dot-only x-show=\"card.hasDot\" x-bind:data-state=\"card.state\"><span class=\"[ visually-hidden ]\" x-text=\"card.word\"></span></span> <span class=\"[ count ]\" title=\"live sessions\" x-show=\"card.hasCount\" x-text=\"card.live\"></span> <select class=\"[ status-picker ]\" x-bind:data-task-id=\"card.id\" x-bind:aria-label=\"card.moveLabel\" x-bind:value=\"card.status\" x-on:change=\"moveTo\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 36, "<div class=\"[ board ]\" aria-label=\"Tasks by status\"><template x-for=\"column in columns\" x-bind:key=\"column.status\"><section class=\"[ column ]\" x-bind:aria-label=\"column.label\"><header><span class=\"[ label ]\" x-text=\"column.label\"></span><span class=\"[ badge ]\" x-text=\"column.count\"></span></header><div class=\"[ cards ]\"><template x-for=\"card in column.cards\" x-bind:key=\"card.id\"><article class=\"[ card ]\" x-bind:data-task-id=\"card.id\" x-bind:data-fresh=\"card.fresh\"><a class=\"[ title ]\" x-bind:href=\"card.href\" x-text=\"card.title\"></a><div class=\"[ meta ]\"><span class=\"[ status ]\" data-dot-only x-show=\"card.hasDot\" x-bind:data-state=\"card.state\"><span class=\"[ visually-hidden ]\" x-text=\"card.word\"></span></span> <span class=\"[ count ]\" title=\"live sessions\" x-show=\"card.hasCount\" x-text=\"card.live\"></span><template x-if=\"card.hasReviews\"><span class=\"[ badge ]\" data-tone=\"attention\" x-text=\"card.reviews\"></span></template><select class=\"[ status-picker ]\" x-bind:data-task-id=\"card.id\" x-bind:aria-label=\"card.moveLabel\" x-bind:value=\"card.status\" x-on:change=\"moveTo\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -503,7 +509,7 @@ func liveBoard() templ.Component {
 			var templ_7745c5c3_Var25 string
 			templ_7745c5c3_Var25, templ_7745c5c3_Err = templ.ResolveAttributeValue(st.Value)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `tasks/project.templ`, Line: 119, Col: 34}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `tasks/project.templ`, Line: 125, Col: 34}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var25)
 			if templ_7745c5c3_Err != nil {
@@ -516,7 +522,7 @@ func liveBoard() templ.Component {
 			var templ_7745c5c3_Var26 string
 			templ_7745c5c3_Var26, templ_7745c5c3_Err = templ.JoinStringErrs(st.Label)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `tasks/project.templ`, Line: 119, Col: 47}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `tasks/project.templ`, Line: 125, Col: 47}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var26))
 			if templ_7745c5c3_Err != nil {
@@ -576,7 +582,7 @@ func NewTaskPage(f shell.Frame, projectID, projectName string) templ.Component {
 			var templ_7745c5c3_Var29 templ.SafeURL
 			templ_7745c5c3_Var29, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL("/projects/" + projectID))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `tasks/project.templ`, Line: 137, Col: 71}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `tasks/project.templ`, Line: 143, Col: 71}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var29))
 			if templ_7745c5c3_Err != nil {
@@ -589,7 +595,7 @@ func NewTaskPage(f shell.Frame, projectID, projectName string) templ.Component {
 			var templ_7745c5c3_Var30 string
 			templ_7745c5c3_Var30, templ_7745c5c3_Err = templ.JoinStringErrs(projectName)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `tasks/project.templ`, Line: 137, Col: 87}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `tasks/project.templ`, Line: 143, Col: 87}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var30))
 			if templ_7745c5c3_Err != nil {
@@ -602,7 +608,7 @@ func NewTaskPage(f shell.Frame, projectID, projectName string) templ.Component {
 			var templ_7745c5c3_Var31 string
 			templ_7745c5c3_Var31, templ_7745c5c3_Err = templ.ResolveAttributeValue(projectID)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `tasks/project.templ`, Line: 141, Col: 124}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `tasks/project.templ`, Line: 147, Col: 124}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var31)
 			if templ_7745c5c3_Err != nil {
@@ -620,7 +626,7 @@ func NewTaskPage(f shell.Frame, projectID, projectName string) templ.Component {
 				var templ_7745c5c3_Var32 string
 				templ_7745c5c3_Var32, templ_7745c5c3_Err = templ.ResolveAttributeValue(st.Value)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `tasks/project.templ`, Line: 154, Col: 32}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `tasks/project.templ`, Line: 160, Col: 32}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var32)
 				if templ_7745c5c3_Err != nil {
@@ -633,7 +639,7 @@ func NewTaskPage(f shell.Frame, projectID, projectName string) templ.Component {
 				var templ_7745c5c3_Var33 string
 				templ_7745c5c3_Var33, templ_7745c5c3_Err = templ.JoinStringErrs(st.Label)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `tasks/project.templ`, Line: 154, Col: 45}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `tasks/project.templ`, Line: 160, Col: 45}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var33))
 				if templ_7745c5c3_Err != nil {
@@ -651,7 +657,7 @@ func NewTaskPage(f shell.Frame, projectID, projectName string) templ.Component {
 			var templ_7745c5c3_Var34 templ.SafeURL
 			templ_7745c5c3_Var34, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL("/projects/" + projectID))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `tasks/project.templ`, Line: 168, Col: 95}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `tasks/project.templ`, Line: 174, Col: 95}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var34))
 			if templ_7745c5c3_Err != nil {

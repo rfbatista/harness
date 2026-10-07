@@ -81,6 +81,12 @@ templ taskRail(r Rail) {
 				if r.DesignHref != "" {
 					<a class="[ button ]" data-variant="ghost" data-size="sm" href={ templ.SafeURL(r.DesignHref) }>Design assets</a>
 				}
+				if r.ReviewsHref != "" {
+					<a class="[ button ]" data-variant="ghost" data-size="sm" href={ templ.SafeURL(r.ReviewsHref) }>
+						Reviews
+						<span class="[ badge ]" data-tone="attention" x-show="hasReviews" x-text="reviewsCount" { shownIf(r.Reviews > 0)... }>{ strconv.Itoa(r.Reviews) }</span>
+					</a>
+				}
 			</div>
 		}
 		if r.Seed != nil {

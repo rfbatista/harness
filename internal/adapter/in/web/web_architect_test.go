@@ -104,3 +104,61 @@ func TestTaskPageWithNoReviewsPaintsTheBandHidden(t *testing.T) {
 		t.Error("nothing waits, yet the page says something does")
 	}
 }
+
+func TestBoardAndRailSayWhereReviewsWaitOnThePerson(t *testing.T) {
+	w := board()
+	w.tickets[1].PendingReviews = 2 // t-docs: no session waits, yet reviews do
+	w.tickets[0].PendingReviews = 1
+	body := get(t, newTestHandler(t, w), "/projects/p1").Body.String()
+	card := body[strings.Index(body, `<article class="[ card ]" data-task-id="t-docs"`):]
+	card = card[:strings.Index(card, "</article>")]
+	for _, want := range []string{`<span class="[ badge ]" data-tone="attention">2 reviews</span>`, `data-state="waiting"`, "waiting on you"} {
+		if !strings.Contains(card, want) {
+			t.Errorf("the t-docs card lacks %q:\n%s", want, card)
+		}
+	}
+	for _, want := range []string{
+		`href="/projects/p1/reviews"`,
+		`x-text="reviewsCount">3</span>`,
+		`<template x-if="card.hasReviews">`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("the project page lacks %q", want)
+		}
+	}
+}
+
+func TestRailHidesTheReviewsBadgeWhenNothingWaits(t *testing.T) {
+	body := get(t, newTestHandler(t, board()), "/projects/p1").Body.String()
+	if !strings.Contains(body, `x-text="reviewsCount" style="display: none">0</span>`) {
+		t.Error("with nothing waiting, the Reviews badge should be painted hidden")
+	}
+}
+
+func TestReviewInboxPageNamesTheTasksAndSessions(t *testing.T) {
+	w := architectWorld()
+	w.tickets[0].PendingReviews = 2
+	rec := get(t, newTestHandler(t, w), "/projects/p1/reviews")
+	body := rec.Body.String()
+	if rec.Code != http.StatusOK {
+		t.Fatalf("got %d:\n%s", rec.Code, body)
+	}
+	for _, want := range []string{
+		`<h1>Reviews</h1>`,
+		`x-data="reviewsInbox" data-seed="reviews-seed"`,
+		`2 reviews wait on you`,
+		`"t-docs":{"title":"Write docs","href":"/projects/p1/tasks/t-docs"}`,
+		`"s-server":"plain claude · build the server"`,
+		`x-for="group in groups"`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("the inbox lacks %q", want)
+		}
+	}
+	if strings.Contains(body, "data-ticket-id") {
+		t.Error("the project's inbox is not scoped to a task")
+	}
+	if rec := get(t, newTestHandler(t, w), "/projects/nope/reviews"); rec.Code != http.StatusNotFound {
+		t.Errorf("an unknown project's inbox: got %d, want 404", rec.Code)
+	}
+}

@@ -352,3 +352,64 @@ func TestPersonAnswersTheArchitectsReviewRequests(t *testing.T) {
 		t.Errorf("JS errors: %v", e)
 	}
 }
+
+// TestReviewInboxAndBoardFollowWhatWaitsOnThePerson: the project's inbox
+// lists the pending requests by task and answers them; the board's badge and
+// the rail's Reviews count follow the ticket change the server sends after.
+func TestReviewInboxAndBoardFollowWhatWaitsOnThePerson(t *testing.T) {
+	now := time.Now()
+	review := func(id, subject string) *domain.ReviewRequest {
+		return &domain.ReviewRequest{ID: id, TaskID: "t1", ProjectID: "p1", ArchitectSessionID: "s-arch", Subject: subject, Body: "Look.",
+			DocumentIDs: []string{}, ArtifactIDs: []string{}, State: domain.ReviewPending, CreatedAt: now, UpdatedAt: now}
+	}
+	srv, feed := architectServer(t, nil, review("rv1", "Spec set ready for sign-off"), review("rv2", "Server API shape"))
+	ctx, errs := browser(t)
+
+	cards := `[...document.querySelectorAll('main .review')]`
+	var group, headline string
+	if err := chromedp.Run(ctx,
+		chromedp.EmulateViewport(1280, 800),
+		chromedp.Navigate(srv.URL+"/projects/p1/reviews"),
+		chromedp.Poll(cards+`.length === 2`, nil, chromedp.WithPollingTimeout(10*time.Second)),
+		chromedp.Evaluate(`document.querySelector('main .reviews h2').textContent.trim()`, &group),
+		shot("reviews-inbox"),
+		chromedp.Evaluate(cards+`[0].querySelector('button').click()`, nil),
+		chromedp.Poll(cards+`.length === 1`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Evaluate(`document.querySelector('main .toolbar [x-text=headline]').textContent`, &headline),
+	); err != nil {
+		t.Fatalf("%v\nJS errors: %v", err, errs.all())
+	}
+	if group != "Architect highlights" || headline != "1 review waits on you" {
+		t.Errorf("group %q, headline %q", group, headline)
+	}
+
+	// The board: the card's badge and the rail's count follow the ticket change.
+	badge := `(document.querySelector('.board .card[data-task-id=t1] .badge[data-tone=attention]')?.textContent ?? '')`
+	railCount := `(document.querySelector('nav [x-text=reviewsCount]')?.textContent ?? '')`
+	var before, after, railAfter string
+	if err := chromedp.Run(ctx,
+		chromedp.Navigate(srv.URL+"/projects/p1"),
+		chromedp.Poll(`(`+badge+`) !== ''`, nil, chromedp.WithPollingTimeout(10*time.Second)),
+		chromedp.Evaluate(badge, &before),
+	); err != nil {
+		t.Fatalf("%v\nJS errors: %v", err, errs.all())
+	}
+	waitFor(t, "the board's feed", func() bool { return feed.followers() >= 1 })
+	arch := "s-arch"
+	feed.pushRaw(t, map[string]any{"ticket": &domain.Ticket{ID: "t1", ProjectID: "p1", Title: "Architect highlights", Status: domain.TicketStatusInProgress, ArchitectSessionID: &arch, PendingReviews: 1}})
+	if err := chromedp.Run(ctx,
+		chromedp.Poll(`(`+badge+`) === '1 review'`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Evaluate(badge, &after),
+		chromedp.Evaluate(railCount, &railAfter),
+		shot("board-reviews"),
+	); err != nil {
+		t.Fatalf("%v\nJS errors: %v", err, errs.all())
+	}
+	if before != "2 reviews" || after != "1 review" || railAfter != "1" {
+		t.Errorf("badge %q → %q, rail %q", before, after, railAfter)
+	}
+	noBanner(t, ctx)
+	if e := errs.all(); len(e) > 0 {
+		t.Errorf("JS errors: %v", e)
+	}
+}

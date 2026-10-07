@@ -46,6 +46,10 @@ type Rail struct {
 	// DesignHref is the project's design assets: the artifacts moved to
 	// project level.
 	DesignHref string
+	// ReviewsHref is the project's review inbox: the requests its tasks'
+	// architects raised for the person; Reviews counts the pending ones.
+	ReviewsHref string
+	Reviews     int
 	Groups        []RailGroup
 	// Empty is shown when a project is selected but has no tasks.
 	Empty string
@@ -93,8 +97,11 @@ type Link struct {
 	Current bool
 	// Live counts the task's sessions whose process is alive.
 	Live int
-	// Attention: one of its sessions is waiting on the developer.
+	// Attention: one of its sessions is waiting on the developer, or a
+	// review request its architect raised is.
 	Attention bool
+	// Reviews counts the review requests waiting on the person.
+	Reviews int
 }
 
 // DocumentTitle is the <title>: the page's own title, then the app.
@@ -169,4 +176,13 @@ func railAttrs(r Rail) templ.Attributes {
 		attrs["data-reports-feed"] = ""
 	}
 	return attrs
+}
+
+// shownIf paints an x-show element as Alpine will: hidden unless shown, so
+// the first paint does not flash what the live page hides.
+func shownIf(shown bool) templ.Attributes {
+	if shown {
+		return templ.Attributes{}
+	}
+	return templ.Attributes{"style": "display: none"}
 }

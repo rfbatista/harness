@@ -7,11 +7,21 @@ export function makeTask(overrides = {}) {
     title: "Add SSE feed",
     description: "Stream session changes to clients.",
     status: "in_progress",
+    architectSessionId: "",
+    pendingReviews: 0,
     ...overrides,
   });
 }
 
 /** The wire format of a task (ticket). */
 export function taskDTO(t) {
-  return { id: t.id, project_id: t.projectId, title: t.title, description: t.description || undefined, status: t.status };
+  return {
+    id: t.id,
+    project_id: t.projectId,
+    title: t.title,
+    description: t.description || undefined,
+    status: t.status,
+    architect_session_id: t.architectSessionId || null,
+    pending_reviews: t.pendingReviews,
+  };
 }
