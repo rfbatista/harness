@@ -142,10 +142,20 @@ func TestApplyTaskContext_BriefNamesProjectDocuments(t *testing.T) {
 
 // Every tool on the task server is named in the brief, in the list style,
 // so the two never drift apart.
+// The architect channel's tools are named only in the briefs of the roles that
+// use them (a delegate's and the architect's); a peer's brief stays as it was.
+var channelTools = []string{
+	"message_architect", "reply_to_session", "list_task_messages", "request_user_review",
+	"withdraw_user_review", "list_review_requests", "set_status_check", "list_status_checks",
+}
+
 func TestApplyTaskContext_BriefNamesEveryTaskTool(t *testing.T) {
 	cfg := llmkit.SessionConfig{}
 	applyTaskContext(&cfg, &domain.Ticket{ID: "tk1", Title: "Ship the thing"}, "")
 	for _, name := range tooling.SessionTaskToolNames {
+		if slices.Contains(channelTools, name) {
+			continue
+		}
 		if !strings.Contains(cfg.AppendSystem, "\n- mcp__task__"+name+" — ") {
 			t.Errorf("brief does not list mcp__task__%s", name)
 		}

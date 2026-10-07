@@ -5,7 +5,9 @@ import (
 	"context"
 	"slices"
 	"strconv"
+	"strings"
 	"time"
+	"unicode/utf8"
 
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
@@ -36,6 +38,14 @@ var SessionTaskToolNames = []string{
 	"list_project_artifacts",
 	"move_artifact_to_project",
 	"move_artifact_to_task",
+	"message_architect",
+	"reply_to_session",
+	"list_task_messages",
+	"request_user_review",
+	"withdraw_user_review",
+	"list_review_requests",
+	"set_status_check",
+	"list_status_checks",
 }
 
 // MaxLiveTaskSessions caps the sessions running on one task at once, so agents
@@ -69,8 +79,10 @@ type ArtifactTooling struct {
 // sessions sharing it. agents, when set, names the agents those sessions run
 // and lists them to delegate to; arch, when set, maps the task's project into
 // bounded contexts and zones; start lets a session start peers on its task;
-// artifacts lets it publish what it made to the Design tab.
-func SessionTaskTools(planningSvc ports.Planning, sessions ports.SessionRepository, agents ports.AgentLister, arch ports.ArchitectureMap, start PeerStarter, artifacts ArtifactTooling) []domain.Tool {
+// artifacts lets it publish what it made to the Design tab; channel connects
+// the task's delegates to its architect and makes the architect the owner of
+// the task status (nil: no channel, every session a peer).
+func SessionTaskTools(planningSvc ports.Planning, sessions ports.SessionRepository, agents ports.AgentLister, arch ports.ArchitectureMap, start PeerStarter, artifacts ArtifactTooling, channel ports.TaskChannel) []domain.Tool {
 	tools := append([]domain.Tool{
 		{
 			Name: "start_task_session",
@@ -79,13 +91,17 @@ func SessionTaskTools(planningSvc ports.Planning, sessions ports.SessionReposito
 				"list_task_sessions. Give it a prompt saying exactly what to do and what not to touch. Optionally pick the " +
 				"agent (by name), the repository (by name; default yours) and the branch to cut its worktree from " +
 				"(default the repository's default branch; pass your own branch to build on what you have committed). " +
-				"It gets your permission mode. At most " + strconv.Itoa(MaxLiveTaskSessions) + " sessions run on a task at once.",
+				"It gets your permission mode. At most " + strconv.Itoa(MaxLiveTaskSessions) + " sessions run on a task at once. " +
+				"If you are the task's architect, a status-check loop wakes you every status_check_minutes (default 10, 0 for " +
+				"none) to check on the new session. A session you start while you are the architect or one of its delegates " +
+				"reports to the architect.",
 			InputSchema: schemaFromJSON(`{"type":"object","required":["prompt"],"properties":{` +
 				`"prompt":{"type":"string","description":"What the new session should do: its first message."},` +
 				`"agent":{"type":"string","description":"The agent to run, by name or id. Default: none (plain claude)."},` +
 				`"repository":{"type":"string","description":"The repository to work in, by name or id. Default: yours."},` +
 				`"base_branch":{"type":"string","description":"The branch its worktree branches off. Default: the repository's default branch."},` +
-				`"mode":{"type":"string","enum":["","architect","design"],"description":"architect: the session shapes its prompt into per-application specs and delegates them. design: the session produces components, images and videos and publishes each to the Design tab. Default: none."}}}`),
+				`"mode":{"type":"string","enum":["","architect","design"],"description":"architect: the session shapes its prompt into per-application specs and delegates them. design: the session produces components, images and videos and publishes each to the Design tab. Default: none."},` +
+				`"status_check_minutes":{"type":"integer","minimum":0,"maximum":240,"description":"Architect only: minutes between the checks that wake you about this session, 2–240; 0 for no loop. Default: 10."}}}`),
 			Source: "code",
 			Handler: func(ctx context.Context, args map[string]any) (any, error) {
 				scope, err := resolveTaskScope(ctx, planningSvc, sessions)
@@ -95,13 +111,14 @@ func SessionTaskTools(planningSvc ports.Planning, sessions ports.SessionReposito
 				if start.Sessions == nil {
 					return nil, &domain.StructuredError{Code: "UNAVAILABLE", Message: "starting sessions is not available on this server"}
 				}
-				return startPeer(ctx, scope, sessions, agents, start, args)
+				return startPeer(ctx, scope, sessions, agents, start, channel, args)
 			},
 		},
 		{
 			Name: "list_task_sessions",
 			Description: "List the other agent sessions working on this session's task: which agent, what it was asked, " +
-				"its status and last action, and the branch and worktree it works in. Use it to coordinate with them and " +
+				"its status and last action, the branch and worktree it works in, and its role (architect, delegate, or \"\" for a " +
+				"peer); the task's architect_session_id says who the architect is. Use it to coordinate with them and " +
 				"avoid duplicated or conflicting work. Only sessions still running are listed unless include_ended is true. " +
 				"Your own session is not in the list; it is reported as `you`.",
 			InputSchema: schemaFromJSON(`{"type":"object","properties":{"include_ended":{"type":"boolean","description":"Also list sessions that have finished, failed or been stopped (default false)."}}}`),
@@ -112,12 +129,14 @@ func SessionTaskTools(planningSvc ports.Planning, sessions ports.SessionReposito
 					return nil, err
 				}
 				includeEnded, _ := args["include_ended"].(bool)
-				peers := taskPeers(ctx, scope, sessions.List(ports.SessionFilter{ProjectID: scope.session.ProjectID, TicketID: scope.ticket.ID}), includeEnded, agents)
+				roles := taskRoles(ctx, scope, channel)
+				peers := taskPeers(ctx, scope, sessions.List(ports.SessionFilter{ProjectID: scope.session.ProjectID, TicketID: scope.ticket.ID}), includeEnded, agents, roles.of)
 				return map[string]any{
-					"task":     map[string]string{"id": scope.ticket.ID, "title": scope.ticket.Title},
-					"you":      map[string]string{"session_id": scope.session.ID, "branch": scope.session.Branch},
-					"count":    len(peers),
-					"sessions": peers,
+					"task":                 map[string]string{"id": scope.ticket.ID, "title": scope.ticket.Title},
+					"you":                  map[string]string{"session_id": scope.session.ID, "branch": scope.session.Branch, "role": string(roles.of(scope.session.ID))},
+					"architect_session_id": roles.architectID,
+					"count":                len(peers),
+					"sessions":             peers,
 				}, nil
 			},
 		},
@@ -216,9 +235,12 @@ func SessionTaskTools(planningSvc ports.Planning, sessions ports.SessionReposito
 			Name: "update_task_status",
 			Description: "Set the status of this session's task so the board stays true as the work moves. Move it to in_progress " +
 				"when you pick the work up, to review when it is ready for a person to look at, and to done when you are told it " +
-				"is accepted. Only the status changes. The same status again is fine.",
-			InputSchema: schemaFromJSON(`{"type":"object","required":["status"],"properties":{"status":{"type":"string","enum":["backlog","todo","in_progress","review","done"],"description":"The task's new status."}}}`),
-			Source:      "code",
+				"is accepted. Only the status changes. The same status again is fine. Give a reason when you change it. If this " +
+				"task has an architect and you are its delegate, this fails with TASK_STATUS_OWNED_BY_ARCHITECT: report to the " +
+				"architect with message_architect instead.",
+			InputSchema: schemaFromJSON(`{"type":"object","required":["status"],"properties":{"status":{"type":"string","enum":["backlog","todo","in_progress","review","done"],"description":"The task's new status."},` +
+				`"reason":{"type":"string","maxLength":` + strconv.Itoa(domain.MaxStatusReasonLen) + `,"description":"Why the status moves, in a sentence."}}}`),
+			Source: "code",
 			Handler: func(ctx context.Context, args map[string]any) (any, error) {
 				scope, err := resolveTaskScope(ctx, planningSvc, sessions)
 				if err != nil {
@@ -228,8 +250,18 @@ func SessionTaskTools(planningSvc ports.Planning, sessions ports.SessionReposito
 				if status == "" {
 					return nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "status is required: one of backlog, todo, in_progress, review, done"}
 				}
+				reason := strings.TrimSpace(getString(args, "reason", ""))
+				if utf8.RuneCountInString(reason) > domain.MaxStatusReasonLen {
+					return nil, invalidInput("reason is limited to " + strconv.Itoa(domain.MaxStatusReasonLen) + " characters")
+				}
 				// The task comes from the session, never from the arguments.
-				tk, err := planningSvc.PatchTicket(ctx, scope.ticket.ID, ports.TicketPatch{Status: &status})
+				var tk *domain.Ticket
+				if channel != nil {
+					// The channel enforces that only the architect moves a task that has one.
+					tk, err = channel.SetTaskStatus(ctx, scope.session.ID, status, reason)
+				} else {
+					tk, err = planningSvc.PatchTicket(ctx, scope.ticket.ID, ports.TicketPatch{Status: &status})
+				}
 				if err != nil {
 					return nil, err
 				}
@@ -237,6 +269,7 @@ func SessionTaskTools(planningSvc ports.Planning, sessions ports.SessionReposito
 			},
 		},
 	}, sessionDocumentTools(planningSvc, sessions)...)
+	tools = append(tools, sessionChannelTools(planningSvc, sessions, channel)...)
 	tools = append(tools, sessionProjectTools(planningSvc, sessions, agents, arch, start.Repositories)...)
 	return append(tools, sessionArtifactTools(planningSvc, sessions, artifacts)...)
 }
@@ -254,13 +287,14 @@ type peerSession struct {
 	Branch      string               `json:"branch,omitempty"`
 	Worktree    string               `json:"worktree,omitempty"`
 	Interactive bool                 `json:"interactive"`
+	Role        domain.SessionRole   `json:"role"`
 	UpdatedAt   time.Time            `json:"updated_at"`
 }
 
 // taskPeers is every session on the scoped task but the caller's own, live
 // ones first, then the most recently active. Ended sessions are left out
 // unless includeEnded.
-func taskPeers(ctx context.Context, scope *taskScope, list []*domain.Session, includeEnded bool, agents ports.AgentLister) []peerSession {
+func taskPeers(ctx context.Context, scope *taskScope, list []*domain.Session, includeEnded bool, agents ports.AgentLister, roleOf func(string) domain.SessionRole) []peerSession {
 	names := map[string]string{}
 	if agents != nil {
 		if all, err := agents.ListAgents(ctx); err == nil {
@@ -294,6 +328,7 @@ func taskPeers(ctx context.Context, scope *taskScope, list []*domain.Session, in
 			Branch:      s.Branch,
 			Worktree:    s.WorkingDir,
 			Interactive: s.Interactive,
+			Role:        roleOf(s.ID),
 			UpdatedAt:   s.UpdatedAt,
 		})
 	}
@@ -307,6 +342,33 @@ func taskPeers(ctx context.Context, scope *taskScope, list []*domain.Session, in
 		return b.UpdatedAt.Compare(a.UpdatedAt)
 	})
 	return peers
+}
+
+// sessionRoles is who is who on a task: its architect, and each session's
+// role. The channel derives both; without one, every session is a peer.
+type sessionRoles struct {
+	architectID *string
+	of          func(sessionID string) domain.SessionRole
+}
+
+// taskRoles reads the roles from the channel. A lookup that fails reads as a
+// peer, so a listing never fails on the channel's account.
+func taskRoles(ctx context.Context, scope *taskScope, channel ports.TaskChannel) sessionRoles {
+	roles := sessionRoles{of: func(string) domain.SessionRole { return domain.RolePeer }}
+	if channel == nil {
+		return roles
+	}
+	if a, err := channel.TaskArchitect(ctx, scope.ticket.ID); err == nil && a != nil {
+		roles.architectID = &a.ID
+	}
+	roles.of = func(id string) domain.SessionRole {
+		role, err := channel.SessionRole(ctx, id)
+		if err != nil {
+			return domain.RolePeer
+		}
+		return role
+	}
+	return roles
 }
 
 // taskScope is the task a session is allowed to act on: resolved once per call
