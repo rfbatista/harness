@@ -99,6 +99,20 @@ type Seed struct {
 	RepositoryNames map[string]string `json:"repository_names"`
 	// DocumentTitles names the task's documents a task message links.
 	DocumentTitles map[string]string `json:"document_titles,omitempty"`
+	// Artifacts are the task's design assets: those it produced and the
+	// project assets attached to it, newest first. Never null.
+	Artifacts []*domain.Artifact `json:"artifacts"`
+	// Tasks are the project's tasks, so an attached asset can link the task
+	// that produced it. Never null.
+	Tasks []TaskLink `json:"tasks"`
+}
+
+// TaskLink is a task of the project with its page, as the design seeds
+// carry it.
+type TaskLink struct {
+	ID    string `json:"id"`
+	Title string `json:"title"`
+	Href  string `json:"href"`
 }
 
 // Option is one choice in the new-session form.
@@ -204,8 +218,9 @@ func NewPageView(frame shell.Frame, project *domain.Project, task *domain.Ticket
 		PendingReviews:  task.PendingReviews,
 		Summary:         summary(list),
 		Groups:          views,
-		Seed:            Seed{ProjectID: project.ID, TicketID: task.ID, Sessions: list, AgentNames: names, RepositoryNames: repoNames},
-		NewSession:      form,
+		Seed: Seed{ProjectID: project.ID, TicketID: task.ID, Sessions: list, AgentNames: names, RepositoryNames: repoNames,
+			Artifacts: []*domain.Artifact{}, Tasks: []TaskLink{}},
+		NewSession: form,
 	}
 }
 

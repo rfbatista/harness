@@ -539,3 +539,38 @@ func TestTickets_AreDecorated(t *testing.T) {
 		}
 	}
 }
+
+// Deleting a task publishes TicketDeleted once the task is gone, so other
+// contexts drop what they kept about it; a failed delete publishes nothing.
+func TestTickets_DeleteIsPublished(t *testing.T) {
+	db, err := sqlite.Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	projects := sqlite.NewProjectRepository(db)
+	p, _ := projects.Create("proj", "/tmp/proj")
+	tickets := sqlite.NewTicketRepository(db)
+	svc := planning.NewService(tickets, sqlite.NewDocumentRepository(db), projects)
+	bus := eventbus.New()
+	var seen []domain.TicketDeleted
+	ports.On(bus, func(_ context.Context, ev domain.TicketDeleted) error {
+		if tickets.Get(ev.TicketID) != nil {
+			t.Errorf("TicketDeleted published while %s is still stored", ev.TicketID)
+		}
+		seen = append(seen, ev)
+		return nil
+	})
+	svc.Events = bus
+	ctx := context.Background()
+
+	tk, _ := svc.CreateTicket(ctx, p.ID, "Gone soon", "", domain.TicketStatusTodo)
+	if err := svc.DeleteTicket(ctx, tk.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.DeleteTicket(ctx, "ghost"); err == nil {
+		t.Fatal("deleting a missing task should fail")
+	}
+	if len(seen) != 1 || seen[0].TicketID != tk.ID || seen[0].ProjectID != p.ID {
+		t.Fatalf("published: %+v", seen)
+	}
+}

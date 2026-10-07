@@ -33,6 +33,16 @@ type ArtifactModel struct {
 
 func (ArtifactModel) TableName() string { return "artifacts" }
 
+// ArtifactTicketModel links a project artifact to a task it is attached to
+// (never the task that produced it). CreatedAt orders an artifact's links.
+type ArtifactTicketModel struct {
+	ArtifactID string `gorm:"column:artifact_id;primaryKey;index"`
+	TicketID   string `gorm:"column:ticket_id;primaryKey;index"`
+	CreatedAt  int64  `gorm:"autoCreateTime:nano"`
+}
+
+func (ArtifactTicketModel) TableName() string { return "artifact_tickets" }
+
 func artifactTarget(path, url string) string {
 	if url != "" {
 		return "url:" + url

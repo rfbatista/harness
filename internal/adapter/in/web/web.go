@@ -41,6 +41,9 @@ type Deps struct {
 	Documents ports.DocumentReader
 	// History reads repositories' commit graphs for their history pages.
 	History ports.RepositoryHistory
+	// Artifacts lists the design assets the task pages and the project's
+	// design library seed; nil seeds none.
+	Artifacts ports.ArtifactReader
 	// Now defaults to time.Now.
 	Now func() time.Time
 }
@@ -60,7 +63,7 @@ func NewHandler(deps Deps, assets *Assets, fallback http.Handler) http.Handler {
 	homePage := home.Handler{Projects: deps.Projects, Layout: s.layout, Render: render}
 	taskPages := tasks.Handler{
 		Projects: deps.Projects, Tasks: deps.Tasks, Sessions: deps.Sessions,
-		Agents: deps.Agents, Repositories: deps.Repositories, Docs: deps.Documents,
+		Agents: deps.Agents, Repositories: deps.Repositories, Docs: deps.Documents, Artifacts: deps.Artifacts,
 		Layout: s.layout, Render: render, Now: deps.Now,
 	}
 	projectPages := projects.Handler{Projects: deps.Projects, Repositories: deps.Repositories, EnvFiles: deps.EnvFiles, Layout: s.layout, Render: render}
