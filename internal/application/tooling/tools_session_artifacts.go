@@ -13,11 +13,11 @@ import (
 // sessionArtifactTools let a session publish what it made — a page, an
 // image, a video, a file from its worktree, or a loopback dev-server URL —
 // to the Design tab of the web UI, see what the task's sessions published,
-// and take its own down. Scoped by the session id in the context, like the
-// other task tools.
+// and take its own down; then the project's design assets. Scoped by the
+// session id in the context, like the other task tools.
 func sessionArtifactTools(planningSvc ports.Planning, sessions ports.SessionRepository, art ArtifactTooling) []domain.Tool {
-	unavailable := &domain.StructuredError{Code: "UNAVAILABLE", Message: "artifacts are not available on this server"}
-	return []domain.Tool{
+	unavailable := artifactsUnavailable()
+	return append([]domain.Tool{
 		{
 			Name: "publish_artifact",
 			Description: "Publish a file from your worktree — a self-contained HTML page or component, an image, a video, any file — " +
@@ -50,17 +50,14 @@ func sessionArtifactTools(planningSvc ports.Planning, sessions ports.SessionRepo
 				if err != nil {
 					return nil, codedMessage(err)
 				}
-				view := a.URL
-				if a.Kind != domain.ArtifactURL && art.ViewURL != nil {
-					view = art.ViewURL(a.ID)
-				}
-				return map[string]any{"artifact_id": a.ID, "revision": a.Revision, "kind": a.Kind, "view_url": view}, nil
+				return map[string]any{"artifact_id": a.ID, "revision": a.Revision, "kind": a.Kind, "view_url": viewURL(art, a)}, nil
 			},
 		},
 		{
 			Name: "list_task_artifacts",
 			Description: "List what every session on this task has published to the Design tab, newest first: " +
-				"pages, images, videos, files and dev-server URLs. Use it to see what earlier sessions produced before making more.",
+				"pages, images, videos, files and dev-server URLs, each with its scope (task, or project once it is kept as a " +
+				"project design asset). Use it to see what earlier sessions produced before making more.",
 			InputSchema: schemaFromJSON(`{"type":"object","properties":{}}`),
 			Source:      "code",
 			Handler: func(ctx context.Context, args map[string]any) (any, error) {
@@ -78,14 +75,15 @@ func sessionArtifactTools(planningSvc ports.Planning, sessions ports.SessionRepo
 				out := make([]taskArtifact, 0, len(list))
 				for _, a := range list {
 					out = append(out, taskArtifact{ArtifactID: a.ID, SessionID: a.SessionID, Kind: a.Kind, Title: a.Title,
-						Path: a.Path, URL: a.URL, Revision: a.Revision, UpdatedAt: a.UpdatedAt})
+						Path: a.Path, URL: a.URL, Scope: scopeOf(a), Revision: a.Revision, UpdatedAt: a.UpdatedAt})
 				}
 				return map[string]any{"count": len(out), "artifacts": out}, nil
 			},
 		},
 		{
-			Name:        "unpublish_artifact",
-			Description: "Remove one of your artifacts from the Design tab. The record goes; the file stays. Only artifacts you published can be removed.",
+			Name: "unpublish_artifact",
+			Description: "Remove one of your artifacts from the Design tab. The record goes; the file stays. Only artifacts you published can be removed. " +
+				"A project design asset must be moved back with move_artifact_to_task first (ARTIFACT_IN_PROJECT).",
 			InputSchema: schemaFromJSON(`{"type":"object","required":["artifact_id"],"properties":{"artifact_id":{"type":"string","description":"The artifact_id publish_artifact returned."}}}`),
 			Source:      "code",
 			Handler: func(ctx context.Context, args map[string]any) (any, error) {
@@ -101,24 +99,43 @@ func sessionArtifactTools(planningSvc ports.Planning, sessions ports.SessionRepo
 					return nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "artifact_id is required"}
 				}
 				if err := art.Publisher.Unpublish(ctx, scope.session.ID, id); err != nil {
+					var se *domain.StructuredError
+					if errors.As(err, &se) && se.Code == "ARTIFACT_IN_PROJECT" {
+						return nil, &domain.StructuredError{Code: se.Code, Message: "ARTIFACT_IN_PROJECT: this artifact is a project design asset that other tasks may reuse; " +
+							"move it back with move_artifact_to_task first, then unpublish it (or leave it for a person to delete in the web UI)"}
+					}
 					return nil, codedMessage(err)
 				}
 				return map[string]any{"artifact_id": id, "removed": true}, nil
 			},
 		},
+	}, sessionArtifactScopeTools(planningSvc, sessions, art)...)
+}
+
+func artifactsUnavailable() error {
+	return &domain.StructuredError{Code: "UNAVAILABLE", Message: "artifacts are not available on this server"}
+}
+
+// viewURL is where a person opens the artifact: the dev server itself for a
+// url artifact, the harness's view route otherwise.
+func viewURL(art ArtifactTooling, a *domain.Artifact) string {
+	if a.Kind != domain.ArtifactURL && art.ViewURL != nil {
+		return art.ViewURL(a.ID)
 	}
+	return a.URL
 }
 
 // taskArtifact is an artifact as list_task_artifacts reports it.
 type taskArtifact struct {
-	ArtifactID string              `json:"artifact_id"`
-	SessionID  string              `json:"session_id"`
-	Kind       domain.ArtifactKind `json:"kind"`
-	Title      string              `json:"title"`
-	Path       string              `json:"path,omitempty"`
-	URL        string              `json:"url,omitempty"`
-	Revision   int                 `json:"revision"`
-	UpdatedAt  time.Time           `json:"updated_at"`
+	ArtifactID string               `json:"artifact_id"`
+	SessionID  string               `json:"session_id"`
+	Kind       domain.ArtifactKind  `json:"kind"`
+	Title      string               `json:"title"`
+	Path       string               `json:"path,omitempty"`
+	URL        string               `json:"url,omitempty"`
+	Scope      domain.ArtifactScope `json:"scope"`
+	Revision   int                  `json:"revision"`
+	UpdatedAt  time.Time            `json:"updated_at"`
 }
 
 // codedMessage puts an artifact error's code in front of its message. The

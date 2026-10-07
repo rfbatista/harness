@@ -33,6 +33,9 @@ var SessionTaskToolNames = []string{
 	"publish_artifact",
 	"list_task_artifacts",
 	"unpublish_artifact",
+	"list_project_artifacts",
+	"move_artifact_to_project",
+	"move_artifact_to_task",
 }
 
 // MaxLiveTaskSessions caps the sessions running on one task at once, so agents
@@ -57,8 +60,8 @@ type ArtifactTooling struct {
 
 // SessionTaskTools exposes the task a session was spawned into (to read, and
 // to move between statuses), the documents linked to that task, the project's
-// own documents, the other sessions working on it, and the artifacts those
-// sessions published, as MCP tools.
+// own documents, the other sessions working on it, the artifacts those
+// sessions published, and the project's design assets, as MCP tools.
 //
 // The tools take no project or ticket id: the session id travels in the context
 // (see WithSessionID) and every handler resolves the scope from it, so a session

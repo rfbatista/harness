@@ -19,6 +19,8 @@ type artifactToolsFixture struct {
 	ticketID string
 	root     string // sess-1's worktree
 	root2    string // sess-2's worktree, same task
+	root3    string // sess-3's worktree, another task of the same project
+	root4    string // sess-4's worktree, a task of another project
 }
 
 func newArtifactToolsFixture(t *testing.T) *artifactToolsFixture {
@@ -35,13 +37,29 @@ func newArtifactToolsFixture(t *testing.T) *artifactToolsFixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	f := &artifactToolsFixture{tools: map[string]domain.Tool{}, ticketID: tk.ID, root: t.TempDir(), root2: t.TempDir()}
-	for id, dir := range map[string]string{"sess-1": f.root, "sess-2": f.root2} {
-		if _, err := sessions.Create(&domain.Session{ID: id, ProjectID: proj.ID, TicketID: tk.ID, Task: "go", WorkingDir: dir, Status: domain.SessionRunning}); err != nil {
+	other, err := plan.CreateTicket(context.Background(), proj.ID, "Design the logo", "", domain.TicketStatusInProgress)
+	if err != nil {
+		t.Fatal(err)
+	}
+	proj2, _ := projects.Create("p2", t.TempDir())
+	foreign, err := plan.CreateTicket(context.Background(), proj2.ID, "Elsewhere", "", domain.TicketStatusInProgress)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f := &artifactToolsFixture{tools: map[string]domain.Tool{}, ticketID: tk.ID, root: t.TempDir(), root2: t.TempDir(), root3: t.TempDir(), root4: t.TempDir()}
+	for _, s := range []*domain.Session{
+		{ID: "sess-1", ProjectID: proj.ID, TicketID: tk.ID, WorkingDir: f.root},
+		{ID: "sess-2", ProjectID: proj.ID, TicketID: tk.ID, WorkingDir: f.root2},
+		{ID: "sess-3", ProjectID: proj.ID, TicketID: other.ID, WorkingDir: f.root3},
+		{ID: "sess-4", ProjectID: proj2.ID, TicketID: foreign.ID, WorkingDir: f.root4},
+	} {
+		s.Task, s.Status = "go", domain.SessionRunning
+		if _, err := sessions.Create(s); err != nil {
 			t.Fatal(err)
 		}
 	}
 	art := artifacts.NewService(sqlite.NewArtifactRepository(db), sessions, nil)
+	art.StoreDir = t.TempDir() // moving to project copies the bytes here
 	for _, tl := range SessionTaskTools(plan, sessions, nil, nil, PeerStarter{}, ArtifactTooling{Publisher: art, ViewURL: func(id string) string { return "/api/artifacts/" + id + "/view/" }}) {
 		f.tools[tl.Name] = tl
 	}
@@ -126,7 +144,8 @@ func TestListAndUnpublishArtifactTools(t *testing.T) {
 		t.Fatal(err)
 	}
 	items := listed["artifacts"].([]taskArtifact)
-	if listed["count"] != 2 || len(items) != 2 || items[0].ArtifactID != b["artifact_id"] || items[0].SessionID != "sess-2" || items[1].ArtifactID != a["artifact_id"] || items[1].Path != "a.html" {
+	if listed["count"] != 2 || len(items) != 2 || items[0].ArtifactID != b["artifact_id"] || items[0].SessionID != "sess-2" || items[1].ArtifactID != a["artifact_id"] || items[1].Path != "a.html" ||
+		items[0].Scope != domain.ArtifactScopeTask || items[1].Scope != domain.ArtifactScopeTask {
 		t.Fatalf("list = %+v", items)
 	}
 
@@ -148,7 +167,7 @@ func TestListAndUnpublishArtifactTools(t *testing.T) {
 
 func TestArtifactTools_UnavailableWithoutAPublisher(t *testing.T) {
 	f := newTaskToolsFixture(t) // built with a zero ArtifactTooling
-	for _, name := range []string{"publish_artifact", "list_task_artifacts", "unpublish_artifact"} {
+	for _, name := range []string{"publish_artifact", "list_task_artifacts", "unpublish_artifact", "list_project_artifacts", "move_artifact_to_project", "move_artifact_to_task"} {
 		_, err := f.call(t, f.sessionID, name, map[string]any{"title": "T", "path": "x", "artifact_id": "y"})
 		wantCode(t, err, "UNAVAILABLE")
 	}
