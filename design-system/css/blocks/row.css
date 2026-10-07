@@ -2,7 +2,9 @@
  * Row — the workhorse: sessions, tickets, agents, skills.
  * Columns: status | .title | .meta (override with --row-columns).
  * Exceptions: aria-selected / aria-current, data-attention, data-dense,
- * data-fresh (just arrived over the live feed: a wash that fades).
+ * data-fresh (just arrived over the live feed: a wash that fades),
+ * data-stacked (two lines for narrow lists: status | title | action, then
+ * the meta under the title, truncating; the action keeps its own column).
  */
 
 @layer blocks {
@@ -49,6 +51,26 @@
       @media (prefers-reduced-motion: reduce) {
         animation: none;
         box-shadow: inset 2px 0 0 var(--color-signal);
+      }
+    }
+
+    &[data-stacked] {
+      grid-template-columns: var(--row-status-width, 5.75rem) minmax(0, 1fr) auto;
+      grid-template-areas:
+        "status title action"
+        ".      meta  action";
+      row-gap: var(--space-3xs);
+      padding-block: var(--space-xs);
+
+      & > .status { grid-area: status; }
+      & > .title { grid-area: title; }
+      & > .action { grid-area: action; }
+
+      & > .meta {
+        grid-area: meta;
+        display: block;
+        overflow: hidden;
+        text-overflow: ellipsis;
       }
     }
 

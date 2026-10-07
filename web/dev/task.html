@@ -67,6 +67,8 @@
               { "id": "s-port", "project_id": "coding_pool", "ticket_id": "t-feed", "task": "Port tickets screen to httpclient", "agent_id": "backend", "status": "running", "pending_approvals": 0, "interactive": true, "runs_on": "server", "last_action": "go test ./internal/adapter/out/httpclient/...", "updated_at": "2026-10-02T23:50:00Z" },
               { "id": "s-suite", "project_id": "coding_pool", "ticket_id": "t-feed", "task": "Conformance suite for TicketBoard", "agent_id": "tester", "status": "thinking", "pending_approvals": 0, "interactive": true, "runs_on": "server", "updated_at": "2026-10-02T23:40:00Z" },
               { "id": "s-bump", "project_id": "coding_pool", "ticket_id": "t-feed", "task": "Bump harnesskit to v0.9", "agent_id": "backend", "status": "failed", "pending_approvals": 0, "interactive": true, "runs_on": "server", "last_action": "dto_golden_test.go failed", "resumable": true, "resume_blocked": "", "updated_at": "2026-10-02T22:00:00Z" },
+              { "id": "s-arch", "project_id": "coding_pool", "ticket_id": "t-feed", "task": "Plan: resume agent sessions from the web UI", "agent_id": "software-architect", "mode": "architect", "status": "stopped", "pending_approvals": 0, "interactive": true, "runs_on": "server", "resumable": true, "resume_blocked": "", "updated_at": "2026-10-02T21:30:00Z" },
+              { "id": "s-go", "project_id": "coding_pool", "ticket_id": "t-feed", "task": "Server: resumable flag on the session wire shape", "agent_id": "go-developer", "parent_session_id": "s-arch", "status": "stopped", "pending_approvals": 0, "interactive": true, "runs_on": "server", "resumable": true, "resume_blocked": "", "updated_at": "2026-10-02T21:20:00Z" },
               { "id": "s-gone", "project_id": "coding_pool", "ticket_id": "t-feed", "task": "Spike: drop the old poller", "agent_id": "backend", "status": "stopped", "pending_approvals": 0, "interactive": true, "runs_on": "server", "resumable": false, "resume_blocked": "WORKSPACE_MISSING", "updated_at": "2026-10-02T21:00:00Z" },
               { "id": "s-api", "project_id": "coding_pool", "ticket_id": "t-feed", "task": "Nightly dependency audit", "agent_id": "tester", "status": "done", "pending_approvals": 0, "interactive": false, "last_action": "opened 2 issues", "resumable": false, "resume_blocked": "SESSION_NOT_INTERACTIVE", "updated_at": "2026-10-02T20:00:00Z" }
             ]
@@ -77,7 +79,7 @@
           <a class="[ crumb ]" href="#">coding_pool /</a>
           <h1>Add SSE feed</h1>
           <span class="[ badge ]">in progress</span>
-          <span class="[ color-ink-faint text-sm ]" x-text="summary">6 sessions · 1 waiting</span>
+          <span class="[ color-ink-faint text-sm ]" x-text="summary">8 sessions · 1 waiting</span>
           <div class="[ actions ]">
             <template x-if="canResumeSelected">
               <button class="[ button ]" data-variant="primary" data-size="sm" :disabled="cannotResume" :aria-busy="resumingSelected" @click="resume()">Resume</button>
@@ -112,24 +114,24 @@
             <!-- First paint: rendered by the server, removed once Alpine renders the template below. -->
             <div x-ignore data-ssr role="group">
               <div class="[ group ]">Needs you <span class="[ badge ]" data-tone="attention">1</span></div>
-              <div class="[ row ]" role="option" aria-selected="true" data-attention>
+              <div class="[ row ]" data-stacked role="option" aria-selected="true" data-attention>
                 <span class="[ status ]" data-state="waiting">your turn</span>
                 <span class="[ title ]">Add SSE feed to orchestration</span>
                 <span class="[ meta ]">reviewer · 2m</span>
               </div>
               <div class="[ group ]">Running <span class="[ badge ]">2</span></div>
-              <div class="[ row ]" role="option" aria-selected="false">
+              <div class="[ row ]" data-stacked role="option" aria-selected="false">
                 <span class="[ status ]" data-state="running">running</span>
                 <span class="[ title ]">Port tickets screen to httpclient</span>
                 <span class="[ meta ]">backend · 10m</span>
               </div>
-              <div class="[ row ]" role="option" aria-selected="false">
+              <div class="[ row ]" data-stacked role="option" aria-selected="false">
                 <span class="[ status ]" data-state="running">thinking</span>
                 <span class="[ title ]">Conformance suite for TicketBoard</span>
                 <span class="[ meta ]">tester · 20m</span>
               </div>
               <div class="[ group ]">Earlier <span class="[ badge ]">1</span></div>
-              <div class="[ row ]" role="option" aria-selected="false">
+              <div class="[ row ]" data-stacked role="option" aria-selected="false">
                 <span class="[ status ]" data-state="failed">failed</span>
                 <span class="[ title ]">Bump harnesskit to v0.9</span>
                 <span class="[ meta ]">backend · 2h</span>
@@ -144,15 +146,13 @@
                   <span class="[ badge ]" :data-tone="group.tone" x-text="group.count"></span>
                 </div>
                 <template x-for="row in group.rows" :key="row.id">
-                  <div class="[ row ]" role="option" :aria-selected="row.selected" :data-attention="row.attention" @click="select(row.id)">
+                  <div class="[ row ]" data-stacked role="option" :aria-selected="row.selected" :data-attention="row.attention" @click="select(row.id)">
                     <span class="[ status ]" :data-state="row.state" x-text="row.word"></span>
                     <span class="[ title ]" x-text="row.title"></span>
-                    <span class="[ meta ]">
-                      <span x-text="row.meta"></span>
-                      <template x-if="row.resumable">
-                        <button class="[ button ]" data-variant="ghost" data-size="sm" :aria-label="row.resumeLabel" :disabled="cannotResume" @click.stop="resume(row.id)">Resume</button>
-                      </template>
-                    </span>
+                    <span class="[ meta ]" x-text="row.meta"></span>
+                    <template x-if="row.resumable">
+                      <button class="[ button action ]" data-variant="ghost" data-size="sm" :aria-label="row.resumeLabel" :disabled="cannotResume" @click.stop="resume(row.id)">Resume</button>
+                    </template>
                   </div>
                 </template>
               </div>
