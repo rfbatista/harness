@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -52,6 +53,35 @@ func (h *Handler) handleSetArtifactScope(c echo.Context) error {
 		return err
 	}
 	a, err := h.artifactsSvc.SetArtifactScope(c.Request().Context(), in.ArtifactID, domain.ArtifactScope(in.Scope))
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, map[string]any{"artifact": a})
+}
+
+// handleAttachArtifactToTicket links a project asset to another task of its
+// project; handleDetachArtifactFromTicket unlinks it. Both are idempotent and
+// answer with the artifact as stored.
+func (h *Handler) handleAttachArtifactToTicket(c echo.Context) error {
+	return h.linkArtifact(c, h.artifactsSvc.AttachArtifactToTicket)
+}
+
+func (h *Handler) handleDetachArtifactFromTicket(c echo.Context) error {
+	return h.linkArtifact(c, h.artifactsSvc.DetachArtifactFromTicket)
+}
+
+func (h *Handler) linkArtifact(c echo.Context, link func(ctx context.Context, artifactID, ticketID string) (*domain.Artifact, error)) error {
+	if h.artifactsSvc == nil {
+		return echo.NewHTTPError(http.StatusServiceUnavailable, "artifacts not configured")
+	}
+	var in struct {
+		ArtifactID string `json:"artifact_id"`
+		TicketID   string `json:"ticket_id"`
+	}
+	if err := bindJSON(c, &in); err != nil {
+		return err
+	}
+	a, err := link(c.Request().Context(), in.ArtifactID, in.TicketID)
 	if err != nil {
 		return err
 	}

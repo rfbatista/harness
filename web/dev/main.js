@@ -27,7 +27,7 @@ const terminals = memoryTerminals({
   greeting: "dev terminal: type, and it echoes back",
   history: Array.from({ length: 60 }, (_, i) => `\x1b[2m${String(i + 1).padStart(2)}\x1b[0m earlier output, line ${i + 1}`),
 });
-const artifacts = memoryArtifacts();
+const artifacts = memoryArtifacts({ tickets: [{ id: seed.ticketId, projectId: seed.projectId }] });
 const channel = memoryChannel({
   projectId: seed.projectId,
   checks: seed.sessions.flatMap((s) => (s.statusCheck ? [s.statusCheck] : [])),
@@ -55,6 +55,12 @@ window.harness = {
   /** Publishes a page into a session, as the agent's publish_artifact tool would. */
   publish: (id, title = "Hero", path = "hero.html") =>
     artifacts.publish({ sessionId: id, kind: "page", title, note: "from the console", path, mime: "text/html", sizeBytes: 1 }),
+  /** Moves an artifact to the project, as move_artifact_to_project would. */
+  promote: (artifactId) => artifacts.gateway.setScope(artifactId, "project"),
+  /** Attaches a project asset to a task, as attach_artifact_to_task would: harness.attach("art-1", "t2"). */
+  attach: (artifactId, ticketId) => artifacts.gateway.attach(artifactId, ticketId),
+  /** Detaches it, as detach_artifact_from_task would. */
+  detach: (artifactId, ticketId) => artifacts.gateway.detach(artifactId, ticketId),
 };
 
 Alpine.start();

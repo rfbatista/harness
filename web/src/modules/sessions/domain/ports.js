@@ -138,6 +138,12 @@
  *           move between scopes (same revision, later updatedAt);
  *           ended: the session is over, no more publishes will come.
  *
+ * @typedef {{ kind: "changed", artifact: Artifact }
+ *   | { kind: "deleted", id: string, projectId: string, ticketId: string, attachedTicketIds: string[] }} ProjectArtifactChange
+ *           An `artifact` change on the project feed: after an attach, a
+ *           detach, a scope move or a re-publish of a project asset (changed),
+ *           or after a delete (deleted, with the ids as they were before).
+ *
  * @typedef {object} ArtifactGateway
  * @property {(sessionId: string, signal?: AbortSignal) => Promise<Artifact[]>} list
  *           The session's artifacts, most recently updated first. A session
@@ -152,9 +158,34 @@
  *           stream as a publish of the moved artifact. Rejects with
  *           ARTIFACT_NOT_FOUND, INVALID_INPUT (unknown scope) or
  *           ARTIFACT_NOT_PROMOTABLE (no file to keep: a url, or a session
- *           whose worktree is gone).
+ *           whose worktree is gone). A move back to the task detaches it
+ *           from every task; either move is also a change on the project feed.
  * @property {(artifactId: string) => Promise<void>} remove
- *           Deletes the artifact in either scope. Rejects with ARTIFACT_NOT_FOUND.
+ *           Deletes the artifact in either scope, and its attachments with it.
+ *           Rejects with ARTIFACT_NOT_FOUND.
+ * @property {(rows: unknown[]) => Artifact[]} decodeArtifacts
+ *           Artifacts a page was seeded with, in the API's wire shape.
+ *           Throws BAD_RESPONSE on rows it cannot read.
+ * @property {(ticketId: string, signal?: AbortSignal) => Promise<Artifact[]>} listTask
+ *           The task's design assets, most recently updated first: what its
+ *           sessions produced (either scope) and the project assets attached
+ *           to it.
+ * @property {(artifactId: string, ticketId: string) => Promise<Artifact>} attach
+ *           Attaches a project asset to another task of its project and
+ *           returns it. Attaching again, or to the producing task, changes
+ *           nothing. Revision and updatedAt never change. Rejects with
+ *           ARTIFACT_NOT_FOUND, TICKET_NOT_FOUND, INVALID_INPUT (a missing
+ *           id), ARTIFACT_NOT_IN_PROJECT (a task-scope artifact) or
+ *           ARTIFACT_PROJECT_MISMATCH (a task of another project).
+ * @property {(artifactId: string, ticketId: string) => Promise<Artifact>} detach
+ *           Detaches it from a task and returns it. Detaching a task it is
+ *           not attached to changes nothing. Rejects with ARTIFACT_NOT_FOUND,
+ *           INVALID_INPUT or ARTIFACT_PRODUCER_TASK (its own task).
+ * @property {(projectId: string,
+ *             onChange: (change: ProjectArtifactChange) => void,
+ *             onStatus: (status: FeedStatus) => void) => () => void} followProject
+ *           Follows the project feed for artifact changes until the returned
+ *           function is called. The feed's other keys are not delivered.
  * @property {(sessionId: string,
  *             onEvent: (event: ArtifactEvent) => void,
  *             onStatus: (status: FeedStatus) => void) => () => void} follow

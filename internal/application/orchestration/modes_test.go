@@ -184,12 +184,13 @@ func TestStartInteractive_DesignSkillNamesProjectAssets(t *testing.T) {
 	_, launch := startInteractive(t, svc, InteractiveRequest{Mode: "design"})
 	body := pluginSkill(t, launch, "design-artifacts")
 	for _, want := range []string{"mcp__task__list_project_artifacts", "mcp__task__move_artifact_to_project", "mcp__task__move_artifact_to_task",
-		"ARTIFACT_IN_PROJECT", "ARTIFACT_NOT_PROMOTABLE", "ARTIFACT_NOT_ON_TASK", "project level"} {
+		"mcp__task__attach_artifact_to_task", "mcp__task__detach_artifact_from_task",
+		"ARTIFACT_IN_PROJECT", "ARTIFACT_NOT_PROMOTABLE", "ARTIFACT_NOT_ON_TASK", "ARTIFACT_NOT_IN_PROJECT", "ARTIFACT_PRODUCER_TASK", "project level"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("design-artifacts SKILL.md lacks %q", want)
 		}
 	}
-	for _, want := range []string{"list_project_artifacts", "move_artifact_to_project"} {
+	for _, want := range []string{"list_project_artifacts", "move_artifact_to_project", "attach_artifact_to_task"} {
 		if !strings.Contains(launch.Spec.Prompt, want) {
 			t.Errorf("design prompt lacks %q:\n%s", want, launch.Spec.Prompt)
 		}
@@ -200,8 +201,11 @@ func TestStartInteractive_DesignSkillNamesProjectAssets(t *testing.T) {
 func TestStartInteractive_ArchitectSkillNamesProjectAssets(t *testing.T) {
 	svc, _ := newInteractiveService(t)
 	_, launch := startInteractive(t, svc, InteractiveRequest{Mode: "architect"})
-	if body := pluginSkill(t, launch, "task-architecture"); !strings.Contains(body, "mcp__task__list_project_artifacts") {
-		t.Errorf("task-architecture SKILL.md lacks mcp__task__list_project_artifacts")
+	body := pluginSkill(t, launch, "task-architecture")
+	for _, want := range []string{"mcp__task__list_project_artifacts", "mcp__task__attach_artifact_to_task"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("task-architecture SKILL.md lacks %s", want)
+		}
 	}
 }
 

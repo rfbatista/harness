@@ -2,9 +2,12 @@
 // the preview of the selected one. Pure; no DOM.
 
 import { bytes, relativeTime } from "../../../shared/presentation/format.js";
-import { fileName, isLoopbackUrl, isPromotable, Kind, Scope } from "../domain/artifact.js";
+import { fileName, isLoopbackUrl, isPromotable, Kind, relationTo, Scope } from "../domain/artifact.js";
 
 const KIND_WORD = { page: "page", image: "image", video: "video", url: "dev server", file: "file" };
+
+/** A task's design assets page: what its sessions made and what is attached to it. */
+export const taskDesignHref = (projectId, ticketId) => `/projects/${encodeURIComponent(projectId)}/tasks/${encodeURIComponent(ticketId)}/design`;
 
 /** How a kind reads on a card. */
 export const kindWord = (kind) => KIND_WORD[kind] ?? kind;
@@ -14,7 +17,39 @@ export function artifactTitle(artifact) {
   return artifact.title || fileName(artifact) || artifact.url || "Untitled artifact";
 }
 
-export function toCardView(artifact, { selectedId, now, fresh = false }) {
+/** "attached to 2 tasks"; "" when it is on none. */
+export function attachedWord(artifact) {
+  const n = artifact.attachedTicketIds.length;
+  return n === 0 ? "" : n === 1 ? "attached to 1 task" : `attached to ${n} tasks`;
+}
+
+/**
+ * The question a move back to its task asks first, when it is attached
+ * elsewhere: "" when it is not, and the move needs no confirmation.
+ * @param {string[]} attachedTitles  the titles of the tasks it is attached to
+ */
+export function moveBackWarning(artifact, producerTitle, attachedTitles) {
+  const n = artifact.attachedTicketIds.length;
+  if (n === 0) return "";
+  const tasks = n === 1 ? "1 task" : `${n} tasks`;
+  return `Move ${artifactTitle(artifact)} back to ${producerTitle}? It will be detached from ${tasks}: ${attachedTitles.join(", ")}.`;
+}
+
+/** A picker's choices narrowed by what the person typed: every word, anywhere in the label, any case. */
+export function filterChoices(choices, query) {
+  const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+  return choices.filter((c) => {
+    const label = c.label.toLowerCase();
+    return words.every((w) => label.includes(w));
+  });
+}
+
+/**
+ * @param {{ selectedId: string, now: Date, fresh?: boolean, ticketId?: string }} opts
+ *        ticketId: the task the list is about, for its relation to each card
+ */
+export function toCardView(artifact, { selectedId, now, fresh = false, ticketId = "" }) {
+  const relation = ticketId ? relationTo(artifact, ticketId) : null;
   return {
     id: artifact.id,
     title: artifactTitle(artifact),
@@ -26,6 +61,9 @@ export function toCardView(artifact, { selectedId, now, fresh = false }) {
     fresh,
     /** The list's mark on a project artifact; nothing on a task one. */
     scopeMark: artifact.scope === Scope.PROJECT ? "project" : "",
+    /** On a task's list: the project asset came from another task. */
+    attachedMark: relation === "attached" ? "attached" : "",
+    attachedWord: attachedWord(artifact),
   };
 }
 

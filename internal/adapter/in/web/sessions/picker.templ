@@ -1,0 +1,41 @@
+package sessions
+
+// PickerDialog is the command palette's modal <dialog> as a choice picker,
+// bound to the picker() state a design page composes: a filter (a combobox
+// over the listbox, with the active option as its aria-activedescendant), the
+// matching choices, and a line when nothing matches. ↑/↓ move, Enter picks,
+// Esc closes (the dialog's own cancel), and focus returns to the opener.
+templ PickerDialog(placeholder string) {
+	<dialog class="[ palette ]" x-ref="picker" x-bind:aria-label="pickerLabel" x-on:close="pickerClosed">
+		<input
+			x-ref="pickerInput"
+			type="text"
+			role="combobox"
+			aria-expanded="true"
+			aria-controls="picker-results"
+			aria-autocomplete="list"
+			autocomplete="off"
+			placeholder={ placeholder }
+			x-bind:aria-label="pickerLabel"
+			x-bind:aria-activedescendant="pickerActiveDomId"
+			x-model="pickerQuery"
+			x-on:input="pickerFiltered"
+			x-on:keydown.down.prevent="pickerNext"
+			x-on:keydown.up.prevent="pickerPrevious"
+			x-on:keydown.enter.prevent="pickerChoose"
+		/>
+		<div class="[ results ]" id="picker-results" role="listbox" x-bind:aria-label="pickerLabel">
+			<template x-for="choice in pickerResults" x-bind:key="choice.id">
+				<div role="option" x-bind:id="choice.domId" x-bind:aria-selected="choice.active" x-on:click="pick(choice.id)">
+					<span x-text="choice.label"></span>
+					<template x-if="choice.detail">
+						<span class="[ color-ink-faint text-sm ]" x-text="choice.detail"></span>
+					</template>
+				</div>
+			</template>
+			<template x-if="pickerIsEmpty">
+				<p class="[ pad-s color-ink-faint ]" data-picker-empty x-text="pickerEmptyText"></p>
+			</template>
+		</div>
+	</dialog>
+}

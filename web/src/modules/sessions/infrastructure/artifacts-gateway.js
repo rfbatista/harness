@@ -1,8 +1,9 @@
 // ArtifactGateway over the harness HTTP API: the artifact list route, the
-// scope move, the delete, and the `artifact` events on a session's SSE stream
-// (the one interactive sessions already use for status and done).
+// scope move, attach and detach, the delete, the `artifact` events on a
+// session's SSE stream (the one interactive sessions already use for status
+// and done) and the `artifact` changes on the project feed.
 
-import { toArtifactEvent, toArtifactList, toMovedArtifact } from "./artifact-dto.js";
+import { toArtifactAnswer, toArtifactEvent, toArtifactList, toProjectArtifactChange } from "./artifact-dto.js";
 
 /**
  * @param {import("../../../shared/infrastructure/api.js").ApiClient} api
@@ -20,8 +21,24 @@ export function artifactsGateway(api, feed, base = "/api") {
       return toArtifactList(await api.get("/artifacts", { project_id: projectId, scope: "project" }, signal), base);
     },
 
+    decodeArtifacts(rows) {
+      return toArtifactList({ artifacts: rows }, base);
+    },
+
+    async listTask(ticketId, signal) {
+      return toArtifactList(await api.get("/artifacts", { ticket_id: ticketId }, signal), base);
+    },
+
+    async attach(artifactId, ticketId) {
+      return toArtifactAnswer(await api.post("/attach_artifact_to_ticket", { artifact_id: artifactId, ticket_id: ticketId }), base);
+    },
+
+    async detach(artifactId, ticketId) {
+      return toArtifactAnswer(await api.post("/detach_artifact_from_ticket", { artifact_id: artifactId, ticket_id: ticketId }), base);
+    },
+
     async setScope(artifactId, scope) {
-      return toMovedArtifact(await api.post("/set_artifact_scope", { artifact_id: artifactId, scope }), base);
+      return toArtifactAnswer(await api.post("/set_artifact_scope", { artifact_id: artifactId, scope }), base);
     },
 
     async remove(artifactId) {
@@ -38,6 +55,21 @@ export function artifactsGateway(api, feed, base = "/api") {
             return; // an event we cannot read is dropped; the next resync corrects the list
           }
           if (event) onEvent(event);
+        },
+        onStatus,
+      });
+    },
+
+    followProject(projectId, onChange, onStatus) {
+      return feed.follow(`/events?project_id=${encodeURIComponent(projectId)}`, {
+        onMessage: (dto) => {
+          let change;
+          try {
+            change = toProjectArtifactChange(dto, base);
+          } catch {
+            return; // a change we cannot read is dropped; the next resync corrects the list
+          }
+          if (change) onChange(change);
         },
         onStatus,
       });

@@ -70,9 +70,57 @@ type Artifact struct {
 	Scope     ArtifactScope
 	// Snapshot is set once the harness holds its own copy of the artifact's
 	// directory; its bytes are served from that copy from then on. Not on the wire.
-	Snapshot  bool
-	CreatedAt time.Time
-	UpdatedAt time.Time
+	Snapshot bool
+	// AttachedTicketIDs are the other tasks of the project a project artifact
+	// is attached to, oldest link first. Never the producing task (TicketID);
+	// always empty while the artifact is task-scoped.
+	AttachedTicketIDs []string
+	CreatedAt         time.Time
+	UpdatedAt         time.Time
+}
+
+// AttachedTo reports whether ticketID is one of the tasks the artifact is
+// attached to (not the task that produced it).
+func (a *Artifact) AttachedTo(ticketID string) bool {
+	for _, id := range a.AttachedTicketIDs {
+		if id == ticketID {
+			return true
+		}
+	}
+	return false
+}
+
+// CheckAttach says whether attaching the artifact to a task, of project
+// ticketProjectID, is allowed, and whether it would change nothing: the
+// producing task and an already attached one are no-ops. Only a project
+// artifact can be attached, and only to a task of its own project.
+func (a *Artifact) CheckAttach(ticketID, ticketProjectID string) (noop bool, err error) {
+	if ticketProjectID != a.ProjectID {
+		return false, projectMismatch(ticketID)
+	}
+	if a.Scope != ArtifactScopeProject {
+		return false, &StructuredError{Code: "ARTIFACT_NOT_IN_PROJECT",
+			Message: "artifact " + a.ID + " is kept by its task; move it to the project before attaching it to another task"}
+	}
+	return ticketID == a.TicketID || a.AttachedTo(ticketID), nil
+}
+
+// CheckDetach says whether detaching the artifact from a task is allowed, and
+// whether it would change nothing (the task is not attached). The producing
+// task cannot be detached.
+func (a *Artifact) CheckDetach(ticketID, ticketProjectID string) (noop bool, err error) {
+	if ticketProjectID != a.ProjectID {
+		return false, projectMismatch(ticketID)
+	}
+	if ticketID == a.TicketID {
+		return false, &StructuredError{Code: "ARTIFACT_PRODUCER_TASK",
+			Message: "task " + ticketID + " produced artifact " + a.ID + "; the producing task cannot be detached"}
+	}
+	return !a.AttachedTo(ticketID), nil
+}
+
+func projectMismatch(ticketID string) error {
+	return &StructuredError{Code: "ARTIFACT_PROJECT_MISMATCH", Message: "task " + ticketID + " belongs to another project"}
 }
 
 // artifactJSON is the wire shape of the Artifacts contract: path and url are
@@ -93,11 +141,17 @@ type artifactJSON struct {
 	Scope     ArtifactScope `json:"scope"`
 	CreatedAt time.Time     `json:"created_at"`
 	UpdatedAt time.Time     `json:"updated_at"`
+	// AttachedTicketIDs is never null on the wire.
+	AttachedTicketIDs []string `json:"attached_ticket_ids"`
 }
 
 func (a Artifact) MarshalJSON() ([]byte, error) {
 	w := artifactJSON{ID: a.ID, SessionID: a.SessionID, TicketID: a.TicketID, ProjectID: a.ProjectID, Kind: a.Kind,
-		Title: a.Title, Note: a.Note, Mime: a.Mime, SizeBytes: a.SizeBytes, Revision: a.Revision, Scope: a.Scope, CreatedAt: a.CreatedAt, UpdatedAt: a.UpdatedAt}
+		Title: a.Title, Note: a.Note, Mime: a.Mime, SizeBytes: a.SizeBytes, Revision: a.Revision, Scope: a.Scope, CreatedAt: a.CreatedAt, UpdatedAt: a.UpdatedAt,
+		AttachedTicketIDs: a.AttachedTicketIDs}
+	if w.AttachedTicketIDs == nil {
+		w.AttachedTicketIDs = []string{}
+	}
 	if w.Scope == "" {
 		w.Scope = ArtifactScopeTask
 	}
@@ -116,7 +170,8 @@ func (a *Artifact) UnmarshalJSON(b []byte) error {
 		return err
 	}
 	*a = Artifact{ID: w.ID, SessionID: w.SessionID, TicketID: w.TicketID, ProjectID: w.ProjectID, Kind: w.Kind,
-		Title: w.Title, Note: w.Note, Mime: w.Mime, SizeBytes: w.SizeBytes, Revision: w.Revision, Scope: w.Scope, CreatedAt: w.CreatedAt, UpdatedAt: w.UpdatedAt}
+		Title: w.Title, Note: w.Note, Mime: w.Mime, SizeBytes: w.SizeBytes, Revision: w.Revision, Scope: w.Scope, CreatedAt: w.CreatedAt, UpdatedAt: w.UpdatedAt,
+		AttachedTicketIDs: w.AttachedTicketIDs}
 	if a.Scope == "" {
 		a.Scope = ArtifactScopeTask
 	}

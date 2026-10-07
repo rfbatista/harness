@@ -119,3 +119,94 @@ func TestArtifact_ScopeOnTheWire(t *testing.T) {
 		t.Fatalf("missing scope should read as task: %q %v", back.Scope, err)
 	}
 }
+
+// attached_ticket_ids is always on the wire, [] when there are none, and
+// survives a round trip.
+func TestArtifact_AttachedTicketIDsOnTheWire(t *testing.T) {
+	b, err := json.Marshal(Artifact{ID: "a1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(b), `"attached_ticket_ids":[]`) {
+		t.Fatalf("attached_ticket_ids should be [] when none: %s", b)
+	}
+	b, _ = json.Marshal(Artifact{ID: "a1", Scope: ArtifactScopeProject, AttachedTicketIDs: []string{"t2", "t3"}})
+	var back Artifact
+	if err := json.Unmarshal(b, &back); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(back.AttachedTicketIDs, ",") != "t2,t3" {
+		t.Fatalf("attached_ticket_ids lost in the round trip: %v", back.AttachedTicketIDs)
+	}
+}
+
+func artifactCode(err error) string {
+	if se, ok := err.(*StructuredError); ok {
+		return se.Code
+	}
+	return ""
+}
+
+func TestArtifact_CheckAttach(t *testing.T) {
+	project := Artifact{ID: "a1", TicketID: "t1", ProjectID: "p1", Scope: ArtifactScopeProject, AttachedTicketIDs: []string{"t2"}}
+	task := Artifact{ID: "a2", TicketID: "t1", ProjectID: "p1", Scope: ArtifactScopeTask}
+	for _, c := range []struct {
+		name               string
+		a                  Artifact
+		ticket, ticketProj string
+		noop               bool
+		code               string
+	}{
+		{"another task of the project", project, "t3", "p1", false, ""},
+		{"already attached", project, "t2", "p1", true, ""},
+		{"the producing task", project, "t1", "p1", true, ""},
+		{"a task of another project", project, "t9", "p2", false, "ARTIFACT_PROJECT_MISMATCH"},
+		{"a task-scoped artifact", task, "t3", "p1", false, "ARTIFACT_NOT_IN_PROJECT"},
+		{"a task-scoped artifact to its producer", task, "t1", "p1", false, "ARTIFACT_NOT_IN_PROJECT"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			noop, err := c.a.CheckAttach(c.ticket, c.ticketProj)
+			if artifactCode(err) != c.code || (c.code == "" && err != nil) {
+				t.Fatalf("err = %v, want code %q", err, c.code)
+			}
+			if noop != c.noop {
+				t.Fatalf("noop = %v, want %v", noop, c.noop)
+			}
+		})
+	}
+}
+
+func TestArtifact_CheckDetach(t *testing.T) {
+	project := Artifact{ID: "a1", TicketID: "t1", ProjectID: "p1", Scope: ArtifactScopeProject, AttachedTicketIDs: []string{"t2"}}
+	task := Artifact{ID: "a2", TicketID: "t1", ProjectID: "p1", Scope: ArtifactScopeTask}
+	for _, c := range []struct {
+		name               string
+		a                  Artifact
+		ticket, ticketProj string
+		noop               bool
+		code               string
+	}{
+		{"an attached task", project, "t2", "p1", false, ""},
+		{"a task not attached", project, "t3", "p1", true, ""},
+		{"a task-scoped artifact from another task", task, "t3", "p1", true, ""},
+		{"the producing task", project, "t1", "p1", false, "ARTIFACT_PRODUCER_TASK"},
+		{"the producer of a task-scoped artifact", task, "t1", "p1", false, "ARTIFACT_PRODUCER_TASK"},
+		{"a task of another project", project, "t9", "p2", false, "ARTIFACT_PROJECT_MISMATCH"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			noop, err := c.a.CheckDetach(c.ticket, c.ticketProj)
+			if artifactCode(err) != c.code || (c.code == "" && err != nil) {
+				t.Fatalf("err = %v, want code %q", err, c.code)
+			}
+			if noop != c.noop {
+				t.Fatalf("noop = %v, want %v", noop, c.noop)
+			}
+		})
+	}
+}
+
+func TestTicketDeleted_EventName(t *testing.T) {
+	if got := (TicketDeleted{TicketID: "t1", ProjectID: "p1"}).EventName(); got != "ticket.deleted" {
+		t.Fatalf("EventName = %q", got)
+	}
+}

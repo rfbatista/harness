@@ -38,6 +38,8 @@ export const designPanel = ({ artifacts, clock, setTimeout = globalThis.setTimeo
 
   return compose(artifactBrowsing(clock), {
     sessionId: panel.sessionId ?? "",
+    /** The task's design assets page, where the project assets attached to the task are. */
+    designHref: panel.designHref ?? "",
     /** The session is alive: its stream is worth following. */
     live: panel.live === true,
     ready: false,

@@ -63,6 +63,8 @@ test("a ticket message becomes a task change; a deleted one carries only the id"
 
 test("a message of a kind it does not know, or one it cannot read, is dropped, not thrown", () => {
   assert.equal(toProjectChange({ run: { id: "r1" } }), null);
+  assert.equal(toProjectChange({ artifact: { id: "a1", kind: "page", revision: 1, scope: "project", attached_ticket_ids: ["t2"], updated_at: "2026-10-07T12:00:00Z" } }), null, "an artifact change is the design pages' business");
+  assert.equal(toProjectChange({ artifact: { id: "a1" }, deleted: true }), null);
   assert.equal(toProjectChange({}), null);
   assert.equal(toProjectChange({ ticket: { id: "t1", status: "someday" } }), null, "an unknown status drops the message (Review Focus 1)");
   assert.equal(toProjectChange({ ticket: { status: "todo" } }), null);

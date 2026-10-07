@@ -11,8 +11,9 @@ import (
 	"operators-mcp/internal/adapter/out/httpclient"
 )
 
-// The TUI follows sessions only. A ticket message on the shared feed is not a
-// session change and must never reach it, let alone as a nil session.
+// The TUI follows sessions only. A ticket or artifact message on the shared
+// feed is not a session change and must never reach it, let alone as a nil
+// session.
 func TestEvents_SkipsTicketMessages(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
@@ -20,6 +21,9 @@ func TestEvents_SkipsTicketMessages(t *testing.T) {
 		fmt.Fprint(w, ": ping\n\n")
 		fmt.Fprint(w, "data: {\"session\":{\"id\":\"s1\",\"project_id\":\"p1\"}}\n\n")
 		fmt.Fprint(w, "data: {\"ticket\":{\"id\":\"tk1\",\"project_id\":\"p1\"},\"deleted\":true}\n\n")
+		// Project design assets: attached or moved, then deleted.
+		fmt.Fprint(w, "data: {\"artifact\":{\"id\":\"a1\",\"project_id\":\"p1\",\"ticket_id\":\"tk1\",\"scope\":\"project\",\"attached_ticket_ids\":[\"tk2\"]}}\n\n")
+		fmt.Fprint(w, "data: {\"artifact\":{\"id\":\"a1\",\"project_id\":\"p1\",\"ticket_id\":\"tk1\",\"attached_ticket_ids\":[]},\"deleted\":true}\n\n")
 	}))
 	t.Cleanup(srv.Close)
 

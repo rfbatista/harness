@@ -69,7 +69,10 @@ type ProjectChange struct {
 	ReviewRequest *domain.ReviewRequest    `json:"review_request,omitempty"`
 	StatusCheck   *StatusCheckEvent        `json:"status_check,omitempty"`
 	TaskStatus    *domain.TaskStatusChange `json:"task_status,omitempty"`
-	Deleted       bool                     `json:"deleted,omitempty"`
+	// Artifact is a project design asset that changed (attached, detached,
+	// moved, re-published) or was deleted.
+	Artifact *ArtifactChange `json:"artifact,omitempty"`
+	Deleted  bool            `json:"deleted,omitempty"`
 }
 
 // ProjectID is the project whose followers the change is for.
@@ -87,6 +90,8 @@ func (c ProjectChange) ProjectID() string {
 		return c.StatusCheck.ProjectID
 	case c.TaskStatus != nil:
 		return c.TaskStatus.ProjectID
+	case c.Artifact != nil && c.Artifact.Artifact != nil:
+		return c.Artifact.Artifact.ProjectID
 	}
 	return ""
 }

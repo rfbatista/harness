@@ -41,6 +41,9 @@ type Deps struct {
 	Documents ports.DocumentReader
 	// History reads repositories' commit graphs for their history pages.
 	History ports.RepositoryHistory
+	// Artifacts lists the design assets the task pages and the project's
+	// design library seed; nil seeds none.
+	Artifacts ports.ArtifactReader
 	// Now defaults to time.Now.
 	Now func() time.Time
 }
@@ -60,7 +63,7 @@ func NewHandler(deps Deps, assets *Assets, fallback http.Handler) http.Handler {
 	homePage := home.Handler{Projects: deps.Projects, Layout: s.layout, Render: render}
 	taskPages := tasks.Handler{
 		Projects: deps.Projects, Tasks: deps.Tasks, Sessions: deps.Sessions,
-		Agents: deps.Agents, Repositories: deps.Repositories, Docs: deps.Documents,
+		Agents: deps.Agents, Repositories: deps.Repositories, Docs: deps.Documents, Artifacts: deps.Artifacts,
 		Layout: s.layout, Render: render, Now: deps.Now,
 	}
 	projectPages := projects.Handler{Projects: deps.Projects, Repositories: deps.Repositories, EnvFiles: deps.EnvFiles, Layout: s.layout, Render: render}
@@ -93,6 +96,7 @@ func NewHandler(deps Deps, assets *Assets, fallback http.Handler) http.Handler {
 	mux.Handle("GET /projects/{project}/tasks/{task}", s.page(taskPages.Task))
 	mux.Handle("GET /projects/{project}/tasks/{task}/sessions/{session}/history", s.page(historyPages.Session))
 	mux.Handle("GET /projects/{project}/tasks/{task}/sessions/{session}/history/{commit}", s.page(historyPages.Session))
+	mux.Handle("GET /projects/{project}/tasks/{task}/design", s.page(taskPages.TaskDesign))
 	mux.Handle("GET /projects/{project}/tasks/{task}/documents", s.page(taskPages.Documents))
 	mux.Handle("GET /projects/{project}/tasks/{task}/documents/{document}", s.page(taskPages.Documents))
 	mux.Handle("GET /projects/{project}/tasks/{task}/documents/{document}/view", s.page(taskPages.DocumentView))

@@ -2,15 +2,21 @@ import { assert, file, test } from "../../../shared/testing/test.js";
 import { A0, makeArtifact } from "../testing/artifact-fixtures.js";
 import {
   applyChange,
+  applyProjectChange,
   applyPublish,
+  attachableAssets,
+  attachableTasks,
+  belongsTo,
   byUpdated,
   fileName,
   isKnown,
   isLoopbackUrl,
   isNewer,
+  isNotOlder,
   isPromotable,
   isPublish,
   KINDS,
+  relationTo,
   Scope,
   withoutArtifact,
 } from "./artifact.js";
@@ -94,4 +100,57 @@ test("withoutArtifact drops one by id", () => {
 test("only a file-backed artifact can move to the project: a dev-server url dies with its session", () => {
   assert.equal(isPromotable(makeArtifact({ kind: "page" })), true);
   assert.equal(isPromotable(makeArtifact({ kind: "url", path: "", url: "http://localhost:5173/" })), false);
+});
+
+test("a task has an artifact it produced, or a project asset attached to it", () => {
+  const a = makeArtifact({ ticketId: "t1", scope: "project", attachedTicketIds: ["t2"] });
+  assert.equal(relationTo(a, "t1"), "produced");
+  assert.equal(relationTo(a, "t2"), "attached");
+  assert.equal(relationTo(a, "t3"), null);
+  assert.equal(belongsTo(a, "t2"), true);
+  assert.equal(belongsTo(a, "t3"), false);
+});
+
+test("attachable tasks leave out the producer and the tasks already attached", () => {
+  const a = makeArtifact({ ticketId: "t1", scope: "project", attachedTicketIds: ["t2"] });
+  const tasks = ["t1", "t2", "t3", "t4"].map((id) => ({ id, title: id, href: "" }));
+  assert.deepEqual(attachableTasks(a, tasks).map((t) => t.id), ["t3", "t4"]);
+});
+
+test("attachable assets are the project assets the task does not have yet", () => {
+  const mine = makeArtifact({ id: "mine", ticketId: "t1", scope: "project" });
+  const onIt = makeArtifact({ id: "on", ticketId: "t2", scope: "project", attachedTicketIds: ["t1"] });
+  const free = makeArtifact({ id: "free", ticketId: "t2", scope: "project" });
+  assert.deepEqual(attachableAssets([mine, onIt, free], "t1").map((a) => a.id), ["free"]);
+});
+
+test("isNotOlder: a later revision or a later-or-equal change wins; an attach bumps nothing, so a tie goes to the incoming copy", () => {
+  const known = makeArtifact({ revision: 2, updatedAt: later(10) });
+  assert.equal(isNotOlder(undefined, known), true);
+  assert.equal(isNotOlder(known, makeArtifact({ revision: 3, updatedAt: later(0) })), true);
+  assert.equal(isNotOlder(known, makeArtifact({ revision: 1, updatedAt: later(99) })), false);
+  assert.equal(isNotOlder(known, makeArtifact({ revision: 2, updatedAt: later(9) })), false);
+  assert.equal(isNotOlder(known, makeArtifact({ revision: 2, updatedAt: later(10), attachedTicketIds: ["t2"] })), true);
+});
+
+test("applyProjectChange adds, replaces and drops by the list's keep rule, newest first", () => {
+  const keep = (a) => a.scope === "project";
+  const a = makeArtifact({ id: "a", scope: "project", updatedAt: later(1) });
+  const b = makeArtifact({ id: "b", scope: "project", updatedAt: later(2) });
+  let list = applyProjectChange([], { kind: "changed", artifact: a }, keep);
+  list = applyProjectChange(list, { kind: "changed", artifact: b }, keep);
+  assert.deepEqual(list.map((x) => x.id), ["b", "a"]);
+
+  const attached = makeArtifact({ id: "a", scope: "project", updatedAt: later(1), attachedTicketIds: ["t2"] });
+  list = applyProjectChange(list, { kind: "changed", artifact: attached }, keep);
+  assert.deepEqual(list.map((x) => [x.id, x.attachedTicketIds.join()]), [["b", ""], ["a", "t2"]], "an attach replaces in place");
+
+  const movedBack = makeArtifact({ id: "b", scope: "task", updatedAt: later(3) });
+  list = applyProjectChange(list, { kind: "changed", artifact: movedBack }, keep);
+  assert.deepEqual(list.map((x) => x.id), ["a"], "it no longer belongs: dropped");
+
+  const stale = makeArtifact({ id: "a", scope: "task", updatedAt: later(0) });
+  assert.equal(applyProjectChange(list, { kind: "changed", artifact: stale }, keep), list, "an older copy changes nothing");
+  assert.deepEqual(applyProjectChange(list, { kind: "changed", artifact: movedBack }, keep), list, "not on the list and not kept: nothing");
+  assert.deepEqual(applyProjectChange(list, { kind: "deleted", id: "a", projectId: "p1", ticketId: "t1", attachedTicketIds: [] }, keep), []);
 });

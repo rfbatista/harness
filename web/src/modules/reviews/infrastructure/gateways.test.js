@@ -37,6 +37,8 @@ test("http · a malformed review request is dropped, the stream stays open", asy
   await flush();
   stub.pushRaw({ review_request: { id: "", state: "pending" } });
   stub.pushRaw({ task_message: { id: "m1" } });
+  stub.pushRaw({ artifact: { id: "a1", kind: "page", revision: 1, scope: "project", attached_ticket_ids: ["t2"], updated_at: "2026-10-07T12:00:00Z" } });
+  stub.pushRaw({ artifact: { id: "a1" }, deleted: true });
   stub.memory.request({ subject: "After" });
   await flush();
   assert.deepEqual(events.map((e) => e.review.subject), ["After"]);

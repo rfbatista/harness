@@ -68,7 +68,8 @@ func errorHandler(err error, c echo.Context) {
 			// The session exists but its worktree or saved conversation is
 			// gone: a state conflict, not a missing resource.
 			"WORKSPACE_MISSING", "SESSION_TRANSCRIPT_MISSING",
-			"ARTIFACT_IN_PROJECT", "REVIEW_NOT_PENDING":
+			"ARTIFACT_IN_PROJECT", "REVIEW_NOT_PENDING",
+			"ARTIFACT_NOT_IN_PROJECT", "ARTIFACT_PROJECT_MISMATCH", "ARTIFACT_PRODUCER_TASK":
 			_ = c.JSON(http.StatusConflict, errorBody(se.Message, se.Code))
 			return
 		case "CLAUDE_CLI_NOT_FOUND", "AGENT_CLI_NOT_FOUND", "SERVER_HOSTING_UNAVAILABLE":

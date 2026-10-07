@@ -51,6 +51,17 @@ templ Page(v PageView) {
 								Documents <span class="[ badge ]" x-text="count">{ strconv.Itoa(v.Documents.Count) }</span>
 							</a>
 						}
+						<a
+							class="[ button ]"
+							data-variant="ghost"
+							data-size="sm"
+							href={ templ.SafeURL(taskDesignHref(v.ProjectID, v.Seed.TicketID)) }
+							x-data="sessionsDesignWatch"
+							data-seed="sessions-seed"
+							data-design-assets
+						>
+							Design assets <span class="[ badge ]" x-text="count">{ strconv.Itoa(len(v.Seed.Artifacts)) }</span>
+						</a>
 						<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-on:click="startEditTask">Edit</button>
 						<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-bind:aria-busy="checkingTaskDelete" x-on:click="askDeleteTask">Delete task</button>
 						if v.NewSession.CanStart() {
@@ -479,10 +490,14 @@ templ designPanel() {
 						@ArtifactCard()
 					</template>
 					<template x-if="isEmpty">
-						@components.Empty("Nothing published yet", "When the agent publishes a page, an image, a video or a file for you to look at, it appears here and refreshes as it changes. Ask for one in the Agent tab.")
+						<div>
+							@components.Empty("Nothing published yet", "When the agent publishes a page, an image, a video or a file for you to look at, it appears here and refreshes as it changes. Ask for one in the Agent tab.")
+							<p class="[ pad-inline-l text-sm ]"><a x-bind:href="designHref" data-task-design>Project assets attached to this task are on its Design assets page</a></p>
+						</div>
 					</template>
 				</div>
 				@ArtifactPreview() {
+					<a x-bind:href="designHref" data-task-design>Attached project assets are on the task's Design assets</a>
 					<template x-if="canMoveCurrent">
 						<form x-on:submit.prevent="move">
 							<button type="submit" class="[ button ]" data-variant="ghost" data-size="sm" x-bind:aria-busy="moving" x-bind:aria-label="currentMoveAriaLabel" x-text="currentMoveLabel">Move to project</button>

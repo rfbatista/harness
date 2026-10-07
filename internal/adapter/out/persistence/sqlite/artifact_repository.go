@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
@@ -33,7 +34,7 @@ func (r *ArtifactRepository) Create(a *domain.Artifact) (*domain.Artifact, error
 	if err := r.db.Create(m).Error; err != nil {
 		return nil, err
 	}
-	return m.ToDomain(), nil
+	return r.withLinks(m.ToDomain())[0], nil
 }
 
 func (r *ArtifactRepository) Update(a *domain.Artifact) error {
@@ -59,7 +60,7 @@ func (r *ArtifactRepository) Get(id string) *domain.Artifact {
 	if err := r.db.First(&m, "id = ?", id).Error; err != nil {
 		return nil
 	}
-	return m.ToDomain()
+	return r.withLinks(m.ToDomain())[0]
 }
 
 func (r *ArtifactRepository) FindByTarget(sessionID, path, url string) *domain.Artifact {
@@ -67,7 +68,7 @@ func (r *ArtifactRepository) FindByTarget(sessionID, path, url string) *domain.A
 	if err := r.db.First(&m, "session_id = ? AND target = ?", sessionID, artifactTarget(path, url)).Error; err != nil {
 		return nil
 	}
-	return m.ToDomain()
+	return r.withLinks(m.ToDomain())[0]
 }
 
 func (r *ArtifactRepository) List(f ports.ArtifactFilter) []*domain.Artifact {
@@ -76,7 +77,9 @@ func (r *ArtifactRepository) List(f ports.ArtifactFilter) []*domain.Artifact {
 		q = q.Where("session_id = ?", f.SessionID)
 	}
 	if f.TicketID != "" {
-		q = q.Where("ticket_id = ?", f.TicketID)
+		// What the task produced, and the project artifacts attached to it.
+		q = q.Where("ticket_id = ? OR id IN (?)", f.TicketID,
+			r.db.Model(&ArtifactTicketModel{}).Select("artifact_id").Where("ticket_id = ?", f.TicketID))
 	}
 	if f.ProjectID != "" {
 		q = q.Where("project_id = ?", f.ProjectID)
@@ -97,32 +100,45 @@ func (r *ArtifactRepository) List(f ports.ArtifactFilter) []*domain.Artifact {
 	for i := range models {
 		out = append(out, models[i].ToDomain())
 	}
-	return out
+	return r.withLinks(out...)
 }
 
+// Delete removes the record and its links to tasks.
 func (r *ArtifactRepository) Delete(id string) error {
-	res := r.db.Delete(&ArtifactModel{}, "id = ?", id)
-	if res.Error != nil {
-		return res.Error
-	}
-	if res.RowsAffected == 0 {
-		return &domain.StructuredError{Code: "ARTIFACT_NOT_FOUND", Message: "artifact not found"}
-	}
-	return nil
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		res := tx.Delete(&ArtifactModel{}, "id = ?", id)
+		if res.Error != nil {
+			return res.Error
+		}
+		if res.RowsAffected == 0 {
+			return &domain.StructuredError{Code: "ARTIFACT_NOT_FOUND", Message: "artifact not found"}
+		}
+		return tx.Delete(&ArtifactTicketModel{}, "artifact_id = ?", id).Error
+	})
 }
 
 // SetScope moves an artifact between task and project scope and records
 // whether the harness holds a copy of its bytes. It bumps updated_at, so
-// listings and watchers notice the move.
+// listings and watchers notice the move. Moving to task drops its links to
+// tasks: only a project artifact is attached anywhere.
 func (r *ArtifactRepository) SetScope(id string, scope domain.ArtifactScope, snapshot bool) (*domain.Artifact, error) {
-	res := r.db.Model(&ArtifactModel{}).Where("id = ?", id).Updates(map[string]any{
-		"scope": string(scope), "snapshot": snapshot, "updated_at": time.Now().UnixMilli(),
+	err := r.db.Transaction(func(tx *gorm.DB) error {
+		res := tx.Model(&ArtifactModel{}).Where("id = ?", id).Updates(map[string]any{
+			"scope": string(scope), "snapshot": snapshot, "updated_at": time.Now().UnixMilli(),
+		})
+		if res.Error != nil {
+			return res.Error
+		}
+		if res.RowsAffected == 0 {
+			return &domain.StructuredError{Code: "ARTIFACT_NOT_FOUND", Message: "artifact not found"}
+		}
+		if scope == domain.ArtifactScopeProject {
+			return nil
+		}
+		return tx.Delete(&ArtifactTicketModel{}, "artifact_id = ?", id).Error
 	})
-	if res.Error != nil {
-		return nil, res.Error
-	}
-	if res.RowsAffected == 0 {
-		return nil, &domain.StructuredError{Code: "ARTIFACT_NOT_FOUND", Message: "artifact not found"}
+	if err != nil {
+		return nil, err
 	}
 	return r.Get(id), nil
 }
@@ -140,10 +156,79 @@ func (r *ArtifactRepository) DeleteTaskScopedBySession(sessionID string) ([]stri
 		if len(ids) == 0 {
 			return nil
 		}
+		if err := tx.Delete(&ArtifactTicketModel{}, "artifact_id IN ?", ids).Error; err != nil {
+			return err
+		}
 		return tx.Delete(&ArtifactModel{}, "id IN ?", ids).Error
 	})
 	if err != nil {
 		return nil, err
 	}
 	return ids, nil
+}
+
+// Attach links an artifact to a task; changed is false when it already was.
+func (r *ArtifactRepository) Attach(artifactID, ticketID string) (bool, error) {
+	res := r.db.Clauses(clause.OnConflict{DoNothing: true}).Create(&ArtifactTicketModel{ArtifactID: artifactID, TicketID: ticketID})
+	if res.Error != nil {
+		return false, res.Error
+	}
+	return res.RowsAffected == 1, nil
+}
+
+// Detach unlinks an artifact from a task; changed is false when it was not linked.
+func (r *ArtifactRepository) Detach(artifactID, ticketID string) (bool, error) {
+	res := r.db.Delete(&ArtifactTicketModel{}, "artifact_id = ? AND ticket_id = ?", artifactID, ticketID)
+	if res.Error != nil {
+		return false, res.Error
+	}
+	return res.RowsAffected > 0, nil
+}
+
+// DetachTicket unlinks every artifact from a task (the task was deleted) and
+// returns the ids of those that were linked.
+func (r *ArtifactRepository) DetachTicket(ticketID string) ([]string, error) {
+	ids := []string{}
+	err := r.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Model(&ArtifactTicketModel{}).Where("ticket_id = ?", ticketID).Order("artifact_id").Pluck("artifact_id", &ids).Error; err != nil {
+			return err
+		}
+		return tx.Delete(&ArtifactTicketModel{}, "ticket_id = ?", ticketID).Error
+	})
+	if err != nil {
+		return nil, err
+	}
+	return ids, nil
+}
+
+// withLinks fills each artifact's AttachedTicketIDs, oldest link first. A
+// link whose task row is gone is skipped: the task's deletion is still being
+// handled, or raced an attach.
+func (r *ArtifactRepository) withLinks(list ...*domain.Artifact) []*domain.Artifact {
+	ids := make([]string, 0, len(list))
+	byID := make(map[string]*domain.Artifact, len(list))
+	for _, a := range list {
+		if a == nil {
+			continue
+		}
+		a.AttachedTicketIDs = []string{}
+		ids = append(ids, a.ID)
+		byID[a.ID] = a
+	}
+	if len(ids) == 0 {
+		return list
+	}
+	var links []ArtifactTicketModel
+	r.db.Model(&ArtifactTicketModel{}).
+		Joins("JOIN tickets ON tickets.id = artifact_tickets.ticket_id").
+		Where("artifact_tickets.artifact_id IN ?", ids).
+		Order("artifact_tickets.created_at ASC, artifact_tickets.ticket_id ASC").
+		Select("artifact_tickets.artifact_id, artifact_tickets.ticket_id").
+		Find(&links)
+	for _, l := range links {
+		if a := byID[l.ArtifactID]; a != nil {
+			a.AttachedTicketIDs = append(a.AttachedTicketIDs, l.TicketID)
+		}
+	}
+	return list
 }

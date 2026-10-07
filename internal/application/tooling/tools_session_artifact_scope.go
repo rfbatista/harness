@@ -15,6 +15,33 @@ import (
 // on artifacts published on its own task. Deletion of a project asset stays
 // with people.
 func sessionArtifactScopeTools(planningSvc ports.Planning, sessions ports.SessionRepository, art ArtifactTooling) []domain.Tool {
+	// link attaches or detaches a project asset to or from this session's task.
+	link := func(name, description string, apply func(ctx context.Context, artifactID, ticketID string) (*domain.Artifact, error)) domain.Tool {
+		return domain.Tool{
+			Name:        name,
+			Description: description,
+			InputSchema: schemaFromJSON(`{"type":"object","required":["artifact_id"],"properties":{"artifact_id":{"type":"string","description":"An artifact_id from list_project_artifacts or list_task_artifacts."}}}`),
+			Source:      "code",
+			Handler: func(ctx context.Context, args map[string]any) (any, error) {
+				scope, err := resolveTaskScope(ctx, planningSvc, sessions)
+				if err != nil {
+					return nil, err
+				}
+				if art.Attachments == nil {
+					return nil, artifactsUnavailable()
+				}
+				a, err := apply(ctx, getString(args, "artifact_id", ""), scope.ticket.ID)
+				if err != nil {
+					return nil, codedMessage(err)
+				}
+				title := ""
+				if tk, err := planningSvc.GetTicket(ctx, a.TicketID); err == nil && tk != nil {
+					title = tk.Title
+				}
+				return map[string]any{"artifact": reportProjectArtifact(art, a, title)}, nil
+			},
+		}
+	}
 	move := func(name, description string, to domain.ArtifactScope) domain.Tool {
 		return domain.Tool{
 			Name:        name,
@@ -47,7 +74,8 @@ func sessionArtifactScopeTools(planningSvc ports.Planning, sessions ports.Sessio
 			Name: "list_project_artifacts",
 			Description: "List the design assets kept at project level in this session's project, from any task, newest first: " +
 				"logos, palettes, components, reference screens other tasks reuse. Each has its artifact_id, title, kind, note, " +
-				"revision, the task that made it, and a view_url. Check it before making a new asset.",
+				"revision, the task that made it, the tasks it is attached to (attached_ticket_ids), and a view_url. Check it " +
+				"before making a new asset, and attach one to this task with attach_artifact_to_task.",
 			InputSchema: schemaFromJSON(`{"type":"object","properties":{}}`),
 			Source:      "code",
 			Handler: func(ctx context.Context, args map[string]any) (any, error) {
@@ -90,13 +118,29 @@ func sessionArtifactScopeTools(planningSvc ports.Planning, sessions ports.Sessio
 			domain.ArtifactScopeProject),
 		move("move_artifact_to_task",
 			"Move a project design asset published on this task back to task scope, for example before unpublishing it. "+
-				"The artifact must be published on this task (ARTIFACT_NOT_ON_TASK otherwise). Idempotent.",
+				"The artifact must be published on this task (ARTIFACT_NOT_ON_TASK otherwise). Moving back removes every "+
+				"attachment to other tasks. Idempotent.",
 			domain.ArtifactScopeTask),
+		link("attach_artifact_to_task",
+			"Attach a project design asset, from any task of this project, to this task: it then shows in this task's Design tab "+
+				"and in list_task_artifacts with relation attached. Only a project asset can be attached "+
+				"(ARTIFACT_NOT_IN_PROJECT: its task moves it to the project first), and only within its project "+
+				"(ARTIFACT_PROJECT_MISMATCH). Attaching again, or to the task that produced it, changes nothing.",
+			func(ctx context.Context, artifactID, ticketID string) (*domain.Artifact, error) {
+				return art.Attachments.AttachArtifactToTicket(ctx, artifactID, ticketID)
+			}),
+		link("detach_artifact_from_task",
+			"Detach a project design asset from this task; it stays in the project. The task that produced it cannot detach it "+
+				"(ARTIFACT_PRODUCER_TASK). Detaching one that is not attached changes nothing.",
+			func(ctx context.Context, artifactID, ticketID string) (*domain.Artifact, error) {
+				return art.Attachments.DetachArtifactFromTicket(ctx, artifactID, ticketID)
+			}),
 	}
 }
 
 // artifact returns the artifact only when it was published on the scoped task
-// (in either scope), so a session cannot move another task's assets.
+// (in either scope), so a session cannot move another task's assets, even
+// one attached to its task.
 func (s *taskScope) artifact(ctx context.Context, pub ports.ArtifactPublisher, artifactID string) (*domain.Artifact, error) {
 	artifactID = strings.TrimSpace(artifactID)
 	if artifactID == "" {
@@ -107,7 +151,7 @@ func (s *taskScope) artifact(ctx context.Context, pub ports.ArtifactPublisher, a
 		return nil, err
 	}
 	for _, a := range list {
-		if a.ID == artifactID {
+		if a.ID == artifactID && a.TicketID == s.ticket.ID {
 			return a, nil
 		}
 	}
@@ -126,11 +170,14 @@ type projectArtifact struct {
 	TaskTitle  string               `json:"task_title,omitempty"`
 	ViewURL    string               `json:"view_url"`
 	UpdatedAt  time.Time            `json:"updated_at"`
+	// AttachedTicketIDs are the other tasks the asset is attached to.
+	AttachedTicketIDs []string `json:"attached_ticket_ids"`
 }
 
 func reportProjectArtifact(art ArtifactTooling, a *domain.Artifact, taskTitle string) projectArtifact {
 	return projectArtifact{ArtifactID: a.ID, Title: a.Title, Kind: a.Kind, Note: a.Note, Revision: a.Revision,
-		Scope: scopeOf(a), TaskID: a.TicketID, TaskTitle: taskTitle, ViewURL: viewURL(art, a), UpdatedAt: a.UpdatedAt}
+		Scope: scopeOf(a), TaskID: a.TicketID, TaskTitle: taskTitle, ViewURL: viewURL(art, a), UpdatedAt: a.UpdatedAt,
+		AttachedTicketIDs: attachedIDs(a)}
 }
 
 // scopeOf reads an artifact's scope; one that predates scopes is a task's.

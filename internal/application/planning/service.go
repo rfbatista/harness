@@ -185,15 +185,31 @@ func (s *Service) PatchTicket(ctx context.Context, id string, patch ports.Ticket
 
 // DeleteTicket removes the ticket and announces it with its last known state,
 // so followers know which project's board loses the card.
-func (s *Service) DeleteTicket(_ context.Context, id string) error {
+// DeleteTicket deletes a task, announces it on the feed, then publishes
+// TicketDeleted (outside ticketMu: its handlers take their own locks) so other
+// contexts drop what they kept about the task.
+func (s *Service) DeleteTicket(ctx context.Context, id string) error {
+	last, err := s.deleteTicket(id)
+	if err != nil {
+		return err
+	}
+	if s.Events != nil && last != nil {
+		if err := s.Events.Publish(ctx, domain.TicketDeleted{TicketID: last.ID, ProjectID: last.ProjectID}); err != nil {
+			slog.Warn("announce task deletion", "ticket", id, "err", err)
+		}
+	}
+	return nil
+}
+
+func (s *Service) deleteTicket(id string) (*domain.Ticket, error) {
 	s.ticketMu.Lock()
 	defer s.ticketMu.Unlock()
 	last := s.tickets.Get(id)
 	if err := s.tickets.Delete(id); err != nil {
-		return err
+		return nil, err
 	}
 	s.announce(last, true)
-	return nil
+	return last, nil
 }
 
 // --- Documents ---
