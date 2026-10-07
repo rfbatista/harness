@@ -8,20 +8,58 @@ import (
 	"net/url"
 	"path"
 	"strings"
+	"time"
 
 	"operators-mcp/internal/adapter/in/web/shell"
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
 )
 
-// Handler serves GET /projects/new, GET /projects/{project}/repositories and
+// Handler serves GET /projects, GET /projects/new, GET /projects/{project}/settings,
+// GET /projects/{project}/repositories and
 // GET /projects/{project}/repositories/{repository}/env.
 type Handler struct {
 	Projects     ports.ProjectReader
 	Repositories ports.RepositoryLister
 	EnvFiles     ports.EnvFileLister
-	Layout       shell.Layout
-	Render       shell.Renderer
+	// Summaries counts each project for the projects list.
+	Summaries SummaryLister
+	Layout    shell.Layout
+	Render    shell.Renderer
+	Now       func() time.Time
+}
+
+// List is the projects list: every project with its counts.
+func (h Handler) List(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+	summaries, err := h.Summaries.ListProjectSummaries(ctx)
+	if err != nil {
+		return err
+	}
+	frame, err := h.Layout(ctx, "Projects", "", "")
+	if err != nil {
+		return err
+	}
+	frame.Top.OnProjects = true
+	return h.Render(w, r, http.StatusOK, ListPage(NewListView(frame, summaries, h.Now())))
+}
+
+// Settings is a project's settings page.
+func (h Handler) Settings(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+	project, err := h.Projects.GetProject(ctx, r.PathValue("project"))
+	if err != nil {
+		return err
+	}
+	repos, err := h.Repositories.ListRepositories(ctx, project.ID)
+	if err != nil {
+		return err
+	}
+	frame, err := h.Layout(ctx, "Settings", project.ID, "")
+	if err != nil {
+		return err
+	}
+	return h.Render(w, r, http.StatusOK, SettingsPage(NewSettingsView(frame, project, repos)))
 }
 
 // New is the new-project form.

@@ -18,6 +18,7 @@ templ ProjectPage(f shell.Frame, projectID, projectName string, b Board) {
 				<h1>{ projectName }</h1>
 				<div class="[ actions ]">
 					<a class="[ button ]" data-variant="ghost" data-size="sm" href={ templ.SafeURL(projects.RepositoriesHref(projectID)) }>Repositories</a>
+					<a class="[ button ]" data-variant="ghost" data-size="sm" href={ templ.SafeURL(projects.SettingsHref(projectID)) }>Settings</a>
 					<a class="[ button ]" data-variant="primary" data-size="sm" href={ templ.SafeURL(NewTaskHref(projectID)) }>New task</a>
 				</div>
 			</header>

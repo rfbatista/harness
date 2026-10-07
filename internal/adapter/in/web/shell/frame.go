@@ -31,6 +31,10 @@ type Frame struct {
 type TopBar struct {
 	Projects []Option
 	Current  string // project ID; "" when none is selected
+	// ProjectsHref is the projects list; "" when it is not served.
+	ProjectsHref string
+	// OnProjects marks the projects list as the current page.
+	OnProjects bool
 }
 
 // Option is one project in the picker.
@@ -50,7 +54,7 @@ type Rail struct {
 	// architects raised for the person; Reviews counts the pending ones.
 	ReviewsHref string
 	Reviews     int
-	Groups        []RailGroup
+	Groups      []RailGroup
 	// Empty is shown when a project is selected but has no tasks.
 	Empty string
 	// Current is the open task's id, "" when none: the live rail marks it.
