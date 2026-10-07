@@ -204,13 +204,13 @@ test("the Design tab mounts the panel for the selected session, alive or ended, 
     makeSession({ id: "over", status: "done", updatedAt: new Date(T0.getTime() - 60_000) }),
   ]);
   tick();
-  assert.deepEqual(instance.designPanels, [{ key: "live", sessionId: "live", live: true }], "mounted behind the Agent tab too, so publishes are counted");
+  assert.deepEqual(instance.designPanels, [{ key: "live:live", sessionId: "live", live: true }], "mounted behind the Agent tab too, so publishes are counted");
   instance.showDesign();
   assert.ok(instance.designTabSelected && instance.showingDesign);
   assert.deepEqual(instance.terminalIds, []);
   assert.deepEqual(instance.appPanels, []);
   instance.select("over");
-  assert.deepEqual(instance.designPanels, [{ key: "over", sessionId: "over", live: false }]);
+  assert.deepEqual(instance.designPanels, [{ key: "over:ended", sessionId: "over", live: false }]);
   instance.startCreating();
   assert.deepEqual(instance.designPanels, [], "the form replaces the detail");
   instance.destroy();
@@ -313,6 +313,102 @@ test("stops the selected session; a failure shows the coded error", async () => 
   assert.equal(instance.error.code, Codes.SESSION_NOT_FOUND);
   instance.dismissError();
   assert.equal(instance.error, null);
+  instance.destroy();
+});
+
+const endedSession = (overrides = {}) =>
+  makeSession({ id: "over", status: "stopped", resumable: true, resumeBlocked: "", updatedAt: new Date(T0.getTime() - 60_000), ...overrides });
+
+test("resume brings the selected ended session back: its terminal mounts on the Agent tab", async () => {
+  const { instance, tick } = setup([makeSession({ id: "live", status: "idle" }), endedSession()]);
+  tick();
+  instance.select("over");
+  instance.showDesign();
+  assert.equal(instance.selected.resumable, true);
+  assert.deepEqual(instance.terminalIds, []);
+
+  const resuming = instance.resume();
+  assert.equal(instance.resumingSelected, true, "busy while the call runs");
+  await resuming;
+
+  assert.equal(instance.resumingId, null);
+  assert.equal(instance.selectedId, "over");
+  assert.equal(instance.selected.word, "running");
+  assert.equal(instance.selected.resumable, false);
+  assert.equal(instance.detailTab, "agent");
+  assert.deepEqual(instance.terminalIds, ["over"], "the live terminal attaches");
+  assert.ok(instance.announcement.includes("resumed"), instance.announcement);
+  instance.destroy();
+});
+
+test("resume from a row selects that session and resumes it", async () => {
+  const { instance, tick } = setup([makeSession({ id: "live", status: "idle" }), endedSession()]);
+  tick();
+  assert.equal(instance.selectedId, "live");
+  const row = instance.groups.flatMap((g) => g.rows).find((r) => r.id === "over");
+  assert.equal(row.resumable, true);
+  await instance.resume("over");
+  assert.equal(instance.selectedId, "over");
+  assert.deepEqual(instance.terminalIds, ["over"]);
+  instance.destroy();
+});
+
+test("a refused resume shows the coded error, clears the busy state, and refreshes the list", async () => {
+  const { instance, memory, tick } = setup([endedSession()]);
+  tick();
+  instance.select("over");
+  memory.update("over", { resumable: false, resumeBlocked: "WORKSPACE_MISSING" });
+  instance.sessions = instance.sessions.map((s) => (s.id === "over" ? { ...s, resumable: true, resumeBlocked: "" } : s)); // the page has not heard yet
+  await instance.resume();
+  assert.equal(instance.error.code, Codes.WORKSPACE_MISSING);
+  assert.equal(instance.resumingId, null);
+
+  instance.dismissError();
+  memory.update("over", { status: "running", resumable: false, resumeBlocked: "SESSION_ALREADY_RUNNING" });
+  instance.sessions = instance.sessions.map((s) => (s.id === "over" ? { ...s, status: "stopped", resumable: true } : s));
+  await instance.resume();
+  assert.equal(instance.error.code, Codes.SESSION_ALREADY_RUNNING);
+  await flush();
+  assert.equal(instance.sessions.find((s) => s.id === "over").status, "running", "the list catches up");
+  instance.destroy();
+});
+
+test("a second Resume while one is in flight makes no second call", async () => {
+  const { instance, memory, tick } = setup([endedSession()]);
+  tick();
+  instance.select("over");
+  let calls = 0;
+  const resume = memory.gateway.resume;
+  memory.gateway.resume = (...args) => {
+    calls += 1;
+    return resume(...args);
+  };
+  await Promise.all([instance.resume(), instance.resume()]);
+  assert.equal(calls, 1);
+  assert.equal(instance.error, null);
+  instance.destroy();
+});
+
+test("a session resumed elsewhere comes back live without a reload, and is announced", () => {
+  const { instance, memory, tick } = setup([endedSession()]);
+  tick();
+  instance.select("over");
+  assert.deepEqual(instance.designPanels.map((p) => p.key), ["over:ended"]);
+  memory.update("over", { status: "running", runsOn: "server", resumable: false, resumeBlocked: "SESSION_ALREADY_RUNNING" });
+  assert.deepEqual(instance.terminalIds, ["over"]);
+  assert.ok(instance.announcement.includes("resumed"), instance.announcement);
+  assert.deepEqual(instance.designPanels.map((p) => p.key), ["over:live"], "the Design panel remounts and follows again");
+  instance.destroy();
+});
+
+test("a session resumed in the TUI points there", () => {
+  const { instance, memory, tick } = setup([endedSession()]);
+  tick();
+  instance.select("over");
+  memory.update("over", { status: "running", runsOn: "tui", runnerHost: "laptop", resumable: false, resumeBlocked: "SESSION_ALREADY_RUNNING" });
+  assert.deepEqual(instance.terminalIds, []);
+  assert.ok(instance.terminalNote.includes("laptop"));
+  assert.equal(instance.selected.resumable, false);
   instance.destroy();
 });
 
