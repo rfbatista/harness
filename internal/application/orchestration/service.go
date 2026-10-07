@@ -208,7 +208,7 @@ func (s *Service) Start(ctx context.Context, req StartRequest) (*domain.Session,
 	if err := s.Send(ctx, sess.ID(), req.Task); err != nil {
 		slog.Error("send initial task failed", "session", sess.ID(), "err", err)
 	}
-	return created, nil
+	return s.withResumability(created), nil
 }
 
 // prepareInput is what every way of starting a session shares: enough to
@@ -809,11 +809,15 @@ func (s *Service) Get(_ context.Context, id string) (*domain.Session, error) {
 	if sess == nil {
 		return nil, &domain.StructuredError{Code: "SESSION_NOT_FOUND", Message: "session not found"}
 	}
-	return sess, nil
+	return s.withResumability(sess), nil
 }
 
 func (s *Service) List(_ context.Context, f ports.SessionFilter) ([]*domain.Session, error) {
-	return s.sessions.List(f), nil
+	list := s.sessions.List(f)
+	for _, sess := range list {
+		s.withResumability(sess)
+	}
+	return list, nil
 }
 
 func (s *Service) publish(sessionID string, ev SessionEvent) {

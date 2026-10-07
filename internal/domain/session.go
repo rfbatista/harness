@@ -76,9 +76,13 @@ type Session struct {
 	// It starts equal to ID (the CLI is launched with --session-id ID) and moves
 	// when the conversation does, e.g. after /clear; the CLI's SessionStart hook
 	// reports it.
-	ClaudeSessionID string    `json:"claude_session_id,omitempty"`
-	CreatedAt       time.Time `json:"created_at"`
-	UpdatedAt       time.Time `json:"updated_at"`
+	ClaudeSessionID string `json:"claude_session_id,omitempty"`
+	// Resumable says a resume call would be accepted now; ResumeBlocked is the
+	// error code it would answer otherwise. Derived on read, never stored.
+	Resumable     bool      `json:"resumable"`
+	ResumeBlocked string    `json:"resume_blocked"`
+	CreatedAt     time.Time `json:"created_at"`
+	UpdatedAt     time.Time `json:"updated_at"`
 }
 
 // Runner is where an interactive session's agent process runs.
