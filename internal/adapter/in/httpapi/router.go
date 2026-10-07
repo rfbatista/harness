@@ -173,6 +173,13 @@ func NewRouter(h *Handler, opts ...Option) *echo.Echo {
 	g.POST("/interactive_session_started", h.handleInteractiveSessionHook)
 	g.POST("/interactive_session_hook", h.handleInteractiveSessionHook)
 
+	// the architect channel: what passes between a task's architect and its
+	// delegates, and the reviews it asks the person for
+	g.GET("/task_messages", h.handleTaskMessages)
+	g.GET("/review_requests", h.handleReviewRequests)
+	g.POST("/respond_review_request", h.handleRespondReviewRequest)
+	g.POST("/set_status_check", h.handleSetStatusCheck)
+
 	// tickets & documents
 	g.GET("/list_tickets", h.handleListTickets)
 	g.GET("/get_ticket", h.handleGetTicket)
