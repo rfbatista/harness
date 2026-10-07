@@ -78,6 +78,10 @@ type TicketPatch struct {
 	Title       *string
 	Description *string
 	Status      *domain.TicketStatus
+	// StatusReason and BySessionID say why and by whom the status moves; an
+	// empty BySessionID is a person. They are recorded only when it does.
+	StatusReason string
+	BySessionID  string
 }
 
 // TicketPatcher applies a partial change to one ticket. A present blank title

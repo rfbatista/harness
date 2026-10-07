@@ -119,9 +119,11 @@ type TaskMessage struct {
 	Delivered     bool            `json:"delivered"`
 	DeliveredAt   *time.Time      `json:"delivered_at,omitempty"`
 	CreatedAt     time.Time       `json:"created_at"`
-	// Queued marks a message waiting in its running recipient's outbox for the
-	// end of a turn. It is the server's own bookkeeping, not on the wire.
-	Queued bool `json:"-"`
+	// ProjectID routes the message's feed events. Queued marks a message
+	// waiting in its running recipient's outbox for the end of a turn. Both
+	// are the server's own bookkeeping, not on the wire.
+	ProjectID string `json:"-"`
+	Queued    bool   `json:"-"`
 }
 
 // Validate checks the message's own fields: a known kind, a body, a status
