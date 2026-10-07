@@ -28,7 +28,7 @@ type ProjectDesignView struct {
 
 // DesignLibrarySeed is the design-library-seed JSON.
 type DesignLibrarySeed struct {
-	ProjectID string             `json:"project_id"`
+	ProjectID string              `json:"project_id"`
 	Tasks     []DesignLibraryTask `json:"tasks"`
 	// Artifacts are the project's assets, each with the tasks it is attached
 	// to. Never null.
