@@ -106,6 +106,10 @@ func (h Handler) Task(w http.ResponseWriter, r *http.Request) error {
 			Count:     len(docs),
 			Signature: documentSignature(docs),
 		}
+		view.Seed.DocumentTitles = make(map[string]string, len(docs))
+		for _, d := range docs {
+			view.Seed.DocumentTitles[d.ID] = d.Title
+		}
 	}
 	for _, st := range Statuses {
 		view.StatusChoices = append(view.StatusChoices, sessions.StatusChoice{Value: st.Value, Label: st.Label, Selected: st.Value == string(task.Status)})

@@ -482,3 +482,45 @@ test("a task without an architect never asks for messages, until an architect st
   assert.equal(channelStore.messages.length, 1);
   instance.destroy();
 });
+
+test("the Conversation tab shows on the architect and its delegates, not on a peer", async () => {
+  const sessions = [
+    makeSession({ id: "arch", role: "architect", mode: "architect", agentId: "backend" }),
+    makeSession({ id: "d1", role: "delegate", parentSessionId: "arch", agentId: "backend", task: "Build the server" }),
+    makeSession({ id: "peer", agentId: "backend" }),
+  ];
+  const { instance } = architectSetup({ sessions });
+  instance.select("arch");
+  assert.equal(instance.hasConversation, true);
+  instance.showConversation();
+  const [panel] = instance.conversationPanels;
+  assert.deepEqual([panel.key, panel.isArchitect, panel.delegates], ["arch", true, [{ id: "d1", label: "go-developer · Build the server" }]]);
+
+  instance.select("d1");
+  assert.deepEqual([instance.showingConversation, instance.conversationPanels[0].isArchitect], [true, false], "a delegate's own thread");
+
+  instance.select("peer");
+  assert.deepEqual([instance.hasConversation, instance.detailTab], [false, "agent"], "a peer falls back to its terminal");
+  instance.destroy();
+});
+
+test("a message behind another tab badges the Conversation tab and is announced; opening the tab clears it", async () => {
+  const { instance, channel } = architectSetup();
+  await flush();
+  instance.select("d1");
+  const m = channel.send({ taskId: "t1", fromSessionId: "d1", toSessionId: "arch", kind: "status_report", status: "ready_for_review", body: "Ready.", delivered: false, deliveredAt: null });
+  await flush();
+  assert.equal(instance.conversationBadge, "1");
+  assert.equal(instance.announcement, "go-developer reported: ready for review");
+
+  channel.deliver(m.id);
+  await flush();
+  assert.equal(instance.conversationBadge, "1", "the same message delivered is not news");
+
+  instance.showConversation();
+  assert.equal(instance.conversationBadge, "");
+  channel.send({ taskId: "t1", fromSessionId: "arch", toSessionId: "d1", kind: "reply", body: "Go on." });
+  await flush();
+  assert.equal(instance.conversationBadge, "", "nothing is unseen while the tab is in front");
+  instance.destroy();
+});

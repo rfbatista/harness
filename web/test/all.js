@@ -20,6 +20,8 @@ import "../src/modules/sessions/infrastructure/memory-terminals.test.js";
 import "../src/modules/sessions/infrastructure/terminal-gateway.test.js";
 import "../src/modules/sessions/infrastructure/terminal-keys.test.js";
 import "../src/modules/sessions/presentation/artifactView.test.js";
+import "../src/modules/sessions/presentation/channelView.test.js";
+import "../src/modules/sessions/presentation/components/conversation.test.js";
 import "../src/modules/sessions/presentation/components/designLibrary.test.js";
 import "../src/modules/sessions/presentation/components/designPanel.test.js";
 import "../src/modules/sessions/presentation/components/newSession.test.js";

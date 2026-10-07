@@ -40,7 +40,7 @@ func TestTaskPageLeadsWithTheArchitectAndItsDelegates(t *testing.T) {
 	for _, want := range []string{
 		`<span class="[ badge ]">architect</span>`,
 		`Architect`,
-		`x-bind:data-role="row.role || null"`,
+		`x-bind:data-role="row.roleAttr"`,
 		`"role":"architect"`,
 		`"architect_session_id":"s-arch"`,
 	} {

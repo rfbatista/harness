@@ -59,6 +59,7 @@
 @import url("./blocks/history.css");
 @import url("./blocks/stream-bar.css");
 @import url("./blocks/transcript.css");
+@import url("./blocks/message.css");
 @import url("./blocks/terminal.css");
 @import url("./blocks/artifact-card.css");
 @import url("./blocks/preview.css");

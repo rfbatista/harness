@@ -1,6 +1,7 @@
 // The sessions module's Alpine components. Names are global: module
 // components carry the module prefix.
 
+import { conversation } from "./components/conversation.js";
 import { designLibrary } from "./components/designLibrary.js";
 import { designPanel } from "./components/designPanel.js";
 import { newSession } from "./components/newSession.js";
@@ -25,6 +26,7 @@ export function registerSessions(Alpine, deps) {
   Alpine.store("sessionsChannel", { messages: [], loaded: false });
   const channelStore = Alpine.store("sessionsChannel");
   Alpine.data("sessionsPage", sessionsPage({ ...deps, channelStore }));
+  Alpine.data("sessionsConversation", conversation({ ...deps, channelStore }));
   Alpine.data("sessionsNewSession", newSession(deps));
   Alpine.data("sessionsTerminal", terminal(deps));
   Alpine.data("sessionsDesignPanel", designPanel(deps));

@@ -78,6 +78,9 @@ export function toRowView(session, { selectedId, now, agentNames, others = [], f
     resumeLabel: `Resume ${session.task || "Untitled session"}`,
     role: session.role,
     depth: Math.min(depth, MAX_DEPTH),
+    // What x-bind sets: null leaves the attribute off a peer's row.
+    roleAttr: session.role || null,
+    depthAttr: depth > 0 ? String(Math.min(depth, MAX_DEPTH)) : null,
     badge: session.role === "architect" ? "architect" : "",
   };
 }

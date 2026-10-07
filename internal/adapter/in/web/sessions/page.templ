@@ -119,7 +119,7 @@ templ ssrRows(v PageView) {
 						}
 						{ r.Title }
 					</span>
-					<span class="[ meta ]">{ r.Meta }</span>
+					<span class="[ meta ]" title={ r.Meta }>{ r.Meta }</span>
 				</div>
 			}
 		}
@@ -135,15 +135,15 @@ templ liveRows() {
 				<span class="[ badge ]" x-bind:data-tone="group.tone" x-text="group.count"></span>
 			</div>
 			<template x-for="row in group.rows" x-bind:key="row.id">
-				<div class="[ row ]" data-stacked role="option" x-bind:aria-selected="row.selected" x-bind:data-attention="row.attention" x-bind:data-fresh="row.fresh" x-bind:data-role="row.role || null" x-bind:data-depth="row.depth || null" x-on:click="select(row.id)">
+				<div class="[ row ]" data-stacked role="option" x-bind:aria-selected="row.selected" x-bind:data-attention="row.attention" x-bind:data-fresh="row.fresh" x-bind:data-role="row.roleAttr" x-bind:data-depth="row.depthAttr" x-on:click="select(row.id)">
 					<span class="[ status ]" x-bind:data-state="row.state" x-text="row.word"></span>
 					<span class="[ title ]">
 						<template x-if="row.badge">
-							<span class="[ badge ]" x-text="row.badge"></span>
+							<span><span class="[ badge ]" x-text="row.badge"></span>{ " " }</span>
 						</template>
 						<span x-text="row.title"></span>
 					</span>
-					<span class="[ meta ]" x-text="row.meta"></span>
+					<span class="[ meta ]" x-bind:title="row.meta" x-text="row.meta"></span>
 					<template x-if="row.resumable">
 						<button type="button" class="[ button action ]" data-variant="ghost" data-size="sm" x-bind:aria-label="row.resumeLabel" x-bind:disabled="cannotResume" x-on:click.stop="resume(row.id)">Resume</button>
 					</template>
@@ -204,6 +204,7 @@ templ detail(form NewSessionForm) {
 							<span class="[ badge ]" data-tone="signal" x-text="designBadge"></span>
 						</template>
 					</button>
+					@conversationTab()
 				</div>
 				<template x-for="sid in terminalIds" x-bind:key="sid">
 					@terminalPane()
@@ -213,6 +214,9 @@ templ detail(form NewSessionForm) {
 				</template>
 				<template x-for="panel in designPanels" x-bind:key="panel.key">
 					@designPanel()
+				</template>
+				<template x-for="panel in conversationPanels" x-bind:key="panel.key">
+					@conversationPanel()
 				</template>
 				<template x-if="appUnavailable">
 					@components.Empty("No worktree to run from", "This session was not started on a repository, so there is no application to run. Start a session on a repository to run its app beside the agent.")

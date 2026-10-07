@@ -87,6 +87,7 @@ export function toSeed(body) {
     sessions: toSessionList(body),
     agentNames: { ...(body.agent_names ?? {}) },
     repositoryNames: { ...(body.repository_names ?? {}) },
+    documentTitles: { ...(body.document_titles ?? {}) },
   };
 }
 

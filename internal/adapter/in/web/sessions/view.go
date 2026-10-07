@@ -96,6 +96,8 @@ type Seed struct {
 	// RepositoryNames lets the App tab say which repository a run's code
 	// comes from.
 	RepositoryNames map[string]string `json:"repository_names"`
+	// DocumentTitles names the task's documents a task message links.
+	DocumentTitles map[string]string `json:"document_titles,omitempty"`
 }
 
 // Option is one choice in the new-session form.

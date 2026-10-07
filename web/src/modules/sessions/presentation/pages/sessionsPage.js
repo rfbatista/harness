@@ -11,7 +11,8 @@ import { Codes, codeOf } from "../../../../shared/domain/errors.js";
 import { mergeMessages, newestAt, upsertMessage } from "../../domain/channel.js";
 import { applyChange, displayOrder, group, INITIAL_TERMINAL_SIZE, isTerminal, ofTask } from "../../domain/session.js";
 import { artifactTitle } from "../artifactView.js";
-import { startedBy, summary, toDetailView, toGroupViews } from "../view.js";
+import { announceMessage } from "../channelView.js";
+import { agentLabel, startedBy, summary, toDetailView, toGroupViews } from "../view.js";
 
 const TICK_MS = 30_000;
 
@@ -64,6 +65,10 @@ export const sessionsPage = ({ gateway, clock, channel = null, channelStore = { 
     announcement: "",
     /** Publishes that arrived while the Design tab was not in front. */
     unseenArtifacts: 0,
+    /** Messages to or from the selected session that arrived while its Conversation tab was not in front. */
+    unseenMessages: 0,
+    /** The task's documents when the page loaded, to name the ones a message links. */
+    documentTitles: {},
 
     // ── what the markup binds ────────────────────────────────────────────
     get groups() {
@@ -162,6 +167,40 @@ export const sessionsPage = ({ gateway, clock, channel = null, channelStore = { 
     get designTabSelected() {
       return this.detailTab === "design";
     },
+    /** The selected session is the architect or a delegate: it has a conversation to show. */
+    get hasConversation() {
+      return this.showingSession && this.selectedRole() !== "";
+    },
+    get showingConversation() {
+      return this.hasConversation && this.detailTab === "conversation";
+    },
+    get conversationTabSelected() {
+      return this.detailTab === "conversation";
+    },
+    get conversationBadge() {
+      return this.unseenMessages > 0 ? String(this.unseenMessages) : "";
+    },
+    /** The Conversation tab's panel, keyed on the session, with what it needs to name people and links. */
+    get conversationPanels() {
+      if (!this.showingConversation) return [];
+      const isArchitect = this.selectedRole() === "architect";
+      const delegates = isArchitect
+        ? this.sessions.filter((s) => s.role === "delegate").map((s) => ({ id: s.id, label: `${agentLabel(s.agentId, this.agentNames)} · ${s.task || "Untitled session"}` }))
+        : [];
+      return [
+        {
+          key: this.selectedId,
+          sessionId: this.selectedId,
+          isArchitect,
+          delegates,
+          sessions: this.sessions,
+          agentNames: this.agentNames,
+          documentTitles: this.documentTitles,
+          projectId: this.projectId,
+          ticketId: this.ticketId,
+        },
+      ];
+    },
     get showingNothing() {
       return !this.creating && !this.hasSelection;
     },
@@ -179,6 +218,7 @@ export const sessionsPage = ({ gateway, clock, channel = null, channelStore = { 
         this.ticketId = seed.ticketId;
         this.agentNames = seed.agentNames;
         this.repositoryNames = seed.repositoryNames;
+        this.documentTitles = seed.documentTitles;
         this.sessions = seed.sessions.filter(ofTask(this.ticketId));
       } catch (err) {
         this.error = describeError(err);
@@ -241,7 +281,13 @@ export const sessionsPage = ({ gateway, clock, channel = null, channelStore = { 
     /** @param {import("../../domain/ports.js").ChannelEvent} event */
     channelEvent({ message }) {
       if (message.taskId !== this.ticketId) return;
+      const arriving = !channelStore.messages.some((m) => m.id === message.id);
       channelStore.messages = upsertMessage(channelStore.messages, message);
+      if (!arriving) return; // the same message, now delivered
+      this.announcement = announceMessage(message, { sessions: this.sessions, agentNames: this.agentNames });
+      const role = this.selectedRole();
+      const concernsSelected = role === "architect" || (role === "delegate" && (message.fromSessionId === this.selectedId || message.toSessionId === this.selectedId));
+      if (concernsSelected && !this.showingConversation) this.unseenMessages += 1;
     },
 
     // ── feed ─────────────────────────────────────────────────────────────
@@ -299,6 +345,15 @@ export const sessionsPage = ({ gateway, clock, channel = null, channelStore = { 
       this.detailTab = "design";
       this.unseenArtifacts = 0;
     },
+    showConversation() {
+      this.detailTab = "conversation";
+      this.unseenMessages = 0;
+    },
+
+    /** The selected session's role on the task; "" when none is selected. */
+    selectedRole() {
+      return this.sessions.find((s) => s.id === this.selectedId)?.role ?? "";
+    },
 
     /** @param {CustomEvent<{ artifact: import("../../domain/artifact.js").Artifact, isNew: boolean }>} event */
     artifactPublished(event) {
@@ -326,8 +381,13 @@ export const sessionsPage = ({ gateway, clock, channel = null, channelStore = { 
     },
 
     select(id) {
-      if (id !== this.selectedId) this.unseenArtifacts = 0;
+      if (id !== this.selectedId) {
+        this.unseenArtifacts = 0;
+        this.unseenMessages = 0;
+      }
       this.selectedId = id;
+      // A peer has no conversation: fall back to its terminal.
+      if (this.detailTab === "conversation" && this.selectedRole() === "") this.detailTab = "agent";
       this.creating = false;
       this.confirmingDelete = false;
     },
@@ -343,7 +403,7 @@ export const sessionsPage = ({ gateway, clock, channel = null, channelStore = { 
       if (order.length === 0) return;
       const at = order.indexOf(this.selectedId);
       const next = at === -1 ? 0 : Math.max(0, Math.min(order.length - 1, at + delta));
-      this.selectedId = order[next];
+      this.select(order[next]);
     },
 
     // New session: the form is its own component (sessionsNewSession); it

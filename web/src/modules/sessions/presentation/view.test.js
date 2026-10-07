@@ -134,6 +134,8 @@ test("the architect's group leads, its row badged, its delegates indented (deepe
     [["arch", "architect", 0, "architect"], ["d1", "delegate", 1, ""], ["d2", "delegate", 2, ""], ["d3", "delegate", 3, ""], ["d4", "delegate", 3, ""]],
   );
   assert.deepEqual([groups[1].rows[0].role, groups[1].rows[0].depth, groups[1].rows[0].badge], ["", 0, ""]);
+  assert.deepEqual([groups[1].rows[0].roleAttr, groups[1].rows[0].depthAttr], [null, null], "a peer's row carries neither attribute");
+  assert.deepEqual([groups[0].rows[0].roleAttr, groups[0].rows[0].depthAttr, groups[0].rows[4].depthAttr], ["architect", null, "3"]);
 });
 
 test("a status check reads the same as on first paint (shared fixture)", () => {

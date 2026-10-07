@@ -1,0 +1,77 @@
+/*
+ * Message — one task message between a task's architect and a delegate, in
+ * the Conversation tab's .conversation log. An agent's prose: sans, kept to
+ * a readable measure, line breaks kept. Exceptions: data-clamped on .body
+ * (a long body folded to 8 lines until shown in full), data-undelivered.
+ * .conversation-bar: the filter above the log, its select sized to its options.
+ */
+
+@layer blocks {
+  .conversation-bar {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    padding: var(--space-s) var(--space-l);
+    font-size: var(--text-sm);
+
+    & select { inline-size: auto; min-inline-size: 0; max-inline-size: 100%; }
+  }
+
+  .conversation {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-l);
+    padding: var(--space-l);
+  }
+
+  .message {
+    display: grid;
+    gap: var(--space-2xs);
+    max-inline-size: 68ch;
+    padding-block-end: var(--space-l);
+    border-block-end: var(--border-width) solid var(--color-line);
+
+    & .head {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: var(--space-xs);
+      font-size: var(--text-sm);
+    }
+
+    & .head > .meta {
+      margin-inline-start: auto;
+      color: var(--color-ink-faint);
+      font-variant-numeric: tabular-nums;
+    }
+
+    & .subject { font-weight: var(--weight-bold); }
+
+    & .body {
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+
+      &[data-clamped] {
+        display: -webkit-box;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 8;
+        line-clamp: 8;
+        overflow: hidden;
+      }
+    }
+
+    & > .button { justify-self: start; }
+
+    & .links {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--space-xs) var(--space-m);
+      font-size: var(--text-sm);
+    }
+
+    & .aside {
+      color: var(--color-ink-faint);
+      font-size: var(--text-sm);
+    }
+  }
+}
