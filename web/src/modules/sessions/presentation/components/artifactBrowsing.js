@@ -30,7 +30,9 @@ export function artifactBrowsing(clock) {
 
     get cards() {
       const fresh = new Set(this.freshIds);
-      return this.artifacts.map((a) => this.cardView(a, toCardView(a, { selectedId: this.selectedId, now: this.now, fresh: fresh.has(a.id) })));
+      // ticketId: the task a list is about (a task's design page), to mark what is attached to it.
+      const ticketId = this.ticketId ?? "";
+      return this.artifacts.map((a) => this.cardView(a, toCardView(a, { selectedId: this.selectedId, now: this.now, fresh: fresh.has(a.id), ticketId })));
     },
     /** A component adds to a card here (the library names its task). */
     cardView(_artifact, card) {

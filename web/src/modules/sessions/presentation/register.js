@@ -3,6 +3,7 @@
 
 import { conversation } from "./components/conversation.js";
 import { designLibrary } from "./components/designLibrary.js";
+import { taskDesign } from "./components/taskDesign.js";
 import { designPanel } from "./components/designPanel.js";
 import { newSession } from "./components/newSession.js";
 import { terminal } from "./components/terminal.js";
@@ -33,6 +34,7 @@ export function registerSessions(Alpine, deps) {
   Alpine.data("sessionsTerminal", terminal(deps));
   Alpine.data("sessionsDesignPanel", designPanel(deps));
   Alpine.data("sessionsDesignLibrary", designLibrary(deps));
+  Alpine.data("sessionsTaskDesign", taskDesign(deps));
   // The same terminal, on an application run started from a session.
   if (deps.runTerminals) Alpine.data("sessionsRunTerminal", terminal({ ...deps, terminals: deps.runTerminals }));
 }
