@@ -118,7 +118,7 @@ templ SettingsPage(v SettingsView) {
 		<main class="[ frame ]" x-data="projectsSettingsPage" data-seed="settings-seed">
 			@templ.JSONScript("settings-seed", v.Seed)
 			<header class="[ toolbar ]">
-				<a class="[ crumb ]" href={ templ.SafeURL("/projects/" + v.Project.ID) }>{ v.Project.Name } /</a>
+				<a class="[ crumb ]" href={ templ.SafeURL("/projects/" + v.Project.ID) } x-text="crumb">{ v.Project.Name } /</a>
 				<h1>Settings</h1>
 			</header>
 			<div data-scroll>

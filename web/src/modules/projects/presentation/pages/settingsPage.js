@@ -64,6 +64,10 @@ export const settingsPage = ({ gateway, navigate }) => () => ({
   get canDelete() {
     return confirmsDelete(this.typedName, this.project.name) && !this.deleting && !this.deletedElsewhere;
   },
+  /** The toolbar's crumb follows a rename. */
+  get crumb() {
+    return `${this.project.name} /`;
+  },
   get nameInvalid() {
     return this.nameError !== null;
   },
@@ -260,7 +264,7 @@ function refusalView(project, sessions) {
     sessions: sessions.map((s) => ({
       id: s.id,
       label: s.agent || "a session",
-      detail: `· session ${s.id.slice(0, 8)}${s.ticketId ? "" : " · no task"}`,
+      detail: ` · session ${s.id.slice(0, 8)}${s.ticketId ? "" : " · no task"}`,
       href: s.ticketId ? `/projects/${encodeURIComponent(project.id)}/tasks/${encodeURIComponent(s.ticketId)}` : "",
     })),
   };

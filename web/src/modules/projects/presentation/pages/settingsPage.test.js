@@ -63,7 +63,7 @@ test("a taken name shows under Name, a bad directory under Directory; what was t
 test("a change made elsewhere updates untouched fields, and only warns over unsaved edits", async () => {
   const { instance, memory } = setup();
   await memory.gateway.updateProject({ projectId: "p1", name: "harness2" });
-  assert.deepEqual([instance.name, instance.notice], ["harness2", ""]);
+  assert.deepEqual([instance.name, instance.notice, instance.crumb], ["harness2", "", "harness2 /"]);
 
   instance.rootDir = "/src";
   await memory.gateway.updateProject({ projectId: "p1", name: "harness3" });
@@ -121,8 +121,8 @@ test("a refused delete names the running sessions in its own words, linking thos
   assert.deepEqual(
     instance.refusal.sessions.map((s) => [s.label, s.href, s.detail]),
     [
-      ["go-developer", "/projects/p1/tasks/t1", "· session s-123456"],
-      ["a session", "", "· session s-876543 · no task"],
+      ["go-developer", "/projects/p1/tasks/t1", " · session s-123456"],
+      ["a session", "", " · session s-876543 · no task"],
     ],
   );
 
