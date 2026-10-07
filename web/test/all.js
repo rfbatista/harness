@@ -45,6 +45,7 @@ import "../src/modules/tasks/presentation/components/documentWatch.test.js";
 import "../src/modules/tasks/presentation/components/newTask.test.js";
 import "../src/modules/tasks/presentation/components/rail.test.js";
 import "../src/modules/tasks/presentation/components/taskEditor.test.js";
+import "../src/modules/tasks/presentation/statusChange.test.js";
 import "../src/screen-theme.test.js";
 import "../src/shared/infrastructure/api.test.js";
 import "../src/shared/infrastructure/feed.test.js";

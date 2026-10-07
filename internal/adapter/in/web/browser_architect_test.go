@@ -413,3 +413,39 @@ func TestReviewInboxAndBoardFollowWhatWaitsOnThePerson(t *testing.T) {
 		t.Errorf("JS errors: %v", e)
 	}
 }
+
+// TestTaskPageSaysWhoMovedTheTaskAndWhy: the architect moves the task; the
+// page says so with its reason, and the status picker follows without a reload.
+func TestTaskPageSaysWhoMovedTheTaskAndWhy(t *testing.T) {
+	srv, feed := architectServer(t, nil)
+	ctx, errs := browser(t)
+
+	var line, picker string
+	if err := chromedp.Run(ctx,
+		chromedp.EmulateViewport(1280, 800),
+		chromedp.Navigate(srv.URL+"/projects/p1/tasks/t1"),
+		chromedp.Poll(`!!document.querySelector('[role=listbox] .row[data-role=architect]')`, nil, chromedp.WithPollingTimeout(10*time.Second)),
+	); err != nil {
+		t.Fatalf("%v\nJS errors: %v", err, errs.all())
+	}
+	waitFor(t, "the page's feed", func() bool { return feed.followers() >= 1 })
+	arch := "s-arch"
+	feed.pushRaw(t, map[string]any{"task_status": domain.TaskStatusChange{TaskID: "t1", Status: domain.TicketStatusReview, Reason: "Server and tools merged; the web UI is in review", BySessionID: arch, By: domain.ChangedBySession, At: time.Now()}})
+	feed.pushRaw(t, map[string]any{"ticket": &domain.Ticket{ID: "t1", ProjectID: "p1", Title: "Architect highlights", Status: domain.TicketStatusReview, ArchitectSessionID: &arch}})
+	if err := chromedp.Run(ctx,
+		chromedp.Poll(`!!document.querySelector('.status-change')`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Evaluate(`document.querySelector('.status-change').textContent.replace(/\s+/g, ' ').trim()`, &line),
+		chromedp.Poll(`document.querySelector('.toolbar .status-picker').value === 'review'`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Evaluate(`document.querySelector('.toolbar .status-picker').value`, &picker),
+		shot("status-change"),
+	); err != nil {
+		t.Fatalf("%v\nline %q\nJS errors: %v", err, line, errs.all())
+	}
+	if line != "Moved to review by the architect · now — “Server and tools merged; the web UI is in review”" {
+		t.Errorf("line = %q", line)
+	}
+	noBanner(t, ctx)
+	if e := errs.all(); len(e) > 0 {
+		t.Errorf("JS errors: %v", e)
+	}
+}

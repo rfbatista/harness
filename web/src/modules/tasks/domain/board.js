@@ -38,3 +38,10 @@ export function describeChange(previous, change) {
   if (previous.title !== t.title) return `${previous.title} was renamed to ${t.title}`;
   return "";
 }
+
+/**
+ * Who moved a task's status, and why: the project feed's `task_status`.
+ * at is when it happened; null when the server did not say.
+ * @typedef {{ taskId: string, status: string, reason: string, by: "session"|"person", bySessionId: string, at: Date | null }} StatusChange
+ * @typedef {{ kind: "task-status", change: StatusChange }} StatusChangeEvent
+ */

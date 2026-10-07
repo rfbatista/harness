@@ -37,7 +37,7 @@
  *
  * @typedef {import("./activity.js").RailSession} RailSession
  * @typedef {{ kind: "upsert", session: RailSession } | { kind: "deleted", id: string }} RailChange
- * @typedef {RailChange | import("./board.js").TaskChange} ProjectChange
+ * @typedef {RailChange | import("./board.js").TaskChange | import("./board.js").StatusChangeEvent} ProjectChange
  *
  * @typedef {object} RailGateway
  * @property {(seed: unknown) => { projectId: string, sessions: RailSession[], tasks: Task[] }} decodeSeed

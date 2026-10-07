@@ -80,3 +80,15 @@ test("a task reads its architect and how many reviews wait on the person; absent
   const plain = toTask({ id: "t2", status: "todo", architect_session_id: null });
   assert.deepEqual([plain.architectSessionId, plain.pendingReviews], ["", 0]);
 });
+
+test("a task_status message says who moved the task and why", () => {
+  const { kind, change } = toProjectChange({ task_status: { task_id: "t1", status: "review", reason: "All specs merged", by_session_id: "s-arch", by: "session", at: "2026-10-02T14:00:00Z" } });
+  assert.equal(kind, "task-status");
+  assert.deepEqual(
+    [change.taskId, change.status, change.reason, change.by, change.bySessionId, change.at.toISOString()],
+    ["t1", "review", "All specs merged", "session", "s-arch", "2026-10-02T14:00:00.000Z"],
+  );
+  const person = toProjectChange({ task_status: { task_id: "t1", status: "done", by: "person" } }).change;
+  assert.deepEqual([person.reason, person.bySessionId, person.at], ["", "", null]);
+  assert.equal(toProjectChange({ task_status: { task_id: "t1", status: "done", by: "robot" } }), null, "an unknown author drops it");
+});

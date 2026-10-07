@@ -915,7 +915,8 @@ func designPanel() templ.Component {
 	})
 }
 
-// taskBand sits under the toolbar, in the task editor's scope: the
+// taskBand sits under the toolbar, in the task editor's scope: who moved
+// the task's status last and why (seen live, over the feed), the
 // description, the edit form, the delete confirmation, the editor's errors.
 func taskBand(v PageView) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
@@ -938,20 +939,33 @@ func taskBand(v PageView) templ.Component {
 			templ_7745c5c3_Var36 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 72, "<template x-if=\"showsDescription\"><p class=\"[ brief ]\" x-text=\"description\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 72, "<template x-if=\"statusLine\"><p class=\"[ status-change ]\"><span x-text=\"statusLine\"></span><template x-if=\"statusReason\"><span class=\"[ truncate ]\" x-bind:title=\"statusReason\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var37 string
-		templ_7745c5c3_Var37, templ_7745c5c3_Err = templ.JoinStringErrs(v.TaskDescription)
+		templ_7745c5c3_Var37, templ_7745c5c3_Err = templ.JoinStringErrs(" ")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `sessions/page.templ`, Line: 501, Col: 63}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `sessions/page.templ`, Line: 505, Col: 64}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var37))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 73, "</p></template><template x-if=\"editingTask\"><form class=\"[ flow ] [ flow-space-s pad-l divide-bottom ]\" x-on:submit.prevent=\"save\" x-on:keydown.escape=\"cancelEditTask\"><div class=\"[ field ]\"><label for=\"task-edit-title\">Title</label> <input id=\"task-edit-title\" autocomplete=\"off\" x-model=\"draftTitle\" x-ref=\"title\"></div><div class=\"[ field ]\"><label for=\"task-edit-description\">Description</label> <textarea id=\"task-edit-description\" x-model=\"draftDescription\"></textarea></div><div class=\"[ cluster ]\"><button type=\"submit\" class=\"[ button ]\" data-variant=\"primary\" data-size=\"sm\" x-bind:disabled=\"cannotSaveTask\" x-bind:aria-busy=\"savingTask\">Save</button> <button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" x-on:click=\"cancelEditTask\">Cancel</button></div></form></template><template x-if=\"taskDeleteProblem\"><div class=\"[ pad-inline-l pad-block-s ]\"><div class=\"[ banner ]\" data-tone=\"attention\" role=\"alert\"><div class=\"[ flow ] [ flow-space-3xs grow ]\"><strong>This task cannot be deleted yet.</strong> <span x-text=\"taskDeleteProblem\"></span></div><button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" x-on:click=\"cancelDeleteTask\">OK</button></div></div></template><template x-if=\"confirmingTaskDelete\"><div class=\"[ pad-inline-l pad-block-s ]\"><div class=\"[ banner ]\" data-tone=\"danger\" role=\"alertdialog\" aria-label=\"Delete this task?\"><div class=\"[ flow ] [ flow-space-3xs grow ]\"><strong>Delete this task?</strong> <span>It has no sessions. Its title and description are removed for good.</span></div><div class=\"[ cluster ] [ gutter-xs ]\"><button type=\"button\" class=\"[ button ]\" data-variant=\"danger\" data-size=\"sm\" x-bind:aria-busy=\"deletingTask\" x-on:click=\"removeTask\">Delete task</button> <button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" x-on:click=\"cancelDeleteTask\">Keep it</button></div></div></div></template><template x-if=\"taskError\"><div class=\"[ pad-inline-l pad-block-s ]\"><div class=\"[ banner ]\" data-tone=\"danger\" role=\"alert\"><div class=\"[ flow ] [ flow-space-3xs grow ]\"><span x-text=\"taskError.message\"></span> <span class=\"[ code ]\"><span x-text=\"taskError.code\"></span> · <span x-text=\"taskError.next\"></span></span></div><button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" x-on:click=\"dismissTaskError\">Dismiss</button></div></div></template>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 73, "— <span x-text=\"statusReason\"></span></span></template></p></template><template x-if=\"showsDescription\"><p class=\"[ brief ]\" x-text=\"description\">")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		var templ_7745c5c3_Var38 string
+		templ_7745c5c3_Var38, templ_7745c5c3_Err = templ.JoinStringErrs(v.TaskDescription)
+		if templ_7745c5c3_Err != nil {
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `sessions/page.templ`, Line: 510, Col: 63}
+		}
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var38))
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 74, "</p></template><template x-if=\"editingTask\"><form class=\"[ flow ] [ flow-space-s pad-l divide-bottom ]\" x-on:submit.prevent=\"save\" x-on:keydown.escape=\"cancelEditTask\"><div class=\"[ field ]\"><label for=\"task-edit-title\">Title</label> <input id=\"task-edit-title\" autocomplete=\"off\" x-model=\"draftTitle\" x-ref=\"title\"></div><div class=\"[ field ]\"><label for=\"task-edit-description\">Description</label> <textarea id=\"task-edit-description\" x-model=\"draftDescription\"></textarea></div><div class=\"[ cluster ]\"><button type=\"submit\" class=\"[ button ]\" data-variant=\"primary\" data-size=\"sm\" x-bind:disabled=\"cannotSaveTask\" x-bind:aria-busy=\"savingTask\">Save</button> <button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" x-on:click=\"cancelEditTask\">Cancel</button></div></form></template><template x-if=\"taskDeleteProblem\"><div class=\"[ pad-inline-l pad-block-s ]\"><div class=\"[ banner ]\" data-tone=\"attention\" role=\"alert\"><div class=\"[ flow ] [ flow-space-3xs grow ]\"><strong>This task cannot be deleted yet.</strong> <span x-text=\"taskDeleteProblem\"></span></div><button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" x-on:click=\"cancelDeleteTask\">OK</button></div></div></template><template x-if=\"confirmingTaskDelete\"><div class=\"[ pad-inline-l pad-block-s ]\"><div class=\"[ banner ]\" data-tone=\"danger\" role=\"alertdialog\" aria-label=\"Delete this task?\"><div class=\"[ flow ] [ flow-space-3xs grow ]\"><strong>Delete this task?</strong> <span>It has no sessions. Its title and description are removed for good.</span></div><div class=\"[ cluster ] [ gutter-xs ]\"><button type=\"button\" class=\"[ button ]\" data-variant=\"danger\" data-size=\"sm\" x-bind:aria-busy=\"deletingTask\" x-on:click=\"removeTask\">Delete task</button> <button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" x-on:click=\"cancelDeleteTask\">Keep it</button></div></div></div></template><template x-if=\"taskError\"><div class=\"[ pad-inline-l pad-block-s ]\"><div class=\"[ banner ]\" data-tone=\"danger\" role=\"alert\"><div class=\"[ flow ] [ flow-space-3xs grow ]\"><span x-text=\"taskError.message\"></span> <span class=\"[ code ]\"><span x-text=\"taskError.code\"></span> · <span x-text=\"taskError.next\"></span></span></div><button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" x-on:click=\"dismissTaskError\">Dismiss</button></div></div></template>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

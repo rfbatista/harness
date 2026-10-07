@@ -14,17 +14,18 @@ import { taskEditor } from "./components/taskEditor.js";
  *   rail: import("../domain/ports.js").RailGateway,
  *   navigate: (url: string) => void,
  *   reload: () => void,
+ *   clock?: import("../../../shared/infrastructure/clock.js").Clock,
  * }} deps
  */
 export function registerTasks(Alpine, deps) {
   Alpine.data("tasksNewTask", newTask(deps));
-  Alpine.data("tasksTaskEditor", taskEditor(deps));
   Alpine.data("tasksDocumentWatch", documentWatch(deps));
   Alpine.data("tasksDocumentScope", documentScope(deps));
 
   // The project's live model, shared by the rail, its links and the board.
-  Alpine.store("tasksRail", { byTask: {}, tasks: [], seeded: false });
+  Alpine.store("tasksRail", { byTask: {}, tasks: [], seeded: false, statusChanges: {} });
   const store = Alpine.store("tasksRail");
+  Alpine.data("tasksTaskEditor", taskEditor({ ...deps, store }));
   Alpine.data("tasksRail", rail({ gateway: deps.rail, store }));
   Alpine.data("tasksBoard", board({ gateway: deps.gateway, store }));
 }

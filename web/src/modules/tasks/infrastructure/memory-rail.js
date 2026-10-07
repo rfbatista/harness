@@ -37,7 +37,9 @@ export function memoryRail({ projectId = "p1", sessions = [], tasks = [] } = {})
     gateway,
     /** A session or a task started, changed or went, as the server would announce it. */
     emit(change) {
-      if (change.kind === "task-upsert" || change.kind === "task-deleted") {
+      if (change.kind === "task-status") {
+        // nothing to keep: the ticket change that follows carries the status
+      } else if (change.kind === "task-upsert" || change.kind === "task-deleted") {
         const id = change.kind === "task-deleted" ? change.id : change.task.id;
         taskList = taskList.filter((t) => t.id !== id);
         if (change.kind === "task-upsert") taskList.push(change.task);

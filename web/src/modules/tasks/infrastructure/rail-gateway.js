@@ -35,6 +35,30 @@ export function toTaskChange(dto) {
   return { kind: "task-upsert", task: toTask(dto?.ticket) };
 }
 
+const CHANGERS = ["session", "person"];
+
+/**
+ * A `task_status` feed message: who moved a task's status, and why.
+ * @returns {import("../domain/board.js").StatusChangeEvent}
+ */
+export function toStatusChange(dto) {
+  const c = dto?.task_status;
+  if (!c || typeof c.task_id !== "string" || c.task_id === "") bad("task status change without a task_id");
+  if (!CHANGERS.includes(c.by)) bad(`task status change of ${c.task_id} by "${c.by}"`);
+  const at = c.at ? new Date(c.at) : null;
+  return {
+    kind: "task-status",
+    change: Object.freeze({
+      taskId: c.task_id,
+      status: c.status ?? "",
+      reason: c.reason ?? "",
+      by: c.by,
+      bySessionId: c.by_session_id ?? "",
+      at: at && !Number.isNaN(at.getTime()) ? at : null,
+    }),
+  };
+}
+
 /**
  * One feed message as the rail and the board see it, or null for a kind
  * they do not know or cannot read (the contract: consumers ignore kinds they
@@ -43,6 +67,7 @@ export function toTaskChange(dto) {
 export function toProjectChange(dto) {
   try {
     if (dto && "ticket" in dto) return toTaskChange(dto);
+    if (dto && "task_status" in dto) return toStatusChange(dto);
     if (dto && "session" in dto) return toRailChange(dto);
   } catch {
     return null;

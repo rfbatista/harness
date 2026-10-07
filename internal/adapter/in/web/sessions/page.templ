@@ -494,9 +494,18 @@ templ designPanel() {
 	</div>
 }
 
-// taskBand sits under the toolbar, in the task editor's scope: the
+// taskBand sits under the toolbar, in the task editor's scope: who moved
+// the task's status last and why (seen live, over the feed), the
 // description, the edit form, the delete confirmation, the editor's errors.
 templ taskBand(v PageView) {
+	<template x-if="statusLine">
+		<p class="[ status-change ]">
+			<span x-text="statusLine"></span>
+			<template x-if="statusReason">
+				<span class="[ truncate ]" x-bind:title="statusReason">{ " " }— <span x-text="statusReason"></span></span>
+			</template>
+		</p>
+	</template>
 	<template x-if="showsDescription">
 		<p class="[ brief ]" x-text="description">{ v.TaskDescription }</p>
 	</template>
