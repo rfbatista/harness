@@ -238,6 +238,17 @@ test("publishes behind another tab count on the Design tab until it is opened; e
   instance.destroy();
 });
 
+test("a move announces itself but is not counted: nothing new to look at", () => {
+  const { instance, tick } = setup();
+  tick();
+  instance.artifactMoved({ detail: { artifact: makeArtifact({ id: "a1", title: "Hero", scope: "project" }) } });
+  assert.equal(instance.announcement, "Moved to project: Hero");
+  instance.artifactMoved({ detail: { artifact: makeArtifact({ id: "a1", title: "Hero", scope: "task" }) } });
+  assert.equal(instance.announcement, "Moved back to task: Hero");
+  assert.equal(instance.designBadge, "");
+  instance.destroy();
+});
+
 test("a session started elsewhere arrives live: highlighted for a moment, announced, naming who started it", async () => {
   const sessions = [makeSession({ id: "lead", agentId: "backend", status: "running" })];
   const memory = memoryGateway({ projects: ["p1"], sessions, now: () => T0 });

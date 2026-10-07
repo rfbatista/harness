@@ -1,7 +1,7 @@
 import { Codes } from "../../../shared/domain/errors.js";
 import { assert, file, test } from "../../../shared/testing/test.js";
 import { makeArtifact, toArtifactDTO } from "../testing/artifact-fixtures.js";
-import { toArtifact, toArtifactEvent, toArtifactList } from "./artifact-dto.js";
+import { toArtifact, toArtifactEvent, toArtifactList, toMovedArtifact } from "./artifact-dto.js";
 
 file("sessions/infrastructure/artifact-dto");
 
@@ -45,4 +45,19 @@ test("events: artifact → published, done → ended, anything else → null", (
   assert.equal(toArtifactEvent({ seq: 1, type: "status", status: "running" }), null);
   assert.equal(toArtifactEvent(null), null);
   assert.throws(() => toArtifactEvent({ type: "artifact", artifact: { id: "" } }), Codes.BAD_RESPONSE);
+});
+
+test("scope is read; a server that does not send it reads as task; anything else is BAD_RESPONSE", () => {
+  const dto = toArtifactDTO(makeArtifact({ scope: "project" }));
+  assert.equal(toArtifact(dto).scope, "project");
+  const { scope: _, ...older } = dto;
+  assert.equal(toArtifact(older).scope, "task");
+  assert.throws(() => toArtifact({ ...dto, scope: "global" }), Codes.BAD_RESPONSE);
+});
+
+test("set_artifact_scope answers {artifact}", () => {
+  const dto = toArtifactDTO(makeArtifact({ id: "a1", scope: "project" }));
+  const a = toMovedArtifact({ artifact: dto });
+  assert.deepEqual([a.id, a.scope], ["a1", "project"]);
+  assert.throws(() => toMovedArtifact({ document: dto }), Codes.BAD_RESPONSE);
 });

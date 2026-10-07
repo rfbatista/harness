@@ -78,6 +78,9 @@ templ taskRail(r Rail) {
 				if r.DocumentsHref != "" {
 					<a class="[ button ]" data-variant="ghost" data-size="sm" href={ templ.SafeURL(r.DocumentsHref) }>Documents</a>
 				}
+				if r.DesignHref != "" {
+					<a class="[ button ]" data-variant="ghost" data-size="sm" href={ templ.SafeURL(r.DesignHref) }>Design assets</a>
+				}
 			</div>
 		}
 		if r.Seed != nil {

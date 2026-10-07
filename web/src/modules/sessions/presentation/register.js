@@ -1,6 +1,7 @@
 // The sessions module's Alpine components. Names are global: module
 // components carry the module prefix.
 
+import { designLibrary } from "./components/designLibrary.js";
 import { designPanel } from "./components/designPanel.js";
 import { newSession } from "./components/newSession.js";
 import { terminal } from "./components/terminal.js";
@@ -22,6 +23,7 @@ export function registerSessions(Alpine, deps) {
   Alpine.data("sessionsNewSession", newSession(deps));
   Alpine.data("sessionsTerminal", terminal(deps));
   Alpine.data("sessionsDesignPanel", designPanel(deps));
+  Alpine.data("sessionsDesignLibrary", designLibrary(deps));
   // The same terminal, on an application run started from a session.
   if (deps.runTerminals) Alpine.data("sessionsRunTerminal", terminal({ ...deps, terminals: deps.runTerminals }));
 }

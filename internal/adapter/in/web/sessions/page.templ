@@ -20,6 +20,7 @@ templ Page(v PageView) {
 			x-on:session-created="sessionCreated"
 			x-on:new-session-cancelled="cancelCreating"
 			x-on:artifact-published="artifactPublished"
+			x-on:artifact-moved="artifactMoved"
 		>
 			@templ.JSONScript("sessions-seed", v.Seed)
 			<div x-data="tasksTaskEditor" data-seed="task-seed">
@@ -423,13 +424,10 @@ templ appPanel() {
 }
 
 // designPanel is what the session published, newest first, with the selected
-// artifact rendered beside the list. It stays mounted behind the other tabs
-// (x-show), so its stream keeps counting publishes for the tab's badge.
-// Pages and dev servers are embedded only in a sandboxed frame; titles and
-// notes are text. The Alpine CSP build refuses directives on an iframe, so
-// the frame is literal markup (sandbox included) and its wrapper's x-init
-// hands it to loadFrame, which sets only src and title. Tab leaves the frame
-// (sequential focus crosses it) and lands on the bar, which says so.
+// artifact rendered beside the list (ArtifactPreview: sandboxed frames, text
+// titles). It stays mounted behind the other tabs (x-show), so its stream
+// keeps counting publishes for the tab's badge. The bar moves the selected
+// artifact to the project, or back to its task.
 // The page's showingDesign is read from a wrapper outside the panel's x-data:
 // evaluated on the panel itself, the page's getters would resolve `this`
 // through the panel's scope, whose selectedId (an artifact) shadows the page's
@@ -458,61 +456,19 @@ templ designPanel() {
 					x-on:keydown.up.prevent="previous"
 				>
 					<template x-for="card in cards" x-bind:key="card.id">
-						<div class="[ artifact-card ]" role="option" x-bind:aria-selected="card.selected" x-bind:data-fresh="card.fresh" x-on:click="select(card.id)">
-							<span class="[ title ]" x-text="card.title"></span>
-							<span class="[ badge ]" x-text="card.kindWord"></span>
-							<span class="[ note ]" x-text="card.note"></span>
-							<span class="[ meta ]"><span x-text="card.revision"></span><span x-text="card.updated"></span></span>
-						</div>
+						@ArtifactCard()
 					</template>
 					<template x-if="isEmpty">
 						@components.Empty("Nothing published yet", "When the agent publishes a page, an image, a video or a file for you to look at, it appears here and refreshes as it changes. Ask for one in the Agent tab.")
 					</template>
 				</div>
-				<div class="[ preview ]" x-bind:data-kind="currentKind">
-					<div class="[ stage ]">
-						<template x-for="frame in frames" x-bind:key="frame.key">
-							<div class="[ frame ]">
-								<template x-if="frame.isPage">
-									<div class="[ frame ]" x-init="loadFrame($el, frame)">
-										<iframe sandbox="allow-scripts" referrerpolicy="no-referrer"></iframe>
-									</div>
-								</template>
-								<template x-if="frame.embedsUrl">
-									<div class="[ frame ]" x-init="loadFrame($el, frame)">
-										<iframe sandbox="allow-scripts" referrerpolicy="no-referrer"></iframe>
-									</div>
-								</template>
-								<template x-if="frame.notEmbeddable">
-									<div class="[ pad-l ]">
-										<div class="[ banner ]" data-tone="attention">
-											<span>This dev server is not on this machine, so it is not embedded. The session published <strong x-text="frame.title"></strong> at <code x-text="frame.url"></code>.</span>
-										</div>
-									</div>
-								</template>
-								<template x-if="frame.isImage">
-									<img x-bind:src="frame.src" x-bind:alt="frame.title"/>
-								</template>
-								<template x-if="frame.isVideo">
-									<video controls preload="metadata" x-bind:src="frame.src" x-bind:aria-label="frame.frameTitle"></video>
-								</template>
-								<template x-if="frame.isFile">
-									<div class="[ flow ] [ flow-space-s ]">
-										<p><a x-bind:href="frame.openHref" x-bind:download="frame.fileName" x-text="frame.fileName"></a></p>
-										<p class="[ text-sm color-ink-muted ]"><span x-text="frame.size"></span> · <code x-text="frame.mime"></code></p>
-									</div>
-								</template>
-							</div>
-						</template>
-					</div>
-					<div class="[ bar ]">
-						<span class="[ status ]" x-bind:data-state="feedState" x-text="feedWord">connecting</span>
-						<span class="[ grow truncate ]"><kbd>Tab</kbd> leaves the frame · <kbd>J</kbd> <kbd>K</kbd> move the list</span>
-						<template x-if="hasOpenHref">
-							<a x-bind:href="currentOpenHref" target="_blank" rel="noopener noreferrer">Open in a new tab</a>
-						</template>
-					</div>
-				</div>
+				@ArtifactPreview() {
+					<template x-if="canMoveCurrent">
+						<form x-on:submit.prevent="move">
+							<button type="submit" class="[ button ]" data-variant="ghost" data-size="sm" x-bind:aria-busy="moving" x-bind:aria-label="currentMoveAriaLabel" x-text="currentMoveLabel">Move to project</button>
+						</form>
+					</template>
+				}
 			</div>
 		</section>
 	</div>

@@ -14,6 +14,8 @@ const NEXT_STEP = {
   [Codes.PROJECT_NOT_FOUND]: "pick another project at the top",
   [Codes.TICKET_NOT_FOUND]: "it was deleted; pick a task on the rail",
   [Codes.DOCUMENT_NOT_FOUND]: "it was deleted; reload the page",
+  [Codes.ARTIFACT_NOT_FOUND]: "it was deleted; reload the page",
+  [Codes.ARTIFACT_NOT_PROMOTABLE]: "only a file a live session published can be kept; ask the agent to publish it as a file, then move it",
   [Codes.INVALID_ROOT]: "give the absolute path of the project's directory on the server's machine",
   [Codes.INVALID_URL]: "give the repository's git remote, or leave it empty for a local-only one",
   [Codes.REPOSITORY_NOT_FOUND]: "it was already removed; reload the page",

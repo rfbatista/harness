@@ -1,6 +1,19 @@
 import { assert, file, test } from "../../../shared/testing/test.js";
 import { A0, makeArtifact } from "../testing/artifact-fixtures.js";
-import { applyPublish, byUpdated, fileName, isKnown, isLoopbackUrl, KINDS } from "./artifact.js";
+import {
+  applyChange,
+  applyPublish,
+  byUpdated,
+  fileName,
+  isKnown,
+  isLoopbackUrl,
+  isNewer,
+  isPromotable,
+  isPublish,
+  KINDS,
+  Scope,
+  withoutArtifact,
+} from "./artifact.js";
 
 file("sessions/domain/artifact");
 
@@ -45,4 +58,40 @@ test("only http(s) on this machine may be embedded", () => {
 test("a file's name is its last path segment", () => {
   assert.equal(fileName(makeArtifact({ path: "out/report.pdf" })), "report.pdf");
   assert.equal(fileName(makeArtifact({ kind: "url", path: "", url: "http://localhost:3000" })), "");
+});
+
+test("an artifact is newer with a higher revision, or the same revision updated later (a move)", () => {
+  const known = makeArtifact({ id: "a1", revision: 2, updatedAt: later(10) });
+  assert.equal(isNewer(known, makeArtifact({ id: "a1", revision: 3, updatedAt: later(10) })), true, "a re-publish");
+  assert.equal(isNewer(known, makeArtifact({ id: "a1", revision: 2, updatedAt: later(11), scope: Scope.PROJECT })), true, "a move");
+  assert.equal(isNewer(known, makeArtifact({ id: "a1", revision: 2, updatedAt: later(10) })), false, "the same again");
+  assert.equal(isNewer(known, makeArtifact({ id: "a1", revision: 1, updatedAt: later(30) })), false, "an older revision");
+  assert.equal(isNewer(undefined, known), true, "anything is newer than nothing");
+});
+
+test("only a new artifact or a new revision is a publish; a move is not", () => {
+  const list = [makeArtifact({ id: "a1", revision: 2 })];
+  assert.equal(isPublish(list, makeArtifact({ id: "a9" })), true);
+  assert.equal(isPublish(list, makeArtifact({ id: "a1", revision: 3 })), true);
+  assert.equal(isPublish(list, makeArtifact({ id: "a1", revision: 2, updatedAt: later(5), scope: Scope.PROJECT })), false);
+});
+
+test("a change replaces the artifact where it is, without re-sorting; an unknown one is left out", () => {
+  const a = makeArtifact({ id: "a", updatedAt: later(2) });
+  const b = makeArtifact({ id: "b", updatedAt: later(1) });
+  const moved = makeArtifact({ id: "b", updatedAt: later(9), scope: Scope.PROJECT });
+  const list = applyChange([a, b], moved);
+  assert.deepEqual(list.map((x) => `${x.id}:${x.scope}`), ["a:task", "b:project"]);
+  assert.deepEqual(applyChange([a], moved).map((x) => x.id), ["a"]);
+});
+
+test("withoutArtifact drops one by id", () => {
+  const list = [makeArtifact({ id: "a" }), makeArtifact({ id: "b" })];
+  assert.deepEqual(withoutArtifact(list, "a").map((x) => x.id), ["b"]);
+  assert.equal(list.length, 2, "does not mutate");
+});
+
+test("only a file-backed artifact can move to the project: a dev-server url dies with its session", () => {
+  assert.equal(isPromotable(makeArtifact({ kind: "page" })), true);
+  assert.equal(isPromotable(makeArtifact({ kind: "url", path: "", url: "http://localhost:5173/" })), false);
 });

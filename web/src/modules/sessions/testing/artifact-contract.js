@@ -2,6 +2,7 @@
 // implementation. A fake that passes it behaves like the real gateway as far
 // as the Design tab can tell.
 
+import { Codes } from "../../../shared/domain/errors.js";
 import { FeedStatus } from "../../../shared/domain/feed.js";
 import { flush } from "../../../shared/testing/doubles.js";
 import { assert, test } from "../../../shared/testing/test.js";
@@ -75,6 +76,56 @@ export function artifactGatewayContract(name, makeSubject) {
     const list = await subject.gateway.list("s1");
     assert.deepEqual(list.map((a) => `${a.id}@${a.revision}`), [`${first.id}@2`]);
     close();
+  });
+
+  contract("setScope moves an artifact: a new updatedAt, the same id and revision; the same scope again changes nothing", async () => {
+    const { gateway } = makeSubject({ artifacts: [makeArtifact({ id: "a", revision: 3, updatedAt: A0 })] });
+    const moved = await gateway.setScope("a", "project");
+    assert.deepEqual([moved.id, moved.revision, moved.scope], ["a", 3, "project"]);
+    assert.ok(moved.updatedAt.getTime() > A0.getTime(), "a move is a change");
+    const again = await gateway.setScope("a", "project");
+    assert.equal(again.updatedAt.getTime(), moved.updatedAt.getTime(), "the same scope again changes nothing");
+    assert.equal((await gateway.setScope("a", "task")).scope, "task");
+    assert.equal((await gateway.list("s1"))[0].scope, "task", "the session keeps it in both scopes");
+  });
+
+  contract("setScope refuses an unknown artifact, an unknown scope, and a url going to the project", async () => {
+    const url = makeArtifact({ id: "u", kind: "url", path: "", url: "http://localhost:5173/", mime: "", sizeBytes: 0 });
+    const { gateway } = makeSubject({ artifacts: [makeArtifact({ id: "a" }), url] });
+    await assert.rejects(gateway.setScope("ghost", "project"), Codes.ARTIFACT_NOT_FOUND);
+    await assert.rejects(gateway.setScope("a", "global"), Codes.INVALID_INPUT);
+    await assert.rejects(gateway.setScope("u", "project"), Codes.ARTIFACT_NOT_PROMOTABLE);
+  });
+
+  contract("listProject lists the project's project-scoped artifacts only, newest first", async () => {
+    const { gateway } = makeSubject({
+      artifacts: [
+        makeArtifact({ id: "old", scope: "project", updatedAt: A0 }),
+        makeArtifact({ id: "new", path: "n.html", scope: "project", updatedAt: later(5) }),
+        makeArtifact({ id: "task", path: "t.html", scope: "task", updatedAt: later(9) }),
+        makeArtifact({ id: "other", path: "o.html", projectId: "p2", scope: "project", updatedAt: later(9) }),
+      ],
+    });
+    assert.deepEqual((await gateway.listProject("p1")).map((a) => a.id), ["new", "old"]);
+    assert.deepEqual(await gateway.listProject("nobody"), []);
+  });
+
+  contract("a move is delivered on the producing session's stream, with its new scope", async () => {
+    const subject = makeSubject({ artifacts: [makeArtifact({ id: "a" })] });
+    const events = [];
+    const close = subject.gateway.follow("s1", (e) => events.push(e), () => {});
+    await flush();
+    await subject.gateway.setScope("a", "project");
+    await flush();
+    assert.deepEqual(events.map((e) => [e.kind, e.artifact.id, e.artifact.scope, e.artifact.revision]), [["published", "a", "project", 1]]);
+    close();
+  });
+
+  contract("remove deletes an artifact in either scope; an unknown one is ARTIFACT_NOT_FOUND", async () => {
+    const { gateway } = makeSubject({ artifacts: [makeArtifact({ id: "a", scope: "project" })] });
+    await gateway.remove("a");
+    assert.deepEqual(await gateway.listProject("p1"), []);
+    await assert.rejects(gateway.remove("a"), Codes.ARTIFACT_NOT_FOUND);
   });
 
   contract("the session's end is delivered as ended", async () => {

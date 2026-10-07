@@ -43,6 +43,9 @@ type Rail struct {
 	// DocumentsHref is the project's documents library; "" when documents
 	// are not served.
 	DocumentsHref string
+	// DesignHref is the project's design assets: the artifacts moved to
+	// project level.
+	DesignHref string
 	Groups        []RailGroup
 	// Empty is shown when a project is selected but has no tasks.
 	Empty string
