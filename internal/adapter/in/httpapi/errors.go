@@ -45,7 +45,7 @@ func errorHandler(err error, c echo.Context) {
 			"SKILL_NOT_FOUND", "MCP_SERVER_NOT_FOUND", "TOOL_NOT_FOUND", "TASK_NOT_FOUND",
 			"TICKET_NOT_FOUND", "DOCUMENT_NOT_FOUND", "REPOSITORY_NOT_FOUND", "WORKSPACE_NOT_FOUND",
 			"BOUNDED_CONTEXT_NOT_FOUND", "SESSION_NOT_FOUND", "SKILL_FILE_NOT_FOUND",
-			"WORKSPACE_MISSING", "SESSION_TRANSCRIPT_MISSING", "TERMINAL_NOT_FOUND", "ENV_FILE_NOT_FOUND",
+			"TERMINAL_NOT_FOUND", "ENV_FILE_NOT_FOUND",
 			"RUN_NOT_FOUND", "RUN_COMMAND_NOT_FOUND", "ARTIFACT_NOT_FOUND":
 			_ = c.JSON(http.StatusNotFound, errorBody(se.Message, se.Code))
 			return
@@ -64,6 +64,9 @@ func errorHandler(err error, c echo.Context) {
 		case "PUBLISH_TARGET_EXISTS", "PUBLISH_SLUG_CONFLICT", "WORKSPACE_EXISTS", "BRANCH_EXISTS",
 			"SESSION_INTERACTIVE", "SESSION_NOT_INTERACTIVE", "SESSION_ALREADY_RUNNING",
 			"SESSION_RUNS_ON_SERVER", "SESSION_RUNS_ON_TUI", "SESSION_NOT_RUNNING", "TASK_SESSION_LIMIT",
+			// The session exists but its worktree or saved conversation is
+			// gone: a state conflict, not a missing resource.
+			"WORKSPACE_MISSING", "SESSION_TRANSCRIPT_MISSING",
 			"ARTIFACT_IN_PROJECT":
 			_ = c.JSON(http.StatusConflict, errorBody(se.Message, se.Code))
 			return

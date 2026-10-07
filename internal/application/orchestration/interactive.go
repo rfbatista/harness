@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/rfbatista/harnesskit/errs"
 	"github.com/rfbatista/llmkit"
 	"github.com/rfbatista/llmkit/claude"
 
@@ -96,7 +97,7 @@ func (s *Service) StartInteractive(ctx context.Context, req InteractiveRequest) 
 				return nil, ports.AgentSpec{}, err
 			}
 		}
-		return created, spec, nil
+		return s.withResumability(created), spec, nil
 	}
 	// Not recorded: nothing will ever run in this worktree, and its branch is
 	// seconds old with no commits, so Discard (not Delete) is safe.
@@ -113,26 +114,27 @@ func (s *Service) StartInteractive(ctx context.Context, req InteractiveRequest) 
 //
 // The permission mode is not stored, only whether the session ran unattended:
 // a session that did resumes in bypass mode, any other in the default mode.
+//
+// Concurrent calls for one session resume it once; the others answer
+// SESSION_ALREADY_RUNNING. A resume is not held to the task's session limit
+// (TASK_SESSION_LIMIT): like starting one from the TUI or the web, it is a
+// person's action, and the limit only bounds the sessions agents start. Once
+// running, it counts toward that limit again.
 func (s *Service) ResumeInteractive(ctx context.Context, req ports.ResumeRequest) (*domain.Session, ports.AgentSpec, error) {
 	runsOn, err := s.runner(req.RunsOn)
 	if err != nil {
 		return nil, ports.AgentSpec{}, err
 	}
+	if !s.claimResume(req.SessionID) {
+		return nil, ports.AgentSpec{}, &domain.StructuredError{Code: "SESSION_ALREADY_RUNNING", Message: "session is being resumed"}
+	}
+	defer s.releaseResume(req.SessionID)
 	sess, err := s.interactiveSession(req.SessionID)
 	if err != nil {
 		return nil, ports.AgentSpec{}, err
 	}
-	if !sess.Status.IsTerminal() {
-		return nil, ports.AgentSpec{}, &domain.StructuredError{Code: "SESSION_ALREADY_RUNNING", Message: "session is still running"}
-	}
-	claudeID := sess.ClaudeSessionID
-	if claudeID == "" {
-		claudeID = sess.ID
-	}
-	if s.Transcripts != nil {
-		if err := s.Transcripts.CanResume(sess.WorkingDir, claudeID); err != nil {
-			return nil, ports.AgentSpec{}, err
-		}
+	if err := s.resumeBlock(sess); err != nil {
+		return nil, ports.AgentSpec{}, err
 	}
 
 	var ticket *domain.Ticket
@@ -148,7 +150,7 @@ func (s *Service) ResumeInteractive(ctx context.Context, req ports.ResumeRequest
 		permission = llmkit.PermissionBypass
 	}
 	cfg := s.sessionConfig(sess.ID, sess.WorkingDir, sess.Model, nil, permission, ag, ticket, sess.ZoneID)
-	spec := s.agentSpec(cfg, ports.Conversation{ID: claudeID, Resume: true}, "")
+	spec := s.agentSpec(cfg, ports.Conversation{ID: claudeID(sess), Resume: true}, "")
 	err = s.sessions.UpdateRunner(sess.ID, runsOn, runnerHost(runsOn, req.RunnerHost))
 	if err == nil {
 		err = s.sessions.UpdateStatus(sess.ID, domain.SessionRunning)
@@ -166,7 +168,58 @@ func (s *Service) ResumeInteractive(ctx context.Context, req ports.ResumeRequest
 			return nil, ports.AgentSpec{}, err
 		}
 	}
-	return s.sessions.Get(sess.ID), spec, nil
+	return s.withResumability(s.sessions.Get(sess.ID)), spec, nil
+}
+
+// claimResume marks id as being resumed; false when another call already is.
+func (s *Service) claimResume(id string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.resuming[id] {
+		return false
+	}
+	s.resuming[id] = true
+	return true
+}
+
+func (s *Service) releaseResume(id string) {
+	s.mu.Lock()
+	delete(s.resuming, id)
+	s.mu.Unlock()
+}
+
+// resumeBlock is the error a resume of sess would answer now, nil when it
+// would be accepted. Only an ended interactive session reaches the
+// filesystem, so listing many sessions stays cheap.
+func (s *Service) resumeBlock(sess *domain.Session) error {
+	switch {
+	case !sess.Interactive:
+		return &domain.StructuredError{Code: "SESSION_NOT_INTERACTIVE", Message: "session is not interactive"}
+	case !sess.Status.IsTerminal():
+		return &domain.StructuredError{Code: "SESSION_ALREADY_RUNNING", Message: "session is still running"}
+	case s.Transcripts != nil:
+		return s.Transcripts.CanResume(sess.WorkingDir, claudeID(sess))
+	}
+	return nil
+}
+
+// withResumability fills sess's Resumable and ResumeBlocked, for a session
+// about to leave the service. Nil stays nil.
+func (s *Service) withResumability(sess *domain.Session) *domain.Session {
+	if sess == nil {
+		return nil
+	}
+	sess.ResumeBlocked = errs.Code(s.resumeBlock(sess))
+	sess.Resumable = sess.ResumeBlocked == ""
+	return sess
+}
+
+// claudeID is the claude conversation sess resumes into.
+func claudeID(sess *domain.Session) string {
+	if sess.ClaudeSessionID != "" {
+		return sess.ClaudeSessionID
+	}
+	return sess.ID
 }
 
 // runner checks where a session is asked to run; empty means RunnerTUI, the
@@ -237,7 +290,7 @@ func (s *Service) end(id string, exitCode int, closedByUser bool) (*domain.Sessi
 	}
 	s.runCleanup(id)
 	if sess.Status.IsTerminal() {
-		return sess, nil
+		return s.withResumability(sess), nil
 	}
 
 	status, text := domain.SessionDone, "exited"
@@ -251,7 +304,7 @@ func (s *Service) end(id string, exitCode int, closedByUser bool) (*domain.Sessi
 		return nil, err
 	}
 	s.publish(id, SessionEvent{Type: "done", Status: status, Text: text, At: time.Now()})
-	return s.sessions.Get(id), nil
+	return s.withResumability(s.sessions.Get(id)), nil
 }
 
 // RecordClaudeSession stores the claude conversation an interactive session is

@@ -87,6 +87,10 @@ type Service struct {
 	// which is routinely *after* the initial task was already sent — cannot
 	// report the session as idle while Claude is working on that first turn.
 	busy map[string]bool
+	// resuming marks sessions a ResumeInteractive call is bringing back, from
+	// its status check until the session is recorded running, so two calls at
+	// once cannot both pass the check.
+	resuming map[string]bool
 }
 
 func NewService(runtime llmkit.Manager, broker *approval.Broker, hub *Hub, sessions ports.SessionRepository, catalog Catalog, tickets ticketResolver, workspaces ports.WorkspaceProvisioner) *Service {
@@ -94,6 +98,7 @@ func NewService(runtime llmkit.Manager, broker *approval.Broker, hub *Hub, sessi
 		runtime: runtime, broker: broker, hub: hub, sessions: sessions, catalog: catalog, tickets: tickets,
 		workspaces: workspaces,
 		seq:        map[string]int64{}, cleanups: map[string]func(){}, busy: map[string]bool{},
+		resuming: map[string]bool{},
 	}
 	go s.approvalLoop()
 	go s.expiryLoop()
@@ -208,7 +213,7 @@ func (s *Service) Start(ctx context.Context, req StartRequest) (*domain.Session,
 	if err := s.Send(ctx, sess.ID(), req.Task); err != nil {
 		slog.Error("send initial task failed", "session", sess.ID(), "err", err)
 	}
-	return created, nil
+	return s.withResumability(created), nil
 }
 
 // prepareInput is what every way of starting a session shares: enough to
@@ -809,11 +814,15 @@ func (s *Service) Get(_ context.Context, id string) (*domain.Session, error) {
 	if sess == nil {
 		return nil, &domain.StructuredError{Code: "SESSION_NOT_FOUND", Message: "session not found"}
 	}
-	return sess, nil
+	return s.withResumability(sess), nil
 }
 
 func (s *Service) List(_ context.Context, f ports.SessionFilter) ([]*domain.Session, error) {
-	return s.sessions.List(f), nil
+	list := s.sessions.List(f)
+	for _, sess := range list {
+		s.withResumability(sess)
+	}
+	return list, nil
 }
 
 func (s *Service) publish(sessionID string, ev SessionEvent) {

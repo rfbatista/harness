@@ -81,7 +81,7 @@ func (s *Service) notify(sessionID, eventType string) {
 		return
 	}
 	if sess := s.sessions.Get(sessionID); sess != nil {
-		s.feed.send(ports.SessionChange{Session: sess})
+		s.feed.send(ports.SessionChange{Session: s.withResumability(sess)})
 	}
 }
 
