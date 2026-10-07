@@ -63,6 +63,13 @@ type SessionTurnEnded struct{ SessionID string }
 // TicketStatusChanged: a task's status moved.
 type TicketStatusChanged struct{ Change TaskStatusChange }
 
+// TicketDeleted: a task was deleted. It is published after the delete, so
+// what other contexts kept about the task (attachments) can go too.
+type TicketDeleted struct {
+	TicketID  string
+	ProjectID string
+}
+
 func (ProjectDeleted) EventName() string      { return "project.deleted" }
 func (PromptDeleted) EventName() string       { return "prompt.deleted" }
 func (AgentDeleted) EventName() string        { return "agent.deleted" }
@@ -74,3 +81,4 @@ func (SessionStarted) EventName() string      { return "session.started" }
 func (SessionEnded) EventName() string        { return "session.ended" }
 func (SessionTurnEnded) EventName() string    { return "session.turn_ended" }
 func (TicketStatusChanged) EventName() string { return "ticket.status_changed" }
+func (TicketDeleted) EventName() string       { return "ticket.deleted" }
