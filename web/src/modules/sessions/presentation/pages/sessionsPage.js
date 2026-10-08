@@ -359,8 +359,10 @@ export const sessionsPage = ({ gateway, clock, channel = null, channelStore = { 
     },
 
     // ── developer actions ────────────────────────────────────────────────
+    /** The person opened the Agent tab: its terminal takes the focus once mounted. */
     showAgent() {
       this.detailTab = "agent";
+      this.$nextTick(() => this.$dispatch("terminal-focus-requested"));
     },
     showApp() {
       this.detailTab = "app";

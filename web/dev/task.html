@@ -178,7 +178,7 @@
                   </div>
                 </div>
                 <template x-for="sid in terminalIds" :key="sid">
-                  <div class="[ terminal ]" x-data="sessionsTerminal(sid)" data-scroll>
+                  <div class="[ terminal ]" x-data="sessionsTerminal(sid)" x-on:terminal-focus-requested.window="focus" data-scroll>
                     <div class="[ screen ]" x-ref="screen" @click="focus"></div>
                     <div class="[ bar ]">
                       <span class="[ status ]" :data-state="statusState" x-text="stateWord">connecting</span>

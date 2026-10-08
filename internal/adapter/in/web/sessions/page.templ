@@ -346,7 +346,7 @@ templ newSessionForm(form NewSessionForm) {
 // terminalPane is the selected session's PTY, drawn by xterm.js. It is
 // mounted once per session (the x-for key), so switching sessions detaches.
 templ terminalPane() {
-	<div class="[ terminal ]" x-data="sessionsTerminal(sid)" data-scroll>
+	<div class="[ terminal ]" x-data="sessionsTerminal(sid)" x-on:terminal-focus-requested.window="focus" data-scroll>
 		<div class="[ screen ]" x-ref="screen" x-on:click="focus"></div>
 		<div class="[ bar ]">
 			<span class="[ status ]" x-bind:data-state="statusState" x-text="stateWord">connecting</span>

@@ -74,5 +74,8 @@ export function memoryTerminals({ greeting = "claude is ready", history = [] } =
     print(sessionId, text) {
       open.get(sessionId)?.onOutput(encoder.encode(text));
     },
+    retitle(sessionId, title) {
+      open.get(sessionId)?.onTitle?.(title);
+    },
   };
 }

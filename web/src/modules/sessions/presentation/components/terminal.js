@@ -1,9 +1,12 @@
 // A session's terminal: the PTY claude runs in on the server, drawn in the
 // browser. The screen (xterm.js, injected as createScreen) draws; the gateway
 // carries the snapshot, the output and the keys. Keyed on the session, so
-// choosing another session mounts a fresh one and destroy() detaches.
+// choosing another session mounts a fresh one and destroy() detaches. It takes
+// the keyboard focus only when the person asks for it (a click on the screen,
+// Reconnect, the page's terminal-focus-requested); never on what the server
+// sends, so J/K in the sessions list walk past live terminals.
 //
-//   <div x-data="sessionsTerminal(sid)" class="[ terminal ]">
+//   <div x-data="sessionsTerminal(sid)" x-on:terminal-focus-requested.window="focus" class="[ terminal ]">
 //     <div class="[ screen ]" x-ref="screen"></div> …
 //   </div>
 
@@ -79,9 +82,9 @@ export const terminal = ({ terminals, createScreen, observeResize = resizeObserv
         onSnapshot: (snapshot) => {
           screen.draw(snapshot);
           if (snapshot.title) this.title = snapshot.title;
-          // The snapshot is at the server's size; take this pane's.
+          // The snapshot is at the server's size; take this pane's. The focus
+          // stays where the person left it: a terminal takes it on request.
           this.fit(true);
-          screen.focus();
         },
         onOutput: (bytes) => screen.write(bytes),
         onTitle: (title) => {
@@ -98,9 +101,11 @@ export const terminal = ({ terminals, createScreen, observeResize = resizeObserv
       });
     },
 
+    /** The person pressed Reconnect: the terminal takes the focus the button had. */
     reconnect() {
       connection?.close();
       this.connect();
+      screen?.focus();
     },
 
     /** Fits the screen to the pane and tells the server; force sends even when unchanged. */
