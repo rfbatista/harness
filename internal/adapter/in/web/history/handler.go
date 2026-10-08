@@ -9,7 +9,6 @@ import (
 
 	"github.com/rfbatista/harnesskit/errs"
 
-	"operators-mcp/internal/adapter/in/web/pullrequests"
 	"operators-mcp/internal/adapter/in/web/sessions"
 	"operators-mcp/internal/adapter/in/web/shell"
 	"operators-mcp/internal/adapter/in/web/tasks"
@@ -31,10 +30,10 @@ type Handler struct {
 	Sessions ports.SessionReader
 	// PullRequests offers a session's branch as a pull request on its
 	// history page; nil leaves the page without it.
-	PullRequests pullrequests.Reader
-	Layout   shell.Layout
-	Render   shell.Renderer
-	Now      func() time.Time
+	PullRequests ports.PullRequests
+	Layout       shell.Layout
+	Render       shell.Renderer
+	Now          func() time.Time
 }
 
 // Href is a repository's history page.

@@ -12,7 +12,8 @@ import (
 
 	"github.com/chromedp/chromedp"
 
-	"operators-mcp/internal/adapter/in/web/pullrequests"
+	"operators-mcp/internal/domain"
+	"operators-mcp/internal/ports"
 )
 
 // fakePullRequestAPI answers the Web UI contract's pull request routes the
@@ -21,7 +22,7 @@ import (
 type fakePullRequestAPI struct {
 	mu      sync.Mutex
 	posts   []map[string]any
-	pr      *pullrequests.PullRequest
+	pr      *domain.PullRequest
 	streams []chan string
 }
 
@@ -30,7 +31,7 @@ func (f *fakePullRequestAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case "/api/pull_request":
 		f.mu.Lock()
 		defer f.mu.Unlock()
-		_ = json.NewEncoder(w).Encode(pullrequests.View{Draft: agentDraft(), PullRequest: f.pr})
+		_ = json.NewEncoder(w).Encode(ports.PullRequestView{Draft: agentDraft(), PullRequest: f.pr})
 	case "/api/create_pull_request":
 		var body map[string]any
 		_ = json.NewDecoder(r.Body).Decode(&body)
@@ -82,7 +83,7 @@ func TestPullRequestPanelInTheBrowser(t *testing.T) {
 	}
 	ctx, errs := browser(t)
 	w := historyWorld(t)
-	w.prs = fakePullRequests{views: map[string]*pullrequests.View{"ws-agent": {Draft: agentDraft()}}}
+	w.prs = fakePullRequests{views: map[string]*ports.PullRequestView{"ws-agent": {Draft: agentDraft()}}}
 	api := &fakePullRequestAPI{}
 	mux := http.NewServeMux()
 	mux.Handle("/api/", api)

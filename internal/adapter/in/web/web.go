@@ -19,7 +19,6 @@ import (
 	"github.com/rfbatista/harnesskit/errs"
 
 	"operators-mcp/internal/adapter/in/web/history"
-	"operators-mcp/internal/adapter/in/web/pullrequests"
 	"operators-mcp/internal/adapter/in/web/home"
 	"operators-mcp/internal/adapter/in/web/projects"
 	"operators-mcp/internal/adapter/in/web/shell"
@@ -50,7 +49,7 @@ type Deps struct {
 	ProjectSummaries ports.ProjectSummaries
 	// PullRequests offers a session's branch as a pull request on its history
 	// page and badges the task page's rows; nil leaves both out.
-	PullRequests pullrequests.Reader
+	PullRequests ports.PullRequests
 	// Now defaults to time.Now.
 	Now func() time.Time
 }

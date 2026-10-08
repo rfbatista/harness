@@ -4,6 +4,9 @@ import (
 	"encoding/json"
 	"os"
 	"testing"
+
+	"operators-mcp/internal/domain"
+	"operators-mcp/internal/ports"
 )
 
 // The pages paint what the browser's view.js says: both read
@@ -14,7 +17,7 @@ func TestViewsMatchTheBrowser(t *testing.T) {
 		t.Fatal(err)
 	}
 	var v struct {
-		Draft    Draft `json:"draft"`
+		Draft    domain.PullRequestDraft `json:"draft"`
 		Blockers []struct{ Code, Text string }
 		Chips    []struct {
 			State string
@@ -24,7 +27,7 @@ func TestViewsMatchTheBrowser(t *testing.T) {
 		}
 		Summaries []struct {
 			Ahead  int
-			Remote *Remote
+			Remote *domain.GitRemote
 			Text   string
 		}
 		Uncommitted []struct {
@@ -41,7 +44,7 @@ func TestViewsMatchTheBrowser(t *testing.T) {
 		}
 	}
 	for _, c := range v.Chips {
-		chip := NewChip(&PullRequest{Number: 4, State: c.State, Draft: c.Draft})
+		chip := NewChip(&domain.PullRequest{Number: 4, State: domain.PullRequestState(c.State), Draft: c.Draft})
 		tone := ""
 		if c.Tone != nil {
 			tone = *c.Tone
@@ -67,20 +70,20 @@ func TestViewsMatchTheBrowser(t *testing.T) {
 }
 
 func TestPanelPaintsWhatTheViewSays(t *testing.T) {
-	open := &PullRequest{Number: 7, State: "open", Title: "T", URL: "https://github.com/a/b/pull/7"}
-	merged := &PullRequest{Number: 6, State: "merged"}
-	blocked := Draft{HeadBranch: "agent/x", BaseBranch: "main", Blockers: []string{"PR_NO_COMMITS"}}
+	open := &domain.PullRequest{Number: 7, State: "open", Title: "T", URL: "https://github.com/a/b/pull/7"}
+	merged := &domain.PullRequest{Number: 6, State: "merged"}
+	blocked := domain.PullRequestDraft{HeadBranch: "agent/x", BaseBranch: "main", Blockers: []string{"PR_NO_COMMITS"}}
 
 	if p := NewPanel("p1", "ws1", nil); p.Painted() || p.OffersCreate || p.Chip != nil {
 		t.Errorf("no view paints nothing: %+v", p)
 	}
-	if p := NewPanel("p1", "ws1", &View{Draft: blocked}); !p.OffersCreate || !p.Blocked() || p.Blockers[0] != "Nothing to propose yet: agent/x has no commits ahead of main." {
+	if p := NewPanel("p1", "ws1", &ports.PullRequestView{Draft: blocked}); !p.OffersCreate || !p.Blocked() || p.Blockers[0] != "Nothing to propose yet: agent/x has no commits ahead of main." {
 		t.Errorf("blocked: %+v", p)
 	}
-	if p := NewPanel("p1", "ws1", &View{Draft: blocked, PullRequest: open}); p.OffersCreate || p.Blocked() || p.Chip.Label != "#7" || p.Chip.Tone != "success" {
+	if p := NewPanel("p1", "ws1", &ports.PullRequestView{Draft: blocked, PullRequest: open}); p.OffersCreate || p.Blocked() || p.Chip.Label != "#7" || p.Chip.Tone != "success" {
 		t.Errorf("an open PR shows, no create, no reasons: %+v", p)
 	}
-	if p := NewPanel("p1", "ws1", &View{Draft: Draft{}, PullRequest: merged}); !p.OffersCreate || p.Blocked() || p.Chip.State != "merged" {
+	if p := NewPanel("p1", "ws1", &ports.PullRequestView{Draft: domain.PullRequestDraft{}, PullRequest: merged}); !p.OffersCreate || p.Blocked() || p.Chip.State != "merged" {
 		t.Errorf("a merged PR beside the create: %+v", p)
 	}
 }
@@ -90,7 +93,7 @@ func TestPanelSeedIsTheContractsShape(t *testing.T) {
 	if string(b) != `{"project_id":"p1","workspace_id":"ws1"}` {
 		t.Errorf("without a view: %s", b)
 	}
-	b, _ = json.Marshal(NewPanel("p1", "ws1", &View{Draft: Draft{WorkspaceID: "ws1", Blockers: []string{}}}).Seed)
+	b, _ = json.Marshal(NewPanel("p1", "ws1", &ports.PullRequestView{Draft: domain.PullRequestDraft{WorkspaceID: "ws1", Blockers: []string{}}}).Seed)
 	var got map[string]any
 	_ = json.Unmarshal(b, &got)
 	if _, ok := got["draft"]; !ok || got["pull_request"] != nil {

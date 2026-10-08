@@ -27,10 +27,10 @@ type Handler struct {
 	// seed; nil seeds none.
 	Artifacts ports.ArtifactReader
 	// PullRequests seeds the session rows' pull request badges; nil seeds none.
-	PullRequests pullrequests.Reader
+	PullRequests ports.PullRequests
 	Layout       shell.Layout
-	Render    shell.Renderer
-	Now       func() time.Time
+	Render       shell.Renderer
+	Now          func() time.Time
 }
 
 // workspaceIDs are the sessions' worktrees, each once.

@@ -13,7 +13,6 @@ import (
 
 	"github.com/rfbatista/harnesskit/errs"
 
-	"operators-mcp/internal/adapter/in/web/pullrequests"
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
 )
@@ -130,7 +129,7 @@ type world struct {
 	history   ports.RepositoryHistory
 	artifacts []*domain.Artifact
 	summaries fakeSummaries
-	prs       pullrequests.Reader
+	prs       ports.PullRequests
 }
 
 // fakeSummaries counts like the projects context: nil leaves /projects unserved.

@@ -3,6 +3,9 @@ package pullrequests
 import (
 	"context"
 	"strconv"
+
+	"operators-mcp/internal/domain"
+	"operators-mcp/internal/ports"
 )
 
 // Panel is the history page's control for one workspace: what it paints
@@ -18,12 +21,12 @@ type Panel struct {
 }
 
 // PanelSeed is the panel's seed: GET /api/pull_request's answer with the
-// workspace and its project. View is nil when the server could not read it,
+// workspace and its project. PullRequestView is nil when the server could not read it,
 // and the browser then reads it itself.
 type PanelSeed struct {
 	ProjectID   string `json:"project_id"`
 	WorkspaceID string `json:"workspace_id"`
-	*View
+	*ports.PullRequestView
 }
 
 // Chip is a PR as its chip and badges show it.
@@ -32,15 +35,15 @@ type Chip struct {
 }
 
 // NewPanel is the panel for a workspace; view nil paints nothing yet.
-func NewPanel(projectID, workspaceID string, view *View) *Panel {
-	p := &Panel{Seed: PanelSeed{ProjectID: projectID, WorkspaceID: workspaceID, View: view}}
+func NewPanel(projectID, workspaceID string, view *ports.PullRequestView) *Panel {
+	p := &Panel{Seed: PanelSeed{ProjectID: projectID, WorkspaceID: workspaceID, PullRequestView: view}}
 	if view == nil {
 		return p
 	}
 	if view.PullRequest != nil {
 		p.Chip = NewChip(view.PullRequest)
 	}
-	p.OffersCreate = view.PullRequest == nil || view.PullRequest.State != "open"
+	p.OffersCreate = view.PullRequest == nil || view.PullRequest.Closed()
 	if p.OffersCreate {
 		for _, code := range view.Draft.Blockers {
 			p.Blockers = append(p.Blockers, BlockerText(code, view.Draft))
@@ -53,20 +56,20 @@ func NewPanel(projectID, workspaceID string, view *View) *Panel {
 func (p *Panel) Blocked() bool { return len(p.Blockers) > 0 }
 
 // Painted reports whether the server painted the control (it had a view).
-func (p *Panel) Painted() bool { return p.Seed.View != nil }
+func (p *Panel) Painted() bool { return p.Seed.PullRequestView != nil }
 
 var tones = map[string]string{"open": "success", "draft": "", "merged": "signal", "closed": "danger"}
 
 // ShownState is "draft" for an open PR marked draft, else its state.
-func ShownState(pr *PullRequest) string {
-	if pr.State == "open" && pr.Draft {
+func ShownState(pr *domain.PullRequest) string {
+	if pr.State == domain.PullRequestOpen && pr.Draft {
 		return "draft"
 	}
-	return pr.State
+	return string(pr.State)
 }
 
 // NewChip is how a PR reads on its chip and badges.
-func NewChip(pr *PullRequest) *Chip {
+func NewChip(pr *domain.PullRequest) *Chip {
 	state := ShownState(pr)
 	n := strconv.Itoa(pr.Number)
 	return &Chip{
@@ -77,7 +80,7 @@ func NewChip(pr *PullRequest) *Chip {
 
 // BlockerText is why a create cannot go ahead, for one blocker code. The
 // browser's presentation/view.js says the same; web/testdata/views/pull-request.json pins both.
-func BlockerText(code string, d Draft) string {
+func BlockerText(code string, d domain.PullRequestDraft) string {
 	switch code {
 	case "PR_NO_COMMITS":
 		return "Nothing to propose yet: " + d.HeadBranch + " has no commits ahead of " + d.BaseBranch + "."
@@ -102,7 +105,7 @@ func plural(n int, one, many string) string {
 }
 
 // Summary is "3 commits from agent/x into main on acme/harness".
-func Summary(d Draft) string {
+func Summary(d domain.PullRequestDraft) string {
 	where := ""
 	if d.Remote != nil {
 		where = " on " + d.Remote.Owner + "/" + d.Remote.Repo
@@ -111,7 +114,7 @@ func Summary(d Draft) string {
 }
 
 // Uncommitted warns of what the PR will leave out; "" when nothing.
-func Uncommitted(d Draft) string {
+func Uncommitted(d domain.PullRequestDraft) string {
 	if d.UncommittedChanges == 0 {
 		return ""
 	}
@@ -121,16 +124,16 @@ func Uncommitted(d Draft) string {
 // WatchSeed is the task page's: its sessions' workspaces and the newest PR
 // stored for each that has one, for the rows' badges.
 type WatchSeed struct {
-	ProjectID    string         `json:"project_id"`
-	WorkspaceIDs []string       `json:"workspace_ids"`
-	PullRequests []*PullRequest `json:"pull_requests"`
+	ProjectID    string                `json:"project_id"`
+	WorkspaceIDs []string              `json:"workspace_ids"`
+	PullRequests []*domain.PullRequest `json:"pull_requests"`
 }
 
 // NewWatchSeed reads the stored PRs of the workspaces (never the host). A
 // failed read seeds none: the badges then fill from the feed. Neither list
 // is ever null.
-func NewWatchSeed(ctx context.Context, r Reader, projectID string, workspaceIDs []string) *WatchSeed {
-	s := &WatchSeed{ProjectID: projectID, WorkspaceIDs: []string{}, PullRequests: []*PullRequest{}}
+func NewWatchSeed(ctx context.Context, r ports.PullRequests, projectID string, workspaceIDs []string) *WatchSeed {
+	s := &WatchSeed{ProjectID: projectID, WorkspaceIDs: []string{}, PullRequests: []*domain.PullRequest{}}
 	s.WorkspaceIDs = append(s.WorkspaceIDs, workspaceIDs...)
 	if len(workspaceIDs) == 0 {
 		return s

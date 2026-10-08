@@ -8,19 +8,20 @@ import (
 
 	"github.com/rfbatista/harnesskit/errs"
 
-	"operators-mcp/internal/adapter/in/web/pullrequests"
+	"operators-mcp/internal/domain"
+	"operators-mcp/internal/ports"
 )
 
 // fakePullRequests answers like the server's PullRequests port: views by
 // workspace, the stored PRs, or the error it is set to.
 type fakePullRequests struct {
-	views  map[string]*pullrequests.View
-	stored []*pullrequests.PullRequest
+	views  map[string]*ports.PullRequestView
+	stored []*domain.PullRequest
 	err    error
 	asked  *[]string
 }
 
-func (f fakePullRequests) PullRequest(_ context.Context, id string) (*pullrequests.View, error) {
+func (f fakePullRequests) PullRequest(_ context.Context, id string) (*ports.PullRequestView, error) {
 	if f.err != nil {
 		return nil, f.err
 	}
@@ -30,7 +31,11 @@ func (f fakePullRequests) PullRequest(_ context.Context, id string) (*pullreques
 	return nil, errs.Newf("WORKSPACE_NOT_FOUND", "WORKSPACE_NOT_FOUND: workspace %s", id)
 }
 
-func (f fakePullRequests) StoredPullRequests(_ context.Context, ids []string) ([]*pullrequests.PullRequest, error) {
+func (f fakePullRequests) CreatePullRequest(context.Context, ports.CreatePullRequest) (*domain.PullRequest, error) {
+	return nil, errs.Newf("UNAVAILABLE", "pages only read")
+}
+
+func (f fakePullRequests) StoredPullRequests(_ context.Context, ids []string) ([]*domain.PullRequest, error) {
 	if f.asked != nil {
 		*f.asked = append(*f.asked, ids...)
 	}
@@ -40,20 +45,20 @@ func (f fakePullRequests) StoredPullRequests(_ context.Context, ids []string) ([
 	return f.stored, nil
 }
 
-func agentDraft(blockers ...string) pullrequests.Draft {
+func agentDraft(blockers ...string) domain.PullRequestDraft {
 	if blockers == nil {
 		blockers = []string{}
 	}
-	return pullrequests.Draft{
+	return domain.PullRequestDraft{
 		WorkspaceID: "ws-agent", RepositoryID: "r1", HeadBranch: "agent/add-sse-feed-1a2b", BaseBranch: "main",
-		Title: "Add SSE feed", Ahead: 1, UncommittedChanges: 2, Remote: &pullrequests.Remote{Host: "github.com", Owner: "acme", Repo: "harness"},
+		Title: "Add SSE feed", Ahead: 1, UncommittedChanges: 2, Remote: &domain.GitRemote{Host: "github.com", Owner: "acme", Repo: "harness"},
 		Blockers: blockers,
 	}
 }
 
-var agentPR = &pullrequests.PullRequest{
+var agentPR = &domain.PullRequest{
 	WorkspaceID: "ws-agent", RepositoryID: "r1", Number: 12, URL: "https://github.com/acme/harness/pull/12", Title: "Add SSE feed",
-	HeadBranch: "agent/add-sse-feed-1a2b", BaseBranch: "main", State: "open", CreatedAt: now,
+	HeadBranch: "agent/add-sse-feed-1a2b", BaseBranch: "main", State: domain.PullRequestOpen, CreatedAt: now,
 }
 
 // tagWith is the opening tag that carries marker.
@@ -69,7 +74,7 @@ func tagWith(body, marker string) string {
 
 const sessionHistory = "/projects/p1/tasks/t-feed/sessions/s-agent/history"
 
-func historyWith(t *testing.T, prs pullrequests.Reader) string {
+func historyWith(t *testing.T, prs ports.PullRequests) string {
 	t.Helper()
 	w := historyWorld(t)
 	w.prs = prs
@@ -81,7 +86,7 @@ func historyWith(t *testing.T, prs pullrequests.Reader) string {
 }
 
 func TestSessionHistoryOffersAPullRequestAndSeedsThePanel(t *testing.T) {
-	body := historyWith(t, fakePullRequests{views: map[string]*pullrequests.View{"ws-agent": {Draft: agentDraft()}}})
+	body := historyWith(t, fakePullRequests{views: map[string]*ports.PullRequestView{"ws-agent": {Draft: agentDraft()}}})
 	for _, want := range []string{
 		`data-seed="pull-request-seed" x-data="pullRequestPanel"`,
 		`x-on:click="openForm"`,
@@ -103,7 +108,7 @@ func TestSessionHistoryOffersAPullRequestAndSeedsThePanel(t *testing.T) {
 }
 
 func TestSessionHistorySaysWhyAPullRequestCannotBeOpened(t *testing.T) {
-	body := historyWith(t, fakePullRequests{views: map[string]*pullrequests.View{"ws-agent": {Draft: agentDraft("PR_NO_COMMITS", "PR_TOOL_UNAVAILABLE")}}})
+	body := historyWith(t, fakePullRequests{views: map[string]*ports.PullRequestView{"ws-agent": {Draft: agentDraft("PR_NO_COMMITS", "PR_TOOL_UNAVAILABLE")}}})
 	if !strings.Contains(tagWith(body, `x-on:click="openForm"`), `aria-disabled="true"`) {
 		t.Error("the create button is disabled")
 	}
@@ -122,7 +127,7 @@ func TestSessionHistorySaysWhyAPullRequestCannotBeOpened(t *testing.T) {
 }
 
 func TestSessionHistoryShowsItsOpenPullRequestInsteadOfTheCreate(t *testing.T) {
-	body := historyWith(t, fakePullRequests{views: map[string]*pullrequests.View{"ws-agent": {Draft: agentDraft(), PullRequest: agentPR}}})
+	body := historyWith(t, fakePullRequests{views: map[string]*ports.PullRequestView{"ws-agent": {Draft: agentDraft(), PullRequest: agentPR}}})
 	for _, want := range []string{
 		`class="[ pr-chip ]" href="https://github.com/acme/harness/pull/12" target="_blank" rel="noopener"`,
 		`data-tone="success"`,
@@ -137,8 +142,8 @@ func TestSessionHistoryShowsItsOpenPullRequestInsteadOfTheCreate(t *testing.T) {
 	}
 
 	merged := *agentPR
-	merged.State = "merged"
-	body = historyWith(t, fakePullRequests{views: map[string]*pullrequests.View{"ws-agent": {Draft: agentDraft(), PullRequest: &merged}}})
+	merged.State = domain.PullRequestMerged
+	body = historyWith(t, fakePullRequests{views: map[string]*ports.PullRequestView{"ws-agent": {Draft: agentDraft(), PullRequest: &merged}}})
 	if !strings.Contains(body, `data-tone="signal"`) || strings.Contains(tagWith(body, `x-on:click="openForm"`), `display: none`) {
 		t.Error("a merged PR shows beside a create")
 	}
@@ -148,7 +153,7 @@ func TestSessionHistoryWithoutPullRequestsStillRenders(t *testing.T) {
 	if body := historyWith(t, nil); strings.Contains(body, "pullRequestPanel") {
 		t.Error("no reader: no panel")
 	}
-	if body := historyWith(t, fakePullRequests{views: map[string]*pullrequests.View{}}); strings.Contains(body, "pullRequestPanel") {
+	if body := historyWith(t, fakePullRequests{views: map[string]*ports.PullRequestView{}}); strings.Contains(body, "pullRequestPanel") {
 		t.Error("the workspace is gone: no PR action")
 	}
 	body := historyWith(t, fakePullRequests{err: errs.Newf("UNAVAILABLE", "store down")})
@@ -163,7 +168,7 @@ func TestSessionHistoryWithoutPullRequestsStillRenders(t *testing.T) {
 func TestTaskPageSeedsItsSessionsPullRequestsFromTheStore(t *testing.T) {
 	w := historyWorld(t)
 	var asked []string
-	w.prs = fakePullRequests{stored: []*pullrequests.PullRequest{agentPR}, asked: &asked}
+	w.prs = fakePullRequests{stored: []*domain.PullRequest{agentPR}, asked: &asked}
 	body := get(t, newTestHandler(t, w), "/projects/p1/tasks/t-feed").Body.String()
 	seed := seedOf(t, body, "pull-requests-seed")
 	ids, _ := seed["workspace_ids"].([]any)
