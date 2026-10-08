@@ -34,6 +34,10 @@ type PullRequests interface {
 	// CreatePullRequest pushes the workspace branch to origin and opens the
 	// pull request, answering the PR_* codes when it cannot.
 	CreatePullRequest(ctx context.Context, req CreatePullRequest) (*domain.PullRequest, error)
+	// StoredPullRequests is the newest stored pull request of each workspace
+	// that has one, from the store alone: no git, no host, no background
+	// lookup. Pages seed lists of sessions with it.
+	StoredPullRequests(ctx context.Context, workspaceIDs []string) ([]*domain.PullRequest, error)
 }
 
 // ErrRemoteBranchNotFound is BranchPublisher.FetchBranch's answer for a

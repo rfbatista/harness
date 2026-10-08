@@ -706,3 +706,71 @@ func assertAlreadyExists(t *testing.T, err error, number int) {
 		t.Fatalf("details = %#v, want pull_request #%d", de.Details, number)
 	}
 }
+
+func TestStoredPullRequestsReadsTheStoreOnly(t *testing.T) {
+	f := newPRFixture(t)
+	w2, err := f.deps.Workspaces.Create(domain.Workspace{RepositoryID: f.ws.RepositoryID, Name: "other", Branch: "agent/y", Path: "/wt2"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t0 := time.Date(2026, 10, 7, 12, 0, 0, 0, time.UTC)
+	_, _ = f.store.Save(&domain.PullRequest{WorkspaceID: f.ws.ID, RepositoryID: f.ws.RepositoryID, ProjectID: "p1", Number: 1, State: domain.PullRequestClosed, CreatedAt: t0})
+	_, _ = f.store.Save(&domain.PullRequest{WorkspaceID: f.ws.ID, RepositoryID: f.ws.RepositoryID, ProjectID: "p1", Number: 2, State: domain.PullRequestOpen, CreatedAt: t0.Add(time.Hour)})
+	// Git and the host would fail the call if it reached them.
+	f.git.origin = "unused"
+	f.host.Gate = make(chan struct{})
+	f.host.ReadyErr = errors.New("the host was asked")
+
+	got, err := f.svc.StoredPullRequests(context.Background(), []string{f.ws.ID, w2.ID, "unknown"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0].Number != 2 || got[0].WorkspaceID != f.ws.ID {
+		t.Fatalf("got %+v, want the newest of the workspace that has one", got)
+	}
+	f.svc.Wait()
+	if opens, gets, finds := f.host.Calls(); opens+gets+finds != 0 {
+		t.Fatalf("host calls %d %d %d", opens, gets, finds)
+	}
+	if len(f.git.fetches)+len(f.git.pushes) != 0 {
+		t.Fatal("git was asked")
+	}
+
+	empty, err := f.svc.StoredPullRequests(context.Background(), nil)
+	if err != nil || empty == nil || len(empty) != 0 {
+		t.Fatalf("no ids = %#v, %v; want an empty, non-nil list", empty, err)
+	}
+}
+
+func TestRefreshNowAsksTheHostDespiteTheThrottle(t *testing.T) {
+	f := newPRFixture(t)
+	_, _ = f.store.Save(&domain.PullRequest{WorkspaceID: f.ws.ID, RepositoryID: f.ws.RepositoryID, ProjectID: "p1", Number: 1, HeadBranch: "agent/x", BaseBranch: "main", State: domain.PullRequestOpen})
+	f.host.Add(widgets, ports.HostPullRequest{Number: 1, Head: "agent/x", Base: "main", State: domain.PullRequestOpen})
+	f.get(t) // uses up this 30 s slot
+
+	f.host.SetState(widgets, 1, domain.PullRequestMerged)
+	if err := f.svc.RefreshNow(context.Background(), f.ws.ID); err != nil {
+		t.Fatal(err)
+	}
+	if got := f.feed.pullRequests(); len(got) != 1 || got[0].State != domain.PullRequestMerged {
+		t.Fatalf("announced %+v by the time RefreshNow returned", got)
+	}
+	if v, _ := f.svc.PullRequest(context.Background(), f.ws.ID); v.PullRequest.State != domain.PullRequestMerged {
+		t.Fatalf("stored %s", v.PullRequest.State)
+	}
+
+	// Nothing stored: it adopts the pushed branch's open PR.
+	g := newPRFixture(t)
+	g.git.setRef("refs/remotes/origin/agent/x", true)
+	g.host.Add(widgets, ports.HostPullRequest{Number: 4, Head: "agent/x", Base: "main", State: domain.PullRequestOpen})
+	if err := g.svc.RefreshNow(context.Background(), g.ws.ID); err != nil {
+		t.Fatal(err)
+	}
+	if got := g.feed.pullRequests(); len(got) != 1 || got[0].Number != 4 {
+		t.Fatalf("adopted %+v", got)
+	}
+
+	if err := g.svc.RefreshNow(context.Background(), "nope"); errs.Code(err) != "WORKSPACE_NOT_FOUND" {
+		t.Fatalf("unknown workspace = %v", err)
+	}
+}

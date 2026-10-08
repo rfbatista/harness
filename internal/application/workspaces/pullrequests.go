@@ -284,19 +284,64 @@ func (s *PullRequests) refreshLater(t *target, stored *domain.PullRequest) {
 		defer s.bg.Done()
 		ctx, cancel := context.WithTimeout(s.ctx, hostTimeout)
 		defer cancel()
-		lock := s.lock(t.ws.ID)
-		lock.Lock()
-		defer lock.Unlock()
 		// Host errors are ignored here: the next read tries again.
-		if stored == nil {
-			if found, err := s.d.Host.FindOpen(ctx, *t.remote, t.ws.Branch); err == nil && found != nil &&
-				s.d.Store.LatestForWorkspace(t.ws.ID) == nil {
-				_, _ = s.store(t, found)
-			}
-			return
-		}
-		_, _ = s.refresh(ctx, t, stored)
+		_ = s.lookup(ctx, t, stored)
 	}()
+}
+
+// lookup asks the host about the workspace, one lookup or create at a time:
+// it refreshes a stored open pull request, or adopts the open one of a
+// branch with nothing stored. What changed is stored and announced.
+func (s *PullRequests) lookup(ctx context.Context, t *target, stored *domain.PullRequest) error {
+	lock := s.lock(t.ws.ID)
+	lock.Lock()
+	defer lock.Unlock()
+	if stored == nil {
+		found, err := s.d.Host.FindOpen(ctx, *t.remote, t.ws.Branch)
+		if err != nil || found == nil || s.d.Store.LatestForWorkspace(t.ws.ID) != nil {
+			return err
+		}
+		_, err = s.store(t, found)
+		return err
+	}
+	_, err := s.refresh(ctx, t, stored)
+	return err
+}
+
+// RefreshNow asks the host about the workspace's pull request now, as a read
+// would in the background, but without the RefreshEvery wait, and returns
+// once any change is stored and announced. Tests use it to see a change made
+// on the host without sleeping through the throttle.
+func (s *PullRequests) RefreshNow(ctx context.Context, workspaceID string) error {
+	t, err := s.resolve(ctx, workspaceID)
+	if err != nil {
+		return err
+	}
+	if !t.github() {
+		return nil
+	}
+	stored := s.d.Store.LatestForWorkspace(t.ws.ID)
+	if stored != nil && stored.Closed() {
+		return nil
+	}
+	s.mu.Lock()
+	s.refreshed[t.ws.ID] = s.d.Now()
+	s.mu.Unlock()
+	ctx, cancel := context.WithTimeout(ctx, hostTimeout)
+	defer cancel()
+	return s.lookup(ctx, t, stored)
+}
+
+// StoredPullRequests is the newest stored pull request of each workspace that
+// has one, from the store alone: no git, no host, no background lookup.
+func (s *PullRequests) StoredPullRequests(_ context.Context, workspaceIDs []string) ([]*domain.PullRequest, error) {
+	out := make([]*domain.PullRequest, 0, len(workspaceIDs))
+	for _, id := range workspaceIDs {
+		if pr := s.d.Store.LatestForWorkspace(id); pr != nil {
+			out = append(out, pr)
+		}
+	}
+	return out, nil
 }
 
 // refresh reads a stored pull request from the host, storing and announcing

@@ -28,6 +28,10 @@ func (f *fakePullRequests) PullRequest(_ context.Context, id string) (*ports.Pul
 	return f.view, f.err
 }
 
+func (f *fakePullRequests) StoredPullRequests(context.Context, []string) ([]*domain.PullRequest, error) {
+	return []*domain.PullRequest{}, nil
+}
+
 func (f *fakePullRequests) CreatePullRequest(_ context.Context, req ports.CreatePullRequest) (*domain.PullRequest, error) {
 	f.gotReq = req
 	return f.created, f.err
