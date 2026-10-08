@@ -1,0 +1,195 @@
+/*
+ * The Select — the native <select>, restyled. An element style, so every
+ * select in the app is right with no class. The shared form-control rule in
+ * global.css gives it the box; this file adds the chevron and the exceptions.
+ *
+ * Exceptions: data-size="sm", data-fit (as wide as its value),
+ * data-variant="ghost" (no edge until touched); states disabled, aria-invalid,
+ * aria-busy; a chosen <option value=""> reads as a placeholder.
+ * Where appearance: base-select is supported, the open list is drawn on the
+ * popup surface automatically. It has no API; features must not rely on it.
+ */
+
+@layer global {
+  select {
+    --_chevron: var(--color-ink-muted);
+    --_chevron-size: 0.375rem; /* one arm of the chevron */
+    --_chevron-end: var(--space-m); /* its distance from the end edge */
+    /* Two strokes, one per square: a chevron drawn from tokens alone. */
+    --_stroke: transparent calc(50% - 0.75px), var(--_chevron) calc(50% - 0.5px)
+      calc(50% + 0.5px), transparent calc(50% + 0.75px);
+
+    appearance: none;
+    padding-inline-end: calc(var(--_chevron-end) + var(--space-l));
+    background-image: linear-gradient(45deg, var(--_stroke)), linear-gradient(135deg, var(--_stroke));
+    background-position:
+      calc(100% - var(--_chevron-end) - var(--_chevron-size)) 50%,
+      calc(100% - var(--_chevron-end)) 50%;
+    background-size: var(--_chevron-size) var(--_chevron-size);
+    background-repeat: no-repeat;
+    text-overflow: ellipsis;
+    cursor: pointer;
+
+    &:hover { --_chevron: var(--color-ink); }
+    &:disabled { --_chevron: var(--color-ink-faint); }
+
+    /* Nothing chosen yet: the empty first option reads as a placeholder. */
+    &:has(> option[value=""]:checked) { color: var(--color-ink-faint); }
+
+    & option,
+    & optgroup {
+      color: var(--color-ink);
+      background-color: var(--color-raised);
+    }
+
+    &[data-size="sm"] {
+      --_chevron-end: var(--space-s);
+      min-block-size: var(--size-control-sm);
+      padding-inline-start: var(--space-xs);
+      font-size: var(--text-sm);
+    }
+
+    /* As wide as its value, not the row (rows, cards, toolbars). */
+    &[data-fit] {
+      inline-size: auto;
+      field-sizing: content;
+    }
+
+    /* Options are loading: pair it with disabled and a hint in words. */
+    &[aria-busy="true"] { cursor: progress; }
+
+    /* Quiet select for toolbars and cards: no edge until it is touched. */
+    &[data-variant="ghost"] {
+      border-color: transparent;
+      background-color: transparent;
+      color: var(--color-ink-muted);
+
+      &:hover { background-color: var(--color-hover); color: var(--color-ink); }
+    }
+
+    /* A list box (multiple / size > 1) has no chevron and lists its options. */
+    &:is([multiple], [size]:not([size="1"])) {
+      padding: var(--space-2xs);
+      background-image: none;
+      cursor: default;
+
+      & option {
+        padding: var(--space-2xs) var(--space-s);
+        border-radius: var(--radius-xs);
+      }
+
+      & option:checked {
+        background: var(--color-selected);
+        color: var(--color-ink);
+      }
+    }
+
+    &:dir(rtl) {
+      background-position:
+        var(--_chevron-end) 50%,
+        calc(var(--_chevron-end) + var(--_chevron-size)) 50%;
+    }
+  }
+
+  /* Touch: a small select grows to the shared control height. */
+  @media (pointer: coarse) {
+    select[data-size="sm"] { min-block-size: var(--size-control-md); }
+  }
+
+  /* Any invalid control keeps its red edge while focused. */
+  :is(input, select, textarea)[aria-invalid="true"]:focus-visible {
+    border-color: var(--color-danger);
+    box-shadow: 0 0 0 1px var(--color-danger);
+  }
+
+  /* The open list where base-select is supported (Chromium): plain-text rows
+     on the popup surface. Rich options are the Listbox select's job. */
+  @supports (appearance: base-select) {
+    select:where(:not([multiple], [size]:not([size="1"]))),
+    select:where(:not([multiple], [size]:not([size="1"])))::picker(select) {
+      appearance: base-select;
+    }
+
+    select:where(:not([multiple], [size]:not([size="1"]))) {
+      display: flex;
+      align-items: center;
+      gap: var(--space-s);
+      padding-inline-end: var(--space-s);
+      background-image: none;
+
+      &::picker-icon {
+        content: "";
+        inline-size: var(--_chevron-size);
+        block-size: var(--_chevron-size);
+        margin-inline: auto var(--space-2xs);
+        border-inline-end: var(--border-icon-width) solid var(--_chevron);
+        border-block-end: var(--border-icon-width) solid var(--_chevron);
+        translate: 0 -25%;
+        rotate: 45deg;
+        transition: rotate var(--duration-quick) var(--ease-out),
+          translate var(--duration-quick) var(--ease-out);
+      }
+
+      &:open::picker-icon { rotate: 225deg; translate: 0 25%; }
+      &:open { border-color: var(--color-focus); box-shadow: 0 0 0 1px var(--color-focus); }
+
+      &::picker(select) {
+        min-inline-size: anchor-size(inline);
+        max-inline-size: min(24rem, calc(100vw - 2 * var(--space-l)));
+        max-block-size: min(20rem, 60dvh);
+        margin-block: var(--space-2xs);
+        padding: var(--space-2xs);
+        border: var(--border-width) solid var(--color-line-strong);
+        border-radius: var(--radius-md);
+        background: var(--color-raised);
+        color: var(--color-ink);
+        box-shadow: var(--shadow-float);
+        opacity: 1;
+        translate: 0 0;
+        transition: opacity var(--duration-quick) var(--ease-out),
+          translate var(--duration-quick) var(--ease-out),
+          overlay var(--duration-quick) allow-discrete,
+          display var(--duration-quick) allow-discrete;
+      }
+
+      &:not(:open)::picker(select) { opacity: 0; translate: 0 calc(-1 * var(--space-2xs)); }
+
+      & option {
+        display: flex;
+        align-items: center;
+        gap: var(--space-s);
+        min-block-size: var(--size-control-md);
+        padding: var(--space-2xs) var(--space-s);
+        border-radius: var(--radius-sm);
+        color: var(--color-ink-muted);
+        background: transparent;
+
+        &:is(:hover, :focus-visible) { background: var(--color-hover); color: var(--color-ink); outline: none; }
+        &:focus-visible { box-shadow: inset 0 0 0 1px var(--color-line-strong); }
+        &:checked { background: var(--color-selected); color: var(--color-ink); }
+        &::checkmark { order: 9; margin-inline-start: auto; color: var(--color-signal); }
+        &:disabled { opacity: 0.45; }
+      }
+
+      /* The group's label: the list's quiet 12px heading. Options reset it. */
+      & optgroup {
+        padding: 0;
+        background: transparent;
+        font-size: var(--text-xs);
+        font-weight: var(--weight-medium);
+        color: var(--color-ink-muted);
+
+        & > option { font-size: var(--text-base); font-weight: var(--weight-regular); }
+      }
+
+      & legend {
+        padding: var(--space-xs) var(--space-s) var(--space-2xs);
+        font-size: var(--text-xs);
+        font-weight: var(--weight-medium);
+        color: var(--color-ink-muted);
+      }
+
+      & hr { margin-block: var(--space-2xs); }
+    }
+  }
+}

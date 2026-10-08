@@ -18,6 +18,7 @@
 @import url("./global/reset.css");
 @import url("./global/tokens.css");
 @import url("./global/global.css");
+@import url("./global/select.css");
 
 /* Compositions */
 @import url("./compositions/flow.css");
