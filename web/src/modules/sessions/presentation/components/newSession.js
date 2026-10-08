@@ -52,6 +52,11 @@ export const newSession = ({ gateway }) => (projectId = "", ticketId = "") => ({
     return `The session gets its own branch, cut from ${this.baseBranch}.`;
   },
 
+  /** The Branch off combobox's error row (data-error); null removes it. */
+  get branchError() {
+    return this.branchesFailed ? "Could not list the branches." : null;
+  },
+
   /** Lists the chosen repository's branches and preselects the checked-out one. */
   async loadBranches() {
     const repositoryId = this.repositoryId;

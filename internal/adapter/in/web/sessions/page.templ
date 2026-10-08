@@ -306,21 +306,23 @@ templ newSessionForm(form NewSessionForm) {
 			</div>
 			<div class="[ field ]">
 				<label for="new-session-base">Branch off</label>
-				<select id="new-session-base" x-model="baseBranch" x-bind:disabled="loadingBranches" x-bind:aria-busy="loadingBranches">
-					<option value="">The checked-out branch</option>
-					<optgroup label="Branches">
-						<template x-for="b in localBranches" x-bind:key="b.name">
-							<option x-bind:value="b.name" x-text="b.name"></option>
-						</template>
-					</optgroup>
-					<template x-if="hasRemoteBranches">
-						<optgroup label="Remote branches">
-							<template x-for="b in remoteBranches" x-bind:key="b.name">
+				<div class="[ dropdown ]" x-data="combobox" x-bind:aria-busy="loadingBranches" x-bind:data-error="branchError" x-on:dropdown-retry="loadBranches">
+					<select id="new-session-base" x-model="baseBranch" x-bind:disabled="loadingBranches">
+						<option value="" data-pinned>The checked-out branch</option>
+						<optgroup label="Branches">
+							<template x-for="b in localBranches" x-bind:key="b.name">
 								<option x-bind:value="b.name" x-text="b.name"></option>
 							</template>
 						</optgroup>
-					</template>
-				</select>
+						<template x-if="hasRemoteBranches">
+							<optgroup label="Remote branches">
+								<template x-for="b in remoteBranches" x-bind:key="b.name">
+									<option x-bind:value="b.name" x-text="b.name"></option>
+								</template>
+							</optgroup>
+						</template>
+					</select>
+				</div>
 				<span class="[ hint ]" x-text="baseHint"></span>
 			</div>
 			<div class="[ field ]">

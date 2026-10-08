@@ -68,8 +68,8 @@ func TestNewSessionBranchesOffTheChosenBranch(t *testing.T) {
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
-	var options []string
-	var preselected string
+	var options, filtered []string
+	var preselected, shown string
 	err = chromedp.Run(ctx,
 		chromedp.EmulateViewport(1280, 900),
 		chromedp.Navigate(srv.URL+"/projects/p1/tasks/t1"),
@@ -78,7 +78,14 @@ func TestNewSessionBranchesOffTheChosenBranch(t *testing.T) {
 		chromedp.Poll(`document.querySelector('#new-session-base').value === 'main'`, nil, chromedp.WithPollingTimeout(5*time.Second)),
 		chromedp.Evaluate(`[...document.querySelectorAll('#new-session-base option')].map(o => (o.parentElement.label || '') + ':' + o.textContent)`, &options),
 		chromedp.Evaluate(`document.querySelector('#new-session-base').value`, &preselected),
-		setField(`#new-session-base`, "origin/release", "change"),
+		// The Branch off combobox: type to filter, the checked-out branch stays pinned.
+		chromedp.Evaluate(`document.querySelector('#new-session-base-input').focus()`, nil),
+		chromedp.SendKeys(`#new-session-base-input`, "rel", chromedp.ByQuery),
+		chromedp.Poll(`(document.querySelector('#new-session-base-input').getAttribute('aria-expanded') === 'true')`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Evaluate(`[...document.querySelectorAll('#new-session-base-listbox [role=option] .label')].map(l => l.textContent)`, &filtered),
+		pressEnter(),
+		chromedp.Poll(`document.querySelector('#new-session-base').value === 'origin/release'`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Evaluate(`document.querySelector('#new-session-base-input').value`, &shown),
 		clickButton(`main form`, "Start session"),
 		chromedp.Poll(`!document.querySelector('form[x-data^=sessionsNewSession]')`, nil, chromedp.WithPollingTimeout(5*time.Second)),
 	)
@@ -88,6 +95,12 @@ func TestNewSessionBranchesOffTheChosenBranch(t *testing.T) {
 	want := ":The checked-out branch,Branches:main,Branches:feat/feed,Remote branches:origin/release"
 	if got := strings.Join(options, ","); got != want {
 		t.Errorf("options = %s\nwant      %s", got, want)
+	}
+	if got := strings.Join(filtered, ","); got != "The checked-out branch,origin/release" {
+		t.Errorf("filtered on \"rel\" = %s, want the pinned row and origin/release", got)
+	}
+	if shown != "origin/release" {
+		t.Errorf("the field shows %q after Enter, want origin/release", shown)
 	}
 	if preselected != "main" {
 		t.Errorf("preselected %q, want the checked-out main", preselected)
