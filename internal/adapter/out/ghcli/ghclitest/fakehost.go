@@ -15,8 +15,8 @@ import (
 var _ ports.CodeHost = (*FakeHost)(nil)
 
 // FakeHost keeps pull requests per remote in memory. Set the *Err fields to
-// script refusals; Gate, when set, holds every Open until it is closed or
-// receives.
+// script refusals; Gate, when set, holds every Open, Get and FindOpen until it
+// is closed or receives, or their context ends.
 type FakeHost struct {
 	mu       sync.Mutex
 	prs      map[domain.GitRemote][]*ports.HostPullRequest
@@ -43,7 +43,10 @@ func (h *FakeHost) Ready(context.Context) error {
 }
 
 // FindOpen is the newest open pull request for head.
-func (h *FakeHost) FindOpen(_ context.Context, r domain.GitRemote, head string) (*ports.HostPullRequest, error) {
+func (h *FakeHost) FindOpen(ctx context.Context, r domain.GitRemote, head string) (*ports.HostPullRequest, error) {
+	if err := h.wait(ctx); err != nil {
+		return nil, err
+	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.finds++
@@ -67,12 +70,8 @@ func (h *FakeHost) openFor(r domain.GitRemote, head string) *ports.HostPullReque
 // Open opens a pull request, refusing a second open one for the same head as
 // GitHub does.
 func (h *FakeHost) Open(ctx context.Context, r domain.GitRemote, req ports.OpenPullRequest) (*ports.HostPullRequest, error) {
-	if h.Gate != nil {
-		select {
-		case <-h.Gate:
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		}
+	if err := h.wait(ctx); err != nil {
+		return nil, err
 	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -86,8 +85,23 @@ func (h *FakeHost) Open(ctx context.Context, r domain.GitRemote, req ports.OpenP
 	return h.add(r, ports.HostPullRequest{Head: req.Head, Base: req.Base, Title: req.Title, Draft: req.Draft, State: domain.PullRequestOpen}), nil
 }
 
+func (h *FakeHost) wait(ctx context.Context) error {
+	if h.Gate == nil {
+		return nil
+	}
+	select {
+	case <-h.Gate:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
 // Get reads a pull request by number.
-func (h *FakeHost) Get(_ context.Context, r domain.GitRemote, number int) (*ports.HostPullRequest, error) {
+func (h *FakeHost) Get(ctx context.Context, r domain.GitRemote, number int) (*ports.HostPullRequest, error) {
+	if err := h.wait(ctx); err != nil {
+		return nil, err
+	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.gets++
