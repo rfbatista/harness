@@ -4,7 +4,7 @@ import { assert, file, test } from "../../../shared/testing/test.js";
 import { needsYou } from "../domain/session.js";
 import { makeSession, T0 } from "../testing/fixtures.js";
 import { makeCheck, makeMessage } from "../testing/channel-fixtures.js";
-import { agentLabel, reportView, runsAs, startedBy, statusCheckView, statusView, summary, terminalView, toDetailView, toGroupViews } from "./view.js";
+import { agentLabel, delegateOption, reportView, runsAs, startedBy, statusCheckView, statusView, summary, terminalView, toDetailView, toGroupViews } from "./view.js";
 
 file("sessions/presentation/view");
 
@@ -178,4 +178,17 @@ test("a delegate's row says its last report and its next check instead of who st
     d1: "go-developer · ready for review 4m · check in 6m",
     d2: "go-developer · no report yet",
   });
+});
+
+test("a delegate as a Conversation filter option: who, on what, its word and dot", () => {
+  const names = { backend: "go-developer" };
+  assert.deepEqual(delegateOption(makeSession({ id: "d1", agentId: "backend", task: "Build", status: "running" }), names), {
+    id: "d1",
+    label: "go-developer · Build",
+    word: "running",
+    tone: "signal",
+  });
+  assert.equal(delegateOption(makeSession({ status: "idle" }), names).tone, "attention");
+  assert.equal(delegateOption(makeSession({ status: "failed" }), names).tone, "danger");
+  assert.deepEqual([delegateOption(makeSession({ status: "done", task: "" }), names).tone, delegateOption(makeSession({ status: "done", task: "" }), names).label.endsWith("Untitled session")], ["", true]);
 });

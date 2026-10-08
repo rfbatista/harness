@@ -514,7 +514,7 @@ test("the Conversation tab shows on the architect and its delegates, not on a pe
   assert.equal(instance.hasConversation, true);
   instance.showConversation();
   const [panel] = instance.conversationPanels;
-  assert.deepEqual([panel.key, panel.isArchitect, panel.delegates], ["arch", true, [{ id: "d1", label: "go-developer · Build the server" }]]);
+  assert.deepEqual([panel.key, panel.isArchitect, panel.delegates], ["arch", true, [{ id: "d1", label: "go-developer · Build the server", word: "running", tone: "signal" }]]);
 
   instance.select("d1");
   assert.deepEqual([instance.showingConversation, instance.conversationPanels[0].isArchitect], [true, false], "a delegate's own thread");

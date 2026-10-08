@@ -12,7 +12,7 @@ import { mergeMessages, newestAt, upsertMessage } from "../../domain/channel.js"
 import { applyChange, displayOrder, group, INITIAL_TERMINAL_SIZE, isTerminal, ofTask } from "../../domain/session.js";
 import { artifactTitle, taskDesignHref } from "../artifactView.js";
 import { announceMessage } from "../channelView.js";
-import { agentLabel, startedBy, statusCheckView, summary, toDetailView, toGroupViews } from "../view.js";
+import { delegateOption, startedBy, statusCheckView, summary, toDetailView, toGroupViews } from "../view.js";
 
 const TICK_MS = 30_000;
 
@@ -207,7 +207,7 @@ export const sessionsPage = ({ gateway, clock, channel = null, channelStore = { 
       if (!this.showingConversation) return [];
       const isArchitect = this.selectedRole() === "architect";
       const delegates = isArchitect
-        ? this.sessions.filter((s) => s.role === "delegate").map((s) => ({ id: s.id, label: `${agentLabel(s.agentId, this.agentNames)} · ${s.task || "Untitled session"}` }))
+        ? this.sessions.filter((s) => s.role === "delegate").map((s) => delegateOption(s, this.agentNames))
         : [];
       return [
         {

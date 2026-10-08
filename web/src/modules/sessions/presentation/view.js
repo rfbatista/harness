@@ -53,6 +53,24 @@ export function statusView(session) {
   return STATUS[session.status];
 }
 
+/** .status[data-state] → an option's data-tone (the dot in a Listbox select). */
+const TONE = { running: "signal", waiting: "attention", failed: "danger" };
+
+/**
+ * A delegate as an option of the Conversation filter: who and on what, with
+ * its status word and dot.
+ * @returns {{ id: string, label: string, word: string, tone: string }}
+ */
+export function delegateOption(session, agentNames = {}) {
+  const status = statusView(session);
+  return {
+    id: session.id,
+    label: `${agentLabel(session.agentId, agentNames)} · ${session.task || "Untitled session"}`,
+    word: status?.word ?? "",
+    tone: TONE[status?.state] ?? "",
+  };
+}
+
 /** How far a delegate's row is indented: deeper ones line up at the last step. */
 export const MAX_DEPTH = 3;
 

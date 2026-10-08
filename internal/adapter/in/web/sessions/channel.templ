@@ -29,12 +29,14 @@ templ conversationPanel() {
 		<template x-if="showsFilter">
 			<div class="[ conversation-bar ] [ divide-bottom ]">
 				<label for="conversation-filter" class="[ color-ink-muted ]">Show</label>
-				<select id="conversation-filter" data-size="sm" data-fit x-model="filter">
-					<option value="">Every delegate</option>
-					<template x-for="d in delegates" x-bind:key="d.id">
-						<option x-bind:value="d.id" x-text="d.label"></option>
-					</template>
-				</select>
+				<div class="[ dropdown ]" x-data="dropdown" data-size="sm" data-fit>
+					<select id="conversation-filter" x-model="filter">
+						<option value="">Every delegate</option>
+						<template x-for="d in delegates" x-bind:key="d.id">
+							<option x-bind:value="d.id" x-bind:data-meta="d.word" x-bind:data-tone="d.tone" x-text="d.label"></option>
+						</template>
+					</select>
+				</div>
 			</div>
 		</template>
 		<div class="[ conversation ]" x-ref="log" data-scroll tabindex="0" aria-label="Messages">
