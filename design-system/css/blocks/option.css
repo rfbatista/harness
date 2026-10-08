@@ -1,0 +1,33 @@
+/*
+ * Option — one row of a list to choose from, the anatomy the Listbox select,
+ * the Combobox and the Picker dialog share: a lead (status dot), the label
+ * with an optional second line, trailing meta (a word, badge or kbd), and a
+ * column for the check that .popup draws on the chosen row.
+ * <div role="option"><span class="status" data-dot-only></span>
+ *   <span class="text"><span class="label">…</span><span class="description">…</span></span>
+ *   <span class="meta">…</span></div>
+ * States live with the list: .popup (data-active, aria-selected, the check)
+ * and .palette (aria-selected is the active row).
+ */
+
+@layer blocks {
+  :is(.popup, .palette) [role="option"] {
+    display: grid;
+    grid-template-columns: [lead] auto [text] minmax(0, 1fr) [meta] auto [check] 0.75rem;
+    align-items: center;
+    column-gap: var(--space-s);
+    min-block-size: var(--size-control-md);
+    padding: var(--space-2xs) var(--space-s);
+    border-radius: var(--radius-sm);
+    color: var(--color-ink-muted);
+    cursor: pointer;
+
+    & > .status { grid-column: lead; inline-size: 1rem; justify-content: center; }
+    & > .text { grid-column: text; display: flex; flex-direction: column; min-inline-size: 0; }
+    & :is(.label, .description) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    & .description { font-size: var(--text-xs); color: var(--color-ink-faint); }
+    & > :is(.meta, kbd) { grid-column: meta; }
+    & > .meta { font-size: var(--text-xs); color: var(--color-ink-faint); }
+    & mark { background: none; color: var(--color-ink); font-weight: var(--weight-bold); text-decoration: underline 1px; text-underline-offset: 0.18em; }
+  }
+}

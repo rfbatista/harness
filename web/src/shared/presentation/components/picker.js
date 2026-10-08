@@ -1,6 +1,9 @@
-// A choice picker in the command palette's <dialog>: a filter, a listbox, and
-// the keys a person expects (↑/↓ move, Enter picks, Esc closes). The design
-// pages compose it to attach an asset to a task, or a task to an asset:
+// The Picker dialog (contract variant 5): a choice picker in the command
+// palette's <dialog>, for when picking is a step of its own over a large set,
+// opened from a button. A filter, a listbox whose rows share the Combobox's
+// option anatomy (label, description), and the keys a person expects (↑/↓
+// move, Enter picks, Esc closes). The design pages compose it to attach an
+// asset to a task, or a task to an asset:
 //
 //   compose(artifactBrowsing(clock), picker(), { …, openAttachPicker() { this.openPicker({…}) } })
 //
@@ -12,9 +15,16 @@
 // The dialog is modal (showModal), so focus stays in it; on close focus goes
 // back to the control that opened it.
 
-import { filterChoices } from "../artifactView.js";
+/** @typedef {{ id: string, label: string, detail?: string }} Choice (detail is the row's second line) */
 
-/** @typedef {{ id: string, label: string, detail?: string }} Choice */
+/** A picker's choices narrowed by what the person typed: every word, anywhere in the label, any case. */
+export function filterChoices(choices, query) {
+  const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+  return choices.filter((c) => {
+    const label = c.label.toLowerCase();
+    return words.every((w) => label.includes(w));
+  });
+}
 
 export function picker() {
   /** @type {(id: string) => void} */

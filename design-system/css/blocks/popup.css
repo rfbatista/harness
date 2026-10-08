@@ -8,6 +8,7 @@
  *     <span class="status" data-dot-only></span><span class="text"><span class="label">…</span>
  *     <span class="description">…</span></span><span class="meta">…</span></div></div></div>
  *   <div class="message">…</div><footer>…</footer></div>
+ * Option rows: option.css (shared with the palette's Picker dialog).
  * Exceptions: data-placement="top"; on options aria-selected, data-active
  * (mirrors aria-activedescendant), aria-disabled; on the listbox
  * aria-multiselectable, aria-busy; .message[data-tone="danger"].
@@ -51,24 +52,8 @@
       color: var(--color-ink-muted);
     }
 
+    /* The row's anatomy is option.css; here its states and the check. */
     & [role="option"] {
-      display: grid;
-      grid-template-columns: [lead] auto [text] minmax(0, 1fr) [meta] auto [check] 0.75rem;
-      align-items: center;
-      column-gap: var(--space-s);
-      min-block-size: var(--size-control-md);
-      padding: var(--space-2xs) var(--space-s);
-      border-radius: var(--radius-sm);
-      color: var(--color-ink-muted);
-      cursor: pointer;
-
-      & > .status { grid-column: lead; inline-size: 1rem; justify-content: center; }
-      & > .text { grid-column: text; display: flex; flex-direction: column; min-inline-size: 0; }
-      & :is(.label, .description) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-      & .description { font-size: var(--text-xs); color: var(--color-ink-faint); }
-      & > .meta { grid-column: meta; font-size: var(--text-xs); color: var(--color-ink-faint); }
-      & mark { background: none; color: var(--color-ink); font-weight: var(--weight-bold); text-decoration: underline 1px; text-underline-offset: 0.18em; }
-
       /* The check: drawn, signal, only on the chosen option. */
       &::after {
         content: "";

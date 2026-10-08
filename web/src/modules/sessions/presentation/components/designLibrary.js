@@ -16,7 +16,7 @@ import { attachableTasks, byUpdated, Scope } from "../../domain/artifact.js";
 import { artifactTitle, moveBackWarning } from "../artifactView.js";
 import { artifactBrowsing, compose } from "./artifactBrowsing.js";
 import { attachments } from "./attachments.js";
-import { picker } from "./picker.js";
+import { picker } from "../../../../shared/presentation/components/picker.js";
 
 const NO_TASK = { title: "a deleted task", href: "" };
 

@@ -57,6 +57,7 @@ import "../src/shared/infrastructure/feed.test.js";
 import "../src/shared/presentation/components/combobox.test.js";
 import "../src/shared/presentation/components/dropdown.test.js";
 import "../src/shared/presentation/components/options.test.js";
+import "../src/shared/presentation/components/picker.test.js";
 import "../src/shared/presentation/components/popup.test.js";
 import "../src/shared/presentation/components/projectPicker.test.js";
 import "../src/shared/presentation/components/streamStatus.test.js";

@@ -27,10 +27,12 @@ templ PickerDialog(placeholder string) {
 		<div class="[ results ]" id="picker-results" role="listbox" x-bind:aria-label="pickerLabel">
 			<template x-for="choice in pickerResults" x-bind:key="choice.id">
 				<div role="option" x-bind:id="choice.domId" x-bind:aria-selected="choice.active" x-on:click="pick(choice.id)">
-					<span x-text="choice.label"></span>
-					<template x-if="choice.detail">
-						<span class="[ color-ink-faint text-sm ]" x-text="choice.detail"></span>
-					</template>
+					<span class="[ text ]">
+						<span class="[ label ]" x-text="choice.label"></span>
+						<template x-if="choice.detail">
+							<span class="[ description ]" x-text="choice.detail"></span>
+						</template>
+					</span>
 				</div>
 			</template>
 			<template x-if="pickerIsEmpty">
