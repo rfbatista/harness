@@ -200,6 +200,12 @@ export function memoryPullRequests({ workspaces = [], pullRequests = [], now = (
     gateway,
     /** A PR opened outside this page (another browser, gh, the server adopting one): harness.pr.open("ws1", { draft: true }). */
     open: (workspaceId, fields = {}) => announce(makePR(workspace(workspaceId), fields)),
+    /** A PR is open on the host the feed has not told of yet: a create then finds it (PR_ALREADY_EXISTS). */
+    openOnHost(workspaceId, fields = {}) {
+      const pr = makePR(workspace(workspaceId), fields);
+      prs.set(workspaceId, [...(prs.get(workspaceId) ?? []), pr]);
+      return pr;
+    },
     /** The host says the newest PR's state changed, as a background refresh finds it. */
     setState(workspaceId, state) {
       const pr = newest(workspaceId);
