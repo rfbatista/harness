@@ -39,6 +39,10 @@
       &:is([aria-invalid="true"], :has([aria-invalid="true"])):is(:focus-visible, :focus-within) { box-shadow: 0 0 0 1px var(--color-danger); }
       &:is([aria-disabled="true"], :has(input:disabled)) { background: var(--color-panel); color: var(--color-ink-faint); --_chevron: var(--color-ink-faint); cursor: not-allowed; }
 
+      @media (forced-colors: active) {
+        &:is([aria-disabled="true"], :has(input:disabled)) { --_edge: GrayText; --_chevron: GrayText; color: GrayText; }
+      }
+
       & > .status { flex-shrink: 0; }
       & > :is(.chips, .ends) { display: contents; }
       & > .value { flex: 1 1 0; min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

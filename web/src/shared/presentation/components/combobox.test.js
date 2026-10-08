@@ -376,6 +376,7 @@ test("on a phone it opens as a tall sheet with the input first and Done", () => 
     f.c.popup.querySelector("header button").click();
     assert.ok(!f.c.isOpen);
     assert.equal(f.input.parentElement, f.c.field, "the input goes back to the field");
+    assert.equal(f.c.chips.parentElement, f.c.field, "and so do the chips");
   } finally {
     f.done();
   }

@@ -103,7 +103,7 @@ export function floating(el, { anchor, onDismiss, env, align = () => "start" }) 
     );
     el.style.top = `${p.top}px`;
     el.style.left = `${p.left}px`;
-    el.style.minInlineSize = `${p.minWidth}px`;
+    el.style.setProperty("--_anchor-width", `${p.minWidth}px`);
     el.style.maxBlockSize = `${p.maxHeight}px`;
     el.dataset.placement = p.placement;
   }
@@ -121,7 +121,8 @@ export function floating(el, { anchor, onDismiss, env, align = () => "start" }) 
       claim(dismiss);
       el.toggleAttribute("data-sheet", sheet);
       el.toggleAttribute("data-tall", sheet && tall);
-      el.style.top = el.style.left = el.style.minInlineSize = el.style.maxBlockSize = "";
+      el.style.top = el.style.left = el.style.maxBlockSize = "";
+      el.style.removeProperty("--_anchor-width");
       if (!isOpen) {
         isOpen = true;
         if (el.isConnected && !el.matches(":popover-open")) el.showPopover?.();

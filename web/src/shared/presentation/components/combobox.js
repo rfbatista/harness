@@ -288,7 +288,7 @@ export class Combobox {
       spinner.className = "spinner";
       spinner.setAttribute("aria-hidden", "true");
       parts.push(spinner);
-    } else if (this.input.value && !this.disabled) {
+    } else if (this.input.value && !this.disabled && (this.dirty || this.root.hasAttribute("data-clearable"))) {
       const clear = this.doc.createElement("button");
       clear.type = "button";
       clear.className = "clear";
@@ -405,7 +405,7 @@ export class Combobox {
         const search = this.doc.createElement("div");
         search.className = "search";
         this.moving = true;
-        search.append(this.input);
+        search.append(this.chips, this.input);
         this.popup.prepend(sheetHeader(this.doc, { title: this.labelText, button: "Done", onClose: () => this.close() }), search);
       }
       this.root.toggleAttribute("data-open", true);
@@ -437,6 +437,7 @@ export class Combobox {
     this.releaseCancel?.();
     if (search) {
       this.moving = true;
+      this.marker.before(this.chips);
       this.marker.after(this.input);
       this.moving = false;
       search.remove();

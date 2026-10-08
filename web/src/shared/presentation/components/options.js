@@ -166,7 +166,9 @@ export function renderOptions(listbox, options, { idPrefix, selected, query = ""
   let group = null;
   let groupName;
   options.forEach((option, i) => {
-    const row = optionRow(doc, option, { id: `${idPrefix}-${i}`, selected: selected.has(option.value), query });
+    // A free-text row ("Use “…”") quotes the text; it has no match to mark.
+    const mark = option.created ? "" : query;
+    const row = optionRow(doc, option, { id: `${idPrefix}-${i}`, selected: selected.has(option.value), query: mark });
     rows.push(row);
     if (!option.group) {
       group = null;

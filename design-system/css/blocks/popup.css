@@ -23,6 +23,7 @@
     flex-direction: column;
     margin: 0;
     padding: 0;
+    min-inline-size: var(--_anchor-width, 0px); /* set by the component: the trigger's width */
     max-inline-size: min(24rem, calc(100vw - 2 * var(--space-l)));
     border: var(--border-width) solid var(--color-line-strong);
     border-radius: var(--radius-md);
