@@ -72,12 +72,7 @@
       color: var(--color-ink-faint);
     }
 
-    & .card .meta select {
-      inline-size: auto;
-      min-block-size: var(--size-control-sm);
-      margin-inline-start: auto;
-      font-size: var(--text-sm);
-    }
+    & .card .meta select { margin-inline-start: auto; }
 
     & .card[data-fresh] {
       animation: card-arrived 8s var(--ease-out) both;

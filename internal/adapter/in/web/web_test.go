@@ -244,7 +244,7 @@ func TestProjectPagePutsItsTasksOnTheRailAndTheProjectInThePicker(t *testing.T) 
 		`class="[ card ]" data-task-id="t-feed"`,
 		`class="[ title ]" href="/projects/p1/tasks/t-feed">Add SSE feed</a>`,
 		// Moving a card: the task page's status select, on every card.
-		`<select class="[ status-picker ]" data-task-id="t-feed" aria-label="Move Add SSE feed to" x-on:change="moveTo">`,
+		`<select data-size="sm" data-fit data-variant="ghost" data-task-id="t-feed" aria-label="Move Add SSE feed to" x-on:change="moveTo">`,
 		`<option value="in_progress" selected>In progress</option>`,
 		`x-bind:value="card.status" x-on:change="moveTo"`,
 	} {

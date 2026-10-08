@@ -84,7 +84,7 @@ templ ssrBoard(b Board) {
 								if l.Reviews > 0 {
 									@components.Badge(reviewsWord(l.Reviews), "attention")
 								}
-								<select class="[ status-picker ]" data-task-id={ l.TaskID } aria-label={ "Move " + l.Label + " to" } x-on:change="moveTo">
+								<select data-size="sm" data-fit data-variant="ghost" data-task-id={ l.TaskID } aria-label={ "Move " + l.Label + " to" } x-on:change="moveTo">
 									for _, st := range Statuses {
 										<option value={ st.Value } { selectedIf(st.Value == c.Status)... }>{ st.Label }</option>
 									}
@@ -121,7 +121,7 @@ templ liveBoard() {
 								<template x-if="card.hasReviews">
 									<span class="[ badge ]" data-tone="attention" x-text="card.reviews"></span>
 								</template>
-								<select class="[ status-picker ]" x-bind:data-task-id="card.id" x-bind:aria-label="card.moveLabel" x-bind:value="card.status" x-on:change="moveTo">
+								<select data-size="sm" data-fit data-variant="ghost" x-bind:data-task-id="card.id" x-bind:aria-label="card.moveLabel" x-bind:value="card.status" x-on:change="moveTo">
 									for _, st := range Statuses {
 										<option value={ st.Value }>{ st.Label }</option>
 									}

@@ -394,14 +394,14 @@ func ssrBoard(b Board) templ.Component {
 						return templ_7745c5c3_Err
 					}
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 26, "<select class=\"[ status-picker ]\" data-task-id=\"")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 26, "<select data-size=\"sm\" data-fit data-variant=\"ghost\" data-task-id=\"")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var21 string
 				templ_7745c5c3_Var21, templ_7745c5c3_Err = templ.ResolveAttributeValue(l.TaskID)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `tasks/project.templ`, Line: 87, Col: 65}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `tasks/project.templ`, Line: 87, Col: 84}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var21)
 				if templ_7745c5c3_Err != nil {
@@ -414,7 +414,7 @@ func ssrBoard(b Board) templ.Component {
 				var templ_7745c5c3_Var22 string
 				templ_7745c5c3_Var22, templ_7745c5c3_Err = templ.ResolveAttributeValue("Move " + l.Label + " to")
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `tasks/project.templ`, Line: 87, Col: 106}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `tasks/project.templ`, Line: 87, Col: 125}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var22)
 				if templ_7745c5c3_Err != nil {
@@ -510,7 +510,7 @@ func liveBoard() templ.Component {
 			templ_7745c5c3_Var25 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 37, "<div class=\"[ board ]\" aria-label=\"Tasks by status\"><template x-for=\"column in columns\" x-bind:key=\"column.status\"><section class=\"[ column ]\" x-bind:aria-label=\"column.label\"><header><span class=\"[ label ]\" x-text=\"column.label\"></span><span class=\"[ badge ]\" x-text=\"column.count\"></span></header><div class=\"[ cards ]\"><template x-for=\"card in column.cards\" x-bind:key=\"card.id\"><article class=\"[ card ]\" x-bind:data-task-id=\"card.id\" x-bind:data-fresh=\"card.fresh\"><a class=\"[ title ]\" x-bind:href=\"card.href\" x-text=\"card.title\"></a><div class=\"[ meta ]\"><span class=\"[ status ]\" data-dot-only x-show=\"card.hasDot\" x-bind:data-state=\"card.state\"><span class=\"[ visually-hidden ]\" x-text=\"card.word\"></span></span> <span class=\"[ count ]\" title=\"live sessions\" x-show=\"card.hasCount\" x-text=\"card.live\"></span><template x-if=\"card.hasReviews\"><span class=\"[ badge ]\" data-tone=\"attention\" x-text=\"card.reviews\"></span></template><select class=\"[ status-picker ]\" x-bind:data-task-id=\"card.id\" x-bind:aria-label=\"card.moveLabel\" x-bind:value=\"card.status\" x-on:change=\"moveTo\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 37, "<div class=\"[ board ]\" aria-label=\"Tasks by status\"><template x-for=\"column in columns\" x-bind:key=\"column.status\"><section class=\"[ column ]\" x-bind:aria-label=\"column.label\"><header><span class=\"[ label ]\" x-text=\"column.label\"></span><span class=\"[ badge ]\" x-text=\"column.count\"></span></header><div class=\"[ cards ]\"><template x-for=\"card in column.cards\" x-bind:key=\"card.id\"><article class=\"[ card ]\" x-bind:data-task-id=\"card.id\" x-bind:data-fresh=\"card.fresh\"><a class=\"[ title ]\" x-bind:href=\"card.href\" x-text=\"card.title\"></a><div class=\"[ meta ]\"><span class=\"[ status ]\" data-dot-only x-show=\"card.hasDot\" x-bind:data-state=\"card.state\"><span class=\"[ visually-hidden ]\" x-text=\"card.word\"></span></span> <span class=\"[ count ]\" title=\"live sessions\" x-show=\"card.hasCount\" x-text=\"card.live\"></span><template x-if=\"card.hasReviews\"><span class=\"[ badge ]\" data-tone=\"attention\" x-text=\"card.reviews\"></span></template><select data-size=\"sm\" data-fit data-variant=\"ghost\" x-bind:data-task-id=\"card.id\" x-bind:aria-label=\"card.moveLabel\" x-bind:value=\"card.status\" x-on:change=\"moveTo\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

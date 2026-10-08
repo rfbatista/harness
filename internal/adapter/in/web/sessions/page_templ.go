@@ -107,7 +107,7 @@ func Page(v PageView) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 6, "</h1><select class=\"[ status-picker ]\" aria-label=\"Task status\" x-model=\"status\" x-on:change=\"changeStatus\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 6, "</h1><select data-size=\"sm\" data-fit aria-label=\"Task status\" x-model=\"status\" x-on:change=\"changeStatus\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

@@ -373,7 +373,7 @@ func TestArchitectChannelInTheWebUI_EndToEnd(t *testing.T) {
 	// picker follows.
 	e.as(arch.ID, "update_task_status", map[string]any{"status": "review", "reason": "Server and tools merged; the web UI is in review."})
 	p.run(t, "the architect moves the task",
-		poll(`!!document.querySelector('.status-change') && document.querySelector('.toolbar .status-picker').value === 'review'`),
+		poll(`!!document.querySelector('.status-change') && document.querySelector('.toolbar select[aria-label="Task status"]').value === 'review'`),
 	)
 	if got := p.text(t, `document.querySelector('.status-change').textContent.replace(/\s+/g, ' ').trim()`); got != "Moved to review by the architect · now — “Server and tools merged; the web UI is in review.”" {
 		t.Errorf("status line: %q", got)

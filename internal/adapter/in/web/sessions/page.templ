@@ -30,7 +30,7 @@ templ Page(v PageView) {
 				<header class="[ toolbar ]">
 					<a class="[ crumb ]" href={ templ.SafeURL("/projects/" + v.ProjectID) }>{ v.ProjectName } /</a>
 					<h1 x-text="title">{ v.TaskTitle }</h1>
-					<select class="[ status-picker ]" aria-label="Task status" x-model="status" x-on:change="changeStatus">
+					<select data-size="sm" data-fit aria-label="Task status" x-model="status" x-on:change="changeStatus">
 						for _, st := range v.StatusChoices {
 							<option value={ st.Value } { selectedAttrs(st.Selected)... }>{ st.Label }</option>
 						}

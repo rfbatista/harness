@@ -149,7 +149,7 @@ func TestTaskManagementInTheBrowser(t *testing.T) {
 		clickButton(`main`, "Save"),
 		chromedp.Poll(`document.querySelector('main h1')?.textContent === 'Write the live docs'`, nil, chromedp.WithPollingTimeout(5*time.Second)),
 		chromedp.Evaluate(`document.querySelector('main h1').textContent`, &title),
-		setField(`select.status-picker`, "review", "change"),
+		setField(`.toolbar select[aria-label="Task status"]`, "review", "change"),
 		chromedp.Sleep(500*time.Millisecond),
 	)
 	if err != nil {

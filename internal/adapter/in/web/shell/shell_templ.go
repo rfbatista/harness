@@ -193,7 +193,7 @@ func topBar(t TopBar) templ.Component {
 			return templ_7745c5c3_Err
 		}
 		if len(t.Projects) > 0 {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 10, "<form class=\"[ cluster ] [ gutter-xs ]\" method=\"get\" action=\"/switch-project\" x-data=\"projectPicker\"><label class=\"[ visually-hidden ]\" for=\"project-picker\">Project</label> <select id=\"project-picker\" name=\"project\" x-on:change=\"go\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 10, "<form class=\"[ cluster ] [ gutter-xs ]\" method=\"get\" action=\"/switch-project\" x-data=\"projectPicker\"><label class=\"[ visually-hidden ]\" for=\"project-picker\">Project</label> <select id=\"project-picker\" name=\"project\" data-size=\"sm\" data-fit x-on:change=\"go\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

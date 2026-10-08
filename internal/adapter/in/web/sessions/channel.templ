@@ -29,7 +29,7 @@ templ conversationPanel() {
 		<template x-if="showsFilter">
 			<div class="[ conversation-bar ] [ divide-bottom ]">
 				<label for="conversation-filter" class="[ color-ink-muted ]">Show</label>
-				<select id="conversation-filter" x-model="filter">
+				<select id="conversation-filter" data-size="sm" data-fit x-model="filter">
 					<option value="">Every delegate</option>
 					<template x-for="d in delegates" x-bind:key="d.id">
 						<option x-bind:value="d.id" x-text="d.label"></option>
@@ -103,7 +103,7 @@ templ statusCheckBar() {
 		<template x-if="controllable">
 			<div class="[ cluster ] [ gutter-xs ]">
 				<label class="[ visually-hidden ]" for="status-check-interval">Check every</label>
-				<select id="status-check-interval" x-model="minutes" x-bind:disabled="busy" x-on:change="retune">
+				<select id="status-check-interval" data-size="sm" data-fit x-model="minutes" x-bind:disabled="busy" x-bind:aria-busy="busy" x-on:change="retune">
 					<template x-for="i in intervals" x-bind:key="i.value">
 						<option x-bind:value="i.value" x-text="i.label"></option>
 					</template>

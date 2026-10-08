@@ -52,6 +52,7 @@
     /* As wide as its value, not the row (rows, cards, toolbars). */
     &[data-fit] {
       inline-size: auto;
+      max-inline-size: 100%;
       field-sizing: content;
     }
 

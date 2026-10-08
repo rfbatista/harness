@@ -51,7 +51,7 @@ templ topBar(t TopBar) {
 		if len(t.Projects) > 0 {
 			<form class="[ cluster ] [ gutter-xs ]" method="get" action="/switch-project" x-data="projectPicker">
 				<label class="[ visually-hidden ]" for="project-picker">Project</label>
-				<select id="project-picker" name="project" x-on:change="go">
+				<select id="project-picker" name="project" data-size="sm" data-fit x-on:change="go">
 					if t.Current == "" {
 						<option value="" selected disabled>Choose a project…</option>
 					}
