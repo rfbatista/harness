@@ -34,6 +34,7 @@
     --size-control-sm: 1.625rem;
     --size-control-md: 2rem;
     --size-row: 2.25rem;
+    --size-touch: 2.75rem;
     --size-measure: 68ch;
     --size-sidebar: 15rem;
     --size-wrapper: 72rem;
@@ -46,6 +47,7 @@
     --border-width: 1px;
     --border-focus-width: 2px;
     --border-focus-offset: 2px;
+    --border-icon-width: 1.5px;
 
     --ease-out: cubic-bezier(0.25, 1, 0.5, 1);
     --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
