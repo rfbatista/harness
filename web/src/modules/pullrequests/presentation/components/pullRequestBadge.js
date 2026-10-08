@@ -28,4 +28,6 @@ export const pullRequestBadge = ({ store }) => (workspaceId = "") => ({
   get describe() {
     return this.chip?.describe ?? "";
   },
+  /** The link opens the PR; the row under it does not take the click. */
+  stay() {},
 });

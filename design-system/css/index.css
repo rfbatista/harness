@@ -57,6 +57,7 @@
 @import url("./blocks/prose.css");
 @import url("./blocks/source.css");
 @import url("./blocks/history.css");
+@import url("./blocks/pull-request.css");
 @import url("./blocks/stream-bar.css");
 @import url("./blocks/transcript.css");
 @import url("./blocks/message.css");

@@ -86,6 +86,11 @@ export const sessionsPage = ({ gateway, clock, channel = null, channelStore = { 
       const session = this.sessions.find((s) => s.id === this.selectedId);
       return session ? toDetailView(session, this.now, this.agentNames) : null;
     },
+    /** The selected session's worktree, as a list keyed by it, so what hangs off it (its PR badge) follows the selection. */
+    get selectedWorkspaces() {
+      const id = this.selected?.workspaceId;
+      return id ? [id] : [];
+    },
     get hasSelection() {
       return this.selected !== null;
     },

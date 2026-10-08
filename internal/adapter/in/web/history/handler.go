@@ -9,6 +9,7 @@ import (
 
 	"github.com/rfbatista/harnesskit/errs"
 
+	"operators-mcp/internal/adapter/in/web/pullrequests"
 	"operators-mcp/internal/adapter/in/web/sessions"
 	"operators-mcp/internal/adapter/in/web/shell"
 	"operators-mcp/internal/adapter/in/web/tasks"
@@ -28,6 +29,9 @@ type Handler struct {
 	Tasks ports.TicketReader
 	// Sessions links branches that are agent sessions' to their tasks.
 	Sessions ports.SessionReader
+	// PullRequests offers a session's branch as a pull request on its
+	// history page; nil leaves the page without it.
+	PullRequests pullrequests.Reader
 	Layout   shell.Layout
 	Render   shell.Renderer
 	Now      func() time.Time

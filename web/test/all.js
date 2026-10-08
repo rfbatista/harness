@@ -12,6 +12,7 @@ import "../src/modules/pullrequests/domain/pullRequest.test.js";
 import "../src/modules/pullrequests/infrastructure/gateways.test.js";
 import "../src/modules/pullrequests/presentation/components/pullRequestPanel.test.js";
 import "../src/modules/pullrequests/presentation/components/pullRequestWatch.test.js";
+import "../src/modules/pullrequests/presentation/view.test.js";
 import "../src/modules/reviews/domain/review.test.js";
 import "../src/modules/reviews/infrastructure/gateways.test.js";
 import "../src/modules/reviews/presentation/components/reviewsInbox.test.js";

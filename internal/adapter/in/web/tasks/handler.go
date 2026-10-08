@@ -6,6 +6,7 @@ import (
 
 	"github.com/rfbatista/harnesskit/errs"
 
+	"operators-mcp/internal/adapter/in/web/pullrequests"
 	"operators-mcp/internal/adapter/in/web/sessions"
 	"operators-mcp/internal/adapter/in/web/shell"
 	"operators-mcp/internal/domain"
@@ -25,9 +26,24 @@ type Handler struct {
 	// Artifacts lists the design assets the task page and the design library
 	// seed; nil seeds none.
 	Artifacts ports.ArtifactReader
-	Layout    shell.Layout
+	// PullRequests seeds the session rows' pull request badges; nil seeds none.
+	PullRequests pullrequests.Reader
+	Layout       shell.Layout
 	Render    shell.Renderer
 	Now       func() time.Time
+}
+
+// workspaceIDs are the sessions' worktrees, each once.
+func workspaceIDs(list []*domain.Session) []string {
+	seen := map[string]bool{}
+	ids := []string{}
+	for _, s := range list {
+		if s.WorkspaceID != "" && !seen[s.WorkspaceID] {
+			seen[s.WorkspaceID] = true
+			ids = append(ids, s.WorkspaceID)
+		}
+	}
+	return ids
 }
 
 // Project serves GET /projects/{project}: the project's tasks as a kanban
@@ -125,6 +141,9 @@ func (h Handler) Task(w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 	view.Reviews = reviewsSeed(project.ID, task.ID, list, agents, []*domain.Ticket{task}, docs)
+	if h.PullRequests != nil {
+		view.PullRequests = pullrequests.NewWatchSeed(ctx, h.PullRequests, project.ID, workspaceIDs(list))
+	}
 	for _, st := range Statuses {
 		view.StatusChoices = append(view.StatusChoices, sessions.StatusChoice{Value: st.Value, Label: st.Label, Selected: st.Value == string(task.Status)})
 	}

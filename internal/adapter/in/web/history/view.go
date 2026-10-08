@@ -1,6 +1,9 @@
 package history
 
-import "operators-mcp/internal/adapter/in/web/shell"
+import (
+	"operators-mcp/internal/adapter/in/web/pullrequests"
+	"operators-mcp/internal/adapter/in/web/shell"
+)
 
 // PageView is a history page: a repository's, or one session's branch.
 type PageView struct {
@@ -25,6 +28,9 @@ type PageView struct {
 	Open    *CommitView
 	// OpenWorking is the uncommitted changes, open beside the graph.
 	OpenWorking *WorkingView
+	// PullRequest is the session branch's pull request control; nil on a
+	// repository's page, or when the server cannot open pull requests.
+	PullRequest *pullrequests.Panel
 }
 
 // Crumb is one step back in the toolbar.

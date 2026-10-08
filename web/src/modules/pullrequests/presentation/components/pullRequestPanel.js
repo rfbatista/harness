@@ -58,11 +58,33 @@ export const pullRequestPanel = ({ gateway }) => () => {
     get hidden() {
       return this.gone || (!this.draft && !this.pullRequest);
     },
+    get visible() {
+      return !this.hidden;
+    },
     get chip() {
       return this.pullRequest ? toChip(this.pullRequest) : null;
     },
     get hasChip() {
       return !!this.pullRequest;
+    },
+    // The chip's parts, flat for the markup ("" / null with no PR).
+    get chipHref() {
+      return this.chip?.href ?? "";
+    },
+    get chipLabel() {
+      return this.chip?.label ?? "";
+    },
+    get chipTitle() {
+      return this.chip?.title ?? "";
+    },
+    get chipState() {
+      return this.chip?.state ?? "";
+    },
+    get chipTone() {
+      return this.chip?.tone ?? null;
+    },
+    get chipDescribe() {
+      return this.chip?.describe ?? "";
     },
     /** The create button shows unless a PR is open; it is enabled when nothing is in the way. */
     get offersCreate() {
@@ -93,6 +115,31 @@ export const pullRequestPanel = ({ gateway }) => () => {
     get showsForm() {
       return this.formOpen && !!this.draft;
     },
+    /** The strip under the toolbar shows when it has something to say. */
+    get showsStrip() {
+      return !this.gone && (this.blocked || this.hasNotice || this.showsForm || !!this.error);
+    },
+    get hasNotice() {
+      return this.notice !== "";
+    },
+    get hasUncommitted() {
+      return this.uncommitted !== "";
+    },
+    get hasRefusal() {
+      return !!this.refusal;
+    },
+    get refusalLead() {
+      return this.refusal?.lead ?? "";
+    },
+    get refusalReason() {
+      return this.refusal?.reason ?? "";
+    },
+    get refusalCode() {
+      return this.refusal?.code ?? "";
+    },
+    get errorLine() {
+      return this.error ? `${this.error.message} ${this.error.code} · ${this.error.next}` : "";
+    },
     get summary() {
       return this.draft ? summaryLine(this.draft, this.form.baseBranch.trim()) : "";
     },
@@ -111,6 +158,8 @@ export const pullRequestPanel = ({ gateway }) => () => {
 
     // ── lifecycle ────────────────────────────────────────────────────────
     init() {
+      // The server's first paint of what Alpine now renders from data (the reasons list).
+      for (const node of this.$el.querySelectorAll?.("[data-ssr]") ?? []) node.remove();
       let seed;
       try {
         seed = gateway.decodePanelSeed(readSeed(this.$el));

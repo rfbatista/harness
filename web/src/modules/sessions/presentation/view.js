@@ -82,6 +82,7 @@ export function toRowView(session, { selectedId, now, agentNames, others = [], f
     roleAttr: session.role || null,
     depthAttr: depth > 0 ? String(Math.min(depth, MAX_DEPTH)) : null,
     badge: session.role === "architect" ? "architect" : "",
+    workspaceId: session.workspaceId,
   };
 }
 
@@ -162,6 +163,7 @@ export function toDetailView(session, now, agentNames) {
     updated: relativeTime(session.updatedAt, now),
     stoppable: !isTerminal(session),
     repositoryId: session.repositoryId,
+    workspaceId: session.workspaceId,
     ...terminalView(session),
   };
 }

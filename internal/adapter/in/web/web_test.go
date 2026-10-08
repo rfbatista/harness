@@ -13,6 +13,7 @@ import (
 
 	"github.com/rfbatista/harnesskit/errs"
 
+	"operators-mcp/internal/adapter/in/web/pullrequests"
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
 )
@@ -129,6 +130,7 @@ type world struct {
 	history   ports.RepositoryHistory
 	artifacts []*domain.Artifact
 	summaries fakeSummaries
+	prs       pullrequests.Reader
 }
 
 // fakeSummaries counts like the projects context: nil leaves /projects unserved.
@@ -161,6 +163,9 @@ func newTestHandler(t *testing.T, w world) http.Handler {
 	}
 	if w.summaries != nil {
 		deps.ProjectSummaries = w.summaries
+	}
+	if w.prs != nil {
+		deps.PullRequests = w.prs
 	}
 	return NewHandler(deps, builtAssets(t), fallback)
 }
