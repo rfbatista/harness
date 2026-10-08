@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -41,7 +42,7 @@ func startPRServer(t *testing.T, dir, dbPath string, host *ghclitest.FakeHost) *
 		fx.Supply(Config{HTTPAddr: "127.0.0.1:0", MCPAddr: "127.0.0.1:0", DBPath: dbPath, Root: dir, ClaudeBin: "/bin/true", SessionShell: "direct"}),
 		PersistenceModule, CatalogModule, PlanningModule, WorkspacesModule,
 		AgentRuntimeModule, TaskChannelModule, TextProcessingModule, ToolingModule,
-		fx.Decorate(func(ports.CodeHost) ports.CodeHost { return host }),
+		WithCodeHost(host),
 		fx.Populate(&s.cat, &s.orch, &s.plan, &s.ws, &s.prs, &s.sess),
 		fx.NopLogger,
 	)
@@ -167,6 +168,9 @@ func TestPullRequests_EndToEnd(t *testing.T) {
 		t.Fatalf("the checkout moved to %s", got)
 	}
 	e.sawOnFeed("pull_request", `"number":1`, `"workspace_id":"`+ws.ID+`"`, `"state":"open"`)
+	if opened := host.Opened(); len(opened) != 1 || opened[0].Title != "Create pull request" || opened[0].Body != "Why" || opened[0].Base != "main" || opened[0].Head != "agent/pr-e2e" {
+		t.Fatalf("opened on the host = %+v", opened)
+	}
 
 	status, out = e.http("POST", "/api/create_pull_request", `{"workspace_id":"`+ws.ID+`","title":"Again"}`)
 	details, _ := out["details"].(map[string]any)
@@ -195,5 +199,33 @@ func TestPullRequests_EndToEnd(t *testing.T) {
 	}
 	if b := out["draft"].(map[string]any)["blockers"].([]any); len(b) != 0 {
 		t.Fatalf("blockers after the merge = %v; a merged PR blocks nothing", b)
+	}
+
+	// gh signed out on the server machine.
+	host.SignOut()
+	_, out = e.http("GET", get, "")
+	if b := out["draft"].(map[string]any)["blockers"].([]any); len(b) != 1 || b[0] != "PR_TOOL_UNAVAILABLE" {
+		t.Fatalf("blockers signed out = %v", b)
+	}
+	status, out = e.http("POST", "/api/create_pull_request", `{"workspace_id":"`+ws.ID+`","title":"Follow-up"}`)
+	if status != 503 || out["code"] != "PR_TOOL_UNAVAILABLE" || !strings.Contains(out["error"].(string), "gh auth login") {
+		t.Fatalf("create signed out = %d %v", status, out)
+	}
+	host.SignIn()
+
+	// A follow-up PR closed on the host reaches the feed at once through
+	// RefreshNow, with no wait for the 30 s throttle.
+	if status, out = e.http("POST", "/api/create_pull_request", `{"workspace_id":"`+ws.ID+`","title":"Follow-up"}`); status != 200 {
+		t.Fatalf("follow-up = %d %v", status, out)
+	}
+	number := int(out["pull_request"].(map[string]any)["number"].(float64))
+	host.SetState(widgets, number, domain.PullRequestClosed)
+	if err := s.prs.RefreshNow(ctx, ws.ID); err != nil {
+		t.Fatal(err)
+	}
+	e.sawOnFeed("pull_request", `"number":`+strconv.Itoa(number), `"state":"closed"`)
+	stored, err := s.prs.StoredPullRequests(ctx, []string{ws.ID})
+	if err != nil || len(stored) != 1 || stored[0].Number != number || stored[0].State != domain.PullRequestClosed {
+		t.Fatalf("stored = %+v, %v", stored, err)
 	}
 }

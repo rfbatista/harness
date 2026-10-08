@@ -518,6 +518,13 @@ func newWorkspacesService(
 	return svc
 }
 
+// WithCodeHost binds host in place of the gh adapter, so a test of the wired
+// server opens pull requests without reaching GitHub. See package ghclitest
+// for driving its fake.
+func WithCodeHost(host ports.CodeHost) fx.Option {
+	return fx.Decorate(func(ports.CodeHost) ports.CodeHost { return host })
+}
+
 // newPullRequestsService opens workspaces' branches as pull requests. It
 // announces on the orchestration's project feed, reads the task of a
 // workspace's session from planning for the suggested title and body, drops a
