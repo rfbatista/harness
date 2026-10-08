@@ -25,3 +25,39 @@ Alpine.data("specimenSearch", () => ({
   },
 }));
 Alpine.start();
+
+// Phone frames: the specimen at 375px with one sheet open in each. Inside a
+// frame (?open=<id>) the page opens that control; outside, it draws the frames.
+const params = new URLSearchParams(location.search);
+const opening = params.get("open");
+if (opening) {
+  setTimeout(() => {
+    const el = document.getElementById(opening);
+    el?.scrollIntoView({ block: "center" });
+    if (el instanceof HTMLInputElement) {
+      el.focus();
+      el.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
+    } else {
+      el?.click();
+    }
+  }, 200);
+} else {
+  const frames = [
+    ["l-agent-trigger", "Listbox select"],
+    ["c-labels-input", "Combobox, several values"],
+    ["m-session", "Menu button"],
+  ];
+  document.querySelector("[data-phone-frames]")?.append(
+    ...frames.map(([id, title]) => {
+      const frame = document.createElement("iframe");
+      frame.src = `${location.pathname}?open=${id}`;
+      frame.title = `${title} as a bottom sheet, at 375px`;
+      frame.width = "375";
+      frame.height = "667";
+      frame.loading = "lazy";
+      frame.style.border = "var(--border-width) solid var(--color-line)";
+      frame.style.borderRadius = "var(--radius-md)";
+      return frame;
+    }),
+  );
+}

@@ -530,7 +530,7 @@
           <h3>4 · Menu button (<code>x-data="menu"</code>)</h3>
           <div class="[ cluster ]">
             <div class="[ menu ]" x-data="menu">
-              <button type="button" class="[ button ]">Session <span class="[ chevron ]" aria-hidden="true"></span></button>
+              <button type="button" class="[ button ]" id="m-session">Session <span class="[ chevron ]" aria-hidden="true"></span></button>
               <div class="[ popup ]" role="menu">
                 <button type="button" role="menuitem" data-action="copy-link">Copy link <kbd>C</kbd></button>
                 <button type="button" role="menuitem" data-action="history">Open history</button>
@@ -568,7 +568,11 @@
             <span class="[ hint ]" id="r-all-hint">Accept everything runs every command and edit without asking you.</span>
           </fieldset>
         </div>
-        <p class="[ color-ink-faint text-sm ]">Below 48rem the scripted variants open as bottom sheets: narrow the window to see them.</p>
+        <div class="[ flow ] [ flow-space-s ]">
+          <h3>On a phone: the sheets</h3>
+          <p class="[ color-ink-muted ]">Below 48rem the scripted variants open as bottom sheets. These frames are this page at 375px, each with one sheet open (served from the repository root).</p>
+          <div class="[ cluster ] [ gutter-l ]" data-phone-frames></div>
+        </div>
       </section>
 
       <section class="[ flow ] [ flow-space-m ]">
