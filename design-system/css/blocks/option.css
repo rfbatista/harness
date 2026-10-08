@@ -6,8 +6,10 @@
  * <div role="option"><span class="status" data-dot-only></span>
  *   <span class="text"><span class="label">…</span><span class="description">…</span></span>
  *   <span class="meta">…</span></div>
- * States live with the list: .popup (data-active, aria-selected, the check)
- * and .palette (aria-selected is the active row).
+ * In a .popup: data-active (the keys or pointer are on it), aria-selected
+ * (the wash and a drawn check), aria-disabled; several values swap the check
+ * for a leading box. In the .palette, aria-selected is the active row
+ * (palette.css).
  */
 
 @layer blocks {
@@ -29,5 +31,51 @@
     & > :is(.meta, kbd) { grid-column: meta; }
     & > .meta { font-size: var(--text-xs); color: var(--color-ink-faint); }
     & mark { background: none; color: var(--color-ink); font-weight: var(--weight-bold); text-decoration: underline 1px; text-underline-offset: 0.18em; }
+  }
+
+  .popup {
+    & [role="option"] {
+      /* The check: drawn, signal, only on the chosen option. */
+      &::after {
+        content: "";
+        grid-column: check;
+        justify-self: center;
+        inline-size: 0.3125rem;
+        block-size: 0.625rem;
+        border-inline-end: var(--border-icon-width) solid var(--color-signal);
+        border-block-end: var(--border-icon-width) solid var(--color-signal);
+        rotate: 45deg;
+        translate: 0 -10%;
+        opacity: 0;
+      }
+
+      &[data-active] { background: var(--color-hover); color: var(--color-ink); box-shadow: inset 0 0 0 1px var(--color-line-strong); }
+      &[aria-selected="true"] { background: var(--color-selected); color: var(--color-ink); &::after { opacity: 1; } }
+      &[aria-disabled="true"] { opacity: 0.45; cursor: not-allowed; }
+
+      @media (forced-colors: active) {
+        &[data-active] { outline: 1px solid Highlight; outline-offset: -1px; }
+        &::after { border-color: CanvasText; }
+      }
+    }
+
+    /* When some rows have a dot, every label lines up after its column. */
+    & > [role="listbox"]:has(.status) [role="option"] { grid-template-columns: [lead] 1rem [text] minmax(0, 1fr) [meta] auto [check] 0.75rem; }
+
+    /* Several values: a leading box instead of the trailing check. */
+    & > [aria-multiselectable="true"] [role="option"] {
+      grid-template-columns: [check] 0.875rem [lead] auto [text] minmax(0, 1fr) [meta] auto;
+      &::before {
+        content: ""; grid-column: check; grid-row: 1;
+        inline-size: 0.875rem; block-size: 0.875rem;
+        border: var(--border-width) solid var(--color-line-control);
+        border-radius: var(--radius-xs);
+        background: var(--color-raised);
+      }
+      &::after { grid-row: 1; border-color: var(--color-signal-ink); block-size: 0.5rem; inline-size: 0.25rem; }
+      &[aria-selected="true"] { background: none; }
+      &[aria-selected="true"]::before { background: var(--color-signal); border-color: var(--color-signal); }
+      &[aria-selected="true"][data-active] { background: var(--color-hover); }
+    }
   }
 }
