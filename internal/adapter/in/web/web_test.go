@@ -335,7 +335,7 @@ func TestTaskPageListsItsSessionsBesideTheDetail(t *testing.T) {
 		`x-on:click="startCreating"`,
 		`x-data="sessionsNewSession(projectId, ticketId)"`,
 		`data-default-repository="r-harness"`,
-		`<option value="">Plain claude</option>`,
+		`<option value="" data-description="claude with no agent definition">Plain claude</option>`,
 		`<option value="backend">Backend dev</option>`,
 		`<option value="r-kit">harnesskit</option>`,
 		`<option value="edits">Accept file edits</option>`,

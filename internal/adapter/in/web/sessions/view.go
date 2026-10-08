@@ -115,8 +115,9 @@ type TaskLink struct {
 	Href  string `json:"href"`
 }
 
-// Option is one choice in the new-session form.
-type Option struct{ ID, Name string }
+// Option is one choice in the new-session form. Description, when set, is the
+// option's second line in the Listbox select (an agent's Description).
+type Option struct{ ID, Name, Description string }
 
 // NewSessionForm is what the new-session form offers: which agent runs, in
 // which repository. With no repository a session cannot start.
@@ -186,12 +187,12 @@ func NewPageView(frame shell.Frame, project *domain.Project, task *domain.Ticket
 	form := NewSessionForm{}
 	for _, a := range agents {
 		names[a.ID] = a.Name
-		form.Agents = append(form.Agents, Option{a.ID, a.Name})
+		form.Agents = append(form.Agents, Option{ID: a.ID, Name: a.Name, Description: a.Description})
 	}
 	repoNames := make(map[string]string, len(repos))
 	for _, r := range repos {
 		repoNames[r.ID] = r.Name
-		form.Repositories = append(form.Repositories, Option{r.ID, r.Name})
+		form.Repositories = append(form.Repositories, Option{ID: r.ID, Name: r.Name})
 	}
 
 	byID := make(map[string]*domain.Session, len(list))

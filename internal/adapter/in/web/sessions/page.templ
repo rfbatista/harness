@@ -276,20 +276,24 @@ templ newSessionForm(form NewSessionForm) {
 		<div class="[ switcher ]">
 			<div class="[ field ]">
 				<label for="new-session-agent">Agent</label>
-				<select id="new-session-agent" x-model="agentId">
-					<option value="">Plain claude</option>
-					for _, a := range form.Agents {
-						<option value={ a.ID }>{ a.Name }</option>
-					}
-				</select>
+				<div class="[ dropdown ]" x-data="dropdown">
+					<select id="new-session-agent" x-model="agentId">
+						<option value="" data-description="claude with no agent definition">Plain claude</option>
+						for _, a := range form.Agents {
+							<option value={ a.ID } { descriptionAttrs(a.Description)... }>{ a.Name }</option>
+						}
+					</select>
+				</div>
 			</div>
 			<div class="[ field ]">
 				<label for="new-session-mode">Mode</label>
-				<select id="new-session-mode" x-model="mode">
-					<option value="">Default</option>
-					<option value="architect">Architect</option>
-					<option value="design">Design</option>
-				</select>
+				<div class="[ dropdown ]" x-data="dropdown">
+					<select id="new-session-mode" x-model="mode">
+						<option value="" data-description="Runs the agent as it is">Default</option>
+						<option value="architect" data-description="Writes per-application specs and delegates them">Architect</option>
+						<option value="design" data-description="Publishes pages, images and videos as it works">Design</option>
+					</select>
+				</div>
 				<span class="[ hint ]" x-text="modeHint"></span>
 			</div>
 			<div class="[ field ]">
