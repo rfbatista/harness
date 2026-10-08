@@ -26,8 +26,10 @@ async function setup({ workspace = {}, pullRequests = [], painted = true, ...wor
 test("a branch with commits and no PR offers the create; the form starts from the draft", async () => {
   const { panel } = await setup({ workspace: { uncommittedChanges: 2 } });
   assert.deepEqual([panel.hidden, panel.offersCreate, panel.cannotCreate, panel.hasChip, panel.blocked], [false, true, false, false, false]);
+  assert.equal(panel.showsCreateButton, true);
   panel.openForm();
   assert.deepEqual([panel.showsForm, panel.form.title, panel.form.baseBranch, panel.form.draft], [true, "Create pull request", "main", false]);
+  assert.equal(panel.showsCreateButton, false, "the form has its own button");
   assert.equal(panel.summary, "3 commits from agent/create-pull-request-9d728ce8 into main on acme/harness");
   assert.equal(panel.uncommitted, "2 uncommitted changes in the worktree will not be in the pull request.");
   panel.destroy();

@@ -58,13 +58,23 @@
       </nav>
 
       <main class="[ frame ]" x-data="sessionsPage" data-seed="sessions-seed">
+        <script type="application/json" id="pull-requests-seed">
+          {
+            "project_id": "coding_pool",
+            "workspace_ids": ["ws-feed", "ws-port"],
+            "pull_requests": [
+              { "workspace_id": "ws-feed", "repository_id": "r1", "number": 42, "url": "https://github.com/acme/coding_pool/pull/42", "title": "Add SSE feed to orchestration", "head_branch": "agent/add-sse-feed-1a2b", "base_branch": "main", "draft": false, "state": "open", "created_at": "2026-10-02T23:00:00Z" }
+            ]
+          }
+        </script>
+        <div x-data="pullRequestWatch" data-seed="pull-requests-seed" hidden></div>
         <script type="application/json" id="sessions-seed">
           {
             "project_id": "coding_pool",
             "ticket_id": "t-feed",
             "sessions": [
-              { "id": "s-feed", "project_id": "coding_pool", "ticket_id": "t-feed", "task": "Add SSE feed to orchestration", "agent_id": "reviewer", "status": "idle", "pending_approvals": 0, "interactive": true, "runs_on": "server", "last_action": "Edited internal/tuiclient/live/live.go", "updated_at": "2026-10-02T23:58:00Z" },
-              { "id": "s-port", "project_id": "coding_pool", "ticket_id": "t-feed", "task": "Port tickets screen to httpclient", "agent_id": "backend", "status": "running", "pending_approvals": 0, "interactive": true, "runs_on": "server", "last_action": "go test ./internal/adapter/out/httpclient/...", "updated_at": "2026-10-02T23:50:00Z" },
+              { "id": "s-feed", "project_id": "coding_pool", "ticket_id": "t-feed", "task": "Add SSE feed to orchestration", "agent_id": "reviewer", "workspace_id": "ws-feed", "status": "idle", "pending_approvals": 0, "interactive": true, "runs_on": "server", "last_action": "Edited internal/tuiclient/live/live.go", "updated_at": "2026-10-02T23:58:00Z" },
+              { "id": "s-port", "project_id": "coding_pool", "ticket_id": "t-feed", "task": "Port tickets screen to httpclient", "agent_id": "backend", "workspace_id": "ws-port", "status": "running", "pending_approvals": 0, "interactive": true, "runs_on": "server", "last_action": "go test ./internal/adapter/out/httpclient/...", "updated_at": "2026-10-02T23:50:00Z" },
               { "id": "s-suite", "project_id": "coding_pool", "ticket_id": "t-feed", "task": "Conformance suite for TicketBoard", "agent_id": "tester", "status": "thinking", "pending_approvals": 0, "interactive": true, "runs_on": "server", "updated_at": "2026-10-02T23:40:00Z" },
               { "id": "s-bump", "project_id": "coding_pool", "ticket_id": "t-feed", "task": "Bump harnesskit to v0.9", "agent_id": "backend", "status": "failed", "pending_approvals": 0, "interactive": true, "runs_on": "server", "last_action": "dto_golden_test.go failed", "resumable": true, "resume_blocked": "", "updated_at": "2026-10-02T22:00:00Z" },
               { "id": "s-arch", "project_id": "coding_pool", "ticket_id": "t-feed", "task": "Plan: resume agent sessions from the web UI", "agent_id": "software-architect", "mode": "architect", "status": "stopped", "pending_approvals": 0, "interactive": true, "runs_on": "server", "resumable": true, "resume_blocked": "", "updated_at": "2026-10-02T21:30:00Z" },
@@ -148,7 +158,12 @@
                 <template x-for="row in group.rows" :key="row.id">
                   <div class="[ row ]" data-stacked role="option" :aria-selected="row.selected" :data-attention="row.attention" @click="select(row.id)">
                     <span class="[ status ]" :data-state="row.state" x-text="row.word"></span>
-                    <span class="[ title ]" x-text="row.title"></span>
+                    <span class="[ title ]">
+                      <span x-text="row.title"></span>
+                      <span x-data="pullRequestBadge(row.workspaceId)" x-show="has" style="display: none">
+                        <a class="[ badge ] [ pr-badge ]" target="_blank" rel="noopener" :href="href" :data-tone="tone" :aria-label="describe" :title="describe" @click.stop="stay" x-text="label"></a>
+                      </span>
+                    </span>
                     <span class="[ meta ]" x-text="row.meta"></span>
                     <template x-if="row.resumable">
                       <button class="[ button action ]" data-variant="ghost" data-size="sm" :aria-label="row.resumeLabel" :disabled="cannotResume" @click.stop="resume(row.id)">Resume</button>
@@ -170,7 +185,14 @@
             <template x-if="hasSelection">
               <div class="[ frame ]">
                 <div class="[ flow ] [ flow-space-s pad-l divide-bottom ]">
-                  <h2 x-text="selected.title"></h2>
+                  <div class="[ repel ]">
+                    <h2 x-text="selected.title"></h2>
+                    <template x-for="ws in selectedWorkspaces" :key="ws">
+                      <span x-data="pullRequestBadge(ws)" x-show="has" style="display: none">
+                        <a class="[ badge ] [ pr-badge ]" target="_blank" rel="noopener" :href="href" :data-tone="tone" :aria-label="describe" :title="describe" x-text="label"></a>
+                      </span>
+                    </template>
+                  </div>
                   <div class="[ cluster ] [ gutter-m text-sm color-ink-muted ]">
                     <span class="[ status ]" :data-state="selected.state" x-text="selected.word"></span>
                     <span x-text="selected.agent"></span>

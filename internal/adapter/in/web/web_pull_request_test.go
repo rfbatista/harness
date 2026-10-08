@@ -46,7 +46,7 @@ func agentDraft(blockers ...string) pullrequests.Draft {
 	}
 	return pullrequests.Draft{
 		WorkspaceID: "ws-agent", RepositoryID: "r1", HeadBranch: "agent/add-sse-feed-1a2b", BaseBranch: "main",
-		Title: "Add SSE feed", Ahead: 2, UncommittedChanges: 2, Remote: &pullrequests.Remote{Host: "github.com", Owner: "acme", Repo: "harness"},
+		Title: "Add SSE feed", Ahead: 1, UncommittedChanges: 2, Remote: &pullrequests.Remote{Host: "github.com", Owner: "acme", Repo: "harness"},
 		Blockers: blockers,
 	}
 }

@@ -39,10 +39,15 @@
     }
   }
 
+  /* In a .frame, the graph below keeps at least a third of the height: the strip scrolls. */
   .pr-strip {
     display: flex;
     flex-direction: column;
+    flex: 0 1 auto;
     gap: var(--space-s);
+    max-block-size: 66%;
+    overflow: auto;
+    overscroll-behavior: contain;
     padding: var(--space-m) var(--space-l);
     border-block-end: var(--border-width) solid var(--color-line);
     background: var(--color-panel);
@@ -65,7 +70,7 @@
     max-inline-size: 60rem;
 
     & textarea {
-      min-block-size: 8rem;
+      min-block-size: 5rem;
     }
 
     @media (min-width: 48rem) {

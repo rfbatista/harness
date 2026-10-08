@@ -47,7 +47,7 @@ templ Control(p *Panel) {
 			aria-expanded="false"
 			{ shownIf(p.OffersCreate)... }
 			{ disabledAttrs(p.Blocked())... }
-			x-show="offersCreate"
+			x-show="showsCreateButton"
 			x-bind:aria-disabled="disabledAttr"
 			x-bind:aria-busy="busyAttr"
 			x-bind:aria-expanded="expandedAttr"
@@ -79,7 +79,7 @@ templ Strip(p *Panel) {
 	@templ.JSONScript("pull-request-seed", p.Seed)
 	<p class="[ visually-hidden ]" role="status" aria-live="polite" x-text="announcement"></p>
 	<section class="[ pr-strip ]" aria-label="Pull request" { shownIf(p.Blocked())... } x-show="showsStrip">
-		<ul class="[ reasons ]" id="pr-reasons" role="list">
+		<ul class="[ reasons ]" id="pr-reasons" role="list" { shownIf(p.Blocked())... } x-show="blocked">
 			for _, b := range p.Blockers {
 				<li data-ssr>{ b }</li>
 			}
@@ -104,6 +104,14 @@ templ Strip(p *Panel) {
 templ form() {
 	<form id="pr-form" class="[ pr-form ]" aria-label="New pull request" novalidate style="display: none" x-show="showsForm" x-on:submit.prevent="submit">
 		<p class="[ text-sm color-ink-muted ]" data-span x-text="summary"></p>
+		<div class="[ banner ]" data-tone="danger" role="alert" data-span x-ref="refusal" x-show="hasRefusal">
+			<div class="[ flow ] [ flow-space-2xs ]">
+				<p x-text="refusalLead"></p>
+				<p class="[ font-mono text-xs ]" x-show="refusalReason" x-text="refusalReason"></p>
+				<span class="[ code ]" x-text="refusalCode"></span>
+			</div>
+		</div>
+		<p class="[ text-sm color-ink-muted ]" role="status" data-span x-show="creating" x-text="progress"></p>
 		<div class="[ banner ]" data-tone="attention" data-span x-show="hasUncommitted">
 			<span x-text="uncommitted"></span>
 		</div>
@@ -126,14 +134,6 @@ templ form() {
 			<input id="pr-draft" type="checkbox" x-model="form.draft" x-bind:disabled="creating"/>
 			<label for="pr-draft">Open as a draft</label>
 		</div>
-		<div class="[ banner ]" data-tone="danger" role="alert" data-span x-show="hasRefusal">
-			<div class="[ flow ] [ flow-space-2xs ]">
-				<p x-text="refusalLead"></p>
-				<p class="[ font-mono text-xs ]" x-show="refusalReason" x-text="refusalReason"></p>
-				<span class="[ code ]" x-text="refusalCode"></span>
-			</div>
-		</div>
-		<p class="[ text-sm color-ink-muted ]" role="status" data-span x-show="creating" x-text="progress"></p>
 		<div class="[ cluster ] [ gutter-xs ]" data-span>
 			<button type="submit" class="[ button ]" data-variant="primary" x-bind:aria-busy="busyAttr" x-bind:aria-disabled="busyAttr" x-text="buttonLabel">Create pull request</button>
 			<button type="button" class="[ button ]" data-variant="ghost" x-bind:disabled="creating" x-on:click="cancel">Cancel</button>

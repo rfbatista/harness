@@ -90,6 +90,10 @@ export const pullRequestPanel = ({ gateway }) => () => {
     get offersCreate() {
       return !!this.draft && !isOpen(this.pullRequest);
     },
+    /** The toolbar's button; the form has its own while it is open. */
+    get showsCreateButton() {
+      return this.offersCreate && !this.showsForm;
+    },
     get cannotCreate() {
       return this.creating || !canCreate(this.draft, this.pullRequest);
     },
@@ -309,6 +313,7 @@ export const pullRequestPanel = ({ gateway }) => () => {
         this.problems = { ...NO_PROBLEMS, baseBranch: `${this.form.baseBranch.trim() || this.draft.baseBranch} is not a branch on origin.` };
       } else {
         this.refusal = refusalOf(err);
+        this.$nextTick(() => this.$refs.refusal?.scrollIntoView?.({ block: "nearest" }));
       }
       if (STALE_DRAFT.includes(code)) this.refreshDraft();
       this.say(this.problems.title || this.problems.baseBranch || this.refusal?.lead || "");
