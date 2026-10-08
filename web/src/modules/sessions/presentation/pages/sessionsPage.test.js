@@ -200,6 +200,26 @@ test("the App tab swaps the agent's terminal for the session's App panel", () =>
   instance.destroy();
 });
 
+test("opening the Agent tab asks its terminal for the focus once it is mounted; selecting a session does not", () => {
+  const { instance, tick, dispatched } = setup();
+  tick();
+  const asks = () => dispatched.filter((d) => d.name === "terminal-focus-requested").length;
+  instance.next();
+  instance.previous();
+  instance.select("run");
+  instance.showApp();
+  tick();
+  assert.equal(asks(), 0, "walking the list and other tabs leave the focus where it is");
+  instance.showAgent();
+  assert.equal(asks(), 0, "not before the terminal is mounted");
+  tick();
+  assert.equal(asks(), 1);
+  instance.showAgent();
+  tick();
+  assert.equal(asks(), 2, "the tab already in front asks again");
+  instance.destroy();
+});
+
 test("the Design tab mounts the panel for the selected session, alive or ended, and the terminal detaches", () => {
   const { instance, tick } = setup([
     makeSession({ id: "live", status: "idle" }),

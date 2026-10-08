@@ -24,6 +24,8 @@ import (
 	"operators-mcp/internal/adapter/in/httpapi"
 	"operators-mcp/internal/adapter/in/web"
 	"operators-mcp/internal/app/catalog"
+	"operators-mcp/internal/application/apps"
+	"operators-mcp/internal/application/artifacts"
 	"operators-mcp/internal/application/orchestration"
 	"operators-mcp/internal/application/planning"
 	"operators-mcp/internal/application/taskchannel"
@@ -78,6 +80,8 @@ func newArchWeb(t *testing.T) *archWeb {
 	var (
 		cat      catalog.Catalog
 		sessions ports.SessionRepository
+		runner   *apps.Service
+		art      *artifacts.Service
 	)
 	// Without ExecutionModule: it registers Genkit flows in a process-wide
 	// registry, so it cannot boot twice in one test binary, and the
@@ -86,7 +90,7 @@ func newArchWeb(t *testing.T) *archWeb {
 		fx.Supply(Config{HTTPAddr: "127.0.0.1:0", MCPAddr: "127.0.0.1:0", DBPath: ":memory:", Root: dir, ClaudeBin: fake, SessionShell: "direct"}),
 		PersistenceModule, CatalogModule, PlanningModule, WorkspacesModule,
 		AgentRuntimeModule, TaskChannelModule, TextProcessingModule, ToolingModule,
-		fx.Populate(&e.orch, &e.plan, &e.channel, &cat, &sessions),
+		fx.Populate(&e.orch, &e.plan, &e.channel, &cat, &sessions, &runner, &art),
 		fx.NopLogger,
 	)
 	if err := app.Start(e.ctx); err != nil {
@@ -114,12 +118,17 @@ func newArchWeb(t *testing.T) *archWeb {
 	mux := http.NewServeMux()
 	mux.Handle("/api/", httpapi.NewRouter(httpapi.NewHandler(httpapi.Services{
 		Projects: cat.Projects, Agents: cat.Agents, Sessions: e.orch, Planning: e.plan, TaskChannel: e.channel,
+		RunCommands: cat.Projects, Apps: runner, Artifacts: art,
 	})))
 	mux.Handle("/", web.NewHandler(web.Deps{
 		Projects: cat.Projects, Tasks: e.plan, Sessions: e.orch, Agents: cat.Agents, Repositories: cat.Projects,
-		EnvFiles: cat.Projects, Documents: e.plan,
+		EnvFiles: cat.Projects, Documents: e.plan, Artifacts: art,
 	}, assets, nil))
-	e.srv = httptest.NewServer(mux)
+	// Over HTTP/2: the task page holds several event streams open, more than
+	// Chrome's six HTTP/1.1 connections per host leave room for.
+	e.srv = httptest.NewUnstartedServer(mux)
+	e.srv.EnableHTTP2 = true
+	e.srv.StartTLS()
 	t.Cleanup(func() {
 		e.srv.CloseClientConnections() // the pages' event streams never end on their own
 		e.srv.Close()
@@ -185,7 +194,8 @@ type person struct {
 func newPerson(t *testing.T) *person {
 	t.Helper()
 	ctx, cancelAlloc := chromedp.NewExecAllocator(context.Background(),
-		append(chromedp.DefaultExecAllocatorOptions[:], chromedp.Flag("disable-extensions", true))...)
+		append(chromedp.DefaultExecAllocatorOptions[:], chromedp.Flag("disable-extensions", true),
+			chromedp.Flag("ignore-certificate-errors", true))...)
 	ctx, cancelBrowser := chromedp.NewContext(ctx)
 	ctx, cancelTimeout := context.WithTimeout(ctx, 120*time.Second)
 	t.Cleanup(func() { cancelTimeout(); cancelBrowser(); cancelAlloc() })
@@ -400,7 +410,7 @@ func TestArchitectChannelInTheWebUI_EndToEnd(t *testing.T) {
 			wording = r.ID
 		}
 	}
-	res, err := http.Post(e.url("/api/respond_review_request"), "application/json", strings.NewReader(`{"review_id":"`+wording+`","decision":"approved","note":""}`))
+	res, err := e.srv.Client().Post(e.url("/api/respond_review_request"), "application/json", strings.NewReader(`{"review_id":"`+wording+`","decision":"approved","note":""}`))
 	if err != nil || res.StatusCode != http.StatusOK {
 		t.Fatalf("approve elsewhere: %v %v", err, res)
 	}
@@ -438,22 +448,30 @@ func TestArchitectChannelInTheWebUI_EndToEnd(t *testing.T) {
 		t.Errorf("the board still shows %q", got)
 	}
 
-	// Keyboard only on the task page: J and K walk the architect's group.
-	p.run(t, "J and K",
+	// Keyboard only on the task page: J and K walk the architect's group,
+	// past the delegates' live terminals, at desktop and phone widths. A
+	// terminal takes the focus only when the person asks for it.
+	//
+	// Each delegate's screen gets a few lines first, so the steps can tell
+	// its snapshot has been drawn.
+	for _, id := range []string{server, webUI} {
+		term, err := e.orch.AttachTerminal(e.ctx, id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := term.Paste("ready\r"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	p.run(t, "open the task",
 		chromedp.Navigate(task),
 		// Alpine has taken over the list: the server's copy is gone.
 		poll(`!!document.querySelector('[role=listbox] .row[data-role=architect][aria-selected=true]') && !document.querySelector('[role=listbox] [data-ssr]')`),
-		chromedp.Focus(`[role=listbox]`, chromedp.ByQuery),
-		chromedp.KeyEvent("j"),
-		poll(`document.querySelector('[role=listbox] .row[aria-selected=true]')?.dataset.role === 'delegate'`),
-		// A delegate runs in a terminal on the server, and the terminal takes
-		// the focus when its first screen arrives (sessionsTerminal). The person
-		// comes back to the list before walking on.
-		poll(`!!document.activeElement?.closest('.terminal')`),
-		chromedp.Focus(`[role=listbox]`, chromedp.ByQuery),
-		chromedp.KeyEvent("k"),
-		poll(`document.querySelector('[role=listbox] .row[aria-selected=true]')?.dataset.role === 'architect'`),
 	)
+	for _, size := range [][2]int64{{1280, 860}, {390, 844}} {
+		walkWithKeys(t, p, server, webUI, size)
+	}
+	focusOnRequest(t, p, server)
 
 	if banners := p.text(t, `[...document.querySelectorAll('.banner[role=alert]')].map(b => b.innerText).join(' | ')`); banners != "" {
 		t.Errorf("an error banner shows: %s", banners)
@@ -461,4 +479,157 @@ func TestArchitectChannelInTheWebUI_EndToEnd(t *testing.T) {
 	if len(p.errors) > 0 {
 		t.Errorf("JS errors: %v", p.errors)
 	}
+}
+
+// Queries for the keyboard focus steps: the Agent tab's terminal, and the
+// App tab's run terminal.
+const (
+	listFocused     = `document.activeElement === document.querySelector('[role=listbox]')`
+	sessionTerminal = `document.querySelector('.terminal:not([aria-label=Application] .terminal)')`
+	runTerminal     = `document.querySelector('[aria-label=Application] .terminal')`
+	selectedRole    = `document.querySelector('[role=listbox] .row[aria-selected=true]')?.dataset.role`
+	selectedID      = `document.querySelector('[role=listbox] .row[aria-selected=true]')?.dataset.sessionId`
+)
+
+// clickTab clicks the session detail's tab whose label starts with label.
+func clickTab(label string) chromedp.Action {
+	return chromedp.Evaluate(fmt.Sprintf(`[...document.querySelectorAll('[role=tab]')].find(b => b.textContent.trim().startsWith(%q)).click()`, label), nil)
+}
+
+// terminalDrawn waits for the selected session's terminal to be live and to
+// have drawn its first snapshot.
+func terminalDrawn(sessionID string) chromedp.Action {
+	return chromedp.Tasks{
+		poll(fmt.Sprintf(`%s === %q && %s?.querySelector('.status')?.dataset.state === 'running'`, selectedID, sessionID, sessionTerminal)),
+		// A fresh screen has its cursor on the first row; the snapshot puts
+		// it below the delegate's lines. xterm keeps its input under the
+		// cursor, focused or not.
+		poll(`parseFloat(` + sessionTerminal + `?.querySelector('.xterm-helper-textarea')?.style.top ?? '0') > 0`),
+	}
+}
+
+// walkWithKeys walks the task's list with J and K, from the architect over
+// both delegates and back, keeping the focus in the list while each
+// delegate's terminal comes up live and draws (contract rules F1, F4).
+func walkWithKeys(t *testing.T, p *person, first, second string, size [2]int64) {
+	t.Helper()
+	at := fmt.Sprintf(" at %dx%d", size[0], size[1])
+	p.run(t, "focus the list"+at,
+		chromedp.EmulateViewport(size[0], size[1]),
+		poll(selectedRole+` === 'architect'`),
+		chromedp.Focus(`[role=listbox]`, chromedp.ByQuery),
+	)
+	order := p.text(t, `[...document.querySelectorAll('[role=listbox] .row[data-role=delegate]')].map(r => r.dataset.sessionId).join(' ')`)
+	if order != first+" "+second && order != second+" "+first {
+		t.Fatalf("delegates%s: %q", at, order)
+	}
+	delegates := strings.Fields(order)
+	for i, id := range delegates {
+		p.run(t, fmt.Sprintf("J to delegate %d%s", i+1, at),
+			chromedp.KeyEvent("j"),
+			terminalDrawn(id),
+		)
+		if !p.truth(t, listFocused) {
+			t.Fatalf("J to delegate %d%s: its terminal took the focus from the list (active: %s)", i+1, at, p.text(t, `document.activeElement?.className ?? ''`))
+		}
+	}
+	p.run(t, "K back to delegate 1"+at,
+		chromedp.KeyEvent("k"),
+		terminalDrawn(delegates[0]),
+	)
+	if !p.truth(t, listFocused) {
+		t.Fatalf("K back to delegate 1%s: its terminal took the focus from the list", at)
+	}
+	p.run(t, "K back to the architect"+at,
+		chromedp.KeyEvent("k"),
+		poll(selectedRole+` === 'architect'`),
+	)
+	if !p.truth(t, listFocused) {
+		t.Fatalf("K back to the architect%s: the list lost the focus", at)
+	}
+}
+
+// focusOnRequest checks that the terminal takes the focus when the person
+// asks for it, and only then (contract rule F2): the App tab's run terminal
+// draws without taking it and ignores the Agent tab's request; switching
+// App → Agent, opening the Agent tab already in front, and clicking the
+// screen each focus the session's terminal and nothing else.
+func focusOnRequest(t *testing.T, p *person, delegate string) {
+	t.Helper()
+	// Every focus() on a terminal is recorded: which terminal took it.
+	spy := `(() => {
+		window.__terminalFocus = [];
+		const focus = HTMLElement.prototype.focus;
+		HTMLElement.prototype.focus = function (...args) {
+			if (this.closest?.('.terminal')) window.__terminalFocus.push(this.closest('[aria-label=Application]') ? 'run' : 'session');
+			return focus.apply(this, args);
+		};
+	})()`
+	focused := func() string { return p.text(t, `window.__terminalFocus.join(' ')`) }
+	inSession := `!!document.activeElement?.closest('.terminal') && !document.activeElement.closest('[aria-label=Application]')`
+
+	p.run(t, "select the delegate, from the list",
+		chromedp.EmulateViewport(1280, 860),
+		chromedp.Evaluate(spy, nil),
+		chromedp.Evaluate(fmt.Sprintf(`document.querySelector('[role=listbox] .row[data-session-id=%q]').click()`, delegate), nil),
+		terminalDrawn(delegate),
+	)
+	if got := focused(); got != "" {
+		t.Fatalf("selecting a session focused a terminal: %q", got)
+	}
+
+	p.run(t, "run the app from the App tab",
+		clickTab("App"),
+		// Typed once the saved commands have loaded and the field is there;
+		// Run is enabled once the command has reached the panel.
+		poll(`(() => {
+			const input = document.querySelector('[aria-label="Command to run"]');
+			if (!input) return false;
+			const command = "printf 'app is up\\n'; sleep 30";
+			if (input.value !== command) {
+				input.value = command;
+				input.dispatchEvent(new Event('input', { bubbles: true }));
+			}
+			return ![...document.querySelectorAll('[aria-label=Application] button')].find(b => b.textContent.trim() === 'Run').disabled;
+		})()`),
+		chromedp.Evaluate(`[...document.querySelectorAll('[aria-label=Application] button')].find(b => b.textContent.trim() === 'Run').click()`, nil),
+		poll(runTerminal+`?.querySelector('.xterm-rows')?.textContent.includes('app is up')`),
+		// The Agent tab's request, with no session terminal mounted: the run
+		// terminal does not answer it.
+		chromedp.Evaluate(`window.dispatchEvent(new CustomEvent('terminal-focus-requested'))`, nil),
+	)
+	if got := focused(); got != "" {
+		t.Fatalf("the run terminal took the focus on its own: %q", got)
+	}
+
+	p.run(t, "App → Agent focuses the freshly mounted terminal",
+		clickTab("Agent"),
+		poll(inSession),
+	)
+	if got := focused(); got != "session" {
+		t.Fatalf("App → Agent: focus() ran on %q, want the session terminal once", got)
+	}
+
+	p.run(t, "the Agent tab already in front focuses it again",
+		chromedp.Focus(`[role=listbox]`, chromedp.ByQuery),
+		poll(listFocused),
+		clickTab("Agent"),
+		poll(inSession),
+	)
+	p.run(t, "a click on the screen focuses it",
+		chromedp.Focus(`[role=listbox]`, chromedp.ByQuery),
+		poll(listFocused),
+		chromedp.Click(`.terminal .screen`, chromedp.ByQuery),
+		poll(inSession),
+	)
+	if got := focused(); strings.Contains(got, "run") {
+		t.Fatalf("the run terminal took the focus: %q", got)
+	}
+}
+
+func (p *person) truth(t *testing.T, js string) bool {
+	t.Helper()
+	var b bool
+	p.run(t, "read "+js, chromedp.Evaluate(js, &b))
+	return b
 }

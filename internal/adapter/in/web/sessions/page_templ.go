@@ -799,7 +799,7 @@ func terminalPane() templ.Component {
 			templ_7745c5c3_Var33 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 65, "<div class=\"[ terminal ]\" x-data=\"sessionsTerminal(sid)\" data-scroll><div class=\"[ screen ]\" x-ref=\"screen\" x-on:click=\"focus\"></div><div class=\"[ bar ]\"><span class=\"[ status ]\" x-bind:data-state=\"statusState\" x-text=\"stateWord\">connecting</span> <span class=\"[ color-ink-faint truncate grow ]\" x-text=\"title\"></span><template x-if=\"canReconnect\"><button type=\"button\" class=\"[ button ]\" data-size=\"sm\" x-on:click=\"reconnect\">Reconnect</button></template></div></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 65, "<div class=\"[ terminal ]\" x-data=\"sessionsTerminal(sid)\" x-on:terminal-focus-requested.window=\"focus\" data-scroll><div class=\"[ screen ]\" x-ref=\"screen\" x-on:click=\"focus\"></div><div class=\"[ bar ]\"><span class=\"[ status ]\" x-bind:data-state=\"statusState\" x-text=\"stateWord\">connecting</span> <span class=\"[ color-ink-faint truncate grow ]\" x-text=\"title\"></span><template x-if=\"canReconnect\"><button type=\"button\" class=\"[ button ]\" data-size=\"sm\" x-on:click=\"reconnect\">Reconnect</button></template></div></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
