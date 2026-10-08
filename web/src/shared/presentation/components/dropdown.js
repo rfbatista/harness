@@ -131,6 +131,7 @@ export class ListboxSelect {
   destroy() {
     this.close();
     this.observer.disconnect();
+    this.watch.restore();
     this.trigger.remove();
     this.popup.remove();
     this.select.hidden = false;

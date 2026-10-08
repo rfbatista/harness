@@ -71,3 +71,41 @@ test("watchValue notices value, selectedIndex and option.selected writes", async
   await Promise.resolve();
   assert.equal(calls, 3);
 });
+
+test("watchValue delegates to the native accessors and restore() takes the wrappers off", async () => {
+  const select = selectOf(`<option value="a">a</option><option value="b">b</option>`);
+  let calls = 0;
+  const w = watchValue(select, () => calls++);
+  assert.ok(Object.hasOwn(select, "value") && Object.hasOwn(select.options[0], "selected"));
+  select.selectedIndex = 1;
+  assert.equal(select.value, "b", "the native getter answers");
+  assert.equal(select.options[1].selected, true);
+  w.restore();
+  assert.ok(!Object.hasOwn(select, "value") && !Object.hasOwn(select, "selectedIndex") && !Object.hasOwn(select.options[0], "selected"));
+  await Promise.resolve();
+  calls = 0;
+  select.value = "a";
+  await Promise.resolve();
+  assert.equal(calls, 0, "no longer watched");
+  assert.equal(select.value, "a");
+});
+
+test("watchValue notices a form reset once it has run", async () => {
+  const form = document.createElement("form");
+  form.innerHTML = `<select><option value="a">a</option><option value="b" selected>b</option></select>`;
+  document.body.append(form);
+  const select = form.querySelector("select");
+  const seen = [];
+  const w = watchValue(select, () => seen.push(select.value));
+  try {
+    select.options[0].selected = true;
+    await new Promise((r) => setTimeout(r, 0));
+    seen.length = 0;
+    form.reset();
+    await new Promise((r) => setTimeout(r, 0));
+    assert.deepEqual(seen, ["b"], "after the reset, the default option");
+  } finally {
+    w.restore();
+    form.remove();
+  }
+});

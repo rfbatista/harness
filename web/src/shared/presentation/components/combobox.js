@@ -176,6 +176,7 @@ export class Combobox {
   destroy() {
     this.close();
     this.observer.disconnect();
+    this.watch?.restore();
     this.field.remove();
     this.popup.remove();
     if (this.select) {

@@ -40,10 +40,12 @@ export function selectedValues(select) {
  * Calls `onChange` (once per task) whenever script sets the select's value:
  * `select.value`, `selectedIndex`, or an option's `selected` (which is how
  * Alpine's x-model writes a select). The browser fires no event for those,
- * so the accessors are wrapped on this select and its options only.
+ * so the accessors are wrapped on this select and its options only; each
+ * wrapper calls the native descriptor. A form reset is noticed too (after
+ * the reset has run). restore() takes every wrapper off again.
  * @param {HTMLSelectElement} select
  * @param {() => void} onChange
- * @returns {{ track: () => void }}  call track() after options are added
+ * @returns {{ track: () => void, restore: () => void }}  call track() after options are added
  */
 export function watchValue(select, onChange) {
   let queued = false;
@@ -55,8 +57,11 @@ export function watchValue(select, onChange) {
       onChange();
     });
   };
+  /** @type {[object, string][]} */
+  const wrapped = [];
   const wrap = (target, proto, prop) => {
     if (Object.prototype.hasOwnProperty.call(target, prop)) return;
+    wrapped.push([target, prop]);
     const d = Object.getOwnPropertyDescriptor(proto, prop);
     Object.defineProperty(target, prop, {
       configurable: true,
@@ -75,7 +80,17 @@ export function watchValue(select, onChange) {
     for (const o of select.options) wrap(o, HTMLOptionElement.prototype, "selected");
   };
   track();
-  return { track };
+  // The reset event comes before the reset itself: look once it has run.
+  const form = select.form;
+  const onReset = () => select.ownerDocument.defaultView?.setTimeout(onChange, 0);
+  form?.addEventListener("reset", onReset);
+  return {
+    track,
+    restore() {
+      for (const [target, prop] of wrapped.splice(0)) delete target[prop];
+      form?.removeEventListener("reset", onReset);
+    },
+  };
 }
 
 /**

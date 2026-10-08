@@ -323,3 +323,48 @@ test("the Alpine component builds on init and restores the select on destroy", (
   assert.ok(!root.querySelector("select").hidden);
   root.remove();
 });
+
+test("an x-model write while the list is open moves the check, keeps the active option, and never closes it", async () => {
+  const f = fixture(`<option value="a">alpha</option><option value="b">beta</option><option value="c">gamma</option>`);
+  try {
+    f.c.open();
+    key(f.trigger, "ArrowDown");
+    assert.equal(activeLabel(f.c), "beta");
+    f.select.options[2].selected = true; // Alpine's x-model, from elsewhere on the page
+    await flush();
+    assert.ok(f.c.isOpen);
+    assert.equal(f.c.rows[2].getAttribute("aria-selected"), "true");
+    assert.equal(f.c.rows[0].getAttribute("aria-selected"), "false");
+    assert.equal(activeLabel(f.c), "beta", "the keys stay where they were");
+    assert.equal(f.trigger.querySelector(".value").textContent, "gamma");
+  } finally {
+    f.done();
+  }
+});
+
+test("a form reset puts the trigger back on the default option", async () => {
+  const form = document.createElement("form");
+  form.innerHTML = `<div class="dropdown"><select aria-label="Mode"><option value="">Default</option><option value="arch">Architect</option></select></div>`;
+  document.body.append(form);
+  const c = new ListboxSelect(form.querySelector(".dropdown"), env());
+  try {
+    c.choose(1);
+    assert.equal(c.trigger.querySelector(".value").textContent, "Architect");
+    form.reset();
+    await new Promise((r) => setTimeout(r, 0));
+    await flush();
+    assert.equal(c.select.value, "");
+    assert.equal(c.trigger.querySelector(".value").textContent, "Default");
+  } finally {
+    c.destroy();
+    form.remove();
+  }
+});
+
+test("destroy (x-if / x-for teardown) takes the accessor wrappers off the select", () => {
+  const f = fixture(AGENTS);
+  f.done();
+  assert.ok(!Object.hasOwn(f.select, "value"));
+  assert.ok(!Object.hasOwn(f.select, "selectedIndex"));
+  assert.ok([...f.select.options].every((o) => !Object.hasOwn(o, "selected")));
+});

@@ -401,3 +401,30 @@ test("the Alpine component resolves data-source on its scope", async () => {
     root.remove();
   }
 });
+
+test("an x-model write while open moves the check without closing; a form reset restores the field", async () => {
+  const f = fixture(BRANCHES);
+  try {
+    f.c.open();
+    f.select.querySelector('option[value="main"]').selected = true; // x-model
+    await flush();
+    assert.ok(f.c.isOpen);
+    assert.equal(f.c.rows[1].getAttribute("aria-selected"), "true");
+    assert.equal(f.input.value, "main");
+    f.c.close();
+    f.root.closest("form").reset();
+    await new Promise((r) => setTimeout(r, 0));
+    await flush();
+    assert.equal(f.select.value, "");
+    assert.equal(f.input.value, "The checked-out branch");
+  } finally {
+    f.done();
+  }
+});
+
+test("destroy takes the accessor wrappers off the select", () => {
+  const f = fixture(BRANCHES);
+  f.done();
+  assert.ok(!Object.hasOwn(f.select, "value"));
+  assert.ok([...f.select.options].every((o) => !Object.hasOwn(o, "selected")));
+});
