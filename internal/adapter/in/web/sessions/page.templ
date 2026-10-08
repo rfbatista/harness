@@ -383,15 +383,13 @@ templ appPanel() {
 			</div>
 			<form class="[ cluster ] [ gutter-xs ]" x-on:submit.prevent="start">
 				<label class="[ visually-hidden ]" for="run-choice">Command</label>
-				<select id="run-choice" x-model="choice" x-bind:disabled="busy">
-					<template x-for="c in commands" x-bind:key="c.name">
-						<option x-bind:value="c.name" x-text="c.name"></option>
-					</template>
-					<option value="">Type a command…</option>
-				</select>
-				<template x-if="typing">
-					<input class="[ grow code ]" aria-label="Command to run" autocomplete="off" spellcheck="false" placeholder="make air" x-model="typed"/>
-				</template>
+				<div class="[ dropdown ] [ grow ]" x-data="combobox" data-free-text data-free-text-label="Run “{q}”" data-placeholder="Type a command or pick a saved one" x-on:dropdown-change="commandPicked" x-on:input="commandTyped">
+					<select id="run-choice" x-ref="command" x-bind:disabled="busy">
+						<template x-for="c in commands" x-bind:key="c.name">
+							<option x-bind:value="c.name" x-bind:data-description="c.command" x-text="c.name"></option>
+						</template>
+					</select>
+				</div>
 				<template x-if="canForget">
 					<span class="[ code color-ink-muted truncate grow ]" x-text="chosenCommand"></span>
 				</template>

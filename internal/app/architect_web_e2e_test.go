@@ -583,7 +583,7 @@ func focusOnRequest(t *testing.T, p *person, delegate string) {
 		// Typed once the saved commands have loaded and the field is there;
 		// Run is enabled once the command has reached the panel.
 		poll(`(() => {
-			const input = document.querySelector('[aria-label="Command to run"]');
+			const input = document.querySelector('#run-choice-input');
 			if (!input) return false;
 			const command = "printf 'app is up\\n'; sleep 30";
 			if (input.value !== command) {

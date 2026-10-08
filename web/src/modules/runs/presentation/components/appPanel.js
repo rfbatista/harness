@@ -1,5 +1,6 @@
 // A session's App panel: run the repository's application from the session's
-// worktree and watch it. Pick a saved run command or type one; the run's
+// worktree and watch it. Pick a saved run command or type one (one Combobox
+// with free text: saved commands are its suggestions); the run's
 // terminal (a run terminal, mounted per run) shows its output live, colors and
 // all, and takes keys, so Ctrl+C reaches the app. A typed command can be saved
 // for the repository under a name.
@@ -47,6 +48,7 @@ export const appPanel = ({ gateway }) => (panel = {}) => ({
       this.commands = commands;
       this.runs = runs;
       if (commands.length > 0) this.choice = commands[0].name;
+      this.showChoice();
       this.runId = preferredRun(runs)?.id ?? "";
     } catch (err) {
       this.error = describeError(err);
@@ -123,6 +125,33 @@ export const appPanel = ({ gateway }) => (panel = {}) => ({
 
   // --- actions ---
 
+  /** The command field's dropdown-change: a saved command, or typed text (created). */
+  commandPicked(e) {
+    const { value, created } = e.detail;
+    if (!created && this.commands.some((c) => c.name === value)) {
+      this.choice = value;
+      this.typed = "";
+    } else {
+      this.choice = TYPED;
+      this.typed = value;
+    }
+  },
+
+  /** Typing in the command field: the text is the command to run, as typed. */
+  commandTyped(e) {
+    if (!(e.target instanceof HTMLInputElement) || e.target.type === "hidden") return;
+    this.choice = TYPED;
+    this.typed = e.target.value;
+  },
+
+  /** Puts the command field on the chosen saved command once its option exists. */
+  showChoice() {
+    this.$nextTick(() => {
+      const select = this.$refs.command;
+      if (select && !this.typing) select.value = this.choice;
+    });
+  },
+
   async start() {
     if (this.cannotRun) return;
     const what = this.typing ? { command: this.typed } : { name: this.choice };
@@ -185,6 +214,7 @@ export const appPanel = ({ gateway }) => (panel = {}) => ({
       this.choice = saved.name;
       this.typed = "";
       this.saveName = "";
+      this.showChoice();
       this.notice = `Saved “${saved.name}” for this repository.`;
     } catch (err) {
       this.error = describeError(err);
@@ -203,6 +233,7 @@ export const appPanel = ({ gateway }) => (panel = {}) => ({
       await gateway.deleteCommand(this.repositoryId, name);
       this.commands = this.commands.filter((c) => c.name !== name);
       this.choice = this.commands[0]?.name ?? TYPED;
+      this.showChoice();
       this.notice = `Removed “${name}”.`;
     } catch (err) {
       this.error = describeError(err);
