@@ -41,6 +41,7 @@
       overflow: auto;
       overscroll-behavior: contain;
       &:empty { display: none; }
+      & > .skeleton { margin: var(--space-s); inline-size: auto; }
     }
 
     & .group {
@@ -91,6 +92,9 @@
         &::after { border-color: CanvasText; }
       }
     }
+
+    /* When some rows have a dot, every label lines up after its column. */
+    & > [role="listbox"]:has(.status) [role="option"] { grid-template-columns: [lead] 1rem [text] minmax(0, 1fr) [meta] auto [check] 0.75rem; }
 
     /* Several values: a leading box instead of the trailing check. */
     & > [aria-multiselectable="true"] [role="option"] {

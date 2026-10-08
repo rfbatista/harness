@@ -152,7 +152,8 @@ export class ListboxSelect {
   readSelect() {
     const activeValue = this.options[this.active]?.value;
     const oldIndex = this.active;
-    this.options = readOptions(this.select);
+    // An empty <option value=""></option> is only a placeholder stub: not a row.
+    this.options = readOptions(this.select).filter((o) => o.value !== "" || o.label !== "");
     if (this.isOpen) {
       this.renderList();
       // Live data: keep the active option by value; if it went, the next one.
@@ -297,7 +298,7 @@ export class ListboxSelect {
     const option = this.options[i];
     if (!option || option.disabled) return;
     this.close({ refocus });
-    if (option.value === this.select.value && this.select.selectedIndex === i) return;
+    if (option.value === this.select.value && this.shown.value === option.value) return;
     this.shown = { value: option.value, label: option.label };
     commitSelect(this.select, [option.value]);
     this.root.dispatchEvent(
@@ -308,9 +309,8 @@ export class ListboxSelect {
   clear() {
     if (this.disabled || (this.select.value === "" && this.shown.value === "")) return;
     this.shown = { value: "", label: "" };
-    const empty = this.options.findIndex((o) => o.value === "");
-    if (empty >= 0) this.select.selectedIndex = empty;
-    commitSelect(this.select, empty >= 0 ? [""] : []);
+    const hasEmpty = [...this.select.options].some((o) => o.value === "");
+    commitSelect(this.select, hasEmpty ? [""] : []);
     this.sync();
     this.root.dispatchEvent(new CustomEvent("dropdown-change", { bubbles: true, detail: { value: "", option: null } }));
     this.trigger.focus();

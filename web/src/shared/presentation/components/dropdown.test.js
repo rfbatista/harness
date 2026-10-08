@@ -206,12 +206,15 @@ test("live options keep the active option by value and never change the value", 
 });
 
 test("clearable: × and Delete clear to the placeholder", () => {
-  const f = fixture(`<option value="">None</option><option value="a">alpha</option>`, { label: "Owner" });
+  const f = fixture(`<option value=""></option><option value="a">alpha</option>`, { label: "Owner" });
   f.root.dataset.clearable = "";
   f.root.dataset.placeholder = "Choose an owner…";
   try {
     f.select.value = "a";
     f.c.sync();
+    f.c.open();
+    assert.deepEqual(f.c.rows.map((r) => r.querySelector(".label").textContent), ["alpha"], "an empty placeholder option is no row");
+    f.c.close();
     const clear = f.trigger.querySelector(".clear");
     assert.equal(clear.getAttribute("aria-label"), "Clear Owner");
     assert.equal(clear.tabIndex, -1);
