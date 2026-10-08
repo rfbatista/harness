@@ -54,6 +54,7 @@ import "../src/modules/tasks/presentation/statusChange.test.js";
 import "../src/screen-theme.test.js";
 import "../src/shared/infrastructure/api.test.js";
 import "../src/shared/infrastructure/feed.test.js";
+import "../src/shared/presentation/components/combobox.test.js";
 import "../src/shared/presentation/components/dropdown.test.js";
 import "../src/shared/presentation/components/options.test.js";
 import "../src/shared/presentation/components/popup.test.js";

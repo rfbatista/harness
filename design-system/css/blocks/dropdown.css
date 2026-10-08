@@ -40,6 +40,7 @@
       &:is([aria-disabled="true"], :has(input:disabled)) { background: var(--color-panel); color: var(--color-ink-faint); --_chevron: var(--color-ink-faint); cursor: not-allowed; }
 
       & > .status { flex-shrink: 0; }
+      & > :is(.chips, .ends) { display: contents; }
       & > .value { flex: 1 1 0; min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
       & > .placeholder { flex: 1 1 0; min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--color-ink-faint); }
       & > input {
