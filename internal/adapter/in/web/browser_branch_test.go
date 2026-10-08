@@ -86,6 +86,8 @@ func TestNewSessionBranchesOffTheChosenBranch(t *testing.T) {
 		pressEnter(),
 		chromedp.Poll(`document.querySelector('#new-session-base').value === 'origin/release'`, nil, chromedp.WithPollingTimeout(5*time.Second)),
 		chromedp.Evaluate(`document.querySelector('#new-session-base-input').value`, &shown),
+		// Permissions is a radio group: all three choices in sight.
+		chromedp.Evaluate(`document.querySelector('#new-session-permissions-all').click()`, nil),
 		clickButton(`main form`, "Start session"),
 		chromedp.Poll(`!document.querySelector('form[x-data^=sessionsNewSession]')`, nil, chromedp.WithPollingTimeout(5*time.Second)),
 	)
@@ -107,7 +109,7 @@ func TestNewSessionBranchesOffTheChosenBranch(t *testing.T) {
 	}
 	api.mu.Lock()
 	defer api.mu.Unlock()
-	if api.started["base_branch"] != "origin/release" || api.started["repository_id"] != "r1" {
+	if api.started["base_branch"] != "origin/release" || api.started["repository_id"] != "r1" || api.started["auto_accept"] != "all" {
 		t.Errorf("start request = %v", api.started)
 	}
 	if e := errs.all(); len(e) > 0 {

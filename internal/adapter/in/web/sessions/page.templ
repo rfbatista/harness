@@ -325,14 +325,22 @@ templ newSessionForm(form NewSessionForm) {
 				</div>
 				<span class="[ hint ]" x-text="baseHint"></span>
 			</div>
-			<div class="[ field ]">
-				<label for="new-session-permissions">Permissions</label>
-				<select id="new-session-permissions" x-model="autoAccept">
-					<option value="off">Ask me in the terminal</option>
-					<option value="edits">Accept file edits</option>
-					<option value="all">Accept everything</option>
-				</select>
-			</div>
+			<fieldset class="[ field ]">
+				<legend>Permissions</legend>
+				<div class="[ field ]" data-inline>
+					<input type="radio" id="new-session-permissions-off" name="new-session-permissions" value="off" x-model="autoAccept"/>
+					<label for="new-session-permissions-off">Ask me in the terminal</label>
+				</div>
+				<div class="[ field ]" data-inline>
+					<input type="radio" id="new-session-permissions-edits" name="new-session-permissions" value="edits" x-model="autoAccept"/>
+					<label for="new-session-permissions-edits">Accept file edits</label>
+				</div>
+				<div class="[ field ]" data-inline>
+					<input type="radio" id="new-session-permissions-all" name="new-session-permissions" value="all" x-model="autoAccept" aria-describedby="new-session-permissions-all-hint"/>
+					<label for="new-session-permissions-all">Accept everything</label>
+				</div>
+				<span class="[ hint ]" id="new-session-permissions-all-hint">Accept everything runs every command and edit without asking you.</span>
+			</fieldset>
 		</div>
 		<template x-if="error">
 			<div class="[ banner ]" data-tone="danger" role="alert">

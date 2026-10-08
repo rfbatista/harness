@@ -338,7 +338,7 @@ func TestTaskPageListsItsSessionsBesideTheDetail(t *testing.T) {
 		`<option value="" data-description="claude with no agent definition">Plain claude</option>`,
 		`<option value="backend">Backend dev</option>`,
 		`<option value="r-kit">harnesskit</option>`,
-		`<option value="edits">Accept file edits</option>`,
+		`<label for="new-session-permissions-edits">Accept file edits</label>`,
 		`x-on:click="askDelete"`,
 		`x-on:click="deleteSelected"`,
 		`"agent_names":{`,
