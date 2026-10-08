@@ -1,0 +1,134 @@
+/*
+ * Popup — the floating surface the scripted dropdowns open (Listbox select,
+ * Combobox, Menu button). It lives in the top layer (popover="manual"), so no
+ * container clips it; the component sets its top, left and min-inline-size.
+ * <div class="popup" popover="manual"><div role="listbox">
+ *   <div role="group"><div class="group">…</div>
+ *   <div role="option" aria-selected data-active>
+ *     <span class="status" data-dot-only></span><span class="text"><span class="label">…</span>
+ *     <span class="description">…</span></span><span class="meta">…</span></div></div></div>
+ *   <div class="message">…</div><footer>…</footer></div>
+ * Exceptions: data-placement="top"; on options aria-selected, data-active
+ * (mirrors aria-activedescendant), aria-disabled; on the listbox
+ * aria-multiselectable, aria-busy; .message[data-tone="danger"].
+ * The phone form (data-sheet) is sheet.css.
+ */
+
+@layer blocks {
+  .popup {
+    position: fixed;
+    inset: auto;
+    display: flex;
+    flex-direction: column;
+    margin: 0;
+    padding: 0;
+    max-inline-size: min(24rem, calc(100vw - 2 * var(--space-l)));
+    border: var(--border-width) solid var(--color-line-strong);
+    border-radius: var(--radius-md);
+    background: var(--color-raised);
+    color: var(--color-ink);
+    box-shadow: var(--shadow-float);
+    overflow: hidden;
+    animation: popup-in var(--duration-quick) var(--ease-out);
+
+    &:not(:popover-open) { display: none; }
+    &[data-placement="top"] { animation-name: popup-in-up; }
+    & > header { display: none; }
+
+    & > [role="listbox"] {
+      max-block-size: calc(var(--size-control-md) * 8.5 + var(--space-2xs));
+      padding: var(--space-2xs);
+      overflow: auto;
+      overscroll-behavior: contain;
+      &:empty { display: none; }
+    }
+
+    & .group {
+      padding: var(--space-xs) var(--space-s) var(--space-2xs);
+      font-size: var(--text-xs);
+      font-weight: var(--weight-medium);
+      color: var(--color-ink-muted);
+    }
+
+    & [role="option"] {
+      display: grid;
+      grid-template-columns: [lead] auto [text] minmax(0, 1fr) [meta] auto [check] 0.75rem;
+      align-items: center;
+      column-gap: var(--space-s);
+      min-block-size: var(--size-control-md);
+      padding: var(--space-2xs) var(--space-s);
+      border-radius: var(--radius-sm);
+      color: var(--color-ink-muted);
+      cursor: pointer;
+
+      & > .status { grid-column: lead; inline-size: 1rem; justify-content: center; }
+      & > .text { grid-column: text; display: flex; flex-direction: column; min-inline-size: 0; }
+      & :is(.label, .description) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      & .description { font-size: var(--text-xs); color: var(--color-ink-faint); }
+      & > .meta { grid-column: meta; font-size: var(--text-xs); color: var(--color-ink-faint); }
+      & mark { background: none; color: var(--color-ink); font-weight: var(--weight-bold); text-decoration: underline 1px; text-underline-offset: 0.18em; }
+
+      /* The check: drawn, signal, only on the chosen option. */
+      &::after {
+        content: "";
+        grid-column: check;
+        justify-self: center;
+        inline-size: 0.3125rem;
+        block-size: 0.625rem;
+        border-inline-end: var(--border-icon-width) solid var(--color-signal);
+        border-block-end: var(--border-icon-width) solid var(--color-signal);
+        rotate: 45deg;
+        translate: 0 -10%;
+        opacity: 0;
+      }
+
+      &[data-active] { background: var(--color-hover); color: var(--color-ink); box-shadow: inset 0 0 0 1px var(--color-line-strong); }
+      &[aria-selected="true"] { background: var(--color-selected); color: var(--color-ink); &::after { opacity: 1; } }
+      &[aria-disabled="true"] { opacity: 0.45; cursor: not-allowed; }
+
+      @media (forced-colors: active) {
+        &[data-active] { outline: 1px solid Highlight; outline-offset: -1px; }
+        &::after { border-color: CanvasText; }
+      }
+    }
+
+    /* Several values: a leading box instead of the trailing check. */
+    & > [aria-multiselectable="true"] [role="option"] {
+      grid-template-columns: [check] 0.875rem [lead] auto [text] minmax(0, 1fr) [meta] auto;
+      &::before {
+        content: ""; grid-column: check; grid-row: 1;
+        inline-size: 0.875rem; block-size: 0.875rem;
+        border: var(--border-width) solid var(--color-line-control);
+        border-radius: var(--radius-xs);
+        background: var(--color-raised);
+      }
+      &::after { grid-row: 1; border-color: var(--color-signal-ink); block-size: 0.5rem; inline-size: 0.25rem; }
+      &[aria-selected="true"] { background: none; }
+      &[aria-selected="true"]::before { background: var(--color-signal); border-color: var(--color-signal); }
+      &[aria-selected="true"][data-active] { background: var(--color-hover); }
+    }
+
+    /* Empty, no results, loading words, error with Retry. */
+    & > .message {
+      display: flex; align-items: center; gap: var(--space-s);
+      padding: var(--space-s) var(--space-m);
+      font-size: var(--text-sm);
+      color: var(--color-ink-muted);
+      &[data-tone="danger"] { color: var(--color-danger); }
+      & > .button { margin-inline-start: auto; }
+    }
+
+    & > [role="listbox"] + .message { border-block-start: var(--border-width) solid var(--color-line); }
+
+    & > footer {
+      display: flex; align-items: center; justify-content: space-between; gap: var(--space-s);
+      padding: var(--space-2xs) var(--space-2xs) var(--space-2xs) var(--space-s);
+      border-block-start: var(--border-width) solid var(--color-line);
+      font-size: var(--text-xs);
+      color: var(--color-ink-faint);
+    }
+  }
+
+  @keyframes popup-in { from { opacity: 0; translate: 0 calc(-1 * var(--space-2xs)); } }
+  @keyframes popup-in-up { from { opacity: 0; translate: 0 var(--space-2xs); } }
+}

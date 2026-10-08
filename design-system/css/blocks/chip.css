@@ -1,0 +1,41 @@
+/*
+ * Chip — one chosen value in a multiple Combobox, with its × to remove it.
+ * <span class="chip">design<button type="button" aria-label="Remove design">×</button></span>
+ * Exceptions: data-active (the chip the keyboard is on), data-more ("+N more",
+ * no fill and no ×).
+ */
+
+@layer blocks {
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-3xs);
+    block-size: 1.375rem;
+    padding-inline: var(--space-xs) var(--space-3xs);
+    border: var(--border-width) solid var(--color-line);
+    border-radius: var(--radius-xs);
+    background: var(--color-panel);
+    color: var(--color-ink);
+    font-size: var(--text-sm);
+    white-space: nowrap;
+
+    & > button {
+      display: inline-grid;
+      place-items: center;
+      inline-size: 1rem;
+      block-size: 1rem;
+      padding: 0;
+      border: 0;
+      border-radius: var(--radius-xs);
+      background: none;
+      color: var(--color-ink-faint);
+      line-height: 1;
+      cursor: pointer;
+
+      &:hover { background: var(--color-hover); color: var(--color-ink); }
+    }
+
+    &[data-active] { outline: var(--border-focus-width) solid var(--color-focus); outline-offset: 1px; }
+    &[data-more] { padding-inline-end: var(--space-xs); color: var(--color-ink-muted); background: none; }
+  }
+}
