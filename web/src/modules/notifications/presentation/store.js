@@ -86,11 +86,17 @@ export function notificationsStore({ gateway, alerts, prefs, clock, navigate, an
 
     /**
      * Starts following, once per page.
-     * @param {import("../domain/notification.js").Page | null} seed  the server's first paint, or null when it had none
+     * @param {unknown} rawSeed  the server's first paint (#notifications-seed), or null when it had none
      */
-    start(seed) {
+    start(rawSeed) {
       if (started) return;
       started = true;
+      let seed = null;
+      try {
+        seed = rawSeed ? gateway.fromSeed(rawSeed) : null;
+      } catch {
+        // An unreadable seed is no seed: the first read fills the count.
+      }
       baseTitle = (doc?.title ?? "").replace(/^\(\d+\+?\) /, "");
       const permission = alerts.permission();
       if (permission === "unsupported") this.alerts = "unsupported";

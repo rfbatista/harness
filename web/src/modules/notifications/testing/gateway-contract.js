@@ -6,7 +6,7 @@ import { Codes } from "../../../shared/domain/errors.js";
 import { FeedStatus } from "../../../shared/domain/feed.js";
 import { flush } from "../../../shared/testing/doubles.js";
 import { assert, test } from "../../../shared/testing/test.js";
-import { at, makeNotification } from "./fixtures.js";
+import { at, makeNotification, notificationDTO } from "./fixtures.js";
 
 /**
  * @typedef {object} Subject
@@ -92,6 +92,14 @@ export function notificationGatewayContract(name, makeSubject) {
     await assert.rejects(gateway.markRead({ ids: ["ghost"] }), Codes.NOTIFICATION_NOT_FOUND);
     await assert.rejects(gateway.markRead({}), Codes.INVALID_INPUT);
     assert.equal((await gateway.list({})).unreadCount, 2, "a refused read changes nothing");
+  });
+
+  contract("decodes the first paint's seed, the GET's shape; a bad one is BAD_RESPONSE", () => {
+    const { gateway } = makeSubject({});
+    const page = gateway.fromSeed({ notifications: [notificationDTO(makeNotification({ id: "s1" }))], unread_count: 4, next_before: "c" });
+    assert.deepEqual([page.notifications.map((n) => n.id), page.unreadCount, page.nextBefore], [["s1"], 4, "c"]);
+    assert.ok(page.notifications[0].createdAt instanceof Date);
+    assert.throws(() => gateway.fromSeed({ unread_count: 1 }), Codes.BAD_RESPONSE);
   });
 
   contract("follow reports live, streams what is created, read and resolved with the count, and stops when closed", async () => {

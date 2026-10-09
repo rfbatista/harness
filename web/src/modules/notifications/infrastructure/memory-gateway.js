@@ -6,6 +6,7 @@
 import { Codes, StructuredError } from "../../../shared/domain/errors.js";
 import { FeedStatus } from "../../../shared/domain/feed.js";
 import { isUnread, markedRead, matches, upsert } from "../domain/notification.js";
+import { toPage } from "./dto.js";
 
 const MAX_LIMIT = 200;
 const DEFAULT_LIMIT = 50;
@@ -66,6 +67,8 @@ export function memoryNotifications({ notifications = [], now = () => new Date()
       await beforeAnswer();
       return change;
     },
+
+    fromSeed: toPage,
 
     follow(onChange, onStatus) {
       const follower = { onChange };

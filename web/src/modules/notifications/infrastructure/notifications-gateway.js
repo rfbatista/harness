@@ -25,6 +25,8 @@ export function notificationsGateway(api, feed) {
       return toReadAnswer(await api.post("/notifications/read", body));
     },
 
+    fromSeed: toPage,
+
     follow(onChange, onStatus) {
       return feed.follow("/notifications/events", {
         onMessage: (dto) => {

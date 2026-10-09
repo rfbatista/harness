@@ -28,6 +28,9 @@
  *           a project. Answers with the ones it changed; ids already read
  *           are not an error. Rejects with NOTIFICATION_NOT_FOUND for an
  *           unknown id, INVALID_INPUT for neither ids nor all.
+ * @property {(seed: unknown) => Page} fromSeed
+ *           Decodes the page the server embedded for the first paint (the
+ *           GET's JSON). Throws BAD_RESPONSE when it cannot be read.
  * @property {(onChange: (change: Change) => void,
  *             onStatus: (status: FeedStatus) => void) => () => void} follow
  *           Every notification created, read or resolved, in every project,
