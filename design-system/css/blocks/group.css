@@ -1,0 +1,98 @@
+/*
+ * Group — one status group of the rail's Tasks nav: a sticky h3 heading and
+ * its rows. The live heading holds a disclosure button; the server copy (and
+ * an empty group) is the bare h3, chevron included.
+ * <section class="group" data-collapsed?>
+ *   <h3><button aria-expanded="true"><svg/><span class="name">Todo</span><span class="count">2</span></button></h3>
+ *   <ul role="list"><li><a>…</a></li> … <li class="more"><details><summary>
+ *     <span class="closed">Show 7 more</span><span class="opened">Show fewer</span></summary><ul>…</ul></details></li></ul>
+ * </section>
+ * Exceptions: data-empty (no tasks: faint, no chevron), data-collapsed (rows
+ * hide except the open task and what needs the person: the peek rule; a row
+ * that keeps focus peeks too, data-peek).
+ */
+
+@layer blocks {
+  .nav .group {
+    & > h3 {
+      position: sticky;
+      inset-block-start: 0;
+      z-index: var(--z-sticky);
+      padding: 0;
+      border-radius: var(--radius-sm);
+      background: var(--_surface);
+      font-size: var(--text-xs);
+      font-weight: var(--weight-bold);
+      line-height: var(--leading-snug);
+      color: var(--color-ink-muted);
+    }
+
+    & > h3:not(:has(> button)),
+    & > h3 > button {
+      display: grid;
+      grid-template-columns: var(--_slot) minmax(0, 1fr) auto;
+      align-items: center;
+      column-gap: var(--space-s);
+      inline-size: 100%;
+      min-block-size: var(--_row);
+      padding-inline: var(--space-s);
+
+      & > svg {
+        grid-column: 1;
+        justify-self: center;
+        inline-size: 0.75rem;
+        block-size: 0.75rem;
+        color: var(--color-ink-faint);
+      }
+      & > .name { grid-column: 2; text-align: start; }
+      & > .count { grid-column: 3; }
+    }
+
+    & > h3 > button {
+      border: 0;
+      border-radius: inherit;
+      background: transparent;
+      color: inherit;
+      font: inherit;
+      cursor: pointer;
+
+      &:hover { background: var(--color-hover); color: var(--color-ink); }
+      &:hover > .count { color: var(--color-ink-muted); }
+      &:focus-visible { outline-offset: calc(var(--border-focus-width) * -1); }
+      /* The turn follows a click only: a group painted collapsed starts turned. */
+      &[data-turns] > svg { transition: rotate var(--duration-quick) var(--ease-out); }
+    }
+    &[data-collapsed] > h3 > svg,
+    & > h3 > button[aria-expanded="false"] > svg { rotate: -90deg; }
+
+    &[data-empty] > h3 { color: var(--color-ink-faint); font-weight: var(--weight-medium); }
+
+    /* Collapsed: rows hide, except the open task and what needs the person. */
+    &[data-collapsed] > ul > li:not(:has(> a:is([aria-current="page"], [data-attention], [data-peek]))) { display: none; }
+
+    & > ul { margin-block-start: var(--space-3xs); }
+
+    /* Done's cap: the rest sit in a <details> after the visible rows. */
+    & .more > details > summary {
+      display: grid;
+      grid-template-columns: var(--_slot) minmax(0, 1fr);
+      column-gap: var(--space-s);
+      align-items: center;
+      min-block-size: var(--_row);
+      padding-inline: var(--space-s);
+      border-radius: var(--radius-sm);
+      color: var(--color-ink-faint);
+      font-size: var(--text-sm);
+      list-style: none;
+      cursor: pointer;
+
+      &::-webkit-details-marker { display: none; }
+      & > span { grid-column: 2; }
+      &:hover { background: var(--color-hover); color: var(--color-ink); }
+      &:focus-visible { outline-offset: calc(var(--border-focus-width) * -1); }
+    }
+    & .more > details[open] > summary > .closed,
+    & .more > details:not([open]) > summary > .opened { display: none; }
+    & .more > details > ul { margin-block-start: var(--space-3xs); }
+  }
+}

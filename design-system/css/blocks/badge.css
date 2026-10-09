@@ -23,7 +23,8 @@
 
     &[data-tone="signal"] { --_tone: var(--color-signal); }
     &[data-tone="success"] { --_tone: var(--color-success); }
-    &[data-tone="attention"] { --_tone: var(--color-attention); }
+    /* Amber text on a fill reads attention-strong (4.5:1 on panel and washes). */
+    &[data-tone="attention"] { --_tone: var(--color-attention-strong); }
     &[data-tone="danger"] { --_tone: var(--color-danger); }
   }
 }

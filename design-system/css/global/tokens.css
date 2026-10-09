@@ -34,6 +34,7 @@
     --size-control-sm: 1.625rem;
     --size-control-md: 2rem;
     --size-row: 2.25rem;
+    --size-nav-row: 1.75rem;
     --size-touch: 2.75rem;
     --size-measure: 68ch;
     --size-sidebar: 15rem;
@@ -87,6 +88,7 @@
     --color-signal-ink: oklch(0.99 0.008 182);
     --color-signal-wash: oklch(0.5 0.095 182 / 0.1);
     --color-attention: oklch(0.52 0.12 65);
+    --color-attention-strong: oklch(0.46 0.11 60);
     --color-attention-wash: oklch(0.75 0.13 75 / 0.16);
     --color-danger: oklch(0.52 0.18 27);
     --color-danger-strong: oklch(0.46 0.17 27);
@@ -120,6 +122,7 @@
       --color-signal-ink: oklch(0.18 0.03 182);
       --color-signal-wash: oklch(0.78 0.1 182 / 0.12);
       --color-attention: oklch(0.81 0.13 75);
+      --color-attention-strong: oklch(0.86 0.11 78);
       --color-attention-wash: oklch(0.81 0.13 75 / 0.13);
       --color-danger: oklch(0.72 0.16 25);
       --color-danger-strong: oklch(0.78 0.13 25);
@@ -153,6 +156,7 @@
     --color-signal-ink: oklch(0.18 0.03 182);
     --color-signal-wash: oklch(0.78 0.1 182 / 0.12);
     --color-attention: oklch(0.81 0.13 75);
+    --color-attention-strong: oklch(0.86 0.11 78);
     --color-attention-wash: oklch(0.81 0.13 75 / 0.13);
     --color-danger: oklch(0.72 0.16 25);
     --color-danger-strong: oklch(0.78 0.13 25);
