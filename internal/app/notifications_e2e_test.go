@@ -11,8 +11,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mark3labs/mcp-go/client"
-	"github.com/mark3labs/mcp-go/client/transport"
 	mcplib "github.com/mark3labs/mcp-go/mcp"
 	"go.uber.org/fx"
 
@@ -233,21 +231,4 @@ func TestNotifications_WiredServer(t *testing.T) {
 			t.Fatal("the log provider delivered with notifications.log.enabled false")
 		}
 	}
-}
-
-func dialTask(t *testing.T, url string) *client.Client {
-	t.Helper()
-	trans, err := transport.NewStreamableHTTP(url)
-	if err != nil {
-		t.Fatal(err)
-	}
-	c := client.NewClient(trans)
-	t.Cleanup(func() { _ = trans.Close() })
-	var req mcplib.InitializeRequest
-	req.Params.ProtocolVersion = mcplib.LATEST_PROTOCOL_VERSION
-	req.Params.ClientInfo = mcplib.Implementation{Name: "e2e", Version: "0.0.1"}
-	if _, err := c.Initialize(context.Background(), req); err != nil {
-		t.Fatal(err)
-	}
-	return c
 }

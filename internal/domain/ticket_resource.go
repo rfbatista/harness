@@ -56,22 +56,40 @@ type TicketResource struct {
 // IsUpload says whether the resource has bytes (anything but a link).
 func (r *TicketResource) IsUpload() bool { return r.Kind != ResourceLink }
 
-// CommentAuthor says who wrote a comment. Only a person does, for now.
+// CommentAuthor says who wrote a comment: the person, or an agent session
+// working on the task.
 type CommentAuthor string
 
-const CommentByPerson CommentAuthor = "person"
+const (
+	CommentByPerson  CommentAuthor = "person"
+	CommentBySession CommentAuthor = "session"
+)
 
 // TicketComment is a plain-text note on a task, in one chronological thread
-// per task.
+// per task. A session's comment keeps who wrote it after the session ends.
 type TicketComment struct {
 	ID        string        `json:"id"`
 	TicketID  string        `json:"ticket_id"`
 	ProjectID string        `json:"project_id"`
 	Author    CommentAuthor `json:"author"`
-	Body      string        `json:"body"`
-	CreatedAt time.Time     `json:"created_at"`
-	UpdatedAt time.Time     `json:"updated_at"` // later than CreatedAt once edited
+	// SessionID is the writing session; "" for the person.
+	SessionID string `json:"session_id"`
+	// AgentName is the session's agent when it wrote: "" for the person or a
+	// plain session, the agent id only when its name could not be looked up.
+	AgentName string    `json:"agent_name"`
+	Body      string    `json:"body"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"` // later than CreatedAt once edited
 }
+
+// WrittenBy says whether session sessionID wrote the comment.
+func (c *TicketComment) WrittenBy(sessionID string) bool {
+	return c.Author == CommentBySession && sessionID != "" && c.SessionID == sessionID
+}
+
+// CommentWriter is the session a comment is written as. It comes from the
+// session-scoped endpoint, never from what the agent sends.
+type CommentWriter struct{ SessionID, AgentName string }
 
 // MediaType is mime's lower-cased type/subtype, without parameters.
 func MediaType(mime string) string {

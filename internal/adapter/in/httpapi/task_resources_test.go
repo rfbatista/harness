@@ -352,6 +352,30 @@ func TestHTTP_Comments(t *testing.T) {
 	}
 }
 
+func TestHTTP_ASessionsComment(t *testing.T) {
+	h, svc, tid := newResourcesHandler(t)
+	c, err := svc.AddSessionComment(context.Background(), tid, domain.CommentWriter{SessionID: "s1", AgentName: "go-developer"}, "agent note")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec, _ := serveReq(t, h, httptest.NewRequest(http.MethodGet, "/api/list_ticket_comments?ticket_id="+tid, nil))
+	for _, key := range []string{`"author":"session"`, `"session_id":"s1"`, `"agent_name":"go-developer"`} {
+		if !strings.Contains(rec.Body.String(), key) {
+			t.Fatalf("list lacks %s: %s", key, rec.Body)
+		}
+	}
+	if rec, out := postWire(t, h, "/api/update_ticket_comment", map[string]string{"comment_id": c.ID, "body": "x"}); rec.Code != 403 || out.Code != "COMMENT_NOT_YOURS" {
+		t.Fatalf("the person edits a session's comment = %d %s", rec.Code, rec.Body)
+	}
+	if rec, _ := postWire(t, h, "/api/delete_ticket_comment", map[string]string{"comment_id": c.ID}); rec.Code != 200 {
+		t.Fatalf("the person deletes a session's comment = %d %s", rec.Code, rec.Body)
+	}
+	_, out := postWire(t, h, "/api/add_ticket_comment", map[string]any{"ticket_id": tid, "body": "mine", "author": "session", "session_id": "s1"})
+	if out.Comment.Author != domain.CommentByPerson || out.Comment.SessionID != "" {
+		t.Fatalf("the API writes only as the person: %+v", out.Comment)
+	}
+}
+
 func TestHTTP_ResourcesUnconfiguredAnswer503(t *testing.T) {
 	h := &Handler{}
 	for _, path := range []string{"/api/list_ticket_resources?ticket_id=t", "/api/list_ticket_comments?ticket_id=t", "/api/ticket_resources/x/content"} {

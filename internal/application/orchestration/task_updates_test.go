@@ -124,6 +124,26 @@ func TestTaskUpdates_DeliveredToTheTasksRunningSessions(t *testing.T) {
 	}
 }
 
+// A session's comment wakes no session, the writer included, so agents do
+// not answer each other in a loop; the person's next comment still does.
+func TestTaskUpdates_ASessionsCommentSendsNoTurn(t *testing.T) {
+	_, bus, d := newUpdatesFixture(t)
+	ctx := context.Background()
+	_ = bus.Publish(ctx, domain.TicketCommentAdded{Comment: domain.TicketComment{ID: "c1", TicketID: "tk1", Author: domain.CommentBySession, SessionID: "dlg", Body: "done"}})
+	_ = bus.Publish(ctx, domain.TicketCommentAdded{Comment: domain.TicketComment{ID: "c2", TicketID: "tk1", Author: domain.CommentByPerson, Body: "thanks"}})
+
+	eventually(t, "the person's comment delivered", func() bool { return len(d.list()) == 2 })
+	time.Sleep(50 * time.Millisecond)
+	for _, g := range d.list() {
+		if strings.Contains(g, "task-update:c1") {
+			t.Fatalf("a session's comment was delivered: %v", d.list())
+		}
+	}
+	if len(d.list()) != 2 {
+		t.Fatalf("deliveries = %v", d.list())
+	}
+}
+
 // Publishing never waits on a session: the event returns while delivery is
 // stuck.
 func TestTaskUpdates_PublishDoesNotWaitOnDelivery(t *testing.T) {
@@ -195,12 +215,17 @@ func TestStartInteractive_BriefsTheResourcesAndComments(t *testing.T) {
 	_, launch := startInteractive(t, svc, InteractiveRequest{})
 	brief := briefOf(t, launch)
 	for _, want := range []string{
-		"## Resources and comments from the person",
+		"## Resources and comments\n",
 		"This task has 2 resources and 1 comment.",
 		"[task update · …]",
 		"\n- mcp__task__list_task_resources — ",
 		"\n- mcp__task__read_task_resource — ",
 		"\n- mcp__task__list_task_comments — ",
+		"\n- mcp__task__add_task_comment — ",
+		"\n- mcp__task__update_task_comment — ",
+		"\n- mcp__task__delete_task_comment — ",
+		"message_architect",
+		"your comment wakes no session",
 	} {
 		if !strings.Contains(brief, want) {
 			t.Errorf("brief lacks %q:\n%s", want, brief)
@@ -210,7 +235,7 @@ func TestStartInteractive_BriefsTheResourcesAndComments(t *testing.T) {
 	svc.Resources, svc.Comments = fakeTaskInputs{err: fmt.Errorf("db down")}, fakeTaskInputs{err: fmt.Errorf("db down")}
 	_, launch = startInteractive(t, svc, InteractiveRequest{})
 	brief = briefOf(t, launch)
-	if !strings.Contains(brief, "## Resources and comments from the person") || strings.Contains(brief, "This task has") {
+	if !strings.Contains(brief, "## Resources and comments\n") || strings.Contains(brief, "This task has") {
 		t.Fatalf("a failed count keeps the section, without counts:\n%s", brief)
 	}
 

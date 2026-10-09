@@ -51,6 +51,9 @@ var SessionTaskToolNames = []string{
 	"list_task_resources",
 	"read_task_resource",
 	"list_task_comments",
+	"add_task_comment",
+	"update_task_comment",
+	"delete_task_comment",
 	"list_notifications",
 	"notify",
 }
@@ -283,7 +286,7 @@ func SessionTaskTools(planningSvc ports.Planning, sessions ports.SessionReposito
 	}, sessionDocumentTools(planningSvc, sessions)...)
 	tools = append(tools, sessionChannelTools(planningSvc, sessions, channel)...)
 	tools = append(tools, sessionProjectTools(planningSvc, sessions, agents, arch, start.Repositories)...)
-	tools = append(tools, sessionResourceTools(planningSvc, sessions, resources)...)
+	tools = append(tools, sessionResourceTools(planningSvc, sessions, agents, resources)...)
 	tools = append(tools, sessionNotificationTools(planningSvc, sessions, notes)...)
 	return append(tools, sessionArtifactTools(planningSvc, sessions, artifacts)...)
 }

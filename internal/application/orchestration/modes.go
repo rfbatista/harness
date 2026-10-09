@@ -58,7 +58,9 @@ func modePrompt(mode domain.SessionMode, tk *domain.Ticket, typed string) string
 			"(reply_to_session), ask the person for review with request_user_review when something needs " +
 			"their eye, and tune loops with set_status_check. When the person adds a resource or a comment to the " +
 			"task, every running session, you included, gets a turn starting with [task update · …]; read it with " +
-			"read_task_resource or list_task_comments and decide whether a spec, a contract or a delegate's work changes."
+			"read_task_resource or list_task_comments and decide whether a spec, a contract or a delegate's work changes. " +
+			"Leave the person a comment with add_task_comment for decisions and summaries they should see on the task; " +
+			"talk to your delegates with task messages, not comments."
 	case domain.SessionModeDesign:
 		skill = "design-artifacts"
 		closing = "Work under design/ in this worktree. Make each component or screen a self-contained HTML " +
@@ -69,7 +71,8 @@ func modePrompt(mode domain.SessionMode, tk *domain.Ticket, typed string) string
 			"publish images and videos the same way, and a dev server as its loopback url. The person sees " +
 			"each publish in the Design tab of the web UI — tell them so in one line instead of pasting HTML here. " +
 			"Reference images, recordings and links the person adds to the task are in list_task_resources; " +
-			"a turn starting with [task update · …] tells you when they add one or comment."
+			"a turn starting with [task update · …] tells you when they add one or comment. " +
+			"Tell the person what you published and what is left with add_task_comment."
 	default:
 		return typed
 	}

@@ -6,18 +6,19 @@ import { flush, manualTimers } from "../../../../shared/testing/doubles.js";
 import { assert, file, test } from "../../../../shared/testing/test.js";
 import { MAX_RESOURCE_BYTES } from "../../domain/resources.js";
 import { memoryResources } from "../../infrastructure/memory-resources.js";
-import { commentDTO, everyKind, makeComment, makeResource, resourceDTO } from "../../testing/resource-fixtures.js";
+import { commentDTO, everyKind, makeComment, makeResource, resourceDTO, sessionComment } from "../../testing/resource-fixtures.js";
 import { taskResources, TOAST_MS } from "./taskResources.js";
 
 file("tasks/presentation/components/taskResources");
 
 const NOW = "2026-10-08T15:00:00Z";
 
-function page({ resources = [], comments = [], holdUploads = false, tickets = [{ id: "t1", projectId: "p1" }, { id: "t2", projectId: "p1" }] } = {}) {
-  const memory = memoryResources({ tickets, resources, comments, holdUploads, now: () => new Date(NOW) });
+function page({ resources = [], comments = [], sessionIds = [], holdUploads = false, tickets = [{ id: "t1", projectId: "p1" }, { id: "t2", projectId: "p1" }] } = {}) {
+  const sessions = sessionIds.map((id) => ({ id, ticketId: "t1" }));
+  const memory = memoryResources({ tickets, resources, comments, sessions, holdUploads, now: () => new Date(NOW) });
   const timers = manualTimers();
   const copied = [];
-  const el = seededElement({ project_id: "p1", ticket_id: "t1", resources: resources.filter((r) => r.ticketId === "t1").map(resourceDTO), comments: comments.map(commentDTO) }, "task-resources-seed");
+  const el = seededElement({ project_id: "p1", ticket_id: "t1", resources: resources.filter((r) => r.ticketId === "t1").map(resourceDTO), comments: comments.map(commentDTO), session_ids: sessionIds }, "task-resources-seed");
   const m = mount(
     taskResources({
       resources: memory.gateway,
@@ -346,4 +347,77 @@ test("a file name longer than the title limit still matches its echo: nothing sh
   await flush();
   assert.equal(p.rows.length, 1);
   assert.equal(p.rows[0].title.length, 200);
+});
+
+test("a session's comment names its agent, links to its session while it is listed, and has no Edit", () => {
+  const { page: p } = page({
+    comments: [makeComment({ id: "c1" }), sessionComment({ id: "c2" }), sessionComment({ id: "c3", sessionId: "s-gone", agentName: "" })],
+    sessionIds: ["s-rev"],
+  });
+  assert.deepEqual(
+    p.commentRows.map((c) => [c.author, c.bySession, c.authorHref, c.canEdit]),
+    [
+      ["You", false, "", true],
+      ["Reviewer", true, "/projects/p1/tasks/t1?session=s-rev", false],
+      ["Agent session", true, "", false],
+    ],
+  );
+  assert.equal(p.commentRows[1].deleteLabel, "Delete comment by Reviewer from 3 h ago");
+  p.startEdit("c2");
+  assert.equal(p.editingId, "", "a session's comment cannot be edited here");
+});
+
+test("the person deletes a session's comment", async () => {
+  const { page: p, memory } = page({ comments: [sessionComment({ id: "c2" })], sessionIds: ["s-rev"] });
+  p.askDeleteComment("c2");
+  await p.confirmDeleteComment();
+  assert.deepEqual([p.comments, memory.comments()], [[], []]);
+  assert.equal(p.announcement, "Comment deleted.");
+});
+
+test("a stale edit of a session's comment is refused: the edit closes and the comment stays", async () => {
+  // A page that took the comment for the person's (from before sessions wrote comments).
+  const { page: p, memory } = page({ comments: [sessionComment({ id: "c2", body: "theirs" })] });
+  p.comments = [makeComment({ id: "c2", body: "theirs" })];
+  p.startEdit("c2");
+  p.editText = "mine now";
+  await p.saveEdit();
+  assert.deepEqual([p.editingId, p.editError, p.comments.length], ["", "", 1]);
+  assert.deepEqual(p.toasts.map((t) => t.message), ["Only the session that wrote this comment can edit it."]);
+  assert.equal(memory.comments()[0].body, "theirs");
+});
+
+test("what a session writes arrives live, in order: added, edited and deleted, announced once", async () => {
+  const { page: p, memory } = page({ comments: [makeComment({ id: "c1" })], sessionIds: ["s-rev"] });
+  const c = memory.sessionAdds({ ticketId: "t1", sessionId: "s-rev", agentName: "Reviewer", body: "Found it." });
+  assert.deepEqual(p.commentRows.map((r) => [r.author, r.body, r.fresh]), [["You", "Keep the v2 contract.", false], ["Reviewer", "Found it.", true]]);
+  assert.equal(p.announcement, "Reviewer commented.");
+  memory.sessionEdits(c.id, "Found it twice.");
+  assert.deepEqual(p.commentRows.map((r) => r.body), ["Keep the v2 contract.", "Found it twice."]);
+  assert.ok(p.commentRows[1].edited);
+  assert.equal(p.announcement, "Reviewer commented.", "an edit is not announced");
+  memory.sessionAdds({ ticketId: "t2", sessionId: "s-other", body: "another task" });
+  memory.sessionDeletes(c.id);
+  assert.deepEqual(p.commentRows.map((r) => r.id), ["c1"]);
+});
+
+test("a session's comment with the body of the person's pending one is not taken for its echo", async () => {
+  const { page: p, memory } = page();
+  p.draft = "Same words.";
+  const sending = p.send();
+  memory.sessionAdds({ ticketId: "t1", sessionId: "s-rev", agentName: "Reviewer", body: "Same words." });
+  assert.deepEqual(p.commentRows.map((r) => r.author), ["Reviewer"], "shown at once, not held");
+  await sending;
+  assert.deepEqual(p.commentRows.map((r) => r.author), ["Reviewer", "You"]);
+});
+
+test("a session starting on the task links its comments; deleted, it no longer does", async () => {
+  const { page: p, memory } = page({ comments: [sessionComment({ id: "c2" })] });
+  assert.equal(p.commentRows[0].authorHref, "");
+  memory.startSession("t2", "s-rev"); // another task's session is not this task's
+  assert.equal(p.commentRows[0].authorHref, "");
+  memory.startSession("t1", "s-rev");
+  assert.equal(p.commentRows[0].authorHref, "/projects/p1/tasks/t1?session=s-rev");
+  memory.deleteSession("s-rev");
+  assert.equal(p.commentRows[0].authorHref, "");
 });
