@@ -245,7 +245,8 @@ func TestPersonPausesAndResumesADelegatesStatusChecks(t *testing.T) {
 
 	bar := `(document.querySelector('[aria-label="Status checks"]')?.textContent ?? '').replace(/\s+/g, ' ').trim()`
 	serverRow := `[...document.querySelectorAll('[role=listbox] .row')].find(r => r.textContent.includes('Server: architect channel'))`
-	var before, paused, resumed, row string
+	picked := `(() => { const s = document.querySelector('#status-check-interval'); return s ? s.options[s.selectedIndex]?.textContent ?? '' : ''; })()`
+	var before, paused, resumed, row, picker string
 	if err := chromedp.Run(ctx,
 		chromedp.EmulateViewport(1280, 800),
 		chromedp.Navigate(srv.URL+"/projects/p1/tasks/t1"),
@@ -253,6 +254,7 @@ func TestPersonPausesAndResumesADelegatesStatusChecks(t *testing.T) {
 		chromedp.Evaluate(serverRow+`.click()`, nil),
 		chromedp.Poll(`!!document.querySelector('[aria-label="Status checks"] button')`, nil, chromedp.WithPollingTimeout(5*time.Second)),
 		chromedp.Evaluate(bar, &before),
+		chromedp.Evaluate(picked, &picker),
 		shot("status-check-active"),
 		chromedp.Click(`[aria-label="Status checks"] button`, chromedp.ByQuery),
 		chromedp.Poll(`(`+bar+`).includes('checks paused')`, nil, chromedp.WithPollingTimeout(5*time.Second)),
@@ -263,6 +265,9 @@ func TestPersonPausesAndResumesADelegatesStatusChecks(t *testing.T) {
 		chromedp.Evaluate(bar, &resumed),
 	); err != nil {
 		t.Fatalf("%v\nJS errors: %v", err, errs.all())
+	}
+	if picker != "10 min" {
+		t.Errorf("the interval picker shows %q while the loop checks every 10m", picker)
 	}
 	for _, c := range []struct{ got, want string }{
 		{before, "checks every 10m · next in 6m · no check yet"},

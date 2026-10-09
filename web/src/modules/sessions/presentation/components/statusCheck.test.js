@@ -22,6 +22,20 @@ test("an active loop pauses, and says so to the page", async () => {
   assert.deepEqual([changed.detail.check.state, changed.detail.check.everyMinutes], ["paused", 0]);
 });
 
+test("the picker offers the loop's own interval, in order, when it is not one of the presets", () => {
+  const { instance } = make(makeCheck({ everyMinutes: 20 }));
+  assert.equal(instance.minutes, "20");
+  const values = instance.intervals.map((i) => i.value);
+  assert.deepEqual(values, ["2", "5", "10", "15", "20", "30", "60", "120", "240"], "the architect set 20 minutes: the select can show it");
+  assert.equal(instance.intervals.find((i) => i.value === "20").label, "20 min");
+
+  const odd = make(makeCheck({ everyMinutes: 90 }));
+  assert.equal(odd.instance.intervals.find((i) => i.value === "90").label, "90 min", "not a whole number of hours: minutes");
+
+  const preset = make(makeCheck({ everyMinutes: 10 }));
+  assert.equal(preset.instance.intervals.length, 8, "a preset is listed once");
+});
+
 test("a paused loop resumes at the interval it had before the pause, or the default", async () => {
   const remembered = make(makeCheck({ state: "paused", everyMinutes: 0, nextAt: null }), { remembered: 30 });
   assert.deepEqual([remembered.instance.minutes, remembered.instance.toggleWord], ["30", "Resume"]);
