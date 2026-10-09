@@ -18,6 +18,7 @@ type taskToolsFixture struct {
 	tools     map[string]domain.Tool
 	plan      *planning.Service
 	projects  ports.ProjectRepository
+	sessions  ports.SessionRepository
 	projectID string
 	ticketID  string
 	sessionID string
@@ -54,7 +55,7 @@ func newTaskToolsFixture(t *testing.T) *taskToolsFixture {
 	}
 
 	byName := map[string]domain.Tool{}
-	for _, tool := range SessionTaskTools(plan, sessions, nil, nil, PeerStarter{}, ArtifactTooling{}, nil, ResourceTooling{Files: plan, Comments: plan}) {
+	for _, tool := range SessionTaskTools(plan, sessions, nil, nil, PeerStarter{}, ArtifactTooling{}, nil, ResourceTooling{Files: plan, Comments: plan, Writer: plan}) {
 		byName[tool.Name] = tool
 	}
 	if len(byName) != len(SessionTaskToolNames) {
@@ -66,7 +67,7 @@ func newTaskToolsFixture(t *testing.T) *taskToolsFixture {
 		}
 	}
 
-	return &taskToolsFixture{tools: byName, plan: plan, projects: projects, projectID: proj.ID, ticketID: tk.ID, sessionID: "sess-1"}
+	return &taskToolsFixture{tools: byName, plan: plan, projects: projects, sessions: sessions, projectID: proj.ID, ticketID: tk.ID, sessionID: "sess-1"}
 }
 
 func (f *taskToolsFixture) call(t *testing.T, sessionID, tool string, args map[string]any) (any, error) {
