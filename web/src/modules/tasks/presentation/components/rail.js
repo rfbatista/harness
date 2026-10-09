@@ -47,7 +47,22 @@ const NAV_ITEMS = "h3 > button, a[data-task-id], .more > details > summary";
 /** How many tasks need the person: a session waits, or a review does. */
 export const needsYouCount = (store) => store.tasks.filter((t) => needsYou(t, store.byTask[t.id])).length;
 
-const isShown = (el) => el.getClientRects().length > 0;
+/** Shown and focusable: not hidden, folded away or inside a closed <details>. */
+const isShown = (el) => (el.checkVisibility ? el.checkVisibility() : el.getClientRects().length > 0);
+
+/**
+ * Scrolls the rail's list just enough to show a row. Not scrollIntoView: in
+ * Chrome that also moves where Tab starts from, and the skip link must stay
+ * the first Tab stop.
+ */
+function reveal(row) {
+  const list = row?.closest?.(".groups");
+  if (!list) return;
+  const r = row.getBoundingClientRect();
+  const box = list.getBoundingClientRect();
+  if (r.bottom > box.bottom) list.scrollTop += r.bottom - box.bottom;
+  else if (r.top < box.top) list.scrollTop -= box.top - r.top;
+}
 
 /**
  * @param {{
@@ -162,7 +177,7 @@ export const rail = ({ gateway, store, prefs, navigate, timers = globalThis, isN
       // bring the open task into view.
       this.$nextTick(() => {
         for (const node of this.$el.querySelectorAll("[data-ssr]")) node.remove();
-        this.$el.querySelector?.('.groups a[aria-current="page"]')?.scrollIntoView?.({ block: "nearest" });
+        reveal(this.$el.querySelector?.('.groups a[aria-current="page"]'));
       });
       unfollow = gateway.follow(
         this.projectId,
@@ -369,8 +384,13 @@ export const rail = ({ gateway, store, prefs, navigate, timers = globalThis, isN
       if (target?.ownerDocument?.querySelector?.("dialog[open]")) return;
       if (!this.hasTasks) return;
       event.preventDefault();
-      if (isNarrow() && !store.drawerOpen) store.drawerOpen = true;
-      this.$nextTick(() => root?.querySelector?.(".filter input")?.focus());
+      const focusFilter = () => root?.querySelector?.(".filter input")?.focus();
+      if (isNarrow() && !store.drawerOpen) {
+        store.drawerOpen = true; // the drawer shows on the next render
+        this.$nextTick(focusFilter);
+      } else {
+        focusFilter();
+      }
     },
 
     // ── Focus during live changes ──────────────────────────────────────
@@ -425,7 +445,7 @@ export const rail = ({ gateway, store, prefs, navigate, timers = globalThis, isN
       store.drawerOpen = true;
       this.$nextTick(() => {
         const target = root?.querySelector?.('.groups a[aria-current="page"]') ?? root?.querySelector?.(".filter input");
-        target?.scrollIntoView?.({ block: "nearest" });
+        reveal(target);
         target?.focus?.();
       });
     },

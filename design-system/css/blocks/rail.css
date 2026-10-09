@@ -1,10 +1,10 @@
 /*
- * Rail — the column beside the page: the skip link, New task, the Project nav
+ * Rail — the column beside the page: New task, the Project nav
  * and the Tasks nav (both .nav). Below 48rem it is a drawer from the
  * inline-start edge, opened from the top bar's .tasks-toggle, with a .scrim
  * after it.
  * <div class="rail" data-open?>
- *   <a class="skip-link button">…</a> <div class="drawer-head">…</div>
+ *   <div class="drawer-head">…</div>
  *   <a class="button">New task</a> <nav class="nav" aria-label="Project">…</nav> <nav class="nav" aria-label="Tasks">…</nav>
  * </div>
  * <div class="scrim" data-open?></div>
@@ -35,22 +35,6 @@
     }
 
     & > .drawer-head { display: none; }
-
-    /* The first Tab stop: a button over the rail's top while focused. */
-    & > .skip-link {
-      position: absolute;
-      inset: var(--space-s) var(--space-s) auto;
-      z-index: var(--z-overlay);
-    }
-    & > .skip-link:not(:focus) {
-      inline-size: 1px;
-      block-size: 1px;
-      min-block-size: 0;
-      padding: 0;
-      border: 0;
-      overflow: hidden;
-      clip-path: inset(50%);
-    }
 
     @media (width < 48rem) {
       --size-nav-row: var(--size-touch);
@@ -83,12 +67,16 @@
         font-size: var(--text-md);
         font-weight: var(--weight-bold);
 
-        & > .button { margin-inline-start: auto; }
+        & > .button {
+          inline-size: var(--size-touch);
+          min-block-size: var(--size-touch);
+          margin-inline-start: auto;
+        }
       }
 
-      & > .button,
-      & .head > .button,
-      & .filter input { min-block-size: var(--size-touch); }
+      & > .button[data-size],
+      & .nav .head > .button,
+      & .nav .filter input { min-block-size: var(--size-touch); }
 
       @media (prefers-reduced-motion: reduce) { transition: none; }
     }

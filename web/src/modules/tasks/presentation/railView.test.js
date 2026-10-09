@@ -38,6 +38,8 @@ test("a heading says its count in words, and what needs the person", () => {
   assert.deepEqual([review.countText, review.countWords, review.foldable, review.empty, review.hasRows], ["0", " tasks", false, true, false]);
   const [, , , filtered] = railGroups(tasks, { query: "zzz" }).map((g) => toGroupView(g, ctx({ query: "zzz" })));
   assert.deepEqual([filtered.countText, filtered.countWords, filtered.foldable], ["0 of 2", " tasks match", false]);
+  const emptyWhileFiltering = toGroupView(railGroups(tasks, { query: "zzz" })[1], ctx({ query: "zzz" }));
+  assert.deepEqual([emptyWhileFiltering.countText, emptyWhileFiltering.countWords], ["0", " tasks"], "an empty group stays 0, not 0 of 0");
 });
 
 test("Done's rest reads Show N more", () => {

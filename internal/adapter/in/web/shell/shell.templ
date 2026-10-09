@@ -32,6 +32,7 @@ templ Document(f Frame) {
 templ AppShell(f Frame) {
 	@Document(f) {
 		<div class="[ app-shell ]">
+			<a class="[ skip-link ] [ button ]" data-size="sm" href="#main">Skip to content</a>
 			@topBar(f)
 			@taskRail(f)
 			{ children... }
@@ -108,7 +109,6 @@ templ taskRail(f Frame) {
 		@templ.JSONScript("rail-seed", r.Seed)
 	}
 	<div class="[ rail ]" id="rail" { railAttrs(r)... }>
-		<a class="[ skip-link ] [ button ]" data-size="sm" href="#main">Skip to content</a>
 		if r.Seed != nil {
 			<div class="[ drawer-head ]">
 				<span class="[ truncate ]">{ f.ProjectName() }</span>

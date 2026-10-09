@@ -72,7 +72,7 @@ export function toGroupView(g, ctx) {
   const waiting = [...rows, ...more].filter((r) => r.attention).length;
   let countText = String(g.total);
   let countWords = g.total === 1 ? " task" : " tasks";
-  if (g.filtering) {
+  if (g.filtering && !g.empty) {
     countText = `${g.matched} of ${g.total}`;
     countWords += " match";
   } else if (waiting > 0) {
