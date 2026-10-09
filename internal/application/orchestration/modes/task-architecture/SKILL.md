@@ -271,6 +271,9 @@ Attach the documents and artifacts, and name the delegate with
 against the spec yourself. Withdraw a review that is no longer needed with
 `withdraw_user_review`.
 
+**Notifications.** `request_user_review` and moving the task to `review`
+already notify the person in their inbox; do not also call `notify` for them.
+
 **Status policy.** Only you move the task status, always with
 `update_task_status` and a `reason` saying what happened:
 

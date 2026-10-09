@@ -59,10 +59,13 @@ func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRun
 
 	// An interface holding a nil pointer is not nil: hand the inbox on only
 	// when NotificationsModule built one.
-	var notes ports.Notifications
-	var noteReader ports.NotificationReader
+	var (
+		notes      ports.Notifications
+		noteReader ports.NotificationReader
+		notifier   ports.Notifier
+	)
 	if inbox.Service != nil {
-		notes, noteReader = inbox.Service, inbox.Service
+		notes, noteReader, notifier = inbox.Service, inbox.Service, inbox.Service
 	}
 
 	mux := http.NewServeMux()
@@ -95,7 +98,7 @@ func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRun
 	mux.Handle(mcpsession.PathPrefix, mcpsession.TaskHandler(tooling.SessionTaskTools(plan, sessions, cat.Agents, cat.Architecture,
 		tooling.PeerStarter{Sessions: orch, Repositories: cat.Projects},
 		tooling.ArtifactTooling{Publisher: art, Attachments: art, ViewURL: httpapi.ArtifactViewPath}, channel,
-		tooling.ResourceTooling{Files: plan, Comments: plan})))
+		tooling.ResourceTooling{Files: plan, Comments: plan}, tooling.NotificationTooling{Notifier: notifier})))
 	// The web client owns / and its pages; anything else reaches the legacy
 	// designer SPA until it is retired.
 	mux.Handle("/", web.NewHandler(web.Deps{Projects: cat.Projects, Tasks: plan, Sessions: orch, Agents: cat.Agents, Repositories: cat.Projects, EnvFiles: cat.Projects, Documents: plan, History: ws, Artifacts: art, ProjectSummaries: cat.Projects, PullRequests: prs,

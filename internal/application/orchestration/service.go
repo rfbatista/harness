@@ -99,8 +99,8 @@ type Service struct {
 	updates       updateQueue
 	deliverUpdate func(sessionID, key, text string) error
 
-	mu       sync.Mutex
-	seq      map[string]int64
+	mu  sync.Mutex
+	seq map[string]int64
 	// statuses is the last status announced per session, so a status is
 	// announced on the bus only when it actually changes.
 	statuses map[string]domain.SessionStatus

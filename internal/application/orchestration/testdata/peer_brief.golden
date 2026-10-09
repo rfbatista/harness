@@ -98,3 +98,14 @@ tells you; read it if it bears on your work.
 - mcp__task__list_task_resources — what the person added, oldest first
 - mcp__task__read_task_resource — one resource: text inline, or a local path to open
 - mcp__task__list_task_comments — the person's comments, oldest first (since narrows)
+
+The person has one inbox across every project: review requests, sessions
+waiting for approval, tasks in review, failed sessions, and what agents post.
+You can read it and post to it; reading never marks anything read:
+
+- mcp__task__list_notifications — the inbox, newest first: scope all (default) or project, unread_only (default true), since, limit
+- mcp__task__notify — post to it as this session: title, body, level info or action, link (default: this task's page); it shows in the web UI live and goes out through every enabled delivery provider
+
+Use notify only for what the person has to know or do, never for progress
+chatter: request_user_review and moving a task to review already notify the
+person. A session may post at most 20 an hour.
