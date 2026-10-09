@@ -10,6 +10,7 @@
 import { Codes, StructuredError } from "../../../shared/domain/errors.js";
 import { FeedStatus } from "../../../shared/domain/feed.js";
 import { MAX_COMMENT } from "../domain/comments.js";
+import { defaultUploadTitle } from "../domain/items.js";
 import { linkProblem, MAX_RESOURCE_BYTES, runeCount, titleProblem } from "../domain/resources.js";
 import { toResourcesSeed } from "./resource-dto.js";
 
@@ -28,7 +29,6 @@ function mimeOf(file) {
 }
 
 const kindOf = (mime) => (mime.startsWith("image/") ? "image" : mime.startsWith("audio/") ? "audio" : "file");
-const baseName = (name) => (name ?? "").split(/[\\/]/).at(-1) ?? "";
 
 /**
  * @param {{
@@ -86,7 +86,7 @@ export function memoryResources({ tickets = [{ id: "t1", projectId: "p1" }], res
     requireTicket(ticketId); // the task may be gone by the time the bytes are in
     if (file.size > MAX_RESOURCE_BYTES) throw err(Codes.RESOURCE_TOO_LARGE, "the file is over 25 MiB", 413);
     if (file.size === 0) throw err(Codes.INVALID_INPUT, "the file is empty", 400);
-    const t = title.trim() || baseName(file.name);
+    const t = title.trim() || defaultUploadTitle(file.name);
     if (titleProblem(t)) throw err(Codes.INVALID_INPUT, "title must be 1–200 characters", 400);
     const mime = mimeOf(file);
     return store(newResource(ticketId, { kind: kindOf(mime), title: t, mime, sizeBytes: file.size }));
@@ -155,7 +155,7 @@ export function memoryResources({ tickets = [{ id: "t1", projectId: "p1" }], res
       requireTicket(ticketId);
       const u = (url ?? "").trim();
       if (linkProblem(u)) throw err(Codes.INVALID_INPUT, "url must be http or https with a host, at most 2048 characters", 400);
-      const t = title.trim() || u;
+      const t = title.trim() || [...u].slice(0, 200).join("");
       if (titleProblem(t)) throw err(Codes.INVALID_INPUT, "title must be 1–200 characters", 400);
       return store(newResource(ticketId, { kind: "link", title: t, url: u }));
     },

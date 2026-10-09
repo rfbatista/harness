@@ -29,9 +29,9 @@ export function canSend(text) {
   return n > 0 && n <= MAX_COMMENT;
 }
 
-/** The counter's tone: none below 9,000, amber up to the limit, red at it. */
+/** The counter's tone: none below 9,000, amber up to the limit, red past it (it cannot be sent). */
 export function counterTone(length) {
-  if (length >= MAX_COMMENT) return "danger";
+  if (length > MAX_COMMENT) return "danger";
   if (length >= WARN_FROM) return "attention";
   return "";
 }

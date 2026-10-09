@@ -128,11 +128,12 @@ func (h Handler) Task(w http.ResponseWriter, r *http.Request) error {
 			view.Seed.DocumentTitles[d.ID] = d.Title
 		}
 	}
-	resources, comments, err := h.resourcesOf(ctx, task.ID)
-	if err != nil {
-		return err
+	// The toolbar's counts are not worth the page: a failed read hides the links.
+	if h.Resources != nil || h.Comments != nil {
+		if resources, comments, err := h.resourcesOf(ctx, task.ID); err == nil {
+			view.Resources = resourcesLink(project.ID, task.ID, resources, comments)
+		}
 	}
-	view.Resources = resourcesLink(project.ID, task.ID, resources, comments)
 	view.Reviews = reviewsSeed(project.ID, task.ID, list, agents, []*domain.Ticket{task}, docs)
 	for _, st := range Statuses {
 		view.StatusChoices = append(view.StatusChoices, sessions.StatusChoice{Value: st.Value, Label: st.Label, Selected: st.Value == string(task.Status)})

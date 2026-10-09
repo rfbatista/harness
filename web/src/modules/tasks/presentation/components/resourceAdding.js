@@ -52,7 +52,7 @@ export function resourceAdding({ gateway, clock, guards }) {
     },
 
     get uploadRows() {
-      return this.uploads.map(uploadRow);
+      return this.uploads.map((u) => uploadRow(u, { taskGone: this.taskGone }));
     },
     get cannotAdd() {
       return this.taskGone;
@@ -113,7 +113,8 @@ export function resourceAdding({ gateway, clock, guards }) {
           file,
           title: row.title,
           signal: controller.signal,
-          onProgress: (loaded) => this.replaceUpload(row.key, (u) => progressed(u, loaded)),
+          // The body carries the form's other parts too: scale what was sent to the file.
+          onProgress: (loaded, total) => this.replaceUpload(row.key, (u) => progressed(u, total > 0 ? Math.round((u.size * loaded) / total) : 0)),
         });
         for (const twin of guards.resources.settle(claim, resource.id)) this.showResource(twin);
         this.dropUpload(row.key);
@@ -140,6 +141,7 @@ export function resourceAdding({ gateway, clock, guards }) {
       else this.dropUpload(key);
     },
     retryUpload(key) {
+      if (this.taskGone) return;
       this.replaceUpload(key, retried);
       this.pump();
     },

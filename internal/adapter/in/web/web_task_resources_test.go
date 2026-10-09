@@ -2,6 +2,7 @@ package web
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"strings"
 	"testing"
@@ -126,5 +127,35 @@ func TestTaskPageLinksItsResourcesAndCommentsWithLiveCounts(t *testing.T) {
 		if !strings.Contains(body, want) {
 			t.Errorf("task page lacks %s", want)
 		}
+	}
+}
+
+func TestTaskPageWithoutResourceReadersHasNoResourcesLinks(t *testing.T) {
+	body := get(t, newTestHandler(t, board()), "/projects/p1/tasks/t-feed").Body.String()
+	if strings.Contains(body, "data-task-resources") || strings.Contains(body, "tasksResourceWatch") {
+		t.Error("the task page links resources it cannot read")
+	}
+}
+
+// failingResources fails every read, as a broken store would.
+type failingResources struct{}
+
+func (failingResources) ListTicketResources(context.Context, string) ([]*domain.TicketResource, error) {
+	return nil, errors.New("disk on fire")
+}
+
+func TestTaskPageStillServesWhenTheResourceCountFails(t *testing.T) {
+	w := board()
+	h := NewHandler(Deps{
+		Projects: fakeProjects{w.projects}, Tasks: fakeTickets{w.tickets}, Sessions: fakeSessions{w.sessions},
+		Agents: fakeAgents{w.agents}, Repositories: fakeRepos{w.repos}, Resources: failingResources{},
+		Now: func() time.Time { return now },
+	}, builtAssets(t), nil)
+	rec := get(t, h, "/projects/p1/tasks/t-feed")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status %d: a toolbar count took the task page down", rec.Code)
+	}
+	if strings.Contains(rec.Body.String(), "data-task-resources") {
+		t.Error("the links show counts that could not be read")
 	}
 }

@@ -4,6 +4,7 @@
 // Rows here are plain values; the page keeps the list and starts the uploads.
 
 import { Codes } from "../../../shared/domain/errors.js";
+import { defaultUploadTitle } from "./items.js";
 import { sizeWords, tooLarge } from "./resources.js";
 
 /** Uploads that run at once; the rest wait. */
@@ -56,7 +57,7 @@ export const failed = (row, code, message = "") => ({ ...row, state: UploadState
 export const retried = (row) => ({ ...row, state: UploadState.WAITING, loaded: 0, failure: null });
 
 /** What the row shows: its title, as the resource will be called. */
-export const uploadTitle = (row) => row.title || row.name;
+export const uploadTitle = (row) => row.title.trim() || defaultUploadTitle(row.name);
 
 export const percent = (row) => (row.size > 0 ? Math.floor((row.loaded / row.size) * 100) : 0);
 

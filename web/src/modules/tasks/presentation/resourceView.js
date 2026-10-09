@@ -88,7 +88,7 @@ export function resourceRow(r, { now, fresh = false, renaming = false, confirmin
 }
 
 /** @param {import("../domain/uploads.js").UploadRow} u */
-export function uploadRow(u) {
+export function uploadRow(u, { taskGone = false } = {}) {
   const failed = u.state === UploadState.FAILED;
   return {
     key: u.key,
@@ -98,7 +98,7 @@ export function uploadRow(u) {
     failed,
     meta: failed ? u.failure.message : progressWords(u),
     code: failed ? `${u.failure.code} · ${u.failure.next}` : "",
-    canRetry: failed && u.failure.retry,
+    canRetry: failed && u.failure.retry && !taskGone,
     uploading: u.state === UploadState.UPLOADING,
     percent: percent(u),
     progressLabel: `Uploading ${uploadTitle(u)}`,

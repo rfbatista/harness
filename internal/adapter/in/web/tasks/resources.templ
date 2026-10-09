@@ -320,7 +320,7 @@ templ commentsColumn() {
 							<template x-if="!c.editing && !c.confirming">
 								<div class="[ actions ] [ cluster ] [ gutter-2xs ]">
 									<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" data-edit x-bind:aria-label="c.editLabel" x-bind:disabled="cannotAdd" x-on:click="startEdit(c.id)">Edit</button>
-									<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-bind:aria-label="c.deleteLabel" x-on:click="askDeleteComment(c.id)">Delete</button>
+									<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-bind:aria-label="c.deleteLabel" x-bind:disabled="cannotAdd" x-on:click="askDeleteComment(c.id)">Delete</button>
 								</div>
 							</template>
 						</header>
@@ -328,7 +328,6 @@ templ commentsColumn() {
 							<div class="[ flow ] [ flow-space-xs ]">
 								<textarea
 									aria-label="Edit comment"
-									x-bind:maxlength="maxComment"
 									x-model="editText"
 									x-on:keydown.meta.enter.prevent="saveEdit"
 									x-on:keydown.ctrl.enter.prevent="saveEdit"
@@ -372,7 +371,6 @@ templ commentsColumn() {
 				placeholder="Write a comment…"
 				aria-describedby="composer-hint composer-count"
 				data-composer
-				x-bind:maxlength="maxComment"
 				x-bind:disabled="cannotAdd"
 				x-model="draft"
 				x-on:keydown.meta.enter.prevent="send"

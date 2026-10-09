@@ -17,10 +17,11 @@ test("a comment can be sent when the trimmed body is 1 to 10,000 runes", () => {
   assert.ok(!canSend("é".repeat(MAX_COMMENT + 1)));
 });
 
-test("the counter turns amber from 9,000 and red at 10,000", () => {
+test("the counter turns amber from 9,000 and red past 10,000", () => {
   assert.equal(counterTone(8_999), "");
   assert.equal(counterTone(9_000), "attention");
-  assert.equal(counterTone(10_000), "danger");
+  assert.equal(counterTone(10_000), "attention", "exactly the limit can be sent");
+  assert.equal(counterTone(10_001), "danger");
   assert.equal(counterWords(9_412), "9,412 / 10,000");
 });
 

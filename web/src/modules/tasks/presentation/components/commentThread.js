@@ -27,8 +27,6 @@ export function commentThread({ gateway, guards }) {
     confirmingCommentId: "",
     busyCommentId: "",
 
-    maxComment: MAX_COMMENT,
-
     initThread() {
       if (globalThis.location?.hash === "#comments") this.focusLater("[data-composer]");
     },
@@ -51,7 +49,8 @@ export function commentThread({ gateway, guards }) {
 
     // ── the composer ───────────────────────────────────────────────────
     get draftLength() {
-      return runeCount(this.draft);
+      // As the server counts: runes, after the trim.
+      return runeCount(this.draft.trim());
     },
     get cannotSend() {
       return this.sending || this.taskGone || !canSend(this.draft);
@@ -106,7 +105,7 @@ export function commentThread({ gateway, guards }) {
     async saveEdit() {
       const id = this.editingId;
       const c = this.comments.find((x) => x.id === id);
-      if (!c || this.busyCommentId) return;
+      if (!c || this.busyCommentId || this.taskGone) return;
       if (isUnchanged(c, this.editText)) return this.cancelEdit();
       if (!canSend(this.editText)) {
         this.editError = this.editText.trim() ? `Keep it to ${MAX_COMMENT.toLocaleString("en-US")} characters.` : "A comment needs some text; delete it instead.";
@@ -131,7 +130,7 @@ export function commentThread({ gateway, guards }) {
 
     // ── delete ─────────────────────────────────────────────────────────
     askDeleteComment(id) {
-      if (!this.comments.some((x) => x.id === id)) return;
+      if (this.taskGone || !this.comments.some((x) => x.id === id)) return;
       this.editingId = "";
       this.confirmingCommentId = id;
       this.focusLater(`[data-comment-id="${CSS.escape(id)}"] [data-keep]`);

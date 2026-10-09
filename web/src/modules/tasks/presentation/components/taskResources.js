@@ -14,6 +14,7 @@
 
 import { Codes, codeOf } from "../../../../shared/domain/errors.js";
 import { FeedStatus } from "../../../../shared/domain/feed.js";
+import { count } from "../../../../shared/presentation/format.js";
 import { readSeed } from "../../../../shared/presentation/seed.js";
 import { commentSignature, echoGuard, hasId, removeById, resourceSignature, upsert } from "../../domain/items.js";
 import { titleProblem } from "../../domain/resources.js";
@@ -59,6 +60,8 @@ export const taskResources = (deps) => () => {
   let nextToast = 1;
   /** The page's <main>. A handler on an element that x-if then removes loses $root, so the page keeps its own. */
   let root = null;
+  /** Changes the feed delivers while a resync's lists are on their way: applied again on top of them. */
+  let duringResync = null;
   const parts = { gateway, clock, guards, setTimeout };
 
   return compose(resourceAdding(parts), resourceLightbox(), commentThread(parts), {
@@ -117,10 +120,10 @@ export const taskResources = (deps) => () => {
       return this.comments.length;
     },
     get resourceCountLabel() {
-      return `${this.resources.length} ${this.resources.length === 1 ? "resource" : "resources"}`;
+      return count(this.resources.length, "resource");
     },
     get commentCountLabel() {
-      return `${this.comments.length} ${this.comments.length === 1 ? "comment" : "comments"}`;
+      return count(this.comments.length, "comment");
     },
     get summary() {
       return summaryWords(this.resources.length, this.comments.length);
@@ -154,6 +157,7 @@ export const taskResources = (deps) => () => {
 
     /** @param {import("../../domain/ports.js").ResourceChange} change */
     apply(change) {
+      duringResync?.push(change);
       switch (change.kind) {
         case "task-deleted":
           if (change.id === this.ticketId) this.loseTask();
@@ -196,14 +200,22 @@ export const taskResources = (deps) => () => {
 
     /** The feed dropped and came back: changes were missed, so the lists are read again. */
     async resync() {
+      const seen = [];
+      duringResync = seen;
       try {
         const [resources, comments] = await Promise.all([gateway.listResources(this.ticketId), gateway.listComments(this.ticketId)]);
+        duringResync = null;
         this.resources = resources;
         this.comments = comments;
-        if (this.renamingId && !hasId(resources, this.renamingId)) this.renamingId = "";
-        if (this.confirmingId && !hasId(resources, this.confirmingId)) this.confirmingId = "";
-        if (this.editingId && !hasId(comments, this.editingId)) this.editingId = "";
+        // What arrived while the lists were on their way is newer than them.
+        for (const change of seen) this.apply(change);
+        if (this.renamingId && !hasId(this.resources, this.renamingId)) this.renamingId = "";
+        if (this.confirmingId && !hasId(this.resources, this.confirmingId)) this.confirmingId = "";
+        if (this.editingId && !hasId(this.comments, this.editingId)) this.editingId = "";
+        if (this.confirmingCommentId && !hasId(this.comments, this.confirmingCommentId)) this.confirmingCommentId = "";
+        if (this.lightboxId && !hasId(this.resources, this.lightboxId)) this.closeLightbox();
       } catch (err) {
+        duringResync = null;
         if (codeOf(err) === Codes.TICKET_NOT_FOUND) this.loseTask();
         // otherwise keep what is shown; the next resync reads again
       }
@@ -213,6 +225,10 @@ export const taskResources = (deps) => () => {
       this.taskGone = true;
       this.renamingId = "";
       this.confirmingId = "";
+      this.editingId = "";
+      this.confirmingCommentId = "";
+      this.linkOpen = false;
+      if (this.lightboxId) this.closeLightbox();
       this.cancelUploads?.();
     },
 

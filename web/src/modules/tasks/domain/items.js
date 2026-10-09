@@ -1,3 +1,5 @@
+import { MAX_TITLE } from "./resources.js";
+
 // The by-id lists of a task's resources and comments, and the echo guard
 // that keeps the person's own additions from showing twice.
 //
@@ -27,6 +29,15 @@ export const hasId = (list, id) => list.some((x) => x.id === id);
 /** @param {import("./resources.js").Resource} r */
 export const resourceSignature = (r) => (r.kind === "link" ? `link\n${r.url}` : `upload\n${r.title}\n${r.sizeBytes}`);
 export const uploadClaim = (title, size) => `upload\n${title.trim()}\n${size}`;
+
+/**
+ * The title the server gives an upload sent without one (domain.DefaultResourceTitle):
+ * the file's base name, trimmed, cut to 200 runes.
+ */
+export function defaultUploadTitle(fileName) {
+  const base = (fileName ?? "").split(/[\\/]/).at(-1) ?? "";
+  return [...base.trim()].slice(0, MAX_TITLE).join("");
+}
 export const linkClaim = (url) => `link\n${url.trim()}`;
 
 /** @param {import("./comments.js").Comment} c */

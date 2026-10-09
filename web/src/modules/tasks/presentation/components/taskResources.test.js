@@ -240,14 +240,16 @@ test("comments: send clears the draft and shows the comment once; Ctrl Enter on 
   assert.equal(p.announcement, "Comment added. Sessions running on this task get it as a message.");
 });
 
-test("the composer counts from 9,000 characters, amber then red", () => {
+test("the composer counts runes from 9,000, amber then red past the limit", () => {
   const { page: p } = page();
   p.draft = "x".repeat(8_999);
   assert.ok(!p.showsCounter);
   p.draft = "x".repeat(9_412);
   assert.deepEqual([p.showsCounter, p.counter, p.counterTone], [true, "9,412 / 10,000", "attention"]);
-  p.draft = "x".repeat(10_000);
-  assert.equal(p.counterTone, "danger");
+  p.draft = "😀".repeat(10_000);
+  assert.deepEqual([p.counterTone, p.cannotSend], ["attention", false], "10,000 emoji are 10,000 runes: sendable");
+  p.draft = "x".repeat(10_001);
+  assert.deepEqual([p.counterTone, p.cannotSend], ["danger", true]);
 });
 
 test("editing a comment: an unchanged text sends nothing; a change saves and shows edited", async () => {
@@ -307,4 +309,41 @@ test("the lightbox steps through the images the browser can show, and closes whe
   assert.equal(p.lightboxId, "r-png", "one image: stepping stays");
   await memory.gateway.removeResource("r-png");
   assert.equal(p.lightboxId, "");
+});
+
+test("a change the feed delivers while a resync's lists are on their way is not lost", async () => {
+  const { page: p, memory } = page({ resources: [makeResource({ id: "r1" }), makeResource({ id: "r2", title: "b.png" })] });
+  memory.feedStatus(FeedStatus.RESYNCED); // the lists are asked for…
+  await memory.gateway.removeResource("r2"); // …and r2 is deleted before they answer
+  await memory.gateway.addComment("t1", "meanwhile");
+  await flush();
+  await flush();
+  assert.deepEqual(titles(p), ["wireframe.png"]);
+  assert.deepEqual(p.commentRows.map((c) => c.body), ["meanwhile"]);
+});
+
+test("the task deleted elsewhere closes an edit, a delete question and the lightbox; Retry is gone", async () => {
+  const { page: p, memory } = page({ resources: everyKind(), comments: [makeComment({ id: "c1" })], holdUploads: true });
+  p.addFiles([fileOf("a.txt")]);
+  await flush();
+  memory.uploads[0].fail(Codes.NETWORK);
+  await flush();
+  p.startEdit("c1");
+  p.openLightbox("r-png");
+  memory.deleteTask("t1");
+  assert.deepEqual([p.editingId, p.confirmingCommentId, p.lightboxId], ["", "", ""]);
+  assert.equal(p.uploadRows[0].canRetry, false);
+  p.askDeleteComment("c1");
+  assert.equal(p.confirmingCommentId, "");
+});
+
+test("a file name longer than the title limit still matches its echo: nothing shows twice", async () => {
+  const { page: p, memory } = page({ holdUploads: true });
+  const long = `${"n".repeat(230)}.png`;
+  p.addFiles([fileOf(long, 5, "image/png")]);
+  await flush();
+  memory.uploads[0].finish();
+  await flush();
+  assert.equal(p.rows.length, 1);
+  assert.equal(p.rows[0].title.length, 200);
 });
