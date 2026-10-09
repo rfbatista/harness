@@ -312,15 +312,25 @@ templ commentsColumn() {
 						x-bind:aria-busy="c.busy"
 					>
 						<header>
-							<strong>You</strong>
+							<template x-if="!c.authorHref">
+								<strong data-author x-text="c.author"></strong>
+							</template>
+							<template x-if="c.authorHref">
+								<strong data-author><a x-bind:href="c.authorHref" x-bind:title="c.authorLabel" x-text="c.author"></a></strong>
+							</template>
+							<template x-if="c.bySession">
+								<span class="[ badge ]" data-tone="signal" data-agent-mark>Agent</span>
+							</template>
 							<time x-bind:datetime="c.datetime" x-bind:title="c.dateTitle" x-text="c.age"></time>
 							<template x-if="c.edited">
 								<span class="[ edited ]" x-bind:title="c.editedTitle">edited</span>
 							</template>
 							<template x-if="!c.editing && !c.confirming">
 								<div class="[ actions ] [ cluster ] [ gutter-2xs ]">
-									<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" data-edit x-bind:aria-label="c.editLabel" x-bind:disabled="cannotAdd" x-on:click="startEdit(c.id)">Edit</button>
-									<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-bind:aria-label="c.deleteLabel" x-bind:disabled="cannotAdd" x-on:click="askDeleteComment(c.id)">Delete</button>
+									<template x-if="c.canEdit">
+										<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" data-edit x-bind:aria-label="c.editLabel" x-bind:disabled="cannotAdd" x-on:click="startEdit(c.id)">Edit</button>
+									</template>
+									<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" data-delete x-bind:aria-label="c.deleteLabel" x-bind:disabled="cannotAdd" x-on:click="askDeleteComment(c.id)">Delete</button>
 								</div>
 							</template>
 						</header>

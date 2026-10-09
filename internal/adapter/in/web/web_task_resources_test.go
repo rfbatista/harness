@@ -67,6 +67,8 @@ func TestTaskResourcesPageSeedsTheTasksResourcesAndComments(t *testing.T) {
 		`id="resources"`, `id="comments"`, `class="[ resources-page ]" data-scroll`,
 		`class="[ lightbox ]"`, `x-data="menu"`, `class="[ composer ]"`,
 		`Sessions running on this task get each new comment as a message; edits are not sent.`,
+		// A session's comment: its agent's name (a link while the session is listed), the Agent mark, no Edit.
+		`<strong data-author><a x-bind:href="c.authorHref"`, `data-tone="signal" data-agent-mark>Agent</span>`, `<template x-if="c.canEdit">`,
 		`<kbd>⌘V</kbd> paste an image`,
 	} {
 		if !strings.Contains(body, want) {
