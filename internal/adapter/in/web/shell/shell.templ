@@ -86,7 +86,7 @@ templ notificationsBell(b *Bell) {
 	if b.Seed != nil {
 		@templ.JSONScript("notifications-seed", b.Seed)
 	}
-	<div class="[ notifications ]" x-data="notificationsBell" x-on:focusout="focusLeft">
+	<div class="[ notifications ]" x-data="notificationsBell" x-bind:data-feed="feedStatus" x-on:focusout="focusLeft">
 		<a
 			class="[ button ] [ bell ]"
 			data-variant="ghost"

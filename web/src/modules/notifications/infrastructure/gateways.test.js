@@ -1,6 +1,7 @@
 // Both NotificationGateway implementations run the same contract.
 
 import { Codes } from "../../../shared/domain/errors.js";
+import { FeedStatus } from "../../../shared/domain/feed.js";
 import { apiClient } from "../../../shared/infrastructure/api.js";
 import { feed } from "../../../shared/infrastructure/feed.js";
 import { fakeFetch, flush, jsonResponse } from "../../../shared/testing/doubles.js";
@@ -17,6 +18,18 @@ file("notifications/infrastructure/gateways");
 notificationGatewayContract("memory", (world) => {
   const memory = memoryNotifications(world);
   return { gateway: memory.gateway, notify: memory.notify, resolve: memory.resolve };
+});
+
+test("memory · the stream's state is the test's to report", async () => {
+  const memory = memoryNotifications();
+  const heard = [];
+  const stop = memory.gateway.follow(() => {}, (s) => heard.push(s));
+  await flush();
+  memory.reportStatus(FeedStatus.PAUSED);
+  memory.reportStatus(FeedStatus.RESYNCED);
+  stop();
+  memory.reportStatus(FeedStatus.PAUSED);
+  assert.deepEqual(heard, [FeedStatus.LIVE, FeedStatus.PAUSED, FeedStatus.RESYNCED]);
 });
 
 function http(world) {

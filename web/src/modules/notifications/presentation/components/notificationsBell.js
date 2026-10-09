@@ -56,6 +56,10 @@ export const notificationsBell = ({ gateway, store, clock, env }) => () => {
     now: clock.now(),
 
     // ── what the markup binds ────────────────────────────────────────────
+    /** The stream's state, on the root (data-feed): "live" once following. */
+    get feedStatus() {
+      return store.status;
+    },
     get badge() {
       return badgeText(store.unreadCount);
     },

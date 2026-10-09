@@ -1,5 +1,5 @@
 /*
- * Top bar — the app's name and the project picker. The picker is a native
+ * Top bar — the app's name, the project picker and the notifications bell. The picker is a native
  * <select> in a GET form (styled globally); it decides what the rail lists.
  * <header class="topbar"><a class="brand" href="/">harness</a><form>…<select>…</form></header>
  */
@@ -37,6 +37,15 @@
     & select {
       min-inline-size: 12rem;
       max-inline-size: 24rem;
+    }
+
+    /* The notifications bell (notification.css) ends the first line; on a
+       phone it stays there, beside the Tasks button and the name, and the
+       picker wraps below. */
+    @media (width < 48rem) {
+      & > .tasks-toggle,
+      & > .brand { order: -2; }
+      & > .notifications > .bell { order: -1; }
     }
   }
 }

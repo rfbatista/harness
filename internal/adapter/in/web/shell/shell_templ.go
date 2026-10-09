@@ -336,7 +336,7 @@ func notificationsBell(b *Bell) templ.Component {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 23, "<div class=\"[ notifications ]\" x-data=\"notificationsBell\" x-on:focusout=\"focusLeft\"><a class=\"[ button ] [ bell ]\" data-variant=\"ghost\" data-icon href=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 23, "<div class=\"[ notifications ]\" x-data=\"notificationsBell\" x-bind:data-feed=\"feedStatus\" x-on:focusout=\"focusLeft\"><a class=\"[ button ] [ bell ]\" data-variant=\"ghost\" data-icon href=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

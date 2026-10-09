@@ -71,7 +71,7 @@ export function memoryNotifications({ notifications = [], now = () => new Date()
     fromSeed: toPage,
 
     follow(onChange, onStatus) {
-      const follower = { onChange };
+      const follower = { onChange, onStatus };
       followers.add(follower);
       queueMicrotask(() => followers.has(follower) && onStatus(FeedStatus.LIVE));
       return () => followers.delete(follower);
@@ -110,6 +110,10 @@ export function memoryNotifications({ notifications = [], now = () => new Date()
       const resolved = Object.freeze({ ...n, resolvedAt: now() });
       commit([resolved]);
       return resolved;
+    },
+    /** The stream drops (PAUSED) or comes back having missed changes (RESYNCED). */
+    reportStatus(status) {
+      for (const f of followers) f.onStatus(status);
     },
     find: (id) => list.find((n) => n.id === id) ?? null,
     unreadCount,
