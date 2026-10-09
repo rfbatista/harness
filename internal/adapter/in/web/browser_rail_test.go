@@ -495,5 +495,11 @@ func TestRailScreenshots(t *testing.T) {
 		chromedp.SendKeys(`.filter input`, "design", chromedp.ByQuery),
 		chromedp.Sleep(800*time.Millisecond),
 		railShot("rail-filter-dark"),
+		chromedp.EmulateViewport(375, 740),
+		h.openLive("/projects/p1/tasks/t-cur"),
+		railTheme("light"),
+		chromedp.Click(`.tasks-toggle`, chromedp.ByQuery),
+		chromedp.Sleep(900*time.Millisecond),
+		railShot("rail-phone-drawer-light"),
 	)
 }

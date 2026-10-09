@@ -75,8 +75,8 @@
       }
 
       & > .button[data-size],
-      & .nav .head > .button,
-      & .nav .filter input { min-block-size: var(--size-touch); }
+      & .nav .head > .button { min-block-size: var(--size-touch); }
+      & .nav .filter { --_field: var(--size-touch); }
 
       @media (prefers-reduced-motion: reduce) { transition: none; }
     }

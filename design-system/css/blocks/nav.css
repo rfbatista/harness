@@ -137,12 +137,14 @@
     }
 
     & .filter {
+      --_field: var(--size-control-sm);   /* the drawer makes it 44px */
+
       position: relative;
       padding: var(--space-2xs) var(--space-s) var(--space-s);
 
       & input {
         inline-size: 100%;
-        min-block-size: var(--size-control-sm);
+        min-block-size: var(--_field);
         padding-inline-end: var(--space-xl);
         font-size: var(--text-sm);
       }
@@ -150,7 +152,7 @@
       & > kbd {
         position: absolute;
         inset-inline-end: calc(var(--space-s) + var(--space-xs));
-        inset-block-start: calc(var(--space-2xs) + (var(--size-control-sm) - 1.125rem) / 2);
+        inset-block-start: calc(var(--space-2xs) + (var(--_field) - 1.125rem) / 2);
         block-size: 1.125rem;
         pointer-events: none;
       }
