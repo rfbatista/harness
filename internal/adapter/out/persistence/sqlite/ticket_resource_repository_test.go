@@ -1,10 +1,13 @@
 package sqlite
 
 import (
+	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/rfbatista/harnesskit/errs"
+	gormsqlite "gorm.io/driver/sqlite"
+	"gorm.io/gorm"
 
 	"operators-mcp/internal/domain"
 )
@@ -104,5 +107,59 @@ func TestTicketCommentRepo(t *testing.T) {
 	}
 	if len(r.List("t", time.Time{})) != 0 || len(r.List("other", time.Time{})) != 1 {
 		t.Fatal("DeleteByTicket must clear only its task")
+	}
+}
+
+func TestTicketCommentRepo_KeepsTheWritingSession(t *testing.T) {
+	db, err := Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := NewTicketCommentRepository(db)
+	c, err := r.Create(&domain.TicketComment{TicketID: "t", ProjectID: "p", Author: domain.CommentBySession, SessionID: "s1", AgentName: "go-developer", Body: "done"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Author != domain.CommentBySession || c.SessionID != "s1" || c.AgentName != "go-developer" {
+		t.Fatalf("created = %+v", c)
+	}
+	if got := r.Get(c.ID); got.Author != domain.CommentBySession || got.SessionID != "s1" || got.AgentName != "go-developer" {
+		t.Fatalf("round trip = %+v", got)
+	}
+	if edited, err := r.SetBody(c.ID, "redone"); err != nil || edited.SessionID != "s1" || edited.AgentName != "go-developer" {
+		t.Fatalf("SetBody keeps the author: %+v, %v", edited, err)
+	}
+}
+
+func TestTicketCommentRepo_OldRowsReadBackAsThePersons(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "h.db")
+	old, err := gorm.Open(gormsqlite.Open(path), &gorm.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, q := range []string{
+		`CREATE TABLE ticket_comments (id text PRIMARY KEY, ticket_id text, project_id text, author text, body text, created_at integer, updated_at integer)`,
+		`INSERT INTO ticket_comments VALUES ('c1', 't', 'p', 'person', 'hello', 1, 1)`,
+		`INSERT INTO ticket_comments VALUES ('c2', 't', 'p', '', 'blank author', 2, 2)`,
+	} {
+		if err := old.Exec(q).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+	sqlDB, _ := old.DB()
+	_ = sqlDB.Close()
+
+	db, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	list := NewTicketCommentRepository(db).List("t", time.Time{})
+	if len(list) != 2 {
+		t.Fatalf("list = %+v", list)
+	}
+	for _, c := range list {
+		if c.Author != domain.CommentByPerson || c.SessionID != "" || c.AgentName != "" {
+			t.Errorf("old row %s = %+v, want a person's comment", c.ID, c)
+		}
 	}
 }
