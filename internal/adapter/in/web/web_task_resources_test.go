@@ -92,6 +92,19 @@ func TestTaskResourcesPageSeedsTheTasksResourcesAndComments(t *testing.T) {
 	if strings.Contains(body, "Keep <the>") {
 		t.Error("a comment body reached the HTML unescaped")
 	}
+	// The sessions listed on the task, so a session's comment links to its own while it is there.
+	if ids := seed["session_ids"].([]any); len(ids) != 2 || ids[0] != "s1" || ids[1] != "s2" {
+		t.Errorf("session_ids = %v, want t-feed's s1 and s2", ids)
+	}
+}
+
+func TestTaskResourcesPageWithoutSessionsSeedsNoSessionIDs(t *testing.T) {
+	w := resourcesBoard()
+	w.sessions = nil
+	seed := seedOf(t, get(t, newTestHandler(t, w), "/projects/p1/tasks/t-feed/resources").Body.String(), "task-resources-seed")
+	if ids, ok := seed["session_ids"].([]any); !ok || len(ids) != 0 {
+		t.Errorf("session_ids = %v, want []", seed["session_ids"])
+	}
 }
 
 func TestTaskResourcesPageOfAnotherProjectsTaskIsNotFound(t *testing.T) {
