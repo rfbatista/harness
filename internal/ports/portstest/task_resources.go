@@ -30,9 +30,8 @@ func TaskResourcesConformance(t *testing.T, newPort func(t *testing.T) (ports.Ta
 			up.Mime != "image/png" || up.SizeBytes != int64(len(pngHead)) || up.URL != "" {
 			t.Fatalf("uploaded = %+v", up)
 		}
-		got, err := p.GetTicketResource(ctx, up.ID)
-		if err != nil || got.ID != up.ID || got.Title != "shot.png" {
-			t.Fatalf("GetTicketResource = %+v, %v", got, err)
+		if list, err := p.ListTicketResources(ctx, tid); err != nil || len(list) != 1 || list[0].ID != up.ID || list[0].Title != "shot.png" {
+			t.Fatalf("ListTicketResources = %+v, %v", list, err)
 		}
 		c, err := p.OpenTicketResource(ctx, up.ID)
 		if err != nil {
@@ -51,8 +50,11 @@ func TaskResourcesConformance(t *testing.T, newPort func(t *testing.T) (ports.Ta
 			t.Fatal(err)
 		}
 		wantCode(t, p.DeleteTicketResource(ctx, up.ID), "RESOURCE_NOT_FOUND")
-		_, err = p.GetTicketResource(ctx, up.ID)
+		_, err = p.OpenTicketResource(ctx, up.ID)
 		wantCode(t, err, "RESOURCE_NOT_FOUND")
+		if list, _ := p.ListTicketResources(ctx, tid); len(list) != 0 {
+			t.Fatalf("after delete = %+v", list)
+		}
 	})
 
 	t.Run("a given title wins over the file name", func(t *testing.T) {

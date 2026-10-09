@@ -11,7 +11,7 @@ import (
 	"operators-mcp/internal/adapter/out/httpclient"
 )
 
-// The TUI follows sessions only. A ticket or artifact message on the shared
+// The TUI follows sessions only. A ticket, artifact, resource or comment message on the shared
 // feed is not a session change and must never reach it, let alone as a nil
 // session.
 func TestEvents_SkipsTicketMessages(t *testing.T) {
@@ -24,6 +24,11 @@ func TestEvents_SkipsTicketMessages(t *testing.T) {
 		// Project design assets: attached or moved, then deleted.
 		fmt.Fprint(w, "data: {\"artifact\":{\"id\":\"a1\",\"project_id\":\"p1\",\"ticket_id\":\"tk1\",\"scope\":\"project\",\"attached_ticket_ids\":[\"tk2\"]}}\n\n")
 		fmt.Fprint(w, "data: {\"artifact\":{\"id\":\"a1\",\"project_id\":\"p1\",\"ticket_id\":\"tk1\",\"attached_ticket_ids\":[]},\"deleted\":true}\n\n")
+		// A person's resources and comments on a task.
+		fmt.Fprint(w, "data: {\"ticket_resource\":{\"id\":\"r1\",\"ticket_id\":\"tk1\",\"project_id\":\"p1\",\"kind\":\"link\",\"url\":\"https://x.io\"}}\n\n")
+		fmt.Fprint(w, "data: {\"ticket_resource\":{\"id\":\"r1\",\"ticket_id\":\"tk1\",\"project_id\":\"p1\"},\"deleted\":true}\n\n")
+		fmt.Fprint(w, "data: {\"ticket_comment\":{\"id\":\"c1\",\"ticket_id\":\"tk1\",\"project_id\":\"p1\",\"body\":\"hi\"}}\n\n")
+		fmt.Fprint(w, "data: {\"ticket_comment\":{\"id\":\"c1\",\"ticket_id\":\"tk1\",\"project_id\":\"p1\"},\"deleted\":true}\n\n")
 	}))
 	t.Cleanup(srv.Close)
 

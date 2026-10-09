@@ -200,5 +200,17 @@ func NewRouter(h *Handler, opts ...Option) *echo.Echo {
 	g.POST("/unlink_document_from_ticket", h.handleUnlinkDocument)
 	g.GET("/list_ticket_documents", h.handleListTicketDocuments)
 
+	// task resources and comments: what a person adds to a task
+	g.GET("/list_ticket_resources", h.handleListTicketResources)
+	g.POST("/upload_ticket_resource", h.handleUploadTicketResource)
+	g.POST("/add_ticket_link", h.handleAddTicketLink)
+	g.POST("/update_ticket_resource", h.handleUpdateTicketResource)
+	g.POST("/delete_ticket_resource", h.handleDeleteTicketResource)
+	g.Match([]string{http.MethodGet, http.MethodHead}, "/ticket_resources/:id/content", h.handleTicketResourceContent)
+	g.GET("/list_ticket_comments", h.handleListTicketComments)
+	g.POST("/add_ticket_comment", h.handleAddTicketComment)
+	g.POST("/update_ticket_comment", h.handleUpdateTicketComment)
+	g.POST("/delete_ticket_comment", h.handleDeleteTicketComment)
+
 	return e
 }

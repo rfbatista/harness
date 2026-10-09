@@ -44,6 +44,10 @@ type Deps struct {
 	// Artifacts lists the design assets the task pages and the project's
 	// design library seed; nil seeds none.
 	Artifacts ports.ArtifactReader
+	// Resources and Comments read what a person added to a task, for the
+	// task page's first paint; nil seeds none.
+	Resources ports.TaskResourceReader
+	Comments  ports.TaskCommentReader
 	// ProjectSummaries counts every project for the projects list; nil
 	// leaves /projects unserved and the top bar offers New project instead.
 	ProjectSummaries ports.ProjectSummaries

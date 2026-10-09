@@ -98,8 +98,6 @@ type ResourceContent struct {
 type TaskResourceReader interface {
 	// ListTicketResources is oldest first; TICKET_NOT_FOUND.
 	ListTicketResources(ctx context.Context, ticketID string) ([]*domain.TicketResource, error)
-	// GetTicketResource is RESOURCE_NOT_FOUND when there is none.
-	GetTicketResource(ctx context.Context, id string) (*domain.TicketResource, error)
 }
 
 // TaskResources is the person's side of resources. Network-safe: tui-client
@@ -124,6 +122,8 @@ type TaskResources interface {
 // agent tools hand a session. Not network-safe.
 type TaskResourceFiles interface {
 	TaskResourceReader
+	// GetTicketResource is RESOURCE_NOT_FOUND when there is none.
+	GetTicketResource(ctx context.Context, id string) (*domain.TicketResource, error)
 	OpenTicketResource(ctx context.Context, id string) (*ResourceContent, error)
 	// TicketResourcePath is the absolute path of an upload's bytes;
 	// RESOURCE_NOT_FOUND for a link or a missing id.

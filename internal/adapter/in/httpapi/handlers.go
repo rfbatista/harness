@@ -42,6 +42,10 @@ type Services struct {
 	// TaskChannel is the person's side of the architect channel: task
 	// messages, review requests, status checks. Nil answers 503.
 	TaskChannel ports.TaskChannelUI
+	// TaskResources and TaskComments are what a person adds to a task:
+	// files, images, audio, links and comments. Nil answers 503.
+	TaskResources ports.TaskResources
+	TaskComments  ports.TaskComments
 }
 
 // Handler serves the application's driving ports as HTTP endpoints (the same
@@ -68,6 +72,8 @@ type Handler struct {
 	workspacesSvc ports.WorkspaceManager
 	artifactsSvc  ports.Artifacts
 	channel       ports.TaskChannelUI
+	resources     ports.TaskResources
+	comments      ports.TaskComments
 }
 
 // NewHandler returns an HTTP handler that serves /api/list_tree, /api/list_zones, /api/list_projects, etc.
@@ -90,6 +96,8 @@ func NewHandler(s Services) *Handler {
 		workspacesSvc: s.Workspaces,
 		artifactsSvc:  s.Artifacts,
 		channel:       s.TaskChannel,
+		resources:     s.TaskResources,
+		comments:      s.TaskComments,
 	}
 }
 

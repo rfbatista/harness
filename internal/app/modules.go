@@ -22,6 +22,7 @@ import (
 	"operators-mcp/internal/adapter/in/mcpsession"
 	"operators-mcp/internal/adapter/out/agents/claudehome"
 	"operators-mcp/internal/adapter/out/agents/claudetext"
+	"operators-mcp/internal/adapter/out/blobstore"
 	"operators-mcp/internal/adapter/out/configrepo"
 	"operators-mcp/internal/adapter/out/filesystem"
 	"operators-mcp/internal/adapter/out/gitcli"
@@ -204,18 +205,39 @@ func bindProjectActivity(cat catalog.Catalog, plan *planning.Service, orch *orch
 	cat.Projects.UseActivity(plan, orch)
 }
 
-// newPlanningService builds the planning service and points its ticket
-// announcements at the orchestration, which owns the project feed the board
-// and the rail follow.
+// newPlanningService builds the planning service and points its ticket,
+// resource and comment announcements at the orchestration, which owns the
+// project feed the board and the rail follow. A person's additions to a task
+// go on the bus too, for the orchestration to tell the task's sessions. The
+// bytes of uploaded resources live in a task-resources/ directory next to
+// the database; an in-memory database gets a temporary one.
 func newPlanningService(
+	cfg Config,
+	db *gorm.DB,
 	tickets ports.TicketRepository,
 	documents ports.DocumentRepository,
 	projects ports.ProjectRepository,
 	orch *orchestration.Service,
-) *planning.Service {
+	cat catalog.Catalog,
+) (*planning.Service, error) {
 	svc := planning.NewService(tickets, documents, projects)
-	svc.Announcer = orch
-	return svc
+	svc.Announcer, svc.Feed, svc.Events = orch, orch, cat.Bus
+	dir, err := dataDir(cfg, "task-resources")
+	if err != nil {
+		return nil, err
+	}
+	svc.Resources, svc.Comments = sqlite.NewTicketResourceRepository(db), sqlite.NewTicketCommentRepository(db)
+	svc.Blobs, svc.ContentURL = blobstore.New(dir), httpapi.TicketResourceContentPath
+	return svc, nil
+}
+
+// dataDir is name next to the database, or a fresh temporary directory for
+// an in-memory one.
+func dataDir(cfg Config, name string) (string, error) {
+	if cfg.DBPath == "" || cfg.DBPath == ":memory:" {
+		return os.MkdirTemp("", "harness-"+name+"-")
+	}
+	return filepath.Join(filepath.Dir(cfg.DBPath), name), nil
 }
 
 // ExecutionModule wires the Genkit-backed execution layer: the LLM client, the
@@ -338,15 +360,11 @@ func newArtifactsService(cfg Config, repo ports.ArtifactRepository, sessions por
 	svc := artifacts.NewService(repo, sessions, orch)
 	svc.Tickets, svc.Feed = plan, orch
 	orch.Artifacts = svc // a session's brief lists its task's attached assets
-	if cfg.DBPath == "" || cfg.DBPath == ":memory:" {
-		dir, err := os.MkdirTemp("", "harness-artifacts-")
-		if err != nil {
-			return nil, err
-		}
-		svc.StoreDir = dir
-	} else {
-		svc.StoreDir = filepath.Join(filepath.Dir(cfg.DBPath), "artifacts")
+	dir, err := dataDir(cfg, "artifacts")
+	if err != nil {
+		return nil, err
 	}
+	svc.StoreDir = dir
 	svc.Subscribe(cat.Bus)
 	return svc, nil
 }

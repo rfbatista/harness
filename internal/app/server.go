@@ -75,6 +75,9 @@ func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRun
 		Workspaces:   ws,
 		Artifacts:    art,
 		TaskChannel:  channel,
+		// What a person adds to a task: files, images, audio, links, comments.
+		TaskResources: plan,
+		TaskComments:  plan,
 	}), httpapi.WithToken(cfg.APIToken))
 	mux.Handle("/api/", apiRouter)
 	mux.Handle(mcpapprove.PathPrefix, mcpapprove.Handler(broker))
@@ -83,7 +86,8 @@ func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRun
 		tooling.ArtifactTooling{Publisher: art, Attachments: art, ViewURL: httpapi.ArtifactViewPath}, channel)))
 	// The web client owns / and its pages; anything else reaches the legacy
 	// designer SPA until it is retired.
-	mux.Handle("/", web.NewHandler(web.Deps{Projects: cat.Projects, Tasks: plan, Sessions: orch, Agents: cat.Agents, Repositories: cat.Projects, EnvFiles: cat.Projects, Documents: plan, History: ws, Artifacts: art, ProjectSummaries: cat.Projects}, assets, uiHandler))
+	mux.Handle("/", web.NewHandler(web.Deps{Projects: cat.Projects, Tasks: plan, Sessions: orch, Agents: cat.Agents, Repositories: cat.Projects, EnvFiles: cat.Projects, Documents: plan, History: ws, Artifacts: art, ProjectSummaries: cat.Projects,
+		Resources: plan, Comments: plan}, assets, uiHandler))
 
 	srv := &http.Server{Addr: cfg.HTTPAddr, Handler: httpapi.CORSMiddleware(mux)}
 	lc.Append(fx.Hook{
