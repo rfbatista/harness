@@ -72,7 +72,11 @@ type ProjectChange struct {
 	// Artifact is a project design asset that changed (attached, detached,
 	// moved, re-published) or was deleted.
 	Artifact *ArtifactChange `json:"artifact,omitempty"`
-	Deleted  bool            `json:"deleted,omitempty"`
+	// A resource or comment a person added to, changed on or deleted from a
+	// task.
+	TicketResource *TicketResourceChange `json:"ticket_resource,omitempty"`
+	TicketComment  *TicketCommentChange  `json:"ticket_comment,omitempty"`
+	Deleted        bool                  `json:"deleted,omitempty"`
 }
 
 // ProjectID is the project whose followers the change is for.
@@ -92,6 +96,10 @@ func (c ProjectChange) ProjectID() string {
 		return c.TaskStatus.ProjectID
 	case c.Artifact != nil && c.Artifact.Artifact != nil:
 		return c.Artifact.Artifact.ProjectID
+	case c.TicketResource != nil && c.TicketResource.Resource != nil:
+		return c.TicketResource.Resource.ProjectID
+	case c.TicketComment != nil && c.TicketComment.Comment != nil:
+		return c.TicketComment.Comment.ProjectID
 	}
 	return ""
 }

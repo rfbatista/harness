@@ -70,6 +70,13 @@ type TicketDeleted struct {
 	ProjectID string
 }
 
+// TicketResourceAdded: a person added a resource to a task. Edits and
+// deletes raise nothing: only an addition is news to the task's sessions.
+type TicketResourceAdded struct{ Resource TicketResource }
+
+// TicketCommentAdded: a person commented on a task.
+type TicketCommentAdded struct{ Comment TicketComment }
+
 func (ProjectDeleted) EventName() string      { return "project.deleted" }
 func (PromptDeleted) EventName() string       { return "prompt.deleted" }
 func (AgentDeleted) EventName() string        { return "agent.deleted" }
@@ -82,3 +89,5 @@ func (SessionEnded) EventName() string        { return "session.ended" }
 func (SessionTurnEnded) EventName() string    { return "session.turn_ended" }
 func (TicketStatusChanged) EventName() string { return "ticket.status_changed" }
 func (TicketDeleted) EventName() string       { return "ticket.deleted" }
+func (TicketResourceAdded) EventName() string { return "ticket.resource_added" }
+func (TicketCommentAdded) EventName() string  { return "ticket.comment_added" }
