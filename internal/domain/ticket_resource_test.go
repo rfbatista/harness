@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -95,6 +96,32 @@ func TestCommentBody(t *testing.T) {
 	for _, bad := range []string{"", " \n\t ", strings.Repeat("é", MaxCommentLen+1)} {
 		if _, err := CommentBody(bad); errs.Code(err) != "INVALID_INPUT" {
 			t.Errorf("CommentBody(%d runes) err = %v, want INVALID_INPUT", len([]rune(bad)), err)
+		}
+	}
+}
+
+func TestCommentWrittenBy(t *testing.T) {
+	mine := &TicketComment{Author: CommentBySession, SessionID: "s1"}
+	if !mine.WrittenBy("s1") {
+		t.Error("a session's own comment is written by it")
+	}
+	if mine.WrittenBy("s2") {
+		t.Error("another session's comment is not written by the caller")
+	}
+	person := &TicketComment{Author: CommentByPerson}
+	if person.WrittenBy("") || person.WrittenBy("s1") {
+		t.Error("a person's comment is written by no session")
+	}
+}
+
+func TestCommentWireShapeAlwaysCarriesTheAuthorFields(t *testing.T) {
+	b, err := json.Marshal(&TicketComment{ID: "c", Author: CommentByPerson, Body: "x"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, key := range []string{`"author":"person"`, `"session_id":""`, `"agent_name":""`} {
+		if !strings.Contains(string(b), key) {
+			t.Errorf("%s lacks %s", b, key)
 		}
 	}
 }

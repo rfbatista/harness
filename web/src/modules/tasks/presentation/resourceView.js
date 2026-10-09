@@ -2,7 +2,7 @@
 // values the markup binds. Pure; the page component decides the state.
 
 import { count } from "../../../shared/presentation/format.js";
-import { isEdited } from "../domain/comments.js";
+import { authorName, canEdit, isBySession, isEdited } from "../domain/comments.js";
 import { addressWords, downloadHref, extensionLabel, menuItems, sizeWords, tileKind, titleAction, titleHref, typeWord } from "../domain/resources.js";
 import { percent, progressWords, uploadTitle, UploadState } from "../domain/uploads.js";
 
@@ -105,22 +105,33 @@ export function uploadRow(u, { taskGone = false } = {}) {
   };
 }
 
+/** The task page with one of its sessions open. */
+export const sessionHref = (taskHref, sessionId) => `${taskHref}?session=${encodeURIComponent(sessionId)}`;
+
 /**
  * @param {import("../domain/comments.js").Comment} c
- * @param {{ now: Date, fresh: boolean, editing: boolean, confirming: boolean, busy: boolean }} state
+ * @param {{ now: Date, fresh: boolean, editing: boolean, confirming: boolean, busy: boolean, authorHref: string }} state
+ *        authorHref: where the writing session opens, "" when it is no longer listed on the task
  */
-export function commentRow(c, { now, fresh = false, editing = false, confirming = false, busy = false }) {
+export function commentRow(c, { now, fresh = false, editing = false, confirming = false, busy = false, authorHref = "" }) {
   const age = agoWords(c.createdAt, now);
+  const bySession = isBySession(c);
+  const author = authorName(c);
   return {
     id: c.id,
     body: c.body,
+    bySession,
+    author,
+    authorHref: bySession ? authorHref : "",
+    authorLabel: `Open ${author}'s session`,
+    canEdit: canEdit(c),
     age,
     datetime: c.createdAt.toISOString(),
     dateTitle: fullDate(c.createdAt),
     edited: isEdited(c),
     editedTitle: `Edited ${fullDate(c.updatedAt)}`,
     editLabel: `Edit comment from ${age}`,
-    deleteLabel: `Delete comment from ${age}`,
+    deleteLabel: bySession ? `Delete comment by ${author} from ${age}` : `Delete comment from ${age}`,
     fresh,
     editing,
     confirming,

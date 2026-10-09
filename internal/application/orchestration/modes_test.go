@@ -53,7 +53,7 @@ func TestStartInteractive_ArchitectMode(t *testing.T) {
 		t.Error("task-architecture SKILL.md still carries Markdown document templates")
 	}
 	prompt := launch.Spec.Prompt
-	for _, want := range []string{"task-architecture skill", "tk1: Ship the thing", "Users export their data as CSV."} {
+	for _, want := range []string{"task-architecture skill", "tk1: Ship the thing", "Users export their data as CSV.", "add_task_comment"} {
 		if !strings.Contains(prompt, want) {
 			t.Errorf("first message lacks %q:\n%s", want, prompt)
 		}
@@ -135,7 +135,7 @@ func TestStartInteractive_DesignMode(t *testing.T) {
 	}
 	p := launch.Spec.Prompt
 	if !strings.HasPrefix(p, "Use the design-artifacts skill on task tk1: Ship the thing") || !strings.Contains(p, "A pricing card in three states.") ||
-		!strings.Contains(p, "publish_artifact") || !strings.HasSuffix(p, "Start with the hover state.") {
+		!strings.Contains(p, "publish_artifact") || !strings.Contains(p, "add_task_comment") || !strings.HasSuffix(p, "Start with the hover state.") {
 		t.Errorf("first message = %q", p)
 	}
 	// The design skill must not drag the architect one along.

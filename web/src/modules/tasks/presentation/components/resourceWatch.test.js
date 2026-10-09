@@ -36,3 +36,14 @@ test("after the feed resyncs the counts are read again", async () => {
   await flush();
   assert.equal(w.resourceCount, 1);
 });
+
+test("a session's comment counts like the person's; a session coming and going does not", async () => {
+  const { w, memory } = watch();
+  memory.startSession("t1", "s-rev");
+  const c = memory.sessionAdds({ ticketId: "t1", sessionId: "s-rev", agentName: "Reviewer", body: "Found it." });
+  memory.sessionEdits(c.id, "Found it twice.");
+  assert.deepEqual([w.resourceCount, w.commentCount], [1, 2]);
+  memory.sessionDeletes(c.id);
+  memory.deleteSession("s-rev");
+  assert.deepEqual([w.resourceCount, w.commentCount], [1, 1]);
+});

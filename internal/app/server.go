@@ -25,6 +25,7 @@ import (
 	"operators-mcp/internal/application/taskchannel"
 	"operators-mcp/internal/application/tooling"
 	"operators-mcp/internal/application/workspaces"
+	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
 
 	mcplib "github.com/mark3labs/mcp-go/mcp"
@@ -95,10 +96,7 @@ func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRun
 	}), httpapi.WithToken(cfg.APIToken))
 	mux.Handle("/api/", apiRouter)
 	mux.Handle(mcpapprove.PathPrefix, mcpapprove.Handler(broker))
-	mux.Handle(mcpsession.PathPrefix, mcpsession.TaskHandler(tooling.SessionTaskTools(plan, sessions, cat.Agents, cat.Architecture,
-		tooling.PeerStarter{Sessions: orch, Repositories: cat.Projects},
-		tooling.ArtifactTooling{Publisher: art, Attachments: art, ViewURL: httpapi.ArtifactViewPath}, channel,
-		tooling.ResourceTooling{Files: plan, Comments: plan}, tooling.NotificationTooling{Notifier: notifier})))
+	mux.Handle(mcpsession.PathPrefix, mcpsession.TaskHandler(sessionTaskTools(cat, orch, plan, sessions, art, channel, notifier)))
 	// The web client owns / and its pages; anything else reaches the legacy
 	// designer SPA until it is retired.
 	mux.Handle("/", web.NewHandler(web.Deps{Projects: cat.Projects, Tasks: plan, Sessions: orch, Agents: cat.Agents, Repositories: cat.Projects, EnvFiles: cat.Projects, Documents: plan, History: ws, Artifacts: art, ProjectSummaries: cat.Projects, PullRequests: prs,
@@ -139,6 +137,15 @@ type optionalNotifications struct {
 	fx.In
 
 	Service *notifications.Service `optional:"true"`
+}
+
+// sessionTaskTools are the tools each session reaches on its own task
+// endpoint, /mcp/task/{session}.
+func sessionTaskTools(cat catalog.Catalog, orch *orchestration.Service, plan *planning.Service, sessions ports.SessionRepository, art *artifacts.Service, channel *taskchannel.Service, notifier ports.Notifier) []domain.Tool {
+	return tooling.SessionTaskTools(plan, sessions, cat.Agents, cat.Architecture,
+		tooling.PeerStarter{Sessions: orch, Repositories: cat.Projects},
+		tooling.ArtifactTooling{Publisher: art, Attachments: art, ViewURL: httpapi.ArtifactViewPath}, channel,
+		tooling.ResourceTooling{Files: plan, Comments: plan, Writer: plan}, tooling.NotificationTooling{Notifier: notifier})
 }
 
 // registerMCPServer builds the MCP server, registers all tools and the designer

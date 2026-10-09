@@ -44,7 +44,10 @@ export function toComment(dto) {
     id: dto.id,
     ticketId: dto.ticket_id ?? "",
     projectId: dto.project_id ?? "",
-    author: dto.author ?? "person",
+    // Anything but a session's is the person's: rows from before sessions wrote comments have no author.
+    author: dto.author === "session" ? "session" : "person",
+    sessionId: dto.author === "session" ? (dto.session_id ?? "") : "",
+    agentName: dto.author === "session" ? (dto.agent_name ?? "") : "",
     body: dto.body,
     ...dates(dto, "comment"),
   });
@@ -60,7 +63,7 @@ export function toCommentList(body) {
   return body.comments.map(toComment);
 }
 
-/** The seed the task's resources page embeds: the two lists in the API's shapes. */
+/** The seed the task's resources page embeds: the two lists in the API's shapes, and the ids of the sessions listed on the task. */
 export function toResourcesSeed(seed) {
   if (!seed || typeof seed.ticket_id !== "string" || seed.ticket_id === "") bad("seed without a ticket_id");
   return {
@@ -68,6 +71,7 @@ export function toResourcesSeed(seed) {
     ticketId: seed.ticket_id,
     resources: toResourceList({ resources: seed.resources ?? [] }),
     comments: toCommentList({ comments: seed.comments ?? [] }),
+    sessionIds: (seed.session_ids ?? []).filter((id) => typeof id === "string" && id !== ""),
   };
 }
 
@@ -79,8 +83,10 @@ function ref(dto, key) {
 
 /**
  * A project-feed message as a ResourceChange, or null when it is about
- * something else (sessions, artifacts, documents, a ticket that changed).
- * Throws BAD_RESPONSE on a resource or comment change it cannot read.
+ * something else (artifacts, documents, a ticket that changed). A session's
+ * change only says which session came or went; one without an id is null,
+ * since the sessions module owns that shape. Throws BAD_RESPONSE on a
+ * resource or comment change it cannot read.
  * @returns {import("../domain/ports.js").ResourceChange | null}
  */
 export function toResourceChange(dto) {
@@ -90,6 +96,11 @@ export function toResourceChange(dto) {
   }
   if ("ticket_comment" in dto) {
     return dto.deleted ? { kind: "comment-deleted", ...ref(dto, "ticket_comment") } : { kind: "comment", comment: toComment(dto.ticket_comment) };
+  }
+  if ("session" in dto) {
+    const id = dto.session?.id;
+    if (typeof id !== "string" || id === "") return null;
+    return dto.deleted ? { kind: "session-deleted", id } : { kind: "session", id, ticketId: dto.session.ticket_id ?? "" };
   }
   if ("ticket" in dto && dto.deleted) return { kind: "task-deleted", id: ref(dto, "ticket").id };
   return null;

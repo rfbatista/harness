@@ -1,8 +1,11 @@
 // ResourceGateway in memory: the fake for page tests and the data source for
 // web/dev pages. It obeys the same contract as the real gateway
 // (../testing/resource-contract.js) and mirrors the server's rules: kind
-// from the MIME type, titles and bodies trimmed, the 25 MiB limit, the
-// change on the project feed for every write.
+// from the MIME type, titles and bodies trimmed, the 25 MiB limit, a
+// session's comment deleted but never edited, the change on the project
+// feed for every write. Sessions writing comments, starting and being
+// deleted are played from outside (sessionAdds…, startSession…): the API
+// has no way to do either.
 //
 // Uploads finish on their own a tick after they start. With holdUploads, each
 // waits in `uploads` until the test (or the dev console) moves it on.
@@ -18,6 +21,7 @@ const err = (code, message, status) => new StructuredError(code, message, status
 const taskNotFound = () => err(Codes.TICKET_NOT_FOUND, "ticket not found", 404);
 const resourceNotFound = () => err(Codes.RESOURCE_NOT_FOUND, "resource not found", 404);
 const commentNotFound = () => err(Codes.COMMENT_NOT_FOUND, "comment not found", 404);
+const commentNotYours = () => err(Codes.COMMENT_NOT_YOURS, "a session wrote this comment; only it can edit it", 403);
 
 const EXTENSION_TYPES = { png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp", svg: "image/svg+xml", pdf: "application/pdf", txt: "text/plain", json: "application/json", m4a: "audio/mp4", mp3: "audio/mpeg" };
 
@@ -35,16 +39,19 @@ const kindOf = (mime) => (mime.startsWith("image/") ? "image" : mime.startsWith(
  *   tickets?: { id: string, projectId: string }[],
  *   resources?: import("../domain/resources.js").Resource[],
  *   comments?: import("../domain/comments.js").Comment[],
+ *   sessions?: { id: string, ticketId: string }[],
  *   now?: () => Date,
  *   holdUploads?: boolean,
  * }} [world]
  */
-export function memoryResources({ tickets = [{ id: "t1", projectId: "p1" }], resources = [], comments = [], now = () => new Date(), holdUploads = false } = {}) {
+export function memoryResources({ tickets = [{ id: "t1", projectId: "p1" }], resources = [], comments = [], sessions = [], now = () => new Date(), holdUploads = false } = {}) {
   let nextId = 1;
   const projects = new Map(tickets.map((t) => [t.id, t.projectId]));
   /** Insertion order is creation order: the lists are oldest first. */
   const resourceStore = new Map(resources.map((r) => [r.id, r]));
   const commentStore = new Map(comments.map((c) => [c.id, c]));
+  /** Session id → its task. */
+  const sessionStore = new Map(sessions.map((x) => [x.id, x.ticketId]));
   const followers = new Set();
   /** Uploads waiting on the test, when held. */
   const uploads = [];
@@ -57,6 +64,13 @@ export function memoryResources({ tickets = [{ id: "t1", projectId: "p1" }], res
     const projectId = projects.get(ticketId);
     if (!projectId) throw taskNotFound();
     return projectId;
+  }
+
+  /** A comment's body as the server takes it: trimmed, 1–10,000 runes. */
+  function commentBody(body) {
+    const text = (body ?? "").trim();
+    if (!text || runeCount(text) > MAX_COMMENT) throw err(Codes.INVALID_INPUT, "body must be 1–10000 characters", 400);
+    return text;
   }
 
   /** A write is a new updated_at, even when the clock has not moved. */
@@ -90,6 +104,21 @@ export function memoryResources({ tickets = [{ id: "t1", projectId: "p1" }], res
     if (titleProblem(t)) throw err(Codes.INVALID_INPUT, "title must be 1–200 characters", 400);
     const mime = mimeOf(file);
     return store(newResource(ticketId, { kind: kindOf(mime), title: t, mime, sizeBytes: file.size }));
+  }
+
+  function newComment(ticketId, text, by) {
+    const at = now();
+    return storeComment(Object.freeze({ id: `com-${nextId++}`, ticketId, projectId: projects.get(ticketId), ...by, body: text, createdAt: at, updatedAt: at }));
+  }
+
+  function editBody(c, text) {
+    if (text === c.body) return c; // a no-op edit keeps updated_at
+    return storeComment(Object.freeze({ ...c, body: text, updatedAt: later(c.updatedAt) }));
+  }
+
+  function removeStoredComment(c) {
+    commentStore.delete(c.id);
+    emit(c.projectId, { kind: "comment-deleted", id: c.id, ticketId: c.ticketId });
   }
 
   /** @type {import("../domain/ports.js").ResourceGateway} */
@@ -182,27 +211,21 @@ export function memoryResources({ tickets = [{ id: "t1", projectId: "p1" }], res
     },
 
     async addComment(ticketId, body) {
-      const projectId = requireTicket(ticketId);
-      const text = (body ?? "").trim();
-      if (!text || runeCount(text) > MAX_COMMENT) throw err(Codes.INVALID_INPUT, "body must be 1–10000 characters", 400);
-      const at = now();
-      return storeComment(Object.freeze({ id: `com-${nextId++}`, ticketId, projectId, author: "person", body: text, createdAt: at, updatedAt: at }));
+      requireTicket(ticketId);
+      return newComment(ticketId, commentBody(body), { author: "person", sessionId: "", agentName: "" });
     },
 
     async editComment(commentId, body) {
       const c = commentStore.get(commentId);
       if (!c) throw commentNotFound();
-      const text = (body ?? "").trim();
-      if (!text || runeCount(text) > MAX_COMMENT) throw err(Codes.INVALID_INPUT, "body must be 1–10000 characters", 400);
-      if (text === c.body) return c; // a no-op edit keeps updated_at
-      return storeComment(Object.freeze({ ...c, body: text, updatedAt: later(c.updatedAt) }));
+      if (c.author === "session") throw commentNotYours();
+      return editBody(c, commentBody(body));
     },
 
     async removeComment(commentId) {
       const c = commentStore.get(commentId);
       if (!c) throw commentNotFound();
-      commentStore.delete(commentId);
-      emit(c.projectId, { kind: "comment-deleted", id: c.id, ticketId: c.ticketId });
+      removeStoredComment(c);
     },
 
     follow(projectId, onChange, onStatus) {
@@ -224,6 +247,34 @@ export function memoryResources({ tickets = [{ id: "t1", projectId: "p1" }], res
       for (const r of [...resourceStore.values()]) if (r.ticketId === ticketId) resourceStore.delete(r.id);
       for (const c of [...commentStore.values()]) if (c.ticketId === ticketId) commentStore.delete(c.id);
       emit(projectId, { kind: "task-deleted", id: ticketId });
+    },
+    /** A session on the task writes a comment, as its task tool would: on the feed, not through the gateway. */
+    sessionAdds({ ticketId, sessionId, agentName = "", body }) {
+      requireTicket(ticketId);
+      return newComment(ticketId, commentBody(body), { author: "session", sessionId, agentName });
+    },
+    /** The session edits its comment. */
+    sessionEdits(commentId, body) {
+      const c = commentStore.get(commentId);
+      if (!c) throw commentNotFound();
+      return editBody(c, commentBody(body));
+    },
+    /** The session deletes its comment. */
+    sessionDeletes(commentId) {
+      const c = commentStore.get(commentId);
+      if (!c) throw commentNotFound();
+      removeStoredComment(c);
+    },
+    /** A session starts on the task: the feed says so. */
+    startSession(ticketId, sessionId) {
+      sessionStore.set(sessionId, ticketId);
+      emit(projects.get(ticketId), { kind: "session", id: sessionId, ticketId });
+    },
+    /** The session's record is deleted: it is no longer listed on its task. */
+    deleteSession(sessionId) {
+      const ticketId = sessionStore.get(sessionId);
+      sessionStore.delete(sessionId);
+      emit(projects.get(ticketId), { kind: "session-deleted", id: sessionId });
     },
     resources: () => [...resourceStore.values()],
     comments: () => [...commentStore.values()],

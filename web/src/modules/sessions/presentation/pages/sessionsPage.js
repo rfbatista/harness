@@ -31,9 +31,10 @@ export const FRESH_MS = 8_000;
  *   clock: import("../../../../shared/infrastructure/clock.js").Clock,
  *   channel?: import("../../domain/ports.js").ChannelGateway,  the architect channel; without it the page shows none
  *   channelStore?: ChannelStore,
+ *   location?: { search: string },  ?session=<id> opens that session (a comment links to the session that wrote it)
  * }} deps
  */
-export const sessionsPage = ({ gateway, clock, channel = null, channelStore = { messages: [], loaded: false }, setTimeout = globalThis.setTimeout.bind(globalThis) }) => () => {
+export const sessionsPage = ({ gateway, clock, channel = null, channelStore = { messages: [], loaded: false }, setTimeout = globalThis.setTimeout.bind(globalThis), location = globalThis.location }) => () => {
   let unfollow = () => {};
   let unfollowChannel = null;
   let ticker = null;
@@ -252,7 +253,8 @@ export const sessionsPage = ({ gateway, clock, channel = null, channelStore = { 
         this.error = describeError(err);
         return;
       }
-      this.selectedId = group(this.sessions)[0]?.sessions[0]?.id ?? null;
+      const asked = new URLSearchParams(location?.search ?? "").get("session");
+      this.selectedId = this.sessions.some((s) => s.id === asked) ? asked : (group(this.sessions)[0]?.sessions[0]?.id ?? null);
 
       unfollow = gateway.follow(
         this.projectId,
