@@ -23,6 +23,7 @@
     padding: 0;
     list-style: none;
 
+    & > li { max-inline-size: none; }
     & > li + li { border-block-start: var(--border-width) solid var(--color-line); }
   }
 
@@ -73,6 +74,7 @@
       flex-wrap: wrap;
       align-items: baseline;
       gap: 0 var(--space-xs);
+      max-inline-size: none;
       margin: 0;
       color: var(--color-ink-muted);
       font-size: var(--text-xs);
@@ -120,8 +122,9 @@
 
       & > .badge {
         position: absolute;
+        /* From the bell's middle outwards, so 99+ leaves the bell in sight. */
         inset-block-start: -0.2rem;
-        inset-inline-end: -0.35rem;
+        inset-inline-start: calc(50% + 0.1rem);
         min-inline-size: 1.25rem;
         justify-content: center;
         padding-inline: var(--space-3xs);
@@ -172,6 +175,7 @@
       & > .all { margin-inline-start: auto; font-size: var(--text-sm); }
     }
 
+    &[data-sheet] { inline-size: 100%; }
     &[data-sheet] > .list { max-block-size: none; }
   }
 
