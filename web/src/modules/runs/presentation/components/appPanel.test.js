@@ -88,6 +88,41 @@ test("saves a typed command under a name and chooses it; forgets one", async () 
   assert.equal(instance.choice, "server");
 });
 
+test("the command field: a saved command chooses it, typed text is the command to run", async () => {
+  const { instance } = await setup();
+  instance.commandPicked({ detail: { value: "make lint", created: true } });
+  assert.ok(instance.typing);
+  assert.equal(instance.typed, "make lint");
+  assert.ok(!instance.canForget, "nothing saved to remove");
+  instance.commandPicked({ detail: { value: "web", created: false } });
+  assert.deepEqual([instance.choice, instance.typed, instance.chosenCommand], ["web", "", "npm run dev"]);
+  instance.commandPicked({ detail: { value: "", created: false } });
+  assert.ok(instance.typing, "a cleared field is a command to type");
+  assert.ok(instance.cannotRun);
+});
+
+test("typing in the command field makes the text the command to run", async () => {
+  const { instance } = await setup();
+  const input = document.createElement("input");
+  input.value = "make lint";
+  instance.commandTyped({ target: input });
+  assert.deepEqual([instance.choice, instance.typed, instance.cannotRun], ["", "make lint", false]);
+  instance.commandTyped({ target: document.createElement("select") });
+  assert.equal(instance.typed, "make lint", "the select's own input event is not typing");
+});
+
+test("after a save the field shows the saved command once its option exists", async () => {
+  const { instance, tick } = await setup();
+  const select = document.createElement("select");
+  select.innerHTML = `<option value="server">server</option><option value="test">test</option>`;
+  instance.$refs = { command: select };
+  instance.commandPicked({ detail: { value: "make test", created: true } });
+  instance.saveName = "test";
+  await instance.save();
+  tick();
+  assert.equal(select.value, "test");
+});
+
 test("a refused name shows the error with its code", async () => {
   const { instance } = await setup();
   instance.choice = "";

@@ -1,6 +1,9 @@
 // Shell-wide components, available on every page.
 
+import { combobox } from "./components/combobox.js";
+import { dropdown } from "./components/dropdown.js";
 import { listbox } from "./components/listbox.js";
+import { menu } from "./components/menu.js";
 import { projectPicker } from "./components/projectPicker.js";
 import { streamStatus } from "./components/streamStatus.js";
 import { themeToggle } from "./components/themeToggle.js";
@@ -10,7 +13,10 @@ import { themeToggle } from "./components/themeToggle.js";
  * @param {{ prefs: import("../infrastructure/storage.js").Preferences }} deps
  */
 export function registerShared(Alpine, { prefs }) {
+  Alpine.data("combobox", combobox());
+  Alpine.data("dropdown", dropdown());
   Alpine.data("listbox", listbox());
+  Alpine.data("menu", menu());
   Alpine.data("projectPicker", projectPicker());
   Alpine.data("streamStatus", streamStatus());
   Alpine.data("themeToggle", themeToggle(prefs));

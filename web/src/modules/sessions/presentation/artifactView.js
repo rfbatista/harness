@@ -35,15 +35,6 @@ export function moveBackWarning(artifact, producerTitle, attachedTitles) {
   return `Move ${artifactTitle(artifact)} back to ${producerTitle}? It will be detached from ${tasks}: ${attachedTitles.join(", ")}.`;
 }
 
-/** A picker's choices narrowed by what the person typed: every word, anywhere in the label, any case. */
-export function filterChoices(choices, query) {
-  const words = query.toLowerCase().split(/\s+/).filter(Boolean);
-  return choices.filter((c) => {
-    const label = c.label.toLowerCase();
-    return words.every((w) => label.includes(w));
-  });
-}
-
 /**
  * @param {{ selectedId: string, now: Date, fresh?: boolean, ticketId?: string }} opts
  *        ticketId: the task the list is about, for its relation to each card

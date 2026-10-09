@@ -311,3 +311,20 @@ func TestDelegateRowSaysItsNextCheckInsteadOfWhoStartedIt(t *testing.T) {
 		}
 	}
 }
+
+// The new-session form's agents carry their Description, the second line of
+// each option in the Agent Listbox select.
+func TestNewSessionFormCarriesEachAgentsDescription(t *testing.T) {
+	agents := []*domain.Agent{
+		{ID: "ux", Name: "ux-designer", Description: "Variants, behaviour, wireframes"},
+		{ID: "dev", Name: "developer"},
+	}
+	view := NewPageView(shell.Frame{}, &domain.Project{ID: "p"}, &domain.Ticket{ID: "t"}, nil, agents, nil, time.Now())
+	want := []Option{
+		{ID: "ux", Name: "ux-designer", Description: "Variants, behaviour, wireframes"},
+		{ID: "dev", Name: "developer"},
+	}
+	if fmt.Sprint(view.NewSession.Agents) != fmt.Sprint(want) {
+		t.Errorf("Agents = %+v, want %+v", view.NewSession.Agents, want)
+	}
+}

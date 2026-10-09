@@ -1,0 +1,103 @@
+/*
+ * Dropdown — the field a Listbox select or a Combobox lives in. It looks
+ * exactly like a closed native Select: a person cannot tell the variant until
+ * it opens. The component builds the trigger beside the select it wraps.
+ * Listbox select: <div class="dropdown" x-data="dropdown"><select hidden>…</select>
+ *   <div class="trigger" role="combobox" tabindex="0"><span class="value">…</span>
+ *   <span class="chevron"></span></div><div class="popup" popover>…</div></div>
+ * Combobox: the trigger is a box around chips, an <input role="combobox">,
+ *   .spinner, .clear and a .toggle button.
+ * Exceptions: data-open, data-size="sm", data-fit, data-variant="ghost";
+ * on the trigger aria-invalid, aria-disabled. Chips are chip.css.
+ */
+
+@layer blocks {
+  .dropdown {
+    --_chevron: var(--color-ink-muted);
+    --_edge: var(--color-line-control);
+
+    display: block;
+    min-inline-size: 0;
+
+    & > .trigger {
+      display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2xs) var(--space-xs);
+      inline-size: 100%;
+      min-block-size: var(--size-control-md);
+      padding: var(--space-3xs) var(--space-2xs) var(--space-3xs) var(--space-s);
+      border: var(--border-width) solid var(--_edge);
+      border-radius: var(--radius-sm);
+      background: var(--color-raised);
+      color: var(--color-ink);
+      font-size: var(--text-base);
+      text-align: start;
+      cursor: pointer;
+      transition: border-color var(--duration-quick) var(--ease-out), box-shadow var(--duration-quick) var(--ease-out);
+
+      &:hover { --_edge: var(--color-ink-faint); --_chevron: var(--color-ink); }
+      &:is(:focus-visible, :focus-within) { outline: none; --_edge: var(--color-focus); box-shadow: 0 0 0 1px var(--color-focus); }
+      &[aria-invalid="true"], &:has([aria-invalid="true"]) { --_edge: var(--color-danger); box-shadow: none; }
+      &:is([aria-invalid="true"], :has([aria-invalid="true"])):is(:focus-visible, :focus-within) { box-shadow: 0 0 0 1px var(--color-danger); }
+      &:is([aria-disabled="true"], :has(input:disabled)) { background: var(--color-panel); color: var(--color-ink-faint); --_chevron: var(--color-ink-faint); cursor: not-allowed; }
+
+      @media (forced-colors: active) {
+        &:is([aria-disabled="true"], :has(input:disabled)) { --_edge: GrayText; --_chevron: GrayText; color: GrayText; }
+      }
+
+      & > .status { flex-shrink: 0; }
+      & > :is(.chips, .ends) { display: contents; }
+      & > .value { flex: 1 1 0; min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      & > .placeholder { flex: 1 1 0; min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--color-ink-faint); }
+      & > input {
+        flex: 1 1 1.5rem; min-inline-size: 1.5rem; min-block-size: 1.5rem;
+        padding: 0; border: 0; background: transparent; box-shadow: none; outline: none;
+        font-size: inherit;
+      }
+    }
+
+    /* Clear (×) and the toggle (▾): 24px ghost icon buttons at the end. */
+    & :is(.clear, .toggle) {
+      display: inline-grid; place-items: center; flex-shrink: 0;
+      inline-size: 1.5rem; block-size: 1.5rem; margin-inline-start: auto; padding: 0;
+      border: 0; border-radius: var(--radius-xs);
+      background: none;
+      color: var(--color-ink-faint);
+      font-size: var(--text-md);
+      line-height: 1;
+      cursor: pointer;
+      &:hover { background: var(--color-hover); color: var(--color-ink); }
+      & + :is(.toggle, .chevron) { margin-inline-start: 0; }
+    }
+
+    & .chevron {
+      flex-shrink: 0; margin-inline: auto var(--space-xs);
+      inline-size: 0.375rem; block-size: 0.375rem;
+      border-inline-end: var(--border-icon-width) solid var(--_chevron);
+      border-block-end: var(--border-icon-width) solid var(--_chevron);
+      translate: 0 -25%; rotate: 45deg;
+      transition: rotate var(--duration-quick) var(--ease-out), translate var(--duration-quick) var(--ease-out);
+    }
+
+    & .toggle > .chevron { margin: 0; }
+    & .spinner {
+      flex-shrink: 0; inline-size: 0.875rem; block-size: 0.875rem; margin-inline: auto var(--space-xs);
+      border: 2px solid var(--color-ink-faint); border-inline-end-color: transparent; border-radius: var(--radius-round);
+      animation: button-spin 700ms linear infinite;
+      & ~ .toggle { display: none; }
+    }
+
+    &[data-open] > .trigger { --_edge: var(--color-focus); box-shadow: 0 0 0 1px var(--color-focus); }
+    &[data-open] .chevron { rotate: 225deg; translate: 0 25%; }
+
+    &[data-fit] { display: inline-block; max-inline-size: 100%; & > .trigger { inline-size: auto; } }
+    &[data-size="sm"] > .trigger { min-block-size: var(--size-control-sm); padding-block: 0; padding-inline-start: var(--space-xs); font-size: var(--text-sm); }
+
+    /* Touch: a 44px hit area around the small trigger; the look stays 26px. */
+    @media (pointer: coarse) {
+      &[data-size="sm"] > .trigger { position: relative; }
+      &[data-size="sm"] > .trigger::before { content: ""; position: absolute; inset: calc((var(--size-touch) - 100%) / -2) 0; }
+    }
+
+    &[data-variant="ghost"] > .trigger:not(:hover, :focus-visible, :focus-within) { --_edge: transparent; background: transparent; color: var(--color-ink-muted); }
+    &[data-variant="ghost"] > .trigger:hover { --_edge: transparent; background: var(--color-hover); }
+  }
+}

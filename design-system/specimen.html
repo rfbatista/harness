@@ -335,6 +335,246 @@
         </div>
       </section>
 
+      <!-- Dropdowns: the variants in DESIGN.md §5, lightest first. The scripted
+           ones run when the specimen is served from the repository root
+           (python3 -m http.server, then /design-system/specimen.html). -->
+      <section class="[ flow ] [ flow-space-l ]" id="dropdowns">
+        <h2>Dropdowns</h2>
+
+        <div class="[ flow ] [ flow-space-s ]">
+          <h3>1 · Select (native, restyled)</h3>
+          <div class="[ grid ]" style="--grid-min: 14rem">
+            <div class="[ field ]">
+              <label for="s-default">Status</label>
+              <select id="s-default"><option>Backlog</option><option selected>In progress</option><option>Review</option></select>
+            </div>
+            <div class="[ field ]">
+              <label for="s-placeholder">Repository</label>
+              <select id="s-placeholder"><option value="" selected disabled>Choose a repository…</option><option>harness</option><option>harnesskit</option></select>
+            </div>
+            <div class="[ field ]">
+              <label for="s-invalid">Interval</label>
+              <select id="s-invalid" aria-invalid="true" aria-describedby="s-invalid-err"><option>Every 5 minutes</option></select>
+              <span class="[ error ]" id="s-invalid-err">Pick an interval of 2 minutes or more.</span>
+            </div>
+            <div class="[ field ]">
+              <label for="s-disabled">Project</label>
+              <select id="s-disabled" disabled><option>harness</option></select>
+            </div>
+            <div class="[ field ]">
+              <label for="s-busy">Branch off</label>
+              <select id="s-busy" disabled aria-busy="true" aria-describedby="s-busy-hint"><option>The checked-out branch</option></select>
+              <span class="[ hint ]" id="s-busy-hint">Loading branches…</span>
+            </div>
+            <div class="[ field ]">
+              <label for="s-empty">Command</label>
+              <select id="s-empty" disabled><option>No saved commands</option></select>
+            </div>
+            <div class="[ field ]">
+              <label for="s-groups">Branch</label>
+              <select id="s-groups"><optgroup label="Branches"><option>main</option><option>agent/dropdown</option></optgroup><optgroup label="Remote branches"><option>origin/release</option></optgroup></select>
+            </div>
+            <div class="[ field ]">
+              <label for="s-multiple">Labels (list box)</label>
+              <select id="s-multiple" multiple size="3"><option selected>design</option><option>web</option><option selected>a11y</option></select>
+            </div>
+          </div>
+          <div class="[ cluster ]">
+            <select data-size="sm" data-fit aria-label="Task status (sm, fit)"><option>Backlog</option><option selected>In progress</option></select>
+            <select data-size="sm" data-fit data-variant="ghost" aria-label="Move Add SSE feed to (ghost)"><option>Todo</option><option selected>Review</option></select>
+            <select data-fit aria-label="Check every (fit)"><option>Every 10 minutes</option></select>
+          </div>
+        </div>
+
+        <div class="[ flow ] [ flow-space-s ]">
+          <h3>2 · Listbox select (<code>x-data="dropdown"</code>)</h3>
+          <div class="[ grid ]" style="--grid-min: 16rem">
+            <div class="[ field ]">
+              <label for="l-agent">Agent</label>
+              <div class="[ dropdown ]" x-data="dropdown">
+                <select id="l-agent">
+                  <option value="" data-description="claude with no agent definition">Plain claude</option>
+                  <option value="ux" data-description="Variants, behaviour, wireframes">ux-designer</option>
+                  <option value="design" data-description="Visual design on the system's tokens" selected>designer</option>
+                  <option value="web" data-description="Alpine, templ and the design system">frontend-developer</option>
+                  <option value="go" data-description="Go services and the BFF">go-developer</option>
+                  <option value="old" disabled data-meta="retired">reviewer</option>
+                </select>
+              </div>
+            </div>
+            <div class="[ field ]">
+              <label for="l-delegate">Show</label>
+              <div class="[ dropdown ]" x-data="dropdown" data-size="sm" data-fit>
+                <select id="l-delegate">
+                  <option value="">Every delegate</option>
+                  <option value="d1" data-meta="running" data-tone="signal">go-developer · Build the server</option>
+                  <option value="d2" data-meta="your turn" data-tone="attention">frontend-developer · Dropdowns</option>
+                  <option value="d3" data-meta="failed" data-tone="danger">designer · Mockups</option>
+                </select>
+              </div>
+            </div>
+            <div class="[ field ]">
+              <label for="l-owner">Owner</label>
+              <div class="[ dropdown ]" x-data="dropdown" data-clearable data-placeholder="Choose an owner…">
+                <select id="l-owner">
+                  <option value=""></option>
+                  <optgroup label="People"><option value="p1">Renan</option><option value="p2">Reviewer</option></optgroup>
+                  <optgroup label="Agents"><option value="a1">software-architect</option><option value="a2">go-developer</option></optgroup>
+                </select>
+              </div>
+            </div>
+            <div class="[ field ]">
+              <label for="l-busy">Agent (loading)</label>
+              <div class="[ dropdown ]" x-data="dropdown" aria-busy="true">
+                <select id="l-busy"><option value="">Plain claude</option></select>
+              </div>
+            </div>
+            <div class="[ field ]">
+              <label for="l-empty">Agent (empty)</label>
+              <div class="[ dropdown ]" x-data="dropdown" data-empty-text="No agents in this project yet." data-placeholder="Choose an agent…">
+                <select id="l-empty"></select>
+              </div>
+            </div>
+            <div class="[ field ]">
+              <label for="l-error">Agent (error)</label>
+              <div class="[ dropdown ]" x-data="dropdown" data-error="Could not load agents." data-placeholder="Choose an agent…">
+                <select id="l-error"></select>
+              </div>
+            </div>
+            <div class="[ field ]">
+              <label for="l-invalid">Mode (invalid)</label>
+              <div class="[ dropdown ]" x-data="dropdown">
+                <select id="l-invalid" aria-invalid="true" aria-describedby="l-invalid-err"><option>Default</option><option>Architect</option></select>
+              </div>
+              <span class="[ error ]" id="l-invalid-err">Architect mode needs a repository.</span>
+            </div>
+            <div class="[ field ]">
+              <label for="l-disabled">Mode (disabled)</label>
+              <div class="[ dropdown ]" x-data="dropdown">
+                <select id="l-disabled" disabled><option>Default</option></select>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="[ flow ] [ flow-space-s ]">
+          <h3>3 · Combobox (<code>x-data="combobox"</code>)</h3>
+          <div class="[ grid ]" style="--grid-min: 16rem">
+            <div class="[ field ]">
+              <label for="c-branch">Branch off</label>
+              <div class="[ dropdown ]" x-data="combobox">
+                <select id="c-branch">
+                  <option value="" data-pinned>The checked-out branch</option>
+                  <optgroup label="Branches">
+                    <option>main</option><option>agent/dropdown-component</option><option>agent/terminal-focus</option>
+                    <option>agent/project-management</option><option>agent/pull-requests</option><option>agent/design-assets</option>
+                  </optgroup>
+                  <optgroup label="Remote branches"><option>origin/main</option><option>origin/release</option></optgroup>
+                </select>
+              </div>
+              <span class="[ hint ]">Type to filter; the checked-out branch stays on top.</span>
+            </div>
+            <div class="[ field ]">
+              <label for="c-command">Command</label>
+              <div class="[ dropdown ]" x-data="combobox" data-free-text data-free-text-label="Run “{q}”" data-placeholder="Type a command or pick a saved one">
+                <select id="c-command">
+                  <option value="server" data-description="make air">server</option>
+                  <option value="web" data-description="npm run dev">web</option>
+                </select>
+              </div>
+            </div>
+            <div class="[ field ]">
+              <label for="c-labels">Labels</label>
+              <div class="[ dropdown ]" x-data="combobox">
+                <select id="c-labels" multiple>
+                  <option selected>design</option><option selected>web</option><option>a11y</option><option>backend</option><option>docs</option>
+                </select>
+              </div>
+            </div>
+            <div class="[ field ]" x-data="specimenSearch">
+              <label for="c-task">Task (query source)</label>
+              <div class="[ dropdown ]" x-data="combobox" data-source="searchTasks" data-placeholder="Search tasks…">
+                <input type="hidden" id="c-task" name="task" />
+              </div>
+              <span class="[ hint ]">Asks <code>searchTasks(query, signal)</code> after 150ms; type “fail” for the error row.</span>
+            </div>
+            <div class="[ field ]">
+              <label for="c-busy">Branch off (loading)</label>
+              <div class="[ dropdown ]" x-data="combobox" aria-busy="true">
+                <select id="c-busy" disabled><option value="" data-pinned>The checked-out branch</option></select>
+              </div>
+            </div>
+            <div class="[ field ]">
+              <label for="c-error">Branch off (error)</label>
+              <div class="[ dropdown ]" x-data="combobox" data-error="Could not list the branches.">
+                <select id="c-error"><option value="" data-pinned>The checked-out branch</option></select>
+              </div>
+            </div>
+            <div class="[ field ]">
+              <label for="c-invalid">Repository (invalid)</label>
+              <div class="[ dropdown ]" x-data="combobox">
+                <select id="c-invalid" aria-invalid="true" aria-describedby="c-invalid-err"><option>harness</option></select>
+              </div>
+              <span class="[ error ]" id="c-invalid-err">This repository has no remote.</span>
+            </div>
+            <div class="[ field ]">
+              <label for="c-disabled">Repository (disabled)</label>
+              <div class="[ dropdown ]" x-data="combobox">
+                <select id="c-disabled" disabled><option>harness</option></select>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="[ flow ] [ flow-space-s ]">
+          <h3>4 · Menu button (<code>x-data="menu"</code>)</h3>
+          <div class="[ cluster ]">
+            <div class="[ menu ]" x-data="menu">
+              <button type="button" class="[ button ]" id="m-session">Session <span class="[ chevron ]" aria-hidden="true"></span></button>
+              <div class="[ popup ]" role="menu">
+                <button type="button" role="menuitem" data-action="copy-link">Copy link <kbd>C</kbd></button>
+                <button type="button" role="menuitem" data-action="history">Open history</button>
+                <button type="button" role="menuitem" data-action="terminal" aria-disabled="true">Open terminal <span class="[ meta ]">not running</span></button>
+                <hr role="separator" />
+                <div class="[ group ]" aria-hidden="true">Move to</div>
+                <button type="button" role="menuitemradio" data-action="move" data-value="progress" aria-checked="true">In progress</button>
+                <button type="button" role="menuitemradio" data-action="move" data-value="review" aria-checked="false">Review</button>
+                <hr role="separator" />
+                <button type="button" role="menuitem" data-action="delete" data-tone="danger">Delete session…</button>
+              </div>
+            </div>
+            <div class="[ menu ]" x-data="menu" data-align="end">
+              <button type="button" class="[ button ]" data-variant="ghost" aria-label="More actions for Add SSE feed">⋯</button>
+              <div class="[ popup ]" role="menu">
+                <button type="button" role="menuitem" data-action="edit">Edit</button>
+                <button type="button" role="menuitem" data-action="delete" data-tone="danger">Delete task…</button>
+              </div>
+            </div>
+            <div class="[ menu ]" x-data="menu">
+              <button type="button" class="[ button ]" aria-busy="true">Exporting <span class="[ chevron ]" aria-hidden="true"></span></button>
+              <div class="[ popup ]" role="menu"><button type="button" role="menuitem">Cancel export</button></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="[ flow ] [ flow-space-s ]">
+          <h3>5 · Picker dialog, and not a dropdown</h3>
+          <p class="[ color-ink-muted ]">The Picker dialog is the palette below opened from a button (“Attach to a task…”); its rows share the option anatomy. For 2–5 choices to compare, a radio group:</p>
+          <fieldset class="[ field ]">
+            <legend>Permissions</legend>
+            <div class="[ field ]" data-inline><input type="radio" id="r-off" name="r-perm" checked /><label for="r-off">Ask me in the terminal</label></div>
+            <div class="[ field ]" data-inline><input type="radio" id="r-edits" name="r-perm" /><label for="r-edits">Accept file edits</label></div>
+            <div class="[ field ]" data-inline><input type="radio" id="r-all" name="r-perm" aria-describedby="r-all-hint" /><label for="r-all">Accept everything</label></div>
+            <span class="[ hint ]" id="r-all-hint">Accept everything runs every command and edit without asking you.</span>
+          </fieldset>
+        </div>
+        <div class="[ flow ] [ flow-space-s ]">
+          <h3>On a phone: the sheets</h3>
+          <p class="[ color-ink-muted ]">Below 48rem the scripted variants open as bottom sheets. These frames are this page at 375px, each with one sheet open (served from the repository root).</p>
+          <div class="[ cluster ] [ gutter-l ]" data-phone-frames></div>
+        </div>
+      </section>
+
       <section class="[ flow ] [ flow-space-m ]">
         <h2>Command palette and toast</h2>
         <div class="[ cluster ]">
@@ -350,11 +590,12 @@
     <dialog class="[ palette ]" id="palette" aria-label="Command palette">
       <input placeholder="Jump to a session, ticket or command…" aria-label="Search commands" autofocus />
       <div class="[ results ]" role="listbox">
-        <div role="option" aria-selected="true">Open session · Add SSE feed <span class="[ color-ink-faint ]">waiting</span></div>
-        <div role="option">New session <kbd>N</kbd></div>
-        <div role="option">Go to Tickets <kbd>G T</kbd></div>
-        <div role="option">Toggle theme</div>
+        <div role="option" aria-selected="true"><span class="[ text ]"><span class="[ label ]">Open session · Add SSE feed</span></span><span class="[ meta ]">waiting</span></div>
+        <div role="option"><span class="[ text ]"><span class="[ label ]">New session</span></span><kbd>N</kbd></div>
+        <div role="option"><span class="[ text ]"><span class="[ label ]">Go to Tickets</span></span><kbd>G T</kbd></div>
+        <div role="option"><span class="[ text ]"><span class="[ label ]">Toggle theme</span><span class="[ description ]">Light, dark or the system's</span></span></div>
       </div>
     </dialog>
+    <script type="module" src="./specimen.js"></script>
   </body>
 </html>

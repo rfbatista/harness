@@ -30,7 +30,7 @@ templ Page(v PageView) {
 				<header class="[ toolbar ]">
 					<a class="[ crumb ]" href={ templ.SafeURL("/projects/" + v.ProjectID) }>{ v.ProjectName } /</a>
 					<h1 x-text="title">{ v.TaskTitle }</h1>
-					<select class="[ status-picker ]" aria-label="Task status" x-model="status" x-on:change="changeStatus">
+					<select data-size="sm" data-fit aria-label="Task status" x-model="status" x-on:change="changeStatus">
 						for _, st := range v.StatusChoices {
 							<option value={ st.Value } { selectedAttrs(st.Selected)... }>{ st.Label }</option>
 						}
@@ -276,20 +276,24 @@ templ newSessionForm(form NewSessionForm) {
 		<div class="[ switcher ]">
 			<div class="[ field ]">
 				<label for="new-session-agent">Agent</label>
-				<select id="new-session-agent" x-model="agentId">
-					<option value="">Plain claude</option>
-					for _, a := range form.Agents {
-						<option value={ a.ID }>{ a.Name }</option>
-					}
-				</select>
+				<div class="[ dropdown ]" x-data="dropdown">
+					<select id="new-session-agent" x-model="agentId">
+						<option value="" data-description="claude with no agent definition">Plain claude</option>
+						for _, a := range form.Agents {
+							<option value={ a.ID } { descriptionAttrs(a.Description)... }>{ a.Name }</option>
+						}
+					</select>
+				</div>
 			</div>
 			<div class="[ field ]">
 				<label for="new-session-mode">Mode</label>
-				<select id="new-session-mode" x-model="mode">
-					<option value="">Default</option>
-					<option value="architect">Architect</option>
-					<option value="design">Design</option>
-				</select>
+				<div class="[ dropdown ]" x-data="dropdown">
+					<select id="new-session-mode" x-model="mode">
+						<option value="" data-description="Runs the agent as it is">Default</option>
+						<option value="architect" data-description="Writes per-application specs and delegates them">Architect</option>
+						<option value="design" data-description="Publishes pages, images and videos as it works">Design</option>
+					</select>
+				</div>
 				<span class="[ hint ]" x-text="modeHint"></span>
 			</div>
 			<div class="[ field ]">
@@ -302,31 +306,41 @@ templ newSessionForm(form NewSessionForm) {
 			</div>
 			<div class="[ field ]">
 				<label for="new-session-base">Branch off</label>
-				<select id="new-session-base" x-model="baseBranch" x-bind:disabled="loadingBranches" x-bind:aria-busy="loadingBranches">
-					<option value="">The checked-out branch</option>
-					<optgroup label="Branches">
-						<template x-for="b in localBranches" x-bind:key="b.name">
-							<option x-bind:value="b.name" x-text="b.name"></option>
-						</template>
-					</optgroup>
-					<template x-if="hasRemoteBranches">
-						<optgroup label="Remote branches">
-							<template x-for="b in remoteBranches" x-bind:key="b.name">
+				<div class="[ dropdown ]" x-data="combobox" x-bind:aria-busy="loadingBranches" x-bind:data-error="branchError" x-on:dropdown-retry="loadBranches">
+					<select id="new-session-base" x-model="baseBranch" x-bind:disabled="loadingBranches">
+						<option value="" data-pinned>The checked-out branch</option>
+						<optgroup label="Branches">
+							<template x-for="b in localBranches" x-bind:key="b.name">
 								<option x-bind:value="b.name" x-text="b.name"></option>
 							</template>
 						</optgroup>
-					</template>
-				</select>
+						<template x-if="hasRemoteBranches">
+							<optgroup label="Remote branches">
+								<template x-for="b in remoteBranches" x-bind:key="b.name">
+									<option x-bind:value="b.name" x-text="b.name"></option>
+								</template>
+							</optgroup>
+						</template>
+					</select>
+				</div>
 				<span class="[ hint ]" x-text="baseHint"></span>
 			</div>
-			<div class="[ field ]">
-				<label for="new-session-permissions">Permissions</label>
-				<select id="new-session-permissions" x-model="autoAccept">
-					<option value="off">Ask me in the terminal</option>
-					<option value="edits">Accept file edits</option>
-					<option value="all">Accept everything</option>
-				</select>
-			</div>
+			<fieldset class="[ field ]">
+				<legend>Permissions</legend>
+				<div class="[ field ]" data-inline>
+					<input type="radio" id="new-session-permissions-off" name="new-session-permissions" value="off" x-model="autoAccept"/>
+					<label for="new-session-permissions-off">Ask me in the terminal</label>
+				</div>
+				<div class="[ field ]" data-inline>
+					<input type="radio" id="new-session-permissions-edits" name="new-session-permissions" value="edits" x-model="autoAccept"/>
+					<label for="new-session-permissions-edits">Accept file edits</label>
+				</div>
+				<div class="[ field ]" data-inline>
+					<input type="radio" id="new-session-permissions-all" name="new-session-permissions" value="all" x-model="autoAccept" aria-describedby="new-session-permissions-all-hint"/>
+					<label for="new-session-permissions-all">Accept everything</label>
+				</div>
+				<span class="[ hint ]" id="new-session-permissions-all-hint">Accept everything runs every command and edit without asking you.</span>
+			</fieldset>
 		</div>
 		<template x-if="error">
 			<div class="[ banner ]" data-tone="danger" role="alert">
@@ -377,15 +391,13 @@ templ appPanel() {
 			</div>
 			<form class="[ cluster ] [ gutter-xs ]" x-on:submit.prevent="start">
 				<label class="[ visually-hidden ]" for="run-choice">Command</label>
-				<select id="run-choice" x-model="choice" x-bind:disabled="busy">
-					<template x-for="c in commands" x-bind:key="c.name">
-						<option x-bind:value="c.name" x-text="c.name"></option>
-					</template>
-					<option value="">Type a command…</option>
-				</select>
-				<template x-if="typing">
-					<input class="[ grow code ]" aria-label="Command to run" autocomplete="off" spellcheck="false" placeholder="make air" x-model="typed"/>
-				</template>
+				<div class="[ dropdown ] [ grow ]" x-data="combobox" data-free-text data-free-text-label="Run “{q}”" data-placeholder="Type a command or pick a saved one" x-on:dropdown-change="commandPicked" x-on:input="commandTyped">
+					<select id="run-choice" x-ref="command" x-bind:disabled="busy">
+						<template x-for="c in commands" x-bind:key="c.name">
+							<option x-bind:value="c.name" x-bind:data-description="c.command" x-text="c.name"></option>
+						</template>
+					</select>
+				</div>
 				<template x-if="canForget">
 					<span class="[ code color-ink-muted truncate grow ]" x-text="chosenCommand"></span>
 				</template>

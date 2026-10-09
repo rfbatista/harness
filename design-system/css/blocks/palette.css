@@ -42,17 +42,8 @@
       padding: var(--space-2xs);
     }
 
+    /* Rows: option.css. Here aria-selected is the row the arrows are on. */
     & [role="option"] {
-      display: flex;
-      align-items: center;
-      gap: var(--space-s);
-      min-block-size: var(--size-control-md);
-      padding-inline: var(--space-s);
-      border-radius: var(--radius-sm);
-      color: var(--color-ink-muted);
-
-      & > :last-child:not(:first-child) { margin-inline-start: auto; }
-
       &[aria-selected="true"] {
         background: var(--color-selected);
         color: var(--color-ink);

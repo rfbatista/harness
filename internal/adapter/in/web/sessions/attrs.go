@@ -37,6 +37,15 @@ func selectedAttrs(selected bool) templ.Attributes {
 	return templ.Attributes{}
 }
 
+// descriptionAttrs gives an option its second line in a Listbox select
+// (data-description), and leaves it off when there is none.
+func descriptionAttrs(description string) templ.Attributes {
+	if description != "" {
+		return templ.Attributes{"data-description": description}
+	}
+	return templ.Attributes{}
+}
+
 // bandAttrs paints the review band before the browser reads the requests:
 // amber when some wait on the person, hidden when none do.
 func bandAttrs(pending int) templ.Attributes {

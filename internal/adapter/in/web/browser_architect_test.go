@@ -435,8 +435,8 @@ func TestTaskPageSaysWhoMovedTheTaskAndWhy(t *testing.T) {
 	if err := chromedp.Run(ctx,
 		chromedp.Poll(`!!document.querySelector('.status-change')`, nil, chromedp.WithPollingTimeout(5*time.Second)),
 		chromedp.Evaluate(`document.querySelector('.status-change').textContent.replace(/\s+/g, ' ').trim()`, &line),
-		chromedp.Poll(`document.querySelector('.toolbar .status-picker').value === 'review'`, nil, chromedp.WithPollingTimeout(5*time.Second)),
-		chromedp.Evaluate(`document.querySelector('.toolbar .status-picker').value`, &picker),
+		chromedp.Poll(`document.querySelector('.toolbar select[aria-label="Task status"]').value === 'review'`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Evaluate(`document.querySelector('.toolbar select[aria-label="Task status"]').value`, &picker),
 		shot("status-change"),
 	); err != nil {
 		t.Fatalf("%v\nline %q\nJS errors: %v", err, line, errs.all())

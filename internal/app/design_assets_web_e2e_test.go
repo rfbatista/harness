@@ -178,7 +178,7 @@ func TestDesignAssetsAttachedToTasksInTheWebUI_EndToEnd(t *testing.T) {
 	// Attach it again from the task's page, through its picker of the project's assets.
 	task.run("attach from the task's page",
 		clickText(`main[x-data="sessionsTaskDesign"] header`, "Attach a project asset…"),
-		waitFor(`[...document.querySelectorAll('dialog.palette [role=option]')].map(o => [...o.querySelectorAll('span')].map(x => x.textContent).join(' | ')).join() === 'Logo | page · from Brand refresh'`),
+		waitFor(`[...document.querySelectorAll('dialog.palette [role=option]')].map(o => [...o.querySelectorAll('.label, .description')].map(x => x.textContent).join(' | ')).join() === 'Logo | page · from Brand refresh'`),
 		pressEnter(),
 		waitFor(attachedCards+` === 1`),
 	)

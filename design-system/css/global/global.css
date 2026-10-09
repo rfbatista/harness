@@ -110,7 +110,7 @@
     inline-size: 100%;
     min-block-size: var(--size-control-md);
     padding-inline: var(--space-s);
-    background: var(--color-raised);
+    background-color: var(--color-raised);
     color: var(--color-ink);
     border: var(--border-width) solid var(--color-line-control);
     border-radius: var(--radius-sm);
@@ -133,7 +133,7 @@
     }
 
     &:disabled {
-      background: var(--color-panel);
+      background-color: var(--color-panel);
       color: var(--color-ink-faint);
       cursor: not-allowed;
     }

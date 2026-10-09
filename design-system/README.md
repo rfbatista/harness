@@ -16,7 +16,7 @@ design-system/
   specimen.html          every block, plus the Sessions screen as a worked example
   css/
     index.css            entry point: declares the layers, imports everything
-    global/              reset.css, tokens.css (generated), global.css
+    global/              reset.css, tokens.css (generated), global.css, select.css
     compositions/        flow, cluster, repel, sidebar, switcher, grid, wrapper, frame
     utilities/           tokens.css (generated), visually-hidden, truncate, region, divide, flex-item
     blocks/              one file per block, exceptions inside it
@@ -37,7 +37,9 @@ motion. This is the minimum viable experience, and most of the UI. A plain
 like the system.
 
 Reach here first. If every instance of an element should look one way, it is a
-global style, not a block.
+global style, not a block. The Select (`select.css`) is one: a bare `<select>`
+is restyled with no class, and takes `data-size="sm"`, `data-fit` and
+`data-variant="ghost"` like a button.
 
 ## Compositions: layout skeletons
 
@@ -122,9 +124,39 @@ An exception is a deviation from a block: a variant or a state. It is written
 
 Vocabulary in use: `data-variant`, `data-size`, `data-icon`, `data-tone`,
 `data-state`, `data-signal`, `data-kind`, `data-attention`, `data-dense`,
-`data-inline`, `data-dot-only`, plus `aria-selected`, `aria-current`,
-`aria-invalid`, `aria-busy`, `disabled`. If an exception changes a block beyond
+`data-inline`, `data-dot-only`, `data-fit` (as wide as its content), plus
+`aria-selected`, `aria-current`, `aria-invalid`, `aria-busy`, `disabled`.
+The dropdowns add states their components set: `data-open` (the popup is
+open), `data-active` (the option the keys or pointer are on), `data-sheet` and
+`data-tall` (the phone sheet), `data-placement="top"` (opened upward), and
+one a page sets, `data-align="end"` (a menu lined up with its trigger's end). If an exception changes a block beyond
 recognition, it is a new block.
+
+## Dropdowns: which one
+
+A feature picks the lightest variant that does the job. Ask in order and take
+the first yes (DESIGN.md §5 Dropdowns has the visual spec; the components are
+in `web/src/shared/presentation/components/`):
+
+| # | Question | Use |
+|---|---|---|
+| 1 | Does picking run a command instead of setting a value the page keeps? | Menu button: `.menu` + `x-data="menu"`, items `role="menuitem"` with `data-action`; listen for `menu-select` |
+| 2 | Is picking a step of its own, opened from a button, over a large set? | Picker dialog: `picker()` composed into the page, `PickerDialog` in the palette `<dialog>` |
+| 3 | 2–5 options to compare, or several values from 6 or fewer? | Not a dropdown: radios or checkboxes in a `fieldset.field` |
+| 4 | More than ~15 options, typed names, options per query, several values, or free text? | Combobox: `.dropdown` + `x-data="combobox"` around a `<select>` (or `data-source` + a hidden input) |
+| 5 | A second line, a status dot or badge, or a clearable value? | Listbox select: `.dropdown` + `x-data="dropdown"` around a `<select>` |
+| 6 | Otherwise (and every page that must work without JavaScript) | Select: a bare `<select>` |
+
+The scripted variants wrap a native `<select>`, which stays the source of
+truth: migrating a call site means wrapping it. Option data rides on the
+`<option>` (`data-description`, `data-meta`, `data-tone`, `data-pinned`) and
+`<optgroup>`; wrapper flags are `data-clearable`, `data-placeholder`,
+`data-empty-text`, `data-error` (+ the `dropdown-retry` event), `aria-busy`,
+and on the Combobox `data-multiple`, `data-free-text`, `data-free-text-label`,
+`data-min-chars`. Choosing fires `change` on the select and `dropdown-change`
+on the wrapper. The blocks: `popup.css` (the floating surface), `option.css`
+(the row anatomy, shared with the palette), `sheet.css` (phones),
+`dropdown.css` (the trigger or field), `chip.css`, `menu.css`.
 
 ## Class grouping in markup
 

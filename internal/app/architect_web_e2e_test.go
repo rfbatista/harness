@@ -373,7 +373,7 @@ func TestArchitectChannelInTheWebUI_EndToEnd(t *testing.T) {
 	// picker follows.
 	e.as(arch.ID, "update_task_status", map[string]any{"status": "review", "reason": "Server and tools merged; the web UI is in review."})
 	p.run(t, "the architect moves the task",
-		poll(`!!document.querySelector('.status-change') && document.querySelector('.toolbar .status-picker').value === 'review'`),
+		poll(`!!document.querySelector('.status-change') && document.querySelector('.toolbar select[aria-label="Task status"]').value === 'review'`),
 	)
 	if got := p.text(t, `document.querySelector('.status-change').textContent.replace(/\s+/g, ' ').trim()`); got != "Moved to review by the architect · now — “Server and tools merged; the web UI is in review.”" {
 		t.Errorf("status line: %q", got)
@@ -583,7 +583,7 @@ func focusOnRequest(t *testing.T, p *person, delegate string) {
 		// Typed once the saved commands have loaded and the field is there;
 		// Run is enabled once the command has reached the panel.
 		poll(`(() => {
-			const input = document.querySelector('[aria-label="Command to run"]');
+			const input = document.querySelector('#run-choice-input');
 			if (!input) return false;
 			const command = "printf 'app is up\\n'; sleep 30";
 			if (input.value !== command) {

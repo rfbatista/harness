@@ -22,11 +22,8 @@
     }
 
     & select {
-      inline-size: auto;
       min-inline-size: 12rem;
       max-inline-size: 24rem;
-      min-block-size: var(--size-control-sm);
-      font-size: var(--text-sm);
     }
   }
 }

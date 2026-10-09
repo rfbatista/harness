@@ -26,12 +26,6 @@
       font-size: var(--text-sm);
     }
 
-    & .status-picker {
-      inline-size: auto;
-      min-block-size: var(--size-control-sm);
-      font-size: var(--text-sm);
-    }
-
     & .actions {
       display: flex;
       flex-wrap: wrap;

@@ -101,6 +101,12 @@ test("preselects the checked-out branch, and branches off the one chosen", async
   assert.equal(started[0].baseBranch, "feat/feed");
 });
 
+test("no error row while the branches list", async () => {
+  const { instance } = setup();
+  await flush();
+  assert.equal(instance.branchError, null);
+});
+
 test("choosing another repository lists its branches", async () => {
   const { instance, tick } = setup();
   await flush();
@@ -118,6 +124,7 @@ test("when branches cannot be listed the session still starts, off the checkout"
   await flush();
   assert.equal(instance.branchesFailed, true);
   assert.ok(instance.baseHint.includes("Could not list"));
+  assert.equal(instance.branchError, "Could not list the branches.", "the combobox's error row");
   await instance.submit();
   assert.equal(dispatched[0].name, "session-created");
 });

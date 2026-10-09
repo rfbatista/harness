@@ -2,6 +2,8 @@
  * Field — label, control, then a hint or an error. The control itself is
  * styled globally; this block only arranges the parts.
  * <div class="field"><label for>…</label><input …><span class="hint">…</span></div>
+ * A radio or checkbox group is a <fieldset class="field"> whose <legend> reads
+ * like a label, with one .field[data-inline] row per choice.
  */
 
 @layer blocks {
@@ -19,6 +21,22 @@
       font-size: var(--text-xs);
       color: var(--color-danger);
     }
+
+    &:is(fieldset) {
+      min-inline-size: 0;
+      margin: 0;
+      padding: 0;
+      border: 0;
+    }
+
+    & > legend {
+      padding: 0;
+      margin-block-end: var(--space-2xs);
+      font-size: var(--text-sm);
+      font-weight: var(--weight-medium);
+    }
+
+    & > .field[data-inline] > label { font-weight: var(--weight-regular); }
 
     /* Exception: inline checkbox / radio field. */
     &[data-inline] {
