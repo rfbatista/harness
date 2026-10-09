@@ -35,7 +35,7 @@ templ AppShell(f Frame) {
 			@topBar(f.Top)
 			@taskRail(f.Rail)
 			{ children... }
-			@streamBar(f.Live)
+			@streamBar(f.Live, f.Hints)
 		</div>
 	}
 }
@@ -153,12 +153,24 @@ templ railLink(l Link) {
 
 // streamBar shows whether the page is live. The page's feed reports its
 // status as a `feed-status` window event; streamStatus listens for it.
-templ streamBar(live bool) {
+templ streamBar(live bool, hints []Hint) {
 	<footer class="[ stream-bar ]" aria-live="polite">
 		if live {
 			<span class="[ status ]" data-state="reconnecting" x-data="streamStatus" x-on:feed-status.window="update" x-bind:data-state="state" x-text="label">connecting</span>
 		}
-		<span class="[ keys ]"><span><kbd>J</kbd><kbd>K</kbd> move</span></span>
+		<span class="[ keys ]">
+			if hints == nil {
+				<span><kbd>J</kbd><kbd>K</kbd> move</span>
+			}
+			for _, h := range hints {
+				<span>
+					for _, k := range h.Keys {
+						<kbd>{ k }</kbd>
+					}
+					{ h.Label }
+				</span>
+			}
+		</span>
 		<span class="[ cluster ] [ gutter-2xs ]" x-data="themeToggle">
 			<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-bind:aria-pressed="isLight" x-on:click="light">Light</button>
 			<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-bind:aria-pressed="isDark" x-on:click="dark">Dark</button>

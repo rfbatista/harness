@@ -1,0 +1,448 @@
+package tasks
+
+import "operators-mcp/internal/adapter/in/web/shell"
+
+// TaskResourcesPage is a task's resources and comments: files, images, audio
+// and links the person added (tasksResources renders the rows from the seed),
+// beside the plain-text comment thread and its composer. Files dragged over
+// the page arm the Resources column; a pasted image is uploaded; images open
+// in the lightbox, the page's one modal. Each row's ⋯ is the shared Menu
+// button (an action sheet on phones). What others change arrives over the
+// project feed; the polite live region reads out what happened.
+templ TaskResourcesPage(v TaskResourcesView) {
+	@shell.AppShell(v.Frame) {
+		<main
+			class="[ frame ]"
+			x-data="tasksResources"
+			data-seed="task-resources-seed"
+			x-on:dragenter.window="windowDragEnter"
+			x-on:dragover.window="windowDragOver"
+			x-on:dragleave.window="windowDragLeave"
+			x-on:drop.window="windowDrop"
+			x-on:paste.window="pasted"
+		>
+			@templ.JSONScript("task-resources-seed", v.Seed)
+			<header class="[ toolbar ] [ shrink-0 ]">
+				<a class="[ crumb ]" href={ templ.SafeURL("/projects/" + v.ProjectID) }>{ v.ProjectName } /</a>
+				<a class="[ crumb ]" href={ templ.SafeURL(v.TaskHref) }>{ v.TaskTitle } /</a>
+				<h1>Resources and comments</h1>
+				<span class="[ color-ink-faint text-sm ]" x-text="summary" data-summary></span>
+			</header>
+			<p class="[ visually-hidden ]" role="status" aria-live="polite" x-text="announcement"></p>
+			<template x-if="taskGone">
+				<div class="[ pad-inline-l pad-block-s ] [ shrink-0 ]">
+					<div class="[ banner ]" data-tone="danger" role="alert" data-task-gone>
+						<div class="[ flow ] [ flow-space-3xs grow ]">
+							<span>This task no longer exists.</span>
+							<span class="[ code ]">TICKET_NOT_FOUND · <a x-bind:href="projectHref">back to the project</a></span>
+						</div>
+					</div>
+				</div>
+			</template>
+			<div class="[ resources-page ]" data-scroll>
+				@resourcesColumn()
+				@commentsColumn()
+			</div>
+			@lightbox()
+			<div class="[ toast-region ]" aria-live="polite">
+				<template x-for="t in toasts" x-bind:key="t.id">
+					<div class="[ toast ]" x-bind:data-tone="t.tone" data-toast>
+						<span class="[ grow ]" x-text="t.message"></span>
+						<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-on:click="dismissToast(t.id)">Dismiss</button>
+					</div>
+				</template>
+			</div>
+		</main>
+	}
+}
+
+templ resourcesColumn() {
+	<section
+		class="[ resources-col drop-target ]"
+		id="resources"
+		aria-labelledby="resources-title"
+		x-bind:data-drop-armed="dropArmed"
+		x-bind:data-drop-over="dropOver"
+		x-on:dragenter="zoneDragEnter"
+		x-on:dragleave="zoneDragLeave"
+		x-on:drop="zoneDrop"
+	>
+		<div class="[ drop-overlay ]" aria-hidden="true">
+			@iconUpload()
+			Drop to add to this task
+			<span>Files up to 25 MiB each</span>
+		</div>
+		<header class="[ section-head ]">
+			<h2 id="resources-title">Resources</h2>
+			<span class="[ badge ]" x-text="resourceCount" x-bind:aria-label="resourceCountLabel"></span>
+			<div class="[ actions ]">
+				<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" data-add-link aria-controls="link-form" x-bind:aria-expanded="linkOpen" x-bind:disabled="cannotAdd" x-on:click="toggleLink">
+					@iconLink()
+					Add link
+				</button>
+				<button type="button" class="[ button ]" data-size="sm" data-add-files x-bind:disabled="cannotAdd" x-on:click="pickFiles">
+					@iconUpload()
+					Add files
+				</button>
+				<input type="file" multiple hidden data-file-input x-on:change="picked"/>
+			</div>
+		</header>
+		<div class="[ scroll ]">
+			<template x-if="linkOpen">
+				<form class="[ inline-form ]" id="link-form" novalidate x-on:submit.prevent="submitLink" x-on:keydown.escape.prevent="cancelLink">
+					<div class="[ field ]">
+						<label for="link-url">Link</label>
+						<input
+							id="link-url"
+							type="url"
+							inputmode="url"
+							class="[ font-mono text-sm ]"
+							placeholder="https://"
+							autocomplete="off"
+							data-link-url
+							x-model="linkUrl"
+							x-bind:aria-invalid="linkInvalid"
+							aria-describedby="link-url-msg"
+						/>
+						<template x-if="linkInvalid">
+							<span class="[ error ]" id="link-url-msg" x-text="linkError"></span>
+						</template>
+						<template x-if="!linkInvalid">
+							<span class="[ hint ]" id="link-url-msg">http or https. Agents get the address; the harness never opens it.</span>
+						</template>
+					</div>
+					<div class="[ field ]">
+						<label for="link-title">Title <span class="[ color-ink-faint ]">(optional)</span></label>
+						<input id="link-title" autocomplete="off" placeholder="The address is used when empty" data-link-title x-model="linkTitle" x-bind:aria-invalid="linkTitleInvalid" aria-describedby="link-title-msg"/>
+						<template x-if="linkTitleInvalid">
+							<span class="[ error ]" id="link-title-msg" x-text="linkTitleError"></span>
+						</template>
+					</div>
+					<div class="[ cluster ] [ gutter-xs ]">
+						<button type="submit" class="[ button ]" data-variant="primary" data-size="sm" x-bind:aria-busy="linkBusy">Add link</button>
+						<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-on:click="cancelLink">Cancel</button>
+					</div>
+				</form>
+			</template>
+			<ul class="[ resources-list ]" aria-labelledby="resources-title" x-on:menu-select="rowAction">
+				<template x-for="row in rows" x-bind:key="row.id">
+					@resourceRow()
+				</template>
+				<template x-for="up in uploadRows" x-bind:key="up.key">
+					@uploadRow()
+				</template>
+			</ul>
+			<p class="[ drop-hint ]">
+				@iconUpload()
+				<span class="[ pointer-fine ]">Drop files here, paste an image, or <button type="button" x-on:click="pickFiles">choose files</button>.</span>
+				<span class="[ pointer-coarse ]"><button type="button" x-on:click="pickFiles">Choose files</button> or photos.</span>
+				<span>Up to 25 MiB each.</span>
+			</p>
+		</div>
+	</section>
+}
+
+// resourceRow is one resource, inside x-for="row in rows".
+templ resourceRow() {
+	<li
+		class="[ resource ]"
+		x-bind:data-id="row.id"
+		x-bind:data-kind="row.kind"
+		x-bind:data-fresh="row.fresh"
+		x-bind:data-editing="row.renaming"
+		x-bind:data-confirming="row.confirming"
+		x-bind:aria-busy="row.busy"
+	>
+		<template x-if="row.isLightbox">
+			<button type="button" class="[ tile ]" x-bind:aria-label="row.viewLabel" x-bind:title="row.viewLabel" x-on:click="viewImage">
+				<img alt="" loading="lazy" x-bind:src="row.thumb"/>
+			</button>
+		</template>
+		<template x-if="!row.isLightbox">
+			<span class="[ tile ]">
+				<template x-if="row.tile === 'audio'">
+					@iconAudio()
+				</template>
+				<template x-if="row.tile === 'link'">
+					@iconLink()
+				</template>
+				<template x-if="row.tile === 'ext'">
+					<span class="[ ext ]" x-text="row.ext"></span>
+				</template>
+			</span>
+		</template>
+		<div class="[ text ]">
+			<template x-if="row.renaming">
+				<input
+					data-rename
+					data-select
+					x-model="renameText"
+					x-bind:aria-label="'Title of ' + row.title"
+					x-bind:aria-invalid="renameError !== ''"
+					x-on:keydown.enter.prevent="saveRename"
+					x-on:keydown.escape.prevent="cancelRename"
+				/>
+			</template>
+			<template x-if="!row.renaming && row.isLightbox">
+				<button type="button" class="[ title ]" x-text="row.title" x-on:click="viewImage"></button>
+			</template>
+			<template x-if="!row.renaming && row.isLink && row.newTab">
+				<a class="[ title ]" target="_blank" rel="noopener noreferrer" x-bind:href="row.href">
+					<span x-text="row.title"></span><span class="[ visually-hidden ]"> (opens in a new tab)</span> ↗
+				</a>
+			</template>
+			<template x-if="!row.renaming && row.isLink && row.download">
+				<a class="[ title ]" download x-bind:href="row.href" x-text="row.title"></a>
+			</template>
+			<template x-if="!row.renaming && row.isAudio">
+				<span class="[ title ]" x-text="row.title"></span>
+			</template>
+			<template x-if="row.renaming && renameError">
+				<span class="[ meta ] [ color-danger ]" role="alert" x-text="renameError"></span>
+			</template>
+			<template x-if="!(row.renaming && renameError)">
+				<span class="[ meta ]" x-bind:title="row.metaTitle">
+					<span x-text="row.meta"></span>
+					<template x-if="row.host">
+						<span class="[ host ]" x-text="row.host"></span>
+					</template>
+				</span>
+			</template>
+		</div>
+		<template x-if="row.renaming">
+			<div class="[ actions ]">
+				<button type="button" class="[ button ]" data-variant="primary" data-size="sm" x-bind:aria-busy="row.busy" x-on:click="saveRename">Save</button>
+				<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-on:click="cancelRename">Cancel</button>
+			</div>
+		</template>
+		<template x-if="!row.renaming && !row.confirming">
+			<div class="[ actions ]">
+				<template x-if="row.downloadHref">
+					<a class="[ button ]" data-variant="ghost" data-size="sm" data-icon download x-bind:href="row.downloadHref" x-bind:aria-label="row.downloadLabel" x-bind:title="row.downloadLabel">
+						@iconDownload()
+					</a>
+				</template>
+				<div class="[ menu ]" x-data="menu" data-align="end">
+					<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" data-icon x-bind:aria-label="row.moreLabel" x-bind:title="row.moreLabel">⋯</button>
+					<div class="[ popup ]" role="menu">
+						<template x-for="item in row.menu" x-bind:key="item.action">
+							<div style="display: contents">
+								<template x-if="item.danger">
+									<hr role="separator"/>
+								</template>
+								<template x-if="item.href">
+									<a role="menuitem" x-bind:href="item.href" x-bind:target="item.newTab ? '_blank' : null" x-bind:rel="item.newTab ? 'noopener noreferrer' : null" x-bind:download="item.download" x-text="item.label"></a>
+								</template>
+								<template x-if="!item.href">
+									<button type="button" role="menuitem" x-bind:data-action="item.action" x-bind:data-tone="item.danger ? 'danger' : null" x-text="item.label"></button>
+								</template>
+							</div>
+						</template>
+					</div>
+				</div>
+			</div>
+		</template>
+		<template x-if="row.isAudio">
+			<audio controls preload="metadata" x-bind:src="row.audioSrc" x-bind:aria-label="row.playLabel"></audio>
+		</template>
+		<template x-if="row.confirming">
+			<div class="[ confirm ]" role="group" x-bind:aria-label="row.deleteQuestion">
+				<span><strong x-text="row.deleteQuestion"></strong> Sessions that already read it keep what they read.</span>
+				<span class="[ cluster ] [ gutter-xs ]">
+					<button type="button" class="[ button ]" data-variant="danger" data-size="sm" x-bind:aria-busy="row.busy" x-on:click="confirmDelete">Delete</button>
+					<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" data-keep x-on:click="keep">Keep it</button>
+				</span>
+			</div>
+		</template>
+	</li>
+}
+
+// uploadRow is a file on its way, inside x-for="up in uploadRows".
+templ uploadRow() {
+	<li class="[ resource ]" data-kind="file" x-bind:data-state="up.state" data-upload>
+		<span class="[ tile ]">
+			<template x-if="up.failed">
+				@iconWarning()
+			</template>
+			<template x-if="!up.failed">
+				<span class="[ ext ]" x-text="up.ext"></span>
+			</template>
+		</span>
+		<div class="[ text ]">
+			<span class="[ title ]" x-text="up.title"></span>
+			<template x-if="up.failed">
+				<span class="[ meta ]" role="alert"><span x-text="up.meta"></span> <span class="[ code ]" x-text="up.code"></span></span>
+			</template>
+			<template x-if="!up.failed">
+				<span class="[ meta ]" x-text="up.meta"></span>
+			</template>
+		</div>
+		<div class="[ actions ]">
+			<template x-if="up.canRetry">
+				<button type="button" class="[ button ]" data-size="sm" x-on:click="retryUpload(up.key)">Retry</button>
+			</template>
+			<template x-if="up.failed">
+				<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-on:click="dismissUpload(up.key)">Dismiss</button>
+			</template>
+			<template x-if="!up.failed">
+				<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-on:click="cancelUpload(up.key)">Cancel</button>
+			</template>
+		</div>
+		<template x-if="up.uploading">
+			<progress max="100" x-bind:value="up.percent" x-bind:aria-label="up.progressLabel"></progress>
+		</template>
+	</li>
+}
+
+templ commentsColumn() {
+	<section class="[ comments-col ]" id="comments" aria-labelledby="comments-title">
+		<header class="[ section-head ]">
+			<h2 id="comments-title">Comments</h2>
+			<span class="[ badge ]" x-text="commentCount" x-bind:aria-label="commentCountLabel"></span>
+		</header>
+		<div class="[ scroll ]">
+			<ol class="[ thread ]" aria-labelledby="comments-title">
+				<template x-for="c in commentRows" x-bind:key="c.id">
+					<li
+						class="[ comment ]"
+						x-bind:data-comment-id="c.id"
+						x-bind:data-fresh="c.fresh"
+						x-bind:data-editing="c.editing"
+						x-bind:data-confirming="c.confirming"
+						x-bind:aria-busy="c.busy"
+					>
+						<header>
+							<strong>You</strong>
+							<time x-bind:datetime="c.datetime" x-bind:title="c.dateTitle" x-text="c.age"></time>
+							<template x-if="c.edited">
+								<span class="[ edited ]" x-bind:title="c.editedTitle">edited</span>
+							</template>
+							<template x-if="!c.editing && !c.confirming">
+								<div class="[ actions ] [ cluster ] [ gutter-2xs ]">
+									<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" data-edit x-bind:aria-label="c.editLabel" x-bind:disabled="cannotAdd" x-on:click="startEdit(c.id)">Edit</button>
+									<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-bind:aria-label="c.deleteLabel" x-on:click="askDeleteComment(c.id)">Delete</button>
+								</div>
+							</template>
+						</header>
+						<template x-if="c.editing">
+							<div class="[ flow ] [ flow-space-xs ]">
+								<textarea
+									aria-label="Edit comment"
+									x-bind:maxlength="maxComment"
+									x-model="editText"
+									x-on:keydown.meta.enter.prevent="saveEdit"
+									x-on:keydown.ctrl.enter.prevent="saveEdit"
+									x-on:keydown.escape.prevent="cancelEdit"
+								></textarea>
+								<template x-if="editError">
+									<p class="[ text-xs color-danger ]" role="alert" x-text="editError"></p>
+								</template>
+								<div class="[ repel ]">
+									<span class="[ text-xs color-ink-faint ]">Edits are not sent to running sessions.</span>
+									<span class="[ cluster ] [ gutter-xs ]">
+										<button type="button" class="[ button ]" data-variant="primary" data-size="sm" x-bind:aria-busy="c.busy" x-on:click="saveEdit">Save</button>
+										<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-on:click="cancelEdit">Cancel</button>
+									</span>
+								</div>
+							</div>
+						</template>
+						<template x-if="!c.editing">
+							<p class="[ body ]" x-text="c.body"></p>
+						</template>
+						<template x-if="c.confirming">
+							<div class="[ confirm ]" role="group" aria-label="Delete this comment?">
+								<span><strong>Delete this comment?</strong> Sessions that already got it keep their copy.</span>
+								<span class="[ cluster ] [ gutter-xs ]">
+									<button type="button" class="[ button ]" data-variant="danger" data-size="sm" x-bind:aria-busy="c.busy" x-on:click="confirmDeleteComment">Delete</button>
+									<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" data-keep x-on:click="keepComment">Keep it</button>
+								</span>
+							</div>
+						</template>
+					</li>
+				</template>
+			</ol>
+			<template x-if="hasNoComments">
+				<p class="[ empty-note ]">No comments yet. Write what the agents should keep in mind: a decision, a correction, a pointer to one of the resources.</p>
+			</template>
+		</div>
+		<form class="[ composer ]" novalidate x-on:submit.prevent="send">
+			<label for="comment-body" class="[ visually-hidden ]">Write a comment</label>
+			<textarea
+				id="comment-body"
+				placeholder="Write a comment…"
+				aria-describedby="composer-hint composer-count"
+				data-composer
+				x-bind:maxlength="maxComment"
+				x-bind:disabled="cannotAdd"
+				x-model="draft"
+				x-on:keydown.meta.enter.prevent="send"
+				x-on:keydown.ctrl.enter.prevent="send"
+			></textarea>
+			<template x-if="composerError">
+				<p class="[ text-xs color-danger ]" role="alert" x-text="composerError"></p>
+			</template>
+			<footer>
+				<span class="[ hint ]" id="composer-hint">Plain text. Sessions running on this task get each new comment as a message; edits are not sent.</span>
+				<span class="[ count ]" id="composer-count" x-show="showsCounter" x-bind:data-tone="counterTone" x-text="counter"></span>
+				<button type="submit" class="[ button ]" data-variant="primary" data-size="sm" x-bind:disabled="cannotSend" x-bind:aria-busy="sending">Comment <kbd>⌘↵</kbd></button>
+			</footer>
+		</form>
+	</section>
+}
+
+templ lightbox() {
+	<dialog
+		class="[ lightbox ]"
+		aria-labelledby="lightbox-name"
+		x-ref="lightbox"
+		x-on:close="lightboxClosed"
+		x-on:click="lightboxClick"
+		x-on:keydown.left.prevent="previousImage"
+		x-on:keydown.right.prevent="nextImage"
+	>
+		<div class="[ stage ]">
+			<img x-bind:src="lightboxSrc" x-bind:alt="lightboxTitle"/>
+			<template x-if="lightboxSteps">
+				<button type="button" class="[ button step ]" data-icon data-dir="prev" aria-label="Previous image" x-on:click="previousImage">
+					<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M10 3.5L5.5 8l4.5 4.5"></path></svg>
+				</button>
+			</template>
+			<template x-if="lightboxSteps">
+				<button type="button" class="[ button step ]" data-icon data-dir="next" aria-label="Next image" x-on:click="nextImage">
+					<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M6 3.5L10.5 8 6 12.5"></path></svg>
+				</button>
+			</template>
+		</div>
+		<footer>
+			<div class="[ text ]">
+				<span class="[ name ]" id="lightbox-name" x-text="lightboxTitle"></span>
+				<span class="[ meta ]" x-text="lightboxMeta"></span>
+			</div>
+			<div class="[ cluster ] [ gutter-xs ]">
+				<a class="[ button ]" data-variant="ghost" data-size="sm" target="_blank" rel="noopener noreferrer" x-bind:href="lightboxSrc">Open in a new tab</a>
+				<a class="[ button ]" data-size="sm" download x-bind:href="lightboxDownload">Download</a>
+				<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" data-lightbox-close autofocus x-on:click="closeLightbox">Close <kbd>Esc</kbd></button>
+			</div>
+		</footer>
+	</dialog>
+}
+
+templ iconUpload() {
+	<svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M8 10.5V2.5M5 5.5l3-3 3 3M2.5 10v3.5h11V10"></path></svg>
+}
+
+templ iconLink() {
+	<svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M6.5 9.5l3-3M7 4.5l1-1a2.8 2.8 0 014 4l-1 1M9 11.5l-1 1a2.8 2.8 0 01-4-4l1-1"></path></svg>
+}
+
+templ iconAudio() {
+	<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M2.5 6v4M5.5 3.5v9M8.5 5.5v5M11.5 2.5v11M14 6.5v3"></path></svg>
+}
+
+templ iconDownload() {
+	<svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M8 2.5v8M5 7.5l3 3 3-3M2.5 13.5h11"></path></svg>
+}
+
+templ iconWarning() {
+	<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M8 2l6.5 11.5h-13z"></path><path d="M8 6.5v3M8 11.5v.01"></path></svg>
+}

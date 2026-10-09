@@ -71,6 +71,7 @@ func NewHandler(deps Deps, assets *Assets, fallback http.Handler) http.Handler {
 	taskPages := tasks.Handler{
 		Projects: deps.Projects, Tasks: deps.Tasks, Sessions: deps.Sessions,
 		Agents: deps.Agents, Repositories: deps.Repositories, Docs: deps.Documents, Artifacts: deps.Artifacts,
+		Resources: deps.Resources, Comments: deps.Comments,
 		Layout: s.layout, Render: render, Now: deps.Now,
 	}
 	projectPages := projects.Handler{
@@ -111,6 +112,7 @@ func NewHandler(deps Deps, assets *Assets, fallback http.Handler) http.Handler {
 	mux.Handle("GET /projects/{project}/tasks/{task}/sessions/{session}/history", s.page(historyPages.Session))
 	mux.Handle("GET /projects/{project}/tasks/{task}/sessions/{session}/history/{commit}", s.page(historyPages.Session))
 	mux.Handle("GET /projects/{project}/tasks/{task}/design", s.page(taskPages.TaskDesign))
+	mux.Handle("GET /projects/{project}/tasks/{task}/resources", s.page(taskPages.TaskResources))
 	mux.Handle("GET /projects/{project}/tasks/{task}/documents", s.page(taskPages.Documents))
 	mux.Handle("GET /projects/{project}/tasks/{task}/documents/{document}", s.page(taskPages.Documents))
 	mux.Handle("GET /projects/{project}/tasks/{task}/documents/{document}/view", s.page(taskPages.DocumentView))

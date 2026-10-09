@@ -25,6 +25,14 @@ type Frame struct {
 	// connection. Pages that do not follow it show none, rather than a
 	// "connecting" that never ends.
 	Live bool
+	// Hints are the keys the stream bar names; nil names the list keys (J K move).
+	Hints []Hint
+}
+
+// Hint is one keyboard way the stream bar names: its keys and what they do.
+type Hint struct {
+	Keys  []string
+	Label string
 }
 
 // TopBar holds the project picker.

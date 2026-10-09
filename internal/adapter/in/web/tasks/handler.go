@@ -25,6 +25,10 @@ type Handler struct {
 	// Artifacts lists the design assets the task page and the design library
 	// seed; nil seeds none.
 	Artifacts ports.ArtifactReader
+	// Resources and Comments read what a person added to a task, for its
+	// resources page and the task toolbar's counts; nil reads none.
+	Resources ports.TaskResourceReader
+	Comments  ports.TaskCommentReader
 	Layout    shell.Layout
 	Render    shell.Renderer
 	Now       func() time.Time
@@ -124,6 +128,11 @@ func (h Handler) Task(w http.ResponseWriter, r *http.Request) error {
 			view.Seed.DocumentTitles[d.ID] = d.Title
 		}
 	}
+	resources, comments, err := h.resourcesOf(ctx, task.ID)
+	if err != nil {
+		return err
+	}
+	view.Resources = resourcesLink(project.ID, task.ID, resources, comments)
 	view.Reviews = reviewsSeed(project.ID, task.ID, list, agents, []*domain.Ticket{task}, docs)
 	for _, st := range Statuses {
 		view.StatusChoices = append(view.StatusChoices, sessions.StatusChoice{Value: st.Value, Label: st.Label, Selected: st.Value == string(task.Status)})
