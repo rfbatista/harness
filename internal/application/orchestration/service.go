@@ -101,6 +101,9 @@ type Service struct {
 
 	mu       sync.Mutex
 	seq      map[string]int64
+	// statuses is the last status announced per session, so a status is
+	// announced on the bus only when it actually changes.
+	statuses map[string]domain.SessionStatus
 	cleanups map[string]func()
 	// busy marks sessions with a turn in flight: set when a user message is
 	// written to the CLI, cleared by the "result" line that ends the turn. It
@@ -122,7 +125,7 @@ func NewService(runtime llmkit.Manager, broker *approval.Broker, hub *Hub, sessi
 		runtime: runtime, broker: broker, hub: hub, sessions: sessions, catalog: catalog, tickets: tickets,
 		workspaces: workspaces,
 		seq:        map[string]int64{}, cleanups: map[string]func(){}, busy: map[string]bool{},
-		resuming: map[string]bool{},
+		resuming: map[string]bool{}, statuses: map[string]domain.SessionStatus{},
 	}
 	go s.approvalLoop()
 	go s.expiryLoop()
@@ -876,6 +879,10 @@ func (s *Service) publish(sessionID string, ev SessionEvent) {
 	s.mu.Lock()
 	s.seq[sessionID]++
 	ev.Seq = s.seq[sessionID]
+	moved := ev.Status != "" && s.statuses[sessionID] != ev.Status
+	if moved {
+		s.statuses[sessionID] = ev.Status
+	}
 	s.mu.Unlock()
 
 	ev.SessionID = sessionID
@@ -886,6 +893,9 @@ func (s *Service) publish(sessionID string, ev SessionEvent) {
 	_ = s.sessions.AppendEvent(sessionID, ev.Seq, ev.Type, payload)
 	s.hub.Publish(sessionID, ev)
 	s.notify(sessionID, ev.Type)
+	if moved {
+		s.announce(domain.SessionStatusChanged{SessionID: sessionID, Status: ev.Status})
+	}
 }
 
 // publishDelta streams an ephemeral token-delta event to live subscribers only:

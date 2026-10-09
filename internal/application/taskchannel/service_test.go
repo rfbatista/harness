@@ -2,6 +2,8 @@ package taskchannel_test
 
 import (
 	"context"
+	"errors"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -418,5 +420,41 @@ func TestDecorateSessions(t *testing.T) {
 		if (s.StatusCheck != nil) != (s.ID == "dev") {
 			t.Errorf("%s: status check %+v (only the architect's direct delegate has one)", s.ID, s.StatusCheck)
 		}
+	}
+}
+
+func TestReviewsAreAnnouncedOnTheBus(t *testing.T) {
+	f := newFixture(t)
+	f.svc.Events = f.bus
+	var got []domain.ReviewRequestChanged
+	ports.On(f.bus, func(_ context.Context, ev domain.ReviewRequestChanged) error {
+		got = append(got, ev)
+		return errors.New("a failing subscriber never fails the request")
+	})
+	f.start(t, "arch", "", domain.SessionModeArchitect, intp(0))
+	f.start(t, "dev", "arch", "", intp(0))
+
+	r, err := f.svc.RequestUserReview(ctx, "arch", ports.ReviewRequestInput{Subject: "Server plan", Body: "b", AboutSessionID: "dev"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := f.svc.RespondReview(ctx, r.ID, domain.ReviewApproved, ""); err != nil {
+		t.Fatal(err)
+	}
+	r2, err := f.svc.RequestUserReview(ctx, "arch", ports.ReviewRequestInput{Subject: "two", Body: "b"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.svc.WithdrawReview(ctx, "arch", r2.ID); err != nil {
+		t.Fatal(err)
+	}
+	want := []domain.ReviewRequestChanged{
+		{ReviewID: r.ID, TaskID: f.ticket, ProjectID: f.project, Subject: "Server plan", AboutSessionID: "dev", State: domain.ReviewPending},
+		{ReviewID: r.ID, TaskID: f.ticket, ProjectID: f.project, Subject: "Server plan", AboutSessionID: "dev", State: domain.ReviewApproved},
+		{ReviewID: r2.ID, TaskID: f.ticket, ProjectID: f.project, Subject: "two", State: domain.ReviewPending},
+		{ReviewID: r2.ID, TaskID: f.ticket, ProjectID: f.project, Subject: "two", State: domain.ReviewWithdrawn},
+	}
+	if !slices.Equal(got, want) {
+		t.Fatalf("announced %+v\nwant %+v", got, want)
 	}
 }
