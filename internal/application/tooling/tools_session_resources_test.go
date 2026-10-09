@@ -161,7 +161,7 @@ func TestListTaskComments(t *testing.T) {
 
 func TestResourceToolsUnavailableWithoutTheirPorts(t *testing.T) {
 	f := newTaskToolsFixture(t)
-	for _, tl := range SessionTaskTools(f.plan, nil, nil, nil, PeerStarter{}, ArtifactTooling{}, nil, ResourceTooling{}) {
+	for _, tl := range SessionTaskTools(f.plan, nil, nil, nil, PeerStarter{}, ArtifactTooling{}, nil, ResourceTooling{}, NotificationTooling{}) {
 		if tl.Name != "list_task_resources" && tl.Name != "list_task_comments" {
 			continue
 		}

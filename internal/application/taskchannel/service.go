@@ -10,6 +10,7 @@ package taskchannel
 
 import (
 	"context"
+	"log/slog"
 	"slices"
 	"sync"
 	"sync/atomic"
@@ -57,6 +58,9 @@ type Service struct {
 	// silent.
 	Announcer ports.SessionAnnouncer
 	Feed      ports.ProjectChangeSink
+	// Events announces review requests opening and settling on the bus (the
+	// notifications context records them). Nil announces nothing.
+	Events ports.EventPublisher
 	// Artifacts checks that an artifact a message names is on the task. Nil
 	// refuses every artifact id.
 	Artifacts interface {
@@ -264,6 +268,13 @@ func (s *Service) emitMessage(m *domain.TaskMessage) {
 
 func (s *Service) emitReview(r *domain.ReviewRequest) {
 	s.feed(ports.ProjectChange{ReviewRequest: r})
+	if s.Events != nil {
+		ev := domain.ReviewRequestChanged{ReviewID: r.ID, TaskID: r.TaskID, ProjectID: r.ProjectID,
+			Subject: r.Subject, AboutSessionID: r.AboutSessionID, State: r.State}
+		if err := s.Events.Publish(context.Background(), ev); err != nil {
+			slog.Warn("announce review request", "review", r.ID, "err", err)
+		}
+	}
 	s.tell(ports.SessionEvent{Type: "review_request", ReviewRequest: r, At: s.now()}, r.ArchitectSessionID, r.AboutSessionID)
 	// The task's pending count changed with it.
 	if tk, err := s.tickets.GetTicket(context.Background(), r.TaskID); err == nil && s.Feed != nil {

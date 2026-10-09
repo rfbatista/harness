@@ -215,5 +215,10 @@ func NewRouter(h *Handler, opts ...Option) *echo.Echo {
 	g.POST("/update_ticket_comment", h.handleUpdateTicketComment)
 	g.POST("/delete_ticket_comment", h.handleDeleteTicketComment)
 
+	// notifications: the person's inbox across every project
+	g.GET("/notifications", h.handleListNotifications)
+	g.POST("/notifications/read", h.handleMarkNotificationsRead)
+	g.GET("/notifications/events", h.handleNotificationEvents) // every inbox change (SSE)
+
 	return e
 }

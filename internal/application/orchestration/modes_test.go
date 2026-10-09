@@ -46,6 +46,9 @@ func TestStartInteractive_ArchitectMode(t *testing.T) {
 			t.Errorf("task-architecture SKILL.md lacks %q: its document templates must be HTML", want)
 		}
 	}
+	if !strings.Contains(body, "already notify the person") {
+		t.Error("task-architecture SKILL.md does not say review requests and the review status already notify the person")
+	}
 	if strings.Contains(body, "```\n## <Application>") || strings.Contains(body, "```\n**Type:** REST API") {
 		t.Error("task-architecture SKILL.md still carries Markdown document templates")
 	}

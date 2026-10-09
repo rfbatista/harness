@@ -49,6 +49,9 @@ type Services struct {
 	// PullRequests opens workspaces' branches as pull requests; nil answers
 	// 503.
 	PullRequests ports.PullRequests
+	// Notifications is the person's inbox across every project; nil answers
+	// 503.
+	Notifications ports.Notifications
 }
 
 // Handler serves the application's driving ports as HTTP endpoints (the same
@@ -78,6 +81,7 @@ type Handler struct {
 	resources     ports.TaskResources
 	comments      ports.TaskComments
 	pullRequests  ports.PullRequests
+	notifications ports.Notifications
 }
 
 // NewHandler returns an HTTP handler that serves /api/list_tree, /api/list_zones, /api/list_projects, etc.
@@ -103,6 +107,7 @@ func NewHandler(s Services) *Handler {
 		resources:     s.TaskResources,
 		comments:      s.TaskComments,
 		pullRequests:  s.PullRequests,
+		notifications: s.Notifications,
 	}
 }
 
