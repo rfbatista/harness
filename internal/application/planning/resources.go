@@ -15,9 +15,10 @@ import (
 )
 
 var (
-	_ ports.TaskResources     = (*Service)(nil)
-	_ ports.TaskResourceFiles = (*Service)(nil)
-	_ ports.TaskComments      = (*Service)(nil)
+	_ ports.TaskResources       = (*Service)(nil)
+	_ ports.TaskResourceFiles   = (*Service)(nil)
+	_ ports.TaskComments        = (*Service)(nil)
+	_ ports.SessionTaskComments = (*Service)(nil)
 )
 
 // The resources and comments a person adds to a task. Every change is
@@ -28,6 +29,8 @@ var (
 var (
 	errResourceNotFound = &domain.StructuredError{Code: "RESOURCE_NOT_FOUND", Message: "resource not found"}
 	errCommentNotFound  = &domain.StructuredError{Code: "COMMENT_NOT_FOUND", Message: "comment not found"}
+	errCommentNotOnTask = &domain.StructuredError{Code: "COMMENT_NOT_ON_TASK", Message: "comment belongs to another task"}
+	errCommentNotYours  = &domain.StructuredError{Code: "COMMENT_NOT_YOURS", Message: "only the session that wrote this comment can change it"}
 	errNoResources      = &domain.StructuredError{Code: "UNAVAILABLE", Message: "task resources are not available on this server"}
 	errNoComments       = &domain.StructuredError{Code: "UNAVAILABLE", Message: "task comments are not available on this server"}
 )

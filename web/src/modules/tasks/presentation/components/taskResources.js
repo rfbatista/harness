@@ -4,9 +4,11 @@
 // writes through the ResourceGateway and follows the project feed, so what
 // another tab or person adds, renames or deletes shows here live. The echo
 // of the person's own add is held until its POST answers (domain/items.js),
-// so nothing shows twice.
+// so nothing shows twice. Sessions write comments too; theirs are never an
+// echo. The ids of the sessions listed on the task, from the seed and then
+// the feed, say which of them a comment can link to.
 //
-//   <script id="task-resources-seed" type="application/json">{"project_id", "ticket_id", "resources": [...], "comments": [...]}</script>
+//   <script id="task-resources-seed" type="application/json">{"project_id", "ticket_id", "resources": [...], "comments": [...], "session_ids": [...]}</script>
 //   <main x-data="tasksResources" data-seed="task-resources-seed"> …
 //
 // The parts (adding, lightbox, thread) share this object: they read the
@@ -16,6 +18,7 @@ import { Codes, codeOf } from "../../../../shared/domain/errors.js";
 import { FeedStatus } from "../../../../shared/domain/feed.js";
 import { count } from "../../../../shared/presentation/format.js";
 import { readSeed } from "../../../../shared/presentation/seed.js";
+import { authorName, isBySession } from "../../domain/comments.js";
 import { commentSignature, echoGuard, hasId, removeById, resourceSignature, upsert } from "../../domain/items.js";
 import { titleProblem } from "../../domain/resources.js";
 import { resourceRow, summaryWords } from "../resourceView.js";
@@ -71,6 +74,8 @@ export const taskResources = (deps) => () => {
     resources: [],
     /** @type {import("../../domain/comments.js").Comment[]} */
     comments: [],
+    /** The sessions listed on the task. */
+    sessionIds: [],
     /** Ids that arrived after the page loaded: they take the arrival wash once. */
     freshIds: [],
     now: clock.now(),
@@ -94,6 +99,7 @@ export const taskResources = (deps) => () => {
       this.ticketId = seed.ticketId;
       this.resources = seed.resources;
       this.comments = seed.comments;
+      this.sessionIds = seed.sessionIds;
       unfollow = gateway.follow(this.projectId, (change) => this.apply(change), (status) => status === FeedStatus.RESYNCED && this.resync());
       ticker = setInterval(() => (this.now = clock.now()), TICK_MS);
       this.initAdding?.();
@@ -130,6 +136,9 @@ export const taskResources = (deps) => () => {
     },
     get projectHref() {
       return `/projects/${encodeURIComponent(this.projectId)}`;
+    },
+    get taskHref() {
+      return `${this.projectHref}/tasks/${encodeURIComponent(this.ticketId)}`;
     },
 
     // ── the lists ──────────────────────────────────────────────────────
@@ -183,9 +192,21 @@ export const taskResources = (deps) => () => {
         case "comment": {
           const c = change.comment;
           if (c.ticketId !== this.ticketId) return;
+          // Only the person's own add can be an echo; a session's is news.
+          if (isBySession(c)) {
+            if (!hasId(this.comments, c.id)) this.announce(`${authorName(c)} commented.`);
+            this.showComment(c);
+            return;
+          }
           if (hasId(this.comments, c.id) || !guards.comments.hold(c)) this.showComment(c);
           return;
         }
+        case "session":
+          if (change.ticketId === this.ticketId && !this.sessionIds.includes(change.id)) this.sessionIds = [...this.sessionIds, change.id];
+          return;
+        case "session-deleted":
+          this.sessionIds = this.sessionIds.filter((id) => id !== change.id);
+          return;
         case "comment-deleted": {
           if (change.ticketId !== this.ticketId) return;
           guards.comments.drop(change.id);

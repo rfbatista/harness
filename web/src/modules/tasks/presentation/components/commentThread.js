@@ -1,13 +1,15 @@
 // The comment thread and its composer, a part of the task's resources page
 // (taskResources.js). Comments are plain text, oldest first, edited and
 // deleted in place. Each new one reaches the sessions running on the task as
-// a message; edits do not, and the page says so.
+// a message; edits do not, and the page says so. Sessions write in the same
+// thread: theirs name the agent and link to the session while it is listed
+// on the task, and the person can delete them but not edit them.
 
 import { Codes, codeOf } from "../../../../shared/domain/errors.js";
-import { canSend, counterTone, counterWords, isUnchanged, MAX_COMMENT, WARN_FROM } from "../../domain/comments.js";
+import { canEdit, canSend, counterTone, counterWords, isUnchanged, MAX_COMMENT, WARN_FROM } from "../../domain/comments.js";
 import { commentClaim } from "../../domain/items.js";
 import { runeCount } from "../../domain/resources.js";
-import { commentRow } from "../resourceView.js";
+import { commentRow, sessionHref } from "../resourceView.js";
 
 /**
  * @param {{
@@ -33,9 +35,11 @@ export function commentThread({ gateway, guards }) {
 
     get commentRows() {
       const fresh = new Set(this.freshIds);
+      const listed = new Set(this.sessionIds);
       return this.comments.map((c) =>
         commentRow(c, {
           now: this.now,
+          authorHref: listed.has(c.sessionId) ? sessionHref(this.taskHref, c.sessionId) : "",
           fresh: fresh.has(c.id),
           editing: c.id === this.editingId,
           confirming: c.id === this.confirmingCommentId,
@@ -89,7 +93,7 @@ export function commentThread({ gateway, guards }) {
     // ── edit ───────────────────────────────────────────────────────────
     startEdit(id) {
       const c = this.comments.find((x) => x.id === id);
-      if (!c || this.taskGone) return;
+      if (!c || this.taskGone || !canEdit(c)) return;
       this.confirmingCommentId = "";
       this.editingId = id;
       this.editText = c.body;
@@ -120,6 +124,11 @@ export function commentThread({ gateway, guards }) {
         if (codeOf(err) === Codes.COMMENT_NOT_FOUND) {
           this.forgetComment(id);
           this.toast("That comment was already deleted.");
+        } else if (codeOf(err) === Codes.COMMENT_NOT_YOURS) {
+          // A page that took a session's comment for the person's: it stays as it was.
+          this.editingId = "";
+          this.editError = "";
+          this.toast("Only the session that wrote this comment can edit it.");
         } else {
           this.editError = `The edit was not saved: ${err?.message ?? "something went wrong"}.`;
         }
@@ -138,7 +147,8 @@ export function commentThread({ gateway, guards }) {
     keepComment() {
       const id = this.confirmingCommentId;
       this.confirmingCommentId = "";
-      this.focusLater(`[data-comment-id="${CSS.escape(id)}"] [data-edit]`);
+      // A session's comment has no Edit: back to its Delete.
+      this.focusLater(`[data-comment-id="${CSS.escape(id)}"] :is([data-edit], [data-delete])`);
     },
     async confirmDeleteComment() {
       const id = this.confirmingCommentId;

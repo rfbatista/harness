@@ -4,12 +4,15 @@ import { Codes } from "../../../shared/domain/errors.js";
 import { flush } from "../../../shared/testing/doubles.js";
 import { assert, test } from "../../../shared/testing/test.js";
 import { MAX_RESOURCE_BYTES } from "../domain/resources.js";
-import { makeComment, makeResource, resourceDTO } from "./resource-fixtures.js";
+import { commentDTO, makeComment, makeResource, resourceDTO, sessionComment } from "./resource-fixtures.js";
 
 /**
  * @typedef {object} Subject
  * @property {import("../domain/ports.js").ResourceGateway} gateway
  * @property {(ticketId: string) => void} deleteTask  the task is deleted elsewhere
+ * @property {{ sessionAdds: Function, sessionEdits: Function, sessionDeletes: Function,
+ *             startSession: (ticketId: string, id: string) => void, deleteSession: (id: string) => void }} sessions
+ *           what the server does when a session writes or comes and goes
  *
  * @param {string} name
  * @param {(world: Parameters<typeof import("../infrastructure/memory-resources.js").memoryResources>[0]) => Subject} makeSubject
@@ -112,6 +115,48 @@ export function resourceGatewayContract(name, makeSubject) {
     await assert.rejects(gateway.removeComment("c1"), Codes.COMMENT_NOT_FOUND);
   });
 
+  contract("a session's comment reads back with its author, session and agent; the person's has neither", async () => {
+    const { gateway } = makeSubject(world({ comments: [makeComment({ id: "c1" }), sessionComment({ id: "c2" })] }));
+    const mine = await gateway.addComment("t1", "mine");
+    assert.deepEqual(
+      (await gateway.listComments("t1")).map((c) => [c.id, c.author, c.sessionId, c.agentName]),
+      [["c1", "person", "", ""], ["c2", "session", "s-rev", "Reviewer"], [mine.id, "person", "", ""]],
+    );
+  });
+
+  contract("a session's comment cannot be edited (COMMENT_NOT_YOURS) but can be deleted", async () => {
+    const { gateway } = makeSubject(world({ comments: [sessionComment({ id: "c2", body: "theirs" })] }));
+    const changes = [];
+    const stop = gateway.follow("p1", (c) => changes.push(c), () => {});
+    await flush();
+    await assert.rejects(gateway.editComment("c2", "mine now"), Codes.COMMENT_NOT_YOURS);
+    assert.equal((await gateway.listComments("t1"))[0].body, "theirs", "the refused edit changed nothing");
+    await gateway.removeComment("c2");
+    await flush();
+    assert.deepEqual(await gateway.listComments("t1"), []);
+    assert.deepEqual(changes.map((c) => [c.kind, c.id]), [["comment-deleted", "c2"]]);
+    stop();
+  });
+
+  contract("follow delivers what a session writes, and sessions coming and going", async () => {
+    const subject = makeSubject(world());
+    const changes = [];
+    const stop = subject.gateway.follow("p1", (c) => changes.push(c), () => {});
+    await flush();
+    subject.sessions.startSession("t1", "s-rev");
+    const c = subject.sessions.sessionAdds({ ticketId: "t1", sessionId: "s-rev", agentName: "Reviewer", body: " Found it. " });
+    subject.sessions.sessionEdits(c.id, "Found it twice.");
+    subject.sessions.sessionDeletes(c.id);
+    subject.sessions.deleteSession("s-rev");
+    await flush();
+    assert.deepEqual(
+      changes.map((x) => [x.kind, x.comment ? `${x.comment.author}/${x.comment.agentName}/${x.comment.body}` : x.id]),
+      [["session", "s-rev"], ["comment", "session/Reviewer/Found it."], ["comment", "session/Reviewer/Found it twice."], ["comment-deleted", c.id], ["session-deleted", "s-rev"]],
+    );
+    assert.equal(changes[0].ticketId, "t1", "a session names its task");
+    stop();
+  });
+
   contract("follow delivers every change of the project's tasks, in order, and nothing else", async () => {
     const subject = makeSubject(world({ tickets: [{ id: "t1", projectId: "p1" }, { id: "t9", projectId: "p9" }], resources: [makeResource({ id: "r1" })] }));
     const { gateway } = subject;
@@ -157,5 +202,14 @@ export function resourceGatewayContract(name, makeSubject) {
     assert.equal(gateway.decodeSeed({ ticket_id: "t1" }).resources.length, 0, "missing lists are empty");
     assert.throws(() => gateway.decodeSeed({ ticket_id: "t1", resources: [{ id: "r1", kind: "sticker" }] }), Codes.BAD_RESPONSE);
     assert.throws(() => gateway.decodeSeed(null), Codes.BAD_RESPONSE);
+    const agent = gateway.decodeSeed({ ticket_id: "t1", comments: [commentDTO(sessionComment())], session_ids: ["s-rev", "s-2"] });
+    assert.deepEqual([agent.comments[0].author, agent.comments[0].sessionId, agent.comments[0].agentName, agent.sessionIds], ["session", "s-rev", "Reviewer", ["s-rev", "s-2"]]);
+    assert.deepEqual(gateway.decodeSeed({ ticket_id: "t1" }).sessionIds, [], "no session_ids is none");
+    const old = commentDTO(makeComment());
+    delete old.author;
+    delete old.session_id;
+    delete old.agent_name;
+    const before = gateway.decodeSeed({ ticket_id: "t1", comments: [old] }).comments[0];
+    assert.deepEqual([before.author, before.sessionId, before.agentName], ["person", "", ""], "a row from before sessions wrote is the person's");
   });
 }

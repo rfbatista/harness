@@ -62,7 +62,8 @@ func errorHandler(err error, c echo.Context) {
 			writeCoded(c, http.StatusBadRequest, err, se)
 			return
 		case "ARTIFACT_NOT_YOURS", "ARCHITECT_ONLY", "TASK_STATUS_OWNED_BY_ARCHITECT", "SESSION_NOT_ON_TASK",
-			"RESOURCE_NOT_ON_TASK": // MCP only; no route answers it
+			"COMMENT_NOT_YOURS",
+			"RESOURCE_NOT_ON_TASK", "COMMENT_NOT_ON_TASK": // MCP only; no route answers them
 			writeCoded(c, http.StatusForbidden, err, se)
 			return
 		case "RESOURCE_TOO_LARGE":

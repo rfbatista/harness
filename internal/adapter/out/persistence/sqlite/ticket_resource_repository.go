@@ -48,6 +48,8 @@ type TicketCommentModel struct {
 	TicketID  string `gorm:"column:ticket_id;index:idx_ticket_comments_ticket_created"`
 	ProjectID string `gorm:"column:project_id"`
 	Author    string `gorm:"column:author"`
+	SessionID string `gorm:"column:session_id;not null;default:''"`
+	AgentName string `gorm:"column:agent_name;not null;default:''"`
 	Body      string `gorm:"column:body"`
 	CreatedAt int64  `gorm:"column:created_at;index:idx_ticket_comments_ticket_created"`
 	UpdatedAt int64  `gorm:"column:updated_at"`
@@ -55,9 +57,16 @@ type TicketCommentModel struct {
 
 func (TicketCommentModel) TableName() string { return "ticket_comments" }
 
+// ToDomain reads a row from before sessions could comment, with no author
+// fields, as the person's.
 func (m *TicketCommentModel) ToDomain() *domain.TicketComment {
+	author := domain.CommentAuthor(m.Author)
+	if author == "" {
+		author = domain.CommentByPerson
+	}
 	return &domain.TicketComment{
-		ID: m.ID, TicketID: m.TicketID, ProjectID: m.ProjectID, Author: domain.CommentAuthor(m.Author), Body: m.Body,
+		ID: m.ID, TicketID: m.TicketID, ProjectID: m.ProjectID, Author: author,
+		SessionID: m.SessionID, AgentName: m.AgentName, Body: m.Body,
 		CreatedAt: time.UnixMilli(m.CreatedAt), UpdatedAt: time.UnixMilli(m.UpdatedAt),
 	}
 }
@@ -169,7 +178,8 @@ func (r *TicketCommentRepository) Create(c *domain.TicketComment) (*domain.Ticke
 		return nil, err
 	}
 	now := time.Now().UnixMilli()
-	m := &TicketCommentModel{ID: id, TicketID: c.TicketID, ProjectID: c.ProjectID, Author: string(c.Author), Body: c.Body, CreatedAt: now, UpdatedAt: now}
+	m := &TicketCommentModel{ID: id, TicketID: c.TicketID, ProjectID: c.ProjectID, Author: string(c.Author),
+		SessionID: c.SessionID, AgentName: c.AgentName, Body: c.Body, CreatedAt: now, UpdatedAt: now}
 	if err := r.db.Create(m).Error; err != nil {
 		return nil, err
 	}

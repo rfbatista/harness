@@ -13,7 +13,7 @@ import { sessionsPage } from "./sessionsPage.js";
 
 file("sessions/presentation/sessionsPage");
 
-function setup(sessions = [makeSession({ id: "run" }), makeSession({ id: "turn", status: "idle" })]) {
+function setup(sessions = [makeSession({ id: "run" }), makeSession({ id: "turn", status: "idle" })], location = { search: "" }) {
   const memory = memoryGateway({ projects: ["p1"], sessions, now: () => T0 });
   const clock = fixedClock(T0);
   const el = seededElement({
@@ -23,7 +23,7 @@ function setup(sessions = [makeSession({ id: "run" }), makeSession({ id: "turn",
     agent_names: { backend: "Backend dev" },
     repository_names: { r1: "harness" },
   });
-  const mounted = mount(sessionsPage({ gateway: memory.gateway, clock }), { el });
+  const mounted = mount(sessionsPage({ gateway: memory.gateway, clock, location }), { el });
   mounted.instance.init();
   return { ...mounted, memory, clock, el };
 }
@@ -35,6 +35,16 @@ test("starts from the seed and selects what needs the developer first", () => {
   assert.equal(instance.summary, "2 sessions · 1 waiting");
   assert.deepEqual(instance.groups.map((g) => g.label), ["Needs you", "Running"]);
   instance.destroy();
+});
+
+test("?session= opens that session; one not on the task falls back to what needs the developer", () => {
+  const sessions = [makeSession({ id: "run" }), makeSession({ id: "turn", status: "idle" })];
+  const asked = setup(sessions, { search: "?session=run" });
+  assert.equal(asked.instance.selectedId, "run");
+  asked.instance.destroy();
+  const gone = setup(sessions, { search: "?session=s-gone" });
+  assert.equal(gone.instance.selectedId, "turn");
+  gone.instance.destroy();
 });
 
 test("removes the server-rendered rows once Alpine has rendered", () => {

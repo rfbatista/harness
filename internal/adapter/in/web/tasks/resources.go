@@ -11,6 +11,7 @@ import (
 	"operators-mcp/internal/adapter/in/web/sessions"
 	"operators-mcp/internal/adapter/in/web/shell"
 	"operators-mcp/internal/domain"
+	"operators-mcp/internal/ports"
 )
 
 // ResourcesHref is a task's resources and comments page.
@@ -32,12 +33,15 @@ type TaskResourcesView struct {
 }
 
 // TaskResourcesSeed is the task-resources-seed JSON: the task's resources
-// and comments in the API's shapes, oldest first. Never null.
+// and comments in the API's shapes, oldest first, and the ids of the
+// sessions listed on the task, so a session's comment links to it while it
+// is there. Never null.
 type TaskResourcesSeed struct {
-	ProjectID string                   `json:"project_id"`
-	TicketID  string                   `json:"ticket_id"`
-	Resources []*domain.TicketResource `json:"resources"`
-	Comments  []*domain.TicketComment  `json:"comments"`
+	ProjectID  string                   `json:"project_id"`
+	TicketID   string                   `json:"ticket_id"`
+	Resources  []*domain.TicketResource `json:"resources"`
+	Comments   []*domain.TicketComment  `json:"comments"`
+	SessionIDs []string                 `json:"session_ids"`
 }
 
 // TaskResources serves GET /projects/{project}/tasks/{task}/resources: what
@@ -60,6 +64,14 @@ func (h Handler) TaskResources(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
+	list, err := h.Sessions.List(ctx, ports.SessionFilter{ProjectID: project.ID, TicketID: task.ID})
+	if err != nil {
+		return err
+	}
+	sessionIDs := make([]string, 0, len(list))
+	for _, s := range list {
+		sessionIDs = append(sessionIDs, s.ID)
+	}
 	frame, err := h.Layout(ctx, "Resources and comments · "+task.Title, project.ID, task.ID)
 	if err != nil {
 		return err
@@ -70,7 +82,7 @@ func (h Handler) TaskResources(w http.ResponseWriter, r *http.Request) error {
 	view := TaskResourcesView{
 		Frame: frame, ProjectID: project.ID, ProjectName: project.Name,
 		TaskID: task.ID, TaskTitle: task.Title, TaskHref: Href(project.ID, task.ID),
-		Seed: TaskResourcesSeed{ProjectID: project.ID, TicketID: task.ID, Resources: resources, Comments: comments},
+		Seed: TaskResourcesSeed{ProjectID: project.ID, TicketID: task.ID, Resources: resources, Comments: comments, SessionIDs: sessionIDs},
 	}
 	return h.Render(w, r, http.StatusOK, TaskResourcesPage(view))
 }
