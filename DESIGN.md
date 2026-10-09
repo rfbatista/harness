@@ -19,6 +19,7 @@ colors:
   danger: "oklch(0.52 0.18 27)"
   danger-ink: "oklch(0.99 0.01 27)"
   success: "oklch(0.5 0.11 150)"
+  scrim-strong: "oklch(0.1 0.005 190 / 0.82)"
 typography:
   headline:
     fontFamily: "Atkinson Hyperlegible Next, ui-sans-serif, system-ui, sans-serif"
@@ -171,6 +172,7 @@ A cool, nearly colorless console with a trace of the signal hue (190) in every n
 - **Well** (`sunken`): transcripts and code: where an agent's output is read.
 - **Ink** (`ink`, 16.5:1), **Muted Ink** (`ink-muted`, 7:1), **Faint Ink** (`ink-faint`, ≥ 4.7:1): primary text, secondary text, and meta/placeholder text. All three clear AA on every surface in both themes.
 - **Hairline** (`line`), **Strong Hairline** (`line-strong`), **Control Edge** (`line-control`, ≥ 3:1): dividers, emphasized dividers, input and secondary-button boundaries.
+- **Dim Scrim** (`scrim`) and **Dark Scrim** (`scrim-strong`): what sits behind a modal surface. `scrim` dims the page behind a sheet or dialog; `scrim-strong` (near-black at 82%, 86% in dark mode) sits behind an image in the Lightbox, where the page must drop away.
 
 ### Named Rules
 **The Done Goes Quiet Rule.** A finished session is gray, not green. Success is the expected outcome; it earns no color on a resting list. Only running (signal), waiting (amber) and failed (red) are colored.
@@ -306,7 +308,7 @@ What a person adds to a task for context: **resources** (files, images, audio, l
 - **Drop target** (`.drop-target`, `.drop-hint`): files dragged over the page arm it with a dashed `line-control` outline (`data-drop-armed`). Over it, `data-drop-over` shows a 2px dashed signal outline and an overlay naming what a drop does. The quiet hint row says what to do, worded for coarse pointers on touch screens. Drag and paste are shortcuts only; the Add files button is the full path.
 - **Comment** (`.comment` in an `<ol class="thread">`): oldest first, no bubbles and no avatars. A header reads *You · 3 h ago · edited*, with ghost Edit and Delete buttons. The body is escaped plain text, `pre-wrap`, capped at 68ch. Edit and delete happen in place.
 - **Composer** (`.composer`): a textarea that grows with its content, a hint saying running sessions get each new comment as a message and edits are not sent, a counter from 9,000 of the 10,000 characters (amber, then red), and a primary *Comment ⌘↵*.
-- **Lightbox** (`dialog.lightbox`): the one modal on the page. It shows the image fitted over a near-black scrim (proposed token `--color-scrim-strong`), with ← → between the task's images, and a `raised` footer with the name, *n of N*, Open in a new tab, Download and Close. Focus returns to the control that opened it.
+- **Lightbox** (`dialog.lightbox`): the one modal on the page. It shows the image fitted over a near-black scrim (`scrim-strong`), with ← → between the task's images, and a `raised` footer with the name, *n of N*, Open in a new tab, Download and Close. Focus returns to the control that opened it.
 - **Copy:** adding says *Sessions running on this task are told about it.* Edits, renames and deletes never claim to tell anyone.
 
 ### Transcript (signature)

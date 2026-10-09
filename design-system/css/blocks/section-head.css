@@ -1,0 +1,30 @@
+/*
+ * Section head — the head of a section of a page: a 44px row like a pane's
+ * header (h2, a count badge, the section's actions), on the panel surface.
+ * <header class="section-head"><h2 id>…</h2><span class="badge">6</span><div class="actions">…</div></header>
+ * Inline form — a small form that opens under a section head instead of a
+ * dialog (Add link), on the canvas, closed by its own Cancel or Esc.
+ * <form class="inline-form"><div class="field">…</div><div class="cluster">…</div></form>
+ */
+@layer blocks {
+  .section-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-xs) var(--space-s);
+    min-block-size: 2.75rem;
+    padding: var(--space-xs) var(--space-l);
+    border-block-end: var(--border-width) solid var(--color-line);
+    background: var(--color-panel);
+    & > h2 { font-size: var(--text-md); }
+    & > .actions { display: flex; gap: var(--space-xs); margin-inline-start: auto; }
+  }
+  .inline-form {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-s);
+    padding: var(--space-m) var(--space-l);
+    border-block-end: var(--border-width) solid var(--color-line);
+    background: var(--color-canvas);
+  }
+}
