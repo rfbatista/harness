@@ -145,6 +145,32 @@ func resourcesServer(t *testing.T) (*httpclient.Client, string) {
 	return serve(t, httpapi.Services{Planning: svc, TaskResources: svc, TaskComments: svc}), tk.ID
 }
 
+// sessionCommentsServer is resourcesServer that also answers how to write a
+// comment as a session, in process: the API has no route for it.
+func sessionCommentsServer(t *testing.T) (*httpclient.Client, string, portstest.SessionCommentSeed) {
+	t.Helper()
+	db := openDB(t)
+	projectRepo := sqlite.NewProjectRepository(db)
+	p, err := projectRepo.Create("proj", t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	svc := planning.NewService(sqlite.NewTicketRepository(db), sqlite.NewDocumentRepository(db), projectRepo)
+	svc.Comments = sqlite.NewTicketCommentRepository(db)
+	tk, err := svc.CreateTicket(context.Background(), p.ID, "Task", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	seed := func(t *testing.T, tid string, w domain.CommentWriter, body string) *domain.TicketComment {
+		c, err := svc.AddSessionComment(context.Background(), tid, w, body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return c
+	}
+	return serve(t, httpapi.Services{Planning: svc, TaskComments: svc}), tk.ID, seed
+}
+
 func TestTaskResourcesConformance(t *testing.T) {
 	portstest.TaskResourcesConformance(t, func(t *testing.T) (ports.TaskResources, string) {
 		c, tid := resourcesServer(t)
@@ -156,5 +182,12 @@ func TestTaskCommentsConformance(t *testing.T) {
 	portstest.TaskCommentsConformance(t, func(t *testing.T) (ports.TaskComments, string) {
 		c, tid := resourcesServer(t)
 		return httpclient.NewTaskComments(c), tid
+	})
+}
+
+func TestSessionCommentsConformance(t *testing.T) {
+	portstest.SessionCommentsConformance(t, func(t *testing.T) (ports.TaskComments, string, portstest.SessionCommentSeed) {
+		c, tid, seed := sessionCommentsServer(t)
+		return httpclient.NewTaskComments(c), tid, seed
 	})
 }

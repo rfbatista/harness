@@ -67,6 +67,8 @@ func TestTaskResourcesPageSeedsTheTasksResourcesAndComments(t *testing.T) {
 		`id="resources"`, `id="comments"`, `class="[ resources-page ]" data-scroll`,
 		`class="[ lightbox ]"`, `x-data="menu"`, `class="[ composer ]"`,
 		`Sessions running on this task get each new comment as a message; edits are not sent.`,
+		// A session's comment: its agent's name (a link while the session is listed), the Agent mark, no Edit.
+		`<strong data-author><a x-bind:href="c.authorHref"`, `data-tone="signal" data-agent-mark>Agent</span>`, `<template x-if="c.canEdit">`,
 		`<kbd>⌘V</kbd> paste an image`,
 	} {
 		if !strings.Contains(body, want) {
@@ -91,6 +93,19 @@ func TestTaskResourcesPageSeedsTheTasksResourcesAndComments(t *testing.T) {
 	}
 	if strings.Contains(body, "Keep <the>") {
 		t.Error("a comment body reached the HTML unescaped")
+	}
+	// The sessions listed on the task, so a session's comment links to its own while it is there.
+	if ids := seed["session_ids"].([]any); len(ids) != 2 || ids[0] != "s1" || ids[1] != "s2" {
+		t.Errorf("session_ids = %v, want t-feed's s1 and s2", ids)
+	}
+}
+
+func TestTaskResourcesPageWithoutSessionsSeedsNoSessionIDs(t *testing.T) {
+	w := resourcesBoard()
+	w.sessions = nil
+	seed := seedOf(t, get(t, newTestHandler(t, w), "/projects/p1/tasks/t-feed/resources").Body.String(), "task-resources-seed")
+	if ids, ok := seed["session_ids"].([]any); !ok || len(ids) != 0 {
+		t.Errorf("session_ids = %v, want []", seed["session_ids"])
 	}
 }
 
@@ -157,5 +172,22 @@ func TestTaskPageStillServesWhenTheResourceCountFails(t *testing.T) {
 	}
 	if strings.Contains(rec.Body.String(), "data-task-resources") {
 		t.Error("the links show counts that could not be read")
+	}
+}
+
+func TestTaskResourcesPageSeedsWhoWroteEachComment(t *testing.T) {
+	w := resourcesBoard()
+	at := now.Add(-time.Minute)
+	w.comments = append(w.comments, &domain.TicketComment{ID: "c2", TicketID: "t-feed", ProjectID: "p1", Author: domain.CommentBySession, SessionID: "s1", AgentName: "go-developer", Body: "Done.", CreatedAt: at, UpdatedAt: at})
+	seed := seedOf(t, get(t, newTestHandler(t, w), "/projects/p1/tasks/t-feed/resources").Body.String(), "task-resources-seed")
+	comments := seed["comments"].([]any)
+	if len(comments) != 2 {
+		t.Fatalf("seeded comments = %v", comments)
+	}
+	for i, want := range [][3]string{{"person", "", ""}, {"session", "s1", "go-developer"}} {
+		c := comments[i].(map[string]any)
+		if c["author"] != want[0] || c["session_id"] != want[1] || c["agent_name"] != want[2] {
+			t.Errorf("comment %d = %v, want author/session_id/agent_name %v (always present)", i, c, want)
+		}
 	}
 }

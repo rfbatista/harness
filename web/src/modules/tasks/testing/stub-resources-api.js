@@ -111,7 +111,6 @@ export function stubResourcesApi(world) {
       queueMicrotask(() => {
         this.onopen?.({});
         // The project feed carries more than resources; the gateway must ignore the rest.
-        this.send({ session: { id: "s-other", ticket_id: "t1", status: "running" } });
         this.send({ ticket: { id: "t1", project_id: this.projectId, title: "x", status: "todo" } });
         this.send({ artifact: { id: "a1", kind: "page" } });
       });
@@ -135,6 +134,10 @@ export function stubResourcesApi(world) {
         return { ticket_comment: commentDTO(change.comment) };
       case "comment-deleted":
         return { ticket_comment: { id: change.id, ticket_id: change.ticketId, project_id: "p1" }, deleted: true };
+      case "session":
+        return { session: { id: change.id, ticket_id: change.ticketId, project_id: "p1", status: "running" } };
+      case "session-deleted":
+        return { session: { id: change.id }, deleted: true };
       default:
         return { ticket: { id: change.id }, deleted: true };
     }

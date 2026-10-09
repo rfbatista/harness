@@ -1,6 +1,6 @@
 import { assert, file, test } from "../../../shared/testing/test.js";
 import { makeComment } from "../testing/resource-fixtures.js";
-import { canSend, counterTone, counterWords, isEdited, isUnchanged, MAX_COMMENT } from "./comments.js";
+import { authorName, canEdit, canSend, counterTone, counterWords, isBySession, isEdited, isUnchanged, MAX_COMMENT } from "./comments.js";
 
 file("tasks/domain/comments");
 
@@ -29,4 +29,13 @@ test("an edit that only adds spaces around the body changes nothing", () => {
   const c = makeComment({ body: "Use the v2 contract." });
   assert.ok(isUnchanged(c, "  Use the v2 contract.\n"));
   assert.ok(!isUnchanged(c, "Use the v3 contract."));
+});
+
+test("a session's comment names its agent, or says Agent session; only the person's can be edited", () => {
+  const mine = makeComment();
+  const reviewer = makeComment({ author: "session", sessionId: "s1", agentName: "Reviewer" });
+  const plain = makeComment({ author: "session", sessionId: "s2", agentName: "" });
+  assert.deepEqual([mine, reviewer, plain].map(authorName), ["You", "Reviewer", "Agent session"]);
+  assert.deepEqual([mine, reviewer, plain].map(isBySession), [false, true, true]);
+  assert.deepEqual([mine, reviewer, plain].map(canEdit), [true, false, false]);
 });

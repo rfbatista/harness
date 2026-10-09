@@ -183,3 +183,33 @@ func TaskCommentsConformance(t *testing.T, newPort func(t *testing.T) (ports.Tas
 		wantCode(t, err, "COMMENT_NOT_FOUND")
 	})
 }
+
+// SessionCommentSeed writes a comment on task ticketID as session w, through
+// the in-process side the person's port has no way to reach.
+type SessionCommentSeed func(t *testing.T, ticketID string, w domain.CommentWriter, body string) *domain.TicketComment
+
+// SessionCommentsConformance runs what the person's port does with a comment
+// a session wrote: it reads back with its author, cannot be edited, and can
+// be deleted. newPort answers the port, a task, and how to seed a comment.
+func SessionCommentsConformance(t *testing.T, newPort func(t *testing.T) (ports.TaskComments, string, SessionCommentSeed)) {
+	ctx := context.Background()
+	p, tid, seed := newPort(t)
+	c := seed(t, tid, domain.CommentWriter{SessionID: "s1", AgentName: "go-developer"}, "agent note")
+
+	list, err := p.ListTicketComments(ctx, tid, time.Time{})
+	if err != nil || len(list) != 1 {
+		t.Fatalf("list = %+v, %v", list, err)
+	}
+	if got := list[0]; got.ID != c.ID || got.Author != domain.CommentBySession || got.SessionID != "s1" ||
+		got.AgentName != "go-developer" || got.Body != "agent note" {
+		t.Fatalf("read back = %+v", got)
+	}
+	_, err = p.UpdateTicketComment(ctx, c.ID, "rewritten")
+	wantCode(t, err, "COMMENT_NOT_YOURS")
+	if err := p.DeleteTicketComment(ctx, c.ID); err != nil {
+		t.Fatalf("the person deletes a session's comment: %v", err)
+	}
+	if list, _ := p.ListTicketComments(ctx, tid, time.Time{}); len(list) != 0 {
+		t.Fatalf("after delete = %+v", list)
+	}
+}

@@ -15,7 +15,7 @@ file("tasks/infrastructure/resources");
 
 resourceGatewayContract("memory", (world) => {
   const memory = memoryResources(world);
-  return { gateway: memory.gateway, deleteTask: memory.deleteTask };
+  return { gateway: memory.gateway, deleteTask: memory.deleteTask, sessions: memory };
 });
 
 function http(world) {
@@ -30,7 +30,7 @@ function http(world) {
 
 resourceGatewayContract("http", (world) => {
   const { gateway, stub } = http(world);
-  return { gateway, deleteTask: stub.memory.deleteTask };
+  return { gateway, deleteTask: stub.memory.deleteTask, sessions: stub.memory };
 });
 
 test("http · the upload sends ticket_id and title before the file, and no blank title", async () => {
@@ -57,8 +57,11 @@ test("http · a malformed change on the project feed is dropped, the stream stay
   stub.pushProject("p1", { ticket_resource: { id: "", kind: "image" } });
   stub.pushProject("p1", { ticket_comment: {}, deleted: true });
   stub.pushProject("p1", "not even json");
+  stub.pushProject("p1", { session: { status: "running" } }); // not ours to judge: ignored, not an error
+  stub.pushProject("p1", { session: { id: "s-x", ticket_id: "t1", status: "running", agent_id: "a1" } });
   await gateway.retitle("r1", "After");
   await flush();
-  assert.deepEqual(changes.map((c) => c.resource?.title), ["After"]);
+  assert.deepEqual(changes.map((c) => c.resource?.title ?? c.kind), ["session", "After"]);
+  assert.deepEqual([changes[0].id, changes[0].ticketId], ["s-x", "t1"]);
   stop();
 });
