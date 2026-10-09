@@ -1,6 +1,7 @@
 /*
- * Top bar — the app's name, the project picker and the notifications bell. The picker is a native
- * <select> in a GET form (styled globally); it decides what the rail lists.
+ * Top bar — the app's name, the project picker and the notifications bell.
+ * The picker is a native <select> in a GET form (styled globally); it
+ * decides what the rail lists.
  * <header class="topbar"><a class="brand" href="/">harness</a><form>…<select>…</form></header>
  */
 
