@@ -12,12 +12,17 @@
   .terminal {
     display: flex;
     flex-direction: column;
+    /* Its size is the room left beside its siblings, never what xterm last
+       drew: a content-sized pane would shrink the header with it and keep a
+       refit's old rows in its next measurement. */
+    flex: 1 1 0;
     min-block-size: 0;
+    overflow: hidden; /* the history scrolls in xterm, never the pane: no scrollbar to take columns from it */
     background: var(--color-sunken);
 
     & > .screen {
-      flex: 1 1 auto;
-      min-block-size: 12rem;
+      flex: 1 1 0;
+      min-block-size: 0; /* it takes the height left, however little: a floor would push the bar out */
       padding: var(--space-s) var(--space-m);
       overflow: hidden;
       cursor: text;

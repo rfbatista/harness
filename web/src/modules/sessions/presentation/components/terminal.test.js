@@ -23,7 +23,6 @@ function fakeScreen() {
         if (next) screen.size = next;
         return next;
       },
-      size: () => screen.size,
       focus: () => screen.focused++,
       dispose: () => (screen.disposed = true),
     };
@@ -84,7 +83,7 @@ test("resizing the pane resizes the PTY once it settles", async () => {
   await flush();
   screen.nextFit = { cols: 90, rows: 20 };
   resize();
-  assert.equal(terms.sent.get("s1").filter((m) => m.type === "resize").length, 0, "not while the pane is still changing");
+  assert.equal(terms.sent.get("s1")?.filter((m) => m.type === "resize").length ?? 0, 0, "not while the pane is still changing");
   timers.tick();
   assert.deepEqual(terms.sent.get("s1").at(-1), { type: "resize", size: { cols: 90, rows: 20 } });
 });

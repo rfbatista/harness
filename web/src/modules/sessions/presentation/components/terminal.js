@@ -15,28 +15,36 @@
  * @typedef {object} Screen
  * @property {(snapshot: import("../../domain/ports.js").TerminalSnapshot) => void} draw  redraws from scratch
  * @property {(bytes: Uint8Array) => void} write
- * @property {() => ({ cols: number, rows: number } | null)} fit  fits the container; the new size, or null when unchanged
- * @property {() => { cols: number, rows: number }} size  the current size
+ * @property {() => ({ cols: number, rows: number } | null)} fit  fits the container; the new size, or null when unchanged or hidden
  * @property {() => void} focus
  * @property {() => void} dispose
  *
  * @typedef {(container: HTMLElement, input: {
  *   onKey: (event: KeyboardEvent) => boolean,
  *   onPaste: (text: string) => void,
+ *   onCellSize?: () => void,
  * }) => Screen} CreateScreen
  */
+
+/**
+ * How long the pane's size must hold before the PTY hears of it: a window
+ * drag or a header growing is one resize, not one per frame.
+ */
+const FIT_SETTLE_MS = 100;
 
 /**
  * @param {{
  *   terminals: import("../../domain/ports.js").TerminalGateway,
  *   createScreen: CreateScreen,
  *   observeResize?: (el: HTMLElement, onResize: () => void) => () => void,
+ *   timers?: { setTimeout: typeof globalThis.setTimeout, clearTimeout: typeof globalThis.clearTimeout },
  * }} deps
  */
-export const terminal = ({ terminals, createScreen, observeResize = resizeObserver }) => (sessionId = "") => {
+export const terminal = ({ terminals, createScreen, observeResize = resizeObserver, timers = globalThis }) => (sessionId = "") => {
   let screen = null;
   let connection = null;
   let stopObserving = () => {};
+  let fitTimer = 0;
 
   return {
     sessionId,
@@ -68,9 +76,11 @@ export const terminal = ({ terminals, createScreen, observeResize = resizeObserv
       screen = createScreen(this.$refs.screen, {
         onKey: (event) => connection?.key(event) ?? false,
         onPaste: (text) => connection?.paste(text),
+        // The font arrived after the screen measured it: the same pane holds other rows and columns.
+        onCellSize: () => this.scheduleFit(),
       });
       this.connect();
-      stopObserving = observeResize(this.$refs.screen, () => this.fit());
+      stopObserving = observeResize(this.$refs.screen, () => this.scheduleFit());
     },
 
     connect() {
@@ -82,9 +92,10 @@ export const terminal = ({ terminals, createScreen, observeResize = resizeObserv
         onSnapshot: (snapshot) => {
           screen.draw(snapshot);
           if (snapshot.title) this.title = snapshot.title;
-          // The snapshot is at the server's size; take this pane's. The focus
-          // stays where the person left it: a terminal takes it on request.
-          this.fit(true);
+          // The snapshot is at the server's size; take this pane's, telling
+          // the server only when they differ (a hidden pane has none). The
+          // focus stays where the person left it: a terminal takes it on request.
+          this.fit();
         },
         onOutput: (bytes) => screen.write(bytes),
         onTitle: (title) => {
@@ -108,10 +119,16 @@ export const terminal = ({ terminals, createScreen, observeResize = resizeObserv
       screen?.focus();
     },
 
-    /** Fits the screen to the pane and tells the server; force sends even when unchanged. */
-    fit(force = false) {
+    /** Fits the screen to the pane once its size has held for a moment. */
+    scheduleFit() {
+      timers.clearTimeout(fitTimer);
+      fitTimer = timers.setTimeout(() => this.fit(), FIT_SETTLE_MS);
+    },
+
+    /** Fits the screen to the pane and tells the server the new size, if there is one. */
+    fit() {
       if (!screen) return;
-      const size = screen.fit() ?? (force ? screen.size() : null);
+      const size = screen.fit();
       if (size) connection?.resize(size);
     },
 
@@ -120,6 +137,7 @@ export const terminal = ({ terminals, createScreen, observeResize = resizeObserv
     },
 
     destroy() {
+      timers.clearTimeout(fitTimer);
       stopObserving();
       connection?.close();
       screen?.dispose();
@@ -129,11 +147,7 @@ export const terminal = ({ terminals, createScreen, observeResize = resizeObserv
 
 function resizeObserver(el, onResize) {
   if (typeof ResizeObserver === "undefined") return () => {};
-  let frame = 0;
-  const observer = new ResizeObserver(() => {
-    cancelAnimationFrame(frame);
-    frame = requestAnimationFrame(onResize);
-  });
+  const observer = new ResizeObserver(() => onResize());
   observer.observe(el);
   return () => observer.disconnect();
 }

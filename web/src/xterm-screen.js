@@ -36,12 +36,47 @@ const SCROLL_KEYS = {
 
 const crlf = (text) => text.replace(/\r?\n/g, "\r\n");
 
+const FONT_SIZE = 13;
+
+/**
+ * Calls onChange when text in the screen's font changes size: the font
+ * arriving after xterm measured its cells with a fallback (a local font is
+ * not ready on first use). xterm re-measures only on a resize or a font
+ * option change, so without this it would fit with the fallback's narrower,
+ * shorter cells and clip the last row and columns. A hidden sample of the
+ * font, watched for size, is the signal.
+ */
+function watchFont(parent, font, onChange) {
+  if (typeof ResizeObserver === "undefined") return () => {};
+  const sample = document.createElement("span");
+  sample.setAttribute("aria-hidden", "true");
+  // Fixed and short, so it never makes the page or a pane scroll.
+  sample.style.cssText = `position: fixed; inset: 0 auto auto 0; visibility: hidden; pointer-events: none; display: inline-block; white-space: pre; font: ${FONT_SIZE}px ${font};`;
+  sample.textContent = "W".repeat(10);
+  parent.append(sample);
+  let last = "";
+  // The first size counts too: the font may have arrived between xterm's
+  // measure and this observer's first report.
+  const observer = new ResizeObserver(() => {
+    const size = `${sample.offsetWidth}x${sample.offsetHeight}`;
+    if (size === "0x0" || size === last) return;
+    last = size;
+    onChange();
+  });
+  observer.observe(sample);
+  return () => {
+    observer.disconnect();
+    sample.remove();
+  };
+}
+
 /** @type {import("./modules/sessions/presentation/components/terminal.js").CreateScreen} */
-export function createScreen(container, { onKey, onPaste }) {
+export function createScreen(container, { onKey, onPaste, onCellSize }) {
+  const font = screenFont();
   const term = new Terminal({
     cursorBlink: true,
-    fontFamily: screenFont(),
-    fontSize: 13,
+    fontFamily: font,
+    fontSize: FONT_SIZE,
     lineHeight: 1.15,
     scrollback: HISTORY_LINES,
     theme: screenColors(),
@@ -60,6 +95,12 @@ export function createScreen(container, { onKey, onPaste }) {
   host.className = "host";
   container.append(host);
   term.open(host);
+  const stopWatchingFont = watchFont(container, font, () => {
+    // Setting the option again (it must differ to count) makes xterm re-measure.
+    term.options.fontFamily = `${font}, monospace`;
+    term.options.fontFamily = font;
+    onCellSize?.();
+  });
 
   // Whether the main screen has lines scrolled off above it: the hook the
   // stylesheet uses to keep the scrollbar on. Checked once each write is parsed.
@@ -136,10 +177,10 @@ export function createScreen(container, { onKey, onPaste }) {
       }
       return `${term.cols}x${term.rows}` === before ? null : { cols: term.cols, rows: term.rows };
     },
-    size: () => ({ cols: term.cols, rows: term.rows }),
     focus: () => term.focus(),
     dispose() {
       stopFollowing();
+      stopWatchingFont();
       container.removeEventListener("paste", paste, true);
       term.dispose();
       host.remove();
