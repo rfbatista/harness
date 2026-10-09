@@ -65,5 +65,16 @@ export function upsert(list, changed) {
   return [...list.filter((n) => !ids.has(n.id)), ...changed].sort(byCreated);
 }
 
+/**
+ * What a list with `filter` shows after `changed`: the ones it has are
+ * replaced where they stand, even when they no longer match (a row read in
+ * an Unread list stays until the list is read again, rather than jumping
+ * away under the pointer); new ones join only when they match.
+ */
+export function merge(list, changed, filter) {
+  const have = new Set(list.map((n) => n.id));
+  return upsert(list, changed.filter((n) => have.has(n.id) || matches(filter, n)));
+}
+
 /** n as read at `at`; one already read or resolved is returned as is. */
 export const markedRead = (n, at) => (isUnread(n) ? Object.freeze({ ...n, readAt: at }) : n);

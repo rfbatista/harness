@@ -33,6 +33,14 @@
  *           Every notification created, read or resolved, in every project,
  *           with the global count as of that change, in order, until the
  *           returned function is called. The person's own reads echo here.
+ *
+ * @typedef {"default"|"granted"|"denied"|"unsupported"} AlertPermission
+ *
+ * @typedef {object} DesktopAlerts  the browser's own notifications, outside the page
+ * @property {() => AlertPermission} permission
+ * @property {() => Promise<AlertPermission>} request  asks the person; call it only from their click
+ * @property {(alert: { title: string, body: string, tag: string, onClick: () => void }) => void} show
+ * @property {() => boolean} hidden  whether the page is out of sight (another tab, minimised)
  */
 
 export {};
