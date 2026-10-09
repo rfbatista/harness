@@ -211,8 +211,14 @@ func (h *Handler) handleTicketResourceContent(c echo.Context) error {
 	hdr.Set("X-Content-Type-Options", "nosniff")
 	hdr.Set("Content-Security-Policy", ResourceCSP)
 	hdr.Set("Cache-Control", "private, no-cache")
-	hdr.Set("ETag", `"`+strconv.FormatInt(rc.ModTime.UnixNano(), 36)+`"`)
-	http.ServeContent(c.Response(), c.Request(), "", rc.ModTime.Truncate(time.Second), rc.Content)
+	// The headers carry the title, so a retitle must change the validators
+	// as much as new bytes would.
+	changed := rc.ModTime
+	if rc.Resource.UpdatedAt.After(changed) {
+		changed = rc.Resource.UpdatedAt
+	}
+	hdr.Set("ETag", `"`+strconv.FormatInt(rc.ModTime.UnixNano(), 36)+"-"+strconv.FormatInt(rc.Resource.UpdatedAt.UnixMilli(), 36)+`"`)
+	http.ServeContent(c.Response(), c.Request(), "", changed.Truncate(time.Second), rc.Content)
 	return nil
 }
 

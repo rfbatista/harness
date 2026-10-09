@@ -105,3 +105,13 @@ func assertOnly(t *testing.T, dir string, names ...string) {
 		t.Fatalf("dir holds %v, want %v", got, names)
 	}
 }
+
+// Staging files a crash left behind go when the store is opened; filed
+// blobs stay.
+func TestNewSweepsLeftoverStagingFiles(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, ".staging-123"), []byte("half"), 0o644)
+	os.WriteFile(filepath.Join(dir, "keep"), []byte("whole"), 0o644)
+	New(dir)
+	assertOnly(t, dir, "keep")
+}

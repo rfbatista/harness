@@ -32,6 +32,9 @@ func (s *Service) AddTicketComment(ctx context.Context, ticketID, body string) (
 	}
 	s.resourceMu.Lock()
 	defer s.resourceMu.Unlock()
+	if err := s.stillThere(tk.ID); err != nil {
+		return nil, err
+	}
 	c, err := s.Comments.Create(&domain.TicketComment{TicketID: tk.ID, ProjectID: tk.ProjectID, Author: domain.CommentByPerson, Body: b})
 	if err != nil {
 		return nil, err

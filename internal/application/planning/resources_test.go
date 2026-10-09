@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"os"
 	"strings"
 	"sync"
@@ -301,5 +302,50 @@ func TestResourcesUnconfiguredAreUnavailable(t *testing.T) {
 	}
 	if _, err := svc.ListTicketComments(context.Background(), "t", time.Time{}); errs.Code(err) != "UNAVAILABLE" {
 		t.Fatalf("comments = %v", err)
+	}
+}
+
+// gateReader blocks the upload mid-stream until released, so a test can
+// delete the task while the bytes are being staged.
+type gateReader struct {
+	started chan struct{}
+	release chan struct{}
+	done    bool
+}
+
+func (g *gateReader) Read(p []byte) (int, error) {
+	if g.done {
+		return 0, io.EOF
+	}
+	close(g.started)
+	<-g.release
+	g.done = true
+	p[0] = 'x'
+	return 1, nil
+}
+
+// A task deleted while one of its uploads is staging keeps nothing of it:
+// the upload is refused, and no record or bytes are left behind.
+func TestUploadRacingATaskDeleteLeavesNothing(t *testing.T) {
+	f := newResourceFixture(t)
+	g := &gateReader{started: make(chan struct{}), release: make(chan struct{})}
+	errc := make(chan error, 1)
+	go func() {
+		_, err := f.svc.UploadTicketResource(context.Background(), ports.ResourceUpload{TicketID: f.ticketID, FileName: "a", Content: g})
+		errc <- err
+	}()
+	<-g.started
+	if err := f.svc.DeleteTicket(context.Background(), f.ticketID); err != nil {
+		t.Fatal(err)
+	}
+	close(g.release)
+	if err := <-errc; errs.Code(err) != "TICKET_NOT_FOUND" {
+		t.Fatalf("upload to a task deleted meanwhile = %v", err)
+	}
+	if names := blobNames(t, f.blobDir); len(names) != 0 {
+		t.Fatalf("left behind %v", names)
+	}
+	if len(f.events) != 0 {
+		t.Fatalf("raised %+v for a deleted task", f.events)
 	}
 }

@@ -119,7 +119,7 @@ func TestTaskResources_WiredGraph(t *testing.T) {
 
 // On the wired graph what the person adds reaches every running session of
 // the task as a [task update · …] turn, through the courier: the architect
-// as well as its delegate. Sessions run by a client take it from their Stop
+// as well as its delegate and a peer. Sessions run by a client take it from their Stop
 // hook. A session that has stopped is not a recipient.
 func TestTaskUpdates_WiredGraph(t *testing.T) {
 	ctx := context.Background()
@@ -128,6 +128,7 @@ func TestTaskUpdates_WiredGraph(t *testing.T) {
 	for _, s := range []*domain.Session{
 		{ID: "s-arch", Mode: domain.SessionModeArchitect},
 		{ID: "s-dlg", ParentSessionID: "s-arch"},
+		{ID: "s-peer"},
 		{ID: "s-old", Status: domain.SessionStopped},
 	} {
 		s.ProjectID, s.TicketID, s.Task, s.Interactive, s.RunsOn = tk.ProjectID, tk.ID, "work", true, domain.RunnerTUI
@@ -144,6 +145,9 @@ func TestTaskUpdates_WiredGraph(t *testing.T) {
 	if role, _ := w.channel.SessionRole(ctx, "s-dlg"); role != domain.RoleDelegate {
 		t.Fatalf("s-dlg is %q, want a delegate", role)
 	}
+	if role, _ := w.channel.SessionRole(ctx, "s-peer"); role != domain.RolePeer {
+		t.Fatalf("s-peer is %q, want a peer", role)
+	}
 
 	r, err := plan.AddTicketLink(ctx, tk.ID, "https://example.com/spec", "Spec")
 	if err != nil {
@@ -157,10 +161,13 @@ func TestTaskUpdates_WiredGraph(t *testing.T) {
 		`, url https://example.com/spec). Read it with read_task_resource if it bears on your work.` +
 		"\n\n---\n\n" +
 		"[task update · comment] The person commented on this task (comment_id " + c.ID + "):\nuse the spec I linked"
-	for _, id := range []string{"s-arch", "s-dlg"} {
+	for _, id := range []string{"s-arch", "s-dlg", "s-peer"} {
 		if got := stopHookUntil(t, orch, id, want); got != want {
 			t.Fatalf("%s's Stop hook = %q, want %q", id, got, want)
 		}
+	}
+	if got, err := orch.TurnEnded(ctx, "s-old", false); err != nil || got != "" {
+		t.Fatalf("the stopped session had %q queued (%v), want nothing", got, err)
 	}
 }
 

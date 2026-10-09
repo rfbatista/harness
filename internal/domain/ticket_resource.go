@@ -113,6 +113,10 @@ func DefaultResourceTitle(fileName string) string {
 	return cutRunes(strings.TrimSpace(name), MaxResourceTitleLen)
 }
 
+// DefaultLinkTitle is the title a link gets when the person gives none: the
+// URL itself, cut to the title limit.
+func DefaultLinkTitle(url string) string { return cutRunes(url, MaxResourceTitleLen) }
+
 // LinkURL is raw trimmed, when it is an http or https URL with a host of at
 // most MaxResourceURLLen characters.
 func LinkURL(raw string) (string, error) {

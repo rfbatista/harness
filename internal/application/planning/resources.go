@@ -58,6 +58,17 @@ func (s *Service) ticket(id string) (*domain.Ticket, error) {
 	return tk, nil
 }
 
+// stillThere is TICKET_NOT_FOUND when the task went while an addition was
+// on its way. Callers hold resourceMu, which a task's deletion takes to drop
+// what it had, so an addition lands either before that, and goes with it, or
+// not at all.
+func (s *Service) stillThere(ticketID string) error {
+	if s.tickets.Get(ticketID) == nil {
+		return &domain.StructuredError{Code: "TICKET_NOT_FOUND", Message: "ticket not found"}
+	}
+	return nil
+}
+
 // withContentURL fills the derived content URL of uploads.
 func (s *Service) withContentURL(rs ...*domain.TicketResource) {
 	if s.ContentURL == nil {
@@ -154,6 +165,10 @@ func (s *Service) UploadTicketResource(ctx context.Context, up ports.ResourceUpl
 
 	s.resourceMu.Lock()
 	defer s.resourceMu.Unlock()
+	if err := s.stillThere(tk.ID); err != nil {
+		staged.Discard()
+		return nil, err
+	}
 	r, err := s.Resources.Create(&domain.TicketResource{
 		TicketID: tk.ID, ProjectID: tk.ProjectID, Kind: domain.ResourceKindFor(mimeType),
 		Title: title, Mime: mimeType, SizeBytes: staged.Size(),
@@ -200,7 +215,7 @@ func (s *Service) AddTicketLink(ctx context.Context, ticketID, rawURL, title str
 	if err != nil {
 		return nil, err
 	}
-	t := cut(u, domain.MaxResourceTitleLen) // the URL itself by default
+	t := domain.DefaultLinkTitle(u)
 	if strings.TrimSpace(title) != "" {
 		if t, err = domain.ResourceTitle(title); err != nil {
 			return nil, err
@@ -208,6 +223,9 @@ func (s *Service) AddTicketLink(ctx context.Context, ticketID, rawURL, title str
 	}
 	s.resourceMu.Lock()
 	defer s.resourceMu.Unlock()
+	if err := s.stillThere(tk.ID); err != nil {
+		return nil, err
+	}
 	r, err := s.Resources.Create(&domain.TicketResource{
 		TicketID: tk.ID, ProjectID: tk.ProjectID, Kind: domain.ResourceLink, Title: t, URL: u,
 	})
@@ -216,13 +234,6 @@ func (s *Service) AddTicketLink(ctx context.Context, ticketID, rawURL, title str
 	}
 	s.resourceAdded(ctx, r)
 	return r, nil
-}
-
-func cut(s string, n int) string {
-	if r := []rune(s); len(r) > n {
-		return string(r[:n])
-	}
-	return s
 }
 
 // RetitleTicketResource renames a resource; the same title again changes
@@ -324,6 +335,8 @@ func (s *Service) TicketResourcePath(_ context.Context, id string) (string, erro
 // comments. The ticket's own deletion on the feed covers them, so nothing
 // is announced. Failures are logged: the task is gone already.
 func (s *Service) dropTaskResources(ticketID string) {
+	s.resourceMu.Lock()
+	defer s.resourceMu.Unlock()
 	if s.Resources != nil {
 		ids, err := s.Resources.DeleteByTicket(ticketID)
 		if err != nil {

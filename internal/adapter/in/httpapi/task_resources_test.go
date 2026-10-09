@@ -392,3 +392,27 @@ func TestHTTP_Events_StreamsResourceAndCommentChanges(t *testing.T) {
 		t.Fatalf("lines = %v", lines)
 	}
 }
+
+// A retitle changes the download name, so it changes the validator too: a
+// browser revalidating after one gets the new name, not a 304.
+func TestHTTP_ContentValidatorFollowsTheTitle(t *testing.T) {
+	h, svc, tid := newResourcesHandler(t)
+	_, out := upload(t, h, part{name: "ticket_id", body: tid}, part{name: "file", fileName: "report.pdf", contentType: "application/pdf", body: "%PDF"})
+	rec, _ := serveReq(t, h, httptest.NewRequest(http.MethodGet, out.Resource.ContentURL, nil))
+	etag := rec.Header().Get("ETag")
+	req := httptest.NewRequest(http.MethodGet, out.Resource.ContentURL, nil)
+	req.Header.Set("If-None-Match", etag)
+	if rec, _ := serveReq(t, h, req); rec.Code != http.StatusNotModified {
+		t.Fatalf("unchanged = %d", rec.Code)
+	}
+	time.Sleep(2 * time.Millisecond)
+	if _, err := svc.RetitleTicketResource(context.Background(), out.Resource.ID, "Final spec"); err != nil {
+		t.Fatal(err)
+	}
+	req = httptest.NewRequest(http.MethodGet, out.Resource.ContentURL, nil)
+	req.Header.Set("If-None-Match", etag)
+	rec, _ = serveReq(t, h, req)
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Header().Get("Content-Disposition"), "Final%20spec") {
+		t.Fatalf("after a retitle = %d %q", rec.Code, rec.Header().Get("Content-Disposition"))
+	}
+}

@@ -24,14 +24,27 @@ const headLen = 512
 // Store is a ports.ResourceBlobStore over a directory, created on first use.
 type Store struct{ dir string }
 
-// New returns a store over dir.
-func New(dir string) *Store { return &Store{dir: dir} }
+// stagingPrefix names content still being received.
+const stagingPrefix = ".staging-"
+
+// New returns a store over dir. Staging files left there by a run that
+// stopped mid-upload are removed: at startup nothing is being received.
+func New(dir string) *Store {
+	if entries, err := os.ReadDir(dir); err == nil {
+		for _, e := range entries {
+			if strings.HasPrefix(e.Name(), stagingPrefix) {
+				os.Remove(filepath.Join(dir, e.Name()))
+			}
+		}
+	}
+	return &Store{dir: dir}
+}
 
 func (s *Store) Stage(r io.Reader, max int64) (ports.StagedBlob, error) {
 	if err := os.MkdirAll(s.dir, 0o755); err != nil {
 		return nil, err
 	}
-	f, err := os.CreateTemp(s.dir, ".staging-*")
+	f, err := os.CreateTemp(s.dir, stagingPrefix+"*")
 	if err != nil {
 		return nil, err
 	}
