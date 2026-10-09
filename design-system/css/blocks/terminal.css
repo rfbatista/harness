@@ -1,10 +1,11 @@
 /*
  * Terminal — a session's PTY, drawn by xterm.js, with a one-line bar under it
  * (connection, window title, reconnect). It fills the space it is given; the
- * screen element is what xterm fits its rows and columns to. xterm's viewport
- * scrolls the history; the screen carries data-history while there is some
- * (set by the screen script), and then keeps xterm's scrollbar on and themed.
- * <div class="terminal"><div class="screen" data-history>xterm</div><div class="bar">…</div></div>
+ * screen holds the gutter, and its unpadded host is what xterm fits its rows
+ * and columns to (the screen script adds it). xterm's viewport scrolls the
+ * history; the screen carries data-history while there is some (set by the
+ * screen script), and then keeps xterm's scrollbar on and themed.
+ * <div class="terminal"><div class="screen" data-history><div class="host">xterm</div></div><div class="bar">…</div></div>
  */
 
 @layer blocks {
@@ -22,6 +23,7 @@
       cursor: text;
       touch-action: pan-y; /* a vertical pan scrolls the history, not the page */
 
+      & > .host,
       & .xterm {
         block-size: 100%;
       }

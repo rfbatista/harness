@@ -53,7 +53,13 @@ export function createScreen(container, { onKey, onPaste }) {
   });
   const fitter = new FitAddon();
   term.loadAddon(fitter);
-  term.open(container);
+  // xterm opens in an unpadded host filling the screen's content box: the fit
+  // addon measures its parent's box with the padding in (border-box), so a
+  // padded parent would get a row and columns more than it can show.
+  const host = document.createElement("div");
+  host.className = "host";
+  container.append(host);
+  term.open(host);
 
   // Whether the main screen has lines scrolled off above it: the hook the
   // stylesheet uses to keep the scrollbar on. Checked once each write is parsed.
@@ -120,6 +126,8 @@ export function createScreen(container, { onKey, onPaste }) {
       term.write(bytes);
     },
     fit() {
+      // A hidden pane (another column on a narrow screen) has no size to send.
+      if (host.clientWidth === 0 || host.clientHeight === 0) return null;
       const before = `${term.cols}x${term.rows}`;
       try {
         fitter.fit();
@@ -134,6 +142,7 @@ export function createScreen(container, { onKey, onPaste }) {
       stopFollowing();
       container.removeEventListener("paste", paste, true);
       term.dispose();
+      host.remove();
     },
   };
 }
