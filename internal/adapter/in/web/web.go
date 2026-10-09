@@ -47,6 +47,9 @@ type Deps struct {
 	// ProjectSummaries counts every project for the projects list; nil
 	// leaves /projects unserved and the top bar offers New project instead.
 	ProjectSummaries ports.ProjectSummaries
+	// PullRequests offers a session's branch as a pull request on its history
+	// page and badges the task page's rows; nil leaves both out.
+	PullRequests ports.PullRequests
 	// Now defaults to time.Now.
 	Now func() time.Time
 }
@@ -66,7 +69,7 @@ func NewHandler(deps Deps, assets *Assets, fallback http.Handler) http.Handler {
 	homePage := home.Handler{Projects: deps.Projects, Layout: s.layout, Render: render}
 	taskPages := tasks.Handler{
 		Projects: deps.Projects, Tasks: deps.Tasks, Sessions: deps.Sessions,
-		Agents: deps.Agents, Repositories: deps.Repositories, Docs: deps.Documents, Artifacts: deps.Artifacts,
+		Agents: deps.Agents, Repositories: deps.Repositories, Docs: deps.Documents, Artifacts: deps.Artifacts, PullRequests: deps.PullRequests,
 		Layout: s.layout, Render: render, Now: deps.Now,
 	}
 	projectPages := projects.Handler{
@@ -75,7 +78,7 @@ func NewHandler(deps Deps, assets *Assets, fallback http.Handler) http.Handler {
 	}
 	historyPages := history.Handler{
 		Projects: deps.Projects, Repositories: deps.Repositories, History: deps.History, Sessions: deps.Sessions, Tasks: deps.Tasks,
-		Layout: s.layout, Render: render, Now: deps.Now,
+		PullRequests: deps.PullRequests, Layout: s.layout, Render: render, Now: deps.Now,
 	}
 	toProject := func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/projects/"+url.PathEscape(r.PathValue("project")), http.StatusFound)

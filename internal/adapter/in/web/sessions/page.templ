@@ -4,6 +4,7 @@ import (
 	"strconv"
 
 	"operators-mcp/internal/adapter/in/web/components"
+	"operators-mcp/internal/adapter/in/web/pullrequests"
 	"operators-mcp/internal/adapter/in/web/shell"
 )
 
@@ -25,6 +26,10 @@ templ Page(v PageView) {
 			x-on:artifact-moved="artifactMoved"
 		>
 			@templ.JSONScript("sessions-seed", v.Seed)
+			if v.PullRequests != nil {
+				@templ.JSONScript("pull-requests-seed", v.PullRequests)
+				<div x-data="pullRequestWatch" data-seed="pull-requests-seed" hidden></div>
+			}
 			<div x-data="tasksTaskEditor" data-seed="task-seed">
 				@templ.JSONScript("task-seed", v.Task)
 				<header class="[ toolbar ]">
@@ -156,6 +161,7 @@ templ liveRows() {
 							<span><span class="[ badge ]" x-text="row.badge"></span>{ " " }</span>
 						</template>
 						<span x-text="row.title"></span>
+						@pullrequests.Badge("row.workspaceId")
 					</span>
 					<span class="[ meta ]" x-bind:title="row.meta" x-text="row.meta"></span>
 					<template x-if="row.resumable">
@@ -181,6 +187,9 @@ templ detail(form NewSessionForm) {
 					<div class="[ repel ]">
 						<h2 x-text="selected.title"></h2>
 						<div class="[ cluster ] [ gutter-xs ]">
+							<template x-for="ws in selectedWorkspaces" x-bind:key="ws">
+								@pullrequests.Badge("ws")
+							</template>
 							<template x-if="historyHref">
 								<a class="[ button ]" data-variant="ghost" data-size="sm" x-bind:href="historyHref">Git history</a>
 							</template>

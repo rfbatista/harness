@@ -24,6 +24,7 @@ import (
 	"operators-mcp/internal/adapter/out/agents/claudetext"
 	"operators-mcp/internal/adapter/out/configrepo"
 	"operators-mcp/internal/adapter/out/filesystem"
+	"operators-mcp/internal/adapter/out/ghcli"
 	"operators-mcp/internal/adapter/out/gitcli"
 	"operators-mcp/internal/adapter/out/persistence/sqlite"
 	"operators-mcp/internal/app/catalog"
@@ -65,6 +66,7 @@ var PersistenceModule = fx.Module("persistence",
 		asPort(sqlite.NewSettingsRepository, new(ports.SettingsRepository)),
 		asPort(sqlite.NewWorkspaceRepository, new(ports.WorkspaceRepository)),
 		asPort(sqlite.NewBoundedContextRepository, new(ports.BoundedContextRepository)),
+		asPort(sqlite.NewPullRequestRepository, new(ports.PullRequestRepository)),
 	),
 )
 
@@ -494,7 +496,10 @@ var WorkspacesModule = fx.Module("workspaces",
 	fx.Provide(
 		asPort(gitcli.NewWorktreeManager, new(ports.WorktreeManager)),
 		asPort(gitcli.NewHistory, new(ports.GitHistory)),
+		asPort(gitcli.NewBranchPublisher, new(ports.BranchPublisher)),
+		asPort(ghcli.New, new(ports.CodeHost)),
 		newWorkspacesService,
+		newPullRequestsService,
 	),
 )
 
@@ -510,5 +515,42 @@ func newWorkspacesService(
 	svc := workspaces.NewService(ws, repos, wt, settings)
 	svc.UseEnvFiles(envFiles, envIO)
 	svc.UseHistory(history)
+	return svc
+}
+
+// WithCodeHost binds host in place of the gh adapter, so a test of the wired
+// server opens pull requests without reaching GitHub. See package ghclitest
+// for driving its fake.
+func WithCodeHost(host ports.CodeHost) fx.Option {
+	return fx.Decorate(func(ports.CodeHost) ports.CodeHost { return host })
+}
+
+// newPullRequestsService opens workspaces' branches as pull requests. It
+// announces on the orchestration's project feed, reads the task of a
+// workspace's session from planning for the suggested title and body, drops a
+// deleted project's records, and stops its background host lookups on
+// shutdown.
+func newPullRequestsService(
+	lc fx.Lifecycle,
+	ws ports.WorkspaceRepository,
+	repos ports.RepositoryRepository,
+	history ports.GitHistory,
+	git ports.BranchPublisher,
+	host ports.CodeHost,
+	store ports.PullRequestRepository,
+	sessions ports.SessionRepository,
+	plan *planning.Service,
+	orch *orchestration.Service,
+	cat catalog.Catalog,
+) *workspaces.PullRequests {
+	svc := workspaces.NewPullRequests(workspaces.PullRequestDeps{
+		Workspaces: ws, Repositories: repos, History: history, Git: git, Host: host, Store: store,
+		Sessions: sessions, Tickets: plan, Feed: orch,
+	})
+	svc.Subscribe(cat.Bus)
+	lc.Append(fx.Hook{OnStop: func(context.Context) error {
+		svc.Close()
+		return nil
+	}})
 	return svc
 }

@@ -22,6 +22,7 @@
     }
 
     &[data-tone="signal"] { --_tone: var(--color-signal); }
+    &[data-tone="success"] { --_tone: var(--color-success); }
     &[data-tone="attention"] { --_tone: var(--color-attention); }
     &[data-tone="danger"] { --_tone: var(--color-danger); }
   }

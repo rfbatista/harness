@@ -10,6 +10,8 @@ import { preferences } from "../src/shared/infrastructure/storage.js";
 import { registerShared } from "../src/shared/presentation/register.js";
 
 import { memoryProjects } from "../src/modules/projects/infrastructure/memory-gateway.js";
+import { memoryPullRequests } from "../src/modules/pullrequests/infrastructure/memory-gateway.js";
+import { registerPullRequests } from "../src/modules/pullrequests/presentation/register.js";
 import { registerProjects } from "../src/modules/projects/presentation/register.js";
 import { memoryArtifacts } from "../src/modules/sessions/infrastructure/memory-artifacts.js";
 import { memoryChannel } from "../src/modules/sessions/infrastructure/memory-channel.js";
@@ -26,7 +28,50 @@ const seedOf = (id) => {
 };
 
 if (seedOf("sessions-seed")) startTaskPage(seedOf("sessions-seed"));
+else if (seedOf("pull-request-seed")) startHistoryPage(seedOf("pull-request-seed"));
 else startProjectPages();
+
+/**
+ * web/dev/history.html: a session's git history with its pull request panel,
+ * over an in-memory server that knows the page's workspace as its seed says.
+ * A create takes 1.5 s, as a push and the host would.
+ */
+function startHistoryPage(rawSeed) {
+  const decoder = memoryPullRequests().gateway;
+  const seed = decoder.decodePanelSeed(rawSeed);
+  const ws = seed.workspaceId;
+  const draft = seed.view?.draft ?? {};
+  const pr = memoryPullRequests({
+    workspaces: [{ ...draft, id: ws, projectId: seed.projectId, originBranches: [draft.baseBranch ?? "main", "develop"] }],
+    pullRequests: seed.view?.pullRequest ? [seed.view.pullRequest] : [],
+    delayMs: 1500,
+  });
+  registerPullRequests(Alpine, { gateway: pr.gateway });
+
+  window.harness = {
+    pr: {
+      memory: pr,
+      /** Another browser, gh, or the server's background check opened one: harness.pr.open({ draft: true }). */
+      open: (fields = {}) => pr.open(ws, fields),
+      /** A background refresh found the PR merged (or closed, or open again). */
+      state: (state) => pr.setState(ws, state),
+      /** What the server says locally now: harness.pr.block("PR_TOOL_UNAVAILABLE"); none clears. Seen on reconnect or on opening the form. */
+      block: (...codes) => pr.block(ws, ...codes),
+      /** What git says now: harness.pr.update({ uncommittedChanges: 0, ahead: 5 }). */
+      update: (fields) => pr.update(ws, fields),
+      /** The next create fails: harness.pr.failNext("PR_PUSH_FAILED", "! [rejected] (non-fast-forward)"). */
+      failNext: (code, reason) => pr.failNext(code, reason),
+      /** A create takes this long. */
+      slow: (ms) => pr.slow(ms),
+      /** The feed echo of a create lands before its answer. */
+      echoFirst: (on = true) => pr.echoFirst(on),
+      /** The workspace row is deleted: the next read hides the panel. */
+      forget: () => pr.forget(ws),
+    },
+    drop: () => pr.reportStatus(FeedStatus.PAUSED),
+    reconnect: () => pr.reportStatus(FeedStatus.RESYNCED),
+  };
+}
 
 /** web/dev/task.html: one task's sessions. */
 function startTaskPage(rawSeed) {
@@ -47,10 +92,18 @@ function startTaskPage(rawSeed) {
     onCheck: (check) => memory.update(check.delegateSessionId, { statusCheck: check }),
   });
   registerSessions(Alpine, { gateway: memory.gateway, artifacts: artifacts.gateway, channel: channel.gateway, terminals: terminals.gateway, createScreen, clock: systemClock });
+  const prSeed = seedOf("pull-requests-seed");
+  const prs = memoryPullRequests({
+    workspaces: (prSeed?.workspace_ids ?? []).map((id) => ({ id, projectId: seed.projectId })),
+    pullRequests: prSeed ? memoryPullRequests().gateway.decodeWatchSeed(prSeed).pullRequests : [],
+  });
+  registerPullRequests(Alpine, { gateway: prs.gateway });
 
   window.harness = {
     memory,
     terminals,
+    /** A session's branch gets a PR, or its PR changes: harness.pr.open("ws-port"), harness.pr.state("ws-feed", "merged"). */
+    pr: { memory: prs, open: (ws, fields = {}) => prs.open(ws, fields), state: (ws, state) => prs.setState(ws, state) },
     /** Simulates what the server's feed would push. */
     finish: (id) => memory.update(id, { status: "done" }),
     ask: (id) => memory.update(id, { status: "waiting_approval", pendingApprovals: 1 }),

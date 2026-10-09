@@ -72,7 +72,10 @@ type ProjectChange struct {
 	// Artifact is a project design asset that changed (attached, detached,
 	// moved, re-published) or was deleted.
 	Artifact *ArtifactChange `json:"artifact,omitempty"`
-	Deleted  bool            `json:"deleted,omitempty"`
+	// PullRequest is a workspace's pull request as it is after being
+	// opened, adopted, or found changed on its host.
+	PullRequest *domain.PullRequest `json:"pull_request,omitempty"`
+	Deleted     bool                `json:"deleted,omitempty"`
 }
 
 // ProjectID is the project whose followers the change is for.
@@ -92,6 +95,8 @@ func (c ProjectChange) ProjectID() string {
 		return c.TaskStatus.ProjectID
 	case c.Artifact != nil && c.Artifact.Artifact != nil:
 		return c.Artifact.Artifact.ProjectID
+	case c.PullRequest != nil:
+		return c.PullRequest.ProjectID
 	}
 	return ""
 }

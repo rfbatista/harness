@@ -4,6 +4,7 @@ import (
 	"strconv"
 
 	"operators-mcp/internal/adapter/in/web/components"
+	"operators-mcp/internal/adapter/in/web/pullrequests"
 	"operators-mcp/internal/adapter/in/web/shell"
 )
 
@@ -14,7 +15,7 @@ import (
 // the graph (#c-<hash>).
 templ Page(v PageView) {
 	@shell.AppShell(v.Frame) {
-		<main class="[ frame ]">
+		<main class="[ frame ]" { pullrequests.PanelAttrs(v.PullRequest)... }>
 			<header class="[ toolbar ]">
 				for _, c := range v.Crumbs {
 					<a class="[ crumb ]" href={ templ.SafeURL(c.Href) }>{ c.Label } /</a>
@@ -28,7 +29,13 @@ templ Page(v PageView) {
 						</a>
 					</div>
 				}
+				if v.PullRequest != nil {
+					@pullrequests.Control(v.PullRequest)
+				}
 			</header>
+			if v.PullRequest != nil {
+				@pullrequests.Strip(v.PullRequest)
+			}
 			if v.Notice != "" {
 				<div class="[ banner ]" role="status">{ v.Notice }</div>
 			}
