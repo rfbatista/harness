@@ -33,6 +33,8 @@
       &[data-detail] > :first-child { display: none; }
     }
 
+    & [data-split-back] { align-self: flex-start; }
+
     @media (width >= 64rem) {
       & [data-split-back] { display: none; }
     }

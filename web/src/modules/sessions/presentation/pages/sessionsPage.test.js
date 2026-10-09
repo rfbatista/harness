@@ -334,7 +334,8 @@ test("J/K walk the rows in on-screen order", () => {
 });
 
 test("on a narrow screen, opening a session shows its detail and Sessions goes back; J/K never open it", () => {
-  const { instance } = setup();
+  const { instance, tick } = setup();
+  tick();
   assert.equal(instance.detailOpenAttr, null, "the list is the page at first");
   instance.next();
   instance.previous();

@@ -111,12 +111,14 @@ templ Page(v PageView) {
 				</div>
 			</template>
 			<p class="[ visually-hidden ]" role="status" aria-live="polite" x-text="announcement"></p>
-			<div class="[ split-view ]" data-scroll>
+			<div class="[ split-view ]" data-scroll x-bind:data-detail="detailOpenAttr">
 				<div
 					class="[ list ] [ divide-end ]"
 					role="listbox"
 					aria-label="Sessions of this task"
 					tabindex="0"
+					x-ref="list"
+					x-on:keydown.enter.self.prevent="openSelected"
 					x-on:keydown.j.prevent="next"
 					x-on:keydown.down.prevent="next"
 					x-on:keydown.k.prevent="previous"
@@ -171,7 +173,7 @@ templ liveRows() {
 				<span class="[ badge ]" x-bind:data-tone="group.tone" x-text="group.count"></span>
 			</div>
 			<template x-for="row in group.rows" x-bind:key="row.id">
-				<div class="[ row ]" data-stacked role="option" x-bind:data-session-id="row.id" x-bind:aria-selected="row.selected" x-bind:data-attention="row.attention" x-bind:data-fresh="row.fresh" x-bind:data-role="row.roleAttr" x-bind:data-depth="row.depthAttr" x-on:click="select(row.id)">
+				<div class="[ row ]" data-stacked role="option" x-bind:data-session-id="row.id" x-bind:aria-selected="row.selected" x-bind:data-attention="row.attention" x-bind:data-fresh="row.fresh" x-bind:data-role="row.roleAttr" x-bind:data-depth="row.depthAttr" x-on:click="open(row.id)">
 					<span class="[ status ]" x-bind:data-state="row.state" x-text="row.word"></span>
 					<span class="[ title ]">
 						<template x-if="row.badge">
@@ -201,6 +203,7 @@ templ detail(form NewSessionForm) {
 		<template x-if="showingSession">
 			<div class="[ frame ]">
 				<div class="[ flow ] [ flow-space-s pad-l divide-bottom ]">
+					<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" data-split-back x-on:click="closeDetail">Sessions</button>
 					<div class="[ repel ]">
 						<h2 x-text="selected.title"></h2>
 						<div class="[ cluster ] [ gutter-xs ]">
