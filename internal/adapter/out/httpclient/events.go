@@ -25,20 +25,28 @@ func NewEvents(c *Client) *Events { return &Events{c: c} }
 // stream does — the server dropped this follower, or the connection was lost
 // — and then closes the channel.
 func (e *Events) FollowProject(ctx context.Context, projectID string) (<-chan ports.SessionChange, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, e.c.base+"/api/events?"+url.Values{"project_id": {projectID}}.Encode(), nil)
+	return follow(ctx, e.c, "/api/events?"+url.Values{"project_id": {projectID}}.Encode(),
+		func(change ports.SessionChange) bool { return change.Session != nil })
+}
+
+// follow reads the server-sent events at path, one JSON value of T per
+// `data:` line, keeping those keep accepts, until ctx ends or the stream
+// does; then it closes the channel.
+func follow[T any](ctx context.Context, c *Client, path string, keep func(T) bool) (<-chan T, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.base+path, nil)
 	if err != nil {
 		return nil, err
 	}
 	req.Header.Set("Accept", "text/event-stream")
-	if e.c.token != "" {
-		req.Header.Set("Authorization", "Bearer "+e.c.token)
+	if c.token != "" {
+		req.Header.Set("Authorization", "Bearer "+c.token)
 	}
 	// A stream lasts as long as the follower wants it, so it must not run
 	// under the client's per-request timeout.
-	stream := &http.Client{Transport: e.c.http.Transport}
+	stream := &http.Client{Transport: c.http.Transport}
 	resp, err := stream.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("coding_pool server at %s: %w", e.c.base, err)
+		return nil, fmt.Errorf("coding_pool server at %s: %w", c.base, err)
 	}
 	if resp.StatusCode >= 300 {
 		defer resp.Body.Close()
@@ -46,9 +54,9 @@ func (e *Events) FollowProject(ctx context.Context, projectID string) (<-chan po
 		return nil, decodeError(resp.StatusCode, body)
 	}
 
-	changes := make(chan ports.SessionChange, 64)
+	out := make(chan T, 64)
 	go func() {
-		defer close(changes)
+		defer close(out)
 		defer resp.Body.Close()
 		scan := bufio.NewScanner(resp.Body)
 		scan.Buffer(make([]byte, 64<<10), 16<<20)
@@ -57,16 +65,16 @@ func (e *Events) FollowProject(ctx context.Context, projectID string) (<-chan po
 			if !ok {
 				continue // blank separators, ": ping" comments
 			}
-			var change ports.SessionChange
-			if json.Unmarshal([]byte(data), &change) != nil || change.Session == nil {
+			var v T
+			if json.Unmarshal([]byte(data), &v) != nil || !keep(v) {
 				continue
 			}
 			select {
-			case changes <- change:
+			case out <- v:
 			case <-ctx.Done():
 				return
 			}
 		}
 	}()
-	return changes, nil
+	return out, nil
 }

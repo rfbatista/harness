@@ -19,6 +19,7 @@ import (
 	"operators-mcp/internal/application/apps"
 	"operators-mcp/internal/application/artifacts"
 	"operators-mcp/internal/application/execution"
+	"operators-mcp/internal/application/notifications"
 	"operators-mcp/internal/application/orchestration"
 	"operators-mcp/internal/application/planning"
 	"operators-mcp/internal/application/taskchannel"
@@ -43,7 +44,7 @@ var ServerModule = fx.Module("server",
 
 // registerHTTPServer mounts the UI and JSON API on a mux and serves it,
 // shutting down gracefully when fx stops.
-func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRunner *apps.Service, ts *tooling.Service, exec *execution.Service, orch *orchestration.Service, plan *planning.Service, ws *workspaces.Service, broker *approval.Broker, sessions ports.SessionRepository, art *artifacts.Service, channel *taskchannel.Service, prs *workspaces.PullRequests) error {
+func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRunner *apps.Service, ts *tooling.Service, exec *execution.Service, orch *orchestration.Service, plan *planning.Service, ws *workspaces.Service, broker *approval.Broker, sessions ports.SessionRepository, art *artifacts.Service, channel *taskchannel.Service, prs *workspaces.PullRequests, inbox optionalNotifications) error {
 	uiHandler, err := ui.SPAHandler(ui.Dist)
 	if err != nil {
 		return err
@@ -54,6 +55,14 @@ func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRun
 	}
 	if !assets.Built() {
 		slog.Warn("the web client is not built; pages render without styles or scripts. Run: make web")
+	}
+
+	// An interface holding a nil pointer is not nil: hand the inbox on only
+	// when NotificationsModule built one.
+	var notes ports.Notifications
+	var noteReader ports.NotificationReader
+	if inbox.Service != nil {
+		notes, noteReader = inbox.Service, inbox.Service
 	}
 
 	mux := http.NewServeMux()
@@ -79,6 +88,7 @@ func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRun
 		TaskResources: plan,
 		TaskComments:  plan,
 		PullRequests:  prs,
+		Notifications: notes,
 	}), httpapi.WithToken(cfg.APIToken))
 	mux.Handle("/api/", apiRouter)
 	mux.Handle(mcpapprove.PathPrefix, mcpapprove.Handler(broker))
@@ -89,7 +99,7 @@ func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRun
 	// The web client owns / and its pages; anything else reaches the legacy
 	// designer SPA until it is retired.
 	mux.Handle("/", web.NewHandler(web.Deps{Projects: cat.Projects, Tasks: plan, Sessions: orch, Agents: cat.Agents, Repositories: cat.Projects, EnvFiles: cat.Projects, Documents: plan, History: ws, Artifacts: art, ProjectSummaries: cat.Projects, PullRequests: prs,
-		Resources: plan, Comments: plan}, assets, uiHandler))
+		Resources: plan, Comments: plan, Notifications: noteReader}, assets, uiHandler))
 
 	srv := &http.Server{Addr: cfg.HTTPAddr, Handler: httpapi.CORSMiddleware(mux)}
 	lc.Append(fx.Hook{
@@ -118,6 +128,14 @@ func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRun
 		},
 	})
 	return nil
+}
+
+// optionalNotifications is the inbox when NotificationsModule is in the
+// graph; graphs built without it (some tests) serve no notifications.
+type optionalNotifications struct {
+	fx.In
+
+	Service *notifications.Service `optional:"true"`
 }
 
 // registerMCPServer builds the MCP server, registers all tools and the designer
