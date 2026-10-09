@@ -54,6 +54,9 @@ type Deps struct {
 	// PullRequests offers a session's branch as a pull request on its history
 	// page and badges the task page's rows; nil leaves both out.
 	PullRequests ports.PullRequests
+	// Notifications seeds the top bar's unread count and the inbox's latest
+	// page; nil, or a failed read, renders the page without a seed.
+	Notifications ports.NotificationReader
 	// Now defaults to time.Now.
 	Now func() time.Time
 }
