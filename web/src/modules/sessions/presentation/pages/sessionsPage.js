@@ -256,7 +256,9 @@ export const sessionsPage = ({ gateway, clock, channel = null, channelStore = { 
         return;
       }
       const asked = new URLSearchParams(location?.search ?? "").get("session");
-      this.selectedId = this.sessions.some((s) => s.id === asked) ? asked : (group(this.sessions)[0]?.sessions[0]?.id ?? null);
+      // A link to a session opens it: on a narrow screen its detail, not the list.
+      this.detailOpen = this.sessions.some((s) => s.id === asked);
+      this.selectedId = this.detailOpen ? asked : (group(this.sessions)[0]?.sessions[0]?.id ?? null);
 
       unfollow = gateway.follow(
         this.projectId,

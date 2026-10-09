@@ -41,9 +41,11 @@ test("?session= opens that session; one not on the task falls back to what needs
   const sessions = [makeSession({ id: "run" }), makeSession({ id: "turn", status: "idle" })];
   const asked = setup(sessions, { search: "?session=run" });
   assert.equal(asked.instance.selectedId, "run");
+  assert.equal(asked.instance.detailOpenAttr, "", "on a narrow screen the link shows the session, not the list");
   asked.instance.destroy();
   const gone = setup(sessions, { search: "?session=s-gone" });
   assert.equal(gone.instance.selectedId, "turn");
+  assert.equal(gone.instance.detailOpenAttr, null);
   gone.instance.destroy();
 });
 
