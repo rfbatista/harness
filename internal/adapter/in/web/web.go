@@ -20,6 +20,7 @@ import (
 
 	"operators-mcp/internal/adapter/in/web/history"
 	"operators-mcp/internal/adapter/in/web/home"
+	"operators-mcp/internal/adapter/in/web/notifications"
 	"operators-mcp/internal/adapter/in/web/projects"
 	"operators-mcp/internal/adapter/in/web/shell"
 	"operators-mcp/internal/adapter/in/web/tasks"
@@ -96,6 +97,10 @@ func NewHandler(deps Deps, assets *Assets, fallback http.Handler) http.Handler {
 	mux.Handle("GET /static/", assets.Handler())
 	mux.Handle("GET /{$}", s.page(homePage.Index))
 	mux.HandleFunc("GET /switch-project", switchProject)
+	if deps.Notifications != nil {
+		inbox := notifications.Handler{Notifications: deps.Notifications, Projects: deps.Projects, Layout: s.layout, Render: render, Now: deps.Now}
+		mux.Handle("GET "+notifications.Href, s.page(inbox.Page))
+	}
 	if deps.ProjectSummaries != nil {
 		mux.Handle("GET /projects", s.page(projectPages.List))
 	}
@@ -156,6 +161,7 @@ func switchProject(w http.ResponseWriter, r *http.Request) {
 // selected project's tasks on the rail with their live sessions.
 func (s *server) layout(ctx context.Context, title, projectID, taskID string) (shell.Frame, error) {
 	frame := s.bareFrame(title)
+	frame.Notifications = s.bell(ctx)
 	all, err := s.deps.Projects.ListProjects(ctx)
 	if err != nil {
 		return shell.Frame{}, err
@@ -191,6 +197,23 @@ func (s *server) layout(ctx context.Context, title, projectID, taskID string) (s
 	}
 	frame.Rail.DesignHref = tasks.ProjectDesignHref(projectID)
 	return frame, nil
+}
+
+// bell is the top bar's way to the inbox, with the unread count and the
+// panel's latest notifications; nil when the inbox is not served. A failed
+// read still shows the bell: the browser reads the count itself.
+func (s *server) bell(ctx context.Context) *shell.Bell {
+	if s.deps.Notifications == nil {
+		return nil
+	}
+	b := &shell.Bell{Href: notifications.Href}
+	page, err := s.deps.Notifications.ListNotifications(ctx, ports.NotificationQuery{Limit: notifications.PanelLimit})
+	if err != nil {
+		slog.Warn("web: notifications seed not read; the browser reads it", "err", err)
+		return b
+	}
+	b.Seed = page
+	return b
 }
 
 // bareFrame is a frame without the rail, for when the rail cannot be read.

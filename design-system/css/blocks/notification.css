@@ -1,0 +1,197 @@
+/*
+ * Notification — one item of the inbox, in the top bar's panel and on the
+ * notifications page: a marker, the title (a link to where it points), the
+ * project · task, the level, the age, the plain-text body, and Mark read.
+ * <article class="notification" data-level="action" data-state="unread">
+ *   <span class="marker"></span>
+ *   <div class="text"><a class="title" href>…</a>
+ *     <p class="meta"><span>harness</span><span class="task">…</span><span class="level">Needs you</span><time>5m</time></p>
+ *     <p class="body">…</p></div>
+ *   <button class="button mark">Mark read</button></article>
+ * Exceptions: data-level="action|info"; data-state="unread|read|settled".
+ * Unread is a filled dot (a shape, not only a colour); action adds the amber
+ * rule and the "Needs you" label; settled is muted and says "Settled".
+ *
+ * .notification-list stacks them; .notifications is the top bar's bell and
+ * .notifications-panel the popup it discloses (a sheet on phones).
+ */
+
+@layer blocks {
+  .notification-list {
+    display: grid;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+
+    & > li + li { border-block-start: var(--border-width) solid var(--color-line); }
+  }
+
+  .notification {
+    --_rule: transparent;
+
+    display: grid;
+    grid-template-columns: 0.5rem minmax(0, 1fr) auto;
+    align-items: start;
+    gap: var(--space-s);
+    padding: var(--space-s) var(--space-m);
+    box-shadow: inset 3px 0 0 var(--_rule);
+
+    &[data-level="action"]:not([data-state="settled"]) {
+      --_rule: var(--color-attention);
+      background: var(--color-attention-wash);
+    }
+
+    & .marker {
+      inline-size: 0.5rem;
+      block-size: 0.5rem;
+      margin-block-start: 0.45em;
+      border: var(--border-icon-width) solid transparent;
+      border-radius: 50%;
+    }
+    &[data-state="unread"] .marker {
+      border-color: var(--color-signal);
+      background: var(--color-signal);
+    }
+    &[data-state="unread"][data-level="action"] .marker {
+      border-color: var(--color-attention-strong);
+      background: var(--color-attention-strong);
+    }
+
+    & .text { display: grid; gap: var(--space-3xs); min-inline-size: 0; }
+
+    & .title {
+      color: var(--color-ink);
+      font-weight: var(--weight-medium);
+      text-decoration: none;
+      overflow-wrap: anywhere;
+      &:hover { text-decoration: underline; }
+    }
+    &[data-state="unread"] .title { font-weight: var(--weight-bold); }
+
+    & .meta {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      gap: 0 var(--space-xs);
+      margin: 0;
+      color: var(--color-ink-muted);
+      font-size: var(--text-xs);
+
+      & > .task::before { content: "· "; }
+      & > .level { color: var(--color-attention-strong); font-weight: var(--weight-medium); }
+      & > time { margin-inline-start: auto; color: var(--color-ink-faint); }
+    }
+
+    & .body {
+      margin: 0;
+      color: var(--color-ink-muted);
+      font-size: var(--text-sm);
+      white-space: pre-line;
+      overflow-wrap: anywhere;
+    }
+
+    & > .mark { align-self: center; }
+
+    &[data-state="settled"] {
+      & .title { color: var(--color-ink-muted); font-weight: var(--weight-regular); }
+      & .meta > .level { color: var(--color-ink-faint); }
+    }
+
+    @media (forced-colors: active) {
+      &[data-state="unread"] .marker { background: CanvasText; border-color: CanvasText; }
+      &[data-level="action"]:not([data-state="settled"]) { box-shadow: inset 3px 0 0 Highlight; }
+    }
+  }
+
+  /* The panel clamps bodies to two lines; the page shows them whole. */
+  .notifications-panel .notification .body {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    overflow: hidden;
+  }
+
+  .notifications {
+    display: contents;
+
+    & > .bell {
+      position: relative;
+      margin-inline-start: auto;
+
+      & > .badge {
+        position: absolute;
+        inset-block-start: -0.2rem;
+        inset-inline-end: -0.35rem;
+        min-inline-size: 1.25rem;
+        justify-content: center;
+        padding-inline: var(--space-3xs);
+        background: var(--color-panel);
+      }
+
+      @media (pointer: coarse) {
+        min-inline-size: var(--size-touch);
+        min-block-size: var(--size-touch);
+      }
+    }
+  }
+
+  .popup.notifications-panel {
+    inline-size: min(26rem, calc(100vw - 2 * var(--space-l)));
+    max-inline-size: none;
+
+    & > .head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-s);
+      padding: var(--space-s) var(--space-m);
+      border-block-end: var(--border-width) solid var(--color-line);
+
+      & > h2 { margin: 0; font-size: var(--text-md); }
+    }
+
+    & > .list {
+      flex: 1 1 auto;
+      max-block-size: min(60vh, 32rem);
+      overflow: auto;
+      overscroll-behavior: contain;
+    }
+
+    & .message { padding: var(--space-m); color: var(--color-ink-muted); }
+
+    & > .foot {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: var(--space-xs) var(--space-s);
+      padding: var(--space-xs) var(--space-m);
+      border-block-start: var(--border-width) solid var(--color-line);
+
+      & > .note:empty { display: none; }
+      & > .note { color: var(--color-ink-faint); font-size: var(--text-xs); }
+      & > .all { margin-inline-start: auto; font-size: var(--text-sm); }
+    }
+
+    &[data-sheet] > .list { max-block-size: none; }
+  }
+
+  /* The notifications page: filters over the list. */
+  .inbox {
+    display: grid;
+    align-content: start;
+    gap: var(--space-m);
+    padding: var(--space-l);
+    overflow: auto;
+
+    & > .inbox-filters fieldset { margin: 0; padding: 0; border: 0; }
+    & .empty-line { color: var(--color-ink-muted); }
+    & .more { justify-self: start; margin-block-start: var(--space-s); }
+    & .notification-list {
+      border: var(--border-width) solid var(--color-line);
+      border-radius: var(--radius-md);
+      overflow: hidden;
+    }
+
+    @media (width < 48rem) { padding: var(--space-m); }
+  }
+}

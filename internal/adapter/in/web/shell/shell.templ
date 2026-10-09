@@ -72,7 +72,90 @@ templ topBar(f Frame) {
 		} else {
 			<a class="[ button ]" data-variant="ghost" data-size="sm" href="/projects/new">New project</a>
 		}
+		if f.Notifications != nil {
+			@notificationsBell(f.Notifications)
+		}
 	</header>
+}
+
+// notificationsBell is the unread count on every page and the panel with
+// the latest notifications across projects (notificationsBell in web/src).
+// Without JavaScript it is a link to the inbox; the count and its badge are
+// painted here, so they are right before any script runs.
+templ notificationsBell(b *Bell) {
+	if b.Seed != nil {
+		@templ.JSONScript("notifications-seed", b.Seed)
+	}
+	<div class="[ notifications ]" x-data="notificationsBell" x-on:focusout="focusLeft">
+		<a
+			class="[ button ] [ bell ]"
+			data-variant="ghost"
+			data-icon
+			href={ templ.SafeURL(b.Href) }
+			aria-label={ b.Label() }
+			x-bind:aria-label="label"
+			aria-controls="notifications-panel"
+			x-bind:aria-expanded="expanded"
+			x-ref="trigger"
+			x-on:click="toggle"
+		>
+			@icon("bell")
+			<span class="[ badge ]" data-tone="attention" aria-hidden="true" x-show="hasUnread" x-text="badge" { shownIf(b.Unread() > 0)... }>{ b.BadgeText() }</span>
+		</a>
+		<section id="notifications-panel" class="[ popup ] [ notifications-panel ]" aria-labelledby="notifications-heading" x-ref="panel" x-on:keydown="panelKey">
+			<div class="[ head ]">
+				<h2 id="notifications-heading" tabindex="-1">Notifications</h2>
+				<div class="[ cluster ] [ gutter-2xs ]" role="group" aria-label="Show">
+					<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-bind:aria-pressed="showsAll" x-on:click="showAll">All</button>
+					<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-bind:aria-pressed="showsUnread" x-on:click="showUnread">Unread</button>
+				</div>
+			</div>
+			<template x-if="error">
+				<div class="[ message ]" data-tone="danger" role="alert">
+					<span x-text="error.message"></span>
+					<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-on:click="dismissError">Dismiss</button>
+				</div>
+			</template>
+			<div class="[ list ]" x-bind:aria-busy="loading">
+				<ul role="list" class="[ notification-list ]">
+					<template x-for="row in rows" x-bind:key="row.id">
+						<li>
+							@NotificationLiveRow()
+						</li>
+					</template>
+				</ul>
+				<p class="[ message ]" x-show="isEmpty" x-text="emptyText"></p>
+			</div>
+			<footer class="[ foot ]">
+				<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-bind:disabled="!canMarkAll" x-on:click="markAll">Mark all read</button>
+				<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-bind:aria-pressed="alertsPressed" x-bind:disabled="alertsUnavailable" aria-describedby="notifications-alerts-note" x-on:click="toggleAlerts">Desktop alerts</button>
+				<span id="notifications-alerts-note" class="[ note ]" x-text="alertsNote"></span>
+				<a class="[ all ]" href={ templ.SafeURL(b.Href) }>See all notifications</a>
+			</footer>
+		</section>
+	</div>
+}
+
+// NotificationLiveRow is one notification as the browser renders it, in an
+// x-for over `rows` (the bell's panel, the inbox page): its fields are
+// web/src/modules/notifications/presentation/view.js's Row.
+templ NotificationLiveRow() {
+	<article class="[ notification ]" x-bind:data-level="row.level" x-bind:data-state="row.state">
+		<span class="[ marker ]" aria-hidden="true"></span>
+		<div class="[ text ]">
+			<a class="[ title ]" data-item x-bind:href="row.href" x-bind:data-id="row.id" x-bind:aria-label="row.label" x-on:click="openItem" x-text="row.title"></a>
+			<p class="[ meta ]">
+				<span x-text="row.project"></span>
+				<template x-if="row.hasTask">
+					<span class="[ task ]" x-text="row.task"></span>
+				</template>
+				<span class="[ level ]" x-show="row.levelLabel" x-text="row.levelLabel"></span>
+				<time x-bind:datetime="row.at" x-text="row.age"></time>
+			</p>
+			<p class="[ body ]" x-show="row.body" x-text="row.body"></p>
+		</div>
+		<button type="button" class="[ button ] [ mark ]" data-variant="ghost" data-size="sm" x-show="row.unread" x-bind:data-id="row.id" x-bind:aria-label="row.markLabel" x-on:click="markOne">Mark read</button>
+	</article>
 }
 
 // tasksToggle is the phone's way to the rail: the Tasks button, with how many

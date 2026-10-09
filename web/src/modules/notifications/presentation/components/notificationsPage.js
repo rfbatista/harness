@@ -76,8 +76,9 @@ export const notificationsPage = ({ gateway, store, clock }) => () => {
         store.listed(page, store.stamp);
         this.items = page.notifications;
         this.nextBefore = page.nextBefore;
-      } catch (err) {
-        this.error = describeError(err);
+      } catch {
+        // The server could not read the page (or sent no seed): read it here.
+        this.reload();
       }
       el.querySelector("[data-ssr]")?.remove();
       this.live = true;
