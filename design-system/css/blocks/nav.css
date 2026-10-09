@@ -8,6 +8,10 @@
 
 @layer blocks {
   .nav {
+    /* Contains the status dots' visually hidden words, which are absolutely
+       positioned: at 375px the horizontally scrolling rail would otherwise let
+       them widen the page. */
+    position: relative;
     display: flex;
     flex-direction: column;
     gap: var(--space-l);
