@@ -6,6 +6,7 @@ import (
 
 	"operators-mcp/internal/adapter/in/web/components"
 	"operators-mcp/internal/adapter/in/web/sessions"
+	"operators-mcp/internal/adapter/in/web/shell"
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
 )
@@ -43,6 +44,7 @@ func (h Handler) Reviews(w http.ResponseWriter, r *http.Request) error {
 	}
 	frame.Live = true             // the stream bar shows the connection…
 	frame.Rail.ReportsFeed = true // …which the rail, following the same feed, reports
+	frame.Rail.Page = shell.PageReviews
 	seed := reviewsSeed(project.ID, "", list, agents, tickets, docs)
 	return h.Render(w, r, http.StatusOK, ReviewsPage(frame, project.ID, project.Name, seed, pending))
 }

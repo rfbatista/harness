@@ -70,6 +70,12 @@
       &:hover { --_ink: var(--color-ink); }
     }
 
+    /* A toggle that is on (Needs you, the theme buttons). */
+    &[aria-pressed="true"] {
+      --_bg: var(--color-pressed);
+      --_ink: var(--color-ink);
+    }
+
     &[data-size="sm"] {
       min-block-size: var(--size-control-sm);
       padding-inline: var(--space-s);

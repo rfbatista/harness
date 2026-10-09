@@ -1,0 +1,99 @@
+/*
+ * Rail — the column beside the page: New task, the Project nav
+ * and the Tasks nav (both .nav). Below 48rem it is a drawer from the
+ * inline-start edge, opened from the top bar's .tasks-toggle, with a .scrim
+ * after it.
+ * <div class="rail" data-open?>
+ *   <div class="drawer-head">…</div>
+ *   <a class="button">New task</a> <nav class="nav" aria-label="Project">…</nav> <nav class="nav" aria-label="Tasks">…</nav>
+ * </div>
+ * <div class="scrim" data-open?></div>
+ * Exceptions: data-open (the drawer is shown).
+ */
+
+@layer blocks {
+  .rail {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-s);
+    min-block-size: 0;
+    padding-block-start: var(--space-s);
+    background: var(--color-panel);
+    border-inline-end: var(--border-width) solid var(--color-line);
+
+    & > .button { margin-inline: var(--space-s); }
+    & > .nav[aria-label="Project"] {
+      padding-block-end: var(--space-s);
+      border-block-end: var(--border-width) solid var(--color-line);
+    }
+    & > .nav[aria-label="Tasks"] { flex: 1 1 auto; min-block-size: 0; }
+    & > .note {
+      padding: var(--space-s) var(--space-m);
+      font-size: var(--text-sm);
+      color: var(--color-ink-faint);
+    }
+
+    & > .drawer-head { display: none; }
+
+    @media (width < 48rem) {
+      --size-nav-row: var(--size-touch);
+
+      position: fixed;
+      inset: 0 auto 0 0;
+      z-index: var(--z-dialog);
+      inline-size: min(20rem, 86vw);
+      padding-block-start: 0;
+      background: var(--color-raised);
+      border-inline-end-color: var(--color-line-strong);
+      box-shadow: var(--shadow-float);
+      translate: -100% 0;
+      visibility: hidden;
+      transition: translate var(--duration-settle) var(--ease-out-expo), visibility 0s var(--duration-settle);
+
+      &[data-open] {
+        translate: 0 0;
+        visibility: visible;
+        transition-delay: 0s;
+      }
+
+      & > .drawer-head {
+        display: flex;
+        align-items: center;
+        gap: var(--space-s);
+        min-block-size: var(--size-touch);
+        padding-inline: var(--space-l) var(--space-xs);
+        border-block-end: var(--border-width) solid var(--color-line);
+        font-size: var(--text-md);
+        font-weight: var(--weight-bold);
+
+        & > .button {
+          inline-size: var(--size-touch);
+          min-block-size: var(--size-touch);
+          margin-inline-start: auto;
+        }
+      }
+
+      & > .button[data-size],
+      & .nav .head > .button { min-block-size: var(--size-touch); }
+      & .nav .filter { --_field: var(--size-touch); }
+
+      @media (prefers-reduced-motion: reduce) { transition: none; }
+    }
+  }
+
+  /* The page dimmed behind the open drawer. */
+  .scrim {
+    display: none;
+
+    @media (width < 48rem) {
+      &[data-open] {
+        display: block;
+        position: fixed;
+        inset: 0;
+        z-index: calc(var(--z-dialog) - 1);
+        background: var(--color-scrim);
+      }
+    }
+  }
+}

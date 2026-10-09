@@ -178,6 +178,12 @@
     border-block-end: var(--border-width) solid var(--color-line);
   }
 
+  /* ── Arrival: a row or card that just arrived over the feed (data-fresh) */
+  @keyframes arrived {
+    from { background-color: var(--color-signal-wash); box-shadow: inset 2px 0 0 var(--color-signal); }
+    to { box-shadow: inset 2px 0 0 transparent; }
+  }
+
   /* ── Focus: one treatment everywhere ───────────────────────────────── */
   :focus-visible {
     outline: var(--border-focus-width) solid var(--color-focus);

@@ -28,38 +28,41 @@
 
     <!-- 1. A real screen: Sessions -->
     <div class="[ app-shell ]">
-      <nav class="[ nav ]" aria-label="Primary">
-        <div class="[ group ]">
-          <h2>harness</h2>
-          <a href="#" aria-current="page">
-            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M5 7l2 1.5L5 10M8.5 10H11"/></svg>
-            Sessions <span class="[ count ]">4</span>
-          </a>
-          <a href="#">
-            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M3 4h10M3 8h10M3 12h6"/></svg>
-            Tickets <span class="[ count ]">12</span>
-          </a>
-          <a href="#">
-            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="8" cy="5.5" r="2.5"/><path d="M3 13.5c.8-2.4 2.7-3.5 5-3.5s4.2 1.1 5 3.5"/></svg>
-            Agents
-          </a>
-        </div>
-        <div class="[ group ]">
-          <h2>catalog</h2>
-          <a href="#">
-            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M8 2l5.5 3v6L8 14l-5.5-3V5z"/></svg>
-            Skills
-          </a>
-          <a href="#">
-            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="2.5" y="2.5" width="11" height="4" rx="1"/><rect x="2.5" y="9.5" width="11" height="4" rx="1"/></svg>
-            MCP servers
-          </a>
-          <a href="#">
-            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M2.5 4.5h4l1.5 1.5h5.5v6.5h-11z"/></svg>
-            Projects
-          </a>
-        </div>
-      </nav>
+      <!-- The rail: New task, the Project nav, the Tasks nav (blocks/rail, nav, group). -->
+      <div class="[ rail ]">
+        <a class="[ button ]" data-size="sm" href="#"><svg aria-hidden="true" viewBox="0 0 16 16"><path d="M8 3v10M3 8h10" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>New task</a>
+        <nav class="[ nav ]" aria-label="Project">
+          <ul role="list">
+            <li><a href="#" aria-current="page"><svg aria-hidden="true" viewBox="0 0 16 16"><path d="M2 2.75h12v10.5H2z M6 2.75v10.5 M10 2.75v10.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg><span class="[ label ]">Board</span></a></li>
+            <li><a href="#"><svg aria-hidden="true" viewBox="0 0 16 16"><path d="M2 3h12v7.75H8.5L5 13.5v-2.75H2z M5.5 6.9l1.75 1.6L10.5 5.4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/></svg><span class="[ label ]">Review requests</span><span class="[ badge ]" data-tone="attention">2</span></a></li>
+            <li><a href="#"><svg aria-hidden="true" viewBox="0 0 16 16"><path d="M3.75 1.75h5.5L12.25 4.75v9.5h-8.5z M9 1.75V5h3.25 M6 8.25h4 M6 11h4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg><span class="[ label ]">Documents</span></a></li>
+          </ul>
+        </nav>
+        <nav class="[ nav ]" aria-label="Tasks">
+          <div class="[ head ]"><h2 class="[ title ]">Tasks <span class="[ count ]">14</span></h2><button type="button" class="[ button ]" data-variant="ghost" data-size="sm" aria-pressed="false">Needs you <span class="[ badge ]" data-tone="attention">2</span></button></div>
+          <div class="[ filter ]"><input type="search" placeholder="Filter tasks" aria-label="Filter tasks"/><kbd aria-hidden="true">/</kbd></div>
+          <div class="[ groups ]">
+            <section class="[ group ]"><h3><button type="button" aria-expanded="true"><svg aria-hidden="true" viewBox="0 0 12 12"><path d="M3 4.5 6 7.5 9 4.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="[ name ]">In progress</span><span class="[ count ]">3</span></button></h3>
+              <ul role="list">
+                <li><a href="#" aria-current="page"><span class="[ status ]" data-state="running" data-dot-only></span><span class="[ label ]">Redesign sidebar</span><span class="[ meta ]">2 live</span></a></li>
+                <li><a href="#" data-attention="true"><span class="[ status ]" data-state="waiting" data-dot-only></span><span class="[ label ]">Improve tasks dashboard ui</span><span class="[ badge ]" data-tone="attention">1 review</span></a></li>
+                <li><a href="#"><span class="[ label ]">Clone repository</span></a></li>
+              </ul></section>
+            <section class="[ group ]" data-empty="true"><h3><span class="[ name ]">Review</span><span class="[ count ]">0</span></h3></section>
+            <section class="[ group ]" data-collapsed="true"><h3><button type="button" aria-expanded="false"><svg aria-hidden="true" viewBox="0 0 12 12"><path d="M3 4.5 6 7.5 9 4.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="[ name ]">Backlog</span><span class="[ count ]">6</span></button></h3>
+              <ul role="list">
+                <li><a href="#"><span class="[ label ]">Notification</span></a></li>
+                <li><a href="#" data-attention="true"><span class="[ status ]" data-state="waiting" data-dot-only></span><span class="[ label ]">Fix flaky project documents test</span><span class="[ meta ]" data-tone="attention">waiting</span></a></li>
+              </ul></section>
+            <section class="[ group ]"><h3><button type="button" aria-expanded="true"><svg aria-hidden="true" viewBox="0 0 12 12"><path d="M3 4.5 6 7.5 9 4.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="[ name ]">Done</span><span class="[ count ]">5</span></button></h3>
+              <ul role="list">
+                <li><a href="#"><span class="[ label ]">Architect highlights</span></a></li>
+                <li><a href="#"><span class="[ label ]">Project design assets</span></a></li>
+                <li class="[ more ]"><details><summary><span class="[ closed ]">Show 3 more</span><span class="[ opened ]">Show fewer</span></summary><ul role="list"><li><a href="#"><span class="[ label ]">Design View</span></a></li></ul></details></li>
+              </ul></section>
+          </div>
+        </nav>
+      </div>
 
       <main class="[ frame ]">
         <header class="[ toolbar ]">

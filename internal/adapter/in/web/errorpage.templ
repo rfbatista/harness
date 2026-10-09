@@ -7,7 +7,7 @@ import (
 
 templ errorPage(f shell.Frame, message, code, next string) {
 	@shell.Document(f) {
-		<main class="[ wrapper flow ] [ region ]">
+		<main id="main" class="[ wrapper flow ] [ region ]">
 			<h1>This page could not be shown</h1>
 			@components.ErrorBanner(message, code, next)
 			<p><a href="/">Back to the start</a></p>

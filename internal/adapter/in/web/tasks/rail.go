@@ -5,6 +5,7 @@ package tasks
 
 import (
 	"net/url"
+	"slices"
 
 	"operators-mcp/internal/adapter/in/web/sessions"
 	"operators-mcp/internal/adapter/in/web/shell"
@@ -19,6 +20,15 @@ var kanban = []domain.TicketStatus{
 	domain.TicketStatusTodo,
 	domain.TicketStatusBacklog,
 	domain.TicketStatusDone,
+}
+
+// DoneCap is how many done tasks the rail shows before "Show N more"; the
+// browser's is DONE_CAP in web/src/modules/tasks/domain/rail.js.
+const DoneCap = 5
+
+// BoardHref is the project's board.
+func BoardHref(projectID string) string {
+	return "/projects/" + url.PathEscape(projectID)
 }
 
 // ReviewsHref is the project's review inbox.
@@ -77,9 +87,11 @@ func seed(projectID string, tasks []*domain.Ticket, list []*domain.Session) *she
 
 // BuildRail groups a project's tasks by status and marks, per task, how many
 // sessions are live and whether one waits on the developer. Sessions without a
-// task are not on the rail. The seed is always there, so the browser follows
-// the project even before its first task.
-func BuildRail(projectID string, tasks []*domain.Ticket, list []*domain.Session, currentTaskID string) shell.Rail {
+// task are not on the rail. Every known status has its group, empty or not;
+// collapsed holds the groups the person folded (shell.ParseCollapsed). The
+// seed is always there, so the browser follows the project even before its
+// first task.
+func BuildRail(projectID string, tasks []*domain.Ticket, list []*domain.Session, currentTaskID string, collapsed map[string]bool) shell.Rail {
 	rail := shell.Rail{Seed: seed(projectID, tasks, list), Current: currentTaskID}
 	if len(tasks) == 0 {
 		rail.Empty = "No tasks yet."
@@ -89,25 +101,65 @@ func BuildRail(projectID string, tasks []*domain.Ticket, list []*domain.Session,
 		rail.Reviews += t.PendingReviews
 	}
 	byTask := activityByTask(list)
-	byStatus := map[domain.TicketStatus][]shell.Link{}
-	var other []shell.Link
+	byStatus := map[domain.TicketStatus][]*domain.Ticket{}
+	var other []*domain.Ticket
 	for _, t := range tasks {
-		link := card(projectID, t, byTask, currentTaskID)
 		if known(t.Status) {
-			byStatus[t.Status] = append(byStatus[t.Status], link)
+			byStatus[t.Status] = append(byStatus[t.Status], t)
 		} else {
-			other = append(other, link)
+			other = append(other, t)
 		}
+	}
+	links := func(ts []*domain.Ticket) []shell.Link {
+		out := make([]shell.Link, 0, len(ts))
+		for _, t := range ts {
+			out = append(out, card(projectID, t, byTask, currentTaskID))
+		}
+		return out
 	}
 	for _, st := range kanban {
-		if links := byStatus[st]; len(links) > 0 {
-			rail.Groups = append(rail.Groups, shell.RailGroup{Label: sessions.StatusLabel(st), Links: links})
+		g := shell.RailGroup{Label: statusLabel(st), Key: string(st), Total: len(byStatus[st])}
+		if st == domain.TicketStatusDone {
+			g.Links, g.More = capDone(links(byDoneOrder(byStatus[st])))
+		} else {
+			g.Links = links(byStatus[st])
 		}
+		g.Collapsed = collapsed[g.Key] && g.Total > 0
+		rail.Groups = append(rail.Groups, g)
 	}
 	if len(other) > 0 {
-		rail.Groups = append(rail.Groups, shell.RailGroup{Label: "other", Links: other})
+		rail.Groups = append(rail.Groups, shell.RailGroup{Label: "Other", Key: "other", Total: len(other), Collapsed: collapsed["other"], Links: links(other)})
 	}
 	return rail
+}
+
+// byDoneOrder is the most recently updated first; ties keep creation order.
+func byDoneOrder(ts []*domain.Ticket) []*domain.Ticket {
+	out := slices.Clone(ts)
+	slices.SortStableFunc(out, func(a, b *domain.Ticket) int { return b.UpdatedAt.Compare(a.UpdatedAt) })
+	return out
+}
+
+// capDone splits Done at DoneCap. The open task and the tasks that need the
+// person stay shown whatever their age: the rail never hides them.
+func capDone(all []shell.Link) (shown, more []shell.Link) {
+	for i, l := range all {
+		if i < DoneCap || l.Current || l.Attention {
+			shown = append(shown, l)
+		} else {
+			more = append(more, l)
+		}
+	}
+	return shown, more
+}
+
+func statusLabel(st domain.TicketStatus) string {
+	for _, s := range Statuses {
+		if s.Value == string(st) {
+			return s.Label
+		}
+	}
+	return string(st)
 }
 
 // card is a task as the rail links it and the board draws it.

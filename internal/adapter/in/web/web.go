@@ -131,6 +131,7 @@ type server struct {
 // page adapts a page handler: an error becomes the error page for its code.
 func (s *server) page(h shell.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		r = r.WithContext(shell.WithCollapsed(r.Context(), r)) // the rail's folded groups, for the layout
 		if err := h(w, r); err != nil {
 			s.renderError(w, r, err)
 		}
@@ -178,7 +179,8 @@ func (s *server) layout(ctx context.Context, title, projectID, taskID string) (s
 	if err != nil {
 		return shell.Frame{}, err
 	}
-	frame.Rail = tasks.BuildRail(projectID, list, live, taskID)
+	frame.Rail = tasks.BuildRail(projectID, list, live, taskID, shell.CollapsedFrom(ctx))
+	frame.Rail.BoardHref = tasks.BoardHref(projectID)
 	frame.Rail.NewTaskHref = tasks.NewTaskHref(projectID)
 	frame.Rail.ReviewsHref = tasks.ReviewsHref(projectID)
 	if s.deps.Documents != nil {

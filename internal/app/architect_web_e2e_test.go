@@ -415,7 +415,7 @@ func TestArchitectChannelInTheWebUI_EndToEnd(t *testing.T) {
 		t.Fatalf("approve elsewhere: %v %v", err, res)
 	}
 	res.Body.Close()
-	p.run(t, "the badge goes down", poll(`(`+badge+`) === '1 review'`), poll(`document.querySelector('nav [x-text=reviewsCount]').textContent === '1'`))
+	p.run(t, "the badge goes down", poll(`(`+badge+`) === '1 review'`), poll(`document.querySelector('nav[aria-label="Project"] [x-text=reviewsCount]').textContent === '1'`))
 
 	// The inbox, keyboard only: from the note, Tab reaches Approve, Enter answers.
 	p.run(t, "the inbox",

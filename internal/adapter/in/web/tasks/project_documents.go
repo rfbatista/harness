@@ -99,6 +99,7 @@ func (h Handler) ProjectDocuments(w http.ResponseWriter, r *http.Request) error 
 	if err != nil {
 		return err
 	}
+	frame.Rail.Page = shell.PageDocuments
 	view.Frame = frame
 	return h.Render(w, r, http.StatusOK, ProjectDocumentsPage(view))
 }

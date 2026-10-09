@@ -21,6 +21,19 @@
       text-decoration: none;
     }
 
+    /* The phone's Tasks trigger, first in the bar: it opens the rail's drawer. */
+    & > .tasks-toggle {
+      display: none;
+
+      @media (width < 48rem) {
+        display: inline-flex;
+        min-block-size: var(--size-touch);
+        padding-inline: var(--space-s);
+        margin-inline-start: calc(var(--space-s) * -1);
+        font-size: var(--text-base);
+      }
+    }
+
     & select {
       min-inline-size: 12rem;
       max-inline-size: 24rem;

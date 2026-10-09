@@ -75,7 +75,7 @@
     & .card .meta select { margin-inline-start: auto; }
 
     & .card[data-fresh] {
-      animation: card-arrived 8s var(--ease-out) both;
+      animation: arrived 8s var(--ease-out) both;
 
       @media (prefers-reduced-motion: reduce) {
         animation: none;
@@ -88,10 +88,5 @@
       font-size: var(--text-xs);
       color: var(--color-ink-faint);
     }
-  }
-
-  @keyframes card-arrived {
-    from { background-color: var(--color-signal-wash); box-shadow: inset 2px 0 0 var(--color-signal); }
-    to { box-shadow: inset 2px 0 0 transparent; }
   }
 }

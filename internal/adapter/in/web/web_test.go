@@ -235,7 +235,7 @@ func TestProjectPagePutsItsTasksOnTheRailAndTheProjectInThePicker(t *testing.T) 
 		`<option value="p1" selected>coding_pool</option>`,
 		`<option value="p2">other</option>`,
 		`action="/switch-project"`,
-		`<h2>in progress</h2>`,
+		`<span class="[ name ]">In progress</span>`,
 		`href="/projects/p1/tasks/t-feed"`,
 		`<span class="[ label ]">Add SSE feed</span>`,
 		`data-state="waiting"`, // the feed task waits on the developer
@@ -243,9 +243,10 @@ func TestProjectPagePutsItsTasksOnTheRailAndTheProjectInThePicker(t *testing.T) 
 		`x-data="tasksBoard" data-project-id="p1"`,
 		`x-on:task-changed.window="taskChanged"`,
 		// The rail: its first paint and the live groups it regroups from the store.
-		`data-current-task="" data-reports-feed="" data-seed="rail-seed" x-data="tasksRail"`, // templ renders attribute maps sorted by key
+		`data-current-task="" data-reports-feed="" data-seed="rail-seed"`, // templ renders attribute maps sorted by key
+		`x-data="tasksRail"`,
 		`x-for="group in groups"`,
-		`x-for="link in group.links"`,
+		`x-for="row in group.rows"`,
 		`x-data="streamStatus"`, // the board follows the project feed…
 		`data-reports-feed`,     // …through the rail, which reports it to the stream bar
 		`<script id="rail-seed" type="application/json">`,
@@ -280,8 +281,9 @@ func TestProjectPagePutsItsTasksOnTheRailAndTheProjectInThePicker(t *testing.T) 
 		}
 		last = i
 	}
-	order := []int{strings.Index(body, "<h2>in progress</h2>"), strings.Index(body, "<h2>todo</h2>"), strings.Index(body, "<h2>done</h2>")}
-	if !(order[0] < order[1] && order[1] < order[2]) {
+	group := func(label string) int { return strings.Index(body, `<span class="[ name ]">`+label+`</span>`) }
+	order := []int{group("In progress"), group("Review"), group("Todo"), group("Backlog"), group("Done")}
+	if !(order[0] >= 0 && order[0] < order[1] && order[1] < order[2] && order[2] < order[3] && order[3] < order[4]) {
 		t.Errorf("rail groups are not in kanban order: %v", order)
 	}
 }
@@ -331,7 +333,7 @@ func TestTaskPageListsItsSessionsBesideTheDetail(t *testing.T) {
 		`<script id="task-seed" type="application/json">`,
 		`<option value="in_progress" selected>In progress</option>`,
 		`x-on:click="askDeleteTask"`,
-		`href="/projects/p1/tasks/t-feed" aria-current="page"`,
+		`href="/projects/p1/tasks/t-feed" data-task-id="t-feed" aria-current="page"`,
 		`data-current-task="t-feed"`,
 		`x-data="sessionsPage"`,
 		`x-data="streamStatus"`,
@@ -534,7 +536,7 @@ func TestNewTaskPage(t *testing.T) {
 		`x-data="tasksNewTask" data-project-id="p1"`,
 		`<option value="backlog">Backlog</option>`,
 		`<option value="done">Done</option>`,
-		`<h2>in progress</h2>`, // the rail is there
+		`<span class="[ name ]">In progress</span>`, // the rail is there
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("new task page is missing %q", want)

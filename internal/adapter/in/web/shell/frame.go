@@ -6,6 +6,7 @@ package shell
 import (
 	"context"
 	"net/http"
+	"strconv"
 
 	"github.com/a-h/templ"
 
@@ -48,10 +49,24 @@ type TopBar struct {
 // Option is one project in the picker.
 type Option struct{ ID, Name string }
 
-// Rail is the current project's tasks, in kanban groups.
+// The project pages the rail links to; Rail.Page marks the current one.
+const (
+	PageBoard     = "board"
+	PageReviews   = "reviews"
+	PageDocuments = "documents"
+	PageDesign    = "design"
+)
+
+// Rail is the current project's tasks, in kanban groups, and the ways to its
+// pages.
 type Rail struct {
 	// NewTaskHref is the new-task page of the selected project; "" with none.
 	NewTaskHref string
+	// BoardHref is the project's board; "" hides it.
+	BoardHref string
+	// Page is the project page open now (PageBoard, …), marked current on
+	// the rail; "" for any other page.
+	Page string
 	// DocumentsHref is the project's documents library; "" when documents
 	// are not served.
 	DocumentsHref string
@@ -94,10 +109,40 @@ type RailSession struct {
 	PendingApprovals int    `json:"pending_approvals"`
 }
 
-// RailGroup is one kanban column: "in progress", "todo", …
+// RailGroup is one status group: "In progress", "Todo", …
 type RailGroup struct {
 	Label string
+	// Key is the status value ("in_progress"), or "other".
+	Key string
+	// Total counts the group's tasks: Links and More.
+	Total int
+	// Collapsed: the person folded it (the rail_collapsed cookie). Its rows
+	// still show the open task and what needs the person.
+	Collapsed bool
+	// Links are the rows shown. Done shows its most recently updated tasks,
+	// plus the open task and every task that needs the person.
 	Links []Link
+	// More are Done's other rows, behind "Show N more".
+	More []Link
+}
+
+// IsEmpty: the group has no tasks, so its heading has nothing to fold.
+func (g RailGroup) IsEmpty() bool { return g.Total == 0 }
+
+// NeedsYou counts the tasks waiting on the person, for the phone's Tasks
+// trigger.
+func (r Rail) NeedsYou() int {
+	n := 0
+	for _, g := range r.Groups {
+		for _, links := range [][]Link{g.Links, g.More} {
+			for _, l := range links {
+				if l.Attention {
+					n++
+				}
+			}
+		}
+	}
+	return n
 }
 
 // Link is one task in the rail.
@@ -183,9 +228,39 @@ func railAttrs(r Rail) templ.Attributes {
 	if r.Seed == nil {
 		return nil
 	}
-	attrs := templ.Attributes{"x-data": "tasksRail", "data-seed": "rail-seed", "data-current-task": r.Current}
+	attrs := templ.Attributes{
+		"x-data": "tasksRail", "data-seed": "rail-seed", "data-current-task": r.Current,
+		// The phone drawer: opened from the top bar's Tasks button, closed by
+		// Esc, Close or the scrim; "/" anywhere focuses the filter.
+		"x-bind:data-open":       "drawerOpen",
+		"x-on:rail-open.window":  "openDrawer",
+		"x-on:rail-close.window": "closeDrawer",
+		"x-on:keydown":           "drawerKey",
+		"x-on:keydown.window":    "globalKey",
+	}
 	if r.ReportsFeed {
 		attrs["data-reports-feed"] = ""
+	}
+	return attrs
+}
+
+// attentionAttrs washes a row that waits on the person.
+func attentionAttrs(attention bool) templ.Attributes {
+	if attention {
+		return templ.Attributes{"data-attention": "true"}
+	}
+	return templ.Attributes{}
+}
+
+// groupAttrs paints a group folded (from the cookie) or empty, as the live
+// copy binds it, so the handover changes nothing.
+func groupAttrs(g RailGroup) templ.Attributes {
+	attrs := templ.Attributes{}
+	if g.Collapsed {
+		attrs["data-collapsed"] = "true"
+	}
+	if g.IsEmpty() {
+		attrs["data-empty"] = "true"
 	}
 	return attrs
 }
@@ -197,4 +272,94 @@ func shownIf(shown bool) templ.Attributes {
 		return templ.Attributes{}
 	}
 	return templ.Attributes{"style": "display: none"}
+}
+
+// The rail row's one meta item, by priority: the reviews badge, else
+// "waiting", else "N live". The browser's toRow (web/src/modules/tasks/
+// presentation/railView.js) says the same.
+
+// ReviewsText is the badge: "1 review", "2 reviews"; "" without reviews.
+func (l Link) ReviewsText() string {
+	switch {
+	case l.Reviews == 0:
+		return ""
+	case l.Reviews == 1:
+		return "1 review"
+	default:
+		return strconv.Itoa(l.Reviews) + " reviews"
+	}
+}
+
+// Waiting: a session waits on the person and no review request does.
+func (l Link) Waiting() bool { return l.Reviews == 0 && l.Attention }
+
+// Running: live sessions and nothing waiting.
+func (l Link) Running() bool { return !l.Attention && l.Live > 0 }
+
+// MetaLead and MetaTail are the hidden words around the meta item, so the
+// link reads "Redesign sidebar, running, 2 live sessions".
+func (l Link) MetaLead() string {
+	switch {
+	case l.Running():
+		return ", running, "
+	case l.Attention:
+		return ", "
+	default:
+		return ""
+	}
+}
+
+func (l Link) MetaTail() string {
+	switch {
+	case l.Reviews > 0:
+		return " waiting on you"
+	case l.Attention:
+		return " on you"
+	case l.Live == 1:
+		return " session"
+	case l.Live > 1:
+		return " sessions"
+	default:
+		return ""
+	}
+}
+
+// HeadingID and ListID tie a group's heading to its section and list.
+func (g RailGroup) HeadingID() string { return "rail-" + g.Key + "-heading" }
+func (g RailGroup) ListID() string    { return "rail-" + g.Key }
+
+// CountWords follow the heading's count: "Backlog 9 tasks, 1 needs you".
+func (g RailGroup) CountWords() string {
+	words := " tasks"
+	if g.Total == 1 {
+		words = " task"
+	}
+	waiting := 0
+	for _, links := range [][]Link{g.Links, g.More} {
+		for _, l := range links {
+			if l.Attention {
+				waiting++
+			}
+		}
+	}
+	switch {
+	case waiting == 1:
+		words += ", 1 needs you"
+	case waiting > 1:
+		words += ", " + strconv.Itoa(waiting) + " need you"
+	}
+	return words
+}
+
+// MoreText is Done's summary: "Show 7 more".
+func (g RailGroup) MoreText() string { return "Show " + strconv.Itoa(len(g.More)) + " more" }
+
+// ProjectName is the selected project's name, for the phone drawer's header.
+func (f Frame) ProjectName() string {
+	for _, p := range f.Top.Projects {
+		if p.ID == f.Top.Current {
+			return p.Name
+		}
+	}
+	return ""
 }

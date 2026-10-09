@@ -13,7 +13,7 @@ import (
 // columns live from the rail's store and removes the server copy.
 templ ProjectPage(f shell.Frame, projectID, projectName string, b Board) {
 	@shell.AppShell(f) {
-		<main class="[ frame ]" x-data="tasksBoard" data-project-id={ projectID } x-on:task-changed.window="taskChanged">
+		<main id="main" class="[ frame ]" x-data="tasksBoard" data-project-id={ projectID } x-on:task-changed.window="taskChanged">
 			<header class="[ toolbar ]">
 				<h1>{ projectName }</h1>
 				<div class="[ actions ]">
@@ -139,7 +139,7 @@ templ liveBoard() {
 // NewTaskPage creates a task in the project.
 templ NewTaskPage(f shell.Frame, projectID, projectName string) {
 	@shell.AppShell(f) {
-		<main class="[ frame ]">
+		<main id="main" class="[ frame ]">
 			<header class="[ toolbar ]">
 				<a class="[ crumb ]" href={ templ.SafeURL("/projects/" + projectID) }>{ projectName } /</a>
 				<h1>New task</h1>

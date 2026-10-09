@@ -6,6 +6,7 @@
   .color-ink-faint { color: var(--color-ink-faint); }
   .color-signal { color: var(--color-signal); }
   .color-attention { color: var(--color-attention); }
+  .color-attention-strong { color: var(--color-attention-strong); }
   .color-danger { color: var(--color-danger); }
   .color-success { color: var(--color-success); }
 

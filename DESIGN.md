@@ -16,6 +16,7 @@ colors:
   signal-strong: "oklch(0.44 0.09 182)"
   signal-ink: "oklch(0.99 0.008 182)"
   attention: "oklch(0.52 0.12 65)"
+  attention-strong: "oklch(0.46 0.11 60)"
   danger: "oklch(0.52 0.18 27)"
   danger-ink: "oklch(0.99 0.01 27)"
   success: "oklch(0.5 0.11 150)"
@@ -159,7 +160,7 @@ A cool, nearly colorless console with a trace of the signal hue (190) in every n
 - **Signal Teal** (`signal`): the one accent. Running sessions, the primary action on a screen, current selection, links, focus rings. In dark mode it lifts to `oklch(0.78 0.1 182)`. Text on it uses `signal-ink` (5.5:1 light, 9.8:1 dark).
 
 ### Secondary
-- **Waiting Amber** (`attention`): a session is waiting on the developer: input, a permission prompt, a review. Rows in this state also take the `attention-wash` background so they are findable in a peripheral glance.
+- **Waiting Amber** (`attention`): a session is waiting on the developer: input, a permission prompt, a review. Rows in this state also take the `attention-wash` background so they are findable in a peripheral glance. Amber text on a wash or a badge uses `attention-strong`.
 
 ### Tertiary
 - **Fault Red** (`danger`): failed sessions, coded errors, destructive buttons, invalid fields.
@@ -268,10 +269,12 @@ Every control has a visible label (or a visually hidden one when the context nam
 
 ### Navigation
 - **Top bar** (`.topbar`): a 44px `panel` strip across the app: the name, then the project picker, a small fitted native `<select>` in a GET form. The picker decides what the rail lists.
-- **Rail** (`.nav`): 15rem `panel` column of the selected project's **tasks**, grouped under quiet 12px kanban headings (`in progress`, `review`, `todo`, `backlog`, `done`). A link is a truncating `.label`, then a status dot (`data-dot-only`: teal running, amber waiting on you) and a `.count` of live sessions.
-- **Current:** `aria-current="page"` gets the `selected` wash and ink text. No stripes, no pills.
+- **Rail** (`.rail`): 15rem `panel` column: a skip link, one full-width **New task** button, the **Project** nav (Board, Review requests with its amber count, Documents, Design assets) closed by a hairline, then the **Tasks** nav: "Tasks N" with the Needs you toggle, a filter field with a `/` hint, and the five status groups in rail order (In progress, Review, Todo, Backlog, Done), always present.
+- **Rows** (`.nav a`): 28px (`--size-nav-row`; 44px on a coarse pointer and in the drawer), grid `16px slot · label · meta`. The slot holds an icon or the status dot (teal running, amber waiting). Meta is one item, by priority: the amber reviews badge, "waiting" in `attention-strong`, "N live" in faint ink. Rows waiting on the person take the `attention-wash`. Titles truncate on one line; the full title is a native tooltip.
+- **Groups** (`.nav .group`): a sticky 12px bold heading (`h3`) in sentence case with a chevron and a count, a disclosure button that folds the group. Folded groups still show the open task and what needs the person (the peek rule), and the server paints them folded from the `rail_collapsed` cookie. Done shows its five latest, then "Show N more".
+- **Current:** `aria-current="page"` gets the `selected` wash and ink text, on the open task (two lines) and on the current project page. No stripes, no pills.
 - **Inner list:** a task's own sessions sit in the page's `.split-view` list, beside the selected session's detail. A task can run several sessions at once.
-- **Below 48rem:** the rail becomes a horizontally scrolling bar under the top bar; headings hide.
+- **Below 48rem:** the rail becomes a drawer from the inline-start edge (`raised`, Float shadow, scrim), opened by the "Tasks" button first in the top bar, with 44px rows.
 
 ### List rows (signature)
 The workhorse for sessions, tickets, agents and skills. Grid columns `status | title | meta` (override with `--row-columns`), 36px high, 16px inline padding, hairline dividers. Sticky `.list > .group` headers in `panel` (e.g. *Needs you / Running / Earlier*). Selection is `aria-selected="true"` (signal wash); rows waiting on the developer add `data-attention` (amber wash). Titles truncate; meta never wraps. In a narrow list (a task's sessions beside their detail) rows take `data-stacked`: status, title and a row action (`.action`, e.g. Resume) on the first line, the meta under the title on the second, both truncating, so the action is never pushed out.

@@ -12,7 +12,7 @@ import (
 templ ReviewsPage(frame shell.Frame, projectID, projectName string, seed *components.ReviewsSeed, pending int) {
 	@shell.AppShell(frame) {
 		@templ.JSONScript("reviews-seed", seed)
-		<main class="[ frame ]" x-data="reviewsInbox" data-seed="reviews-seed">
+		<main id="main" class="[ frame ]" x-data="reviewsInbox" data-seed="reviews-seed">
 			<header class="[ toolbar ]">
 				<a class="[ crumb ]" href={ templ.SafeURL("/projects/" + projectID) }>{ projectName } /</a>
 				<h1>Reviews</h1>

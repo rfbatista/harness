@@ -5,6 +5,7 @@ import { dropdown } from "./components/dropdown.js";
 import { listbox } from "./components/listbox.js";
 import { menu } from "./components/menu.js";
 import { projectPicker } from "./components/projectPicker.js";
+import { streamAnnouncer } from "./components/streamAnnouncer.js";
 import { streamStatus } from "./components/streamStatus.js";
 import { themeToggle } from "./components/themeToggle.js";
 
@@ -19,5 +20,6 @@ export function registerShared(Alpine, { prefs }) {
   Alpine.data("menu", menu());
   Alpine.data("projectPicker", projectPicker());
   Alpine.data("streamStatus", streamStatus());
+  Alpine.data("streamAnnouncer", streamAnnouncer());
   Alpine.data("themeToggle", themeToggle(prefs));
 }

@@ -81,6 +81,7 @@ func (h Handler) ProjectDesign(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
+	frame.Rail.Page = shell.PageDesign
 	view := ProjectDesignView{Frame: frame, ProjectID: project.ID, ProjectName: project.Name, Seed: seed}
 	return h.Render(w, r, http.StatusOK, ProjectDesignPage(view))
 }

@@ -97,3 +97,14 @@
  */
 
 export {};
+
+/**
+ * The rail's remembered folding: which status groups the person collapsed.
+ * Implemented by infrastructure/rail-prefs.js (the rail_collapsed cookie, which
+ * the server reads to paint the first load folded) and
+ * infrastructure/memory-rail-prefs.js; both run testing/rail-prefs-contract.js.
+ *
+ * @typedef {object} RailPrefs
+ * @property {() => string[]} collapsed  status keys; [] when none or unreadable
+ * @property {(keys: string[]) => void} setCollapsed  remembers them; [] forgets
+ */

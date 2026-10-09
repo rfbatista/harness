@@ -69,7 +69,7 @@ CSS into HTML. **Design-token utilities are generated** from `tokens.json`:
 
 | Prefix | Property | Tokens |
 |---|---|---|
-| `color-*` | `color` | ink, ink-muted, ink-faint, signal, attention, danger, success |
+| `color-*` | `color` | ink, ink-muted, ink-faint, signal, attention, attention-strong, danger, success |
 | `bg-*` | `background` | canvas, panel, raised, sunken |
 | `font-*` | `font-family` | sans, mono |
 | `text-*` | `font-size` | xs … 2xl |

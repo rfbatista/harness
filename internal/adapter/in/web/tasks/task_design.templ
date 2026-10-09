@@ -16,7 +16,7 @@ import (
 // the project feed and is read out by the polite live region.
 templ TaskDesignPage(v TaskDesignView) {
 	@shell.AppShell(v.Frame) {
-		<main class="[ frame ]" x-data="sessionsTaskDesign" data-seed="task-design-seed">
+		<main id="main" class="[ frame ]" x-data="sessionsTaskDesign" data-seed="task-design-seed">
 			@templ.JSONScript("task-design-seed", v.Seed)
 			<header class="[ toolbar ]">
 				<a class="[ crumb ]" href={ templ.SafeURL("/projects/" + v.ProjectID) }>{ v.ProjectName } /</a>
