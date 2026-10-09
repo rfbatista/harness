@@ -54,8 +54,9 @@
  */
 
 /**
- * A task's resources and comments: what the person added for context, read
- * and written over /api and followed on the project feed. Implemented by
+ * A task's resources and comments: what the person added for context and
+ * what the person and its sessions wrote, read and written over /api and
+ * followed on the project feed, with the sessions coming and going on it. Implemented by
  * infrastructure/resources-gateway.js (over /api) and
  * infrastructure/memory-resources.js; both run testing/resource-contract.js.
  *
@@ -63,10 +64,11 @@
  * @typedef {import("./comments.js").Comment} Comment
  * @typedef {{ kind: "resource", resource: Resource } | { kind: "resource-deleted", id: string, ticketId: string }
  *         | { kind: "comment", comment: Comment } | { kind: "comment-deleted", id: string, ticketId: string }
+ *         | { kind: "session", id: string, ticketId: string } | { kind: "session-deleted", id: string }
  *         | { kind: "task-deleted", id: string }} ResourceChange
  *
  * @typedef {object} ResourceGateway
- * @property {(seed: unknown) => { projectId: string, ticketId: string, resources: Resource[], comments: Comment[] }} decodeSeed
+ * @property {(seed: unknown) => { projectId: string, ticketId: string, resources: Resource[], comments: Comment[], sessionIds: string[] }} decodeSeed
  *           Reads the page's embedded seed. Throws BAD_RESPONSE when malformed.
  * @property {(ticketId: string) => Promise<Resource[]>} listResources
  *           Oldest first. Rejects with TICKET_NOT_FOUND.
@@ -86,14 +88,15 @@
  *           Rejects with INVALID_INPUT (empty, over 10,000) or TICKET_NOT_FOUND.
  * @property {(commentId: string, body: string) => Promise<Comment>} editComment
  *           An edit that changes nothing keeps updated_at. Rejects with
- *           INVALID_INPUT or COMMENT_NOT_FOUND.
+ *           INVALID_INPUT, COMMENT_NOT_FOUND or COMMENT_NOT_YOURS (a session wrote it).
  * @property {(commentId: string) => Promise<void>} removeComment
- *           Rejects with COMMENT_NOT_FOUND, also when it is already gone.
+ *           The person's or a session's. Rejects with COMMENT_NOT_FOUND, also
+ *           when it is already gone.
  * @property {(projectId: string, onChange: (change: ResourceChange) => void,
  *             onStatus: (status: import("../../../shared/domain/feed.js").FeedStatus) => void) => () => void} follow
- *           Resource and comment changes of every task of the project, and
- *           tasks deleted; returns the unfollow. Other messages, and ones it
- *           cannot read, are not delivered.
+ *           Resource and comment changes of every task of the project,
+ *           sessions started or deleted, and tasks deleted; returns the
+ *           unfollow. Other messages, and ones it cannot read, are not delivered.
  */
 
 export {};

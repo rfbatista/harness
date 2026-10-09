@@ -30,6 +30,8 @@ export function makeComment(overrides = {}) {
     ticketId: "t1",
     projectId: "p1",
     author: "person",
+    sessionId: "",
+    agentName: "",
     body: "Keep the v2 contract.",
     createdAt: AT,
     updatedAt: AT,
@@ -51,6 +53,9 @@ export function everyKind(ticketId = "t1") {
     r({ n: 6, id: "r-link", kind: "link", title: "Figma file", url: "https://figma.com/file/abc", mime: "", sizeBytes: 0, contentUrl: "" }),
   ];
 }
+
+/** A comment a session wrote: by default the Reviewer agent's session s-rev. */
+export const sessionComment = (overrides = {}) => makeComment({ id: "c-agent", author: "session", sessionId: "s-rev", agentName: "Reviewer", body: "The contract tests pass on my branch.", ...overrides });
 
 export function resourceDTO(r) {
   return {
@@ -74,6 +79,8 @@ export function commentDTO(c) {
     ticket_id: c.ticketId,
     project_id: c.projectId,
     author: c.author,
+    session_id: c.sessionId,
+    agent_name: c.agentName,
     body: c.body,
     created_at: c.createdAt.toISOString(),
     updated_at: c.updatedAt.toISOString(),
