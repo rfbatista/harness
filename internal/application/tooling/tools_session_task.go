@@ -48,6 +48,9 @@ var SessionTaskToolNames = []string{
 	"list_review_requests",
 	"set_status_check",
 	"list_status_checks",
+	"list_task_resources",
+	"read_task_resource",
+	"list_task_comments",
 }
 
 // MaxLiveTaskSessions caps the sessions running on one task at once, so agents
@@ -86,8 +89,9 @@ type ArtifactTooling struct {
 // bounded contexts and zones; start lets a session start peers on its task;
 // artifacts lets it publish what it made to the Design tab; channel connects
 // the task's delegates to its architect and makes the architect the owner of
-// the task status (nil: no channel, every session a peer).
-func SessionTaskTools(planningSvc ports.Planning, sessions ports.SessionRepository, agents ports.AgentLister, arch ports.ArchitectureMap, start PeerStarter, artifacts ArtifactTooling, channel ports.TaskChannel) []domain.Tool {
+// the task status (nil: no channel, every session a peer); resources lets it
+// read what the person added to the task.
+func SessionTaskTools(planningSvc ports.Planning, sessions ports.SessionRepository, agents ports.AgentLister, arch ports.ArchitectureMap, start PeerStarter, artifacts ArtifactTooling, channel ports.TaskChannel, resources ResourceTooling) []domain.Tool {
 	tools := append([]domain.Tool{
 		{
 			Name: "start_task_session",
@@ -276,6 +280,7 @@ func SessionTaskTools(planningSvc ports.Planning, sessions ports.SessionReposito
 	}, sessionDocumentTools(planningSvc, sessions)...)
 	tools = append(tools, sessionChannelTools(planningSvc, sessions, channel)...)
 	tools = append(tools, sessionProjectTools(planningSvc, sessions, agents, arch, start.Repositories)...)
+	tools = append(tools, sessionResourceTools(planningSvc, sessions, resources)...)
 	return append(tools, sessionArtifactTools(planningSvc, sessions, artifacts)...)
 }
 

@@ -47,7 +47,8 @@ func errorHandler(err error, c echo.Context) {
 			"BOUNDED_CONTEXT_NOT_FOUND", "SESSION_NOT_FOUND", "SKILL_FILE_NOT_FOUND",
 			"TERMINAL_NOT_FOUND", "ENV_FILE_NOT_FOUND",
 			"RUN_NOT_FOUND", "RUN_COMMAND_NOT_FOUND", "ARTIFACT_NOT_FOUND",
-			"MESSAGE_NOT_FOUND", "REVIEW_NOT_FOUND", "STATUS_CHECK_NOT_FOUND", "NO_ARCHITECT":
+			"MESSAGE_NOT_FOUND", "REVIEW_NOT_FOUND", "STATUS_CHECK_NOT_FOUND", "NO_ARCHITECT",
+			"RESOURCE_NOT_FOUND", "COMMENT_NOT_FOUND":
 			writeCoded(c, http.StatusNotFound, err, se)
 			return
 		case "INVALID_PATTERN", "INVALID_NAME", "INVALID_ROOT", "INVALID_PATH",
@@ -60,8 +61,15 @@ func errorHandler(err error, c echo.Context) {
 			"PR_NO_REMOTE", "PR_BASE_NOT_FOUND":
 			writeCoded(c, http.StatusBadRequest, err, se)
 			return
-		case "ARTIFACT_NOT_YOURS", "ARCHITECT_ONLY", "TASK_STATUS_OWNED_BY_ARCHITECT", "SESSION_NOT_ON_TASK":
+		case "ARTIFACT_NOT_YOURS", "ARCHITECT_ONLY", "TASK_STATUS_OWNED_BY_ARCHITECT", "SESSION_NOT_ON_TASK",
+			"RESOURCE_NOT_ON_TASK": // MCP only; no route answers it
 			writeCoded(c, http.StatusForbidden, err, se)
+			return
+		case "RESOURCE_TOO_LARGE":
+			writeCoded(c, http.StatusRequestEntityTooLarge, err, se)
+			return
+		case "UNAVAILABLE":
+			writeCoded(c, http.StatusServiceUnavailable, err, se)
 			return
 		case "PUBLISH_TARGET_EXISTS", "PUBLISH_SLUG_CONFLICT", "WORKSPACE_EXISTS", "BRANCH_EXISTS",
 			"SESSION_INTERACTIVE", "SESSION_NOT_INTERACTIVE", "SESSION_ALREADY_RUNNING",

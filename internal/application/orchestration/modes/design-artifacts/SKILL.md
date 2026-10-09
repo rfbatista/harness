@@ -37,6 +37,12 @@ person in one line what changed → listen.
   task's Design tab, attach it with `mcp__task__attach_artifact_to_task`. Once
   an asset of yours is something other tasks will reuse, move it to project
   level with `mcp__task__move_artifact_to_project`.
+- **Start from what the person gave you.** `mcp__task__list_task_resources`
+  lists the references the person added to the task (images, recordings,
+  links, files), and `mcp__task__read_task_resource` gives each one's
+  `local_path` (open images with your Read tool) or its `url`. When they add
+  one or comment while you work, a turn starting with `[task update · …]`
+  says so: look at it before your next publish.
 - **Commit nothing unless asked.** The worktree is the working surface.
 - Titles and notes are shown as plain text; keep them short and human.
 - **Notes you leave on the task are HTML pages.** `create_task_document` takes
@@ -55,6 +61,7 @@ person in one line what changed → listen.
 | `mcp__task__attach_artifact_to_task` | Attach a project asset, from any task of the project, to this task, so it shows in this task's Design tab. |
 | `mcp__task__detach_artifact_from_task` | Detach a project asset from this task; it stays in the project. |
 | `mcp__task__unpublish_artifact` | Take one of your own cards down (the file stays). A project asset is moved back to the task first. |
+| `mcp__task__list_task_resources` / `read_task_resource` / `list_task_comments` | What the person added to the task for context (references, recordings, links) and their comments. Read-only. |
 | `mcp__task__get_task` / `read_task_document` | The brief, and any design notes or specs earlier sessions left (documents are HTML pages; older ones may be Markdown). |
 
 `publish_artifact` returns `{artifact_id, revision, kind, view_url}`. Its
@@ -75,8 +82,9 @@ it cannot detach it).
 
 ## Components and screens
 
-1. Read the task, `list_task_artifacts` (with the assets attached to it) and
-   `list_project_artifacts`.
+1. Read the task, its resources and comments (`list_task_resources`,
+   `list_task_comments`), `list_task_artifacts` (with the assets attached to
+   it) and `list_project_artifacts`.
 2. Write `design/<name>.html`: a complete document, inline `<style>` and
    `<script>`, realistic copy, the states the person asked for (default,
    hover, empty, error…) visible on one page or as separate files.

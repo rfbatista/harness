@@ -64,7 +64,7 @@ func newArtifactToolsFixture(t *testing.T) *artifactToolsFixture {
 	art.Tickets = plan
 	f.otherTicketID = other.ID
 	tooling := ArtifactTooling{Publisher: art, Attachments: art, ViewURL: func(id string) string { return "/api/artifacts/" + id + "/view/" }}
-	for _, tl := range SessionTaskTools(plan, sessions, nil, nil, PeerStarter{}, tooling, nil) {
+	for _, tl := range SessionTaskTools(plan, sessions, nil, nil, PeerStarter{}, tooling, nil, ResourceTooling{}) {
 		f.tools[tl.Name] = tl
 	}
 	return f

@@ -26,6 +26,10 @@ type Handler struct {
 	// Artifacts lists the design assets the task page and the design library
 	// seed; nil seeds none.
 	Artifacts ports.ArtifactReader
+	// Resources and Comments read what a person added to a task, for its
+	// resources page and the task toolbar's counts; nil reads none.
+	Resources ports.TaskResourceReader
+	Comments  ports.TaskCommentReader
 	// PullRequests seeds the session rows' pull request badges; nil seeds none.
 	PullRequests ports.PullRequests
 	Layout       shell.Layout
@@ -138,6 +142,12 @@ func (h Handler) Task(w http.ResponseWriter, r *http.Request) error {
 		view.Seed.DocumentTitles = make(map[string]string, len(docs))
 		for _, d := range docs {
 			view.Seed.DocumentTitles[d.ID] = d.Title
+		}
+	}
+	// The toolbar's counts are not worth the page: a failed read hides the links.
+	if h.Resources != nil || h.Comments != nil {
+		if resources, comments, err := h.resourcesOf(ctx, task.ID); err == nil {
+			view.Resources = resourcesLink(project.ID, task.ID, resources, comments)
 		}
 	}
 	view.Reviews = reviewsSeed(project.ID, task.ID, list, agents, []*domain.Ticket{task}, docs)

@@ -1,0 +1,68 @@
+/*
+ * Lightbox — an image resource at full size, over the page. A native
+ * <dialog> (showModal): Esc and the Close button leave, ← → step through the
+ * task's images, focus returns to the tile that opened it.
+ * <dialog class="lightbox"><figure><img><figcaption>…</figcaption></figure><footer>…</footer></dialog>
+ */
+@layer blocks {
+  .lightbox {
+    inline-size: 100vw;
+    block-size: 100dvh;
+    max-inline-size: none;
+    max-block-size: none;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--color-ink);
+    &::backdrop { background: var(--color-scrim-strong); }
+    &[open] {
+      display: grid;
+      grid-template-rows: minmax(0, 1fr) auto;
+      animation: lightbox-in var(--duration-settle) var(--ease-out-expo);
+      @media (prefers-reduced-motion: reduce) { animation: none; }
+    }
+    & > .stage {
+      position: relative;
+      display: grid;
+      place-items: center;
+      padding: var(--space-xl) var(--space-3xl) var(--space-m);
+      min-block-size: 0;
+      & > img {
+        max-inline-size: 100%;
+        max-block-size: calc(100dvh - 8rem);
+        object-fit: contain;
+        border-radius: var(--radius-sm);
+        background: var(--color-raised);
+        box-shadow: var(--shadow-float);
+      }
+      & > .step {
+        position: absolute;
+        inset-block-start: 50%;
+        translate: 0 -50%;
+        &[data-dir="prev"] { inset-inline-start: var(--space-s); }
+        &[data-dir="next"] { inset-inline-end: var(--space-s); }
+      }
+    }
+    & > footer {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: var(--space-xs) var(--space-m);
+      padding: var(--space-s) var(--space-l);
+      border-block-start: var(--border-width) solid var(--color-line-strong);
+      background: var(--color-raised);
+      & > .text { display: flex; flex-direction: column; min-inline-size: 0; flex: 1 1 12rem; }
+      & .name { font-weight: var(--weight-medium); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      & .meta { color: var(--color-ink-faint); font-size: var(--text-sm); font-variant-numeric: tabular-nums; }
+      & > .cluster { flex-wrap: nowrap; }
+    }
+    @media (width < 48rem) {
+      & > .stage {
+        padding: var(--space-s);
+        & > .step { display: none; }
+      }
+    }
+  }
+  @keyframes lightbox-in { from { opacity: 0; scale: 0.98; } }
+}

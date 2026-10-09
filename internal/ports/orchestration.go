@@ -72,6 +72,10 @@ type ProjectChange struct {
 	// Artifact is a project design asset that changed (attached, detached,
 	// moved, re-published) or was deleted.
 	Artifact *ArtifactChange `json:"artifact,omitempty"`
+	// A resource or comment a person added to, changed on or deleted from a
+	// task.
+	TicketResource *TicketResourceChange `json:"ticket_resource,omitempty"`
+	TicketComment  *TicketCommentChange  `json:"ticket_comment,omitempty"`
 	// PullRequest is a workspace's pull request as it is after being
 	// opened, adopted, or found changed on its host.
 	PullRequest *domain.PullRequest `json:"pull_request,omitempty"`
@@ -95,6 +99,10 @@ func (c ProjectChange) ProjectID() string {
 		return c.TaskStatus.ProjectID
 	case c.Artifact != nil && c.Artifact.Artifact != nil:
 		return c.Artifact.Artifact.ProjectID
+	case c.TicketResource != nil && c.TicketResource.Resource != nil:
+		return c.TicketResource.Resource.ProjectID
+	case c.TicketComment != nil && c.TicketComment.Comment != nil:
+		return c.TicketComment.Comment.ProjectID
 	case c.PullRequest != nil:
 		return c.PullRequest.ProjectID
 	}

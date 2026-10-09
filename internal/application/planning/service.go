@@ -38,9 +38,26 @@ type Service struct {
 	// reviews) before it is returned or announced. Nil leaves them empty.
 	Decorator ports.TicketDecorator
 
+	// Resources, Comments and Blobs keep what a person adds to a task. Nil
+	// Resources or Blobs leaves resources unavailable; nil Comments, comments.
+	Resources ports.TicketResourceRepository
+	Comments  ports.TicketCommentRepository
+	Blobs     ports.ResourceBlobStore
+	// Feed announces resource and comment changes on the project feed. Nil
+	// announces nothing.
+	Feed ports.ProjectChangeSink
+	// ContentURL names where an upload's bytes are served; the route belongs
+	// to the HTTP adapter. Nil leaves content_url empty.
+	ContentURL func(resourceID string) string
+	// MaxResourceBytes caps an upload; zero means domain.MaxResourceBytes.
+	MaxResourceBytes int64
+
 	// ticketMu serialises write-then-announce on tickets, so the feed carries
 	// a ticket's changes in the order they were applied.
 	ticketMu sync.Mutex
+	// resourceMu does the same for resources and comments, and keeps their
+	// additions' events in the order they were made.
+	resourceMu sync.Mutex
 }
 
 // NewService returns a planning service. projects is used to validate that
@@ -195,6 +212,9 @@ func (s *Service) DeleteTicket(ctx context.Context, id string) error {
 	last, err := s.deleteTicket(id)
 	if err != nil {
 		return err
+	}
+	if last != nil {
+		s.dropTaskResources(last.ID)
 	}
 	if s.Events != nil && last != nil {
 		if err := s.Events.Publish(ctx, domain.TicketDeleted{TicketID: last.ID, ProjectID: last.ProjectID}); err != nil {

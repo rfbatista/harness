@@ -78,6 +78,19 @@ type Group struct {
 // IsLive: the session's process is alive (not done, failed or stopped).
 func IsLive(s *domain.Session) bool { return !s.Status.IsTerminal() }
 
+// ResourcesLink is the toolbar's way to the task's resources and comments:
+// the Resources N and Comments N links, kept current by the browser
+// (tasksResourceWatch) from the project feed. The ids are comma-separated.
+type ResourcesLink struct {
+	Href        string
+	ProjectID   string
+	TicketID    string
+	ResourceIDs string
+	CommentIDs  string
+	Resources   int
+	Comments    int
+}
+
 // DocumentsLink is the toolbar's way to the task's documents: how many there
 // are, kept current by the browser (tasksDocumentWatch) as agents write more.
 type DocumentsLink struct {
@@ -161,6 +174,8 @@ type PageView struct {
 	Seed            Seed
 	// Documents links the task's documents page; nil hides it.
 	Documents *DocumentsLink
+	// Resources links the task's resources and comments page; nil hides both links.
+	Resources *ResourcesLink
 	// Reviews seeds the review band (reviewsInbox); nil hides it.
 	Reviews *components.ReviewsSeed
 	// PendingReviews is how many requests wait on the person, for the band's

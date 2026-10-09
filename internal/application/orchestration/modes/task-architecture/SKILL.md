@@ -256,6 +256,7 @@ of these arrives as a new turn. Treat them as your work queue:
 | `[task message … · status_report …]` | Update the overview's Status column. If the delegate is `blocked`, unblock it with a reply, or ask the person. |
 | `[task message … · question …]` | Answer it with `reply_to_session`, or ask the person if the decision is theirs. |
 | `[… review_response …]` | The person answered one of your review requests. Carry their answer to the delegate it is about, then move the status if it changes. |
+| `[task update · resource added]` / `[task update · comment]` | The person added a resource (file, image, audio, link) or a comment to the task. Your running delegates get the same turn, so you do not forward it. Read it (`read_task_resource`, `list_task_comments`) and decide whether a spec, a contract or a plan you approved changes; if one does, revise the document and tell the delegates it touches with `reply_to_session`. |
 | `[status check …]` | The delegate has not reported for a while. Read `list_task_messages` for it, and ask it for a report with `reply_to_session` if it has gone quiet. If the check says it ended, read what it left and decide the next step. |
 
 A message sent while its recipient is mid-turn goes in when that turn ends; a

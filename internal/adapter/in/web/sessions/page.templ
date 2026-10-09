@@ -67,6 +67,23 @@ templ Page(v PageView) {
 						>
 							Design assets <span class="[ badge ]" x-text="count">{ strconv.Itoa(len(v.Seed.Artifacts)) }</span>
 						</a>
+						if v.Resources != nil {
+							<span
+								style="display: contents"
+								x-data="tasksResourceWatch"
+								data-project-id={ v.Resources.ProjectID }
+								data-ticket-id={ v.Resources.TicketID }
+								data-resource-ids={ v.Resources.ResourceIDs }
+								data-comment-ids={ v.Resources.CommentIDs }
+							>
+								<a class="[ button ]" data-variant="ghost" data-size="sm" href={ templ.SafeURL(v.Resources.Href) } data-task-resources>
+									Resources <span class="[ badge ]" x-text="resourceCount">{ strconv.Itoa(v.Resources.Resources) }</span>
+								</a>
+								<a class="[ button ]" data-variant="ghost" data-size="sm" href={ templ.SafeURL(v.Resources.Href + "#comments") } data-task-comments>
+									Comments <span class="[ badge ]" x-text="commentCount">{ strconv.Itoa(v.Resources.Comments) }</span>
+								</a>
+							</span>
+						}
 						<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-on:click="startEditTask">Edit</button>
 						<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-bind:aria-busy="checkingTaskDelete" x-on:click="askDeleteTask">Delete task</button>
 						if v.NewSession.CanStart() {

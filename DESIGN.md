@@ -19,6 +19,7 @@ colors:
   danger: "oklch(0.52 0.18 27)"
   danger-ink: "oklch(0.99 0.01 27)"
   success: "oklch(0.5 0.11 150)"
+  scrim-strong: "oklch(0.1 0.005 190 / 0.82)"
 typography:
   headline:
     fontFamily: "Atkinson Hyperlegible Next, ui-sans-serif, system-ui, sans-serif"
@@ -171,6 +172,7 @@ A cool, nearly colorless console with a trace of the signal hue (190) in every n
 - **Well** (`sunken`): transcripts and code: where an agent's output is read.
 - **Ink** (`ink`, 16.5:1), **Muted Ink** (`ink-muted`, 7:1), **Faint Ink** (`ink-faint`, ≥ 4.7:1): primary text, secondary text, and meta/placeholder text. All three clear AA on every surface in both themes.
 - **Hairline** (`line`), **Strong Hairline** (`line-strong`), **Control Edge** (`line-control`, ≥ 3:1): dividers, emphasized dividers, input and secondary-button boundaries.
+- **Dim Scrim** (`scrim`) and **Dark Scrim** (`scrim-strong`): what sits behind a modal surface. `scrim` dims the page behind a sheet or dialog; `scrim-strong` (near-black at 82%, 86% in dark mode) sits behind an image in the Lightbox, where the page must drop away.
 
 ### Named Rules
 **The Done Goes Quiet Rule.** A finished session is gray, not green. Success is the expected outcome; it earns no color on a resting list. Only running (signal), waiting (amber) and failed (red) are colored.
@@ -288,6 +290,26 @@ A session's live PTY, drawn by xterm.js in the `sunken` well with the mono famil
 
 ### Artifact card and preview (Design tab)
 The Design tab lists what a session published (`.artifact-card` rows in a `.list`: title, a neutral kind badge, the revision's note clamped to two lines, `rev N` and the time) beside `.preview`, which renders the selected one in the `sunken` well: a page or a dev server in an `<iframe sandbox="allow-scripts">` that fills the tab and scrolls inside, an image or video fitted and centred, a file as a download link with its name and size. Under it a 32px `panel` bar: the stream status word, the keyboard way out of the frame (Tab), and an "Open in a new tab" link. A card that arrives over the stream takes the one-shot arrival wash. Video never autoplays. The tab's label carries a count badge while publishes arrive behind another tab.
+
+### Resources and comments (task)
+What a person adds to a task for context: **resources** (files, images, audio, links) and plain-text **comments**. Never call them "attachments"; that word belongs to project design assets attached to a task. They live on a task sub-page, *Resources and comments*, reached from two ghost links in the task toolbar (*Resources N*, *Comments N*, beside Documents and Design assets). From 64rem the Resources column (21–27rem) sits beside the Comments thread, each scrolling under a 44px `panel` section head, with the composer pinned at the foot of the thread. Below 64rem it is one column: resources, then comments, then the composer. The page toolbar keeps `flex-shrink: 0`. The blocks below are specified in the project asset *Blocks — resource row, drop target, comment, composer, lightbox* and in the task document *Design: task resources and comments*.
+- **Resource row** (`.resource` in a `.resources-list`): a 40px `sunken` tile, the title (it opens the resource) over a faint meta line (*PNG image · 403 KB · 3 h ago*), then a ghost Download icon button and a ⋯ Menu button named for the resource. By kind:
+  - **image:** the tile is the image itself and opens the Lightbox. `image/svg+xml` has no preview and downloads like a file.
+  - **audio:** a native `<audio controls>` spans the row under the title.
+  - **PDF and text/plain:** open in a new tab.
+  - **other files:** download; the tile shows the extension in mono.
+  - **link:** opens in a new tab (`noopener noreferrer`); the address shows in mono.
+- **Row states:**
+  - `data-state="uploading"`: a 4px determinate `<progress>` and Cancel.
+  - `data-state="failed"`: danger wash, warning tile, message and `.code` line. A file over 25 MiB is refused before sending.
+  - `data-editing`: rename in place.
+  - `data-confirming`: delete asks in the row, *Delete* and *Keep it*.
+  - `data-fresh`: the one-shot arrival wash.
+- **Drop target** (`.drop-target`, `.drop-hint`): files dragged over the page arm it with a dashed `line-control` outline (`data-drop-armed`). Over it, `data-drop-over` shows a 2px dashed signal outline and an overlay naming what a drop does. The quiet hint row says what to do, worded for coarse pointers on touch screens. Drag and paste are shortcuts only; the Add files button is the full path.
+- **Comment** (`.comment` in an `<ol class="thread">`): oldest first, no bubbles and no avatars. A header reads *You · 3 h ago · edited*, with ghost Edit and Delete buttons. The body is escaped plain text, `pre-wrap`, capped at 68ch. Edit and delete happen in place.
+- **Composer** (`.composer`): a textarea that grows with its content, a hint saying running sessions get each new comment as a message and edits are not sent, a counter from 9,000 of the 10,000 characters (amber, then red), and a primary *Comment ⌘↵*.
+- **Lightbox** (`dialog.lightbox`): the one modal on the page. It shows the image fitted over a near-black scrim (`scrim-strong`), with ← → between the task's images, and a `raised` footer with the name, *n of N*, Open in a new tab, Download and Close. Focus returns to the control that opened it.
+- **Copy:** adding says *Sessions running on this task are told about it.* Edits, renames and deletes never claim to tell anyone.
 
 ### Transcript (signature)
 The `sunken` well where a session's output is read: mono 13px, a grid of `time | mark | text`. Line kinds via `data-kind`: `user` (signal mark ›), `agent` (·), `tool` (muted, ⌁), `error` (red, ×), `prompt` (amber wash, ?) for a permission request awaiting the developer.

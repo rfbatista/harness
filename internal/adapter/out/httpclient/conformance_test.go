@@ -13,6 +13,7 @@ import (
 	"gorm.io/gorm"
 
 	"operators-mcp/internal/adapter/in/httpapi"
+	"operators-mcp/internal/adapter/out/blobstore"
 	"operators-mcp/internal/adapter/out/httpclient"
 	"operators-mcp/internal/adapter/out/persistence/sqlite"
 	"operators-mcp/internal/application/agents"
@@ -121,5 +122,39 @@ func TestArtifactAttachmentsConformance(t *testing.T) {
 	portstest.ArtifactAttachmentsConformance(t, func(t *testing.T) (ports.ArtifactAttachments, portstest.AttachmentFixture) {
 		svc, f := artifactstest.New(t)
 		return httpclient.NewArtifacts(serve(t, httpapi.Services{Artifacts: svc})), f
+	})
+}
+
+// resourcesServer serves a planning service with resources and comments
+// over the real router, with a task to put them on.
+func resourcesServer(t *testing.T) (*httpclient.Client, string) {
+	t.Helper()
+	db := openDB(t)
+	projectRepo := sqlite.NewProjectRepository(db)
+	p, err := projectRepo.Create("proj", t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	svc := planning.NewService(sqlite.NewTicketRepository(db), sqlite.NewDocumentRepository(db), projectRepo)
+	svc.Resources, svc.Comments = sqlite.NewTicketResourceRepository(db), sqlite.NewTicketCommentRepository(db)
+	svc.Blobs, svc.ContentURL = blobstore.New(t.TempDir()), httpapi.TicketResourceContentPath
+	tk, err := svc.CreateTicket(context.Background(), p.ID, "Task", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return serve(t, httpapi.Services{Planning: svc, TaskResources: svc, TaskComments: svc}), tk.ID
+}
+
+func TestTaskResourcesConformance(t *testing.T) {
+	portstest.TaskResourcesConformance(t, func(t *testing.T) (ports.TaskResources, string) {
+		c, tid := resourcesServer(t)
+		return httpclient.NewTaskResources(c), tid
+	})
+}
+
+func TestTaskCommentsConformance(t *testing.T) {
+	portstest.TaskCommentsConformance(t, func(t *testing.T) (ports.TaskComments, string) {
+		c, tid := resourcesServer(t)
+		return httpclient.NewTaskComments(c), tid
 	})
 }

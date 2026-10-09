@@ -1,0 +1,169 @@
+/*
+ * Resource — one thing a person added to a task: a 40px preview tile, the
+ * title (opens it) over a meta line, then the row's actions.
+ * <li class="resource" data-kind="image|audio|file|link">
+ *   <span class="tile"><img|svg|span.ext></span>
+ *   <div class="text"><a class="title">…</a><span class="meta">…</span></div>
+ *   <div class="actions">…</div>
+ *   <audio controls>  (audio only: under the text, full width)
+ *   <progress>        (uploading only)
+ * Exceptions: data-state="uploading|failed", data-editing (the title is an
+ * input), data-confirming (the delete question replaces the actions),
+ * data-fresh (arrived over the feed), aria-busy (a write is in flight).
+ */
+@layer blocks {
+  .resources-list { list-style: none; margin: 0; padding: 0; }
+
+  .resource {
+    max-inline-size: none;
+    display: grid;
+    grid-template-columns: 2.5rem minmax(0, 1fr) auto;
+    grid-template-areas:
+      "tile text actions"
+      ".    more more";
+    align-items: center;
+    column-gap: var(--space-m);
+    padding: var(--space-s) var(--space-l);
+    border-block-end: var(--border-width) solid var(--color-line);
+    transition: background-color var(--duration-instant) var(--ease-out);
+    &:hover { background: var(--color-hover); }
+
+    & > .tile {
+      grid-area: tile;
+      display: grid;
+      place-items: center;
+      inline-size: 2.5rem;
+      block-size: 2.5rem;
+      overflow: hidden;
+      padding: 0;
+      border: var(--border-width) solid var(--color-line);
+      border-radius: var(--radius-sm);
+      background: var(--color-sunken);
+      color: var(--color-ink-muted);
+      & > img { inline-size: 100%; block-size: 100%; object-fit: cover; }
+      & > svg { inline-size: 1.125rem; block-size: 1.125rem; }
+      & > .ext {
+        font-family: var(--font-mono);
+        font-size: 0.625rem;
+        font-weight: var(--weight-medium);
+        letter-spacing: 0;
+        color: var(--color-ink-muted);
+      }
+    }
+    /* An image tile is a button that opens the lightbox. */
+    & > button.tile { cursor: zoom-in; }
+    & > button.tile:hover { border-color: var(--color-line-strong); }
+
+    & > .text {
+      grid-area: text;
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-3xs);
+      min-inline-size: 0;
+    }
+    & .title {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      padding: 0;
+      border: 0;
+      background: none;
+      color: var(--color-ink);
+      font: inherit;
+      font-weight: var(--weight-medium);
+      text-align: start;
+      text-decoration: none;
+      cursor: pointer;
+      &:hover { text-decoration: underline; text-underline-offset: 2px; }
+      & > .external { display: inline-block; inline-size: 0.7rem; block-size: 0.7rem; margin-inline-start: var(--space-2xs); vertical-align: 0; color: var(--color-ink-faint); }
+    }
+    & .meta {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      color: var(--color-ink-faint);
+      font-size: var(--text-sm);
+      font-variant-numeric: tabular-nums;
+      & > .host { font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-ink-muted); }
+    }
+
+    & > .actions {
+      grid-area: actions;
+      display: flex;
+      align-items: center;
+      gap: var(--space-3xs);
+    }
+
+    /* Audio plays in place, under the title. */
+    & > audio {
+      grid-area: more;
+      inline-size: 100%;
+      block-size: var(--size-control-md);
+      margin-block-start: var(--space-xs);
+      accent-color: var(--color-signal);
+    }
+
+    /* Uploading: a determinate bar under the text; the tile shows the type. */
+    & > progress {
+      grid-area: more;
+      inline-size: 100%;
+      block-size: 0.25rem;
+      margin-block-start: var(--space-xs);
+      appearance: none;
+      border: 0;
+      border-radius: var(--radius-round);
+      background: var(--color-sunken);
+      overflow: hidden;
+      &::-webkit-progress-bar { background: var(--color-sunken); }
+      &::-webkit-progress-value { background: var(--color-signal); transition: inline-size var(--duration-settle) var(--ease-out); }
+      &::-moz-progress-bar { background: var(--color-signal); }
+    }
+    &[data-state="uploading"] .title { color: var(--color-ink-muted); cursor: default; text-decoration: none; }
+
+    &[data-state="failed"] {
+      background: var(--color-danger-wash);
+      & > .tile { border-color: color-mix(in oklch, var(--color-danger) 35%, transparent); color: var(--color-danger); }
+      & .title { cursor: default; text-decoration: none; }
+      & .meta { color: var(--color-danger); white-space: normal; }
+      & .code { font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-ink-faint); }
+    }
+
+    /* Rename in place: the title becomes a field; Save / Cancel replace the actions. */
+    &[data-editing] {
+      background: var(--color-canvas);
+      & > .text > input { block-size: var(--size-control-sm); font-weight: var(--weight-medium); }
+    }
+
+    /* Delete asks in the row itself. */
+    &[data-confirming] {
+      background: var(--color-danger-wash);
+      grid-template-areas:
+        "tile text text"
+        ".    more more";
+      & > .confirm {
+        grid-area: more;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--space-s);
+        margin-block-start: var(--space-xs);
+        font-size: var(--text-sm);
+      }
+    }
+
+    &[data-fresh] {
+      animation: resource-arrived 8s var(--ease-out) both;
+      @media (prefers-reduced-motion: reduce) { animation: none; box-shadow: inset 2px 0 0 var(--color-signal); }
+    }
+
+    @media (width < 48rem) {
+      padding-inline: var(--space-l) var(--space-s);
+      & > .actions .button[data-icon] { inline-size: var(--size-touch); block-size: var(--size-touch); }
+    }
+  }
+  @keyframes resource-arrived {
+    from { background-color: var(--color-signal-wash); box-shadow: inset 2px 0 0 var(--color-signal); }
+    to { box-shadow: inset 2px 0 0 transparent; }
+  }
+}

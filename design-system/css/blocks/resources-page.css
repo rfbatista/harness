@@ -1,0 +1,41 @@
+/*
+ * Resources page — a task's resources beside its comment thread. From 64rem
+ * two columns, each scrolling on its own under its section head, with the
+ * composer pinned at the foot of the thread; below, one column (resources,
+ * then comments, then the composer) scrolling as a whole in the frame's
+ * [data-scroll] region.
+ * <div class="resources-page" data-scroll>
+ *   <section class="resources-col drop-target">…<div class="scroll">…</div></section>
+ *   <section class="comments-col">…<div class="scroll">…</div><form class="composer">…</form></section>
+ * </div>
+ */
+
+@layer blocks {
+  .resources-page {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    align-content: start;
+
+    & > section { min-inline-size: 0; }
+    & > .resources-col { border-block-end: var(--border-width) solid var(--color-line); }
+    & .section-head .badge { font-variant-numeric: tabular-nums; }
+
+    & .empty-note {
+      max-inline-size: 40ch;
+      padding: var(--space-l);
+      color: var(--color-ink-muted);
+      font-size: var(--text-sm);
+    }
+
+    @media (width >= 64rem) {
+      grid-template-columns: minmax(21rem, 27rem) minmax(0, 1fr);
+      grid-template-rows: minmax(0, 1fr);
+      overflow: hidden;
+
+      & > section { display: flex; flex-direction: column; min-block-size: 0; }
+      & > section > .scroll { flex: 1 1 auto; min-block-size: 0; overflow: auto; overscroll-behavior: contain; }
+      & > .resources-col { border-block-end: 0; border-inline-end: var(--border-width) solid var(--color-line); }
+      & > .comments-col > .composer { border-block-start: var(--border-width) solid var(--color-line); background: var(--color-canvas); }
+    }
+  }
+}

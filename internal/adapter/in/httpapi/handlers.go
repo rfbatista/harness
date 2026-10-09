@@ -42,6 +42,10 @@ type Services struct {
 	// TaskChannel is the person's side of the architect channel: task
 	// messages, review requests, status checks. Nil answers 503.
 	TaskChannel ports.TaskChannelUI
+	// TaskResources and TaskComments are what a person adds to a task:
+	// files, images, audio, links and comments. Nil answers 503.
+	TaskResources ports.TaskResources
+	TaskComments  ports.TaskComments
 	// PullRequests opens workspaces' branches as pull requests; nil answers
 	// 503.
 	PullRequests ports.PullRequests
@@ -71,6 +75,8 @@ type Handler struct {
 	workspacesSvc ports.WorkspaceManager
 	artifactsSvc  ports.Artifacts
 	channel       ports.TaskChannelUI
+	resources     ports.TaskResources
+	comments      ports.TaskComments
 	pullRequests  ports.PullRequests
 }
 
@@ -94,6 +100,8 @@ func NewHandler(s Services) *Handler {
 		workspacesSvc: s.Workspaces,
 		artifactsSvc:  s.Artifacts,
 		channel:       s.TaskChannel,
+		resources:     s.TaskResources,
+		comments:      s.TaskComments,
 		pullRequests:  s.PullRequests,
 	}
 }

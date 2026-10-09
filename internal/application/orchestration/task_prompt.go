@@ -30,7 +30,10 @@ const taskServerName = "task"
 // role is what the session is on its task: a delegate is told to report to the
 // architect instead of moving the status, the architect that it owns the
 // status and how its delegates reach it; a peer gets the brief unchanged.
-func applyTaskContext(cfg *llmkit.SessionConfig, tk *domain.Ticket, taskServerURL string, role domain.SessionRole) {
+//
+// counts are the task's resources and comments, for the brief; the zero value
+// leaves the counts out.
+func applyTaskContext(cfg *llmkit.SessionConfig, tk *domain.Ticket, taskServerURL string, role domain.SessionRole, counts taskCounts) {
 	if tk == nil {
 		return
 	}
@@ -44,12 +47,13 @@ func applyTaskContext(cfg *llmkit.SessionConfig, tk *domain.Ticket, taskServerUR
 	for _, name := range tooling.SessionTaskToolNames {
 		cfg.AllowedTools = append(cfg.AllowedTools, llmkit.MCPToolRef(taskServerName, name))
 	}
-	cfg.AppendSystem = appendSection(cfg.AppendSystem, taskBrief(tk, role))
+	cfg.AppendSystem = appendSection(cfg.AppendSystem, taskBrief(tk, role, counts))
 }
 
-// taskBrief is the block describing the task and the tools that reach it.
-// Only the paragraph about the task's status depends on role.
-func taskBrief(tk *domain.Ticket, role domain.SessionRole) string {
+// taskBrief is the block describing the task and the tools that reach it,
+// then what the person added to the task. Only the paragraph about the
+// task's status depends on role.
+func taskBrief(tk *domain.Ticket, role domain.SessionRole, counts taskCounts) string {
 	var b strings.Builder
 	b.WriteString("## Your task\n\n")
 	b.WriteString("You are working on task " + tk.ID + ": " + tk.Title + "\n")
@@ -140,7 +144,7 @@ it shows in this task's Design tab beside what the task produced:
 - mcp__task__detach_artifact_from_task — detach one from this task; it stays in the project
 
 These tools always act on this task; they take no project or task id.`)
-	return b.String()
+	return b.String() + "\n\n" + resourcesSection(counts)
 }
 
 // appendSection joins two prompt fragments with a blank line, tolerating an

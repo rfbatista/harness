@@ -75,16 +75,21 @@ func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRun
 		Workspaces:   ws,
 		Artifacts:    art,
 		TaskChannel:  channel,
-		PullRequests: prs,
+		// What a person adds to a task: files, images, audio, links, comments.
+		TaskResources: plan,
+		TaskComments:  plan,
+		PullRequests:  prs,
 	}), httpapi.WithToken(cfg.APIToken))
 	mux.Handle("/api/", apiRouter)
 	mux.Handle(mcpapprove.PathPrefix, mcpapprove.Handler(broker))
 	mux.Handle(mcpsession.PathPrefix, mcpsession.TaskHandler(tooling.SessionTaskTools(plan, sessions, cat.Agents, cat.Architecture,
 		tooling.PeerStarter{Sessions: orch, Repositories: cat.Projects},
-		tooling.ArtifactTooling{Publisher: art, Attachments: art, ViewURL: httpapi.ArtifactViewPath}, channel)))
+		tooling.ArtifactTooling{Publisher: art, Attachments: art, ViewURL: httpapi.ArtifactViewPath}, channel,
+		tooling.ResourceTooling{Files: plan, Comments: plan})))
 	// The web client owns / and its pages; anything else reaches the legacy
 	// designer SPA until it is retired.
-	mux.Handle("/", web.NewHandler(web.Deps{Projects: cat.Projects, Tasks: plan, Sessions: orch, Agents: cat.Agents, Repositories: cat.Projects, EnvFiles: cat.Projects, Documents: plan, History: ws, Artifacts: art, ProjectSummaries: cat.Projects, PullRequests: prs}, assets, uiHandler))
+	mux.Handle("/", web.NewHandler(web.Deps{Projects: cat.Projects, Tasks: plan, Sessions: orch, Agents: cat.Agents, Repositories: cat.Projects, EnvFiles: cat.Projects, Documents: plan, History: ws, Artifacts: art, ProjectSummaries: cat.Projects, PullRequests: prs,
+		Resources: plan, Comments: plan}, assets, uiHandler))
 
 	srv := &http.Server{Addr: cfg.HTTPAddr, Handler: httpapi.CORSMiddleware(mux)}
 	lc.Append(fx.Hook{
