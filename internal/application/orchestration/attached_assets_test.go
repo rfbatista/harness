@@ -35,7 +35,7 @@ func (fakeArtifactReader) OpenArtifactFile(context.Context, string, string) (*po
 // The brief names the attach tools and says list_task_artifacts includes
 // attached assets.
 func TestTaskBrief_NamesTheAttachTools(t *testing.T) {
-	got := taskBrief(&domain.Ticket{ID: "tk1", Title: "Ship the thing"}, domain.RolePeer)
+	got := taskBrief(&domain.Ticket{ID: "tk1", Title: "Ship the thing"}, domain.RolePeer, taskCounts{})
 	for _, want := range []string{
 		"\n- mcp__task__attach_artifact_to_task — ",
 		"\n- mcp__task__detach_artifact_from_task — ",

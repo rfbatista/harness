@@ -88,3 +88,13 @@ it shows in this task's Design tab beside what the task produced:
 - mcp__task__detach_artifact_from_task — detach one from this task; it stays in the project
 
 These tools always act on this task; they take no project or task id.
+
+## Resources and comments from the person
+
+The person can add files, images, audio, links and comments to this task.
+When they add one while you run, a turn starting with [task update · …]
+tells you; read it if it bears on your work.
+
+- mcp__task__list_task_resources — what the person added, oldest first
+- mcp__task__read_task_resource — one resource: text inline, or a local path to open
+- mcp__task__list_task_comments — the person's comments, oldest first (since narrows)

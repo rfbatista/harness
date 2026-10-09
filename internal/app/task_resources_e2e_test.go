@@ -105,3 +105,33 @@ func TestTaskResources_WiredGraph(t *testing.T) {
 	}
 }
 
+// On the wired graph a comment the person adds reaches the task's running
+// session as a [task update · comment] turn, through the courier: a session
+// run by a client takes it from its Stop hook.
+func TestTaskUpdates_WiredGraph(t *testing.T) {
+	ctx := context.Background()
+	plan, orch, sessions, tk := wiredResources(t)
+	if _, err := sessions.Create(&domain.Session{ID: "s-live", ProjectID: tk.ProjectID, TicketID: tk.ID, Task: "build",
+		Status: domain.SessionRunning, Interactive: true, RunsOn: domain.RunnerTUI}); err != nil {
+		t.Fatal(err)
+	}
+	c, err := plan.AddTicketComment(ctx, tk.ID, "use the notes I added")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "[task update · comment] The person commented on this task (comment_id " + c.ID + "):\nuse the notes I added"
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		next, err := orch.TurnEnded(ctx, "s-live", false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if next == want {
+			return
+		}
+		if next != "" || time.Now().After(deadline) {
+			t.Fatalf("Stop hook = %q, want %q", next, want)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}

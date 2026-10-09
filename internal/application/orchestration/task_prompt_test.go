@@ -16,7 +16,7 @@ func TestApplyTaskContext(t *testing.T) {
 	cfg := llmkit.SessionConfig{AppendSystem: "be terse", AllowedTools: []string{"Read"}}
 	applyTaskContext(&cfg, &domain.Ticket{
 		ID: "tk1", Title: "Ship the thing", Description: "with care", Status: domain.TicketStatusInProgress,
-	}, "http://127.0.0.1:8080/mcp/task/s1", domain.RolePeer)
+	}, "http://127.0.0.1:8080/mcp/task/s1", domain.RolePeer, taskCounts{})
 
 	if len(cfg.MCPServers) != 1 {
 		t.Fatalf("want exactly one MCP server, got %+v", cfg.MCPServers)
@@ -49,7 +49,7 @@ func TestApplyTaskContext(t *testing.T) {
 
 func TestApplyTaskContext_NoTask(t *testing.T) {
 	cfg := llmkit.SessionConfig{AppendSystem: "be terse"}
-	applyTaskContext(&cfg, nil, "http://127.0.0.1:8080/mcp/task/s1", domain.RolePeer)
+	applyTaskContext(&cfg, nil, "http://127.0.0.1:8080/mcp/task/s1", domain.RolePeer, taskCounts{})
 	if len(cfg.MCPServers) != 0 || cfg.AppendSystem != "be terse" || len(cfg.AllowedTools) != 0 {
 		t.Fatalf("a session with no task must be untouched: %+v", cfg)
 	}
@@ -60,7 +60,7 @@ func TestApplyTaskContext_NoTask(t *testing.T) {
 // MCP server with an empty URL.
 func TestApplyTaskContext_NoTaskServerURL(t *testing.T) {
 	cfg := llmkit.SessionConfig{}
-	applyTaskContext(&cfg, &domain.Ticket{ID: "tk1", Title: "Ship the thing"}, "", domain.RolePeer)
+	applyTaskContext(&cfg, &domain.Ticket{ID: "tk1", Title: "Ship the thing"}, "", domain.RolePeer, taskCounts{})
 	if len(cfg.MCPServers) != 0 {
 		t.Fatalf("no url must mean no server entry: %+v", cfg.MCPServers)
 	}
@@ -75,7 +75,7 @@ func TestApplyTaskContext_NoTaskServerURL(t *testing.T) {
 // With no agent prompt the brief stands alone, without a leading blank line.
 func TestApplyTaskContext_NoAgentPrompt(t *testing.T) {
 	cfg := llmkit.SessionConfig{}
-	applyTaskContext(&cfg, &domain.Ticket{ID: "tk1", Title: "Ship the thing"}, "http://127.0.0.1:8080/mcp/task/s1", domain.RolePeer)
+	applyTaskContext(&cfg, &domain.Ticket{ID: "tk1", Title: "Ship the thing"}, "http://127.0.0.1:8080/mcp/task/s1", domain.RolePeer, taskCounts{})
 	if !strings.HasPrefix(cfg.AppendSystem, "## Your task") {
 		t.Fatalf("unexpected prompt start:\n%s", cfg.AppendSystem)
 	}
@@ -85,7 +85,7 @@ func TestApplyTaskContext_NoAgentPrompt(t *testing.T) {
 // so the board does not wait for a person to drag the card.
 func TestApplyTaskContext_BriefNamesUpdateTaskStatus(t *testing.T) {
 	cfg := llmkit.SessionConfig{}
-	applyTaskContext(&cfg, &domain.Ticket{ID: "tk1", Title: "Ship the thing"}, "", domain.RolePeer)
+	applyTaskContext(&cfg, &domain.Ticket{ID: "tk1", Title: "Ship the thing"}, "", domain.RolePeer, taskCounts{})
 	for _, want := range []string{"mcp__task__update_task_status", "in_progress", "review", "done"} {
 		if !strings.Contains(cfg.AppendSystem, want) {
 			t.Fatalf("brief missing %q:\n%s", want, cfg.AppendSystem)
@@ -101,7 +101,7 @@ func TestApplyTaskContext_BriefNamesUpdateTaskStatus(t *testing.T) {
 // before its first create_task_document, so it does not learn it from a refusal.
 func TestApplyTaskContext_BriefSaysDocumentsAreHTML(t *testing.T) {
 	cfg := llmkit.SessionConfig{}
-	applyTaskContext(&cfg, &domain.Ticket{ID: "tk1", Title: "Ship the thing"}, "", domain.RolePeer)
+	applyTaskContext(&cfg, &domain.Ticket{ID: "tk1", Title: "Ship the thing"}, "", domain.RolePeer, taskCounts{})
 	for _, want := range []string{
 		"complete HTML document",
 		"<!doctype html>",
@@ -126,7 +126,7 @@ func TestApplyTaskContext_BriefSaysDocumentsAreHTML(t *testing.T) {
 // and which tools move and reach them.
 func TestApplyTaskContext_BriefNamesProjectDocuments(t *testing.T) {
 	cfg := llmkit.SessionConfig{}
-	applyTaskContext(&cfg, &domain.Ticket{ID: "tk1", Title: "Ship the thing"}, "", domain.RolePeer)
+	applyTaskContext(&cfg, &domain.Ticket{ID: "tk1", Title: "Ship the thing"}, "", domain.RolePeer, taskCounts{})
 	for _, want := range []string{
 		"\n- mcp__task__list_project_documents — ",
 		"\n- mcp__task__read_project_document — ",
@@ -152,7 +152,7 @@ var channelTools = []string{
 
 func TestApplyTaskContext_BriefNamesEveryTaskTool(t *testing.T) {
 	cfg := llmkit.SessionConfig{}
-	applyTaskContext(&cfg, &domain.Ticket{ID: "tk1", Title: "Ship the thing"}, "", domain.RolePeer)
+	applyTaskContext(&cfg, &domain.Ticket{ID: "tk1", Title: "Ship the thing"}, "", domain.RolePeer, taskCounts{})
 	for _, name := range tooling.SessionTaskToolNames {
 		if slices.Contains(channelTools, name) {
 			continue
@@ -167,7 +167,7 @@ func TestApplyTaskContext_BriefNamesEveryTaskTool(t *testing.T) {
 // task, to look for them before making new ones, and which tools move them.
 func TestApplyTaskContext_BriefNamesProjectArtifacts(t *testing.T) {
 	cfg := llmkit.SessionConfig{}
-	applyTaskContext(&cfg, &domain.Ticket{ID: "tk1", Title: "Ship the thing"}, "", domain.RolePeer)
+	applyTaskContext(&cfg, &domain.Ticket{ID: "tk1", Title: "Ship the thing"}, "", domain.RolePeer, taskCounts{})
 	for _, want := range []string{
 		"\n- mcp__task__list_project_artifacts — ",
 		"\n- mcp__task__move_artifact_to_project — ",
@@ -187,7 +187,7 @@ func TestTaskBrief_PeerIsUnchanged(t *testing.T) {
 		t.Fatal(err)
 	}
 	tk := &domain.Ticket{ID: "tk1", Title: "Ship the thing", Description: "with care", Status: domain.TicketStatusInProgress}
-	if got := taskBrief(tk, domain.RolePeer); got != string(want) {
+	if got := taskBrief(tk, domain.RolePeer, taskCounts{}); got != string(want) {
 		t.Fatalf("the peer brief changed:\n%s", got)
 	}
 }
@@ -195,7 +195,7 @@ func TestTaskBrief_PeerIsUnchanged(t *testing.T) {
 // A delegate reports to the architect instead of moving the status, and is
 // told how the architect's replies reach it.
 func TestTaskBrief_DelegateTalksToTheArchitect(t *testing.T) {
-	got := taskBrief(&domain.Ticket{ID: "tk1", Title: "Ship the thing"}, domain.RoleDelegate)
+	got := taskBrief(&domain.Ticket{ID: "tk1", Title: "Ship the thing"}, domain.RoleDelegate, taskCounts{})
 	for _, want := range []string{
 		"\n- mcp__task__message_architect — ", "\n- mcp__task__list_task_messages — ",
 		"review_request", "status_report", "blocked", "Do not call update_task_status",
@@ -213,7 +213,7 @@ func TestTaskBrief_DelegateTalksToTheArchitect(t *testing.T) {
 
 // The architect owns the status and works the turns its delegates send it.
 func TestTaskBrief_ArchitectOwnsTheStatus(t *testing.T) {
-	got := taskBrief(&domain.Ticket{ID: "tk1", Title: "Ship the thing"}, domain.RoleArchitect)
+	got := taskBrief(&domain.Ticket{ID: "tk1", Title: "Ship the thing"}, domain.RoleArchitect, taskCounts{})
 	for _, name := range channelTools {
 		if name == "message_architect" {
 			continue // the architect does not message itself

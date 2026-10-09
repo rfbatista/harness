@@ -89,6 +89,15 @@ type Service struct {
 	// Artifacts lists the project assets attached to a session's task, for
 	// its brief. Nil leaves them out.
 	Artifacts ports.ArtifactReader
+	// Resources and Comments count what the person added to a session's
+	// task, for its brief. Nil leaves the counts out.
+	Resources ports.TaskResourceReader
+	Comments  ports.TaskCommentReader
+
+	// updates feeds the task-update turns to the courier, one at a time;
+	// deliverUpdate replaces the courier in tests.
+	updates       updateQueue
+	deliverUpdate func(sessionID, key, text string) error
 
 	mu       sync.Mutex
 	seq      map[string]int64
@@ -411,7 +420,7 @@ func (s *Service) sessionConfig(id, dir, model string, allowedTools []string, pe
 	if s.TaskServerURL != nil {
 		taskURL = s.TaskServerURL(id)
 	}
-	applyTaskContext(&cfg, ticket, taskURL, role)
+	applyTaskContext(&cfg, ticket, taskURL, role, s.taskCounts(ticket))
 	if section := attachedAssetsSection(s.attachedAssets(ticket)); section != "" {
 		cfg.AppendSystem = appendSection(cfg.AppendSystem, section)
 	}

@@ -208,7 +208,7 @@ func bindProjectActivity(cat catalog.Catalog, plan *planning.Service, orch *orch
 // newPlanningService builds the planning service and points its ticket,
 // resource and comment announcements at the orchestration, which owns the
 // project feed the board and the rail follow. A person's additions to a task
-// go on the bus too, for the orchestration to tell the task's sessions. The
+// go on the bus too, and the orchestration tells the task's running sessions. The
 // bytes of uploaded resources live in a task-resources/ directory next to
 // the database; an in-memory database gets a temporary one.
 func newPlanningService(
@@ -228,6 +228,9 @@ func newPlanningService(
 	}
 	svc.Resources, svc.Comments = sqlite.NewTicketResourceRepository(db), sqlite.NewTicketCommentRepository(db)
 	svc.Blobs, svc.ContentURL = blobstore.New(dir), httpapi.TicketResourceContentPath
+	// A session's brief counts them, and its task's additions become turns.
+	orch.Resources, orch.Comments = svc, svc
+	orch.SubscribeTaskUpdates(cat.Bus)
 	return svc, nil
 }
 
