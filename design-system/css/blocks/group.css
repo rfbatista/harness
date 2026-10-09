@@ -44,8 +44,8 @@
         block-size: 0.75rem;
         color: var(--color-ink-faint);
       }
-      & > .name { grid-column: 2; text-align: start; }
-      & > .count { grid-column: 3; }
+      & .name { grid-column: 2; text-align: start; }
+      & .count { grid-column: 3; }
     }
 
     & > h3 > button {

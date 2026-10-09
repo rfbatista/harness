@@ -50,7 +50,7 @@ func TaskResourcesPage(v TaskResourcesView) templ.Component {
 				}()
 			}
 			ctx = templ.InitializeContext(ctx)
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<main class=\"[ frame ]\" x-data=\"tasksResources\" data-seed=\"task-resources-seed\" x-on:dragenter.window=\"windowDragEnter\" x-on:dragover.window=\"windowDragOver\" x-on:dragleave.window=\"windowDragLeave\" x-on:drop.window=\"windowDrop\" x-on:paste.window=\"pasted\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<main id=\"main\" class=\"[ frame ]\" x-data=\"tasksResources\" data-seed=\"task-resources-seed\" x-on:dragenter.window=\"windowDragEnter\" x-on:dragover.window=\"windowDragOver\" x-on:dragleave.window=\"windowDragLeave\" x-on:drop.window=\"windowDrop\" x-on:paste.window=\"pasted\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

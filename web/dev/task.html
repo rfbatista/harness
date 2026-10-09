@@ -41,21 +41,15 @@
         </form>
       </header>
 
-      <nav class="[ nav ]" aria-label="Tasks">
-        <div class="[ group ]">
-          <h2>in progress</h2>
-          <a href="#" aria-current="page">
-            <span class="[ label ]">Add SSE feed</span>
-            <span class="[ status ]" data-state="waiting" data-dot-only><span class="[ visually-hidden ]">waiting on you</span></span>
-            <span class="[ count ]">3</span>
-          </a>
-          <a href="#"><span class="[ label ]">Port tickets screen to httpclient</span></a>
-        </div>
-        <div class="[ group ]">
-          <h2>todo</h2>
-          <a href="#"><span class="[ label ]">Write docs/TUI.md live section</span></a>
-        </div>
-      </nav>
+      <div class="[ rail ]">
+        <nav class="[ nav ]" aria-label="Tasks">
+          <ul role="list">
+            <li><a href="#" aria-current="page"><span class="[ status ]" data-state="waiting" data-dot-only></span><span class="[ label ]">Add SSE feed</span><span class="[ meta ]" data-tone="attention">waiting</span></a></li>
+            <li><a href="#"><span class="[ label ]">Port tickets screen to httpclient</span></a></li>
+            <li><a href="#"><span class="[ label ]">Write docs/TUI.md live section</span></a></li>
+          </ul>
+        </nav>
+      </div>
 
       <main class="[ frame ]" x-data="sessionsPage" data-seed="sessions-seed">
         <script type="application/json" id="pull-requests-seed">

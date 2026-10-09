@@ -23,6 +23,9 @@
     display: flex;
     flex-direction: column;
 
+    /* The server copy and the live copy wrap their parts without a box. */
+    & .contents { display: contents; }
+
     & ul {
       display: flex;
       flex-direction: column;

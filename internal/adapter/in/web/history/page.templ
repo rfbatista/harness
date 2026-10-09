@@ -15,7 +15,7 @@ import (
 // the graph (#c-<hash>).
 templ Page(v PageView) {
 	@shell.AppShell(v.Frame) {
-		<main class="[ frame ]" { pullrequests.PanelAttrs(v.PullRequest)... }>
+		<main id="main" class="[ frame ]" { pullrequests.PanelAttrs(v.PullRequest)... }>
 			<header class="[ toolbar ]">
 				for _, c := range v.Crumbs {
 					<a class="[ crumb ]" href={ templ.SafeURL(c.Href) }>{ c.Label } /</a>

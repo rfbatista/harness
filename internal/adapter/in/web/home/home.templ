@@ -10,7 +10,7 @@ import (
 // NoProjects is the first-run page.
 templ NoProjects(f shell.Frame) {
 	@shell.AppShell(f) {
-		<main class="[ frame ]">
+		<main id="main" class="[ frame ]">
 			<header class="[ toolbar ]"><h1>Welcome</h1></header>
 			@components.Empty("No projects yet", "A project is a codebase the harness works on: its repositories, its tasks, and the sessions agents run on them.") {
 				<div class="[ actions ]">

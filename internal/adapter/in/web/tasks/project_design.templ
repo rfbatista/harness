@@ -16,7 +16,7 @@ import (
 // feed; what others change is read out by the polite live region.
 templ ProjectDesignPage(v ProjectDesignView) {
 	@shell.AppShell(v.Frame) {
-		<main class="[ frame ]" x-data="sessionsDesignLibrary" data-seed="design-library-seed">
+		<main id="main" class="[ frame ]" x-data="sessionsDesignLibrary" data-seed="design-library-seed">
 			@templ.JSONScript("design-library-seed", v.Seed)
 			<header class="[ toolbar ]">
 				<a class="[ crumb ]" href={ templ.SafeURL("/projects/" + v.ProjectID) }>{ v.ProjectName } /</a>

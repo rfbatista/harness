@@ -55,7 +55,7 @@ func ProjectDesignPage(v ProjectDesignView) templ.Component {
 				}()
 			}
 			ctx = templ.InitializeContext(ctx)
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<main class=\"[ frame ]\" x-data=\"sessionsDesignLibrary\" data-seed=\"design-library-seed\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<main id=\"main\" class=\"[ frame ]\" x-data=\"sessionsDesignLibrary\" data-seed=\"design-library-seed\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

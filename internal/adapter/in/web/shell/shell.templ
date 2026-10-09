@@ -32,8 +32,8 @@ templ Document(f Frame) {
 templ AppShell(f Frame) {
 	@Document(f) {
 		<div class="[ app-shell ]">
-			@topBar(f.Top)
-			@taskRail(f.Rail)
+			@topBar(f)
+			@taskRail(f)
 			{ children... }
 			@streamBar(f.Live, f.Hints)
 		</div>
@@ -44,110 +44,299 @@ templ AppShell(f Frame) {
 // projects list, where New project lives, or New project itself where the
 // list is not served. The picker is
 // a GET form, so it works without JavaScript; projectPicker submits it as
-// soon as the choice changes.
-templ topBar(t TopBar) {
+// soon as the choice changes. Below 48rem it starts with the Tasks button
+// that opens the rail as a drawer (a link to the board without JavaScript).
+templ topBar(f Frame) {
 	<header class="[ topbar ]">
+		if f.Rail.Seed != nil {
+			@tasksToggle(f.Rail)
+		}
 		<a class="[ brand ]" href="/">harness</a>
-		if len(t.Projects) > 0 {
+		if len(f.Top.Projects) > 0 {
 			<form class="[ cluster ] [ gutter-xs ]" method="get" action="/switch-project" x-data="projectPicker">
 				<label class="[ visually-hidden ]" for="project-picker">Project</label>
 				<select id="project-picker" name="project" data-size="sm" data-fit x-on:change="go">
-					if t.Current == "" {
+					if f.Top.Current == "" {
 						<option value="" selected disabled>Choose a project…</option>
 					}
-					for _, p := range t.Projects {
-						<option value={ p.ID } { selectedAttrs(p.ID == t.Current)... }>{ p.Name }</option>
+					for _, p := range f.Top.Projects {
+						<option value={ p.ID } { selectedAttrs(p.ID == f.Top.Current)... }>{ p.Name }</option>
 					}
 				</select>
 				<noscript><button type="submit" class="[ button ]" data-size="sm">Open</button></noscript>
 			</form>
 		}
-		if t.ProjectsHref != "" {
-			<a class="[ button ]" data-variant="ghost" data-size="sm" href={ templ.SafeURL(t.ProjectsHref) } { currentAttrs(t.OnProjects)... }>Projects</a>
+		if f.Top.ProjectsHref != "" {
+			<a class="[ button ]" data-variant="ghost" data-size="sm" href={ templ.SafeURL(f.Top.ProjectsHref) } { currentAttrs(f.Top.OnProjects)... }>Projects</a>
 		} else {
 			<a class="[ button ]" data-variant="ghost" data-size="sm" href="/projects/new">New project</a>
 		}
 	</header>
 }
 
-// taskRail is the current project's tasks, grouped like the kanban board. The
-// server renders the groups inside [data-ssr]; tasksRail renders the same
-// groups live from its store and removes the server copy, so a task an agent
-// creates or moves regroups the rail as it happens.
-templ taskRail(r Rail) {
+// tasksToggle is the phone's way to the rail: the Tasks button, with how many
+// tasks need the person.
+templ tasksToggle(r Rail) {
+	<a
+		class="[ button ] [ tasks-toggle ]"
+		data-variant="ghost"
+		href={ templ.SafeURL(r.BoardHref) }
+		aria-controls="rail"
+		aria-haspopup="dialog"
+		aria-expanded="false"
+		x-data="tasksRailToggle"
+		x-bind:aria-expanded="expanded"
+		x-on:click="open"
+	>
+		@icon("rail")
+		Tasks
+		<span class="[ badge ]" data-tone="attention" x-show="hasNeedsYou" { shownIf(r.NeedsYou() > 0)... }>
+			<span x-text="needsYouCount">{ strconv.Itoa(r.NeedsYou()) }</span><span class="[ visually-hidden ]">{ " need you" }</span>
+		</span>
+	</a>
+}
+
+// taskRail is the column beside the page: the skip link, New task, the
+// project's pages and its tasks in status groups. The server renders the
+// groups inside [data-ssr], folded as the rail_collapsed cookie says;
+// tasksRail renders the same groups live from its store (with the filter
+// and Needs you) and removes the server copy, so a task an agent creates or
+// moves regroups the rail as it happens. Below 48rem it is a drawer.
+templ taskRail(f Frame) {
+	{{ r := f.Rail }}
 	if r.Seed != nil {
 		@templ.JSONScript("rail-seed", r.Seed)
 	}
-	<nav class="[ nav ]" aria-label="Tasks" { railAttrs(r)... }>
-		if r.NewTaskHref != "" {
-			<div class="[ cluster ]">
-				<a class="[ button ]" data-size="sm" href={ templ.SafeURL(r.NewTaskHref) }>New task</a>
-				if r.DocumentsHref != "" {
-					<a class="[ button ]" data-variant="ghost" data-size="sm" href={ templ.SafeURL(r.DocumentsHref) }>Documents</a>
-				}
-				if r.DesignHref != "" {
-					<a class="[ button ]" data-variant="ghost" data-size="sm" href={ templ.SafeURL(r.DesignHref) }>Design assets</a>
-				}
-				if r.ReviewsHref != "" {
-					<a class="[ button ]" data-variant="ghost" data-size="sm" href={ templ.SafeURL(r.ReviewsHref) }>
-						Reviews
-						<span class="[ badge ]" data-tone="attention" x-show="hasReviews" x-text="reviewsCount" { shownIf(r.Reviews > 0)... }>{ strconv.Itoa(r.Reviews) }</span>
-					</a>
-				}
+	<div class="[ rail ]" id="rail" { railAttrs(r)... }>
+		<a class="[ skip-link ] [ button ]" data-size="sm" href="#main">Skip to content</a>
+		if r.Seed != nil {
+			<div class="[ drawer-head ]">
+				<span class="[ truncate ]">{ f.ProjectName() }</span>
+				<button type="button" class="[ button ]" data-variant="ghost" data-icon aria-label="Close" x-on:click="closeDrawer">
+					@icon("close")
+				</button>
 			</div>
+		}
+		if r.NewTaskHref != "" {
+			<a class="[ button ]" data-size="sm" href={ templ.SafeURL(r.NewTaskHref) }>
+				@icon("plus")
+				New task
+			</a>
+			@projectNav(r)
+		} else if len(f.Top.Projects) > 0 {
+			<p class="[ note ]">Choose a project in the picker above to see its tasks.</p>
 		}
 		if r.Seed != nil {
-			<div x-ignore data-ssr class="[ flow ] [ flow-space-l ]">
-				@railGroups(r)
-			</div>
-			<p class="[ text-sm color-ink-faint pad-inline-s ]" x-show="isEmpty" style="display: none">No tasks yet.</p>
-			<template x-for="group in groups" x-bind:key="group.key">
-				<div class="[ group ]">
-					<h2 x-text="group.label"></h2>
-					<template x-for="link in group.links" x-bind:key="link.id">
-						<a x-bind:href="link.href" x-bind:aria-current="link.current" x-bind:data-task-id="link.id">
-							<span class="[ label ]" x-text="link.label"></span>
-							<span class="[ status ]" data-dot-only x-show="link.hasDot" x-bind:data-state="link.state">
-								<span class="[ visually-hidden ]" x-text="link.word"></span>
-							</span>
-							<span class="[ count ]" title="live sessions" x-show="link.hasCount" x-text="link.live"></span>
-						</a>
-					</template>
+			<nav class="[ nav ]" aria-label="Tasks">
+				<div x-ignore data-ssr class="[ contents ]">
+					@railServerCopy(r)
 				</div>
-			</template>
-		} else {
-			@railGroups(r)
+				<template x-if="live">
+					@railLiveCopy()
+				</template>
+			</nav>
 		}
+	</div>
+	if r.Seed != nil {
+		<div class="[ scrim ]" x-data="tasksRailToggle" x-bind:data-open="openAttr" x-on:click="close"></div>
+	}
+}
+
+// projectNav is the project's pages; the open one is aria-current.
+templ projectNav(r Rail) {
+	<nav class="[ nav ]" aria-label="Project">
+		<ul role="list">
+			if r.BoardHref != "" {
+				<li>
+					<a href={ templ.SafeURL(r.BoardHref) } { currentAttrs(r.Page == PageBoard)... }>
+						@icon("board")
+						<span class="[ label ]">Board</span>
+					</a>
+				</li>
+			}
+			if r.ReviewsHref != "" {
+				<li>
+					<a href={ templ.SafeURL(r.ReviewsHref) } { currentAttrs(r.Page == PageReviews)... }>
+						@icon("review")
+						<span class="[ label ]">Review requests</span>
+						<span class="[ badge ]" data-tone="attention" x-show="hasReviews" { shownIf(r.Reviews > 0)... }>
+							<span x-text="reviewsCount">{ strconv.Itoa(r.Reviews) }</span><span class="[ visually-hidden ]">{ " waiting on you" }</span>
+						</span>
+					</a>
+				</li>
+			}
+			if r.DocumentsHref != "" {
+				<li>
+					<a href={ templ.SafeURL(r.DocumentsHref) } { currentAttrs(r.Page == PageDocuments)... }>
+						@icon("document")
+						<span class="[ label ]">Documents</span>
+					</a>
+				</li>
+			}
+			if r.DesignHref != "" {
+				<li>
+					<a href={ templ.SafeURL(r.DesignHref) } { currentAttrs(r.Page == PageDesign)... }>
+						@icon("design")
+						<span class="[ label ]">Design assets</span>
+					</a>
+				</li>
+			}
+		</ul>
 	</nav>
 }
 
-// railGroups is the server-rendered rail: the empty note or the groups.
-templ railGroups(r Rail) {
+// railServerCopy is the Tasks nav's first paint: the heading, the filter's
+// place, and the groups with bare h3 headings.
+templ railServerCopy(r Rail) {
 	if r.Empty != "" {
-		<p class="[ text-sm color-ink-faint pad-inline-s ]">{ r.Empty }</p>
-	}
-	for _, g := range r.Groups {
-		<div class="[ group ]">
-			<h2>{ g.Label }</h2>
-			for _, l := range g.Links {
-				@railLink(l)
+		@emptyProjectNotice()
+	} else {
+		<div class="[ head ]">
+			<h2 class="[ title ]">Tasks <span class="[ count ]">{ strconv.Itoa(len(r.Seed.Tasks)) }</span></h2>
+		</div>
+		<div class="[ filter-placeholder ]"></div>
+		<div class="[ groups ]">
+			for _, g := range r.Groups {
+				<section class="[ group ]" aria-labelledby={ g.HeadingID() } data-key={ g.Key } { groupAttrs(g)... }>
+					<h3 id={ g.HeadingID() }>
+						if !g.IsEmpty() {
+							@icon("chevron")
+						}
+						<span class="[ name ]">{ g.Label }</span>
+						<span class="[ count ]">{ strconv.Itoa(g.Total) }<span class="[ visually-hidden ]">{ g.CountWords() }</span></span>
+					</h3>
+					if !g.IsEmpty() {
+						<ul role="list" id={ g.ListID() }>
+							for _, l := range g.Links {
+								<li>
+									@railLink(l)
+								</li>
+							}
+							if len(g.More) > 0 {
+								<li class="[ more ]">
+									<details>
+										<summary><span class="[ closed ]">{ g.MoreText() }<span class="[ visually-hidden ]">{ " done tasks" }</span></span><span class="[ opened ]">Show fewer</span></summary>
+										<ul role="list">
+											for _, l := range g.More {
+												<li>
+													@railLink(l)
+												</li>
+											}
+										</ul>
+									</details>
+								</li>
+							}
+						</ul>
+					}
+				</section>
 			}
 		</div>
 	}
 }
 
-// railLink is one task, server-rendered with its activity.
+templ emptyProjectNotice() {
+	<p class="[ notice ]"><span><b>No tasks yet.</b> A task is what agents work on: create one, then start a session on it.</span></p>
+}
+
+// railLink is one task, server-rendered with its activity: the dot, the
+// title, and one meta item.
 templ railLink(l Link) {
-	<a href={ templ.SafeURL(l.Href) } { currentAttrs(l.Current)... } data-task-id={ l.TaskID }>
-		<span class="[ label ]">{ l.Label }</span>
+	<a href={ templ.SafeURL(l.Href) } data-task-id={ l.TaskID } { currentAttrs(l.Current)... } { attentionAttrs(l.Attention)... }>
 		if l.LiveState() != "" {
-			<span class="[ status ]" data-state={ l.LiveState() } data-dot-only>
-				<span class="[ visually-hidden ]">{ l.LiveWord() }</span>
-			</span>
+			<span class="[ status ]" data-state={ l.LiveState() } data-dot-only></span>
 		}
-		if l.Live > 0 {
-			<span class="[ count ]" title="live sessions">{ strconv.Itoa(l.Live) }</span>
+		<span class="[ label ]">{ l.Label }</span>
+		<span class="[ visually-hidden ]">{ l.MetaLead() }</span>
+		if l.Reviews > 0 {
+			<span class="[ badge ]" data-tone="attention">{ l.ReviewsText() }</span>
+		} else if l.Waiting() {
+			<span class="[ meta ]" data-tone="attention">waiting</span>
+		} else if l.Running() {
+			<span class="[ meta ]">{ strconv.Itoa(l.Live) } live</span>
 		}
+		<span class="[ visually-hidden ]">{ l.MetaTail() }</span>
+	</a>
+}
+
+// railLiveCopy is the Tasks nav as tasksRail renders it from its store.
+templ railLiveCopy() {
+	<div class="[ contents ]">
+		<template x-if="isEmpty">
+			@emptyProjectNotice()
+		</template>
+		<div class="[ head ]" x-show="hasTasks">
+			<h2 class="[ title ]">Tasks <span class="[ count ]" x-text="total"></span></h2>
+			<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-show="showsNeedsYou" x-bind:aria-pressed="needsYouOnly" x-on:click="toggleNeedsYou">
+				Needs you <span class="[ badge ]" data-tone="attention" x-text="needsYouCount"></span>
+			</button>
+		</div>
+		<div class="[ filter ]" x-show="hasTasks">
+			<input type="search" placeholder="Filter tasks" aria-label="Filter tasks" aria-describedby="rail-filter-result" autocomplete="off" x-ref="filter" x-model="query" x-on:input="filtered" x-on:keydown="filterKey"/>
+			<kbd aria-hidden="true">/</kbd>
+		</div>
+		<p id="rail-filter-result" class="[ visually-hidden ]" aria-live="polite" x-text="filterResult"></p>
+		<template x-if="hasNoMatch">
+			<div class="[ notice ]">
+				<span x-text="noMatchText"></span>
+				<button type="button" class="[ button ]" data-size="sm" x-on:click="clearFilter">Clear</button>
+			</div>
+		</template>
+		<template x-if="nothingNeedsYou">
+			<p class="[ notice ]">Nothing needs you right now.</p>
+		</template>
+		<div class="[ groups ]" x-show="hasTasks" x-on:keydown="navKey" x-on:focusin="noteFocus" x-on:focusout="forgetFocus">
+			<template x-for="group in groups" x-bind:key="group.key">
+				<section class="[ group ]" x-bind:aria-labelledby="group.headingId" x-bind:data-key="group.key" x-bind:data-collapsed="group.collapsed" x-bind:data-empty="group.empty">
+					<h3 x-bind:id="group.headingId">
+						<template x-if="group.foldable">
+							<button type="button" x-bind:aria-expanded="group.expanded" x-bind:aria-controls="group.listId" x-bind:data-key="group.key" x-bind:data-turns="turned" x-on:click="toggleGroup">
+								@icon("chevron")
+								<span class="[ name ]" x-text="group.label"></span>
+								<span class="[ count ]"><span x-text="group.countText"></span><span class="[ visually-hidden ]" x-text="group.countWords"></span></span>
+							</button>
+						</template>
+						<template x-if="!group.foldable">
+							<span class="[ contents ]">
+								<span class="[ name ]" x-text="group.label"></span>
+								<span class="[ count ]"><span x-text="group.countText"></span><span class="[ visually-hidden ]" x-text="group.countWords"></span></span>
+							</span>
+						</template>
+					</h3>
+					<ul role="list" x-bind:id="group.listId" x-show="group.hasRows">
+						<template x-for="row in group.rows" x-bind:key="row.id">
+							<li>
+								@railLiveLink()
+							</li>
+						</template>
+						<li class="[ more ]" x-show="group.hasMore">
+							<details>
+								<summary><span class="[ closed ]"><span x-text="group.moreText"></span><span class="[ visually-hidden ]">{ " done tasks" }</span></span><span class="[ opened ]">Show fewer</span></summary>
+								<ul role="list">
+									<template x-for="row in group.more" x-bind:key="row.id">
+										<li>
+											@railLiveLink()
+										</li>
+									</template>
+								</ul>
+							</details>
+						</li>
+					</ul>
+				</section>
+			</template>
+		</div>
+	</div>
+}
+
+// railLiveLink is the live copy of railLink, bound to a row of railView.js.
+templ railLiveLink() {
+	<a x-bind:href="row.href" x-bind:aria-current="row.current" x-bind:data-task-id="row.id" x-bind:data-attention="row.attention" x-bind:data-fresh="row.fresh" x-bind:data-peek="row.peek" x-on:mouseenter="tip">
+		<span class="[ status ]" data-dot-only x-show="row.hasDot" x-bind:data-state="row.state" x-bind:data-signal="row.signal"></span>
+		<span class="[ label ]"><span x-text="row.before"></span><mark x-show="row.hasMatch" x-text="row.match"></mark><span x-text="row.after"></span></span>
+		<span class="[ visually-hidden ]" x-text="row.lead"></span>
+		<span class="[ badge ]" data-tone="attention" x-show="row.hasReviews" x-text="row.reviewsText"></span>
+		<span class="[ meta ]" data-tone="attention" x-show="row.isWaiting">waiting</span>
+		<span class="[ meta ]" x-show="row.isLive" x-text="row.liveText"></span>
+		<span class="[ visually-hidden ]" x-text="row.tail"></span>
 	</a>
 }
 
@@ -158,6 +347,7 @@ templ streamBar(live bool, hints []Hint) {
 		if live {
 			<span class="[ status ]" data-state="reconnecting" x-data="streamStatus" x-on:feed-status.window="update" x-bind:data-state="state" x-text="label">connecting</span>
 		}
+		<span class="[ visually-hidden ]" x-data="streamAnnouncer" x-on:rail-announce.window="say" x-text="text"></span>
 		<span class="[ keys ]">
 			if hints == nil {
 				<span><kbd>J</kbd><kbd>K</kbd> move</span>

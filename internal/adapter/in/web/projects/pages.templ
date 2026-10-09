@@ -9,7 +9,7 @@ import (
 // repositories found inside it.
 templ NewProjectPage(f shell.Frame) {
 	@shell.AppShell(f) {
-		<main class="[ frame ]">
+		<main id="main" class="[ frame ]">
 			<header class="[ toolbar ]"><h1>New project</h1></header>
 			<div data-scroll>
 				<form class="[ wrapper flow ] [ region ]" style="--wrapper-max: 44rem" x-data="projectsNewProject" x-on:submit.prevent="submit">
@@ -70,7 +70,7 @@ templ NewProjectPage(f shell.Frame) {
 // RepositoriesPage lists a project's repositories, adds and removes them.
 templ RepositoriesPage(v RepositoriesView) {
 	@shell.AppShell(v.Frame) {
-		<main class="[ frame ]" x-data="projectsRepositoriesPage" data-seed="repositories-seed">
+		<main id="main" class="[ frame ]" x-data="projectsRepositoriesPage" data-seed="repositories-seed">
 			@templ.JSONScript("repositories-seed", v.Seed)
 			<header class="[ toolbar ]">
 				<a class="[ crumb ]" href={ templ.SafeURL("/projects/" + v.ProjectID) }>{ v.ProjectName } /</a>
@@ -176,7 +176,7 @@ templ RepositoriesPage(v RepositoriesView) {
 // worktree of a repository.
 templ EnvFilesPage(v EnvFilesView) {
 	@shell.AppShell(v.Frame) {
-		<main class="[ frame ]" x-data="projectsEnvFilesPage" data-seed="env-files-seed">
+		<main id="main" class="[ frame ]" x-data="projectsEnvFilesPage" data-seed="env-files-seed">
 			@templ.JSONScript("env-files-seed", v.Seed)
 			<header class="[ toolbar ]">
 				<a class="[ crumb ]" href={ templ.SafeURL(RepositoriesHref(v.ProjectID)) }>{ v.ProjectName } / repositories / { v.RepositoryName } /</a>

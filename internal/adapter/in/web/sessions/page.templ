@@ -14,7 +14,7 @@ import (
 // server copy once the template has rendered.
 templ Page(v PageView) {
 	@shell.AppShell(v.Frame) {
-		<main
+		<main id="main"
 			class="[ frame ]"
 			x-data="sessionsPage"
 			data-seed="sessions-seed"

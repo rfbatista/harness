@@ -12,7 +12,7 @@ import (
 // document linked to no task has nowhere to go back to.
 templ ProjectDocumentsPage(v ProjectDocumentsView) {
 	@shell.AppShell(v.Frame) {
-		<main class="[ frame ]">
+		<main id="main" class="[ frame ]">
 			<header class="[ toolbar ]">
 				<a class="[ crumb ]" href={ templ.SafeURL("/projects/" + v.ProjectID) }>{ v.ProjectName } /</a>
 				<h1>Documents</h1>

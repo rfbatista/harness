@@ -104,8 +104,9 @@ func TestSessionsStartedElsewhereShowUpLive(t *testing.T) {
 		srv.Close()
 	}()
 
+	// The row's one meta item: "N live", "waiting" or the reviews badge.
 	count := func(task string) string {
-		return fmt.Sprintf(`(() => { const c = document.querySelector('nav [data-task-id=%q] .count'); return c && c.style.display !== 'none' ? c.textContent : ''; })()`, task)
+		return fmt.Sprintf(`(() => { const a = [...document.querySelectorAll('nav [data-task-id=%q]')].find(a => !a.closest('[data-ssr]')); const m = a && [...a.querySelectorAll('.meta, .badge')].find(m => m.style.display !== 'none'); return m ? m.textContent : ''; })()`, task)
 	}
 	var t1Before, t2Before string
 	if err := chromedp.Run(ctx,
@@ -117,7 +118,7 @@ func TestSessionsStartedElsewhereShowUpLive(t *testing.T) {
 	); err != nil {
 		t.Fatalf("%v\nJS errors: %v", err, errs.all())
 	}
-	if t1Before != "1" || t2Before != "" {
+	if t1Before != "1 live" || t2Before != "" {
 		t.Fatalf("rail before: t1=%q t2=%q", t1Before, t2Before)
 	}
 	// The rail and the sessions page follow the project feed over one shared
@@ -143,7 +144,7 @@ func TestSessionsStartedElsewhereShowUpLive(t *testing.T) {
 		chromedp.Evaluate(peerRow+`.querySelector('.meta').textContent`, &meta),
 		chromedp.Evaluate(peerRow+`.hasAttribute('data-fresh')`, &fresh),
 		chromedp.Evaluate(`document.querySelector('[role=status][aria-live=polite]').textContent`, &announced),
-		chromedp.Poll(count("t2")+` === '1'`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Poll(count("t2")+` === 'waiting'`, nil, chromedp.WithPollingTimeout(5*time.Second)),
 		chromedp.Evaluate(count("t1"), &t1After),
 		chromedp.Evaluate(count("t2"), &t2After),
 		chromedp.Evaluate(`document.querySelector('nav [data-task-id=t2] .status').dataset.state`, &t2Dot),
@@ -160,7 +161,7 @@ func TestSessionsStartedElsewhereShowUpLive(t *testing.T) {
 	if announced != "Lead dev started a session: Write the feed tests" {
 		t.Errorf("announcement = %q", announced)
 	}
-	if t1After != "2" || t2After != "1" || t2Dot != "waiting" {
+	if t1After != "2 live" || t2After != "waiting" || t2Dot != "waiting" {
 		t.Errorf("rail after: t1=%q t2=%q t2 dot=%q", t1After, t2After, t2Dot)
 	}
 	if e := errs.all(); len(e) > 0 {

@@ -11,7 +11,7 @@ import (
 // live (web/src/modules/projects/presentation/pages/projectsPage.js).
 templ ListPage(v ListView) {
 	@shell.AppShell(v.Frame) {
-		<main class="[ frame ]" x-data="projectsListPage" data-seed="projects-seed" x-on:keydown.window="key" x-on:visibilitychange.document="onVisibility">
+		<main id="main" class="[ frame ]" x-data="projectsListPage" data-seed="projects-seed" x-on:keydown.window="key" x-on:visibilitychange.document="onVisibility">
 			@templ.JSONScript("projects-seed", v.Seed)
 			<header class="[ toolbar ]">
 				<h1>Projects</h1>
@@ -115,7 +115,7 @@ templ fieldError(id, prop string) {
 // (projectsSettingsPage, web/src/modules/projects/presentation/pages/settingsPage.js).
 templ SettingsPage(v SettingsView) {
 	@shell.AppShell(v.Frame) {
-		<main class="[ frame ]" x-data="projectsSettingsPage" data-seed="settings-seed">
+		<main id="main" class="[ frame ]" x-data="projectsSettingsPage" data-seed="settings-seed">
 			@templ.JSONScript("settings-seed", v.Seed)
 			<header class="[ toolbar ]">
 				<a class="[ crumb ]" href={ templ.SafeURL("/projects/" + v.Project.ID) } x-text="crumb">{ v.Project.Name } /</a>

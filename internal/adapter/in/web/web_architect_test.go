@@ -130,8 +130,8 @@ func TestBoardAndRailSayWhereReviewsWaitOnThePerson(t *testing.T) {
 
 func TestRailHidesTheReviewsBadgeWhenNothingWaits(t *testing.T) {
 	body := get(t, newTestHandler(t, board()), "/projects/p1").Body.String()
-	if !strings.Contains(body, `x-text="reviewsCount" style="display: none">0</span>`) {
-		t.Error("with nothing waiting, the Reviews badge should be painted hidden")
+	if !strings.Contains(body, `x-show="hasReviews" style="display: none"><span x-text="reviewsCount">0</span>`) {
+		t.Error("with nothing waiting, the Review requests badge should be painted hidden")
 	}
 }
 

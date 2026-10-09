@@ -46,7 +46,7 @@ func errorPage(f shell.Frame, message, code, next string) templ.Component {
 				}()
 			}
 			ctx = templ.InitializeContext(ctx)
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<main class=\"[ wrapper flow ] [ region ]\"><h1>This page could not be shown</h1>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<main id=\"main\" class=\"[ wrapper flow ] [ region ]\"><h1>This page could not be shown</h1>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

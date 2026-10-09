@@ -11,7 +11,7 @@ import "operators-mcp/internal/adapter/in/web/shell"
 // project feed; the polite live region reads out what happened.
 templ TaskResourcesPage(v TaskResourcesView) {
 	@shell.AppShell(v.Frame) {
-		<main
+		<main id="main"
 			class="[ frame ]"
 			x-data="tasksResources"
 			data-seed="task-resources-seed"
