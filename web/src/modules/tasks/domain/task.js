@@ -13,6 +13,7 @@
  * @property {TaskStatus} status
  * @property {string} architectSessionId  the task's architect session; "" when it has none
  * @property {number} pendingReviews      review requests the architect raised that wait on the person
+ * @property {number} updatedAt           when it last changed, ms since the epoch; 0 when unknown (Done is ordered by it)
  */
 
 /** The statuses in board order, with how they read. */

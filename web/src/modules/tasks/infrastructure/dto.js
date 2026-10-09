@@ -15,6 +15,7 @@ export function toTask(dto) {
     status: dto.status,
     architectSessionId: dto.architect_session_id ?? "",
     pendingReviews: Number(dto.pending_reviews ?? 0),
+    updatedAt: Date.parse(dto.updated_at ?? "") || 0,
   });
 }
 

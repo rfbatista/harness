@@ -9,6 +9,7 @@ export function makeTask(overrides = {}) {
     status: "in_progress",
     architectSessionId: "",
     pendingReviews: 0,
+    updatedAt: 0,
     ...overrides,
   });
 }
@@ -23,5 +24,6 @@ export function taskDTO(t) {
     status: t.status,
     architect_session_id: t.architectSessionId || null,
     pending_reviews: t.pendingReviews,
+    updated_at: t.updatedAt ? new Date(t.updatedAt).toISOString() : undefined,
   };
 }

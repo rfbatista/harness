@@ -48,10 +48,24 @@ type TopBar struct {
 // Option is one project in the picker.
 type Option struct{ ID, Name string }
 
-// Rail is the current project's tasks, in kanban groups.
+// The project pages the rail links to; Rail.Page marks the current one.
+const (
+	PageBoard     = "board"
+	PageReviews   = "reviews"
+	PageDocuments = "documents"
+	PageDesign    = "design"
+)
+
+// Rail is the current project's tasks, in kanban groups, and the ways to its
+// pages.
 type Rail struct {
 	// NewTaskHref is the new-task page of the selected project; "" with none.
 	NewTaskHref string
+	// BoardHref is the project's board; "" hides it.
+	BoardHref string
+	// Page is the project page open now (PageBoard, …), marked current on
+	// the rail; "" for any other page.
+	Page string
 	// DocumentsHref is the project's documents library; "" when documents
 	// are not served.
 	DocumentsHref string
@@ -94,10 +108,40 @@ type RailSession struct {
 	PendingApprovals int    `json:"pending_approvals"`
 }
 
-// RailGroup is one kanban column: "in progress", "todo", …
+// RailGroup is one status group: "In progress", "Todo", …
 type RailGroup struct {
 	Label string
+	// Key is the status value ("in_progress"), or "other".
+	Key string
+	// Total counts the group's tasks: Links and More.
+	Total int
+	// Collapsed: the person folded it (the rail_collapsed cookie). Its rows
+	// still show the open task and what needs the person.
+	Collapsed bool
+	// Links are the rows shown. Done shows its most recently updated tasks,
+	// plus the open task and every task that needs the person.
 	Links []Link
+	// More are Done's other rows, behind "Show N more".
+	More []Link
+}
+
+// IsEmpty: the group has no tasks, so its heading has nothing to fold.
+func (g RailGroup) IsEmpty() bool { return g.Total == 0 }
+
+// NeedsYou counts the tasks waiting on the person, for the phone's Tasks
+// trigger.
+func (r Rail) NeedsYou() int {
+	n := 0
+	for _, g := range r.Groups {
+		for _, links := range [][]Link{g.Links, g.More} {
+			for _, l := range links {
+				if l.Attention {
+					n++
+				}
+			}
+		}
+	}
+	return n
 }
 
 // Link is one task in the rail.
