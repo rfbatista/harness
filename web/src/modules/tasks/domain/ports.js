@@ -53,4 +53,47 @@
  *           not delivered.
  */
 
+/**
+ * A task's resources and comments: what the person added for context, read
+ * and written over /api and followed on the project feed. Implemented by
+ * infrastructure/resources-gateway.js (over /api) and
+ * infrastructure/memory-resources.js; both run testing/resource-contract.js.
+ *
+ * @typedef {import("./resources.js").Resource} Resource
+ * @typedef {import("./comments.js").Comment} Comment
+ * @typedef {{ kind: "resource", resource: Resource } | { kind: "resource-deleted", id: string, ticketId: string }
+ *         | { kind: "comment", comment: Comment } | { kind: "comment-deleted", id: string, ticketId: string }
+ *         | { kind: "task-deleted", id: string }} ResourceChange
+ *
+ * @typedef {object} ResourceGateway
+ * @property {(seed: unknown) => { projectId: string, ticketId: string, resources: Resource[], comments: Comment[] }} decodeSeed
+ *           Reads the page's embedded seed. Throws BAD_RESPONSE when malformed.
+ * @property {(ticketId: string) => Promise<Resource[]>} listResources
+ *           Oldest first. Rejects with TICKET_NOT_FOUND.
+ * @property {(input: { ticketId: string, file: Blob & { name: string }, title?: string,
+ *             onProgress?: (loaded: number, total: number) => void, signal?: AbortSignal }) => Promise<Resource>} upload
+ *           Rejects with RESOURCE_TOO_LARGE, INVALID_INPUT (empty file, bad
+ *           title), TICKET_NOT_FOUND or NETWORK; a cancel rejects with an AbortError.
+ * @property {(input: { ticketId: string, url: string, title?: string }) => Promise<Resource>} addLink
+ *           Rejects with INVALID_INPUT (not http(s), too long) or TICKET_NOT_FOUND.
+ * @property {(resourceId: string, title: string) => Promise<Resource>} retitle
+ *           Rejects with INVALID_INPUT (blank, too long) or RESOURCE_NOT_FOUND.
+ * @property {(resourceId: string) => Promise<void>} removeResource
+ *           Rejects with RESOURCE_NOT_FOUND, also when it is already gone.
+ * @property {(ticketId: string) => Promise<Comment[]>} listComments
+ *           Oldest first. Rejects with TICKET_NOT_FOUND.
+ * @property {(ticketId: string, body: string) => Promise<Comment>} addComment
+ *           Rejects with INVALID_INPUT (empty, over 10,000) or TICKET_NOT_FOUND.
+ * @property {(commentId: string, body: string) => Promise<Comment>} editComment
+ *           An edit that changes nothing keeps updated_at. Rejects with
+ *           INVALID_INPUT or COMMENT_NOT_FOUND.
+ * @property {(commentId: string) => Promise<void>} removeComment
+ *           Rejects with COMMENT_NOT_FOUND, also when it is already gone.
+ * @property {(projectId: string, onChange: (change: ResourceChange) => void,
+ *             onStatus: (status: import("../../../shared/domain/feed.js").FeedStatus) => void) => () => void} follow
+ *           Resource and comment changes of every task of the project, and
+ *           tasks deleted; returns the unfollow. Other messages, and ones it
+ *           cannot read, are not delivered.
+ */
+
 export {};

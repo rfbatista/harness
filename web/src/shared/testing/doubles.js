@@ -72,3 +72,48 @@ export function manualTimers() {
 
 /** Lets queued microtasks (promise callbacks) run. */
 export const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+/** An XMLHttpRequest the test drives: progress(loaded, total), respond(status, body), fail(). */
+export function fakeXHRClass() {
+  const instances = [];
+  class FakeXMLHttpRequest {
+    constructor() {
+      this.upload = { onprogress: null };
+      this.onload = null;
+      this.onerror = null;
+      this.onabort = null;
+      this.headers = {};
+      this.status = 0;
+      this.statusText = "";
+      this.responseText = "";
+      this.aborted = false;
+      instances.push(this);
+    }
+    open(method, url) {
+      this.method = method;
+      this.url = url;
+    }
+    setRequestHeader(name, value) {
+      this.headers[name] = value;
+    }
+    send(body) {
+      this.body = body;
+    }
+    abort() {
+      this.aborted = true;
+      this.onabort?.({});
+    }
+    progress(loaded, total) {
+      this.upload.onprogress?.({ lengthComputable: true, loaded, total });
+    }
+    respond(status, body) {
+      this.status = status;
+      this.responseText = typeof body === "string" ? body : JSON.stringify(body);
+      this.onload?.({});
+    }
+    fail() {
+      this.onerror?.({});
+    }
+  }
+  return { XMLHttpRequest: FakeXMLHttpRequest, instances, latest: () => instances.at(-1) };
+}
