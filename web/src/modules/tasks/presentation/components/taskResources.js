@@ -125,9 +125,6 @@ export const taskResources = (deps) => () => {
     get summary() {
       return summaryWords(this.resources.length, this.comments.length);
     },
-    get hasNoResources() {
-      return this.resources.length === 0 && this.uploads.length === 0;
-    },
     get projectHref() {
       return `/projects/${encodeURIComponent(this.projectId)}`;
     },

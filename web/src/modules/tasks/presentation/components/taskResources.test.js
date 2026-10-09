@@ -45,7 +45,6 @@ test("the page starts from the seed: rows of every kind, the counts and the summ
   assert.deepEqual([png.isLightbox, png.thumb !== "", svg.isLightbox, svg.download, pdf.newTab], [true, true, false, true, true]);
   assert.ok(png.meta.startsWith("PNG image · 403 KB · "));
   assert.equal(p.rows.at(-1).host, "figma.com/file/abc");
-  assert.ok(!p.hasNoResources);
 });
 
 test("what another tab adds arrives at the end with the arrival wash; other tasks' changes do not", async () => {
