@@ -12,13 +12,23 @@ import (
 	"operators-mcp/internal/app/catalog"
 	"operators-mcp/internal/application/orchestration"
 	"operators-mcp/internal/application/planning"
+	"operators-mcp/internal/application/taskchannel"
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
 )
 
 // wiredResources boots the graph without ExecutionModule (Genkit registers
 // flows process-wide) and returns a task to add things to.
-func wiredResources(t *testing.T) (*planning.Service, *orchestration.Service, ports.SessionRepository, *domain.Ticket) {
+// wired is the graph a resources test drives, with a task to add things to.
+type wired struct {
+	plan     *planning.Service
+	orch     *orchestration.Service
+	sessions ports.SessionRepository
+	channel  *taskchannel.Service
+	tk       *domain.Ticket
+}
+
+func wiredResources(t *testing.T) wired {
 	t.Helper()
 	ctx := context.Background()
 	dir := t.TempDir()
@@ -27,12 +37,13 @@ func wiredResources(t *testing.T) (*planning.Service, *orchestration.Service, po
 		plan     *planning.Service
 		orch     *orchestration.Service
 		sessions ports.SessionRepository
+		channel  *taskchannel.Service
 	)
 	app := fx.New(
 		fx.Supply(Config{HTTPAddr: "127.0.0.1:0", MCPAddr: "127.0.0.1:0", DBPath: ":memory:", Root: dir, ClaudeBin: "/bin/true", SessionShell: "direct"}),
 		PersistenceModule, CatalogModule, PlanningModule, WorkspacesModule,
 		AgentRuntimeModule, TaskChannelModule, TextProcessingModule,
-		fx.Populate(&cat, &plan, &orch, &sessions),
+		fx.Populate(&cat, &plan, &orch, &sessions, &channel),
 		fx.NopLogger,
 	)
 	if err := app.Start(ctx); err != nil {
@@ -47,7 +58,7 @@ func wiredResources(t *testing.T) (*planning.Service, *orchestration.Service, po
 	if err != nil {
 		t.Fatal(err)
 	}
-	return plan, orch, sessions, tk
+	return wired{plan, orch, sessions, channel, tk}
 }
 
 // On the wired graph an upload keeps its bytes outside any worktree, names
@@ -55,7 +66,8 @@ func wiredResources(t *testing.T) (*planning.Service, *orchestration.Service, po
 func TestTaskResources_WiredGraph(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	plan, orch, _, tk := wiredResources(t)
+	w := wiredResources(t)
+	plan, orch, tk := w.plan, w.orch, w.tk
 	feed, err := orch.FollowProject(ctx, tk.ProjectID)
 	if err != nil {
 		t.Fatal(err)
@@ -105,33 +117,73 @@ func TestTaskResources_WiredGraph(t *testing.T) {
 	}
 }
 
-// On the wired graph a comment the person adds reaches the task's running
-// session as a [task update · comment] turn, through the courier: a session
-// run by a client takes it from its Stop hook.
+// On the wired graph what the person adds reaches every running session of
+// the task as a [task update · …] turn, through the courier: the architect
+// as well as its delegate. Sessions run by a client take it from their Stop
+// hook. A session that has stopped is not a recipient.
 func TestTaskUpdates_WiredGraph(t *testing.T) {
 	ctx := context.Background()
-	plan, orch, sessions, tk := wiredResources(t)
-	if _, err := sessions.Create(&domain.Session{ID: "s-live", ProjectID: tk.ProjectID, TicketID: tk.ID, Task: "build",
-		Status: domain.SessionRunning, Interactive: true, RunsOn: domain.RunnerTUI}); err != nil {
-		t.Fatal(err)
+	w := wiredResources(t)
+	plan, orch, sessions, tk := w.plan, w.orch, w.sessions, w.tk
+	for _, s := range []*domain.Session{
+		{ID: "s-arch", Mode: domain.SessionModeArchitect},
+		{ID: "s-dlg", ParentSessionID: "s-arch"},
+		{ID: "s-old", Status: domain.SessionStopped},
+	} {
+		s.ProjectID, s.TicketID, s.Task, s.Interactive, s.RunsOn = tk.ProjectID, tk.ID, "work", true, domain.RunnerTUI
+		if s.Status == "" {
+			s.Status = domain.SessionRunning
+		}
+		if _, err := sessions.Create(s); err != nil {
+			t.Fatal(err)
+		}
 	}
-	c, err := plan.AddTicketComment(ctx, tk.ID, "use the notes I added")
+	if role, _ := w.channel.SessionRole(ctx, "s-arch"); role != domain.RoleArchitect {
+		t.Fatalf("s-arch is %q, want the task's architect", role)
+	}
+	if role, _ := w.channel.SessionRole(ctx, "s-dlg"); role != domain.RoleDelegate {
+		t.Fatalf("s-dlg is %q, want a delegate", role)
+	}
+
+	r, err := plan.AddTicketLink(ctx, tk.ID, "https://example.com/spec", "Spec")
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := "[task update · comment] The person commented on this task (comment_id " + c.ID + "):\nuse the notes I added"
+	c, err := plan.AddTicketComment(ctx, tk.ID, "use the spec I linked")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := `[task update · resource added] The person added a link to this task: "Spec" (resource_id ` + r.ID +
+		`, url https://example.com/spec). Read it with read_task_resource if it bears on your work.` +
+		"\n\n---\n\n" +
+		"[task update · comment] The person commented on this task (comment_id " + c.ID + "):\nuse the spec I linked"
+	for _, id := range []string{"s-arch", "s-dlg"} {
+		if got := stopHookUntil(t, orch, id, want); got != want {
+			t.Fatalf("%s's Stop hook = %q, want %q", id, got, want)
+		}
+	}
+}
+
+// stopHookUntil calls the session's Stop hook until the turns it hands back,
+// joined the way the courier joins them, are as long as want, or the
+// deadline passes: the drainer delivers asynchronously, so the two updates
+// may arrive at one Stop or at two.
+func stopHookUntil(t *testing.T, orch *orchestration.Service, id, want string) string {
+	t.Helper()
 	deadline := time.Now().Add(5 * time.Second)
-	for {
-		next, err := orch.TurnEnded(ctx, "s-live", false)
+	var turns []string
+	for time.Now().Before(deadline) {
+		next, err := orch.TurnEnded(context.Background(), id, false)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if next == want {
-			return
+		if next != "" {
+			turns = append(turns, next)
 		}
-		if next != "" || time.Now().After(deadline) {
-			t.Fatalf("Stop hook = %q, want %q", next, want)
+		if got := strings.Join(turns, "\n\n---\n\n"); len(got) >= len(want) {
+			return got
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
+	return strings.Join(turns, "\n\n---\n\n")
 }
