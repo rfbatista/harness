@@ -57,6 +57,8 @@ export const taskResources = (deps) => () => {
   let unfollow = () => {};
   let ticker = null;
   let nextToast = 1;
+  /** The page's <main>. A handler on an element that x-if then removes loses $root, so the page keeps its own. */
+  let root = null;
   const parts = { gateway, clock, guards, setTimeout };
 
   return compose(resourceAdding(parts), resourceLightbox(), commentThread(parts), {
@@ -83,6 +85,7 @@ export const taskResources = (deps) => () => {
     busyId: "",
 
     init() {
+      root = this.$el;
       const seed = gateway.decodeSeed(readSeed(this.$el));
       this.projectId = seed.projectId;
       this.ticketId = seed.ticketId;
@@ -231,10 +234,15 @@ export const taskResources = (deps) => () => {
       this.announcement = this.announcement === message ? `${message} ` : message;
     },
 
+    /** The page's root element. */
+    pageRoot() {
+      return root;
+    },
+
     /** Focuses the first element matching `selector` in the page, after Alpine renders. */
     focusLater(selector) {
       this.$nextTick(() => {
-        const el = this.$root.querySelector?.(selector);
+        const el = root?.querySelector(selector);
         el?.focus();
         if (el instanceof HTMLInputElement && el.dataset.select !== undefined) el.select();
       });

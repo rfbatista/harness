@@ -3,7 +3,7 @@
 // (showModal) over the strong scrim. ← → step through the task's images, Esc
 // or a click on the scrim closes it, and focus goes back to what opened it.
 //
-//   <dialog class="[ lightbox ]" x-ref="lightbox" x-on:close="lightboxClosed" …>
+//   <dialog class="[ lightbox ]" x-on:close="lightboxClosed" …>
 
 import { sizeWords, typeWord, viewableImages } from "../../domain/resources.js";
 
@@ -51,13 +51,13 @@ export function resourceLightbox() {
       if (!this.lightboxImages.some((r) => r.id === id)) return;
       opener = from;
       this.lightboxId = id;
-      const dialog = this.$refs.lightbox;
+      const dialog = this.pageRoot()?.querySelector("dialog.lightbox");
       if (dialog && !dialog.open) dialog.showModal();
       this.focusLater("[data-lightbox-close]");
     },
 
     closeLightbox() {
-      const dialog = this.$refs.lightbox;
+      const dialog = this.pageRoot()?.querySelector("dialog.lightbox");
       if (dialog?.open) dialog.close();
       else this.lightboxClosed();
     },

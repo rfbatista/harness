@@ -60,7 +60,7 @@ export function resourceAdding({ gateway, clock, guards }) {
 
     // ── files ──────────────────────────────────────────────────────────
     pickFiles() {
-      if (!this.taskGone) this.$root.querySelector?.("[data-file-input]")?.click();
+      if (!this.taskGone) this.pageRoot()?.querySelector("[data-file-input]")?.click();
     },
     /** The picker's change event. */
     picked(event) {
