@@ -174,3 +174,20 @@ func TestTaskPageStillServesWhenTheResourceCountFails(t *testing.T) {
 		t.Error("the links show counts that could not be read")
 	}
 }
+
+func TestTaskResourcesPageSeedsWhoWroteEachComment(t *testing.T) {
+	w := resourcesBoard()
+	at := now.Add(-time.Minute)
+	w.comments = append(w.comments, &domain.TicketComment{ID: "c2", TicketID: "t-feed", ProjectID: "p1", Author: domain.CommentBySession, SessionID: "s1", AgentName: "go-developer", Body: "Done.", CreatedAt: at, UpdatedAt: at})
+	seed := seedOf(t, get(t, newTestHandler(t, w), "/projects/p1/tasks/t-feed/resources").Body.String(), "task-resources-seed")
+	comments := seed["comments"].([]any)
+	if len(comments) != 2 {
+		t.Fatalf("seeded comments = %v", comments)
+	}
+	for i, want := range [][3]string{{"person", "", ""}, {"session", "s1", "go-developer"}} {
+		c := comments[i].(map[string]any)
+		if c["author"] != want[0] || c["session_id"] != want[1] || c["agent_name"] != want[2] {
+			t.Errorf("comment %d = %v, want author/session_id/agent_name %v (always present)", i, c, want)
+		}
+	}
+}
