@@ -333,6 +333,33 @@ test("J/K walk the rows in on-screen order", () => {
   instance.destroy();
 });
 
+test("on a narrow screen, opening a session shows its detail and Sessions goes back; J/K never open it", () => {
+  const { instance } = setup();
+  assert.equal(instance.detailOpenAttr, null, "the list is the page at first");
+  instance.next();
+  instance.previous();
+  assert.equal(instance.detailOpenAttr, null, "J/K only move the selection");
+  instance.open("run");
+  assert.equal(instance.selectedId, "run");
+  assert.equal(instance.detailOpenAttr, "");
+  instance.closeDetail();
+  assert.equal(instance.detailOpenAttr, null);
+  instance.openSelected();
+  assert.equal(instance.detailOpenAttr, "", "Enter on the list opens the selected session");
+  instance.closeDetail();
+  instance.startCreating();
+  assert.equal(instance.detailOpenAttr, "", "the new-session form is shown in place of the list too");
+  instance.destroy();
+});
+
+test("opening a session does not ask its terminal for the focus", () => {
+  const { instance, tick, dispatched } = setup();
+  instance.open("run");
+  tick();
+  assert.equal(dispatched.filter((d) => d.name === "terminal-focus-requested").length, 0);
+  instance.destroy();
+});
+
 test("stops the selected session; a failure shows the coded error", async () => {
   const { instance, memory, tick } = setup();
   tick();

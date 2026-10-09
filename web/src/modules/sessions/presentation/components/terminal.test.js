@@ -1,5 +1,5 @@
 import { mount } from "../../../../shared/testing/alpine.js";
-import { flush } from "../../../../shared/testing/doubles.js";
+import { flush, manualTimers } from "../../../../shared/testing/doubles.js";
 import { assert, file, test } from "../../../../shared/testing/test.js";
 import { memoryTerminals } from "../../infrastructure/memory-terminals.js";
 import { terminal } from "./terminal.js";
@@ -34,16 +34,17 @@ function fakeScreen() {
 function setup(history = []) {
   const terms = memoryTerminals({ greeting: "claude is ready", history });
   const { screen, create } = fakeScreen();
+  const timers = manualTimers();
   let resized = null;
   const el = document.createElement("div");
   const refs = { screen: document.createElement("div") };
   const mounted = mount(
-    () => terminal({ terminals: terms.gateway, createScreen: create, observeResize: (_, cb) => ((resized = cb), () => {}) })("s1"),
+    () => terminal({ terminals: terms.gateway, createScreen: create, timers, observeResize: (_, cb) => ((resized = cb), () => {}) })("s1"),
     { el },
   );
   Object.defineProperty(mounted.instance, "$refs", { value: refs });
   mounted.instance.init();
-  return { ...mounted, terms, screen, resize: () => resized() };
+  return { ...mounted, terms, screen, timers, resize: () => resized() };
 }
 
 const press = (k) => ({ key: k, shiftKey: false, altKey: false, ctrlKey: false, metaKey: false });
@@ -78,12 +79,57 @@ test("typing goes to the PTY and its output comes back to the screen", async () 
   );
 });
 
-test("resizing the pane resizes the PTY", async () => {
-  const { screen, terms, resize } = setup();
+test("resizing the pane resizes the PTY once it settles", async () => {
+  const { screen, terms, timers, resize } = setup();
   await flush();
   screen.nextFit = { cols: 90, rows: 20 };
   resize();
+  assert.equal(terms.sent.get("s1").filter((m) => m.type === "resize").length, 0, "not while the pane is still changing");
+  timers.tick();
   assert.deepEqual(terms.sent.get("s1").at(-1), { type: "resize", size: { cols: 90, rows: 20 } });
+});
+
+test("a burst of pane changes (a window drag, a header growing) sends one resize", async () => {
+  const { screen, terms, timers, resize } = setup();
+  await flush();
+  resize();
+  resize();
+  screen.nextFit = { cols: 100, rows: 30 };
+  resize();
+  assert.deepEqual(timers.delays().length, 1, "each change restarts the one wait");
+  timers.tick();
+  assert.deepEqual(
+    terms.sent.get("s1").filter((m) => m.type === "resize"),
+    [{ type: "resize", size: { cols: 100, rows: 30 } }],
+  );
+});
+
+test("a snapshot already at the pane's size sends no resize; one at another size sends the pane's", async () => {
+  const { instance, screen, terms } = setup();
+  await flush();
+  assert.equal(terms.sent.get("s1")?.filter((m) => m.type === "resize").length ?? 0, 0, "the server has this size already");
+  screen.nextFit = { cols: 120, rows: 35 };
+  instance.connect();
+  await flush();
+  assert.deepEqual(terms.sent.get("s1").filter((m) => m.type === "resize"), [{ type: "resize", size: { cols: 120, rows: 35 } }]);
+});
+
+test("a pane change that leaves the size as it was sends nothing (a hidden pane fits to nothing)", async () => {
+  const { terms, timers, resize } = setup();
+  await flush();
+  resize();
+  timers.tick();
+  assert.equal(terms.sent.get("s1")?.filter((m) => m.type === "resize").length ?? 0, 0);
+});
+
+test("destroying the terminal drops a pending fit", async () => {
+  const { instance, screen, terms, timers, resize } = setup();
+  await flush();
+  screen.nextFit = { cols: 90, rows: 20 };
+  resize();
+  instance.destroy();
+  assert.equal(timers.delays().length, 0);
+  assert.equal(terms.sent.get("s1")?.filter((m) => m.type === "resize").length ?? 0, 0);
 });
 
 test("an exit is shown with its code; a drop offers to reconnect", async () => {
@@ -103,12 +149,13 @@ test("an exit is shown with its code; a drop offers to reconnect", async () => {
 });
 
 test("output, titles, resizes and a reconnect's snapshot never move the focus; asking for it does", async () => {
-  const { instance, screen, terms, resize } = setup();
+  const { instance, screen, terms, timers, resize } = setup();
   await flush();
   terms.print("s1", "more");
   terms.retitle("s1", "claude: tests");
   screen.nextFit = { cols: 90, rows: 20 };
   resize();
+  timers.tick();
   instance.connect();
   await flush();
   assert.equal(screen.drawn.length, 2, "the reconnect drew a fresh snapshot");
