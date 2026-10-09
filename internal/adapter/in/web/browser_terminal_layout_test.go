@@ -175,6 +175,14 @@ func TestSessionTerminalFitsItsPaneOnTheDesktop(t *testing.T) {
 		t.Run(fmt.Sprintf("%dx%d %s", c.width, c.height, c.scheme), func(t *testing.T) {
 			ctx, errs, pty := openCrowdedTask(t, c.width, c.height, c.scheme)
 			checkFits(t, ctx, pty, errs, "after attaching")
+			// The list scrolls on its own; its rows keep their height.
+			var squashed []string
+			if err := chromedp.Run(ctx, chromedp.Evaluate(`[...document.querySelectorAll('[role=listbox] .row')].filter(r => r.scrollHeight > r.clientHeight + 1).map(r => r.textContent.trim().replace(/\s+/g, ' ') + ': ' + r.clientHeight + ' < ' + r.scrollHeight)`, &squashed)); err != nil {
+				t.Fatal(err)
+			}
+			if len(squashed) > 0 {
+				t.Errorf("%d list rows squashed to less than their content, e.g. %s", len(squashed), squashed[0])
+			}
 			shoot(t, ctx, fmt.Sprintf("terminal-%dx%d-%s", c.width, c.height, c.scheme))
 			if e := errs.all(); len(e) > 0 {
 				t.Errorf("JavaScript errors:\n%s", strings.Join(e, "\n"))
