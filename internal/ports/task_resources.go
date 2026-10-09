@@ -146,7 +146,24 @@ type TaskComments interface {
 	// UpdateTicketComment: COMMENT_NOT_FOUND, INVALID_INPUT. The same body
 	// again changes nothing, updated_at included.
 	UpdateTicketComment(ctx context.Context, id, body string) (*domain.TicketComment, error)
+	// UpdateTicketComment of a session's comment is COMMENT_NOT_YOURS: the
+	// person deletes it but does not rewrite it.
 	DeleteTicketComment(ctx context.Context, id string) error
+}
+
+// SessionTaskComments is a session's side of comments, on its own task. In
+// process only: the HTTP API has no way to write as a session. The caller
+// passes the session the endpoint identified, never one the agent named.
+type SessionTaskComments interface {
+	TaskCommentReader
+	// AddSessionComment writes as w: TICKET_NOT_FOUND, INVALID_INPUT for an
+	// empty or oversized body or no session.
+	AddSessionComment(ctx context.Context, ticketID string, w domain.CommentWriter, body string) (*domain.TicketComment, error)
+	// UpdateSessionComment and DeleteSessionComment act only on a comment of
+	// ticketID that sessionID wrote: COMMENT_NOT_FOUND, then
+	// COMMENT_NOT_ON_TASK, then COMMENT_NOT_YOURS.
+	UpdateSessionComment(ctx context.Context, ticketID, sessionID, id, body string) (*domain.TicketComment, error)
+	DeleteSessionComment(ctx context.Context, ticketID, sessionID, id string) error
 }
 
 // --- Feed ---

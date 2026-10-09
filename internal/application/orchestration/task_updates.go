@@ -20,6 +20,8 @@ import (
 // server ↔ Agent sessions — task resources, comments and update turns").
 // Planning raises the events; the turns go through the courier, so a busy
 // session gets its update when its turn ends, never in the middle of one.
+// A comment a session wrote wakes no one: sessions answering each other's
+// comments would loop, and they coordinate through task messages instead.
 
 // maxUpdateComment is how much of a comment an update turn carries.
 const maxUpdateComment = 2000
@@ -44,6 +46,9 @@ func (s *Service) SubscribeTaskUpdates(sub ports.EventSubscriber) {
 		return nil
 	})
 	ports.On(sub, func(_ context.Context, ev domain.TicketCommentAdded) error {
+		if ev.Comment.Author == domain.CommentBySession {
+			return nil
+		}
 		s.queueUpdate(taskUpdate{ev.Comment.TicketID, "task-update:" + ev.Comment.ID, commentUpdateText(ev.Comment)})
 		return nil
 	})
@@ -138,7 +143,7 @@ type taskCounts struct {
 // Without known counts the rest still holds.
 func resourcesSection(c taskCounts) string {
 	var b strings.Builder
-	b.WriteString("## Resources and comments from the person\n\n")
+	b.WriteString("## Resources and comments\n\n")
 	b.WriteString("The person can add files, images, audio, links and comments to this task.\n")
 	if c.known {
 		b.WriteString(countLine(c.resources, c.comments) + "\n")
@@ -148,7 +153,18 @@ tells you; read it if it bears on your work.
 
 - mcp__task__list_task_resources — what the person added, oldest first
 - mcp__task__read_task_resource — one resource: text inline, or a local path to open
-- mcp__task__list_task_comments — the person's comments, oldest first (since narrows)`)
+- mcp__task__list_task_comments — the task's comments, the person's and sessions', oldest first (since narrows)
+
+You can comment on this task too, in the thread the person reads. A comment
+is for what the person should see on the task: progress, a decision, a
+question for them, a summary of what you did. It is not for talking to other
+sessions: your comment wakes no session, so reach them with the task messages
+(message_architect, reply_to_session) when the task has them. You can change
+or delete only your own comments.
+
+- mcp__task__add_task_comment — write a comment as this session
+- mcp__task__update_task_comment — rewrite one of your comments
+- mcp__task__delete_task_comment — delete one of your comments`)
 	return b.String()
 }
 
