@@ -57,7 +57,8 @@ func errorHandler(err error, c echo.Context) {
 			"PUBLISH_ROOT_NOT_SET", "SESSION_HAS_NO_TASK", "DOCUMENT_NOT_ON_TASK", "DOCUMENT_NOT_HTML",
 			"NO_ANSWERS", "ENV_FILE_TOO_LARGE",
 			"ARTIFACT_PATH_OUTSIDE_WORKTREE", "ARTIFACT_URL_NOT_LOCAL", "ARTIFACT_TOO_LARGE", "ARTIFACT_KIND_MISMATCH",
-			"ARTIFACT_NOT_PROMOTABLE", "PROJECT_ROOT_INVALID":
+			"ARTIFACT_NOT_PROMOTABLE", "PROJECT_ROOT_INVALID",
+			"PR_NO_REMOTE", "PR_BASE_NOT_FOUND":
 			writeCoded(c, http.StatusBadRequest, err, se)
 			return
 		case "ARTIFACT_NOT_YOURS", "ARCHITECT_ONLY", "TASK_STATUS_OWNED_BY_ARCHITECT", "SESSION_NOT_ON_TASK",
@@ -78,12 +79,18 @@ func errorHandler(err error, c echo.Context) {
 			"WORKSPACE_MISSING", "SESSION_TRANSCRIPT_MISSING",
 			"ARTIFACT_IN_PROJECT", "REVIEW_NOT_PENDING",
 			"ARTIFACT_NOT_IN_PROJECT", "ARTIFACT_PROJECT_MISMATCH", "ARTIFACT_PRODUCER_TASK",
-			"PROJECT_NAME_TAKEN", "PROJECT_HAS_RUNNING_SESSIONS":
+			"PROJECT_NAME_TAKEN", "PROJECT_HAS_RUNNING_SESSIONS",
+			"PR_NO_COMMITS", "PR_ALREADY_EXISTS":
 			writeCoded(c, http.StatusConflict, err, se)
 			return
-		case "CLAUDE_CLI_NOT_FOUND", "AGENT_CLI_NOT_FOUND", "SERVER_HOSTING_UNAVAILABLE":
-			// The request is well-formed; the machine just cannot run agents.
+		case "CLAUDE_CLI_NOT_FOUND", "AGENT_CLI_NOT_FOUND", "SERVER_HOSTING_UNAVAILABLE", "PR_TOOL_UNAVAILABLE":
+			// The request is well-formed; the machine just cannot run agents,
+			// or reach the code host as the person.
 			writeCoded(c, http.StatusServiceUnavailable, err, se)
+			return
+		case "PR_PUSH_FAILED", "PR_CREATE_FAILED":
+			// The remote or the code host refused; its reason is in the message.
+			writeCoded(c, http.StatusBadGateway, err, se)
 			return
 		}
 	}

@@ -7,6 +7,7 @@ import (
 
 	"github.com/rfbatista/harnesskit/errs"
 
+	"operators-mcp/internal/adapter/in/web/pullrequests"
 	"operators-mcp/internal/adapter/in/web/tasks"
 	"operators-mcp/internal/domain"
 )
@@ -108,6 +109,7 @@ func (h Handler) Session(w http.ResponseWriter, r *http.Request) error {
 	if detail != nil {
 		view.Open = openView(detail, g)
 	}
+	view.PullRequest = h.pullRequestPanel(r, project.ID, sess.WorkspaceID)
 
 	frame, err := h.Layout(ctx, "History · "+task.Title, project.ID, task.ID)
 	if err != nil {
@@ -115,6 +117,23 @@ func (h Handler) Session(w http.ResponseWriter, r *http.Request) error {
 	}
 	view.Frame = frame
 	return h.Render(w, r, http.StatusOK, Page(view))
+}
+
+// pullRequestPanel is the branch's pull request control. Reading it never
+// waits on the host; when it fails the browser reads it again, and a
+// workspace that is gone has none.
+func (h Handler) pullRequestPanel(r *http.Request, projectID, workspaceID string) *pullrequests.Panel {
+	if h.PullRequests == nil {
+		return nil
+	}
+	view, err := h.PullRequests.PullRequest(r.Context(), workspaceID)
+	if errs.Code(err) == "WORKSPACE_NOT_FOUND" {
+		return nil
+	}
+	if err != nil {
+		view = nil
+	}
+	return pullrequests.NewPanel(projectID, workspaceID, view)
 }
 
 // branchMeta says where the session's branch stands: "agent/feed · 2 ahead,

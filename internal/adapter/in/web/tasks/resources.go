@@ -34,8 +34,8 @@ type TaskResourcesView struct {
 // TaskResourcesSeed is the task-resources-seed JSON: the task's resources
 // and comments in the API's shapes, oldest first. Never null.
 type TaskResourcesSeed struct {
-	ProjectID string                  `json:"project_id"`
-	TicketID  string                  `json:"ticket_id"`
+	ProjectID string                   `json:"project_id"`
+	TicketID  string                   `json:"ticket_id"`
 	Resources []*domain.TicketResource `json:"resources"`
 	Comments  []*domain.TicketComment  `json:"comments"`
 }

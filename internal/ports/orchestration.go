@@ -76,7 +76,10 @@ type ProjectChange struct {
 	// task.
 	TicketResource *TicketResourceChange `json:"ticket_resource,omitempty"`
 	TicketComment  *TicketCommentChange  `json:"ticket_comment,omitempty"`
-	Deleted        bool                  `json:"deleted,omitempty"`
+	// PullRequest is a workspace's pull request as it is after being
+	// opened, adopted, or found changed on its host.
+	PullRequest *domain.PullRequest `json:"pull_request,omitempty"`
+	Deleted     bool                `json:"deleted,omitempty"`
 }
 
 // ProjectID is the project whose followers the change is for.
@@ -100,6 +103,8 @@ func (c ProjectChange) ProjectID() string {
 		return c.TicketResource.Resource.ProjectID
 	case c.TicketComment != nil && c.TicketComment.Comment != nil:
 		return c.TicketComment.Comment.ProjectID
+	case c.PullRequest != nil:
+		return c.PullRequest.ProjectID
 	}
 	return ""
 }

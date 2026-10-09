@@ -305,8 +305,11 @@ test("a session with a worktree links its git history", () => {
   tick();
   instance.select("on-repo");
   assert.equal(instance.historyHref, "/projects/p1/tasks/t1/sessions/on-repo/history");
+  assert.deepEqual(instance.selectedWorkspaces, ["ws1"], "what hangs off its worktree (its PR badge) follows the selection");
+  assert.equal(instance.groups.flatMap((g) => g.rows).find((r) => r.id === "on-repo").workspaceId, "ws1");
   instance.select("loose");
   assert.equal(instance.historyHref, "", "no worktree, no history");
+  assert.deepEqual(instance.selectedWorkspaces, []);
   instance.startCreating();
   assert.equal(instance.historyHref, "", "nothing while creating");
   instance.destroy();

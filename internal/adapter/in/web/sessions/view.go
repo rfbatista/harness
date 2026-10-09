@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"operators-mcp/internal/adapter/in/web/components"
+	"operators-mcp/internal/adapter/in/web/pullrequests"
 	"operators-mcp/internal/adapter/in/web/shell"
 	"operators-mcp/internal/domain"
 )
@@ -181,6 +182,9 @@ type PageView struct {
 	// first paint.
 	PendingReviews int
 	NewSession     NewSessionForm
+	// PullRequests seeds the rows' pull request badges; nil leaves them to
+	// the feed alone.
+	PullRequests *pullrequests.WatchSeed
 }
 
 // Empty reports a project without sessions.

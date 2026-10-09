@@ -131,6 +131,7 @@ type world struct {
 	summaries fakeSummaries
 	resources []*domain.TicketResource
 	comments  []*domain.TicketComment
+	prs       ports.PullRequests
 }
 
 // fakeSummaries counts like the projects context: nil leaves /projects unserved.
@@ -169,6 +170,9 @@ func newTestHandler(t *testing.T, w world) http.Handler {
 	}
 	if w.comments != nil {
 		deps.Comments = fakeComments(w.comments)
+	}
+	if w.prs != nil {
+		deps.PullRequests = w.prs
 	}
 	return NewHandler(deps, builtAssets(t), fallback)
 }

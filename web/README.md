@@ -40,6 +40,7 @@ at the repository (handy for the in-memory dev page):
 python3 -m http.server 8413        # from the repo root
 open http://127.0.0.1:8413/web/test/index.html     # unit tests
 open http://127.0.0.1:8413/web/dev/task.html   # a task page, in memory
+open http://127.0.0.1:8413/web/dev/history.html   # a session's git history and its pull request
 ```
 
 Disable the browser cache (or use a no-cache server) while editing: modules are
@@ -49,7 +50,13 @@ cached aggressively. On the dev page, `window.harness` simulates the server:
 `harness.attach("art-1", "t2")`, `harness.detach("art-1", "t2")`; for a task with an
 architect, `harness.report("s-port", "s-arch", "ready_for_review")`,
 `harness.reply("s-arch", "s-port", "Rename it.", "changes_requested")` and
-`harness.fireCheck("s-port")`.
+`harness.fireCheck("s-port")`; a session's PR badge, `harness.pr.open("ws-port")` and
+`harness.pr.state("ws-feed", "merged")`. On the history page, `harness.pr` plays the
+server and the host for its workspace: `open({ draft: true })` (another browser or
+the server's background check), `state("merged")`, `block("PR_TOOL_UNAVAILABLE")`
+(seen on reconnect or when the form opens), `update({ ahead: 0 })`,
+`failNext("PR_PUSH_FAILED", "! [rejected] …")`, `slow(4000)`, `echoFirst()`,
+`forget()` (the workspace row is gone), and `harness.drop()` / `harness.reconnect()`.
 
 ## Adding code
 

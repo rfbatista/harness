@@ -1,0 +1,92 @@
+/*
+ * Pull request — a session branch's PR. The chip links it on the host from
+ * the history page's toolbar; the strip below the toolbar holds why a create
+ * cannot go ahead, notices, and the create form; .pr-badge is a session row's
+ * small link to it.
+ * <a class="pr-chip"><span class="badge" data-tone>open</span><span class="number">#42</span><span class="title">…</span></a>
+ * <section class="pr-strip"><ul class="reasons">…</ul><form class="pr-form">…</form></section>
+ * Exceptions: data-span on a form part takes the full width.
+ */
+
+@layer blocks {
+  .pr-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-xs);
+    min-inline-size: 0;
+    max-inline-size: min(28rem, 100%);
+    min-block-size: var(--size-control-sm);
+    padding-inline: var(--space-xs);
+    border-radius: var(--radius-sm);
+    color: var(--color-ink);
+    font-size: var(--text-sm);
+    text-decoration: none;
+
+    & .number {
+      font-family: var(--font-mono);
+      color: var(--color-ink-muted);
+    }
+
+    & .title {
+      min-inline-size: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    &:hover {
+      background: var(--color-hover);
+    }
+  }
+
+  /* In a .frame, the graph below keeps at least a third of the height: the strip scrolls. */
+  .pr-strip {
+    display: flex;
+    flex-direction: column;
+    flex: 0 1 auto;
+    gap: var(--space-s);
+    max-block-size: 66%;
+    overflow: auto;
+    overscroll-behavior: contain;
+    padding: var(--space-m) var(--space-l);
+    border-block-end: var(--border-width) solid var(--color-line);
+    background: var(--color-panel);
+
+    & .reasons {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-2xs);
+      padding: 0;
+      list-style: none;
+      font-size: var(--text-sm);
+      color: var(--color-ink-muted);
+    }
+  }
+
+  .pr-form {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-s) var(--space-m);
+    max-inline-size: 60rem;
+
+    & textarea {
+      min-block-size: 5rem;
+    }
+
+    @media (min-width: 48rem) {
+      grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+
+      & > [data-span] {
+        grid-column: 1 / -1;
+      }
+    }
+  }
+
+  .pr-badge {
+    text-decoration: none;
+
+    &:hover {
+      text-decoration: underline;
+    }
+  }
+}

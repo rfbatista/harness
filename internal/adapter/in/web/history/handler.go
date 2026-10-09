@@ -28,9 +28,12 @@ type Handler struct {
 	Tasks ports.TicketReader
 	// Sessions links branches that are agent sessions' to their tasks.
 	Sessions ports.SessionReader
-	Layout   shell.Layout
-	Render   shell.Renderer
-	Now      func() time.Time
+	// PullRequests offers a session's branch as a pull request on its
+	// history page; nil leaves the page without it.
+	PullRequests ports.PullRequests
+	Layout       shell.Layout
+	Render       shell.Renderer
+	Now          func() time.Time
 }
 
 // Href is a repository's history page.

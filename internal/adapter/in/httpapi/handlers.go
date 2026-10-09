@@ -46,6 +46,9 @@ type Services struct {
 	// files, images, audio, links and comments. Nil answers 503.
 	TaskResources ports.TaskResources
 	TaskComments  ports.TaskComments
+	// PullRequests opens workspaces' branches as pull requests; nil answers
+	// 503.
+	PullRequests ports.PullRequests
 }
 
 // Handler serves the application's driving ports as HTTP endpoints (the same
@@ -74,6 +77,7 @@ type Handler struct {
 	channel       ports.TaskChannelUI
 	resources     ports.TaskResources
 	comments      ports.TaskComments
+	pullRequests  ports.PullRequests
 }
 
 // NewHandler returns an HTTP handler that serves /api/list_tree, /api/list_zones, /api/list_projects, etc.
@@ -98,6 +102,7 @@ func NewHandler(s Services) *Handler {
 		channel:       s.TaskChannel,
 		resources:     s.TaskResources,
 		comments:      s.TaskComments,
+		pullRequests:  s.PullRequests,
 	}
 }
 

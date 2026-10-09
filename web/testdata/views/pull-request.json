@@ -1,0 +1,27 @@
+{
+  "$comment": "How a workspace's pull request reads on the history page and the task page's badges, first painted by internal/adapter/in/web/pullrequests and then by web/src/modules/pullrequests/presentation/view.js. Read by both sides' tests (pullrequests/view_test.go, presentation/view.test.js).",
+  "draft": { "head_branch": "agent/feed", "base_branch": "main" },
+  "blockers": [
+    { "code": "PR_NO_COMMITS", "text": "Nothing to propose yet: agent/feed has no commits ahead of main." },
+    { "code": "PR_NO_REMOTE", "text": "This repository has no GitHub origin remote, so there is nowhere to open a pull request." },
+    { "code": "PR_TOOL_UNAVAILABLE", "text": "The server can't reach GitHub as you: gh is missing or not signed in on the server machine. Run gh auth login there." },
+    { "code": "PR_BASE_NOT_FOUND", "text": "main is not a branch on origin." },
+    { "code": "PR_ALREADY_EXISTS", "text": "A pull request is already open for this branch." },
+    { "code": "PR_FROM_THE_FUTURE", "text": "The server would refuse it (PR_FROM_THE_FUTURE)." }
+  ],
+  "chips": [
+    { "state": "open", "draft": false, "shown": "open", "tone": "success" },
+    { "state": "open", "draft": true, "shown": "draft", "tone": null },
+    { "state": "merged", "draft": false, "shown": "merged", "tone": "signal" },
+    { "state": "closed", "draft": true, "shown": "closed", "tone": "danger" }
+  ],
+  "summaries": [
+    { "ahead": 3, "remote": { "host": "github.com", "owner": "acme", "repo": "harness" }, "text": "3 commits from agent/feed into main on acme/harness" },
+    { "ahead": 1, "remote": null, "text": "1 commit from agent/feed into main" }
+  ],
+  "uncommitted": [
+    { "count": 0, "text": "" },
+    { "count": 1, "text": "1 uncommitted change in the worktree will not be in the pull request." },
+    { "count": 4, "text": "4 uncommitted changes in the worktree will not be in the pull request." }
+  ]
+}

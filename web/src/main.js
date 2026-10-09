@@ -16,6 +16,8 @@ import { reviewsGateway } from "./modules/reviews/infrastructure/reviews-gateway
 import { registerReviews } from "./modules/reviews/presentation/register.js";
 import { registerRuns } from "./modules/runs/presentation/register.js";
 import { projectsGateway } from "./modules/projects/infrastructure/projects-gateway.js";
+import { pullRequestsGateway } from "./modules/pullrequests/infrastructure/pullrequests-gateway.js";
+import { registerPullRequests } from "./modules/pullrequests/presentation/register.js";
 import { registerProjects } from "./modules/projects/presentation/register.js";
 import { artifactsGateway } from "./modules/sessions/infrastructure/artifacts-gateway.js";
 import { channelGateway } from "./modules/sessions/infrastructure/channel-gateway.js";
@@ -56,5 +58,6 @@ registerSessions(Alpine, {
 
 registerRuns(Alpine, { gateway: runsGateway(api) });
 registerReviews(Alpine, { gateway: reviewsGateway(api, events), clock: systemClock });
+registerPullRequests(Alpine, { gateway: pullRequestsGateway(api, events) });
 
 Alpine.start();
