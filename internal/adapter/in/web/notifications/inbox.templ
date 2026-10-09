@@ -1,0 +1,108 @@
+package notifications
+
+import "operators-mcp/internal/adapter/in/web/shell"
+
+// InboxPage is /notifications. The filters are a GET form (a native select
+// and a radio pair), so the page works and the URL shares without
+// JavaScript; the server paints the first page in [data-ssr], and
+// notificationsPage takes over from the seed, live.
+templ InboxPage(frame shell.Frame, v View) {
+	@shell.AppShell(frame) {
+		if v.Seed != nil {
+			@templ.JSONScript("notifications-page-seed", v.Seed)
+		}
+		<main
+			id="main"
+			class="[ frame ]"
+			x-data="notificationsPage"
+			data-seed="notifications-page-seed"
+			data-project-id={ v.Filter.ProjectID }
+			data-project-name={ v.ProjectName }
+			{ unreadAttr(v.Filter.Unread)... }
+		>
+			<header class="[ toolbar ]">
+				<h1>Notifications</h1>
+				<button type="button" class="[ button ]" data-size="sm" style="display: none" x-show="live" x-bind:disabled="cannotMarkAll" x-bind:aria-busy="marking" x-on:click="markAll">{ v.MarkAllLabel() }</button>
+			</header>
+			<div class="[ inbox ]" data-scroll>
+				<form class="[ inbox-filters ] [ cluster ] [ gutter-s ]" method="get" action={ templ.SafeURL(Href) } x-data="projectPicker">
+					<label class="[ visually-hidden ]" for="inbox-project">Project</label>
+					<select id="inbox-project" name="project" data-size="sm" data-fit x-on:change="go">
+						<option value="" { selected(v.Filter.ProjectID == "")... }>All projects</option>
+						for _, p := range v.Projects {
+							<option value={ p.ID } { selected(p.ID == v.Filter.ProjectID)... }>{ p.Name }</option>
+						}
+					</select>
+					<fieldset class="[ cluster ] [ gutter-xs ]">
+						<legend class="[ visually-hidden ]">Show</legend>
+						<label><input type="radio" name="unread" value="" { checked(!v.Filter.Unread)... } x-on:change="go"/> All</label>
+						<label><input type="radio" name="unread" value="1" { checked(v.Filter.Unread)... } x-on:change="go"/> Unread</label>
+					</fieldset>
+					<noscript><button type="submit" class="[ button ]" data-size="sm">Apply</button></noscript>
+				</form>
+				<template x-if="error">
+					<div class="[ banner ]" data-tone="danger" role="alert">
+						<div class="[ flow ] [ flow-space-3xs grow ]">
+							<span x-text="error.message"></span>
+							<span class="[ code ]"><span x-text="error.code"></span> · <span x-text="error.next"></span></span>
+						</div>
+						<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-on:click="dismissError">Dismiss</button>
+					</div>
+				</template>
+				<div x-ignore data-ssr>
+					if rows := v.Rows(); len(rows) > 0 {
+						<ul role="list" class="[ notification-list ]">
+							for _, row := range rows {
+								<li>
+									@serverRow(row)
+								</li>
+							}
+						</ul>
+						if v.Seed.NextBefore != "" {
+							<a class="[ button ] [ more ]" data-size="sm" href={ templ.SafeURL(moreHref(v.Filter, v.Seed.NextBefore)) }>Older notifications</a>
+						}
+					} else if v.Seed != nil {
+						<p class="[ empty-line ]">{ v.EmptyText() }</p>
+					}
+				</div>
+				<template x-if="live">
+					<div>
+						<ul role="list" class="[ notification-list ]" x-show="hasRows">
+							<template x-for="row in rows" x-bind:key="row.id">
+								<li>
+									@shell.NotificationLiveRow()
+								</li>
+							</template>
+						</ul>
+						<p class="[ empty-line ]" x-show="isEmpty" x-text="emptyText"></p>
+						<button type="button" class="[ button ] [ more ]" data-size="sm" x-show="hasMore" x-bind:aria-busy="loadingMore" x-on:click="loadMore">Load more</button>
+					</div>
+				</template>
+			</div>
+		</main>
+	}
+}
+
+// serverRow is a notification as the server paints it: a plain link, no
+// actions (they need JavaScript).
+templ serverRow(row Row) {
+	<article class="[ notification ]" data-level={ row.Level } data-state={ row.State }>
+		<span class="[ marker ]" aria-hidden="true"></span>
+		<div class="[ text ]">
+			<a class="[ title ]" href={ templ.SafeURL(row.Href) }>{ row.Title }</a>
+			<p class="[ meta ]">
+				<span>{ row.Project }</span>
+				if row.Task != "" {
+					<span class="[ task ]">{ row.Task }</span>
+				}
+				if row.LevelLabel != "" {
+					<span class="[ level ]">{ row.LevelLabel }</span>
+				}
+				<time datetime={ row.At }>{ row.Age }</time>
+			</p>
+			if row.Body != "" {
+				<p class="[ body ]">{ row.Body }</p>
+			}
+		</div>
+	</article>
+}

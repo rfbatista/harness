@@ -83,7 +83,7 @@ func TestSessionComments_EndToEnd(t *testing.T) {
 	mux.Handle("/api/", httpapi.NewRouter(httpapi.NewHandler(httpapi.Services{
 		Projects: cat.Projects, ProjectFeed: cat.Projects, Sessions: orch, Planning: plan, TaskComments: plan,
 	})))
-	mux.Handle(mcpsession.PathPrefix, mcpsession.TaskHandler(sessionTaskTools(cat, orch, plan, sessions, art, channel)))
+	mux.Handle(mcpsession.PathPrefix, mcpsession.TaskHandler(sessionTaskTools(cat, orch, plan, sessions, art, channel, nil)))
 	mux.Handle("/", web.NewHandler(web.Deps{Projects: cat.Projects, Tasks: plan, Sessions: orch, Agents: cat.Agents, Repositories: cat.Projects, Comments: plan}, assets, nil))
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)

@@ -48,7 +48,7 @@ func errorHandler(err error, c echo.Context) {
 			"TERMINAL_NOT_FOUND", "ENV_FILE_NOT_FOUND",
 			"RUN_NOT_FOUND", "RUN_COMMAND_NOT_FOUND", "ARTIFACT_NOT_FOUND",
 			"MESSAGE_NOT_FOUND", "REVIEW_NOT_FOUND", "STATUS_CHECK_NOT_FOUND", "NO_ARCHITECT",
-			"RESOURCE_NOT_FOUND", "COMMENT_NOT_FOUND":
+			"RESOURCE_NOT_FOUND", "COMMENT_NOT_FOUND", "NOTIFICATION_NOT_FOUND":
 			writeCoded(c, http.StatusNotFound, err, se)
 			return
 		case "INVALID_PATTERN", "INVALID_NAME", "INVALID_ROOT", "INVALID_PATH",
@@ -58,13 +58,16 @@ func errorHandler(err error, c echo.Context) {
 			"NO_ANSWERS", "ENV_FILE_TOO_LARGE",
 			"ARTIFACT_PATH_OUTSIDE_WORKTREE", "ARTIFACT_URL_NOT_LOCAL", "ARTIFACT_TOO_LARGE", "ARTIFACT_KIND_MISMATCH",
 			"ARTIFACT_NOT_PROMOTABLE", "PROJECT_ROOT_INVALID",
-			"PR_NO_REMOTE", "PR_BASE_NOT_FOUND":
+			"PR_NO_REMOTE", "PR_BASE_NOT_FOUND", "TASK_NOT_ON_PROJECT":
 			writeCoded(c, http.StatusBadRequest, err, se)
 			return
 		case "ARTIFACT_NOT_YOURS", "ARCHITECT_ONLY", "TASK_STATUS_OWNED_BY_ARCHITECT", "SESSION_NOT_ON_TASK",
 			"COMMENT_NOT_YOURS",
 			"RESOURCE_NOT_ON_TASK", "COMMENT_NOT_ON_TASK": // MCP only; no route answers them
 			writeCoded(c, http.StatusForbidden, err, se)
+			return
+		case "NOTIFICATION_RATE_LIMITED":
+			writeCoded(c, http.StatusTooManyRequests, err, se)
 			return
 		case "RESOURCE_TOO_LARGE":
 			writeCoded(c, http.StatusRequestEntityTooLarge, err, se)

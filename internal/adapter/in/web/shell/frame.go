@@ -11,6 +11,7 @@ import (
 	"github.com/a-h/templ"
 
 	"operators-mcp/internal/domain"
+	"operators-mcp/internal/ports"
 )
 
 // Frame is what the shell needs from a page.
@@ -28,6 +29,50 @@ type Frame struct {
 	Live bool
 	// Hints are the keys the stream bar names; nil names the list keys (J K move).
 	Hints []Hint
+	// Notifications is the top bar's bell; nil leaves it out (the inbox is
+	// not served).
+	Notifications *Bell
+}
+
+// Bell is the top bar's way to the inbox: the global unread count, painted
+// before any script runs, and the latest notifications the panel opens on.
+type Bell struct {
+	// Href is the inbox page.
+	Href string
+	// Seed is the latest page (the API's JSON), or nil when it could not be
+	// read: the browser's first read then fills in the count.
+	Seed *ports.NotificationPage
+}
+
+// Unread is the count to paint; 0 without a seed.
+func (b *Bell) Unread() int {
+	if b == nil || b.Seed == nil {
+		return 0
+	}
+	return b.Seed.UnreadCount
+}
+
+// badgeMax is where the badge stops counting (the browser's badgeText).
+const badgeMax = 99
+
+// BadgeText is the bell's badge: "", "3", "99+".
+func (b *Bell) BadgeText() string {
+	n := b.Unread()
+	switch {
+	case n <= 0:
+		return ""
+	case n > badgeMax:
+		return strconv.Itoa(badgeMax) + "+"
+	}
+	return strconv.Itoa(n)
+}
+
+// Label is the bell's accessible name, with the exact count (bellLabel).
+func (b *Bell) Label() string {
+	if n := b.Unread(); n > 0 {
+		return "Notifications, " + strconv.Itoa(n) + " unread"
+	}
+	return "Notifications"
 }
 
 // Hint is one keyboard way the stream bar names: its keys and what they do.
@@ -163,10 +208,15 @@ type Link struct {
 
 // DocumentTitle is the <title>: the page's own title, then the app.
 func (f Frame) DocumentTitle() string {
-	if f.Title == "" {
-		return "harness"
+	title := "harness"
+	if f.Title != "" {
+		title = f.Title + " · harness"
 	}
-	return f.Title + " · harness"
+	// The unread count leads, as the browser keeps it (store.syncTitle).
+	if n := f.Notifications.Unread(); n > 0 {
+		title = "(" + strconv.Itoa(n) + ") " + title
+	}
+	return title
 }
 
 // Layout builds a page's Frame: assets, the project picker and the task rail.

@@ -615,6 +615,26 @@
         </div>
       </section>
 
+      <section class="[ flow ] [ flow-space-m ]" id="notifications">
+        <h2>Notifications</h2>
+        <p class="[ color-ink-muted ]">The bell ends the <code>topbar</code>, with an <code>attention</code> badge for the unread count across projects: none at 0, the number, then <em>99+</em> (the accessible name keeps the exact count). Each item is a <code>notification</code> row: an <code>action</code> one takes the amber rule and <em>Needs you</em>; unread is a filled dot and a bold title; <code>settled</code> is muted and says so. The panel clamps bodies to two lines; the inbox page shows them whole.</p>
+        <div class="[ flow ] [ flow-space-xs ]" style="border: 1px solid var(--color-line); border-radius: var(--radius-md); overflow: hidden">
+          <header class="[ topbar ]"><a class="[ brand ]" href="#">harness</a><div class="[ notifications ]"><a class="[ button ] [ bell ]" data-variant="ghost" data-icon href="#" aria-label="Notifications"><svg aria-hidden="true" viewBox="0 0 16 16"><path d="M4 11.25V7a4 4 0 0 1 8 0v4.25l1.25 1.25H2.75z M6.5 13.75a1.6 1.6 0 0 0 3 0" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"></path></svg></a></div></header>
+          <header class="[ topbar ]"><a class="[ brand ]" href="#">harness</a><div class="[ notifications ]"><a class="[ button ] [ bell ]" data-variant="ghost" data-icon href="#" aria-label="Notifications, 3 unread"><svg aria-hidden="true" viewBox="0 0 16 16"><path d="M4 11.25V7a4 4 0 0 1 8 0v4.25l1.25 1.25H2.75z M6.5 13.75a1.6 1.6 0 0 0 3 0" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"></path></svg><span class="[ badge ]" data-tone="attention" aria-hidden="true">3</span></a></div></header>
+          <header class="[ topbar ]"><a class="[ brand ]" href="#">harness</a><div class="[ notifications ]"><a class="[ button ] [ bell ]" data-variant="ghost" data-icon href="#" aria-label="Notifications, 128 unread"><svg aria-hidden="true" viewBox="0 0 16 16"><path d="M4 11.25V7a4 4 0 0 1 8 0v4.25l1.25 1.25H2.75z M6.5 13.75a1.6 1.6 0 0 0 3 0" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"></path></svg><span class="[ badge ]" data-tone="attention" aria-hidden="true">99+</span></a></div></header>
+        </div>
+        <div style="border: 1px solid var(--color-line); border-radius: var(--radius-md); overflow: hidden; max-inline-size: 40rem">
+          <ul role="list" class="[ notification-list ]">
+            <li><article class="[ notification ]" data-level="action" data-state="unread"><span class="[ marker ]" aria-hidden="true"></span><div class="[ text ]"><a class="[ title ]" href="#">Review requested: the dashboard plan</a><p class="[ meta ]"><span>harness</span><span class="[ task ]">Improve tasks dashboard ui</span><span class="[ level ]">Needs you</span><time>2m</time></p><p class="[ body ]">The architect asks you to look at the plan before the delegates start.</p></div><button type="button" class="[ button ] [ mark ]" data-variant="ghost" data-size="sm" aria-label="Mark read: Review requested: the dashboard plan">Mark read</button></article></li>
+            <li><article class="[ notification ]" data-level="info" data-state="unread"><span class="[ marker ]" aria-hidden="true"></span><div class="[ text ]"><a class="[ title ]" href="#">Release notes drafted</a><p class="[ meta ]"><span>tui</span><time>5m</time></p></div><button type="button" class="[ button ] [ mark ]" data-variant="ghost" data-size="sm" aria-label="Mark read: Release notes drafted">Mark read</button></article></li>
+            <li><article class="[ notification ]" data-level="action" data-state="read"><span class="[ marker ]" aria-hidden="true"></span><div class="[ text ]"><a class="[ title ]" href="#">A session waits for approval</a><p class="[ meta ]"><span>harness</span><span class="[ task ]">Fix flaky project documents test</span><span class="[ level ]">Needs you</span><time>9m</time></p></div></article></li>
+            <li><article class="[ notification ]" data-level="info" data-state="read"><span class="[ marker ]" aria-hidden="true"></span><div class="[ text ]"><a class="[ title ]" href="#">A session failed</a><p class="[ meta ]"><span>harness</span><time>40m</time></p><p class="[ body ]">exit status 1</p></div></article></li>
+            <li><article class="[ notification ]" data-level="action" data-state="settled"><span class="[ marker ]" aria-hidden="true"></span><div class="[ text ]"><a class="[ title ]" href="#">Redesign sidebar is in review</a><p class="[ meta ]"><span>harness</span><span class="[ task ]">Redesign sidebar</span><span class="[ level ]">Settled</span><time>1h</time></p></div></article></li>
+            <li><article class="[ notification ]" data-level="info" data-state="settled"><span class="[ marker ]" aria-hidden="true"></span><div class="[ text ]"><a class="[ title ]" href="#">Deploy finished</a><p class="[ meta ]"><span>tui</span><span class="[ task ]">Ship it</span><span class="[ level ]">Settled</span><time>3h</time></p></div></article></li>
+          </ul>
+        </div>
+      </section>
+
       <section class="[ flow ] [ flow-space-m ]">
         <h2>Command palette and toast</h2>
         <div class="[ cluster ]">

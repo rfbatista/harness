@@ -282,9 +282,12 @@ var ToolingModule = fx.Module("tooling",
 	fx.Provide(newToolingService),
 )
 
-func newToolingService(cat catalog.Catalog, plan *planning.Service, exec *execution.Service) *tooling.Service {
+func newToolingService(cat catalog.Catalog, plan *planning.Service, exec *execution.Service, inbox optionalNotifications) *tooling.Service {
 	svc := tooling.NewService()
 	tooling.Bootstrap(svc, cat.Tooling(), plan, exec)
+	if inbox.Service != nil {
+		svc.Register(tooling.NotificationTools(inbox.Service)...)
+	}
 	return svc
 }
 

@@ -144,8 +144,21 @@ it shows in this task's Design tab beside what the task produced:
 - mcp__task__detach_artifact_from_task — detach one from this task; it stays in the project
 
 These tools always act on this task; they take no project or task id.`)
-	return b.String() + "\n\n" + resourcesSection(counts)
+	return b.String() + "\n\n" + resourcesSection(counts) + "\n\n" + notificationsSection
 }
+
+// notificationsSection names the inbox tools and what notify is for (see
+// "Contract: Harness server ↔ Agent sessions — notification tools" §4).
+const notificationsSection = `The person has one inbox across every project: review requests, sessions
+waiting for approval, tasks in review, failed sessions, and what agents post.
+You can read it and post to it; reading never marks anything read:
+
+- mcp__task__list_notifications — the inbox, newest first: scope all (default) or project, unread_only (default true), since, limit
+- mcp__task__notify — post to it as this session: title, body, level info or action, link (default: this task's page); it shows in the web UI live and goes out through every enabled delivery provider
+
+Use notify only for what the person has to know or do, never for progress
+chatter: request_user_review and moving a task to review already notify the
+person. A session may post at most 20 an hour.`
 
 // appendSection joins two prompt fragments with a blank line, tolerating an
 // empty base (a session with no agent prompt).

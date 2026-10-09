@@ -41,7 +41,7 @@ func newCommentFixture(t *testing.T) *taskToolsFixture {
 		}
 	}
 	for _, tl := range SessionTaskTools(f.plan, f.sessions, namedAgents{}, nil, PeerStarter{}, ArtifactTooling{}, nil,
-		ResourceTooling{Files: f.plan, Comments: f.plan, Writer: f.plan}) {
+		ResourceTooling{Files: f.plan, Comments: f.plan, Writer: f.plan}, NotificationTooling{}) {
 		f.tools[tl.Name] = tl
 	}
 	return f
@@ -155,7 +155,7 @@ func TestListTaskComments_BothAuthors(t *testing.T) {
 
 func TestCommentWriteToolsUnavailableWithoutTheirPort(t *testing.T) {
 	f := newTaskToolsFixture(t)
-	for _, tl := range SessionTaskTools(f.plan, f.sessions, nil, nil, PeerStarter{}, ArtifactTooling{}, nil, ResourceTooling{Files: f.plan, Comments: f.plan}) {
+	for _, tl := range SessionTaskTools(f.plan, f.sessions, nil, nil, PeerStarter{}, ArtifactTooling{}, nil, ResourceTooling{Files: f.plan, Comments: f.plan}, NotificationTooling{}) {
 		switch tl.Name {
 		case "add_task_comment", "update_task_comment", "delete_task_comment":
 			_, err := tl.Handler(WithSessionID(context.Background(), f.sessionID), map[string]any{"body": "x", "comment_id": "c"})

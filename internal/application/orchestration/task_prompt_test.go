@@ -242,3 +242,16 @@ func assertNamesTheOtherTools(t *testing.T, brief string) {
 		}
 	}
 }
+
+// Every role's brief names the inbox tools and keeps notify for what the
+// person has to know or do.
+func TestTaskBrief_NamesTheNotificationTools(t *testing.T) {
+	for _, role := range []domain.SessionRole{domain.RolePeer, domain.RoleDelegate, domain.RoleArchitect} {
+		got := taskBrief(&domain.Ticket{ID: "tk1", Title: "Ship the thing"}, role, taskCounts{})
+		for _, want := range []string{"\n- mcp__task__list_notifications — ", "\n- mcp__task__notify — ", "never for progress", "already notify the"} {
+			if !strings.Contains(got, want) {
+				t.Errorf("%q brief lacks %q", role, want)
+			}
+		}
+	}
+}

@@ -109,3 +109,14 @@ or delete only your own comments.
 - mcp__task__add_task_comment — write a comment as this session
 - mcp__task__update_task_comment — rewrite one of your comments
 - mcp__task__delete_task_comment — delete one of your comments
+
+The person has one inbox across every project: review requests, sessions
+waiting for approval, tasks in review, failed sessions, and what agents post.
+You can read it and post to it; reading never marks anything read:
+
+- mcp__task__list_notifications — the inbox, newest first: scope all (default) or project, unread_only (default true), since, limit
+- mcp__task__notify — post to it as this session: title, body, level info or action, link (default: this task's page); it shows in the web UI live and goes out through every enabled delivery provider
+
+Use notify only for what the person has to know or do, never for progress
+chatter: request_user_review and moving a task to review already notify the
+person. A session may post at most 20 an hour.
