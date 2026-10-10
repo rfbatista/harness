@@ -79,6 +79,8 @@ export const sessionsPage = ({ gateway, clock, channel = null, channelStore = { 
     baseRefs: {},
     /** Changed files per session, as each Code panel counted them, for the tab's badge. */
     codeCounts: {},
+    /** The Code tab asked for the whole width (⇧E): the session list hides while it is in front. */
+    codeExpanded: false,
 
     // ── what the markup binds ────────────────────────────────────────────
     get groups() {
@@ -219,6 +221,7 @@ export const sessionsPage = ({ gateway, clock, channel = null, channelStore = { 
           baseRef: this.baseRefs[session.workspaceId] ?? "",
           live,
           shown: this.detailTab === "code",
+          expanded: this.codeExpanded,
           seedId: "code-seed",
         },
       ];
@@ -456,6 +459,10 @@ export const sessionsPage = ({ gateway, clock, channel = null, channelStore = { 
       const t = encodeURIComponent(this.ticketId);
       history?.replaceState?.(null, "", `/projects/${p}/tasks/${t}?session=${encodeURIComponent(this.selectedId)}`);
     },
+    /** The Code panel's Expand (⇧E): a view preference, the URL stays. */
+    codeExpand(event) {
+      this.codeExpanded = event.detail?.expanded === true;
+    },
     /** A Code panel counted its session's changed files. */
     codeCounted(event) {
       const { sessionId, count } = event.detail ?? {};
@@ -538,6 +545,10 @@ export const sessionsPage = ({ gateway, clock, channel = null, channelStore = { 
     closeDetail() {
       this.detailOpen = false;
       this.$nextTick(() => this.$refs.list?.focus());
+    },
+    /** data-expanded on the split view: the Code tab expanded, while it is in front. */
+    get expandedAttr() {
+      return this.codeExpanded && this.showingCode ? "" : null;
     },
     /** data-detail on the split view: present while the detail is open. */
     get detailOpenAttr() {

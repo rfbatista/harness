@@ -26,6 +26,7 @@ templ Page(v PageView) {
 			x-on:announce="announce"
 			x-on:artifact-moved="artifactMoved"
 			x-on:code-files-counted="codeCounted"
+			x-on:code-expand="codeExpand"
 		>
 			@templ.JSONScript("sessions-seed", v.Seed)
 			if v.Code != nil {
@@ -116,7 +117,7 @@ templ Page(v PageView) {
 				</div>
 			</template>
 			<p class="[ visually-hidden ]" role="status" aria-live="polite" x-text="announcement"></p>
-			<div class="[ split-view ]" data-scroll x-bind:data-detail="detailOpenAttr">
+			<div class="[ split-view ]" data-scroll x-bind:data-detail="detailOpenAttr" x-bind:data-expanded="expandedAttr">
 				<div
 					class="[ list ] [ divide-end ]"
 					role="listbox"

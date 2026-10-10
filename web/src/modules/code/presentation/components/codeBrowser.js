@@ -142,6 +142,8 @@ export function codeBrowser({ gateway, highlighter, prefs, history = globalThis.
     pathsTruncated: false,
     announcement: "",
     toast: "",
+    /** A session's Code tab takes the whole width (⇧E); the sessions page hides its list. */
+    expanded: false,
 
     // ── the source bar ───────────────────────────────────────────────────
     get view() {
@@ -382,6 +384,15 @@ export function codeBrowser({ gateway, highlighter, prefs, history = globalThis.
       const current = this.route?.ref || this.branch;
       const refs = current && !this.refs.includes(current) ? [current, ...this.refs] : this.refs;
       return refs.map((r) => ({ key: r, value: r, selected: r === current }));
+    },
+    get expandPressed() {
+      return String(this.expanded);
+    },
+    /** ⇧E and the Expand button: the session list hides or comes back; the URL stays. */
+    toggleExpand() {
+      if (this.kind !== "session") return;
+      this.expanded = !this.expanded;
+      this.$dispatch?.("code-expand", { expanded: this.expanded });
     },
     get paletteActiveId() {
       return this.paletteMode === "file" && this.finderRows.length ? `finder-${this.paletteActive}` : null;
@@ -1286,6 +1297,8 @@ export function codeBrowser({ gateway, highlighter, prefs, history = globalThis.
           return run(() => this.copyPermalink());
         case "r":
           return this.isStale && run(() => this.reload());
+        case "E":
+          return this.kind === "session" && event.shiftKey && run(() => this.toggleExpand());
         case "F6":
           return run(() => this.swapPane());
         case "Escape":

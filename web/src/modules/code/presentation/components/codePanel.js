@@ -22,6 +22,7 @@ export const CODE_HINTS = Object.freeze([
   { keys: ["L"], label: "line" },
   { keys: ["]", "["], label: "files" },
   { keys: ["G", "C/F/M"], label: "views" },
+  { keys: ["⇧E"], label: "expand" },
 ]);
 
 /**
@@ -37,6 +38,7 @@ export const CODE_HINTS = Object.freeze([
  * @property {string} baseRef
  * @property {boolean} live      the session is running
  * @property {boolean} shown     the Code tab is in front now
+ * @property {boolean} expanded  the page's list is hidden for the Code tab (⇧E)
  * @property {string} seedId     the first paint's seed, when the server painted this panel
  */
 
@@ -53,6 +55,7 @@ export const codePanel = (deps) => (/** @type {PanelInput} */ panel) => {
     init() {
       this.sessionId = panel.sessionId;
       this.shown = !!panel.shown;
+      this.expanded = !!panel.expanded;
       const seedEl = panel.seedId ? this.$el.ownerDocument.getElementById(panel.seedId) : null;
       let seeded = false;
       if (seedEl) {

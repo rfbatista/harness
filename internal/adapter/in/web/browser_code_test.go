@@ -14,7 +14,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/chromedp/cdproto/input"
 	"github.com/chromedp/chromedp"
+	"github.com/chromedp/chromedp/kb"
 
 	"operators-mcp/internal/adapter/in/httpapi"
 	"operators-mcp/internal/application/workspaces/workspacestest"
@@ -218,6 +220,10 @@ func TestSessionCodeTabInTheBrowser(t *testing.T) {
 		chromedp.KeyEvent("]"),
 		chromedp.Sleep(200*time.Millisecond),
 		chromedp.Evaluate(`document.querySelector('.diff-summary a[aria-current=location] .name').textContent`, &afterStep),
+		chromedp.KeyEvent("s"),
+		chromedp.Poll(`document.querySelectorAll('section[aria-label=Code] .code-lines[data-layout=split] .line > .half').length > 0`, nil, chromedp.WithPollingTimeout(3*time.Second)),
+		chromedp.KeyEvent("s"),
+		chromedp.Poll(`document.querySelectorAll('section[aria-label=Code] .half').length === 0 && document.querySelectorAll('section[aria-label=Code] .diff-view .code-lines .line').length > 0`, nil, chromedp.WithPollingTimeout(3*time.Second)),
 		chromedp.KeyEvent("g"),
 		chromedp.KeyEvent("f"),
 		chromedp.Poll(`document.querySelectorAll('section[aria-label=Code] .file-tree [role=treeitem]').length > 0`, nil, chromedp.WithPollingTimeout(5*time.Second)),
@@ -579,6 +585,97 @@ func TestCodeMapAndNarrowLayoutInTheBrowser(t *testing.T) {
 	}
 	if !sideShown || mainShown || sideAfter || !mainAfter || back != "‹ Files" {
 		t.Errorf("narrow: side %v main %v, after opening side %v main %v, back %q", sideShown, mainShown, sideAfter, mainAfter, back)
+	}
+	if e := errs.all(); len(e) > 0 {
+		t.Errorf("JS errors: %v", e)
+	}
+}
+
+// TestCodeExpandHidesTheSessionListInTheBrowser: Expand (and ⇧E) gives the
+// Code tab the whole width at 1440, and brings the list back; the URL stays.
+func TestCodeExpandHidesTheSessionListInTheBrowser(t *testing.T) {
+	w := newCodeWorld(t, withSession(domain.SessionRunning, func(w *codeWorld) string { return w.at.WorkspaceID }))
+	ctx, errs := browser(t)
+	url := w.srv.URL + "/projects/" + w.f.ProjectID + "/tasks/t1/sessions/s1/code"
+	listShown := `getComputedStyle(document.querySelector('.split-view > :first-child')).display !== 'none'`
+	var before, expanded, back, pressed bool
+	var locBefore, locAfter string
+	err := chromedp.Run(ctx,
+		chromedp.EmulateViewport(1440, 900),
+		chromedp.Navigate(url),
+		chromedp.Poll(`document.querySelectorAll('[data-ssr]').length === 0 && !!document.querySelector('section[aria-label=Code] [data-code-expand]')`, nil, chromedp.WithPollingTimeout(10*time.Second)),
+		chromedp.Evaluate(listShown, &before),
+		chromedp.Location(&locBefore),
+		chromedp.Click(`section[aria-label=Code] [data-code-expand]`, chromedp.ByQuery),
+		chromedp.Poll(`document.querySelector('.split-view').hasAttribute('data-expanded')`, nil, chromedp.WithPollingTimeout(3*time.Second)),
+		chromedp.Evaluate(`!(`+listShown+`)`, &expanded),
+		chromedp.Evaluate(`document.querySelector('section[aria-label=Code] [data-code-expand]').getAttribute('aria-pressed') === 'true'`, &pressed),
+		chromedp.Focus(`section[aria-label=Code] .main`, chromedp.ByQuery),
+		chromedp.KeyEvent("E", chromedp.KeyModifiers(input.ModifierShift)),
+		chromedp.Poll(`!document.querySelector('.split-view').hasAttribute('data-expanded')`, nil, chromedp.WithPollingTimeout(3*time.Second)),
+		chromedp.Evaluate(listShown, &back),
+		chromedp.Location(&locAfter),
+	)
+	if err != nil {
+		t.Fatalf("%v\nJS errors: %v", err, errs.all())
+	}
+	if !before || !expanded || !pressed || !back {
+		t.Errorf("list shown %v, hidden when expanded %v (pressed %v), back after ⇧E %v", before, expanded, pressed, back)
+	}
+	if locBefore != locAfter {
+		t.Errorf("Expand changed the URL: %q → %q", locBefore, locAfter)
+	}
+	if e := errs.all(); len(e) > 0 {
+		t.Errorf("JS errors: %v", e)
+	}
+}
+
+// TestCodeTreeKeysInTheBrowser: the flat tree follows the APG tree pattern:
+// type-ahead, → opens a directory then enters its first child, ← goes to the
+// parent then closes it, * opens every sibling directory; the levels stay right.
+func TestCodeTreeKeysInTheBrowser(t *testing.T) {
+	w := newCodeWorld(t, nil)
+	ctx, errs := browser(t)
+	base := w.srv.URL + "/projects/" + w.f.ProjectID + "/repositories/" + w.repoID + "/code"
+	focused := func(out *string) chromedp.Action {
+		return chromedp.Evaluate(`document.activeElement.closest('[role=treeitem]')?.getAttribute('title') ?? ''`, out)
+	}
+	var afterType, afterRight, intoChild, childLevel, toParent, collapsed string
+	var levels []string
+	err := chromedp.Run(ctx,
+		chromedp.EmulateViewport(1440, 900),
+		chromedp.Navigate(base),
+		chromedp.Poll(`document.querySelectorAll('[data-ssr]').length === 0 && document.querySelectorAll('.file-tree [role=treeitem]').length > 0`, nil, chromedp.WithPollingTimeout(10*time.Second)),
+		chromedp.Focus(`.file-tree .item[tabindex="0"]`, chromedp.ByQuery),
+		chromedp.KeyEvent("i"),
+		chromedp.Sleep(100*time.Millisecond),
+		focused(&afterType),
+		chromedp.KeyEvent(kb.ArrowRight),
+		chromedp.Poll(`document.querySelector('.file-tree [title="internal"]').getAttribute('aria-expanded') === 'true' && !!document.querySelector('.file-tree [title="internal/app"]')`, nil, chromedp.WithPollingTimeout(3*time.Second)),
+		focused(&afterRight),
+		chromedp.KeyEvent(kb.ArrowRight),
+		chromedp.Sleep(100*time.Millisecond),
+		focused(&intoChild),
+		chromedp.Evaluate(`document.activeElement.closest('[role=treeitem]').getAttribute('aria-level')`, &childLevel),
+		chromedp.KeyEvent(kb.ArrowLeft),
+		chromedp.Sleep(100*time.Millisecond),
+		focused(&toParent),
+		chromedp.KeyEvent(kb.ArrowLeft),
+		chromedp.Sleep(100*time.Millisecond),
+		chromedp.Evaluate(`document.querySelector('.file-tree [title="internal"]').getAttribute('aria-expanded')`, &collapsed),
+		chromedp.KeyEvent("*"),
+		chromedp.Poll(`['bulk','docs','internal','web'].every(d => document.querySelector('.file-tree [title="' + d + '"]').getAttribute('aria-expanded') === 'true')`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Poll(`!!document.querySelector('.file-tree [title="docs/new.md"]') && !document.querySelector('.file-tree [aria-busy=true]')`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Evaluate(`[...document.querySelectorAll('.file-tree [role=treeitem]')].filter(li => ['docs','docs/old.md','docs/new.md'].includes(li.title)).map(li => li.title + ':' + li.getAttribute('aria-level') + '/' + li.getAttribute('aria-posinset') + '/' + li.getAttribute('aria-setsize'))`, &levels),
+	)
+	if err != nil {
+		t.Fatalf("%v\nJS errors: %v", err, errs.all())
+	}
+	if afterType != "internal" || afterRight != "internal" || intoChild != "internal/app" || childLevel != "2" || toParent != "internal" || collapsed != "false" {
+		t.Errorf("type-ahead %q, → %q, → %q (level %s), ← %q, ← leaves internal expanded=%s", afterType, afterRight, intoChild, childLevel, toParent, collapsed)
+	}
+	if strings.Join(levels, " ") != "docs:1/2/13 docs/new.md:2/1/1" {
+		t.Errorf("levels after *: %v", levels)
 	}
 	if e := errs.all(); len(e) > 0 {
 		t.Errorf("JS errors: %v", e)
