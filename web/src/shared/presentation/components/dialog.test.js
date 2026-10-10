@@ -135,3 +135,8 @@ test("popupDialog opens on dialog-open for its own id only, and closes with clos
     outer.remove();
   }
 });
+
+test("each popupDialog keeps its own dialog, even nested in a scope that holds others", () => {
+  const instance = popupDialog(env())();
+  assert.ok(Object.prototype.hasOwnProperty.call(instance, "_dialog"), "declared, so Alpine does not write it to the outer scope");
+});

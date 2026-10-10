@@ -144,12 +144,8 @@ test("delete asks first, then removes the session and clears the selection", asy
   assert.equal((await memory.gateway.list({ projectId: "p1" })).some((s) => s.id === "run"), false);
 
   instance.select("turn");
-  instance.askDelete();
-  assert.equal(instance.confirmingDelete, true);
   assert.ok(instance.deleteConsequence.includes("stops now"), "deleting a live session says it stops it");
-  instance.cancelDelete();
-  assert.equal(instance.confirmingDelete, false);
-  assert.ok(instance.sessions.some((s) => s.id === "turn"), "cancel keeps it");
+  assert.ok(instance.sessions.some((s) => s.id === "turn"), "asking (the confirm on ⋯) deletes nothing");
   instance.destroy();
 });
 
@@ -170,15 +166,15 @@ test("the selected live session's terminal is mounted; switching sessions remoun
     makeSession({ id: "over", status: "done", updatedAt: new Date(T0.getTime() - 60_000) }),
   ]);
   tick();
-  assert.deepEqual(instance.terminalIds, ["live"]);
-  assert.equal(instance.terminalNote, "");
+  assert.deepEqual(instance.terminalPanes.map((p) => p.id), ["live"]);
+  assert.equal(instance.paneNote, null, "a live terminal needs no note");
   instance.select("over");
-  assert.deepEqual(instance.terminalIds, [], "an ended session has no terminal to attach");
-  assert.ok(instance.terminalNote.includes("ended"));
+  assert.deepEqual(instance.terminalPanes.map((p) => p.id), [], "an ended session has no terminal to attach");
+  assert.ok(instance.paneNote.text.includes("ended"));
   instance.select("live");
   instance.startCreating();
   assert.equal(instance.creating, true);
-  assert.deepEqual(instance.terminalIds, [], "the form replaces the terminal while creating");
+  assert.deepEqual(instance.terminalPanes.map((p) => p.id), [], "the form replaces the terminal while creating");
   instance.destroy();
 });
 
@@ -191,7 +187,7 @@ test("the App tab swaps the agent's terminal for the session's App panel", () =>
   assert.ok(instance.agentTabSelected);
   assert.deepEqual(instance.appPanels, []);
   instance.showApp();
-  assert.deepEqual(instance.terminalIds, [], "the agent's terminal detaches while the App tab is open");
+  assert.deepEqual(instance.terminalPanes.map((p) => p.id), [], "the agent's terminal detaches while the App tab is open");
   assert.deepEqual(instance.appPanels, [
     {
       key: "live",
@@ -208,7 +204,7 @@ test("the App tab swaps the agent's terminal for the session's App panel", () =>
   assert.ok(instance.appUnavailable);
   instance.showAgent();
   instance.select("live");
-  assert.deepEqual(instance.terminalIds, ["live"]);
+  assert.deepEqual(instance.terminalPanes.map((p) => p.id), ["live"]);
   instance.destroy();
 });
 
@@ -241,7 +237,7 @@ test("the Design tab mounts the panel for the selected session, alive or ended, 
   assert.deepEqual(instance.designPanels, [{ key: "live:live", sessionId: "live", live: true, designHref: "/projects/p1/tasks/t1/design" }], "mounted behind the Agent tab too, so publishes are counted");
   instance.showDesign();
   assert.ok(instance.designTabSelected && instance.showingDesign);
-  assert.deepEqual(instance.terminalIds, []);
+  assert.deepEqual(instance.terminalPanes.map((p) => p.id), []);
   assert.deepEqual(instance.appPanels, []);
   instance.select("over");
   assert.deepEqual(instance.designPanels, [{ key: "over:ended", sessionId: "over", live: false, designHref: "/projects/p1/tasks/t1/design" }]);
@@ -402,7 +398,7 @@ test("resume brings the selected ended session back: its terminal mounts on the 
   instance.showDesign();
   assert.equal(instance.selected.resumable, true);
   assert.equal(instance.canResumeSelected, true);
-  assert.deepEqual(instance.terminalIds, []);
+  assert.deepEqual(instance.terminalPanes.map((p) => p.id), []);
 
   const resuming = instance.resume();
   assert.equal(instance.resumingSelected, true, "busy while the call runs");
@@ -413,7 +409,7 @@ test("resume brings the selected ended session back: its terminal mounts on the 
   assert.equal(instance.selected.word, "running");
   assert.equal(instance.selected.resumable, false);
   assert.equal(instance.detailTab, "agent");
-  assert.deepEqual(instance.terminalIds, ["over"], "the live terminal attaches");
+  assert.deepEqual(instance.terminalPanes.map((p) => p.id), ["over"], "the live terminal attaches");
   assert.ok(instance.announcement.includes("resumed"), instance.announcement);
   instance.destroy();
 });
@@ -426,7 +422,7 @@ test("resume from a row selects that session and resumes it", async () => {
   assert.equal(row.resumable, true);
   await instance.resume("over");
   assert.equal(instance.selectedId, "over");
-  assert.deepEqual(instance.terminalIds, ["over"]);
+  assert.deepEqual(instance.terminalPanes.map((p) => p.id), ["over"]);
   instance.destroy();
 });
 
@@ -472,7 +468,7 @@ test("a session resumed elsewhere comes back live without a reload, and is annou
   instance.select("over");
   assert.deepEqual(instance.designPanels.map((p) => p.key), ["over:ended"]);
   memory.update("over", { status: "running", runsOn: "server", resumable: false, resumeBlocked: "SESSION_ALREADY_RUNNING" });
-  assert.deepEqual(instance.terminalIds, ["over"]);
+  assert.deepEqual(instance.terminalPanes.map((p) => p.id), ["over"]);
   assert.ok(instance.announcement.includes("resumed"), instance.announcement);
   assert.deepEqual(instance.designPanels.map((p) => p.key), ["over:live"], "the Design panel remounts and follows again");
   instance.destroy();
@@ -483,8 +479,8 @@ test("a session resumed in the TUI points there", () => {
   tick();
   instance.select("over");
   memory.update("over", { status: "running", runsOn: "tui", runnerHost: "laptop", resumable: false, resumeBlocked: "SESSION_ALREADY_RUNNING" });
-  assert.deepEqual(instance.terminalIds, []);
-  assert.ok(instance.terminalNote.includes("laptop"));
+  assert.deepEqual(instance.terminalPanes.map((p) => p.id), []);
+  assert.ok(instance.paneNote.text.includes("laptop"));
   assert.equal(instance.selected.resumable, false);
   instance.destroy();
 });
@@ -603,5 +599,193 @@ test("a delegate with a loop gets a status-check bar; a change patches its row a
   instance.statusCheckChanged({ detail: { check: makeCheck({ everyMinutes: 0, state: "paused", nextAt: null }) } });
   assert.deepEqual([instance.statusCheckBars[0].key, instance.statusCheckBars[0].remembered], ["d1:paused:0", 15], "the interval before the pause is kept for Resume");
   assert.ok(instance.groups[0].rows.find((r) => r.id === "d1").meta.endsWith("checks paused"));
+  instance.destroy();
+});
+
+// ── the session screen: tab-row tools, text size, focus mode, ⋯ ─────────────
+
+function screenSetup({ sessions = [makeSession({ id: "live" }), makeSession({ id: "gone", status: "done", resumable: true, resumeBlocked: "" })], phone = false, textSize = 13, focus = false } = {}) {
+  const memory = memoryGateway({ projects: ["p1"], sessions, now: () => T0 });
+  const el = seededElement({ project_id: "p1", ticket_id: "t1", sessions: sessions.map(toDTO), agent_names: {}, repository_names: {} });
+  const saved = { textSize, focus };
+  const prefs = {
+    textSize: () => saved.textSize,
+    setTextSize: (px) => (saved.textSize = px),
+    focus: () => saved.focus,
+    setFocus: (on) => (saved.focus = on),
+  };
+  const shellFocus = [];
+  const copied = [];
+  const mounted = mount(
+    sessionsPage({
+      gateway: memory.gateway,
+      clock: fixedClock(T0),
+      prefs,
+      shell: { setFocus: (on) => shellFocus.push(on) },
+      clipboard: { writeText: async (text) => copied.push(text) },
+      isPhone: () => phone,
+    }),
+    { el },
+  );
+  mounted.instance.init();
+  mounted.instance.select("live");
+  return { ...mounted, memory, saved, shellFocus, copied };
+}
+
+const status = (over) => ({ id: "live", kind: "agent", state: "live", title: "", exitCode: null, lostAt: null, scrolledUp: false, newLines: 0, ...over });
+const asked = (dispatched, name) => dispatched.filter((d) => d.name === name).map((d) => d.detail);
+
+test("the tab row's tools follow the terminal of the open tab: the agent's on Agent, the run on screen on App, none elsewhere", () => {
+  const { instance } = screenSetup();
+  instance.terminalStatus({ detail: status({ title: "✳ Ionizing…" }) });
+  assert.deepEqual([instance.paneTools.down, instance.paneTools.dotState, instance.paneTools.dotLabel], [false, "live", "Live · ✳ Ionizing…"]);
+  instance.showApp();
+  assert.equal(instance.paneTools, null, "no run on screen yet");
+  instance.runShown({ detail: { id: "r9" } });
+  instance.terminalStatus({ detail: status({ id: "r9", kind: "run", state: "ended", exitCode: 1 }) });
+  assert.deepEqual([instance.paneTools.dotState, instance.paneTools.dotLabel], ["done", "Exited with code 1"]);
+  instance.showDesign();
+  assert.equal(instance.paneTools, null);
+  instance.destroy();
+});
+
+test("connecting, reconnecting and offline show a word and Reconnect, which asks the terminal by its id", () => {
+  const { instance, dispatched } = screenSetup();
+  instance.terminalStatus({ detail: status({ state: "connecting" }) });
+  assert.deepEqual([instance.paneTools.down, instance.paneTools.word, instance.paneTools.reconnectDisabled], [true, "connecting…", true]);
+  instance.terminalStatus({ detail: status({ state: "offline", lostAt: T0.getTime() - 5_000 }) });
+  assert.deepEqual([instance.paneTools.statusState, instance.paneTools.word, instance.paneTools.reconnectDisabled], ["offline", "offline · lost just now", false]);
+  instance.requestReconnect();
+  assert.deepEqual(asked(dispatched, "terminal-reconnect-requested"), [{ id: "live" }]);
+  instance.terminalStatus({ detail: status({ state: "reconnecting" }) });
+  assert.deepEqual([instance.paneTools.word, instance.paneTools.reconnectBusy], ["reconnecting…", true]);
+  instance.destroy();
+});
+
+test("Jump to latest shows while scrolled up, with the new lines counted, and is announced once per burst", () => {
+  const { instance, dispatched } = screenSetup();
+  instance.terminalStatus({ detail: status({ scrolledUp: true }) });
+  assert.deepEqual([instance.paneTools.jump, instance.paneTools.jumpCount], [true, ""]);
+  instance.terminalStatus({ detail: status({ scrolledUp: true, newLines: 3 }) });
+  assert.equal(instance.announcement, "New output below");
+  instance.announcement = "";
+  instance.terminalStatus({ detail: status({ scrolledUp: true, newLines: 1200 }) });
+  assert.equal(instance.announcement, "", "the same burst is not announced again");
+  assert.deepEqual([instance.paneTools.jumpCount, instance.paneTools.jumpLabel], ["999+", "Jump to latest, 1200 new lines"]);
+  instance.requestJump();
+  assert.deepEqual(asked(dispatched, "terminal-jump-requested"), [{ id: "live" }]);
+  assert.equal(asked(dispatched, "terminal-focus-requested").length, 0, "Jump never takes the focus");
+  instance.destroy();
+});
+
+test("a text size is remembered and sent to every terminal; the phone sheet steps through them", () => {
+  const { instance, dispatched, saved } = screenSetup();
+  instance.setTextSize(15);
+  assert.equal(saved.textSize, 15);
+  assert.equal(instance.textSize, 15);
+  assert.deepEqual(asked(dispatched, "terminal-text-size"), [{ px: 15 }]);
+  instance.cycleTextSize();
+  assert.equal(instance.textSize, 12);
+  assert.equal(instance.textSizeLabel, "Smaller");
+  instance.destroy();
+});
+
+test("focus mode is remembered, and on only while a terminal's tools show: never from a key", () => {
+  const { instance, shellFocus, saved } = screenSetup();
+  instance.terminalStatus({ detail: status() });
+  instance.toggleFocus();
+  assert.equal(saved.focus, true);
+  instance.applyFocus();
+  assert.equal(shellFocus.at(-1), true);
+  instance.showDesign();
+  instance.applyFocus();
+  assert.equal(shellFocus.at(-1), false, "Design has no tools, so no Exit focus: the page shows normally");
+  instance.showAgent();
+  instance.applyFocus();
+  assert.equal(shellFocus.at(-1), true, "back on Agent, still on");
+  instance.toggleFocus();
+  instance.applyFocus();
+  assert.deepEqual([saved.focus, shellFocus.at(-1)], [false, false]);
+  instance.destroy();
+});
+
+test("a terminal that ends while it is open keeps its screen under the note; another session drops it", async () => {
+  const { instance, memory } = screenSetup();
+  assert.deepEqual(instance.terminalPanes.map((p) => p.id), ["live"]);
+  instance.terminalStatus({ detail: status({ state: "ended", exitCode: 0 }) });
+  memory.update("live", { status: "done" });
+  await flush();
+  assert.deepEqual(instance.terminalPanes.map((p) => p.id), ["live"], "the screen xterm holds stays, read-only");
+  assert.ok(instance.paneNote.text.length > 0);
+  instance.select("gone");
+  assert.deepEqual(instance.terminalPanes, [], "an ended session opened later has nothing to keep");
+  assert.deepEqual([instance.paneNote.resumable, instance.paneNote.failed], [true, false]);
+  instance.destroy();
+});
+
+test("a resumed session gets a fresh terminal, not the ended one", async () => {
+  const { instance, memory } = screenSetup();
+  const before = instance.terminalPanes[0].key;
+  instance.terminalStatus({ detail: status({ state: "ended", exitCode: 0 }) });
+  memory.update("live", { status: "done", resumable: true, resumeBlocked: "" });
+  await flush();
+  await instance.resume("live");
+  assert.equal(instance.error, null);
+  assert.ok(instance.terminalPanes[0] && instance.terminalPanes[0].key !== before, "keyed afresh");
+  instance.destroy();
+});
+
+test("⋯: Copy session id copies and says so; Delete session… opens the confirm on ⋯; a text size from its menu", async () => {
+  const { instance, dispatched, copied, saved } = screenSetup();
+  const wrapper = document.createElement("div");
+  wrapper.innerHTML = '<button type="button">⋯</button>';
+  await instance.menuSelect({ detail: { action: "copy-id" }, target: wrapper });
+  assert.deepEqual(copied, ["live"]);
+  assert.equal(instance.announcement, "Session id copied");
+  instance.menuSelect({ detail: { action: "ask-delete" }, target: wrapper });
+  const [open] = asked(dispatched, "dialog-open");
+  assert.deepEqual([open.id, open.anchor], ["session-delete", wrapper.firstElementChild]);
+  instance.menuSelect({ detail: { action: "text-size", value: "12" }, target: wrapper });
+  assert.equal(saved.textSize, 12);
+  instance.menuSelect({ detail: { action: "move", value: "review" }, target: wrapper });
+  assert.equal(asked(dispatched, "dialog-open").length, 1, "another menu's items are not the session's");
+  instance.destroy();
+});
+
+test("on a phone ⋯ opens the session sheet instead of the menu; on a wide screen it is left to the menu", () => {
+  const head = document.createElement("header");
+  head.innerHTML = '<button type="button" id="session-more">⋯</button><button type="button" id="other">Stop</button>';
+  const press = (phone, target) => {
+    const { instance, dispatched } = screenSetup({ phone });
+    const event = new MouseEvent("click", { cancelable: true });
+    Object.defineProperty(event, "target", { value: target });
+    instance.moreCapture(event);
+    const opened = asked(dispatched, "dialog-open");
+    instance.destroy();
+    return { event, opened };
+  };
+  const phone = press(true, head.querySelector("#session-more"));
+  assert.deepEqual(phone.opened.map((o) => o.id), ["session-sheet"]);
+  assert.ok(phone.event.defaultPrevented);
+  assert.deepEqual(press(true, head.querySelector("#other")).opened, [], "only ⋯");
+  const wide = press(false, head.querySelector("#session-more"));
+  assert.deepEqual(wide.opened, []);
+  assert.equal(wide.event.defaultPrevented, false);
+});
+
+test("the confirm's and the sheet's buttons arrive as dialog-action", async () => {
+  const { instance, copied } = screenSetup();
+  await instance.dialogAction({ detail: { id: "session-sheet", action: "copy-id" } });
+  assert.deepEqual(copied, ["live"]);
+  await instance.dialogAction({ detail: { id: "some-other-dialog", action: "delete" } });
+  assert.equal(instance.selectedId, "live", "another dialog's buttons are not the session's");
+  instance.destroy();
+});
+
+test("the head's actions arrive as session-action: Stop, Delete, Copy session id", async () => {
+  const { instance, memory } = screenSetup();
+  await instance.sessionAction({ detail: { action: "delete" } });
+  assert.equal(instance.selectedId, null);
+  assert.equal((await memory.gateway.list({ projectId: "p1" })).some((s) => s.id === "live"), false);
   instance.destroy();
 });

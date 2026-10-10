@@ -127,7 +127,7 @@ function startTaskPage(rawSeed) {
     checks: seed.sessions.flatMap((s) => (s.statusCheck ? [s.statusCheck] : [])),
     onCheck: (check) => memory.update(check.delegateSessionId, { statusCheck: check }),
   });
-  registerSessions(Alpine, { gateway: memory.gateway, artifacts: artifacts.gateway, channel: channel.gateway, terminals: terminals.gateway, createScreen, clock: systemClock });
+  registerSessions(Alpine, { gateway: memory.gateway, artifacts: artifacts.gateway, channel: channel.gateway, terminals: terminals.gateway, createScreen, clock: systemClock, prefs });
   const prSeed = seedOf("pull-requests-seed");
   const prs = memoryPullRequests({
     workspaces: (prSeed?.workspace_ids ?? []).map((id) => ({ id, projectId: seed.projectId })),

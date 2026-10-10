@@ -60,6 +60,7 @@ registerSessions(Alpine, {
   runTerminals: terminalGateway({ base: "/api", path: (id) => `/runs/${encodeURIComponent(id)}/terminal` }),
   createScreen,
   clock: systemClock,
+  prefs,
 });
 
 registerRuns(Alpine, { gateway: runsGateway(api) });

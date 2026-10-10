@@ -81,6 +81,13 @@ func (p *fakePTY) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// The tab row's connection dot (layout contract L7): data-state "live" while
+// attached, "done" once the process exited; its label says which.
+const (
+	terminalDot  = `document.querySelector('.pane-tabs .tools [role=status][data-dot-only]')`
+	terminalLive = terminalDot + `?.dataset.state === 'live'`
+)
+
 // terminalPage serves the task page with session s1's PTY handled by pty.
 // It skips the test when the web client is not built.
 func terminalPage(t *testing.T, pty http.Handler) *httptest.Server {
@@ -130,7 +137,7 @@ func TestTerminalInTheBrowserTalksToThePTY(t *testing.T) {
 		chromedp.KeyEvent("\r"),
 		chromedp.Poll(rows+`.includes('ran it')`, nil, chromedp.WithPollingTimeout(5*time.Second)),
 		chromedp.Evaluate(rows, &afterEnter),
-		chromedp.Evaluate(`document.querySelector('.terminal .bar .status')?.textContent ?? ''`, &state),
+		chromedp.Evaluate(terminalDot+`?.dataset.state ?? ''`, &state),
 	)
 	if err != nil {
 		t.Fatalf("%v\nJS errors: %v", err, errs.all())
@@ -157,12 +164,17 @@ func TestTerminalInTheBrowserTalksToThePTY(t *testing.T) {
 	}
 
 	pty.exit <- 0
+	var note string
 	err = chromedp.Run(ctx,
-		chromedp.Poll(`document.querySelector('.terminal .bar .status')?.textContent === 'exited (code 0)'`, nil, chromedp.WithPollingTimeout(5*time.Second)),
-		chromedp.Evaluate(`document.querySelector('.terminal .bar')?.textContent ?? ''`, &bar),
+		chromedp.Poll(terminalDot+`?.getAttribute('aria-label') === 'Ended · exit 0'`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Evaluate(terminalDot+`?.getAttribute('aria-label') ?? ''`, &bar),
+		chromedp.Evaluate(`document.querySelector('.terminal[data-state=ended] .pane-note')?.textContent.trim() ?? ''`, &note),
 	)
 	if err != nil {
-		t.Fatalf("exit not shown: %v (bar %q)", err, bar)
+		t.Fatalf("exit not shown: %v (dot %q)", err, bar)
+	}
+	if !strings.Contains(note, "This session ended") {
+		t.Errorf("the ended terminal's note = %q", note)
 	}
 	if e := errs.all(); len(e) > 0 {
 		t.Errorf("JavaScript errors:\n%s", strings.Join(e, "\n"))

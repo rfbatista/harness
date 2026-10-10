@@ -353,8 +353,8 @@ func TestTaskPageListsItsSessionsBesideTheDetail(t *testing.T) {
 		`<option value="backend">Backend dev</option>`,
 		`<option value="r-kit">harnesskit</option>`,
 		`<label for="new-session-permissions-edits">Accept file edits</label>`,
-		`x-on:click="askDelete"`,
-		`x-on:click="deleteSelected"`,
+		`data-action="ask-delete"`, // ⋯ → the confirm
+		`x-on:click="act('delete')"`,
 		`"agent_names":{`,
 		`src="/static/app.js?v=`,
 		`href="/static/app.css?v=`,

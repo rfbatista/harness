@@ -7,6 +7,7 @@
 //   <div class="[ popup ]" role="alertdialog" id="session-delete" data-trap
 //        x-data="popupDialog" x-on:dialog-open.window="openFrom($event)">
 //     … <button type="button" data-initial-focus x-on:click="close()">Keep it</button>
+//       <button type="button" x-on:click="act('delete')">Delete session</button>
 //   </div>
 //
 // Opened by `dialog-open` on window, with { id, anchor }. The focus goes to
@@ -98,6 +99,9 @@ export class AnchoredDialog {
 
 /** Alpine.data("popupDialog", popupDialog()). */
 export const popupDialog = (env) => () => ({
+  // Declared, so init's assignment lands here: an undeclared one would land on
+  // the outermost scope (the page), shared by every dialog on it.
+  _dialog: null,
   init() {
     this._dialog = new AnchoredDialog(this.$el, env ?? defaultEnv());
   },
@@ -110,6 +114,10 @@ export const popupDialog = (env) => () => ({
   },
   close() {
     this._dialog.close();
+  },
+  /** A button inside it was pressed: tells the page, which owns what it does (dialog-action, { id, action }). */
+  act(action) {
+    this.$dispatch("dialog-action", { id: this.$el.id, action });
   },
   destroy() {
     this._dialog?.close({ refocus: false });

@@ -8,15 +8,15 @@ import { statusCheck } from "./statusCheck.js";
 
 file("sessions/presentation/statusCheck");
 
-function make(check, { remembered } = {}) {
+function make(check, { remembered, next = "next in 15m", last = "no check yet" } = {}) {
   const channel = memoryChannel({ checks: check ? [check] : [], now: () => T0 });
-  const mounted = mount(() => statusCheck({ channel: channel.gateway })({ key: "k", sessionId: "d1", check, remembered }));
+  const mounted = mount(() => statusCheck({ channel: channel.gateway })({ key: "k", sessionId: "d1", check, remembered, next, last }));
   return { ...mounted, channel };
 }
 
 test("an active loop pauses, and says so to the page", async () => {
   const { instance, dispatched } = make(makeCheck({ everyMinutes: 10 }));
-  assert.deepEqual([instance.minutes, instance.toggleWord, instance.controllable], ["10", "Pause", true]);
+  assert.deepEqual([instance.minutes, instance.toggleWord, instance.controllable], ["10", "Pause checks", true]);
   await instance.toggle();
   const [changed] = dispatched.filter((d) => d.name === "status-check-changed");
   assert.deepEqual([changed.detail.check.state, changed.detail.check.everyMinutes], ["paused", 0]);
@@ -38,7 +38,7 @@ test("the picker offers the loop's own interval, in order, when it is not one of
 
 test("a paused loop resumes at the interval it had before the pause, or the default", async () => {
   const remembered = make(makeCheck({ state: "paused", everyMinutes: 0, nextAt: null }), { remembered: 30 });
-  assert.deepEqual([remembered.instance.minutes, remembered.instance.toggleWord], ["30", "Resume"]);
+  assert.deepEqual([remembered.instance.minutes, remembered.instance.toggleWord], ["30", "Resume checks"]);
   await remembered.instance.toggle();
   assert.equal(remembered.dispatched.at(-1).detail.check.everyMinutes, 30);
 
@@ -77,4 +77,43 @@ test("a refused change shows the coded error and leaves the loop as it was", asy
 test("the intervals on offer are the server's, labelled for people", () => {
   const { instance } = make(makeCheck());
   assert.deepEqual(instance.intervals.map((i) => i.label), ["2 min", "5 min", "10 min", "15 min", "30 min", "1 h", "2 h", "4 h"]);
+});
+
+test("the checks button and its panel read from the one interval the select shows", () => {
+  const { instance } = make(makeCheck({ everyMinutes: 20 }));
+  assert.deepEqual([instance.every, instance.buttonDot, instance.buttonNext], ["20m", "live", "next 15m"]);
+  assert.equal(instance.buttonLabel, "Status checks: every 20m, next in 15m");
+  assert.deepEqual([instance.panelDot, instance.panelWord, instance.toggleWord], ["live", "On", "Pause checks"]);
+  instance.minutes = "60";
+  assert.equal(instance.every, "1h", "the button follows the select");
+});
+
+test("paused, saving and a failed change each read on the button", async () => {
+  const paused = make(makeCheck({ state: "paused", everyMinutes: 0, nextAt: null }), { remembered: 30 });
+  assert.deepEqual([paused.instance.buttonDot, paused.instance.buttonNext, paused.instance.panelWord, paused.instance.toggleWord], ["idle", "paused", "Paused", "Resume checks"]);
+
+  const failing = make(null);
+  await failing.instance.set(10);
+  assert.deepEqual([failing.instance.buttonDot, failing.instance.buttonNext], ["failed", "couldn't save"]);
+
+  const saving = make(makeCheck({ everyMinutes: 20 }));
+  saving.instance.busy = true;
+  assert.equal(saving.instance.buttonNext, "saving…");
+});
+
+test("Retry sends the change that failed again", async () => {
+  const { instance, channel } = make(makeCheck({ everyMinutes: 10 }));
+  channel.failNext?.();
+  instance.minutes = "30";
+  await instance.retune();
+  await instance.retry();
+  assert.equal(channel.check("d1").everyMinutes, 30);
+});
+
+test("the button opens the panel, anchored to itself", () => {
+  const { instance, dispatched } = make(makeCheck({ everyMinutes: 20 }));
+  const button = document.createElement("button");
+  Object.defineProperty(instance, "$refs", { value: { button } });
+  instance.openPanel();
+  assert.deepEqual(dispatched.filter((d) => d.name === "dialog-open").map((d) => d.detail), [{ id: "session-checks", anchor: button }]);
 });

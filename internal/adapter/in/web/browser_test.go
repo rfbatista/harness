@@ -14,6 +14,7 @@ import (
 
 	"github.com/chromedp/cdproto/runtime"
 	"github.com/chromedp/chromedp"
+	"github.com/chromedp/chromedp/kb"
 
 	"operators-mcp/internal/domain"
 )
@@ -149,8 +150,8 @@ func TestSessionsPageComesAliveInTheBrowser(t *testing.T) {
 	defer srv.Close()
 
 	var rows, groups, agentOptions []string
-	var detail, ssrLeft, formRepo, confirmText string
-	var formOpen, formClosed, confirmGone bool
+	var detail, ssrLeft, formRepo, confirmText, confirmFocus, focusBack string
+	var formOpen, formClosed, confirmGone, focusTrapped bool
 	err = chromedp.Run(ctx,
 		chromedp.Navigate(srv.URL+"/projects/p1/tasks/t1"),
 		// Alpine has taken over once the server-rendered copy is gone.
@@ -170,11 +171,17 @@ func TestSessionsPageComesAliveInTheBrowser(t *testing.T) {
 		clickButton(`main form`, "Cancel"),
 		chromedp.Poll(`!document.querySelector('form[x-data^=sessionsNewSession]')`, &formClosed, chromedp.WithPollingTimeout(5*time.Second)),
 
-		// Delete asks first, inline.
-		clickButton(`main section`, "Delete"),
-		chromedp.Poll(`document.querySelector('[role=alertdialog]')?.textContent ?? ''`, &confirmText, chromedp.WithPollingTimeout(5*time.Second)),
-		clickButton(`[role=alertdialog]`, "Keep it"),
-		chromedp.Poll(`!document.querySelector('[role=alertdialog]')`, &confirmGone, chromedp.WithPollingTimeout(5*time.Second)),
+		// Delete asks first, in a confirm on ⋯ that holds the focus until it is answered.
+		chromedp.Evaluate(`document.getElementById('session-more').click()`, nil),
+		clickButton(`.session-head [role=menu]`, "Delete session"),
+		chromedp.Poll(`document.querySelector('#session-delete:popover-open')?.textContent ?? ''`, &confirmText, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Evaluate(`document.activeElement.textContent.trim()`, &confirmFocus),
+		chromedp.KeyEvent(kb.Tab),
+		chromedp.KeyEvent(kb.Tab),
+		chromedp.Evaluate(`document.activeElement.closest('#session-delete') !== null`, &focusTrapped),
+		chromedp.KeyEvent(kb.Escape),
+		chromedp.Poll(`!document.querySelector('#session-delete:popover-open')`, &confirmGone, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Evaluate(`document.activeElement.id`, &focusBack),
 	)
 	if err != nil {
 		t.Fatalf("%v\nJS errors: %v", err, errs.all())
@@ -194,6 +201,9 @@ func TestSessionsPageComesAliveInTheBrowser(t *testing.T) {
 	}
 	if !strings.Contains(confirmText, "Delete this session?") {
 		t.Errorf("delete confirmation = %q", confirmText)
+	}
+	if confirmFocus != "Keep it" || !focusTrapped || focusBack != "session-more" {
+		t.Errorf("the confirm: first focus %q, Tab kept inside %v, focus after Esc on %q (want Keep it, true, session-more)", confirmFocus, focusTrapped, focusBack)
 	}
 	if e := errs.all(); len(e) > 0 {
 		t.Errorf("JavaScript errors on the page:\n%s", strings.Join(e, "\n"))

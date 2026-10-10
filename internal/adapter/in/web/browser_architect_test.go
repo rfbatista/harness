@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/chromedp/chromedp"
+	"github.com/chromedp/chromedp/kb"
 
 	"operators-mcp/internal/domain"
 )
@@ -238,43 +239,61 @@ func TestArchitectLeadsTheTaskAndTalksWithItsDelegates(t *testing.T) {
 }
 
 // TestPersonPausesAndResumesADelegatesStatusChecks: the selected delegate's
-// header shows its loop; Pause and Resume change it, and its row follows.
+// head has a Checks button with its loop's interval; the panel it opens shows
+// that interval in its select, and Pause and Resume there change the loop, the
+// button and the row. Esc closes the panel and gives the button the focus.
 func TestPersonPausesAndResumesADelegatesStatusChecks(t *testing.T) {
 	srv, _ := architectServer(t, nil)
 	ctx, errs := browser(t)
 
-	bar := `(document.querySelector('[aria-label="Status checks"]')?.textContent ?? '').replace(/\s+/g, ' ').trim()`
+	button := `(document.querySelector('.session-head .check-button')?.textContent ?? '').replace(/\s+/g, ' ').trim()`
 	serverRow := `[...document.querySelectorAll('[role=listbox] .row')].find(r => r.textContent.includes('Server: architect channel'))`
-	picked := `(() => { const s = document.querySelector('#status-check-interval'); return s ? s.options[s.selectedIndex]?.textContent ?? '' : ''; })()`
-	var before, paused, resumed, row, picker string
+	picked := `(() => { const s = document.querySelector('#session-checks-every'); return s ? s.options[s.selectedIndex]?.textContent ?? '' : ''; })()`
+	panel := `(document.querySelector('#session-checks:popover-open')?.textContent ?? '').replace(/\s+/g, ' ').trim()`
+	openPanel := chromedp.Evaluate(`document.querySelector('.session-head .check-button').click()`, nil)
+	var before, panelText, picker, paused, row, resumed, focusAfterEsc string
 	if err := chromedp.Run(ctx,
 		chromedp.EmulateViewport(1280, 800),
 		chromedp.Navigate(srv.URL+"/projects/p1/tasks/t1"),
 		chromedp.Poll(`!!document.querySelector('[role=listbox] .row[data-role=delegate]')`, nil, chromedp.WithPollingTimeout(10*time.Second)),
 		chromedp.Evaluate(serverRow+`.click()`, nil),
-		chromedp.Poll(`!!document.querySelector('[aria-label="Status checks"] button')`, nil, chromedp.WithPollingTimeout(5*time.Second)),
-		chromedp.Evaluate(bar, &before),
+		chromedp.Poll(`!!document.querySelector('.session-head .check-button')`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Evaluate(button, &before),
+		openPanel,
+		chromedp.Poll(panel+` !== ''`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Evaluate(panel, &panelText),
 		chromedp.Evaluate(picked, &picker),
 		shot("status-check-active"),
-		chromedp.Click(`[aria-label="Status checks"] button`, chromedp.ByQuery),
-		chromedp.Poll(`(`+bar+`).includes('checks paused')`, nil, chromedp.WithPollingTimeout(5*time.Second)),
-		chromedp.Evaluate(bar, &paused),
+		chromedp.KeyEvent(kb.Escape),
+		chromedp.Poll(panel+` === ''`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Evaluate(`document.activeElement.classList.contains('check-button') ? 'button' : document.activeElement.tagName`, &focusAfterEsc),
+		openPanel,
+		clickButton(`#session-checks`, "Pause checks"),
+		chromedp.Poll(`(`+button+`).includes('paused')`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Evaluate(button, &paused),
 		chromedp.Evaluate(serverRow+`.querySelector('.meta').textContent`, &row),
-		chromedp.Click(`[aria-label="Status checks"] button`, chromedp.ByQuery),
-		chromedp.Poll(`(`+bar+`).includes('checks every 10m')`, nil, chromedp.WithPollingTimeout(5*time.Second)),
-		chromedp.Evaluate(bar, &resumed),
+		openPanel,
+		clickButton(`#session-checks`, "Resume checks"),
+		chromedp.Poll(`(`+button+`).includes('next')`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Evaluate(button, &resumed),
 	); err != nil {
 		t.Fatalf("%v\nJS errors: %v", err, errs.all())
 	}
 	if picker != "10 min" {
 		t.Errorf("the interval picker shows %q while the loop checks every 10m", picker)
 	}
+	if focusAfterEsc != "button" {
+		t.Errorf("after Esc the focus is on %s, want the Checks button", focusAfterEsc)
+	}
 	for _, c := range []struct{ got, want string }{
-		{before, "checks every 10m · next in 6m · no check yet"},
-		{before, "Pause"},
-		{paused, "Resume"},
+		{before, "Checks · 10m"},
+		{before, "next 6m"},
+		{panelText, "On"},
+		{panelText, "no check yet"},
+		{panelText, "Pause checks"},
+		{paused, "Checks · 10m"},
 		{row, "checks paused"},
-		{resumed, "Pause"},
+		{resumed, "Checks · 10m"},
 	} {
 		if !strings.Contains(c.got, c.want) {
 			t.Errorf("%q lacks %q", c.got, c.want)

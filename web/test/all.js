@@ -44,6 +44,7 @@ import "../src/modules/sessions/presentation/components/statusCheck.test.js";
 import "../src/modules/sessions/presentation/components/taskDesign.test.js";
 import "../src/modules/sessions/presentation/components/terminal.test.js";
 import "../src/modules/sessions/presentation/pages/sessionsPage.test.js";
+import "../src/modules/sessions/presentation/screenPrefs.test.js";
 import "../src/modules/sessions/presentation/view.test.js";
 import "../src/modules/tasks/domain/activity.test.js";
 import "../src/modules/tasks/domain/board.test.js";
