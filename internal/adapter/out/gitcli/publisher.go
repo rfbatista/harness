@@ -25,8 +25,7 @@ func NewBranchPublisher() *BranchPublisher { return &BranchPublisher{} }
 
 // OriginURL is remote.origin.url, "" when the checkout has no origin.
 func (BranchPublisher) OriginURL(ctx context.Context, repoRoot string) (string, error) {
-	cmd := exec.CommandContext(ctx, "git", "config", "--get", "remote.origin.url")
-	cmd.Dir = repoRoot
+	cmd := gitCmd(ctx, repoRoot, "config", "--get", "remote.origin.url")
 	out, err := cmd.Output()
 	if err != nil {
 		// git config exits 1 when the key is unset.

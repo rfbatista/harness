@@ -152,3 +152,105 @@ type SecretBox interface {
 type OriginReader interface {
 	OriginURL(ctx context.Context, repoRoot string) (string, error)
 }
+
+// GitHTTPSLogin is what the credential helper answers for one host.
+type GitHTTPSLogin struct {
+	Host     string
+	Username string
+	Token    domain.Secret
+}
+
+// GitAuthMaterial is what one git directory holds: the identity, the login
+// for an https origin, the private key for an ssh one, and the token gh
+// gets. Nil or empty parts are left out, so git runs without them.
+type GitAuthMaterial struct {
+	Identity    *domain.GitIdentity
+	HTTPS       *GitHTTPSLogin
+	SSHKey      domain.Secret
+	GitHubToken domain.Secret
+}
+
+// GitAuthFiles writes harness-owned git directories — gitconfig, credential
+// helper, key, env file — outside every worktree, and answers the
+// environment that makes git and gh use them and nothing of the machine's
+// (driven). See "Contract: Harness server ↔ Agent sessions — git
+// credentials" §1–§2.
+type GitAuthFiles interface {
+	// WriteSession writes, or rewrites in place, the session's directory.
+	// Its paths, so its env, never change for the session.
+	WriteSession(sessionID string, m GitAuthMaterial) (env []string, envFile string, err error)
+	RemoveSession(sessionID string) error
+	// SessionIDs are the sessions that have a directory.
+	SessionIDs() ([]string, error)
+	// WriteOperation writes a directory for one server-side operation;
+	// release removes it.
+	WriteOperation(m GitAuthMaterial) (env []string, release func(), err error)
+	// SweepOperations removes the operation directories a previous run left.
+	SweepOperations() error
+}
+
+// GitCredentialSecret is a credential with its secret: the token, or the
+// unencrypted private key. Only the adapters that hand it to git see it.
+type GitCredentialSecret struct {
+	domain.GitCredential
+	Secret domain.Secret
+}
+
+// GitCredentialTester checks a credential without changing anything
+// (driven): against remoteURL with ls-remote, or, when it is "", against the
+// credential's host. A host refusal or an unreachable host is OK false,
+// never an error.
+type GitCredentialTester interface {
+	Test(ctx context.Context, c GitCredentialSecret, remoteURL string) (*GitCredentialTest, error)
+}
+
+// GitResolution is what a repository's remote operations would use now,
+// read from the store alone.
+type GitResolution struct {
+	// Remote is origin as credentials see it; nil when there is no origin or
+	// it is no remote URL.
+	Remote *domain.GitRemoteURL
+	// Push authenticates fetch and push to origin; nil when none resolves.
+	Push *domain.GitCredential
+	// GitHub is the https_token for origin's host, for GitHub API calls; nil
+	// when none resolves.
+	GitHub *domain.GitCredential
+}
+
+// GitOperation is one server-side remote operation's credentials: Env for
+// git, and the GitHub token for API calls, which never reaches a process.
+// Release removes its files.
+type GitOperation struct {
+	Env         []string
+	Push        *domain.GitCredential
+	GitHub      *domain.GitCredential
+	GitHubToken domain.Secret
+	Release     func()
+}
+
+// SessionGit is what a session's processes get: Env on top of their own,
+// EnvFile for login shells to source after the profile, and Note, a line for
+// the session's brief when its git cannot authenticate ("" when it can).
+type SessionGit struct {
+	Env     []string
+	EnvFile string
+	Note    string
+}
+
+// GitAuth is how other contexts get a repository's stored credentials
+// (read port; *gitcredentials.Service satisfies it). Nothing resolving is an
+// answer, never a reason to use the machine's.
+type GitAuth interface {
+	// Resolve reads the store only: no git, no files.
+	Resolve(ctx context.Context, repositoryID, originURL string) (*GitResolution, error)
+	// Operation writes the credentials of one operation on the repository;
+	// GIT_CREDENTIAL_STORE_LOCKED when they cannot be read.
+	Operation(ctx context.Context, repositoryID, originURL string) (*GitOperation, error)
+	// SessionEnv writes (or rewrites) the session's git directory. A locked
+	// store or nothing resolving still answers, with a Note.
+	SessionEnv(ctx context.Context, sessionID, repositoryID string) (*SessionGit, error)
+	// EndSession removes the session's directory.
+	EndSession(sessionID string)
+	// Used records that a credential just authenticated.
+	Used(credentialID string)
+}

@@ -55,30 +55,23 @@ type Readers struct {
 	Origins      ports.OriginReader
 }
 
-// Tester checks a credential against a remote without changing anything. A
-// host refusal is OK false, never an error.
-type Tester interface {
-	Test(ctx context.Context, c Credential, remoteURL string) (*ports.GitCredentialTest, error)
-}
-
-// Credential is a credential with its secret, for the adapters that hand it
-// to git: the token, or the unencrypted private key.
-type Credential struct {
-	domain.GitCredential
-	Secret domain.Secret
-}
-
 // Service is the git credentials context.
 type Service struct {
 	st  Stores
 	rd  Readers
 	box ports.SecretBox
 	// Tester runs test_git_credential; nil answers ok:false.
-	Tester Tester
-	now    func() time.Time
+	Tester ports.GitCredentialTester
+	// Files writes the git directories of operations and sessions; nil
+	// leaves GitAuth without them (Operation and SessionEnv fail).
+	Files ports.GitAuthFiles
+	now   func() time.Time
 
 	mu   sync.Mutex // one write at a time
 	feed feed
+
+	sessMu   sync.Mutex
+	sessions map[string]liveSession // sessions with a git directory
 }
 
 // New returns the service. now nil is time.Now.
@@ -86,10 +79,11 @@ func New(st Stores, rd Readers, box ports.SecretBox, now func() time.Time) *Serv
 	if now == nil {
 		now = time.Now
 	}
-	return &Service{st: st, rd: rd, box: box, now: now, feed: newFeed()}
+	return &Service{st: st, rd: rd, box: box, now: now, feed: newFeed(), sessions: map[string]liveSession{}}
 }
 
-// Subscribe drops the pins of deleted repositories and projects.
+// Subscribe drops the pins of deleted repositories and projects, and a
+// session's git directory when the session ends or is deleted.
 func (s *Service) Subscribe(sub ports.EventSubscriber) {
 	ports.On(sub, func(_ context.Context, ev domain.ProjectDeleted) error {
 		return s.st.Pins.DeleteByProject(ev.ProjectID)
@@ -97,6 +91,7 @@ func (s *Service) Subscribe(sub ports.EventSubscriber) {
 	ports.On(sub, func(_ context.Context, ev domain.RepositoryDeleted) error {
 		return s.st.Pins.Delete(ev.RepositoryID)
 	})
+	s.SubscribeSessions(sub)
 }
 
 func (s *Service) stamp() time.Time { return domain.GitTime(s.now()) }
@@ -260,6 +255,7 @@ func (s *Service) CreateGitCredential(_ context.Context, in ports.CreateGitCrede
 	}
 	out := stored.Credential
 	s.feed.announce(ports.GitCredentialChange{Credential: &out})
+	s.refreshSessions()
 	return &out, nil
 }
 
@@ -344,6 +340,7 @@ func (s *Service) UpdateGitCredential(ctx context.Context, in ports.UpdateGitCre
 		return nil, err
 	}
 	s.feed.announce(ports.GitCredentialChange{Credential: &c})
+	s.refreshSessions()
 	return &c, nil
 }
 
@@ -388,19 +385,20 @@ func (s *Service) DeleteGitCredential(_ context.Context, credentialID string) er
 		return err
 	}
 	s.feed.announce(ports.GitCredentialChange{Credential: &domain.GitCredential{ID: credentialID}, Deleted: true})
+	s.refreshSessions()
 	return nil
 }
 
 // reveal is c with its secret, or GIT_CREDENTIAL_STORE_LOCKED.
-func (s *Service) reveal(c *ports.StoredGitCredential) (Credential, error) {
+func (s *Service) reveal(c *ports.StoredGitCredential) (ports.GitCredentialSecret, error) {
 	if c.KeyID != s.box.KeyID() {
-		return Credential{}, domain.ErrGitCredentialStoreLocked
+		return ports.GitCredentialSecret{}, domain.ErrGitCredentialStoreLocked
 	}
 	plain, err := s.box.Open(c.Sealed)
 	if err != nil {
-		return Credential{}, err
+		return ports.GitCredentialSecret{}, err
 	}
-	return Credential{GitCredential: c.Credential, Secret: domain.Secret(plain)}, nil
+	return ports.GitCredentialSecret{GitCredential: c.Credential, Secret: domain.Secret(plain)}, nil
 }
 
 // TestGitCredential checks the credential against the repository's origin,
@@ -482,6 +480,7 @@ func (s *Service) UpdateGitIdentity(_ context.Context, name, email string) (*dom
 		return nil, err
 	}
 	s.feed.announce(ports.GitCredentialChange{Identity: &id})
+	s.refreshSessions()
 	return &id, nil
 }
 
@@ -579,6 +578,7 @@ func (s *Service) SetRepositoryCredential(ctx context.Context, repositoryID stri
 		if err != nil {
 			return nil, err
 		}
+		s.refreshSessions()
 		return s.GetRepositoryCredential(ctx, repositoryID)
 	}
 	origin, err := s.origin(ctx, r)
@@ -602,6 +602,7 @@ func (s *Service) SetRepositoryCredential(ctx context.Context, repositoryID stri
 	if err != nil {
 		return nil, err
 	}
+	s.refreshSessions()
 	return s.GetRepositoryCredential(ctx, repositoryID)
 }
 

@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
-	"os/exec"
 	"strconv"
 	"strings"
 	"time"
@@ -174,8 +173,7 @@ func numstat(s string) int {
 }
 
 func gitOutput(ctx context.Context, dir string, args ...string) (string, error) {
-	cmd := exec.CommandContext(ctx, "git", args...)
-	cmd.Dir = dir
+	cmd := gitCmd(ctx, dir, args...)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	if err := cmd.Run(); err != nil {
@@ -185,8 +183,7 @@ func gitOutput(ctx context.Context, dir string, args ...string) (string, error) 
 }
 
 func gitOK(ctx context.Context, dir string, args ...string) bool {
-	cmd := exec.CommandContext(ctx, "git", args...)
-	cmd.Dir = dir
+	cmd := gitCmd(ctx, dir, args...)
 	return cmd.Run() == nil
 }
 

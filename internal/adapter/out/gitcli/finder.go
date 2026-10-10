@@ -2,9 +2,9 @@ package gitcli
 
 import (
 	"bytes"
+	"context"
 	"io/fs"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -75,7 +75,7 @@ func isCheckout(dir string) bool {
 
 // originURL is the checkout's origin remote, or "" when it has none.
 func originURL(dir string) string {
-	out, err := exec.Command("git", "-C", dir, "config", "--get", "remote.origin.url").Output()
+	out, err := gitCmd(context.Background(), "", "-C", dir, "config", "--get", "remote.origin.url").Output()
 	if err != nil {
 		return ""
 	}

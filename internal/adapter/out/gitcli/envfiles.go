@@ -2,10 +2,10 @@ package gitcli
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"io/fs"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -54,10 +54,10 @@ func (EnvFiles) Write(root string, files []*domain.EnvFile) error {
 // ensureIgnored adds rel to the repository's info/exclude unless git already
 // ignores it.
 func ensureIgnored(root, rel string) error {
-	if exec.Command("git", "-C", root, "check-ignore", "-q", "--", rel).Run() == nil {
+	if gitCmd(context.Background(), "", "-C", root, "check-ignore", "-q", "--", rel).Run() == nil {
 		return nil // already ignored
 	}
-	out, err := exec.Command("git", "-C", root, "rev-parse", "--path-format=absolute", "--git-common-dir").Output()
+	out, err := gitCmd(context.Background(), "", "-C", root, "rev-parse", "--path-format=absolute", "--git-common-dir").Output()
 	if err != nil {
 		return err
 	}

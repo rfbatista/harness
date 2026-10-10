@@ -39,7 +39,7 @@ var codeGitEnv = []string{"GIT_OPTIONAL_LOCKS=0", "GIT_TERMINAL_PROMPT=0", "GIT_
 func codeCmd(ctx context.Context, dir string, args ...string) *exec.Cmd {
 	cmd := exec.CommandContext(ctx, "git", append(append([]string{}, codeGitArgs...), args...)...)
 	cmd.Dir = dir
-	cmd.Env = append(os.Environ(), codeGitEnv...)
+	cmd.Env = localEnv(codeGitEnv...)
 	return cmd
 }
 

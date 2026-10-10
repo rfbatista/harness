@@ -1,0 +1,266 @@
+package gitcredentials
+
+import (
+	"context"
+	"errors"
+	"log/slog"
+
+	"github.com/rfbatista/harnesskit/errs"
+
+	"operators-mcp/internal/domain"
+	"operators-mcp/internal/ports"
+)
+
+var _ ports.GitAuth = (*Service)(nil)
+
+// githubHost is where gh and the pull requests go when origin is not on a
+// code host the harness knows.
+const githubHost = "github.com"
+
+// liveSession is a session with a git directory: what it is rewritten from
+// when a credential, the identity or a pin changes. The origin is read once,
+// when the session starts or resumes.
+type liveSession struct {
+	repositoryID string
+	origin       string
+}
+
+// resolve is what remote operations on repositoryID (with origin) use now.
+func (s *Service) resolve(repositoryID, origin string) (*ports.GitResolution, []*ports.StoredGitCredential, error) {
+	all, err := s.st.Credentials.List()
+	if err != nil {
+		return nil, nil, err
+	}
+	pinned := ""
+	if repositoryID != "" {
+		if pinned, err = s.st.Pins.Get(repositoryID); err != nil {
+			return nil, nil, err
+		}
+	}
+	creds := publicOf(all)
+	res := &ports.GitResolution{}
+	if u, ok := domain.ParseGitRemoteURL(origin); ok {
+		res.Remote = &u
+	}
+	res.Push = domain.ResolveGitCredential(creds, pinned, res.Remote)
+	apiHost := githubHost
+	if res.Remote != nil {
+		apiHost = res.Remote.Host
+	}
+	if res.Push != nil && res.Push.Kind == domain.GitHTTPSToken && res.Push.Host == apiHost {
+		res.GitHub = res.Push
+	} else {
+		res.GitHub = domain.CredentialFor(creds, apiHost, domain.GitHTTPSToken)
+	}
+	return res, all, nil
+}
+
+// Resolve reads the store only.
+func (s *Service) Resolve(_ context.Context, repositoryID, originURL string) (*ports.GitResolution, error) {
+	res, _, err := s.resolve(repositoryID, originURL)
+	return res, err
+}
+
+// material is what a git directory for res holds; locked is true when the
+// secrets could not be read (the material then holds none).
+func (s *Service) material(res *ports.GitResolution, all []*ports.StoredGitCredential) (ports.GitAuthMaterial, bool, error) {
+	var m ports.GitAuthMaterial
+	id, err := s.st.Identity.Get()
+	if err != nil {
+		return m, false, err
+	}
+	m.Identity = id
+	secret := func(c *domain.GitCredential) (domain.Secret, error) {
+		stored := find(all, c.ID)
+		if stored == nil {
+			return "", errNotFound
+		}
+		cs, err := s.reveal(stored)
+		return cs.Secret, err
+	}
+	if c := res.Push; c != nil {
+		v, err := secret(c)
+		if err != nil {
+			return ports.GitAuthMaterial{Identity: id}, isLocked(err), lockedOrErr(err)
+		}
+		switch c.Kind {
+		case domain.GitHTTPSToken:
+			m.HTTPS = &ports.GitHTTPSLogin{Host: c.Host, Username: c.Username, Token: v}
+		case domain.GitSSHKey:
+			m.SSHKey = v
+		}
+	}
+	if c := res.GitHub; c != nil {
+		v, err := secret(c)
+		if err != nil {
+			return ports.GitAuthMaterial{Identity: id}, isLocked(err), lockedOrErr(err)
+		}
+		m.GitHubToken = v
+	}
+	return m, false, nil
+}
+
+func isLocked(err error) bool { return errs.Code(err) == domain.CodeGitCredentialStoreLocked }
+
+// lockedOrErr is nil for a locked store (the caller decides what that
+// means) and err otherwise.
+func lockedOrErr(err error) error {
+	if isLocked(err) {
+		return nil
+	}
+	return err
+}
+
+var errNoFiles = errors.New("git credentials: no git directories configured")
+
+// Operation writes the credentials of one server-side operation.
+func (s *Service) Operation(_ context.Context, repositoryID, originURL string) (*ports.GitOperation, error) {
+	if s.Files == nil {
+		return nil, errNoFiles
+	}
+	res, all, err := s.resolve(repositoryID, originURL)
+	if err != nil {
+		return nil, err
+	}
+	m, locked, err := s.material(res, all)
+	switch {
+	case err != nil:
+		return nil, err
+	case locked:
+		return nil, domain.ErrGitCredentialStoreLocked
+	}
+	env, release, err := s.Files.WriteOperation(m)
+	if err != nil {
+		return nil, err
+	}
+	return &ports.GitOperation{Env: env, Push: res.Push, GitHub: res.GitHub, GitHubToken: m.GitHubToken, Release: release}, nil
+}
+
+// SessionEnv writes the session's git directory from the repository's
+// credentials. A locked store or nothing resolving still answers: the
+// session runs with no credentials and its brief says why.
+func (s *Service) SessionEnv(ctx context.Context, sessionID, repositoryID string) (*ports.SessionGit, error) {
+	if s.Files == nil {
+		return nil, errNoFiles
+	}
+	origin := ""
+	if r := s.rd.Repositories.Get(repositoryID); r != nil {
+		var err error
+		if origin, err = s.origin(ctx, r); err != nil {
+			slog.Warn("read origin for a session's git credentials", "session", sessionID, "repository", repositoryID, "err", err)
+		}
+	}
+	s.sessMu.Lock()
+	defer s.sessMu.Unlock()
+	live := liveSession{repositoryID: repositoryID, origin: origin}
+	out, err := s.writeSession(sessionID, live)
+	if err != nil {
+		return nil, err
+	}
+	s.sessions[sessionID] = live
+	return out, nil
+}
+
+// writeSession writes one session's directory; under sessMu.
+func (s *Service) writeSession(sessionID string, live liveSession) (*ports.SessionGit, error) {
+	res, all, err := s.resolve(live.repositoryID, live.origin)
+	if err != nil {
+		return nil, err
+	}
+	m, locked, err := s.material(res, all)
+	if err != nil {
+		return nil, err
+	}
+	env, envFile, err := s.Files.WriteSession(sessionID, m)
+	if err != nil {
+		return nil, err
+	}
+	return &ports.SessionGit{Env: env, EnvFile: envFile, Note: sessionNote(res, locked)}, nil
+}
+
+// sessionNote is the brief's line when the session's git cannot
+// authenticate to origin; "" when it can or there is no remote origin.
+func sessionNote(res *ports.GitResolution, locked bool) string {
+	const tail = " Do not retry or look for other credentials; tell the person, who can fix it on the harness's Git credentials page."
+	switch {
+	case res.Remote == nil || res.Remote.Kind == "":
+		return ""
+	case locked:
+		return "Git: the harness's credential store is locked (its encryption key is missing), so git push, fetch and gh will fail." + tail
+	case res.Push == nil:
+		return "Git: no stored credential for " + res.Remote.Host + " (" + string(res.Remote.Kind) + "), so git push and fetch to origin will fail." + tail
+	}
+	return ""
+}
+
+// EndSession removes the session's directory.
+func (s *Service) EndSession(sessionID string) {
+	if s.Files == nil {
+		return
+	}
+	s.sessMu.Lock()
+	defer s.sessMu.Unlock()
+	delete(s.sessions, sessionID)
+	if err := s.Files.RemoveSession(sessionID); err != nil {
+		slog.Warn("remove a session's git directory", "session", sessionID, "err", err)
+	}
+}
+
+// refreshSessions rewrites every live session's directory, so their next
+// git command uses what changed.
+func (s *Service) refreshSessions() {
+	if s.Files == nil {
+		return
+	}
+	s.sessMu.Lock()
+	defer s.sessMu.Unlock()
+	for id, live := range s.sessions {
+		if _, err := s.writeSession(id, live); err != nil {
+			slog.Warn("rewrite a session's git directory", "session", id, "err", err)
+		}
+	}
+}
+
+// LiveSession says whether a session with a git directory is still running,
+// and its repository.
+type LiveSession func(sessionID string) (repositoryID string, running bool)
+
+// Sweep removes what a previous run left: every operation directory and the
+// directory of every session that is not running. The running ones are
+// rewritten and kept fresh from now on.
+func (s *Service) Sweep(ctx context.Context, live LiveSession) error {
+	if s.Files == nil {
+		return nil
+	}
+	if err := s.Files.SweepOperations(); err != nil {
+		return err
+	}
+	ids, err := s.Files.SessionIDs()
+	if err != nil {
+		return err
+	}
+	for _, id := range ids {
+		repositoryID, running := live(id)
+		if !running {
+			s.EndSession(id)
+			continue
+		}
+		if _, err := s.SessionEnv(ctx, id, repositoryID); err != nil {
+			slog.Warn("rewrite a running session's git directory", "session", id, "err", err)
+		}
+	}
+	return nil
+}
+
+// SubscribeSessions removes a session's directory when it ends or is
+// deleted.
+func (s *Service) SubscribeSessions(sub ports.EventSubscriber) {
+	ports.On(sub, func(_ context.Context, ev domain.SessionEnded) error {
+		s.EndSession(ev.SessionID)
+		return nil
+	})
+	ports.On(sub, func(_ context.Context, ev domain.SessionDeleted) error {
+		s.EndSession(ev.SessionID)
+		return nil
+	})
+}

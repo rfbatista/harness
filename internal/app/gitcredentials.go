@@ -1,12 +1,15 @@
 package app
 
 import (
+	"context"
+	"log/slog"
 	"os"
 	"path/filepath"
 
 	"go.uber.org/fx"
 	"gorm.io/gorm"
 
+	"operators-mcp/internal/adapter/out/gitcli"
 	"operators-mcp/internal/adapter/out/persistence/sqlite"
 	"operators-mcp/internal/adapter/out/secretbox"
 	"operators-mcp/internal/app/catalog"
@@ -19,6 +22,7 @@ import (
 // its bus subscriptions. It provides *gitcredentials.Service.
 var GitCredentialsModule = fx.Module("gitcredentials",
 	fx.Provide(newGitCredentialsService),
+	fx.Invoke(registerGitCredentials),
 )
 
 type gitCredentialsParams struct {
@@ -32,11 +36,30 @@ type gitCredentialsParams struct {
 	Cat          catalog.Catalog
 }
 
+// registerGitCredentials checks git on start and sweeps what a previous run
+// left: operation directories, and the git directories of sessions that are
+// no longer running.
+func registerGitCredentials(lc fx.Lifecycle, svc *gitcredentials.Service, sessions ports.SessionRepository) {
+	lc.Append(fx.Hook{OnStart: func(ctx context.Context) error {
+		if err := gitcli.CheckVersion(); err != nil {
+			slog.Error("git credentials", "err", err)
+		}
+		return svc.Sweep(ctx, func(id string) (string, bool) {
+			sess := sessions.Get(id)
+			if sess == nil || sess.Status.IsTerminal() {
+				return "", false
+			}
+			return sess.RepositoryID, true
+		})
+	}})
+}
+
 func newGitCredentialsService(p gitCredentialsParams) (*gitcredentials.Service, error) {
-	keyFile, err := secretKeyPath(p.Cfg)
+	dataDir, err := secretsDir(p.Cfg)
 	if err != nil {
 		return nil, err
 	}
+	keyFile := filepath.Join(dataDir, "secret.key")
 	box, err := secretbox.New(os.Getenv(secretbox.EnvKey), keyFile)
 	if err != nil {
 		return nil, err
@@ -49,21 +72,20 @@ func newGitCredentialsService(p gitCredentialsParams) (*gitcredentials.Service, 
 		},
 		gitcredentials.Readers{Repositories: p.Repositories, Projects: p.Projects, Origins: p.Git},
 		box, nil)
+	files := gitcli.NewAuthFiles(filepath.Join(dataDir, "git"), gitcli.MachineExcludesFile())
+	svc.Files = files
+	svc.Tester = &gitcli.Probe{Files: files}
 	svc.Subscribe(p.Cat.Bus)
 	return svc, nil
 }
 
-// secretKeyPath is secret.key next to the database, or in a fresh temporary
-// directory for an in-memory one.
-func secretKeyPath(cfg Config) (string, error) {
+// secretsDir is the data dir: where the database is, or a fresh temporary
+// directory for an in-memory one. secret.key and git/ go there.
+func secretsDir(cfg Config) (string, error) {
 	if cfg.DBPath == "" || cfg.DBPath == ":memory:" {
-		dir, err := os.MkdirTemp("", "harness-secrets-")
-		if err != nil {
-			return "", err
-		}
-		return filepath.Join(dir, "secret.key"), nil
+		return os.MkdirTemp("", "harness-secrets-")
 	}
-	return filepath.Join(filepath.Dir(cfg.DBPath), "secret.key"), nil
+	return filepath.Dir(cfg.DBPath), nil
 }
 
 // optionalGitCredentials is the credentials context when
