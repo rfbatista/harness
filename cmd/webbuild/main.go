@@ -42,6 +42,8 @@ var vendors = map[string]string{
 	"alpinejs":         alpineAlias,
 	"@xterm/xterm":     "./web/vendor/xterm.esm.js",
 	"@xterm/addon-fit": "./web/vendor/xterm-addon-fit.esm.js",
+	// The code views' highlighter, tracked (not in web/vendor): see its README.
+	"highlight.js": "./web/third_party/highlightjs",
 }
 
 // engines are the browsers the web client supports; esbuild lowers syntax
