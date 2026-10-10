@@ -522,10 +522,40 @@ var WorkspacesModule = fx.Module("workspaces",
 		asPort(gitcli.NewHistory, new(ports.GitHistory)),
 		asPort(gitcli.NewBranchPublisher, new(ports.BranchPublisher)),
 		asPort(ghcli.New, new(ports.CodeHost)),
+		asPort(gitcli.NewCode, new(ports.GitCode)),
+		asPort(filesystem.NewWorktreeFiles, new(ports.WorktreeFiles)),
 		newWorkspacesService,
 		newPullRequestsService,
+		newCodeBrowser,
 	),
+	fx.Invoke(registerCodeWatcher),
 )
+
+// newCodeBrowser serves the code views: repositories and worktrees read
+// through git and the filesystem, zoned by the architecture context's read
+// port.
+func newCodeBrowser(ws ports.WorkspaceRepository, repos ports.RepositoryRepository, git ports.GitCode, files ports.WorktreeFiles, cat catalog.Catalog) ports.CodeBrowser {
+	return workspaces.NewCode(workspaces.CodeDeps{
+		Workspaces: ws, Repositories: repos, Git: git, Files: files, Architecture: cat.Architecture,
+	})
+}
+
+// registerCodeWatcher announces code_changed on the orchestration's project
+// feed while a workspace's session runs, polling from start to stop.
+func registerCodeWatcher(lc fx.Lifecycle, sessions ports.SessionRepository, ws ports.WorkspaceRepository, git ports.GitCode, orch *orchestration.Service, cat catalog.Catalog) {
+	w := workspaces.NewCodeWatcher(workspaces.CodeWatcherDeps{Sessions: sessions, Workspaces: ws, Git: git, Feed: orch})
+	w.Subscribe(cat.Bus)
+	lc.Append(fx.Hook{
+		OnStart: func(context.Context) error {
+			w.Start()
+			return nil
+		},
+		OnStop: func(context.Context) error {
+			w.Stop()
+			return nil
+		},
+	})
+}
 
 func newWorkspacesService(
 	ws ports.WorkspaceRepository,
