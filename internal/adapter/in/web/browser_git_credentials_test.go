@@ -133,8 +133,8 @@ func TestGitCredentialsAddedInTheBrowserNeverLeaveTheirSecretBehind(t *testing.T
 	if !clean {
 		t.Error("the token is still in the page, an input or storage after it was added")
 	}
-	list, _ := h.fake.ListGitCredentials(context.Background())
-	if len(list) != 1 || list[0].Host != "github.com" || !list[0].IsDefault {
+	got, _ := h.fake.ListGitCredentials(context.Background())
+	if list := got.Credentials; len(list) != 1 || list[0].Host != "github.com" || !list[0].IsDefault {
 		t.Errorf("stored: %+v (the host normalised, the first token of a host its default)", list)
 	}
 	if err := chromedp.Run(other, credPoll(`(`+credNames+`) === 'work-token'`)); err != nil {
@@ -170,8 +170,8 @@ func TestAGeneratedKeyShowsItsPublicHalfAndIsDeletedAfterTheConfirm(t *testing.T
 	if err != nil {
 		t.Fatal(err)
 	}
-	if list, _ := h.fake.ListGitCredentials(context.Background()); len(list) != 0 {
-		t.Errorf("still stored: %+v", list)
+	if got, _ := h.fake.ListGitCredentials(context.Background()); len(got.Credentials) != 0 {
+		t.Errorf("still stored: %+v", got.Credentials)
 	}
 	if got := errs.all(); len(got) > 0 {
 		t.Errorf("console errors: %v", got)

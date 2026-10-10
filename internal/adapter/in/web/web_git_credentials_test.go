@@ -87,6 +87,21 @@ func TestGitCredentialsPageSaysWhatIsMissing(t *testing.T) {
 	}
 }
 
+func TestGitCredentialsPageShowsALockedStoreOnFirstPaint(t *testing.T) {
+	w, fake := credentialsWorld(t)
+	fake.Lock()
+	body := get(t, newTestHandler(t, w), "/git-credentials").Body.String()
+	if !strings.Contains(body, `"locked":true`) {
+		t.Error("the seed says the store is locked")
+	}
+	if banner := tagWith(body, lockedBanner); strings.Contains(banner, "display: none") || !strings.Contains(body, "HARNESS_SECRET_KEY") {
+		t.Errorf("the locked banner shows on first paint: %s", banner)
+	}
+	if !strings.Contains(body, ">work-token<") {
+		t.Error("a locked store still lists what it keeps")
+	}
+}
+
 // lockedBanner finds the locked banner's tag.
 const lockedBanner = `x-show="locked"`
 

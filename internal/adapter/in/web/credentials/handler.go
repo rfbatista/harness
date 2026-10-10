@@ -52,7 +52,7 @@ func (h Handler) Page(w http.ResponseWriter, r *http.Request) error {
 	} else if identity, err := h.Credentials.GetGitIdentity(ctx); err != nil {
 		slog.Warn("git credentials page: identity not read; the browser reads it", "err", err)
 	} else {
-		v.Seed = &Seed{Credentials: list, Identity: identity}
+		v.Seed = &Seed{Credentials: list.Credentials, Locked: list.Locked, Identity: identity}
 	}
 	frame, err := h.Layout(ctx, "Git credentials", "", "")
 	if err != nil {
@@ -63,7 +63,7 @@ func (h Handler) Page(w http.ResponseWriter, r *http.Request) error {
 }
 
 // Seed is what gitCredentialsPage starts from: list_git_credentials' answer
-// with the identity. Locked is false until the port reports it.
+// (the credentials and whether the store is locked) with the identity.
 type Seed struct {
 	Credentials []*domain.GitCredential `json:"credentials"`
 	Locked      bool                    `json:"locked"`

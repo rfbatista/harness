@@ -114,7 +114,7 @@ func (h Handler) credentialsSeed(r *http.Request, projectID string) *credentials
 		slog.Warn("repositories page: repository credentials not read", "err", err)
 		return nil
 	}
-	return &credentials.RepositoriesSeed{ProjectID: projectID, Credentials: list, Repositories: bindings}
+	return &credentials.RepositoriesSeed{ProjectID: projectID, Credentials: list.Credentials, Locked: list.Locked, Repositories: bindings}
 }
 
 // EnvFileList is a repository's env files page. A repository of another project
