@@ -38,6 +38,14 @@ const NEXT_STEP = {
   [Codes.STATUS_CHECK_NOT_FOUND]: "its loop is gone (the session ended?); the list will refresh",
   [Codes.REVIEW_NOT_FOUND]: "the architect's request is gone; reload the page",
   [Codes.REVIEW_NOT_PENDING]: "it was already answered or withdrawn; the list now shows where it stands",
+  [Codes.GIT_CREDENTIAL_NOT_FOUND]: "it was deleted; the list will refresh",
+  [Codes.GIT_CREDENTIAL_NAME_TAKEN]: "pick a name no other credential uses",
+  [Codes.GIT_CREDENTIAL_INVALID_KEY]: "give an OpenSSH or PEM private key, with its passphrase if it has one",
+  [Codes.GIT_CREDENTIAL_HOST_MISMATCH]: "pick a credential for the origin's host",
+  [Codes.GIT_CREDENTIAL_KIND_MISMATCH]: "an https origin takes a token and an ssh origin takes a key; pick one of that kind",
+  [Codes.GIT_CREDENTIAL_MISSING]: "add a credential for that host in Git credentials",
+  [Codes.GIT_CREDENTIAL_REJECTED]: "replace its secret in Git credentials, then retry",
+  [Codes.GIT_CREDENTIAL_STORE_LOCKED]: "give the server its key (HARNESS_SECRET_KEY or secret.key in its data directory), then retry",
   [Codes.BAD_RESPONSE]: "the server and the web client disagree; reload the page",
 };
 
