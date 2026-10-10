@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Code views — every block and state</title>
+<!--
+  Mockup for task "Visualize code in the web ui": each proposed block in every
+  state of the contract, light beside dark, plus phone frames. The specimen
+  sections in design-system/specimen.html will be cut from this page.
+  Built by design/code-views/tools/build.py.
+-->
+<style data-ds></style>
+<style data-proposal></style>
+<style data-page>
+  body { padding: var(--space-xl) var(--space-l) var(--space-3xl); background: var(--color-canvas); }
+  .page { max-inline-size: 96rem; margin-inline: auto; display: flex; flex-direction: column; gap: var(--space-2xl); }
+  .page > header p, .page section > p { color: var(--color-ink-muted); max-inline-size: 80ch; }
+  .page section > h2 { margin-block-end: var(--space-2xs); }
+  .page section > p { margin-block-end: var(--space-m); }
+  .page nav a { font-size: var(--text-sm); }
+  .themes { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 38rem), 1fr)); gap: var(--space-m); }
+  .theme { padding: var(--space-l); border: var(--border-width) solid var(--color-line); border-radius: var(--radius-md); background: var(--color-canvas); display: flex; flex-direction: column; gap: var(--space-l); min-inline-size: 0; }
+  .theme > h3 { font-size: var(--text-xs); font-weight: var(--weight-medium); color: var(--color-ink-faint); }
+  .cell { display: flex; flex-direction: column; gap: var(--space-2xs); min-inline-size: 0; }
+  .cell > .tag { font-size: var(--text-xs); color: var(--color-ink-faint); font-family: var(--font-mono); }
+  .box { border: var(--border-width) solid var(--color-line); border-radius: var(--radius-sm); overflow: hidden; background: var(--color-canvas); }
+  .box.tall { block-size: 26rem; display: flex; flex-direction: column; }
+  .box.tall > .code-layout { flex: 1 1 0; block-size: auto; }
+  .row-cells { display: flex; flex-wrap: wrap; gap: var(--space-s); align-items: center; }
+  .swatches { display: grid; grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr)); gap: var(--space-2xs); font-family: var(--font-mono); font-size: var(--text-sm); background: var(--color-code); padding: var(--space-s); border-radius: var(--radius-sm); }
+  .swatches span { display: flex; justify-content: space-between; gap: var(--space-s); }
+  .swatches small { color: var(--color-ink-muted); font-family: var(--font-sans); font-size: var(--text-xs); }
+  .phones { display: flex; flex-wrap: wrap; gap: var(--space-l); }
+  .phone { inline-size: 375px; max-inline-size: 100%; block-size: 640px; border: var(--border-width) solid var(--color-line-strong); border-radius: 14px; overflow: hidden; background: var(--color-canvas); color: var(--color-ink); display: flex; flex-direction: column; }
+  .phone > .bar { display: flex; align-items: center; gap: var(--space-s); padding: var(--space-xs) var(--space-m); border-block-end: var(--border-width) solid var(--color-line); background: var(--color-panel); font-size: var(--text-sm); font-weight: var(--weight-medium); }
+  .phone > .code-layout { flex: 1 1 0; block-size: auto; }
+  .phone .tabs { padding-inline: var(--space-m); }
+  .keys { display: grid; grid-template-columns: max-content 1fr; gap: var(--space-2xs) var(--space-l); font-size: var(--text-sm); color: var(--color-ink-muted); }
+  .keys dt { white-space: nowrap; }
+  .keys dd { margin: 0; }
+</style>
+</head>
+<body>
+<main class="page">
+  <header class="flow flow-space-s">
+    <h1>Code views: every block and state</h1>
+    <p>The proposed blocks for reading code in the harness, drawn on the design system's tokens: <code>code-layout</code>, <code>code-source-bar</code>, <code>segmented</code>, <code>file-tree</code>, <code>diff-summary</code>, <code>diff-view</code>, <code>code-view</code>, <code>code-lines</code>, <code>crumbs</code>, <code>change-mark</code>, <code>zone-tag</code> and <code>code-map</code>, plus the <code>tok-*</code> syntax classes. Code sits in its own well (<code>--color-code</code>), mono 13px on a fixed 20px line. Colour marks the shape of the code and the kind of a diff line. A letter, a sign or a word carries every state.</p>
+    <nav class="cluster gutter-m"><a href="#tokens">Syntax</a><a href="#marks">Marks and tags</a><a href="#source">Source bar</a><a href="#tree">File tree</a><a href="#summary">Changed files</a><a href="#diff">Diff</a><a href="#code">File</a><a href="#map">Map</a><a href="#phone">Phone</a><a href="#keys">Keys</a></nav>
+  </header>
+
+  <section id="tokens"><h2>Syntax tokens</h2><p>The 17 <code>tok-*</code> classes of the contract. Nine have a colour. Variables stay ink, operators, punctuation and meta muted, headings bold, emphasis italic. Every colour clears 4.5:1 on the code well and on the add, remove and target washes, in both themes.</p><div class="themes" data-each="tokens"></div></section>
+  <section id="marks"><h2>Change marks and zone tags</h2><p><code>change-mark</code> is a letter in a fixed slot: A added, M modified, D deleted, R renamed, C copied, T type changed, U untracked (dashed: git does not know it yet), and a dot for a directory with changes inside. <code>zone-tag</code> is a swatch plus a name. The hue is the bounded context's index in the map (8 hues, ≥ 3:1 as a graphic), dashed for a zone in no context. The dot-only variant is for the tree.</p><div class="themes" data-each="marks"></div></section>
+  <section id="source"><h2>Source bar</h2><p>Which code is on screen and whether it is current. On a session it is live, then stale, then gone. On a repository page it shows a fixed ref with its picker.</p><div class="themes" data-each="source"></div></section>
+  <section id="tree"><h2>File tree</h2><p>An ARIA tree, lazy: expanded, collapsed, loading (skeleton rows), selected (the open file), focused (roving tabindex, the ring inside the row), marks, zone dots, a symlink with its target, a submodule, a deleted file still listed so its diff can open, and a long name truncated with the full path in its title.</p><div class="themes" data-each="tree"></div></section>
+  <section id="summary"><h2>Changed files</h2><p><code>diff-summary</code>: totals, the scope switch (All · Branch · Working), one row per file with its mark, the path truncated from the start so the name stays, and its counts or a word. The file on screen is current. When the worktree is gone, All and Working are disabled and say why.</p><div class="themes" data-each="summary"></div></section>
+  <section id="diff"><h2>Diff</h2><p>File heads stick while their hunks scroll. Lines carry + or − in the gutter (spoken as added or removed) as well as the wash. Withheld files say why and offer the next step. A renamed file reads old → new. The last line can say it has no newline. Split puts old beside new and wraps. It falls back to unified below a 44rem container.</p><div class="themes" data-each="diff"></div></section>
+  <section id="code"><h2>File</h2><p><code>code-view</code>: a targeted range from the URL (<code>#L45-L49</code>), soft wrap, the truncated notice, binary and empty files, and loading. Line numbers are links, never copied with a selection, and stay put while the code scrolls sideways.</p><div class="themes" data-each="code"></div></section>
+  <section id="map"><h2>Map</h2><p><code>code-map</code>: an overview bar of each context's share, then one card per context with its zones, a bar and a count. Zones in no context get a dashed card, and unzoned files get their own last card. A project without zones shows an empty state that teaches.</p><div class="themes" data-each="map"></div></section>
+  <section id="phone"><h2>Phone (375px)</h2><p>One side at a time, like the session list and its detail. The changed files or the tree come first, and opening one shows it with a back control. Diffs are unified, the file head wraps, and rows are 44px on touch. The views switch stays at the top.</p><div class="themes" data-each="phone"></div></section>
+  <section id="keys"><h2>Keys</h2><div class="themes" data-each="keys"></div></section>
+</main>
+
+<script data-kit></script>
+<script>
+
+  const cell = (tag, html) => `<div class="cell"><span class="tag">${tag}</span>${html}</div>`;
+  const tokenSample = `// Browser reads code for the web UI.
+func (b *Browser) File(ctx context.Context, p string) (CodeFile, error) {
+	if len(p) > 4096 || p == "" {
+		return CodeFile{}, ErrInvalidInput
+	}
+	const re = /^[\\w./-]+$/g;
+	return b.read(ctx, p, true, nil)
+}`;
+  const SECTIONS = {
+    tokens: () => `<div class="swatches">${[["tok-comment", "// comment"], ["tok-string", '"string"'], ["tok-number", "4096"], ["tok-constant", "true nil"], ["tok-keyword", "func return"], ["tok-type", "CodeFile"], ["tok-function", "File("], ["tok-variable", "ctx"], ["tok-operator", ":= ||"], ["tok-punctuation", "{ } ;"], ["tok-tag", "&lt;section&gt;"], ["tok-attr", "class="], ["tok-meta", "#!/usr/bin/env"], ["tok-regexp", "/^[\\w]+$/"], ["tok-heading", "## Heading"], ["tok-emphasis", "*emphasis*"], ["tok-link", "https://…"]].map(([c, t]) => `<span class="code-lines" style="inline-size:auto;min-inline-size:0"><span class="${c}">${t}</span> <small>${c.slice(4)}</small></span>`).join("")}</div>
+      ${cell("code-lines · Go", `<div class="box">${KIT.codeLines(tokenSample, { lang: "go" })}</div>`)}
+      ${cell("code-lines · Markdown", `<div class="box">${KIT.codeLines("## Code views\nReading code is the **densest** surface: see [the contract](docs/code.md).\n`code` and *emphasis* stay quiet.", { lang: "markdown" })}</div>`)}`,
+    marks: () => `${cell("change-mark · data-change", `<div class="row-cells">${["added", "modified", "deleted", "renamed", "copied", "type_changed", "untracked", "contains"].map((c) => `<span class="cluster gutter-2xs text-xs color-ink-muted"><span class="change-mark" data-change="${c}" title="${c}">${{ added: "A", modified: "M", deleted: "D", renamed: "R", copied: "C", type_changed: "T", untracked: "U", contains: "" }[c]}</span>${c}</span>`).join("")}</div>`)}
+      ${cell("zone-tag · data-hue 0–7, none, data-kind=context, data-dot-only", `<div class="row-cells">${["Code browsing", "Orchestration", "Web UI adapters", "Workspaces", "Web client", "Architecture", "Projects", "Notifications"].map((n, i) => `<span class="zone-tag" data-hue="${i}">${n}</span>`).join("")}<span class="zone-tag" data-hue="none">design-system</span><span class="zone-tag" data-kind="context" data-hue="3">Workspaces</span><span class="zone-tag" data-dot-only data-hue="1" aria-label="Orchestration"></span><span class="zone-tag" data-hue="2">a zone with a name long enough to truncate here</span></div>`)}
+      ${cell("crumbs", `<div class="box pad-s">${KIT.crumbs("internal/adapter/in/httpapi/code_handlers.go")}</div>`)}
+      ${cell("segmented · aria-current, aria-pressed, aria-disabled", `<div class="row-cells"><nav class="segmented" aria-label="Code views"><a href="#" aria-current="page">Changes <span class="count">7</span></a><a href="#">Files</a><a href="#">Map</a></nav><div class="segmented" role="group" aria-label="Layout"><button type="button" aria-pressed="true">Unified</button><button type="button" aria-pressed="false">Split</button></div><nav class="segmented" aria-label="Scope"><a href="#" aria-disabled="true">All</a><a href="#" aria-current="page">Branch</a><a href="#" aria-disabled="true">Working</a></nav></div>`)}`,
+    source: () => ["live", "stale", "fixed", "gone"].map((s) => cell(`code-source-bar · ${s === "fixed" ? "session ended (no data-state)" : `data-state=${s}`}`, `<div class="box">${KIT.sourceBar({ state: s })}</div>`)).join("") + cell("code-source-bar · repository at a ref", `<div class="box">${KIT.sourceBar({ state: "fixed", kind: "repository", view: "files" })}</div>`),
+    tree: () => `<div class="row-cells" style="align-items:start">${cell("expanded, selected, marks, zone dots", `<div class="box" style="inline-size:18rem">${KIT.tree({ focus: "internal/ports/code.go" })}</div>`)}${cell("loading, symlink, submodule, deleted, long name", `<div class="box" style="inline-size:18rem">${KIT.tree({ open: new Set(["web", "third_party", "internal"]), busy: new Set(["internal"]), selected: "", nodes: [["internal", "dir", "contains", null, []], ["third_party", "dir", null, null, [["xterm", "submodule", null]]], ["web", "dir", "contains", 4, [["alpine.js", "symlink", null, 4, "../node_modules/alpinejs/dist/module.esm.js"], ["files.go", "file", "deleted", 2], ["a_component_with_a_very_long_file_name_for_the_tree.js", "file", "added", 4]]]] })}</div>`)}</div>`,
+    summary: () => `<div class="row-cells" style="align-items:start">${cell("scope all, current file", `<div class="box" style="inline-size:20rem">${KIT.diffSummary()}</div>`)}${cell("worktree gone: branch only", `<div class="box" style="inline-size:20rem">${KIT.diffSummary({ gone: true, scope: "branch", files: KIT_DIFF.filter((f) => f.status !== "untracked").slice(0, 4) })}</div>`)}${cell("base branch gone: working only", `<div class="box" style="inline-size:20rem">${KIT.diffSummary({ baseGone: true, scope: "working", files: KIT_DIFF.filter((f) => ["untracked", "modified"].includes(f.status)) })}</div>`)}${cell("no changes", `<div class="box" style="inline-size:20rem">${KIT.diffSummary({ files: [] })}</div>`)}</div>`,
+    diff: () => `${cell("modified · unified, two hunks", `<div class="box">${KIT.diffFile({ i: 1 })}</div>`)}
+      ${cell("modified · split", `<div class="box">${KIT.diffFile({ i: 1, layout: "split" })}</div>`)}
+      ${cell("renamed · untracked", `<div class="box">${KIT.diffFile({ i: 3 })}${KIT.diffFile({ i: 2 })}</div>`)}
+      ${cell("no newline at end of file", `<div class="box">${KIT.diffFile({ i: 0 })}</div>`)}
+      ${cell("withheld: binary · too large · loading · collapsed", `<div class="box">${KIT.diffFile({ i: 4 })}${KIT.diffFile({ i: 5 })}${KIT.diffFile({ i: 5, busy: true })}${KIT.diffFile({ i: 6 })}</div>`)}
+      ${cell("too large even when asked (over 20,000 lines)", `<div class="box"><div class="diff-view" style="padding:0"><section class="file" style="border:0"><header class="head"><span class="change-mark" data-change="modified">M</span><h3 class="path">web/vendor/monaco.bundle.js</h3><span class="stat"><span class="added">+31,204</span><span class="deleted">−29,877</span></span></header><div class="withheld" data-reason="too_large"><p><strong>Too large to show here</strong> · over 20,000 changed lines. Read it with git instead.</p><a class="button" data-size="sm" href="#">View file</a><span class="code">git diff c741e99...3f9a2c1 -- web/vendor/monaco.bundle.js</span></div></section></div></div>`)}`,
+    code: () => `${cell("targeted range #L45-L49", `<div class="box" style="block-size:16rem;display:flex">${KIT.codeView({ text: KIT_BROWSER.split("\n").slice(0, 60).join("\n"), target: [45, 49] }).replace('class="code-view"', 'class="code-view" data-scroll-to="45"')}</div>`)}
+      ${cell("soft wrap (data-wrap)", `<div class="box" style="block-size:12rem;display:flex">${KIT.codeView({ wrap: true, target: [] })}</div>`)}
+      ${cell("truncated", `<div class="box" style="block-size:9rem;display:flex">${KIT.codeView({ path: "web/vendor/highlight.min.js", zone: 4, lang: "javascript", target: [], meta: "JavaScript · 2.4 MB", text: "var h=function(e){return e.replace(/[&<>]/g,function(c){return M[c]})};", notice: "<strong>Showing the first 1 MiB</strong> · 24,310 of 61,002 lines. The rest is not loaded. Read it in your editor: <code class=\"path\">web/vendor/highlight.min.js</code>" })}</div>`)}
+      <div class="row-cells" style="align-items:stretch">${cell("binary", `<div class="box" style="inline-size:22rem">${KIT.codeView({ path: "docs/assets/code-map.png", kind: "binary", zone: null, meta: "PNG · 48 KB" })}</div>`)}${cell("empty", `<div class="box" style="inline-size:16rem">${KIT.codeView({ path: "web/.gitkeep", kind: "empty", zone: null, meta: "0 bytes" })}</div>`)}${cell("symlink", `<div class="box" style="inline-size:22rem">${KIT.codeView({ path: "web/vendor/alpine.js", kind: "symlink", zone: null, meta: "symlink" })}</div>`)}${cell("submodule", `<div class="box" style="inline-size:20rem">${KIT.codeView({ path: "third_party/xterm", kind: "submodule", zone: null, meta: "submodule" })}</div>`)}${cell("loading (aria-busy)", `<div class="box" style="inline-size:16rem;block-size:12rem;display:flex">${KIT.codeView({ busy: true, zone: null, meta: "loading…" })}</div>`)}</div>`,
+    map: () => `${cell("contexts, no context, unzoned", `<div class="box" style="container: code / inline-size">${KIT.codeMap()}</div>`)}${cell("no zones yet", `<div class="box">${KIT.codeMap({ empty: true })}</div>`)}`,
+    phone: () => `<div class="phones">
+      <div class="phone"><div class="bar">Design system — code views</div><div class="tabs" role="tablist"><button role="tab" aria-selected="false">Agent</button><button role="tab" aria-selected="true">Code</button></div>${KIT.sourceBar({})}<div class="code-layout"><aside class="side" aria-label="Changed files">${KIT.diffSummary()}</aside><section class="main"></section></div></div>
+      <div class="phone"><div class="bar">Design system — code views</div>${KIT.sourceBar({ state: "stale" })}<div class="code-layout" data-main><aside class="side"></aside><section class="main"><button type="button" class="button" data-variant="ghost" data-size="sm" data-code-back>‹ Changed files</button>${KIT.diffView({ files: [KIT_DIFF[1], KIT_DIFF[5]] })}</section></div></div>
+      <div class="phone"><div class="bar">harness · Code</div>${KIT.sourceBar({ state: "fixed", kind: "repository", view: "files" })}<div class="code-layout" data-main><aside class="side"></aside><section class="main"><button type="button" class="button" data-variant="ghost" data-size="sm" data-code-back>‹ Files</button>${KIT.codeView({ target: [] })}</section></div></div>
+    </div>`,
+    keys: () => `<dl class="keys">
+      <dt><kbd>G</kbd> <kbd>C</kbd> · <kbd>G</kbd> <kbd>F</kbd> · <kbd>G</kbd> <kbd>M</kbd></dt><dd>Changes, Files, Map</dd>
+      <dt><kbd>T</kbd></dt><dd>Find file: the palette over every path</dd>
+      <dt><kbd>L</kbd></dt><dd>Go to line or range (<code>120</code>, <code>120-140</code>)</dd>
+      <dt><kbd>]</kbd> <kbd>[</kbd></dt><dd>Next / previous changed file in a diff (wraps, says so in the live region)</dd>
+      <dt><kbd>J</kbd> <kbd>K</kbd></dt><dd>Move in the changed-files list; <kbd>↵</kbd> shows that file</dd>
+      <dt><kbd>↑</kbd> <kbd>↓</kbd> <kbd>←</kbd> <kbd>→</kbd> <kbd>Home</kbd> <kbd>End</kbd> <kbd>*</kbd>, type-ahead</dt><dd>The tree, as the APG tree pattern; <kbd>↵</kbd> opens a file</dd>
+      <dt><kbd>X</kbd></dt><dd>Collapse or expand the file the diff is on; <kbd>⇧X</kbd> all files</dd>
+      <dt><kbd>S</kbd></dt><dd>Unified ↔ split (from 44rem)</dd>
+      <dt><kbd>W</kbd></dt><dd>Wrap lines in a file</dd>
+      <dt><kbd>Y</kbd></dt><dd>Permalink: the URL pins the commit; copies it</dd>
+      <dt><kbd>R</kbd></dt><dd>Reload when the source bar says the code changed</dd>
+      <dt><kbd>⇧E</kbd></dt><dd>Expand the session's Code tab to the whole width, and back</dd>
+      <dt><kbd>F6</kbd> · <kbd>Esc</kbd></dt><dd>Move between the side list and the code. Esc leaves the code for the side list, then the side list for the tab bar, and closes the palette first when it is open</dd>
+    </dl>`,
+  };
+  document.querySelectorAll("[data-each]").forEach((host) => {
+    const html = SECTIONS[host.dataset.each]();
+    host.innerHTML = ["light", "dark"].map((t) => `<div class="theme" data-theme="${t}"><h3>${t}</h3>${html}</div>`).join("");
+  });
+  document.querySelectorAll("[data-scroll-to]").forEach((v) => { const l = v.querySelector("#L43"); if (l) v.querySelector(".scroll").scrollTop = l.offsetTop - 8; });
+</script>
+</body>
+</html>

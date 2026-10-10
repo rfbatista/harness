@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Code views — session Code tab</title>
+<!--
+  Mockup for task "Visualize code in the web ui": the session page's Code tab
+  (Changes / Files / Map) inside the real app shell. Proposed blocks are in the
+  data-proposal style; the design system is inlined in data-ds. Built by
+  design/code-views/tools/build.py from design/code-views/src/. UX: task
+  document "Design: code views — UX".
+-->
+<style data-ds></style>
+<style data-proposal></style>
+<style data-page>
+  body { background: var(--color-panel); }
+  .controls { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-s) var(--space-l); padding: var(--space-s) var(--space-l); font-size: var(--text-sm); color: var(--color-ink-muted); border-block-end: var(--border-width) solid var(--color-line); }
+  .controls h1 { font-size: var(--text-md); color: var(--color-ink); margin-inline-end: auto; }
+  .controls label { display: inline-flex; gap: var(--space-xs); align-items: center; }
+  .stage { block-size: 900px; border-block-end: var(--border-width) solid var(--color-line); }
+  .stage > .app-shell { block-size: 100%; }
+  .detail { display: flex; flex-direction: column; min-block-size: 0; }
+  .detail > .code-area { flex: 1 1 0; min-block-size: 0; display: flex; flex-direction: column; }
+  .detail > .code-area > .code-layout { flex: 1 1 0; block-size: auto; }
+  .split-view[data-reading] { grid-template-columns: minmax(0, 1fr); }
+  .split-view[data-reading] > :first-child { display: none; }
+  .notes { max-inline-size: 72rem; margin: var(--space-xl) auto var(--space-3xl); padding-inline: var(--space-l); display: grid; gap: var(--space-m); color: var(--color-ink-muted); font-size: var(--text-sm); }
+  .notes h2 { color: var(--color-ink); font-size: var(--text-md); }
+  .notes kbd { margin-inline: 1px; }
+</style>
+</head>
+<body>
+<div class="controls" role="group" aria-label="Mockup controls">
+  <h1>Session · Code tab</h1>
+  <label>State <select data-size="sm" data-fit id="state"><option value="live">live (running session)</option><option value="stale">stale (changed on disk)</option><option value="fixed">ended (no live)</option><option value="gone">worktree gone</option><option value="basegone">base branch gone</option></select></label>
+  <label>Diff <select data-size="sm" data-fit id="layout"><option>unified</option><option>split</option></select></label>
+  <label><input type="checkbox" id="reading"> Reading width (Expand <kbd>⇧E</kbd>)</label>
+  <label><input type="checkbox" id="empty"> No changes yet</label>
+</div>
+
+<div class="stage">
+<div class="app-shell">
+  <header class="topbar"><a class="brand" href="#">harness</a><select data-size="sm" data-fit aria-label="Project"><option>harness</option></select></header>
+  <div class="rail">
+    <a class="button" data-size="sm" href="#"><svg aria-hidden="true" viewBox="0 0 16 16"><path d="M8 3v10M3 8h10" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>New task</a>
+    <nav class="nav" aria-label="Project"><ul role="list">
+      <li><a href="#"><span class="label">Board</span></a></li>
+      <li><a href="#"><span class="label">Code</span></a></li>
+      <li><a href="#"><span class="label">Documents</span></a></li>
+      <li><a href="#"><span class="label">Design assets</span></a></li>
+    </ul></nav>
+    <nav class="nav" aria-label="Tasks">
+      <div class="head"><h2 class="title">Tasks <span class="count">9</span></h2></div>
+      <div class="groups"><section class="group"><h3><span class="name">In progress</span><span class="count">2</span></h3>
+        <ul role="list">
+          <li><a href="#" aria-current="page"><span class="status" data-state="running" data-dot-only></span><span class="label">Visualize code in the web ui</span><span class="meta">3 live</span></a></li>
+          <li><a href="#"><span class="label">Notification</span></a></li>
+        </ul></section></div>
+    </nav>
+  </div>
+  <main class="frame">
+    <header class="toolbar"><span class="crumb">harness /</span><h1>Visualize code in the web ui</h1></header>
+    <div class="split-view" data-scroll id="split">
+      <div class="list divide-end" role="listbox" aria-label="Sessions">
+        <div class="group">Running</div>
+        <div class="row" role="option" aria-selected="true" tabindex="0"><span class="status" data-state="running">running</span><span class="title">Design system — code views</span><span class="meta">designer · 4m</span></div>
+        <div class="row" role="option" tabindex="-1"><span class="status" data-state="running">running</span><span class="title">Harness server — code browsing</span><span class="meta">go-developer · 9m</span></div>
+        <div class="row" role="option" tabindex="-1"><span class="status" data-state="running">running</span><span class="title">Architect</span><span class="meta">software-architect · 20m</span></div>
+      </div>
+      <section class="detail" aria-label="Session detail">
+        <div class="flow flow-space-s pad-l divide-bottom">
+          <div class="repel"><h2>Design system — code views</h2>
+            <div class="cluster gutter-xs"><a class="button" data-variant="ghost" data-size="sm" href="#">Git history</a><button type="button" class="button" data-size="sm">Stop</button></div></div>
+          <div class="cluster gutter-m text-sm color-ink-muted"><span class="status" data-state="running">running</span><span>designer</span><span>4m</span></div>
+        </div>
+        <div class="tabs" role="tablist" aria-label="Session views">
+          <button type="button" role="tab" aria-selected="false">Agent</button>
+          <button type="button" role="tab" aria-selected="false">App</button>
+          <button type="button" role="tab" aria-selected="false">Design</button>
+          <button type="button" role="tab" aria-selected="true">Code <span class="badge font-mono">7 files</span></button>
+        </div>
+        <div class="code-area" id="code"></div>
+      </section>
+    </div>
+  </main>
+  <footer class="stream-bar" aria-live="polite">
+    <span class="status" data-state="live">live · :8080</span><span>3 sessions</span>
+    <span class="keys"><span><kbd>T</kbd> find file</span><span><kbd>L</kbd> line</span><span><kbd>[</kbd><kbd>]</kbd> file</span><span><kbd>G</kbd> then <kbd>C</kbd>/<kbd>F</kbd>/<kbd>M</kbd> view</span></span>
+  </footer>
+</div>
+</div>
+
+<section class="notes">
+  <h2>What this shows</h2>
+  <p><strong>Changes</strong> opens first on a session: the changed files beside the diff, scope All (branch + uncommitted) by default. The file the diff is scrolled to is current in the list. <strong>Files</strong> is the worktree as it is on disk, with change marks in the tree. <strong>Map</strong> divides the files into bounded contexts and zones. Every view, file, scope and line is a URL.</p>
+  <p>The Code tab lives in the session detail pane, which is about 49rem wide on a 1440px screen: the side list takes up to 18rem and the main side the rest. <em>Expand</em> (<kbd>⇧E</kbd>) gives the detail the whole width for reading. Below a 44rem pane (or on a phone) one side shows at a time, like the session list and its detail.</p>
+  <p>Try the state control: <em>live</em> follows the agent quietly. <em>stale</em> appears when a <code>code_changed</code> arrives for a file the person is reading: nothing moves under them until they press <kbd>R</kbd>. The changed-files list updates in place. <em>gone</em> falls back to the branch.</p>
+</section>
+
+<script data-kit></script>
+<script>
+  const S = { view: "changes", state: "live", layout: "unified", file: "internal/application/code/browser.go", reading: false, empty: false };
+  const $ = (s) => document.querySelector(s);
+  function render() {
+    const files = S.empty ? [] : KIT_DIFF;
+    let side = "", main = "", mainAttr = "";
+    if (S.view === "changes") {
+      const bg = S.state === "basegone";
+      const shown = S.state === "gone" ? files.filter((f) => f.status !== "untracked") : bg ? files.filter((f) => ["untracked", "modified"].includes(f.status)) : files;
+      side = KIT.diffSummary({ files: shown, gone: S.state === "gone", baseGone: bg, scope: S.state === "gone" ? "branch" : bg ? "working" : "all" });
+      const banner = bg ? `<div class="pad-m" style="padding-block-end:0"><div class="banner"><div class="flow flow-space-3xs"><span><strong>The base branch main no longer resolves</strong>, so only uncommitted work can be compared.</span><span class="code">REF_NOT_FOUND</span></div></div></div>` : "";
+      main = files.length ? banner + KIT.diffView({ layout: S.layout, files: shown })
+        : `<div class="empty"><h2>No changes yet</h2><p>This session has not changed any file on its branch. Its edits appear here as the agent makes them, without a reload.</p><div class="actions"><a class="button" data-variant="ghost" href="#" data-view-link="files">Browse files</a></div></div>`;
+    } else if (S.view === "files") {
+      side = KIT.tree({ selected: S.file, marks: S.state !== "basegone" });
+      main = S.state === "gone"
+        ? `<div class="empty"><h2>The worktree is gone</h2><p>Files on disk went with it. The branch still has everything the session committed.</p><div class="actions"><a class="button" data-variant="primary" href="#">Browse the branch</a></div><p class="font-mono text-xs color-ink-faint">WORKSPACE_MISSING</p></div>`
+        : KIT.codeView({ path: S.file });
+    } else {
+      main = KIT.codeMap();
+    }
+    const back = `<button type="button" class="button" data-variant="ghost" data-size="sm" data-code-back>${S.view === "changes" ? "Changed files" : "Files"}</button>`;
+    $("#code").innerHTML = KIT.sourceBar({ view: S.view, state: S.state === "basegone" ? "live" : S.state }) +
+      `<div class="code-layout"${S.view === "map" ? ' data-side="none"' : ""}><aside class="side" aria-label="${S.view === "changes" ? "Changed files" : "Files"}">${side}</aside><section class="main" aria-label="${S.view}">${back}${main}</section></div>`;
+    $("#split").toggleAttribute("data-reading", S.reading);
+  }
+  document.addEventListener("click", (e) => {
+    const v = e.target.closest("[data-view], [data-view-link]");
+    if (v) { e.preventDefault(); S.view = v.dataset.view || v.dataset.viewLink; render(); return; }
+    const l = e.target.closest("[data-layout]");
+    if (l && l.tagName === "BUTTON") { S.layout = l.dataset.layout; $("#layout").value = S.layout; render(); return; }
+    if (e.target.closest("[data-reload]")) { S.state = "live"; $("#state").value = "live"; render(); return; }
+    const t = e.target.closest(".diff-view .toggle");
+    if (t) { const f = t.closest(".file"); const open = f.toggleAttribute("data-collapsed"); t.setAttribute("aria-expanded", String(!open)); return; }
+    const item = e.target.closest(".file-tree [role=treeitem] > .item");
+    if (item) {
+      e.preventDefault();
+      const li = item.parentElement;
+      if (li.dataset.kind === "dir") { li.setAttribute("aria-expanded", li.getAttribute("aria-expanded") === "true" ? "false" : "true"); const g = li.querySelector(":scope > [role=group]"); if (g) g.hidden = li.getAttribute("aria-expanded") !== "true"; return; }
+      if (li.dataset.kind === "file") { S.file = li.dataset.path; render(); }
+      return;
+    }
+    const a = e.target.closest(".diff-summary .changed a");
+    if (a) {
+      e.preventDefault();
+      document.querySelectorAll(".diff-summary .changed a").forEach((x) => x.removeAttribute("aria-current"));
+      a.setAttribute("aria-current", "location");
+      document.querySelector(a.getAttribute("href"))?.scrollIntoView({ block: "start" });
+    }
+  });
+  $("#state").onchange = (e) => { S.state = e.target.value; render(); };
+  $("#layout").onchange = (e) => { S.layout = e.target.value; render(); };
+  $("#reading").onchange = (e) => { S.reading = e.target.checked; render(); };
+  $("#empty").onchange = (e) => { S.empty = e.target.checked; render(); };
+  document.addEventListener("keydown", (e) => {
+    if (e.target.closest("input, select, textarea")) return;
+    if (e.key === "E" && e.shiftKey) { S.reading = !S.reading; $("#reading").checked = S.reading; render(); }
+    if (e.key === "r" && S.state === "stale") { S.state = "live"; $("#state").value = "live"; render(); }
+  });
+  render();
+</script>
+</body>
+</html>

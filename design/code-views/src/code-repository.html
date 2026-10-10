@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Code views — repository code page</title>
+<!--
+  Mockup for task "Visualize code in the web ui": the repository code page
+  (Files and Map at a branch, tag or commit), with the quick-open and
+  go-to-line palettes. Built by design/code-views/tools/build.py.
+-->
+<style data-ds></style>
+<style data-proposal></style>
+<style data-page>
+  body { background: var(--color-panel); }
+  .controls { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-s) var(--space-l); padding: var(--space-s) var(--space-l); font-size: var(--text-sm); color: var(--color-ink-muted); border-block-end: var(--border-width) solid var(--color-line); }
+  .controls h1 { font-size: var(--text-md); color: var(--color-ink); margin-inline-end: auto; }
+  .controls label { display: inline-flex; gap: var(--space-xs); align-items: center; }
+  .stage { position: relative; block-size: 860px; border-block-end: var(--border-width) solid var(--color-line); }
+  .stage > .app-shell { block-size: 100%; }
+  .page-body { display: flex; flex-direction: column; min-block-size: 0; }
+  .page-body > .code-layout { flex: 1 1 0; block-size: auto; }
+  /* The palette drawn open in place, for the mockup (it is a modal <dialog> in the app). */
+  .stage .palette[open] { position: absolute; inset: 0; margin: 9rem auto auto; z-index: var(--z-dialog); }
+  .stage .veil { position: absolute; inset: 0; background: var(--color-scrim); z-index: var(--z-overlay); }
+  .notes { max-inline-size: 72rem; margin: var(--space-xl) auto var(--space-3xl); padding-inline: var(--space-l); display: grid; gap: var(--space-m); color: var(--color-ink-muted); font-size: var(--text-sm); }
+  .notes h2 { color: var(--color-ink); font-size: var(--text-md); }
+</style>
+</head>
+<body>
+<div class="controls" role="group" aria-label="Mockup controls">
+  <h1>Repository · Code</h1>
+  <label>View <select data-size="sm" data-fit id="view"><option value="files">Files</option><option value="map">Map</option><option value="mapempty">Map, no zones</option></select></label>
+  <label>File <select data-size="sm" data-fit id="kind"><option value="text">text, lines 45–49 targeted</option><option value="wrap">text, soft-wrapped</option><option value="truncated">truncated (over 1 MiB)</option><option value="binary">binary</option><option value="empty">empty</option><option value="loading">loading</option><option value="none">no file open</option></select></label>
+  <label>Palette <select data-size="sm" data-fit id="palette"><option value="">closed</option><option value="find">Find file (T)</option><option value="line">Go to line (L)</option></select></label>
+</div>
+
+<div class="stage">
+<div class="app-shell">
+  <header class="topbar"><a class="brand" href="#">harness</a><select data-size="sm" data-fit aria-label="Project"><option>harness</option></select></header>
+  <div class="rail">
+    <a class="button" data-size="sm" href="#"><svg aria-hidden="true" viewBox="0 0 16 16"><path d="M8 3v10M3 8h10" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>New task</a>
+    <nav class="nav" aria-label="Project"><ul role="list">
+      <li><a href="#"><span class="label">Board</span></a></li>
+      <li><a href="#" aria-current="page"><span class="label">Code</span></a></li>
+      <li><a href="#"><span class="label">Documents</span></a></li>
+      <li><a href="#"><span class="label">Design assets</span></a></li>
+    </ul></nav>
+  </div>
+  <main class="frame">
+    <header class="toolbar"><span class="crumb">harness / repositories /</span><h1>harness</h1><div class="actions"><a class="button" data-variant="ghost" data-size="sm" href="#">Git history</a></div></header>
+    <div class="page-body" id="body" data-scroll></div>
+  </main>
+  <footer class="stream-bar" aria-live="polite">
+    <span class="status" data-state="live">live · :8080</span><span>3 sessions</span>
+    <span class="keys"><span><kbd>T</kbd> find file</span><span><kbd>L</kbd> line</span><span><kbd>W</kbd> wrap</span><span><kbd>Y</kbd> permalink</span></span>
+  </footer>
+</div>
+<div id="overlay"></div>
+</div>
+
+<section class="notes">
+  <h2>What this shows</h2>
+  <p>The repository code page reads a repository at a ref, chosen from the source bar's native select (branches, then tags; a pasted hash works too), the way the history page does. It has Files and Map but no Changes: a ref has nothing uncommitted. The source bar shows the commit the ref resolved to. Every later read pins that commit, so a branch moving mid-read never mixes two versions. <kbd>Y</kbd> rewrites the URL to that commit, the same permalink move GitHub uses.</p>
+  <p><strong>Find file</strong> (<kbd>T</kbd>) opens the existing command palette over <code>/api/code/paths</code>: fuzzy match on the path, the match in bold and underlined, the directory faint, the change mark at the end in a session. Past 50,000 paths a last row says the list is cut. <strong>Go to line</strong> (<kbd>L</kbd>) is the same palette with one field, accepting <code>120</code> or <code>120-140</code>. It sets the URL's <code>#L120-L140</code>, scrolls there and targets the lines.</p>
+  <p>The tree is lazy. A directory being read shows skeleton rows under it, and the open file is selected and scrolled into view on first paint.</p>
+</section>
+
+<script data-kit></script>
+<script>
+  const S = { view: "files", kind: "text", palette: "" };
+  const $ = (s) => document.querySelector(s);
+  function render() {
+    let side = "", main = "", attrs = "";
+    if (S.view === "files") {
+      side = KIT.tree({ marks: false, selected: { truncated: "web/vendor/highlight.min.js", binary: "docs/assets/code-map.png" }[S.kind] || "internal/application/code/browser.go", busy: new Set(S.kind === "loading" ? ["web"] : []), open: new Set(["internal", "internal/application", "internal/application/code", "internal/ports", "web", "web/vendor", "docs", "docs/assets"]), nodes: undefined });
+      const k = S.kind;
+      if (k === "none") main = `<div class="empty"><h2>harness at main</h2><p>Pick a file in the tree, or press <kbd>T</kbd> to find one by name.</p></div>`;
+      else if (k === "binary") main = KIT.codeView({ path: "docs/assets/code-map.png", kind: "binary", zone: null, meta: "PNG image · 48 KB" });
+      else if (k === "empty") main = KIT.codeView({ path: "web/vendor/.gitkeep", kind: "empty", zone: 4, meta: "0 bytes" });
+      else if (k === "loading") main = KIT.codeView({ busy: true, meta: "Go · loading…" });
+      else if (k === "truncated") main = KIT.codeView({ path: "web/vendor/highlight.min.js", zone: 4, lang: "javascript", target: [], meta: "JavaScript · 2.4 MB", text: Array.from({ length: 60 }, (_, i) => `var h${i}=function(e){return e.replace(/[&<>]/g,function(c){return M[c]})};`).join("\n"), notice: "<strong>Showing the first 1 MiB</strong> · 24,310 of 61,002 lines. The rest of this 2.4 MB file is not loaded. Read it in your editor: <code class=\"path\">web/vendor/highlight.min.js</code>" });
+      else main = KIT.codeView({ wrap: k === "wrap" });
+      if (S.kind === "none") attrs = "";
+    } else {
+      attrs = ' data-side="none"';
+      main = KIT.codeMap({ empty: S.view === "mapempty" });
+    }
+    const v = S.view === "files" ? "files" : "map";
+    $("#body").innerHTML = KIT.sourceBar({ view: v, state: "fixed", kind: "repository" }) +
+      `<div class="code-layout"${attrs}><aside class="side" aria-label="Files">${side}</aside><section class="main" aria-label="${v}"><button type="button" class="button" data-variant="ghost" data-size="sm" data-code-back>Files</button>${main}</section></div>`;
+    const paths = [["internal/application/code/", "<mark>bro</mark>wser.go", "M"], ["internal/application/code/", "<mark>bro</mark>wser_test.go", "U"], ["web/src/modules/code/presentation/", "<mark>bro</mark>wse.js", ""], ["internal/adapter/in/web/sessions/", "<mark>bro</mark>wser_test.go", ""], ["docs/", "<mark>BRO</mark>WSER.md", ""]];
+    const row = ([dir, n, m], i) => { return `<div role="option"${i === 0 ? ' aria-selected="true" data-active' : ""}><span></span><span class="text"><span class="label font-mono">${n}</span><span class="description font-mono">${dir}</span></span>${m ? `<span class="meta"><span class="change-mark" data-change="${m === "M" ? "modified" : "untracked"}">${m}</span></span>` : ""}</div>`; };
+    $("#overlay").innerHTML = !S.palette ? "" : `<div class="veil"></div><dialog class="palette" open aria-label="${S.palette === "find" ? "Find file" : "Go to line"}">` +
+      (S.palette === "find"
+        ? `<input value="bro" aria-label="Find a file by path" class="font-mono"><div class="results" role="listbox" aria-label="Files">${paths.map(row).join("")}</div><p class="text-xs color-ink-faint pad-s pad-inline-l">5 of 1,284 files · <kbd>↵</kbd> open · <kbd>Esc</kbd> close</p>`
+        : `<input value="120-140" aria-label="Go to line or range" class="font-mono"><p class="text-sm color-ink-muted pad-m pad-inline-l">Go to lines 120–140 of browser.go (67 lines: the range is past the end, so line 67).</p>`) + `</dialog>`;
+  }
+  $("#view").onchange = (e) => { S.view = e.target.value; render(); };
+  $("#kind").onchange = (e) => { S.kind = e.target.value; render(); };
+  $("#palette").onchange = (e) => { S.palette = e.target.value; render(); };
+  document.addEventListener("click", (e) => {
+    const v = e.target.closest("[data-view]");
+    if (v) { e.preventDefault(); S.view = v.dataset.view; $("#view").value = S.view; render(); }
+  });
+  render();
+</script>
+</body>
+</html>

@@ -1,0 +1,18 @@
+/*
+ * Context hue — data-hue="0"–"7" sets --hue to one of the bounded-context
+ * colours; data-hue="none" (a zone in no context) leaves it unset, so a
+ * reader falls back to its own edge colour. .zone-tag and .code-map read it.
+ * The Web UI passes a context's index in CodeMap.contexts, mod 8.
+ */
+
+@layer utilities {
+  [data-hue="0"] { --hue: var(--color-context-0); }
+  [data-hue="1"] { --hue: var(--color-context-1); }
+  [data-hue="2"] { --hue: var(--color-context-2); }
+  [data-hue="3"] { --hue: var(--color-context-3); }
+  [data-hue="4"] { --hue: var(--color-context-4); }
+  [data-hue="5"] { --hue: var(--color-context-5); }
+  [data-hue="6"] { --hue: var(--color-context-6); }
+  [data-hue="7"] { --hue: var(--color-context-7); }
+  [data-hue="none"] { --hue: initial; }
+}

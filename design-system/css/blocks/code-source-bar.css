@@ -1,0 +1,107 @@
+/*
+ * Code source bar — the strip above every code view that says which code is
+ * on screen: the views switch, the repository, the ref (a picker on the
+ * repository page, the session's branch on a session), the short commit and,
+ * for a worktree, how much is uncommitted. Then its state, then actions.
+ * A session with several worktrees puts a <select> of its repositories in
+ * place of .repo; the repository page puts the ref picker (a <select>) in
+ * place of .branch.
+ * <header class="code-source-bar" data-state?>
+ *   <nav class="segmented" aria-label="Code views">…</nav>
+ *   <div class="origin"><span class="repo">harness</span><span class="branch">agent/…</span>
+ *     <code class="commit">a1b2c3d</code><span class="dirty">worktree · 3 uncommitted</span></div>
+ *   <p class="state">…</p>
+ *   <div class="actions">…</div>
+ * </header>
+ * data-state: live (a running session: the code follows it, a quiet dot and
+ * "live"), stale (a code_changed event arrived for what is on screen: amber
+ * dot, "Changed on disk", a Reload button with kbd R), gone (the worktree was
+ * removed: a second line .gone explains, says what is shown instead and
+ * offers the branch). Without data-state the source is fixed (a ref).
+ */
+
+@layer blocks {
+  .code-source-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-xs) var(--space-m);
+    min-block-size: var(--size-row);
+    padding: var(--space-2xs) var(--space-m);
+    border-block-end: var(--border-width) solid var(--color-line);
+    background: var(--color-panel);
+    font-size: var(--text-sm);
+
+    & > .origin {
+      display: flex;
+      align-items: center;
+      gap: var(--space-xs);
+      min-inline-size: 0;
+      flex: 1 1 16rem;
+      overflow: hidden;
+      color: var(--color-ink-muted);
+      white-space: nowrap;
+
+      & > * { flex: none; }
+      & > * + :not(select)::before { content: "·" / ""; margin-inline-end: var(--space-xs); color: var(--color-ink-faint); }
+      & .repo { color: var(--color-ink); font-weight: var(--weight-medium); }
+      /* The branch gives way first, then the uncommitted count. */
+      & .dirty { flex: 0 0.01 auto; min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; }
+      & .branch { flex: 0 1 auto; min-inline-size: 8ch; overflow: hidden; text-overflow: ellipsis; font-family: var(--font-mono); color: var(--color-ink); }
+      & .commit { font-size: var(--text-xs); color: var(--color-ink-muted); background: none; padding: 0; }
+      & select { flex: 0 1 auto; min-inline-size: 8rem; max-inline-size: 18rem; }
+    }
+
+    & > .state {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--space-xs);
+      color: var(--color-ink-muted);
+      white-space: nowrap;
+
+      &::before {
+        content: "";
+        inline-size: 0.5rem;
+        block-size: 0.5rem;
+        border-radius: var(--radius-round);
+        background: var(--color-ink-faint);
+      }
+    }
+
+    & > .actions { display: flex; gap: var(--space-xs); margin-inline-start: auto; }
+
+    &[data-state="live"] > .state::before { background: var(--color-signal); }
+
+    &[data-state="stale"] {
+      & > .state { color: var(--color-attention-strong); font-weight: var(--weight-medium); }
+      & > .state::before { background: var(--color-attention); }
+    }
+
+    /* The second line: what happened, what is shown instead, the way on. */
+    & > .gone {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: var(--space-2xs) var(--space-s);
+      flex-basis: 100%;
+      padding: var(--space-xs) var(--space-s);
+      border: var(--border-width) solid var(--color-line-strong);
+      border-radius: var(--radius-sm);
+      background: var(--color-canvas);
+      color: var(--color-ink-muted);
+
+      & strong { color: var(--color-ink); font-weight: var(--weight-medium); }
+      & .code { font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-ink-faint); }
+      & > :last-child { margin-inline-start: auto; }
+    }
+
+    &[data-state="gone"] > .state::before {
+      background: none;
+      box-shadow: inset 0 0 0 1.5px var(--color-ink-faint);
+    }
+
+    @media (forced-colors: active) {
+      & > .state::before { background: CanvasText; }
+    }
+  }
+}

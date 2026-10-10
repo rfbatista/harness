@@ -79,7 +79,9 @@ CSS into HTML. **Design-token utilities are generated** from `tokens.json`:
 | `pad-*`, `pad-inline-*`, `pad-block-*` | padding | 3xs … 3xl |
 
 Hand-written utilities live one per file: `visually-hidden`, `truncate`,
-`region`, `divide-top|bottom|end`, `grow`, `shrink-0`, `push-end`.
+`region`, `divide-top|bottom|end`, `grow`, `shrink-0`, `push-end`, and
+`context-hue` (`data-hue="0"`–`"7"` sets `--hue` to a bounded context's colour,
+read by `.zone-tag` and `.code-map`).
 
 Utilities never use `!important`. Because blocks come after utilities, **a
 block's own declarations win over a utility on the same element**. Use
@@ -129,7 +131,13 @@ Vocabulary in use: `data-variant`, `data-size`, `data-icon`, `data-tone`,
 The dropdowns add states their components set: `data-open` (the popup is
 open), `data-active` (the option the keys or pointer are on), `data-sheet` and
 `data-tall` (the phone sheet), `data-placement="top"` (opened upward), and
-one a page sets, `data-align="end"` (a menu lined up with its trigger's end). If an exception changes a block beyond
+one a page sets, `data-align="end"` (a menu lined up with its trigger's end).
+The code views add `data-change` (a file's git state on `.change-mark`),
+`data-hue` (a context's colour index, or `none`), `data-kind` on tree items,
+diff lines and map cards, `data-main` / `data-side="none"` / `data-code-back`
+(`.code-layout`), `data-layout="split"`, `data-wrap`, `data-target`,
+`data-no-newline` (`.code-lines`), `data-collapsed`, `data-reason` and
+`data-layout-switch` (`.diff-view`), and `data-empty` (a zone with no files). If an exception changes a block beyond
 recognition, it is a new block.
 
 ## Dropdowns: which one
@@ -158,6 +166,14 @@ on the wrapper. The blocks: `popup.css` (the floating surface), `option.css`
 (the row anatomy, shared with the palette), `sheet.css` (phones),
 `dropdown.css` (the trigger or field), `chip.css`, `menu.css`.
 
+## Size containers
+
+A block that must follow the room it is given rather than the window
+declares a named size container, and its children query it. The code views
+use `container: code / inline-size` on `.code-layout`. Below 44rem it shows one
+side at a time, and `.diff-view` stacks split rows, whether that room is a
+phone or the session's detail pane on a desktop.
+
 ## Class grouping in markup
 
 Group classes with square brackets in CUBE order: the primary block, other
@@ -183,6 +199,10 @@ Elements inside a block use their short class alone: `class="[ title ]"`.
   Add a new composition only for a genuinely new layout relationship.
 - **A component:** a new file in `css/blocks/`, imported in `index.css` under
   `/* Blocks */`; add it to `specimen.html` and to DESIGN.md §5.
+- **A code-views block or state:** change `design/code-views/src/kit.js` as
+  well, then run `node design/code-views/tools/specimen.mjs`. It regenerates
+  the specimen's *Code views* section and its scoped light/dark rules from
+  `tokens.json`, so run it after a token change too.
 - **A state or variant:** an exception inside the existing block file.
 
 ## Delivery

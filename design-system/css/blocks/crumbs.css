@@ -1,0 +1,60 @@
+/*
+ * Crumbs — a path as links, one per directory, the file itself current.
+ * Mono, because a path is machine text. The directories shrink to a few
+ * characters first; the file name always shows whole.
+ * <nav class="crumbs" aria-label="Path"><ol>
+ *   <li><a href="…">harness</a></li><li><a href="…">internal</a></li>
+ *   <li><a aria-current="page">feed.go</a></li>
+ * </ol></nav>
+ * Separators are drawn, never read. Exception: data-copy — a trailing ghost
+ * button (.copy) that copies the path.
+ */
+
+@layer blocks {
+  .crumbs {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2xs);
+    min-inline-size: 0;
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+
+    & ol {
+      display: flex;
+      align-items: center;
+      min-inline-size: 0;
+      padding: 0;
+      list-style: none;
+      overflow: hidden;
+    }
+
+    & li {
+      display: flex;
+      align-items: center;
+      flex: 0 1 auto;
+      min-inline-size: 2ch;
+      max-inline-size: none;
+      white-space: nowrap;
+
+      /* The file name keeps its width; the directories give way, deepest last. */
+      &:last-child { flex-shrink: 0; max-inline-size: 100%; }
+
+      & + li::before {
+        content: "/" / "";
+        padding-inline: var(--space-3xs);
+        color: var(--color-ink-faint);
+      }
+    }
+
+    & a {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      color: var(--color-ink-muted);
+      text-decoration: none;
+      border-radius: var(--radius-xs);
+
+      &[href]:hover { color: var(--color-ink); text-decoration: underline; }
+      &[aria-current="page"] { color: var(--color-ink); font-weight: var(--weight-medium); }
+    }
+  }
+}

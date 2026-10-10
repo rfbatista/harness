@@ -1,0 +1,64 @@
+/*
+ * Segmented — two to five sibling views or scopes of one thing, each its own
+ * URL: Changes / Files / Map, All / Branch / Working, Unified / Split.
+ * Links (or buttons) in a hairline box; the current one is pressed.
+ * <nav class="segmented" aria-label="Code views">
+ *   <a href="…" aria-current="page">Changes <span class="count">12</span></a><a href="…">Files</a>
+ * </nav>
+ * A button group (no URL) uses aria-pressed instead of aria-current.
+ * Exceptions: [aria-disabled="true"] with a title saying why (a gone
+ * worktree has no working changes), data-size="sm".
+ */
+
+@layer blocks {
+  .segmented {
+    --_h: var(--size-control-sm);
+
+    display: inline-flex;
+    flex: none;
+    padding: var(--space-3xs);
+    gap: var(--space-3xs);
+    border: var(--border-width) solid var(--color-line);
+    border-radius: var(--radius-sm);
+    background: var(--color-panel);
+
+    & > :is(a, button) {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--space-2xs);
+      min-block-size: calc(var(--_h) - 2 * var(--space-3xs) - 2 * var(--border-width));
+      padding-inline: var(--space-s);
+      border: 0;
+      border-radius: var(--radius-xs);
+      background: none;
+      color: var(--color-ink-muted);
+      font-size: var(--text-sm);
+      text-decoration: none;
+      white-space: nowrap;
+      transition: background-color var(--duration-instant) var(--ease-out);
+
+      &:hover { background: var(--color-hover); color: var(--color-ink); }
+
+      &:is([aria-current]:not([aria-current="false"]), [aria-pressed="true"]) {
+        background: var(--color-raised);
+        box-shadow: 0 0 0 var(--border-width) var(--color-line-strong);
+        color: var(--color-ink);
+        font-weight: var(--weight-medium);
+      }
+
+      &[aria-disabled="true"] { opacity: 0.45; pointer-events: none; }
+    }
+
+    & .count {
+      color: var(--color-ink-faint);
+      font-size: var(--text-xs);
+      font-variant-numeric: tabular-nums;
+    }
+
+    @media (pointer: coarse) { --_h: var(--size-touch); }
+
+    @media (forced-colors: active) {
+      & > :is([aria-current]:not([aria-current="false"]), [aria-pressed="true"]) { outline: 2px solid CanvasText; }
+    }
+  }
+}
