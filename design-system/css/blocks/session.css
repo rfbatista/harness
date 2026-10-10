@@ -1,0 +1,24 @@
+/*
+ * Session — the detail column of a session: its head, the tab row and the
+ * open pane. A fixed column: only the pane grows, and only the pane scrolls
+ * (contract L1, L2, L5). It is the size container the head and the tab row
+ * answer to, so they adapt to the column (rail open, list beside it), not
+ * only to the window.
+ * <section class="session" aria-label="Session"><header class="session-head">…</header>
+ *   <div class="pane-tabs">…</div><div class="terminal">…</div></section>
+ * The head is session-head.css, the tab row pane-tabs.css.
+ */
+
+@layer blocks {
+  .session {
+    container: session / inline-size;
+    display: flex;
+    flex-direction: column;
+    block-size: 100%;
+    min-block-size: 0;
+    overflow: hidden;
+
+    & > :is(.session-head, .pane-tabs) { flex: none; }
+    & > :not(.session-head, .pane-tabs) { flex: 1 1 0; min-block-size: 0; }
+  }
+}

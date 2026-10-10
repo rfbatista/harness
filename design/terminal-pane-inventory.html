@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Design: session terminal pane — component inventory</title>
+<link rel="stylesheet" href="/static/document.css">
+<style>
+  :root { color-scheme: light dark; }
+  body { font: 15px/1.55 system-ui, sans-serif; max-width: 80ch; margin: 2rem auto; padding: 0 1rem; }
+  code { font-family: ui-monospace, monospace; font-size: .9em; }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; }
+  th, td { text-align: left; vertical-align: top; padding: .45rem .6rem; border-bottom: 1px solid color-mix(in oklch, currentColor 18%, transparent); }
+  th { font-weight: 600; }
+  .keep { color: oklch(0.6 0.13 165); font-weight: 600; }
+  .weak { color: oklch(0.65 0.15 60); font-weight: 600; }
+  .bug  { color: oklch(0.6 0.18 25); font-weight: 600; }
+  .callout { border-inline-start: 3px solid oklch(0.6 0.18 25); padding: .5rem .9rem; background: color-mix(in oklch, oklch(0.6 0.18 25) 8%, transparent); }
+</style>
+</head>
+<body class="prose">
+<h1>Design: session terminal pane — component inventory</h1>
+<p>What the session screen's Agent tab is built from today, read from <code>design-system/css/blocks</code>, <code>design-system/specimen.html</code>, <code>DESIGN.md</code>, the session template (<code>internal/adapter/in/web/sessions/page.templ</code>, <code>channel.templ</code>) and the person's screenshot <em>Terminal section print</em>. Read-only inventory: nothing was changed. Rules L1–L6 refer to the project contract <em>Design system ↔ Web UI — session terminal pane layout</em>.</p>
+
+<h2>Probable root cause of the clipping (design-system side)</h2>
+<div class="callout">
+<p><strong><code>terminal.css</code> pads the element xterm is fitted to.</strong> <code>.terminal &gt; .screen</code> has <code>padding: var(--space-s) var(--space-m)</code>, and <code>xterm-screen.js</code> calls <code>term.open(container)</code> on that same <code>.screen</code>. FitAddon measures the <em>parent's</em> computed height/width and subtracts only the padding of xterm's own element. With the global <code>box-sizing: border-box</code> reset, the parent's computed size includes its padding, so xterm proposes rows/cols for a box 2×<code>space-s</code> taller and 2×<code>space-m</code> wider than it has. <code>.screen { overflow: hidden }</code> then clips the overflow.</p>
+<p>That matches the screenshot exactly: the last row (<code>auto mode on · esc to interrupt</code>) is cut in half at the bottom, and long lines are cut on the right (<code>…3d7da05b/3</code>). This breaks L3.</p>
+<p><strong>Fix direction (for the frontend-developer and later for <code>terminal.css</code>):</strong> leave the fitted element unpadded, and put the gutter on xterm's element (<code>.screen &gt; .xterm { padding }</code>, which FitAddon does subtract), or on an inner wrapper that xterm opens into. I'm not touching <code>web/src</code> or the CSS until the UX proposal is approved; I'm flagging it to the architect so the frontend-developer can confirm it.</p>
+</div>
+
+<h2>Other layout weaknesses behind L1, L2 and L5</h2>
+<ul>
+  <li><span class="bug">Nested scroller.</span> <code>main.frame &gt; .split-view[data-scroll]</code> scrolls (<code>overflow: auto</code>). When the detail column is taller than the viewport the <em>split view</em> scrolls, not the terminal. The screenshot shows that outer scrollbar next to the tab bar. This breaks L1 and L5.</li>
+  <li><span class="bug">The terminal has a minimum height.</span> <code>.screen { min-block-size: 12rem }</code> sits inside a <code>.terminal[data-scroll]</code> that is itself <code>overflow: auto</code>. On short viewports, or when the header grows (status-check row, delete banner, a wrapped toolbar), the terminal block overflows and scrolls as a box. xterm is never told it got smaller.</li>
+  <li><span class="weak">The chrome can shrink.</span> In <code>.frame</code> every child keeps <code>flex-shrink: 1</code>. <code>.tabs</code> has <code>overflow-x: auto</code>, so its automatic minimum height is 0 and it can be squeezed vertically. The header and tabs need <code>flex: none</code>.</li>
+  <li><span class="weak">Two footers.</span> The terminal's 32px <code>.bar</code> (status + window title, the "live ◆" in the screenshot) and the shell's 28px <code>.stream-bar</code> (also "live"). Both show connection status, and together they cost about 60px of terminal height.</li>
+</ul>
+
+<h2>Inventory</h2>
+<table>
+  <thead><tr><th>Component</th><th>Built from</th><th>Verdict</th><th>Notes</th></tr></thead>
+  <tbody>
+    <tr><td>Session header: title + actions</td><td><code>.flow.pad-l.divide-bottom</code> › <code>.repel</code> (h2 + <code>.cluster</code> of <code>.button</code> sm: Git history, Resume, Stop, Delete; PR badges)</td><td><span class="keep">Reusable</span> parts, <span class="weak">weak</span> assembly</td><td>No header block: it's assembled from utilities in the template. <code>pad-l</code> on all sides plus <code>flow-space-s</code> between three rows uses about 180px (screenshot) before the tabs. Stop (a destructive action) is the strongest-looking button. Delete is a ghost button right next to it. A header block (e.g. <code>.session-head</code>) with a compact one-line layout would own the height.</td></tr>
+    <tr><td>Meta row: state · agent · age</td><td><code>.cluster</code> of <code>.status[data-state]</code> + spans</td><td><span class="keep">Reusable</span></td><td><code>.status</code> is solid: dot plus word, signal ring, reduced-motion handling. The row could share a line with the title on wide screens.</td></tr>
+    <tr><td>Status-check row</td><td><code>.check-bar</code> (in <code>message.css</code>) › <code>.status</code>, native <code>&lt;select data-size=sm data-fit&gt;</code>, <code>.button</code> Pause, inline <code>.banner</code> on error</td><td><span class="keep">Reusable</span> controls, <span class="weak">weak</span> placement</td><td>The select already follows the project asset <em>Select — native, restyled</em>. Weak: it's a third full-height header row that appears and disappears (it changes the pane height, see L4). The wording "checks every 20m · next in 15m · no check yet" sits beside a select showing "2 min", which reads as a contradiction. The block lives in <code>message.css</code>, not its own file.</td></tr>
+    <tr><td>Delete confirmation</td><td><code>.banner[data-tone=danger][role=alertdialog]</code></td><td><span class="keep">Reusable</span></td><td>Pushes the terminal down while it's open, which is another source of height change for L4.</td></tr>
+    <tr><td>Tab bar: Agent · App · Design · Conversation</td><td><code>.tabs[role=tablist]</code></td><td><span class="keep">Reusable</span></td><td>Good ARIA, underline indicator, signal badge for Design. Weak: <code>padding-inline: space-l</code> doesn't line up with the terminal's <code>space-m</code> gutter (visible in the screenshot). It can shrink vertically (see above). There's no room for per-tab tools on the right (e.g. scroll-to-bottom, copy, font size).</td></tr>
+    <tr><td>Terminal block</td><td><code>.terminal</code> › <code>.screen</code> (xterm) + <code>.bar</code></td><td><span class="bug">Root of the bug</span>, otherwise <span class="keep">reusable</span></td><td>Good: themed scrollbar that stays on with history, transparent xterm background, <code>touch-action: pan-y</code>, <code>sunken</code> well. Weak: padding on the fitted element (L3), <code>min-block-size: 12rem</code> (L1/L2), and no states for <em>waiting</em>, <em>ended</em> or <em>reconnecting</em> beyond the bar's word. The "ended" and "no terminal" states are a separate <code>.banner</code> under the tabs (<code>terminalNote</code>).</td></tr>
+    <tr><td>Terminal bar ("live" footer)</td><td><code>.terminal &gt; .bar</code>: <code>.status</code> + window title + Reconnect</td><td><span class="weak">Weak</span></td><td>It repeats the shell stream bar's connection word. The window title (claude's spinner glyph, ◆) is noise at this size. This 32px strip could merge into the tab bar's right side or the stream bar, which frees a row for the terminal.</td></tr>
+    <tr><td>Shell stream bar</td><td><code>.stream-bar</code></td><td><span class="keep">Reusable</span> (signature)</td><td>Already reports "live". It's the natural single home for connection status.</td></tr>
+    <tr><td>Screen scaffolding</td><td><code>.frame</code> / <code>[data-scroll]</code>, <code>.split-view</code>, <code>.app-shell</code> (100dvh grid)</td><td><span class="keep">Reusable</span>, <span class="weak">misused</span></td><td><code>.app-shell</code> is already viewport-height (L1). The leak is the session page marking the whole <code>.split-view</code> as the scroll region. The terminal page wants the split view fixed and the inner panes to scroll.</td></tr>
+    <tr><td>Specimen's session screen</td><td><code>specimen.html</code> §1 (Transcript / Diff / Ticket tabs, reply input)</td><td><span class="weak">Stale</span></td><td>It shows the pre-terminal transcript design. There's no terminal, check-bar or Agent/App/Design/Conversation tabs, so the specimen can't catch this regression. It needs a real session screen built to L1–L6, light and dark, desktop and phone.</td></tr>
+    <tr><td>Dropdown / Select (project assets)</td><td><code>dropdown.css</code>, native <code>select</code> restyle</td><td><span class="keep">Reuse as-is</span></td><td>For the interval picker and any pane overflow menu (e.g. "⋯" with Git history / Delete).</td></tr>
+  </tbody>
+</table>
+
+<h2>What I'll carry into the components once the UX proposal is approved</h2>
+<ul>
+  <li>A <strong>session header</strong> block with a fixed, compact height: title, status, agent and age on one line, and actions on the right with Delete moved into a menu. The status check folds into a small chip/popover so the header height doesn't change when it appears.</li>
+  <li><strong>Tab bar</strong> with a right-hand slot for pane tools and the connection word, so the terminal's own bar can go.</li>
+  <li><strong>Terminal block</strong> fixed for L3 (unpadded fit target), no minimum height, a single scroller, and overlay states: connecting, reconnecting, ended with Resume, waiting on you.</li>
+  <li>The <strong>specimen</strong> session screen rebuilt so the contract is visible and testable.</li>
+</ul>
+</body>
+</html>
