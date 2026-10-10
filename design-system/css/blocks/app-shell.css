@@ -49,7 +49,7 @@
       grid-template-areas: "top" "main" "stream"; /* the rail is a drawer (rail.css) */
 
       &:has(.split-view[data-detail]) > .topbar,
-      &:has(.split-view[data-detail]) main > .toolbar { display: none; }
+      &:has(.split-view[data-detail]) main > :is(.toolbar, :has(> .toolbar)) { display: none; }
     }
 
     &[data-focus] {
@@ -57,7 +57,7 @@
       grid-template-areas: "top" "main" "stream";
 
       & > .rail { display: none; }
-      & main > .toolbar { display: none; }
+      & main > :is(.toolbar, :has(> .toolbar)) { display: none; } /* the task page wraps its toolbar in its editor */
       & .split-view { grid-template-columns: minmax(0, 1fr); }
       & .split-view > :first-child { display: none; }
       & .session > .session-head { display: none; }

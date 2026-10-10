@@ -223,11 +223,11 @@ func TestSessionTerminalRefitsOnceForEachPaneChange(t *testing.T) {
 	step("text back to default", pickTextSize("Default"))
 	step("focus mode on", chromedp.Evaluate(focusButton+`.click()`, nil))
 	var hidden []string
-	if err := chromedp.Run(ctx, chromedp.Evaluate(`['.rail', 'main > .toolbar', '[role=listbox][aria-label="Sessions of this task"]', '.session-head'].filter(s => document.querySelector(s)?.checkVisibility())`, &hidden)); err != nil {
+	if err := chromedp.Run(ctx, chromedp.Evaluate(`['.rail', 'main .toolbar', '[role=listbox][aria-label="Sessions of this task"]', '.session-head'].filter(s => { const el = document.querySelector(s); return !el || el.checkVisibility(); })`, &hidden)); err != nil {
 		t.Fatal(err)
 	}
 	if len(hidden) > 0 {
-		t.Errorf("focus mode left these shown: %v", hidden)
+		t.Errorf("focus mode left these shown (or missing): %v", hidden)
 	}
 	var stillFocused bool
 	if err := chromedp.Run(ctx, chromedp.Focus(`.terminal .xterm-helper-textarea`, chromedp.ByQuery), chromedp.KeyEvent(kb.Escape), settle(),
@@ -310,6 +310,16 @@ func TestSessionTerminalOnANarrowScreen(t *testing.T) {
 			}
 			if focusInTerminal {
 				t.Error("opening the session focused its terminal")
+			}
+			if c.width < 768 {
+				// A phone: the session's own head leads, with its back button.
+				var shown []string
+				if err := chromedp.Run(ctx, chromedp.Evaluate(`['.topbar', 'main .toolbar'].filter(s => document.querySelector(s)?.checkVisibility())`, &shown)); err != nil {
+					t.Fatal(err)
+				}
+				if len(shown) > 0 {
+					t.Errorf("with a session open on a phone these still show: %v", shown)
+				}
 			}
 			checkFits(t, ctx, pty, errs, "session opened")
 			shoot(t, ctx, fmt.Sprintf("terminal-narrow-%dx%d", c.width, c.height))
