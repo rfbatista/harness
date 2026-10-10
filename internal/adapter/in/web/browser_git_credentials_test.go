@@ -271,7 +271,7 @@ func TestGitCredentialsPageFitsAPhone(t *testing.T) {
 		chromedp.EmulateViewport(390, 844, chromedp.EmulateMobile),
 		chromedp.Navigate(h.srv.URL+"/git-credentials"),
 		credPoll(credPageLive),
-		chromedp.Evaluate(`document.querySelector('main .credential-row button[aria-expanded]').click(); true`, nil),
+		chromedp.Evaluate(`[...document.querySelectorAll('main .credential-row button')].find(b => b.textContent.trim() === 'Public key').click(); true`, nil),
 		credPoll(`!!document.querySelector('main .key-line')`),
 		clickButton(`main header`, "Add credential"),
 		credPoll(`document.querySelector('#credential-name').checkVisibility()`),
