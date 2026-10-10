@@ -76,6 +76,7 @@ import "../src/shared/infrastructure/api.test.js";
 import "../src/shared/infrastructure/feed.test.js";
 import "../src/shared/infrastructure/upload.test.js";
 import "../src/shared/presentation/components/combobox.test.js";
+import "../src/shared/presentation/components/dialog.test.js";
 import "../src/shared/presentation/components/dropdown.test.js";
 import "../src/shared/presentation/components/menu.test.js";
 import "../src/shared/presentation/components/options.test.js";
