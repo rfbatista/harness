@@ -34,7 +34,7 @@ type CodeWatcher struct {
 	d CodeWatcherDeps
 
 	mu       sync.Mutex
-	sessions map[string]string         // running session → its workspace
+	sessions map[string]string           // running session → its workspace
 	watched  map[string]*watchedWorktree // workspace → what was last seen
 
 	stop chan struct{}
