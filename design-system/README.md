@@ -132,7 +132,9 @@ The dropdowns add states their components set: `data-open` (the popup is
 open), `data-active` (the option the keys or pointer are on), `data-sheet` and
 `data-tall` (the phone sheet), `data-placement="top"` (opened upward), and
 one a page sets, `data-align="end"` (a menu lined up with its trigger's end).
-The code views add `data-change` (a file's git state on `.change-mark`),
+The split view takes `data-expanded` (the detail at full width at every
+width, the list hidden: a session's Code tab expanded for reading). The code
+views add `data-change` (a file's git state on `.change-mark`),
 `data-hue` (a context's colour index, or `none`), `data-kind` on tree items,
 diff lines and map cards, `data-main` / `data-side="none"` / `data-code-back`
 (`.code-layout`), `data-layout="split"`, `data-wrap`, `data-target`,
