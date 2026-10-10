@@ -64,9 +64,10 @@ export function pullRequestGatewayContract(name, makeSubject) {
   });
 
   contract("create is refused with the draft's blocker, and when origin has moved since the draft", async () => {
-    const { gateway, world } = makeSubject({ workspaces: [makeWorkspace({ blockers: ["PR_TOOL_UNAVAILABLE"] })] });
-    const err = await assert.rejects(create(gateway), Codes.PR_TOOL_UNAVAILABLE);
-    assert.ok(err.message.startsWith("PR_TOOL_UNAVAILABLE"), "the message starts with the code");
+    const { gateway, world } = makeSubject({ workspaces: [makeWorkspace({ blockers: ["GIT_CREDENTIAL_MISSING"] })] });
+    const err = await assert.rejects(create(gateway), Codes.GIT_CREDENTIAL_MISSING);
+    assert.ok(err.message.startsWith("GIT_CREDENTIAL_MISSING"), "the message starts with the code");
+    assert.deepEqual(err.details, { host: "github.com", kind: "https_token" }, "it says what to add");
     world.block("ws1");
     await assert.rejects(create(gateway, { baseBranch: "gone" }), Codes.PR_BASE_NOT_FOUND);
     world.update("ws1", { ahead: 0 });

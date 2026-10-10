@@ -52,17 +52,18 @@ test("creating shows progress, sends one POST for a double submit, then shows th
 });
 
 test("a draft whose blockers say no disables the create and says why, one reason each", async () => {
-  const { panel } = await setup({ workspace: { ahead: 0, remote: null, blockers: [Codes.PR_NO_COMMITS, Codes.PR_NO_REMOTE, Codes.PR_TOOL_UNAVAILABLE, "PR_FROM_THE_FUTURE"] } });
+  const { panel } = await setup({ workspace: { ahead: 0, remote: null, blockers: [Codes.PR_NO_COMMITS, Codes.PR_NO_REMOTE, Codes.GIT_CREDENTIAL_MISSING, "PR_FROM_THE_FUTURE"] } });
   assert.deepEqual([panel.offersCreate, panel.cannotCreate, panel.disabledAttr], [true, true, "true"]);
   assert.deepEqual(
     panel.blockers.map((b) => b.text),
     [
       "Nothing to propose yet: agent/create-pull-request-9d728ce8 has no commits ahead of main.",
       "This repository has no GitHub origin remote, so there is nowhere to open a pull request.",
-      "The server can't reach GitHub as you: gh is missing or not signed in on the server machine. Run gh auth login there.",
+      "No credential stored for this repository's host can push this branch or open the pull request. The harness never uses the server machine's git, ssh or gh sign-ins.",
       "The server would refuse it (PR_FROM_THE_FUTURE).",
     ],
   );
+  assert.deepEqual(panel.blockers.map((b) => b.href), ["", "", "/git-credentials", ""], "the missing credential links to where it is added");
   panel.openForm();
   assert.equal(panel.showsForm, false, "the form does not open");
   panel.destroy();
@@ -124,12 +125,15 @@ test("origin moved since the draft: a missing base lands on the base field; no c
   panel.destroy();
 });
 
-test("the push's, the host's and the tool's refusals show their reason and the code; a retry may follow", async () => {
+test("the push's, the host's and the credentials' refusals show their reason, the code and where to fix it; a retry may follow", async () => {
   const { panel, memory } = await setup();
   panel.openForm();
-  memory.failNext(Codes.PR_TOOL_UNAVAILABLE, "gh is not signed in; run `gh auth login` on the server machine");
+  memory.failNext(Codes.GIT_CREDENTIAL_REJECTED, "Bad credentials", { host: "github.com", credential_id: "gc-1" });
   await panel.submit();
-  assert.deepEqual(panel.refusal, { lead: "The server can't reach GitHub as you.", reason: "gh is not signed in; run `gh auth login` on the server machine", code: Codes.PR_TOOL_UNAVAILABLE });
+  assert.deepEqual(
+    [panel.refusalLead, panel.refusalReason, panel.refusalCode, panel.refusalHref, panel.refusalLinkText],
+    ["github.com refused the stored credential.", "Bad credentials", Codes.GIT_CREDENTIAL_REJECTED, "/git-credentials?credential=gc-1", "Replace it in Git credentials"],
+  );
   memory.failNext(Codes.PR_PUSH_FAILED, "! [rejected] (non-fast-forward)");
   await panel.submit();
   assert.deepEqual([panel.refusal.lead, panel.refusal.reason], ["Git refused the push.", "! [rejected] (non-fast-forward)"]);
@@ -214,7 +218,7 @@ test("opening the form reads the draft again without touching what the person ty
 
 test("after a reconnect the panel reads the workspace again; nothing polls meanwhile", async () => {
   const { panel, memory } = await setup();
-  memory.update("ws1", { blockers: [Codes.PR_TOOL_UNAVAILABLE] });
+  memory.update("ws1", { blockers: [Codes.GIT_CREDENTIAL_MISSING] });
   await flush();
   assert.equal(panel.blocked, false, "no polling: still what was read");
   memory.reportStatus(FeedStatus.RESYNCED);
