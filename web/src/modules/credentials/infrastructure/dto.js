@@ -50,10 +50,10 @@ export function toRepositoryCredential(dto) {
   });
 }
 
-/** GET /api/list_git_credentials → {credentials: [...]} */
-export function toCredentials(body) {
-  if (!body || !Array.isArray(body.credentials)) bad("expected {credentials: [...]}");
-  return body.credentials.map(toCredential);
+/** GET /api/list_git_credentials → {credentials: [...], locked} */
+export function toCredentialList(body) {
+  if (!body || !Array.isArray(body.credentials)) bad("expected {credentials: [...], locked}");
+  return { credentials: body.credentials.map(toCredential), locked: body.locked === true };
 }
 
 /** POST /api/test_git_credential → {ok, message, checked_url} */
@@ -68,15 +68,15 @@ export function toRepositoryCredentials(body) {
   return body.repositories.map(toRepositoryCredential);
 }
 
-/** The Git credentials page's seed: {"credentials": [...], "identity": {...}|null} */
+/** The Git credentials page's seed: {"credentials": [...], "locked", "identity": {...}|null} */
 export function toPageSeed(body) {
-  return { credentials: toCredentials(body), identity: toIdentity(body.identity) };
+  return { ...toCredentialList(body), identity: toIdentity(body.identity) };
 }
 
-/** The Repositories page's seed: {"project_id", "credentials": [...], "repositories": [...]} */
+/** The Repositories page's seed: {"project_id", "credentials": [...], "locked", "repositories": [...]} */
 export function toRepositoriesSeed(body) {
   if (typeof body?.project_id !== "string" || body.project_id === "") bad("expected a project_id");
-  return { projectId: body.project_id, credentials: toCredentials(body), repositories: toRepositoryCredentials(body) };
+  return { projectId: body.project_id, ...toCredentialList(body), repositories: toRepositoryCredentials(body) };
 }
 
 /**

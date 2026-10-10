@@ -17,6 +17,7 @@ async function setup({ credentials = CREDENTIALS, world = {} } = {}) {
   const seed = {
     project_id: "p1",
     credentials: credentials.map(credentialDTO),
+    locked: world.locked === true,
     repositories: (await memory.gateway.listRepositoryCredentials("p1")).map(repositoryCredentialDTO),
   };
   const page = seededElement(seed, SEED_ID);
@@ -134,4 +135,10 @@ test("a repository added after the page loaded reads its binding", async () => {
   await flush();
   await flush();
   assert.equal(late.line.state, "local");
+});
+
+test("a store locked on first paint turns Test off before anyone tries it", async () => {
+  const { row, store } = await setup({ world: { locked: true } });
+  const first = row("r-https"); // the first row starts the store from the seed
+  assert.deepEqual([store.locked, first.cannotTest], [true, true]);
 });

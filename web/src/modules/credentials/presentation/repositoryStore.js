@@ -39,6 +39,7 @@ export function repositoryCredentialsStore({ gateway }) {
         const seed = gateway.decodeRepositoriesSeed(JSON.parse(script?.textContent ?? "null"));
         this.projectId = seed.projectId;
         this.credentials = seed.credentials;
+        this.locked = seed.locked;
         this.keep(seed.repositories);
       } catch (err) {
         this.error = describeError(err);

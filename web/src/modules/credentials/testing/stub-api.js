@@ -31,7 +31,10 @@ export function stubCredentialsApi(world) {
   const identityDTO = (i) => (i ? { name: i.name, email: i.email } : null);
 
   const routes = {
-    "GET /api/list_git_credentials": async () => ({ credentials: (await gateway.list()).map(credentialDTO) }),
+    "GET /api/list_git_credentials": async () => {
+      const { credentials, locked } = await gateway.list();
+      return { credentials: credentials.map(credentialDTO), locked };
+    },
     "POST /api/create_git_credential": async (b) => ({
       credential: credentialDTO(
         await gateway.create({ name: b.name, kind: b.kind, host: b.host, username: b.username, token: b.token, privateKey: b.private_key, passphrase: b.passphrase, generate: b.generate, isDefault: b.is_default }),

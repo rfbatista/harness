@@ -188,6 +188,7 @@ export const gitCredentialsPage = ({ gateway, clock, copy = (text) => globalThis
       try {
         const seed = gateway.decodePageSeed(readSeed(el));
         this.credentials = seed.credentials;
+        this.locked = seed.locked;
         this.setIdentity(seed.identity);
       } catch {
         // The server could not read them (or sent no seed): read them here.
@@ -213,8 +214,9 @@ export const gitCredentialsPage = ({ gateway, clock, copy = (text) => globalThis
 
     async reload() {
       try {
-        const [credentials, identity] = await Promise.all([gateway.list(), gateway.getIdentity()]);
+        const [{ credentials, locked }, identity] = await Promise.all([gateway.list(), gateway.getIdentity()]);
         this.credentials = credentials;
+        this.locked = locked;
         if (!this.identityDirty) this.setIdentity(identity);
         else this.identity = identity;
       } catch (err) {

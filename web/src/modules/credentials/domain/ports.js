@@ -9,6 +9,7 @@
 
 /**
  * @typedef {import("./credential.js").Credential} Credential
+ * @typedef {{ credentials: Credential[], locked: boolean }} CredentialList  locked: the store cannot read secrets
  * @typedef {import("./credential.js").Identity} Identity
  * @typedef {import("./credential.js").Kind} Kind
  * @typedef {import("./credential.js").RepositoryCredential} RepositoryCredential
@@ -39,16 +40,19 @@
  *
  * @typedef {object} PageSeed  the Git credentials page's first paint
  * @property {Credential[]} credentials
+ * @property {boolean} locked
  * @property {Identity|null} identity
  *
  * @typedef {object} RepositoriesSeed  the Repositories page's first paint
  * @property {string} projectId
  * @property {Credential[]} credentials
+ * @property {boolean} locked
  * @property {RepositoryCredential[]} repositories
  *
  * @typedef {object} CredentialGateway
- * @property {() => Promise<Credential[]>} list
- *           By host, then name. Answers while the store is locked.
+ * @property {() => Promise<CredentialList>} list
+ *           By host, then name, and whether the store is locked. Answers
+ *           while it is.
  * @property {(input: CreateInput) => Promise<Credential>} create
  *           Rejects with INVALID_INPUT (no name, host or token),
  *           GIT_CREDENTIAL_NAME_TAKEN, GIT_CREDENTIAL_INVALID_KEY, or

@@ -87,7 +87,7 @@ export function memoryCredentials({ credentials = [], identity = null, repositor
   /** @type {import("../domain/ports.js").CredentialGateway} */
   const gateway = {
     async list() {
-      return list;
+      return { credentials: list, locked: isLocked };
     },
 
     async create(input) {

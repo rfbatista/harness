@@ -5,7 +5,7 @@
 import {
   toChange,
   toCredential,
-  toCredentials,
+  toCredentialList,
   toIdentity,
   toPageSeed,
   toRepositoriesSeed,
@@ -25,7 +25,7 @@ const present = (o) => Object.fromEntries(Object.entries(o).filter(([, v]) => v 
 export function credentialsGateway(api, events) {
   return {
     async list() {
-      return toCredentials(await api.get("/list_git_credentials"));
+      return toCredentialList(await api.get("/list_git_credentials"));
     },
 
     async create({ name, kind, host, username, token, privateKey, passphrase, generate, isDefault }) {

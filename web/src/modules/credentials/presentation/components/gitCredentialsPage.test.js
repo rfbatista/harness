@@ -26,7 +26,7 @@ function secretInputs(doc) {
 
 function setup({ credentials = [makeCredential(), makeKey()], identity = null, dataset = {}, world = {} } = {}) {
   const memory = memoryCredentials({ credentials, identity, repositories: REPOSITORIES.map((r) => ({ ...r })), now: () => at(90), ...world });
-  const el = seededElement({ credentials: credentials.map(credentialDTO), identity });
+  const el = seededElement({ credentials: credentials.map(credentialDTO), locked: world.locked === true, identity });
   Object.assign(el.dataset, dataset);
   const copied = [];
   const mounted = mount(gitCredentialsPage({ gateway: memory.gateway, clock: fixedClock(at(120)), copy: async (t) => void copied.push(t) }), { el });
@@ -93,7 +93,7 @@ test("what is missing is said before asking: no token, no name", async () => {
   instance.form.name = "ci";
   await instance.submit();
   assert.ok(instance.formError?.message.includes("token"));
-  assert.equal((await memory.gateway.list()).length, 0);
+  assert.equal((await memory.gateway.list()).credentials.length, 0);
 });
 
 test("a taken name shows under Name and the pasted token stays in its input only", async () => {
@@ -148,7 +148,7 @@ test("a key file is read only to send", async () => {
   Object.assign(instance.form, { name: "from-file", keySource: "file" });
   refs.keyFile.files = [{ text: async () => PRIVATE_KEY }];
   await instance.submit();
-  assert.equal((await memory.gateway.list())[0].name, "from-file");
+  assert.equal((await memory.gateway.list()).credentials[0].name, "from-file");
   assert.equal(refs.keyFile.value, "");
 });
 
@@ -285,4 +285,22 @@ test("leaving the page empties every secret input", () => {
   refs.passphrase.value = PASSPHRASE;
   instance.clearSecrets();
   assert.deepEqual([refs.token.value, refs.privateKey.value, refs.passphrase.value], ["", "", ""]);
+});
+
+test("a store locked on first paint shows so at once: add, replace and test are off from the start", async () => {
+  const { instance } = setup({ world: { locked: true } });
+  assert.deepEqual([instance.locked, instance.cannotAdd], [true, true]);
+  instance.openAdd();
+  instance.openReplace("gc-work");
+  assert.equal(instance.formOpen, false);
+  await instance.test("gc-work");
+  assert.equal(instance.tests["gc-work"], undefined, "no test is tried");
+});
+
+test("a reload after a reconnect takes the locked state from the list", async () => {
+  const { instance, memory } = setup();
+  memory.lock();
+  memory.reportStatus(FeedStatus.RESYNCED);
+  await flush();
+  assert.equal(instance.locked, true);
 });

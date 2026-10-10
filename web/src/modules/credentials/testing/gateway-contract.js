@@ -22,6 +22,7 @@ import { ENCRYPTED_KEY, PRIVATE_KEY, REPOSITORIES, SECRET_TOKEN, credentialDTO, 
 export function credentialGatewayContract(name, makeSubject) {
   const contract = (title, fn) => test(`${name} · ${title}`, fn);
   const names = (list) => list.map((c) => c.name);
+  const listed = async (gateway) => (await gateway.list()).credentials;
 
   const world = (extra = {}) => ({
     credentials: [
@@ -36,8 +37,9 @@ export function credentialGatewayContract(name, makeSubject) {
 
   contract("lists by host, then name ignoring case; times are Dates", async () => {
     const { gateway } = makeSubject(world());
-    const list = await gateway.list();
+    const { credentials: list, locked } = await gateway.list();
     assert.deepEqual(names(list), ["laptop-key", "spare-token", "work-token", "Gitlab"]);
+    assert.equal(locked, false);
     const work = list.find((c) => c.id === "gc-work");
     assert.deepEqual([work.kind, work.host, work.username, work.fingerprint, work.publicKey, work.isDefault, work.lastUsedAt], ["https_token", "github.com", "x-access-token", "…1234", null, true, null]);
     assert.ok(work.createdAt instanceof Date && work.updatedAt instanceof Date);
@@ -74,16 +76,16 @@ export function credentialGatewayContract(name, makeSubject) {
     await assert.rejects(gateway.create({ name: "x", kind: "https_token", host: "https:///", token: "t" }), Codes.INVALID_INPUT);
     await assert.rejects(gateway.create({ name: "x", kind: "https_token", host: "github.com" }), Codes.INVALID_INPUT);
     await assert.rejects(gateway.create({ name: "WORK-TOKEN", kind: "https_token", host: "github.com", token: "t" }), Codes.GIT_CREDENTIAL_NAME_TAKEN);
-    assert.equal((await gateway.list()).length, 4, "nothing was added");
+    assert.equal((await listed(gateway)).length, 4, "nothing was added");
   });
 
   contract("one default per host and kind: a new default takes the flag from the old one", async () => {
     const { gateway } = makeSubject(world());
     const next = await gateway.create({ name: "new-default", kind: "https_token", host: "github.com", token: "t-0001", isDefault: true });
-    const list = await gateway.list();
+    const list = await listed(gateway);
     assert.deepEqual(list.filter((c) => c.isDefault).map((c) => c.id), [next.id]);
     await gateway.update({ credentialId: "gc-key", isDefault: true });
-    assert.deepEqual((await gateway.list()).filter((c) => c.isDefault).map((c) => c.name).sort(), ["laptop-key", "new-default"], "keys and tokens keep their own default");
+    assert.deepEqual((await listed(gateway)).filter((c) => c.isDefault).map((c) => c.name).sort(), ["laptop-key", "new-default"], "keys and tokens keep their own default");
   });
 
   contract("updates: absent fields and an empty secret keep their value; a new token changes the fingerprint; un-defaulting clears the flag", async () => {
@@ -112,7 +114,7 @@ export function credentialGatewayContract(name, makeSubject) {
     const { gateway } = makeSubject(world());
     await gateway.setRepositoryCredential("r-https", "gc-spare");
     await gateway.remove("gc-spare");
-    assert.ok(!(await gateway.list()).some((c) => c.id === "gc-spare"));
+    assert.ok(!(await listed(gateway)).some((c) => c.id === "gc-spare"));
     const rc = await gateway.getRepositoryCredential("r-https");
     assert.deepEqual([rc.credentialId, rc.resolved?.id], [null, "gc-work"], "back to automatic");
     await assert.rejects(gateway.remove("gc-spare"), Codes.GIT_CREDENTIAL_NOT_FOUND);
@@ -123,14 +125,14 @@ export function credentialGatewayContract(name, makeSubject) {
     const viaRepo = await gateway.test("gc-work", "r-https");
     assert.deepEqual([viaRepo.ok, viaRepo.checkedUrl], [true, "https://github.com/acme/harness.git"]);
     assert.ok(viaRepo.message);
-    assert.ok((await gateway.list()).find((c) => c.id === "gc-work").lastUsedAt instanceof Date, "success records last use");
+    assert.ok((await listed(gateway)).find((c) => c.id === "gc-work").lastUsedAt instanceof Date, "success records last use");
     assert.equal((await gateway.test("gc-key")).ok, true, "a key is tested with ssh -T on its host");
     assert.equal((await gateway.test("gc-work")).ok, true, "a GitHub token is tested against the GitHub API");
     const elsewhere = await gateway.test("gc-gitlab");
     assert.deepEqual([elsewhere.ok, elsewhere.message], [false, "pick a repository to test this token against"]);
     const refused = await gateway.test("gc-spare", "r-https");
     assert.deepEqual([refused.ok, refused.message], [false, "Bad credentials"]);
-    assert.equal((await gateway.list()).find((c) => c.id === "gc-spare").lastUsedAt, null, "a refusal records nothing");
+    assert.equal((await listed(gateway)).find((c) => c.id === "gc-spare").lastUsedAt, null, "a refusal records nothing");
     await assert.rejects(gateway.test("ghost"), Codes.GIT_CREDENTIAL_NOT_FOUND);
     await assert.rejects(gateway.test("gc-work", "ghost"), Codes.REPOSITORY_NOT_FOUND);
   });
@@ -178,7 +180,7 @@ export function credentialGatewayContract(name, makeSubject) {
   contract("a locked store still lists, deletes, renames, pins and saves the identity; what needs a secret is STORE_LOCKED", async () => {
     const { gateway, lock } = makeSubject(world());
     lock();
-    assert.equal((await gateway.list()).length, 4);
+    assert.deepEqual([(await listed(gateway)).length, (await gateway.list()).locked], [4, true], "the list says it is locked");
     await gateway.update({ credentialId: "gc-work", name: "renamed", isDefault: true });
     await gateway.updateIdentity({ name: "Ada", email: "ada@example.com" });
     await gateway.setRepositoryCredential("r-https", "gc-spare");
@@ -188,13 +190,15 @@ export function credentialGatewayContract(name, makeSubject) {
     await assert.rejects(gateway.update({ credentialId: "gc-work", token: "t-2" }), Codes.GIT_CREDENTIAL_STORE_LOCKED);
     await assert.rejects(gateway.test("gc-work"), Codes.GIT_CREDENTIAL_STORE_LOCKED);
     lock(false);
+    assert.equal((await gateway.list()).locked, false);
     assert.equal((await gateway.test("gc-work")).ok, true);
   });
 
   contract("decodes the pages' seeds, the API's shapes; a bad one is BAD_RESPONSE", () => {
     const { gateway } = makeSubject({});
     const page = gateway.decodePageSeed({ credentials: [credentialDTO(makeCredential())], identity: { name: "Ada", email: "ada@example.com" } });
-    assert.deepEqual([names(page.credentials), page.identity], [["work-token"], { name: "Ada", email: "ada@example.com" }]);
+    assert.deepEqual([names(page.credentials), page.locked, page.identity], [["work-token"], false, { name: "Ada", email: "ada@example.com" }]);
+    assert.equal(gateway.decodePageSeed({ credentials: [], locked: true, identity: null }).locked, true);
     assert.equal(gateway.decodePageSeed({ credentials: [], identity: null }).identity, null);
     assert.throws(() => gateway.decodePageSeed({ identity: null }), Codes.BAD_RESPONSE);
     const rc = { repositoryId: "r-https", credentialId: null, resolved: makeCredential(), remoteUrl: "https://github.com/acme/harness.git" };
