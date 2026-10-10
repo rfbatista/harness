@@ -14,6 +14,8 @@ import { registerShared } from "./shared/presentation/register.js";
 import { desktopAlerts } from "./modules/notifications/infrastructure/desktop-alerts.js";
 import { notificationsGateway } from "./modules/notifications/infrastructure/notifications-gateway.js";
 import { registerNotifications } from "./modules/notifications/presentation/register.js";
+import { codeGateway } from "./modules/code/infrastructure/code-gateway.js";
+import { registerCode } from "./modules/code/presentation/register.js";
 import { runsGateway } from "./modules/runs/infrastructure/runs-gateway.js";
 import { reviewsGateway } from "./modules/reviews/infrastructure/reviews-gateway.js";
 import { registerReviews } from "./modules/reviews/presentation/register.js";
@@ -32,6 +34,7 @@ import { cookieRailPrefs } from "./modules/tasks/infrastructure/rail-prefs.js";
 import { resourcesGateway } from "./modules/tasks/infrastructure/resources-gateway.js";
 import { tasksGateway } from "./modules/tasks/infrastructure/tasks-gateway.js";
 import { registerTasks } from "./modules/tasks/presentation/register.js";
+import { createHighlighter } from "./highlight.js";
 import { createScreen } from "./xterm-screen.js";
 
 const api = apiClient({ base: "/api" });
@@ -65,6 +68,7 @@ registerSessions(Alpine, {
 registerRuns(Alpine, { gateway: runsGateway(api) });
 registerReviews(Alpine, { gateway: reviewsGateway(api, events), clock: systemClock });
 registerPullRequests(Alpine, { gateway: pullRequestsGateway(api, events) });
+registerCode(Alpine, { gateway: codeGateway(api, events), highlighter: createHighlighter(), prefs, navigate });
 registerNotifications(Alpine, { gateway: notificationsGateway(api, events), alerts: desktopAlerts(), prefs, clock: systemClock, navigate });
 
 Alpine.start();
