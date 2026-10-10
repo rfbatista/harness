@@ -19,7 +19,8 @@ src/
 dev/                            pages that run the real modules on the memory gateway
 test/                           browser test page; all.js lists every *.test.js
 testdata/views/                 fixtures shared with the Go BFF's tests
-vendor/                         Alpine, pinned (see vendor/README.md)
+vendor/                         Alpine and xterm.js, pinned (see vendor/README.md)
+third_party/highlightjs/        highlight.js for the code views, pinned and tracked (see its README.md)
 ```
 
 ## Running it

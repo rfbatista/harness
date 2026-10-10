@@ -237,7 +237,8 @@ export function codeBrowser({ gateway, highlighter, prefs, history = globalThis.
       return this.diff.files.map((f) =>
         diffFileView(f, {
           slug: this.diffSlugs[f.path],
-          rev: this.diffRev,
+          // The layout changes the rows: a new key draws them again.
+          rev: `${this.diffRev}:${splitAllowed && f.added + f.deleted <= SPLIT_UP_TO ? "split" : "unified"}`,
           collapsed: !!this.collapsed[f.path],
           busy: !!this.busyFiles[f.path],
           asked: !!this.askedFiles[f.path],
@@ -268,7 +269,8 @@ export function codeBrowser({ gateway, highlighter, prefs, history = globalThis.
       return this.allCollapsed ? "Expand all" : "Collapse all";
     },
     get fileKeys() {
-      return this.file && this.file.content ? [`${this.file.path}@${this.fileRev}`] : [];
+      // Wrapping changes how rows are drawn (not windowed): a new key draws them again.
+      return this.file && this.file.content ? [`${this.file.path}@${this.fileRev}:${this.wrap && this.canWrap ? "wrap" : "nowrap"}`] : [];
     },
     get fileCrumbs() {
       const path = this.file?.path ?? this.openEntry?.path ?? "";
