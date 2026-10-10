@@ -208,3 +208,21 @@ func (s *Seed) loadFiles(ctx context.Context, cb ports.CodeBrowser, q ports.Code
 		s.File, s.Error = f, toSeedError(err)
 	}
 }
+
+// LoadCommit reads one commit's diff against its first parent, for the
+// history page's open commit.
+func LoadCommit(ctx context.Context, cb ports.CodeBrowser, projectID, repositoryID, commit string) Seed {
+	// View file opens the repository's code page at the commit.
+	rt := Route{Kind: "repository", ProjectID: projectID, RepositoryID: repositoryID, View: ViewChanges, Ref: commit}
+	d, err := cb.CodeDiff(ctx, ports.CodeDiffQuery{RepositoryID: repositoryID, Commit: commit})
+	return Seed{ProjectID: projectID, Route: rt, Source: SourceQuery{RepositoryID: repositoryID}, Diff: d, Error: toSeedError(err), Commit: commit}
+}
+
+// LoadWorking reads a worktree's uncommitted changes (scope working), for
+// the session history page's working-copy row.
+func LoadWorking(ctx context.Context, cb ports.CodeBrowser, projectID, repositoryID, workspaceID string) Seed {
+	// Kind "history": uncommitted files have no code page to open them on.
+	rt := Route{Kind: "history", ProjectID: projectID, RepositoryID: repositoryID, View: ViewChanges}
+	d, err := cb.CodeDiff(ctx, ports.CodeDiffQuery{WorkspaceID: workspaceID, Scope: "working"})
+	return Seed{ProjectID: projectID, Route: rt, Source: SourceQuery{WorkspaceID: workspaceID}, Diff: d, Error: toSeedError(err)}
+}

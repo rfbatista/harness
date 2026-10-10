@@ -416,7 +416,7 @@ func (v *View) buildDiff(s Seed, zones map[string]ZoneTag) {
 		}
 		df.Zones, df.ZoneMore = zoneTags(f.Zones, zones)
 		df.Withheld = withheldOf(f)
-		if f.Status != "deleted" && !f.Binary && rt.Kind != "" {
+		if f.Status != "deleted" && !f.Binary && rt.Kind != "history" {
 			df.ViewHref = rt.With(ViewFiles, f.Path).Href("")
 		}
 		if f.Hunks != nil && !df.Collapsed && budget > 0 {

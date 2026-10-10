@@ -492,6 +492,36 @@ templ livePalette() {
 	</dialog>
 }
 
+// LiveDiff is a diff alone, for the history pages: the diff-view bound to a
+// codeDiff component on an ancestor, in a code-layout without a side (the
+// size container its blocks adapt to), and Go to line's palette.
+templ LiveDiff() {
+	<div class="code-layout" data-side="none" x-ref="layout" x-on:keydown="onKey" x-on:click="clickLine">
+		<section class="main" aria-label="Diff">
+			@liveDiff()
+		</section>
+		@livePalette()
+	</div>
+}
+
+// StaticDiff is LiveDiff's first paint.
+templ StaticDiff(v View) {
+	<div class="code-layout" data-side="none" x-ignore data-ssr>
+		<section class="main" aria-label="Diff">
+			if v.Problem != nil {
+				<div class="[ banner ]" data-tone="danger" role="alert">
+					<div class="[ flow ] [ flow-space-3xs grow ]">
+						<span>{ v.Problem.Text }</span>
+						<span class="[ code ]">{ v.Problem.Code }</span>
+					</div>
+				</div>
+			} else {
+				@staticDiff(v)
+			}
+		</section>
+	</div>
+}
+
 // ── static (first paint) ─────────────────────────────────────────────────
 
 // Static is a code view's first paint from v, removed by the browser once

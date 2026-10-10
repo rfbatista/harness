@@ -359,3 +359,54 @@ func TestSessionCodeTabWhenTheWorktreeIsGone(t *testing.T) {
 		t.Errorf("JS errors: %v", e)
 	}
 }
+
+// TestHistoryDiffsInTheBrowser: an open commit shows its patch under its
+// files, renamed file included; a session's uncommitted changes show theirs.
+func TestHistoryDiffsInTheBrowser(t *testing.T) {
+	w := newCodeWorld(t, func(w *codeWorld, d *Deps) {
+		withSession(domain.SessionRunning, func(w *codeWorld) string { return w.at.WorkspaceID })(w, d)
+		d.History = gitHistory{
+			dirs:       map[string]string{w.at.RepositoryID: w.f.RepoDir},
+			workspaces: map[string]testWorkspace{w.at.WorkspaceID: {repo: w.at.RepositoryID, dir: w.f.Worktree, branch: w.f.Branch, base: w.f.BaseRef}},
+		}
+	})
+	ctx, errs := browser(t)
+	commit := w.srv.URL + "/projects/" + w.f.ProjectID + "/repositories/" + w.repoID + "/history/" + w.f.Rename
+	working := w.srv.URL + "/projects/" + w.f.ProjectID + "/tasks/t1/sessions/s1/history/working"
+
+	var sections, workingSections []string
+	var renamed, view string
+	var lines int
+	var shot []byte
+	err := chromedp.Run(ctx,
+		chromedp.EmulateViewport(1440, 900),
+		chromedp.Navigate(commit),
+		chromedp.Poll(`document.querySelectorAll('[data-ssr]').length === 0 && document.querySelectorAll('section[aria-label=Diff] .diff-view .code-lines .line').length > 0`, nil, chromedp.WithPollingTimeout(10*time.Second)),
+		chromedp.Evaluate(`[...document.querySelectorAll('section[aria-label=Diff] section.file h3.path')].map(h => h.title)`, &sections),
+		chromedp.Evaluate(`document.querySelector('section[aria-label=Diff] section.file h3.path .old')?.textContent ?? ''`, &renamed),
+		chromedp.Evaluate(`document.querySelectorAll('section[aria-label=Diff] .code-lines .line').length`, &lines),
+		chromedp.Evaluate(`document.querySelector('section[aria-label=Diff] section.file .actions a')?.getAttribute('href') ?? ''`, &view),
+		chromedp.FullScreenshot(&shot, 85),
+		chromedp.Navigate(working),
+		chromedp.Poll(`document.querySelectorAll('[data-ssr]').length === 0 && document.querySelectorAll('section[aria-label=Diff] section.file').length > 0`, nil, chromedp.WithPollingTimeout(10*time.Second)),
+		chromedp.Evaluate(`[...document.querySelectorAll('section[aria-label=Diff] section.file h3.path')].map(h => h.title)`, &workingSections),
+	)
+	if err != nil {
+		var dump string
+		_ = chromedp.Run(ctx, chromedp.Evaluate(`JSON.stringify({url: location.href, ssr: document.querySelectorAll('[data-ssr]').length, files: document.querySelectorAll('section[aria-label=Diff] section.file').length, lines: document.querySelectorAll('section[aria-label=Diff] .code-lines .line').length, diff: document.querySelector('section[aria-label=Diff]')?.outerHTML.slice(0, 1500)})`, &dump))
+		t.Fatalf("%v\n%s\nJS errors: %v", err, dump, errs.all())
+	}
+	saveShot("code-history-commit.jpg", shot)
+	if strings.Join(sections, ",") != "docs/new.md,internal/app/app.go" || renamed != "docs/old.md" || lines == 0 {
+		t.Errorf("commit diff: sections %v, renamed from %q, %d lines", sections, renamed, lines)
+	}
+	if !strings.Contains(view, "/code/files/docs/new.md?ref="+w.f.Rename) {
+		t.Errorf("View file = %q", view)
+	}
+	if strings.Join(workingSections, ",") != "README.md,new.txt,nonl.txt" {
+		t.Errorf("working diff: %v", workingSections)
+	}
+	if e := errs.all(); len(e) > 0 {
+		t.Errorf("JS errors: %v", e)
+	}
+}

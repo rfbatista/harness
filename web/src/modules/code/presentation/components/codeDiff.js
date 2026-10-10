@@ -34,6 +34,7 @@ export const codeDiff = (deps) => () => {
       this.watchWidth();
       this.$nextTick(() => {
         for (const node of this.$el.querySelectorAll("[data-ssr]")) node.remove();
+        this.mainScroller()?.addEventListener("scroll", () => this.mainScrolled(), { passive: true });
       });
     },
 
@@ -47,6 +48,9 @@ export const codeDiff = (deps) => () => {
     },
     urlOwned() {
       return false;
+    },
+    mainScroller() {
+      return this.$el.closest("[data-scroll]");
     },
     historyQuery() {
       return this.commitHash ? { repositoryId: this.repositoryId, commit: this.commitHash } : { workspaceId: this.workspaceId, scope: "working" };

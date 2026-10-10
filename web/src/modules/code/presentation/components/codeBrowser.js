@@ -620,6 +620,10 @@ export function codeBrowser({ gateway, highlighter, prefs, history = globalThis.
       this.route = route;
       if (this.urlOwned()) history?.[push ? "pushState" : "replaceState"]?.(null, "", hrefOf(route, hash));
     },
+    /** What scrolls the diff: the main side (the history pages scroll their own pane). */
+    mainScroller() {
+      return this.$refs?.main ?? null;
+    },
     /** Whether this view owns the address bar (the session's tab only while in front). */
     urlOwned() {
       return true;
@@ -877,7 +881,7 @@ export function codeBrowser({ gateway, highlighter, prefs, history = globalThis.
       const split = el.dataset.layout === "split";
       const ctl = drawLines(el, {
         rows: diffRows(f.hunks, split ? "split" : "unified"),
-        scroller: this.$refs?.main ?? null,
+        scroller: this.mainScroller() ?? null,
         slug: this.diffSlugs[path],
         highlighter,
         language: f.language,
@@ -929,7 +933,7 @@ export function codeBrowser({ gateway, highlighter, prefs, history = globalThis.
 
     /** Scrolls the main side to a file of the diff, its head at the top, and makes it current. */
     scrollToFile(path, line = 0, side = "R") {
-      const main = this.$refs?.main;
+      const main = this.mainScroller();
       const slug = this.diffSlugs[path];
       if (!main || !slug) return;
       this.currentFile = path;
@@ -937,7 +941,7 @@ export function codeBrowser({ gateway, highlighter, prefs, history = globalThis.
       if (this.collapsed[path] && line) this.toggleFile(path);
       const section = main.querySelector?.(`#diff-${cssEscape(slug)}`);
       if (!section) return;
-      let top = section.offsetTop - main.offsetTop;
+      let top = topIn(main, section);
       if (line) {
         const ctl = drawn.get(`diff:${path}`);
         const f = this.diff.files.find((x) => x.path === path);
@@ -973,13 +977,13 @@ export function codeBrowser({ gateway, highlighter, prefs, history = globalThis.
       if (scrollFrame || !this.showingChanges || Date.now() < pinnedUntil) return;
       scrollFrame = requestAnimationFrame(() => {
         scrollFrame = 0;
-        const main = this.$refs?.main;
+        const main = this.mainScroller();
         if (!main || !this.diff) return;
         const y = main.scrollTop + 8;
         let current = this.diff.files[0]?.path ?? "";
         for (const f of this.diff.files) {
           const el = main.querySelector(`#diff-${cssEscape(this.diffSlugs[f.path])}`);
-          if (el && el.offsetTop - main.offsetTop <= y) current = f.path;
+          if (el && topIn(main, el) <= y) current = f.path;
         }
         this.currentFile = current;
       });
@@ -1017,7 +1021,7 @@ export function codeBrowser({ gateway, highlighter, prefs, history = globalThis.
 
     // ── live ─────────────────────────────────────────────────────────────
     get untouched() {
-      const el = this.showingChanges ? this.$refs?.main : this.$refs?.scroll;
+      const el = this.showingChanges ? this.mainScroller() : this.$refs?.scroll;
       return !this.touched && (!el || el.scrollTop === 0);
     },
 
@@ -1091,7 +1095,7 @@ export function codeBrowser({ gateway, highlighter, prefs, history = globalThis.
     /** R: re-read what is on screen, keeping the place. */
     async reload() {
       if (!this.isStale) return;
-      const main = this.showingChanges ? this.$refs?.main : this.$refs?.scroll;
+      const main = this.showingChanges ? this.mainScroller() : this.$refs?.scroll;
       const top = main?.scrollTop ?? 0;
       if (this.showingChanges) {
         if (this.heldDiff) this.setDiff(this.heldDiff);
@@ -1290,7 +1294,7 @@ export function codeBrowser({ gateway, highlighter, prefs, history = globalThis.
     /** F6: between the side list and the main side. */
     swapPane() {
       const side = this.$refs?.side;
-      const main = this.showingChanges ? this.$refs?.main : this.$refs?.scroll ?? this.$refs?.main;
+      const main = this.showingChanges ? this.mainScroller() : this.$refs?.scroll ?? this.mainScroller();
       if (side?.contains(document.activeElement)) {
         this.showMain = true;
         main?.focus();
@@ -1326,6 +1330,9 @@ function focusSide(side) {
   const target = side?.querySelector('.item[tabindex="0"], .diff-summary a[aria-current], .diff-summary a, .item');
   target?.focus();
 }
+
+/** An element's top inside a scroller's content, whatever lies between them. */
+const topIn = (scroller, el) => el.getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop;
 
 const spanTo = (range, n) => ({ start: Math.min(range.start, n), end: Math.max(range.end, n) });
 
