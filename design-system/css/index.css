@@ -61,6 +61,10 @@
 @import url("./blocks/row.css");
 @import url("./blocks/board.css");
 @import url("./blocks/tabs.css");
+@import url("./blocks/session.css");
+@import url("./blocks/session-head.css");
+@import url("./blocks/check.css");
+@import url("./blocks/pane-tabs.css");
 @import url("./blocks/banner.css");
 @import url("./blocks/brief.css");
 @import url("./blocks/prose.css");
@@ -72,6 +76,7 @@
 @import url("./blocks/message.css");
 @import url("./blocks/review.css");
 @import url("./blocks/terminal.css");
+@import url("./blocks/pane-note.css");
 @import url("./blocks/artifact-card.css");
 @import url("./blocks/preview.css");
 @import url("./blocks/section-head.css");
