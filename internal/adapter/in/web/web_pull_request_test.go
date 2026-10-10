@@ -108,13 +108,14 @@ func TestSessionHistoryOffersAPullRequestAndSeedsThePanel(t *testing.T) {
 }
 
 func TestSessionHistorySaysWhyAPullRequestCannotBeOpened(t *testing.T) {
-	body := historyWith(t, fakePullRequests{views: map[string]*ports.PullRequestView{"ws-agent": {Draft: agentDraft("PR_NO_COMMITS", "PR_TOOL_UNAVAILABLE")}}})
+	body := historyWith(t, fakePullRequests{views: map[string]*ports.PullRequestView{"ws-agent": {Draft: agentDraft("PR_NO_COMMITS", "GIT_CREDENTIAL_MISSING")}}})
 	if !strings.Contains(tagWith(body, `x-on:click="openForm"`), `aria-disabled="true"`) {
 		t.Error("the create button is disabled")
 	}
 	for _, want := range []string{
-		`<li data-ssr>Nothing to propose yet: agent/add-sse-feed-1a2b has no commits ahead of main.</li>`,
-		`<li data-ssr>The server can&#39;t reach GitHub as you`,
+		`<li data-ssr>Nothing to propose yet: agent/add-sse-feed-1a2b has no commits ahead of main.`,
+		`<li data-ssr>No credential stored for github.com can push this branch`,
+		`<a href="/git-credentials?host=github.com">Add one in Git credentials</a>`,
 		`aria-describedby="pr-reasons"`,
 	} {
 		if !strings.Contains(body, want) {
@@ -123,6 +124,9 @@ func TestSessionHistorySaysWhyAPullRequestCannotBeOpened(t *testing.T) {
 	}
 	if strings.Contains(tagWith(body, `aria-label="Pull request"`), "display: none") {
 		t.Error("the reasons show on first paint")
+	}
+	if strings.Contains(body, "gh auth login") {
+		t.Error("the gh sign-in copy is gone")
 	}
 }
 

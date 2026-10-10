@@ -260,20 +260,78 @@ func Strip(p *Panel) templ.Component {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var9 string
-			templ_7745c5c3_Var9, templ_7745c5c3_Err = templ.JoinStringErrs(b)
+			templ_7745c5c3_Var9, templ_7745c5c3_Err = templ.JoinStringErrs(b.Text)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `pullrequests/panel.templ`, Line: 84, Col: 20}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `pullrequests/panel.templ`, Line: 85, Col: 13}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var9))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 17, "</li>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 17, " ")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			if b.Href != "" {
+				var templ_7745c5c3_Var10 string
+				templ_7745c5c3_Var10, templ_7745c5c3_Err = templ.JoinStringErrs(" ")
+				if templ_7745c5c3_Err != nil {
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `pullrequests/panel.templ`, Line: 87, Col: 11}
+				}
+				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var10))
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 18, "<a href=\"")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				var templ_7745c5c3_Var11 templ.SafeURL
+				templ_7745c5c3_Var11, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL(b.Href))
+				if templ_7745c5c3_Err != nil {
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `pullrequests/panel.templ`, Line: 87, Col: 44}
+				}
+				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var11))
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 19, "\">")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				var templ_7745c5c3_Var12 string
+				templ_7745c5c3_Var12, templ_7745c5c3_Err = templ.JoinStringErrs(b.LinkText)
+				if templ_7745c5c3_Err != nil {
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `pullrequests/panel.templ`, Line: 87, Col: 59}
+				}
+				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var12))
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 20, "</a>")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 21, "</li>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 18, "<template x-for=\"b in blockers\" x-bind:key=\"b.code\"><li x-text=\"b.text\"></li></template></ul><div class=\"[ banner ]\" data-tone=\"signal\" role=\"status\" style=\"display: none\" x-show=\"hasNotice\"><div class=\"[ repel ] [ grow ]\"><span x-text=\"notice\"></span> <button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" x-on:click=\"dismissNotice\">Dismiss</button></div></div><div class=\"[ banner ]\" data-tone=\"danger\" role=\"alert\" style=\"display: none\" x-show=\"error\"><span x-text=\"errorLine\"></span></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 22, "<template x-for=\"b in blockers\" x-bind:key=\"b.code\"><li><span x-text=\"b.text\"></span><template x-if=\"b.href\">")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		var templ_7745c5c3_Var13 string
+		templ_7745c5c3_Var13, templ_7745c5c3_Err = templ.JoinStringErrs(" ")
+		if templ_7745c5c3_Err != nil {
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `pullrequests/panel.templ`, Line: 92, Col: 66}
+		}
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var13))
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 23, "<a x-bind:href=\"b.href\" x-text=\"b.linkText\"></a></template></li></template></ul><div class=\"[ banner ]\" data-tone=\"signal\" role=\"status\" style=\"display: none\" x-show=\"hasNotice\"><div class=\"[ repel ] [ grow ]\"><span x-text=\"notice\"></span> <button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" x-on:click=\"dismissNotice\">Dismiss</button></div></div><div class=\"[ banner ]\" data-tone=\"danger\" role=\"alert\" style=\"display: none\" x-show=\"error\"><span x-text=\"errorLine\"></span></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -281,7 +339,7 @@ func Strip(p *Panel) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 19, "</section>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 24, "</section>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -306,12 +364,12 @@ func form() templ.Component {
 			}()
 		}
 		ctx = templ.InitializeContext(ctx)
-		templ_7745c5c3_Var10 := templ.GetChildren(ctx)
-		if templ_7745c5c3_Var10 == nil {
-			templ_7745c5c3_Var10 = templ.NopComponent
+		templ_7745c5c3_Var14 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var14 == nil {
+			templ_7745c5c3_Var14 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 20, "<form id=\"pr-form\" class=\"[ pr-form ]\" aria-label=\"New pull request\" novalidate style=\"display: none\" x-show=\"showsForm\" x-on:submit.prevent=\"submit\"><p class=\"[ text-sm color-ink-muted ]\" data-span x-text=\"summary\"></p><div class=\"[ banner ]\" data-tone=\"danger\" role=\"alert\" data-span x-ref=\"refusal\" x-show=\"hasRefusal\"><div class=\"[ flow ] [ flow-space-2xs ]\"><p x-text=\"refusalLead\"></p><p class=\"[ font-mono text-xs ]\" x-show=\"refusalReason\" x-text=\"refusalReason\"></p><span class=\"[ code ]\" x-text=\"refusalCode\"></span></div></div><p class=\"[ text-sm color-ink-muted ]\" role=\"status\" data-span x-show=\"creating\" x-text=\"progress\"></p><div class=\"[ banner ]\" data-tone=\"attention\" data-span x-show=\"hasUncommitted\"><span x-text=\"uncommitted\"></span></div><div class=\"[ field ]\" data-span><label for=\"pr-title\">Title</label> <input id=\"pr-title\" autocomplete=\"off\" x-ref=\"title\" x-model=\"form.title\" x-bind:readonly=\"creating\" x-bind:aria-invalid=\"titleInvalid\" aria-describedby=\"pr-title-error\"> <span class=\"[ error ]\" id=\"pr-title-error\" x-show=\"titleInvalid\" x-text=\"problems.title\"></span></div><div class=\"[ field ]\" data-span><label for=\"pr-body\">Description</label> <textarea id=\"pr-body\" x-model=\"form.body\" x-bind:readonly=\"creating\"></textarea></div><div class=\"[ field ]\"><label for=\"pr-base\">Base branch</label> <input id=\"pr-base\" class=\"[ font-mono text-sm ]\" autocomplete=\"off\" x-model=\"form.baseBranch\" x-bind:readonly=\"creating\" x-bind:aria-invalid=\"baseInvalid\" aria-describedby=\"pr-base-hint pr-base-error\"> <span class=\"[ hint ]\" id=\"pr-base-hint\">The branch it merges into, on origin.</span> <span class=\"[ error ]\" id=\"pr-base-error\" x-show=\"baseInvalid\" x-text=\"problems.baseBranch\"></span></div><div class=\"[ field ]\" data-inline><input id=\"pr-draft\" type=\"checkbox\" x-model=\"form.draft\" x-bind:disabled=\"creating\"> <label for=\"pr-draft\">Open as a draft</label></div><div class=\"[ cluster ] [ gutter-xs ]\" data-span><button type=\"submit\" class=\"[ button ]\" data-variant=\"primary\" x-bind:aria-busy=\"busyAttr\" x-bind:aria-disabled=\"busyAttr\" x-text=\"buttonLabel\">Create pull request</button> <button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" x-bind:disabled=\"creating\" x-on:click=\"cancel\">Cancel</button></div></form>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 25, "<form id=\"pr-form\" class=\"[ pr-form ]\" aria-label=\"New pull request\" novalidate style=\"display: none\" x-show=\"showsForm\" x-on:submit.prevent=\"submit\"><p class=\"[ text-sm color-ink-muted ]\" data-span x-text=\"summary\"></p><div class=\"[ banner ]\" data-tone=\"danger\" role=\"alert\" data-span x-ref=\"refusal\" x-show=\"hasRefusal\"><div class=\"[ flow ] [ flow-space-2xs ]\"><p x-text=\"refusalLead\"></p><p class=\"[ font-mono text-xs ]\" x-show=\"refusalReason\" x-text=\"refusalReason\"></p><span class=\"[ code ]\" x-text=\"refusalCode\"></span> <a x-show=\"refusalHref\" x-bind:href=\"refusalHref\" x-text=\"refusalLinkText\"></a></div></div><p class=\"[ text-sm color-ink-muted ]\" role=\"status\" data-span x-show=\"creating\" x-text=\"progress\"></p><div class=\"[ banner ]\" data-tone=\"attention\" data-span x-show=\"hasUncommitted\"><span x-text=\"uncommitted\"></span></div><div class=\"[ field ]\" data-span><label for=\"pr-title\">Title</label> <input id=\"pr-title\" autocomplete=\"off\" x-ref=\"title\" x-model=\"form.title\" x-bind:readonly=\"creating\" x-bind:aria-invalid=\"titleInvalid\" aria-describedby=\"pr-title-error\"> <span class=\"[ error ]\" id=\"pr-title-error\" x-show=\"titleInvalid\" x-text=\"problems.title\"></span></div><div class=\"[ field ]\" data-span><label for=\"pr-body\">Description</label> <textarea id=\"pr-body\" x-model=\"form.body\" x-bind:readonly=\"creating\"></textarea></div><div class=\"[ field ]\"><label for=\"pr-base\">Base branch</label> <input id=\"pr-base\" class=\"[ font-mono text-sm ]\" autocomplete=\"off\" x-model=\"form.baseBranch\" x-bind:readonly=\"creating\" x-bind:aria-invalid=\"baseInvalid\" aria-describedby=\"pr-base-hint pr-base-error\"> <span class=\"[ hint ]\" id=\"pr-base-hint\">The branch it merges into, on origin.</span> <span class=\"[ error ]\" id=\"pr-base-error\" x-show=\"baseInvalid\" x-text=\"problems.baseBranch\"></span></div><div class=\"[ field ]\" data-inline><input id=\"pr-draft\" type=\"checkbox\" x-model=\"form.draft\" x-bind:disabled=\"creating\"> <label for=\"pr-draft\">Open as a draft</label></div><div class=\"[ cluster ] [ gutter-xs ]\" data-span><button type=\"submit\" class=\"[ button ]\" data-variant=\"primary\" x-bind:aria-busy=\"busyAttr\" x-bind:aria-disabled=\"busyAttr\" x-text=\"buttonLabel\">Create pull request</button> <button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" x-bind:disabled=\"creating\" x-on:click=\"cancel\">Cancel</button></div></form>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -338,25 +396,25 @@ func Badge(workspace string) templ.Component {
 			}()
 		}
 		ctx = templ.InitializeContext(ctx)
-		templ_7745c5c3_Var11 := templ.GetChildren(ctx)
-		if templ_7745c5c3_Var11 == nil {
-			templ_7745c5c3_Var11 = templ.NopComponent
+		templ_7745c5c3_Var15 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var15 == nil {
+			templ_7745c5c3_Var15 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 21, "<span x-data=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 26, "<span x-data=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		var templ_7745c5c3_Var12 string
-		templ_7745c5c3_Var12, templ_7745c5c3_Err = templ.ResolveAttributeValue("pullRequestBadge(" + workspace + ")")
+		var templ_7745c5c3_Var16 string
+		templ_7745c5c3_Var16, templ_7745c5c3_Err = templ.ResolveAttributeValue("pullRequestBadge(" + workspace + ")")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `pullrequests/panel.templ`, Line: 148, Col: 53}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `pullrequests/panel.templ`, Line: 154, Col: 53}
 		}
-		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var12)
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var16)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 22, "\" x-show=\"has\" style=\"display: none\"><a class=\"[ badge ] [ pr-badge ]\" target=\"_blank\" rel=\"noopener\" x-bind:href=\"href\" x-bind:data-tone=\"tone\" x-bind:aria-label=\"describe\" x-bind:title=\"describe\" x-on:click.stop=\"stay\" x-text=\"label\"></a></span>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 27, "\" x-show=\"has\" style=\"display: none\"><a class=\"[ badge ] [ pr-badge ]\" target=\"_blank\" rel=\"noopener\" x-bind:href=\"href\" x-bind:data-tone=\"tone\" x-bind:aria-label=\"describe\" x-bind:title=\"describe\" x-on:click.stop=\"stay\" x-text=\"label\"></a></span>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

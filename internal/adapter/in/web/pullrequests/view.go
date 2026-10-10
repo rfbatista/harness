@@ -18,8 +18,12 @@ type Panel struct {
 	// OffersCreate: no PR is open, so the create button shows.
 	OffersCreate bool
 	// Blockers are why a create cannot go ahead, in words; empty when it can.
-	Blockers []string
+	Blockers []Blocker
 }
+
+// Blocker is one reason a create cannot go ahead, and where its fix is
+// (Href "" when it has none).
+type Blocker struct{ Text, Href, LinkText string }
 
 // PanelSeed is the panel's seed: GET /api/pull_request's answer with the
 // workspace and its project. PullRequestView is nil when the server could not read it,
@@ -47,7 +51,8 @@ func NewPanel(projectID, workspaceID string, view *ports.PullRequestView) *Panel
 	p.OffersCreate = view.PullRequest == nil || view.PullRequest.Closed()
 	if p.OffersCreate {
 		for _, code := range view.Draft.Blockers {
-			p.Blockers = append(p.Blockers, BlockerText(code, view.Draft))
+			href, link := BlockerLink(code, view.Draft)
+			p.Blockers = append(p.Blockers, Blocker{Text: BlockerText(code, view.Draft), Href: href, LinkText: link})
 		}
 	}
 	return p

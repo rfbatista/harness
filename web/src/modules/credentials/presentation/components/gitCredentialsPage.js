@@ -124,6 +124,10 @@ export const gitCredentialsPage = ({ gateway, clock, copy = (text) => globalThis
     get showsKeySource() {
       return this.form.mode === "add" && this.form.kind === "ssh_key";
     },
+    /** Replacing a key: from a file or pasted. */
+    get showsRekeySource() {
+      return this.form.mode === "secret" && this.form.kind === "ssh_key";
+    },
     get showsKeyInput() {
       return this.form.kind === "ssh_key" && (this.form.mode === "secret" || (this.form.mode === "add" && this.form.keySource !== "generate"));
     },
@@ -294,7 +298,9 @@ export const gitCredentialsPage = ({ gateway, clock, copy = (text) => globalThis
       this.formError = this.nameError = null;
       this.pinnedRepositories = [];
       this.notice = "";
-      this.$nextTick(() => this.$refs.formFirst?.focus());
+      // The first field the form shows: the name, or the secret being replaced.
+      const first = form.mode !== "secret" ? "formFirst" : form.kind === "https_token" ? "token" : "keyFile";
+      this.$nextTick(() => this.$refs[first]?.focus());
     },
     cancelForm() {
       this.closeForm();

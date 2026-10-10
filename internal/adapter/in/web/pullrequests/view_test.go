@@ -22,7 +22,7 @@ func TestViewsMatchTheBrowser(t *testing.T) {
 			Code, Text, Href string
 			Remote           *domain.GitRemote
 		}
-		Chips    []struct {
+		Chips []struct {
 			State string
 			Draft bool
 			Shown string
@@ -85,7 +85,7 @@ func TestPanelPaintsWhatTheViewSays(t *testing.T) {
 	if p := NewPanel("p1", "ws1", nil); p.Painted() || p.OffersCreate || p.Chip != nil {
 		t.Errorf("no view paints nothing: %+v", p)
 	}
-	if p := NewPanel("p1", "ws1", &ports.PullRequestView{Draft: blocked}); !p.OffersCreate || !p.Blocked() || p.Blockers[0] != "Nothing to propose yet: agent/x has no commits ahead of main." {
+	if p := NewPanel("p1", "ws1", &ports.PullRequestView{Draft: blocked}); !p.OffersCreate || !p.Blocked() || p.Blockers[0].Text != "Nothing to propose yet: agent/x has no commits ahead of main." {
 		t.Errorf("blocked: %+v", p)
 	}
 	if p := NewPanel("p1", "ws1", &ports.PullRequestView{Draft: blocked, PullRequest: open}); p.OffersCreate || p.Blocked() || p.Chip.Label != "#7" || p.Chip.Tone != "success" {

@@ -4,12 +4,14 @@
 package projects
 
 import (
+	"log/slog"
 	"net/http"
 	"net/url"
 	"path"
 	"strings"
 	"time"
 
+	"operators-mcp/internal/adapter/in/web/credentials"
 	"operators-mcp/internal/adapter/in/web/shell"
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
@@ -24,9 +26,12 @@ type Handler struct {
 	EnvFiles     ports.EnvFileLister
 	// Summaries counts each project for the projects list.
 	Summaries ports.ProjectSummaries
-	Layout    shell.Layout
-	Render    shell.Renderer
-	Now       func() time.Time
+	// Credentials paints each repository's git credential on its page; nil
+	// leaves it out.
+	Credentials ports.GitCredentials
+	Layout      shell.Layout
+	Render      shell.Renderer
+	Now         func() time.Time
 }
 
 // List is the projects list: every project with its counts.
@@ -87,7 +92,29 @@ func (h Handler) RepositoryList(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	return h.Render(w, r, http.StatusOK, RepositoriesPage(NewRepositoriesView(frame, project, repos)))
+	v := NewRepositoriesView(frame, project, repos)
+	v.Credentials = h.credentialsSeed(r, project.ID)
+	return h.Render(w, r, http.StatusOK, RepositoriesPage(v))
+}
+
+// credentialsSeed reads the credentials and every repository's binding; nil
+// when they are not served or could not be read (the rows then go without).
+func (h Handler) credentialsSeed(r *http.Request, projectID string) *credentials.RepositoriesSeed {
+	if h.Credentials == nil {
+		return nil
+	}
+	ctx := r.Context()
+	list, err := h.Credentials.ListGitCredentials(ctx)
+	if err != nil {
+		slog.Warn("repositories page: git credentials not read", "err", err)
+		return nil
+	}
+	bindings, err := h.Credentials.ListRepositoryCredentials(ctx, projectID)
+	if err != nil {
+		slog.Warn("repositories page: repository credentials not read", "err", err)
+		return nil
+	}
+	return &credentials.RepositoriesSeed{ProjectID: projectID, Credentials: list, Repositories: bindings}
 }
 
 // EnvFileList is a repository's env files page. A repository of another project
@@ -164,6 +191,18 @@ type RepositoriesView struct {
 	ProjectName string
 	Rows        []RepositoryRow
 	Seed        Seed
+	// Credentials is each repository's git credential; nil leaves it out.
+	Credentials *credentials.RepositoriesSeed
+}
+
+// CredentialLine is a repository's credential as its row says it; ok is
+// false when there is none to say.
+func (v RepositoriesView) CredentialLine(repositoryID string) (credentials.BindingLine, bool) {
+	if v.Credentials == nil {
+		return credentials.BindingLine{}, false
+	}
+	line, ok := v.Credentials.Lines()[repositoryID]
+	return line, ok
 }
 
 // RepositoryRow is one repository as listed.

@@ -11,6 +11,14 @@ file("credentials/presentation/repositoryCredential");
 
 const CREDENTIALS = [makeCredential(), makeKey(), makeCredential({ id: "spare", name: "spare", isDefault: false })];
 
+/** A select set to value, as the dropdown leaves it when the person picks. */
+function chose(value) {
+  const select = document.createElement("select");
+  for (const v of ["", "gc-work", "gc-key", "spare"]) select.append(new Option(v || "Automatic", v));
+  select.value = value;
+  return select;
+}
+
 /** The Repositories page: its seed, the shared store, and one row component per repository asked for. */
 async function setup({ credentials = CREDENTIALS, world = {} } = {}) {
   const memory = memoryCredentials({ credentials, repositories: REPOSITORIES.map((r) => ({ ...r })), ...world });
@@ -30,7 +38,6 @@ async function setup({ credentials = CREDENTIALS, world = {} } = {}) {
     el.dataset.repositoryName = REPOSITORIES.find((r) => r.id === repositoryId)?.name ?? "";
     page.append(el);
     const mounted = mount(repositoryCredential({ store }), { el });
-    mounted.instance.$refs = { select: page.ownerDocument.createElement("select") };
     mounted.instance.init();
     return (rows[repositoryId] = mounted.instance);
   };
@@ -60,9 +67,10 @@ test("the picker offers Automatic, then the credentials of the origin's host and
 test("picking pins it; Automatic unpins; the select shows what is stored", async () => {
   const { row, memory } = await setup();
   const r = row("r-https");
-  await r.pick("spare");
-  assert.deepEqual([r.selected, r.line.state, r.line.name, memory.repository("r-https").credentialId], ["spare", "pinned", "spare", "spare"]);
-  await r.pick("");
+  const select = chose("spare");
+  await r.pick(select);
+  assert.deepEqual([r.selected, r.line.state, r.line.name, memory.repository("r-https").credentialId, select.value], ["spare", "pinned", "spare", "spare", "spare"]);
+  await r.pick(chose(""));
   assert.deepEqual([r.selected, r.line.state], ["", "automatic"]);
 });
 
@@ -77,9 +85,10 @@ test("a refused pin shows on the dropdown with Retry, and the stored choice stay
     }
     return set(...args);
   };
-  await r.pick("spare");
+  const select = chose("spare");
+  await r.pick(select);
   assert.ok(r.pickError.includes(Codes.GIT_CREDENTIAL_KIND_MISMATCH));
-  assert.equal(r.selected, "", "still automatic");
+  assert.deepEqual([r.selected, select.value], ["", ""], "still automatic, and the select says so");
   refuse = false;
   await r.retry();
   assert.deepEqual([r.pickError, r.selected], ["", "spare"]);

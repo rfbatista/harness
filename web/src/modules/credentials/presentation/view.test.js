@@ -1,4 +1,7 @@
+import views from "../../../../testdata/views/git-credentials.json" with { type: "json" };
 import { assert, file, test } from "../../../shared/testing/test.js";
+import { remoteOf } from "../domain/credential.js";
+import { toCredential } from "../infrastructure/dto.js";
 import { at, makeCredential, makeKey } from "../testing/fixtures.js";
 import { addHref, bindingLine, credentialHref, credentialRow, lastUsedLabel, testLine } from "./view.js";
 
@@ -33,4 +36,23 @@ test("a binding reads pinned, automatic, local, or what to add", () => {
   assert.deepEqual([none.state, none.addHref], ["none", "/git-credentials?host=github.com&kind=ssh_key"]);
   assert.ok(none.text.startsWith("No SSH key for github.com"));
   assert.equal(bindingLine({ repositoryId: "r", credentialId: "gc-key", resolved: makeKey(), remoteUrl: null }).state, "pinned", "a repository without an origin can be pinned");
+});
+
+test("rows, origins and bindings read as the Go pages paint them", () => {
+  const pick = (which) => (which === "key" ? toCredential(views.key) : toCredential(views.credential));
+  const now = new Date("2026-10-10T18:00:00Z");
+  for (const c of views.rows) {
+    const cred = { ...pick(c.which), lastUsedAt: c.used_minutes_ago === null ? null : new Date(now.getTime() - c.used_minutes_ago * 60_000) };
+    const row = credentialRow(cred, now);
+    assert.deepEqual([row.kindLabel, row.meta], [c.kind_label, c.meta], `${c.which} row`);
+  }
+  for (const c of views.remotes) {
+    const r = remoteOf(c.url);
+    assert.deepEqual([r?.host ?? "", r?.kind ?? ""], [c.host, c.kind], c.url);
+  }
+  for (const c of views.bindings) {
+    const resolved = c.resolved ? pick(c.resolved) : null;
+    const line = bindingLine({ repositoryId: "r", credentialId: c.pinned && resolved ? resolved.id : null, resolved, remoteUrl: c.remote_url });
+    assert.deepEqual(line, { state: c.line.state, name: c.line.name, text: c.line.text, addHref: c.line.add_href }, JSON.stringify(c));
+  }
 });

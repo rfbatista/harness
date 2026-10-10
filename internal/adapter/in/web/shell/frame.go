@@ -89,6 +89,10 @@ type TopBar struct {
 	ProjectsHref string
 	// OnProjects marks the projects list as the current page.
 	OnProjects bool
+	// CredentialsHref is the Git credentials page; "" when it is not served.
+	CredentialsHref string
+	// OnCredentials marks the Git credentials page as the current page.
+	OnCredentials bool
 }
 
 // Option is one project in the picker.

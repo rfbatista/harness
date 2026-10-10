@@ -2,6 +2,7 @@ package projects
 
 import (
 	"operators-mcp/internal/adapter/in/web/components"
+	"operators-mcp/internal/adapter/in/web/credentials"
 	"operators-mcp/internal/adapter/in/web/shell"
 )
 
@@ -72,6 +73,7 @@ templ RepositoriesPage(v RepositoriesView) {
 	@shell.AppShell(v.Frame) {
 		<main id="main" class="[ frame ]" x-data="projectsRepositoriesPage" data-seed="repositories-seed">
 			@templ.JSONScript("repositories-seed", v.Seed)
+			@credentials.RepositorySeed(v.Credentials)
 			<header class="[ toolbar ]">
 				<a class="[ crumb ]" href={ templ.SafeURL("/projects/" + v.ProjectID) }>{ v.ProjectName } /</a>
 				<h1>Repositories</h1>
@@ -98,6 +100,9 @@ templ RepositoriesPage(v RepositoriesView) {
 									<span class="[ flow ] [ flow-space-3xs pad-block-xs ]">
 										<span class="[ weight-medium ]">{ r.Name }</span>
 										<span class="[ font-mono text-xs color-ink-faint ]">{ r.RootDir } · { r.Remote }</span>
+										if line, ok := v.CredentialLine(r.ID); ok {
+											@credentials.RepositoryLine(line)
+										}
 									</span>
 									<a class="[ button ]" data-variant="ghost" data-size="sm" href={ templ.SafeURL(r.HistoryHref) }>History</a>
 									<a class="[ button ]" data-variant="ghost" data-size="sm" href={ templ.SafeURL(r.EnvHref) }>Env files</a>
@@ -109,6 +114,9 @@ templ RepositoriesPage(v RepositoriesView) {
 								<span class="[ flow ] [ flow-space-3xs pad-block-xs ]">
 									<span class="[ weight-medium ]" x-text="r.name"></span>
 									<span class="[ font-mono text-xs color-ink-faint ]"><span x-text="r.rootDir"></span> · <span x-text="r.remote"></span></span>
+									if v.Credentials != nil {
+										@credentials.RepositoryCredential()
+									}
 								</span>
 								<span class="[ cluster ] [ gutter-xs ]">
 									<a class="[ button ]" data-variant="ghost" data-size="sm" x-bind:href="r.historyHref">History</a>
