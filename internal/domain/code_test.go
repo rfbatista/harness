@@ -69,3 +69,26 @@ func TestZoneMatcher(t *testing.T) {
 		t.Error("a zone with no pattern and no paths holds a path")
 	}
 }
+
+func TestSymlinkEscapes(t *testing.T) {
+	cases := map[[2]string]bool{
+		{"link", "README.md"}: false, {"a/link", "../b"}: false, {"a/link", "../../x"}: true,
+		{"link", "../x"}: true, {"link", "/etc"}: true, {"link", ".."}: true, {"a/b/l", "../../c"}: false, {"link", ""}: true,
+	}
+	for c, want := range cases {
+		if got := SymlinkEscapes(c[0], c[1]); got != want {
+			t.Errorf("SymlinkEscapes(%q, %q) = %v, want %v", c[0], c[1], got, want)
+		}
+	}
+}
+
+func TestIsBinaryAndCountLines(t *testing.T) {
+	if IsBinary([]byte("plain\ntext")) || !IsBinary([]byte("a\x00b")) || !IsBinary([]byte{0xff, 0xfe}) || IsBinary(nil) {
+		t.Error("IsBinary misjudged")
+	}
+	for in, want := range map[string]int{"": 0, "a": 1, "a\n": 1, "a\nb": 2, "\n\n": 2} {
+		if got := CountLines(in); got != want {
+			t.Errorf("CountLines(%q) = %d, want %d", in, got, want)
+		}
+	}
+}

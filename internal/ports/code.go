@@ -54,6 +54,8 @@ type GitEntry struct {
 	Path string
 	// Kind is domain.EntryDir, EntryFile, EntrySymlink or EntrySubmodule.
 	Kind string
+	// Object is the blob or tree hash in a tree.
+	Object string
 	// Size is a blob's size in a tree; -1 when unknown.
 	Size int64
 	// Target is a symlink's target, read from its blob, in a tree.
@@ -93,13 +95,15 @@ type GitCode interface {
 	// directory path, or every file under it when recursive. A path that is
 	// not a directory there is PATH_NOT_FOUND.
 	TreeAt(ctx context.Context, dir, commit, path string, recursive bool) ([]GitEntry, error)
-	// PathKind is the kind of path at commit, PATH_NOT_FOUND when absent.
+	// PathKind is the entry of path at commit, walked one directory at a
+	// time: PATH_NOT_FOUND when absent or when the walk meets a symlink,
+	// INVALID_INPUT when that symlink leads out of the root.
 	PathKind(ctx context.Context, dir, commit, path string) (GitEntry, error)
 	// WorktreeEntries lists a worktree's tracked paths (with their index
 	// kind) and its untracked ones that are not ignored.
 	WorktreeEntries(ctx context.Context, dir string) ([]GitEntry, error)
-	// Blob reads at most max bytes of commit:path and the blob's size.
-	Blob(ctx context.Context, dir, commit, path string, max int64) ([]byte, int64, error)
+	// Blob reads at most max bytes of the blob object.
+	Blob(ctx context.Context, dir, object string, max int64) ([]byte, error)
 	// Changes lists the files changed from base to head; head "" is the
 	// worktree on disk, whose untracked files are not included.
 	Changes(ctx context.Context, dir, base, head string) ([]GitChange, error)

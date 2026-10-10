@@ -1,8 +1,10 @@
 package domain
 
 import (
+	"bytes"
 	"path"
 	"strings"
+	"unicode/utf8"
 )
 
 // Limits of the code views: what one answer may carry.
@@ -284,4 +286,33 @@ func LanguageOf(p string) string {
 		return l
 	}
 	return "plaintext"
+}
+
+// SymlinkEscapes reports whether a symlink at the repository-relative path
+// link, pointing at target, resolves outside the repository's root. An
+// absolute target always does.
+func SymlinkEscapes(link, target string) bool {
+	if target == "" || strings.HasPrefix(target, "/") {
+		return true
+	}
+	p := path.Join(path.Dir(link), target)
+	return p == ".." || strings.HasPrefix(p, "../")
+}
+
+// binarySniff is how much of a file git looks at for a NUL byte.
+const binarySniff = 8000
+
+// IsBinary reports whether content is not text: a NUL byte in its first
+// 8000 bytes, as git decides, or invalid UTF-8.
+func IsBinary(content []byte) bool {
+	return bytes.IndexByte(content[:min(len(content), binarySniff)], 0) >= 0 || !utf8.Valid(content)
+}
+
+// CountLines counts content's lines; a last line without a newline counts.
+func CountLines(content string) int {
+	n := strings.Count(content, "\n")
+	if content != "" && !strings.HasSuffix(content, "\n") {
+		n++
+	}
+	return n
 }
