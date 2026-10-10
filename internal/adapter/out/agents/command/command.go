@@ -25,7 +25,8 @@ func New() Agent { return Agent{} }
 
 func (Agent) Kind() string { return Kind }
 
-// Command is `<shell> -l -c <command>` in the spec's directory.
+// Command is `<shell> -l -c <command>` in the spec's directory, sourcing
+// the spec's env file first when it has one.
 func (a Agent) Command(spec ports.AgentSpec) (ports.ShellCommand, error) {
 	line := strings.TrimSpace(spec.Command)
 	if line == "" {
@@ -38,6 +39,11 @@ func (a Agent) Command(spec ports.AgentSpec) (ports.ShellCommand, error) {
 	if sh == "" {
 		sh = "/bin/sh"
 	}
+	if spec.EnvFile != "" {
+		// After the profile, so it cannot override the session's git
+		// credentials.
+		line = ". " + shellQuote(spec.EnvFile) + "; " + line
+	}
 	return ports.ShellCommand{
 		Program: sh,
 		Args:    []string{"-l", "-c", line},
@@ -45,3 +51,5 @@ func (a Agent) Command(spec ports.AgentSpec) (ports.ShellCommand, error) {
 		Env:     spec.Env,
 	}, nil
 }
+
+func shellQuote(s string) string { return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'" }

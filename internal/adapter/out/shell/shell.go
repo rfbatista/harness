@@ -47,7 +47,8 @@ func (Direct) CheckDir(_ context.Context, dir string) error { return checkDir(di
 // Login runs the program through a login shell: `$SHELL -l -c 'exec "$0"
 // "$@"' program args...`, so the program is found on the PATH the user's
 // profile sets. A program that is not there fails inside the terminal, as it
-// would when typed.
+// would when typed. A command's EnvFile is sourced after the profile, so the
+// profile cannot override what it sets (the session's git credentials).
 type Login struct {
 	// Shell is the shell to run; empty means $SHELL, else /bin/sh.
 	Shell string
@@ -62,6 +63,9 @@ func (l Login) Prepare(_ context.Context, cmd ports.ShellCommand) (ports.Process
 		sh = "/bin/sh"
 	}
 	args := append([]string{"-l", "-c", `exec "$0" "$@"`, cmd.Program}, cmd.Args...)
+	if cmd.EnvFile != "" {
+		args = append([]string{"-l", "-c", `f=$1; shift; . "$f"; exec "$@"`, "login", cmd.EnvFile, cmd.Program}, cmd.Args...)
+	}
 	return ports.ProcessSpec{Path: sh, Args: args, Dir: cmd.Dir, Env: env(cmd)}, nil
 }
 

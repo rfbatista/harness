@@ -1,0 +1,118 @@
+package orchestration
+
+import (
+	"context"
+	"errors"
+	"slices"
+	"strings"
+	"sync"
+	"testing"
+
+	"operators-mcp/internal/domain"
+	"operators-mcp/internal/ports"
+)
+
+// fakeGitAuth records the sessions it gave a git directory and removed.
+type fakeGitAuth struct {
+	mu       sync.Mutex
+	note     string
+	err      error
+	prepared []string // "session/repository"
+	ended    []string
+}
+
+func (f *fakeGitAuth) SessionEnv(_ context.Context, sessionID, repositoryID string) (*ports.SessionGit, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.err != nil {
+		return nil, f.err
+	}
+	f.prepared = append(f.prepared, sessionID+"/"+repositoryID)
+	return &ports.SessionGit{
+		Env:     []string{"GIT_CONFIG_GLOBAL=/data/git/sessions/" + sessionID + "/gitconfig", "GH_TOKEN=harness-no-credential"},
+		EnvFile: "/data/git/sessions/" + sessionID + "/env.sh",
+		Note:    f.note,
+	}, nil
+}
+
+func (f *fakeGitAuth) EndSession(sessionID string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.ended = append(f.ended, sessionID)
+}
+
+func (f *fakeGitAuth) Resolve(context.Context, string, string) (*ports.GitResolution, error) {
+	return &ports.GitResolution{}, nil
+}
+
+func (f *fakeGitAuth) Operation(context.Context, string, string) (*ports.GitOperation, error) {
+	return nil, errors.New("not used")
+}
+
+func (f *fakeGitAuth) GitHubToken(context.Context, string, string) (*domain.GitCredential, domain.Secret, error) {
+	return nil, "", nil
+}
+
+func (f *fakeGitAuth) Used(string) {}
+
+func (f *fakeGitAuth) endedSessions() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return slices.Clone(f.ended)
+}
+
+func TestASessionRunsWithItsGitDirectory(t *testing.T) {
+	svc, _ := newInteractiveService(t)
+	git := &fakeGitAuth{note: "Git: no stored credential for github.com (https_token), so git push and fetch to origin will fail."}
+	svc.GitAuth = git
+	sess, launch := startInteractive(t, svc, InteractiveRequest{})
+
+	if !slices.Equal(git.prepared, []string{sess.ID + "/r1"}) {
+		t.Fatalf("git directories prepared %v, want one for the session's repository", git.prepared)
+	}
+	if !slices.Contains(launch.Spec.Env, "GIT_CONFIG_GLOBAL=/data/git/sessions/"+sess.ID+"/gitconfig") {
+		t.Fatalf("env %v lacks the session's git config", launch.Spec.Env)
+	}
+	if launch.Spec.EnvFile != "/data/git/sessions/"+sess.ID+"/env.sh" {
+		t.Fatalf("env file %q", launch.Spec.EnvFile)
+	}
+	if system, _ := flag(launch.Args, "--append-system-prompt"); !strings.Contains(system, git.note) {
+		t.Fatalf("the brief does not carry the git note:\n%s", system)
+	}
+
+	// The session ends: its directory goes. A resume makes it again.
+	if _, err := svc.EndInteractive(context.Background(), sess.ID, 0, false); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Contains(git.endedSessions(), sess.ID) {
+		t.Fatalf("ended %v, want the session's directory removed", git.endedSessions())
+	}
+	_, spec, err := svc.ResumeInteractive(context.Background(), ports.ResumeRequest{SessionID: sess.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(git.prepared) != 2 || spec.EnvFile != "/data/git/sessions/"+sess.ID+"/env.sh" ||
+		!slices.Contains(spec.Env, "GH_TOKEN=harness-no-credential") {
+		t.Fatalf("resume: prepared %v, spec env %v file %q", git.prepared, spec.Env, spec.EnvFile)
+	}
+}
+
+func TestASessionWhoseGitDirectoryFailsDoesNotStart(t *testing.T) {
+	svc, prov := newInteractiveService(t)
+	svc.GitAuth = &fakeGitAuth{err: errors.New("disk full")}
+	_, _, err := svc.StartInteractive(context.Background(), InteractiveRequest{ProjectID: "p1", RepositoryID: "r1", TicketID: "tk1"})
+	if err == nil || !strings.Contains(err.Error(), "disk full") {
+		t.Fatalf("start = %v, want the git directory's failure", err)
+	}
+	if len(prov.discarded) != 1 {
+		t.Fatalf("discarded %v: the worktree of a session that never started must go", prov.discarded)
+	}
+}
+
+func TestWithoutGitAuthNothingChanges(t *testing.T) {
+	svc, _ := newInteractiveService(t)
+	_, launch := startInteractive(t, svc, InteractiveRequest{})
+	if launch.Spec.EnvFile != "" {
+		t.Fatalf("env file %q without GitAuth", launch.Spec.EnvFile)
+	}
+}

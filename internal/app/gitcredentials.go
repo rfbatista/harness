@@ -14,7 +14,9 @@ import (
 	"operators-mcp/internal/adapter/out/persistence/sqlite"
 	"operators-mcp/internal/adapter/out/secretbox"
 	"operators-mcp/internal/app/catalog"
+	"operators-mcp/internal/application/apps"
 	"operators-mcp/internal/application/gitcredentials"
+	"operators-mcp/internal/application/orchestration"
 	"operators-mcp/internal/ports"
 )
 
@@ -23,8 +25,28 @@ import (
 // its bus subscriptions. It provides *gitcredentials.Service.
 var GitCredentialsModule = fx.Module("gitcredentials",
 	fx.Provide(newGitCredentialsService),
-	fx.Invoke(registerGitCredentials),
+	fx.Invoke(registerGitCredentials, bindGitCredentials),
 )
+
+// gitCredentialUsers are what runs git in session worktrees, when the graph
+// has them.
+type gitCredentialUsers struct {
+	fx.In
+
+	Orch *orchestration.Service `optional:"true"`
+	Apps *apps.Service          `optional:"true"`
+}
+
+// bindGitCredentials gives sessions and their app runs the stored
+// credentials: their processes get a git directory of their own.
+func bindGitCredentials(svc *gitcredentials.Service, u gitCredentialUsers) {
+	if u.Orch != nil {
+		u.Orch.GitAuth = svc
+	}
+	if u.Apps != nil {
+		u.Apps.GitAuth = svc
+	}
+}
 
 type gitCredentialsParams struct {
 	fx.In

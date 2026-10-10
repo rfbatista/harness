@@ -47,8 +47,12 @@ type AgentSpec struct {
 	// (claude's SessionStart hook).
 	HookURL string `json:"hook_url,omitempty"`
 	// Prompt is the optional first message.
-	Prompt       string       `json:"prompt,omitempty"`
-	Env          []string     `json:"env,omitempty"`
+	Prompt string   `json:"prompt,omitempty"`
+	Env    []string `json:"env,omitempty"`
+	// EnvFile is an sh file a login shell sources after the person's
+	// profile, so the profile cannot override Env's git credentials (see
+	// "Contract: Harness server ↔ Agent sessions — git credentials").
+	EnvFile      string       `json:"env_file,omitempty"`
 	Conversation Conversation `json:"conversation"`
 }
 
@@ -80,6 +84,9 @@ type ShellCommand struct {
 	Dir string
 	// Env is added to the shell's own environment.
 	Env []string
+	// EnvFile, when set, is sourced by a login shell after the profile and
+	// before the program runs.
+	EnvFile string
 }
 
 // Shell decides what process runs a command, and where: this machine's login

@@ -2,6 +2,8 @@ package apps_test
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -173,5 +175,37 @@ func TestDeletingTheSessionStopsItsRuns(t *testing.T) {
 	}
 	if runs, _ := svc.List(ctx, "s1"); len(runs) != 0 {
 		t.Fatalf("runs = %+v", runs)
+	}
+}
+
+// gitAuth gives a run an environment and an env file to source.
+type gitAuth struct {
+	ports.GitAuth
+	envFile string
+	asked   []string
+}
+
+func (g *gitAuth) SessionEnv(_ context.Context, sessionID, repositoryID string) (*ports.SessionGit, error) {
+	g.asked = append(g.asked, sessionID+"/"+repositoryID)
+	return &ports.SessionGit{Env: []string{"HARNESS_FROM_ENV=env"}, EnvFile: g.envFile}, nil
+}
+
+// A run is part of its session: it gets the session's git environment, and
+// its login shell sources the env file after the profile.
+func TestARunGetsItsSessionsGitEnvironment(t *testing.T) {
+	svc, _ := newRunner(t)
+	envFile := filepath.Join(t.TempDir(), "env.sh")
+	if err := os.WriteFile(envFile, []byte("export HARNESS_FROM_FILE=file\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	git := &gitAuth{envFile: envFile}
+	svc.GitAuth = git
+	r, err := svc.Start(context.Background(), "s1", "", `printf 'git:%s-%s\n' "$HARNESS_FROM_ENV" "$HARNESS_FROM_FILE"; sleep 30`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	readUntil(t, svc, r.ID, "git:env-file")
+	if len(git.asked) != 1 || git.asked[0] != "s1/r1" {
+		t.Fatalf("asked %v", git.asked)
 	}
 }

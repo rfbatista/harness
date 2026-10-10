@@ -11,6 +11,12 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"go.uber.org/fx"
+
+	"operators-mcp/internal/application/apps"
+	"operators-mcp/internal/application/gitcredentials"
+	"operators-mcp/internal/application/orchestration"
 )
 
 func freeAddr(t *testing.T) string {
@@ -68,5 +74,29 @@ func TestTheServerKeepsGitCredentials_EndToEnd(t *testing.T) {
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&list); err != nil || len(list.Credentials) != 1 || list.Credentials[0]["host"] != "github.com" {
 		t.Fatalf("list: %+v, %v", list, err)
+	}
+}
+
+// Sessions and their app runs get the stored credentials in the shipped
+// graph.
+func TestSessionsAndAppRunsAreBoundToTheStoredCredentials(t *testing.T) {
+	dir := t.TempDir()
+	var (
+		orch  *orchestration.Service
+		runs  *apps.Service
+		creds *gitcredentials.Service
+	)
+	a := fx.New(
+		fx.Supply(Config{HTTPAddr: "127.0.0.1:0", MCPAddr: "127.0.0.1:0", DBPath: filepath.Join(dir, "harness.db"), Root: dir, ClaudeBin: "/bin/true", SessionShell: "direct"}),
+		PersistenceModule, CatalogModule, PlanningModule, WorkspacesModule, GitCredentialsModule,
+		AgentRuntimeModule, TaskChannelModule, TextProcessingModule, ToolingModule,
+		fx.Populate(&orch, &runs, &creds),
+		fx.NopLogger,
+	)
+	if err := a.Err(); err != nil {
+		t.Fatal(err)
+	}
+	if orch.GitAuth != creds || runs.GitAuth != creds {
+		t.Fatalf("sessions %v and app runs %v are not bound to the credentials", orch.GitAuth, runs.GitAuth)
 	}
 }
