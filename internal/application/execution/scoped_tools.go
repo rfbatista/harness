@@ -5,7 +5,6 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 
 	"operators-mcp/internal/domain"
@@ -121,25 +120,15 @@ func isUnderRoot(absPath, root string) bool {
 	return !strings.HasPrefix(rel, "..")
 }
 
+// isPathAllowedByZone applies the zone's boundary to a tool's path. A zone
+// with neither a pattern nor explicit paths bounds nothing: that is this
+// context's policy; which paths a zone holds is the domain's rule.
 func isPathAllowedByZone(relPath, pattern string, explicitPaths []string) bool {
 	if pattern == "" && len(explicitPaths) == 0 {
 		return true
 	}
-
-	if pattern != "" {
-		re, err := regexp.Compile(pattern)
-		if err == nil && re.MatchString(relPath) {
-			return true
-		}
-	}
-
-	for _, ep := range explicitPaths {
-		if relPath == ep || strings.HasPrefix(relPath, ep+string(os.PathSeparator)) {
-			return true
-		}
-	}
-
-	return false
+	z := domain.Zone{Pattern: pattern, ExplicitPaths: explicitPaths}
+	return z.Contains(filepath.ToSlash(relPath))
 }
 
 func getStringArg(args map[string]any, key string) string {
