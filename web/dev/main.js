@@ -9,6 +9,9 @@ import { systemClock } from "../src/shared/infrastructure/clock.js";
 import { preferences } from "../src/shared/infrastructure/storage.js";
 import { registerShared } from "../src/shared/presentation/register.js";
 
+import { desktopAlerts } from "../src/modules/notifications/infrastructure/desktop-alerts.js";
+import { memoryNotifications } from "../src/modules/notifications/infrastructure/memory-gateway.js";
+import { registerNotifications } from "../src/modules/notifications/presentation/register.js";
 import { memoryProjects } from "../src/modules/projects/infrastructure/memory-gateway.js";
 import { memoryPullRequests } from "../src/modules/pullrequests/infrastructure/memory-gateway.js";
 import { registerPullRequests } from "../src/modules/pullrequests/presentation/register.js";
@@ -20,16 +23,49 @@ import { memoryTerminals } from "../src/modules/sessions/infrastructure/memory-t
 import { registerSessions } from "../src/modules/sessions/presentation/register.js";
 import { createScreen } from "../src/xterm-screen.js";
 
-registerShared(Alpine, { prefs: preferences() });
+const prefs = preferences();
+registerShared(Alpine, { prefs });
 
 const seedOf = (id) => {
   const el = document.getElementById(id);
   return el ? JSON.parse(el.textContent) : null;
 };
 
+const notifications = startNotifications();
+
 if (seedOf("sessions-seed")) startTaskPage(seedOf("sessions-seed"));
 else if (seedOf("pull-request-seed")) startHistoryPage(seedOf("pull-request-seed"));
-else startProjectPages();
+else if (!seedOf("notifications-page-seed")) startProjectPages();
+window.harness = { ...window.harness, notifications };
+
+/**
+ * The top bar's bell on every page, and web/dev/notifications.html (the
+ * inbox), over an in-memory inbox holding what the page's seeds list. A read
+ * is streamed before it is answered, as the server does.
+ */
+function startNotifications() {
+  let delayMs = 0;
+  const decoded = ["notifications-page-seed", "notifications-seed"].flatMap((id) => {
+    const raw = seedOf(id);
+    return raw ? memoryNotifications().gateway.fromSeed(raw).notifications : [];
+  });
+  const memory = memoryNotifications({
+    notifications: [...new Map(decoded.map((n) => [n.id, n])).values()],
+    beforeAnswer: () => new Promise((r) => setTimeout(r, delayMs)),
+  });
+  registerNotifications(Alpine, { gateway: memory.gateway, alerts: desktopAlerts(), prefs, clock: systemClock, navigate: (url) => console.info("navigate", url) });
+  return {
+    memory,
+    /** Something needs the person, or an agent called notify: harness.notifications.notify({ level: "info", projectName: "tui" }). */
+    notify: (fields = {}) => memory.notify(fields),
+    /** Its cause was settled: harness.notifications.resolve("n-review"). */
+    resolve: (id) => memory.resolve(id),
+    /** A read is answered this long after its echo. */
+    slow: (ms) => (delayMs = ms),
+    drop: () => memory.reportStatus(FeedStatus.PAUSED),
+    reconnect: () => memory.reportStatus(FeedStatus.RESYNCED),
+  };
+}
 
 /**
  * web/dev/history.html: a session's git history with its pull request panel,

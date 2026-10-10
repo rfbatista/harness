@@ -18,6 +18,7 @@ import (
 	"operators-mcp/internal/adapter/out/persistence/sqlite"
 	"operators-mcp/internal/application/agents"
 	"operators-mcp/internal/application/artifacts/artifactstest"
+	"operators-mcp/internal/application/notifications/notificationstest"
 	"operators-mcp/internal/application/orchestration"
 	"operators-mcp/internal/application/planning"
 	"operators-mcp/internal/application/projects"
@@ -182,6 +183,13 @@ func TestTaskCommentsConformance(t *testing.T) {
 	portstest.TaskCommentsConformance(t, func(t *testing.T) (ports.TaskComments, string) {
 		c, tid := resourcesServer(t)
 		return httpclient.NewTaskComments(c), tid
+	})
+}
+
+func TestNotificationsConformance(t *testing.T) {
+	portstest.NotificationsConformance(t, func(t *testing.T) (ports.Notifications, portstest.NotificationsFixture) {
+		svc, f := notificationstest.New(t)
+		return httpclient.NewNotifications(serve(t, httpapi.Services{Notifications: svc})), f
 	})
 }
 

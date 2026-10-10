@@ -55,7 +55,7 @@ func newTaskToolsFixture(t *testing.T) *taskToolsFixture {
 	}
 
 	byName := map[string]domain.Tool{}
-	for _, tool := range SessionTaskTools(plan, sessions, nil, nil, PeerStarter{}, ArtifactTooling{}, nil, ResourceTooling{Files: plan, Comments: plan, Writer: plan}) {
+	for _, tool := range SessionTaskTools(plan, sessions, nil, nil, PeerStarter{}, ArtifactTooling{}, nil, ResourceTooling{Files: plan, Comments: plan, Writer: plan}, NotificationTooling{}) {
 		byName[tool.Name] = tool
 	}
 	if len(byName) != len(SessionTaskToolNames) {
@@ -207,7 +207,7 @@ func TestSessionTaskTools_SessionWithoutTask(t *testing.T) {
 	if _, err := sessions.Create(&domain.Session{ID: "free", ProjectID: proj.ID, Task: "go", Status: domain.SessionRunning}); err != nil {
 		t.Fatal(err)
 	}
-	tools := SessionTaskTools(plan, sessions, nil, nil, PeerStarter{}, ArtifactTooling{}, nil, ResourceTooling{})
+	tools := SessionTaskTools(plan, sessions, nil, nil, PeerStarter{}, ArtifactTooling{}, nil, ResourceTooling{}, NotificationTooling{})
 
 	_, err = tools[0].Handler(WithSessionID(context.Background(), "free"), nil)
 	wantCode(t, err, "SESSION_HAS_NO_TASK")
