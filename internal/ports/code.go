@@ -87,7 +87,7 @@ type GitCode interface {
 	ResolveCommit(ctx context.Context, dir, ref string) (string, error)
 	// CurrentBranch is the branch checked out in dir, "" when detached.
 	CurrentBranch(ctx context.Context, dir string) (string, error)
-	// MergeBase is the best common ancestor of two commits.
+	// MergeBase is the best common ancestor of two commits or refs.
 	MergeBase(ctx context.Context, dir, a, b string) (string, error)
 	// FirstParent is commit's first parent, "" for a root commit.
 	FirstParent(ctx context.Context, dir, commit string) (string, error)
@@ -103,9 +103,11 @@ type GitCode interface {
 	// INVALID_INPUT when that symlink leads out of the root.
 	PathKind(ctx context.Context, dir, commit, path string) (GitEntry, error)
 	// WorktreeEntries lists a worktree's tracked paths (with their index
-	// kind, Deleted when gone from disk) and its untracked ones that are not
-	// ignored.
-	WorktreeEntries(ctx context.Context, dir string) ([]GitEntry, error)
+	// kind; with deleted, Deleted marks those gone from disk) and its
+	// untracked ones that are not ignored.
+	WorktreeEntries(ctx context.Context, dir string, deleted bool) ([]GitEntry, error)
+	// UntrackedFiles lists a worktree's untracked files git does not ignore.
+	UntrackedFiles(ctx context.Context, dir string) ([]string, error)
 	// Blob reads at most max bytes of the blob object.
 	Blob(ctx context.Context, dir, object string, max int64) ([]byte, error)
 	// Changes lists the files changed from base to head; head "" is the

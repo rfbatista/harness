@@ -134,17 +134,14 @@ func (c *Code) CodeDiff(ctx context.Context, q ports.CodeDiffQuery) (*domain.Cod
 		return nil, err
 	}
 	if plan.untracked {
-		list, err := c.d.Git.WorktreeEntries(ctx, plan.dir)
+		untracked, err := c.d.Git.UntrackedFiles(ctx, plan.dir)
 		if err != nil {
 			return nil, err
 		}
-		for _, g := range list {
-			if !g.Untracked {
-				continue
-			}
-			ch := ports.GitChange{Status: domain.ChangeUntracked, Path: g.Path, Added: -1, Deleted: 0}
-			if only == "" || only == g.Path {
-				lines, binary, err := c.d.Files.Lines(plan.dir, g.Path)
+		for _, p := range untracked {
+			ch := ports.GitChange{Status: domain.ChangeUntracked, Path: p, Added: -1, Deleted: 0}
+			if only == "" || only == p {
+				lines, binary, err := c.d.Files.Lines(plan.dir, p)
 				if err != nil {
 					return nil, err
 				}

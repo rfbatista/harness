@@ -33,31 +33,25 @@ func diffSides(base, head string) []string {
 	return []string{"--end-of-options", base, head}
 }
 
-// Changes lists the files changed from base to head with their line counts.
+// Changes lists the files changed from base to head with their line counts,
+// in one git diff: its raw records (":<modes> <oids> <status>\0path\0",
+// a second path for a rename or copy), then its numstat ones.
 func (Code) Changes(ctx context.Context, dir, base, head string) ([]ports.GitChange, error) {
-	sides := diffSides(base, head)
-	raw, err := codeOutput(ctx, dir, append(append([]string{"diff", "--raw", "-z", "--no-color", "--no-ext-diff", "-M", "-C"}, sides...), "--")...)
+	args := append([]string{"diff", "--raw", "--numstat", "-z", "--no-color", "--no-ext-diff", "--no-textconv", "-M", "-C"}, diffSides(base, head)...)
+	out, err := codeOutput(ctx, dir, append(args, "--")...)
 	if err != nil {
 		return nil, err
 	}
-	stat, err := codeOutput(ctx, dir, append(append([]string{"diff", "--numstat", "-z", "--no-color", "--no-ext-diff", "--no-textconv", "-M", "-C"}, sides...), "--")...)
-	if err != nil {
-		return nil, err
-	}
-	counts := parseNumstatZ(stat)
 	var changes []ports.GitChange
-	recs := strings.Split(raw, "\x00")
-	for i := 0; i < len(recs); i++ {
-		meta := recs[i]
-		if !strings.HasPrefix(meta, ":") {
-			continue
-		}
-		f := strings.Fields(meta)
+	recs := strings.Split(out, "\x00")
+	i := 0
+	for ; i < len(recs) && strings.HasPrefix(recs[i], ":"); i++ {
+		f := strings.Fields(recs[i])
 		if len(f) < 5 || i+1 >= len(recs) {
-			return nil, fmt.Errorf("git diff --raw: unexpected record %q", meta)
+			return nil, fmt.Errorf("git diff --raw: unexpected record %q", recs[i])
 		}
-		ch := ports.GitChange{Path: recs[i+1], Added: -1, Deleted: -1}
 		i++
+		ch := ports.GitChange{Path: recs[i], Added: -1, Deleted: -1}
 		switch f[4][0] {
 		case 'A':
 			ch.Status = domain.ChangeAdded
@@ -67,8 +61,8 @@ func (Code) Changes(ctx context.Context, dir, base, head string) ([]ports.GitCha
 			if i+1 >= len(recs) {
 				return nil, fmt.Errorf("git diff --raw: rename without a destination")
 			}
-			ch.OldPath, ch.Path = ch.Path, recs[i+1]
 			i++
+			ch.OldPath, ch.Path = ch.Path, recs[i]
 			ch.Status = domain.ChangeRenamed
 			if f[4][0] == 'C' {
 				ch.Status = domain.ChangeCopied
@@ -78,10 +72,13 @@ func (Code) Changes(ctx context.Context, dir, base, head string) ([]ports.GitCha
 		default: // M, U (unmerged), X
 			ch.Status = domain.ChangeModified
 		}
-		if n, ok := counts[ch.Path]; ok {
-			ch.Added, ch.Deleted = n[0], n[1]
-		}
 		changes = append(changes, ch)
+	}
+	counts := parseNumstatZ(strings.Join(recs[i:], "\x00"))
+	for j := range changes {
+		if n, ok := counts[changes[j].Path]; ok {
+			changes[j].Added, changes[j].Deleted = n[0], n[1]
+		}
 	}
 	return changes, nil
 }

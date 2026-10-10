@@ -292,18 +292,22 @@ func (c *Code) mergeBase(ctx context.Context, s *source) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	if s.src.Commit != "" {
+		if base, err := c.d.Git.MergeBase(ctx, s.repo.RootDir, ref, s.src.Commit); err == nil {
+			return base, nil
+		}
+	}
+	// No commit yet, or no merge base: say why, REF_NOT_FOUND when the base
+	// is gone.
 	base, err := c.d.Git.ResolveCommit(ctx, s.repo.RootDir, ref)
-	if err != nil {
-		return "", err
+	if err != nil || s.src.Commit == "" {
+		return base, err
 	}
-	if s.src.Commit == "" {
-		return base, nil
-	}
-	return c.d.Git.MergeBase(ctx, s.repo.RootDir, base, s.src.Commit)
+	return "", &domain.StructuredError{Code: "REF_NOT_FOUND", Message: ref + " and the workspace's branch share no history"}
 }
 
 func (c *Code) worktreeTree(ctx context.Context, s *source, dir string) ([]domain.TreeEntry, error) {
-	list, err := c.d.Git.WorktreeEntries(ctx, s.ws.Path)
+	list, err := c.d.Git.WorktreeEntries(ctx, s.ws.Path, false)
 	if err != nil {
 		return nil, err
 	}
@@ -359,18 +363,18 @@ func (c *Code) worktreeTree(ctx context.Context, s *source, dir string) ([]domai
 			e.Change = strp(state)
 		}
 		e.Kind = ch.entry.Kind
-		if ch.entry.Deleted {
-			if !changed {
-				continue // neither in the base nor on disk
-			}
-			if e.Kind != domain.EntrySymlink {
-				e.Kind = domain.EntryFile
-			}
-			entries = append(entries, e)
-			continue
-		}
 		if e.Kind != domain.EntrySubmodule {
 			st, err := c.d.Files.Stat(s.ws.Path, p)
+			if errs.Code(err) == "PATH_NOT_FOUND" {
+				// Tracked, gone from disk: listed when the base had it.
+				if changed {
+					if e.Kind != domain.EntrySymlink {
+						e.Kind = domain.EntryFile
+					}
+					entries = append(entries, e)
+				}
+				continue
+			}
 			if err != nil {
 				return nil, err
 			}
@@ -397,7 +401,7 @@ func strp(s string) *string { return &s }
 func (c *Code) allPaths(ctx context.Context, s *source) ([]string, error) {
 	var paths []string
 	if s.workspace() {
-		list, err := c.d.Git.WorktreeEntries(ctx, s.ws.Path)
+		list, err := c.d.Git.WorktreeEntries(ctx, s.ws.Path, true)
 		if err != nil {
 			return nil, err
 		}

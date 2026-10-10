@@ -235,23 +235,61 @@ func (c Code) TreeAt(ctx context.Context, dir, commit, p string, recursive bool)
 		return nil, err
 	}
 	if !recursive {
+		var links []string
+		for _, e := range entries {
+			if e.Kind == domain.EntrySymlink {
+				links = append(links, e.Object)
+			}
+		}
+		targets, err := blobs(ctx, dir, links, maxLinkTarget)
+		if err != nil {
+			return nil, err
+		}
 		for i, e := range entries {
 			if e.Kind == domain.EntrySymlink {
-				target, err := c.Blob(ctx, dir, e.Object, maxLinkTarget)
-				if err != nil {
-					return nil, err
-				}
-				entries[i].Target = string(target)
+				entries[i].Target = targets[e.Object]
 			}
 		}
 	}
 	return entries, nil
 }
 
+// blobs reads small blobs in one git cat-file --batch, each cut at max
+// bytes: "<oid> blob <size>\n<content>\n" per object asked.
+func blobs(ctx context.Context, dir string, objects []string, max int) (map[string]string, error) {
+	out := map[string]string{}
+	if len(objects) == 0 {
+		return out, nil
+	}
+	cmd := codeCmd(ctx, dir, "cat-file", "--batch")
+	cmd.Stdin = strings.NewReader(strings.Join(objects, "\n") + "\n")
+	raw, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("git cat-file --batch: %w", err)
+	}
+	for _, object := range objects {
+		header, rest, ok := bytes.Cut(raw, []byte("\n"))
+		if !ok {
+			return nil, fmt.Errorf("git cat-file --batch: short output")
+		}
+		f := strings.Fields(string(header))
+		if len(f) != 3 {
+			return nil, fmt.Errorf("git cat-file --batch: %q", header)
+		}
+		size, err := strconv.Atoi(f[2])
+		if err != nil || size+1 > len(rest) {
+			return nil, fmt.Errorf("git cat-file --batch: %q", header)
+		}
+		out[object] = string(rest[:min(size, max)])
+		raw = rest[size+1:]
+	}
+	return out, nil
+}
+
 // WorktreeEntries lists the index (one entry per path, conflicts merged),
-// marking what is gone from disk, and the untracked files git does not
-// ignore.
-func (Code) WorktreeEntries(ctx context.Context, dir string) ([]ports.GitEntry, error) {
+// with deleted marking what is gone from disk, and the untracked files git
+// does not ignore.
+func (c Code) WorktreeEntries(ctx context.Context, dir string, deleted bool) ([]ports.GitEntry, error) {
 	staged, err := codeOutput(ctx, dir, "ls-files", "-z", "-s", "--full-name")
 	if err != nil {
 		return nil, err
@@ -267,27 +305,44 @@ func (Code) WorktreeEntries(ctx context.Context, dir string) ([]ports.GitEntry, 
 		mode, _, _ := strings.Cut(meta, " ")
 		entries = append(entries, ports.GitEntry{Path: p, Kind: kindOfMode(mode), Size: -1})
 	}
-	deleted, err := codeOutput(ctx, dir, "ls-files", "-z", "-d", "--full-name")
+	if deleted {
+		out, err := codeOutput(ctx, dir, "ls-files", "-z", "-d", "--full-name")
+		if err != nil {
+			return nil, err
+		}
+		gone := map[string]bool{}
+		for p := range strings.SplitSeq(out, "\x00") {
+			gone[p] = p != ""
+		}
+		for i := range entries {
+			entries[i].Deleted = gone[entries[i].Path]
+		}
+	}
+	others, err := c.UntrackedFiles(ctx, dir)
 	if err != nil {
 		return nil, err
 	}
-	gone := map[string]bool{}
-	for p := range strings.SplitSeq(deleted, "\x00") {
-		gone[p] = p != ""
-	}
-	for i := range entries {
-		entries[i].Deleted = gone[entries[i].Path]
-	}
-	others, err := codeOutput(ctx, dir, "ls-files", "-z", "-o", "--exclude-standard", "--full-name")
-	if err != nil {
-		return nil, err
-	}
-	for p := range strings.SplitSeq(others, "\x00") {
-		if p != "" && !seen[p] {
+	for _, p := range others {
+		if !seen[p] {
 			entries = append(entries, ports.GitEntry{Path: p, Kind: domain.EntryFile, Size: -1, Untracked: true})
 		}
 	}
 	return entries, nil
+}
+
+// UntrackedFiles lists the untracked files git does not ignore.
+func (Code) UntrackedFiles(ctx context.Context, dir string) ([]string, error) {
+	out, err := codeOutput(ctx, dir, "ls-files", "-z", "-o", "--exclude-standard", "--full-name")
+	if err != nil {
+		return nil, err
+	}
+	var paths []string
+	for p := range strings.SplitSeq(out, "\x00") {
+		if p != "" {
+			paths = append(paths, p)
+		}
+	}
+	return paths, nil
 }
 
 // Blob reads at most max bytes of the blob, stopping git once it has them.
