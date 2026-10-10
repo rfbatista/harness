@@ -245,8 +245,9 @@ func (c Code) TreeAt(ctx context.Context, dir, commit, p string, recursive bool)
 	return entries, nil
 }
 
-// WorktreeEntries lists the index (one entry per path, conflicts merged)
-// and the untracked files git does not ignore.
+// WorktreeEntries lists the index (one entry per path, conflicts merged),
+// marking what is gone from disk, and the untracked files git does not
+// ignore.
 func (Code) WorktreeEntries(ctx context.Context, dir string) ([]ports.GitEntry, error) {
 	staged, err := codeOutput(ctx, dir, "ls-files", "-z", "-s", "--full-name")
 	if err != nil {
@@ -262,6 +263,17 @@ func (Code) WorktreeEntries(ctx context.Context, dir string) ([]ports.GitEntry, 
 		seen[p] = true
 		mode, _, _ := strings.Cut(meta, " ")
 		entries = append(entries, ports.GitEntry{Path: p, Kind: kindOfMode(mode), Size: -1})
+	}
+	deleted, err := codeOutput(ctx, dir, "ls-files", "-z", "-d", "--full-name")
+	if err != nil {
+		return nil, err
+	}
+	gone := map[string]bool{}
+	for p := range strings.SplitSeq(deleted, "\x00") {
+		gone[p] = p != ""
+	}
+	for i := range entries {
+		entries[i].Deleted = gone[entries[i].Path]
 	}
 	others, err := codeOutput(ctx, dir, "ls-files", "-z", "-o", "--exclude-standard", "--full-name")
 	if err != nil {

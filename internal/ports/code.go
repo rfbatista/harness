@@ -59,8 +59,11 @@ type GitEntry struct {
 	// Size is a blob's size in a tree; -1 when unknown.
 	Size int64
 	// Target is a symlink's target, read from its blob, in a tree.
-	Target    string
+	Target string
+	// Untracked and Deleted (tracked, gone from disk) describe a worktree's
+	// entries.
 	Untracked bool
+	Deleted   bool
 }
 
 // GitChange is one file changed between two sides, without its hunks.
@@ -100,7 +103,8 @@ type GitCode interface {
 	// INVALID_INPUT when that symlink leads out of the root.
 	PathKind(ctx context.Context, dir, commit, path string) (GitEntry, error)
 	// WorktreeEntries lists a worktree's tracked paths (with their index
-	// kind) and its untracked ones that are not ignored.
+	// kind, Deleted when gone from disk) and its untracked ones that are not
+	// ignored.
 	WorktreeEntries(ctx context.Context, dir string) ([]GitEntry, error)
 	// Blob reads at most max bytes of the blob object.
 	Blob(ctx context.Context, dir, object string, max int64) ([]byte, error)
