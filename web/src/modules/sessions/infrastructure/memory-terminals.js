@@ -71,6 +71,11 @@ export function memoryTerminals({ greeting = "claude is ready", history = [] } =
       h?.onClosed?.();
       open.delete(sessionId);
     },
+    /** Loses the connection with the process still running: the page is offline until it reconnects. */
+    drop(sessionId) {
+      open.get(sessionId)?.onClosed?.();
+      open.delete(sessionId);
+    },
     print(sessionId, text) {
       open.get(sessionId)?.onOutput(encoder.encode(text));
     },
