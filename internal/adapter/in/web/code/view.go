@@ -703,10 +703,12 @@ func mapView(s Seed, m domain.CodeMap) *MapView {
 
 // literalDir is the longest directory a pattern names literally (zones.js).
 func literalDir(pattern string) string {
-	segments := strings.Split(strings.TrimPrefix(strings.TrimPrefix(pattern, "./"), "/"), "/")
+	// Zone patterns are regular expressions (domain.ZoneMatcher); globs read the same way.
+	plain := strings.NewReplacer(`\.`, ".", `\/`, "/", `\-`, "-").Replace(strings.TrimPrefix(pattern, "^"))
+	segments := strings.Split(strings.TrimPrefix(strings.TrimPrefix(plain, "./"), "/"), "/")
 	var out []string
 	for _, s := range segments {
-		if s == "" || strings.ContainsAny(s, "*?[]{}!") {
+		if s == "" || strings.ContainsAny(s, `*?[]{}!()+|\$`) {
 			break
 		}
 		out = append(out, s)

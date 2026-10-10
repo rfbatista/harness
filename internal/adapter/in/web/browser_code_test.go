@@ -3,6 +3,7 @@ package web
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -405,6 +406,179 @@ func TestHistoryDiffsInTheBrowser(t *testing.T) {
 	}
 	if strings.Join(workingSections, ",") != "README.md,new.txt,nonl.txt" {
 		t.Errorf("working diff: %v", workingSections)
+	}
+	if e := errs.all(); len(e) > 0 {
+		t.Errorf("JS errors: %v", e)
+	}
+}
+
+// typeText types into the focused element one key at a time.
+func typeText(s string) chromedp.Action {
+	return chromedp.ActionFunc(func(ctx context.Context) error {
+		for _, r := range s {
+			if err := chromedp.KeyEvent(string(r)).Do(ctx); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
+// TestCodeKeysAndLargeFilesInTheBrowser: a deep link targets a range of a
+// file too large to load whole (shown windowed, not highlighted, with its
+// notice); L goes to a line near its end; T finds a file by a fuzzy query;
+// a symlink shows its placeholder.
+func TestCodeKeysAndLargeFilesInTheBrowser(t *testing.T) {
+	w := newCodeWorld(t, nil)
+	ctx, errs := browser(t)
+	step := ""
+	mark := func(n string) chromedp.Action {
+		return chromedp.ActionFunc(func(context.Context) error { step = n; return nil })
+	}
+	base := w.srv.URL + "/projects/" + w.f.ProjectID + "/repositories/" + w.repoID + "/code"
+
+	var notice, meta, hash, loc, link, outside string
+	var paletteOpen bool
+	var targeted []string
+	var rendered, total int
+	var goneTo bool
+	var elapsed time.Duration
+	var shot []byte
+	err := chromedp.Run(ctx,
+		chromedp.EmulateViewport(1440, 900),
+		chromedp.Navigate(base+"/files/big.txt#L45-L49"),
+		mark("p1"),
+		chromedp.Poll(`document.querySelectorAll('[data-ssr]').length === 0 && document.querySelectorAll('.code-view .code-lines .line[data-target]').length === 5`, nil, chromedp.WithPollingTimeout(10*time.Second)),
+		chromedp.Evaluate(`[...document.querySelectorAll('.code-view .code-lines .line[data-target]')].map(l => l.id)`, &targeted),
+		chromedp.Evaluate(`document.querySelector('.code-view .notice').textContent`, &notice),
+		chromedp.Evaluate(`document.querySelector('.code-view .meta').textContent`, &meta),
+		chromedp.Evaluate(`document.querySelectorAll('.code-view .code-lines .line').length`, &rendered),
+		chromedp.Evaluate(`JSON.parse(document.getElementById('code-seed').textContent).file.line_count`, &total),
+		chromedp.Focus(`.code-view .scroll`, chromedp.ByQuery),
+		chromedp.KeyEvent("l"),
+		mark("p2"),
+		chromedp.Sleep(300*time.Millisecond),
+		chromedp.Evaluate(`document.querySelector('dialog.palette[open] input') === document.activeElement`, &paletteOpen),
+		typeText("40000"),
+		chromedp.ActionFunc(func(ctx context.Context) error {
+			start := time.Now()
+			if err := chromedp.KeyEvent("\r").Do(ctx); err != nil {
+				return err
+			}
+			// Past the end: it clamps to the last line and says so.
+			err := chromedp.Poll(fmt.Sprintf(`!!document.querySelector('#L%d[data-target]')`, total), &goneTo, chromedp.WithPollingTimeout(5*time.Second)).Do(ctx)
+			elapsed = time.Since(start)
+			return err
+		}),
+		chromedp.Evaluate(`location.hash`, &hash),
+		chromedp.FullScreenshot(&shot, 80),
+		chromedp.KeyEvent("t"),
+		mark("p3"),
+		chromedp.Poll(`document.querySelector('dialog.palette[open] input') === document.activeElement`, nil, chromedp.WithPollingTimeout(3*time.Second)),
+		typeText("appgo"),
+		mark("p4"),
+		chromedp.Poll(`document.querySelector('dialog.palette [role=option] .label')?.textContent === 'app.go'`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.KeyEvent("\r"),
+		mark("p5"),
+		chromedp.Poll(`location.pathname.endsWith('/files/internal/app/app.go') && document.querySelectorAll('.code-view .code-lines .line').length === 4`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Location(&loc),
+		chromedp.Click(`.file-tree [title="link-in"] > .item`, chromedp.ByQuery),
+		mark("p6"),
+		chromedp.Poll(`document.querySelector('.code-view .placeholder strong')?.textContent === 'Symbolic link'`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Evaluate(`document.querySelector('.code-view .placeholder a')?.textContent ?? ''`, &link),
+		chromedp.Click(`.file-tree [title="link-out"] > .item`, chromedp.ByQuery),
+		mark("p7"),
+		chromedp.Poll(`!document.querySelector('.code-view .placeholder a')`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Evaluate(`document.querySelector('.code-view .placeholder p').textContent`, &outside),
+	)
+	if err != nil {
+		var dump string
+		_ = chromedp.Run(ctx, chromedp.Evaluate(`JSON.stringify({url: location.href, dialog: !!document.querySelector("dialog[open]"), active: document.activeElement?.outerHTML.slice(0,200), main: document.querySelector(".code-layout")?.outerHTML.slice(0,600)})`, &dump))
+		t.Fatalf("at %s: %v\n%s\nJS errors: %v", step, err, dump, errs.all())
+	}
+	saveShot("code-large-file.jpg", shot)
+	if !paletteOpen {
+		t.Error("L did not open Go to line with its field focused")
+	}
+	if strings.Join(targeted, ",") != "L45,L46,L47,L48,L49" {
+		t.Errorf("targeted %v", targeted)
+	}
+	if !strings.HasPrefix(notice, "Showing the first 1 MiB") || !strings.Contains(meta, "plain text: too long to highlight") {
+		t.Errorf("notice %q, meta %q", notice, meta)
+	}
+	if total < 30_000 || rendered > 1500 {
+		t.Errorf("%d lines, %d rendered: not windowed", total, rendered)
+	}
+	if hash != fmt.Sprintf("#L%d", total) || elapsed > 2*time.Second {
+		t.Errorf("L 40000 in a %d-line file: hash %q in %v", total, hash, elapsed)
+	}
+	if loc != base+"/files/internal/app/app.go" {
+		t.Errorf("Find file opened %q", loc)
+	}
+	if link != "Open the target" || outside != "Points outside this repository, so it is not shown." {
+		t.Errorf("symlinks: %q / %q", link, outside)
+	}
+	if e := errs.all(); len(e) > 0 {
+		t.Errorf("JS errors: %v", e)
+	}
+}
+
+// TestCodeMapAndNarrowLayoutInTheBrowser: the map's zone opens Files at its
+// directory; below 44rem one side shows at a time, with a back control.
+func TestCodeMapAndNarrowLayoutInTheBrowser(t *testing.T) {
+	w := newCodeWorld(t, nil)
+	ctx, errs := browser(t)
+	step := ""
+	mark := func(n string) chromedp.Action {
+		return chromedp.ActionFunc(func(context.Context) error { step = n; return nil })
+	}
+	base := w.srv.URL + "/projects/" + w.f.ProjectID + "/repositories/" + w.repoID + "/code"
+	var cards []string
+	var loc, back string
+	var sideShown, mainShown, sideAfter, mainAfter bool
+	var shot []byte
+	visible := func(sel string, out *bool) chromedp.Action {
+		return chromedp.Evaluate(`(() => { const e = document.querySelector('`+sel+`'); return !!e && getComputedStyle(e).display !== 'none' })()`, out)
+	}
+	err := chromedp.Run(ctx,
+		chromedp.EmulateViewport(1440, 900),
+		chromedp.Navigate(base+"/map"),
+		mark("p1"),
+		chromedp.Poll(`document.querySelectorAll('[data-ssr]').length === 0 && document.querySelectorAll('.code-map section.context').length > 0`, nil, chromedp.WithPollingTimeout(10*time.Second)),
+		chromedp.Evaluate(`[...document.querySelectorAll('.code-map section.context h3')].map(h => h.textContent.trim())`, &cards),
+		chromedp.Click(`.code-map .zones a`, chromedp.ByQuery),
+		mark("p2"),
+		chromedp.Poll(`location.pathname.endsWith('/files/internal') && !!document.querySelector('.file-tree [title="internal/app"]')`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Location(&loc),
+		chromedp.EmulateViewport(560, 900),
+		chromedp.Navigate(base),
+		mark("p3"),
+		chromedp.Poll(`document.querySelectorAll('[data-ssr]').length === 0 && document.querySelectorAll('.file-tree [role=treeitem]').length > 0`, nil, chromedp.WithPollingTimeout(10*time.Second)),
+		chromedp.Sleep(200*time.Millisecond),
+		visible(".code-layout > .side", &sideShown),
+		visible(".code-layout > .main", &mainShown),
+		chromedp.Click(`.file-tree [title="README.md"] > .item`, chromedp.ByQuery),
+		mark("p4"),
+		chromedp.Poll(`document.querySelectorAll('.code-view .code-lines .line').length > 0`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		visible(".code-layout > .side", &sideAfter),
+		visible(".code-layout > .main", &mainAfter),
+		chromedp.Evaluate(`document.querySelector('[data-code-back]').textContent`, &back),
+		chromedp.FullScreenshot(&shot, 80),
+	)
+	if err != nil {
+		var dump string
+		_ = chromedp.Run(ctx, chromedp.Evaluate(`JSON.stringify({url: location.href, dialog: !!document.querySelector("dialog[open]"), active: document.activeElement?.outerHTML.slice(0,200), main: document.querySelector(".code-layout")?.outerHTML.slice(0,600)})`, &dump))
+		t.Fatalf("at %s: %v\n%s\nJS errors: %v", step, err, dump, errs.all())
+	}
+	saveShot("code-narrow.jpg", shot)
+	if strings.Join(cards, ",") != "Core,No bounded context,Unzoned files" {
+		t.Errorf("map cards %v", cards)
+	}
+	if loc != base+"/files/internal" {
+		t.Errorf("zone opened %q", loc)
+	}
+	if !sideShown || mainShown || sideAfter || !mainAfter || back != "‹ Files" {
+		t.Errorf("narrow: side %v main %v, after opening side %v main %v, back %q", sideShown, mainShown, sideAfter, mainAfter, back)
 	}
 	if e := errs.all(); len(e) > 0 {
 		t.Errorf("JS errors: %v", e)

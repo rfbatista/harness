@@ -660,6 +660,7 @@ export function codeBrowser({ gateway, highlighter, prefs, history = globalThis.
     async openPath(path, { push = true, hash = "" } = {}) {
       this.showMain = true;
       this.problem = null;
+      if (!this.tree.levels[""]) await this.loadDirectory("");
       for (const dir of missingAncestors(this.tree, path)) await this.loadDirectory(dir);
       this.tree = revealPath(this.tree, path);
       const entry = this.entryOf(path);

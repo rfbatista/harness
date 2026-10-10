@@ -211,6 +211,9 @@ test("a zone link opens the longest literal directory of its pattern", () => {
   assert.equal(literalDir("web/src/*.js"), "web/src");
   assert.equal(literalDir("**/*.go"), "");
   assert.equal(literalDir("docs/README.md"), "docs");
+  assert.equal(literalDir("^internal/"), "internal", "a regular expression");
+  assert.equal(literalDir("^internal/adapter/out/git/.*\\.go$"), "internal/adapter/out/git");
+  assert.equal(literalDir("^web\\/src\\/"), "web/src");
 });
 
 test("the map's cards: contexts in order, then no context, then unzoned", () => {

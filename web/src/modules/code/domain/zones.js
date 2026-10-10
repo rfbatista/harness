@@ -63,10 +63,12 @@ export function zoneDot(ids, index) {
  * A pattern whose first segment is a wildcard opens the root ("").
  */
 export function literalDir(pattern) {
-  const segments = (pattern ?? "").replace(/^\.?\//, "").split("/");
+  // Zone patterns are regular expressions (domain.ZoneMatcher); globs read the same way.
+  const plain = (pattern ?? "").replace(/^\^/, "").replace(/\\([./-])/g, "$1").replace(/^\.?\//, "");
+  const segments = plain.split("/");
   const out = [];
   for (const s of segments) {
-    if (s === "" || /[*?[\]{}!]/.test(s)) break;
+    if (s === "" || /[*?[\]{}!()+|\\$]/.test(s)) break;
     out.push(s);
   }
   // A last literal segment with a dot is most likely a file: open its directory.
