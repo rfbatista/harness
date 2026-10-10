@@ -51,6 +51,13 @@ export const codePanel = (deps) => (/** @type {PanelInput} */ panel) => {
     kind: "session",
     sessionId: "",
     shown: false,
+    /** The window is wide enough (64rem) for the split view to show the list beside the detail. */
+    wide: true,
+
+    /** Expand only helps where the session list shows beside the code. */
+    get canExpand() {
+      return this.wide || this.expanded;
+    },
 
     init() {
       this.sessionId = panel.sessionId;
@@ -142,6 +149,11 @@ export const codePanel = (deps) => (/** @type {PanelInput} */ panel) => {
     },
 
     watchWidth() {
+      const wide = globalThis.matchMedia?.("(width >= 64rem)");
+      if (wide) {
+        this.wide = wide.matches;
+        wide.addEventListener?.("change", (e) => (this.wide = e.matches));
+      }
       const el = this.$refs?.layout;
       if (!el || typeof ResizeObserver !== "function") return;
       const rem = parseFloat(getComputedStyle(el.ownerDocument.documentElement).fontSize) || 16;

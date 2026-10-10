@@ -13,6 +13,7 @@ import { applyChange, displayOrder, group, INITIAL_TERMINAL_SIZE, isTerminal, of
 import { artifactTitle, taskDesignHref } from "../artifactView.js";
 import { announceMessage } from "../channelView.js";
 import { delegateOption, startedBy, statusCheckView, summary, toDetailView, toGroupViews } from "../view.js";
+import { DEFAULT_TEXT_SIZE, nextTextSize, TEXT_SIZES } from "../screenPrefs.js";
 
 const TICK_MS = 30_000;
 
@@ -32,9 +33,25 @@ export const FRESH_MS = 8_000;
  *   channel?: import("../../domain/ports.js").ChannelGateway,  the architect channel; without it the page shows none
  *   channelStore?: ChannelStore,
  *   location?: { search: string },  ?session=<id> opens that session (a comment links to the session that wrote it)
+ *   prefs?: ReturnType<typeof import("../screenPrefs.js").screenPrefs>,  this browser's text size and focus mode
+ *   shell?: { setFocus: (on: boolean) => void },  the app shell around the page (focus mode hides the rail and more)
+ *   clipboard?: { writeText: (text: string) => Promise<void> },
+ *   isPhone?: () => boolean,
  * }} deps
  */
-export const sessionsPage = ({ gateway, clock, channel = null, channelStore = { messages: [], loaded: false }, setTimeout = globalThis.setTimeout.bind(globalThis), location = globalThis.location, history = globalThis.history }) => () => {
+export const sessionsPage = ({
+  gateway,
+  clock,
+  channel = null,
+  channelStore = { messages: [], loaded: false },
+  setTimeout = globalThis.setTimeout.bind(globalThis),
+  location = globalThis.location,
+  history = globalThis.history,
+  prefs = { textSize: () => DEFAULT_TEXT_SIZE, setTextSize() {}, focus: () => false, setFocus() {} },
+  shell = { setFocus() {} },
+  clipboard = { writeText: (text) => globalThis.navigator.clipboard.writeText(text) },
+  isPhone = () => globalThis.matchMedia?.("(width < 48rem)").matches ?? false,
+}) => () => {
   let unfollow = () => {};
   let unfollowChannel = null;
   let ticker = null;
@@ -57,9 +74,19 @@ export const sessionsPage = ({ gateway, clock, channel = null, channelStore = { 
     creating: false,
     /** On a narrow screen, the detail is shown in place of the list. */
     detailOpen: false,
-    /** The selected session's delete is awaiting confirmation. */
-    confirmingDelete: false,
     deleting: false,
+    /** What each mounted agent terminal last said about itself (terminal-status), by session id. */
+    terminalStatuses: {},
+    /** The same for the App tab's run terminal on screen, and which run that is. */
+    runStatus: null,
+    shownRunId: "",
+    /** A terminal that ended while it was open: its screen stays, read-only, under the note. */
+    keptTerminalId: null,
+    /** Bumped on a resume, so the resumed session mounts a fresh terminal. */
+    terminalEpochs: {},
+    /** This browser's terminal text size, in px, and focus mode. */
+    textSize: prefs.textSize(),
+    focusMode: prefs.focus(),
     /** The detail pane's tab: the agent's terminal, the application run from the worktree, or what the session designed. */
     detailTab: "agent",
     /** Sessions that just arrived over the feed (started elsewhere: by an agent, the TUI). */
@@ -134,13 +161,90 @@ export const sessionsPage = ({ gateway, clock, channel = null, channelStore = { 
     get showingApp() {
       return this.showingSession && this.detailTab === "app";
     },
-    /** The session whose terminal to mount, as a one-item list keyed on its id. */
-    get terminalIds() {
-      return this.showingAgent && this.selected.terminal === "attach" ? [this.selected.id] : [];
+    /** The session whose terminal to mount, as a one-item list keyed on it (and on its resumes), with its id. */
+    get terminalPanes() {
+      if (!this.showingAgent) return [];
+      const id = this.selected.id;
+      if (this.selected.terminal !== "attach" && this.keptTerminalId !== id) return [];
+      return [{ key: `${id}:${this.terminalEpochs[id] ?? 0}`, id }];
     },
-    get terminalNote() {
-      return this.showingAgent ? this.selected.terminalNote : "";
+    /** The status of the terminal on screen: the agent's on Agent, the run's on App; null without one. */
+    get paneTerminal() {
+      if (this.terminalPanes.length > 0) {
+        const id = this.terminalPanes[0].id;
+        return this.terminalStatuses[id] ?? { id, kind: "agent", state: "connecting", title: "", exitCode: null, lostAt: null, scrolledUp: false, newLines: 0 };
+      }
+      if (this.showingApp && this.shownRunId && this.runStatus?.id === this.shownRunId) return this.runStatus;
+      return null;
     },
+    /** The tab row's terminal tools, for the terminal on screen; null on a tab without one. */
+    get paneTools() {
+      const t = this.paneTerminal;
+      if (!t) return null;
+      const down = t.state === "connecting" || t.state === "reconnecting" || t.state === "offline";
+      const run = t.kind === "run";
+      let dotLabel;
+      if (t.state === "ended") dotLabel = run ? `Exited with code ${t.exitCode ?? 0}` : `Ended · exit ${t.exitCode ?? 0}`;
+      else if (run) dotLabel = "Live · keys go to the app";
+      else dotLabel = t.title ? `Live · ${t.title}` : "Live";
+      return {
+        id: t.id,
+        kind: t.kind,
+        down,
+        statusState: { connecting: "queued", reconnecting: "reconnecting", offline: "offline" }[t.state] ?? "",
+        word: { connecting: "connecting…", reconnecting: "reconnecting…", offline: `offline · lost ${lostWords(t.lostAt, this.now)}` }[t.state] ?? "",
+        reconnectDisabled: t.state === "connecting",
+        reconnectBusy: t.state === "reconnecting",
+        dotState: t.state === "ended" ? "done" : "live",
+        dotLabel,
+        jump: !down && t.scrolledUp,
+        jumpCount: t.newLines > 999 ? "999+" : t.newLines > 0 ? String(t.newLines) : "",
+        jumpLabel: t.newLines > 0 ? `Jump to latest, ${t.newLines} new lines` : "Jump to latest",
+        groupLabel: run ? "Run terminal tools" : "Terminal tools",
+      };
+    },
+    /** The strip at the top of the Agent pane when there is no live terminal: why, and Resume when it would be accepted. */
+    get paneNote() {
+      if (!this.showingAgent) return null;
+      const mounted = this.terminalPanes.length > 0;
+      const status = mounted ? this.paneTerminal : null;
+      if (mounted && status.state !== "ended") return null;
+      const code = status?.exitCode ?? null;
+      const text =
+        this.selected.terminalNote ||
+        `This session ended. claude exited${code ? ` with code ${code}` : ""}. The screen below is its last, read-only.`;
+      return {
+        text,
+        failed: this.selected.state === "failed" || (code !== null && code !== 0),
+        resumable: this.canResumeSelected,
+      };
+    },
+    /** The note with no terminal under it: an ended session opened, one in the TUI, a headless one. */
+    get noteOnly() {
+      return this.terminalPanes.length === 0 ? this.paneNote : null;
+    },
+    /** The agent waits on the person: the Agent tab's dot and the terminal's amber edge. */
+    get attention() {
+      return this.showingSession && this.selected.state === "waiting";
+    },
+    /** Focus mode is on, and there is a terminal's Exit focus to leave it by. */
+    get focusActive() {
+      return this.focusMode && this.paneTools !== null;
+    },
+    get textSizes() {
+      return TEXT_SIZES.map((s) => ({ ...s, value: String(s.px), checked: s.px === this.textSize }));
+    },
+    get textSizeLabel() {
+      return TEXT_SIZES.find((s) => s.px === this.textSize)?.label ?? "Default";
+    },
+    get shortId() {
+      return this.selectedId ? this.selectedId.slice(0, 8) : "";
+    },
+    /** The head's meta: who runs it and since when. */
+    get who() {
+      return this.selected ? `${this.selected.agent} · ${this.selected.updated}` : "";
+    },
+
     /** The session whose App panel to mount, keyed on its id, with what the panel needs. */
     get appPanels() {
       if (!this.showingApp || !this.selected.repositoryId) return [];
@@ -250,6 +354,9 @@ export const sessionsPage = ({ gateway, clock, channel = null, channelStore = { 
           remembered: this.lastIntervals[session.id] ?? 0,
           state: view.state,
           detail: view.detail,
+          next: view.next,
+          last: view.last,
+          meta: check.state === "active" ? `· checks ${shortEvery(check.everyMinutes)}` : `· ${view.short}`,
         },
       ];
     },
@@ -529,7 +636,7 @@ export const sessionsPage = ({ gateway, clock, channel = null, channelStore = { 
       if (this.detailTab === "conversation" && this.selectedRole() === "") this.detailTab = "agent";
       if (this.detailTab === "code" && !this.hasCode) this.detailTab = "agent";
       this.creating = false;
-      this.confirmingDelete = false;
+      if (this.keptTerminalId !== id) this.keptTerminalId = null;
     },
 
     /** The person opened a session (a click or tap on its row): on a narrow screen its detail replaces the list. */
@@ -573,7 +680,6 @@ export const sessionsPage = ({ gateway, clock, channel = null, channelStore = { 
     // reports back with session-created or new-session-cancelled.
     startCreating() {
       if (this.cannotCreate) return;
-      this.confirmingDelete = false;
       this.creating = true;
       this.detailOpen = true;
     },
@@ -599,15 +705,8 @@ export const sessionsPage = ({ gateway, clock, channel = null, channelStore = { 
       this.error = null;
     },
 
-    // Delete: ask first, inline, then remove.
-    askDelete() {
-      if (this.hasSelection) this.confirmingDelete = true;
-    },
-
-    cancelDelete() {
-      this.confirmingDelete = false;
-    },
-
+    // Delete: asked in the confirm on ⋯ (session-delete), then removed. The
+    // head goes with the session, so the focus goes back to the list.
     async deleteSelected() {
       const id = this.selectedId;
       if (!id || this.deleting) return;
@@ -616,7 +715,7 @@ export const sessionsPage = ({ gateway, clock, channel = null, channelStore = { 
         await gateway.remove(id);
         this.sessions = applyChange(this.sessions, { kind: "deleted", id });
         if (this.selectedId === id) this.selectedId = null;
-        this.confirmingDelete = false;
+        this.$nextTick(() => this.$refs.list?.focus());
       } catch (err) {
         this.error = describeError(err);
       } finally {
@@ -644,6 +743,8 @@ export const sessionsPage = ({ gateway, clock, channel = null, channelStore = { 
       try {
         const session = await gateway.resume(id, INITIAL_TERMINAL_SIZE);
         this.sessions = applyChange(this.sessions, { kind: "upsert", session }, ofTask(this.ticketId));
+        if (this.keptTerminalId === id) this.keptTerminalId = null;
+        this.terminalEpochs = { ...this.terminalEpochs, [id]: (this.terminalEpochs[id] ?? 0) + 1 };
         this.now = clock.now();
         this.detailTab = "agent";
         this.error = null;
@@ -660,5 +761,124 @@ export const sessionsPage = ({ gateway, clock, channel = null, channelStore = { 
     dismissError() {
       this.error = null;
     },
+
+    // ── the session screen: tab-row tools, text size, focus mode, ⋯ ──────
+    /** @param {CustomEvent<import("../components/terminal.js").TerminalStatus>} event */
+    terminalStatus(event) {
+      const status = event.detail;
+      if (status.kind === "run") {
+        this.runStatus = status;
+        return;
+      }
+      const before = this.terminalStatuses[status.id];
+      if (status.newLines > 0 && !(before?.newLines > 0)) this.announcement = "New output below";
+      this.terminalStatuses = { ...this.terminalStatuses, [status.id]: status };
+      if (status.state === "ended" && status.id === this.selectedId && this.showingAgent) this.keptTerminalId = status.id;
+    },
+    /** @param {CustomEvent<{ id: string }>} event  the App panel's run on screen ("" for none) */
+    runShown(event) {
+      this.shownRunId = event.detail?.id ?? "";
+    },
+    requestReconnect() {
+      const t = this.paneTools;
+      if (t) this.$dispatch("terminal-reconnect-requested", { id: t.id });
+    },
+    requestJump() {
+      const t = this.paneTools;
+      if (t) this.$dispatch("terminal-jump-requested", { id: t.id });
+    },
+    /** @param {number | string} px */
+    setTextSize(px) {
+      const size = Number(px);
+      if (!TEXT_SIZES.some((s) => s.px === size)) return;
+      this.textSize = size;
+      prefs.setTextSize(size);
+      this.$dispatch("terminal-text-size", { px: size });
+    },
+    cycleTextSize() {
+      this.setTextSize(nextTextSize(this.textSize));
+    },
+    toggleFocus() {
+      this.focusMode = !this.focusMode;
+      prefs.setFocus(this.focusMode);
+    },
+    /** Puts focus mode on the shell (x-effect): only while a terminal's tools, and so its Exit focus, show. */
+    applyFocus() {
+      shell.setFocus(this.focusActive);
+    },
+    async copySessionId() {
+      const id = this.selectedId;
+      if (!id) return;
+      try {
+        await clipboard.writeText(id);
+        this.announcement = "Session id copied";
+      } catch {
+        this.announcement = `Could not copy. The session id is ${id}`;
+      }
+    },
+    /**
+     * An item of a menu in the session screen (they bubble up here): the head's
+     * ⋯ (copy-id, ask-delete) and the tab row's text size (text-size, with px).
+     * @param {CustomEvent<{ action: string, value?: string }>} event  its target is the menu
+     */
+    menuSelect(event) {
+      const { action, value } = event.detail ?? {};
+      if (action === "copy-id") return this.copySessionId();
+      if (action === "text-size") return this.setTextSize(value);
+      if (action === "ask-delete") this.$dispatch("dialog-open", { id: "session-delete", anchor: event.target?.querySelector?.(":scope > button") });
+    },
+    /**
+     * On a phone, ⋯ opens the session sheet, not the menu: caught on the way
+     * down (the head listens in the capture phase), before the menu sees the
+     * click or the key that would open it.
+     * @param {Event} event
+     */
+    moreCapture(event) {
+      const trigger = /** @type {HTMLElement | null} */ (event.target)?.closest?.("#session-more");
+      if (!trigger || !isPhone()) return;
+      if (event.type === "keydown" && !["Enter", " ", "ArrowDown", "ArrowUp"].includes(/** @type {KeyboardEvent} */ (event).key)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      this.$dispatch("dialog-open", { id: "session-sheet", anchor: trigger });
+    },
+    /** @param {CustomEvent<{ id: string, action: string }>} event  a button in the confirm or the sheet (popupDialog's act) */
+    dialogAction(event) {
+      const { id, action } = event.detail ?? {};
+      if (id !== "session-delete" && id !== "session-sheet") return;
+      return this.sessionAction({ detail: { action } });
+    },
+    /** @param {{ detail?: { action: string } }} event */
+    async sessionAction(event) {
+      switch (event.detail?.action) {
+        case "delete":
+          return this.deleteSelected();
+        case "ask-delete":
+          // From the sheet: the confirm opens where the sheet was, anchored to ⋯.
+          return this.$dispatch("dialog-open", { id: "session-delete", anchor: globalThis.document?.getElementById("session-more") });
+        case "stop":
+          return this.stopSelected();
+        case "copy-id":
+          return this.copySessionId();
+        case "text-size":
+          return this.cycleTextSize();
+        case "resume":
+          return this.resume();
+      }
+    },
   };
 };
+
+/** An interval, short: 20m, 1h. */
+function shortEvery(minutes) {
+  return minutes < 60 || minutes % 60 ? `${minutes}m` : `${minutes / 60}h`;
+}
+
+/** How long ago a terminal lost its connection, for the offline word. */
+function lostWords(lostAt, now) {
+  if (lostAt === null || lostAt === undefined) return "just now";
+  const seconds = Math.max(0, Math.round((now.getTime() - lostAt) / 1000));
+  if (seconds < 60) return "just now";
+  const minutes = Math.round(seconds / 60);
+  return minutes < 60 ? `${minutes}m ago` : `${Math.round(minutes / 60)}h ago`;
+}
+

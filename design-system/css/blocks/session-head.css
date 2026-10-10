@@ -1,0 +1,93 @@
+/*
+ * Session head — one row of fixed height: state, title, agent and age, then
+ * the actions. Its height never changes with what the session has (checks or
+ * not, a popup open or not), so it never resizes the terminal (L4). An ended
+ * or failed session keeps the same shape: its Resume is on the pane's note
+ * strip (pane-note.css), not here.
+ * <header class="session-head">
+ *   <button class="button" data-variant="ghost" data-icon data-split-back aria-label="Sessions">‹</button>
+ *   <h2>title</h2>
+ *   <p class="meta"><span class="status" data-state>…</span><span class="who">agent · age</span>
+ *     <span class="checks">· checks 20m</span></p>
+ *   <div class="actions">[PR badge] [.check-button] <a class="button" data-wide>Git history</a>
+ *     [Stop] <div class="menu">⋯</div></div></header>
+ * When the column is tight: agent and age hide first (< 46rem), then the
+ * [data-wide] actions leave for their ⋯ items ([data-narrow], < 40rem), then
+ * the check button drops its "next" (< 34rem). The title truncates last.
+ * [data-split-back] shows in split-view's narrow mode only (split-view.css).
+ * Phone (< 48rem): two lines, back · title · ⋯ over state · agent · age ·
+ * checks; every other action is in the ⋯ sheet (sheet.css).
+ */
+
+@layer blocks {
+  .session-head {
+    display: flex;
+    align-items: center;
+    gap: var(--space-s);
+    block-size: 3.25rem;
+    padding-inline: var(--space-m) var(--space-s);
+    border-block-end: var(--border-width) solid var(--color-line);
+    background: var(--color-canvas);
+
+    & > [data-split-back] { order: -2; align-self: center; margin-inline-start: calc(var(--space-xs) * -1); }
+
+    & > h2 {
+      flex: 0 1 auto;
+      min-inline-size: 4rem;
+      font-size: var(--text-lg);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* On a wide column the meta's parts sit in the row itself, the state first. */
+    & > .meta { display: contents; }
+    & > .meta > .status { order: -1; flex: none; }
+    & > .meta > .who {
+      flex: 0 100 auto;
+      min-inline-size: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      color: var(--color-ink-faint);
+      font-size: var(--text-sm);
+    }
+    & > .meta > .checks { display: none; }
+
+    & > .actions { display: flex; align-items: center; gap: var(--space-2xs); flex: none; margin-inline-start: auto; }
+
+    @container session (width < 46rem) { & > .meta > .who { display: none; } }
+    @container session (width < 40rem) { & .actions > [data-wide] { display: none; } }
+    @container session (width >= 40rem) { & [role="menuitem"][data-narrow] { display: none; } }
+
+    @media (width < 48rem) {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr) auto;
+      grid-template-rows: var(--size-touch) 1.5rem;
+      grid-template-areas: "back title more" "meta meta meta";
+      gap: 0;
+      block-size: calc(var(--size-touch) + 1.5rem + var(--space-2xs));
+      padding: 0 var(--space-2xs) var(--space-2xs);
+
+      & > [data-split-back] { grid-area: back; margin: 0; inline-size: var(--size-touch); min-block-size: var(--size-touch); }
+      & > h2 { grid-area: title; min-inline-size: 0; padding-inline-start: var(--space-2xs); font-size: var(--text-md); }
+      & > .meta {
+        grid-area: meta;
+        display: flex;
+        align-items: center;
+        gap: var(--space-s);
+        min-inline-size: 0;
+        padding-inline: var(--space-m);
+        overflow: hidden;
+        color: var(--color-ink-faint);
+        font-size: var(--text-xs);
+        white-space: nowrap;
+      }
+      & > .meta > .status { order: 0; font-size: inherit; }
+      & > .meta > :is(.who, .checks) { display: inline; font-size: inherit; }
+      & > .actions { grid-area: more; }
+      & > .actions > :not(.menu) { display: none; }
+      & > .actions .button[data-icon] { inline-size: var(--size-touch); min-block-size: var(--size-touch); }
+    }
+  }
+}

@@ -205,6 +205,7 @@ func TestSessionCodeTabInTheBrowser(t *testing.T) {
 
 	var paths []string
 	var badge, current, afterStep, loc string
+	var tools bool
 	var shot, filesShot []byte
 	err := chromedp.Run(ctx,
 		chromedp.EmulateViewport(1440, 900),
@@ -214,6 +215,7 @@ func TestSessionCodeTabInTheBrowser(t *testing.T) {
 		chromedp.Poll(`document.querySelector('[role=tab][aria-selected=true] .badge')?.textContent`, &badge, chromedp.WithPollingTimeout(5*time.Second)),
 		chromedp.Poll(`document.querySelectorAll('section[aria-label=Code] .diff-view .code-lines .line').length > 0`, nil, chromedp.WithPollingTimeout(5*time.Second)),
 		chromedp.Evaluate(`document.querySelector('.diff-summary a[aria-current=location] .name').textContent`, &current),
+		chromedp.Evaluate(`!!document.querySelector('.pane-tabs .tools')`, &tools),
 		chromedp.Sleep(300*time.Millisecond),
 		chromedp.FullScreenshot(&shot, 85),
 		chromedp.Focus(`section[aria-label=Code] .main`, chromedp.ByQuery),
@@ -245,6 +247,9 @@ func TestSessionCodeTabInTheBrowser(t *testing.T) {
 	_ = want
 	if badge != strconv.Itoa(len(paths))+" files" {
 		t.Errorf("badge = %q, want %d files", badge, len(paths))
+	}
+	if tools {
+		t.Error("the terminal's tools show on the Code tab")
 	}
 	if current == afterStep {
 		t.Errorf("] did not move to the next file (%q)", current)
@@ -676,6 +681,53 @@ func TestCodeTreeKeysInTheBrowser(t *testing.T) {
 	}
 	if strings.Join(levels, " ") != "docs:1/2/13 docs/new.md:2/1/1" {
 		t.Errorf("levels after *: %v", levels)
+	}
+	if e := errs.all(); len(e) > 0 {
+		t.Errorf("JS errors: %v", e)
+	}
+}
+
+// TestSessionCodeTabOnAPhone: the Code tab sits in the session screen's tab
+// row on a phone, one code side at a time, the page never scrolls sideways,
+// and ⋯ still opens the session sheet.
+func TestSessionCodeTabOnAPhone(t *testing.T) {
+	w := newCodeWorld(t, withSession(domain.SessionRunning, func(w *codeWorld) string { return w.at.WorkspaceID }))
+	ctx, errs := browser(t)
+	url := w.srv.URL + "/projects/" + w.f.ProjectID + "/tasks/t1/sessions/s1/code"
+	var tabs []string
+	var overflow, sideShown, mainShown, mainAfter, sheetOpen, expand bool
+	var shot []byte
+	visible := func(sel string, out *bool) chromedp.Action {
+		return chromedp.Evaluate(`(() => { const e = document.querySelector('`+sel+`'); return !!e && getComputedStyle(e).display !== 'none' && e.getBoundingClientRect().width > 0 })()`, out)
+	}
+	err := chromedp.Run(ctx,
+		chromedp.EmulateViewport(375, 700),
+		chromedp.Navigate(url),
+		chromedp.Poll(`document.querySelectorAll('[data-ssr]').length === 0 && document.querySelectorAll('section[aria-label=Code] .diff-summary .changed a').length > 0`, nil, chromedp.WithPollingTimeout(10*time.Second)),
+		chromedp.Evaluate(`[...document.querySelectorAll('.pane-tabs [role=tab]')].map(b => b.firstChild.textContent.trim())`, &tabs),
+		chromedp.Evaluate(`document.documentElement.scrollWidth > window.innerWidth`, &overflow),
+		visible(`section[aria-label=Code] .code-layout > .side`, &sideShown),
+		visible(`section[aria-label=Code] .code-layout > .main`, &mainShown),
+		chromedp.Evaluate(`!!document.querySelector('[data-code-expand]')`, &expand),
+		chromedp.Evaluate(`document.querySelector('section[aria-label=Code] .diff-summary .changed a').click()`, nil),
+		chromedp.Sleep(300*time.Millisecond),
+		visible(`section[aria-label=Code] .code-layout > .main`, &mainAfter),
+		chromedp.FullScreenshot(&shot, 80),
+		chromedp.Evaluate(`document.getElementById('session-more').click()`, nil),
+		chromedp.Poll(`!!document.querySelector('#session-sheet:popover-open')`, &sheetOpen, chromedp.WithPollingTimeout(5*time.Second)),
+	)
+	if err != nil {
+		t.Fatalf("%v\nJS errors: %v", err, errs.all())
+	}
+	saveShot("code-session-phone.jpg", shot)
+	if strings.Join(tabs, ",") != "Agent,App,Design,Code" {
+		t.Errorf("tabs %v", tabs)
+	}
+	if expand {
+		t.Error("Expand shows on a phone, where the list is already hidden")
+	}
+	if overflow || !sideShown || mainShown || !mainAfter || !sheetOpen {
+		t.Errorf("overflow %v, side %v main %v, main after opening %v, sheet %v", overflow, sideShown, mainShown, mainAfter, sheetOpen)
 	}
 	if e := errs.all(); len(e) > 0 {
 		t.Errorf("JS errors: %v", e)

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/chromedp/chromedp"
+	"github.com/chromedp/chromedp/kb"
 
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
@@ -62,9 +63,10 @@ func crowdedTerminalPage(t *testing.T, pty http.Handler) *httptest.Server {
 
 // paneProblems lists every way the terminal under scope breaks the layout
 // contract, empty when it fits: the last row below the screen's content box
-// or under the bar (L3), the text past the content box or under xterm's
-// scrollbar (L3), the bar below the stream bar or the window (L2), and any
-// scrolling box between the document and the terminal (L1, L5).
+// (L3), the text past the content box or under xterm's scrollbar (L3), the
+// terminal ending below the stream bar or the window (L1, L2), a footer bar
+// left in it, its tools missing from the tab row (L7), and any scrolling box
+// between the document and the terminal (L1, L5).
 func paneProblems(scope string) string {
 	return `((scope) => {
   const out = [];
@@ -78,19 +80,20 @@ func paneProblems(scope string) string {
     right: box.right - parseFloat(cs.paddingRight) - parseFloat(cs.borderRightWidth),
   };
   const last = term.querySelector('.xterm-rows')?.lastElementChild?.getBoundingClientRect();
-  const bar = term.querySelector(':scope > .bar').getBoundingClientRect();
   if (!last) out.push('no rows drawn');
-  else {
-    if (last.bottom > content.bottom + 0.5) out.push('last row ends at ' + last.bottom + ', the screen at ' + content.bottom);
-    if (last.bottom > bar.top + 0.5) out.push('last row ends at ' + last.bottom + ', under the bar at ' + bar.top);
-  }
+  else if (last.bottom > content.bottom + 0.5) out.push('last row ends at ' + last.bottom + ', the screen at ' + content.bottom);
   const text = term.querySelector('.xterm-screen').getBoundingClientRect();
   const scrollbar = term.querySelector('.xterm-scrollable-element > .scrollbar.vertical')?.getBoundingClientRect();
   const right = scrollbar && scrollbar.width ? Math.min(content.right, scrollbar.left) : content.right;
   if (text.right > right + 0.5) out.push('text ends at x=' + text.right + ', past ' + right);
+  const pane = term.getBoundingClientRect();
   const stream = document.querySelector('.stream-bar').getBoundingClientRect();
-  if (bar.bottom > stream.top + 0.5) out.push('bar ends at ' + bar.bottom + ', below the stream bar at ' + stream.top);
-  if (bar.bottom > innerHeight + 0.5) out.push('bar ends at ' + bar.bottom + ', below the window at ' + innerHeight);
+  if (pane.bottom > stream.top + 0.5) out.push('terminal ends at ' + pane.bottom + ', below the stream bar at ' + stream.top);
+  if (pane.bottom > innerHeight + 0.5) out.push('terminal ends at ' + pane.bottom + ', below the window at ' + innerHeight);
+  if (term.querySelector(':scope > .bar')) out.push('the terminal still has a footer bar');
+  const tabs = document.querySelector('section[aria-label="Session detail"] .pane-tabs');
+  if (!tabs?.querySelector('.tools [role=status]')) out.push('no connection status in the tab row');
+  else if (pane.top + 0.5 < tabs.getBoundingClientRect().bottom) out.push('terminal starts at ' + pane.top + ', above the tab row\'s end at ' + tabs.getBoundingClientRect().bottom);
   for (let el = term; el; el = el.parentElement) {
     if (el.scrollHeight > el.clientHeight + 1) out.push((el.className || el.tagName).toString().trim() + ' scrolls: ' + el.scrollHeight + ' > ' + el.clientHeight);
   }
@@ -158,7 +161,7 @@ func openCrowdedTask(t *testing.T, width, height int64, scheme string) (context.
 		chromedp.EmulateViewport(width, height),
 		emulateColorScheme(scheme),
 		chromedp.Navigate(srv.URL+"/projects/p1/tasks/t1"),
-		chromedp.Poll(`document.querySelector('.terminal .bar .status')?.textContent === 'live'`, nil, chromedp.WithPollingTimeout(10*time.Second)),
+		chromedp.Poll(terminalLive, nil, chromedp.WithPollingTimeout(10*time.Second)),
 		settle(),
 	)
 	if err != nil {
@@ -191,8 +194,9 @@ func TestSessionTerminalFitsItsPaneOnTheDesktop(t *testing.T) {
 	}
 }
 
-// The header growing (a status-check row appears) or shrinking, and the
-// window resizing, each refit the terminal and send one resize.
+// A text size, focus mode on and off, and the window resizing each refit the
+// terminal and send one resize (L4). The head has a fixed height: it never
+// sends one.
 func TestSessionTerminalRefitsOnceForEachPaneChange(t *testing.T) {
 	ctx, errs, pty := openCrowdedTask(t, 1280, 800, "dark")
 	checkFits(t, ctx, pty, errs, "after attaching")
@@ -208,9 +212,32 @@ func TestSessionTerminalRefitsOnceForEachPaneChange(t *testing.T) {
 		}
 		checkFits(t, ctx, pty, errs, when)
 	}
-	header := `document.querySelector('section[aria-label="Session detail"] .divide-bottom')`
-	step("header grown", chromedp.Evaluate(header+`.insertAdjacentHTML('beforeend', '<div id="grown" style="block-size: 90px">a status-check row</div>')`, nil))
-	step("header shrunk back", chromedp.Evaluate(`document.getElementById('grown').remove()`, nil))
+	pickTextSize := func(label string) chromedp.Action {
+		return chromedp.Tasks{
+			chromedp.Evaluate(`document.querySelector('.pane-tabs .menu.pref > button').click()`, nil),
+			clickButton(`.pane-tabs .menu.pref [role=menu]`, label),
+		}
+	}
+	focusButton := `document.querySelector('.pane-tabs .tools .button.pref[aria-pressed]')`
+	step("text larger", pickTextSize("Larger"))
+	step("text back to default", pickTextSize("Default"))
+	step("focus mode on", chromedp.Evaluate(focusButton+`.click()`, nil))
+	var hidden []string
+	if err := chromedp.Run(ctx, chromedp.Evaluate(`['.rail', 'main .toolbar', '[role=listbox][aria-label="Sessions of this task"]', '.session-head'].filter(s => { const el = document.querySelector(s); return !el || el.checkVisibility(); })`, &hidden)); err != nil {
+		t.Fatal(err)
+	}
+	if len(hidden) > 0 {
+		t.Errorf("focus mode left these shown (or missing): %v", hidden)
+	}
+	var stillFocused bool
+	if err := chromedp.Run(ctx, chromedp.Focus(`.terminal .xterm-helper-textarea`, chromedp.ByQuery), chromedp.KeyEvent(kb.Escape), settle(),
+		chromedp.Evaluate(`document.querySelector('.app-shell').hasAttribute('data-focus')`, &stillFocused)); err != nil {
+		t.Fatal(err)
+	}
+	if !stillFocused {
+		t.Error("Esc left focus mode: it belongs to the agent")
+	}
+	step("focus mode off", chromedp.Evaluate(focusButton+`.click()`, nil))
 	step("window grown", chromedp.EmulateViewport(1600, 1000))
 	step("window shrunk", chromedp.EmulateViewport(1280, 800))
 	if e := errs.all(); len(e) > 0 {
@@ -235,7 +262,7 @@ func TestSessionTerminalRefitsWhenItsTabComesBack(t *testing.T) {
 	}
 	err = chromedp.Run(ctx,
 		clickButton(`[role=tablist]`, "Agent"),
-		chromedp.Poll(`document.querySelector('.terminal .bar .status')?.textContent === 'live'`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Poll(terminalLive, nil, chromedp.WithPollingTimeout(5*time.Second)),
 		settle(),
 	)
 	if err != nil {
@@ -284,12 +311,22 @@ func TestSessionTerminalOnANarrowScreen(t *testing.T) {
 			if focusInTerminal {
 				t.Error("opening the session focused its terminal")
 			}
+			if c.width < 768 {
+				// A phone: the session's own head leads, with its back button.
+				var shown []string
+				if err := chromedp.Run(ctx, chromedp.Evaluate(`['.topbar', 'main .toolbar'].filter(s => document.querySelector(s)?.checkVisibility())`, &shown)); err != nil {
+					t.Fatal(err)
+				}
+				if len(shown) > 0 {
+					t.Errorf("with a session open on a phone these still show: %v", shown)
+				}
+			}
 			checkFits(t, ctx, pty, errs, "session opened")
 			shoot(t, ctx, fmt.Sprintf("terminal-narrow-%dx%d", c.width, c.height))
 
 			var listBack, detailGone bool
 			err = chromedp.Run(ctx,
-				clickButton(`section[aria-label="Session detail"]`, "Sessions"),
+				chromedp.Evaluate(`document.querySelector('section[aria-label="Session detail"] [data-split-back]').click()`, nil),
 				chromedp.Poll(listShown, nil, chromedp.WithPollingTimeout(5*time.Second)),
 				chromedp.Evaluate(listShown, &listBack),
 				chromedp.Evaluate(`!(`+detailShown+`)`, &detailGone),

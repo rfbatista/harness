@@ -108,7 +108,7 @@ templ liveSourceBar() {
 				<button type="button" class="[ button ]" data-size="sm" data-reload x-on:click="reload">Reload <kbd>R</kbd></button>
 			</template>
 			<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-bind:disabled="gone" x-on:click="openFinder">Find file <kbd>T</kbd></button>
-			<template x-if="kind === 'session'">
+			<template x-if="kind === 'session' && canExpand">
 				<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" data-code-expand title="Give the code the whole width, hiding the session list" x-bind:aria-pressed="expandPressed" x-on:click="toggleExpand">Expand <kbd>⇧E</kbd></button>
 			</template>
 		</div>

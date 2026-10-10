@@ -1,6 +1,13 @@
 /*
  * App shell — the top bar across, the task rail and the current screen
  * beneath it, and the stream bar at the foot of the screen.
+ * Exception: data-focus (focus mode, from a session's tab row; remembered per
+ * browser): the rail, the page toolbar, the session list and the session
+ * head go; the top bar, the tab row and the stream bar stay. One refit on
+ * enter and one on exit (contract L4). Never bound to Esc.
+ * On a phone, a screen whose split view shows its detail (a session open in
+ * place of the list) gives the whole height to it: the top bar and the page
+ * toolbar step aside, and the detail's own head leads with its back button.
  */
 
 @layer blocks {
@@ -40,6 +47,20 @@
       grid-template-columns: minmax(0, 1fr);
       grid-template-rows: auto minmax(0, 1fr) auto;
       grid-template-areas: "top" "main" "stream"; /* the rail is a drawer (rail.css) */
+
+      &:has(.split-view[data-detail]) > .topbar,
+      &:has(.split-view[data-detail]) main > :is(.toolbar, :has(> .toolbar)) { display: none; }
+    }
+
+    &[data-focus] {
+      grid-template-columns: minmax(0, 1fr);
+      grid-template-areas: "top" "main" "stream";
+
+      & > .rail { display: none; }
+      & main > :is(.toolbar, :has(> .toolbar)) { display: none; } /* the task page wraps its toolbar in its editor */
+      & .split-view { grid-template-columns: minmax(0, 1fr); }
+      & .split-view > :first-child { display: none; }
+      & .session > .session-head { display: none; }
     }
   }
 }

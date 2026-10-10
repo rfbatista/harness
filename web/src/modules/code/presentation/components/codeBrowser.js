@@ -385,6 +385,10 @@ export function codeBrowser({ gateway, highlighter, prefs, history = globalThis.
       const refs = current && !this.refs.includes(current) ? [current, ...this.refs] : this.refs;
       return refs.map((r) => ({ key: r, value: r, selected: r === current }));
     },
+    /** Only a session's tab expands (codePanel narrows it to wide windows). */
+    get canExpand() {
+      return this.kind === "session";
+    },
     get expandPressed() {
       return String(this.expanded);
     },

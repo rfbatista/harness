@@ -27,6 +27,11 @@ templ Page(v PageView) {
 			x-on:artifact-moved="artifactMoved"
 			x-on:code-files-counted="codeCounted"
 			x-on:code-expand="codeExpand"
+			x-on:terminal-status="terminalStatus"
+			x-on:run-shown="runShown"
+			x-on:menu-select="menuSelect"
+			x-on:dialog-action="dialogAction"
+			x-effect="applyFocus()"
 		>
 			@templ.JSONScript("sessions-seed", v.Seed)
 			if v.Code != nil {
@@ -210,67 +215,17 @@ templ detail(form NewSessionForm, paint *code.View) {
 			@newSessionForm(form)
 		</template>
 		<template x-if="showingSession">
-			<div class="[ frame ]">
-				<div class="[ flow ] [ flow-space-s pad-l divide-bottom ]">
-					<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" data-split-back x-on:click="closeDetail">Sessions</button>
-					<div class="[ repel ]">
-						<h2 x-text="selected.title"></h2>
-						<div class="[ cluster ] [ gutter-xs ]">
-							<template x-for="ws in selectedWorkspaces" x-bind:key="ws">
-								@pullrequests.Badge("ws")
-							</template>
-							<template x-if="historyHref">
-								<a class="[ button ]" data-variant="ghost" data-size="sm" x-bind:href="historyHref">Git history</a>
-							</template>
-							<template x-if="selected.resumable">
-								<button type="button" class="[ button ]" data-variant="primary" data-size="sm" x-bind:disabled="cannotResume" x-bind:aria-busy="resumingSelected" x-on:click="resume()">Resume</button>
-							</template>
-							<button type="button" class="[ button ]" data-size="sm" x-bind:disabled="cannotStop" x-bind:aria-busy="stopping" x-on:click="stopSelected">Stop</button>
-							<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-bind:disabled="deleting" x-on:click="askDelete">Delete</button>
-						</div>
-					</div>
-					<div class="[ cluster ] [ gutter-m text-sm color-ink-muted ]">
-						<span class="[ status ]" x-bind:data-state="selected.state" x-text="selected.word"></span>
-						<span x-text="selected.agent"></span>
-						<span x-text="selected.updated"></span>
-					</div>
-					<template x-for="bar in statusCheckBars" x-bind:key="bar.key">
-						@statusCheckBar()
-					</template>
-					<template x-if="confirmingDelete">
-						<div class="[ banner ]" data-tone="danger" role="alertdialog" aria-label="Delete this session?">
-							<div class="[ flow ] [ flow-space-3xs grow ]">
-								<strong>Delete this session?</strong>
-								<span x-text="deleteConsequence"></span>
-							</div>
-							<div class="[ cluster ] [ gutter-xs ]">
-								<button type="button" class="[ button ]" data-variant="danger" data-size="sm" x-bind:aria-busy="deleting" x-on:click="deleteSelected">Delete session</button>
-								<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-on:click="cancelDelete">Keep it</button>
-							</div>
-						</div>
-					</template>
-				</div>
-				<div class="[ tabs ]" role="tablist" aria-label="Session views">
-					<button type="button" role="tab" x-bind:aria-selected="agentTabSelected" x-on:click="showAgent">Agent</button>
-					<button type="button" role="tab" x-bind:aria-selected="appTabSelected" x-on:click="showApp">App</button>
-					<button type="button" role="tab" x-bind:aria-selected="designTabSelected" x-on:click="showDesign">
-						Design
-						<template x-if="designBadge">
-							<span class="[ badge ]" data-tone="signal" x-text="designBadge"></span>
-						</template>
-					</button>
-					<template x-if="hasCode">
-						<button type="button" role="tab" x-bind:aria-selected="codeTabSelected" x-on:click="showCode">
-							Code
-							<template x-if="codeBadge">
-								<span class="[ badge ]" x-text="codeBadge"></span>
-							</template>
-						</button>
-					</template>
-					@conversationTab()
-				</div>
-				<template x-for="sid in terminalIds" x-bind:key="sid">
+			<section class="[ session ]" aria-label="Session">
+				@sessionHead()
+				@paneTabs()
+				<template x-for="t in terminalPanes" x-bind:key="t.key">
 					@terminalPane()
+				</template>
+				<template x-if="noteOnly">
+					<div class="[ terminal ]" data-state="ended">
+						@paneNote()
+						<div class="[ screen ]"></div>
+					</div>
 				</template>
 				<template x-for="panel in appPanels" x-bind:key="panel.key">
 					@appPanel()
@@ -287,17 +242,7 @@ templ detail(form NewSessionForm, paint *code.View) {
 				<template x-if="appUnavailable">
 					@components.Empty("No worktree to run from", "This session was not started on a repository, so there is no application to run. Start a session on a repository to run its app beside the agent.")
 				</template>
-				<template x-if="terminalNote">
-					<div class="[ pad-l ]">
-						<div class="[ banner ]">
-							<span class="[ grow ]" x-text="terminalNote"></span>
-							<template x-if="selected.resumable">
-								<button type="button" class="[ button ]" data-size="sm" x-bind:disabled="cannotResume" x-bind:aria-busy="resumingSelected" x-on:click="resume()">Resume session</button>
-							</template>
-						</div>
-					</div>
-				</template>
-			</div>
+			</section>
 		</template>
 		<template x-if="showingNothing">
 			@components.Empty("Pick a session", "Select one on the left, move with J and K, or start a new one with N.")
@@ -409,16 +354,28 @@ templ newSessionForm(form NewSessionForm) {
 // terminalPane is the selected session's PTY, drawn by xterm.js. It is
 // mounted once per session (the x-for key), so switching sessions detaches.
 templ terminalPane() {
-	<div class="[ terminal ]" x-data="sessionsTerminal(sid)" x-on:terminal-focus-requested.window="focus" data-scroll>
+	<div
+		class="[ terminal ]"
+		x-data="sessionsTerminal(t.id)"
+		x-bind:data-state="state"
+		x-bind:data-attention="attention ? '' : null"
+		x-on:terminal-focus-requested.window="focus"
+		x-on:terminal-reconnect-requested.window="reconnectRequested"
+		x-on:terminal-jump-requested.window="jumpRequested"
+		x-on:terminal-text-size.window="textSizeRequested"
+	>
+		<template x-if="state === 'ended' && paneNote">
+			@paneNote()
+		</template>
 		<div class="[ screen ]" x-ref="screen" x-on:click="focus"></div>
-		<div class="[ bar ]">
-			<span class="[ status ]" x-bind:data-state="statusState" x-text="stateWord">connecting</span>
-			<span class="[ color-ink-faint truncate grow ]" x-text="title"></span>
-			<template x-if="canReconnect">
-				<button type="button" class="[ button ]" data-size="sm" x-on:click="reconnect">Reconnect</button>
-			</template>
-		</div>
+		<template x-if="state === 'connecting'">
+			@connectingNotice()
+		</template>
 	</div>
+}
+
+templ connectingNotice() {
+	<p class="[ notice ]" role="status"><span class="[ skeleton ]"></span>Connecting to the terminal…</p>
 }
 
 // appPanel runs the session's repository's application from its worktree:
@@ -426,7 +383,7 @@ templ terminalPane() {
 // through, so Ctrl+C reaches the app). One run is on screen at a time; the
 // session's earlier runs are a click away.
 templ appPanel() {
-	<section class="[ frame ]" aria-label="Application" x-data="runsAppPanel(panel)" x-on:terminal-exited="refresh">
+	<section class="[ frame ]" aria-label="Application" x-data="runsAppPanel(panel)" x-on:terminal-exited="refresh" x-effect="reportRun()">
 		<div class="[ flow ] [ flow-space-s pad-l divide-bottom ]">
 			<div class="[ source ]" aria-label="Where the code comes from">
 				<p>
@@ -497,16 +454,18 @@ templ appPanel() {
 			</template>
 		</div>
 		<template x-for="rid in runIds" x-bind:key="rid">
-			<div class="[ terminal ]" x-data="sessionsRunTerminal(rid)" data-scroll>
+			<div
+				class="[ terminal ]"
+				x-data="sessionsRunTerminal(rid)"
+				x-bind:data-state="state"
+				x-on:terminal-reconnect-requested.window="reconnectRequested"
+				x-on:terminal-jump-requested.window="jumpRequested"
+				x-on:terminal-text-size.window="textSizeRequested"
+			>
 				<div class="[ screen ]" x-ref="screen" x-on:click="focus"></div>
-				<div class="[ bar ]">
-					<span class="[ status ]" x-bind:data-state="statusState" x-text="stateWord">connecting</span>
-					<span class="[ code color-ink-faint truncate grow ]" x-text="runDir" x-bind:title="runDir"></span>
-					<span class="[ color-ink-faint text-sm ]">keys go to the app</span>
-					<template x-if="canReconnect">
-						<button type="button" class="[ button ]" data-size="sm" x-on:click="reconnect">Reconnect</button>
-					</template>
-				</div>
+				<template x-if="state === 'connecting'">
+					@connectingNotice()
+				</template>
 			</div>
 		</template>
 		<template x-if="showsEmpty">

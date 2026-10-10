@@ -7,11 +7,15 @@ import { terminal } from "./terminal.js";
 file("sessions/presentation/terminal");
 
 function fakeScreen() {
-  const screen = { drawn: [], written: "", size: { cols: 80, rows: 24 }, nextFit: null, focused: 0, disposed: false, input: null };
+  const screen = { drawn: [], written: "", size: { cols: 80, rows: 24 }, nextFit: null, focused: 0, disposed: false, input: null, fontSizes: [], bottomed: 0, cursorHidden: 0, options: null };
   const decoder = new TextDecoder();
   const create = (container, input) => {
     screen.input = input;
+    screen.options = input;
     return {
+      setFontSize: (px) => screen.fontSizes.push(px),
+      scrollToBottom: () => screen.bottomed++,
+      hideCursor: () => screen.cursorHidden++,
       draw: (s) => {
         screen.drawn.push(s);
         screen.size = { cols: s.cols, rows: s.rows };
@@ -30,7 +34,7 @@ function fakeScreen() {
   return { screen, create };
 }
 
-function setup(history = []) {
+function setup(history = [], { kind = "agent", textSize = () => 13, now = () => 1000 } = {}) {
   const terms = memoryTerminals({ greeting: "claude is ready", history });
   const { screen, create } = fakeScreen();
   const timers = manualTimers();
@@ -38,7 +42,7 @@ function setup(history = []) {
   const el = document.createElement("div");
   const refs = { screen: document.createElement("div") };
   const mounted = mount(
-    () => terminal({ terminals: terms.gateway, createScreen: create, timers, observeResize: (_, cb) => ((resized = cb), () => {}) })("s1"),
+    () => terminal({ terminals: terms.gateway, createScreen: create, timers, kind, textSize, now, observeResize: (_, cb) => ((resized = cb), () => {}) })("s1"),
     { el },
   );
   Object.defineProperty(mounted.instance, "$refs", { value: refs });
@@ -131,22 +135,6 @@ test("destroying the terminal drops a pending fit", async () => {
   assert.equal(terms.sent.get("s1")?.filter((m) => m.type === "resize").length ?? 0, 0);
 });
 
-test("an exit is shown with its code; a drop offers to reconnect", async () => {
-  const { instance, terms } = setup();
-  await flush();
-  terms.exit("s1", 2);
-  assert.equal(instance.state, "exited");
-  assert.equal(instance.stateWord, "exited (code 2)");
-  assert.equal(instance.canReconnect, false);
-
-  const other = setup();
-  await flush();
-  other.instance.state = "live";
-  other.instance.connect(); // a fresh connection…
-  other.instance.state = "closed"; // …that dropped
-  assert.equal(other.instance.canReconnect, true);
-});
-
 test("output, titles, resizes and a reconnect's snapshot never move the focus; asking for it does", async () => {
   const { instance, screen, terms, timers, resize } = setup();
   await flush();
@@ -166,7 +154,7 @@ test("output, titles, resizes and a reconnect's snapshot never move the focus; a
 test("Reconnect focuses the terminal on the press, not on the snapshot that follows", async () => {
   const { instance, screen } = setup();
   await flush();
-  instance.state = "closed";
+  instance.state = "offline";
   instance.reconnect();
   assert.equal(screen.focused, 1, "focused on the press");
   await flush();
@@ -180,4 +168,81 @@ test("destroy detaches without stopping the session", async () => {
   instance.destroy();
   assert.ok(screen.disposed);
   assert.equal(terms.sent.get("s1").at(-1).type, "close");
+});
+
+const statuses = (dispatched) => dispatched.filter((d) => d.name === "terminal-status").map((d) => d.detail);
+const resizesOf = (terms) => terms.sent.get("s1")?.filter((m) => m.type === "resize") ?? [];
+
+test("reports its state up as it goes: connecting, then live, with its kind and window title", async () => {
+  const { instance, dispatched, terms } = setup([], { kind: "run" });
+  assert.equal(instance.state, "connecting");
+  assert.deepEqual(statuses(dispatched)[0], { id: "s1", kind: "run", state: "connecting", title: "", exitCode: null, lostAt: null, scrolledUp: false, newLines: 0 });
+  await flush();
+  terms.retitle("s1", "✳ Ionizing…");
+  const last = statuses(dispatched).at(-1);
+  assert.deepEqual([last.state, last.title, last.kind], ["live", "✳ Ionizing…", "run"]);
+});
+
+test("a dropped connection is offline since when it was lost; Reconnect is reconnecting, then live again", async () => {
+  let clock = 1000;
+  const { instance, dispatched, terms } = setup([], { now: () => clock });
+  await flush();
+  clock = 5000;
+  terms.drop("s1");
+  assert.equal(instance.state, "offline");
+  assert.equal(statuses(dispatched).at(-1).lostAt, 5000);
+  instance.reconnect();
+  assert.equal(instance.state, "reconnecting", "a reconnect the person started, not a first attach");
+  await flush();
+  assert.equal(instance.state, "live");
+  assert.equal(statuses(dispatched).at(-1).lostAt, null);
+});
+
+test("an exit ends it: read-only, the cursor hidden, the code reported", async () => {
+  const { instance, screen, dispatched, terms } = setup();
+  await flush();
+  terms.exit("s1", 3);
+  assert.equal(instance.state, "ended", "the drop that follows the exit does not make it offline");
+  assert.equal(screen.cursorHidden, 1);
+  assert.deepEqual([statuses(dispatched).at(-1).state, statuses(dispatched).at(-1).exitCode], ["ended", 3]);
+});
+
+test("mounts at the remembered text size; a new size refits at once, with one resize", async () => {
+  const { instance, screen, terms } = setup([], { textSize: () => 15 });
+  assert.equal(screen.options.fontSize, 15);
+  await flush();
+  screen.nextFit = { cols: 70, rows: 20 };
+  instance.textSizeRequested({ detail: { px: 12 } });
+  assert.deepEqual(screen.fontSizes, [12]);
+  assert.deepEqual(resizesOf(terms), [{ type: "resize", size: { cols: 70, rows: 20 } }], "no wait for the debounce: the pane did not move");
+});
+
+test("Jump to latest scrolls to the bottom and never takes the focus; requests for another terminal are ignored", async () => {
+  const { instance, screen } = setup();
+  await flush();
+  instance.jumpRequested({ detail: { id: "other" } });
+  assert.equal(screen.bottomed, 0);
+  instance.jumpRequested({ detail: { id: "s1" } });
+  assert.equal(screen.bottomed, 1);
+  assert.equal(screen.focused, 0, "F2: only a click on the screen, the Agent tab or Reconnect focuses it");
+});
+
+test("a Reconnect asked from the tab row focuses the terminal on the press (F2); for another terminal, nothing", async () => {
+  const { instance, screen, terms } = setup();
+  await flush();
+  terms.drop("s1");
+  instance.reconnectRequested({ detail: { id: "other" } });
+  assert.equal(instance.state, "offline");
+  instance.reconnectRequested({ detail: { id: "s1" } });
+  assert.equal(instance.state, "reconnecting");
+  assert.equal(screen.focused, 1);
+});
+
+test("scrolling up and new lines below are reported, for the tab row's Jump to latest", async () => {
+  const { screen, dispatched } = setup();
+  await flush();
+  screen.input.onScrollState({ scrolledUp: true, newLines: 0 });
+  screen.input.onScrollState({ scrolledUp: true, newLines: 12 });
+  const last = statuses(dispatched).at(-1);
+  assert.deepEqual([last.scrolledUp, last.newLines], [true, 12]);
 });

@@ -1,0 +1,24 @@
+/* The design/ mockup pages' own layout. Blocks: design-system/css; frames and
+   fake output: design-system/session-screen.css. */
+
+body { background: var(--color-canvas); color: var(--color-ink); }
+.page { max-inline-size: 86rem; margin-inline: auto; padding: var(--space-2xl) var(--space-l) var(--space-3xl); }
+.page > header { display: grid; gap: var(--space-s); max-inline-size: 76ch; }
+.page > header p { color: var(--color-ink-muted); }
+.page h1 { font-size: var(--text-2xl); }
+.part { margin-block-start: var(--space-3xl); display: grid; gap: var(--space-m); }
+.part > h2 { font-size: var(--text-xl); }
+.part > .lede { color: var(--color-ink-muted); max-inline-size: 76ch; }
+.cap { font-size: var(--text-xs); color: var(--color-ink-faint); text-transform: uppercase; letter-spacing: 0.06em; font-weight: var(--weight-medium); margin-block-end: var(--space-xs); }
+.pair { display: grid; gap: var(--space-l); grid-template-columns: repeat(auto-fit, minmax(min(100%, 36rem), 1fr)); align-items: start; }
+.grid3 { display: grid; gap: var(--space-l); grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr)); align-items: start; }
+.phones { display: flex; flex-wrap: wrap; gap: var(--space-xl); align-items: start; }
+.specs { font-size: var(--text-sm); color: var(--color-ink-muted); max-inline-size: 80ch; padding-inline-start: 1.2rem; display: grid; gap: var(--space-2xs); }
+.specs strong, .specs code { color: var(--color-ink); }
+.specs code, .tok { font-family: var(--font-mono); font-size: 0.92em; }
+table.spec { border-collapse: collapse; font-size: var(--text-sm); inline-size: 100%; }
+table.spec :is(th, td) { text-align: start; padding: var(--space-xs) var(--space-s); border-block-end: 1px solid var(--color-line); vertical-align: top; }
+table.spec th { color: var(--color-ink-faint); font-weight: var(--weight-medium); font-size: var(--text-xs); text-transform: uppercase; letter-spacing: 0.05em; }
+table.spec td:first-child { white-space: nowrap; color: var(--color-ink); }
+table.spec td { color: var(--color-ink-muted); }
+

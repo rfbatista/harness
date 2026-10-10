@@ -1,6 +1,7 @@
 // Shell-wide components, available on every page.
 
 import { combobox } from "./components/combobox.js";
+import { popupDialog } from "./components/dialog.js";
 import { dropdown } from "./components/dropdown.js";
 import { listbox } from "./components/listbox.js";
 import { menu } from "./components/menu.js";
@@ -19,6 +20,7 @@ export function registerShared(Alpine, { prefs }) {
   Alpine.data("dropdown", dropdown());
   Alpine.data("listbox", listbox());
   Alpine.data("menu", menu());
+  Alpine.data("popupDialog", popupDialog());
   Alpine.data("projectPicker", projectPicker());
   Alpine.data("streamStatus", streamStatus());
   Alpine.data("streamAnnouncer", streamAnnouncer());
