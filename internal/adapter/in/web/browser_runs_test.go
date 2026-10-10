@@ -74,7 +74,7 @@ func TestAppTabRunsACommandInTheWorktree(t *testing.T) {
 	rows := `document.querySelector('[aria-label=Application] .terminal .xterm-rows')?.textContent ?? ''`
 	// The ANSI color reaches xterm as a style, not as text.
 	colored := `[...document.querySelectorAll('[aria-label=Application] .xterm-rows span')].some(s => s.textContent.includes('app is up') && [...s.classList].some(c => c.startsWith('xterm-fg-')))`
-	var runState, afterStop, source, worktree string
+	var runState, afterStop, source, worktree, problems string
 	var shot []byte
 	err = chromedp.Run(ctx,
 		chromedp.EmulateViewport(1280, 800),
@@ -87,6 +87,8 @@ func TestAppTabRunsACommandInTheWorktree(t *testing.T) {
 		chromedp.Evaluate(`document.querySelector('[aria-label=Application] .source .code').textContent`, &worktree),
 		clickButton(`[aria-label=Application]`, "Run"),
 		chromedp.Poll(colored, nil, chromedp.WithPollingTimeout(10*time.Second)),
+		chromedp.Sleep(400*time.Millisecond), // the resize debounce
+		chromedp.Evaluate(paneProblems(`[aria-label=Application]`), &problems),
 		chromedp.FullScreenshot(&shot, 80),
 		clickButton(`[aria-label=Application]`, "Stop"),
 		chromedp.Poll(`document.querySelector('[aria-label=Application] .repel .status')?.textContent === 'stopped'`, nil, chromedp.WithPollingTimeout(10*time.Second)),
@@ -97,6 +99,9 @@ func TestAppTabRunsACommandInTheWorktree(t *testing.T) {
 	)
 	if err != nil {
 		t.Fatalf("%v\nJS errors: %v", err, errs.all())
+	}
+	if problems != "" {
+		t.Errorf("the run terminal does not fit its pane (layout contract L3, L6):\n%s", problems)
 	}
 	if want := "Runs harness on branch agent/add-sse-feed-1a2b — this session's worktree, with the agent's changes, not your own checkout."; source != want {
 		t.Errorf("source line = %q\nwant          %q", source, want)

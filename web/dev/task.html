@@ -104,12 +104,14 @@
           </div>
         </template>
 
-        <div class="[ split-view ]" data-scroll>
+        <div class="[ split-view ]" data-scroll :data-detail="detailOpenAttr">
           <div
             class="[ list ] [ divide-end ]"
             role="listbox"
             aria-label="Sessions"
             tabindex="0"
+            x-ref="list"
+            @keydown.enter.self.prevent="openSelected"
             @keydown.j.prevent="next"
             @keydown.down.prevent="next"
             @keydown.k.prevent="previous"
@@ -150,7 +152,7 @@
                   <span class="[ badge ]" :data-tone="group.tone" x-text="group.count"></span>
                 </div>
                 <template x-for="row in group.rows" :key="row.id">
-                  <div class="[ row ]" data-stacked role="option" :aria-selected="row.selected" :data-attention="row.attention" @click="select(row.id)">
+                  <div class="[ row ]" data-stacked role="option" :aria-selected="row.selected" :data-attention="row.attention" @click="open(row.id)">
                     <span class="[ status ]" :data-state="row.state" x-text="row.word"></span>
                     <span class="[ title ]">
                       <span x-text="row.title"></span>
@@ -179,6 +181,7 @@
             <template x-if="hasSelection">
               <div class="[ frame ]">
                 <div class="[ flow ] [ flow-space-s pad-l divide-bottom ]">
+                  <button type="button" class="[ button ]" data-variant="ghost" data-size="sm" data-split-back @click="closeDetail">Sessions</button>
                   <div class="[ repel ]">
                     <h2 x-text="selected.title"></h2>
                     <template x-for="ws in selectedWorkspaces" :key="ws">

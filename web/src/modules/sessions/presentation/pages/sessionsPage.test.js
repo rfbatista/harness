@@ -41,9 +41,11 @@ test("?session= opens that session; one not on the task falls back to what needs
   const sessions = [makeSession({ id: "run" }), makeSession({ id: "turn", status: "idle" })];
   const asked = setup(sessions, { search: "?session=run" });
   assert.equal(asked.instance.selectedId, "run");
+  assert.equal(asked.instance.detailOpenAttr, "", "on a narrow screen the link shows the session, not the list");
   asked.instance.destroy();
   const gone = setup(sessions, { search: "?session=s-gone" });
   assert.equal(gone.instance.selectedId, "turn");
+  assert.equal(gone.instance.detailOpenAttr, null);
   gone.instance.destroy();
 });
 
@@ -340,6 +342,34 @@ test("J/K walk the rows in on-screen order", () => {
   assert.equal(instance.selectedId, "run", "stops at the end");
   instance.previous();
   assert.equal(instance.selectedId, "turn");
+  instance.destroy();
+});
+
+test("on a narrow screen, opening a session shows its detail and Sessions goes back; J/K never open it", () => {
+  const { instance, tick } = setup();
+  tick();
+  assert.equal(instance.detailOpenAttr, null, "the list is the page at first");
+  instance.next();
+  instance.previous();
+  assert.equal(instance.detailOpenAttr, null, "J/K only move the selection");
+  instance.open("run");
+  assert.equal(instance.selectedId, "run");
+  assert.equal(instance.detailOpenAttr, "");
+  instance.closeDetail();
+  assert.equal(instance.detailOpenAttr, null);
+  instance.openSelected();
+  assert.equal(instance.detailOpenAttr, "", "Enter on the list opens the selected session");
+  instance.closeDetail();
+  instance.startCreating();
+  assert.equal(instance.detailOpenAttr, "", "the new-session form is shown in place of the list too");
+  instance.destroy();
+});
+
+test("opening a session does not ask its terminal for the focus", () => {
+  const { instance, tick, dispatched } = setup();
+  instance.open("run");
+  tick();
+  assert.equal(dispatched.filter((d) => d.name === "terminal-focus-requested").length, 0);
   instance.destroy();
 });
 

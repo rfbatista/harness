@@ -55,6 +55,8 @@ export const sessionsPage = ({ gateway, clock, channel = null, channelStore = { 
     ready: false,
     /** The detail pane shows the new-session form. */
     creating: false,
+    /** On a narrow screen, the detail is shown in place of the list. */
+    detailOpen: false,
     /** The selected session's delete is awaiting confirmation. */
     confirmingDelete: false,
     deleting: false,
@@ -254,7 +256,9 @@ export const sessionsPage = ({ gateway, clock, channel = null, channelStore = { 
         return;
       }
       const asked = new URLSearchParams(location?.search ?? "").get("session");
-      this.selectedId = this.sessions.some((s) => s.id === asked) ? asked : (group(this.sessions)[0]?.sessions[0]?.id ?? null);
+      // A link to a session opens it: on a narrow screen its detail, not the list.
+      this.detailOpen = this.sessions.some((s) => s.id === asked);
+      this.selectedId = this.detailOpen ? asked : (group(this.sessions)[0]?.sessions[0]?.id ?? null);
 
       unfollow = gateway.follow(
         this.projectId,
@@ -445,6 +449,25 @@ export const sessionsPage = ({ gateway, clock, channel = null, channelStore = { 
       this.confirmingDelete = false;
     },
 
+    /** The person opened a session (a click or tap on its row): on a narrow screen its detail replaces the list. */
+    open(id) {
+      this.select(id);
+      this.detailOpen = true;
+    },
+    /** Enter on the list opens the selected session. */
+    openSelected() {
+      if (this.selectedId) this.detailOpen = true;
+    },
+    /** Back to the list, which takes the focus the Sessions button had. */
+    closeDetail() {
+      this.detailOpen = false;
+      this.$nextTick(() => this.$refs.list?.focus());
+    },
+    /** data-detail on the split view: present while the detail is open. */
+    get detailOpenAttr() {
+      return this.detailOpen ? "" : null;
+    },
+
     next() {
       this.step(1);
     },
@@ -465,6 +488,7 @@ export const sessionsPage = ({ gateway, clock, channel = null, channelStore = { 
       if (this.cannotCreate) return;
       this.confirmingDelete = false;
       this.creating = true;
+      this.detailOpen = true;
     },
 
     /** N opens the form, unless the developer is typing in a field. */

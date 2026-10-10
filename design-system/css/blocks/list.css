@@ -15,6 +15,13 @@
       display: contents;
     }
 
+    /* Rows keep their height: a list taller than its room scrolls (a split
+       view bounds it) rather than squashing them. */
+    & > *,
+    & > [role="group"] > * {
+      flex-shrink: 0;
+    }
+
     & > .group,
     & > [role="group"] > .group {
       position: sticky;

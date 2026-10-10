@@ -1,23 +1,42 @@
 /*
- * Split view — a list beside the detail of what is selected in it.
- * <div class="split-view"><div class="list">…</div><section>detail</section></div>
- * Below 64rem only the list shows; the detail is reached by opening a row.
- * Exception: data-wide-list — the list is the main view (a commit graph) and
- * the detail the narrower side.
+ * Split view — a list beside the detail of what is selected in it. It is as
+ * tall as the room it is given, never taller: each side scrolls on its own,
+ * so a long list never stretches the detail (and a terminal in it) past the
+ * window.
+ * <div class="split-view" data-detail?><div class="list">…</div><section>detail</section></div>
+ * Below 64rem one side shows: the list, or with data-detail the detail, which
+ * then carries a [data-split-back] control back to the list (hidden when both
+ * sides show).
+ * Exceptions: data-wide-list — the list is the main view (a commit graph) and
+ * the detail the narrower side; data-detail.
  */
 
 @layer blocks {
   .split-view {
     display: grid;
     grid-template-columns: minmax(18rem, 26rem) minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
     min-block-size: 0;
+
+    & > * {
+      min-block-size: 0;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+    }
 
     &[data-wide-list] { grid-template-columns: minmax(0, 1fr) minmax(20rem, 32rem); }
 
     @media (width < 64rem) {
       grid-template-columns: minmax(0, 1fr);
 
-      & > :last-child { display: none; }
+      &:not([data-detail]) > :last-child,
+      &[data-detail] > :first-child { display: none; }
+    }
+
+    & [data-split-back] { align-self: flex-start; }
+
+    @media (width >= 64rem) {
+      & [data-split-back] { display: none; }
     }
   }
 }

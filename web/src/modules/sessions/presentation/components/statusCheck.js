@@ -24,8 +24,11 @@ export const statusCheck = ({ channel }) => (bar = {}) => {
     busy: false,
     error: null,
 
+    /** The presets, plus the loop's own interval when the architect set another (else the select would show the first preset). */
     get intervals() {
-      return INTERVALS.map((m) => ({ value: String(m), label: m < 60 ? `${m} min` : `${m / 60} h` }));
+      const own = check?.everyMinutes || bar.remembered || 0;
+      const all = INTERVALS.includes(own) || !(own > 0) ? INTERVALS : [...INTERVALS, own].sort((a, b) => a - b);
+      return all.map((m) => ({ value: String(m), label: m < 60 || m % 60 ? `${m} min` : `${m / 60} h` }));
     },
     get active() {
       return check?.state === "active";

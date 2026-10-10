@@ -10,6 +10,7 @@
     padding-inline: var(--space-l);
     border-block-end: var(--border-width) solid var(--color-line);
     overflow-x: auto;
+    overflow-y: hidden; /* the selected tab's underline sits 1px into the border: no vertical scroll for it */
 
     & [role="tab"] {
       position: relative;

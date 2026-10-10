@@ -1,27 +1,34 @@
 /*
  * Terminal — a session's PTY, drawn by xterm.js, with a one-line bar under it
  * (connection, window title, reconnect). It fills the space it is given; the
- * screen element is what xterm fits its rows and columns to. xterm's viewport
- * scrolls the history; the screen carries data-history while there is some
- * (set by the screen script), and then keeps xterm's scrollbar on and themed.
- * <div class="terminal"><div class="screen" data-history>xterm</div><div class="bar">…</div></div>
+ * screen holds the gutter, and its unpadded host is what xterm fits its rows
+ * and columns to (the screen script adds it). xterm's viewport scrolls the
+ * history; the screen carries data-history while there is some (set by the
+ * screen script), and then keeps xterm's scrollbar on and themed.
+ * <div class="terminal"><div class="screen" data-history><div class="host">xterm</div></div><div class="bar">…</div></div>
  */
 
 @layer blocks {
   .terminal {
     display: flex;
     flex-direction: column;
+    /* Its size is the room left beside its siblings, never what xterm last
+       drew: a content-sized pane would shrink the header with it and keep a
+       refit's old rows in its next measurement. */
+    flex: 1 1 0;
     min-block-size: 0;
+    overflow: hidden; /* the history scrolls in xterm, never the pane: no scrollbar to take columns from it */
     background: var(--color-sunken);
 
     & > .screen {
-      flex: 1 1 auto;
-      min-block-size: 12rem;
+      flex: 1 1 0;
+      min-block-size: 0; /* it takes the height left, however little: a floor would push the bar out */
       padding: var(--space-s) var(--space-m);
       overflow: hidden;
       cursor: text;
       touch-action: pan-y; /* a vertical pan scrolls the history, not the page */
 
+      & > .host,
       & .xterm {
         block-size: 100%;
       }
