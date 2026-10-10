@@ -99,6 +99,32 @@ func CodeConformance(t *testing.T, newPort func(t *testing.T, f *CodeFixture) (p
 		}
 	})
 
+	t.Run("a directory carries the zones whose rule holds it", func(t *testing.T) {
+		// A directory is matched as itself and with a trailing slash, so the
+		// pattern ^internal/ holds internal, and the explicit path web holds
+		// web; files are matched as they are.
+		for _, src := range []ports.CodeSourceQuery{repo, ws} {
+			tree, err := p.CodeTree(ctx, src, "")
+			if err != nil {
+				t.Fatal(err)
+			}
+			byName := entries(tree.Entries)
+			want := map[string][]string{"internal": {"zone-adapters"}, "web": {"zone-web"}, "docs": {}, "linkdir": {}}
+			for name, zones := range want {
+				if got := byName[name].Zones; !slices.Equal(got, zones) {
+					t.Errorf("%s %s zones = %v, want %v", kindOf(src), name, got, zones)
+				}
+			}
+			sub, err := p.CodeTree(ctx, src, "internal")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := entries(sub.Entries)["app"].Zones; !slices.Equal(got, []string{"zone-adapters"}) {
+				t.Errorf("%s internal/app zones = %v", kindOf(src), got)
+			}
+		}
+	})
+
 	t.Run("a ref or a hash reads that commit", func(t *testing.T) {
 		tree, err := p.CodeTree(ctx, refAt(f.Root), "docs")
 		if err != nil {
