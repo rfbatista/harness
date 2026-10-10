@@ -141,6 +141,10 @@ func CodeConformance(t *testing.T, newPort func(t *testing.T, f *CodeFixture) (p
 				if !hasCode(err, "INVALID_INPUT") {
 					t.Errorf("%s file %q: err = %v, want INVALID_INPUT (a link out of the root)", kindOf(src), path, err)
 				}
+				_, err = p.CodeTree(ctx, src, path)
+				if !hasCode(err, "INVALID_INPUT") {
+					t.Errorf("%s tree %q: err = %v, want INVALID_INPUT (a link out of the root)", kindOf(src), path, err)
+				}
 			}
 			for _, c := range []struct {
 				tree bool

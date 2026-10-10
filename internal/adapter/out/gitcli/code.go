@@ -215,6 +215,9 @@ func (c Code) TreeAt(ctx context.Context, dir, commit, p string, recursive bool)
 		if err != nil {
 			return nil, err
 		}
+		if e.Kind == domain.EntrySymlink && domain.SymlinkEscapes(p, e.Target) {
+			return nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: p + " is a symlink out of the repository"}
+		}
 		if e.Kind != domain.EntryDir {
 			return nil, pathNotFound(p)
 		}
