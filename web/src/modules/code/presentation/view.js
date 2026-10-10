@@ -16,7 +16,8 @@ import { zoneDot, zoneTags } from "../domain/zones.js";
  * @param {import("../domain/tree.js").TreeRow} row
  * @param {{ state: import("../domain/tree.js").TreeState, selected: string, focused: string, zones: Map<string, any>, href: (path: string) => string, fresh: Set<string> }} ctx
  */
-export function treeRowView({ entry, depth }, ctx) {
+export function treeRowView({ entry, depth, parent }, ctx) {
+  const siblings = ctx.state.levels[parent] ?? [];
   const isDir = entry.kind === "dir";
   const mark = isDir ? dirMark(entry.change) : entry.change ? changeMark(entry.change) : null;
   const dot = isDir ? null : zoneDot(entry.zones, ctx.zones);
@@ -29,6 +30,9 @@ export function treeRowView({ entry, depth }, ctx) {
     isDir,
     isLink: entry.kind === "file",
     level: String(depth + 1),
+    setsize: String(siblings.length),
+    posinset: String(siblings.indexOf(entry) + 1),
+    skeleton: false,
     depthStyle: `--depth:${depth}`,
     expanded: isDir ? String(!!ctx.state.expanded[entry.path]) : null,
     busy: isDir && ctx.state.busy[entry.path] ? "true" : null,

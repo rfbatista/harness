@@ -1,11 +1,11 @@
-import { createHighlighter } from "../../../highlight.js";
+import { createHljs } from "../../../highlight.js";
 import { assert, file, test } from "../../../shared/testing/test.js";
-import { HLJS_LANGUAGES, TOKENS, scan, scopeOf, tokenOf } from "./hljs-highlighter.js";
+import { HLJS_LANGUAGES, TOKENS, hljsHighlighter, scan, scopeOf, tokenOf } from "./hljs-highlighter.js";
 import { plainHighlighter } from "./plain-highlighter.js";
 
 file("code/infrastructure/highlighter");
 
-const highlighter = createHighlighter();
+const highlighter = hljsHighlighter(createHljs());
 
 /** One sample per server language id the highlighter maps. */
 const SAMPLES = {

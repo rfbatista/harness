@@ -21,9 +21,8 @@ export const codeDiff = (deps) => () => {
 
     init() {
       try {
-        const raw = readSeed(this.$el);
-        const seed = deps.gateway.decodeSeed(raw);
-        this.commitHash = typeof raw?.commit === "string" ? raw.commit : "";
+        const seed = deps.gateway.decodeSeed(readSeed(this.$el));
+        this.commitHash = seed.commit;
         this.repositoryId = seed.source.repositoryId;
         this.workspaceId = seed.source.workspaceId;
         this.startFrom(seed);

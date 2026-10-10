@@ -186,15 +186,25 @@ export function codeBrowser({ gateway, highlighter, prefs, history = globalThis.
     },
 
     // ── the side ─────────────────────────────────────────────────────────
+    /**
+     * The tree's rows, flat, in order: each with aria-level, -setsize and
+     * -posinset, and a loading directory's skeleton rows right after it.
+     */
     get treeRows() {
       const fresh = new Set(this.freshPaths);
-      return visibleRows(this.tree).map((row) => treeRowView(row, { state: this.tree, selected: this.file?.path ?? this.openEntry?.path ?? "", focused: this.focusedPath, zones, href: (p) => this.filesHref(p), fresh }));
+      const focused = this.focusedPath || visibleRows(this.tree)[0]?.entry.path || "";
+      const ctx = { state: this.tree, selected: this.file?.path ?? this.openEntry?.path ?? "", focused, zones, href: (p) => this.filesHref(p), fresh };
+      const out = [];
+      for (const row of visibleRows(this.tree)) {
+        out.push(treeRowView(row, ctx));
+        if (this.tree.busy[row.entry.path] && !this.tree.levels[row.entry.path]) {
+          for (const s of skeletonRows(row.entry.path)) out.push({ ...s, skeleton: true, depthStyle: `--depth:${row.depth + 1}` });
+        }
+      }
+      return out;
     },
-    skeletons(dir) {
-      return skeletonRows(dir);
-    },
-    groupRows(dir) {
-      return this.treeRows.filter((r) => r.path.slice(0, r.path.lastIndexOf("/") < 0 ? 0 : r.path.lastIndexOf("/")) === dir);
+    get treeBusy() {
+      return this.tree.busy[""] ? "true" : null;
     },
     get summaryRows() {
       if (!this.diff) return [];
@@ -325,6 +335,75 @@ export function codeBrowser({ gateway, highlighter, prefs, history = globalThis.
       return this.paletteMode === "line" ? "Line or range, like 120 or 120-140" : "Find a file by name or path";
     },
 
+    // ── layout ───────────────────────────────────────────────────────────
+    get mainAttr() {
+      return this.showMain ? "" : null;
+    },
+    get sideAttr() {
+      return this.showingMap || this.kind === "history" ? "none" : null;
+    },
+    get sideLabel() {
+      return this.showingChanges ? "Changed files" : "Files";
+    },
+    get backLabel() {
+      return this.showingChanges ? "‹ Changed files" : "‹ Files";
+    },
+    get hasRefs() {
+      return this.kind === "repository" && this.refs.length > 0;
+    },
+    /** The ref select's options: the current ref always among them. */
+    get refOptions() {
+      const current = this.route?.ref || this.branch;
+      const refs = current && !this.refs.includes(current) ? [current, ...this.refs] : this.refs;
+      return refs.map((r) => ({ key: r, value: r, selected: r === current }));
+    },
+    get paletteActiveId() {
+      return this.paletteMode === "file" && this.finderRows.length ? `finder-${this.paletteActive}` : null;
+    },
+    get fileDigitsStyle() {
+      return `--digits:${String(Math.max(1, this.file?.lineCount ?? 1)).length}`;
+    },
+    get wrapAttr() {
+      return this.wrap && this.canWrap ? "" : null;
+    },
+
+    /** The danger banner's next step: the tree root, or the ref picker. */
+    problemAction() {
+      if (this.problem?.next === "root") this.showRoot();
+      else if (this.problem?.next === "ref") this.$root?.querySelector?.(".code-source-bar select")?.focus();
+    },
+
+    /** Whether the open file is in the diff, for the file head's Changes link. */
+    diffHas(path) {
+      return !!this.diff?.files.some((f) => f.path === path);
+    },
+    changesHref(path) {
+      return hrefOf({ ...this.route, view: "changes", path: "" }, `#diff-${this.diffSlugs[path] ?? ""}`);
+    },
+    openChanges(event, path) {
+      if (event.metaKey || event.ctrlKey) return;
+      event.preventDefault();
+      this.go({ ...this.route, view: "changes", path: "" }, { hash: `diff-${this.diffSlugs[path] ?? ""}` });
+      this.enterView();
+      this.$nextTick?.(() => this.scrollToFile(path));
+    },
+    /** A symlink's Open the target. */
+    openTarget(event) {
+      if (event.metaKey || event.ctrlKey) return;
+      event.preventDefault();
+      const href = event.currentTarget?.getAttribute("href") ?? "";
+      const r = parseHref(new URL(href, "http://x").pathname, "");
+      if (r?.path) this.openPath(r.path);
+    },
+    /** A zone of the map opens Files at its pattern's directory. */
+    openZone(event, dir) {
+      if (event.metaKey || event.ctrlKey) return;
+      event.preventDefault();
+      this.go({ ...this.route, view: "files", path: dir });
+      this.enterView();
+      if (dir) this.openPath(dir, { push: false });
+    },
+
     // ── hrefs ────────────────────────────────────────────────────────────
     /** A diff file head's View file; the history pages open the repository page instead. */
     viewFileHref(path) {
@@ -353,6 +432,8 @@ export function codeBrowser({ gateway, highlighter, prefs, history = globalThis.
       this.historyHref = seed.historyHref;
       this.layout = prefs.get("code.layout") === "split" ? "split" : "unified";
       this.wrap = prefs.get("code.wrap") === "1";
+      if (seed.gone) this.markGone();
+      this.baseGone = seed.baseGone;
       if (seed.map) this.setMap(seed.map);
       let tree = emptyTree();
       for (const t of seed.trees) tree = withExpanded(withLevel(tree, t.path, t.entries), t.path, t.path !== "");

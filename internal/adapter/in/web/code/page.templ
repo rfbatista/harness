@@ -1,0 +1,55 @@
+package code
+
+import (
+	"operators-mcp/internal/adapter/in/web/components"
+	"operators-mcp/internal/adapter/in/web/shell"
+)
+
+// Page is a repository's code page: a toolbar, then the code view at a ref
+// (Files or Map), painted from the seed and taken over by codePage.
+templ Page(v PageView) {
+	@shell.AppShell(v.Frame) {
+		<main id="main" class="[ frame ]" x-data="codePage" data-seed="code-seed" x-on:popstate.window="popState">
+			@templ.JSONScript("code-seed", v.View.Seed)
+			<header class="[ toolbar ]">
+				<a class="[ crumb ]" href={ templ.SafeURL("/projects/" + v.ProjectID) }>{ v.ProjectName } /</a>
+				<a class="[ crumb ]" href={ templ.SafeURL("/projects/" + v.ProjectID + "/repositories") }>Repositories /</a>
+				<h1>{ v.RepositoryName }</h1>
+				<div class="[ actions ]">
+					<a class="[ button ]" data-variant="ghost" data-size="sm" href={ templ.SafeURL(v.HistoryHref) }>Git history</a>
+				</div>
+			</header>
+			@Static(v.View)
+			@Live()
+		</main>
+	}
+}
+
+// IndexPage lists the project's repositories, each opening its code page.
+templ IndexPage(v IndexView) {
+	@shell.AppShell(v.Frame) {
+		<main id="main" class="[ frame ]">
+			<header class="[ toolbar ]">
+				<a class="[ crumb ]" href={ templ.SafeURL("/projects/" + v.ProjectID) }>{ v.ProjectName } /</a>
+				<h1>Code</h1>
+			</header>
+			<div data-scroll>
+				<div class="[ wrapper flow ] [ region ]" style="--wrapper-max: 48rem">
+					if len(v.Rows) == 0 {
+						@components.Empty("No repositories yet", "Add the project's git checkout on its Repositories page; its code is read from there.")
+					}
+					<section class="[ pane ]" aria-label="Repositories">
+						for _, r := range v.Rows {
+							<a class="[ row ]" href={ templ.SafeURL(r.Href) } style="--row-columns: minmax(0, 1fr)">
+								<span class="[ flow ] [ flow-space-3xs pad-block-xs ]">
+									<span class="[ weight-medium ]">{ r.Name }</span>
+									<span class="[ font-mono text-xs color-ink-faint ]">{ r.Detail }</span>
+								</span>
+							</a>
+						}
+					</section>
+				</div>
+			</div>
+		</main>
+	}
+}

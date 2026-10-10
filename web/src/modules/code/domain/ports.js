@@ -47,6 +47,9 @@
  * @property {{ code: string, message: string } | null} error   what the first paint hit
  * @property {string[]} refs                 the ref select's options (repository page)
  * @property {string} historyHref
+ * @property {string} commit                 a history page's open commit ("" for uncommitted changes)
+ * @property {boolean} gone                  the worktree is no longer on disk
+ * @property {boolean} baseGone              the worktree's base branch no longer resolves
  *
  * @typedef {{ text: string, tok: string }} Token  tok: a contract tok-* name without the prefix, or ""
  *

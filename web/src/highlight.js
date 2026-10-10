@@ -1,4 +1,4 @@
-// The code views' syntax highlighter, on highlight.js: the one place the
+// The code views' syntax highlighting library, highlight.js: the one place it
 // library is imported (web/third_party/highlightjs, pinned; cmd/webbuild
 // aliases "highlight.js" to it). Only these grammars are bundled; any other
 // language is shown as plain text.
@@ -35,8 +35,6 @@ import makefile from "highlight.js/languages/makefile.min.js";
 import diff from "highlight.js/languages/diff.min.js";
 import plaintext from "highlight.js/languages/plaintext.min.js";
 
-import { hljsHighlighter } from "./modules/code/infrastructure/hljs-highlighter.js";
-
 const grammars = {
   go,
   javascript,
@@ -70,10 +68,10 @@ const grammars = {
   plaintext,
 };
 
-/** @returns {import("./modules/code/domain/ports.js").Highlighter} */
-export function createHighlighter() {
+/** highlight.js core with the bundled grammars registered (hljsHighlighter's input). */
+export function createHljs() {
   for (const [name, grammar] of Object.entries(grammars)) {
     if (!hljs.getLanguage(name)) hljs.registerLanguage(name, grammar);
   }
-  return hljsHighlighter(hljs);
+  return hljs;
 }

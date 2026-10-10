@@ -37,43 +37,48 @@ func icon(name string) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
+		case "code":
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, "<svg aria-hidden=\"true\" viewBox=\"0 0 16 16\"><path d=\"M5.5 4.5 2 8l3.5 3.5 M10.5 4.5 14 8l-3.5 3.5 M9 3 7 13\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linejoin=\"round\" stroke-linecap=\"round\"></path></svg>")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
 		case "document":
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, "<svg aria-hidden=\"true\" viewBox=\"0 0 16 16\"><path d=\"M3.75 1.75h5.5L12.25 4.75v9.5h-8.5z M9 1.75V5h3.25 M6 8.25h4 M6 11h4\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linejoin=\"round\"></path></svg>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, "<svg aria-hidden=\"true\" viewBox=\"0 0 16 16\"><path d=\"M3.75 1.75h5.5L12.25 4.75v9.5h-8.5z M9 1.75V5h3.25 M6 8.25h4 M6 11h4\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linejoin=\"round\"></path></svg>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		case "design":
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, "<svg aria-hidden=\"true\" viewBox=\"0 0 16 16\"><path d=\"M2 2.25h5v5H2z M11.5 2.1a2.6 2.6 0 1 1 0 5.2 2.6 2.6 0 0 1 0-5.2z M4.5 9.25 7.25 13.75h-5.5z M9.25 9.25h4.75v4.5H9.25z\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linejoin=\"round\"></path></svg>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "<svg aria-hidden=\"true\" viewBox=\"0 0 16 16\"><path d=\"M2 2.25h5v5H2z M11.5 2.1a2.6 2.6 0 1 1 0 5.2 2.6 2.6 0 0 1 0-5.2z M4.5 9.25 7.25 13.75h-5.5z M9.25 9.25h4.75v4.5H9.25z\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linejoin=\"round\"></path></svg>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		case "review":
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "<svg aria-hidden=\"true\" viewBox=\"0 0 16 16\"><path d=\"M2 3h12v7.75H8.5L5 13.5v-2.75H2z M5.5 6.9l1.75 1.6L10.5 5.4\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linejoin=\"round\" stroke-linecap=\"round\"></path></svg>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 5, "<svg aria-hidden=\"true\" viewBox=\"0 0 16 16\"><path d=\"M2 3h12v7.75H8.5L5 13.5v-2.75H2z M5.5 6.9l1.75 1.6L10.5 5.4\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linejoin=\"round\" stroke-linecap=\"round\"></path></svg>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		case "plus":
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 5, "<svg aria-hidden=\"true\" viewBox=\"0 0 16 16\"><path d=\"M8 3v10M3 8h10\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\"></path></svg>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 6, "<svg aria-hidden=\"true\" viewBox=\"0 0 16 16\"><path d=\"M8 3v10M3 8h10\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\"></path></svg>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		case "chevron":
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 6, "<svg aria-hidden=\"true\" viewBox=\"0 0 12 12\"><path d=\"M3 4.5 6 7.5 9 4.5\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"></path></svg>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 7, "<svg aria-hidden=\"true\" viewBox=\"0 0 12 12\"><path d=\"M3 4.5 6 7.5 9 4.5\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"></path></svg>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		case "close":
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 7, "<svg aria-hidden=\"true\" viewBox=\"0 0 16 16\"><path d=\"M4 4l8 8M12 4l-8 8\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\"></path></svg>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 8, "<svg aria-hidden=\"true\" viewBox=\"0 0 16 16\"><path d=\"M4 4l8 8M12 4l-8 8\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\"></path></svg>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		case "bell":
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 8, "<svg aria-hidden=\"true\" viewBox=\"0 0 16 16\"><path d=\"M4 11.25V7a4 4 0 0 1 8 0v4.25l1.25 1.25H2.75z M6.5 13.75a1.6 1.6 0 0 0 3 0\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linejoin=\"round\" stroke-linecap=\"round\"></path></svg>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 9, "<svg aria-hidden=\"true\" viewBox=\"0 0 16 16\"><path d=\"M4 11.25V7a4 4 0 0 1 8 0v4.25l1.25 1.25H2.75z M6.5 13.75a1.6 1.6 0 0 0 3 0\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linejoin=\"round\" stroke-linecap=\"round\"></path></svg>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		case "rail":
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 9, "<svg aria-hidden=\"true\" viewBox=\"0 0 16 16\"><path d=\"M2 2.75h12v10.5H2z M6 2.75v10.5\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linejoin=\"round\"></path></svg>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 10, "<svg aria-hidden=\"true\" viewBox=\"0 0 16 16\"><path d=\"M2 2.75h12v10.5H2z M6 2.75v10.5\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linejoin=\"round\"></path></svg>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

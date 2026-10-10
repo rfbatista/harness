@@ -44,12 +44,6 @@ export const codePage = (deps) => () => {
       deps.navigate(hrefOf({ ...this.route, view: this.view, path: this.view === "files" ? (this.file?.path ?? this.route.path) : "", ref }));
     },
 
-    /** PATH_NOT_FOUND's and REF_NOT_FOUND's next step. */
-    problemAction() {
-      if (this.problem?.next === "root") this.showRoot();
-      else if (this.problem?.next === "ref") this.$root.querySelector(".code-source-bar select")?.focus();
-    },
-
     watchWidth() {
       const el = this.$refs?.layout;
       if (!el || typeof ResizeObserver !== "function") return;

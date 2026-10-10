@@ -215,5 +215,8 @@ export function toSeed(raw) {
     error: raw.error && typeof raw.error.code === "string" ? Object.freeze({ code: raw.error.code, message: str(raw.error.message) }) : null,
     refs: strings(raw.refs),
     historyHref: str(raw.history_href),
+    commit: str(raw.commit),
+    gone: raw.gone === true,
+    baseGone: raw.base_gone === true,
   });
 }

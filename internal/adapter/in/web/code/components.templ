@@ -1,0 +1,892 @@
+package code
+
+import (
+	"strconv"
+
+	"operators-mcp/internal/adapter/in/web/components"
+)
+
+// The code views' markup, in the design system's blocks (contract "Design
+// system ↔ Web UI — code views" and its plan §2). Each view comes twice: Live
+// is the Alpine markup the browser's code components bind (codeBrowser.js),
+// Static the server's first paint of the same blocks from a View, inside a
+// [data-ssr] the component removes once Live has rendered. Lines of code are
+// drawn into .code-lines by render/lines.js in the browser, and painted here
+// as plain text.
+
+// ── live (Alpine) ────────────────────────────────────────────────────────
+
+// Live is a code view's markup, bound to a codeBrowser component on an
+// ancestor (codePanel or codePage).
+templ Live() {
+	<div class="[ frame ]" x-on:keydown="onKey">
+		@liveSourceBar()
+		<template x-if="problemLine">
+			<div class="[ banner ]" data-tone="danger" role="alert">
+				<div class="[ flow ] [ flow-space-3xs grow ]">
+					<span x-text="problem.text"></span>
+					<span class="[ code ]" x-text="problem.code"></span>
+				</div>
+				<template x-if="problem.action">
+					<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-on:click="problemAction" x-text="problem.action"></button>
+				</template>
+			</div>
+		</template>
+		<template x-if="emptyProblem">
+			<div class="[ empty ]">
+				<h2 x-text="emptyProblem.title"></h2>
+				<p x-text="emptyProblem.text"></p>
+				<p class="[ code ]" x-text="emptyProblem.code"></p>
+			</div>
+		</template>
+		<template x-if="!emptyProblem">
+			<div class="code-layout" x-ref="layout" x-bind:data-main="mainAttr" x-bind:data-side="sideAttr">
+				<aside class="side" x-ref="side" x-bind:aria-label="sideLabel">
+					<template x-if="showingChanges">
+						@liveSummary()
+					</template>
+					<template x-if="showingFiles && !gone">
+						@liveTree()
+					</template>
+				</aside>
+				<section class="main" x-ref="main" tabindex="0" x-bind:aria-label="mainLabel" x-on:scroll="mainScrolled" x-on:click="clickLine">
+					<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" data-code-back x-on:click="back" x-text="backLabel"></button>
+					<template x-if="goneEmpty">
+						<div class="[ empty ]">
+							<h2>The worktree was removed</h2>
+							<p>Its files are no longer on disk. What the session committed is still on its branch.</p>
+							<a class="[ button ]" data-size="sm" x-bind:href="browseBranchHref">Browse the branch</a>
+						</div>
+					</template>
+					<template x-if="showingChanges">
+						@liveDiff()
+					</template>
+					<template x-if="showingFiles && !gone">
+						@liveFile()
+					</template>
+					<template x-if="showingMap && !gone">
+						@liveMap()
+					</template>
+				</section>
+			</div>
+		</template>
+		@livePalette()
+		<p class="[ visually-hidden ]" role="status" x-text="toast"></p>
+	</div>
+}
+
+templ liveSourceBar() {
+	<header class="code-source-bar" x-bind:data-state="bar.state">
+		<nav class="segmented" aria-label="Code views">
+			<template x-for="s in views" x-bind:key="s.key">
+				<a x-bind:href="s.href" x-bind:aria-current="s.current" x-on:click="clickView($event, s.key)">
+					<span x-text="s.label"></span>
+					<template x-if="s.count">
+						<span class="count" x-text="s.count"></span>
+					</template>
+				</a>
+			</template>
+		</nav>
+		<div class="origin">
+			<span class="repo" x-text="bar.repo"></span>
+			<template x-if="hasRefs">
+				<select data-size="sm" data-fit aria-label="Branch, tag or commit" x-on:change="pickRef">
+					<template x-for="r in refOptions" x-bind:key="r.key">
+						<option x-bind:value="r.value" x-bind:selected="r.selected" x-text="r.value"></option>
+					</template>
+				</select>
+			</template>
+			<template x-if="!hasRefs && bar.branch">
+				<span class="branch" x-bind:title="bar.branch" x-text="bar.branch"></span>
+			</template>
+			<code class="commit" x-bind:title="bar.commitTitle" x-text="bar.commit"></code>
+			<template x-if="bar.dirty">
+				<span class="dirty" x-text="bar.dirty"></span>
+			</template>
+		</div>
+		<template x-if="hasState">
+			<p class="state" role="status" x-text="bar.word"></p>
+		</template>
+		<div class="actions">
+			<template x-if="isStale">
+				<button type="button" class="[ button ]" data-size="sm" data-reload x-on:click="reload">Reload <kbd>R</kbd></button>
+			</template>
+			<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-bind:disabled="gone" x-on:click="openFinder">Find file <kbd>T</kbd></button>
+		</div>
+		<template x-if="isGone">
+			<div class="gone" role="note">
+				<span><strong>This session's worktree was removed.</strong> Showing what it committed on its branch; uncommitted work is gone with the worktree.</span>
+				<span class="code">WORKSPACE_MISSING</span>
+				<a class="[ button ]" data-size="sm" x-bind:href="browseBranchHref">Browse the branch</a>
+			</div>
+		</template>
+	</header>
+}
+
+templ liveSummary() {
+	<nav class="diff-summary" aria-label="Changed files">
+		<header class="head">
+			<template x-if="totals">
+				<p class="totals"><span x-text="totals.files"></span> <span class="added" x-text="totals.added"></span> <span class="deleted" x-text="totals.deleted"></span></p>
+			</template>
+			<template x-if="kind === 'session'">
+				<nav class="segmented" aria-label="Scope">
+					<template x-for="s in scopes" x-bind:key="s.key">
+						<a x-bind:href="s.href" x-bind:aria-current="s.current" x-bind:aria-disabled="s.disabled" x-bind:title="s.title" x-on:click="clickScope($event, s.key)" x-text="s.label"></a>
+					</template>
+				</nav>
+			</template>
+		</header>
+		<template x-if="noChanges">
+			<p class="none" x-text="noChangesText"></p>
+		</template>
+		<template x-if="loadingDiff && !diff">
+			<div class="[ pad-s ] [ flow ]" aria-busy="true"><div class="[ skeleton ]"></div><div class="[ skeleton ]"></div></div>
+		</template>
+		<ol class="changed">
+			<template x-for="row in summaryRows" x-bind:key="row.key">
+				<li x-bind:data-fresh="row.fresh">
+					<a x-bind:href="row.href" x-bind:aria-current="row.current" x-bind:aria-label="row.label" x-on:click="clickSummary($event, row.path)">
+						@liveMark("row.mark")
+						<span class="path"><bdi><span class="dir" x-text="row.dir"></span><span class="name" x-text="row.name"></span></bdi></span>
+						<span class="stat">
+							<template x-if="row.stat">
+								<span><span class="added" x-text="row.stat.added"></span><span class="deleted" x-text="row.stat.deleted"></span></span>
+							</template>
+							<template x-if="row.note">
+								<span class="note" x-text="row.note"></span>
+							</template>
+						</span>
+						<template x-if="row.old">
+							<span class="old" x-text="row.old"></span>
+						</template>
+					</a>
+				</li>
+			</template>
+		</ol>
+	</nav>
+}
+
+// liveMark is a change-mark bound to expr (a {change, letter, word} or null).
+templ liveMark(expr string) {
+	<template x-if={ expr }>
+		<span class="change-mark" x-bind:data-change={ expr + ".change" } x-bind:title={ expr + ".word" } x-bind:aria-label={ expr + ".word" } x-text={ expr + ".letter" }></span>
+	</template>
+}
+
+templ liveTree() {
+	<ul class="file-tree" role="tree" aria-label="Files" x-bind:aria-busy="treeBusy" x-on:keydown="treeKeydown">
+		<template x-for="row in treeRows" x-bind:key="row.key">
+			<li
+				x-bind:role="row.skeleton ? 'none' : 'treeitem'"
+				x-bind:class="row.skeleton ? 'skeleton-row' : null"
+				x-bind:style="row.depthStyle"
+				x-bind:aria-level="row.level"
+				x-bind:aria-setsize="row.setsize"
+				x-bind:aria-posinset="row.posinset"
+				x-bind:aria-expanded="row.expanded"
+				x-bind:aria-selected="row.selected"
+				x-bind:aria-busy="row.busy"
+				x-bind:data-kind="row.kind"
+				x-bind:data-change="row.deleted"
+				x-bind:data-fresh="row.fresh"
+				x-bind:title="row.title"
+			>
+				<template x-if="row.skeleton">
+					<span class="[ skeleton ]"></span>
+				</template>
+				<template x-if="!row.skeleton && row.isLink">
+					<a class="item" x-bind:href="row.href" x-bind:tabindex="row.tabindex" x-bind:aria-label="row.label" x-on:click="clickRow($event, row.path)" x-on:focus="focusedPath = row.path">
+						@liveTreeItem()
+					</a>
+				</template>
+				<template x-if="!row.skeleton && !row.isLink">
+					<span class="item" x-bind:tabindex="row.tabindex" x-bind:aria-label="row.label" x-on:click="clickRow($event, row.path)" x-on:focus="focusedPath = row.path">
+						@liveTreeItem()
+					</span>
+				</template>
+			</li>
+		</template>
+	</ul>
+}
+
+templ liveTreeItem() {
+	<template x-if="row.isDir">
+		@chevron("chevron")
+	</template>
+	<template x-if="!row.isDir">
+		<span></span>
+	</template>
+	<template x-if="row.isDir">
+		@entryIcon("dir")
+	</template>
+	<template x-if="row.kind === 'file'">
+		@entryIcon("file")
+	</template>
+	<template x-if="row.kind === 'symlink'">
+		@entryIcon("symlink")
+	</template>
+	<template x-if="row.submodule">
+		@entryIcon("submodule")
+	</template>
+	<span class="name"><span x-text="row.name"></span><template x-if="row.target"><span class="target" x-text="row.target"></span></template></span>
+	<template x-if="row.dot">
+		<span class="zone-tag" data-dot-only x-bind:data-hue="row.dot.hue" x-bind:title="row.dot.label" x-bind:aria-label="row.dot.label"></span>
+	</template>
+	@liveMark("row.mark")
+}
+
+templ liveDiff() {
+	<div class="diff-view">
+		<template x-if="baseGone">
+			<div class="[ banner ]" role="status">
+				<div class="[ flow ] [ flow-space-3xs grow ]">
+					<span><strong x-text="baseGoneLine"></strong>, so only uncommitted work can be compared.</span>
+					<span class="[ code ]">REF_NOT_FOUND</span>
+				</div>
+			</div>
+		</template>
+		<template x-if="truncatedDiff">
+			<div class="[ banner ]" role="status">Some files were not loaded: this diff is over 20,000 changed lines.</div>
+		</template>
+		<template x-if="noChanges">
+			@components.Empty("No changes yet", "The agent's edits appear here as it makes them.") {
+				<button type="button" class="[ button ]" data-size="sm" x-on:click="showView('files')">Browse files</button>
+			}
+		</template>
+		<template x-if="diff && !noChanges">
+			<div class="bar">
+				<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-on:click="toggleAll" x-text="collapseAllLabel"></button>
+				<span class="[ color-ink-faint text-xs ]">Files <kbd>[</kbd> <kbd>]</kbd></span>
+				<template x-if="canSplit">
+					<div class="segmented" data-layout-switch role="group" aria-label="Diff layout">
+						<button type="button" x-bind:aria-pressed="unifiedPressed" x-on:click="setLayout('unified')">Unified</button>
+						<button type="button" x-bind:aria-pressed="splitPressed" x-on:click="setLayout('split')">Split</button>
+					</div>
+				</template>
+			</div>
+		</template>
+		<template x-for="f in diffFiles" x-bind:key="f.key">
+			<section class="file" x-bind:id="f.id" x-bind:aria-labelledby="f.nameId" x-bind:data-collapsed="f.collapsed" x-bind:aria-busy="f.busy">
+				<header class="head">
+					<button type="button" class="toggle" x-bind:aria-expanded="f.expanded" x-bind:aria-controls="f.bodyId" x-bind:aria-label="f.toggleLabel" x-on:click="toggleFile(f.path)">
+						@chevron("")
+					</button>
+					@liveMark("f.mark")
+					<h3 class="path" x-bind:id="f.nameId" x-bind:title="f.path" x-bind:aria-label="f.renamedLabel">
+						<template x-if="f.oldPath">
+							<span class="old" x-text="f.oldPath"></span>
+						</template>
+						<span x-text="f.path"></span>
+					</h3>
+					<template x-for="z in f.zoneTags" x-bind:key="z.id">
+						<span class="zone-tag" x-bind:data-hue="z.hue" x-bind:title="z.title" x-text="z.name"></span>
+					</template>
+					<template x-if="f.zoneMore">
+						<span class="[ text-xs color-ink-faint ]" x-bind:title="f.zoneMore.title" x-text="f.zoneMore.label"></span>
+					</template>
+					<span class="stat">
+						<template x-if="f.stat">
+							<span><span class="added" x-text="f.stat.added"></span><span class="deleted" x-text="f.stat.deleted"></span></span>
+						</template>
+						<template x-if="!f.stat">
+							<span class="note">binary</span>
+						</template>
+					</span>
+					<div class="actions">
+						<template x-if="f.viewHref">
+							<a class="[ button ]" data-variant="ghost" data-size="sm" x-bind:href="f.viewHref">View file</a>
+						</template>
+					</div>
+				</header>
+				<template x-if="f.hasLines">
+					<div class="hunks" x-bind:id="f.bodyId">
+						<div class="code-lines" x-bind:style="f.digitsStyle" x-bind:data-layout="f.layout" x-init="drawHunks($el, f.path)"></div>
+					</div>
+				</template>
+				<template x-if="f.withheld && !f.collapsed">
+					<div class="withheld" x-bind:data-reason="f.withheld.reason" x-bind:id="f.bodyId">
+						<p><strong x-text="f.withheld.title"></strong> · <span x-text="f.withheld.detail"></span></p>
+						<template x-if="f.withheld.action === 'load'">
+							<button type="button" class="[ button ]" data-size="sm" x-bind:aria-busy="f.busy" x-on:click="loadWithheld(f.path)">Load diff</button>
+						</template>
+						<template x-if="f.withheld.action === 'view' && f.viewHref">
+							<a class="[ button ]" data-size="sm" x-bind:href="f.viewHref">View file</a>
+						</template>
+						<template x-if="f.command">
+							<code class="code" x-text="f.command"></code>
+						</template>
+					</div>
+				</template>
+			</section>
+		</template>
+	</div>
+}
+
+templ liveFile() {
+	<template x-if="noFileOpen">
+		@components.Empty("Pick a file", "Pick a file in the tree, or press T to find one by name.")
+	</template>
+	<template x-if="loadingFile && !hasFile">
+		<article class="code-view" aria-busy="true">
+			<div class="scroll"><div class="[ skeleton ]"></div><div class="[ skeleton ]"></div><div class="[ skeleton ]"></div></div>
+		</article>
+	</template>
+	<template x-if="hasFile">
+		<article class="code-view" x-bind:aria-busy="loadingFile ? 'true' : null">
+			<header class="head">
+				<nav class="crumbs" aria-label="Path">
+					<ol>
+						<template x-for="c in fileCrumbs" x-bind:key="c.key">
+							<li><a x-bind:href="c.href" x-bind:aria-current="c.current" x-on:click="c.href && clickFile($event, c.key)" x-text="c.label"></a></li>
+						</template>
+					</ol>
+				</nav>
+				<template x-for="z in fileZoneTags.tags" x-bind:key="z.id">
+					<span class="zone-tag" x-bind:data-hue="z.hue" x-bind:title="z.title" x-text="z.name"></span>
+				</template>
+				<template x-if="fileZoneTags.more">
+					<span class="[ text-xs color-ink-faint ]" x-bind:title="fileZoneTags.more.title" x-text="fileZoneTags.more.label"></span>
+				</template>
+				<span class="meta" x-text="fileMeta"></span>
+				<div class="actions">
+					<template x-if="file && file.content">
+						<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-bind:aria-pressed="wrapPressed" x-bind:disabled="!canWrap" x-bind:title="wrapTitle" x-on:click="toggleWrap">Wrap <kbd>W</kbd></button>
+					</template>
+					<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" title="Copy a link to this line (Y)" x-on:click="copyPermalink">Copy link <kbd>Y</kbd></button>
+					<template x-if="kind === 'session' && file && diffHas(file.path)">
+						<a class="[ button ]" data-variant="ghost" data-size="sm" x-bind:href="changesHref(file.path)" x-on:click="openChanges($event, file.path)">Changes</a>
+					</template>
+				</div>
+			</header>
+			<template x-if="fileNotice">
+				<p class="notice"><strong x-text="fileNotice.title"></strong> · <span x-text="fileNotice.text"></span> <code class="path" x-text="fileNotice.path"></code></p>
+			</template>
+			<template x-if="placeholder">
+				<div class="placeholder">
+					@entryIcon("file")
+					<strong x-text="placeholder.title"></strong>
+					<p x-text="placeholder.text"></p>
+					<template x-if="placeholder.code">
+						<code class="code" x-text="placeholder.code"></code>
+					</template>
+					<template x-if="placeholder.action">
+						<a class="[ button ]" data-size="sm" x-bind:href="placeholder.actionHref" x-on:click="openTarget($event)" x-text="placeholder.action"></a>
+					</template>
+				</div>
+			</template>
+			<template x-for="key in fileKeys" x-bind:key="key">
+				<div class="scroll" x-ref="scroll" tabindex="0" x-bind:aria-label="mainLabel" x-on:scroll="fileScrolled" x-on:click="clickLine">
+					<div class="code-lines" x-bind:style="fileDigitsStyle" x-bind:data-wrap="wrapAttr" x-init="drawFile($el)"></div>
+				</div>
+			</template>
+		</article>
+	</template>
+}
+
+templ liveMap() {
+	<template x-if="loadingMap && !map">
+		<div class="[ pad-l ] [ flow ]" aria-busy="true"><div class="[ skeleton ]"></div><div class="[ skeleton ]"></div></div>
+	</template>
+	<template x-if="mapEmpty">
+		@components.Empty("No zones in this project yet", "Zones map paths to the parts of your architecture, and bounded contexts group them.") {
+			<button type="button" class="[ button ]" data-size="sm" x-on:click="showView('files')">Browse files</button>
+		}
+	</template>
+	<template x-if="mapCards && !mapEmpty">
+		<div class="code-map">
+			<header class="overview">
+				<p class="totals" x-text="mapCards.totals"></p>
+				<div class="spread" aria-hidden="true">
+					<template x-for="s in mapCards.spread" x-bind:key="s.key">
+						<span x-bind:data-hue="s.kind ? null : s.hue" x-bind:data-kind="s.kind || null" x-bind:style="'--share:' + s.share"></span>
+					</template>
+				</div>
+			</header>
+			<div class="contexts">
+				<template x-for="c in mapCards.cards" x-bind:key="c.key">
+					<section class="context" x-bind:data-hue="c.hue" x-bind:data-kind="c.kind || null" x-bind:aria-labelledby="'map-' + c.key">
+						<header>
+							<h3 x-bind:id="'map-' + c.key">
+								<span class="zone-tag" data-kind="context" x-bind:data-hue="c.hue" x-text="c.name"></span>
+							</h3>
+							<span class="count" x-text="c.count"></span>
+							<template x-if="c.purpose">
+								<p class="purpose" x-text="c.purpose"></p>
+							</template>
+							<template x-if="c.kind === 'unzoned'">
+								<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-on:click="showView('files')">Browse them</button>
+							</template>
+						</header>
+						<template x-if="c.zones.length">
+							<ol class="zones">
+								<template x-for="z in c.zones" x-bind:key="z.id">
+									<li>
+										<a x-bind:href="zoneHref(z.dir)" x-bind:data-empty="z.empty ? '' : null" x-on:click="openZone($event, z.dir)">
+											<span class="name" x-text="z.name"></span>
+											<code class="pattern" x-text="z.pattern"></code>
+											<template x-if="!z.empty">
+												<span class="meter" aria-hidden="true" x-bind:style="'--share:' + z.share"></span>
+											</template>
+											<span class="count" x-text="z.count"></span>
+										</a>
+									</li>
+								</template>
+							</ol>
+						</template>
+					</section>
+				</template>
+			</div>
+		</div>
+	</template>
+}
+
+templ livePalette() {
+	<dialog class="[ palette ]" x-ref="palette" x-bind:aria-label="paletteLabel" x-on:close="paletteClosed">
+		<input
+			x-ref="paletteInput"
+			type="text"
+			role="combobox"
+			aria-expanded="true"
+			aria-controls="code-palette-results"
+			aria-autocomplete="list"
+			autocomplete="off"
+			x-bind:placeholder="palettePlaceholder"
+			x-bind:aria-label="paletteLabel"
+			x-bind:aria-activedescendant="paletteActiveId"
+			x-model="paletteQuery"
+			x-on:input="paletteInput"
+			x-on:keydown.down.prevent="paletteMove(1)"
+			x-on:keydown.up.prevent="paletteMove(-1)"
+			x-on:keydown.enter.prevent="paletteChoose"
+		/>
+		<div class="[ results ]" id="code-palette-results" role="listbox" x-bind:aria-label="paletteLabel">
+			<template x-for="row in finderRows" x-bind:key="row.key">
+				<div role="option" x-bind:id="row.domId" x-bind:aria-selected="row.active" x-on:click="pickPath(row.path)">
+					<span class="[ text ]">
+						<span class="[ label ]">
+							<template x-for="p in row.nameParts" x-bind:key="p.key">
+								<span>
+									<template x-if="p.mark"><mark x-text="p.text"></mark></template>
+									<template x-if="!p.mark"><span x-text="p.text"></span></template>
+								</span>
+							</template>
+						</span>
+						<span class="[ description ]">
+							<template x-for="p in row.dirParts" x-bind:key="p.key">
+								<span>
+									<template x-if="p.mark"><mark x-text="p.text"></mark></template>
+									<template x-if="!p.mark"><span x-text="p.text"></span></template>
+								</span>
+							</template>
+						</span>
+					</span>
+					@liveMark("row.mark")
+				</div>
+			</template>
+			<template x-if="finderTruncated">
+				<p class="[ pad-s color-ink-faint ]">Showing 50,000 paths; type more to narrow</p>
+			</template>
+			<template x-if="paletteNote">
+				<p class="[ pad-s color-ink-muted ]" role="status" x-text="paletteNote"></p>
+			</template>
+		</div>
+	</dialog>
+}
+
+// ── static (first paint) ─────────────────────────────────────────────────
+
+// Static is a code view's first paint from v, removed by the browser once
+// Live has rendered.
+templ Static(v View) {
+	<div class="[ frame ]" x-ignore data-ssr>
+		@staticSourceBar(v)
+		if v.Problem != nil && !v.Problem.Empty {
+			<div class="[ banner ]" data-tone="danger" role="alert">
+				<div class="[ flow ] [ flow-space-3xs grow ]">
+					<span>{ v.Problem.Text }</span>
+					<span class="[ code ]">{ v.Problem.Code }</span>
+				</div>
+			</div>
+		}
+		if v.Problem != nil && v.Problem.Empty {
+			<div class="[ empty ]">
+				<h2>{ v.Problem.Title }</h2>
+				<p>{ v.Problem.Text }</p>
+				<p class="[ code ]">{ v.Problem.Code }</p>
+			</div>
+		} else {
+			<div class="code-layout" { sideAttrs(v)... }>
+				<aside class="side" aria-label={ sideLabel(v.View) }>
+					if v.View == ViewChanges {
+						@staticSummary(v)
+					} else if v.View == ViewFiles && !v.Seed.Gone {
+						@staticTree(v)
+					}
+				</aside>
+				<section class="main" aria-label={ v.View }>
+					if v.Seed.Gone && v.View != ViewChanges {
+						<div class="[ empty ]">
+							<h2>The worktree was removed</h2>
+							<p>Its files are no longer on disk. What the session committed is still on its branch.</p>
+							<a class="[ button ]" data-size="sm" href={ templ.SafeURL(v.Bar.BrowseHref) }>Browse the branch</a>
+						</div>
+					} else if v.View == ViewChanges {
+						@staticDiff(v)
+					} else if v.View == ViewFiles {
+						if v.File != nil {
+							@staticFile(*v.File)
+						} else {
+							@components.Empty("Pick a file", "Pick a file in the tree, or press T to find one by name.")
+						}
+					} else if v.Map != nil {
+						@staticMap(*v.Map)
+					}
+				</section>
+			</div>
+		}
+	</div>
+}
+
+templ staticSourceBar(v View) {
+	<header class="code-source-bar" { stateAttrs(v.Bar.State)... }>
+		<nav class="segmented" aria-label="Code views">
+			for _, s := range v.Bar.Views {
+				<a href={ templ.SafeURL(s.Href) } { currentAttrs(s.Current, "page")... }>
+					{ s.Label }
+					if s.Count != "" {
+						<span class="count">{ s.Count }</span>
+					}
+				</a>
+			}
+		</nav>
+		<div class="origin">
+			<span class="repo">{ v.Bar.Repo }</span>
+			if len(v.Bar.Refs) > 0 {
+				<select data-size="sm" data-fit aria-label="Branch, tag or commit">
+					for _, r := range refOptions(v.Bar.Refs, v.Bar.Ref) {
+						<option value={ r } { selectedAttrs(r == v.Bar.Ref)... }>{ r }</option>
+					}
+				</select>
+			} else if v.Bar.Branch != "" {
+				<span class="branch" title={ v.Bar.Branch }>{ v.Bar.Branch }</span>
+			}
+			<code class="commit" title={ v.Bar.CommitTitle }>{ v.Bar.Commit }</code>
+		</div>
+		if v.Bar.Word != "" {
+			<p class="state" role="status">{ v.Bar.Word }</p>
+		}
+		<div class="actions">
+			<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" disabled>Find file <kbd>T</kbd></button>
+		</div>
+		if v.Bar.Gone {
+			<div class="gone" role="note">
+				<span><strong>This session's worktree was removed.</strong> Showing what it committed on its branch; uncommitted work is gone with the worktree.</span>
+				<span class="code">WORKSPACE_MISSING</span>
+				<a class="[ button ]" data-size="sm" href={ templ.SafeURL(v.Bar.BrowseHref) }>Browse the branch</a>
+			</div>
+		}
+	</header>
+}
+
+templ staticSummary(v View) {
+	<nav class="diff-summary" aria-label="Changed files">
+		<header class="head">
+			if v.Totals != "" {
+				<p class="totals">{ v.Totals } <span class="added">{ v.Added }</span> <span class="deleted">{ v.Deleted }</span></p>
+			}
+			if v.Kind == "session" {
+				<nav class="segmented" aria-label="Scope">
+					for _, s := range v.Scopes {
+						<a href={ templ.SafeURL(s.Href) } { currentAttrs(s.Current, "page")... } { disabledAttrs(s.Disabled)... }>{ s.Label }</a>
+					}
+				</nav>
+			}
+		</header>
+		if v.NoChanges != "" {
+			<p class="none">{ v.NoChanges }</p>
+		}
+		<ol class="changed">
+			for _, r := range v.Summary {
+				<li>
+					<a href={ templ.SafeURL(r.Href) } { currentAttrs(r.Current, "location")... }>
+						@staticMark(r.Mark)
+						<span class="path"><bdi><span class="dir">{ r.Dir }</span><span class="name">{ r.Name }</span></bdi></span>
+						<span class="stat">
+							if r.HasStat {
+								<span class="added">{ r.Added }</span><span class="deleted">{ r.Deleted }</span>
+							}
+							if r.Note != "" {
+								<span class="note">{ r.Note }</span>
+							}
+						</span>
+						if r.Old != "" {
+							<span class="old">{ r.Old }</span>
+						}
+					</a>
+				</li>
+			}
+		</ol>
+	</nav>
+}
+
+templ staticMark(m *Mark) {
+	if m != nil {
+		<span class="change-mark" data-change={ m.Change } title={ m.Word } aria-label={ m.Word }>{ m.Letter }</span>
+	}
+}
+
+templ staticTree(v View) {
+	<ul class="file-tree" role="tree" aria-label="Files">
+		for i, r := range v.Tree {
+			<li
+				role="treeitem"
+				aria-level={ strconv.Itoa(r.Depth + 1) }
+				aria-setsize={ strconv.Itoa(r.SetSize) }
+				aria-posinset={ strconv.Itoa(r.PosInSet) }
+				style={ "--depth:" + strconv.Itoa(r.Depth) }
+				data-kind={ r.Kind }
+				title={ r.Title }
+				{ treeAttrs(r)... }
+			>
+				if r.Href != "" {
+					<a class="item" href={ templ.SafeURL(r.Href) } tabindex={ tabindex(i == 0) } aria-label={ r.Label }>
+						@staticTreeItem(r)
+					</a>
+				} else {
+					<span class="item" tabindex={ tabindex(i == 0) } aria-label={ r.Label }>
+						@staticTreeItem(r)
+					</span>
+				}
+			</li>
+		}
+	</ul>
+}
+
+templ staticTreeItem(r TreeRow) {
+	if r.Kind == "dir" {
+		@chevron("chevron")
+	} else {
+		<span></span>
+	}
+	@entryIcon(r.Kind)
+	<span class="name">
+		{ r.Name }
+		if r.Target != "" {
+			<span class="target">{ r.Target }</span>
+		}
+	</span>
+	if r.Dot != nil {
+		<span class="zone-tag" data-dot-only data-hue={ r.Dot.Hue } title={ r.Dot.Name } aria-label={ r.Dot.Name }></span>
+	}
+	@staticMark(r.Mark)
+}
+
+templ staticDiff(v View) {
+	<div class="diff-view">
+		if v.BaseGoneLine != "" {
+			<div class="[ banner ]" role="status">
+				<div class="[ flow ] [ flow-space-3xs grow ]">
+					<span><strong>{ v.BaseGoneLine }</strong>, so only uncommitted work can be compared.</span>
+					<span class="[ code ]">REF_NOT_FOUND</span>
+				</div>
+			</div>
+		}
+		if v.DiffTruncated {
+			<div class="[ banner ]" role="status">Some files were not loaded: this diff is over 20,000 changed lines.</div>
+		}
+		if v.NoChanges != "" {
+			@components.Empty("No changes yet", "The agent's edits appear here as it makes them.")
+		}
+		for _, f := range v.Files {
+			<section class="file" id={ f.ID } aria-labelledby={ f.NameID } { collapsedAttrs(f.Collapsed)... }>
+				<header class="head">
+					<button type="button" class="toggle" aria-expanded={ strconv.FormatBool(!f.Collapsed) } aria-controls={ f.BodyID } aria-label={ f.ToggleLabel }>
+						@chevron("")
+					</button>
+					@staticMark(f.Mark)
+					<h3 class="path" id={ f.NameID } title={ f.Path }>
+						if f.OldPath != "" {
+							<span class="old">{ f.OldPath }</span>
+						}
+						{ f.Path }
+					</h3>
+					for _, z := range f.Zones {
+						<span class="zone-tag" data-hue={ z.Hue } title={ z.Title }>{ z.Name }</span>
+					}
+					if f.ZoneMore != nil {
+						<span class="[ text-xs color-ink-faint ]" title={ f.ZoneMore.Title }>{ f.ZoneMore.Name }</span>
+					}
+					<span class="stat">
+						if f.HasStat {
+							<span class="added">{ f.Added }</span><span class="deleted">{ f.Deleted }</span>
+						} else {
+							<span class="note">binary</span>
+						}
+					</span>
+					<div class="actions">
+						if f.ViewHref != "" {
+							<a class="[ button ]" data-variant="ghost" data-size="sm" href={ templ.SafeURL(f.ViewHref) }>View file</a>
+						}
+					</div>
+				</header>
+				if len(f.Lines) > 0 {
+					<div class="hunks" id={ f.BodyID }>
+						@staticLines(f.Lines, f.Digits, f.Slug)
+					</div>
+				} else if f.Withheld != nil && !f.Collapsed {
+					<div class="withheld" data-reason={ f.Withheld.Reason } id={ f.BodyID }>
+						<p><strong>{ f.Withheld.Title }</strong> · { f.Withheld.Detail }</p>
+						if f.Withheld.Load {
+							<button type="button" class="[ button ]" data-size="sm" disabled>Load diff</button>
+						}
+					</div>
+				}
+			</section>
+		}
+	</div>
+}
+
+// staticLines paints rows of code as plain text: a diff's (slug != "") or a file's.
+templ staticLines(lines []Line, digits int, slug string) {
+	<div class="code-lines" style={ "--digits:" + strconv.Itoa(digits) }>
+		for _, l := range lines {
+			if l.Hunk {
+				<div class="hunk">
+					<span class="range">{ l.Range }</span>
+					if l.Header != "" {
+						<span class="context">{ l.Header }</span>
+					}
+				</div>
+			} else if slug != "" {
+				<div class="line" data-kind={ l.Kind } { noNewlineAttrs(l.NoNewline)... }>
+					<span class="gutter">
+						@num(l.Old, "diff-"+slug+"-L", "Old line")
+						@num(l.New, "diff-"+slug+"-R", "New line")
+					</span>
+					<span class="text">{ l.Text }</span>
+				</div>
+			} else {
+				<div class="line" id={ "L" + strconv.Itoa(l.N) }>
+					<span class="gutter">
+						@num(l.N, "L", "Line")
+					</span>
+					<span class="text">{ l.Text }</span>
+				</div>
+			}
+		}
+	</div>
+}
+
+templ num(n int, prefix, label string) {
+	if n > 0 {
+		<a class="num" data-line={ strconv.Itoa(n) } href={ templ.SafeURL("#" + prefix + strconv.Itoa(n)) } tabindex="-1" aria-label={ label + " " + strconv.Itoa(n) }></a>
+	} else {
+		<span class="num"></span>
+	}
+}
+
+templ staticFile(f FileView) {
+	<article class="code-view">
+		<header class="head">
+			<nav class="crumbs" aria-label="Path">
+				<ol>
+					for _, c := range f.Crumbs {
+						if c.Href != "" {
+							<li><a href={ templ.SafeURL(c.Href) }>{ c.Label }</a></li>
+						} else {
+							<li><a aria-current="page">{ c.Label }</a></li>
+						}
+					}
+				</ol>
+			</nav>
+			for _, z := range f.Zones {
+				<span class="zone-tag" data-hue={ z.Hue } title={ z.Title }>{ z.Name }</span>
+			}
+			if f.ZoneMore != nil {
+				<span class="[ text-xs color-ink-faint ]" title={ f.ZoneMore.Title }>{ f.ZoneMore.Name }</span>
+			}
+			<span class="meta">{ f.Meta }</span>
+		</header>
+		if f.Notice != nil {
+			<p class="notice"><strong>{ f.Notice.Title }</strong> · { f.Notice.Text } <code class="path">{ f.Notice.Path }</code></p>
+		}
+		if f.Placeholder != nil {
+			<div class="placeholder">
+				@entryIcon("file")
+				<strong>{ f.Placeholder.Title }</strong>
+				<p>{ f.Placeholder.Text }</p>
+			</div>
+		} else {
+			<div class="scroll">
+				@staticLines(f.Lines, f.Digits, "")
+			</div>
+		}
+	</article>
+}
+
+templ staticMap(m MapView) {
+	if m.Empty {
+		@components.Empty("No zones in this project yet", "Zones map paths to the parts of your architecture, and bounded contexts group them.")
+	} else {
+		<div class="code-map">
+			<header class="overview">
+				<p class="totals">{ m.Totals }</p>
+				<div class="spread" aria-hidden="true">
+					for _, s := range m.Spread {
+						<span { spreadAttrs(s)... }></span>
+					}
+				</div>
+			</header>
+			<div class="contexts">
+				for _, c := range m.Cards {
+					<section class="context" data-hue={ c.Hue } aria-labelledby={ "map-ssr-" + c.ID } { kindAttrs(c.Kind)... }>
+						<header>
+							<h3 id={ "map-ssr-" + c.ID }><span class="zone-tag" data-kind="context" data-hue={ c.Hue }>{ c.Name }</span></h3>
+							<span class="count">{ c.Count }</span>
+							if c.Purpose != "" {
+								<p class="purpose">{ c.Purpose }</p>
+							}
+						</header>
+						if len(c.Zones) > 0 {
+							<ol class="zones">
+								for _, z := range c.Zones {
+									<li>
+										<a href={ templ.SafeURL(z.Href) } { emptyAttrs(z.Empty)... }>
+											<span class="name">{ z.Name }</span>
+											<code class="pattern">{ z.Pattern }</code>
+											if !z.Empty {
+												<span class="meter" aria-hidden="true" style={ "--share:" + strconv.FormatFloat(z.Share, 'f', 3, 64) }></span>
+											}
+											<span class="count">{ z.Count }</span>
+										</a>
+									</li>
+								}
+							</ol>
+						}
+					</section>
+				}
+			</div>
+		</div>
+	}
+}
+
+// ── icons ────────────────────────────────────────────────────────────────
+
+templ chevron(class string) {
+	<svg class={ class } aria-hidden="true" viewBox="0 0 12 12"><path d="M3 4.5 6 7.5 9 4.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+}
+
+// entryIcon is a tree entry's or a placeholder's icon by kind.
+templ entryIcon(kind string) {
+	switch kind {
+		case "dir":
+			<svg class="icon" aria-hidden="true" viewBox="0 0 16 16"><path d="M2 4.25h4.25l1.25 1.5H14v6.5H2z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"></path></svg>
+		case "symlink":
+			<svg class="icon" aria-hidden="true" viewBox="0 0 16 16"><path d="M4 1.75h5.25L12.25 4.75v9.5H4z M6.5 11.5c0-2 1-3 3-3M8.5 7l1.25 1.5L8.5 10" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"></path></svg>
+		case "submodule":
+			<svg class="icon" aria-hidden="true" viewBox="0 0 16 16"><path d="M2 4.25h4.25l1.25 1.5H14v6.5H2z M6 9h4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"></path></svg>
+		default:
+			<svg class="icon" aria-hidden="true" viewBox="0 0 16 16"><path d="M4 1.75h5.25L12.25 4.75v9.5H4z M9 1.75V5h3.25" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"></path></svg>
+	}
+}
