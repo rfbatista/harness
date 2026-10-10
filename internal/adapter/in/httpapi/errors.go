@@ -49,7 +49,7 @@ func errorHandler(err error, c echo.Context) {
 			"RUN_NOT_FOUND", "RUN_COMMAND_NOT_FOUND", "ARTIFACT_NOT_FOUND",
 			"MESSAGE_NOT_FOUND", "REVIEW_NOT_FOUND", "STATUS_CHECK_NOT_FOUND", "NO_ARCHITECT",
 			"RESOURCE_NOT_FOUND", "COMMENT_NOT_FOUND", "NOTIFICATION_NOT_FOUND",
-			"COMMIT_NOT_FOUND", "REF_NOT_FOUND", "PATH_NOT_FOUND":
+			"COMMIT_NOT_FOUND", "REF_NOT_FOUND", "PATH_NOT_FOUND", "GIT_CREDENTIAL_NOT_FOUND":
 			writeCoded(c, http.StatusNotFound, err, se)
 			return
 		case "INVALID_PATTERN", "INVALID_NAME", "INVALID_ROOT", "INVALID_PATH",
@@ -59,7 +59,9 @@ func errorHandler(err error, c echo.Context) {
 			"NO_ANSWERS", "ENV_FILE_TOO_LARGE",
 			"ARTIFACT_PATH_OUTSIDE_WORKTREE", "ARTIFACT_URL_NOT_LOCAL", "ARTIFACT_TOO_LARGE", "ARTIFACT_KIND_MISMATCH",
 			"ARTIFACT_NOT_PROMOTABLE", "PROJECT_ROOT_INVALID",
-			"PR_NO_REMOTE", "PR_BASE_NOT_FOUND", "TASK_NOT_ON_PROJECT":
+			"PR_NO_REMOTE", "PR_BASE_NOT_FOUND", "TASK_NOT_ON_PROJECT",
+			"GIT_CREDENTIAL_INVALID_KEY", "GIT_CREDENTIAL_HOST_MISMATCH", "GIT_CREDENTIAL_KIND_MISMATCH",
+			"GIT_CREDENTIAL_MISSING":
 			writeCoded(c, http.StatusBadRequest, err, se)
 			return
 		case "ARTIFACT_NOT_YOURS", "ARCHITECT_ONLY", "TASK_STATUS_OWNED_BY_ARCHITECT", "SESSION_NOT_ON_TASK",
@@ -85,15 +87,16 @@ func errorHandler(err error, c echo.Context) {
 			"ARTIFACT_IN_PROJECT", "REVIEW_NOT_PENDING",
 			"ARTIFACT_NOT_IN_PROJECT", "ARTIFACT_PROJECT_MISMATCH", "ARTIFACT_PRODUCER_TASK",
 			"PROJECT_NAME_TAKEN", "PROJECT_HAS_RUNNING_SESSIONS",
-			"PR_NO_COMMITS", "PR_ALREADY_EXISTS":
+			"PR_NO_COMMITS", "PR_ALREADY_EXISTS", "GIT_CREDENTIAL_NAME_TAKEN":
 			writeCoded(c, http.StatusConflict, err, se)
 			return
-		case "CLAUDE_CLI_NOT_FOUND", "AGENT_CLI_NOT_FOUND", "SERVER_HOSTING_UNAVAILABLE", "PR_TOOL_UNAVAILABLE":
+		case "CLAUDE_CLI_NOT_FOUND", "AGENT_CLI_NOT_FOUND", "SERVER_HOSTING_UNAVAILABLE", "PR_TOOL_UNAVAILABLE",
+			"GIT_CREDENTIAL_STORE_LOCKED":
 			// The request is well-formed; the machine just cannot run agents,
 			// or reach the code host as the person.
 			writeCoded(c, http.StatusServiceUnavailable, err, se)
 			return
-		case "PR_PUSH_FAILED", "PR_CREATE_FAILED":
+		case "PR_PUSH_FAILED", "PR_CREATE_FAILED", "GIT_CREDENTIAL_REJECTED":
 			// The remote or the code host refused; its reason is in the message.
 			writeCoded(c, http.StatusBadGateway, err, se)
 			return

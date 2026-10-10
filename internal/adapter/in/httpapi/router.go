@@ -220,6 +220,18 @@ func NewRouter(h *Handler, opts ...Option) *echo.Echo {
 	g.POST("/notifications/read", h.handleMarkNotificationsRead)
 	g.GET("/notifications/events", h.handleNotificationEvents) // every inbox change (SSE)
 
+	// git credentials: what every git remote operation authenticates with
+	g.GET("/list_git_credentials", h.handleListGitCredentials)
+	g.POST("/create_git_credential", h.handleCreateGitCredential)
+	g.POST("/update_git_credential", h.handleUpdateGitCredential)
+	g.POST("/delete_git_credential", h.handleDeleteGitCredential)
+	g.POST("/test_git_credential", h.handleTestGitCredential)
+	g.GET("/get_git_identity", h.handleGetGitIdentity)
+	g.POST("/update_git_identity", h.handleUpdateGitIdentity)
+	g.GET("/get_repository_credential", h.handleGetRepositoryCredential)
+	g.GET("/list_repository_credentials", h.handleListRepositoryCredentials)
+	g.POST("/set_repository_credential", h.handleSetRepositoryCredential)
+
 	// code views: read-only file trees, contents, diffs and the zone map
 	g.GET("/code/tree", h.handleCodeTree)
 	g.GET("/code/paths", h.handleCodePaths)

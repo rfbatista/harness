@@ -65,6 +65,9 @@ type Deps struct {
 	// Notifications seeds the top bar's unread count and the inbox's latest
 	// page; nil, or a failed read, renders the page without a seed.
 	Notifications ports.NotificationReader
+	// GitCredentials seeds the Git credentials page, the repositories'
+	// credential and the pull-request panel; nil leaves them out.
+	GitCredentials ports.GitCredentials
 	// Now defaults to time.Now.
 	Now func() time.Time
 }
