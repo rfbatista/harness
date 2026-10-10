@@ -57,13 +57,22 @@ type GitCredentialChange struct {
 	Deleted    bool
 }
 
+// GitCredentialList is every credential, sorted by host then name, and
+// whether the store is locked: its key is missing or is not the one that
+// sealed the secrets. Locked is known without decrypting anything.
+type GitCredentialList struct {
+	Credentials []*domain.GitCredential `json:"credentials"`
+	Locked      bool                    `json:"locked"`
+}
+
 // GitCredentials is the driving port of the git credentials context:
 // *gitcredentials.Service satisfies it, and httpclient implements it over
 // the wire. Its reads return the §1 shapes, so the templ BFF seeds encode
 // byte for byte like the API bodies.
 type GitCredentials interface {
-	// ListGitCredentials is sorted by host, then name; never nil.
-	ListGitCredentials(ctx context.Context) ([]*domain.GitCredential, error)
+	// ListGitCredentials is the list as list_git_credentials answers it;
+	// Credentials is never nil.
+	ListGitCredentials(ctx context.Context) (*GitCredentialList, error)
 	CreateGitCredential(ctx context.Context, in CreateGitCredential) (*domain.GitCredential, error)
 	UpdateGitCredential(ctx context.Context, in UpdateGitCredential) (*domain.GitCredential, error)
 	// DeleteGitCredential unpins the repositories pinned to it.

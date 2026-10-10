@@ -16,17 +16,15 @@ type GitCredentials struct{ c *Client }
 // NewGitCredentials returns the adapter over c.
 func NewGitCredentials(c *Client) *GitCredentials { return &GitCredentials{c: c} }
 
-func (g *GitCredentials) ListGitCredentials(ctx context.Context) ([]*domain.GitCredential, error) {
-	var out struct {
-		Credentials []*domain.GitCredential `json:"credentials"`
-	}
+func (g *GitCredentials) ListGitCredentials(ctx context.Context) (*ports.GitCredentialList, error) {
+	var out ports.GitCredentialList
 	if err := g.c.get(ctx, "/api/list_git_credentials", nil, &out); err != nil {
 		return nil, err
 	}
 	if out.Credentials == nil {
 		out.Credentials = []*domain.GitCredential{}
 	}
-	return out.Credentials, nil
+	return &out, nil
 }
 
 // secrets are the request's secret fields in clear: domain.Secret writes

@@ -25,7 +25,7 @@ func (h *Handler) handleListGitCredentials(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	return c.JSON(http.StatusOK, map[string]any{"credentials": list})
+	return c.JSON(http.StatusOK, list)
 }
 
 func (h *Handler) handleCreateGitCredential(c echo.Context) error {

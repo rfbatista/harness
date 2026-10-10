@@ -545,8 +545,8 @@ func TestCreatePushesAndOpensThePullRequest(t *testing.T) {
 	if f.auth.Files.Operations() != 0 {
 		t.Fatal("the operation's files outlived the create")
 	}
-	if list, _ := f.auth.ListGitCredentials(context.Background()); list[0].LastUsedAt == nil || list[1].LastUsedAt == nil {
-		t.Fatalf("last_used_at not recorded: %+v %+v", list[0], list[1])
+	if list, _ := f.auth.ListGitCredentials(context.Background()); list.Credentials[0].LastUsedAt == nil || list.Credentials[1].LastUsedAt == nil {
+		t.Fatalf("last_used_at not recorded: %+v %+v", list.Credentials[0], list.Credentials[1])
 	}
 }
 

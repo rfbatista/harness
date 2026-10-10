@@ -114,7 +114,7 @@ func TestTheKeyFileIsMadeOnceAndALostKeyLocks(t *testing.T) {
 	if _, err := env.Service.TestGitCredential(ctx, c.ID, ""); errs.Code(err) != domain.CodeGitCredentialStoreLocked {
 		t.Fatalf("test with the wrong key: %v, want STORE_LOCKED", err)
 	}
-	if list, err := env.Service.ListGitCredentials(ctx); err != nil || len(list) != 1 {
+	if list, err := env.Service.ListGitCredentials(ctx); err != nil || len(list.Credentials) != 1 || !list.Locked {
 		t.Fatalf("the credential is gone or unreadable while locked: %v, %v", list, err)
 	}
 }

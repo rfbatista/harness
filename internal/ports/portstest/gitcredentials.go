@@ -112,8 +112,8 @@ func GitCredentialsConformance(t *testing.T, newPort func(t *testing.T) (ports.G
 		if err != nil {
 			t.Fatal(err)
 		}
-		if list == nil || len(list) != 0 {
-			t.Fatalf("ListGitCredentials = %#v, want an empty, non-nil list", list)
+		if list == nil || list.Credentials == nil || len(list.Credentials) != 0 || list.Locked {
+			t.Fatalf("ListGitCredentials = %#v, want an empty, non-nil list, not locked", list)
 		}
 		id, err := p.GetGitIdentity(ctx)
 		if err != nil || id != nil {
@@ -141,10 +141,10 @@ func GitCredentialsConformance(t *testing.T, newPort func(t *testing.T) (ports.G
 		if err != nil {
 			t.Fatal(err)
 		}
-		if len(list) != 1 || list[0].ID != c.ID {
+		if len(list.Credentials) != 1 || list.Credentials[0].ID != c.ID || list.Locked {
 			t.Fatalf("ListGitCredentials = %+v", list)
 		}
-		a, _ := json.Marshal(list[0])
+		a, _ := json.Marshal(list.Credentials[0])
 		b, _ := json.Marshal(c)
 		if string(a) != string(b) {
 			t.Fatalf("listed %s, created %s", a, b)
@@ -207,7 +207,7 @@ func GitCredentialsConformance(t *testing.T, newPort func(t *testing.T) (ports.G
 				t.Fatal(err)
 			}
 			m := map[string]bool{}
-			for _, c := range list {
+			for _, c := range list.Credentials {
 				m[c.ID] = c.IsDefault
 			}
 			return m
@@ -259,7 +259,7 @@ func GitCredentialsConformance(t *testing.T, newPort func(t *testing.T) (ports.G
 			t.Fatal(err)
 		}
 		list, _ := p.ListGitCredentials(ctx)
-		if len(list) != 0 {
+		if len(list.Credentials) != 0 {
 			t.Fatalf("after delete %+v", list)
 		}
 		rc, err := p.GetRepositoryCredential(ctx, repo)
@@ -414,10 +414,13 @@ func GitCredentialsConformance(t *testing.T, newPort func(t *testing.T) (ports.G
 		p, fx := newPort(t)
 		c := token(t, p, "GitHub", "github.com", false)
 		_, repo := fx.AddRepository(t, "", "widgets", "https://github.com/acme/widgets.git")
+		if list, err := p.ListGitCredentials(ctx); err != nil || list.Locked {
+			t.Fatalf("list before locking: %+v, %v; want not locked", list, err)
+		}
 		fx.Lock(t)
 
-		if list, err := p.ListGitCredentials(ctx); err != nil || len(list) != 1 {
-			t.Fatalf("list while locked: %v, %v", list, err)
+		if list, err := p.ListGitCredentials(ctx); err != nil || len(list.Credentials) != 1 || !list.Locked {
+			t.Fatalf("list while locked: %+v, %v; want the credential, locked", list, err)
 		}
 		if _, err := p.UpdateGitIdentity(ctx, "Ada", "ada@example.com"); err != nil {
 			t.Fatalf("identity while locked: %v", err)

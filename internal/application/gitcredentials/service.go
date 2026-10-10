@@ -139,15 +139,29 @@ func publicOf(all []*ports.StoredGitCredential) []*domain.GitCredential {
 	return out
 }
 
-// ListGitCredentials is every credential, sorted by host then name.
-func (s *Service) ListGitCredentials(context.Context) ([]*domain.GitCredential, error) {
+// ListGitCredentials is every credential, sorted by host then name, and
+// whether the store is locked, from the key ids alone.
+func (s *Service) ListGitCredentials(context.Context) (*ports.GitCredentialList, error) {
 	all, err := s.st.Credentials.List()
 	if err != nil {
 		return nil, err
 	}
+	return &ports.GitCredentialList{Credentials: s.sorted(all), Locked: s.locked(all)}, nil
+}
+
+func (s *Service) sorted(all []*ports.StoredGitCredential) []*domain.GitCredential {
 	out := publicOf(all)
 	sortCredentials(out)
-	return out, nil
+	return out
+}
+
+// credentials is every credential, sorted.
+func (s *Service) credentials() ([]*domain.GitCredential, error) {
+	all, err := s.st.Credentials.List()
+	if err != nil {
+		return nil, err
+	}
+	return s.sorted(all), nil
 }
 
 func (s *Service) checkName(all []*ports.StoredGitCredential, name, selfID string) (string, error) {
@@ -524,7 +538,7 @@ func (s *Service) GetRepositoryCredential(ctx context.Context, repositoryID stri
 	if r == nil {
 		return nil, errRepositoryNotFound()
 	}
-	creds, err := s.ListGitCredentials(ctx)
+	creds, err := s.credentials()
 	if err != nil {
 		return nil, err
 	}
@@ -537,7 +551,7 @@ func (s *Service) ListRepositoryCredentials(ctx context.Context, projectID strin
 	if s.rd.Projects.Get(projectID) == nil {
 		return nil, domain.GitCredentialError("PROJECT_NOT_FOUND", "project not found")
 	}
-	creds, err := s.ListGitCredentials(ctx)
+	creds, err := s.credentials()
 	if err != nil {
 		return nil, err
 	}

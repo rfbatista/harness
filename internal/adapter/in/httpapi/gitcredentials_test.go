@@ -51,7 +51,7 @@ func credCall(t *testing.T, method, url, body string) (*http.Response, []byte) {
 }
 
 // The templ pages seed what the port returns; the API answers the same
-// values. Both must be the same bytes.
+// values. Both must be the same bytes, locked or not.
 func TestGitCredentialSeedsAreTheAPIBodies(t *testing.T) {
 	srv, fake, _ := gitCredentialsServer(t)
 	ctx := context.Background()
@@ -74,7 +74,7 @@ func TestGitCredentialSeedsAreTheAPIBodies(t *testing.T) {
 		path string
 		seed any
 	}{
-		{"/api/list_git_credentials", map[string]any{"credentials": list}},
+		{"/api/list_git_credentials", list},
 		{"/api/get_git_identity", map[string]any{"identity": identity}},
 		{"/api/get_repository_credential?repository_id=" + repo, one},
 		{"/api/list_repository_credentials?project_id=" + project, map[string]any{"repositories": all}},
@@ -93,6 +93,14 @@ func TestGitCredentialSeedsAreTheAPIBodies(t *testing.T) {
 		if bytes.Contains(body, []byte("ghp_seedtoken1234")) || bytes.Contains(body, []byte("PRIVATE KEY")) {
 			t.Fatalf("%s shows a secret: %s", c.path, body)
 		}
+	}
+
+	fake.Lock()
+	locked, _ := fake.ListGitCredentials(ctx)
+	_, body := credCall(t, "GET", srv.URL+"/api/list_git_credentials", "")
+	seed, _ := json.Marshal(locked)
+	if !locked.Locked || !bytes.Equal(bytes.TrimSpace(body), seed) || !bytes.Contains(body, []byte(`"locked":true`)) {
+		t.Fatalf("locked:\n api  %s\n seed %s", bytes.TrimSpace(body), seed)
 	}
 }
 
