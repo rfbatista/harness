@@ -48,7 +48,7 @@ export const sessionsPage = ({
   location = globalThis.location,
   prefs = { textSize: () => DEFAULT_TEXT_SIZE, setTextSize() {}, focus: () => false, setFocus() {} },
   shell = { setFocus() {} },
-  clipboard = globalThis.navigator?.clipboard,
+  clipboard = { writeText: (text) => globalThis.navigator.clipboard.writeText(text) },
   isPhone = () => globalThis.matchMedia?.("(width < 48rem)").matches ?? false,
 }) => () => {
   let unfollow = () => {};

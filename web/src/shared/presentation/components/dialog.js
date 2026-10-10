@@ -109,15 +109,17 @@ export const popupDialog = (env) => () => ({
     return this._dialog?.isOpen ?? false;
   },
   /** @param {{ detail?: { id: string, anchor: HTMLElement } }} event */
+  // this.$el is the element of the expression that called the method (a
+  // button inside, for act), so the dialog's own element names it.
   openFrom(event) {
-    if (event.detail?.id === this.$el.id && event.detail.anchor) this._dialog.open(event.detail.anchor);
+    if (event.detail?.id === this._dialog.el.id && event.detail.anchor) this._dialog.open(event.detail.anchor);
   },
   close() {
     this._dialog.close();
   },
   /** A button inside it was pressed: tells the page, which owns what it does (dialog-action, { id, action }). */
   act(action) {
-    this.$dispatch("dialog-action", { id: this.$el.id, action });
+    this.$dispatch("dialog-action", { id: this._dialog.el.id, action });
   },
   destroy() {
     this._dialog?.close({ refocus: false });

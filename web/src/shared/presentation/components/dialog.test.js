@@ -140,3 +140,23 @@ test("each popupDialog keeps its own dialog, even nested in a scope that holds o
   const instance = popupDialog(env())();
   assert.ok(Object.prototype.hasOwnProperty.call(instance, "_dialog"), "declared, so Alpine does not write it to the outer scope");
 });
+
+test("act tells the page which dialog a button belongs to, whatever element called it", () => {
+  const outer = document.createElement("div");
+  outer.innerHTML = `<div class="popup" role="dialog" id="pd-act"><button type="button">Copy session id</button></div>`;
+  document.body.append(outer);
+  const el = outer.querySelector("#pd-act");
+  const dispatched = [];
+  const instance = popupDialog(env())();
+  try {
+    Object.defineProperties(instance, { $el: { value: el, configurable: true }, $dispatch: { value: (name, detail) => dispatched.push([name, detail]) } });
+    instance.init();
+    // As Alpine calls it from the button: $el is the button, not the dialog.
+    Object.defineProperty(instance, "$el", { value: el.querySelector("button") });
+    instance.act("copy-id");
+    assert.deepEqual(dispatched, [["dialog-action", { id: "pd-act", action: "copy-id" }]]);
+  } finally {
+    instance.destroy();
+    outer.remove();
+  }
+});
