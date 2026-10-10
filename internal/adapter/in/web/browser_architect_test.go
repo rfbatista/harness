@@ -252,6 +252,7 @@ func TestPersonPausesAndResumesADelegatesStatusChecks(t *testing.T) {
 	panel := `(document.querySelector('#session-checks:popover-open')?.textContent ?? '').replace(/\s+/g, ' ').trim()`
 	openPanel := chromedp.Evaluate(`document.querySelector('.session-head .check-button').click()`, nil)
 	var before, panelText, picker, paused, row, resumed, focusAfterEsc string
+	var headWithChecks, headWithout float64
 	if err := chromedp.Run(ctx,
 		chromedp.EmulateViewport(1280, 800),
 		chromedp.Navigate(srv.URL+"/projects/p1/tasks/t1"),
@@ -276,11 +277,18 @@ func TestPersonPausesAndResumesADelegatesStatusChecks(t *testing.T) {
 		clickButton(`#session-checks`, "Resume checks"),
 		chromedp.Poll(`(`+button+`).includes('next')`, nil, chromedp.WithPollingTimeout(5*time.Second)),
 		chromedp.Evaluate(button, &resumed),
+		chromedp.Evaluate(`document.querySelector('.session-head').getBoundingClientRect().height`, &headWithChecks),
+		chromedp.Evaluate(`[...document.querySelectorAll('[role=listbox] .row')].find(r => r.textContent.includes("A person's own session")).click()`, nil),
+		chromedp.Poll(`!document.querySelector('.session-head .check-button') && document.querySelector('.session-head h2')?.textContent === "A person's own session"`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Evaluate(`document.querySelector('.session-head').getBoundingClientRect().height`, &headWithout),
 	); err != nil {
 		t.Fatalf("%v\nJS errors: %v", err, errs.all())
 	}
 	if picker != "10 min" {
 		t.Errorf("the interval picker shows %q while the loop checks every 10m", picker)
+	}
+	if headWithChecks != headWithout || headWithChecks == 0 {
+		t.Errorf("the head is %vpx with a check loop and %vpx without: it must not change (L4)", headWithChecks, headWithout)
 	}
 	if focusAfterEsc != "button" {
 		t.Errorf("after Esc the focus is on %s, want the Checks button", focusAfterEsc)
