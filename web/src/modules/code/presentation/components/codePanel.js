@@ -43,7 +43,9 @@ export const CODE_HINTS = Object.freeze([
 /** @param {import("./codeBrowser.js").BrowserDeps} deps */
 export const codePanel = (deps) => (/** @type {PanelInput} */ panel) => {
   let observer = null;
-  return compose(codeBrowser(deps), {
+  const browser = codeBrowser(deps);
+  const codeBrowserPopState = browser.popState;
+  return compose(browser, {
     kind: "session",
     sessionId: "",
     shown: false,
@@ -115,7 +117,8 @@ export const codePanel = (deps) => (/** @type {PanelInput} */ panel) => {
       const { sessionId, shown } = event.detail ?? {};
       if (sessionId !== this.sessionId) return;
       this.shown = shown;
-      this.$dispatch("stream-hints", shown ? CODE_HINTS : null);
+      // After a replaced panel's destroy has cleared them.
+      this.$nextTick(() => this.$dispatch("stream-hints", shown ? CODE_HINTS : null));
       if (!shown) return;
       (deps.history ?? globalThis.history)?.replaceState?.(null, "", this.currentHref());
       this.enterView();
@@ -125,8 +128,14 @@ export const codePanel = (deps) => (/** @type {PanelInput} */ panel) => {
       return this.viewHref(this.view);
     },
 
-    sessionEnded() {
-      this.ended();
+    /** The page's `session-ended` {id}: this session's code is fixed now. */
+    sessionEnded(event) {
+      if (event.detail?.id === this.sessionId) this.ended();
+    },
+
+    /** Back and forward move the code view only while its tab is in front. */
+    popState() {
+      if (this.shown) codeBrowserPopState.call(this);
     },
 
     watchWidth() {

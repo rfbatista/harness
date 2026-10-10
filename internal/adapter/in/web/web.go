@@ -92,8 +92,11 @@ func NewHandler(deps Deps, assets *Assets, fallback http.Handler) http.Handler {
 	taskPages := tasks.Handler{
 		Projects: deps.Projects, Tasks: deps.Tasks, Sessions: deps.Sessions,
 		Agents: deps.Agents, Repositories: deps.Repositories, Docs: deps.Documents, Artifacts: deps.Artifacts, PullRequests: deps.PullRequests,
-		Resources: deps.Resources, Comments: deps.Comments,
+		Resources: deps.Resources, Comments: deps.Comments, Code: deps.Code,
 		Layout: s.layout, Render: render, Now: deps.Now,
+	}
+	if deps.Workspaces != nil {
+		taskPages.Workspaces = deps.Workspaces
 	}
 	projectPages := projects.Handler{
 		Projects: deps.Projects, Repositories: deps.Repositories, EnvFiles: deps.EnvFiles, Summaries: deps.ProjectSummaries,
@@ -138,6 +141,12 @@ func NewHandler(deps Deps, assets *Assets, fallback http.Handler) http.Handler {
 		mux.Handle("GET /projects/{project}/repositories/{repository}/code/files", s.page(codePages.Files))
 		mux.Handle("GET /projects/{project}/repositories/{repository}/code/files/{path...}", s.page(codePages.Files))
 		mux.Handle("GET /projects/{project}/repositories/{repository}/code/map", s.page(codePages.Map))
+		session := "GET /projects/{project}/tasks/{task}/sessions/{session}/code"
+		mux.Handle(session, s.page(taskPages.SessionCode("")))
+		mux.Handle(session+"/changes", s.page(taskPages.SessionCode(code.ViewChanges)))
+		mux.Handle(session+"/files", s.page(taskPages.SessionCode(code.ViewFiles)))
+		mux.Handle(session+"/files/{path...}", s.page(taskPages.SessionCode(code.ViewFiles)))
+		mux.Handle(session+"/map", s.page(taskPages.SessionCode(code.ViewMap)))
 	}
 	mux.Handle("GET /projects/{project}/design", s.page(taskPages.ProjectDesign))
 	mux.Handle("GET /projects/{project}/reviews", s.page(taskPages.Reviews))

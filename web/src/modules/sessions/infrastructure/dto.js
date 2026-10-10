@@ -88,6 +88,10 @@ export function toSeed(body) {
     agentNames: { ...(body.agent_names ?? {}) },
     repositoryNames: { ...(body.repository_names ?? {}) },
     documentTitles: { ...(body.document_titles ?? {}) },
+    // The Code tab: served at all, the session a code URL opened on it, and each worktree's base branch.
+    code: body.code === true,
+    openCode: typeof body.open_code === "string" ? body.open_code : "",
+    baseRefs: { ...(body.base_refs ?? {}) },
   };
 }
 

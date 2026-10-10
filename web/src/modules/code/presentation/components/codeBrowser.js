@@ -12,7 +12,7 @@
 import { Codes, codeOf } from "../../../../shared/domain/errors.js";
 import { FeedStatus } from "../../../../shared/domain/feed.js";
 import { baseName, changeMark } from "../../domain/code.js";
-import { parseDiffHash, rowOfLine, rowOfNewLine } from "../../domain/diff.js";
+import { parseDiffHash, rowOfLine, rowOfNewLine, slugs } from "../../domain/diff.js";
 import { problemOf } from "../../domain/errors.js";
 import { clampRange, parseRange, parseRangeHash, rangeHash, scrollTopFor, splitLines, WRAP_UP_TO } from "../../domain/lines.js";
 import { markParts, rank, shiftRanges } from "../../domain/fuzzy.js";
@@ -75,6 +75,9 @@ export function codeBrowser({ gateway, highlighter, prefs, history = globalThis.
   let sequenceTimer = null;
   let scrollFrame = 0;
   let refreshing = null;
+  // A file made current by ] or a click stays current through the scroll it causes,
+  // even when the diff is too short to bring its head to the top.
+  let pinnedUntil = 0;
   let refreshAgain = false;
 
   return {
@@ -168,7 +171,7 @@ export function codeBrowser({ gateway, highlighter, prefs, history = globalThis.
       return this.liveState === GONE;
     },
     get views() {
-      return viewsView(this.route, { count: this.diff ? this.diff.files.length : null, kind: this.kind, current: this.view });
+      return viewsView(this.route, { count: this.listDiff ? this.listDiff.files.length : null, kind: this.kind, current: this.view });
     },
     get scopes() {
       return scopesView(this.route, { scope: this.scope, gone: this.gone, baseGone: this.baseGone, baseRef: this.baseRef });
@@ -206,13 +209,19 @@ export function codeBrowser({ gateway, highlighter, prefs, history = globalThis.
     get treeBusy() {
       return this.tree.busy[""] ? "true" : null;
     },
+    /** The changed files the side lists: the re-read diff while the open one is held (UX §5). */
+    get listDiff() {
+      return this.heldDiff ?? this.diff;
+    },
     get summaryRows() {
-      if (!this.diff) return [];
+      const list = this.listDiff;
+      if (!list) return [];
       const fresh = new Set(this.freshPaths);
-      return this.diff.files.map((f) => summaryRowView(f, { slug: this.diffSlugs[f.path], current: f.path === this.currentFile, fresh: fresh.has(f.path) }));
+      const s = slugs(list.files.map((f) => f.path));
+      return list.files.map((f) => summaryRowView(f, { slug: s.get(f.path), current: f.path === this.currentFile, fresh: fresh.has(f.path) }));
     },
     get totals() {
-      return this.diff ? totalsView(this.diff) : null;
+      return this.listDiff ? totalsView(this.listDiff) : null;
     },
     get noChanges() {
       return !!this.diff && this.diff.files.length === 0;
@@ -506,9 +515,9 @@ export function codeBrowser({ gateway, highlighter, prefs, history = globalThis.
     },
 
     setDiff(diff) {
-      const { slugs, collapsed } = diffSetup(diff);
+      const { slugs: bySlug, collapsed } = diffSetup(diff);
       const keep = this.diff ? { ...this.collapsed } : {};
-      this.diffSlugs = Object.fromEntries(slugs);
+      this.diffSlugs = Object.fromEntries(bySlug);
       this.collapsed = this.diff ? Object.fromEntries(diff.files.filter((f) => keep[f.path] ?? collapsed[f.path]).map((f) => [f.path, true])) : collapsed;
       this.diff = diff;
       this.diffRev += 1;
@@ -924,6 +933,7 @@ export function codeBrowser({ gateway, highlighter, prefs, history = globalThis.
       const slug = this.diffSlugs[path];
       if (!main || !slug) return;
       this.currentFile = path;
+      pinnedUntil = Date.now() + 400;
       if (this.collapsed[path] && line) this.toggleFile(path);
       const section = main.querySelector?.(`#diff-${cssEscape(slug)}`);
       if (!section) return;
@@ -946,10 +956,12 @@ export function codeBrowser({ gateway, highlighter, prefs, history = globalThis.
       ctl.refresh();
     },
 
-    clickSummary(event, path) {
+    async clickSummary(event, path) {
       if (event.metaKey || event.ctrlKey) return;
       event.preventDefault();
       this.showMain = true;
+      // A file only the re-read diff has: show that diff first.
+      if (this.heldDiff && !this.diff?.files.some((f) => f.path === path)) await this.reload();
       if (this.collapsed[path]) this.toggleFile(path);
       this.$nextTick?.(() => this.scrollToFile(path));
       if (this.urlOwned()) history?.replaceState?.(null, "", hrefOf(this.route, `#diff-${this.diffSlugs[path]}`));
@@ -958,7 +970,7 @@ export function codeBrowser({ gateway, highlighter, prefs, history = globalThis.
     /** The main side scrolled: the file under the sticky head becomes current. */
     mainScrolled() {
       this.touched = true;
-      if (scrollFrame || !this.showingChanges) return;
+      if (scrollFrame || !this.showingChanges || Date.now() < pinnedUntil) return;
       scrollFrame = requestAnimationFrame(() => {
         scrollFrame = 0;
         const main = this.$refs?.main;
