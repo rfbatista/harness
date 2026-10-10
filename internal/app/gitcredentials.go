@@ -10,6 +10,7 @@ import (
 	"gorm.io/gorm"
 
 	"operators-mcp/internal/adapter/out/gitcli"
+	"operators-mcp/internal/adapter/out/githubapi"
 	"operators-mcp/internal/adapter/out/persistence/sqlite"
 	"operators-mcp/internal/adapter/out/secretbox"
 	"operators-mcp/internal/app/catalog"
@@ -74,7 +75,7 @@ func newGitCredentialsService(p gitCredentialsParams) (*gitcredentials.Service, 
 		box, nil)
 	files := gitcli.NewAuthFiles(filepath.Join(dataDir, "git"), gitcli.MachineExcludesFile())
 	svc.Files = files
-	svc.Tester = &gitcli.Probe{Files: files}
+	svc.Tester = &gitcli.Probe{Files: files, GitHub: githubapi.New().User}
 	svc.Subscribe(p.Cat.Bus)
 	return svc, nil
 }

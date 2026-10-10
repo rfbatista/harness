@@ -249,6 +249,10 @@ type GitAuth interface {
 	// SessionEnv writes (or rewrites) the session's git directory. A locked
 	// store or nothing resolving still answers, with a Note.
 	SessionEnv(ctx context.Context, sessionID, repositoryID string) (*SessionGit, error)
+	// GitHubToken is the https_token for origin's host and its secret, read
+	// in memory for API calls: no files. Nil when none resolves;
+	// GIT_CREDENTIAL_STORE_LOCKED when it cannot be read.
+	GitHubToken(ctx context.Context, repositoryID, originURL string) (*domain.GitCredential, domain.Secret, error)
 	// EndSession removes the session's directory.
 	EndSession(sessionID string)
 	// Used records that a credential just authenticated.

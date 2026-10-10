@@ -28,10 +28,12 @@ import (
 	"operators-mcp/internal/ports"
 )
 
-// Fake is the service over memory. It satisfies ports.GitCredentials.
+// Fake is the service over memory. It satisfies ports.GitCredentials and
+// ports.GitAuth; Files holds what its git directories would.
 type Fake struct {
 	*gitcredentials.Service
 	Catalog *Catalog
+	Files   *Files
 	box     *Box
 }
 
@@ -43,7 +45,9 @@ func New() *Fake {
 		gitcredentials.Stores{Credentials: NewCredentials(), Identity: &Identity{}, Pins: NewPins()},
 		gitcredentials.Readers{Repositories: cat, Projects: cat.Projects(), Origins: cat},
 		box, nil)
-	return &Fake{Service: svc, Catalog: cat, box: box}
+	files := NewFiles()
+	svc.Files = files
+	return &Fake{Service: svc, Catalog: cat, Files: files, box: box}
 }
 
 // AddRepository records a repository whose origin is originURL ("" for none)
@@ -358,4 +362,80 @@ func (s *Pins) DeleteByProject(projectID string) error {
 		}
 	}
 	return nil
+}
+
+// Files is ports.GitAuthFiles in memory: it keeps what each directory would
+// hold and answers an environment naming it, so a test can see which
+// credentials an operation or a session got.
+type Files struct {
+	mu       sync.Mutex
+	sessions map[string]ports.GitAuthMaterial
+	ops      map[string]ports.GitAuthMaterial
+}
+
+// NewFiles returns an empty one.
+func NewFiles() *Files {
+	return &Files{sessions: map[string]ports.GitAuthMaterial{}, ops: map[string]ports.GitAuthMaterial{}}
+}
+
+// EnvKey is the variable the environments carry: the directory's name.
+const EnvKey = "HARNESS_TEST_GIT_DIR"
+
+func (f *Files) WriteSession(sessionID string, m ports.GitAuthMaterial) ([]string, string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.sessions[sessionID] = m
+	return []string{EnvKey + "=session-" + sessionID}, "/fake/git/sessions/" + sessionID + "/env.sh", nil
+}
+
+func (f *Files) RemoveSession(sessionID string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	delete(f.sessions, sessionID)
+	return nil
+}
+
+func (f *Files) SessionIDs() ([]string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	var ids []string
+	for id := range f.sessions {
+		ids = append(ids, id)
+	}
+	slices.Sort(ids)
+	return ids, nil
+}
+
+func (f *Files) WriteOperation(m ports.GitAuthMaterial) ([]string, func(), error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	id := nextID("op-")
+	f.ops[id] = m
+	return []string{EnvKey + "=" + id}, func() {
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		delete(f.ops, id)
+	}, nil
+}
+
+func (f *Files) SweepOperations() error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.ops = map[string]ports.GitAuthMaterial{}
+	return nil
+}
+
+// Session is what the session's directory holds, and whether it has one.
+func (f *Files) Session(sessionID string) (ports.GitAuthMaterial, bool) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	m, ok := f.sessions[sessionID]
+	return m, ok
+}
+
+// Operations counts the operation directories not yet released.
+func (f *Files) Operations() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return len(f.ops)
 }

@@ -264,3 +264,21 @@ func (s *Service) SubscribeSessions(sub ports.EventSubscriber) {
 		return nil
 	})
 }
+
+// GitHubToken reads the token for GitHub API calls on the repository, in
+// memory only.
+func (s *Service) GitHubToken(_ context.Context, repositoryID, originURL string) (*domain.GitCredential, domain.Secret, error) {
+	res, all, err := s.resolve(repositoryID, originURL)
+	if err != nil || res.GitHub == nil {
+		return nil, "", err
+	}
+	stored := find(all, res.GitHub.ID)
+	if stored == nil {
+		return nil, "", errNotFound
+	}
+	cs, err := s.reveal(stored)
+	if err != nil {
+		return nil, "", err
+	}
+	return res.GitHub, cs.Secret, nil
+}

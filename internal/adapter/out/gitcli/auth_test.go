@@ -3,6 +3,7 @@ package gitcli
 import (
 	"context"
 	"encoding/base64"
+	"errors"
 	"net"
 	"net/http"
 	"net/http/cgi"
@@ -504,4 +505,46 @@ func TestTheEnvFileRestoresTheHarnessEnvironmentInAShell(t *testing.T) {
 	if parts[0] != "unset" || parts[1] != storedToken || parts[2] != "" || !strings.Contains(parts[3], "IdentityAgent=none") {
 		t.Fatalf("after sourcing env.sh: %q", out)
 	}
+}
+
+// The publisher pushes with the operation's environment only, and says when
+// origin refused the credential.
+func TestThePublisherAuthenticatesOnlyThroughItsEnvironment(t *testing.T) {
+	m := plantMachine(t)
+	for k, v := range envMap(m.env) {
+		t.Setenv(k, v)
+	}
+	srv := newGitServer(t, "x-access-token", storedToken)
+	host := strings.TrimPrefix(srv.URL, "http://")
+	host = host[:strings.IndexByte(host, '/')]
+	dir := checkout(t, m, srv.URL)
+	mustGit(t, dir, nil, "branch", "agent/x")
+	p := NewBranchPublisher()
+	ctx := context.Background()
+
+	err := p.Push(ctx, dir, "agent/x", nil)
+	if !errors.Is(err, ports.ErrRemoteAuthRejected) {
+		t.Fatalf("push with no credentials: %v, want ErrRemoteAuthRejected", err)
+	}
+	files := authFiles(t, m)
+	wrong, release, err := files.WriteOperation(ports.GitAuthMaterial{HTTPS: &ports.GitHTTPSLogin{Host: host, Username: "x-access-token", Token: "ghp_wrong"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer release()
+	if err := p.Push(ctx, dir, "agent/x", wrong); !errors.Is(err, ports.ErrRemoteAuthRejected) {
+		t.Fatalf("push with a refused token: %v, want ErrRemoteAuthRejected", err)
+	}
+	right, release2, err := files.WriteOperation(ports.GitAuthMaterial{HTTPS: &ports.GitHTTPSLogin{Host: host, Username: "x-access-token", Token: storedToken}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer release2()
+	if err := p.Push(ctx, dir, "agent/x", right); err != nil {
+		t.Fatalf("push with the stored token: %v", err)
+	}
+	if err := p.FetchBranch(ctx, dir, "agent/x", right); err != nil {
+		t.Fatalf("fetch with the stored token: %v", err)
+	}
+	m.untouched(t)
 }

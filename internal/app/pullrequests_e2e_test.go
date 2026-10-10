@@ -13,8 +13,9 @@ import (
 	"go.uber.org/fx"
 
 	"operators-mcp/internal/adapter/in/httpapi"
-	"operators-mcp/internal/adapter/out/ghcli/ghclitest"
+	"operators-mcp/internal/adapter/out/githubapi/githubapitest"
 	"operators-mcp/internal/app/catalog"
+	"operators-mcp/internal/application/gitcredentials"
 	"operators-mcp/internal/application/orchestration"
 	"operators-mcp/internal/application/planning"
 	"operators-mcp/internal/application/workspaces"
@@ -25,25 +26,45 @@ import (
 // prServer is the wired server stack on a database file, with real git and
 // only the code host faked.
 type prServer struct {
-	app  *fx.App
-	cat  catalog.Catalog
-	orch *orchestration.Service
-	plan *planning.Service
-	ws   *workspaces.Service
-	prs  *workspaces.PullRequests
-	sess ports.SessionRepository
-	e    *archE2E
+	app   *fx.App
+	cat   catalog.Catalog
+	orch  *orchestration.Service
+	plan  *planning.Service
+	ws    *workspaces.Service
+	prs   *workspaces.PullRequests
+	sess  ports.SessionRepository
+	creds *gitcredentials.Service
+	e     *archE2E
 }
 
-func startPRServer(t *testing.T, dir, dbPath string, host *ghclitest.FakeHost) *prServer {
+// e2eToken is the GitHub token the e2e servers store.
+const e2eToken domain.Secret = "ghp_e2eStoredToken0001"
+
+// storeCredentials stores what a PR on github.com needs: an ssh key for the
+// push (origin is git@github.com:…, which url.insteadOf lands in a local
+// bare repository) and a GitHub token for the API. It answers the token.
+func (s *prServer) storeCredentials(t *testing.T) *domain.GitCredential {
+	t.Helper()
+	ctx := context.Background()
+	if _, err := s.creds.CreateGitCredential(ctx, ports.CreateGitCredential{Name: "deploy key", Kind: domain.GitSSHKey, Host: "github.com", Generate: true}); err != nil {
+		t.Fatal(err)
+	}
+	tok, err := s.creds.CreateGitCredential(ctx, ports.CreateGitCredential{Name: "GitHub", Kind: domain.GitHTTPSToken, Host: "github.com", Token: e2eToken})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return tok
+}
+
+func startPRServer(t *testing.T, dir, dbPath string, host *githubapitest.FakeHost) *prServer {
 	t.Helper()
 	s := &prServer{}
 	s.app = fx.New(
 		fx.Supply(Config{HTTPAddr: "127.0.0.1:0", MCPAddr: "127.0.0.1:0", DBPath: dbPath, Root: dir, ClaudeBin: "/bin/true", SessionShell: "direct"}),
-		PersistenceModule, CatalogModule, PlanningModule, WorkspacesModule,
+		PersistenceModule, CatalogModule, PlanningModule, WorkspacesModule, GitCredentialsModule,
 		AgentRuntimeModule, TaskChannelModule, TextProcessingModule, ToolingModule,
 		WithCodeHost(host),
-		fx.Populate(&s.cat, &s.orch, &s.plan, &s.ws, &s.prs, &s.sess),
+		fx.Populate(&s.cat, &s.orch, &s.plan, &s.ws, &s.prs, &s.sess, &s.creds),
 		fx.NopLogger,
 	)
 	if err := s.app.Start(context.Background()); err != nil {
@@ -93,7 +114,7 @@ func TestPullRequests_EndToEnd(t *testing.T) {
 	gitE2E(t, repoDir, "push", "-q", "origin", "main")
 	gitE2E(t, repoDir, "fetch", "-q", "origin")
 
-	host := ghclitest.New()
+	host := githubapitest.New()
 	s := startPRServer(t, dir, dbPath, host)
 	stopped := false
 	t.Cleanup(func() {
@@ -104,6 +125,7 @@ func TestPullRequests_EndToEnd(t *testing.T) {
 	if _, err := s.cat.Settings.UpdateSettings(map[string]string{domain.SettingWorkspacesRoot: filepath.Join(dir, "worktrees")}); err != nil {
 		t.Fatal(err)
 	}
+	token := s.storeCredentials(t)
 	p, err := s.cat.Projects.CreateProject(ctx, "widgets", repoDir)
 	if err != nil {
 		t.Fatal(err)
@@ -201,17 +223,35 @@ func TestPullRequests_EndToEnd(t *testing.T) {
 		t.Fatalf("blockers after the merge = %v; a merged PR blocks nothing", b)
 	}
 
-	// gh signed out on the server machine.
-	host.SignOut()
+	// GitHub revokes the stored token: create names it.
+	host.Reject(e2eToken)
+	status, out = e.http("POST", "/api/create_pull_request", `{"workspace_id":"`+ws.ID+`","title":"Follow-up"}`)
+	details, _ = out["details"].(map[string]any)
+	if status != 502 || out["code"] != "GIT_CREDENTIAL_REJECTED" || details["credential_id"] != token.ID || details["host"] != "github.com" ||
+		!strings.Contains(out["error"].(string), "Bad credentials") {
+		t.Fatalf("create with a revoked token = %d %v", status, out)
+	}
+	// No token stored at all: the draft says so, and create says what to add.
+	if err := s.creds.DeleteGitCredential(ctx, token.ID); err != nil {
+		t.Fatal(err)
+	}
 	_, out = e.http("GET", get, "")
-	if b := out["draft"].(map[string]any)["blockers"].([]any); len(b) != 1 || b[0] != "PR_TOOL_UNAVAILABLE" {
-		t.Fatalf("blockers signed out = %v", b)
+	if b := out["draft"].(map[string]any)["blockers"].([]any); len(b) != 1 || b[0] != "GIT_CREDENTIAL_MISSING" {
+		t.Fatalf("blockers with no token = %v", b)
 	}
 	status, out = e.http("POST", "/api/create_pull_request", `{"workspace_id":"`+ws.ID+`","title":"Follow-up"}`)
-	if status != 503 || out["code"] != "PR_TOOL_UNAVAILABLE" || !strings.Contains(out["error"].(string), "gh auth login") {
-		t.Fatalf("create signed out = %d %v", status, out)
+	details, _ = out["details"].(map[string]any)
+	if status != 400 || out["code"] != "GIT_CREDENTIAL_MISSING" || details["host"] != "github.com" || details["kind"] != "https_token" {
+		t.Fatalf("create with no token = %d %v", status, out)
 	}
-	host.SignIn()
+	if _, err := s.creds.CreateGitCredential(ctx, ports.CreateGitCredential{Name: "GitHub again", Kind: domain.GitHTTPSToken, Host: "github.com", Token: "ghp_e2eStoredToken0002"}); err != nil {
+		t.Fatal(err)
+	}
+	for _, tok := range host.Tokens() {
+		if tok != e2eToken && tok != "ghp_e2eStoredToken0002" {
+			t.Fatalf("a host call carried %q, not a stored token", tok.Reveal())
+		}
+	}
 
 	// A follow-up PR closed on the host reaches the feed at once through
 	// RefreshNow, with no wait for the 30 s throttle.
