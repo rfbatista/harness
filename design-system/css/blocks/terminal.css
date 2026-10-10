@@ -4,9 +4,9 @@
  * fits its rows and columns to (the screen script adds it). xterm's viewport
  * scrolls the history; the screen carries data-history while there is some
  * (set by the screen script), and then keeps xterm's scrollbar on and themed.
- * In a session's pane (.session) it has no bar: its connection state and
- * tools sit at the end of the tab row (pane-tabs.css, contract L7). The
- * one-line .bar under the screen stays for the App tab until it moves too.
+ * It has no bar of its own: its connection state and tools sit at the end
+ * of the session's tab row (pane-tabs.css, contract L7), for the Agent tab
+ * and the App tab's run terminal alike.
  * <div class="terminal" data-state="live">[<div class="pane-note">…</div>]
  *   <div class="screen" data-history><div class="host">xterm</div></div>[<p class="notice">…</p>]</div>
  * .notice: a word in the middle of the empty well while connecting. An ended
@@ -110,18 +110,5 @@
     &[data-state="ended"] > .screen { cursor: default; }
 
     @media (prefers-reduced-motion: reduce) { & > .screen { transition: none; } }
-
-    & > .bar {
-      display: flex;
-      align-items: center;
-      gap: var(--space-m);
-      min-block-size: 2rem;
-      padding-inline: var(--space-m);
-      border-block-start: var(--border-width) solid var(--color-line);
-      background: var(--color-panel);
-      font-size: var(--text-xs);
-
-      & .status { font-size: inherit; }
-    }
   }
 }

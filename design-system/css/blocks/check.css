@@ -22,7 +22,6 @@
  *   <div class="message" data-tone="danger" role="alert">… <button class="button">Retry</button></div>
  *   <footer><span>Last check: …</span><button class="button" data-size="sm">Pause checks</button></footer></div>
  * Phone: the same controls are the first rows of the session sheet (sheet.css).
- * Replaces .check-bar (message.css), which stays until the web UI moves.
  */
 
 @layer blocks {
