@@ -1,11 +1,13 @@
 package tasks
 
 import (
+	"context"
 	"net/http"
 	"time"
 
 	"github.com/rfbatista/harnesskit/errs"
 
+	"operators-mcp/internal/adapter/in/web/code"
 	"operators-mcp/internal/adapter/in/web/pullrequests"
 	"operators-mcp/internal/adapter/in/web/sessions"
 	"operators-mcp/internal/adapter/in/web/shell"
@@ -32,9 +34,13 @@ type Handler struct {
 	Comments  ports.TaskCommentReader
 	// PullRequests seeds the session rows' pull request badges; nil seeds none.
 	PullRequests ports.PullRequests
-	Layout       shell.Layout
-	Render       shell.Renderer
-	Now          func() time.Time
+	// Code serves the sessions' Code tab; nil leaves it out. Workspaces
+	// names each worktree's base branch for it.
+	Code       ports.CodeBrowser
+	Workspaces WorkspaceReader
+	Layout     shell.Layout
+	Render     shell.Renderer
+	Now        func() time.Time
 }
 
 // workspaceIDs are the sessions' worktrees, each once.
@@ -93,6 +99,28 @@ func (h Handler) New(w http.ResponseWriter, r *http.Request) error {
 // Task serves GET /projects/{project}/tasks/{task}: the task's sessions. A
 // task of another project is TICKET_NOT_FOUND, as if it did not exist.
 func (h Handler) Task(w http.ResponseWriter, r *http.Request) error {
+	return h.task(w, r, nil)
+}
+
+// WorkspaceReader reads a workspace (*workspaces.Service satisfies it).
+type WorkspaceReader interface {
+	Get(id string) *domain.Workspace
+}
+
+// SessionCode serves a session's code URLs (…/sessions/{session}/code[/…]):
+// the task page with that session open on its Code tab, painted from the
+// code browser in process.
+func (h Handler) SessionCode(view string) shell.Handler {
+	return func(w http.ResponseWriter, r *http.Request) error {
+		if h.Code == nil {
+			return errs.Newf("UNAVAILABLE", "code browsing is not available on this server")
+		}
+		rt := code.SessionRoute(r, view)
+		return h.task(w, r, &rt)
+	}
+}
+
+func (h Handler) task(w http.ResponseWriter, r *http.Request, codeRoute *code.Route) error {
 	ctx := r.Context()
 	project, err := h.Projects.GetProject(ctx, r.PathValue("project"))
 	if err != nil {
@@ -158,5 +186,65 @@ func (h Handler) Task(w http.ResponseWriter, r *http.Request) error {
 	for _, st := range Statuses {
 		view.StatusChoices = append(view.StatusChoices, sessions.StatusChoice{Value: st.Value, Label: st.Label, Selected: st.Value == string(task.Status)})
 	}
+	if h.Code != nil {
+		view.Seed.Code = true
+		view.Seed.BaseRefs = h.baseRefs(list)
+	}
+	if codeRoute != nil {
+		paint, err := h.codePaint(ctx, *codeRoute, list, repos, view.Seed.BaseRefs)
+		if err != nil {
+			return err
+		}
+		view.Code = paint
+		view.Seed.OpenCode = codeRoute.SessionID
+	}
 	return h.Render(w, r, http.StatusOK, sessions.Page(view))
+}
+
+// baseRefs names each session worktree's base branch, by workspace.
+func (h Handler) baseRefs(list []*domain.Session) map[string]string {
+	out := map[string]string{}
+	if h.Workspaces == nil {
+		return out
+	}
+	for _, s := range list {
+		if s.WorkspaceID == "" {
+			continue
+		}
+		if ws := h.Workspaces.Get(s.WorkspaceID); ws != nil && ws.BaseRef != "" {
+			out[s.WorkspaceID] = ws.BaseRef
+		}
+	}
+	return out
+}
+
+// codePaint reads what the session's Code tab shows first.
+func (h Handler) codePaint(ctx context.Context, rt code.Route, list []*domain.Session, repos []*domain.Repository, baseRefs map[string]string) (*code.View, error) {
+	var session *domain.Session
+	for _, s := range list {
+		if s.ID == rt.SessionID {
+			session = s
+		}
+	}
+	if session == nil {
+		return nil, errs.Newf("SESSION_NOT_FOUND", "session %s is not on this task", rt.SessionID)
+	}
+	if session.WorkspaceID == "" {
+		return nil, errs.Newf("WORKSPACE_NOT_FOUND", "session %s has no worktree", rt.SessionID)
+	}
+	name := ""
+	for _, repo := range repos {
+		if repo.ID == session.RepositoryID {
+			name = repo.Name
+		}
+	}
+	seed := code.Load(ctx, h.Code, rt, code.Source{
+		Query:          ports.CodeSourceQuery{WorkspaceID: session.WorkspaceID},
+		RepositoryName: name,
+		Branch:         session.Branch,
+		BaseRef:        baseRefs[session.WorkspaceID],
+		Live:           !session.Status.IsTerminal(),
+	})
+	v := code.Build(seed)
+	return &v, nil
 }

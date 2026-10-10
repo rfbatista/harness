@@ -1,0 +1,100 @@
+/*
+ * File tree — a lazy ARIA tree of a source's directories and files.
+ * Nested markup: a directory's children are a [role="group"] list inside its
+ * treeitem, rendered when it is first expanded. Every row is the same grid:
+ * chevron · icon · name · zone dot · change mark. Depth comes from --depth
+ * on the treeitem (0 at the root), set by the Web UI, so a row's hover and
+ * selection span the whole width at any depth.
+ * <ul class="file-tree" role="tree" aria-label="Files">
+ *   <li role="treeitem" aria-expanded="true" aria-level="1" style="--depth:0" data-kind="dir">
+ *     <span class="item"><svg class="chevron"/><svg class="icon"/><span class="name">internal</span>
+ *       <span class="change-mark" data-change="contains" title="Contains changes"></span></span>
+ *     <ul role="group">…</ul></li>
+ *   <li role="treeitem" aria-selected="true" aria-level="2" style="--depth:1" data-kind="file" title="internal/feed.go">
+ *     <a class="item" href="…" tabindex="-1">…</a></li>
+ * </ul>
+ * Exceptions: aria-expanded, aria-selected (the open file), aria-busy on a
+ * directory (its group holds li.skeleton-row placeholders), data-kind="dir|file|symlink|
+ * submodule", data-change="deleted" (struck-through name), .target (a
+ * symlink's target, faint, after an arrow), data-fresh (one-shot arrival
+ * wash when a code_changed re-read adds it). Focus is the roving tabindex
+ * on the .item; the focused row gets the ring inside its edge.
+ */
+
+@layer blocks {
+  .file-tree {
+    --_row: var(--size-nav-row);
+    --_indent: 0.875rem;
+
+    padding: var(--space-2xs) 0;
+    font-size: var(--text-sm);
+    list-style: none;
+
+    & ul { padding: 0; list-style: none; }
+    & li { max-inline-size: none; }
+
+    & .item {
+      display: grid;
+      grid-template-columns: 0.75rem 1rem minmax(0, 1fr) auto auto;
+      align-items: center;
+      column-gap: var(--space-2xs);
+      min-block-size: var(--_row);
+      padding-inline: calc(var(--space-s) + var(--depth, 0) * var(--_indent)) var(--space-s);
+      color: var(--color-ink-muted);
+      text-decoration: none;
+      cursor: default;
+      user-select: none;
+
+      &:hover { background: var(--color-hover); color: var(--color-ink); }
+      &:focus-visible { outline-offset: calc(var(--border-focus-width) * -1); }
+    }
+
+    & .chevron {
+      grid-column: 1;
+      inline-size: 0.75rem;
+      block-size: 0.75rem;
+      color: var(--color-ink-faint);
+      transform: rotate(-90deg);
+      transition: transform var(--duration-instant) var(--ease-out);
+    }
+    & [aria-expanded="true"] > .item > .chevron { transform: none; }
+
+    & .icon { grid-column: 2; inline-size: 1rem; block-size: 1rem; color: var(--color-ink-faint); }
+    & .name { grid-column: 3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    & .target { margin-inline-start: var(--space-xs); color: var(--color-ink-faint); font-family: var(--font-mono); font-size: var(--text-xs); }
+    & .target::before { content: "→ " / ""; }
+    & .zone-tag { grid-column: 4; }
+    & .change-mark { grid-column: 5; }
+
+    & [data-kind="dir"] > .item > .name { color: var(--color-ink); }
+    & [data-kind="submodule"] > .item > .name::after { content: " · submodule"; color: var(--color-ink-faint); font-size: var(--text-xs); }
+    & [data-change="deleted"] > .item > .name { text-decoration: line-through; color: var(--color-ink-faint); }
+
+    & [aria-selected="true"] > .item {
+      background: var(--color-selected);
+      color: var(--color-ink);
+      font-weight: var(--weight-medium);
+
+      & > .icon { color: var(--color-signal); }
+    }
+
+    /* Loading a directory: its group holds .skeleton-row items until the entries arrive. */
+    & .skeleton-row {
+      display: flex;
+      align-items: center;
+      block-size: var(--_row);
+      padding-inline: calc(var(--space-s) + var(--depth, 0) * var(--_indent) + 1.75rem) var(--space-l);
+    }
+
+    & [data-fresh] > .item { animation: arrived 8s var(--ease-out) both; }
+
+    @media (pointer: coarse) { --_row: var(--size-touch); }
+    @media (prefers-reduced-motion: reduce) {
+      & .chevron { transition: none; }
+      & [data-fresh] > .item { animation: none; box-shadow: inset 2px 0 0 var(--color-signal); }
+    }
+    @media (forced-colors: active) {
+      & [aria-selected="true"] > .item { outline: 2px solid Highlight; outline-offset: -2px; }
+    }
+  }
+}

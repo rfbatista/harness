@@ -3,6 +3,7 @@ package history
 import (
 	"strconv"
 
+	"operators-mcp/internal/adapter/in/web/code"
 	"operators-mcp/internal/adapter/in/web/components"
 	"operators-mcp/internal/adapter/in/web/pullrequests"
 	"operators-mcp/internal/adapter/in/web/shell"
@@ -143,6 +144,9 @@ templ workingDetail(w *WorkingView) {
 					</li>
 				}
 			</ul>
+			if w.Diff != nil {
+				@historyDiff(*w.Diff)
+			}
 		</div>
 	</article>
 }
@@ -195,8 +199,21 @@ templ commitDetail(c *CommitView) {
 					}
 				</ul>
 			}
+			if c.Diff != nil {
+				@historyDiff(*c.Diff)
+			}
 		</div>
 	</article>
+}
+
+// historyDiff is the open commit's (or the uncommitted changes') diff under
+// its file list: painted here, taken over by the code module's codeDiff.
+templ historyDiff(v code.View) {
+	<section aria-label="Diff" x-data="codeDiff" data-seed="code-diff-seed">
+		@templ.JSONScript("code-diff-seed", v.Seed)
+		@code.StaticDiff(v)
+		@code.LiveDiff()
+	</section>
 }
 
 func parentLabel(n int) string {

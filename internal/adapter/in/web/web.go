@@ -18,6 +18,7 @@ import (
 	"github.com/a-h/templ"
 	"github.com/rfbatista/harnesskit/errs"
 
+	"operators-mcp/internal/adapter/in/web/code"
 	"operators-mcp/internal/adapter/in/web/history"
 	"operators-mcp/internal/adapter/in/web/home"
 	"operators-mcp/internal/adapter/in/web/notifications"
@@ -55,11 +56,24 @@ type Deps struct {
 	// PullRequests offers a session's branch as a pull request on its history
 	// page and badges the task page's rows; nil leaves both out.
 	PullRequests ports.PullRequests
+	// Code reads code for the code pages, the session's Code tab and the
+	// history pages' diffs; nil leaves all three out.
+	Code ports.CodeBrowser
+	// Workspaces names a session's base branch and lists a repository's
+	// branches for the code pages' ref select; nil shortens both.
+	Workspaces CodeWorkspaces
 	// Notifications seeds the top bar's unread count and the inbox's latest
 	// page; nil, or a failed read, renders the page without a seed.
 	Notifications ports.NotificationReader
 	// Now defaults to time.Now.
 	Now func() time.Time
+}
+
+// CodeWorkspaces is what the code pages read of the workspaces:
+// *workspaces.Service satisfies it.
+type CodeWorkspaces interface {
+	Get(id string) *domain.Workspace
+	ListBranches(repositoryID string) ([]domain.GitBranch, error)
 }
 
 // NewHandler routes the web client's pages and assets. Requests it does not
@@ -78,8 +92,11 @@ func NewHandler(deps Deps, assets *Assets, fallback http.Handler) http.Handler {
 	taskPages := tasks.Handler{
 		Projects: deps.Projects, Tasks: deps.Tasks, Sessions: deps.Sessions,
 		Agents: deps.Agents, Repositories: deps.Repositories, Docs: deps.Documents, Artifacts: deps.Artifacts, PullRequests: deps.PullRequests,
-		Resources: deps.Resources, Comments: deps.Comments,
+		Resources: deps.Resources, Comments: deps.Comments, Code: deps.Code,
 		Layout: s.layout, Render: render, Now: deps.Now,
+	}
+	if deps.Workspaces != nil {
+		taskPages.Workspaces = deps.Workspaces
 	}
 	projectPages := projects.Handler{
 		Projects: deps.Projects, Repositories: deps.Repositories, EnvFiles: deps.EnvFiles, Summaries: deps.ProjectSummaries,
@@ -87,7 +104,14 @@ func NewHandler(deps Deps, assets *Assets, fallback http.Handler) http.Handler {
 	}
 	historyPages := history.Handler{
 		Projects: deps.Projects, Repositories: deps.Repositories, History: deps.History, Sessions: deps.Sessions, Tasks: deps.Tasks,
-		PullRequests: deps.PullRequests, Layout: s.layout, Render: render, Now: deps.Now,
+		PullRequests: deps.PullRequests, Code: deps.Code, Layout: s.layout, Render: render, Now: deps.Now,
+	}
+	codePages := code.Handler{
+		Projects: deps.Projects, Repositories: deps.Repositories, Code: deps.Code, History: deps.History,
+		Layout: s.layout, Render: render,
+	}
+	if deps.Workspaces != nil {
+		codePages.Branches = deps.Workspaces
 	}
 	toProject := func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/projects/"+url.PathEscape(r.PathValue("project")), http.StatusFound)
@@ -111,6 +135,19 @@ func NewHandler(deps Deps, assets *Assets, fallback http.Handler) http.Handler {
 	mux.Handle("GET /projects/{project}/repositories/{repository}/env", s.page(projectPages.EnvFileList))
 	mux.Handle("GET /projects/{project}/repositories/{repository}/history", s.page(historyPages.Page))
 	mux.Handle("GET /projects/{project}/repositories/{repository}/history/{commit}", s.page(historyPages.Page))
+	if deps.Code != nil {
+		mux.Handle("GET /projects/{project}/code", s.page(codePages.Index))
+		mux.Handle("GET /projects/{project}/repositories/{repository}/code", s.page(codePages.Root))
+		mux.Handle("GET /projects/{project}/repositories/{repository}/code/files", s.page(codePages.Files))
+		mux.Handle("GET /projects/{project}/repositories/{repository}/code/files/{path...}", s.page(codePages.Files))
+		mux.Handle("GET /projects/{project}/repositories/{repository}/code/map", s.page(codePages.Map))
+		session := "GET /projects/{project}/tasks/{task}/sessions/{session}/code"
+		mux.Handle(session, s.page(taskPages.SessionCode("")))
+		mux.Handle(session+"/changes", s.page(taskPages.SessionCode(code.ViewChanges)))
+		mux.Handle(session+"/files", s.page(taskPages.SessionCode(code.ViewFiles)))
+		mux.Handle(session+"/files/{path...}", s.page(taskPages.SessionCode(code.ViewFiles)))
+		mux.Handle(session+"/map", s.page(taskPages.SessionCode(code.ViewMap)))
+	}
 	mux.Handle("GET /projects/{project}/design", s.page(taskPages.ProjectDesign))
 	mux.Handle("GET /projects/{project}/reviews", s.page(taskPages.Reviews))
 	mux.Handle("GET /projects/{project}/documents", s.page(taskPages.ProjectDocuments))
@@ -190,6 +227,9 @@ func (s *server) layout(ctx context.Context, title, projectID, taskID string) (s
 	}
 	frame.Rail = tasks.BuildRail(projectID, list, live, taskID, shell.CollapsedFrom(ctx))
 	frame.Rail.BoardHref = tasks.BoardHref(projectID)
+	if s.deps.Code != nil {
+		frame.Rail.CodeHref = code.IndexHref(projectID)
+	}
 	frame.Rail.NewTaskHref = tasks.NewTaskHref(projectID)
 	frame.Rail.ReviewsHref = tasks.ReviewsHref(projectID)
 	if s.deps.Documents != nil {

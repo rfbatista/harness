@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"operators-mcp/internal/adapter/in/web/code"
 	"operators-mcp/internal/adapter/in/web/components"
 	"operators-mcp/internal/adapter/in/web/pullrequests"
 	"operators-mcp/internal/adapter/in/web/shell"
@@ -119,6 +120,11 @@ type Seed struct {
 	// Tasks are the project's tasks, so an attached asset can link the task
 	// that produced it. Never null.
 	Tasks []TaskLink `json:"tasks"`
+	// Code: the Code tab is served. OpenCode is the session a code URL opens
+	// on it; BaseRefs each session worktree's base branch, by workspace.
+	Code     bool              `json:"code,omitempty"`
+	OpenCode string            `json:"open_code,omitempty"`
+	BaseRefs map[string]string `json:"base_refs,omitempty"`
 }
 
 // TaskLink is a task of the project with its page, as the design seeds
@@ -185,6 +191,9 @@ type PageView struct {
 	// PullRequests seeds the rows' pull request badges; nil leaves them to
 	// the feed alone.
 	PullRequests *pullrequests.WatchSeed
+	// Code is the Code tab's first paint on a code URL; nil on the plain
+	// task page, which reads no code.
+	Code *code.View
 }
 
 // Empty reports a project without sessions.

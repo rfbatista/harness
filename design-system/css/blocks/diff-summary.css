@@ -1,0 +1,106 @@
+/*
+ * Diff summary — the changed files of a diff, beside it (or above it on a
+ * narrow page): a head with the totals and the scope switch, then one row per
+ * file. Rows are links to the file's place in the diff; the one on screen is
+ * current. The path truncates from its start, so the file name stays.
+ * <nav class="diff-summary" aria-label="Changed files">
+ *   <header class="head"><p class="totals">12 files <span class="added">+214</span> <span class="deleted">−38</span></p>
+ *     <nav class="segmented" aria-label="Scope">…All · Branch · Working…</nav></header>
+ *   <ol class="changed">
+ *     <li><a href="#diff-…" aria-current="location">
+ *       <span class="change-mark" data-change="modified">M</span>
+ *       <span class="path"><bdi><span class="dir">internal/feed/</span><span class="name">feed.go</span></bdi></span>
+ *       <span class="stat"><span class="added">+88</span> <span class="deleted">−4</span></span></a></li>
+ *   </ol>
+ * </nav>
+ * Exceptions: aria-current="location" (the file on screen), .stat .note (a
+ * faint word in place of or after the counts: "binary", "not loaded"), .old
+ * (a rename's old path under the new one), and in place of .changed a .none
+ * sentence ("No changes on this branch yet.").
+ */
+
+@layer blocks {
+  .diff-summary {
+    display: flex;
+    flex-direction: column;
+    font-size: var(--text-sm);
+
+    & > .head {
+      position: sticky;
+      inset-block-start: 0;
+      z-index: var(--z-sticky);
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-xs) var(--space-s);
+      padding: var(--space-s) var(--space-m);
+      border-block-end: var(--border-width) solid var(--color-line);
+      background: var(--color-canvas);
+    }
+
+    & .totals { color: var(--color-ink-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+    & :is(.added, .deleted) { font-family: var(--font-mono); font-size: var(--text-xs); }
+    & .added { color: var(--color-diff-add); }
+    & .deleted { color: var(--color-diff-del); }
+
+    & .changed { padding: var(--space-2xs) 0; list-style: none; }
+    & li { max-inline-size: none; }
+
+    & .changed a {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr) auto;
+      align-items: center;
+      column-gap: var(--space-xs);
+      min-block-size: var(--size-nav-row);
+      padding-inline: var(--space-s) var(--space-m);
+      color: var(--color-ink-muted);
+      text-decoration: none;
+
+      &:hover { background: var(--color-hover); color: var(--color-ink); }
+      &:focus-visible { outline-offset: calc(var(--border-focus-width) * -1); }
+      &[aria-current]:not([aria-current="false"]) {
+        background: var(--color-selected);
+        color: var(--color-ink);
+        & .name { font-weight: var(--weight-medium); }
+      }
+    }
+
+    /* rtl truncates from the start, keeping the name; the bdi keeps the path in order. */
+    & .path {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      direction: rtl;
+      text-align: left; /* physical: the path reads from the left whatever the direction */
+      font-family: var(--font-mono);
+      font-size: var(--text-xs);
+
+      & > bdi { direction: ltr; }
+      & .dir { color: var(--color-ink-faint); }
+      & .name { color: var(--color-ink); }
+    }
+    & .old {
+      grid-column: 2;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      color: var(--color-ink-faint);
+      font-family: var(--font-mono);
+      font-size: var(--text-xs);
+      &::before { content: "from " / ""; font-family: var(--font-sans); }
+    }
+
+    & .stat { display: inline-flex; gap: var(--space-2xs); white-space: nowrap; font-variant-numeric: tabular-nums; }
+    & .stat .note { color: var(--color-ink-faint); font-size: var(--text-xs); }
+    /* Faint ink drops under 4.5:1 on the hover veil and the selected wash: lift it. */
+    & .changed a:is(:hover, [aria-current="location"]) :is(.dir, .old, .note) { color: var(--color-ink-muted); }
+
+    & > .none { padding: var(--space-xl) var(--space-m); color: var(--color-ink-muted); }
+
+    @media (pointer: coarse) { & .changed a { min-block-size: var(--size-touch); } }
+    @media (forced-colors: active) {
+      & .changed a[aria-current]:not([aria-current="false"]) { outline: 2px solid Highlight; outline-offset: -2px; }
+    }
+  }
+}

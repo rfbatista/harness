@@ -214,6 +214,14 @@ templ paneTabs() {
 					<span class="[ badge ]" data-tone="signal" x-text="designBadge"></span>
 				</template>
 			</button>
+			<template x-if="hasCode">
+				<button type="button" role="tab" x-bind:aria-selected="codeTabSelected" x-on:click="showCode">
+					Code
+					<template x-if="codeBadge">
+						<span class="[ badge ]" x-text="codeBadge"></span>
+					</template>
+				</button>
+			</template>
 			@conversationTab()
 		</div>
 		<template x-if="paneTools">

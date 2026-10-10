@@ -1,0 +1,31 @@
+/*
+ * Syntax — the token classes a highlighter in the Web UI emits (or maps its
+ * output to) inside .code-lines (in .code-view and .diff-view). Nothing else reaches the
+ * stylesheet; an unknown token is plain text. Quiet by design: names and
+ * punctuation stay ink, colour marks the words that give code its shape.
+ * Every colour clears 4.5:1 on the code well and on the diff and target
+ * washes, in both themes (design/code-views/tools/contrast.py).
+ */
+
+@layer blocks {
+  .code-lines {
+    & .tok-comment { color: var(--color-tok-comment); font-style: italic; }
+    & .tok-string { color: var(--color-tok-string); }
+    & .tok-regexp { color: var(--color-tok-regexp); }
+    & :is(.tok-number, .tok-constant) { color: var(--color-tok-number); }
+    & .tok-keyword { color: var(--color-tok-keyword); }
+    & .tok-type { color: var(--color-tok-type); }
+    & .tok-function { color: var(--color-tok-function); }
+    & .tok-variable { color: var(--color-ink); }
+    & :is(.tok-operator, .tok-punctuation, .tok-meta) { color: var(--color-ink-muted); }
+    & .tok-tag { color: var(--color-tok-tag); }
+    & .tok-attr { color: var(--color-tok-attr); }
+    & .tok-heading { color: var(--color-ink); font-weight: var(--weight-bold); }
+    & .tok-emphasis { font-style: italic; }
+    & .tok-link { color: var(--color-tok-function); text-decoration: underline; text-underline-offset: 0.18em; }
+
+    @media (forced-colors: active) {
+      & [class^="tok-"] { color: CanvasText; }
+    }
+  }
+}

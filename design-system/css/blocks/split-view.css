@@ -8,7 +8,10 @@
  * then carries a [data-split-back] control back to the list (hidden when both
  * sides show).
  * Exceptions: data-wide-list — the list is the main view (a commit graph) and
- * the detail the narrower side; data-detail.
+ * the detail the narrower side; data-detail; data-expanded — the detail takes
+ * the whole width at every width and the list is hidden (a session's Code tab
+ * expanded for reading, ⇧E). It switches at once, with no transition, and it
+ * hides [data-split-back]: the control that expanded the view brings the list back.
  */
 
 @layer blocks {
@@ -29,8 +32,15 @@
     @media (width < 64rem) {
       grid-template-columns: minmax(0, 1fr);
 
-      &:not([data-detail]) > :last-child,
+      &:not([data-detail], [data-expanded]) > :last-child,
       &[data-detail] > :first-child { display: none; }
+    }
+
+    &[data-expanded] {
+      grid-template-columns: minmax(0, 1fr);
+
+      & > :first-child,
+      & [data-split-back] { display: none; }
     }
 
     & [data-split-back] { align-self: flex-start; }

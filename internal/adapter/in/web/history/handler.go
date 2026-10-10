@@ -9,6 +9,7 @@ import (
 
 	"github.com/rfbatista/harnesskit/errs"
 
+	"operators-mcp/internal/adapter/in/web/code"
 	"operators-mcp/internal/adapter/in/web/sessions"
 	"operators-mcp/internal/adapter/in/web/shell"
 	"operators-mcp/internal/adapter/in/web/tasks"
@@ -31,9 +32,12 @@ type Handler struct {
 	// PullRequests offers a session's branch as a pull request on its
 	// history page; nil leaves the page without it.
 	PullRequests ports.PullRequests
-	Layout       shell.Layout
-	Render       shell.Renderer
-	Now          func() time.Time
+	// Code paints the open commit's (or the uncommitted changes') diff; nil
+	// leaves the file list alone.
+	Code   ports.CodeBrowser
+	Layout shell.Layout
+	Render shell.Renderer
+	Now    func() time.Time
 }
 
 // Href is a repository's history page.
@@ -136,6 +140,7 @@ func (h Handler) Page(w http.ResponseWriter, r *http.Request) error {
 	view.Rows, _ = g.rows(commits, nil, detail)
 	if detail != nil {
 		view.Open = openView(detail, g)
+		view.Open.Diff = h.commitDiff(r, project.ID, repo.ID, detail.Hash)
 	}
 
 	title := "History · " + repo.Name
@@ -263,4 +268,14 @@ func commitCount(n int) string {
 		return "1 commit"
 	}
 	return strconv.Itoa(n) + " commits"
+}
+
+// commitDiff is the open commit's patch for the history page, or nil
+// without a code browser.
+func (h Handler) commitDiff(r *http.Request, projectID, repositoryID, hash string) *code.View {
+	if h.Code == nil {
+		return nil
+	}
+	v := code.Build(code.LoadCommit(r.Context(), h.Code, projectID, repositoryID, hash))
+	return &v
 }

@@ -1,0 +1,61 @@
+/*
+ * Code layout — the shell of every code view: a side list (the file tree or
+ * the changed files) beside the main reading surface (a file, a diff, the
+ * map). It is a size container named "code", so it and the blocks inside
+ * adapt to the room they get (the session detail pane or a whole page), not
+ * to the window.
+ * <div class="code-layout" data-main?>
+ *   <aside class="side" aria-label="Files">…file-tree or diff-summary…</aside>
+ *   <section class="main" aria-label="…">…code-view, diff-view or code-map…</section>
+ * </div>
+ * Each side scrolls on its own; the layout is as tall as it is given.
+ * Below a 44rem container one side shows: the side, or with data-main the
+ * main, which then carries a [data-code-back] control back to the side
+ * (hidden while both show). data-side="none": no side (the map).
+ */
+
+@layer blocks {
+  .code-layout {
+    container: code / inline-size;
+    display: flex;
+    min-block-size: 0;
+    block-size: 100%;
+    background: var(--color-canvas);
+
+    & > .side,
+    & > .main {
+      min-block-size: 0;
+      min-inline-size: 0;
+      overflow: auto;
+      overscroll-behavior: contain;
+    }
+
+    & > .side {
+      flex: 0 0 clamp(14rem, 32%, var(--size-code-side));
+      border-inline-end: var(--border-width) solid var(--color-line);
+    }
+
+    & > .main {
+      display: flex;
+      flex: 1 1 0;
+      flex-direction: column;
+    }
+
+    &[data-side="none"] > .side { display: none; }
+
+    & [data-code-back] { flex: none; align-self: flex-start; margin: var(--space-xs) var(--space-s) 0; }
+  }
+
+  @container code (width < 44rem) {
+    .code-layout:not([data-side="none"]) {
+      & > .side { flex: 1 1 0; border-inline-end: 0; }
+    }
+    .code-layout:not([data-main], [data-side="none"]) > .main,
+    .code-layout[data-main]:not([data-side="none"]) > .side { display: none; }
+  }
+
+  @container code (width >= 44rem) {
+    .code-layout [data-code-back] { display: none; }
+  }
+  .code-layout[data-side="none"] [data-code-back] { display: none; }
+}

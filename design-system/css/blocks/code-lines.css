@@ -1,0 +1,107 @@
+/*
+ * Code lines — numbered lines of code, shared by .code-view and .diff-view.
+ * Every line is exactly --size-code-line high, so a virtualising Web UI can
+ * place line n at (n − 1) × that height. The gutter is sized from --digits
+ * (the largest number's digit count), never by measuring. Numbers come from
+ * data-line and +/− from data-kind, so a copied selection holds only code.
+ * <div class="code-lines" style="--digits: 3">
+ *   <div class="line" id="L12"><span class="gutter"><a class="num" data-line="12" href="#L12" tabindex="-1" aria-label="Line 12"></a></span><span class="text">…</span></div>
+ * </div>
+ * In a diff: two numbers per gutter (an absent side is an empty span.num),
+ * data-kind="context|add|del" on lines and a .hunk row per hunk;
+ * data-layout="split" rows hold two .half cells (data-kind del|add|context|empty).
+ * Exceptions: data-wrap and data-layout="split" (lines grow: do not
+ * virtualise), data-target / :target, data-no-newline.
+ */
+
+@layer blocks {
+  .code-lines {
+    --_line: var(--size-code-line);
+    --_num: calc(var(--digits, 4) * 1ch + var(--space-s));
+
+    inline-size: max-content;
+    min-inline-size: 100%;
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    line-height: var(--_line);
+    tab-size: 4;
+    font-variant-ligatures: none;
+
+    & :is(.line, .half) { display: flex; block-size: var(--_line); background: var(--color-code); white-space: pre; }
+
+    & .gutter {
+      position: sticky;
+      inset-inline-start: 0;
+      display: flex;
+      flex: none;
+      padding-inline-start: var(--space-2xs);
+      background: inherit;
+      user-select: none;
+    }
+    & [data-kind] > .gutter::after { content: " " / ""; inline-size: 2ch; text-align: center; }
+
+    & .num {
+      inline-size: var(--_num);
+      padding-inline-end: var(--space-s);
+      color: var(--color-line-number);
+      text-align: end;
+      text-decoration: none;
+      font-variant-numeric: tabular-nums;
+
+      &::before { content: attr(data-line); }
+      &[href]:hover { color: var(--color-ink); text-decoration: underline; }
+      &:focus-visible { outline-offset: calc(var(--border-focus-width) * -1); }
+    }
+
+    & .text { padding-inline: var(--space-2xs) var(--space-xl); color: var(--color-ink); }
+
+    & [data-kind="add"] { background: linear-gradient(var(--color-diff-add-wash), var(--color-diff-add-wash)), var(--color-code); }
+    & [data-kind="del"] { background: linear-gradient(var(--color-diff-del-wash), var(--color-diff-del-wash)), var(--color-code); }
+    & [data-kind="empty"] { background: var(--color-sunken); }
+    & [data-kind="add"] > .gutter::after { content: "+" / "added"; color: var(--color-diff-add); }
+    & [data-kind="del"] > .gutter::after { content: "−" / "removed"; color: var(--color-diff-del); }
+
+    & .line:is([data-target], :target) {
+      background: linear-gradient(var(--color-target-wash), var(--color-target-wash)), var(--color-code);
+      & .num[data-line] { color: var(--color-ink); font-weight: var(--weight-bold); }
+    }
+
+    & [data-no-newline] > .text::after {
+      content: "No newline at end of file";
+      margin-inline-start: var(--space-s);
+      color: var(--color-ink-muted);
+      font-family: var(--font-sans);
+      font-size: var(--text-xs);
+    }
+
+    & > .hunk {
+      display: flex;
+      align-items: center;
+      gap: var(--space-s);
+      block-size: calc(var(--_line) + var(--space-s));
+      padding-inline: var(--space-s);
+      background: var(--color-sunken);
+      color: var(--color-ink-muted);
+      white-space: pre;
+
+      & .context { color: var(--color-ink); }
+    }
+
+    &:is([data-wrap], [data-layout="split"]) {
+      inline-size: auto;
+      & :is(.line, .half) { block-size: auto; min-block-size: var(--_line); white-space: pre-wrap; overflow-wrap: anywhere; }
+      & .gutter { position: static; }
+      & .text { min-inline-size: 0; }
+    }
+
+    &[data-layout="split"] {
+      & .line { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+      & .half + .half { border-inline-start: var(--border-width) solid var(--color-line); }
+    }
+
+    @media (forced-colors: active) {
+      & :is([data-kind="add"], [data-kind="del"]) > .gutter::after { color: CanvasText; }
+      & .line:is([data-target], :target) { outline: 1px solid Highlight; outline-offset: -1px; }
+    }
+  }
+}

@@ -3,6 +3,7 @@ package history
 import (
 	"net/http"
 	"net/url"
+	"operators-mcp/internal/adapter/in/web/code"
 	"strconv"
 
 	"github.com/rfbatista/harnesskit/errs"
@@ -104,10 +105,15 @@ func (h Handler) Session(w http.ResponseWriter, r *http.Request) error {
 		view.Working = &WorkingRow{Href: base + "/" + workingID + q.encode(), Summary: changesSummary(hist.Changes), Current: open == workingID, Graph: *wg}
 		if open == workingID {
 			view.OpenWorking = workingView(hist.Changes)
+			if h.Code != nil {
+				v := code.Build(code.LoadWorking(ctx, h.Code, project.ID, hist.RepositoryID, sess.WorkspaceID))
+				view.OpenWorking.Diff = &v
+			}
 		}
 	}
 	if detail != nil {
 		view.Open = openView(detail, g)
+		view.Open.Diff = h.commitDiff(r, project.ID, hist.RepositoryID, detail.Hash)
 	}
 	view.PullRequest = h.pullRequestPanel(r, project.ID, sess.WorkspaceID)
 

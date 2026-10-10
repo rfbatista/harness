@@ -220,5 +220,12 @@ func NewRouter(h *Handler, opts ...Option) *echo.Echo {
 	g.POST("/notifications/read", h.handleMarkNotificationsRead)
 	g.GET("/notifications/events", h.handleNotificationEvents) // every inbox change (SSE)
 
+	// code views: read-only file trees, contents, diffs and the zone map
+	g.GET("/code/tree", h.handleCodeTree)
+	g.GET("/code/paths", h.handleCodePaths)
+	g.GET("/code/file", h.handleCodeFile)
+	g.GET("/code/diff", h.handleCodeDiff)
+	g.GET("/code/map", h.handleCodeMap)
+
 	return e
 }

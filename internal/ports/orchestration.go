@@ -79,7 +79,18 @@ type ProjectChange struct {
 	// PullRequest is a workspace's pull request as it is after being
 	// opened, adopted, or found changed on its host.
 	PullRequest *domain.PullRequest `json:"pull_request,omitempty"`
-	Deleted     bool                `json:"deleted,omitempty"`
+	// CodeChanged says a running session's worktree moved: its HEAD or its
+	// working tree. Clients re-read the code they show.
+	CodeChanged *CodeChange `json:"code_changed,omitempty"`
+	Deleted     bool        `json:"deleted,omitempty"`
+}
+
+// CodeChange is a workspace whose code changed and its HEAD now. ProjectID
+// routes it to the project's followers and is not on the wire.
+type CodeChange struct {
+	WorkspaceID string `json:"workspace_id"`
+	Head        string `json:"head"`
+	ProjectID   string `json:"-"`
 }
 
 // ProjectID is the project whose followers the change is for.
@@ -105,6 +116,8 @@ func (c ProjectChange) ProjectID() string {
 		return c.TicketComment.Comment.ProjectID
 	case c.PullRequest != nil:
 		return c.PullRequest.ProjectID
+	case c.CodeChanged != nil:
+		return c.CodeChanged.ProjectID
 	}
 	return ""
 }

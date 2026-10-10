@@ -22,6 +22,7 @@ import (
 	"operators-mcp/internal/application/orchestration"
 	"operators-mcp/internal/application/planning"
 	"operators-mcp/internal/application/projects"
+	"operators-mcp/internal/application/workspaces/workspacestest"
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
 	"operators-mcp/internal/ports/portstest"
@@ -190,6 +191,13 @@ func TestNotificationsConformance(t *testing.T) {
 	portstest.NotificationsConformance(t, func(t *testing.T) (ports.Notifications, portstest.NotificationsFixture) {
 		svc, f := notificationstest.New(t)
 		return httpclient.NewNotifications(serve(t, httpapi.Services{Notifications: svc})), f
+	})
+}
+
+func TestCodeConformance(t *testing.T) {
+	portstest.CodeConformance(t, func(t *testing.T, f *portstest.CodeFixture) (ports.CodeBrowser, portstest.CodeTarget) {
+		svc, at := workspacestest.NewCode(t, f)
+		return httpclient.NewCode(serve(t, httpapi.Services{Code: svc})), at
 	})
 }
 

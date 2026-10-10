@@ -52,6 +52,8 @@ type Services struct {
 	// Notifications is the person's inbox across every project; nil answers
 	// 503.
 	Notifications ports.Notifications
+	// Code reads code for the code views (/api/code/*); nil answers 503.
+	Code ports.CodeBrowser
 }
 
 // Handler serves the application's driving ports as HTTP endpoints (the same
@@ -82,6 +84,7 @@ type Handler struct {
 	comments      ports.TaskComments
 	pullRequests  ports.PullRequests
 	notifications ports.Notifications
+	code          ports.CodeBrowser
 }
 
 // NewHandler returns an HTTP handler that serves /api/list_tree, /api/list_zones, /api/list_projects, etc.
@@ -108,6 +111,7 @@ func NewHandler(s Services) *Handler {
 		comments:      s.TaskComments,
 		pullRequests:  s.PullRequests,
 		notifications: s.Notifications,
+		code:          s.Code,
 	}
 }
 

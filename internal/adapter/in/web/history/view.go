@@ -1,6 +1,7 @@
 package history
 
 import (
+	"operators-mcp/internal/adapter/in/web/code"
 	"operators-mcp/internal/adapter/in/web/pullrequests"
 	"operators-mcp/internal/adapter/in/web/shell"
 )
@@ -69,12 +70,17 @@ type CommitView struct {
 	Files                                    []FileView
 	Added, Deleted                           int
 	Summary                                  string
+	// Diff is the commit's patch, painted first and taken over by codeDiff;
+	// nil without a code browser.
+	Diff *code.View
 }
 
 // WorkingView is the uncommitted changes, open.
 type WorkingView struct {
 	Summary string
 	Files   []FileView
+	// Diff is the uncommitted patch (scope working); nil without a code browser.
+	Diff *code.View
 }
 
 // ParentLink opens a parent commit.

@@ -46,6 +46,7 @@ export const sessionsPage = ({
   channelStore = { messages: [], loaded: false },
   setTimeout = globalThis.setTimeout.bind(globalThis),
   location = globalThis.location,
+  history = globalThis.history,
   prefs = { textSize: () => DEFAULT_TEXT_SIZE, setTextSize() {}, focus: () => false, setFocus() {} },
   shell = { setFocus() {} },
   clipboard = { writeText: (text) => globalThis.navigator.clipboard.writeText(text) },
@@ -100,6 +101,13 @@ export const sessionsPage = ({
     lastIntervals: {},
     /** The task's documents when the page loaded, to name the ones a message links. */
     documentTitles: {},
+    /** The Code tab is served (the server reads code), and each worktree's base branch. */
+    codeEnabled: false,
+    baseRefs: {},
+    /** Changed files per session, as each Code panel counted them, for the tab's badge. */
+    codeCounts: {},
+    /** The Code tab asked for the whole width (⇧E): the session list hides while it is in front. */
+    codeExpanded: false,
 
     // ── what the markup binds ────────────────────────────────────────────
     get groups() {
@@ -280,6 +288,48 @@ export const sessionsPage = ({
     get designTabSelected() {
       return this.detailTab === "design";
     },
+    /** The selected session has a worktree whose code the Code tab can read. */
+    get hasCode() {
+      return this.codeEnabled && this.showingSession && !!this.selected?.workspaceId;
+    },
+    get showingCode() {
+      return this.hasCode && this.detailTab === "code";
+    },
+    get codeTabSelected() {
+      return this.detailTab === "code";
+    },
+    /** "7 files": the selected session's changed files, once its panel counted them. */
+    get codeBadge() {
+      const n = this.codeCounts[this.selectedId];
+      return typeof n === "number" ? `${n} ${n === 1 ? "file" : "files"}` : "";
+    },
+    /**
+     * The selected session's Code panel, keyed on it and on liveness (a
+     * resumed session gets a fresh one that follows again); mounted while a
+     * session with a worktree shows, so it counts changes behind other tabs.
+     */
+    get codePanels() {
+      if (!this.hasCode) return [];
+      const session = this.sessions.find((s) => s.id === this.selectedId);
+      const live = this.selected.stoppable;
+      return [
+        {
+          key: `${this.selected.id}:${live ? "live" : "ended"}`,
+          projectId: this.projectId,
+          taskId: this.ticketId,
+          sessionId: this.selected.id,
+          workspaceId: session.workspaceId,
+          repositoryId: session.repositoryId ?? "",
+          repositoryName: this.repositoryNames[session.repositoryId] ?? "",
+          branch: session.branch ?? "",
+          baseRef: this.baseRefs[session.workspaceId] ?? "",
+          live,
+          shown: this.detailTab === "code",
+          expanded: this.codeExpanded,
+          seedId: "code-seed",
+        },
+      ];
+    },
     /** The selected session is the architect or a delegate: it has a conversation to show. */
     get hasConversation() {
       return this.showingSession && this.selectedRole() !== "";
@@ -348,20 +398,26 @@ export const sessionsPage = ({
 
     // ── lifecycle ────────────────────────────────────────────────────────
     init() {
+      let openCode = "";
       try {
         const seed = gateway.decodeSeed(readSeed(this.$el));
+        openCode = seed.openCode ?? "";
         this.projectId = seed.projectId;
         this.ticketId = seed.ticketId;
         this.agentNames = seed.agentNames;
         this.repositoryNames = seed.repositoryNames;
         this.documentTitles = seed.documentTitles;
+        this.codeEnabled = seed.code === true;
+        this.baseRefs = seed.baseRefs ?? {};
         this.sessions = seed.sessions.filter(ofTask(this.ticketId));
         for (const s of this.sessions) this.remember(s.statusCheck);
       } catch (err) {
         this.error = describeError(err);
         return;
       }
-      const asked = new URLSearchParams(location?.search ?? "").get("session");
+      // A code URL opens its session on the Code tab; ?session= opens one on its terminal.
+      const asked = openCode || new URLSearchParams(location?.search ?? "").get("session");
+      if (openCode) this.detailTab = "code";
       // A link to a session opens it: on a narrow screen its detail, not the list.
       this.detailOpen = this.sessions.some((s) => s.id === asked);
       this.selectedId = this.detailOpen ? asked : (group(this.sessions)[0]?.sessions[0]?.id ?? null);
@@ -478,19 +534,46 @@ export const sessionsPage = ({
     // ── developer actions ────────────────────────────────────────────────
     /** The person opened the Agent tab: its terminal takes the focus once mounted. */
     showAgent() {
+      this.leaveCode();
       this.detailTab = "agent";
       this.$nextTick(() => this.$dispatch("terminal-focus-requested"));
     },
     showApp() {
+      this.leaveCode();
       this.detailTab = "app";
     },
     showDesign() {
+      this.leaveCode();
       this.detailTab = "design";
       this.unseenArtifacts = 0;
     },
     showConversation() {
+      this.leaveCode();
       this.detailTab = "conversation";
       this.unseenMessages = 0;
+    },
+
+    /** The Code tab: its panel takes the address bar and the stream bar's keys. */
+    showCode() {
+      this.detailTab = "code";
+      this.$dispatch("code-tab", { sessionId: this.selectedId, shown: true });
+    },
+    /** Leaving the Code tab: the panel lets go, and the URL is the session's again. */
+    leaveCode() {
+      if (this.detailTab !== "code") return;
+      this.$dispatch("code-tab", { sessionId: this.selectedId, shown: false });
+      const p = encodeURIComponent(this.projectId);
+      const t = encodeURIComponent(this.ticketId);
+      history?.replaceState?.(null, "", `/projects/${p}/tasks/${t}?session=${encodeURIComponent(this.selectedId)}`);
+    },
+    /** The Code panel's Expand (⇧E): a view preference, the URL stays. */
+    codeExpand(event) {
+      this.codeExpanded = event.detail?.expanded === true;
+    },
+    /** A Code panel counted its session's changed files. */
+    codeCounted(event) {
+      const { sessionId, count } = event.detail ?? {};
+      if (sessionId) this.codeCounts = { ...this.codeCounts, [sessionId]: count };
     },
 
     /** The selected session's role on the task; "" when none is selected. */
@@ -549,8 +632,9 @@ export const sessionsPage = ({
         this.unseenMessages = 0;
       }
       this.selectedId = id;
-      // A peer has no conversation: fall back to its terminal.
+      // A peer has no conversation, a session without a worktree no code: fall back to its terminal.
       if (this.detailTab === "conversation" && this.selectedRole() === "") this.detailTab = "agent";
+      if (this.detailTab === "code" && !this.hasCode) this.detailTab = "agent";
       this.creating = false;
       if (this.keptTerminalId !== id) this.keptTerminalId = null;
     },
@@ -568,6 +652,10 @@ export const sessionsPage = ({
     closeDetail() {
       this.detailOpen = false;
       this.$nextTick(() => this.$refs.list?.focus());
+    },
+    /** data-expanded on the split view: the Code tab expanded, while it is in front. */
+    get expandedAttr() {
+      return this.codeExpanded && this.showingCode ? "" : null;
     },
     /** data-detail on the split view: present while the detail is open. */
     get detailOpenAttr() {

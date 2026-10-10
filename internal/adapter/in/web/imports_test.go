@@ -62,8 +62,10 @@ func TestBrowserCodeRespectsTheLayers(t *testing.T) {
 			fail := func(why string) { violations = append(violations, rel+" imports "+spec+": "+why) }
 
 			if !strings.HasPrefix(spec, ".") {
-				if !bareAllowed[rel+" "+spec] {
-					fail("bare imports (vendored libraries) belong in main.js and xterm-screen.js only")
+				// highlight.js is many files: its core and one per grammar.
+				highlight := rel == "highlight.js" && strings.HasPrefix(spec, "highlight.js/")
+				if !bareAllowed[rel+" "+spec] && !highlight {
+					fail("bare imports (vendored libraries) belong in main.js, xterm-screen.js and highlight.js only")
 				}
 				continue
 			}

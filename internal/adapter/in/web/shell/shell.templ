@@ -237,6 +237,14 @@ templ projectNav(r Rail) {
 					</a>
 				</li>
 			}
+			if r.CodeHref != "" {
+				<li>
+					<a href={ templ.SafeURL(r.CodeHref) } { currentAttrs(r.Page == PageCode)... }>
+						@icon("code")
+						<span class="[ label ]">Code</span>
+					</a>
+				</li>
+			}
 			if r.ReviewsHref != "" {
 				<li>
 					<a href={ templ.SafeURL(r.ReviewsHref) } { currentAttrs(r.Page == PageReviews)... }>
@@ -431,18 +439,26 @@ templ streamBar(live bool, hints []Hint) {
 			<span class="[ status ]" data-state="reconnecting" x-data="streamStatus" x-on:feed-status.window="update" x-bind:data-state="state" x-text="label">connecting</span>
 		}
 		<span class="[ visually-hidden ]" x-data="streamAnnouncer" x-on:rail-announce.window="say" x-text="text"></span>
-		<span class="[ keys ]">
+		<span class="[ keys ]" x-data="streamHints" x-on:stream-hints.window="set">
 			if hints == nil {
-				<span><kbd>J</kbd><kbd>K</kbd> move</span>
+				<span x-show="!overridden"><kbd>J</kbd><kbd>K</kbd> move</span>
 			}
 			for _, h := range hints {
-				<span>
+				<span x-show="!overridden">
 					for _, k := range h.Keys {
 						<kbd>{ k }</kbd>
 					}
 					{ h.Label }
 				</span>
 			}
+			<template x-for="h in hints" x-bind:key="h.key">
+				<span>
+					<template x-for="k in h.keys" x-bind:key="k">
+						<kbd x-text="k"></kbd>
+					</template>
+					<span x-text="h.label"></span>
+				</span>
+			</template>
 		</span>
 		<span class="[ cluster ] [ gutter-2xs ]" x-data="themeToggle">
 			<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-bind:aria-pressed="isLight" x-on:click="light">Light</button>

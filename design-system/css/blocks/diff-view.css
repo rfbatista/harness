@@ -1,0 +1,104 @@
+/*
+ * Diff view — the files of a diff, each a sticky head over its hunks (a
+ * .code-lines) in the code well. Unified by default; the .code-lines takes
+ * data-layout="split" to put the old side beside the new.
+ * <div class="diff-view">
+ *   <div class="bar"><button class="button" data-variant="ghost" data-size="sm">Collapse all</button>
+ *     <div class="segmented" data-layout-switch>…Unified · Split (aria-pressed)…</div></div>
+ *   <section class="file" id="diff-…" aria-labelledby="…">
+ *     <header class="head"><button class="toggle" aria-expanded="true" aria-controls="…" aria-label="Collapse feed.go">…</button>
+ *       <span class="change-mark" data-change="renamed">R</span>
+ *       <h3 class="path" id="…"><span class="old">feed/old.go</span>internal/feed/feed.go</h3>
+ *       <span class="zone-tag">…</span><span class="stat"><span class="added">+88</span><span class="deleted">−4</span></span>
+ *       <div class="actions">…</div></header>
+ *     <div class="hunks" id="…"><div class="code-lines">…</div></div>
+ *   </section>
+ * </div>
+ * Exceptions: data-collapsed on .file; .withheld[data-reason="too_large|
+ * binary"] in place of .hunks (a sentence, an action, optionally a .code
+ * line with the git command); aria-busy on .file while its hunks load.
+ * Below a 44rem container the Web UI renders unified and the layout switch
+ * hides; a split it still sends stacks its halves.
+ */
+
+@layer blocks {
+  .diff-view {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-m);
+    min-inline-size: 0;
+    padding: var(--space-m);
+    font-size: var(--text-sm);
+
+    & > .bar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: var(--space-xs);
+      & > :last-child { margin-inline-start: auto; }
+    }
+
+    & > .file {
+      min-inline-size: 0;
+      border: var(--border-width) solid var(--color-line);
+      border-radius: var(--radius-md);
+      background: var(--color-code);
+      overflow: clip; /* clip, not hidden: the head still sticks to the page's scroller */
+    }
+    & > .file[data-collapsed] > :not(.head) { display: none; }
+    & > .file[data-collapsed] > .head { border-block-end: 0; }
+
+    & .head {
+      position: sticky;
+      inset-block-start: 0;
+      z-index: var(--z-sticky);
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: var(--space-2xs) var(--space-s);
+      min-block-size: var(--size-row);
+      padding: var(--space-2xs) var(--space-s);
+      border-block-end: var(--border-width) solid var(--color-line);
+      background: var(--color-panel);
+
+      & .toggle { display: grid; place-items: center; inline-size: 1.5rem; block-size: 1.5rem; padding: 0; border: 0; border-radius: var(--radius-xs); background: none; color: var(--color-ink-muted); }
+      & .toggle:hover { background: var(--color-hover); color: var(--color-ink); }
+      & .toggle svg { inline-size: 0.75rem; block-size: 0.75rem; transition: transform var(--duration-instant) var(--ease-out); }
+      & .toggle[aria-expanded="false"] svg { transform: rotate(-90deg); }
+      & .path { flex: 1 1 8rem; min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-mono); font-size: var(--text-sm); font-weight: var(--weight-medium); }
+      & .old { color: var(--color-ink-muted); font-weight: var(--weight-regular); }
+      & .old::after { content: " → " / " renamed to "; }
+      & .stat { display: inline-flex; gap: var(--space-2xs); font-family: var(--font-mono); font-size: var(--text-xs); font-variant-numeric: tabular-nums; }
+      & .added { color: var(--color-diff-add); }
+      & .deleted { color: var(--color-diff-del); }
+      & .actions { display: flex; gap: var(--space-3xs); margin-inline-start: auto; }
+    }
+
+    & .hunks { overflow-x: auto; }
+
+    & .withheld {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: var(--space-xs) var(--space-m);
+      padding: var(--space-m);
+      color: var(--color-ink-muted);
+
+      & > svg { flex: none; inline-size: 1.25rem; block-size: 1.25rem; color: var(--color-ink-faint); }
+      & > p { flex: 1 1 20rem; }
+      & strong { color: var(--color-ink); font-weight: var(--weight-medium); }
+      & .code { flex-basis: 100%; font-family: var(--font-mono); font-size: var(--text-xs); user-select: all; }
+    }
+
+    @container code (width < 44rem) {
+      & { padding: var(--space-s) 0; gap: var(--space-s); }
+      & > .file { border-radius: 0; border-inline: 0; }
+      & [data-layout-switch] { display: none; }
+      & .code-lines[data-layout="split"] .line { grid-template-columns: minmax(0, 1fr); }
+      & .code-lines[data-layout="split"] .half + .half { border-inline-start: 0; }
+      & .code-lines[data-layout="split"] .half[data-kind="empty"] { display: none; }
+    }
+
+    @media (prefers-reduced-motion: reduce) { & .toggle svg { transition: none; } }
+  }
+}

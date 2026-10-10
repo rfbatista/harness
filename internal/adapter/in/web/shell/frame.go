@@ -97,6 +97,7 @@ type Option struct{ ID, Name string }
 // The project pages the rail links to; Rail.Page marks the current one.
 const (
 	PageBoard     = "board"
+	PageCode      = "code"
 	PageReviews   = "reviews"
 	PageDocuments = "documents"
 	PageDesign    = "design"
@@ -112,6 +113,9 @@ type Rail struct {
 	// Page is the project page open now (PageBoard, …), marked current on
 	// the rail; "" for any other page.
 	Page string
+	// CodeHref is the project's code pages; "" when code browsing is not
+	// served.
+	CodeHref string
 	// DocumentsHref is the project's documents library; "" when documents
 	// are not served.
 	DocumentsHref string
