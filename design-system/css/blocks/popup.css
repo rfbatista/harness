@@ -13,6 +13,14 @@
  * (mirrors aria-activedescendant), aria-disabled; on the listbox
  * aria-multiselectable, aria-busy; .message[data-tone="danger"].
  * The phone form (data-sheet) is sheet.css.
+ * A destructive confirm anchored to the control that raised it (the session
+ * ⋯ menu's Delete) is a popup too, so nothing in the page grows:
+ * <div class="popup" role="alertdialog" aria-labelledby aria-describedby popover="manual">
+ *   <div class="confirm-panel"><h3>Delete this session?</h3><p>…consequence</p></div>
+ *   <footer><button class="button" data-variant="ghost" data-size="sm">Keep it</button>
+ *   <button class="button" data-variant="danger" data-size="sm">Delete session</button></footer></div>
+ * It traps focus (initial focus on Keep it); Esc or Keep it closes it and
+ * focus returns to the trigger. aria-busy on Delete while it runs.
  */
 
 @layer blocks {
@@ -75,6 +83,19 @@
       color: var(--color-ink-faint);
     }
   }
+
+  .confirm-panel {
+    display: grid;
+    gap: var(--space-xs);
+    inline-size: 21rem;
+    max-inline-size: 100%;
+    padding: var(--space-m) var(--space-m) var(--space-s);
+
+    & > h3 { color: var(--color-danger); font-size: var(--text-sm); font-weight: var(--weight-bold); }
+    & > p { color: var(--color-ink-muted); font-size: var(--text-sm); }
+  }
+
+  .popup[role="alertdialog"] > footer { justify-content: flex-end; padding: var(--space-s); }
 
   @keyframes popup-in { from { opacity: 0; translate: 0 calc(-1 * var(--space-2xs)); } }
   @keyframes popup-in-up { from { opacity: 0; translate: 0 var(--space-2xs); } }

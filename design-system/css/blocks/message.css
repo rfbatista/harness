@@ -4,7 +4,6 @@
  * a readable measure, line breaks kept. Exceptions: data-clamped on .body
  * (a long body folded to 8 lines until shown in full), data-undelivered.
  * .conversation-bar: the filter above the log.
- * .check-bar: a delegate's status-check loop and its controls, in its header.
  */
 
 @layer blocks {
@@ -14,16 +13,6 @@
     gap: var(--space-xs);
     padding: var(--space-s) var(--space-l);
     font-size: var(--text-sm);
-  }
-
-  .check-bar {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: var(--space-xs) var(--space-m);
-    font-size: var(--text-sm);
-
-    & > .banner { flex-basis: 100%; }
   }
 
   .conversation {

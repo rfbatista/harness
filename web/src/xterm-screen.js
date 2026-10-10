@@ -71,12 +71,12 @@ function watchFont(parent, font, onChange) {
 }
 
 /** @type {import("./modules/sessions/presentation/components/terminal.js").CreateScreen} */
-export function createScreen(container, { onKey, onPaste, onCellSize }) {
+export function createScreen(container, { onKey, onPaste, onCellSize, onScrollState, fontSize = FONT_SIZE }) {
   const font = screenFont();
   const term = new Terminal({
     cursorBlink: true,
     fontFamily: font,
-    fontSize: FONT_SIZE,
+    fontSize,
     lineHeight: 1.15,
     scrollback: HISTORY_LINES,
     theme: screenColors(),
@@ -110,6 +110,25 @@ export function createScreen(container, { onKey, onPaste, onCellSize }) {
     else delete container.dataset.history;
   };
   term.onWriteParsed(markHistory);
+
+  // Scrolled up off the live screen, and how many lines arrived below since:
+  // the tab row's Jump to latest. Reported only when it changes.
+  let scrolledUp = false;
+  let newLines = 0;
+  const reportScroll = () => {
+    const buffer = term.buffer.active;
+    const up = buffer.viewportY < buffer.baseY;
+    if (up === scrolledUp) return;
+    scrolledUp = up;
+    newLines = 0;
+    onScrollState?.({ scrolledUp, newLines });
+  };
+  term.onRender(reportScroll);
+  term.onLineFeed(() => {
+    if (!scrolledUp) return;
+    newLines++;
+    onScrollState?.({ scrolledUp, newLines });
+  });
 
   const scrollKey = (event) => {
     if (!event.shiftKey || event.ctrlKey || event.altKey || event.metaKey) return false;
@@ -178,6 +197,13 @@ export function createScreen(container, { onKey, onPaste, onCellSize }) {
       return `${term.cols}x${term.rows}` === before ? null : { cols: term.cols, rows: term.rows };
     },
     focus: () => term.focus(),
+    setFontSize(px) {
+      term.options.fontSize = px;
+    },
+    scrollToBottom: () => term.scrollToBottom(),
+    // An ended terminal is read-only: no cursor inviting input. xterm's cursor
+    // element differs by renderer, so the terminal is told, not the stylesheet.
+    hideCursor: () => term.write("\x1b[?25l"),
     dispose() {
       stopFollowing();
       stopWatchingFont();

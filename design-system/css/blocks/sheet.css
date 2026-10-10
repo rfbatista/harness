@@ -5,6 +5,11 @@
  * 8% from the top with its input first (.search), so the on-screen keyboard
  * covers only empty space.
  * Exceptions: data-sheet (set by the component), data-tall.
+ * .sheet-checks: the session sheet's first row, the status-check summary
+ * beside its interval select (then Pause as a menu row):
+ * <div class="popup" data-sheet role="dialog"><header>title <button>Close</button></header>
+ *   <div class="sheet-checks"><span class="status" data-state="live">Checks · next 15m</span><select data-fit>…</select></div>
+ *   <div class="menu" role="menu">…44px rows…</div></div>
  */
 
 @layer blocks {
@@ -48,6 +53,20 @@
       & > .chips { display: contents; }
       & > input { flex: 1 1 100%; }
     }
+  }
+
+  .sheet-checks {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-s);
+    min-block-size: var(--size-touch);
+    padding-inline: var(--space-l) var(--space-s);
+    border-block-end: var(--border-width) solid var(--color-line);
+    font-size: var(--text-sm);
+
+    & > .status { color: var(--color-ink); font-size: inherit; }
+    & > select { min-block-size: var(--size-control-md); }
   }
 
   @keyframes sheet-in { from { translate: 0 100%; } }

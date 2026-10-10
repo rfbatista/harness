@@ -94,7 +94,7 @@ func TestAppTabRunsACommandInTheWorktree(t *testing.T) {
 		chromedp.Poll(`document.querySelector('[aria-label=Application] .repel .status')?.textContent === 'stopped'`, nil, chromedp.WithPollingTimeout(10*time.Second)),
 		chromedp.Evaluate(`document.querySelector('[aria-label=Application] .repel .status')?.textContent ?? ''`, &runState),
 		// The terminal reports the exit; the output stays on screen.
-		chromedp.Poll(`document.querySelector('[aria-label=Application] .terminal .bar .status')?.textContent.startsWith('exited')`, nil, chromedp.WithPollingTimeout(10*time.Second)),
+		chromedp.Poll(terminalDot+`?.getAttribute('aria-label')?.startsWith('Exited with code') ?? false`, nil, chromedp.WithPollingTimeout(10*time.Second)),
 		chromedp.Evaluate(rows, &afterStop),
 	)
 	if err != nil {

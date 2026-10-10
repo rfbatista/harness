@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Session pane — components (direction A)</title>
+<!-- Built by design/tools/build.py from design/src/session-pane.html; edit the source. -->
+<style data-ds></style>
+<style data-kit></style>
+</head>
+<body>
+<main class="page">
+  <header>
+    <h1>Session pane — components (direction A)</h1>
+    <p>High-fidelity components for the approved direction: the session head with its Checks button and panel, the ⋯ menu and its Delete confirm, the tab row's pane tools, the terminal without its bar, focus mode, narrow mode and the phone. Each frame is a real viewport (scaled to fit), drawn with the design system's own CSS. The new blocks are proposed below and are not in <code class="tok">design-system/</code> yet.</p>
+  </header>
+
+  <section class="part">
+    <h2>1 · The page · desktop</h2>
+    <p class="lede">Head 52px and tab row 40px, then the terminal down to the stream bar, which is the page's only footer. The terminal's own bar is gone: while live, the connection is the quiet dot at the end of the tab row. As in Phase 1, <code class="tok">.screen</code> holds the gutter and FitAddon measures its unpadded <code class="tok">.host</code> (L3).</p>
+    <div data-frame='{"w":1280,"h":760,"theme":"light","checks":"on","detail":false}' aria-label="Desktop, light"></div>
+    <div data-frame='{"w":1280,"h":760,"theme":"dark","checks":"on","detail":false,"pr":"open"}' aria-label="Desktop, dark, with a PR badge"></div>
+    <ol class="specs">
+      <li><strong>Session head</strong> <code>.session-head</code>: fixed height of 3.25rem whatever the session has. Inline padding is <code>space-m</code>, matching the tab row and the terminal gutter, so state, tabs and output start on one line.</li>
+      <li><strong>Checks button</strong> <code>.check-button</code>: a ghost, small button showing the loop's dot, the interval and when the next check is due. Shown only for a session with a check loop.</li>
+      <li><strong>Pane tools</strong> <code>.pane-tabs &gt; .tools</code>: connection dot, Jump to latest (only while scrolled up), text size, focus mode.</li>
+      <li><strong>Terminal</strong> <code>.terminal</code>: no <code>.bar</code>. Its <code>.screen</code> fills the pane, and its last row is whole.</li>
+    </ol>
+  </section>
+
+  <section class="part">
+    <h2>2 · Session head · states</h2>
+    <p class="lede">The panel and the confirm open in the top layer (<code class="tok">popover</code>), so the head never grows and the terminal never resizes for them (L4). The panel and the menu follow the project's Dropdown/Menu keyboard rules: Esc closes them and focus returns to the trigger. The Delete confirm is an alertdialog: focus lands on Keep it and is trapped inside until it closes (Esc, Keep it, or Delete session), then returns to ⋯. The interval is the project's restyled native Select.</p>
+    <div class="pair">
+      <div><p class="cap">Checks panel · light</p><div data-frame='{"what":"comp","w":900,"h":340,"col":820,"parts":["head"],"theme":"light","checks":"on","checksOpen":true,"popAt":"inset-block-start: calc(100% - 0.35rem); inset-inline-end: 7.5rem"}'></div></div>
+      <div><p class="cap">Checks paused · dark</p><div data-frame='{"what":"comp","w":900,"h":340,"col":820,"parts":["head"],"theme":"dark","checks":"paused","checksOpen":true}'></div></div>
+      <div><p class="cap">Changing the interval failed · light</p><div data-frame='{"what":"comp","w":900,"h":390,"col":820,"parts":["head"],"theme":"light","checks":"error","checksOpen":true}'></div></div>
+      <div><p class="cap">Saving the interval · dark</p><div data-frame='{"what":"comp","w":900,"h":340,"col":820,"parts":["head"],"theme":"dark","checks":"busy","checksOpen":true}'></div></div>
+      <div><p class="cap">⋯ menu · light</p><div data-frame='{"what":"comp","w":900,"h":240,"col":820,"parts":["head"],"theme":"light","checks":"on","menuOpen":true}'></div></div>
+      <div><p class="cap">⋯ → Delete confirm · dark</p><div data-frame='{"what":"comp","w":900,"h":260,"col":820,"parts":["head"],"theme":"dark","checks":"on","confirmDelete":true}'></div></div>
+      <div><p class="cap">Deleting · light</p><div data-frame='{"what":"comp","w":900,"h":260,"col":820,"parts":["head"],"theme":"light","checks":"on","confirmDelete":true,"deleting":true}'></div></div>
+      <div><p class="cap">Stopping · dark</p><div data-frame='{"what":"comp","w":900,"h":120,"col":820,"parts":["head"],"theme":"dark","checks":"on","stopping":true}'></div></div>
+    </div>
+    <div class="pair">
+      <div><p class="cap">Waiting on you, no check loop · light</p><div data-frame='{"what":"comp","w":900,"h":120,"col":820,"parts":["head"],"theme":"light","state":"waiting","signal":true}'></div></div>
+      <div><p class="cap">Ended (same shape; Resume is on the pane's note) · dark</p><div data-frame='{"what":"comp","w":900,"h":120,"col":820,"parts":["head"],"theme":"dark","state":"done","word":"ended","who":"database-manager · 19m"}'></div></div>
+      <div><p class="cap">Failed · light</p><div data-frame='{"what":"comp","w":900,"h":120,"col":820,"parts":["head"],"theme":"light","state":"failed","who":"database-manager · 22m"}'></div></div>
+      <div><p class="cap">With a PR badge · dark</p><div data-frame='{"what":"comp","w":900,"h":120,"col":820,"parts":["head"],"theme":"dark","checks":"on","pr":"open"}'></div></div>
+    </div>
+  </section>
+
+  <section class="part">
+    <h2>3 · Session head · when the column narrows</h2>
+    <p class="lede">The head answers to its column (a <code class="tok">session</code> size container), not the window, so it adapts when the rail opens or the list sits beside it. Order of collapse: agent and age go first (&lt; 46rem), then Git history moves into ⋯ (&lt; 40rem), then the checks button keeps only its dot and interval (&lt; 34rem). The title truncates last.</p>
+    <div class="grid3" style="grid-template-columns: 1fr">
+      <div><p class="cap">Column 820px: everything</p><div data-frame='{"what":"comp","w":900,"h":104,"col":820,"parts":["head"],"theme":"light","checks":"on"}'></div></div>
+      <div><p class="cap">Column 700px: agent and age hidden</p><div data-frame='{"what":"comp","w":900,"h":104,"col":700,"parts":["head"],"theme":"light","checks":"on"}'></div></div>
+      <div><p class="cap">Column 600px: Git history in ⋯ (menu open)</p><div data-frame='{"what":"comp","w":900,"h":250,"col":600,"parts":["head"],"theme":"dark","checks":"on","menuOpen":true}'></div></div>
+      <div><p class="cap">Column 480px: checks keep the dot and interval, title truncates</p><div data-frame='{"what":"comp","w":900,"h":104,"col":480,"parts":["head"],"theme":"dark","checks":"on","title":"Messages history — static FK rewrites"}'></div></div>
+    </div>
+  </section>
+
+  <section class="part">
+    <h2>4 · Tab row · pane tools</h2>
+    <p class="lede">The tools belong to a terminal tab: the App tab's run terminal gets the same set, and Design and Conversation get none. While the terminal is down, the tools collapse to a word and Reconnect. Reconnect focuses the terminal (F2). Jump to latest only scrolls and never takes focus. Focus mode is a button and never Esc.</p>
+    <div class="pair">
+      <div><p class="cap">Live: a quiet dot (the window title in its tooltip) · light</p><div data-frame='{"what":"comp","w":900,"h":100,"col":820,"parts":["tabs"],"theme":"light"}'></div></div>
+      <div><p class="cap">Scrolled up, 12 new lines below · dark</p><div data-frame='{"what":"comp","w":900,"h":100,"col":820,"parts":["tabs"],"theme":"dark","jump":12}'></div></div>
+      <div><p class="cap">Connecting · light</p><div data-frame='{"what":"comp","w":900,"h":100,"col":820,"parts":["tabs"],"theme":"light","conn":"connecting"}'></div></div>
+      <div><p class="cap">Reconnecting · dark</p><div data-frame='{"what":"comp","w":900,"h":100,"col":820,"parts":["tabs"],"theme":"dark","conn":"reconnecting"}'></div></div>
+      <div><p class="cap">Offline → Reconnect · light</p><div data-frame='{"what":"comp","w":900,"h":100,"col":820,"parts":["tabs"],"theme":"light","conn":"offline"}'></div></div>
+      <div><p class="cap">Reconnecting after a press · dark</p><div data-frame='{"what":"comp","w":900,"h":100,"col":820,"parts":["tabs"],"theme":"dark","conn":"offline","reconnecting":true}'></div></div>
+      <div><p class="cap">Text size menu · light</p><div data-frame='{"what":"comp","w":900,"h":250,"col":820,"parts":["tabs"],"theme":"light","textMenu":true}'></div></div>
+      <div><p class="cap">Waiting on you: an amber dot on Agent · dark</p><div data-frame='{"what":"comp","w":900,"h":100,"col":820,"parts":["tabs"],"theme":"dark","attention":true,"tab":"design"}'></div></div>
+      <div><p class="cap">Focus mode: title leads, Exit focus · light</p><div data-frame='{"what":"comp","w":900,"h":100,"col":820,"parts":["tabs"],"theme":"light","focus":true}'></div></div>
+      <div><p class="cap">Narrow column: words drop, the tools stay · dark</p><div data-frame='{"what":"comp","w":900,"h":100,"col":520,"parts":["tabs"],"theme":"dark","jump":340}'></div></div>
+    </div>
+  </section>
+
+  <section class="part">
+    <h2>5 · Terminal · states</h2>
+    <p class="lede">Nothing floats over the output. Connecting is a word in an empty well. While down, the last screen stays, dimmed and frozen. An ended or failed session gets a note strip at the top of the pane with Resume session, and its last screen stays below, read-only. A session waiting on you gets an amber edge in the gutter. Keyboard focus in the terminal shows as a hairline inside the well.</p>
+    <div class="pair">
+      <div><p class="cap">Waiting on you, focused · light</p><div data-frame='{"what":"comp","w":900,"h":250,"col":820,"parts":["tabs","terminal"],"theme":"light","attention":true,"focused":true,"screen":"ask"}'></div></div>
+      <div><p class="cap">Scrolled up with history · dark</p><div data-frame='{"what":"comp","w":900,"h":250,"col":820,"parts":["tabs","terminal"],"theme":"dark","scrolled":true,"jump":12}'></div></div>
+      <div><p class="cap">Connecting · light</p><div data-frame='{"what":"comp","w":900,"h":250,"col":820,"parts":["tabs","terminal"],"theme":"light","conn":"connecting","history":false}'></div></div>
+      <div><p class="cap">Offline: last screen dimmed · dark</p><div data-frame='{"what":"comp","w":900,"h":250,"col":820,"parts":["tabs","terminal"],"theme":"dark","conn":"offline"}'></div></div>
+      <div><p class="cap">Ended: note strip + Resume session · light</p><div data-frame='{"what":"comp","w":900,"h":250,"col":820,"parts":["tabs","terminal"],"theme":"light","conn":"ended","state":"done","screen":"ended"}'></div></div>
+      <div><p class="cap">Failed · dark</p><div data-frame='{"what":"comp","w":900,"h":250,"col":820,"parts":["tabs","terminal"],"theme":"dark","conn":"ended","state":"failed","screen":"ended"}'></div></div>
+      <div><p class="cap">Text size: Smaller (12px) · light</p><div data-frame='{"what":"comp","w":900,"h":250,"col":820,"parts":["tabs","terminal"],"theme":"light","text":"sm"}'></div></div>
+      <div><p class="cap">Text size: Larger (15px) · dark</p><div data-frame='{"what":"comp","w":900,"h":250,"col":820,"parts":["tabs","terminal"],"theme":"dark","text":"lg"}'></div></div>
+    </div>
+  </section>
+
+  <section class="part">
+    <h2>6 · App tab, focus mode, narrow mode</h2>
+    <p class="lede">The App tab's run terminal keeps its command row above it and gets the same tools. Focus mode hides the rail, the page toolbar, the list and the head. The top bar, the tab row (title, tools, Exit focus) and the stream bar stay. Below 64rem the list gives way to the open session, and the head leads with ‹ back.</p>
+    <div data-frame='{"w":1280,"h":620,"theme":"dark","tab":"app","detail":false}' aria-label="App tab"></div>
+    <div data-frame='{"w":1280,"h":760,"theme":"dark","focus":true,"checks":"on","detail":false}' aria-label="Focus mode, dark"></div>
+    <div class="pair">
+      <div><p class="cap">Focus mode · light, Larger text</p><div data-frame='{"w":1280,"h":760,"theme":"light","focus":true,"text":"lg","detail":false}'></div></div>
+      <div><p class="cap">Narrow window (900px) · light</p><div data-frame='{"w":900,"h":680,"theme":"light","checks":"on"}'></div></div>
+    </div>
+  </section>
+
+  <section class="part">
+    <h2>7 · Phone</h2>
+    <p class="lede">The session opens in place of the list and its head leads the screen. The head has two lines: ‹, the title and ⋯, then state · agent · age · checks. The tabs are 44px, with the connection dot at the end. Every action is in the ⋯ sheet, in 44px rows, and Delete asks again in a sheet. The stream bar shows its status only. The key strip is a later step.</p>
+    <div class="mock-row">
+      <div><p class="cap">Light</p><div data-frame='{"w":375,"h":760,"device":"phone","theme":"light","checks":"on","phone":true}'></div></div>
+      <div><p class="cap">Dark · ⋯ sheet</p><div data-frame='{"w":375,"h":760,"device":"phone","theme":"dark","checks":"on","phone":true,"sheet":true}'></div></div>
+      <div><p class="cap">Light · Delete confirm</p><div data-frame='{"w":375,"h":760,"device":"phone","theme":"light","checks":"on","phone":true,"sheetConfirm":true}'></div></div>
+      <div><p class="cap">Dark · offline</p><div data-frame='{"w":375,"h":760,"device":"phone","theme":"dark","checks":"on","phone":true,"conn":"offline"}'></div></div>
+      <div><p class="cap">Dark · ended</p><div data-frame='{"w":375,"h":760,"device":"phone","theme":"dark","phone":true,"conn":"ended","state":"done","word":"ended","screen":"ended"}'></div></div>
+      <div><p class="cap">Phone at 320px · light</p><div data-frame='{"w":320,"h":640,"device":"phone","theme":"light","checks":"on","phone":true,"jump":12,"scrolled":true}'></div></div>
+    </div>
+    <p class="cap">Landscape · light</p>
+    <div class="mock-row"><div data-frame='{"w":760,"h":375,"device":"phone","theme":"light","checks":"on","phone":true}'></div></div>
+  </section>
+
+  <section class="part">
+    <h2>8 · Blocks and tokens</h2>
+    <table class="spec">
+      <thead><tr><th>Block</th><th>File (proposed)</th><th>Sizes and tokens</th><th>States / exceptions</th></tr></thead>
+      <tbody>
+        <tr><td><code class="tok">.session</code></td><td>blocks/session.css (new)</td><td>column flex, <code class="tok">container: session / inline-size</code>; head and tab row <code class="tok">flex: none</code>, the pane <code class="tok">flex: 1 1 0; min-block-size: 0</code></td><td>data-focus</td></tr>
+        <tr><td><code class="tok">.session-head</code></td><td>blocks/session.css</td><td>block-size 3.25rem; padding-inline space-m / space-s; h2 text-lg; who text-sm ink-faint. Phone: 44px + 24px rows, ‹ and ⋯ 44px</td><td>back (&lt; 64rem), collapse at 46 / 40 / 34rem (container), phone form &lt; 48rem</td></tr>
+        <tr><td><code class="tok">.check-button</code>, <code class="tok">.check-panel</code></td><td>blocks/check.css (new; replaces .check-bar in message.css)</td><td>ghost sm button; panel 20rem, padding space-m, in a .popup role="dialog"; Select data-size="sm" data-fit; footer = popup footer</td><td>dot live / idle (paused) / failed (error); aria-busy while saving; .message[data-tone=danger] with Retry</td></tr>
+        <tr><td><code class="tok">.confirm-panel</code></td><td>blocks/popup.css (addition)</td><td>21rem; title text-sm bold danger; footer Keep it (ghost) · Delete session (danger)</td><td>role="alertdialog", focus trapped, initial focus Keep it, Esc closes, focus returns to ⋯; aria-busy on Delete; phone: data-sheet with 44px buttons</td></tr>
+        <tr><td><code class="tok">.pane-tabs</code></td><td>blocks/pane-tabs.css (new; wraps the existing .tabs)</td><td>block-size 2.5rem (44px &lt; 48rem); tabs padding-start space-m; tools gap space-3xs, sep 1px × 1.25rem; jump: signal-wash, signal-strong ink</td><td>data-focus with .lead; tools: live dot / word + Reconnect; jump hidden unless scrolled up; words drop &lt; 36rem column</td></tr>
+        <tr><td><code class="tok">.terminal</code></td><td>blocks/terminal.css (change, on top of Phase 1)</td><td>Phase 1 kept: .screen padding space-s / space-m (the gutter), unpadded .host for FitAddon, onCellSize refit; .note min-block-size size-row on panel; focus hairline focus 55%; attention edge 3px</td><td>data-state connecting / live / reconnecting / offline (screen 0.55) / ended; data-attention; .note[data-tone=danger]; .bar retired once App has the tools</td></tr>
+        <tr><td><code class="tok">.app-shell[data-focus]</code></td><td>blocks/app-shell.css (addition)</td><td>one column; rail, page toolbar, list and head hidden</td><td>reduced motion: no enter/exit motion</td></tr>
+        <tr><td><code class="tok">.sheet-checks</code></td><td>blocks/sheet.css (addition)</td><td>44px row, padding-inline space-l / space-s</td><td>—</td></tr>
+      </tbody>
+    </table>
+    <p class="lede">No new tokens. Every color, size and space above comes from <code class="tok">tokens.json</code>.</p>
+  </section>
+</main>
+<script data-kit></script>
+<script>Kit.mount();</script>
+</body>
+</html>

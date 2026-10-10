@@ -173,7 +173,7 @@ func attachWithHistory(t *testing.T) (context.Context, *errorLog, *historyPTY) {
 	err := chromedp.Run(ctx,
 		chromedp.EmulateViewport(1280, 800),
 		chromedp.Navigate(srv.URL+"/projects/p1/tasks/t1"),
-		chromedp.Poll(`document.querySelector('.terminal .bar .status')?.textContent === 'live'`, nil, chromedp.WithPollingTimeout(10*time.Second)),
+		chromedp.Poll(terminalLive, nil, chromedp.WithPollingTimeout(10*time.Second)),
 		// The pane's own size, redrawn by the PTY: the screen fills the viewport.
 		chromedp.Poll(termFirstRow+` === 'live top'`, nil, chromedp.WithPollingTimeout(10*time.Second)),
 		chromedp.Sleep(300*time.Millisecond),

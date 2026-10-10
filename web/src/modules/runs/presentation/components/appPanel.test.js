@@ -152,3 +152,11 @@ test("without a known name, the repository reads as its id", () => {
   const { instance } = mount(() => appPanel({ gateway: memoryRuns().gateway })({ sessionId: "s1", repositoryId: "r1" }));
   assert.deepEqual([instance.repositoryLabel, instance.hasBranch], ["r1", false]);
 });
+
+test("tells the page which run is on screen, so the tab row shows its terminal's tools", async () => {
+  const { instance, dispatched } = await setup();
+  instance.reportRun();
+  await instance.start();
+  instance.reportRun();
+  assert.deepEqual(dispatched.filter((d) => d.name === "run-shown").map((d) => d.detail), [{ id: "" }, { id: "run-1" }]);
+});

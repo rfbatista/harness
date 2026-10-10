@@ -1,0 +1,41 @@
+/*
+ * Pane note — a one-line strip at the top of a pane that says why the pane
+ * is as it is, with the way out: "This session ended." + Resume session. It
+ * sits in the flow, above the terminal's screen, so nothing overlaps the
+ * output (contract L2); appearing is one size change for the pane (L4).
+ * <div class="pane-note" role="status"><span class="text"><strong>This session ended.</strong>
+ *   claude exited at 15:41. The screen below is its last, read-only.</span>
+ *   <button class="button" data-variant="primary" data-size="sm">Resume session</button></div>
+ * Exception: data-tone="danger" (failed).
+ */
+
+@layer blocks {
+  .pane-note {
+    display: flex;
+    align-items: center;
+    gap: var(--space-s);
+    flex: none;
+    min-block-size: var(--size-row);
+    padding: var(--space-2xs) var(--space-s) var(--space-2xs) var(--space-m);
+    border-block-end: var(--border-width) solid var(--color-line);
+    background: var(--color-panel);
+    color: var(--color-ink-muted);
+    font-size: var(--text-sm);
+
+    & > .text { flex: 1 1 auto; min-inline-size: 0; }
+    & > .text > strong { color: var(--color-ink); font-weight: var(--weight-medium); }
+
+    &[data-tone="danger"] {
+      background: var(--color-danger-wash);
+
+      & > .text > strong { color: var(--color-danger); }
+    }
+
+    @media (width < 48rem) {
+      flex-wrap: wrap;
+      padding-block: var(--space-xs);
+
+      & > .button { min-block-size: var(--size-touch); }
+    }
+  }
+}

@@ -1,0 +1,93 @@
+/*
+ * Check button — a delegate's status-check loop folded into one ghost button
+ * in the session head: its state dot, the interval, and when the next check
+ * is due. It opens the check panel. Shown only for a session with a loop.
+ * <button class="button check-button" data-variant="ghost" data-size="sm"
+ *   aria-haspopup="dialog" aria-expanded="false" aria-label="Status checks: every 20 minutes, next in 15 minutes">
+ *   <span class="status" data-state="live">Checks · 20m</span><span class="next">next 15m</span>
+ *   <span class="chevron"></span></button>
+ * The dot: live (on), idle (paused), failed (the last change failed).
+ * aria-busy while a change is saved.
+ *
+ * Check panel — the content of that button's popup (a .popup role="dialog"
+ * in the top layer, popup.css): what the loop is doing in words, the
+ * interval (the restyled native select), the hint, then Pause or Resume in
+ * the popup's footer. An error is the popup's .message[data-tone="danger"].
+ * <div class="popup" role="dialog" aria-labelledby="checks-title" popover="manual">
+ *   <div class="check-panel"><h3 id="checks-title">Status checks</h3>
+ *     <p class="state"><span class="status" data-state="live">On</span><span>next in 15m</span><span>· no check yet</span></p>
+ *     <div class="field-row"><label for="checks-every">Check every</label>
+ *       <select id="checks-every" data-size="sm" data-fit>…</select></div>
+ *     <p class="hint">…</p></div>
+ *   <div class="message" data-tone="danger" role="alert">… <button class="button">Retry</button></div>
+ *   <footer><span>Last check: …</span><button class="button" data-size="sm">Pause checks</button></footer></div>
+ * Phone: the same controls are the first rows of the session sheet (sheet.css).
+ */
+
+@layer blocks {
+  .check-button {
+    --_ink: var(--color-ink-muted);
+
+    gap: var(--space-xs);
+
+    & > .status {
+      font-size: inherit;
+      color: var(--color-ink);
+      font-variant-numeric: tabular-nums;
+
+      &[data-state="idle"] { color: var(--color-ink-muted); }
+    }
+
+    & > .next {
+      color: var(--color-ink-faint);
+      font-weight: var(--weight-regular);
+      font-variant-numeric: tabular-nums;
+    }
+
+    & > .chevron {
+      inline-size: 0.3125rem;
+      block-size: 0.3125rem;
+      margin-inline-start: var(--space-3xs);
+      border-inline-end: var(--border-icon-width) solid;
+      border-block-end: var(--border-icon-width) solid;
+      rotate: 45deg;
+      translate: 0 -25%;
+      opacity: 0.7;
+    }
+
+    &[aria-expanded="true"] { --_bg: var(--color-pressed); }
+
+    @container session (width < 34rem) { & > .next { display: none; } }
+  }
+
+  .check-panel {
+    display: grid;
+    gap: var(--space-s);
+    inline-size: 20rem;
+    max-inline-size: 100%;
+    padding: var(--space-m);
+
+    & > h3 { font-size: var(--text-sm); font-weight: var(--weight-bold); }
+
+    & > .state {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--space-2xs) var(--space-s);
+      color: var(--color-ink-muted);
+      font-size: var(--text-sm);
+      font-variant-numeric: tabular-nums;
+
+      & > .status { font-size: inherit; }
+    }
+
+    & > .field-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-s);
+      font-size: var(--text-sm);
+    }
+
+    & > .hint { color: var(--color-ink-faint); font-size: var(--text-xs); }
+  }
+}

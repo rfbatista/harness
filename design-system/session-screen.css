@@ -1,0 +1,74 @@
+/*
+ * Session screen specimen — scaffolding only: the frames (an iframe at a real
+ * viewport size, scaled to its column), the page around the session inside a
+ * frame (a list and a rail stand-in), the faked xterm output, and popups drawn
+ * open in place (the real ones are in the top layer). Every block on the
+ * screen itself comes from css/index.css. Used by specimen.html with
+ * session-screen.js.
+ */
+
+/* A frame: an iframe at a real viewport size, scaled down to its column. */
+.mock { position: relative; overflow: hidden; border: 1px solid var(--color-line-strong); border-radius: var(--radius-md); background: var(--color-canvas); }
+.mock[data-device="phone"] { border-width: 6px; border-radius: 1.75rem; inline-size: fit-content; }
+.mock > iframe { display: block; border: 0; transform-origin: 0 0; background: var(--color-canvas); }
+.mock-row { display: flex; flex-wrap: wrap; gap: var(--space-xl); align-items: start; }
+/* The page inside a frame. */
+.in-frame { margin: 0; block-size: 100dvh; overflow: hidden; }
+.in-frame .app-shell main { display: flex; flex-direction: column; }
+.in-frame .split-view { flex: 1 1 0; min-block-size: 0; grid-template-rows: minmax(0, 1fr); }
+.in-frame .split-view > .list-stub { inline-size: auto; }
+.in-frame .app-shell[data-focus] .split-view > .list-stub { display: none; } /* unlayered: restate what split-view and focus mode hide */
+@media (width < 64rem) { .in-frame .split-view[data-detail] > .list-stub { display: none; } }
+.in-frame .split-view > .session { block-size: 100%; }
+.in-frame .rail .stub { display: grid; gap: 2px; padding-inline: var(--space-s); font-size: var(--text-sm); color: var(--color-ink-muted); }
+.in-frame .rail .stub > span { padding: var(--space-2xs) var(--space-s); border-radius: var(--radius-sm); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.in-frame .rail .stub > [aria-current] { background: var(--color-selected); color: var(--color-ink); }
+.in-frame .rail .stub > .h { font-size: var(--text-xs); color: var(--color-ink-faint); }
+.in-frame .comp { padding: var(--space-l); }
+.in-frame .comp > .session { block-size: auto; overflow: visible; border: 1px solid var(--color-line); border-radius: var(--radius-sm); }
+.in-frame .comp > .session > .terminal { block-size: 9rem; flex: none; }
+.in-frame .app-cmd { display: flex; align-items: center; gap: var(--space-s); flex: none; padding: var(--space-xs) var(--space-m); border-block-end: 1px solid var(--color-line); font-size: var(--text-sm); }
+.in-frame .app-cmd code { font-family: var(--font-mono); }
+.in-frame .app-pane { display: flex; flex-direction: column; min-block-size: 0; }
+.in-frame .app-pane > .terminal { flex: 1 1 0; }
+
+.list-stub {
+  inline-size: 15rem; flex-shrink: 0;
+  border-inline-end: 1px solid var(--color-line);
+  background: var(--color-panel);
+  padding: var(--space-s);
+  display: flex; flex-direction: column; gap: 2px;
+  & .row { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: var(--space-s); border-radius: var(--radius-sm); font-size: var(--text-sm); }
+  & .row[aria-selected="true"] { background: var(--color-selected); }
+  & .meta { font-size: var(--text-xs); color: var(--color-ink-faint); }
+}
+
+/* Fake xterm output: whole rows only, newest at the bottom. */
+.xterm[data-fake] {
+  display: flex; flex-direction: column; justify-content: flex-end;
+  font-family: var(--font-mono); font-size: var(--_fs, 13px); line-height: 1.15;
+  color: var(--color-ink); white-space: pre; overflow: hidden;
+  &[data-top] { justify-content: flex-start; }
+}
+.xterm[data-fake] .l { flex: none; min-block-size: 1.15em; white-space: pre-wrap; overflow-wrap: anywhere; }
+.xterm[data-fake] .l:has(.t-rule) { white-space: pre; overflow: hidden; }
+.t-dim { color: var(--color-ink-faint); }
+.t-b { font-weight: 700; }
+.t-link { color: oklch(0.52 0.14 280); }
+[data-theme="dark"] .t-link { color: oklch(0.78 0.1 280); }
+.t-busy { color: var(--color-danger); }
+.t-mode { color: var(--color-attention); }
+.t-ok { color: var(--color-success); }
+.t-rule { color: var(--color-line-strong); }
+.t-ask { color: var(--color-attention-strong); }
+.xterm-cursor { display: inline-block; inline-size: 0.6em; block-size: 1.05em; vertical-align: text-bottom; background: var(--color-signal); }
+.screen[data-blur] .xterm-cursor { background: none; outline: 1.5px solid var(--color-signal); outline-offset: -1.5px; }
+/* xterm's scrollbar, as terminal.css themes it (always on with history). */
+.screen[data-history] { position: relative; }
+.screen[data-history]::after { content: ""; position: absolute; inset-block: var(--_thumb-top, 55%) var(--_thumb-bottom, 4px); inset-inline-end: 4px; inline-size: 6px; border-radius: var(--radius-round); background: var(--color-line-strong); }
+
+/* Static popups for the mockup (the real ones are in the top layer). */
+.popup[data-static] { position: absolute; display: flex; animation: none; z-index: 5; }
+.menu > .popup[data-static] { min-inline-size: 13rem; }
+.scrim { position: fixed; inset: 0; background: var(--color-scrim); z-index: 4; }
+.popup[data-static][data-sheet] { position: fixed; inset: auto 0 0; z-index: 5; }

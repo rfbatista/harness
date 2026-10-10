@@ -1,11 +1,20 @@
 /*
- * Terminal — a session's PTY, drawn by xterm.js, with a one-line bar under it
- * (connection, window title, reconnect). It fills the space it is given; the
- * screen holds the gutter, and its unpadded host is what xterm fits its rows
- * and columns to (the screen script adds it). xterm's viewport scrolls the
- * history; the screen carries data-history while there is some (set by the
- * screen script), and then keeps xterm's scrollbar on and themed.
- * <div class="terminal"><div class="screen" data-history><div class="host">xterm</div></div><div class="bar">…</div></div>
+ * Terminal — a session's PTY, drawn by xterm.js. It fills the space it is
+ * given; the screen holds the gutter, and its unpadded host is what xterm
+ * fits its rows and columns to (the screen script adds it). xterm's viewport
+ * scrolls the history; the screen carries data-history while there is some
+ * (set by the screen script), and then keeps xterm's scrollbar on and themed.
+ * It has no bar of its own: its connection state and tools sit at the end
+ * of the session's tab row (pane-tabs.css, contract L7), for the Agent tab
+ * and the App tab's run terminal alike.
+ * <div class="terminal" data-state="live">[<div class="pane-note">…</div>]
+ *   <div class="screen" data-history><div class="host">xterm</div></div>[<p class="notice">…</p>]</div>
+ * .notice: a word in the middle of the empty well while connecting. An ended
+ * or failed session's strip is a .pane-note (pane-note.css).
+ * Exceptions: data-state="connecting|live|reconnecting|offline|ended" (down:
+ * the last screen stays, dimmed; ended: read-only, and the screen script
+ * hides xterm's cursor); data-attention (the agent waits on the person: an
+ * amber edge in the gutter, never over text).
  */
 
 @layer blocks {
@@ -18,6 +27,7 @@
     flex: 1 1 0;
     min-block-size: 0;
     overflow: hidden; /* the history scrolls in xterm, never the pane: no scrollbar to take columns from it */
+    position: relative;
     background: var(--color-sunken);
 
     & > .screen {
@@ -27,6 +37,7 @@
       overflow: hidden;
       cursor: text;
       touch-action: pan-y; /* a vertical pan scrolls the history, not the page */
+      transition: opacity var(--duration-quick) var(--ease-out);
 
       & > .host,
       & .xterm {
@@ -63,17 +74,41 @@
       }
     }
 
-    & > .bar {
-      display: flex;
-      align-items: center;
-      gap: var(--space-m);
-      min-block-size: 2rem;
-      padding-inline: var(--space-m);
-      border-block-start: var(--border-width) solid var(--color-line);
-      background: var(--color-panel);
-      font-size: var(--text-xs);
-
-      & .status { font-size: inherit; }
+    & > .notice {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-content: center;
+      justify-items: center;
+      gap: var(--space-xs);
+      color: var(--color-ink-faint);
+      font-size: var(--text-sm);
+      pointer-events: none;
     }
+
+    /* Keyboard focus is in the terminal: a hairline inside the well. */
+    &:has(> .screen:focus-within)::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--color-focus) 55%, transparent);
+      pointer-events: none;
+    }
+
+    &[data-attention]::before {
+      content: "";
+      position: absolute;
+      inset-block: 0;
+      inset-inline-start: 0;
+      z-index: 1;
+      inline-size: 3px;
+      background: var(--color-attention);
+      pointer-events: none;
+    }
+
+    &:is([data-state="reconnecting"], [data-state="offline"]) > .screen { opacity: 0.55; cursor: default; }
+    &[data-state="ended"] > .screen { cursor: default; }
+
+    @media (prefers-reduced-motion: reduce) { & > .screen { transition: none; } }
   }
 }

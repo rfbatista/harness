@@ -102,7 +102,7 @@ func TestDesignTabShowsArtifactsLive(t *testing.T) {
 		chromedp.EmulateViewport(1280, 800),
 		chromedp.Navigate(srv.URL+"/projects/p1/tasks/t1"),
 		chromedp.Poll(`!!document.querySelector('[role=tab]')`, nil, chromedp.WithPollingTimeout(10*time.Second)),
-		chromedp.Evaluate(`document.querySelector('main section .cluster span:nth-child(2)')?.textContent ?? ''`, &agentLine),
+		chromedp.Evaluate(`document.querySelector('.session-head .who')?.textContent ?? ''`, &agentLine),
 		chromedp.Evaluate(designTab+`.querySelector('.badge') !== null`, &badgeBefore),
 		clickButton(`[role=tablist]`, "Design"),
 		chromedp.Poll(`!!`+card, nil, chromedp.WithPollingTimeout(5*time.Second)),
@@ -117,7 +117,7 @@ func TestDesignTabShowsArtifactsLive(t *testing.T) {
 	if err != nil {
 		t.Fatalf("%v\nJS errors: %v", err, errs.all())
 	}
-	if agentLine != "plain claude as design" {
+	if !strings.HasPrefix(agentLine, "plain claude as design · ") {
 		t.Errorf("detail agent line = %q, want the mode as a word", agentLine)
 	}
 	if badgeBefore {

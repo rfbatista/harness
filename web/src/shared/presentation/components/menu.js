@@ -185,6 +185,8 @@ export class MenuButton {
 
 /** Alpine.data("menu", menu()). */
 export const menu = (env) => () => ({
+  // Declared, so init's assignment lands here, not on an outer scope shared by other menus.
+  _menu: null,
   init() {
     this._menu = new MenuButton(this.$el, env ?? defaultEnv());
   },

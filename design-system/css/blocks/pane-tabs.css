@@ -1,0 +1,103 @@
+/*
+ * Pane tabs — a session's tab row (the .tabs block) with the open pane's
+ * tools at its end (contract L7). The tools belong to a terminal tab: the
+ * Agent tab and the App tab's run terminal get the same set; Design and
+ * Conversation render no .tools.
+ * <div class="pane-tabs">
+ *   <div class="tabs" role="tablist" aria-label="Session views">…</div>
+ *   <div class="tools" role="group" aria-label="Terminal tools">
+ *     live:  <span class="status" data-state="live" data-dot-only role="status" aria-label="Terminal live" title="…window title"></span>
+ *            [<button class="button jump" data-size="sm" aria-label="Jump to latest, 12 new lines">↓<span>12</span><span class="word">new lines</span></button>]
+ *            <span class="sep"></span>
+ *            <div class="menu pref">[Text size: icon button + menuitemradio Smaller / Default / Larger]</div>
+ *            <button class="button pref" data-variant="ghost" data-size="sm" data-icon aria-pressed="false" aria-label="Focus mode">…</button>
+ *     down:  <span class="status" data-state="queued|reconnecting|offline" role="status"><span class="word">offline · lost 12s ago</span></span>
+ *            <button class="button" data-size="sm">↻<span class="word">Reconnect</span></button></div></div>
+ * Jump to latest shows only while scrolled up; it scrolls and never takes
+ * focus. Reconnect focuses the terminal (F2). Focus mode is never Esc.
+ * Exceptions: data-focus (focus mode: a .lead with the state dot and the
+ * title comes first, and the focus button is .exit-focus "Exit focus",
+ * aria-pressed="true"); .pref marks text size and focus mode, which move to
+ * the ⋯ sheet on a phone.
+ */
+
+@layer blocks {
+  .pane-tabs {
+    display: flex;
+    align-items: center;
+    gap: var(--space-s);
+    block-size: 2.5rem;
+    padding-inline-end: var(--space-s);
+    border-block-end: var(--border-width) solid var(--color-line);
+    background: var(--color-canvas);
+
+    /* Tabs that don't fit scroll sideways; the edge fades instead of cutting a word. */
+    & > .tabs {
+      flex: 1 1 auto;
+      align-self: stretch;
+      min-inline-size: 0;
+      padding-inline: var(--space-m) var(--space-l);
+      border: 0;
+      scrollbar-width: none;
+      mask-image: linear-gradient(to left, transparent, #000 var(--space-l));
+    }
+
+    & > .lead {
+      display: flex;
+      align-items: center;
+      gap: var(--space-xs);
+      flex: 0 1 auto;
+      min-inline-size: 0;
+      max-inline-size: 18rem;
+      block-size: 1.25rem;
+      padding-inline: var(--space-m);
+      border-inline-end: var(--border-width) solid var(--color-line);
+      font-weight: var(--weight-medium);
+      white-space: nowrap;
+
+      & > :last-child { overflow: hidden; text-overflow: ellipsis; }
+      & + .tabs { padding-inline-start: 0; }
+    }
+
+    & > .tools {
+      display: flex;
+      align-items: center;
+      gap: var(--space-3xs);
+      flex: none;
+
+      & > .status { padding-inline: var(--space-xs); font-size: var(--text-xs); font-variant-numeric: tabular-nums; }
+      /* Live is quiet: the dot alone, the window title in its tooltip. */
+      & > .status[data-dot-only] { inline-size: var(--size-control-sm); justify-content: center; padding: 0; }
+      & > .sep { inline-size: var(--border-width); block-size: 1.25rem; margin-inline: var(--space-2xs); background: var(--color-line); }
+      /* Busy: the ring replaces the icon instead of sitting beside it. */
+      & .button[aria-busy="true"] > svg { display: none; }
+    }
+
+    /* New output while scrolled up: the one tool that asks to be seen. */
+    & .jump {
+      --_bg: var(--color-signal-wash);
+      --_ink: var(--color-signal-strong);
+      --_line: color-mix(in oklch, var(--color-signal) 45%, transparent);
+
+      font-variant-numeric: tabular-nums;
+
+      @media (forced-colors: active) { border-color: ButtonText; }
+    }
+
+    & .exit-focus { --_ink: var(--color-ink); }
+
+    /* A narrow column: the words leave the screen but stay for screen readers. */
+    @container session (width < 36rem) {
+      & .tools > .status { padding-inline: var(--space-2xs); }
+      & .tools :is(.status, .button) > .word { position: absolute; inline-size: 1px; block-size: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+    }
+
+    @media (width < 48rem) {
+      block-size: var(--size-touch);
+
+      & > .tabs [role="tab"] { min-block-size: var(--size-touch); }
+      & .tools .button { min-block-size: var(--size-touch); min-inline-size: var(--size-touch); }
+      & .tools > :is(.sep, .pref) { display: none; }
+    }
+  }
+}

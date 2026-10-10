@@ -158,7 +158,7 @@ export function statusCheckView(check, now) {
     : "no check yet";
   if (check.state !== "active") {
     const word = check.state === "paused" ? "checks paused" : "checks ended";
-    return { state: CHECK_STATE[check.state], short: word, detail: `${word} · ${last}` };
+    return { state: CHECK_STATE[check.state], short: word, detail: `${word} · ${last}`, next: "", last };
   }
   const next = until(check.nextAt, now);
   const every = relativeTime(new Date(0), new Date(check.everyMinutes * 60_000));
@@ -166,6 +166,8 @@ export function statusCheckView(check, now) {
     state: CHECK_STATE.active,
     short: next ? `check in ${next}` : "check due",
     detail: `checks every ${every} · ${next ? `next in ${next}` : "next due now"} · ${last}`,
+    next: next ? `next in ${next}` : "next due now",
+    last,
   };
 }
 

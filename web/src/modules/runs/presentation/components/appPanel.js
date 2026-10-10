@@ -91,6 +91,10 @@ export const appPanel = ({ gateway }) => (panel = {}) => ({
   get run() {
     return this.runs.find((r) => r.id === this.runId) ?? null;
   },
+  /** Tells the page which run is on screen ("" for none), for the tab row's terminal tools (x-effect). */
+  reportRun() {
+    this.$dispatch("run-shown", { id: this.runId });
+  },
   /** The run on screen, as a one-item list keyed on its id, so another run mounts a fresh terminal. */
   get runIds() {
     return this.runId ? [this.runId] : [];

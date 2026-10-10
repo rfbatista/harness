@@ -315,19 +315,26 @@ func TestArchitectChannelInTheWebUI_EndToEnd(t *testing.T) {
 		}
 	}
 
-	// The person pauses the server delegate's checks.
+	// The person pauses the server delegate's checks, from the panel the
+	// head's Checks button opens.
+	checks := `document.querySelector('.session-head .check-button')`
+	toggle := `[...document.querySelectorAll('#session-checks footer button')][0]`
 	p.run(t, "pause the delegate's checks",
 		chromedp.Evaluate(row(server)+`.click()`, nil),
-		poll(`!!document.querySelector('[aria-label="Status checks"] button')`),
+		poll(`!!`+checks),
+		chromedp.Evaluate(checks+`.click()`, nil),
+		poll(`!!document.querySelector('#session-checks:popover-open')`),
 		both("2-status-check"),
-		chromedp.Click(`[aria-label="Status checks"] button`, chromedp.ByQuery),
-		poll(`document.querySelector('[aria-label="Status checks"]').textContent.includes('checks paused')`),
+		chromedp.Evaluate(toggle+`.click()`, nil),
+		poll(checks+`?.textContent.includes('paused')`),
 		poll(row(server)+`.querySelector('.meta').textContent.includes('checks paused')`),
 	)
 	e.checkState(domain.StatusCheckPaused, 0)
 	p.run(t, "resume them",
-		chromedp.Click(`[aria-label="Status checks"] button`, chromedp.ByQuery),
-		poll(`document.querySelector('[aria-label="Status checks"]').textContent.includes('checks every 10m')`),
+		chromedp.Evaluate(checks+`.click()`, nil),
+		poll(`!!document.querySelector('#session-checks:popover-open')`),
+		chromedp.Evaluate(toggle+`.click()`, nil),
+		poll(checks+`?.textContent.includes('next')`),
 	)
 	e.checkState(domain.StatusCheckActive, 10)
 
@@ -500,7 +507,7 @@ func clickTab(label string) chromedp.Action {
 // have drawn its first snapshot.
 func terminalDrawn(sessionID string) chromedp.Action {
 	return chromedp.Tasks{
-		poll(fmt.Sprintf(`%s === %q && %s?.querySelector('.status')?.dataset.state === 'running'`, selectedID, sessionID, sessionTerminal)),
+		poll(fmt.Sprintf(`%s === %q && %s?.dataset.state === 'live'`, selectedID, sessionID, sessionTerminal)),
 		// A fresh screen has its cursor on the first row; the snapshot puts
 		// it below the delegate's lines. xterm keeps its input under the
 		// cursor, focused or not.

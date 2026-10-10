@@ -1,15 +1,22 @@
-// A delegate's status-check loop, in its detail header: how often the
-// architect is woken to check on it, and the person's controls to pause,
-// resume or retune it. The page keys the bar on the loop's interval and state,
-// so a change from anywhere (the architect's set_status_check, another tab)
-// mounts a fresh one; its words (bar.detail) come from the page, which ticks.
+// A delegate's status-check loop: how often the architect is woken to check
+// on it, and the person's controls to pause, resume or retune it. In the
+// session head it is a button ("Checks · 20m · next 15m") opening a panel in
+// the top layer; on a phone it is the first row of the ⋯ sheet. The page keys
+// it on the loop's interval and state, so a change from anywhere (the
+// architect's set_status_check, another tab) mounts a fresh one; its words
+// about time (bar.next, bar.last) come from the page, which ticks. The
+// button's words and the select read the same value, so they never disagree.
 //
 //   <template x-for="bar in statusCheckBars" x-bind:key="bar.key">
-//     <div x-data="sessionsStatusCheck(bar)"> …
+//     <div style="display: contents" x-data="sessionsStatusCheck(bar)">
+//       <button x-ref="button" x-on:click="openPanel" …>…</button>
+//       <div class="[ popup ]" role="dialog" id="session-checks" x-data="popupDialog" …>…</div>
+//     </div>
+//   </template>
 //
 // A change is told to the page with status-check-changed, so the row and the
-// header follow at once; the session change the server then announces says
-// the same.
+// head follow at once; the session change the server then announces says the
+// same.
 
 import { DEFAULT_INTERVAL, INTERVALS } from "../../domain/channel.js";
 import { describeError } from "../../../../shared/presentation/errors.js";
@@ -23,6 +30,8 @@ export const statusCheck = ({ channel }) => (bar = {}) => {
     minutes: String(check?.everyMinutes || bar.remembered || DEFAULT_INTERVAL),
     busy: false,
     error: null,
+    /** The interval last asked for, for Retry. */
+    asked: null,
 
     /** The presets, plus the loop's own interval when the architect set another (else the select would show the first preset). */
     get intervals() {
@@ -41,7 +50,48 @@ export const statusCheck = ({ channel }) => (bar = {}) => {
       return this.active || this.paused;
     },
     get toggleWord() {
-      return this.active ? "Pause" : "Resume";
+      return this.active ? "Pause checks" : "Resume checks";
+    },
+    /** The interval the select shows, short: 20m, 1h. */
+    get every() {
+      const m = Number(this.minutes);
+      return m < 60 || m % 60 ? `${m}m` : `${m / 60}h`;
+    },
+    get buttonDot() {
+      if (this.error) return "failed";
+      return this.paused ? "idle" : "live";
+    },
+    get buttonNext() {
+      if (this.busy) return "saving…";
+      if (this.error) return "couldn't save";
+      if (this.paused) return "paused";
+      return (bar.next ?? "").replace(/^next in /, "next ");
+    },
+    get buttonLabel() {
+      const next = this.busy || this.error || this.paused ? this.buttonNext : bar.next ?? "";
+      return `Status checks: every ${this.every}, ${next}`;
+    },
+    get panelDot() {
+      return this.paused ? "idle" : "live";
+    },
+    get panelWord() {
+      return this.paused ? "Paused" : "On";
+    },
+    get nextWords() {
+      return this.paused ? "" : bar.next ?? "";
+    },
+    get lastWords() {
+      return bar.last ?? "";
+    },
+
+    /** Opens the panel under the button. */
+    openPanel() {
+      this.$dispatch("dialog-open", { id: "session-checks", anchor: this.$refs.button });
+    },
+
+    /** Sends the change that failed again. */
+    retry() {
+      if (this.asked !== null) return this.set(this.asked);
     },
 
     /** Pause an active loop; resume a paused one at the chosen interval. */
@@ -56,6 +106,7 @@ export const statusCheck = ({ channel }) => (bar = {}) => {
 
     async set(everyMinutes) {
       if (this.busy) return;
+      this.asked = everyMinutes;
       this.busy = true;
       this.error = null;
       try {
