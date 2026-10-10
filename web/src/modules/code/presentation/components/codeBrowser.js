@@ -283,8 +283,23 @@ export function codeBrowser({ gateway, highlighter, prefs, history = globalThis.
     get hasFile() {
       return !!this.file || !!this.openEntry;
     },
-    get noFileOpen() {
-      return !this.hasFile && !this.loadingFile && !this.problem;
+    get filesEmpty() {
+      return this.showingFiles && !this.gone && !this.hasFile && !this.loadingFile && !this.problem;
+    },
+    get filesLoading() {
+      return this.showingFiles && !this.gone && this.loadingFile && !this.hasFile;
+    },
+    get filesShown() {
+      return this.showingFiles && !this.gone && this.hasFile;
+    },
+    get mapLoading() {
+      return this.showingMap && !this.gone && this.loadingMap && !this.map;
+    },
+    get mapNone() {
+      return this.showingMap && !this.gone && this.mapEmpty;
+    },
+    get mapShown() {
+      return this.showingMap && !this.gone && !!this.mapCards && !this.mapEmpty;
     },
     get mainLabel() {
       if (this.showingMap) return "Map";
@@ -439,6 +454,8 @@ export function codeBrowser({ gateway, highlighter, prefs, history = globalThis.
       for (const t of seed.trees) tree = withExpanded(withLevel(tree, t.path, t.entries), t.path, t.path !== "");
       this.tree = tree;
       if (seed.trees[0]) this.commit = seed.trees[0].source.commit;
+      // A repository page's ref as the server resolved it (its checkout's branch by default).
+      if (this.kind === "repository" && !this.branch) this.branch = (seed.trees[0] ?? seed.file ?? seed.map)?.source.ref ?? "";
       if (seed.diff) this.setDiff(seed.diff);
       if (seed.file) this.setFile(seed.file);
       if (seed.error) this.fail(seed.error, { path: seed.route.path, ref: seed.route.ref });

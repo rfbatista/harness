@@ -61,12 +61,8 @@ templ Live() {
 					<template x-if="showingChanges">
 						@liveDiff()
 					</template>
-					<template x-if="showingFiles && !gone">
-						@liveFile()
-					</template>
-					<template x-if="showingMap && !gone">
-						@liveMap()
-					</template>
+					@liveFile()
+					@liveMap()
 				</section>
 			</div>
 		</template>
@@ -323,16 +319,18 @@ templ liveDiff() {
 	</div>
 }
 
+// liveFile is the Files view's main side: each state its own x-if (an
+// x-if renders only its template's first element).
 templ liveFile() {
-	<template x-if="noFileOpen">
+	<template x-if="filesEmpty">
 		@components.Empty("Pick a file", "Pick a file in the tree, or press T to find one by name.")
 	</template>
-	<template x-if="loadingFile && !hasFile">
+	<template x-if="filesLoading">
 		<article class="code-view" aria-busy="true">
 			<div class="scroll"><div class="[ skeleton ]"></div><div class="[ skeleton ]"></div><div class="[ skeleton ]"></div></div>
 		</article>
 	</template>
-	<template x-if="hasFile">
+	<template x-if="filesShown">
 		<article class="code-view" x-bind:aria-busy="loadingFile ? 'true' : null">
 			<header class="head">
 				<nav class="crumbs" aria-label="Path">
@@ -385,15 +383,15 @@ templ liveFile() {
 }
 
 templ liveMap() {
-	<template x-if="loadingMap && !map">
+	<template x-if="mapLoading">
 		<div class="[ pad-l ] [ flow ]" aria-busy="true"><div class="[ skeleton ]"></div><div class="[ skeleton ]"></div></div>
 	</template>
-	<template x-if="mapEmpty">
+	<template x-if="mapNone">
 		@components.Empty("No zones in this project yet", "Zones map paths to the parts of your architecture, and bounded contexts group them.") {
 			<button type="button" class="[ button ]" data-size="sm" x-on:click="showView('files')">Browse files</button>
 		}
 	</template>
-	<template x-if="mapCards && !mapEmpty">
+	<template x-if="mapShown">
 		<div class="code-map">
 			<header class="overview">
 				<p class="totals" x-text="mapCards.totals"></p>
