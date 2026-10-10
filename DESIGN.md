@@ -289,7 +289,7 @@ Every control has a visible label (or a visually hidden one when the context nam
 - **Rows** (`.nav a`): 28px (`--size-nav-row`; 44px on a coarse pointer and in the drawer), grid `16px slot · label · meta`. The slot holds an icon or the status dot (teal running, amber waiting). Meta is one item, by priority: the amber reviews badge, "waiting" in `attention-strong`, "N live" in faint ink. Rows waiting on the person take the `attention-wash`. Titles truncate on one line; the full title is a native tooltip.
 - **Groups** (`.nav .group`): a sticky 12px bold heading (`h3`) in sentence case with a chevron and a count, a disclosure button that folds the group. Folded groups still show the open task and what needs the person (the peek rule), and the server paints them folded from the `rail_collapsed` cookie. Done shows its five latest, then "Show N more".
 - **Current:** `aria-current="page"` gets the `selected` wash and ink text, on the open task (two lines) and on the current project page. No stripes, no pills.
-- **Inner list:** a task's own sessions sit in the page's `.split-view` list, beside the selected session's detail. A task can run several sessions at once.
+- **Inner list:** a task's own sessions sit in the page's `.split-view` list, beside the selected session's detail. A task can run several sessions at once. `data-expanded` hides the list and gives the detail the whole width at any viewport (the Code tab's Expand, ⇧E). It switches at once, with no animation.
 - **Below 48rem:** the rail becomes a drawer from the inline-start edge (`raised`, Float shadow, scrim), opened by the "Tasks" button first in the top bar, with 44px rows.
 
 ### List rows (signature)
