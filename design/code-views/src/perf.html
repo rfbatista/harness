@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Code views — 10,000-line check</title>
+<!-- The plan's performance check: 10,000 highlighted lines in a .code-view and
+     a 10,000-line unified diff, all in the DOM (no virtualisation). Reports
+     the time to style and lay them out, and whether every line is exactly
+     --size-code-line high. Built by design/code-views/tools/build.py. -->
+<style data-ds></style>
+<style data-proposal></style>
+<style data-page>
+  body { padding: var(--space-l); display: grid; gap: var(--space-m); }
+  #out { font-family: var(--font-mono); font-size: var(--text-sm); white-space: pre-wrap; }
+  .stage { block-size: 30rem; display: flex; border: var(--border-width) solid var(--color-line); }
+</style>
+</head>
+<body>
+<h1>10,000-line check</h1>
+<pre id="out">running…</pre>
+<div class="stage" id="file"></div>
+<div class="stage" style="overflow:auto" id="diff"></div>
+<script data-kit></script>
+<script>
+  const src = KIT_BROWSER.split("\n");
+  const text = Array.from({ length: 10000 }, (_, i) => src[i % src.length]).join("\n");
+  const results = [];
+  function measure(name, host, html, sel) {
+    const t0 = performance.now();
+    host.innerHTML = html;
+    const lines = host.querySelectorAll(sel);
+    void host.offsetHeight; // style + layout
+    const t1 = performance.now();
+    const want = parseFloat(getComputedStyle(document.documentElement).fontSize) * 1.25;
+    let bad = 0;
+    for (const l of lines) if (Math.abs(l.getBoundingClientRect().height - want) > 0.01) bad++;
+    results.push(`${name}: ${lines.length} lines · insert + style + layout ${(t1 - t0).toFixed(0)} ms · lines not ${want}px high: ${bad}`);
+  }
+  measure("code-view", document.getElementById("file"), KIT.codeView({ text, target: [5000, 5004] }), ".code-lines > .line");
+  const diffLines = Array.from({ length: 10000 }, (_, i) => (i % 7 === 3 ? "-" : i % 7 === 4 ? "+" : " ") + src[i % src.length]);
+  KIT_DIFF[1] = { ...KIT_DIFF[1], hunks: [[1, 1, "", diffLines]], added: 1428, deleted: 1429 };
+  measure("diff-view (unified)", document.getElementById("diff"), KIT.diffView({ files: [KIT_DIFF[1]] }), ".code-lines > .line");
+  document.getElementById("out").textContent = results.join("\n");
+  window.PERF = results;
+</script>
+</body>
+</html>

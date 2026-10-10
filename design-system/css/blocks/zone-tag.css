@@ -1,0 +1,65 @@
+/*
+ * Zone tag — names the zone or bounded context a path belongs to. A small
+ * square swatch in the context's categorical hue (data-hue, utilities/
+ * context-hue.css), then the name: the name carries the meaning, the hue only
+ * groups. A zone takes its context's hue.
+ * <span class="zone-tag" data-hue="2" title="Zone · Workspaces context">workspaces/git</span>
+ * Exceptions: data-hue="none" (a zone in no bounded context: hollow dashed
+ * swatch), data-dot-only (just the swatch, for the tree; needs an
+ * aria-label or a title), data-kind="context" (the context itself: bold name).
+ */
+
+@layer blocks {
+  .zone-tag {
+    --_hue: var(--hue, var(--color-line-control));
+
+    /* inline-block, not flex: the name is a bare text node and must ellipsize. */
+    display: inline-block;
+    max-inline-size: 16rem;
+    block-size: 1.25rem;
+    line-height: calc(1.25rem - 2 * var(--border-width));
+    vertical-align: middle;
+    padding-inline: var(--space-2xs) var(--space-xs);
+    border: var(--border-width) solid var(--color-line);
+    border-radius: var(--radius-xs);
+    color: var(--color-ink-muted);
+    font-size: var(--text-xs);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+
+    &::before {
+      content: "";
+      display: inline-block;
+      margin-inline-end: var(--space-2xs);
+      vertical-align: -0.02em;
+      inline-size: 0.5rem;
+      block-size: 0.5rem;
+      border-radius: 2px;
+      background: var(--_hue);
+      /* The swatch keeps its edge where colour is gone (forced colours). */
+      outline: var(--border-width) solid transparent;
+    }
+
+    &[data-hue="none"]::before {
+      background: none;
+      outline: var(--border-width) dashed var(--color-line-control);
+      outline-offset: -1px;
+    }
+
+    &[data-kind="context"] { color: var(--color-ink); font-weight: var(--weight-medium); }
+
+    &[data-dot-only] {
+      inline-size: 1rem;
+      padding: 0;
+      border: 0;
+      font-size: 0;
+      text-align: center;
+      &::before { margin: 0; vertical-align: middle; }
+    }
+
+    @media (forced-colors: active) {
+      &::before { outline-color: CanvasText; forced-color-adjust: none; }
+    }
+  }
+}

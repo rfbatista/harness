@@ -21,6 +21,10 @@ colors:
   danger-ink: "oklch(0.99 0.01 27)"
   success: "oklch(0.5 0.11 150)"
   scrim-strong: "oklch(0.1 0.005 190 / 0.82)"
+  code: "oklch(0.975 0.004 190)"
+  line-number: "oklch(0.5 0.012 190)"
+  diff-add: "oklch(0.46 0.11 150)"
+  diff-del: "oklch(0.48 0.17 27)"
 typography:
   headline:
     fontFamily: "Atkinson Hyperlegible Next, ui-sans-serif, system-ui, sans-serif"
@@ -175,10 +179,22 @@ A cool, nearly colorless console with a trace of the signal hue (190) in every n
 - **Hairline** (`line`), **Strong Hairline** (`line-strong`), **Control Edge** (`line-control`, ≥ 3:1): dividers, emphasized dividers, input and secondary-button boundaries.
 - **Dim Scrim** (`scrim`) and **Dark Scrim** (`scrim-strong`): what sits behind a modal surface. `scrim` dims the page behind a sheet or dialog; `scrim-strong` (near-black at 82%, 86% in dark mode) sits behind an image in the Lightbox, where the page must drop away.
 
+### Code
+Reading code has its own small palette, used only inside the code blocks (§5 Code views). Every text colour clears 4.5:1 on the code well and on the add, remove and target washes in both themes. Run `python3 -I design/code-views/tools/contrast.py design-system/tokens.json` after changing one.
+- **Code Well** (`code`): where files and diffs are read. In light it is a shade lighter than `sunken` (0.975), so nine syntax colours and two washes all clear AA. In dark it is `sunken`.
+- **Line Number** (`line-number`): the gutter. It is not `ink-faint`, which drops to 4.3:1 on the light washes.
+- **Syntax** (`tok-comment`, `tok-string`, `tok-number`, `tok-keyword`, `tok-type`, `tok-function`, `tok-tag`, `tok-attr`, `tok-regexp`): quiet, mid-chroma hues at one lightness per theme (L ≈ 0.48 light, ≈ 0.8 dark). Comments are neutral and italic. Variables stay ink, and punctuation, operators and meta stay muted ink.
+- **Diff** (`diff-add`, `diff-del` for the signs, counts and A/D marks; `diff-add-wash`, `diff-del-wash` for line backgrounds; `target-wash` for a line targeted from the URL). The signs are separate from `success` and `danger`, which fall under 4.5:1 on the washes.
+- **Context hues** (`context-0`…`context-7`): the categorical colours of bounded contexts, as graphics only (swatches and bars, ≥ 3:1 on canvas and panel). They avoid the diff red and green and the teal signal. A context's hue is its index in the code map, mod 8 (`data-hue`, utilities/context-hue.css).
+
+Lowest measured ratios: light `line-number` and `tok-comment` 4.86 on the target wash, dark `line-number` 5.50 on the target wash, light `context-7` 3.30 on panel. The full table is in the task document *Plan: Design system — code views* §3.2.1.
+
 ### Named Rules
 **The Done Goes Quiet Rule.** A finished session is gray, not green. Success is the expected outcome; it earns no color on a resting list. Only running (signal), waiting (amber) and failed (red) are colored.
 
 **The One Signal Rule.** Signal teal covers ≤ 10% of any screen. If two primary buttons sit side by side, one is wrong.
+
+**The Letter Beside the Colour Rule.** In code, a change is a letter (A M D R C T U), a diff line is a sign (+ −), a zone is its name. Colour only repeats them.
 
 **The Word Beside the Dot Rule.** Every colored status ships with its word (`running`, `waiting`, `failed`) or an accessible name. A dot alone is allowed only where the word is adjacent in the same row.
 
@@ -321,6 +337,22 @@ What needs the person across every project. **The bell** ends the `topbar`: a gh
 - **Inbox page** (`/notifications`, `.inbox`): filters in a GET form: a native project select and an *All / Unread* radio pair, not a dropdown. Then the list and *Load more*. *Mark all read* names its scope (*Mark all read in harness*).
 - **Live and alerts:** the stream bar's polite region announces only a new `action` item (*New in harness: Review requested…*). A read or a resolve is never announced. Desktop alerts are opt-in from the panel's switch: the permission is asked only in that click, and an alert fires only while the tab is hidden.
 
+### Code views
+Reading code: a session's Code tab (Changes, Files, Map) and a repository's code page (Files, Map). The UX is in the task document *Design: code views — UX*, and every block and state is in the specimen's *Code views* section. Code is mono 13px on a fixed 20px line (`--size-code-line`) in the `code` well. Long lines scroll sideways inside the code, never the page, and line numbers stay put.
+- **Code layout** (`.code-layout`): a side list (`aside.side`: the tree or the changed files, `clamp(14rem, 32%, 18rem)`) beside the reading surface (`section.main`). Each scrolls on its own. It is a size container named `code`, so it follows the room it gets: below a 44rem container one side shows at a time, the main side with `data-main`, with a `[data-code-back]` control back. `data-side="none"` has no side (the map).
+- **Source bar** (`.code-source-bar`): the views switch, then which code is on screen (`.origin`: repository or a worktree select, `.branch` or the ref select, `.commit`, `.dirty`), its state and actions. `data-state="live"` is a teal dot and *live*. `stale` is an amber dot, *Changed on disk* and *Reload R*: an open file never moves under its reader. `gone` is a hollow dot and a `.gone` line saying what is shown instead, with its code and the way on. No `data-state` means a fixed ref.
+- **Segmented** (`.segmented`): 2–5 sibling views or scopes, each its own URL (`a[aria-current]`) or a pressed button (`aria-pressed`), in a hairline box. The current one is raised. `aria-disabled` items carry a title saying why.
+- **File tree** (`.file-tree`): a lazy ARIA tree. 28px rows (44px on touch) of chevron · icon · name · zone dot · change mark, indented by `--depth`. The open file is `aria-selected` (selected wash, signal icon). A loading directory holds skeleton rows. A deleted file stays listed, struck through. A symlink shows its target, and a submodule says so.
+- **Changed files** (`.diff-summary`): totals and the scope switch (All · Branch · Working) over one row per file: change mark, the path truncated from its start so the name stays, counts or a faint word (*binary*, *not loaded*). The file on screen is `aria-current="location"`.
+- **Change mark** (`.change-mark`): the git state as its letter in a fixed slot, coloured only to repeat it. Untracked is a dashed box, and a directory with changes inside is a dot.
+- **Code lines** (`.code-lines`): the lines shared by files and diffs. The gutter is sized from `--digits`. Numbers come from `data-line` and the diff signs from `data-kind`, so a copied selection holds only code. Fixed-height lines can be virtualised. `data-wrap` and split rows grow, so they cannot. The targeted line takes `target-wash` and a bold number. A last line without a newline says so.
+- **File** (`.code-view`): a head (the path as `.crumbs`, zone tags, language · lines · size, actions), an optional notice (truncated: what is shown and the path to read the rest elsewhere), then the lines, or a placeholder (binary, empty, symlink, submodule) with a sentence and no fake action.
+- **Diff** (`.diff-view`): files with sticky heads (toggle, mark, path with `old → new` for a rename, zone tags, counts, actions) over their hunks. It is unified by default, and split from a 44rem container. A withheld file (`.withheld[data-reason]`) says why, with *Load diff* or the git command to run instead.
+- **Crumbs** (`.crumbs`): a path as links, mono. The directories shrink and the file name never does.
+- **Zone tag** (`.zone-tag`): a swatch in the context's hue (`data-hue`) and the name. `data-hue="none"` is dashed (a zone in no context), `data-kind="context"` bolds the name, and `data-dot-only` is the swatch alone for the tree.
+- **Map** (`.code-map`): an overview bar of each context's share (no context dashed, unzoned hatched) over one card per context with its zones, a bar and a count. The count is always written. A project without zones shows the empty state.
+- **Syntax** (`syntax.css`): the contract's 17 `tok-*` classes, scoped to `.code-lines`. Nothing else from a highlighter reaches the stylesheet.
+
 ### Transcript (signature)
 The `sunken` well where a session's output is read: mono 13px, a grid of `time | mark | text`. Line kinds via `data-kind`: `user` (signal mark ›), `agent` (·), `tool` (muted, ⌁), `error` (red, ×), `prompt` (amber wash, ?) for a permission request awaiting the developer.
 
@@ -341,6 +373,7 @@ The `sunken` well where a session's output is read: mono 13px, a grid of `time |
 - **Do** show the error `code` and the next action whenever the API returns a `StructuredError`, in a `.banner` with its `.code` line.
 - **Do** keep transitions between 90 and 240ms with `--ease-out`, and give every animation a reduced-motion fallback.
 - **Do** keep text contrast ≥ 4.5:1 and control edges ≥ 3:1 in both themes; re-check when adding a surface.
+- **Do** pair every code state with its letter, sign or word, and keep code lines a fixed `--size-code-line` high unless they wrap.
 - **Do** embed agent-produced pages only in `<iframe sandbox="allow-scripts">` and render their titles and notes as text; `allow-same-origin` is never added.
 
 ### Don't:
@@ -353,4 +386,5 @@ The `sunken` well where a session's output is read: mono 13px, a grid of `time |
 - **Don't** set anything above 22px or use uppercase tracked eyebrows; hierarchy is weight and ink.
 - **Don't** add shadows to surfaces that don't float, or nest a `.pane` inside a `.pane`.
 - **Don't** reach for a modal first. Inline editing and the side pane come before a dialog; the command palette is the one standing exception.
+- **Don't** use syntax or context colours outside the code blocks, or size code lines and gutters from their content (no per-line content-sized tracks).
 - **Don't** restyle native scrollbars or checkboxes beyond theme color (`accent-color`, `scrollbar-color`). Selects follow the Select variant in §5 Dropdowns: the closed control matches the inputs; the open list stays the browser's, or base-select where supported.

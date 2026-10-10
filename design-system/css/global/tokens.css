@@ -39,6 +39,8 @@
     --size-measure: 68ch;
     --size-sidebar: 15rem;
     --size-wrapper: 72rem;
+    --size-code-line: 1.25rem;
+    --size-code-side: 18rem;
 
     --radius-xs: 3px;
     --radius-sm: 5px;
@@ -99,6 +101,30 @@
     --color-focus: oklch(0.5 0.095 182);
     --color-scrim: oklch(0.22 0.01 190 / 0.28);
     --color-scrim-strong: oklch(0.1 0.005 190 / 0.82);
+    --color-code: oklch(0.975 0.004 190);
+    --color-line-number: oklch(0.5 0.012 190);
+    --color-tok-comment: oklch(0.5 0.012 190);
+    --color-tok-string: oklch(0.48 0.1 148);
+    --color-tok-number: oklch(0.5 0.12 50);
+    --color-tok-keyword: oklch(0.48 0.15 300);
+    --color-tok-type: oklch(0.48 0.09 225);
+    --color-tok-function: oklch(0.48 0.14 262);
+    --color-tok-tag: oklch(0.5 0.15 350);
+    --color-tok-attr: oklch(0.49 0.1 80);
+    --color-tok-regexp: oklch(0.47 0.1 175);
+    --color-diff-add: oklch(0.46 0.11 150);
+    --color-diff-del: oklch(0.48 0.17 27);
+    --color-diff-add-wash: oklch(0.7 0.14 150 / 0.13);
+    --color-diff-del-wash: oklch(0.66 0.17 27 / 0.1);
+    --color-target-wash: oklch(0.8 0.13 80 / 0.24);
+    --color-context-0: oklch(0.58 0.13 250);
+    --color-context-1: oklch(0.56 0.15 300);
+    --color-context-2: oklch(0.58 0.15 345);
+    --color-context-3: oklch(0.58 0.12 50);
+    --color-context-4: oklch(0.58 0.11 110);
+    --color-context-5: oklch(0.58 0.09 210);
+    --color-context-6: oklch(0.52 0.12 275);
+    --color-context-7: oklch(0.62 0.1 80);
     --shadow-float: 0 1px 2px oklch(0.22 0.01 190 / 0.06), 0 8px 24px -4px oklch(0.22 0.01 190 / 0.14);
   }
 
@@ -133,6 +159,30 @@
       --color-focus: oklch(0.78 0.1 182);
       --color-scrim: oklch(0.1 0.005 190 / 0.6);
       --color-scrim-strong: oklch(0.08 0.004 190 / 0.86);
+      --color-code: oklch(0.145 0.006 190);
+      --color-line-number: oklch(0.67 0.012 190);
+      --color-tok-comment: oklch(0.7 0.012 190);
+      --color-tok-string: oklch(0.8 0.12 148);
+      --color-tok-number: oklch(0.8 0.1 55);
+      --color-tok-keyword: oklch(0.78 0.12 300);
+      --color-tok-type: oklch(0.8 0.08 220);
+      --color-tok-function: oklch(0.79 0.1 262);
+      --color-tok-tag: oklch(0.78 0.12 350);
+      --color-tok-attr: oklch(0.83 0.1 85);
+      --color-tok-regexp: oklch(0.8 0.09 175);
+      --color-diff-add: oklch(0.78 0.13 150);
+      --color-diff-del: oklch(0.74 0.15 25);
+      --color-diff-add-wash: oklch(0.7 0.14 150 / 0.14);
+      --color-diff-del-wash: oklch(0.68 0.16 25 / 0.15);
+      --color-target-wash: oklch(0.81 0.13 75 / 0.12);
+      --color-context-0: oklch(0.72 0.12 250);
+      --color-context-1: oklch(0.72 0.13 300);
+      --color-context-2: oklch(0.74 0.13 345);
+      --color-context-3: oklch(0.74 0.11 50);
+      --color-context-4: oklch(0.76 0.11 110);
+      --color-context-5: oklch(0.76 0.08 210);
+      --color-context-6: oklch(0.66 0.13 275);
+      --color-context-7: oklch(0.8 0.1 80);
       --shadow-float: 0 1px 2px oklch(0 0 0 / 0.4), 0 12px 32px -6px oklch(0 0 0 / 0.55);
     }
   }
@@ -167,6 +217,30 @@
     --color-focus: oklch(0.78 0.1 182);
     --color-scrim: oklch(0.1 0.005 190 / 0.6);
     --color-scrim-strong: oklch(0.08 0.004 190 / 0.86);
+    --color-code: oklch(0.145 0.006 190);
+    --color-line-number: oklch(0.67 0.012 190);
+    --color-tok-comment: oklch(0.7 0.012 190);
+    --color-tok-string: oklch(0.8 0.12 148);
+    --color-tok-number: oklch(0.8 0.1 55);
+    --color-tok-keyword: oklch(0.78 0.12 300);
+    --color-tok-type: oklch(0.8 0.08 220);
+    --color-tok-function: oklch(0.79 0.1 262);
+    --color-tok-tag: oklch(0.78 0.12 350);
+    --color-tok-attr: oklch(0.83 0.1 85);
+    --color-tok-regexp: oklch(0.8 0.09 175);
+    --color-diff-add: oklch(0.78 0.13 150);
+    --color-diff-del: oklch(0.74 0.15 25);
+    --color-diff-add-wash: oklch(0.7 0.14 150 / 0.14);
+    --color-diff-del-wash: oklch(0.68 0.16 25 / 0.15);
+    --color-target-wash: oklch(0.81 0.13 75 / 0.12);
+    --color-context-0: oklch(0.72 0.12 250);
+    --color-context-1: oklch(0.72 0.13 300);
+    --color-context-2: oklch(0.74 0.13 345);
+    --color-context-3: oklch(0.74 0.11 50);
+    --color-context-4: oklch(0.76 0.11 110);
+    --color-context-5: oklch(0.76 0.08 210);
+    --color-context-6: oklch(0.66 0.13 275);
+    --color-context-7: oklch(0.8 0.1 80);
     --shadow-float: 0 1px 2px oklch(0 0 0 / 0.4), 0 12px 32px -6px oklch(0 0 0 / 0.55);
   }
 
