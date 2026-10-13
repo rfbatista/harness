@@ -95,7 +95,7 @@ func (s *Service) raise(ctx context.Context, ev domain.Event) {
 		return
 	}
 	if err := s.Events.Publish(ctx, ev); err != nil {
-		slog.Warn("announce task addition", "event", ev.EventName(), "err", err)
+		slog.Warn("announce a planning change", "event", ev.EventName(), "err", err)
 	}
 }
 

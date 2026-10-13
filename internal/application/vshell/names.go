@@ -27,6 +27,18 @@ func DocumentExt(format domain.DocumentFormat) string {
 	return ".txt"
 }
 
+// DocumentFormatOf is the format a document file at p is in, by its
+// extension: .html/.htm html, .md markdown, anything else text.
+func DocumentFormatOf(p string) domain.DocumentFormat {
+	switch strings.ToLower(path.Ext(p)) {
+	case ".html", ".htm":
+		return domain.DocumentFormatHTML
+	case ".md":
+		return domain.DocumentFormatMarkdown
+	}
+	return domain.DocumentFormatText
+}
+
 // CommentFileName is <yyyymmdd-hhmmss>-<author>-<short id>.md, the time
 // the comment was written, in UTC.
 func CommentFileName(c *domain.TicketComment) string {

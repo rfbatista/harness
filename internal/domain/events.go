@@ -102,6 +102,36 @@ type TicketResourceAdded struct{ Resource TicketResource }
 // TicketCommentAdded: a person commented on a task.
 type TicketCommentAdded struct{ Comment TicketComment }
 
+// DocumentChange is what happened to a document.
+type DocumentChange string
+
+const (
+	DocumentCreated      DocumentChange = "created"
+	DocumentUpdated      DocumentChange = "updated"
+	DocumentDeleted      DocumentChange = "deleted"
+	DocumentScopeChanged DocumentChange = "scope_changed"
+	DocumentLinked       DocumentChange = "linked"
+	DocumentUnlinked     DocumentChange = "unlinked"
+)
+
+// DocumentChanged: a document was created, updated, deleted, moved between
+// task and project scope, or linked to or unlinked from a task (TicketID).
+// It is published after the change is stored, whoever made it.
+type DocumentChanged struct {
+	DocumentID string
+	ProjectID  string
+	TicketID   string
+	Change     DocumentChange
+}
+
+// ArtifactChanged: an artifact was published, re-published, unpublished,
+// deleted, moved between task and project scope, or attached to or detached
+// from a task. It is published after the change is stored, whoever made it.
+type ArtifactChanged struct {
+	ArtifactID string
+	ProjectID  string
+}
+
 func (ProjectDeleted) EventName() string       { return "project.deleted" }
 func (RepositoryDeleted) EventName() string    { return "repository.deleted" }
 func (PromptDeleted) EventName() string        { return "prompt.deleted" }
@@ -119,3 +149,5 @@ func (TicketResourceAdded) EventName() string  { return "ticket.resource_added" 
 func (ReviewRequestChanged) EventName() string { return "review_request.changed" }
 func (SessionStatusChanged) EventName() string { return "session.status_changed" }
 func (TicketCommentAdded) EventName() string   { return "ticket.comment_added" }
+func (DocumentChanged) EventName() string      { return "document.changed" }
+func (ArtifactChanged) EventName() string      { return "artifact.changed" }

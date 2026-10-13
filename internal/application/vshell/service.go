@@ -1,14 +1,16 @@
 // Package vshell gives task sessions their virtual shell: a temporary folder
 // holding their task's and project's documents, comments, resources and
 // designs as files, and what each session was last given of each file, its
-// base version (see "Contract: Harness server ↔ Agent sessions — virtual
-// shell" §1–2).
+// base version. Whoever changes one of those, every running shell that
+// should see it is brought up to date (see "Contract: Harness server ↔ Agent
+// sessions — virtual shell" §1–3).
 package vshell
 
 import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"os"
 	"path"
 	"path/filepath"
@@ -28,10 +30,12 @@ const (
 // indexFile is the shell's own index of every other file.
 const indexFile = ".index.json"
 
-// Service satisfies the virtual-shell ports, checked at compile time.
+// Service satisfies the virtual-shell ports, checked at compile time, and
+// hears every change a shell may have to show.
 var (
 	_ ports.VirtualShells     = (*Service)(nil)
 	_ ports.ShellBaseVersions = (*Service)(nil)
+	_ ports.ProjectChangeSink = (*Service)(nil)
 )
 
 // Sources is what a shell is filled from. Artifacts may be nil: the shell
@@ -44,8 +48,8 @@ type Sources struct {
 	Artifacts ports.ArtifactReader
 }
 
-// Service makes, fills and removes sessions' shells, and keeps each running
-// shell's base versions in memory.
+// Service makes, fills, refreshes and removes sessions' shells, and keeps
+// each running shell's base versions in memory.
 type Service struct {
 	src Sources
 
@@ -59,21 +63,26 @@ func New(src Sources) *Service {
 
 // shell is one session's folder and what it was last given of each file.
 type shell struct {
-	dir string
+	dir                         string
+	sessionID, ticketID, projID string
 
-	mu    sync.Mutex
-	files map[string]ports.ShellFile // by path
+	// mu guards the folder and files; a refresh holds it from reading the
+	// sources to writing the last file, so refreshes never interleave.
+	mu     sync.Mutex
+	files  map[string]ports.ShellFile // by path
+	closed bool
+
+	// kickMu guards dirty and running: one refresh runs at a time, and a
+	// change while it runs makes it go round once more.
+	kickMu         sync.Mutex
+	dirty, running bool
 }
 
 // Open makes the session's shell in a fresh temp dir and fills it before
 // answering its path. A session that had a shell gets a new one and the old
-// one is removed.
+// one is removed. The shell hears changes from the moment it is filled.
 func (s *Service) Open(ctx context.Context, sessionID, ticketID string) (string, error) {
 	tk, err := s.src.Tickets.GetTicket(ctx, ticketID)
-	if err != nil {
-		return "", err
-	}
-	files, err := s.contents(ctx, sessionID, tk)
 	if err != nil {
 		return "", err
 	}
@@ -81,30 +90,73 @@ func (s *Service) Open(ctx context.Context, sessionID, ticketID string) (string,
 	if err != nil {
 		return "", err
 	}
-	sh := &shell{dir: dir, files: map[string]ports.ShellFile{}}
-	if err := sh.fill(files); err != nil {
-		_ = os.RemoveAll(dir)
-		return "", fmt.Errorf("fill the virtual shell: %w", err)
-	}
-
+	sh := &shell{dir: dir, sessionID: sessionID, ticketID: tk.ID, projID: tk.ProjectID, files: map[string]ports.ShellFile{}}
+	// Held until filled: a change heard meanwhile refreshes it after.
+	sh.mu.Lock()
 	s.mu.Lock()
 	old := s.shells[sessionID]
 	s.shells[sessionID] = sh
 	s.mu.Unlock()
+
+	if err := s.fill(ctx, sh, tk); err != nil {
+		sh.closed = true
+		sh.mu.Unlock()
+		s.mu.Lock()
+		if s.shells[sessionID] == sh {
+			if old != nil {
+				s.shells[sessionID] = old
+			} else {
+				delete(s.shells, sessionID)
+			}
+		}
+		s.mu.Unlock()
+		_ = os.RemoveAll(dir)
+		return "", fmt.Errorf("fill the virtual shell: %w", err)
+	}
+	sh.mu.Unlock()
 	if old != nil {
-		_ = os.RemoveAll(old.dir)
+		old.remove()
 	}
 	return dir, nil
+}
+
+// fill makes the layout's folders and writes every file. The caller holds
+// sh.mu.
+func (s *Service) fill(ctx context.Context, sh *shell, tk *domain.Ticket) error {
+	for _, d := range []string{"task/docs", "task/comments", "task/resources", "task/designs", "project/docs", "project/designs"} {
+		if err := os.MkdirAll(sh.abs(d), 0o755); err != nil {
+			return err
+		}
+	}
+	b, err := s.contents(ctx, sh.sessionID, tk)
+	if err != nil {
+		return err
+	}
+	return sh.sync(b)
 }
 
 // Close removes dir, and forgets the session's shell while dir is still it.
 func (s *Service) Close(sessionID, dir string) {
 	s.mu.Lock()
-	if sh := s.shells[sessionID]; sh != nil && sh.dir == dir {
+	sh := s.shells[sessionID]
+	if sh != nil && sh.dir == dir {
 		delete(s.shells, sessionID)
 	}
 	s.mu.Unlock()
+	if sh != nil && sh.dir == dir {
+		sh.remove()
+		return
+	}
 	_ = os.RemoveAll(dir)
+}
+
+// remove closes the shell, so no refresh writes into it again, and deletes
+// its folder.
+func (sh *shell) remove() {
+	sh.mu.Lock()
+	sh.closed = true
+	sh.mu.Unlock()
+	_ = os.RemoveAll(sh.dir)
 }
 
 // BaseVersion is the file at path as the session last received it.
@@ -141,7 +193,10 @@ func (s *Service) Put(sessionID string, f ports.ShellFile, content []byte, readO
 	}
 	sh.mu.Lock()
 	defer sh.mu.Unlock()
-	if err := sh.write(file{meta: f, content: content, readOnly: readOnly}); err != nil {
+	if sh.closed {
+		return shellNotFound()
+	}
+	if err := sh.write(&file{meta: f, content: content, readOnly: readOnly}); err != nil {
 		return err
 	}
 	return sh.writeIndex()
@@ -156,11 +211,106 @@ func (s *Service) Remove(sessionID, path string) error {
 	}
 	sh.mu.Lock()
 	defer sh.mu.Unlock()
-	if err := os.Remove(sh.abs(path)); err != nil && !os.IsNotExist(err) {
+	if sh.closed {
+		return shellNotFound()
+	}
+	if err := sh.drop(path); err != nil {
 		return err
 	}
-	delete(sh.files, path)
 	return sh.writeIndex()
+}
+
+// Subscribe hears the changes announced as domain events: documents' and
+// artifacts'. Comments and resources reach the shells through
+// AnnounceChange.
+func (s *Service) Subscribe(sub ports.EventSubscriber) {
+	ports.On(sub, func(_ context.Context, ev domain.DocumentChanged) error {
+		s.changed(ev.ProjectID, "")
+		return nil
+	})
+	ports.On(sub, func(_ context.Context, ev domain.ArtifactChanged) error {
+		s.changed(ev.ProjectID, "")
+		return nil
+	})
+}
+
+// AnnounceChange hears a task's comments and resources change, as planning
+// puts them on the project feed (ports.ProjectChangeSink).
+func (s *Service) AnnounceChange(c ports.ProjectChange) {
+	switch {
+	case c.TicketComment != nil && c.TicketComment.Comment != nil:
+		s.changed(c.ProjectID(), c.TicketComment.Comment.TicketID)
+	case c.TicketResource != nil && c.TicketResource.Resource != nil:
+		s.changed(c.ProjectID(), c.TicketResource.Resource.TicketID)
+	}
+}
+
+// changed brings up to date every running shell of the project, or of one
+// task of it when ticketID is set. It never waits: each shell is refreshed
+// on its own goroutine, after whatever refresh it is in.
+func (s *Service) changed(projectID, ticketID string) {
+	if projectID == "" {
+		return
+	}
+	s.mu.Lock()
+	var due []*shell
+	for _, sh := range s.shells {
+		if sh.projID == projectID && (ticketID == "" || sh.ticketID == ticketID) {
+			due = append(due, sh)
+		}
+	}
+	s.mu.Unlock()
+	for _, sh := range due {
+		s.kick(sh)
+	}
+}
+
+// kick refreshes sh, or, when a refresh is running, has it go round once
+// more, so the last change is always read after it was stored.
+func (s *Service) kick(sh *shell) {
+	sh.kickMu.Lock()
+	sh.dirty = true
+	if sh.running {
+		sh.kickMu.Unlock()
+		return
+	}
+	sh.running = true
+	sh.kickMu.Unlock()
+	go func() {
+		for {
+			sh.kickMu.Lock()
+			if !sh.dirty {
+				sh.running = false
+				sh.kickMu.Unlock()
+				return
+			}
+			sh.dirty = false
+			sh.kickMu.Unlock()
+			s.refresh(sh)
+		}
+	}()
+}
+
+// refresh reads what the shell should hold now and rewrites what differs.
+func (s *Service) refresh(sh *shell) {
+	sh.mu.Lock()
+	defer sh.mu.Unlock()
+	if sh.closed {
+		return
+	}
+	ctx := context.Background()
+	tk, err := s.src.Tickets.GetTicket(ctx, sh.ticketID)
+	if err != nil {
+		slog.Warn("refresh a virtual shell", "session", sh.sessionID, "err", err)
+		return
+	}
+	b, err := s.contents(ctx, sh.sessionID, tk)
+	if err == nil {
+		err = sh.sync(b)
+	}
+	if err != nil {
+		slog.Warn("refresh a virtual shell", "session", sh.sessionID, "err", err)
+	}
 }
 
 func (s *Service) shell(sessionID string) *shell {
@@ -173,41 +323,108 @@ func shellNotFound() error {
 	return &domain.StructuredError{Code: "SHELL_NOT_FOUND", Message: "the session has no virtual shell"}
 }
 
-// file is one file to write: its index row, its bytes and its mode.
-type file struct {
-	meta     ports.ShellFile
-	content  []byte
-	readOnly bool
-}
-
-// fill writes files and then the index of them.
-func (sh *shell) fill(files []file) error {
-	sh.mu.Lock()
-	defer sh.mu.Unlock()
-	for _, d := range []string{"task/docs", "task/comments", "task/resources", "task/designs", "project/docs", "project/designs"} {
-		if err := os.MkdirAll(sh.abs(d), 0o755); err != nil {
-			return err
+// sync makes the shell hold exactly b's files: each is placed (a file the
+// shell has keeps its path), written when the shell lacks that version,
+// atomically, and recorded as the session's base version; a file the shell
+// should no longer hold is removed; the index is rewritten when anything
+// changed. The caller holds sh.mu.
+func (sh *shell) sync(b *builder) error {
+	prev := map[string]string{}
+	for p, f := range sh.files {
+		if f.ID != "" {
+			prev[fileKey(f)] = p
 		}
 	}
-	for _, f := range files {
+	b.place(prev)
+
+	keep := map[string]bool{}
+	changed := false
+	put := func(f *file) error {
+		if cur, ok := sh.files[f.meta.Path]; ok && current(cur, f.meta) {
+			keep[f.meta.Path] = true
+			return nil
+		}
+		if f.load != nil {
+			content, err := f.load()
+			if err != nil {
+				slog.Warn("leave a file out of a virtual shell", "path", f.meta.Path, "id", f.meta.ID, "err", err)
+				f.dropped = true
+				return nil
+			}
+			f.content = content
+			if f.meta.Version == "" {
+				f.meta.Version = Version(content)
+			}
+		}
 		if err := sh.write(f); err != nil {
 			return err
 		}
+		keep[f.meta.Path], changed = true, true
+		return nil
+	}
+	for _, f := range b.files {
+		if f.generate == nil {
+			if err := put(f); err != nil {
+				return err
+			}
+		}
+	}
+	for _, f := range b.files {
+		if f.generate != nil {
+			f.content = f.generate()
+			f.meta.Version = Version(f.content)
+			if err := put(f); err != nil {
+				return err
+			}
+		}
+	}
+	for p := range sh.files {
+		if !keep[p] {
+			if err := sh.drop(p); err != nil {
+				return err
+			}
+			changed = true
+		}
+	}
+	if !changed {
+		return nil
 	}
 	return sh.writeIndex()
+}
+
+// current says the shell's row cur already holds want: the same thing at
+// the same version, or, while want's version is not known before reading
+// its bytes, last changed at the same time.
+func current(cur, want ports.ShellFile) bool {
+	if cur.Kind != want.Kind || cur.ID != want.ID || cur.Scope != want.Scope || cur.Title != want.Title {
+		return false
+	}
+	if want.Version == "" {
+		return cur.UpdatedAt.Equal(want.UpdatedAt)
+	}
+	return cur.Version == want.Version
 }
 
 func (sh *shell) abs(p string) string { return filepath.Join(sh.dir, filepath.FromSlash(p)) }
 
 // write puts f on disk through a temp file and a rename, so a reader never
 // sees half of it, and records its row.
-func (sh *shell) write(f file) error {
+func (sh *shell) write(f *file) error {
 	if err := writeAtomic(sh.abs(f.meta.Path), f.content, f.readOnly); err != nil {
 		return err
 	}
 	if f.meta.Path != indexFile {
 		sh.files[f.meta.Path] = f.meta
 	}
+	return nil
+}
+
+// drop deletes the file at p and forgets it; one already gone is fine.
+func (sh *shell) drop(p string) error {
+	if err := os.Remove(sh.abs(p)); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	delete(sh.files, p)
 	return nil
 }
 
@@ -233,7 +450,7 @@ func (sh *shell) writeIndex() error {
 	if err != nil {
 		return err
 	}
-	return sh.write(file{meta: ports.ShellFile{Path: indexFile}, content: append(b, '\n'), readOnly: true})
+	return sh.write(&file{meta: ports.ShellFile{Path: indexFile}, content: append(b, '\n'), readOnly: true})
 }
 
 func writeAtomic(name string, content []byte, readOnly bool) error {
