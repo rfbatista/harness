@@ -227,6 +227,9 @@ templ detail(form NewSessionForm, paint *code.View) {
 						<div class="[ screen ]"></div>
 					</div>
 				</template>
+				<template x-for="panel in historyPanels" x-bind:key="panel.key">
+					@historyPanel()
+				</template>
 				<template x-for="panel in appPanels" x-bind:key="panel.key">
 					@appPanel()
 				</template>

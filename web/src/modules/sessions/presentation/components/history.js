@@ -5,7 +5,7 @@
 //
 //   <template x-for="panel in historyPanels" x-bind:key="panel.key">
 //     <section class="[ frame ]" x-data="sessionsHistory(panel)"> …
-//       <div class="[ transcript ]" data-scroll x-ref="log" x-on:scroll="onScroll"> …
+//       <div class="[ transcript ]" data-scroll role="log" x-on:scroll="onScroll"> …
 //
 // Mounted only while the tab is in front, keyed on the session and whether
 // it runs. It opens on the newest page; scrolling near the top shows older
@@ -43,6 +43,13 @@ export const history = ({ transcripts, timers = globalThis, pageVisible = () => 
   let pollTimer = 0;
   let busy = false;
   let gone = false;
+  /**
+   * The panel's element, kept from init: $refs and $el in a method resolve
+   * from the element that called it, and Jump to latest is gone by the time
+   * its scroll runs.
+   */
+  let root = null;
+  const logEl = () => root?.querySelector("[role=log]") ?? null;
   /** Lines already built, by cursor: entries never change once written. */
   const built = new Map();
 
@@ -110,6 +117,7 @@ export const history = ({ transcripts, timers = globalThis, pageVisible = () => 
 
     // ── lifecycle ────────────────────────────────────────────────────────
     init() {
+      root = this.$el;
       this.load().then(() => this.schedule());
     },
 
@@ -198,7 +206,7 @@ export const history = ({ transcripts, timers = globalThis, pageVisible = () => 
 
     // ── reading ──────────────────────────────────────────────────────────
     onScroll() {
-      const log = this.$refs.log;
+      const log = logEl();
       if (!log) return;
       const fromBottom = log.scrollHeight - log.scrollTop - log.clientHeight;
       this.following = fromBottom < NEAR_BOTTOM_PX && this.end === this.entries.length;
@@ -263,13 +271,13 @@ export const history = ({ transcripts, timers = globalThis, pageVisible = () => 
     },
 
     scrollToEnd() {
-      const log = this.$refs.log;
+      const log = logEl();
       if (log) log.scrollTop = log.scrollHeight;
     },
 
     /** The first line the reader can see, and how far below the log's top it is. */
     anchor() {
-      const log = this.$refs.log;
+      const log = logEl();
       if (!log) return null;
       const top = log.getBoundingClientRect().top;
       for (const el of log.querySelectorAll("[data-cursor]")) {
@@ -283,7 +291,7 @@ export const history = ({ transcripts, timers = globalThis, pageVisible = () => 
     restore(kept) {
       if (!kept) return;
       this.$nextTick(() => {
-        const log = this.$refs.log;
+        const log = logEl();
         const el = log?.querySelector(`[data-cursor="${CSS.escape(kept.cursor)}"]`);
         if (!el) return;
         log.scrollTop += el.getBoundingClientRect().top - log.getBoundingClientRect().top - kept.offset;

@@ -23,9 +23,9 @@ function fakeLog({ scrollHeight = 10_000, clientHeight = 500, scrollTop = 0 } = 
 async function make({ transcripts = { s1: numbered(5) }, live = false, visible = () => true } = {}) {
   const memory = memoryTranscripts({ transcripts });
   const timers = manualTimers();
-  const mounted = mount(() => history({ transcripts: memory.gateway, timers, pageVisible: visible })({ sessionId: "s1", live }));
   const log = fakeLog();
-  mounted.instance.$refs = { log };
+  const el = { querySelector: (selector) => (selector === "[role=log]" ? log : null) };
+  const mounted = mount(() => history({ transcripts: memory.gateway, timers, pageVisible: visible })({ sessionId: "s1", live }), { el });
   mounted.instance.init();
   await flush();
   mounted.tick();

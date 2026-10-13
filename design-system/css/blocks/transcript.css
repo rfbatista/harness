@@ -16,7 +16,9 @@
  * cut short. .jump: sticks to the bottom of the region while the reader is
  * scrolled up and newer lines arrived.
  * Exception: data-kind="user|agent|tool|error|prompt|system".
- * Narrow (its container under 28rem): the time column folds away.
+ * Narrow (its container under 28rem): the time column folds away. A long
+ * conversation is windowed by the script (at most a few hundred lines in the
+ * DOM), so lines are laid out in full: no estimated sizes to drift.
  */
 
 @layer blocks {
@@ -29,7 +31,9 @@
     font-size: var(--text-sm);
     line-height: var(--leading-snug);
     overflow: auto;
-    overflow-anchor: none; /* the script anchors the reader itself when older lines arrive */
+    /* The script keeps the line in view when older lines arrive; the
+       browser's own anchoring would move it a second time. */
+    overflow-anchor: none;
 
     &:focus-visible { outline-offset: calc(var(--border-focus-width) * -1); }
 
@@ -41,9 +45,6 @@
       padding-block: var(--space-3xs);
       white-space: pre-wrap;
       overflow-wrap: anywhere;
-      /* Thousands of lines: only those near the view are laid out. */
-      content-visibility: auto;
-      contain-intrinsic-size: auto 1.5em;
     }
 
     & time,
@@ -125,7 +126,7 @@
       white-space: pre-wrap;
       overflow-wrap: anywhere;
     }
-    & .summary[aria-expanded="true"] + .detail { display: block; }
+    & .summary[aria-expanded="true"] ~ .detail { display: block; }
 
     & > .older {
       display: flex;
