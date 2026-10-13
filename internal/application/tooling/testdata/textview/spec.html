@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Spec: harness server — reading documents and design assets in parts</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { font: 15px/1.5 system-ui, sans-serif; max-width: 72ch; margin: 2rem auto; padding: 0 1rem; }
+  dt { font-weight: 600; margin-top: 1rem; }
+</style>
+</head>
+<body>
+<h1>Harness server <small>(repository: harness)</small></h1>
+<dl>
+  <dt>Agent</dt><dd>go-developer (planning only, no code until the person approves)</dd>
+  <dt>Decision</dt><dd>The person chose <strong>A + B + C over one text view, with a size guard, plus F</strong>.</dd>
+  <dt>What changes at the boundary</dt>
+  <dd><ul>
+    <li><code>read_task_document</code> / <code>read_project_document</code> take <code>offset/limit</code>, <code>section</code> and <code>view</code>.</li>
+    <li>New <code>search_documents</code> across task documents, project documents and, optionally, text artifacts.</li>
+    <li>Document listings carry <code>bytes</code>, <code>lines</code> and <code>version</code>.</li>
+  </ul></dd>
+  <dt>Constraints</dt>
+  <dd><ul>
+    <li>Backward compatible: a call without the new arguments on a document under the guard returns exactly what it returns today, plus metadata.</li>
+    <li>Error messages begin with their code, because agents over MCP see messages only.</li>
+  </ul></dd>
+</dl>
+<pre>
+read_task_document { document_id, offset?, limit? }
+  → { document, lines?, outline? }
+</pre>
+</body>
+</html>

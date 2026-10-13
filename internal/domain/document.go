@@ -1,6 +1,8 @@
 package domain
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"strings"
 	"time"
 )
@@ -67,4 +69,12 @@ func IsHTMLDocument(content string) bool {
 		return false
 	}
 	return strings.Contains(s, "<html") && strings.Contains(s, "<body")
+}
+
+// DocumentVersion names a document's content: the first 12 hex characters of
+// its sha256. The same content always has the same version, so a version
+// read earlier says whether the document changed since.
+func DocumentVersion(content string) string {
+	sum := sha256.Sum256([]byte(content))
+	return hex.EncodeToString(sum[:])[:12]
 }

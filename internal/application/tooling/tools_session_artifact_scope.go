@@ -165,6 +165,7 @@ type projectArtifact struct {
 	Kind       domain.ArtifactKind  `json:"kind"`
 	Note       string               `json:"note,omitempty"`
 	Revision   int                  `json:"revision"`
+	Bytes      int64                `json:"bytes"`
 	Scope      domain.ArtifactScope `json:"scope"`
 	TaskID     string               `json:"task_id"`
 	TaskTitle  string               `json:"task_title,omitempty"`
@@ -175,7 +176,7 @@ type projectArtifact struct {
 }
 
 func reportProjectArtifact(art ArtifactTooling, a *domain.Artifact, taskTitle string) projectArtifact {
-	return projectArtifact{ArtifactID: a.ID, Title: a.Title, Kind: a.Kind, Note: a.Note, Revision: a.Revision,
+	return projectArtifact{ArtifactID: a.ID, Title: a.Title, Kind: a.Kind, Note: a.Note, Revision: a.Revision, Bytes: a.SizeBytes,
 		Scope: scopeOf(a), TaskID: a.TicketID, TaskTitle: taskTitle, ViewURL: viewURL(art, a), UpdatedAt: a.UpdatedAt,
 		AttachedTicketIDs: attachedIDs(a)}
 }

@@ -107,8 +107,9 @@ func TestSessionComments_EndToEnd(t *testing.T) {
 	feed.saw(t, "ticket_comment", c.ID, `"author":"session"`, `"session_id":"s-writer"`, `"agent_name":"comment-e2e-agent"`)
 
 	// Another session can neither rewrite nor delete it. The MCP bridge hands
-	// the agent a structured error's message, not its code.
-	const notYours = "only the session that wrote this comment can change it"
+	// the agent a structured error's message, not its code, so the session
+	// tools put the code in front of it.
+	const notYours = "COMMENT_NOT_YOURS: only the session that wrote this comment can change it"
 	if got := callTaskErr(t, other, "update_task_comment", map[string]any{"comment_id": c.ID, "body": "mine now"}); got != notYours {
 		t.Fatalf("another session's update = %s", got)
 	}
@@ -165,7 +166,7 @@ func TestSessionComments_EndToEnd(t *testing.T) {
 		t.Fatalf("person's delete of the agent's comment = %d %s", status, body)
 	}
 	feed.saw(t, "ticket_comment", c.ID)
-	if got := callTaskErr(t, writer, "delete_task_comment", map[string]any{"comment_id": c.ID}); got != "comment not found" {
+	if got := callTaskErr(t, writer, "delete_task_comment", map[string]any{"comment_id": c.ID}); got != "COMMENT_NOT_FOUND: comment not found" {
 		t.Fatalf("delete after the person's = %s", got)
 	}
 }

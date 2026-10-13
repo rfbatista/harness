@@ -288,7 +288,7 @@ func SessionTaskTools(planningSvc ports.Planning, sessions ports.SessionReposito
 	tools = append(tools, sessionProjectTools(planningSvc, sessions, agents, arch, start.Repositories)...)
 	tools = append(tools, sessionResourceTools(planningSvc, sessions, agents, resources)...)
 	tools = append(tools, sessionNotificationTools(planningSvc, sessions, notes)...)
-	return append(tools, sessionArtifactTools(planningSvc, sessions, artifacts)...)
+	return codedTools(append(tools, sessionArtifactTools(planningSvc, sessions, artifacts)...))
 }
 
 // peerSession is another session on the same task, as list_task_sessions
@@ -429,19 +429,25 @@ func (s *taskScope) document(planningSvc ports.Planning, documentID string) (*do
 }
 
 // documentSummary is a document without its body, for listings that would
-// otherwise flood the agent's context with pages.
+// otherwise flood the agent's context with pages. Bytes and Lines say how
+// big it is before the agent opens it; Version names its content.
 type documentSummary struct {
 	ID        string                `json:"id"`
 	Title     string                `json:"title"`
 	Format    domain.DocumentFormat `json:"format"`
 	Scope     domain.DocumentScope  `json:"scope"`
+	Bytes     int                   `json:"bytes"`
+	Lines     int                   `json:"lines"`
+	Version   string                `json:"version"`
 	UpdatedAt time.Time             `json:"updated_at"`
 }
 
 func summarizeDocuments(docs []*domain.Document) []documentSummary {
 	out := make([]documentSummary, 0, len(docs))
 	for _, d := range docs {
-		out = append(out, documentSummary{ID: d.ID, Title: d.Title, Format: d.Format, Scope: d.Scope, UpdatedAt: d.UpdatedAt})
+		out = append(out, documentSummary{ID: d.ID, Title: d.Title, Format: d.Format, Scope: d.Scope,
+			Bytes: len(d.Content), Lines: len(newTextView(d.Content, documentKind(d)).lines),
+			Version: domain.DocumentVersion(d.Content), UpdatedAt: d.UpdatedAt})
 	}
 	return out
 }

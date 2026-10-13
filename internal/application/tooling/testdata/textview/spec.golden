@@ -1,0 +1,20 @@
+   1  # Harness server (repository: harness)
+   2  Agent
+   3  go-developer (planning only, no code until the person approves)
+   4  Decision
+   5  The person chose A + B + C over one text view, with a size guard, plus F.
+   6  What changes at the boundary
+   7  read_task_document / read_project_document take offset/limit, section and view.
+   8  New search_documents across task documents, project documents and, optionally, text artifacts.
+   9  Document listings carry bytes, lines and version.
+  10  Constraints
+  11  Backward compatible: a call without the new arguments on a document under the guard returns exactly what it returns today, plus metadata.
+  12  Error messages begin with their code, because agents over MCP see messages only.
+  13  read_task_document { document_id, offset?, limit? }
+  14    → { document, lines?, outline? }
+---- outline
+1 L1 "Harness server (repository: harness)" 1-14
+1.1 L5 "Agent" 2-3
+1.2 L5 "Decision" 4-5
+1.3 L5 "What changes at the boundary" 6-9
+1.4 L5 "Constraints" 10-14
