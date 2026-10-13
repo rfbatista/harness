@@ -7,12 +7,12 @@ import (
 )
 
 func TestDocumentFormatValid(t *testing.T) {
-	for _, f := range []DocumentFormat{DocumentFormatMarkdown, DocumentFormatHTML} {
+	for _, f := range []DocumentFormat{DocumentFormatMarkdown, DocumentFormatHTML, "text"} {
 		if !f.Valid() {
 			t.Errorf("%q should be valid", f)
 		}
 	}
-	for _, f := range []DocumentFormat{"", "pdf", "HTML", "Markdown"} {
+	for _, f := range []DocumentFormat{"", "pdf", "HTML", "Markdown", "Text", "txt"} {
 		if f.Valid() {
 			t.Errorf("%q should not be valid", f)
 		}
@@ -55,6 +55,25 @@ func TestDocumentJSONCarriesFormat(t *testing.T) {
 	}
 	if !strings.Contains(string(b), `"format":"html"`) {
 		t.Fatalf("format missing from the wire: %s", b)
+	}
+}
+
+// A plain-text document keeps its format as "text" on the wire and back.
+func TestDocumentTextFormatRoundTripsUnchanged(t *testing.T) {
+	in := Document{ID: "d1", Format: DocumentFormatText, Content: "line one\n  <b>not markup</b>\n"}
+	b, err := json.Marshal(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(b), `"format":"text"`) {
+		t.Fatalf("format missing from the wire: %s", b)
+	}
+	var out Document
+	if err := json.Unmarshal(b, &out); err != nil {
+		t.Fatal(err)
+	}
+	if out.Format != DocumentFormatText || out.Content != in.Content {
+		t.Fatalf("round trip changed the document: %+v", out)
 	}
 }
 

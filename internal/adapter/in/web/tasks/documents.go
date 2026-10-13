@@ -71,8 +71,8 @@ type DocumentLink struct {
 // documents page with the document open.
 type TaskRef struct{ Title, Href string }
 
-// OpenDocument is the document being read: a Markdown one rendered into
-// Body, an HTML one framed from FrameSrc. Never both. Tasks is what it is
+// OpenDocument is the document being read: a Markdown or text one rendered
+// into Body, an HTML one framed from FrameSrc. Never both. Tasks is what it is
 // linked to; the move control needs at least one.
 type OpenDocument struct {
 	ID       string
@@ -81,7 +81,7 @@ type OpenDocument struct {
 	Format   domain.DocumentFormat
 	Scope    domain.DocumentScope
 	Tasks    []TaskRef
-	Body     templ.Component // markdown
+	Body     templ.Component // markdown or text
 	FrameSrc string          // html
 }
 
@@ -133,16 +133,19 @@ func newestFirst(docs []*domain.Document) []*domain.Document {
 }
 
 // openDocument builds the open document: framed from frameSrc when it is an
-// HTML page, otherwise rendered as Markdown (the legacy empty format too),
-// with the tasks it is linked to.
+// HTML page, shown as written when it is text, otherwise rendered as Markdown
+// (the legacy empty format too), with the tasks it is linked to.
 func (h Handler) openDocument(projectID string, d *domain.Document, updated, frameSrc string) *OpenDocument {
 	open := &OpenDocument{ID: d.ID, Title: titleOf(d), Updated: updated, Format: d.Format, Scope: scopeOf(d)}
 	for _, tk := range h.Docs.ListDocumentTickets(d.ID) {
 		open.Tasks = append(open.Tasks, TaskRef{Title: tk.Title, Href: DocumentsHref(projectID, tk.ID, d.ID)})
 	}
-	if d.Format == domain.DocumentFormatHTML {
+	switch d.Format {
+	case domain.DocumentFormatHTML:
 		open.FrameSrc = frameSrc
-	} else {
+	case domain.DocumentFormatText:
+		open.Body = renderText(d.Content)
+	default:
 		open.Body = renderMarkdown(d.Content)
 	}
 	return open

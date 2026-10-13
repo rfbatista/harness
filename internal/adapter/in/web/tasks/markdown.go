@@ -21,10 +21,15 @@ func renderMarkdown(source string) templ.Component {
 	var buf bytes.Buffer
 	if err := markdown.Convert([]byte(source), &buf); err != nil {
 		// Convert only fails on a writer error; show the text as written.
-		return templ.ComponentFunc(func(_ context.Context, w io.Writer) error {
-			_, err := io.WriteString(w, "<pre>"+templ.EscapeString(source)+"</pre>")
-			return err
-		})
+		return renderText(source)
 	}
 	return templ.Raw(buf.String())
+}
+
+// renderText is source as written: preformatted and escaped, never parsed.
+func renderText(source string) templ.Component {
+	return templ.ComponentFunc(func(_ context.Context, w io.Writer) error {
+		_, err := io.WriteString(w, "<pre>"+templ.EscapeString(source)+"</pre>")
+		return err
+	})
 }

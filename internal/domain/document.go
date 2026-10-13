@@ -8,19 +8,21 @@ import (
 )
 
 // DocumentFormat says what a Document's body is: Markdown (what people and
-// the project-level API write by default) or a complete HTML page (what
-// task sessions write). Rendering depends on it.
+// the project-level API write by default), a complete HTML page (what task
+// sessions write), or plain text, shown as written (ADR 0004). Rendering
+// depends on it.
 type DocumentFormat string
 
 const (
 	DocumentFormatMarkdown DocumentFormat = "markdown"
 	DocumentFormatHTML     DocumentFormat = "html"
+	DocumentFormatText     DocumentFormat = "text"
 )
 
-// Valid reports whether f is one of the two formats. The empty string is not
+// Valid reports whether f is one of the three formats. The empty string is not
 // valid: callers that mean "default" or "keep" handle it before asking.
 func (f DocumentFormat) Valid() bool {
-	return f == DocumentFormatMarkdown || f == DocumentFormatHTML
+	return f == DocumentFormatMarkdown || f == DocumentFormatHTML || f == DocumentFormatText
 }
 
 // DocumentScope says who a Document is for. A task document belongs to the
