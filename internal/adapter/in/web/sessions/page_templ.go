@@ -765,7 +765,15 @@ func detail(form NewSessionForm, paint *code.View) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 62, "<div class=\"[ screen ]\"></div></div></template><template x-for=\"panel in appPanels\" x-bind:key=\"panel.key\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 62, "<div class=\"[ screen ]\"></div></div></template><template x-for=\"panel in historyPanels\" x-bind:key=\"panel.key\">")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = historyPanel().Render(ctx, templ_7745c5c3_Buffer)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 63, "</template><template x-for=\"panel in appPanels\" x-bind:key=\"panel.key\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -773,7 +781,7 @@ func detail(form NewSessionForm, paint *code.View) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 63, "</template><template x-for=\"panel in designPanels\" x-bind:key=\"panel.key\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 64, "</template><template x-for=\"panel in designPanels\" x-bind:key=\"panel.key\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -781,7 +789,7 @@ func detail(form NewSessionForm, paint *code.View) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 64, "</template><template x-for=\"panel in codePanels\" x-bind:key=\"panel.key\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 65, "</template><template x-for=\"panel in codePanels\" x-bind:key=\"panel.key\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -789,7 +797,7 @@ func detail(form NewSessionForm, paint *code.View) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 65, "</template><template x-for=\"panel in conversationPanels\" x-bind:key=\"panel.key\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 66, "</template><template x-for=\"panel in conversationPanels\" x-bind:key=\"panel.key\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -797,7 +805,7 @@ func detail(form NewSessionForm, paint *code.View) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 66, "</template><template x-if=\"appUnavailable\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 67, "</template><template x-if=\"appUnavailable\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -805,7 +813,7 @@ func detail(form NewSessionForm, paint *code.View) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 67, "</template></section></template><template x-if=\"showingNothing\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 68, "</template></section></template><template x-if=\"showingNothing\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -813,7 +821,7 @@ func detail(form NewSessionForm, paint *code.View) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 68, "</template></section>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 69, "</template></section>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -845,38 +853,38 @@ func newSessionForm(form NewSessionForm) templ.Component {
 			templ_7745c5c3_Var35 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 69, "<form class=\"[ flow ] [ pad-l ]\" x-data=\"sessionsNewSession(projectId, ticketId)\" data-default-repository=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 70, "<form class=\"[ flow ] [ pad-l ]\" x-data=\"sessionsNewSession(projectId, ticketId)\" data-default-repository=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var36 string
 		templ_7745c5c3_Var36, templ_7745c5c3_Err = templ.ResolveAttributeValue(form.DefaultRepository())
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `sessions/page.templ`, Line: 260, Col: 52}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `sessions/page.templ`, Line: 263, Col: 52}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var36)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 70, "\" x-on:submit.prevent=\"submit\" x-on:keydown.escape=\"cancel\"><h2>New session</h2><div class=\"[ field ]\"><label for=\"new-session-prompt\">First message <span class=\"[ color-ink-faint weight-regular ]\">(optional)</span></label> <textarea id=\"new-session-prompt\" class=\"[ font-mono text-sm ]\" x-bind:placeholder=\"promptPlaceholder\" x-model=\"prompt\" x-ref=\"prompt\"></textarea> <span class=\"[ hint ]\">claude starts in a terminal on the server, on this task's branch.</span></div><div class=\"[ switcher ]\"><div class=\"[ field ]\"><label for=\"new-session-agent\">Agent</label><div class=\"[ dropdown ]\" x-data=\"dropdown\"><select id=\"new-session-agent\" x-model=\"agentId\"><option value=\"\" data-description=\"claude with no agent definition\">Plain claude</option> ")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 71, "\" x-on:submit.prevent=\"submit\" x-on:keydown.escape=\"cancel\"><h2>New session</h2><div class=\"[ field ]\"><label for=\"new-session-prompt\">First message <span class=\"[ color-ink-faint weight-regular ]\">(optional)</span></label> <textarea id=\"new-session-prompt\" class=\"[ font-mono text-sm ]\" x-bind:placeholder=\"promptPlaceholder\" x-model=\"prompt\" x-ref=\"prompt\"></textarea> <span class=\"[ hint ]\">claude starts in a terminal on the server, on this task's branch.</span></div><div class=\"[ switcher ]\"><div class=\"[ field ]\"><label for=\"new-session-agent\">Agent</label><div class=\"[ dropdown ]\" x-data=\"dropdown\"><select id=\"new-session-agent\" x-model=\"agentId\"><option value=\"\" data-description=\"claude with no agent definition\">Plain claude</option> ")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		for _, a := range form.Agents {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 71, "<option value=\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 72, "<option value=\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var37 string
 			templ_7745c5c3_Var37, templ_7745c5c3_Err = templ.ResolveAttributeValue(a.ID)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `sessions/page.templ`, Line: 277, Col: 27}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `sessions/page.templ`, Line: 280, Col: 27}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var37)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 72, "\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 73, "\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -884,61 +892,61 @@ func newSessionForm(form NewSessionForm) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 73, ">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 74, ">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var38 string
 			templ_7745c5c3_Var38, templ_7745c5c3_Err = templ.JoinStringErrs(a.Name)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `sessions/page.templ`, Line: 277, Col: 77}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `sessions/page.templ`, Line: 280, Col: 77}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var38))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 74, "</option>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 75, "</option>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 75, "</select></div></div><div class=\"[ field ]\"><label for=\"new-session-mode\">Mode</label><div class=\"[ dropdown ]\" x-data=\"dropdown\"><select id=\"new-session-mode\" x-model=\"mode\"><option value=\"\" data-description=\"Runs the agent as it is\">Default</option> <option value=\"architect\" data-description=\"Writes per-application specs and delegates them\">Architect</option> <option value=\"design\" data-description=\"Publishes pages, images and videos as it works\">Design</option></select></div><span class=\"[ hint ]\" x-text=\"modeHint\"></span></div><div class=\"[ field ]\"><label for=\"new-session-repository\">Repository</label> <select id=\"new-session-repository\" x-model=\"repositoryId\" x-on:change=\"repositoryChanged\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 76, "</select></div></div><div class=\"[ field ]\"><label for=\"new-session-mode\">Mode</label><div class=\"[ dropdown ]\" x-data=\"dropdown\"><select id=\"new-session-mode\" x-model=\"mode\"><option value=\"\" data-description=\"Runs the agent as it is\">Default</option> <option value=\"architect\" data-description=\"Writes per-application specs and delegates them\">Architect</option> <option value=\"design\" data-description=\"Publishes pages, images and videos as it works\">Design</option></select></div><span class=\"[ hint ]\" x-text=\"modeHint\"></span></div><div class=\"[ field ]\"><label for=\"new-session-repository\">Repository</label> <select id=\"new-session-repository\" x-model=\"repositoryId\" x-on:change=\"repositoryChanged\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		for _, r := range form.Repositories {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 76, "<option value=\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 77, "<option value=\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var39 string
 			templ_7745c5c3_Var39, templ_7745c5c3_Err = templ.ResolveAttributeValue(r.ID)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `sessions/page.templ`, Line: 297, Col: 26}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `sessions/page.templ`, Line: 300, Col: 26}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var39)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 77, "\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 78, "\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var40 string
 			templ_7745c5c3_Var40, templ_7745c5c3_Err = templ.JoinStringErrs(r.Name)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `sessions/page.templ`, Line: 297, Col: 37}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `sessions/page.templ`, Line: 300, Col: 37}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var40))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 78, "</option>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 79, "</option>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 79, "</select></div><div class=\"[ field ]\"><label for=\"new-session-base\">Branch off</label><div class=\"[ dropdown ]\" x-data=\"combobox\" x-bind:aria-busy=\"loadingBranches\" x-bind:data-error=\"branchError\" x-on:dropdown-retry=\"loadBranches\"><select id=\"new-session-base\" x-model=\"baseBranch\" x-bind:disabled=\"loadingBranches\"><option value=\"\" data-pinned>The checked-out branch</option> <optgroup label=\"Branches\"><template x-for=\"b in localBranches\" x-bind:key=\"b.name\"><option x-bind:value=\"b.name\" x-text=\"b.name\"></option></template></optgroup><template x-if=\"hasRemoteBranches\"><optgroup label=\"Remote branches\"><template x-for=\"b in remoteBranches\" x-bind:key=\"b.name\"><option x-bind:value=\"b.name\" x-text=\"b.name\"></option></template></optgroup></template></select></div><span class=\"[ hint ]\" x-text=\"baseHint\"></span></div><fieldset class=\"[ field ]\"><legend>Permissions</legend><div class=\"[ field ]\" data-inline><input type=\"radio\" id=\"new-session-permissions-off\" name=\"new-session-permissions\" value=\"off\" x-model=\"autoAccept\"> <label for=\"new-session-permissions-off\">Ask me in the terminal</label></div><div class=\"[ field ]\" data-inline><input type=\"radio\" id=\"new-session-permissions-edits\" name=\"new-session-permissions\" value=\"edits\" x-model=\"autoAccept\"> <label for=\"new-session-permissions-edits\">Accept file edits</label></div><div class=\"[ field ]\" data-inline><input type=\"radio\" id=\"new-session-permissions-all\" name=\"new-session-permissions\" value=\"all\" x-model=\"autoAccept\" aria-describedby=\"new-session-permissions-all-hint\"> <label for=\"new-session-permissions-all\">Accept everything</label></div><span class=\"[ hint ]\" id=\"new-session-permissions-all-hint\">Accept everything runs every command and edit without asking you.</span></fieldset></div><template x-if=\"error\"><div class=\"[ banner ]\" data-tone=\"danger\" role=\"alert\"><div class=\"[ flow ] [ flow-space-3xs ]\"><span x-text=\"error.message\"></span> <span class=\"[ code ]\"><span x-text=\"error.code\"></span> · <span x-text=\"error.next\"></span></span></div></div></template><div class=\"[ cluster ]\"><button type=\"submit\" class=\"[ button ]\" data-variant=\"primary\" x-bind:disabled=\"cannotSubmit\" x-bind:aria-busy=\"submitting\">Start session</button> <button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" x-on:click=\"cancel\">Cancel</button></div></form>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 80, "</select></div><div class=\"[ field ]\"><label for=\"new-session-base\">Branch off</label><div class=\"[ dropdown ]\" x-data=\"combobox\" x-bind:aria-busy=\"loadingBranches\" x-bind:data-error=\"branchError\" x-on:dropdown-retry=\"loadBranches\"><select id=\"new-session-base\" x-model=\"baseBranch\" x-bind:disabled=\"loadingBranches\"><option value=\"\" data-pinned>The checked-out branch</option> <optgroup label=\"Branches\"><template x-for=\"b in localBranches\" x-bind:key=\"b.name\"><option x-bind:value=\"b.name\" x-text=\"b.name\"></option></template></optgroup><template x-if=\"hasRemoteBranches\"><optgroup label=\"Remote branches\"><template x-for=\"b in remoteBranches\" x-bind:key=\"b.name\"><option x-bind:value=\"b.name\" x-text=\"b.name\"></option></template></optgroup></template></select></div><span class=\"[ hint ]\" x-text=\"baseHint\"></span></div><fieldset class=\"[ field ]\"><legend>Permissions</legend><div class=\"[ field ]\" data-inline><input type=\"radio\" id=\"new-session-permissions-off\" name=\"new-session-permissions\" value=\"off\" x-model=\"autoAccept\"> <label for=\"new-session-permissions-off\">Ask me in the terminal</label></div><div class=\"[ field ]\" data-inline><input type=\"radio\" id=\"new-session-permissions-edits\" name=\"new-session-permissions\" value=\"edits\" x-model=\"autoAccept\"> <label for=\"new-session-permissions-edits\">Accept file edits</label></div><div class=\"[ field ]\" data-inline><input type=\"radio\" id=\"new-session-permissions-all\" name=\"new-session-permissions\" value=\"all\" x-model=\"autoAccept\" aria-describedby=\"new-session-permissions-all-hint\"> <label for=\"new-session-permissions-all\">Accept everything</label></div><span class=\"[ hint ]\" id=\"new-session-permissions-all-hint\">Accept everything runs every command and edit without asking you.</span></fieldset></div><template x-if=\"error\"><div class=\"[ banner ]\" data-tone=\"danger\" role=\"alert\"><div class=\"[ flow ] [ flow-space-3xs ]\"><span x-text=\"error.message\"></span> <span class=\"[ code ]\"><span x-text=\"error.code\"></span> · <span x-text=\"error.next\"></span></span></div></div></template><div class=\"[ cluster ]\"><button type=\"submit\" class=\"[ button ]\" data-variant=\"primary\" x-bind:disabled=\"cannotSubmit\" x-bind:aria-busy=\"submitting\">Start session</button> <button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" x-on:click=\"cancel\">Cancel</button></div></form>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -969,7 +977,7 @@ func terminalPane() templ.Component {
 			templ_7745c5c3_Var41 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 80, "<div class=\"[ terminal ]\" x-data=\"sessionsTerminal(t.id)\" x-bind:data-state=\"state\" x-bind:data-attention=\"attention ? '' : null\" x-on:terminal-focus-requested.window=\"focus\" x-on:terminal-reconnect-requested.window=\"reconnectRequested\" x-on:terminal-jump-requested.window=\"jumpRequested\" x-on:terminal-text-size.window=\"textSizeRequested\"><template x-if=\"state === 'ended' && paneNote\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 81, "<div class=\"[ terminal ]\" x-data=\"sessionsTerminal(t.id)\" x-bind:data-state=\"state\" x-bind:data-attention=\"attention ? '' : null\" x-on:terminal-focus-requested.window=\"focus\" x-on:terminal-reconnect-requested.window=\"reconnectRequested\" x-on:terminal-jump-requested.window=\"jumpRequested\" x-on:terminal-text-size.window=\"textSizeRequested\"><template x-if=\"state === 'ended' && paneNote\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -977,7 +985,7 @@ func terminalPane() templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 81, "</template><div class=\"[ screen ]\" x-ref=\"screen\" x-on:click=\"focus\"></div><template x-if=\"state === 'connecting'\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 82, "</template><div class=\"[ screen ]\" x-ref=\"screen\" x-on:click=\"focus\"></div><template x-if=\"state === 'connecting'\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -985,7 +993,7 @@ func terminalPane() templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 82, "</template></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 83, "</template></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -1014,7 +1022,7 @@ func connectingNotice() templ.Component {
 			templ_7745c5c3_Var42 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 83, "<p class=\"[ notice ]\" role=\"status\"><span class=\"[ skeleton ]\"></span>Connecting to the terminal…</p>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 84, "<p class=\"[ notice ]\" role=\"status\"><span class=\"[ skeleton ]\"></span>Connecting to the terminal…</p>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -1047,33 +1055,33 @@ func appPanel() templ.Component {
 			templ_7745c5c3_Var43 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 84, "<section class=\"[ frame ]\" aria-label=\"Application\" x-data=\"runsAppPanel(panel)\" x-on:terminal-exited=\"refresh\" x-effect=\"reportRun()\"><div class=\"[ flow ] [ flow-space-s pad-l divide-bottom ]\"><div class=\"[ source ]\" aria-label=\"Where the code comes from\"><p>Runs <strong x-text=\"repositoryLabel\"></strong>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 85, "<section class=\"[ frame ]\" aria-label=\"Application\" x-data=\"runsAppPanel(panel)\" x-on:terminal-exited=\"refresh\" x-effect=\"reportRun()\"><div class=\"[ flow ] [ flow-space-s pad-l divide-bottom ]\"><div class=\"[ source ]\" aria-label=\"Where the code comes from\"><p>Runs <strong x-text=\"repositoryLabel\"></strong>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var44 string
 		templ_7745c5c3_Var44, templ_7745c5c3_Err = templ.JoinStringErrs(" ")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `sessions/page.templ`, Line: 390, Col: 57}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `sessions/page.templ`, Line: 393, Col: 57}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var44))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 85, "<template x-if=\"hasBranch\"><span>on branch <code x-text=\"branch\"></code>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 86, "<template x-if=\"hasBranch\"><span>on branch <code x-text=\"branch\"></code>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var45 string
 		templ_7745c5c3_Var45, templ_7745c5c3_Err = templ.JoinStringErrs(" ")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `sessions/page.templ`, Line: 392, Col: 56}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `sessions/page.templ`, Line: 395, Col: 56}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var45))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 86, "</span></template>— this session's worktree, with the agent's changes, not your own checkout.</p><p class=\"[ code color-ink-faint truncate ]\" x-text=\"worktree\" x-bind:title=\"worktree\"></p></div><form class=\"[ cluster ] [ gutter-xs ]\" x-on:submit.prevent=\"start\"><label class=\"[ visually-hidden ]\" for=\"run-choice\">Command</label><div class=\"[ dropdown ] [ grow ]\" x-data=\"combobox\" data-free-text data-free-text-label=\"Run “{q}”\" data-placeholder=\"Type a command or pick a saved one\" x-on:dropdown-change=\"commandPicked\" x-on:input=\"commandTyped\"><select id=\"run-choice\" x-ref=\"command\" x-bind:disabled=\"busy\"><template x-for=\"c in commands\" x-bind:key=\"c.name\"><option x-bind:value=\"c.name\" x-bind:data-description=\"c.command\" x-text=\"c.name\"></option></template></select></div><template x-if=\"canForget\"><span class=\"[ code color-ink-muted truncate grow ]\" x-text=\"chosenCommand\"></span></template><button type=\"submit\" class=\"[ button ]\" data-variant=\"primary\" data-size=\"sm\" x-bind:disabled=\"cannotRun\" x-bind:aria-busy=\"busy\">Run</button><template x-if=\"canForget\"><button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" x-on:click=\"forget\">Remove</button></template></form><template x-if=\"typing\"><form class=\"[ cluster ] [ gutter-xs text-sm ]\" x-on:submit.prevent=\"save\"><label for=\"run-save-name\" class=\"[ color-ink-muted ]\">Save for this repository as</label> <input id=\"run-save-name\" autocomplete=\"off\" placeholder=\"server\" x-model=\"saveName\"> <button type=\"submit\" class=\"[ button ]\" data-size=\"sm\" x-bind:disabled=\"cannotSave\">Save</button></form></template><template x-if=\"hasRun\"><div class=\"[ repel ]\"><div class=\"[ cluster ] [ gutter-s text-sm ]\"><span class=\"[ status ]\" x-bind:data-state=\"runStatusState\" x-text=\"runStatusWord\"></span> <strong x-text=\"runLabel\"></strong> <span class=\"[ code color-ink-faint truncate ]\" x-text=\"runCommandLine\"></span></div><div class=\"[ cluster ] [ gutter-xs ]\"><button type=\"button\" class=\"[ button ]\" data-size=\"sm\" x-bind:disabled=\"busy\" x-on:click=\"restart\">Restart</button> <button type=\"button\" class=\"[ button ]\" data-size=\"sm\" x-show=\"running\" x-bind:disabled=\"busy\" x-on:click=\"stop\">Stop</button></div></div></template><template x-if=\"hasHistory\"><div class=\"[ cluster ] [ gutter-xs text-sm ]\" role=\"group\" aria-label=\"Earlier runs\"><template x-for=\"h in history\" x-bind:key=\"h.id\"><button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" x-bind:aria-pressed=\"h.current\" x-on:click=\"show(h.id)\"><span class=\"[ status ]\" x-bind:data-state=\"h.state\" x-text=\"h.label\"></span></button></template></div></template><template x-if=\"notice\"><p class=\"[ text-sm color-ink-muted ]\" role=\"status\" x-text=\"notice\"></p></template><template x-if=\"error\"><div class=\"[ banner ]\" data-tone=\"danger\" role=\"alert\"><div class=\"[ flow ] [ flow-space-3xs ]\"><span x-text=\"error.message\"></span> <span class=\"[ code ]\"><span x-text=\"error.code\"></span> · <span x-text=\"error.next\"></span></span></div></div></template></div><template x-for=\"rid in runIds\" x-bind:key=\"rid\"><div class=\"[ terminal ]\" x-data=\"sessionsRunTerminal(rid)\" x-bind:data-state=\"state\" x-on:terminal-reconnect-requested.window=\"reconnectRequested\" x-on:terminal-jump-requested.window=\"jumpRequested\" x-on:terminal-text-size.window=\"textSizeRequested\"><div class=\"[ screen ]\" x-ref=\"screen\" x-on:click=\"focus\"></div><template x-if=\"state === 'connecting'\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 87, "</span></template>— this session's worktree, with the agent's changes, not your own checkout.</p><p class=\"[ code color-ink-faint truncate ]\" x-text=\"worktree\" x-bind:title=\"worktree\"></p></div><form class=\"[ cluster ] [ gutter-xs ]\" x-on:submit.prevent=\"start\"><label class=\"[ visually-hidden ]\" for=\"run-choice\">Command</label><div class=\"[ dropdown ] [ grow ]\" x-data=\"combobox\" data-free-text data-free-text-label=\"Run “{q}”\" data-placeholder=\"Type a command or pick a saved one\" x-on:dropdown-change=\"commandPicked\" x-on:input=\"commandTyped\"><select id=\"run-choice\" x-ref=\"command\" x-bind:disabled=\"busy\"><template x-for=\"c in commands\" x-bind:key=\"c.name\"><option x-bind:value=\"c.name\" x-bind:data-description=\"c.command\" x-text=\"c.name\"></option></template></select></div><template x-if=\"canForget\"><span class=\"[ code color-ink-muted truncate grow ]\" x-text=\"chosenCommand\"></span></template><button type=\"submit\" class=\"[ button ]\" data-variant=\"primary\" data-size=\"sm\" x-bind:disabled=\"cannotRun\" x-bind:aria-busy=\"busy\">Run</button><template x-if=\"canForget\"><button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" x-on:click=\"forget\">Remove</button></template></form><template x-if=\"typing\"><form class=\"[ cluster ] [ gutter-xs text-sm ]\" x-on:submit.prevent=\"save\"><label for=\"run-save-name\" class=\"[ color-ink-muted ]\">Save for this repository as</label> <input id=\"run-save-name\" autocomplete=\"off\" placeholder=\"server\" x-model=\"saveName\"> <button type=\"submit\" class=\"[ button ]\" data-size=\"sm\" x-bind:disabled=\"cannotSave\">Save</button></form></template><template x-if=\"hasRun\"><div class=\"[ repel ]\"><div class=\"[ cluster ] [ gutter-s text-sm ]\"><span class=\"[ status ]\" x-bind:data-state=\"runStatusState\" x-text=\"runStatusWord\"></span> <strong x-text=\"runLabel\"></strong> <span class=\"[ code color-ink-faint truncate ]\" x-text=\"runCommandLine\"></span></div><div class=\"[ cluster ] [ gutter-xs ]\"><button type=\"button\" class=\"[ button ]\" data-size=\"sm\" x-bind:disabled=\"busy\" x-on:click=\"restart\">Restart</button> <button type=\"button\" class=\"[ button ]\" data-size=\"sm\" x-show=\"running\" x-bind:disabled=\"busy\" x-on:click=\"stop\">Stop</button></div></div></template><template x-if=\"hasHistory\"><div class=\"[ cluster ] [ gutter-xs text-sm ]\" role=\"group\" aria-label=\"Earlier runs\"><template x-for=\"h in history\" x-bind:key=\"h.id\"><button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" x-bind:aria-pressed=\"h.current\" x-on:click=\"show(h.id)\"><span class=\"[ status ]\" x-bind:data-state=\"h.state\" x-text=\"h.label\"></span></button></template></div></template><template x-if=\"notice\"><p class=\"[ text-sm color-ink-muted ]\" role=\"status\" x-text=\"notice\"></p></template><template x-if=\"error\"><div class=\"[ banner ]\" data-tone=\"danger\" role=\"alert\"><div class=\"[ flow ] [ flow-space-3xs ]\"><span x-text=\"error.message\"></span> <span class=\"[ code ]\"><span x-text=\"error.code\"></span> · <span x-text=\"error.next\"></span></span></div></div></template></div><template x-for=\"rid in runIds\" x-bind:key=\"rid\"><div class=\"[ terminal ]\" x-data=\"sessionsRunTerminal(rid)\" x-bind:data-state=\"state\" x-on:terminal-reconnect-requested.window=\"reconnectRequested\" x-on:terminal-jump-requested.window=\"jumpRequested\" x-on:terminal-text-size.window=\"textSizeRequested\"><div class=\"[ screen ]\" x-ref=\"screen\" x-on:click=\"focus\"></div><template x-if=\"state === 'connecting'\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -1081,7 +1089,7 @@ func appPanel() templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 87, "</template></div></template><template x-if=\"showsEmpty\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 88, "</template></div></template><template x-if=\"showsEmpty\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -1089,7 +1097,7 @@ func appPanel() templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 88, "</template></section>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 89, "</template></section>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -1123,7 +1131,7 @@ func codePanel() templ.Component {
 			templ_7745c5c3_Var46 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 89, "<div class=\"[ frame ]\" x-show=\"showingCode\"><section class=\"[ frame ]\" aria-label=\"Code\" x-data=\"codePanel(panel)\" x-on:code-tab.window=\"tabShown\" x-on:session-ended.window=\"sessionEnded\" x-on:popstate.window=\"popState\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 90, "<div class=\"[ frame ]\" x-show=\"showingCode\"><section class=\"[ frame ]\" aria-label=\"Code\" x-data=\"codePanel(panel)\" x-on:code-tab.window=\"tabShown\" x-on:session-ended.window=\"sessionEnded\" x-on:popstate.window=\"popState\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -1131,7 +1139,7 @@ func codePanel() templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 90, "</section></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 91, "</section></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -1169,7 +1177,7 @@ func designPanel() templ.Component {
 			templ_7745c5c3_Var47 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 91, "<div class=\"[ frame ]\" x-show=\"showingDesign\"><section class=\"[ frame ]\" aria-label=\"Design\" x-data=\"sessionsDesignPanel(panel)\" x-on:session-ended.window=\"sessionEnded\"><template x-if=\"error\"><div class=\"[ banner ] [ pad-s ]\" data-tone=\"danger\" role=\"alert\"><div class=\"[ flow ] [ flow-space-3xs grow ]\"><span x-text=\"error.message\"></span> <span class=\"[ code ]\"><span x-text=\"error.code\"></span> · <span x-text=\"error.next\"></span></span></div><button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" x-on:click=\"dismissError\">Dismiss</button></div></template><div class=\"[ with-sidebar ] [ grow ]\" style=\"--sidebar-target: 16rem\" data-scroll><div class=\"[ list ] [ divide-end ]\" role=\"listbox\" aria-label=\"Artifacts of this session\" tabindex=\"0\" x-on:keydown.j.prevent=\"next\" x-on:keydown.down.prevent=\"next\" x-on:keydown.k.prevent=\"previous\" x-on:keydown.up.prevent=\"previous\"><template x-for=\"card in cards\" x-bind:key=\"card.id\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 92, "<div class=\"[ frame ]\" x-show=\"showingDesign\"><section class=\"[ frame ]\" aria-label=\"Design\" x-data=\"sessionsDesignPanel(panel)\" x-on:session-ended.window=\"sessionEnded\"><template x-if=\"error\"><div class=\"[ banner ] [ pad-s ]\" data-tone=\"danger\" role=\"alert\"><div class=\"[ flow ] [ flow-space-3xs grow ]\"><span x-text=\"error.message\"></span> <span class=\"[ code ]\"><span x-text=\"error.code\"></span> · <span x-text=\"error.next\"></span></span></div><button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" x-on:click=\"dismissError\">Dismiss</button></div></template><div class=\"[ with-sidebar ] [ grow ]\" style=\"--sidebar-target: 16rem\" data-scroll><div class=\"[ list ] [ divide-end ]\" role=\"listbox\" aria-label=\"Artifacts of this session\" tabindex=\"0\" x-on:keydown.j.prevent=\"next\" x-on:keydown.down.prevent=\"next\" x-on:keydown.k.prevent=\"previous\" x-on:keydown.up.prevent=\"previous\"><template x-for=\"card in cards\" x-bind:key=\"card.id\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -1177,7 +1185,7 @@ func designPanel() templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 92, "</template><template x-if=\"isEmpty\"><div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 93, "</template><template x-if=\"isEmpty\"><div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -1185,7 +1193,7 @@ func designPanel() templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 93, "<p class=\"[ pad-inline-l text-sm ]\"><a x-bind:href=\"designHref\" data-task-design>Project assets attached to this task are on its Design assets page</a></p></div></template></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 94, "<p class=\"[ pad-inline-l text-sm ]\"><a x-bind:href=\"designHref\" data-task-design>Project assets attached to this task are on its Design assets page</a></p></div></template></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -1201,7 +1209,7 @@ func designPanel() templ.Component {
 				}()
 			}
 			ctx = templ.InitializeContext(ctx)
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 94, "<a x-bind:href=\"designHref\" data-task-design>Attached project assets are on the task's Design assets</a><template x-if=\"canMoveCurrent\"><form x-on:submit.prevent=\"move\"><button type=\"submit\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" x-bind:aria-busy=\"moving\" x-bind:aria-label=\"currentMoveAriaLabel\" x-text=\"currentMoveLabel\">Move to project</button></form></template>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 95, "<a x-bind:href=\"designHref\" data-task-design>Attached project assets are on the task's Design assets</a><template x-if=\"canMoveCurrent\"><form x-on:submit.prevent=\"move\"><button type=\"submit\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" x-bind:aria-busy=\"moving\" x-bind:aria-label=\"currentMoveAriaLabel\" x-text=\"currentMoveLabel\">Move to project</button></form></template>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -1211,7 +1219,7 @@ func designPanel() templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 95, "</div></section></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 96, "</div></section></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -1243,33 +1251,33 @@ func taskBand(v PageView) templ.Component {
 			templ_7745c5c3_Var49 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 96, "<template x-if=\"statusLine\"><p class=\"[ status-change ]\"><span x-text=\"statusLine\"></span><template x-if=\"statusReason\"><span class=\"[ truncate ]\" x-bind:title=\"statusReason\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 97, "<template x-if=\"statusLine\"><p class=\"[ status-change ]\"><span x-text=\"statusLine\"></span><template x-if=\"statusReason\"><span class=\"[ truncate ]\" x-bind:title=\"statusReason\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var50 string
 		templ_7745c5c3_Var50, templ_7745c5c3_Err = templ.JoinStringErrs(" ")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `sessions/page.templ`, Line: 553, Col: 64}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `sessions/page.templ`, Line: 556, Col: 64}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var50))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 97, "— <span x-text=\"statusReason\"></span></span></template></p></template><template x-if=\"showsDescription\"><p class=\"[ brief ]\" x-text=\"description\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 98, "— <span x-text=\"statusReason\"></span></span></template></p></template><template x-if=\"showsDescription\"><p class=\"[ brief ]\" x-text=\"description\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var51 string
 		templ_7745c5c3_Var51, templ_7745c5c3_Err = templ.JoinStringErrs(v.TaskDescription)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `sessions/page.templ`, Line: 558, Col: 63}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `sessions/page.templ`, Line: 561, Col: 63}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var51))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 98, "</p></template><template x-if=\"editingTask\"><form class=\"[ flow ] [ flow-space-s pad-l divide-bottom ]\" x-on:submit.prevent=\"save\" x-on:keydown.escape=\"cancelEditTask\"><div class=\"[ field ]\"><label for=\"task-edit-title\">Title</label> <input id=\"task-edit-title\" autocomplete=\"off\" x-model=\"draftTitle\" x-ref=\"title\"></div><div class=\"[ field ]\"><label for=\"task-edit-description\">Description</label> <textarea id=\"task-edit-description\" x-model=\"draftDescription\"></textarea></div><div class=\"[ cluster ]\"><button type=\"submit\" class=\"[ button ]\" data-variant=\"primary\" data-size=\"sm\" x-bind:disabled=\"cannotSaveTask\" x-bind:aria-busy=\"savingTask\">Save</button> <button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" x-on:click=\"cancelEditTask\">Cancel</button></div></form></template><template x-if=\"taskDeleteProblem\"><div class=\"[ pad-inline-l pad-block-s ]\"><div class=\"[ banner ]\" data-tone=\"attention\" role=\"alert\"><div class=\"[ flow ] [ flow-space-3xs grow ]\"><strong>This task cannot be deleted yet.</strong> <span x-text=\"taskDeleteProblem\"></span></div><button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" x-on:click=\"cancelDeleteTask\">OK</button></div></div></template><template x-if=\"confirmingTaskDelete\"><div class=\"[ pad-inline-l pad-block-s ]\"><div class=\"[ banner ]\" data-tone=\"danger\" role=\"alertdialog\" aria-label=\"Delete this task?\"><div class=\"[ flow ] [ flow-space-3xs grow ]\"><strong>Delete this task?</strong> <span>It has no sessions. Its title and description are removed for good.</span></div><div class=\"[ cluster ] [ gutter-xs ]\"><button type=\"button\" class=\"[ button ]\" data-variant=\"danger\" data-size=\"sm\" x-bind:aria-busy=\"deletingTask\" x-on:click=\"removeTask\">Delete task</button> <button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" x-on:click=\"cancelDeleteTask\">Keep it</button></div></div></div></template><template x-if=\"taskError\"><div class=\"[ pad-inline-l pad-block-s ]\"><div class=\"[ banner ]\" data-tone=\"danger\" role=\"alert\"><div class=\"[ flow ] [ flow-space-3xs grow ]\"><span x-text=\"taskError.message\"></span> <span class=\"[ code ]\"><span x-text=\"taskError.code\"></span> · <span x-text=\"taskError.next\"></span></span></div><button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" x-on:click=\"dismissTaskError\">Dismiss</button></div></div></template>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 99, "</p></template><template x-if=\"editingTask\"><form class=\"[ flow ] [ flow-space-s pad-l divide-bottom ]\" x-on:submit.prevent=\"save\" x-on:keydown.escape=\"cancelEditTask\"><div class=\"[ field ]\"><label for=\"task-edit-title\">Title</label> <input id=\"task-edit-title\" autocomplete=\"off\" x-model=\"draftTitle\" x-ref=\"title\"></div><div class=\"[ field ]\"><label for=\"task-edit-description\">Description</label> <textarea id=\"task-edit-description\" x-model=\"draftDescription\"></textarea></div><div class=\"[ cluster ]\"><button type=\"submit\" class=\"[ button ]\" data-variant=\"primary\" data-size=\"sm\" x-bind:disabled=\"cannotSaveTask\" x-bind:aria-busy=\"savingTask\">Save</button> <button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" x-on:click=\"cancelEditTask\">Cancel</button></div></form></template><template x-if=\"taskDeleteProblem\"><div class=\"[ pad-inline-l pad-block-s ]\"><div class=\"[ banner ]\" data-tone=\"attention\" role=\"alert\"><div class=\"[ flow ] [ flow-space-3xs grow ]\"><strong>This task cannot be deleted yet.</strong> <span x-text=\"taskDeleteProblem\"></span></div><button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" x-on:click=\"cancelDeleteTask\">OK</button></div></div></template><template x-if=\"confirmingTaskDelete\"><div class=\"[ pad-inline-l pad-block-s ]\"><div class=\"[ banner ]\" data-tone=\"danger\" role=\"alertdialog\" aria-label=\"Delete this task?\"><div class=\"[ flow ] [ flow-space-3xs grow ]\"><strong>Delete this task?</strong> <span>It has no sessions. Its title and description are removed for good.</span></div><div class=\"[ cluster ] [ gutter-xs ]\"><button type=\"button\" class=\"[ button ]\" data-variant=\"danger\" data-size=\"sm\" x-bind:aria-busy=\"deletingTask\" x-on:click=\"removeTask\">Delete task</button> <button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" x-on:click=\"cancelDeleteTask\">Keep it</button></div></div></div></template><template x-if=\"taskError\"><div class=\"[ pad-inline-l pad-block-s ]\"><div class=\"[ banner ]\" data-tone=\"danger\" role=\"alert\"><div class=\"[ flow ] [ flow-space-3xs grow ]\"><span x-text=\"taskError.message\"></span> <span class=\"[ code ]\"><span x-text=\"taskError.code\"></span> · <span x-text=\"taskError.next\"></span></span></div><button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" x-on:click=\"dismissTaskError\">Dismiss</button></div></div></template>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

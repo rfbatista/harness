@@ -720,7 +720,7 @@ func TestSessionCodeTabOnAPhone(t *testing.T) {
 		t.Fatalf("%v\nJS errors: %v", err, errs.all())
 	}
 	saveShot("code-session-phone.jpg", shot)
-	if strings.Join(tabs, ",") != "Agent,App,Design,Code" {
+	if strings.Join(tabs, ",") != "Agent,History,App,Design,Code" {
 		t.Errorf("tabs %v", tabs)
 	}
 	if expand {

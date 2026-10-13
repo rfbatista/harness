@@ -87,7 +87,7 @@ export const sessionsPage = ({
     /** This browser's terminal text size, in px, and focus mode. */
     textSize: prefs.textSize(),
     focusMode: prefs.focus(),
-    /** The detail pane's tab: the agent's terminal, the application run from the worktree, or what the session designed. */
+    /** The detail pane's tab: the agent's terminal, its saved conversation (history), the application run from the worktree, what the session designed, its code or its conversation with the architect. */
     detailTab: "agent",
     /** Sessions that just arrived over the feed (started elsewhere: by an agent, the TUI). */
     freshIds: [],
@@ -157,6 +157,22 @@ export const sessionsPage = ({
     },
     get showingAgent() {
       return this.showingSession && this.detailTab === "agent";
+    },
+    get showingHistory() {
+      return this.showingSession && this.detailTab === "history";
+    },
+    get historyTabSelected() {
+      return this.detailTab === "history";
+    },
+    /**
+     * The History tab's panel, keyed on the session and on liveness (an
+     * ended session's is read once; a resumed one gets a fresh one that
+     * catches up again). Mounted only while the tab is in front.
+     */
+    get historyPanels() {
+      if (!this.showingHistory) return [];
+      const live = this.selected.stoppable;
+      return [{ key: `${this.selected.id}:${live ? "live" : "ended"}`, sessionId: this.selected.id, live }];
     },
     get showingApp() {
       return this.showingSession && this.detailTab === "app";
@@ -537,6 +553,11 @@ export const sessionsPage = ({
       this.leaveCode();
       this.detailTab = "agent";
       this.$nextTick(() => this.$dispatch("terminal-focus-requested"));
+    },
+    /** The saved conversation: read-only, so the focus stays on the tab. */
+    showHistory() {
+      this.leaveCode();
+      this.detailTab = "history";
     },
     showApp() {
       this.leaveCode();

@@ -194,4 +194,23 @@
  *           not delivered.
  */
 
+/**
+ * A session's saved conversation, read a page at a time (the contract
+ * "Harness server ↔ Web UI — agent session history", T1–T6). Implemented by
+ * infrastructure/transcript-gateway.js (GET /api/sessions/{id}/transcript)
+ * and infrastructure/memory-transcripts.js (tests and web/dev). Both run
+ * testing/transcript-contract.js.
+ *
+ * @typedef {import("./transcript.js").TranscriptPage} TranscriptPage
+ *
+ * @typedef {object} TranscriptGateway
+ * @property {(sessionId: string, page?: { before?: string, after?: string, limit?: number }, signal?: AbortSignal) => Promise<TranscriptPage>} page
+ *           No cursor: the newest `limit` entries. before: the `limit`
+ *           entries just older than that cursor. after: the entries newer
+ *           than it, oldest first, up to `limit`. Rejects with
+ *           SESSION_TRANSCRIPT_MISSING (no saved conversation yet),
+ *           SESSION_NOT_FOUND or INVALID_INPUT (a bad cursor or limit, or
+ *           both cursors).
+ */
+
 export {};

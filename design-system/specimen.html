@@ -802,6 +802,65 @@
       </section>
       <!-- code-views:end -->
 
+      <section class="[ flow ] [ flow-space-m ]" id="session-history">
+        <h2>Session history</h2>
+        <p class="[ color-ink-muted ]">A session's History tab: its saved conversation in the <code>transcript</code> block, the region that scrolls (<code>role="log"</code>, focusable). Older lines load at the top; tool calls and results are one line until opened; errors are marked; text the server cut says so. With no saved conversation the tab shows an <code>empty</code> state; a failed load a <code>pane-note</code> with Retry, never a toast.</p>
+        <div class="specimen-themes">
+          <div class="[ flow ] [ flow-space-l ] specimen-theme" data-theme="light">
+<div class="[ flow ] [ flow-space-2xs ]"><p class="[ font-mono text-xs color-ink-faint ]">transcript · Load older · user, agent, tool call and result (one open), error, system, cut · Jump to latest</p><div class="specimen-box" style="display: flex; block-size: 26rem; container-type: inline-size"><div class="transcript" role="log" tabindex="0" aria-label="Conversation history" style="flex: 1">
+  <div class="older"><button type="button" class="button" data-variant="ghost" data-size="sm">Load older</button></div>
+  <p class="line" data-kind="user"><time datetime="2026-10-13T14:02:11Z" title="13 Oct 2026, 14:02:11">14:02</time><span class="mark" aria-hidden="true">›</span><span class="text">Why does the agent tab stop scrolling?</span></p>
+  <p class="line" data-kind="agent"><time>14:02</time><span class="mark" aria-hidden="true">⏺</span><span class="text">Let me look at how the terminal handles the wheel.
+The screen is on the **alternate screen**, so there is no history to scroll.</span></p>
+  <div class="line" data-kind="tool"><time>14:02</time><span class="mark" aria-hidden="true">⌁</span><div class="fold"><button type="button" class="summary" aria-expanded="false" aria-controls="tr-a"><span class="tool">Grep</span><span class="gist">onData|wheel in web/src</span></button><pre class="detail" id="tr-a">web/src/xterm-screen.js:4: onData is ignored</pre></div></div>
+  <div class="line" data-kind="tool"><time>14:03</time><span class="mark" aria-hidden="true">⌁</span><div class="fold"><button type="button" class="summary" aria-expanded="true" aria-controls="tr-b"><span class="tool">Bash</span><span class="gist">git status --short</span><span class="meta">3 lines</span></button><pre class="detail" id="tr-b"> M web/src/xterm-screen.js
+ M design-system/css/blocks/transcript.css
+?? web/src/modules/sessions/presentation/components/history.js</pre></div></div>
+  <div class="line" data-kind="error"><time>14:03</time><span class="mark" aria-hidden="true">✕</span><div class="fold"><button type="button" class="summary" aria-expanded="false" aria-controls="tr-c"><span class="tool">Bash</span><span class="gist">exit 1 · go test ./internal/...</span><span class="meta">48 lines</span></button><pre class="detail" id="tr-c">--- FAIL: TestTerminal (0.31s)</pre></div></div>
+  <p class="line" data-kind="system"><time>14:04</time><span class="mark" aria-hidden="true">·</span><span class="text">Conversation compacted</span></p>
+  <p class="line" data-kind="agent"><time>14:05</time><span class="mark" aria-hidden="true">⏺</span><span class="text">Here is the whole log, as written…<span class="cut">cut at 16 KiB</span></span></p>
+  <button type="button" class="button jump" data-size="sm">3 new · Jump to latest</button>
+</div></div></div>
+<div class="[ cluster ] [ gutter-l ]" data-align="start">
+<div class="[ flow ] [ flow-space-2xs ]"><p class="[ font-mono text-xs color-ink-faint ]">transcript at 320px · start of the conversation</p><div class="specimen-box" style="inline-size: 320px; display: flex; block-size: 14rem; container-type: inline-size"><div class="transcript" role="log" tabindex="0" aria-label="Conversation history" style="flex: 1">
+  <div class="older">Start of the conversation</div>
+  <p class="line" data-kind="user"><time>14:02</time><span class="mark" aria-hidden="true">›</span><span class="text">Scroll the agent session, it is cut.</span></p>
+  <div class="line" data-kind="tool"><time>14:02</time><span class="mark" aria-hidden="true">⌁</span><div class="fold"><button type="button" class="summary" aria-expanded="false"><span class="tool">Read</span><span class="gist">web/src/modules/sessions/presentation/pages/sessionsPage.js</span></button><pre class="detail"></pre></div></div>
+  <p class="line" data-kind="agent"><time>14:03</time><span class="mark" aria-hidden="true">⏺</span><span class="text">A long_unbroken_identifier_that_must_wrap_anywhere_in_a_narrow_column.</span></p>
+</div></div></div>
+<div class="[ flow ] [ flow-space-2xs ]"><p class="[ font-mono text-xs color-ink-faint ]">History · no saved conversation (empty) · could not load (pane-note)</p><div class="[ flow ] [ flow-space-s ]"><div class="specimen-box" style="inline-size: 22rem"><div class="empty"><h2>No saved conversation yet</h2><p>It appears here once the agent has written its first turn.</p></div></div>
+<div class="specimen-box" style="inline-size: 22rem"><div class="pane-note" data-tone="danger" role="status"><span class="text"><strong>History could not load.</strong> The harness server is not reachable.</span><button type="button" class="button" data-size="sm">Retry</button></div></div></div></div>
+</div>
+</div>
+          <div class="[ flow ] [ flow-space-l ] specimen-theme" data-theme="dark">
+<div class="[ flow ] [ flow-space-2xs ]"><p class="[ font-mono text-xs color-ink-faint ]">transcript · Load older · user, agent, tool call and result (one open), error, system, cut · Jump to latest</p><div class="specimen-box" style="display: flex; block-size: 26rem; container-type: inline-size"><div class="transcript" role="log" tabindex="0" aria-label="Conversation history" style="flex: 1">
+  <div class="older"><button type="button" class="button" data-variant="ghost" data-size="sm">Load older</button></div>
+  <p class="line" data-kind="user"><time datetime="2026-10-13T14:02:11Z" title="13 Oct 2026, 14:02:11">14:02</time><span class="mark" aria-hidden="true">›</span><span class="text">Why does the agent tab stop scrolling?</span></p>
+  <p class="line" data-kind="agent"><time>14:02</time><span class="mark" aria-hidden="true">⏺</span><span class="text">Let me look at how the terminal handles the wheel.
+The screen is on the **alternate screen**, so there is no history to scroll.</span></p>
+  <div class="line" data-kind="tool"><time>14:02</time><span class="mark" aria-hidden="true">⌁</span><div class="fold"><button type="button" class="summary" aria-expanded="false" aria-controls="tr-a-dark"><span class="tool">Grep</span><span class="gist">onData|wheel in web/src</span></button><pre class="detail" id="tr-a-dark">web/src/xterm-screen.js:4: onData is ignored</pre></div></div>
+  <div class="line" data-kind="tool"><time>14:03</time><span class="mark" aria-hidden="true">⌁</span><div class="fold"><button type="button" class="summary" aria-expanded="true" aria-controls="tr-b-dark"><span class="tool">Bash</span><span class="gist">git status --short</span><span class="meta">3 lines</span></button><pre class="detail" id="tr-b-dark"> M web/src/xterm-screen.js
+ M design-system/css/blocks/transcript.css
+?? web/src/modules/sessions/presentation/components/history.js</pre></div></div>
+  <div class="line" data-kind="error"><time>14:03</time><span class="mark" aria-hidden="true">✕</span><div class="fold"><button type="button" class="summary" aria-expanded="false" aria-controls="tr-c-dark"><span class="tool">Bash</span><span class="gist">exit 1 · go test ./internal/...</span><span class="meta">48 lines</span></button><pre class="detail" id="tr-c-dark">--- FAIL: TestTerminal (0.31s)</pre></div></div>
+  <p class="line" data-kind="system"><time>14:04</time><span class="mark" aria-hidden="true">·</span><span class="text">Conversation compacted</span></p>
+  <p class="line" data-kind="agent"><time>14:05</time><span class="mark" aria-hidden="true">⏺</span><span class="text">Here is the whole log, as written…<span class="cut">cut at 16 KiB</span></span></p>
+  <button type="button" class="button jump" data-size="sm">3 new · Jump to latest</button>
+</div></div></div>
+<div class="[ cluster ] [ gutter-l ]" data-align="start">
+<div class="[ flow ] [ flow-space-2xs ]"><p class="[ font-mono text-xs color-ink-faint ]">transcript at 320px · start of the conversation</p><div class="specimen-box" style="inline-size: 320px; display: flex; block-size: 14rem; container-type: inline-size"><div class="transcript" role="log" tabindex="0" aria-label="Conversation history" style="flex: 1">
+  <div class="older">Start of the conversation</div>
+  <p class="line" data-kind="user"><time>14:02</time><span class="mark" aria-hidden="true">›</span><span class="text">Scroll the agent session, it is cut.</span></p>
+  <div class="line" data-kind="tool"><time>14:02</time><span class="mark" aria-hidden="true">⌁</span><div class="fold"><button type="button" class="summary" aria-expanded="false"><span class="tool">Read</span><span class="gist">web/src/modules/sessions/presentation/pages/sessionsPage.js</span></button><pre class="detail"></pre></div></div>
+  <p class="line" data-kind="agent"><time>14:03</time><span class="mark" aria-hidden="true">⏺</span><span class="text">A long_unbroken_identifier_that_must_wrap_anywhere_in_a_narrow_column.</span></p>
+</div></div></div>
+<div class="[ flow ] [ flow-space-2xs ]"><p class="[ font-mono text-xs color-ink-faint ]">History · no saved conversation (empty) · could not load (pane-note)</p><div class="[ flow ] [ flow-space-s ]"><div class="specimen-box" style="inline-size: 22rem"><div class="empty"><h2>No saved conversation yet</h2><p>It appears here once the agent has written its first turn.</p></div></div>
+<div class="specimen-box" style="inline-size: 22rem"><div class="pane-note" data-tone="danger" role="status"><span class="text"><strong>History could not load.</strong> The harness server is not reachable.</span><button type="button" class="button" data-size="sm">Retry</button></div></div></div></div>
+</div>
+</div>
+        </div>
+      </section>
+
       <section class="[ flow ] [ flow-space-m ]">
         <h2>Session screen</h2>
         <p class="[ color-ink-muted ]">A session's detail column (contract “Design system ↔ Web UI — session terminal pane layout”, L1–L7): a fixed-height <code>.session-head</code>, the <code>.pane-tabs</code> row with the terminal's tools at its end, then the <code>.terminal</code> down to the stream bar, the page's only footer. Each frame is drawn by <code>session-screen.js</code> at a real viewport size, scaled to fit, so the 64rem and 48rem rules apply as in the app (serve from the repository root). The xterm output is faked.</p>
@@ -819,6 +878,7 @@
           <div class="[ flow ] [ flow-space-2xs ]"><p class="[ text-xs color-ink-faint ]">Connecting</p><div data-frame='{"what":"comp","w":900,"h":250,"col":820,"parts":["tabs","terminal"],"theme":"light","conn":"connecting","history":false}'></div></div>
           <div class="[ flow ] [ flow-space-2xs ]"><p class="[ text-xs color-ink-faint ]">Waiting on you, focused</p><div data-frame='{"what":"comp","w":900,"h":250,"col":820,"parts":["tabs","terminal"],"theme":"dark","attention":true,"focused":true,"screen":"ask"}'></div></div>
           <div class="[ flow ] [ flow-space-2xs ]"><p class="[ text-xs color-ink-faint ]">Ended: pane note + Resume session</p><div data-frame='{"what":"comp","w":900,"h":250,"col":820,"parts":["head","tabs","terminal"],"theme":"light","conn":"ended","state":"done","word":"ended","screen":"ended"}'></div></div>
+          <div class="[ flow ] [ flow-space-2xs ]"><p class="[ text-xs color-ink-faint ]">History tab: no terminal tools; 3 new below a reader scrolled up</p><div data-frame='{"what":"comp","w":900,"h":300,"col":820,"parts":["tabs","history"],"theme":"light","tab":"history","jump":3}'></div></div>
           <div class="[ flow ] [ flow-space-2xs ]"><p class="[ text-xs color-ink-faint ]">Failed</p><div data-frame='{"what":"comp","w":900,"h":250,"col":820,"parts":["head","tabs","terminal"],"theme":"dark","conn":"ended","state":"failed","screen":"ended"}'></div></div>
         </div>
         <h3>Focus mode and narrow mode</h3>
@@ -831,6 +891,7 @@
           <div data-frame='{"w":375,"h":720,"device":"phone","theme":"light","checks":"on","phone":true,"sheetConfirm":true}'></div>
           <div data-frame='{"w":375,"h":720,"device":"phone","theme":"dark","phone":true,"conn":"ended","state":"done","word":"ended","screen":"ended"}'></div>
           <div data-frame='{"w":320,"h":620,"device":"phone","theme":"light","checks":"on","phone":true,"conn":"offline"}'></div>
+          <div data-frame='{"w":320,"h":620,"device":"phone","theme":"dark","phone":true,"tab":"history"}'></div>
           <div data-frame='{"w":740,"h":360,"device":"phone","theme":"dark","checks":"on","phone":true}'></div>
         </div>
       </section>

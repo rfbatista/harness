@@ -789,3 +789,18 @@ test("the head's actions arrive as session-action: Stop, Delete, Copy session id
   assert.equal((await memory.gateway.list({ projectId: "p1" })).some((s) => s.id === "live"), false);
   instance.destroy();
 });
+
+test("History: the session's saved conversation, for running and ended sessions, with no terminal tools and no focus taken", () => {
+  const { instance, dispatched } = screenSetup();
+  instance.terminalStatus({ detail: status() });
+  assert.deepEqual(instance.historyPanels, [], "mounted only while its tab is in front");
+  instance.showHistory();
+  assert.deepEqual([instance.historyTabSelected, instance.agentTabSelected, instance.paneTools, instance.noteOnly], [true, false, null, null]);
+  assert.deepEqual(instance.historyPanels, [{ key: "live:live", sessionId: "live", live: true }]);
+  assert.deepEqual(asked(dispatched, "terminal-focus-requested"), []);
+  instance.select("gone");
+  assert.deepEqual(instance.historyPanels, [{ key: "gone:ended", sessionId: "gone", live: false }], "History stays on another session, ended or not");
+  instance.showAgent();
+  assert.deepEqual(instance.historyPanels, []);
+  instance.destroy();
+});

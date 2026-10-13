@@ -207,6 +207,7 @@ templ paneTabs() {
 					<span class="[ status ]" data-state="waiting" data-dot-only aria-label="waiting on you"></span>
 				</template>
 			</button>
+			<button type="button" role="tab" x-bind:aria-selected="historyTabSelected" x-on:click="showHistory">History</button>
 			<button type="button" role="tab" x-bind:aria-selected="appTabSelected" x-on:click="showApp">App</button>
 			<button type="button" role="tab" x-bind:aria-selected="designTabSelected" x-on:click="showDesign">
 				Design

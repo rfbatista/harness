@@ -20,6 +20,7 @@ import { memoryArtifacts } from "../src/modules/sessions/infrastructure/memory-a
 import { memoryChannel } from "../src/modules/sessions/infrastructure/memory-channel.js";
 import { memoryGateway } from "../src/modules/sessions/infrastructure/memory-gateway.js";
 import { memoryTerminals } from "../src/modules/sessions/infrastructure/memory-terminals.js";
+import { memoryTranscripts } from "../src/modules/sessions/infrastructure/memory-transcripts.js";
 import { registerSessions } from "../src/modules/sessions/presentation/register.js";
 import { createScreen } from "../src/xterm-screen.js";
 
@@ -109,6 +110,18 @@ function startHistoryPage(rawSeed) {
   };
 }
 
+/** n entries of a made-up conversation: a person, the agent, its tool calls and their results. */
+function devTranscript(n) {
+  const start = Date.now() - n * 20_000;
+  const kinds = [
+    (i) => ({ kind: "user", text: `Question ${i}: what does this part do?` }),
+    (i) => ({ kind: "assistant", text: `Let me look.\nIt reads the transcript, step ${i}.` }),
+    () => ({ kind: "tool_use", tool: "Bash", text: "git status --short" }),
+    (i) => ({ kind: "tool_result", tool: "Bash", text: " M web/src/a.js\n M web/src/b.js", isError: i % 7 === 0 }),
+  ];
+  return Array.from({ length: n }, (_, i) => ({ ...kinds[i % kinds.length](i), at: new Date(start + i * 20_000) }));
+}
+
 /** web/dev/task.html: one task's sessions. */
 function startTaskPage(rawSeed) {
   // The page's seed doubles as the in-memory world; the gateway owns the wire format.
@@ -127,7 +140,9 @@ function startTaskPage(rawSeed) {
     checks: seed.sessions.flatMap((s) => (s.statusCheck ? [s.statusCheck] : [])),
     onCheck: (check) => memory.update(check.delegateSessionId, { statusCheck: check }),
   });
-  registerSessions(Alpine, { gateway: memory.gateway, artifacts: artifacts.gateway, channel: channel.gateway, terminals: terminals.gateway, createScreen, clock: systemClock, prefs });
+  // Each session's saved conversation: a long one, so History has older pages to load.
+  const transcripts = memoryTranscripts({ transcripts: Object.fromEntries(seed.sessions.map((s) => [s.id, devTranscript(400)])) });
+  registerSessions(Alpine, { gateway: memory.gateway, artifacts: artifacts.gateway, channel: channel.gateway, terminals: terminals.gateway, transcripts: transcripts.gateway, createScreen, clock: systemClock, prefs });
   const prSeed = seedOf("pull-requests-seed");
   const prs = memoryPullRequests({
     workspaces: (prSeed?.workspace_ids ?? []).map((id) => ({ id, projectId: seed.projectId })),

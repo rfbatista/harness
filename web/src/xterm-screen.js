@@ -7,19 +7,25 @@
 //
 // The viewport is xterm's: wheel, trackpad and touch scroll it, and the
 // scrollbar is its own (terminal.css keeps it visible and themed while there
-// is history). Scrolling never sends keys. Typing, pasting and a snapshot
-// redraw bring the view back to the live screen, as terminal emulators do.
+// is history). Typing, pasting and a snapshot redraw bring the view back to
+// the live screen, as terminal emulators do. Scrolling sends no keys, except
+// to a full-screen program that turned on mouse reporting (claude does): the
+// alternate screen has no history to scroll, the program scrolls its own
+// view, and the socket carries keys, not mouse reports, so the wheel and
+// touch become PageUp/PageDown (wheel-pages.js).
 
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal } from "@xterm/xterm";
 
 import { followTheme, screenColors, screenFont } from "./screen-theme.js";
+import { wheelPages } from "./wheel-pages.js";
 
 /**
  * Lines of history the screen keeps: the server's snapshot carries up to
- * 2000 (the attach contract's bound); the rest is room for live output.
+ * 10,000 (the agent session history contract, H1/H4); the rest is room for
+ * live output.
  */
-const HISTORY_LINES = 5000;
+const HISTORY_LINES = 12_000;
 
 /**
  * The keyboard scrolling every terminal emulator has, taken by the viewport
@@ -71,7 +77,7 @@ function watchFont(parent, font, onChange) {
 }
 
 /** @type {import("./modules/sessions/presentation/components/terminal.js").CreateScreen} */
-export function createScreen(container, { onKey, onPaste, onCellSize, onScrollState, fontSize = FONT_SIZE }) {
+export function createScreen(container, { onKey, onPaste, onPageKey, onCellSize, onScrollState, fontSize = FONT_SIZE }) {
   const font = screenFont();
   const term = new Terminal({
     cursorBlink: true,
@@ -79,8 +85,15 @@ export function createScreen(container, { onKey, onPaste, onCellSize, onScrollSt
     fontSize,
     lineHeight: 1.15,
     scrollback: HISTORY_LINES,
+    // H2: a full clear (ED2) keeps the cleared screen in the history, as the
+    // server's emulator does, so what a person could scroll to stays.
+    scrollOnEraseInDisplay: true,
     theme: screenColors(),
   });
+  // H2, H3: erasing the saved lines (ED3, ESC[3J) is ignored here as on the
+  // server, so a browser that stayed attached keeps the history a reload
+  // would show. Other erases fall through to xterm.
+  term.parser.registerCsiHandler({ final: "J" }, (params) => params[0] === 3);
   // A pinned theme restored after this screen mounted, a toggle click, the OS
   // flipping: each re-themes the screen in place.
   const stopFollowing = followTheme(() => {
@@ -155,6 +168,42 @@ export function createScreen(container, { onKey, onPaste, onCellSize, onScrollSt
     return !event.metaKey;
   });
 
+  // A full-screen program that asked for the mouse scrolls its own view: the
+  // wheel and touch reach it as page keys. Anywhere else xterm scrolls its
+  // viewport as usual (a program on the alternate screen that did not ask
+  // gets nothing it did not type).
+  const pagesToProgram = () => term.buffer.active.type === "alternate" && term.modes.mouseTrackingMode !== "none";
+  const pager = wheelPages({
+    step: () => Math.max(host.clientHeight / 2, 40),
+    line: () => (host.clientHeight || 1) / Math.max(term.rows, 1),
+  });
+  const page = (key) => {
+    if (key) onPageKey?.(key);
+  };
+  term.attachCustomWheelEventHandler((event) => {
+    if (!pagesToProgram()) {
+      pager.reset();
+      return true;
+    }
+    event.preventDefault();
+    page(pager.add(event.deltaY, event.deltaMode));
+    return false;
+  });
+  let touchY = null;
+  const touchStart = (event) => {
+    touchY = event.touches.length === 1 ? event.touches[0].clientY : null;
+    pager.reset();
+  };
+  const touchMove = (event) => {
+    if (touchY === null || event.touches.length !== 1 || !pagesToProgram()) return;
+    const y = event.touches[0].clientY;
+    // A finger moving up shows what is below: PageDown.
+    page(pager.add(touchY - y));
+    touchY = y;
+  };
+  container.addEventListener("touchstart", touchStart, { passive: true });
+  container.addEventListener("touchmove", touchMove, { passive: true });
+
   // Pastes too: caught before xterm turns them into input.
   const paste = (event) => {
     const text = event.clipboardData?.getData("text") ?? "";
@@ -208,6 +257,8 @@ export function createScreen(container, { onKey, onPaste, onCellSize, onScrollSt
       stopFollowing();
       stopWatchingFont();
       container.removeEventListener("paste", paste, true);
+      container.removeEventListener("touchstart", touchStart);
+      container.removeEventListener("touchmove", touchMove);
       term.dispose();
       host.remove();
     },
