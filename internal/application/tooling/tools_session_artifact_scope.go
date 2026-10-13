@@ -75,7 +75,8 @@ func sessionArtifactScopeTools(planningSvc ports.Planning, sessions ports.Sessio
 			Description: "List the design assets kept at project level in this session's project, from any task, newest first: " +
 				"logos, palettes, components, reference screens other tasks reuse. Each has its artifact_id, title, kind, note, " +
 				"revision, the task that made it, the tasks it is attached to (attached_ticket_ids), and a view_url. Check it " +
-				"before making a new asset, and attach one to this task with attach_artifact_to_task.",
+				"before making a new asset, and attach one to this task with attach_artifact_to_task. bytes is each one's size; " +
+				"read_artifact reads a text asset's content in parts.",
 			InputSchema: schemaFromJSON(`{"type":"object","properties":{}}`),
 			Source:      "code",
 			Handler: func(ctx context.Context, args map[string]any) (any, error) {

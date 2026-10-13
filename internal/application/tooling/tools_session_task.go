@@ -164,7 +164,7 @@ func SessionTaskTools(planningSvc ports.Planning, sessions ports.SessionReposito
 		},
 		{
 			Name:        "get_task",
-			Description: "Get the task this session is working on, with the documents linked to it.",
+			Description: "Get the task this session is working on, with the documents linked to it (titles, bytes, lines and version; no bodies).",
 			InputSchema: schemaFromJSON(`{"type":"object","properties":{}}`),
 			Source:      "code",
 			Handler: func(ctx context.Context, args map[string]any) (any, error) {
@@ -179,8 +179,9 @@ func SessionTaskTools(planningSvc ports.Planning, sessions ports.SessionReposito
 			},
 		},
 		{
-			Name:        "list_task_documents",
-			Description: "List the documents linked to this session's task. Titles only — use read_task_document for the body.",
+			Name: "list_task_documents",
+			Description: "List the documents linked to this session's task. No bodies: each row has its bytes, lines and version, so check the size before " +
+				"read_task_document; search_documents finds a line without reading.",
 			InputSchema: schemaFromJSON(`{"type":"object","properties":{}}`),
 			Source:      "code",
 			Handler: func(ctx context.Context, args map[string]any) (any, error) {
@@ -240,7 +241,7 @@ func SessionTaskTools(planningSvc ports.Planning, sessions ports.SessionReposito
 		},
 		{
 			Name:        "update_task_document",
-			Description: "Revise a document linked to this session's task. Omitted fields keep their current value. New content must be a complete HTML document (Markdown is refused with DOCUMENT_NOT_HTML); it makes an older markdown document an html one.",
+			Description: "Revise a document linked to this session's task. Omitted fields keep their current value. New content must be a complete HTML document (Markdown is refused with DOCUMENT_NOT_HTML); it makes an older markdown document an html one. To change part of a page, use edit_task_document instead of resending it.",
 			InputSchema: schemaFromJSON(`{"type":"object","properties":{"document_id":{"type":"string","description":"Document ID"},"title":{"type":"string","description":"New title; omit to keep the current one"},"content":{"type":"string","description":"New content as a complete HTML document; omit to keep the current one"}},"required":["document_id"]}`),
 			Source:      "code",
 			Handler: func(ctx context.Context, args map[string]any) (any, error) {
@@ -456,11 +457,15 @@ type documentSummary struct {
 func summarizeDocuments(docs []*domain.Document) []documentSummary {
 	out := make([]documentSummary, 0, len(docs))
 	for _, d := range docs {
-		out = append(out, documentSummary{ID: d.ID, Title: d.Title, Format: d.Format, Scope: d.Scope,
-			Bytes: len(d.Content), Lines: len(newTextView(d.Content, documentKind(d)).lines),
-			Version: domain.DocumentVersion(d.Content), UpdatedAt: d.UpdatedAt})
+		out = append(out, summarize(d, newTextView(d.Content, documentKind(d))))
 	}
 	return out
+}
+
+// summarize is d without its content, sized by its text view tv.
+func summarize(d *domain.Document, tv *textView) documentSummary {
+	return documentSummary{ID: d.ID, Title: d.Title, Format: d.Format, Scope: d.Scope,
+		Bytes: len(d.Content), Lines: len(tv.lines), Version: domain.DocumentVersion(d.Content), UpdatedAt: d.UpdatedAt}
 }
 
 // notHTML is the refusal for a task document body that is not an HTML page.

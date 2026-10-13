@@ -59,7 +59,8 @@ func sessionArtifactTools(planningSvc ports.Planning, sessions ports.SessionRepo
 				"Design tab (pages, images, videos, files and dev-server URLs), each with its scope (task, or project once it is " +
 				"kept as a project design asset), and the project assets attached to this task. relation says which: produced " +
 				"or attached; attached_ticket_ids names the other tasks a project asset is attached to. Use it to see what " +
-				"earlier sessions produced, and what was attached for you, before making more.",
+				"earlier sessions produced, and what was attached for you, before making more. bytes is each one's size; " +
+				"read_artifact reads a text asset's content in parts.",
 			InputSchema: schemaFromJSON(`{"type":"object","properties":{}}`),
 			Source:      "code",
 			Handler: func(ctx context.Context, args map[string]any) (any, error) {

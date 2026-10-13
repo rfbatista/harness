@@ -240,3 +240,24 @@ func TestStartInteractive_ArchitectCoordinatesDelegates(t *testing.T) {
 		}
 	}
 }
+
+// Both mode skills tell the agent to read large documents and assets in
+// parts, with the tools for it.
+func TestStartInteractive_SkillsReadInParts(t *testing.T) {
+	svc, _ := newInteractiveService(t)
+	for mode, skill := range map[string]string{"architect": "task-architecture", "design": "design-artifacts"} {
+		_, launch := startInteractive(t, svc, InteractiveRequest{Mode: mode})
+		body := pluginSkill(t, launch, skill)
+		want := []string{"mcp__task__search_documents", "`section`", "`offset`/`limit`", "never the whole"}
+		if skill == "task-architecture" {
+			want = append(want, "mcp__task__edit_task_document", "expected_version")
+		} else {
+			want = append(want, "mcp__task__read_artifact", "include_artifacts")
+		}
+		for _, w := range want {
+			if !strings.Contains(body, w) {
+				t.Errorf("%s SKILL.md lacks %q", skill, w)
+			}
+		}
+	}
+}

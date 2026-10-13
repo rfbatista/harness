@@ -45,6 +45,9 @@ person in one line what changed → listen.
   says so: look at it before your next publish.
 - **Commit nothing unless asked.** The worktree is the working surface.
 - Titles and notes are shown as plain text; keep them short and human.
+- **Read big pages and assets in parts.** Check `bytes` in the listings; use
+  `mcp__task__search_documents` or the outline a large read returns, then
+  read one section or window, never the whole file.
 - **Notes you leave on the task are HTML pages.** `create_task_document` takes
   a complete HTML document (doctype, head with title and charset, body) and
   refuses Markdown. A short self-contained HTML page is enough.
@@ -62,7 +65,9 @@ person in one line what changed → listen.
 | `mcp__task__detach_artifact_from_task` | Detach a project asset from this task; it stays in the project. |
 | `mcp__task__unpublish_artifact` | Take one of your own cards down (the file stays). A project asset is moved back to the task first. |
 | `mcp__task__list_task_resources` / `read_task_resource` / `list_task_comments` | What the person added to the task for context (references, recordings, links) and their comments. Read-only. |
-| `mcp__task__get_task` / `read_task_document` | The brief, and any design notes or specs earlier sessions left (documents are HTML pages; older ones may be Markdown). |
+| `mcp__task__get_task` / `read_task_document` | The brief, and any design notes or specs earlier sessions left (documents are HTML pages; older ones may be Markdown). A large one comes back as its outline and first lines: read the `section` you need. |
+| `mcp__task__read_artifact` | Read an asset's markup, CSS or tokens (html, svg, css, json, md, txt) like a document: whole when small, otherwise by `section` or `offset`/`limit`. Images and larger files answer their `view_url`. |
+| `mcp__task__search_documents` | Find a token, class or note across the task's documents and, with `include_artifacts`, its text assets, without reading them whole. |
 
 `publish_artifact` returns `{artifact_id, revision, kind, view_url}`. Its
 errors name the rule you broke: `ARTIFACT_PATH_OUTSIDE_WORKTREE` (move the

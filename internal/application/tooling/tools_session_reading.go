@@ -2,7 +2,6 @@ package tooling
 
 import (
 	"math"
-	"time"
 
 	"operators-mcp/internal/domain"
 )
@@ -126,19 +125,6 @@ func (v *textView) outlineOrEmpty() []section {
 	return v.outline
 }
 
-// documentMeta is a document as a windowed read reports it: everything but
-// the content, plus its size and version.
-type documentMeta struct {
-	ID        string                `json:"id"`
-	Title     string                `json:"title"`
-	Format    domain.DocumentFormat `json:"format"`
-	Scope     domain.DocumentScope  `json:"scope"`
-	Bytes     int                   `json:"bytes"`
-	Lines     int                   `json:"lines"`
-	Version   string                `json:"version"`
-	UpdatedAt time.Time             `json:"updated_at"`
-}
-
 // documentWhole is a document as a read under the guard answers it: as it
 // always was, content included, plus its size and version.
 type documentWhole struct {
@@ -151,9 +137,7 @@ type documentWhole struct {
 // readDocument answers read_task_document and read_project_document.
 func readDocument(d *domain.Document, args map[string]any) (any, error) {
 	tv := newTextView(d.Content, documentKind(d))
-	version := domain.DocumentVersion(d.Content)
-	whole := &documentWhole{Document: d, Bytes: len(d.Content), Lines: len(tv.lines), Version: version}
-	meta := &documentMeta{ID: d.ID, Title: d.Title, Format: d.Format, Scope: d.Scope,
-		Bytes: len(d.Content), Lines: len(tv.lines), Version: version, UpdatedAt: d.UpdatedAt}
+	meta := summarize(d, tv)
+	whole := &documentWhole{Document: d, Bytes: meta.Bytes, Lines: meta.Lines, Version: meta.Version}
 	return readView(d.Content, tv, args, "document", whole, meta)
 }

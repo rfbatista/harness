@@ -41,7 +41,8 @@ func sessionDocumentTools(planningSvc ports.Planning, sessions ports.SessionRepo
 		{
 			Name: "list_project_documents",
 			Description: "List the project documents of this session's project: the ones moved to project scope, from any task or none — " +
-				"architecture, conventions, decisions, specs and contracts that outlive one task. Titles only — use read_project_document for the body.",
+				"architecture, conventions, decisions, specs and contracts that outlive one task. No bodies: each row has its bytes, lines and version, " +
+				"so check the size before read_project_document, and search_documents finds a line without reading.",
 			InputSchema: schemaFromJSON(`{"type":"object","properties":{}}`),
 			Source:      "code",
 			Handler: func(ctx context.Context, args map[string]any) (any, error) {
@@ -76,7 +77,8 @@ func sessionDocumentTools(planningSvc ports.Planning, sessions ports.SessionRepo
 		{
 			Name: "update_project_document",
 			Description: "Revise a project document of this session's project. Omitted fields keep their current value. New content must be a complete HTML document " +
-				"(Markdown is refused with DOCUMENT_NOT_HTML and nothing is stored); it makes an older markdown document an html one.",
+				"(Markdown is refused with DOCUMENT_NOT_HTML and nothing is stored); it makes an older markdown document an html one. " +
+				"To change part of a page, use edit_project_document instead of resending it.",
 			InputSchema: schemaFromJSON(`{"type":"object","properties":{"document_id":{"type":"string","description":"Document ID"},"title":{"type":"string","description":"New title; omit to keep the current one"},"content":{"type":"string","description":"New content as a complete HTML document; omit to keep the current one"}},"required":["document_id"]}`),
 			Source:      "code",
 			Handler: func(ctx context.Context, args map[string]any) (any, error) {

@@ -10,11 +10,6 @@ import (
 	"unicode/utf8"
 )
 
-func viewOf(t *testing.T, content string, kind textKind) *textView {
-	t.Helper()
-	return newTextView(content, kind)
-}
-
 func TestTextView_HTMLRendering(t *testing.T) {
 	for _, tc := range []struct {
 		name, html string
@@ -47,7 +42,7 @@ func TestTextView_HTMLRendering(t *testing.T) {
 			[]string{"Agent", "go-developer"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := viewOf(t, tc.html, textHTML).lines; !reflect.DeepEqual(got, tc.want) {
+			if got := newTextView(tc.html, textHTML).lines; !reflect.DeepEqual(got, tc.want) {
 				t.Fatalf("lines\n got %q\nwant %q", got, tc.want)
 			}
 		})
@@ -68,7 +63,7 @@ func TestTextView_HTMLOutline(t *testing.T) {
 		`<h3>Detail</h3><p>d</p>` +
 		`<h2>Slices</h2><h4>One</h4><p>1</p><h4>Two</h4><p>2</p>` +
 		`<h5>not outlined</h5><h2>Risks</h2><p>r</p></body>`
-	v := viewOf(t, page, textHTML)
+	v := newTextView(page, textHTML)
 	want := []string{
 		`1 L1 "Plan" 1-14`,
 		`where L2 "Where" 3-6`,
@@ -88,15 +83,15 @@ func TestTextView_HTMLOutline(t *testing.T) {
 func TestTextView_DtFallback(t *testing.T) {
 	spec := `<body><h1>Harness server</h1><dl><dt>Agent</dt><dd>go</dd><dt>Why</dt><dd>because</dd><dd>and more</dd></dl></body>`
 	want := []string{`1 L1 "Harness server" 1-6`, `1.1 L5 "Agent" 2-3`, `1.2 L5 "Why" 4-6`}
-	if got := outlineOf(viewOf(t, spec, textHTML)); !reflect.DeepEqual(got, want) {
+	if got := outlineOf(newTextView(spec, textHTML)); !reflect.DeepEqual(got, want) {
 		t.Fatalf("outline\n got %q\nwant %q", got, want)
 	}
 	bare := `<body><dl><dt>A</dt><dd>a</dd><dt>B</dt><dd>b</dd></dl></body>`
-	if got := outlineOf(viewOf(t, bare, textHTML)); !reflect.DeepEqual(got, []string{`1 L5 "A" 1-2`, `2 L5 "B" 3-4`}) {
+	if got := outlineOf(newTextView(bare, textHTML)); !reflect.DeepEqual(got, []string{`1 L5 "A" 1-2`, `2 L5 "B" 3-4`}) {
 		t.Fatalf("outline without headings: %q", got)
 	}
 	headed := `<body><h1>A</h1><h2>B</h2><dl><dt>x</dt><dd>y</dd></dl></body>`
-	for _, s := range viewOf(t, headed, textHTML).outline {
+	for _, s := range newTextView(headed, textHTML).outline {
 		if s.Level == 5 {
 			t.Fatalf("a page with two headings has dt sections: %+v", s)
 		}
@@ -105,7 +100,7 @@ func TestTextView_DtFallback(t *testing.T) {
 
 func TestTextView_Markdown(t *testing.T) {
 	md := "# Title\r\nintro\n\n## Part ##\n```\n# not a heading\n```\ntext\n##### too deep\n### Sub\nend\n"
-	v := viewOf(t, md, textMarkdown)
+	v := newTextView(md, textMarkdown)
 	if len(v.lines) != 11 || v.lines[0] != "# Title" || v.lines[10] != "end" {
 		t.Fatalf("lines %q", v.lines)
 	}
@@ -119,7 +114,7 @@ func TestTextView_Markdown(t *testing.T) {
 }
 
 func TestTextView_Section(t *testing.T) {
-	v := viewOf(t, `<body><h1>Plan</h1><h2 id="risks">Risks</h2><h2>Slice</h2><h2>Slice</h2></body>`, textHTML)
+	v := newTextView(`<body><h1>Plan</h1><h2 id="risks">Risks</h2><h2>Slice</h2><h2>Slice</h2></body>`, textHTML)
 	for key, want := range map[string]string{"risks": "Risks", "1": "Plan", "1.3": "Slice", "  RISKS ": "Risks", "plan": "Plan"} {
 		s, err := v.section(key)
 		if err != nil || s.Heading != want {

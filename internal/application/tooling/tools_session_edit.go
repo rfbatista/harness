@@ -2,7 +2,6 @@ package tooling
 
 import (
 	"context"
-	"time"
 
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
@@ -14,16 +13,6 @@ const editSchema = `{"type":"object","required":["document_id","old_string","new
 	`"new_string":{"type":"string","description":"What replaces it."},` +
 	`"replace_all":{"type":"boolean","description":"Replace every match instead of requiring exactly one. Default false."},` +
 	`"expected_version":{"type":"string","description":"The version you read (from a read or a listing); the edit is refused with DOCUMENT_CHANGED if the document has changed since."}}}`
-
-// editedDocument is a document as an edit answers it: no content.
-type editedDocument struct {
-	ID        string    `json:"id"`
-	Title     string    `json:"title"`
-	Bytes     int       `json:"bytes"`
-	Lines     int       `json:"lines"`
-	Version   string    `json:"version"`
-	UpdatedAt time.Time `json:"updated_at"`
-}
 
 // editTool is edit_task_document or edit_project_document: find resolves the
 // document under the same scope rules as the matching update tool.
@@ -55,8 +44,8 @@ func editTool(name, whose string, planningSvc ports.Planning, sessions ports.Ses
 			if err != nil {
 				return nil, err
 			}
-			return map[string]any{"document": editedDocument{ID: d.ID, Title: d.Title, Bytes: len(d.Content),
-				Lines: len(newTextView(d.Content, documentKind(d)).lines), Version: domain.DocumentVersion(d.Content), UpdatedAt: d.UpdatedAt}}, nil
+			// The edited document without its content: the agent sent the change.
+			return map[string]any{"document": summarize(d, newTextView(d.Content, documentKind(d)))}, nil
 		},
 	}
 }
