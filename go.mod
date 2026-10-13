@@ -14,7 +14,7 @@ require (
 	github.com/mark3labs/mcp-go v0.42.0
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2
 	github.com/rfbatista/harnesskit v0.2.1
-	github.com/rfbatista/llmkit v0.1.0
+	github.com/rfbatista/llmkit v0.3.0
 	github.com/tree-sitter/go-tree-sitter v0.25.0
 	github.com/tree-sitter/tree-sitter-go v0.25.0
 	github.com/tree-sitter/tree-sitter-javascript v0.25.0

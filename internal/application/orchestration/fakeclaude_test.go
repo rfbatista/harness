@@ -15,8 +15,10 @@ const fakeLaunchFile = "fake-claude-launch.json"
 
 // fakeLaunch is what fakeLaunchFile holds.
 type fakeLaunch struct {
-	Args  []string `json:"args"`
-	Shell string   `json:"shell"` // HARNESS_SHELL
+	Args     []string `json:"args"`
+	Shell    string   `json:"shell"`     // HARNESS_SHELL
+	ShellURL string   `json:"shell_url"` // HARNESS_SHELL_URL
+	Path     string   `json:"path"`      // PATH
 }
 
 func TestMain(m *testing.M) {
@@ -29,7 +31,8 @@ func TestMain(m *testing.M) {
 
 func runFakeClaude() {
 	if os.Getenv("CLAUDE_FAKE_RECORD") == "1" {
-		b, _ := json.Marshal(fakeLaunch{Args: os.Args[1:], Shell: os.Getenv("HARNESS_SHELL")})
+		b, _ := json.Marshal(fakeLaunch{Args: os.Args[1:], Shell: os.Getenv("HARNESS_SHELL"),
+			ShellURL: os.Getenv("HARNESS_SHELL_URL"), Path: os.Getenv("PATH")})
 		_ = os.WriteFile(fakeLaunchFile+".tmp", b, 0o644)
 		_ = os.Rename(fakeLaunchFile+".tmp", fakeLaunchFile)
 	}

@@ -505,12 +505,10 @@ func (s *Service) agentSpec(cfg llmkit.SessionConfig, conv ports.Conversation, p
 	}
 	if dc, ok := cfg.Driver.(claude.Config); ok {
 		spec.SkillDirs = dc.SkillDirs
+		spec.Hooks = specHooks(dc.Settings)
 	}
 	if s.SessionHookURL != nil {
 		spec.HookURL = s.SessionHookURL(cfg.ID)
-	}
-	if s.SessionShellURL != nil && shellDir(cfg.Env) != "" {
-		spec.Hooks = ShellHooks(s.SessionShellURL(cfg.ID))
 	}
 	return spec
 }
