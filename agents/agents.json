@@ -8,8 +8,49 @@
     "auto_sync": true
   },
   "bundles": {
-    "backend-developer": ["api-and-interface-design", "database-normalization", "postgres-best-practices"],
+    "mattpocock": [
+      "ask-matt",
+      "code-review",
+      "codebase-design",
+      "diagnosing-bugs",
+      "domain-modeling",
+      "grill-with-docs",
+      "implement",
+      "implement-spec",
+      "improve-codebase-architecture",
+      "mp-retro",
+      "pr",
+      "prototype",
+      "research",
+      "setup-matt-pocock-skills",
+      "tdd",
+      "to-spec",
+      "to-tickets",
+      "triage",
+      "wayfinder",
+      "wizard",
+      "grill-me",
+      "grilling",
+      "handoff",
+      "teach",
+      "to-questionnaire",
+      "wait-what",
+      "writing-for-agents"
+    ],
+    "spec-implementer": [
+      "implement-spec",
+      "to-tickets",
+      "tdd",
+      "code-review",
+      "codebase-design"
+    ],
+    "backend-developer": [
+      "api-and-interface-design",
+      "database-normalization",
+      "postgres-best-practices"
+    ],
     "developer": [
+      "@spec-implementer",
       "ci-cd-and-automation",
       "code-review-and-quality",
       "code-simplification",
@@ -299,7 +340,8 @@
       "frontend-slides",
       "draft-nda",
       "privacy-policy",
-      "review-resume"
+      "review-resume",
+      "humanizer"
     ],
     "product-manager": [
       "@pm-strategy",
@@ -383,6 +425,7 @@
       "design-critic-loop",
       "video-motion-design",
       "remove-ai-tells",
+      "humanizer",
       "fal-genmedia",
       "impeccable",
       "dev-browser",
@@ -457,11 +500,13 @@
   "agents": {
     "software-architect": {
       "skills": [
+        "@mattpocock",
         "agent-delegation",
         "clarifying-tickets",
         "deslope",
         "documentation-and-adrs",
         "feature-architecture",
+        "humanizer",
         "idea-refine",
         "planning-and-task-breakdown",
         "software-engineering-best-practices",
@@ -558,7 +603,14 @@
       "skills": ["@go-developer", "@developer", "postgres-best-practices"]
     },
     "designer": {
-      "skills": ["design-md", "frontend-slides", "impeccable", "fal-genmedia", "deslope", "@landing-page"],
+      "skills": [
+        "design-md",
+        "frontend-slides",
+        "impeccable",
+        "fal-genmedia",
+        "deslope",
+        "@landing-page"
+      ],
       "mcp": "self"
     },
     "ux-designer": {
@@ -668,7 +720,13 @@
       "skills": ["@developer", "postgres-best-practices"]
     },
     "documentator": {
-      "skills": ["documentation", "visual-explainer", "snipgrapher", "@developer"]
+      "skills": [
+        "documentation",
+        "visual-explainer",
+        "snipgrapher",
+        "humanizer",
+        "@developer"
+      ]
     },
     "random": {
       "skills": ["context-engineering", "find-skills", "@developer"]
@@ -677,6 +735,7 @@
       "skills": [
         "frontend-slides",
         "deslope",
+        "humanizer",
 
         "@sales-core",
         "@sales-strategy",

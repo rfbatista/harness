@@ -1,6 +1,6 @@
 ---
 name: feature-architecture
-description: Use when receiving any feature request, change request, or product initiative. The software-architect role is high-level architecture only — it identifies affected applications, writes a per-application spec for each one, and assigns a planning agent to own each spec. The architect never plans code changes, never writes implementation, and never does detailed technical planning.
+description: Use when receiving any feature request, change request, or product initiative. The software-architect role is high-level architecture only and works in a fixed order — grill the person on the design (grill-with-docs), identify affected applications and contracts, write a per-application spec for each one (to-spec), and delegate each spec to an agent that runs implement-spec. The architect never plans code changes, never writes implementation, and never does detailed technical planning.
 ---
 
 # Agent Delegation
@@ -11,32 +11,59 @@ description: Use when receiving any feature request, change request, or product 
 
 ## Overview
 
-The software-architect **thinks in systems, not in code**. When a feature request arrives — from a PM, a stakeholder, or another agent — the architect's job is to understand the intent, identify every application affected, and produce a high-level spec per application. Each spec defines *what* needs to change and *why*, not *how*. A planning agent then picks up each spec and breaks it into implementable tasks.
+The software-architect **thinks in systems, not in code**. When a feature request arrives — from a PM, a stakeholder, or another agent — the architect's job is to understand the intent, identify every application affected, and produce a high-level spec per application. Each spec defines *what* needs to change and *why*, not *how*. An implementing agent then picks up each spec, breaks it into tickets for you to review, and implements them with `implement-spec`.
 
-"Assigning" a planning agent means more than writing its name in the spec: it means actually getting the spec to a running session of that agent, via the `agent-delegation` skill (see "Assign Planning Agents" below). Writing `**Agent:** go-developer` in a spec is not itself a handoff — nothing reads that label unless the delegation step runs.
+"Assigning" an agent means more than writing its name in the spec: it means actually getting the spec to a running session of that agent, via the `agent-delegation` skill (see "Assign Agents" below). Writing `**Agent:** go-developer` in a spec is not itself a handoff — nothing reads that label unless the delegation step runs.
 
-**Core principle:** The architect shapes the problem space. Planning and execution agents navigate it.
+**Core principle:** The architect shapes the problem space. Implementing agents navigate it.
 
 ## The Architect's Loop
+
+Always in this order — no spec before the grilling ends, no delegation before the spec:
 
 ```dot
 digraph architect {
     "Feature request received" [shape=doublecircle];
-    "Understand the intent" [shape=box];
-    "Identify affected applications" [shape=diamond];
-    "Write per-application spec" [shape=box];
-    "Assign planning agent to each spec" [shape=box];
+    "1. grill-with-docs" [shape=box];
+    "Person confirms shared understanding?" [shape=diamond];
+    "Identify affected applications" [shape=box];
     "Define cross-application contracts" [shape=box];
-    "Output: specs + agent assignments" [shape=doublecircle];
+    "2. to-spec per application" [shape=box];
+    "3. Delegate: agent runs implement-spec" [shape=box];
+    "Review tickets, then the branch" [shape=doublecircle];
 
-    "Feature request received" -> "Understand the intent";
-    "Understand the intent" -> "Identify affected applications";
-    "Identify affected applications" -> "Write per-application spec";
-    "Write per-application spec" -> "Define cross-application contracts";
-    "Define cross-application contracts" -> "Assign planning agent to each spec";
-    "Assign planning agent to each spec" -> "Output: specs + agent assignments";
+    "Feature request received" -> "1. grill-with-docs";
+    "1. grill-with-docs" -> "Person confirms shared understanding?";
+    "Person confirms shared understanding?" -> "1. grill-with-docs" [label="no"];
+    "Person confirms shared understanding?" -> "Identify affected applications" [label="yes"];
+    "Identify affected applications" -> "Define cross-application contracts";
+    "Define cross-application contracts" -> "2. to-spec per application";
+    "2. to-spec per application" -> "3. Delegate: agent runs implement-spec";
+    "3. Delegate: agent runs implement-spec" -> "Review tickets, then the branch";
 }
 ```
+
+1. **Grill** — invoke the `grill-with-docs` skill: rounds of questions over the design
+   tree with your recommended answers, facts looked up by you, the project's
+   `GLOSSARY.md` and `docs/adr/` updated as terms and decisions settle. Stop until the
+   person confirms you share an understanding.
+2. **Spec** — identify the affected applications and write the contracts, then invoke
+   the `to-spec` skill once per application. Its spec template (problem, solution, user
+   stories, implementation and testing decisions, out of scope) goes *below* the
+   per-application header in "Per-Application Spec Format".
+3. **Delegate** — hand each spec to its agent with `agent-delegation`, telling it to run
+   `implement-spec` (see "Assign Agents").
+
+### The issue tracker is local files
+
+The mattpocock skills (`to-spec`, `to-tickets`, `implement-spec`, `code-review`) expect
+an issue tracker set up by `/setup-matt-pocock-skills`. Here it is local Markdown, so
+do not ask for that setup:
+
+- **Specs** are `.claude/plans/<app-key>-<feature-slug>.md` (the `plans_dir`), not issues.
+- **Tickets** are one file each under `.scratch/<feature-slug>/issues/<NN>-<slug>.md`,
+  per `to-tickets`' local template, written by the implementing agent.
+- "Publish" means write the file; "close" means set its **Status** to `done`.
 
 ## Role Boundary
 
@@ -45,11 +72,12 @@ digraph architect {
 - Identifying which applications are affected and why
 - Defining cross-application contracts: API shapes, events, shared data models
 - Writing high-level specs per application (what changes, not how)
-- Assigning the right planning agent to each spec
+- Grilling the person on the design before any spec, and keeping the glossary and ADRs
+- Assigning the right implementing agent to each spec, and reviewing its tickets
 - Flagging sequencing constraints (e.g., backend contract must exist before frontend plans)
 
 **NOT architecture (never do this):**
-- Planning code changes inside an application — that is the planning agent's job
+- Planning code changes inside an application — the implementing agent's tickets do that
 - Writing implementation code of any kind
 - Designing UI screens or component details
 - Debugging failures or running tests
@@ -74,15 +102,15 @@ For every affected application, produce one spec using this structure:
 
 **Constraints:**
 - [Non-functional requirements: latency, data privacy, backward compatibility]
-- [Anything the planning agent must not break]
+- [Anything the implementing agent must not break]
 
 **Depends on:**
 - [Other application specs that must be resolved first, if any]
 ```
 
-## Available Applications and Their Planning Agents
+## Available Applications and Their Agents
 
-| Application | Planning Agent | Use when the feature requires... |
+| Application | Agent | Use when the feature requires... |
 |---|---|---|
 | `backend` | `backend-developer` | New or changed APIs, business logic, database access, background jobs |
 | `frontend` | `frontend-developer` | New pages, UI changes, client-side state, browser-side logic |
@@ -93,7 +121,7 @@ For every affected application, produce one spec using this structure:
 
 > If a feature only touches one application, produce one spec. If it spans three, produce three — one per application.
 
-## Assign Planning Agents
+## Assign Agents
 
 Once a spec is finalized (and any contract it depends on is stable — see "Sequencing
 Rules" below):
@@ -101,14 +129,19 @@ Rules" below):
 1. Write the spec to `.claude/plans/<app-key>-<feature-slug>.md` (the project's
    `plans_dir`, per the `agent-delegation` skill's "Where specs live").
 2. Use the `agent-delegation` skill: `delegate(agent_key, spec_path)`, with `agent_key`
-   from the table above.
-3. Track the handle `agent-delegation` returns for each application so you can check back
+   from the table above. The task it hands over is **implement-spec**: the agent first
+   runs `to-tickets` on the spec into `.scratch/<feature-slug>/issues/`, messages you the
+   breakdown for review, and only after you approve implements it with `implement-spec`
+   (its `developer` skills include the `@spec-implementer` bundle).
+3. When its ticket breakdown arrives, review it against the spec — every user story
+   covered, vertical slices, honest blocking edges — and approve or ask for changes.
+4. Track the handle `agent-delegation` returns for each application so you can check back
    before reporting the overall feature as underway or complete — a spec being written and
    delegated is not the same as the work being done.
 
 ## Cross-Application Contracts
 
-When a feature requires two or more applications to interact, define the contract in the architect's output before assigning the planning agents. The contract is the shared source of truth.
+When a feature requires two or more applications to interact, define the contract in the architect's output before assigning the agents. The contract is the shared source of truth.
 
 **Contract format:**
 
@@ -125,19 +158,19 @@ When a feature requires two or more applications to interact, define the contrac
 **Consumer:** [Which application consumes it and must not change it unilaterally]
 ```
 
-Contracts must be stable before planning begins on consumer-side applications.
+Contracts must be stable before work begins on consumer-side applications.
 
 ## Sequencing Rules
 
 When applications depend on each other, sequence the agent assignments:
 
 1. **Design first** if UX is undecided and will constrain both frontend and backend
-2. **Backend spec and contract first** before frontend or mobile planning begins
+2. **Backend spec and contract first** before frontend or mobile work begins
 3. **Infrastructure spec in parallel** with backend when deployment changes are needed
 4. **Frontend and mobile in parallel** once the backend contract is stable
-5. **Planning agents start only after** the spec they own is complete and dependencies are resolved
+5. **Agents start only after** the spec they own is complete and dependencies are resolved
 
-Independent application specs (no shared contracts) can be assigned to planning agents in parallel.
+Independent application specs (no shared contracts) can be assigned to agents in parallel.
 
 ## Example: PM Brings a Feature Request
 
@@ -210,9 +243,11 @@ Response: { status: "queued" | "processing" | "done" | "failed", downloadUrl?: s
 | Mistake | Correction |
 |---|---|
 | Describing how to implement a change inside an application | Stop at the boundary. Describe what the application must expose or consume, not how it does it internally. |
-| Skipping the contract when two applications interact | The contract is the architect's primary output. Without it, planning agents will design incompatible interfaces. |
-| Assigning a planning agent before its spec's dependencies are resolved | An agent that starts without a stable contract will plan against assumptions and rework later. |
-| Writing a single combined spec for multiple applications | Each application gets its own spec and its own planning agent. One spec per domain. |
+| Writing specs before the person confirmed the grilling | Finish `grill-with-docs` first; a spec built on a guess is rework. |
+| Delegating "implement this" without implement-spec | The agent must run to-tickets, get your review, then implement-spec. |
+| Skipping the contract when two applications interact | The contract is the architect's primary output. Without it, agents will design incompatible interfaces. |
+| Assigning an agent before its spec's dependencies are resolved | An agent that starts without a stable contract will plan against assumptions and rework later. |
+| Writing a single combined spec for multiple applications | Each application gets its own spec and its own agent. One spec per domain. |
 | Treating "no code changes" as "not affected" | If a feature requires a new contract boundary or a new integration, the application is affected even if implementation is small. |
 
 ## Red Flags

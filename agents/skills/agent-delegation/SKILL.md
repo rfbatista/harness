@@ -10,7 +10,7 @@ description: Use when a spec, plan, or task needs to be handed off from your ses
 Launching a persona with `agent <name>` (backed by `agents/agent_launch.py`) starts a
 **separate `claude` process** — its own session, its own context, its own memory. A
 coordinator persona (currently `software-architect`) does not share a process with the
-personas it hands work to, so "assign a planning agent" cannot be satisfied by writing
+personas it hands work to, so "assign an agent" cannot be satisfied by writing
 `**Agent:** go-developer` in a spec and moving on — nothing reads that label. Delegating
 means actually reaching that other session.
 
@@ -64,8 +64,10 @@ Steps:
    was launched under `~/projetos/...`).
 2. **`ListAgents`** — check whether a session with that name is already running.
 3. **Launch if missing** —
-   `agent <agent_key> --bg "Read the spec at <spec_path> and implement it. When you're
-   done or blocked, message back."` The `--bg` flag starts it detached and returns
+   `agent <agent_key> --bg "Implement the spec at <spec_path> with the implement-spec
+   skill. First run to-tickets on it into .scratch/<feature-slug>/issues/ (local files are
+   the issue tracker) and message back the breakdown for review; implement only after I
+   approve. When you're done or blocked, message back."` The `--bg` flag starts it detached and returns
    immediately; `agent_launch.py` sets the predictable `--name` automatically (step 1), so
    the new session matches what you just looked for.
 4. **`SendMessage`** the spec path / task summary to that session's name — this is how you
@@ -99,8 +101,8 @@ the "Current mechanism" section without touching any caller:
   dispatch via Claude Code's built-in Agent/Task tool. Synchronous, same session, no
   cross-process messaging — but the subagent doesn't get the target persona's full skill
   set the way a real `agent go-developer` launch does.
-- **CLI shell-out** — `agent <agent_key> -p "Read the spec at <spec_path> and implement
-  it."` run synchronously (e.g. via Bash), capturing its output directly instead of
+- **CLI shell-out** — `agent <agent_key> -p "Implement the spec at <spec_path> with the
+  implement-spec skill."` run synchronously (e.g. via Bash), capturing its output directly instead of
   messaging a separate long-running session.
 
 Whichever is chosen, keep `delegate(agent_key, spec_path) -> a way to check on progress`
@@ -114,7 +116,10 @@ delegate("go-developer", ".claude/plans/backend-payments-export.md")
 
 1. Expected name (delegating from `~/projetos/acme/api`): `go-developer-acme-api`.
 2. `ListAgents` — not found.
-3. `agent go-developer --bg "Read the spec at .claude/plans/backend-payments-export.md
-   and implement it. When you're done or blocked, message back."`
+3. `agent go-developer --bg "Implement the spec at .claude/plans/backend-payments-export.md
+   with the implement-spec skill. First run to-tickets on it into
+   .scratch/payments-export/issues/ (local files are the issue tracker) and message back
+   the breakdown for review; implement only after I approve. When you're done or
+   blocked, message back."`
 4. `SendMessage` to `go-developer-acme-api` confirming the same spec path.
 5. Wait for its reply before reporting this application's work as underway/done.
