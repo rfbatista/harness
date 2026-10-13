@@ -1,6 +1,9 @@
 package orchestration
 
 import (
+	"slices"
+
+	"github.com/rfbatista/llmkit"
 	"github.com/rfbatista/llmkit/claude"
 
 	"operators-mcp/internal/ports"
@@ -11,9 +14,6 @@ import (
 const (
 	// ShellEditTools are the claude tools that write files.
 	ShellEditTools = "Edit|Write|MultiEdit|NotebookEdit"
-	// shellUnavailable is the contract's refusal when the harness cannot be
-	// reached before an edit tool runs.
-	shellUnavailable = "SHELL_UNAVAILABLE: the harness could not be reached; nothing was written"
 )
 
 // ShellHooks are the claude settings hooks of a session whose shell's edit
@@ -41,14 +41,14 @@ func ShellHooks(shellURL string) map[claude.HookEvent][]claude.HookMatcher {
 	}
 	hook := func(cmd string) []claude.Hook { return []claude.Hook{{Type: "command", Command: cmd}} }
 	check := hook(curl("check", "PreToolUse") + " || printf '%s\\n' '" +
-		`{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"` + shellUnavailable + `"}}'`)
+		`{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"` + ports.ShellUnavailable + `"}}'`)
 	bash := hook(curl("check", "PreToolUse") + " || true")
 	// The input is read once: curl gets it, and if the harness is down the
 	// file's path is taken from it (file_path, or notebook_path), relative
 	// to the shell as every refusal names it.
 	commit := hook(`in=$(cat); printf '%s' "$in" | ` + curl("commit", "PostToolUse") +
 		` || { p=$(printf '%s' "$in" | sed -nE 's/.*"(file_path|notebook_path)"[[:space:]]*:[[:space:]]*"([^"]*)".*/\2/p' | head -n 1); p=${p#"$HARNESS_SHELL"/};` +
-		` printf '{"decision":"block","reason":"SHELL_UNAVAILABLE: the harness could not be reached; %s changed on disk but was not stored — redo the change once the harness is back"}\n' "$p"; }`)
+		` printf '{"decision":"block","reason":"` + ports.ShellUnavailableAfter("%s") + `"}\n' "$p"; }`)
 	return map[claude.HookEvent][]claude.HookMatcher{
 		claude.HookPreToolUse: {
 			{Matcher: ShellEditTools, Hooks: check},
@@ -77,4 +77,33 @@ func specHooks(settings *claude.Settings) map[string][]ports.HookGroup {
 		}
 	}
 	return out
+}
+
+// withHooks is driver with hooks added to its claude settings, next to the
+// hooks and other settings it already has. A nil driver becomes a claude
+// config carrying only them; any other driver is not claude's, and is
+// answered false.
+func withHooks(driver llmkit.DriverConfig, hooks map[claude.HookEvent][]claude.HookMatcher) (claude.Config, bool) {
+	var dc claude.Config
+	switch d := driver.(type) {
+	case nil:
+	case claude.Config:
+		dc = d
+	default:
+		return claude.Config{}, false
+	}
+	var settings claude.Settings
+	if dc.Settings != nil {
+		settings = *dc.Settings
+	}
+	merged := make(map[claude.HookEvent][]claude.HookMatcher, len(settings.Hooks)+len(hooks))
+	for event, matchers := range settings.Hooks {
+		merged[event] = slices.Clone(matchers)
+	}
+	for event, matchers := range hooks {
+		merged[event] = append(merged[event], matchers...)
+	}
+	settings.Hooks = merged
+	dc.Settings = &settings
+	return dc, true
 }

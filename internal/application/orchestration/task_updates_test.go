@@ -124,6 +124,43 @@ func TestTaskUpdates_DeliveredToTheTasksRunningSessions(t *testing.T) {
 	}
 }
 
+// laggingShells are shells that never get the new file in time.
+type laggingShells struct{}
+
+func (laggingShells) BaseVersion(string, string) (ports.ShellFile, bool) {
+	return ports.ShellFile{}, false
+}
+func (laggingShells) ShellFiles(string) []ports.ShellFile {
+	return []ports.ShellFile{{Path: "README.md", Kind: "readme"}}
+}
+
+// When the shells are slow to get the new file, the update waits for them
+// once, not once per session: every session's turn goes out within one
+// wait, naming the file as the shell would name it.
+func TestTaskUpdates_SlowShellsDelayTheTurnOnce(t *testing.T) {
+	svc, bus, d := newUpdatesFixture(t)
+	svc.ShellIndex = laggingShells{}
+	start := time.Now()
+	_ = bus.Publish(context.Background(), domain.TicketCommentAdded{Comment: domain.TicketComment{ID: "c1", TicketID: "tk1", Body: "hi"}})
+
+	deadline := time.Now().Add(shellPathWait + 3*time.Second)
+	for len(d.list()) < 2 && time.Now().Before(deadline) {
+		time.Sleep(20 * time.Millisecond)
+	}
+	took := time.Since(start)
+	if len(d.list()) != 2 {
+		t.Fatalf("deliveries = %v", d.list())
+	}
+	if took > shellPathWait+time.Second {
+		t.Fatalf("two sessions' turns took %v; the wait is %v once", took, shellPathWait)
+	}
+	for _, g := range d.list() {
+		if !strings.Contains(g, "task/comments/") {
+			t.Fatalf("turn without the fallback path: %s", g)
+		}
+	}
+}
+
 // A session's comment wakes no session, the writer included, so agents do
 // not answer each other in a loop; the person's next comment still does.
 func TestTaskUpdates_ASessionsCommentSendsNoTurn(t *testing.T) {

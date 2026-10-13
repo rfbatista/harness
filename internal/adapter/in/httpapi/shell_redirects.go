@@ -3,6 +3,8 @@ package httpapi
 import (
 	"path/filepath"
 	"strings"
+
+	"operators-mcp/internal/ports"
 )
 
 // redirectTargets is every file a Bash command line redirects output into
@@ -266,7 +268,7 @@ func (l *shLexer) word() (string, bool) {
 // variable expands $HARNESS_SHELL, $HOME or their ${…} forms at l.i into b.
 func (l *shLexer) variable(b *strings.Builder) bool {
 	r := l.rest()
-	for _, v := range []struct{ name, value string }{{"HARNESS_SHELL", l.shell}, {"HOME", l.home}} {
+	for _, v := range []struct{ name, value string }{{ports.ShellDirEnv, l.shell}, {"HOME", l.home}} {
 		if v.value == "" {
 			continue
 		}

@@ -117,7 +117,7 @@ func (h *Handler) handleCreateDocument(c echo.Context) error {
 		ProjectID string `json:"project_id"`
 		Title     string `json:"title"`
 		Content   string `json:"content"`
-		Format    string `json:"format"` // markdown (default) or html
+		Format    string `json:"format"` // markdown (default), html or text
 		Scope     string `json:"scope"`  // project (default) or task
 	}
 	if err := bindJSON(c, &in); err != nil {

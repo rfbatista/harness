@@ -196,7 +196,7 @@ func refuseUnstored(rel string, a area) ports.ShellAnswer {
 	case layout:
 		return refuse("NOT_STORED", rel+" is one of the shell's own folders; nothing was written")
 	}
-	return refuse("NOT_STORED", rel+" is outside the folders the harness stores (task/docs, project/docs, task/comments, task/designs); nothing was written")
+	return refuse("NOT_STORED", rel+" is outside the folders the harness stores (task/docs, project/docs, task/comments, task/designs, project/designs); nothing was written")
 }
 
 func refuseCrossMove(src, dst string) ports.ShellAnswer {
@@ -652,20 +652,6 @@ func (sh *shell) saveIndex() ports.ShellAnswer {
 func docRow(rel string, d *domain.Document) ports.ShellFile {
 	return ports.ShellFile{Path: rel, Kind: ports.ShellDocument, ID: d.ID, Scope: string(d.Scope),
 		Version: domain.DocumentVersion(d.Content), Title: d.Title, UpdatedAt: d.UpdatedAt}
-}
-
-// restorePath puts back what is stored at rel after a refused commit, so the
-// shell never shows what was not stored: a file the harness has no record
-// of is removed, one it has is rewritten by the refresh.
-func (s *Service) restorePath(sh *shell, rel string) {
-	sh.release(rel)
-	if row, ok := sh.files[rel]; ok {
-		row.Version, row.UpdatedAt = "", time.Time{}
-		sh.files[rel] = row
-	} else {
-		_ = os.Remove(sh.abs(rel))
-	}
-	s.refreshLocked(sh)
 }
 
 // hold keeps rel, and the files under it, from refreshes until its commit

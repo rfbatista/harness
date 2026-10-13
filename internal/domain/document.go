@@ -3,7 +3,6 @@ package domain
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	"strings"
 	"time"
 )
 
@@ -58,19 +57,6 @@ type Document struct {
 	Content   string         `json:"content,omitempty"` // in Format
 	CreatedAt time.Time      `json:"created_at"`
 	UpdatedAt time.Time      `json:"updated_at"`
-}
-
-// IsHTMLDocument reports whether content is a complete HTML document rather
-// than plain text, Markdown or a bare fragment: after optional whitespace or
-// a byte-order mark it opens with a doctype or <html>, and it has <html> and
-// <body> elements. It is deliberately a shape check, not a parse: the page
-// is rendered by a browser inside a sandbox, which copes with the rest.
-func IsHTMLDocument(content string) bool {
-	s := strings.ToLower(strings.TrimLeft(content, "\uFEFF \t\r\n"))
-	if !strings.HasPrefix(s, "<!doctype") && !strings.HasPrefix(s, "<html") {
-		return false
-	}
-	return strings.Contains(s, "<html") && strings.Contains(s, "<body")
 }
 
 // DocumentVersion names a document's content: the first 12 hex characters of

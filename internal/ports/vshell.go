@@ -69,6 +69,24 @@ var ShellShimCommands = []string{"sed", "tee", "cp", "mv", "rm", "touch", "mkdir
 // PATH, so a profile that reorders PATH cannot bypass the shims.
 const ShimDirEnv = "HARNESS_SHIM_DIR"
 
+// The environment a task session's shell is named in: ShellDirEnv is the
+// shell's absolute path, ShellURLEnv its edit endpoints' base
+// (…/api/sessions/{id}/shell), which the PATH shims call.
+const (
+	ShellDirEnv = "HARNESS_SHELL"
+	ShellURLEnv = "HARNESS_SHELL_URL"
+)
+
+// ShellUnavailable is the refusal when the harness cannot be reached before
+// a change is made (contract §6).
+const ShellUnavailable = "SHELL_UNAVAILABLE: the harness could not be reached; nothing was written"
+
+// ShellUnavailableAfter is the refusal when the harness cannot be reached
+// after rel was changed on disk (contract §6).
+func ShellUnavailableAfter(rel string) string {
+	return "SHELL_UNAVAILABLE: the harness could not be reached; " + rel + " changed on disk but was not stored — redo the change once the harness is back"
+}
+
 // ShellEdit is one file operation an agent makes in its shell, as the edit
 // proxy (hooks and PATH shims) reports it: Op is write (or create, modify,
 // touch), rm, mv or cp (Paths[0] the source, Paths[1] the destination), or

@@ -6,12 +6,9 @@ package planning
 import (
 	"context"
 	"log/slog"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
-
-	"github.com/rfbatista/harnesskit/errs"
 
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
@@ -303,60 +300,6 @@ func (s *Service) UpdateDocument(id, title, content string, format domain.Docume
 	return s.documentChanged(d, err, "", domain.DocumentUpdated)
 }
 
-// EditDocument makes an exact string-replace edit to an HTML document's
-// stored content and writes it with a compare-and-set on the content it
-// read. With no expected version, a write that loses a race is tried once
-// more on the fresh content; with one, the caller decides.
-func (s *Service) EditDocument(id, old, new string, replaceAll bool, expectedVersion string) (*domain.Document, error) {
-	if old == "" {
-		return nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "old_string is required"}
-	}
-	if old == new {
-		return nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "old_string and new_string are the same; there is nothing to change"}
-	}
-	for attempt := 0; ; attempt++ {
-		d, err := s.editOnce(id, old, new, replaceAll, expectedVersion)
-		if !errs.HasCode(err, "DOCUMENT_CHANGED") || expectedVersion != "" || attempt == 1 {
-			return d, err
-		}
-	}
-}
-
-func (s *Service) editOnce(id, old, new string, replaceAll bool, expectedVersion string) (*domain.Document, error) {
-	d := s.documents.Get(id)
-	if d == nil {
-		return nil, &domain.StructuredError{Code: "DOCUMENT_NOT_FOUND", Message: "document not found"}
-	}
-	if d.Format != domain.DocumentFormatHTML {
-		return nil, &domain.StructuredError{Code: "DOCUMENT_NOT_HTML",
-			Message: "this document is Markdown; rewrite it once as HTML with update_*_document, then edit"}
-	}
-	if version := domain.DocumentVersion(d.Content); expectedVersion != "" && expectedVersion != version {
-		return nil, &domain.StructuredError{Code: "DOCUMENT_CHANGED", Message: "now at " + version + "; read it again before editing"}
-	}
-	switch n := strings.Count(d.Content, old); {
-	case n == 0:
-		return nil, &domain.StructuredError{Code: "EDIT_NO_MATCH", Message: noMatchMessage(d.Content, old)}
-	case n > 1 && !replaceAll:
-		return nil, &domain.StructuredError{Code: "EDIT_AMBIGUOUS", Message: strconv.Itoa(n) +
-			" matches; add surrounding text to old_string so it matches once, or set replace_all"}
-	}
-	limit := 1
-	if replaceAll {
-		limit = -1
-	}
-	content := strings.Replace(d.Content, old, new, limit)
-	if !domain.IsHTMLDocument(content) {
-		return nil, &domain.StructuredError{Code: "DOCUMENT_NOT_HTML",
-			Message: "the edit would leave the document without a complete HTML page (doctype, html, body); nothing was stored"}
-	}
-	edited, err := s.documents.UpdateIfContent(id, d.Content, d.Title, content, "")
-	if errs.HasCode(err, "DOCUMENT_CHANGED") {
-		return nil, &domain.StructuredError{Code: "DOCUMENT_CHANGED", Message: "the document changed while it was being edited; read it again"}
-	}
-	return s.documentChanged(edited, err, "", domain.DocumentUpdated)
-}
-
 // WriteDocumentIfVersion replaces title, content and format (empty keeps
 // the stored one) while the stored content is still at version: a
 // compare-and-set, so a write made on an older copy is DOCUMENT_CHANGED and
@@ -377,38 +320,6 @@ func (s *Service) WriteDocumentIfVersion(id, version, title, content string, for
 	}
 	written, err := s.documents.UpdateIfContent(id, d.Content, title, content, format)
 	return s.documentChanged(written, err, "", domain.DocumentUpdated)
-}
-
-// noMatchMessage says old_string was not found, with the stored lines that
-// come closest, so the agent can copy the markup exactly.
-func noMatchMessage(content, old string) string {
-	msg := "old_string is not in the document; it must match the stored markup exactly (read it with view raw)"
-	first := strings.SplitN(strings.TrimSpace(old), "\n", 2)[0]
-	if first == "" {
-		return msg
-	}
-	best, bestScore := "", 0
-	for _, line := range strings.Split(content, "\n") {
-		if score := commonPrefixRunes(strings.TrimSpace(line), strings.TrimSpace(first)); score > bestScore {
-			best, bestScore = strings.TrimSpace(line), score
-		}
-	}
-	if bestScore >= 8 {
-		if len(best) > 300 {
-			best = best[:300] + "…"
-		}
-		msg += "; closest stored line: " + strconv.Quote(best)
-	}
-	return msg
-}
-
-// commonPrefixRunes is the length of the longest common prefix of a and b.
-func commonPrefixRunes(a, b string) int {
-	n := 0
-	for i := 0; i < len(a) && i < len(b) && a[i] == b[i]; i++ {
-		n++
-	}
-	return n
 }
 
 func (s *Service) DeleteDocument(id string) error {

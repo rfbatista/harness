@@ -427,12 +427,12 @@ func (s *Service) withShell(id string, ticket *domain.Ticket, cfg *llmkit.Sessio
 		return nil, fmt.Errorf("make the session's virtual shell: %w", err)
 	}
 	cfg.AddDirs = append(slices.Clone(cfg.AddDirs), dir)
-	cfg.Env = append(slices.Clone(cfg.Env), "HARNESS_SHELL="+dir)
+	cfg.Env = append(slices.Clone(cfg.Env), ports.ShellDirEnv+"="+dir)
 	cfg.AppendSystem = appendSection(cfg.AppendSystem, shellSection(dir))
 	if s.SessionShellURL != nil {
-		dc, _ := cfg.Driver.(claude.Config)
-		dc.Settings = &claude.Settings{Hooks: ShellHooks(s.SessionShellURL(id))}
-		cfg.Driver = dc
+		if dc, ok := withHooks(cfg.Driver, ShellHooks(s.SessionShellURL(id))); ok {
+			cfg.Driver = dc
+		}
 	}
 	return s.withShims(id, cfg, func() {
 		if cleanup != nil {
@@ -473,7 +473,7 @@ func (s *Service) withShims(id string, cfg *llmkit.SessionConfig, cleanup func()
 	}
 	cfg.Env = append(slices.Clone(cfg.Env), "PATH="+path, ports.ShimDirEnv+"="+dir)
 	if s.SessionShellURL != nil {
-		cfg.Env = append(cfg.Env, "HARNESS_SHELL_URL="+s.SessionShellURL(id))
+		cfg.Env = append(cfg.Env, ports.ShellURLEnv+"="+s.SessionShellURL(id))
 	}
 	return func() {
 		if cleanup != nil {
