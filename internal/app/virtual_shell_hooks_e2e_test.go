@@ -50,7 +50,15 @@ func runHook(t *testing.T, s runningSession, base, event, matcher string, input 
 	cmd := exec.Command("sh", "-c", strings.ReplaceAll(command, configuredBase, base))
 	cmd.Dir = s.worktree
 	cmd.Env = append(os.Environ(), "HARNESS_SHELL="+s.shell)
-	cmd.Stdin = bytes.NewReader(stdin)
+	if home, ok := input["home"].(string); ok {
+		delete(input, "home")
+		stdin, _ = json.Marshal(input)
+		cmd.Stdin = bytes.NewReader(stdin)
+		cmd.Env = append(cmd.Env, "HOME="+home)
+	}
+	if cmd.Stdin == nil {
+		cmd.Stdin = bytes.NewReader(stdin)
+	}
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	out, err := cmd.Output()
@@ -209,6 +217,31 @@ func TestTheBashHookDeniesRedirectsIntoTheShell(t *testing.T) {
 		}
 	}
 
+	// ~ and $HOME are read as the session's home, here the shell's parent.
+	home := filepath.Dir(a.shell)
+	rel := filepath.Base(a.shell)
+	for _, command := range []string{
+		`echo hi > ~/` + rel + `/task/docs/x.md`,
+		`echo hi > $HOME/` + rel + `/task/docs/x.md`,
+		`echo hi > "${HOME}/` + rel + `/task/docs/x.md"`,
+	} {
+		in := bashInput(a.worktree, command)
+		in["home"] = home
+		if out := runHook(t, a, e.srv.URL, "PreToolUse", "Bash", in); !sameJSON(out, denied(redirect)) {
+			t.Errorf("Bash %q with HOME %s = %s, want %s", command, home, out, denied(redirect))
+		}
+	}
+	for _, command := range []string{
+		`echo hi > '~/` + rel + `/task/docs/x.md'`,
+		`echo hi > ~/elsewhere.txt`,
+	} {
+		in := bashInput(a.worktree, command)
+		in["home"] = home
+		if out := runHook(t, a, e.srv.URL, "PreToolUse", "Bash", in); out != "" {
+			t.Errorf("Bash %q with HOME %s = %s, want nothing", command, home, out)
+		}
+	}
+
 	for _, c := range []struct{ cwd, command string }{
 		{a.worktree, `echo hi | tee $HARNESS_SHELL/task/docs/notes.md`},
 		{a.worktree, `echo hi > /dev/null 2>&1`},
@@ -225,8 +258,10 @@ func TestTheBashHookDeniesRedirectsIntoTheShell(t *testing.T) {
 	}
 }
 
-// With the harness down, the check denies with SHELL_UNAVAILABLE, and a
-// commit blocks with it, so no write is silently lost.
+// With the harness down, an edit tool is denied before it runs with
+// SHELL_UNAVAILABLE, and after it ran a commit blocks naming the file that
+// changed on disk unstored, so no write is silently lost; Bash runs, since
+// its redirects are never stored anyway.
 func TestTheHooksRefuseWithShellUnavailableWhenTheHarnessIsDown(t *testing.T) {
 	e := newShellE2E(t)
 	a := e.start(e.task("Shell hooks"))
@@ -238,10 +273,17 @@ func TestTheHooksRefuseWithShellUnavailableWhenTheHarnessIsDown(t *testing.T) {
 	if out := runHook(t, a, down.URL, "PreToolUse", editTools, editInput("Write", plan)); !sameJSON(out, denied(unavailable)) {
 		t.Fatalf("PreToolUse with the harness down = %q, want %s", out, denied(unavailable))
 	}
-	if out := runHook(t, a, down.URL, "PreToolUse", "Bash", bashInput(a.worktree, "ls")); !sameJSON(out, denied(unavailable)) {
-		t.Fatalf("PreToolUse Bash with the harness down = %q, want %s", out, denied(unavailable))
+	if out := runHook(t, a, down.URL, "PreToolUse", "Bash", bashInput(a.worktree, "echo hi > $HARNESS_SHELL/task/docs/x.md")); out != "" {
+		t.Fatalf("PreToolUse Bash with the harness down = %q, want nothing", out)
 	}
-	if out := runHook(t, a, down.URL, "PostToolUse", editTools, editInput("Write", plan)); !sameJSON(out, blocked(unavailable)) {
-		t.Fatalf("PostToolUse with the harness down = %q, want %s", out, blocked(unavailable))
+	unstored := "SHELL_UNAVAILABLE: the harness could not be reached; task/docs/plan.md changed on disk but was not stored — redo the change once the harness is back"
+	if out := runHook(t, a, down.URL, "PostToolUse", editTools, editInput("Write", plan)); !sameJSON(out, blocked(unstored)) {
+		t.Fatalf("PostToolUse with the harness down = %q, want %s", out, blocked(unstored))
+	}
+	nb := filepath.Join(a.shell, "task", "docs", "nb.ipynb")
+	in := map[string]any{"tool_name": "NotebookEdit", "tool_input": map[string]any{"notebook_path": nb, "new_source": "x"}}
+	unstoredNB := "SHELL_UNAVAILABLE: the harness could not be reached; task/docs/nb.ipynb changed on disk but was not stored — redo the change once the harness is back"
+	if out := runHook(t, a, down.URL, "PostToolUse", editTools, in); !sameJSON(out, blocked(unstoredNB)) {
+		t.Fatalf("PostToolUse NotebookEdit with the harness down = %q, want %s", out, blocked(unstoredNB))
 	}
 }

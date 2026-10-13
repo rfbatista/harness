@@ -237,6 +237,12 @@ func checkShell(t *testing.T, dir string, w *shellWorld) {
 			t.Errorf("%s = %o %q, want read-only with %q", path, gf.mode, gf.content, line)
 		}
 	}
+	// The README states the write rules, the redirect refusal and its limit.
+	for _, rule := range []string{"REDIRECT_DENIED", "eval", "SHELL_UNAVAILABLE", "BASE_VERSION_STALE"} {
+		if !strings.Contains(got["README.md"].content, rule) {
+			t.Errorf("README.md does not mention %s", rule)
+		}
+	}
 	if extra := len(got) - len(want) - len(generated); extra != 0 {
 		t.Errorf("shell has %d unexpected files: %v", extra, keys(got))
 	}

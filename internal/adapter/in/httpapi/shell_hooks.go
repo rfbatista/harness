@@ -24,7 +24,8 @@ type shellHookInput struct {
 // shellHook answers a claude hook's own input, posted by the commands
 // orchestration.ShellHooks builds. A file tool's path is checked or
 // committed as a write; a Bash command is checked for redirects into the
-// shell ($HARNESS_SHELL read from the X-Harness-Shell header). Allowed, the
+// shell ($HARNESS_SHELL and $HOME read from the X-Harness-Shell and
+// X-Harness-Home headers). Allowed, the
 // answer is empty; refused before the tool runs, it is a PreToolUse deny,
 // and after, a block, each with the refusal's reason.
 func (h *Handler) shellHook(c echo.Context, event string, answer func(ports.ShellEdit) ports.ShellAnswer) error {
@@ -32,7 +33,7 @@ func (h *Handler) shellHook(c echo.Context, event string, answer func(ports.Shel
 	if err := bindJSON(c, &in); err != nil {
 		return err
 	}
-	e, ok := in.edit(event, c.Request().Header.Get("X-Harness-Shell"))
+	e, ok := in.edit(event, c.Request().Header.Get("X-Harness-Shell"), c.Request().Header.Get("X-Harness-Home"))
 	if !ok || h.shells == nil {
 		return c.NoContent(http.StatusOK)
 	}
@@ -59,7 +60,7 @@ func (h *Handler) shellHook(c echo.Context, event string, answer func(ports.Shel
 
 // edit is the shell edit the hook's tool call makes; false when it makes
 // none the proxy looks at.
-func (in shellHookInput) edit(event, shellDir string) (ports.ShellEdit, bool) {
+func (in shellHookInput) edit(event, shellDir, home string) (ports.ShellEdit, bool) {
 	switch in.ToolName {
 	case "Edit", "Write", "MultiEdit", "NotebookEdit":
 		p := in.ToolInput.FilePath
@@ -77,7 +78,7 @@ func (in shellHookInput) edit(event, shellDir string) (ports.ShellEdit, bool) {
 		if event != "PreToolUse" {
 			return ports.ShellEdit{}, false
 		}
-		targets := redirectTargets(in.ToolInput.Command, in.Cwd, shellDir)
+		targets := redirectTargets(in.ToolInput.Command, in.Cwd, shellDir, home)
 		if len(targets) == 0 {
 			return ports.ShellEdit{}, false
 		}
