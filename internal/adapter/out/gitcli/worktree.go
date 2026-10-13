@@ -1,11 +1,15 @@
-// Package gitcli shells out to the git binary for worktree management.
+// Package gitcli shells out to the git binary: worktrees, history, code
+// views, env files, publishing branches, and the git directories that give
+// every remote operation the harness's stored credentials and nothing of the
+// machine's (AuthFiles). Commands that only read a checkout run with
+// localOverrides, so they can never authenticate either.
 package gitcli
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -65,7 +69,7 @@ func (w *WorktreeManager) Remove(repoRoot, path string) error {
 // ListBranches reads refs/heads and refs/remotes in one pass. The NUL separator
 // keeps branch names with spaces or slashes intact.
 func (w *WorktreeManager) ListBranches(repoRoot string) ([]domain.GitBranch, error) {
-	cmd := exec.Command("git", "for-each-ref",
+	cmd := gitCmd(context.Background(), "", "for-each-ref",
 		"--format=%(refname:short)%00%(refname)%00%(HEAD)",
 		"refs/heads", "refs/remotes")
 	cmd.Dir = repoRoot
@@ -100,7 +104,7 @@ func (w *WorktreeManager) ListBranches(repoRoot string) ([]domain.GitBranch, err
 }
 
 func (w *WorktreeManager) branchExists(repoRoot, branch string) bool {
-	cmd := exec.Command("git", "show-ref", "--verify", "--quiet", "refs/heads/"+branch)
+	cmd := gitCmd(context.Background(), "", "show-ref", "--verify", "--quiet", "refs/heads/"+branch)
 	cmd.Dir = repoRoot
 	return cmd.Run() == nil
 }
@@ -108,7 +112,7 @@ func (w *WorktreeManager) branchExists(repoRoot, branch string) bool {
 // run executes git with args in dir, wrapping stderr into the error so
 // failures are diagnosable from logs and API responses.
 func run(dir string, args ...string) error {
-	cmd := exec.Command("git", args...)
+	cmd := gitCmd(context.Background(), "", args...)
 	cmd.Dir = dir
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr

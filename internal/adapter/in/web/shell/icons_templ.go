@@ -72,13 +72,18 @@ func icon(name string) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
+		case "key":
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 9, "<svg aria-hidden=\"true\" viewBox=\"0 0 16 16\"><path d=\"M5.5 6.75a3.25 3.25 0 1 1 3.1 3.25L7.25 11.5H5.75V13H4.25v1.25h-2.5v-2.5l3.9-3.9A3.2 3.2 0 0 1 5.5 6.75z M10.5 5.1a.6.6 0 1 1 0 1.2.6.6 0 0 1 0-1.2z\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linejoin=\"round\" stroke-linecap=\"round\"></path></svg>")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
 		case "bell":
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 9, "<svg aria-hidden=\"true\" viewBox=\"0 0 16 16\"><path d=\"M4 11.25V7a4 4 0 0 1 8 0v4.25l1.25 1.25H2.75z M6.5 13.75a1.6 1.6 0 0 0 3 0\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linejoin=\"round\" stroke-linecap=\"round\"></path></svg>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 10, "<svg aria-hidden=\"true\" viewBox=\"0 0 16 16\"><path d=\"M4 11.25V7a4 4 0 0 1 8 0v4.25l1.25 1.25H2.75z M6.5 13.75a1.6 1.6 0 0 0 3 0\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linejoin=\"round\" stroke-linecap=\"round\"></path></svg>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		case "rail":
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 10, "<svg aria-hidden=\"true\" viewBox=\"0 0 16 16\"><path d=\"M2 2.75h12v10.5H2z M6 2.75v10.5\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linejoin=\"round\"></path></svg>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 11, "<svg aria-hidden=\"true\" viewBox=\"0 0 16 16\"><path d=\"M2 2.75h12v10.5H2z M6 2.75v10.5\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linejoin=\"round\"></path></svg>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

@@ -15,7 +15,7 @@ export function stubPullRequestsApi(world) {
   const posted = [];
 
   function fail(err) {
-    const details = err.details?.pullRequest ? { pull_request: pullRequestDTO(err.details.pullRequest) } : undefined;
+    const details = err.details?.pullRequest ? { pull_request: pullRequestDTO(err.details.pullRequest) } : err.details;
     return jsonResponse(err.status ?? 500, { error: err.message, code: codeOf(err), details });
   }
 

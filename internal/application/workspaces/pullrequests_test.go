@@ -12,8 +12,9 @@ import (
 	"github.com/rfbatista/harnesskit/errs"
 
 	"operators-mcp/internal/adapter/out/eventbus"
-	"operators-mcp/internal/adapter/out/ghcli/ghclitest"
+	"operators-mcp/internal/adapter/out/githubapi/githubapitest"
 	"operators-mcp/internal/adapter/out/persistence/sqlite"
+	"operators-mcp/internal/application/gitcredentials/gitcredentialstest"
 	"operators-mcp/internal/application/workspaces"
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
@@ -32,6 +33,7 @@ type fakeGit struct {
 	onFetch func(branch string)
 	fetches []string
 	pushes  []string
+	envs    [][]string // the environment of each fetch and push
 }
 
 func (g *fakeGit) OriginURL(context.Context, string) (string, error) { return g.origin, nil }
@@ -42,9 +44,10 @@ func (g *fakeGit) HasRef(_ context.Context, _ string, ref string) bool {
 	return g.refs[ref]
 }
 
-func (g *fakeGit) FetchBranch(_ context.Context, _ string, branch string) error {
+func (g *fakeGit) FetchBranch(_ context.Context, _ string, branch string, env []string) error {
 	g.mu.Lock()
 	g.fetches = append(g.fetches, branch)
+	g.envs = append(g.envs, env)
 	on := g.onFetch
 	g.mu.Unlock()
 	if on != nil {
@@ -53,9 +56,10 @@ func (g *fakeGit) FetchBranch(_ context.Context, _ string, branch string) error 
 	return g.fetchErr
 }
 
-func (g *fakeGit) Push(_ context.Context, _ string, branch string) error {
+func (g *fakeGit) Push(_ context.Context, _ string, branch string, env []string) error {
 	g.mu.Lock()
 	defer g.mu.Unlock()
+	g.envs = append(g.envs, env)
 	if g.pushErr != nil {
 		return g.pushErr
 	}
@@ -165,7 +169,10 @@ type prFixture struct {
 	ws      *domain.Workspace
 	git     *fakeGit
 	history *fakeHistory
-	host    *ghclitest.FakeHost
+	host    *githubapitest.FakeHost
+	auth    *gitcredentialstest.Fake
+	key     *domain.GitCredential // the ssh key origin pushes with
+	token   *domain.GitCredential // the GitHub token
 	store   *sqlite.PullRequestRepository
 	feed    *feedRecorder
 	bus     *eventbus.Bus
@@ -185,9 +192,12 @@ func (f *prFixture) advance(d time.Duration) {
 	f.now = f.now.Add(d)
 }
 
+// fixtureToken is the GitHub token the fixture stores.
+const fixtureToken domain.Secret = "ghp_fixtureToken0001"
+
 // newPRFixture: workspace "agent/x" cut from origin/main in project p1, two
-// commits ahead of origin/main, one uncommitted file, origin on GitHub, gh
-// signed in, and a session on a task.
+// commits ahead of origin/main, one uncommitted file, origin on GitHub over
+// ssh, an ssh key and a GitHub token stored, and a session on a task.
 func newPRFixture(t *testing.T) *prFixture {
 	t.Helper()
 	db, err := sqlite.Open(":memory:")
@@ -213,14 +223,22 @@ func newPRFixture(t *testing.T) *prFixture {
 		git: &fakeGit{origin: "git@github.com:acme/widgets.git", subjects: []string{"second change", "first change"},
 			refs: map[string]bool{"refs/heads/main": true, "refs/remotes/origin/main": true, "refs/heads/agent/x": true}},
 		history: &fakeHistory{ahead: map[string]int{"refs/remotes/origin/main": 2, "refs/heads/main": 2}, changes: 1, rootBranch: "main"},
-		host:    ghclitest.New(),
+		host:    githubapitest.New(),
+		auth:    gitcredentialstest.New(),
 		store:   sqlite.NewPullRequestRepository(db),
 		feed:    &feedRecorder{},
 		bus:     eventbus.New(),
 		now:     time.Date(2026, 10, 7, 12, 0, 0, 0, time.UTC),
 	}
+	ctx := context.Background()
+	if f.key, err = f.auth.CreateGitCredential(ctx, ports.CreateGitCredential{Name: "key", Kind: domain.GitSSHKey, Host: "github.com", Generate: true}); err != nil {
+		t.Fatal(err)
+	}
+	if f.token, err = f.auth.CreateGitCredential(ctx, ports.CreateGitCredential{Name: "token", Kind: domain.GitHTTPSToken, Host: "github.com", Token: fixtureToken}); err != nil {
+		t.Fatal(err)
+	}
 	f.deps = workspaces.PullRequestDeps{
-		Workspaces: wsRepo, Repositories: repos, History: f.history, Git: f.git, Host: f.host, Store: f.store,
+		Workspaces: wsRepo, Repositories: repos, History: f.history, Git: f.git, Host: f.host, Store: f.store, Auth: f.auth,
 		Sessions: sessions, Tickets: fakeTickets{"t1": {ID: "t1", ProjectID: "p1", Title: "Create pull request", Description: "I need a way to create a pull request from the ui"}},
 		Feed: f.feed, Now: f.clock,
 	}
@@ -333,9 +351,12 @@ func TestDraftBlockers(t *testing.T) {
 		"no origin": {func(f *prFixture) { f.git.origin = "" }, "PR_NO_REMOTE", nil},
 		"origin not on GitHub": {func(f *prFixture) { f.git.origin = "git@gitlab.com:acme/widgets.git" }, "PR_NO_REMOTE",
 			&domain.GitRemote{Host: "gitlab.com", Owner: "acme", Repo: "widgets"}},
-		"gh signed out": {func(f *prFixture) {
-			f.host.ReadyErr = domain.PullRequestError(domain.CodePRToolUnavailable, "run gh auth login")
-		}, "PR_TOOL_UNAVAILABLE", &widgets},
+		"no stored ssh key": {func(f *prFixture) {
+			_ = f.auth.DeleteGitCredential(context.Background(), f.key.ID)
+		}, "GIT_CREDENTIAL_MISSING", &widgets},
+		"no stored GitHub token": {func(f *prFixture) {
+			_ = f.auth.DeleteGitCredential(context.Background(), f.token.ID)
+		}, "GIT_CREDENTIAL_MISSING", &widgets},
 		"nothing ahead": {func(f *prFixture) { f.history.setAhead("refs/remotes/origin/main", 0) }, "PR_NO_COMMITS", &widgets},
 		"an open PR stored": {func(f *prFixture) {
 			_, _ = f.store.Save(&domain.PullRequest{WorkspaceID: f.ws.ID, RepositoryID: f.ws.RepositoryID, ProjectID: "p1", Number: 1, State: domain.PullRequestOpen})
@@ -507,9 +528,25 @@ func TestCreatePushesAndOpensThePullRequest(t *testing.T) {
 	if got := f.feed.pullRequests(); len(got) != 1 || got[0].Number != 1 {
 		t.Fatalf("announced %+v", got)
 	}
-	host, _ := f.host.Get(context.Background(), widgets, 1)
+	host, _ := f.host.Get(context.Background(), widgets, fixtureToken, 1)
 	if host.Title != "Create pull request" || host.Base != "main" || !host.Draft {
 		t.Fatalf("opened on the host as %+v", host)
+	}
+	// Every host call carried the stored token; fetch and push ran with an
+	// operation's credentials, released once done.
+	for _, tok := range f.host.Tokens() {
+		if tok != fixtureToken {
+			t.Fatalf("a host call carried %q", tok.Reveal())
+		}
+	}
+	if len(f.git.envs) != 2 || len(f.git.envs[0]) == 0 || !strings.HasPrefix(f.git.envs[0][0], gitcredentialstest.EnvKey+"=op-") {
+		t.Fatalf("fetch and push env %v", f.git.envs)
+	}
+	if f.auth.Files.Operations() != 0 {
+		t.Fatal("the operation's files outlived the create")
+	}
+	if list, _ := f.auth.ListGitCredentials(context.Background()); list.Credentials[0].LastUsedAt == nil || list.Credentials[1].LastUsedAt == nil {
+		t.Fatalf("last_used_at not recorded: %+v %+v", list.Credentials[0], list.Credentials[1])
 	}
 }
 
@@ -537,9 +574,21 @@ func TestCreateRefusals(t *testing.T) {
 		"no such workspace": {nil, ports.CreatePullRequest{WorkspaceID: "nope", Title: "T"}, "WORKSPACE_NOT_FOUND", ""},
 		"no origin":         {func(f *prFixture) { f.git.origin = "" }, ports.CreatePullRequest{Title: "T"}, "PR_NO_REMOTE", ""},
 		"not GitHub":        {func(f *prFixture) { f.git.origin = "https://gitlab.com/acme/widgets" }, ports.CreatePullRequest{Title: "T"}, "PR_NO_REMOTE", "gitlab.com"},
-		"gh unavailable": {func(f *prFixture) {
-			f.host.ReadyErr = domain.PullRequestError(domain.CodePRToolUnavailable, "run `gh auth login`")
-		}, ports.CreatePullRequest{Title: "T"}, "PR_TOOL_UNAVAILABLE", "gh auth login"},
+		"no stored ssh key": {func(f *prFixture) {
+			_ = f.auth.DeleteGitCredential(context.Background(), f.key.ID)
+		}, ports.CreatePullRequest{Title: "T"}, "GIT_CREDENTIAL_MISSING", "ssh_key for github.com"},
+		"no stored GitHub token": {func(f *prFixture) {
+			_ = f.auth.DeleteGitCredential(context.Background(), f.token.ID)
+		}, ports.CreatePullRequest{Title: "T"}, "GIT_CREDENTIAL_MISSING", "https_token for github.com"},
+		"store locked": {func(f *prFixture) { f.auth.Lock() }, ports.CreatePullRequest{Title: "T"}, "GIT_CREDENTIAL_STORE_LOCKED", ""},
+		"origin refuses the key": {func(f *prFixture) {
+			f.git.pushErr = fmt.Errorf("git push: %w: git@github.com: Permission denied (publickey).", ports.ErrRemoteAuthRejected)
+		}, ports.CreatePullRequest{Title: "T"}, "GIT_CREDENTIAL_REJECTED", "Permission denied (publickey)"},
+		"origin refuses the key on fetch": {func(f *prFixture) {
+			f.git.fetchErr = fmt.Errorf("git fetch: %w: Permission denied (publickey).", ports.ErrRemoteAuthRejected)
+		}, ports.CreatePullRequest{Title: "T"}, "GIT_CREDENTIAL_REJECTED", "Permission denied"},
+		"GitHub refuses the token": {func(f *prFixture) { f.host.Reject(fixtureToken) },
+			ports.CreatePullRequest{Title: "T"}, "GIT_CREDENTIAL_REJECTED", "Bad credentials"},
 		"base not on origin": {func(f *prFixture) {
 			f.git.fetchErr = fmt.Errorf("%w: main", ports.ErrRemoteBranchNotFound)
 		}, ports.CreatePullRequest{Title: "T"}, "PR_BASE_NOT_FOUND", "main"},
@@ -719,7 +768,6 @@ func TestStoredPullRequestsReadsTheStoreOnly(t *testing.T) {
 	// Git and the host would fail the call if it reached them.
 	f.git.origin = "unused"
 	f.host.Gate = make(chan struct{})
-	f.host.ReadyErr = errors.New("the host was asked")
 
 	got, err := f.svc.StoredPullRequests(context.Background(), []string{f.ws.ID, w2.ID, "unknown"})
 	if err != nil {
@@ -772,5 +820,54 @@ func TestRefreshNowAsksTheHostDespiteTheThrottle(t *testing.T) {
 
 	if err := g.svc.RefreshNow(context.Background(), "nope"); errs.Code(err) != "WORKSPACE_NOT_FOUND" {
 		t.Fatalf("unknown workspace = %v", err)
+	}
+}
+
+// A refusal names the credential the host refused, so the person can fix
+// that one.
+func TestRejectedNamesTheRefusedCredential(t *testing.T) {
+	for name, c := range map[string]struct {
+		arrange func(f *prFixture)
+		want    func(f *prFixture) string
+	}{
+		"the push key": {func(f *prFixture) {
+			f.git.pushErr = fmt.Errorf("git push: %w: Permission denied (publickey).", ports.ErrRemoteAuthRejected)
+		}, func(f *prFixture) string { return f.key.ID }},
+		"the GitHub token": {func(f *prFixture) { f.host.Reject(fixtureToken) }, func(f *prFixture) string { return f.token.ID }},
+	} {
+		t.Run(name, func(t *testing.T) {
+			f := newPRFixture(t)
+			c.arrange(f)
+			_, err := f.create(ports.CreatePullRequest{Title: "T"})
+			var de *domain.DetailedError
+			if !errors.As(err, &de) {
+				t.Fatalf("no details on %v", err)
+			}
+			d, _ := de.Details.(map[string]any)
+			if d["host"] != "github.com" || d["credential_id"] != c.want(f) {
+				t.Fatalf("details %v, want host github.com and credential %s", d, c.want(f))
+			}
+		})
+	}
+}
+
+// Without a stored GitHub token the background refresh does not ask the
+// host at all: there is no other token to try.
+func TestTheBackgroundRefreshNeedsAStoredToken(t *testing.T) {
+	f := newPRFixture(t)
+	_, _ = f.store.Save(&domain.PullRequest{WorkspaceID: f.ws.ID, RepositoryID: f.ws.RepositoryID, ProjectID: "p1", Number: 1, HeadBranch: "agent/x", BaseBranch: "main", State: domain.PullRequestOpen})
+	f.host.Add(widgets, ports.HostPullRequest{Number: 1, Head: "agent/x", Base: "main", State: domain.PullRequestOpen})
+	if err := f.auth.DeleteGitCredential(context.Background(), f.token.ID); err != nil {
+		t.Fatal(err)
+	}
+	f.get(t)
+	if opens, gets, finds := f.host.Calls(); opens+gets+finds != 0 {
+		t.Fatalf("the host was asked without a stored token: %d %d %d", opens, gets, finds)
+	}
+	if err := f.svc.RefreshNow(context.Background(), f.ws.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, gets, _ := f.host.Calls(); gets != 0 {
+		t.Fatal("RefreshNow asked the host without a stored token")
 	}
 }

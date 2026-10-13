@@ -125,14 +125,20 @@ func (c *Client) do(req *http.Request, out any) error {
 	return nil
 }
 
-// decodeError reads the {"error": msg, "code": CODE} contract.
+// decodeError reads the {"error": msg, "code": CODE, "details"?: …}
+// contract. A coded error with details comes back as *domain.DetailedError,
+// its details as decoded JSON.
 func decodeError(status int, body []byte) error {
 	var e struct {
-		Error string `json:"error"`
-		Code  string `json:"code"`
+		Error   string `json:"error"`
+		Code    string `json:"code"`
+		Details any    `json:"details"`
 	}
 	if json.Unmarshal(body, &e) != nil || e.Error == "" {
 		return &StatusError{Status: status, Message: http.StatusText(status)}
+	}
+	if e.Code != "" && e.Details != nil {
+		return &domain.DetailedError{StructuredError: &domain.StructuredError{Code: e.Code, Message: e.Error}, Details: e.Details}
 	}
 	if e.Code != "" {
 		return &domain.StructuredError{Code: e.Code, Message: e.Error}

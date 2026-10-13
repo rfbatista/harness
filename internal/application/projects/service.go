@@ -429,14 +429,21 @@ func (s *Service) UpdateRepository(_ context.Context, id, name, description, url
 }
 
 // DeleteRepository deletes a git repository by id, with its env files.
-func (s *Service) DeleteRepository(_ context.Context, id string) error {
+func (s *Service) DeleteRepository(ctx context.Context, id string) error {
 	if s.repositories == nil {
 		return errNoRepositories
 	}
+	r := s.repositories.Get(id)
 	if err := s.repositories.Delete(id); err != nil {
 		return err
 	}
-	return s.deleteRepositoryConfig(id)
+	if err := s.deleteRepositoryConfig(id); err != nil {
+		return err
+	}
+	if s.events == nil || r == nil {
+		return nil
+	}
+	return s.events.Publish(ctx, domain.RepositoryDeleted{RepositoryID: id, ProjectID: r.ProjectID})
 }
 
 // deleteRepositoryConfig removes what the harness keeps for a repository:

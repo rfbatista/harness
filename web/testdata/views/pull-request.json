@@ -1,10 +1,12 @@
 {
-  "$comment": "How a workspace's pull request reads on the history page and the task page's badges, first painted by internal/adapter/in/web/pullrequests and then by web/src/modules/pullrequests/presentation/view.js. Read by both sides' tests (pullrequests/view_test.go, presentation/view.test.js).",
+  "$comment": "A blocker may name a remote (the draft's) and the link it carries (href). How a workspace's pull request reads on the history page and the task page's badges, first painted by internal/adapter/in/web/pullrequests and then by web/src/modules/pullrequests/presentation/view.js. Read by both sides' tests (pullrequests/view_test.go, presentation/view.test.js).",
   "draft": { "head_branch": "agent/feed", "base_branch": "main" },
   "blockers": [
     { "code": "PR_NO_COMMITS", "text": "Nothing to propose yet: agent/feed has no commits ahead of main." },
     { "code": "PR_NO_REMOTE", "text": "This repository has no GitHub origin remote, so there is nowhere to open a pull request." },
-    { "code": "PR_TOOL_UNAVAILABLE", "text": "The server can't reach GitHub as you: gh is missing or not signed in on the server machine. Run gh auth login there." },
+    { "code": "PR_TOOL_UNAVAILABLE", "text": "The server can't reach GitHub right now." },
+    { "code": "GIT_CREDENTIAL_MISSING", "remote": { "host": "github.com", "owner": "acme", "repo": "harness" }, "text": "No credential stored for github.com can push this branch or open the pull request. The harness never uses the server machine's git, ssh or gh sign-ins.", "href": "/git-credentials?host=github.com" },
+    { "code": "GIT_CREDENTIAL_MISSING", "text": "No credential stored for this repository's host can push this branch or open the pull request. The harness never uses the server machine's git, ssh or gh sign-ins.", "href": "/git-credentials" },
     { "code": "PR_BASE_NOT_FOUND", "text": "main is not a branch on origin." },
     { "code": "PR_ALREADY_EXISTS", "text": "A pull request is already open for this branch." },
     { "code": "PR_FROM_THE_FUTURE", "text": "The server would refuse it (PR_FROM_THE_FUTURE)." }

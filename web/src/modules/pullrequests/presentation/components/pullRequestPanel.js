@@ -17,7 +17,7 @@ import { FeedStatus } from "../../../../shared/domain/feed.js";
 import { describeError } from "../../../../shared/presentation/errors.js";
 import { readSeed } from "../../../../shared/presentation/seed.js";
 import { canCreate, formFromDraft, formProblems, hasProblems, isOpen, newerOf } from "../../domain/pullRequest.js";
-import { blockerText, refusalOf, summaryLine, toChip, uncommittedLine } from "../view.js";
+import { blockerLink, blockerText, refusalOf, summaryLine, toChip, uncommittedLine } from "../view.js";
 
 /** Codes after which what the draft says has likely changed. */
 const STALE_DRAFT = [Codes.PR_NO_COMMITS, Codes.PR_NO_REMOTE, Codes.PR_BASE_NOT_FOUND];
@@ -111,7 +111,10 @@ export const pullRequestPanel = ({ gateway }) => () => {
     },
     get blockers() {
       if (!this.draft || isOpen(this.pullRequest)) return [];
-      return this.draft.blockers.map((code) => ({ code, text: blockerText(code, this.draft) }));
+      return this.draft.blockers.map((code) => {
+        const link = blockerLink(code, this.draft);
+        return { code, text: blockerText(code, this.draft), href: link?.href ?? "", linkText: link?.text ?? "" };
+      });
     },
     get blocked() {
       return this.blockers.length > 0;
@@ -140,6 +143,12 @@ export const pullRequestPanel = ({ gateway }) => () => {
     },
     get refusalCode() {
       return this.refusal?.code ?? "";
+    },
+    get refusalHref() {
+      return this.refusal?.href ?? "";
+    },
+    get refusalLinkText() {
+      return this.refusal?.linkText ?? "";
     },
     get errorLine() {
       return this.error ? `${this.error.message} ${this.error.code} · ${this.error.next}` : "";

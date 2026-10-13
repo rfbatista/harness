@@ -25,13 +25,14 @@ import (
 	"operators-mcp/internal/adapter/out/blobstore"
 	"operators-mcp/internal/adapter/out/configrepo"
 	"operators-mcp/internal/adapter/out/filesystem"
-	"operators-mcp/internal/adapter/out/ghcli"
 	"operators-mcp/internal/adapter/out/gitcli"
+	"operators-mcp/internal/adapter/out/githubapi"
 	"operators-mcp/internal/adapter/out/persistence/sqlite"
 	"operators-mcp/internal/app/catalog"
 	"operators-mcp/internal/application/apps"
 	"operators-mcp/internal/application/artifacts"
 	"operators-mcp/internal/application/execution"
+	"operators-mcp/internal/application/gitcredentials"
 	"operators-mcp/internal/application/orchestration"
 	"operators-mcp/internal/application/planning"
 	"operators-mcp/internal/application/taskchannel"
@@ -528,7 +529,7 @@ var WorkspacesModule = fx.Module("workspaces",
 		asPort(gitcli.NewWorktreeManager, new(ports.WorktreeManager)),
 		asPort(gitcli.NewHistory, new(ports.GitHistory)),
 		asPort(gitcli.NewBranchPublisher, new(ports.BranchPublisher)),
-		asPort(ghcli.New, new(ports.CodeHost)),
+		asPort(githubapi.New, new(ports.CodeHost)),
 		asPort(gitcli.NewCode, new(ports.GitCode)),
 		asPort(filesystem.NewWorktreeFiles, new(ports.WorktreeFiles)),
 		newWorkspacesService,
@@ -579,18 +580,18 @@ func newWorkspacesService(
 	return svc
 }
 
-// WithCodeHost binds host in place of the gh adapter, so a test of the wired
-// server opens pull requests without reaching GitHub. See package ghclitest
-// for driving its fake.
+// WithCodeHost binds host in place of the GitHub adapter, so a test of the
+// wired server opens pull requests without reaching GitHub. See package
+// githubapitest for driving its fake.
 func WithCodeHost(host ports.CodeHost) fx.Option {
 	return fx.Decorate(func(ports.CodeHost) ports.CodeHost { return host })
 }
 
-// newPullRequestsService opens workspaces' branches as pull requests. It
-// announces on the orchestration's project feed, reads the task of a
-// workspace's session from planning for the suggested title and body, drops a
-// deleted project's records, and stops its background host lookups on
-// shutdown.
+// newPullRequestsService opens workspaces' branches as pull requests with
+// the stored git credentials only. It announces on the orchestration's
+// project feed, reads the task of a workspace's session from planning for the
+// suggested title and body, drops a deleted project's records, and stops its
+// background host lookups on shutdown.
 func newPullRequestsService(
 	lc fx.Lifecycle,
 	ws ports.WorkspaceRepository,
@@ -603,10 +604,11 @@ func newPullRequestsService(
 	plan *planning.Service,
 	orch *orchestration.Service,
 	cat catalog.Catalog,
+	creds *gitcredentials.Service,
 ) *workspaces.PullRequests {
 	svc := workspaces.NewPullRequests(workspaces.PullRequestDeps{
 		Workspaces: ws, Repositories: repos, History: history, Git: git, Host: host, Store: store,
-		Sessions: sessions, Tickets: plan, Feed: orch,
+		Sessions: sessions, Tickets: plan, Feed: orch, Auth: creds,
 	})
 	svc.Subscribe(cat.Bus)
 	lc.Append(fx.Hook{OnStop: func(context.Context) error {

@@ -44,20 +44,26 @@ type PullRequests interface {
 // branch origin does not have.
 var ErrRemoteBranchNotFound = errors.New("branch not found on origin")
 
+// ErrRemoteAuthRejected wraps a fetch or push origin refused for its
+// credential; the error carries the remote's reason.
+var ErrRemoteAuthRejected = errors.New("origin refused the credential")
+
 // BranchPublisher reads a checkout's origin and publishes its branches there
 // (driven; gitcli implements it). It never force-pushes and never touches a
-// working tree: only refs and the branch's upstream config change.
+// working tree: only refs and the branch's upstream config change. Fetch and
+// push authenticate only through env, a GitOperation's environment.
 type BranchPublisher interface {
 	// OriginURL is the origin remote's URL, "" when there is no origin.
 	OriginURL(ctx context.Context, repoRoot string) (string, error)
 	// HasRef reports whether ref (e.g. refs/remotes/origin/main) resolves.
 	HasRef(ctx context.Context, repoRoot, ref string) bool
 	// FetchBranch updates refs/remotes/origin/<branch> from origin, or answers
-	// ErrRemoteBranchNotFound.
-	FetchBranch(ctx context.Context, repoRoot, branch string) error
+	// ErrRemoteBranchNotFound, or ErrRemoteAuthRejected.
+	FetchBranch(ctx context.Context, repoRoot, branch string, env []string) error
 	// Push publishes the local branch to origin under the same name and sets
-	// its upstream. A rejection carries git's reason.
-	Push(ctx context.Context, repoRoot, branch string) error
+	// its upstream. A rejection carries git's reason; an auth refusal wraps
+	// ErrRemoteAuthRejected.
+	Push(ctx context.Context, repoRoot, branch string, env []string) error
 	// Subjects are the subjects of the commits head has that base lacks,
 	// newest first, at most limit.
 	Subjects(ctx context.Context, repoRoot, base, head string, limit int) ([]string, error)
@@ -88,18 +94,20 @@ type OpenPullRequest struct {
 // open pull request for the head.
 var ErrPullRequestExists = errors.New("a pull request already exists for this head")
 
-// CodeHost opens and reads pull requests as the person signed in on this
-// machine (driven; ghcli implements it).
+// ErrCodeHostUnauthorized wraps a code host's refusal of the token; the
+// error carries the host's reason.
+var ErrCodeHostUnauthorized = errors.New("the code host refused the token")
+
+// CodeHost opens and reads pull requests with a stored token (driven;
+// githubapi implements it). The token never reaches a process. A refused
+// token wraps ErrCodeHostUnauthorized.
 type CodeHost interface {
-	// Ready is PR_TOOL_UNAVAILABLE, saying what to run, when the host cannot
-	// be reached as the person. It does not go over the network.
-	Ready(ctx context.Context) error
 	// FindOpen is the open pull request for head, nil when there is none.
-	FindOpen(ctx context.Context, r domain.GitRemote, head string) (*HostPullRequest, error)
+	FindOpen(ctx context.Context, r domain.GitRemote, token domain.Secret, head string) (*HostPullRequest, error)
 	// Open opens a pull request: PR_CREATE_FAILED with the host's reason, or
 	// ErrPullRequestExists.
-	Open(ctx context.Context, r domain.GitRemote, req OpenPullRequest) (*HostPullRequest, error)
-	Get(ctx context.Context, r domain.GitRemote, number int) (*HostPullRequest, error)
+	Open(ctx context.Context, r domain.GitRemote, token domain.Secret, req OpenPullRequest) (*HostPullRequest, error)
+	Get(ctx context.Context, r domain.GitRemote, token domain.Secret, number int) (*HostPullRequest, error)
 }
 
 // PullRequestRepository keeps the pull requests opened for workspaces. They

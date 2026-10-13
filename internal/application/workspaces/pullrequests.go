@@ -36,10 +36,13 @@ type PullRequestDeps struct {
 	History      ports.GitHistory
 	Git          ports.BranchPublisher
 	Host         ports.CodeHost
-	Store        ports.PullRequestRepository
-	Sessions     ports.SessionRepository
-	Tickets      ports.TicketReader
-	Feed         ports.ProjectChangeSink
+	// Auth is the only source of credentials: the push's and the GitHub
+	// token. Nothing resolving refuses, never falls back to the machine's.
+	Auth     ports.GitAuth
+	Store    ports.PullRequestRepository
+	Sessions ports.SessionRepository
+	Tickets  ports.TicketReader
+	Feed     ports.ProjectChangeSink
 	// Now is the clock the refresh rate is measured with; nil is time.Now.
 	Now func() time.Time
 }
@@ -95,6 +98,7 @@ type target struct {
 	ws        *domain.Workspace
 	projectID string
 	root      string
+	origin    string            // origin's URL, "" when there is none
 	remote    *domain.GitRemote // nil: no origin, or one that is no URL
 	base      string            // default base branch
 }
@@ -121,6 +125,7 @@ func (s *PullRequests) resolve(ctx context.Context, workspaceID string) (*target
 	if err != nil {
 		return nil, err
 	}
+	t.origin = url
 	if r, ok := domain.ParseGitRemote(url); ok {
 		t.remote = &r
 	}
@@ -198,9 +203,8 @@ func (s *PullRequests) draft(ctx context.Context, t *target, stored *domain.Pull
 
 	if !t.github() {
 		d.Blockers = append(d.Blockers, domain.CodePRNoRemote)
-	}
-	if err := s.d.Host.Ready(ctx); err != nil {
-		d.Blockers = append(d.Blockers, domain.CodePRToolUnavailable)
+	} else if s.missingCredential(ctx, t) != nil {
+		d.Blockers = append(d.Blockers, domain.CodeGitCredentialMissing)
 	}
 	if stored != nil && !stored.Closed() {
 		d.Blockers = append(d.Blockers, domain.CodePRAlreadyExists)
@@ -212,6 +216,23 @@ func (s *PullRequests) draft(ctx context.Context, t *target, stored *domain.Pull
 		d.Blockers = append(d.Blockers, domain.CodePRNoCommits)
 	}
 	return d
+}
+
+// missingCredential is GIT_CREDENTIAL_MISSING, saying what to add, when no
+// stored credential resolves for the push to origin or for GitHub's API. It
+// reads the credential store only.
+func (s *PullRequests) missingCredential(ctx context.Context, t *target) error {
+	res, err := s.d.Auth.Resolve(ctx, t.ws.RepositoryID, t.origin)
+	if err != nil {
+		return err
+	}
+	switch {
+	case res.Remote != nil && res.Remote.Kind != "" && res.Push == nil:
+		return domain.GitCredentialMissing(res.Remote.Host, res.Remote.Kind)
+	case res.GitHub == nil:
+		return domain.GitCredentialMissing(t.remote.Host, domain.GitHTTPSToken)
+	}
+	return nil
 }
 
 // suggest is the title (the task's, else the newest commit subject, else the
@@ -296,15 +317,20 @@ func (s *PullRequests) lookup(ctx context.Context, t *target, stored *domain.Pul
 	lock := s.lock(t.ws.ID)
 	lock.Lock()
 	defer lock.Unlock()
+	// Only the stored token: with none, the host is not asked.
+	cred, token, err := s.d.Auth.GitHubToken(ctx, t.ws.RepositoryID, t.origin)
+	if err != nil || cred == nil {
+		return err
+	}
 	if stored == nil {
-		found, err := s.d.Host.FindOpen(ctx, *t.remote, t.ws.Branch)
+		found, err := s.d.Host.FindOpen(ctx, *t.remote, token, t.ws.Branch)
 		if err != nil || found == nil || s.d.Store.LatestForWorkspace(t.ws.ID) != nil {
 			return err
 		}
 		_, err = s.store(t, found)
 		return err
 	}
-	_, err := s.refresh(ctx, t, stored)
+	_, err = s.refresh(ctx, t, token, stored)
 	return err
 }
 
@@ -346,8 +372,8 @@ func (s *PullRequests) StoredPullRequests(_ context.Context, workspaceIDs []stri
 
 // refresh reads a stored pull request from the host, storing and announcing
 // it when it changed.
-func (s *PullRequests) refresh(ctx context.Context, t *target, stored *domain.PullRequest) (*domain.PullRequest, error) {
-	got, err := s.d.Host.Get(ctx, *t.remote, stored.Number)
+func (s *PullRequests) refresh(ctx context.Context, t *target, token domain.Secret, stored *domain.PullRequest) (*domain.PullRequest, error) {
+	got, err := s.d.Host.Get(ctx, *t.remote, token, stored.Number)
 	if err != nil {
 		return stored, err
 	}
@@ -418,10 +444,20 @@ func (s *PullRequests) CreatePullRequest(ctx context.Context, req ports.CreatePu
 	case !t.remote.IsGitHub():
 		return nil, domain.PullRequestError(domain.CodePRNoRemote, "origin is on "+t.remote.Host+", not GitHub; pull requests are opened on GitHub only")
 	}
-	if err := s.d.Host.Ready(ctx); err != nil {
+	if err := s.missingCredential(ctx, t); err != nil {
 		return nil, err
 	}
-	if err := s.refuseOpen(ctx, t); err != nil {
+	op, err := s.d.Auth.Operation(ctx, t.ws.RepositoryID, t.origin)
+	if err != nil {
+		return nil, err
+	}
+	defer op.Release()
+	// The store could change between the two reads.
+	if op.Push == nil || op.GitHub == nil {
+		return nil, s.missingCredential(ctx, t)
+	}
+	host := hostCall{s: s, t: t, op: op}
+	if err := s.refuseOpen(ctx, host); err != nil {
 		return nil, err
 	}
 
@@ -433,9 +469,11 @@ func (s *PullRequests) CreatePullRequest(ctx context.Context, req ports.CreatePu
 		return nil, domain.PullRequestError(domain.CodePRBaseNotFound, "no base branch: the repository has no branch checked out")
 	}
 	fetchCtx, cancel := context.WithTimeout(ctx, fetchTimeout)
-	err = s.d.Git.FetchBranch(fetchCtx, t.root, base)
+	err = s.d.Git.FetchBranch(fetchCtx, t.root, base, op.Env)
 	cancel()
 	switch {
+	case errors.Is(err, ports.ErrRemoteAuthRejected):
+		return nil, domain.GitCredentialRejected(op.Push.Host, op.Push.ID, reasonAfter(err, ports.ErrRemoteAuthRejected))
 	case errors.Is(err, ports.ErrRemoteBranchNotFound):
 		return nil, domain.PullRequestError(domain.CodePRBaseNotFound, "the base branch "+base+" does not exist on origin")
 	case err != nil:
@@ -446,18 +484,24 @@ func (s *PullRequests) CreatePullRequest(ctx context.Context, req ports.CreatePu
 	}
 
 	pushCtx, cancel := context.WithTimeout(ctx, pushTimeout)
-	err = s.d.Git.Push(pushCtx, t.root, t.ws.Branch)
+	err = s.d.Git.Push(pushCtx, t.root, t.ws.Branch, op.Env)
 	cancel()
-	if err != nil {
+	switch {
+	case errors.Is(err, ports.ErrRemoteAuthRejected):
+		return nil, domain.GitCredentialRejected(op.Push.Host, op.Push.ID, reasonAfter(err, ports.ErrRemoteAuthRejected))
+	case err != nil:
 		return nil, domain.PullRequestError(domain.CodePRPushFailed, "pushing "+t.ws.Branch+" to origin failed: "+err.Error())
 	}
+	s.d.Auth.Used(op.Push.ID)
 
 	hostCtx, cancel := context.WithTimeout(ctx, hostTimeout)
 	defer cancel()
-	opened, err := s.d.Host.Open(hostCtx, *t.remote, ports.OpenPullRequest{Head: t.ws.Branch, Base: base, Title: title, Body: req.Body, Draft: req.Draft})
+	opened, err := s.d.Host.Open(hostCtx, *t.remote, op.GitHubToken, ports.OpenPullRequest{Head: t.ws.Branch, Base: base, Title: title, Body: req.Body, Draft: req.Draft})
 	switch {
+	case errors.Is(err, ports.ErrCodeHostUnauthorized):
+		return nil, host.rejected(err)
 	case errors.Is(err, ports.ErrPullRequestExists):
-		if found, ferr := s.d.Host.FindOpen(hostCtx, *t.remote, t.ws.Branch); ferr == nil && found != nil {
+		if found, ferr := s.d.Host.FindOpen(hostCtx, *t.remote, op.GitHubToken, t.ws.Branch); ferr == nil && found != nil {
 			pr, serr := s.store(t, found)
 			if serr != nil {
 				return nil, serr
@@ -470,17 +514,45 @@ func (s *PullRequests) CreatePullRequest(ctx context.Context, req ports.CreatePu
 	case err != nil:
 		return nil, domain.PullRequestError(domain.CodePRCreateFailed, "opening the pull request on GitHub failed: "+err.Error())
 	}
+	s.d.Auth.Used(op.GitHub.ID)
 	return s.store(t, opened)
+}
+
+// hostCall is a create's calls to the code host: the target and the
+// operation whose token they carry.
+type hostCall struct {
+	s  *PullRequests
+	t  *target
+	op *ports.GitOperation
+}
+
+// rejected is GIT_CREDENTIAL_REJECTED for the GitHub token err says the host
+// refused.
+func (h hostCall) rejected(err error) error {
+	return domain.GitCredentialRejected(h.op.GitHub.Host, h.op.GitHub.ID, reasonAfter(err, ports.ErrCodeHostUnauthorized))
+}
+
+// reasonAfter is err's message from after sentinel's: the host's reason.
+func reasonAfter(err, sentinel error) string {
+	msg := err.Error()
+	if i := strings.Index(msg, sentinel.Error()); i >= 0 {
+		msg = strings.TrimPrefix(msg[i+len(sentinel.Error()):], ": ")
+	}
+	return msg
 }
 
 // refuseOpen is PR_ALREADY_EXISTS when the branch has an open pull request:
 // one on the host (adopted), or the stored one if the host still has it open.
 // A stored one the host has since closed or merged is stored as such.
-func (s *PullRequests) refuseOpen(ctx context.Context, t *target) error {
+func (s *PullRequests) refuseOpen(ctx context.Context, h hostCall) error {
+	t := h.t
 	hostCtx, cancel := context.WithTimeout(ctx, hostTimeout)
 	defer cancel()
-	found, err := s.d.Host.FindOpen(hostCtx, *t.remote, t.ws.Branch)
+	found, err := s.d.Host.FindOpen(hostCtx, *t.remote, h.op.GitHubToken, t.ws.Branch)
 	if err != nil {
+		if errors.Is(err, ports.ErrCodeHostUnauthorized) {
+			return h.rejected(err)
+		}
 		if errs.Code(err) != "" {
 			return err
 		}
@@ -497,7 +569,7 @@ func (s *PullRequests) refuseOpen(ctx context.Context, t *target) error {
 	if stored == nil || stored.Closed() {
 		return nil
 	}
-	if fresh, err := s.refresh(hostCtx, t, stored); err != nil || !fresh.Closed() {
+	if fresh, err := s.refresh(hostCtx, t, h.op.GitHubToken, stored); err != nil || !fresh.Closed() {
 		return alreadyExists(stored)
 	}
 	return nil

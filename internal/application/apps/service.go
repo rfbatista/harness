@@ -38,6 +38,9 @@ type Service struct {
 	commands ports.RunCommandLister
 	host     ports.TerminalHost
 	now      func() time.Time
+	// GitAuth gives a run the session's git credentials and nothing of the
+	// machine's; nil leaves its git as it is.
+	GitAuth ports.GitAuth
 
 	mu   sync.Mutex
 	runs map[string]*run
@@ -92,6 +95,17 @@ func (s *Service) Start(ctx context.Context, sessionID, name, command string) (*
 	s.mu.Unlock()
 
 	spec := ports.AgentSpec{Kind: CommandKind, SessionID: sessionID, Dir: sess.WorkingDir, Command: command}
+	if s.GitAuth != nil {
+		// The session's own git directory: a run is part of its session.
+		sg, err := s.GitAuth.SessionEnv(ctx, sessionID, sess.RepositoryID)
+		if err != nil {
+			s.mu.Lock()
+			delete(s.runs, id)
+			s.mu.Unlock()
+			return nil, err
+		}
+		spec.Env, spec.EnvFile = sg.Env, sg.EnvFile
+	}
 	if err := s.host.Spawn(ctx, id, spec, ports.TermSize{Cols: startCols, Rows: startRows}, func(code int) { s.ended(id, code) }); err != nil {
 		s.mu.Lock()
 		delete(s.runs, id)

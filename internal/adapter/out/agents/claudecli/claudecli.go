@@ -90,7 +90,7 @@ func (a Agent) Command(spec ports.AgentSpec) (ports.ShellCommand, error) {
 	if bin == "" {
 		bin = "claude"
 	}
-	return ports.ShellCommand{Program: bin, Args: args, Dir: spec.Dir, Env: spec.Env}, nil
+	return ports.ShellCommand{Program: bin, Args: args, Dir: spec.Dir, Env: spec.Env, EnvFile: spec.EnvFile}, nil
 }
 
 // mcpConfigJSON is the --mcp-config payload for servers, in the shape llmkit

@@ -12,6 +12,13 @@ type Event interface {
 // scoped to the project must go with it.
 type ProjectDeleted struct{ ProjectID string }
 
+// RepositoryDeleted: one repository is gone (a deleted project announces
+// ProjectDeleted instead). What is kept for it must go with it.
+type RepositoryDeleted struct {
+	RepositoryID string
+	ProjectID    string
+}
+
 // PromptDeleted: a prompt is gone. Whatever referenced it drops the reference.
 type PromptDeleted struct{ PromptID string }
 
@@ -96,6 +103,7 @@ type TicketResourceAdded struct{ Resource TicketResource }
 type TicketCommentAdded struct{ Comment TicketComment }
 
 func (ProjectDeleted) EventName() string       { return "project.deleted" }
+func (RepositoryDeleted) EventName() string    { return "repository.deleted" }
 func (PromptDeleted) EventName() string        { return "prompt.deleted" }
 func (AgentDeleted) EventName() string         { return "agent.deleted" }
 func (SkillDeleted) EventName() string         { return "skill.deleted" }

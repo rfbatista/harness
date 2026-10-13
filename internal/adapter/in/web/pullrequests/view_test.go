@@ -18,8 +18,11 @@ func TestViewsMatchTheBrowser(t *testing.T) {
 	}
 	var v struct {
 		Draft    domain.PullRequestDraft `json:"draft"`
-		Blockers []struct{ Code, Text string }
-		Chips    []struct {
+		Blockers []struct {
+			Code, Text, Href string
+			Remote           *domain.GitRemote
+		}
+		Chips []struct {
 			State string
 			Draft bool
 			Shown string
@@ -39,8 +42,13 @@ func TestViewsMatchTheBrowser(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, c := range v.Blockers {
-		if got := BlockerText(c.Code, v.Draft); got != c.Text {
+		d := v.Draft
+		d.Remote = c.Remote
+		if got := BlockerText(c.Code, d); got != c.Text {
 			t.Errorf("%s: %q, want %q", c.Code, got, c.Text)
+		}
+		if href, _ := BlockerLink(c.Code, d); href != c.Href {
+			t.Errorf("%s: link %q, want %q", c.Code, href, c.Href)
 		}
 	}
 	for _, c := range v.Chips {
@@ -77,7 +85,7 @@ func TestPanelPaintsWhatTheViewSays(t *testing.T) {
 	if p := NewPanel("p1", "ws1", nil); p.Painted() || p.OffersCreate || p.Chip != nil {
 		t.Errorf("no view paints nothing: %+v", p)
 	}
-	if p := NewPanel("p1", "ws1", &ports.PullRequestView{Draft: blocked}); !p.OffersCreate || !p.Blocked() || p.Blockers[0] != "Nothing to propose yet: agent/x has no commits ahead of main." {
+	if p := NewPanel("p1", "ws1", &ports.PullRequestView{Draft: blocked}); !p.OffersCreate || !p.Blocked() || p.Blockers[0].Text != "Nothing to propose yet: agent/x has no commits ahead of main." {
 		t.Errorf("blocked: %+v", p)
 	}
 	if p := NewPanel("p1", "ws1", &ports.PullRequestView{Draft: blocked, PullRequest: open}); p.OffersCreate || p.Blocked() || p.Chip.Label != "#7" || p.Chip.Tone != "success" {

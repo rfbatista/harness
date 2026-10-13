@@ -19,6 +19,7 @@ import (
 	"github.com/rfbatista/harnesskit/errs"
 
 	"operators-mcp/internal/adapter/in/web/code"
+	"operators-mcp/internal/adapter/in/web/credentials"
 	"operators-mcp/internal/adapter/in/web/history"
 	"operators-mcp/internal/adapter/in/web/home"
 	"operators-mcp/internal/adapter/in/web/notifications"
@@ -65,6 +66,9 @@ type Deps struct {
 	// Notifications seeds the top bar's unread count and the inbox's latest
 	// page; nil, or a failed read, renders the page without a seed.
 	Notifications ports.NotificationReader
+	// GitCredentials seeds the Git credentials page, the repositories'
+	// credential and the pull-request panel; nil leaves them out.
+	GitCredentials ports.GitCredentials
 	// Now defaults to time.Now.
 	Now func() time.Time
 }
@@ -99,7 +103,7 @@ func NewHandler(deps Deps, assets *Assets, fallback http.Handler) http.Handler {
 		taskPages.Workspaces = deps.Workspaces
 	}
 	projectPages := projects.Handler{
-		Projects: deps.Projects, Repositories: deps.Repositories, EnvFiles: deps.EnvFiles, Summaries: deps.ProjectSummaries,
+		Projects: deps.Projects, Repositories: deps.Repositories, EnvFiles: deps.EnvFiles, Summaries: deps.ProjectSummaries, Credentials: deps.GitCredentials,
 		Layout: s.layout, Render: render, Now: deps.Now,
 	}
 	historyPages := history.Handler{
@@ -127,6 +131,10 @@ func NewHandler(deps Deps, assets *Assets, fallback http.Handler) http.Handler {
 	}
 	if deps.ProjectSummaries != nil {
 		mux.Handle("GET /projects", s.page(projectPages.List))
+	}
+	if deps.GitCredentials != nil {
+		creds := credentials.Handler{Credentials: deps.GitCredentials, Layout: s.layout, Render: render, Now: deps.Now}
+		mux.Handle("GET "+credentials.Href, s.page(creds.Page))
 	}
 	mux.Handle("GET /projects/new", s.page(projectPages.New))
 	mux.Handle("GET /projects/{project}", s.page(taskPages.Project))
@@ -258,12 +266,16 @@ func (s *server) bell(ctx context.Context) *shell.Bell {
 
 // bareFrame is a frame without the rail, for when the rail cannot be read.
 func (s *server) bareFrame(title string) shell.Frame {
-	return shell.Frame{
+	f := shell.Frame{
 		Title: title,
 		CSS:   s.assets.URL("app.css"),
 		JS:    s.assets.URL("app.js"),
 		Built: s.assets.Built(),
 	}
+	if s.deps.GitCredentials != nil {
+		f.Top.CredentialsHref = credentials.Href
+	}
+	return f
 }
 
 // renderError shows a coded error the way the API reports it: the message,

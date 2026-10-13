@@ -17,7 +17,7 @@ import (
 
 	"operators-mcp/internal/adapter/in/httpapi"
 	"operators-mcp/internal/adapter/in/web"
-	"operators-mcp/internal/adapter/out/ghcli/ghclitest"
+	"operators-mcp/internal/adapter/out/githubapi/githubapitest"
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
 )
@@ -58,7 +58,7 @@ func TestPullRequestsInTheWebUI_EndToEnd(t *testing.T) {
 
 	// Every host call waits at the gate until the first create has been
 	// seen in progress; the gate is set before the server starts.
-	host := ghclitest.New()
+	host := githubapitest.New()
 	gate := make(chan struct{})
 	host.Gate = gate
 	released := false
@@ -72,6 +72,7 @@ func TestPullRequestsInTheWebUI_EndToEnd(t *testing.T) {
 
 	s := startPRServer(t, dir, filepath.Join(dir, "harness.db"), host)
 	t.Cleanup(func() { _ = s.app.Stop(context.Background()) })
+	s.storeCredentials(t)
 	if _, err := s.cat.Settings.UpdateSettings(map[string]string{domain.SettingWorkspacesRoot: filepath.Join(dir, "worktrees")}); err != nil {
 		t.Fatal(err)
 	}
@@ -264,28 +265,31 @@ func TestPullRequestsInTheWebUI_EndToEnd(t *testing.T) {
 		t.Errorf("no remote: %q", got)
 	}
 
-	// Signed out of gh after the page was read: the server's message, the input kept.
-	author.run(t, "open the form while signed in",
+	// GitHub refuses the stored token after the page was read: the server's
+	// message with its code, the input kept.
+	author.run(t, "open the form while the token is good",
 		chromedp.Navigate(history("s-refusals")),
 		waitFor(panel+` && `+btnShown),
 		chromedp.Evaluate(createBtn+`.click()`, nil),
 		waitFor(formOpen),
 	)
-	host.SignOut()
-	author.run(t, "create while signed out",
+	host.Reject(e2eToken)
+	author.run(t, "create with a revoked token",
 		chromedp.Evaluate(`(`+typeTitleJ+`)('Keep this title'); `+submit+`.click()`, nil),
 		waitFor(shown(refusal)),
 		shot("pr-refused-light", "light"),
 	)
-	if got := author.text(t, refusal+`.innerText`); !contains(got, "The server can't reach GitHub as you.", "PR_TOOL_UNAVAILABLE", "gh auth login") {
-		t.Errorf("signed out: %q", got)
+	if got := author.text(t, refusal+`.innerText`); !contains(got, "GIT_CREDENTIAL_REJECTED", "Bad credentials") {
+		t.Errorf("revoked token: %q", got)
 	}
 	if got := author.text(t, `document.getElementById('pr-title').value`); got != "Keep this title" {
 		t.Errorf("the title is kept: %q", got)
 	}
 
 	// Origin lacks the base the person typed: said on the field.
-	host.SignIn()
+	if _, err := s.creds.CreateGitCredential(ctx, ports.CreateGitCredential{Name: "GitHub, new", Kind: domain.GitHTTPSToken, Host: "github.com", Token: "ghp_e2eStoredToken0003", IsDefault: true}); err != nil {
+		t.Fatal(err)
+	}
 	author.run(t, "create into a base origin does not have",
 		chromedp.Evaluate(`(() => { const b = document.getElementById('pr-base'); b.value = 'release-9'; b.dispatchEvent(new Event('input')); })(); `+submit+`.click()`, nil),
 		waitFor(shown(`document.getElementById('pr-base-error')`)),

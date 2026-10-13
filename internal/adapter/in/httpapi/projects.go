@@ -33,16 +33,24 @@ func projectEventOf(c ports.ProjectCatalogChange) projectEvent {
 }
 
 // handleProjectEvents streams the set of projects as it changes — created,
-// updated (ignored paths included), deleted — as server-sent events, one
-// change per event. Pings and the end of a stream that fell behind work as on
+// updated (ignored paths included), deleted — and the git credentials and
+// identity as they change, as server-sent events, one change per event. Pings and the end of a stream that fell behind work as on
 // /api/events.
 func (h *Handler) handleProjectEvents(c echo.Context) error {
 	if h.projectFeed == nil {
 		return echo.NewHTTPError(http.StatusServiceUnavailable, "project feed not configured")
 	}
-	changes, err := h.projectFeed.FollowProjects(c.Request().Context())
+	ctx := c.Request().Context()
+	changes, err := h.projectFeed.FollowProjects(ctx)
 	if err != nil {
 		return err
 	}
-	return streamSSE(c, changes, func(ch ports.ProjectCatalogChange) any { return projectEventOf(ch) })
+	if h.gitCredentials == nil {
+		return streamSSE(c, changes, func(ch ports.ProjectCatalogChange) any { return projectEventOf(ch) })
+	}
+	creds, err := h.gitCredentials.FollowGitCredentials(ctx)
+	if err != nil {
+		return err
+	}
+	return streamSSE(c, catalogEvents(ctx, changes, creds), func(ev any) any { return ev })
 }

@@ -54,6 +54,9 @@ type Services struct {
 	Notifications ports.Notifications
 	// Code reads code for the code views (/api/code/*); nil answers 503.
 	Code ports.CodeBrowser
+	// GitCredentials keeps the credentials git remote operations use; nil
+	// answers 503 and leaves them off /api/project_events.
+	GitCredentials ports.GitCredentials
 }
 
 // Handler serves the application's driving ports as HTTP endpoints (the same
@@ -71,47 +74,49 @@ type Handler struct {
 		ports.AgentCatalog
 		ports.PromptCatalog
 	}
-	capabilities  ports.Capabilities
-	settings      ports.SettingsEditor
-	toolingSvc    ports.ToolRegistry
-	execSvc       ports.TaskRunner
-	orchSvc       ports.Orchestration
-	planningSvc   ports.Planning
-	workspacesSvc ports.WorkspaceManager
-	artifactsSvc  ports.Artifacts
-	channel       ports.TaskChannelUI
-	resources     ports.TaskResources
-	comments      ports.TaskComments
-	pullRequests  ports.PullRequests
-	notifications ports.Notifications
-	code          ports.CodeBrowser
+	capabilities   ports.Capabilities
+	settings       ports.SettingsEditor
+	toolingSvc     ports.ToolRegistry
+	execSvc        ports.TaskRunner
+	orchSvc        ports.Orchestration
+	planningSvc    ports.Planning
+	workspacesSvc  ports.WorkspaceManager
+	artifactsSvc   ports.Artifacts
+	channel        ports.TaskChannelUI
+	resources      ports.TaskResources
+	comments       ports.TaskComments
+	pullRequests   ports.PullRequests
+	notifications  ports.Notifications
+	code           ports.CodeBrowser
+	gitCredentials ports.GitCredentials
 }
 
 // NewHandler returns an HTTP handler that serves /api/list_tree, /api/list_zones, /api/list_projects, etc.
 func NewHandler(s Services) *Handler {
 	return &Handler{
-		projects:      s.Projects,
-		projectFeed:   s.ProjectFeed,
-		discovery:     s.Discovery,
-		env:           s.Env,
-		runCommands:   s.RunCommands,
-		apps:          s.Apps,
-		architecture:  s.Architecture,
-		agents:        s.Agents,
-		capabilities:  s.Capabilities,
-		settings:      s.Settings,
-		toolingSvc:    s.Tools,
-		execSvc:       s.Tasks,
-		orchSvc:       s.Sessions,
-		planningSvc:   s.Planning,
-		workspacesSvc: s.Workspaces,
-		artifactsSvc:  s.Artifacts,
-		channel:       s.TaskChannel,
-		resources:     s.TaskResources,
-		comments:      s.TaskComments,
-		pullRequests:  s.PullRequests,
-		notifications: s.Notifications,
-		code:          s.Code,
+		projects:       s.Projects,
+		projectFeed:    s.ProjectFeed,
+		discovery:      s.Discovery,
+		env:            s.Env,
+		runCommands:    s.RunCommands,
+		apps:           s.Apps,
+		architecture:   s.Architecture,
+		agents:         s.Agents,
+		capabilities:   s.Capabilities,
+		settings:       s.Settings,
+		toolingSvc:     s.Tools,
+		execSvc:        s.Tasks,
+		orchSvc:        s.Sessions,
+		planningSvc:    s.Planning,
+		workspacesSvc:  s.Workspaces,
+		artifactsSvc:   s.Artifacts,
+		channel:        s.TaskChannel,
+		resources:      s.TaskResources,
+		comments:       s.TaskComments,
+		pullRequests:   s.PullRequests,
+		notifications:  s.Notifications,
+		code:           s.Code,
+		gitCredentials: s.GitCredentials,
 	}
 }
 

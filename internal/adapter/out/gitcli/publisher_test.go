@@ -73,7 +73,7 @@ func TestPublisher_HasRefAndFetchBranch(t *testing.T) {
 	}
 	gitIn(t, other, "commit", "-q", "--allow-empty", "-m", "upstream moved")
 	gitIn(t, other, "push", "-q", "origin", "main")
-	if err := p.FetchBranch(ctx, repo, "main"); err != nil {
+	if err := p.FetchBranch(ctx, repo, "main", nil); err != nil {
 		t.Fatal(err)
 	}
 	if got := strings.TrimSpace(gitOut(t, repo, "log", "-1", "--format=%s", "refs/remotes/origin/main")); got != "upstream moved" {
@@ -83,7 +83,7 @@ func TestPublisher_HasRefAndFetchBranch(t *testing.T) {
 		t.Fatalf("the local main moved to %q; a fetch must only touch origin/main", got)
 	}
 
-	if err := p.FetchBranch(ctx, repo, "no-such-branch"); !errors.Is(err, ports.ErrRemoteBranchNotFound) {
+	if err := p.FetchBranch(ctx, repo, "no-such-branch", nil); !errors.Is(err, ports.ErrRemoteBranchNotFound) {
 		t.Fatalf("fetch of a missing branch = %v, want ErrRemoteBranchNotFound", err)
 	}
 }
@@ -95,7 +95,7 @@ func TestPublisher_PushPublishesTheBranchAndLeavesTheCheckoutAlone(t *testing.T)
 	statusBefore := gitOut(t, repo, "status", "--porcelain")
 	headBefore := gitOut(t, repo, "symbolic-ref", "HEAD")
 
-	if err := p.Push(ctx, repo, "agent/x"); err != nil {
+	if err := p.Push(ctx, repo, "agent/x", nil); err != nil {
 		t.Fatal(err)
 	}
 	local := strings.TrimSpace(gitOut(t, worktree, "rev-parse", "HEAD"))
@@ -116,7 +116,7 @@ func TestPublisher_PushPublishesTheBranchAndLeavesTheCheckoutAlone(t *testing.T)
 		t.Fatalf("the checkout's branch changed to %s", got)
 	}
 	// A second push with nothing new is fine.
-	if err := p.Push(ctx, repo, "agent/x"); err != nil {
+	if err := p.Push(ctx, repo, "agent/x", nil); err != nil {
 		t.Fatalf("pushing again: %v", err)
 	}
 }
@@ -125,7 +125,7 @@ func TestPublisher_PushNeverForces(t *testing.T) {
 	ctx := context.Background()
 	p := NewBranchPublisher()
 	repo, worktree, origin := publishRepo(t)
-	if err := p.Push(ctx, repo, "agent/x"); err != nil {
+	if err := p.Push(ctx, repo, "agent/x", nil); err != nil {
 		t.Fatal(err)
 	}
 	pushed := strings.TrimSpace(gitOut(t, origin, "rev-parse", "refs/heads/agent/x"))
@@ -133,7 +133,7 @@ func TestPublisher_PushNeverForces(t *testing.T) {
 	gitIn(t, worktree, "reset", "-q", "--hard", "HEAD~1")
 	gitIn(t, worktree, "commit", "-q", "--allow-empty", "-m", "rewritten")
 
-	err := p.Push(ctx, repo, "agent/x")
+	err := p.Push(ctx, repo, "agent/x", nil)
 	if err == nil {
 		t.Fatal("a non-fast-forward push was accepted")
 	}

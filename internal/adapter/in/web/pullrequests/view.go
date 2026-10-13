@@ -2,6 +2,7 @@ package pullrequests
 
 import (
 	"context"
+	"net/url"
 	"strconv"
 
 	"operators-mcp/internal/domain"
@@ -17,8 +18,12 @@ type Panel struct {
 	// OffersCreate: no PR is open, so the create button shows.
 	OffersCreate bool
 	// Blockers are why a create cannot go ahead, in words; empty when it can.
-	Blockers []string
+	Blockers []Blocker
 }
+
+// Blocker is one reason a create cannot go ahead, and where its fix is
+// (Href "" when it has none).
+type Blocker struct{ Text, Href, LinkText string }
 
 // PanelSeed is the panel's seed: GET /api/pull_request's answer with the
 // workspace and its project. PullRequestView is nil when the server could not read it,
@@ -46,7 +51,8 @@ func NewPanel(projectID, workspaceID string, view *ports.PullRequestView) *Panel
 	p.OffersCreate = view.PullRequest == nil || view.PullRequest.Closed()
 	if p.OffersCreate {
 		for _, code := range view.Draft.Blockers {
-			p.Blockers = append(p.Blockers, BlockerText(code, view.Draft))
+			href, link := BlockerLink(code, view.Draft)
+			p.Blockers = append(p.Blockers, Blocker{Text: BlockerText(code, view.Draft), Href: href, LinkText: link})
 		}
 	}
 	return p
@@ -86,8 +92,10 @@ func BlockerText(code string, d domain.PullRequestDraft) string {
 		return "Nothing to propose yet: " + d.HeadBranch + " has no commits ahead of " + d.BaseBranch + "."
 	case "PR_NO_REMOTE":
 		return "This repository has no GitHub origin remote, so there is nowhere to open a pull request."
-	case "PR_TOOL_UNAVAILABLE":
-		return "The server can't reach GitHub as you: gh is missing or not signed in on the server machine. Run gh auth login there."
+	case "PR_TOOL_UNAVAILABLE": // retired by the contract's revision 3; an older server may still send it
+		return "The server can't reach GitHub right now."
+	case "GIT_CREDENTIAL_MISSING":
+		return "No credential stored for " + remoteHost(d) + " can push this branch or open the pull request. The harness never uses the server machine's git, ssh or gh sign-ins."
 	case "PR_BASE_NOT_FOUND":
 		return d.BaseBranch + " is not a branch on origin."
 	case "PR_ALREADY_EXISTS":
@@ -95,6 +103,28 @@ func BlockerText(code string, d domain.PullRequestDraft) string {
 	default:
 		return "The server would refuse it (" + code + ")."
 	}
+}
+
+// CredentialsHref is the Git credentials page.
+const CredentialsHref = "/git-credentials"
+
+// BlockerLink is where a blocker's fix is, and the link's words; "" when it
+// has none. The browser's blockerLink says the same.
+func BlockerLink(code string, d domain.PullRequestDraft) (href, text string) {
+	if code != "GIT_CREDENTIAL_MISSING" {
+		return "", ""
+	}
+	if d.Remote == nil || d.Remote.Host == "" {
+		return CredentialsHref, "Add one in Git credentials"
+	}
+	return CredentialsHref + "?" + url.Values{"host": {d.Remote.Host}}.Encode(), "Add one in Git credentials"
+}
+
+func remoteHost(d domain.PullRequestDraft) string {
+	if d.Remote == nil || d.Remote.Host == "" {
+		return "this repository's host"
+	}
+	return d.Remote.Host
 }
 
 func plural(n int, one, many string) string {

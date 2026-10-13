@@ -73,3 +73,15 @@ func TestCommand_SessionHooks(t *testing.T) {
 		}
 	}
 }
+
+// The session's git env file reaches the shell, which sources it after the
+// profile.
+func TestCommandCarriesTheEnvFile(t *testing.T) {
+	cmd, err := New("").Command(ports.AgentSpec{Conversation: ports.Conversation{ID: "c"}, Env: []string{"GIT_TERMINAL_PROMPT=0"}, EnvFile: "/data/git/sessions/c/env.sh"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cmd.EnvFile != "/data/git/sessions/c/env.sh" || len(cmd.Env) != 1 {
+		t.Fatalf("command %+v", cmd)
+	}
+}

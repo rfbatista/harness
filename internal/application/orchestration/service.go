@@ -74,6 +74,10 @@ type Service struct {
 	// Events announces SessionDeleted, so other contexts stop what runs in a
 	// session's worktree before it goes. Nil announces nothing.
 	Events ports.EventPublisher
+	// GitAuth gives each session's processes the stored git credentials and
+	// nothing of the machine's (see "Contract: Harness server ↔ Agent
+	// sessions — git credentials"). Nil leaves sessions' git as it is.
+	GitAuth ports.GitAuth
 	// Roles says what a session is on its task, for the role-aware brief. Nil:
 	// every session is a peer.
 	Roles interface {
@@ -275,7 +279,8 @@ type prepared struct {
 	ws         *domain.Workspace
 	branch     string
 	permission llmkit.PermissionMode
-	cleanup    func() // removes the materialized skill plugin dir; nil if none
+	cleanup    func() // removes the materialized skill plugin dir and the git directory; nil if none
+	envFile    string // the session's git env file, for login shells; "" without GitAuth
 }
 
 // prepare validates a start request, provisions the session's worktree and
@@ -339,12 +344,46 @@ func (s *Service) prepare(in prepareInput) (*prepared, error) {
 		id = llmkit.NewSessionID()
 	}
 	permission := parseAutoAccept(in.AutoAccept)
+	cfg := s.sessionConfig(id, ws.Path, in.Model, in.AllowedTools, permission, ag, ticket, in.ZoneID, in.Role)
+	envFile, cleanup, err := s.withGit(id, in.RepositoryID, &cfg, ag.cleanup)
+	if err != nil {
+		_ = s.workspaces.Discard(ws.ID)
+		return nil, err
+	}
 	return &prepared{
-		cfg:        s.sessionConfig(id, ws.Path, in.Model, in.AllowedTools, permission, ag, ticket, in.ZoneID, in.Role),
+		cfg:        cfg,
 		ws:         ws,
 		branch:     in.Branch,
 		permission: permission,
-		cleanup:    ag.cleanup,
+		cleanup:    cleanup,
+		envFile:    envFile,
+	}, nil
+}
+
+// withGit gives the session's processes its git directory's environment and
+// briefs the agent when its git cannot authenticate. The cleanup it answers
+// runs cleanup and removes the directory. Without GitAuth it changes
+// nothing.
+func (s *Service) withGit(id, repositoryID string, cfg *llmkit.SessionConfig, cleanup func()) (string, func(), error) {
+	if s.GitAuth == nil {
+		return "", cleanup, nil
+	}
+	sg, err := s.GitAuth.SessionEnv(context.TODO(), id, repositoryID)
+	if err != nil {
+		if cleanup != nil {
+			cleanup()
+		}
+		return "", nil, fmt.Errorf("prepare the session's git credentials: %w", err)
+	}
+	cfg.Env = append(slices.Clone(cfg.Env), sg.Env...)
+	if sg.Note != "" {
+		cfg.AppendSystem = appendSection(cfg.AppendSystem, sg.Note)
+	}
+	return sg.EnvFile, func() {
+		if cleanup != nil {
+			cleanup()
+		}
+		s.GitAuth.EndSession(id)
 	}, nil
 }
 

@@ -45,8 +45,10 @@ export function blockerText(code, draft) {
       return `Nothing to propose yet: ${draft.headBranch} has no commits ahead of ${draft.baseBranch}.`;
     case Codes.PR_NO_REMOTE:
       return "This repository has no GitHub origin remote, so there is nowhere to open a pull request.";
-    case Codes.PR_TOOL_UNAVAILABLE:
-      return "The server can't reach GitHub as you: gh is missing or not signed in on the server machine. Run gh auth login there.";
+    case Codes.PR_TOOL_UNAVAILABLE: // retired by the contract's revision 3; an older server may still send it
+      return "The server can't reach GitHub right now.";
+    case Codes.GIT_CREDENTIAL_MISSING:
+      return `No credential stored for ${draft.remote?.host || "this repository's host"} can push this branch or open the pull request. The harness never uses the server machine's git, ssh or gh sign-ins.`;
     case Codes.PR_BASE_NOT_FOUND:
       return `${draft.baseBranch} is not a branch on origin.`;
     case Codes.PR_ALREADY_EXISTS:
@@ -54,6 +56,24 @@ export function blockerText(code, draft) {
     default:
       return `The server would refuse it (${code}).`;
   }
+}
+
+/** The Git credentials page (the credentials module's; modules do not import each other). */
+export const CREDENTIALS_HREF = "/git-credentials";
+
+const credentialsLink = (params = {}) => {
+  const q = new URLSearchParams(Object.entries(params).filter(([, v]) => v));
+  return q.size ? `${CREDENTIALS_HREF}?${q}` : CREDENTIALS_HREF;
+};
+
+/**
+ * Where a blocker's fix is, and the link's words; null when it has none.
+ * The Go page's BlockerLink says the same.
+ * @returns {{ href: string, text: string } | null}
+ */
+export function blockerLink(code, draft) {
+  if (code !== Codes.GIT_CREDENTIAL_MISSING) return null;
+  return { href: credentialsLink({ host: draft.remote?.host }), text: "Add one in Git credentials" };
 }
 
 /** The server's reason without the code its messages start with. */
@@ -66,18 +86,30 @@ export function reasonOf(err) {
 const LEADS = {
   [Codes.PR_NO_COMMITS]: "Nothing to propose: origin already has every commit of this branch.",
   [Codes.PR_NO_REMOTE]: "This repository has no GitHub origin remote, so there is nowhere to open a pull request.",
-  [Codes.PR_TOOL_UNAVAILABLE]: "The server can't reach GitHub as you.",
+  [Codes.PR_TOOL_UNAVAILABLE]: "The server can't reach GitHub right now.",
+  [Codes.GIT_CREDENTIAL_STORE_LOCKED]: "The server can't read its stored credentials: its encryption key is missing or wrong.",
   [Codes.PR_PUSH_FAILED]: "Git refused the push.",
   [Codes.PR_CREATE_FAILED]: "GitHub refused the pull request.",
 };
 
 /**
  * A refused create as the form's banner shows it: what happened, the server's
- * reason (for the tool, what to run), and the code.
- * @returns {{ lead: string, reason: string, code: string }}
+ * reason, the code, and for a credential refusal the link to fix it.
+ * @returns {{ lead: string, reason: string, code: string, href?: string, linkText?: string }}
  */
 export function refusalOf(err) {
   const code = codeOf(err);
+  const details = err?.details ?? {};
+  const host = details.host || "the host";
+  if (code === Codes.GIT_CREDENTIAL_MISSING) {
+    const what = details.kind === "ssh_key" ? "SSH key" : "token";
+    return { lead: `No ${what} stored for ${host}.`, reason: reasonOf(err), code, href: credentialsLink({ host: details.host, kind: details.kind }), linkText: `Add one in Git credentials` };
+  }
+  if (code === Codes.GIT_CREDENTIAL_REJECTED) {
+    const href = details.credential_id ? credentialsLink({ credential: details.credential_id }) : credentialsLink({ host: details.host });
+    return { lead: `${host} refused the stored credential.`, reason: reasonOf(err), code, href, linkText: "Replace it in Git credentials" };
+  }
+  if (code === Codes.GIT_CREDENTIAL_STORE_LOCKED) return { lead: LEADS[code], reason: reasonOf(err), code, href: CREDENTIALS_HREF, linkText: "See Git credentials" };
   if (LEADS[code]) return { lead: LEADS[code], reason: reasonOf(err), code };
   const d = describeError(err);
   return { lead: d.message, reason: d.next, code: d.code };

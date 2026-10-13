@@ -74,6 +74,7 @@ func (s *Service) StartInteractive(ctx context.Context, req InteractiveRequest) 
 	}
 
 	spec := s.agentSpec(p.cfg, ports.Conversation{ID: id}, modePrompt(mode, ticket, req.Prompt))
+	spec.EnvFile = p.envFile
 	created, err := s.sessions.Create(&domain.Session{
 		ID:              id,
 		ProjectID:       req.ProjectID,
@@ -161,18 +162,23 @@ func (s *Service) ResumeInteractive(ctx context.Context, req ports.ResumeRequest
 		permission = llmkit.PermissionBypass
 	}
 	cfg := s.sessionConfig(sess.ID, sess.WorkingDir, sess.Model, nil, permission, ag, ticket, sess.ZoneID, s.sessionRole(ctx, sess.ID))
+	envFile, cleanup, err := s.withGit(sess.ID, sess.RepositoryID, &cfg, ag.cleanup)
+	if err != nil {
+		return nil, ports.AgentSpec{}, err
+	}
 	spec := s.agentSpec(cfg, ports.Conversation{ID: claudeID(sess), Resume: true}, "")
+	spec.EnvFile = envFile
 	err = s.sessions.UpdateRunner(sess.ID, runsOn, runnerHost(runsOn, req.RunnerHost))
 	if err == nil {
 		err = s.sessions.UpdateStatus(sess.ID, domain.SessionRunning)
 	}
 	if err != nil {
-		if ag.cleanup != nil {
-			ag.cleanup()
+		if cleanup != nil {
+			cleanup()
 		}
 		return nil, ports.AgentSpec{}, err
 	}
-	s.adoptCleanup(sess.ID, ag.cleanup)
+	s.adoptCleanup(sess.ID, cleanup)
 	s.courier.setTurn(sess.ID, turnIdle) // a resumed conversation waits for its next prompt
 	s.publish(sess.ID, SessionEvent{Type: "status", Status: domain.SessionRunning, Text: "resumed" + strings.TrimPrefix(startedText(runsOn), "started"), At: time.Now()})
 	if runsOn == domain.RunnerServer {

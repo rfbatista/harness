@@ -1,23 +1,24 @@
-// Package ghclitest is an in-memory ports.CodeHost, so tests of what opens
-// pull requests never reach GitHub.
+// Package githubapitest is an in-memory ports.CodeHost, so tests of what
+// opens pull requests never reach GitHub.
 //
-// In a test of the wired server (package app), bind it in place of the gh
-// adapter and drive it:
+// In a test of the wired server (package app), bind it in place of the
+// GitHub adapter and drive it:
 //
-//	host := ghclitest.New()
+//	host := githubapitest.New()
 //	var prs *workspaces.PullRequests
 //	app := fx.New(…the modules…, app.WithCodeHost(host), fx.Populate(&prs))
 //
-//	host.SignOut()                       // Ready answers PR_TOOL_UNAVAILABLE ("run `gh auth login`")
+//	host.Reject("ghp_old")               // a call with this token answers ErrCodeHostUnauthorized
 //	host.Add(remote, ports.HostPullRequest{Head: "agent/x", Base: "main", Title: "By hand"}) // pre-open: create adopts it
 //	host.Opened()                        // what create asked the host to open, in order
+//	host.Tokens()                        // the token each call carried, in order
 //	host.SetState(remote, 1, domain.PullRequestMerged) // merge or close it on the host
 //	prs.RefreshNow(ctx, workspaceID)     // the server asks the host now, past the 30 s throttle,
 //	                                     // and returns once the change is on the project feed
 //
 // remote is the origin as parsed, e.g. domain.GitRemote{Host: "github.com",
 // Owner: "acme", Repo: "widgets"}. Calls counts Open, Get and FindOpen.
-package ghclitest
+package githubapitest
 
 import (
 	"context"
@@ -37,7 +38,8 @@ var _ ports.CodeHost = (*FakeHost)(nil)
 type FakeHost struct {
 	mu       sync.Mutex
 	prs      map[domain.GitRemote][]*ports.HostPullRequest
-	ReadyErr error
+	rejected map[domain.Secret]bool
+	tokens   []domain.Secret
 	OpenErr  error
 	GetErr   error
 	FindErr  error
@@ -50,24 +52,44 @@ type FakeHost struct {
 
 // New returns an empty, ready host.
 func New() *FakeHost {
-	return &FakeHost{prs: map[domain.GitRemote][]*ports.HostPullRequest{}, Now: time.Now}
+	return &FakeHost{prs: map[domain.GitRemote][]*ports.HostPullRequest{}, rejected: map[domain.Secret]bool{}, Now: time.Now}
 }
 
-// Ready answers ReadyErr.
-func (h *FakeHost) Ready(context.Context) error {
+// Reject makes every call carrying token answer ErrCodeHostUnauthorized, as
+// GitHub does for a revoked token.
+func (h *FakeHost) Reject(token domain.Secret) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	return h.ReadyErr
+	h.rejected[token] = true
+}
+
+// Tokens is the token each call carried, in order.
+func (h *FakeHost) Tokens() []domain.Secret {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return append([]domain.Secret(nil), h.tokens...)
+}
+
+// auth records token and refuses a rejected or empty one; under mu.
+func (h *FakeHost) auth(token domain.Secret) error {
+	h.tokens = append(h.tokens, token)
+	if token == "" || h.rejected[token] {
+		return fmt.Errorf("%w: Bad credentials", ports.ErrCodeHostUnauthorized)
+	}
+	return nil
 }
 
 // FindOpen is the newest open pull request for head.
-func (h *FakeHost) FindOpen(ctx context.Context, r domain.GitRemote, head string) (*ports.HostPullRequest, error) {
+func (h *FakeHost) FindOpen(ctx context.Context, r domain.GitRemote, token domain.Secret, head string) (*ports.HostPullRequest, error) {
 	if err := h.wait(ctx); err != nil {
 		return nil, err
 	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.finds++
+	if err := h.auth(token); err != nil {
+		return nil, err
+	}
 	if h.FindErr != nil {
 		return nil, h.FindErr
 	}
@@ -87,7 +109,7 @@ func (h *FakeHost) openFor(r domain.GitRemote, head string) *ports.HostPullReque
 
 // Open opens a pull request, refusing a second open one for the same head as
 // GitHub does.
-func (h *FakeHost) Open(ctx context.Context, r domain.GitRemote, req ports.OpenPullRequest) (*ports.HostPullRequest, error) {
+func (h *FakeHost) Open(ctx context.Context, r domain.GitRemote, token domain.Secret, req ports.OpenPullRequest) (*ports.HostPullRequest, error) {
 	if err := h.wait(ctx); err != nil {
 		return nil, err
 	}
@@ -95,6 +117,9 @@ func (h *FakeHost) Open(ctx context.Context, r domain.GitRemote, req ports.OpenP
 	defer h.mu.Unlock()
 	h.opens++
 	h.opened = append(h.opened, req)
+	if err := h.auth(token); err != nil {
+		return nil, err
+	}
 	if h.OpenErr != nil {
 		return nil, h.OpenErr
 	}
@@ -117,13 +142,16 @@ func (h *FakeHost) wait(ctx context.Context) error {
 }
 
 // Get reads a pull request by number.
-func (h *FakeHost) Get(ctx context.Context, r domain.GitRemote, number int) (*ports.HostPullRequest, error) {
+func (h *FakeHost) Get(ctx context.Context, r domain.GitRemote, token domain.Secret, number int) (*ports.HostPullRequest, error) {
 	if err := h.wait(ctx); err != nil {
 		return nil, err
 	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.gets++
+	if err := h.auth(token); err != nil {
+		return nil, err
+	}
 	if h.GetErr != nil {
 		return nil, h.GetErr
 	}
@@ -188,20 +216,4 @@ func (h *FakeHost) Opened() []ports.OpenPullRequest {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	return append([]ports.OpenPullRequest(nil), h.opened...)
-}
-
-// SignOut makes Ready answer PR_TOOL_UNAVAILABLE, as gh signed out does;
-// SignIn undoes it.
-func (h *FakeHost) SignOut() {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	h.ReadyErr = domain.PullRequestError(domain.CodePRToolUnavailable,
-		"gh is not signed in to github.com on the server machine; run `gh auth login`")
-}
-
-// SignIn makes Ready answer nil again.
-func (h *FakeHost) SignIn() {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	h.ReadyErr = nil
 }

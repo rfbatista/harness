@@ -17,7 +17,9 @@ export const STATUS = Object.freeze({
   [Codes.PR_NO_COMMITS]: 409,
   [Codes.PR_BASE_NOT_FOUND]: 400,
   [Codes.PR_ALREADY_EXISTS]: 409,
-  [Codes.PR_TOOL_UNAVAILABLE]: 503,
+  [Codes.GIT_CREDENTIAL_MISSING]: 400,
+  [Codes.GIT_CREDENTIAL_REJECTED]: 502,
+  [Codes.GIT_CREDENTIAL_STORE_LOCKED]: 503,
   [Codes.PR_PUSH_FAILED]: 502,
   [Codes.PR_CREATE_FAILED]: 502,
 });
@@ -25,7 +27,8 @@ export const STATUS = Object.freeze({
 const REASONS = {
   [Codes.PR_NO_REMOTE]: "the repository has no GitHub origin remote",
   [Codes.PR_NO_COMMITS]: "the branch has no commits ahead of its base",
-  [Codes.PR_TOOL_UNAVAILABLE]: "gh is not signed in on the server; run `gh auth login` on the server machine",
+  [Codes.GIT_CREDENTIAL_MISSING]: "no stored credential resolves for the repository",
+  [Codes.GIT_CREDENTIAL_REJECTED]: "Bad credentials",
   [Codes.PR_PUSH_FAILED]: "! [rejected] (non-fast-forward)",
   [Codes.PR_CREATE_FAILED]: "GitHub refused the pull request",
 };
@@ -164,11 +167,11 @@ export function memoryPullRequests({ workspaces = [], pullRequests = [], now = (
       if (failure) {
         const f = failure;
         failure = null;
-        throw refusal(f.code, f.reason);
+        throw refusal(f.code, f.reason, f.details);
       }
       const open = newest(workspaceId);
       if (isOpen(open)) throw refusal(Codes.PR_ALREADY_EXISTS, `#${open.number} is open for ${w.headBranch}`, { pullRequest: open });
-      if (w.blockers.length > 0) throw refusal(w.blockers[0]);
+      if (w.blockers.length > 0) throw refusal(w.blockers[0], undefined, w.blockers[0] === Codes.GIT_CREDENTIAL_MISSING ? { host: w.remote?.host ?? "", kind: "https_token" } : undefined);
       const base = baseBranch.trim() || w.baseBranch;
       if (!w.originBranches.includes(base)) throw refusal(Codes.PR_BASE_NOT_FOUND, `${base} is not a branch on origin`);
       if (w.ahead === 0) throw refusal(Codes.PR_NO_COMMITS, `${w.headBranch} has no commits ahead of ${base}`);
@@ -211,7 +214,7 @@ export function memoryPullRequests({ workspaces = [], pullRequests = [], now = (
       const pr = newest(workspaceId);
       return pr ? announce(Object.freeze({ ...pr, state })) : null;
     },
-    /** What the server would now say locally: harness.pr.block("ws1", "PR_TOOL_UNAVAILABLE"); none clears. */
+    /** What the server would now say locally: harness.pr.block("ws1", "GIT_CREDENTIAL_MISSING"); none clears. */
     block(workspaceId, ...codes) {
       workspace(workspaceId).blockers = codes;
     },
@@ -220,8 +223,8 @@ export function memoryPullRequests({ workspaces = [], pullRequests = [], now = (
       Object.assign(workspace(workspaceId), fields);
     },
     /** The next create fails with this code, whatever the draft said. */
-    failNext(code, reason) {
-      failure = { code, reason };
+    failNext(code, reason, details) {
+      failure = { code, reason, details };
     },
     /** A create takes this long (push + host). */
     slow(ms) {

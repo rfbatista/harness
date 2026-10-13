@@ -18,6 +18,7 @@ import (
 	"operators-mcp/internal/adapter/out/persistence/sqlite"
 	"operators-mcp/internal/application/agents"
 	"operators-mcp/internal/application/artifacts/artifactstest"
+	"operators-mcp/internal/application/gitcredentials/gitcredentialstest"
 	"operators-mcp/internal/application/notifications/notificationstest"
 	"operators-mcp/internal/application/orchestration"
 	"operators-mcp/internal/application/planning"
@@ -205,5 +206,14 @@ func TestSessionCommentsConformance(t *testing.T) {
 	portstest.SessionCommentsConformance(t, func(t *testing.T) (ports.TaskComments, string, portstest.SessionCommentSeed) {
 		c, tid, seed := sessionCommentsServer(t)
 		return httpclient.NewTaskComments(c), tid, seed
+	})
+}
+
+func TestGitCredentialsConformance(t *testing.T) {
+	portstest.GitCredentialsConformance(t, func(t *testing.T) (ports.GitCredentials, portstest.GitCredentialsFixture) {
+		env := gitcredentialstest.NewSQLite(t)
+		catalog := projects.NewService(env.Projects, env.Repos, nil)
+		c := serve(t, httpapi.Services{Projects: catalog, ProjectFeed: catalog, GitCredentials: env.Service})
+		return httpclient.NewGitCredentials(c), env.Fixture()
 	})
 }

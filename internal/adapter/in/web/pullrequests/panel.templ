@@ -81,10 +81,15 @@ templ Strip(p *Panel) {
 	<section class="[ pr-strip ]" aria-label="Pull request" { shownIf(p.Blocked())... } x-show="showsStrip">
 		<ul class="[ reasons ]" id="pr-reasons" role="list" { shownIf(p.Blocked())... } x-show="blocked">
 			for _, b := range p.Blockers {
-				<li data-ssr>{ b }</li>
+				<li data-ssr>
+					{ b.Text }
+					if b.Href != "" {
+						{ " " }<a href={ templ.SafeURL(b.Href) }>{ b.LinkText }</a>
+					}
+				</li>
 			}
 			<template x-for="b in blockers" x-bind:key="b.code">
-				<li x-text="b.text"></li>
+				<li><span x-text="b.text"></span><template x-if="b.href">{ " " }<a x-bind:href="b.href" x-text="b.linkText"></a></template></li>
 			</template>
 		</ul>
 		<div class="[ banner ]" data-tone="signal" role="status" style="display: none" x-show="hasNotice">
@@ -109,6 +114,7 @@ templ form() {
 				<p x-text="refusalLead"></p>
 				<p class="[ font-mono text-xs ]" x-show="refusalReason" x-text="refusalReason"></p>
 				<span class="[ code ]" x-text="refusalCode"></span>
+				<a x-show="refusalHref" x-bind:href="refusalHref" x-text="refusalLinkText"></a>
 			</div>
 		</div>
 		<p class="[ text-sm color-ink-muted ]" role="status" data-span x-show="creating" x-text="progress"></p>

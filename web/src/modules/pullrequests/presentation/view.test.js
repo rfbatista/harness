@@ -2,14 +2,29 @@ import views from "../../../../testdata/views/pull-request.json" with { type: "j
 import { Codes, StructuredError } from "../../../shared/domain/errors.js";
 import { assert, file, test } from "../../../shared/testing/test.js";
 import { makeDraft, makePullRequest } from "../testing/fixtures.js";
-import { blockerText, reasonOf, refusalOf, summaryLine, toChip, uncommittedLine } from "./view.js";
+import { blockerLink, blockerText, reasonOf, refusalOf, summaryLine, toChip, uncommittedLine } from "./view.js";
 
 file("pullrequests/presentation/view");
 
 const draft = makeDraft({ headBranch: views.draft.head_branch, baseBranch: views.draft.base_branch });
 
-test("each blocker reads as the Go page paints it", () => {
-  for (const c of views.blockers) assert.equal(blockerText(c.code, draft), c.text, c.code);
+test("each blocker reads, and links to its fix, as the Go page paints it", () => {
+  for (const c of views.blockers) {
+    const d = { ...draft, remote: c.remote ?? null };
+    assert.equal(blockerText(c.code, d), c.text, c.code);
+    assert.equal(blockerLink(c.code, d)?.href ?? "", c.href ?? "", `${c.code} link`);
+  }
+});
+
+test("a credential refusal names the host and links to where it is fixed", () => {
+  const missing = refusalOf(new StructuredError(Codes.GIT_CREDENTIAL_MISSING, "GIT_CREDENTIAL_MISSING: no token resolves for github.com", 400, { host: "github.com", kind: "https_token" }));
+  assert.deepEqual(missing, { lead: "No token stored for github.com.", reason: "no token resolves for github.com", code: Codes.GIT_CREDENTIAL_MISSING, href: "/git-credentials?host=github.com&kind=https_token", linkText: "Add one in Git credentials" });
+  const key = refusalOf(new StructuredError(Codes.GIT_CREDENTIAL_MISSING, "GIT_CREDENTIAL_MISSING: x", 400, { host: "github.com", kind: "ssh_key" }));
+  assert.equal(key.lead, "No SSH key stored for github.com.");
+  const rejected = refusalOf(new StructuredError(Codes.GIT_CREDENTIAL_REJECTED, "GIT_CREDENTIAL_REJECTED: Bad credentials", 502, { host: "github.com", credential_id: "gc-1" }));
+  assert.deepEqual([rejected.lead, rejected.reason, rejected.href], ["github.com refused the stored credential.", "Bad credentials", "/git-credentials?credential=gc-1"]);
+  const locked = refusalOf(new StructuredError(Codes.GIT_CREDENTIAL_STORE_LOCKED, "GIT_CREDENTIAL_STORE_LOCKED: no key", 503));
+  assert.deepEqual([locked.code, locked.href], [Codes.GIT_CREDENTIAL_STORE_LOCKED, "/git-credentials"]);
 });
 
 test("each state reads and tones as the Go page paints it", () => {

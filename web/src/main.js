@@ -15,6 +15,8 @@ import { desktopAlerts } from "./modules/notifications/infrastructure/desktop-al
 import { notificationsGateway } from "./modules/notifications/infrastructure/notifications-gateway.js";
 import { registerNotifications } from "./modules/notifications/presentation/register.js";
 import { codeGateway } from "./modules/code/infrastructure/code-gateway.js";
+import { credentialsGateway } from "./modules/credentials/infrastructure/credentials-gateway.js";
+import { registerCredentials } from "./modules/credentials/presentation/register.js";
 import { hljsHighlighter } from "./modules/code/infrastructure/hljs-highlighter.js";
 import { registerCode } from "./modules/code/presentation/register.js";
 import { runsGateway } from "./modules/runs/infrastructure/runs-gateway.js";
@@ -74,5 +76,6 @@ registerReviews(Alpine, { gateway: reviewsGateway(api, events), clock: systemClo
 registerPullRequests(Alpine, { gateway: pullRequestsGateway(api, events) });
 registerCode(Alpine, { gateway: codeGateway(api, events), highlighter: hljsHighlighter(createHljs()), prefs, navigate });
 registerNotifications(Alpine, { gateway: notificationsGateway(api, events), alerts: desktopAlerts(), prefs, clock: systemClock, navigate });
+registerCredentials(Alpine, { gateway: credentialsGateway(api, events), clock: systemClock });
 
 Alpine.start();
