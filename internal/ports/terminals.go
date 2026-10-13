@@ -48,7 +48,8 @@ type TerminalSnapshot struct {
 	Screen string `json:"screen"`
 	// Scrollback is what scrolled off the top of the main screen, rendered
 	// like Screen, oldest line first, the last line being the one just
-	// above the first visible row. At most 2000 lines; absent on the
+	// above the first visible row. At most 10,000 lines, kept through a
+	// program's screen clears (ED2, ED3); absent on the
 	// alternate screen, which has no history, and on Log snapshots, whose
 	// Screen already is the whole output. Lines keep the width they had
 	// when they scrolled off.

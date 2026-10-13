@@ -5,6 +5,7 @@ package termhost
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -263,18 +264,58 @@ func TestSnapshotCarriesScrollback(t *testing.T) {
 	}
 }
 
-func TestScrollbackIsBoundedAtTwoThousandLines(t *testing.T) {
+func TestScrollbackIsBoundedAtTenThousandLines(t *testing.T) {
 	h := newHost(t)
-	term, _ := spawn(t, h, "big", lines(2100, `line %d`)+`printf 'done\r\n'; sleep 5`)
+	term, _ := spawn(t, h, "big", lines(historyLines+100, `line %d`)+`printf 'done\r\n'; sleep 5`)
 	snap := screen(t, term, "done")
 	sb := rows(snap.Scrollback)
-	if len(sb) != scrollbackLines {
-		t.Fatalf("scrollback has %d rows, want %d", len(sb), scrollbackLines)
+	if len(sb) != historyLines {
+		t.Fatalf("scrollback has %d rows, want %d", len(sb), historyLines)
 	}
 	last, first := sb[len(sb)-1], rows(snap.Screen)[0]
 	var n int
 	if _, err := fmt.Sscanf(last, "line %d", &n); err != nil || first != fmt.Sprintf("line %d", n+1) {
 		t.Errorf("after trimming, last scrollback row %q is not just above the first screen row %q", last, first)
+	}
+	if want := fmt.Sprintf("line %d", n-historyLines+1); sb[0] != want {
+		t.Errorf("oldest scrollback row = %q, want %q", sb[0], want)
+	}
+}
+
+// A full redraw as programs send it — erase the screen, erase saved lines,
+// home — keeps the history a person could already scroll to, and the
+// cleared screen joins it.
+func TestEraseSavedLinesKeepsHistory(t *testing.T) {
+	h := newHost(t)
+	term, _ := spawn(t, h, "ed3", lines(30, `line %d`)+`printf 'on screen\r\n'; printf '\033[2J\033[3J\033[H'; printf 'redrawn\r\n'; printf '\033[3J'; printf 'still\r\n'; sleep 5`)
+	snap := screen(t, term, "still")
+	sb := rows(snap.Scrollback)
+	if len(sb) == 0 || sb[0] != "line 1" {
+		t.Fatalf("scrollback after ED3 = %q, want it to start at line 1", sb)
+	}
+	if !slices.Contains(sb, "on screen") {
+		t.Errorf("the cleared screen did not join the history: %q", sb)
+	}
+	if got := rows(snap.Screen); got[0] != "redrawn" || got[1] != "still" {
+		t.Errorf("screen = %q, want the redraw kept by ED3", got[:2])
+	}
+}
+
+// History only grows: a client attaching after a full redraw sees what an
+// earlier snapshot showed, then what scrolled off since, styles kept.
+func TestReattachShowsTheSameHistory(t *testing.T) {
+	h := newHost(t)
+	term, _ := spawn(t, h, "re", lines(40, `\033[1mline %d\033[0m`)+`printf 'first\r\n'; read x; `+lines(40, `more %d`)+`printf '\033[2J\033[3J\033[H'; printf 'done\r\n'; sleep 5`)
+	early := screen(t, term, "first")
+	_ = term.Key(ports.KeyEvent{Code: '\r'})
+	late := screen(t, term, "done")
+
+	if !strings.HasPrefix(late.Scrollback, early.Scrollback+"\n") {
+		t.Fatalf("late scrollback does not continue the early one:\nearly %q\n late %q", rows(early.Scrollback), rows(late.Scrollback))
+	}
+	sb := rows(late.Scrollback)
+	if sb[0] != "line 1" || !slices.Contains(sb, "first") || !slices.Contains(sb, "more 40") {
+		t.Errorf("late scrollback = %q, want all output before the redraw", sb)
 	}
 }
 
