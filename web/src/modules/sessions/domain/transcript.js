@@ -29,6 +29,15 @@ export const TRANSCRIPT_PAGE = 200;
  */
 
 /**
+ * The server would not take a cursor it gave (only the exact returned form
+ * is accepted, and a rewritten transcript has new ones): start again from
+ * the newest page rather than show an error.
+ */
+export function isStaleCursor(err) {
+  return err?.code === Codes.INVALID_INPUT;
+}
+
+/**
  * The session has no saved conversation to show (yet): nothing is wrong, the
  * view is empty. A 404 without a code (a server that does not serve the
  * route yet) reads the same.

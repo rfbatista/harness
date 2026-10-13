@@ -85,8 +85,15 @@ export function createScreen(container, { onKey, onPaste, onPageKey, onCellSize,
     fontSize,
     lineHeight: 1.15,
     scrollback: HISTORY_LINES,
+    // H2: a full clear (ED2) keeps the cleared screen in the history, as the
+    // server's emulator does, so what a person could scroll to stays.
+    scrollOnEraseInDisplay: true,
     theme: screenColors(),
   });
+  // H2, H3: erasing the saved lines (ED3, ESC[3J) is ignored here as on the
+  // server, so a browser that stayed attached keeps the history a reload
+  // would show. Other erases fall through to xterm.
+  term.parser.registerCsiHandler({ final: "J" }, (params) => params[0] === 3);
   // A pinned theme restored after this screen mounted, a toggle click, the OS
   // flipping: each re-themes the screen in place.
   const stopFollowing = followTheme(() => {

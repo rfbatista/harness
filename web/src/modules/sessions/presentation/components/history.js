@@ -17,7 +17,7 @@
 // keeping the line they look at where it was.
 
 import { describeError } from "../../../../shared/presentation/errors.js";
-import { isTranscriptMissing, TRANSCRIPT_PAGE } from "../../domain/transcript.js";
+import { isStaleCursor, isTranscriptMissing, TRANSCRIPT_PAGE } from "../../domain/transcript.js";
 import { historyLine } from "../historyView.js";
 
 /** The catch-up interval while the session runs (T5: no more often than every 2 s). */
@@ -184,7 +184,9 @@ export const history = ({ transcripts, timers = globalThis, pageVisible = () => 
           if (!page.hasNewer) break;
         }
       } catch (err) {
-        if (!gone) this.error = describeError(err).message;
+        if (gone) return;
+        if (isStaleCursor(err)) await this.load();
+        else this.error = describeError(err).message;
       } finally {
         busy = false;
       }
@@ -239,7 +241,9 @@ export const history = ({ transcripts, timers = globalThis, pageVisible = () => 
         this.error = "";
         this.restore(kept);
       } catch (err) {
-        if (!gone) this.error = describeError(err).message;
+        if (gone) return;
+        if (isStaleCursor(err)) await this.load();
+        else this.error = describeError(err).message;
       } finally {
         this.loadingOlder = false;
       }

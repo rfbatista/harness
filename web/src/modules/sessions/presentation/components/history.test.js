@@ -161,3 +161,17 @@ test("a tool line opens and closes on its own", async () => {
   instance.toggle(result);
   assert.equal(instance.expanded(result), false);
 });
+
+test("a cursor the server no longer takes starts History again from the newest page, without an error", async () => {
+  const { instance, timers, memory } = await make({ transcripts: { s1: numbered(300) }, live: true });
+  memory.failNext(new StructuredError(Codes.INVALID_INPUT, "bad cursor", 400));
+  timers.tick();
+  await flush();
+  await flush();
+  assert.deepEqual([instance.showsError, instance.state, instance.entries.length, texts(instance).at(-1)], [false, "ready", 200, "300"]);
+  assert.deepEqual(memory.calls.slice(-2).map((c) => [c.after !== undefined, c.before]), [[true, undefined], [false, undefined]]);
+
+  memory.failNext(new StructuredError(Codes.INVALID_INPUT, "bad cursor", 400));
+  await instance.older();
+  assert.deepEqual([instance.showsError, instance.entries.length, instance.hasOlder, memory.calls.at(-1).before], [false, 200, true, undefined]);
+});
