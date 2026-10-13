@@ -86,6 +86,9 @@ type shell struct {
 	// skipped says the last refresh left something out for them.
 	pending map[string]time.Time
 	skipped bool
+	// rekick says a refresh is already set for when the holds run out, so
+	// refreshes that skip again arm no more timers.
+	rekick bool
 
 	// kickMu guards dirty and running: one refresh runs at a time, and a
 	// change while it runs makes it go round once more.
@@ -105,7 +108,10 @@ func (s *Service) Open(ctx context.Context, sessionID, ticketID string) (string,
 	if err != nil {
 		return "", err
 	}
-	realDir, _ := filepath.EvalSymlinks(dir)
+	realDir, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		realDir = dir
+	}
 	sh := &shell{dir: dir, realDir: realDir, sessionID: sessionID, ticketID: tk.ID, projID: tk.ProjectID, files: map[string]ports.ShellFile{}}
 	// Held until filled: a change heard meanwhile refreshes it after.
 	sh.mu.Lock()
@@ -342,8 +348,14 @@ func (s *Service) refreshLocked(sh *shell) {
 	if err != nil {
 		slog.Warn("refresh a virtual shell", "session", sh.sessionID, "err", err)
 	}
-	if sh.skipped {
-		time.AfterFunc(pendingFor, func() { s.kick(sh) })
+	if sh.skipped && !sh.rekick {
+		sh.rekick = true
+		time.AfterFunc(pendingFor, func() {
+			sh.mu.Lock()
+			sh.rekick = false
+			sh.mu.Unlock()
+			s.kick(sh)
+		})
 	}
 }
 
