@@ -243,7 +243,7 @@ const Kit = (() => {
     const t = (id, name, extra = "") => `<button role="tab" aria-selected="${tab === id}"${attr(tab !== id, 'tabindex="-1"')}>${name}${extra}</button>`;
     const attention = o.attention ? ' <span class="status" data-state="waiting" data-dot-only aria-label="waiting on you"></span>' : "";
     return `<div class="pane-tabs"${attr(o.focus, "data-focus")}>${lead}
-      <div class="tabs" role="tablist" aria-label="Session views">${t("agent", "Agent", attention)}${t("app", "App")}${t("design", "Design", o.designBadge === false ? "" : ' <span class="badge" data-tone="signal">2</span>')}${t("conversation", "Conversation")}</div>
+      <div class="tabs" role="tablist" aria-label="Session views">${t("agent", "Agent", attention)}${t("history", "History")}${t("app", "App")}${t("design", "Design", o.designBadge === false ? "" : ' <span class="badge" data-tone="signal">2</span>')}${t("conversation", "Conversation")}</div>
       ${tools ? `<div class="tools" role="group" aria-label="${tab === "app" ? "Run terminal tools" : "Terminal tools"}">${tools}</div>` : ""}
     </div>`;
   }
@@ -267,10 +267,27 @@ const Kit = (() => {
     </div>`;
   }
 
+  // --- history: the saved conversation, read-only ---------------------------
+  const HISTORY = [
+    ["user", "›", "14:02", "Why does the agent tab stop scrolling?"],
+    ["agent", "⏺", "14:02", "claude draws on the alternate screen, so the terminal keeps no history. The full conversation is here."],
+    ["tool", "⌁", "14:02", null, "Grep", "onData|wheel in web/src"],
+    ["tool", "⌁", "14:03", null, "Bash", "git status --short", "3 lines"],
+    ["error", "✕", "14:03", null, "Bash", "exit 1 · go test ./internal/...", "48 lines"],
+    ["agent", "⏺", "14:04", "Fixed: the wheel now pages claude's own view, and History reads the transcript."],
+  ];
+  function history(o) {
+    const lines = HISTORY.map(([kind, mark, at, text, tool, gist, meta]) => text !== null
+      ? `<p class="line" data-kind="${kind}"><time>${at}</time><span class="mark" aria-hidden="true">${mark}</span><span class="text">${esc(text)}</span></p>`
+      : `<div class="line" data-kind="${kind}"><time>${at}</time><span class="mark" aria-hidden="true">${mark}</span><div class="fold"><button class="summary" aria-expanded="false"><span class="tool">${tool}</span><span class="gist">${esc(gist)}</span>${meta ? `<span class="meta">${meta}</span>` : ""}</button><pre class="detail"></pre></div></div>`).join("");
+    const jump = o.jump ? `<button class="button jump" data-size="sm">${o.jump} new · Jump to latest</button>` : "";
+    return `<section class="frame" aria-label="History"><div class="transcript" data-scroll role="log" tabindex="0" aria-label="Conversation history"><div class="older"><button class="button" data-variant="ghost" data-size="sm">Load older</button></div>${lines}${jump}</div></section>`;
+  }
+
   // --- a whole session column ----------------------------------------------
   function session(o) {
     const tab = o.tab || "agent";
-    const pane = tab === "design" || tab === "conversation"
+    const pane = tab === "history" ? history(o) : tab === "design" || tab === "conversation"
       ? `<div class="empty" style="display:grid;place-content:center;color:var(--color-ink-faint);font-size:var(--text-sm)">${tab === "design" ? "Design tab: no tools in the tab row" : "Conversation tab: no tools in the tab row"}</div>`
       : tab === "app"
         ? `<div class="app-pane"><div class="app-cmd"><span class="status" data-state="running">running</span><code>make dev</code><span class="grow"></span><button class="button" data-size="sm">Stop</button></div>${terminal({ ...o, screen: "app" })}</div>`
@@ -333,7 +350,7 @@ const Kit = (() => {
   function comp(o) {
     const parts = o.parts || ["head", "tabs"];
     // Outside a split view nothing hides the narrow-mode back button: leave it out.
-    const inner = parts.map((p) => (p === "head" ? head({ ...o, back: false }) : p === "tabs" ? paneTabs(o) : terminal({ ...o, screen: o.screen || "wide" }))).join("");
+    const inner = parts.map((p) => (p === "head" ? head({ ...o, back: false }) : p === "tabs" ? paneTabs(o) : p === "history" ? history(o) : terminal({ ...o, screen: o.screen || "wide" }))).join("");
     return `<div class="comp"><section class="session" style="inline-size: ${o.col ? o.col + "px" : "auto"}"${attr(o.focus, "data-focus")}>${inner}</section></div>`;
   }
 

@@ -27,6 +27,7 @@
 .in-frame .comp { padding: var(--space-l); }
 .in-frame .comp > .session { block-size: auto; overflow: visible; border: 1px solid var(--color-line); border-radius: var(--radius-sm); }
 .in-frame .comp > .session > .terminal { block-size: 9rem; flex: none; }
+.in-frame .comp > .session > .frame { block-size: 12rem; flex: none; }
 .in-frame .app-cmd { display: flex; align-items: center; gap: var(--space-s); flex: none; padding: var(--space-xs) var(--space-m); border-block-end: 1px solid var(--color-line); font-size: var(--text-sm); }
 .in-frame .app-cmd code { font-family: var(--font-mono); }
 .in-frame .app-pane { display: flex; flex-direction: column; min-block-size: 0; }

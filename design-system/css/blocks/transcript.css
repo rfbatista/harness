@@ -1,7 +1,22 @@
 /*
- * Transcript — what an agent actually did.
- * <div class="transcript"><p class="line" data-kind="tool"><time>…</time><span class="mark">⌁</span><span>…</span></p></div>
- * Exception: data-kind="user|agent|tool|error|prompt".
+ * Transcript — what an agent actually did: a session's saved conversation,
+ * one line per entry, oldest at the top. The History tab's scroll region.
+ * <div class="transcript" data-scroll role="log" tabindex="0" aria-label="Conversation history">
+ *   <div class="older"><button class="button" data-variant="ghost" data-size="sm">Load older</button></div>
+ *   <p class="line" data-kind="user"><time>…</time><span class="mark">›</span><span class="text">…</span></p>
+ *   <div class="line" data-kind="tool"><time>…</time><span class="mark">⌁</span>
+ *     <div class="fold"><button class="summary" aria-expanded="false"><span class="tool">Bash</span>
+ *       <span class="gist">git status</span><span class="meta">12 lines</span></button>
+ *       <pre class="detail">…</pre></div></div>
+ *   <button class="button jump" data-size="sm">3 new · Jump to latest</button>
+ * </div>
+ * .older: the row above the first line (Load older, a loader, or where the
+ * conversation starts). .fold: a tool call or result, one line until opened;
+ * .detail shows only while its summary is aria-expanded. .cut: text the server
+ * cut short. .jump: sticks to the bottom of the region while the reader is
+ * scrolled up and newer lines arrived.
+ * Exception: data-kind="user|agent|tool|error|prompt|system".
+ * Narrow (its container under 28rem): the time column folds away.
  */
 
 @layer blocks {
@@ -14,6 +29,9 @@
     font-size: var(--text-sm);
     line-height: var(--leading-snug);
     overflow: auto;
+    overflow-anchor: none; /* the script anchors the reader itself when older lines arrive */
+
+    &:focus-visible { outline-offset: calc(var(--border-focus-width) * -1); }
 
     & > .line {
       display: grid;
@@ -23,17 +41,24 @@
       padding-block: var(--space-3xs);
       white-space: pre-wrap;
       overflow-wrap: anywhere;
+      /* Thousands of lines: only those near the view are laid out. */
+      content-visibility: auto;
+      contain-intrinsic-size: auto 1.5em;
     }
 
     & time,
     & .mark { color: var(--color-ink-faint); }
 
+    & time { font-variant-numeric: tabular-nums; }
     & .mark { text-align: center; }
 
     & [data-kind="user"] .mark { color: var(--color-signal); }
+    & [data-kind="user"] > .text { color: var(--color-ink); font-weight: var(--weight-medium); }
     & [data-kind="tool"] { color: var(--color-ink-muted); }
+    & [data-kind="system"] { color: var(--color-ink-faint); font-style: italic; }
     & [data-kind="error"],
-    & [data-kind="error"] .mark { color: var(--color-danger); }
+    & [data-kind="error"] .mark,
+    & [data-kind="error"] .summary { color: var(--color-danger); }
 
     & [data-kind="prompt"] {
       margin-block: var(--space-xs);
@@ -42,6 +67,93 @@
       background: var(--color-attention-wash);
 
       & .mark { color: var(--color-attention); }
+    }
+
+    & .cut {
+      display: block;
+      margin-block-start: var(--space-3xs);
+      color: var(--color-ink-faint);
+      font-size: var(--text-xs);
+      font-style: italic;
+    }
+
+    /* A tool call or its result: one line, opened on demand. */
+    & .fold {
+      display: grid;
+      min-inline-size: 0;
+    }
+
+    & .summary {
+      display: flex;
+      align-items: baseline;
+      gap: var(--space-xs);
+      min-inline-size: 0;
+      padding: 0;
+      border: 0;
+      border-radius: var(--radius-xs);
+      background: none;
+      color: inherit;
+      font: inherit;
+      text-align: start;
+      cursor: pointer;
+
+      &::before {
+        content: "▸";
+        flex: none;
+        color: var(--color-ink-faint);
+      }
+      &[aria-expanded="true"]::before { content: "▾"; }
+      &:hover > .gist { color: var(--color-ink); }
+
+      & > .tool { flex: none; color: var(--color-ink); font-weight: var(--weight-medium); }
+      & > .gist { flex: 0 1 auto; min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      & > .meta { flex: none; color: var(--color-ink-faint); font-size: var(--text-xs); }
+    }
+
+    & .detail {
+      display: none;
+      max-block-size: 24rem;
+      margin: var(--space-2xs) 0 var(--space-xs);
+      padding: var(--space-xs) var(--space-s);
+      overflow: auto;
+      border: var(--border-width) solid var(--color-line);
+      border-radius: var(--radius-sm);
+      background: var(--color-canvas);
+      color: var(--color-ink);
+      font: inherit;
+      font-size: var(--text-xs);
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+    & .summary[aria-expanded="true"] + .detail { display: block; }
+
+    & > .older {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: var(--space-xs);
+      min-block-size: var(--size-row);
+      margin-block-end: var(--space-xs);
+      color: var(--color-ink-faint);
+      font-family: var(--font-sans);
+      font-size: var(--text-xs);
+    }
+
+    /* Newer lines below a reader who scrolled up: the way back down. */
+    & > .jump {
+      position: sticky;
+      inset-block-end: 0;
+      align-self: flex-end;
+      margin-block-start: auto;
+      font-family: var(--font-sans);
+      box-shadow: var(--shadow-float);
+    }
+
+    @container (width < 28rem) {
+      padding-inline: var(--space-s);
+
+      & > .line { grid-template-columns: 1.25rem minmax(0, 1fr); gap: var(--space-2xs); }
+      & > .line > time { display: none; }
     }
   }
 }
