@@ -3,6 +3,8 @@ package orchestration
 import (
 	"embed"
 	"fmt"
+	"io/fs"
+	"path"
 	"strings"
 
 	"github.com/rfbatista/harnesskit/skill"
@@ -17,8 +19,10 @@ import (
 var modeFS embed.FS
 
 // modeSkillNames lists, per mode, the skill directories under modes/ it adds.
+// The first one is the skill the mode's first message names.
 var modeSkillNames = map[domain.SessionMode][]string{
-	domain.SessionModeArchitect: {"task-architecture"},
+	domain.SessionModeArchitect: {"task-architecture", "task-grill-with-docs", "task-to-spec"},
+	domain.SessionModeImplement: {"task-implement-spec", "task-tdd", "task-code-review"},
 	domain.SessionModeDesign:    {"design-artifacts"},
 }
 
@@ -27,16 +31,35 @@ func modeSkills(mode domain.SessionMode) ([]domain.Skill, error) {
 	names := modeSkillNames[mode]
 	out := make([]domain.Skill, 0, len(names))
 	for _, name := range names {
-		body, err := modeFS.ReadFile("modes/" + name + "/" + skill.FileName)
+		files, err := modeSkillFiles(name)
 		if err != nil {
 			return nil, fmt.Errorf("mode %s: skill %s: %w", mode, name, err)
 		}
-		out = append(out, domain.Skill{
-			Name:  name,
-			Files: []skill.File{{Path: skill.FileName, Content: string(body)}},
-		})
+		out = append(out, domain.Skill{Name: name, Files: files})
 	}
 	return out, nil
+}
+
+// modeSkillFiles reads every file of the skill directory modes/<name>, with
+// SKILL.md required, so a skill's reference files ship along with it.
+func modeSkillFiles(name string) ([]skill.File, error) {
+	root := "modes/" + name
+	if _, err := fs.Stat(modeFS, path.Join(root, skill.FileName)); err != nil {
+		return nil, err
+	}
+	var files []skill.File
+	err := fs.WalkDir(modeFS, root, func(p string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return err
+		}
+		body, err := modeFS.ReadFile(p)
+		if err != nil {
+			return err
+		}
+		files = append(files, skill.File{Path: strings.TrimPrefix(p, root+"/"), Content: string(body)})
+		return nil
+	})
+	return files, err
 }
 
 // modePrompt is the first message a mode opens the session with. typed is what
@@ -49,9 +72,12 @@ func modePrompt(mode domain.SessionMode, tk *domain.Ticket, typed string) string
 	switch mode {
 	case domain.SessionModeArchitect:
 		skill = "task-architecture"
-		closing = "Identify the affected applications, write the contracts and one spec per " +
-			"application as task documents, then delegate each spec to a planning agent with " +
-			"start_task_session. Do not write any local files.\n\n" +
+		closing = "Work in this order. First grill the person on the design with the task-grill-with-docs skill, " +
+			"recording settled terms and decisions as Glossary and ADR project documents, and wait for them to confirm " +
+			"you share an understanding. Then identify the affected applications, write the contracts, and write one " +
+			"spec per application with the task-to-spec skill, all as task documents. Then delegate each spec with " +
+			"start_task_session in mode implement: the delegate writes tickets, asks you to review them, and implements " +
+			"them once you approve. Do not write any local files.\n\n" +
 			"You own this task's status: move it with update_task_status and a reason, based on what your " +
 			"delegates report. They report to you; their messages, status checks and the person's review " +
 			"answers arrive as turns starting with [task message …] or [status check …]. Answer each one " +
@@ -61,6 +87,16 @@ func modePrompt(mode domain.SessionMode, tk *domain.Ticket, typed string) string
 			"read_task_resource or list_task_comments and decide whether a spec, a contract or a delegate's work changes. " +
 			"Leave the person a comment with add_task_comment for decisions and summaries they should see on the task; " +
 			"talk to your delegates with task messages, not comments."
+	case domain.SessionModeImplement:
+		skill = "task-implement-spec"
+		closing = "Implement the Spec task document your prompt names, with the Contract documents it depends on. " +
+			"First break it into tickets, one task document each, and ask the architect to review them with " +
+			"message_architect (kind review_request, attach the ticket documents). Write no code until the reply's " +
+			"verdict is approved; on changes_requested, revise the tickets and ask again. Then implement the ticket " +
+			"frontier test first (task-tdd) on your branch, review the result against the spec (task-code-review), and " +
+			"commit. Report with message_architect kind status_report at each ticket done and whenever you are blocked, " +
+			"and when the spec is done, report done and ask for review naming your branch. Never change a contract you " +
+			"consume and never change the task status: the architect owns it."
 	case domain.SessionModeDesign:
 		skill = "design-artifacts"
 		closing = "Work under design/ in this worktree. Make each component or screen a self-contained HTML " +

@@ -287,7 +287,8 @@ templ newSessionForm(form NewSessionForm) {
 				<div class="[ dropdown ]" x-data="dropdown">
 					<select id="new-session-mode" x-model="mode">
 						<option value="" data-description="Runs the agent as it is">Default</option>
-						<option value="architect" data-description="Writes per-application specs and delegates them">Architect</option>
+						<option value="architect" data-description="Grills you on the design, writes per-application specs and delegates them">Architect</option>
+						<option value="implement" data-description="Turns a spec into reviewed tickets, then implements them test first">Implement</option>
 						<option value="design" data-description="Publishes pages, images and videos as it works">Design</option>
 					</select>
 				</div>

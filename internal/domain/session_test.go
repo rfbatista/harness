@@ -22,14 +22,14 @@ func TestSessionStatusValues(t *testing.T) {
 }
 
 func TestParseSessionMode(t *testing.T) {
-	for in, want := range map[string]SessionMode{"": SessionModeDefault, "architect": SessionModeArchitect, "design": SessionModeDesign} {
+	for in, want := range map[string]SessionMode{"": SessionModeDefault, "architect": SessionModeArchitect, "implement": SessionModeImplement, "design": SessionModeDesign} {
 		got, err := ParseSessionMode(in)
 		if err != nil || got != want {
 			t.Errorf("ParseSessionMode(%q) = %q, %v; want %q", in, got, err, want)
 		}
 	}
 	_, err := ParseSessionMode("wizard")
-	if err == nil || !strings.Contains(err.Error(), `"design"`) {
-		t.Fatalf("unknown mode must be refused and the message must list design: %v", err)
+	if err == nil || !strings.Contains(err.Error(), `"design"`) || !strings.Contains(err.Error(), `"implement"`) {
+		t.Fatalf("unknown mode must be refused and the message must list design and implement: %v", err)
 	}
 }

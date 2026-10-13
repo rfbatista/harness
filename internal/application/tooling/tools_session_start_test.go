@@ -141,6 +141,26 @@ func TestStartTaskSession_OffersDesignMode(t *testing.T) {
 	}
 }
 
+// The architect hands each spec to a delegate in implement mode.
+func TestStartTaskSession_OffersImplementMode(t *testing.T) {
+	start, starter, _ := startFixture(t, false)
+	if _, err := start(map[string]any{"prompt": `Implement "Spec: backend — CSV export".`, "mode": "implement"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := starter.got[0].Mode; got != "implement" {
+		t.Fatalf("mode = %q, want implement", got)
+	}
+	for _, tl := range SessionTaskTools(nil, nil, nil, nil, PeerStarter{}, ArtifactTooling{}, nil, ResourceTooling{}, NotificationTooling{}) {
+		if tl.Name != "start_task_session" {
+			continue
+		}
+		schema, _ := json.Marshal(tl.InputSchema)
+		if !strings.Contains(string(schema), `"implement"`) {
+			t.Fatalf("start_task_session schema does not offer implement: %s", schema)
+		}
+	}
+}
+
 func TestStartTaskSession_AnUnattendedParentStartsAnUnattendedPeer(t *testing.T) {
 	start, starter, _ := startFixture(t, true)
 	if _, err := start(map[string]any{"prompt": "x"}); err != nil {

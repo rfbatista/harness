@@ -14,13 +14,19 @@ import (
 // pluginSkill reads a skill's SKILL.md out of the session's --plugin-dir.
 func pluginSkill(t *testing.T, l launched, name string) string {
 	t.Helper()
+	return pluginFile(t, l, name, "SKILL.md")
+}
+
+// pluginFile reads one file of a skill out of the session's --plugin-dir.
+func pluginFile(t *testing.T, l launched, name, file string) string {
+	t.Helper()
 	dir, ok := flag(l.Args, "--plugin-dir")
 	if !ok {
 		t.Fatalf("no --plugin-dir: %q", l.Args)
 	}
-	b, err := os.ReadFile(filepath.Join(dir, "skills", name, "SKILL.md"))
+	b, err := os.ReadFile(filepath.Join(dir, "skills", name, file))
 	if err != nil {
-		t.Fatalf("skill %s not in the plugin dir: %v", name, err)
+		t.Fatalf("skill %s: %s not in the plugin dir: %v", name, file, err)
 	}
 	return string(b)
 }
@@ -41,19 +47,23 @@ func TestStartInteractive_ArchitectMode(t *testing.T) {
 		t.Errorf("task-architecture SKILL.md has no frontmatter name:\n%s", body)
 	}
 	// Sessions copy the templates literally, so they must be HTML pages.
-	for _, want := range []string{"<!doctype html>", "<title>Spec: ", "<title>Contract: ", "<title>Architecture: ", "HTML page"} {
+	for _, want := range []string{"<!doctype html>", "<title>Contract: ", "<title>Architecture: ", "HTML page"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("task-architecture SKILL.md lacks %q: its document templates must be HTML", want)
 		}
 	}
+	if spec := pluginSkill(t, launch, "task-to-spec"); !strings.Contains(spec, "<!doctype html>") || !strings.Contains(spec, "<title>Spec: ") {
+		t.Error("task-to-spec SKILL.md lacks the HTML Spec template")
+	}
 	if !strings.Contains(body, "already notify the person") {
 		t.Error("task-architecture SKILL.md does not say review requests and the review status already notify the person")
 	}
-	if strings.Contains(body, "```\n## <Application>") || strings.Contains(body, "```\n**Type:** REST API") {
+	if strings.Contains(body, "```\n## <Application>") || strings.Contains(body, "```\n**Type:** REST API") || strings.Contains(body, "<title>Spec: ") {
 		t.Error("task-architecture SKILL.md still carries Markdown document templates")
 	}
 	prompt := launch.Spec.Prompt
-	for _, want := range []string{"task-architecture skill", "tk1: Ship the thing", "Users export their data as CSV.", "add_task_comment"} {
+	for _, want := range []string{"task-architecture skill", "tk1: Ship the thing", "Users export their data as CSV.", "add_task_comment",
+		"task-grill-with-docs", "task-to-spec", "mode implement"} {
 		if !strings.Contains(prompt, want) {
 			t.Errorf("first message lacks %q:\n%s", want, prompt)
 		}
@@ -245,11 +255,11 @@ func TestStartInteractive_ArchitectCoordinatesDelegates(t *testing.T) {
 // parts, with the tools for it.
 func TestStartInteractive_SkillsReadInParts(t *testing.T) {
 	svc, _ := newInteractiveService(t)
-	for mode, skill := range map[string]string{"architect": "task-architecture", "design": "design-artifacts"} {
+	for mode, skill := range map[string]string{"architect": "task-architecture", "implement": "task-implement-spec", "design": "design-artifacts"} {
 		_, launch := startInteractive(t, svc, InteractiveRequest{Mode: mode})
 		body := pluginSkill(t, launch, skill)
 		want := []string{"mcp__task__search_documents", "`section`", "`offset`/`limit`", "never the whole"}
-		if skill == "task-architecture" {
+		if skill == "task-architecture" || skill == "task-implement-spec" {
 			want = append(want, "mcp__task__edit_task_document", "expected_version")
 		} else {
 			want = append(want, "mcp__task__read_artifact", "include_artifacts")
@@ -260,4 +270,88 @@ func TestStartInteractive_SkillsReadInParts(t *testing.T) {
 			}
 		}
 	}
+}
+
+// The architect grills before it specs and specs before it delegates, and
+// hands every spec to a delegate in implement mode.
+func TestStartInteractive_ArchitectStepsInOrder(t *testing.T) {
+	svc, _ := newInteractiveService(t)
+	_, launch := startInteractive(t, svc, InteractiveRequest{Mode: "architect"})
+	body := pluginSkill(t, launch, "task-architecture")
+	loop := body[strings.Index(body, "## The Architect's Loop"):]
+	grill, spec, deleg := strings.Index(loop, "**Grill the person**"), strings.Index(loop, "with the `task-to-spec` skill"), strings.Index(loop, "**Delegate** in `implement` mode")
+	if grill < 0 || spec < 0 || deleg < 0 || !(grill < spec && spec < deleg) {
+		t.Errorf("architect loop is not grill → spec → delegate (at %d, %d, %d)", grill, spec, deleg)
+	}
+	for _, want := range []string{"Grill before you spec", `mode: "implement"`, "Ticket:", "task-implement-spec"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("task-architecture SKILL.md lacks %q", want)
+		}
+	}
+	if strings.Contains(body, "Plan: ") {
+		t.Error("task-architecture SKILL.md still asks delegates for a Plan document")
+	}
+	grilling := pluginSkill(t, launch, "task-grill-with-docs")
+	for _, want := range []string{"name: task-grill-with-docs", "frontier", "Glossary: <project>", "ADR: NNNN", "mcp__task__move_document_to_project", "confirms"} {
+		if !strings.Contains(grilling, want) {
+			t.Errorf("task-grill-with-docs SKILL.md lacks %q", want)
+		}
+	}
+	for _, file := range []string{"GLOSSARY-FORMAT.md", "ADR-FORMAT.md"} {
+		if !strings.Contains(pluginFile(t, launch, "task-grill-with-docs", file), "<!doctype html>") {
+			t.Errorf("task-grill-with-docs %s has no HTML template", file)
+		}
+	}
+	toSpec := pluginSkill(t, launch, "task-to-spec")
+	for _, want := range []string{"User stories", "Testing decisions", "Out of scope", "seams"} {
+		if !strings.Contains(toSpec, want) {
+			t.Errorf("task-to-spec SKILL.md lacks %q", want)
+		}
+	}
+}
+
+func TestStartInteractive_ImplementMode(t *testing.T) {
+	svc, _ := newInteractiveService(t)
+	sess, launch := startInteractive(t, svc, InteractiveRequest{Mode: "implement", Prompt: `Implement "Spec: backend — CSV export".`})
+
+	if sess.Mode != domain.SessionModeImplement {
+		t.Fatalf("mode = %q, want implement", sess.Mode)
+	}
+	body := pluginSkill(t, launch, "task-implement-spec")
+	for _, want := range []string{"name: task-implement-spec", "Ticket: <application> — NN", "<!doctype html>", "review_request", "verdict: approved",
+		"mcp__task__message_architect", "task-tdd", "task-code-review", `isolation: "worktree"`, "Never move the task status"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("task-implement-spec SKILL.md lacks %q", want)
+		}
+	}
+	if tdd := pluginSkill(t, launch, "task-tdd"); !strings.Contains(tdd, "Testing decisions") {
+		t.Error("task-tdd does not take its seams from the spec's Testing decisions")
+	}
+	for _, file := range []string{"tests.md", "mocking.md"} {
+		pluginFile(t, launch, "task-tdd", file)
+	}
+	if review := pluginSkill(t, launch, "task-code-review"); !strings.Contains(review, "Spec: <application>") || strings.Contains(review, "setup-matt-pocock-skills") {
+		t.Error("task-code-review does not review against the Spec task document")
+	}
+	p := launch.Spec.Prompt
+	if !strings.HasPrefix(p, "Use the task-implement-spec skill on task tk1: Ship the thing") || !strings.Contains(p, "message_architect") ||
+		!strings.Contains(p, "approved") || !strings.HasSuffix(p, `Implement "Spec: backend — CSV export".`) {
+		t.Errorf("first message = %q", p)
+	}
+	if _, err := os.Stat(filepath.Join(mustFlag(t, launch.Args, "--plugin-dir"), "skills", "task-architecture")); err == nil {
+		t.Error("implement mode attached the architect skill")
+	}
+}
+
+func TestResumeInteractive_KeepsTheImplementSkills(t *testing.T) {
+	svc, _ := newInteractiveService(t)
+	sess, _ := startInteractive(t, svc, InteractiveRequest{Mode: "implement"})
+	if _, err := svc.EndInteractive(context.Background(), sess.ID, 0, false); err != nil {
+		t.Fatal(err)
+	}
+	_, spec, err := svc.ResumeInteractive(context.Background(), ports.ResumeRequest{SessionID: sess.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	pluginFile(t, launchOf(t, spec), "task-tdd", "mocking.md")
 }

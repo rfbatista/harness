@@ -53,6 +53,16 @@ test("architect mode starts from the task without a first message", async () => 
   assert.equal(dispatched[0].detail.session.mode, "architect");
 });
 
+test("implement mode asks which spec and starts in that mode", async () => {
+  const { instance, dispatched } = setup();
+  instance.mode = "implement";
+  assert.ok(instance.implement);
+  assert.ok(instance.promptPlaceholder.includes("Spec"), instance.promptPlaceholder);
+  assert.ok(instance.modeHint.includes("task-implement-spec"), instance.modeHint);
+  await instance.submit();
+  assert.equal(dispatched[0].detail.session.mode, "implement");
+});
+
 test("design mode tells the agent to publish as it goes", async () => {
   const { instance, dispatched } = setup();
   instance.mode = "design";

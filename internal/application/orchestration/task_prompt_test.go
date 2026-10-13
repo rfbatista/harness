@@ -264,12 +264,16 @@ func TestPrompts_NameOnlyRealTaskTools(t *testing.T) {
 	for _, role := range []domain.SessionRole{domain.RolePeer, domain.RoleDelegate, domain.RoleArchitect} {
 		texts["brief/"+string(role)] = taskBrief(&domain.Ticket{ID: "tk1", Title: "Ship the thing"}, role, taskCounts{})
 	}
-	for _, skill := range []string{"task-architecture", "design-artifacts"} {
-		b, err := os.ReadFile("modes/" + skill + "/SKILL.md")
-		if err != nil {
-			t.Fatal(err)
+	for _, names := range modeSkillNames {
+		for _, skill := range names {
+			files, err := modeSkillFiles(skill)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, f := range files {
+				texts[skill+"/"+f.Path] = f.Content
+			}
 		}
-		texts[skill] = string(b)
 	}
 	named := regexp.MustCompile(`mcp__task__([a-z_]+)`)
 	for where, text := range texts {

@@ -47,6 +47,12 @@ func TestHTTP_StartInteractiveSessionMode(t *testing.T) {
 		t.Fatalf("design start = %d %+v / prompt %q", status, design.Session, design.Agent.Prompt)
 	}
 
+	status, implement := post(t, srv.URL+"/api/start_interactive_session",
+		`{"project_id":"p1","repository_id":"r1","ticket_id":"tk1","mode":"implement"}`)
+	if status != http.StatusCreated || implement.Session.Mode != domain.SessionModeImplement || !strings.Contains(implement.Agent.Prompt, "task-implement-spec") {
+		t.Fatalf("implement start = %d %+v / prompt %q", status, implement.Session, implement.Agent.Prompt)
+	}
+
 	status, refused := post(t, srv.URL+"/api/start_interactive_session",
 		`{"project_id":"p1","repository_id":"r1","ticket_id":"tk1","mode":"wizard"}`)
 	if status != http.StatusBadRequest || refused.Code != "INVALID_INPUT" {

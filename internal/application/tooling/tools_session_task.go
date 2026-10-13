@@ -122,7 +122,7 @@ func SessionTaskTools(planningSvc ports.Planning, sessions ports.SessionReposito
 				`"agent":{"type":"string","description":"The agent to run, by name or id. Default: none (plain claude)."},` +
 				`"repository":{"type":"string","description":"The repository to work in, by name or id. Default: yours."},` +
 				`"base_branch":{"type":"string","description":"The branch its worktree branches off. Default: the repository's default branch."},` +
-				`"mode":{"type":"string","enum":["","architect","design"],"description":"architect: the session shapes its prompt into per-application specs and delegates them. design: the session produces components, images and videos and publishes each to the Design tab. Default: none."},` +
+				`"mode":{"type":"string","enum":["","architect","implement","design"],"description":"architect: the session grills the person on its prompt, shapes it into per-application specs and delegates them. implement: the session turns a Spec task document into tickets, has the architect review them, then implements them test first on its branch. design: the session produces components, images and videos and publishes each to the Design tab. Default: none."},` +
 				`"status_check_minutes":{"type":"integer","minimum":0,"maximum":240,"description":"Architect only: minutes between the checks that wake you about this session, 2–240; 0 for no loop. Default: 10."}}}`),
 			Source: "code",
 			Handler: func(ctx context.Context, args map[string]any) (any, error) {
