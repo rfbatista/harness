@@ -16,6 +16,7 @@ import (
 	"path/filepath"
 	"slices"
 	"sync"
+	"time"
 
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
@@ -38,14 +39,16 @@ var (
 	_ ports.ProjectChangeSink = (*Service)(nil)
 )
 
-// Sources is what a shell is filled from. Artifacts may be nil: the shell
-// then has no designs.
+// Sources is what a shell is filled from, and Writes where what agents
+// write in it is stored. Artifacts may be nil: the shell then has no
+// designs.
 type Sources struct {
 	Tickets   ports.TicketReader
 	Documents ports.DocumentReader
 	Comments  ports.TaskCommentReader
 	Resources ports.TaskResourceFiles
 	Artifacts ports.ArtifactReader
+	Writes    ports.ShellDocumentWriter
 }
 
 // Service makes, fills, refreshes and removes sessions' shells, and keeps
@@ -64,6 +67,7 @@ func New(src Sources) *Service {
 // shell is one session's folder and what it was last given of each file.
 type shell struct {
 	dir                         string
+	realDir                     string // dir with its symlinks resolved
 	sessionID, ticketID, projID string
 
 	// mu guards the folder and files; a refresh holds it from reading the
@@ -71,6 +75,11 @@ type shell struct {
 	mu     sync.Mutex
 	files  map[string]ports.ShellFile // by path
 	closed bool
+	// pending is the paths an agent was cleared to change, and since when:
+	// a refresh leaves them as they are until the change is committed.
+	// skipped says the last refresh left something out for them.
+	pending map[string]time.Time
+	skipped bool
 
 	// kickMu guards dirty and running: one refresh runs at a time, and a
 	// change while it runs makes it go round once more.
@@ -90,7 +99,8 @@ func (s *Service) Open(ctx context.Context, sessionID, ticketID string) (string,
 	if err != nil {
 		return "", err
 	}
-	sh := &shell{dir: dir, sessionID: sessionID, ticketID: tk.ID, projID: tk.ProjectID, files: map[string]ports.ShellFile{}}
+	realDir, _ := filepath.EvalSymlinks(dir)
+	sh := &shell{dir: dir, realDir: realDir, sessionID: sessionID, ticketID: tk.ID, projID: tk.ProjectID, files: map[string]ports.ShellFile{}}
 	// Held until filled: a change heard meanwhile refreshes it after.
 	sh.mu.Lock()
 	s.mu.Lock()
@@ -295,6 +305,12 @@ func (s *Service) kick(sh *shell) {
 func (s *Service) refresh(sh *shell) {
 	sh.mu.Lock()
 	defer sh.mu.Unlock()
+	s.refreshLocked(sh)
+}
+
+// refreshLocked is refresh with sh held. When it leaves out a file held for
+// an agent's change, the shell is refreshed again once the hold runs out.
+func (s *Service) refreshLocked(sh *shell) {
 	if sh.closed {
 		return
 	}
@@ -310,6 +326,9 @@ func (s *Service) refresh(sh *shell) {
 	}
 	if err != nil {
 		slog.Warn("refresh a virtual shell", "session", sh.sessionID, "err", err)
+	}
+	if sh.skipped {
+		time.AfterFunc(pendingFor, func() { s.kick(sh) })
 	}
 }
 
@@ -335,13 +354,18 @@ func (sh *shell) sync(b *builder) error {
 			prev[fileKey(f)] = p
 		}
 	}
-	b.place(prev)
+	b.place(prev, sh.held)
 
 	keep := map[string]bool{}
 	changed := false
+	sh.skipped = false
 	put := func(f *file) error {
 		if cur, ok := sh.files[f.meta.Path]; ok && current(cur, f.meta) {
 			keep[f.meta.Path] = true
+			return nil
+		}
+		if sh.held(f.meta.Path) {
+			keep[f.meta.Path], sh.skipped = true, true
 			return nil
 		}
 		if f.load != nil {
@@ -379,6 +403,10 @@ func (sh *shell) sync(b *builder) error {
 		}
 	}
 	for p := range sh.files {
+		if !keep[p] && sh.held(p) {
+			sh.skipped = true
+			continue
+		}
 		if !keep[p] {
 			if err := sh.drop(p); err != nil {
 				return err

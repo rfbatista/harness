@@ -28,6 +28,7 @@ import (
 	"operators-mcp/internal/application/orchestration"
 	"operators-mcp/internal/application/planning"
 	"operators-mcp/internal/application/taskchannel"
+	"operators-mcp/internal/application/vshell"
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
 )
@@ -65,12 +66,13 @@ func newShellE2E(t *testing.T) *shellE2E {
 		sessions ports.SessionRepository
 		channel  *taskchannel.Service
 		art      *artifacts.Service
+		shells   *vshell.Service
 	)
 	app := fx.New(
 		fx.Supply(Config{HTTPAddr: "127.0.0.1:0", MCPAddr: "127.0.0.1:0", DBPath: ":memory:", Root: dir, ClaudeBin: fake, SessionShell: "direct"}),
 		PersistenceModule, CatalogModule, PlanningModule, WorkspacesModule,
 		AgentRuntimeModule, TaskChannelModule, TextProcessingModule,
-		fx.Populate(&e.orch, &e.plan, &channel, &art, &cat, &sessions),
+		fx.Populate(&e.orch, &e.plan, &channel, &art, &cat, &sessions, &shells),
 		fx.NopLogger,
 	)
 	if err := app.Start(e.ctx); err != nil {
@@ -93,7 +95,7 @@ func newShellE2E(t *testing.T) *shellE2E {
 
 	mux := http.NewServeMux()
 	mux.Handle("/api/", httpapi.NewRouter(httpapi.NewHandler(httpapi.Services{
-		Sessions: e.orch, Planning: e.plan, TaskResources: e.plan, TaskComments: e.plan, Artifacts: art,
+		Sessions: e.orch, Planning: e.plan, TaskResources: e.plan, TaskComments: e.plan, Artifacts: art, Shells: shells,
 	})))
 	mux.Handle(mcpsession.PathPrefix, mcpsession.TaskHandler(sessionTaskTools(cat, e.orch, e.plan, sessions, art, channel, nil)))
 	e.srv = httptest.NewServer(mux)

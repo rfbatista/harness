@@ -19,18 +19,21 @@ type options struct{ token string }
 // claude itself. Without it, or with an empty token, the API is open.
 func WithToken(token string) Option { return func(o *options) { o.token = token } }
 
-// openRoutes answer without a token.
+// openRoutes answer without a token, by path or by route: the session's
+// shell endpoints are loopback-only too, and called by its hooks and shims.
 var openRoutes = map[string]bool{
 	"/api/health":                 true,
 	InteractiveSessionStartedPath: true,
 	InteractiveSessionHookPath:    true,
+	ShellCheckRoute:               true,
+	ShellCommitRoute:              true,
 }
 
 func requireToken(token string) echo.MiddlewareFunc {
 	want := []byte("Bearer " + token)
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
-			if openRoutes[c.Request().URL.Path] {
+			if openRoutes[c.Request().URL.Path] || openRoutes[c.Path()] {
 				return next(c)
 			}
 			got := []byte(strings.TrimSpace(c.Request().Header.Get("Authorization")))

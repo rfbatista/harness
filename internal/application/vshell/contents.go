@@ -99,8 +99,8 @@ func (b *builder) generated(meta ports.ShellFile, gen func() []byte) {
 // fileKey to path) keeps that path while it is in the same folder and its
 // keep rule allows, so a file is not renamed under the agent; the rest are
 // named in the order they were added (oldest first), with -<short id> on a
-// clash.
-func (b *builder) place(prev map[string]string) {
+// clash, and never at a path held for an agent's change.
+func (b *builder) place(prev map[string]string, held func(string) bool) {
 	taken := map[string]bool{indexFile: true}
 	for _, f := range b.files {
 		if f.folder == "" {
@@ -119,7 +119,7 @@ func (b *builder) place(prev map[string]string) {
 		if f.folder == "" || placed[f] {
 			continue
 		}
-		f.meta.Path = Unique(f.folder+f.name, f.meta.ID, func(q string) bool { return taken[q] })
+		f.meta.Path = Unique(f.folder+f.name, f.meta.ID, func(q string) bool { return taken[q] || held(q) })
 		taken[f.meta.Path] = true
 	}
 }

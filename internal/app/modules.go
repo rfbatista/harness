@@ -382,9 +382,10 @@ func newArtifactsService(cfg Config, repo ports.ArtifactRepository, sessions por
 }
 
 // newVirtualShells fills task sessions' virtual shells from planning's
-// tickets, documents, comments and resources and the artifacts' designs.
+// tickets, documents, comments and resources and the artifacts' designs,
+// and stores the documents agents write in them through planning.
 func newVirtualShells(plan *planning.Service, art *artifacts.Service) *vshell.Service {
-	return vshell.New(vshell.Sources{Tickets: plan, Documents: plan, Comments: plan, Resources: plan, Artifacts: art})
+	return vshell.New(vshell.Sources{Tickets: plan, Documents: plan, Comments: plan, Resources: plan, Artifacts: art, Writes: plan})
 }
 
 // bindVirtualShells gives every session with a task its virtual shell, and
