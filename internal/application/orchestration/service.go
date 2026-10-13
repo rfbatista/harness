@@ -430,9 +430,9 @@ func (s *Service) withShell(id string, ticket *domain.Ticket, cfg *llmkit.Sessio
 	cfg.Env = append(slices.Clone(cfg.Env), "HARNESS_SHELL="+dir)
 	cfg.AppendSystem = appendSection(cfg.AppendSystem, shellSection(dir))
 	if s.SessionShellURL != nil {
-		dc, _ := cfg.Driver.(claude.Config)
-		dc.Settings = &claude.Settings{Hooks: ShellHooks(s.SessionShellURL(id))}
-		cfg.Driver = dc
+		if dc, ok := withHooks(cfg.Driver, ShellHooks(s.SessionShellURL(id))); ok {
+			cfg.Driver = dc
+		}
 	}
 	return s.withShims(id, cfg, func() {
 		if cleanup != nil {

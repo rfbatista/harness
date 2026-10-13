@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+
+	"github.com/rfbatista/llmkit/claude"
 )
 
 const testShellBase = "http://127.0.0.1:8080/api/sessions/"
@@ -70,6 +72,51 @@ func TestAnInteractiveTaskSessionsSettingsCarryTheEditProxyHooks(t *testing.T) {
 		if !strings.Contains(cmd, "curl") || !strings.Contains(cmd, h.url) {
 			t.Errorf("%s %s hook does not curl %s: %s", h.event, h.matcher, h.url, cmd)
 		}
+	}
+}
+
+// otherDriver is a driver config that is not claude's.
+type otherDriver struct{}
+
+func (otherDriver) DriverName() string { return "other" }
+
+// The edit proxy's hooks join a claude config's own settings, hooks
+// included, rather than replacing them; a nil driver gets a claude config
+// with only them, and another driver's config is left alone.
+func TestTheEditProxyHooksJoinTheDriversOwnSettings(t *testing.T) {
+	own := claude.Config{SkillDirs: []string{"/skills"}, Settings: &claude.Settings{
+		Hooks: map[claude.HookEvent][]claude.HookMatcher{
+			claude.HookPreToolUse: {{Matcher: "Read", Hooks: []claude.Hook{{Type: "command", Command: "audit"}}}},
+		},
+		Extra: map[string]json.RawMessage{"model": json.RawMessage(`"opus"`)},
+	}}
+	hooks := ShellHooks(testShellBase + "s1/shell")
+	dc, ok := withHooks(own, hooks)
+	if !ok {
+		t.Fatal("a claude config was refused")
+	}
+	if len(dc.SkillDirs) != 1 || string(dc.Settings.Extra["model"]) != `"opus"` {
+		t.Fatalf("the driver's own settings were lost: %+v", dc)
+	}
+	var matchers []string
+	for _, m := range dc.Settings.Hooks[claude.HookPreToolUse] {
+		matchers = append(matchers, m.Matcher)
+	}
+	if strings.Join(matchers, ",") != "Read,"+ShellEditTools+",Bash" {
+		t.Fatalf("PreToolUse matchers = %v", matchers)
+	}
+	if len(dc.Settings.Hooks[claude.HookPostToolUse]) != 1 {
+		t.Fatalf("PostToolUse = %+v", dc.Settings.Hooks[claude.HookPostToolUse])
+	}
+	if len(own.Settings.Hooks[claude.HookPreToolUse]) != 1 {
+		t.Fatalf("the driver's settings were changed in place: %+v", own.Settings.Hooks)
+	}
+
+	if dc, ok := withHooks(nil, hooks); !ok || len(dc.Settings.Hooks[claude.HookPreToolUse]) != 2 {
+		t.Fatalf("nil driver = %+v, %v", dc, ok)
+	}
+	if _, ok := withHooks(otherDriver{}, hooks); ok {
+		t.Fatal("another driver's config was turned into claude's")
 	}
 }
 
