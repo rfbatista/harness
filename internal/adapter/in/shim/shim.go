@@ -33,8 +33,6 @@ import (
 	"operators-mcp/internal/ports"
 )
 
-const unavailable = "SHELL_UNAVAILABLE: the harness could not be reached; nothing was written"
-
 // Is says whether a process started as argv0 is a shim.
 func Is(argv0 string) bool {
 	return slices.Contains(ports.ShellShimCommands, filepath.Base(argv0))
@@ -50,7 +48,7 @@ func Main() int {
 		fmt.Fprintf(os.Stderr, "%s: %v\n", name, err)
 		return 127
 	}
-	shell := os.Getenv("HARNESS_SHELL")
+	shell := os.Getenv(ports.ShellDirEnv)
 	if shell == "" {
 		return become(real)
 	}
@@ -62,7 +60,7 @@ func Main() int {
 	if !inside(shell, edits) {
 		return become(real)
 	}
-	h := harness{base: strings.TrimRight(os.Getenv("HARNESS_SHELL_URL"), "/"), tool: name, shell: newShellDir(shell)}
+	h := harness{base: strings.TrimRight(os.Getenv(ports.ShellURLEnv), "/"), tool: name, shell: newShellDir(shell)}
 	return h.run(real, edits)
 }
 
@@ -172,32 +170,26 @@ type harness struct {
 	shell shellDir
 }
 
-type answer struct {
-	Allow  bool   `json:"allow"`
-	Code   string `json:"code"`
-	Reason string `json:"reason"`
-}
-
 var client = &http.Client{Timeout: 5 * time.Second}
 
 // call posts e to step (check or commit); err means the harness did not
 // answer.
-func (h harness) call(step string, e edit) (answer, error) {
+func (h harness) call(step string, e edit) (ports.ShellAnswer, error) {
 	if h.base == "" {
-		return answer{}, errors.New("HARNESS_SHELL_URL is not set")
+		return ports.ShellAnswer{}, errors.New(ports.ShellURLEnv + " is not set")
 	}
 	body, _ := json.Marshal(ports.ShellEdit{Op: e.op, Paths: e.paths, Tool: h.tool})
 	res, err := client.Post(h.base+"/"+step, "application/json", bytes.NewReader(body))
 	if err != nil {
-		return answer{}, err
+		return ports.ShellAnswer{}, err
 	}
 	defer res.Body.Close()
 	if res.StatusCode != http.StatusOK {
-		return answer{}, fmt.Errorf("%s answered %s", step, res.Status)
+		return ports.ShellAnswer{}, fmt.Errorf("%s answered %s", step, res.Status)
 	}
-	var a answer
+	var a ports.ShellAnswer
 	if err := json.NewDecoder(res.Body).Decode(&a); err != nil {
-		return answer{}, err
+		return ports.ShellAnswer{}, err
 	}
 	return a, nil
 }
@@ -215,7 +207,7 @@ func (h harness) run(real string, edits []edit) int {
 			_, _ = h.call("commit", allowed)
 		}
 		if err != nil {
-			fmt.Fprintln(os.Stderr, unavailable)
+			fmt.Fprintln(os.Stderr, ports.ShellUnavailable)
 		} else {
 			fmt.Fprintln(os.Stderr, a.Reason)
 		}
@@ -235,7 +227,7 @@ func (h harness) commitAll(edits []edit) bool {
 	ok, reached := true, true
 	for _, e := range edits {
 		for _, c := range append([]edit{e}, copied(e)...) {
-			var a answer
+			var a ports.ShellAnswer
 			var err error
 			if reached {
 				a, err = h.call("commit", c)
@@ -244,7 +236,7 @@ func (h harness) commitAll(edits []edit) bool {
 			switch {
 			case !reached:
 				for _, rel := range h.shell.changed(c) {
-					fmt.Fprintf(os.Stderr, "SHELL_UNAVAILABLE: the harness could not be reached; %s changed on disk but was not stored — redo the change once the harness is back\n", rel)
+					fmt.Fprintln(os.Stderr, ports.ShellUnavailableAfter(rel))
 				}
 				ok = false
 			case !a.Allow:

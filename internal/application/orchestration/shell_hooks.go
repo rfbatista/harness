@@ -14,9 +14,6 @@ import (
 const (
 	// ShellEditTools are the claude tools that write files.
 	ShellEditTools = "Edit|Write|MultiEdit|NotebookEdit"
-	// shellUnavailable is the contract's refusal when the harness cannot be
-	// reached before an edit tool runs.
-	shellUnavailable = "SHELL_UNAVAILABLE: the harness could not be reached; nothing was written"
 )
 
 // ShellHooks are the claude settings hooks of a session whose shell's edit
@@ -44,14 +41,14 @@ func ShellHooks(shellURL string) map[claude.HookEvent][]claude.HookMatcher {
 	}
 	hook := func(cmd string) []claude.Hook { return []claude.Hook{{Type: "command", Command: cmd}} }
 	check := hook(curl("check", "PreToolUse") + " || printf '%s\\n' '" +
-		`{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"` + shellUnavailable + `"}}'`)
+		`{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"` + ports.ShellUnavailable + `"}}'`)
 	bash := hook(curl("check", "PreToolUse") + " || true")
 	// The input is read once: curl gets it, and if the harness is down the
 	// file's path is taken from it (file_path, or notebook_path), relative
 	// to the shell as every refusal names it.
 	commit := hook(`in=$(cat); printf '%s' "$in" | ` + curl("commit", "PostToolUse") +
 		` || { p=$(printf '%s' "$in" | sed -nE 's/.*"(file_path|notebook_path)"[[:space:]]*:[[:space:]]*"([^"]*)".*/\2/p' | head -n 1); p=${p#"$HARNESS_SHELL"/};` +
-		` printf '{"decision":"block","reason":"SHELL_UNAVAILABLE: the harness could not be reached; %s changed on disk but was not stored — redo the change once the harness is back"}\n' "$p"; }`)
+		` printf '{"decision":"block","reason":"` + ports.ShellUnavailableAfter("%s") + `"}\n' "$p"; }`)
 	return map[claude.HookEvent][]claude.HookMatcher{
 		claude.HookPreToolUse: {
 			{Matcher: ShellEditTools, Hooks: check},

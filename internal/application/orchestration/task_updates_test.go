@@ -127,7 +127,9 @@ func TestTaskUpdates_DeliveredToTheTasksRunningSessions(t *testing.T) {
 // laggingShells are shells that never get the new file in time.
 type laggingShells struct{}
 
-func (laggingShells) BaseVersion(string, string) (ports.ShellFile, bool) { return ports.ShellFile{}, false }
+func (laggingShells) BaseVersion(string, string) (ports.ShellFile, bool) {
+	return ports.ShellFile{}, false
+}
 func (laggingShells) ShellFiles(string) []ports.ShellFile {
 	return []ports.ShellFile{{Path: "README.md", Kind: "readme"}}
 }
