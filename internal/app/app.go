@@ -38,6 +38,10 @@ type Config struct {
 	// SessionShell is how the interactive sessions the server runs are
 	// started: "direct" or "login" (see runtime.Config).
 	SessionShell string
+	// ShimBinary is the binary task sessions' PATH shims (sed, tee, cp, mv,
+	// rm, touch, mkdir) link to: cmd/server sets it to itself, as it runs
+	// the shim when invoked under one of those names. Empty: no shims.
+	ShimBinary string
 	// ClaudeLogStdout tees each session's raw stdout to the terminal, prefixed
 	// with the session id. Disable to keep the console quiet.
 	ClaudeLogStdout bool
