@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"os"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"sort"
@@ -104,6 +106,12 @@ type Service struct {
 	// "Contract: Harness server ↔ Agent sessions — virtual shell"). Nil:
 	// sessions get none.
 	Shells ports.VirtualShells
+	// ShimBinary is what a task session's shim commands (sed, tee, cp, mv,
+	// rm, touch, mkdir) link to, first on its PATH; ShellURL is the
+	// session's shell endpoint base they call (…/shell, without /check or
+	// /commit). Empty ShimBinary: sessions get no shims.
+	ShimBinary string
+	ShellURL   func(sessionID string) string
 
 	// updates feeds the task-update turns to the courier, one at a time;
 	// deliverUpdate replaces the courier in tests.
@@ -414,11 +422,52 @@ func (s *Service) withShell(id string, ticket *domain.Ticket, cfg *llmkit.Sessio
 	cfg.AddDirs = append(slices.Clone(cfg.AddDirs), dir)
 	cfg.Env = append(slices.Clone(cfg.Env), "HARNESS_SHELL="+dir)
 	cfg.AppendSystem = appendSection(cfg.AppendSystem, shellSection(dir))
-	return func() {
+	return s.withShims(id, cfg, func() {
 		if cleanup != nil {
 			cleanup()
 		}
 		s.Shells.Close(id, dir)
+	})
+}
+
+// withShims puts the session's shim dir first on its PATH: one link per
+// shim command to ShimBinary, which finds the session's shell endpoint in
+// HARNESS_SHELL_URL. PATH is an override of the server's own, so it wins
+// over the inherited one. The cleanup it answers runs cleanup and removes
+// the dir. Without ShimBinary it changes nothing.
+func (s *Service) withShims(id string, cfg *llmkit.SessionConfig, cleanup func()) (func(), error) {
+	if s.ShimBinary == "" {
+		return cleanup, nil
+	}
+	fail := func(err error) (func(), error) {
+		if cleanup != nil {
+			cleanup()
+		}
+		return nil, fmt.Errorf("make the session's shims: %w", err)
+	}
+	dir, err := os.MkdirTemp("", "harness-shims-*")
+	if err != nil {
+		return fail(err)
+	}
+	for _, name := range ports.ShellShimCommands {
+		if err := os.Symlink(s.ShimBinary, filepath.Join(dir, name)); err != nil {
+			_ = os.RemoveAll(dir)
+			return fail(err)
+		}
+	}
+	path := dir
+	if inherited := os.Getenv("PATH"); inherited != "" {
+		path += string(os.PathListSeparator) + inherited
+	}
+	cfg.Env = append(slices.Clone(cfg.Env), "PATH="+path)
+	if s.ShellURL != nil {
+		cfg.Env = append(cfg.Env, "HARNESS_SHELL_URL="+s.ShellURL(id))
+	}
+	return func() {
+		if cleanup != nil {
+			cleanup()
+		}
+		_ = os.RemoveAll(dir)
 	}, nil
 }
 

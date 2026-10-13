@@ -60,6 +60,10 @@ type ShellBaseVersions interface {
 	ShellFiles(sessionID string) []ShellFile
 }
 
+// ShellShimCommands are the commands a task session runs through the
+// harness's PATH shims (contract §5).
+var ShellShimCommands = []string{"sed", "tee", "cp", "mv", "rm", "touch", "mkdir"}
+
 // ShellEdit is one file operation an agent makes in its shell, as the edit
 // proxy (hooks and PATH shims) reports it: Op is write (or create, modify,
 // touch), rm, mv or cp (Paths[0] the source, Paths[1] the destination), or

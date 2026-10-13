@@ -513,6 +513,10 @@ func newOrchestrationService(
 	svc.SessionHookURL = func(sessionID string) string {
 		return base + httpapi.InteractiveSessionHookPath + "?session_id=" + url.QueryEscape(sessionID)
 	}
+	svc.ShimBinary = cfg.ShimBinary
+	svc.ShellURL = func(sessionID string) string {
+		return base + "/api/sessions/" + url.PathEscape(sessionID) + "/shell"
+	}
 	svc.Transcripts = transcripts
 	svc.TranscriptReader = transcriptReader
 	svc.Terminals = terminals

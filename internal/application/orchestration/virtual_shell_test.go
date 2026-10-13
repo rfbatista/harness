@@ -469,3 +469,44 @@ func TestASessionWithoutATaskGetsNoVirtualShell(t *testing.T) {
 		t.Fatalf("a session with no task got a shell: %q %q", launch.Shell, launch.Args)
 	}
 }
+
+// An interactive task session runs with its shim dir first on PATH: the
+// seven commands, each a link to the harness's shim binary, with the
+// session's shell endpoint in HARNESS_SHELL_URL. The dir goes with the
+// session.
+func TestAnInteractiveTaskSessionRunsWithItsShimsFirstOnPath(t *testing.T) {
+	svc := newHostedService(t, scriptAgent{script: `printf '%s' "$PATH" > path; printf '%s' "$HARNESS_SHELL_URL" > shell-url; printf 'ready\r\n'; cat`})
+	w := withShells(t, svc)
+	svc.ShimBinary = "/opt/harness/server"
+	svc.ShellURL = func(id string) string { return "http://127.0.0.1:9/api/sessions/" + id + "/shell" }
+	sess, _ := startInteractive(t, svc, InteractiveRequest{ProjectID: "p1", RepositoryID: "r1", TicketID: w.task.ID,
+		RunsOn: domain.RunnerServer, Size: ports.TermSize{Cols: 80, Rows: 24}})
+
+	path := string(waitFile(t, filepath.Join(sess.WorkingDir, "path")))
+	shims, rest, _ := strings.Cut(path, string(os.PathListSeparator))
+	if rest != os.Getenv("PATH") {
+		t.Errorf("PATH after the shims = %q, want the server's %q", rest, os.Getenv("PATH"))
+	}
+	entries, err := os.ReadDir(shims)
+	if err != nil {
+		t.Fatalf("first PATH entry %q: %v", shims, err)
+	}
+	var names []string
+	for _, e := range entries {
+		names = append(names, e.Name())
+		if target, err := os.Readlink(filepath.Join(shims, e.Name())); err != nil || target != "/opt/harness/server" {
+			t.Errorf("%s links to %q (%v), want the shim binary", e.Name(), target, err)
+		}
+	}
+	if want := []string{"cp", "mkdir", "mv", "rm", "sed", "tee", "touch"}; !slices.Equal(names, want) {
+		t.Errorf("shim dir holds %v, want %v", names, want)
+	}
+	if got, want := string(waitFile(t, filepath.Join(sess.WorkingDir, "shell-url"))), "http://127.0.0.1:9/api/sessions/"+sess.ID+"/shell"; got != want {
+		t.Errorf("HARNESS_SHELL_URL = %q, want %q", got, want)
+	}
+
+	if err := svc.Stop(context.Background(), sess.ID); err != nil {
+		t.Fatal(err)
+	}
+	waitGone(t, shims)
+}
