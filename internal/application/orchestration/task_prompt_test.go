@@ -98,43 +98,20 @@ func TestApplyTaskContext_BriefNamesUpdateTaskStatus(t *testing.T) {
 	}
 }
 
-// Documents are HTML pages. The brief is where an agent learns the rule
-// before its first create_task_document, so it does not learn it from a refusal.
-func TestApplyTaskContext_BriefSaysDocumentsAreHTML(t *testing.T) {
+// The brief is where an agent learns its resources are files in its
+// virtual shell: where each kind lives, how to read and write them, and the
+// refusal codes it acts on.
+func TestApplyTaskContext_BriefTeachesTheShell(t *testing.T) {
 	cfg := llmkit.SessionConfig{}
 	applyTaskContext(&cfg, &domain.Ticket{ID: "tk1", Title: "Ship the thing"}, "", domain.RolePeer, taskCounts{})
 	for _, want := range []string{
-		"complete HTML document",
-		"<!doctype html>",
-		"<meta charset=\"utf-8\">",
-		"<title>",
-		"<body>",
-		"Markdown is refused",
-		"DOCUMENT_NOT_HTML",
-		"light and dark",
-		"/static/document.css",
-	} {
-		if !strings.Contains(cfg.AppendSystem, want) {
-			t.Errorf("brief missing %q:\n%s", want, cfg.AppendSystem)
-		}
-	}
-	if strings.Contains(cfg.AppendSystem, "markdown document") {
-		t.Errorf("brief still describes markdown documents:\n%s", cfg.AppendSystem)
-	}
-}
-
-// The brief is where an agent learns that some documents outlive the task,
-// and which tools move and reach them.
-func TestApplyTaskContext_BriefNamesProjectDocuments(t *testing.T) {
-	cfg := llmkit.SessionConfig{}
-	applyTaskContext(&cfg, &domain.Ticket{ID: "tk1", Title: "Ship the thing"}, "", domain.RolePeer, taskCounts{})
-	for _, want := range []string{
-		"\n- mcp__task__list_project_documents — ",
-		"\n- mcp__task__read_project_document — ",
-		"\n- mcp__task__update_project_document — ",
-		"\n- mcp__task__move_document_to_project — ",
-		"\n- mcp__task__move_document_to_task — ",
-		"project document", "architecture", "conventions", "decisions", "outlive",
+		"$HARNESS_SHELL", "README.md", ".index.json",
+		"\n- task/docs/ — ", "\n- project/docs/ — ", "\n- task/comments/ — ", "\n- task/resources/ — ",
+		"\n- task/designs/ — ", "\n- project/designs/ — ",
+		"Read, grep", "sed -n", "Write, Edit, sed -i, tee, cp, mv, rm",
+		"architecture, conventions, decisions", "mv a document from task/docs/ to project/docs/",
+		"\n- BASE_VERSION_STALE — ", "\n- READ_ONLY, COMMENT_NOT_YOURS — ", "\n- REDIRECT_DENIED — ",
+		"\n- NOT_ON_TASK — ", "\n- NOT_STORED — ", "\n- SHELL_UNAVAILABLE — ",
 	} {
 		if !strings.Contains(cfg.AppendSystem, want) {
 			t.Errorf("brief missing %q:\n%s", want, cfg.AppendSystem)
@@ -165,15 +142,13 @@ func TestApplyTaskContext_BriefNamesEveryTaskTool(t *testing.T) {
 }
 
 // The brief is where an agent learns that some design assets outlive the
-// task, to look for them before making new ones, and which tools move them.
-func TestApplyTaskContext_BriefNamesProjectArtifacts(t *testing.T) {
+// task, to look for them before making new ones, and how to move them.
+func TestApplyTaskContext_BriefNamesProjectAssets(t *testing.T) {
 	cfg := llmkit.SessionConfig{}
 	applyTaskContext(&cfg, &domain.Ticket{ID: "tk1", Title: "Ship the thing"}, "", domain.RolePeer, taskCounts{})
 	for _, want := range []string{
-		"\n- mcp__task__list_project_artifacts — ",
-		"\n- mcp__task__move_artifact_to_project — ",
-		"\n- mcp__task__move_artifact_to_task — ",
-		"project asset", "logo", "palette", "outlive", "Before you make a new\nasset, check list_project_artifacts",
+		"logo", "palette", "outlives", "Look here before you make a new asset",
+		"mv a design from task/designs/ to project/designs/", "task/designs/attached.md",
 	} {
 		if !strings.Contains(cfg.AppendSystem, want) {
 			t.Errorf("brief missing %q:\n%s", want, cfg.AppendSystem)
@@ -257,6 +232,58 @@ func TestTaskBrief_NamesTheNotificationTools(t *testing.T) {
 	}
 }
 
+// removedTaskTools are the tools the virtual shell replaced (contract
+// "Harness server ↔ Agent sessions — virtual shell" §7).
+var removedTaskTools = []string{
+	"list_task_documents", "read_task_document", "create_task_document", "update_task_document", "edit_task_document",
+	"list_project_documents", "read_project_document", "update_project_document", "edit_project_document",
+	"move_document_to_project", "move_document_to_task", "search_documents",
+	"add_task_comment", "update_task_comment", "delete_task_comment", "list_task_comments",
+	"list_task_resources", "read_task_resource",
+	"list_task_artifacts", "list_project_artifacts", "read_artifact", "unpublish_artifact",
+	"move_artifact_to_project", "move_artifact_to_task",
+}
+
+// No removed tool is named anywhere a session is told what to do: the
+// brief for each role and its sections, each mode's opening message, and
+// every file of the mode skills. Nor does any of them still require HTML
+// documents (ADR 0004).
+func TestPrompts_NameNoRemovedTool(t *testing.T) {
+	tk := &domain.Ticket{ID: "tk1", Title: "Ship the thing"}
+	texts := map[string]string{
+		"shell":     shellSection("/tmp/harness-shell-1"),
+		"resources": resourcesSection(taskCounts{1, 2, true}),
+		"attached":  attachedAssetsSection([]*domain.Artifact{{ID: "a1", TicketID: "tk9", Title: "Logo", Kind: domain.ArtifactPage}}),
+	}
+	for _, role := range []domain.SessionRole{domain.RolePeer, domain.RoleDelegate, domain.RoleArchitect} {
+		texts["brief/"+string(role)] = taskBrief(tk, role, taskCounts{})
+	}
+	for mode, names := range modeSkillNames {
+		texts["prompt/"+string(mode)] = modePrompt(mode, tk, "")
+		for _, skill := range names {
+			files, err := modeSkillFiles(skill)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, f := range files {
+				texts[skill+"/"+f.Path] = f.Content
+			}
+		}
+	}
+	for where, text := range texts {
+		for _, name := range removedTaskTools {
+			if regexp.MustCompile(`\b` + name + `\b`).MatchString(text) {
+				t.Errorf("%s names the removed tool %s", where, name)
+			}
+		}
+		for _, rule := range []string{"DOCUMENT_NOT_HTML", "Markdown is refused", "complete HTML document", "complete HTML page"} {
+			if strings.Contains(text, rule) {
+				t.Errorf("%s still requires HTML documents (%q)", where, rule)
+			}
+		}
+	}
+}
+
 // Every task tool a prompt names exists: the brief for each role and the
 // mode skills never point an agent at a tool the server does not serve.
 func TestPrompts_NameOnlyRealTaskTools(t *testing.T) {
@@ -285,14 +312,11 @@ func TestPrompts_NameOnlyRealTaskTools(t *testing.T) {
 	}
 }
 
-// The brief tells every session to read large documents in parts and to
-// edit pages in parts.
-func TestTaskBrief_ReadsAndEditsDocumentsInParts(t *testing.T) {
+// The brief tells every session to read large files in parts and to edit
+// them in parts.
+func TestTaskBrief_ReadsAndEditsFilesInParts(t *testing.T) {
 	got := taskBrief(&domain.Ticket{ID: "tk1", Title: "Ship the thing"}, domain.RolePeer, taskCounts{})
-	for _, want := range []string{
-		"Check bytes and lines in the listing first", "search_documents", "offset and limit, never the whole page",
-		"edit the part with edit_*_document rather than rewriting it", "\n- mcp__task__read_artifact — ",
-	} {
+	for _, want := range []string{"grep for what you need", "sed -n", "offset and limit, never the whole file", "change a part with Edit\nor sed -i"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("brief lacks %q", want)
 		}

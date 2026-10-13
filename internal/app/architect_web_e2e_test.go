@@ -136,7 +136,7 @@ func newArchWeb(t *testing.T) *archWeb {
 
 	e.tools = map[string]domain.Tool{}
 	for _, tool := range tooling.SessionTaskTools(e.plan, sessions, cat.Agents, cat.Architecture,
-		tooling.PeerStarter{Sessions: e.orch, Repositories: cat.Projects}, tooling.ArtifactTooling{}, e.channel, tooling.ResourceTooling{}, tooling.NotificationTooling{}) {
+		tooling.PeerStarter{Sessions: e.orch, Repositories: cat.Projects}, tooling.ArtifactTooling{}, e.channel, tooling.NotificationTooling{}) {
 		e.tools[tool.Name] = tool
 	}
 	return e

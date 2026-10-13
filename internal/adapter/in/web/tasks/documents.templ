@@ -32,7 +32,7 @@ templ DocumentsPage(v DocumentsView) {
 			</template>
 			if len(v.Documents) == 0 {
 				<div data-scroll>
-					@components.Empty("No documents on this task yet", "Agents working on the task write them with create_task_document — plans, findings, handoffs. They show here as they are written, and stay here when moved to project level.")
+					@components.Empty("No documents on this task yet", "Agents working on the task write them as files in task/docs of their virtual shell — plans, findings, handoffs. They show here as they are written, and stay here when moved to project level.")
 				</div>
 			} else {
 				<div class="[ split-view ]" data-scroll { scopeAttrs(v.Open)... }>

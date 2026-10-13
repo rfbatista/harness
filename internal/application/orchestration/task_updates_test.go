@@ -19,29 +19,29 @@ import (
 
 func TestTaskUpdateText(t *testing.T) {
 	file := domain.TicketResource{ID: "r1", Kind: domain.ResourceImage, Title: "Login screen"}
-	if got, want := resourceUpdateText(file), `[task update · resource added] The person added an image to this task: "Login screen" (resource_id r1). Read it with read_task_resource if it bears on your work.`; got != want {
+	if got, want := resourceUpdateText(file, "task/resources/login.png"), `[task update · resource added] The person added an image to this task: "Login screen", at task/resources/login.png in your shell. Read it there if it bears on your work.`; got != want {
 		t.Fatalf("file:\n%s\nwant\n%s", got, want)
 	}
 	link := domain.TicketResource{ID: "r2", Kind: domain.ResourceLink, Title: "Spec", URL: "https://x.io/spec"}
-	if got := resourceUpdateText(link); !strings.Contains(got, `"Spec" (resource_id r2, url https://x.io/spec).`) {
+	if got := resourceUpdateText(link, linksPath); !strings.Contains(got, `"Spec" (https://x.io/spec), listed in task/resources/links.md`) {
 		t.Fatalf("link: %s", got)
 	}
 
 	c := domain.TicketComment{ID: "c1", Body: "line one\nline two"}
-	if got, want := commentUpdateText(c), "[task update · comment] The person commented on this task (comment_id c1):\nline one\nline two"; got != want {
+	if got, want := commentUpdateText(c, "task/comments/c1.md"), "[task update · comment] The person commented on this task (task/comments/c1.md in your shell):\nline one\nline two"; got != want {
 		t.Fatalf("comment:\n%q\nwant\n%q", got, want)
 	}
 	long := domain.TicketComment{ID: "c2", Body: strings.Repeat("é", 2500)}
-	got := commentUpdateText(long)
+	got := commentUpdateText(long, "task/comments/c2.md")
 	body := strings.SplitN(got, "\n", 2)[1]
-	if !strings.HasSuffix(body, "…\n(cut; read the whole comment with list_task_comments)") {
+	if !strings.HasSuffix(body, "…\n(cut; the whole comment is task/comments/c2.md in your shell)") {
 		t.Fatalf("cut comment ends %q", body[len(body)-80:])
 	}
 	if n := utf8.RuneCountInString(strings.SplitN(body, "…", 2)[0]); n != 2000 || !utf8.ValidString(got) {
 		t.Fatalf("kept %d runes, valid %v", n, utf8.ValidString(got))
 	}
 	exact := domain.TicketComment{ID: "c3", Body: strings.Repeat("x", 2000)}
-	if strings.Contains(commentUpdateText(exact), "cut;") {
+	if strings.Contains(commentUpdateText(exact, "task/comments/c3.md"), "cut;") {
 		t.Fatal("2 000 characters are not cut")
 	}
 }
@@ -183,7 +183,8 @@ func TestTaskUpdates_ThroughTheCourier(t *testing.T) {
 		return len(svc.courier.outbox[sess.ID]) == 1
 	})
 	next, err := svc.TurnEnded(context.Background(), sess.ID, false)
-	if err != nil || next != "[task update · comment] The person commented on this task (comment_id c1):\nplease also check X" {
+	// The service has no shell index here: the turn names the file the shell gives the comment.
+	if err != nil || next != "[task update · comment] The person commented on this task (task/comments/00010101-000000-person-c1.md in your shell):\nplease also check X" {
 		t.Fatalf("Stop hook = %q, %v", next, err)
 	}
 }
@@ -208,7 +209,7 @@ var (
 )
 
 // Every task session's brief has the section, with the counts when they are
-// known, and names the three read tools.
+// known, and says where resources and comments are in the shell.
 func TestStartInteractive_BriefsTheResourcesAndComments(t *testing.T) {
 	svc, _ := newInteractiveService(t)
 	svc.Resources, svc.Comments = fakeTaskInputs{resources: 2, comments: 1}, fakeTaskInputs{resources: 2, comments: 1}
@@ -218,12 +219,8 @@ func TestStartInteractive_BriefsTheResourcesAndComments(t *testing.T) {
 		"## Resources and comments\n",
 		"This task has 2 resources and 1 comment.",
 		"[task update · …]",
-		"\n- mcp__task__list_task_resources — ",
-		"\n- mcp__task__read_task_resource — ",
-		"\n- mcp__task__list_task_comments — ",
-		"\n- mcp__task__add_task_comment — ",
-		"\n- mcp__task__update_task_comment — ",
-		"\n- mcp__task__delete_task_comment — ",
+		"task/resources/", "task/resources/links.md", "task/comments/",
+		"write a\nfile in task/comments/", "Edit or rm only your own comments",
 		"message_architect",
 		"your comment wakes no session",
 	} {
@@ -241,7 +238,7 @@ func TestStartInteractive_BriefsTheResourcesAndComments(t *testing.T) {
 
 	svc.Resources, svc.Comments = nil, nil
 	_, launch = startInteractive(t, svc, InteractiveRequest{})
-	if !strings.Contains(briefOf(t, launch), "mcp__task__list_task_comments") {
+	if !strings.Contains(briefOf(t, launch), "## Resources and comments\n") {
 		t.Fatal("the section is there even without readers")
 	}
 }

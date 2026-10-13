@@ -110,6 +110,10 @@ type Service struct {
 	// "Contract: Harness server ↔ Agent sessions — virtual shell"). Nil:
 	// sessions get none.
 	Shells ports.VirtualShells
+	// ShellIndex is what each running shell holds, so a [task update]
+	// turn names the path the session's shell holds the new file at. Nil:
+	// turns name the path the shell gives such a file.
+	ShellIndex ports.ShellBaseVersions
 	// ShimBinary is what a task session's shim commands (sed, tee, cp, mv,
 	// rm, touch, mkdir) link to, first on its PATH; they call the session's
 	// SessionShellURL. Empty: sessions get no shims.

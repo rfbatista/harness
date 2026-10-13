@@ -1,12 +1,16 @@
 ---
 name: task-implement-spec
-description: Use in a harness task session started in implement mode, as a delegate of the task's architect — break the Spec task document you were handed into tracer-bullet tickets (task documents with blocking edges), have the architect review them, then implement the ticket frontier test first on your branch, review the result against the spec, and report back. Adapted from mattpocock/skills to-tickets and implement-spec for task documents.
+description: Use in a harness task session started in implement mode, as a delegate of the task's architect — break the Spec document you were handed into tracer-bullet tickets (files in task/docs of your virtual shell, with blocking edges), have the architect review them, then implement the ticket frontier test first on your branch, review the result against the spec, and report back. Adapted from mattpocock/skills to-tickets and implement-spec for task documents.
 ---
 
 # Implement Spec
 
 You are a delegate. The architect wrote a `Spec: <application> — <feature>` task
 document for your repository and started you to implement it. Your prompt names it.
+It is a file in `task/docs/` of your virtual shell (`$HARNESS_SHELL`), beside the
+contracts; the project's Glossary and ADRs are in `project/docs/`. Read them with
+Read, `grep` and `sed -n`; write with Write, Edit or `sed -i` — each change is stored
+as you make it. `.index.json` gives each file's document `id`.
 
 The goal: the whole spec implemented and committed on **your session's branch** —
 your integration branch — with every ticket marked done, reviewed against the spec,
@@ -16,8 +20,8 @@ and handed back to the architect.
 
 - **No code before the tickets are approved.** The architect's reply to your ticket
   review request must carry `verdict: approved`.
-- **Tickets are task documents, not files.** Nothing under `.scratch/` or `docs/`;
-  the worktree holds only the code change.
+- **Tickets are files in `task/docs/` of your virtual shell.** Nothing under
+  `.scratch/` or `docs/` in the repository; the worktree holds only the code change.
 - **Never change a contract you consume.** If a Contract document is wrong or
   missing something, say so with `mcp__task__message_architect` kind question and
   wait.
@@ -25,17 +29,18 @@ and handed back to the architect.
   refused for you.
 - **Test only at the spec's agreed seams** (its Testing decisions). A new seam is a
   question for the architect, not a decision you make.
-- **Read documents in parts.** Check a document's `bytes` and `lines` first; read the
-  `section` you need or an `offset`/`limit` window, never the whole page when it is
-  large. Edit a ticket with `mcp__task__edit_task_document` and its `expected_version`.
+- **Read documents in parts.** `grep -n` for the heading you need, then `sed -n`
+  that range (or Read with offset and limit), never the whole file when it is large.
+  Change a ticket's status line with Edit or `sed -i`, not by rewriting it. A write
+  refused with `BASE_VERSION_STALE` means someone changed the file: read it again
+  and redo the change; any other refusal code says the path is not yours to write.
 
 ## 1. Read the spec
 
-Read the Spec document and every Contract it depends on
-(`mcp__task__list_task_documents`, `mcp__task__read_task_document`). Read the
-project's `Glossary:` and the `ADR:` documents in your area
-(`mcp__task__list_project_documents`, `mcp__task__search_documents`), and use the
-glossary's terms in ticket titles, test names and code. Explore the repository as
+Read the Spec document and every Contract it depends on (`ls task/docs`,
+`grep -l '^# Contract' task/docs/* project/docs/*`). Read the project's `Glossary:`
+and the `ADR:` documents in your area in `project/docs/` (`grep -rn` for the terms
+you need), and use the glossary's terms in ticket titles, test names and code. Explore the repository as
 far as you need to slice the work — look for a prefactor that makes the change easy
 ("make the change easy, then make the easy change").
 
@@ -56,39 +61,26 @@ expand–contract instead: an *expand* ticket adds the new form beside the old; 
 *migrate* ticket per batch of call sites (per package or directory), each blocked by
 the expand; a *contract* ticket deletes the old form, blocked by every migrate batch.
 
-Write one task document per ticket with `mcp__task__create_task_document`, numbered
-from `01` in dependency order (blockers first), titled
-`Ticket: <application> — NN <title>`. No file paths or code snippets in them.
+Write one file per ticket in `task/docs/`, numbered from `01` in dependency order
+(blockers first), titled `Ticket: <application> — NN <title>` in its first heading,
+e.g. `task/docs/ticket-backend-01-export-endpoint.md`. No file paths or code
+snippets in them.
 
-```html
-<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<title>Ticket: <application> — NN <title></title>
-<style>
-  :root { color-scheme: light dark; }
-  body { font: 15px/1.5 system-ui, sans-serif; max-width: 72ch; margin: 2rem auto; padding: 0 1rem; }
-  h1, h2 { line-height: 1.25; }
-  dt { font-weight: 600; margin-top: 1rem; }
-</style>
-</head>
-<body>
-<h1>NN: &lt;Ticket title&gt;</h1>
-<dl>
-  <dt>Spec</dt><dd>&lt;Spec document title&gt;</dd>
-  <dt>Blocked by</dt><dd>&lt;ticket numbers and titles — or "none (can start immediately)"&gt;</dd>
-  <dt>Status</dt><dd>todo</dd>
-  <dt>Commit</dt><dd>&lt;filled in when done&gt;</dd>
-</dl>
-<h2>What to build</h2>
-<p>&lt;The end-to-end behaviour this ticket makes work, from the user's perspective — not a list of layers&gt;</p>
-<h2>Acceptance criteria</h2>
-<ul>
-  <li>&lt;criterion, observable at one of the spec's seams&gt;</li>
-</ul>
-</body>
-</html>
+```markdown
+# Ticket: <application> — NN <title>
+
+- **Spec:** <Spec document title>
+- **Blocked by:** <ticket numbers and titles — or "none (can start immediately)">
+- **Status:** todo
+- **Commit:** <filled in when done>
+
+## What to build
+
+<The end-to-end behaviour this ticket makes work, from the user's perspective — not a list of layers>
+
+## Acceptance criteria
+
+- <criterion, observable at one of the spec's seams>
 ```
 
 Status moves `todo` → `in_progress` → `done` (or `blocked`).
@@ -96,14 +88,15 @@ Status moves `todo` → `in_progress` → `done` (or `blocked`).
 ## 3. Get the tickets reviewed
 
 Send `mcp__task__message_architect` with kind `review_request`, a subject like
-`Tickets: <application> — <feature>`, every ticket in `document_ids`, and a body that
+`Tickets: <application> — <feature>`, every ticket in `document_ids` (their ids in
+`.index.json`), and a body that
 lists them as a numbered breakdown — title, blocked by, what it delivers — and calls
 out the slicing choices you are unsure of (granularity, edges, merges or splits).
 
 Then stop and wait. The reply arrives as a turn starting with `[task message …]`:
 
 - `verdict: approved` → go to step 4.
-- `verdict: changes_requested` → revise the tickets in place, and ask for review
+- `verdict: changes_requested` → edit the ticket files in place, and ask for review
   again, `in_reply_to` the reply.
 
 ## 4. Implement the frontier
@@ -114,7 +107,7 @@ whose blockers are all `done`.
 - For each frontier ticket, run an **implementer sub-agent** in its own worktree off
   your branch (the Agent tool with `isolation: "worktree"`), in the background when
   several can run at once. Communicate by pointer — the ticket's and the spec's
-  document titles, earlier commits — not by pasting them. Each implementer:
+  paths in your virtual shell, earlier commits — not by pasting them. Each implementer:
   - confirms its worktree is based on your branch's tip, and resets onto it if not;
   - builds the ticket with the `task-tdd` skill, at the spec's seams;
   - merges your branch's tip into its own before reporting done.

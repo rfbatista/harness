@@ -68,7 +68,7 @@ func startFixtureWith(t *testing.T, autoRun, canStart bool) (start func(args map
 		peers = PeerStarter{}
 	}
 	var tool domain.Tool
-	for _, tl := range SessionTaskTools(plan, sessions, agentList{{ID: "a-rev", Name: "Reviewer"}}, nil, peers, ArtifactTooling{}, nil, ResourceTooling{}, NotificationTooling{}) {
+	for _, tl := range SessionTaskTools(plan, sessions, agentList{{ID: "a-rev", Name: "Reviewer"}}, nil, peers, ArtifactTooling{}, nil, NotificationTooling{}) {
 		if tl.Name == "start_task_session" {
 			tool = tl
 		}
@@ -130,7 +130,7 @@ func TestStartTaskSession_OffersDesignMode(t *testing.T) {
 	if got := starter.got[0].Mode; got != "design" {
 		t.Fatalf("mode = %q, want design", got)
 	}
-	for _, tl := range SessionTaskTools(nil, nil, nil, nil, PeerStarter{}, ArtifactTooling{}, nil, ResourceTooling{}, NotificationTooling{}) {
+	for _, tl := range SessionTaskTools(nil, nil, nil, nil, PeerStarter{}, ArtifactTooling{}, nil, NotificationTooling{}) {
 		if tl.Name != "start_task_session" {
 			continue
 		}
@@ -150,7 +150,7 @@ func TestStartTaskSession_OffersImplementMode(t *testing.T) {
 	if got := starter.got[0].Mode; got != "implement" {
 		t.Fatalf("mode = %q, want implement", got)
 	}
-	for _, tl := range SessionTaskTools(nil, nil, nil, nil, PeerStarter{}, ArtifactTooling{}, nil, ResourceTooling{}, NotificationTooling{}) {
+	for _, tl := range SessionTaskTools(nil, nil, nil, nil, PeerStarter{}, ArtifactTooling{}, nil, NotificationTooling{}) {
 		if tl.Name != "start_task_session" {
 			continue
 		}

@@ -172,7 +172,7 @@ function startTaskPage(rawSeed) {
     /** Publishes a page into a session, as the agent's publish_artifact tool would. */
     publish: (id, title = "Hero", path = "hero.html") =>
       artifacts.publish({ sessionId: id, kind: "page", title, note: "from the console", path, mime: "text/html", sizeBytes: 1 }),
-    /** Moves an artifact to the project, as move_artifact_to_project would. */
+    /** Moves an artifact to the project, as a move to project/designs in a session shell would. */
     promote: (artifactId) => artifacts.gateway.setScope(artifactId, "project"),
     /** Attaches a project asset to a task, as attach_artifact_to_task would: harness.attach("art-1", "t2"). */
     attach: (artifactId, ticketId) => artifacts.gateway.attach(artifactId, ticketId),

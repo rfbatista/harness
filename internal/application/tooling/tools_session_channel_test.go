@@ -180,7 +180,7 @@ func newChannelFixture(t *testing.T) *channelFixture {
 	starter := &fakeStarter{sessions: sessions}
 	tools := map[string]domain.Tool{}
 	for _, tl := range SessionTaskTools(plan, sessions, nil, nil,
-		PeerStarter{Sessions: starter, Repositories: repoList{{ID: "r-api", Name: "api"}}}, ArtifactTooling{}, ch, ResourceTooling{}, NotificationTooling{}) {
+		PeerStarter{Sessions: starter, Repositories: repoList{{ID: "r-api", Name: "api"}}}, ArtifactTooling{}, ch, NotificationTooling{}) {
 		tools[tl.Name] = tl
 	}
 	return &channelFixture{ch: ch, tools: tools, starter: starter, taskID: task.ID}

@@ -118,7 +118,7 @@ func TestTaskResources_WiredGraph(t *testing.T) {
 }
 
 // On the wired graph what the person adds reaches every running session of
-// the task as a [task update · …] turn, through the courier: the architect
+// the task as a [task update · …] turn naming its shell file, through the courier: the architect
 // as well as its delegate and a peer. Sessions run by a client take it from their Stop
 // hook. A session that has stopped is not a recipient.
 func TestTaskUpdates_WiredGraph(t *testing.T) {
@@ -157,10 +157,13 @@ func TestTaskUpdates_WiredGraph(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := `[task update · resource added] The person added a link to this task: "Spec" (resource_id ` + r.ID +
-		`, url https://example.com/spec). Read it with read_task_resource if it bears on your work.` +
+	// These sessions have no shell: the turns name the files a shell gives
+	// a link and the comment.
+	commentPath := "task/comments/" + c.CreatedAt.UTC().Format("20060102-150405") + "-person-" + c.ID[:8] + ".md"
+	want := `[task update · resource added] The person added a link to this task: "Spec" (` + r.URL + `), ` +
+		`listed in task/resources/links.md in your shell. Open it if it bears on your work.` +
 		"\n\n---\n\n" +
-		"[task update · comment] The person commented on this task (comment_id " + c.ID + "):\nuse the spec I linked"
+		"[task update · comment] The person commented on this task (" + commentPath + " in your shell):\nuse the spec I linked"
 	for _, id := range []string{"s-arch", "s-dlg", "s-peer"} {
 		if got := stopHookUntil(t, orch, id, want); got != want {
 			t.Fatalf("%s's Stop hook = %q, want %q", id, got, want)

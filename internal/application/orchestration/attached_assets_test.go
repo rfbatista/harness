@@ -56,7 +56,7 @@ func TestAttachedAssetsSection(t *testing.T) {
 	got := attachedAssetsSection([]*domain.Artifact{
 		{ID: "a1", TicketID: "tk9", Title: "Logo", Kind: domain.ArtifactPage},
 	})
-	for _, want := range []string{"## Project assets attached to this task", "\n- a1 — Logo (page), from task tk9", "list_task_artifacts"} {
+	for _, want := range []string{"## Project assets attached to this task", "\n- a1 — Logo (page), from task tk9", "task/designs/attached.md"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("section lacks %q:\n%s", want, got)
 		}

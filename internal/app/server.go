@@ -150,8 +150,8 @@ type optionalNotifications struct {
 func sessionTaskTools(cat catalog.Catalog, orch *orchestration.Service, plan *planning.Service, sessions ports.SessionRepository, art *artifacts.Service, channel *taskchannel.Service, notifier ports.Notifier) []domain.Tool {
 	return tooling.SessionTaskTools(plan, sessions, cat.Agents, cat.Architecture,
 		tooling.PeerStarter{Sessions: orch, Repositories: cat.Projects},
-		tooling.ArtifactTooling{Publisher: art, Reader: art, Attachments: art, ViewURL: httpapi.ArtifactViewPath}, channel,
-		tooling.ResourceTooling{Files: plan, Comments: plan, Writer: plan}, tooling.NotificationTooling{Notifier: notifier})
+		tooling.ArtifactTooling{Publisher: art, Attachments: art, ViewURL: httpapi.ArtifactViewPath}, channel,
+		tooling.NotificationTooling{Notifier: notifier})
 }
 
 // registerMCPServer builds the MCP server, registers all tools and the designer

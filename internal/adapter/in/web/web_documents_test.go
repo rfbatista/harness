@@ -389,7 +389,7 @@ func TestProjectDocumentsPageRefusesWhatIsNotAProjectDocumentOfTheProject(t *tes
 func TestProjectDocumentsPageWithNoneSaysHowTheyArrive(t *testing.T) {
 	rec := get(t, newTestHandler(t, documentsBoard()), "/projects/p2/documents")
 	body := rec.Body.String()
-	if rec.Code != http.StatusOK || !strings.Contains(body, "No document has been moved to this project yet") || !strings.Contains(body, "move_document_to_project") {
+	if rec.Code != http.StatusOK || !strings.Contains(body, "No document has been moved to this project yet") || !strings.Contains(body, "project/docs") {
 		t.Fatalf("status %d:\n%s", rec.Code, body)
 	}
 }

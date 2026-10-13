@@ -46,24 +46,25 @@ func TestStartInteractive_ArchitectMode(t *testing.T) {
 	if !strings.Contains(body, "name: task-architecture") {
 		t.Errorf("task-architecture SKILL.md has no frontmatter name:\n%s", body)
 	}
-	// Sessions copy the templates literally, so they must be HTML pages.
-	for _, want := range []string{"<!doctype html>", "<title>Contract: ", "<title>Architecture: ", "HTML page"} {
+	// Documents are files in the virtual shell; the templates start with their title.
+	for _, want := range []string{"# Contract: ", "# Architecture: ", "task/docs/", "project/docs/", "$HARNESS_SHELL",
+		"BASE_VERSION_STALE", "REDIRECT_DENIED", "SHELL_UNAVAILABLE"} {
 		if !strings.Contains(body, want) {
-			t.Errorf("task-architecture SKILL.md lacks %q: its document templates must be HTML", want)
+			t.Errorf("task-architecture SKILL.md lacks %q", want)
 		}
 	}
-	if spec := pluginSkill(t, launch, "task-to-spec"); !strings.Contains(spec, "<!doctype html>") || !strings.Contains(spec, "<title>Spec: ") {
-		t.Error("task-to-spec SKILL.md lacks the HTML Spec template")
+	if spec := pluginSkill(t, launch, "task-to-spec"); !strings.Contains(spec, "# Spec: <application> — <feature>") || !strings.Contains(spec, "task/docs/") {
+		t.Error("task-to-spec SKILL.md lacks the Spec template written to task/docs/")
 	}
 	if !strings.Contains(body, "already notify the person") {
 		t.Error("task-architecture SKILL.md does not say review requests and the review status already notify the person")
 	}
-	if strings.Contains(body, "```\n## <Application>") || strings.Contains(body, "```\n**Type:** REST API") || strings.Contains(body, "<title>Spec: ") {
-		t.Error("task-architecture SKILL.md still carries Markdown document templates")
+	if strings.Contains(body, "<title>Spec: ") {
+		t.Error("task-architecture SKILL.md carries the Spec template; it belongs to task-to-spec")
 	}
 	prompt := launch.Spec.Prompt
-	for _, want := range []string{"task-architecture skill", "tk1: Ship the thing", "Users export their data as CSV.", "add_task_comment",
-		"task-grill-with-docs", "task-to-spec", "mode implement"} {
+	for _, want := range []string{"task-architecture skill", "tk1: Ship the thing", "Users export their data as CSV.", "task/comments/",
+		"task-grill-with-docs", "task-to-spec", "mode implement", "project/docs/", "task/docs/"} {
 		if !strings.Contains(prompt, want) {
 			t.Errorf("first message lacks %q:\n%s", want, prompt)
 		}
@@ -138,14 +139,14 @@ func TestStartInteractive_DesignMode(t *testing.T) {
 		t.Fatalf("mode not persisted: %+v", got)
 	}
 	body := pluginSkill(t, launch, "design-artifacts")
-	for _, want := range []string{"name: design-artifacts", "publish_artifact", "design/", "self-contained", "kind", "url", "Design tab", "HTML page"} {
+	for _, want := range []string{"name: design-artifacts", "publish_artifact", "task/designs/", "self-contained", "url", "Design tab", "PUBLISH_URL_ONLY"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("design-artifacts SKILL.md lacks %q", want)
 		}
 	}
 	p := launch.Spec.Prompt
 	if !strings.HasPrefix(p, "Use the design-artifacts skill on task tk1: Ship the thing") || !strings.Contains(p, "A pricing card in three states.") ||
-		!strings.Contains(p, "publish_artifact") || !strings.Contains(p, "add_task_comment") || !strings.HasSuffix(p, "Start with the hover state.") {
+		!strings.Contains(p, "task/designs/") || !strings.Contains(p, "task/comments/") || !strings.HasSuffix(p, "Start with the hover state.") {
 		t.Errorf("first message = %q", p)
 	}
 	// The design skill must not drag the architect one along.
@@ -177,12 +178,12 @@ func mustFlag(t *testing.T, args []string, name string) string {
 }
 
 // The architect's specs and contracts are what other tasks build on; its
-// skill says they can be moved to project level, with the tool that does it.
+// skill says they can be moved to project level, and how.
 func TestStartInteractive_ArchitectSkillNamesProjectDocuments(t *testing.T) {
 	svc, _ := newInteractiveService(t)
 	_, launch := startInteractive(t, svc, InteractiveRequest{Mode: "architect"})
 	body := pluginSkill(t, launch, "task-architecture")
-	for _, want := range []string{"mcp__task__move_document_to_project", "mcp__task__list_project_documents", "project level"} {
+	for _, want := range []string{"mv task/docs/", "project/docs/", "project level"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("task-architecture SKILL.md lacks %q", want)
 		}
@@ -191,19 +192,19 @@ func TestStartInteractive_ArchitectSkillNamesProjectDocuments(t *testing.T) {
 
 // The designer reuses the project's assets before drawing new ones, and keeps
 // what other tasks will reuse at project level; its skill and opening prompt
-// say so, with the tools.
+// say so.
 func TestStartInteractive_DesignSkillNamesProjectAssets(t *testing.T) {
 	svc, _ := newInteractiveService(t)
 	_, launch := startInteractive(t, svc, InteractiveRequest{Mode: "design"})
 	body := pluginSkill(t, launch, "design-artifacts")
-	for _, want := range []string{"mcp__task__list_project_artifacts", "mcp__task__move_artifact_to_project", "mcp__task__move_artifact_to_task",
+	for _, want := range []string{"project/designs/", "task/designs/attached.md", "mv task/designs/",
 		"mcp__task__attach_artifact_to_task", "mcp__task__detach_artifact_from_task",
-		"ARTIFACT_IN_PROJECT", "ARTIFACT_NOT_PROMOTABLE", "ARTIFACT_NOT_ON_TASK", "ARTIFACT_NOT_IN_PROJECT", "ARTIFACT_PRODUCER_TASK", "project level"} {
+		"NOT_ON_TASK", "ARTIFACT_NOT_IN_PROJECT", "ARTIFACT_PRODUCER_TASK", "project level"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("design-artifacts SKILL.md lacks %q", want)
 		}
 	}
-	for _, want := range []string{"list_project_artifacts", "move_artifact_to_project", "attach_artifact_to_task"} {
+	for _, want := range []string{"project/designs/", "attached.md", "attach_artifact_to_task"} {
 		if !strings.Contains(launch.Spec.Prompt, want) {
 			t.Errorf("design prompt lacks %q:\n%s", want, launch.Spec.Prompt)
 		}
@@ -215,7 +216,7 @@ func TestStartInteractive_ArchitectSkillNamesProjectAssets(t *testing.T) {
 	svc, _ := newInteractiveService(t)
 	_, launch := startInteractive(t, svc, InteractiveRequest{Mode: "architect"})
 	body := pluginSkill(t, launch, "task-architecture")
-	for _, want := range []string{"mcp__task__list_project_artifacts", "mcp__task__attach_artifact_to_task"} {
+	for _, want := range []string{"project/designs/", "mcp__task__attach_artifact_to_task"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("task-architecture SKILL.md lacks %s", want)
 		}
@@ -251,20 +252,14 @@ func TestStartInteractive_ArchitectCoordinatesDelegates(t *testing.T) {
 	}
 }
 
-// Both mode skills tell the agent to read large documents and assets in
-// parts, with the tools for it.
+// The mode skills tell the agent to read large files in parts and edit
+// them in parts, with shell tools.
 func TestStartInteractive_SkillsReadInParts(t *testing.T) {
 	svc, _ := newInteractiveService(t)
 	for mode, skill := range map[string]string{"architect": "task-architecture", "implement": "task-implement-spec", "design": "design-artifacts"} {
 		_, launch := startInteractive(t, svc, InteractiveRequest{Mode: mode})
 		body := pluginSkill(t, launch, skill)
-		want := []string{"mcp__task__search_documents", "`section`", "`offset`/`limit`", "never the whole"}
-		if skill == "task-architecture" || skill == "task-implement-spec" {
-			want = append(want, "mcp__task__edit_task_document", "expected_version")
-		} else {
-			want = append(want, "mcp__task__read_artifact", "include_artifacts")
-		}
-		for _, w := range want {
+		for _, w := range []string{"grep -n", "sed -n", "never the whole", "Edit", "BASE_VERSION_STALE"} {
 			if !strings.Contains(body, w) {
 				t.Errorf("%s SKILL.md lacks %q", skill, w)
 			}
@@ -292,14 +287,14 @@ func TestStartInteractive_ArchitectStepsInOrder(t *testing.T) {
 		t.Error("task-architecture SKILL.md still asks delegates for a Plan document")
 	}
 	grilling := pluginSkill(t, launch, "task-grill-with-docs")
-	for _, want := range []string{"name: task-grill-with-docs", "frontier", "Glossary: <project>", "ADR: NNNN", "mcp__task__move_document_to_project", "confirms"} {
+	for _, want := range []string{"name: task-grill-with-docs", "frontier", "Glossary: <project>", "ADR NNNN", "project/docs/", "task/comments/", "confirms"} {
 		if !strings.Contains(grilling, want) {
 			t.Errorf("task-grill-with-docs SKILL.md lacks %q", want)
 		}
 	}
 	for _, file := range []string{"GLOSSARY-FORMAT.md", "ADR-FORMAT.md"} {
-		if !strings.Contains(pluginFile(t, launch, "task-grill-with-docs", file), "<!doctype html>") {
-			t.Errorf("task-grill-with-docs %s has no HTML template", file)
+		if f := pluginFile(t, launch, "task-grill-with-docs", file); !strings.Contains(f, "project/docs/") || !strings.Contains(f, "## Template") {
+			t.Errorf("task-grill-with-docs %s has no template for a file in project/docs/", file)
 		}
 	}
 	toSpec := pluginSkill(t, launch, "task-to-spec")
@@ -318,7 +313,7 @@ func TestStartInteractive_ImplementMode(t *testing.T) {
 		t.Fatalf("mode = %q, want implement", sess.Mode)
 	}
 	body := pluginSkill(t, launch, "task-implement-spec")
-	for _, want := range []string{"name: task-implement-spec", "Ticket: <application> — NN", "<!doctype html>", "review_request", "verdict: approved",
+	for _, want := range []string{"name: task-implement-spec", "Ticket: <application> — NN", "task/docs/", ".index.json", "review_request", "verdict: approved",
 		"mcp__task__message_architect", "task-tdd", "task-code-review", `isolation: "worktree"`, "Never move the task status"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("task-implement-spec SKILL.md lacks %q", want)

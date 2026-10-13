@@ -73,24 +73,24 @@ func modePrompt(mode domain.SessionMode, tk *domain.Ticket, typed string) string
 	case domain.SessionModeArchitect:
 		skill = "task-architecture"
 		closing = "Work in this order. First grill the person on the design with the task-grill-with-docs skill, " +
-			"recording settled terms and decisions as Glossary and ADR project documents, and wait for them to confirm " +
-			"you share an understanding. Then identify the affected applications, write the contracts, and write one " +
-			"spec per application with the task-to-spec skill, all as task documents. Then delegate each spec with " +
+			"recording settled terms and decisions as Glossary and ADR files in project/docs/ in your virtual shell, and wait " +
+			"for them to confirm you share an understanding. Then identify the affected applications, write the contracts, and " +
+			"write one spec per application with the task-to-spec skill, each a file in task/docs/. Then delegate each spec with " +
 			"start_task_session in mode implement: the delegate writes tickets, asks you to review them, and implements " +
-			"them once you approve. Do not write any local files.\n\n" +
+			"them once you approve. Write documents only in your virtual shell, no other local files.\n\n" +
 			"You own this task's status: move it with update_task_status and a reason, based on what your " +
 			"delegates report. They report to you; their messages, status checks and the person's review " +
 			"answers arrive as turns starting with [task message …] or [status check …]. Answer each one " +
 			"(reply_to_session), ask the person for review with request_user_review when something needs " +
 			"their eye, and tune loops with set_status_check. When the person adds a resource or a comment to the " +
-			"task, every running session, you included, gets a turn starting with [task update · …]; read it with " +
-			"read_task_resource or list_task_comments and decide whether a spec, a contract or a delegate's work changes. " +
-			"Leave the person a comment with add_task_comment for decisions and summaries they should see on the task; " +
-			"talk to your delegates with task messages, not comments."
+			"task, every running session, you included, gets a turn starting with [task update · …] naming its file " +
+			"in task/resources/ or task/comments/; read it and decide whether a spec, a contract or a delegate's work changes. " +
+			"Leave the person a comment for decisions and summaries they should see on the task by writing a file in " +
+			"task/comments/; talk to your delegates with task messages, not comments."
 	case domain.SessionModeImplement:
 		skill = "task-implement-spec"
 		closing = "Implement the Spec task document your prompt names, with the Contract documents it depends on. " +
-			"First break it into tickets, one task document each, and ask the architect to review them with " +
+			"First break it into tickets, one file each in task/docs/ in your virtual shell, and ask the architect to review them with " +
 			"message_architect (kind review_request, attach the ticket documents). Write no code until the reply's " +
 			"verdict is approved; on changes_requested, revise the tickets and ask again. Then implement the ticket " +
 			"frontier test first (task-tdd) on your branch, review the result against the spec (task-code-review), and " +
@@ -99,16 +99,16 @@ func modePrompt(mode domain.SessionMode, tk *domain.Ticket, typed string) string
 			"consume and never change the task status: the architect owns it."
 	case domain.SessionModeDesign:
 		skill = "design-artifacts"
-		closing = "Work under design/ in this worktree. Make each component or screen a self-contained HTML " +
-			"file and publish every result with publish_artifact as soon as it changes, with a one-line note; " +
-			"check list_task_artifacts for the project assets attached to this task and list_project_artifacts first, " +
-			"and build on them (attach_artifact_to_task brings a project asset onto this task); move an asset to project " +
-			"level with move_artifact_to_project once other tasks will reuse it; " +
-			"publish images and videos the same way, and a dev server as its loopback url. The person sees " +
-			"each publish in the Design tab of the web UI — tell them so in one line instead of pasting HTML here. " +
-			"Reference images, recordings and links the person adds to the task are in list_task_resources; " +
-			"a turn starting with [task update · …] tells you when they add one or comment. " +
-			"Tell the person what you published and what is left with add_task_comment."
+		closing = "Make each component or screen a self-contained HTML file and publish it by writing it into " +
+			"task/designs/ in your virtual shell; every change there publishes a new revision, so write as soon as it changes. " +
+			"Check task/designs/attached.md for the project assets attached to this task and project/designs/ first, " +
+			"and build on them (attach_artifact_to_task brings a project asset onto this task); mv an asset to " +
+			"project/designs/ once other tasks will reuse it. " +
+			"Write images and videos there the same way, and publish a dev server as its loopback url with publish_artifact. " +
+			"The person sees each publish in the Design tab of the web UI — tell them so in one line instead of pasting HTML here. " +
+			"Reference images, recordings and links the person adds to the task are in task/resources/; " +
+			"a turn starting with [task update · …] names the file when they add one or comment. " +
+			"Tell the person what you published and what is left in a comment: a file you write in task/comments/."
 	default:
 		return typed
 	}
