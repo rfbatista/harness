@@ -411,7 +411,8 @@ func (s *Service) withGit(id, repositoryID string, cfg *llmkit.SessionConfig, cl
 }
 
 // withShell gives a session with a task its virtual shell: made and filled
-// now, passed with --add-dir and HARNESS_SHELL, named in the brief. The
+// now, passed with --add-dir and HARNESS_SHELL, named in the brief, with
+// the edit proxy's hooks in its claude settings. The
 // cleanup it answers runs cleanup and removes the shell. A session with no
 // task, or a service without Shells, changes nothing.
 func (s *Service) withShell(id string, ticket *domain.Ticket, cfg *llmkit.SessionConfig, cleanup func()) (func(), error) {
@@ -428,6 +429,11 @@ func (s *Service) withShell(id string, ticket *domain.Ticket, cfg *llmkit.Sessio
 	cfg.AddDirs = append(slices.Clone(cfg.AddDirs), dir)
 	cfg.Env = append(slices.Clone(cfg.Env), "HARNESS_SHELL="+dir)
 	cfg.AppendSystem = appendSection(cfg.AppendSystem, shellSection(dir))
+	if s.SessionShellURL != nil {
+		dc, _ := cfg.Driver.(claude.Config)
+		dc.Settings = &claude.Settings{Hooks: ShellHooks(s.SessionShellURL(id))}
+		cfg.Driver = dc
+	}
 	return s.withShims(id, cfg, func() {
 		if cleanup != nil {
 			cleanup()
