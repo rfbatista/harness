@@ -116,6 +116,8 @@ func (sh *shell) resolve(e ports.ShellEdit) (edit, bool) {
 		out.op = "mv"
 	case "mkdir":
 		out.op = "mkdir"
+	case "redirect":
+		out.op = "redirect"
 	default:
 		out.op = e.Op
 	}
@@ -124,7 +126,7 @@ func (sh *shell) resolve(e ports.ShellEdit) (edit, bool) {
 		out.rel, out.in = append(out.rel, rel), append(out.in, in)
 	}
 	switch out.op {
-	case "write", "rm", "mkdir":
+	case "write", "rm", "mkdir", "redirect":
 		return out, true
 	case "mv":
 		return out, len(out.rel) == 2
@@ -167,6 +169,10 @@ func refuseReadOnly(rel string) ports.ShellAnswer {
 
 func refuseStale(rel, now string) ports.ShellAnswer {
 	return refuse("BASE_VERSION_STALE", rel+" changed since this session last received it (now "+now+"); the file has been refreshed — read it again and redo the change")
+}
+
+func refuseRedirect() ports.ShellAnswer {
+	return refuse("REDIRECT_DENIED", "shell redirects into $HARNESS_SHELL are not stored; use Write/Edit or tee")
 }
 
 func refuseNotOnTask(rel string) ports.ShellAnswer {
@@ -218,10 +224,14 @@ func (s *Service) CommitShellEdit(_ context.Context, sessionID string, e ports.S
 		if sh.skipped {
 			s.kick(sh)
 		}
-		if ans := refuseArea(ed); !ans.Allow {
-			return ans
+		ans := refuseArea(ed)
+		if ans.Allow {
+			ans = s.commit(sh, ed)
 		}
-		return s.commit(sh, ed)
+		if !ans.Allow {
+			s.restore(sh, ed)
+		}
+		return ans
 	})
 }
 
@@ -243,6 +253,9 @@ func (s *Service) withShell(sessionID string, e ports.ShellEdit, do func(*shell,
 	}
 	if !ok {
 		return refuse("INVALID_INPUT", "op must be write, rm, mv (source and destination) or mkdir, not "+e.Op)
+	}
+	if ed.op == "redirect" {
+		return refuseRedirect()
 	}
 	return do(sh, ed)
 }

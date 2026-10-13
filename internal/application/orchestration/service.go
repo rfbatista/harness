@@ -67,6 +67,10 @@ type Service struct {
 	// SessionHookURL returns where an interactive session's SessionStart hook
 	// reports its conversation id. Nil leaves the hook out.
 	SessionHookURL func(sessionID string) string
+	// SessionShellURL returns where a session's edit proxy checks and
+	// commits its shell's files (…/api/sessions/{id}/shell); a session with
+	// a shell gets ShellHooks aimed at it.
+	SessionShellURL func(sessionID string) string
 	// Terminals hosts RunnerServer interactive sessions. Nil means this
 	// server does not run agents itself; such sessions answer
 	// SERVER_HOSTING_UNAVAILABLE.
