@@ -357,6 +357,28 @@ func (s *Service) editOnce(id, old, new string, replaceAll bool, expectedVersion
 	return s.documentChanged(edited, err, "", domain.DocumentUpdated)
 }
 
+// WriteDocumentIfVersion replaces title, content and format (empty keeps
+// the stored one) while the stored content is still at version: a
+// compare-and-set, so a write made on an older copy is DOCUMENT_CHANGED and
+// nothing is stored. No format's shape is checked.
+func (s *Service) WriteDocumentIfVersion(id, version, title, content string, format domain.DocumentFormat) (*domain.Document, error) {
+	if title == "" {
+		return nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "title is required"}
+	}
+	if format != "" && !format.Valid() {
+		return nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "format must be markdown, html or text"}
+	}
+	d := s.documents.Get(id)
+	if d == nil {
+		return nil, &domain.StructuredError{Code: "DOCUMENT_NOT_FOUND", Message: "document not found"}
+	}
+	if now := domain.DocumentVersion(d.Content); now != version {
+		return nil, &domain.StructuredError{Code: "DOCUMENT_CHANGED", Message: "now at " + now}
+	}
+	written, err := s.documents.UpdateIfContent(id, d.Content, title, content, format)
+	return s.documentChanged(written, err, "", domain.DocumentUpdated)
+}
+
 // noMatchMessage says old_string was not found, with the stored lines that
 // come closest, so the agent can copy the markup exactly.
 func noMatchMessage(content, old string) string {

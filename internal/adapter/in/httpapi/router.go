@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/labstack/echo/v4"
 )
@@ -180,6 +181,10 @@ func NewRouter(h *Handler, opts ...Option) *echo.Echo {
 	g.POST("/end_interactive_session", h.handleEndInteractiveSession)
 	g.POST("/interactive_session_started", h.handleInteractiveSessionHook)
 	g.POST("/interactive_session_hook", h.handleInteractiveSessionHook)
+	// the edit proxy: a session's hooks and shims check and commit changes
+	// to its virtual shell's files
+	g.POST(strings.TrimPrefix(ShellCheckRoute, "/api"), h.handleShellCheck)
+	g.POST(strings.TrimPrefix(ShellCommitRoute, "/api"), h.handleShellCommit)
 
 	// the architect channel: what passes between a task's architect and its
 	// delegates, and the reviews it asks the person for

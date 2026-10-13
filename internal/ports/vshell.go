@@ -3,6 +3,8 @@ package ports
 import (
 	"context"
 	"time"
+
+	"operators-mcp/internal/domain"
 )
 
 // A task session's virtual shell: a temporary folder holding its task's and
@@ -56,4 +58,48 @@ type ShellBaseVersions interface {
 	// ShellFiles is every file of the session's shell, by path; nil when it
 	// has none.
 	ShellFiles(sessionID string) []ShellFile
+}
+
+// ShellEdit is one file operation an agent makes in its shell, as the edit
+// proxy (hooks and PATH shims) reports it: Op is write (or create, modify,
+// touch), rm, mv or cp (Paths[0] the source, Paths[1] the destination), or
+// mkdir. Paths are absolute; a relative one is taken as outside the shell.
+// Tool names the tool or command that makes it.
+type ShellEdit struct {
+	Op    string   `json:"op"`
+	Paths []string `json:"paths"`
+	Tool  string   `json:"tool,omitempty"`
+}
+
+// ShellAnswer is the harness's answer to a check or a commit. Allow false
+// carries the refusal's code and its reason, which starts with the code
+// (contract §6). Paths outside the shell are always allowed, with nothing
+// else said.
+type ShellAnswer struct {
+	Allow  bool   `json:"allow"`
+	Code   string `json:"code,omitempty"`
+	Reason string `json:"reason,omitempty"`
+}
+
+// ShellEdits checks and stores what agents do to their shells' files.
+type ShellEdits interface {
+	// CheckShellEdit says whether the session may make e, before it does.
+	CheckShellEdit(ctx context.Context, sessionID string, e ShellEdit) ShellAnswer
+	// CommitShellEdit stores e once the session has made it, reading the
+	// bytes from disk; the stored version becomes the session's base
+	// version, and every other running shell gets it.
+	CommitShellEdit(ctx context.Context, sessionID string, e ShellEdit) ShellAnswer
+}
+
+// ShellDocumentWriter stores what agents do to their shells' document
+// files. Planning implements it. WriteDocumentIfVersion replaces a
+// document's title, content and format while its content is still at
+// version, and is DOCUMENT_CHANGED otherwise.
+type ShellDocumentWriter interface {
+	GetDocument(id string) *domain.Document
+	CreateDocument(projectID, title, content string, format domain.DocumentFormat, scope domain.DocumentScope) (*domain.Document, error)
+	WriteDocumentIfVersion(id, version, title, content string, format domain.DocumentFormat) (*domain.Document, error)
+	SetDocumentScope(id string, scope domain.DocumentScope) (*domain.Document, error)
+	DeleteDocument(id string) error
+	LinkDocument(ticketID, documentID string) error
 }

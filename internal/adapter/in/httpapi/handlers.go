@@ -57,6 +57,9 @@ type Services struct {
 	// GitCredentials keeps the credentials git remote operations use; nil
 	// answers 503 and leaves them off /api/project_events.
 	GitCredentials ports.GitCredentials
+	// Shells checks and stores what sessions do to their virtual shells'
+	// files; nil allows everything, as no path is inside a shell.
+	Shells ports.ShellEdits
 }
 
 // Handler serves the application's driving ports as HTTP endpoints (the same
@@ -89,6 +92,7 @@ type Handler struct {
 	notifications  ports.Notifications
 	code           ports.CodeBrowser
 	gitCredentials ports.GitCredentials
+	shells         ports.ShellEdits
 }
 
 // NewHandler returns an HTTP handler that serves /api/list_tree, /api/list_zones, /api/list_projects, etc.
@@ -117,6 +121,7 @@ func NewHandler(s Services) *Handler {
 		notifications:  s.Notifications,
 		code:           s.Code,
 		gitCredentials: s.GitCredentials,
+		shells:         s.Shells,
 	}
 }
 
