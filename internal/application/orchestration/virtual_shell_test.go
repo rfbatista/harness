@@ -222,6 +222,7 @@ func checkShell(t *testing.T, dir string, w *shellWorld) {
 		"task/resources/links.md":  "- [Figma board](https://example.com/board)",
 		"task/designs/attached.md": "Logo → project/designs/brand/logo.svg",
 		"project/designs/urls.md":  "- [Dev server](http://localhost:5173/)",
+		"task/designs/urls.md":     "# Design URLs",
 		"README.md":                "task/docs/",
 		".index.json":              "",
 		"task/task.json":           "",
@@ -478,7 +479,7 @@ func TestAnInteractiveTaskSessionRunsWithItsShimsFirstOnPath(t *testing.T) {
 	svc := newHostedService(t, scriptAgent{script: `printf '%s' "$PATH" > path; printf '%s' "$HARNESS_SHELL_URL" > shell-url; printf 'ready\r\n'; cat`})
 	w := withShells(t, svc)
 	svc.ShimBinary = "/opt/harness/server"
-	svc.ShellURL = func(id string) string { return "http://127.0.0.1:9/api/sessions/" + id + "/shell" }
+	svc.SessionShellURL = func(id string) string { return "http://127.0.0.1:9/api/sessions/" + id + "/shell" }
 	sess, _ := startInteractive(t, svc, InteractiveRequest{ProjectID: "p1", RepositoryID: "r1", TicketID: w.task.ID,
 		RunsOn: domain.RunnerServer, Size: ports.TermSize{Cols: 80, Rows: 24}})
 

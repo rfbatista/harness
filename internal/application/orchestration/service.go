@@ -69,6 +69,10 @@ type Service struct {
 	// SessionHookURL returns where an interactive session's SessionStart hook
 	// reports its conversation id. Nil leaves the hook out.
 	SessionHookURL func(sessionID string) string
+	// SessionShellURL returns where a session's edit proxy checks and
+	// commits its shell's files (…/api/sessions/{id}/shell); a session with
+	// a shell gets ShellHooks aimed at it.
+	SessionShellURL func(sessionID string) string
 	// Terminals hosts RunnerServer interactive sessions. Nil means this
 	// server does not run agents itself; such sessions answer
 	// SERVER_HOSTING_UNAVAILABLE.
@@ -107,11 +111,9 @@ type Service struct {
 	// sessions get none.
 	Shells ports.VirtualShells
 	// ShimBinary is what a task session's shim commands (sed, tee, cp, mv,
-	// rm, touch, mkdir) link to, first on its PATH; ShellURL is the
-	// session's shell endpoint base they call (…/shell, without /check or
-	// /commit). Empty ShimBinary: sessions get no shims.
+	// rm, touch, mkdir) link to, first on its PATH; they call the session's
+	// SessionShellURL. Empty: sessions get no shims.
 	ShimBinary string
-	ShellURL   func(sessionID string) string
 
 	// updates feeds the task-update turns to the courier, one at a time;
 	// deliverUpdate replaces the courier in tests.
@@ -460,8 +462,8 @@ func (s *Service) withShims(id string, cfg *llmkit.SessionConfig, cleanup func()
 		path += string(os.PathListSeparator) + inherited
 	}
 	cfg.Env = append(slices.Clone(cfg.Env), "PATH="+path)
-	if s.ShellURL != nil {
-		cfg.Env = append(cfg.Env, "HARNESS_SHELL_URL="+s.ShellURL(id))
+	if s.SessionShellURL != nil {
+		cfg.Env = append(cfg.Env, "HARNESS_SHELL_URL="+s.SessionShellURL(id))
 	}
 	return func() {
 		if cleanup != nil {

@@ -37,18 +37,24 @@ var (
 	_ ports.VirtualShells     = (*Service)(nil)
 	_ ports.ShellBaseVersions = (*Service)(nil)
 	_ ports.ProjectChangeSink = (*Service)(nil)
+	_ ports.TicketAnnouncer   = (*Service)(nil)
 )
 
-// Sources is what a shell is filled from, and Writes where what agents
-// write in it is stored. Artifacts may be nil: the shell then has no
-// designs.
+// Sources is what a shell is filled from, and Writes, Comments and Designs
+// where what agents write in it is stored. Artifacts may be nil: the shell
+// then has no designs; Designs may be nil: designs written in it are then
+// not stored. Sessions and Agents name a comment's writer; either may be
+// nil.
 type Sources struct {
 	Tickets   ports.TicketReader
 	Documents ports.DocumentReader
-	Comments  ports.TaskCommentReader
+	Comments  ports.SessionTaskComments
 	Resources ports.TaskResourceFiles
 	Artifacts ports.ArtifactReader
 	Writes    ports.ShellDocumentWriter
+	Designs   ports.ShellDesignWriter
+	Sessions  ports.SessionRepository
+	Agents    ports.AgentLister
 }
 
 // Service makes, fills, refreshes and removes sessions' shells, and keeps
@@ -252,6 +258,15 @@ func (s *Service) AnnounceChange(c ports.ProjectChange) {
 		s.changed(c.ProjectID(), c.TicketComment.Comment.TicketID)
 	case c.TicketResource != nil && c.TicketResource.Resource != nil:
 		s.changed(c.ProjectID(), c.TicketResource.Resource.TicketID)
+	}
+}
+
+// AnnounceTicket hears a task change, its title, description or status
+// among them, as planning announces it: the task's shells rewrite
+// task/task.json (ports.TicketAnnouncer).
+func (s *Service) AnnounceTicket(tk *domain.Ticket, deleted bool) {
+	if tk != nil && !deleted {
+		s.changed(tk.ProjectID, tk.ID)
 	}
 }
 

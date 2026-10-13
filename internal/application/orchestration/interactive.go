@@ -509,5 +509,8 @@ func (s *Service) agentSpec(cfg llmkit.SessionConfig, conv ports.Conversation, p
 	if s.SessionHookURL != nil {
 		spec.HookURL = s.SessionHookURL(cfg.ID)
 	}
+	if s.SessionShellURL != nil && shellDir(cfg.Env) != "" {
+		spec.Hooks = ShellHooks(s.SessionShellURL(cfg.ID))
+	}
 	return spec
 }

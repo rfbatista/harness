@@ -67,7 +67,8 @@ var ShellShimCommands = []string{"sed", "tee", "cp", "mv", "rm", "touch", "mkdir
 // ShellEdit is one file operation an agent makes in its shell, as the edit
 // proxy (hooks and PATH shims) reports it: Op is write (or create, modify,
 // touch), rm, mv or cp (Paths[0] the source, Paths[1] the destination), or
-// mkdir. Paths are absolute; a relative one is taken as outside the shell.
+// mkdir; redirect is a shell redirect into Paths, refused inside the shell
+// with REDIRECT_DENIED. Paths are absolute; a relative one is taken as outside the shell.
 // Tool names the tool or command that makes it.
 type ShellEdit struct {
 	Op    string   `json:"op"`
