@@ -11,7 +11,7 @@ import (
 // ones moved to project scope, which every session of the project may read
 // and revise, and the moves themselves, which a session may only make on
 // documents linked to its own task. Deletion stays with people.
-func sessionDocumentTools(planningSvc ports.Planning, sessions ports.SessionRepository) []domain.Tool {
+func sessionDocumentTools(planningSvc ports.Planning, sessions ports.SessionRepository, art ArtifactTooling) []domain.Tool {
 	byID := schemaFromJSON(`{"type":"object","properties":{"document_id":{"type":"string","description":"Document ID"}},"required":["document_id"]}`)
 	move := func(name, description string, to domain.DocumentScope) domain.Tool {
 		return domain.Tool{
@@ -91,7 +91,7 @@ func sessionDocumentTools(planningSvc ports.Planning, sessions ports.SessionRepo
 				return reviseAsHTML(planningSvc, current, args)
 			},
 		},
-		searchDocumentsTool(planningSvc, sessions),
+		searchDocumentsTool(planningSvc, sessions, art),
 		move("move_document_to_project",
 			"Make one of this task's documents a project document: every session of the project can then read and revise it, and it shows on the project's documents page. "+
 				"Do it for knowledge that outlives this task (architecture, conventions, decisions, specs and contracts other tasks build on). The document must be linked to this task (DOCUMENT_NOT_ON_TASK otherwise); its link to the task stays. Idempotent.",

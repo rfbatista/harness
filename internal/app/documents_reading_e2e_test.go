@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -24,6 +26,7 @@ import (
 // readingMCP is the wired server as a task session reaches it over MCP: a
 // project, the session's task, a second task, and the session's client.
 type readingMCP struct {
+	cat      catalog.Catalog
 	plan     *planning.Service
 	art      *artifacts.Service
 	sessions ports.SessionRepository
@@ -79,7 +82,7 @@ func newReadingMCP(t *testing.T) *readingMCP {
 	mux.Handle(mcpsession.PathPrefix, mcpsession.TaskHandler(sessionTaskTools(cat, orch, plan, sessions, art, channel, nil)))
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
-	return &readingMCP{plan: plan, art: art, sessions: sessions, project: p, task: tk, other: other, worktree: worktree,
+	return &readingMCP{cat: cat, plan: plan, art: art, sessions: sessions, project: p, task: tk, other: other, worktree: worktree,
 		agent: dialTask(t, srv.URL+mcpsession.PathPrefix+"s-reader")}
 }
 
@@ -225,5 +228,83 @@ func TestSearchingDocuments_EndToEnd(t *testing.T) {
 
 	if got := callTaskErr(t, r.agent, "search_documents", map[string]any{"pattern": "(unclosed", "regex": true}); !strings.HasPrefix(got, "INVALID_PATTERN: ") {
 		t.Fatalf("bad regex: %q", got)
+	}
+}
+
+// An agent reads design assets the way it reads documents: a published
+// page in parts, an asset another task kept for the project and attached
+// here; never another project's.
+func TestReadingDesignAssets_EndToEnd(t *testing.T) {
+	ctx := context.Background()
+	r := newReadingMCP(t)
+	if err := os.MkdirAll(filepath.Join(r.worktree, "design"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	page := "<!doctype html><html><head><meta charset=\"utf-8\"></head><body>" + bigPage() + "</body></html>"
+	if err := os.WriteFile(filepath.Join(r.worktree, "design", "arch.html"), []byte(page), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	published := r.call(t, "publish_artifact", map[string]any{"path": "design/arch.html", "title": "Architecture page"})
+	id := published["artifact_id"]
+
+	listed := r.call(t, "list_task_artifacts", nil)
+	if row := listed["artifacts"].([]any)[0].(map[string]any); row["bytes"] != float64(len(page)) {
+		t.Fatalf("listing row: %v", row)
+	}
+	first := r.call(t, "read_artifact", map[string]any{"artifact_id": id})
+	if _, ok := first["artifact"].(map[string]any)["content"]; ok || first["truncated"] != true || len(first["outline"].([]any)) != 14 {
+		t.Fatalf("a 60 KB page came back whole, or without its outline: truncated %v", first["truncated"])
+	}
+	section := r.call(t, "read_artifact", map[string]any{"artifact_id": id, "section": "add"})
+	if got := texts(section); len(got) != 2 || got[0] != "## Where new code goes" {
+		t.Fatalf("section: %q", got)
+	}
+
+	// Another task's session keeps a logo for the project and attaches it here.
+	otherTree := t.TempDir()
+	if _, err := r.sessions.Create(&domain.Session{ID: "s-logo", ProjectID: r.project.ID, TicketID: r.other.ID, Task: "logo",
+		Status: domain.SessionRunning, WorkingDir: otherTree}); err != nil {
+		t.Fatal(err)
+	}
+	svg := `<svg xmlns="http://www.w3.org/2000/svg"><title>Logo</title></svg>`
+	if err := os.WriteFile(filepath.Join(otherTree, "logo.svg"), []byte(svg), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	logo, err := r.art.Publish(ctx, ports.PublishArtifactRequest{SessionID: "s-logo", Path: "logo.svg", Title: "Logo"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.art.SetArtifactScope(ctx, logo.ID, domain.ArtifactScopeProject); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.art.AttachArtifactToTicket(ctx, logo.ID, r.task.ID); err != nil {
+		t.Fatal(err)
+	}
+	if got := r.call(t, "read_artifact", map[string]any{"artifact_id": logo.ID}); got["artifact"].(map[string]any)["content"] != svg {
+		t.Fatalf("attached asset: %v", got)
+	}
+	found := r.call(t, "search_documents", map[string]any{"pattern": "<title>Logo", "view": "raw", "include_artifacts": true})
+	if ms := found["matches"].([]any); len(ms) != 1 || ms[0].(map[string]any)["source"] != "artifact" || ms[0].(map[string]any)["id"] != logo.ID {
+		t.Fatalf("search with artifacts: %v", found)
+	}
+
+	// Another project's asset is out of reach, and the agent is told why.
+	p2, err := r.cat.Projects.CreateProject(ctx, "elsewhere", t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t2, _ := r.plan.CreateTicket(ctx, p2.ID, "Theirs", "", domain.TicketStatusTodo)
+	foreignTree := t.TempDir()
+	if _, err := r.sessions.Create(&domain.Session{ID: "s-foreign", ProjectID: p2.ID, TicketID: t2.ID, Task: "x",
+		Status: domain.SessionRunning, WorkingDir: foreignTree}); err != nil {
+		t.Fatal(err)
+	}
+	_ = os.WriteFile(filepath.Join(foreignTree, "secret.html"), []byte("<p>secret</p>"), 0o644)
+	foreign, err := r.art.Publish(ctx, ports.PublishArtifactRequest{SessionID: "s-foreign", Path: "secret.html", Title: "Secret"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := callTaskErr(t, r.agent, "read_artifact", map[string]any{"artifact_id": foreign.ID}); !strings.HasPrefix(got, "ARTIFACT_PROJECT_MISMATCH: ") {
+		t.Fatalf("another project's asset: %q", got)
 	}
 }

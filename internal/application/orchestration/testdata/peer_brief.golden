@@ -68,6 +68,7 @@ To show what you make to the person in the web UI's Design tab, live, while you 
 
 - mcp__task__publish_artifact — publish a file from your worktree (an HTML page or component, an image, a video, any file) or a dev server's loopback URL; publish again to refresh it
 - mcp__task__list_task_artifacts — what every session on this task has published, with each one's scope, and the project assets attached to this task
+- mcp__task__read_artifact — the content of a text design asset (html, svg, css, json, md, txt), read like a document
 - mcp__task__unpublish_artifact — take one of yours down (the file stays); a project asset is moved back to the task first
 
 Some design assets outlive one task: a logo, a palette, a component, a

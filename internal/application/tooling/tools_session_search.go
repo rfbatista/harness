@@ -36,10 +36,10 @@ type searchMatch struct {
 	SectionID string   `json:"section_id,omitempty"`
 }
 
-func searchDocumentsTool(planningSvc ports.Planning, sessions ports.SessionRepository) domain.Tool {
+func searchDocumentsTool(planningSvc ports.Planning, sessions ports.SessionRepository, art ArtifactTooling) domain.Tool {
 	return domain.Tool{
 		Name: "search_documents",
-		Description: "Search this task's documents and the project's documents for a pattern, line by line, without reading them whole. " +
+		Description: "Search this task's documents and the project's documents (and, with include_artifacts, their text design assets) for a pattern, line by line, without reading them whole. " +
 			"Each match gives the document, the line number (valid for read_task_document / read_project_document offset), the line, " +
 			"a few lines of context and its section. Literal text by default; regex for RE2. Use it before reading a large document.",
 		InputSchema: schemaFromJSON(`{"type":"object","required":["pattern"],"properties":{` +
@@ -48,6 +48,7 @@ func searchDocumentsTool(planningSvc ports.Planning, sessions ports.SessionRepos
 			`"case_sensitive":{"type":"boolean","description":"Match case exactly. Default false."},` +
 			`"scope":{"type":"string","enum":["task","project","all"],"description":"task: the documents linked to this task; project: the project's documents; all (default): both."},` +
 			`"document_id":{"type":"string","description":"Search this one document only."},` +
+			`"include_artifacts":{"type":"boolean","description":"Also search the text design assets read_artifact can see (at most 50 per search; skipped counts the rest)."},` +
 			`"context":{"type":"integer","minimum":0,"maximum":5,"description":"Lines of context before and after each match, 0–5. Default 1."},` +
 			`"max_matches":{"type":"integer","minimum":1,"maximum":200,"description":"Most matches to return, 1–200. Default 50."},` +
 			`"view":{"type":"string","enum":["text","raw"],"description":"text (default): search the page as plain lines. raw: search the stored markup."}}}`),
@@ -61,11 +62,20 @@ func searchDocumentsTool(planningSvc ports.Planning, sessions ports.SessionRepos
 			if err != nil {
 				return nil, err
 			}
-			sources, err := documentSources(planningSvc, scope, q.scope, getString(args, "document_id", ""))
+			documentID := getString(args, "document_id", "")
+			sources, err := documentSources(planningSvc, scope, q.scope, documentID)
 			if err != nil {
 				return nil, err
 			}
-			return runSearch(q, sources, 0), nil
+			skipped := 0
+			if getBool(args, "include_artifacts", false) && documentID == "" {
+				assets, n, err := artifactSources(ctx, scope, art)
+				if err != nil {
+					return nil, err
+				}
+				sources, skipped = append(sources, assets...), n
+			}
+			return runSearch(q, sources, skipped), nil
 		},
 	}
 }

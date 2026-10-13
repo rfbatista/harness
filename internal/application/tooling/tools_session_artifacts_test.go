@@ -63,7 +63,7 @@ func newArtifactToolsFixture(t *testing.T) *artifactToolsFixture {
 	art.StoreDir = t.TempDir() // moving to project copies the bytes here
 	art.Tickets = plan
 	f.otherTicketID = other.ID
-	tooling := ArtifactTooling{Publisher: art, Attachments: art, ViewURL: func(id string) string { return "/api/artifacts/" + id + "/view/" }}
+	tooling := ArtifactTooling{Publisher: art, Reader: art, Attachments: art, ViewURL: func(id string) string { return "/api/artifacts/" + id + "/view/" }}
 	for _, tl := range SessionTaskTools(plan, sessions, nil, nil, PeerStarter{}, tooling, nil, ResourceTooling{}, NotificationTooling{}) {
 		f.tools[tl.Name] = tl
 	}

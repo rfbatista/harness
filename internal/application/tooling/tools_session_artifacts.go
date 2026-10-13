@@ -87,6 +87,7 @@ func sessionArtifactTools(planningSvc ports.Planning, sessions ports.SessionRepo
 				return map[string]any{"count": len(out), "artifacts": out}, nil
 			},
 		},
+		readArtifactTool(planningSvc, sessions, art),
 		{
 			Name: "unpublish_artifact",
 			Description: "Remove one of your artifacts from the Design tab. The record goes; the file stays. Only artifacts you published can be removed. " +

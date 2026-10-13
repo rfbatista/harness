@@ -35,6 +35,7 @@ var SessionTaskToolNames = []string{
 	"list_agents",
 	"publish_artifact",
 	"list_task_artifacts",
+	"read_artifact",
 	"unpublish_artifact",
 	"list_project_artifacts",
 	"move_artifact_to_project",
@@ -76,6 +77,9 @@ type PeerStarter struct {
 // value leaves the tools answering that artifacts are unavailable.
 type ArtifactTooling struct {
 	Publisher ports.ArtifactPublisher
+	// Reader opens an artifact's bytes for read_artifact and for searches
+	// that include artifacts; nil leaves read_artifact unavailable.
+	Reader ports.ArtifactReader
 	// Attachments attaches project assets to the session's task; nil leaves
 	// attach_artifact_to_task and detach_artifact_from_task unavailable.
 	Attachments ports.ArtifactAttachments
@@ -286,7 +290,7 @@ func SessionTaskTools(planningSvc ports.Planning, sessions ports.SessionReposito
 				return map[string]any{"task": tk}, nil
 			},
 		},
-	}, sessionDocumentTools(planningSvc, sessions)...)
+	}, sessionDocumentTools(planningSvc, sessions, artifacts)...)
 	tools = append(tools, sessionChannelTools(planningSvc, sessions, channel)...)
 	tools = append(tools, sessionProjectTools(planningSvc, sessions, agents, arch, start.Repositories)...)
 	tools = append(tools, sessionResourceTools(planningSvc, sessions, agents, resources)...)
