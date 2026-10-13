@@ -17,6 +17,9 @@ import (
 
 	"operators-mcp/internal/adapter/out/blobstore"
 	"operators-mcp/internal/adapter/out/persistence/sqlite"
+	"operators-mcp/internal/adapter/out/ptyunix"
+	"operators-mcp/internal/adapter/out/shell"
+	"operators-mcp/internal/adapter/out/termhost"
 	"operators-mcp/internal/application/planning"
 	"operators-mcp/internal/application/vshell"
 	"operators-mcp/internal/domain"
@@ -238,7 +241,7 @@ func checkShell(t *testing.T, dir string, w *shellWorld) {
 		}
 	}
 	// The README states the write rules, the redirect refusal and its limit.
-	for _, rule := range []string{"REDIRECT_DENIED", "eval", "SHELL_UNAVAILABLE", "BASE_VERSION_STALE"} {
+	for _, rule := range []string{"REDIRECT_DENIED", "eval", "SHELL_UNAVAILABLE", "BASE_VERSION_STALE", "abbreviated long options"} {
 		if !strings.Contains(got["README.md"].content, rule) {
 			t.Errorf("README.md does not mention %s", rule)
 		}
@@ -570,4 +573,60 @@ func TestAHeadlessTaskSessionRunsWithItsShimsAndTheEditProxyHooks(t *testing.T) 
 	}
 	waitGone(t, shims)
 	waitGone(t, launch.Shell)
+}
+
+// profileShell is a login shell whose profile puts the system directories
+// first on PATH, as macOS's path_helper does, before it runs the command.
+func profileShell(t *testing.T) string {
+	t.Helper()
+	sh := filepath.Join(t.TempDir(), "login-sh")
+	script := "#!/bin/sh\n[ \"$1\" = -l ] && shift\nPATH=/usr/bin:/bin:$PATH; export PATH\nexec /bin/sh \"$@\"\n"
+	if err := os.WriteFile(sh, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return sh
+}
+
+func newLoginHostedService(t *testing.T, agent scriptAgent) *Service {
+	t.Helper()
+	svc, _ := newInteractiveService(t)
+	host := termhost.New(shell.Login{Shell: profileShell(t)}, ptyunix.New(), agent)
+	t.Cleanup(func() { _ = host.Shutdown(context.Background()) })
+	svc.Terminals = host
+	return svc
+}
+
+// A session run through a login shell whose profile reorders PATH still
+// finds its shims first, so sed and the rest never bypass the edit proxy.
+func TestALoginTaskSessionKeepsItsShimsFirstOnPath(t *testing.T) {
+	svc := newLoginHostedService(t, scriptAgent{script: `printf '%s' "$PATH" > path; printf 'ready\r\n'; cat`})
+	w := withShells(t, svc)
+	svc.ShimBinary = "/opt/harness/server"
+	sess, _ := startInteractive(t, svc, InteractiveRequest{ProjectID: "p1", RepositoryID: "r1", TicketID: w.task.ID,
+		RunsOn: domain.RunnerServer, Size: ports.TermSize{Cols: 80, Rows: 24}})
+
+	path := string(waitFile(t, filepath.Join(sess.WorkingDir, "path")))
+	first, _, _ := strings.Cut(path, string(os.PathListSeparator))
+	if _, err := os.Readlink(filepath.Join(first, "sed")); err != nil {
+		t.Fatalf("first PATH entry %q is not the shim dir (PATH %q)", first, path)
+	}
+	if err := svc.Stop(context.Background(), sess.ID); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// Without shims a login session's PATH is the profile's, untouched.
+func TestALoginSessionWithoutShimsKeepsTheProfilesPath(t *testing.T) {
+	svc := newLoginHostedService(t, scriptAgent{script: `printf '%s' "$PATH" > path; printf 'ready\r\n'; cat`})
+	w := withShells(t, svc)
+	sess, _ := startInteractive(t, svc, InteractiveRequest{ProjectID: "p1", RepositoryID: "r1", TicketID: w.task.ID,
+		RunsOn: domain.RunnerServer, Size: ports.TermSize{Cols: 80, Rows: 24}})
+
+	path := string(waitFile(t, filepath.Join(sess.WorkingDir, "path")))
+	if !strings.HasPrefix(path, "/usr/bin:/bin:") {
+		t.Errorf("PATH = %q, want the profile's, starting /usr/bin:/bin:", path)
+	}
+	if err := svc.Stop(context.Background(), sess.ID); err != nil {
+		t.Fatal(err)
+	}
 }

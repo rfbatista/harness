@@ -65,4 +65,8 @@ Redirects are recognised when their target names this folder directly, or
 through $HARNESS_SHELL, $HOME, ~ or a cd earlier in the line. A target
 reached through eval, another variable or any other indirection is not
 recognised: the file changes on disk and is not stored.
+
+The commands' common options are understood; abbreviated long options,
+options after the file names, and cp -R src/ with a trailing slash are not,
+so write those another way.
 `
