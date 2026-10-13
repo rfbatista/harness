@@ -31,6 +31,7 @@
  * @typedef {(container: HTMLElement, input: {
  *   onKey: (event: KeyboardEvent) => boolean,
  *   onPaste: (text: string) => void,
+ *   onPageKey?: (key: "PageUp" | "PageDown") => void,  a scroll a full-screen program gets as a page key
  *   onCellSize?: () => void,
  *   onScrollState?: (state: { scrolledUp: boolean, newLines: number }) => void,
  *   fontSize?: number,
@@ -79,6 +80,8 @@ export const terminal = ({ terminals, createScreen, observeResize = resizeObserv
       screen = createScreen(this.$refs.screen, {
         onKey: (event) => connection?.key(event) ?? false,
         onPaste: (text) => connection?.paste(text),
+        // A plain page key, as if pressed: the focus stays where it is.
+        onPageKey: (key) => connection?.key({ key, shiftKey: false, altKey: false, ctrlKey: false, metaKey: false }),
         // The font arrived after the screen measured it: the same pane holds other rows and columns.
         onCellSize: () => this.scheduleFit(),
         onScrollState: ({ scrolledUp, newLines }) => {

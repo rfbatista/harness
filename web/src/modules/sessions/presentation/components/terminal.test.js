@@ -246,3 +246,13 @@ test("scrolling up and new lines below are reported, for the tab row's Jump to l
   const last = statuses(dispatched).at(-1);
   assert.deepEqual([last.scrolledUp, last.newLines], [true, 12]);
 });
+
+test("a scroll the screen turns into a page key reaches the program as a plain key, and the focus stays", async () => {
+  const { screen, terms } = setup();
+  await flush();
+  screen.input.onPageKey("PageUp");
+  screen.input.onPageKey("PageDown");
+  const keys = terms.sent.get("s1").filter((m) => m.type === "key").map((m) => m.key);
+  assert.deepEqual(keys, [{ code: 1114122 }, { code: 1114123 }]);
+  assert.equal(screen.focused, 0);
+});

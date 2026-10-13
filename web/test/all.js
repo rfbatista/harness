@@ -97,3 +97,4 @@ import "../src/shared/presentation/components/streamStatus.test.js";
 import "../src/shared/presentation/components/themeToggle.test.js";
 import "../src/shared/presentation/errors.test.js";
 import "../src/shared/presentation/format.test.js";
+import "../src/wheel-pages.test.js";
