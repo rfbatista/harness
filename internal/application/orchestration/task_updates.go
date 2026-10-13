@@ -112,11 +112,14 @@ func (s *Service) deliverTaskUpdate(u taskUpdate) {
 			return err
 		}
 	}
+	// One wait for the shells per update, shared by its sessions, so the
+	// courier is held at most shellPathWait whatever their number.
+	deadline := time.Now().Add(shellPathWait)
 	for _, sess := range s.sessions.List(ports.SessionFilter{TicketID: u.ticketID}) {
 		if sess.TicketID != u.ticketID || sess.Status.IsTerminal() {
 			continue
 		}
-		if err := deliver(sess.ID, u.key, u.text(s.shellPath(sess.ID, u))); err != nil && errs.Code(err) != "SESSION_NOT_RUNNING" {
+		if err := deliver(sess.ID, u.key, u.text(s.shellPath(sess.ID, u, deadline))); err != nil && errs.Code(err) != "SESSION_NOT_RUNNING" {
 			slog.Warn("deliver a task update", "session", sess.ID, "key", u.key, "err", err)
 		}
 	}
@@ -141,12 +144,11 @@ const linksPath = "task/resources/links.md"
 // shellPath is where the session's shell holds u's file: once the shell
 // has it, the path it has it at, so a name that clashed is named as the
 // shell has it. A session with no shell, or a shell that has not got the
-// file in time, gets the name the shell gives such a file.
-func (s *Service) shellPath(sessionID string, u taskUpdate) string {
+// file by deadline, gets the name the shell gives such a file.
+func (s *Service) shellPath(sessionID string, u taskUpdate, deadline time.Time) string {
 	if s.ShellIndex == nil || u.kind == "" {
 		return u.fallback
 	}
-	deadline := time.Now().Add(shellPathWait)
 	for {
 		files := s.ShellIndex.ShellFiles(sessionID)
 		if files == nil {
