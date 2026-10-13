@@ -373,3 +373,38 @@ func TestScrollbackSurvivesResize(t *testing.T) {
 		t.Errorf("scrollback after resize = %q, want the history kept", sb)
 	}
 }
+
+// A client attaching to a program that turned mouse reporting on is led
+// into the same modes before the screen is drawn; modes the program turned
+// off again, or never set, are not sent.
+func TestSnapshotRestoresMouseModes(t *testing.T) {
+	h := newHost(t)
+	term, _ := spawn(t, h, "mouse", `printf '\033[?1049h\033[?1000h\033[?1002h\033[?1003h\033[?1006h\033[?1003l'; printf 'tracking\r\n'; read x; printf '\033[?1000;1002;1006l'; printf 'off\r\n'; read x; printf '\033[?1002;1006h\033c'; printf 'reset\r\n'; sleep 5`)
+	snap := screen(t, term, "tracking")
+	modes, drawn, ok := strings.Cut(snap.Screen, "tracking")
+	if !ok || !snap.AltScreen {
+		t.Fatalf("snapshot = %+v", snap)
+	}
+	for _, m := range []string{"\x1b[?1000h", "\x1b[?1002h", "\x1b[?1006h"} {
+		if !strings.HasPrefix(snap.Screen, "\x1b[?") || !strings.Contains(modes, m) {
+			t.Errorf("screen does not open with %q: %q", m, snap.Screen[:min(len(snap.Screen), 60)])
+		}
+	}
+	if strings.Contains(snap.Screen, "1003h") || strings.Contains(drawn, "\x1b[?") {
+		t.Errorf("screen restores a mode turned off, or sends modes after drawing: %q", snap.Screen[:min(len(snap.Screen), 60)])
+	}
+
+	_ = term.Key(ports.KeyEvent{Code: '\r'})
+	if snap := screen(t, term, "off"); strings.Contains(snap.Screen, "\x1b[?") {
+		t.Errorf("modes turned off are still restored: %q", snap.Screen[:min(len(snap.Screen), 60)])
+	}
+	_ = term.Key(ports.KeyEvent{Code: '\r'})
+	if snap := screen(t, term, "reset"); strings.Contains(snap.Screen, "\x1b[?") {
+		t.Errorf("modes survived a full reset (RIS): %q", snap.Screen[:min(len(snap.Screen), 60)])
+	}
+
+	plain, _ := spawn(t, h, "plain", `printf 'no mouse\r\n'; sleep 5`)
+	if snap := screen(t, plain, "no mouse"); strings.Contains(snap.Screen, "\x1b[?") {
+		t.Errorf("a program without mouse modes gets some: %q", snap.Screen[:min(len(snap.Screen), 60)])
+	}
+}

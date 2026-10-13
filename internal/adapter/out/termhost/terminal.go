@@ -46,6 +46,7 @@ type terminal struct {
 	size    ports.TermSize
 	subs    map[chan []byte]struct{}
 	history *history
+	mouse   mouseModes
 
 	title    atomic.Pointer[string]
 	done     chan struct{}
@@ -69,6 +70,7 @@ func newTerminal(proc ports.PTYProcess, size ports.TermSize, killAfter time.Dura
 	// Before run: neither is locked.
 	t.emu.SetCallbacks(vt.Callbacks{Title: func(s string) { t.title.Store(&s) }})
 	t.emu.RegisterCsiHandler('J', keepSavedLines)
+	t.mouse.track(t.emu)
 	return t
 }
 
@@ -188,7 +190,9 @@ func (t *terminal) Subscribe() (ports.TerminalSnapshot, ports.Subscription) {
 	t.mu.Lock()
 	pos := t.emu.CursorPosition()
 	snap := ports.TerminalSnapshot{
-		Screen:    t.emu.Render(),
+		// A client that attaches while the program reports the mouse must
+		// report it too: the program enabled it once, long before.
+		Screen:    t.mouse.restore() + t.emu.Render(),
 		CursorX:   pos.X,
 		CursorY:   pos.Y,
 		AltScreen: t.emu.IsAltScreen(),
