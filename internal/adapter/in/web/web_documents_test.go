@@ -425,3 +425,39 @@ func TestProjectDocumentViewServesTheHTMLUnderTheArtifactCSP(t *testing.T) {
 		}
 	}
 }
+
+// textBoard is documentsBoard plus a plain-text project document on t-docs
+// whose body looks like Markdown and HTML but is neither.
+func textBoard() world {
+	w := documentsBoard()
+	w.docs["t-docs"] = []*domain.Document{
+		{ID: "d-log", ProjectID: "p1", Title: "Build log", Format: domain.DocumentFormatText, Scope: domain.DocumentScopeProject, UpdatedAt: now.Add(-time.Minute),
+			Content: "# not a heading\n  indented line\n<script>alert(1)</script> & <b>bold?</b>\n"},
+	}
+	return w
+}
+
+// A text document shows as written: preformatted, escaped, never parsed as
+// Markdown or HTML, on the task's and the project's documents pages.
+func TestDocumentsPagesShowATextDocumentAsPreformattedText(t *testing.T) {
+	h := newTestHandler(t, textBoard())
+	for _, path := range []string{
+		"/projects/p1/tasks/t-docs/documents/d-log",
+		"/projects/p1/documents/d-log",
+	} {
+		rec := get(t, h, path)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("%s: status %d: %s", path, rec.Code, rec.Body)
+		}
+		body := rec.Body.String()
+		want := "# not a heading\n  indented line\n&lt;script&gt;alert(1)&lt;/script&gt; &amp; &lt;b&gt;bold?&lt;/b&gt;\n</pre>"
+		if !strings.Contains(body, want) {
+			t.Errorf("%s: the text is not shown as written in a <pre>:\n%s", path, body)
+		}
+		for _, parsed := range []string{"<h1>not a heading", "<script>alert(1)", "<b>bold?</b>", "<iframe"} {
+			if strings.Contains(body, parsed) {
+				t.Errorf("%s: a text document was parsed: page has %q", path, parsed)
+			}
+		}
+	}
+}

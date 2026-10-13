@@ -475,7 +475,7 @@ type DocumentModel struct {
 	ID        string `gorm:"primaryKey"`
 	ProjectID string `gorm:"column:project_id;index"`
 	Title     string
-	// Format is markdown or html. The column default covers rows written
+	// Format is markdown, html or text. The column default covers rows written
 	// before it existed; ToDomain covers an empty value either way.
 	Format string `gorm:"default:markdown"`
 	// Scope is task or project. The column default covers rows written

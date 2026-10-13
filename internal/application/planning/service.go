@@ -248,7 +248,7 @@ func (s *Service) CreateDocument(projectID, title, content string, format domain
 		format = domain.DocumentFormatMarkdown
 	}
 	if !format.Valid() {
-		return nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "format must be markdown or html"}
+		return nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "format must be markdown, html or text"}
 	}
 	if scope == "" {
 		scope = domain.DocumentScopeProject
@@ -294,7 +294,7 @@ func (s *Service) UpdateDocument(id, title, content string, format domain.Docume
 		return nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "title is required"}
 	}
 	if format != "" && !format.Valid() {
-		return nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "format must be markdown or html"}
+		return nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "format must be markdown, html or text"}
 	}
 	return s.documents.Update(id, title, content, format)
 }
