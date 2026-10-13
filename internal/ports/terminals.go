@@ -44,11 +44,15 @@ type Terminal interface {
 // TerminalSnapshot is a terminal's screen at one moment.
 type TerminalSnapshot struct {
 	// Screen is the visible screen, rendered with its styles, one line per
-	// row.
+	// row. It opens with the DECSET of each mouse reporting mode (1000,
+	// 1002, 1003, 1006) the program has set, so a client attaching late
+	// reports the mouse as one attached all along; a client writes it after
+	// any alternate-screen switch.
 	Screen string `json:"screen"`
 	// Scrollback is what scrolled off the top of the main screen, rendered
 	// like Screen, oldest line first, the last line being the one just
-	// above the first visible row. At most 2000 lines; absent on the
+	// above the first visible row. At most 10,000 lines, kept through a
+	// program's screen clears (ED2, ED3); absent on the
 	// alternate screen, which has no history, and on Log snapshots, whose
 	// Screen already is the whole output. Lines keep the width they had
 	// when they scrolled off.

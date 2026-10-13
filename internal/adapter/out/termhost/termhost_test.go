@@ -5,6 +5,7 @@ package termhost
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -263,18 +264,58 @@ func TestSnapshotCarriesScrollback(t *testing.T) {
 	}
 }
 
-func TestScrollbackIsBoundedAtTwoThousandLines(t *testing.T) {
+func TestScrollbackIsBoundedAtTenThousandLines(t *testing.T) {
 	h := newHost(t)
-	term, _ := spawn(t, h, "big", lines(2100, `line %d`)+`printf 'done\r\n'; sleep 5`)
+	term, _ := spawn(t, h, "big", lines(historyLines+100, `line %d`)+`printf 'done\r\n'; sleep 5`)
 	snap := screen(t, term, "done")
 	sb := rows(snap.Scrollback)
-	if len(sb) != scrollbackLines {
-		t.Fatalf("scrollback has %d rows, want %d", len(sb), scrollbackLines)
+	if len(sb) != historyLines {
+		t.Fatalf("scrollback has %d rows, want %d", len(sb), historyLines)
 	}
 	last, first := sb[len(sb)-1], rows(snap.Screen)[0]
 	var n int
 	if _, err := fmt.Sscanf(last, "line %d", &n); err != nil || first != fmt.Sprintf("line %d", n+1) {
 		t.Errorf("after trimming, last scrollback row %q is not just above the first screen row %q", last, first)
+	}
+	if want := fmt.Sprintf("line %d", n-historyLines+1); sb[0] != want {
+		t.Errorf("oldest scrollback row = %q, want %q", sb[0], want)
+	}
+}
+
+// A full redraw as programs send it — erase the screen, erase saved lines,
+// home — keeps the history a person could already scroll to, and the
+// cleared screen joins it.
+func TestEraseSavedLinesKeepsHistory(t *testing.T) {
+	h := newHost(t)
+	term, _ := spawn(t, h, "ed3", lines(30, `line %d`)+`printf 'on screen\r\n'; printf '\033[2J\033[3J\033[H'; printf 'redrawn\r\n'; printf '\033[3J'; printf 'still\r\n'; sleep 5`)
+	snap := screen(t, term, "still")
+	sb := rows(snap.Scrollback)
+	if len(sb) == 0 || sb[0] != "line 1" {
+		t.Fatalf("scrollback after ED3 = %q, want it to start at line 1", sb)
+	}
+	if !slices.Contains(sb, "on screen") {
+		t.Errorf("the cleared screen did not join the history: %q", sb)
+	}
+	if got := rows(snap.Screen); got[0] != "redrawn" || got[1] != "still" {
+		t.Errorf("screen = %q, want the redraw kept by ED3", got[:2])
+	}
+}
+
+// History only grows: a client attaching after a full redraw sees what an
+// earlier snapshot showed, then what scrolled off since, styles kept.
+func TestReattachShowsTheSameHistory(t *testing.T) {
+	h := newHost(t)
+	term, _ := spawn(t, h, "re", lines(40, `\033[1mline %d\033[0m`)+`printf 'first\r\n'; read x; `+lines(40, `more %d`)+`printf '\033[2J\033[3J\033[H'; printf 'done\r\n'; sleep 5`)
+	early := screen(t, term, "first")
+	_ = term.Key(ports.KeyEvent{Code: '\r'})
+	late := screen(t, term, "done")
+
+	if !strings.HasPrefix(late.Scrollback, early.Scrollback+"\n") {
+		t.Fatalf("late scrollback does not continue the early one:\nearly %q\n late %q", rows(early.Scrollback), rows(late.Scrollback))
+	}
+	sb := rows(late.Scrollback)
+	if sb[0] != "line 1" || !slices.Contains(sb, "first") || !slices.Contains(sb, "more 40") {
+		t.Errorf("late scrollback = %q, want all output before the redraw", sb)
 	}
 }
 
@@ -330,5 +371,40 @@ func TestScrollbackSurvivesResize(t *testing.T) {
 	}
 	if sb := rows(snap.Scrollback); len(sb) == 0 || sb[0] != "line 1" {
 		t.Errorf("scrollback after resize = %q, want the history kept", sb)
+	}
+}
+
+// A client attaching to a program that turned mouse reporting on is led
+// into the same modes before the screen is drawn; modes the program turned
+// off again, or never set, are not sent.
+func TestSnapshotRestoresMouseModes(t *testing.T) {
+	h := newHost(t)
+	term, _ := spawn(t, h, "mouse", `printf '\033[?1049h\033[?1000h\033[?1002h\033[?1003h\033[?1006h\033[?1003l'; printf 'tracking\r\n'; read x; printf '\033[?1000;1002;1006l'; printf 'off\r\n'; read x; printf '\033[?1002;1006h\033c'; printf 'reset\r\n'; sleep 5`)
+	snap := screen(t, term, "tracking")
+	modes, drawn, ok := strings.Cut(snap.Screen, "tracking")
+	if !ok || !snap.AltScreen {
+		t.Fatalf("snapshot = %+v", snap)
+	}
+	for _, m := range []string{"\x1b[?1000h", "\x1b[?1002h", "\x1b[?1006h"} {
+		if !strings.HasPrefix(snap.Screen, "\x1b[?") || !strings.Contains(modes, m) {
+			t.Errorf("screen does not open with %q: %q", m, snap.Screen[:min(len(snap.Screen), 60)])
+		}
+	}
+	if strings.Contains(snap.Screen, "1003h") || strings.Contains(drawn, "\x1b[?") {
+		t.Errorf("screen restores a mode turned off, or sends modes after drawing: %q", snap.Screen[:min(len(snap.Screen), 60)])
+	}
+
+	_ = term.Key(ports.KeyEvent{Code: '\r'})
+	if snap := screen(t, term, "off"); strings.Contains(snap.Screen, "\x1b[?") {
+		t.Errorf("modes turned off are still restored: %q", snap.Screen[:min(len(snap.Screen), 60)])
+	}
+	_ = term.Key(ports.KeyEvent{Code: '\r'})
+	if snap := screen(t, term, "reset"); strings.Contains(snap.Screen, "\x1b[?") {
+		t.Errorf("modes survived a full reset (RIS): %q", snap.Screen[:min(len(snap.Screen), 60)])
+	}
+
+	plain, _ := spawn(t, h, "plain", `printf 'no mouse\r\n'; sleep 5`)
+	if snap := screen(t, plain, "no mouse"); strings.Contains(snap.Screen, "\x1b[?") {
+		t.Errorf("a program without mouse modes gets some: %q", snap.Screen[:min(len(snap.Screen), 60)])
 	}
 }

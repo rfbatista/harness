@@ -177,6 +177,16 @@ type Orchestration interface {
 	ConversationRecorder
 	TurnHooks
 	TerminalAccess
+	SessionTranscripts
+}
+
+// SessionTranscripts reads the conversation a session's claude saved,
+// read-only, a page at a time.
+type SessionTranscripts interface {
+	// SessionTranscript returns a page of session id's conversation: the one
+	// a resume would continue. Errors are StructuredErrors coded
+	// SESSION_NOT_FOUND, SESSION_TRANSCRIPT_MISSING or INVALID_INPUT.
+	SessionTranscript(ctx context.Context, id string, q TranscriptQuery) (TranscriptPage, error)
 }
 
 // StartRequest starts a headless session.

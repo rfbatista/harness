@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -77,6 +78,35 @@ func (h *Handler) handleSessionHistory(c echo.Context) error {
 		from, _ = strconv.ParseInt(v, 10, 64)
 	}
 	return c.JSON(http.StatusOK, map[string]any{"events": h.orchSvc.History(c.Param("id"), from)})
+}
+
+// handleSessionTranscript serves a page of the conversation a session's
+// claude saved (contract: agent session history, T1–T6).
+func (h *Handler) handleSessionTranscript(c echo.Context) error {
+	if h.orchSvc == nil {
+		return echo.NewHTTPError(http.StatusServiceUnavailable, "orchestration not configured")
+	}
+	q := ports.TranscriptQuery{Before: c.QueryParam("before"), After: c.QueryParam("after"), Limit: ports.TranscriptDefaultLimit}
+	if v := c.QueryParam("limit"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil || n < 1 {
+			return &domain.StructuredError{Code: "INVALID_INPUT", Message: "limit must be between 1 and 500"}
+		}
+		q.Limit = n
+	}
+	page, err := h.orchSvc.SessionTranscript(c.Request().Context(), c.Param("id"), q)
+	var se *domain.StructuredError
+	if errors.As(err, &se) && se.Code == "SESSION_TRANSCRIPT_MISSING" {
+		// 404 here, though a resume answers this code with 409: there is no
+		// transcript to read, where a resume conflicts with a session that
+		// has none.
+		writeCoded(c, http.StatusNotFound, err, se)
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, page)
 }
 
 func (h *Handler) handleSessionMessages(c echo.Context) error {

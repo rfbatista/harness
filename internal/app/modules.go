@@ -305,6 +305,7 @@ var AgentRuntimeModule = fx.Module("agentruntime",
 		newHub,
 		asPort(sqlite.NewSessionRepository, new(ports.SessionRepository)),
 		asPort(newClaudeTranscripts, new(ports.ClaudeTranscripts)),
+		asPort(newClaudeTranscriptReader, new(ports.ClaudeTranscriptReader)),
 		newOrchestrationService,
 		newAppsService,
 		asPort(sqlite.NewArtifactRepository, new(ports.ArtifactRepository)),
@@ -444,6 +445,10 @@ func newBroker(m llmkit.Manager) (*approval.Broker, error) {
 
 func newClaudeTranscripts() claudehome.Transcripts { return claudehome.Transcripts{} }
 
+func newClaudeTranscriptReader() *claudehome.TranscriptReader {
+	return claudehome.NewTranscriptReader("")
+}
+
 func newHub() *orchestration.Hub { return orchestration.NewHub(256) }
 
 // newOrchestrationService hands the orchestration the catalog contexts it
@@ -458,6 +463,7 @@ func newOrchestrationService(
 	tickets ports.TicketRepository,
 	ws *workspaces.Service,
 	transcripts ports.ClaudeTranscripts,
+	transcriptReader ports.ClaudeTranscriptReader,
 	terminals ports.TerminalHost,
 ) *orchestration.Service {
 	svc := orchestration.NewService(runtime, broker, hub, sessions, orchestration.Catalog{
@@ -477,6 +483,7 @@ func newOrchestrationService(
 		return base + httpapi.InteractiveSessionHookPath + "?session_id=" + url.QueryEscape(sessionID)
 	}
 	svc.Transcripts = transcripts
+	svc.TranscriptReader = transcriptReader
 	svc.Terminals = terminals
 	svc.Events = cat.Bus
 	return svc

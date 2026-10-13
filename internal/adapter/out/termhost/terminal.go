@@ -4,13 +4,13 @@ import (
 	"errors"
 	"io"
 	"os"
-	"slices"
 	"sync"
 	"sync/atomic"
 	"syscall"
 	"time"
 
 	uv "github.com/charmbracelet/ultraviolet"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/charmbracelet/x/vt"
 
 	"operators-mcp/internal/ports"
@@ -20,9 +20,9 @@ import (
 // behind before it is dropped and must subscribe again for a fresh snapshot.
 const defaultSubscriberBuffer = 1024
 
-// scrollbackLines is how many lines of main-screen history a terminal keeps
+// historyLines is how many lines of main-screen history a terminal keeps
 // and hands to a client in its snapshot: the attach protocol's bound.
-const scrollbackLines = 2000
+const historyLines = 10000
 
 // terminal is one process on a PTY and the goroutines that connect it to the
 // emulator:
@@ -42,9 +42,11 @@ type terminal struct {
 
 	// mu makes feeding the emulator and fanning out to subscribers one step,
 	// so a snapshot taken under it is followed by exactly the output after it.
-	mu   sync.Mutex
-	size ports.TermSize
-	subs map[chan []byte]struct{}
+	mu      sync.Mutex
+	size    ports.TermSize
+	subs    map[chan []byte]struct{}
+	history *history
+	mouse   mouseModes
 
 	title    atomic.Pointer[string]
 	done     chan struct{}
@@ -62,11 +64,24 @@ func newTerminal(proc ports.PTYProcess, size ports.TermSize, killAfter time.Dura
 		subBuffer: subBuffer,
 		size:      size,
 		subs:      map[chan []byte]struct{}{},
+		history:   newHistory(historyLines),
 		done:      make(chan struct{}),
 	}
-	t.emu.SetCallbacks(vt.Callbacks{Title: func(s string) { t.title.Store(&s) }}) // before run: not locked
-	t.emu.SetScrollbackSize(scrollbackLines)
+	// Before run: neither is locked.
+	t.emu.SetCallbacks(vt.Callbacks{Title: func(s string) { t.title.Store(&s) }})
+	t.emu.RegisterCsiHandler('J', keepSavedLines)
+	t.mouse.track(t.emu)
 	return t
+}
+
+// keepSavedLines answers ED3 (CSI 3 J, erase saved lines) by keeping them:
+// a program's full redraw must not take away history a person could
+// already scroll to. In xterm ED3 leaves the screen alone, so there is
+// nothing else to do. Every other ED falls through to the emulator, whose
+// ED2 moves the screen into scrollback before clearing it.
+func keepSavedLines(params ansi.Params) bool {
+	n, _, _ := params.Param(0, 0)
+	return n == 3
 }
 
 func (t *terminal) run(onExit func(code int)) {
@@ -120,6 +135,7 @@ func (t *terminal) feed(b []byte) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	_, _ = t.emu.Write(b)
+	t.drainScrollback()
 	for c := range t.subs {
 		select {
 		case c <- append([]byte(nil), b...):
@@ -131,6 +147,21 @@ func (t *terminal) feed(b []byte) {
 			delete(t.subs, c)
 		}
 	}
+}
+
+// drainScrollback moves the lines the emulator pushed into its scrollback
+// since the last call into history, rendered. The emulator's own buffer
+// keeps its default bound, larger than what one output chunk can scroll, so
+// it only ever holds a chunk's worth. Called under mu after every write.
+func (t *terminal) drainScrollback() {
+	sb := t.emu.Scrollback()
+	if sb.Len() == 0 {
+		return
+	}
+	for _, l := range sb.Lines() {
+		t.history.push(l.Render())
+	}
+	sb.Clear()
 }
 
 // closeInput ends the emulator's input pipe. Emulator.Close would do the same
@@ -153,22 +184,24 @@ func (t *terminal) exited() bool {
 
 // Subscribe takes the screen, its scrollback and the subscription in one
 // step under mu, so the output that follows is exactly what was printed
-// after them. The scrollback is rendered after unlocking: its lines are
-// immutable once stored, so copying the slice is enough.
+// after them. History lines are rendered as they are stored, so joining
+// them can wait until after unlocking.
 func (t *terminal) Subscribe() (ports.TerminalSnapshot, ports.Subscription) {
 	t.mu.Lock()
 	pos := t.emu.CursorPosition()
 	snap := ports.TerminalSnapshot{
-		Screen:    t.emu.Render(),
+		// A client that attaches while the program reports the mouse must
+		// report it too: the program enabled it once, long before.
+		Screen:    t.mouse.restore() + t.emu.Render(),
 		CursorX:   pos.X,
 		CursorY:   pos.Y,
 		AltScreen: t.emu.IsAltScreen(),
 		Size:      t.size,
 		Title:     t.Title(),
 	}
-	var history []uv.Line
+	var history []string
 	if !snap.AltScreen {
-		history = slices.Clone(t.emu.Scrollback().Lines())
+		history = t.history.snapshot()
 	}
 	c := make(chan []byte, t.subBuffer)
 	exited := t.subs == nil
@@ -177,7 +210,7 @@ func (t *terminal) Subscribe() (ports.TerminalSnapshot, ports.Subscription) {
 	}
 	t.mu.Unlock()
 
-	snap.Scrollback = uv.Lines(history).Render() // the same renderer as Screen: "\n" between rows
+	snap.Scrollback = render(history)
 	if exited {
 		close(c)
 		return snap, ports.Subscription{C: c, Close: func() {}}
