@@ -492,7 +492,22 @@ func TestAnInteractiveTaskSessionRunsWithItsShimsFirstOnPath(t *testing.T) {
 	sess, _ := startInteractive(t, svc, InteractiveRequest{ProjectID: "p1", RepositoryID: "r1", TicketID: w.task.ID,
 		RunsOn: domain.RunnerServer, Size: ports.TermSize{Cols: 80, Rows: 24}})
 
-	path := string(waitFile(t, filepath.Join(sess.WorkingDir, "path")))
+	shims := checkShimsFirst(t, string(waitFile(t, filepath.Join(sess.WorkingDir, "path"))))
+	if got, want := string(waitFile(t, filepath.Join(sess.WorkingDir, "shell-url"))), "http://127.0.0.1:9/api/sessions/"+sess.ID+"/shell"; got != want {
+		t.Errorf("HARNESS_SHELL_URL = %q, want %q", got, want)
+	}
+
+	if err := svc.Stop(context.Background(), sess.ID); err != nil {
+		t.Fatal(err)
+	}
+	waitGone(t, shims)
+}
+
+// checkShimsFirst checks that path starts with a shim dir holding the seven
+// commands, each a link to the shim binary, before the server's own PATH,
+// and answers the dir.
+func checkShimsFirst(t *testing.T, path string) string {
+	t.Helper()
 	shims, rest, _ := strings.Cut(path, string(os.PathListSeparator))
 	if rest != os.Getenv("PATH") {
 		t.Errorf("PATH after the shims = %q, want the server's %q", rest, os.Getenv("PATH"))
@@ -511,14 +526,53 @@ func TestAnInteractiveTaskSessionRunsWithItsShimsFirstOnPath(t *testing.T) {
 	if want := []string{"cp", "mkdir", "mv", "rm", "sed", "tee", "touch"}; !slices.Equal(names, want) {
 		t.Errorf("shim dir holds %v, want %v", names, want)
 	}
-	if got, want := string(waitFile(t, filepath.Join(sess.WorkingDir, "shell-url"))), "http://127.0.0.1:9/api/sessions/"+sess.ID+"/shell"; got != want {
-		t.Errorf("HARNESS_SHELL_URL = %q, want %q", got, want)
+	return shims
+}
+
+// A headless task session gets what an interactive one gets: its shim dir
+// first on PATH, its shell endpoint in HARNESS_SHELL_URL, and the edit
+// proxy's hooks in the CLI's --settings.
+func TestAHeadlessTaskSessionRunsWithItsShimsAndTheEditProxyHooks(t *testing.T) {
+	svc, _, _ := newTestService(t)
+	svc.DefaultEnv = append(svc.DefaultEnv, "CLAUDE_FAKE_RECORD=1")
+	w := withShells(t, svc)
+	svc.ShimBinary = "/opt/harness/server"
+	svc.SessionShellURL = func(id string) string { return testShellBase + id + "/shell" }
+	sess, err := svc.Start(context.Background(), StartRequest{ProjectID: "p1", RepositoryID: "r1", TicketID: w.task.ID, Task: "go"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var launch fakeLaunch
+	if err := json.Unmarshal(waitFile(t, filepath.Join(sess.WorkingDir, fakeLaunchFile)), &launch); err != nil {
+		t.Fatal(err)
+	}
+
+	shims := checkShimsFirst(t, launch.Path)
+	base := testShellBase + sess.ID + "/shell"
+	if launch.ShellURL != base {
+		t.Errorf("HARNESS_SHELL_URL = %q, want %q", launch.ShellURL, base)
+	}
+	s := settingsOf(t, launch.Args)
+	for _, h := range []struct{ event, matcher, url string }{
+		{"PreToolUse", "Edit|Write|MultiEdit|NotebookEdit", base + "/check?hook=PreToolUse"},
+		{"PostToolUse", "Edit|Write|MultiEdit|NotebookEdit", base + "/commit?hook=PostToolUse"},
+		{"PreToolUse", "Bash", base + "/check?hook=PreToolUse"},
+	} {
+		cmd, ok := s.hookCommand(h.event, h.matcher)
+		if !ok {
+			t.Errorf("no %s hook on %s: %+v", h.event, h.matcher, s.Hooks)
+			continue
+		}
+		if !strings.Contains(cmd, "curl") || !strings.Contains(cmd, h.url) {
+			t.Errorf("%s %s hook does not curl %s: %s", h.event, h.matcher, h.url, cmd)
+		}
 	}
 
 	if err := svc.Stop(context.Background(), sess.ID); err != nil {
 		t.Fatal(err)
 	}
 	waitGone(t, shims)
+	waitGone(t, launch.Shell)
 }
 
 // profileShell is a login shell whose profile puts the system directories
