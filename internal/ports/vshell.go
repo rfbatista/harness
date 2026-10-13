@@ -64,6 +64,11 @@ type ShellBaseVersions interface {
 // harness's PATH shims (contract §5).
 var ShellShimCommands = []string{"sed", "tee", "cp", "mv", "rm", "touch", "mkdir"}
 
+// ShimDirEnv names, in a session's environment, its PATH shims' directory.
+// A shell that runs a profile before the program puts it back first on
+// PATH, so a profile that reorders PATH cannot bypass the shims.
+const ShimDirEnv = "HARNESS_SHIM_DIR"
+
 // ShellEdit is one file operation an agent makes in its shell, as the edit
 // proxy (hooks and PATH shims) reports it: Op is write (or create, modify,
 // touch), rm, mv or cp (Paths[0] the source, Paths[1] the destination), or

@@ -49,6 +49,9 @@ func (Direct) CheckDir(_ context.Context, dir string) error { return checkDir(di
 // profile sets. A program that is not there fails inside the terminal, as it
 // would when typed. A command's EnvFile is sourced after the profile, so the
 // profile cannot override what it sets (the session's git credentials).
+// The session's PATH shims (ports.ShimDirEnv) go back first on PATH after
+// the profile, which may have reordered it (macOS's path_helper does), so
+// writes into the virtual shell cannot bypass the edit proxy.
 type Login struct {
 	// Shell is the shell to run; empty means $SHELL, else /bin/sh.
 	Shell string
@@ -62,12 +65,15 @@ func (l Login) Prepare(_ context.Context, cmd ports.ShellCommand) (ports.Process
 	if sh == "" {
 		sh = "/bin/sh"
 	}
-	args := append([]string{"-l", "-c", `exec "$0" "$@"`, cmd.Program}, cmd.Args...)
+	args := append([]string{"-l", "-c", shimsFirst + `exec "$0" "$@"`, cmd.Program}, cmd.Args...)
 	if cmd.EnvFile != "" {
-		args = append([]string{"-l", "-c", `f=$1; shift; . "$f"; exec "$@"`, "login", cmd.EnvFile, cmd.Program}, cmd.Args...)
+		args = append([]string{"-l", "-c", `f=$1; shift; . "$f"; ` + shimsFirst + `exec "$@"`, "login", cmd.EnvFile, cmd.Program}, cmd.Args...)
 	}
 	return ports.ProcessSpec{Path: sh, Args: args, Dir: cmd.Dir, Env: env(cmd)}, nil
 }
+
+// shimsFirst puts the session's shim dir, if it has one, first on PATH.
+const shimsFirst = `if [ -n "$` + ports.ShimDirEnv + `" ]; then PATH="$` + ports.ShimDirEnv + `:$PATH"; export PATH; fi; `
 
 func (Login) CheckDir(_ context.Context, dir string) error { return checkDir(dir) }
 

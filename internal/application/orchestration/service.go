@@ -461,7 +461,7 @@ func (s *Service) withShims(id string, cfg *llmkit.SessionConfig, cleanup func()
 	if inherited := os.Getenv("PATH"); inherited != "" {
 		path += string(os.PathListSeparator) + inherited
 	}
-	cfg.Env = append(slices.Clone(cfg.Env), "PATH="+path)
+	cfg.Env = append(slices.Clone(cfg.Env), "PATH="+path, ports.ShimDirEnv+"="+dir)
 	if s.SessionShellURL != nil {
 		cfg.Env = append(cfg.Env, "HARNESS_SHELL_URL="+s.SessionShellURL(id))
 	}
