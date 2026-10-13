@@ -91,6 +91,7 @@ func sessionDocumentTools(planningSvc ports.Planning, sessions ports.SessionRepo
 				return reviseAsHTML(planningSvc, current, args)
 			},
 		},
+		searchDocumentsTool(planningSvc, sessions),
 		move("move_document_to_project",
 			"Make one of this task's documents a project document: every session of the project can then read and revise it, and it shows on the project's documents page. "+
 				"Do it for knowledge that outlives this task (architecture, conventions, decisions, specs and contracts other tasks build on). The document must be linked to this task (DOCUMENT_NOT_ON_TASK otherwise); its link to the task stays. Idempotent.",

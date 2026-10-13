@@ -24,6 +24,7 @@ var SessionTaskToolNames = []string{
 	"list_project_documents",
 	"read_project_document",
 	"update_project_document",
+	"search_documents",
 	"move_document_to_project",
 	"move_document_to_task",
 	"update_task_status",

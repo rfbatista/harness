@@ -70,6 +70,7 @@ sessions left, and write down what the next one will need:
 - mcp__task__get_task — this task and the documents linked to it
 - mcp__task__list_task_documents — the linked documents, titles only
 - mcp__task__read_task_document — one document, with its content and format
+- mcp__task__search_documents — find a line in this task's or the project's documents without reading them whole
 - mcp__task__create_task_document — a new document, linked to this task for you
 - mcp__task__update_task_document — revise one of them
 

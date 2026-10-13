@@ -192,3 +192,38 @@ func TestReadingDocumentsInParts_EndToEnd(t *testing.T) {
 		}
 	}
 }
+
+// An agent finds a fact without opening any page: search names the
+// document, the line and the section, and a one-line window at that line
+// reads the same text. A bad regex comes back as a coded message.
+func TestSearchingDocuments_EndToEnd(t *testing.T) {
+	r := newReadingMCP(t)
+	big := r.taskDocument(t, "System architecture", bigPage())
+	conv, err := r.plan.CreateDocument(r.project.ID, "Conventions", "# Conventions\n\nErrors start with their code.\n", domain.DocumentFormatMarkdown, domain.DocumentScopeProject)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	found := r.call(t, "search_documents", map[string]any{"pattern": "where new code goes"})
+	matches := found["matches"].([]any)
+	if len(matches) != 1 || found["searched"] != float64(2) || found["truncated"] != false {
+		t.Fatalf("search: %v", found)
+	}
+	m := matches[0].(map[string]any)
+	if m["id"] != big.ID || m["source"] != "task_document" || m["section_id"] != "add" || m["text"] != "## Where new code goes" {
+		t.Fatalf("match: %v", m)
+	}
+	at := r.call(t, "read_task_document", map[string]any{"document_id": big.ID, "offset": m["line"], "limit": 1})
+	if got := texts(at); len(got) != 1 || got[0] != m["text"] {
+		t.Fatalf("the window at the hit reads %q", got)
+	}
+
+	code := r.call(t, "search_documents", map[string]any{"pattern": `start with their \w+`, "regex": true, "scope": "project"})
+	if ms := code["matches"].([]any); len(ms) != 1 || ms[0].(map[string]any)["id"] != conv.ID || ms[0].(map[string]any)["source"] != "project_document" {
+		t.Fatalf("project search: %v", code)
+	}
+
+	if got := callTaskErr(t, r.agent, "search_documents", map[string]any{"pattern": "(unclosed", "regex": true}); !strings.HasPrefix(got, "INVALID_PATTERN: ") {
+		t.Fatalf("bad regex: %q", got)
+	}
+}
