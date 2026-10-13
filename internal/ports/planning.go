@@ -53,7 +53,7 @@ type TicketReader interface {
 }
 
 // TicketDocumentReader reads the documents linked to a task (written by its
-// agents through create_task_document, or linked by a person): what the
+// agents in task/docs of their virtual shell, or linked by a person): what the
 // task's documents page needs. Planning implements it.
 type TicketDocumentReader interface {
 	ListTicketDocuments(ticketID string) []*domain.Document

@@ -179,7 +179,7 @@ func DocumentsPage(v DocumentsView) templ.Component {
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = components.Empty("No documents on this task yet", "Agents working on the task write them with create_task_document — plans, findings, handoffs. They show here as they are written, and stay here when moved to project level.").Render(ctx, templ_7745c5c3_Buffer)
+				templ_7745c5c3_Err = components.Empty("No documents on this task yet", "Agents working on the task write them as files in task/docs of their virtual shell — plans, findings, handoffs. They show here as they are written, and stay here when moved to project level.").Render(ctx, templ_7745c5c3_Buffer)
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}

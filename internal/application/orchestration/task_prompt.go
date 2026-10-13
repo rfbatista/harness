@@ -14,7 +14,7 @@ import (
 )
 
 // taskServerName is the MCP server exposing the task the session was spawned
-// into, the documents linked to it, and the other sessions working on it. The literal matters: taskBrief names its
+// into and the other sessions working on it. The literal matters: taskBrief names its
 // tools as mcp__task__* in the system prompt, and the two have to agree.
 const taskServerName = "task"
 
@@ -22,7 +22,8 @@ const taskServerName = "task"
 // work on it: the per-session task MCP server, an allow-list so reading and
 // writing its own task never stops for an approval, and a short brief appended
 // to the system prompt so the agent knows about the task without a tool call.
-// Document bodies stay behind the tools, so the prompt stays small.
+// Document bodies stay in the session's virtual shell, so the prompt stays
+// small.
 //
 // taskServerURL is empty when the host serves no per-session task endpoint; the
 // brief and the allow-list still apply, only the server entry is skipped.
@@ -50,8 +51,9 @@ func applyTaskContext(cfg *llmkit.SessionConfig, tk *domain.Ticket, taskServerUR
 	cfg.AppendSystem = appendSection(cfg.AppendSystem, taskBrief(tk, role, counts))
 }
 
-// taskBrief is the block describing the task and the tools that reach it,
-// then what the person added to the task. Only the paragraph about the
+// taskBrief is the block describing the task, the virtual shell holding
+// its resources and the tools that reach the rest, then what the person
+// added to the task. Only the paragraph about the
 // task's status depends on role.
 func taskBrief(tk *domain.Ticket, role domain.SessionRole, counts taskCounts) string {
 	var b strings.Builder
@@ -64,53 +66,42 @@ func taskBrief(tk *domain.Ticket, role domain.SessionRole, counts taskCounts) st
 		b.WriteString("\n" + tk.Description + "\n")
 	}
 	b.WriteString(`
-Documents are how a task carries context between sessions. Read what earlier
-sessions left, and write down what the next one will need:
+Your task's and your project's documents, comments, resources and designs
+are files in your virtual shell, $HARNESS_SHELL ("Your virtual shell" below
+names its path; its README.md maps the layout and the rules). Work on them
+with your ordinary tools; none of it takes a tool call:
 
-- mcp__task__get_task — this task and the documents linked to it
-- mcp__task__list_task_documents — the linked documents: titles, size in bytes and lines, version
-- mcp__task__read_task_document — one document: whole when small, otherwise its outline and first lines
-- mcp__task__search_documents — find a line in this task's or the project's documents without reading them whole
-- mcp__task__create_task_document — a new document, linked to this task for you
-- mcp__task__update_task_document — revise one of them
-- mcp__task__edit_task_document — change part of one by exact string replace, without sending the whole page
+- Read with Read, grep, ls and sed -n. .index.json lists every file with its id, kind, scope and version.
+- Write with Write, Edit, sed -i, tee, cp, mv, rm, touch and mkdir. Each change is checked before it lands and stored once it has. Shell redirects (>, >>) into the folder are refused: they would not be stored.
 
-Documents can be large. Check bytes and lines in the listing first; find what
-you need with search_documents or the outline a large read returns; then read
-that section, or a window with offset and limit, never the whole page. To
-change a page, edit the part with edit_*_document rather than rewriting it.
+What the folders hold:
 
-A document you write is a complete HTML document, not Markdown.
-Markdown is refused with DOCUMENT_NOT_HTML and nothing is stored; rewrite it
-as a page. The minimal shape:
+- task/docs/ — this task's documents. A file you create there is a new document linked to this task, titled by its first heading. Any text format: .md, .html, .txt.
+- project/docs/ — the project's documents: architecture, conventions, decisions, the specs and contracts other tasks build on. mv a document from task/docs/ to project/docs/ once it says something the next task needs, not just this one; mv it back to make it this task's again.
+- task/comments/ — the task's comments, one file each (see "Resources and comments").
+- task/resources/ — what the person added: uploads under their names, links in links.md. Read-only.
+- task/designs/ — what this task published to the web UI's Design tab. A file you create there is published, a change publishes a new revision, rm unpublishes it.
+- project/designs/ — the project's design assets, from any task: a logo, a palette, a component, a reference screen. Look here before you make a new asset. mv a design from task/designs/ to project/designs/ once other tasks will reuse it; the harness keeps its own copy, so it outlives this session.
 
-<!doctype html>
-<html lang="en">
-<head><meta charset="utf-8"><title>Plan: …</title><style>/* inline styles */</style></head>
-<body>…</body>
-</html>
+task/task.json is this task; README.md, .index.json and the urls.md,
+attached.md and links.md lists are read-only.
 
-Keep styles inline or in <style>; nothing outside the harness origin loads.
-To match the harness look, link <link rel="stylesheet" href="/static/document.css">
-in <head> and put class="prose" on <body>; it follows the system's light or
-dark scheme. Make it readable in light and dark (color-scheme: light dark, or a
-prefers-color-scheme media query). It renders on the task's documents page
-in a sandboxed frame: scripts run there but cannot reach the harness API.
-Older documents may be Markdown; read_task_document says which.
+Files can be large. grep for what you need, read that range with sed -n or
+Read with offset and limit, never the whole file; change a part with Edit
+or sed -i rather than rewriting it.
 
-Some knowledge outlives one task: architecture, conventions, decisions, and
-the specs and contracts other tasks will build on. Those are project
-documents: every session of the project, on any task, can read and revise
-them, and they show on the project's documents page. Move a document there
-once it says something the next task needs, not just this one; its link to
-this task stays. Only documents linked to this task can be moved:
+A refused write says why, starting with its code:
 
-- mcp__task__list_project_documents — the project's documents: titles, size and version
-- mcp__task__read_project_document — one project document, read like a task document: whole when small, otherwise in parts
-- mcp__task__update_project_document — revise a project document; new content must be a complete HTML page
-- mcp__task__edit_project_document — change part of a project document by exact string replace
-- mcp__task__move_document_to_project — make one of this task's documents a project document
-- mcp__task__move_document_to_task — move one of them back to this task's scope
+- BASE_VERSION_STALE — the file changed since you got it and has been refreshed: read it again and redo the change
+- READ_ONLY, COMMENT_NOT_YOURS — the path is not yours to change
+- REDIRECT_DENIED — write with Write, Edit or tee instead of > or >>
+- NOT_ON_TASK — only a document linked to this task can move to task/docs/
+- NOT_STORED — the path is outside the folders the harness stores; nothing was written
+- SHELL_UNAVAILABLE — the harness could not be reached: redo the change once it is back
+
+Your task itself:
+
+- mcp__task__get_task — this task: title, description, status and its architect
 
 ` + statusSection(role) + `
 
@@ -127,27 +118,13 @@ To see the project around the task, and who to hand work to:
 - mcp__task__list_bounded_contexts — its bounded contexts, with their language and zones
 - mcp__task__list_agents — the agents a session can run as, and what each is for
 
-To show what you make to the person in the web UI's Design tab, live, while you keep talking here:
+A dev server you started shows in the Design tab too (files go in task/designs/):
 
-- mcp__task__publish_artifact — publish a file from your worktree (an HTML page or component, an image, a video, any file) or a dev server's loopback URL; publish again to refresh it
-- mcp__task__list_task_artifacts — what every session on this task has published, with each one's scope, and the project assets attached to this task
-- mcp__task__read_artifact — the content of a text design asset (html, svg, css, json, md, txt), read like a document
-- mcp__task__unpublish_artifact — take one of yours down (the file stays); a project asset is moved back to the task first
+- mcp__task__publish_artifact — publish a dev server's loopback URL; publish it again to refresh it
 
-Some design assets outlive one task: a logo, a palette, a component, a
-reference screen other tasks will reuse. Those are project assets: the
-harness keeps its own copy, so they outlive this session and its worktree,
-and they show in the project's design-assets library. Before you make a new
-asset, check list_project_artifacts for one to build on. Move an asset there
-once other tasks will reuse it; a dev-server URL cannot move. Only artifacts
-published on this task can be moved:
-
-- mcp__task__list_project_artifacts — the project's design assets, from any task: title, kind, note, revision, task, view URL
-- mcp__task__move_artifact_to_project — make one of this task's artifacts a project asset
-- mcp__task__move_artifact_to_task — move one of them back to this task's scope
-
-A project asset can also be attached to this task, by a person or by you, so
-it shows in this task's Design tab beside what the task produced:
+A project asset can be attached to this task, by a person or by you, so it
+shows in this task's Design tab beside what the task produced, and in
+task/designs/attached.md. Its artifact_id is its id in .index.json:
 
 - mcp__task__attach_artifact_to_task — attach a project asset, from any task of this project, to this task
 - mcp__task__detach_artifact_from_task — detach one from this task; it stays in the project
@@ -196,7 +173,7 @@ func statusSection(role domain.SessionRole) string {
 It owns the task status. Do not call update_task_status; it is refused.
 Talk to the architect instead:
 
-- mcp__task__message_architect — kind review_request when your plan or work is ready for review (attach the documents and artifacts by id); kind status_report at each milestone, when you finish, and as soon as you are blocked (status working, blocked, ready_for_review or done); kind question when you need a decision
+- mcp__task__message_architect — kind review_request when your plan or work is ready for review (attach the documents and artifacts by id, from .index.json); kind status_report at each milestone, when you finish, and as soon as you are blocked (status working, blocked, ready_for_review or done); kind question when you need a decision
 - mcp__task__list_task_messages — your messages with the architect, to catch up on a reply you missed
 
 Its replies arrive as a new turn starting with [task message … · reply …]. A reply
@@ -265,7 +242,7 @@ func (s *Service) sessionRole(ctx context.Context, id string) domain.SessionRole
 }
 
 // maxAttachedInBrief caps the attached assets a brief lists; the rest are
-// one list_task_artifacts away.
+// in task/designs/attached.md.
 const maxAttachedInBrief = 20
 
 // attachedAssetsSection tells a session which project assets are attached to
@@ -277,10 +254,10 @@ func attachedAssetsSection(attached []*domain.Artifact) string {
 	var b strings.Builder
 	b.WriteString("## Project assets attached to this task\n\n")
 	b.WriteString("A person or another session attached these project design assets to this task.\n")
-	b.WriteString("Build on them; list_task_artifacts has their view URLs.\n\n")
+	b.WriteString("Build on them; task/designs/attached.md names their files under project/designs/.\n\n")
 	for i, a := range attached {
 		if i == maxAttachedInBrief {
-			fmt.Fprintf(&b, "- +%d more: list_task_artifacts\n", len(attached)-maxAttachedInBrief)
+			fmt.Fprintf(&b, "- +%d more: task/designs/attached.md\n", len(attached)-maxAttachedInBrief)
 			break
 		}
 		fmt.Fprintf(&b, "- %s — %s (%s), from task %s\n", a.ID, a.Title, a.Kind, a.TicketID)

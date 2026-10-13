@@ -1,36 +1,24 @@
 # ADR document format
 
-One project document per decision, titled `ADR: NNNN <short title>`, numbered one
-past the highest existing `ADR:` title in `list_project_documents`. A complete HTML
-page, like every task document.
+One file per decision in `project/docs/` of your virtual shell, titled
+`ADR NNNN: <short title>` in its first heading, numbered one past the highest
+existing ADR (`grep -h '^# ADR' project/docs/*`). Name the file after it:
+`adr-NNNN-<slug>.md`.
 
 ## Template
 
-```html
-<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<title>ADR: NNNN <short title></title>
-<style>
-  :root { color-scheme: light dark; }
-  body { font: 15px/1.5 system-ui, sans-serif; max-width: 72ch; margin: 2rem auto; padding: 0 1rem; }
-  h1, h2 { line-height: 1.25; }
-</style>
-</head>
-<body>
-<h1>ADR NNNN: &lt;short title&gt;</h1>
-<p>&lt;One to three sentences: the context, what was decided, and why.&gt;</p>
-</body>
-</html>
+```markdown
+# ADR NNNN: <short title>
+
+<One to three sentences: the context, what was decided, and why.>
 ```
 
 That is all most ADRs need. The value is recording *that* a decision was made and
 *why*, not filling in sections. Add these only when they earn their place:
 
-- `<h2>Status</h2>` — proposed, accepted, deprecated, or superseded by ADR NNNN; useful when a decision is revisited.
-- `<h2>Considered options</h2>` — only when the rejected alternatives are worth remembering.
-- `<h2>Consequences</h2>` — only for downstream effects that are not obvious.
+- `## Status` — proposed, accepted, deprecated, or superseded by ADR NNNN; useful when a decision is revisited.
+- `## Considered options` — only when the rejected alternatives are worth remembering.
+- `## Consequences` — only for downstream effects that are not obvious.
 
 ## When to offer one
 

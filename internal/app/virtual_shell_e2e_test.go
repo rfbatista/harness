@@ -369,8 +369,9 @@ func TestDocumentChangesReachEveryRunningShell(t *testing.T) {
 }
 
 // A comment and a resource the person adds, and an artifact another
-// session publishes, revises, moves and unpublishes, show in the running
-// shell of the task; another task's shell sees only the project assets.
+// session publishes, revises, moves and unpublishes through its own shell,
+// show in the running shell of the task; another task's shell sees only the
+// project assets.
 func TestCommentsResourcesAndArtifactsReachEveryRunningShell(t *testing.T) {
 	e := newShellE2E(t)
 	taskA, taskB := e.task("Shell sync"), e.task("Elsewhere")
@@ -405,63 +406,56 @@ func TestCommentsResourcesAndArtifactsReachEveryRunningShell(t *testing.T) {
 		t.Fatalf("B saw A's resource: %v", err)
 	}
 
-	// The peer session publishes a page from its worktree.
-	page := filepath.Join(peer.worktree, "design.html")
-	if err := os.WriteFile(page, []byte("<h1>v1</h1>"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	mcp := e.dial(peer)
-	var pub struct {
-		ArtifactID string `json:"artifact_id"`
-	}
-	if err := json.Unmarshal([]byte(callTask(t, mcp, "publish_artifact", map[string]any{"path": "design.html", "title": "Design"})), &pub); err != nil {
-		t.Fatal(err)
-	}
+	// The peer session publishes a page by writing it in its shell.
+	page := "task/designs/design.html"
+	e.shellOp(peer, "write", func() { writeShellFile(t, peer, page, "<h1>Design</h1><p>v1</p>") }, page)
+	id := indexedID(t, peer, page)
 	eventually(t, "the published artifact in A", func() error {
-		return hasFile(a.shell, "task/designs/design.html", "<h1>v1</h1>", pub.ArtifactID, "task", "1")
+		return hasFile(a.shell, page, "<h1>Design</h1><p>v1</p>", id, "task", "1")
 	})
-	if err := os.WriteFile(page, []byte("<h1>v2</h1>"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	callTask(t, mcp, "publish_artifact", map[string]any{"path": "design.html", "title": "Design"})
+	e.shellOp(peer, "modify", func() { writeShellFile(t, peer, page, "<h1>Design</h1><p>v2</p>") }, page)
 	eventually(t, "the revised artifact in A", func() error {
-		return hasFile(a.shell, "task/designs/design.html", "<h1>v2</h1>", pub.ArtifactID, "task", "2")
+		return hasFile(a.shell, page, "<h1>Design</h1><p>v2</p>", id, "task", "2")
 	})
-	if err := lacks(b.shell, pub.ArtifactID); err != nil {
+	if err := lacks(b.shell, id); err != nil {
 		t.Fatalf("B saw A's task artifact: %v", err)
 	}
 
 	// Moved to the project, it is a project asset in every shell; attached
 	// to task B, B's attached.md names it.
-	callTask(t, mcp, "move_artifact_to_project", map[string]any{"artifact_id": pub.ArtifactID})
+	asset := "project/designs/design.html"
+	e.shellOp(peer, "mv", func() { moveShellFile(t, peer, page, asset) }, page, asset)
 	for name, s := range map[string]runningSession{"A": a, "B": b} {
 		eventually(t, "the project asset in "+name, func() error {
 			if _, err := os.Stat(filepath.Join(s.shell, "task", "designs", "design.html")); err == nil {
 				return fmt.Errorf("task/designs/design.html is still there")
 			}
-			return hasFile(s.shell, "project/designs/design.html", "<h1>v2</h1>", pub.ArtifactID, "project", "")
+			return hasFile(s.shell, asset, "<h1>Design</h1><p>v2</p>", id, "project", "")
 		})
 	}
-	e.post("attach_artifact_to_ticket", map[string]string{"artifact_id": pub.ArtifactID, "ticket_id": taskB}, nil)
+	e.post("attach_artifact_to_ticket", map[string]string{"artifact_id": id, "ticket_id": taskB}, nil)
 	eventually(t, "the attached asset in B's attached.md", func() error {
 		return fileWith(b.shell, "task/designs/attached.md", "Design → project/designs/design.html")
 	})
-	e.post("detach_artifact_from_ticket", map[string]string{"artifact_id": pub.ArtifactID, "ticket_id": taskB}, nil)
+	e.post("detach_artifact_from_ticket", map[string]string{"artifact_id": id, "ticket_id": taskB}, nil)
 	eventually(t, "the detached asset gone from B's attached.md", func() error {
 		return fileWithout(b.shell, "task/designs/attached.md", "Design →")
 	})
 
 	// Back on the task and unpublished, it leaves every shell.
-	callTask(t, mcp, "move_artifact_to_task", map[string]any{"artifact_id": pub.ArtifactID})
+	eventually(t, "the project asset in the peer's shell", func() error {
+		return hasFile(peer.shell, asset, "<h1>Design</h1><p>v2</p>", id, "project", "")
+	})
+	e.shellOp(peer, "mv", func() { moveShellFile(t, peer, asset, page) }, asset, page)
 	eventually(t, "the asset back in A's task/designs", func() error {
-		return hasFile(a.shell, "task/designs/design.html", "<h1>v2</h1>", pub.ArtifactID, "task", "")
+		return hasFile(a.shell, page, "<h1>Design</h1><p>v2</p>", id, "task", "")
 	})
 	eventually(t, "the asset gone from B", func() error {
-		return lacks(b.shell, pub.ArtifactID, "project/designs/design.html")
+		return lacks(b.shell, id, asset)
 	})
-	callTask(t, mcp, "unpublish_artifact", map[string]any{"artifact_id": pub.ArtifactID})
+	e.shellOp(peer, "rm", func() { removeShellFile(t, peer, page) }, page)
 	eventually(t, "the unpublished artifact gone from A", func() error {
-		return lacks(a.shell, pub.ArtifactID, "task/designs/design.html")
+		return lacks(a.shell, id, page)
 	})
 
 	// The person deletes their comment: it leaves the shell.

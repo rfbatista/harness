@@ -11,8 +11,8 @@ rules of the loop. Every section applies on every cycle: consult them before and
 during the loop, not after.
 
 Name tests and interfaces in the project's language: the `Glossary: <project>` project
-document (find it with `mcp__task__search_documents`), and respect the `ADR:` documents
-in the area you touch.
+document (`grep -l '^# Glossary' project/docs/*` in your virtual shell, `$HARNESS_SHELL`),
+and respect the `ADR:` documents beside it in the area you touch.
 
 ## What a good test is
 
@@ -30,8 +30,9 @@ A **seam** is the public boundary you test at: the interface where you observe
 behaviour without reaching inside. Tests live at seams, never against internals.
 
 **Test only at the agreed seams.** The person agreed them with the architect; they are
-in the **Testing decisions** section of your Spec task document. Read that section
-before writing any test. If a ticket cannot be tested at any of them, do not invent
+in the **Testing decisions** section of your Spec task document (a file in `task/docs/`
+of your virtual shell). Read that section (`grep -n '^## Testing decisions'`, then
+`sed -n` from there) before writing any test. If a ticket cannot be tested at any of them, do not invent
 one: ask the architect with `mcp__task__message_architect` kind question, giving the
 seam you would add and a line on what it catches and what it misses. (An implementer
 sub-agent asks the session that started it instead.)

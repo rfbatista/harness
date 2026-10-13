@@ -22,7 +22,7 @@ Before going further, confirm the fixed point resolves (`git rev-parse <fixed-po
 
 ### 2. Identify the spec source
 
-The spec is your task's `Spec: <application> — <feature>` document, plus the `Ticket:` documents you implemented and the Contract documents the spec depends on. Find them with `mcp__task__list_task_documents`. The Spec sub-agent reads them with `mcp__task__read_task_document`, a `section` at a time when they are large; give it their titles, not their contents.
+The spec is your task's `Spec: <application> — <feature>` document, plus the `Ticket:` documents you implemented and the Contract documents the spec depends on. They are files in `task/docs/` of your virtual shell (`$HARNESS_SHELL`): `grep -l '^# \(Spec\|Ticket\|Contract\)' task/docs/* project/docs/*` finds them. The Spec sub-agent reads them with Read, `grep` and `sed -n`, a section at a time when they are large; give it their paths, not their contents.
 
 ### 3. Identify the standards sources
 
@@ -61,7 +61,7 @@ Issue both sub-agent calls together, in the foreground, and aggregate the report
 **Spec sub-agent prompt** should include:
 
 - The diff command and commit list.
-- The titles of the Spec, Ticket and Contract task documents, and that it reads them with `mcp__task__read_task_document`.
+- The paths of the Spec, Ticket and Contract documents in your virtual shell, and that it reads them with Read, `grep` and `sed -n`, writing nothing there.
 - The brief: "Report: (a) requirements the spec asked for that are missing or partial; (b) behaviour in the diff that wasn't asked for (scope creep); (c) requirements that look implemented but where the implementation looks wrong. Quote the spec line for each finding. Under 400 words."
 
 A delegate always has a spec. If you cannot find it, ask the architect with `mcp__task__message_architect` kind question rather than skipping the axis.

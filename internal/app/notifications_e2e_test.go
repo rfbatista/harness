@@ -111,7 +111,7 @@ func TestNotifications_WiredServer(t *testing.T) {
 		Notifications: notes, Settings: cat.Settings, Planning: plan, TaskChannel: channel,
 	})))
 	mux.Handle(mcpsession.PathPrefix, mcpsession.TaskHandler(tooling.SessionTaskTools(plan, sessions, nil, nil,
-		tooling.PeerStarter{}, tooling.ArtifactTooling{}, channel, tooling.ResourceTooling{}, tooling.NotificationTooling{Notifier: notes})))
+		tooling.PeerStarter{}, tooling.ArtifactTooling{}, channel, tooling.NotificationTooling{Notifier: notes})))
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 	inbox := httpclient.NewNotifications(httpclient.New(srv.URL))

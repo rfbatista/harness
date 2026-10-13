@@ -6,16 +6,17 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"operators-mcp/internal/adapter/out/persistence/sqlite"
 	"operators-mcp/internal/application/artifacts"
 	"operators-mcp/internal/application/planning"
 	"operators-mcp/internal/domain"
+	"operators-mcp/internal/ports"
 )
 
 type artifactToolsFixture struct {
 	tools         map[string]domain.Tool
+	art           *artifacts.Service
 	ticketID      string
 	otherTicketID string // sess-3's task
 	root          string // sess-1's worktree
@@ -63,8 +64,9 @@ func newArtifactToolsFixture(t *testing.T) *artifactToolsFixture {
 	art.StoreDir = t.TempDir() // moving to project copies the bytes here
 	art.Tickets = plan
 	f.otherTicketID = other.ID
-	tooling := ArtifactTooling{Publisher: art, Reader: art, Attachments: art, ViewURL: func(id string) string { return "/api/artifacts/" + id + "/view/" }}
-	for _, tl := range SessionTaskTools(plan, sessions, nil, nil, PeerStarter{}, tooling, nil, ResourceTooling{}, NotificationTooling{}) {
+	f.art = art
+	tooling := ArtifactTooling{Publisher: art, Attachments: art, ViewURL: func(id string) string { return "/api/artifacts/" + id + "/view/" }}
+	for _, tl := range SessionTaskTools(plan, sessions, nil, nil, PeerStarter{}, tooling, nil, NotificationTooling{}) {
 		f.tools[tl.Name] = tl
 	}
 	return f
@@ -88,94 +90,75 @@ func (f *artifactToolsFixture) write(t *testing.T, root, rel, content string) {
 	}
 }
 
-func TestPublishArtifactTool_PublishesAndReturnsViewURL(t *testing.T) {
+// publish publishes path from session's worktree through the artifacts
+// service, as the shell does for a file in task/designs, and returns its id.
+func (f *artifactToolsFixture) publish(t *testing.T, session, root, path string) string {
+	t.Helper()
+	f.write(t, root, path, "<h1>"+path+"</h1>")
+	a, err := f.art.Publish(context.Background(), ports.PublishArtifactRequest{SessionID: session, Path: path, Title: path})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return a.ID
+}
+
+// A dev server's loopback URL is published, and publishing it again revises
+// the same card.
+func TestPublishArtifactTool_PublishesALoopbackURL(t *testing.T) {
 	f := newArtifactToolsFixture(t)
-	f.write(t, f.root, "design/card.html", "<h1>card</h1>")
-	out, err := f.call(t, "sess-1", "publish_artifact", map[string]any{"path": "design/card.html", "title": "Card", "note": "first"})
+	out, err := f.call(t, "sess-1", "publish_artifact", map[string]any{"url": "http://localhost:5173/", "title": "Dev", "note": "first"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	id, _ := out["artifact_id"].(string)
-	if id == "" || out["revision"] != 1 || out["kind"] != domain.ArtifactPage || out["view_url"] != "/api/artifacts/"+id+"/view/" {
+	if id == "" || out["revision"] != 1 || out["kind"] != domain.ArtifactURL || out["view_url"] != "http://localhost:5173/" {
 		t.Fatalf("out = %+v", out)
 	}
-	again, _ := f.call(t, "sess-1", "publish_artifact", map[string]any{"path": "design/card.html", "title": "Card"})
-	if again["artifact_id"] != id || again["revision"] != 2 {
-		t.Fatalf("re-publish = %+v", again)
-	}
-	link, err := f.call(t, "sess-1", "publish_artifact", map[string]any{"url": "http://localhost:5173/", "title": "Dev"})
-	if err != nil || link["kind"] != domain.ArtifactURL || link["view_url"] != "http://localhost:5173/" {
-		t.Fatalf("url publish = %+v, %v", link, err)
+	again, err := f.call(t, "sess-1", "publish_artifact", map[string]any{"url": "http://localhost:5173/", "title": "Dev"})
+	if err != nil || again["artifact_id"] != id || again["revision"] != 2 {
+		t.Fatalf("re-publish = %+v, %v", again, err)
 	}
 }
 
-// The MCP bridge hands the agent only the message, so the contract's codes
-// travel in it.
-func TestPublishArtifactTool_ErrorsCarryTheirCode(t *testing.T) {
+// A file is published through the shell, not the tool: a path is refused
+// with a code that says where to put it, and nothing is published.
+func TestPublishArtifactTool_RefusesAFilePath(t *testing.T) {
 	f := newArtifactToolsFixture(t)
-	for name, args := range map[string]map[string]any{
-		"ARTIFACT_NOT_FOUND":             {"path": "design/nope.html", "title": "T"},
-		"ARTIFACT_PATH_OUTSIDE_WORKTREE": {"path": "../../etc/passwd", "title": "T"},
-		"ARTIFACT_URL_NOT_LOCAL":         {"url": "http://example.com", "title": "T"},
+	f.write(t, f.root, "design/card.html", "<h1>card</h1>")
+	for _, args := range []map[string]any{
+		{"path": "design/card.html", "title": "Card"},
+		{"path": "design/card.html", "url": "http://localhost:5173/", "title": "Card"},
 	} {
 		_, err := f.call(t, "sess-1", "publish_artifact", args)
-		if err == nil {
-			t.Fatalf("%s: no error", name)
-		}
 		var se *domain.StructuredError
-		if !errorsAs(err, &se) || se.Code != name || !strings.HasPrefix(se.Message, name+": ") {
-			t.Fatalf("%s: err = %v", name, err)
+		if !errorsAs(err, &se) || se.Code != "PUBLISH_URL_ONLY" || !strings.HasPrefix(se.Message, "PUBLISH_URL_ONLY: ") || !strings.Contains(se.Message, "task/designs/") {
+			t.Fatalf("%v: err = %v", args, err)
 		}
 	}
-	// Every other code travels in the message too, once.
-	_, err := f.call(t, "sess-1", "publish_artifact", map[string]any{"path": "x"})
-	var se *domain.StructuredError
-	if !errorsAs(err, &se) || se.Code != "INVALID_INPUT" || !strings.HasPrefix(se.Message, "INVALID_INPUT: ") || strings.Count(se.Message, "INVALID_INPUT") != 1 {
-		t.Fatalf("err = %v", err)
+	if list, _ := f.art.ListTaskArtifacts(context.Background(), f.ticketID); len(list) != 0 {
+		t.Fatalf("a refused publish stored %+v", list)
 	}
 }
 
-func TestListAndUnpublishArtifactTools(t *testing.T) {
+// The MCP bridge hands the agent only the message, so the codes travel in it.
+func TestPublishArtifactTool_ErrorsCarryTheirCode(t *testing.T) {
 	f := newArtifactToolsFixture(t)
-	f.write(t, f.root, "a.html", "a")
-	f.write(t, f.root2, "b.png", "\x89PNG")
-	a, _ := f.call(t, "sess-1", "publish_artifact", map[string]any{"path": "a.html", "title": "A"})
-	time.Sleep(2 * time.Millisecond) // millisecond timestamps: keep "newest first" unambiguous
-	b, _ := f.call(t, "sess-2", "publish_artifact", map[string]any{"path": "b.png", "title": "B"})
-
-	listed, err := f.call(t, "sess-1", "list_task_artifacts", nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	items := listed["artifacts"].([]taskArtifact)
-	if listed["count"] != 2 || len(items) != 2 || items[0].ArtifactID != b["artifact_id"] || items[0].SessionID != "sess-2" || items[1].ArtifactID != a["artifact_id"] || items[1].Path != "a.html" ||
-		items[0].Scope != domain.ArtifactScopeTask || items[1].Scope != domain.ArtifactScopeTask {
-		t.Fatalf("list = %+v", items)
-	}
-	if items[0].Bytes != 4 || items[1].Bytes != 1 {
-		t.Fatalf("listed sizes: %d, %d", items[0].Bytes, items[1].Bytes)
-	}
-
-	if _, err := f.call(t, "sess-1", "unpublish_artifact", map[string]any{"artifact_id": b["artifact_id"]}); err == nil || !strings.Contains(err.Error(), "ARTIFACT_NOT_YOURS") {
-		t.Fatalf("unpublishing another session's artifact = %v", err)
-	}
-	if _, err := f.call(t, "sess-1", "unpublish_artifact", nil); err == nil || !strings.Contains(err.Error(), "INVALID_INPUT") {
-		t.Fatalf("missing id = %v", err)
-	}
-	out, err := f.call(t, "sess-1", "unpublish_artifact", map[string]any{"artifact_id": a["artifact_id"]})
-	if err != nil || out["removed"] != true {
-		t.Fatalf("unpublish = %+v, %v", out, err)
-	}
-	listed, _ = f.call(t, "sess-1", "list_task_artifacts", nil)
-	if listed["count"] != 1 {
-		t.Fatalf("after unpublish: %+v", listed)
+	for code, args := range map[string]map[string]any{
+		"ARTIFACT_URL_NOT_LOCAL": {"url": "http://example.com", "title": "T"},
+		"INVALID_INPUT":          {"title": "T"},
+	} {
+		_, err := f.call(t, "sess-1", "publish_artifact", args)
+		var se *domain.StructuredError
+		if !errorsAs(err, &se) || se.Code != code || !strings.HasPrefix(se.Message, code+": ") || strings.Count(se.Message, code) != 1 {
+			t.Fatalf("%s: err = %v", code, err)
+		}
 	}
 }
 
 func TestArtifactTools_UnavailableWithoutAPublisher(t *testing.T) {
 	f := newTaskToolsFixture(t) // built with a zero ArtifactTooling
-	for _, name := range []string{"publish_artifact", "list_task_artifacts", "unpublish_artifact", "list_project_artifacts", "move_artifact_to_project", "move_artifact_to_task"} {
-		_, err := f.call(t, f.sessionID, name, map[string]any{"title": "T", "path": "x", "artifact_id": "y"})
+	for _, name := range []string{"publish_artifact", "attach_artifact_to_task", "detach_artifact_from_task"} {
+		_, err := f.call(t, f.sessionID, name, map[string]any{"title": "T", "url": "http://localhost:5173/", "artifact_id": "y"})
 		wantCode(t, err, "UNAVAILABLE")
 	}
 	// Scope still fails closed first.

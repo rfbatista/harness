@@ -15,24 +15,23 @@ import (
 	"github.com/mark3labs/mcp-go/client"
 	"github.com/mark3labs/mcp-go/client/transport"
 	mcplib "github.com/mark3labs/mcp-go/mcp"
+	"github.com/rfbatista/harnesskit/errs"
 	"go.uber.org/fx"
 
 	"operators-mcp/internal/adapter/in/httpapi"
-	"operators-mcp/internal/adapter/in/mcpsession"
 	"operators-mcp/internal/adapter/in/web"
 	"operators-mcp/internal/app/catalog"
-	"operators-mcp/internal/application/artifacts"
 	"operators-mcp/internal/application/orchestration"
 	"operators-mcp/internal/application/planning"
-	"operators-mcp/internal/application/taskchannel"
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
 )
 
-// TestSessionComments_EndToEnd drives an agent's comment through the
-// session's own MCP endpoint, as the server wires it, and follows it to the
-// project feed, the person's routes, the task page's seed and the sessions'
-// turns: a session's comment wakes no one, the person's still does.
+// TestSessionComments_EndToEnd stores an agent's comment the way its virtual
+// shell does, through planning's session side, as the server wires it, and
+// follows it to the project feed, the person's routes, the task page's seed
+// and the sessions' turns: a session's comment wakes no one, the person's
+// still does.
 func TestSessionComments_EndToEnd(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()
@@ -41,14 +40,12 @@ func TestSessionComments_EndToEnd(t *testing.T) {
 		plan     *planning.Service
 		orch     *orchestration.Service
 		sessions ports.SessionRepository
-		channel  *taskchannel.Service
-		art      *artifacts.Service
 	)
 	fxApp := fx.New(
 		fx.Supply(Config{HTTPAddr: "127.0.0.1:0", MCPAddr: "127.0.0.1:0", DBPath: ":memory:", Root: dir, ClaudeBin: "/bin/true", SessionShell: "direct"}),
 		PersistenceModule, CatalogModule, PlanningModule, WorkspacesModule,
 		AgentRuntimeModule, TaskChannelModule, TextProcessingModule,
-		fx.Populate(&cat, &plan, &orch, &sessions, &channel, &art),
+		fx.Populate(&cat, &plan, &orch, &sessions),
 		fx.NopLogger,
 	)
 	if err := fxApp.Start(ctx); err != nil {
@@ -83,38 +80,28 @@ func TestSessionComments_EndToEnd(t *testing.T) {
 	mux.Handle("/api/", httpapi.NewRouter(httpapi.NewHandler(httpapi.Services{
 		Projects: cat.Projects, ProjectFeed: cat.Projects, Sessions: orch, Planning: plan, TaskComments: plan,
 	})))
-	mux.Handle(mcpsession.PathPrefix, mcpsession.TaskHandler(sessionTaskTools(cat, orch, plan, sessions, art, channel, nil)))
 	mux.Handle("/", web.NewHandler(web.Deps{Projects: cat.Projects, Tasks: plan, Sessions: orch, Agents: cat.Agents, Repositories: cat.Projects, Comments: plan}, assets, nil))
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 	feed := followFeed(t, srv.URL, p.ID)
 
-	writer := dialTask(t, srv.URL+mcpsession.PathPrefix+"s-writer")
-	other := dialTask(t, srv.URL+mcpsession.PathPrefix+"s-other")
-
 	// The agent comments as itself; the feed carries who wrote it.
-	added := callTask(t, writer, "add_task_comment", map[string]any{"body": "Plan approved; starting on the server."})
-	var out struct {
-		Comment domain.TicketComment `json:"comment"`
+	writer := domain.CommentWriter{SessionID: "s-writer", AgentName: "comment-e2e-agent"}
+	c, err := plan.AddSessionComment(ctx, tk.ID, writer, "Plan approved; starting on the server.")
+	if err != nil {
+		t.Fatal(err)
 	}
-	if err := json.Unmarshal([]byte(added), &out); err != nil {
-		t.Fatalf("add_task_comment = %s", added)
-	}
-	c := out.Comment
 	if c.Author != domain.CommentBySession || c.SessionID != "s-writer" || c.AgentName != "comment-e2e-agent" {
 		t.Fatalf("comment = %+v", c)
 	}
 	feed.saw(t, "ticket_comment", c.ID, `"author":"session"`, `"session_id":"s-writer"`, `"agent_name":"comment-e2e-agent"`)
 
-	// Another session can neither rewrite nor delete it. The MCP bridge hands
-	// the agent a structured error's message, not its code, so the session
-	// tools put the code in front of it.
-	const notYours = "COMMENT_NOT_YOURS: only the session that wrote this comment can change it"
-	if got := callTaskErr(t, other, "update_task_comment", map[string]any{"comment_id": c.ID, "body": "mine now"}); got != notYours {
-		t.Fatalf("another session's update = %s", got)
+	// Another session can neither rewrite nor delete it.
+	if _, err := plan.UpdateSessionComment(ctx, tk.ID, "s-other", c.ID, "mine now"); errs.Code(err) != "COMMENT_NOT_YOURS" {
+		t.Fatalf("another session's update = %v", err)
 	}
-	if got := callTaskErr(t, other, "delete_task_comment", map[string]any{"comment_id": c.ID}); got != notYours {
-		t.Fatalf("another session's delete = %s", got)
+	if err := plan.DeleteSessionComment(ctx, tk.ID, "s-other", c.ID); errs.Code(err) != "COMMENT_NOT_YOURS" {
+		t.Fatalf("another session's delete = %v", err)
 	}
 
 	// The person's comment wakes both sessions; the agent's woke neither.
@@ -157,17 +144,16 @@ func TestSessionComments_EndToEnd(t *testing.T) {
 	}
 
 	// The writer edits its own; the person deletes it.
-	edited := callTask(t, writer, "update_task_comment", map[string]any{"comment_id": c.ID, "body": "Plan approved; server half done."})
-	if !strings.Contains(edited, "server half done") {
-		t.Fatalf("update_task_comment = %s", edited)
+	if edited, err := plan.UpdateSessionComment(ctx, tk.ID, "s-writer", c.ID, "Plan approved; server half done."); err != nil || edited.Body != "Plan approved; server half done." {
+		t.Fatalf("the writer's update = %+v, %v", edited, err)
 	}
 	feed.saw(t, "ticket_comment", c.ID, "server half done")
 	if status, body := postJSON(t, srv.URL+"/api/delete_ticket_comment", `{"comment_id":"`+c.ID+`"}`); status != 200 {
 		t.Fatalf("person's delete of the agent's comment = %d %s", status, body)
 	}
 	feed.saw(t, "ticket_comment", c.ID)
-	if got := callTaskErr(t, writer, "delete_task_comment", map[string]any{"comment_id": c.ID}); got != "COMMENT_NOT_FOUND: comment not found" {
-		t.Fatalf("delete after the person's = %s", got)
+	if err := plan.DeleteSessionComment(ctx, tk.ID, "s-writer", c.ID); errs.Code(err) != "COMMENT_NOT_FOUND" {
+		t.Fatalf("delete after the person's = %v", err)
 	}
 }
 

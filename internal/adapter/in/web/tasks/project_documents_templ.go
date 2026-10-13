@@ -99,7 +99,7 @@ func ProjectDocumentsPage(v ProjectDocumentsView) templ.Component {
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = components.Empty("No document has been moved to this project yet", "Project documents are the knowledge that outlives one task: architecture, conventions, decisions. Move one here with \"Move to project\" on a task's documents page, or let an agent do it with move_document_to_project; the task keeps it too.").Render(ctx, templ_7745c5c3_Buffer)
+				templ_7745c5c3_Err = components.Empty("No document has been moved to this project yet", "Project documents are the knowledge that outlives one task: architecture, conventions, decisions. Move one here with \"Move to project\" on a task's documents page, or let an agent do it by moving the file to project/docs in its virtual shell; the task keeps it too.").Render(ctx, templ_7745c5c3_Buffer)
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}

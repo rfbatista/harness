@@ -395,7 +395,7 @@ func newVirtualShells(plan *planning.Service, art *artifacts.Service, sessions p
 // artifacts' on the bus, comments' and resources' as planning puts them on
 // the project feed.
 func bindVirtualShells(orch *orchestration.Service, shells *vshell.Service, plan *planning.Service, cat catalog.Catalog) {
-	orch.Shells = shells
+	orch.Shells, orch.ShellIndex = shells, shells
 	shells.Subscribe(cat.Bus)
 	plan.Feed = changeSinks{plan.Feed, shells}
 	plan.Announcer = ticketAnnouncers{plan.Announcer, shells}

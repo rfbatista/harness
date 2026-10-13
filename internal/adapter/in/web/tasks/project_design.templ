@@ -79,7 +79,7 @@ templ ProjectDesignPage(v ProjectDesignView) {
 			</template>
 			<template x-if="isEmpty">
 				<div data-scroll>
-					@components.Empty("No design asset has been moved to this project yet", "Project assets are what other tasks reuse: a logo, a palette, a component, a reference screen. Move one here with \"Move to project\" on a session's Design tab, or let an agent do it with move_artifact_to_project; its task keeps it too.")
+					@components.Empty("No design asset has been moved to this project yet", "Project assets are what other tasks reuse: a logo, a palette, a component, a reference screen. Move one here with \"Move to project\" on a session's Design tab, or let an agent do it by moving the file to project/designs in its virtual shell; its task keeps it too.")
 				</div>
 			</template>
 			<div class="[ with-sidebar ] [ grow ]" style="--sidebar-target: 16rem" data-scroll x-show="hasCurrent">

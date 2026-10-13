@@ -1,48 +1,33 @@
 # Glossary document format
 
-One project document per project, titled `Glossary: <project>`. Like every task
-document it is a complete HTML page; `create_task_document` refuses Markdown.
+One file per project, `project/docs/glossary.md` in your virtual shell, titled
+`Glossary: <project>` in its first heading.
 
 ## Template
 
-```html
-<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<title>Glossary: <project></title>
-<style>
-  :root { color-scheme: light dark; }
-  body { font: 15px/1.5 system-ui, sans-serif; max-width: 72ch; margin: 2rem auto; padding: 0 1rem; }
-  h1, h2 { line-height: 1.25; }
-  dt { font-weight: 600; margin-top: 1rem; }
-  .avoid { font-style: italic; opacity: 0.8; }
-</style>
-</head>
-<body>
-<h1>Glossary: &lt;project&gt;</h1>
-<p>&lt;One or two sentences: what this project is and why it exists.&gt;</p>
+```markdown
+# Glossary: <project>
 
-<h2>&lt;Bounded context or cluster of terms&gt;</h2>
-<dl>
-  <dt>Order</dt>
-  <dd>&lt;One or two sentences: what the term IS.&gt;
-    <div class="avoid">Avoid: Purchase, transaction</div></dd>
-  <dt>Invoice</dt>
-  <dd>A request for payment sent to a customer after delivery.
-    <div class="avoid">Avoid: Bill, payment request</div></dd>
-</dl>
+<One or two sentences: what this project is and why it exists.>
 
-<h2>Relationships</h2>
-<ul>
-  <li>&lt;Context A&gt; → &lt;Context B&gt;: &lt;how they relate, e.g. which event one emits and the other consumes&gt;</li>
-</ul>
-</body>
-</html>
+## <Bounded context or cluster of terms>
+
+**Order**
+: <One or two sentences: what the term IS.>
+  _Avoid: Purchase, transaction_
+
+**Invoice**
+: A request for payment sent to a customer after delivery.
+  _Avoid: Bill, payment request_
+
+## Relationships
+
+- <Context A> → <Context B>: <how they relate, e.g. which event one emits and the other consumes>
 ```
 
-Each `<dt>` is a term, so the read tools' outline lists every term and a single term
-can be read or edited without the rest of the page.
+Each term starts its own bolded line, so `grep -n '^\*\*Order\*\*'` finds it and a
+single term can be read with `sed -n` or changed with Edit without the rest of the
+file.
 
 ## Rules
 

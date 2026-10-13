@@ -11,13 +11,15 @@ import (
 
 	"github.com/rfbatista/harnesskit/errs"
 
+	"operators-mcp/internal/application/vshell"
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
 )
 
 // Task updates: when the person adds a resource or a comment to a task,
-// every running session on it gets a turn saying so (see "Contract: Harness
-// server ↔ Agent sessions — task resources, comments and update turns").
+// every running session on it gets a turn saying so, naming the file's path
+// in the session's virtual shell (see "Contract: Harness server ↔ Agent
+// sessions — virtual shell" §8).
 // Planning raises the events; the turns go through the courier, so a busy
 // session gets its update when its turn ends, never in the middle of one.
 // A comment a session wrote wakes no one: sessions answering each other's
@@ -26,8 +28,18 @@ import (
 // maxUpdateComment is how much of a comment an update turn carries.
 const maxUpdateComment = 2000
 
-// taskUpdate is one turn for every running session of a task.
-type taskUpdate struct{ ticketID, key, text string }
+// taskUpdate is one turn for every running session of a task. The turn
+// names the shell file of the item (kind, id): text makes it from the path
+// the session's shell holds it at, or fallback when the shell does not.
+type taskUpdate struct {
+	ticketID, key      string
+	kind, id, fallback string
+	text               func(path string) string
+}
+
+// shellPathWait is how long an update waits for a session's shell to hold
+// the new file, which the shells are written after the change is stored.
+const shellPathWait = 3 * time.Second
 
 // updateQueue hands updates to a single drainer, so the bus handler never
 // waits on a session and the turns go out in the order the person made the
@@ -42,14 +54,22 @@ type updateQueue struct {
 // the task's running sessions.
 func (s *Service) SubscribeTaskUpdates(sub ports.EventSubscriber) {
 	ports.On(sub, func(_ context.Context, ev domain.TicketResourceAdded) error {
-		s.queueUpdate(taskUpdate{ev.Resource.TicketID, "task-update:" + ev.Resource.ID, resourceUpdateText(ev.Resource)})
+		r := ev.Resource
+		u := taskUpdate{ticketID: r.TicketID, key: "task-update:" + r.ID, fallback: linksPath,
+			text: func(path string) string { return resourceUpdateText(r, path) }}
+		if r.IsUpload() {
+			u.kind, u.id, u.fallback = ports.ShellResource, r.ID, "task/resources/"+vshell.ResourceFileName(&r)
+		}
+		s.queueUpdate(u)
 		return nil
 	})
 	ports.On(sub, func(_ context.Context, ev domain.TicketCommentAdded) error {
 		if ev.Comment.Author == domain.CommentBySession {
 			return nil
 		}
-		s.queueUpdate(taskUpdate{ev.Comment.TicketID, "task-update:" + ev.Comment.ID, commentUpdateText(ev.Comment)})
+		c := ev.Comment
+		s.queueUpdate(taskUpdate{ticketID: c.TicketID, key: "task-update:" + c.ID, kind: ports.ShellComment, id: c.ID,
+			fallback: "task/comments/" + vshell.CommentFileName(&c), text: func(path string) string { return commentUpdateText(c, path) }})
 		return nil
 	})
 }
@@ -96,7 +116,7 @@ func (s *Service) deliverTaskUpdate(u taskUpdate) {
 		if sess.TicketID != u.ticketID || sess.Status.IsTerminal() {
 			continue
 		}
-		if err := deliver(sess.ID, u.key, u.text); err != nil && errs.Code(err) != "SESSION_NOT_RUNNING" {
+		if err := deliver(sess.ID, u.key, u.text(s.shellPath(sess.ID, u))); err != nil && errs.Code(err) != "SESSION_NOT_RUNNING" {
 			slog.Warn("deliver a task update", "session", sess.ID, "key", u.key, "err", err)
 		}
 	}
@@ -115,21 +135,50 @@ func resourceNoun(k domain.ResourceKind) string {
 	return "a file"
 }
 
-func resourceUpdateText(r domain.TicketResource) string {
-	ref := "resource_id " + r.ID
-	if r.Kind == domain.ResourceLink {
-		ref += ", url " + r.URL
+// linksPath is the shell file listing the links the person added.
+const linksPath = "task/resources/links.md"
+
+// shellPath is where the session's shell holds u's file: once the shell
+// has it, the path it has it at, so a name that clashed is named as the
+// shell has it. A session with no shell, or a shell that has not got the
+// file in time, gets the name the shell gives such a file.
+func (s *Service) shellPath(sessionID string, u taskUpdate) string {
+	if s.ShellIndex == nil || u.kind == "" {
+		return u.fallback
 	}
-	return fmt.Sprintf("[task update · resource added] The person added %s to this task: %q (%s). Read it with read_task_resource if it bears on your work.",
-		resourceNoun(r.Kind), r.Title, ref)
+	deadline := time.Now().Add(shellPathWait)
+	for {
+		files := s.ShellIndex.ShellFiles(sessionID)
+		if files == nil {
+			return u.fallback
+		}
+		for _, f := range files {
+			if f.Kind == u.kind && f.ID == u.id {
+				return f.Path
+			}
+		}
+		if time.Now().After(deadline) {
+			return u.fallback
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
 }
 
-func commentUpdateText(c domain.TicketComment) string {
+func resourceUpdateText(r domain.TicketResource, path string) string {
+	if r.Kind == domain.ResourceLink {
+		return fmt.Sprintf("[task update · resource added] The person added a link to this task: %q (%s), listed in %s in your shell. Open it if it bears on your work.",
+			r.Title, r.URL, path)
+	}
+	return fmt.Sprintf("[task update · resource added] The person added %s to this task: %q, at %s in your shell. Read it there if it bears on your work.",
+		resourceNoun(r.Kind), r.Title, path)
+}
+
+func commentUpdateText(c domain.TicketComment, path string) string {
 	body := c.Body
 	if utf8.RuneCountInString(body) > maxUpdateComment {
-		body = string([]rune(body)[:maxUpdateComment]) + "…\n(cut; read the whole comment with list_task_comments)"
+		body = string([]rune(body)[:maxUpdateComment]) + "…\n(cut; the whole comment is " + path + " in your shell)"
 	}
-	return "[task update · comment] The person commented on this task (comment_id " + c.ID + "):\n" + body
+	return "[task update · comment] The person commented on this task (" + path + " in your shell):\n" + body
 }
 
 // taskCounts is how many resources and comments a task has; known is false
@@ -148,23 +197,19 @@ func resourcesSection(c taskCounts) string {
 	if c.known {
 		b.WriteString(countLine(c.resources, c.comments) + "\n")
 	}
-	b.WriteString(`When they add one while you run, a turn starting with [task update · …]
-tells you; read it if it bears on your work.
+	b.WriteString(`They are files in your virtual shell: uploads in task/resources/, links in
+task/resources/links.md, comments in task/comments/, one file each, the
+person's and sessions'. When they add a resource or comment while you run, a
+turn starting with [task update · …] names its file; read it if it bears on
+your work.
 
-- mcp__task__list_task_resources — what the person added, oldest first
-- mcp__task__read_task_resource — one resource: text inline, or a local path to open
-- mcp__task__list_task_comments — the task's comments, the person's and sessions', oldest first (since narrows)
-
-You can comment on this task too, in the thread the person reads. A comment
-is for what the person should see on the task: progress, a decision, a
-question for them, a summary of what you did. It is not for talking to other
-sessions: your comment wakes no session, so reach them with the task messages
-(message_architect, reply_to_session) when the task has them. You can change
-or delete only your own comments.
-
-- mcp__task__add_task_comment — write a comment as this session
-- mcp__task__update_task_comment — rewrite one of your comments
-- mcp__task__delete_task_comment — delete one of your comments`)
+You can comment on this task too, in the thread the person reads: write a
+file in task/comments/ (any name, e.g. progress.md); its content is the
+comment. A comment is for what the person should see on the task: progress,
+a decision, a question for them, a summary of what you did. It is not for
+talking to other sessions: your comment wakes no session, so reach them with
+the task messages (message_architect, reply_to_session) when the task has
+them. Edit or rm only your own comments; the others' are read-only.`)
 	return b.String()
 }
 

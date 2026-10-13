@@ -17,18 +17,6 @@ import (
 // the single source of truth for the orchestration's allow-list.
 var SessionTaskToolNames = []string{
 	"get_task",
-	"list_task_documents",
-	"read_task_document",
-	"create_task_document",
-	"update_task_document",
-	"edit_task_document",
-	"list_project_documents",
-	"read_project_document",
-	"update_project_document",
-	"edit_project_document",
-	"search_documents",
-	"move_document_to_project",
-	"move_document_to_task",
 	"update_task_status",
 	"list_task_sessions",
 	"start_task_session",
@@ -36,12 +24,6 @@ var SessionTaskToolNames = []string{
 	"list_bounded_contexts",
 	"list_agents",
 	"publish_artifact",
-	"list_task_artifacts",
-	"read_artifact",
-	"unpublish_artifact",
-	"list_project_artifacts",
-	"move_artifact_to_project",
-	"move_artifact_to_task",
 	"attach_artifact_to_task",
 	"detach_artifact_from_task",
 	"message_architect",
@@ -52,12 +34,6 @@ var SessionTaskToolNames = []string{
 	"list_review_requests",
 	"set_status_check",
 	"list_status_checks",
-	"list_task_resources",
-	"read_task_resource",
-	"list_task_comments",
-	"add_task_comment",
-	"update_task_comment",
-	"delete_task_comment",
 	"list_notifications",
 	"notify",
 }
@@ -79,9 +55,6 @@ type PeerStarter struct {
 // value leaves the tools answering that artifacts are unavailable.
 type ArtifactTooling struct {
 	Publisher ports.ArtifactPublisher
-	// Reader opens an artifact's bytes for read_artifact and for searches
-	// that include artifacts; nil leaves read_artifact unavailable.
-	Reader ports.ArtifactReader
 	// Attachments attaches project assets to the session's task; nil leaves
 	// attach_artifact_to_task and detach_artifact_from_task unavailable.
 	Attachments ports.ArtifactAttachments
@@ -89,23 +62,22 @@ type ArtifactTooling struct {
 }
 
 // SessionTaskTools exposes the task a session was spawned into (to read, and
-// to move between statuses), the documents linked to that task, the project's
-// own documents, the other sessions working on it, the artifacts those
-// sessions published, and the project's design assets, as MCP tools.
+// to move between statuses), the other sessions working on it, the project
+// around it, publishing a dev server to the Design tab and attaching project
+// assets, as MCP tools. Documents, comments, resources and designs are not
+// here: they are files in the session's virtual shell.
 //
 // The tools take no project or ticket id: the session id travels in the context
 // (see WithSessionID) and every handler resolves the scope from it, so a session
-// can only ever reach its own task, the documents linked to it, and the
-// sessions sharing it. agents, when set, names the agents those sessions run
-// and lists them to delegate to; arch, when set, maps the task's project into
-// bounded contexts and zones; start lets a session start peers on its task;
-// artifacts lets it publish what it made to the Design tab; channel connects
-// the task's delegates to its architect and makes the architect the owner of
-// the task status (nil: no channel, every session a peer); resources lets it
-// read what the person added to the task; notes lets it read the person's
-// inbox and post to it.
-func SessionTaskTools(planningSvc ports.Planning, sessions ports.SessionRepository, agents ports.AgentLister, arch ports.ArchitectureMap, start PeerStarter, artifacts ArtifactTooling, channel ports.TaskChannel, resources ResourceTooling, notes NotificationTooling) []domain.Tool {
-	tools := append([]domain.Tool{
+// can only ever reach its own task and the sessions sharing it. agents, when
+// set, names the agents those sessions run and lists them to delegate to; arch,
+// when set, maps the task's project into bounded contexts and zones; start lets
+// a session start peers on its task; artifacts lets it publish a dev server to
+// the Design tab; channel connects the task's delegates to its architect and
+// makes the architect the owner of the task status (nil: no channel, every
+// session a peer); notes lets it read the person's inbox and post to it.
+func SessionTaskTools(planningSvc ports.Planning, sessions ports.SessionRepository, agents ports.AgentLister, arch ports.ArchitectureMap, start PeerStarter, artifacts ArtifactTooling, channel ports.TaskChannel, notes NotificationTooling) []domain.Tool {
+	tools := []domain.Tool{
 		{
 			Name: "start_task_session",
 			Description: "Start another agent session on this session's task, to hand off or parallelise part of the work. " +
@@ -164,7 +136,7 @@ func SessionTaskTools(planningSvc ports.Planning, sessions ports.SessionReposito
 		},
 		{
 			Name:        "get_task",
-			Description: "Get the task this session is working on, with the documents linked to it (titles, bytes, lines and version; no bodies).",
+			Description: "Get the task this session is working on. Its documents, comments, resources and designs are files in your virtual shell ($HARNESS_SHELL).",
 			InputSchema: schemaFromJSON(`{"type":"object","properties":{}}`),
 			Source:      "code",
 			Handler: func(ctx context.Context, args map[string]any) (any, error) {
@@ -172,92 +144,9 @@ func SessionTaskTools(planningSvc ports.Planning, sessions ports.SessionReposito
 				if err != nil {
 					return nil, err
 				}
-				return map[string]any{
-					"task":      scope.ticket,
-					"documents": summarizeDocuments(planningSvc.ListTicketDocuments(scope.ticket.ID)),
-				}, nil
+				return map[string]any{"task": scope.ticket}, nil
 			},
 		},
-		{
-			Name: "list_task_documents",
-			Description: "List the documents linked to this session's task. No bodies: each row has its bytes, lines and version, so check the size before " +
-				"read_task_document; search_documents finds a line without reading.",
-			InputSchema: schemaFromJSON(`{"type":"object","properties":{}}`),
-			Source:      "code",
-			Handler: func(ctx context.Context, args map[string]any) (any, error) {
-				scope, err := resolveTaskScope(ctx, planningSvc, sessions)
-				if err != nil {
-					return nil, err
-				}
-				return map[string]any{
-					"documents": summarizeDocuments(planningSvc.ListTicketDocuments(scope.ticket.ID)),
-				}, nil
-			},
-		},
-		{
-			Name: "read_task_document",
-			Description: "Read one document linked to this session's task. A document under 24 KiB and 400 lines comes back whole, as its content and format " +
-				"(html for pages written by task sessions, markdown for older documents). A larger one comes back as its outline and first 200 lines; " +
-				"then read the section you need, or a window with offset/limit (next_offset continues). search_documents finds a line without reading.",
-			InputSchema: schemaFromJSON(`{"type":"object","properties":{"document_id":{"type":"string","description":"Document ID"},` + readSchemaProps + `},"required":["document_id"]}`),
-			Source:      "code",
-			Handler: func(ctx context.Context, args map[string]any) (any, error) {
-				scope, err := resolveTaskScope(ctx, planningSvc, sessions)
-				if err != nil {
-					return nil, err
-				}
-				doc, err := scope.document(planningSvc, getString(args, "document_id", ""))
-				if err != nil {
-					return nil, err
-				}
-				return readDocument(doc, args)
-			},
-		},
-		{
-			Name: "create_task_document",
-			Description: "Write a new document as a complete HTML page and link it to this session's task. Use it to hand plans, findings and decisions " +
-				"to whoever picks the task up next. content must be an HTML document (<!doctype html>, <html>, <head> with <title> and <meta charset>, <body>; " +
-				"styles inline or in <style>; no external resources). Markdown is refused with DOCUMENT_NOT_HTML. It renders on the task's documents page in a sandboxed frame.",
-			InputSchema: schemaFromJSON(`{"type":"object","properties":{"title":{"type":"string","description":"Document title"},"content":{"type":"string","description":"A complete HTML document: doctype, html, head (title, meta charset), body. Markdown is refused."}},"required":["title","content"]}`),
-			Source:      "code",
-			Handler: func(ctx context.Context, args map[string]any) (any, error) {
-				scope, err := resolveTaskScope(ctx, planningSvc, sessions)
-				if err != nil {
-					return nil, err
-				}
-				content := getString(args, "content", "")
-				if !domain.IsHTMLDocument(content) {
-					return nil, notHTML()
-				}
-				doc, err := planningSvc.CreateDocument(scope.session.ProjectID, getString(args, "title", ""), content, domain.DocumentFormatHTML, domain.DocumentScopeTask)
-				if err != nil {
-					return nil, err
-				}
-				if err := planningSvc.LinkDocument(scope.ticket.ID, doc.ID); err != nil {
-					return nil, err
-				}
-				return map[string]any{"document": doc}, nil
-			},
-		},
-		{
-			Name:        "update_task_document",
-			Description: "Revise a document linked to this session's task. Omitted fields keep their current value. New content must be a complete HTML document (Markdown is refused with DOCUMENT_NOT_HTML); it makes an older markdown document an html one. To change part of a page, use edit_task_document instead of resending it.",
-			InputSchema: schemaFromJSON(`{"type":"object","properties":{"document_id":{"type":"string","description":"Document ID"},"title":{"type":"string","description":"New title; omit to keep the current one"},"content":{"type":"string","description":"New content as a complete HTML document; omit to keep the current one"}},"required":["document_id"]}`),
-			Source:      "code",
-			Handler: func(ctx context.Context, args map[string]any) (any, error) {
-				scope, err := resolveTaskScope(ctx, planningSvc, sessions)
-				if err != nil {
-					return nil, err
-				}
-				current, err := scope.document(planningSvc, getString(args, "document_id", ""))
-				if err != nil {
-					return nil, err
-				}
-				return reviseAsHTML(planningSvc, current, args)
-			},
-		},
-		editTool("edit_task_document", "a document linked to this session's task", planningSvc, sessions,
-			func(scope *taskScope, id string) (*domain.Document, error) { return scope.document(planningSvc, id) }),
 		{
 			Name: "update_task_status",
 			Description: "Set the status of this session's task so the board stays true as the work moves. Move it to in_progress " +
@@ -295,10 +184,9 @@ func SessionTaskTools(planningSvc ports.Planning, sessions ports.SessionReposito
 				return map[string]any{"task": tk}, nil
 			},
 		},
-	}, sessionDocumentTools(planningSvc, sessions, artifacts)...)
+	}
 	tools = append(tools, sessionChannelTools(planningSvc, sessions, channel)...)
 	tools = append(tools, sessionProjectTools(planningSvc, sessions, agents, arch, start.Repositories)...)
-	tools = append(tools, sessionResourceTools(planningSvc, sessions, agents, resources)...)
 	tools = append(tools, sessionNotificationTools(planningSvc, sessions, notes)...)
 	return codedTools(append(tools, sessionArtifactTools(planningSvc, sessions, artifacts)...))
 }
@@ -424,54 +312,4 @@ func resolveTaskScope(ctx context.Context, planningSvc ports.Planning, sessions 
 		return nil, err
 	}
 	return &taskScope{session: sess, ticket: tk}, nil
-}
-
-// document returns the document only when it is linked to the scoped task, so a
-// session cannot read or edit a document belonging to another task.
-func (s *taskScope) document(planningSvc ports.Planning, documentID string) (*domain.Document, error) {
-	if documentID == "" {
-		return nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "document_id is required"}
-	}
-	for _, d := range planningSvc.ListTicketDocuments(s.ticket.ID) {
-		if d.ID == documentID {
-			return d, nil
-		}
-	}
-	return nil, &domain.StructuredError{Code: "DOCUMENT_NOT_ON_TASK", Message: "document is not linked to this session's task"}
-}
-
-// documentSummary is a document without its body, for listings that would
-// otherwise flood the agent's context with pages. Bytes and Lines say how
-// big it is before the agent opens it; Version names its content.
-type documentSummary struct {
-	ID        string                `json:"id"`
-	Title     string                `json:"title"`
-	Format    domain.DocumentFormat `json:"format"`
-	Scope     domain.DocumentScope  `json:"scope"`
-	Bytes     int                   `json:"bytes"`
-	Lines     int                   `json:"lines"`
-	Version   string                `json:"version"`
-	UpdatedAt time.Time             `json:"updated_at"`
-}
-
-func summarizeDocuments(docs []*domain.Document) []documentSummary {
-	out := make([]documentSummary, 0, len(docs))
-	for _, d := range docs {
-		out = append(out, summarize(d, newTextView(d.Content, documentKind(d))))
-	}
-	return out
-}
-
-// summarize is d without its content, sized by its text view tv.
-func summarize(d *domain.Document, tv *textView) documentSummary {
-	return documentSummary{ID: d.ID, Title: d.Title, Format: d.Format, Scope: d.Scope,
-		Bytes: len(d.Content), Lines: len(tv.lines), Version: domain.DocumentVersion(d.Content), UpdatedAt: d.UpdatedAt}
-}
-
-// notHTML is the refusal for a task document body that is not an HTML page.
-// It says what to send instead, so an agent learns the rule on first use.
-func notHTML() error {
-	return &domain.StructuredError{Code: "DOCUMENT_NOT_HTML", Message: "content must be a complete HTML document: start with <!doctype html>, " +
-		"then <html> with a <head> (title, meta charset) and a <body>. Markdown and HTML fragments are refused; " +
-		"rewrite the body as an HTML page and send it again."}
 }

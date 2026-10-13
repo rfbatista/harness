@@ -93,7 +93,7 @@ func ProjectDesignPage(v ProjectDesignView) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = components.Empty("No design asset has been moved to this project yet", "Project assets are what other tasks reuse: a logo, a palette, a component, a reference screen. Move one here with \"Move to project\" on a session's Design tab, or let an agent do it with move_artifact_to_project; its task keeps it too.").Render(ctx, templ_7745c5c3_Buffer)
+			templ_7745c5c3_Err = components.Empty("No design asset has been moved to this project yet", "Project assets are what other tasks reuse: a logo, a palette, a component, a reference screen. Move one here with \"Move to project\" on a session's Design tab, or let an agent do it by moving the file to project/designs in its virtual shell; its task keeps it too.").Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

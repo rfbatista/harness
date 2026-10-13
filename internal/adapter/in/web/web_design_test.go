@@ -31,7 +31,7 @@ func TestProjectDesignPageSeedsTheProjectAndItsTasks(t *testing.T) {
 	for _, want := range []string{
 		`x-data="sessionsDesignLibrary"`, `data-seed="design-library-seed"`,
 		`href="/projects/p1"`, `<h1>Design assets</h1>`, `<title>Design assets · coding_pool`,
-		`sandbox="allow-scripts"`, "move_artifact_to_project",
+		`sandbox="allow-scripts"`, "project/designs",
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("page lacks %s", want)

@@ -1,6 +1,7 @@
 package tooling
 
 import (
+	"context"
 	"strings"
 	"testing"
 
@@ -11,24 +12,27 @@ import (
 func (f *artifactToolsFixture) asset(t *testing.T, path string) string {
 	t.Helper()
 	id := f.publish(t, "sess-1", f.root, path)
-	f.moved(t, "sess-1", "move_artifact_to_project", id)
+	if _, err := f.art.SetArtifactScope(context.Background(), id, domain.ArtifactScopeProject); err != nil {
+		t.Fatal(err)
+	}
 	return id
 }
 
-func (f *artifactToolsFixture) taskArtifacts(t *testing.T, session string) map[string]taskArtifact {
+// attachedTo is the tasks the asset is attached to, as the service lists
+// them on the producing task.
+func (f *artifactToolsFixture) attachedTo(t *testing.T, id string) []string {
 	t.Helper()
-	out, err := f.call(t, session, "list_task_artifacts", nil)
+	list, err := f.art.ListTaskArtifacts(context.Background(), f.ticketID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	rows := map[string]taskArtifact{}
-	for _, a := range out["artifacts"].([]taskArtifact) {
-		if a.AttachedTicketIDs == nil {
-			t.Fatalf("%s: attached_ticket_ids is nil", a.ArtifactID)
+	for _, a := range list {
+		if a.ID == id {
+			return a.AttachedTicketIDs
 		}
-		rows[a.ArtifactID] = a
 	}
-	return rows
+	t.Fatalf("%s is not listed on its task", id)
+	return nil
 }
 
 // A session attaches a project asset of another task to its own task: its
@@ -46,15 +50,8 @@ func TestAttachArtifactToTask_ShowsOnBothTasks(t *testing.T) {
 	if got.ArtifactID != logo || strings.Join(got.AttachedTicketIDs, ",") != f.otherTicketID || got.TaskID != f.ticketID || got.TaskTitle != "Design the card" {
 		t.Fatalf("attached = %+v", got)
 	}
-	if row, ok := f.taskArtifacts(t, "sess-3")[logo]; !ok || row.Relation != "attached" {
-		t.Fatalf("the attaching task lists %+v", row)
-	}
-	row := f.taskArtifacts(t, "sess-1")[logo]
-	if row.Relation != "produced" || strings.Join(row.AttachedTicketIDs, ",") != f.otherTicketID {
-		t.Fatalf("the producing task lists %+v", row)
-	}
-	if list := f.projectAssets(t, "sess-2"); len(list) != 1 || strings.Join(list[0].AttachedTicketIDs, ",") != f.otherTicketID {
-		t.Fatalf("project assets = %+v", list)
+	if got := f.attachedTo(t, logo); strings.Join(got, ",") != f.otherTicketID {
+		t.Fatalf("attached to %v", got)
 	}
 
 	out, err = f.call(t, "sess-3", "detach_artifact_from_task", map[string]any{"artifact_id": logo})
@@ -64,25 +61,8 @@ func TestAttachArtifactToTask_ShowsOnBothTasks(t *testing.T) {
 	if got := out["artifact"].(projectArtifact); got.AttachedTicketIDs == nil || len(got.AttachedTicketIDs) != 0 {
 		t.Fatalf("detached = %+v", got)
 	}
-	if _, ok := f.taskArtifacts(t, "sess-3")[logo]; ok {
-		t.Fatal("the detached task still lists the asset")
-	}
-}
-
-// An attached asset is not this task's to move: the move tools keep acting
-// only on what the task produced.
-func TestAttachedArtifact_IsNotTheTasksToMove(t *testing.T) {
-	f := newArtifactToolsFixture(t)
-	logo := f.asset(t, "logo.html")
-	if _, err := f.call(t, "sess-3", "attach_artifact_to_task", map[string]any{"artifact_id": logo}); err != nil {
-		t.Fatal(err)
-	}
-	for _, name := range []string{"move_artifact_to_task", "move_artifact_to_project"} {
-		_, err := f.call(t, "sess-3", name, map[string]any{"artifact_id": logo})
-		wantCode(t, err, "ARTIFACT_NOT_ON_TASK")
-	}
-	if got := f.taskScopeOf(t, "sess-1", logo); got != domain.ArtifactScopeProject {
-		t.Fatalf("a refused move changed the asset: %q", got)
+	if got := f.attachedTo(t, logo); len(got) != 0 {
+		t.Fatalf("still attached to %v", got)
 	}
 }
 
