@@ -370,7 +370,7 @@ func registerTaskChannel(lc fx.Lifecycle, svc *taskchannel.Service) {
 // database gets a temporary one.
 func newArtifactsService(cfg Config, repo ports.ArtifactRepository, sessions ports.SessionRepository, orch *orchestration.Service, plan *planning.Service, cat catalog.Catalog) (*artifacts.Service, error) {
 	svc := artifacts.NewService(repo, sessions, orch)
-	svc.Tickets, svc.Feed = plan, orch
+	svc.Tickets, svc.Feed, svc.Events = plan, orch, cat.Bus
 	orch.Artifacts = svc // a session's brief lists its task's attached assets
 	dir, err := dataDir(cfg, "artifacts")
 	if err != nil {
@@ -387,9 +387,25 @@ func newVirtualShells(plan *planning.Service, art *artifacts.Service) *vshell.Se
 	return vshell.New(vshell.Sources{Tickets: plan, Documents: plan, Comments: plan, Resources: plan, Artifacts: art})
 }
 
-// bindVirtualShells gives every session with a task its virtual shell.
-func bindVirtualShells(orch *orchestration.Service, shells *vshell.Service) {
+// bindVirtualShells gives every session with a task its virtual shell, and
+// has the shells hear every change they may have to show: documents' and
+// artifacts' on the bus, comments' and resources' as planning puts them on
+// the project feed.
+func bindVirtualShells(orch *orchestration.Service, shells *vshell.Service, plan *planning.Service, cat catalog.Catalog) {
 	orch.Shells = shells
+	shells.Subscribe(cat.Bus)
+	plan.Feed = changeSinks{plan.Feed, shells}
+}
+
+// changeSinks puts each change on every sink in turn.
+type changeSinks []ports.ProjectChangeSink
+
+func (s changeSinks) AnnounceChange(c ports.ProjectChange) {
+	for _, sink := range s {
+		if sink != nil {
+			sink.AnnounceChange(c)
+		}
+	}
 }
 
 // newAppsService runs applications from session worktrees on the same

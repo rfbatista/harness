@@ -35,7 +35,8 @@ type Service struct {
 	// StatusHistory records every status move, with who made it and why. Nil
 	// records nothing.
 	StatusHistory ports.TaskStatusChangeRepository
-	// Events announces TicketStatusChanged. Nil announces nothing.
+	// Events announces TicketStatusChanged, a person's additions to a task,
+	// and every document change (DocumentChanged). Nil announces nothing.
 	Events ports.EventPublisher
 	// Decorator fills a ticket's derived fields (its architect, its pending
 	// reviews) before it is returned or announced. Nil leaves them empty.
@@ -259,7 +260,8 @@ func (s *Service) CreateDocument(projectID, title, content string, format domain
 	if s.projects.Get(projectID) == nil {
 		return nil, &domain.StructuredError{Code: "PROJECT_NOT_FOUND", Message: "project not found"}
 	}
-	return s.documents.Create(projectID, title, content, format, scope)
+	d, err := s.documents.Create(projectID, title, content, format, scope)
+	return s.documentChanged(d, err, "", domain.DocumentCreated)
 }
 
 func (s *Service) GetDocument(id string) *domain.Document { return s.documents.Get(id) }
@@ -284,7 +286,8 @@ func (s *Service) SetDocumentScope(id string, scope domain.DocumentScope) (*doma
 	if existing.Scope == scope {
 		return existing, nil
 	}
-	return s.documents.SetScope(id, scope)
+	d, err := s.documents.SetScope(id, scope)
+	return s.documentChanged(d, err, "", domain.DocumentScopeChanged)
 }
 
 // UpdateDocument replaces title and content. An empty format keeps the
@@ -296,7 +299,8 @@ func (s *Service) UpdateDocument(id, title, content string, format domain.Docume
 	if format != "" && !format.Valid() {
 		return nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "format must be markdown, html or text"}
 	}
-	return s.documents.Update(id, title, content, format)
+	d, err := s.documents.Update(id, title, content, format)
+	return s.documentChanged(d, err, "", domain.DocumentUpdated)
 }
 
 // EditDocument makes an exact string-replace edit to an HTML document's
@@ -350,7 +354,7 @@ func (s *Service) editOnce(id, old, new string, replaceAll bool, expectedVersion
 	if errs.HasCode(err, "DOCUMENT_CHANGED") {
 		return nil, &domain.StructuredError{Code: "DOCUMENT_CHANGED", Message: "the document changed while it was being edited; read it again"}
 	}
-	return edited, err
+	return s.documentChanged(edited, err, "", domain.DocumentUpdated)
 }
 
 // noMatchMessage says old_string was not found, with the stored lines that
@@ -385,7 +389,23 @@ func commonPrefixRunes(a, b string) int {
 	return n
 }
 
-func (s *Service) DeleteDocument(id string) error { return s.documents.Delete(id) }
+func (s *Service) DeleteDocument(id string) error {
+	last := s.documents.Get(id)
+	if err := s.documents.Delete(id); err != nil {
+		return err
+	}
+	_, err := s.documentChanged(last, nil, "", domain.DocumentDeleted)
+	return err
+}
+
+// documentChanged raises DocumentChanged for d once it is stored (err nil),
+// and answers d and err as they came.
+func (s *Service) documentChanged(d *domain.Document, err error, ticketID string, change domain.DocumentChange) (*domain.Document, error) {
+	if err == nil && d != nil {
+		s.raise(context.Background(), domain.DocumentChanged{DocumentID: d.ID, ProjectID: d.ProjectID, TicketID: ticketID, Change: change})
+	}
+	return d, err
+}
 
 // --- Links ---
 
@@ -401,11 +421,15 @@ func (s *Service) LinkDocument(ticketID, documentID string) error {
 	if tk.ProjectID != doc.ProjectID {
 		return &domain.StructuredError{Code: "CROSS_PROJECT_ACCESS", Message: "ticket and document belong to different projects"}
 	}
-	return s.documents.Link(ticketID, documentID)
+	err := s.documents.Link(ticketID, documentID)
+	_, err = s.documentChanged(doc, err, ticketID, domain.DocumentLinked)
+	return err
 }
 
 func (s *Service) UnlinkDocument(ticketID, documentID string) error {
-	return s.documents.Unlink(ticketID, documentID)
+	err := s.documents.Unlink(ticketID, documentID)
+	_, err = s.documentChanged(s.documents.Get(documentID), err, ticketID, domain.DocumentUnlinked)
+	return err
 }
 
 func (s *Service) ListTicketDocuments(ticketID string) []*domain.Document {

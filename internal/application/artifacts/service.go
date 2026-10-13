@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"path"
 	"path/filepath"
@@ -37,6 +38,9 @@ type Service struct {
 	// Feed announces project-asset changes on the project feed. Nil: they
 	// are stored but not announced.
 	Feed ports.ProjectChangeSink
+	// Events announces every stored change of an artifact (ArtifactChanged),
+	// task scope included. Nil announces nothing.
+	Events ports.EventPublisher
 
 	// MaxSizeBytes caps a published file, and a project artifact's copy as a
 	// whole; zero means DefaultMaxSizeBytes.
@@ -64,9 +68,14 @@ func (s *Service) Subscribe(sub ports.EventSubscriber) {
 	ports.On(sub, func(_ context.Context, ev domain.SessionDeleted) error {
 		s.snapMu.Lock()
 		defer s.snapMu.Unlock()
+		had := map[string]*domain.Artifact{}
+		for _, a := range s.artifacts.List(ports.ArtifactFilter{SessionID: ev.SessionID}) {
+			had[a.ID] = a
+		}
 		ids, err := s.artifacts.DeleteTaskScopedBySession(ev.SessionID)
 		for _, id := range ids {
 			s.dropSnapshot(id)
+			s.changed(had[id])
 		}
 		return err
 	})
@@ -78,10 +87,23 @@ func (s *Service) Subscribe(sub ports.EventSubscriber) {
 		for _, id := range ids {
 			if a := s.artifacts.Get(id); a != nil {
 				s.announceFeed(ports.ArtifactUpdated(a))
+				s.changed(a)
 			}
 		}
 		return err
 	})
+}
+
+// changed raises ArtifactChanged for a once its change is stored. Callers
+// hold snapMu, so the changes of an artifact are raised in the order they
+// were applied.
+func (s *Service) changed(a *domain.Artifact) {
+	if s.Events == nil || a == nil {
+		return
+	}
+	if err := s.Events.Publish(context.Background(), domain.ArtifactChanged{ArtifactID: a.ID, ProjectID: a.ProjectID}); err != nil {
+		slog.Warn("announce an artifact change", "artifact", a.ID, "err", err)
+	}
 }
 
 // announceFeed puts a project-asset change on the project feed. Callers hold
@@ -207,10 +229,15 @@ func (s *Service) save(a *domain.Artifact, worktree string) (*domain.Artifact, e
 		if saved != nil && saved.Scope == domain.ArtifactScopeProject {
 			s.announceFeed(ports.ArtifactUpdated(saved))
 		}
+		s.changed(saved)
 		return saved, nil
 	}
 	a.Revision = 1
-	return s.artifacts.Create(a)
+	created, err := s.artifacts.Create(a)
+	if err == nil {
+		s.changed(created)
+	}
+	return created, err
 }
 
 func (s *Service) Unpublish(_ context.Context, sessionID, artifactID string) error {
@@ -226,7 +253,11 @@ func (s *Service) Unpublish(_ context.Context, sessionID, artifactID string) err
 	if a.Scope == domain.ArtifactScopeProject {
 		return &domain.StructuredError{Code: "ARTIFACT_IN_PROJECT", Message: "artifact " + artifactID + " is kept by the project; move it back to task first, or a person deletes it in the UI"}
 	}
-	return s.delete(artifactID)
+	if err := s.delete(artifactID); err != nil {
+		return err
+	}
+	s.changed(a)
+	return nil
 }
 
 // delete removes the record, then the harness's copy if it has one. The
@@ -275,6 +306,7 @@ func (s *Service) SetArtifactScope(_ context.Context, artifactID string, scope d
 	}
 	// Either way the project library and attached tasks' pages change.
 	s.announceFeed(ports.ArtifactUpdated(saved))
+	s.changed(saved)
 	return saved, nil
 }
 
@@ -363,6 +395,7 @@ func (s *Service) DeleteArtifact(_ context.Context, id string) error {
 	if last != nil && last.Scope == domain.ArtifactScopeProject {
 		s.announceFeed(ports.ArtifactRemoved(last))
 	}
+	s.changed(last)
 	return nil
 }
 
@@ -410,6 +443,7 @@ func (s *Service) link(ctx context.Context, artifactID, ticketID string,
 		return nil, notFound("artifact not found")
 	}
 	s.announceFeed(ports.ArtifactUpdated(saved))
+	s.changed(saved)
 	return saved, nil
 }
 
