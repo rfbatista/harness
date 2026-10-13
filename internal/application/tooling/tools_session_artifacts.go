@@ -59,7 +59,8 @@ func sessionArtifactTools(planningSvc ports.Planning, sessions ports.SessionRepo
 				"Design tab (pages, images, videos, files and dev-server URLs), each with its scope (task, or project once it is " +
 				"kept as a project design asset), and the project assets attached to this task. relation says which: produced " +
 				"or attached; attached_ticket_ids names the other tasks a project asset is attached to. Use it to see what " +
-				"earlier sessions produced, and what was attached for you, before making more.",
+				"earlier sessions produced, and what was attached for you, before making more. bytes is each one's size; " +
+				"read_artifact reads a text asset's content in parts.",
 			InputSchema: schemaFromJSON(`{"type":"object","properties":{}}`),
 			Source:      "code",
 			Handler: func(ctx context.Context, args map[string]any) (any, error) {
@@ -81,12 +82,13 @@ func sessionArtifactTools(planningSvc ports.Planning, sessions ports.SessionRepo
 						relation = "attached"
 					}
 					out = append(out, taskArtifact{ArtifactID: a.ID, SessionID: a.SessionID, Kind: a.Kind, Title: a.Title,
-						Path: a.Path, URL: a.URL, Scope: scopeOf(a), Revision: a.Revision, UpdatedAt: a.UpdatedAt,
+						Path: a.Path, URL: a.URL, Scope: scopeOf(a), Revision: a.Revision, Bytes: a.SizeBytes, UpdatedAt: a.UpdatedAt,
 						Relation: relation, AttachedTicketIDs: attachedIDs(a)})
 				}
 				return map[string]any{"count": len(out), "artifacts": out}, nil
 			},
 		},
+		readArtifactTool(planningSvc, sessions, art),
 		{
 			Name: "unpublish_artifact",
 			Description: "Remove one of your artifacts from the Design tab. The record goes; the file stays. Only artifacts you published can be removed. " +
@@ -142,6 +144,7 @@ type taskArtifact struct {
 	URL        string               `json:"url,omitempty"`
 	Scope      domain.ArtifactScope `json:"scope"`
 	Revision   int                  `json:"revision"`
+	Bytes      int64                `json:"bytes"`
 	UpdatedAt  time.Time            `json:"updated_at"`
 	// Relation is produced (published on this task) or attached (a project
 	// asset of another task, attached to this one).
@@ -157,13 +160,36 @@ func attachedIDs(a *domain.Artifact) []string {
 	return a.AttachedTicketIDs
 }
 
-// codedMessage puts an artifact error's code in front of its message. The
-// MCP bridge hands the agent the message alone, and these errors are coded
-// so the agent can correct itself (ARTIFACT_PATH_OUTSIDE_WORKTREE, …).
+// coded is a refusal whose message starts with its code. The MCP bridge
+// hands the agent the message alone, so the code has to be in it.
+func coded(code, message string) error {
+	return &domain.StructuredError{Code: code, Message: code + ": " + message}
+}
+
+// codedMessage puts a session tool's refusal code in front of its message,
+// unless the message starts with it already, so the agent can correct itself
+// (DOCUMENT_NOT_ON_TASK, ARTIFACT_PATH_OUTSIDE_WORKTREE, …). Errors without a
+// code, and coded errors that carry more than a code (DetailedError), pass
+// through unchanged.
 func codedMessage(err error) error {
-	var se *domain.StructuredError
-	if errors.As(err, &se) && strings.HasPrefix(se.Code, "ARTIFACT_") {
-		return &domain.StructuredError{Code: se.Code, Message: se.Code + ": " + se.Message}
+	se, ok := err.(*domain.StructuredError)
+	if !ok || se.Code == "" || strings.HasPrefix(se.Message, se.Code) {
+		return err
 	}
-	return err
+	return &domain.StructuredError{Code: se.Code, Message: se.Code + ": " + se.Message}
+}
+
+// codedTools makes every tool's refusals coded in their message.
+func codedTools(tools []domain.Tool) []domain.Tool {
+	for i := range tools {
+		h := tools[i].Handler
+		tools[i].Handler = func(ctx context.Context, args map[string]any) (any, error) {
+			out, err := h(ctx, args)
+			if err != nil {
+				return nil, codedMessage(err)
+			}
+			return out, nil
+		}
+	}
+	return tools
 }

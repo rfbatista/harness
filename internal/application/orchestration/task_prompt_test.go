@@ -2,6 +2,7 @@ package orchestration
 
 import (
 	"os"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -252,6 +253,44 @@ func TestTaskBrief_NamesTheNotificationTools(t *testing.T) {
 			if !strings.Contains(got, want) {
 				t.Errorf("%q brief lacks %q", role, want)
 			}
+		}
+	}
+}
+
+// Every task tool a prompt names exists: the brief for each role and the
+// mode skills never point an agent at a tool the server does not serve.
+func TestPrompts_NameOnlyRealTaskTools(t *testing.T) {
+	texts := map[string]string{}
+	for _, role := range []domain.SessionRole{domain.RolePeer, domain.RoleDelegate, domain.RoleArchitect} {
+		texts["brief/"+string(role)] = taskBrief(&domain.Ticket{ID: "tk1", Title: "Ship the thing"}, role, taskCounts{})
+	}
+	for _, skill := range []string{"task-architecture", "design-artifacts"} {
+		b, err := os.ReadFile("modes/" + skill + "/SKILL.md")
+		if err != nil {
+			t.Fatal(err)
+		}
+		texts[skill] = string(b)
+	}
+	named := regexp.MustCompile(`mcp__task__([a-z_]+)`)
+	for where, text := range texts {
+		for _, m := range named.FindAllStringSubmatch(text, -1) {
+			if !slices.Contains(tooling.SessionTaskToolNames, m[1]) {
+				t.Errorf("%s names mcp__task__%s, which is not a task tool", where, m[1])
+			}
+		}
+	}
+}
+
+// The brief tells every session to read large documents in parts and to
+// edit pages in parts.
+func TestTaskBrief_ReadsAndEditsDocumentsInParts(t *testing.T) {
+	got := taskBrief(&domain.Ticket{ID: "tk1", Title: "Ship the thing"}, domain.RolePeer, taskCounts{})
+	for _, want := range []string{
+		"Check bytes and lines in the listing first", "search_documents", "offset and limit, never the whole page",
+		"edit the part with edit_*_document rather than rewriting it", "\n- mcp__task__read_artifact — ",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("brief lacks %q", want)
 		}
 	}
 }

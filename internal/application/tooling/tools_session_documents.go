@@ -11,7 +11,7 @@ import (
 // ones moved to project scope, which every session of the project may read
 // and revise, and the moves themselves, which a session may only make on
 // documents linked to its own task. Deletion stays with people.
-func sessionDocumentTools(planningSvc ports.Planning, sessions ports.SessionRepository) []domain.Tool {
+func sessionDocumentTools(planningSvc ports.Planning, sessions ports.SessionRepository, art ArtifactTooling) []domain.Tool {
 	byID := schemaFromJSON(`{"type":"object","properties":{"document_id":{"type":"string","description":"Document ID"}},"required":["document_id"]}`)
 	move := func(name, description string, to domain.DocumentScope) domain.Tool {
 		return domain.Tool{
@@ -41,7 +41,8 @@ func sessionDocumentTools(planningSvc ports.Planning, sessions ports.SessionRepo
 		{
 			Name: "list_project_documents",
 			Description: "List the project documents of this session's project: the ones moved to project scope, from any task or none — " +
-				"architecture, conventions, decisions, specs and contracts that outlive one task. Titles only — use read_project_document for the body.",
+				"architecture, conventions, decisions, specs and contracts that outlive one task. No bodies: each row has its bytes, lines and version, " +
+				"so check the size before read_project_document, and search_documents finds a line without reading.",
 			InputSchema: schemaFromJSON(`{"type":"object","properties":{}}`),
 			Source:      "code",
 			Handler: func(ctx context.Context, args map[string]any) (any, error) {
@@ -55,9 +56,11 @@ func sessionDocumentTools(planningSvc ports.Planning, sessions ports.SessionRepo
 			},
 		},
 		{
-			Name:        "read_project_document",
-			Description: "Read one project document of this session's project, including its content and format (html for pages written by sessions, markdown for older documents or ones people wrote).",
-			InputSchema: byID,
+			Name: "read_project_document",
+			Description: "Read one project document of this session's project. A document under 24 KiB and 400 lines comes back whole, as its content and format " +
+				"(html for pages written by sessions, markdown for older documents or ones people wrote). A larger one comes back as its outline and first 200 lines; " +
+				"then read the section you need, or a window with offset/limit (next_offset continues). search_documents finds a line without reading.",
+			InputSchema: schemaFromJSON(`{"type":"object","properties":{"document_id":{"type":"string","description":"Document ID"},` + readSchemaProps + `},"required":["document_id"]}`),
 			Source:      "code",
 			Handler: func(ctx context.Context, args map[string]any) (any, error) {
 				scope, err := resolveTaskScope(ctx, planningSvc, sessions)
@@ -68,13 +71,14 @@ func sessionDocumentTools(planningSvc ports.Planning, sessions ports.SessionRepo
 				if err != nil {
 					return nil, err
 				}
-				return map[string]any{"document": doc}, nil
+				return readDocument(doc, args)
 			},
 		},
 		{
 			Name: "update_project_document",
 			Description: "Revise a project document of this session's project. Omitted fields keep their current value. New content must be a complete HTML document " +
-				"(Markdown is refused with DOCUMENT_NOT_HTML and nothing is stored); it makes an older markdown document an html one.",
+				"(Markdown is refused with DOCUMENT_NOT_HTML and nothing is stored); it makes an older markdown document an html one. " +
+				"To change part of a page, use edit_project_document instead of resending it.",
 			InputSchema: schemaFromJSON(`{"type":"object","properties":{"document_id":{"type":"string","description":"Document ID"},"title":{"type":"string","description":"New title; omit to keep the current one"},"content":{"type":"string","description":"New content as a complete HTML document; omit to keep the current one"}},"required":["document_id"]}`),
 			Source:      "code",
 			Handler: func(ctx context.Context, args map[string]any) (any, error) {
@@ -89,6 +93,11 @@ func sessionDocumentTools(planningSvc ports.Planning, sessions ports.SessionRepo
 				return reviseAsHTML(planningSvc, current, args)
 			},
 		},
+		editTool("edit_project_document", "a project document of this session's project", planningSvc, sessions,
+			func(scope *taskScope, id string) (*domain.Document, error) {
+				return scope.projectDocument(planningSvc, id)
+			}),
+		searchDocumentsTool(planningSvc, sessions, art),
 		move("move_document_to_project",
 			"Make one of this task's documents a project document: every session of the project can then read and revise it, and it shows on the project's documents page. "+
 				"Do it for knowledge that outlives this task (architecture, conventions, decisions, specs and contracts other tasks build on). The document must be linked to this task (DOCUMENT_NOT_ON_TASK otherwise); its link to the task stays. Idempotent.",

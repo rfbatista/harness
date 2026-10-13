@@ -3,6 +3,7 @@ package tooling
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -18,7 +19,15 @@ func (f *taskToolsFixture) doc(t *testing.T, tool string, args map[string]any) *
 	if err != nil {
 		t.Fatal(err)
 	}
-	return out.(map[string]any)["document"].(*domain.Document)
+	switch d := out.(map[string]any)["document"].(type) {
+	case *domain.Document:
+		return d
+	case *documentWhole: // a read under the guard: the document plus its size
+		return d.Document
+	default:
+		t.Fatalf("%s answered %T", tool, d)
+		return nil
+	}
 }
 
 // summaries calls a tool that answers {documents} as the fixture's session.
@@ -166,5 +175,48 @@ func TestSessionDocumentTools_SummariesCarryScope(t *testing.T) {
 	b, _ := json.Marshal(list[0])
 	if list[0].ID != created.ID || !strings.Contains(string(b), `"scope":"task"`) {
 		t.Fatalf("summary lacks the scope: %s", b)
+	}
+}
+
+// Every document listing says how big each document is and names its
+// content, so an agent knows a page is large before it opens it.
+func TestSessionDocumentTools_ListingsCarrySizeAndVersion(t *testing.T) {
+	f := newTaskToolsFixture(t)
+	page := htmlPage("Plan", "<h1>Plan</h1><p>one</p><ul><li>a</li><li>b</li></ul>")
+	created := f.doc(t, "create_task_document", map[string]any{"title": "Plan", "content": page})
+	md, _ := f.plan.CreateDocument(f.projectID, "Notes", "# Notes\nline\n", domain.DocumentFormatMarkdown, domain.DocumentScopeProject)
+
+	for _, tool := range []string{"list_task_documents", "get_task"} {
+		list := f.summaries(t, tool, nil)
+		if len(list) != 1 || list[0].ID != created.ID {
+			t.Fatalf("%s: %+v", tool, list)
+		}
+		if got := list[0]; got.Bytes != len(page) || got.Lines != 4 || got.Version != domain.DocumentVersion(page) {
+			t.Fatalf("%s row: bytes %d lines %d version %q", tool, got.Bytes, got.Lines, got.Version)
+		}
+		b, _ := json.Marshal(list[0])
+		for _, key := range []string{`"bytes":`, `"lines":4`, `"version":"`} {
+			if !strings.Contains(string(b), key) {
+				t.Fatalf("%s row lacks %s: %s", tool, key, b)
+			}
+		}
+	}
+	list := f.summaries(t, "list_project_documents", nil)
+	if len(list) != 1 || list[0].ID != md.ID || list[0].Lines != 2 || list[0].Bytes != len("# Notes\nline\n") {
+		t.Fatalf("project listing: %+v", list)
+	}
+}
+
+// Scope refusals carry their code in the message: agents over MCP see only that.
+func TestSessionDocumentTools_RefusalsAreCoded(t *testing.T) {
+	f := newTaskToolsFixture(t)
+	for tool, code := range map[string]string{"read_task_document": "DOCUMENT_NOT_ON_TASK", "read_project_document": "DOCUMENT_NOT_IN_PROJECT"} {
+		_, err := f.call(t, f.sessionID, tool, map[string]any{"document_id": "missing"})
+		wantCode(t, err, code)
+		var se *domain.StructuredError
+		_ = errors.As(err, &se)
+		if !strings.HasPrefix(se.Message, code+": ") || strings.Count(se.Message, code) != 1 {
+			t.Fatalf("%s: message %q", tool, se.Message)
+		}
 	}
 }

@@ -5,6 +5,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/rfbatista/harnesskit/errs"
+
 	"operators-mcp/internal/domain"
 )
 
@@ -290,5 +292,32 @@ func TestDocumentRepo_LegacyRowsReadAsTask(t *testing.T) {
 	}
 	if got := docs.ListByProject("p1", domain.DocumentScopeProject); len(got) != 0 {
 		t.Fatalf("a legacy row is listed as a project document: %+v", got)
+	}
+}
+
+// UpdateIfContent writes only while the stored content is the one the caller
+// read: a write that landed since is never overwritten.
+func TestDocumentRepo_UpdateIfContentIsACompareAndSet(t *testing.T) {
+	db, err := Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	docs := NewDocumentRepository(db)
+	d, err := docs.Create("p1", "Plan", "v1", domain.DocumentFormatHTML, domain.DocumentScopeTask)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := docs.UpdateIfContent(d.ID, "v1", "Plan 2", "v2", "")
+	if err != nil || got.Content != "v2" || got.Title != "Plan 2" || got.Format != domain.DocumentFormatHTML {
+		t.Fatalf("match: %+v, %v", got, err)
+	}
+	if _, err := docs.UpdateIfContent(d.ID, "v1", "Plan 3", "v3", ""); errs.Code(err) != "DOCUMENT_CHANGED" {
+		t.Fatalf("stale content: %v", err)
+	}
+	if cur := docs.Get(d.ID); cur.Content != "v2" || cur.Title != "Plan 2" {
+		t.Fatalf("a refused write changed the row: %+v", cur)
+	}
+	if _, err := docs.UpdateIfContent("missing", "v1", "x", "y", ""); errs.Code(err) != "DOCUMENT_NOT_FOUND" {
+		t.Fatalf("missing: %v", err)
 	}
 }

@@ -9,10 +9,17 @@ Documents are how a task carries context between sessions. Read what earlier
 sessions left, and write down what the next one will need:
 
 - mcp__task__get_task — this task and the documents linked to it
-- mcp__task__list_task_documents — the linked documents, titles only
-- mcp__task__read_task_document — one document, with its content and format
+- mcp__task__list_task_documents — the linked documents: titles, size in bytes and lines, version
+- mcp__task__read_task_document — one document: whole when small, otherwise its outline and first lines
+- mcp__task__search_documents — find a line in this task's or the project's documents without reading them whole
 - mcp__task__create_task_document — a new document, linked to this task for you
 - mcp__task__update_task_document — revise one of them
+- mcp__task__edit_task_document — change part of one by exact string replace, without sending the whole page
+
+Documents can be large. Check bytes and lines in the listing first; find what
+you need with search_documents or the outline a large read returns; then read
+that section, or a window with offset and limit, never the whole page. To
+change a page, edit the part with edit_*_document rather than rewriting it.
 
 A document you write is a complete HTML document, not Markdown.
 Markdown is refused with DOCUMENT_NOT_HTML and nothing is stored; rewrite it
@@ -39,9 +46,10 @@ them, and they show on the project's documents page. Move a document there
 once it says something the next task needs, not just this one; its link to
 this task stays. Only documents linked to this task can be moved:
 
-- mcp__task__list_project_documents — the project's documents, titles only
-- mcp__task__read_project_document — one project document, with its content and format
+- mcp__task__list_project_documents — the project's documents: titles, size and version
+- mcp__task__read_project_document — one project document, read like a task document: whole when small, otherwise in parts
 - mcp__task__update_project_document — revise a project document; new content must be a complete HTML page
+- mcp__task__edit_project_document — change part of a project document by exact string replace
 - mcp__task__move_document_to_project — make one of this task's documents a project document
 - mcp__task__move_document_to_task — move one of them back to this task's scope
 
@@ -67,6 +75,7 @@ To show what you make to the person in the web UI's Design tab, live, while you 
 
 - mcp__task__publish_artifact — publish a file from your worktree (an HTML page or component, an image, a video, any file) or a dev server's loopback URL; publish again to refresh it
 - mcp__task__list_task_artifacts — what every session on this task has published, with each one's scope, and the project assets attached to this task
+- mcp__task__read_artifact — the content of a text design asset (html, svg, css, json, md, txt), read like a document
 - mcp__task__unpublish_artifact — take one of yours down (the file stays); a project asset is moved back to the task first
 
 Some design assets outlive one task: a logo, a palette, a component, a

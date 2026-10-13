@@ -32,6 +32,11 @@ type DocumentRepository interface {
 	ListTicketIDsByDocument(documentID string) []string
 	Create(projectID, title, content string, format domain.DocumentFormat, scope domain.DocumentScope) (*domain.Document, error)
 	Update(id, title, content string, format domain.DocumentFormat) (*domain.Document, error)
+	// UpdateIfContent is Update as a compare-and-set: it writes only while
+	// the stored content is still expectedContent. Otherwise it changes
+	// nothing and answers DOCUMENT_CHANGED; a missing document is
+	// DOCUMENT_NOT_FOUND.
+	UpdateIfContent(id, expectedContent, title, content string, format domain.DocumentFormat) (*domain.Document, error)
 	SetScope(id string, scope domain.DocumentScope) (*domain.Document, error)
 	Delete(id string) error
 	Link(ticketID, documentID string) error
@@ -110,11 +115,19 @@ type TicketAnnouncer interface {
 // or scope is INVALID_INPUT. SetDocumentScope moves a document between task
 // and project scope without touching its ticket links; the same scope again
 // changes nothing. ListDocumentTickets is the tickets a document is linked to.
+// EditDocument replaces old with new in an HTML document's stored content:
+// exactly one match, or every match with replaceAll, and the result must
+// still be a complete HTML page. A Markdown document, no match, several
+// matches without replaceAll, a non-empty expectedVersion that is not the
+// document's version, and a write that loses a race are refused with
+// DOCUMENT_NOT_HTML, EDIT_NO_MATCH, EDIT_AMBIGUOUS and DOCUMENT_CHANGED;
+// nothing is stored then.
 type DocumentLibrary interface {
 	CreateDocument(projectID, title, content string, format domain.DocumentFormat, scope domain.DocumentScope) (*domain.Document, error)
 	GetDocument(id string) *domain.Document
 	ListDocuments(projectID string, scope domain.DocumentScope) []*domain.Document
 	UpdateDocument(id, title, content string, format domain.DocumentFormat) (*domain.Document, error)
+	EditDocument(id, old, new string, replaceAll bool, expectedVersion string) (*domain.Document, error)
 	SetDocumentScope(id string, scope domain.DocumentScope) (*domain.Document, error)
 	DeleteDocument(id string) error
 	LinkDocument(ticketID, documentID string) error

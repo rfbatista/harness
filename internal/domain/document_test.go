@@ -81,3 +81,16 @@ func TestDocument_ScopeIsOnTheWire(t *testing.T) {
 		t.Fatalf("scope missing: %s", b)
 	}
 }
+
+// The version is the content's name: the same bytes give the same version,
+// any change gives another, and it is 12 hex characters of sha256.
+func TestDocumentVersion(t *testing.T) {
+	// sha256("") = e3b0c44298fc1c149afbf4c8996fb924…
+	if got := DocumentVersion(""); got != "e3b0c44298fc" {
+		t.Fatalf("DocumentVersion(\"\") = %q", got)
+	}
+	a, b := DocumentVersion("<p>a</p>"), DocumentVersion("<p>b</p>")
+	if a == b || len(a) != 12 || a != DocumentVersion("<p>a</p>") {
+		t.Fatalf("versions %q %q", a, b)
+	}
+}

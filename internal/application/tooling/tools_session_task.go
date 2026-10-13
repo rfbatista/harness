@@ -21,9 +21,12 @@ var SessionTaskToolNames = []string{
 	"read_task_document",
 	"create_task_document",
 	"update_task_document",
+	"edit_task_document",
 	"list_project_documents",
 	"read_project_document",
 	"update_project_document",
+	"edit_project_document",
+	"search_documents",
 	"move_document_to_project",
 	"move_document_to_task",
 	"update_task_status",
@@ -34,6 +37,7 @@ var SessionTaskToolNames = []string{
 	"list_agents",
 	"publish_artifact",
 	"list_task_artifacts",
+	"read_artifact",
 	"unpublish_artifact",
 	"list_project_artifacts",
 	"move_artifact_to_project",
@@ -75,6 +79,9 @@ type PeerStarter struct {
 // value leaves the tools answering that artifacts are unavailable.
 type ArtifactTooling struct {
 	Publisher ports.ArtifactPublisher
+	// Reader opens an artifact's bytes for read_artifact and for searches
+	// that include artifacts; nil leaves read_artifact unavailable.
+	Reader ports.ArtifactReader
 	// Attachments attaches project assets to the session's task; nil leaves
 	// attach_artifact_to_task and detach_artifact_from_task unavailable.
 	Attachments ports.ArtifactAttachments
@@ -157,7 +164,7 @@ func SessionTaskTools(planningSvc ports.Planning, sessions ports.SessionReposito
 		},
 		{
 			Name:        "get_task",
-			Description: "Get the task this session is working on, with the documents linked to it.",
+			Description: "Get the task this session is working on, with the documents linked to it (titles, bytes, lines and version; no bodies).",
 			InputSchema: schemaFromJSON(`{"type":"object","properties":{}}`),
 			Source:      "code",
 			Handler: func(ctx context.Context, args map[string]any) (any, error) {
@@ -172,8 +179,9 @@ func SessionTaskTools(planningSvc ports.Planning, sessions ports.SessionReposito
 			},
 		},
 		{
-			Name:        "list_task_documents",
-			Description: "List the documents linked to this session's task. Titles only — use read_task_document for the body.",
+			Name: "list_task_documents",
+			Description: "List the documents linked to this session's task. No bodies: each row has its bytes, lines and version, so check the size before " +
+				"read_task_document; search_documents finds a line without reading.",
 			InputSchema: schemaFromJSON(`{"type":"object","properties":{}}`),
 			Source:      "code",
 			Handler: func(ctx context.Context, args map[string]any) (any, error) {
@@ -187,9 +195,11 @@ func SessionTaskTools(planningSvc ports.Planning, sessions ports.SessionReposito
 			},
 		},
 		{
-			Name:        "read_task_document",
-			Description: "Read one document linked to this session's task, including its content and format (html for pages written by task sessions, markdown for older documents).",
-			InputSchema: schemaFromJSON(`{"type":"object","properties":{"document_id":{"type":"string","description":"Document ID"}},"required":["document_id"]}`),
+			Name: "read_task_document",
+			Description: "Read one document linked to this session's task. A document under 24 KiB and 400 lines comes back whole, as its content and format " +
+				"(html for pages written by task sessions, markdown for older documents). A larger one comes back as its outline and first 200 lines; " +
+				"then read the section you need, or a window with offset/limit (next_offset continues). search_documents finds a line without reading.",
+			InputSchema: schemaFromJSON(`{"type":"object","properties":{"document_id":{"type":"string","description":"Document ID"},` + readSchemaProps + `},"required":["document_id"]}`),
 			Source:      "code",
 			Handler: func(ctx context.Context, args map[string]any) (any, error) {
 				scope, err := resolveTaskScope(ctx, planningSvc, sessions)
@@ -200,7 +210,7 @@ func SessionTaskTools(planningSvc ports.Planning, sessions ports.SessionReposito
 				if err != nil {
 					return nil, err
 				}
-				return map[string]any{"document": doc}, nil
+				return readDocument(doc, args)
 			},
 		},
 		{
@@ -231,7 +241,7 @@ func SessionTaskTools(planningSvc ports.Planning, sessions ports.SessionReposito
 		},
 		{
 			Name:        "update_task_document",
-			Description: "Revise a document linked to this session's task. Omitted fields keep their current value. New content must be a complete HTML document (Markdown is refused with DOCUMENT_NOT_HTML); it makes an older markdown document an html one.",
+			Description: "Revise a document linked to this session's task. Omitted fields keep their current value. New content must be a complete HTML document (Markdown is refused with DOCUMENT_NOT_HTML); it makes an older markdown document an html one. To change part of a page, use edit_task_document instead of resending it.",
 			InputSchema: schemaFromJSON(`{"type":"object","properties":{"document_id":{"type":"string","description":"Document ID"},"title":{"type":"string","description":"New title; omit to keep the current one"},"content":{"type":"string","description":"New content as a complete HTML document; omit to keep the current one"}},"required":["document_id"]}`),
 			Source:      "code",
 			Handler: func(ctx context.Context, args map[string]any) (any, error) {
@@ -246,6 +256,8 @@ func SessionTaskTools(planningSvc ports.Planning, sessions ports.SessionReposito
 				return reviseAsHTML(planningSvc, current, args)
 			},
 		},
+		editTool("edit_task_document", "a document linked to this session's task", planningSvc, sessions,
+			func(scope *taskScope, id string) (*domain.Document, error) { return scope.document(planningSvc, id) }),
 		{
 			Name: "update_task_status",
 			Description: "Set the status of this session's task so the board stays true as the work moves. Move it to in_progress " +
@@ -283,12 +295,12 @@ func SessionTaskTools(planningSvc ports.Planning, sessions ports.SessionReposito
 				return map[string]any{"task": tk}, nil
 			},
 		},
-	}, sessionDocumentTools(planningSvc, sessions)...)
+	}, sessionDocumentTools(planningSvc, sessions, artifacts)...)
 	tools = append(tools, sessionChannelTools(planningSvc, sessions, channel)...)
 	tools = append(tools, sessionProjectTools(planningSvc, sessions, agents, arch, start.Repositories)...)
 	tools = append(tools, sessionResourceTools(planningSvc, sessions, agents, resources)...)
 	tools = append(tools, sessionNotificationTools(planningSvc, sessions, notes)...)
-	return append(tools, sessionArtifactTools(planningSvc, sessions, artifacts)...)
+	return codedTools(append(tools, sessionArtifactTools(planningSvc, sessions, artifacts)...))
 }
 
 // peerSession is another session on the same task, as list_task_sessions
@@ -429,21 +441,31 @@ func (s *taskScope) document(planningSvc ports.Planning, documentID string) (*do
 }
 
 // documentSummary is a document without its body, for listings that would
-// otherwise flood the agent's context with pages.
+// otherwise flood the agent's context with pages. Bytes and Lines say how
+// big it is before the agent opens it; Version names its content.
 type documentSummary struct {
 	ID        string                `json:"id"`
 	Title     string                `json:"title"`
 	Format    domain.DocumentFormat `json:"format"`
 	Scope     domain.DocumentScope  `json:"scope"`
+	Bytes     int                   `json:"bytes"`
+	Lines     int                   `json:"lines"`
+	Version   string                `json:"version"`
 	UpdatedAt time.Time             `json:"updated_at"`
 }
 
 func summarizeDocuments(docs []*domain.Document) []documentSummary {
 	out := make([]documentSummary, 0, len(docs))
 	for _, d := range docs {
-		out = append(out, documentSummary{ID: d.ID, Title: d.Title, Format: d.Format, Scope: d.Scope, UpdatedAt: d.UpdatedAt})
+		out = append(out, summarize(d, newTextView(d.Content, documentKind(d))))
 	}
 	return out
+}
+
+// summarize is d without its content, sized by its text view tv.
+func summarize(d *domain.Document, tv *textView) documentSummary {
+	return documentSummary{ID: d.ID, Title: d.Title, Format: d.Format, Scope: d.Scope,
+		Bytes: len(d.Content), Lines: len(tv.lines), Version: domain.DocumentVersion(d.Content), UpdatedAt: d.UpdatedAt}
 }
 
 // notHTML is the refusal for a task document body that is not an HTML page.

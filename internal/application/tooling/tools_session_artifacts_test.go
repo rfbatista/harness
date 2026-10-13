@@ -63,7 +63,7 @@ func newArtifactToolsFixture(t *testing.T) *artifactToolsFixture {
 	art.StoreDir = t.TempDir() // moving to project copies the bytes here
 	art.Tickets = plan
 	f.otherTicketID = other.ID
-	tooling := ArtifactTooling{Publisher: art, Attachments: art, ViewURL: func(id string) string { return "/api/artifacts/" + id + "/view/" }}
+	tooling := ArtifactTooling{Publisher: art, Reader: art, Attachments: art, ViewURL: func(id string) string { return "/api/artifacts/" + id + "/view/" }}
 	for _, tl := range SessionTaskTools(plan, sessions, nil, nil, PeerStarter{}, tooling, nil, ResourceTooling{}, NotificationTooling{}) {
 		f.tools[tl.Name] = tl
 	}
@@ -127,10 +127,10 @@ func TestPublishArtifactTool_ErrorsCarryTheirCode(t *testing.T) {
 			t.Fatalf("%s: err = %v", name, err)
 		}
 	}
-	// Non-artifact codes are left alone.
+	// Every other code travels in the message too, once.
 	_, err := f.call(t, "sess-1", "publish_artifact", map[string]any{"path": "x"})
 	var se *domain.StructuredError
-	if !errorsAs(err, &se) || se.Code != "INVALID_INPUT" || strings.HasPrefix(se.Message, "INVALID_INPUT") {
+	if !errorsAs(err, &se) || se.Code != "INVALID_INPUT" || !strings.HasPrefix(se.Message, "INVALID_INPUT: ") || strings.Count(se.Message, "INVALID_INPUT") != 1 {
 		t.Fatalf("err = %v", err)
 	}
 }
@@ -151,6 +151,9 @@ func TestListAndUnpublishArtifactTools(t *testing.T) {
 	if listed["count"] != 2 || len(items) != 2 || items[0].ArtifactID != b["artifact_id"] || items[0].SessionID != "sess-2" || items[1].ArtifactID != a["artifact_id"] || items[1].Path != "a.html" ||
 		items[0].Scope != domain.ArtifactScopeTask || items[1].Scope != domain.ArtifactScopeTask {
 		t.Fatalf("list = %+v", items)
+	}
+	if items[0].Bytes != 4 || items[1].Bytes != 1 {
+		t.Fatalf("listed sizes: %d, %d", items[0].Bytes, items[1].Bytes)
 	}
 
 	if _, err := f.call(t, "sess-1", "unpublish_artifact", map[string]any{"artifact_id": b["artifact_id"]}); err == nil || !strings.Contains(err.Error(), "ARTIFACT_NOT_YOURS") {

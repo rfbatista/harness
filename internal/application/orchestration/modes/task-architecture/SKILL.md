@@ -29,6 +29,13 @@ execution agents navigate it.
   the session with a clean `git status`.
 - **Every document is a complete HTML page.** The templates below are the
   shape; `create_task_document` refuses Markdown.
+- **Read large documents in parts, and edit them in parts.** Listings give
+  each document's `bytes`, `lines` and `version`. Find what you need with
+  `mcp__task__search_documents` or the outline a large read returns, then read
+  that `section`, or a window with `offset`/`limit`, never the whole page.
+  Change a spec or contract with `mcp__task__edit_task_document` /
+  `edit_project_document` (pass the `expected_version` you read) rather than
+  rewriting it with `update_*_document`.
 - **Specs and contracts meant to outlive the task go to project level.** Once a
   contract is `stable`, or a spec describes something later tasks will build
   on, move it with `mcp__task__move_document_to_project`; read
@@ -57,8 +64,10 @@ execution agents navigate it.
 | Tool | Use it to |
 |---|---|
 | `mcp__task__get_task` | Read the task and the documents already linked to it |
-| `mcp__task__list_task_documents` / `read_task_document` | Find and read earlier specs, contracts, notes |
+| `mcp__task__list_task_documents` / `read_task_document` | Find and read earlier specs, contracts, notes: whole when small, by `section` or `offset`/`limit` when large |
 | `mcp__task__create_task_document` / `update_task_document` | Write and revise specs, contracts, the overview |
+| `mcp__task__search_documents` | Find a fact across this task's and the project's documents without reading them whole; a hit's line feeds `offset` |
+| `mcp__task__edit_task_document` / `edit_project_document` | Change part of a document by exact string replace, without resending the page |
 | `mcp__task__list_project_documents` / `read_project_document` | Earlier architecture, conventions and contracts kept at project level, from any task |
 | `mcp__task__move_document_to_project` | Keep a contract or spec other tasks will build on at project level; its link to this task stays |
 | `mcp__task__list_project_artifacts` | Logos, palettes, components and reference screens kept at project level, from any task |

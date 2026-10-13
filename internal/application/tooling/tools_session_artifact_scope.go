@@ -75,7 +75,8 @@ func sessionArtifactScopeTools(planningSvc ports.Planning, sessions ports.Sessio
 			Description: "List the design assets kept at project level in this session's project, from any task, newest first: " +
 				"logos, palettes, components, reference screens other tasks reuse. Each has its artifact_id, title, kind, note, " +
 				"revision, the task that made it, the tasks it is attached to (attached_ticket_ids), and a view_url. Check it " +
-				"before making a new asset, and attach one to this task with attach_artifact_to_task.",
+				"before making a new asset, and attach one to this task with attach_artifact_to_task. bytes is each one's size; " +
+				"read_artifact reads a text asset's content in parts.",
 			InputSchema: schemaFromJSON(`{"type":"object","properties":{}}`),
 			Source:      "code",
 			Handler: func(ctx context.Context, args map[string]any) (any, error) {
@@ -165,6 +166,7 @@ type projectArtifact struct {
 	Kind       domain.ArtifactKind  `json:"kind"`
 	Note       string               `json:"note,omitempty"`
 	Revision   int                  `json:"revision"`
+	Bytes      int64                `json:"bytes"`
 	Scope      domain.ArtifactScope `json:"scope"`
 	TaskID     string               `json:"task_id"`
 	TaskTitle  string               `json:"task_title,omitempty"`
@@ -175,7 +177,7 @@ type projectArtifact struct {
 }
 
 func reportProjectArtifact(art ArtifactTooling, a *domain.Artifact, taskTitle string) projectArtifact {
-	return projectArtifact{ArtifactID: a.ID, Title: a.Title, Kind: a.Kind, Note: a.Note, Revision: a.Revision,
+	return projectArtifact{ArtifactID: a.ID, Title: a.Title, Kind: a.Kind, Note: a.Note, Revision: a.Revision, Bytes: a.SizeBytes,
 		Scope: scopeOf(a), TaskID: a.TicketID, TaskTitle: taskTitle, ViewURL: viewURL(art, a), UpdatedAt: a.UpdatedAt,
 		AttachedTicketIDs: attachedIDs(a)}
 }

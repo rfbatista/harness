@@ -83,6 +83,9 @@ func TestArtifactScopeTools_MoveToProjectAndBack(t *testing.T) {
 		list[0].TaskTitle != moved.TaskTitle || !list[0].UpdatedAt.Equal(moved.UpdatedAt) {
 		t.Fatalf("project listing = %+v, want %+v", list, moved)
 	}
+	if list[0].Bytes == 0 || list[0].Bytes != moved.Bytes {
+		t.Fatalf("a project asset is listed without its size: %+v", list[0])
+	}
 	if got := f.taskScopeOf(t, "sess-1", id); got != domain.ArtifactScopeProject {
 		t.Fatalf("the task lists its moved artifact as %q", got)
 	}
