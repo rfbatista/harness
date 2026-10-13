@@ -5,10 +5,14 @@ package app
 import (
 	"bytes"
 	"errors"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"testing"
 
@@ -228,6 +232,30 @@ func TestShimsRefuseWithTheCodeAndWriteNothing(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(a.shell, "task", "resources", "more")); err == nil {
 		t.Fatal("the refused mkdir made its dir")
+	}
+
+	// The harness answers the check, then is gone before the commit: the
+	// change is on disk, unstored, and the agent is told to redo it.
+	lostCommit := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/commit") {
+			conn, _, _ := w.(http.Hijacker).Hijack()
+			_ = conn.Close()
+			return
+		}
+		res, err := http.Post(e.srv.URL+r.URL.Path, "application/json", r.Body)
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		defer res.Body.Close()
+		_, _ = io.Copy(w, res.Body)
+	}))
+	defer lostCommit.Close()
+	unstored := shimSession{a.runningSession, append(slices.Clone(a.env), "HARNESS_SHELL_URL="+lostCommit.URL+"/api/sessions/"+a.id+"/shell")}
+	r := unstored.run(t, "# Unstored\n", "tee task/docs/unstored.md")
+	want := "SHELL_UNAVAILABLE: the harness could not be reached; task/docs/unstored.md changed on disk but was not stored — redo the change once the harness is back\n"
+	if r.code != 1 || r.stderr != want || r.stdout != "# Unstored\n" {
+		t.Fatalf("tee with the commit lost = %+v, want exit 1 and %q", r, want)
 	}
 
 	e.srv.Close()

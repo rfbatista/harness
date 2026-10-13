@@ -62,7 +62,7 @@ func Main() int {
 	if !inside(shell, edits) {
 		return become(real)
 	}
-	h := harness{base: strings.TrimRight(os.Getenv("HARNESS_SHELL_URL"), "/"), tool: name}
+	h := harness{base: strings.TrimRight(os.Getenv("HARNESS_SHELL_URL"), "/"), tool: name, shell: newShellDir(shell)}
 	return h.run(real, edits)
 }
 
@@ -112,33 +112,64 @@ type edit struct {
 	walk  bool
 }
 
-// inside says whether any edit changes a path in the shell: a cp only its
-// destination.
+// shellDir is the session's shell, as made and with its symlinks resolved.
+type shellDir []string
+
+func newShellDir(dir string) shellDir {
+	s := shellDir{filepath.Clean(dir)}
+	if r, err := filepath.EvalSymlinks(dir); err == nil && r != s[0] {
+		s = append(s, r)
+	}
+	return s
+}
+
+// rel is p relative to the shell, and whether p is in it.
+func (s shellDir) rel(p string) (string, bool) {
+	for _, root := range s {
+		if p == root {
+			return ".", true
+		}
+		if r, ok := strings.CutPrefix(p, root+string(filepath.Separator)); ok {
+			return r, true
+		}
+	}
+	return "", false
+}
+
+// changed is what e changes in the shell, relative to it: a cp only its
+// destination, an mv its destination or else its source.
+func (s shellDir) changed(e edit) []string {
+	paths := e.paths
+	switch e.op {
+	case "cp":
+		paths = paths[1:]
+	case "mv":
+		if _, in := s.rel(paths[1]); in {
+			paths = paths[1:]
+		} else {
+			paths = paths[:1]
+		}
+	}
+	var out []string
+	for _, p := range paths {
+		if r, in := s.rel(p); in {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
+// inside says whether any edit changes a path in the shell.
 func inside(shell string, edits []edit) bool {
-	roots := []string{filepath.Clean(shell)}
-	if r, err := filepath.EvalSymlinks(shell); err == nil {
-		roots = append(roots, r)
-	}
-	for _, e := range edits {
-		changed := e.paths
-		if e.op == "cp" {
-			changed = changed[1:]
-		}
-		for _, p := range changed {
-			for _, root := range roots {
-				if p == root || strings.HasPrefix(p, root+string(filepath.Separator)) {
-					return true
-				}
-			}
-		}
-	}
-	return false
+	s := newShellDir(shell)
+	return slices.ContainsFunc(edits, func(e edit) bool { return len(s.changed(e)) > 0 })
 }
 
 // harness talks to the session's shell endpoints.
 type harness struct {
-	base string // …/api/sessions/<id>/shell
-	tool string
+	base  string // …/api/sessions/<id>/shell
+	tool  string
+	shell shellDir
 }
 
 type answer struct {
@@ -198,16 +229,24 @@ func (h harness) run(real string, edits []edit) int {
 }
 
 // commitAll commits edits, printing each refusal; false when one was
-// refused or not answered.
+// refused or not answered. Once the harness does not answer, every path
+// left is named as changed on disk but not stored.
 func (h harness) commitAll(edits []edit) bool {
-	ok := true
+	ok, reached := true, true
 	for _, e := range edits {
 		for _, c := range append([]edit{e}, copied(e)...) {
-			a, err := h.call("commit", c)
+			var a answer
+			var err error
+			if reached {
+				a, err = h.call("commit", c)
+				reached = err == nil
+			}
 			switch {
-			case err != nil:
-				fmt.Fprintln(os.Stderr, "SHELL_UNAVAILABLE: the harness could not be reached; the change was made on disk but not stored")
-				return false
+			case !reached:
+				for _, rel := range h.shell.changed(c) {
+					fmt.Fprintf(os.Stderr, "SHELL_UNAVAILABLE: the harness could not be reached; %s changed on disk but was not stored — redo the change once the harness is back\n", rel)
+				}
+				ok = false
 			case !a.Allow:
 				fmt.Fprintln(os.Stderr, a.Reason)
 				ok = false
