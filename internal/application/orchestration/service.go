@@ -86,6 +86,9 @@ type Service struct {
 	// Transcripts checks an interactive session can be resumed. Nil skips the
 	// check and lets the CLI report a missing conversation itself.
 	Transcripts ports.ClaudeTranscripts
+	// TranscriptReader reads a session's saved conversation. Nil: no session
+	// has one to show.
+	TranscriptReader ports.ClaudeTranscriptReader
 	// Artifacts lists the project assets attached to a session's task, for
 	// its brief. Nil leaves them out.
 	Artifacts ports.ArtifactReader

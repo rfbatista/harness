@@ -154,6 +154,7 @@ func NewRouter(h *Handler, opts ...Option) *echo.Echo {
 	g.GET("/sessions/:id/events", h.handleSessionEvents)
 	g.GET("/sessions/:id/terminal", h.handleSessionTerminal) // WebSocket upgrade
 	g.GET("/sessions/:id/history", h.handleSessionHistory)
+	g.GET("/sessions/:id/transcript", h.handleSessionTranscript)
 
 	// artifacts: what sessions publish for the Design tab. The /view/ routes
 	// are loaded as plain subresources (<img>, <video>, <iframe>), under the
