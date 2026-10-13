@@ -97,7 +97,7 @@ func (s *Service) refuseComment(sh *shell, rel string, row ports.ShellFile, err 
 	default:
 		ans = refuseErr(err)
 	}
-	s.restore(sh, rel)
+	s.restorePath(sh, rel)
 	return ans
 }
 

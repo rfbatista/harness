@@ -654,10 +654,10 @@ func docRow(rel string, d *domain.Document) ports.ShellFile {
 		Version: domain.DocumentVersion(d.Content), Title: d.Title, UpdatedAt: d.UpdatedAt}
 }
 
-// restore puts back what is stored at rel after a refused commit, so the
+// restorePath puts back what is stored at rel after a refused commit, so the
 // shell never shows what was not stored: a file the harness has no record
 // of is removed, one it has is rewritten by the refresh.
-func (s *Service) restore(sh *shell, rel string) {
+func (s *Service) restorePath(sh *shell, rel string) {
 	sh.release(rel)
 	if row, ok := sh.files[rel]; ok {
 		row.Version, row.UpdatedAt = "", time.Time{}

@@ -103,7 +103,7 @@ func (s *Service) commitDesignWrite(sh *shell, rel string) ports.ShellAnswer {
 		return allow
 	default:
 		if now := s.storedVersion(sh, row); now != row.Version {
-			s.restore(sh, rel)
+			s.restorePath(sh, rel)
 			return refuseStale(rel, now)
 		}
 		if s.storedBytesAre(row.ID, content) {
@@ -113,7 +113,7 @@ func (s *Service) commitDesignWrite(sh *shell, rel string) ports.ShellAnswer {
 	}
 	if err != nil {
 		ans := refuseErr(err)
-		s.restore(sh, rel)
+		s.restorePath(sh, rel)
 		return ans
 	}
 	sh.files[rel] = designRow(rel, a)
@@ -132,7 +132,7 @@ func (s *Service) commitDesignRemove(sh *shell, rel string) ports.ShellAnswer {
 		}
 		if err := s.src.Designs.RemoveDesign(context.Background(), row.ID); err != nil && !errs.HasCode(err, "ARTIFACT_NOT_FOUND") {
 			ans := refuseErr(err)
-			s.restore(sh, row.Path)
+			s.restorePath(sh, row.Path)
 			return ans
 		}
 		delete(sh.files, row.Path)
@@ -197,7 +197,7 @@ func (s *Service) undoMove(sh *shell, from, to string, ans ports.ShellAnswer) po
 		_ = os.MkdirAll(filepath.Dir(sh.abs(from)), 0o755)
 		_ = os.Rename(sh.abs(to), sh.abs(from))
 	}
-	s.restore(sh, from)
+	s.restorePath(sh, from)
 	return ans
 }
 
