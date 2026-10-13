@@ -91,6 +91,10 @@ func sessionDocumentTools(planningSvc ports.Planning, sessions ports.SessionRepo
 				return reviseAsHTML(planningSvc, current, args)
 			},
 		},
+		editTool("edit_project_document", "a project document of this session's project", planningSvc, sessions,
+			func(scope *taskScope, id string) (*domain.Document, error) {
+				return scope.projectDocument(planningSvc, id)
+			}),
 		searchDocumentsTool(planningSvc, sessions, art),
 		move("move_document_to_project",
 			"Make one of this task's documents a project document: every session of the project can then read and revise it, and it shows on the project's documents page. "+

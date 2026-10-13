@@ -14,6 +14,7 @@ sessions left, and write down what the next one will need:
 - mcp__task__search_documents — find a line in this task's or the project's documents without reading them whole
 - mcp__task__create_task_document — a new document, linked to this task for you
 - mcp__task__update_task_document — revise one of them
+- mcp__task__edit_task_document — change part of one by exact string replace, without sending the whole page
 
 A document you write is a complete HTML document, not Markdown.
 Markdown is refused with DOCUMENT_NOT_HTML and nothing is stored; rewrite it
@@ -43,6 +44,7 @@ this task stays. Only documents linked to this task can be moved:
 - mcp__task__list_project_documents — the project's documents, titles only
 - mcp__task__read_project_document — one project document, with its content and format
 - mcp__task__update_project_document — revise a project document; new content must be a complete HTML page
+- mcp__task__edit_project_document — change part of a project document by exact string replace
 - mcp__task__move_document_to_project — make one of this task's documents a project document
 - mcp__task__move_document_to_task — move one of them back to this task's scope
 

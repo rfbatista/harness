@@ -308,3 +308,41 @@ func TestReadingDesignAssets_EndToEnd(t *testing.T) {
 		t.Fatalf("another project's asset: %q", got)
 	}
 }
+
+// An agent changes one row of a 60 KB page without sending the page: it
+// finds the row, edits it against the version it read, and reads the
+// section back. Refusals arrive as coded messages.
+func TestEditingDocuments_EndToEnd(t *testing.T) {
+	r := newReadingMCP(t)
+	big := r.taskDocument(t, "System architecture", bigPage())
+	notes, _ := r.plan.CreateDocument(r.project.ID, "Notes", "# notes\n", domain.DocumentFormatMarkdown, domain.DocumentScopeProject)
+
+	version := r.call(t, "list_task_documents", nil)["documents"].([]any)[0].(map[string]any)["version"]
+	edited := r.call(t, "edit_task_document", map[string]any{"document_id": big.ID,
+		"old_string":       "<p>internal/application/tooling for MCP tools.</p>",
+		"new_string":       "<p>internal/application/tooling for MCP tools; tooling/textview.go for the text view.</p>",
+		"expected_version": version})
+	doc := edited["document"].(map[string]any)
+	if doc["version"] == version || doc["content"] != nil {
+		t.Fatalf("edit answered %v", doc)
+	}
+	section := r.call(t, "read_task_document", map[string]any{"document_id": big.ID, "section": "add"})
+	if got := texts(section); len(got) != 2 || got[1] != "internal/application/tooling for MCP tools; tooling/textview.go for the text view." {
+		t.Fatalf("section after the edit: %q", got)
+	}
+
+	for _, c := range []struct {
+		tool string
+		args map[string]any
+		want string
+	}{
+		{"edit_task_document", map[string]any{"document_id": big.ID, "old_string": "<td>row</td>", "new_string": "<td>Row</td>"}, "EDIT_AMBIGUOUS: 480 matches"},
+		{"edit_task_document", map[string]any{"document_id": big.ID, "old_string": "<p>nowhere</p>", "new_string": "x"}, "EDIT_NO_MATCH: "},
+		{"edit_task_document", map[string]any{"document_id": big.ID, "old_string": "<h1>", "new_string": "<h2>", "expected_version": version}, "DOCUMENT_CHANGED: now at " + doc["version"].(string)},
+		{"edit_project_document", map[string]any{"document_id": notes.ID, "old_string": "notes", "new_string": "Notes"}, "DOCUMENT_NOT_HTML: this document is Markdown"},
+	} {
+		if got := callTaskErr(t, r.agent, c.tool, c.args); !strings.HasPrefix(got, c.want) {
+			t.Fatalf("%s %v: message %q, want it to start with %q", c.tool, c.args["old_string"], got, c.want)
+		}
+	}
+}

@@ -21,9 +21,11 @@ var SessionTaskToolNames = []string{
 	"read_task_document",
 	"create_task_document",
 	"update_task_document",
+	"edit_task_document",
 	"list_project_documents",
 	"read_project_document",
 	"update_project_document",
+	"edit_project_document",
 	"search_documents",
 	"move_document_to_project",
 	"move_document_to_task",
@@ -253,6 +255,8 @@ func SessionTaskTools(planningSvc ports.Planning, sessions ports.SessionReposito
 				return reviseAsHTML(planningSvc, current, args)
 			},
 		},
+		editTool("edit_task_document", "a document linked to this session's task", planningSvc, sessions,
+			func(scope *taskScope, id string) (*domain.Document, error) { return scope.document(planningSvc, id) }),
 		{
 			Name: "update_task_status",
 			Description: "Set the status of this session's task so the board stays true as the work moves. Move it to in_progress " +

@@ -105,6 +105,31 @@ func (r *DocumentRepository) Update(id, title, content string, format domain.Doc
 	return m.ToDomain(), nil
 }
 
+// UpdateIfContent replaces title and content only while the stored content
+// is still expectedContent, in one UPDATE, so a write that landed since the
+// caller read the document is never overwritten.
+func (r *DocumentRepository) UpdateIfContent(id, expectedContent, title, content string, format domain.DocumentFormat) (*domain.Document, error) {
+	updates := map[string]interface{}{"title": title, "content": content}
+	if format != "" {
+		updates["format"] = string(format)
+	}
+	res := r.db.Model(&DocumentModel{}).Where("id = ? AND content = ?", id, expectedContent).Updates(updates)
+	if res.Error != nil {
+		return nil, res.Error
+	}
+	if res.RowsAffected == 0 {
+		if r.Get(id) == nil {
+			return nil, &domain.StructuredError{Code: "DOCUMENT_NOT_FOUND", Message: "document not found"}
+		}
+		return nil, &domain.StructuredError{Code: "DOCUMENT_CHANGED", Message: "the document changed since it was read"}
+	}
+	d := r.Get(id)
+	if d == nil {
+		return nil, &domain.StructuredError{Code: "DOCUMENT_NOT_FOUND", Message: "document not found"}
+	}
+	return d, nil
+}
+
 // SetScope moves a document between task and project scope. Updates bumps
 // updated_at, so the browser's watch signature notices the move.
 func (r *DocumentRepository) SetScope(id string, scope domain.DocumentScope) (*domain.Document, error) {
