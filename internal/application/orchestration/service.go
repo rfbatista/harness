@@ -100,6 +100,10 @@ type Service struct {
 	// task, for its brief. Nil leaves the counts out.
 	Resources ports.TaskResourceReader
 	Comments  ports.TaskCommentReader
+	// Shells gives each session with a task its virtual shell (see
+	// "Contract: Harness server ↔ Agent sessions — virtual shell"). Nil:
+	// sessions get none.
+	Shells ports.VirtualShells
 
 	// updates feeds the task-update turns to the courier, one at a time;
 	// deliverUpdate replaces the courier in tests.
@@ -345,7 +349,12 @@ func (s *Service) prepare(in prepareInput) (*prepared, error) {
 	}
 	permission := parseAutoAccept(in.AutoAccept)
 	cfg := s.sessionConfig(id, ws.Path, in.Model, in.AllowedTools, permission, ag, ticket, in.ZoneID, in.Role)
-	envFile, cleanup, err := s.withGit(id, in.RepositoryID, &cfg, ag.cleanup)
+	cleanup, err := s.withShell(id, ticket, &cfg, ag.cleanup)
+	if err != nil {
+		_ = s.workspaces.Discard(ws.ID)
+		return nil, err
+	}
+	envFile, cleanup, err := s.withGit(id, in.RepositoryID, &cfg, cleanup)
 	if err != nil {
 		_ = s.workspaces.Discard(ws.ID)
 		return nil, err
@@ -384,6 +393,32 @@ func (s *Service) withGit(id, repositoryID string, cfg *llmkit.SessionConfig, cl
 			cleanup()
 		}
 		s.GitAuth.EndSession(id)
+	}, nil
+}
+
+// withShell gives a session with a task its virtual shell: made and filled
+// now, passed with --add-dir and HARNESS_SHELL, named in the brief. The
+// cleanup it answers runs cleanup and removes the shell. A session with no
+// task, or a service without Shells, changes nothing.
+func (s *Service) withShell(id string, ticket *domain.Ticket, cfg *llmkit.SessionConfig, cleanup func()) (func(), error) {
+	if s.Shells == nil || ticket == nil {
+		return cleanup, nil
+	}
+	dir, err := s.Shells.Open(context.TODO(), id, ticket.ID)
+	if err != nil {
+		if cleanup != nil {
+			cleanup()
+		}
+		return nil, fmt.Errorf("make the session's virtual shell: %w", err)
+	}
+	cfg.AddDirs = append(slices.Clone(cfg.AddDirs), dir)
+	cfg.Env = append(slices.Clone(cfg.Env), "HARNESS_SHELL="+dir)
+	cfg.AppendSystem = appendSection(cfg.AppendSystem, shellSection(dir))
+	return func() {
+		if cleanup != nil {
+			cleanup()
+		}
+		s.Shells.Close(id, dir)
 	}, nil
 }
 
