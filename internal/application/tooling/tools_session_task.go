@@ -187,9 +187,11 @@ func SessionTaskTools(planningSvc ports.Planning, sessions ports.SessionReposito
 			},
 		},
 		{
-			Name:        "read_task_document",
-			Description: "Read one document linked to this session's task, including its content and format (html for pages written by task sessions, markdown for older documents).",
-			InputSchema: schemaFromJSON(`{"type":"object","properties":{"document_id":{"type":"string","description":"Document ID"}},"required":["document_id"]}`),
+			Name: "read_task_document",
+			Description: "Read one document linked to this session's task. A document under 24 KiB and 400 lines comes back whole, as its content and format " +
+				"(html for pages written by task sessions, markdown for older documents). A larger one comes back as its outline and first 200 lines; " +
+				"then read the section you need, or a window with offset/limit (next_offset continues). search_documents finds a line without reading.",
+			InputSchema: schemaFromJSON(`{"type":"object","properties":{"document_id":{"type":"string","description":"Document ID"},` + readSchemaProps + `},"required":["document_id"]}`),
 			Source:      "code",
 			Handler: func(ctx context.Context, args map[string]any) (any, error) {
 				scope, err := resolveTaskScope(ctx, planningSvc, sessions)
@@ -200,7 +202,7 @@ func SessionTaskTools(planningSvc ports.Planning, sessions ports.SessionReposito
 				if err != nil {
 					return nil, err
 				}
-				return map[string]any{"document": doc}, nil
+				return readDocument(doc, args)
 			},
 		},
 		{

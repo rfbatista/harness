@@ -130,7 +130,7 @@ func TestSessionTaskTools_CreateThenList(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := read.(map[string]any)["document"].(*domain.Document); got.Content != htmlPage("Plan", "step one") || got.Format != domain.DocumentFormatHTML {
+	if got := read.(map[string]any)["document"].(*documentWhole); got.Content != htmlPage("Plan", "step one") || got.Format != domain.DocumentFormatHTML {
 		t.Fatalf("read back %+v", got)
 	}
 }
@@ -347,7 +347,7 @@ func TestSessionTaskTools_UpdateRefusesNonHTMLAndKeepsTheOld(t *testing.T) {
 	_, err := f.call(t, f.sessionID, "update_task_document", map[string]any{"document_id": id, "content": "# new"})
 	wantCode(t, err, "DOCUMENT_NOT_HTML")
 	read, _ := f.call(t, f.sessionID, "read_task_document", map[string]any{"document_id": id})
-	if got := read.(map[string]any)["document"].(*domain.Document); got.Content != htmlPage("Plan", "old") || got.Format != domain.DocumentFormatHTML {
+	if got := read.(map[string]any)["document"].(*documentWhole); got.Content != htmlPage("Plan", "old") || got.Format != domain.DocumentFormatHTML {
 		t.Fatalf("a refused update changed the document: %+v", got)
 	}
 }

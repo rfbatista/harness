@@ -19,7 +19,15 @@ func (f *taskToolsFixture) doc(t *testing.T, tool string, args map[string]any) *
 	if err != nil {
 		t.Fatal(err)
 	}
-	return out.(map[string]any)["document"].(*domain.Document)
+	switch d := out.(map[string]any)["document"].(type) {
+	case *domain.Document:
+		return d
+	case *documentWhole: // a read under the guard: the document plus its size
+		return d.Document
+	default:
+		t.Fatalf("%s answered %T", tool, d)
+		return nil
+	}
 }
 
 // summaries calls a tool that answers {documents} as the fixture's session.
