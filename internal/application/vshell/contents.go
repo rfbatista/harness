@@ -242,11 +242,19 @@ func (b *builder) designs(ctx context.Context, src ports.ArtifactReader, tk *dom
 		where[a.ID] = f
 		b.named(folder, ArtifactFileName(a), f)
 	}
+	var taskURLs strings.Builder
+	taskURLs.WriteString("# Design URLs\n\nDev-server URLs published on this task, not files.\n\n")
 	for _, a := range oldestFirst(onTask) {
-		if a.TicketID == tk.ID && a.Scope != domain.ArtifactScopeProject {
-			put("task/designs/", a)
+		if a.TicketID != tk.ID || a.Scope == domain.ArtifactScopeProject {
+			continue
 		}
+		if a.Kind == domain.ArtifactURL {
+			fmt.Fprintf(&taskURLs, "- [%s](%s)\n", a.Title, a.URL)
+			continue
+		}
+		put("task/designs/", a)
 	}
+	b.fixed(ports.ShellFile{Path: "task/designs/urls.md", Kind: ports.ShellDesignURL, Scope: "task", Title: "Design URLs", UpdatedAt: b.now}, []byte(taskURLs.String()))
 	var urls strings.Builder
 	urls.WriteString("# Design URLs\n\nProject design assets that are URLs, not files.\n\n")
 	urlsFile := &file{meta: ports.ShellFile{Path: "project/designs/urls.md"}}

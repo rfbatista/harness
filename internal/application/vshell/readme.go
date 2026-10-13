@@ -28,6 +28,7 @@ here, and what you write here is stored.
     task/resources/           the person's uploads under their names (read-only)
     task/resources/links.md   the links the person added (read-only)
     task/designs/             artifacts published on this task, file bytes
+    task/designs/urls.md      dev-server URLs published on this task (read-only)
     task/designs/attached.md  project assets attached to this task: title → path here (read-only)
     project/docs/             every project document
     project/designs/          every project design asset, file bytes
@@ -37,7 +38,11 @@ File names are <slug of title>.<ext>, with -<short id> added only on a
 clash; a file you create keeps the name you chose. A document's extension
 is its format: .html/.htm html, .md markdown, anything else text.
 
-Comments are named <yyyymmdd-hhmmss>-<author>-<short id>.md. You can edit
-or delete only your own; the others' are read-only (mode 0444), like every
-read-only path above.
+Comments are named <yyyymmdd-hhmmss>-<author>-<short id>.md. A file you
+create in task/comments is your comment. You can edit or delete only your
+own; the others' are read-only (mode 0444), like every read-only path above.
+
+A file you create, change or remove in task/designs publishes, revises or
+unpublishes a design; mv it to project/designs to make it a project asset,
+and back to make it the task's again. Folders under designs are kept.
 `
