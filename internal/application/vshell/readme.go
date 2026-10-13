@@ -45,4 +45,24 @@ own; the others' are read-only (mode 0444), like every read-only path above.
 A file you create, change or remove in task/designs publishes, revises or
 unpublishes a design; mv it to project/designs to make it a project asset,
 and back to make it the task's again. Folders under designs are kept.
+
+## Writing
+
+Write here with Write, Edit, MultiEdit or NotebookEdit, or with sed -i,
+tee, cp, mv, rm, touch and mkdir: each change is checked before it lands
+and stored once it has. Nothing else is seen, so nothing else is stored.
+A refusal starts with its code:
+
+    BASE_VERSION_STALE  the file changed since you got it; it has been refreshed: read it again and redo the change
+    READ_ONLY           the path is read-only
+    COMMENT_NOT_YOURS   the comment is someone else's
+    NOT_ON_TASK         the document is not linked to this task, so it cannot move to task/docs
+    NOT_STORED          the path is outside the folders the harness stores
+    REDIRECT_DENIED     shell redirects (>, >>, &>) into this folder are not stored: use Write/Edit or tee
+    SHELL_UNAVAILABLE   the harness could not be reached: redo the change once it is back
+
+Redirects are recognised when their target names this folder directly, or
+through $HARNESS_SHELL, $HOME, ~ or a cd earlier in the line. A target
+reached through eval, another variable or any other indirection is not
+recognised: the file changes on disk and is not stored.
 `

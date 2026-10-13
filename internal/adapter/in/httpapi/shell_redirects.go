@@ -7,12 +7,12 @@ import (
 
 // redirectTargets is every file a Bash command line redirects output into
 // (>, >>, >|, &>, &>>, n>, >&file, <>), as absolute paths: relative ones
-// are taken from cwd, following the line's cd commands, and $HARNESS_SHELL
-// is read as shellDir. It reads the line the way sh does as far as quotes,
+// are taken from cwd, following the line's cd commands, $HARNESS_SHELL is
+// read as shellDir, and ~, $HOME and ${HOME} as home. It reads the line the way sh does as far as quotes,
 // escapes, comments, operators and here-documents go; other expansions are
 // left as written, so such a target is not found inside the shell.
-func redirectTargets(command, cwd, shellDir string) []string {
-	l := &shLexer{s: command, shell: shellDir}
+func redirectTargets(command, cwd, shellDir, home string) []string {
+	l := &shLexer{s: command, shell: shellDir, home: home}
 	l.run()
 	var out []string
 	start := true
@@ -60,6 +60,7 @@ type shLexer struct {
 	s     string
 	i     int
 	shell string
+	home  string
 	toks  []shTok
 	// heredocs are the delimiters of here-documents whose bodies start
 	// after the current line, and whether their lines lose leading tabs.
@@ -206,14 +207,19 @@ func (l *shLexer) skipHeredocs() {
 	l.heredocs = nil
 }
 
-// word reads one word at l.i with its quotes removed and $HARNESS_SHELL
-// expanded outside single quotes; quoted says some of it was quoted.
+// word reads one word at l.i with its quotes removed, $HARNESS_SHELL and
+// $HOME expanded outside single quotes, and a leading unquoted ~ read as
+// home; quoted says some of it was quoted.
 func (l *shLexer) word() (string, bool) {
 	var b strings.Builder
 	quoted := false
+	start := l.i
 	for l.i < len(l.s) {
 		c := l.s[l.i]
 		switch {
+		case c == '~' && l.i == start && l.home != "" && (l.i+1 == len(l.s) || strings.IndexByte("/ \t\n;&|()<>", l.s[l.i+1]) >= 0):
+			b.WriteString(l.home)
+			l.i++
 		case c == ' ' || c == '\t' || c == '\n' || strings.IndexByte(";&|()<>`", c) >= 0:
 			return b.String(), quoted
 		case c == '\\':
@@ -257,22 +263,27 @@ func (l *shLexer) word() (string, bool) {
 	return b.String(), quoted
 }
 
-// variable expands $HARNESS_SHELL or ${HARNESS_SHELL} at l.i into b.
+// variable expands $HARNESS_SHELL, $HOME or their ${…} forms at l.i into b.
 func (l *shLexer) variable(b *strings.Builder) bool {
-	const name = "HARNESS_SHELL"
 	r := l.rest()
-	var n int
-	switch {
-	case strings.HasPrefix(r, "${"+name+"}"):
-		n = len(name) + 3
-	case strings.HasPrefix(r, "$"+name) && (len(r) == len(name)+1 || !isNameByte(r[len(name)+1])):
-		n = len(name) + 1
-	default:
-		return false
+	for _, v := range []struct{ name, value string }{{"HARNESS_SHELL", l.shell}, {"HOME", l.home}} {
+		if v.value == "" {
+			continue
+		}
+		var n int
+		switch {
+		case strings.HasPrefix(r, "${"+v.name+"}"):
+			n = len(v.name) + 3
+		case strings.HasPrefix(r, "$"+v.name) && (len(r) == len(v.name)+1 || !isNameByte(r[len(v.name)+1])):
+			n = len(v.name) + 1
+		default:
+			continue
+		}
+		b.WriteString(v.value)
+		l.i += n
+		return true
 	}
-	b.WriteString(l.shell)
-	l.i += n
-	return true
+	return false
 }
 
 func isNameByte(c byte) bool {
