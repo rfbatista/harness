@@ -37,6 +37,7 @@ import (
 	"operators-mcp/internal/application/planning"
 	"operators-mcp/internal/application/taskchannel"
 	"operators-mcp/internal/application/tooling"
+	"operators-mcp/internal/application/vshell"
 	"operators-mcp/internal/application/workspaces"
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/infra"
@@ -311,8 +312,9 @@ var AgentRuntimeModule = fx.Module("agentruntime",
 		newAppsService,
 		asPort(sqlite.NewArtifactRepository, new(ports.ArtifactRepository)),
 		newArtifactsService,
+		newVirtualShells,
 	),
-	fx.Invoke(registerRuntimeShutdown, registerServerSessions),
+	fx.Invoke(registerRuntimeShutdown, registerServerSessions, bindVirtualShells),
 )
 
 // TaskChannelModule wires the architect channel: its tables, the service,
@@ -377,6 +379,17 @@ func newArtifactsService(cfg Config, repo ports.ArtifactRepository, sessions por
 	svc.StoreDir = dir
 	svc.Subscribe(cat.Bus)
 	return svc, nil
+}
+
+// newVirtualShells fills task sessions' virtual shells from planning's
+// tickets, documents, comments and resources and the artifacts' designs.
+func newVirtualShells(plan *planning.Service, art *artifacts.Service) *vshell.Service {
+	return vshell.New(vshell.Sources{Tickets: plan, Documents: plan, Comments: plan, Resources: plan, Artifacts: art})
+}
+
+// bindVirtualShells gives every session with a task its virtual shell.
+func bindVirtualShells(orch *orchestration.Service, shells *vshell.Service) {
+	orch.Shells = shells
 }
 
 // newAppsService runs applications from session worktrees on the same

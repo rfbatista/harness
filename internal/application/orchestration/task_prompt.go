@@ -169,6 +169,14 @@ Use notify only for what the person has to know or do, never for progress
 chatter: request_user_review and moving a task to review already notify the
 person. A session may post at most 20 an hour.`
 
+// shellSection names the session's virtual shell, the folder holding its
+// task's and project's resources as files; its README.md maps the layout.
+func shellSection(dir string) string {
+	return "## Your virtual shell\n\n" +
+		"Your task's and project's documents, comments, resources and designs are files in\n" +
+		dir + " (also in $HARNESS_SHELL). Its README.md maps the layout and its rules."
+}
+
 // appendSection joins two prompt fragments with a blank line, tolerating an
 // empty base (a session with no agent prompt).
 func appendSection(base, section string) string {

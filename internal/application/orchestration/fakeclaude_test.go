@@ -2,10 +2,22 @@ package orchestration
 
 import (
 	"bufio"
+	"encoding/json"
 	"fmt"
 	"os"
 	"testing"
 )
+
+// fakeLaunchFile is where the fake CLI, run with CLAUDE_FAKE_RECORD=1, writes
+// how it was launched, in its working directory: what a headless session's
+// CLI gets.
+const fakeLaunchFile = "fake-claude-launch.json"
+
+// fakeLaunch is what fakeLaunchFile holds.
+type fakeLaunch struct {
+	Args  []string `json:"args"`
+	Shell string   `json:"shell"` // HARNESS_SHELL
+}
 
 func TestMain(m *testing.M) {
 	if os.Getenv("CLAUDE_FAKE") == "1" {
@@ -16,6 +28,11 @@ func TestMain(m *testing.M) {
 }
 
 func runFakeClaude() {
+	if os.Getenv("CLAUDE_FAKE_RECORD") == "1" {
+		b, _ := json.Marshal(fakeLaunch{Args: os.Args[1:], Shell: os.Getenv("HARNESS_SHELL")})
+		_ = os.WriteFile(fakeLaunchFile+".tmp", b, 0o644)
+		_ = os.Rename(fakeLaunchFile+".tmp", fakeLaunchFile)
+	}
 	out := bufio.NewWriter(os.Stdout)
 	defer out.Flush()
 	fmt.Fprintln(out, `{"type":"system","subtype":"init","session_id":"fake"}`)
