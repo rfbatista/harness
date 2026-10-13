@@ -5,6 +5,7 @@ package app
 import (
 	"bytes"
 	"encoding/json"
+	"net/http"
 	"net/http/httptest"
 	"os"
 	"os/exec"
@@ -160,6 +161,31 @@ func TestTheEditHooksCheckAndCommitEditsInsideTheShell(t *testing.T) {
 	}
 }
 
+// A hook query naming neither PreToolUse nor PostToolUse is a malformed
+// call: INVALID_INPUT, and nothing is stored or put back.
+func TestAnUnknownHookEventIsInvalidInput(t *testing.T) {
+	e := newShellE2E(t)
+	taskA := e.task("Shell hooks")
+	a := e.start(taskA)
+	doc := e.createDocument("Plan", "# Plan\n\nv1\n", "markdown", "task")
+	e.post("link_document_to_ticket", map[string]string{"ticket_id": taskA, "document_id": doc.ID}, nil)
+	eventually(t, "the plan in A", func() error { return hasFile(a.shell, "task/docs/plan.md", "# Plan\n\nv1\n", doc.ID, "task", "") })
+	agents := "# Plan\n\nv2 by the agent\n"
+	writeShellFile(t, a, "task/docs/plan.md", agents)
+	input := editInput("Write", filepath.Join(a.shell, "task", "docs", "plan.md"))
+	input["cwd"] = a.worktree
+	b, _ := json.Marshal(input)
+	for _, step := range []string{"check", "commit"} {
+		status, text := postJSON(t, e.srv.URL+"/api/sessions/"+a.id+"/shell/"+step+"?hook=PostToolUseFailure", string(b))
+		if status != http.StatusBadRequest || !strings.Contains(text, "INVALID_INPUT") {
+			t.Fatalf("shell/%s with an unknown hook = %d %s, want 400 INVALID_INPUT", step, status, text)
+		}
+	}
+	if d := e.document(doc.ID); d.Content != "# Plan\n\nv1\n" {
+		t.Fatalf("an unknown hook stored the edit: %q", d.Content)
+	}
+}
+
 // A commit the harness refuses after the tool already wrote puts the shell
 // back as the harness holds it: a changed read-only file gets its stored
 // content again, a file it does not store is removed.
@@ -185,9 +211,9 @@ func TestARefusedCommitPutsTheShellBack(t *testing.T) {
 
 	stray := filepath.Join(a.shell, "task", "stray.md")
 	writeShellFile(t, a, "task/stray.md", "# Stray\n")
-	out := runHook(t, a, e.srv.URL, "PostToolUse", editTools, editInput("Write", stray))
-	if !strings.Contains(out, `"decision":"block"`) || !strings.Contains(out, "NOT_STORED: task/stray.md") {
-		t.Fatalf("PostToolUse on a file the harness does not store = %s", out)
+	notStored := "NOT_STORED: task/stray.md is outside the folders the harness stores (task/docs, project/docs, task/comments, task/designs, project/designs); nothing was written"
+	if out := runHook(t, a, e.srv.URL, "PostToolUse", editTools, editInput("Write", stray)); !sameJSON(out, blocked(notStored)) {
+		t.Fatalf("PostToolUse on a file the harness does not store = %s, want %s", out, blocked(notStored))
 	}
 	if _, err := os.Stat(stray); !os.IsNotExist(err) {
 		t.Fatalf("the unstored file is still in the shell: %v", err)

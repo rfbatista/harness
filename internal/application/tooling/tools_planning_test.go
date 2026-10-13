@@ -155,7 +155,7 @@ func TestDocumentTools_FormatIsOptionalAndValidated(t *testing.T) {
 
 	// The schema advertises the choice and the descriptions no longer say Markdown.
 	schema, _ := json.Marshal(byName["create_document"].InputSchema)
-	if !bytes.Contains(schema, []byte(`"enum":["markdown","html"]`)) {
+	if !bytes.Contains(schema, []byte(`"enum":["markdown","html","text"]`)) {
 		t.Fatalf("create_document schema lacks the format enum: %s", schema)
 	}
 	for _, name := range []string{"create_document", "update_document"} {

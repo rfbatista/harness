@@ -3,9 +3,11 @@ package httpapi
 import (
 	"net/http"
 	"net/url"
+	"strconv"
 
 	"github.com/labstack/echo/v4"
 
+	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
 )
 
@@ -49,6 +51,9 @@ func (h *Handler) shellEdit(c echo.Context, answer func(ports.ShellEdit) ports.S
 		return echo.NewHTTPError(http.StatusForbidden, "loopback only")
 	}
 	if event := c.QueryParam("hook"); event != "" {
+		if event != "PreToolUse" && event != "PostToolUse" {
+			return &domain.StructuredError{Code: "INVALID_INPUT", Message: "hook must be PreToolUse or PostToolUse, not " + strconv.Quote(event)}
+		}
 		return h.shellHook(c, event, answer)
 	}
 	var e ports.ShellEdit

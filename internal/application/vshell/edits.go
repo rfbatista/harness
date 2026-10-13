@@ -196,7 +196,7 @@ func refuseUnstored(rel string, a area) ports.ShellAnswer {
 	case layout:
 		return refuse("NOT_STORED", rel+" is one of the shell's own folders; nothing was written")
 	}
-	return refuse("NOT_STORED", rel+" is outside the folders the harness stores (task/docs, project/docs, task/comments, task/designs); nothing was written")
+	return refuse("NOT_STORED", rel+" is outside the folders the harness stores (task/docs, project/docs, task/comments, task/designs, project/designs); nothing was written")
 }
 
 func refuseCrossMove(src, dst string) ports.ShellAnswer {
