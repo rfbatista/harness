@@ -127,6 +127,25 @@ type ArtifactAttachments interface {
 	DetachArtifactFromTicket(ctx context.Context, artifactID, ticketID string) (*domain.Artifact, error)
 }
 
+// ShellDesignWriter stores what agents do to the design files of their
+// virtual shells. Every design stored this way is served from a harness
+// copy of its bytes, because the shell they came from is temporary.
+type ShellDesignWriter interface {
+	GetArtifact(ctx context.Context, id string) (*domain.Artifact, error)
+	OpenArtifactFile(ctx context.Context, id, relpath string) (*ArtifactFile, error)
+	// PublishDesign publishes content as a new task-scope artifact of the
+	// session's task at path (relative to task/designs), kept as the
+	// artifact's path; its type comes from path and content.
+	PublishDesign(ctx context.Context, sessionID, path, title string, content []byte) (*domain.Artifact, error)
+	// ReviseDesign makes content the artifact's next revision; the files
+	// next to it are kept.
+	ReviseDesign(ctx context.Context, id string, content []byte) (*domain.Artifact, error)
+	// RemoveDesign unpublishes a task-scope artifact, whichever session of
+	// its task published it; a project one is ARTIFACT_IN_PROJECT.
+	RemoveDesign(ctx context.Context, id string) error
+	SetArtifactScope(ctx context.Context, artifactID string, scope domain.ArtifactScope) (*domain.Artifact, error)
+}
+
 // Artifacts is the whole artifact surface.
 type Artifacts interface {
 	ArtifactPublisher

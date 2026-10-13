@@ -383,9 +383,11 @@ func newArtifactsService(cfg Config, repo ports.ArtifactRepository, sessions por
 
 // newVirtualShells fills task sessions' virtual shells from planning's
 // tickets, documents, comments and resources and the artifacts' designs,
-// and stores the documents agents write in them through planning.
-func newVirtualShells(plan *planning.Service, art *artifacts.Service) *vshell.Service {
-	return vshell.New(vshell.Sources{Tickets: plan, Documents: plan, Comments: plan, Resources: plan, Artifacts: art, Writes: plan})
+// and stores the documents and comments agents write in them through
+// planning and their designs through the artifacts.
+func newVirtualShells(plan *planning.Service, art *artifacts.Service, sessions ports.SessionRepository, cat catalog.Catalog) *vshell.Service {
+	return vshell.New(vshell.Sources{Tickets: plan, Documents: plan, Comments: plan, Resources: plan, Artifacts: art, Writes: plan,
+		Designs: art, Sessions: sessions, Agents: cat.Agents})
 }
 
 // bindVirtualShells gives every session with a task its virtual shell, and
@@ -396,6 +398,18 @@ func bindVirtualShells(orch *orchestration.Service, shells *vshell.Service, plan
 	orch.Shells = shells
 	shells.Subscribe(cat.Bus)
 	plan.Feed = changeSinks{plan.Feed, shells}
+	plan.Announcer = ticketAnnouncers{plan.Announcer, shells}
+}
+
+// ticketAnnouncers tells every announcer of each task change in turn.
+type ticketAnnouncers []ports.TicketAnnouncer
+
+func (a ticketAnnouncers) AnnounceTicket(tk *domain.Ticket, deleted bool) {
+	for _, to := range a {
+		if to != nil {
+			to.AnnounceTicket(tk, deleted)
+		}
+	}
 }
 
 // changeSinks puts each change on every sink in turn.

@@ -222,6 +222,7 @@ func checkShell(t *testing.T, dir string, w *shellWorld) {
 		"task/resources/links.md":  "- [Figma board](https://example.com/board)",
 		"task/designs/attached.md": "Logo → project/designs/brand/logo.svg",
 		"project/designs/urls.md":  "- [Dev server](http://localhost:5173/)",
+		"task/designs/urls.md":     "# Design URLs",
 		"README.md":                "task/docs/",
 		".index.json":              "",
 		"task/task.json":           "",
