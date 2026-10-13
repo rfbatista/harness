@@ -116,6 +116,8 @@ func (e *shellE2E) task(title string) string {
 // its id, its worktree and its virtual shell.
 type runningSession struct {
 	id, worktree, shell string
+	// hooks are the settings hooks its CLI was given beside its own.
+	hooks map[string][]ports.HookGroup
 }
 
 func (e *shellE2E) start(ticketID string) runningSession {
@@ -126,7 +128,7 @@ func (e *shellE2E) start(ticketID string) runningSession {
 	}
 	for _, d := range spec.AddDirs {
 		if strings.HasPrefix(filepath.Base(d), "harness-shell-") {
-			return runningSession{id: sess.ID, worktree: spec.Dir, shell: d}
+			return runningSession{id: sess.ID, worktree: spec.Dir, shell: d, hooks: spec.Hooks}
 		}
 	}
 	e.t.Fatalf("session %s has no virtual shell in %v", sess.ID, spec.AddDirs)

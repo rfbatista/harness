@@ -527,6 +527,9 @@ func newOrchestrationService(
 	svc.SessionHookURL = func(sessionID string) string {
 		return base + httpapi.InteractiveSessionHookPath + "?session_id=" + url.QueryEscape(sessionID)
 	}
+	svc.SessionShellURL = func(sessionID string) string {
+		return base + httpapi.SessionShellPath(sessionID)
+	}
 	svc.Transcripts = transcripts
 	svc.TranscriptReader = transcriptReader
 	svc.Terminals = terminals

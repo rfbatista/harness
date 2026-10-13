@@ -76,8 +76,8 @@ func (a Agent) Command(spec ports.AgentSpec) (ports.ShellCommand, error) {
 	if spec.AppendSystem != "" {
 		args = append(args, "--append-system-prompt", spec.AppendSystem)
 	}
-	if spec.HookURL != "" {
-		settings, err := sessionHookSettings(spec.HookURL)
+	if spec.HookURL != "" || len(spec.Hooks) > 0 {
+		settings, err := sessionHookSettings(spec.HookURL, spec.Hooks)
 		if err != nil {
 			return ports.ShellCommand{}, err
 		}
@@ -124,7 +124,8 @@ func mcpConfigJSON(servers []ports.MCPServerSpec) (string, error) {
 
 // sessionHookSettings is a --settings payload whose hooks post their input
 // to url, with the hook's name added as event=: SessionStart names the
-// conversation, UserPromptSubmit starts a turn and Stop ends one.
+// conversation, UserPromptSubmit starts a turn and Stop ends one. The
+// spec's more hooks (a task session's edit proxy) are added beside them.
 // --settings layers over the user's own settings rather than replacing them.
 //
 // The hooks must never disturb the session. SessionStart's and
@@ -133,22 +134,25 @@ func mcpConfigJSON(servers []ports.MCPServerSpec) (string, error) {
 // claude turns that waited for this one to end ({"decision":"block",...}),
 // and it is empty otherwise. A server that is down only costs the
 // five-second timeout, and the session goes on as if it had answered nothing.
-func sessionHookSettings(url string) (string, error) {
-	sep := "&"
-	if !strings.Contains(url, "?") {
-		sep = "?"
+func sessionHookSettings(url string, more map[string][]ports.HookGroup) (string, error) {
+	hooks := map[string][]ports.HookGroup{}
+	if url != "" {
+		sep := "&"
+		if !strings.Contains(url, "?") {
+			sep = "?"
+		}
+		post := func(event, out string) []ports.HookGroup {
+			cmd := "curl -fsS -m 5 -X POST -H 'Content-Type: application/json' --data-binary @- '" +
+				url + sep + "event=" + event + "' " + out + " || true"
+			return []ports.HookGroup{{Hooks: []ports.HookCommand{{Type: "command", Command: cmd}}}}
+		}
+		hooks["SessionStart"] = post("SessionStart", ">/dev/null 2>&1")
+		hooks["UserPromptSubmit"] = post("UserPromptSubmit", ">/dev/null 2>&1")
+		hooks["Stop"] = post("Stop", "2>/dev/null")
 	}
-	post := func(event, out string) any {
-		cmd := "curl -fsS -m 5 -X POST -H 'Content-Type: application/json' --data-binary @- '" +
-			url + sep + "event=" + event + "' " + out + " || true"
-		return []any{map[string]any{"hooks": []any{map[string]any{"type": "command", "command": cmd}}}}
+	for event, groups := range more {
+		hooks[event] = append(hooks[event], groups...)
 	}
-	b, err := json.Marshal(map[string]any{
-		"hooks": map[string]any{
-			"SessionStart":     post("SessionStart", ">/dev/null 2>&1"),
-			"UserPromptSubmit": post("UserPromptSubmit", ">/dev/null 2>&1"),
-			"Stop":             post("Stop", "2>/dev/null"),
-		},
-	})
+	b, err := json.Marshal(map[string]any{"hooks": hooks})
 	return string(b), err
 }

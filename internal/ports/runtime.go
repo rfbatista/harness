@@ -46,6 +46,9 @@ type AgentSpec struct {
 	// HookURL, when set, is where the CLI reports the conversation it is in
 	// (claude's SessionStart hook).
 	HookURL string `json:"hook_url,omitempty"`
+	// Hooks are more claude settings hooks by event (PreToolUse, ...),
+	// added beside the ones HookURL brings: a task session's edit proxy.
+	Hooks map[string][]HookGroup `json:"hooks,omitempty"`
 	// Prompt is the optional first message.
 	Prompt string   `json:"prompt,omitempty"`
 	Env    []string `json:"env,omitempty"`
@@ -54,6 +57,20 @@ type AgentSpec struct {
 	// "Contract: Harness server ↔ Agent sessions — git credentials").
 	EnvFile      string       `json:"env_file,omitempty"`
 	Conversation Conversation `json:"conversation"`
+}
+
+// HookGroup is one entry of a claude settings hook event: the commands run
+// for the tools Matcher names (a regular expression; empty for all).
+type HookGroup struct {
+	Matcher string        `json:"matcher,omitempty"`
+	Hooks   []HookCommand `json:"hooks"`
+}
+
+// HookCommand is a shell command claude runs as a hook, with the hook's
+// input on its stdin.
+type HookCommand struct {
+	Type    string `json:"type"` // "command"
+	Command string `json:"command"`
 }
 
 // MCPServerSpec is an MCP server attached to a session.
