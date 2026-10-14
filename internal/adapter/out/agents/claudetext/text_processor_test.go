@@ -2,193 +2,87 @@ package claudetext
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
-	"slices"
+	"fmt"
+	"os/exec"
 	"strings"
 	"testing"
 
 	"operators-mcp/internal/domain"
 )
 
-// decodeEcho runs one adapter call against the fake one-shot CLI and returns
-// what the fake saw: the argv, the piped prompt and the working directory.
-func decodeEcho(t *testing.T, out string) oneShotEcho {
-	t.Helper()
-	var e oneShotEcho
-	if err := json.Unmarshal([]byte(out), &e); err != nil {
-		t.Fatalf("decode echo from %q: %v", out, err)
-	}
-	return e
-}
+// The text-processing ports over llmkit's one-shot mode: each adapter owns
+// its prompt, and every call is the harness's own spend.
 
-// flagValue returns the argument following flag in args.
-func flagValue(args []string, flag string) (string, bool) {
-	for i, a := range args {
-		if a == flag && i+1 < len(args) {
-			return args[i+1], true
-		}
+func TestSummarizeSendsTheTextAsTheInputUnderTheSummarizerPrompt(t *testing.T) {
+	f := &fakeOneShot{result: claudeResult("the gist")}
+	out, err := NewSummarizer(f, "claude", "sonnet").Summarize(context.Background(), "a long piece of prose")
+	if err != nil || out != "the gist" {
+		t.Fatalf("Summarize = %q, %v; want the one-shot's answer", out, err)
 	}
-	return "", false
-}
-
-func TestSummarizeSendsTextOnStdin(t *testing.T) {
-	bin, env := fakeOneShotCmd()
-	s := &Summarizer{cli: oneShot{bin: bin, model: "sonnet", env: env}}
-
-	out, err := s.Summarize(context.Background(), "a long piece of prose")
-	if err != nil {
-		t.Fatalf("Summarize: %v", err)
+	req := f.got[0]
+	if req.Input != "a long piece of prose" || !strings.Contains(req.System, "summarizer") || req.Model != "sonnet" {
+		t.Errorf("request = %+v, want the text as input, the summarizer prompt and model sonnet", req)
 	}
-	echo := decodeEcho(t, out)
-
-	if echo.Stdin != "a long piece of prose" {
-		t.Errorf("stdin = %q, want the text verbatim", echo.Stdin)
-	}
-	if slices.Contains(echo.Args, "a long piece of prose") {
-		t.Error("text leaked into argv; it must only travel on stdin")
-	}
-	sys, ok := flagValue(echo.Args, "--system-prompt")
-	if !ok || !strings.Contains(sys, "summarizer") {
-		t.Errorf("--system-prompt = %q, want the summarizer prompt", sys)
-	}
-	if model, _ := flagValue(echo.Args, "--model"); model != "sonnet" {
-		t.Errorf("--model = %q, want sonnet", model)
+	if req.Attribution != "harness:system" {
+		t.Errorf("attribution = %q, want harness:system", req.Attribution)
 	}
 }
 
-// The whole point of the one-shot adapter is that it is a pure function of its
-// input: no tools, no MCP servers, no skills, no project context, no session
-// left on disk. Losing any of these flags silently turns a text utility into a
-// coding agent with filesystem access.
-func TestOneShotIsSandboxedAndStateless(t *testing.T) {
-	bin, env := fakeOneShotCmd()
-	g := &TextGenerator{cli: oneShot{bin: bin, env: env}}
-
-	out, err := g.GenerateText(context.Background(), "write a haiku")
-	if err != nil {
-		t.Fatalf("GenerateText: %v", err)
+func TestGenerateAndTranslateCarryTheirOwnPrompts(t *testing.T) {
+	f := &fakeOneShot{}
+	if _, err := NewTextGenerator(f, "claude", "").GenerateText(context.Background(), "write a haiku"); err != nil {
+		t.Fatal(err)
 	}
-	echo := decodeEcho(t, out)
+	if _, err := NewTranslator(f, "claude", "").Translate(context.Background(), "Bom dia", "  Japanese  "); err != nil {
+		t.Fatal(err)
+	}
+	gen, tr := f.got[0], f.got[1]
+	if gen.Input != "write a haiku" || !strings.Contains(gen.System, "text generator") || gen.Model != "" || gen.Attribution != "harness:system" {
+		t.Errorf("generate request = %+v, want the prompt as input, the generator prompt, no model, harness:system", gen)
+	}
+	if tr.Input != "Bom dia" || !strings.Contains(tr.System, "into Japanese") || strings.Contains(tr.Input, "Japanese") || tr.Attribution != "harness:system" {
+		t.Errorf("translate request = %+v, want the source text alone as input and the trimmed language in the prompt", tr)
+	}
+}
 
-	for _, flag := range []string{
-		"--print", "--strict-mcp-config", "--disable-slash-commands",
-		"--no-session-persistence", "--safe-mode",
+func TestBlankInputIsRejectedBeforeCallingClaude(t *testing.T) {
+	f := &fakeOneShot{}
+	s, g, tr := NewSummarizer(f, "claude", ""), NewTextGenerator(f, "claude", ""), NewTranslator(f, "claude", "")
+	for name, call := range map[string]func() (string, error){
+		"summarize blank text":     func() (string, error) { return s.Summarize(context.Background(), "  \n ") },
+		"generate blank prompt":    func() (string, error) { return g.GenerateText(context.Background(), "") },
+		"translate blank text":     func() (string, error) { return tr.Translate(context.Background(), " ", "French") },
+		"translate blank language": func() (string, error) { return tr.Translate(context.Background(), "hello", " ") },
 	} {
-		if !slices.Contains(echo.Args, flag) {
-			t.Errorf("missing %s in %v", flag, echo.Args)
+		_, err := call()
+		var se *domain.StructuredError
+		if !errors.As(err, &se) || se.Code != "INVALID_INPUT" {
+			t.Errorf("%s: err = %v, want INVALID_INPUT", name, err)
 		}
 	}
-	if v, _ := flagValue(echo.Args, "--tools"); v != "" {
-		t.Errorf("--tools = %q, want the empty string (all tools disabled)", v)
-	}
-	if v, _ := flagValue(echo.Args, "--output-format"); v != "json" {
-		t.Errorf("--output-format = %q, want json", v)
-	}
-	if v, _ := flagValue(echo.Args, "--max-turns"); v != "1" {
-		t.Errorf("--max-turns = %q, want 1", v)
-	}
-	if _, ok := flagValue(echo.Args, "--model"); ok {
-		t.Error("--model passed although no model was configured")
-	}
-	if strings.Contains(echo.Dir, "coding_pool") {
-		t.Errorf("ran in %q, want a neutral directory outside the project", echo.Dir)
+	if len(f.got) != 0 {
+		t.Errorf("claude was called %d times, want none", len(f.got))
 	}
 }
 
-func TestTranslatePutsTargetLanguageInSystemPrompt(t *testing.T) {
-	bin, env := fakeOneShotCmd()
-	tr := &Translator{cli: oneShot{bin: bin, env: env}}
-
-	out, err := tr.Translate(context.Background(), "Bom dia", "  Japanese  ")
-	if err != nil {
-		t.Fatalf("Translate: %v", err)
-	}
-	echo := decodeEcho(t, out)
-
-	sys, _ := flagValue(echo.Args, "--system-prompt")
-	if !strings.Contains(sys, "into Japanese") {
-		t.Errorf("--system-prompt = %q, want the trimmed target language in it", sys)
-	}
-	if echo.Stdin != "Bom dia" {
-		t.Errorf("stdin = %q, want the source text alone", echo.Stdin)
-	}
-	if strings.Contains(echo.Stdin, "Japanese") {
-		t.Error("target language leaked into the translated text")
-	}
-}
-
-func TestBlankInputIsRejectedBeforeSpawning(t *testing.T) {
-	// A binary that does not exist: reaching it at all would be the failure.
-	s := &Summarizer{cli: oneShot{bin: "/nonexistent/claude"}}
-	g := &TextGenerator{cli: oneShot{bin: "/nonexistent/claude"}}
-	tr := &Translator{cli: oneShot{bin: "/nonexistent/claude"}}
-
-	cases := []struct {
-		name string
-		call func() (string, error)
-	}{
-		{"summarize blank text", func() (string, error) { return s.Summarize(context.Background(), "  \n ") }},
-		{"generate blank prompt", func() (string, error) { return g.GenerateText(context.Background(), "") }},
-		{"translate blank text", func() (string, error) { return tr.Translate(context.Background(), " ", "French") }},
-		{"translate blank language", func() (string, error) { return tr.Translate(context.Background(), "hello", " ") }},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			_, err := tc.call()
-			var se *domain.StructuredError
-			if !errors.As(err, &se) || se.Code != "INVALID_INPUT" {
-				t.Fatalf("err = %v, want INVALID_INPUT", err)
-			}
-		})
-	}
-}
-
-func TestMissingBinaryReportsStructuredError(t *testing.T) {
-	s := &Summarizer{cli: oneShot{bin: "definitely-not-a-real-binary-xyz"}}
-
-	_, err := s.Summarize(context.Background(), "text")
+func TestAMissingCLIIsAStructuredError(t *testing.T) {
+	f := &fakeOneShot{err: fmt.Errorf("claude: start: %w", exec.ErrNotFound)}
+	_, err := NewSummarizer(f, "definitely-not-claude", "").Summarize(context.Background(), "text")
 	var se *domain.StructuredError
-	if !errors.As(err, &se) || se.Code != "CLAUDE_CLI_NOT_FOUND" {
-		t.Fatalf("err = %v, want CLAUDE_CLI_NOT_FOUND", err)
+	if !errors.As(err, &se) || se.Code != "CLAUDE_CLI_NOT_FOUND" || !strings.Contains(se.Message, "definitely-not-claude") {
+		t.Fatalf("err = %v, want CLAUDE_CLI_NOT_FOUND naming the binary", err)
 	}
 }
 
-func TestCLIFailuresSurface(t *testing.T) {
-	cases := []struct {
-		mode string
-		want string
-	}{
-		{"exit", "no auth token found"}, // stderr tail is kept in the error
-		{"is_error", "error_max_turns"}, // exit 0, but the envelope says it failed
-		{"empty", "empty result"},
-		{"garbage", "decode result"},
+func TestCLIFailuresAndCancellationSurface(t *testing.T) {
+	f := &fakeOneShot{err: errors.New("claude: error_max_turns: turn limit")}
+	if _, err := NewSummarizer(f, "claude", "").Summarize(context.Background(), "text"); err == nil || !strings.Contains(err.Error(), "error_max_turns") {
+		t.Errorf("err = %v, want the CLI's failure", err)
 	}
-	for _, tc := range cases {
-		t.Run(tc.mode, func(t *testing.T) {
-			bin, env := fakeOneShotCmd("CLAUDE_FAKE_MODE=" + tc.mode)
-			s := &Summarizer{cli: oneShot{bin: bin, env: env}}
-
-			_, err := s.Summarize(context.Background(), "text")
-			if err == nil {
-				t.Fatal("want an error")
-			}
-			if !strings.Contains(err.Error(), tc.want) {
-				t.Errorf("err = %v, want it to mention %q", err, tc.want)
-			}
-		})
-	}
-}
-
-func TestCancelledContextStopsTheCLI(t *testing.T) {
-	bin, env := fakeOneShotCmd()
-	s := &Summarizer{cli: oneShot{bin: bin, env: env}}
-
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-
-	_, err := s.Summarize(ctx, "text")
-	if !errors.Is(err, context.Canceled) {
-		t.Fatalf("err = %v, want context.Canceled", err)
+	if _, err := NewSummarizer(&fakeOneShot{}, "claude", "").Summarize(ctx, "text"); !errors.Is(err, context.Canceled) {
+		t.Errorf("err = %v, want context.Canceled", err)
 	}
 }

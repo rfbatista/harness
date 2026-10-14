@@ -105,6 +105,7 @@ const (
 	PageReviews   = "reviews"
 	PageDocuments = "documents"
 	PageDesign    = "design"
+	PageUsage     = "usage"
 )
 
 // Rail is the current project's tasks, in kanban groups, and the ways to its
@@ -130,7 +131,9 @@ type Rail struct {
 	// architects raised for the person; Reviews counts the pending ones.
 	ReviewsHref string
 	Reviews     int
-	Groups      []RailGroup
+	// UsageHref is the project's token usage; "" when usage is not served.
+	UsageHref string
+	Groups    []RailGroup
 	// Empty is shown when a project is selected but has no tasks.
 	Empty string
 	// Current is the open task's id, "" when none: the live rail marks it.

@@ -1,15 +1,13 @@
 package claudetext
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
 	"os/exec"
-	"strconv"
 	"strings"
+
+	"github.com/rfbatista/llmkit/claude"
 
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
@@ -21,11 +19,6 @@ var (
 	_ ports.TextGenerator = (*TextGenerator)(nil)
 	_ ports.Translator    = (*Translator)(nil)
 )
-
-// oneShotMaxTurns caps the CLI at a single assistant turn. A text transform has
-// no tools to call and nothing to iterate on, so a second turn could only mean
-// the model started a conversation we never intend to continue.
-const oneShotMaxTurns = 1
 
 // System prompts replace the CLI's default coding-agent prompt entirely, which
 // is what keeps the output a bare transformation instead of a chat reply.
@@ -48,71 +41,29 @@ const (
 		"no markdown fences, no notes."
 )
 
-// oneShot runs the claude CLI as a stateless text transformer: one prompt in on
-// stdin, one answer out on stdout. It is the shared machinery behind the three
-// text-processing adapters; each of them only supplies a system prompt.
-//
-// This is deliberately not a *Manager session. A session is a long-lived,
-// tool-using, approval-gated process the user watches in the UI; a summary is a
-// pure function of its input, and paying for a session's lifecycle, permission
-// broker and event stream to get one would tie a text utility to the whole
-// orchestration layer.
+// OneShotter runs one stateless claude turn: llmkit's one-shot mode, which
+// *claude.Manager implements, routed through the LLM proxy.
+type OneShotter interface {
+	OneShot(ctx context.Context, req claude.OneShotRequest) (claude.OneShotResult, error)
+}
+
+// oneShot is the shared machinery behind the three text-processing
+// adapters; each of them only supplies a system prompt. llmkit owns the CLI's
+// arguments: no tools, no MCP, no skills, no session persistence, a neutral
+// working directory, the input on stdin.
 type oneShot struct {
-	// bin is the claude CLI binary (Config.ClaudeBin).
+	claude OneShotter
+	// bin names the CLI in the error a missing one gives.
 	bin string
 	// model is the CLI model alias or full name; empty leaves the CLI's own
 	// configured default in place.
 	model string
-	// env replaces the child's environment when non-nil; nil inherits this
-	// process's. Tests use it to drive a fake CLI.
-	env []string
 }
 
-// args builds the argv for one transformation. Everything here exists to make
-// the call a pure function: no tools, no MCP servers, no skills, no resumable
-// session, and no project context.
-func (o oneShot) args(systemPrompt string) []string {
-	a := []string{
-		"--print",
-		"--output-format", "json",
-		// A text transform must not touch the machine or reach the network
-		// beyond the model API.
-		"--tools", "",
-		"--strict-mcp-config",
-		"--disable-slash-commands",
-		// Nothing here is ever resumed, so it does not belong on disk.
-		"--no-session-persistence",
-		"--max-turns", strconv.Itoa(oneShotMaxTurns),
-		// safe-mode drops CLAUDE.md, plugins, skills and hooks, so the same text
-		// summarizes the same way regardless of which directory the server
-		// happens to be running in.
-		"--safe-mode",
-		"--system-prompt", systemPrompt,
-	}
-	if o.model != "" {
-		a = append(a, "--model", o.model)
-	}
-	return a
-}
-
-// run feeds input to the CLI and returns the transformed text.
+// run sends input under systemPrompt and returns the answer.
 func (o oneShot) run(ctx context.Context, systemPrompt, input string) (string, error) {
-	cmd := exec.CommandContext(ctx, o.bin, o.args(systemPrompt)...)
-	// The text travels on stdin, never in argv: it can be arbitrarily long
-	// (ARG_MAX) and can start with "--", which as an argument the CLI would
-	// parse as a flag.
-	cmd.Stdin = strings.NewReader(input)
-	// A neutral working directory: the CLI reports its cwd and git state to
-	// itself, and a text transform should not vary with where the server runs.
-	cmd.Dir = os.TempDir()
-	if o.env != nil {
-		cmd.Env = o.env
-	}
-	var stdout bytes.Buffer
-	stderr := newStderrTail(nil)
-	cmd.Stdout, cmd.Stderr = &stdout, stderr
-
-	if err := cmd.Run(); err != nil {
+	res, err := o.claude.OneShot(ctx, claude.OneShotRequest{System: systemPrompt, Input: input, Model: o.model, Attribution: ports.UsageSystemAttribution})
+	if err != nil {
 		if errors.Is(err, exec.ErrNotFound) {
 			return "", &domain.StructuredError{
 				Code:    "CLAUDE_CLI_NOT_FOUND",
@@ -122,36 +73,9 @@ func (o oneShot) run(ctx context.Context, systemPrompt, input string) (string, e
 		if ctxErr := ctx.Err(); ctxErr != nil {
 			return "", ctxErr
 		}
-		return "", fmt.Errorf("claude: %w: %s", err, stderr.String())
+		return "", err
 	}
-	return decodeOneShotResult(stdout.Bytes(), stderr.String())
-}
-
-// oneShotResult is the `--output-format json` envelope: the whole run collapsed
-// into a single result object.
-type oneShotResult struct {
-	Subtype string `json:"subtype"`
-	IsError bool   `json:"is_error"`
-	Result  string `json:"result"`
-}
-
-// decodeOneShotResult turns the CLI's JSON envelope into the transformed text.
-// A zero-exit run can still carry a failure (is_error with subtype
-// "error_max_turns" or "error_during_execution"), so the exit code alone is not
-// enough to call the call a success.
-func decodeOneShotResult(stdout []byte, stderrTail string) (string, error) {
-	var res oneShotResult
-	if err := json.Unmarshal(bytes.TrimSpace(stdout), &res); err != nil {
-		return "", fmt.Errorf("claude: decode result: %w: %s", err, stderrTail)
-	}
-	if res.IsError {
-		return "", fmt.Errorf("claude: %s: %s", res.Subtype, strings.TrimSpace(res.Result))
-	}
-	text := strings.TrimSpace(res.Result)
-	if text == "" {
-		return "", errors.New("claude: empty result")
-	}
-	return text, nil
+	return res.Text, nil
 }
 
 // Summarizer condenses text with the Claude CLI.
@@ -159,8 +83,8 @@ type Summarizer struct{ cli oneShot }
 
 // NewSummarizer returns the summarization adapter. model may be empty to keep
 // the CLI's configured default.
-func NewSummarizer(bin, model string) *Summarizer {
-	return &Summarizer{cli: oneShot{bin: bin, model: model}}
+func NewSummarizer(c OneShotter, bin, model string) *Summarizer {
+	return &Summarizer{cli: oneShot{claude: c, bin: bin, model: model}}
 }
 
 func (s *Summarizer) Summarize(ctx context.Context, text string) (string, error) {
@@ -175,8 +99,8 @@ type TextGenerator struct{ cli oneShot }
 
 // NewTextGenerator returns the text-generation adapter. model may be empty to
 // keep the CLI's configured default.
-func NewTextGenerator(bin, model string) *TextGenerator {
-	return &TextGenerator{cli: oneShot{bin: bin, model: model}}
+func NewTextGenerator(c OneShotter, bin, model string) *TextGenerator {
+	return &TextGenerator{cli: oneShot{claude: c, bin: bin, model: model}}
 }
 
 func (g *TextGenerator) GenerateText(ctx context.Context, prompt string) (string, error) {
@@ -191,8 +115,8 @@ type Translator struct{ cli oneShot }
 
 // NewTranslator returns the translation adapter. model may be empty to keep the
 // CLI's configured default.
-func NewTranslator(bin, model string) *Translator {
-	return &Translator{cli: oneShot{bin: bin, model: model}}
+func NewTranslator(c OneShotter, bin, model string) *Translator {
+	return &Translator{cli: oneShot{claude: c, bin: bin, model: model}}
 }
 
 // Translate renders text in targetLanguage. The target language goes in the

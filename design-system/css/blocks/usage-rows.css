@@ -1,0 +1,54 @@
+/*
+ * Usage rows — the Usage page's ranked lists (top tasks, top sessions) and
+ * its live feed: one row per task, session or request, its name or time at
+ * the start and its figures (tokens, share, estimated cost) at the end.
+ * <ol class="usage-rows"><li><a class="name">…</a><span class="figures">…</span></li></ol>
+ * <ol class="usage-feed"><li data-failed><time>…</time><span class="model">…</span><span class="task">…</span><span class="figures">…</span><span class="failure">…</span></li></ol>
+ */
+
+@layer blocks {
+  .usage-tops {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr));
+    gap: var(--space-l);
+  }
+
+  .usage-rows,
+  .usage-feed {
+    display: grid;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+
+    & > li {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      gap: var(--space-2xs) var(--space-s);
+      max-inline-size: none;
+      padding: var(--space-xs) var(--space-l);
+      font-size: var(--text-sm);
+    }
+    & > li + li { border-block-start: var(--border-width) solid var(--color-line); }
+
+    & .name { display: inline-flex; flex-wrap: wrap; gap: 0 var(--space-xs); flex: 1 1 12rem; min-inline-size: 0; overflow-wrap: anywhere; }
+    & .task { color: var(--color-ink-muted); }
+    & .figures {
+      display: inline-flex;
+      gap: var(--space-s);
+      margin-inline-start: auto;
+      color: var(--color-ink);
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
+    & .share, & .duration { color: var(--color-ink-faint); }
+  }
+
+  .usage-feed {
+    & time { color: var(--color-ink-faint); font-variant-numeric: tabular-nums; }
+    & .model { color: var(--color-ink-muted); font-family: var(--font-mono); font-size: var(--text-xs); }
+    & .task { color: var(--color-ink); flex: 1 1 10rem; min-inline-size: 0; overflow-wrap: anywhere; }
+    & .failure { flex-basis: 100%; color: var(--color-danger); font-size: var(--text-xs); }
+    & > li[data-failed] { box-shadow: inset 3px 0 0 var(--color-danger); }
+  }
+}

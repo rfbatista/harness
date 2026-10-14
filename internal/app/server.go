@@ -11,6 +11,7 @@ import (
 	"go.uber.org/fx"
 
 	"operators-mcp/internal/adapter/in/httpapi"
+	"operators-mcp/internal/adapter/in/llm"
 	"operators-mcp/internal/adapter/in/mcp"
 	"operators-mcp/internal/adapter/in/mcpsession"
 	"operators-mcp/internal/adapter/in/ui"
@@ -24,6 +25,7 @@ import (
 	"operators-mcp/internal/application/planning"
 	"operators-mcp/internal/application/taskchannel"
 	"operators-mcp/internal/application/tooling"
+	"operators-mcp/internal/application/usage"
 	"operators-mcp/internal/application/vshell"
 	"operators-mcp/internal/application/workspaces"
 	"operators-mcp/internal/domain"
@@ -46,7 +48,7 @@ var ServerModule = fx.Module("server",
 
 // registerHTTPServer mounts the UI and JSON API on a mux and serves it,
 // shutting down gracefully when fx stops.
-func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRunner *apps.Service, ts *tooling.Service, exec *execution.Service, orch *orchestration.Service, plan *planning.Service, ws *workspaces.Service, broker *approval.Broker, sessions ports.SessionRepository, art *artifacts.Service, channel *taskchannel.Service, prs *workspaces.PullRequests, code ports.CodeBrowser, inbox optionalNotifications, creds optionalGitCredentials, shells *vshell.Service) error {
+func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRunner *apps.Service, ts *tooling.Service, exec *execution.Service, orch *orchestration.Service, plan *planning.Service, ws *workspaces.Service, broker *approval.Broker, sessions ports.SessionRepository, art *artifacts.Service, channel *taskchannel.Service, prs *workspaces.PullRequests, code ports.CodeBrowser, inbox optionalNotifications, creds optionalGitCredentials, shells *vshell.Service, usageSvc *usage.Service) error {
 	uiHandler, err := ui.SPAHandler(ui.Dist)
 	if err != nil {
 		return err
@@ -94,6 +96,7 @@ func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRun
 		TaskComments:  plan,
 		PullRequests:  prs,
 		Notifications: notes,
+		Usage:         usageSvc,
 		Code:          code,
 		// The git credentials every remote operation authenticates with.
 		GitCredentials: creds.port(),
@@ -106,9 +109,20 @@ func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRun
 	// The web client owns / and its pages; anything else reaches the legacy
 	// designer SPA until it is retired.
 	mux.Handle("/", web.NewHandler(web.Deps{Projects: cat.Projects, Tasks: plan, Sessions: orch, Agents: cat.Agents, Repositories: cat.Projects, EnvFiles: cat.Projects, Documents: plan, History: ws, Code: code, Workspaces: ws, Artifacts: art, ProjectSummaries: cat.Projects, PullRequests: prs,
-		Resources: plan, Comments: plan, Notifications: noteReader, GitCredentials: creds.port()}, assets, uiHandler))
+		Resources: plan, Comments: plan, Notifications: noteReader, GitCredentials: creds.port(), Usage: usageSvc}, assets, uiHandler))
 
-	srv := &http.Server{Addr: cfg.HTTPAddr, Handler: httpapi.CORSMiddleware(mux)}
+	// The LLM proxy every claude process calls through (ADR 0006): loopback
+	// only, outside the API token and CORS, so its responses come back as
+	// the upstream sent them and no web page is invited to use it.
+	llmProxy, err := llm.Handler(llm.Config{Sink: usageSvc})
+	if err != nil {
+		return err
+	}
+	root := http.NewServeMux()
+	root.Handle(llm.PathPrefix, llmProxy)
+	root.Handle("/", httpapi.CORSMiddleware(mux))
+
+	srv := &http.Server{Addr: cfg.HTTPAddr, Handler: root}
 	lc.Append(fx.Hook{
 		OnStart: func(context.Context) error {
 			ln, err := net.Listen("tcp", srv.Addr)

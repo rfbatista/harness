@@ -34,21 +34,25 @@ func (s SessionStatus) IsTerminal() bool {
 // Session is a live Claude CLI run. The Agent (template) and Zone are referenced
 // by ID; WorkingDir is the project root the process runs in.
 type Session struct {
-	ID               string        `json:"id"`
-	ProjectID        string        `json:"project_id"`
-	RepositoryID     string        `json:"repository_id,omitempty"`
-	AgentID          string        `json:"agent_id,omitempty"`
-	ZoneID           string        `json:"zone_id,omitempty"`
-	TicketID         string        `json:"ticket_id,omitempty"`
-	Task             string        `json:"task"`
-	WorkingDir       string        `json:"working_dir"`
-	Model            string        `json:"model,omitempty"`
-	Status           SessionStatus `json:"status"`
-	CostUSD          float64       `json:"cost_usd"`
-	InputTokens      int           `json:"input_tokens"`
-	OutputTokens     int           `json:"output_tokens"`
-	LastAction       string        `json:"last_action,omitempty"`
-	PendingApprovals int           `json:"pending_approvals"`
+	ID           string        `json:"id"`
+	ProjectID    string        `json:"project_id"`
+	RepositoryID string        `json:"repository_id,omitempty"`
+	AgentID      string        `json:"agent_id,omitempty"`
+	ZoneID       string        `json:"zone_id,omitempty"`
+	TicketID     string        `json:"ticket_id,omitempty"`
+	Task         string        `json:"task"`
+	WorkingDir   string        `json:"working_dir"`
+	Model        string        `json:"model,omitempty"`
+	Status       SessionStatus `json:"status"`
+	CostUSD      float64       `json:"cost_usd"`
+	InputTokens  int           `json:"input_tokens"`
+	OutputTokens int           `json:"output_tokens"`
+	// The cache tokens count apart from InputTokens, as Anthropic reports
+	// them and as the session's usage records do.
+	CacheCreationInputTokens int    `json:"cache_creation_input_tokens"`
+	CacheReadInputTokens     int    `json:"cache_read_input_tokens"`
+	LastAction               string `json:"last_action,omitempty"`
+	PendingApprovals         int    `json:"pending_approvals"`
 	// AutoRun means the session answers its own permission requests: tool calls
 	// run without asking. It is switched per session while it runs, and it never
 	// covers AskUserQuestion — a question needs the user's actual answer.

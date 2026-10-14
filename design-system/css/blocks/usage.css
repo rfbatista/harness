@@ -1,0 +1,43 @@
+/*
+ * Usage — a project's token usage page: total tiles, the tokens-over-time
+ * chart, the top tasks and sessions, and the live feed of requests.
+ * <div class="usage" data-scroll>
+ *   <section class="usage-totals"><dl class="usage-tiles"><div class="tile" data-key="cost"><dt>…</dt><dd class="value">…</dd><dd class="note">…</dd></div></dl></section>
+ *   <section class="usage-section"><header class="section-head">…</header>
+ *     <div class="usage-chart"><ul class="legend">…<span class="swatch" data-slot="1"></span>…</ul>
+ *       <div class="plot"><span class="max">…</span><svg>…<rect data-slot="1">…</svg><div class="axis">…</div></div></div></section>
+ *   <div class="usage-tops"><section class="usage-section"><ol class="usage-rows">…</ol></section>…</div>
+ *   <section class="usage-section"><ol class="usage-feed"><li data-failed>…</li></ol></section>
+ * </div>
+ * Series colours: data-slot="1"–"8" is a model's categorical slot, the
+ * --color-series-* tokens (fixed order, validated for adjacent pairs in both
+ * modes with the dataviz palette check); data-slot="0" is Other, neutral.
+ * Text stays in ink tokens; the swatch carries identity.
+ * The total tiles are usage-tiles.css; a task's totals chip is usage-total.css.
+ */
+
+@layer blocks {
+  .usage {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-l);
+    padding-block-end: var(--space-xl);
+  }
+
+  .usage [data-slot="0"] { --_series: var(--color-ink-faint); }
+  .usage [data-slot="1"] { --_series: var(--color-series-1); }
+  .usage [data-slot="2"] { --_series: var(--color-series-2); }
+  .usage [data-slot="3"] { --_series: var(--color-series-3); }
+  .usage [data-slot="4"] { --_series: var(--color-series-4); }
+  .usage [data-slot="5"] { --_series: var(--color-series-5); }
+  .usage [data-slot="6"] { --_series: var(--color-series-6); }
+  .usage [data-slot="7"] { --_series: var(--color-series-7); }
+  .usage [data-slot="8"] { --_series: var(--color-series-8); }
+
+  .usage-hint {
+    margin: 0;
+    padding-inline: var(--space-l);
+    color: var(--color-ink-faint);
+    font-size: var(--text-sm);
+  }
+}

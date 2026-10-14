@@ -26,6 +26,7 @@ import (
 	"operators-mcp/internal/adapter/in/web/projects"
 	"operators-mcp/internal/adapter/in/web/shell"
 	"operators-mcp/internal/adapter/in/web/tasks"
+	"operators-mcp/internal/adapter/in/web/usage"
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
 )
@@ -69,6 +70,9 @@ type Deps struct {
 	// GitCredentials seeds the Git credentials page, the repositories'
 	// credential and the pull-request panel; nil leaves them out.
 	GitCredentials ports.GitCredentials
+	// Usage reads token usage for a project's Usage page and the task
+	// page's totals; nil leaves the page, its rail link and the totals out.
+	Usage ports.UsageDashboard
 	// Now defaults to time.Now.
 	Now func() time.Time
 }
@@ -96,7 +100,7 @@ func NewHandler(deps Deps, assets *Assets, fallback http.Handler) http.Handler {
 	taskPages := tasks.Handler{
 		Projects: deps.Projects, Tasks: deps.Tasks, Sessions: deps.Sessions,
 		Agents: deps.Agents, Repositories: deps.Repositories, Docs: deps.Documents, Artifacts: deps.Artifacts, PullRequests: deps.PullRequests,
-		Resources: deps.Resources, Comments: deps.Comments, Code: deps.Code,
+		Resources: deps.Resources, Comments: deps.Comments, Code: deps.Code, Usage: deps.Usage,
 		Layout: s.layout, Render: render, Now: deps.Now,
 	}
 	if deps.Workspaces != nil {
@@ -158,6 +162,10 @@ func NewHandler(deps Deps, assets *Assets, fallback http.Handler) http.Handler {
 	}
 	mux.Handle("GET /projects/{project}/design", s.page(taskPages.ProjectDesign))
 	mux.Handle("GET /projects/{project}/reviews", s.page(taskPages.Reviews))
+	if deps.Usage != nil {
+		usagePage := usage.Handler{Projects: deps.Projects, Usage: deps.Usage, Layout: s.layout, Render: render}
+		mux.Handle("GET /projects/{project}/usage", s.page(usagePage.Page))
+	}
 	mux.Handle("GET /projects/{project}/documents", s.page(taskPages.ProjectDocuments))
 	mux.Handle("GET /projects/{project}/documents/{document}", s.page(taskPages.ProjectDocuments))
 	mux.Handle("GET /projects/{project}/documents/{document}/view", s.page(taskPages.ProjectDocumentView))
@@ -244,6 +252,9 @@ func (s *server) layout(ctx context.Context, title, projectID, taskID string) (s
 		frame.Rail.DocumentsHref = tasks.ProjectDocumentsHref(projectID, "")
 	}
 	frame.Rail.DesignHref = tasks.ProjectDesignHref(projectID)
+	if s.deps.Usage != nil {
+		frame.Rail.UsageHref = usage.Href(projectID)
+	}
 	return frame, nil
 }
 

@@ -1,0 +1,74 @@
+/*
+ * Usage chart — the Usage page's sections and its tokens over time: a legend
+ * (a swatch per model), the largest bucket's count, the SVG of stacked bars
+ * usagePage draws (rect[data-slot], a hover .hit per column, a .baseline) and
+ * the axis labels under it; "Show as a table" is the same numbers as text.
+ * Series colours come from .usage (usage.css).
+ */
+
+@layer blocks {
+  .usage-section {
+    display: grid;
+    align-content: start;
+    gap: var(--space-s);
+    padding-block-end: var(--space-s);
+  }
+
+  .usage-chart {
+    display: grid;
+    gap: var(--space-s);
+    padding: var(--space-s) var(--space-l) 0;
+
+    & > .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--space-2xs) var(--space-m);
+      margin: 0;
+      padding: 0;
+      font-size: var(--text-sm);
+
+      & > li { display: inline-flex; align-items: center; gap: var(--space-2xs); max-inline-size: none; }
+      & .swatch { inline-size: 0.625rem; block-size: 0.625rem; border-radius: 2px; background: var(--_series); }
+      & .count { color: var(--color-ink-faint); font-variant-numeric: tabular-nums; }
+    }
+
+    & > .plot {
+      display: grid;
+      gap: var(--space-2xs);
+
+      & > .max { color: var(--color-ink-faint); font-size: var(--text-xs); font-variant-numeric: tabular-nums; }
+
+      & > svg {
+        display: block;
+        inline-size: 100%;
+        block-size: 192px; /* the drawing box's height: 1 unit is 1px vertically */
+        border-block-start: var(--border-width) dashed var(--color-line);
+        overflow: visible;
+
+        & rect[data-slot] { fill: var(--_series); }
+        & .hit { fill: transparent; }
+        & .column:hover .hit { fill: var(--color-hover); }
+        & .baseline { stroke: var(--color-line-strong); stroke-width: 1; vector-effect: non-scaling-stroke; }
+      }
+
+      & > .axis {
+        display: flex;
+        color: var(--color-ink-faint);
+        font-size: var(--text-xs);
+        font-variant-numeric: tabular-nums;
+
+        & > span { flex: 1 1 0; min-inline-size: 0; overflow: visible; white-space: nowrap; }
+      }
+    }
+
+    & > .table-view {
+      font-size: var(--text-sm);
+      & > summary { color: var(--color-ink-muted); cursor: pointer; }
+      & table { margin-block-start: var(--space-xs); }
+    }
+
+    @media (forced-colors: active) {
+      & rect[data-slot] { fill: CanvasText; }
+    }
+  }
+}

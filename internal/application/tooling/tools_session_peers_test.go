@@ -8,6 +8,7 @@ import (
 	"operators-mcp/internal/adapter/out/persistence/sqlite"
 	"operators-mcp/internal/application/planning"
 	"operators-mcp/internal/domain"
+	"operators-mcp/internal/ports"
 )
 
 type agentList []*domain.Agent
@@ -45,7 +46,7 @@ func peersFixture(t *testing.T) (call func(sessionID string, args map[string]any
 		}
 	}
 	// The last action is recorded as the session runs, not at creation.
-	if err := sessions.UpdateMetrics("reviewer", 0, 0, 0, "Read plan.md", 0); err != nil {
+	if err := sessions.UpdateMetrics("reviewer", 0, ports.SessionTokens{}, "Read plan.md", 0); err != nil {
 		t.Fatal(err)
 	}
 

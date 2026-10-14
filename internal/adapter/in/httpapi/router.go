@@ -226,6 +226,13 @@ func NewRouter(h *Handler, opts ...Option) *echo.Echo {
 	g.POST("/notifications/read", h.handleMarkNotificationsRead)
 	g.GET("/notifications/events", h.handleNotificationEvents) // every inbox change (SSE)
 
+	// usage: the token usage the LLM proxy measured, per project
+	// (_harness is the harness's own spend)
+	g.GET("/projects/:project/usage", h.handleUsageSummary) // ?range=today|7d|30d
+	g.GET("/projects/:project/usage/records", h.handleListUsageRecords)
+	g.GET("/projects/:project/usage/events", h.handleUsageEvents) // each record as it is stored (SSE)
+	g.GET("/usage/totals", h.handleUsageTotals)                   // ?task_id= or ?session_id=
+
 	// git credentials: what every git remote operation authenticates with
 	g.GET("/list_git_credentials", h.handleListGitCredentials)
 	g.POST("/create_git_credential", h.handleCreateGitCredential)

@@ -133,6 +133,7 @@ type world struct {
 	comments  []*domain.TicketComment
 	prs       ports.PullRequests
 	creds     ports.GitCredentials
+	usage     ports.UsageDashboard
 }
 
 // fakeSummaries counts like the projects context: nil leaves /projects unserved.
@@ -177,6 +178,9 @@ func newTestHandler(t *testing.T, w world) http.Handler {
 	}
 	if w.creds != nil {
 		deps.GitCredentials = w.creds
+	}
+	if w.usage != nil {
+		deps.Usage = w.usage
 	}
 	return NewHandler(deps, builtAssets(t), fallback)
 }

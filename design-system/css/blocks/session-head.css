@@ -8,7 +8,7 @@
  *   <button class="button" data-variant="ghost" data-icon data-split-back aria-label="Sessions">‹</button>
  *   <h2>title</h2>
  *   <p class="meta"><span class="status" data-state>…</span><span class="who">agent · age</span>
- *     <span class="checks">· checks 20m</span></p>
+ *     <span class="checks">· checks 20m</span><span class="usage-total">11K tokens · $0.42 estimated</span></p>
  *   <div class="actions">[PR badge] [.check-button] <a class="button" data-wide>Git history</a>
  *     [Stop] <div class="menu">⋯</div></div></header>
  * When the column is tight: agent and age hide first (< 46rem), then the
@@ -53,6 +53,9 @@
       font-size: var(--text-sm);
     }
     & > .meta > .checks { display: none; }
+    /* The session's token totals (.usage-total, usage.css), beside agent · age. */
+    & > .meta > .usage-total { flex: none; }
+    @container session (width < 34rem) { & > .meta > .usage-total { display: none; } }
 
     & > .actions { display: flex; align-items: center; gap: var(--space-2xs); flex: none; margin-inline-start: auto; }
 
@@ -84,7 +87,7 @@
         white-space: nowrap;
       }
       & > .meta > .status { order: 0; font-size: inherit; }
-      & > .meta > :is(.who, .checks) { display: inline; font-size: inherit; }
+      & > .meta > :is(.who, .checks, .usage-total) { display: inline; font-size: inherit; }
       & > .actions { grid-area: more; }
       & > .actions > :not(.menu) { display: none; }
       & > .actions .button[data-icon] { inline-size: var(--size-touch); min-block-size: var(--size-touch); }

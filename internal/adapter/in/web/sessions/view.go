@@ -15,6 +15,7 @@ import (
 	"operators-mcp/internal/adapter/in/web/pullrequests"
 	"operators-mcp/internal/adapter/in/web/shell"
 	"operators-mcp/internal/domain"
+	"operators-mcp/internal/ports"
 )
 
 // The rules below are the Go twin of web/src/modules/sessions (domain/session.js
@@ -194,6 +195,19 @@ type PageView struct {
 	// Code is the Code tab's first paint on a code URL; nil on the plain
 	// task page, which reads no code.
 	Code *code.View
+	// Usage seeds the task's and its sessions' token totals; nil leaves them
+	// out (no usage reader, or they could not be read).
+	Usage *UsageTotalsSeed
+}
+
+// UsageTotalsSeed is what usageTotalsWatch starts from: the task's and each
+// of its sessions' all-time token totals, in the usage API's shape
+// (GET /api/usage/totals).
+type UsageTotalsSeed struct {
+	ProjectID string                        `json:"project_id"`
+	TaskID    string                        `json:"task_id"`
+	Task      *ports.UsageTotals            `json:"task"`
+	Sessions  map[string]*ports.UsageTotals `json:"sessions"`
 }
 
 // Empty reports a project without sessions.

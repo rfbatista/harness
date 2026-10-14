@@ -29,8 +29,9 @@ templ icon(name string) {
 // sessionHead is one fixed-height row (two short lines on a phone): back,
 // title, state · agent · age, then the actions. Nothing in it grows: the
 // checks panel, the ⋯ menu, the Delete confirm and the phone sheet open in the
-// top layer. The capture listeners give ⋯ to the sheet on a phone.
-templ sessionHead() {
+// top layer. The capture listeners give ⋯ to the sheet on a phone. usage adds
+// the selected session's token totals (usageTotalsChip) after agent · age.
+templ sessionHead(usage bool) {
 	<header class="[ session-head ]" x-on:click.capture="moreCapture($event)" x-on:keydown.capture="moreCapture($event)">
 		<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" data-icon data-split-back aria-label="Sessions" x-on:click="closeDetail">
 			@icon("back")
@@ -39,6 +40,9 @@ templ sessionHead() {
 		<p class="[ meta ]">
 			<span class="[ status ]" x-bind:data-state="selected.state" x-text="selected.word"></span>
 			<span class="[ who ]" x-text="who"></span>
+			if usage {
+				<span class="[ usage-total ]" x-data="usageTotalsChip" x-show="hasSession(selected.id)" x-text="sessionText(selected.id)" x-bind:title="sessionTitle(selected.id)"></span>
+			}
 			<template x-for="bar in statusCheckBars" x-bind:key="bar.key">
 				<span class="[ checks ]" x-text="bar.meta"></span>
 			</template>

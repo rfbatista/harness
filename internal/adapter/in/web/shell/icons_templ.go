@@ -57,33 +57,38 @@ func icon(name string) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
+		case "usage":
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 6, "<svg aria-hidden=\"true\" viewBox=\"0 0 16 16\"><path d=\"M2 13.75h12 M4 11.5V8 M7 11.5V4 M10 11.5V6.5 M13 11.5V2.5\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\"></path></svg>")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
 		case "plus":
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 6, "<svg aria-hidden=\"true\" viewBox=\"0 0 16 16\"><path d=\"M8 3v10M3 8h10\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\"></path></svg>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 7, "<svg aria-hidden=\"true\" viewBox=\"0 0 16 16\"><path d=\"M8 3v10M3 8h10\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\"></path></svg>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		case "chevron":
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 7, "<svg aria-hidden=\"true\" viewBox=\"0 0 12 12\"><path d=\"M3 4.5 6 7.5 9 4.5\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"></path></svg>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 8, "<svg aria-hidden=\"true\" viewBox=\"0 0 12 12\"><path d=\"M3 4.5 6 7.5 9 4.5\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"></path></svg>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		case "close":
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 8, "<svg aria-hidden=\"true\" viewBox=\"0 0 16 16\"><path d=\"M4 4l8 8M12 4l-8 8\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\"></path></svg>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 9, "<svg aria-hidden=\"true\" viewBox=\"0 0 16 16\"><path d=\"M4 4l8 8M12 4l-8 8\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\"></path></svg>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		case "key":
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 9, "<svg aria-hidden=\"true\" viewBox=\"0 0 16 16\"><path d=\"M5.5 6.75a3.25 3.25 0 1 1 3.1 3.25L7.25 11.5H5.75V13H4.25v1.25h-2.5v-2.5l3.9-3.9A3.2 3.2 0 0 1 5.5 6.75z M10.5 5.1a.6.6 0 1 1 0 1.2.6.6 0 0 1 0-1.2z\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linejoin=\"round\" stroke-linecap=\"round\"></path></svg>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 10, "<svg aria-hidden=\"true\" viewBox=\"0 0 16 16\"><path d=\"M5.5 6.75a3.25 3.25 0 1 1 3.1 3.25L7.25 11.5H5.75V13H4.25v1.25h-2.5v-2.5l3.9-3.9A3.2 3.2 0 0 1 5.5 6.75z M10.5 5.1a.6.6 0 1 1 0 1.2.6.6 0 0 1 0-1.2z\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linejoin=\"round\" stroke-linecap=\"round\"></path></svg>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		case "bell":
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 10, "<svg aria-hidden=\"true\" viewBox=\"0 0 16 16\"><path d=\"M4 11.25V7a4 4 0 0 1 8 0v4.25l1.25 1.25H2.75z M6.5 13.75a1.6 1.6 0 0 0 3 0\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linejoin=\"round\" stroke-linecap=\"round\"></path></svg>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 11, "<svg aria-hidden=\"true\" viewBox=\"0 0 16 16\"><path d=\"M4 11.25V7a4 4 0 0 1 8 0v4.25l1.25 1.25H2.75z M6.5 13.75a1.6 1.6 0 0 0 3 0\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linejoin=\"round\" stroke-linecap=\"round\"></path></svg>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		case "rail":
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 11, "<svg aria-hidden=\"true\" viewBox=\"0 0 16 16\"><path d=\"M2 2.75h12v10.5H2z M6 2.75v10.5\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linejoin=\"round\"></path></svg>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 12, "<svg aria-hidden=\"true\" viewBox=\"0 0 16 16\"><path d=\"M2 2.75h12v10.5H2z M6 2.75v10.5\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linejoin=\"round\"></path></svg>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

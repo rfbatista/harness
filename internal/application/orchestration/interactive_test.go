@@ -8,6 +8,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/rfbatista/llmkit"
+	"github.com/rfbatista/llmkit/claude"
+
 	"operators-mcp/internal/adapter/out/agents/claudecli"
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
@@ -39,12 +42,26 @@ type launched struct {
 
 func launchOf(t *testing.T, spec ports.AgentSpec) launched {
 	t.Helper()
-	cmd, err := claudecli.New("").Command(spec)
-	if err != nil {
+	sh := &capturingShell{}
+	_, err := claudecli.NewLauncher(claude.New(llmkit.Options{Bin: "claude"})).Launch(context.Background(), spec, ports.TermSize{Cols: 80, Rows: 24}, sh)
+	if !errors.Is(err, errCaptured) {
 		t.Fatalf("claude command for %+v: %v", spec, err)
 	}
-	return launched{SessionID: spec.SessionID, Dir: cmd.Dir, Args: cmd.Args, Spec: spec}
+	return launched{SessionID: spec.SessionID, Dir: sh.got.Dir, Args: sh.got.Args, Spec: spec}
 }
+
+// errCaptured stops a launch once the shell has the command.
+var errCaptured = errors.New("captured")
+
+// capturingShell keeps the command a launch hands it, and starts nothing.
+type capturingShell struct{ got ports.ShellCommand }
+
+func (s *capturingShell) Prepare(_ context.Context, cmd ports.ShellCommand) (ports.ProcessSpec, error) {
+	s.got = cmd
+	return ports.ProcessSpec{}, errCaptured
+}
+
+func (s *capturingShell) CheckDir(context.Context, string) error { return nil }
 
 func startInteractive(t *testing.T, svc *Service, req InteractiveRequest) (*domain.Session, launched) {
 	t.Helper()

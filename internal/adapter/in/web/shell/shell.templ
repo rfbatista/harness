@@ -277,6 +277,14 @@ templ projectNav(r Rail) {
 					</a>
 				</li>
 			}
+			if r.UsageHref != "" {
+				<li>
+					<a href={ templ.SafeURL(r.UsageHref) } { currentAttrs(r.Page == PageUsage)... }>
+						@icon("usage")
+						<span class="[ label ]">Usage</span>
+					</a>
+				</li>
+			}
 		</ul>
 	</nav>
 }
