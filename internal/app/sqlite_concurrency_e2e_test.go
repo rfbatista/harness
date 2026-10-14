@@ -22,6 +22,7 @@ import (
 
 	"operators-mcp/internal/adapter/in/httpapi"
 	"operators-mcp/internal/app/catalog"
+	"operators-mcp/internal/application/artifacts"
 	"operators-mcp/internal/application/orchestration"
 	"operators-mcp/internal/application/planning"
 	"operators-mcp/internal/domain"
@@ -57,6 +58,7 @@ type freezeE2E struct {
 	ctx     context.Context
 	app     *fx.App
 	orch    *orchestration.Service
+	art     *artifacts.Service
 	srv     *httptest.Server
 	db      *gorm.DB
 	project string
@@ -91,7 +93,7 @@ func startFreezeE2E(t *testing.T, dir, dbPath string) *freezeE2E {
 		fx.Supply(Config{HTTPAddr: "127.0.0.1:0", MCPAddr: "127.0.0.1:0", DBPath: dbPath, Root: dir, ClaudeBin: fake, SessionShell: "direct"}),
 		PersistenceModule, CatalogModule, PlanningModule, WorkspacesModule,
 		AgentRuntimeModule, TaskChannelModule, TextProcessingModule, ToolingModule,
-		fx.Populate(&e.orch, &plan, &cat, &e.db),
+		fx.Populate(&e.orch, &e.art, &plan, &cat, &e.db),
 		fx.NopLogger,
 	)
 	if err := e.app.Start(e.ctx); err != nil {
@@ -99,7 +101,7 @@ func startFreezeE2E(t *testing.T, dir, dbPath string) *freezeE2E {
 	}
 	t.Cleanup(func() { _ = e.app.Stop(context.Background()) })
 
-	e.srv = httptest.NewServer(httpapi.NewRouter(httpapi.NewHandler(httpapi.Services{Sessions: e.orch, Planning: plan})))
+	e.srv = httptest.NewServer(httpapi.NewRouter(httpapi.NewHandler(httpapi.Services{Sessions: e.orch, Planning: plan, Artifacts: e.art})))
 	t.Cleanup(e.srv.Close)
 
 	if ps, err := cat.Projects.ListProjects(e.ctx); err == nil && len(ps) > 0 {
