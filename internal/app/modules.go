@@ -81,7 +81,7 @@ func asPort(ctor any, iface any) any {
 
 // newDB opens the SQLite database and registers a hook to close it on shutdown.
 func newDB(lc fx.Lifecycle, cfg Config) (*gorm.DB, error) {
-	db, err := sqlite.Open(cfg.DBPath)
+	db, err := sqlite.Open(cfg.DBPath, sqlite.WithSlowThreshold(cfg.DBSlowThreshold))
 	if err != nil {
 		return nil, err
 	}
