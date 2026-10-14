@@ -9,7 +9,6 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
-	"sync"
 	"time"
 
 	"operators-mcp/internal/domain"
@@ -51,9 +50,9 @@ type Service struct {
 	StoreDir string
 	now      func() time.Time
 
-	// snapMu serializes everything that writes an artifact's row together
-	// with its copy, so a row never names a revision whose copy is not there.
-	snapMu sync.Mutex
+	// locks serializes the work on one artifact (see lockArtifact), and on
+	// one session's or one task's artifacts as a whole.
+	locks keyedLocks
 }
 
 // NewService returns the artifacts service. announce may be nil (tests).
@@ -66,36 +65,52 @@ func NewService(repo ports.ArtifactRepository, sessions ports.SessionRepository,
 // files stay too: their removal is the workspaces context's business.
 func (s *Service) Subscribe(sub ports.EventSubscriber) {
 	ports.On(sub, func(_ context.Context, ev domain.SessionDeleted) error {
-		s.snapMu.Lock()
-		defer s.snapMu.Unlock()
+		// The session's lock keeps new artifacts of it out while its
+		// artifacts' locks keep each one's other work out.
+		unlockSession := s.lockSession(ev.SessionID)
 		had := map[string]*domain.Artifact{}
+		var keys []string
 		for _, a := range s.artifacts.List(ports.ArtifactFilter{SessionID: ev.SessionID}) {
 			had[a.ID] = a
+			keys = append(keys, artifactKey(a.ID))
 		}
+		unlockArtifacts := s.locks.lockAll(keys)
 		ids, err := s.artifacts.DeleteTaskScopedBySession(ev.SessionID)
 		for _, id := range ids {
 			s.dropSnapshot(id)
+		}
+		unlockArtifacts()
+		unlockSession()
+		// Gone, they have no later change to be ordered against.
+		for _, id := range ids {
 			s.changed(had[id])
 		}
 		return err
 	})
 	// A deleted task loses its attachments; the assets stay in the project.
 	ports.On(sub, func(_ context.Context, ev domain.TicketDeleted) error {
-		s.snapMu.Lock()
-		defer s.snapMu.Unlock()
+		unlockTicket := s.lockTicket(ev.TicketID)
 		ids, err := s.artifacts.DetachTicket(ev.TicketID)
+		unlockTicket()
 		for _, id := range ids {
-			if a := s.artifacts.Get(id); a != nil {
-				s.announceFeed(ports.ArtifactUpdated(a))
-				s.changed(a)
-			}
+			s.announceStored(id)
 		}
 		return err
 	})
 }
 
+// announceStored announces the artifact as stored now, on the project feed
+// and as ArtifactChanged, under its lock.
+func (s *Service) announceStored(id string) {
+	defer s.lockArtifact(id)()
+	if a := s.artifacts.Get(id); a != nil {
+		s.announceFeed(ports.ArtifactUpdated(a))
+		s.changed(a)
+	}
+}
+
 // changed raises ArtifactChanged for a once its change is stored. Callers
-// hold snapMu, so the changes of an artifact are raised in the order they
+// hold the artifact's lock, so the changes of an artifact are raised in the order they
 // were applied.
 func (s *Service) changed(a *domain.Artifact) {
 	if s.Events == nil || a == nil {
@@ -107,7 +122,7 @@ func (s *Service) changed(a *domain.Artifact) {
 }
 
 // announceFeed puts a project-asset change on the project feed. Callers hold
-// snapMu and have stored the change, so the feed carries an artifact's
+// the artifact's lock and have stored the change, so the feed carries an artifact's
 // changes in the order they were applied.
 func (s *Service) announceFeed(c ports.ProjectChange) {
 	if s.Feed != nil {
@@ -205,44 +220,51 @@ func (s *Service) Publish(_ context.Context, req ports.PublishArtifactRequest) (
 // harness holds a copy of it, the copy is refreshed first, under the new
 // revision, so a refused copy leaves the artifact as it was.
 func (s *Service) save(a *domain.Artifact, worktree string) (*domain.Artifact, error) {
-	s.snapMu.Lock()
-	defer s.snapMu.Unlock()
-	if prev := s.artifacts.FindByTarget(a.SessionID, a.Path, a.URL); prev != nil {
-		prev.Title, prev.Note, prev.Kind, prev.Mime, prev.SizeBytes = a.Title, a.Note, a.Kind, a.Mime, a.SizeBytes
-		prev.Revision++
-		prev.UpdatedAt = s.now()
-		if prev.Snapshot {
-			if err := copyArtifactDir(worktree, prev.Path, s.snapshotRoot(prev.ID, prev.Revision), s.maxSize()); err != nil {
-				return nil, err
-			}
+	defer s.lockSession(a.SessionID)()
+	if found := s.artifacts.FindByTarget(a.SessionID, a.Path, a.URL); found != nil {
+		defer s.lockArtifact(found.ID)()
+		if prev := s.artifacts.Get(found.ID); prev != nil {
+			return s.bump(prev, a, worktree)
 		}
-		if err := s.artifacts.Update(prev); err != nil {
-			if prev.Snapshot {
-				os.RemoveAll(s.snapshotRoot(prev.ID, prev.Revision))
-			}
-			return nil, err
-		}
-		if prev.Snapshot {
-			s.pruneSnapshots(prev.ID, prev.Revision)
-		}
-		saved := s.artifacts.Get(prev.ID)
-		if saved != nil && saved.Scope == domain.ArtifactScopeProject {
-			s.announceFeed(ports.ArtifactUpdated(saved))
-		}
-		s.changed(saved)
-		return saved, nil
 	}
 	a.Revision = 1
 	created, err := s.artifacts.Create(a)
 	if err == nil {
+		defer s.lockArtifact(created.ID)()
 		s.changed(created)
 	}
 	return created, err
 }
 
+// bump makes a the next revision of prev. The caller holds prev's lock.
+func (s *Service) bump(prev, a *domain.Artifact, worktree string) (*domain.Artifact, error) {
+	prev.Title, prev.Note, prev.Kind, prev.Mime, prev.SizeBytes = a.Title, a.Note, a.Kind, a.Mime, a.SizeBytes
+	prev.Revision++
+	prev.UpdatedAt = s.now()
+	if prev.Snapshot {
+		if err := copyArtifactDir(worktree, prev.Path, s.snapshotRoot(prev.ID, prev.Revision), s.maxSize()); err != nil {
+			return nil, err
+		}
+	}
+	if err := s.artifacts.Update(prev); err != nil {
+		if prev.Snapshot {
+			os.RemoveAll(s.snapshotRoot(prev.ID, prev.Revision))
+		}
+		return nil, err
+	}
+	if prev.Snapshot {
+		s.pruneSnapshots(prev.ID, prev.Revision)
+	}
+	saved := s.artifacts.Get(prev.ID)
+	if saved != nil && saved.Scope == domain.ArtifactScopeProject {
+		s.announceFeed(ports.ArtifactUpdated(saved))
+	}
+	s.changed(saved)
+	return saved, nil
+}
+
 func (s *Service) Unpublish(_ context.Context, sessionID, artifactID string) error {
-	s.snapMu.Lock()
-	defer s.snapMu.Unlock()
+	defer s.lockArtifact(artifactID)()
 	a := s.artifacts.Get(artifactID)
 	if a == nil {
 		return notFound("artifact not found")
@@ -261,7 +283,7 @@ func (s *Service) Unpublish(_ context.Context, sessionID, artifactID string) err
 }
 
 // delete removes the record, then the harness's copy if it has one. The
-// caller holds snapMu.
+// caller holds the artifact's lock.
 func (s *Service) delete(id string) error {
 	if err := s.artifacts.Delete(id); err != nil {
 		return err
@@ -278,8 +300,7 @@ func (s *Service) SetArtifactScope(_ context.Context, artifactID string, scope d
 	if !scope.Valid() {
 		return nil, invalid("scope must be task or project")
 	}
-	s.snapMu.Lock()
-	defer s.snapMu.Unlock()
+	defer s.lockArtifact(artifactID)()
 	a := s.artifacts.Get(artifactID)
 	if a == nil {
 		return nil, notFound("artifact not found")
@@ -386,8 +407,7 @@ func (s *Service) ListArtifacts(_ context.Context, f ports.ArtifactFilter) ([]*d
 // DeleteArtifact is a person removing an artifact, in either scope. A
 // project asset's deletion goes on the project feed with the ids it had.
 func (s *Service) DeleteArtifact(_ context.Context, id string) error {
-	s.snapMu.Lock()
-	defer s.snapMu.Unlock()
+	defer s.lockArtifact(id)()
 	last := s.artifacts.Get(id)
 	if err := s.delete(id); err != nil {
 		return err
@@ -415,8 +435,8 @@ func (s *Service) link(ctx context.Context, artifactID, ticketID string,
 	if artifactID == "" || ticketID == "" {
 		return nil, invalid("artifact_id and ticket_id are required")
 	}
-	s.snapMu.Lock()
-	defer s.snapMu.Unlock()
+	defer s.lockTicket(ticketID)()
+	defer s.lockArtifact(artifactID)()
 	a := s.artifacts.Get(artifactID)
 	if a == nil {
 		return nil, notFound("artifact not found")
