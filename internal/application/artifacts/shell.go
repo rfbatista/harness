@@ -39,12 +39,14 @@ func (s *Service) PublishDesign(_ context.Context, sessionID, p, title string, c
 		Kind: domain.InferArtifactKind(mime), Path: p, Mime: mime, SizeBytes: int64(len(content)),
 		Revision: 1, Scope: domain.ArtifactScopeTask, Snapshot: true}
 
-	s.snapMu.Lock()
-	defer s.snapMu.Unlock()
+	unlockSession := s.lockSession(sess.ID)
 	created, err := s.artifacts.Create(a)
 	if err != nil {
+		unlockSession()
 		return nil, err
 	}
+	defer s.lockArtifact(created.ID)()
+	unlockSession()
 	if err := s.writeRevision(created, created.Revision, "", content); err != nil {
 		_ = s.artifacts.Delete(created.ID)
 		return nil, err
@@ -58,8 +60,7 @@ func (s *Service) PublishDesign(_ context.Context, sessionID, p, title string, c
 // to it come from the harness's copy when it has one, else from its
 // session's worktree while there is one.
 func (s *Service) ReviseDesign(_ context.Context, id string, content []byte) (*domain.Artifact, error) {
-	s.snapMu.Lock()
-	defer s.snapMu.Unlock()
+	defer s.lockArtifact(id)()
 	a := s.artifacts.Get(id)
 	if a == nil {
 		return nil, notFound("artifact not found")
@@ -99,8 +100,7 @@ func (s *Service) ReviseDesign(_ context.Context, id string, content []byte) (*d
 
 // RemoveDesign unpublishes a task-scope artifact.
 func (s *Service) RemoveDesign(_ context.Context, id string) error {
-	s.snapMu.Lock()
-	defer s.snapMu.Unlock()
+	defer s.lockArtifact(id)()
 	a := s.artifacts.Get(id)
 	if a == nil {
 		return notFound("artifact not found")
@@ -129,7 +129,7 @@ func (s *Service) designFits(p string, content []byte) error {
 // writeRevision makes the harness's copy of a at revision: the files of
 // from (a copy root, or a worktree the artifact lives in; "" for none) and
 // content as the artifact's own file. It appears whole or not at all. The
-// caller holds snapMu.
+// caller holds the artifact's lock.
 func (s *Service) writeRevision(a *domain.Artifact, revision int, from string, content []byte) error {
 	dest := s.snapshotRoot(a.ID, revision)
 	tmp := dest + ".tmp-" + randSuffix()
@@ -173,7 +173,7 @@ func copyTree(src, dst string) error {
 }
 
 // announceArtifact tells the producing session's followers, while it
-// exists. The caller holds snapMu.
+// exists. The caller holds the artifact's lock.
 func (s *Service) announceArtifact(a *domain.Artifact) {
 	if s.announce != nil && a != nil && s.sessions.Get(a.SessionID) != nil {
 		s.announce.Announce(a.SessionID, ports.SessionEvent{Type: "artifact", Artifact: a, At: s.now()})

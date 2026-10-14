@@ -22,6 +22,7 @@ import (
 
 	"operators-mcp/internal/adapter/in/httpapi"
 	"operators-mcp/internal/app/catalog"
+	"operators-mcp/internal/application/artifacts"
 	"operators-mcp/internal/application/notifications"
 	"operators-mcp/internal/application/orchestration"
 	"operators-mcp/internal/application/planning"
@@ -59,6 +60,7 @@ type freezeE2E struct {
 	ctx     context.Context
 	app     *fx.App
 	orch    *orchestration.Service
+	art     *artifacts.Service
 	bus     ports.EventPublisher
 	notes   *notifications.Service // with the inbox only
 	srv     *httptest.Server
@@ -101,7 +103,7 @@ func startFreezeServer(t *testing.T, dir, dbPath string, inbox bool) *freezeE2E 
 		fx.Supply(Config{HTTPAddr: "127.0.0.1:0", MCPAddr: "127.0.0.1:0", DBPath: dbPath, Root: dir, ClaudeBin: fake, SessionShell: "direct"}),
 		PersistenceModule, CatalogModule, PlanningModule, WorkspacesModule,
 		AgentRuntimeModule, TaskChannelModule, TextProcessingModule, ToolingModule,
-		fx.Populate(&e.orch, &plan, &cat),
+		fx.Populate(&e.orch, &e.art, &plan, &cat),
 		fx.NopLogger,
 	}
 	if inbox {
@@ -114,7 +116,7 @@ func startFreezeServer(t *testing.T, dir, dbPath string, inbox bool) *freezeE2E 
 	t.Cleanup(func() { _ = e.app.Stop(context.Background()) })
 
 	e.bus = cat.Bus
-	services := httpapi.Services{Sessions: e.orch, Planning: plan}
+	services := httpapi.Services{Sessions: e.orch, Planning: plan, Artifacts: e.art}
 	if e.notes != nil {
 		services.Notifications = e.notes
 	}
