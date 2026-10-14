@@ -137,6 +137,7 @@ func (s *Service) ListRecentUsage(_ context.Context, q ports.UsageQuery) (*ports
 func (s *Service) decorate(list []*domain.UsageRecord) {
 	titles := map[string]string{}
 	for _, r := range list {
+		r.EstimatedCostUSD = estimatedCost(r)
 		if r.TaskID == "" {
 			continue
 		}

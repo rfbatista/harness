@@ -185,3 +185,69 @@ func TestUsageUnconfiguredAnswers503(t *testing.T) {
 		t.Fatalf("no usage service = %d, want 503", resp.StatusCode)
 	}
 }
+
+func TestEachUsageRecordCarriesAnEstimatedCostFromThePriceTable(t *testing.T) {
+	srv, e := usageServer(t)
+	cases := []struct {
+		model                   string
+		in, out, cacheW, cacheR int64
+		want                    float64
+	}{
+		// 1200×$3 + 340×$15 + 5000×$3.75 + 80000×$0.30 per million.
+		{"claude-sonnet-4-5-20250929", 1200, 340, 5000, 80000, 0.05145},
+		// $4 per million in, $20 per million out.
+		{"claude-opus-5-5", 1_000_000, 100_000, 0, 0, 6.0},
+		// Opus 5.5 reads cache at $0.20, a twentieth of its input price.
+		{"claude-opus-5-5", 0, 0, 0, 1_000_000, 0.20},
+		// Fable 5.1 writes cache at $12.50 and reads it at $0.25.
+		{"claude-fable-5-1", 0, 0, 1_000_000, 1_000_000, 12.75},
+		// Haiku 5.5 over 100K prompt tokens: $0.50 in, $2.50 out.
+		{"claude-haiku-5-5", 150_000, 1000, 0, 0, 0.0775},
+		// ...and at or under it: $0.10 in, $0.50 out.
+		{"claude-haiku-5-5", 100_000, 1000, 0, 0, 0.0105},
+		// Model ids as the CLI may send them: a 1M-context suffix, a dated id.
+		{"claude-opus-4-1-20250805", 1_000_000, 0, 0, 0, 15.0},
+		{"claude-sonnet-4-6[1m]", 1_000_000, 0, 0, 0, 3.0},
+	}
+	for i, c := range cases {
+		e.Service.Record(context.Background(), aRequest(e.SessionA, c.model, usageT0.Add(time.Duration(i)*time.Second), c.in, c.out, c.cacheW, c.cacheR))
+	}
+	got := recentRecords(t, srv, e.ProjectA, "")
+	for i, c := range cases {
+		r := got[len(got)-1-i]
+		if r.EstimatedCostUSD == nil {
+			t.Errorf("%s: no estimated cost, want %v", c.model, c.want)
+			continue
+		}
+		if diff := *r.EstimatedCostUSD - c.want; diff > 1e-9 || diff < -1e-9 {
+			t.Errorf("%s %d/%d/%d/%d: estimated cost %v, want %v", c.model, c.in, c.out, c.cacheW, c.cacheR, *r.EstimatedCostUSD, c.want)
+		}
+	}
+}
+
+func TestAnUnknownModelHasTokensButNoEstimatedCost(t *testing.T) {
+	srv, e := usageServer(t)
+	for i, model := range []string{"claude-opus-9", "gpt-4o", ""} {
+		e.Service.Record(context.Background(), aRequest(e.SessionA, model, usageT0.Add(time.Duration(i)*time.Second), 10, 20, 0, 0))
+	}
+	resp, err := http.Get(srv.URL + "/api/projects/" + e.ProjectA + "/usage/records")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	var page struct {
+		Records []map[string]any `json:"records"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&page); err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range page.Records {
+		cost, present := r["estimated_cost_usd"]
+		if !present || cost != nil {
+			t.Errorf("model %q: estimated_cost_usd = %v (present %v), want null", r["model"], cost, present)
+		}
+		if r["input_tokens"] != float64(10) || r["output_tokens"] != float64(20) {
+			t.Errorf("model %q: tokens %v/%v, want 10/20", r["model"], r["input_tokens"], r["output_tokens"])
+		}
+	}
+}
