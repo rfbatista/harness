@@ -54,6 +54,8 @@ func TestOpenFileDatabaseRunsInWAL(t *testing.T) {
 func TestOpenWriteTransactionsTakeTheWriteLockWhenTheyBegin(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "data.db")
 	db := openFile(t, path)
+	// No busy timeout on purpose: the app's connections wait busyTimeoutMS for
+	// the lock, this one fails at once so the test can see the lock is held.
 	other, err := sql.Open(sqlite.DriverName, "file:"+path+"?_busy_timeout=0")
 	if err != nil {
 		t.Fatal(err)
