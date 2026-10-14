@@ -22,6 +22,16 @@ type Agent interface {
 	Command(spec AgentSpec) (ShellCommand, error)
 }
 
+// Launcher starts one kind of agent on a terminal itself, where an Agent
+// only builds the command a Shell and a PTY then run: claude, which llmkit
+// starts (ADR 0007). shell still prepares the process.
+type Launcher interface {
+	// Kind is the AgentSpec.Kind this launcher serves, e.g. "claude".
+	Kind() string
+	// Launch starts spec on a terminal of size.
+	Launch(ctx context.Context, spec AgentSpec, size TermSize, shell Shell) (PTYProcess, error)
+}
+
 // AgentSpec is everything the server resolved for one interactive session:
 // what to run and with which agent configuration. It crosses the wire, so the
 // process can be started wherever the session runs.

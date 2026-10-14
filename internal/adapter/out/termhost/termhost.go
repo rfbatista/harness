@@ -22,6 +22,7 @@ var _ ports.TerminalHost = (*Host)(nil)
 // Host owns the terminals it spawned, by id.
 type Host struct {
 	agents    map[string]ports.Agent
+	launchers map[string]ports.Launcher
 	shell     ports.Shell
 	pty       ports.PTY
 	killAfter time.Duration
@@ -35,6 +36,7 @@ type Host struct {
 func New(shell ports.Shell, pty ports.PTY, agents ...ports.Agent) *Host {
 	h := &Host{
 		agents:    map[string]ports.Agent{},
+		launchers: map[string]ports.Launcher{},
 		shell:     shell,
 		pty:       pty,
 		killAfter: 2 * time.Second,
@@ -47,23 +49,19 @@ func New(shell ports.Shell, pty ports.PTY, agents ...ports.Agent) *Host {
 	return h
 }
 
+// WithLaunchers adds agents that start themselves on a terminal; a
+// launcher's kind wins over an agent's.
+func (h *Host) WithLaunchers(launchers ...ports.Launcher) *Host {
+	for _, l := range launchers {
+		h.launchers[l.Kind()] = l
+	}
+	return h
+}
+
 // Spawn starts spec on a new terminal. A spec with no kind runs on the only
-// agent, when there is exactly one.
+// agent or launcher, when there is exactly one.
 func (h *Host) Spawn(ctx context.Context, id string, spec ports.AgentSpec, size ports.TermSize, onExit func(code int)) error {
-	agent, err := h.agent(spec.Kind)
-	if err != nil {
-		return err
-	}
-	cmd, err := agent.Command(spec)
-	if err != nil {
-		return err
-	}
-	if cmd.Dir != "" {
-		if err := h.shell.CheckDir(ctx, cmd.Dir); err != nil {
-			return err
-		}
-	}
-	ps, err := h.shell.Prepare(ctx, cmd)
+	start, err := h.starter(ctx, spec)
 	if err != nil {
 		return err
 	}
@@ -73,7 +71,7 @@ func (h *Host) Spawn(ctx context.Context, id string, spec ports.AgentSpec, size 
 	if t, ok := h.terms[id]; ok && !t.exited() {
 		return &domain.StructuredError{Code: "SESSION_ALREADY_RUNNING", Message: "a terminal already runs " + id}
 	}
-	proc, err := h.pty.Start(ps, size)
+	proc, err := start(size)
 	if err != nil {
 		return err
 	}
@@ -92,16 +90,45 @@ func (h *Host) Spawn(ctx context.Context, id string, spec ports.AgentSpec, size 
 	return nil
 }
 
-func (h *Host) agent(kind string) (ports.Agent, error) {
-	if kind == "" && len(h.agents) == 1 {
-		for _, a := range h.agents {
-			return a, nil
+// starter checks what spec needs before it starts, and answers how to start
+// it: through its launcher, or as its agent's command prepared by the shell
+// on the PTY.
+func (h *Host) starter(ctx context.Context, spec ports.AgentSpec) (func(ports.TermSize) (ports.PTYProcess, error), error) {
+	kind := spec.Kind
+	if kind == "" && len(h.agents)+len(h.launchers) == 1 {
+		for k := range h.agents {
+			kind = k
+		}
+		for k := range h.launchers {
+			kind = k
 		}
 	}
-	if a, ok := h.agents[kind]; ok {
-		return a, nil
+	if l, ok := h.launchers[kind]; ok {
+		if spec.Dir != "" {
+			if err := h.shell.CheckDir(ctx, spec.Dir); err != nil {
+				return nil, err
+			}
+		}
+		return func(size ports.TermSize) (ports.PTYProcess, error) { return l.Launch(ctx, spec, size, h.shell) }, nil
 	}
-	return nil, fmt.Errorf("termhost: no agent adapter for kind %q", kind)
+	agent, ok := h.agents[kind]
+	if !ok {
+		return nil, fmt.Errorf("termhost: no agent adapter for kind %q", spec.Kind)
+	}
+	cmd, err := agent.Command(spec)
+	if err != nil {
+		return nil, err
+	}
+	if cmd.Dir != "" {
+		if err := h.shell.CheckDir(ctx, cmd.Dir); err != nil {
+			return nil, err
+		}
+	}
+	ps, err := h.shell.Prepare(ctx, cmd)
+	if err != nil {
+		return nil, err
+	}
+	return func(size ports.TermSize) (ports.PTYProcess, error) { return h.pty.Start(ps, size) }, nil
 }
 
 // Attach returns the running terminal under id.

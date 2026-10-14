@@ -126,9 +126,9 @@ func (r *SessionRepository) UpdateMetrics(id string, costUSD float64, tokens por
 		"output_tokens":               tokens.Output,
 		"cache_creation_input_tokens": tokens.CacheCreation,
 		"cache_read_input_tokens":     tokens.CacheRead,
-		"last_action":       lastAction,
-		"pending_approvals": pendingApprovals,
-		"updated_at":        time.Now().UnixMilli(),
+		"last_action":                 lastAction,
+		"pending_approvals":           pendingApprovals,
+		"updated_at":                  time.Now().UnixMilli(),
 	})
 	if res.Error != nil {
 		return res.Error

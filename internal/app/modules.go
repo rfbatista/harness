@@ -432,7 +432,7 @@ func newAppsService(orch *orchestration.Service, cat catalog.Catalog, host ports
 }
 
 func newRuntimeConfig(cfg Config) runtime.Config {
-	return runtime.Config{ClaudeBin: cfg.ClaudeBin, Shell: cfg.SessionShell}
+	return runtime.Config{ClaudeBin: cfg.ClaudeBin, Shell: cfg.SessionShell, ProxyURL: cfg.llmProxyURL()}
 }
 
 // registerServerSessions reconciles the interactive sessions the server runs

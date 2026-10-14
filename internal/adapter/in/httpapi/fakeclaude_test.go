@@ -15,6 +15,10 @@ func TestMain(m *testing.M) {
 		if path := os.Getenv("CLAUDE_FAKE_ENV_FILE"); path != "" {
 			_ = os.WriteFile(path, []byte(strings.Join(os.Environ(), "\n")), 0o600)
 		}
+		// CLAUDE_FAKE_ARGS_FILE: write the arguments there, one per line.
+		if path := os.Getenv("CLAUDE_FAKE_ARGS_FILE"); path != "" {
+			_ = os.WriteFile(path, []byte(strings.Join(os.Args[1:], "\n")), 0o600)
+		}
 		out := bufio.NewWriter(os.Stdout)
 		fmt.Fprintln(out, `{"type":"system","subtype":"init","session_id":"fake"}`)
 		out.Flush()
