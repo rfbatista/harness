@@ -190,6 +190,14 @@ func (r *NotificationRepository) Prune(before time.Time) (int, error) {
 	return int(res.RowsAffected), res.Error
 }
 
+// Transaction runs fn in one transaction on the writer connection, which
+// takes the write lock when it begins.
+func (r *NotificationRepository) Transaction(fn func(tx ports.NotificationRepository) error) error {
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		return fn(&NotificationRepository{db: tx})
+	})
+}
+
 func toNotifications(ms []NotificationModel) []*domain.Notification {
 	out := make([]*domain.Notification, 0, len(ms))
 	for i := range ms {
