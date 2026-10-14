@@ -15,6 +15,7 @@ import (
 // records of the project it is asked about.
 type fakeUsage struct {
 	failSummary bool
+	failTotals  bool
 	asked       *[]string
 }
 

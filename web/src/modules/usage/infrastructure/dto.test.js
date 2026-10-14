@@ -1,6 +1,6 @@
 import { Codes } from "../../../shared/domain/errors.js";
 import { assert, file, test } from "../../../shared/testing/test.js";
-import { toRecord, toRecords, toSeed, toSummary } from "./dto.js";
+import { toRecord, toRecords, toSeed, toSummary, toTotals, toTotalsSeed } from "./dto.js";
 
 file("usage/infrastructure/dto");
 
@@ -116,4 +116,21 @@ test("a malformed record is BAD_RESPONSE", () => {
   assert.throws(() => toRecord({ ...wireRecord, estimated_cost_usd: "free" }), Codes.BAD_RESPONSE);
   assert.throws(() => toRecords([wireRecord]), Codes.BAD_RESPONSE);
   assert.throws(() => toSeed({ summary: null, records: [] }), Codes.BAD_RESPONSE);
+});
+
+test("the totals of a task or session, and a page's totals seed", () => {
+  assert.deepEqual(toTotals({ ...wireTotals, estimated_cost_usd: null, unpriced_tokens: 1630 }), {
+    requests: 2, input: 1000, output: 200, cacheWrite: 30, cacheRead: 400, total: 1630, costUsd: null, unpriced: 1630,
+  });
+  const seed = toTotalsSeed({ project_id: "p1", task_id: "t1", task: wireTotals, sessions: { s1: wireTotals, s2: { ...wireTotals, total_tokens: 0 } } });
+  assert.deepEqual([seed.projectId, seed.taskId, seed.task.total, seed.sessions.s1.total, seed.sessions.s2.total], ["p1", "t1", 1630, 1630, 0]);
+  const bare = toTotalsSeed({ project_id: "p1", task_id: "", task: null, sessions: null });
+  assert.deepEqual([bare.taskId, bare.task, bare.sessions], ["", null, {}]);
+});
+
+test("a malformed totals seed is BAD_RESPONSE", () => {
+  assert.throws(() => toTotalsSeed({ task_id: "t1", task: wireTotals, sessions: {} }), Codes.BAD_RESPONSE);
+  assert.throws(() => toTotalsSeed({ project_id: "p1", task: { ...wireTotals, total_tokens: "x" }, sessions: {} }), Codes.BAD_RESPONSE);
+  assert.throws(() => toTotalsSeed({ project_id: "p1", task: null, sessions: [wireTotals] }), Codes.BAD_RESPONSE);
+  assert.throws(() => toTotalsSeed({ project_id: "p1", task: null, sessions: { s1: null } }), Codes.BAD_RESPONSE);
 });

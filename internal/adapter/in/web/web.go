@@ -70,8 +70,8 @@ type Deps struct {
 	// GitCredentials seeds the Git credentials page, the repositories'
 	// credential and the pull-request panel; nil leaves them out.
 	GitCredentials ports.GitCredentials
-	// Usage reads a project's token usage for its Usage page; nil leaves
-	// the page and its rail link out.
+	// Usage reads token usage for a project's Usage page and the task
+	// page's totals; nil leaves the page, its rail link and the totals out.
 	Usage ports.UsageDashboard
 	// Now defaults to time.Now.
 	Now func() time.Time
@@ -100,7 +100,7 @@ func NewHandler(deps Deps, assets *Assets, fallback http.Handler) http.Handler {
 	taskPages := tasks.Handler{
 		Projects: deps.Projects, Tasks: deps.Tasks, Sessions: deps.Sessions,
 		Agents: deps.Agents, Repositories: deps.Repositories, Docs: deps.Documents, Artifacts: deps.Artifacts, PullRequests: deps.PullRequests,
-		Resources: deps.Resources, Comments: deps.Comments, Code: deps.Code,
+		Resources: deps.Resources, Comments: deps.Comments, Code: deps.Code, Usage: deps.Usage,
 		Layout: s.layout, Render: render, Now: deps.Now,
 	}
 	if deps.Workspaces != nil {

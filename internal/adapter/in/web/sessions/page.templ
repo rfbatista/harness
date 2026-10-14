@@ -41,6 +41,10 @@ templ Page(v PageView) {
 				@templ.JSONScript("pull-requests-seed", v.PullRequests)
 				<div x-data="pullRequestWatch" data-seed="pull-requests-seed" hidden></div>
 			}
+			if v.Usage != nil {
+				@templ.JSONScript("usage-totals-seed", v.Usage)
+				<div x-data="usageTotalsWatch" data-seed="usage-totals-seed" hidden></div>
+			}
 			<div x-data="tasksTaskEditor" data-seed="task-seed">
 				@templ.JSONScript("task-seed", v.Task)
 				<header class="[ toolbar ]">
@@ -52,6 +56,9 @@ templ Page(v PageView) {
 						}
 					</select>
 					<span class="[ color-ink-faint text-sm ]" x-text="summary">{ v.Summary }</span>
+					if v.Usage != nil {
+						<span class="[ usage-total ]" x-data="usageTotalsChip" x-show="hasTask" x-text="taskText" x-bind:title="taskTitle"></span>
+					}
 					<div class="[ actions ]">
 						if v.Documents != nil {
 							<a
@@ -141,7 +148,7 @@ templ Page(v PageView) {
 						@components.Empty("No sessions for this task yet", "A session is an agent working on this task. Start one from the TUI: open the task and press n.")
 					</template>
 				</div>
-				@detail(v.NewSession, v.Code)
+				@detail(v.NewSession, v.Code, v.Usage != nil)
 			</div>
 		</main>
 	}
@@ -206,7 +213,7 @@ templ liveRows() {
 // detail is the right-hand pane: the new-session form while creating,
 // otherwise the selected session. Alpine renders it, since it follows the
 // selection.
-templ detail(form NewSessionForm, paint *code.View) {
+templ detail(form NewSessionForm, paint *code.View, usage bool) {
 	<section class="[ frame ]" aria-label="Session detail" x-on:keydown.window.n="startCreatingFromKey">
 		if paint != nil {
 			@code.Static(*paint)
@@ -216,7 +223,7 @@ templ detail(form NewSessionForm, paint *code.View) {
 		</template>
 		<template x-if="showingSession">
 			<section class="[ session ]" aria-label="Session">
-				@sessionHead()
+				@sessionHead(usage)
 				@paneTabs()
 				<template x-for="t in terminalPanes" x-bind:key="t.key">
 					@terminalPane()

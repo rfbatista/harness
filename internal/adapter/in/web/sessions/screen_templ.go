@@ -62,8 +62,9 @@ func icon(name string) templ.Component {
 // sessionHead is one fixed-height row (two short lines on a phone): back,
 // title, state · agent · age, then the actions. Nothing in it grows: the
 // checks panel, the ⋯ menu, the Delete confirm and the phone sheet open in the
-// top layer. The capture listeners give ⋯ to the sheet on a phone.
-func sessionHead() templ.Component {
+// top layer. The capture listeners give ⋯ to the sheet on a phone. usage adds
+// the selected session's token totals (usageTotalsChip) after agent · age.
+func sessionHead(usage bool) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 		if templ_7745c5c3_CtxErr := ctx.Err(); templ_7745c5c3_CtxErr != nil {
@@ -92,7 +93,17 @@ func sessionHead() templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, "</button><h2 x-text=\"selected.title\"></h2><p class=\"[ meta ]\"><span class=\"[ status ]\" x-bind:data-state=\"selected.state\" x-text=\"selected.word\"></span> <span class=\"[ who ]\" x-text=\"who\"></span><template x-for=\"bar in statusCheckBars\" x-bind:key=\"bar.key\"><span class=\"[ checks ]\" x-text=\"bar.meta\"></span></template></p><div class=\"[ actions ]\"><template x-for=\"ws in selectedWorkspaces\" x-bind:key=\"ws\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, "</button><h2 x-text=\"selected.title\"></h2><p class=\"[ meta ]\"><span class=\"[ status ]\" x-bind:data-state=\"selected.state\" x-text=\"selected.word\"></span> <span class=\"[ who ]\" x-text=\"who\"></span> ")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		if usage {
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, "<span class=\"[ usage-total ]\" x-data=\"usageTotalsChip\" x-show=\"hasSession(selected.id)\" x-text=\"sessionText(selected.id)\" x-bind:title=\"sessionTitle(selected.id)\"></span>")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "<template x-for=\"bar in statusCheckBars\" x-bind:key=\"bar.key\"><span class=\"[ checks ]\" x-text=\"bar.meta\"></span></template></p><div class=\"[ actions ]\"><template x-for=\"ws in selectedWorkspaces\" x-bind:key=\"ws\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -100,7 +111,7 @@ func sessionHead() templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, "</template><template x-for=\"bar in statusCheckBars\" x-bind:key=\"bar.key\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 5, "</template><template x-for=\"bar in statusCheckBars\" x-bind:key=\"bar.key\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -108,7 +119,7 @@ func sessionHead() templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "</template><template x-if=\"historyHref\"><a class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" data-wide x-bind:href=\"historyHref\">Git history</a></template><template x-if=\"selected.stoppable\"><button type=\"button\" class=\"[ button ]\" data-size=\"sm\" x-bind:disabled=\"cannotStop\" x-bind:aria-busy=\"stopping\" x-on:click=\"stopSelected\">Stop</button></template><div class=\"[ menu ]\" x-data=\"menu\" data-align=\"end\"><button type=\"button\" class=\"[ button ]\" id=\"session-more\" data-variant=\"ghost\" data-size=\"sm\" data-icon aria-label=\"More session actions\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 6, "</template><template x-if=\"historyHref\"><a class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" data-wide x-bind:href=\"historyHref\">Git history</a></template><template x-if=\"selected.stoppable\"><button type=\"button\" class=\"[ button ]\" data-size=\"sm\" x-bind:disabled=\"cannotStop\" x-bind:aria-busy=\"stopping\" x-on:click=\"stopSelected\">Stop</button></template><div class=\"[ menu ]\" x-data=\"menu\" data-align=\"end\"><button type=\"button\" class=\"[ button ]\" id=\"session-more\" data-variant=\"ghost\" data-size=\"sm\" data-icon aria-label=\"More session actions\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -116,7 +127,7 @@ func sessionHead() templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 5, "</button><div class=\"[ popup ]\" role=\"menu\" popover=\"manual\"><template x-if=\"historyHref\"><a role=\"menuitem\" data-narrow x-bind:href=\"historyHref\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 7, "</button><div class=\"[ popup ]\" role=\"menu\" popover=\"manual\"><template x-if=\"historyHref\"><a role=\"menuitem\" data-narrow x-bind:href=\"historyHref\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -124,7 +135,7 @@ func sessionHead() templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 6, "Git history</a></template><button type=\"button\" role=\"menuitem\" data-action=\"copy-id\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 8, "Git history</a></template><button type=\"button\" role=\"menuitem\" data-action=\"copy-id\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -132,7 +143,7 @@ func sessionHead() templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 7, "Copy session id <span class=\"[ meta ]\" x-text=\"shortId\"></span></button><hr role=\"separator\"><button type=\"button\" role=\"menuitem\" data-action=\"ask-delete\" data-tone=\"danger\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 9, "Copy session id <span class=\"[ meta ]\" x-text=\"shortId\"></span></button><hr role=\"separator\"><button type=\"button\" role=\"menuitem\" data-action=\"ask-delete\" data-tone=\"danger\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -140,7 +151,7 @@ func sessionHead() templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 8, "Delete session…</button></div></div></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 10, "Delete session…</button></div></div></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -152,7 +163,7 @@ func sessionHead() templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 9, "</header>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 11, "</header>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -183,7 +194,7 @@ func checksControl() templ.Component {
 			templ_7745c5c3_Var3 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 10, "<div style=\"display: contents\" x-data=\"sessionsStatusCheck(bar)\"><template x-if=\"controllable\"><button type=\"button\" class=\"[ button check-button ]\" data-variant=\"ghost\" data-size=\"sm\" aria-haspopup=\"dialog\" aria-expanded=\"false\" x-ref=\"button\" x-bind:aria-label=\"buttonLabel\" x-bind:aria-busy=\"busy\" x-on:click=\"openPanel()\"><span class=\"[ status ]\" x-bind:data-state=\"buttonDot\" x-text=\"'Checks · ' + every\"></span><span class=\"[ next ]\" x-text=\"buttonNext\"></span><span class=\"[ chevron ]\"></span></button></template><div class=\"[ popup ]\" role=\"dialog\" id=\"session-checks\" popover=\"manual\" aria-labelledby=\"session-checks-title\" x-data=\"popupDialog\" x-on:dialog-open.window=\"openFrom($event)\"><div class=\"[ check-panel ]\"><h3 id=\"session-checks-title\">Status checks</h3><p class=\"[ state ]\"><span class=\"[ status ]\" x-bind:data-state=\"panelDot\" x-text=\"panelWord\"></span><span x-text=\"nextWords\"></span><span x-text=\"'· ' + lastWords\"></span></p><div class=\"[ field-row ]\"><label for=\"session-checks-every\">Check every</label> <select id=\"session-checks-every\" data-size=\"sm\" data-fit x-model=\"minutes\" x-bind:disabled=\"busy\" x-bind:aria-busy=\"busy\" x-on:change=\"retune()\"><template x-for=\"i in intervals\" x-bind:key=\"i.value\"><option x-bind:value=\"i.value\" x-text=\"i.label\"></option></template></select></div><p class=\"[ hint ]\">The task's architect is woken on this timer to check on this session.</p></div><template x-if=\"error\"><div class=\"[ message ]\" data-tone=\"danger\" role=\"alert\"><span x-text=\"error.message\"></span> <button type=\"button\" class=\"[ button ]\" data-size=\"sm\" data-variant=\"ghost\" x-on:click=\"retry()\">Retry</button></div></template><footer><span x-text=\"'Last check: ' + lastWords\"></span> <button type=\"button\" class=\"[ button ]\" data-size=\"sm\" x-bind:disabled=\"busy\" x-on:click=\"toggle()\" x-text=\"toggleWord\"></button></footer></div></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 12, "<div style=\"display: contents\" x-data=\"sessionsStatusCheck(bar)\"><template x-if=\"controllable\"><button type=\"button\" class=\"[ button check-button ]\" data-variant=\"ghost\" data-size=\"sm\" aria-haspopup=\"dialog\" aria-expanded=\"false\" x-ref=\"button\" x-bind:aria-label=\"buttonLabel\" x-bind:aria-busy=\"busy\" x-on:click=\"openPanel()\"><span class=\"[ status ]\" x-bind:data-state=\"buttonDot\" x-text=\"'Checks · ' + every\"></span><span class=\"[ next ]\" x-text=\"buttonNext\"></span><span class=\"[ chevron ]\"></span></button></template><div class=\"[ popup ]\" role=\"dialog\" id=\"session-checks\" popover=\"manual\" aria-labelledby=\"session-checks-title\" x-data=\"popupDialog\" x-on:dialog-open.window=\"openFrom($event)\"><div class=\"[ check-panel ]\"><h3 id=\"session-checks-title\">Status checks</h3><p class=\"[ state ]\"><span class=\"[ status ]\" x-bind:data-state=\"panelDot\" x-text=\"panelWord\"></span><span x-text=\"nextWords\"></span><span x-text=\"'· ' + lastWords\"></span></p><div class=\"[ field-row ]\"><label for=\"session-checks-every\">Check every</label> <select id=\"session-checks-every\" data-size=\"sm\" data-fit x-model=\"minutes\" x-bind:disabled=\"busy\" x-bind:aria-busy=\"busy\" x-on:change=\"retune()\"><template x-for=\"i in intervals\" x-bind:key=\"i.value\"><option x-bind:value=\"i.value\" x-text=\"i.label\"></option></template></select></div><p class=\"[ hint ]\">The task's architect is woken on this timer to check on this session.</p></div><template x-if=\"error\"><div class=\"[ message ]\" data-tone=\"danger\" role=\"alert\"><span x-text=\"error.message\"></span> <button type=\"button\" class=\"[ button ]\" data-size=\"sm\" data-variant=\"ghost\" x-on:click=\"retry()\">Retry</button></div></template><footer><span x-text=\"'Last check: ' + lastWords\"></span> <button type=\"button\" class=\"[ button ]\" data-size=\"sm\" x-bind:disabled=\"busy\" x-on:click=\"toggle()\" x-text=\"toggleWord\"></button></footer></div></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -213,7 +224,7 @@ func deleteConfirm() templ.Component {
 			templ_7745c5c3_Var4 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 11, "<div class=\"[ popup ]\" role=\"alertdialog\" id=\"session-delete\" popover=\"manual\" data-trap aria-labelledby=\"session-delete-title\" aria-describedby=\"session-delete-text\" x-data=\"popupDialog\" x-on:dialog-open.window=\"openFrom($event)\"><div class=\"[ confirm-panel ]\"><h3 id=\"session-delete-title\">Delete this session?</h3><p id=\"session-delete-text\" x-text=\"deleteConsequence\"></p></div><footer><button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" data-initial-focus x-on:click=\"close()\">Keep it</button> <button type=\"button\" class=\"[ button ]\" data-variant=\"danger\" data-size=\"sm\" x-bind:aria-busy=\"deleting\" x-on:click=\"act('delete')\">Delete session</button></footer></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 13, "<div class=\"[ popup ]\" role=\"alertdialog\" id=\"session-delete\" popover=\"manual\" data-trap aria-labelledby=\"session-delete-title\" aria-describedby=\"session-delete-text\" x-data=\"popupDialog\" x-on:dialog-open.window=\"openFrom($event)\"><div class=\"[ confirm-panel ]\"><h3 id=\"session-delete-title\">Delete this session?</h3><p id=\"session-delete-text\" x-text=\"deleteConsequence\"></p></div><footer><button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" data-initial-focus x-on:click=\"close()\">Keep it</button> <button type=\"button\" class=\"[ button ]\" data-variant=\"danger\" data-size=\"sm\" x-bind:aria-busy=\"deleting\" x-on:click=\"act('delete')\">Delete session</button></footer></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -243,7 +254,7 @@ func sessionSheet() templ.Component {
 			templ_7745c5c3_Var5 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 12, "<div class=\"[ popup ]\" role=\"dialog\" id=\"session-sheet\" popover=\"manual\" aria-labelledby=\"session-sheet-title\" x-data=\"popupDialog\" x-on:dialog-open.window=\"openFrom($event)\"><header><span id=\"session-sheet-title\" x-text=\"selected.title\"></span> <button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" x-on:click=\"close()\">Close</button></header><template x-for=\"bar in statusCheckBars\" x-bind:key=\"bar.key\"><div style=\"display: contents\" x-data=\"sessionsStatusCheck(bar)\"><template x-if=\"controllable\"><div style=\"display: contents\"><div class=\"[ sheet-checks ]\"><span class=\"[ status ]\" x-bind:data-state=\"buttonDot\" x-text=\"'Checks · ' + buttonNext\"></span> <label class=\"[ visually-hidden ]\" for=\"session-sheet-every\">Check every</label> <select id=\"session-sheet-every\" data-fit x-model=\"minutes\" x-bind:disabled=\"busy\" x-on:change=\"retune()\"><template x-for=\"i in intervals\" x-bind:key=\"i.value\"><option x-bind:value=\"i.value\" x-text=\"i.label\"></option></template></select></div><div class=\"[ menu ]\" role=\"menu\" style=\"display: block\"><button type=\"button\" role=\"menuitem\" x-bind:disabled=\"busy\" x-on:click=\"toggle()\" x-text=\"toggleWord\"></button><hr role=\"separator\"></div></div></template></div></template><div class=\"[ menu ]\" role=\"menu\" style=\"display: block\"><template x-if=\"historyHref\"><a role=\"menuitem\" x-bind:href=\"historyHref\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 14, "<div class=\"[ popup ]\" role=\"dialog\" id=\"session-sheet\" popover=\"manual\" aria-labelledby=\"session-sheet-title\" x-data=\"popupDialog\" x-on:dialog-open.window=\"openFrom($event)\"><header><span id=\"session-sheet-title\" x-text=\"selected.title\"></span> <button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" x-on:click=\"close()\">Close</button></header><template x-for=\"bar in statusCheckBars\" x-bind:key=\"bar.key\"><div style=\"display: contents\" x-data=\"sessionsStatusCheck(bar)\"><template x-if=\"controllable\"><div style=\"display: contents\"><div class=\"[ sheet-checks ]\"><span class=\"[ status ]\" x-bind:data-state=\"buttonDot\" x-text=\"'Checks · ' + buttonNext\"></span> <label class=\"[ visually-hidden ]\" for=\"session-sheet-every\">Check every</label> <select id=\"session-sheet-every\" data-fit x-model=\"minutes\" x-bind:disabled=\"busy\" x-on:change=\"retune()\"><template x-for=\"i in intervals\" x-bind:key=\"i.value\"><option x-bind:value=\"i.value\" x-text=\"i.label\"></option></template></select></div><div class=\"[ menu ]\" role=\"menu\" style=\"display: block\"><button type=\"button\" role=\"menuitem\" x-bind:disabled=\"busy\" x-on:click=\"toggle()\" x-text=\"toggleWord\"></button><hr role=\"separator\"></div></div></template></div></template><div class=\"[ menu ]\" role=\"menu\" style=\"display: block\"><template x-if=\"historyHref\"><a role=\"menuitem\" x-bind:href=\"historyHref\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -251,7 +262,7 @@ func sessionSheet() templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 13, "Git history</a></template><button type=\"button\" role=\"menuitem\" x-on:click=\"act('text-size')\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 15, "Git history</a></template><button type=\"button\" role=\"menuitem\" x-on:click=\"act('text-size')\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -259,7 +270,7 @@ func sessionSheet() templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 14, "Text size <span class=\"[ meta ]\" x-text=\"textSizeLabel\"></span></button> <button type=\"button\" role=\"menuitem\" x-on:click=\"act('copy-id')\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 16, "Text size <span class=\"[ meta ]\" x-text=\"textSizeLabel\"></span></button> <button type=\"button\" role=\"menuitem\" x-on:click=\"act('copy-id')\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -267,7 +278,7 @@ func sessionSheet() templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 15, "Copy session id</button><template x-if=\"selected.stoppable\"><button type=\"button\" role=\"menuitem\" x-bind:disabled=\"cannotStop\" x-on:click=\"act('stop')\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 17, "Copy session id</button><template x-if=\"selected.stoppable\"><button type=\"button\" role=\"menuitem\" x-bind:disabled=\"cannotStop\" x-on:click=\"act('stop')\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -275,7 +286,7 @@ func sessionSheet() templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 16, "Stop session</button></template><hr role=\"separator\"><button type=\"button\" role=\"menuitem\" data-tone=\"danger\" x-on:click=\"act('ask-delete')\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 18, "Stop session</button></template><hr role=\"separator\"><button type=\"button\" role=\"menuitem\" data-tone=\"danger\" x-on:click=\"act('ask-delete')\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -283,7 +294,7 @@ func sessionSheet() templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 17, "Delete session…</button></div></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 19, "Delete session…</button></div></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -314,7 +325,7 @@ func paneTabs() templ.Component {
 			templ_7745c5c3_Var6 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 18, "<div class=\"[ pane-tabs ]\" x-bind:data-focus=\"focusActive ? '' : null\"><template x-if=\"focusActive\"><span class=\"[ lead ]\"><span class=\"[ status ]\" x-bind:data-state=\"selected.state\" data-dot-only x-bind:aria-label=\"selected.word\"></span><span x-text=\"selected.title\"></span></span></template><div class=\"[ tabs ]\" role=\"tablist\" aria-label=\"Session views\"><button type=\"button\" role=\"tab\" x-bind:aria-selected=\"agentTabSelected\" x-on:click=\"showAgent\">Agent<template x-if=\"attention\"><span class=\"[ status ]\" data-state=\"waiting\" data-dot-only aria-label=\"waiting on you\"></span></template></button> <button type=\"button\" role=\"tab\" x-bind:aria-selected=\"historyTabSelected\" x-on:click=\"showHistory\">History</button> <button type=\"button\" role=\"tab\" x-bind:aria-selected=\"appTabSelected\" x-on:click=\"showApp\">App</button> <button type=\"button\" role=\"tab\" x-bind:aria-selected=\"designTabSelected\" x-on:click=\"showDesign\">Design<template x-if=\"designBadge\"><span class=\"[ badge ]\" data-tone=\"signal\" x-text=\"designBadge\"></span></template></button><template x-if=\"hasCode\"><button type=\"button\" role=\"tab\" x-bind:aria-selected=\"codeTabSelected\" x-on:click=\"showCode\">Code<template x-if=\"codeBadge\"><span class=\"[ badge ]\" x-text=\"codeBadge\"></span></template></button></template>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 20, "<div class=\"[ pane-tabs ]\" x-bind:data-focus=\"focusActive ? '' : null\"><template x-if=\"focusActive\"><span class=\"[ lead ]\"><span class=\"[ status ]\" x-bind:data-state=\"selected.state\" data-dot-only x-bind:aria-label=\"selected.word\"></span><span x-text=\"selected.title\"></span></span></template><div class=\"[ tabs ]\" role=\"tablist\" aria-label=\"Session views\"><button type=\"button\" role=\"tab\" x-bind:aria-selected=\"agentTabSelected\" x-on:click=\"showAgent\">Agent<template x-if=\"attention\"><span class=\"[ status ]\" data-state=\"waiting\" data-dot-only aria-label=\"waiting on you\"></span></template></button> <button type=\"button\" role=\"tab\" x-bind:aria-selected=\"historyTabSelected\" x-on:click=\"showHistory\">History</button> <button type=\"button\" role=\"tab\" x-bind:aria-selected=\"appTabSelected\" x-on:click=\"showApp\">App</button> <button type=\"button\" role=\"tab\" x-bind:aria-selected=\"designTabSelected\" x-on:click=\"showDesign\">Design<template x-if=\"designBadge\"><span class=\"[ badge ]\" data-tone=\"signal\" x-text=\"designBadge\"></span></template></button><template x-if=\"hasCode\"><button type=\"button\" role=\"tab\" x-bind:aria-selected=\"codeTabSelected\" x-on:click=\"showCode\">Code<template x-if=\"codeBadge\"><span class=\"[ badge ]\" x-text=\"codeBadge\"></span></template></button></template>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -322,7 +333,7 @@ func paneTabs() templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 19, "</div><template x-if=\"paneTools\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 21, "</div><template x-if=\"paneTools\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -330,7 +341,7 @@ func paneTabs() templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 20, "</template></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 22, "</template></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -362,7 +373,7 @@ func paneTools() templ.Component {
 			templ_7745c5c3_Var7 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 21, "<div class=\"[ tools ]\" role=\"group\" x-bind:aria-label=\"paneTools.groupLabel\"><template x-if=\"paneTools.down\"><span class=\"[ status ]\" x-bind:data-state=\"paneTools.statusState\" role=\"status\"><span class=\"[ word ]\" x-text=\"paneTools.word\"></span></span></template><template x-if=\"paneTools.down\"><button type=\"button\" class=\"[ button ]\" data-size=\"sm\" x-bind:disabled=\"paneTools.reconnectDisabled\" x-bind:aria-busy=\"paneTools.reconnectBusy\" x-on:click=\"requestReconnect()\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 23, "<div class=\"[ tools ]\" role=\"group\" x-bind:aria-label=\"paneTools.groupLabel\"><template x-if=\"paneTools.down\"><span class=\"[ status ]\" x-bind:data-state=\"paneTools.statusState\" role=\"status\"><span class=\"[ word ]\" x-text=\"paneTools.word\"></span></span></template><template x-if=\"paneTools.down\"><button type=\"button\" class=\"[ button ]\" data-size=\"sm\" x-bind:disabled=\"paneTools.reconnectDisabled\" x-bind:aria-busy=\"paneTools.reconnectBusy\" x-on:click=\"requestReconnect()\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -370,7 +381,7 @@ func paneTools() templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 22, "<span class=\"[ word ]\">Reconnect</span></button></template><template x-if=\"!paneTools.down\"><span class=\"[ status ]\" data-dot-only role=\"status\" x-bind:data-state=\"paneTools.dotState\" x-bind:aria-label=\"paneTools.dotLabel\" x-bind:title=\"paneTools.dotLabel\"></span></template><template x-if=\"paneTools.jump\"><button type=\"button\" class=\"[ button jump ]\" data-size=\"sm\" x-bind:aria-label=\"paneTools.jumpLabel\" x-on:click=\"requestJump()\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 24, "<span class=\"[ word ]\">Reconnect</span></button></template><template x-if=\"!paneTools.down\"><span class=\"[ status ]\" data-dot-only role=\"status\" x-bind:data-state=\"paneTools.dotState\" x-bind:aria-label=\"paneTools.dotLabel\" x-bind:title=\"paneTools.dotLabel\"></span></template><template x-if=\"paneTools.jump\"><button type=\"button\" class=\"[ button jump ]\" data-size=\"sm\" x-bind:aria-label=\"paneTools.jumpLabel\" x-on:click=\"requestJump()\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -378,7 +389,7 @@ func paneTools() templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 23, "<template x-if=\"paneTools.jumpCount\"><span x-text=\"paneTools.jumpCount\"></span></template><span class=\"[ word ]\" x-text=\"paneTools.jumpCount ? 'new lines' : 'latest'\"></span></button></template><template x-if=\"!paneTools.down\"><span class=\"[ sep ]\"></span></template><template x-if=\"!paneTools.down\"><div class=\"[ menu pref ]\" x-data=\"menu\" data-align=\"end\"><button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" data-icon aria-label=\"Text size\" title=\"Text size\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 25, "<template x-if=\"paneTools.jumpCount\"><span x-text=\"paneTools.jumpCount\"></span></template><span class=\"[ word ]\" x-text=\"paneTools.jumpCount ? 'new lines' : 'latest'\"></span></button></template><template x-if=\"!paneTools.down\"><span class=\"[ sep ]\"></span></template><template x-if=\"!paneTools.down\"><div class=\"[ menu pref ]\" x-data=\"menu\" data-align=\"end\"><button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" data-icon aria-label=\"Text size\" title=\"Text size\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -386,7 +397,7 @@ func paneTools() templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 24, "</button><div class=\"[ popup ]\" role=\"menu\" popover=\"manual\"><div class=\"[ group ]\">Text size</div><template x-for=\"size in textSizes\" x-bind:key=\"size.value\"><button type=\"button\" role=\"menuitemradio\" data-action=\"text-size\" x-bind:data-value=\"size.value\" x-bind:aria-checked=\"size.checked ? 'true' : 'false'\"><span x-text=\"size.label\"></span><span class=\"[ meta ]\" x-text=\"size.px + 'px'\"></span></button></template></div></div></template><template x-if=\"!paneTools.down\"><button type=\"button\" class=\"[ button pref ]\" data-variant=\"ghost\" data-size=\"sm\" x-bind:class=\"focusActive ? 'exit-focus' : ''\" x-bind:data-icon=\"focusActive ? null : ''\" x-bind:aria-pressed=\"focusActive ? 'true' : 'false'\" x-bind:aria-label=\"focusActive ? null : 'Focus mode'\" x-bind:title=\"focusActive ? null : 'Focus mode'\" x-on:click=\"toggleFocus()\"><span x-show=\"!focusActive\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 26, "</button><div class=\"[ popup ]\" role=\"menu\" popover=\"manual\"><div class=\"[ group ]\">Text size</div><template x-for=\"size in textSizes\" x-bind:key=\"size.value\"><button type=\"button\" role=\"menuitemradio\" data-action=\"text-size\" x-bind:data-value=\"size.value\" x-bind:aria-checked=\"size.checked ? 'true' : 'false'\"><span x-text=\"size.label\"></span><span class=\"[ meta ]\" x-text=\"size.px + 'px'\"></span></button></template></div></div></template><template x-if=\"!paneTools.down\"><button type=\"button\" class=\"[ button pref ]\" data-variant=\"ghost\" data-size=\"sm\" x-bind:class=\"focusActive ? 'exit-focus' : ''\" x-bind:data-icon=\"focusActive ? null : ''\" x-bind:aria-pressed=\"focusActive ? 'true' : 'false'\" x-bind:aria-label=\"focusActive ? null : 'Focus mode'\" x-bind:title=\"focusActive ? null : 'Focus mode'\" x-on:click=\"toggleFocus()\"><span x-show=\"!focusActive\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -394,7 +405,7 @@ func paneTools() templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 25, "</span> <span x-show=\"focusActive\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 27, "</span> <span x-show=\"focusActive\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -402,7 +413,7 @@ func paneTools() templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 26, "</span> <span class=\"[ word ]\" x-show=\"focusActive\">Exit focus</span></button></template></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 28, "</span> <span class=\"[ word ]\" x-show=\"focusActive\">Exit focus</span></button></template></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -433,7 +444,7 @@ func paneNote() templ.Component {
 			templ_7745c5c3_Var8 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 27, "<div class=\"[ pane-note ]\" role=\"status\" x-bind:data-tone=\"paneNote.failed ? 'danger' : null\"><span class=\"[ text ]\" x-text=\"paneNote.text\"></span><template x-if=\"paneNote.resumable\"><button type=\"button\" class=\"[ button ]\" data-variant=\"primary\" data-size=\"sm\" x-bind:disabled=\"cannotResume\" x-bind:aria-busy=\"resumingSelected\" x-on:click=\"resume()\">Resume session</button></template></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 29, "<div class=\"[ pane-note ]\" role=\"status\" x-bind:data-tone=\"paneNote.failed ? 'danger' : null\"><span class=\"[ text ]\" x-text=\"paneNote.text\"></span><template x-if=\"paneNote.resumable\"><button type=\"button\" class=\"[ button ]\" data-variant=\"primary\" data-size=\"sm\" x-bind:disabled=\"cannotResume\" x-bind:aria-busy=\"resumingSelected\" x-on:click=\"resume()\">Resume session</button></template></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

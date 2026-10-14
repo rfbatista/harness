@@ -2,6 +2,7 @@ package tasks
 
 import (
 	"context"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -34,6 +35,8 @@ type Handler struct {
 	Comments  ports.TaskCommentReader
 	// PullRequests seeds the session rows' pull request badges; nil seeds none.
 	PullRequests ports.PullRequests
+	// Usage seeds the task's and its sessions' token totals; nil leaves them out.
+	Usage ports.UsageDashboard
 	// Code serves the sessions' Code tab; nil leaves it out. Workspaces
 	// names each worktree's base branch for it.
 	Code       ports.CodeBrowser
@@ -183,6 +186,9 @@ func (h Handler) task(w http.ResponseWriter, r *http.Request, codeRoute *code.Ro
 	if h.PullRequests != nil {
 		view.PullRequests = pullrequests.NewWatchSeed(ctx, h.PullRequests, project.ID, workspaceIDs(list))
 	}
+	if h.Usage != nil {
+		view.Usage = h.usageTotals(ctx, project.ID, task.ID, list)
+	}
 	for _, st := range Statuses {
 		view.StatusChoices = append(view.StatusChoices, sessions.StatusChoice{Value: st.Value, Label: st.Label, Selected: st.Value == string(task.Status)})
 	}
@@ -199,6 +205,24 @@ func (h Handler) task(w http.ResponseWriter, r *http.Request, codeRoute *code.Ro
 		view.Seed.OpenCode = codeRoute.SessionID
 	}
 	return h.Render(w, r, http.StatusOK, sessions.Page(view))
+}
+
+// usageTotals reads the task's and each of its sessions' all-time token
+// totals; nil when one cannot be read: the totals are not worth the page.
+func (h Handler) usageTotals(ctx context.Context, projectID, taskID string, list []*domain.Session) *sessions.UsageTotalsSeed {
+	seed := &sessions.UsageTotalsSeed{ProjectID: projectID, TaskID: taskID, Sessions: make(map[string]*ports.UsageTotals, len(list))}
+	var err error
+	if seed.Task, err = h.Usage.UsageTotals(ctx, ports.UsageTotalsQuery{TaskID: taskID}); err != nil {
+		slog.Warn("task page: usage totals not read", "task", taskID, "err", err)
+		return nil
+	}
+	for _, s := range list {
+		if seed.Sessions[s.ID], err = h.Usage.UsageTotals(ctx, ports.UsageTotalsQuery{SessionID: s.ID}); err != nil {
+			slog.Warn("task page: usage totals not read", "session", s.ID, "err", err)
+			return nil
+		}
+	}
+	return seed
 }
 
 // baseRefs names each session worktree's base branch, by workspace.

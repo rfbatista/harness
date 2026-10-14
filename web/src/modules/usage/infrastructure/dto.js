@@ -103,6 +103,23 @@ export function toSeed(body) {
   };
 }
 
+/**
+ * A task page's usage totals seed: {"project_id", "task_id", "task",
+ * "sessions": {id: totals}}, all-time. task is null on a page without a task
+ * or when its totals were not read.
+ */
+export function toTotalsSeed(body) {
+  if (!body || typeof body.project_id !== "string" || body.project_id === "") bad("totals seed without a project_id");
+  const sessions = body.sessions ?? {};
+  if (typeof sessions !== "object" || Array.isArray(sessions)) bad("totals seed sessions is not a map");
+  return {
+    projectId: body.project_id,
+    taskId: str(body.task_id),
+    task: body.task ? toTotals(body.task, "task") : null,
+    sessions: Object.fromEntries(Object.entries(sessions).map(([id, t]) => [id, toTotals(t, `sessions.${id}`)])),
+  };
+}
+
 const str = (v) => (typeof v === "string" ? v : "");
 
 function id(v, at) {

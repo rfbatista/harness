@@ -67,6 +67,14 @@
   .usage [data-slot="7"] { --_series: var(--series-7); }
   .usage [data-slot="8"] { --_series: var(--series-8); }
 
+  /* A task's token totals in its toolbar (usageTotalsChip): quiet meta text. */
+  .usage-total {
+    color: var(--color-ink-faint);
+    font-size: var(--text-sm);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+
   .usage-hint {
     margin: 0;
     padding-inline: var(--space-l);

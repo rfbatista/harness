@@ -1,7 +1,8 @@
 // UsageGateway over the harness HTTP API: /api/projects/{p}/usage, its
-// records and its event stream (bare `data:` lines, one record each).
+// records and its event stream (bare `data:` lines, one record each), and
+// /api/usage/totals for one task or session.
 
-import { toRecord, toRecords, toSeed, toSummary } from "./dto.js";
+import { toRecord, toRecords, toSeed, toSummary, toTotals, toTotalsSeed } from "./dto.js";
 
 const base = (projectId) => `/projects/${encodeURIComponent(projectId)}/usage`;
 
@@ -13,6 +14,11 @@ const base = (projectId) => `/projects/${encodeURIComponent(projectId)}/usage`;
 export function usageGateway(api, feed) {
   return {
     decodeSeed: toSeed,
+    decodeTotalsSeed: toTotalsSeed,
+
+    async totals({ taskId = "", sessionId = "" }, signal) {
+      return toTotals(await api.get("/usage/totals", { task_id: taskId, session_id: sessionId }, signal));
+    },
 
     async summary(projectId, range, signal) {
       return toSummary(await api.get(base(projectId), { range }, signal));
