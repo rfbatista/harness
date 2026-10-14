@@ -89,7 +89,7 @@ func (h Handler) Session(w http.ResponseWriter, r *http.Request) error {
 		view.Notice = "This session's worktree was removed, so there is nothing uncommitted to show; its branch and commits are kept."
 	}
 	if len(hist.Commits) == q.limit && q.limit < domain.MaxHistory {
-		view.MoreHref = base + query{limit: min(q.limit+pageSize, domain.MaxHistory)}.encode()
+		view.MoreHref = keepOpen(base, r, open) + query{limit: min(q.limit+pageSize, domain.MaxHistory)}.encode()
 	}
 	g := graphRows{
 		branchTasks: h.sessionBranches(r, project.ID, hist.RepositoryID),
@@ -111,6 +111,11 @@ func (h Handler) Session(w http.ResponseWriter, r *http.Request) error {
 				v := code.Build(code.LoadWorking(ctx, h.Code, project.ID, hist.RepositoryID, sess.WorkspaceID))
 				view.OpenWorking.Diff = &v
 			}
+		}
+	}
+	if swap {
+		if more, err := h.answerShowMore(w, r, view); more {
+			return err
 		}
 	}
 	if detail != nil {

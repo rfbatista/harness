@@ -496,3 +496,111 @@ func TestSessionHistorySwapKeepsTheRefusals(t *testing.T) {
 		}
 	}
 }
+
+// showMore is the request htmx sends for a history's "Show more": the next
+// page's URL, into the list's tail, after the last commit shown.
+func showMore(t *testing.T, h http.Handler, path, after string) *httptest.ResponseRecorder {
+	t.Helper()
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, path, nil)
+	req.Header.Set("HX-Request", "true")
+	req.Header.Set("HX-Target", "history-more")
+	if after != "" {
+		req.Header.Set("X-History-After", after)
+	}
+	h.ServeHTTP(rec, req)
+	return rec
+}
+
+// commitRows are the hashes of the commit rows in body, in order.
+func commitRows(body string) []string {
+	var out []string
+	for rest := body; ; {
+		i := strings.Index(rest, `<a class="[ commit ]"`)
+		if i < 0 {
+			return out
+		}
+		tag := openingTag(rest[i:], `class="[ commit ]"`)
+		if !strings.Contains(tag, "data-working") {
+			path, _, _ := strings.Cut(hrefOf(tag), "?")
+			out = append(out, path[strings.LastIndex(path, "/")+1:])
+		}
+		rest = rest[i+len(tag):]
+	}
+}
+
+func TestHistoryShowMoreIsALinkThatAppendsAfterTheLastCommitShown(t *testing.T) {
+	w := historyWorld(t)
+	h := newTestHandler(t, w)
+	for _, base := range []string{"/projects/p1/repositories/r1/history", sessionHistory} {
+		body := get(t, h, base+"?limit=1").Body.String()
+		shown := commitRows(body)
+		if len(shown) != 1 {
+			t.Fatalf("%s: %d rows shown, want 1", base, len(shown))
+		}
+		more := openingTag(body, `href="`+base+`?limit=201"`)
+		assertSwapTrigger(t, more, base+"?limit=201", "history-more")
+		if !strings.Contains(more, `hx-headers="{&#34;X-History-After&#34;:&#34;`+shown[0]+`&#34;}"`) {
+			t.Errorf("%s: Show more does not say what it follows: %s", base, more)
+		}
+		if region := openingTag(body, `id="history-more"`); region == "" || strings.Contains(region, "data-swap-region") {
+			t.Errorf("%s: Show more's target is %q, want a plain tail of the list", base, region)
+		}
+	}
+}
+
+func TestHistoryShowMoreAnswersOnlyTheNextCommits(t *testing.T) {
+	w := historyWorld(t)
+	h := newTestHandler(t, w)
+	for _, base := range []string{"/projects/p1/repositories/r1/history", sessionHistory} {
+		all := commitRows(get(t, h, base+"?limit=201").Body.String())
+		if len(all) < 3 {
+			t.Fatalf("%s: %d commits, want a few", base, len(all))
+		}
+		rec := showMore(t, h, base+"?limit=201", all[0])
+		body := rec.Body.String()
+		if rec.Code != http.StatusOK || rec.Header().Get("Vary") != "HX-Request" {
+			t.Fatalf("%s: status %d, Vary %q", base, rec.Code, rec.Header().Get("Vary"))
+		}
+		if got := strings.Join(commitRows(body), ","); got != strings.Join(all[1:], ",") {
+			t.Errorf("%s: appended %s, want the commits after the first: %s", base, got, strings.Join(all[1:], ","))
+		}
+		// Never a commit's detail, nor the page around the list.
+		for _, absent := range []string{`id="commit-detail"`, "data-working", "<html", `aria-label="Commits"`, "Show more"} {
+			if strings.Contains(body, absent) {
+				t.Errorf("%s: the next commits carry %q", base, absent)
+			}
+		}
+		// And a commit swap is never the next commits.
+		detail := swap(t, h, base+"/"+all[1]+"?limit=201", "commit-detail").Body.String()
+		if rows := commitRows(detail); len(rows) != 0 || strings.Contains(detail, `id="history-more"`) {
+			t.Errorf("%s: a commit swap carries rows %v or Show more", base, rows)
+		}
+	}
+}
+
+func TestHistoryShowMoreAfterACommitNoLongerListedIsRefused(t *testing.T) {
+	h := newTestHandler(t, historyWorld(t))
+	for _, after := range []string{"0000000000000000000000000000000000000000", ""} {
+		if rec := showMore(t, h, "/projects/p1/repositories/r1/history?limit=201", after); rec.Code != http.StatusConflict {
+			t.Errorf("after %q: status %d, want 409 (the page loads instead)", after, rec.Code)
+		}
+	}
+}
+
+func TestHistoryShowMoreKeepsTheOpenCommit(t *testing.T) {
+	w := historyWorld(t)
+	h := newTestHandler(t, w)
+	agent := agentCommit(t, w)
+	for page, want := range map[string]string{
+		"/projects/p1/repositories/r1/history/" + agent + "?limit=1": "/projects/p1/repositories/r1/history/" + agent + "?limit=201",
+		sessionHistory + "/" + agent + "?limit=1":                    sessionHistory + "/" + agent + "?limit=201",
+		sessionHistory + "/working?limit=1":                          sessionHistory + "/working?limit=201",
+		sessionHistory + "?limit=1":                                  sessionHistory + "?limit=201", // none named: as before
+	} {
+		body := get(t, h, page).Body.String()
+		if more := hrefOf(openingTag(body, `hx-target="#history-more"`)); more != want {
+			t.Errorf("%s: Show more is %q, want %q", page, more, want)
+		}
+	}
+}

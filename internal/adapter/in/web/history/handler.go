@@ -131,7 +131,7 @@ func (h Handler) Page(w http.ResponseWriter, r *http.Request) error {
 	}
 	if len(commits) == q.limit && q.limit < domain.MaxHistory {
 		more := query{limit: min(q.limit+pageSize, domain.MaxHistory), remotes: q.remotes}
-		view.MoreHref = base + more.encode()
+		view.MoreHref = keepOpen(base, r, open) + more.encode()
 	}
 	g := graphRows{
 		branchTasks: h.sessionBranches(r, project.ID, repo.ID),
@@ -139,6 +139,11 @@ func (h Handler) Page(w http.ResponseWriter, r *http.Request) error {
 		href:        func(hash string) string { return base + "/" + hash + q.encode() + "#c-" + short(hash) },
 	}
 	view.Rows, _ = g.rows(commits, nil, detail)
+	if swap {
+		if more, err := h.answerShowMore(w, r, view); more {
+			return err
+		}
+	}
 	if detail != nil {
 		view.Open = openView(detail, g)
 		view.Open.Diff = h.commitDiff(r, project.ID, repo.ID, detail.Hash)

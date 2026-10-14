@@ -53,11 +53,7 @@ templ Page(v PageView) {
 						for _, r := range v.Rows {
 							@commitRow(r)
 						}
-						if v.MoreHref != "" {
-							<div class="[ pad-l ]">
-								<a class="[ button ]" data-size="sm" href={ templ.SafeURL(v.MoreHref) }>Show more</a>
-							</div>
-						}
+						@showMore(v)
 					</nav>
 					@openDetail(v)
 				</div>
@@ -116,6 +112,25 @@ templ refBadge(ref RefView, link bool) {
 	} else {
 		<span class="[ ref ]" data-kind={ ref.Kind } title={ ref.Name } { headAttrs(ref.Head)... }>{ ref.Name }</span>
 	}
+}
+
+// showMore is the list's tail: the link to the next page of commits, which
+// htmx swaps for those commits and the next one, after the last row shown.
+templ showMore(v PageView) {
+	if v.MoreHref != "" {
+		<div class="[ pad-l ]" id={ moreTarget }>
+			<a class="[ button ]" data-size="sm" href={ templ.SafeURL(v.MoreHref) } { shell.SwapLink(moreTarget)... } { afterAttrs(v.Rows)... }>Show more</a>
+		</div>
+	}
+}
+
+// nextCommits answers "Show more": the commits after those shown, then the
+// next "Show more".
+templ nextCommits(v PageView) {
+	for _, r := range v.Rows {
+		@commitRow(r)
+	}
+	@showMore(v)
 }
 
 // detailRegion is the id of a history page's swap region: the open commit's

@@ -257,3 +257,86 @@ func TestSessionHistorySwapInTheBrowser(t *testing.T) {
 		t.Error("a failing swap stayed in place instead of loading the page")
 	}
 }
+
+// TestHistoryShowMoreInTheBrowser: on both history pages, "Show more"
+// appends the next commits below the ones shown without reloading: the
+// list keeps its scroll and the open commit stays open, the address bar
+// carries the new limit, Back returns to the shorter list, and a request
+// that fails loads the page.
+func TestHistoryShowMoreInTheBrowser(t *testing.T) {
+	assets, err := NewAssets()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !assets.Built() {
+		t.Skip("browser test: web client not built; run `make web`")
+	}
+	ctx, errs := browser(t)
+	w := historyWorld(t)
+	pages, fail := failingSwaps(NewHandler(Deps{
+		Projects: fakeProjects{w.projects}, Tasks: fakeTickets{w.tickets}, Sessions: fakeSessions{w.sessions},
+		Agents: fakeAgents{w.agents}, Repositories: fakeRepos{w.repos}, EnvFiles: w.env, History: w.history,
+		Now: func() time.Time { return now },
+	}, assets, nil))
+	mux := http.NewServeMux()
+	mux.Handle("/api/", http.NotFoundHandler())
+	mux.Handle("/", pages)
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	rows := `document.querySelectorAll('nav[aria-label=Commits] a.commit:not([data-working])').length`
+	list := `document.querySelector('nav[aria-label=Commits]')`
+	heading := `document.querySelector('#commit-detail h2').textContent`
+	for _, base := range []string{"/projects/p1/repositories/r1/history", sessionHistory} {
+		fail.Store(false)
+		var before, after, shorter, failed int
+		var scrolled, kept float64
+		var openBefore, openAfter, search string
+		var swapped, reloaded bool
+		err := chromedp.Run(ctx,
+			chromedp.EmulateViewport(1280, 200), // short, so the list scrolls
+			chromedp.Navigate(srv.URL+base+"?limit=2"),
+			pageSettled(),
+			chromedp.Evaluate(rows, &before),
+			chromedp.Evaluate(heading, &openBefore),
+			chromedp.Evaluate(`(l => { l.scrollTop = l.scrollHeight; return l.scrollTop })(`+list+`)`, &scrolled),
+			markWindow(),
+			chromedp.Evaluate(`document.querySelector('#history-more a').click()`, nil),
+			chromedp.Poll(rows+` === 5 && location.search === '?limit=202'`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+			chromedp.Evaluate(rows, &after),
+			chromedp.Evaluate(list+`.scrollTop`, &kept),
+			chromedp.Evaluate(heading, &openAfter),
+			chromedp.Evaluate(`location.search`, &search),
+			windowMarked(&swapped),
+
+			chromedp.Evaluate(`history.back()`, nil),
+			pollAcrossLoads(`document.readyState === 'complete' && location.search === '?limit=2' && !!document.querySelector('#history-more')`),
+			chromedp.Evaluate(rows, &shorter),
+
+			markWindow(),
+			chromedp.ActionFunc(func(context.Context) error { fail.Store(true); return nil }),
+			chromedp.Evaluate(`document.querySelector('#history-more a').click()`, nil),
+			pollAcrossLoads(`document.readyState === 'complete' && location.search === '?limit=202' && `+rows+` === 5`),
+			chromedp.Evaluate(rows, &failed),
+			windowMarked(&reloaded),
+		)
+		if err != nil {
+			t.Fatalf("%s: %v\nJS errors: %v", base, err, errs.all())
+		}
+		if before != 2 || after != 5 || !swapped {
+			t.Errorf("%s: %d rows, then %d; the page was kept %v", base, before, after, swapped)
+		}
+		if scrolled == 0 || kept != scrolled {
+			t.Errorf("%s: the list was scrolled to %v, and is at %v after Show more", base, scrolled, kept)
+		}
+		if openAfter != openBefore || search != "?limit=202" {
+			t.Errorf("%s: open %q then %q; address %q", base, openBefore, openAfter, search)
+		}
+		if shorter != 2 {
+			t.Errorf("%s: Back shows %d rows, want the shorter list", base, shorter)
+		}
+		if reloaded || failed != 5 {
+			t.Errorf("%s: a failing Show more stayed in place (%v) or loaded %d rows", base, reloaded, failed)
+		}
+	}
+}

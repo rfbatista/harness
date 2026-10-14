@@ -5,7 +5,8 @@
 //
 // A region is [data-swap-region] with an id; its links carry hx-boost,
 // hx-target and hx-swap (shell.SwapLink). While a swap is in flight the region
-// is aria-busy; after it, the region is at its top, its first heading has
+// is aria-busy (a link that swaps something else, like "Show more", is busy
+// itself); after it, the region is at its top, its first heading has
 // focus, any [data-swap-keep-scroll="key"] inside it keeps its scroll, and of
 // the links that swap it, the one to the new address is aria-current (the
 // list's highlight follows, also when the list is outside the region). A link
@@ -35,8 +36,11 @@ export function startSwapRegions(htmx, { navigate, doc = document }) {
   const regionOf = (el) => (el instanceof Element ? el.closest("[data-swap-region]") : null);
   let kept = new Map();
 
-  doc.addEventListener("htmx:beforeRequest", (e) => regionOf(e.detail.target)?.setAttribute("aria-busy", "true"));
-  doc.addEventListener("htmx:afterRequest", (e) => regionOf(e.detail.target)?.removeAttribute("aria-busy"));
+  // A swap into a region shows the region busy; one that only adds to a
+  // list ("Show more") shows its link busy.
+  const busyOf = (e) => regionOf(e.detail.target) ?? e.detail.elt;
+  doc.addEventListener("htmx:beforeRequest", (e) => busyOf(e)?.setAttribute("aria-busy", "true"));
+  doc.addEventListener("htmx:afterRequest", (e) => busyOf(e)?.removeAttribute("aria-busy"));
 
   doc.addEventListener("htmx:beforeSwap", (e) => {
     if (e.detail.shouldSwap && executableScript(e.detail.serverResponse)) {
