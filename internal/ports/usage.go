@@ -34,10 +34,16 @@ type UsageRecords struct {
 	Records []*domain.UsageRecord `json:"records"`
 }
 
-// UsageReader is what the API reads of token usage.
-type UsageReader interface {
+// UsageDashboard is what the Usage page reads for its seed: a project's
+// summary over a range and its recent records.
+type UsageDashboard interface {
 	ListRecentUsage(ctx context.Context, q UsageQuery) (*UsageRecords, error)
 	UsageSummary(ctx context.Context, projectID string, r UsageRange) (*UsageSummary, error)
+}
+
+// UsageReader is what the API reads of token usage.
+type UsageReader interface {
+	UsageDashboard
 	UsageTotals(ctx context.Context, q UsageTotalsQuery) (*UsageTotals, error)
 	// FollowUsage streams each usage record stored for a project, until ctx
 	// ends or the follower falls behind; then the channel closes.

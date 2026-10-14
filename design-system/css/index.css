@@ -98,6 +98,9 @@
 @import url("./blocks/section-head.css");
 @import url("./blocks/resource.css");
 @import url("./blocks/drop-target.css");
+@import url("./blocks/usage.css");
+@import url("./blocks/usage-chart.css");
+@import url("./blocks/usage-rows.css");
 @import url("./blocks/comment.css");
 @import url("./blocks/lightbox.css");
 @import url("./blocks/resources-page.css");

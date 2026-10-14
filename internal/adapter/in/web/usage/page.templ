@@ -1,0 +1,147 @@
+package usage
+
+import "operators-mcp/internal/adapter/in/web/shell"
+
+// Page is a project's Usage page. usagePage renders it from the seed:
+// totals by token kind with the estimated cost, tokens over time by model
+// (an SVG it draws), the top tasks and sessions, and the live feed.
+templ Page(frame shell.Frame, projectID, projectName string, seed Seed) {
+	@shell.AppShell(frame) {
+		@templ.JSONScript("usage-seed", seed)
+		<main id="main" class="[ frame ]" x-data="usagePage" data-seed="usage-seed">
+			<header class="[ toolbar ]">
+				<a class="[ crumb ]" href={ templ.SafeURL("/projects/" + projectID) }>{ projectName } /</a>
+				<h1>Usage</h1>
+				<div class="[ segmented ]" role="group" aria-label="Range">
+					<template x-for="tab in tabs" x-bind:key="tab.id">
+						<button type="button" x-bind:data-range="tab.id" x-bind:aria-pressed="tab.pressed" x-on:click="pick" x-text="tab.label"></button>
+					</template>
+				</div>
+				<span class="[ color-ink-faint text-sm ]" x-show="loading" style="display: none">Loading…</span>
+			</header>
+			<div class="[ usage ]" data-scroll>
+				<template x-if="error">
+					<div class="[ banner ]" data-tone="danger" role="alert">
+						<div class="[ flow ] [ flow-space-3xs grow ]">
+							<span x-text="error.message"></span>
+							<span class="[ code ]"><span x-text="error.code"></span> · <span x-text="error.next"></span></span>
+						</div>
+						<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-on:click="dismissError">Dismiss</button>
+					</div>
+				</template>
+				<section class="[ usage-totals ]" aria-label="Totals">
+					<dl class="[ usage-tiles ]" x-bind:aria-busy="loading">
+						<template x-for="tile in tiles" x-bind:key="tile.key">
+							<div class="[ tile ]" x-bind:data-key="tile.key">
+								<dt x-text="tile.label"></dt>
+								<dd class="[ value ]" x-bind:title="tile.exact"><span aria-hidden="true" x-text="tile.value"></span><span class="[ visually-hidden ]" x-text="tile.exact"></span></dd>
+								<dd class="[ note ]" x-show="tile.note" x-text="tile.note"></dd>
+							</div>
+						</template>
+					</dl>
+					<p class="[ usage-hint ]">Estimated cost comes from the harness's own price table per model. On a subscription nothing is billed per token.</p>
+				</section>
+				<section class="[ usage-section ]" aria-labelledby="usage-chart-head">
+					<header class="[ section-head ]">
+						<h2 id="usage-chart-head">Tokens over time</h2>
+					</header>
+					<div class="[ usage-chart ]">
+						<ul role="list" class="[ legend ]" x-show="!chartView.empty">
+							<template x-for="entry in chartView.legend" x-bind:key="entry.model">
+								<li><span class="[ swatch ]" x-bind:data-slot="entry.slot"></span><span x-text="entry.model"></span> <span class="[ count ]" x-text="entry.tokens"></span></li>
+							</template>
+						</ul>
+						<div class="[ plot ]" aria-hidden="true">
+							<span class="[ max ]" x-text="chartView.maxLabel"></span>
+							<svg preserveAspectRatio="none" x-effect="draw($el)"></svg>
+							<div class="[ axis ]">
+								<template x-for="column in chartView.columns" x-bind:key="column.key">
+									<span x-text="column.axis"></span>
+								</template>
+							</div>
+						</div>
+						<p class="[ usage-hint ]" x-show="chartView.empty">No tokens in this range yet.</p>
+						<details class="[ table-view ]" x-show="!chartView.empty">
+							<summary>Show as a table</summary>
+							<table>
+								<thead><tr><th scope="col">When</th><th scope="col">Tokens by model</th><th scope="col">Total</th></tr></thead>
+								<tbody>
+									<template x-for="column in chartView.columns" x-bind:key="column.key">
+										<tr x-show="column.total">
+											<th scope="row" x-text="column.label"></th>
+											<td x-text="column.byModel"></td>
+											<td x-text="column.totalText"></td>
+										</tr>
+									</template>
+								</tbody>
+							</table>
+						</details>
+					</div>
+				</section>
+				<div class="[ usage-tops ]">
+					<section class="[ usage-section ]" aria-labelledby="usage-tasks-head">
+						<header class="[ section-head ]">
+							<h2 id="usage-tasks-head">Top tasks</h2>
+						</header>
+						<ol role="list" class="[ usage-rows ]">
+							<template x-for="row in taskRows" x-bind:key="row.id">
+								<li>
+									<a class="[ name ]" x-bind:href="row.href" x-text="row.title"></a>
+									<span class="[ figures ]"><span x-bind:title="row.exact" x-text="row.tokens"></span><span class="[ share ]" x-text="row.shareText"></span><span class="[ cost ]" x-bind:title="row.costTitle" x-text="row.cost"></span></span>
+								</li>
+							</template>
+						</ol>
+						<p class="[ usage-hint ]" x-show="noTasks">No task used tokens in this range.</p>
+					</section>
+					<section class="[ usage-section ]" aria-labelledby="usage-sessions-head">
+						<header class="[ section-head ]">
+							<h2 id="usage-sessions-head">Top sessions</h2>
+						</header>
+						<ol role="list" class="[ usage-rows ]">
+							<template x-for="row in sessionRows" x-bind:key="row.id">
+								<li>
+									<span class="[ name ]">
+										<template x-if="row.href">
+											<a x-bind:href="row.href" x-text="row.label"></a>
+										</template>
+										<template x-if="!row.href">
+											<span x-text="row.label"></span>
+										</template>
+										<span class="[ task ]" x-text="row.task"></span>
+									</span>
+									<span class="[ figures ]"><span x-bind:title="row.exact" x-text="row.tokens"></span><span class="[ share ]" x-text="row.shareText"></span><span class="[ cost ]" x-bind:title="row.costTitle" x-text="row.cost"></span></span>
+								</li>
+							</template>
+						</ol>
+						<p class="[ usage-hint ]" x-show="noSessions">No session used tokens in this range.</p>
+					</section>
+				</div>
+				<section class="[ usage-section ]" aria-labelledby="usage-feed-head">
+					<header class="[ section-head ]">
+						<h2 id="usage-feed-head">Live requests</h2>
+						<span class="[ badge ]" x-bind:data-tone="liveTone" x-text="liveText"></span>
+					</header>
+					<ol role="list" class="[ usage-feed ]" aria-live="polite" aria-relevant="additions">
+						<template x-for="row in feedRows" x-bind:key="row.id">
+							<li x-bind:data-failed="row.failedAttr">
+								<time x-bind:datetime="row.iso" x-text="row.time"></time>
+								<span class="[ model ]" x-text="row.model"></span>
+								<span class="[ task ]">
+									<template x-if="row.taskHref">
+										<a x-bind:href="row.taskHref" x-text="row.task"></a>
+									</template>
+									<template x-if="!row.taskHref">
+										<span x-text="row.task"></span>
+									</template>
+								</span>
+								<span class="[ figures ]"><span x-bind:title="row.exact" x-text="row.tokens"></span><span class="[ cost ]" title="Estimated cost" x-text="row.cost"></span><span class="[ duration ]" x-text="row.duration"></span></span>
+								<span class="[ failure ]" x-show="row.failed" x-text="row.status"></span>
+							</li>
+						</template>
+					</ol>
+					<p class="[ usage-hint ]" x-show="feedEmpty">No requests yet. Each request a session makes shows here as it finishes.</p>
+				</section>
+			</div>
+		</main>
+	}
+}

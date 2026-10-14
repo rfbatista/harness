@@ -1,0 +1,113 @@
+/*
+ * Usage — a project's token usage page: total tiles, the tokens-over-time
+ * chart, the top tasks and sessions, and the live feed of requests.
+ * <div class="usage" data-scroll>
+ *   <section class="usage-totals"><dl class="usage-tiles"><div class="tile" data-key="cost"><dt>…</dt><dd class="value">…</dd><dd class="note">…</dd></div></dl></section>
+ *   <section class="usage-section"><header class="section-head">…</header>
+ *     <div class="usage-chart"><ul class="legend">…<span class="swatch" data-slot="1"></span>…</ul>
+ *       <div class="plot"><span class="max">…</span><svg>…<rect data-slot="1">…</svg><div class="axis">…</div></div></div></section>
+ *   <div class="usage-tops"><section class="usage-section"><ol class="usage-rows">…</ol></section>…</div>
+ *   <section class="usage-section"><ol class="usage-feed"><li data-failed>…</li></ol></section>
+ * </div>
+ * Series colours: data-slot="1"–"8" is a model's categorical slot (fixed
+ * order, validated for adjacent pairs in both modes with the dataviz
+ * palette check); data-slot="0" is Other, neutral. Each mode has its own
+ * steps. Text stays in ink tokens; the swatch carries identity.
+ */
+
+@layer blocks {
+  .usage {
+    --series-0: var(--color-ink-faint);
+    --series-1: #2a78d6;
+    --series-2: #eb6834;
+    --series-3: #1baf7a;
+    --series-4: #eda100;
+    --series-5: #e87ba4;
+    --series-6: #008300;
+    --series-7: #6250d6;
+    --series-8: #e34948;
+
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-l);
+    padding-block-end: var(--space-xl);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) .usage {
+      --series-1: #3987e5;
+      --series-2: #d95926;
+      --series-3: #199e70;
+      --series-4: #c98500;
+      --series-5: #d55181;
+      --series-6: #008300;
+      --series-7: #9085e9;
+      --series-8: #e66767;
+    }
+  }
+
+  :root[data-theme="dark"] .usage {
+    --series-1: #3987e5;
+    --series-2: #d95926;
+    --series-3: #199e70;
+    --series-4: #c98500;
+    --series-5: #d55181;
+    --series-6: #008300;
+    --series-7: #9085e9;
+    --series-8: #e66767;
+  }
+
+  .usage [data-slot="0"] { --_series: var(--series-0); }
+  .usage [data-slot="1"] { --_series: var(--series-1); }
+  .usage [data-slot="2"] { --_series: var(--series-2); }
+  .usage [data-slot="3"] { --_series: var(--series-3); }
+  .usage [data-slot="4"] { --_series: var(--series-4); }
+  .usage [data-slot="5"] { --_series: var(--series-5); }
+  .usage [data-slot="6"] { --_series: var(--series-6); }
+  .usage [data-slot="7"] { --_series: var(--series-7); }
+  .usage [data-slot="8"] { --_series: var(--series-8); }
+
+  .usage-hint {
+    margin: 0;
+    padding-inline: var(--space-l);
+    color: var(--color-ink-faint);
+    font-size: var(--text-sm);
+  }
+
+  .usage-totals {
+    display: grid;
+    gap: var(--space-s);
+    padding-block-start: var(--space-l);
+  }
+
+  .usage-tiles {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(8rem, 1fr));
+    gap: var(--space-s);
+    margin: 0;
+    padding-inline: var(--space-l);
+
+    & > .tile {
+      display: grid;
+      align-content: start;
+      gap: var(--space-3xs);
+      padding: var(--space-s) var(--space-m);
+      border: var(--border-width) solid var(--color-line);
+      border-radius: var(--radius-sm);
+      background: var(--color-raised);
+    }
+
+    & dt { color: var(--color-ink-muted); font-size: var(--text-xs); }
+    & dd { margin: 0; }
+    & .value {
+      color: var(--color-ink);
+      font-size: var(--text-xl);
+      font-weight: var(--weight-bold);
+      font-variant-numeric: tabular-nums;
+      line-height: var(--leading-tight);
+    }
+    & .note { color: var(--color-ink-faint); font-size: var(--text-xs); }
+    & > .tile[data-key="total"] .value,
+    & > .tile[data-key="cost"] .value { font-size: var(--text-2xl); }
+  }
+}

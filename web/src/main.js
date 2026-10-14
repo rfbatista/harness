@@ -38,6 +38,8 @@ import { cookieRailPrefs } from "./modules/tasks/infrastructure/rail-prefs.js";
 import { resourcesGateway } from "./modules/tasks/infrastructure/resources-gateway.js";
 import { tasksGateway } from "./modules/tasks/infrastructure/tasks-gateway.js";
 import { registerTasks } from "./modules/tasks/presentation/register.js";
+import { usageGateway } from "./modules/usage/infrastructure/usage-gateway.js";
+import { registerUsage } from "./modules/usage/presentation/register.js";
 import { createHljs } from "./highlight.js";
 import { createScreen } from "./xterm-screen.js";
 
@@ -77,5 +79,6 @@ registerPullRequests(Alpine, { gateway: pullRequestsGateway(api, events) });
 registerCode(Alpine, { gateway: codeGateway(api, events), highlighter: hljsHighlighter(createHljs()), prefs, navigate });
 registerNotifications(Alpine, { gateway: notificationsGateway(api, events), alerts: desktopAlerts(), prefs, clock: systemClock, navigate });
 registerCredentials(Alpine, { gateway: credentialsGateway(api, events), clock: systemClock });
+registerUsage(Alpine, { gateway: usageGateway(api, events) });
 
 Alpine.start();
