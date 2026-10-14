@@ -194,6 +194,16 @@
     outline: none;
   }
 
+  /* ── Swap regions: muted while the next one loads (ADR 0005) ───────── */
+  [data-swap-region] {
+    transition: opacity var(--duration-quick) var(--ease-out);
+  }
+
+  [data-swap-region][aria-busy="true"] {
+    opacity: 0.6;
+    cursor: progress;
+  }
+
   /* ── Reduced motion: every transition becomes instant ──────────────── */
   @media (prefers-reduced-motion: reduce) {
     *,

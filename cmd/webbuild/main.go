@@ -44,6 +44,8 @@ var vendors = map[string]string{
 	"@xterm/addon-fit": "./web/vendor/xterm-addon-fit.esm.js",
 	// The code views' highlighter, tracked (not in web/vendor): see its README.
 	"highlight.js": "./web/third_party/highlightjs",
+	// The swap regions' htmx, tracked too: see its README.
+	"htmx.org": "./web/third_party/htmx/htmx.esm.js",
 }
 
 // engines are the browsers the web client supports; esbuild lowers syntax
@@ -125,6 +127,9 @@ func options(root string, dev bool) api.BuildOptions {
 		MinifyIdentifiers: !dev,
 		LegalComments:     api.LegalCommentsEndOfFile,
 		LogLevel:          api.LogLevelWarning,
+		// htmx keeps a direct eval for hx-on and js: values; it is never
+		// reached, since web/src/swap-regions.js sets allowEval to false.
+		LogOverride: map[string]api.LogLevel{"direct-eval": api.LogLevelSilent},
 	}
 }
 

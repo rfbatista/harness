@@ -67,6 +67,85 @@ func TestDocumentsPageInTheBrowser(t *testing.T) {
 	}
 }
 
+// TestDocumentsSwapRegionInTheBrowser: picking another document swaps the
+// list and the viewer in place (the page is not reloaded), the address bar
+// and the highlight follow, focus lands on the document's heading, Back
+// returns to the previous document, and a swap that fails loads the page.
+func TestDocumentsSwapRegionInTheBrowser(t *testing.T) {
+	assets, err := NewAssets()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !assets.Built() {
+		t.Skip("browser test: web client not built; run `make web`")
+	}
+	ctx, errs := browser(t)
+	w := documentsBoard()
+	pages, fail := failingSwaps(NewHandler(Deps{
+		Projects: fakeProjects{w.projects}, Tasks: fakeTickets{w.tickets}, Sessions: fakeSessions{w.sessions},
+		Agents: fakeAgents{w.agents}, Repositories: fakeRepos{w.repos}, EnvFiles: w.env, Documents: docReader{w.docs, w.tickets},
+		Now: func() time.Time { return now },
+	}, assets, nil))
+	mux := http.NewServeMux()
+	mux.Handle("/api/", http.NotFoundHandler())
+	mux.Handle("/", pages)
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+	base := srv.URL + "/projects/p1/tasks/t-feed/documents"
+	row := func(id string) string {
+		return `document.querySelector('nav[aria-label="Documents of this task"] a[href$="/documents/` + id + `"]')`
+	}
+
+	var path, current, focused, back string
+	var swapped, reloaded, afterFailure bool
+	err = chromedp.Run(ctx,
+		chromedp.EmulateViewport(1280, 800),
+		chromedp.Navigate(base),
+		pageSettled(),
+		markWindow(),
+		chromedp.Evaluate(row("d-plan")+`.click()`, nil),
+		waitForPath(base+"/d-plan", &path),
+		chromedp.Poll(`!!document.querySelector('article .prose table')`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		windowMarked(&swapped),
+		chromedp.Evaluate(`document.querySelector('nav[aria-label="Documents of this task"] [aria-current="page"]').getAttribute('href')`, &current),
+		chromedp.Poll(`document.activeElement && document.activeElement.tagName === 'H2'`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Evaluate(`document.activeElement.textContent.trim()`, &focused),
+
+		chromedp.Evaluate(`history.back()`, nil),
+		pollAcrossLoads(`document.readyState === 'complete' && document.querySelector('article h2')?.textContent.trim() === 'Handoff notes'`),
+		chromedp.Evaluate(`document.querySelector('article h2').textContent.trim()`, &back),
+
+		markWindow(),
+		chromedp.ActionFunc(func(context.Context) error { fail.Store(true); return nil }),
+		chromedp.Evaluate(row("d-page")+`.click()`, nil),
+		waitForPath(base+"/d-page", &path),
+		pollAcrossLoads(`document.readyState === 'complete' && !!document.querySelector('article iframe')`),
+		windowMarked(&reloaded),
+		chromedp.Evaluate(`!!document.querySelector('[data-swap-region][aria-busy="true"]')`, &afterFailure),
+	)
+	if err != nil {
+		t.Fatalf("%v\nJS errors: %v", err, errs.all())
+	}
+	if !swapped {
+		t.Error("picking a document reloaded the page")
+	}
+	if current != "/projects/p1/tasks/t-feed/documents/d-plan" {
+		t.Errorf("the highlighted row is %q, want the picked document", current)
+	}
+	if focused != "Plan" {
+		t.Errorf("focus is on %q, want the document's heading", focused)
+	}
+	if back != "Handoff notes" {
+		t.Errorf("Back shows %q, want the previous document", back)
+	}
+	if reloaded {
+		t.Error("a failing swap stayed in place instead of loading the page")
+	}
+	if afterFailure {
+		t.Error("the page loaded after a failed swap still looks busy")
+	}
+}
+
 // TestDocumentsPageFramesHTMLInTheBrowser: an HTML document renders in a
 // sandboxed frame whose script runs (it reports in by postMessage) but cannot
 // touch the page, the frame has an accessible name, and Tab leaves it for
@@ -213,6 +292,46 @@ func TestDocumentScopeMovesInPlaceInTheBrowser(t *testing.T) {
 	}
 	if !stayed || !stillListed {
 		t.Errorf("the page reloaded (%v) or dropped the document (%v)", !stayed, !stillListed)
+	}
+}
+
+// TestDocumentScopeMovesAfterASwapInTheBrowser: the move control of a
+// document swapped in works like the page's own: Alpine took over the
+// swapped region, and the move is for the swapped-in document.
+func TestDocumentScopeMovesAfterASwapInTheBrowser(t *testing.T) {
+	assets, err := NewAssets()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !assets.Built() {
+		t.Skip("browser test: web client not built; run `make web`")
+	}
+	ctx, errs := browser(t)
+	srv, bodies := scopeServer(t, documentsBoard(), assets)
+	button := `document.querySelector('[x-data="tasksDocumentScope"] button[type=submit]')`
+
+	var word string
+	var stayed bool
+	err = chromedp.Run(ctx,
+		chromedp.EmulateViewport(1280, 800),
+		chromedp.Navigate(srv.URL+"/projects/p1/tasks/t-feed/documents"),
+		chromedp.Poll(button+`?.textContent === 'Move to project'`, nil, chromedp.WithPollingTimeout(10*time.Second)),
+		markWindow(),
+		chromedp.Evaluate(`document.querySelector('nav[aria-label="Documents of this task"] a[href$="/documents/d-plan"]').click()`, nil),
+		chromedp.Poll(`document.querySelector('article h2')?.textContent === 'Plan' && `+button+`?.getAttribute('aria-label') === 'Move Plan to project'`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Evaluate(button+`.click()`, nil),
+		chromedp.Poll(button+`?.textContent === 'Move back to task'`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Evaluate(`document.querySelector('[data-scope-word]').textContent`, &word),
+		windowMarked(&stayed),
+	)
+	if err != nil {
+		t.Fatalf("%v\nJS errors: %v", err, errs.all())
+	}
+	if got := bodies(); len(got) != 1 || !strings.Contains(got[0], `"document_id":"d-plan"`) {
+		t.Errorf("set_document_scope calls: %q, want one for the swapped-in document", got)
+	}
+	if word != "Project document" || !stayed {
+		t.Errorf("after the move: word %q, page kept %v", word, stayed)
 	}
 }
 

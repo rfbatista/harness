@@ -21,6 +21,7 @@ test/                           browser test page; all.js lists every *.test.js
 testdata/views/                 fixtures shared with the Go BFF's tests
 vendor/                         Alpine and xterm.js, pinned (see vendor/README.md)
 third_party/highlightjs/        highlight.js for the code views, pinned and tracked (see its README.md)
+third_party/htmx/               htmx for the swap regions, pinned and tracked (see its README.md)
 ```
 
 ## Running it
@@ -66,3 +67,29 @@ the server's background check), `state("merged")`, `block("PR_TOOL_UNAVAILABLE")
   presentation never imports infrastructure, modules never import each other,
   only `main.js` and `dev/main.js` construct infrastructure.
 - Markup binds properties and calls methods; logic lives in the component.
+
+## Swap regions and Alpine components
+
+Two client styles live side by side (ADR 0005); the line between them is the
+swap region.
+
+- **A swap region** is a server-owned part of a page that htmx replaces in
+  place when a link inside the page is followed: the documents list and viewer,
+  a commit's detail. The page's own URL answers `HX-Request` with just the
+  region (a fragment response) from the same templ component as the full page.
+  Mark it with `shell.SwapRegion(id)` and its links with `shell.SwapLink(id)`;
+  every trigger stays a real `<a href>`, so new tabs, reloads and pages without
+  JavaScript work as before.
+- **Everything else is Alpine:** writes (through the `/api` JSON client), live
+  views fed by SSE, terminals, the code browser, the shell's navigation.
+- **A swap region never depends on the page seed.** An Alpine component inside
+  it may read only data swapped with it: data attributes on its element, or a
+  region-local seed (a JSON script inside the region, read by nothing outside
+  it). Alpine initialises it again after each swap.
+- A new swap region must be read-mostly and already server-rendered;
+  otherwise it belongs to Alpine.
+- htmx is configured once, in `src/swap-regions.js`, wired from `main.js`
+  only: no eval, no script tags, no `hx-on`. Busy state, scroll, focus on the
+  region's heading and the fall-back to a full load when a swap fails are
+  done there for every region, never per page. Back and Forward load the page
+  (no history snapshots, which would bring back dead Alpine markup).

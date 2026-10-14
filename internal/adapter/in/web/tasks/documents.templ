@@ -30,55 +30,65 @@ templ DocumentsPage(v DocumentsView) {
 					<button type="button" class="[ button ]" data-size="sm" x-on:click="reload">Reload</button>
 				</div>
 			</template>
-			if len(v.Documents) == 0 {
-				<div data-scroll>
-					@components.Empty("No documents on this task yet", "Agents working on the task write them as files in task/docs of their virtual shell — plans, findings, handoffs. They show here as they are written, and stay here when moved to project level.")
-				</div>
-			} else {
-				<div class="[ split-view ]" data-scroll { scopeAttrs(v.Open)... }>
-					<nav class="[ list ] [ divide-end ]" aria-label="Documents of this task" style="--row-columns: minmax(0, 1fr) auto auto">
-						for _, d := range v.Documents {
-							<a class="[ row ]" href={ templ.SafeURL(d.Href) } { documentCurrent(d.Current)... }>
-								<span class="[ title ]">{ d.Title }</span>
-								if d.Current {
-									<span class="[ badge ]" data-scope-mark x-show="isProject" x-text="mark" { hiddenUnless(d.Project)... }>project</span>
-								} else if d.Project {
-									<span class="[ badge ]">project</span>
-								} else {
-									<span></span>
-								}
-								<span class="[ meta ]">{ d.Updated }</span>
-							</a>
-						}
-					</nav>
-					if v.Open != nil {
-						<article class="[ frame ]" aria-label={ v.Open.Title }>
-							<div class="[ repel ] [ pad-l divide-bottom ]">
-								<h2>{ v.Open.Title }</h2>
-								<span class="[ badge ]" data-scope-word x-text="word">{ v.Open.ScopeWord() }</span>
-								<span class="[ color-ink-faint text-sm ]">updated { v.Open.Updated }</span>
-								@moveForm(v.Open)
-							</div>
-							if v.Open.IsHTML() {
-								<div class="[ preview ] [ frame ]" data-kind="page">
-									<div class="[ stage ]">
-										<iframe sandbox="allow-scripts" referrerpolicy="no-referrer" src={ v.Open.FrameSrc } title={ v.Open.Title }></iframe>
-									</div>
-									<div class="[ bar ]">
-										<span class="[ grow truncate ]"><kbd>Tab</kbd> leaves the frame</span>
-										<a href={ templ.SafeURL(v.Open.FrameSrc) } target="_blank" rel="noopener noreferrer">Open in a new tab</a>
-									</div>
-								</div>
-							} else {
-								<div class="[ prose ] [ pad-l ]" data-scroll>
-									@v.Open.Body
-								</div>
-							}
-						</article>
-					}
-				</div>
-			}
+			@documentsBody(v)
 		</main>
+	}
+}
+
+// documentsRegion is the id of the documents page's swap region: the list
+// and the open document, swapped together so the highlight follows.
+const documentsRegion = "documents-region"
+
+// documentsBody is the page under its toolbar: the list beside the open
+// document (the swap region), or how documents arrive when there are none.
+templ documentsBody(v DocumentsView) {
+	if len(v.Documents) == 0 {
+		<div data-scroll>
+			@components.Empty("No documents on this task yet", "Agents working on the task write them as files in task/docs of their virtual shell — plans, findings, handoffs. They show here as they are written, and stay here when moved to project level.")
+		</div>
+	} else {
+		<div class="[ split-view ]" data-scroll { scopeAttrs(v.Open)... } { shell.SwapRegion(documentsRegion)... }>
+			<nav class="[ list ] [ divide-end ]" aria-label="Documents of this task" data-swap-keep-scroll="documents" style="--row-columns: minmax(0, 1fr) auto auto">
+				for _, d := range v.Documents {
+					<a class="[ row ]" href={ templ.SafeURL(d.Href) } { documentCurrent(d.Current)... } { shell.SwapLink(documentsRegion)... }>
+						<span class="[ title ]">{ d.Title }</span>
+						if d.Current {
+							<span class="[ badge ]" data-scope-mark x-show="isProject" x-text="mark" { hiddenUnless(d.Project)... }>project</span>
+						} else if d.Project {
+							<span class="[ badge ]">project</span>
+						} else {
+							<span></span>
+						}
+						<span class="[ meta ]">{ d.Updated }</span>
+					</a>
+				}
+			</nav>
+			if v.Open != nil {
+				<article class="[ frame ]" aria-label={ v.Open.Title }>
+					<div class="[ repel ] [ pad-l divide-bottom ]">
+						<h2>{ v.Open.Title }</h2>
+						<span class="[ badge ]" data-scope-word x-text="word">{ v.Open.ScopeWord() }</span>
+						<span class="[ color-ink-faint text-sm ]">updated { v.Open.Updated }</span>
+						@moveForm(v.Open)
+					</div>
+					if v.Open.IsHTML() {
+						<div class="[ preview ] [ frame ]" data-kind="page">
+							<div class="[ stage ]">
+								<iframe sandbox="allow-scripts" referrerpolicy="no-referrer" src={ v.Open.FrameSrc } title={ v.Open.Title }></iframe>
+							</div>
+							<div class="[ bar ]">
+								<span class="[ grow truncate ]"><kbd>Tab</kbd> leaves the frame</span>
+								<a href={ templ.SafeURL(v.Open.FrameSrc) } target="_blank" rel="noopener noreferrer">Open in a new tab</a>
+							</div>
+						</div>
+					} else {
+						<div class="[ prose ] [ pad-l ]" data-scroll>
+							@v.Open.Body
+						</div>
+					}
+				</article>
+			}
+		</div>
 	}
 }
 

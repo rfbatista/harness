@@ -2,6 +2,7 @@ package web
 
 import (
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -121,6 +122,83 @@ func TestDocumentsPageRefusesADocumentOfAnotherTask(t *testing.T) {
 	}
 	if rec := get(t, newTestHandler(t, w), "/projects/p2/tasks/t-feed/documents"); rec.Code != http.StatusNotFound {
 		t.Fatalf("a task under another project: status %d, want 404", rec.Code)
+	}
+}
+
+func TestDocumentsPageAnswersASwapWithOnlyItsSwapRegion(t *testing.T) {
+	h := newTestHandler(t, documentsBoard())
+	for _, path := range []string{"/projects/p1/tasks/t-feed/documents", "/projects/p1/tasks/t-feed/documents/d-plan"} {
+		full := get(t, h, path)
+		if full.Code != http.StatusOK || !strings.Contains(full.Body.String(), "<html") || !strings.Contains(full.Body.String(), `x-data="tasksDocumentWatch"`) {
+			t.Fatalf("%s: without HX-Request the full page, got %d", path, full.Code)
+		}
+		frag := swap(t, h, path, "documents-region")
+		body := frag.Body.String()
+		if frag.Code != http.StatusOK {
+			t.Fatalf("%s: fragment status %d: %s", path, frag.Code, body)
+		}
+		for _, absent := range []string{"<html", "<body", `x-data="tasksDocumentWatch"`, "Documents of this project"} {
+			if strings.Contains(body, absent) {
+				t.Errorf("%s: the fragment carries %q, which is outside the swap region", path, absent)
+			}
+		}
+		region := openingTag(body, `id="documents-region"`)
+		for _, want := range []string{"data-swap-region", `x-data="tasksDocumentScope"`} {
+			if !strings.Contains(region, want) {
+				t.Errorf("%s: the swap region %q lacks %s", path, region, want)
+			}
+		}
+		for _, rec := range []*httptest.ResponseRecorder{full, frag} {
+			if got := rec.Header().Get("Vary"); got != "HX-Request" {
+				t.Errorf("%s: Vary = %q, want HX-Request", path, got)
+			}
+		}
+	}
+
+	body := swap(t, h, "/projects/p1/tasks/t-feed/documents/d-plan", "documents-region").Body.String()
+	for _, want := range []string{
+		`href="/projects/p1/tasks/t-feed/documents/d-plan" aria-current="page"`, // the highlight follows the swap
+		"<h1>The plan</h1>",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("fragment lacks %q", want)
+		}
+	}
+}
+
+func TestDocumentsPageRowsAreLinksThatSwapTheRegion(t *testing.T) {
+	body := get(t, newTestHandler(t, documentsBoard()), "/projects/p1/tasks/t-feed/documents").Body.String()
+	for _, id := range []string{"d-notes", "d-plan", "d-page"} {
+		href := "/projects/p1/tasks/t-feed/documents/" + id
+		assertSwapTrigger(t, openingTag(body, `href="`+href+`"`), href, "documents-region")
+	}
+}
+
+func TestDocumentsPageSwapKeepsTheRefusals(t *testing.T) {
+	w := documentsBoard()
+	w.docs["t-docs"] = []*domain.Document{{ID: "d-other", ProjectID: "p1", Title: "Other"}}
+	h := newTestHandler(t, w)
+	for _, path := range []string{
+		"/projects/p1/tasks/t-feed/documents/d-other", // another task's document
+		"/projects/p1/tasks/t-feed/documents/d-gone",  // no such document
+		"/projects/p2/tasks/t-feed/documents",         // a task under another project
+	} {
+		if rec := swap(t, h, path, "documents-region"); rec.Code != http.StatusNotFound {
+			t.Errorf("%s with HX-Request: status %d, want 404", path, rec.Code)
+		}
+	}
+}
+
+func TestDocumentsPageSwapFramesAnHTMLDocumentLikeThePage(t *testing.T) {
+	h := newTestHandler(t, documentsBoard())
+	path := "/projects/p1/tasks/t-feed/documents/d-page"
+	frame := func(body string) string { return openingTag(body, "<iframe") }
+	page, frag := frame(get(t, h, path).Body.String()), frame(swap(t, h, path, "documents-region").Body.String())
+	if frag == "" || frag != page {
+		t.Fatalf("the swapped viewer frames %q, the page %q", frag, page)
+	}
+	if !strings.Contains(frag, `sandbox="allow-scripts"`) {
+		t.Errorf("the swapped frame is not sandboxed: %s", frag)
 	}
 }
 

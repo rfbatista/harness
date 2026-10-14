@@ -1,8 +1,9 @@
 // Composition root: the one place infrastructure is constructed and wired
 // into the modules. Bundled by `go run ./cmd/webbuild`, which resolves the
-// bare imports (Alpine, xterm.js) to web/vendor.
+// bare imports (Alpine, xterm.js) to web/vendor and htmx to web/third_party.
 
 import Alpine from "alpinejs";
+import htmx from "htmx.org";
 
 import { apiClient } from "./shared/infrastructure/api.js";
 import { systemClock } from "./shared/infrastructure/clock.js";
@@ -40,6 +41,7 @@ import { tasksGateway } from "./modules/tasks/infrastructure/tasks-gateway.js";
 import { registerTasks } from "./modules/tasks/presentation/register.js";
 import { createHljs } from "./highlight.js";
 import { createScreen } from "./xterm-screen.js";
+import { startSwapRegions } from "./swap-regions.js";
 
 const api = apiClient({ base: "/api" });
 const events = feed({ base: "/api" });
@@ -48,6 +50,7 @@ const prefs = preferences();
 registerShared(Alpine, { prefs });
 const navigate = (url) => window.location.assign(url);
 const reload = () => window.location.reload();
+startSwapRegions(htmx, { navigate });
 
 registerProjects(Alpine, { gateway: projectsGateway(api, events), navigate, clock: systemClock });
 registerTasks(Alpine, {

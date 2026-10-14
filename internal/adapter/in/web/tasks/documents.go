@@ -238,6 +238,7 @@ func (h Handler) Documents(w http.ResponseWriter, r *http.Request) error {
 		return errs.Newf("UNAVAILABLE", "documents are not available on this server")
 	}
 	ctx := r.Context()
+	swap := shell.SwapRequest(w, r)
 	project, task, docs, err := h.taskDocuments(r)
 	if err != nil {
 		return err
@@ -269,6 +270,9 @@ func (h Handler) Documents(w http.ResponseWriter, r *http.Request) error {
 	if view.Open == nil && r.PathValue("document") != "" {
 		// Only documents linked to this task open here.
 		return errs.Newf("DOCUMENT_NOT_FOUND", "document %s is not linked to this task", openID)
+	}
+	if swap {
+		return h.Render(w, r, http.StatusOK, documentsBody(view))
 	}
 
 	title := "Documents · " + task.Title

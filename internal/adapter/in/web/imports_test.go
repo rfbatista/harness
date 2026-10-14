@@ -19,6 +19,7 @@ const webSrc = "../../../../web/src"
 // imported from: the composition root, and the screen adapter.
 var bareAllowed = map[string]bool{
 	"main.js alpinejs":                 true,
+	"main.js htmx.org":                 true,
 	"xterm-screen.js @xterm/xterm":     true,
 	"xterm-screen.js @xterm/addon-fit": true,
 }

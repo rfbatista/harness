@@ -214,6 +214,43 @@ func get(t *testing.T, h http.Handler, path string) *httptest.ResponseRecorder {
 	return rec
 }
 
+// swap is get as htmx sends it when a trigger swaps a region: HX-Request set,
+// and HX-Target naming the region it replaces.
+func swap(t *testing.T, h http.Handler, path, target string) *httptest.ResponseRecorder {
+	t.Helper()
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, path, nil)
+	req.Header.Set("HX-Request", "true")
+	req.Header.Set("HX-Target", target)
+	h.ServeHTTP(rec, req)
+	return rec
+}
+
+// openingTag is the first start tag in body that contains needle, or "".
+func openingTag(body, needle string) string {
+	i := strings.Index(body, needle)
+	if i < 0 {
+		return ""
+	}
+	start := strings.LastIndex(body[:i], "<")
+	end := strings.Index(body[i:], ">")
+	if start < 0 || end < 0 {
+		return ""
+	}
+	return body[start : i+end+1]
+}
+
+// assertSwapTrigger fails unless tag is a real link to href that htmx swaps
+// into the region with id target, pushing the URL.
+func assertSwapTrigger(t *testing.T, tag, href, target string) {
+	t.Helper()
+	for _, want := range []string{`href="` + href + `"`, `hx-boost="true"`, `hx-target="#` + target + `"`, `hx-swap="outerHTML"`} {
+		if !strings.Contains(tag, want) {
+			t.Errorf("trigger %s lacks %s", tag, want)
+		}
+	}
+}
+
 func TestHomeOpensTheFirstProjectByName(t *testing.T) {
 	h := newTestHandler(t, world{projects: []*domain.Project{{ID: "z1", Name: "zebra"}, {ID: "a1", Name: "Alpha"}}})
 	rec := get(t, h, "/")
