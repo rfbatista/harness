@@ -606,12 +606,7 @@ func (s *Service) pump(sess llmkit.Session) {
 		}
 
 		var change sessionChange
-		cur, err := s.sessions.Find(id)
-		if err != nil {
-			slog.Error("session not read; its metrics miss this event", "session", id, "type", ev.Type, "err", err)
-		}
-		if cur != nil {
-			m := ports.SessionMetrics{CostUSD: cur.CostUSD, Tokens: ports.TokensOf(cur), LastAction: cur.LastAction, PendingApprovals: cur.PendingApprovals}
+		if m := s.metricsOf(id); m != nil {
 			switch ev.Type {
 			case "output":
 				if ev.Text != "" {
@@ -634,7 +629,7 @@ func (s *Service) pump(sess llmkit.Session) {
 			if hasStatus && status.IsTerminal() {
 				m.PendingApprovals = 0
 			}
-			change.metrics = &m
+			change.metrics = m
 		}
 		if hasStatus {
 			ev.Status = status
@@ -746,25 +741,23 @@ func (s *Service) expiryLoop() {
 // keeps working. A session that actually died gets the truth from its own exit
 // event moments later.
 func (s *Service) handleExpiry(e approval.Expiry) {
-	s.releaseApproval(e.SessionID)
-	s.publish(e.SessionID, SessionEvent{
+	s.record(e.SessionID, SessionEvent{
 		Type:     "approval_expired",
 		Status:   domain.SessionThinking,
 		ToolName: e.ToolName,
 		Text:     e.Reason,
 		Approval: &ApprovalInfo{ReqID: e.ReqID, ToolName: e.ToolName},
 		At:       time.Now(),
-	})
+	}, s.releaseApproval(e.SessionID))
 }
 
 func (s *Service) handleApproval(req approval.Request) {
-	_ = s.sessions.UpdateStatus(req.SessionID, domain.SessionWaitingApproval)
-	if cur := s.sessions.Get(req.SessionID); cur != nil {
-		if err := s.sessions.UpdateMetrics(req.SessionID, cur.CostUSD, ports.TokensOf(cur), cur.LastAction, cur.PendingApprovals+1); err != nil {
-			slog.Error("session metrics not stored", "session", req.SessionID, "err", err)
-		}
+	change := sessionChange{status: domain.SessionWaitingApproval}
+	if m := s.metricsOf(req.SessionID); m != nil {
+		m.PendingApprovals++
+		change.metrics = m
 	}
-	s.publish(req.SessionID, SessionEvent{
+	s.record(req.SessionID, SessionEvent{
 		Type:     "approval_needed",
 		Status:   domain.SessionWaitingApproval,
 		ToolName: req.ToolName,
@@ -775,7 +768,7 @@ func (s *Service) handleApproval(req approval.Request) {
 			Questions: ParseQuestions(req.ToolName, req.Input),
 		},
 		At: time.Now(),
-	})
+	}, change)
 }
 
 // Send writes one user message into the live CLI process, starting a new turn.
@@ -793,13 +786,12 @@ func (s *Service) Send(ctx context.Context, id, text string) error {
 		return err
 	}
 	s.setBusy(id, true)
-	_ = s.sessions.UpdateStatus(id, domain.SessionThinking)
-	s.publish(id, SessionEvent{
+	s.record(id, SessionEvent{
 		Type:   "user_message",
 		Status: domain.SessionThinking,
 		Text:   text,
 		At:     time.Now(),
-	})
+	}, sessionChange{status: domain.SessionThinking})
 	return nil
 }
 
@@ -863,15 +855,14 @@ func (s *Service) SetAutoRun(ctx context.Context, id string, autoRun bool) error
 	})
 
 	for _, req := range flushed {
-		s.releaseApproval(id)
-		s.publish(id, SessionEvent{
+		s.record(id, SessionEvent{
 			Type:     "approval_resolved",
 			Status:   domain.SessionThinking,
 			Text:     "auto-approved",
 			ToolName: req.ToolName,
 			Approval: &ApprovalInfo{ReqID: req.ID, ToolName: req.ToolName},
 			At:       time.Now(),
-		})
+		}, s.releaseApproval(id))
 	}
 	return nil
 }
@@ -886,32 +877,42 @@ func (s *Service) decide(id, reqID string, d approval.Decision, text string) err
 	if err := s.broker.Resolve(id, reqID, d); err != nil {
 		return &domain.StructuredError{Code: "NO_PENDING_APPROVAL", Message: err.Error()}
 	}
-	s.releaseApproval(id)
-	s.publish(id, SessionEvent{
+	s.record(id, SessionEvent{
 		Type:     "approval_resolved",
 		Status:   domain.SessionThinking,
 		Text:     text,
 		Approval: &ApprovalInfo{ReqID: reqID},
 		At:       time.Now(),
-	})
+	}, s.releaseApproval(id))
 	return nil
 }
 
 // releaseApproval is the bookkeeping every outstanding approval ends with,
 // whether it was decided or expired: one fewer pending decision, and the
 // session back to working rather than idle — idle would wrongly invite the user
-// to type mid-turn.
-func (s *Service) releaseApproval(id string) {
-	if cur := s.sessions.Get(id); cur != nil {
-		pend := cur.PendingApprovals
-		if pend > 0 {
-			pend--
+// to type mid-turn. It is stored with the event that ends the approval.
+func (s *Service) releaseApproval(id string) sessionChange {
+	change := sessionChange{status: domain.SessionThinking}
+	if m := s.metricsOf(id); m != nil {
+		if m.PendingApprovals > 0 {
+			m.PendingApprovals--
 		}
-		if err := s.sessions.UpdateMetrics(id, cur.CostUSD, ports.TokensOf(cur), cur.LastAction, pend); err != nil {
-			slog.Error("session metrics not stored", "session", id, "err", err)
-		}
+		change.metrics = m
 	}
-	_ = s.sessions.UpdateStatus(id, domain.SessionThinking)
+	return change
+}
+
+// metricsOf is the session's stored metrics, nil when it is gone or its read
+// failed (logged).
+func (s *Service) metricsOf(id string) *ports.SessionMetrics {
+	cur, err := s.sessions.Find(id)
+	if err != nil {
+		slog.Error("session not read; its metrics miss this event", "session", id, "err", err)
+	}
+	if cur == nil {
+		return nil
+	}
+	return &ports.SessionMetrics{CostUSD: cur.CostUSD, Tokens: ports.TokensOf(cur), LastAction: cur.LastAction, PendingApprovals: cur.PendingApprovals}
 }
 
 // answerSummary renders the chosen answers for the resolved timeline row.

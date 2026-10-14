@@ -61,7 +61,7 @@ func (s *slowCalls) log(elapsed time.Duration, lockWait bool, sql string, err er
 	}
 	attrs := []any{"operation", operation(sql), "duration", elapsed, "lock_wait", lockWait}
 	if err != nil {
-		attrs = append(attrs, "error", err)
+		attrs = append(attrs, "err", err)
 	}
 	l.Warn("slow database call", attrs...)
 }

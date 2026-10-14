@@ -103,7 +103,7 @@ func fileDSN(path string, params ...string) string {
 // pool.
 func Close(db *gorm.DB) error {
 	var errs []error
-	if p, ok := db.Config.Plugins[readerPoolName].(*readerPool); ok {
+	if p := readerPoolOf(db); p != nil {
 		errs = append(errs, p.pool.Close())
 	}
 	w, err := db.DB()
@@ -116,10 +116,16 @@ func Close(db *gorm.DB) error {
 // Reader is db on its reader pool, which refuses writes. An in-memory
 // database has no reader pool: Reader is db itself.
 func Reader(db *gorm.DB) *gorm.DB {
-	if p, ok := db.Config.Plugins[readerPoolName].(*readerPool); ok {
+	if p := readerPoolOf(db); p != nil {
 		return p.db
 	}
 	return db
+}
+
+// readerPoolOf is db's reader pool; nil for an in-memory database.
+func readerPoolOf(db *gorm.DB) *readerPool {
+	p, _ := db.Config.Plugins[readerPoolName].(*readerPool)
+	return p
 }
 
 const readerPoolName = "harness:reader-pool"
