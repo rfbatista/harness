@@ -52,6 +52,8 @@ type Services struct {
 	// Notifications is the person's inbox across every project; nil answers
 	// 503.
 	Notifications ports.Notifications
+	// Usage reads the token usage the LLM proxy measured; nil answers 503.
+	Usage ports.UsageReader
 	// Code reads code for the code views (/api/code/*); nil answers 503.
 	Code ports.CodeBrowser
 	// GitCredentials keeps the credentials git remote operations use; nil
@@ -90,6 +92,7 @@ type Handler struct {
 	comments       ports.TaskComments
 	pullRequests   ports.PullRequests
 	notifications  ports.Notifications
+	usage          ports.UsageReader
 	code           ports.CodeBrowser
 	gitCredentials ports.GitCredentials
 	shells         ports.ShellEdits
@@ -119,6 +122,7 @@ func NewHandler(s Services) *Handler {
 		comments:       s.TaskComments,
 		pullRequests:   s.PullRequests,
 		notifications:  s.Notifications,
+		usage:          s.Usage,
 		code:           s.Code,
 		gitCredentials: s.GitCredentials,
 		shells:         s.Shells,

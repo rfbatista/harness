@@ -24,6 +24,7 @@ import (
 	"operators-mcp/internal/application/planning"
 	"operators-mcp/internal/application/taskchannel"
 	"operators-mcp/internal/application/tooling"
+	"operators-mcp/internal/application/usage"
 	"operators-mcp/internal/application/vshell"
 	"operators-mcp/internal/application/workspaces"
 	"operators-mcp/internal/domain"
@@ -46,7 +47,7 @@ var ServerModule = fx.Module("server",
 
 // registerHTTPServer mounts the UI and JSON API on a mux and serves it,
 // shutting down gracefully when fx stops.
-func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRunner *apps.Service, ts *tooling.Service, exec *execution.Service, orch *orchestration.Service, plan *planning.Service, ws *workspaces.Service, broker *approval.Broker, sessions ports.SessionRepository, art *artifacts.Service, channel *taskchannel.Service, prs *workspaces.PullRequests, code ports.CodeBrowser, inbox optionalNotifications, creds optionalGitCredentials, shells *vshell.Service) error {
+func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRunner *apps.Service, ts *tooling.Service, exec *execution.Service, orch *orchestration.Service, plan *planning.Service, ws *workspaces.Service, broker *approval.Broker, sessions ports.SessionRepository, art *artifacts.Service, channel *taskchannel.Service, prs *workspaces.PullRequests, code ports.CodeBrowser, inbox optionalNotifications, creds optionalGitCredentials, shells *vshell.Service, usageSvc *usage.Service) error {
 	uiHandler, err := ui.SPAHandler(ui.Dist)
 	if err != nil {
 		return err
@@ -94,6 +95,7 @@ func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRun
 		TaskComments:  plan,
 		PullRequests:  prs,
 		Notifications: notes,
+		Usage:         usageSvc,
 		Code:          code,
 		// The git credentials every remote operation authenticates with.
 		GitCredentials: creds.port(),
