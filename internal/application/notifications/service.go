@@ -21,6 +21,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 	"unicode/utf8"
 
@@ -93,12 +94,52 @@ type Service struct {
 	now      func() time.Time
 	delivery *dispatcher
 
-	// mu orders every write: dedup check, repository write, unread count,
-	// the change sent to followers and the enqueue to providers all happen
-	// under it, so followers see changes in commit order with the count as
-	// of each commit. Nothing under it waits on the network.
-	mu        sync.Mutex
+	// Each write (its checks, the change and the unread count) is one write
+	// transaction, numbered inside it; stream sends the changes to the
+	// followers in that order, which is commit order.
+	stream *sequencer
+
+	// followMu guards followers only: following never waits on a write.
+	followMu  sync.Mutex
 	followers map[chan ports.NotificationChange]struct{}
+}
+
+// sequencer hands committed changes on in commit order. A write takes its
+// number inside its transaction; write transactions run one at a time, so
+// numbers follow commit order. A change waits here, in memory, only for the
+// ones numbered before it.
+type sequencer struct {
+	taken atomic.Uint64
+
+	mu      sync.Mutex
+	next    uint64
+	pending map[uint64]*ports.NotificationChange
+}
+
+func newSequencer() *sequencer {
+	return &sequencer{next: 1, pending: map[uint64]*ports.NotificationChange{}}
+}
+
+// take numbers a write; call it inside the write's transaction.
+func (q *sequencer) take() uint64 { return q.taken.Add(1) }
+
+// done hands on the change numbered n, nil when its commit failed, and every
+// change after it that was waiting for it.
+func (q *sequencer) done(n uint64, c *ports.NotificationChange, send func(ports.NotificationChange)) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	q.pending[n] = c
+	for {
+		c, ok := q.pending[q.next]
+		if !ok {
+			return
+		}
+		delete(q.pending, q.next)
+		q.next++
+		if c != nil {
+			send(*c)
+		}
+	}
 }
 
 // New returns the service. It fails when two providers share a name or one
@@ -113,7 +154,7 @@ func New(repo ports.NotificationRepository, readers Readers, opts Options) (*Ser
 		return nil, err
 	}
 	return &Service{
-		repo: repo, readers: readers, now: now, delivery: d,
+		repo: repo, readers: readers, now: now, delivery: d, stream: newSequencer(),
 		followers: map[chan ports.NotificationChange]struct{}{},
 	}, nil
 }
@@ -146,15 +187,15 @@ func (s *Service) Subscribe(bus ports.EventSubscriber) {
 		return nil
 	})
 	ports.On(bus, func(ctx context.Context, ev domain.TicketDeleted) error {
-		s.write("resolve a deleted task's notifications", func(now time.Time) ([]*domain.Notification, bool, error) {
-			changed, err := s.repo.ResolveTask(ev.TicketID, now)
+		s.logged("resolve a deleted task's notifications", func(tx ports.NotificationRepository, now time.Time) ([]*domain.Notification, bool, error) {
+			changed, err := tx.ResolveTask(ev.TicketID, now)
 			return changed, len(changed) > 0, err
 		})
 		return nil
 	})
 	ports.On(bus, func(ctx context.Context, ev domain.ProjectDeleted) error {
-		s.write("delete a deleted project's notifications", func(time.Time) ([]*domain.Notification, bool, error) {
-			return nil, true, s.repo.DeleteByProject(ev.ProjectID)
+		s.logged("delete a deleted project's notifications", func(tx ports.NotificationRepository, _ time.Time) ([]*domain.Notification, bool, error) {
+			return nil, true, tx.DeleteByProject(ev.ProjectID)
 		})
 		return nil
 	})
@@ -240,61 +281,91 @@ func (s *Service) onTaskStatus(c domain.TaskStatusChange) {
 // unresolved one (or, with once, any one at all).
 func (s *Service) record(n *domain.Notification, once bool) {
 	n.Source = domain.NotificationFromSystem
-	s.write("record a notification", func(now time.Time) ([]*domain.Notification, bool, error) {
-		if once && s.repo.AnyByCause(n.CauseKey) || !once && s.repo.OpenByCause(n.CauseKey) != nil {
+	c, err := s.write(func(tx ports.NotificationRepository, now time.Time) ([]*domain.Notification, bool, error) {
+		if once && tx.AnyByCause(n.CauseKey) || !once && tx.OpenByCause(n.CauseKey) != nil {
 			return nil, false, nil
 		}
 		n.CreatedAt = now
-		created, err := s.repo.Create(n)
+		created, err := tx.Create(n)
 		if err != nil {
 			return nil, false, err
 		}
-		s.delivery.enqueue(*s.named(created)[0])
 		return []*domain.Notification{created}, true, nil
 	})
+	if err != nil {
+		slog.Warn("record a notification", "err", err)
+		return
+	}
+	if c != nil {
+		s.delivery.enqueue(*c.Changed[0])
+	}
 }
 
 // resolve settles the unresolved notifications of a cause.
 func (s *Service) resolve(causeKey string) {
-	s.write("resolve a notification", func(now time.Time) ([]*domain.Notification, bool, error) {
-		changed, err := s.repo.Resolve(causeKey, now)
+	s.logged("resolve a notification", func(tx ports.NotificationRepository, now time.Time) ([]*domain.Notification, bool, error) {
+		changed, err := tx.Resolve(causeKey, now)
 		return changed, len(changed) > 0, err
 	})
 }
 
-// write runs change under the write lock and, when it says something
-// changed, streams what changed with the unread count as of that commit. An
-// error is logged as what failed.
-func (s *Service) write(what string, change func(now time.Time) ([]*domain.Notification, bool, error)) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if _, err := s.commit(change); err != nil {
+// change is one write, made through tx: what it changed, and whether
+// anything did.
+type change func(tx ports.NotificationRepository, now time.Time) ([]*domain.Notification, bool, error)
+
+// logged writes change and logs an error as what failed.
+func (s *Service) logged(what string, change change) {
+	if _, err := s.write(change); err != nil {
 		slog.Warn(what, "err", err)
 	}
 }
 
-// commit is write's body for callers that already hold s.mu and want the
-// change back.
-func (s *Service) commit(change func(now time.Time) ([]*domain.Notification, bool, error)) (*ports.NotificationChange, error) {
-	changed, ok, err := change(s.now())
-	if err != nil || !ok {
+// write runs change and the unread count in one write transaction and, when
+// change says something changed, streams what changed with the count as of
+// that commit, in commit order, and answers it. It answers nil when nothing
+// changed.
+func (s *Service) write(change change) (*ports.NotificationChange, error) {
+	var (
+		seq     uint64
+		changed []*domain.Notification
+		count   int
+		c       *ports.NotificationChange
+	)
+	// A numbered write always hands its number on, so a failed commit never
+	// holds back the changes after it.
+	defer func() {
+		if seq != 0 {
+			s.stream.done(seq, c, s.broadcast)
+		}
+	}()
+	err := s.repo.Transaction(func(tx ports.NotificationRepository) error {
+		var ok bool
+		var err error
+		changed, ok, err = change(tx, s.now())
+		if err != nil || !ok {
+			return err
+		}
+		if count, err = tx.CountUnread(); err != nil {
+			return err
+		}
+		seq = s.stream.take()
+		return nil
+	})
+	if err != nil || seq == 0 {
 		return nil, err
 	}
-	count, err := s.repo.CountUnread()
-	if err != nil {
-		return nil, err
-	}
-	c := ports.NotificationChange{Changed: s.named(changed...), UnreadCount: count}
+	c = &ports.NotificationChange{Changed: s.named(changed...), UnreadCount: count}
 	if c.Changed == nil {
 		c.Changed = []*domain.Notification{}
 	}
-	s.broadcast(c)
-	return &c, nil
+	return c, nil
 }
 
 // broadcast sends c to every follower without waiting: one that is full has
 // fallen behind and is closed, so it reloads.
 func (s *Service) broadcast(c ports.NotificationChange) {
+	s.followMu.Lock()
+	defer s.followMu.Unlock()
 	for ch := range s.followers {
 		select {
 		case ch <- c:
@@ -309,13 +380,13 @@ func (s *Service) broadcast(c ports.NotificationChange) {
 // follower falls behind; then the channel closes.
 func (s *Service) FollowNotifications(ctx context.Context) (<-chan ports.NotificationChange, error) {
 	ch := make(chan ports.NotificationChange, followerBuffer)
-	s.mu.Lock()
+	s.followMu.Lock()
 	s.followers[ch] = struct{}{}
-	s.mu.Unlock()
+	s.followMu.Unlock()
 	go func() {
 		<-ctx.Done()
-		s.mu.Lock()
-		defer s.mu.Unlock()
+		s.followMu.Lock()
+		defer s.followMu.Unlock()
 		if _, ok := s.followers[ch]; ok {
 			delete(s.followers, ch)
 			close(ch)
@@ -370,20 +441,18 @@ func (s *Service) MarkNotificationsRead(_ context.Context, req ports.MarkNotific
 	if (len(req.IDs) > 0) == req.All {
 		return nil, invalid("give either ids or all, not both")
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	for _, id := range req.IDs {
-		if s.repo.Get(id) == nil {
-			return nil, &domain.StructuredError{Code: "NOTIFICATION_NOT_FOUND", Message: "notification " + id + " not found"}
+	c, err := s.write(func(tx ports.NotificationRepository, now time.Time) ([]*domain.Notification, bool, error) {
+		for _, id := range req.IDs {
+			if tx.Get(id) == nil {
+				return nil, false, &domain.StructuredError{Code: "NOTIFICATION_NOT_FOUND", Message: "notification " + id + " not found"}
+			}
 		}
-	}
-	c, err := s.commit(func(now time.Time) ([]*domain.Notification, bool, error) {
 		var changed []*domain.Notification
 		var err error
 		if req.All {
-			changed, err = s.repo.MarkAllRead(req.ProjectID, now)
+			changed, err = tx.MarkAllRead(req.ProjectID, now)
 		} else {
-			changed, err = s.repo.MarkRead(req.IDs, now)
+			changed, err = tx.MarkRead(req.IDs, now)
 		}
 		return changed, len(changed) > 0, err
 	})
@@ -437,25 +506,20 @@ func (s *Service) Notify(_ context.Context, req ports.NotifyRequest) (*domain.No
 		}
 	}
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	now := s.now()
-	posted, err := s.repo.CountAgentSince(req.SessionID, req.ProjectID, now.Add(-agentRateWindow))
-	if err != nil {
-		return nil, err
-	}
-	if posted >= agentRateLimit {
-		who := "this session"
-		if req.SessionID == "" {
-			who = "this project"
+	c, err := s.write(func(tx ports.NotificationRepository, now time.Time) ([]*domain.Notification, bool, error) {
+		posted, err := tx.CountAgentSince(req.SessionID, req.ProjectID, now.Add(-agentRateWindow))
+		if err != nil {
+			return nil, false, err
 		}
-		return nil, &domain.StructuredError{Code: "NOTIFICATION_RATE_LIMITED",
-			Message: fmt.Sprintf("%s has posted %d notifications in the last hour, the most allowed; keep notify for what the person has to know or do", who, agentRateLimit)}
-	}
-	var created *domain.Notification
-	_, err = s.commit(func(now time.Time) ([]*domain.Notification, bool, error) {
-		var err error
-		created, err = s.repo.Create(&domain.Notification{
+		if posted >= agentRateLimit {
+			who := "this session"
+			if req.SessionID == "" {
+				who = "this project"
+			}
+			return nil, false, &domain.StructuredError{Code: "NOTIFICATION_RATE_LIMITED",
+				Message: fmt.Sprintf("%s has posted %d notifications in the last hour, the most allowed; keep notify for what the person has to know or do", who, agentRateLimit)}
+		}
+		created, err := tx.Create(&domain.Notification{
 			ProjectID: req.ProjectID, TaskID: req.TaskID, SessionID: req.SessionID,
 			Source: domain.NotificationFromAgent, Kind: domain.NotificationAgent, Level: level,
 			Title: title, Body: body, Link: link, CreatedAt: now,
@@ -463,13 +527,15 @@ func (s *Service) Notify(_ context.Context, req ports.NotifyRequest) (*domain.No
 		if err != nil {
 			return nil, false, err
 		}
-		s.delivery.enqueue(*s.named(created)[0])
 		return []*domain.Notification{created}, true, nil
 	})
 	if err != nil {
 		return nil, err
 	}
-	return s.named(created)[0], nil
+	created := c.Changed[0]
+	s.delivery.enqueue(*created)
+	n := *created
+	return &n, nil
 }
 
 // Prune deletes read or resolved notifications older than Retention. Unread
@@ -484,9 +550,7 @@ func (s *Service) StartDelivery() { s.delivery.start() }
 // StopDelivery stops taking new deliveries, lets the workers finish what is
 // queued until ctx ends, then cancels what is still running.
 func (s *Service) StopDelivery(ctx context.Context) {
-	s.mu.Lock()
 	s.delivery.close()
-	s.mu.Unlock()
 	s.delivery.wait(ctx)
 }
 

@@ -22,9 +22,11 @@ import (
 
 	"operators-mcp/internal/adapter/in/httpapi"
 	"operators-mcp/internal/app/catalog"
+	"operators-mcp/internal/application/notifications"
 	"operators-mcp/internal/application/orchestration"
 	"operators-mcp/internal/application/planning"
 	"operators-mcp/internal/domain"
+	"operators-mcp/internal/ports"
 )
 
 // Load of the freeze test: concurrentSessions sessions each stream events as
@@ -57,6 +59,8 @@ type freezeE2E struct {
 	ctx     context.Context
 	app     *fx.App
 	orch    *orchestration.Service
+	bus     ports.EventPublisher
+	notes   *notifications.Service // with the inbox only
 	srv     *httptest.Server
 	project string
 	repo    string
@@ -68,6 +72,13 @@ type freezeE2E struct {
 }
 
 func startFreezeE2E(t *testing.T, dir, dbPath string) *freezeE2E {
+	t.Helper()
+	return startFreezeServer(t, dir, dbPath, false)
+}
+
+// startFreezeServer is startFreezeE2E, with the person's inbox wired and
+// served when inbox is set.
+func startFreezeServer(t *testing.T, dir, dbPath string, inbox bool) *freezeE2E {
 	t.Helper()
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git is required")
@@ -86,19 +97,28 @@ func startFreezeE2E(t *testing.T, dir, dbPath string) *freezeE2E {
 		cat  catalog.Catalog
 		plan *planning.Service
 	)
-	e.app = fx.New(
+	opts := []fx.Option{
 		fx.Supply(Config{HTTPAddr: "127.0.0.1:0", MCPAddr: "127.0.0.1:0", DBPath: dbPath, Root: dir, ClaudeBin: fake, SessionShell: "direct"}),
 		PersistenceModule, CatalogModule, PlanningModule, WorkspacesModule,
 		AgentRuntimeModule, TaskChannelModule, TextProcessingModule, ToolingModule,
 		fx.Populate(&e.orch, &plan, &cat),
 		fx.NopLogger,
-	)
+	}
+	if inbox {
+		opts = append(opts, NotificationsModule, fx.Populate(&e.notes))
+	}
+	e.app = fx.New(opts...)
 	if err := e.app.Start(e.ctx); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = e.app.Stop(context.Background()) })
 
-	e.srv = httptest.NewServer(httpapi.NewRouter(httpapi.NewHandler(httpapi.Services{Sessions: e.orch, Planning: plan})))
+	e.bus = cat.Bus
+	services := httpapi.Services{Sessions: e.orch, Planning: plan}
+	if e.notes != nil {
+		services.Notifications = e.notes
+	}
+	e.srv = httptest.NewServer(httpapi.NewRouter(httpapi.NewHandler(services)))
 	t.Cleanup(e.srv.Close)
 
 	if ps, err := cat.Projects.ListProjects(e.ctx); err == nil && len(ps) > 0 {
