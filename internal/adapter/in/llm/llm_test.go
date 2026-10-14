@@ -14,8 +14,8 @@ import (
 
 	"operators-mcp/internal/adapter/in/httpapi"
 	"operators-mcp/internal/adapter/in/llm"
-	"operators-mcp/internal/application/usage"
 	"operators-mcp/internal/application/usage/usagetest"
+	"operators-mcp/internal/ports"
 )
 
 // The LLM proxy at /llm/ in-process (seam H1): requests go through to a fake
@@ -234,9 +234,9 @@ func TestAStreamedCallIsCountedFromItsEvents(t *testing.T) {
 func TestTheHarnessesOwnCallsAreRecordedAsItsOwnSpend(t *testing.T) {
 	up := newUpstream(t)
 	srv, e := harness(t, up)
-	callClaude(t, srv, usage.SystemAttribution, `{"model":"claude-sonnet-4-5"}`)
-	list := recent(t, srv, usage.SystemProject, 1)
-	if len(list) != 1 || list[0].Attribution != usage.SystemAttribution || list[0].ProjectID != "" || list[0].SessionID != "" {
+	callClaude(t, srv, ports.UsageSystemAttribution, `{"model":"claude-sonnet-4-5"}`)
+	list := recent(t, srv, ports.UsageSystemProject, 1)
+	if len(list) != 1 || list[0].Attribution != ports.UsageSystemAttribution || list[0].ProjectID != "" || list[0].SessionID != "" {
 		t.Fatalf("the harness's records = %+v, want the one-shot, attributed to no project", list)
 	}
 	if other := recent(t, srv, e.ProjectA, 0); len(other) != 0 {

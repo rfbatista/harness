@@ -133,7 +133,7 @@ type Rail struct {
 	Reviews     int
 	// UsageHref is the project's token usage; "" when usage is not served.
 	UsageHref string
-	Groups      []RailGroup
+	Groups    []RailGroup
 	// Empty is shown when a project is selected but has no tasks.
 	Empty string
 	// Current is the open task's id, "" when none: the live rail marks it.

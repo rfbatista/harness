@@ -18,16 +18,12 @@ import (
 	"operators-mcp/internal/ports"
 )
 
-var _ ports.UsageReader = (*Service)(nil)
+var (
+	_ ports.UsageReader = (*Service)(nil)
+	_ ports.UsageSink   = (*Service)(nil)
+)
 
 const (
-	// SystemAttribution is the attribution of the harness's own one-shots
-	// (summarize, generate, translate).
-	SystemAttribution = "harness:system"
-	// SystemProject is the project key the API reads the harness's own
-	// spend under: records attributed to no project.
-	SystemProject = "_harness"
-
 	defaultLimit = 50
 	maxLimit     = 200
 	// writeTimeout bounds storing one record: the LLM proxy runs the sink
@@ -37,27 +33,6 @@ const (
 	// closed and has to reload.
 	followerBuffer = 64
 )
-
-// Request is one finished LLM request as the LLM proxy reports it; it has
-// the shape of spillway's llmproxy.UsageRecord.
-type Request struct {
-	ID          string
-	Attribution string
-	Method      string
-	Path        string
-	Model       string
-	Status      int
-	Streamed    bool
-	StartedAt   time.Time
-	EndedAt     time.Time
-
-	InputTokens              int64
-	OutputTokens             int64
-	CacheCreationInputTokens int64
-	CacheReadInputTokens     int64
-
-	Error string
-}
 
 // Sessions finds a session; the sqlite session repository satisfies it.
 type Sessions interface {
@@ -112,7 +87,7 @@ func New(repo ports.UsageRepository, readers Readers, opts Options) *Service {
 // Record stores r as a usage record attributed to its session, task and
 // project, and streams it to the project's followers. It never fails: a
 // failed write is logged, and the record is not streamed.
-func (s *Service) Record(ctx context.Context, r Request) {
+func (s *Service) Record(ctx context.Context, r ports.UsageRequest) {
 	rec := &domain.UsageRecord{
 		ID: r.ID, Attribution: r.Attribution, Method: r.Method, Path: r.Path, Model: r.Model,
 		Status: r.Status, Streamed: r.Streamed, StartedAt: r.StartedAt, DurationMS: r.EndedAt.Sub(r.StartedAt).Milliseconds(),
@@ -120,7 +95,7 @@ func (s *Service) Record(ctx context.Context, r Request) {
 		CacheCreationInputTokens: r.CacheCreationInputTokens, CacheReadInputTokens: r.CacheReadInputTokens,
 		Error: r.Error,
 	}
-	if r.Attribution != "" && r.Attribution != SystemAttribution {
+	if r.Attribution != "" && r.Attribution != ports.UsageSystemAttribution {
 		if sess := s.readers.Sessions.Get(r.Attribution); sess != nil {
 			rec.SessionID, rec.TaskID, rec.ProjectID = sess.ID, sess.TicketID, sess.ProjectID
 		}
@@ -200,26 +175,16 @@ func (s *Service) ListRecentUsage(_ context.Context, q ports.UsageQuery) (*ports
 
 // decorate fills what a record carries beyond what is stored.
 func (s *Service) decorate(list []*domain.UsageRecord) {
-	titles := map[string]string{}
+	titles := s.titler()
 	for _, r := range list {
 		r.EstimatedCostUSD = estimatedCost(r)
-		if r.TaskID == "" {
-			continue
-		}
-		title, ok := titles[r.TaskID]
-		if !ok {
-			if t := s.readers.Tickets.Get(r.TaskID); t != nil {
-				title = t.Title
-			}
-			titles[r.TaskID] = title
-		}
-		r.TaskTitle = title
+		r.TaskTitle = titles(r.TaskID)
 	}
 }
 
 // projectKey maps the API's project key to the stored project id.
 func projectKey(p string) string {
-	if p == SystemProject {
+	if p == ports.UsageSystemProject {
 		return ""
 	}
 	return p

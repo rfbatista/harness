@@ -13,23 +13,18 @@ import (
 
 	"github.com/rfbatista/spillway/llmproxy"
 
-	"operators-mcp/internal/application/usage"
+	"operators-mcp/internal/ports"
 )
 
 // PathPrefix is where the LLM proxy is mounted; the claude CLI's base URL
 // is the server's loopback address plus "/llm".
 const PathPrefix = "/llm/"
 
-// Recorder is the usage sink: the usage service satisfies it.
-type Recorder interface {
-	Record(ctx context.Context, r usage.Request)
-}
-
 // Config configures the mount.
 type Config struct {
 	// Upstream defaults to the Anthropic API.
 	Upstream string
-	Sink     Recorder
+	Sink     ports.UsageSink
 	// Logger defaults to slog.Default.
 	Logger *slog.Logger
 }
@@ -50,10 +45,10 @@ func Handler(cfg Config) (http.Handler, error) {
 }
 
 // sink hands spillway's usage records to the harness's usage sink.
-type sink struct{ r Recorder }
+type sink struct{ r ports.UsageSink }
 
 func (s sink) Record(ctx context.Context, r llmproxy.UsageRecord) {
-	s.r.Record(ctx, usage.Request{
+	s.r.Record(ctx, ports.UsageRequest{
 		ID: r.ID, Attribution: r.Attribution, Method: r.Method, Path: r.Path, Model: r.Model,
 		Status: r.Status, Streamed: r.Streamed, StartedAt: r.StartedAt, EndedAt: r.EndedAt,
 		InputTokens: r.InputTokens, OutputTokens: r.OutputTokens,

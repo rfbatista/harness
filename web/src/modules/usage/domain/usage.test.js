@@ -97,3 +97,15 @@ test("without a summary yet, records still reach the feed", () => {
   const s = applyRecord({ summary: null, records: [] }, makeRecord());
   assert.deepEqual([s.summary, s.records.length], [null, 1]);
 });
+
+test("a record after the range's last day ends the range: it joins the feed, the numbers wait for a reload", () => {
+  const tomorrow = new Date(2026, 9, 15, 0, 5);
+  const today = applyRecord(start(), makeRecord({ startedAt: tomorrow, input: 9, output: 0 }));
+  assert.equal(today.stale, true);
+  assert.equal(today.records.length, 1);
+  assert.equal(today.summary.totals.input, 1000);
+
+  const week = { summary: makeSummary({ range: "7d", bucket: "day", since: new Date(2026, 9, 8) }), records: [] };
+  assert.equal(applyRecord(week, makeRecord({ startedAt: tomorrow })).stale, true);
+  assert.equal(applyRecord(week, makeRecord({ startedAt: at(23, 59) })).stale, undefined);
+});

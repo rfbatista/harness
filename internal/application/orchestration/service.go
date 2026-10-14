@@ -629,7 +629,9 @@ func (s *Service) pump(sess llmkit.Session) {
 			if hasStatus && status.IsTerminal() {
 				pend = 0
 			}
-			_ = s.sessions.UpdateMetrics(id, cost, tokens, last, pend)
+			if err := s.sessions.UpdateMetrics(id, cost, tokens, last, pend); err != nil {
+				slog.Error("session metrics not stored", "session", id, "err", err)
+			}
 		}
 		if hasStatus {
 			_ = s.sessions.UpdateStatus(id, status)
@@ -755,7 +757,9 @@ func (s *Service) handleExpiry(e approval.Expiry) {
 func (s *Service) handleApproval(req approval.Request) {
 	_ = s.sessions.UpdateStatus(req.SessionID, domain.SessionWaitingApproval)
 	if cur := s.sessions.Get(req.SessionID); cur != nil {
-		_ = s.sessions.UpdateMetrics(req.SessionID, cur.CostUSD, ports.TokensOf(cur), cur.LastAction, cur.PendingApprovals+1)
+		if err := s.sessions.UpdateMetrics(req.SessionID, cur.CostUSD, ports.TokensOf(cur), cur.LastAction, cur.PendingApprovals+1); err != nil {
+			slog.Error("session metrics not stored", "session", req.SessionID, "err", err)
+		}
 	}
 	s.publish(req.SessionID, SessionEvent{
 		Type:     "approval_needed",
@@ -900,7 +904,9 @@ func (s *Service) releaseApproval(id string) {
 		if pend > 0 {
 			pend--
 		}
-		_ = s.sessions.UpdateMetrics(id, cur.CostUSD, ports.TokensOf(cur), cur.LastAction, pend)
+		if err := s.sessions.UpdateMetrics(id, cur.CostUSD, ports.TokensOf(cur), cur.LastAction, pend); err != nil {
+			slog.Error("session metrics not stored", "session", id, "err", err)
+		}
 	}
 	_ = s.sessions.UpdateStatus(id, domain.SessionThinking)
 }

@@ -1,0 +1,46 @@
+/*
+ * Usage tiles — the Usage page's totals for its range: one tile per token
+ * kind, requests and the estimated cost; total and cost read larger.
+ * <section class="usage-totals"><dl class="usage-tiles">
+ *   <div class="tile" data-key="cost"><dt>…</dt><dd class="value">…</dd><dd class="note">…</dd></div>
+ * </dl></section>
+ */
+
+@layer blocks {
+  .usage-totals {
+    display: grid;
+    gap: var(--space-s);
+    padding-block-start: var(--space-l);
+  }
+
+  .usage-tiles {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(8rem, 1fr));
+    gap: var(--space-s);
+    margin: 0;
+    padding-inline: var(--space-l);
+
+    & > .tile {
+      display: grid;
+      align-content: start;
+      gap: var(--space-3xs);
+      padding: var(--space-s) var(--space-m);
+      border: var(--border-width) solid var(--color-line);
+      border-radius: var(--radius-sm);
+      background: var(--color-raised);
+    }
+
+    & dt { color: var(--color-ink-muted); font-size: var(--text-xs); }
+    & dd { margin: 0; }
+    & .value {
+      color: var(--color-ink);
+      font-size: var(--text-xl);
+      font-weight: var(--weight-bold);
+      font-variant-numeric: tabular-nums;
+      line-height: var(--leading-tight);
+    }
+    & .note { color: var(--color-ink-faint); font-size: var(--text-xs); }
+    & > .tile[data-key="total"] .value,
+    & > .tile[data-key="cost"] .value { font-size: var(--text-2xl); }
+  }
+}

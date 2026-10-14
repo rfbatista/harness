@@ -34,6 +34,9 @@
 
 /** @type {Range[]} */
 export const RANGES = ["today", "7d", "30d"];
+
+/** How many local days each range spans, counting the day it was read. */
+const RANGE_DAYS = { today: 1, "7d": 7, "30d": 30 };
 export const BUCKETS = ["hour", "day"];
 
 /** How many records the live feed keeps. */
@@ -79,16 +82,19 @@ export function addToTotals(t, r) {
 
 /**
  * The state with a live record merged in: first in the feed (capped), and
- * counted in the summary when it falls inside its range. A record already
- * in the feed changes nothing: the same state comes back.
+ * counted in the summary when it falls inside its range. A record past the
+ * range's last day (the page stayed open over midnight) is not counted:
+ * the state comes back stale, for the range to be read again. A record
+ * already in the feed changes nothing: the same state comes back.
  * @param {UsageState} state @param {UsageRecord} r @param {number} [cap]
- * @returns {UsageState}
+ * @returns {UsageState & { stale?: boolean }}
  */
 export function applyRecord(state, r, cap = FEED_CAP) {
   if (state.records.some((x) => x.id === r.id)) return state;
   const records = [r, ...state.records].slice(0, cap);
   const s = state.summary;
   if (!s || r.startedAt.getTime() < s.since.getTime()) return { summary: s, records };
+  if (r.startedAt.getTime() >= rangeEnd(s).getTime()) return { summary: s, records, stale: true };
   return {
     records,
     summary: {
@@ -101,6 +107,13 @@ export function applyRecord(state, r, cap = FEED_CAP) {
         : s.topSessions,
     },
   };
+}
+
+/** The local midnight a summary's range ends at. @param {UsageSummary} s */
+function rangeEnd(s) {
+  const end = new Date(s.since);
+  end.setDate(end.getDate() + RANGE_DAYS[s.range]);
+  return end;
 }
 
 /** @param {SeriesPoint[]} series @param {UsageRecord} r @param {Bucket} bucket */

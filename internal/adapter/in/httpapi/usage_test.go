@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"operators-mcp/internal/application/usage"
 	"operators-mcp/internal/application/usage/usagetest"
+	"operators-mcp/internal/ports"
 )
 
 // The usage API in-process (seam H1). The tests hand usage records to the
@@ -32,8 +32,8 @@ var usageT0 = time.Date(2026, 10, 14, 10, 0, 0, 0, time.Local)
 
 var requestSeq atomic.Int64
 
-func aRequest(attribution, model string, at time.Time, in, out, cacheWrite, cacheRead int64) usage.Request {
-	return usage.Request{
+func aRequest(attribution, model string, at time.Time, in, out, cacheWrite, cacheRead int64) ports.UsageRequest {
+	return ports.UsageRequest{
 		ID: fmt.Sprintf("req-%d", requestSeq.Add(1)), Attribution: attribution, Method: "POST", Path: "/v1/messages",
 		Model: model, Status: 200, Streamed: true, StartedAt: at, EndedAt: at.Add(1500 * time.Millisecond),
 		InputTokens: in, OutputTokens: out, CacheCreationInputTokens: cacheWrite, CacheReadInputTokens: cacheRead,
@@ -118,7 +118,7 @@ func TestAUsageRecordIsAttributedToItsSessionTaskAndProject(t *testing.T) {
 func TestHarnessSystemAndUnknownAttributionsAreKeptOutsideAnyProject(t *testing.T) {
 	srv, e := usageServer(t)
 	ctx := context.Background()
-	e.Service.Record(ctx, aRequest(usage.SystemAttribution, "claude-haiku-4-5", usageT0, 10, 20, 0, 0))
+	e.Service.Record(ctx, aRequest(ports.UsageSystemAttribution, "claude-haiku-4-5", usageT0, 10, 20, 0, 0))
 	e.Service.Record(ctx, aRequest("no-such-session", "claude-haiku-4-5", usageT0.Add(time.Second), 1, 2, 0, 0))
 	e.Service.Record(ctx, aRequest("", "claude-haiku-4-5", usageT0.Add(2*time.Second), 3, 4, 0, 0))
 
@@ -127,11 +127,11 @@ func TestHarnessSystemAndUnknownAttributionsAreKeptOutsideAnyProject(t *testing.
 			t.Errorf("project %s has %d records, want none", p, len(got))
 		}
 	}
-	got := recentRecords(t, srv, usage.SystemProject, "")
+	got := recentRecords(t, srv, ports.UsageSystemProject, "")
 	if len(got) != 3 {
 		t.Fatalf("the harness's own records = %d, want 3 (system, unknown, empty)", len(got))
 	}
-	want := []string{"", "no-such-session", usage.SystemAttribution} // newest first
+	want := []string{"", "no-such-session", ports.UsageSystemAttribution} // newest first
 	for i, r := range got {
 		if r.Attribution != want[i] || r.ProjectID != "" || r.SessionID != "" || r.TaskID != "" {
 			t.Errorf("record %d = attribution %q project %q session %q, want %q unresolved", i, r.Attribution, r.ProjectID, r.SessionID, want[i])

@@ -1,0 +1,14 @@
+/*
+ * Usage total — a task's or session's token totals in its header
+ * (usageTotalsChip): quiet meta text, by kind on hover.
+ * <span class="usage-total" title="…">12K tokens · $0.52 estimated</span>
+ */
+
+@layer blocks {
+  .usage-total {
+    color: var(--color-ink-faint);
+    font-size: var(--text-sm);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+}

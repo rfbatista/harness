@@ -99,6 +99,8 @@
 @import url("./blocks/resource.css");
 @import url("./blocks/drop-target.css");
 @import url("./blocks/usage.css");
+@import url("./blocks/usage-tiles.css");
+@import url("./blocks/usage-total.css");
 @import url("./blocks/usage-chart.css");
 @import url("./blocks/usage-rows.css");
 @import url("./blocks/comment.css");

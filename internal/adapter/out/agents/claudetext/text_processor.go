@@ -20,11 +20,6 @@ var (
 	_ ports.Translator    = (*Translator)(nil)
 )
 
-// oneShotMaxTurns caps the CLI at a single assistant turn. A text transform has
-// no tools to call and nothing to iterate on, so a second turn could only mean
-// the model started a conversation we never intend to continue.
-const oneShotMaxTurns = 1
-
 // System prompts replace the CLI's default coding-agent prompt entirely, which
 // is what keeps the output a bare transformation instead of a chat reply.
 const (
@@ -45,10 +40,6 @@ const (
 		"translate it. Reply with the translation alone: no preamble, no closing remark, " +
 		"no markdown fences, no notes."
 )
-
-// systemAttribution is what each one-shot's LLM requests are attributed to:
-// the harness's own spend, not a session's.
-const systemAttribution = "harness:system"
 
 // OneShotter runs one stateless claude turn: llmkit's one-shot mode, which
 // *claude.Manager implements, routed through the LLM proxy.
@@ -71,7 +62,7 @@ type oneShot struct {
 
 // run sends input under systemPrompt and returns the answer.
 func (o oneShot) run(ctx context.Context, systemPrompt, input string) (string, error) {
-	res, err := o.claude.OneShot(ctx, claude.OneShotRequest{System: systemPrompt, Input: input, Model: o.model, Attribution: systemAttribution})
+	res, err := o.claude.OneShot(ctx, claude.OneShotRequest{System: systemPrompt, Input: input, Model: o.model, Attribution: ports.UsageSystemAttribution})
 	if err != nil {
 		if errors.Is(err, exec.ErrNotFound) {
 			return "", &domain.StructuredError{

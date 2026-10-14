@@ -122,6 +122,7 @@ export const usagePage = ({ gateway }) => () => {
       if (next.summary !== this.summary && next.summary) this.slots = modelSlots(this.slots, next.summary.series);
       this.summary = next.summary;
       this.records = next.records;
+      if (next.stale) this.load();
     },
 
     show(summary) {

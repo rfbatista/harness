@@ -176,3 +176,39 @@ type UsageTotalsQuery struct {
 	TaskID    string
 	SessionID string
 }
+
+const (
+	// UsageSystemAttribution is the attribution of the harness's own
+	// one-shots (summarize, generate, translate).
+	UsageSystemAttribution = "harness:system"
+	// UsageSystemProject is the project key the API reads the harness's own
+	// spend under: records attributed to no project.
+	UsageSystemProject = "_harness"
+)
+
+// UsageRequest is one finished LLM request as the LLM proxy reports it; it
+// has the shape of spillway's llmproxy.UsageRecord.
+type UsageRequest struct {
+	ID          string
+	Attribution string
+	Method      string
+	Path        string
+	Model       string
+	Status      int
+	Streamed    bool
+	StartedAt   time.Time
+	EndedAt     time.Time
+
+	InputTokens              int64
+	OutputTokens             int64
+	CacheCreationInputTokens int64
+	CacheReadInputTokens     int64
+
+	Error string
+}
+
+// UsageSink stores each finished LLM request as a usage record. It never
+// fails: recording is best-effort (ADR 0006).
+type UsageSink interface {
+	Record(ctx context.Context, r UsageRequest)
+}
