@@ -605,39 +605,38 @@ func (s *Service) pump(sess llmkit.Session) {
 			continue
 		}
 
+		var change sessionChange
 		if cur := s.sessions.Get(id); cur != nil {
-			cost, tokens, last, pend := cur.CostUSD, ports.TokensOf(cur), cur.LastAction, cur.PendingApprovals
+			m := ports.SessionMetrics{CostUSD: cur.CostUSD, Tokens: ports.TokensOf(cur), LastAction: cur.LastAction, PendingApprovals: cur.PendingApprovals}
 			switch ev.Type {
 			case "output":
 				if ev.Text != "" {
-					last = truncate(ev.Text, 200)
+					m.LastAction = truncate(ev.Text, 200)
 				}
 			case "tool_use":
-				last = "tool: " + ev.ToolName
+				m.LastAction = "tool: " + ev.ToolName
 			case "usage":
-				cost += ev.CostUSD
+				m.CostUSD += ev.CostUSD
 				if ev.Usage != nil {
-					tokens.Input += ev.Usage.InputTokens
-					tokens.Output += ev.Usage.OutputTokens
-					tokens.CacheCreation += ev.Usage.CacheCreationInputTokens
-					tokens.CacheRead += ev.Usage.CacheReadInputTokens
+					m.Tokens.Input += ev.Usage.InputTokens
+					m.Tokens.Output += ev.Usage.OutputTokens
+					m.Tokens.CacheCreation += ev.Usage.CacheCreationInputTokens
+					m.Tokens.CacheRead += ev.Usage.CacheReadInputTokens
 				}
 			}
 			// A dead session has no outstanding decisions: broker.DenyAll has
 			// answered whatever was pending, and a lingering count would leave
 			// the session owing the user a decision forever.
 			if hasStatus && status.IsTerminal() {
-				pend = 0
+				m.PendingApprovals = 0
 			}
-			if err := s.sessions.UpdateMetrics(id, cost, tokens, last, pend); err != nil {
-				slog.Error("session metrics not stored", "session", id, "err", err)
-			}
+			change.metrics = &m
 		}
 		if hasStatus {
-			_ = s.sessions.UpdateStatus(id, status)
 			ev.Status = status
+			change.status = status
 		}
-		s.publish(id, ev)
+		s.record(id, ev, change)
 		if ce.Type == llmkit.EventResult {
 			s.announce(domain.SessionTurnEnded{SessionID: id})
 			s.flushHeadless(id)
@@ -1025,6 +1024,19 @@ func (s *Service) List(_ context.Context, f ports.SessionFilter) ([]*domain.Sess
 }
 
 func (s *Service) publish(sessionID string, ev SessionEvent) {
+	s.record(sessionID, ev, sessionChange{})
+}
+
+// sessionChange is what an agent event changes on its session besides its
+// log: its metrics when set, its status when set.
+type sessionChange struct {
+	metrics *ports.SessionMetrics
+	status  domain.SessionStatus
+}
+
+// record sequences ev, stores it with change in one transaction, then fans
+// it out live. A store failure is logged; the live stream still gets it.
+func (s *Service) record(sessionID string, ev SessionEvent, change sessionChange) {
 	s.mu.Lock()
 	s.seq[sessionID]++
 	ev.Seq = s.seq[sessionID]
@@ -1039,7 +1051,11 @@ func (s *Service) publish(sessionID string, ev SessionEvent) {
 		ev.At = time.Now()
 	}
 	payload, _ := json.Marshal(ev)
-	_ = s.sessions.AppendEvent(sessionID, ev.Seq, ev.Type, payload)
+	if err := s.sessions.RecordEvent(sessionID, ports.SessionEventRecord{
+		Seq: ev.Seq, Type: ev.Type, Payload: payload, Metrics: change.metrics, Status: change.status,
+	}); err != nil {
+		slog.Error("session event not stored", "session", sessionID, "seq", ev.Seq, "type", ev.Type, "err", err)
+	}
 	s.hub.Publish(sessionID, ev)
 	s.notify(sessionID, ev.Type)
 	if moved {

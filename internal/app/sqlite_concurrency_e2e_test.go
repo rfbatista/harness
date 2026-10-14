@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
-	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -19,6 +18,7 @@ import (
 
 	"go.uber.org/fx"
 	gormsqlite "gorm.io/driver/sqlite"
+	"gorm.io/gorm"
 
 	"operators-mcp/internal/adapter/in/httpapi"
 	"operators-mcp/internal/app/catalog"
@@ -64,6 +64,7 @@ type freezeE2E struct {
 	bus     ports.EventPublisher
 	notes   *notifications.Service // with the inbox only
 	srv     *httptest.Server
+	db      *gorm.DB
 	project string
 	repo    string
 	ticket  string
@@ -103,7 +104,7 @@ func startFreezeServer(t *testing.T, dir, dbPath string, inbox bool) *freezeE2E 
 		fx.Supply(Config{HTTPAddr: "127.0.0.1:0", MCPAddr: "127.0.0.1:0", DBPath: dbPath, Root: dir, ClaudeBin: fake, SessionShell: "direct"}),
 		PersistenceModule, CatalogModule, PlanningModule, WorkspacesModule,
 		AgentRuntimeModule, TaskChannelModule, TextProcessingModule, ToolingModule,
-		fx.Populate(&e.orch, &e.art, &plan, &cat),
+		fx.Populate(&e.orch, &e.art, &plan, &cat, &e.db),
 		fx.NopLogger,
 	}
 	if inbox {
@@ -187,18 +188,7 @@ func TestConcurrentSessionsOnAFileDatabaseAnswerPromptly(t *testing.T) {
 	dir := t.TempDir()
 	e := startFreezeE2E(t, dir, filepath.Join(dir, "data.db"))
 
-	ids := make([]string, concurrentSessions)
-	for i := range ids {
-		sess, err := e.orch.Start(e.ctx, orchestration.StartRequest{
-			ProjectID: e.project, RepositoryID: e.repo, TicketID: e.ticket,
-			Task: fmt.Sprintf("stream %d", i), Branch: fmt.Sprintf("freeze-%d", i), AutoAccept: "all",
-		})
-		if err != nil {
-			t.Fatal(err)
-		}
-		ids[i] = sess.ID
-		t.Cleanup(func() { _ = e.orch.Stop(context.Background(), sess.ID) })
-	}
+	ids := e.startSessions(concurrentSessions)
 
 	deadline := time.Now().Add(loadDuration)
 	var wg sync.WaitGroup
