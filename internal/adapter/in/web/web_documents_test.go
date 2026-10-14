@@ -494,7 +494,7 @@ func TestProjectDocumentsPageAnswersASwapWithOnlyItsSwapRegion(t *testing.T) {
 	body := swap(t, h, "/projects/p1/documents/d-page", "documents-region").Body.String()
 	for _, want := range []string{
 		`href="/projects/p1/documents/d-page" aria-current="page"`, // the highlight follows the swap
-		`x-data="tasksDocumentScope"`,                             // it has tasks to go back to
+		`x-data="tasksDocumentScope"`,                              // it has tasks to go back to
 		`data-after-task-href=`,
 		`<iframe sandbox="allow-scripts"`,
 		"From",

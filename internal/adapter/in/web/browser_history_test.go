@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/chromedp/chromedp"
+
+	"operators-mcp/internal/ports"
 )
 
 // TestHistoryInTheBrowser opens a repository's history from the
@@ -175,6 +177,81 @@ func TestHistoryCommitSwapInTheBrowser(t *testing.T) {
 	}
 	if back != first {
 		t.Errorf("Back shows %q, want %q", back, first)
+	}
+	if reloaded {
+		t.Error("a failing swap stayed in place instead of loading the page")
+	}
+}
+
+// TestSessionHistorySwapInTheBrowser: on a session's history, opening a
+// commit and then the uncommitted changes swaps the detail in place while
+// the pull request panel keeps its state (its form stays open); the address
+// bar follows, Back returns to the commit, and a swap that fails loads the
+// page.
+func TestSessionHistorySwapInTheBrowser(t *testing.T) {
+	assets, err := NewAssets()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !assets.Built() {
+		t.Skip("browser test: web client not built; run `make web`")
+	}
+	ctx, errs := browser(t)
+	w := historyWorld(t)
+	w.prs = fakePullRequests{views: map[string]*ports.PullRequestView{"ws-agent": {Draft: agentDraft()}}}
+	agent := agentCommit(t, w)
+	mux := http.NewServeMux()
+	mux.Handle("/api/", &fakePullRequestAPI{})
+	mux.Handle("/", NewHandler(Deps{
+		Projects: fakeProjects{w.projects}, Tasks: fakeTickets{w.tickets}, Sessions: fakeSessions{w.sessions},
+		Agents: fakeAgents{w.agents}, Repositories: fakeRepos{w.repos}, EnvFiles: w.env, History: w.history,
+		PullRequests: w.prs, Now: func() time.Time { return now },
+	}, assets, nil))
+	pages, fail := failingSwaps(mux)
+	srv := httptest.NewServer(pages)
+	defer func() { srv.CloseClientConnections(); srv.Close() }() // the feed's stream stays open
+
+	formOpen := `(() => { const el = document.getElementById('pr-form'); return !!el && getComputedStyle(el).display !== 'none' })()`
+	heading := `document.querySelector('article[id=commit-detail] h2')?.textContent`
+	var commit, changes, back string
+	var swapped, keptForm, reloaded bool
+	err = chromedp.Run(ctx,
+		chromedp.EmulateViewport(1280, 800),
+		chromedp.Navigate(srv.URL+sessionHistory),
+		chromedp.Poll(`!!document.querySelector('main header [x-on\\:click="openForm"]') && getComputedStyle(document.querySelector('main header [x-on\\:click="openForm"]')).display !== 'none'`, nil, chromedp.WithPollingTimeout(10*time.Second)),
+		chromedp.Evaluate(`document.querySelector('main header [x-on\\:click="openForm"]').click()`, nil),
+		chromedp.Poll(formOpen, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		markWindow(),
+		chromedp.Evaluate(`document.querySelector('nav[aria-label=Commits] a.commit[href*="/history/`+agent+`"]').click()`, nil),
+		chromedp.Poll(`location.pathname.endsWith('/history/`+agent+`') && `+heading+` === 'Add the SSE feed'`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Evaluate(heading, &commit),
+		chromedp.Evaluate(`document.querySelector('nav[aria-label=Commits] a[data-working]').click()`, nil),
+		chromedp.Poll(`location.pathname.endsWith('/history/working') && `+heading+` === 'Uncommitted changes'`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Evaluate(heading, &changes),
+		windowMarked(&swapped),
+		chromedp.Evaluate(formOpen, &keptForm),
+
+		chromedp.Evaluate(`history.back()`, nil),
+		pollAcrossLoads(`document.readyState === 'complete' && location.pathname.endsWith('/history/`+agent+`') && !!document.querySelector('article[id=commit-detail] h2')`),
+		chromedp.Evaluate(heading, &back),
+
+		markWindow(),
+		chromedp.ActionFunc(func(context.Context) error { fail.Store(true); return nil }),
+		chromedp.Evaluate(`document.querySelector('nav[aria-label=Commits] a[data-working]').click()`, nil),
+		pollAcrossLoads(`document.readyState === 'complete' && location.pathname.endsWith('/history/working') && !!document.querySelector('article[aria-label="Uncommitted changes"]')`),
+		windowMarked(&reloaded),
+	)
+	if err != nil {
+		t.Fatalf("%v\nJS errors: %v", err, errs.all())
+	}
+	if commit != "Add the SSE feed" || changes != "Uncommitted changes" {
+		t.Errorf("swapped in %q, then %q", commit, changes)
+	}
+	if !swapped || !keptForm {
+		t.Errorf("the page was kept %v, the pull request form stayed open %v", swapped, keptForm)
+	}
+	if back != "Add the SSE feed" {
+		t.Errorf("Back shows %q, want the commit", back)
 	}
 	if reloaded {
 		t.Error("a failing swap stayed in place instead of loading the page")

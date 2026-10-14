@@ -407,3 +407,92 @@ func TestHistoryPageSwapKeepsTheRefusals(t *testing.T) {
 		}
 	}
 }
+
+// agentCommit is the hash of the session's own commit in historyWorld.
+func agentCommit(t *testing.T, w world) string {
+	t.Helper()
+	commits, err := w.history.RepositoryLog(context.Background(), "r1", ports.HistoryQuery{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range commits {
+		if c.Subject == "Add the SSE feed" {
+			return c.Hash
+		}
+	}
+	t.Fatal("no agent commit")
+	return ""
+}
+
+func TestSessionHistoryAnswersASwapWithOnlyTheDetail(t *testing.T) {
+	w := historyWorld(t)
+	w.prs = fakePullRequests{views: map[string]*ports.PullRequestView{"ws-agent": {Draft: agentDraft()}}}
+	h := newTestHandler(t, w)
+	agent := agentCommit(t, w)
+	for path, detail := range map[string]string{
+		sessionHistory:                            `aria-label="Uncommitted changes"`, // open by default
+		sessionHistory + "/working":               `aria-label="Uncommitted changes"`,
+		sessionHistory + "/" + agent:              `aria-label="Commit"`,
+		sessionHistory + "/" + agent + "?limit=3": `aria-label="Commit"`,
+	} {
+		full := get(t, h, path)
+		if full.Code != http.StatusOK || !strings.Contains(full.Body.String(), `x-data="pullRequestPanel"`) {
+			t.Fatalf("%s: without HX-Request the full page with its pull request panel, got %d", path, full.Code)
+		}
+		frag := swap(t, h, path, "commit-detail")
+		body := frag.Body.String()
+		if frag.Code != http.StatusOK {
+			t.Fatalf("%s: fragment status %d: %s", path, frag.Code, body)
+		}
+		for _, absent := range []string{"<html", `aria-label="Commits"`, "pullRequestPanel", "pull-request-seed", "Git history"} {
+			if strings.Contains(body, absent) {
+				t.Errorf("%s: the fragment carries %q, which is outside the swap region", path, absent)
+			}
+		}
+		if region := openingTag(body, `id="commit-detail"`); !strings.Contains(region, "data-swap-region") || !strings.Contains(region, detail) {
+			t.Errorf("%s: the swap region is %q, want %s", path, region, detail)
+		}
+		for _, rec := range []*httptest.ResponseRecorder{full, frag} {
+			if got := rec.Header().Get("Vary"); got != "HX-Request" {
+				t.Errorf("%s: Vary = %q, want HX-Request", path, got)
+			}
+		}
+	}
+}
+
+func TestSessionHistoryRowsAreLinksThatSwapTheDetail(t *testing.T) {
+	w := historyWorld(t)
+	body := get(t, newTestHandler(t, w), sessionHistory+"/"+agentCommit(t, w)).Body.String()
+	working := openingTag(body, "data-working")
+	if hrefOf(working) != sessionHistory+"/working" {
+		t.Fatalf("the uncommitted changes row is %q", working)
+	}
+	assertSwapTrigger(t, working, hrefOf(working), "commit-detail")
+	rows := 0
+	for rest := body; ; rows++ {
+		i := strings.Index(rest, `<a class="[ commit ]"`)
+		if i < 0 {
+			break
+		}
+		tag := openingTag(rest[i:], `class="[ commit ]"`)
+		assertSwapTrigger(t, tag, hrefOf(tag), "commit-detail")
+		rest = rest[i+len(tag):]
+	}
+	if rows < 2 {
+		t.Errorf("%d rows, want the changes and the commits", rows)
+	}
+}
+
+func TestSessionHistorySwapKeepsTheRefusals(t *testing.T) {
+	h := newTestHandler(t, historyWorld(t))
+	for _, path := range []string{
+		sessionHistory + "/deadbeef",                         // no such commit
+		"/projects/p1/tasks/t-docs/sessions/s-agent/history", // another task's
+		"/projects/p1/tasks/t-feed/sessions/s1/history",      // no worktree
+		"/projects/p1/tasks/t-feed/sessions/nope/history",
+	} {
+		if rec := swap(t, h, path, "commit-detail"); rec.Code != http.StatusNotFound {
+			t.Errorf("%s with HX-Request: status %d, want 404", path, rec.Code)
+		}
+	}
+}
