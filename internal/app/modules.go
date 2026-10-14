@@ -432,7 +432,7 @@ func newAppsService(orch *orchestration.Service, cat catalog.Catalog, host ports
 }
 
 func newRuntimeConfig(cfg Config) runtime.Config {
-	return runtime.Config{ClaudeBin: cfg.ClaudeBin, Shell: cfg.SessionShell}
+	return runtime.Config{ClaudeBin: cfg.ClaudeBin, Shell: cfg.SessionShell, ProxyURL: cfg.llmProxyURL()}
 }
 
 // registerServerSessions reconciles the interactive sessions the server runs
@@ -465,6 +465,7 @@ func newClaudeManager(cfg Config) llmkit.Manager {
 		},
 		ApprovalTimeout: cfg.ApprovalTimeout,
 		RawLog:          rawLogWriter(cfg),
+		ProxyURL:        cfg.llmProxyURL(),
 	})
 }
 
@@ -542,6 +543,7 @@ func newOrchestrationService(
 // processing ports. Each port gets its own adapter so a consumer depends on the
 // single capability it uses rather than on "the text processor".
 var TextProcessingModule = fx.Module("textprocessing",
+	fx.Provide(fx.Private, newOneShotter),
 	fx.Provide(
 		asPort(newSummarizer, new(ports.Summarizer)),
 		asPort(newTextGenerator, new(ports.TextGenerator)),
@@ -549,16 +551,23 @@ var TextProcessingModule = fx.Module("textprocessing",
 	),
 )
 
-func newSummarizer(cfg Config) *claudetext.Summarizer {
-	return claudetext.NewSummarizer(cfg.ClaudeBin, cfg.ClaudeTextModel)
+// newOneShotter is the claude driver the one-shots run on: llmkit's one-shot
+// mode, routed through the LLM proxy like every other claude mode. One-shots
+// need nothing else of a manager, so the module keeps its own.
+func newOneShotter(cfg Config) claudetext.OneShotter {
+	return claude.New(llmkit.Options{Bin: cfg.ClaudeBin, ProxyURL: cfg.llmProxyURL()})
 }
 
-func newTextGenerator(cfg Config) *claudetext.TextGenerator {
-	return claudetext.NewTextGenerator(cfg.ClaudeBin, cfg.ClaudeTextModel)
+func newSummarizer(cfg Config, c claudetext.OneShotter) *claudetext.Summarizer {
+	return claudetext.NewSummarizer(c, cfg.ClaudeBin, cfg.ClaudeTextModel)
 }
 
-func newTranslator(cfg Config) *claudetext.Translator {
-	return claudetext.NewTranslator(cfg.ClaudeBin, cfg.ClaudeTextModel)
+func newTextGenerator(cfg Config, c claudetext.OneShotter) *claudetext.TextGenerator {
+	return claudetext.NewTextGenerator(c, cfg.ClaudeBin, cfg.ClaudeTextModel)
+}
+
+func newTranslator(cfg Config, c claudetext.OneShotter) *claudetext.Translator {
+	return claudetext.NewTranslator(c, cfg.ClaudeBin, cfg.ClaudeTextModel)
 }
 
 func registerRuntimeShutdown(lc fx.Lifecycle, m llmkit.Manager) {

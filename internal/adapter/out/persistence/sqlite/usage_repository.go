@@ -1,6 +1,7 @@
 package sqlite
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -55,7 +56,7 @@ func NewUsageRepository(db *gorm.DB) *UsageRepository {
 }
 
 // Create stores r in one insert; an empty ID gets a generated one.
-func (r *UsageRepository) Create(u *domain.UsageRecord) error {
+func (r *UsageRepository) Create(ctx context.Context, u *domain.UsageRecord) error {
 	id := u.ID
 	if id == "" {
 		var err error
@@ -63,7 +64,7 @@ func (r *UsageRepository) Create(u *domain.UsageRecord) error {
 			return err
 		}
 	}
-	return r.db.Create(&UsageRecordModel{
+	return r.db.WithContext(ctx).Create(&UsageRecordModel{
 		ID: id, Attribution: u.Attribution, ProjectID: u.ProjectID, TaskID: u.TaskID, SessionID: u.SessionID,
 		Method: u.Method, Path: u.Path, Model: u.Model, Status: u.Status, Streamed: u.Streamed,
 		StartedAt: u.StartedAt.UnixMilli(), DurationMS: u.DurationMS,

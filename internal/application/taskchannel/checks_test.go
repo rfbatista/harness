@@ -59,7 +59,7 @@ func TestLoops_FireIntoAnIdleArchitect(t *testing.T) {
 	f := newFixture(t)
 	f.start(t, "arch", "", domain.SessionModeArchitect, nil)
 	f.start(t, "dev", "arch", "", nil)
-	_ = f.sessions.UpdateMetrics("dev", 0, 0, 0, "tool: Edit", 0)
+	_ = f.sessions.UpdateMetrics("dev", 0, ports.SessionTokens{}, "tool: Edit", 0)
 
 	f.advance(9 * time.Minute)
 	f.svc.FireDue()
