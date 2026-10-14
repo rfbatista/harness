@@ -26,19 +26,19 @@ const busyTimeoutMS = 5000
 // whose transactions take the write lock when they begin, and sends reads
 // made outside a transaction to the reader pool, whose connections refuse
 // writes. Close releases both.
-func Open(path string) (*gorm.DB, error) {
+//
+// Every database call slower than the slow-call threshold (WithSlowThreshold,
+// DefaultSlowThreshold when unset) is logged as a slow database call.
+func Open(path string, opts ...Option) (*gorm.DB, error) {
+	slow := newSlowCalls(opts)
 	if isMemoryDSN(path) {
-		return openMemory(path)
+		return openMemory(path, slow)
 	}
-	db, err := gorm.Open(sqlite.Open(fileDSN(path, "_journal_mode=WAL", "_synchronous=NORMAL", "_txlock=immediate")), &gorm.Config{})
+	db, err := openWriter(fileDSN(path, "_journal_mode=WAL", "_synchronous=NORMAL", "_txlock=immediate"), slow)
 	if err != nil {
-		return nil, fmt.Errorf("sqlite open: %w", err)
+		return nil, err
 	}
-	writer, err := db.DB()
-	if err != nil {
-		return nil, fmt.Errorf("sqlite pool: %w", err)
-	}
-	writer.SetMaxOpenConns(1)
+	writer, _ := db.DB()
 	if err := migrate(db); err != nil {
 		writer.Close()
 		return nil, err
@@ -51,22 +51,37 @@ func Open(path string) (*gorm.DB, error) {
 	return db, nil
 }
 
-func openMemory(path string) (*gorm.DB, error) {
-	db, err := gorm.Open(sqlite.Open(path), &gorm.Config{})
+func openMemory(path string, slow *slowCalls) (*gorm.DB, error) {
+	// Every new connection to an in-memory DSN opens its *own* empty
+	// database, so as soon as the pool grows past one connection the
+	// schema appears to vanish ("no such table: sessions"). openWriter's
+	// pool of one keeps the whole process on one database.
+	db, err := openWriter(path, slow)
+	if err != nil {
+		return nil, err
+	}
+	if err := migrate(db); err != nil {
+		return nil, err
+	}
+	return db, nil
+}
+
+// openWriter opens dsn as the writer connection, a pool of one, with slow
+// database calls logged.
+func openWriter(dsn string, slow *slowCalls) (*gorm.DB, error) {
+	pool, err := sql.Open(sqlite.DriverName, dsn)
 	if err != nil {
 		return nil, fmt.Errorf("sqlite open: %w", err)
 	}
-	// Every new connection to an in-memory DSN opens its *own* empty
-	// database, so as soon as the pool grows past one connection the
-	// schema appears to vanish ("no such table: sessions"). Pinning the
-	// pool keeps the whole process on one database.
-	sqlDB, err := db.DB()
+	pool.SetMaxOpenConns(1)
+	db, err := gorm.Open(sqlite.New(sqlite.Config{Conn: &writerConn{DB: pool, slow: slow}}), &gorm.Config{Logger: slow.gormLogger()})
 	if err != nil {
-		return nil, fmt.Errorf("sqlite pool: %w", err)
+		pool.Close()
+		return nil, fmt.Errorf("sqlite open: %w", err)
 	}
-	sqlDB.SetMaxOpenConns(1)
-	if err := migrate(db); err != nil {
-		return nil, err
+	if err := measureBeginWait(db); err != nil {
+		pool.Close()
+		return nil, fmt.Errorf("sqlite slow-call logging: %w", err)
 	}
 	return db, nil
 }

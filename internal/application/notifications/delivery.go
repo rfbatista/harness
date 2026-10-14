@@ -48,7 +48,9 @@ type dispatcher struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 	wg     sync.WaitGroup
-	// closed is guarded by the service's mu, which every enqueue holds.
+	// mu guards closed and the sends to the queues, so none is sent on after
+	// close.
+	mu     sync.Mutex
 	closed bool
 }
 
@@ -82,16 +84,20 @@ func newDispatcher(providers []Provider, settings ports.SettingsReader) (*dispat
 // enqueue hands n to every provider that is enabled and whose level it
 // reaches, without waiting: a full queue drops n for that provider only.
 // Settings are read here, at dispatch time, so a change applies to the very
-// next notification. The caller holds the service's mu.
+// next notification.
 func (d *dispatcher) enqueue(n domain.Notification) {
+	var to []*worker
+	for _, w := range d.workers {
+		if enabled, min := d.config(w); enabled && n.Level.AtLeast(min) {
+			to = append(to, w)
+		}
+	}
+	d.mu.Lock()
+	defer d.mu.Unlock()
 	if d.closed {
 		return
 	}
-	for _, w := range d.workers {
-		enabled, min := d.config(w)
-		if !enabled || !n.Level.AtLeast(min) {
-			continue
-		}
+	for _, w := range to {
 		select {
 		case w.queue <- n:
 		default:
@@ -147,9 +153,10 @@ func (d *dispatcher) deliver(w *worker, n domain.Notification) {
 	}
 }
 
-// close stops taking notifications; the workers finish what is queued. The
-// caller holds the service's mu.
+// close stops taking notifications; the workers finish what is queued.
 func (d *dispatcher) close() {
+	d.mu.Lock()
+	defer d.mu.Unlock()
 	if d.closed {
 		return
 	}

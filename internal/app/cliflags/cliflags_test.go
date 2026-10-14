@@ -86,3 +86,27 @@ func TestParseBadEnvFallsBack(t *testing.T) {
 		t.Fatalf("unparseable env should fall back: %+v", cfg)
 	}
 }
+
+func TestParseDBSlowThreshold(t *testing.T) {
+	for _, c := range []struct {
+		name string
+		args []string
+		env  map[string]string
+		want time.Duration
+	}{
+		{"default", nil, nil, 500 * time.Millisecond},
+		{"env", nil, map[string]string{"DB_SLOW_THRESHOLD": "2s"}, 2 * time.Second},
+		{"flag over env", []string{"--db.slow-threshold=150ms"}, map[string]string{"DB_SLOW_THRESHOLD": "2s"}, 150 * time.Millisecond},
+		{"unparseable env", nil, map[string]string{"DB_SLOW_THRESHOLD": "slow"}, 500 * time.Millisecond},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			cfg, err := Parse(flag.NewFlagSet("test", flag.ContinueOnError), c.args, env(c.env))
+			if err != nil {
+				t.Fatalf("parse: %v", err)
+			}
+			if cfg.DBSlowThreshold != c.want {
+				t.Errorf("DBSlowThreshold = %v, want %v", cfg.DBSlowThreshold, c.want)
+			}
+		})
+	}
+}

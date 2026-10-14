@@ -125,6 +125,11 @@ type NotificationRepository interface {
 	DeleteByProject(projectID string) error
 	// Prune deletes read or resolved notifications created before before.
 	Prune(before time.Time) (int, error)
+	// Transaction runs fn as one write transaction: what fn does through the
+	// repository it is handed commits together, or not at all when fn
+	// returns an error. Write transactions run one at a time, so they commit
+	// in the order they run.
+	Transaction(fn func(tx NotificationRepository) error) error
 }
 
 // NotificationDelivery hands newly recorded notifications to one outside

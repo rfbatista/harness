@@ -25,6 +25,9 @@ type Config struct {
 	MCPAddr string
 	// DBPath is the SQLite database path (e.g. "data.db" or ":memory:").
 	DBPath string
+	// DBSlowThreshold is how long a database call may take before it is
+	// logged as a slow database call. Zero uses the SQLite adapter's default.
+	DBSlowThreshold time.Duration
 	// DevMode proxies the designer resource to the Vite dev server instead of the embedded build.
 	DevMode bool
 	// Root is the default project root for tree and path operations (usually the working directory).
