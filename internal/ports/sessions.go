@@ -118,8 +118,29 @@ type SessionRepository interface {
 	// UpdateRunner records where an interactive session now runs; resuming
 	// can move it.
 	UpdateRunner(id string, runsOn domain.Runner, host string) error
-	AppendEvent(sessionID string, seq int64, typ string, payload []byte) error
+	// RecordEvent stores one event on the session's log together with what
+	// it changes on the session, all or nothing.
+	RecordEvent(sessionID string, ev SessionEventRecord) error
 	ListEvents(sessionID string, fromSeq int64) []StoredEvent
+}
+
+// SessionEventRecord is one event of a session's log as stored, with what it
+// changes on the session: its metrics when Metrics is set, its status when
+// Status is.
+type SessionEventRecord struct {
+	Seq     int64
+	Type    string
+	Payload []byte
+	Metrics *SessionMetrics
+	Status  domain.SessionStatus
+}
+
+// SessionMetrics are a session's running totals and latest activity.
+type SessionMetrics struct {
+	CostUSD          float64
+	Tokens           SessionTokens
+	LastAction       string
+	PendingApprovals int
 }
 
 // SessionTokens are a session's token totals, by kind.

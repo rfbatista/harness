@@ -184,10 +184,10 @@ func TestSessionRepo_CRUDAndEvents(t *testing.T) {
 		t.Fatalf("List by status want 0 got %d", len(list))
 	}
 
-	if err := r.AppendEvent("s1", 1, "output", []byte(`{"a":1}`)); err != nil {
+	if err := r.RecordEvent("s1", ports.SessionEventRecord{Seq: 1, Type: "output", Payload: []byte(`{"a":1}`)}); err != nil {
 		t.Fatal(err)
 	}
-	if err := r.AppendEvent("s1", 2, "status", []byte(`{"b":2}`)); err != nil {
+	if err := r.RecordEvent("s1", ports.SessionEventRecord{Seq: 2, Type: "status", Payload: []byte(`{"b":2}`)}); err != nil {
 		t.Fatal(err)
 	}
 	evs := r.ListEvents("s1", 0)
@@ -248,5 +248,35 @@ func TestMigrateInteractiveRunner(t *testing.T) {
 		if got := repo.Get(id).RunsOn; got != want {
 			t.Errorf("%s RunsOn = %q, want %q", id, got, want)
 		}
+	}
+}
+
+// An event is stored with the metrics and status it brings, or not at all.
+func TestSessionRepository_RecordEventIsAllOrNothing(t *testing.T) {
+	db, err := Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := NewSessionRepository(db)
+	if _, err := r.Create(&domain.Session{ID: "s1", Status: domain.SessionStarting}); err != nil {
+		t.Fatal(err)
+	}
+	err = r.RecordEvent("s1", ports.SessionEventRecord{
+		Seq: 1, Type: "usage", Payload: []byte(`{}`), Status: domain.SessionIdle,
+		Metrics: &ports.SessionMetrics{CostUSD: 0.5, Tokens: ports.SessionTokens{Input: 3}, LastAction: "tool: Read"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := r.Get("s1")
+	if got.Status != domain.SessionIdle || got.CostUSD != 0.5 || got.InputTokens != 3 || got.LastAction != "tool: Read" {
+		t.Fatalf("session after the event: %+v", got)
+	}
+
+	if err := r.RecordEvent("gone", ports.SessionEventRecord{Seq: 1, Type: "done", Payload: []byte(`{}`), Status: domain.SessionStopped}); err == nil {
+		t.Fatal("recording a status on a missing session succeeded")
+	}
+	if evs := r.ListEvents("gone", 0); len(evs) != 0 {
+		t.Fatalf("the event of a failed record was kept: %+v", evs)
 	}
 }
