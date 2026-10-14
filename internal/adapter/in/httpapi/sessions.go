@@ -77,7 +77,11 @@ func (h *Handler) handleSessionHistory(c echo.Context) error {
 	if v := c.QueryParam("from_seq"); v != "" {
 		from, _ = strconv.ParseInt(v, 10, 64)
 	}
-	return c.JSON(http.StatusOK, map[string]any{"events": h.orchSvc.History(c.Param("id"), from)})
+	events, err := h.orchSvc.History(c.Param("id"), from)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, map[string]any{"events": events})
 }
 
 // handleSessionTranscript serves a page of the conversation a session's

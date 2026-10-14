@@ -606,7 +606,11 @@ func (s *Service) pump(sess llmkit.Session) {
 		}
 
 		var change sessionChange
-		if cur := s.sessions.Get(id); cur != nil {
+		cur, err := s.sessions.Find(id)
+		if err != nil {
+			slog.Error("session not read; its metrics miss this event", "session", id, "type", ev.Type, "err", err)
+		}
+		if cur != nil {
 			m := ports.SessionMetrics{CostUSD: cur.CostUSD, Tokens: ports.TokensOf(cur), LastAction: cur.LastAction, PendingApprovals: cur.PendingApprovals}
 			switch ev.Type {
 			case "output":
@@ -995,8 +999,13 @@ func (s *Service) Subscribe(id string) (<-chan SessionEvent, []SessionEvent, fun
 	return s.hub.Subscribe(id)
 }
 
-func (s *Service) History(id string, fromSeq int64) []SessionEvent {
-	stored := s.sessions.ListEvents(id, fromSeq)
+// History is the session's stored events after fromSeq, or the error its
+// read failed with.
+func (s *Service) History(id string, fromSeq int64) ([]SessionEvent, error) {
+	stored, err := s.sessions.ListEvents(id, fromSeq)
+	if err != nil {
+		return nil, fmt.Errorf("session history: %w", err)
+	}
 	out := make([]SessionEvent, 0, len(stored))
 	for _, e := range stored {
 		var ev SessionEvent
@@ -1004,11 +1013,14 @@ func (s *Service) History(id string, fromSeq int64) []SessionEvent {
 			out = append(out, ev)
 		}
 	}
-	return out
+	return out, nil
 }
 
 func (s *Service) Get(_ context.Context, id string) (*domain.Session, error) {
-	sess := s.sessions.Get(id)
+	sess, err := s.sessions.Find(id)
+	if err != nil {
+		return nil, fmt.Errorf("read session: %w", err)
+	}
 	if sess == nil {
 		return nil, &domain.StructuredError{Code: "SESSION_NOT_FOUND", Message: "session not found"}
 	}
@@ -1016,7 +1028,10 @@ func (s *Service) Get(_ context.Context, id string) (*domain.Session, error) {
 }
 
 func (s *Service) List(_ context.Context, f ports.SessionFilter) ([]*domain.Session, error) {
-	list := s.sessions.List(f)
+	list, err := s.sessions.Query(f)
+	if err != nil {
+		return nil, fmt.Errorf("list sessions: %w", err)
+	}
 	for _, sess := range list {
 		s.withResumability(sess)
 	}

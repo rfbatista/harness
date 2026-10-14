@@ -1,6 +1,7 @@
 package sqlite
 
 import (
+	"errors"
 	"time"
 
 	"operators-mcp/internal/domain"
@@ -54,15 +55,35 @@ func (r *SessionRepository) Create(s *domain.Session) (*domain.Session, error) {
 	return m.ToDomain(), nil
 }
 
+// Get is Find for callers that treat a failed read as not found.
 func (r *SessionRepository) Get(id string) *domain.Session {
-	var m SessionModel
-	if err := r.db.First(&m, "id = ?", id).Error; err != nil {
-		return nil
-	}
-	return m.ToDomain()
+	s, _ := r.Find(id)
+	return s
 }
 
+// Find reads a session: nil, nil when there is none, an error when the read
+// failed.
+func (r *SessionRepository) Find(id string) (*domain.Session, error) {
+	var m SessionModel
+	err := r.db.First(&m, "id = ?", id).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return m.ToDomain(), nil
+}
+
+// List is Query for callers that treat a failed read as no sessions.
 func (r *SessionRepository) List(filter ports.SessionFilter) []*domain.Session {
+	list, _ := r.Query(filter)
+	return list
+}
+
+// Query lists the sessions filter matches, newest first, or the error the
+// read failed with.
+func (r *SessionRepository) Query(filter ports.SessionFilter) ([]*domain.Session, error) {
 	q := r.db.Model(&SessionModel{})
 	if filter.ProjectID != "" {
 		q = q.Where("project_id = ?", filter.ProjectID)
@@ -83,13 +104,13 @@ func (r *SessionRepository) List(filter ports.SessionFilter) []*domain.Session {
 	q = q.Order("created_at DESC")
 	var models []SessionModel
 	if err := q.Find(&models).Error; err != nil {
-		return nil
+		return nil, err
 	}
 	out := make([]*domain.Session, 0, len(models))
 	for i := range models {
 		out = append(out, models[i].ToDomain())
 	}
-	return out
+	return out, nil
 }
 
 func (r *SessionRepository) Delete(id string) error {
@@ -206,11 +227,11 @@ func (r *SessionRepository) UpdateRunner(id string, runsOn domain.Runner, host s
 	return nil
 }
 
-func (r *SessionRepository) ListEvents(sessionID string, fromSeq int64) []ports.StoredEvent {
+func (r *SessionRepository) ListEvents(sessionID string, fromSeq int64) ([]ports.StoredEvent, error) {
 	var models []SessionEventModel
 	q := r.db.Where("session_id = ? AND seq > ?", sessionID, fromSeq).Order("seq ASC")
 	if err := q.Find(&models).Error; err != nil {
-		return nil
+		return nil, err
 	}
 	out := make([]ports.StoredEvent, 0, len(models))
 	for _, m := range models {
@@ -218,7 +239,7 @@ func (r *SessionRepository) ListEvents(sessionID string, fromSeq int64) []ports.
 			Seq: m.Seq, Type: m.Type, Payload: m.Payload, At: time.UnixMilli(m.CreatedAt),
 		})
 	}
-	return out
+	return out, nil
 }
 
 // ActivityByProject answers each project's live session count and newest

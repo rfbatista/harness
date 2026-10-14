@@ -227,7 +227,7 @@ func TestService_TurnLifecycle(t *testing.T) {
 
 	// And it opens the timeline as a user message, so the feed shows what was
 	// actually asked rather than starting mid-conversation.
-	first := svc.History(d.ID, 0)
+	first := mustHistory(t, svc, d.ID)
 	if len(first) == 0 || first[0].Type != "user_message" || first[0].Text != "hello" {
 		t.Fatalf("first event = %+v, want the task as a user_message", first)
 	}
@@ -237,7 +237,7 @@ func TestService_TurnLifecycle(t *testing.T) {
 	}
 
 	var user *SessionEvent
-	for _, ev := range svc.History(d.ID, 0) {
+	for _, ev := range mustHistory(t, svc, d.ID) {
 		if ev.Type == "user_message" {
 			e := ev
 			user = &e
@@ -418,7 +418,7 @@ func TestService_DeleteRemovesSessionAndEvents(t *testing.T) {
 	if got := sessionOf(svc, d.ID); got != nil {
 		t.Fatalf("session still present after delete: %+v", got)
 	}
-	if hist := svc.History(d.ID, 0); len(hist) != 0 {
+	if hist := mustHistory(t, svc, d.ID); len(hist) != 0 {
 		t.Fatalf("event log still present after delete: %d events", len(hist))
 	}
 
@@ -485,7 +485,7 @@ func TestService_DeltaStreamsButIsNotPersisted(t *testing.T) {
 		t.Fatal("did not receive live delta")
 	}
 
-	if hist := svc.History("s1", 0); len(hist) != 0 {
+	if hist := mustHistory(t, svc, "s1"); len(hist) != 0 {
 		t.Fatalf("delta must not be persisted, history has %d events", len(hist))
 	}
 }
@@ -1137,4 +1137,14 @@ func sessionOf(svc *Service, id string) *domain.Session {
 		return nil
 	}
 	return sess
+}
+
+// mustHistory is the session's whole stored history; a failed read fails t.
+func mustHistory(t *testing.T, svc *Service, id string) []SessionEvent {
+	t.Helper()
+	hist, err := svc.History(id, 0)
+	if err != nil {
+		t.Fatalf("history of %s: %v", id, err)
+	}
+	return hist
 }

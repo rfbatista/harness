@@ -98,8 +98,13 @@ type TranscriptEntry struct {
 // SessionRepository persists sessions and their append-only event log.
 type SessionRepository interface {
 	Create(s *domain.Session) (*domain.Session, error)
+	// Get and List answer a failed read as not found and as no sessions.
+	// The session path reads through Find and Query instead, which report it.
 	Get(id string) *domain.Session
 	List(filter SessionFilter) []*domain.Session
+	// Find reads a session: nil, nil when there is none.
+	Find(id string) (*domain.Session, error)
+	Query(filter SessionFilter) ([]*domain.Session, error)
 	// Delete removes the session and its event log.
 	Delete(id string) error
 	// ActivityByProject answers each project's live session count and newest
@@ -121,7 +126,7 @@ type SessionRepository interface {
 	// RecordEvent stores one event on the session's log together with what
 	// it changes on the session, all or nothing.
 	RecordEvent(sessionID string, ev SessionEventRecord) error
-	ListEvents(sessionID string, fromSeq int64) []StoredEvent
+	ListEvents(sessionID string, fromSeq int64) ([]StoredEvent, error)
 }
 
 // SessionEventRecord is one event of a session's log as stored, with what it

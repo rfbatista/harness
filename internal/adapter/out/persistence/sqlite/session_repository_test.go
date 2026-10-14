@@ -1,6 +1,7 @@
 package sqlite
 
 import (
+	"path/filepath"
 	"testing"
 
 	"operators-mcp/internal/domain"
@@ -190,11 +191,11 @@ func TestSessionRepo_CRUDAndEvents(t *testing.T) {
 	if err := r.RecordEvent("s1", ports.SessionEventRecord{Seq: 2, Type: "status", Payload: []byte(`{"b":2}`)}); err != nil {
 		t.Fatal(err)
 	}
-	evs := r.ListEvents("s1", 0)
+	evs := mustListEvents(t, r, "s1", 0)
 	if len(evs) != 2 || evs[0].Seq != 1 || evs[1].Type != "status" {
 		t.Fatalf("ListEvents bad: %+v", evs)
 	}
-	if from := r.ListEvents("s1", 1); len(from) != 1 || from[0].Seq != 2 {
+	if from := mustListEvents(t, r, "s1", 1); len(from) != 1 || from[0].Seq != 2 {
 		t.Fatalf("ListEvents fromSeq bad: %+v", from)
 	}
 }
@@ -276,7 +277,52 @@ func TestSessionRepository_RecordEventIsAllOrNothing(t *testing.T) {
 	if err := r.RecordEvent("gone", ports.SessionEventRecord{Seq: 1, Type: "done", Payload: []byte(`{}`), Status: domain.SessionStopped}); err == nil {
 		t.Fatal("recording a status on a missing session succeeded")
 	}
-	if evs := r.ListEvents("gone", 0); len(evs) != 0 {
+	if evs := mustListEvents(t, r, "gone", 0); len(evs) != 0 {
 		t.Fatalf("the event of a failed record was kept: %+v", evs)
 	}
+}
+
+// A session or event read that fails reaches its caller as an error, never as
+// "not found" or an empty list; a session that is not there still reads as
+// not found.
+func TestSessionRepository_FailedReadsReportErrors(t *testing.T) {
+	db := openFile(t, filepath.Join(t.TempDir(), "data.db"))
+	repo := NewSessionRepository(db)
+	created, err := repo.Create(&domain.Session{ProjectID: "p1", Task: "t", Status: domain.SessionRunning})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.RecordEvent(created.ID, ports.SessionEventRecord{Seq: 1, Type: "output", Payload: []byte(`{}`)}); err != nil {
+		t.Fatal(err)
+	}
+
+	if s, err := repo.Find("missing"); s != nil || err != nil {
+		t.Fatalf("Find(missing) = %v, %v; want nil, nil", s, err)
+	}
+	if s, err := repo.Find(created.ID); s == nil || err != nil {
+		t.Fatalf("Find = %v, %v", s, err)
+	}
+
+	if err := Close(db); err != nil {
+		t.Fatal(err)
+	}
+	if s, err := repo.Find(created.ID); err == nil {
+		t.Errorf("Find on a failed read = %v, nil; want an error", s)
+	}
+	if list, err := repo.Query(ports.SessionFilter{}); err == nil {
+		t.Errorf("Query on a failed read = %v, nil; want an error", list)
+	}
+	if evs, err := repo.ListEvents(created.ID, 0); err == nil {
+		t.Errorf("ListEvents on a failed read = %v, nil; want an error", evs)
+	}
+}
+
+// mustListEvents is the session's events after fromSeq; a failed read fails t.
+func mustListEvents(t *testing.T, r *SessionRepository, sessionID string, fromSeq int64) []ports.StoredEvent {
+	t.Helper()
+	evs, err := r.ListEvents(sessionID, fromSeq)
+	if err != nil {
+		t.Fatalf("events of %s: %v", sessionID, err)
+	}
+	return evs
 }

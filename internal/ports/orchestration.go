@@ -41,7 +41,9 @@ type SessionStream interface {
 	// Subscribe returns the live channel, the events already buffered, and a
 	// function that ends the subscription.
 	Subscribe(id string) (<-chan SessionEvent, []SessionEvent, func())
-	History(id string, fromSeq int64) []SessionEvent
+	// History answers the stored events after fromSeq, or the error its read
+	// failed with: never an empty history for a failed read.
+	History(id string, fromSeq int64) ([]SessionEvent, error)
 }
 
 // SessionFeed follows a project as it changes: its sessions (started, ended,
