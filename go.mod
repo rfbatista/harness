@@ -15,6 +15,7 @@ require (
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2
 	github.com/rfbatista/harnesskit v0.2.1
 	github.com/rfbatista/llmkit v0.3.0
+	github.com/rfbatista/spillway v0.1.0
 	github.com/tree-sitter/go-tree-sitter v0.25.0
 	github.com/tree-sitter/tree-sitter-go v0.25.0
 	github.com/tree-sitter/tree-sitter-javascript v0.25.0
@@ -39,8 +40,8 @@ require (
 	github.com/chromedp/sysutil v1.1.0 // indirect
 	github.com/cli/browser v1.3.0 // indirect
 	github.com/evanw/esbuild v0.28.2
-	github.com/fatih/color v1.16.0 // indirect
-	github.com/fsnotify/fsnotify v1.7.0 // indirect
+	github.com/fatih/color v1.18.0 // indirect
+	github.com/fsnotify/fsnotify v1.9.0 // indirect
 	github.com/go-json-experiment/json v0.0.0-20250725192818-e39067aee2d2 // indirect
 	github.com/gobwas/httphead v0.1.0 // indirect
 	github.com/gobwas/pool v0.2.1 // indirect
@@ -127,3 +128,7 @@ require (
 )
 
 tool github.com/a-h/templ/cmd/templ
+
+// Local until the person pushes the tag (see "Spec: harness — token usage
+// monitoring and live dashboard").
+replace github.com/rfbatista/spillway => /Users/renandonatofernandesbatista/.coding-pool/worktrees/spillway-1c1a3c843c28b129/agent-monitor-usage-c48ef1ce

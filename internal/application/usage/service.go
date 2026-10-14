@@ -30,6 +30,9 @@ const (
 
 	defaultLimit = 50
 	maxLimit     = 200
+	// writeTimeout bounds storing one record: the LLM proxy runs the sink
+	// in a goroutine per request, so a stuck write would pile them up.
+	writeTimeout = 5 * time.Second
 	// followerBuffer is how far a follower may fall behind before it is
 	// closed and has to reload.
 	followerBuffer = 64
@@ -109,7 +112,7 @@ func New(repo ports.UsageRepository, readers Readers, opts Options) *Service {
 // Record stores r as a usage record attributed to its session, task and
 // project, and streams it to the project's followers. It never fails: a
 // failed write is logged, and the record is not streamed.
-func (s *Service) Record(_ context.Context, r Request) {
+func (s *Service) Record(ctx context.Context, r Request) {
 	rec := &domain.UsageRecord{
 		ID: r.ID, Attribution: r.Attribution, Method: r.Method, Path: r.Path, Model: r.Model,
 		Status: r.Status, Streamed: r.Streamed, StartedAt: r.StartedAt, DurationMS: r.EndedAt.Sub(r.StartedAt).Milliseconds(),
@@ -122,7 +125,9 @@ func (s *Service) Record(_ context.Context, r Request) {
 			rec.SessionID, rec.TaskID, rec.ProjectID = sess.ID, sess.TicketID, sess.ProjectID
 		}
 	}
-	if err := s.repo.Create(rec); err != nil {
+	ctx, cancel := context.WithTimeout(ctx, writeTimeout)
+	defer cancel()
+	if err := s.repo.Create(ctx, rec); err != nil {
 		s.log.Error("usage record not stored", "id", r.ID, "attribution", r.Attribution, "model", r.Model, "err", err)
 		return
 	}

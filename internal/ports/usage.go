@@ -14,9 +14,10 @@ type UsageFilter struct {
 	Limit     int
 }
 
-// UsageRepository stores usage records; one Create is one short transaction.
+// UsageRepository stores usage records; one Create is one short transaction,
+// given up when ctx ends.
 type UsageRepository interface {
-	Create(r *domain.UsageRecord) error
+	Create(ctx context.Context, r *domain.UsageRecord) error
 	// ListRecent answers the filter's records, newest first.
 	ListRecent(f UsageFilter) ([]*domain.UsageRecord, error)
 	UsageAggregates

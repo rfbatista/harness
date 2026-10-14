@@ -11,6 +11,7 @@ import (
 	"go.uber.org/fx"
 
 	"operators-mcp/internal/adapter/in/httpapi"
+	"operators-mcp/internal/adapter/in/llm"
 	"operators-mcp/internal/adapter/in/mcp"
 	"operators-mcp/internal/adapter/in/mcpsession"
 	"operators-mcp/internal/adapter/in/ui"
@@ -110,7 +111,18 @@ func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRun
 	mux.Handle("/", web.NewHandler(web.Deps{Projects: cat.Projects, Tasks: plan, Sessions: orch, Agents: cat.Agents, Repositories: cat.Projects, EnvFiles: cat.Projects, Documents: plan, History: ws, Code: code, Workspaces: ws, Artifacts: art, ProjectSummaries: cat.Projects, PullRequests: prs,
 		Resources: plan, Comments: plan, Notifications: noteReader, GitCredentials: creds.port()}, assets, uiHandler))
 
-	srv := &http.Server{Addr: cfg.HTTPAddr, Handler: httpapi.CORSMiddleware(mux)}
+	// The LLM proxy every claude process calls through (ADR 0006): loopback
+	// only, outside the API token and CORS, so its responses come back as
+	// the upstream sent them and no web page is invited to use it.
+	llmProxy, err := llm.Handler(llm.Config{Sink: usageSvc})
+	if err != nil {
+		return err
+	}
+	root := http.NewServeMux()
+	root.Handle(llm.PathPrefix, llmProxy)
+	root.Handle("/", httpapi.CORSMiddleware(mux))
+
+	srv := &http.Server{Addr: cfg.HTTPAddr, Handler: root}
 	lc.Append(fx.Hook{
 		OnStart: func(context.Context) error {
 			ln, err := net.Listen("tcp", srv.Addr)
