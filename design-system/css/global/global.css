@@ -194,7 +194,7 @@
     outline: none;
   }
 
-  /* ── Swap regions: muted while the next one loads (ADR 0005) ───────── */
+  /* ── Swap regions: muted while the next one loads (ADR 0008) ───────── */
   [data-swap-region] {
     transition: opacity var(--duration-quick) var(--ease-out);
   }

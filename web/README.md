@@ -70,7 +70,7 @@ the server's background check), `state("merged")`, `block("PR_TOOL_UNAVAILABLE")
 
 ## Swap regions and Alpine components
 
-Two client styles live side by side (ADR 0005); the line between them is the
+Two client styles live side by side (ADR 0008); the line between them is the
 swap region.
 
 - **A swap region** is a server-owned part of a page that htmx replaces in

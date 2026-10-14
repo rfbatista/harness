@@ -1,6 +1,6 @@
 # htmx, vendored
 
-Swaps the web UI's swap regions in place (ADR 0005, web/src/swap-regions.js),
+Swaps the web UI's swap regions in place (ADR 0008, web/src/swap-regions.js),
 committed as-is so building needs no package manager. Never edit these files; replace them.
 Tracked here rather than in web/vendor/, which the repository's `vendor/` ignore rule hides.
 

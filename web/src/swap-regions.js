@@ -1,4 +1,4 @@
-// Swap regions (ADR 0005): htmx swaps a server-owned part of a page in place
+// Swap regions (ADR 0008): htmx swaps a server-owned part of a page in place
 // when a link marked for it is followed, and the page's own URL answers with
 // just that region. Configured here once, for every region, and wired only
 // from the composition root.
