@@ -4,7 +4,9 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"net/http/httptest"
 	"sync/atomic"
+	"testing"
 	"time"
 
 	"github.com/chromedp/chromedp"
@@ -22,6 +24,23 @@ func failingSwaps(h http.Handler) (http.Handler, *atomic.Bool) {
 		}
 		h.ServeHTTP(w, r)
 	}), fail
+}
+
+// swapServer serves the documents pages of world w with failingSwaps in
+// front; /api is not under test.
+func swapServer(t *testing.T, w world, assets *Assets) (*httptest.Server, *atomic.Bool) {
+	t.Helper()
+	pages, fail := failingSwaps(NewHandler(Deps{
+		Projects: fakeProjects{w.projects}, Tasks: fakeTickets{w.tickets}, Sessions: fakeSessions{w.sessions},
+		Agents: fakeAgents{w.agents}, Repositories: fakeRepos{w.repos}, EnvFiles: w.env, Documents: docReader{w.docs, w.tickets},
+		Now: func() time.Time { return now },
+	}, assets, nil))
+	mux := http.NewServeMux()
+	mux.Handle("/api/", http.NotFoundHandler())
+	mux.Handle("/", pages)
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	return srv, fail
 }
 
 // markWindow sets a marker on window that only a full page load clears.

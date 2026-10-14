@@ -69,6 +69,7 @@ func (h Handler) ProjectDocuments(w http.ResponseWriter, r *http.Request) error 
 		return errs.Newf("UNAVAILABLE", "documents are not available on this server")
 	}
 	ctx := r.Context()
+	swap := shell.SwapRequest(w, r)
 	project, docs, err := h.projectDocuments(r)
 	if err != nil {
 		return err
@@ -90,6 +91,9 @@ func (h Handler) ProjectDocuments(w http.ResponseWriter, r *http.Request) error 
 	}
 	if view.Open == nil && r.PathValue("document") != "" {
 		return errs.Newf("DOCUMENT_NOT_FOUND", "document %s is not a project document of this project", openID)
+	}
+	if swap {
+		return h.Render(w, r, http.StatusOK, projectDocumentsBody(view))
 	}
 	title := "Documents · " + project.Name
 	if view.Open != nil {

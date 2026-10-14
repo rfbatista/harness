@@ -464,6 +464,69 @@ func TestProjectDocumentsPageRefusesWhatIsNotAProjectDocumentOfTheProject(t *tes
 	}
 }
 
+func TestProjectDocumentsPageAnswersASwapWithOnlyItsSwapRegion(t *testing.T) {
+	h := newTestHandler(t, libraryBoard())
+	for _, path := range []string{"/projects/p1/documents", "/projects/p1/documents/d-page"} {
+		full := get(t, h, path)
+		if full.Code != http.StatusOK || !strings.Contains(full.Body.String(), "<html") {
+			t.Fatalf("%s: without HX-Request the full page, got %d", path, full.Code)
+		}
+		frag := swap(t, h, path, "documents-region")
+		body := frag.Body.String()
+		if frag.Code != http.StatusOK {
+			t.Fatalf("%s: fragment status %d: %s", path, frag.Code, body)
+		}
+		for _, absent := range []string{"<html", "<body", "<h1>Documents</h1>"} {
+			if strings.Contains(body, absent) {
+				t.Errorf("%s: the fragment carries %q, which is outside the swap region", path, absent)
+			}
+		}
+		if region := openingTag(body, `id="documents-region"`); !strings.Contains(region, "data-swap-region") {
+			t.Errorf("%s: no swap region in the fragment: %q", path, region)
+		}
+		for _, rec := range []*httptest.ResponseRecorder{full, frag} {
+			if got := rec.Header().Get("Vary"); got != "HX-Request" {
+				t.Errorf("%s: Vary = %q, want HX-Request", path, got)
+			}
+		}
+	}
+
+	body := swap(t, h, "/projects/p1/documents/d-page", "documents-region").Body.String()
+	for _, want := range []string{
+		`href="/projects/p1/documents/d-page" aria-current="page"`, // the highlight follows the swap
+		`x-data="tasksDocumentScope"`,                             // it has tasks to go back to
+		`data-after-task-href=`,
+		`<iframe sandbox="allow-scripts"`,
+		"From",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("fragment lacks %q", want)
+		}
+	}
+}
+
+func TestProjectDocumentsPageRowsAreLinksThatSwapTheRegion(t *testing.T) {
+	body := get(t, newTestHandler(t, libraryBoard()), "/projects/p1/documents").Body.String()
+	for _, id := range []string{"d-arch", "d-page"} {
+		href := "/projects/p1/documents/" + id
+		assertSwapTrigger(t, openingTag(body, `href="`+href+`"`), href, "documents-region")
+	}
+}
+
+func TestProjectDocumentsPageSwapKeepsTheRefusals(t *testing.T) {
+	h := newTestHandler(t, libraryBoard())
+	for _, path := range []string{
+		"/projects/p1/documents/d-plan", // a task document
+		"/projects/p1/documents/d-far",  // another project's
+		"/projects/p1/documents/missing",
+		"/projects/p9/documents",
+	} {
+		if rec := swap(t, h, path, "documents-region"); rec.Code != http.StatusNotFound {
+			t.Errorf("%s with HX-Request: status %d, want 404", path, rec.Code)
+		}
+	}
+}
+
 func TestProjectDocumentsPageWithNoneSaysHowTheyArrive(t *testing.T) {
 	rec := get(t, newTestHandler(t, documentsBoard()), "/projects/p2/documents")
 	body := rec.Body.String()

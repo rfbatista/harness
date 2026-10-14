@@ -80,17 +80,7 @@ func TestDocumentsSwapRegionInTheBrowser(t *testing.T) {
 		t.Skip("browser test: web client not built; run `make web`")
 	}
 	ctx, errs := browser(t)
-	w := documentsBoard()
-	pages, fail := failingSwaps(NewHandler(Deps{
-		Projects: fakeProjects{w.projects}, Tasks: fakeTickets{w.tickets}, Sessions: fakeSessions{w.sessions},
-		Agents: fakeAgents{w.agents}, Repositories: fakeRepos{w.repos}, EnvFiles: w.env, Documents: docReader{w.docs, w.tickets},
-		Now: func() time.Time { return now },
-	}, assets, nil))
-	mux := http.NewServeMux()
-	mux.Handle("/api/", http.NotFoundHandler())
-	mux.Handle("/", pages)
-	srv := httptest.NewServer(mux)
-	defer srv.Close()
+	srv, fail := swapServer(t, documentsBoard(), assets)
 	base := srv.URL + "/projects/p1/tasks/t-feed/documents"
 	row := func(id string) string {
 		return `document.querySelector('nav[aria-label="Documents of this task"] a[href$="/documents/` + id + `"]')`
@@ -143,6 +133,66 @@ func TestDocumentsSwapRegionInTheBrowser(t *testing.T) {
 	}
 	if afterFailure {
 		t.Error("the page loaded after a failed swap still looks busy")
+	}
+}
+
+// TestProjectDocumentsSwapRegionInTheBrowser: in the project's library,
+// picking another document swaps it in place and frames an HTML one, the
+// address bar follows, Back returns to the previous document, and a swap
+// that fails loads the page.
+func TestProjectDocumentsSwapRegionInTheBrowser(t *testing.T) {
+	assets, err := NewAssets()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !assets.Built() {
+		t.Skip("browser test: web client not built; run `make web`")
+	}
+	ctx, errs := browser(t)
+	srv, fail := swapServer(t, libraryBoard(), assets)
+	base := srv.URL + "/projects/p1/documents"
+	row := func(id string) string {
+		return `document.querySelector('nav[aria-label="Documents of this project"] a[href$="/documents/` + id + `"]')`
+	}
+
+	var path, current, back string
+	var swapped, reloaded bool
+	err = chromedp.Run(ctx,
+		chromedp.EmulateViewport(1280, 800),
+		chromedp.Navigate(base),
+		pageSettled(),
+		markWindow(),
+		chromedp.Evaluate(row("d-page")+`.click()`, nil),
+		waitForPath(base+"/d-page", &path),
+		chromedp.Poll(`!!document.querySelector('article iframe[sandbox="allow-scripts"]')`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		windowMarked(&swapped),
+		chromedp.Evaluate(`document.querySelector('nav[aria-label="Documents of this project"] [aria-current="page"]').getAttribute('href')`, &current),
+
+		chromedp.Evaluate(`history.back()`, nil),
+		pollAcrossLoads(`document.readyState === 'complete' && document.querySelector('article h2')?.textContent.trim() === 'Architecture'`),
+		chromedp.Evaluate(`document.querySelector('article h2').textContent.trim()`, &back),
+
+		markWindow(),
+		chromedp.ActionFunc(func(context.Context) error { fail.Store(true); return nil }),
+		chromedp.Evaluate(row("d-page")+`.click()`, nil),
+		waitForPath(base+"/d-page", &path),
+		pollAcrossLoads(`document.readyState === 'complete' && !!document.querySelector('article iframe')`),
+		windowMarked(&reloaded),
+	)
+	if err != nil {
+		t.Fatalf("%v\nJS errors: %v", err, errs.all())
+	}
+	if !swapped {
+		t.Error("picking a document reloaded the page")
+	}
+	if current != "/projects/p1/documents/d-page" {
+		t.Errorf("the highlighted row is %q, want the picked document", current)
+	}
+	if back != "Architecture" {
+		t.Errorf("Back shows %q, want the previous document", back)
+	}
+	if reloaded {
+		t.Error("a failing swap stayed in place instead of loading the page")
 	}
 }
 
