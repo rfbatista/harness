@@ -58,7 +58,8 @@ func fromAgentEvent(ce llmkit.Event) (ev SessionEvent, status domain.SessionStat
 		ev.Text = ce.Text
 		ev.CostUSD = ce.CostUSD
 		if ce.Usage != nil {
-			ev.Usage = &Usage{InputTokens: ce.Usage.InputTokens, OutputTokens: ce.Usage.OutputTokens}
+			ev.Usage = &Usage{InputTokens: ce.Usage.InputTokens, OutputTokens: ce.Usage.OutputTokens,
+				CacheCreationInputTokens: ce.Usage.CacheCreationInputTokens, CacheReadInputTokens: ce.Usage.CacheReadInputTokens}
 		}
 		return ev, "", false
 	case llmkit.EventExit:

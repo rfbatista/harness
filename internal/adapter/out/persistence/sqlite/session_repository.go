@@ -119,11 +119,13 @@ func (r *SessionRepository) UpdateStatus(id string, status domain.SessionStatus)
 	return nil
 }
 
-func (r *SessionRepository) UpdateMetrics(id string, costUSD float64, inputTokens, outputTokens int, lastAction string, pendingApprovals int) error {
+func (r *SessionRepository) UpdateMetrics(id string, costUSD float64, tokens ports.SessionTokens, lastAction string, pendingApprovals int) error {
 	res := r.db.Model(&SessionModel{}).Where("id = ?", id).Updates(map[string]any{
-		"cost_usd":          costUSD,
-		"input_tokens":      inputTokens,
-		"output_tokens":     outputTokens,
+		"cost_usd":                    costUSD,
+		"input_tokens":                tokens.Input,
+		"output_tokens":               tokens.Output,
+		"cache_creation_input_tokens": tokens.CacheCreation,
+		"cache_read_input_tokens":     tokens.CacheRead,
 		"last_action":       lastAction,
 		"pending_approvals": pendingApprovals,
 		"updated_at":        time.Now().UnixMilli(),

@@ -73,6 +73,12 @@ func (c Config) loopbackBaseURL() string {
 	return "http://" + addr
 }
 
+// llmProxyURL is the LLM proxy every claude process calls through (ADR
+// 0006): the server's own loopback address under /llm.
+func (c Config) llmProxyURL() string {
+	return c.loopbackBaseURL() + "/llm"
+}
+
 // New builds the fully wired fx application for the given configuration.
 // Call Run on the result to start the servers and block until SIGINT/SIGTERM.
 func New(cfg Config) *fx.App {

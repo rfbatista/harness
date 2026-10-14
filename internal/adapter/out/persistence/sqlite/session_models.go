@@ -7,32 +7,34 @@ import (
 )
 
 type SessionModel struct {
-	ID               string  `gorm:"primaryKey"`
-	ProjectID        string  `gorm:"column:project_id;index"`
-	RepositoryID     string  `gorm:"column:repository_id;index"`
-	AgentID          string  `gorm:"column:agent_id;index"`
-	ZoneID           string  `gorm:"column:zone_id"`
-	TicketID         string  `gorm:"column:ticket_id;index"`
-	Task             string  `gorm:"column:task"`
-	WorkingDir       string  `gorm:"column:working_dir"`
-	Model            string  `gorm:"column:model"`
-	Status           string  `gorm:"column:status;index"`
-	CostUSD          float64 `gorm:"column:cost_usd"`
-	InputTokens      int     `gorm:"column:input_tokens"`
-	OutputTokens     int     `gorm:"column:output_tokens"`
-	LastAction       string  `gorm:"column:last_action"`
-	PendingApprovals int     `gorm:"column:pending_approvals"`
-	AutoRun          bool    `gorm:"column:auto_run"`
-	WorkspaceID      string  `gorm:"column:workspace_id;index"`
-	Branch           string  `gorm:"column:branch"`
-	Interactive      bool    `gorm:"column:interactive"`
-	ClaudeSessionID  string  `gorm:"column:claude_session_id"`
-	RunsOn           string  `gorm:"column:runs_on;index"`
-	RunnerHost       string  `gorm:"column:runner_host"`
-	ParentSessionID  string  `gorm:"column:parent_session_id"`
-	Mode             string  `gorm:"column:mode"`
-	CreatedAt        int64   `gorm:"autoCreateTime:milli"`
-	UpdatedAt        int64   `gorm:"autoUpdateTime:milli"`
+	ID                       string  `gorm:"primaryKey"`
+	ProjectID                string  `gorm:"column:project_id;index"`
+	RepositoryID             string  `gorm:"column:repository_id;index"`
+	AgentID                  string  `gorm:"column:agent_id;index"`
+	ZoneID                   string  `gorm:"column:zone_id"`
+	TicketID                 string  `gorm:"column:ticket_id;index"`
+	Task                     string  `gorm:"column:task"`
+	WorkingDir               string  `gorm:"column:working_dir"`
+	Model                    string  `gorm:"column:model"`
+	Status                   string  `gorm:"column:status;index"`
+	CostUSD                  float64 `gorm:"column:cost_usd"`
+	InputTokens              int     `gorm:"column:input_tokens"`
+	OutputTokens             int     `gorm:"column:output_tokens"`
+	CacheCreationInputTokens int     `gorm:"column:cache_creation_input_tokens"`
+	CacheReadInputTokens     int     `gorm:"column:cache_read_input_tokens"`
+	LastAction               string  `gorm:"column:last_action"`
+	PendingApprovals         int     `gorm:"column:pending_approvals"`
+	AutoRun                  bool    `gorm:"column:auto_run"`
+	WorkspaceID              string  `gorm:"column:workspace_id;index"`
+	Branch                   string  `gorm:"column:branch"`
+	Interactive              bool    `gorm:"column:interactive"`
+	ClaudeSessionID          string  `gorm:"column:claude_session_id"`
+	RunsOn                   string  `gorm:"column:runs_on;index"`
+	RunnerHost               string  `gorm:"column:runner_host"`
+	ParentSessionID          string  `gorm:"column:parent_session_id"`
+	Mode                     string  `gorm:"column:mode"`
+	CreatedAt                int64   `gorm:"autoCreateTime:milli"`
+	UpdatedAt                int64   `gorm:"autoUpdateTime:milli"`
 }
 
 func (SessionModel) TableName() string { return "sessions" }
@@ -42,32 +44,34 @@ func (m *SessionModel) ToDomain() *domain.Session {
 		return nil
 	}
 	return &domain.Session{
-		ID:               m.ID,
-		ProjectID:        m.ProjectID,
-		RepositoryID:     m.RepositoryID,
-		AgentID:          m.AgentID,
-		ZoneID:           m.ZoneID,
-		TicketID:         m.TicketID,
-		Task:             m.Task,
-		WorkingDir:       m.WorkingDir,
-		Model:            m.Model,
-		Status:           domain.SessionStatus(m.Status),
-		CostUSD:          m.CostUSD,
-		InputTokens:      m.InputTokens,
-		OutputTokens:     m.OutputTokens,
-		LastAction:       m.LastAction,
-		PendingApprovals: m.PendingApprovals,
-		AutoRun:          m.AutoRun,
-		WorkspaceID:      m.WorkspaceID,
-		Branch:           m.Branch,
-		Interactive:      m.Interactive,
-		ClaudeSessionID:  m.ClaudeSessionID,
-		RunsOn:           domain.Runner(m.RunsOn),
-		RunnerHost:       m.RunnerHost,
-		ParentSessionID:  m.ParentSessionID,
-		Mode:             domain.SessionMode(m.Mode),
-		CreatedAt:        time.UnixMilli(m.CreatedAt),
-		UpdatedAt:        time.UnixMilli(m.UpdatedAt),
+		ID:                       m.ID,
+		ProjectID:                m.ProjectID,
+		RepositoryID:             m.RepositoryID,
+		AgentID:                  m.AgentID,
+		ZoneID:                   m.ZoneID,
+		TicketID:                 m.TicketID,
+		Task:                     m.Task,
+		WorkingDir:               m.WorkingDir,
+		Model:                    m.Model,
+		Status:                   domain.SessionStatus(m.Status),
+		CostUSD:                  m.CostUSD,
+		InputTokens:              m.InputTokens,
+		OutputTokens:             m.OutputTokens,
+		CacheCreationInputTokens: m.CacheCreationInputTokens,
+		CacheReadInputTokens:     m.CacheReadInputTokens,
+		LastAction:               m.LastAction,
+		PendingApprovals:         m.PendingApprovals,
+		AutoRun:                  m.AutoRun,
+		WorkspaceID:              m.WorkspaceID,
+		Branch:                   m.Branch,
+		Interactive:              m.Interactive,
+		ClaudeSessionID:          m.ClaudeSessionID,
+		RunsOn:                   domain.Runner(m.RunsOn),
+		RunnerHost:               m.RunnerHost,
+		ParentSessionID:          m.ParentSessionID,
+		Mode:                     domain.SessionMode(m.Mode),
+		CreatedAt:                time.UnixMilli(m.CreatedAt),
+		UpdatedAt:                time.UnixMilli(m.UpdatedAt),
 	}
 }
 

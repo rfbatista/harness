@@ -106,7 +106,7 @@ type SessionRepository interface {
 	// session activity, for every project that has sessions.
 	ActivityByProject() (map[string]SessionActivity, error)
 	UpdateStatus(id string, status domain.SessionStatus) error
-	UpdateMetrics(id string, costUSD float64, inputTokens, outputTokens int, lastAction string, pendingApprovals int) error
+	UpdateMetrics(id string, costUSD float64, tokens SessionTokens, lastAction string, pendingApprovals int) error
 	// UpdateAutoRun records whether the session answers its own permission
 	// requests. The gate itself lives in the permission broker; this is the
 	// readable copy, so a client does not have to replay the event log to
@@ -120,4 +120,14 @@ type SessionRepository interface {
 	UpdateRunner(id string, runsOn domain.Runner, host string) error
 	AppendEvent(sessionID string, seq int64, typ string, payload []byte) error
 	ListEvents(sessionID string, fromSeq int64) []StoredEvent
+}
+
+// SessionTokens are a session's token totals, by kind.
+type SessionTokens struct {
+	Input, Output, CacheCreation, CacheRead int
+}
+
+// TokensOf are s's token totals.
+func TokensOf(s *domain.Session) SessionTokens {
+	return SessionTokens{Input: s.InputTokens, Output: s.OutputTokens, CacheCreation: s.CacheCreationInputTokens, CacheRead: s.CacheReadInputTokens}
 }

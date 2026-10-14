@@ -551,7 +551,10 @@ func (s *Service) sessionConfig(id, dir, model string, allowedTools []string, pe
 		Permission:   permission,
 		Env:          s.DefaultEnv,
 		AppendSystem: ag.appendSystem,
-		Driver:       claude.Config{SkillDirs: ag.skillDirs},
+		// What the session's LLM requests are attributed to in the usage
+		// records (ADR 0006).
+		Attribution: id,
+		Driver:      claude.Config{SkillDirs: ag.skillDirs},
 	}
 
 	// After the agent's own prompt, so the task brief lands at the end of the
@@ -603,7 +606,7 @@ func (s *Service) pump(sess llmkit.Session) {
 		}
 
 		if cur := s.sessions.Get(id); cur != nil {
-			cost, in, out, last, pend := cur.CostUSD, cur.InputTokens, cur.OutputTokens, cur.LastAction, cur.PendingApprovals
+			cost, tokens, last, pend := cur.CostUSD, ports.TokensOf(cur), cur.LastAction, cur.PendingApprovals
 			switch ev.Type {
 			case "output":
 				if ev.Text != "" {
@@ -614,8 +617,10 @@ func (s *Service) pump(sess llmkit.Session) {
 			case "usage":
 				cost += ev.CostUSD
 				if ev.Usage != nil {
-					in += ev.Usage.InputTokens
-					out += ev.Usage.OutputTokens
+					tokens.Input += ev.Usage.InputTokens
+					tokens.Output += ev.Usage.OutputTokens
+					tokens.CacheCreation += ev.Usage.CacheCreationInputTokens
+					tokens.CacheRead += ev.Usage.CacheReadInputTokens
 				}
 			}
 			// A dead session has no outstanding decisions: broker.DenyAll has
@@ -624,7 +629,7 @@ func (s *Service) pump(sess llmkit.Session) {
 			if hasStatus && status.IsTerminal() {
 				pend = 0
 			}
-			_ = s.sessions.UpdateMetrics(id, cost, in, out, last, pend)
+			_ = s.sessions.UpdateMetrics(id, cost, tokens, last, pend)
 		}
 		if hasStatus {
 			_ = s.sessions.UpdateStatus(id, status)
@@ -750,7 +755,7 @@ func (s *Service) handleExpiry(e approval.Expiry) {
 func (s *Service) handleApproval(req approval.Request) {
 	_ = s.sessions.UpdateStatus(req.SessionID, domain.SessionWaitingApproval)
 	if cur := s.sessions.Get(req.SessionID); cur != nil {
-		_ = s.sessions.UpdateMetrics(req.SessionID, cur.CostUSD, cur.InputTokens, cur.OutputTokens, cur.LastAction, cur.PendingApprovals+1)
+		_ = s.sessions.UpdateMetrics(req.SessionID, cur.CostUSD, ports.TokensOf(cur), cur.LastAction, cur.PendingApprovals+1)
 	}
 	s.publish(req.SessionID, SessionEvent{
 		Type:     "approval_needed",
@@ -895,7 +900,7 @@ func (s *Service) releaseApproval(id string) {
 		if pend > 0 {
 			pend--
 		}
-		_ = s.sessions.UpdateMetrics(id, cur.CostUSD, cur.InputTokens, cur.OutputTokens, cur.LastAction, pend)
+		_ = s.sessions.UpdateMetrics(id, cur.CostUSD, ports.TokensOf(cur), cur.LastAction, pend)
 	}
 	_ = s.sessions.UpdateStatus(id, domain.SessionThinking)
 }

@@ -169,7 +169,7 @@ func TestSessionRepo_CRUDAndEvents(t *testing.T) {
 	if err := r.UpdateStatus("s1", domain.SessionRunning); err != nil {
 		t.Fatal(err)
 	}
-	if err := r.UpdateMetrics("s1", 1.5, 10, 20, "tool: Bash", 1); err != nil {
+	if err := r.UpdateMetrics("s1", 1.5, ports.SessionTokens{Input: 10, Output: 20}, "tool: Bash", 1); err != nil {
 		t.Fatal(err)
 	}
 	got := r.Get("s1")
