@@ -86,13 +86,7 @@ func newDB(lc fx.Lifecycle, cfg Config) (*gorm.DB, error) {
 		return nil, err
 	}
 	lc.Append(fx.Hook{
-		OnStop: func(context.Context) error {
-			sqlDB, err := db.DB()
-			if err != nil {
-				return err
-			}
-			return sqlDB.Close()
-		},
+		OnStop: func(context.Context) error { return sqlite.Close(db) },
 	})
 	return db, nil
 }
