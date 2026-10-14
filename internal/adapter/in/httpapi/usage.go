@@ -36,3 +36,25 @@ func (h *Handler) handleListUsageRecords(c echo.Context) error {
 	}
 	return c.JSON(http.StatusOK, page)
 }
+
+func (h *Handler) handleUsageSummary(c echo.Context) error {
+	if h.usage == nil {
+		return errUsageOff
+	}
+	sum, err := h.usage.UsageSummary(c.Request().Context(), c.Param("project"), ports.UsageRange(c.QueryParam("range")))
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, sum)
+}
+
+func (h *Handler) handleUsageTotals(c echo.Context) error {
+	if h.usage == nil {
+		return errUsageOff
+	}
+	totals, err := h.usage.UsageTotals(c.Request().Context(), ports.UsageTotalsQuery{TaskID: c.QueryParam("task_id"), SessionID: c.QueryParam("session_id")})
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, totals)
+}

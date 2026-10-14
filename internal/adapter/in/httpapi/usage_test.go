@@ -3,9 +3,11 @@ package httpapi
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -27,9 +29,11 @@ func usageServer(t *testing.T, opts ...usagetest.Option) (*httptest.Server, *usa
 
 var usageT0 = time.Date(2026, 10, 14, 10, 0, 0, 0, time.Local)
 
+var requestSeq atomic.Int64
+
 func aRequest(attribution, model string, at time.Time, in, out, cacheWrite, cacheRead int64) usage.Request {
 	return usage.Request{
-		ID: "req-" + at.Format("150405.000") + attribution, Attribution: attribution, Method: "POST", Path: "/v1/messages",
+		ID: fmt.Sprintf("req-%d", requestSeq.Add(1)), Attribution: attribution, Method: "POST", Path: "/v1/messages",
 		Model: model, Status: 200, Streamed: true, StartedAt: at, EndedAt: at.Add(1500 * time.Millisecond),
 		InputTokens: in, OutputTokens: out, CacheCreationInputTokens: cacheWrite, CacheReadInputTokens: cacheRead,
 	}
@@ -249,5 +253,210 @@ func TestAnUnknownModelHasTokensButNoEstimatedCost(t *testing.T) {
 		if r["input_tokens"] != float64(10) || r["output_tokens"] != float64(20) {
 			t.Errorf("model %q: tokens %v/%v, want 10/20", r["model"], r["input_tokens"], r["output_tokens"])
 		}
+	}
+}
+
+type wireTotals struct {
+	Requests                 int64    `json:"requests"`
+	InputTokens              int64    `json:"input_tokens"`
+	OutputTokens             int64    `json:"output_tokens"`
+	CacheCreationInputTokens int64    `json:"cache_creation_input_tokens"`
+	CacheReadInputTokens     int64    `json:"cache_read_input_tokens"`
+	TotalTokens              int64    `json:"total_tokens"`
+	EstimatedCostUSD         *float64 `json:"estimated_cost_usd"`
+	UnpricedTokens           int64    `json:"unpriced_tokens"`
+}
+
+type wireSummary struct {
+	Range  string     `json:"range"`
+	Bucket string     `json:"bucket"`
+	Since  string     `json:"since"`
+	Totals wireTotals `json:"totals"`
+	Series []struct {
+		Start       string `json:"start"`
+		Model       string `json:"model"`
+		TotalTokens int64  `json:"total_tokens"`
+	} `json:"series"`
+	TopTasks []struct {
+		TaskID    string     `json:"task_id"`
+		TaskTitle string     `json:"task_title"`
+		Totals    wireTotals `json:"totals"`
+	} `json:"top_tasks"`
+	TopSessions []struct {
+		SessionID string     `json:"session_id"`
+		TaskID    string     `json:"task_id"`
+		TaskTitle string     `json:"task_title"`
+		Totals    wireTotals `json:"totals"`
+	} `json:"top_sessions"`
+}
+
+func usageSummary(t *testing.T, srv *httptest.Server, project, rng string) wireSummary {
+	t.Helper()
+	var s wireSummary
+	if code, body := getUsageJSON(t, srv.URL+"/api/projects/"+project+"/usage?range="+rng, &s); code != 200 {
+		t.Fatalf("usage %s = %d %v", rng, code, body)
+	}
+	return s
+}
+
+func near(a *float64, want float64) bool {
+	return a != nil && *a-want < 1e-9 && want-*a < 1e-9
+}
+
+// The clock stands at 11:00 on 2026-10-14, local time.
+var usageNow = usageT0.Add(time.Hour)
+
+func TestUsageTotalsCountEachRecordInTheRangesItFallsIn(t *testing.T) {
+	srv, e := usageServer(t, usagetest.WithClock(func() time.Time { return usageNow }))
+	ctx := context.Background()
+	midnight := time.Date(2026, 10, 14, 0, 0, 0, 0, time.Local)
+	// Sonnet 4.5: $3 in, $15 out, $3.75 cache write, $0.30 cache read.
+	e.Service.Record(ctx, aRequest(e.SessionA, "claude-sonnet-4-5", usageT0, 1_000_000, 100_000, 0, 0))              // today: $4.50
+	e.Service.Record(ctx, aRequest(e.SessionA, "claude-sonnet-4-5", midnight.Add(-time.Minute), 0, 0, 1_000_000, 0)) // yesterday: $3.75
+	e.Service.Record(ctx, aRequest(e.SessionA, "claude-sonnet-4-5", midnight.AddDate(0, 0, -8), 0, 0, 0, 1_000_000)) // 8 days ago: $0.30
+	e.Service.Record(ctx, aRequest(e.SessionA, "claude-sonnet-4-5", midnight.AddDate(0, 0, -40), 7, 7, 7, 7))        // too old for any range
+	e.Service.Record(ctx, aRequest(e.SessionA, "claude-opus-9", usageT0.Add(time.Minute), 500, 0, 0, 0))             // today, unpriced
+
+	cases := []struct {
+		rng                     string
+		requests, total         int64
+		in, out, cacheW, cacheR int64
+		cost                    float64
+		unpriced                int64
+	}{
+		{"today", 2, 1_100_500, 1_000_500, 100_000, 0, 0, 4.50, 500},
+		{"7d", 3, 2_100_500, 1_000_500, 100_000, 1_000_000, 0, 8.25, 500},
+		{"30d", 4, 3_100_500, 1_000_500, 100_000, 1_000_000, 1_000_000, 8.55, 500},
+	}
+	for _, c := range cases {
+		s := usageSummary(t, srv, e.ProjectA, c.rng)
+		tt := s.Totals
+		if tt.Requests != c.requests || tt.TotalTokens != c.total || tt.InputTokens != c.in || tt.OutputTokens != c.out ||
+			tt.CacheCreationInputTokens != c.cacheW || tt.CacheReadInputTokens != c.cacheR || tt.UnpricedTokens != c.unpriced {
+			t.Errorf("%s totals = %+v, want %d requests, %d tokens (%d/%d/%d/%d), %d unpriced", c.rng, tt, c.requests, c.total, c.in, c.out, c.cacheW, c.cacheR, c.unpriced)
+		}
+		if !near(tt.EstimatedCostUSD, c.cost) {
+			t.Errorf("%s estimated cost = %v, want %v", c.rng, tt.EstimatedCostUSD, c.cost)
+		}
+	}
+	if s := usageSummary(t, srv, e.ProjectA, "today"); s.Range != "today" || s.Bucket != "hour" || s.Since == "" {
+		t.Errorf("today = range %q bucket %q since %q, want today, hour, local midnight", s.Range, s.Bucket, s.Since)
+	}
+	if s := usageSummary(t, srv, e.ProjectB, "30d"); s.Totals.Requests != 0 || s.Totals.TotalTokens != 0 || !near(s.Totals.EstimatedCostUSD, 0) {
+		t.Errorf("project B totals = %+v, want nothing and an estimated cost of 0", s.Totals)
+	}
+}
+
+func TestOnlyUnpricedUsageHasNoEstimatedCostTotal(t *testing.T) {
+	srv, e := usageServer(t, usagetest.WithClock(func() time.Time { return usageNow }))
+	e.Service.Record(context.Background(), aRequest(e.SessionA, "claude-opus-9", usageT0, 10, 0, 0, 0))
+	if s := usageSummary(t, srv, e.ProjectA, "today"); s.Totals.EstimatedCostUSD != nil || s.Totals.UnpricedTokens != 10 {
+		t.Errorf("totals = %+v, want no estimated cost and 10 unpriced tokens", s.Totals)
+	}
+}
+
+func TestTheUsageSeriesIsSplitByModelPerBucket(t *testing.T) {
+	srv, e := usageServer(t, usagetest.WithClock(func() time.Time { return usageNow }))
+	ctx := context.Background()
+	e.Service.Record(ctx, aRequest(e.SessionA, "claude-sonnet-4-5", usageT0.Add(-50*time.Minute), 100, 0, 0, 0)) // 09:10
+	e.Service.Record(ctx, aRequest(e.SessionA, "claude-sonnet-4-5", usageT0.Add(-10*time.Minute), 20, 0, 0, 0))  // 09:50
+	e.Service.Record(ctx, aRequest(e.SessionA, "claude-haiku-4-5", usageT0.Add(-5*time.Minute), 3, 0, 0, 0))     // 09:55
+	e.Service.Record(ctx, aRequest(e.SessionA, "claude-sonnet-4-5", usageT0.Add(5*time.Minute), 4000, 0, 0, 0))  // 10:05
+	e.Service.Record(ctx, aRequest(e.SessionA, "claude-sonnet-4-5", usageT0.AddDate(0, 0, -2), 50000, 0, 0, 0))  // two days ago
+
+	type point struct {
+		hour  int
+		model string
+	}
+	got := map[point]int64{}
+	for _, p := range usageSummary(t, srv, e.ProjectA, "today").Series {
+		at, err := time.Parse(time.RFC3339, p.Start)
+		if err != nil {
+			t.Fatalf("series start %q: %v", p.Start, err)
+		}
+		got[point{at.In(time.Local).Hour(), p.Model}] += p.TotalTokens
+	}
+	want := map[point]int64{{9, "claude-sonnet-4-5"}: 120, {9, "claude-haiku-4-5"}: 3, {10, "claude-sonnet-4-5"}: 4000}
+	if len(got) != len(want) {
+		t.Errorf("today's series = %v, want %v", got, want)
+	}
+	for k, v := range want {
+		if got[k] != v {
+			t.Errorf("today's series at %d:00 for %s = %d, want %d", k.hour, k.model, got[k], v)
+		}
+	}
+	week := usageSummary(t, srv, e.ProjectA, "7d")
+	if week.Bucket != "day" || len(week.Series) != 3 {
+		t.Errorf("7d series = bucket %q, %d points, want day buckets: today ×2 models, two days ago", week.Bucket, len(week.Series))
+	}
+}
+
+func TestTopTasksAndSessionsAreRankedByTokens(t *testing.T) {
+	srv, e := usageServer(t, usagetest.WithClock(func() time.Time { return usageNow }))
+	ctx := context.Background()
+	second := e.AddSession(t, e.ProjectA, "Ship it")
+	e.Service.Record(ctx, aRequest(e.SessionA, "claude-sonnet-4-5", usageT0, 100, 0, 0, 0))
+	e.Service.Record(ctx, aRequest(second.SessionID, "claude-sonnet-4-5", usageT0.Add(time.Second), 300, 0, 0, 0))
+	e.Service.Record(ctx, aRequest(e.SessionA, "claude-haiku-4-5", usageT0.Add(2*time.Second), 50, 0, 0, 0))
+
+	s := usageSummary(t, srv, e.ProjectA, "today")
+	if len(s.TopTasks) != 2 || s.TopTasks[0].TaskID != second.TaskID || s.TopTasks[0].TaskTitle != "Ship it" || s.TopTasks[0].Totals.TotalTokens != 300 ||
+		s.TopTasks[1].TaskID != e.TaskA || s.TopTasks[1].TaskTitle != "Build it" || s.TopTasks[1].Totals.TotalTokens != 150 {
+		t.Errorf("top tasks = %+v, want Ship it (300) then Build it (150)", s.TopTasks)
+	}
+	if len(s.TopSessions) != 2 || s.TopSessions[0].SessionID != second.SessionID || s.TopSessions[0].TaskTitle != "Ship it" ||
+		s.TopSessions[1].SessionID != e.SessionA || s.TopSessions[1].Totals.TotalTokens != 150 {
+		t.Errorf("top sessions = %+v, want the second session (300) then session A (150)", s.TopSessions)
+	}
+	// 100×$3 + 50×$1 per million.
+	if !near(s.TopTasks[1].Totals.EstimatedCostUSD, 0.00035) {
+		t.Errorf("Build it estimated cost = %v, want 0.00035", s.TopTasks[1].Totals.EstimatedCostUSD)
+	}
+}
+
+func TestTaskAndSessionUsageTotalsAgreeWithTheirRecords(t *testing.T) {
+	srv, e := usageServer(t, usagetest.WithClock(func() time.Time { return usageNow }))
+	ctx := context.Background()
+	second := e.AddSession(t, e.ProjectA, "Ship it")
+	e.Service.Record(ctx, aRequest(e.SessionA, "claude-sonnet-4-5", usageT0, 1_000_000, 0, 0, 0))
+	e.Service.Record(ctx, aRequest(e.SessionA, "claude-sonnet-4-5", usageT0.AddDate(0, 0, -90), 0, 0, 0, 1_000_000))
+	e.Service.Record(ctx, aRequest(second.SessionID, "claude-sonnet-4-5", usageT0, 7, 0, 0, 0))
+
+	var task, session, other wireTotals
+	for _, c := range []struct {
+		query string
+		into  *wireTotals
+	}{
+		{"task_id=" + e.TaskA, &task}, {"session_id=" + e.SessionA, &session}, {"session_id=" + second.SessionID, &other},
+	} {
+		if code, body := getUsageJSON(t, srv.URL+"/api/usage/totals?"+c.query, c.into); code != 200 {
+			t.Fatalf("totals %s = %d %v", c.query, code, body)
+		}
+	}
+	// Totals cover every record, whatever its age: $3 + $0.30.
+	if task.Requests != 2 || task.TotalTokens != 2_000_000 || !near(task.EstimatedCostUSD, 3.30) {
+		t.Errorf("task A totals = %+v, want 2 requests, 2M tokens, $3.30", task)
+	}
+	if session.Requests != task.Requests || session.TotalTokens != task.TotalTokens || !near(session.EstimatedCostUSD, 3.30) {
+		t.Errorf("session A totals = %+v, want the same as its task's %+v", session, task)
+	}
+	if other.Requests != 1 || other.TotalTokens != 7 {
+		t.Errorf("second session totals = %+v, want 1 request, 7 tokens", other)
+	}
+}
+
+func TestUsageQueriesRefuseInvalidInput(t *testing.T) {
+	srv, e := usageServer(t)
+	for _, path := range []string{
+		"/api/projects/" + e.ProjectA + "/usage?range=year",
+		"/api/usage/totals",
+		"/api/usage/totals?task_id=a&session_id=b",
+	} {
+		if code, body := getUsageJSON(t, srv.URL+path, nil); code != 400 || body["code"] != "INVALID_INPUT" {
+			t.Errorf("GET %s = %d %v, want 400 INVALID_INPUT", path, code, body)
+		}
+	}
+	if code, _ := getUsageJSON(t, srv.URL+"/api/projects/"+e.ProjectA+"/usage", nil); code != 200 {
+		t.Errorf("no range = %d, want 200 (today)", code)
 	}
 }

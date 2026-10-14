@@ -93,3 +93,20 @@ func NewEnv(t *testing.T, opts ...Option) *Env {
 	e.Service = usage.New(e.Repo, usage.Readers{Sessions: sessions, Tickets: tickets}, o)
 	return e
 }
+
+// Added is a task and its session that a test added.
+type Added struct{ TaskID, SessionID string }
+
+// AddSession records a task titled title in project with one session on it.
+func (e *Env) AddSession(t *testing.T, project, title string) Added {
+	t.Helper()
+	tk, err := sqlite.NewTicketRepository(e.DB).Create(project, title, "", domain.TicketStatusTodo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s, err := sqlite.NewSessionRepository(e.DB).Create(&domain.Session{ProjectID: project, TicketID: tk.ID, Status: domain.SessionRunning})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return Added{TaskID: tk.ID, SessionID: s.ID}
+}
