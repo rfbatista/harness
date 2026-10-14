@@ -11,6 +11,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"sync"
 	"time"
 
 	"operators-mcp/internal/domain"
@@ -29,6 +30,9 @@ const (
 
 	defaultLimit = 50
 	maxLimit     = 200
+	// followerBuffer is how far a follower may fall behind before it is
+	// closed and has to reload.
+	followerBuffer = 64
 )
 
 // Request is one finished LLM request as the LLM proxy reports it; it has
@@ -82,11 +86,17 @@ type Service struct {
 	readers Readers
 	log     *slog.Logger
 	now     func() time.Time
+
+	// mu guards followers, by stored project id; nothing under it waits on
+	// the database or the network.
+	mu        sync.Mutex
+	followers map[string]map[chan *domain.UsageRecord]struct{}
 }
 
 // New returns the service.
 func New(repo ports.UsageRepository, readers Readers, opts Options) *Service {
-	s := &Service{repo: repo, readers: readers, log: opts.Logger, now: opts.Clock}
+	s := &Service{repo: repo, readers: readers, log: opts.Logger, now: opts.Clock,
+		followers: map[string]map[chan *domain.UsageRecord]struct{}{}}
 	if s.log == nil {
 		s.log = slog.Default()
 	}
@@ -97,7 +107,8 @@ func New(repo ports.UsageRepository, readers Readers, opts Options) *Service {
 }
 
 // Record stores r as a usage record attributed to its session, task and
-// project. It never fails: a failed write is logged.
+// project, and streams it to the project's followers. It never fails: a
+// failed write is logged, and the record is not streamed.
 func (s *Service) Record(_ context.Context, r Request) {
 	rec := &domain.UsageRecord{
 		ID: r.ID, Attribution: r.Attribution, Method: r.Method, Path: r.Path, Model: r.Model,
@@ -113,7 +124,56 @@ func (s *Service) Record(_ context.Context, r Request) {
 	}
 	if err := s.repo.Create(rec); err != nil {
 		s.log.Error("usage record not stored", "id", r.ID, "attribution", r.Attribution, "model", r.Model, "err", err)
+		return
 	}
+	s.decorate([]*domain.UsageRecord{rec})
+	s.broadcast(rec)
+}
+
+// broadcast sends r to its project's followers without waiting: one that is
+// full has fallen behind and is closed, so it reloads.
+func (s *Service) broadcast(r *domain.UsageRecord) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for ch := range s.followers[r.ProjectID] {
+		select {
+		case ch <- r:
+		default:
+			s.drop(r.ProjectID, ch)
+		}
+	}
+}
+
+// drop closes a follower; s.mu is held.
+func (s *Service) drop(project string, ch chan *domain.UsageRecord) {
+	if _, ok := s.followers[project][ch]; !ok {
+		return
+	}
+	delete(s.followers[project], ch)
+	if len(s.followers[project]) == 0 {
+		delete(s.followers, project)
+	}
+	close(ch)
+}
+
+// FollowUsage streams each usage record stored for a project from now on,
+// until ctx ends or the follower falls behind; then the channel closes.
+func (s *Service) FollowUsage(ctx context.Context, projectID string) (<-chan *domain.UsageRecord, error) {
+	project := projectKey(projectID)
+	ch := make(chan *domain.UsageRecord, followerBuffer)
+	s.mu.Lock()
+	if s.followers[project] == nil {
+		s.followers[project] = map[chan *domain.UsageRecord]struct{}{}
+	}
+	s.followers[project][ch] = struct{}{}
+	s.mu.Unlock()
+	go func() {
+		<-ctx.Done()
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		s.drop(project, ch)
+	}()
+	return ch, nil
 }
 
 // ListRecentUsage answers a project's recent usage records, newest first.

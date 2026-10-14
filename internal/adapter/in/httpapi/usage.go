@@ -58,3 +58,16 @@ func (h *Handler) handleUsageTotals(c echo.Context) error {
 	}
 	return c.JSON(http.StatusOK, totals)
 }
+
+// handleUsageEvents streams each usage record stored for a project as a bare
+// `data:` line, in the recent-records shape.
+func (h *Handler) handleUsageEvents(c echo.Context) error {
+	if h.usage == nil {
+		return errUsageOff
+	}
+	records, err := h.usage.FollowUsage(c.Request().Context(), c.Param("project"))
+	if err != nil {
+		return err
+	}
+	return streamSSE(c, records, func(r *domain.UsageRecord) any { return r })
+}

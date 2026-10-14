@@ -39,6 +39,9 @@ type UsageReader interface {
 	ListRecentUsage(ctx context.Context, q UsageQuery) (*UsageRecords, error)
 	UsageSummary(ctx context.Context, projectID string, r UsageRange) (*UsageSummary, error)
 	UsageTotals(ctx context.Context, q UsageTotalsQuery) (*UsageTotals, error)
+	// FollowUsage streams each usage record stored for a project, until ctx
+	// ends or the follower falls behind; then the channel closes.
+	FollowUsage(ctx context.Context, projectID string) (<-chan *domain.UsageRecord, error)
 }
 
 // UsageGroupFilter selects the records to aggregate: one project's since a

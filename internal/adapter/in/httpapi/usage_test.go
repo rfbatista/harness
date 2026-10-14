@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -458,5 +459,120 @@ func TestUsageQueriesRefuseInvalidInput(t *testing.T) {
 	}
 	if code, _ := getUsageJSON(t, srv.URL+"/api/projects/"+e.ProjectA+"/usage", nil); code != 200 {
 		t.Errorf("no range = %d, want 200 (today)", code)
+	}
+}
+
+// followUsage opens a project's usage stream and answers its events, one
+// decoded data: line each.
+func followUsage(t *testing.T, ctx context.Context, srv *httptest.Server, project string) <-chan wireRecord {
+	t.Helper()
+	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, srv.URL+"/api/projects/"+project+"/usage/events", nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ct := resp.Header.Get("Content-Type"); ct != "text/event-stream" {
+		t.Fatalf("Content-Type = %q, want text/event-stream", ct)
+	}
+	out := make(chan wireRecord, 16)
+	go func() {
+		defer resp.Body.Close()
+		defer close(out)
+		sc := bufio.NewScanner(resp.Body)
+		for sc.Scan() {
+			line := sc.Text()
+			if strings.HasPrefix(line, "event:") {
+				t.Errorf("usage stream sent %q, want bare data: lines", line)
+			}
+			data, ok := strings.CutPrefix(line, "data: ")
+			if !ok {
+				continue
+			}
+			var r wireRecord
+			if err := json.Unmarshal([]byte(data), &r); err != nil {
+				t.Errorf("usage event %q: %v", data, err)
+				return
+			}
+			out <- r
+		}
+	}()
+	return out
+}
+
+func TestEachStoredUsageRecordReachesItsProjectsStream(t *testing.T) {
+	srv, e := usageServer(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	a := followUsage(t, ctx, srv, e.ProjectA)
+	b := followUsage(t, ctx, srv, e.ProjectB)
+
+	e.Service.Record(ctx, aRequest(e.SessionB, "claude-sonnet-4-5", usageT0, 1, 1, 0, 0))
+	e.Service.Record(ctx, aRequest(e.SessionA, "claude-sonnet-4-5", usageT0, 1_000_000, 0, 0, 0))
+
+	select {
+	case r := <-a:
+		if r.SessionID != e.SessionA || r.TaskTitle != "Build it" || r.InputTokens != 1_000_000 || !near(r.EstimatedCostUSD, 3.0) {
+			t.Errorf("project A got %+v, want session A's record with its task title and $3 estimated", r)
+		}
+	case <-ctx.Done():
+		t.Fatal("project A's stream got nothing")
+	}
+	select {
+	case r := <-b:
+		if r.SessionID != e.SessionB {
+			t.Errorf("project B got %+v, want only session B's record", r)
+		}
+	case <-ctx.Done():
+		t.Fatal("project B's stream got nothing")
+	}
+	select {
+	case r := <-a:
+		t.Errorf("project A got a second record %+v, want only its own", r)
+	case <-time.After(100 * time.Millisecond):
+	}
+}
+
+func TestAUsageRecordThatWasNotStoredIsNotStreamed(t *testing.T) {
+	srv, e := usageServer(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	a := followUsage(t, ctx, srv, e.ProjectA)
+	if err := e.DB.Exec("DROP TABLE usage_records").Error; err != nil {
+		t.Fatal(err)
+	}
+	e.Service.Record(ctx, aRequest(e.SessionA, "claude-sonnet-4-5", usageT0, 1, 1, 0, 0))
+	select {
+	case r := <-a:
+		t.Errorf("stream got %+v for a record that failed to store", r)
+	case <-time.After(200 * time.Millisecond):
+	}
+}
+
+func TestAStalledUsageFollowerNeverDelaysTheSink(t *testing.T) {
+	srv, e := usageServer(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	// Opened and never read.
+	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, srv.URL+"/api/projects/"+e.ProjectA+"/usage/events", nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for i := 0; i < 2000; i++ {
+			e.Service.Record(ctx, aRequest(e.SessionA, "claude-sonnet-4-5", usageT0.Add(time.Duration(i)*time.Millisecond), 4096, 4096, 4096, 4096))
+		}
+	}()
+	select {
+	case <-done:
+	case <-time.After(20 * time.Second):
+		t.Fatal("the sink stalled behind a follower that never reads")
+	}
+	if got := recentRecords(t, srv, e.ProjectA, "?limit=1"); len(got) != 1 {
+		t.Fatalf("records = %d, want them stored", len(got))
 	}
 }
