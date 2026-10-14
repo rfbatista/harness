@@ -3,6 +3,7 @@ package web
 import (
 	"context"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -288,6 +289,121 @@ func TestSessionHistoryOpensACommitAndRefusesOtherTasksSessions(t *testing.T) {
 	} {
 		if rec := get(t, h, path); rec.Code != want {
 			t.Errorf("%s: status %d, want %d", path, rec.Code, want)
+		}
+	}
+}
+
+// historyPages are the code fixture's pages with its history readable: its
+// commits have diffs, so a commit's detail carries the diff's own seed.
+func historyPages(t *testing.T) *codePages {
+	t.Helper()
+	return newCodePages(t, func(c *codePages, d *Deps) {
+		d.History = gitHistory{dirs: map[string]string{c.at.RepositoryID: c.f.RepoDir}}
+	})
+}
+
+func TestHistoryPageAnswersASwapWithOnlyTheCommitDetail(t *testing.T) {
+	c := historyPages(t)
+	base := "/projects/" + c.f.ProjectID + "/repositories/" + c.at.RepositoryID + "/history"
+	for _, path := range []string{base, base + "/" + c.f.Rename} {
+		full := get(t, c.h, path)
+		if full.Code != http.StatusOK || !strings.Contains(full.Body.String(), "<html") || !strings.Contains(full.Body.String(), `aria-label="Commits"`) {
+			t.Fatalf("%s: without HX-Request the full page, got %d", path, full.Code)
+		}
+		frag := swap(t, c.h, path, "commit-detail")
+		body := frag.Body.String()
+		if frag.Code != http.StatusOK {
+			t.Fatalf("%s: fragment status %d: %s", path, frag.Code, body)
+		}
+		for _, absent := range []string{"<html", "<body", `aria-label="Commits"`, "Remote branches"} {
+			if strings.Contains(body, absent) {
+				t.Errorf("%s: the fragment carries %q, which is outside the swap region", path, absent)
+			}
+		}
+		region := openingTag(body, `id="commit-detail"`)
+		if !strings.Contains(region, "data-swap-region") || !strings.Contains(region, `aria-label="Commit"`) {
+			t.Errorf("%s: the swap region is %q, want the commit's detail", path, region)
+		}
+		// The diff's seed is region-local: it travels with the region.
+		if !strings.Contains(body, `x-data="codeDiff" data-seed="code-diff-seed"`) || !strings.Contains(body, `id="code-diff-seed"`) {
+			t.Errorf("%s: the fragment lacks the diff and its own seed", path)
+		}
+		for _, rec := range []*httptest.ResponseRecorder{full, frag} {
+			if got := rec.Header().Get("Vary"); got != "HX-Request" {
+				t.Errorf("%s: Vary = %q, want HX-Request", path, got)
+			}
+		}
+	}
+	if body := swap(t, c.h, base+"/"+c.f.Rename, "commit-detail").Body.String(); !strings.Contains(body, c.f.Rename) || !strings.Contains(body, "docs/new.md") {
+		t.Errorf("the fragment is not the named commit's detail:\n%s", body)
+	}
+}
+
+// hrefOf is the href attribute of a start tag, unescaped.
+func hrefOf(tag string) string {
+	_, after, ok := strings.Cut(tag, `href="`)
+	if !ok {
+		return ""
+	}
+	href, _, _ := strings.Cut(after, `"`)
+	return strings.ReplaceAll(href, "&amp;", "&")
+}
+
+func TestHistoryPageRowsAndParentsAreLinksThatSwapTheDetail(t *testing.T) {
+	w := historyWorld(t)
+	h := newTestHandler(t, w)
+	commits, err := w.history.RepositoryLog(context.Background(), "r1", ports.HistoryQuery{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var merge domain.Commit
+	for _, c := range commits {
+		if c.Subject == "Merge the docs" {
+			merge = c
+		}
+	}
+	body := get(t, h, "/projects/p1/repositories/r1/history/"+merge.Hash+"?limit=50").Body.String()
+	rows := 0
+	for rest := body; ; rows++ {
+		i := strings.Index(rest, `<a class="[ commit ]"`)
+		if i < 0 {
+			break
+		}
+		tag := openingTag(rest[i:], `class="[ commit ]"`)
+		assertSwapTrigger(t, tag, hrefOf(tag), "commit-detail")
+		if !strings.Contains(hrefOf(tag), "?limit=50#c-") {
+			t.Errorf("row %s does not keep the query and its place in the graph", tag)
+		}
+		rest = rest[i+len(tag):]
+	}
+	if rows != 5 {
+		t.Errorf("%d commit rows, want 5", rows)
+	}
+	parents := 0
+	for rest := body; ; parents++ {
+		i := strings.Index(rest, `<a class="[ code ]"`)
+		if i < 0 {
+			break
+		}
+		tag := openingTag(rest[i:], `class="[ code ]"`)
+		assertSwapTrigger(t, tag, hrefOf(tag), "commit-detail")
+		rest = rest[i+len(tag):]
+	}
+	if parents != 2 {
+		t.Errorf("%d parent links on a merge, want 2", parents)
+	}
+}
+
+func TestHistoryPageSwapKeepsTheRefusals(t *testing.T) {
+	h := newTestHandler(t, historyWorld(t))
+	for _, path := range []string{
+		"/projects/p1/repositories/r1/history/deadbeef",   // no such commit
+		"/projects/p1/repositories/r1/history/--output=x", // not a hash at all
+		"/projects/p2/repositories/r1/history",            // another project's repository
+		"/projects/p1/repositories/unknown/history",
+	} {
+		if rec := swap(t, h, path, "commit-detail"); rec.Code != http.StatusNotFound {
+			t.Errorf("%s with HX-Request: status %d, want 404", path, rec.Code)
 		}
 	}
 }

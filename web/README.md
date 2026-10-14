@@ -89,7 +89,9 @@ swap region.
 - A new swap region must be read-mostly and already server-rendered;
   otherwise it belongs to Alpine.
 - htmx is configured once, in `src/swap-regions.js`, wired from `main.js`
-  only: no eval, no script tags, no `hx-on`. Busy state, scroll, focus on the
-  region's heading and the fall-back to a full load when a swap fails are
+  only: no eval, no `hx-on`, and no script that can run: a fragment holding
+  any `<script>` other than `type="application/json"` is never inserted (the
+  URL loads as a page). Busy state, scroll, focus on the region's heading, the
+  list's highlight and the fall-back to a full load when a swap fails are
   done there for every region, never per page. Back and Forward load the page
   (no history snapshots, which would bring back dead Alpine markup).

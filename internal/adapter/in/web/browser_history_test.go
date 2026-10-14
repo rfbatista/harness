@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -112,5 +113,70 @@ func TestSessionHistoryInTheBrowser(t *testing.T) {
 	}
 	if dir := os.Getenv("WEB_SCREENSHOT_DIR"); dir != "" {
 		_ = os.WriteFile(dir+"/session-history.jpg", shot, 0o644)
+	}
+}
+
+// TestHistoryCommitSwapInTheBrowser: on a repository's history, opening a
+// commit swaps its detail in place (the page is not reloaded): the address
+// bar and the list's highlight follow, the swapped diff goes live from the
+// seed it carries, Back returns to the previous commit, and a swap that
+// fails loads the page.
+func TestHistoryCommitSwapInTheBrowser(t *testing.T) {
+	w := newCodeWorld(t, func(w *codeWorld, d *Deps) {
+		d.History = gitHistory{dirs: map[string]string{w.at.RepositoryID: w.f.RepoDir}}
+	})
+	pages, fail := failingSwaps(w.srv.Config.Handler)
+	w.srv.Config.Handler = pages
+	ctx, errs := browser(t)
+	base := "/projects/" + w.f.ProjectID + "/repositories/" + w.repoID + "/history"
+	row := func(hash string) string {
+		return `document.querySelector('nav[aria-label=Commits] a.commit[href*="/history/` + hash + `"]')`
+	}
+	liveDiff := `document.querySelectorAll('section[aria-label=Diff] [data-ssr]').length === 0 && document.querySelectorAll('section[aria-label=Diff] .code-lines .line').length > 0`
+
+	var first, opened, current, back, files string
+	var swapped, reloaded bool
+	err := chromedp.Run(ctx,
+		chromedp.EmulateViewport(1440, 900),
+		chromedp.Navigate(w.srv.URL+base),
+		chromedp.Poll(liveDiff, nil, chromedp.WithPollingTimeout(10*time.Second)),
+		chromedp.Evaluate(`document.querySelector('article[aria-label=Commit] h2').textContent`, &first),
+		markWindow(),
+		chromedp.Evaluate(row(w.f.Rename)+`.click()`, nil),
+		chromedp.Poll(`location.pathname.endsWith('/history/`+w.f.Rename+`')`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Poll(`document.querySelector('article[aria-label=Commit] .code')?.textContent === '`+w.f.Rename+`' && `+liveDiff, nil, chromedp.WithPollingTimeout(10*time.Second)),
+		windowMarked(&swapped),
+		chromedp.Evaluate(`document.querySelector('article[aria-label=Commit] h2').textContent`, &opened),
+		chromedp.Evaluate(`[...document.querySelectorAll('section[aria-label=Diff] section.file h3.path')].map(h => h.title).join(',')`, &files),
+		chromedp.Poll(`document.querySelector('nav[aria-label=Commits] [aria-current=page]')?.getAttribute('href').includes('/history/`+w.f.Rename+`')`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Evaluate(`document.querySelectorAll('nav[aria-label=Commits] [aria-current=page]').length + ' ' + document.querySelector('nav[aria-label=Commits] [aria-current=page]').getAttribute('href')`, &current),
+
+		chromedp.Evaluate(`history.back()`, nil),
+		pollAcrossLoads(`document.readyState === 'complete' && location.pathname === '`+base+`' && !!document.querySelector('article[aria-label=Commit] h2')`),
+		chromedp.Evaluate(`document.querySelector('article[aria-label=Commit] h2').textContent`, &back),
+
+		markWindow(),
+		chromedp.ActionFunc(func(context.Context) error { fail.Store(true); return nil }),
+		chromedp.Evaluate(row(w.f.Rename)+`.click()`, nil),
+		pollAcrossLoads(`document.readyState === 'complete' && location.pathname.endsWith('/history/`+w.f.Rename+`') && !!document.querySelector('article[aria-label=Commit]')`),
+		windowMarked(&reloaded),
+	)
+	if err != nil {
+		t.Fatalf("%v\nJS errors: %v", err, errs.all())
+	}
+	if !swapped {
+		t.Error("opening a commit reloaded the page")
+	}
+	if opened == first || files != "docs/new.md,internal/app/app.go" {
+		t.Errorf("the swapped detail is %q with files %q, want the renaming commit's", opened, files)
+	}
+	if !strings.HasPrefix(current, "1 ") || !strings.Contains(current, "/history/"+w.f.Rename) {
+		t.Errorf("the highlighted row is %q, want the opened commit", current)
+	}
+	if back != first {
+		t.Errorf("Back shows %q, want %q", back, first)
+	}
+	if reloaded {
+		t.Error("a failing swap stayed in place instead of loading the page")
 	}
 }

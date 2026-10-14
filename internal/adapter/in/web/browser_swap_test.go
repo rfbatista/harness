@@ -3,8 +3,11 @@ package web
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -74,4 +77,58 @@ func pollAcrossLoads(expr string) chromedp.Action {
 		}
 		return fmt.Errorf("still not %s", expr)
 	})
+}
+
+// TestASwapNeverRunsAScriptInTheBrowser: a fragment holding a script that
+// could run (no type, a JavaScript type, or a module) is never inserted: the
+// script does not run, and the URL loads as a page instead. The script would
+// leave its mark in sessionStorage, which outlives that load.
+func TestASwapNeverRunsAScriptInTheBrowser(t *testing.T) {
+	assets, err := NewAssets()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !assets.Built() {
+		t.Skip("browser test: web client not built; run `make web`")
+	}
+	ctx, errs := browser(t)
+	srv, _ := swapServer(t, documentsBoard(), assets)
+	pages := srv.Config.Handler
+	var script atomic.Value
+	srv.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("HX-Request") != "true" {
+			pages.ServeHTTP(w, r)
+			return
+		}
+		rec := httptest.NewRecorder()
+		pages.ServeHTTP(rec, r)
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = io.WriteString(w, strings.Replace(rec.Body.String(), "</nav>", script.Load().(string)+"</nav>", 1))
+	})
+	base := srv.URL + "/projects/p1/tasks/t-feed/documents"
+
+	for _, tag := range []string{`<script>`, `<script type="">`, `<script type="text/javascript">`, `<script type="module">`, `<script type=" Application/JavaScript ">`} {
+		script.Store(tag + `sessionStorage.setItem('ran', ` + strconv.Quote(tag) + `)</script>`)
+		var ran string
+		var reloaded bool
+		err := chromedp.Run(ctx,
+			chromedp.Navigate(base),
+			pageSettled(),
+			chromedp.Evaluate(`sessionStorage.clear(); true`, nil),
+			markWindow(),
+			chromedp.Evaluate(`document.querySelector('nav[aria-label="Documents of this task"] a[href$="/documents/d-plan"]').click()`, nil),
+			pollAcrossLoads(`document.readyState === 'complete' && location.pathname.endsWith('/documents/d-plan') && !!document.querySelector('article .prose table')`),
+			windowMarked(&reloaded),
+			chromedp.Evaluate(`sessionStorage.getItem('ran') ?? ''`, &ran),
+		)
+		if err != nil {
+			t.Fatalf("%s: %v\nJS errors: %v", tag, err, errs.all())
+		}
+		if ran != "" {
+			t.Errorf("%s: the swapped-in script ran", tag)
+		}
+		if reloaded {
+			t.Errorf("%s: the fragment was swapped in instead of the page loading", tag)
+		}
+	}
 }

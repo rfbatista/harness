@@ -83,6 +83,7 @@ func (h Handler) Page(w http.ResponseWriter, r *http.Request) error {
 		return errs.Newf("UNAVAILABLE", "repository history is not available on this server")
 	}
 	ctx := r.Context()
+	swap := shell.SwapRequest(w, r)
 	project, err := h.Projects.GetProject(ctx, r.PathValue("project"))
 	if err != nil {
 		return err
@@ -141,6 +142,9 @@ func (h Handler) Page(w http.ResponseWriter, r *http.Request) error {
 	if detail != nil {
 		view.Open = openView(detail, g)
 		view.Open.Diff = h.commitDiff(r, project.ID, repo.ID, detail.Hash)
+	}
+	if swap {
+		return h.Render(w, r, http.StatusOK, openDetail(view))
 	}
 
 	title := "History · " + repo.Name

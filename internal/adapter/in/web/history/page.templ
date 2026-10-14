@@ -59,11 +59,7 @@ templ Page(v PageView) {
 							</div>
 						}
 					</nav>
-					if v.Open != nil {
-						@commitDetail(v.Open)
-					} else if v.OpenWorking != nil {
-						@workingDetail(v.OpenWorking)
-					}
+					@openDetail(v)
 				</div>
 			}
 		</main>
@@ -73,7 +69,7 @@ templ Page(v PageView) {
 // workingRow is the uncommitted changes: a hollow dot over the branch tip,
 // joined to it by a dashed line.
 templ workingRow(w *WorkingRow) {
-	<a class="[ commit ]" id={ "c-" + workingID } href={ templ.SafeURL(w.Href) } data-working { currentAttrs(w.Current)... }>
+	<a class="[ commit ]" id={ "c-" + workingID } href={ templ.SafeURL(w.Href) } data-working { currentAttrs(w.Current)... } { shell.SwapLink(detailRegion)... }>
 		@graph(w.Graph)
 		<span class="[ subject ]">
 			<span class="[ text ]">Uncommitted changes</span>
@@ -85,7 +81,7 @@ templ workingRow(w *WorkingRow) {
 }
 
 templ commitRow(r Row) {
-	<a class="[ commit ]" id={ "c-" + r.Short } href={ templ.SafeURL(r.Href) } { currentAttrs(r.Current)... }>
+	<a class="[ commit ]" id={ "c-" + r.Short } href={ templ.SafeURL(r.Href) } { currentAttrs(r.Current)... } { shell.SwapLink(detailRegion)... }>
 		@graph(r.Graph)
 		<span class="[ subject ]">
 			for _, ref := range r.Refs {
@@ -122,9 +118,22 @@ templ refBadge(ref RefView, link bool) {
 	}
 }
 
+// detailRegion is the id of a history page's swap region: the open commit's
+// (or the uncommitted changes') detail and diff. The graph stays put.
+const detailRegion = "commit-detail"
+
+// openDetail is the open commit, or the uncommitted changes, beside the graph.
+templ openDetail(v PageView) {
+	if v.Open != nil {
+		@commitDetail(v.Open)
+	} else if v.OpenWorking != nil {
+		@workingDetail(v.OpenWorking)
+	}
+}
+
 // workingDetail is the uncommitted changes, open: each file and how it changed.
 templ workingDetail(w *WorkingView) {
-	<article class="[ frame ]" aria-label="Uncommitted changes">
+	<article class="[ frame ]" aria-label="Uncommitted changes" { shell.SwapRegion(detailRegion)... }>
 		<div class="[ flow ] [ flow-space-xs pad-l divide-bottom ]">
 			<h2>Uncommitted changes</h2>
 			<p class="[ text-sm color-ink-muted ]">In the session's worktree, not yet committed by the agent: staged, unstaged and new files.</p>
@@ -152,7 +161,7 @@ templ workingDetail(w *WorkingView) {
 }
 
 templ commitDetail(c *CommitView) {
-	<article class="[ frame ]" aria-label="Commit">
+	<article class="[ frame ]" aria-label="Commit" { shell.SwapRegion(detailRegion)... }>
 		<div class="[ flow ] [ flow-space-xs pad-l divide-bottom ]">
 			<h2>{ c.Subject }</h2>
 			if len(c.Refs) > 0 {
@@ -173,7 +182,7 @@ templ commitDetail(c *CommitView) {
 					<dt>{ parentLabel(len(c.Parents)) }</dt>
 					<dd class="[ cluster ] [ gutter-xs ]">
 						for _, p := range c.Parents {
-							<a class="[ code ]" href={ templ.SafeURL(p.Href) }>{ p.Short }</a>
+							<a class="[ code ]" href={ templ.SafeURL(p.Href) } { shell.SwapLink(detailRegion)... }>{ p.Short }</a>
 						}
 					</dd>
 				}

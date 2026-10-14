@@ -9,6 +9,7 @@ import (
 	"github.com/rfbatista/harnesskit/errs"
 
 	"operators-mcp/internal/adapter/in/web/pullrequests"
+	"operators-mcp/internal/adapter/in/web/shell"
 	"operators-mcp/internal/adapter/in/web/tasks"
 	"operators-mcp/internal/domain"
 )
@@ -31,6 +32,7 @@ func (h Handler) Session(w http.ResponseWriter, r *http.Request) error {
 		return errs.Newf("UNAVAILABLE", "session history is not available on this server")
 	}
 	ctx := r.Context()
+	swap := shell.SwapRequest(w, r)
 	project, err := h.Projects.GetProject(ctx, r.PathValue("project"))
 	if err != nil {
 		return err
@@ -114,6 +116,9 @@ func (h Handler) Session(w http.ResponseWriter, r *http.Request) error {
 	if detail != nil {
 		view.Open = openView(detail, g)
 		view.Open.Diff = h.commitDiff(r, project.ID, hist.RepositoryID, detail.Hash)
+	}
+	if swap {
+		return h.Render(w, r, http.StatusOK, openDetail(view))
 	}
 	view.PullRequest = h.pullRequestPanel(r, project.ID, sess.WorkspaceID)
 

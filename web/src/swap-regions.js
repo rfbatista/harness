@@ -6,14 +6,23 @@
 // A region is [data-swap-region] with an id; its links carry hx-boost,
 // hx-target and hx-swap (shell.SwapLink). While a swap is in flight the region
 // is aria-busy; after it, the region is at its top, its first heading has
-// focus, and any [data-swap-keep-scroll="key"] inside it keeps its scroll.
+// focus, any [data-swap-keep-scroll="key"] inside it keeps its scroll, and of
+// the links that swap it, the one to the new address is aria-current (the
+// list's highlight follows, also when the list is outside the region). A link
+// to its own anchor (#c-<hash> on a history row) does not scroll the list.
 // A swap that fails loads the URL as a page.
+//
+// A region may carry its own JSON seed (templ.JSONScript), so htmx keeps
+// script elements; a fragment holding a script that could run is never
+// inserted: the URL loads as a page instead.
 
 /** @param {any} htmx @param {{ navigate: (url: string) => void, doc?: Document }} deps */
 export function startSwapRegions(htmx, { navigate, doc = document }) {
   Object.assign(htmx.config, {
     allowEval: false,
-    allowScriptTags: false,
+    // JSON seeds travel with their region; executableScript keeps any
+    // other script out.
+    allowScriptTags: true,
     includeIndicatorStyles: false,
     // No snapshots: a restored snapshot would bring back dead Alpine markup.
     // Back and Forward load the page instead.
@@ -30,6 +39,15 @@ export function startSwapRegions(htmx, { navigate, doc = document }) {
   doc.addEventListener("htmx:afterRequest", (e) => regionOf(e.detail.target)?.removeAttribute("aria-busy"));
 
   doc.addEventListener("htmx:beforeSwap", (e) => {
+    if (e.detail.shouldSwap && executableScript(e.detail.serverResponse)) {
+      e.preventDefault();
+      navigate(e.detail.pathInfo.requestPath);
+      return;
+    }
+    // The clicked link is where its anchor points: it is in view already.
+    if (e.detail.pathInfo.anchor && e.detail.requestConfig?.elt?.id === e.detail.pathInfo.anchor) {
+      e.detail.pathInfo.anchor = "";
+    }
     const region = regionOf(e.detail.target);
     kept = new Map();
     for (const el of region?.querySelectorAll("[data-swap-keep-scroll]") ?? []) {
@@ -44,6 +62,11 @@ export function startSwapRegions(htmx, { navigate, doc = document }) {
     for (const el of region.querySelectorAll("[data-swap-keep-scroll]")) {
       el.scrollTop = kept.get(el.getAttribute("data-swap-keep-scroll")) ?? 0;
     }
+    for (const link of doc.querySelectorAll(`a[hx-target="#${region.id}"]`)) {
+      if (link.closest("[data-swap-region]") === region) continue;
+      if (new URL(link.href).pathname === doc.location.pathname) link.setAttribute("aria-current", "page");
+      else link.removeAttribute("aria-current");
+    }
     const heading = region.querySelector("h1, h2, h3");
     if (heading) {
       if (!heading.hasAttribute("tabindex")) heading.setAttribute("tabindex", "-1");
@@ -54,4 +77,16 @@ export function startSwapRegions(htmx, { navigate, doc = document }) {
   const fallBack = (e) => navigate(e.detail.pathInfo.requestPath);
   doc.addEventListener("htmx:responseError", fallBack);
   doc.addEventListener("htmx:sendError", fallBack);
+}
+
+/**
+ * Whether html holds a script other than a JSON one. It is parsed inertly
+ * (DOMParser runs nothing), before anything reaches the page.
+ * @param {string} html
+ */
+function executableScript(html) {
+  const parsed = new DOMParser().parseFromString(html, "text/html");
+  return [...parsed.querySelectorAll("script")].some(
+    (script) => script.getAttribute("type")?.trim().toLowerCase() !== "application/json",
+  );
 }
