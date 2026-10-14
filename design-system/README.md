@@ -141,7 +141,10 @@ views add `data-change` (a file's git state on `.change-mark`),
 diff lines and map cards, `data-main` / `data-side="none"` / `data-code-back`
 (`.code-layout`), `data-layout="split"`, `data-wrap`, `data-target`,
 `data-no-newline` (`.code-lines`), `data-collapsed`, `data-reason` and
-`data-layout-switch` (`.diff-view`), and `data-empty` (a zone with no files). If an exception changes a block beyond
+`data-layout-switch` (`.diff-view`), and `data-empty` (a zone with no files).
+A swap region (a part of a page htmx replaces in place, `web/README.md`)
+carries `data-swap-region` and is `aria-busy` (muted) while the next one
+loads. If an exception changes a block beyond
 recognition, it is a new block.
 
 ## Dropdowns: which one

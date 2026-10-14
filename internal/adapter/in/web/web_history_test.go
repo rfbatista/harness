@@ -501,15 +501,10 @@ func TestSessionHistorySwapKeepsTheRefusals(t *testing.T) {
 // page's URL, into the list's tail, after the last commit shown.
 func showMore(t *testing.T, h http.Handler, path, after string) *httptest.ResponseRecorder {
 	t.Helper()
-	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, path, nil)
-	req.Header.Set("HX-Request", "true")
-	req.Header.Set("HX-Target", "history-more")
-	if after != "" {
-		req.Header.Set("X-History-After", after)
+	if after == "" {
+		return swap(t, h, path, "history-more")
 	}
-	h.ServeHTTP(rec, req)
-	return rec
+	return swap(t, h, path, "history-more", "X-History-After", after)
 }
 
 // commitRows are the hashes of the commit rows in body, in order.

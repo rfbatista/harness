@@ -111,8 +111,9 @@ func (h Handler) Page(w http.ResponseWriter, r *http.Request) error {
 	if open == "" && len(commits) > 0 {
 		open = commits[0].Hash
 	}
+	more := showMoreRequest(r)
 	var detail *domain.CommitDetail
-	if open != "" {
+	if open != "" && !more {
 		if detail, err = h.History.RepositoryCommit(ctx, repo.ID, open); err != nil {
 			return err
 		}
@@ -130,19 +131,17 @@ func (h Handler) Page(w http.ResponseWriter, r *http.Request) error {
 		RemotesHref: base + query{limit: q.limit, remotes: !q.remotes}.encode(),
 	}
 	if len(commits) == q.limit && q.limit < domain.MaxHistory {
-		more := query{limit: min(q.limit+pageSize, domain.MaxHistory), remotes: q.remotes}
-		view.MoreHref = keepOpen(base, r, open) + more.encode()
+		next := query{limit: min(q.limit+pageSize, domain.MaxHistory), remotes: q.remotes}
+		view.MoreHref = keepOpen(base, r.PathValue("commit"), open) + next.encode()
 	}
 	g := graphRows{
 		branchTasks: h.sessionBranches(r, project.ID, repo.ID),
 		now:         h.Now(),
 		href:        func(hash string) string { return base + "/" + hash + q.encode() + "#c-" + short(hash) },
 	}
-	view.Rows, _ = g.rows(commits, nil, detail)
-	if swap {
-		if more, err := h.answerShowMore(w, r, view); more {
-			return err
-		}
+	view.Rows, _ = g.rows(commits, nil, openHash(open, detail))
+	if more {
+		return h.answerShowMore(w, r, view)
 	}
 	if detail != nil {
 		view.Open = openView(detail, g)
@@ -210,7 +209,7 @@ type graphRows struct {
 
 // rows lays commits out; with working (the uncommitted changes, a
 // pseudo-commit on HEAD) it is the first row's graph, returned apart.
-func (g graphRows) rows(commits []domain.Commit, working *domain.Commit, open *domain.CommitDetail) ([]Row, *Graph) {
+func (g graphRows) rows(commits []domain.Commit, working *domain.Commit, open string) ([]Row, *Graph) {
 	all := commits
 	if working != nil {
 		all = append([]domain.Commit{*working}, commits...)
@@ -225,7 +224,7 @@ func (g graphRows) rows(commits []domain.Commit, working *domain.Commit, open *d
 		rows = append(rows, Row{
 			Hash: c.Hash, Short: short(c.Hash), Subject: c.Subject, Author: c.AuthorName,
 			When: sessions.RelativeTime(c.AuthoredAt, g.now), Href: g.href(c.Hash),
-			Current: open != nil && c.Hash == open.Hash, Refs: g.refs(c.Refs), Graph: graphs[i],
+			Current: c.Hash == open, Refs: g.refs(c.Refs), Graph: graphs[i],
 		})
 	}
 	return rows, first

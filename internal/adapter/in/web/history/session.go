@@ -69,8 +69,9 @@ func (h Handler) Session(w http.ResponseWriter, r *http.Request) error {
 			open = hist.Commits[0].Hash
 		}
 	}
+	more := showMoreRequest(r)
 	var detail *domain.CommitDetail
-	if open != "" && open != workingID {
+	if open != "" && open != workingID && !more {
 		if detail, err = h.History.RepositoryCommit(ctx, hist.RepositoryID, open); err != nil {
 			return err
 		}
@@ -89,7 +90,7 @@ func (h Handler) Session(w http.ResponseWriter, r *http.Request) error {
 		view.Notice = "This session's worktree was removed, so there is nothing uncommitted to show; its branch and commits are kept."
 	}
 	if len(hist.Commits) == q.limit && q.limit < domain.MaxHistory {
-		view.MoreHref = keepOpen(base, r, open) + query{limit: min(q.limit+pageSize, domain.MaxHistory)}.encode()
+		view.MoreHref = keepOpen(base, r.PathValue("commit"), open) + query{limit: min(q.limit+pageSize, domain.MaxHistory)}.encode()
 	}
 	g := graphRows{
 		branchTasks: h.sessionBranches(r, project.ID, hist.RepositoryID),
@@ -101,8 +102,11 @@ func (h Handler) Session(w http.ResponseWriter, r *http.Request) error {
 	if hasWorking {
 		working = &domain.Commit{Hash: workingID, Parents: []string{hist.Head}}
 	}
-	rows, wg := g.rows(hist.Commits, working, detail)
+	rows, wg := g.rows(hist.Commits, working, openHash(open, detail))
 	view.Rows = rows
+	if more {
+		return h.answerShowMore(w, r, view)
+	}
 	if hasWorking {
 		view.Working = &WorkingRow{Href: base + "/" + workingID + q.encode(), Summary: changesSummary(hist.Changes), Current: open == workingID, Graph: *wg}
 		if open == workingID {
@@ -111,11 +115,6 @@ func (h Handler) Session(w http.ResponseWriter, r *http.Request) error {
 				v := code.Build(code.LoadWorking(ctx, h.Code, project.ID, hist.RepositoryID, sess.WorkspaceID))
 				view.OpenWorking.Diff = &v
 			}
-		}
-	}
-	if swap {
-		if more, err := h.answerShowMore(w, r, view); more {
-			return err
 		}
 	}
 	if detail != nil {

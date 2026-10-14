@@ -216,12 +216,16 @@ func get(t *testing.T, h http.Handler, path string) *httptest.ResponseRecorder {
 
 // swap is get as htmx sends it when a trigger swaps a region: HX-Request set,
 // and HX-Target naming the region it replaces.
-func swap(t *testing.T, h http.Handler, path, target string) *httptest.ResponseRecorder {
+// More headers come in name, value pairs.
+func swap(t *testing.T, h http.Handler, path, target string, headers ...string) *httptest.ResponseRecorder {
 	t.Helper()
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, path, nil)
 	req.Header.Set("HX-Request", "true")
 	req.Header.Set("HX-Target", target)
+	for i := 0; i+1 < len(headers); i += 2 {
+		req.Header.Set(headers[i], headers[i+1])
+	}
 	h.ServeHTTP(rec, req)
 	return rec
 }
