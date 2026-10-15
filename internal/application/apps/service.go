@@ -41,6 +41,10 @@ type Service struct {
 	// GitAuth gives a run the session's git credentials and nothing of the
 	// machine's; nil leaves its git as it is.
 	GitAuth ports.GitAuth
+	// envFiles and envIO refresh the repository's env files in the worktree
+	// before each run; nil leaves the worktree's copies as they are.
+	envFiles ports.EnvFileLister
+	envIO    ports.EnvFileIO
 
 	mu   sync.Mutex
 	runs map[string]*run
@@ -49,6 +53,12 @@ type Service struct {
 // NewService returns the runner. commands may be nil (only ad-hoc commands).
 func NewService(sessions ports.SessionReader, commands ports.RunCommandLister, host ports.TerminalHost) *Service {
 	return &Service{sessions: sessions, commands: commands, host: host, now: time.Now, runs: map[string]*run{}}
+}
+
+// UseEnvFiles makes each run rewrite the repository's saved env files into
+// the session's worktree first, so an edit in settings reaches the next run.
+func (s *Service) UseEnvFiles(files ports.EnvFileLister, io ports.EnvFileIO) {
+	s.envFiles, s.envIO = files, io
 }
 
 type run struct {
@@ -81,6 +91,10 @@ func (s *Service) Start(ctx context.Context, sessionID, name, command string) (*
 	}
 	if len(command) > domain.MaxRunCommandLength {
 		return nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "the command is too long"}
+	}
+
+	if err := s.writeEnvFiles(ctx, sess.RepositoryID, sess.WorkingDir); err != nil {
+		return nil, err
 	}
 
 	id := "run-" + randomHex()
@@ -142,6 +156,25 @@ func (s *Service) savedCommand(ctx context.Context, repositoryID, name string) (
 		}
 	}
 	return "", &domain.StructuredError{Code: "RUN_COMMAND_NOT_FOUND", Message: "this repository has no run command called " + name}
+}
+
+// writeEnvFiles overwrites the worktree's env files with the saved ones. The
+// error names the failure, never a file's content.
+func (s *Service) writeEnvFiles(ctx context.Context, repositoryID, worktree string) error {
+	if s.envFiles == nil || s.envIO == nil || repositoryID == "" {
+		return nil
+	}
+	files, err := s.envFiles.ListEnvFiles(ctx, repositoryID)
+	if err != nil {
+		return err
+	}
+	if len(files) == 0 {
+		return nil
+	}
+	if err := s.envIO.Write(worktree, files); err != nil {
+		return &domain.StructuredError{Code: "ENV_FILE_WRITE_FAILED", Message: "writing the repository's env files into the worktree failed: " + err.Error()}
+	}
+	return nil
 }
 
 // running is the session's live run of the saved command name, if any.
