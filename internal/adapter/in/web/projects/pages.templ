@@ -194,7 +194,7 @@ templ EnvFilesPage(v EnvFilesView) {
 				<div class="[ wrapper flow ] [ region ]" style="--wrapper-max: 52rem">
 					<h2>Env files</h2>
 					<p class="[ color-ink-muted ]">
-						Files of variables git does not carry, like <code>.env</code>. The harness keeps them and writes them into every new session's worktree of this repository, so the session can run the application. Git is told to ignore them there, so they are never committed. Running sessions keep the copy they started with.
+						Files of variables git does not carry, like <code>.env</code>. The harness keeps them and writes them into each session's worktree of this repository when the session starts and again before every app run, so an edit here reaches the next run. Git is told to ignore them there, so they are never committed. An app run also gets the variables of the root <code>.env</code> in its environment.
 					</p>
 					<template x-if="error">
 						<div class="[ banner ]" data-tone="danger" role="alert">

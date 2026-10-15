@@ -239,3 +239,92 @@ func TestAppTabTypingACommandEnablesRunAndSavesIt(t *testing.T) {
 		})
 	}
 }
+
+// failingRunCommands cannot list a repository's run commands.
+type failingRunCommands struct{ noRunCommands }
+
+func (failingRunCommands) ListRunCommands(context.Context, string) ([]*domain.RunCommand, error) {
+	return nil, &domain.StructuredError{Code: "INTERNAL", Message: "the run commands could not be read"}
+}
+
+// When the App tab cannot load the saved commands, or the session has no
+// worktree to run in, it says so in a banner instead of leaving Run quietly
+// disabled.
+func TestAppTabShowsWhyItCannotRun(t *testing.T) {
+	for _, c := range []struct {
+		name     string
+		commands ports.RepositoryRunCommands
+		worktree bool
+		run      bool
+		want     string
+	}{
+		{"the commands do not load", failingRunCommands{}, true, false, "the run commands could not be read"},
+		{"the session has no worktree", noRunCommands{}, false, true, "this session has no worktree to run the application in"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			assets, err := NewAssets()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !assets.Built() {
+				t.Skip("browser test: web client not built; run `make web`")
+			}
+			ctx, errs := browser(t)
+			session := &domain.Session{
+				ID: "s1", ProjectID: "p1", TicketID: "t1", RepositoryID: "r1", Task: "implement this task",
+				Status: domain.SessionIdle, Interactive: true, RunsOn: domain.RunnerServer, UpdatedAt: time.Now(),
+				Branch: "agent/add-sse-feed-1a2b",
+			}
+			if c.worktree {
+				session.WorkingDir = t.TempDir()
+			}
+			sessions := fakeSessions{[]*domain.Session{session}}
+			host := termhost.New(shell.Direct{}, ptyunix.New(), command.Agent{Shell: "/bin/sh"})
+			t.Cleanup(func() { _ = host.Shutdown(context.Background()) })
+			commands := c.commands
+			runner := apps.NewService(sessions, commands, host)
+			pages := NewHandler(Deps{
+				Projects:     fakeProjects{[]*domain.Project{{ID: "p1", Name: "coding_pool"}}},
+				Tasks:        fakeTickets{[]*domain.Ticket{{ID: "t1", ProjectID: "p1", Title: "Add SSE feed", Status: domain.TicketStatusInProgress}}},
+				Agents:       fakeAgents{},
+				Repositories: fakeRepos{[]*domain.Repository{{ID: "r1", ProjectID: "p1", Name: "harness"}}},
+				Sessions:     sessions,
+			}, assets, nil)
+			api := httpapi.NewRouter(httpapi.NewHandler(httpapi.Services{RunCommands: commands, Apps: runner}))
+			mux := http.NewServeMux()
+			mux.Handle("/api/sessions/s1/terminal", http.NotFoundHandler())
+			mux.Handle("/api/", api)
+			mux.Handle("/", pages)
+			srv := httptest.NewServer(mux)
+			defer srv.Close()
+
+			banner := `document.querySelector('[aria-label=Application] [role=alert]')?.textContent ?? ''`
+			actions := []chromedp.Action{
+				chromedp.EmulateViewport(1280, 800),
+				chromedp.Navigate(srv.URL + "/projects/p1/tasks/t1"),
+				chromedp.Poll(`!!document.querySelector('[role=tab]')`, nil, chromedp.WithPollingTimeout(10*time.Second)),
+				clickButton(`[role=tablist]`, "App"),
+				chromedp.Poll(`!!document.querySelector('#run-choice-input')`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+			}
+			if c.run {
+				actions = append(actions,
+					chromedp.Click(`#run-choice-input`, chromedp.ByQuery),
+					chromedp.KeyEvent("echo hi"),
+					chromedp.KeyEvent(kb.Escape),
+					clickButton(`[aria-label=Application]`, "Run"),
+				)
+			}
+			var shown string
+			actions = append(actions,
+				chromedp.Poll(banner+` !== ''`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+				chromedp.Evaluate(banner, &shown),
+			)
+			if err := chromedp.Run(ctx, actions...); err != nil {
+				t.Fatalf("%v\nJS errors: %v", err, errs.all())
+			}
+			if !strings.Contains(shown, c.want) {
+				t.Errorf("banner = %q, want it to say %q", shown, c.want)
+			}
+		})
+	}
+}

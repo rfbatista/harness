@@ -143,3 +143,31 @@ func TestAValidDotenvWritesNoNote(t *testing.T) {
 		t.Errorf("the run shows %q, want %q", screenLines(screen), want)
 	}
 }
+
+// A value with a double quote, a dollar, a newline and a backslash reaches
+// the process byte for byte: written by the run itself, read back here.
+func TestADotenvValueReachesTheProcessByteForByte(t *testing.T) {
+	saved := envFiles{"r1": {{RepositoryID: "r1", Path: ".env", Content: "" +
+		"ESCAPED=\"say \\\"hi\\\" to $USER\\nat C:\\\\tmp\"\n" +
+		"RAW='say \"hi\" to $USER\\n at C:\\\\tmp'\n"}}}
+	svc, worktree := newGitRunner(t, saved)
+	r, err := svc.Start(context.Background(), "s1", "", `printf %s "$ESCAPED" > escaped.out; printf %s "$RAW" > raw.out; echo :end; sleep 30`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	readUntil(t, svc, r.ID, ":end")
+	for file, want := range map[string]string{
+		// Double quotes: \" \n \\ are escapes, $USER stays text.
+		"escaped.out": "say \"hi\" to $USER\nat C:\\tmp",
+		// Single quotes: everything as written.
+		"raw.out": `say "hi" to $USER\n at C:\\tmp`,
+	} {
+		got, err := os.ReadFile(filepath.Join(worktree, file))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(got) != want {
+			t.Errorf("%s = %q, want %q", file, got, want)
+		}
+	}
+}
