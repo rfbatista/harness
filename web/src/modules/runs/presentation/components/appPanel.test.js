@@ -6,7 +6,7 @@ import { appPanel } from "./appPanel.js";
 
 file("runs/presentation/appPanel");
 
-async function setup(world = {}) {
+async function setup(world = {}, { el } = {}) {
   const memory = memoryRuns({
     sessions: ["s1"],
     repositoryOf: { s1: "r1" },
@@ -16,6 +16,7 @@ async function setup(world = {}) {
   });
   const mounted = mount(() =>
     appPanel({ gateway: memory.gateway })({ sessionId: "s1", repositoryId: "r1", repositoryName: "api", branch: "agent/feed-1a2b", worktree: "/w/api/.worktrees/feed" }),
+    { el },
   );
   await mounted.instance.init();
   return { ...mounted, memory };
@@ -112,10 +113,12 @@ test("typing in the command field makes the text the command to run", async () =
 });
 
 test("after a save the field shows the saved command once its option exists", async () => {
-  const { instance, tick } = await setup();
-  const select = document.createElement("select");
-  select.innerHTML = `<option value="server">server</option><option value="test">test</option>`;
-  instance.$refs = { command: select };
+  // As the page has it: the select's x-ref belongs to the combobox's own
+  // x-data, so it is not in the panel's $refs.
+  const el = document.createElement("section");
+  el.innerHTML = `<div x-data="combobox"><select x-ref="command"><option value="server">server</option><option value="test">test</option></select></div>`;
+  const select = el.querySelector("select");
+  const { instance, tick } = await setup({}, { el });
   instance.commandPicked({ detail: { value: "make test", created: true } });
   instance.saveName = "test";
   await instance.save();
