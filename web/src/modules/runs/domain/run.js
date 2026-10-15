@@ -39,3 +39,20 @@ export function runState(run) {
 export function preferredRun(runs) {
   return runs.find(isRunning) ?? runs[0] ?? null;
 }
+
+/** The longest name a run command takes (internal/domain/apprun.go). */
+export const MAX_RUN_COMMAND_NAME = 40;
+
+/**
+ * Why a run command's name is refused, or "" when it is fine. The rule is
+ * the server's (domain.CleanRunCommand): after trimming, 1 to 40 letters,
+ * digits, spaces and . _ -, starting with a letter or digit.
+ */
+export function runCommandNameProblem(name) {
+  const n = name.trim();
+  if (n === "") return "A run command needs a name.";
+  if (n.length > MAX_RUN_COMMAND_NAME) return `Up to ${MAX_RUN_COMMAND_NAME} characters; this one has ${n.length}.`;
+  if (!/^[A-Za-z0-9 ._-]*$/.test(n)) return "Use only letters, digits, spaces and . _ -";
+  if (!/^[A-Za-z0-9]/.test(n)) return "Start with a letter or a digit.";
+  return "";
+}

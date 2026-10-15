@@ -21,6 +21,13 @@ export function runGatewayContract(name, makeSubject) {
     assert.deepEqual(await gateway.listCommands("r9"), []);
   });
 
+  contract("decodes the settings page's seed, the API's shape; a bad one is BAD_RESPONSE", () => {
+    const { gateway } = makeSubject(world());
+    const seed = gateway.decodeCommandsSeed({ repository_id: "r1", run_commands: [{ name: "server", command: "make air" }] });
+    assert.deepEqual([seed.repositoryId, seed.commands.map((c) => `${c.name}=${c.command}`)], ["r1", ["server=make air"]]);
+    assert.throws(() => gateway.decodeCommandsSeed({ repository_id: "r1" }), Codes.BAD_RESPONSE);
+  });
+
   contract("saves, replaces and deletes a command", async () => {
     const { gateway } = makeSubject(world());
     const saved = await gateway.saveCommand("r1", " test ", " go test ./... ");

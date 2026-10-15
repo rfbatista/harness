@@ -26,6 +26,14 @@ export function toRunCommand(dto) {
   return Object.freeze({ name: dto.name, command: dto.command ?? "" });
 }
 
+/** A repository settings page's run commands seed (RunCommandsSeed in Go). */
+export function toRunCommandsSeed(body) {
+  if (!body || typeof body.repository_id !== "string" || !Array.isArray(body.run_commands)) {
+    bad("expected {repository_id, run_commands: [...]}");
+  }
+  return { repositoryId: body.repository_id, commands: body.run_commands.map(toRunCommand) };
+}
+
 function bad(detail) {
   throw new StructuredError(Codes.BAD_RESPONSE, `Unexpected run data: ${detail}.`);
 }

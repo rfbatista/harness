@@ -19,11 +19,15 @@ import (
 
 // Handler serves GET /projects, GET /projects/new, GET /projects/{project}/settings,
 // GET /projects/{project}/repositories and
-// GET /projects/{project}/repositories/{repository}/env.
+// GET /projects/{project}/repositories/{repository}/env (the repository's
+// settings: env files and run commands).
 type Handler struct {
 	Projects     ports.ProjectReader
 	Repositories ports.RepositoryLister
 	EnvFiles     ports.EnvFileLister
+	// RunCommands paints the repository's run commands on its settings
+	// page; nil leaves the section out.
+	RunCommands ports.RunCommandLister
 	// Summaries counts each project for the projects list.
 	Summaries ports.ProjectSummaries
 	// Credentials paints each repository's git credential on its page; nil
@@ -117,7 +121,7 @@ func (h Handler) credentialsSeed(r *http.Request, projectID string) *credentials
 	return &credentials.RepositoriesSeed{ProjectID: projectID, Credentials: list.Credentials, Locked: list.Locked, Repositories: bindings}
 }
 
-// EnvFileList is a repository's env files page. A repository of another project
+// EnvFileList is a repository's settings page: its env files and run commands. A repository of another project
 // is REPOSITORY_NOT_FOUND, as if it did not exist.
 func (h Handler) EnvFileList(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
@@ -145,7 +149,18 @@ func (h Handler) EnvFileList(w http.ResponseWriter, r *http.Request) error {
 	if files == nil {
 		files = []*domain.EnvFile{}
 	}
-	frame, err := h.Layout(ctx, "Env files", project.ID, "")
+	var runCommands *RunCommandsSeed
+	if h.RunCommands != nil {
+		list, err := h.RunCommands.ListRunCommands(ctx, repo.ID)
+		if err != nil {
+			return err
+		}
+		if list == nil {
+			list = []*domain.RunCommand{}
+		}
+		runCommands = &RunCommandsSeed{RepositoryID: repo.ID, RunCommands: list}
+	}
+	frame, err := h.Layout(ctx, "Repository settings", project.ID, "")
 	if err != nil {
 		return err
 	}
@@ -157,6 +172,7 @@ func (h Handler) EnvFileList(w http.ResponseWriter, r *http.Request) error {
 		RootDir:        repo.RootDir,
 		Files:          files,
 		Seed:           EnvFilesSeed{RepositoryID: repo.ID, EnvFiles: files},
+		RunCommands:    runCommands,
 	}))
 }
 
@@ -166,6 +182,14 @@ type EnvFilesView struct {
 	ProjectID, ProjectName, RepositoryName, RootDir string
 	Files                                           []*domain.EnvFile
 	Seed                                            EnvFilesSeed
+	// RunCommands seeds the Run commands section; nil leaves it out.
+	RunCommands *RunCommandsSeed
+}
+
+// RunCommandsSeed is what runsCommandsSettings starts from, in the API's shape.
+type RunCommandsSeed struct {
+	RepositoryID string               `json:"repository_id"`
+	RunCommands  []*domain.RunCommand `json:"run_commands"`
 }
 
 // EnvFilesSeed is what projectsEnvFilesPage starts from, in the API's shape.

@@ -7,6 +7,8 @@
  * @typedef {import("./run.js").RunCommand} RunCommand
  *
  * @typedef {object} RunGateway
+ * @property {(seed: unknown) => { repositoryId: string, commands: RunCommand[] }} decodeCommandsSeed
+ *           A repository settings page's run commands, as the server seeded them.
  * @property {(repositoryId: string) => Promise<RunCommand[]>} listCommands
  *           The repository's saved run commands, by name.
  * @property {(repositoryId: string, name: string, command: string) => Promise<RunCommand>} saveCommand
