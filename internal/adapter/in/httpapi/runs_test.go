@@ -3,8 +3,12 @@ package httpapi
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -12,6 +16,7 @@ import (
 	"github.com/coder/websocket"
 
 	"operators-mcp/internal/adapter/out/agents/command"
+	"operators-mcp/internal/adapter/out/gitcli"
 	"operators-mcp/internal/adapter/out/persistence/sqlite"
 	"operators-mcp/internal/adapter/out/ptyunix"
 	"operators-mcp/internal/adapter/out/shell"
@@ -147,5 +152,63 @@ func TestHTTP_RunCommands(t *testing.T) {
 	}
 	if rec := call("POST", "/api/delete_repository_run_command", `{"repository_id":"`+repo.ID+`","name":"server"}`); rec.Code != 204 {
 		t.Fatalf("delete: %d %s", rec.Code, rec.Body)
+	}
+}
+
+// Starting a run refreshes the worktree's env files; neither its answer nor a
+// refusal to write them shows a value from them.
+func TestHTTP_StartRunNeverShowsAnEnvFileValue(t *testing.T) {
+	db, err := sqlite.Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	deps := catalog.SQLiteDeps(db)
+	deps.EnvFiles, deps.EnvFileIO = sqlite.NewEnvFileRepository(db), gitcli.NewEnvFiles()
+	p, _ := deps.Projects.Create("proj", t.TempDir())
+	repo, _ := deps.Repositories.Create(p.ID, "api", "", "file:///x", t.TempDir())
+	cat := catalog.New(deps)
+	if _, err := cat.Projects.SaveEnvFile(context.Background(), repo.ID, ".env", "API_TOKEN=s3cr3t-value\n"); err != nil {
+		t.Fatal(err)
+	}
+	worktree := t.TempDir()
+	if out, err := exec.Command("git", "init", "-q", worktree).CombinedOutput(); err != nil {
+		t.Fatalf("git init: %v %s", err, out)
+	}
+	host := termhost.New(shell.Direct{}, ptyunix.New(), command.Agent{Shell: "/bin/sh"})
+	t.Cleanup(func() { _ = host.Shutdown(context.Background()) })
+	runner := apps.NewService(oneSession{&domain.Session{ID: "s1", RepositoryID: repo.ID, WorkingDir: worktree}}, cat.Projects, host)
+	runner.UseEnvFiles(cat.Projects, gitcli.NewEnvFiles())
+	services := servicesOf(cat)
+	services.Apps = runner
+	srv := httptest.NewServer(NewRouter(NewHandler(services)))
+	defer srv.Close()
+
+	start := func() (int, string) {
+		res, err := http.Post(srv.URL+"/api/start_run", "application/json", strings.NewReader(`{"session_id":"s1","command":"cat .env; sleep 30"}`))
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer res.Body.Close()
+		body, _ := io.ReadAll(res.Body)
+		return res.StatusCode, string(body)
+	}
+	code, body := start()
+	if code != http.StatusOK || strings.Contains(body, "s3cr3t-value") {
+		t.Fatalf("start: %d %s", code, body)
+	}
+	if b, _ := os.ReadFile(filepath.Join(worktree, ".env")); string(b) != "API_TOKEN=s3cr3t-value\n" {
+		t.Fatalf("worktree .env = %q", b)
+	}
+
+	// A directory where the file goes: the write fails and the run is refused.
+	if err := os.Remove(filepath.Join(worktree, ".env")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(filepath.Join(worktree, ".env"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	code, body = start()
+	if code == http.StatusOK || !strings.Contains(body, "ENV_FILE_WRITE_FAILED") || strings.Contains(body, "s3cr3t-value") {
+		t.Fatalf("refused start: %d %s", code, body)
 	}
 }
