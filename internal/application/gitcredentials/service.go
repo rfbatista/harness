@@ -62,10 +62,11 @@ type Service struct {
 	box ports.SecretBox
 	// Tester runs test_git_credential; nil answers ok:false.
 	Tester ports.GitCredentialTester
-	// Files writes the git directories of operations and sessions; nil
-	// leaves GitAuth without them (Operation and SessionEnv fail).
-	Files ports.GitAuthFiles
-	now   func() time.Time
+	// Broker keeps and serves the git directories of operations and
+	// sessions; nil leaves GitAuth without them (Operation and SessionEnv
+	// fail).
+	Broker ports.GitAuthBroker
+	now    func() time.Time
 
 	mu   sync.Mutex // one write at a time
 	feed feed

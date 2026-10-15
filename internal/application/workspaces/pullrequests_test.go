@@ -542,7 +542,7 @@ func TestCreatePushesAndOpensThePullRequest(t *testing.T) {
 	if len(f.git.envs) != 2 || len(f.git.envs[0]) == 0 || !strings.HasPrefix(f.git.envs[0][0], gitcredentialstest.EnvKey+"=op-") {
 		t.Fatalf("fetch and push env %v", f.git.envs)
 	}
-	if f.auth.Files.Operations() != 0 {
+	if f.auth.Broker.Operations() != 0 {
 		t.Fatal("the operation's files outlived the create")
 	}
 	if list, _ := f.auth.ListGitCredentials(context.Background()); list.Credentials[0].LastUsedAt == nil || list.Credentials[1].LastUsedAt == nil {

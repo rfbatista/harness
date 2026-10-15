@@ -162,14 +162,14 @@ type OriginReader interface {
 	OriginURL(ctx context.Context, repoRoot string) (string, error)
 }
 
-// GitHTTPSLogin is what the credential helper answers for one host.
+// GitHTTPSLogin is what the credential socket answers for one host.
 type GitHTTPSLogin struct {
 	Host     string
 	Username string
 	Token    domain.Secret
 }
 
-// GitAuthMaterial is what one git directory holds: the identity, the login
+// GitAuthMaterial is what one git directory is served: the identity, the login
 // for an https origin, the private key for an ssh one, and the token gh
 // gets. Nil or empty parts are left out, so git runs without them.
 type GitAuthMaterial struct {
@@ -179,22 +179,30 @@ type GitAuthMaterial struct {
 	GitHubToken domain.Secret
 }
 
-// GitAuthFiles writes harness-owned git directories — gitconfig, credential
-// helper, key, env file — outside every worktree, and answers the
-// environment that makes git and gh use them and nothing of the machine's
-// (driven). See "Contract: Harness server ↔ Agent sessions — git
-// credentials" §1–§2.
-type GitAuthFiles interface {
-	// WriteSession writes, or rewrites in place, the session's directory.
-	// Its paths, so its env, never change for the session.
-	WriteSession(sessionID string, m GitAuthMaterial) (env []string, envFile string, err error)
-	RemoveSession(sessionID string) error
+// GitAuthSource reads a git directory's material from the store. The
+// directory's sockets call it on every request, so what git gets is what is
+// stored at that moment.
+type GitAuthSource func() (GitAuthMaterial, error)
+
+// GitAuthBroker keeps harness-owned git directories outside every worktree
+// and serves them their secrets (driven): each directory holds a gitconfig
+// and an env file, never a key or a token; git and ssh reach those through
+// the directory's sockets — an ssh-agent and a credential-cache — which read
+// its source on every request. The environment it answers makes git and gh
+// use them and nothing of the machine's. See "Contract: Harness server ↔
+// Agent sessions — git credentials" §1–§2.
+type GitAuthBroker interface {
+	// OpenSession writes the session's directory and serves it from src,
+	// or, when it is open, rewrites its files and swaps src in place. Its
+	// paths, so its env, never change for the session.
+	OpenSession(sessionID string, src GitAuthSource) (env []string, envFile string, err error)
+	CloseSession(sessionID string) error
 	// SessionIDs are the sessions that have a directory.
 	SessionIDs() ([]string, error)
-	// WriteOperation writes a directory for one server-side operation;
-	// release removes it.
-	WriteOperation(m GitAuthMaterial) (env []string, release func(), err error)
-	// SweepOperations removes the operation directories a previous run left.
+	// OpenOperation opens a directory for one server-side operation;
+	// release closes and removes it.
+	OpenOperation(src GitAuthSource) (env []string, release func(), err error)
+	// SweepOperations removes what a previous run left of operations.
 	SweepOperations() error
 }
 
@@ -228,7 +236,7 @@ type GitResolution struct {
 
 // GitOperation is one server-side remote operation's credentials: Env for
 // git, and the GitHub token for API calls, which never reaches a process.
-// Release removes its files.
+// Release closes its directory.
 type GitOperation struct {
 	Env         []string
 	Push        *domain.GitCredential
@@ -252,17 +260,17 @@ type SessionGit struct {
 type GitAuth interface {
 	// Resolve reads the store only: no git, no files.
 	Resolve(ctx context.Context, repositoryID, originURL string) (*GitResolution, error)
-	// Operation writes the credentials of one operation on the repository;
+	// Operation opens the credentials of one operation on the repository;
 	// GIT_CREDENTIAL_STORE_LOCKED when they cannot be read.
 	Operation(ctx context.Context, repositoryID, originURL string) (*GitOperation, error)
-	// SessionEnv writes (or rewrites) the session's git directory. A locked
+	// SessionEnv opens (or reopens) the session's git directory. A locked
 	// store or nothing resolving still answers, with a Note.
 	SessionEnv(ctx context.Context, sessionID, repositoryID string) (*SessionGit, error)
 	// GitHubToken is the https_token for origin's host and its secret, read
 	// in memory for API calls: no files. Nil when none resolves;
 	// GIT_CREDENTIAL_STORE_LOCKED when it cannot be read.
 	GitHubToken(ctx context.Context, repositoryID, originURL string) (*domain.GitCredential, domain.Secret, error)
-	// EndSession removes the session's directory.
+	// EndSession closes and removes the session's directory.
 	EndSession(sessionID string)
 	// Used records that a credential just authenticated.
 	Used(credentialID string)

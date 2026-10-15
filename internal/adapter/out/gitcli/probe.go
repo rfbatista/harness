@@ -25,7 +25,7 @@ type GitHubUser func(ctx context.Context, host, token string) (ok bool, message,
 // Probe tests credentials as git and ssh would use them, in a directory of
 // its own: nothing of the machine's is used, nothing on the host changes.
 type Probe struct {
-	Files *AuthFiles
+	Broker *AuthBroker
 	// GitHub checks a token on a GitHub host; nil answers ok:false.
 	GitHub GitHubUser
 }
@@ -51,6 +51,11 @@ func (p *Probe) Test(ctx context.Context, c ports.GitCredentialSecret, remoteURL
 
 const githubHost = "github.com"
 
+// staticSource answers m on every request.
+func staticSource(m ports.GitAuthMaterial) ports.GitAuthSource {
+	return func() (ports.GitAuthMaterial, error) { return m, nil }
+}
+
 func material(c ports.GitCredentialSecret) ports.GitAuthMaterial {
 	if c.Kind == domain.GitSSHKey {
 		return ports.GitAuthMaterial{SSHKey: c.Secret}
@@ -62,7 +67,7 @@ func material(c ports.GitCredentialSecret) ports.GitAuthMaterial {
 // itself is dropped: it is the machine's, not the harness's.
 func (p *Probe) lsRemote(ctx context.Context, c ports.GitCredentialSecret, remoteURL string) (*ports.GitCredentialTest, error) {
 	shown := domain.StripURLUserinfo(remoteURL)
-	env, release, err := p.Files.WriteOperation(material(c))
+	env, release, err := p.Broker.OpenOperation(staticSource(material(c)))
 	if err != nil {
 		return nil, err
 	}
@@ -81,7 +86,7 @@ func (p *Probe) lsRemote(ctx context.Context, c ports.GitCredentialSecret, remot
 // ssh exits 255 for its own failures (refused key, unreachable host); a
 // code host that took the key answers with a greeting and another code.
 func (p *Probe) sshHost(ctx context.Context, c ports.GitCredentialSecret) (*ports.GitCredentialTest, error) {
-	env, release, err := p.Files.WriteOperation(material(c))
+	env, release, err := p.Broker.OpenOperation(staticSource(material(c)))
 	if err != nil {
 		return nil, err
 	}

@@ -1,7 +1,7 @@
 // Package gitcli shells out to the git binary: worktrees, history, code
 // views, env files, publishing branches, and the git directories that give
 // every remote operation the harness's stored credentials and nothing of the
-// machine's (AuthFiles). Commands that only read a checkout run with
+// machine's (AuthBroker). Commands that only read a checkout run with
 // localOverrides, so they can never authenticate either.
 package gitcli
 

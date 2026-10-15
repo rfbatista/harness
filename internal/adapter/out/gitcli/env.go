@@ -15,7 +15,7 @@ import (
 // gets no config, agent or key, and nothing prompts. The machine's other
 // config still applies, so output (ignored files, quoting) is as the person
 // sees it. Remote operations use the harness's own credentials instead (see
-// AuthFiles).
+// AuthBroker).
 var localOverrides = []string{
 	"GIT_TERMINAL_PROMPT=0",
 	"GIT_ASKPASS=", "SSH_ASKPASS=", "GIT_SSH=", "SSH_AUTH_SOCK=",

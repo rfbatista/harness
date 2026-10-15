@@ -17,8 +17,8 @@ func TestTheProbeChecksATokenAgainstARemote(t *testing.T) {
 	srv := newGitServer(t, "x-access-token", storedToken)
 	host := strings.TrimPrefix(srv.URL, "http://")
 	host = host[:strings.IndexByte(host, '/')]
-	files := authFiles(t, m)
-	p := &Probe{Files: files}
+	files := authBroker(t, m)
+	p := &Probe{Broker: files}
 	for k, v := range envMap(m.env) {
 		t.Setenv(k, v)
 	}
@@ -61,7 +61,7 @@ func TestTheProbeWithoutARepository(t *testing.T) {
 		}
 	}()
 	called := ""
-	p := &Probe{Files: authFiles(t, m), GitHub: func(_ context.Context, host, token string) (bool, string, string, error) {
+	p := &Probe{Broker: authBroker(t, m), GitHub: func(_ context.Context, host, token string) (bool, string, string, error) {
 		called = host + " " + token
 		return false, "Bad credentials", "https://api.github.com/user", nil
 	}}

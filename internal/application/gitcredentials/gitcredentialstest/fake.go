@@ -29,11 +29,11 @@ import (
 )
 
 // Fake is the service over memory. It satisfies ports.GitCredentials and
-// ports.GitAuth; Files holds what its git directories would.
+// ports.GitAuth; Broker serves what its git directories would.
 type Fake struct {
 	*gitcredentials.Service
 	Catalog *Catalog
-	Files   *Files
+	Broker  *Broker
 	box     *Box
 }
 
@@ -45,9 +45,9 @@ func New() *Fake {
 		gitcredentials.Stores{Credentials: NewCredentials(), Identity: &Identity{}, Pins: NewPins()},
 		gitcredentials.Readers{Repositories: cat, Projects: cat.Projects(), Origins: cat},
 		box, nil)
-	files := NewFiles()
-	svc.Files = files
-	return &Fake{Service: svc, Catalog: cat, Files: files, box: box}
+	broker := NewBroker()
+	svc.Broker = broker
+	return &Fake{Service: svc, Catalog: cat, Broker: broker, box: box}
 }
 
 // AddRepository records a repository whose origin is originURL ("" for none)
@@ -364,78 +364,92 @@ func (s *Pins) DeleteByProject(projectID string) error {
 	return nil
 }
 
-// Files is ports.GitAuthFiles in memory: it keeps what each directory would
-// hold and answers an environment naming it, so a test can see which
-// credentials an operation or a session got.
-type Files struct {
+// Broker is ports.GitAuthBroker in memory: it keeps each directory's source
+// and answers an environment naming it, so a test can see which credentials
+// an operation or a session would be served.
+type Broker struct {
 	mu       sync.Mutex
-	sessions map[string]ports.GitAuthMaterial
-	ops      map[string]ports.GitAuthMaterial
+	sessions map[string]ports.GitAuthSource
+	ops      map[string]ports.GitAuthSource
 }
 
-// NewFiles returns an empty one.
-func NewFiles() *Files {
-	return &Files{sessions: map[string]ports.GitAuthMaterial{}, ops: map[string]ports.GitAuthMaterial{}}
+// NewBroker returns an empty one.
+func NewBroker() *Broker {
+	return &Broker{sessions: map[string]ports.GitAuthSource{}, ops: map[string]ports.GitAuthSource{}}
 }
 
 // EnvKey is the variable the environments carry: the directory's name.
 const EnvKey = "HARNESS_TEST_GIT_DIR"
 
-func (f *Files) WriteSession(sessionID string, m ports.GitAuthMaterial) ([]string, string, error) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	f.sessions[sessionID] = m
+func (b *Broker) OpenSession(sessionID string, src ports.GitAuthSource) ([]string, string, error) {
+	if _, err := src(); err != nil {
+		return nil, "", err
+	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.sessions[sessionID] = src
 	return []string{EnvKey + "=session-" + sessionID}, "/fake/git/sessions/" + sessionID + "/env.sh", nil
 }
 
-func (f *Files) RemoveSession(sessionID string) error {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	delete(f.sessions, sessionID)
+func (b *Broker) CloseSession(sessionID string) error {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	delete(b.sessions, sessionID)
 	return nil
 }
 
-func (f *Files) SessionIDs() ([]string, error) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
+func (b *Broker) SessionIDs() ([]string, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
 	var ids []string
-	for id := range f.sessions {
+	for id := range b.sessions {
 		ids = append(ids, id)
 	}
 	slices.Sort(ids)
 	return ids, nil
 }
 
-func (f *Files) WriteOperation(m ports.GitAuthMaterial) ([]string, func(), error) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
+func (b *Broker) OpenOperation(src ports.GitAuthSource) ([]string, func(), error) {
+	if _, err := src(); err != nil {
+		return nil, nil, err
+	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
 	id := nextID("op-")
-	f.ops[id] = m
+	b.ops[id] = src
 	return []string{EnvKey + "=" + id}, func() {
-		f.mu.Lock()
-		defer f.mu.Unlock()
-		delete(f.ops, id)
+		b.mu.Lock()
+		defer b.mu.Unlock()
+		delete(b.ops, id)
 	}, nil
 }
 
-func (f *Files) SweepOperations() error {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	f.ops = map[string]ports.GitAuthMaterial{}
+func (b *Broker) SweepOperations() error {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.ops = map[string]ports.GitAuthSource{}
 	return nil
 }
 
-// Session is what the session's directory holds, and whether it has one.
-func (f *Files) Session(sessionID string) (ports.GitAuthMaterial, bool) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	m, ok := f.sessions[sessionID]
-	return m, ok
+// Session is what the session's directory would be served now, and
+// whether it has one.
+func (b *Broker) Session(sessionID string) (ports.GitAuthMaterial, bool) {
+	b.mu.Lock()
+	src, ok := b.sessions[sessionID]
+	b.mu.Unlock()
+	if !ok {
+		return ports.GitAuthMaterial{}, false
+	}
+	m, err := src()
+	if err != nil {
+		return ports.GitAuthMaterial{}, false
+	}
+	return m, true
 }
 
 // Operations counts the operation directories not yet released.
-func (f *Files) Operations() int {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	return len(f.ops)
+func (b *Broker) Operations() int {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return len(b.ops)
 }

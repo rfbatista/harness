@@ -2,6 +2,7 @@ package gitcredentials_test
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -19,8 +20,45 @@ func withFiles(t *testing.T) (*gitcredentialstest.SQLite, string) {
 	t.Helper()
 	env := gitcredentialstest.NewSQLite(t)
 	root := filepath.Join(env.Dir, "git")
-	env.Service.Files = &gitcli.AuthFiles{Root: root, Inherited: []string{}}
+	sockets, err := os.MkdirTemp("/tmp", "hg") // socket paths are short on macOS
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.RemoveAll(sockets) })
+	broker, err := gitcli.NewAuthBroker(root, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	broker.SocketRoot, broker.Inherited = sockets, []string{}
+	env.Service.Broker = broker
 	return env, root
+}
+
+// password is what the session's git is answered for github.com now; ""
+// when nothing.
+func password(t *testing.T, env []string) string {
+	t.Helper()
+	cmd := exec.Command("git", "credential", "fill")
+	cmd.Env = append(os.Environ(), env...)
+	cmd.Stdin = strings.NewReader("protocol=https\nhost=github.com\n\n")
+	out, err := cmd.Output()
+	if err != nil {
+		return ""
+	}
+	return envOf(strings.Split(string(out), "\n"), "password")
+}
+
+// noSecretUnder fails t when a file under dir holds secret.
+func noSecretUnder(t *testing.T, dir, secret string) {
+	t.Helper()
+	_ = filepath.WalkDir(dir, func(path string, e os.DirEntry, err error) error {
+		if err == nil && e.Type().IsRegular() {
+			if b, _ := os.ReadFile(path); strings.Contains(string(b), secret) {
+				t.Errorf("%s holds a secret", path)
+			}
+		}
+		return nil
+	})
 }
 
 func envOf(env []string, k string) string {
@@ -77,7 +115,7 @@ func TestAnOperationGetsItsOwnDirectoryAndTheTokenInMemory(t *testing.T) {
 	}
 }
 
-func TestASessionsFilesFollowEveryChangeInPlace(t *testing.T) {
+func TestASessionIsServedEveryChangeWithNoSecretOnDisk(t *testing.T) {
 	env, root := withFiles(t)
 	_, repo := env.AddRepository(t, "", "api", "https://github.com/acme/api.git")
 	sg, err := env.Service.SessionEnv(ctx, "s1", repo)
@@ -95,14 +133,14 @@ func TestASessionsFilesFollowEveryChangeInPlace(t *testing.T) {
 		b, _ := os.ReadFile(filepath.Join(dir, name))
 		return string(b)
 	}
-	if read("https") != "" {
-		t.Fatal("an https file with nothing stored")
+	if got := password(t, sg.Env); got != "" {
+		t.Fatalf("with nothing stored, git got %q", got)
 	}
 
 	// A token stored after the session started reaches its next git.
 	c := githubToken(t, env.Service, "GitHub")
-	if !strings.Contains(read("https"), "password=ghp_servicetest0001") {
-		t.Fatalf("after storing a token, https = %q", read("https"))
+	if got := password(t, sg.Env); got != "ghp_servicetest0001" {
+		t.Fatalf("after storing a token, git got %q", got)
 	}
 	if _, err := env.Service.UpdateGitIdentity(ctx, "Ada", "ada@example.com"); err != nil {
 		t.Fatal(err)
@@ -113,9 +151,11 @@ func TestASessionsFilesFollowEveryChangeInPlace(t *testing.T) {
 	if _, err := env.Service.UpdateGitCredential(ctx, ports.UpdateGitCredential{CredentialID: c.ID, Token: "ghp_rotated000002"}); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(read("https"), "password=ghp_rotated000002") {
-		t.Fatalf("after rotating, https = %q", read("https"))
+	if got := password(t, sg.Env); got != "ghp_rotated000002" {
+		t.Fatalf("after rotating, git got %q", got)
 	}
+	noSecretUnder(t, root, "ghp_")
+	noSecretUnder(t, env.Service.Broker.(*gitcli.AuthBroker).SocketRoot, "ghp_")
 	again, err := env.Service.SessionEnv(ctx, "s1", repo)
 	if err != nil || again.Note != "" || again.EnvFile != sg.EnvFile || envOf(again.Env, "GH_TOKEN") != "ghp_rotated000002" {
 		t.Fatalf("resumed: %+v, %v", again, err)
@@ -123,8 +163,8 @@ func TestASessionsFilesFollowEveryChangeInPlace(t *testing.T) {
 	if err := env.Service.DeleteGitCredential(ctx, c.ID); err != nil {
 		t.Fatal(err)
 	}
-	if read("https") != "" {
-		t.Fatal("a deleted token is still in the session's files")
+	if got := password(t, sg.Env); got != "" {
+		t.Fatalf("a deleted token is still served: %q", got)
 	}
 
 	// The session ends: its directory goes.
@@ -150,9 +190,10 @@ func TestALockedStoreStartsSessionsWithoutCredentials(t *testing.T) {
 	if !strings.Contains(sg.Note, "credential store is locked") || envOf(sg.Env, "GH_TOKEN") != gitcli.NoGitHubToken {
 		t.Fatalf("locked session: note %q, GH_TOKEN %q", sg.Note, envOf(sg.Env, "GH_TOKEN"))
 	}
-	if _, err := os.Stat(filepath.Join(root, "sessions", "s1", "https")); !os.IsNotExist(err) {
-		t.Fatal("a locked store wrote an https file")
+	if got := password(t, sg.Env); got != "" {
+		t.Fatalf("a locked store served %q", got)
 	}
+	_ = root
 }
 
 func TestTheSweepKeepsOnlyRunningSessions(t *testing.T) {
@@ -163,7 +204,7 @@ func TestTheSweepKeepsOnlyRunningSessions(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if _, release, err := env.Service.Files.WriteOperation(ports.GitAuthMaterial{}); err != nil {
+	if _, release, err := env.Service.Broker.OpenOperation(func() (ports.GitAuthMaterial, error) { return ports.GitAuthMaterial{}, nil }); err != nil {
 		t.Fatal(err)
 	} else {
 		_ = release // left behind, as a crash would
@@ -180,9 +221,13 @@ func TestTheSweepKeepsOnlyRunningSessions(t *testing.T) {
 			t.Fatalf("the sweep left %s", gone)
 		}
 	}
-	// The running one is kept fresh again.
+	// The running one is served again, what is stored now.
 	githubToken(t, env.Service, "GitHub")
-	if b, _ := os.ReadFile(filepath.Join(root, "sessions", "running", "https")); !strings.Contains(string(b), "ghp_servicetest0001") {
-		t.Fatal("a swept-in running session is not rewritten on change")
+	sg, err := env.Service.SessionEnv(ctx, "running", repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := password(t, sg.Env); got != "ghp_servicetest0001" {
+		t.Fatalf("a swept-in running session is served %q", got)
 	}
 }

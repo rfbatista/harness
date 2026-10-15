@@ -95,20 +95,25 @@ func newGitCredentialsService(p gitCredentialsParams) (*gitcredentials.Service, 
 		},
 		gitcredentials.Readers{Repositories: p.Repositories, Projects: p.Projects, Origins: p.Git},
 		box, nil)
-	files := gitcli.NewAuthFiles(filepath.Join(dataDir, "git"), gitcli.MachineExcludesFile())
-	svc.Files = files
-	svc.Tester = &gitcli.Probe{Files: files, GitHub: githubapi.New().User}
+	broker, err := gitcli.NewAuthBroker(filepath.Join(dataDir, "git"), gitcli.MachineExcludesFile())
+	if err != nil {
+		return nil, err
+	}
+	svc.Broker = broker
+	svc.Tester = &gitcli.Probe{Broker: broker, GitHub: githubapi.New().User}
 	svc.Subscribe(p.Cat.Bus)
 	return svc, nil
 }
 
-// secretsDir is the data dir: where the database is, or a fresh temporary
-// directory for an in-memory one. secret.key and git/ go there.
+// secretsDir is the data dir, absolute: where the database is, or a fresh
+// temporary directory for an in-memory one. secret.key and git/ go there.
+// Absolute, because sessions run git from their worktrees, never from the
+// server's working directory.
 func secretsDir(cfg Config) (string, error) {
 	if cfg.DBPath == "" || cfg.DBPath == ":memory:" {
 		return os.MkdirTemp("", "harness-secrets-")
 	}
-	return filepath.Dir(cfg.DBPath), nil
+	return filepath.Abs(filepath.Dir(cfg.DBPath))
 }
 
 // optionalGitCredentials is the credentials context when

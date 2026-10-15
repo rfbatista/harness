@@ -17,9 +17,10 @@ var _ ports.GitAuth = (*Service)(nil)
 // code host the harness knows.
 const githubHost = "github.com"
 
-// liveSession is a session with a git directory: what it is rewritten from
-// when a credential, the identity or a pin changes. The origin is read once,
-// when the session starts or resumes.
+// liveSession is a session with a git directory: what its sockets resolve
+// from on every request, and its gitconfig is rewritten from when the
+// identity changes. The origin is read once, when the session starts or
+// resumes.
 type liveSession struct {
 	repositoryID string
 	origin       string
@@ -111,12 +112,13 @@ func lockedOrErr(err error) error {
 	return err
 }
 
-var errNoFiles = errors.New("git credentials: no git directories configured")
+var errNoBroker = errors.New("git credentials: no git directories configured")
 
-// Operation writes the credentials of one server-side operation.
+// Operation opens the credentials of one server-side operation, as stored
+// now.
 func (s *Service) Operation(_ context.Context, repositoryID, originURL string) (*ports.GitOperation, error) {
-	if s.Files == nil {
-		return nil, errNoFiles
+	if s.Broker == nil {
+		return nil, errNoBroker
 	}
 	res, all, err := s.resolve(repositoryID, originURL)
 	if err != nil {
@@ -129,19 +131,20 @@ func (s *Service) Operation(_ context.Context, repositoryID, originURL string) (
 	case locked:
 		return nil, domain.ErrGitCredentialStoreLocked
 	}
-	env, release, err := s.Files.WriteOperation(m)
+	env, release, err := s.Broker.OpenOperation(func() (ports.GitAuthMaterial, error) { return m, nil })
 	if err != nil {
 		return nil, err
 	}
 	return &ports.GitOperation{Env: env, Push: res.Push, GitHub: res.GitHub, GitHubToken: m.GitHubToken, Release: release}, nil
 }
 
-// SessionEnv writes the session's git directory from the repository's
-// credentials. A locked store or nothing resolving still answers: the
-// session runs with no credentials and its brief says why.
+// SessionEnv opens the session's git directory, served the repository's
+// credentials as they are stored at each request. A locked store or nothing
+// resolving still answers: the session runs with no credentials and its
+// brief says why.
 func (s *Service) SessionEnv(ctx context.Context, sessionID, repositoryID string) (*ports.SessionGit, error) {
-	if s.Files == nil {
-		return nil, errNoFiles
+	if s.Broker == nil {
+		return nil, errNoBroker
 	}
 	origin := ""
 	if r := s.rd.Repositories.Get(repositoryID); r != nil {
@@ -153,7 +156,7 @@ func (s *Service) SessionEnv(ctx context.Context, sessionID, repositoryID string
 	s.sessMu.Lock()
 	defer s.sessMu.Unlock()
 	live := liveSession{repositoryID: repositoryID, origin: origin}
-	out, err := s.writeSession(sessionID, live)
+	out, err := s.openSession(sessionID, live)
 	if err != nil {
 		return nil, err
 	}
@@ -161,27 +164,40 @@ func (s *Service) SessionEnv(ctx context.Context, sessionID, repositoryID string
 	return out, nil
 }
 
-// writeSession writes one session's directory; under sessMu.
-func (s *Service) writeSession(sessionID string, live liveSession) (*ports.SessionGit, error) {
+// openSession opens one session's directory; under sessMu.
+func (s *Service) openSession(sessionID string, live liveSession) (*ports.SessionGit, error) {
 	res, all, err := s.resolve(live.repositoryID, live.origin)
 	if err != nil {
 		return nil, err
 	}
-	m, locked, err := s.material(res, all)
+	_, locked, err := s.material(res, all)
 	if err != nil {
 		return nil, err
 	}
-	env, envFile, err := s.Files.WriteSession(sessionID, m)
+	env, envFile, err := s.Broker.OpenSession(sessionID, s.sessionSource(live))
 	if err != nil {
 		return nil, err
 	}
 	return &ports.SessionGit{Env: env, EnvFile: envFile, Note: sessionNote(res, locked)}, nil
 }
 
+// sessionSource reads live's credentials from the store on every call: a
+// locked store answers the identity alone.
+func (s *Service) sessionSource(live liveSession) ports.GitAuthSource {
+	return func() (ports.GitAuthMaterial, error) {
+		res, all, err := s.resolve(live.repositoryID, live.origin)
+		if err != nil {
+			return ports.GitAuthMaterial{}, err
+		}
+		m, _, err := s.material(res, all)
+		return m, err
+	}
+}
+
 // sessionNote is the brief's line when the session's git cannot
 // authenticate to origin; "" when it can or there is no remote origin.
 func sessionNote(res *ports.GitResolution, locked bool) string {
-	const tail = " Do not retry or look for other credentials; tell the person, who can fix it on the harness's Git credentials page."
+	const tail = " Do not look for other credentials; tell the person, who can fix it on the harness's Git credentials page. Once they have, retry: the session's git reads the stored credentials on every push and fetch, with no restart."
 	switch {
 	case res.Remote == nil || res.Remote.Kind == "":
 		return ""
@@ -193,29 +209,30 @@ func sessionNote(res *ports.GitResolution, locked bool) string {
 	return ""
 }
 
-// EndSession removes the session's directory.
+// EndSession closes and removes the session's directory.
 func (s *Service) EndSession(sessionID string) {
-	if s.Files == nil {
+	if s.Broker == nil {
 		return
 	}
 	s.sessMu.Lock()
 	defer s.sessMu.Unlock()
 	delete(s.sessions, sessionID)
-	if err := s.Files.RemoveSession(sessionID); err != nil {
+	if err := s.Broker.CloseSession(sessionID); err != nil {
 		slog.Warn("remove a session's git directory", "session", sessionID, "err", err)
 	}
 }
 
-// refreshSessions rewrites every live session's directory, so their next
-// git command uses what changed.
+// refreshSessions reopens every live session's directory, so its gitconfig
+// carries the identity as it is now. Credentials need no refresh: the
+// sockets read them on every request.
 func (s *Service) refreshSessions() {
-	if s.Files == nil {
+	if s.Broker == nil {
 		return
 	}
 	s.sessMu.Lock()
 	defer s.sessMu.Unlock()
 	for id, live := range s.sessions {
-		if _, err := s.writeSession(id, live); err != nil {
+		if _, err := s.openSession(id, live); err != nil {
 			slog.Warn("rewrite a session's git directory", "session", id, "err", err)
 		}
 	}
@@ -227,15 +244,15 @@ type LiveSession func(sessionID string) (repositoryID string, running bool)
 
 // Sweep removes what a previous run left: every operation directory and the
 // directory of every session that is not running. The running ones are
-// rewritten and kept fresh from now on.
+// reopened, served from the store from now on.
 func (s *Service) Sweep(ctx context.Context, live LiveSession) error {
-	if s.Files == nil {
+	if s.Broker == nil {
 		return nil
 	}
-	if err := s.Files.SweepOperations(); err != nil {
+	if err := s.Broker.SweepOperations(); err != nil {
 		return err
 	}
-	ids, err := s.Files.SessionIDs()
+	ids, err := s.Broker.SessionIDs()
 	if err != nil {
 		return err
 	}
@@ -246,7 +263,7 @@ func (s *Service) Sweep(ctx context.Context, live LiveSession) error {
 			continue
 		}
 		if _, err := s.SessionEnv(ctx, id, repositoryID); err != nil {
-			slog.Warn("rewrite a running session's git directory", "session", id, "err", err)
+			slog.Warn("reopen a running session's git directory", "session", id, "err", err)
 		}
 	}
 	return nil

@@ -95,3 +95,25 @@ func TestSessionsAndAppRunsAreBoundToTheStoredCredentials(t *testing.T) {
 		t.Fatalf("sessions %v and app runs %v are not bound to the credentials", orch.GitAuth, runs.GitAuth)
 	}
 }
+
+// The default database path is relative ("data.db"), but sessions run git
+// from their worktrees: every path their git environment names must be
+// absolute, or ssh looks for its agent under the worktree.
+func TestARelativeDatabaseStillGivesAbsoluteGitDirectories(t *testing.T) {
+	wd := t.TempDir()
+	t.Chdir(wd)
+	dir, err := secretsDir(Config{DBPath: "data.db"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want, _ := filepath.EvalSymlinks(wd); !filepath.IsAbs(dir) || evalOr(dir) != want {
+		t.Fatalf("data dir %q for a relative database, want %q", dir, wd)
+	}
+}
+
+func evalOr(p string) string {
+	if r, err := filepath.EvalSymlinks(p); err == nil {
+		return r
+	}
+	return p
+}

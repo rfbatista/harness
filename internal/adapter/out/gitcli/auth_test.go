@@ -1,9 +1,14 @@
 package gitcli
 
 import (
+	"bytes"
 	"context"
+	"crypto/ed25519"
+	"crypto/rand"
 	"encoding/base64"
+	"encoding/pem"
 	"errors"
+	"fmt"
 	"net"
 	"net/http"
 	"net/http/cgi"
@@ -17,6 +22,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"golang.org/x/crypto/ssh"
 
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
@@ -210,9 +217,33 @@ func checkout(t *testing.T, m *machine, origin string) string {
 	return dir
 }
 
-func authFiles(t *testing.T, m *machine) *AuthFiles {
-	return &AuthFiles{Root: filepath.Join(t.TempDir(), "git"), Inherited: m.env}
+func authBroker(t *testing.T, m *machine) *AuthBroker {
+	t.Helper()
+	b := newBroker(t)
+	b.Inherited = m.env
+	return b
 }
+
+// newBroker keeps its directories in a temp dir and its sockets in a short
+// one of their own (socket paths are short on macOS).
+func newBroker(t *testing.T) *AuthBroker {
+	t.Helper()
+	sockets, err := os.MkdirTemp("/tmp", "hg")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.RemoveAll(sockets) })
+	b, err := NewAuthBroker(filepath.Join(t.TempDir(), "git"), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	b.SocketRoot = sockets
+	b.Inherited = []string{}
+	return b
+}
+
+// fixed serves m on every request.
+func fixed(m ports.GitAuthMaterial) ports.GitAuthSource { return staticSource(m) }
 
 const storedToken = "ghp_storedHarnessToken42"
 
@@ -225,7 +256,7 @@ func TestAPushUsesOnlyTheStoredCredential(t *testing.T) {
 	srv := newGitServer(t, "x-access-token", storedToken)
 	host := strings.TrimPrefix(strings.TrimPrefix(srv.URL, "http://"), "https://")
 	host = host[:strings.IndexByte(host, '/')]
-	files := authFiles(t, m)
+	files := authBroker(t, m)
 	dir := checkout(t, m, srv.URL)
 
 	// Control: without the harness's environment, git does use the planted
@@ -244,13 +275,14 @@ func TestAPushUsesOnlyTheStoredCredential(t *testing.T) {
 			write := func(mat ports.GitAuthMaterial) []string {
 				t.Helper()
 				if kind == "session" {
-					env, _, err := files.WriteSession("s-push", mat)
+					env, _, err := files.OpenSession("s-push", fixed(mat))
 					if err != nil {
 						t.Fatal(err)
 					}
+					t.Cleanup(func() { _ = files.CloseSession("s-push") })
 					return env
 				}
-				env, release, err := files.WriteOperation(mat)
+				env, release, err := files.OpenOperation(fixed(mat))
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -289,11 +321,11 @@ func TestAPushUsesOnlyTheStoredCredential(t *testing.T) {
 func TestTheHelperAnswersOnlyForItsHost(t *testing.T) {
 	m := plantMachine(t)
 	srv := newGitServer(t, "x-access-token", storedToken)
-	files := authFiles(t, m)
+	files := authBroker(t, m)
 	dir := checkout(t, m, srv.URL)
-	env, release, err := files.WriteOperation(ports.GitAuthMaterial{
+	env, release, err := files.OpenOperation(fixed(ports.GitAuthMaterial{
 		HTTPS: &ports.GitHTTPSLogin{Host: "github.com", Username: "x-access-token", Token: storedToken},
-	})
+	}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -336,8 +368,8 @@ func TestAnSSHPushUsesNothingOfTheMachine(t *testing.T) {
 	}
 	m.reset(t)
 
-	files := authFiles(t, m)
-	env, release, err := files.WriteOperation(ports.GitAuthMaterial{})
+	files := authBroker(t, m)
+	env, release, err := files.OpenOperation(fixed(ports.GitAuthMaterial{}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -381,35 +413,60 @@ func decodeBasic(h string) string {
 	return string(b)
 }
 
-// Files are owner-only, outside the worktree, rewritten in place, and the
-// environment points at them.
-func TestSessionDirectoriesAreOwnerOnlyAndStable(t *testing.T) {
-	root := filepath.Join(t.TempDir(), "git")
-	files := &AuthFiles{Root: root, ExcludesFile: "/Users/ada/.gitignore_global", Inherited: []string{"GIT_COMMITTER_EMAIL=old@example.com"}}
+const storedKey = "-----BEGIN OPENSSH PRIVATE KEY-----\nabc\n-----END OPENSSH PRIVATE KEY-----"
+
+// A directory holds no secret: owner-only, outside the worktree, reopened in
+// place, and the environment points at it and at its sockets by absolute
+// paths.
+func TestSessionDirectoriesHoldNoSecretAndAreStable(t *testing.T) {
+	files := newBroker(t)
+	files.ExcludesFile = "/Users/ada/.gitignore_global"
+	files.Inherited = []string{"GIT_COMMITTER_EMAIL=old@example.com"}
+	dir := filepath.Join(files.Root, "sessions", "s1")
+	// An earlier version's files, secrets among them, are removed.
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range legacyFiles {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(storedToken), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
 	id := &domain.GitIdentity{Name: `Ada "Countess" Lovelace`, Email: "ada@example.com"}
-	env, envPath, err := files.WriteSession("s1", ports.GitAuthMaterial{
+	env, envPath, err := files.OpenSession("s1", fixed(ports.GitAuthMaterial{
 		Identity: id, HTTPS: &ports.GitHTTPSLogin{Host: "github.com", Username: "x-access-token", Token: storedToken},
-		SSHKey: "-----BEGIN OPENSSH PRIVATE KEY-----\nabc\n-----END OPENSSH PRIVATE KEY-----", GitHubToken: storedToken,
-	})
+		SSHKey: storedKey, GitHubToken: storedToken,
+	}))
 	if err != nil {
 		t.Fatal(err)
 	}
-	dir := filepath.Join(root, "sessions", "s1")
-	for _, name := range []string{gitconfigFile, httpsFile, sshKeyFile, envFile} {
+	defer files.CloseSession("s1")
+	sockets := files.socketDir(dir)
+	for _, name := range []string{gitconfigFile, envFile} {
 		info, err := os.Stat(filepath.Join(dir, name))
 		if err != nil || info.Mode().Perm() != 0o600 {
 			t.Fatalf("%s: %v, %v; want mode 600", name, info, err)
 		}
 	}
-	if info, _ := os.Stat(dir); info.Mode().Perm() != 0o700 {
-		t.Fatalf("session dir mode %o, want 700", info.Mode().Perm())
+	for _, name := range []string{agentSocket, credSocket} {
+		info, err := os.Stat(filepath.Join(sockets, name))
+		if err != nil || info.Mode()&os.ModeSocket == 0 || info.Mode().Perm() != 0o600 {
+			t.Fatalf("%s: %v, %v; want a socket, mode 600", name, info, err)
+		}
 	}
+	for _, d := range []string{dir, sockets} {
+		if info, _ := os.Stat(d); info.Mode().Perm() != 0o700 {
+			t.Fatalf("%s mode %o, want 700", d, info.Mode().Perm())
+		}
+	}
+	noSecretUnder(t, files.Root, sockets)
 	if envPath != filepath.Join(dir, "env.sh") {
 		t.Fatalf("env file %s", envPath)
 	}
 	want := map[string]string{
 		"GIT_CONFIG_NOSYSTEM": "1", "GIT_CONFIG_GLOBAL": filepath.Join(dir, "gitconfig"), "GIT_CONFIG_COUNT": "2",
 		"GIT_CONFIG_KEY_0": "credential.helper", "GIT_CONFIG_VALUE_0": "", "GIT_CONFIG_KEY_1": "credential.helper",
+		"GIT_CONFIG_VALUE_1":  "cache --socket '" + filepath.Join(sockets, credSocket) + "'",
 		"GIT_TERMINAL_PROMPT": "0", "SSH_AUTH_SOCK": "", "GIT_ASKPASS": "", "EMAIL": "",
 		"GH_TOKEN": storedToken, "GITHUB_TOKEN": storedToken, "GH_CONFIG_DIR": filepath.Join(dir, "gh"),
 		"GIT_COMMITTER_EMAIL": "ada@example.com", "HARNESS_GIT_ENV": envPath,
@@ -427,9 +484,11 @@ func TestSessionDirectoriesAreOwnerOnlyAndStable(t *testing.T) {
 	if _, ok := got["GIT_AUTHOR_NAME"]; ok {
 		t.Error("GIT_AUTHOR_NAME is set though the server's environment has none")
 	}
-	if !strings.Contains(got["GIT_SSH_COMMAND"], "IdentityFile="+filepath.Join(dir, "ssh_key")) ||
-		!strings.Contains(got["GIT_SSH_COMMAND"], "IdentityAgent=none") || !strings.Contains(got["GIT_SSH_COMMAND"], "-F /dev/null") {
-		t.Errorf("GIT_SSH_COMMAND = %q", got["GIT_SSH_COMMAND"])
+	for _, s := range []string{"IdentityAgent=" + filepath.Join(sockets, agentSocket), "IdentityFile=/dev/null", "-F /dev/null",
+		"UserKnownHostsFile=" + filepath.Join(files.Root, "known_hosts")} {
+		if !strings.Contains(got["GIT_SSH_COMMAND"], s) {
+			t.Errorf("GIT_SSH_COMMAND = %q, want %q in it", got["GIT_SSH_COMMAND"], s)
+		}
 	}
 	cfg, _ := os.ReadFile(filepath.Join(dir, "gitconfig"))
 	for _, s := range []string{`name = "Ada \"Countess\" Lovelace"`, "useConfigOnly = true", `excludesFile = "/Users/ada/.gitignore_global"`} {
@@ -443,18 +502,13 @@ func TestSessionDirectoriesAreOwnerOnlyAndStable(t *testing.T) {
 		t.Errorf("git reads user.name %q", out)
 	}
 
-	// Rewritten in place: same paths, new contents; a removed key is gone.
-	env2, envPath2, err := files.WriteSession("s1", ports.GitAuthMaterial{})
+	// Reopened in place: same paths, the new source.
+	env2, envPath2, err := files.OpenSession("s1", fixed(ports.GitAuthMaterial{}))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if envPath2 != envPath || strings.Join(slices.DeleteFunc(slices.Clone(env2), isToken), "\n") != strings.Join(slices.DeleteFunc(slices.Clone(env), isToken), "\n") {
 		t.Fatalf("the environment changed:\n%v\n%v", env, env2)
-	}
-	for _, name := range []string{httpsFile, sshKeyFile} {
-		if _, err := os.Stat(filepath.Join(dir, name)); !os.IsNotExist(err) {
-			t.Fatalf("%s survived a rewrite without it: %v", name, err)
-		}
 	}
 	if got := envValue(env2, "GH_TOKEN"); got != NoGitHubToken {
 		t.Fatalf("GH_TOKEN with no token = %q, want the placeholder", got)
@@ -462,20 +516,42 @@ func TestSessionDirectoriesAreOwnerOnlyAndStable(t *testing.T) {
 	if ids, _ := files.SessionIDs(); len(ids) != 1 || ids[0] != "s1" {
 		t.Fatalf("SessionIDs = %v", ids)
 	}
-	if err := files.RemoveSession("s1"); err != nil {
+	if err := files.CloseSession("s1"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := os.Stat(dir); !os.IsNotExist(err) {
-		t.Fatal("the session directory outlived RemoveSession")
+	for _, d := range []string{dir, sockets} {
+		if _, err := os.Stat(d); !os.IsNotExist(err) {
+			t.Fatalf("%s outlived CloseSession", d)
+		}
 	}
-	if _, _, err := files.WriteSession("../escape", ports.GitAuthMaterial{}); err == nil {
+	if _, _, err := files.OpenSession("../escape", fixed(ports.GitAuthMaterial{})); err == nil {
 		t.Fatal("a session id with a path in it was accepted")
+	}
+	if _, err := NewAuthBroker("git", ""); err == nil {
+		t.Fatal("a relative root was accepted: sessions run git from their worktrees")
+	}
+}
+
+// noSecretUnder fails t when a file under dirs holds the stored token or key.
+func noSecretUnder(t *testing.T, dirs ...string) {
+	t.Helper()
+	for _, d := range dirs {
+		_ = filepath.WalkDir(d, func(path string, e os.DirEntry, err error) error {
+			if err != nil || !e.Type().IsRegular() {
+				return nil
+			}
+			b, _ := os.ReadFile(path)
+			if strings.Contains(string(b), storedToken) || strings.Contains(string(b), "OPENSSH PRIVATE KEY") {
+				t.Errorf("%s holds a secret", path)
+			}
+			return nil
+		})
 	}
 }
 
 func isToken(kv string) bool {
 	k, _, _ := strings.Cut(kv, "=")
-	return slices.Contains(ghTokenVars, k) || slices.Contains(identityVars, k)
+	return k == ghTokenEnv || slices.Contains(ghTokenVars, k) || slices.Contains(identityVars, k)
 }
 
 func envValue(env []string, k string) string {
@@ -490,21 +566,212 @@ func envValue(env []string, k string) string {
 // A login shell's profile may export the machine's agent or token; sourcing
 // env.sh after it puts the harness's values back.
 func TestTheEnvFileRestoresTheHarnessEnvironmentInAShell(t *testing.T) {
-	files := &AuthFiles{Root: filepath.Join(t.TempDir(), "git"), Inherited: []string{}}
-	_, envFile, err := files.WriteSession("s2", ports.GitAuthMaterial{GitHubToken: storedToken})
+	files := newBroker(t)
+	env, envFile, err := files.OpenSession("s2", fixed(ports.GitAuthMaterial{GitHubToken: storedToken}))
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer files.CloseSession("s2")
 	script := `export SSH_AUTH_SOCK=/machine/agent GITHUB_TOKEN=machine GIT_SSH_COMMAND=machine-ssh; . "$1"; ` +
 		`printf '%s|%s|%s|%s' "${SSH_AUTH_SOCK-unset}" "$GITHUB_TOKEN" "$GIT_CONFIG_VALUE_0" "$GIT_SSH_COMMAND"`
-	out, err := exec.Command("/bin/sh", "-c", script, "sh", envFile).Output()
+	cmd := exec.Command("/bin/sh", "-c", script, "sh", envFile)
+	cmd.Env = append(os.Environ(), env...)
+	out, err := cmd.Output()
 	if err != nil {
 		t.Fatal(err)
 	}
 	parts := strings.SplitN(string(out), "|", 4)
-	if parts[0] != "unset" || parts[1] != storedToken || parts[2] != "" || !strings.Contains(parts[3], "IdentityAgent=none") {
+	if parts[0] != "unset" || parts[1] != storedToken || parts[2] != "" || !strings.Contains(parts[3], "IdentityAgent=/") {
 		t.Fatalf("after sourcing env.sh: %q", out)
 	}
+}
+
+// mutable is a source a test changes, as the store would.
+type mutable struct {
+	mu sync.Mutex
+	m  ports.GitAuthMaterial
+}
+
+func (s *mutable) set(m ports.GitAuthMaterial) { s.mu.Lock(); s.m = m; s.mu.Unlock() }
+func (s *mutable) source() (ports.GitAuthMaterial, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.m, nil
+}
+
+// fill is what git's credential machinery answers for host with env: "" when
+// nothing is.
+func fill(t *testing.T, env []string, host string) string {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "git", "credential", "fill")
+	cmd.Env = append(os.Environ(), env...)
+	cmd.Stdin = strings.NewReader("protocol=https\nhost=" + host + "\n\n")
+	out, err := cmd.Output()
+	if err != nil {
+		return ""
+	}
+	return envValue(strings.Split(string(out), "\n"), "password")
+}
+
+// The credential socket reads the store on every request: a token stored,
+// rotated or removed mid-session is the next git's, with no file written.
+func TestTheCredentialSocketFollowsTheStoreOnEveryRequest(t *testing.T) {
+	files := newBroker(t)
+	src := &mutable{}
+	env, _, err := files.OpenSession("s3", src.source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer files.CloseSession("s3")
+	if got := fill(t, env, "github.com"); got != "" {
+		t.Fatalf("with nothing stored, git got %q", got)
+	}
+	login := func(token domain.Secret) ports.GitAuthMaterial {
+		return ports.GitAuthMaterial{HTTPS: &ports.GitHTTPSLogin{Host: "github.com", Username: "x-access-token", Token: token}}
+	}
+	src.set(login(storedToken))
+	if got := fill(t, env, "github.com"); got != storedToken {
+		t.Fatalf("after storing a token, git got %q", got)
+	}
+	if got := fill(t, env, "gitlab.com"); got != "" {
+		t.Fatalf("for another host, git got %q", got)
+	}
+	src.set(login("ghp_rotated"))
+	if got := fill(t, env, "github.com"); got != "ghp_rotated" {
+		t.Fatalf("after rotating, git got %q", got)
+	}
+	noSecretUnder(t, files.Root, files.SocketRoot)
+	src.set(ports.GitAuthMaterial{})
+	if got := fill(t, env, "github.com"); got != "" {
+		t.Fatalf("after deleting, git got %q", got)
+	}
+}
+
+// sshHost is an ssh server that lets in one public key, set by the test.
+type sshHost struct {
+	addr string
+	mu   sync.Mutex
+	key  ssh.PublicKey
+}
+
+func (h *sshHost) allow(k ssh.PublicKey) { h.mu.Lock(); h.key = k; h.mu.Unlock() }
+
+func newSSHHost(t *testing.T) *sshHost {
+	t.Helper()
+	_, hostPriv, _ := ed25519.GenerateKey(rand.Reader)
+	signer, err := ssh.NewSignerFromKey(hostPriv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := &sshHost{}
+	cfg := &ssh.ServerConfig{PublicKeyCallback: func(_ ssh.ConnMetadata, k ssh.PublicKey) (*ssh.Permissions, error) {
+		h.mu.Lock()
+		defer h.mu.Unlock()
+		if h.key != nil && bytes.Equal(k.Marshal(), h.key.Marshal()) {
+			return nil, nil
+		}
+		return nil, errors.New("refused")
+	}}
+	cfg.AddHostKey(signer)
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { ln.Close() })
+	h.addr = ln.Addr().String()
+	go func() {
+		for {
+			c, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			go func() {
+				defer c.Close()
+				_, chans, reqs, err := ssh.NewServerConn(c, cfg)
+				if err != nil {
+					return
+				}
+				go ssh.DiscardRequests(reqs)
+				for nc := range chans {
+					ch, chReqs, err := nc.Accept()
+					if err != nil {
+						continue
+					}
+					for r := range chReqs {
+						_ = r.Reply(true, nil)
+						if r.Type == "exec" || r.Type == "shell" {
+							_, _ = ch.Write([]byte("hi, harness\n"))
+							_, _ = ch.SendRequest("exit-status", false, ssh.Marshal(struct{ Status uint32 }{1}))
+							ch.Close()
+						}
+					}
+				}
+			}()
+		}
+	}()
+	return h
+}
+
+func newKey(t *testing.T) (domain.Secret, ssh.PublicKey) {
+	t.Helper()
+	pub, priv, _ := ed25519.GenerateKey(rand.Reader)
+	block, err := ssh.MarshalPrivateKey(priv, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sp, err := ssh.NewPublicKey(pub)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return domain.Secret(pem.EncodeToMemory(block)), sp
+}
+
+// ssh authenticates through the session's agent with the key stored at that
+// moment, and with nothing of the machine's.
+func TestAnSSHSessionSignsWithTheStoredKeyOfTheMoment(t *testing.T) {
+	m := plantMachine(t)
+	host := newSSHHost(t)
+	files := authBroker(t, m)
+	src := &mutable{}
+	env, _, err := files.OpenSession("s4", src.source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer files.CloseSession("s4")
+	h, port, _ := net.SplitHostPort(host.addr)
+	connect := func() error {
+		cmd := exec.Command("/bin/sh", "-c", `eval "$GIT_SSH_COMMAND \"\$@\""`, "sh", "-p", port, "-T", "git@"+h)
+		cmd.Env = append(slices.Clone(m.env), env...)
+		cmd.Stdin = strings.NewReader("")
+		out, err := cmd.CombinedOutput()
+		var exit *exec.ExitError
+		if errors.As(err, &exit) && exit.ExitCode() == 1 && strings.Contains(string(out), "hi, harness") {
+			return nil
+		}
+		return fmt.Errorf("%v: %s", err, out)
+	}
+	first, firstPub := newKey(t)
+	host.allow(firstPub)
+	if err := connect(); err == nil {
+		t.Fatal("ssh got in with no stored key")
+	}
+	src.set(ports.GitAuthMaterial{SSHKey: first})
+	if err := connect(); err != nil {
+		t.Fatalf("with the stored key: %v", err)
+	}
+	second, secondPub := newKey(t)
+	src.set(ports.GitAuthMaterial{SSHKey: second})
+	if err := connect(); err == nil {
+		t.Fatal("ssh got in with the replaced key")
+	}
+	host.allow(secondPub)
+	if err := connect(); err != nil {
+		t.Fatalf("with the replacing key: %v", err)
+	}
+	noSecretUnder(t, files.Root, files.SocketRoot)
+	m.untouched(t)
 }
 
 // The publisher pushes with the operation's environment only, and says when
@@ -526,8 +793,8 @@ func TestThePublisherAuthenticatesOnlyThroughItsEnvironment(t *testing.T) {
 	if !errors.Is(err, ports.ErrRemoteAuthRejected) {
 		t.Fatalf("push with no credentials: %v, want ErrRemoteAuthRejected", err)
 	}
-	files := authFiles(t, m)
-	wrong, release, err := files.WriteOperation(ports.GitAuthMaterial{HTTPS: &ports.GitHTTPSLogin{Host: host, Username: "x-access-token", Token: "ghp_wrong"}})
+	files := authBroker(t, m)
+	wrong, release, err := files.OpenOperation(fixed(ports.GitAuthMaterial{HTTPS: &ports.GitHTTPSLogin{Host: host, Username: "x-access-token", Token: "ghp_wrong"}}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -535,7 +802,7 @@ func TestThePublisherAuthenticatesOnlyThroughItsEnvironment(t *testing.T) {
 	if err := p.Push(ctx, dir, "agent/x", wrong); !errors.Is(err, ports.ErrRemoteAuthRejected) {
 		t.Fatalf("push with a refused token: %v, want ErrRemoteAuthRejected", err)
 	}
-	right, release2, err := files.WriteOperation(ports.GitAuthMaterial{HTTPS: &ports.GitHTTPSLogin{Host: host, Username: "x-access-token", Token: storedToken}})
+	right, release2, err := files.OpenOperation(fixed(ports.GitAuthMaterial{HTTPS: &ports.GitHTTPSLogin{Host: host, Username: "x-access-token", Token: storedToken}}))
 	if err != nil {
 		t.Fatal(err)
 	}
