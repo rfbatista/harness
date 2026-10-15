@@ -586,7 +586,7 @@ func SettingsPage(v SettingsView) templ.Component {
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 40, "</div><template x-if=\"noIgnored\"><p class=\"[ text-sm color-ink-faint ]\">No ignored paths.</p></template><template x-if=\"hasIgnored\"><div class=\"[ pane ]\" aria-label=\"Ignored paths\"><template x-for=\"p in ignoredRows\" x-bind:key=\"p.path\"><div class=\"[ row ]\" style=\"--row-columns: minmax(0, 1fr) auto\"><span class=\"[ title ] [ font-mono text-sm ]\" x-text=\"p.path\"></span> <button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" x-bind:aria-label=\"p.removeLabel\" x-bind:aria-busy=\"p.removing\" x-on:click=\"removeIgnored(p.path)\">Remove</button></div></template></div></template><form class=\"[ cluster ] [ gutter-xs ]\" x-on:submit.prevent=\"addIgnored\"><label class=\"[ visually-hidden ]\" for=\"ignored-path\">Path to ignore</label> <input id=\"ignored-path\" class=\"[ grow ] [ font-mono text-sm ]\" style=\"flex: 1 1 10rem\" placeholder=\"dist\" autocomplete=\"off\" x-model=\"ignoredPath\" x-bind:aria-invalid=\"ignoredInvalid\" x-bind:aria-describedby=\"ignoredDescribedBy\"> <button type=\"submit\" class=\"[ button ]\" disabled x-bind:disabled=\"cannotAddPath\" x-bind:aria-busy=\"addingPath\">Add path</button></form><template x-if=\"ignoredError\"><span class=\"[ error ] [ text-sm ]\" id=\"ignored-path-error\"><span x-text=\"ignoredError.message\"></span><template x-if=\"ignoredError.code\"><span><span class=\"[ font-mono ]\" x-text=\"ignoredError.code\"></span> · <span x-text=\"ignoredError.next\"></span></span></template></span></template></section><section class=\"[ flow ] [ flow-space-s ]\" aria-labelledby=\"settings-repositories\"><h2 id=\"settings-repositories\">Repositories and env files</h2><div class=\"[ pane ]\"><a class=\"[ row ]\" href=\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 40, "</div><template x-if=\"noIgnored\"><p class=\"[ text-sm color-ink-faint ]\">No ignored paths.</p></template><template x-if=\"hasIgnored\"><div class=\"[ pane ]\" aria-label=\"Ignored paths\"><template x-for=\"p in ignoredRows\" x-bind:key=\"p.path\"><div class=\"[ row ]\" style=\"--row-columns: minmax(0, 1fr) auto\"><span class=\"[ title ] [ font-mono text-sm ]\" x-text=\"p.path\"></span> <button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" x-bind:aria-label=\"p.removeLabel\" x-bind:aria-busy=\"p.removing\" x-on:click=\"removeIgnored(p.path)\">Remove</button></div></template></div></template><form class=\"[ cluster ] [ gutter-xs ]\" x-on:submit.prevent=\"addIgnored\"><label class=\"[ visually-hidden ]\" for=\"ignored-path\">Path to ignore</label> <input id=\"ignored-path\" class=\"[ grow ] [ font-mono text-sm ]\" style=\"flex: 1 1 10rem\" placeholder=\"dist\" autocomplete=\"off\" x-model=\"ignoredPath\" x-bind:aria-invalid=\"ignoredInvalid\" x-bind:aria-describedby=\"ignoredDescribedBy\"> <button type=\"submit\" class=\"[ button ]\" disabled x-bind:disabled=\"cannotAddPath\" x-bind:aria-busy=\"addingPath\">Add path</button></form><template x-if=\"ignoredError\"><span class=\"[ error ] [ text-sm ]\" id=\"ignored-path-error\"><span x-text=\"ignoredError.message\"></span><template x-if=\"ignoredError.code\"><span><span class=\"[ font-mono ]\" x-text=\"ignoredError.code\"></span> · <span x-text=\"ignoredError.next\"></span></span></template></span></template></section><section class=\"[ flow ] [ flow-space-s ]\" aria-labelledby=\"settings-repositories\"><h2 id=\"settings-repositories\">Repositories and their settings</h2><div class=\"[ pane ]\"><a class=\"[ row ]\" href=\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -630,14 +630,14 @@ func SettingsPage(v SettingsView) templ.Component {
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 44, "\" style=\"--row-columns: minmax(0, 1fr) auto\"><span class=\"[ title ]\">Env files of ")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 44, "\" style=\"--row-columns: minmax(0, 1fr) auto\"><span class=\"[ title ]\">Settings of ")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var32 string
 				templ_7745c5c3_Var32, templ_7745c5c3_Err = templ.JoinStringErrs(r.Name)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `projects/manage.templ`, Line: 203, Col: 54}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `projects/manage.templ`, Line: 203, Col: 53}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var32))
 				if templ_7745c5c3_Err != nil {

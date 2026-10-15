@@ -2,6 +2,7 @@
 // contract as the real gateway (../testing/gateway-contract.js).
 
 import { Codes, StructuredError } from "../../../shared/domain/errors.js";
+import { toRunCommandsSeed } from "./dto.js";
 
 /**
  * @param {{
@@ -19,6 +20,7 @@ export function memoryRuns({ sessions = [], commands = {}, repositoryOf = {}, di
 
   /** @type {import("../domain/ports.js").RunGateway} */
   const gateway = {
+    decodeCommandsSeed: toRunCommandsSeed,
     async listCommands(repositoryId) {
       return [...(commands[repositoryId] ?? [])].sort((a, b) => a.name.localeCompare(b.name));
     },

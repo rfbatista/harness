@@ -1,6 +1,6 @@
 // RunGateway over the harness HTTP API.
 
-import { toRun, toRunCommand } from "./dto.js";
+import { toRun, toRunCommand, toRunCommandsSeed } from "./dto.js";
 
 /**
  * @param {import("../../../shared/infrastructure/api.js").ApiClient} api
@@ -8,6 +8,7 @@ import { toRun, toRunCommand } from "./dto.js";
  */
 export function runsGateway(api) {
   return {
+    decodeCommandsSeed: toRunCommandsSeed,
     async listCommands(repositoryId) {
       const body = await api.get("/list_repository_run_commands", { repository_id: repositoryId });
       return (body?.run_commands ?? []).map(toRunCommand);

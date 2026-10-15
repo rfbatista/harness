@@ -1,5 +1,5 @@
 import { assert, file, test } from "../../../shared/testing/test.js";
-import { preferredRun, runState } from "./run.js";
+import { preferredRun, runCommandNameProblem, runState } from "./run.js";
 
 file("runs/domain/run");
 
@@ -21,4 +21,14 @@ test("how a run's state reads", () => {
   assert.deepEqual(runState({ status: "stopped" }), { state: "done", word: "stopped" });
   assert.deepEqual(runState({ status: "exited", exitCode: 0 }), { state: "done", word: "exited" });
   assert.deepEqual(runState({ status: "exited", exitCode: 1 }), { state: "failed", word: "exited (code 1)" });
+});
+
+test("a run command's name follows the server's rule", () => {
+  assert.equal(runCommandNameProblem("server"), "");
+  assert.equal(runCommandNameProblem("  web app_2.dev-x  "), "");
+  assert.equal(runCommandNameProblem("a".repeat(40)), "");
+  assert.equal(runCommandNameProblem("a".repeat(41)), "Up to 40 characters; this one has 41.");
+  assert.equal(runCommandNameProblem("web/app"), "Use only letters, digits, spaces and . _ -");
+  assert.equal(runCommandNameProblem("-dev"), "Start with a letter or a digit.");
+  assert.equal(runCommandNameProblem("   "), "A run command needs a name.");
 });

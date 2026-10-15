@@ -1,6 +1,7 @@
 // The runs module's Alpine components.
 
 import { appPanel } from "./components/appPanel.js";
+import { runCommandsSettings } from "./components/runCommandsSettings.js";
 
 /**
  * @param {import("alpinejs").Alpine} Alpine
@@ -8,4 +9,5 @@ import { appPanel } from "./components/appPanel.js";
  */
 export function registerRuns(Alpine, deps) {
   Alpine.data("runsAppPanel", appPanel(deps));
+  Alpine.data("runsCommandsSettings", runCommandsSettings(deps));
 }

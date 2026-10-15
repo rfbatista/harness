@@ -192,7 +192,7 @@ templ SettingsPage(v SettingsView) {
 					</section>
 
 					<section class="[ flow ] [ flow-space-s ]" aria-labelledby="settings-repositories">
-						<h2 id="settings-repositories">Repositories and env files</h2>
+						<h2 id="settings-repositories">Repositories and their settings</h2>
 						<div class="[ pane ]">
 							<a class="[ row ]" href={ templ.SafeURL(v.RepositoriesHref) } style="--row-columns: minmax(0, 1fr) auto">
 								<span class="[ title ]">Repositories</span>
@@ -200,7 +200,7 @@ templ SettingsPage(v SettingsView) {
 							</a>
 							for _, r := range v.Repositories {
 								<a class="[ row ]" href={ templ.SafeURL(r.EnvHref) } style="--row-columns: minmax(0, 1fr) auto">
-									<span class="[ title ]">Env files of { r.Name }</span>
+									<span class="[ title ]">Settings of { r.Name }</span>
 									<span class="[ meta ]">→</span>
 								</a>
 							}

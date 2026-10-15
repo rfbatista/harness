@@ -41,6 +41,9 @@ type Deps struct {
 	Repositories ports.RepositoryLister
 	// EnvFiles lists a repository's env files for their page.
 	EnvFiles ports.EnvFileLister
+	// RunCommands lists a repository's run commands for its settings page;
+	// nil leaves the page's Run commands section out.
+	RunCommands ports.RunCommandLister
 	// Documents reads a task's documents and the project's library; nil hides both.
 	Documents ports.DocumentReader
 	// History reads repositories' commit graphs for their history pages.
@@ -107,7 +110,7 @@ func NewHandler(deps Deps, assets *Assets, fallback http.Handler) http.Handler {
 		taskPages.Workspaces = deps.Workspaces
 	}
 	projectPages := projects.Handler{
-		Projects: deps.Projects, Repositories: deps.Repositories, EnvFiles: deps.EnvFiles, Summaries: deps.ProjectSummaries, Credentials: deps.GitCredentials,
+		Projects: deps.Projects, Repositories: deps.Repositories, EnvFiles: deps.EnvFiles, RunCommands: deps.RunCommands, Summaries: deps.ProjectSummaries, Credentials: deps.GitCredentials,
 		Layout: s.layout, Render: render, Now: deps.Now,
 	}
 	historyPages := history.Handler{
