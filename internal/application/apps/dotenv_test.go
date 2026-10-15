@@ -93,3 +93,53 @@ func TestARunWithoutARootDotenvRunsNormally(t *testing.T) {
 		})
 	}
 }
+
+// screenLines is the run's log as trimmed, non-empty lines.
+func screenLines(screen string) []string {
+	var lines []string
+	for _, l := range strings.Split(screen, "\n") {
+		if l = strings.TrimSpace(l); l != "" {
+			lines = append(lines, l)
+		}
+	}
+	return lines
+}
+
+// Lines of the .env that are not KEY=VALUE are skipped: the run still starts
+// with the valid ones, and one note naming the line numbers, never a value,
+// comes before the command's own output.
+func TestSkippedDotenvLinesAreNotedBeforeTheCommandsOutput(t *testing.T) {
+	const secret = "sk-live-9f8e7d6c5b4a"
+	for name, tc := range map[string]struct{ dotenv, note string }{
+		"several": {"GOOD=yes\nnot a line\n# comment\nAPI_TOKEN " + secret + "\nOTHER=2\n", ".env: skipped lines 2, 4 (not KEY=VALUE)"},
+		"one":     {"GOOD=yes\n" + secret + "\nOTHER=2\n", ".env: skipped line 2 (not KEY=VALUE)"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			svc, _ := newGitRunner(t, envFiles{"r1": {{RepositoryID: "r1", Path: ".env", Content: tc.dotenv}}})
+			r, err := svc.Start(context.Background(), "s1", "", `printf 'out:%s-%s\n' "$GOOD" "$OTHER"; sleep 30`)
+			if err != nil {
+				t.Fatal(err)
+			}
+			screen := readUntil(t, svc, r.ID, "out:yes-2")
+			if want := []string{tc.note, "out:yes-2"}; !slices.Equal(screenLines(screen), want) {
+				t.Errorf("the run shows %q, want %q", screenLines(screen), want)
+			}
+			if strings.Contains(screen, secret) {
+				t.Errorf("the run's log shows a skipped line's text: %q", screen)
+			}
+		})
+	}
+}
+
+// A .env whose every line is valid adds nothing to the run's log.
+func TestAValidDotenvWritesNoNote(t *testing.T) {
+	svc, _ := newGitRunner(t, envFiles{"r1": {{RepositoryID: "r1", Path: ".env", Content: "# c\n\nGOOD=yes\n"}}})
+	r, err := svc.Start(context.Background(), "s1", "", `printf 'out:%s\n' "$GOOD"; sleep 30`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	screen := readUntil(t, svc, r.ID, "out:yes")
+	if want := []string{"out:yes"}; !slices.Equal(screenLines(screen), want) {
+		t.Errorf("the run shows %q, want %q", screenLines(screen), want)
+	}
+}

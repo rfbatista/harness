@@ -11,6 +11,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -97,8 +98,8 @@ func (s *Service) Start(ctx context.Context, sessionID, name, command string) (*
 	if err != nil {
 		return nil, err
 	}
-	// Parsed, never sourced (ADR 0008). The skipped lines are not shown yet.
-	vars, _ := domain.ParseDotenv(dotenv)
+	// Parsed, never sourced (ADR 0008).
+	vars, skipped := domain.ParseDotenv(dotenv)
 
 	id := "run-" + randomHex()
 	rec := domain.AppRun{
@@ -107,6 +108,10 @@ func (s *Service) Start(ctx context.Context, sessionID, name, command string) (*
 	}
 	// Recorded before it starts, so an exit that comes at once is recorded too.
 	r := &run{rec: rec, log: newLogBuffer()}
+	if note := skippedNote(skipped); note != "" {
+		// Ahead of the command's output: viewers replay and follow the log.
+		r.log.append([]byte(note))
+	}
 	s.mu.Lock()
 	s.runs[id] = r
 	s.mu.Unlock()
@@ -144,6 +149,23 @@ func (s *Service) Start(ctx context.Context, sessionID, name, command string) (*
 	out := r.rec
 	s.mu.Unlock()
 	return &out, nil
+}
+
+// skippedNote names the .env lines that were skipped, by number only: a
+// malformed line may still hold a secret.
+func skippedNote(lines []int) string {
+	if len(lines) == 0 {
+		return ""
+	}
+	nums := make([]string, len(lines))
+	for i, n := range lines {
+		nums[i] = strconv.Itoa(n)
+	}
+	word := "lines"
+	if len(lines) == 1 {
+		word = "line"
+	}
+	return ".env: skipped " + word + " " + strings.Join(nums, ", ") + " (not KEY=VALUE)\r\n"
 }
 
 func (s *Service) savedCommand(ctx context.Context, repositoryID, name string) (string, error) {
