@@ -93,9 +93,12 @@ func (s *Service) Start(ctx context.Context, sessionID, name, command string) (*
 		return nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "the command is too long"}
 	}
 
-	if err := s.writeEnvFiles(ctx, sess.RepositoryID, sess.WorkingDir); err != nil {
+	dotenv, err := s.writeEnvFiles(ctx, sess.RepositoryID, sess.WorkingDir)
+	if err != nil {
 		return nil, err
 	}
+	// Parsed, never sourced (ADR 0008). The skipped lines are not shown yet.
+	vars, _ := domain.ParseDotenv(dotenv)
 
 	id := "run-" + randomHex()
 	rec := domain.AppRun{
@@ -108,7 +111,7 @@ func (s *Service) Start(ctx context.Context, sessionID, name, command string) (*
 	s.runs[id] = r
 	s.mu.Unlock()
 
-	spec := ports.AgentSpec{Kind: CommandKind, SessionID: sessionID, Dir: sess.WorkingDir, Command: command}
+	spec := ports.AgentSpec{Kind: CommandKind, SessionID: sessionID, Dir: sess.WorkingDir, Command: command, Dotenv: vars}
 	if s.GitAuth != nil {
 		// The session's own git directory: a run is part of its session.
 		sg, err := s.GitAuth.SessionEnv(ctx, sessionID, sess.RepositoryID)
@@ -158,23 +161,29 @@ func (s *Service) savedCommand(ctx context.Context, repositoryID, name string) (
 	return "", &domain.StructuredError{Code: "RUN_COMMAND_NOT_FOUND", Message: "this repository has no run command called " + name}
 }
 
-// writeEnvFiles overwrites the worktree's env files with the saved ones. The
-// error names the failure, never a file's content.
-func (s *Service) writeEnvFiles(ctx context.Context, repositoryID, worktree string) error {
+// writeEnvFiles overwrites the worktree's env files with the saved ones and
+// returns the root .env's content (empty without one), the only one a run
+// exports. The error names the failure, never a file's content.
+func (s *Service) writeEnvFiles(ctx context.Context, repositoryID, worktree string) (dotenv string, err error) {
 	if s.envFiles == nil || s.envIO == nil || repositoryID == "" {
-		return nil
+		return "", nil
 	}
 	files, err := s.envFiles.ListEnvFiles(ctx, repositoryID)
 	if err != nil {
-		return err
+		return "", err
 	}
 	if len(files) == 0 {
-		return nil
+		return "", nil
 	}
 	if err := s.envIO.Write(worktree, files); err != nil {
-		return &domain.StructuredError{Code: "ENV_FILE_WRITE_FAILED", Message: "writing the repository's env files into the worktree failed: " + err.Error()}
+		return "", &domain.StructuredError{Code: "ENV_FILE_WRITE_FAILED", Message: "writing the repository's env files into the worktree failed: " + err.Error()}
 	}
-	return nil
+	for _, f := range files {
+		if f.Path == domain.DefaultEnvFilePath {
+			dotenv = f.Content
+		}
+	}
+	return dotenv, nil
 }
 
 // running is the session's live run of the saved command name, if any.

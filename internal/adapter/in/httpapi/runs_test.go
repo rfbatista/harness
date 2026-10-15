@@ -199,6 +199,16 @@ func TestHTTP_StartRunNeverShowsAnEnvFileValue(t *testing.T) {
 	if b, _ := os.ReadFile(filepath.Join(worktree, ".env")); string(b) != "API_TOKEN=s3cr3t-value\n" {
 		t.Fatalf("worktree .env = %q", b)
 	}
+	// The run exports the value; listing runs never shows it.
+	res, err := http.Get(srv.URL + "/api/list_runs?session_id=s1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	listed, _ := io.ReadAll(res.Body)
+	res.Body.Close()
+	if res.StatusCode != http.StatusOK || strings.Contains(string(listed), "s3cr3t-value") {
+		t.Fatalf("list: %d %s", res.StatusCode, listed)
+	}
 
 	// A directory where the file goes: the write fails and the run is refused.
 	if err := os.Remove(filepath.Join(worktree, ".env")); err != nil {

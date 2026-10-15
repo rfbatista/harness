@@ -65,8 +65,12 @@ type AgentSpec struct {
 	// EnvFile is an sh file a login shell sources after the person's
 	// profile, so the profile cannot override Env's git credentials (see
 	// "Contract: Harness server ↔ Agent sessions — git credentials").
-	EnvFile      string       `json:"env_file,omitempty"`
-	Conversation Conversation `json:"conversation"`
+	EnvFile string `json:"env_file,omitempty"`
+	// Dotenv is an application run's root .env, parsed: a "command" agent
+	// puts it in the environment after the profile and before EnvFile, and
+	// never lets a shell read its values as code. Other agents ignore it.
+	Dotenv       []domain.EnvVar `json:"dotenv,omitempty"`
+	Conversation Conversation    `json:"conversation"`
 }
 
 // HookGroup is one entry of a claude settings hook event: the commands run

@@ -6,6 +6,7 @@ package command
 
 import (
 	"os"
+	"slices"
 	"strings"
 
 	"operators-mcp/internal/domain"
@@ -44,12 +45,43 @@ func (a Agent) Command(spec ports.AgentSpec) (ports.ShellCommand, error) {
 		// credentials.
 		line = ". " + shellQuote(spec.EnvFile) + "; " + line
 	}
+	env := spec.Env
+	if len(spec.Dotenv) > 0 {
+		var exports string
+		exports, env = dotenvExports(spec.Dotenv, spec.Env)
+		line = exports + line
+	}
 	return ports.ShellCommand{
 		Program: sh,
 		Args:    []string{"-l", "-c", line},
 		Dir:     spec.Dir,
-		Env:     spec.Env,
+		Env:     env,
 	}, nil
+}
+
+// dotenvPrefix carries a .env variable through the login profile, which
+// would override it under its own name.
+const dotenvPrefix = "HARNESS_DOTENV_"
+
+// dotenvExports puts the .env's values in the environment under
+// dotenvPrefix and returns the line that moves them to their own names once
+// the profile has run. The line is the harness's own: it names keys
+// (validated, so they are plain words) and expands each value once inside
+// double quotes, where the shell does no further substitution, so a $(…) or
+// a backtick in a value stays text. No value is ever written into a script,
+// a file or the command line.
+func dotenvExports(vars []domain.EnvVar, env []string) (string, []string) {
+	env = slices.Clone(env)
+	var b strings.Builder
+	for _, v := range vars {
+		if !domain.ValidEnvKey(v.Key) {
+			continue
+		}
+		carrier := dotenvPrefix + v.Key
+		env = append(env, carrier+"="+v.Value)
+		b.WriteString("export " + v.Key + `="$` + carrier + `"; unset ` + carrier + "; ")
+	}
+	return b.String(), env
 }
 
 func shellQuote(s string) string { return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'" }
