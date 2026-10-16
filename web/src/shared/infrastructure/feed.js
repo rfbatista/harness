@@ -11,6 +11,7 @@
 // URL carries their project, and it closes with its last follower. One that
 // joins late is told the stream's status at once.
 
+import { Codes } from "../domain/errors.js";
 import { FeedStatus } from "../domain/feed.js";
 
 const FIRST_RETRY_MS = 1_000;
@@ -170,6 +171,7 @@ export function feed({
 
     return {
       followers,
+      each,
       add(follower) {
         followers.add(follower);
         if (followers.size === 1) {
@@ -230,7 +232,11 @@ export function feed({
     return next;
   }
   const page = stream({
-    onClose: () => (streamId = ""),
+    onClose() {
+      streamId = "";
+      clearTimeout(retry); // the next hello follows again
+      retry = null;
+    },
     url() {
       query = wanted();
       return `/page_events?${new URLSearchParams(query)}`;
@@ -257,32 +263,68 @@ export function feed({
   // none. One follow is in flight at a time, so they reach the server in
   // order. `followed` is what a stream was last asked to follow, and `seq` the
   // highest event seq delivered of that session: a stream that reconnects
-  // follows it again after that seq. A follow that fails is not retried on the
-  // same stream: one answered STREAM_NOT_FOUND ended, and its next hello
-  // follows again.
+  // follows it again after that seq.
+  //
+  // A follow answered STREAM_NOT_FOUND is not retried: that stream ended, and
+  // its next hello follows again. One answered SESSION_NOT_FOUND is not
+  // either: the session is gone. One that fails on the way (the network, a
+  // 5xx) pauses the session's followers and is retried on the same stream
+  // with the stream's backoff, while the stream and the session stay; once it
+  // lands they resync, since events were missed in between.
   let followed = { streamId: "", sessionId: null };
   let seq = 0;
   let posting = false;
-  function followSession() {
+  let failing = false;
+  let retry = null;
+  let retryDelay = FIRST_RETRY_MS;
+  const latestSession = () => [...page.followers].findLast((f) => f.topic.kind === "session")?.topic.sessionId ?? null;
+  const tellSession = (status) => page.each((f) => f.topic.kind === "session" && f.onStatus(status));
+  function followSession(again = false) {
     if (posting || !streamId) return;
-    const sessionId = [...page.followers].findLast((f) => f.topic.kind === "session")?.topic.sessionId ?? null;
+    const sessionId = latestSession();
     const sameStream = followed.streamId === streamId;
-    if (sameStream && followed.sessionId === sessionId) return;
+    if (sameStream && followed.sessionId === sessionId && !again) return;
+    clearTimeout(retry);
+    retry = null;
     if (!sameStream && sessionId === null) {
       followed = { streamId, sessionId }; // a new stream follows nothing yet
       return;
     }
-    if (sessionId !== followed.sessionId) seq = 0;
+    if (sessionId !== followed.sessionId) {
+      seq = 0;
+      failing = false;
+      retryDelay = FIRST_RETRY_MS;
+    }
     const body = { stream_id: streamId, session_id: sessionId };
     if (sessionId !== null && seq > 0) body.after_seq = seq;
-    followed = { streamId, sessionId };
+    const asked = { streamId, sessionId };
+    followed = asked;
     posting = true;
-    post("/follow_session", body)
-      .catch(() => {})
-      .finally(() => {
+    const current = () => streamId === asked.streamId && latestSession() === asked.sessionId;
+    post("/follow_session", body).then(
+      () => {
         posting = false;
+        if (failing && current()) {
+          failing = false;
+          retryDelay = FIRST_RETRY_MS;
+          tellSession(FeedStatus.RESYNCED);
+          tellSession(FeedStatus.LIVE);
+        }
         followSession();
-      });
+      },
+      (err) => {
+        posting = false;
+        const code = err?.code;
+        if (code !== Codes.STREAM_NOT_FOUND && code !== Codes.SESSION_NOT_FOUND && current()) {
+          failing = true;
+          tellSession(FeedStatus.PAUSED);
+          retry = setTimeout(() => followSession(true), retryDelay);
+          retryDelay = Math.min(retryDelay * 2, MAX_RETRY_MS);
+          return;
+        }
+        followSession();
+      },
+    );
   }
 
   return {
@@ -290,6 +332,7 @@ export function feed({
       if (!Object.hasOwn(KINDS, topic?.kind)) throw new Error(`no such kind on the page stream: ${topic?.kind}`);
       const follower = { topic, onMessage, onStatus };
       page.add(follower);
+      if (topic.kind === "session" && failing && topic.sessionId === followed.sessionId) onStatus(FeedStatus.PAUSED);
       if (new URLSearchParams(wanted()).toString() !== new URLSearchParams(query).toString()) page.reconnect();
       if (topic.kind === "session") followSession();
 

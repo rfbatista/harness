@@ -295,11 +295,12 @@ function sessions() {
   const es = fakeEventSourceClass();
   const timers = manualTimers();
   const posts = [];
-  /** Answers the oldest post still waiting: ok, or with the code it fails with. */
-  const answer = (code) => {
+  /** Answers the oldest post still waiting: ok, with the code it fails with, or with the error it throws. */
+  const answer = (failure) => {
     const p = posts.find((x) => !x.answered);
     p.answered = true;
-    if (code) p.reject(new StructuredError(code, code, 404));
+    if (failure instanceof Error) p.reject(failure);
+    else if (failure) p.reject(new StructuredError(failure, failure, 404));
     else p.resolve(null);
     return flush();
   };
@@ -308,8 +309,9 @@ function sessions() {
   const f = feed({ base: "/api", EventSource: es.EventSource, post, ...timers });
   const follower = (topic) => {
     const messages = [];
-    const close = f.followPage(topic, { onMessage: (m) => messages.push(m) });
-    return { messages, close };
+    const statuses = [];
+    const close = f.followPage(topic, { onMessage: (m) => messages.push(m), onStatus: (s) => statuses.push(s) });
+    return { messages, statuses, close };
   };
   const sent = () => posts.map((p) => [p.path, p.body]);
   return { es, timers, follower, posts, sent, answer, f };
@@ -438,6 +440,7 @@ test("a follow answered STREAM_NOT_FOUND is not retried until the next hello", a
   await answer("STREAM_NOT_FOUND");
   await flush();
   assert.equal(sent().length, 1, "no retry in a loop");
+  assert.deepEqual(timers.delays(), []);
   es.latest().fail();
   timers.tick();
   es.latest().open();
@@ -445,9 +448,9 @@ test("a follow answered STREAM_NOT_FOUND is not retried until the next hello", a
   assert.deepEqual(sent().at(-1), ["/follow_session", { stream_id: "st2", session_id: "s1" }]);
 });
 
-test("a follow that fails otherwise is not retried for the same session and stream", async () => {
+test("a follow answered SESSION_NOT_FOUND is not retried: the session is gone", async () => {
   const { es, timers, follower, sent, answer } = sessions();
-  follower({ kind: "session", sessionId: "gone" });
+  const gone = follower({ kind: "session", sessionId: "gone" });
   timers.tick();
   es.latest().open();
   es.latest().message({ kind: "hello", stream_id: "st1" });
@@ -455,4 +458,137 @@ test("a follow that fails otherwise is not retried for the same session and stre
   follower({ kind: "notifications" });
   await flush();
   assert.equal(sent().length, 1);
+  assert.deepEqual(timers.delays(), []);
+  assert.deepEqual(gone.statuses, [FeedStatus.CONNECTING, FeedStatus.LIVE]);
+});
+
+// A follow that fails on the way (the network, a 5xx) would leave the session
+// followers deaf on a live stream: they are paused, and the follow is retried
+// on the same stream with the stream's backoff until it lands.
+
+test("a follow that fails on the way pauses the session's followers and is retried with backoff; landing resyncs them", async () => {
+  const { es, timers, follower, sent, answer } = sessions();
+  const s1 = follower({ kind: "session", sessionId: "s1" });
+  const inbox = follower({ kind: "notifications" });
+  timers.tick();
+  es.latest().open();
+  es.latest().message({ kind: "hello", stream_id: "st1" });
+  await answer(new TypeError("Failed to fetch"));
+  assert.equal(s1.statuses.at(-1), FeedStatus.PAUSED);
+  assert.equal(inbox.statuses.at(-1), FeedStatus.LIVE, "only the session's followers missed something");
+  assert.deepEqual(timers.delays(), [1000]);
+  timers.tick();
+  assert.deepEqual(sent().at(-1), ["/follow_session", { stream_id: "st1", session_id: "s1" }]);
+  await answer(new StructuredError("UNAVAILABLE", "unavailable", 503));
+  assert.deepEqual(timers.delays(), [2000]);
+  timers.tick();
+  assert.equal(sent().length, 3);
+  await answer();
+  assert.deepEqual(s1.statuses.slice(-2), [FeedStatus.RESYNCED, FeedStatus.LIVE]);
+  assert.deepEqual(timers.delays(), []);
+  assert.equal(es.instances.length, 1, "the same stream all along");
+  assert.deepEqual(inbox.statuses, [FeedStatus.CONNECTING, FeedStatus.LIVE]);
+});
+
+test("a retried follow asks for what came after the highest seq delivered", async () => {
+  const { es, timers, follower, sent, answer } = sessions();
+  follower({ kind: "session", sessionId: "s1" });
+  timers.tick();
+  es.latest().open();
+  es.latest().message({ kind: "hello", stream_id: "st1" });
+  await answer();
+  es.latest().message({ kind: "session", session_id: "s1", event: { seq: 5 } });
+  es.latest().fail();
+  timers.tick();
+  es.latest().open();
+  es.latest().message({ kind: "hello", stream_id: "st2" });
+  await answer(new TypeError("Failed to fetch"));
+  timers.tick();
+  assert.deepEqual(sent().at(-1), ["/follow_session", { stream_id: "st2", session_id: "s1", after_seq: 5 }]);
+});
+
+test("the follow retry's backoff is capped at 30s and resets once a follow lands", async () => {
+  const { es, timers, follower, answer } = sessions();
+  follower({ kind: "session", sessionId: "s1" });
+  timers.tick();
+  es.latest().open();
+  es.latest().message({ kind: "hello", stream_id: "st1" });
+  for (let i = 0; i < 7; i++) {
+    await answer(new TypeError("Failed to fetch"));
+    timers.tick();
+  }
+  await answer(new TypeError("Failed to fetch"));
+  assert.deepEqual(timers.delays(), [30000]);
+  timers.tick();
+  await answer();
+  es.latest().fail();
+  timers.tick();
+  es.latest().open();
+  es.latest().message({ kind: "hello", stream_id: "st2" });
+  await answer(new TypeError("Failed to fetch"));
+  assert.deepEqual(timers.delays(), [1000]);
+});
+
+test("a late follower of a session whose follow is failing is told it is paused", async () => {
+  const { es, timers, follower, answer } = sessions();
+  follower({ kind: "session", sessionId: "s1" });
+  timers.tick();
+  es.latest().open();
+  es.latest().message({ kind: "hello", stream_id: "st1" });
+  await answer(new TypeError("Failed to fetch"));
+  assert.deepEqual(follower({ kind: "session", sessionId: "s1" }).statuses, [FeedStatus.LIVE, FeedStatus.PAUSED]);
+});
+
+test("a follow retry is dropped when the session changes", async () => {
+  const { es, timers, follower, sent, answer } = sessions();
+  follower({ kind: "session", sessionId: "s1" });
+  timers.tick();
+  es.latest().open();
+  es.latest().message({ kind: "hello", stream_id: "st1" });
+  await answer(new TypeError("Failed to fetch"));
+  const s2 = follower({ kind: "session", sessionId: "s2" });
+  assert.deepEqual(timers.delays(), []);
+  assert.deepEqual(sent().at(-1), ["/follow_session", { stream_id: "st1", session_id: "s2" }]);
+  await answer();
+  assert.deepEqual(s2.statuses, [FeedStatus.LIVE], "the new session's follow never failed");
+});
+
+test("a follow retry is dropped when the last session follower leaves", async () => {
+  const { es, timers, follower, sent, answer } = sessions();
+  follower({ kind: "notifications" });
+  const s1 = follower({ kind: "session", sessionId: "s1" });
+  timers.tick();
+  es.latest().open();
+  es.latest().message({ kind: "hello", stream_id: "st1" });
+  await answer(new TypeError("Failed to fetch"));
+  s1.close();
+  assert.deepEqual(timers.delays(), []);
+  assert.deepEqual(sent().at(-1), ["/follow_session", { stream_id: "st1", session_id: null }]);
+});
+
+test("a follow retry is dropped when the stream drops: the next hello follows again", async () => {
+  const { es, timers, follower, sent, answer } = sessions();
+  follower({ kind: "session", sessionId: "s1" });
+  timers.tick();
+  es.latest().open();
+  es.latest().message({ kind: "hello", stream_id: "st1" });
+  await answer(new TypeError("Failed to fetch"));
+  es.latest().fail();
+  assert.deepEqual(timers.delays(), [1000], "only the stream's own retry is left");
+  timers.tick();
+  assert.equal(sent().length, 1);
+  es.latest().open();
+  es.latest().message({ kind: "hello", stream_id: "st2" });
+  assert.deepEqual(sent().at(-1), ["/follow_session", { stream_id: "st2", session_id: "s1" }]);
+});
+
+test("a follow retry is dropped when every follower leaves", async () => {
+  const { es, timers, follower, answer } = sessions();
+  const s1 = follower({ kind: "session", sessionId: "s1" });
+  timers.tick();
+  es.latest().open();
+  es.latest().message({ kind: "hello", stream_id: "st1" });
+  await answer(new TypeError("Failed to fetch"));
+  s1.close();
+  assert.deepEqual(timers.delays(), []);
 });
