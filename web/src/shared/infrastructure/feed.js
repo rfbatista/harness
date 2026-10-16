@@ -15,7 +15,6 @@
 // ride the page stream yet.
 
 import { FeedStatus } from "../domain/feed.js";
-import { apiClient } from "./api.js";
 
 const FIRST_RETRY_MS = 1_000;
 const MAX_RETRY_MS = 30_000;
@@ -102,7 +101,7 @@ const KINDS = {
  * @param {{
  *   base: string,
  *   EventSource?: typeof globalThis.EventSource,
- *   post?: (path: string, body: unknown) => Promise<unknown>,  POSTs to the API, as ApiClient.post
+ *   post: (path: string, body: unknown) => Promise<unknown>,  POSTs to the API, as ApiClient.post
  *   setTimeout?: typeof globalThis.setTimeout,
  *   clearTimeout?: typeof globalThis.clearTimeout,
  * }} options
@@ -111,7 +110,7 @@ const KINDS = {
 export function feed({
   base,
   EventSource = globalThis.EventSource,
-  post = (path, body) => apiClient({ base }).post(path, body),
+  post,
   setTimeout = globalThis.setTimeout.bind(globalThis),
   clearTimeout = globalThis.clearTimeout.bind(globalThis),
 }) {
