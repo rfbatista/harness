@@ -10,6 +10,9 @@ export const projectEnvelope = (change) => ({ kind: "project", change });
 /** An inbox change: exactly what /api/notifications/events sent, beside kind. */
 export const notificationsEnvelope = (payload) => ({ kind: "notifications", ...payload });
 
+/** A session's event: exactly what /api/sessions/:id/events sent, under event. */
+export const sessionEnvelope = (sessionId, event) => ({ kind: "session", session_id: sessionId, event });
+
 /** The project a page event stream follows, from its URL ("" if it is not one). */
 export function pageEventsProject(input) {
   const url = new URL(input, "http://harness.test");
