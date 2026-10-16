@@ -25,6 +25,11 @@ const MAX_RETRY_MS = 30_000;
  *   | {kind: "usage", projectId: string} | {kind: "projects"}} PageTopic
  */
 
+/** The project the latest of followers that names one asks for. */
+const latestProject = (followers) => followers.findLast((f) => f.topic.projectId)?.topic.projectId;
+/** A follower of a project's kind hears the project the stream carries. */
+const hearsProject = (follower, query) => follower.topic.projectId === query.project_id;
+
 /**
  * The kinds of the page stream a follower can follow. A kind says how its
  * followers shape the stream's query (`query`, given the kind's followers in
@@ -49,9 +54,9 @@ const KINDS = {
   // no project (a page outside one) does not move it.
   project: {
     query: (followers, current) => ({
-      project_id: followers.findLast((f) => f.topic.projectId)?.topic.projectId ?? current.project_id ?? "",
+      project_id: latestProject(followers) ?? current.project_id ?? "",
     }),
-    hears: (follower, query) => follower.topic.projectId === query.project_id,
+    hears: hearsProject,
     payload: (envelope) => envelope.change,
   },
   // What /api/notifications/events sent: the envelope without its kind.
@@ -63,10 +68,10 @@ const KINDS = {
   usage: {
     optIn: true,
     query: (followers) => {
-      const projectId = followers.findLast((f) => f.topic.projectId)?.topic.projectId;
+      const projectId = latestProject(followers);
       return projectId ? { project_id: projectId } : {};
     },
-    hears: (follower, query) => follower.topic.projectId === query.project_id,
+    hears: hearsProject,
     payload: (envelope) => envelope.record,
   },
   // What /api/project_events sent, under change.
