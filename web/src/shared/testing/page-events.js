@@ -10,6 +10,18 @@ export const projectEnvelope = (change) => ({ kind: "project", change });
 /** An inbox change: exactly what /api/notifications/events sent, beside kind. */
 export const notificationsEnvelope = (payload) => ({ kind: "notifications", ...payload });
 
+/** A usage record: exactly what /api/projects/:p/usage/events sent, under record. */
+export const usageEnvelope = (record) => ({ kind: "usage", record });
+
+/** A project catalog change: exactly what /api/project_events sent, under change. */
+export const projectsEnvelope = (change) => ({ kind: "projects", change });
+
+/** The opt-in kinds a page event stream carries, from its URL's with. */
+export function pageEventsWith(input) {
+  const url = new URL(input, "http://harness.test");
+  return (url.searchParams.get("with") ?? "").split(",").filter(Boolean);
+}
+
 /** The project a page event stream follows, from its URL ("" if it is not one). */
 export function pageEventsProject(input) {
   const url = new URL(input, "http://harness.test");

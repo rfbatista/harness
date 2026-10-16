@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -41,6 +42,19 @@ type projectEnvelope struct {
 type notificationsEnvelope struct {
 	Kind string `json:"kind"`
 	ports.NotificationChange
+}
+
+// usageEnvelope carries what /api/projects/:p/usage/events sends, under
+// record.
+type usageEnvelope struct {
+	Kind   string              `json:"kind"`
+	Record *domain.UsageRecord `json:"record"`
+}
+
+// projectsEnvelope carries what /api/project_events sends, under change.
+type projectsEnvelope struct {
+	Kind   string `json:"kind"`
+	Change any    `json:"change"`
 }
 
 // sessionEnvelope carries what /api/sessions/:id/events sends, under event.
@@ -107,12 +121,13 @@ func (r *pageStreamRegistry) remove(s *pageStream) {
 // handlePageEvents streams the project's changes (none when project_id is
 // empty) and the inbox's, each as one `data:` line of its envelope, after a
 // hello naming the stream; a part whose service is not configured is left
-// out. It reads the same followers /api/events and
-// /api/notifications/events read, so it never holds back a send; when either
-// falls behind the whole stream ends and the client reconnects.
+// out. The opt-in parts named in `with` ride along too: usage (the
+// project's, so none when project_id is empty) and projects. It reads the
+// same followers the old streams read, so it never holds back a send; when
+// any of them falls behind the whole stream ends and the client reconnects.
 func (h *Handler) handlePageEvents(c echo.Context) error {
 	projectID := c.QueryParam("project_id")
-	// Ending the stream for a follower that fell behind releases the other.
+	// Ending the stream for a follower that fell behind releases the others.
 	ctx, cancel := context.WithCancel(c.Request().Context())
 	defer cancel()
 	// A part whose service this server lacks stays nil, and nil never
@@ -132,6 +147,24 @@ func (h *Handler) handlePageEvents(c echo.Context) error {
 			return err
 		}
 	}
+	var (
+		usage    <-chan *domain.UsageRecord
+		projects <-chan any
+		with     = map[string]bool{}
+	)
+	for _, kind := range strings.Split(c.QueryParam("with"), ",") {
+		with[kind] = true
+	}
+	if with["usage"] && projectID != "" && h.usage != nil {
+		if usage, err = h.usage.FollowUsage(ctx, projectID); err != nil {
+			return err
+		}
+	}
+	if with["projects"] && h.projectFeed != nil {
+		if projects, err = h.followProjectEvents(ctx); err != nil {
+			return err
+		}
+	}
 
 	s := h.pageStreams.open()
 	defer h.pageStreams.remove(s)
@@ -145,7 +178,7 @@ func (h *Handler) handlePageEvents(c echo.Context) error {
 	if h.orchSvc != nil {
 		subscribe = h.orchSvc.Subscribe
 	}
-	s.run(ctx, w, project, inbox, subscribe)
+	s.run(ctx, w, project, inbox, usage, projects, subscribe)
 	return nil
 }
 
@@ -154,8 +187,9 @@ func (h *Handler) handlePageEvents(c echo.Context) error {
 type sessionSubscriber func(id string) (<-chan ports.SessionEvent, []ports.SessionEvent, func())
 
 // run writes the stream's changes, and the events of the session it is
-// asked to follow, until ctx ends or a project or inbox follower closes.
-func (s *pageStream) run(ctx context.Context, w *echo.Response, project <-chan ports.ProjectChange, inbox <-chan ports.NotificationChange, subscribe sessionSubscriber) {
+// asked to follow, until ctx ends or a project, inbox, usage or projects
+// follower closes.
+func (s *pageStream) run(ctx context.Context, w *echo.Response, project <-chan ports.ProjectChange, inbox <-chan ports.NotificationChange, usage <-chan *domain.UsageRecord, projects <-chan any, subscribe sessionSubscriber) {
 	defer close(s.done)
 	ticker := time.NewTicker(pageEventsPing)
 	defer ticker.Stop()
@@ -200,6 +234,16 @@ func (s *pageStream) run(ctx context.Context, w *echo.Response, project <-chan p
 				return
 			}
 			writeEnvelope(w, notificationsEnvelope{Kind: "notifications", NotificationChange: change})
+		case record, ok := <-usage:
+			if !ok {
+				return
+			}
+			writeEnvelope(w, usageEnvelope{Kind: "usage", Record: record})
+		case change, ok := <-projects:
+			if !ok {
+				return
+			}
+			writeEnvelope(w, projectsEnvelope{Kind: "projects", Change: change})
 		case <-ticker.C:
 			fmt.Fprint(w, ": ping\n\n")
 			w.Flush()

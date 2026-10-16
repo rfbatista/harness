@@ -404,3 +404,82 @@ test("the hello names the stream until it drops; it reaches no follower", () => 
   assert.equal(f.pageStreamId(), "", "a stream that ended has no id anymore");
   assert.deepEqual(got, []);
 });
+
+// Usage and the project catalog ride the page stream as opt-in kinds: the
+// stream asks for them in `with` only when a follower wants them.
+
+test("usage and projects followers share the page's one stream, asking for their kinds in with", () => {
+  const { es, timers, follower } = page();
+  const inbox = follower({ kind: "notifications" });
+  const usage = follower({ kind: "usage", projectId: "p1" });
+  const projects = follower({ kind: "projects" });
+  timers.tick();
+  assert.deepEqual(es.instances.map((i) => i.url), ["/api/page_events?project_id=p1&with=usage%2Cprojects"]);
+  es.latest().open();
+  es.latest().message({ kind: "usage", record: { id: "u1" } });
+  es.latest().message({ kind: "projects", change: { project: { id: "p9" } } });
+  assert.deepEqual(usage.messages, [{ id: "u1" }]);
+  assert.deepEqual(projects.messages, [{ project: { id: "p9" } }]);
+  assert.deepEqual(inbox.messages, []);
+});
+
+test("a page without usage or projects followers asks for neither", () => {
+  const { es, timers, follower } = page();
+  follower({ kind: "project", projectId: "p1" });
+  timers.tick();
+  assert.equal(es.latest().url, "/api/page_events?project_id=p1");
+});
+
+test("a usage follower shares the stream of a project follower of its project", () => {
+  const { es, timers, follower } = page();
+  const project = follower({ kind: "project", projectId: "p1" });
+  const usage = follower({ kind: "usage", projectId: "p1" });
+  timers.tick();
+  assert.deepEqual(es.instances.map((i) => i.url), ["/api/page_events?project_id=p1&with=usage"]);
+  es.latest().open();
+  es.latest().message({ kind: "project", change: { ticket: { id: "t1" } } });
+  es.latest().message({ kind: "usage", record: { id: "u1" } });
+  assert.deepEqual(project.messages, [{ ticket: { id: "t1" } }]);
+  assert.deepEqual(usage.messages, [{ id: "u1" }]);
+});
+
+test("a usage follower with no project does not move the stream off its project", () => {
+  const { es, timers, follower } = page();
+  follower({ kind: "project", projectId: "p1" });
+  follower({ kind: "usage", projectId: "" });
+  timers.tick();
+  assert.equal(es.latest().url, "/api/page_events?project_id=p1&with=usage");
+});
+
+test("a late follower needing a new kind reconnects once, as a resync", () => {
+  const { es, timers, follower } = page();
+  const inbox = follower({ kind: "notifications" });
+  timers.tick();
+  es.latest().open();
+  const projects = follower({ kind: "projects" });
+  assert.equal(es.instances.length, 2);
+  assert.ok(es.instances[0].closed);
+  assert.equal(es.latest().url, "/api/page_events?project_id=&with=projects");
+  es.latest().open();
+  assert.deepEqual(inbox.statuses.slice(-2), [FeedStatus.RESYNCED, FeedStatus.LIVE]);
+  assert.deepEqual(projects.statuses, [FeedStatus.LIVE, FeedStatus.RESYNCED, FeedStatus.LIVE]);
+  follower({ kind: "projects" });
+  assert.equal(es.instances.length, 2, "another follower of a kind the stream carries does not reconnect");
+  const usage = follower({ kind: "usage", projectId: "p1" });
+  assert.equal(es.instances.length, 3);
+  assert.equal(es.latest().url, "/api/page_events?project_id=p1&with=usage%2Cprojects");
+  es.latest().open();
+  es.latest().message({ kind: "usage", record: { id: "u1" } });
+  assert.deepEqual(usage.messages, [{ id: "u1" }]);
+});
+
+test("a kind stays on the stream after its followers leave, so a later one does not reconnect", () => {
+  const { es, timers, follower } = page();
+  follower({ kind: "notifications" });
+  const projects = follower({ kind: "projects" });
+  timers.tick();
+  es.latest().open();
+  projects.close();
+  follower({ kind: "projects" });
+  assert.equal(es.instances.length, 1);
+});

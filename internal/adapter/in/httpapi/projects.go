@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/labstack/echo/v4"
@@ -40,17 +41,27 @@ func (h *Handler) handleProjectEvents(c echo.Context) error {
 	if h.projectFeed == nil {
 		return echo.NewHTTPError(http.StatusServiceUnavailable, "project feed not configured")
 	}
-	ctx := c.Request().Context()
+	events, err := h.followProjectEvents(c.Request().Context())
+	if err != nil {
+		return err
+	}
+	return streamSSE(c, events, func(ev any) any { return ev })
+}
+
+// followProjectEvents follows the wire events /api/project_events carries:
+// the project catalog's changes and, when configured, the credentials'. The
+// channel closes when either follower falls behind.
+func (h *Handler) followProjectEvents(ctx context.Context) (<-chan any, error) {
 	changes, err := h.projectFeed.FollowProjects(ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	if h.gitCredentials == nil {
-		return streamSSE(c, changes, func(ch ports.ProjectCatalogChange) any { return projectEventOf(ch) })
+	// A nil credential feed never delivers.
+	var creds <-chan ports.GitCredentialChange
+	if h.gitCredentials != nil {
+		if creds, err = h.gitCredentials.FollowGitCredentials(ctx); err != nil {
+			return nil, err
+		}
 	}
-	creds, err := h.gitCredentials.FollowGitCredentials(ctx)
-	if err != nil {
-		return err
-	}
-	return streamSSE(c, catalogEvents(ctx, changes, creds), func(ev any) any { return ev })
+	return catalogEvents(ctx, changes, creds), nil
 }

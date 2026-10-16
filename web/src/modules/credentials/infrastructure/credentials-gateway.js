@@ -1,6 +1,7 @@
 // CredentialGateway over the harness HTTP API (the Web UI contract "git
-// credentials") and the catalog feed (/api/project_events), which it shares
-// with the projects module.
+// credentials") and the catalog feed (what /api/project_events sent, as the
+// page event stream's projects kind), which it shares with the projects
+// module.
 
 import {
   toChange,
@@ -76,7 +77,7 @@ export function credentialsGateway(api, events) {
     decodeRepositoriesSeed: toRepositoriesSeed,
 
     follow(onChange, onStatus = () => {}) {
-      return events.follow("/project_events", {
+      return events.followPage({ kind: "projects" }, {
         onMessage(data) {
           let change;
           try {

@@ -4,6 +4,7 @@
 
 import { codeOf } from "../../../shared/domain/errors.js";
 import { jsonResponse } from "../../../shared/testing/doubles.js";
+import { helloEnvelope, pageEventsProject, pageEventsWith, projectsEnvelope } from "../../../shared/testing/page-events.js";
 import { memoryProjects } from "../infrastructure/memory-gateway.js";
 import { projectDTO, repositoryDTO, summaryDTO } from "./fixtures.js";
 
@@ -79,19 +80,24 @@ export function stubProjectsApi(world) {
     }
   }
 
-  // GET /api/project_events: one change per message, as the server sends it.
+  // GET /api/page_events?with=projects: one catalog change per projects
+  // envelope, as the server sends it.
   class StubEventSource {
     constructor(input) {
-      this.url = new URL(input, "http://harness.test");
       this.onopen = null;
       this.onmessage = null;
       this.onerror = null;
       sources.add(this);
       this.unfollow =
-        this.url.pathname === "/api/project_events"
-          ? gateway.followCatalog((c) => this.send(c.kind === "deleted" ? { project: { id: c.id }, deleted: true } : { project: projectDTO(c.project) }))
+        pageEventsProject(input) !== null && pageEventsWith(input).includes("projects")
+          ? gateway.followCatalog((c) =>
+              this.send(projectsEnvelope(c.kind === "deleted" ? { project: { id: c.id }, deleted: true } : { project: projectDTO(c.project) })),
+            )
           : () => {};
-      queueMicrotask(() => this.onopen?.({}));
+      queueMicrotask(() => {
+        this.onopen?.({});
+        this.send(helloEnvelope());
+      });
     }
     send(dto) {
       this.onmessage?.({ data: typeof dto === "string" ? dto : JSON.stringify(dto) });
@@ -106,8 +112,9 @@ export function stubProjectsApi(world) {
     fetch,
     EventSource: StubEventSource,
     memory,
+    /** Sends dto as a projects change on every open stream; a string is sent as the raw line. */
     pushRaw(dto) {
-      for (const s of sources) s.send(dto);
+      for (const s of sources) s.send(typeof dto === "string" ? dto : projectsEnvelope(dto));
     },
   };
 }
