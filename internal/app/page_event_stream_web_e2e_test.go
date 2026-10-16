@@ -40,6 +40,7 @@ import (
 type budgetWeb struct {
 	ctx     context.Context
 	orch    *orchestration.Service
+	art     *artifacts.Service
 	srv     *httptest.Server
 	project string
 	repo    string
@@ -75,7 +76,6 @@ func newBudgetWeb(t *testing.T) *budgetWeb {
 		plan    *planning.Service
 		channel *taskchannel.Service
 		runner  *apps.Service
-		art     *artifacts.Service
 		notes   *notifications.Service
 	)
 	// Without ExecutionModule: it registers Genkit flows in a process-wide
@@ -84,7 +84,7 @@ func newBudgetWeb(t *testing.T) *budgetWeb {
 		fx.Supply(Config{HTTPAddr: "127.0.0.1:0", MCPAddr: "127.0.0.1:0", DBPath: ":memory:", Root: dir, ClaudeBin: fake, SessionShell: "direct"}),
 		PersistenceModule, CatalogModule, PlanningModule, WorkspacesModule,
 		AgentRuntimeModule, TaskChannelModule, TextProcessingModule, ToolingModule, NotificationsModule,
-		fx.Populate(&e.orch, &plan, &channel, &cat, &runner, &art, &notes),
+		fx.Populate(&e.orch, &plan, &channel, &cat, &runner, &e.art, &notes),
 		fx.NopLogger,
 	)
 	if err := app.Start(e.ctx); err != nil {
@@ -114,11 +114,11 @@ func newBudgetWeb(t *testing.T) *budgetWeb {
 	mux := http.NewServeMux()
 	mux.Handle("/api/", httpapi.NewRouter(httpapi.NewHandler(httpapi.Services{
 		Projects: cat.Projects, ProjectFeed: cat.Projects, Agents: cat.Agents, Settings: cat.Settings, Sessions: e.orch, Planning: plan,
-		TaskChannel: channel, RunCommands: cat.Projects, Apps: runner, Artifacts: art, Notifications: notes,
+		TaskChannel: channel, RunCommands: cat.Projects, Apps: runner, Artifacts: e.art, Notifications: notes,
 	})))
 	mux.Handle("/", web.NewHandler(web.Deps{
 		Projects: cat.Projects, Tasks: plan, Sessions: e.orch, Agents: cat.Agents, Repositories: cat.Projects,
-		EnvFiles: cat.Projects, Documents: plan, Artifacts: art, Notifications: notes,
+		EnvFiles: cat.Projects, Documents: plan, Artifacts: e.art, Notifications: notes,
 	}, assets, nil))
 	// Plain HTTP/1.1, as the server runs: no TLS, so no HTTP/2.
 	e.srv = httptest.NewServer(mux)
@@ -164,13 +164,16 @@ func (e *budgetWeb) taskURL(sessionID string) string {
 }
 
 // countStreams wraps EventSource before any page script runs, so the page
-// can say how many long-lived streams it holds open.
+// can say how many long-lived streams it holds open, and how many it has
+// opened since it loaded.
 const countStreams = `(() => {
   const Real = window.EventSource;
   const open = new Set();
+  let made = 0;
   window.__streams = () => [...open].filter(s => s.readyState !== 2).map(s => s.url);
+  window.__made = () => made;
   window.EventSource = class extends Real {
-    constructor(...args) { super(...args); open.add(this); }
+    constructor(...args) { super(...args); made++; open.add(this); }
     close() { open.delete(this); super.close(); }
   };
 })();`
@@ -302,5 +305,94 @@ func TestThreeTabsOnOneTaskResumeAndOpenHistoryPromptly_EndToEnd(t *testing.T) {
 		if got := tab.streams(t); len(got) != 1 {
 			t.Errorf("tab %d holds %d streams, want 1: %v", i+1, len(got), got)
 		}
+	}
+}
+
+// publish puts an artifact on the session's Design panel, as its
+// publish_artifact tool would: a dev server, so no worktree file is needed.
+func (e *budgetWeb) publish(t *testing.T, sessionID, title string, port int) {
+	t.Helper()
+	if _, err := e.art.Publish(e.ctx, ports.PublishArtifactRequest{SessionID: sessionID, URL: fmt.Sprintf("http://localhost:%d/", port), Title: title}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// oneStreamOnEveryTab opens each detail tab of the selected session in turn,
+// ending on Design, and fails the test when the page holds other than one
+// stream on any of them.
+func (tab *budgetTab) oneStreamOnEveryTab(t *testing.T, when string) {
+	t.Helper()
+	var labels []string
+	tab.within(t, 5*time.Second, "list the detail tabs", chromedp.Evaluate(`[...document.querySelectorAll('[role=tab]')].map(b => b.textContent.trim().split(/\s/)[0])`, &labels))
+	open := func(label string) {
+		tab.within(t, 5*time.Second, "open the "+label+" tab", clickTab(label),
+			until(fmt.Sprintf(`!!document.querySelector('[role=tab][aria-selected=true]')?.textContent.trim().startsWith(%q)`, label)))
+	}
+	for _, label := range labels {
+		open(label)
+		if got := tab.streams(t); len(got) != 1 {
+			t.Errorf("%s, on the %s tab: the page holds %d streams, want 1: %v", when, label, len(got), got)
+		}
+	}
+	open("Design")
+}
+
+const designCards = `[...document.querySelectorAll('[aria-label="Design"] .artifact-card .title')].map(e => e.textContent)`
+
+func designShows(title string) string {
+	return fmt.Sprintf(`%s.includes(%q)`, designCards, title)
+}
+
+// TestOnePageStreamFollowsTheSelectedSessionOnEveryTab_EndToEnd: with a live
+// session selected the task page holds one stream on every detail tab, and
+// its Design panel updates live from it. Selecting another session moves the
+// stream to it: no new connection, no page reload, the panel follows the new
+// session only. When the connection drops, the page reconnects and the panel
+// catches up on what was published meanwhile.
+func TestOnePageStreamFollowsTheSelectedSessionOnEveryTab_EndToEnd(t *testing.T) {
+	e := newBudgetWeb(t)
+	first := e.start(t, "Design the hero.")
+	second := e.start(t, "Design the footer.")
+	tab := newBudgetTabs(t, 1)[0]
+
+	tab.open(t, "the tab loads the task", e.taskURL(first.ID))
+	tab.within(t, 15*time.Second, "the tab shows the task", until(pageReady))
+	tab.within(t, time.Second, "mark the page", chromedp.Evaluate(`window.__marked = true`, nil))
+	tab.oneStreamOnEveryTab(t, "with a live session selected")
+
+	e.publish(t, first.ID, "Hero", 5173)
+	tab.within(t, 5*time.Second, "the Design panel shows the first session's publish", until(designShows("Hero")))
+
+	var made int
+	tab.within(t, time.Second, "count the streams opened", chromedp.Evaluate(`window.__made()`, &made))
+	tab.within(t, 5*time.Second, "select the second session",
+		chromedp.Evaluate(fmt.Sprintf(`document.querySelector('[role=listbox] .row[data-session-id=%q]').click()`, second.ID), nil),
+		until(fmt.Sprintf(`document.querySelector('[role=listbox] .row[aria-selected=true]')?.dataset.sessionId === %q`, second.ID)),
+		until(`!`+designShows("Hero")))
+	var marked bool
+	var madeAfter int
+	tab.within(t, time.Second, "count the streams opened", chromedp.Evaluate(`window.__marked === true`, &marked), chromedp.Evaluate(`window.__made()`, &madeAfter))
+	if !marked || madeAfter != made {
+		t.Errorf("selecting another session: page kept %v, streams opened %d then %d, want the same page and no new stream", marked, made, madeAfter)
+	}
+	tab.oneStreamOnEveryTab(t, "after selecting another session")
+
+	e.publish(t, first.ID, "Hero, again", 5174)
+	e.publish(t, second.ID, "Footer", 5175)
+	tab.within(t, 5*time.Second, "the Design panel shows the second session's publish", until(designShows("Footer")))
+	var cards []string
+	tab.within(t, time.Second, "read the Design panel", chromedp.Evaluate(designCards, &cards))
+	if fmt.Sprint(cards) != "[Footer]" {
+		t.Errorf("after the switch the Design panel shows %v, want the second session's only", cards)
+	}
+
+	// The connection drops: the page reconnects on its own and catches up.
+	e.srv.CloseClientConnections()
+	e.publish(t, second.ID, "Footer, dark", 5176)
+	tab.within(t, 10*time.Second, "the Design panel catches up after the stream drops", until(designShows("Footer, dark")))
+	var madeAfterDrop int
+	tab.within(t, time.Second, "count the streams opened", chromedp.Evaluate(`window.__made()`, &madeAfterDrop))
+	if got := tab.streams(t); len(got) != 1 || madeAfterDrop != madeAfter+1 {
+		t.Errorf("after the drop the page holds %d streams (%v), having opened %d more, want 1 stream reopened once", len(got), got, madeAfterDrop-madeAfter)
 	}
 }
