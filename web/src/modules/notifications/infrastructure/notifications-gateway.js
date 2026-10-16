@@ -28,7 +28,7 @@ export function notificationsGateway(api, feed) {
     fromSeed: toPage,
 
     follow(onChange, onStatus) {
-      return feed.follow("/notifications/events", {
+      return feed.followPage({ kind: "notifications" }, {
         onMessage: (dto) => {
           let change;
           try {

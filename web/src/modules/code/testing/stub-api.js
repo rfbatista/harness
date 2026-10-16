@@ -1,10 +1,11 @@
-// A stand-in for the harness server's /api/code/* routes and the project
-// feed, backed by the memory gateway's wire answers: a fetch and an
+// A stand-in for the harness server's /api/code/* routes and the page event
+// stream's project kind, backed by the memory gateway's wire answers: a fetch and an
 // EventSource that speak the contract's format. The real codeGateway runs
 // the contract suite against it.
 
 import { codeOf } from "../../../shared/domain/errors.js";
 import { jsonResponse } from "../../../shared/testing/doubles.js";
+import { helloEnvelope, projectEnvelope } from "../../../shared/testing/page-events.js";
 import { memoryCode } from "../infrastructure/memory-gateway.js";
 
 export function stubCodeApi(world) {
@@ -51,7 +52,7 @@ export function stubCodeApi(world) {
     }
   }
 
-  // The project feed carries every kind of change; the gateway must pick out code_changed.
+  // The project's changes carry every kind of change; the gateway must pick out code_changed.
   class EventSource {
     constructor(url) {
       this.url = url;
@@ -59,7 +60,10 @@ export function stubCodeApi(world) {
       this.onmessage = null;
       this.onerror = null;
       sources.add(this);
-      queueMicrotask(() => this.onopen?.({}));
+      queueMicrotask(() => {
+        this.onopen?.({});
+        this.onmessage?.({ data: JSON.stringify(helloEnvelope()) });
+      });
     }
     close() {
       sources.delete(this);
@@ -67,7 +71,7 @@ export function stubCodeApi(world) {
   }
 
   const send = (data) => {
-    for (const s of sources) s.onmessage?.({ data: typeof data === "string" ? data : JSON.stringify(data) });
+    for (const s of sources) s.onmessage?.({ data: typeof data === "string" ? data : JSON.stringify(projectEnvelope(data)) });
   };
 
   return {
@@ -75,7 +79,7 @@ export function stubCodeApi(world) {
     EventSource,
     memory,
     requested,
-    /** Sends a project feed message as the server would. */
+    /** Sends a project change (or, as a string, any line) as the server would. */
     send,
     /** Edits a worktree and sends its code_changed on the stream. */
     change(workspaceId, files, opts) {

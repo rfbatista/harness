@@ -1,6 +1,6 @@
 // RailGateway over the harness HTTP API: GET /api/sessions, GET
-// /api/list_tickets and the project's feed (/api/events, server-sent events),
-// which carries session and ticket changes.
+// /api/list_tickets and the project's changes on the page event stream
+// (/api/page_events), which carry session and ticket changes.
 
 import { Codes, StructuredError } from "../../../shared/domain/errors.js";
 import { toTask, toTasks } from "./dto.js";
@@ -99,7 +99,7 @@ export function railGateway(api, feed) {
       return toTasks(body.tickets);
     },
     follow(projectId, onChange, onStatus) {
-      return feed.follow(`/events?project_id=${encodeURIComponent(projectId)}`, {
+      return feed.followPage({ kind: "project", projectId }, {
         onMessage: (dto) => {
           const change = toProjectChange(dto);
           if (change) onChange(change);

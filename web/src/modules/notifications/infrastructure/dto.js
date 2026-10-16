@@ -1,6 +1,6 @@
 // The wire format of notifications (the Web UI contract: GET
 // /api/notifications, POST /api/notifications/read and the
-// /api/notifications/events stream) and its mapping to domain notifications.
+// notifications kind of /api/page_events) and its mapping to domain notifications.
 
 import { Codes, StructuredError } from "../../../shared/domain/errors.js";
 import { KINDS, LEVELS, SOURCES } from "../domain/notification.js";

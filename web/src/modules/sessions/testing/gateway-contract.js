@@ -52,6 +52,7 @@ export function sessionGatewayContract(name, makeSubject, makeSession) {
     const subject = makeSubject({ projects: ["p1"], sessions: [] });
     const changes = [];
     const close = subject.gateway.follow("p1", (c) => changes.push(c), () => {});
+    await flush(); // the stream is open
     const session = await subject.gateway.start({
       projectId: "p1", ticketId: "t1", repositoryId: "r1", agentId: "", prompt: "  write the plan  ", autoAccept: "off",
       size: { cols: 120, rows: 32 },
@@ -89,6 +90,7 @@ export function sessionGatewayContract(name, makeSubject, makeSession) {
     const subject = makeSubject({ projects: ["p1"], sessions: [s] });
     const changes = [];
     const close = subject.gateway.follow("p1", (c) => changes.push(c), () => {});
+    await flush(); // the stream is open
     await subject.gateway.remove("gone");
     await flush();
     assert.deepEqual(changes.at(-1), { kind: "deleted", id: "gone" });
@@ -105,6 +107,7 @@ export function sessionGatewayContract(name, makeSubject, makeSession) {
     const subject = makeSubject({ projects: ["p1"], sessions: [ended({ id: "back", runsOn: "tui", runnerHost: "laptop" })] });
     const changes = [];
     const close = subject.gateway.follow("p1", (c) => changes.push(c), () => {});
+    await flush(); // the stream is open
     const session = await subject.gateway.resume("back", size);
     assert.equal(session.id, "back");
     assert.equal(session.status, "running");

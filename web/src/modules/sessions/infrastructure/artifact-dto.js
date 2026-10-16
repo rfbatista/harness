@@ -58,7 +58,7 @@ export function toArtifactAnswer(body, base = "/api") {
 }
 
 /**
- * One `data:` line of GET /api/events (the project feed).
+ * One project change of the page event stream (what GET /api/events sends).
  * @returns {import("../domain/ports.js").ProjectArtifactChange | null} null for the feed's other keys
  */
 export function toProjectArtifactChange(dto, base = "/api") {

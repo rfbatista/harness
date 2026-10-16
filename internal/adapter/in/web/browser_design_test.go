@@ -84,7 +84,7 @@ func TestDesignTabShowsArtifactsLive(t *testing.T) {
 		}}},
 	}, assets, nil)
 	mux := http.NewServeMux()
-	mux.Handle("/api/events", http.NotFoundHandler())               // the project feed is not under test
+	mux.Handle("/api/page_events", http.NotFoundHandler())          // the page's stream is not under test
 	mux.Handle("/api/sessions/s1/terminal", http.NotFoundHandler()) // nor the terminal
 	mux.Handle("/api/", api)
 	mux.Handle("/", pages)

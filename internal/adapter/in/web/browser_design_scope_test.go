@@ -183,7 +183,7 @@ func designServer(t *testing.T, api *scopedArtifactsAPI) *httptest.Server {
 		Artifacts: seedReader{api: api},
 	}, assets, nil)
 	mux := http.NewServeMux()
-	mux.Handle("/api/events", http.NotFoundHandler())
+	mux.Handle("/api/page_events", http.NotFoundHandler())
 	mux.Handle("/api/sessions/s1/terminal", http.NotFoundHandler())
 	mux.Handle("/api/", api)
 	mux.Handle("/", pages)

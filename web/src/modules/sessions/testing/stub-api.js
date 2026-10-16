@@ -5,6 +5,7 @@
 
 import { codeOf } from "../../../shared/domain/errors.js";
 import { jsonResponse } from "../../../shared/testing/doubles.js";
+import { helloEnvelope, pageEventsProject, projectEnvelope } from "../../../shared/testing/page-events.js";
 import { memoryGateway } from "../infrastructure/memory-gateway.js";
 import { toDTO } from "./fixtures.js";
 
@@ -81,22 +82,24 @@ export function stubApi(world) {
 
   class StubEventSource {
     constructor(input) {
-      const url = new URL(input, "http://harness.test");
       this.onopen = null;
       this.onmessage = null;
       this.onerror = null;
       this.unfollow = gateway.follow(
-        url.searchParams.get("project_id") ?? "",
+        pageEventsProject(input) ?? "",
         (change) => {
           const data =
             change.kind === "deleted"
               ? { session: { id: change.id }, deleted: true }
               : { session: toDTO(change.session) };
-          this.onmessage?.({ data: JSON.stringify(data) });
+          this.onmessage?.({ data: JSON.stringify(projectEnvelope(data)) });
         },
         () => {},
       );
-      queueMicrotask(() => this.onopen?.({}));
+      queueMicrotask(() => {
+        this.onopen?.({});
+        this.onmessage?.({ data: JSON.stringify(helloEnvelope()) });
+      });
     }
     close() {
       this.unfollow();

@@ -61,7 +61,7 @@ export function artifactsGateway(api, feed, base = "/api") {
     },
 
     followProject(projectId, onChange, onStatus) {
-      return feed.follow(`/events?project_id=${encodeURIComponent(projectId)}`, {
+      return feed.followPage({ kind: "project", projectId }, {
         onMessage: (dto) => {
           let change;
           try {
