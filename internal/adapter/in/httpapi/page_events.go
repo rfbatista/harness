@@ -133,35 +133,30 @@ func (h *Handler) handlePageEvents(c echo.Context) error {
 	// A part whose service this server lacks stays nil, and nil never
 	// delivers: the page keeps the parts it has.
 	var (
-		inbox   <-chan ports.NotificationChange
-		project <-chan ports.ProjectChange
-		err     error
+		parts pageParts
+		err   error
 	)
 	if h.notifications != nil {
-		if inbox, err = h.notifications.FollowNotifications(ctx); err != nil {
+		if parts.inbox, err = h.notifications.FollowNotifications(ctx); err != nil {
 			return err
 		}
 	}
 	if projectID != "" && h.orchSvc != nil {
-		if project, err = h.orchSvc.FollowProject(ctx, projectID); err != nil {
+		if parts.project, err = h.orchSvc.FollowProject(ctx, projectID); err != nil {
 			return err
 		}
 	}
-	var (
-		usage    <-chan *domain.UsageRecord
-		projects <-chan any
-		with     = map[string]bool{}
-	)
+	with := map[string]bool{}
 	for _, kind := range strings.Split(c.QueryParam("with"), ",") {
 		with[kind] = true
 	}
 	if with["usage"] && projectID != "" && h.usage != nil {
-		if usage, err = h.usage.FollowUsage(ctx, projectID); err != nil {
+		if parts.usage, err = h.usage.FollowUsage(ctx, projectID); err != nil {
 			return err
 		}
 	}
 	if with["projects"] && h.projectFeed != nil {
-		if projects, err = h.followProjectEvents(ctx); err != nil {
+		if parts.projects, err = h.followProjectEvents(ctx); err != nil {
 			return err
 		}
 	}
@@ -169,17 +164,31 @@ func (h *Handler) handlePageEvents(c echo.Context) error {
 	s := h.pageStreams.open()
 	defer h.pageStreams.remove(s)
 	w := c.Response()
-	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.Header().Set("Connection", "keep-alive")
-	w.WriteHeader(http.StatusOK)
+	startEventStream(w)
 	writeEnvelope(w, helloEnvelope{Kind: "hello", StreamID: s.id})
 	var subscribe sessionSubscriber
 	if h.orchSvc != nil {
 		subscribe = h.orchSvc.Subscribe
 	}
-	s.run(ctx, w, project, inbox, usage, projects, subscribe)
+	s.run(ctx, w, parts, subscribe)
 	return nil
+}
+
+// pageParts are the followers a page event stream reads beside its session:
+// each nil when the stream does not carry that part.
+type pageParts struct {
+	project  <-chan ports.ProjectChange
+	inbox    <-chan ports.NotificationChange
+	usage    <-chan *domain.UsageRecord
+	projects <-chan any
+}
+
+// startEventStream answers 200 with the headers of a server-sent event stream.
+func startEventStream(w *echo.Response) {
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.WriteHeader(http.StatusOK)
 }
 
 // sessionSubscriber is the hub's Subscribe: the live channel, the events
@@ -189,7 +198,7 @@ type sessionSubscriber func(id string) (<-chan ports.SessionEvent, []ports.Sessi
 // run writes the stream's changes, and the events of the session it is
 // asked to follow, until ctx ends or a project, inbox, usage or projects
 // follower closes.
-func (s *pageStream) run(ctx context.Context, w *echo.Response, project <-chan ports.ProjectChange, inbox <-chan ports.NotificationChange, usage <-chan *domain.UsageRecord, projects <-chan any, subscribe sessionSubscriber) {
+func (s *pageStream) run(ctx context.Context, w *echo.Response, parts pageParts, subscribe sessionSubscriber) {
 	defer close(s.done)
 	ticker := time.NewTicker(pageEventsPing)
 	defer ticker.Stop()
@@ -224,22 +233,22 @@ func (s *pageStream) run(ctx context.Context, w *echo.Response, project <-chan p
 				continue
 			}
 			writeEnvelope(w, sessionEnvelope{Kind: "session", SessionID: following, Event: ev})
-		case change, ok := <-project:
+		case change, ok := <-parts.project:
 			if !ok {
 				return
 			}
 			writeEnvelope(w, projectEnvelope{Kind: "project", Change: change})
-		case change, ok := <-inbox:
+		case change, ok := <-parts.inbox:
 			if !ok {
 				return
 			}
 			writeEnvelope(w, notificationsEnvelope{Kind: "notifications", NotificationChange: change})
-		case record, ok := <-usage:
+		case record, ok := <-parts.usage:
 			if !ok {
 				return
 			}
 			writeEnvelope(w, usageEnvelope{Kind: "usage", Record: record})
-		case change, ok := <-projects:
+		case change, ok := <-parts.projects:
 			if !ok {
 				return
 			}
