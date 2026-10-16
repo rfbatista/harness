@@ -12,7 +12,7 @@
 // joins late is told the stream's status at once.
 //
 // follow(path) is the older stream per path, kept for the streams that do not
-// ride the page stream yet (a session's events, usage, /project_events).
+// ride the page stream yet (a session's events).
 
 import { FeedStatus } from "../domain/feed.js";
 
@@ -23,7 +23,8 @@ const MAX_RETRY_MS = 30_000;
  * What a follower of the page stream follows: a kind, with what that kind
  * needs (a project follower names its project).
  *
- * @typedef {{kind: "project", projectId: string} | {kind: "notifications"}} PageTopic
+ * @typedef {{kind: "project", projectId: string} | {kind: "notifications"}
+ *   | {kind: "usage", projectId: string} | {kind: "projects"}} PageTopic
  */
 
 /**
@@ -32,10 +33,12 @@ const MAX_RETRY_MS = 30_000;
  * the order they joined and the query the stream has now), which followers
  * hear an envelope (`hears`, given the query the stream was opened with), and
  * what of the envelope they get (`payload`). A kind that adds to the query
- * reconnects the stream when a follower changes what it asks for. Envelopes of
- * kinds not listed here are ignored.
+ * reconnects the stream when a follower changes what it asks for. An opt-in
+ * kind (`optIn`) is carried only once a follower has asked for it in `with`.
+ * Envelopes of kinds not listed here are ignored.
  *
  * @type {Record<string, {
+ *   optIn?: boolean,
  *   query?: (followers: any[], current: Record<string, string>) => Record<string, string>,
  *   hears?: (follower: any, query: Record<string, string>) => boolean,
  *   payload: (envelope: any) => any,
@@ -55,6 +58,22 @@ const KINDS = {
   // What /api/notifications/events sent: the envelope without its kind.
   notifications: {
     payload: ({ kind, ...rest }) => rest,
+  },
+  // What /api/projects/:p/usage/events sent, under record: the usage of the
+  // stream's project, which its latest usage follower with a project names.
+  usage: {
+    optIn: true,
+    query: (followers) => {
+      const projectId = followers.findLast((f) => f.topic.projectId)?.topic.projectId;
+      return projectId ? { project_id: projectId } : {};
+    },
+    hears: (follower, query) => follower.topic.projectId === query.project_id,
+    payload: (envelope) => envelope.record,
+  },
+  // What /api/project_events sent, under change.
+  projects: {
+    optIn: true,
+    payload: (envelope) => envelope.change,
   },
 };
 
@@ -204,6 +223,13 @@ export function feed({
       const followers = [...page.followers].filter((f) => f.topic.kind === kind);
       next = { ...next, ...def.query(followers, query) };
     }
+    // The opt-in kinds a follower asked for, and those the stream carries
+    // already: like the project, a kind stays when its followers have left.
+    const carried = (query.with ?? "").split(",");
+    const opted = Object.keys(KINDS).filter(
+      (kind) => KINDS[kind].optIn && (carried.includes(kind) || [...page.followers].some((f) => f.topic.kind === kind)),
+    );
+    if (opted.length) next.with = opted.join(",");
     return next;
   }
   const page = stream({

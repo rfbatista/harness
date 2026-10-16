@@ -1,6 +1,6 @@
 // UsageGateway over the harness HTTP API: /api/projects/{p}/usage, its
-// records and its event stream (bare `data:` lines, one record each), and
-// /api/usage/totals for one task or session.
+// records, its usage records as the page event stream carries them (kind
+// usage, one record each), and /api/usage/totals for one task or session.
 
 import { toRecord, toRecords, toSeed, toSummary, toTotals, toTotalsSeed } from "./dto.js";
 
@@ -29,7 +29,7 @@ export function usageGateway(api, feed) {
     },
 
     follow(projectId, onRecord, onStatus) {
-      return feed.follow(`${base(projectId)}/events`, {
+      return feed.followPage({ kind: "usage", projectId }, {
         onMessage: (dto) => {
           let record;
           try {

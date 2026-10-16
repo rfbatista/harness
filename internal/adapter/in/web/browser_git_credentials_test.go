@@ -69,7 +69,6 @@ func newCredentialsHarness(t *testing.T) *credentialsHarness {
 	}, assets, nil)
 	api := httpapi.NewRouter(httpapi.NewHandler(httpapi.Services{GitCredentials: fake, ProjectFeed: quietProjects{}}))
 	mux := http.NewServeMux()
-	mux.Handle("/api/page_events", projectFeed()) // the rail's feed is not under test
 	mux.Handle("/api/", api)
 	mux.Handle("/", pages)
 	h.srv = httptest.NewServer(mux)
