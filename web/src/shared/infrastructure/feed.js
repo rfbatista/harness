@@ -10,9 +10,6 @@
 // joins, so the followers a page registers as it starts are all known and the
 // URL carries their project, and it closes with its last follower. One that
 // joins late is told the stream's status at once.
-//
-// follow(path) is the older stream per path, kept for the streams that do not
-// ride the page stream yet.
 
 import { FeedStatus } from "../domain/feed.js";
 
@@ -86,15 +83,10 @@ const KINDS = {
 
 /**
  * @typedef {object} Feed
- * @property {(path: string, handlers: {
- *   onMessage: (data: any) => void,
- *   onStatus?: (status: import("../domain/feed.js").FeedStatus) => void,
- * }) => () => void} follow  Follows the stream at path; returns the function that stops following it.
  * @property {(topic: PageTopic, handlers: {
  *   onMessage: (payload: any) => void,
  *   onStatus?: (status: import("../domain/feed.js").FeedStatus) => void,
  * }) => () => void} followPage  Follows one kind of the page stream; returns the function that stops following it.
- * @property {() => string} pageStreamId  The page stream's id from its hello; "" while it is not open.
  */
 
 /**
@@ -116,10 +108,11 @@ export function feed({
 }) {
   /**
    * One EventSource, reopened with backoff when it drops, and the followers
-   * it reports its status to. `url()` is asked on every open; `route` hands a
-   * parsed message to the followers; `onClose` hears the EventSource end.
+   * it reports its status to. It opens on the tick after its first follower
+   * joins. `url()` is asked on every open; `route` hands a parsed message to
+   * the followers; `onClose` hears the EventSource end.
    */
-  function stream({ url, route, deferOpen, onClose }) {
+  function stream({ url, route, onClose }) {
     const followers = new Set();
     let source = null;
     let timer = null;
@@ -184,22 +177,20 @@ export function feed({
           dropped = false;
           delay = FIRST_RETRY_MS;
           report(FeedStatus.CONNECTING);
-          if (deferOpen) timer = setTimeout(open, 0);
-          else open();
+          timer = setTimeout(open, 0);
         } else {
           follower.onStatus(status);
         }
       },
-      /** @returns {boolean} the stream has no followers left and is closed */
+      /** Closes the stream when its last follower leaves. */
       remove(follower) {
         followers.delete(follower);
-        if (followers.size > 0) return false;
+        if (followers.size > 0) return;
         clearTimeout(timer);
         timer = null;
         source?.close();
         source = null;
         onClose?.();
-        return true;
       },
       /**
        * Opens the stream again at once, for a URL that changed. Changes may
@@ -216,9 +207,6 @@ export function feed({
       },
     };
   }
-
-  /** @type {Map<string, ReturnType<typeof stream>>} */
-  const streams = new Map();
 
   // The page stream: the query it is open with, and the one its followers ask
   // for. Its hello names it (stream_id) until it ends, for the calls that act
@@ -242,7 +230,6 @@ export function feed({
     return next;
   }
   const page = stream({
-    deferOpen: true,
     onClose: () => (streamId = ""),
     url() {
       query = wanted();
@@ -299,23 +286,6 @@ export function feed({
   }
 
   return {
-    follow(path, { onMessage, onStatus = () => {} }) {
-      let s = streams.get(path);
-      if (!s) {
-        s = stream({ url: () => path, route: (data, each) => each((f) => f.onMessage(data)) });
-        streams.set(path, s);
-      }
-      const follower = { onMessage, onStatus };
-      s.add(follower);
-
-      let following = true;
-      return () => {
-        if (!following) return;
-        following = false;
-        if (s.remove(follower)) streams.delete(path);
-      };
-    },
-
     followPage(topic, { onMessage, onStatus = () => {} }) {
       if (!Object.hasOwn(KINDS, topic?.kind)) throw new Error(`no such kind on the page stream: ${topic?.kind}`);
       const follower = { topic, onMessage, onStatus };
@@ -331,7 +301,5 @@ export function feed({
         if (topic.kind === "session") followSession();
       };
     },
-
-    pageStreamId: () => streamId,
   };
 }
