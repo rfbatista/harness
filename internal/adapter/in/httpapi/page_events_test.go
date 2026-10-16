@@ -312,3 +312,36 @@ func TestAPageEventStreamPings(t *testing.T) {
 		t.Fatalf("after hello = %q (%v), want a : ping comment", lines, err)
 	}
 }
+
+// A server built without the inbox (or without orchestration) still gives a
+// page its stream, with the parts it has: a page must not lose its project
+// changes because the inbox is off.
+func TestAPageEventStreamWithoutTheInboxCarriesTheProject(t *testing.T) {
+	feed := newFollowedProject()
+	srv := httptest.NewServer(NewRouter(&Handler{orchSvc: feed}))
+	t.Cleanup(srv.Close)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	s, _ := openSSE(t, ctx, srv.URL+"/api/page_events?project_id=p1")
+	s.hello()
+
+	feed.ch <- ports.ProjectChange{Ticket: &domain.Ticket{ID: "t1"}}
+	if raw := s.data(); !strings.Contains(raw, `"kind":"project"`) {
+		t.Fatalf("message = %s, want a project change", raw)
+	}
+}
+
+func TestAPageEventStreamWithoutOrchestrationCarriesTheInbox(t *testing.T) {
+	notes := newFollowedInbox()
+	srv := httptest.NewServer(NewRouter(&Handler{notifications: notes}))
+	t.Cleanup(srv.Close)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	s, _ := openSSE(t, ctx, srv.URL+"/api/page_events?project_id=p1")
+	s.hello()
+
+	notes.ch <- ports.NotificationChange{Changed: []*domain.Notification{}, UnreadCount: 2}
+	if raw := s.data(); !strings.Contains(raw, `"kind":"notifications"`) {
+		t.Fatalf("message = %s, want an inbox change", raw)
+	}
+}

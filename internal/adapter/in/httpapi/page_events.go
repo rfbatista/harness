@@ -84,26 +84,28 @@ func (r *pageStreamRegistry) remove(s *pageStream) {
 
 // handlePageEvents streams the project's changes (none when project_id is
 // empty) and the inbox's, each as one `data:` line of its envelope, after a
-// hello naming the stream. It reads the same followers /api/events and
+// hello naming the stream; a part whose service is not configured is left
+// out. It reads the same followers /api/events and
 // /api/notifications/events read, so it never holds back a send; when either
 // falls behind the whole stream ends and the client reconnects.
 func (h *Handler) handlePageEvents(c echo.Context) error {
-	if h.notifications == nil {
-		return errNotificationsOff
-	}
 	projectID := c.QueryParam("project_id")
-	if projectID != "" && h.orchSvc == nil {
-		return echo.NewHTTPError(http.StatusServiceUnavailable, "orchestration not configured")
-	}
 	// Ending the stream for a follower that fell behind releases the other.
 	ctx, cancel := context.WithCancel(c.Request().Context())
 	defer cancel()
-	inbox, err := h.notifications.FollowNotifications(ctx)
-	if err != nil {
-		return err
+	// A part whose service this server lacks stays nil, and nil never
+	// delivers: the page keeps the parts it has.
+	var (
+		inbox   <-chan ports.NotificationChange
+		project <-chan ports.ProjectChange
+		err     error
+	)
+	if h.notifications != nil {
+		if inbox, err = h.notifications.FollowNotifications(ctx); err != nil {
+			return err
+		}
 	}
-	var project <-chan ports.ProjectChange // nil never delivers: no project part
-	if projectID != "" {
+	if projectID != "" && h.orchSvc != nil {
 		if project, err = h.orchSvc.FollowProject(ctx, projectID); err != nil {
 			return err
 		}
