@@ -10,12 +10,9 @@
 // joins, so the followers a page registers as it starts are all known and the
 // URL carries their project, and it closes with its last follower. One that
 // joins late is told the stream's status at once.
-//
-// follow(path) is the older stream per path, kept for the streams that do not
-// ride the page stream yet.
 
+import { Codes } from "../domain/errors.js";
 import { FeedStatus } from "../domain/feed.js";
-import { apiClient } from "./api.js";
 
 const FIRST_RETRY_MS = 1_000;
 const MAX_RETRY_MS = 30_000;
@@ -27,6 +24,11 @@ const MAX_RETRY_MS = 30_000;
  * @typedef {{kind: "project", projectId: string} | {kind: "notifications"} | {kind: "session", sessionId: string}
  *   | {kind: "usage", projectId: string} | {kind: "projects"}} PageTopic
  */
+
+/** The project the latest of followers that names one asks for. */
+const latestProject = (followers) => followers.findLast((f) => f.topic.projectId)?.topic.projectId;
+/** A follower of a project's kind hears the project the stream carries. */
+const hearsProject = (follower, query) => follower.topic.projectId === query.project_id;
 
 /**
  * The kinds of the page stream a follower can follow. A kind says how its
@@ -52,9 +54,9 @@ const KINDS = {
   // no project (a page outside one) does not move it.
   project: {
     query: (followers, current) => ({
-      project_id: followers.findLast((f) => f.topic.projectId)?.topic.projectId ?? current.project_id ?? "",
+      project_id: latestProject(followers) ?? current.project_id ?? "",
     }),
-    hears: (follower, query) => follower.topic.projectId === query.project_id,
+    hears: hearsProject,
     payload: (envelope) => envelope.change,
   },
   // What /api/notifications/events sent: the envelope without its kind.
@@ -66,10 +68,10 @@ const KINDS = {
   usage: {
     optIn: true,
     query: (followers) => {
-      const projectId = followers.findLast((f) => f.topic.projectId)?.topic.projectId;
+      const projectId = latestProject(followers);
       return projectId ? { project_id: projectId } : {};
     },
-    hears: (follower, query) => follower.topic.projectId === query.project_id,
+    hears: hearsProject,
     payload: (envelope) => envelope.record,
   },
   // What /api/project_events sent, under change.
@@ -87,22 +89,17 @@ const KINDS = {
 
 /**
  * @typedef {object} Feed
- * @property {(path: string, handlers: {
- *   onMessage: (data: any) => void,
- *   onStatus?: (status: import("../domain/feed.js").FeedStatus) => void,
- * }) => () => void} follow  Follows the stream at path; returns the function that stops following it.
  * @property {(topic: PageTopic, handlers: {
  *   onMessage: (payload: any) => void,
  *   onStatus?: (status: import("../domain/feed.js").FeedStatus) => void,
  * }) => () => void} followPage  Follows one kind of the page stream; returns the function that stops following it.
- * @property {() => string} pageStreamId  The page stream's id from its hello; "" while it is not open.
  */
 
 /**
  * @param {{
  *   base: string,
  *   EventSource?: typeof globalThis.EventSource,
- *   post?: (path: string, body: unknown) => Promise<unknown>,  POSTs to the API, as ApiClient.post
+ *   post: (path: string, body: unknown) => Promise<unknown>,  POSTs to the API, as ApiClient.post
  *   setTimeout?: typeof globalThis.setTimeout,
  *   clearTimeout?: typeof globalThis.clearTimeout,
  * }} options
@@ -111,16 +108,17 @@ const KINDS = {
 export function feed({
   base,
   EventSource = globalThis.EventSource,
-  post = (path, body) => apiClient({ base }).post(path, body),
+  post,
   setTimeout = globalThis.setTimeout.bind(globalThis),
   clearTimeout = globalThis.clearTimeout.bind(globalThis),
 }) {
   /**
    * One EventSource, reopened with backoff when it drops, and the followers
-   * it reports its status to. `url()` is asked on every open; `route` hands a
-   * parsed message to the followers; `onClose` hears the EventSource end.
+   * it reports its status to. It opens on the tick after its first follower
+   * joins. `url()` is asked on every open; `route` hands a parsed message to
+   * the followers; `onClose` hears the EventSource end.
    */
-  function stream({ url, route, deferOpen, onClose }) {
+  function stream({ url, route, onClose }) {
     const followers = new Set();
     let source = null;
     let timer = null;
@@ -178,6 +176,7 @@ export function feed({
 
     return {
       followers,
+      each,
       add(follower) {
         followers.add(follower);
         if (followers.size === 1) {
@@ -185,22 +184,20 @@ export function feed({
           dropped = false;
           delay = FIRST_RETRY_MS;
           report(FeedStatus.CONNECTING);
-          if (deferOpen) timer = setTimeout(open, 0);
-          else open();
+          timer = setTimeout(open, 0);
         } else {
           follower.onStatus(status);
         }
       },
-      /** @returns {boolean} the stream has no followers left and is closed */
+      /** Closes the stream when its last follower leaves. */
       remove(follower) {
         followers.delete(follower);
-        if (followers.size > 0) return false;
+        if (followers.size > 0) return;
         clearTimeout(timer);
         timer = null;
         source?.close();
         source = null;
         onClose?.();
-        return true;
       },
       /**
        * Opens the stream again at once, for a URL that changed. Changes may
@@ -217,9 +214,6 @@ export function feed({
       },
     };
   }
-
-  /** @type {Map<string, ReturnType<typeof stream>>} */
-  const streams = new Map();
 
   // The page stream: the query it is open with, and the one its followers ask
   // for. Its hello names it (stream_id) until it ends, for the calls that act
@@ -243,8 +237,11 @@ export function feed({
     return next;
   }
   const page = stream({
-    deferOpen: true,
-    onClose: () => (streamId = ""),
+    onClose() {
+      streamId = "";
+      clearTimeout(retry); // the next hello follows again
+      retry = null;
+    },
     url() {
       query = wanted();
       return `/page_events?${new URLSearchParams(query)}`;
@@ -271,56 +268,76 @@ export function feed({
   // none. One follow is in flight at a time, so they reach the server in
   // order. `followed` is what a stream was last asked to follow, and `seq` the
   // highest event seq delivered of that session: a stream that reconnects
-  // follows it again after that seq. A follow that fails is not retried on the
-  // same stream: one answered STREAM_NOT_FOUND ended, and its next hello
-  // follows again.
+  // follows it again after that seq.
+  //
+  // A follow answered STREAM_NOT_FOUND is not retried: that stream ended, and
+  // its next hello follows again. One answered SESSION_NOT_FOUND is not
+  // either: the session is gone. One that fails on the way (the network, a
+  // 5xx) pauses the session's followers and is retried on the same stream
+  // with the stream's backoff, while the stream and the session stay; once it
+  // lands they resync, since events were missed in between.
   let followed = { streamId: "", sessionId: null };
   let seq = 0;
   let posting = false;
-  function followSession() {
+  let failing = false;
+  let retry = null;
+  let retryDelay = FIRST_RETRY_MS;
+  const latestSession = () => [...page.followers].findLast((f) => f.topic.kind === "session")?.topic.sessionId ?? null;
+  const tellSession = (status) => page.each((f) => f.topic.kind === "session" && f.onStatus(status));
+  function followSession(again = false) {
     if (posting || !streamId) return;
-    const sessionId = [...page.followers].findLast((f) => f.topic.kind === "session")?.topic.sessionId ?? null;
+    const sessionId = latestSession();
     const sameStream = followed.streamId === streamId;
-    if (sameStream && followed.sessionId === sessionId) return;
+    if (sameStream && followed.sessionId === sessionId && !again) return;
+    clearTimeout(retry);
+    retry = null;
     if (!sameStream && sessionId === null) {
       followed = { streamId, sessionId }; // a new stream follows nothing yet
       return;
     }
-    if (sessionId !== followed.sessionId) seq = 0;
+    if (sessionId !== followed.sessionId) {
+      seq = 0;
+      failing = false;
+      retryDelay = FIRST_RETRY_MS;
+    }
     const body = { stream_id: streamId, session_id: sessionId };
     if (sessionId !== null && seq > 0) body.after_seq = seq;
-    followed = { streamId, sessionId };
+    const asked = { streamId, sessionId };
+    followed = asked;
     posting = true;
-    post("/follow_session", body)
-      .catch(() => {})
-      .finally(() => {
+    const current = () => streamId === asked.streamId && latestSession() === asked.sessionId;
+    post("/follow_session", body).then(
+      () => {
         posting = false;
+        if (failing && current()) {
+          failing = false;
+          retryDelay = FIRST_RETRY_MS;
+          tellSession(FeedStatus.RESYNCED);
+          tellSession(FeedStatus.LIVE);
+        }
         followSession();
-      });
+      },
+      (err) => {
+        posting = false;
+        const code = err?.code;
+        if (code !== Codes.STREAM_NOT_FOUND && code !== Codes.SESSION_NOT_FOUND && current()) {
+          failing = true;
+          tellSession(FeedStatus.PAUSED);
+          retry = setTimeout(() => followSession(true), retryDelay);
+          retryDelay = Math.min(retryDelay * 2, MAX_RETRY_MS);
+          return;
+        }
+        followSession();
+      },
+    );
   }
 
   return {
-    follow(path, { onMessage, onStatus = () => {} }) {
-      let s = streams.get(path);
-      if (!s) {
-        s = stream({ url: () => path, route: (data, each) => each((f) => f.onMessage(data)) });
-        streams.set(path, s);
-      }
-      const follower = { onMessage, onStatus };
-      s.add(follower);
-
-      let following = true;
-      return () => {
-        if (!following) return;
-        following = false;
-        if (s.remove(follower)) streams.delete(path);
-      };
-    },
-
     followPage(topic, { onMessage, onStatus = () => {} }) {
       if (!Object.hasOwn(KINDS, topic?.kind)) throw new Error(`no such kind on the page stream: ${topic?.kind}`);
       const follower = { topic, onMessage, onStatus };
       page.add(follower);
+      if (topic.kind === "session" && failing && topic.sessionId === followed.sessionId) onStatus(FeedStatus.PAUSED);
       if (new URLSearchParams(wanted()).toString() !== new URLSearchParams(query).toString()) page.reconnect();
       if (topic.kind === "session") followSession();
 
@@ -332,7 +349,5 @@ export function feed({
         if (topic.kind === "session") followSession();
       };
     },
-
-    pageStreamId: () => streamId,
   };
 }
