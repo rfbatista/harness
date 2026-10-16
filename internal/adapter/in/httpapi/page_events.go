@@ -12,12 +12,14 @@ import (
 
 	"github.com/labstack/echo/v4"
 
+	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
 )
 
 // The page event stream: the one SSE connection a page holds, carrying the
-// project's and the inbox's changes in envelopes told apart by kind (see
-// "Contract: Harness server ↔ Web UI — page event stream").
+// project's and the inbox's changes, and the events of the one session it
+// follows, in envelopes told apart by kind (see "Contract: Harness server ↔
+// Web UI — page event stream").
 
 // pageEventsPing is how often the stream sends a `: ping` comment; tests
 // shorten it.
@@ -41,11 +43,31 @@ type notificationsEnvelope struct {
 	ports.NotificationChange
 }
 
+// sessionEnvelope carries what /api/sessions/:id/events sends, under event.
+type sessionEnvelope struct {
+	Kind      string             `json:"kind"`
+	SessionID string             `json:"session_id"`
+	Event     ports.SessionEvent `json:"event"`
+}
+
 // pageStream is one open page event stream. Only the handler's goroutine
 // writes its response; other calls reach the stream through the registry by
-// id.
+// id and hand it requests on follows.
 type pageStream struct {
-	id string
+	id      string
+	follows chan followRequest
+	// done is closed when the stream's loop has returned, so a request that
+	// found the stream just as it ended does not wait on it.
+	done chan struct{}
+}
+
+// followRequest asks a stream to follow sessionID ("" follows none),
+// replaying its buffered events after afterSeq. The loop closes subscribed
+// once it is subscribed.
+type followRequest struct {
+	sessionID  string
+	afterSeq   int64
+	subscribed chan struct{}
 }
 
 // pageStreamRegistry holds the open page event streams by stream_id. The
@@ -59,7 +81,7 @@ type pageStreamRegistry struct {
 func (r *pageStreamRegistry) open() *pageStream {
 	var b [16]byte
 	_, _ = rand.Read(b[:])
-	s := &pageStream{id: hex.EncodeToString(b[:])}
+	s := &pageStream{id: hex.EncodeToString(b[:]), follows: make(chan followRequest), done: make(chan struct{})}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.streams == nil {
@@ -119,18 +141,55 @@ func (h *Handler) handlePageEvents(c echo.Context) error {
 	w.Header().Set("Connection", "keep-alive")
 	w.WriteHeader(http.StatusOK)
 	writeEnvelope(w, helloEnvelope{Kind: "hello", StreamID: s.id})
-	s.run(ctx, w, project, inbox)
+	var subscribe sessionSubscriber
+	if h.orchSvc != nil {
+		subscribe = h.orchSvc.Subscribe
+	}
+	s.run(ctx, w, project, inbox, subscribe)
 	return nil
 }
 
-// run writes the stream's changes until ctx ends or a follower closes.
-func (s *pageStream) run(ctx context.Context, w *echo.Response, project <-chan ports.ProjectChange, inbox <-chan ports.NotificationChange) {
+// sessionSubscriber is the hub's Subscribe: the live channel, the events
+// already buffered, and the call that releases the subscription.
+type sessionSubscriber func(id string) (<-chan ports.SessionEvent, []ports.SessionEvent, func())
+
+// run writes the stream's changes, and the events of the session it is
+// asked to follow, until ctx ends or a project or inbox follower closes.
+func (s *pageStream) run(ctx context.Context, w *echo.Response, project <-chan ports.ProjectChange, inbox <-chan ports.NotificationChange, subscribe sessionSubscriber) {
+	defer close(s.done)
 	ticker := time.NewTicker(pageEventsPing)
 	defer ticker.Stop()
+	var (
+		following string
+		session   <-chan ports.SessionEvent
+		unfollow  = func() {}
+	)
+	defer func() { unfollow() }()
 	for {
 		select {
 		case <-ctx.Done():
 			return
+		case req := <-s.follows:
+			unfollow()
+			following, session, unfollow = req.sessionID, nil, func() {}
+			if following == "" {
+				close(req.subscribed)
+				continue
+			}
+			ch, replay, cancel := subscribe(following)
+			session, unfollow = ch, cancel
+			close(req.subscribed)
+			for _, ev := range replayFrom(replay, req.afterSeq) {
+				writeEnvelope(w, sessionEnvelope{Kind: "session", SessionID: following, Event: ev})
+			}
+		case ev, ok := <-session:
+			// The hub drops a slow follower's events rather than wait, and
+			// closes the channel only on a release: neither ends the stream.
+			if !ok {
+				session = nil
+				continue
+			}
+			writeEnvelope(w, sessionEnvelope{Kind: "session", SessionID: following, Event: ev})
 		case change, ok := <-project:
 			if !ok {
 				return
@@ -153,3 +212,45 @@ func writeEnvelope(w *echo.Response, envelope any) {
 	fmt.Fprintf(w, "data: %s\n\n", data)
 	w.Flush()
 }
+
+// handleFollowSession makes an open page event stream follow one session, or
+// none when session_id is null. The stream's own loop makes the switch; the
+// call answers 204 once that loop has subscribed, so every event published
+// after the answer is carried.
+func (h *Handler) handleFollowSession(c echo.Context) error {
+	if h.orchSvc == nil {
+		return echo.NewHTTPError(http.StatusServiceUnavailable, "orchestration not configured")
+	}
+	var body struct {
+		StreamID  string  `json:"stream_id"`
+		SessionID *string `json:"session_id"`
+		AfterSeq  int64   `json:"after_seq"`
+	}
+	if err := bindJSON(c, &body); err != nil {
+		return err
+	}
+	ctx := c.Request().Context()
+	s, ok := h.pageStreams.lookup(body.StreamID)
+	if !ok {
+		return errStreamNotFound
+	}
+	req := followRequest{afterSeq: body.AfterSeq, subscribed: make(chan struct{})}
+	if body.SessionID != nil {
+		if _, err := h.orchSvc.Get(ctx, *body.SessionID); err != nil {
+			return err
+		}
+		req.sessionID = *body.SessionID
+	}
+	select {
+	case s.follows <- req:
+	case <-s.done:
+		return errStreamNotFound
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+	// The loop took the request, and closes subscribed before it can return.
+	<-req.subscribed
+	return c.NoContent(http.StatusNoContent)
+}
+
+var errStreamNotFound = &domain.StructuredError{Code: "STREAM_NOT_FOUND", Message: "page event stream not found"}

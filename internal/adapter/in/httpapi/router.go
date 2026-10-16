@@ -151,8 +151,9 @@ func NewRouter(h *Handler, opts ...Option) *echo.Echo {
 	g.POST("/sessions", h.handleCreateSession)
 	g.GET("/sessions/:id", h.handleGetSession)
 	g.DELETE("/sessions/:id", h.handleDeleteSession)
-	g.GET("/events", h.handleEvents)          // a project's session changes (SSE)
-	g.GET("/page_events", h.handlePageEvents) // a page's one stream: project and inbox changes (SSE)
+	g.GET("/events", h.handleEvents)                 // a project's session changes (SSE)
+	g.GET("/page_events", h.handlePageEvents)        // a page's one stream: project and inbox changes (SSE)
+	g.POST("/follow_session", h.handleFollowSession) // which session's events a page stream carries
 	g.GET("/sessions/:id/events", h.handleSessionEvents)
 	g.GET("/sessions/:id/terminal", h.handleSessionTerminal) // WebSocket upgrade
 	g.GET("/sessions/:id/history", h.handleSessionHistory)
