@@ -18,12 +18,19 @@ import (
 // sseFeed stands in for a server-sent event stream: every connected
 // follower gets what the test pushes. With a kind it stands in for
 // /api/page_events, the page's one stream: it says hello first, and what the
-// test pushes is that kind's payload, sent in the kind's envelope.
+// test pushes is that kind's payload, sent in the kind's envelope. Of kind
+// session it also answers POST /api/follow_session (follow) and remembers the
+// session the page follows.
 type sseFeed struct {
-	kind  string
-	mu    sync.Mutex
-	conns []chan []byte
+	kind     string
+	mu       sync.Mutex
+	conns    []chan []byte
+	followed string
 }
+
+// sessionFeed stands in for a session's events on /api/page_events (what
+// /api/sessions/:id/events sends), with the follow that asks for them.
+func sessionFeed() *sseFeed { return &sseFeed{kind: "session"} }
 
 // projectFeed stands in for the project's changes on /api/page_events (what
 // /api/events sends).
@@ -38,11 +45,40 @@ func (f *sseFeed) envelope(b []byte) []byte {
 		return b
 	case f.kind == "project":
 		return []byte(`{"kind":"project","change":` + string(b) + `}`)
+	case f.kind == "session":
+		var ev struct {
+			SessionID string `json:"session_id"`
+		}
+		_ = json.Unmarshal(b, &ev)
+		id, _ := json.Marshal(ev.SessionID)
+		return []byte(`{"kind":"session","session_id":` + string(id) + `,"event":` + string(b) + `}`)
 	case len(b) > 2 && b[0] == '{':
 		return []byte(`{"kind":"` + f.kind + `",` + string(b[1:]))
 	default:
 		return []byte(`{"kind":"` + f.kind + `"}`)
 	}
+}
+
+// follow answers POST /api/follow_session: the page follows the session it names.
+func (f *sseFeed) follow(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		SessionID *string `json:"session_id"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&in)
+	f.mu.Lock()
+	f.followed = ""
+	if in.SessionID != nil {
+		f.followed = *in.SessionID
+	}
+	f.mu.Unlock()
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// following is the session the page last asked to follow.
+func (f *sseFeed) following() string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.followed
 }
 
 func (f *sseFeed) followers() int {

@@ -16,7 +16,7 @@ import (
 
 // artifactsAPI stands in for the server's artifact routes, in the shape of
 // Contract: Server ↔ Web UI — Artifacts: the list, the view route (with the
-// contract's headers), and the session's event stream.
+// contract's headers); the session's events ride the page event stream (feed).
 type artifactsAPI struct {
 	list []map[string]any
 	feed *sseFeed
@@ -46,8 +46,6 @@ func (a *artifactsAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-cache")
 		w.Header().Set("ETag", `"`+r.URL.Query().Get("rev")+`"`)
 		fmt.Fprintf(w, "<!doctype html><title>artifact</title><p>rev %s</p>", r.URL.Query().Get("rev"))
-	case r.URL.Path == "/api/sessions/s1/events":
-		a.feed.ServeHTTP(w, r)
 	default:
 		http.NotFound(w, r)
 	}
@@ -71,7 +69,7 @@ func TestDesignTabShowsArtifactsLive(t *testing.T) {
 	hostile := `<img src=x onerror="document.title='pwned'">`
 	api := &artifactsAPI{
 		list: []map[string]any{artifactDTO("a1", "page", hostile, "first cut", "design/hero.html", 1, now.Add(-time.Minute))},
-		feed: &sseFeed{},
+		feed: sessionFeed(),
 	}
 	pages := NewHandler(Deps{
 		Projects:     fakeProjects{[]*domain.Project{{ID: "p1", Name: "coding_pool"}}},
@@ -84,7 +82,8 @@ func TestDesignTabShowsArtifactsLive(t *testing.T) {
 		}}},
 	}, assets, nil)
 	mux := http.NewServeMux()
-	mux.Handle("/api/page_events", http.NotFoundHandler())          // the page's stream is not under test
+	mux.Handle("/api/page_events", api.feed) // only the session's events are under test
+	mux.HandleFunc("/api/follow_session", api.feed.follow)
 	mux.Handle("/api/sessions/s1/terminal", http.NotFoundHandler()) // nor the terminal
 	mux.Handle("/api/", api)
 	mux.Handle("/", pages)
@@ -142,7 +141,7 @@ func TestDesignTabShowsArtifactsLive(t *testing.T) {
 	// Behind the Agent tab, a publish counts on the Design tab and is announced.
 	// The stream replays its history on connect: the artifact already listed
 	// arrives again first and must count for nothing.
-	waitFor(t, "the session stream", func() bool { return api.feed.followers() >= 1 })
+	waitFor(t, "the page follows the session", func() bool { return api.feed.following() == "s1" })
 	if err := chromedp.Run(ctx, clickButton(`[role=tablist]`, "Agent")); err != nil {
 		t.Fatal(err)
 	}

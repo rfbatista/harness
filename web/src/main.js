@@ -46,7 +46,7 @@ import { createScreen } from "./xterm-screen.js";
 import { startSwapRegions } from "./swap-regions.js";
 
 const api = apiClient({ base: "/api" });
-const events = feed({ base: "/api" });
+const events = feed({ base: "/api", post: api.post });
 
 const prefs = preferences();
 registerShared(Alpine, { prefs });

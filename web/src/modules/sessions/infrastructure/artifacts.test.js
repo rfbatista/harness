@@ -1,8 +1,9 @@
 // Both ArtifactGateway implementations run the same contract.
 
+import { FeedStatus } from "../../../shared/domain/feed.js";
 import { apiClient } from "../../../shared/infrastructure/api.js";
 import { feed } from "../../../shared/infrastructure/feed.js";
-import { flush } from "../../../shared/testing/doubles.js";
+import { flush, manualTimers } from "../../../shared/testing/doubles.js";
 import { assert, file, test } from "../../../shared/testing/test.js";
 import { artifactGatewayContract } from "../testing/artifact-contract.js";
 import { makeArtifact } from "../testing/artifact-fixtures.js";
@@ -19,13 +20,58 @@ artifactGatewayContract("memory", (world) => {
 
 function http(world) {
   const stub = stubArtifactsApi(world);
-  const gateway = artifactsGateway(apiClient({ base: "/api", fetch: stub.fetch }), feed({ base: "/api", EventSource: stub.EventSource }));
-  return { gateway, stub };
+  const opened = [];
+  class EventSource extends stub.EventSource {
+    constructor(url) {
+      super(url);
+      opened.push(url);
+    }
+  }
+  const api = apiClient({ base: "/api", fetch: stub.fetch });
+  const gateway = artifactsGateway(api, feed({ base: "/api", EventSource, post: api.post }));
+  return { gateway, stub, opened };
 }
 
 artifactGatewayContract("http", (world) => {
   const { gateway, stub } = http(world);
   return { gateway, publish: stub.memory.publish, end: stub.memory.end };
+});
+
+test("http · follow rides the page event stream, and a switch to another session opens no other", async () => {
+  const { gateway, stub, opened } = http({ artifacts: [] });
+  const s1 = [];
+  const s2 = [];
+  const close1 = gateway.follow("s1", (e) => s1.push(e.artifact.title), () => {});
+  const close2 = gateway.follow("s2", (e) => s2.push(e.artifact.title), () => {});
+  close1();
+  await flush();
+  stub.memory.publish({ sessionId: "s1", kind: "page", title: "Old", note: "", path: "o.html", mime: "text/html", sizeBytes: 1 });
+  stub.memory.publish({ sessionId: "s2", kind: "page", title: "New", note: "", path: "n.html", mime: "text/html", sizeBytes: 1 });
+  await flush();
+  assert.deepEqual([s1, s2], [[], ["New"]]);
+  assert.deepEqual(opened.map((u) => new URL(u, "http://harness.test").pathname), ["/api/page_events"]);
+  close2();
+});
+
+test("http · after the stream drops, the follower catches up on what was published meanwhile, once", async () => {
+  const stub = stubArtifactsApi({ artifacts: [] });
+  const timers = manualTimers();
+  const api = apiClient({ base: "/api", fetch: stub.fetch });
+  const gateway = artifactsGateway(api, feed({ base: "/api", EventSource: stub.EventSource, post: api.post, ...timers }));
+  const titles = [];
+  const statuses = [];
+  const close = gateway.follow("s1", (e) => titles.push(e.artifact.title), (s) => statuses.push(s));
+  timers.tick();
+  await flush();
+  stub.memory.publish({ sessionId: "s1", kind: "page", title: "Before", note: "", path: "b.html", mime: "text/html", sizeBytes: 1 });
+  await flush();
+  stub.dropStreams();
+  stub.memory.publish({ sessionId: "s1", kind: "page", title: "Meanwhile", note: "", path: "m.html", mime: "text/html", sizeBytes: 1 });
+  timers.tick();
+  await flush();
+  assert.deepEqual(titles, ["Before", "Meanwhile"]);
+  assert.deepEqual(statuses.slice(-3), [FeedStatus.PAUSED, FeedStatus.RESYNCED, FeedStatus.LIVE]);
+  close();
 });
 
 test("http · a malformed artifact event is dropped, the stream stays open", async () => {

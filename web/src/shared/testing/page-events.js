@@ -22,6 +22,9 @@ export function pageEventsWith(input) {
   return (url.searchParams.get("with") ?? "").split(",").filter(Boolean);
 }
 
+/** A session's event: exactly what /api/sessions/:id/events sent, under event. */
+export const sessionEnvelope = (sessionId, event) => ({ kind: "session", session_id: sessionId, event });
+
 /** The project a page event stream follows, from its URL ("" if it is not one). */
 export function pageEventsProject(input) {
   const url = new URL(input, "http://harness.test");

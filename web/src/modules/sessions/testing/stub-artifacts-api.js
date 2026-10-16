@@ -2,14 +2,16 @@
 // and speaking the real wire format: GET /api/artifacts (by session_id,
 // ticket_id or project_id, narrowed by scope), POST /api/set_artifact_scope,
 // POST /api/attach_artifact_to_ticket and /api/detach_artifact_from_ticket,
-// DELETE /api/artifacts/:id, the `artifact` / `done` events on
-// GET /api/sessions/:id/events, and the `artifact` changes of the page event
-// stream's project kind (GET /api/page_events?project_id=). The real
-// artifactsGateway runs the contract suite against it.
+// DELETE /api/artifacts/:id, and the page event stream
+// (GET /api/page_events?project_id=): the `artifact` changes of its project
+// kind, and the `artifact` / `done` events of the session it follows
+// (POST /api/follow_session), replayed from the start or after after_seq as
+// the server's hub does. The real artifactsGateway runs the contract suite
+// against it.
 
 import { codeOf } from "../../../shared/domain/errors.js";
 import { jsonResponse } from "../../../shared/testing/doubles.js";
-import { helloEnvelope, pageEventsProject, projectEnvelope } from "../../../shared/testing/page-events.js";
+import { helloEnvelope, pageEventsProject, projectEnvelope, sessionEnvelope } from "../../../shared/testing/page-events.js";
 import { memoryArtifacts } from "../infrastructure/memory-artifacts.js";
 import { toArtifactDTO } from "./artifact-fixtures.js";
 
@@ -18,6 +20,23 @@ export function stubArtifactsApi(world) {
   const { gateway } = memory;
   const sources = new Set();
   let seq = 0;
+  let streams = 0;
+  /** Session id → every event it put on its stream, as the hub keeps them for replay. */
+  const logs = new Map();
+
+  /** A session's event: logged, and sent to every stream following the session. */
+  function emit(sessionId, event) {
+    const dto = { seq: ++seq, session_id: sessionId, ...event, at: event.at ?? new Date().toISOString() };
+    if (!logs.has(sessionId)) logs.set(sessionId, []);
+    logs.get(sessionId).push(dto);
+    for (const s of sources) if (s.sessionId === sessionId) s.send(sessionEnvelope(sessionId, dto));
+  }
+  /** Artifact id → its scope, to tell a move from the same scope again. */
+  const scopes = new Map((world.artifacts ?? []).map((a) => [a.id, a.scope]));
+  function published(a) {
+    scopes.set(a.id, a.scope);
+    emit(a.sessionId, { type: "artifact", text: a.note, artifact: toArtifactDTO(a), at: a.updatedAt.toISOString() });
+  }
 
   async function fetch(input, init = {}) {
     try {
@@ -43,8 +62,17 @@ export function stubArtifactsApi(world) {
       if (scope) list = list.filter((a) => a.scope === scope);
       return jsonResponse(200, { artifacts: list.map(toArtifactDTO) });
     }
+    if (method === "POST" && url.pathname === "/api/follow_session") {
+      const source = [...sources].find((s) => s.streamId === body.stream_id);
+      if (!source) return jsonResponse(404, { error: "page event stream not found", code: "STREAM_NOT_FOUND" });
+      source.follow(body.session_id ?? "", body.after_seq ?? 0);
+      return new Response(null, { status: 204 });
+    }
     if (method === "POST" && url.pathname === "/api/set_artifact_scope") {
-      return jsonResponse(200, { artifact: toArtifactDTO(await gateway.setScope(body.artifact_id, body.scope)) });
+      const moved = await gateway.setScope(body.artifact_id, body.scope);
+      // A move is on the producing session's stream; the same scope again is no move.
+      if (scopes.get(moved.id) !== moved.scope) published(moved);
+      return jsonResponse(200, { artifact: toArtifactDTO(moved) });
     }
     if (method === "POST" && url.pathname === "/api/attach_artifact_to_ticket") {
       return jsonResponse(200, { artifact: toArtifactDTO(await gateway.attach(body.artifact_id, body.ticket_id)) });
@@ -62,39 +90,36 @@ export function stubArtifactsApi(world) {
 
   class StubEventSource {
     constructor(input) {
-      const url = new URL(input, "http://harness.test");
-      const m = url.pathname.match(/^\/api\/sessions\/([^/]+)\/events$/);
-      this.sessionId = m ? decodeURIComponent(m[1]) : "";
       this.projectId = pageEventsProject(input) ?? "";
       this.onopen = null;
       this.onmessage = null;
       this.onerror = null;
+      this.streamId = `stream-${++streams}`;
+      this.sessionId = "";
       sources.add(this);
-      if (this.projectId) {
-        this.followProject();
-        return;
-      }
-      this.unfollow = gateway.follow(
-        this.sessionId,
-        (event) => {
-          if (event.kind === "published") {
-            const a = event.artifact;
-            this.send({ seq: ++seq, session_id: a.sessionId, type: "artifact", text: a.note, artifact: toArtifactDTO(a), at: a.updatedAt.toISOString() });
-          } else {
-            this.send({ seq: ++seq, session_id: this.sessionId, type: "done", at: new Date().toISOString() });
-          }
-        },
-        () => {},
-      );
+      this.unfollowProject = () => {};
+      if (this.projectId) this.followProject();
       queueMicrotask(() => {
+        if (!sources.has(this)) return;
         this.onopen?.({});
-        // Interactive sessions put lifecycle events on the same stream; the gateway must ignore them.
-        this.send({ seq: ++seq, session_id: this.sessionId, type: "status", status: "running", at: new Date().toISOString() });
+        this.send(helloEnvelope(this.streamId));
+        if (!this.projectId) return;
+        this.send(projectEnvelope({ session: { id: "s-other", ticket_id: "t1", status: "running" } }));
+        this.send(projectEnvelope({ ticket: { id: "t1" }, deleted: true }));
       });
+    }
+    /** Follows a session ("" for none): its events after afterSeq, then live ones. */
+    follow(sessionId, afterSeq) {
+      this.sessionId = "";
+      if (!sessionId) return;
+      // Interactive sessions put lifecycle events on the same stream; the gateway must ignore them.
+      if (!logs.has(sessionId)) emit(sessionId, { type: "status", status: "running" });
+      this.sessionId = sessionId;
+      for (const dto of logs.get(sessionId)) if (dto.seq > afterSeq) this.send(sessionEnvelope(sessionId, dto));
     }
     /** The page event stream's project changes: artifact changes, among the session and ticket changes the gateway must ignore. */
     followProject() {
-      this.unfollow = gateway.followProject(
+      this.unfollowProject = gateway.followProject(
         this.projectId,
         (change) => {
           if (change.kind === "deleted") {
@@ -105,29 +130,43 @@ export function stubArtifactsApi(world) {
         },
         () => {},
       );
-      queueMicrotask(() => {
-        this.onopen?.({});
-        this.send(helloEnvelope());
-        this.send(projectEnvelope({ session: { id: "s-other", ticket_id: "t1", status: "running" } }));
-        this.send(projectEnvelope({ ticket: { id: "t1" }, deleted: true }));
-      });
     }
     send(dto) {
       this.onmessage?.({ data: typeof dto === "string" ? dto : JSON.stringify(dto) });
     }
     close() {
-      this.unfollow();
+      this.unfollowProject();
       sources.delete(this);
+    }
+    /** The server ends the stream, as when a part of it falls behind. */
+    drop() {
+      this.close();
+      this.onerror?.({});
     }
   }
 
   return {
     fetch,
     EventSource: StubEventSource,
-    memory,
-    /** Pushes any line (an object, or a raw string) to every stream open on the session, as a buggy server might. */
+    memory: {
+      ...memory,
+      publish(input) {
+        const a = memory.publish(input);
+        published(a);
+        return a;
+      },
+      end(sessionId) {
+        memory.end(sessionId);
+        emit(sessionId, { type: "done" });
+      },
+    },
+    /** Ends every open page event stream, as the server does when a part of it falls behind. */
+    dropStreams() {
+      for (const s of [...sources]) s.drop();
+    },
+    /** Pushes any event (an object, or as a string any line) to every stream following the session, as a buggy server might. */
     pushRaw(sessionId, dto) {
-      for (const s of sources) if (s.sessionId === sessionId) s.send(dto);
+      for (const s of sources) if (s.sessionId === sessionId) s.send(typeof dto === "string" ? dto : sessionEnvelope(sessionId, dto));
     },
     /** Pushes any project change (or, as a string, any line) to every stream open on the project. */
     pushProject(projectId, dto) {

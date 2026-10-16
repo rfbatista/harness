@@ -12,9 +12,10 @@
 // joins late is told the stream's status at once.
 //
 // follow(path) is the older stream per path, kept for the streams that do not
-// ride the page stream yet (a session's events).
+// ride the page stream yet.
 
 import { FeedStatus } from "../domain/feed.js";
+import { apiClient } from "./api.js";
 
 const FIRST_RETRY_MS = 1_000;
 const MAX_RETRY_MS = 30_000;
@@ -23,7 +24,7 @@ const MAX_RETRY_MS = 30_000;
  * What a follower of the page stream follows: a kind, with what that kind
  * needs (a project follower names its project).
  *
- * @typedef {{kind: "project", projectId: string} | {kind: "notifications"}
+ * @typedef {{kind: "project", projectId: string} | {kind: "notifications"} | {kind: "session", sessionId: string}
  *   | {kind: "usage", projectId: string} | {kind: "projects"}} PageTopic
  */
 
@@ -31,7 +32,8 @@ const MAX_RETRY_MS = 30_000;
  * The kinds of the page stream a follower can follow. A kind says how its
  * followers shape the stream's query (`query`, given the kind's followers in
  * the order they joined and the query the stream has now), which followers
- * hear an envelope (`hears`, given the query the stream was opened with), and
+ * hear an envelope (`hears`, given the query the stream was opened with and
+ * the envelope), and
  * what of the envelope they get (`payload`). A kind that adds to the query
  * reconnects the stream when a follower changes what it asks for. An opt-in
  * kind (`optIn`) is carried only once a follower has asked for it in `with`.
@@ -40,7 +42,7 @@ const MAX_RETRY_MS = 30_000;
  * @type {Record<string, {
  *   optIn?: boolean,
  *   query?: (followers: any[], current: Record<string, string>) => Record<string, string>,
- *   hears?: (follower: any, query: Record<string, string>) => boolean,
+ *   hears?: (follower: any, query: Record<string, string>, envelope: any) => boolean,
  *   payload: (envelope: any) => any,
  * }>}
  */
@@ -75,6 +77,12 @@ const KINDS = {
     optIn: true,
     payload: (envelope) => envelope.change,
   },
+  // What /api/sessions/:id/events sent: the event, to the followers of its
+  // session. The stream carries the one session the page follows (below).
+  session: {
+    hears: (follower, query, envelope) => follower.topic.sessionId === envelope.session_id,
+    payload: (envelope) => envelope.event,
+  },
 };
 
 /**
@@ -94,6 +102,7 @@ const KINDS = {
  * @param {{
  *   base: string,
  *   EventSource?: typeof globalThis.EventSource,
+ *   post?: (path: string, body: unknown) => Promise<unknown>,  POSTs to the API, as ApiClient.post
  *   setTimeout?: typeof globalThis.setTimeout,
  *   clearTimeout?: typeof globalThis.clearTimeout,
  * }} options
@@ -102,6 +111,7 @@ const KINDS = {
 export function feed({
   base,
   EventSource = globalThis.EventSource,
+  post = (path, body) => apiClient({ base }).post(path, body),
   setTimeout = globalThis.setTimeout.bind(globalThis),
   clearTimeout = globalThis.clearTimeout.bind(globalThis),
 }) {
@@ -240,15 +250,54 @@ export function feed({
       return `/page_events?${new URLSearchParams(query)}`;
     },
     route(envelope, each) {
-      if (envelope?.kind === "hello") streamId = String(envelope.stream_id ?? "");
+      if (envelope?.kind === "hello") {
+        streamId = String(envelope.stream_id ?? "");
+        followSession();
+      }
       const def = envelope && Object.hasOwn(KINDS, envelope.kind) ? KINDS[envelope.kind] : null;
       if (!def) return; // the hello, and kinds this client does not know
+      if (envelope.kind === "session" && envelope.session_id === followed.sessionId) {
+        seq = Math.max(seq, Number(envelope.event?.seq) || 0);
+      }
       const payload = def.payload(envelope);
       each((f) => {
-        if (f.topic.kind === envelope.kind && (!def.hears || def.hears(f, query))) f.onMessage(payload);
+        if (f.topic.kind === envelope.kind && (!def.hears || def.hears(f, query, envelope))) f.onMessage(payload);
       });
     },
   });
+
+  // The session the page stream follows (POST /follow_session, once the hello
+  // has named the stream): the one its latest session follower asked for, or
+  // none. One follow is in flight at a time, so they reach the server in
+  // order. `followed` is what a stream was last asked to follow, and `seq` the
+  // highest event seq delivered of that session: a stream that reconnects
+  // follows it again after that seq. A follow that fails is not retried on the
+  // same stream: one answered STREAM_NOT_FOUND ended, and its next hello
+  // follows again.
+  let followed = { streamId: "", sessionId: null };
+  let seq = 0;
+  let posting = false;
+  function followSession() {
+    if (posting || !streamId) return;
+    const sessionId = [...page.followers].findLast((f) => f.topic.kind === "session")?.topic.sessionId ?? null;
+    const sameStream = followed.streamId === streamId;
+    if (sameStream && followed.sessionId === sessionId) return;
+    if (!sameStream && sessionId === null) {
+      followed = { streamId, sessionId }; // a new stream follows nothing yet
+      return;
+    }
+    if (sessionId !== followed.sessionId) seq = 0;
+    const body = { stream_id: streamId, session_id: sessionId };
+    if (sessionId !== null && seq > 0) body.after_seq = seq;
+    followed = { streamId, sessionId };
+    posting = true;
+    post("/follow_session", body)
+      .catch(() => {})
+      .finally(() => {
+        posting = false;
+        followSession();
+      });
+  }
 
   return {
     follow(path, { onMessage, onStatus = () => {} }) {
@@ -273,12 +322,14 @@ export function feed({
       const follower = { topic, onMessage, onStatus };
       page.add(follower);
       if (new URLSearchParams(wanted()).toString() !== new URLSearchParams(query).toString()) page.reconnect();
+      if (topic.kind === "session") followSession();
 
       let following = true;
       return () => {
         if (!following) return;
         following = false;
         page.remove(follower);
+        if (topic.kind === "session") followSession();
       };
     },
 
