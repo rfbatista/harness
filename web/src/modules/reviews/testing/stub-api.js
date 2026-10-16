@@ -4,6 +4,7 @@
 
 import { codeOf } from "../../../shared/domain/errors.js";
 import { jsonResponse } from "../../../shared/testing/doubles.js";
+import { helloEnvelope, pageEventsProject, projectEnvelope } from "../../../shared/testing/page-events.js";
 import { memoryReviews } from "../infrastructure/memory-gateway.js";
 import { reviewDTO } from "./fixtures.js";
 
@@ -39,23 +40,23 @@ export function stubReviewsApi(world) {
     }
   }
 
-  // The project feed carries every kind of change; the gateway must pick out
-  // the review requests and ignore the rest.
+  // The page event stream carries every kind of change; the gateway must
+  // pick out the review requests and ignore the rest.
   class StubEventSource {
     constructor(input) {
-      const url = new URL(input, "http://harness.test");
       this.onopen = null;
       this.onmessage = null;
       this.onerror = null;
       sources.add(this);
-      this.unfollow = gateway.follow(url.searchParams.get("project_id") ?? "", (event) => this.send({ review_request: reviewDTO(event.review) }), () => {});
+      this.unfollow = gateway.follow(pageEventsProject(input) ?? "", (event) => this.send(projectEnvelope({ review_request: reviewDTO(event.review) })), () => {});
       queueMicrotask(() => {
         this.onopen?.({});
-        this.send({ ticket: { id: "t1", project_id: "p1", title: "Other news", status: "review", pending_reviews: 1 } });
+        this.send(helloEnvelope());
+        this.send(projectEnvelope({ ticket: { id: "t1", project_id: "p1", title: "Other news", status: "review", pending_reviews: 1 } }));
       });
     }
-    send(dto) {
-      this.onmessage?.({ data: typeof dto === "string" ? dto : JSON.stringify(dto) });
+    send(envelope) {
+      this.onmessage?.({ data: typeof envelope === "string" ? envelope : JSON.stringify(envelope) });
     }
     close() {
       sources.delete(this);
@@ -68,7 +69,7 @@ export function stubReviewsApi(world) {
     EventSource: StubEventSource,
     memory,
     pushRaw(dto) {
-      for (const s of sources) s.send(dto);
+      for (const s of sources) s.send(typeof dto === "string" ? dto : projectEnvelope(dto));
     },
   };
 }

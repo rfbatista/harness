@@ -4,6 +4,7 @@ import { Codes } from "../../../shared/domain/errors.js";
 import { apiClient } from "../../../shared/infrastructure/api.js";
 import { feed } from "../../../shared/infrastructure/feed.js";
 import { jsonResponse } from "../../../shared/testing/doubles.js";
+import { helloEnvelope, pageEventsProject, projectEnvelope } from "../../../shared/testing/page-events.js";
 import { toTask } from "./dto.js";
 import { assert, file, test } from "../../../shared/testing/test.js";
 import { makeTask, taskDTO } from "../testing/fixtures.js";
@@ -30,16 +31,18 @@ railGatewayContract("http", (world) => {
   };
   class StubEventSource {
     constructor(input) {
-      const url = new URL(input, "http://harness.test");
-      this.unfollow = memory.gateway.follow(url.searchParams.get("project_id"), (c) => {
+      this.unfollow = memory.gateway.follow(pageEventsProject(input), (c) => {
         const data =
           c.kind === "deleted" ? { session: { id: c.id }, deleted: true }
           : c.kind === "upsert" ? { session: toDTO(c.session) }
           : c.kind === "task-deleted" ? { ticket: { id: c.id }, deleted: true }
           : { ticket: taskDTO(c.task) };
-        this.onmessage?.({ data: JSON.stringify(data) });
+        this.onmessage?.({ data: JSON.stringify(projectEnvelope(data)) });
       }, () => {});
-      queueMicrotask(() => this.onopen?.({}));
+      queueMicrotask(() => {
+        this.onopen?.({});
+        this.onmessage?.({ data: JSON.stringify(helloEnvelope()) });
+      });
     }
     close() {
       this.unfollow();

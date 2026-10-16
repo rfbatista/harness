@@ -37,8 +37,8 @@ type codeWorld struct {
 	feed   *fakeFeed
 }
 
-// fakeFeed is the project feed (/api/events) the test speaks for: every
-// connected page receives what send writes.
+// fakeFeed is the page event stream (/api/page_events) the test speaks for:
+// every connected page receives what send writes, as a project change.
 type fakeFeed struct {
 	mu      sync.Mutex
 	clients map[chan string]bool
@@ -62,7 +62,7 @@ func (f *fakeFeed) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		case <-r.Context().Done():
 			return
 		case msg := <-ch:
-			_, _ = w.Write([]byte("data: " + msg + "\n\n"))
+			_, _ = w.Write([]byte(`data: {"kind":"project","change":` + msg + "}\n\n"))
 			flusher.Flush()
 		}
 	}
@@ -83,7 +83,7 @@ func (f *fakeFeed) connected() chromedp.Action {
 	})
 }
 
-// send writes one data line to every page following the feed.
+// send writes one project change to every page following the feed.
 func (f *fakeFeed) send(msg string) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -117,7 +117,7 @@ func newCodeWorld(t *testing.T, deps func(w *codeWorld, d *Deps)) *codeWorld {
 	}
 	w.feed = newFakeFeed()
 	mux := http.NewServeMux()
-	mux.Handle("/api/events", w.feed)
+	mux.Handle("/api/page_events", w.feed)
 	mux.Handle("/api/", httpapi.NewRouter(httpapi.NewHandler(httpapi.Services{Code: code})))
 	mux.Handle("/", NewHandler(d, assets, nil))
 	w.srv = httptest.NewServer(mux)

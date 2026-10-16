@@ -1,12 +1,13 @@
 // A stand-in for the server's resource and comment routes, backed by the
 // memory gateway and speaking the real wire format: the JSON routes (fetch),
 // the multipart upload with its part order and progress (XMLHttpRequest),
-// and the `ticket_resource` / `ticket_comment` changes on the project feed
-// among the session and ticket changes the gateway must ignore
-// (EventSource). The real resourcesGateway runs the contract suite against it.
+// and the `ticket_resource` / `ticket_comment` changes on the page event
+// stream's project kind, among the session and ticket changes and the other
+// kinds the gateway must ignore (EventSource). The real resourcesGateway runs the contract suite against it.
 
 import { Codes, codeOf } from "../../../shared/domain/errors.js";
 import { jsonResponse } from "../../../shared/testing/doubles.js";
+import { helloEnvelope, notificationsEnvelope, pageEventsProject, projectEnvelope } from "../../../shared/testing/page-events.js";
 import { memoryResources } from "../infrastructure/memory-resources.js";
 import { commentDTO, resourceDTO } from "./resource-fixtures.js";
 
@@ -101,22 +102,23 @@ export function stubResourcesApi(world) {
 
   class StubEventSource {
     constructor(input) {
-      const url = new URL(input, "http://harness.test");
-      this.projectId = url.pathname === "/api/events" ? (url.searchParams.get("project_id") ?? "") : "";
+      this.projectId = pageEventsProject(input) ?? "";
       this.onopen = null;
       this.onmessage = null;
       this.onerror = null;
       sources.add(this);
-      this.unfollow = gateway.follow(this.projectId, (change) => this.send(toWire(change)), () => {});
+      this.unfollow = gateway.follow(this.projectId, (change) => this.send(projectEnvelope(toWire(change))), () => {});
       queueMicrotask(() => {
         this.onopen?.({});
-        // The project feed carries more than resources; the gateway must ignore the rest.
-        this.send({ ticket: { id: "t1", project_id: this.projectId, title: "x", status: "todo" } });
-        this.send({ artifact: { id: "a1", kind: "page" } });
+        this.send(helloEnvelope());
+        // The stream carries more than resources; the gateway must ignore the rest.
+        this.send(projectEnvelope({ ticket: { id: "t1", project_id: this.projectId, title: "x", status: "todo" } }));
+        this.send(projectEnvelope({ artifact: { id: "a1", kind: "page" } }));
+        this.send(notificationsEnvelope({ changed: [], unread_count: 0 }));
       });
     }
-    send(dto) {
-      this.onmessage?.({ data: typeof dto === "string" ? dto : JSON.stringify(dto) });
+    send(envelope) {
+      this.onmessage?.({ data: typeof envelope === "string" ? envelope : JSON.stringify(envelope) });
     }
     close() {
       this.unfollow();
@@ -148,9 +150,9 @@ export function stubResourcesApi(world) {
     XMLHttpRequest: StubXMLHttpRequest,
     EventSource: StubEventSource,
     memory,
-    /** Pushes any line to every project feed open on the project, as a buggy server might. */
+    /** Pushes any project change (or, as a string, any line) to every stream open on the project, as a buggy server might. */
     pushProject(projectId, dto) {
-      for (const s of sources) if (s.projectId === projectId) s.send(dto);
+      for (const s of sources) if (s.projectId === projectId) s.send(typeof dto === "string" ? dto : projectEnvelope(dto));
     },
   };
 }

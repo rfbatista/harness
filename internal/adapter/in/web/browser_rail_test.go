@@ -78,9 +78,9 @@ func newRailHarness(t *testing.T) *railHarness {
 		t.Skip("browser test: web client not built; run `make web`")
 	}
 	ctx, errs := browser(t)
-	feed := &sseFeed{}
+	feed := projectFeed()
 	mux := http.NewServeMux()
-	mux.Handle("/api/events", feed)
+	mux.Handle("/api/page_events", feed)
 	mux.Handle("/api/", http.NotFoundHandler())
 	mux.Handle("/", NewHandler(railWorld(), assets, nil))
 	srv := httptest.NewServer(mux)

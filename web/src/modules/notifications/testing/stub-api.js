@@ -5,6 +5,7 @@
 
 import { codeOf } from "../../../shared/domain/errors.js";
 import { jsonResponse } from "../../../shared/testing/doubles.js";
+import { helloEnvelope, notificationsEnvelope, pageEventsProject, projectEnvelope } from "../../../shared/testing/page-events.js";
 import { memoryNotifications } from "../infrastructure/memory-gateway.js";
 import { notificationDTO } from "./fixtures.js";
 
@@ -47,17 +48,21 @@ export function stubNotificationsApi(world) {
 
   class StubEventSource {
     constructor(input) {
-      const url = new URL(input, "http://harness.test");
       this.onopen = null;
       this.onmessage = null;
       this.onerror = null;
-      if (url.pathname !== "/api/notifications/events") throw new Error(`no stream at ${url.pathname}`);
+      if (pageEventsProject(input) === null) throw new Error(`no stream at ${input}`);
       sources.add(this);
       this.unfollow = gateway.follow(
-        (change) => this.send({ changed: change.notifications.map(notificationDTO), unread_count: change.unreadCount }),
+        (change) => this.send(notificationsEnvelope({ changed: change.notifications.map(notificationDTO), unread_count: change.unreadCount })),
         () => {},
       );
-      queueMicrotask(() => this.onopen?.({}));
+      queueMicrotask(() => {
+        this.onopen?.({});
+        this.send(helloEnvelope());
+        // The stream carries more than the inbox; the gateway must ignore the rest.
+        this.send(projectEnvelope({ ticket: { id: "t1" } }));
+      });
     }
     send(dto) {
       this.onmessage?.({ data: typeof dto === "string" ? dto : JSON.stringify(dto) });
@@ -72,8 +77,9 @@ export function stubNotificationsApi(world) {
     fetch,
     EventSource: StubEventSource,
     memory,
+    /** Pushes any inbox change (or, as a string, any line) to every stream, as a buggy server might. */
     pushRaw(dto) {
-      for (const s of sources) s.send(dto);
+      for (const s of sources) s.send(typeof dto === "string" ? dto : notificationsEnvelope(dto));
     },
   };
 }

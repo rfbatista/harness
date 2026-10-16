@@ -47,7 +47,7 @@ func (f *fakePullRequestAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		f.mu.Unlock()
 		time.Sleep(400 * time.Millisecond) // the push and the host
 		_ = json.NewEncoder(w).Encode(map[string]any{"pull_request": pr})
-	case "/api/events":
+	case "/api/page_events":
 		w.Header().Set("Content-Type", "text/event-stream")
 		ch := make(chan string, 4)
 		f.mu.Lock()
@@ -58,7 +58,7 @@ func (f *fakePullRequestAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		for {
 			select {
 			case msg := <-ch:
-				fmt.Fprintf(w, "data: %s\n\n", msg)
+				fmt.Fprintf(w, "data: {\"kind\":\"project\",\"change\":%s}\n\n", msg)
 				w.(http.Flusher).Flush()
 			case <-r.Context().Done():
 				return

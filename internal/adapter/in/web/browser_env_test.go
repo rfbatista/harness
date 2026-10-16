@@ -21,7 +21,7 @@ type fakeEnvAPI struct {
 }
 
 func (f *fakeEnvAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Path == "/api/events" {
+	if r.URL.Path == "/api/page_events" {
 		http.NotFound(w, r) // the rail's feed is not under test
 		return
 	}

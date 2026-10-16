@@ -15,11 +15,34 @@ import (
 	"operators-mcp/internal/ports"
 )
 
-// sseFeed stands in for /api/events: every connected follower (the task page
-// and the rail each hold one) gets what the test pushes.
+// sseFeed stands in for a server-sent event stream: every connected
+// follower gets what the test pushes. With a kind it stands in for
+// /api/page_events, the page's one stream: it says hello first, and what the
+// test pushes is that kind's payload, sent in the kind's envelope.
 type sseFeed struct {
+	kind  string
 	mu    sync.Mutex
 	conns []chan []byte
+}
+
+// projectFeed stands in for the project's changes on /api/page_events (what
+// /api/events sends).
+func projectFeed() *sseFeed { return &sseFeed{kind: "project"} }
+
+// envelope wraps one payload in the page event stream's envelope of the
+// feed's kind: a project change goes under change, any other kind's object
+// gets kind beside its keys.
+func (f *sseFeed) envelope(b []byte) []byte {
+	switch {
+	case f.kind == "":
+		return b
+	case f.kind == "project":
+		return []byte(`{"kind":"project","change":` + string(b) + `}`)
+	case len(b) > 2 && b[0] == '{':
+		return []byte(`{"kind":"` + f.kind + `",` + string(b[1:]))
+	default:
+		return []byte(`{"kind":"` + f.kind + `"}`)
+	}
 }
 
 func (f *sseFeed) followers() int {
@@ -49,6 +72,9 @@ func (f *sseFeed) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(http.StatusOK)
 	flusher := w.(http.Flusher)
+	if f.kind != "" {
+		fmt.Fprint(w, "data: {\"kind\":\"hello\",\"stream_id\":\"stream-1\"}\n\n")
+	}
 	flusher.Flush()
 	c := make(chan []byte, 16)
 	f.mu.Lock()
@@ -57,7 +83,7 @@ func (f *sseFeed) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	for {
 		select {
 		case b := <-c:
-			fmt.Fprintf(w, "data: %s\n\n", b)
+			fmt.Fprintf(w, "data: %s\n\n", f.envelope(b))
 			flusher.Flush()
 		case <-r.Context().Done():
 			return
@@ -93,9 +119,9 @@ func TestSessionsStartedElsewhereShowUpLive(t *testing.T) {
 			Status: domain.SessionRunning, Interactive: true, RunsOn: domain.RunnerServer, UpdatedAt: now,
 		}}},
 	}, assets, nil)
-	feed := &sseFeed{}
+	feed := projectFeed()
 	mux := http.NewServeMux()
-	mux.Handle("/api/events", feed)
+	mux.Handle("/api/page_events", feed)
 	mux.Handle("/api/", http.NotFoundHandler()) // terminals are not under test
 	mux.Handle("/", pages)
 	srv := httptest.NewServer(mux)

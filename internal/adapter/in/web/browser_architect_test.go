@@ -55,9 +55,9 @@ func architectServer(t *testing.T, messages []domain.TaskMessage, reviews ...*do
 		}},
 	}, assets, nil)
 
-	feed := &sseFeed{}
+	feed := projectFeed()
 	mux := http.NewServeMux()
-	mux.Handle("/api/events", feed)
+	mux.Handle("/api/page_events", feed)
 	mux.HandleFunc("GET /api/task_messages", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]any{"messages": messages})

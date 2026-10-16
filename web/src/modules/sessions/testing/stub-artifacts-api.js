@@ -3,12 +3,13 @@
 // ticket_id or project_id, narrowed by scope), POST /api/set_artifact_scope,
 // POST /api/attach_artifact_to_ticket and /api/detach_artifact_from_ticket,
 // DELETE /api/artifacts/:id, the `artifact` / `done` events on
-// GET /api/sessions/:id/events, and the `artifact` changes on the project
-// feed (GET /api/events?project_id=). The real artifactsGateway runs the
-// contract suite against it.
+// GET /api/sessions/:id/events, and the `artifact` changes of the page event
+// stream's project kind (GET /api/page_events?project_id=). The real
+// artifactsGateway runs the contract suite against it.
 
 import { codeOf } from "../../../shared/domain/errors.js";
 import { jsonResponse } from "../../../shared/testing/doubles.js";
+import { helloEnvelope, pageEventsProject, projectEnvelope } from "../../../shared/testing/page-events.js";
 import { memoryArtifacts } from "../infrastructure/memory-artifacts.js";
 import { toArtifactDTO } from "./artifact-fixtures.js";
 
@@ -64,7 +65,7 @@ export function stubArtifactsApi(world) {
       const url = new URL(input, "http://harness.test");
       const m = url.pathname.match(/^\/api\/sessions\/([^/]+)\/events$/);
       this.sessionId = m ? decodeURIComponent(m[1]) : "";
-      this.projectId = url.pathname === "/api/events" ? (url.searchParams.get("project_id") ?? "") : "";
+      this.projectId = pageEventsProject(input) ?? "";
       this.onopen = null;
       this.onmessage = null;
       this.onerror = null;
@@ -91,23 +92,24 @@ export function stubArtifactsApi(world) {
         this.send({ seq: ++seq, session_id: this.sessionId, type: "status", status: "running", at: new Date().toISOString() });
       });
     }
-    /** The project feed: artifact changes, among the session and ticket changes the gateway must ignore. */
+    /** The page event stream's project changes: artifact changes, among the session and ticket changes the gateway must ignore. */
     followProject() {
       this.unfollow = gateway.followProject(
         this.projectId,
         (change) => {
           if (change.kind === "deleted") {
-            this.send({ artifact: { id: change.id, project_id: change.projectId, ticket_id: change.ticketId, attached_ticket_ids: change.attachedTicketIds }, deleted: true });
+            this.send(projectEnvelope({ artifact: { id: change.id, project_id: change.projectId, ticket_id: change.ticketId, attached_ticket_ids: change.attachedTicketIds }, deleted: true }));
           } else {
-            this.send({ artifact: toArtifactDTO(change.artifact) });
+            this.send(projectEnvelope({ artifact: toArtifactDTO(change.artifact) }));
           }
         },
         () => {},
       );
       queueMicrotask(() => {
         this.onopen?.({});
-        this.send({ session: { id: "s-other", ticket_id: "t1", status: "running" } });
-        this.send({ ticket: { id: "t1" }, deleted: true });
+        this.send(helloEnvelope());
+        this.send(projectEnvelope({ session: { id: "s-other", ticket_id: "t1", status: "running" } }));
+        this.send(projectEnvelope({ ticket: { id: "t1" }, deleted: true }));
       });
     }
     send(dto) {
@@ -127,9 +129,9 @@ export function stubArtifactsApi(world) {
     pushRaw(sessionId, dto) {
       for (const s of sources) if (s.sessionId === sessionId) s.send(dto);
     },
-    /** Pushes any line to every project feed open on the project. */
+    /** Pushes any project change (or, as a string, any line) to every stream open on the project. */
     pushProject(projectId, dto) {
-      for (const s of sources) if (s.projectId === projectId) s.send(dto);
+      for (const s of sources) if (s.projectId === projectId) s.send(typeof dto === "string" ? dto : projectEnvelope(dto));
     },
   };
 }

@@ -59,7 +59,7 @@ export function resourcesGateway(api, feed, upload) {
     },
 
     follow(projectId, onChange, onStatus) {
-      return feed.follow(`/events?project_id=${encodeURIComponent(projectId)}`, {
+      return feed.followPage({ kind: "project", projectId }, {
         onMessage: (dto) => {
           let change;
           try {
