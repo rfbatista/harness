@@ -1,5 +1,6 @@
+import { StructuredError } from "../domain/errors.js";
 import { FeedStatus } from "../domain/feed.js";
-import { fakeEventSourceClass, manualTimers } from "../testing/doubles.js";
+import { fakeEventSourceClass, flush, manualTimers } from "../testing/doubles.js";
 import { assert, file, test } from "../testing/test.js";
 import { feed } from "./feed.js";
 
@@ -403,4 +404,158 @@ test("the hello names the stream until it drops; it reaches no follower", () => 
   es.latest().fail();
   assert.equal(f.pageStreamId(), "", "a stream that ended has no id anymore");
   assert.deepEqual(got, []);
+});
+
+// The session kind: the page follows at most one session on its stream, the
+// one its latest session follower asked for, with POST /api/follow_session
+// once the hello has named the stream.
+
+function sessions() {
+  const es = fakeEventSourceClass();
+  const timers = manualTimers();
+  const posts = [];
+  /** Answers the oldest post still waiting: ok, or with the code it fails with. */
+  const answer = (code) => {
+    const p = posts.find((x) => !x.answered);
+    p.answered = true;
+    if (code) p.reject(new StructuredError(code, code, 404));
+    else p.resolve(null);
+    return flush();
+  };
+  const post = (path, body) =>
+    new Promise((resolve, reject) => posts.push({ path, body, resolve, reject, answered: false }));
+  const f = feed({ base: "/api", EventSource: es.EventSource, post, ...timers });
+  const follower = (topic) => {
+    const messages = [];
+    const close = f.followPage(topic, { onMessage: (m) => messages.push(m) });
+    return { messages, close };
+  };
+  const sent = () => posts.map((p) => [p.path, p.body]);
+  return { es, timers, follower, posts, sent, answer, f };
+}
+
+test("a session follower is followed once the hello names the stream, never before", async () => {
+  const { es, timers, follower, sent, answer } = sessions();
+  follower({ kind: "session", sessionId: "s1" });
+  timers.tick();
+  es.latest().open();
+  assert.deepEqual(sent(), [], "no follow before the hello");
+  es.latest().message({ kind: "hello", stream_id: "st1" });
+  assert.deepEqual(sent(), [["/follow_session", { stream_id: "st1", session_id: "s1" }]]);
+  await answer();
+  assert.equal(sent().length, 1);
+  assert.deepEqual(es.instances.map((i) => i.url), ["/api/page_events?project_id="], "the session rides the one page stream");
+});
+
+test("a session follower gets its session's events, unwrapped, and nothing of another session", () => {
+  const { es, timers, follower } = sessions();
+  const s1 = follower({ kind: "session", sessionId: "s1" });
+  const inbox = follower({ kind: "notifications" });
+  timers.tick();
+  es.latest().open();
+  es.latest().message({ kind: "hello", stream_id: "st1" });
+  es.latest().message({ kind: "session", session_id: "s1", event: { seq: 1, type: "artifact" } });
+  es.latest().message({ kind: "session", session_id: "s9", event: { seq: 7, type: "artifact" } });
+  assert.deepEqual(s1.messages, [{ seq: 1, type: "artifact" }]);
+  assert.deepEqual(inbox.messages, []);
+});
+
+test("the latest session follower wins; switching posts the new session on the same stream", async () => {
+  const { es, timers, follower, sent, answer } = sessions();
+  const s1 = follower({ kind: "session", sessionId: "s1" });
+  timers.tick();
+  es.latest().open();
+  es.latest().message({ kind: "hello", stream_id: "st1" });
+  await answer();
+  const s2 = follower({ kind: "session", sessionId: "s2" });
+  assert.deepEqual(sent().at(-1), ["/follow_session", { stream_id: "st1", session_id: "s2" }]);
+  await answer();
+  s1.close();
+  assert.equal(sent().length, 2, "an older follower leaving changes nothing");
+  es.latest().message({ kind: "session", session_id: "s2", event: { seq: 1 } });
+  assert.deepEqual(s2.messages, [{ seq: 1 }]);
+  assert.equal(es.instances.length, 1, "no new connection");
+});
+
+test("the last session follower leaving stops following, while the stream stays open for the others", async () => {
+  const { es, timers, follower, sent, answer } = sessions();
+  follower({ kind: "notifications" });
+  const s1 = follower({ kind: "session", sessionId: "s1" });
+  timers.tick();
+  es.latest().open();
+  es.latest().message({ kind: "hello", stream_id: "st1" });
+  await answer();
+  s1.close();
+  assert.deepEqual(sent().at(-1), ["/follow_session", { stream_id: "st1", session_id: null }]);
+  assert.equal(es.latest().closed, false);
+});
+
+test("a session follower leaving a stream that is not open posts nothing", async () => {
+  const { es, timers, follower, sent } = sessions();
+  follower({ kind: "notifications" });
+  const s1 = follower({ kind: "session", sessionId: "s1" });
+  timers.tick();
+  es.latest().open();
+  s1.close();
+  es.latest().message({ kind: "hello", stream_id: "st1" });
+  assert.deepEqual(sent(), []);
+});
+
+test("a switch while a follow is in flight posts after its answer, the latest session only", async () => {
+  const { es, timers, follower, sent, answer } = sessions();
+  follower({ kind: "session", sessionId: "s1" });
+  timers.tick();
+  es.latest().open();
+  es.latest().message({ kind: "hello", stream_id: "st1" });
+  follower({ kind: "session", sessionId: "s2" });
+  follower({ kind: "session", sessionId: "s3" });
+  assert.equal(sent().length, 1, "one follow at a time, so they arrive in order");
+  await answer();
+  assert.deepEqual(sent().map(([, b]) => b.session_id), ["s1", "s3"]);
+});
+
+test("after a reconnect the session is followed again, after the highest seq delivered", async () => {
+  const { es, timers, follower, sent, answer } = sessions();
+  follower({ kind: "session", sessionId: "s1" });
+  timers.tick();
+  es.latest().open();
+  es.latest().message({ kind: "hello", stream_id: "st1" });
+  await answer();
+  es.latest().message({ kind: "session", session_id: "s1", event: { seq: 4 } });
+  es.latest().message({ kind: "session", session_id: "s1", event: { seq: 9 } });
+  es.latest().message({ kind: "session", session_id: "s1", event: { seq: 7 } });
+  es.latest().fail();
+  timers.tick();
+  es.latest().open();
+  assert.equal(sent().length, 1, "no follow before the new stream's hello");
+  es.latest().message({ kind: "hello", stream_id: "st2" });
+  assert.deepEqual(sent().at(-1), ["/follow_session", { stream_id: "st2", session_id: "s1", after_seq: 9 }]);
+});
+
+test("a follow answered STREAM_NOT_FOUND is not retried until the next hello", async () => {
+  const { es, timers, follower, sent, answer } = sessions();
+  follower({ kind: "session", sessionId: "s1" });
+  timers.tick();
+  es.latest().open();
+  es.latest().message({ kind: "hello", stream_id: "st1" });
+  await answer("STREAM_NOT_FOUND");
+  await flush();
+  assert.equal(sent().length, 1, "no retry in a loop");
+  es.latest().fail();
+  timers.tick();
+  es.latest().open();
+  es.latest().message({ kind: "hello", stream_id: "st2" });
+  assert.deepEqual(sent().at(-1), ["/follow_session", { stream_id: "st2", session_id: "s1" }]);
+});
+
+test("a follow that fails otherwise is not retried for the same session and stream", async () => {
+  const { es, timers, follower, sent, answer } = sessions();
+  follower({ kind: "session", sessionId: "gone" });
+  timers.tick();
+  es.latest().open();
+  es.latest().message({ kind: "hello", stream_id: "st1" });
+  await answer("SESSION_NOT_FOUND");
+  follower({ kind: "notifications" });
+  await flush();
+  assert.equal(sent().length, 1);
 });
