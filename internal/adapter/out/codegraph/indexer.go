@@ -13,7 +13,6 @@ import (
 	"strings"
 	"time"
 
-	"operators-mcp/internal/adapter/out/gitcli"
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
 )
@@ -31,17 +30,12 @@ type Indexer struct{}
 // NewIndexer returns the adapter.
 func NewIndexer() Indexer { return Indexer{} }
 
-// BuildIndex excludes /.codegraph/ from git first, so the checkout never
-// shows it as a change, then runs `codegraph init --yes` where there is no
-// index yet and `codegraph index --quiet` (a full rebuild) where there is,
+// BuildIndex runs `codegraph init --yes` where there is no index yet and `codegraph index --quiet` (a full rebuild) where there is,
 // in checkout, with codegraph's telemetry off and its file watching forced
 // on: init installs git hooks in the checkout when it cannot watch (a WSL
 // /mnt drive, or CODEGRAPH_NO_WATCH set), and the harness never writes the
 // checkout's hooks.
 func (Indexer) BuildIndex(ctx context.Context, codegraph, checkout string) error {
-	if err := gitcli.Exclude(checkout, domain.RepositoryIndexDir+"/", "the codegraph repository index"); err != nil {
-		return fmt.Errorf("keeping %s/ out of git: %w", domain.RepositoryIndexDir, err)
-	}
 	args := []string{"init", "--yes", checkout}
 	if _, err := os.Stat(filepath.Join(checkout, domain.RepositoryIndexDir, database)); err == nil {
 		args = []string{"index", "--quiet", checkout}

@@ -13,6 +13,7 @@ import (
 
 	"operators-mcp/internal/adapter/out/codegraph"
 	"operators-mcp/internal/adapter/out/eventbus"
+	"operators-mcp/internal/adapter/out/gitcli"
 	"operators-mcp/internal/application/workspaces"
 	"operators-mcp/internal/domain"
 )
@@ -34,6 +35,7 @@ func TestASessionEndingRebuildsAnIndexOlderThanADay(t *testing.T) {
 		Installations: installedCodegraph(stub.path),
 		Activations:   codegraphOnNowhere{},
 		Indexer:       codegraph.NewIndexer(),
+		Excludes:      gitcli.NewExcludes(),
 	})
 	indexes.Subscribe(bus)
 	t.Cleanup(indexes.Close)
@@ -102,6 +104,7 @@ func TestASessionEndingBuildsAMissingIndexWhereCodegraphIsOn(t *testing.T) {
 		Installations: installedCodegraph(stub.path),
 		Activations:   codegraphOnIn{"r1"},
 		Indexer:       codegraph.NewIndexer(),
+		Excludes:      gitcli.NewExcludes(),
 	})
 	indexes.Subscribe(bus)
 	t.Cleanup(indexes.Close)

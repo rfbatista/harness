@@ -7,6 +7,7 @@ import (
 	"gorm.io/gorm"
 
 	"operators-mcp/internal/adapter/out/codegraph"
+	"operators-mcp/internal/adapter/out/gitcli"
 	"operators-mcp/internal/adapter/out/persistence/sqlite"
 	"operators-mcp/internal/adapter/out/releases"
 	"operators-mcp/internal/app/catalog"
@@ -51,6 +52,7 @@ func newRepositoryIndexes(lc fx.Lifecycle, cat catalog.Catalog, orch *orchestrat
 		Installations: cat.Capabilities,
 		Activations:   cat.Capabilities,
 		Indexer:       codegraph.NewIndexer(),
+		Excludes:      gitcli.NewExcludes(),
 	})
 	x.Subscribe(cat.Bus)
 	orch.IndexBuilds = x

@@ -51,6 +51,16 @@ func (EnvFiles) Write(root string, files []*domain.EnvFile) error {
 	return nil
 }
 
+var _ ports.GitExcludes = Excludes{}
+
+// Excludes is ports.GitExcludes over Exclude.
+type Excludes struct{}
+
+// NewExcludes returns the adapter.
+func NewExcludes() Excludes { return Excludes{} }
+
+func (Excludes) Exclude(root, rel, what string) error { return Exclude(root, rel, what) }
+
 // Exclude adds rel (anchored at the top of the repository) to the
 // repository's info/exclude, under a comment saying what it is, unless git
 // already ignores it. A directory's rel ends in "/".

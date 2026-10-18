@@ -31,9 +31,8 @@ type RepositoryIndexBuilds interface {
 
 // RepositoryIndexer builds codegraph indexes in checkouts (driven).
 type RepositoryIndexer interface {
-	// BuildIndex keeps .codegraph/ out of git through the repository's
-	// info/exclude, then runs codegraph (the installed executable) in
-	// checkout: a first build, or a full rebuild of the index there.
+	// BuildIndex runs codegraph (the installed executable) in checkout: a
+	// first build, or a full rebuild of the index there.
 	BuildIndex(ctx context.Context, codegraph, checkout string) error
 	// IndexBuiltAt is when checkout's index was last written; false when it
 	// has none.

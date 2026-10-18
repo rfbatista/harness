@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"operators-mcp/internal/adapter/out/codegraph"
+	"operators-mcp/internal/adapter/out/gitcli"
 	"operators-mcp/internal/application/workspaces"
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
@@ -215,6 +216,7 @@ func TestASessionStartsWithoutTheIndexWhileItsBuildRuns(t *testing.T) {
 		Installations: installedCodegraph(stub.path),
 		Activations:   codegraphOnNowhere{},
 		Indexer:       codegraph.NewIndexer(),
+		Excludes:      gitcli.NewExcludes(),
 	})
 	t.Cleanup(indexes.Close)
 	svc.IndexBuilds = indexes

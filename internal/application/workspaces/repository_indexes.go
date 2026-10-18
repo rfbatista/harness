@@ -2,6 +2,7 @@ package workspaces
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"slices"
 	"sync"
@@ -33,6 +34,8 @@ type RepositoryIndexDeps struct {
 	Installations ports.TokenSaverInstallations
 	Activations   ports.TokenSaverActiveRepositories
 	Indexer       ports.RepositoryIndexer
+	// Excludes keeps the index out of git in each checkout it builds in.
+	Excludes ports.GitExcludes
 	// Now is the clock an index's age is measured with; nil is time.Now.
 	Now func() time.Time
 }
@@ -244,7 +247,7 @@ func (x *RepositoryIndexes) start(codegraph, checkout string) {
 	go func() {
 		defer x.work.Done()
 		began := time.Now()
-		err := x.d.Indexer.BuildIndex(x.ctx, codegraph, checkout)
+		err := x.build(codegraph, checkout)
 		x.mu.Lock()
 		delete(x.building, checkout)
 		if err != nil {
@@ -257,6 +260,15 @@ func (x *RepositoryIndexes) start(codegraph, checkout string) {
 		}
 		slog.Info("repository index built", "checkout", checkout, "took", time.Since(began).Round(time.Millisecond))
 	}()
+}
+
+// build keeps /.codegraph/ out of git first, so the checkout never shows
+// the index as a change, then builds it.
+func (x *RepositoryIndexes) build(codegraph, checkout string) error {
+	if err := x.d.Excludes.Exclude(checkout, domain.RepositoryIndexDir+"/", "the codegraph repository index"); err != nil {
+		return fmt.Errorf("keeping %s/ out of git: %w", domain.RepositoryIndexDir, err)
+	}
+	return x.d.Indexer.BuildIndex(x.ctx, codegraph, checkout)
 }
 
 // background runs fn off the caller's goroutine, counted by Wait.
