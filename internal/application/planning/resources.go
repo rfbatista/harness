@@ -114,7 +114,7 @@ func (s *Service) ListTicketResources(ctx context.Context, ticketID string) ([]*
 	if _, err := s.ticket(ctx, ticketID); err != nil {
 		return nil, err
 	}
-	list := s.Resources.ListByTicket(ticketID)
+	list := s.Resources.ListByTicket(ctx, ticketID)
 	s.withContentURL(list...)
 	return list, nil
 }

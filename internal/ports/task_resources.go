@@ -21,7 +21,7 @@ type TicketResourceRepository interface {
 	// Create stores r with a fresh id and both timestamps set.
 	Create(r *domain.TicketResource) (*domain.TicketResource, error)
 	Get(id string) *domain.TicketResource
-	ListByTicket(ticketID string) []*domain.TicketResource
+	ListByTicket(ctx context.Context, ticketID string) []*domain.TicketResource
 	SetTitle(id, title string) (*domain.TicketResource, error)
 	Delete(id string) error
 	// DeleteByTicket removes every resource of the task and answers their
@@ -34,7 +34,7 @@ type TicketCommentRepository interface {
 	Create(c *domain.TicketComment) (*domain.TicketComment, error)
 	Get(id string) *domain.TicketComment
 	// List is the task's comments created strictly after since (zero: all).
-	List(ticketID string, since time.Time) []*domain.TicketComment
+	List(ctx context.Context, ticketID string, since time.Time) []*domain.TicketComment
 	SetBody(id, body string) (*domain.TicketComment, error)
 	Delete(id string) error
 	DeleteByTicket(ticketID string) error

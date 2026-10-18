@@ -214,5 +214,5 @@ func (h *Handler) handleListTicketDocuments(c echo.Context) error {
 	if ticketID == "" {
 		return echo.NewHTTPError(http.StatusBadRequest, "ticket_id is required")
 	}
-	return c.JSON(http.StatusOK, map[string]any{"documents": h.planningSvc.ListTicketDocuments(ticketID)})
+	return c.JSON(http.StatusOK, map[string]any{"documents": h.planningSvc.ListTicketDocuments(c.Request().Context(), ticketID)})
 }

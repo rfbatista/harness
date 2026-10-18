@@ -224,16 +224,16 @@ func refuseErr(err error) ports.ShellAnswer {
 // whose base version is no longer the stored one is BASE_VERSION_STALE,
 // and the shell's copy is refreshed. Paths it allows are kept from
 // refreshes until the commit.
-func (s *Service) CheckShellEdit(_ context.Context, sessionID string, e ports.ShellEdit) ports.ShellAnswer {
+func (s *Service) CheckShellEdit(ctx context.Context, sessionID string, e ports.ShellEdit) ports.ShellAnswer {
 	return s.withShell(sessionID, e, func(sh *shell, ed edit) ports.ShellAnswer {
-		return s.check(sh, ed)
+		return s.check(ctx, sh, ed)
 	})
 }
 
 // CommitShellEdit stores e as the session made it, reading the bytes from
 // disk. A path whose operation did not happen (the file it wrote is not
 // there, the file it removed still is) stores nothing.
-func (s *Service) CommitShellEdit(_ context.Context, sessionID string, e ports.ShellEdit) ports.ShellAnswer {
+func (s *Service) CommitShellEdit(ctx context.Context, sessionID string, e ports.ShellEdit) ports.ShellAnswer {
 	return s.withShell(sessionID, e, func(sh *shell, ed edit) ports.ShellAnswer {
 		for _, rel := range ed.rel {
 			sh.release(rel)
@@ -243,7 +243,7 @@ func (s *Service) CommitShellEdit(_ context.Context, sessionID string, e ports.S
 		}
 		ans := refuseArea(ed)
 		if ans.Allow {
-			ans = s.commit(sh, ed)
+			ans = s.commit(ctx, sh, ed)
 		}
 		if !ans.Allow {
 			s.restore(sh, ed)
@@ -343,7 +343,7 @@ func refuseMoveArea(ed edit) ports.ShellAnswer {
 
 // check is CheckShellEdit with sh held: the paths' areas, then the
 // session's copies of what the edit touches.
-func (s *Service) check(sh *shell, ed edit) ports.ShellAnswer {
+func (s *Service) check(ctx context.Context, sh *shell, ed edit) ports.ShellAnswer {
 	if ans := refuseArea(ed); !ans.Allow {
 		return ans
 	}
@@ -366,7 +366,7 @@ func (s *Service) check(sh *shell, ed edit) ports.ShellAnswer {
 		case classify(src).designs():
 			return s.checkDesignMove(sh, src, dst)
 		}
-		return s.checkMove(sh, src, dst)
+		return s.checkMove(ctx, sh, src, dst)
 	}
 	return allow
 }
@@ -398,7 +398,7 @@ func (s *Service) checkDocsAt(sh *shell, rel string) ports.ShellAnswer {
 // checkMove: from project/docs to task/docs a document changes scope, only
 // when linked to this task; a person moves documents to project/docs, so
 // that move is refused; within a folder it is only renamed.
-func (s *Service) checkMove(sh *shell, src, dst string) ports.ShellAnswer {
+func (s *Service) checkMove(ctx context.Context, sh *shell, src, dst string) ports.ShellAnswer {
 	for _, row := range sh.under(src, ports.ShellDocument) {
 		if ans := s.stale(sh, row); !ans.Allow {
 			return ans
@@ -406,7 +406,7 @@ func (s *Service) checkMove(sh *shell, src, dst string) ports.ShellAnswer {
 		if classify(dst) == projDocs && row.Scope != string(domain.DocumentScopeProject) {
 			return refuseProjectMove(src)
 		}
-		if classify(dst) == taskDocs && row.Scope != string(domain.DocumentScopeTask) && !s.onTask(sh, row.ID) {
+		if classify(dst) == taskDocs && row.Scope != string(domain.DocumentScopeTask) && !s.onTask(ctx, sh, row.ID) {
 			return refuseNotOnTask(row.Path)
 		}
 		if over, ok := sh.files[moved(row.Path, src, dst)]; ok && over.ID != row.ID {
@@ -455,8 +455,8 @@ func (s *Service) storedVersion(sh *shell, row ports.ShellFile) string {
 	return "deleted"
 }
 
-func (s *Service) onTask(sh *shell, docID string) bool {
-	for _, d := range s.src.Documents.ListTicketDocuments(sh.ticketID) {
+func (s *Service) onTask(ctx context.Context, sh *shell, docID string) bool {
+	for _, d := range s.src.Documents.ListTicketDocuments(ctx, sh.ticketID) {
 		if d.ID == docID {
 			return true
 		}
@@ -465,7 +465,7 @@ func (s *Service) onTask(sh *shell, docID string) bool {
 }
 
 // commit stores ed, checked; sh is held.
-func (s *Service) commit(sh *shell, ed edit) ports.ShellAnswer {
+func (s *Service) commit(ctx context.Context, sh *shell, ed edit) ports.ShellAnswer {
 	switch ed.op {
 	case "write":
 		for i, rel := range ed.rel {
@@ -493,7 +493,7 @@ func (s *Service) commit(sh *shell, ed edit) ports.ShellAnswer {
 		case classify(src).designs():
 			return s.commitDesignMove(sh, src, dst)
 		}
-		return s.commitMove(sh, src, dst)
+		return s.commitMove(ctx, sh, src, dst)
 	}
 	return allow
 }
@@ -583,7 +583,7 @@ func (s *Service) commitDocRemove(sh *shell, rel string) ports.ShellAnswer {
 // scope follows the folder, format the extension; a document the move
 // wrote over is deleted. A move of task documents to project/docs is put
 // back and refused before anything is stored.
-func (s *Service) commitMove(sh *shell, src, dst string) ports.ShellAnswer {
+func (s *Service) commitMove(ctx context.Context, sh *shell, src, dst string) ports.ShellAnswer {
 	rows := sh.under(src, ports.ShellDocument)
 	if len(rows) == 0 {
 		return s.commitDocWrite(sh, dst)
@@ -613,7 +613,7 @@ func (s *Service) commitMove(sh *shell, src, dst string) ports.ShellAnswer {
 		}
 		scope := classify(to).scope()
 		if scope != d.Scope {
-			if !s.onTask(sh, d.ID) {
+			if !s.onTask(ctx, sh, d.ID) {
 				delete(sh.files, row.Path)
 				_ = os.Remove(sh.abs(to))
 				s.refreshLocked(sh)

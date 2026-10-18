@@ -20,7 +20,7 @@ func (s *Service) ListTicketComments(ctx context.Context, ticketID string, since
 	if _, err := s.ticket(ctx, ticketID); err != nil {
 		return nil, err
 	}
-	return s.Comments.List(ticketID, since), nil
+	return s.Comments.List(ctx, ticketID, since), nil
 }
 
 func (s *Service) AddTicketComment(ctx context.Context, ticketID, body string) (*domain.TicketComment, error) {

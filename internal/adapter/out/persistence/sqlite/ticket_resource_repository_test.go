@@ -1,6 +1,7 @@
 package sqlite
 
 import (
+	"context"
 	"path/filepath"
 	"testing"
 	"time"
@@ -28,7 +29,7 @@ func TestTicketResourceRepo(t *testing.T) {
 	b, _ := r.Create(&domain.TicketResource{TicketID: "t", ProjectID: "p", Kind: domain.ResourceLink, Title: "Docs", URL: "https://x.io"})
 	other, _ := r.Create(&domain.TicketResource{TicketID: "other", ProjectID: "p", Kind: domain.ResourceFile, Title: "f"})
 
-	list := r.ListByTicket("t")
+	list := r.ListByTicket(context.Background(), "t")
 	if len(list) != 2 || list[0].ID != a.ID || list[1].ID != b.ID {
 		t.Fatalf("oldest first, created in the same millisecond too: %+v", list)
 	}
@@ -57,7 +58,7 @@ func TestTicketResourceRepo(t *testing.T) {
 	if err != nil || len(ids) != 1 || ids[0] != a.ID {
 		t.Fatalf("DeleteByTicket = %v, %v", ids, err)
 	}
-	if len(r.ListByTicket("t")) != 0 || r.Get(other.ID) == nil {
+	if len(r.ListByTicket(context.Background(), "t")) != 0 || r.Get(other.ID) == nil {
 		t.Fatal("DeleteByTicket must clear only its task")
 	}
 }
@@ -75,17 +76,17 @@ func TestTicketCommentRepo(t *testing.T) {
 	b, _ := r.Create(&domain.TicketComment{TicketID: "t", ProjectID: "p", Author: domain.CommentByPerson, Body: "three"})
 	_, _ = r.Create(&domain.TicketComment{TicketID: "other", ProjectID: "p", Author: domain.CommentByPerson, Body: "x"})
 
-	all := r.List("t", time.Time{})
+	all := r.List(context.Background(), "t", time.Time{})
 	if len(all) != 2 || all[0].ID != a.ID || all[1].ID != b.ID {
 		t.Fatalf("oldest first: %+v", all)
 	}
 	if got := r.Get(a.ID); got.Body != "one\ntwo" || got.Author != domain.CommentByPerson || got.ProjectID != "p" {
 		t.Fatalf("round trip = %+v", got)
 	}
-	if got := r.List("t", a.CreatedAt.Add(-time.Millisecond)); len(got) != 2 {
+	if got := r.List(context.Background(), "t", a.CreatedAt.Add(-time.Millisecond)); len(got) != 2 {
 		t.Fatalf("since before both = %d", len(got))
 	}
-	if got := r.List("t", b.CreatedAt); len(got) != 0 {
+	if got := r.List(context.Background(), "t", b.CreatedAt); len(got) != 0 {
 		t.Fatalf("since is strictly after: %+v", got)
 	}
 
@@ -105,7 +106,7 @@ func TestTicketCommentRepo(t *testing.T) {
 	if err := r.DeleteByTicket("t"); err != nil {
 		t.Fatal(err)
 	}
-	if len(r.List("t", time.Time{})) != 0 || len(r.List("other", time.Time{})) != 1 {
+	if len(r.List(context.Background(), "t", time.Time{})) != 0 || len(r.List(context.Background(), "other", time.Time{})) != 1 {
 		t.Fatal("DeleteByTicket must clear only its task")
 	}
 }
@@ -153,7 +154,7 @@ func TestTicketCommentRepo_OldRowsReadBackAsThePersons(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	list := NewTicketCommentRepository(db).List("t", time.Time{})
+	list := NewTicketCommentRepository(db).List(context.Background(), "t", time.Time{})
 	if len(list) != 2 {
 		t.Fatalf("list = %+v", list)
 	}

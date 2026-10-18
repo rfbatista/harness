@@ -40,7 +40,7 @@ func (h Handler) Reviews(w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 	if h.Docs != nil && len(waiting) > 0 {
-		docs = h.Docs.ListTasksDocuments(waiting)
+		docs = h.Docs.ListTasksDocuments(ctx, waiting)
 	}
 	frame, err := h.Layout(ctx, "Reviews", project.ID, "")
 	if err != nil {

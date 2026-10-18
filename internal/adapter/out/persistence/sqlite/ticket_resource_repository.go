@@ -1,6 +1,7 @@
 package sqlite
 
 import (
+	"context"
 	"time"
 
 	"gorm.io/gorm"
@@ -117,9 +118,9 @@ func (r *TicketResourceRepository) Get(id string) *domain.TicketResource {
 	return nil
 }
 
-func (r *TicketResourceRepository) ListByTicket(ticketID string) []*domain.TicketResource {
+func (r *TicketResourceRepository) ListByTicket(ctx context.Context, ticketID string) []*domain.TicketResource {
 	var ms []TicketResourceModel
-	if err := r.db.Where("ticket_id = ?", ticketID).Order("created_at ASC, rowid ASC").Find(&ms).Error; err != nil {
+	if err := r.db.WithContext(ctx).Where("ticket_id = ?", ticketID).Order("created_at ASC, rowid ASC").Find(&ms).Error; err != nil {
 		return nil
 	}
 	out := make([]*domain.TicketResource, len(ms))
@@ -201,8 +202,8 @@ func (r *TicketCommentRepository) Get(id string) *domain.TicketComment {
 	return nil
 }
 
-func (r *TicketCommentRepository) List(ticketID string, since time.Time) []*domain.TicketComment {
-	q := r.db.Where("ticket_id = ?", ticketID)
+func (r *TicketCommentRepository) List(ctx context.Context, ticketID string, since time.Time) []*domain.TicketComment {
+	q := r.db.WithContext(ctx).Where("ticket_id = ?", ticketID)
 	if !since.IsZero() {
 		q = q.Where("created_at > ?", since.UnixMilli())
 	}

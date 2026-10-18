@@ -32,7 +32,7 @@ var (
 type Tickets interface {
 	GetTicket(ctx context.Context, id string) (*domain.Ticket, error)
 	PatchTicket(ctx context.Context, id string, patch ports.TicketPatch) (*domain.Ticket, error)
-	ListTicketDocuments(ticketID string) []*domain.Document
+	ListTicketDocuments(ctx context.Context, ticketID string) []*domain.Document
 }
 
 // Repositories are the channel's own tables.
@@ -197,7 +197,7 @@ func (s *Service) SetTaskStatus(ctx context.Context, bySessionID string, status 
 func (s *Service) checkAttachments(ctx context.Context, ticketID string, docs, artifacts []string) error {
 	if len(docs) > 0 {
 		linked := map[string]bool{}
-		for _, d := range s.tickets.ListTicketDocuments(ticketID) {
+		for _, d := range s.tickets.ListTicketDocuments(ctx, ticketID) {
 			linked[d.ID] = true
 		}
 		for _, id := range docs {

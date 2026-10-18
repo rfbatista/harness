@@ -207,7 +207,7 @@ func (h Handler) taskDocuments(r *http.Request) (*domain.Project, *domain.Ticket
 	if task.ProjectID != project.ID {
 		return nil, nil, nil, errs.Newf("TICKET_NOT_FOUND", "task %s is not in project %s", task.ID, project.Name)
 	}
-	return project, task, newestFirst(h.Docs.ListTicketDocuments(task.ID)), nil
+	return project, task, newestFirst(h.Docs.ListTicketDocuments(ctx, task.ID)), nil
 }
 
 // DocumentView serves GET …/documents/{document}/view: the HTML body of a

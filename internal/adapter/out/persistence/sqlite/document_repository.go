@@ -1,6 +1,7 @@
 package sqlite
 
 import (
+	"context"
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
 
@@ -55,9 +56,9 @@ func (r *DocumentRepository) ListTicketIDsByDocument(documentID string) []string
 	return ids
 }
 
-func (r *DocumentRepository) ListByTicket(ticketID string) []*domain.Document {
+func (r *DocumentRepository) ListByTicket(ctx context.Context, ticketID string) []*domain.Document {
 	var models []DocumentModel
-	err := r.db.
+	err := r.db.WithContext(ctx).
 		Joins("JOIN ticket_documents ON ticket_documents.document_id = documents.id").
 		Where("ticket_documents.ticket_id = ?", ticketID).
 		Find(&models).Error
@@ -68,12 +69,12 @@ func (r *DocumentRepository) ListByTicket(ticketID string) []*domain.Document {
 }
 
 // ListByTickets lists the documents linked to any of ticketIDs, each once.
-func (r *DocumentRepository) ListByTickets(ticketIDs []string) []*domain.Document {
+func (r *DocumentRepository) ListByTickets(ctx context.Context, ticketIDs []string) []*domain.Document {
 	if len(ticketIDs) == 0 {
 		return nil
 	}
 	var models []DocumentModel
-	err := r.db.
+	err := r.db.WithContext(ctx).
 		Where("id IN (?)", r.db.Model(&TicketDocumentModel{}).Select("document_id").Where("ticket_id IN ?", ticketIDs)).
 		Find(&models).Error
 	if err != nil {

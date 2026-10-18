@@ -33,7 +33,7 @@ func (s *Service) contents(ctx context.Context, sessionID string, tk *domain.Tic
 	b.fixed(ports.ShellFile{Path: "README.md", Kind: ports.ShellReadme, Title: "README", UpdatedAt: b.now}, []byte(readme))
 	b.fixed(ports.ShellFile{Path: "task/task.json", Kind: ports.ShellTask, ID: tk.ID, Scope: "task", Title: tk.Title, UpdatedAt: tk.UpdatedAt}, append(taskJSON, '\n'))
 
-	b.documents(s.src.Documents, tk)
+	b.documents(ctx, s.src.Documents, tk)
 	if err := b.comments(ctx, s.src.Comments, tk.ID, sessionID); err != nil {
 		return nil, err
 	}
@@ -131,9 +131,9 @@ func fileKey(f ports.ShellFile) string { return f.Kind + "|" + f.ID }
 // project document in project/docs; oldest first, so the older of two with
 // one title keeps the plain name. A document keeps its file while the
 // file's extension still goes with its format.
-func (b *builder) documents(src ports.DocumentReader, tk *domain.Ticket) {
+func (b *builder) documents(ctx context.Context, src ports.DocumentReader, tk *domain.Ticket) {
 	var taskDocs []*domain.Document
-	for _, d := range src.ListTicketDocuments(tk.ID) {
+	for _, d := range src.ListTicketDocuments(ctx, tk.ID) {
 		if d.Scope != domain.DocumentScopeProject {
 			taskDocs = append(taskDocs, d)
 		}

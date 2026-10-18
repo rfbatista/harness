@@ -168,7 +168,7 @@ func (h Handler) task(w http.ResponseWriter, r *http.Request, codeRoute *code.Ro
 	view.Seed.Tasks = designTasks(tickets, project.ID)
 	var docs []*domain.Document
 	if h.Docs != nil {
-		docs = h.Docs.ListTicketDocuments(task.ID)
+		docs = h.Docs.ListTicketDocuments(ctx, task.ID)
 		view.Documents = &sessions.DocumentsLink{
 			Href:      DocumentsHref(project.ID, task.ID, ""),
 			TicketID:  task.ID,

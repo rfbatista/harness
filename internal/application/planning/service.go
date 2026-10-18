@@ -365,14 +365,14 @@ func (s *Service) UnlinkDocument(ticketID, documentID string) error {
 	return err
 }
 
-func (s *Service) ListTicketDocuments(ticketID string) []*domain.Document {
-	return s.documents.ListByTicket(ticketID)
+func (s *Service) ListTicketDocuments(ctx context.Context, ticketID string) []*domain.Document {
+	return s.documents.ListByTicket(ctx, ticketID)
 }
 
 // ListTasksDocuments is the documents linked to any of ticketIDs, each once,
 // read at once.
-func (s *Service) ListTasksDocuments(ticketIDs []string) []*domain.Document {
-	return s.documents.ListByTickets(ticketIDs)
+func (s *Service) ListTasksDocuments(ctx context.Context, ticketIDs []string) []*domain.Document {
+	return s.documents.ListByTickets(ctx, ticketIDs)
 }
 
 // ListDocumentTickets is the tickets a document is linked to, as stored; a
