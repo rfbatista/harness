@@ -27,7 +27,7 @@ function described(err) {
   return { ...d, next: NEXT_STEP[d.code] ?? d.next };
 }
 
-/** @param {{ gateway: import("../../domain/installation-ports.js").TokenSaverInstallGateway }} deps */
+/** @param {{ gateway: import("../../domain/ports.js").TokenSaverGateway }} deps */
 export const tokenSaversPage = ({ gateway }) => () => ({
   /** @type {ReturnType<typeof toRow>[]} */
   rows: [],
@@ -40,7 +40,7 @@ export const tokenSaversPage = ({ gateway }) => () => ({
 
   async init() {
     try {
-      this.apply(gateway.decodeSeed(readSeed(this.$el)));
+      this.apply(gateway.decodeSavers(readSeed(this.$el)));
     } catch {
       await this.refresh();
     }
@@ -64,7 +64,7 @@ export const tokenSaversPage = ({ gateway }) => () => ({
 
   async refresh() {
     try {
-      this.apply(await gateway.list());
+      this.apply(await gateway.listSavers());
     } catch (err) {
       this.error = described(err);
     }
@@ -88,7 +88,7 @@ export const tokenSaversPage = ({ gateway }) => () => ({
   async install(saver) {
     this.error = null;
     try {
-      this.put(await gateway.install(saver));
+      this.put(await gateway.installSaver(saver));
       this.follow();
     } catch (err) {
       this.error = described(err);
@@ -101,7 +101,7 @@ export const tokenSaversPage = ({ gateway }) => () => ({
     row.removing = true;
     this.error = null;
     try {
-      this.put(await gateway.remove(saver));
+      this.put(await gateway.removeSaver(saver));
       this.announcement = `${saver} removed.`;
     } catch (err) {
       this.error = described(err);

@@ -19,7 +19,7 @@ export const activations = ({ gateway }) => () => ({
 
   init() {
     try {
-      this.apply(gateway.decodeSeed(readSeed(this.$el)));
+      this.apply(gateway.decodeActivations(readSeed(this.$el)));
     } catch (err) {
       this.error = describeError(err);
       return;
@@ -38,7 +38,7 @@ export const activations = ({ gateway }) => () => ({
     row.saving = true;
     this.error = null;
     try {
-      this.apply(await gateway.set(this.level, this.ownerId, row.saver, select.value));
+      this.apply(await gateway.setActivation(this.level, this.ownerId, row.saver, select.value));
     } catch (err) {
       this.error = describeError(err);
       select.value = row.value;

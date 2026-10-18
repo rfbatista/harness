@@ -6,7 +6,7 @@
 
 import { describeError } from "../../../../shared/presentation/errors.js";
 
-/** @param {{ gateway: import("../../domain/caveman-intensity-ports.js").CavemanIntensityGateway }} deps */
+/** @param {{ gateway: import("../../domain/ports.js").TokenSaverGateway }} deps */
 export const cavemanIntensity = ({ gateway }) => () => ({
   /** The intensity the server holds. */
   value: "",
@@ -25,7 +25,7 @@ export const cavemanIntensity = ({ gateway }) => () => ({
     this.saving = true;
     this.error = null;
     try {
-      this.value = await gateway.set(/** @type {any} */ (select.value));
+      this.value = await gateway.setCavemanIntensity(/** @type {any} */ (select.value));
       this.announcement = `Caveman intensity set to ${this.value}.`;
     } catch (err) {
       this.error = describeError(err);

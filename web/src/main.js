@@ -18,12 +18,6 @@ import { registerNotifications } from "./modules/notifications/presentation/regi
 import { codeGateway } from "./modules/code/infrastructure/code-gateway.js";
 import { credentialsGateway } from "./modules/credentials/infrastructure/credentials-gateway.js";
 import { registerCredentials } from "./modules/credentials/presentation/register.js";
-import { tokenSaverInstallsGateway } from "./modules/tokensavers/infrastructure/installations-gateway.js";
-import { registerTokenSaverInstalls } from "./modules/tokensavers/presentation/register-installations.js";
-import { repositoryIndexesGateway } from "./modules/tokensavers/infrastructure/repository-indexes-gateway.js";
-import { registerRepositoryIndexes } from "./modules/tokensavers/presentation/register-repository-indexes.js";
-import { cavemanIntensityGateway } from "./modules/tokensavers/infrastructure/caveman-intensity-gateway.js";
-import { registerCavemanIntensity } from "./modules/tokensavers/presentation/register-caveman-intensity.js";
 import { hljsHighlighter } from "./modules/code/infrastructure/hljs-highlighter.js";
 import { registerCode } from "./modules/code/presentation/register.js";
 import { runsGateway } from "./modules/runs/infrastructure/runs-gateway.js";
@@ -90,10 +84,7 @@ registerPullRequests(Alpine, { gateway: pullRequestsGateway(api, events) });
 registerCode(Alpine, { gateway: codeGateway(api, events), highlighter: hljsHighlighter(createHljs()), prefs, navigate });
 registerNotifications(Alpine, { gateway: notificationsGateway(api, events), alerts: desktopAlerts(), prefs, clock: systemClock, navigate });
 registerCredentials(Alpine, { gateway: credentialsGateway(api, events), clock: systemClock });
-registerTokenSaverInstalls(Alpine, { gateway: tokenSaverInstallsGateway(api) });
-registerRepositoryIndexes(Alpine, { gateway: repositoryIndexesGateway(api), clock: systemClock });
-registerCavemanIntensity(Alpine, { gateway: cavemanIntensityGateway(api) });
 registerUsage(Alpine, { gateway: usageGateway(api, events) });
-registerTokenSavers(Alpine, { gateway: tokenSaversGateway(api) });
+registerTokenSavers(Alpine, { gateway: tokenSaversGateway(api), clock: systemClock });
 
 Alpine.start();

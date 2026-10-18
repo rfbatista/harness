@@ -23,7 +23,7 @@ function described(err) {
 }
 
 /**
- * @param {{ gateway: import("../../domain/repository-index-ports.js").RepositoryIndexGateway,
+ * @param {{ gateway: import("../../domain/ports.js").TokenSaverGateway,
  *           clock: import("../../../../shared/infrastructure/clock.js").Clock }} deps
  */
 export const repositoryIndexes = ({ gateway, clock }) => () => ({
@@ -36,7 +36,7 @@ export const repositoryIndexes = ({ gateway, clock }) => () => ({
 
   async init() {
     try {
-      this.apply(gateway.decodeSeed(readSeed(this.$el)));
+      this.apply(gateway.decodeIndexes(readSeed(this.$el)));
     } catch {
       await this.refresh();
     }
@@ -56,7 +56,7 @@ export const repositoryIndexes = ({ gateway, clock }) => () => ({
 
   async refresh() {
     try {
-      this.apply(await gateway.list());
+      this.apply(await gateway.listIndexes());
     } catch (err) {
       this.error = described(err);
     }
@@ -80,7 +80,7 @@ export const repositoryIndexes = ({ gateway, clock }) => () => ({
   async rebuild(repositoryId) {
     this.error = null;
     try {
-      const idx = await gateway.rebuild(repositoryId);
+      const idx = await gateway.rebuildIndex(repositoryId);
       const row = toRow(idx, clock.now());
       this.rows = this.rows.map((r) => (r.repositoryId === idx.repositoryId ? row : r));
       this.follow();

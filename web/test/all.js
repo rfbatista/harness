@@ -85,6 +85,7 @@ import "../src/modules/tasks/presentation/components/taskEditor.test.js";
 import "../src/modules/tasks/presentation/components/taskResources.test.js";
 import "../src/modules/tasks/presentation/railView.test.js";
 import "../src/modules/tasks/presentation/statusChange.test.js";
+import "../src/modules/tokensavers/infrastructure/gateways.test.js";
 import "../src/modules/usage/domain/format.test.js";
 import "../src/modules/usage/domain/totals.test.js";
 import "../src/modules/usage/domain/usage.test.js";
