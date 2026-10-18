@@ -33,6 +33,8 @@ type Service struct {
 	skills *skill.Service
 	mcp    *mcpserver.Service
 	tools  ports.ToolRepository
+	// savers installs token savers; nil until UseTokenSavers.
+	savers *tokenSavers
 
 	settings ports.SettingsReader // nil: publishing is not configured
 	events   ports.EventPublisher // nil: deletes are not announced

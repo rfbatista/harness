@@ -87,8 +87,13 @@ func icon(name string) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
+		case "saver":
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 12, "<svg aria-hidden=\"true\" viewBox=\"0 0 16 16\"><path d=\"M9 1.75 3.5 9h4L7 14.25 12.5 7h-4z\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linejoin=\"round\"></path></svg>")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
 		case "rail":
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 12, "<svg aria-hidden=\"true\" viewBox=\"0 0 16 16\"><path d=\"M2 2.75h12v10.5H2z M6 2.75v10.5\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linejoin=\"round\"></path></svg>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 13, "<svg aria-hidden=\"true\" viewBox=\"0 0 16 16\"><path d=\"M2 2.75h12v10.5H2z M6 2.75v10.5\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linejoin=\"round\"></path></svg>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

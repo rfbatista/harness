@@ -26,6 +26,7 @@ import (
 	"operators-mcp/internal/adapter/in/web/projects"
 	"operators-mcp/internal/adapter/in/web/shell"
 	"operators-mcp/internal/adapter/in/web/tasks"
+	"operators-mcp/internal/adapter/in/web/tokensavers"
 	"operators-mcp/internal/adapter/in/web/usage"
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
@@ -73,6 +74,9 @@ type Deps struct {
 	// GitCredentials seeds the Git credentials page, the repositories'
 	// credential and the pull-request panel; nil leaves them out.
 	GitCredentials ports.GitCredentials
+	// TokenSaverInstalls lists the token savers for their page; nil leaves
+	// the page and its top bar link out.
+	TokenSaverInstalls ports.TokenSaverInstallReader
 	// Usage reads token usage for a project's Usage page and the task
 	// page's totals; nil leaves the page, its rail link and the totals out.
 	Usage ports.UsageDashboard
@@ -146,6 +150,10 @@ func NewHandler(deps Deps, assets *Assets, fallback http.Handler) http.Handler {
 	if deps.GitCredentials != nil {
 		creds := credentials.Handler{Credentials: deps.GitCredentials, Layout: s.layout, Render: render, Now: deps.Now}
 		mux.Handle("GET "+credentials.Href, s.page(creds.Page))
+	}
+	if deps.TokenSaverInstalls != nil {
+		savers := tokensavers.Handler{Savers: deps.TokenSaverInstalls, Layout: s.layout, Render: render}
+		mux.Handle("GET "+tokensavers.Href, s.page(savers.Page))
 	}
 	mux.Handle("GET /projects/new", s.page(projectPages.New))
 	mux.Handle("GET /projects/{project}", s.page(taskPages.Project))
@@ -292,6 +300,9 @@ func (s *server) bareFrame(title string) shell.Frame {
 	}
 	if s.deps.GitCredentials != nil {
 		f.Top.CredentialsHref = credentials.Href
+	}
+	if s.deps.TokenSaverInstalls != nil {
+		f.Top.TokenSaversHref = tokensavers.Href
 	}
 	return f
 }

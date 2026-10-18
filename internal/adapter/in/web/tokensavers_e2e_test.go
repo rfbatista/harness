@@ -135,10 +135,10 @@ func (w *tokenSaverWorld) resolved(saver domain.TokenSaver, projectID, repositor
 
 // The Token savers control of the page, once its live rows replaced the
 // server's first paint.
-const savers = `document.querySelector('section[aria-labelledby=token-savers-title]')`
+const activationsSection = `document.querySelector('section[aria-labelledby=token-savers-title]')`
 
 func saverRow(saver string) string {
-	return savers + `?.querySelector('[data-saver="` + saver + `"]:not([data-ssr] *)')`
+	return activationsSection + `?.querySelector('[data-saver="` + saver + `"]:not([data-ssr] *)')`
 }
 
 // tokenSaversReady waits for the control's live rows (the details holding
@@ -146,7 +146,7 @@ func saverRow(saver string) string {
 func tokenSaversReady() chromedp.Action {
 	return chromedp.Tasks{
 		chromedp.Evaluate(`document.querySelector('details[data-token-savers]')?.setAttribute('open', '')`, nil),
-		waitUntil(savers + ` && !` + savers + `.querySelector('[data-ssr]') && !!` + saverRow("rtk")),
+		waitUntil(activationsSection + ` && !` + activationsSection + `.querySelector('[data-ssr]') && !!` + saverRow("rtk")),
 	}
 }
 

@@ -64,6 +64,10 @@ type Config struct {
 	// internal/adapter/out/configrepo. Empty disables this entirely; the
 	// catalog is then exactly what's in the database, as before.
 	DotfilesAgentsDir string
+	// TokenSaverReleaseBase is where token savers' pinned releases are
+	// downloaded from, in place of https://github.com (a mirror, or a test's
+	// fake release server). Empty uses GitHub.
+	TokenSaverReleaseBase string
 }
 
 // loopbackBaseURL is the base URL the spawned claude reaches this process at for
@@ -100,6 +104,7 @@ func New(cfg Config) *fx.App {
 		GitCredentialsModule,
 		TextProcessingModule,
 		ToolingModule,
+		TokenSaversModule,
 		ServerModule,
 		fx.WithLogger(func() fxevent.Logger {
 			return &fxevent.SlogLogger{Logger: slog.Default()}
@@ -125,6 +130,7 @@ func Validate(cfg Config) error {
 		GitCredentialsModule,
 		TextProcessingModule,
 		ToolingModule,
+		TokenSaversModule,
 		ServerModule,
 	)
 }

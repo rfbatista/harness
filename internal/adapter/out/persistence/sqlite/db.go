@@ -187,6 +187,9 @@ func migrate(db *gorm.DB) error {
 	if err := migrateInteractiveRunner(db); err != nil {
 		return fmt.Errorf("sqlite session runner migration: %w", err)
 	}
+	if err := db.AutoMigrate(&TokenSaverInstallationModel{}); err != nil {
+		return fmt.Errorf("sqlite migrate token savers: %w", err)
+	}
 	return nil
 }
 
