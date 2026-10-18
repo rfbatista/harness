@@ -221,8 +221,9 @@ type server struct {
 func (s *server) page(h shell.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := shell.WithCollapsed(r.Context(), r) // the rail's folded groups, for the layout
-		ctx = withPageLists(ctx)                   // one read of each list for the page and its layout
-		r = r.WithContext(readshare.With(ctx))     // and of what its parts read alike (a worktree's status)
+		// One read of what the page, its layout and its parts read alike:
+		// the project's ticket and session lists, a worktree's status.
+		r = r.WithContext(readshare.With(ctx))
 		if err := h(w, r); err != nil {
 			s.renderError(w, r, err)
 		}
