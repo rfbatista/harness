@@ -238,12 +238,18 @@ func (s *Service) withResumability(sess *domain.Session) *domain.Session {
 	if sess == nil {
 		return nil
 	}
-	sess.ResumeBlocked = errs.Code(s.resumeBlock(sess))
-	sess.Resumable = sess.ResumeBlocked == ""
+	s.fillResumability(sess)
 	if s.Decorator != nil {
 		s.Decorator.DecorateSessions(sess)
 	}
 	return sess
+}
+
+// fillResumability fills sess's Resumable and ResumeBlocked. It reads no
+// database: an ended interactive session stats its transcript, nothing else.
+func (s *Service) fillResumability(sess *domain.Session) {
+	sess.ResumeBlocked = errs.Code(s.resumeBlock(sess))
+	sess.Resumable = sess.ResumeBlocked == ""
 }
 
 // claudeID is the claude conversation sess resumes into.

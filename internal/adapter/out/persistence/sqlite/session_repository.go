@@ -98,6 +98,9 @@ func (r *SessionRepository) Query(filter ports.SessionFilter) ([]*domain.Session
 	if filter.TicketID != "" {
 		q = q.Where("ticket_id = ?", filter.TicketID)
 	}
+	if len(filter.TicketIDs) > 0 {
+		q = q.Where("ticket_id IN ?", filter.TicketIDs)
+	}
 	if len(filter.Statuses) > 0 {
 		values := make([]string, 0, len(filter.Statuses))
 		for _, s := range filter.Statuses {

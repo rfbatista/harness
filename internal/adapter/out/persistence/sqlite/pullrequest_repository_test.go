@@ -62,6 +62,24 @@ func TestPullRequestRepo_LatestIsTheNewestOfTheWorkspace(t *testing.T) {
 	}
 }
 
+// Many workspaces are read at once, each answered as LatestForWorkspace
+// answers it, in the order asked; one without a pull request is left out.
+func TestPullRequestRepo_LatestForWorkspacesReadsManyAtOnce(t *testing.T) {
+	db, _ := Open(":memory:")
+	r := NewPullRequestRepository(db)
+	t0 := time.Date(2026, 10, 7, 12, 0, 0, 0, time.UTC)
+	_, _ = r.Save(pr("w1", 1, domain.PullRequestClosed, t0))
+	_, _ = r.Save(pr("w1", 2, domain.PullRequestOpen, t0.Add(time.Hour)))
+	_, _ = r.Save(pr("w2", 5, domain.PullRequestOpen, t0.Add(2*time.Hour)))
+	got := r.LatestForWorkspaces([]string{"w2", "w3", "w1"})
+	if len(got) != 2 || got[0].Number != 5 || got[1].Number != 2 {
+		t.Fatalf("latest of w2, w3, w1 = %+v, want #5 then #2", got)
+	}
+	if got := r.LatestForWorkspaces(nil); got == nil || len(got) != 0 {
+		t.Fatalf("no workspaces = %#v, want an empty list", got)
+	}
+}
+
 func TestPullRequestRepo_DeleteByProject(t *testing.T) {
 	db, _ := Open(":memory:")
 	r := NewPullRequestRepository(db)

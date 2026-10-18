@@ -245,6 +245,10 @@ func (s *Service) WorkspaceHistory(ctx context.Context, workspaceID string, limi
 // Get returns the workspace by id, or nil if not found.
 func (s *Service) Get(id string) *domain.Workspace { return s.workspaces.Get(id) }
 
+// GetMany returns the given workspaces, read at once; unknown ids are left
+// out.
+func (s *Service) GetMany(ids []string) []*domain.Workspace { return s.workspaces.ListByIDs(ids) }
+
 // ListByRepository returns all workspaces of the given repository.
 func (s *Service) ListByRepository(repositoryID string) []*domain.Workspace {
 	return s.workspaces.ListByRepository(repositoryID)

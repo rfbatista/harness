@@ -94,7 +94,7 @@ type Deps struct {
 // CodeWorkspaces is what the code pages read of the workspaces:
 // *workspaces.Service satisfies it.
 type CodeWorkspaces interface {
-	Get(id string) *domain.Workspace
+	GetMany(ids []string) []*domain.Workspace
 	ListBranches(repositoryID string) ([]domain.GitBranch, error)
 }
 
@@ -107,6 +107,14 @@ func NewHandler(deps Deps, assets *Assets, fallback http.Handler) http.Handler {
 	}
 	if fallback == nil {
 		fallback = http.NotFoundHandler()
+	}
+	// Every page and the layout around it share one read of the project's
+	// tickets and sessions per request (see pageLists).
+	if deps.Tasks != nil {
+		deps.Tasks = sharedTickets{deps.Tasks}
+	}
+	if deps.Sessions != nil {
+		deps.Sessions = sharedSessions{deps.Sessions}
 	}
 	s := &server{deps: deps, assets: assets}
 
@@ -211,7 +219,8 @@ type server struct {
 // page adapts a page handler: an error becomes the error page for its code.
 func (s *server) page(h shell.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		r = r.WithContext(shell.WithCollapsed(r.Context(), r)) // the rail's folded groups, for the layout
+		ctx := shell.WithCollapsed(r.Context(), r) // the rail's folded groups, for the layout
+		r = r.WithContext(withPageLists(ctx))      // one read of each list for the page and its layout
 		if err := h(w, r); err != nil {
 			s.renderError(w, r, err)
 		}

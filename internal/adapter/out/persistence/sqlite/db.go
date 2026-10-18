@@ -147,6 +147,9 @@ func (p *readerPool) Initialize(db *gorm.DB) error {
 	if err != nil {
 		return err
 	}
+	// Measured with the page-load budget test (internal/app): once pages
+	// read a constant number of queries, 10 parallel task pages finish as
+	// fast with 4 readers as with 32, so the pool stays at max(4, NumCPU).
 	pool.SetMaxOpenConns(max(4, runtime.NumCPU()))
 	reader, err := gorm.Open(sqlite.New(sqlite.Config{Conn: pool}), &gorm.Config{Logger: db.Logger})
 	if err != nil {

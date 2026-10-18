@@ -42,6 +42,23 @@ func (r *WorkspaceRepository) ListByRepository(repositoryID string) []*domain.Wo
 	return out
 }
 
+// ListByIDs returns the given workspaces in one query; unknown ids are left
+// out.
+func (r *WorkspaceRepository) ListByIDs(ids []string) []*domain.Workspace {
+	if len(ids) == 0 {
+		return nil
+	}
+	var models []WorkspaceModel
+	if err := r.db.Where("id IN ?", ids).Find(&models).Error; err != nil {
+		return nil
+	}
+	out := make([]*domain.Workspace, 0, len(models))
+	for i := range models {
+		out = append(out, models[i].ToDomain())
+	}
+	return out
+}
+
 // Create creates a workspace with a generated id.
 func (r *WorkspaceRepository) Create(w domain.Workspace) (*domain.Workspace, error) {
 	id, err := genID()

@@ -1047,7 +1047,10 @@ func (s *Service) List(_ context.Context, f ports.SessionFilter) ([]*domain.Sess
 		return nil, fmt.Errorf("list sessions: %w", err)
 	}
 	for _, sess := range list {
-		s.withResumability(sess)
+		s.fillResumability(sess)
+	}
+	if s.Decorator != nil {
+		s.Decorator.DecorateSessions(list...) // the whole list at once: its queries do not grow with it
 	}
 	return list, nil
 }

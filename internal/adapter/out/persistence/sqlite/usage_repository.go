@@ -107,6 +107,8 @@ func (s UsageSumsRow) sums() ports.UsageSums {
 func (r *UsageRepository) Groups(f ports.UsageGroupFilter) ([]ports.UsageGroup, error) {
 	q := r.db.Model(&UsageRecordModel{})
 	switch {
+	case f.TaskID != "" && len(f.SessionIDs) > 0:
+		q = q.Where("task_id = ? OR session_id IN ?", f.TaskID, f.SessionIDs)
 	case f.TaskID != "":
 		q = q.Where("task_id = ?", f.TaskID)
 	case f.SessionID != "":

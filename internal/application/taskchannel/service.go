@@ -307,42 +307,87 @@ func (s *Service) emitStatus(c domain.TaskStatusChange) {
 // --- decorating ---
 
 // DecorateSessions fills each session's role, its task's architect and the
-// loop checking on it.
+// loop checking on it. However many sessions it is given, it reads their
+// tasks' sessions in one query and their loops in another.
 func (s *Service) DecorateSessions(sessions ...*domain.Session) {
-	byTicket := map[string][]*domain.Session{}
+	var ticketIDs, sessionIDs []string
 	for _, sess := range sessions {
 		if sess == nil {
 			continue
 		}
 		sess.Role, sess.ArchitectSessionID, sess.StatusCheck = domain.RolePeer, nil, nil
-		if sess.TicketID == "" {
+		if sess.TicketID != "" {
+			ticketIDs = append(ticketIDs, sess.TicketID)
+			sessionIDs = append(sessionIDs, sess.ID)
+		}
+	}
+	if len(ticketIDs) == 0 {
+		return
+	}
+	byTicket := s.sessionsByTicket(ticketIDs)
+	checks := make(map[string]*domain.StatusCheck, len(sessionIDs))
+	for _, c := range s.checks.ListByDelegates(uniq(sessionIDs)) {
+		checks[c.DelegateSessionID] = c
+	}
+	for _, sess := range sessions {
+		if sess == nil || sess.TicketID == "" {
 			continue
 		}
-		all, ok := byTicket[sess.TicketID]
-		if !ok {
-			all = s.taskSessions(sess.TicketID)
-			byTicket[sess.TicketID] = all
-		}
-		role, arch := domain.RoleOf(sess.ID, all)
+		role, arch := domain.RoleOf(sess.ID, byTicket[sess.TicketID])
 		sess.Role = role
 		if arch != "" {
 			sess.ArchitectSessionID = &arch
 		}
-		sess.StatusCheck = s.checks.Get(sess.ID)
+		sess.StatusCheck = checks[sess.ID]
 	}
 }
 
-// DecorateTickets fills each ticket's architect and pending review count.
+// DecorateTickets fills each ticket's architect and pending review count,
+// in two queries however many tickets it is given.
 func (s *Service) DecorateTickets(tickets ...*domain.Ticket) {
+	var ids []string
+	for _, tk := range tickets {
+		if tk != nil {
+			ids = append(ids, tk.ID)
+		}
+	}
+	if len(ids) == 0 {
+		return
+	}
+	byTicket := s.sessionsByTicket(ids)
+	pending := s.reviews.CountPendingByTask(uniq(ids))
 	for _, tk := range tickets {
 		if tk == nil {
 			continue
 		}
 		tk.ArchitectSessionID = nil
-		if a := domain.TaskArchitect(s.taskSessions(tk.ID)); a != nil {
+		if a := domain.TaskArchitect(byTicket[tk.ID]); a != nil {
 			id := a.ID
 			tk.ArchitectSessionID = &id
 		}
-		tk.PendingReviews = s.reviews.CountPending(tk.ID)
+		tk.PendingReviews = pending[tk.ID]
 	}
+}
+
+// sessionsByTicket reads the sessions of the given tasks in one query, by
+// task, each task's newest first.
+func (s *Service) sessionsByTicket(ticketIDs []string) map[string][]*domain.Session {
+	out := map[string][]*domain.Session{}
+	for _, sess := range s.sessions.List(ports.SessionFilter{TicketIDs: uniq(ticketIDs)}) {
+		out[sess.TicketID] = append(out[sess.TicketID], sess)
+	}
+	return out
+}
+
+// uniq is ids without repeats, in their first order.
+func uniq(ids []string) []string {
+	seen := make(map[string]bool, len(ids))
+	out := make([]string, 0, len(ids))
+	for _, id := range ids {
+		if !seen[id] {
+			seen[id] = true
+			out = append(out, id)
+		}
+	}
+	return out
 }

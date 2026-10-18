@@ -148,6 +148,8 @@ type SkillPublisher = skill.Publisher
 type WorkspaceRepository interface {
 	Get(id string) *domain.Workspace
 	ListByRepository(repositoryID string) []*domain.Workspace
+	// ListByIDs reads the given workspaces at once; unknown ids are left out.
+	ListByIDs(ids []string) []*domain.Workspace
 	// Create records w (its ID is generated) and returns it.
 	Create(w domain.Workspace) (*domain.Workspace, error)
 	Delete(id string) error

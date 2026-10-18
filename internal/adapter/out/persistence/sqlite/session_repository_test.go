@@ -45,6 +45,24 @@ func TestSessionRepo_ListMatchesAnyStatus(t *testing.T) {
 	}
 }
 
+// The sessions of many tasks are read in one query, newest first.
+func TestSessionRepo_ListMatchesAnyOfTheTickets(t *testing.T) {
+	r := newTestDB(t)
+	for _, s := range []struct{ id, ticket string }{{"a", "t1"}, {"b", "t2"}, {"c", "t3"}, {"d", ""}} {
+		if _, err := r.Create(&domain.Session{ID: s.id, ProjectID: "p1", TicketID: s.ticket, Task: "t", Status: domain.SessionDone}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got := r.List(ports.SessionFilter{TicketIDs: []string{"t1", "t3"}})
+	ids := []string{}
+	for _, s := range got {
+		ids = append(ids, s.ID)
+	}
+	if len(ids) != 2 || !(ids[0] == "a" && ids[1] == "c" || ids[0] == "c" && ids[1] == "a") {
+		t.Fatalf("sessions of t1 and t3 = %v, want a and c", ids)
+	}
+}
+
 func TestSessionRepository_PersistsWorkspaceAndBranch(t *testing.T) {
 	db, err := Open(":memory:")
 	if err != nil {

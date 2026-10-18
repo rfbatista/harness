@@ -176,8 +176,12 @@ var _ = context.Background
 // fakeWorkspaces names the fixture worktrees' base branch.
 type fakeWorkspaces struct{ base string }
 
-func (f fakeWorkspaces) Get(id string) *domain.Workspace {
-	return &domain.Workspace{ID: id, BaseRef: f.base}
+func (f fakeWorkspaces) GetMany(ids []string) []*domain.Workspace {
+	out := make([]*domain.Workspace, 0, len(ids))
+	for _, id := range ids {
+		out = append(out, &domain.Workspace{ID: id, BaseRef: f.base})
+	}
+	return out
 }
 func (fakeWorkspaces) ListBranches(string) ([]domain.GitBranch, error) {
 	return []domain.GitBranch{{Name: "main", IsHead: true}}, nil
