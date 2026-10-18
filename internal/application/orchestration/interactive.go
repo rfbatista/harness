@@ -336,6 +336,7 @@ func (s *Service) end(id string, exitCode int, closedByUser bool) (*domain.Sessi
 		return nil, err
 	}
 	s.publish(id, SessionEvent{Type: "done", Status: status, Text: text, At: time.Now()})
+	s.hub.End(id)
 	s.announce(domain.SessionEnded{SessionID: id, Status: status})
 	return s.withResumability(s.sessions.Get(id)), nil
 }
