@@ -7,9 +7,13 @@ import "sync"
 // closed rather than kept with a gap (ADR 0012): it resumes from the durable
 // log by seq. Publishing never blocks.
 type Hub struct {
-	mu         sync.Mutex
-	subs       map[string]map[int]chan SessionEvent
-	replay     map[string][]SessionEvent
+	mu     sync.Mutex
+	subs   map[string]map[int]chan SessionEvent
+	replay map[string][]SessionEvent
+	// ended holds the sessions End released and that have not started
+	// again: an event published late for one (an announcement after the
+	// end) is fanned out but not kept, so its replay ring does not come back.
+	ended      map[string]struct{}
 	nextSub    int
 	replaySize int
 }
@@ -21,14 +25,24 @@ func NewHub(replaySize int) *Hub {
 	return &Hub{
 		subs:       map[string]map[int]chan SessionEvent{},
 		replay:     map[string][]SessionEvent{},
+		ended:      map[string]struct{}{},
 		replaySize: replaySize,
 	}
 }
 
+// Publish fans ev out and keeps it for late joiners. An ended session keeps
+// nothing until it starts again, which its event says with a live status.
 func (h *Hub) Publish(sessionID string, ev SessionEvent) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
+	if _, ended := h.ended[sessionID]; ended {
+		if ev.Status == "" || ev.Status.IsTerminal() {
+			h.fanOut(sessionID, ev)
+			return
+		}
+		delete(h.ended, sessionID)
+	}
 	buf := append(h.replay[sessionID], ev)
 	if len(buf) > h.replaySize {
 		buf = buf[len(buf)-h.replaySize:]
@@ -65,8 +79,9 @@ func (h *Hub) fanOut(sessionID string, ev SessionEvent) {
 }
 
 // End forgets an ended session: its subscribers are closed after the events
-// already buffered for them, and its replay ring is dropped. Its events stay
-// in the durable log for anyone who follows it again.
+// already buffered for them, and its replay ring is dropped and not kept
+// again until the session starts again. Its events stay in the durable log
+// for anyone who follows it again.
 func (h *Hub) End(sessionID string) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -75,6 +90,7 @@ func (h *Hub) End(sessionID string) {
 	}
 	delete(h.subs, sessionID)
 	delete(h.replay, sessionID)
+	h.ended[sessionID] = struct{}{}
 }
 
 // subscriberBuffer is how many events a subscriber may have waiting before it

@@ -5,6 +5,8 @@ import (
 	"strconv"
 	"testing"
 	"time"
+
+	"operators-mcp/internal/domain"
 )
 
 func TestHub_PublishFanOutAndReplay(t *testing.T) {
@@ -132,6 +134,31 @@ func TestHub_EndReleasesTheSession(t *testing.T) {
 		t.Fatal("ending s1 forgot s2")
 	}
 	cancel() // cancelling after the end is harmless
+}
+
+// An event published after a session ended (an announcement arriving late)
+// reaches no late joiner's replay: the hub does not hold the ended session
+// again. A session that starts again, saying so with a live status, gets its
+// replay back.
+func TestHub_ALatePublishAfterEndHoldsNothingUntilTheSessionStartsAgain(t *testing.T) {
+	h := NewHub(8)
+	h.Publish("s1", SessionEvent{Seq: 1, Type: "output"})
+	h.End("s1")
+
+	h.Publish("s1", SessionEvent{Seq: 2, Type: "artifact"})
+	_, replay, cancel := h.Subscribe("s1")
+	cancel()
+	if len(replay) != 0 {
+		t.Fatalf("replay after a late publish = %+v, want none", replay)
+	}
+
+	h.Publish("s1", SessionEvent{Seq: 3, Type: "status", Status: domain.SessionRunning})
+	h.Publish("s1", SessionEvent{Seq: 4, Type: "output"})
+	_, replay, cancel = h.Subscribe("s1")
+	cancel()
+	if len(replay) != 2 || replay[0].Seq != 3 || replay[1].Seq != 4 {
+		t.Fatalf("replay of the resumed session = %+v, want seqs 3 and 4", replay)
+	}
 }
 
 func TestHub_CancelRemovesSubscriber(t *testing.T) {
