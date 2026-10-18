@@ -401,7 +401,7 @@ func (h *Handler) sessionBacklog(id string, replay []ports.SessionEvent, fromSeq
 		if err != nil {
 			slog.Warn("session backlog from the log", "session", id, "from_seq", fromSeq, "err", err)
 		} else {
-			var last int64
+			last := fromSeq
 			if len(stored) > 0 {
 				last = stored[len(stored)-1].Seq
 			}

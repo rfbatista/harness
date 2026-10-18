@@ -250,3 +250,48 @@ func TestFollowSession_ResumesFromTheLogWithoutDuplicates(t *testing.T) {
 		t.Fatalf("events = %v, want a6,b7,output_delta0,c8", got)
 	}
 }
+
+// laggingLogOrch answers a follow whose replay does not reach back to the
+// resume point while the log has nothing after it yet, and whose replay holds
+// two events in the order they were published, which concurrent recordings
+// may swap.
+type laggingLogOrch struct {
+	ports.Orchestration
+	live chan ports.SessionEvent
+}
+
+func (o *laggingLogOrch) Subscribe(string) (<-chan ports.SessionEvent, []ports.SessionEvent, func()) {
+	return o.live, []ports.SessionEvent{{Seq: 7, Type: "b"}, {Seq: 5, Type: "a"}}, func() {}
+}
+
+func (o *laggingLogOrch) History(string, int64) ([]ports.SessionEvent, error) {
+	return nil, nil
+}
+
+// A follower resuming after seq 5 never gets seq 5 or an earlier one again,
+// whatever the replay holds, when the log has nothing to add.
+func TestFollowSession_NeverResendsWhatTheFollowerHad(t *testing.T) {
+	orch := &laggingLogOrch{live: make(chan ports.SessionEvent, 4)}
+	orch.live <- ports.SessionEvent{Seq: 8, Type: "c"}
+	h := &Handler{orchSvc: orch}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	out, err := h.followSession(ctx, "s1", 5)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for len(got) < 2 {
+		select {
+		case v := <-out:
+			ev := v.(ports.SessionEvent)
+			got = append(got, ev.Type+strconv.FormatInt(ev.Seq, 10))
+		case <-time.After(5 * time.Second):
+			t.Fatalf("got %v, then nothing", got)
+		}
+	}
+	if strings.Join(got, ",") != "b7,c8" {
+		t.Fatalf("events = %v, want b7,c8", got)
+	}
+}
