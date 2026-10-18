@@ -230,6 +230,21 @@ func (r *SessionRepository) UpdateRunner(id string, runsOn domain.Runner, host s
 	return nil
 }
 
+func (r *SessionRepository) UpdateTokenSavers(id string, active, notInstalled []domain.TokenSaver) error {
+	res := r.db.Model(&SessionModel{}).Where("id = ?", id).Updates(map[string]any{
+		"token_savers":               joinSavers(active),
+		"token_savers_not_installed": joinSavers(notInstalled),
+		"updated_at":                 time.Now().UnixMilli(),
+	})
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		return &domain.StructuredError{Code: "SESSION_NOT_FOUND", Message: "session not found"}
+	}
+	return nil
+}
+
 func (r *SessionRepository) ListEvents(sessionID string, fromSeq int64) ([]ports.StoredEvent, error) {
 	var models []SessionEventModel
 	q := r.db.Where("session_id = ? AND seq > ?", sessionID, fromSeq).Order("seq ASC")

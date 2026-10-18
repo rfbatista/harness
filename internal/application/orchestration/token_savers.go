@@ -95,7 +95,8 @@ func (s *Service) withTokenSavers(in prepareInput, checkout, worktree string, cf
 }
 
 // rewireTokenSavers wires a resumed session's stored active savers into
-// cfg again, without resolving. One removed since it started is left out.
+// cfg again, without resolving. One removed since it started is left out
+// and recorded as not installed: the resume goes on without it.
 func (s *Service) rewireTokenSavers(sess *domain.Session, cfg *llmkit.SessionConfig) {
 	if s.TokenSavers == nil || len(sess.TokenSavers) == 0 {
 		return
@@ -105,13 +106,23 @@ func (s *Service) rewireTokenSavers(sess *domain.Session, cfg *llmkit.SessionCon
 		slog.Warn("token saver installations not read; the session resumes without them", "session", sess.ID, "err", err)
 		return
 	}
+	var active, gone []domain.TokenSaver
 	for _, saver := range sess.TokenSavers {
 		inst, ok := installed[saver]
 		if !ok {
 			slog.Warn("token saver no longer installed; the session resumes without it", "session", sess.ID, "saver", saver)
+			gone = append(gone, saver)
 			continue
 		}
+		active = append(active, saver)
 		s.wireSaver(saver, saverSession{cfg: cfg, installation: inst, worktree: sess.WorkingDir, resumed: true})
+	}
+	if len(gone) == 0 {
+		return
+	}
+	notInstalled := append(slices.Clone(sess.TokenSaversNotInstalled), gone...)
+	if err := s.sessions.UpdateTokenSavers(sess.ID, active, notInstalled); err != nil {
+		slog.Warn("token savers not recorded for the resumed session", "session", sess.ID, "err", err)
 	}
 }
 

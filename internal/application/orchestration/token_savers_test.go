@@ -67,6 +67,18 @@ func (w *saverWorld) install(t *testing.T, saver domain.TokenSaver, name string)
 	return path
 }
 
+// uninstall removes an installed saver's files and its installation, as
+// Remove on the Token savers page does.
+func (w *saverWorld) uninstall(t *testing.T, saver domain.TokenSaver) {
+	t.Helper()
+	if err := os.RemoveAll(filepath.Join(w.tools, string(saver))); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.installations.Delete(saver); err != nil {
+		t.Fatal(err)
+	}
+}
+
 // installRuleset puts a stub caveman SKILL.md where caveman installs and
 // records its installation.
 func (w *saverWorld) installRuleset(t *testing.T, text string) {
@@ -268,6 +280,47 @@ func TestAnInteractiveSessionKeepsTheSaversItStartedWithWhenResumed(t *testing.T
 	if !slices.Equal(resumed.TokenSavers, []domain.TokenSaver{domain.TokenSaverRTK}) {
 		t.Errorf("resumed session records %v active, want [rtk]", resumed.TokenSavers)
 	}
+}
+
+// A saver of the stored set removed after the session started is left out
+// of its resume, which still succeeds, and the session records it as not
+// installed, like one that was never installed.
+func TestAResumedSessionRunsWithoutAStoredSaverRemovedSinceItStarted(t *testing.T) {
+	svc, _ := newInteractiveService(t)
+	svc.SessionShellURL = func(id string) string { return testShellBase + id + "/shell" }
+	w := withShells(t, svc)
+	savers := withTokenSavers(t, svc)
+	rtk := savers.install(t, domain.TokenSaverRTK, "rtk-oss")
+	savers.set(t, domain.ActivationLevelProject, "p1", domain.TokenSaverRTK, domain.ActivationOn)
+	ctx := context.Background()
+
+	sess, launch := startInteractive(t, svc, InteractiveRequest{ProjectID: "p1", RepositoryID: "r1", TicketID: w.task.ID})
+	checkRTKWired(t, settingsOf(t, launch.Args), specEnv(launch.Spec), rtk)
+	if _, err := svc.EndInteractive(ctx, sess.ID, 0, false); err != nil {
+		t.Fatal(err)
+	}
+	savers.uninstall(t, domain.TokenSaverRTK)
+
+	resumed, spec, err := svc.ResumeInteractive(ctx, ports.ResumeRequest{SessionID: sess.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _, _ = svc.EndInteractive(ctx, sess.ID, 0, false) })
+	checkNoSavers(t, settingsOf(t, launchOf(t, spec).Args), specEnv(spec))
+	for _, got := range []*domain.Session{resumed, mustGet(t, svc, sess.ID)} {
+		if len(got.TokenSavers) != 0 || !slices.Equal(got.TokenSaversNotInstalled, []domain.TokenSaver{domain.TokenSaverRTK}) {
+			t.Errorf("session records %v active, %v not installed; want none, [rtk]", got.TokenSavers, got.TokenSaversNotInstalled)
+		}
+	}
+}
+
+func mustGet(t *testing.T, svc *Service, id string) *domain.Session {
+	t.Helper()
+	sess, err := svc.Get(context.Background(), id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return sess
 }
 
 // With no saver on, a session gets exactly the config it gets from a
