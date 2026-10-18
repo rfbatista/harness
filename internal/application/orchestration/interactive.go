@@ -98,6 +98,7 @@ func (s *Service) StartInteractive(ctx context.Context, req InteractiveRequest) 
 
 		TokenSavers:             p.savers.active,
 		TokenSaversNotInstalled: p.savers.notInstalled,
+		CavemanIntensity:        p.savers.cavemanIntensity,
 	})
 	if err == nil {
 		s.adoptCleanup(id, p.cleanup)

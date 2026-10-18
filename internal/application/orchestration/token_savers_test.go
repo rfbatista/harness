@@ -468,3 +468,27 @@ func TestAnInteractiveSessionGetsCavemansRulesetAtTheConfiguredIntensity(t *test
 		})
 	}
 }
+
+// The intensity is fixed when the session starts, with its savers: a
+// resume after the setting changed keeps the one it started with.
+func TestAResumedSessionKeepsTheCavemanIntensityItStartedWith(t *testing.T) {
+	svc, _ := newInteractiveService(t)
+	savers := withTokenSavers(t, svc)
+	savers.installRuleset(t, stubRuleset)
+	savers.set(t, domain.ActivationLevelProject, "p1", domain.TokenSaverCaveman, domain.ActivationOn)
+	savers.setIntensity(t, domain.CavemanLite)
+	ctx := context.Background()
+
+	sess, launch := startInteractive(t, svc, InteractiveRequest{})
+	checkCavemanWired(t, launch.Spec.AppendSystem, domain.CavemanLite)
+	savers.setIntensity(t, domain.CavemanUltra)
+	if _, err := svc.EndInteractive(ctx, sess.ID, 0, false); err != nil {
+		t.Fatal(err)
+	}
+	_, spec, err := svc.ResumeInteractive(ctx, ports.ResumeRequest{SessionID: sess.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _, _ = svc.EndInteractive(ctx, sess.ID, 0, false) })
+	checkCavemanWired(t, spec.AppendSystem, domain.CavemanLite)
+}

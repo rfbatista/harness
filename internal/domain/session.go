@@ -87,6 +87,9 @@ type Session struct {
 	// a resume runs with the same set.
 	TokenSavers             []TokenSaver `json:"token_savers,omitempty"`
 	TokenSaversNotInstalled []TokenSaver `json:"token_savers_not_installed,omitempty"`
+	// CavemanIntensity is the intensity caveman was wired at when it is
+	// active, fixed at start with the savers.
+	CavemanIntensity CavemanIntensity `json:"caveman_intensity,omitempty"`
 	// Resumable says a resume call would be accepted now; ResumeBlocked is the
 	// error code it would answer otherwise. Derived on read, never stored.
 	Resumable     bool      `json:"resumable"`

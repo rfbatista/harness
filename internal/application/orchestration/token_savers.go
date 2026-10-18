@@ -27,6 +27,9 @@ type sessionSavers struct {
 	// notInstalled resolved on but are not installed: the session runs
 	// without them and says so.
 	notInstalled []domain.TokenSaver
+	// cavemanIntensity is what caveman was wired at; "" when it is not
+	// active.
+	cavemanIntensity domain.CavemanIntensity
 }
 
 // saverSession is what wiring one active saver into a session sees.
@@ -41,6 +44,8 @@ type saverSession struct {
 	// resumed is a resume: the worktree already holds whatever a start put
 	// in it.
 	resumed bool
+	// cavemanIntensity is the session's, read once at start and stored.
+	cavemanIntensity domain.CavemanIntensity
 }
 
 // saverWiring adds one active saver to a session's config. A saver with no
@@ -81,14 +86,18 @@ func (s *Service) withTokenSavers(in prepareInput, checkout, worktree string, cf
 		return sessionSavers{}
 	}
 	var out sessionSavers
+	intensity := s.TokenSavers.CavemanIntensity(ctx)
 	for _, saver := range on {
 		inst, ok := installed[saver]
 		if !ok {
 			out.notInstalled = append(out.notInstalled, saver)
 			continue
 		}
-		if s.wireSaver(saver, saverSession{cfg: cfg, installation: inst, worktree: worktree, checkout: checkout}) {
+		if s.wireSaver(saver, saverSession{cfg: cfg, installation: inst, worktree: worktree, checkout: checkout, cavemanIntensity: intensity}) {
 			out.active = append(out.active, saver)
+			if saver == domain.TokenSaverCaveman {
+				out.cavemanIntensity = intensity
+			}
 		}
 	}
 	return out
@@ -106,6 +115,11 @@ func (s *Service) rewireTokenSavers(sess *domain.Session, cfg *llmkit.SessionCon
 		slog.Warn("token saver installations not read; the session resumes without them", "session", sess.ID, "err", err)
 		return
 	}
+	// A session stored before intensities were kept resumes at today's.
+	intensity := sess.CavemanIntensity
+	if intensity == "" {
+		intensity = s.TokenSavers.CavemanIntensity(context.TODO())
+	}
 	var active, gone []domain.TokenSaver
 	for _, saver := range sess.TokenSavers {
 		inst, ok := installed[saver]
@@ -115,7 +129,7 @@ func (s *Service) rewireTokenSavers(sess *domain.Session, cfg *llmkit.SessionCon
 			continue
 		}
 		active = append(active, saver)
-		s.wireSaver(saver, saverSession{cfg: cfg, installation: inst, worktree: sess.WorkingDir, resumed: true})
+		s.wireSaver(saver, saverSession{cfg: cfg, installation: inst, worktree: sess.WorkingDir, resumed: true, cavemanIntensity: intensity})
 	}
 	if len(gone) == 0 {
 		return
@@ -170,7 +184,7 @@ func (s *Service) wireRTK(w saverSession) error {
 var errNotClaude = errors.New("the session does not run claude")
 
 // wireCaveman appends caveman's ruleset to the system prompt at the
-// configured intensity, then the harness's instruction keeping person-facing
+// session's intensity, then the harness's instruction keeping person-facing
 // text in normal prose (ADR 0013). The ruleset is caveman's "full"; lite and
 // ultra add a line of the harness's own after it.
 func (s *Service) wireCaveman(w saverSession) error {
@@ -183,7 +197,7 @@ func (s *Service) wireCaveman(w saverSession) error {
 		return errors.New("caveman's ruleset is empty")
 	}
 	system := appendSection(w.cfg.AppendSystem, rules)
-	switch s.TokenSavers.CavemanIntensity(context.TODO()) {
+	switch w.cavemanIntensity {
 	case domain.CavemanLite:
 		system = appendSection(system, cavemanLiteLine)
 	case domain.CavemanUltra:

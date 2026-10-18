@@ -40,6 +40,7 @@ type SessionModel struct {
 	// TokenSavers and TokenSaversNotInstalled are comma-separated saver names.
 	TokenSavers             string `gorm:"column:token_savers"`
 	TokenSaversNotInstalled string `gorm:"column:token_savers_not_installed"`
+	CavemanIntensity        string `gorm:"column:caveman_intensity"`
 }
 
 func (SessionModel) TableName() string { return "sessions" }
@@ -77,6 +78,7 @@ func (m *SessionModel) ToDomain() *domain.Session {
 		Mode:                     domain.SessionMode(m.Mode),
 		TokenSavers:              splitSavers(m.TokenSavers),
 		TokenSaversNotInstalled:  splitSavers(m.TokenSaversNotInstalled),
+		CavemanIntensity:         domain.CavemanIntensity(m.CavemanIntensity),
 		CreatedAt:                time.UnixMilli(m.CreatedAt),
 		UpdatedAt:                time.UnixMilli(m.UpdatedAt),
 	}

@@ -51,6 +51,7 @@ func (r *SessionRepository) Create(s *domain.Session) (*domain.Session, error) {
 
 		TokenSavers:             joinSavers(s.TokenSavers),
 		TokenSaversNotInstalled: joinSavers(s.TokenSaversNotInstalled),
+		CavemanIntensity:        string(s.CavemanIntensity),
 	}
 	if err := r.db.Create(m).Error; err != nil {
 		return nil, err
