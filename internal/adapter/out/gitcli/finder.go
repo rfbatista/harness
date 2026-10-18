@@ -1,7 +1,6 @@
 package gitcli
 
 import (
-	"bytes"
 	"context"
 	"io/fs"
 	"os"
@@ -15,11 +14,13 @@ import (
 var _ ports.RepositoryFinder = (*RepositoryFinder)(nil)
 
 // RepositoryFinder walks a directory for git checkouts and reads their
-// origin remote with git.
-type RepositoryFinder struct{}
+// origin remote with git, each run bounded by the read deadline.
+type RepositoryFinder struct{ d Deadlines }
 
 // NewRepositoryFinder returns the finder.
-func NewRepositoryFinder() *RepositoryFinder { return &RepositoryFinder{} }
+func NewRepositoryFinder(opts ...Option) *RepositoryFinder {
+	return &RepositoryFinder{d: newDeadlines(opts)}
+}
 
 // skipDirs are never searched: they are not where checkouts live, and some
 // are huge.
@@ -53,7 +54,7 @@ func (f *RepositoryFinder) FindRepositories(root string, depth int) ([]ports.Fou
 			}
 		}
 		if isCheckout(path) {
-			found = append(found, ports.FoundRepository{Path: path, Name: filepath.Base(path), Remote: originURL(path)})
+			found = append(found, ports.FoundRepository{Path: path, Name: filepath.Base(path), Remote: f.d.originURL(path)})
 			return fs.SkipDir
 		}
 		if level >= depth {
@@ -73,11 +74,12 @@ func isCheckout(dir string) bool {
 	return err == nil
 }
 
-// originURL is the checkout's origin remote, or "" when it has none.
-func originURL(dir string) string {
-	out, err := gitCmd(context.Background(), "", "-C", dir, "config", "--get", "remote.origin.url").Output()
+// originURL is the checkout's origin remote, or "" when it has none or git
+// gives no answer in time.
+func (d Deadlines) originURL(dir string) string {
+	out, err := d.gitOutput(context.Background(), dir, "config", "--get", "remote.origin.url")
 	if err != nil {
 		return ""
 	}
-	return string(bytes.TrimSpace(out))
+	return strings.TrimSpace(out)
 }

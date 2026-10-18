@@ -51,14 +51,14 @@ func useTokenSavers(lc fx.Lifecycle, cfg Config, db *gorm.DB, cat catalog.Catalo
 // newRepositoryIndexes builds repository indexes as codegraph's activations,
 // installs and sessions ending call for them; stopping the server kills the
 // builds that run.
-func newRepositoryIndexes(lc fx.Lifecycle, cat catalog.Catalog, orch *orchestration.Service) *workspaces.RepositoryIndexes {
+func newRepositoryIndexes(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, orch *orchestration.Service) *workspaces.RepositoryIndexes {
 	x := workspaces.NewRepositoryIndexes(workspaces.RepositoryIndexDeps{
 		Projects:      cat.Projects,
 		Sessions:      orch,
 		Installations: cat.Capabilities,
 		Activations:   cat.Capabilities,
 		Indexer:       codegraph.NewIndexer(),
-		Excludes:      gitcli.NewExcludes(),
+		Excludes:      gitcli.NewExcludes(cfg.gitDeadlines()...),
 	})
 	x.Subscribe(cat.Bus)
 	orch.IndexBuilds = x

@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"operators-mcp/internal/adapter/out/gitcli"
 	"operators-mcp/internal/adapter/out/persistence/sqlite"
 	"operators-mcp/internal/app"
 )
@@ -27,6 +28,8 @@ func Parse(fs *flag.FlagSet, args []string, getenv Getenv) (app.Config, error) {
 	mcpAddr := fs.String("mcp.addr", envOr(getenv, "MCP_ADDR", ":8081"), "MCP server listen address (IDE connects here)")
 	dbPath := fs.String("db", envOr(getenv, "DB_PATH", "data.db"), "SQLite database path (e.g. data.db or :memory:)")
 	dbSlowThreshold := fs.Duration("db.slow-threshold", envDuration(getenv, "DB_SLOW_THRESHOLD", sqlite.DefaultSlowThreshold), "log every database call slower than this as a slow database call")
+	gitWorktreeDeadline := fs.Duration("git.worktree-deadline", envDuration(getenv, "CODING_POOL_GIT_WORKTREE_DEADLINE", gitcli.DefaultWorktreeDeadline), "how long one git worktree add, remove or prune may run before it is killed and its operation fails")
+	gitReadDeadline := fs.Duration("git.read-deadline", envDuration(getenv, "CODING_POOL_GIT_READ_DEADLINE", gitcli.DefaultReadDeadline), "how long one read-only git run may take before it is killed and its operation fails")
 	devMode := fs.Bool("dev", envBool(getenv, "DEV_MODE", false), "proxy ui://designer to the Vite dev server (run 'make web-dev' separately)")
 	claudeBin := fs.String("claude.bin", envOr(getenv, "CLAUDE_BIN", "claude"), "path to the claude CLI binary")
 	apiToken := fs.String("api.token", envOr(getenv, "CODING_POOL_TOKEN", ""), "bearer token required on /api (but /api/health); empty leaves the API open")
@@ -47,19 +50,21 @@ func Parse(fs *flag.FlagSet, args []string, getenv Getenv) (app.Config, error) {
 	}
 
 	return app.Config{
-		HTTPAddr:          *httpAddr,
-		MCPAddr:           *mcpAddr,
-		DBPath:            *dbPath,
-		DBSlowThreshold:   *dbSlowThreshold,
-		DevMode:           *devMode,
-		Root:              root,
-		ClaudeBin:         *claudeBin,
-		SessionShell:      *sessionShell,
-		APIToken:          *apiToken,
-		ClaudeLogStdout:   *claudeLogStdout,
-		ClaudeTextModel:   *claudeTextModel,
-		ApprovalTimeout:   *approvalTimeout,
-		DotfilesAgentsDir: *dotfilesAgentsDir,
+		HTTPAddr:            *httpAddr,
+		MCPAddr:             *mcpAddr,
+		DBPath:              *dbPath,
+		DBSlowThreshold:     *dbSlowThreshold,
+		GitWorktreeDeadline: *gitWorktreeDeadline,
+		GitReadDeadline:     *gitReadDeadline,
+		DevMode:             *devMode,
+		Root:                root,
+		ClaudeBin:           *claudeBin,
+		SessionShell:        *sessionShell,
+		APIToken:            *apiToken,
+		ClaudeLogStdout:     *claudeLogStdout,
+		ClaudeTextModel:     *claudeTextModel,
+		ApprovalTimeout:     *approvalTimeout,
+		DotfilesAgentsDir:   *dotfilesAgentsDir,
 
 		TokenSaverReleaseBase: *tokenSaverReleaseBase,
 	}, nil

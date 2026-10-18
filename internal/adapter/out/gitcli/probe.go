@@ -74,6 +74,7 @@ func (p *Probe) lsRemote(ctx context.Context, c ports.GitCredentialSecret, remot
 	defer release()
 	cmd := exec.CommandContext(ctx, "git", "ls-remote", "--heads", "--", shown)
 	cmd.Env = append(os.Environ(), env...)
+	cmd.WaitDelay = waitDelay
 	var out bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &out
 	if err := cmd.Run(); err != nil {
@@ -103,6 +104,7 @@ func (p *Probe) sshHost(ctx context.Context, c ports.GitCredentialSecret) (*port
 	// GIT_SSH_COMMAND is the exact ssh git would run; eval keeps its quoting.
 	cmd := exec.CommandContext(ctx, "/bin/sh", append([]string{"-c", `eval "$GIT_SSH_COMMAND \"\$@\""`, "sh"}, args...)...)
 	cmd.Env = append(os.Environ(), env...)
+	cmd.WaitDelay = waitDelay
 	cmd.Stdin = strings.NewReader("")
 	var out bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &out

@@ -36,9 +36,9 @@ func diffSides(base, head string) []string {
 // Changes lists the files changed from base to head with their line counts,
 // in one git diff: its raw records (":<modes> <oids> <status>\0path\0",
 // a second path for a rename or copy), then its numstat ones.
-func (Code) Changes(ctx context.Context, dir, base, head string) ([]ports.GitChange, error) {
+func (c Code) Changes(ctx context.Context, dir, base, head string) ([]ports.GitChange, error) {
 	args := append([]string{"diff", "--raw", "--numstat", "-z", "--no-color", "--no-ext-diff", "--no-textconv", "-M", "-C"}, diffSides(base, head)...)
-	out, err := codeOutput(ctx, dir, append(args, "--")...)
+	out, err := c.d.codeOutput(ctx, dir, append(args, "--")...)
 	if err != nil {
 		return nil, err
 	}
@@ -88,12 +88,12 @@ const patchBatch = 500
 
 // Patch reads the hunks of paths from base to head, keyed by each file's
 // (new) path. A rename's old path must be among paths for git to pair it.
-func (Code) Patch(ctx context.Context, dir, base, head string, paths []string, maxLines int, maxBytes int64) (map[string]*domain.FileDiff, error) {
+func (c Code) Patch(ctx context.Context, dir, base, head string, paths []string, maxLines int, maxBytes int64) (map[string]*domain.FileDiff, error) {
 	out := map[string]*domain.FileDiff{}
 	for start := 0; start < len(paths); start += patchBatch {
 		batch := paths[start:min(start+patchBatch, len(paths))]
 		args := append(append(append([]string{"diff", "-p"}, diffFlags...), diffSides(base, head)...), "--")
-		if err := streamPatch(ctx, dir, append(args, batch...), maxLines, maxBytes, out); err != nil {
+		if err := c.d.streamPatch(ctx, dir, append(args, batch...), maxLines, maxBytes, out); err != nil {
 			return nil, err
 		}
 	}
@@ -103,8 +103,8 @@ func (Code) Patch(ctx context.Context, dir, base, head string, paths []string, m
 // errPatchDone stops reading once the only file asked for is past a limit.
 var errPatchDone = errors.New("patch read far enough")
 
-func streamPatch(ctx context.Context, dir string, args []string, maxLines int, maxBytes int64, out map[string]*domain.FileDiff) error {
-	ctx, cancel := context.WithCancel(ctx)
+func (d Deadlines) streamPatch(ctx context.Context, dir string, args []string, maxLines int, maxBytes int64, out map[string]*domain.FileDiff) error {
+	ctx, cancel := context.WithTimeout(ctx, d.read())
 	defer cancel()
 	cmd := codeCmd(ctx, dir, args...)
 	stdout, err := cmd.StdoutPipe()
@@ -123,6 +123,9 @@ func streamPatch(ctx context.Context, dir string, args []string, maxLines int, m
 		_, _ = io.Copy(io.Discard, stdout)
 	}
 	waitErr := cmd.Wait()
+	if err := cut(ctx, "diff", waitErr); timedOut(err) && parseErr != errPatchDone {
+		return err
+	}
 	switch {
 	case parseErr == errPatchDone:
 		return nil

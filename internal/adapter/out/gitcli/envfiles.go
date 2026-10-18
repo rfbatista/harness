@@ -53,26 +53,34 @@ func (EnvFiles) Write(root string, files []*domain.EnvFile) error {
 
 var _ ports.GitExcludes = Excludes{}
 
-// Excludes is ports.GitExcludes over Exclude.
-type Excludes struct{}
+// Excludes is ports.GitExcludes over Exclude, its git runs bounded by the
+// read deadline.
+type Excludes struct{ d Deadlines }
 
 // NewExcludes returns the adapter.
-func NewExcludes() Excludes { return Excludes{} }
+func NewExcludes(opts ...Option) Excludes { return Excludes{d: newDeadlines(opts)} }
 
-func (Excludes) Exclude(root, rel, what string) error { return Exclude(root, rel, what) }
+func (x Excludes) Exclude(root, rel, what string) error { return x.d.exclude(root, rel, what) }
 
 // Exclude adds rel (anchored at the top of the repository) to the
 // repository's info/exclude, under a comment saying what it is, unless git
-// already ignores it. A directory's rel ends in "/".
-func Exclude(root, rel, what string) error {
-	if gitCmd(context.Background(), "", "-C", root, "check-ignore", "-q", "--", rel).Run() == nil {
-		return nil // already ignored
-	}
-	out, err := gitCmd(context.Background(), "", "-C", root, "rev-parse", "--path-format=absolute", "--git-common-dir").Output()
+// already ignores it. A directory's rel ends in "/". Its git runs are bounded
+// by DefaultReadDeadline.
+func Exclude(root, rel, what string) error { return Deadlines{}.exclude(root, rel, what) }
+
+func (d Deadlines) exclude(root, rel, what string) error {
+	ignored, err := d.gitOK(context.Background(), root, "check-ignore", "-q", "--", rel)
 	if err != nil {
 		return err
 	}
-	exclude := filepath.Join(string(bytes.TrimSpace(out)), "info", "exclude")
+	if ignored {
+		return nil
+	}
+	out, err := d.gitOutput(context.Background(), root, "rev-parse", "--path-format=absolute", "--git-common-dir")
+	if err != nil {
+		return err
+	}
+	exclude := filepath.Join(strings.TrimSpace(out), "info", "exclude")
 	line := "/" + strings.TrimPrefix(rel, "/")
 	current, err := os.ReadFile(exclude)
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {

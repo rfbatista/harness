@@ -80,6 +80,24 @@ func asPort(ctor any, iface any) any {
 	return fx.Annotate(ctor, fx.As(iface))
 }
 
+// gitDeadlines are the git adapters' options for c's deadlines.
+func (c Config) gitDeadlines() []gitcli.Option {
+	return []gitcli.Option{gitcli.WithWorktreeDeadline(c.GitWorktreeDeadline), gitcli.WithReadDeadline(c.GitReadDeadline)}
+}
+
+// The git adapters bound each git run by cfg's deadlines (see gitcli.Deadlines).
+func newRepositoryFinder(cfg Config) *gitcli.RepositoryFinder {
+	return gitcli.NewRepositoryFinder(cfg.gitDeadlines()...)
+}
+func newWorktreeManager(cfg Config) *gitcli.WorktreeManager {
+	return gitcli.NewWorktreeManager(cfg.gitDeadlines()...)
+}
+func newGitHistory(cfg Config) *gitcli.History { return gitcli.NewHistory(cfg.gitDeadlines()...) }
+func newBranchPublisher(cfg Config) *gitcli.BranchPublisher {
+	return gitcli.NewBranchPublisher(cfg.gitDeadlines()...)
+}
+func newGitCode(cfg Config) *gitcli.Code { return gitcli.NewCode(cfg.gitDeadlines()...) }
+
 // newDB opens the SQLite database and registers a hook to close it on shutdown.
 func newDB(lc fx.Lifecycle, cfg Config) (*gorm.DB, error) {
 	db, err := sqlite.Open(cfg.DBPath, sqlite.WithSlowThreshold(cfg.DBSlowThreshold))
@@ -138,7 +156,7 @@ var CatalogModule = fx.Module("catalog",
 		asPort(filesystem.NewMatcher, new(ports.PathMatcher)),
 		asPort(filesystem.NewLister, new(ports.TreeLister)),
 		asPort(skillfs.NewPublisher, new(ports.SkillPublisher)),
-		asPort(gitcli.NewRepositoryFinder, new(ports.RepositoryFinder)),
+		asPort(newRepositoryFinder, new(ports.RepositoryFinder)),
 		asPort(gitcli.NewEnvFiles, new(ports.EnvFileIO)),
 		newCatalog,
 	),
@@ -585,11 +603,11 @@ func registerRuntimeShutdown(lc fx.Lifecycle, m llmkit.Manager) {
 // service (isolated worktrees of a repository, tracked in the database).
 var WorkspacesModule = fx.Module("workspaces",
 	fx.Provide(
-		asPort(gitcli.NewWorktreeManager, new(ports.WorktreeManager)),
-		asPort(gitcli.NewHistory, new(ports.GitHistory)),
-		asPort(gitcli.NewBranchPublisher, new(ports.BranchPublisher)),
+		asPort(newWorktreeManager, new(ports.WorktreeManager)),
+		asPort(newGitHistory, new(ports.GitHistory)),
+		asPort(newBranchPublisher, new(ports.BranchPublisher)),
 		asPort(githubapi.New, new(ports.CodeHost)),
-		asPort(gitcli.NewCode, new(ports.GitCode)),
+		asPort(newGitCode, new(ports.GitCode)),
 		asPort(filesystem.NewWorktreeFiles, new(ports.WorktreeFiles)),
 		newWorkspacesService,
 		newPullRequestsService,
