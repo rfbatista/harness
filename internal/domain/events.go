@@ -102,6 +102,22 @@ type TicketResourceAdded struct{ Resource TicketResource }
 // TicketCommentAdded: a person commented on a task.
 type TicketCommentAdded struct{ Comment TicketComment }
 
+// TokenSaverActivationChanged: one token saver's activation was set for an
+// owner (Value inherit: its setting was removed). It is published after the
+// change is stored.
+type TokenSaverActivationChanged struct {
+	Saver     TokenSaver
+	Owner     ActivationOwner
+	ProjectID string
+	Value     ActivationValue
+}
+
+// TokenSaverInstallCompleted: a token saver was installed, or updated, at Version.
+type TokenSaverInstallCompleted struct {
+	Saver   TokenSaver
+	Version string
+}
+
 // DocumentChange is what happened to a document.
 type DocumentChange string
 
@@ -151,3 +167,6 @@ func (SessionStatusChanged) EventName() string { return "session.status_changed"
 func (TicketCommentAdded) EventName() string   { return "ticket.comment_added" }
 func (DocumentChanged) EventName() string      { return "document.changed" }
 func (ArtifactChanged) EventName() string      { return "artifact.changed" }
+
+func (TokenSaverActivationChanged) EventName() string { return "token_saver.activation_changed" }
+func (TokenSaverInstallCompleted) EventName() string  { return "token_saver.install_completed" }

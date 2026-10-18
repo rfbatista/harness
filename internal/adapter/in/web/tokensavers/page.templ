@@ -54,6 +54,9 @@ templ Page(frame shell.Frame, v View) {
 							</template>
 						</ul>
 					</section>
+					if v.Indexes != nil {
+						@indexesSection(*v.Indexes)
+					}
 				</div>
 			</div>
 		</main>

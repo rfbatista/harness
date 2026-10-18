@@ -20,6 +20,8 @@ import { credentialsGateway } from "./modules/credentials/infrastructure/credent
 import { registerCredentials } from "./modules/credentials/presentation/register.js";
 import { tokenSaverInstallsGateway } from "./modules/tokensavers/infrastructure/installations-gateway.js";
 import { registerTokenSaverInstalls } from "./modules/tokensavers/presentation/register-installations.js";
+import { repositoryIndexesGateway } from "./modules/tokensavers/infrastructure/repository-indexes-gateway.js";
+import { registerRepositoryIndexes } from "./modules/tokensavers/presentation/register-repository-indexes.js";
 import { hljsHighlighter } from "./modules/code/infrastructure/hljs-highlighter.js";
 import { registerCode } from "./modules/code/presentation/register.js";
 import { runsGateway } from "./modules/runs/infrastructure/runs-gateway.js";
@@ -87,6 +89,7 @@ registerCode(Alpine, { gateway: codeGateway(api, events), highlighter: hljsHighl
 registerNotifications(Alpine, { gateway: notificationsGateway(api, events), alerts: desktopAlerts(), prefs, clock: systemClock, navigate });
 registerCredentials(Alpine, { gateway: credentialsGateway(api, events), clock: systemClock });
 registerTokenSaverInstalls(Alpine, { gateway: tokenSaverInstallsGateway(api) });
+registerRepositoryIndexes(Alpine, { gateway: repositoryIndexesGateway(api), clock: systemClock });
 registerUsage(Alpine, { gateway: usageGateway(api, events) });
 registerTokenSavers(Alpine, { gateway: tokenSaversGateway(api) });
 

@@ -97,7 +97,17 @@ func Page(frame shell.Frame, v View) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 6, "</template></ul></section></div></div></main>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 6, "</template></ul></section>")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			if v.Indexes != nil {
+				templ_7745c5c3_Err = indexesSection(*v.Indexes).Render(ctx, templ_7745c5c3_Buffer)
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 7, "</div></div></main>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -132,46 +142,46 @@ func ssrRow(r Row) templ.Component {
 			templ_7745c5c3_Var4 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 7, "<li class=\"[ row ] [ token-saver ]\" style=\"--row-columns: minmax(0, 1fr) auto\" data-saver=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 8, "<li class=\"[ row ] [ token-saver ]\" style=\"--row-columns: minmax(0, 1fr) auto\" data-saver=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var5 string
 		templ_7745c5c3_Var5, templ_7745c5c3_Err = templ.ResolveAttributeValue(r.Saver)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `tokensavers/page.templ`, Line: 64, Col: 100}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `tokensavers/page.templ`, Line: 67, Col: 100}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var5)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 8, "\" data-state=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 9, "\" data-state=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var6 string
 		templ_7745c5c3_Var6, templ_7745c5c3_Err = templ.ResolveAttributeValue(string(r.State))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `tokensavers/page.templ`, Line: 64, Col: 131}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `tokensavers/page.templ`, Line: 67, Col: 131}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var6)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 9, "\"><span class=\"[ flow ] [ flow-space-3xs pad-block-xs ]\" style=\"min-inline-size: 0\"><span class=\"[ cluster ] [ gutter-xs ]\"><span class=\"[ title ] [ weight-medium font-mono ]\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 10, "\"><span class=\"[ flow ] [ flow-space-3xs pad-block-xs ]\" style=\"min-inline-size: 0\"><span class=\"[ cluster ] [ gutter-xs ]\"><span class=\"[ title ] [ weight-medium font-mono ]\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var7 string
 		templ_7745c5c3_Var7, templ_7745c5c3_Err = templ.JoinStringErrs(r.Saver)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `tokensavers/page.templ`, Line: 67, Col: 65}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `tokensavers/page.templ`, Line: 70, Col: 65}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var7))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 10, "</span>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 11, "</span>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -179,33 +189,33 @@ func ssrRow(r Row) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 11, "</span> <span class=\"[ text-sm color-ink-muted ]\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 12, "</span> <span class=\"[ text-sm color-ink-muted ]\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var8 string
 		templ_7745c5c3_Var8, templ_7745c5c3_Err = templ.JoinStringErrs(r.Summary)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `tokensavers/page.templ`, Line: 70, Col: 56}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `tokensavers/page.templ`, Line: 73, Col: 56}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var8))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 12, "</span> <span class=\"[ font-mono text-xs color-ink-faint ]\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 13, "</span> <span class=\"[ font-mono text-xs color-ink-faint ]\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var9 string
 		templ_7745c5c3_Var9, templ_7745c5c3_Err = templ.JoinStringErrs(r.Versions)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `tokensavers/page.templ`, Line: 71, Col: 67}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `tokensavers/page.templ`, Line: 74, Col: 67}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var9))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 13, "</span></span></li>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 14, "</span></span></li>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -236,7 +246,7 @@ func liveRow() templ.Component {
 			templ_7745c5c3_Var10 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 14, "<li class=\"[ row ] [ token-saver ]\" style=\"--row-columns: minmax(0, 1fr) auto\" x-bind:data-saver=\"s.saver\" x-bind:data-state=\"s.state\"><span class=\"[ flow ] [ flow-space-3xs pad-block-xs ]\" style=\"min-inline-size: 0\"><span class=\"[ cluster ] [ gutter-xs ]\"><span class=\"[ title ] [ weight-medium font-mono ]\" x-text=\"s.saver\"></span> <span class=\"[ badge ]\" x-bind:data-tone=\"s.tone || null\" x-text=\"s.stateLabel\"></span></span> <span class=\"[ text-sm color-ink-muted ]\" x-text=\"s.summary\"></span> <span class=\"[ font-mono text-xs color-ink-faint ]\" x-text=\"s.versions\"></span><template x-if=\"s.progress\"><span class=\"[ text-sm ]\" role=\"status\" x-text=\"s.progress\"></span></template><template x-if=\"s.error\"><div class=\"[ banner ]\" data-tone=\"danger\" role=\"alert\"><div class=\"[ flow ] [ flow-space-3xs grow ]\"><span x-text=\"s.error.message\"></span> <span class=\"[ code ]\"><span x-text=\"s.error.code\"></span> · <span x-text=\"s.error.next\"></span></span></div></div></template></span> <span class=\"[ cluster ] [ gutter-xs ]\"><template x-if=\"s.installLabel\"><button type=\"button\" class=\"[ button ]\" data-size=\"sm\" data-variant=\"primary\" x-on:click=\"install(s.saver)\" x-text=\"s.installLabel\"></button></template><template x-if=\"s.state === 'installing'\"><button type=\"button\" class=\"[ button ]\" data-size=\"sm\" disabled aria-busy=\"true\">Installing…</button></template><template x-if=\"s.canRemove\"><button type=\"button\" class=\"[ button ]\" data-size=\"sm\" data-variant=\"ghost\" x-bind:disabled=\"s.removing\" x-bind:aria-busy=\"s.removing\" x-on:click=\"remove(s.saver)\">Remove</button></template></span></li>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 15, "<li class=\"[ row ] [ token-saver ]\" style=\"--row-columns: minmax(0, 1fr) auto\" x-bind:data-saver=\"s.saver\" x-bind:data-state=\"s.state\"><span class=\"[ flow ] [ flow-space-3xs pad-block-xs ]\" style=\"min-inline-size: 0\"><span class=\"[ cluster ] [ gutter-xs ]\"><span class=\"[ title ] [ weight-medium font-mono ]\" x-text=\"s.saver\"></span> <span class=\"[ badge ]\" x-bind:data-tone=\"s.tone || null\" x-text=\"s.stateLabel\"></span></span> <span class=\"[ text-sm color-ink-muted ]\" x-text=\"s.summary\"></span> <span class=\"[ font-mono text-xs color-ink-faint ]\" x-text=\"s.versions\"></span><template x-if=\"s.progress\"><span class=\"[ text-sm ]\" role=\"status\" x-text=\"s.progress\"></span></template><template x-if=\"s.error\"><div class=\"[ banner ]\" data-tone=\"danger\" role=\"alert\"><div class=\"[ flow ] [ flow-space-3xs grow ]\"><span x-text=\"s.error.message\"></span> <span class=\"[ code ]\"><span x-text=\"s.error.code\"></span> · <span x-text=\"s.error.next\"></span></span></div></div></template></span> <span class=\"[ cluster ] [ gutter-xs ]\"><template x-if=\"s.installLabel\"><button type=\"button\" class=\"[ button ]\" data-size=\"sm\" data-variant=\"primary\" x-on:click=\"install(s.saver)\" x-text=\"s.installLabel\"></button></template><template x-if=\"s.state === 'installing'\"><button type=\"button\" class=\"[ button ]\" data-size=\"sm\" disabled aria-busy=\"true\">Installing…</button></template><template x-if=\"s.canRemove\"><button type=\"button\" class=\"[ button ]\" data-size=\"sm\" data-variant=\"ghost\" x-bind:disabled=\"s.removing\" x-bind:aria-busy=\"s.removing\" x-on:click=\"remove(s.saver)\">Remove</button></template></span></li>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

@@ -67,6 +67,9 @@ type Services struct {
 	// TokenSaverInstalls installs, updates and removes token savers; nil
 	// answers 503.
 	TokenSaverInstalls ports.TokenSaverInstalls
+	// RepositoryIndexes lists and rebuilds repositories' codegraph indexes;
+	// nil answers 503.
+	RepositoryIndexes ports.RepositoryIndexes
 }
 
 // Handler serves the application's driving ports as HTTP endpoints (the same
@@ -104,6 +107,7 @@ type Handler struct {
 	shells         ports.ShellEdits
 
 	tokenSaverInstalls ports.TokenSaverInstalls
+	repositoryIndexes  ports.RepositoryIndexes
 
 	streams streamRegistry // the browser tabs' live streams (stream.go)
 }
@@ -139,6 +143,7 @@ func NewHandler(s Services) *Handler {
 		shells:         s.Shells,
 
 		tokenSaverInstalls: s.TokenSaverInstalls,
+		repositoryIndexes:  s.RepositoryIndexes,
 	}
 }
 

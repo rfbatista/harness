@@ -40,6 +40,19 @@ func (r *ActivationRepository) List(owner domain.ActivationOwner) ([]domain.Acti
 	if err := r.db.Where("level = ? AND owner_id = ?", owner.Level, owner.ID).Order("saver").Find(&models).Error; err != nil {
 		return nil, err
 	}
+	return activations(models), nil
+}
+
+// ListSaver returns saver's stored activations, at every level.
+func (r *ActivationRepository) ListSaver(saver domain.TokenSaver) ([]domain.Activation, error) {
+	var models []ActivationModel
+	if err := r.db.Where("saver = ?", saver).Order("level, owner_id").Find(&models).Error; err != nil {
+		return nil, err
+	}
+	return activations(models), nil
+}
+
+func activations(models []ActivationModel) []domain.Activation {
 	out := make([]domain.Activation, 0, len(models))
 	for _, m := range models {
 		out = append(out, domain.Activation{
@@ -49,7 +62,7 @@ func (r *ActivationRepository) List(owner domain.ActivationOwner) ([]domain.Acti
 			Value:     domain.ActivationValue(m.Value),
 		})
 	}
-	return out, nil
+	return out
 }
 
 // Put creates or replaces a's activation.

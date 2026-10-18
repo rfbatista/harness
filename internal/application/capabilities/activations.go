@@ -14,8 +14,9 @@ import (
 // repository and task level (ADR 0015).
 
 var (
-	_ ports.TokenSaverActivations = (*Service)(nil)
-	_ ports.TokenSaverResolver    = (*Service)(nil)
+	_ ports.TokenSaverActivations        = (*Service)(nil)
+	_ ports.TokenSaverResolver           = (*Service)(nil)
+	_ ports.TokenSaverActiveRepositories = (*Service)(nil)
 )
 
 // ActivationProjects is what activations read of the projects context: an
@@ -81,7 +82,48 @@ func (s *Service) SetTokenSaverActivation(ctx context.Context, owner domain.Acti
 	if err != nil {
 		return nil, err
 	}
+	if err := s.publish(domain.TokenSaverActivationChanged{Saver: saver, Owner: owner, ProjectID: sc.projectID, Value: value}); err != nil {
+		return nil, err
+	}
 	return s.activationsOf(owner, sc)
+}
+
+// RepositoriesWithTokenSaverOn answers the repositories of projectID (of
+// every project when empty) where saver resolves on at some level: on for
+// their sessions without a task, or on for some task of their project (a
+// task's setting wins in every repository).
+func (s *Service) RepositoriesWithTokenSaverOn(ctx context.Context, saver domain.TokenSaver, projectID string) ([]string, error) {
+	if s.activations == nil || s.projects == nil {
+		return nil, errNoActivations
+	}
+	stored, err := s.activations.ListSaver(saver)
+	if err != nil {
+		return nil, err
+	}
+	// Only a project holding some "on" can have a repository resolve on.
+	projects := map[string]bool{} // project → a task of it turns saver on
+	values := map[domain.ActivationOwner]domain.ActivationValue{}
+	for _, a := range stored {
+		values[a.Owner] = a.Value
+		if a.Value == domain.ActivationOn && (projectID == "" || a.ProjectID == projectID) {
+			projects[a.ProjectID] = projects[a.ProjectID] || a.Owner.Level == domain.ActivationLevelTask
+		}
+	}
+	var out []string
+	for p, taskOn := range projects {
+		repos, err := s.projects.ListRepositories(ctx, p)
+		if err != nil {
+			return nil, err
+		}
+		project := values[domain.ActivationOwner{Level: domain.ActivationLevelProject, ID: p}]
+		for _, r := range repos {
+			repository := values[domain.ActivationOwner{Level: domain.ActivationLevelRepository, ID: r.ID}]
+			if v, _ := Resolve("", repository, project); taskOn || v == domain.ActivationOn {
+				out = append(out, r.ID)
+			}
+		}
+	}
+	return out, nil
 }
 
 // ResolveTokenSavers resolves every token saver for a session. It reads only
