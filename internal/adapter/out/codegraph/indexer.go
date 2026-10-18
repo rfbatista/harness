@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -33,7 +34,10 @@ func NewIndexer() Indexer { return Indexer{} }
 // BuildIndex excludes /.codegraph/ from git first, so the checkout never
 // shows it as a change, then runs `codegraph init --yes` where there is no
 // index yet and `codegraph index --quiet` (a full rebuild) where there is,
-// in checkout, with codegraph's telemetry off.
+// in checkout, with codegraph's telemetry off and its file watching forced
+// on: init installs git hooks in the checkout when it cannot watch (a WSL
+// /mnt drive, or CODEGRAPH_NO_WATCH set), and the harness never writes the
+// checkout's hooks.
 func (Indexer) BuildIndex(ctx context.Context, codegraph, checkout string) error {
 	if err := gitcli.Exclude(checkout, domain.RepositoryIndexDir+"/", "the codegraph repository index"); err != nil {
 		return fmt.Errorf("keeping %s/ out of git: %w", domain.RepositoryIndexDir, err)
@@ -44,7 +48,7 @@ func (Indexer) BuildIndex(ctx context.Context, codegraph, checkout string) error
 	}
 	cmd := exec.CommandContext(ctx, codegraph, args...)
 	cmd.Dir = checkout
-	cmd.Env = append(os.Environ(), "CODEGRAPH_TELEMETRY=0", "DO_NOT_TRACK=1")
+	cmd.Env = buildEnv(os.Environ())
 	var out tail
 	cmd.Stdout, cmd.Stderr = &out, &out
 	if err := cmd.Run(); err != nil {
@@ -54,6 +58,17 @@ func (Indexer) BuildIndex(ctx context.Context, codegraph, checkout string) error
 		return fmt.Errorf("codegraph %s: %w", args[0], err)
 	}
 	return nil
+}
+
+// buildEnv is env for a build: without CODEGRAPH_NO_WATCH, with watching
+// forced and telemetry off whatever env said.
+func buildEnv(env []string) []string {
+	forced := []string{"CODEGRAPH_FORCE_WATCH=1", "CODEGRAPH_TELEMETRY=0", "DO_NOT_TRACK=1"}
+	out := slices.DeleteFunc(slices.Clone(env), func(kv string) bool {
+		name, _, _ := strings.Cut(kv, "=")
+		return name == "CODEGRAPH_NO_WATCH" || slices.ContainsFunc(forced, func(f string) bool { return strings.HasPrefix(f, name+"=") })
+	})
+	return append(out, forced...)
 }
 
 // IndexBuiltAt is when codegraph last wrote checkout's index database (or

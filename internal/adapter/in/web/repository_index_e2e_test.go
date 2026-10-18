@@ -34,8 +34,9 @@ import (
 // installs codegraph (from a fake release whose codegraph is a stub that
 // records its calls) and turns it on for a project. The harness builds the
 // index of the project's repository in its checkout, keeps .codegraph/ out
-// of git through info/exclude (once), and the Token savers page shows the
-// index and its age. Rebuild index runs codegraph there again.
+// of git through info/exclude (once), leaves the checkout's git hooks as
+// they were, and the Token savers page shows the index and its age. Rebuild
+// index runs codegraph there again.
 func TestRepositoryIndexBuiltWhenCodegraphTurnsOnInTheWebUI_EndToEnd(t *testing.T) {
 	w := newIndexWorld(t)
 	assets := builtAssets(t)
@@ -63,6 +64,7 @@ func TestRepositoryIndexBuiltWhenCodegraphTurnsOnInTheWebUI_EndToEnd(t *testing.
 	w.stub.wantCalls(t, "init --yes "+w.checkout)
 	w.wantExcludedOnce()
 	w.wantClean()
+	w.wantHooksUnchanged()
 
 	b.run("the page lists the index and its age",
 		chromedp.Navigate(page+"/token-savers"),
@@ -77,6 +79,7 @@ func TestRepositoryIndexBuiltWhenCodegraphTurnsOnInTheWebUI_EndToEnd(t *testing.
 	w.stub.wantCalls(t, "init --yes "+w.checkout, "index --quiet "+w.checkout)
 	w.wantExcludedOnce()
 	w.wantClean()
+	w.wantHooksUnchanged()
 	if e := b.jsErrors(); len(e) > 0 {
 		t.Errorf("JavaScript errors:\n%s", strings.Join(e, "\n"))
 	}
@@ -119,6 +122,7 @@ type indexWorld struct {
 	indexes  *workspaces.RepositoryIndexes
 	stub     indexStub
 	checkout string
+	hooks    []string // the checkout's .git/hooks before any build
 	project  *domain.Project
 	repo     *domain.Repository
 }
@@ -129,6 +133,7 @@ func newIndexWorld(t *testing.T) *indexWorld {
 		t.Skip("skipped in -short mode")
 	}
 	w := &indexWorld{t: t, ctx: context.Background(), checkout: gitCheckout(t)}
+	w.hooks = w.hookFiles()
 	w.stub = indexStub{log: filepath.Join(t.TempDir(), "codegraph-calls.log")}
 
 	rel := newFakeReleases()
@@ -229,12 +234,37 @@ func (w *indexWorld) wantClean() {
 	}
 }
 
+// hookFiles lists the checkout's .git/hooks.
+func (w *indexWorld) hookFiles() []string {
+	w.t.Helper()
+	entries, err := os.ReadDir(filepath.Join(w.checkout, ".git", "hooks"))
+	if err != nil && !os.IsNotExist(err) {
+		w.t.Fatal(err)
+	}
+	var out []string
+	for _, e := range entries {
+		out = append(out, e.Name())
+	}
+	return out
+}
+
+// wantHooksUnchanged checks no build installed a git hook in the checkout.
+func (w *indexWorld) wantHooksUnchanged() {
+	w.t.Helper()
+	if got := w.hookFiles(); strings.Join(got, ",") != strings.Join(w.hooks, ",") {
+		w.t.Errorf("the checkout's git hooks are %q, want %q as before the build", got, w.hooks)
+	}
+}
+
 // indexStub is a codegraph that records each call's arguments and writes an
-// index into the directory it runs in.
+// index into the directory it runs in. Like codegraph's init when it cannot
+// watch files, it installs a git hook unless CODEGRAPH_FORCE_WATCH=1.
 type indexStub struct{ log string }
 
 func (s indexStub) script() string {
-	return "#!/bin/sh\necho \"$*\" >> '" + s.log + "'\nmkdir -p .codegraph && echo index > .codegraph/codegraph.db\n"
+	return "#!/bin/sh\necho \"$*\" >> '" + s.log + "'\n" +
+		"[ \"$CODEGRAPH_FORCE_WATCH\" = 1 ] || echo codegraph > .git/hooks/post-commit\n" +
+		"mkdir -p .codegraph && echo index > .codegraph/codegraph.db\n"
 }
 
 func (s indexStub) calls() []string {
