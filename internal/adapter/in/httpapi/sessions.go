@@ -203,8 +203,9 @@ func (h *Handler) handleSessionEvents(c echo.Context) error {
 	}
 	id := c.Param("id")
 	w := c.Response()
-	ch, replay, cancel := h.orchSvc.Subscribe(id)
+	sub, replay, cancel := h.orchSvc.Subscribe(id)
 	defer cancel()
+	ch := coalesce(c.Request().Context(), sub)
 
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
@@ -251,7 +252,8 @@ func (h *Handler) followSession(ctx context.Context, id string, fromSeq int64) (
 	if h.orchSvc == nil {
 		return nil, echo.NewHTTPError(http.StatusServiceUnavailable, "orchestration not configured")
 	}
-	ch, replay, cancel := h.orchSvc.Subscribe(id)
+	sub, replay, cancel := h.orchSvc.Subscribe(id)
+	ch := coalesce(ctx, sub)
 	out := make(chan any)
 	go func() {
 		defer cancel()
@@ -288,6 +290,103 @@ func (h *Handler) followSession(ctx context.Context, id string, fromSeq int64) (
 		}
 	}()
 	return out, nil
+}
+
+// coalescePending is how many events a session follower holds for a
+// consumer that has not taken them before it stops reading its subscription,
+// which the hub then closes. A run of merged deltas counts as one.
+const coalescePending = 64
+
+// coalesceTextLimit is the most output one merged delta carries; a longer run
+// goes out as several.
+const coalesceTextLimit = 16 << 10
+
+// coalesce relays a session subscription's events as the consumer takes them,
+// reading the subscription as fast as it fills, so a burst of terminal output
+// does not make a follower fall behind (contract guarantee 4). Each run of
+// consecutive output deltas of one content block that arrive while the
+// consumer is busy goes out as one delta carrying their output, in order.
+// Persisted events are never merged or reordered. The result closes after
+// what it holds once the subscription closes, or when ctx ends.
+func coalesce(ctx context.Context, sub <-chan ports.SessionEvent) <-chan ports.SessionEvent {
+	out := make(chan ports.SessionEvent)
+	go func() {
+		defer close(out)
+		var pending []*pendingEvent
+		for {
+			in := sub
+			if len(pending) >= coalescePending {
+				in = nil
+			}
+			var send chan ports.SessionEvent
+			var head ports.SessionEvent
+			if len(pending) > 0 {
+				send, head = out, pending[0].event()
+			} else if sub == nil {
+				return
+			}
+			select {
+			case <-ctx.Done():
+				return
+			case ev, ok := <-in:
+				if !ok {
+					sub = nil
+					continue
+				}
+				if n := len(pending); n > 0 && pending[n-1].merge(ev) {
+					continue
+				}
+				pending = append(pending, newPendingEvent(ev))
+			case send <- head:
+				pending[0] = nil
+				pending = pending[1:]
+			}
+		}
+	}()
+	return out
+}
+
+// pendingEvent is an event a follower holds until its consumer takes it; an
+// output delta's text grows as later deltas of its block merge into it.
+type pendingEvent struct {
+	ev   ports.SessionEvent
+	text *strings.Builder // set on an output delta
+}
+
+func newPendingEvent(ev ports.SessionEvent) *pendingEvent {
+	p := &pendingEvent{ev: ev}
+	if isDelta(ev) {
+		p.text = &strings.Builder{}
+		p.text.WriteString(ev.Text)
+	}
+	return p
+}
+
+// merge appends ev's output to p when both are deltas of the same content
+// block and the result stays within coalesceTextLimit.
+func (p *pendingEvent) merge(ev ports.SessionEvent) bool {
+	if p.text == nil || !isDelta(ev) ||
+		ev.SessionID != p.ev.SessionID || ev.DeltaKind != p.ev.DeltaKind ||
+		ev.Index != p.ev.Index || ev.ToolName != p.ev.ToolName ||
+		p.text.Len()+len(ev.Text) > coalesceTextLimit {
+		return false
+	}
+	p.text.WriteString(ev.Text)
+	return true
+}
+
+func (p *pendingEvent) event() ports.SessionEvent {
+	ev := p.ev
+	if p.text != nil {
+		ev.Text = p.text.String()
+	}
+	return ev
+}
+
+// isDelta reports whether ev is an ephemeral output delta, the only kind of
+// event a follower merges.
+func isDelta(ev ports.SessionEvent) bool {
+	return ev.Type == "output_delta" && ev.Seq == 0
 }
 
 // sessionBacklog is what a follower resuming after fromSeq missed, taken

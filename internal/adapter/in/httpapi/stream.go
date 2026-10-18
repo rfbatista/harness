@@ -38,7 +38,10 @@ import (
 // Every live feed fans out without blocking and closes a follower that falls
 // behind, so a feed that keeps outrunning the connection closes, and its end
 // is sent; a backlog (a session's stored events, read from the log on a
-// resume) waits instead and arrives at the pace the client reads it. The
+// resume) waits instead and arrives at the pace the client reads it. A
+// session feed keeps reading its hub subscription while its follow waits,
+// merging the terminal output deltas that arrive meanwhile (coalesce in
+// sessions.go), so a burst of output does not make it fall behind. The
 // writer takes one change from each follow in turn, in each feed's order. A connection that cannot take a write within
 // the registry's write timeout (a dead or stuck client) closes the stream,
 // and with it every follow.
