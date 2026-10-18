@@ -32,6 +32,12 @@ type Config struct {
 	// is logged as a slow request, with its query count. Zero uses the HTTP
 	// API adapter's default.
 	SlowRequestThreshold time.Duration
+	// GitWorktreeDeadline bounds each git run that adds, removes or prunes a
+	// worktree; GitReadDeadline each git run that only reads. A git that
+	// gives no answer in time is killed and its operation fails. Zero uses
+	// the git adapter's defaults. Push and fetch keep their own deadline.
+	GitWorktreeDeadline time.Duration
+	GitReadDeadline     time.Duration
 	// DevMode proxies the designer resource to the Vite dev server instead of the embedded build.
 	DevMode bool
 	// Root is the default project root for tree and path operations (usually the working directory).

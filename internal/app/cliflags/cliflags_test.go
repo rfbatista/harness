@@ -158,3 +158,27 @@ func TestParseSlowRequestThreshold(t *testing.T) {
 		})
 	}
 }
+
+func TestParseGitDeadlines(t *testing.T) {
+	for _, c := range []struct {
+		name               string
+		args               []string
+		env                map[string]string
+		worktree, readOnly time.Duration
+	}{
+		{"default", nil, nil, 60 * time.Second, 10 * time.Second},
+		{"env", nil, map[string]string{"CODING_POOL_GIT_WORKTREE_DEADLINE": "2m", "CODING_POOL_GIT_READ_DEADLINE": "3s"}, 2 * time.Minute, 3 * time.Second},
+		{"flag over env", []string{"--git.worktree-deadline=90s", "--git.read-deadline=5s"}, map[string]string{"CODING_POOL_GIT_WORKTREE_DEADLINE": "2m", "CODING_POOL_GIT_READ_DEADLINE": "3s"}, 90 * time.Second, 5 * time.Second},
+		{"unparseable env", nil, map[string]string{"CODING_POOL_GIT_WORKTREE_DEADLINE": "long", "CODING_POOL_GIT_READ_DEADLINE": "short"}, 60 * time.Second, 10 * time.Second},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			cfg, err := Parse(flag.NewFlagSet("test", flag.ContinueOnError), c.args, env(c.env))
+			if err != nil {
+				t.Fatalf("parse: %v", err)
+			}
+			if cfg.GitWorktreeDeadline != c.worktree || cfg.GitReadDeadline != c.readOnly {
+				t.Errorf("git deadlines = %v, %v; want %v, %v", cfg.GitWorktreeDeadline, cfg.GitReadDeadline, c.worktree, c.readOnly)
+			}
+		})
+	}
+}
