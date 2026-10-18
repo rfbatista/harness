@@ -12,7 +12,10 @@ import (
 	"operators-mcp/internal/ports"
 )
 
-var _ ports.RepositoryIndexes = (*RepositoryIndexes)(nil)
+var (
+	_ ports.RepositoryIndexes     = (*RepositoryIndexes)(nil)
+	_ ports.RepositoryIndexBuilds = (*RepositoryIndexes)(nil)
+)
 
 // IndexProjects is what repository indexes read of the projects context.
 type IndexProjects interface {
@@ -250,6 +253,13 @@ func (x *RepositoryIndexes) background(fn func(ctx context.Context)) {
 		defer x.work.Done()
 		fn(x.ctx)
 	}()
+}
+
+// IndexBuilding says whether a build runs on checkout now.
+func (x *RepositoryIndexes) IndexBuilding(checkout string) bool {
+	x.mu.Lock()
+	defer x.mu.Unlock()
+	return x.building[checkout]
 }
 
 // indexOf is r's index as it stands.

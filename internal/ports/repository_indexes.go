@@ -22,6 +22,13 @@ type RepositoryIndexes interface {
 	RebuildRepositoryIndex(ctx context.Context, repositoryID string) (*domain.RepositoryIndex, error)
 }
 
+// RepositoryIndexBuilds says whether a build is writing a checkout's index
+// (driving): a session start does not copy an index while it may be half
+// written.
+type RepositoryIndexBuilds interface {
+	IndexBuilding(checkout string) bool
+}
+
 // RepositoryIndexer builds codegraph indexes in checkouts (driven).
 type RepositoryIndexer interface {
 	// BuildIndex keeps .codegraph/ out of git through the repository's

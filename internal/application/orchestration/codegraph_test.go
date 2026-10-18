@@ -11,6 +11,8 @@ import (
 	"strings"
 	"testing"
 
+	"operators-mcp/internal/adapter/out/codegraph"
+	"operators-mcp/internal/application/workspaces"
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
 )
@@ -195,4 +197,39 @@ func TestAnInteractiveSessionRunsWithCodegraph(t *testing.T) {
 	}
 	t.Cleanup(func() { _, _ = svc.EndInteractive(ctx, sess.ID, 0, false) })
 	checkCodegraphWired(t, launchOf(t, spec).Args, codegraph)
+}
+
+// While a build runs on the repository's checkout its index may be half
+// written: the session starts without a copy, as before a first build.
+func TestASessionStartsWithoutTheIndexWhileItsBuildRuns(t *testing.T) {
+	svc, w := newHeadlessShellService(t)
+	savers := withTokenSavers(t, svc)
+	cg := savers.install(t, domain.TokenSaverCodegraph, "codegraph")
+	savers.set(t, domain.ActivationLevelRepository, "r1", domain.TokenSaverCodegraph, domain.ActivationOn)
+	repo := svc.catalog.Repositories.(*fakeResolver).repo
+	putIndex(t, repo.RootDir)
+	stub := newStubCodegraph(t)
+	indexes := workspaces.NewRepositoryIndexes(workspaces.RepositoryIndexDeps{
+		Projects:      indexProjects{&domain.Repository{ID: "r1", ProjectID: "p1", Name: "api", RootDir: repo.RootDir}},
+		Sessions:      svc,
+		Installations: installedCodegraph(stub.path),
+		Activations:   codegraphOnNowhere{},
+		Indexer:       codegraph.NewIndexer(),
+	})
+	t.Cleanup(indexes.Close)
+	svc.IndexBuilds = indexes
+
+	release := stub.hold(t)
+	if _, err := indexes.RebuildRepositoryIndex(context.Background(), "r1"); err != nil {
+		t.Fatal(err)
+	}
+	stub.waitCalls(t, 1)
+	sess, launch := startHeadless(t, svc, w.task.ID)
+	release()
+	indexes.Wait()
+
+	checkCodegraphWired(t, launch.Args, cg)
+	if _, err := os.Stat(filepath.Join(sess.WorkingDir, domain.RepositoryIndexDir)); !os.IsNotExist(err) {
+		t.Errorf("worktree has %s (%v) though a build was running, want none", domain.RepositoryIndexDir, err)
+	}
 }

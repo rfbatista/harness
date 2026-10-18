@@ -121,6 +121,9 @@ type Service struct {
 	// TokenSavers says which token savers a session runs with, when it is
 	// prepared (ADR 0015). Nil: sessions run with none.
 	TokenSavers ports.SessionTokenSavers
+	// IndexBuilds says when a repository index build runs on a checkout, so
+	// a session start does not copy an index being written. Nil: never.
+	IndexBuilds ports.RepositoryIndexBuilds
 
 	// updates feeds the task-update turns to the courier, one at a time;
 	// deliverUpdate replaces the courier in tests.

@@ -53,6 +53,7 @@ func newRepositoryIndexes(lc fx.Lifecycle, cat catalog.Catalog, orch *orchestrat
 		Indexer:       codegraph.NewIndexer(),
 	})
 	x.Subscribe(cat.Bus)
+	orch.IndexBuilds = x
 	lc.Append(fx.Hook{OnStop: func(context.Context) error {
 		x.Close()
 		return nil
