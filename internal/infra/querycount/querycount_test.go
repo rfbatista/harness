@@ -40,6 +40,25 @@ func TestACallWithoutAContextOnTheTrackingGoroutineIsCounted(t *testing.T) {
 	}
 }
 
+// The known limit of the goroutine fallback: a call made without the
+// request's context, on a goroutine the handler spawned, is not counted. A
+// count is only as complete as the context its calls carry.
+func TestACallWithoutAContextOnASpawnedGoroutineIsNotCounted(t *testing.T) {
+	_, c, stop := Track(context.Background())
+	defer stop()
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		Add(context.Background())
+	}()
+	<-done
+
+	if got := c.Count(); got != 0 {
+		t.Errorf("Count() = %d, want 0", got)
+	}
+}
+
 // A call carrying the counter on the tracking goroutine counts once.
 func TestACallIsCountedOnce(t *testing.T) {
 	ctx, c, stop := Track(context.Background())
