@@ -59,47 +59,6 @@ func TestACallWithoutAContextOnASpawnedGoroutineIsNotCounted(t *testing.T) {
 	}
 }
 
-// A goroutine the handler spawns joins the request's count with Join: its
-// calls made without the context count too, until it leaves.
-func TestAJoinedGoroutineCountsItsCallsWithoutAContext(t *testing.T) {
-	ctx, c, stop := Track(context.Background())
-	defer stop()
-
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		leave := Join(ctx)
-		Add(context.Background())
-		leave()
-		Add(context.Background())
-	}()
-	<-done
-
-	if got := c.Count(); got != 1 {
-		t.Errorf("Count() = %d, want 1", got)
-	}
-}
-
-// Joining a context nothing tracks leaves the goroutine untracked: its calls
-// count nowhere, not even for a tracker another goroutine runs.
-func TestJoiningAnUntrackedContextCountsNothing(t *testing.T) {
-	_, c, stop := Track(context.Background())
-	defer stop()
-
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		leave := Join(context.Background())
-		defer leave()
-		Add(context.Background())
-	}()
-	<-done
-
-	if got := c.Count(); got != 0 {
-		t.Errorf("Count() = %d, want 0", got)
-	}
-}
-
 // A tracker on the context alone counts the calls carrying its counter and
 // none made without it, not even on the goroutine that started it: a count
 // it holds rests on the context the calls carry, never on goroutine identity.

@@ -12,7 +12,6 @@ import (
 	"operators-mcp/internal/adapter/in/web/shell"
 	"operators-mcp/internal/adapter/in/web/tasks"
 	"operators-mcp/internal/domain"
-	"operators-mcp/internal/infra/querycount"
 )
 
 // workingID names the uncommitted changes where a commit hash would go.
@@ -60,7 +59,6 @@ func (h Handler) Session(w http.ResponseWriter, r *http.Request) error {
 	if !swap && !more {
 		panel = make(chan *pullrequests.Panel, 1)
 		go func() {
-			defer querycount.Join(ctx)() // its reads count for the request
 			panel <- h.pullRequestPanel(r, project.ID, sess.WorkspaceID)
 		}()
 	}

@@ -4,10 +4,10 @@
 //
 // A call is attributed to a tracker in one of two ways. A call whose context
 // carries the tracker's counter is counted on whatever goroutine makes it.
-// A call made without such a context (many repositories take none) is
-// counted when it runs on the goroutine that started tracking, or on one
-// that joined it (Join). A call made without the context on any other
-// goroutine is not counted.
+// A call made without such a context (repositories off the budgeted pages
+// take none yet) is counted, by Track alone, when it runs on the goroutine
+// that started tracking; on any other goroutine it is not counted.
+// TrackContext counts by the context alone.
 package querycount
 
 import (
@@ -58,18 +58,6 @@ func Track(ctx context.Context) (context.Context, *Counter, func()) {
 func TrackContext(ctx context.Context) (context.Context, *Counter) {
 	c := &Counter{}
 	return context.WithValue(ctx, counterKey{}, c), c
-}
-
-// Join counts the database calls made without a context on the calling
-// goroutine for ctx's tracker, until leave: how a goroutine a handler spawns
-// keeps its calls in the request's count. Nothing tracks ctx: it does
-// nothing.
-func Join(ctx context.Context) (leave func()) {
-	c := FromContext(ctx)
-	if c == nil {
-		return func() {}
-	}
-	return bind(c)
 }
 
 // bind counts the calling goroutine's calls made without a context for c,

@@ -102,6 +102,7 @@ type budgetProject struct {
 	handler  http.Handler
 	db       *gorm.DB
 	sessions ports.SessionRepository
+	orch     *orchestration.Service
 	cat      catalog.Catalog
 	plan     *planning.Service
 	project  string
@@ -159,7 +160,7 @@ func newBudgetProject(t *testing.T) *budgetProject {
 		t.Fatal(err)
 	}
 	b.project, b.repo, b.repoDir = p.ID, r.ID, repoDir
-	b.cat, b.plan = cat, plan
+	b.cat, b.plan, b.orch = cat, plan, orch
 	b.addTickets(30)
 
 	assets, err := web.NewAssets()
@@ -291,11 +292,19 @@ func (b *budgetProject) worktree(branch, path string) {
 }
 
 // load serves one GET of path on the calling goroutine and answers how long
-// it took and how many database queries it made.
+// it took and how many database queries it made with the request's context.
+// A query made without it is not counted.
 func (b *budgetProject) load(path string) (time.Duration, int64) {
 	b.t.Helper()
-	ctx, counter, stop := querycount.Track(b.ctx)
-	defer stop()
+	ctx, counter := querycount.TrackContext(b.ctx)
+	took := b.serve(path, ctx)
+	return took, counter.Count()
+}
+
+// serve serves one GET of path with ctx on the calling goroutine and
+// answers how long it took.
+func (b *budgetProject) serve(path string, ctx context.Context) time.Duration {
+	b.t.Helper()
 	rec := httptest.NewRecorder()
 	started := time.Now()
 	b.handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil).WithContext(ctx))
@@ -303,11 +312,23 @@ func (b *budgetProject) load(path string) (time.Duration, int64) {
 	if rec.Code != http.StatusOK {
 		b.t.Fatalf("GET %s: %d\n%s", path, rec.Code, rec.Body.String())
 	}
-	return took, counter.Count()
+	return took
 }
 
+// queries is how many database queries a load of path makes with the
+// request's context. A load counted the lenient way too, which also counts
+// the queries made without the context on the request's goroutine, must
+// count as many: a page whose count rests on goroutine identity would leave
+// its reads running after the request ends.
 func (b *budgetProject) queries(path string) int64 {
+	b.t.Helper()
 	_, n := b.load(path)
+	ctx, all, stop := querycount.Track(b.ctx)
+	b.serve(path, ctx)
+	stop()
+	if all.Count() != n {
+		b.t.Errorf("GET %s made %d queries, %d of them with the request's context: the others do not stop when the request ends", path, all.Count(), n)
+	}
 	return n
 }
 
