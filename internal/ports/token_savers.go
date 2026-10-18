@@ -17,7 +17,9 @@ import (
 type TokenSaverInstalls interface {
 	TokenSaverInstallReader
 	// InstallTokenSaver installs the pinned version in the background,
-	// replacing any other installed version, and answers the saver's status
+	// replacing any other installed version (whose files stay until the
+	// harness starts again: running sessions may use them), and answers the
+	// saver's status
 	// as the install starts; its progress and outcome are in later lists.
 	// Refuses TOKEN_SAVER_NOT_FOUND, TOKEN_SAVER_UNSUPPORTED_PLATFORM and
 	// TOKEN_SAVER_BUSY.

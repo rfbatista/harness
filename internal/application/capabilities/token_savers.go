@@ -56,8 +56,9 @@ type installJob struct {
 	err      *domain.TokenSaverError
 }
 
-// UseTokenSavers enables installing token savers. Until it is called their
-// use cases answer UNAVAILABLE.
+// UseTokenSavers enables installing token savers, as the harness starts.
+// Until it is called their use cases answer UNAVAILABLE. No session
+// survives a restart, so it prunes every version an update left behind.
 func (s *Service) UseTokenSavers(d TokenSaverDeps) {
 	if d.ReleaseBaseURL == "" {
 		d.ReleaseBaseURL = DefaultTokenSaverReleaseBase
@@ -70,6 +71,33 @@ func (s *Service) UseTokenSavers(d TokenSaverDeps) {
 		d.Platform = domain.Platform{OS: runtime.GOOS, Arch: runtime.GOARCH}
 	}
 	s.savers = &tokenSavers{TokenSaverDeps: d, jobs: map[domain.TokenSaver]*installJob{}}
+	if err := s.savers.prune(); err != nil {
+		slog.Warn("token savers: old versions not pruned", "dir", d.Dir, "err", err)
+	}
+}
+
+// prune removes, under Dir, each saver's versions other than the one
+// installed: all of them for a saver not installed.
+func (t *tokenSavers) prune() error {
+	installed, err := t.installed()
+	if err != nil {
+		return err
+	}
+	for _, saver := range domain.TokenSavers {
+		dir := filepath.Join(t.Dir, string(saver))
+		versions, err := os.ReadDir(dir)
+		if err != nil {
+			continue // nothing installed there
+		}
+		for _, v := range versions {
+			if in := installed[saver]; in == nil || v.Name() != in.Version {
+				if err := os.RemoveAll(filepath.Join(dir, v.Name())); err != nil {
+					return err
+				}
+			}
+		}
+	}
+	return nil
 }
 
 func (s *Service) tokenSavers() (*tokenSavers, error) {
@@ -343,13 +371,8 @@ func (t *tokenSavers) fetch(ctx context.Context, rel TokenSaverRelease, asset To
 		_ = os.RemoveAll(final)
 		return nil, err
 	}
-	// The pinned version is in place: every other one goes.
-	others, _ := os.ReadDir(saverDir)
-	for _, o := range others {
-		if o.Name() != rel.Version {
-			_ = os.RemoveAll(filepath.Join(saverDir, o.Name()))
-		}
-	}
+	// A version replaced here stays: running sessions may use its files.
+	// The next start prunes it.
 	return in, nil
 }
 

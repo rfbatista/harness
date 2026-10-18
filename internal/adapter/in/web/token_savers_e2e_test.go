@@ -37,8 +37,9 @@ import (
 // standing in for GitHub, and a person in headless Chrome. They reach the
 // page from the top bar, install caveman and codegraph and update an rtk the
 // harness pinned at an older version, see each at the pinned version (also
-// after a reload), and remove codegraph. Files land under <data dir>/tools,
-// the old rtk is gone, and caveman keeps only its SKILL.md.
+// after a reload), and remove codegraph. Files land under <data dir>/tools
+// and caveman keeps only its SKILL.md. The old rtk stays, for sessions that
+// may still run it, until the harness starts again.
 func TestTokenSaversInstallUpdateAndRemoveInTheWebUI_EndToEnd(t *testing.T) {
 	assets := builtAssets(t)
 	rel := newFakeReleases()
@@ -93,7 +94,9 @@ func TestTokenSaversInstallUpdateAndRemoveInTheWebUI_EndToEnd(t *testing.T) {
 	)
 
 	h.wantFile(filepath.Join("rtk", "v1.0.1", "rtk"), "#!/bin/sh\necho rtk 1.0.1\n", 0o100)
-	h.wantGone(filepath.Join("rtk", "v1.0.0"))
+	// A running session may still use rtk v1.0.0: it stays until the
+	// harness restarts.
+	h.wantFile(filepath.Join("rtk", "v1.0.0", "rtk"), "#!/bin/sh\necho rtk 1.0.0\n", 0o100)
 	h.wantFile(filepath.Join("codegraph", "v1.6.2", "codegraph-darwin-arm64", "bin", "codegraph"), "#!/bin/sh\necho codegraph\n", 0o100)
 	h.wantFile(filepath.Join("caveman", "v4.0.1", "SKILL.md"), "Say less.", 0)
 	h.wantGone(filepath.Join("caveman", "v4.0.1", "README.md"))
@@ -114,6 +117,10 @@ func TestTokenSaversInstallUpdateAndRemoveInTheWebUI_EndToEnd(t *testing.T) {
 	if fmt.Sprint(got) != fmt.Sprint(want) {
 		t.Errorf("installed savers:\n%v\nwant:\n%v", got, want)
 	}
+	// No session survives a restart: starting again prunes the old version.
+	h.service(h.releases(digestOf(skill)), darwinARM64)
+	h.wantGone(filepath.Join("rtk", "v1.0.0"))
+	h.wantFile(filepath.Join("rtk", "v1.0.1", "rtk"), "#!/bin/sh\necho rtk 1.0.1\n", 0o100)
 
 	b.run("remove codegraph",
 		clickButton(row("codegraph"), "Remove"),
