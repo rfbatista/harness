@@ -175,7 +175,7 @@ func (s *Service) Start(ctx context.Context, req StartRequest) (*domain.Session,
 		branch = defaultBranchName(req.Task)
 	}
 
-	p, err := s.prepare(prepareInput{
+	p, err := s.prepare(ctx, prepareInput{
 		ProjectID:    req.ProjectID,
 		RepositoryID: req.RepositoryID,
 		AgentID:      req.AgentID,
@@ -315,11 +315,11 @@ type prepared struct {
 // prepare validates a start request, provisions the session's worktree and
 // builds its CLI configuration. Start launches the result headless;
 // StartInteractive hands it to a terminal.
-func (s *Service) prepare(in prepareInput) (*prepared, error) {
+func (s *Service) prepare(ctx context.Context, in prepareInput) (*prepared, error) {
 	if in.ProjectID == "" {
 		return nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "project_id is required"}
 	}
-	if _, err := s.catalog.Projects.GetProject(context.TODO(), in.ProjectID); err != nil {
+	if _, err := s.catalog.Projects.GetProject(ctx, in.ProjectID); err != nil {
 		return nil, err
 	}
 
@@ -335,7 +335,7 @@ func (s *Service) prepare(in prepareInput) (*prepared, error) {
 	if in.RepositoryID == "" {
 		return nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "repository_id is required"}
 	}
-	repo, err := s.catalog.Repositories.GetRepository(context.TODO(), in.RepositoryID)
+	repo, err := s.catalog.Repositories.GetRepository(ctx, in.RepositoryID)
 	if err != nil {
 		return nil, err
 	}
@@ -384,7 +384,7 @@ func (s *Service) prepare(in prepareInput) (*prepared, error) {
 		_ = s.workspaces.Discard(ws.ID)
 		return nil, err
 	}
-	savers := s.withTokenSavers(in, repo.RootDir, ws.Path, &cfg)
+	savers := s.withTokenSavers(ctx, in, repo.RootDir, ws.Path, &cfg)
 	return &prepared{
 		cfg:        cfg,
 		ws:         ws,

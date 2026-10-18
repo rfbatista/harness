@@ -55,7 +55,7 @@ func (s *Service) StartInteractive(ctx context.Context, req InteractiveRequest) 
 	// A task can hold several sessions at once, so the branch carries part of
 	// the session id: two sessions on one task must never race for one branch.
 	id := llmkit.NewSessionID()
-	p, err := s.prepare(prepareInput{
+	p, err := s.prepare(ctx, prepareInput{
 		ID:           id,
 		ProjectID:    req.ProjectID,
 		RepositoryID: req.RepositoryID,
@@ -175,7 +175,7 @@ func (s *Service) ResumeInteractive(ctx context.Context, req ports.ResumeRequest
 	if err != nil {
 		return nil, ports.AgentSpec{}, err
 	}
-	s.rewireTokenSavers(sess, &cfg)
+	s.rewireTokenSavers(ctx, sess, &cfg)
 	spec := s.agentSpec(cfg, ports.Conversation{ID: claudeID(sess), Resume: true}, "")
 	spec.EnvFile = envFile
 	err = s.sessions.UpdateRunner(sess.ID, runsOn, runnerHost(runsOn, req.RunnerHost))

@@ -61,11 +61,10 @@ var saverWirings = map[domain.TokenSaver]saverWiring{
 // withTokenSavers resolves the session's savers and wires the active ones
 // into cfg. A saver never stops a session: when Capabilities cannot answer,
 // the session starts with none.
-func (s *Service) withTokenSavers(in prepareInput, checkout, worktree string, cfg *llmkit.SessionConfig) sessionSavers {
+func (s *Service) withTokenSavers(ctx context.Context, in prepareInput, checkout, worktree string, cfg *llmkit.SessionConfig) sessionSavers {
 	if s.TokenSavers == nil {
 		return sessionSavers{}
 	}
-	ctx := context.TODO()
 	resolved, err := s.TokenSavers.ResolveTokenSavers(ctx, in.ProjectID, in.RepositoryID, in.TicketID)
 	if err != nil {
 		slog.Warn("token savers not resolved; the session starts without them", "session", cfg.ID, "err", err)
@@ -106,11 +105,11 @@ func (s *Service) withTokenSavers(in prepareInput, checkout, worktree string, cf
 // rewireTokenSavers wires a resumed session's stored active savers into
 // cfg again, without resolving. One removed since it started is left out
 // and recorded as not installed: the resume goes on without it.
-func (s *Service) rewireTokenSavers(sess *domain.Session, cfg *llmkit.SessionConfig) {
+func (s *Service) rewireTokenSavers(ctx context.Context, sess *domain.Session, cfg *llmkit.SessionConfig) {
 	if s.TokenSavers == nil || len(sess.TokenSavers) == 0 {
 		return
 	}
-	installed, err := s.installedSavers(context.TODO())
+	installed, err := s.installedSavers(ctx)
 	if err != nil {
 		slog.Warn("token saver installations not read; the session resumes without them", "session", sess.ID, "err", err)
 		return
@@ -118,7 +117,7 @@ func (s *Service) rewireTokenSavers(sess *domain.Session, cfg *llmkit.SessionCon
 	// A session stored before intensities were kept resumes at today's.
 	intensity := sess.CavemanIntensity
 	if intensity == "" {
-		intensity = s.TokenSavers.CavemanIntensity(context.TODO())
+		intensity = s.TokenSavers.CavemanIntensity(ctx)
 	}
 	var active, gone []domain.TokenSaver
 	for _, saver := range sess.TokenSavers {
