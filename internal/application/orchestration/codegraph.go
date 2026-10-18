@@ -19,9 +19,10 @@ const codegraphServerName = "codegraph"
 // wireCodegraph gives the session codegraph's MCP server, with its tools
 // allowed and its telemetry off, and starts its worktree from a copy of the
 // repository index (ADR 0014), unless a build is writing that index now.
-// The server has no working dir of its own: claude spawns it in the
-// worktree, where claude runs.
 func (s *Service) wireCodegraph(w saverSession) error {
+	// codegraph finds its index through the cwd it inherits from claude,
+	// the worktree: llmkit's MCPServerSpec has no working dir, and none is
+	// needed, so do not add one.
 	w.cfg.MCPServers = append(w.cfg.MCPServers, llmkit.MCPServerSpec{
 		Name:      codegraphServerName,
 		Transport: "stdio",
