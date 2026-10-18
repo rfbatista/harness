@@ -288,12 +288,18 @@ func (o *streamOrch) flood(t *testing.T, project string, size int) int {
 	feed, stopped := o.feeds[project], o.stopped[project]
 	o.mu.Unlock()
 	big := &domain.Ticket{ID: "big", ProjectID: project, Description: strings.Repeat("x", size)}
-	for n := 0; ; n++ {
+	// Like every live feed, this one never waits on its follower: when the
+	// follower cannot take a change, the feed closes it.
+	for n, start := 0, time.Now(); ; n++ {
 		select {
 		case feed <- ports.ProjectChange{Ticket: big}:
 		case <-stopped:
 			return n
-		case <-time.After(10 * time.Second):
+		default:
+			close(feed)
+			return n
+		}
+		if time.Since(start) > 10*time.Second {
 			t.Fatalf("the feed of %s took %d changes and never stopped", project, n)
 		}
 	}

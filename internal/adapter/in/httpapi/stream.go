@@ -33,16 +33,18 @@ import (
 // ended (its follower fell behind) and must be followed again.
 //
 // Backpressure (ADR 0012) is per feed: each follow queues its changes on its
-// own, up to followQueueLen. The relay reading a feed never waits for the
-// connection, so the feed is never held back by it; a follow whose queue is
-// full is dropped, its queue discarded and its end sent instead, while the
-// other follows keep flowing. The writer takes one change from each follow in
-// turn, in each feed's order. A connection that cannot take a write within
+// own, up to followQueueLen. A follow whose queue is full stops reading its
+// feed until the writer makes room, so it never holds back another follow.
+// Every live feed fans out without blocking and closes a follower that falls
+// behind, so a feed that keeps outrunning the connection closes, and its end
+// is sent; a backlog (a session's stored events, read from the log on a
+// resume) waits instead and arrives at the pace the client reads it. The
+// writer takes one change from each follow in turn, in each feed's order. A connection that cannot take a write within
 // the registry's write timeout (a dead or stuck client) closes the stream,
 // and with it every follow.
 
 // followQueueLen is how many changes a follow may have waiting to be written
-// before it is dropped.
+// before it stops reading its feed.
 const followQueueLen = 256
 
 // defaultStreamWriteTimeout is how long one write to a stream may take before
@@ -125,7 +127,8 @@ type follow struct {
 	path   string
 	cancel context.CancelFunc
 	queue  []streamMessage
-	done   bool // dropped: nothing more is queued, and nothing queued is written
+	done   bool          // dropped: nothing more is queued, and nothing queued is written
+	room   chan struct{} // the writer took from a full queue
 }
 
 // follow starts relaying the feed at path; following a path twice is one follow.
@@ -141,14 +144,14 @@ func (s *liveStream) follow(h *Handler, path string) error {
 		cancel()
 		return err
 	}
-	f := &follow{path: path, cancel: cancel}
+	f := &follow{path: path, cancel: cancel, room: make(chan struct{}, 1)}
 	s.follows[path] = f
 	go s.relay(ctx, f, changes)
 	return nil
 }
 
-// relay queues each change of the feed for the writer, never waiting on it,
-// until the feed closes or the follow is dropped.
+// relay queues each change of the feed for the writer until the feed closes
+// or the follow is dropped. It waits only for room in its own queue.
 func (s *liveStream) relay(ctx context.Context, f *follow, changes <-chan any) {
 	for {
 		select {
@@ -160,30 +163,35 @@ func (s *liveStream) relay(ctx context.Context, f *follow, changes <-chan any) {
 				s.end(f)
 				return
 			}
-			if !s.enqueue(f, streamMessage{Path: f.path, Data: change}) {
+			if !s.enqueue(ctx, f, streamMessage{Path: f.path, Data: change}) {
 				return
 			}
 		}
 	}
 }
 
-// enqueue queues m on f, or, when f's queue is full, ends f. It says whether f
+// enqueue queues m on f, waiting while f's queue is full. It says whether f
 // still follows its feed.
-func (s *liveStream) enqueue(f *follow, m streamMessage) bool {
-	s.mu.Lock()
-	if f.done {
+func (s *liveStream) enqueue(ctx context.Context, f *follow, m streamMessage) bool {
+	for {
+		s.mu.Lock()
+		if f.done {
+			s.mu.Unlock()
+			return false
+		}
+		if len(f.queue) < followQueueLen {
+			s.push(f, m)
+			s.mu.Unlock()
+			s.signal()
+			return true
+		}
 		s.mu.Unlock()
-		return false
+		select {
+		case <-f.room:
+		case <-ctx.Done():
+			return false
+		}
 	}
-	if len(f.queue) >= followQueueLen {
-		s.mu.Unlock()
-		s.end(f)
-		return false
-	}
-	s.push(f, m)
-	s.mu.Unlock()
-	s.signal()
-	return true
 }
 
 // end drops f and queues its end in place of whatever it had queued, unless
@@ -239,10 +247,17 @@ func (s *liveStream) next() (streamMessage, bool) {
 			f.queue = nil
 			continue
 		}
+		full := len(f.queue) >= followQueueLen
 		m := f.queue[0]
 		f.queue = f.queue[1:]
 		if len(f.queue) > 0 {
 			s.ready = append(s.ready, f)
+		}
+		if full {
+			select {
+			case f.room <- struct{}{}:
+			default:
+			}
 		}
 		return m, true
 	}
