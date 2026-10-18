@@ -96,6 +96,9 @@ type Handler struct {
 	code           ports.CodeBrowser
 	gitCredentials ports.GitCredentials
 	shells         ports.ShellEdits
+
+	// pageStreams are the open page event streams, by stream_id.
+	pageStreams pageStreamRegistry
 }
 
 // NewHandler returns an HTTP handler that serves /api/list_tree, /api/list_zones, /api/list_projects, etc.

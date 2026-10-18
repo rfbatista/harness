@@ -29,7 +29,7 @@ export function codeGateway(api, feed) {
     },
 
     follow(projectId, onCodeChanged, onStatus) {
-      return feed.follow(`/events?project_id=${encodeURIComponent(projectId)}`, {
+      return feed.followPage({ kind: "project", projectId }, {
         onMessage: (msg) => {
           let change;
           try {

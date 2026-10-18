@@ -81,10 +81,6 @@ func (a *scopedArtifactsAPI) find(id string) map[string]any {
 }
 
 func (a *scopedArtifactsAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Path == "/api/sessions/s1/events" && a.feed != nil {
-		a.feed.ServeHTTP(w, r)
-		return
-	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	writeJSON := func(status int, v any) {
@@ -183,7 +179,12 @@ func designServer(t *testing.T, api *scopedArtifactsAPI) *httptest.Server {
 		Artifacts: seedReader{api: api},
 	}, assets, nil)
 	mux := http.NewServeMux()
-	mux.Handle("/api/events", http.NotFoundHandler())
+	if api.feed != nil {
+		mux.Handle("/api/page_events", api.feed)
+		mux.HandleFunc("/api/follow_session", api.feed.follow)
+	} else {
+		mux.Handle("/api/page_events", http.NotFoundHandler())
+	}
 	mux.Handle("/api/sessions/s1/terminal", http.NotFoundHandler())
 	mux.Handle("/api/", api)
 	mux.Handle("/", pages)
@@ -213,7 +214,7 @@ func cardNamed(title string) string {
 func TestDesignTabMovesAnArtifactToTheProjectInTheBrowser(t *testing.T) {
 	ctx, errs := browser(t)
 	now := time.Now()
-	api := &scopedArtifactsAPI{feed: &sseFeed{}, list: []map[string]any{
+	api := &scopedArtifactsAPI{feed: sessionFeed(), list: []map[string]any{
 		scopedDTO("a1", "page", "Hero", "design/hero.html", "task", now.Add(-time.Minute)),
 		scopedDTO("u1", "url", "Dev server", "", "task", now.Add(-2*time.Minute)),
 	}}
@@ -237,7 +238,7 @@ func TestDesignTabMovesAnArtifactToTheProjectInTheBrowser(t *testing.T) {
 	if err != nil {
 		t.Fatalf("%v\nJS errors: %v", err, errs.all())
 	}
-	waitFor(t, "the session stream", func() bool { return api.feed.followers() >= 1 })
+	waitFor(t, "the page follows the session", func() bool { return api.feed.following() == "s1" })
 	err = chromedp.Run(ctx,
 		chromedp.Evaluate(moveButton+`.click(); true`, nil),
 		chromedp.Poll(designPanelSel+`.querySelector('[data-scope-word]').textContent === 'Project asset'`, nil, chromedp.WithPollingTimeout(5*time.Second)),

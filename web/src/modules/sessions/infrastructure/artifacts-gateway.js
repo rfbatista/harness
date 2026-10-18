@@ -1,7 +1,8 @@
 // ArtifactGateway over the harness HTTP API: the artifact list route, the
-// scope move, attach and detach, the delete, the `artifact` events on a
-// session's SSE stream (the one interactive sessions already use for status
-// and done) and the `artifact` changes on the project feed.
+// scope move, attach and detach, the delete, the `artifact` events of a
+// session (the events interactive sessions already put out for status and
+// done) and the `artifact` changes on the project feed, both on the page
+// event stream.
 
 import { toArtifactAnswer, toArtifactEvent, toArtifactList, toProjectArtifactChange } from "./artifact-dto.js";
 
@@ -46,7 +47,7 @@ export function artifactsGateway(api, feed, base = "/api") {
     },
 
     follow(sessionId, onEvent, onStatus) {
-      return feed.follow(`/sessions/${encodeURIComponent(sessionId)}/events`, {
+      return feed.followPage({ kind: "session", sessionId }, {
         onMessage: (dto) => {
           let event;
           try {
@@ -61,7 +62,7 @@ export function artifactsGateway(api, feed, base = "/api") {
     },
 
     followProject(projectId, onChange, onStatus) {
-      return feed.follow(`/events?project_id=${encodeURIComponent(projectId)}`, {
+      return feed.followPage({ kind: "project", projectId }, {
         onMessage: (dto) => {
           let change;
           try {

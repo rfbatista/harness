@@ -148,9 +148,9 @@ func TestTasksMovedElsewhereShowOnTheBoardLive(t *testing.T) {
 	}
 	ctx, errs := browser(t)
 
-	feed := &sseFeed{}
+	feed := projectFeed()
 	mux := http.NewServeMux()
-	mux.Handle("/api/events", feed)
+	mux.Handle("/api/page_events", feed)
 	mux.Handle("/api/", http.NotFoundHandler())
 	mux.Handle("/", NewHandler(boardDeps(), assets, nil))
 	srv := httptest.NewServer(mux)

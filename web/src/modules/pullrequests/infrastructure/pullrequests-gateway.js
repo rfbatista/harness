@@ -23,7 +23,7 @@ export function pullRequestsGateway(api, feed) {
     },
 
     follow(projectId, onPullRequest, onStatus) {
-      return feed.follow(`/events?project_id=${encodeURIComponent(projectId)}`, {
+      return feed.followPage({ kind: "project", projectId }, {
         onMessage: (dto) => {
           let pr;
           try {

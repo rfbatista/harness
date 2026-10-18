@@ -1,5 +1,6 @@
 // ProjectGateway over the harness HTTP API (RPC-style POSTs) and the project
-// catalog feed (/api/project_events, server-sent events).
+// catalog feed (what /api/project_events sent, as the page event stream's
+// projects kind).
 
 import { Codes, StructuredError } from "../../../shared/domain/errors.js";
 import {
@@ -58,7 +59,7 @@ export function projectsGateway(api, events) {
     },
 
     followCatalog(onChange, onStatus = () => {}) {
-      return events.follow("/project_events", {
+      return events.followPage({ kind: "projects" }, {
         onMessage(data) {
           let change;
           try {

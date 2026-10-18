@@ -188,13 +188,12 @@ func newInboxHarness(t *testing.T, list []*domain.Notification) *inboxHarness {
 		t.Skip("browser test: web client not built; run `make web`")
 	}
 	ctx, errs := browser(t)
-	inbox := &fakeInbox{list: list, stream: &sseFeed{}}
+	inbox := &fakeInbox{list: list, stream: &sseFeed{kind: "notifications"}}
 	deps := railWorld()
 	deps.Projects = fakeProjects{[]*domain.Project{{ID: "p1", Name: "harness"}, {ID: "p2", Name: "tui"}}}
 	deps.Notifications = inbox
 	mux := http.NewServeMux()
-	mux.Handle("/api/events", &sseFeed{})
-	mux.Handle("/api/notifications/events", inbox.stream)
+	mux.Handle("/api/page_events", inbox.stream)
 	mux.Handle("/api/notifications", inbox)
 	mux.Handle("/api/notifications/read", inbox)
 	mux.Handle("/api/", http.NotFoundHandler())

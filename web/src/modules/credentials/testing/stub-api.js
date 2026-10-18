@@ -5,6 +5,7 @@
 
 import { codeOf } from "../../../shared/domain/errors.js";
 import { jsonResponse } from "../../../shared/testing/doubles.js";
+import { helloEnvelope, pageEventsProject, pageEventsWith, projectsEnvelope } from "../../../shared/testing/page-events.js";
 import { memoryCredentials } from "../infrastructure/memory-gateway.js";
 import { credentialDTO, repositoryCredentialDTO } from "./fixtures.js";
 
@@ -74,18 +75,20 @@ export function stubCredentialsApi(world) {
 
   class StubEventSource {
     constructor(input) {
-      const url = new URL(input, "http://harness.test");
       this.onopen = null;
       this.onmessage = null;
       this.onerror = null;
-      if (url.pathname !== "/api/project_events") throw new Error(`no stream at ${url.pathname}`);
+      if (pageEventsProject(input) === null || !pageEventsWith(input).includes("projects")) throw new Error(`no catalog feed at ${input}`);
       sources.add(this);
       this.unfollow = gateway.follow((change) => {
-        if (change.kind === "upsert") this.send({ git_credential: credentialDTO(change.credential) });
-        if (change.kind === "deleted") this.send({ git_credential: { id: change.id }, deleted: true });
-        if (change.kind === "identity") this.send({ git_identity: identityDTO(change.identity) });
+        if (change.kind === "upsert") this.send(projectsEnvelope({ git_credential: credentialDTO(change.credential) }));
+        if (change.kind === "deleted") this.send(projectsEnvelope({ git_credential: { id: change.id }, deleted: true }));
+        if (change.kind === "identity") this.send(projectsEnvelope({ git_identity: identityDTO(change.identity) }));
       });
-      queueMicrotask(() => this.onopen?.({}));
+      queueMicrotask(() => {
+        this.onopen?.({});
+        this.send(helloEnvelope());
+      });
     }
     send(dto) {
       this.onmessage?.({ data: typeof dto === "string" ? dto : JSON.stringify(dto) });
@@ -101,9 +104,9 @@ export function stubCredentialsApi(world) {
     EventSource: StubEventSource,
     memory,
     requests,
-    /** Sends a raw message on every open stream (projects share it). */
+    /** Sends dto as a projects change on every open stream (projects share it); a string is sent as the raw line. */
     pushRaw(dto) {
-      for (const s of sources) s.send(dto);
+      for (const s of sources) s.send(typeof dto === "string" ? dto : projectsEnvelope(dto));
     },
   };
 }

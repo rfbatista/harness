@@ -22,7 +22,7 @@ export function channelGateway(api, feed) {
     },
 
     follow(projectId, onEvent, onStatus) {
-      return feed.follow(`/events?project_id=${encodeURIComponent(projectId)}`, {
+      return feed.followPage({ kind: "project", projectId }, {
         onMessage: (dto) => {
           let event;
           try {

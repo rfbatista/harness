@@ -95,7 +95,7 @@ export function toSeed(body) {
   };
 }
 
-/** One `data:` line of GET /api/events: {"session": {...}, "deleted": true?} */
+/** One project change of the page event stream (what GET /api/events sends): {"session": {...}, "deleted": true?} */
 export function toChange(dto) {
   if (dto?.deleted) {
     const id = dto.session?.id;
