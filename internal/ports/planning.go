@@ -9,8 +9,8 @@ import (
 // TicketRepository is the outbound port for persisting and retrieving tickets.
 // Tickets are scoped to a project.
 type TicketRepository interface {
-	Get(id string) *domain.Ticket
-	ListByProject(projectID string) []*domain.Ticket
+	Get(ctx context.Context, id string) *domain.Ticket
+	ListByProject(ctx context.Context, projectID string) []*domain.Ticket
 	Create(projectID, title, description string, status domain.TicketStatus) (*domain.Ticket, error)
 	Update(id, title, description string, status domain.TicketStatus) (*domain.Ticket, error)
 	Delete(id string) error

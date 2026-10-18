@@ -554,7 +554,7 @@ func TestTickets_DeleteIsPublished(t *testing.T) {
 	bus := eventbus.New()
 	var seen []domain.TicketDeleted
 	ports.On(bus, func(_ context.Context, ev domain.TicketDeleted) error {
-		if tickets.Get(ev.TicketID) != nil {
+		if tickets.Get(context.Background(), ev.TicketID) != nil {
 			t.Errorf("TicketDeleted published while %s is still stored", ev.TicketID)
 		}
 		seen = append(seen, ev)

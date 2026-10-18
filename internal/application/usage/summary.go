@@ -14,7 +14,7 @@ const topN = 10
 
 // UsageSummary answers a project's usage over r: totals, tokens over time
 // split by model, and the top tasks and sessions by tokens.
-func (s *Service) UsageSummary(_ context.Context, projectID string, r ports.UsageRange) (*ports.UsageSummary, error) {
+func (s *Service) UsageSummary(ctx context.Context, projectID string, r ports.UsageRange) (*ports.UsageSummary, error) {
 	if r == "" {
 		r = ports.UsageToday
 	}
@@ -50,7 +50,7 @@ func (s *Service) UsageSummary(_ context.Context, projectID string, r ports.Usag
 		sum.Series[i] = ports.UsageSeriesTokens{Start: p.Start, Model: p.Model, InputTokens: p.InputTokens, OutputTokens: p.OutputTokens,
 			CacheCreationInputTokens: p.CacheCreationInputTokens, CacheReadInputTokens: p.CacheReadInputTokens, TotalTokens: total(p.UsageSums)}
 	}
-	titles := s.titler()
+	titles := s.titler(ctx)
 	sum.TopTasks = []ports.UsageByTask{}
 	for _, id := range ranked(tasks) {
 		sum.TopTasks = append(sum.TopTasks, ports.UsageByTask{TaskID: id, TaskTitle: titles(id), Totals: tasks[id].totals()})
@@ -128,7 +128,7 @@ func (s *Service) span(r ports.UsageRange) (time.Time, ports.UsageBucket, error)
 }
 
 // titler looks task titles up once each.
-func (s *Service) titler() func(id string) string {
+func (s *Service) titler(ctx context.Context) func(id string) string {
 	titles := map[string]string{}
 	return func(id string) string {
 		if id == "" {
@@ -136,7 +136,7 @@ func (s *Service) titler() func(id string) string {
 		}
 		title, ok := titles[id]
 		if !ok {
-			if t := s.readers.Tickets.Get(id); t != nil {
+			if t := s.readers.Tickets.Get(ctx, id); t != nil {
 				title = t.Title
 			}
 			titles[id] = title

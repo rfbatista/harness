@@ -38,7 +38,7 @@ func (s *Service) StartInteractive(ctx context.Context, req InteractiveRequest) 
 	if _, err := s.catalog.Projects.GetProject(ctx, req.ProjectID); err != nil {
 		return nil, ports.AgentSpec{}, err
 	}
-	ticket, err := s.ticketIn(req.ProjectID, req.TicketID)
+	ticket, err := s.ticketIn(ctx, req.ProjectID, req.TicketID)
 	if err != nil {
 		return nil, ports.AgentSpec{}, err
 	}
@@ -156,7 +156,7 @@ func (s *Service) ResumeInteractive(ctx context.Context, req ports.ResumeRequest
 
 	var ticket *domain.Ticket
 	if sess.TicketID != "" && s.tickets != nil {
-		ticket = s.tickets.Get(sess.TicketID)
+		ticket = s.tickets.Get(ctx, sess.TicketID)
 	}
 	ag, err := s.resolveAgent(sess.AgentID, sess.Mode)
 	if err != nil {

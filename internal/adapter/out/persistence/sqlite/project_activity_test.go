@@ -1,6 +1,7 @@
 package sqlite
 
 import (
+	"context"
 	"testing"
 
 	"operators-mcp/internal/domain"
@@ -48,7 +49,7 @@ func TestTicketRepo_ActivityByProject(t *testing.T) {
 	if len(got) != 2 || got["p1"].OpenCount != 2 || got["p2"].OpenCount != 0 {
 		t.Fatalf("ActivityByProject = %+v, want p1 2 open, p2 0 open", got)
 	}
-	if !got["p1"].LastUpdatedAt.Equal(r.Get(newest.ID).UpdatedAt) {
+	if !got["p1"].LastUpdatedAt.Equal(r.Get(context.Background(), newest.ID).UpdatedAt) {
 		t.Fatalf("p1 last update = %v, want %v", got["p1"].LastUpdatedAt, newest.UpdatedAt)
 	}
 }

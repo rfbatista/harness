@@ -61,7 +61,7 @@ type Projects interface {
 
 // Tickets finds a task; the sqlite ticket repository satisfies it.
 type Tickets interface {
-	Get(id string) *domain.Ticket
+	Get(ctx context.Context, id string) *domain.Ticket
 }
 
 // Sessions finds a session; the sqlite session repository satisfies it.
@@ -260,7 +260,7 @@ func (s *Service) onTaskStatus(c domain.TaskStatusChange) {
 	}
 	projectID := c.ProjectID
 	if projectID == "" {
-		if tk := s.readers.Tickets.Get(c.TaskID); tk != nil {
+		if tk := s.readers.Tickets.Get(context.Background(), c.TaskID); tk != nil {
 			projectID = tk.ProjectID
 		}
 	}
@@ -354,7 +354,7 @@ func (s *Service) write(change change) (*ports.NotificationChange, error) {
 	if err != nil || seq == 0 {
 		return nil, err
 	}
-	c = &ports.NotificationChange{Changed: s.named(changed...), UnreadCount: count}
+	c = &ports.NotificationChange{Changed: s.named(context.Background(), changed...), UnreadCount: count}
 	if c.Changed == nil {
 		c.Changed = []*domain.Notification{}
 	}
@@ -397,7 +397,7 @@ func (s *Service) FollowNotifications(ctx context.Context) (<-chan ports.Notific
 
 // ListNotifications answers a page of the inbox, newest first, with the
 // global unread count.
-func (s *Service) ListNotifications(_ context.Context, q ports.NotificationQuery) (*ports.NotificationPage, error) {
+func (s *Service) ListNotifications(ctx context.Context, q ports.NotificationQuery) (*ports.NotificationPage, error) {
 	limit := q.Limit
 	if limit == 0 {
 		limit = defaultLimit
@@ -426,7 +426,7 @@ func (s *Service) ListNotifications(_ context.Context, q ports.NotificationQuery
 		list = list[:limit]
 		page.NextBefore = encodeCursor(list[limit-1])
 	}
-	page.Notifications = s.named(list...)
+	page.Notifications = s.named(ctx, list...)
 	if page.Notifications == nil {
 		page.Notifications = []*domain.Notification{}
 	}
@@ -471,7 +471,7 @@ func (s *Service) MarkNotificationsRead(_ context.Context, req ports.MarkNotific
 
 // Notify records a notification an agent posts, attributed to its session
 // (if any), task (if any) and project.
-func (s *Service) Notify(_ context.Context, req ports.NotifyRequest) (*domain.Notification, error) {
+func (s *Service) Notify(ctx context.Context, req ports.NotifyRequest) (*domain.Notification, error) {
 	title, body := strings.TrimSpace(req.Title), strings.TrimSpace(req.Body)
 	if err := domain.ValidateNotificationText(title, body); err != nil {
 		return nil, err
@@ -497,7 +497,7 @@ func (s *Service) Notify(_ context.Context, req ports.NotifyRequest) (*domain.No
 		return nil, &domain.StructuredError{Code: "PROJECT_NOT_FOUND", Message: "project not found"}
 	}
 	if req.TaskID != "" {
-		tk := s.readers.Tickets.Get(req.TaskID)
+		tk := s.readers.Tickets.Get(ctx, req.TaskID)
 		if tk == nil {
 			return nil, &domain.StructuredError{Code: "TICKET_NOT_FOUND", Message: "ticket not found"}
 		}
@@ -556,7 +556,7 @@ func (s *Service) StopDelivery(ctx context.Context) {
 
 // named fills each notification's current project name and task title.
 // One lookup per distinct id per call; a deleted task leaves the title out.
-func (s *Service) named(list ...*domain.Notification) []*domain.Notification {
+func (s *Service) named(ctx context.Context, list ...*domain.Notification) []*domain.Notification {
 	if len(list) == 0 {
 		return nil
 	}
@@ -575,7 +575,7 @@ func (s *Service) named(list ...*domain.Notification) []*domain.Notification {
 		if c.TaskID != "" {
 			title, ok := tasks[c.TaskID]
 			if !ok {
-				if tk := s.readers.Tickets.Get(c.TaskID); tk != nil {
+				if tk := s.readers.Tickets.Get(ctx, c.TaskID); tk != nil {
 					title = tk.Title
 				}
 				tasks[c.TaskID] = title

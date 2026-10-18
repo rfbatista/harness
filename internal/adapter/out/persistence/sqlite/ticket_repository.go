@@ -1,6 +1,7 @@
 package sqlite
 
 import (
+	"context"
 	"time"
 
 	"operators-mcp/internal/domain"
@@ -21,17 +22,17 @@ func NewTicketRepository(db *gorm.DB) *TicketRepository {
 	return &TicketRepository{db: db}
 }
 
-func (r *TicketRepository) Get(id string) *domain.Ticket {
+func (r *TicketRepository) Get(ctx context.Context, id string) *domain.Ticket {
 	var m TicketModel
-	if err := r.db.First(&m, "id = ?", id).Error; err != nil {
+	if err := r.db.WithContext(ctx).First(&m, "id = ?", id).Error; err != nil {
 		return nil
 	}
 	return m.ToDomain()
 }
 
-func (r *TicketRepository) ListByProject(projectID string) []*domain.Ticket {
+func (r *TicketRepository) ListByProject(ctx context.Context, projectID string) []*domain.Ticket {
 	var models []TicketModel
-	if err := r.db.Where("project_id = ?", projectID).Find(&models).Error; err != nil {
+	if err := r.db.WithContext(ctx).Where("project_id = ?", projectID).Find(&models).Error; err != nil {
 		return nil
 	}
 	out := make([]*domain.Ticket, 0, len(models))

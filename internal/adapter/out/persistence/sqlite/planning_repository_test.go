@@ -1,6 +1,7 @@
 package sqlite
 
 import (
+	"context"
 	"slices"
 	"testing"
 	"time"
@@ -24,7 +25,7 @@ func TestTicketRepo_CRUD(t *testing.T) {
 	if tk.ID == "" || tk.Status != domain.TicketStatusBacklog || tk.CreatedAt.IsZero() {
 		t.Fatalf("bad create: %+v", tk)
 	}
-	if got := r.Get(tk.ID); got == nil || got.Title != "Fix login" {
+	if got := r.Get(context.Background(), tk.ID); got == nil || got.Title != "Fix login" {
 		t.Fatalf("Get failed: %+v", got)
 	}
 
@@ -36,17 +37,17 @@ func TestTicketRepo_CRUD(t *testing.T) {
 		t.Fatalf("bad update: %+v", upd)
 	}
 
-	if list := r.ListByProject("p1"); len(list) != 1 {
+	if list := r.ListByProject(context.Background(), "p1"); len(list) != 1 {
 		t.Fatalf("ListByProject want 1 got %d", len(list))
 	}
-	if list := r.ListByProject("other"); len(list) != 0 {
+	if list := r.ListByProject(context.Background(), "other"); len(list) != 0 {
 		t.Fatalf("ListByProject other want 0 got %d", len(list))
 	}
 
 	if err := r.Delete(tk.ID); err != nil {
 		t.Fatal(err)
 	}
-	if got := r.Get(tk.ID); got != nil {
+	if got := r.Get(context.Background(), tk.ID); got != nil {
 		t.Fatalf("expected nil after delete, got %+v", got)
 	}
 	if err := r.Delete("missing"); err == nil {
@@ -117,7 +118,7 @@ func TestDocumentRepo_CRUDAndLinks(t *testing.T) {
 	if err := docs.Delete(d1.ID); err != nil {
 		t.Fatal(err)
 	}
-	if got := tickets.Get(tk2.ID); got == nil {
+	if got := tickets.Get(context.Background(), tk2.ID); got == nil {
 		t.Fatal("ticket should survive document deletion")
 	}
 	if got := docs.ListByTicket(tk2.ID); len(got) != 0 {

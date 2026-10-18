@@ -50,7 +50,7 @@ func (s *stubResolver) GetZone(id string) *domain.Zone        { return nil }
 
 type stubTickets map[string]*domain.Ticket
 
-func (s stubTickets) Get(id string) *domain.Ticket { return s[id] }
+func (s stubTickets) Get(_ context.Context, id string) *domain.Ticket { return s[id] }
 
 // stubProvisioner stands in for workspaces.Service: it hands out real
 // directories so the CLI has somewhere to run, and records what it was asked for.

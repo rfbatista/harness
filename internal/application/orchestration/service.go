@@ -48,7 +48,7 @@ type Catalog struct {
 // ticketResolver is the slice of the planning ticket store the orchestration
 // needs to validate spawn-into-ticket requests. ports.TicketRepository satisfies it.
 type ticketResolver interface {
-	Get(id string) *domain.Ticket
+	Get(ctx context.Context, id string) *domain.Ticket
 }
 
 type Service struct {
@@ -325,7 +325,7 @@ func (s *Service) prepare(ctx context.Context, in prepareInput) (*prepared, erro
 
 	var ticket *domain.Ticket
 	if in.TicketID != "" {
-		tk, err := s.ticketIn(in.ProjectID, in.TicketID)
+		tk, err := s.ticketIn(ctx, in.ProjectID, in.TicketID)
 		if err != nil {
 			return nil, err
 		}
@@ -497,11 +497,11 @@ func (s *Service) withShims(id string, cfg *llmkit.SessionConfig, cleanup func()
 }
 
 // ticketIn loads a ticket and checks it belongs to the project.
-func (s *Service) ticketIn(projectID, ticketID string) (*domain.Ticket, error) {
+func (s *Service) ticketIn(ctx context.Context, projectID, ticketID string) (*domain.Ticket, error) {
 	if s.tickets == nil {
 		return nil, &domain.StructuredError{Code: "TICKET_NOT_FOUND", Message: "tickets are not available"}
 	}
-	tk := s.tickets.Get(ticketID)
+	tk := s.tickets.Get(ctx, ticketID)
 	if tk == nil {
 		return nil, &domain.StructuredError{Code: "TICKET_NOT_FOUND", Message: "ticket not found"}
 	}
