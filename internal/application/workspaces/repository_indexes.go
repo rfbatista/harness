@@ -53,6 +53,7 @@ type RepositoryIndexes struct {
 	cancel context.CancelFunc
 	work   sync.WaitGroup
 
+	// mu guards the maps, and counting work against Close's cancel.
 	mu       sync.Mutex
 	building map[string]bool   // checkout → a build runs there
 	failed   map[string]string // checkout → why its last build failed
@@ -101,9 +102,12 @@ func (x *RepositoryIndexes) Subscribe(sub ports.EventSubscriber) {
 func (x *RepositoryIndexes) Wait() { x.work.Wait() }
 
 // Close stops the builds that run (their codegraph is killed) and waits for
-// them.
+// them. Cancelling under mu orders it after any reaction or build already
+// counted, and before any refused.
 func (x *RepositoryIndexes) Close() {
+	x.mu.Lock()
 	x.cancel()
+	x.mu.Unlock()
 	x.work.Wait()
 }
 
@@ -273,6 +277,8 @@ func (x *RepositoryIndexes) build(codegraph, checkout string) error {
 
 // background runs fn off the caller's goroutine, counted by Wait.
 func (x *RepositoryIndexes) background(fn func(ctx context.Context)) {
+	x.mu.Lock()
+	defer x.mu.Unlock()
 	if x.ctx.Err() != nil {
 		return
 	}
