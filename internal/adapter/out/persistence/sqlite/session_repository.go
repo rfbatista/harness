@@ -1,6 +1,7 @@
 package sqlite
 
 import (
+	"context"
 	"errors"
 	"time"
 
@@ -61,15 +62,15 @@ func (r *SessionRepository) Create(s *domain.Session) (*domain.Session, error) {
 
 // Get is Find for callers that treat a failed read as not found.
 func (r *SessionRepository) Get(id string) *domain.Session {
-	s, _ := r.Find(id)
+	s, _ := r.Find(context.Background(), id)
 	return s
 }
 
 // Find reads a session: nil, nil when there is none, an error when the read
 // failed.
-func (r *SessionRepository) Find(id string) (*domain.Session, error) {
+func (r *SessionRepository) Find(ctx context.Context, id string) (*domain.Session, error) {
 	var m SessionModel
-	err := r.db.First(&m, "id = ?", id).Error
+	err := r.db.WithContext(ctx).First(&m, "id = ?", id).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, nil
 	}
@@ -80,15 +81,15 @@ func (r *SessionRepository) Find(id string) (*domain.Session, error) {
 }
 
 // List is Query for callers that treat a failed read as no sessions.
-func (r *SessionRepository) List(filter ports.SessionFilter) []*domain.Session {
-	list, _ := r.Query(filter)
+func (r *SessionRepository) List(ctx context.Context, filter ports.SessionFilter) []*domain.Session {
+	list, _ := r.Query(ctx, filter)
 	return list
 }
 
 // Query lists the sessions filter matches, newest first, or the error the
 // read failed with.
-func (r *SessionRepository) Query(filter ports.SessionFilter) ([]*domain.Session, error) {
-	q := r.db.Model(&SessionModel{})
+func (r *SessionRepository) Query(ctx context.Context, filter ports.SessionFilter) ([]*domain.Session, error) {
+	q := r.db.WithContext(ctx).Model(&SessionModel{})
 	if filter.ProjectID != "" {
 		q = q.Where("project_id = ?", filter.ProjectID)
 	}

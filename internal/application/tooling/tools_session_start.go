@@ -21,7 +21,7 @@ func startPeer(ctx context.Context, scope *taskScope, sessions ports.SessionRepo
 	}
 
 	live := 0
-	for _, s := range sessions.List(ports.SessionFilter{ProjectID: scope.session.ProjectID, TicketID: scope.ticket.ID}) {
+	for _, s := range sessions.List(ctx, ports.SessionFilter{ProjectID: scope.session.ProjectID, TicketID: scope.ticket.ID}) {
 		if !s.Status.IsTerminal() {
 			live++
 		}

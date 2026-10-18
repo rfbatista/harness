@@ -124,7 +124,7 @@ func SessionTaskTools(planningSvc ports.Planning, sessions ports.SessionReposito
 				}
 				includeEnded, _ := args["include_ended"].(bool)
 				roles := taskRoles(ctx, scope, channel)
-				peers := taskPeers(ctx, scope, sessions.List(ports.SessionFilter{ProjectID: scope.session.ProjectID, TicketID: scope.ticket.ID}), includeEnded, agents, roles.of)
+				peers := taskPeers(ctx, scope, sessions.List(ctx, ports.SessionFilter{ProjectID: scope.session.ProjectID, TicketID: scope.ticket.ID}), includeEnded, agents, roles.of)
 				return map[string]any{
 					"task":                 map[string]string{"id": scope.ticket.ID, "title": scope.ticket.Title},
 					"you":                  map[string]string{"session_id": scope.session.ID, "branch": scope.session.Branch, "role": string(roles.of(scope.session.ID))},

@@ -108,13 +108,13 @@ type TaskChannelUI interface {
 // SessionDecorator fills the derived role fields (Role, ArchitectSessionID,
 // StatusCheck) of sessions about to be shown.
 type SessionDecorator interface {
-	DecorateSessions(sessions ...*domain.Session)
+	DecorateSessions(ctx context.Context, sessions ...*domain.Session)
 }
 
 // TicketDecorator fills the derived fields (ArchitectSessionID,
 // PendingReviews) of tickets about to be shown.
 type TicketDecorator interface {
-	DecorateTickets(tickets ...*domain.Ticket)
+	DecorateTickets(ctx context.Context, tickets ...*domain.Ticket)
 }
 
 // TurnDelivery puts text into a running session as a user turn. The
@@ -175,7 +175,7 @@ type ReviewRequestRepository interface {
 	CountPending(taskID string) int
 	// CountPendingByTask counts each task's pending requests at once; a task
 	// with none is left out.
-	CountPendingByTask(taskIDs []string) map[string]int
+	CountPendingByTask(ctx context.Context, taskIDs []string) map[string]int
 }
 
 // StatusCheckRepository persists status-check loops, one per delegate.
@@ -184,7 +184,7 @@ type StatusCheckRepository interface {
 	Save(c *domain.StatusCheck) error
 	Get(delegateSessionID string) *domain.StatusCheck
 	// ListByDelegates is the loops of the given delegates, at once.
-	ListByDelegates(delegateSessionIDs []string) []*domain.StatusCheck
+	ListByDelegates(ctx context.Context, delegateSessionIDs []string) []*domain.StatusCheck
 	ListByTask(taskID string) []*domain.StatusCheck
 	ListByArchitect(architectSessionID string) []*domain.StatusCheck
 	// ListActive is every active loop, earliest next_at first.

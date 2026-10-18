@@ -85,9 +85,9 @@ func (s *Service) announce(tk *domain.Ticket, deleted bool) {
 }
 
 // decorate fills the tickets' derived fields, when a decorator is wired.
-func (s *Service) decorate(tickets ...*domain.Ticket) {
+func (s *Service) decorate(ctx context.Context, tickets ...*domain.Ticket) {
 	if s.Decorator != nil {
-		s.Decorator.DecorateTickets(tickets...)
+		s.Decorator.DecorateTickets(ctx, tickets...)
 	}
 }
 
@@ -113,7 +113,7 @@ func (s *Service) statusMoved(ctx context.Context, tk *domain.Ticket, patch port
 	}
 }
 
-func (s *Service) CreateTicket(_ context.Context, projectID, title, description string, status domain.TicketStatus) (*domain.Ticket, error) {
+func (s *Service) CreateTicket(ctx context.Context, projectID, title, description string, status domain.TicketStatus) (*domain.Ticket, error) {
 	if title == "" {
 		return nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "title is required"}
 	}
@@ -132,7 +132,8 @@ func (s *Service) CreateTicket(_ context.Context, projectID, title, description 
 	if err != nil {
 		return nil, err
 	}
-	s.decorate(tk)
+	// The write is done: the change goes out whole even if the request ends.
+	s.decorate(context.WithoutCancel(ctx), tk)
 	s.announce(tk, false)
 	return tk, nil
 }
@@ -142,13 +143,13 @@ func (s *Service) GetTicket(ctx context.Context, id string) (*domain.Ticket, err
 	if tk == nil {
 		return nil, &domain.StructuredError{Code: "TICKET_NOT_FOUND", Message: "ticket not found"}
 	}
-	s.decorate(tk)
+	s.decorate(ctx, tk)
 	return tk, nil
 }
 
 func (s *Service) ListTickets(ctx context.Context, projectID string) ([]*domain.Ticket, error) {
 	tickets := s.tickets.ListByProject(ctx, projectID)
-	s.decorate(tickets...)
+	s.decorate(ctx, tickets...)
 	return tickets, nil
 }
 
@@ -189,14 +190,15 @@ func (s *Service) PatchTicket(ctx context.Context, id string, patch ports.Ticket
 		status = *patch.Status
 	}
 	if title == existing.Title && description == existing.Description && status == existing.Status {
-		s.decorate(existing)
+		s.decorate(ctx, existing)
 		return existing, nil
 	}
 	tk, err := s.tickets.Update(id, title, description, status)
 	if err != nil {
 		return nil, err
 	}
-	s.decorate(tk)
+	// The write is done: the change goes out whole even if the request ends.
+	s.decorate(context.WithoutCancel(ctx), tk)
 	s.announce(tk, false)
 	if status != existing.Status {
 		s.statusMoved(ctx, tk, patch)

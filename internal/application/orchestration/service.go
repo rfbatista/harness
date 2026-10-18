@@ -275,7 +275,7 @@ func (s *Service) Start(ctx context.Context, req StartRequest) (*domain.Session,
 	if err := s.Send(ctx, sess.ID(), req.Task); err != nil {
 		slog.Error("send initial task failed", "session", sess.ID(), "err", err)
 	}
-	return s.withResumability(created), nil
+	return s.withResumability(ctx, created), nil
 }
 
 // prepareInput is what every way of starting a session shares: enough to
@@ -919,7 +919,7 @@ func (s *Service) releaseApproval(id string) sessionChange {
 // metricsOf is the session's stored metrics, nil when it is gone or its read
 // failed (logged).
 func (s *Service) metricsOf(id string) *ports.SessionMetrics {
-	cur, err := s.sessions.Find(id)
+	cur, err := s.sessions.Find(context.Background(), id)
 	if err != nil {
 		slog.Error("session not read; its metrics miss this event", "session", id, "err", err)
 	}
@@ -1032,19 +1032,19 @@ func (s *Service) History(id string, fromSeq int64) ([]SessionEvent, error) {
 	return out, nil
 }
 
-func (s *Service) Get(_ context.Context, id string) (*domain.Session, error) {
-	sess, err := s.sessions.Find(id)
+func (s *Service) Get(ctx context.Context, id string) (*domain.Session, error) {
+	sess, err := s.sessions.Find(ctx, id)
 	if err != nil {
 		return nil, fmt.Errorf("read session: %w", err)
 	}
 	if sess == nil {
 		return nil, &domain.StructuredError{Code: "SESSION_NOT_FOUND", Message: "session not found"}
 	}
-	return s.withResumability(sess), nil
+	return s.withResumability(ctx, sess), nil
 }
 
-func (s *Service) List(_ context.Context, f ports.SessionFilter) ([]*domain.Session, error) {
-	list, err := s.sessions.Query(f)
+func (s *Service) List(ctx context.Context, f ports.SessionFilter) ([]*domain.Session, error) {
+	list, err := s.sessions.Query(ctx, f)
 	if err != nil {
 		return nil, fmt.Errorf("list sessions: %w", err)
 	}
@@ -1052,7 +1052,7 @@ func (s *Service) List(_ context.Context, f ports.SessionFilter) ([]*domain.Sess
 		s.fillResumability(sess)
 	}
 	if s.Decorator != nil {
-		s.Decorator.DecorateSessions(list...) // the whole list at once: its queries do not grow with it
+		s.Decorator.DecorateSessions(ctx, list...) // the whole list at once: its queries do not grow with it
 	}
 	return list, nil
 }

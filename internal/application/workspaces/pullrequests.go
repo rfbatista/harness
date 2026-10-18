@@ -266,7 +266,7 @@ func (s *PullRequests) task(ctx context.Context, t *target) *domain.Ticket {
 	if s.d.Sessions == nil || s.d.Tickets == nil {
 		return nil
 	}
-	for _, sess := range s.d.Sessions.List(ports.SessionFilter{ProjectID: t.projectID}) {
+	for _, sess := range s.d.Sessions.List(ctx, ports.SessionFilter{ProjectID: t.projectID}) {
 		if sess.WorkspaceID != t.ws.ID || sess.TicketID == "" {
 			continue
 		}

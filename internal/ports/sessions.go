@@ -1,6 +1,7 @@
 package ports
 
 import (
+	"context"
 	"time"
 
 	"operators-mcp/internal/domain"
@@ -104,10 +105,10 @@ type SessionRepository interface {
 	// Get and List answer a failed read as not found and as no sessions.
 	// The session path reads through Find and Query instead, which report it.
 	Get(id string) *domain.Session
-	List(filter SessionFilter) []*domain.Session
+	List(ctx context.Context, filter SessionFilter) []*domain.Session
 	// Find reads a session: nil, nil when there is none.
-	Find(id string) (*domain.Session, error)
-	Query(filter SessionFilter) ([]*domain.Session, error)
+	Find(ctx context.Context, id string) (*domain.Session, error)
+	Query(ctx context.Context, filter SessionFilter) ([]*domain.Session, error)
 	// Delete removes the session and its event log.
 	Delete(id string) error
 	// ActivityByProject answers each project's live session count and newest

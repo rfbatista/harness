@@ -24,7 +24,7 @@ func (s *Service) SessionActivityByProject(_ context.Context) (map[string]ports.
 // LiveProjectSessions names the project's sessions that are not done, failed
 // or stopped, with their agent's name: what refuses a project's delete.
 func (s *Service) LiveProjectSessions(ctx context.Context, projectID string) ([]domain.ProjectSessionRef, error) {
-	live := s.sessions.List(ports.SessionFilter{ProjectID: projectID, Statuses: liveStatuses})
+	live := s.sessions.List(ctx, ports.SessionFilter{ProjectID: projectID, Statuses: liveStatuses})
 	refs := make([]domain.ProjectSessionRef, 0, len(live))
 	for _, sess := range live {
 		refs = append(refs, domain.ProjectSessionRef{ID: sess.ID, TicketID: sess.TicketID, Agent: s.agentName(ctx, sess.AgentID)})

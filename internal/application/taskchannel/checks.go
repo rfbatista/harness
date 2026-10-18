@@ -153,7 +153,7 @@ func (s *Service) sessionStarted(ev domain.SessionStarted) error {
 	if ev.ParentSessionID == "" {
 		return nil
 	}
-	arch := domain.TaskArchitect(s.taskSessions(ev.TicketID))
+	arch := domain.TaskArchitect(s.taskSessions(context.Background(), ev.TicketID))
 	if arch == nil || arch.ID != ev.ParentSessionID {
 		return nil // a delegate's or a peer's session gets no loop
 	}

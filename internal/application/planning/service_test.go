@@ -472,7 +472,7 @@ func TestSetDocumentScope_MovesKeepsLinksAndIsIdempotent(t *testing.T) {
 
 type decoratorFunc func(...*domain.Ticket)
 
-func (f decoratorFunc) DecorateTickets(tks ...*domain.Ticket) { f(tks...) }
+func (f decoratorFunc) DecorateTickets(_ context.Context, tks ...*domain.Ticket) { f(tks...) }
 
 // A status move is recorded with who made it and why, and announced as
 // TicketStatusChanged; a patch that keeps the status records nothing.

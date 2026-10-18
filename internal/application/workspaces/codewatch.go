@@ -98,7 +98,7 @@ var runningStatuses = []domain.SessionStatus{
 // Start watches the sessions already running and polls every interval until
 // Stop.
 func (w *CodeWatcher) Start() {
-	for _, s := range w.d.Sessions.List(ports.SessionFilter{Statuses: runningStatuses}) {
+	for _, s := range w.d.Sessions.List(context.Background(), ports.SessionFilter{Statuses: runningStatuses}) {
 		w.Track(s.ID)
 	}
 	w.stop, w.done = make(chan struct{}), make(chan struct{})
