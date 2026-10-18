@@ -326,6 +326,11 @@ func (s *server) bareFrame(title string) shell.Frame {
 // the code, and what to do next. A *_NOT_FOUND is a 404; anything uncoded is
 // a 500 whose details stay in the log.
 func (s *server) renderError(w http.ResponseWriter, r *http.Request, err error) {
+	if r.Context().Err() != nil {
+		// The request ended: nobody reads the page, and the reads it cut
+		// short are not a server fault.
+		return
+	}
 	code := errs.Code(err)
 	status, message := http.StatusInternalServerError, "Something went wrong on the server."
 	switch {
