@@ -175,7 +175,7 @@ func isRead(sql string) bool {
 }
 
 func migrate(db *gorm.DB) error {
-	if err := db.AutoMigrate(&ProjectModel{}, &RepositoryModel{}, &ZoneModel{}, &AgentModel{}, &PromptModel{}, &SkillModel{}, &SkillFileModel{}, &SettingModel{}, &MCPServerModel{}, &ToolModel{}, &TaskModel{}, &SessionModel{}, &SessionEventModel{}, &TicketModel{}, &DocumentModel{}, &TicketDocumentModel{}, &WorkspaceModel{}, &BoundedContextModel{}, &EnvFileModel{}, &RunCommandModel{}, &ArtifactModel{}, &ArtifactTicketModel{}, &TaskMessageModel{}, &ReviewRequestModel{}, &StatusCheckModel{}, &TicketStatusChangeModel{}, &TicketResourceModel{}, &TicketCommentModel{}, &PullRequestModel{}, &NotificationModel{}, &GitCredentialModel{}, &GitIdentityModel{}, &RepositoryCredentialModel{}, &UsageRecordModel{}, &ActivationModel{}); err != nil {
+	if err := db.AutoMigrate(&ProjectModel{}, &RepositoryModel{}, &ZoneModel{}, &AgentModel{}, &PromptModel{}, &SkillModel{}, &SkillFileModel{}, &SettingModel{}, &MCPServerModel{}, &ToolModel{}, &TaskModel{}, &SessionModel{}, &SessionEventModel{}, &TicketModel{}, &DocumentModel{}, &TicketDocumentModel{}, &WorkspaceModel{}, &BoundedContextModel{}, &EnvFileModel{}, &RunCommandModel{}, &ArtifactModel{}, &ArtifactTicketModel{}, &TaskMessageModel{}, &ReviewRequestModel{}, &StatusCheckModel{}, &TicketStatusChangeModel{}, &TicketResourceModel{}, &TicketCommentModel{}, &PullRequestModel{}, &NotificationModel{}, &GitCredentialModel{}, &GitIdentityModel{}, &RepositoryCredentialModel{}, &UsageRecordModel{}, &ActivationModel{}, &TokenSaverInstallationModel{}); err != nil {
 		return fmt.Errorf("sqlite migrate: %w", err)
 	}
 	if err := migrateAgentPromptsToEntities(db); err != nil {
@@ -186,9 +186,6 @@ func migrate(db *gorm.DB) error {
 	}
 	if err := migrateInteractiveRunner(db); err != nil {
 		return fmt.Errorf("sqlite session runner migration: %w", err)
-	}
-	if err := db.AutoMigrate(&TokenSaverInstallationModel{}); err != nil {
-		return fmt.Errorf("sqlite migrate token savers: %w", err)
 	}
 	return nil
 }
