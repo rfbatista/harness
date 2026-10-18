@@ -1,6 +1,7 @@
 package sqlite
 
 import (
+	"context"
 	"time"
 
 	"gorm.io/gorm"
@@ -86,9 +87,9 @@ func (r *PullRequestRepository) Save(pr *domain.PullRequest) (*domain.PullReques
 }
 
 // LatestForWorkspace is the workspace's newest pull request, or nil.
-func (r *PullRequestRepository) LatestForWorkspace(workspaceID string) *domain.PullRequest {
+func (r *PullRequestRepository) LatestForWorkspace(ctx context.Context, workspaceID string) *domain.PullRequest {
 	var ms []PullRequestModel
-	if err := r.db.Where("workspace_id = ?", workspaceID).Order("created_at DESC, number DESC").Limit(1).Find(&ms).Error; err != nil || len(ms) == 0 {
+	if err := r.db.WithContext(ctx).Where("workspace_id = ?", workspaceID).Order("created_at DESC, number DESC").Limit(1).Find(&ms).Error; err != nil || len(ms) == 0 {
 		return nil
 	}
 	return ms[0].toDomain()
@@ -97,12 +98,12 @@ func (r *PullRequestRepository) LatestForWorkspace(workspaceID string) *domain.P
 // LatestForWorkspaces is the newest pull request of each given workspace
 // that has one, in one query, in the order of workspaceIDs; none when the
 // read fails, as LatestForWorkspace answers nil.
-func (r *PullRequestRepository) LatestForWorkspaces(workspaceIDs []string) []*domain.PullRequest {
+func (r *PullRequestRepository) LatestForWorkspaces(ctx context.Context, workspaceIDs []string) []*domain.PullRequest {
 	if len(workspaceIDs) == 0 {
 		return []*domain.PullRequest{}
 	}
 	var ms []PullRequestModel
-	if err := r.db.Where("workspace_id IN ?", workspaceIDs).Order("created_at DESC, number DESC").Find(&ms).Error; err != nil {
+	if err := r.db.WithContext(ctx).Where("workspace_id IN ?", workspaceIDs).Order("created_at DESC, number DESC").Find(&ms).Error; err != nil {
 		return []*domain.PullRequest{}
 	}
 	newest := make(map[string]*domain.PullRequest, len(workspaceIDs))

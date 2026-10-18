@@ -109,7 +109,7 @@ func (s *PullRequests) resolve(ctx context.Context, workspaceID string) (*target
 	if strings.TrimSpace(workspaceID) == "" {
 		return nil, domain.PullRequestError("INVALID_INPUT", "workspace_id is required")
 	}
-	ws := s.d.Workspaces.Get(workspaceID)
+	ws := s.d.Workspaces.Get(ctx, workspaceID)
 	if ws == nil {
 		return nil, domain.PullRequestError("WORKSPACE_NOT_FOUND", "workspace not found")
 	}
@@ -179,7 +179,7 @@ func (s *PullRequests) PullRequest(ctx context.Context, workspaceID string) (*po
 	if err != nil {
 		return nil, err
 	}
-	stored := s.d.Store.LatestForWorkspace(t.ws.ID)
+	stored := s.d.Store.LatestForWorkspace(ctx, t.ws.ID)
 	draft := s.draft(ctx, t, stored)
 	s.refreshLater(t, stored)
 	return &ports.PullRequestView{Draft: draft, PullRequest: stored}, nil
@@ -324,7 +324,7 @@ func (s *PullRequests) lookup(ctx context.Context, t *target, stored *domain.Pul
 	}
 	if stored == nil {
 		found, err := s.d.Host.FindOpen(ctx, *t.remote, token, t.ws.Branch)
-		if err != nil || found == nil || s.d.Store.LatestForWorkspace(t.ws.ID) != nil {
+		if err != nil || found == nil || s.d.Store.LatestForWorkspace(ctx, t.ws.ID) != nil {
 			return err
 		}
 		_, err = s.store(t, found)
@@ -346,7 +346,7 @@ func (s *PullRequests) RefreshNow(ctx context.Context, workspaceID string) error
 	if !t.github() {
 		return nil
 	}
-	stored := s.d.Store.LatestForWorkspace(t.ws.ID)
+	stored := s.d.Store.LatestForWorkspace(ctx, t.ws.ID)
 	if stored != nil && stored.Closed() {
 		return nil
 	}
@@ -360,8 +360,8 @@ func (s *PullRequests) RefreshNow(ctx context.Context, workspaceID string) error
 
 // StoredPullRequests is the newest stored pull request of each workspace that
 // has one, from the store alone: no git, no host, no background lookup.
-func (s *PullRequests) StoredPullRequests(_ context.Context, workspaceIDs []string) ([]*domain.PullRequest, error) {
-	return s.d.Store.LatestForWorkspaces(workspaceIDs), nil
+func (s *PullRequests) StoredPullRequests(ctx context.Context, workspaceIDs []string) ([]*domain.PullRequest, error) {
+	return s.d.Store.LatestForWorkspaces(ctx, workspaceIDs), nil
 }
 
 // refresh reads a stored pull request from the host, storing and announcing
@@ -559,7 +559,7 @@ func (s *PullRequests) refuseOpen(ctx context.Context, h hostCall) error {
 		}
 		return alreadyExists(pr)
 	}
-	stored := s.d.Store.LatestForWorkspace(t.ws.ID)
+	stored := s.d.Store.LatestForWorkspace(ctx, t.ws.ID)
 	if stored == nil || stored.Closed() {
 		return nil
 	}

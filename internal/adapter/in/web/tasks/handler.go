@@ -111,7 +111,7 @@ func (h Handler) Task(w http.ResponseWriter, r *http.Request) error {
 // WorkspaceReader reads workspaces, many at once (*workspaces.Service
 // satisfies it).
 type WorkspaceReader interface {
-	GetMany(ids []string) []*domain.Workspace
+	GetMany(ctx context.Context, ids []string) []*domain.Workspace
 }
 
 // SessionCode serves a session's code URLs (…/sessions/{session}/code[/…]):
@@ -199,7 +199,7 @@ func (h Handler) task(w http.ResponseWriter, r *http.Request, codeRoute *code.Ro
 	}
 	if h.Code != nil {
 		view.Seed.Code = true
-		view.Seed.BaseRefs = h.baseRefs(list)
+		view.Seed.BaseRefs = h.baseRefs(ctx, list)
 	}
 	if codeRoute != nil {
 		paint, err := h.codePaint(ctx, *codeRoute, list, repos, view.Seed.BaseRefs)
@@ -229,12 +229,12 @@ func (h Handler) usageTotals(ctx context.Context, projectID, taskID string, list
 }
 
 // baseRefs names each session worktree's base branch, by workspace.
-func (h Handler) baseRefs(list []*domain.Session) map[string]string {
+func (h Handler) baseRefs(ctx context.Context, list []*domain.Session) map[string]string {
 	out := map[string]string{}
 	if h.Workspaces == nil {
 		return out
 	}
-	for _, ws := range h.Workspaces.GetMany(workspaceIDs(list)) {
+	for _, ws := range h.Workspaces.GetMany(ctx, workspaceIDs(list)) {
 		if ws != nil && ws.BaseRef != "" {
 			out[ws.ID] = ws.BaseRef
 		}

@@ -12,7 +12,7 @@ import (
 // WorkspaceManager lists, creates and removes a repository's workspaces.
 type WorkspaceManager interface {
 	Create(repositoryID, name, branch, baseRef string) (*domain.Workspace, error)
-	Get(id string) *domain.Workspace
+	Get(ctx context.Context, id string) *domain.Workspace
 	ListByRepository(repositoryID string) []*domain.Workspace
 	ListBranches(repositoryID string) ([]domain.GitBranch, error)
 	// Delete removes the worktree and keeps its branch, so committed work

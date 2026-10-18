@@ -176,7 +176,7 @@ var _ = context.Background
 // fakeWorkspaces names the fixture worktrees' base branch.
 type fakeWorkspaces struct{ base string }
 
-func (f fakeWorkspaces) GetMany(ids []string) []*domain.Workspace {
+func (f fakeWorkspaces) GetMany(_ context.Context, ids []string) []*domain.Workspace {
 	out := make([]*domain.Workspace, 0, len(ids))
 	for _, id := range ids {
 		out = append(out, &domain.Workspace{ID: id, BaseRef: f.base})

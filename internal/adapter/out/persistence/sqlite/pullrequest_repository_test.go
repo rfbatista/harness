@@ -1,6 +1,7 @@
 package sqlite
 
 import (
+	"context"
 	"path/filepath"
 	"testing"
 	"time"
@@ -24,7 +25,7 @@ func TestPullRequestRepo_SaveUpsertsOnRepositoryAndNumber(t *testing.T) {
 	r := NewPullRequestRepository(db)
 	t0 := time.Date(2026, 10, 7, 12, 0, 0, 0, time.UTC)
 
-	if got := r.LatestForWorkspace("w1"); got != nil {
+	if got := r.LatestForWorkspace(context.Background(), "w1"); got != nil {
 		t.Fatalf("empty repo answered %+v", got)
 	}
 	saved, err := r.Save(pr("w1", 3, domain.PullRequestOpen, t0))
@@ -39,7 +40,7 @@ func TestPullRequestRepo_SaveUpsertsOnRepositoryAndNumber(t *testing.T) {
 	if _, err := r.Save(changed); err != nil {
 		t.Fatal(err)
 	}
-	got := r.LatestForWorkspace("w1")
+	got := r.LatestForWorkspace(context.Background(), "w1")
 	if got == nil || got.State != domain.PullRequestMerged || !got.Draft || !got.CreatedAt.Equal(t0) {
 		t.Fatalf("after upsert = %+v", got)
 	}
@@ -57,7 +58,7 @@ func TestPullRequestRepo_LatestIsTheNewestOfTheWorkspace(t *testing.T) {
 	_, _ = r.Save(pr("w1", 1, domain.PullRequestClosed, t0))
 	_, _ = r.Save(pr("w1", 2, domain.PullRequestOpen, t0.Add(time.Hour)))
 	_, _ = r.Save(pr("w2", 5, domain.PullRequestOpen, t0.Add(2*time.Hour)))
-	if got := r.LatestForWorkspace("w1"); got == nil || got.Number != 2 {
+	if got := r.LatestForWorkspace(context.Background(), "w1"); got == nil || got.Number != 2 {
 		t.Fatalf("latest w1 = %+v, want #2", got)
 	}
 }
@@ -71,11 +72,11 @@ func TestPullRequestRepo_LatestForWorkspacesReadsManyAtOnce(t *testing.T) {
 	_, _ = r.Save(pr("w1", 1, domain.PullRequestClosed, t0))
 	_, _ = r.Save(pr("w1", 2, domain.PullRequestOpen, t0.Add(time.Hour)))
 	_, _ = r.Save(pr("w2", 5, domain.PullRequestOpen, t0.Add(2*time.Hour)))
-	got := r.LatestForWorkspaces([]string{"w2", "w3", "w1"})
+	got := r.LatestForWorkspaces(context.Background(), []string{"w2", "w3", "w1"})
 	if len(got) != 2 || got[0].Number != 5 || got[1].Number != 2 {
 		t.Fatalf("latest of w2, w3, w1 = %+v, want #5 then #2", got)
 	}
-	if got := r.LatestForWorkspaces(nil); got == nil || len(got) != 0 {
+	if got := r.LatestForWorkspaces(context.Background(), nil); got == nil || len(got) != 0 {
 		t.Fatalf("no workspaces = %#v, want an empty list", got)
 	}
 }
@@ -91,10 +92,10 @@ func TestPullRequestRepo_DeleteByProject(t *testing.T) {
 	if err := r.DeleteByProject("p1"); err != nil {
 		t.Fatal(err)
 	}
-	if r.LatestForWorkspace("w1") != nil {
+	if r.LatestForWorkspace(context.Background(), "w1") != nil {
 		t.Fatal("p1's record survived its project")
 	}
-	if r.LatestForWorkspace("w9") == nil {
+	if r.LatestForWorkspace(context.Background(), "w9") == nil {
 		t.Fatal("p2's record went with p1")
 	}
 }
@@ -115,7 +116,7 @@ func TestPullRequestRepo_RecordSurvivesReopen(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := NewPullRequestRepository(db2).LatestForWorkspace("w1"); got == nil || got.Number != 4 {
+	if got := NewPullRequestRepository(db2).LatestForWorkspace(context.Background(), "w1"); got == nil || got.Number != 4 {
 		t.Fatalf("after reopen = %+v", got)
 	}
 }

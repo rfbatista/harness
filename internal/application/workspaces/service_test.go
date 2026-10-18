@@ -1,6 +1,7 @@
 package workspaces_test
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -76,9 +77,9 @@ func newFakeWorkspaceRepo() *fakeWorkspaceRepo {
 	return &fakeWorkspaceRepo{items: map[string]*domain.Workspace{}}
 }
 
-func (f *fakeWorkspaceRepo) Get(id string) *domain.Workspace { return f.items[id] }
+func (f *fakeWorkspaceRepo) Get(_ context.Context, id string) *domain.Workspace { return f.items[id] }
 
-func (f *fakeWorkspaceRepo) ListByIDs(ids []string) []*domain.Workspace {
+func (f *fakeWorkspaceRepo) ListByIDs(_ context.Context, ids []string) []*domain.Workspace {
 	var out []*domain.Workspace
 	for _, id := range ids {
 		if w, ok := f.items[id]; ok {
@@ -175,13 +176,13 @@ func TestCreate_HappyPath(t *testing.T) {
 	if len(wt.added) != 1 || wt.added[0] != want {
 		t.Fatalf("worktree add calls: %v", wt.added)
 	}
-	if got := wsRepo.Get(ws.ID); got == nil {
+	if got := wsRepo.Get(context.Background(), ws.ID); got == nil {
 		t.Fatal("workspace not persisted")
 	}
 	if got := svc.ListByRepository(repo.ID); len(got) != 1 {
 		t.Fatalf("ListByRepository want 1 got %d", len(got))
 	}
-	if got := svc.Get(ws.ID); got == nil || got.ID != ws.ID {
+	if got := svc.Get(context.Background(), ws.ID); got == nil || got.ID != ws.ID {
 		t.Fatalf("Get failed: %+v", got)
 	}
 }
@@ -288,7 +289,7 @@ func TestDelete_RemovesWorktreeThenRow(t *testing.T) {
 	if len(wt.deletedBranches) != 0 {
 		t.Fatalf("Delete must not delete the branch, got: %v", wt.deletedBranches)
 	}
-	if wsRepo.Get(ws.ID) != nil {
+	if wsRepo.Get(context.Background(), ws.ID) != nil {
 		t.Fatal("row should be deleted")
 	}
 }
@@ -311,7 +312,7 @@ func TestDelete_WorktreeRemoveFailureKeepsRow(t *testing.T) {
 	if err := svc.Delete(ws.ID); err == nil {
 		t.Fatal("expected error")
 	}
-	if wsRepo.Get(ws.ID) == nil {
+	if wsRepo.Get(context.Background(), ws.ID) == nil {
 		t.Fatal("row must survive a failed worktree removal")
 	}
 }
@@ -335,7 +336,7 @@ func TestDiscard_RemovesWorktreeBranchThenRow(t *testing.T) {
 	if len(wt.deletedBranches) != 1 || wt.deletedBranches[0] != ws.Branch {
 		t.Fatalf("branch delete calls: %v, want [%s]", wt.deletedBranches, ws.Branch)
 	}
-	if wsRepo.Get(ws.ID) != nil {
+	if wsRepo.Get(context.Background(), ws.ID) != nil {
 		t.Fatal("row should be deleted")
 	}
 }
@@ -358,7 +359,7 @@ func TestDiscard_WorktreeRemoveFailureKeepsRowAndBranch(t *testing.T) {
 	if err := svc.Discard(ws.ID); err == nil {
 		t.Fatal("expected error")
 	}
-	if wsRepo.Get(ws.ID) == nil {
+	if wsRepo.Get(context.Background(), ws.ID) == nil {
 		t.Fatal("row must survive a failed worktree removal")
 	}
 	if len(wt.deletedBranches) != 0 {
@@ -376,7 +377,7 @@ func TestDiscard_BranchDeleteFailureKeepsRow(t *testing.T) {
 	if err := svc.Discard(ws.ID); err == nil {
 		t.Fatal("expected error")
 	}
-	if wsRepo.Get(ws.ID) == nil {
+	if wsRepo.Get(context.Background(), ws.ID) == nil {
 		t.Fatal("row must survive a failed branch deletion")
 	}
 }

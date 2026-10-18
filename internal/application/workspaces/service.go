@@ -200,7 +200,7 @@ func (s *Service) WorkspaceHistory(ctx context.Context, workspaceID string, limi
 	if s.history == nil {
 		return nil, &domain.StructuredError{Code: "UNAVAILABLE", Message: "repository history is not available"}
 	}
-	ws := s.workspaces.Get(workspaceID)
+	ws := s.workspaces.Get(ctx, workspaceID)
 	if ws == nil {
 		return nil, &domain.StructuredError{Code: "WORKSPACE_NOT_FOUND", Message: "workspace not found"}
 	}
@@ -263,11 +263,11 @@ func (s *Service) WorkspaceHistory(ctx context.Context, workspaceID string, limi
 }
 
 // Get returns the workspace by id, or nil if not found.
-func (s *Service) Get(id string) *domain.Workspace { return s.workspaces.Get(id) }
+func (s *Service) Get(ctx context.Context, id string) *domain.Workspace { return s.workspaces.Get(ctx, id) }
 
 // GetMany returns the given workspaces, read at once; unknown ids are left
 // out.
-func (s *Service) GetMany(ids []string) []*domain.Workspace { return s.workspaces.ListByIDs(ids) }
+func (s *Service) GetMany(ctx context.Context, ids []string) []*domain.Workspace { return s.workspaces.ListByIDs(ctx, ids) }
 
 // ListByRepository returns all workspaces of the given repository.
 func (s *Service) ListByRepository(repositoryID string) []*domain.Workspace {
@@ -279,7 +279,7 @@ func (s *Service) ListByRepository(repositoryID string) []*domain.Workspace {
 // The branch is left in place: it is what a deleted session's committed work
 // survives on. Use Discard, never Delete, for spawn rollback.
 func (s *Service) Delete(id string) error {
-	ws := s.workspaces.Get(id)
+	ws := s.workspaces.Get(context.TODO(), id)
 	if ws == nil {
 		return &domain.StructuredError{Code: "WORKSPACE_NOT_FOUND", Message: "workspace not found"}
 	}
@@ -298,7 +298,7 @@ func (s *Service) Delete(id string) error {
 // surviving to poison a retry with a stale BRANCH_EXISTS. Session deletion
 // must keep using Delete, which preserves the branch.
 func (s *Service) Discard(id string) error {
-	ws := s.workspaces.Get(id)
+	ws := s.workspaces.Get(context.TODO(), id)
 	if ws == nil {
 		return &domain.StructuredError{Code: "WORKSPACE_NOT_FOUND", Message: "workspace not found"}
 	}

@@ -147,10 +147,10 @@ type SkillPublisher = skill.Publisher
 // WorkspaceRepository is the outbound port for persisting and retrieving
 // repository workspaces (git worktrees tracked in the database).
 type WorkspaceRepository interface {
-	Get(id string) *domain.Workspace
+	Get(ctx context.Context, id string) *domain.Workspace
 	ListByRepository(repositoryID string) []*domain.Workspace
 	// ListByIDs reads the given workspaces at once; unknown ids are left out.
-	ListByIDs(ids []string) []*domain.Workspace
+	ListByIDs(ctx context.Context, ids []string) []*domain.Workspace
 	// Create records w (its ID is generated) and returns it.
 	Create(w domain.Workspace) (*domain.Workspace, error)
 	Delete(id string) error

@@ -133,7 +133,7 @@ func (c *Code) resolve(ctx context.Context, q ports.CodeSourceQuery, onDisk bool
 }
 
 func (c *Code) resolveWorkspace(ctx context.Context, id string, onDisk bool) (*source, error) {
-	ws := c.d.Workspaces.Get(id)
+	ws := c.d.Workspaces.Get(ctx, id)
 	if ws == nil {
 		return nil, &domain.StructuredError{Code: "WORKSPACE_NOT_FOUND", Message: "workspace not found"}
 	}

@@ -140,7 +140,7 @@ func (w *CodeWatcher) Track(sessionID string) {
 	if s == nil || s.WorkspaceID == "" || s.Status.IsTerminal() {
 		return
 	}
-	ws := w.d.Workspaces.Get(s.WorkspaceID)
+	ws := w.d.Workspaces.Get(context.Background(), s.WorkspaceID)
 	if ws == nil {
 		return
 	}

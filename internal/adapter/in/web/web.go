@@ -95,7 +95,7 @@ type Deps struct {
 // CodeWorkspaces is what the code pages read of the workspaces:
 // *workspaces.Service satisfies it.
 type CodeWorkspaces interface {
-	GetMany(ids []string) []*domain.Workspace
+	GetMany(ctx context.Context, ids []string) []*domain.Workspace
 	ListBranches(repositoryID string) ([]domain.GitBranch, error)
 }
 
