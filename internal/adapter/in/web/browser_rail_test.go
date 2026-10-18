@@ -389,6 +389,8 @@ func TestRailFollowsLiveChanges(t *testing.T) {
 		chromedp.Navigate(h.srv.URL+"/projects/p1/tasks/t-cur"),
 		chromedp.Evaluate(`document.cookie = "rail_collapsed=todo; Path=/"`, nil),
 		h.openLive("/projects/p1/tasks/t-cur"),
+		// The first page's follower stays in the feed; wait for this page's.
+		railPoll(`document.querySelector('[x-data=streamStatus]')?.dataset.state === 'live'`),
 	)
 	waitFor(t, "the rail's feed", func() bool { return h.feed.followers() >= 1 })
 	h.feed.pushRaw(t, map[string]any{"session": &domain.Session{ID: "s9", ProjectID: "p1", TicketID: "t-viz", Status: domain.SessionWaitingApproval, PendingApprovals: 1, UpdatedAt: time.Now()}})
