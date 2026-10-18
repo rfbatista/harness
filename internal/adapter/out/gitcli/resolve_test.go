@@ -8,6 +8,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"operators-mcp/internal/domain"
 )
 
 func TestResolveGit(t *testing.T) {
@@ -91,5 +93,12 @@ func TestEveryAdapterRunsTheConfiguredGit(t *testing.T) {
 		if !slices.Contains(got, want) {
 			t.Errorf("git %s did not run the configured git; it ran %v", want, got)
 		}
+	}
+
+	// Writing env files keeps git from tracking them through the same git.
+	bin, log = recordingGit(t)
+	_ = NewEnvFiles(WithGit(bin)).Write(repo, []*domain.EnvFile{{Path: ".env", Content: "A=1"}})
+	if raw, err := os.ReadFile(log); err != nil || !slices.Contains(strings.Fields(string(raw)), "check-ignore") {
+		t.Errorf("writing env files did not run the configured git (%v): it ran %q", err, raw)
 	}
 }

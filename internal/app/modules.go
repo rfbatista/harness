@@ -93,6 +93,7 @@ func newRepositoryFinder(cfg Config) *gitcli.RepositoryFinder {
 func newWorktreeManager(cfg Config) *gitcli.WorktreeManager {
 	return gitcli.NewWorktreeManager(cfg.gitOptions()...)
 }
+func newEnvFiles(cfg Config) *gitcli.EnvFiles { return gitcli.NewEnvFiles(cfg.gitOptions()...) }
 func newGitHistory(cfg Config) *gitcli.History { return gitcli.NewHistory(cfg.gitOptions()...) }
 func newBranchPublisher(cfg Config) *gitcli.BranchPublisher {
 	return gitcli.NewBranchPublisher(cfg.gitOptions()...)
@@ -158,7 +159,7 @@ var CatalogModule = fx.Module("catalog",
 		asPort(filesystem.NewLister, new(ports.TreeLister)),
 		asPort(skillfs.NewPublisher, new(ports.SkillPublisher)),
 		asPort(newRepositoryFinder, new(ports.RepositoryFinder)),
-		asPort(gitcli.NewEnvFiles, new(ports.EnvFileIO)),
+		asPort(newEnvFiles, new(ports.EnvFileIO)),
 		newCatalog,
 	),
 )
