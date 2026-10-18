@@ -1,0 +1,44 @@
+package tokensavers
+
+import "operators-mcp/internal/domain"
+
+// intensityChoice is one caveman intensity with what it does.
+type intensityChoice struct {
+	Value domain.CavemanIntensity
+	Label string
+}
+
+var intensityChoices = []intensityChoice{
+	{domain.CavemanLite, "lite: full sentences, no filler"},
+	{domain.CavemanFull, "full: caveman's own rules"},
+	{domain.CavemanUltra, "ultra: fragments, no articles"},
+}
+
+// intensitySection is the Caveman intensity section. The server paints the
+// select at the current intensity; cavemanIntensity
+// (web/src/modules/tokensavers/presentation/components/cavemanIntensity.js)
+// saves a change.
+templ intensitySection(current domain.CavemanIntensity) {
+	<section class="[ pane ]" aria-labelledby="caveman-intensity-title" x-data="cavemanIntensity">
+		<header><h2 id="caveman-intensity-title">Caveman intensity</h2></header>
+		<p class="[ text-sm color-ink-muted ]">How terse caveman makes agents in every session where it is on. Person-facing text (documents, task comments, commit messages, pull requests, code, an interactive session's replies) stays in normal prose at every intensity.</p>
+		<p class="[ visually-hidden ]" role="status" aria-live="polite" x-text="announcement"></p>
+		<template x-if="error">
+			<div class="[ banner ]" data-tone="danger" role="alert">
+				<div class="[ flow ] [ flow-space-3xs grow ]">
+					<span x-text="error.message"></span>
+					<span class="[ code ]"><span x-text="error.code"></span> · <span x-text="error.next"></span></span>
+				</div>
+				<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-on:click="dismissError">Dismiss</button>
+			</div>
+		</template>
+		<div class="[ row ]" style="--row-columns: 7rem auto" data-caveman-intensity>
+			<label class="[ title ] [ font-mono ]" for="caveman-intensity">caveman</label>
+			<select id="caveman-intensity" data-size="sm" data-fit x-bind:disabled="saving" x-bind:aria-busy="saving" x-on:change="choose">
+				for _, c := range intensityChoices {
+					<option value={ string(c.Value) } selected?={ c.Value == current }>{ c.Label }</option>
+				}
+			</select>
+		</div>
+	</section>
+}

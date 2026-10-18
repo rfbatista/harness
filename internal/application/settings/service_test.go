@@ -59,6 +59,25 @@ func TestUpdateSettings_RejectsRelativeRootBeforeStoringAnything(t *testing.T) {
 	}
 }
 
+func TestUpdateSettings_TakesOnlyACavemanIntensity(t *testing.T) {
+	svc, _ := newTestService(t)
+	for _, v := range []string{"lite", "full", "ultra"} {
+		if _, err := svc.UpdateSettings(map[string]string{domain.SettingCavemanIntensity: v}); err != nil {
+			t.Fatalf("%s: %v", v, err)
+		}
+	}
+	for _, v := range []string{"", "max", "Full"} {
+		_, err := svc.UpdateSettings(map[string]string{domain.SettingCavemanIntensity: v})
+		var se *domain.StructuredError
+		if !errors.As(err, &se) || se.Code != "INVALID_INPUT" {
+			t.Errorf("%q: expected INVALID_INPUT, got %v", v, err)
+		}
+	}
+	if got := svc.Setting(domain.SettingCavemanIntensity); got != "ultra" {
+		t.Errorf("intensity = %q, want ultra", got)
+	}
+}
+
 func TestUpdateSettings_AnnouncesOnlyChanges(t *testing.T) {
 	svc, bus := newTestService(t)
 	var got []domain.SettingsChanged

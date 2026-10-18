@@ -21,6 +21,10 @@ func ValidateSetting(key, value string) error {
 		if root := ExpandUserPath(value); root != "" && !filepath.IsAbs(root) {
 			return &StructuredError{Code: "INVALID_INPUT", Message: "publish root must be an absolute path"}
 		}
+	case SettingCavemanIntensity:
+		if _, err := ParseCavemanIntensity(value); err != nil {
+			return err
+		}
 	}
 	return validateProviderSetting(key, value)
 }

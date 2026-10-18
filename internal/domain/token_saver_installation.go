@@ -67,6 +67,8 @@ type TokenSaverList struct {
 	// Unsupported then says which ones it does.
 	Supported   bool   `json:"supported"`
 	Unsupported string `json:"unsupported,omitempty"`
+	// CavemanIntensity is the machine-wide caveman intensity.
+	CavemanIntensity CavemanIntensity `json:"caveman_intensity"`
 }
 
 // Platform is an operating system and architecture, as Go names them.

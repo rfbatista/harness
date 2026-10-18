@@ -14,6 +14,7 @@ import (
 
 	"operators-mcp/internal/adapter/out/persistence/sqlite"
 	"operators-mcp/internal/application/capabilities"
+	"operators-mcp/internal/application/settings"
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
 )
@@ -24,6 +25,7 @@ import (
 type saverWorld struct {
 	activations   *sqlite.ActivationRepository
 	installations *sqlite.TokenSaverInstallationRepository
+	settings      *settings.Service
 	tools         string
 }
 
@@ -38,9 +40,10 @@ func withTokenSavers(t *testing.T, svc *Service) *saverWorld {
 	w := &saverWorld{
 		activations:   sqlite.NewActivationRepository(db),
 		installations: sqlite.NewTokenSaverInstallationRepository(db),
+		settings:      settings.NewService(sqlite.NewSettingsRepository(db), nil),
 		tools:         filepath.Join(t.TempDir(), "data dir", "tools"),
 	}
-	caps := capabilities.NewService(capabilities.Deps{Activations: w.activations})
+	caps := capabilities.NewService(capabilities.Deps{Activations: w.activations, Settings: w.settings})
 	caps.UseTokenSavers(capabilities.TokenSaverDeps{Installations: w.installations, Dir: w.tools})
 	svc.TokenSavers = caps
 	return w
@@ -62,6 +65,30 @@ func (w *saverWorld) install(t *testing.T, saver domain.TokenSaver, name string)
 		t.Fatal(err)
 	}
 	return path
+}
+
+// installRuleset puts a stub caveman SKILL.md where caveman installs and
+// records its installation.
+func (w *saverWorld) installRuleset(t *testing.T, text string) {
+	t.Helper()
+	dir := filepath.Join(w.tools, string(domain.TokenSaverCaveman), "v0.0.0-test")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, "SKILL.md")
+	if err := os.WriteFile(path, []byte(text), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.installations.Put(&domain.TokenSaverInstallation{Saver: domain.TokenSaverCaveman, Version: "v0.0.0-test", Dir: dir, Path: path, InstalledAt: time.Now()}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func (w *saverWorld) setIntensity(t *testing.T, i domain.CavemanIntensity) {
+	t.Helper()
+	if _, err := w.settings.UpdateSettings(map[string]string{domain.SettingCavemanIntensity: string(i)}); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func (w *saverWorld) set(t *testing.T, level domain.ActivationLevel, ownerID string, saver domain.TokenSaver, v domain.ActivationValue) {
@@ -252,11 +279,17 @@ func TestASessionWithNoActiveSaverGetsTodaysConfig(t *testing.T) {
 	svc, _ := newInteractiveService(t)
 	savers := withTokenSavers(t, svc)
 	savers.install(t, domain.TokenSaverRTK, "rtk-oss")
+	savers.installRuleset(t, stubRuleset)
 	savers.set(t, domain.ActivationLevelProject, "p1", domain.TokenSaverRTK, domain.ActivationOff)
+	savers.set(t, domain.ActivationLevelProject, "p1", domain.TokenSaverCaveman, domain.ActivationOff)
+	savers.setIntensity(t, domain.CavemanUltra)
 	sess, got := startInteractive(t, svc, InteractiveRequest{})
 
 	if !slices.Equal(got.Spec.Env, want.Spec.Env) {
 		t.Errorf("env = %q, want %q", got.Spec.Env, want.Spec.Env)
+	}
+	if got.Spec.AppendSystem != want.Spec.AppendSystem {
+		t.Errorf("appended system prompt = %q, want %q", got.Spec.AppendSystem, want.Spec.AppendSystem)
 	}
 	if g, w := hooksJSON(t, got.Spec), hooksJSON(t, want.Spec); g != w {
 		t.Errorf("hooks = %s, want %s", g, w)
@@ -276,4 +309,109 @@ func hooksJSON(t *testing.T, spec ports.AgentSpec) string {
 		t.Fatal(err)
 	}
 	return string(b)
+}
+
+// stubRuleset is a caveman SKILL.md: front matter, then the rules.
+const stubRuleset = "---\nname: caveman\ndescription: talk like caveman\n---\n\n# Caveman\n\nDrop articles. Fragments OK.\n"
+
+// checkCavemanWired checks the appended system prompt carries the ruleset
+// without its front matter, then the intensity line when there is one,
+// then the person-facing instruction, in that order and once each.
+func checkCavemanWired(t *testing.T, system string, i domain.CavemanIntensity) {
+	t.Helper()
+	if strings.Contains(system, "description: talk like caveman") {
+		t.Errorf("the ruleset's front matter is in the system prompt:\n%s", system)
+	}
+	rules := strings.Index(system, "# Caveman\n\nDrop articles. Fragments OK.")
+	person := strings.Index(system, "Person-facing text stays in normal prose")
+	if rules < 0 || person < 0 || person < rules || strings.Count(system, "Drop articles.") != 1 {
+		t.Fatalf("want the ruleset then the person-facing instruction once each in:\n%s", system)
+	}
+	instruction := system[person:]
+	for _, want := range []string{
+		"documents (specs, ADRs, glossary, contracts)", "task comments", "review requests", "notifications",
+		"commit messages", "pull request text", "code and code comments", "the replies of an interactive session",
+		"ticket documents", "task messages between sessions", "a headless session's replies",
+	} {
+		if !strings.Contains(instruction, want) {
+			t.Errorf("the person-facing instruction lacks %q:\n%s", want, instruction)
+		}
+	}
+	lite, ultra := strings.Index(system, cavemanLiteLine), strings.Index(system, cavemanUltraLine)
+	switch i {
+	case domain.CavemanFull:
+		if lite >= 0 || ultra >= 0 {
+			t.Errorf("full appends an intensity line:\n%s", system)
+		}
+	case domain.CavemanLite:
+		if lite < rules || lite > person || ultra >= 0 {
+			t.Errorf("want the lite line between the ruleset and the instruction:\n%s", system)
+		}
+	case domain.CavemanUltra:
+		if ultra < rules || ultra > person || lite >= 0 {
+			t.Errorf("want the ultra line between the ruleset and the instruction:\n%s", system)
+		}
+	}
+}
+
+// caveman on and installed, at each intensity: a headless session's
+// appended system prompt carries its ruleset at that intensity and the
+// person-facing instruction, and records caveman active. Unset is full.
+func TestAHeadlessSessionGetsCavemansRulesetAtTheConfiguredIntensity(t *testing.T) {
+	for _, i := range []domain.CavemanIntensity{"", domain.CavemanLite, domain.CavemanFull, domain.CavemanUltra} {
+		t.Run(string(i), func(t *testing.T) {
+			svc, w := newHeadlessShellService(t)
+			savers := withTokenSavers(t, svc)
+			savers.installRuleset(t, stubRuleset)
+			savers.set(t, domain.ActivationLevelProject, "p1", domain.TokenSaverCaveman, domain.ActivationOn)
+			want := domain.CavemanFull
+			if i != "" {
+				savers.setIntensity(t, i)
+				want = i
+			}
+
+			sess, launch := startHeadless(t, svc, w.task.ID)
+			system, _ := flag(launch.Args, "--append-system-prompt")
+			checkCavemanWired(t, system, want)
+			if launch.Env["DO_NOT_TRACK"] != "1" {
+				t.Errorf("DO_NOT_TRACK = %q, want 1", launch.Env["DO_NOT_TRACK"])
+			}
+			if !slices.Equal(sess.TokenSavers, []domain.TokenSaver{domain.TokenSaverCaveman}) {
+				t.Errorf("session records %v active, want [caveman]", sess.TokenSavers)
+			}
+		})
+	}
+}
+
+// An interactive session gets the same, through its spec, and again when
+// resumed.
+func TestAnInteractiveSessionGetsCavemansRulesetAtTheConfiguredIntensity(t *testing.T) {
+	for _, i := range []domain.CavemanIntensity{domain.CavemanLite, domain.CavemanFull, domain.CavemanUltra} {
+		t.Run(string(i), func(t *testing.T) {
+			svc, _ := newInteractiveService(t)
+			savers := withTokenSavers(t, svc)
+			savers.installRuleset(t, stubRuleset)
+			savers.set(t, domain.ActivationLevelProject, "p1", domain.TokenSaverCaveman, domain.ActivationOn)
+			savers.setIntensity(t, i)
+			ctx := context.Background()
+
+			sess, launch := startInteractive(t, svc, InteractiveRequest{})
+			checkCavemanWired(t, launch.Spec.AppendSystem, i)
+			system, _ := flag(launch.Args, "--append-system-prompt")
+			checkCavemanWired(t, system, i)
+			if !slices.Equal(sess.TokenSavers, []domain.TokenSaver{domain.TokenSaverCaveman}) {
+				t.Errorf("session records %v active, want [caveman]", sess.TokenSavers)
+			}
+
+			if _, err := svc.EndInteractive(ctx, sess.ID, 0, false); err != nil {
+				t.Fatal(err)
+			}
+			_, spec, err := svc.ResumeInteractive(ctx, ports.ResumeRequest{SessionID: sess.ID})
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { _, _ = svc.EndInteractive(ctx, sess.ID, 0, false) })
+			checkCavemanWired(t, spec.AppendSystem, i)
+		})
+	}
 }

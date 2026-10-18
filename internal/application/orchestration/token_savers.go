@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"os"
 	"slices"
 	"strings"
 
@@ -48,6 +49,7 @@ type saverWiring func(s *Service, w saverSession) error
 
 var saverWirings = map[domain.TokenSaver]saverWiring{
 	domain.TokenSaverRTK:       (*Service).wireRTK,
+	domain.TokenSaverCaveman:   (*Service).wireCaveman,
 	domain.TokenSaverCodegraph: (*Service).wireCodegraph,
 }
 
@@ -155,6 +157,54 @@ func (s *Service) wireRTK(w saverSession) error {
 }
 
 var errNotClaude = errors.New("the session does not run claude")
+
+// wireCaveman appends caveman's ruleset to the system prompt at the
+// configured intensity, then the harness's instruction keeping person-facing
+// text in normal prose (ADR 0013). The ruleset is caveman's "full"; lite and
+// ultra add a line of the harness's own after it.
+func (s *Service) wireCaveman(w saverSession) error {
+	b, err := os.ReadFile(w.installation.Path)
+	if err != nil {
+		return err
+	}
+	rules := withoutFrontMatter(string(b))
+	if rules == "" {
+		return errors.New("caveman's ruleset is empty")
+	}
+	system := appendSection(w.cfg.AppendSystem, rules)
+	switch s.TokenSavers.CavemanIntensity(context.TODO()) {
+	case domain.CavemanLite:
+		system = appendSection(system, cavemanLiteLine)
+	case domain.CavemanUltra:
+		system = appendSection(system, cavemanUltraLine)
+	}
+	w.cfg.AppendSystem = appendSection(system, personFacingText)
+	withEnv(w.cfg, "DO_NOT_TRACK=1")
+	return nil
+}
+
+// The intensity lines the harness appends after caveman's ruleset.
+const (
+	cavemanLiteLine  = "Caveman intensity: lite. Softer than the rules above: keep articles and full sentences, and drop only filler, pleasantries and hedging."
+	cavemanUltraLine = "Caveman intensity: ultra. Harder than the rules above: fragments only, no articles, no connecting words, abbreviations wherever the meaning stays clear."
+)
+
+// personFacingText keeps caveman out of what a person reads (the Glossary's
+// "Person-facing text"). Appended after the ruleset, it wins over the
+// ruleset's own list of things written in plain prose, which names tickets.
+const personFacingText = `Person-facing text stays in normal prose. The terse style above does not apply to what a person reads: documents (specs, ADRs, glossary, contracts), task comments, review requests, notifications, commit messages, pull request text, code and code comments, and the replies of an interactive session. Write those in clear, complete sentences, as you would without these rules.
+
+Everything else stays terse, and that includes ticket documents and task messages between sessions, as well as a headless session's replies and its narration between tool calls. This overrides any exception in the rules above that lists tickets among the things written in plain prose.`
+
+// withoutFrontMatter is a SKILL.md without its YAML front matter, trimmed.
+func withoutFrontMatter(skill string) string {
+	if rest, ok := strings.CutPrefix(skill, "---\n"); ok {
+		if _, body, ok := strings.Cut(rest, "\n---\n"); ok {
+			skill = body
+		}
+	}
+	return strings.TrimSpace(skill)
+}
 
 // withEnv adds each NAME=value to cfg's env unless NAME is already set
 // there, so two savers asking for the same variable set it once.

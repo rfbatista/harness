@@ -80,7 +80,7 @@ func (s *Service) tokenSavers() (*tokenSavers, error) {
 }
 
 // ListTokenSavers answers every saver with its install state.
-func (s *Service) ListTokenSavers(context.Context) (*domain.TokenSaverList, error) {
+func (s *Service) ListTokenSavers(ctx context.Context) (*domain.TokenSaverList, error) {
 	t, err := s.tokenSavers()
 	if err != nil {
 		return nil, err
@@ -93,7 +93,7 @@ func (s *Service) ListTokenSavers(context.Context) (*domain.TokenSaverList, erro
 	if err != nil {
 		return nil, err
 	}
-	list := &domain.TokenSaverList{Platform: t.Platform.String(), Supported: t.Platform.Supported()}
+	list := &domain.TokenSaverList{Platform: t.Platform.String(), Supported: t.Platform.Supported(), CavemanIntensity: s.CavemanIntensity(ctx)}
 	if !list.Supported {
 		list.Unsupported = domain.UnsupportedPlatformMessage(t.Platform)
 	}
@@ -105,6 +105,19 @@ func (s *Service) ListTokenSavers(context.Context) (*domain.TokenSaverList, erro
 		list.Savers = append(list.Savers, st)
 	}
 	return list, nil
+}
+
+// CavemanIntensity answers the caveman intensity the settings hold: full
+// when it is unset or cannot be read.
+func (s *Service) CavemanIntensity(context.Context) domain.CavemanIntensity {
+	if s.settings == nil {
+		return domain.CavemanFull
+	}
+	i, err := domain.ParseCavemanIntensity(s.settings.Setting(domain.SettingCavemanIntensity))
+	if err != nil {
+		return domain.CavemanFull
+	}
+	return i
 }
 
 // InstalledTokenSavers answers the installed savers, for preparing a session.
