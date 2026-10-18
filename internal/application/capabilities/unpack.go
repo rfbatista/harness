@@ -38,6 +38,8 @@ func unpack(src, dest, entry string, only bool) (string, error) {
 	if err := os.MkdirAll(dest, 0o755); err != nil {
 		return "", err
 	}
+	// Entries are compared cleaned, as target cleans the archive's names.
+	entry = cleanEntry(entry)
 	x := &extractor{dest: dest, entry: entry, only: only, left: maxUnpackedBytes}
 	switch {
 	case bytes.Equal(magic[:2], []byte{0x1f, 0x8b}):
@@ -120,9 +122,13 @@ func (x *extractor) zip(f *os.File) error {
 	return nil
 }
 
+// cleanEntry is an archive entry's name without "./" and redundant
+// separators.
+func cleanEntry(name string) string { return path.Clean(strings.TrimPrefix(name, "./")) }
+
 // target is where name unpacks to, or "" when only skips it.
 func (x *extractor) target(name string) (string, error) {
-	clean := path.Clean(strings.TrimPrefix(name, "./"))
+	clean := cleanEntry(name)
 	if path.IsAbs(clean) || clean == ".." || strings.HasPrefix(clean, "../") {
 		return "", fmt.Errorf("entry %s points outside the archive", name)
 	}
