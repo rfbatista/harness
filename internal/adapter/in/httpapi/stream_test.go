@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -276,5 +277,118 @@ func TestStream_ClosingStopsItsFeeds(t *testing.T) {
 		if time.Now().After(deadline) {
 			t.Fatalf("follow on a closed stream = %d, want 404", code)
 		}
+	}
+}
+
+// flood sends changes of size bytes to the feed of project until that feed is
+// stopped, and says how many it sent.
+func (o *streamOrch) flood(t *testing.T, project string, size int) int {
+	t.Helper()
+	o.mu.Lock()
+	feed, stopped := o.feeds[project], o.stopped[project]
+	o.mu.Unlock()
+	big := &domain.Ticket{ID: "big", ProjectID: project, Description: strings.Repeat("x", size)}
+	for n := 0; ; n++ {
+		select {
+		case feed <- ports.ProjectChange{Ticket: big}:
+		case <-stopped:
+			return n
+		case <-time.After(10 * time.Second):
+			t.Fatalf("the feed of %s took %d changes and never stopped", project, n)
+		}
+	}
+}
+
+// A feed flooded while the client reads slowly ends for its path only: the
+// other feed on the stream keeps every change, in order, and keeps flowing.
+func TestStream_ASlowFeedEndsOnlyThatFeed(t *testing.T) {
+	orch := newStreamOrch()
+	srv := streamServer(t, orch)
+	s := openStream(t, srv)
+	const flooded, steady = "/events?project_id=p1", "/events?project_id=p2"
+	s.post("follow", flooded)
+	s.post("follow", steady)
+
+	// The test reads nothing until p1 has been dropped: the reader's buffer
+	// and the connection fill up behind it.
+	const before = 10
+	for i := range before {
+		orch.feed("p2") <- ports.ProjectChange{Ticket: &domain.Ticket{ID: strconv.Itoa(i), ProjectID: "p2"}}
+	}
+	orch.flood(t, "p1", 16<<10) // under the reader's 64 KiB line limit
+	orch.feed("p2") <- ports.ProjectChange{Ticket: &domain.Ticket{ID: strconv.Itoa(before), ProjectID: "p2"}}
+
+	next, ended := 0, false
+	for next <= before {
+		m := s.next()
+		switch m["path"] {
+		case flooded:
+			if ended {
+				t.Fatalf("a change of p1 after its end: %v", m)
+			}
+			ended = m["end"] == true
+		case steady:
+			if m["end"] == true {
+				t.Fatal("p2 ended")
+			}
+			if id := m["data"].(map[string]any)["ticket"].(map[string]any)["id"]; id != strconv.Itoa(next) {
+				t.Fatalf("p2 change %v, want %d", id, next)
+			}
+			next++
+		}
+	}
+	for !ended {
+		m := s.next()
+		if m["path"] != flooded {
+			t.Fatalf("message = %v, want the rest of p1", m)
+		}
+		ended = m["end"] == true
+	}
+	// p1 is no longer followed: following it again starts a new follow.
+	s.post("follow", flooded)
+	if n := orch.followed("p1"); n != 2 {
+		t.Fatalf("p1 followed %d times, want 2", n)
+	}
+}
+
+// A client that stops reading has its stream closed once a write cannot go
+// through in time, and every feed it followed is stopped.
+func TestStream_AStuckClientsStreamIsClosed(t *testing.T) {
+	orch := newStreamOrch()
+	h := &Handler{orchSvc: orch}
+	h.streams.writeTimeout = 200 * time.Millisecond
+	srv := httptest.NewServer(NewRouter(h))
+	t.Cleanup(func() {
+		srv.CloseClientConnections()
+		srv.Close()
+	})
+	s := openStream(t, srv)
+	s.post("follow", "/events?project_id=p1")
+	s.post("follow", "/events?project_id=p2")
+
+	// A change every millisecond: the stream keeps up with that until the
+	// connection is full, and then it cannot write any more.
+	orch.mu.Lock()
+	feed, p1Stopped, p2Stopped := orch.feeds["p1"], orch.stopped["p1"], orch.stopped["p2"]
+	orch.mu.Unlock()
+	big := ports.ProjectChange{Ticket: &domain.Ticket{ID: "big", ProjectID: "p1", Description: strings.Repeat("x", 32<<10)}}
+	tick := time.NewTicker(time.Millisecond)
+	defer tick.Stop()
+	for deadline := time.After(10 * time.Second); ; {
+		select {
+		case <-p2Stopped:
+		case <-deadline:
+			t.Fatal("the stuck stream was never closed")
+		case <-tick.C:
+			select {
+			case feed <- big:
+			case <-p1Stopped:
+			}
+			continue
+		}
+		break
+	}
+	if code, body := s.post("follow", "/events?project_id=p3"); code != http.StatusNotFound || body["code"] != "STREAM_NOT_FOUND" {
+		t.Fatalf("follow on a stuck stream = %d %v, want STREAM_NOT_FOUND", code, body)
 	}
 }
