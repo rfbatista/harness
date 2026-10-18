@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -85,9 +86,11 @@ func (h History) Log(ctx context.Context, repoRoot string, q ports.HistoryQuery)
 // resolve; "" when none does. Refs that all resolve, the usual case, take one
 // git run; only a log that fails checks them one by one.
 func (h History) logRefs(ctx context.Context, repoRoot string, args, refs []string) (string, error) {
-	// --end-of-options keeps a ref from reading as an option.
-	args = append(args, "--end-of-options")
-	out, err := h.d.gitOutput(ctx, repoRoot, append(append(args, refs...), "--")...)
+	// --end-of-options keeps a ref from reading as an option. Each argument
+	// list is a copy of its own, sharing no array with the caller's or
+	// another run's.
+	args = slices.Concat(args, []string{"--end-of-options"})
+	out, err := h.d.gitOutput(ctx, repoRoot, slices.Concat(args, refs, []string{"--"})...)
 	if err == nil || timedOut(err) {
 		return out, err
 	}
