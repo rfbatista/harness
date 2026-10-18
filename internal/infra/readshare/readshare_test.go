@@ -67,3 +67,38 @@ func TestWithoutAScopeEveryReadRuns(t *testing.T) {
 		t.Errorf("the read ran %d times, want 3", runs)
 	}
 }
+
+// A read that failed because its caller gave up (the caller's context ended)
+// is not shared: the next caller, and one that was waiting for it, read
+// again.
+func TestAReadItsCallerGaveUpOnIsReadAgain(t *testing.T) {
+	scoped := With(context.Background())
+	first, giveUp := context.WithCancel(scoped)
+	started, release := make(chan struct{}), make(chan struct{})
+	go func() {
+		<-started
+		giveUp()
+		close(release)
+	}()
+
+	waiter := make(chan error, 1)
+	_, err := Do(first, "k", func() (int, error) {
+		go func() {
+			// A second caller joins while the first read runs.
+			_, err := Do(scoped, "k", func() (int, error) { return 2, nil })
+			waiter <- err
+		}()
+		close(started)
+		<-release
+		return 0, first.Err()
+	})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("the first caller's read: err = %v, want canceled", err)
+	}
+	if err := <-waiter; err != nil {
+		t.Errorf("the caller that waited got %v, want its own read", err)
+	}
+	if n, err := Do(scoped, "k", func() (int, error) { return 3, nil }); err != nil || n == 0 {
+		t.Errorf("a later read = %d, %v; want a fresh answer", n, err)
+	}
+}
