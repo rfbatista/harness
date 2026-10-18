@@ -3,6 +3,7 @@ package capabilities
 import (
 	"context"
 	"io"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -62,13 +63,44 @@ func (d *blockingDownloads) Download(ctx context.Context, _ string, _ io.Writer,
 	return ctx.Err()
 }
 
-type memoryInstallations struct{ list []*domain.TokenSaverInstallation }
+type memoryInstallations struct {
+	list []*domain.TokenSaverInstallation
+}
 
 func (m *memoryInstallations) List() ([]*domain.TokenSaverInstallation, error) { return m.list, nil }
 
 func (m *memoryInstallations) Put(in *domain.TokenSaverInstallation) error {
+	for i, old := range m.list {
+		if old.Saver == in.Saver {
+			m.list[i] = in
+			return nil
+		}
+	}
 	m.list = append(m.list, in)
 	return nil
+}
+
+// An installation recorded with relative paths, as a server started with a
+// relative database path once stored it, is made absolute when the token
+// savers start: hooks, MCP servers and index builds run from other
+// directories.
+func TestStartingTokenSaversMakesRelativeInstallationPathsAbsolute(t *testing.T) {
+	t.Chdir(t.TempDir())
+	installs := &memoryInstallations{list: []*domain.TokenSaverInstallation{{
+		Saver: domain.TokenSaverCodegraph, Version: "v1.6.2",
+		Dir:  "tools/codegraph/v1.6.2",
+		Path: "tools/codegraph/v1.6.2/codegraph-darwin-arm64/bin/codegraph",
+	}}}
+	s := NewService(Deps{})
+	s.UseTokenSavers(TokenSaverDeps{Installations: installs, Downloads: &blockingDownloads{}, Dir: t.TempDir()})
+	defer s.CloseTokenSavers()
+
+	in := installs.list[0]
+	wantDir, _ := filepath.Abs("tools/codegraph/v1.6.2")
+	wantPath, _ := filepath.Abs("tools/codegraph/v1.6.2/codegraph-darwin-arm64/bin/codegraph")
+	if in.Dir != wantDir || in.Path != wantPath {
+		t.Errorf("installation = %q, %q; want %q, %q", in.Dir, in.Path, wantDir, wantPath)
+	}
 }
 
 func (m *memoryInstallations) Delete(domain.TokenSaver) error { return nil }

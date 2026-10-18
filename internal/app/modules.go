@@ -238,12 +238,13 @@ func newPlanningService(
 }
 
 // dataDir is name next to the database, or a fresh temporary directory for
-// an in-memory one.
+// an in-memory one. It is always absolute: token savers installed under it
+// run from checkouts and worktrees, where a relative path points nowhere.
 func dataDir(cfg Config, name string) (string, error) {
 	if cfg.DBPath == "" || cfg.DBPath == ":memory:" {
 		return os.MkdirTemp("", "harness-"+name+"-")
 	}
-	return filepath.Join(filepath.Dir(cfg.DBPath), name), nil
+	return filepath.Abs(filepath.Join(filepath.Dir(cfg.DBPath), name))
 }
 
 // ExecutionModule wires the Genkit-backed execution layer: the LLM client, the

@@ -77,9 +77,39 @@ func (s *Service) UseTokenSavers(d TokenSaverDeps) {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	s.savers = &tokenSavers{TokenSaverDeps: d, ctx: ctx, cancel: cancel, jobs: map[domain.TokenSaver]*installJob{}}
+	if err := s.savers.absolutize(); err != nil {
+		slog.Warn("token savers: relative installation paths not made absolute", "err", err)
+	}
 	if err := s.savers.prune(); err != nil {
 		slog.Warn("token savers: old versions not pruned", "dir", d.Dir, "err", err)
 	}
+}
+
+// absolutize rewrites installations recorded with relative paths, as a
+// server started with a relative database path once stored them, against
+// the working directory they were relative to: savers run from checkouts
+// and worktrees, where a relative path points nowhere.
+func (t *tokenSavers) absolutize() error {
+	list, err := t.Installations.List()
+	if err != nil {
+		return err
+	}
+	for _, in := range list {
+		if filepath.IsAbs(in.Dir) && filepath.IsAbs(in.Path) {
+			continue
+		}
+		fixed := *in
+		if fixed.Dir, err = filepath.Abs(in.Dir); err != nil {
+			return err
+		}
+		if fixed.Path, err = filepath.Abs(in.Path); err != nil {
+			return err
+		}
+		if err := t.Installations.Put(&fixed); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // prune removes, under Dir, each saver's versions other than the one
