@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -17,14 +18,22 @@ import (
 // follower fell behind; the client then reloads what it shows and connects
 // again.
 func (h *Handler) handleEvents(c echo.Context) error {
-	if h.orchSvc == nil {
-		return echo.NewHTTPError(http.StatusServiceUnavailable, "orchestration not configured")
-	}
-	changes, err := h.orchSvc.FollowProject(c.Request().Context(), c.QueryParam("project_id"))
+	changes, err := h.followProject(c.Request().Context(), c.QueryParam("project_id"))
 	if err != nil {
 		return err
 	}
-	return streamSSE(c, changes, func(ch ports.ProjectChange) any { return ch })
+	return streamSSE(c, changes, func(ch any) any { return ch })
+}
+
+func (h *Handler) followProject(ctx context.Context, projectID string) (<-chan any, error) {
+	if h.orchSvc == nil {
+		return nil, echo.NewHTTPError(http.StatusServiceUnavailable, "orchestration not configured")
+	}
+	changes, err := h.orchSvc.FollowProject(ctx, projectID)
+	if err != nil {
+		return nil, err
+	}
+	return relayAs(ctx, changes, func(ch ports.ProjectChange) any { return ch }), nil
 }
 
 // streamSSE writes each value from changes as one `data:` line of JSON, and a

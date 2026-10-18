@@ -28,6 +28,11 @@ func NewRouter(h *Handler, opts ...Option) *echo.Echo {
 	}
 
 	g.GET("/health", h.handleHealthCheck)
+
+	// a browser tab's one live stream, carrying the SSE feeds below it follows
+	g.GET("/stream", h.handleStream)
+	g.POST("/stream/follow", h.handleStreamFollow)
+	g.POST("/stream/unfollow", h.handleStreamUnfollow)
 	g.GET("/tools", h.handleListTools)
 
 	// projects

@@ -215,3 +215,5 @@ agents/__pycache__/
 # Web client bundles (go run ./cmd/webbuild); only .gitkeep is tracked.
 internal/adapter/in/web/static/*
 !internal/adapter/in/web/static/.gitkeep
+artifacts
+task-resources

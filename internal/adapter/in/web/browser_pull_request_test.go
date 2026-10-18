@@ -92,7 +92,7 @@ func TestPullRequestPanelInTheBrowser(t *testing.T) {
 		Agents: fakeAgents{w.agents}, Repositories: fakeRepos{w.repos}, EnvFiles: w.env, History: w.history,
 		PullRequests: w.prs, Now: func() time.Time { return now },
 	}, assets, nil))
-	srv := httptest.NewServer(mux)
+	srv := httptest.NewServer(withStream(mux))
 	defer func() { srv.CloseClientConnections(); srv.Close() }() // the feed's stream stays open
 
 	shown := func(sel string) string {

@@ -117,7 +117,7 @@ func TestRunCommandsInRepositorySettingsInTheBrowser(t *testing.T) {
 	mux.Handle("/api/sessions/s1/terminal", http.NotFoundHandler()) // the agent's terminal is not under test
 	mux.Handle("/api/", api)
 	mux.Handle("/", pages)
-	srv := httptest.NewServer(mux)
+	srv := httptest.NewServer(withStream(mux))
 	defer srv.Close()
 
 	const section = `section[aria-labelledby=run-commands-title]`

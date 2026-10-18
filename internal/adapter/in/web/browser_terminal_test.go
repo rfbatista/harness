@@ -112,7 +112,7 @@ func terminalPage(t *testing.T, pty http.Handler) *httptest.Server {
 	mux := http.NewServeMux()
 	mux.Handle("/api/sessions/s1/terminal", pty)
 	mux.Handle("/", pages)
-	srv := httptest.NewServer(mux)
+	srv := httptest.NewServer(withStream(mux))
 	t.Cleanup(srv.Close)
 	return srv
 }

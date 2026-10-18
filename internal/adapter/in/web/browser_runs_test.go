@@ -69,7 +69,7 @@ func TestAppTabRunsACommandInTheWorktree(t *testing.T) {
 	mux.Handle("/api/sessions/s1/terminal", http.NotFoundHandler()) // the agent's terminal is not under test
 	mux.Handle("/api/", api)
 	mux.Handle("/", pages)
-	srv := httptest.NewServer(mux)
+	srv := httptest.NewServer(withStream(mux))
 	defer srv.Close()
 
 	rows := `document.querySelector('[aria-label=Application] .terminal .xterm-rows')?.textContent ?? ''`
@@ -169,7 +169,7 @@ func TestAppTabTypingACommandEnablesRunAndSavesIt(t *testing.T) {
 			mux.Handle("/api/sessions/s1/terminal", http.NotFoundHandler())
 			mux.Handle("/api/", api)
 			mux.Handle("/", pages)
-			srv := httptest.NewServer(mux)
+			srv := httptest.NewServer(withStream(mux))
 			defer srv.Close()
 
 			panel := `[aria-label=Application]`
@@ -295,7 +295,7 @@ func TestAppTabShowsWhyItCannotRun(t *testing.T) {
 			mux.Handle("/api/sessions/s1/terminal", http.NotFoundHandler())
 			mux.Handle("/api/", api)
 			mux.Handle("/", pages)
-			srv := httptest.NewServer(mux)
+			srv := httptest.NewServer(withStream(mux))
 			defer srv.Close()
 
 			banner := `document.querySelector('[aria-label=Application] [role=alert]')?.textContent ?? ''`

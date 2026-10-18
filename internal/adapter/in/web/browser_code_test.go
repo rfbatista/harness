@@ -120,7 +120,7 @@ func newCodeWorld(t *testing.T, deps func(w *codeWorld, d *Deps)) *codeWorld {
 	mux.Handle("/api/events", w.feed)
 	mux.Handle("/api/", httpapi.NewRouter(httpapi.NewHandler(httpapi.Services{Code: code})))
 	mux.Handle("/", NewHandler(d, assets, nil))
-	w.srv = httptest.NewServer(mux)
+	w.srv = httptest.NewServer(withStream(mux))
 	t.Cleanup(w.srv.Close)
 	return w
 }

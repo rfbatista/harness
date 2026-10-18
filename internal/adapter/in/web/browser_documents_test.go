@@ -37,7 +37,7 @@ func TestDocumentsPageInTheBrowser(t *testing.T) {
 		Agents: fakeAgents{w.agents}, Repositories: fakeRepos{w.repos}, EnvFiles: w.env, Documents: docReader{w.docs, w.tickets},
 		Now: func() time.Time { return now },
 	}, assets, nil))
-	srv := httptest.NewServer(mux)
+	srv := httptest.NewServer(withStream(mux))
 	defer srv.Close()
 
 	var path, heading, count string
@@ -217,7 +217,7 @@ func TestDocumentsPageFramesHTMLInTheBrowser(t *testing.T) {
 		Agents: fakeAgents{w.agents}, Repositories: fakeRepos{w.repos}, EnvFiles: w.env, Documents: docReader{w.docs, w.tickets},
 		Now: func() time.Time { return now },
 	}, assets, nil))
-	srv := httptest.NewServer(mux)
+	srv := httptest.NewServer(withStream(mux))
 	defer srv.Close()
 
 	var sandbox, frameTitle, pageTitle, afterTab string
@@ -295,7 +295,7 @@ func scopeServer(t *testing.T, w world, assets *Assets) (*httptest.Server, func(
 		Agents: fakeAgents{w.agents}, Repositories: fakeRepos{w.repos}, EnvFiles: w.env, Documents: docReader{w.docs, w.tickets},
 		Now: func() time.Time { return now },
 	}, assets, nil))
-	srv := httptest.NewServer(mux)
+	srv := httptest.NewServer(withStream(mux))
 	t.Cleanup(srv.Close)
 	return srv, func() []string { mu.Lock(); defer mu.Unlock(); return append([]string(nil), bodies...) }
 }

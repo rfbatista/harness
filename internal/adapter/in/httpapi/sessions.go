@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -232,6 +233,45 @@ func (h *Handler) handleSessionEvents(c echo.Context) error {
 			w.Flush()
 		}
 	}
+}
+
+// followSession is a session's events from fromSeq on — the buffered ones
+// first, then each as it happens — for a tab's stream (stream.go). Its own
+// endpoint, handleSessionEvents, also sends each event's seq as the SSE id.
+func (h *Handler) followSession(ctx context.Context, id string, fromSeq int64) (<-chan any, error) {
+	if h.orchSvc == nil {
+		return nil, echo.NewHTTPError(http.StatusServiceUnavailable, "orchestration not configured")
+	}
+	ch, replay, cancel := h.orchSvc.Subscribe(id)
+	out := make(chan any)
+	go func() {
+		defer cancel()
+		defer close(out)
+		send := func(ev ports.SessionEvent) bool {
+			select {
+			case out <- ev:
+				return true
+			case <-ctx.Done():
+				return false
+			}
+		}
+		for _, ev := range replayFrom(replay, fromSeq) {
+			if !send(ev) {
+				return
+			}
+		}
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case ev, ok := <-ch:
+				if !ok || !send(ev) {
+					return
+				}
+			}
+		}
+	}()
+	return out, nil
 }
 
 func writeSSE(w http.ResponseWriter, ev ports.SessionEvent) {

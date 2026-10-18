@@ -7,6 +7,10 @@
 // band, …), and the browser allows only a few connections per host across
 // all its tabs. The stream opens with its first follower and closes with its
 // last; one that joins late is told the stream's status at once.
+//
+// This is one EventSource per path, as the feeds' own endpoints and the
+// gateways' test stubs speak. The app itself uses stream-feed.js, which keeps
+// this contract over the tab's one /api/stream connection.
 
 import { FeedStatus } from "../domain/feed.js";
 

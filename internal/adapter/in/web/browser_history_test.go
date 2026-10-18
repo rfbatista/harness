@@ -33,7 +33,7 @@ func TestHistoryInTheBrowser(t *testing.T) {
 		Agents: fakeAgents{w.agents}, Repositories: fakeRepos{w.repos}, EnvFiles: w.env, History: w.history,
 		Now: func() time.Time { return now },
 	}, assets, nil))
-	srv := httptest.NewServer(mux)
+	srv := httptest.NewServer(withStream(mux))
 	defer srv.Close()
 
 	var path, opened, mergeHref string
@@ -90,7 +90,7 @@ func TestSessionHistoryInTheBrowser(t *testing.T) {
 		Agents: fakeAgents{w.agents}, Repositories: fakeRepos{w.repos}, EnvFiles: w.env, History: w.history,
 		Now: func() time.Time { return now },
 	}, assets, nil))
-	srv := httptest.NewServer(mux)
+	srv := httptest.NewServer(withStream(mux))
 	defer srv.Close()
 
 	var href, path, heading string
@@ -208,7 +208,7 @@ func TestSessionHistorySwapInTheBrowser(t *testing.T) {
 		PullRequests: w.prs, Now: func() time.Time { return now },
 	}, assets, nil))
 	pages, fail := failingSwaps(mux)
-	srv := httptest.NewServer(pages)
+	srv := httptest.NewServer(withStream(pages))
 	defer func() { srv.CloseClientConnections(); srv.Close() }() // the feed's stream stays open
 
 	formOpen := `(() => { const el = document.getElementById('pr-form'); return !!el && getComputedStyle(el).display !== 'none' })()`
@@ -281,7 +281,7 @@ func TestHistoryShowMoreInTheBrowser(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.Handle("/api/", http.NotFoundHandler())
 	mux.Handle("/", pages)
-	srv := httptest.NewServer(mux)
+	srv := httptest.NewServer(withStream(mux))
 	defer srv.Close()
 
 	rows := `document.querySelectorAll('nav[aria-label=Commits] a.commit:not([data-working])').length`

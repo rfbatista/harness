@@ -65,7 +65,7 @@ func TestNewSessionBranchesOffTheChosenBranch(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.Handle("/api/", api)
 	mux.Handle("/", pages)
-	srv := httptest.NewServer(mux)
+	srv := httptest.NewServer(withStream(mux))
 	defer srv.Close()
 
 	var options, filtered []string

@@ -88,7 +88,7 @@ func TestDesignTabShowsArtifactsLive(t *testing.T) {
 	mux.Handle("/api/sessions/s1/terminal", http.NotFoundHandler()) // nor the terminal
 	mux.Handle("/api/", api)
 	mux.Handle("/", pages)
-	srv := httptest.NewServer(mux)
+	srv := httptest.NewServer(withStream(mux))
 	defer func() {
 		srv.CloseClientConnections()
 		srv.Close()

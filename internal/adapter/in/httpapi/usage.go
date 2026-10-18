@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"net/http"
 	"strconv"
 
@@ -62,12 +63,20 @@ func (h *Handler) handleUsageTotals(c echo.Context) error {
 // handleUsageEvents streams each usage record stored for a project as a bare
 // `data:` line, in the recent-records shape.
 func (h *Handler) handleUsageEvents(c echo.Context) error {
-	if h.usage == nil {
-		return errUsageOff
-	}
-	records, err := h.usage.FollowUsage(c.Request().Context(), c.Param("project"))
+	records, err := h.followUsage(c.Request().Context(), c.Param("project"))
 	if err != nil {
 		return err
 	}
-	return streamSSE(c, records, func(r *domain.UsageRecord) any { return r })
+	return streamSSE(c, records, func(r any) any { return r })
+}
+
+func (h *Handler) followUsage(ctx context.Context, projectID string) (<-chan any, error) {
+	if h.usage == nil {
+		return nil, errUsageOff
+	}
+	records, err := h.usage.FollowUsage(ctx, projectID)
+	if err != nil {
+		return nil, err
+	}
+	return relayAs(ctx, records, func(r *domain.UsageRecord) any { return r }), nil
 }

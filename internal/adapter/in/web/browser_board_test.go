@@ -49,7 +49,7 @@ func TestProjectBoardComesAliveInTheBrowser(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.Handle("/api/", http.NotFoundHandler()) // no feed: the board still works from the seed
 	mux.Handle("/", NewHandler(boardDeps(), assets, nil))
-	srv := httptest.NewServer(mux)
+	srv := httptest.NewServer(withStream(mux))
 	defer srv.Close()
 
 	var heads, inProgress, todo []string
@@ -100,7 +100,7 @@ func TestMovingACardOnTheBoard(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.Handle("/api/", api)
 	mux.Handle("/", NewHandler(boardDeps(), assets, nil))
-	srv := httptest.NewServer(mux)
+	srv := httptest.NewServer(withStream(mux))
 	defer srv.Close()
 
 	var review, todo []string
@@ -153,7 +153,7 @@ func TestTasksMovedElsewhereShowOnTheBoardLive(t *testing.T) {
 	mux.Handle("/api/events", feed)
 	mux.Handle("/api/", http.NotFoundHandler())
 	mux.Handle("/", NewHandler(boardDeps(), assets, nil))
-	srv := httptest.NewServer(mux)
+	srv := httptest.NewServer(withStream(mux))
 	defer func() {
 		srv.CloseClientConnections() // the page's event stream never ends on its own
 		srv.Close()

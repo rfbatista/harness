@@ -146,7 +146,7 @@ func TestSessionsPageComesAliveInTheBrowser(t *testing.T) {
 			{ID: "s3", ProjectID: "p1", TicketID: "t1", Task: "Bump harnesskit", Status: domain.SessionFailed, UpdatedAt: recent.Add(-time.Hour)},
 		}},
 	}, assets, nil)
-	srv := httptest.NewServer(h)
+	srv := httptest.NewServer(withStream(h))
 	defer srv.Close()
 
 	var rows, groups, agentOptions []string

@@ -72,7 +72,7 @@ func newCredentialsHarness(t *testing.T) *credentialsHarness {
 	mux.Handle("/api/events", &sseFeed{}) // the rail's feed is not under test
 	mux.Handle("/api/", api)
 	mux.Handle("/", pages)
-	h.srv = httptest.NewServer(mux)
+	h.srv = httptest.NewServer(withStream(mux))
 	t.Cleanup(func() {
 		h.srv.CloseClientConnections()
 		h.srv.Close()

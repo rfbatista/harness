@@ -83,7 +83,7 @@ func newRailHarness(t *testing.T) *railHarness {
 	mux.Handle("/api/events", feed)
 	mux.Handle("/api/", http.NotFoundHandler())
 	mux.Handle("/", NewHandler(railWorld(), assets, nil))
-	srv := httptest.NewServer(mux)
+	srv := httptest.NewServer(withStream(mux))
 	t.Cleanup(func() {
 		srv.CloseClientConnections()
 		srv.Close()

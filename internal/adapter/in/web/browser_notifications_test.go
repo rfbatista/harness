@@ -199,7 +199,7 @@ func newInboxHarness(t *testing.T, list []*domain.Notification) *inboxHarness {
 	mux.Handle("/api/notifications/read", inbox)
 	mux.Handle("/api/", http.NotFoundHandler())
 	mux.Handle("/", NewHandler(deps, assets, nil))
-	srv := httptest.NewServer(mux)
+	srv := httptest.NewServer(withStream(mux))
 	t.Cleanup(func() {
 		srv.CloseClientConnections()
 		srv.Close()

@@ -96,6 +96,8 @@ type Handler struct {
 	code           ports.CodeBrowser
 	gitCredentials ports.GitCredentials
 	shells         ports.ShellEdits
+
+	streams streamRegistry // the browser tabs' live streams (stream.go)
 }
 
 // NewHandler returns an HTTP handler that serves /api/list_tree, /api/list_zones, /api/list_projects, etc.

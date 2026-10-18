@@ -41,7 +41,7 @@ func swapServer(t *testing.T, w world, assets *Assets) (*httptest.Server, *atomi
 	mux := http.NewServeMux()
 	mux.Handle("/api/", http.NotFoundHandler())
 	mux.Handle("/", pages)
-	srv := httptest.NewServer(mux)
+	srv := httptest.NewServer(withStream(mux))
 	t.Cleanup(srv.Close)
 	return srv, fail
 }

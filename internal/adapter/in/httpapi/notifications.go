@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"net/http"
 	"strconv"
 
@@ -69,12 +70,20 @@ func (h *Handler) handleMarkNotificationsRead(c echo.Context) error {
 // handleNotificationEvents streams every committed inbox change, across
 // projects, as bare `data:` lines of ports.NotificationChange.
 func (h *Handler) handleNotificationEvents(c echo.Context) error {
-	if h.notifications == nil {
-		return errNotificationsOff
-	}
-	changes, err := h.notifications.FollowNotifications(c.Request().Context())
+	changes, err := h.followNotifications(c.Request().Context())
 	if err != nil {
 		return err
 	}
-	return streamSSE(c, changes, func(ch ports.NotificationChange) any { return ch })
+	return streamSSE(c, changes, func(ch any) any { return ch })
+}
+
+func (h *Handler) followNotifications(ctx context.Context) (<-chan any, error) {
+	if h.notifications == nil {
+		return nil, errNotificationsOff
+	}
+	changes, err := h.notifications.FollowNotifications(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return relayAs(ctx, changes, func(ch ports.NotificationChange) any { return ch }), nil
 }
