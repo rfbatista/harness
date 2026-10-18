@@ -62,6 +62,9 @@ type Services struct {
 	// Shells checks and stores what sessions do to their virtual shells'
 	// files; nil allows everything, as no path is inside a shell.
 	Shells ports.ShellEdits
+	// TokenSaverInstalls installs, updates and removes token savers; nil
+	// answers 503.
+	TokenSaverInstalls ports.TokenSaverInstalls
 }
 
 // Handler serves the application's driving ports as HTTP endpoints (the same
@@ -97,6 +100,8 @@ type Handler struct {
 	gitCredentials ports.GitCredentials
 	shells         ports.ShellEdits
 
+	tokenSaverInstalls ports.TokenSaverInstalls
+
 	streams streamRegistry // the browser tabs' live streams (stream.go)
 }
 
@@ -128,6 +133,8 @@ func NewHandler(s Services) *Handler {
 		code:           s.Code,
 		gitCredentials: s.GitCredentials,
 		shells:         s.Shells,
+
+		tokenSaverInstalls: s.TokenSaverInstalls,
 	}
 }
 

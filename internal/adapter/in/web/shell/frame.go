@@ -93,6 +93,10 @@ type TopBar struct {
 	CredentialsHref string
 	// OnCredentials marks the Git credentials page as the current page.
 	OnCredentials bool
+	// TokenSaversHref is the Token savers page; "" when it is not served.
+	TokenSaversHref string
+	// OnTokenSavers marks the Token savers page as the current page.
+	OnTokenSavers bool
 }
 
 // Option is one project in the picker.

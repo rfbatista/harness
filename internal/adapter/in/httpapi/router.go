@@ -257,5 +257,10 @@ func NewRouter(h *Handler, opts ...Option) *echo.Echo {
 	g.GET("/code/diff", h.handleCodeDiff)
 	g.GET("/code/map", h.handleCodeMap)
 
+	// token savers: downloaded from the releases the harness pins
+	g.GET("/list_token_savers", h.handleListTokenSavers)
+	g.POST("/install_token_saver", h.handleInstallTokenSaver)
+	g.POST("/remove_token_saver", h.handleRemoveTokenSaver)
+
 	return e
 }
