@@ -36,6 +36,7 @@ func Parse(fs *flag.FlagSet, args []string, getenv Getenv) (app.Config, error) {
 	approvalTimeout := fs.Duration("approval.timeout", envDuration(getenv, "APPROVAL_TIMEOUT", 24*time.Hour), "how long a session waits for the user to answer an approval or question")
 	dotfilesAgentsDir := fs.String("dotfiles.agents-dir", envOr(getenv, "DOTFILES_AGENTS_DIR", ""), "path to a dotfiles-style agents/ directory (agents.json + skills/) to read Agent/Skill/MCPServer data from live, alongside the database")
 	tokenSaverReleaseBase := fs.String("token-savers.release-base", envOr(getenv, "TOKEN_SAVER_RELEASE_BASE", ""), "where token savers' pinned releases are downloaded from instead of https://github.com (<base>/<owner>/<repo>/releases/download/<tag>/<asset>)")
+	profiler := fs.Bool("pprof", envBool(getenv, "PPROF", true), "serve Go's profiler, goroutine dump included, under /debug/pprof/ to loopback peers only")
 
 	if err := fs.Parse(args); err != nil {
 		return app.Config{}, err
@@ -62,6 +63,7 @@ func Parse(fs *flag.FlagSet, args []string, getenv Getenv) (app.Config, error) {
 		DotfilesAgentsDir: *dotfilesAgentsDir,
 
 		TokenSaverReleaseBase: *tokenSaverReleaseBase,
+		ProfilerOff:           !*profiler,
 	}, nil
 }
 

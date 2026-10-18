@@ -128,7 +128,7 @@ func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRun
 	root.Handle(llm.PathPrefix, llmProxy)
 	root.Handle("/", httpapi.CORSMiddleware(mux))
 
-	srv := &http.Server{Addr: cfg.HTTPAddr, Handler: root}
+	srv := newHTTPServer(cfg.HTTPAddr, withProfiler(!cfg.ProfilerOff, root))
 	lc.Append(fx.Hook{
 		OnStart: func(context.Context) error {
 			ln, err := net.Listen("tcp", srv.Addr)
