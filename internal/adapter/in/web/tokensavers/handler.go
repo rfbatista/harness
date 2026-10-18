@@ -9,6 +9,7 @@ package tokensavers
 import (
 	"log/slog"
 	"net/http"
+	"time"
 
 	"operators-mcp/internal/adapter/in/web/shell"
 	"operators-mcp/internal/domain"
@@ -23,6 +24,10 @@ type Handler struct {
 	Savers ports.TokenSaverInstallReader
 	Layout shell.Layout
 	Render shell.Renderer
+	// Indexes lists the repository indexes; nil leaves their section out.
+	Indexes ports.RepositoryIndexes
+	// Now is the clock an index's age is painted with; nil is time.Now.
+	Now func() time.Time
 }
 
 // Page renders the page. A failed read still renders it: the browser reads
@@ -36,6 +41,7 @@ func (h Handler) Page(w http.ResponseWriter, r *http.Request) error {
 	} else {
 		v.Seed = list
 	}
+	v.Indexes = h.readIndexes(r)
 	frame, err := h.Layout(ctx, "Token savers", "", "")
 	if err != nil {
 		return err
@@ -48,6 +54,8 @@ func (h Handler) Page(w http.ResponseWriter, r *http.Request) error {
 type View struct {
 	// Seed is nil when it could not be read.
 	Seed *domain.TokenSaverList
+	// Indexes is nil when repository indexes are not served.
+	Indexes *IndexesView
 }
 
 // Unsupported is why nothing installs here, or "".

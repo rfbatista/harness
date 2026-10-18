@@ -84,6 +84,9 @@ type Deps struct {
 	// of the project's Settings page, the repository's settings page and
 	// the task page; nil leaves the control out.
 	TokenSavers ports.TokenSaverActivationReader
+	// RepositoryIndexes lists the repository indexes on the Token savers
+	// page; nil leaves that section out.
+	RepositoryIndexes ports.RepositoryIndexes
 	// Now defaults to time.Now.
 	Now func() time.Time
 }
@@ -153,6 +156,7 @@ func NewHandler(deps Deps, assets *Assets, fallback http.Handler) http.Handler {
 	}
 	if deps.TokenSaverInstalls != nil {
 		savers := tokensavers.Handler{Savers: deps.TokenSaverInstalls, Layout: s.layout, Render: render}
+		savers.Indexes, savers.Now = deps.RepositoryIndexes, deps.Now
 		mux.Handle("GET "+tokensavers.Href, s.page(savers.Page))
 	}
 	mux.Handle("GET /projects/new", s.page(projectPages.New))

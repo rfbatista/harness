@@ -44,16 +44,17 @@ func (EnvFiles) Write(root string, files []*domain.EnvFile) error {
 		if err := os.WriteFile(target, []byte(f.Content), 0o600); err != nil {
 			return err
 		}
-		if err := ensureIgnored(root, f.Path); err != nil {
+		if err := Exclude(root, f.Path, "a session's env file"); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-// ensureIgnored adds rel to the repository's info/exclude unless git already
-// ignores it.
-func ensureIgnored(root, rel string) error {
+// Exclude adds rel (anchored at the top of the repository) to the
+// repository's info/exclude, under a comment saying what it is, unless git
+// already ignores it. A directory's rel ends in "/".
+func Exclude(root, rel, what string) error {
 	if gitCmd(context.Background(), "", "-C", root, "check-ignore", "-q", "--", rel).Run() == nil {
 		return nil // already ignored
 	}
@@ -84,6 +85,6 @@ func ensureIgnored(root, rel string) error {
 	if len(current) > 0 && !bytes.HasSuffix(current, []byte("\n")) {
 		prefix = "\n"
 	}
-	_, err = fh.WriteString(prefix + "# written by the harness: a session's env file\n" + line + "\n")
+	_, err = fh.WriteString(prefix + "# written by the harness: " + what + "\n" + line + "\n")
 	return err
 }

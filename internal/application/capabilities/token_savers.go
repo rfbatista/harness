@@ -133,7 +133,7 @@ func (s *Service) InstallTokenSaver(_ context.Context, saver domain.TokenSaver) 
 	if job := t.jobs[saver]; job == nil || !job.running {
 		job = &installJob{running: true, progress: "Starting"}
 		t.jobs[saver] = job
-		go t.install(rel, asset, job)
+		go t.install(rel, asset, job, s.publish)
 	}
 	st := t.status(rel, installed[saver])
 	return &st, nil
@@ -217,10 +217,9 @@ func (t *tokenSavers) report(job *installJob, progress string) {
 // Dir, verify, unpack, and only then move the version into place and record
 // it. Whatever fails, the staging directory goes and the previous
 // installation stays as it was.
-func (t *tokenSavers) install(rel TokenSaverRelease, asset TokenSaverAsset, job *installJob) {
+func (t *tokenSavers) install(rel TokenSaverRelease, asset TokenSaverAsset, job *installJob, publish func(domain.Event) error) {
 	in, err := t.fetch(context.Background(), rel, asset, job)
 	t.mu.Lock()
-	defer t.mu.Unlock()
 	job.running = false
 	if err != nil {
 		var se *domain.StructuredError
@@ -228,11 +227,16 @@ func (t *tokenSavers) install(rel TokenSaverRelease, asset TokenSaverAsset, job 
 			se = domain.TokenSaverErr("TOKEN_SAVER_INSTALL_FAILED", fmt.Sprintf("Could not install %s %s: %v", rel.Saver, rel.Version, err))
 		}
 		job.err = &domain.TokenSaverError{Code: se.Code, Message: se.Message}
+		t.mu.Unlock()
 		slog.Warn("token saver install failed", "saver", rel.Saver, "version", rel.Version, "err", err)
 		return
 	}
 	delete(t.jobs, rel.Saver)
+	t.mu.Unlock()
 	slog.Info("token saver installed", "saver", rel.Saver, "version", rel.Version, "path", in.Path)
+	if err := publish(domain.TokenSaverInstallCompleted{Saver: rel.Saver, Version: rel.Version}); err != nil {
+		slog.Warn("token saver installed: a subscriber failed", "saver", rel.Saver, "err", err)
+	}
 }
 
 func (t *tokenSavers) fetch(ctx context.Context, rel TokenSaverRelease, asset TokenSaverAsset, job *installJob) (*domain.TokenSaverInstallation, error) {

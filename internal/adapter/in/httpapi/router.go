@@ -265,6 +265,9 @@ func NewRouter(h *Handler, opts ...Option) *echo.Echo {
 	g.GET("/list_token_savers", h.handleListTokenSavers)
 	g.POST("/install_token_saver", h.handleInstallTokenSaver)
 	g.POST("/remove_token_saver", h.handleRemoveTokenSaver)
+	// repository indexes: codegraph's, built in each repository's checkout
+	g.GET("/list_repository_indexes", h.handleListRepositoryIndexes)
+	g.POST("/rebuild_repository_index", h.handleRebuildRepositoryIndex)
 
 	return e
 }
