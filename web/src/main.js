@@ -7,7 +7,7 @@ import htmx from "htmx.org";
 
 import { apiClient } from "./shared/infrastructure/api.js";
 import { systemClock } from "./shared/infrastructure/clock.js";
-import { streamFeed } from "./shared/infrastructure/stream-feed.js";
+import { sharedFeed } from "./shared/infrastructure/shared-feed.js";
 import { xhrUpload } from "./shared/infrastructure/upload.js";
 import { preferences } from "./shared/infrastructure/storage.js";
 import { registerShared } from "./shared/presentation/register.js";
@@ -48,7 +48,7 @@ import { createScreen } from "./xterm-screen.js";
 import { startSwapRegions } from "./swap-regions.js";
 
 const api = apiClient({ base: "/api" });
-const events = streamFeed({ base: "/api", api });
+const events = sharedFeed({ base: "/api", api });
 
 const prefs = preferences();
 registerShared(Alpine, { prefs });

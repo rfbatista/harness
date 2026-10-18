@@ -117,3 +117,125 @@ export function fakeXHRClass() {
   }
   return { XMLHttpRequest: FakeXMLHttpRequest, instances, latest: () => instances.at(-1) };
 }
+
+/**
+ * Browser tabs of one profile, for code that shares work across tabs: each
+ * tab() has its own Web Locks manager and BroadcastChannel, seeing the
+ * others' as the browser would. A lock is granted in request order, released
+ * when its callback's promise settles, taken over by `steal`, and dropped
+ * with its tab when the tab closes (or crashes). A message posted on a
+ * channel reaches every other open channel of that name, synchronously.
+ */
+export function fakeCrossTab() {
+  const locks = new Map(); // name -> { held: entry|null, queue: entry[] }
+  const channels = new Set();
+
+  function grant(name) {
+    const l = locks.get(name);
+    if (!l || l.held || l.queue.length === 0) return;
+    const entry = l.queue.shift();
+    l.held = entry;
+    let done;
+    try {
+      done = Promise.resolve(entry.callback({ name }));
+    } catch (err) {
+      done = Promise.reject(err);
+    }
+    done.then(
+      (value) => release(entry, () => entry.resolve(value)),
+      (err) => release(entry, () => entry.reject(err)),
+    );
+  }
+  function release(entry, settle) {
+    const l = locks.get(entry.name);
+    if (l.held !== entry) return; // stolen or dropped already
+    l.held = null;
+    settle();
+    grant(entry.name);
+  }
+  function abort(entry) {
+    const err = new Error("the lock was released");
+    err.name = "AbortError";
+    entry.reject(err);
+  }
+
+  function tab() {
+    const mine = new Set();
+    let open = true;
+
+    const tabLocks = {
+      request(name, options, callback) {
+        if (typeof options === "function") [options, callback] = [{}, options];
+        let l = locks.get(name);
+        if (!l) locks.set(name, (l = { held: null, queue: [] }));
+        return new Promise((resolve, reject) => {
+          if (!open) return; // a closed tab runs nothing
+          const entry = { name, callback, resolve, reject, tab: mine };
+          mine.add(entry);
+          if (options.steal) {
+            const held = l.held;
+            l.held = null;
+            if (held) abort(held);
+            l.queue.unshift(entry);
+          } else {
+            l.queue.push(entry);
+          }
+          grant(name);
+        });
+      },
+    };
+
+    class FakeBroadcastChannel {
+      constructor(name) {
+        this.name = name;
+        this.onmessage = null;
+        this.closed = false;
+        this.tabOpen = () => open;
+        channels.add(this);
+      }
+      postMessage(data) {
+        if (this.closed || !open) return;
+        const copy = structuredClone(data);
+        for (const c of [...channels]) {
+          if (c === this || c.closed || !c.tabOpen() || c.name !== this.name) continue;
+          c.onmessage?.({ data: copy });
+        }
+      }
+      close() {
+        this.closed = true;
+        channels.delete(this);
+      }
+    }
+
+    const listeners = new Map();
+    const window = {
+      addEventListener(type, fn) {
+        if (!listeners.has(type)) listeners.set(type, []);
+        listeners.get(type).push(fn);
+      },
+    };
+
+    return {
+      locks: tabLocks,
+      BroadcastChannel: FakeBroadcastChannel,
+      window,
+      /** Closes the tab: `pagehide` runs first unless it crashed. Its locks go with it. */
+      close({ crash = false } = {}) {
+        if (!crash) for (const fn of listeners.get("pagehide") ?? []) fn({});
+        open = false;
+        for (const entry of mine) {
+          const l = locks.get(entry.name);
+          const i = l.queue.indexOf(entry);
+          if (i >= 0) l.queue.splice(i, 1);
+          if (l.held === entry) {
+            l.held = null;
+            grant(entry.name);
+          }
+        }
+        mine.clear();
+      },
+    };
+  }
+
+  return { tab };
+}
