@@ -608,10 +608,12 @@ func newCodeBrowser(ws ports.WorkspaceRepository, repos ports.RepositoryReposito
 }
 
 // registerCodeWatcher announces code_changed on the orchestration's project
-// feed while a workspace's session runs, polling from start to stop.
+// feed while a workspace's session runs and someone follows its project's
+// feed, polling from start to stop.
 func registerCodeWatcher(lc fx.Lifecycle, sessions ports.SessionRepository, ws ports.WorkspaceRepository, git ports.GitCode, orch *orchestration.Service, cat catalog.Catalog) {
 	w := workspaces.NewCodeWatcher(workspaces.CodeWatcherDeps{Sessions: sessions, Workspaces: ws, Git: git, Feed: orch})
 	w.Subscribe(cat.Bus)
+	orch.ObserveFeedFollowers(w)
 	lc.Append(fx.Hook{
 		OnStart: func(context.Context) error {
 			w.Start()

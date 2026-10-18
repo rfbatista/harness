@@ -58,6 +58,15 @@ type SessionFeed interface {
 	FollowProject(ctx context.Context, projectID string) (<-chan SessionChange, error)
 }
 
+// FeedFollowersObserver is told how many followers a project's feed has each
+// time that number changes, so work done only for followers (the code
+// watcher's polling) can run only while someone follows. It is called with
+// the feed's lock held: it must be quick and must not call back into the
+// feed.
+type FeedFollowersObserver interface {
+	ProjectFollowers(projectID string, followers int)
+}
+
 // ProjectChange is one thing in a project as it is after a change, or a
 // deleted one. Exactly one of the pointers is set; the wire tells them apart
 // by which key is present, so the others must be absent, never null.

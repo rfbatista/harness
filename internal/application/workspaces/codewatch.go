@@ -29,13 +29,15 @@ type CodeWatcherDeps struct {
 // of a workspace whose session runs moves: its HEAD or its working tree. It
 // follows sessions through their domain events and polls each watched
 // worktree's git status, so it needs no file watches and ignores what git
-// ignores.
+// ignores. It polls a worktree only while someone follows its project's feed
+// (ProjectFollowers): with nobody to tell, it runs no git at all.
 type CodeWatcher struct {
 	d CodeWatcherDeps
 
 	mu       sync.Mutex
 	sessions map[string]string           // running session → its workspace
 	watched  map[string]*watchedWorktree // workspace → what was last seen
+	followed map[string]bool             // project whose feed has a follower
 
 	stop chan struct{}
 	done chan struct{}
@@ -57,7 +59,9 @@ func NewCodeWatcher(d CodeWatcherDeps) *CodeWatcher {
 	if d.Now == nil {
 		d.Now = time.Now
 	}
-	return &CodeWatcher{d: d, sessions: map[string]string{}, watched: map[string]*watchedWorktree{}}
+	return &CodeWatcher{
+		d: d, sessions: map[string]string{}, watched: map[string]*watchedWorktree{}, followed: map[string]bool{},
+	}
 }
 
 // Subscribe follows sessions starting, changing status, ending and being
@@ -170,6 +174,25 @@ func (w *CodeWatcher) Untrack(sessionID string) {
 	}
 }
 
+// ProjectFollowers polls the project's worktrees while its feed has a
+// follower and stops when the last one leaves (ports.FeedFollowersObserver).
+// What was seen is forgotten on leaving, so the first look after a new
+// follower arrives only records, as on a session's start.
+func (w *CodeWatcher) ProjectFollowers(projectID string, followers int) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if followers > 0 {
+		w.followed[projectID] = true
+		return
+	}
+	delete(w.followed, projectID)
+	for _, wt := range w.watched {
+		if wt.projectID == projectID {
+			wt.fingerprint = ""
+		}
+	}
+}
+
 // Watched is the workspaces being watched.
 func (w *CodeWatcher) Watched() []string {
 	w.mu.Lock()
@@ -181,9 +204,10 @@ func (w *CodeWatcher) Watched() []string {
 	return ids
 }
 
-// Poll looks at every watched worktree once and announces each one that
-// changed since it was last seen, at most once per interval. The first look
-// only records. A worktree gone from disk is skipped.
+// Poll looks once at every watched worktree whose project's feed is
+// followed and announces each one that changed since it was last seen, at
+// most once per interval. The first look only records. A worktree gone from
+// disk is skipped.
 func (w *CodeWatcher) Poll(ctx context.Context) {
 	w.mu.Lock()
 	type target struct {
@@ -191,7 +215,9 @@ func (w *CodeWatcher) Poll(ctx context.Context) {
 	}
 	targets := make([]target, 0, len(w.watched))
 	for id, wt := range w.watched {
-		targets = append(targets, target{id, wt.path})
+		if w.followed[wt.projectID] {
+			targets = append(targets, target{id, wt.path})
+		}
 	}
 	w.mu.Unlock()
 
@@ -207,6 +233,7 @@ func (w *CodeWatcher) Poll(ctx context.Context) {
 		var change *ports.CodeChange
 		switch {
 		case wt == nil: // untracked meanwhile
+		case !w.followed[wt.projectID]: // the last follower left meanwhile
 		case wt.fingerprint == "":
 			wt.fingerprint = fingerprint
 		case wt.fingerprint != fingerprint && w.d.Now().Sub(wt.announced) >= w.d.Interval:
