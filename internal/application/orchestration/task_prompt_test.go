@@ -109,13 +109,16 @@ func TestApplyTaskContext_BriefTeachesTheShell(t *testing.T) {
 		"\n- task/docs/ — ", "\n- project/docs/ — ", "\n- task/comments/ — ", "\n- task/resources/ — ",
 		"\n- task/designs/ — ", "\n- project/designs/ — ",
 		"Read, grep", "sed -n", "Write, Edit, sed -i, tee, cp, mv, rm",
-		"architecture, conventions, decisions", "mv a document from task/docs/ to project/docs/",
+		"architecture, conventions, decisions", "A person moves documents to project level",
 		"\n- BASE_VERSION_STALE — ", "\n- READ_ONLY, COMMENT_NOT_YOURS — ", "\n- REDIRECT_DENIED — ",
-		"\n- NOT_ON_TASK — ", "\n- NOT_STORED — ", "\n- SHELL_UNAVAILABLE — ",
+		"\n- NOT_ON_TASK — ", "\n- PROJECT_MOVE_DENIED — ", "\n- NOT_STORED — ", "\n- SHELL_UNAVAILABLE — ",
 	} {
 		if !strings.Contains(cfg.AppendSystem, want) {
 			t.Errorf("brief missing %q:\n%s", want, cfg.AppendSystem)
 		}
+	}
+	if strings.Contains(cfg.AppendSystem, "mv a document from task/docs/ to project/docs/") {
+		t.Errorf("brief still tells the agent to move documents to project level:\n%s", cfg.AppendSystem)
 	}
 }
 

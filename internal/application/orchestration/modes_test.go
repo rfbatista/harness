@@ -178,15 +178,19 @@ func mustFlag(t *testing.T, args []string, name string) string {
 }
 
 // The architect's specs and contracts are what other tasks build on; its
-// skill says they can be moved to project level, and how.
+// skill says a person moves them to project level, and that the shell
+// refuses the architect's own mv.
 func TestStartInteractive_ArchitectSkillNamesProjectDocuments(t *testing.T) {
 	svc, _ := newInteractiveService(t)
 	_, launch := startInteractive(t, svc, InteractiveRequest{Mode: "architect"})
 	body := pluginSkill(t, launch, "task-architecture")
-	for _, want := range []string{"mv task/docs/", "project/docs/", "project level"} {
+	for _, want := range []string{"project/docs/", "project level", "ask the person", "PROJECT_MOVE_DENIED"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("task-architecture SKILL.md lacks %q", want)
 		}
+	}
+	if strings.Contains(body, "mv task/docs/contract") || strings.Contains(body, "`mv` it to `project/docs/`") {
+		t.Error("task-architecture SKILL.md still tells the architect to mv documents to project/docs/")
 	}
 }
 

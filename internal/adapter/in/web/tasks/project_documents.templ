@@ -29,7 +29,7 @@ templ ProjectDocumentsPage(v ProjectDocumentsView) {
 templ projectDocumentsBody(v ProjectDocumentsView) {
 	if len(v.Documents) == 0 {
 		<div data-scroll>
-			@components.Empty("No document has been moved to this project yet", "Project documents are the knowledge that outlives one task: architecture, conventions, decisions. Move one here with \"Move to project\" on a task's documents page, or let an agent do it by moving the file to project/docs in its virtual shell; the task keeps it too.")
+			@components.Empty("No document has been moved to this project yet", "Project documents are the knowledge that outlives one task: architecture, conventions, decisions. Move one here with \"Move to project\" on a task's documents page; the task keeps it too. An agent cannot move one to project/docs in its virtual shell: it asks you to.")
 		</div>
 	} else {
 		<div class="[ split-view ]" data-scroll { libraryScopeAttrs(v.Open)... } { shell.SwapRegion(documentsRegion)... }>
