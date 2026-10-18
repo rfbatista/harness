@@ -87,6 +87,33 @@ func TestASessionEndingRebuildsAnIndexOlderThanADay(t *testing.T) {
 	indexes.Wait()
 }
 
+// A session ending on a repository where codegraph is on and installed
+// but which has no index yet (it was added after codegraph turned on, or
+// its build failed) builds the first one.
+func TestASessionEndingBuildsAMissingIndexWhereCodegraphIsOn(t *testing.T) {
+	svc, _ := newInteractiveService(t)
+	bus := eventbus.New()
+	svc.Events = bus
+	checkout := gitCheckout(t)
+	stub := newStubCodegraph(t)
+	indexes := workspaces.NewRepositoryIndexes(workspaces.RepositoryIndexDeps{
+		Projects:      indexProjects{&domain.Repository{ID: "r1", ProjectID: "p1", Name: "api", RootDir: checkout}},
+		Sessions:      svc,
+		Installations: installedCodegraph(stub.path),
+		Activations:   codegraphOnIn{"r1"},
+		Indexer:       codegraph.NewIndexer(),
+	})
+	indexes.Subscribe(bus)
+	t.Cleanup(indexes.Close)
+
+	sess, _ := startInteractive(t, svc, InteractiveRequest{})
+	if _, err := svc.EndInteractive(context.Background(), sess.ID, 0, false); err != nil {
+		t.Fatal(err)
+	}
+	indexes.Wait()
+	stub.wantCalls(t, "init --yes "+checkout)
+}
+
 // gitCheckout is a repository's checkout with one commit.
 func gitCheckout(t *testing.T) string {
 	t.Helper()
@@ -187,4 +214,11 @@ type codegraphOnNowhere struct{}
 
 func (codegraphOnNowhere) RepositoriesWithTokenSaverOn(context.Context, domain.TokenSaver, string) ([]string, error) {
 	return nil, nil
+}
+
+// codegraphOnIn has codegraph resolve on in these repositories.
+type codegraphOnIn []string
+
+func (c codegraphOnIn) RepositoriesWithTokenSaverOn(context.Context, domain.TokenSaver, string) ([]string, error) {
+	return c, nil
 }

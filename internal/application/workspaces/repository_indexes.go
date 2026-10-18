@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"path"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -83,8 +84,14 @@ func (x *RepositoryIndexes) Subscribe(sub ports.EventSubscriber) {
 		}
 		return nil
 	})
+	ports.On(sub, func(_ context.Context, ev domain.RepositorySaved) error {
+		// A repository added, or given its checkout, where codegraph is
+		// already on.
+		x.background(func(ctx context.Context) { x.buildMissing(ctx, ev.ProjectID) })
+		return nil
+	})
 	ports.On(sub, func(_ context.Context, ev domain.SessionEnded) error {
-		x.background(func(ctx context.Context) { x.refreshStale(ctx, ev.SessionID) })
+		x.background(func(ctx context.Context) { x.refresh(ctx, ev.SessionID) })
 		return nil
 	})
 }
@@ -179,10 +186,10 @@ func (x *RepositoryIndexes) buildMissing(ctx context.Context, projectID string) 
 	}
 }
 
-// refreshStale rebuilds the index of the ended session's repository when it
-// is older than domain.RepositoryIndexMaxAge. A repository without an index
-// gets none here: activations build the first one.
-func (x *RepositoryIndexes) refreshStale(ctx context.Context, sessionID string) {
+// refresh rebuilds the index of the ended session's repository when it is
+// older than domain.RepositoryIndexMaxAge, and builds it when it is missing
+// while codegraph resolves on there (its first build failed, or never ran).
+func (x *RepositoryIndexes) refresh(ctx context.Context, sessionID string) {
 	sess, err := x.d.Sessions.Get(ctx, sessionID)
 	if err != nil || sess == nil || sess.RepositoryID == "" {
 		return
@@ -192,12 +199,25 @@ func (x *RepositoryIndexes) refreshStale(ctx context.Context, sessionID string) 
 		return
 	}
 	builtAt, built := x.d.Indexer.IndexBuiltAt(r.RootDir)
-	if !built || x.d.Now().Sub(builtAt) <= domain.RepositoryIndexMaxAge {
+	switch {
+	case built && x.d.Now().Sub(builtAt) <= domain.RepositoryIndexMaxAge:
+		return
+	case !built && !x.codegraphOn(ctx, r):
 		return
 	}
 	if codegraph := x.codegraph(ctx); codegraph != "" {
 		x.start(codegraph, r.RootDir)
 	}
+}
+
+// codegraphOn says whether codegraph resolves on for r at some level.
+func (x *RepositoryIndexes) codegraphOn(ctx context.Context, r *domain.Repository) bool {
+	ids, err := x.d.Activations.RepositoriesWithTokenSaverOn(ctx, domain.TokenSaverCodegraph, r.ProjectID)
+	if err != nil {
+		slog.Warn("repository indexes: where codegraph is on was not read", "project", r.ProjectID, "err", err)
+		return false
+	}
+	return slices.Contains(ids, r.ID)
 }
 
 // codegraph is the installed codegraph executable, or "".

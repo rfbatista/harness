@@ -19,6 +19,13 @@ type RepositoryDeleted struct {
 	ProjectID    string
 }
 
+// RepositorySaved: a repository was created or updated (its root dir may
+// be new). It is published after the change is stored.
+type RepositorySaved struct {
+	RepositoryID string
+	ProjectID    string
+}
+
 // PromptDeleted: a prompt is gone. Whatever referenced it drops the reference.
 type PromptDeleted struct{ PromptID string }
 
@@ -150,6 +157,7 @@ type ArtifactChanged struct {
 
 func (ProjectDeleted) EventName() string       { return "project.deleted" }
 func (RepositoryDeleted) EventName() string    { return "repository.deleted" }
+func (RepositorySaved) EventName() string      { return "repository.saved" }
 func (PromptDeleted) EventName() string        { return "prompt.deleted" }
 func (AgentDeleted) EventName() string         { return "agent.deleted" }
 func (SkillDeleted) EventName() string         { return "skill.deleted" }

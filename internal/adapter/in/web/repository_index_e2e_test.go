@@ -75,6 +75,8 @@ func TestRepositoryIndexBuiltWhenCodegraphTurnsOnInTheWebUI_EndToEnd(t *testing.
 		clickButton(indexRow(w.repo.ID), "Rebuild index"),
 		waitUntil(`(`+indexRow(w.repo.ID)+`?.dataset.state ?? '') === 'built' && !`+indexRow(w.repo.ID)+`.querySelector('button').disabled`),
 	)
+	// The row may read built before the rebuild request reaches the server.
+	w.stub.waitCalls(t, 2)
 	w.indexes.Wait()
 	w.stub.wantCalls(t, "init --yes "+w.checkout, "index --quiet "+w.checkout)
 	w.wantExcludedOnce()
@@ -108,6 +110,43 @@ func TestRepositoryIndexBuiltWhenCodegraphIsInstalledWhereItIsOn(t *testing.T) {
 	w.stub.wantCalls(t, "init --yes "+w.checkout)
 	w.wantExcludedOnce()
 	w.wantClean()
+}
+
+// A repository added to a project where codegraph is on and installed, or
+// given its checkout later, gets its index without codegraph being turned
+// on again.
+func TestRepositoryIndexBuiltWhenARepositoryIsAddedWhereCodegraphIsOn(t *testing.T) {
+	w := newIndexWorld(t)
+	if _, err := w.cat.Capabilities.InstallTokenSaver(w.ctx, domain.TokenSaverCodegraph); err != nil {
+		t.Fatal(err)
+	}
+	projectOwner := domain.ActivationOwner{Level: domain.ActivationLevelProject, ID: w.project.ID}
+	if _, err := w.cat.Capabilities.SetTokenSaverActivation(w.ctx, projectOwner, domain.TokenSaverCodegraph, domain.ActivationOn); err != nil {
+		t.Fatal(err)
+	}
+	w.stub.waitCalls(t, 1)
+	w.indexes.Wait()
+	w.stub.wantCalls(t, "init --yes "+w.checkout)
+
+	web := gitCheckout(t)
+	if _, err := w.cat.Projects.CreateRepository(w.ctx, w.project.ID, "web", "", "file://"+web, web); err != nil {
+		t.Fatal(err)
+	}
+	w.indexes.Wait()
+	w.stub.wantCalls(t, "init --yes "+w.checkout, "init --yes "+web)
+
+	docs, err := w.cat.Projects.CreateRepository(w.ctx, w.project.ID, "docs", "", "https://example.com/docs.git", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.indexes.Wait()
+	w.stub.wantCalls(t, "init --yes "+w.checkout, "init --yes "+web)
+	checkout := gitCheckout(t)
+	if _, err := w.cat.Projects.UpdateRepository(w.ctx, docs.ID, "", "", "", checkout); err != nil {
+		t.Fatal(err)
+	}
+	w.indexes.Wait()
+	w.stub.wantCalls(t, "init --yes "+w.checkout, "init --yes "+web, "init --yes "+checkout)
 }
 
 // indexWorld is the server as it runs, token savers included (over an
@@ -273,6 +312,15 @@ func (s indexStub) calls() []string {
 		return nil
 	}
 	return strings.Split(strings.TrimSuffix(string(b), "\n"), "\n")
+}
+
+func (s indexStub) waitCalls(t *testing.T, n int) {
+	t.Helper()
+	for deadline := time.Now().Add(10 * time.Second); len(s.calls()) < n; time.Sleep(20 * time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatalf("codegraph called %d times, want %d", len(s.calls()), n)
+		}
+	}
 }
 
 func (s indexStub) wantCalls(t *testing.T, want ...string) {
