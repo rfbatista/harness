@@ -128,6 +128,40 @@ func TestDocumentRepo_CRUDAndLinks(t *testing.T) {
 	}
 }
 
+// The documents of many tickets come in one read, each document once however
+// many of the tickets it is linked to.
+func TestDocumentRepo_ListByTicketsListsEachLinkedDocumentOnce(t *testing.T) {
+	db, err := Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	tickets := NewTicketRepository(db)
+	docs := NewDocumentRepository(db)
+	a, _ := tickets.Create("p1", "A", "", domain.TicketStatusBacklog)
+	b, _ := tickets.Create("p1", "B", "", domain.TicketStatusBacklog)
+	c, _ := tickets.Create("p1", "C", "", domain.TicketStatusBacklog)
+	shared, _ := docs.Create("p1", "Spec", "# spec", domain.DocumentFormatMarkdown, domain.DocumentScopeTask)
+	own, _ := docs.Create("p1", "Plan", "# plan", domain.DocumentFormatMarkdown, domain.DocumentScopeTask)
+	other, _ := docs.Create("p1", "Notes", "# notes", domain.DocumentFormatMarkdown, domain.DocumentScopeTask)
+	for _, link := range [][2]string{{a.ID, shared.ID}, {b.ID, shared.ID}, {b.ID, own.ID}, {c.ID, other.ID}} {
+		if err := docs.Link(link[0], link[1]); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	var got []string
+	for _, d := range docs.ListByTickets([]string{a.ID, b.ID}) {
+		got = append(got, d.Title)
+	}
+	slices.Sort(got)
+	if want := []string{"Plan", "Spec"}; !slices.Equal(got, want) {
+		t.Errorf("ListByTickets(a, b) = %v, want %v", got, want)
+	}
+	if got := docs.ListByTickets(nil); len(got) != 0 {
+		t.Errorf("ListByTickets(nil) = %d documents, want none", len(got))
+	}
+}
+
 func TestDocumentRepo_FormatPersists(t *testing.T) {
 	db, err := Open(":memory:")
 	if err != nil {

@@ -31,12 +31,16 @@ func (h Handler) Reviews(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	var docs []*domain.Document
+	var waiting []string // the tasks a review waits on, whose documents the inbox names
 	pending := 0
 	for _, t := range tickets {
 		pending += t.PendingReviews
-		if h.Docs != nil && t.PendingReviews > 0 {
-			docs = append(docs, h.Docs.ListTicketDocuments(t.ID)...)
+		if t.PendingReviews > 0 {
+			waiting = append(waiting, t.ID)
 		}
+	}
+	if h.Docs != nil && len(waiting) > 0 {
+		docs = h.Docs.ListTasksDocuments(waiting)
 	}
 	frame, err := h.Layout(ctx, "Reviews", project.ID, "")
 	if err != nil {

@@ -29,6 +29,8 @@ type DocumentRepository interface {
 	Get(id string) *domain.Document
 	ListByProject(projectID string, scope domain.DocumentScope) []*domain.Document
 	ListByTicket(ticketID string) []*domain.Document
+	// ListByTickets lists the documents linked to any of ticketIDs, each once.
+	ListByTickets(ticketIDs []string) []*domain.Document
 	ListTicketIDsByDocument(documentID string) []string
 	Create(projectID, title, content string, format domain.DocumentFormat, scope domain.DocumentScope) (*domain.Document, error)
 	Update(id, title, content string, format domain.DocumentFormat) (*domain.Document, error)
@@ -60,11 +62,12 @@ type TicketDocumentReader interface {
 }
 
 // DocumentReader reads what the documents pages show: a task's linked
-// documents, a project's documents by scope (the project library lists
-// project-scoped ones), and the tasks a document is linked to. Planning
-// implements it.
+// documents, the documents of several tasks at once (the reviews inbox), a
+// project's documents by scope (the project library lists project-scoped
+// ones), and the tasks a document is linked to. Planning implements it.
 type DocumentReader interface {
 	TicketDocumentReader
+	ListTasksDocuments(ticketIDs []string) []*domain.Document
 	ListDocuments(projectID string, scope domain.DocumentScope) []*domain.Document
 	ListDocumentTickets(documentID string) []*domain.Ticket
 }

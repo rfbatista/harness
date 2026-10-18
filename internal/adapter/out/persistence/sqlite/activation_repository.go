@@ -43,6 +43,19 @@ func (r *ActivationRepository) List(owner domain.ActivationOwner) ([]domain.Acti
 	return activations(models), nil
 }
 
+// ListOwners returns the stored activations of the owners ids of level, read
+// at once.
+func (r *ActivationRepository) ListOwners(level domain.ActivationLevel, ids []string) ([]domain.Activation, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	var models []ActivationModel
+	if err := r.db.Where("level = ? AND owner_id IN ?", level, ids).Order("owner_id, saver").Find(&models).Error; err != nil {
+		return nil, err
+	}
+	return activations(models), nil
+}
+
 // ListSaver returns saver's stored activations, at every level.
 func (r *ActivationRepository) ListSaver(saver domain.TokenSaver) ([]domain.Activation, error) {
 	var models []ActivationModel

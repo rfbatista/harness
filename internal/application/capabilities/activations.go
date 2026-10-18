@@ -249,13 +249,9 @@ func (s *Service) activationsOf(owner domain.ActivationOwner, sc activationScope
 		values[level] = v
 	}
 	project, repository, task := values[domain.ActivationLevelProject], values[domain.ActivationLevelRepository], values[domain.ActivationLevelTask]
-	repositories := map[string]map[domain.TokenSaver]domain.ActivationValue{}
-	for _, r := range sc.repositories {
-		v, err := s.storedValues(domain.ActivationLevelRepository, r.ID)
-		if err != nil {
-			return nil, err
-		}
-		repositories[r.ID] = v
+	repositories, err := s.repositoriesValues(sc.repositories)
+	if err != nil {
+		return nil, err
 	}
 	// A project that never set a saver has it off; below it, unset inherits.
 	unset := domain.ActivationInherit
@@ -277,6 +273,27 @@ func (s *Service) activationsOf(owner domain.ActivationOwner, sc activationScope
 		}
 		a.Summary = a.Summarize()
 		out = append(out, a)
+	}
+	return out, nil
+}
+
+// repositoriesValues reads the stored values of repos at once, by
+// repository and saver.
+func (s *Service) repositoriesValues(repos []*domain.Repository) (map[string]map[domain.TokenSaver]domain.ActivationValue, error) {
+	out := make(map[string]map[domain.TokenSaver]domain.ActivationValue, len(repos))
+	ids := make([]string, 0, len(repos))
+	for _, r := range repos {
+		out[r.ID] = map[domain.TokenSaver]domain.ActivationValue{}
+		ids = append(ids, r.ID)
+	}
+	list, err := s.activations.ListOwners(domain.ActivationLevelRepository, ids)
+	if err != nil {
+		return nil, err
+	}
+	for _, a := range list {
+		if values, ok := out[a.Owner.ID]; ok {
+			values[a.Saver] = a.Value
+		}
 	}
 	return out, nil
 }

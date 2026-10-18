@@ -12,6 +12,7 @@ import (
 	"operators-mcp/internal/adapter/in/web/shell"
 	"operators-mcp/internal/adapter/in/web/tasks"
 	"operators-mcp/internal/domain"
+	"operators-mcp/internal/infra/querycount"
 )
 
 // workingID names the uncommitted changes where a commit hash would go.
@@ -52,6 +53,18 @@ func (h Handler) Session(w http.ResponseWriter, r *http.Request) error {
 		return errs.Newf("WORKSPACE_NOT_FOUND", "this session has no worktree: it was not started on a repository")
 	}
 
+	more := showMoreRequest(r)
+	// The pull request panel reads git apart from the history: it is read
+	// beside it, so the page waits for the slower of the two, not both.
+	var panel chan *pullrequests.Panel
+	if !swap && !more {
+		panel = make(chan *pullrequests.Panel, 1)
+		go func() {
+			defer querycount.Join(ctx)() // its reads count for the request
+			panel <- h.pullRequestPanel(r, project.ID, sess.WorkspaceID)
+		}()
+	}
+
 	q := readQuery(r)
 	q.remotes = false
 	hist, err := h.History.WorkspaceHistory(ctx, sess.WorkspaceID, q.limit)
@@ -69,7 +82,6 @@ func (h Handler) Session(w http.ResponseWriter, r *http.Request) error {
 			open = hist.Commits[0].Hash
 		}
 	}
-	more := showMoreRequest(r)
 	var detail *domain.CommitDetail
 	if open != "" && open != workingID && !more {
 		if detail, err = h.History.RepositoryCommit(ctx, hist.RepositoryID, open); err != nil {
@@ -124,7 +136,7 @@ func (h Handler) Session(w http.ResponseWriter, r *http.Request) error {
 	if swap {
 		return h.Render(w, r, http.StatusOK, openDetail(view))
 	}
-	view.PullRequest = h.pullRequestPanel(r, project.ID, sess.WorkspaceID)
+	view.PullRequest = <-panel
 
 	frame, err := h.Layout(ctx, "History · "+task.Title, project.ID, task.ID)
 	if err != nil {

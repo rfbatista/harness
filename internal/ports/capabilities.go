@@ -101,6 +101,8 @@ type SessionTokenSavers interface {
 type TokenSaverActivationRepository interface {
 	// List returns the owner's stored activations.
 	List(owner domain.ActivationOwner) ([]domain.Activation, error)
+	// ListOwners returns the stored activations of the owners ids of level.
+	ListOwners(level domain.ActivationLevel, ids []string) ([]domain.Activation, error)
 	// ListSaver returns saver's stored activations, at every level.
 	ListSaver(saver domain.TokenSaver) ([]domain.Activation, error)
 	// Put creates or replaces the activation of a.Saver for a.Owner.

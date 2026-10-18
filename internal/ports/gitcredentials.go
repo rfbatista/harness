@@ -135,6 +135,9 @@ type RepositoryCredentialPin struct {
 type RepositoryCredentialRepository interface {
 	// Get is "" when the repository is not pinned.
 	Get(repositoryID string) (string, error)
+	// ListByRepositories is the pins of any of repositoryIDs, read at once;
+	// a repository not pinned has none.
+	ListByRepositories(repositoryIDs []string) ([]RepositoryCredentialPin, error)
 	Put(pin RepositoryCredentialPin) error
 	Delete(repositoryID string) error
 	// ListByCredential is every pin on credentialID.

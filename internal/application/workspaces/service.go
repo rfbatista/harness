@@ -8,6 +8,7 @@ import (
 	"errors"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/rfbatista/harnesskit/errs"
 
@@ -217,27 +218,46 @@ func (s *Service) WorkspaceHistory(ctx context.Context, workspaceID string, limi
 		}
 	}
 
-	st, err := s.history.Status(ctx, ws.Path)
-	switch {
-	case errs.Code(err) == "WORKSPACE_MISSING":
-		out.Gone = true
-	case err != nil:
-		return nil, err
-	default:
-		out.Head, out.Changes = st.Head, st.Changes
-	}
-
 	refs := []string{ws.Branch}
 	if out.Base != "" && out.Base != ws.Branch {
 		refs = append(refs, out.Base)
+	}
+	// The worktree's status, the divergence and the graph are independent
+	// git reads, so they run side by side.
+	var (
+		wg                sync.WaitGroup
+		st                *domain.WorktreeStatus
+		statusErr, logErr error
+	)
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		st, statusErr = s.history.Status(ctx, ws.Path)
+	}()
+	go func() {
+		defer wg.Done()
+		// The repository's checkout holds every branch; read the graph
+		// there, so it shows even after the worktree is gone.
+		out.Commits, logErr = s.history.Log(ctx, root, ports.HistoryQuery{Limit: limit, Refs: refs})
+	}()
+	if len(refs) > 1 {
+		var err error
 		if out.Ahead, out.Behind, err = s.history.Divergence(ctx, root, out.Base, ws.Branch); err != nil {
 			out.Ahead, out.Behind = 0, 0 // a base that no longer resolves: no counts
 		}
 	}
-	// The repository's checkout holds every branch; read the graph there,
-	// so it shows even after the worktree is gone.
-	if out.Commits, err = s.history.Log(ctx, root, ports.HistoryQuery{Limit: limit, Refs: refs}); err != nil {
-		return nil, err
+	wg.Wait()
+
+	switch {
+	case errs.Code(statusErr) == "WORKSPACE_MISSING":
+		out.Gone = true
+	case statusErr != nil:
+		return nil, statusErr
+	default:
+		out.Head, out.Changes = st.Head, st.Changes
+	}
+	if logErr != nil {
+		return nil, logErr
 	}
 	return out, nil
 }

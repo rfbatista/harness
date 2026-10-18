@@ -7,8 +7,11 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -32,42 +35,63 @@ import (
 // The page-load budget: a project the harness's own size (30 tasks, 150
 // sessions with events, workspaces, usage and pull requests) on a SQLite
 // file, read through the real services and the real web handler. The task
-// page and the project page make as many database queries at 150 sessions as
-// at 50, which is the hard guarantee: their database work does not grow with
-// the sessions. Each answers within 50 ms when idle, and 10 task pages loaded
-// at once each within 250 ms. The race detector slows everything several
-// times over, so the timings are only held without it.
-func TestTaskAndProjectPagesStayWithinThePageLoadBudget(t *testing.T) {
+// page, the project page, the reviews page, the repositories page and a
+// session's history page make as many database queries at 150 sessions as at
+// 50, at 60 tasks as at 30 and at 4 repositories as at 1, which is the hard
+// guarantee: their database work grows with none of them. Each answers
+// within 50 ms when idle, and 10 of each loaded at once each within 250 ms.
+// The race detector slows everything several times over, so the timings are
+// only held without it.
+func TestBudgetedPagesStayWithinThePageLoadBudget(t *testing.T) {
 	b := newBudgetProject(t)
-	taskPage := "/projects/" + b.project + "/tasks/" + b.tickets[0]
-	projectPage := "/projects/" + b.project
+	pages := []struct{ name, path string }{
+		{"task page", "/projects/" + b.project + "/tasks/" + b.tickets[0]},
+		{"project page", "/projects/" + b.project},
+		{"reviews page", "/projects/" + b.project + "/reviews"},
+		{"repositories page", "/projects/" + b.project + "/repositories"},
+		{"session history page", "/projects/" + b.project + "/tasks/" + b.tickets[0] + "/sessions/s-000/history"},
+	}
 
+	counts := func() []int64 {
+		n := make([]int64, len(pages))
+		for i, p := range pages {
+			n[i] = b.queries(p.path)
+		}
+		return n
+	}
 	b.addSessions(50)
-	taskAt50, projectAt50 := b.queries(taskPage), b.queries(projectPage)
+	at50 := counts()
 	b.addSessions(100)
-	taskAt150, projectAt150 := b.queries(taskPage), b.queries(projectPage)
-	t.Logf("queries at 50 and 150 sessions: task page %d, %d; project page %d, %d", taskAt50, taskAt150, projectAt50, projectAt150)
-	if taskAt50 != taskAt150 {
-		t.Errorf("the task page made %d queries at 50 sessions and %d at 150: its database work grows with the sessions", taskAt50, taskAt150)
-	}
-	if projectAt50 != projectAt150 {
-		t.Errorf("the project page made %d queries at 50 sessions and %d at 150: its database work grows with the sessions", projectAt50, projectAt150)
+	at150 := counts()
+	b.addTickets(30)
+	at60Tasks := counts()
+	b.addRepositories(3)
+	at4Repos := counts()
+	for i, p := range pages {
+		t.Logf("%s: %d queries at 50 sessions, %d at 150, %d at 60 tasks, %d at 4 repositories", p.name, at50[i], at150[i], at60Tasks[i], at4Repos[i])
+		if at50[i] != at150[i] {
+			t.Errorf("the %s made %d queries at 50 sessions and %d at 150: its database work grows with the sessions", p.name, at50[i], at150[i])
+		}
+		if at150[i] != at60Tasks[i] {
+			t.Errorf("the %s made %d queries at 30 tasks and %d at 60: its database work grows with the tasks", p.name, at150[i], at60Tasks[i])
+		}
+		if at60Tasks[i] != at4Repos[i] {
+			t.Errorf("the %s made %d queries at 1 repository and %d at 4: its database work grows with the repositories", p.name, at60Tasks[i], at4Repos[i])
+		}
 	}
 
-	idleTask, idleProject := b.idle(taskPage), b.idle(projectPage)
-	parallel := b.parallel(taskPage, 10)
-	t.Logf("idle: task page %v, project page %v; 10 parallel task pages, slowest %v", idleTask, idleProject, parallel)
-	if raceEnabled {
-		return
-	}
-	if idleTask > 50*time.Millisecond {
-		t.Errorf("the task page took %v when idle, over the 50 ms budget", idleTask)
-	}
-	if idleProject > 50*time.Millisecond {
-		t.Errorf("the project page took %v when idle, over the 50 ms budget", idleProject)
-	}
-	if parallel > 250*time.Millisecond {
-		t.Errorf("the slowest of 10 parallel task pages took %v, over the 250 ms budget", parallel)
+	for _, p := range pages {
+		idle, parallel := b.idle(p.path), b.parallel(p.path, 10)
+		t.Logf("%s: idle %v; 10 in parallel, slowest %v", p.name, idle, parallel)
+		if raceEnabled {
+			continue
+		}
+		if idle > 50*time.Millisecond {
+			t.Errorf("the %s took %v when idle, over the 50 ms budget", p.name, idle)
+		}
+		if parallel > 250*time.Millisecond {
+			t.Errorf("the slowest of 10 parallel loads of the %s took %v, over the 250 ms budget", p.name, parallel)
+		}
 	}
 }
 
@@ -78,14 +102,23 @@ type budgetProject struct {
 	handler  http.Handler
 	db       *gorm.DB
 	sessions ports.SessionRepository
+	cat      catalog.Catalog
+	plan     *planning.Service
 	project  string
 	repo     string
+	repoDir  string
 	tickets  []string
 	seeded   int
 }
 
 func newBudgetProject(t *testing.T) *budgetProject {
 	t.Helper()
+	// Under Xcode, /usr/bin/git is a shim that looks the real git up on every
+	// run, which costs up to 50 ms a run on some machines: that is the
+	// machine's wait, not the server's, so the pages run the real git.
+	if out, err := exec.Command("git", "--exec-path").Output(); err == nil {
+		t.Setenv("PATH", strings.TrimSpace(string(out))+string(os.PathListSeparator)+os.Getenv("PATH"))
+	}
 	dir := t.TempDir()
 	repoDir := filepath.Join(dir, "repo")
 	gitInit(t, repoDir)
@@ -101,6 +134,7 @@ func newBudgetProject(t *testing.T) *budgetProject {
 		art     *artifacts.Service
 		usageSv *usage.Service
 		inbox   optionalNotifications
+		creds   optionalGitCredentials
 	)
 	// Without ExecutionModule: it registers Genkit flows in a process-wide
 	// registry, so it cannot boot twice in one test binary.
@@ -108,7 +142,7 @@ func newBudgetProject(t *testing.T) *budgetProject {
 		fx.Supply(Config{HTTPAddr: "127.0.0.1:0", MCPAddr: "127.0.0.1:0", DBPath: filepath.Join(dir, "harness.db"), Root: dir, ClaudeBin: "/bin/true", SessionShell: "direct"}),
 		PersistenceModule, CatalogModule, PlanningModule, WorkspacesModule, GitCredentialsModule,
 		AgentRuntimeModule, TaskChannelModule, TextProcessingModule, UsageModule, NotificationsModule,
-		fx.Populate(&cat, &orch, &plan, &ws, &prs, &code, &art, &usageSv, &inbox, &b.db, &b.sessions),
+		fx.Populate(&cat, &orch, &plan, &ws, &prs, &code, &art, &usageSv, &inbox, &creds, &b.db, &b.sessions),
 		fx.NopLogger,
 	)
 	if err := app.Start(b.ctx); err != nil {
@@ -124,18 +158,9 @@ func newBudgetProject(t *testing.T) *budgetProject {
 	if err != nil {
 		t.Fatal(err)
 	}
-	b.project, b.repo = p.ID, r.ID
-	reviews := sqlite.NewReviewRequestRepository(b.db)
-	for i := range 30 {
-		tk, err := plan.CreateTicket(b.ctx, p.ID, fmt.Sprintf("Task %02d", i), "A task of the budget project.", domain.TicketStatusInProgress)
-		if err != nil {
-			t.Fatal(err)
-		}
-		b.tickets = append(b.tickets, tk.ID)
-		if _, err := reviews.Create(&domain.ReviewRequest{TaskID: tk.ID, ProjectID: p.ID, Subject: "Review the plan", Body: "Look at it.", State: domain.ReviewPending}); err != nil {
-			t.Fatal(err)
-		}
-	}
+	b.project, b.repo, b.repoDir = p.ID, r.ID, repoDir
+	b.cat, b.plan = cat, plan
+	b.addTickets(30)
 
 	assets, err := web.NewAssets()
 	if err != nil {
@@ -149,9 +174,38 @@ func newBudgetProject(t *testing.T) *budgetProject {
 		Projects: cat.Projects, Tasks: plan, Sessions: orch, Agents: cat.Agents, Repositories: cat.Projects, EnvFiles: cat.Projects,
 		RunCommands: cat.Projects, Documents: plan, History: ws, Code: code, Workspaces: ws, Artifacts: art, ProjectSummaries: cat.Projects,
 		PullRequests: prs, Resources: plan, Comments: plan, Notifications: notes, Usage: usageSv, TokenSavers: cat.Capabilities,
-		TokenSaverInstalls: cat.Capabilities,
+		TokenSaverInstalls: cat.Capabilities, GitCredentials: creds.port(),
 	}, assets, nil)
 	return b
+}
+
+// addRepositories adds n more repositories to the project, each a checkout
+// of its own.
+func (b *budgetProject) addRepositories(n int) {
+	b.t.Helper()
+	for i := range n {
+		dir := filepath.Join(b.t.TempDir(), "repo")
+		gitInit(b.t, dir)
+		if _, err := b.cat.Projects.CreateRepository(b.ctx, b.project, fmt.Sprintf("repo-%d", i), "", fmt.Sprintf("https://example.com/repo-%d.git", i), dir); err != nil {
+			b.t.Fatal(err)
+		}
+	}
+}
+
+// addTickets creates n more tasks, each with a pending review.
+func (b *budgetProject) addTickets(n int) {
+	b.t.Helper()
+	reviews := sqlite.NewReviewRequestRepository(b.db)
+	for range n {
+		tk, err := b.plan.CreateTicket(b.ctx, b.project, fmt.Sprintf("Task %02d", len(b.tickets)), "A task of the budget project.", domain.TicketStatusInProgress)
+		if err != nil {
+			b.t.Fatal(err)
+		}
+		b.tickets = append(b.tickets, tk.ID)
+		if _, err := reviews.Create(&domain.ReviewRequest{TaskID: tk.ID, ProjectID: b.project, Subject: "Review the plan", Body: "Look at it.", State: domain.ReviewPending}); err != nil {
+			b.t.Fatal(err)
+		}
+	}
 }
 
 // addSessions seeds n more sessions, spread over the tasks in turn. Each has
@@ -168,7 +222,11 @@ func (b *budgetProject) addSessions(n int) {
 		i := b.seeded
 		b.seeded++
 		ticket := b.tickets[i%len(b.tickets)]
-		w, err := workspacesRepo.Create(domain.Workspace{RepositoryID: b.repo, Name: fmt.Sprintf("ws-%d", i), Branch: fmt.Sprintf("agent/s-%d", i), Path: b.t.TempDir(), BaseRef: "main"})
+		branch, path := fmt.Sprintf("agent/s-%d", i), b.t.TempDir()
+		if i == 0 {
+			b.worktree(branch, path) // the session whose history page is read
+		}
+		w, err := workspacesRepo.Create(domain.Workspace{RepositoryID: b.repo, Name: fmt.Sprintf("ws-%d", i), Branch: branch, Path: path, BaseRef: "main"})
 		if err != nil {
 			b.t.Fatal(err)
 		}
@@ -207,6 +265,28 @@ func (b *budgetProject) addSessions(n int) {
 				b.t.Fatal(err)
 			}
 		}
+	}
+}
+
+// worktree checks a new branch out at path, with a commit of its own and an
+// uncommitted change, as a session's worktree would be.
+func (b *budgetProject) worktree(branch, path string) {
+	b.t.Helper()
+	for _, c := range []struct {
+		dir  string
+		args []string
+	}{
+		{b.repoDir, []string{"worktree", "add", "-q", "-b", branch, path}},
+		{path, []string{"-c", "user.email=e2e@test", "-c", "user.name=e2e", "commit", "-q", "--allow-empty", "-m", "work"}},
+	} {
+		cmd := exec.Command("git", c.args...)
+		cmd.Dir = c.dir
+		if out, err := cmd.CombinedOutput(); err != nil {
+			b.t.Fatalf("git %v: %v\n%s", c.args, err, out)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(path, "notes.txt"), []byte("work in progress\n"), 0o644); err != nil {
+		b.t.Fatal(err)
 	}
 }
 

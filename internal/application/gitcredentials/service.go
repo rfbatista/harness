@@ -508,11 +508,8 @@ func (s *Service) origin(ctx context.Context, r *domain.Repository) (string, err
 }
 
 // repositoryCredential is r's binding, what it resolves to now and its origin.
-func (s *Service) repositoryCredential(ctx context.Context, r *domain.Repository, creds []*domain.GitCredential) (*domain.RepositoryCredential, error) {
-	pinned, err := s.st.Pins.Get(r.ID)
-	if err != nil {
-		return nil, err
-	}
+// pinned is the credential r is pinned to, "" for none.
+func (s *Service) repositoryCredential(ctx context.Context, r *domain.Repository, pinned string, creds []*domain.GitCredential) (*domain.RepositoryCredential, error) {
 	origin, err := s.origin(ctx, r)
 	if err != nil {
 		return nil, err
@@ -543,7 +540,11 @@ func (s *Service) GetRepositoryCredential(ctx context.Context, repositoryID stri
 	if err != nil {
 		return nil, err
 	}
-	return s.repositoryCredential(ctx, r, creds)
+	pinned, err := s.st.Pins.Get(r.ID)
+	if err != nil {
+		return nil, err
+	}
+	return s.repositoryCredential(ctx, r, pinned, creds)
 }
 
 // ListRepositoryCredentials answers for each of the project's repositories,
@@ -557,6 +558,18 @@ func (s *Service) ListRepositoryCredentials(ctx context.Context, projectID strin
 		return nil, err
 	}
 	repos := s.rd.Repositories.ListByProject(projectID)
+	ids := make([]string, 0, len(repos))
+	for _, r := range repos {
+		ids = append(ids, r.ID)
+	}
+	pins, err := s.st.Pins.ListByRepositories(ids)
+	if err != nil {
+		return nil, err
+	}
+	pinned := make(map[string]string, len(pins))
+	for _, p := range pins {
+		pinned[p.RepositoryID] = p.CredentialID
+	}
 	out := make([]*domain.RepositoryCredential, len(repos))
 	errs := make([]error, len(repos))
 	sem := make(chan struct{}, originReads)
@@ -566,7 +579,7 @@ func (s *Service) ListRepositoryCredentials(ctx context.Context, projectID strin
 		sem <- struct{}{}
 		go func() {
 			defer func() { <-sem; wg.Done() }()
-			out[i], errs[i] = s.repositoryCredential(ctx, r, creds)
+			out[i], errs[i] = s.repositoryCredential(ctx, r, pinned[r.ID], creds)
 		}()
 	}
 	wg.Wait()

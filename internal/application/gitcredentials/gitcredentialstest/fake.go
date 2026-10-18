@@ -307,6 +307,18 @@ func (s *Pins) Get(repositoryID string) (string, error) {
 	return s.pins[repositoryID].CredentialID, nil
 }
 
+func (s *Pins) ListByRepositories(repositoryIDs []string) ([]ports.RepositoryCredentialPin, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var out []ports.RepositoryCredentialPin
+	for _, id := range repositoryIDs {
+		if p, ok := s.pins[id]; ok {
+			out = append(out, p)
+		}
+	}
+	return out, nil
+}
+
 func (s *Pins) Put(pin ports.RepositoryCredentialPin) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()

@@ -24,6 +24,20 @@ type docReader struct {
 
 func (r docReader) ListTicketDocuments(ticketID string) []*domain.Document { return r.docs[ticketID] }
 
+func (r docReader) ListTasksDocuments(ticketIDs []string) []*domain.Document {
+	seen := map[string]bool{}
+	var out []*domain.Document
+	for _, id := range ticketIDs {
+		for _, d := range r.docs[id] {
+			if !seen[d.ID] {
+				seen[d.ID] = true
+				out = append(out, d)
+			}
+		}
+	}
+	return out
+}
+
 func (r docReader) ListDocuments(projectID string, scope domain.DocumentScope) []*domain.Document {
 	seen := map[string]bool{}
 	var out []*domain.Document

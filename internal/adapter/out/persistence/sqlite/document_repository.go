@@ -67,6 +67,21 @@ func (r *DocumentRepository) ListByTicket(ticketID string) []*domain.Document {
 	return documentsToDomain(models)
 }
 
+// ListByTickets lists the documents linked to any of ticketIDs, each once.
+func (r *DocumentRepository) ListByTickets(ticketIDs []string) []*domain.Document {
+	if len(ticketIDs) == 0 {
+		return nil
+	}
+	var models []DocumentModel
+	err := r.db.
+		Where("id IN (?)", r.db.Model(&TicketDocumentModel{}).Select("document_id").Where("ticket_id IN ?", ticketIDs)).
+		Find(&models).Error
+	if err != nil {
+		return nil
+	}
+	return documentsToDomain(models)
+}
+
 func (r *DocumentRepository) Create(projectID, title, content string, format domain.DocumentFormat, scope domain.DocumentScope) (*domain.Document, error) {
 	id, err := genID()
 	if err != nil {
