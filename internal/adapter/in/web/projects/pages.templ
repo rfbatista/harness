@@ -4,6 +4,7 @@ import (
 	"operators-mcp/internal/adapter/in/web/components"
 	"operators-mcp/internal/adapter/in/web/credentials"
 	"operators-mcp/internal/adapter/in/web/shell"
+	"operators-mcp/internal/adapter/in/web/tokensavers"
 )
 
 // NewProjectPage creates a project from a directory, with the git
@@ -275,6 +276,9 @@ templ EnvFilesPage(v EnvFilesView) {
 					</form>
 					if v.RunCommands != nil {
 						@runCommandsSection(*v.RunCommands)
+					}
+					if v.TokenSavers != nil {
+						@tokensavers.Section(*v.TokenSavers)
 					}
 				</div>
 			</div>

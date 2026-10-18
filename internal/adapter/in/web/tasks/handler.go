@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
+	"operators-mcp/internal/adapter/in/web/tokensavers"
 	"time"
 
 	"github.com/rfbatista/harnesskit/errs"
@@ -41,9 +42,11 @@ type Handler struct {
 	// names each worktree's base branch for it.
 	Code       ports.CodeBrowser
 	Workspaces WorkspaceReader
-	Layout     shell.Layout
-	Render     shell.Renderer
-	Now        func() time.Time
+	// TokenSavers seeds the task's Token savers control; nil leaves it out.
+	TokenSavers ports.TokenSaverActivationReader
+	Layout      shell.Layout
+	Render      shell.Renderer
+	Now         func() time.Time
 }
 
 // workspaceIDs are the sessions' worktrees, each once.
@@ -189,6 +192,7 @@ func (h Handler) task(w http.ResponseWriter, r *http.Request, codeRoute *code.Ro
 	if h.Usage != nil {
 		view.Usage = h.usageTotals(ctx, project.ID, task.ID, list)
 	}
+	view.TokenSavers = tokensavers.Read(ctx, h.TokenSavers, domain.ActivationOwner{Level: domain.ActivationLevelTask, ID: task.ID})
 	for _, st := range Statuses {
 		view.StatusChoices = append(view.StatusChoices, sessions.StatusChoice{Value: st.Value, Label: st.Label, Selected: st.Value == string(task.Status)})
 	}

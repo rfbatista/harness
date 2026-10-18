@@ -38,6 +38,8 @@ export function toSession(dto) {
     branch: dto.branch ?? "",
     workspaceId: dto.workspace_id ?? "",
     workingDir: dto.working_dir ?? "",
+    tokenSavers: names(dto.token_savers),
+    tokenSaversNotInstalled: names(dto.token_savers_not_installed),
     updatedAt,
   });
 }
@@ -62,6 +64,11 @@ export function toStatusCheck(dto) {
     firedCount: Number(dto.fired_count ?? 0),
     state: dto.state,
   });
+}
+
+/** A list of names, [] when absent. */
+function names(value) {
+  return Object.freeze(Array.isArray(value) ? value.filter((n) => typeof n === "string") : []);
 }
 
 /** An optional RFC 3339 time: null when absent, BAD_RESPONSE when unreadable. */

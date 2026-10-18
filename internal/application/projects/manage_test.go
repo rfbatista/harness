@@ -215,9 +215,14 @@ func TestDeleteProject_WithOnlyFinishedSessionsCascades(t *testing.T) {
 	f := newManageFixture(t)
 	ctx := context.Background()
 	p, _ := f.svc.CreateProject(ctx, "Done", t.TempDir())
-	if _, err := f.svc.CreateRepository(ctx, p.ID, "api", "", "https://example.com/api", t.TempDir()); err != nil {
+	r, err := f.svc.CreateRepository(ctx, p.ID, "api", "", "https://example.com/api", t.TempDir())
+	if err != nil {
 		t.Fatal(err)
 	}
+	if want := []domain.Event{domain.RepositorySaved{RepositoryID: r.ID, ProjectID: p.ID}}; !reflect.DeepEqual(f.bus.published, want) {
+		t.Fatalf("creating a repository published %v, want %v", f.bus.published, want)
+	}
+	f.bus.published = nil
 	f.sessions.activity[p.ID] = ports.SessionActivity{LastActivityAt: time.Now()}
 
 	if err := f.svc.DeleteProject(ctx, p.ID); err != nil {

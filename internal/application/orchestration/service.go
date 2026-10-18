@@ -118,6 +118,12 @@ type Service struct {
 	// rm, touch, mkdir) link to, first on its PATH; they call the session's
 	// SessionShellURL. Empty: sessions get no shims.
 	ShimBinary string
+	// TokenSavers says which token savers a session runs with, when it is
+	// prepared (ADR 0015). Nil: sessions run with none.
+	TokenSavers ports.SessionTokenSavers
+	// IndexBuilds says when a repository index build runs on a checkout, so
+	// a session start does not copy an index being written. Nil: never.
+	IndexBuilds ports.RepositoryIndexBuilds
 
 	// updates feeds the task-update turns to the courier, one at a time;
 	// deliverUpdate replaces the courier in tests.
@@ -169,7 +175,7 @@ func (s *Service) Start(ctx context.Context, req StartRequest) (*domain.Session,
 		branch = defaultBranchName(req.Task)
 	}
 
-	p, err := s.prepare(prepareInput{
+	p, err := s.prepare(ctx, prepareInput{
 		ProjectID:    req.ProjectID,
 		RepositoryID: req.RepositoryID,
 		AgentID:      req.AgentID,
@@ -247,6 +253,10 @@ func (s *Service) Start(ctx context.Context, req StartRequest) (*domain.Session,
 		Model:        req.ModelOverride,
 		Status:       domain.SessionStarting,
 		AutoRun:      autoRun,
+
+		TokenSavers:             p.savers.active,
+		TokenSaversNotInstalled: p.savers.notInstalled,
+		CavemanIntensity:        p.savers.cavemanIntensity,
 	})
 	if err != nil {
 		_ = sess.Stop()
@@ -299,16 +309,17 @@ type prepared struct {
 	permission llmkit.PermissionMode
 	cleanup    func() // removes the materialized skill plugin dir and the git directory; nil if none
 	envFile    string // the session's git env file, for login shells; "" without GitAuth
+	savers     sessionSavers
 }
 
 // prepare validates a start request, provisions the session's worktree and
 // builds its CLI configuration. Start launches the result headless;
 // StartInteractive hands it to a terminal.
-func (s *Service) prepare(in prepareInput) (*prepared, error) {
+func (s *Service) prepare(ctx context.Context, in prepareInput) (*prepared, error) {
 	if in.ProjectID == "" {
 		return nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "project_id is required"}
 	}
-	if _, err := s.catalog.Projects.GetProject(context.TODO(), in.ProjectID); err != nil {
+	if _, err := s.catalog.Projects.GetProject(ctx, in.ProjectID); err != nil {
 		return nil, err
 	}
 
@@ -324,7 +335,7 @@ func (s *Service) prepare(in prepareInput) (*prepared, error) {
 	if in.RepositoryID == "" {
 		return nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "repository_id is required"}
 	}
-	repo, err := s.catalog.Repositories.GetRepository(context.TODO(), in.RepositoryID)
+	repo, err := s.catalog.Repositories.GetRepository(ctx, in.RepositoryID)
 	if err != nil {
 		return nil, err
 	}
@@ -373,6 +384,7 @@ func (s *Service) prepare(in prepareInput) (*prepared, error) {
 		_ = s.workspaces.Discard(ws.ID)
 		return nil, err
 	}
+	savers := s.withTokenSavers(ctx, in, repo.RootDir, ws.Path, &cfg)
 	return &prepared{
 		cfg:        cfg,
 		ws:         ws,
@@ -380,6 +392,7 @@ func (s *Service) prepare(in prepareInput) (*prepared, error) {
 		permission: permission,
 		cleanup:    cleanup,
 		envFile:    envFile,
+		savers:     savers,
 	}, nil
 }
 

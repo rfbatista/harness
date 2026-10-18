@@ -61,3 +61,54 @@ type Capabilities interface {
 	MCPServerCatalog
 	ToolCatalog
 }
+
+// TokenSaverActivationReader reads one owner's token saver activations: each
+// saver's own value there and what it resolves to. An unknown owner is
+// PROJECT_NOT_FOUND, REPOSITORY_NOT_FOUND or TICKET_NOT_FOUND.
+type TokenSaverActivationReader interface {
+	ListTokenSaverActivations(ctx context.Context, owner domain.ActivationOwner) ([]domain.TokenSaverActivation, error)
+}
+
+// TokenSaverActivations reads and sets token saver activations at project,
+// repository and task level. Setting returns the owner's activations as
+// they now read; a bad saver, level or value is INVALID_INPUT.
+type TokenSaverActivations interface {
+	TokenSaverActivationReader
+	SetTokenSaverActivation(ctx context.Context, owner domain.ActivationOwner, saver domain.TokenSaver, value domain.ActivationValue) ([]domain.TokenSaverActivation, error)
+}
+
+// TokenSaverResolver resolves every token saver for a session's task,
+// repository and project (task → repository → project, the most specific
+// level not inheriting wins). An empty repository or task id skips that
+// level.
+type TokenSaverResolver interface {
+	ResolveTokenSavers(ctx context.Context, projectID, repositoryID, taskID string) ([]domain.ResolvedTokenSaver, error)
+}
+
+// SessionTokenSavers is what Orchestration asks Capabilities when it
+// prepares an agent session: how each saver resolves for it, and which are
+// installed. *capabilities.Service satisfies it.
+type SessionTokenSavers interface {
+	TokenSaverResolver
+	TokenSaverInstallations
+	// CavemanIntensity is the caveman intensity sessions get, full by
+	// default.
+	CavemanIntensity(ctx context.Context) domain.CavemanIntensity
+}
+
+// TokenSaverActivationRepository stores activations (driven). Inherit is
+// never stored: it is the absence of a row.
+type TokenSaverActivationRepository interface {
+	// List returns the owner's stored activations.
+	List(owner domain.ActivationOwner) ([]domain.Activation, error)
+	// ListSaver returns saver's stored activations, at every level.
+	ListSaver(saver domain.TokenSaver) ([]domain.Activation, error)
+	// Put creates or replaces the activation of a.Saver for a.Owner.
+	Put(a domain.Activation) error
+	// Delete removes one saver's activation for owner, if stored.
+	Delete(saver domain.TokenSaver, owner domain.ActivationOwner) error
+	// DeleteOwner removes every activation of owner.
+	DeleteOwner(owner domain.ActivationOwner) error
+	// DeleteProject removes every activation in the project, at every level.
+	DeleteProject(projectID string) error
+}

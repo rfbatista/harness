@@ -48,7 +48,7 @@ var ServerModule = fx.Module("server",
 
 // registerHTTPServer mounts the UI and JSON API on a mux and serves it,
 // shutting down gracefully when fx stops.
-func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRunner *apps.Service, ts *tooling.Service, exec *execution.Service, orch *orchestration.Service, plan *planning.Service, ws *workspaces.Service, broker *approval.Broker, sessions ports.SessionRepository, art *artifacts.Service, channel *taskchannel.Service, prs *workspaces.PullRequests, code ports.CodeBrowser, inbox optionalNotifications, creds optionalGitCredentials, shells *vshell.Service, usageSvc *usage.Service) error {
+func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRunner *apps.Service, ts *tooling.Service, exec *execution.Service, orch *orchestration.Service, plan *planning.Service, ws *workspaces.Service, broker *approval.Broker, sessions ports.SessionRepository, art *artifacts.Service, channel *taskchannel.Service, prs *workspaces.PullRequests, code ports.CodeBrowser, inbox optionalNotifications, creds optionalGitCredentials, shells *vshell.Service, usageSvc *usage.Service, indexes optionalRepositoryIndexes) error {
 	uiHandler, err := ui.SPAHandler(ui.Dist)
 	if err != nil {
 		return err
@@ -83,6 +83,7 @@ func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRun
 		Architecture: cat.Architecture,
 		Agents:       cat.Agents,
 		Capabilities: cat.Capabilities,
+		TokenSavers:  cat.Capabilities,
 		Settings:     cat.Settings,
 		Tools:        ts,
 		Tasks:        exec,
@@ -102,6 +103,10 @@ func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRun
 		GitCredentials: creds.port(),
 		// What sessions write in their virtual shells.
 		Shells: shells,
+		// Token savers, installed from the releases the harness pins.
+		TokenSaverInstalls: cat.Capabilities,
+		// Each repository's codegraph index, built in its checkout.
+		RepositoryIndexes: indexes.port(),
 	}), httpapi.WithToken(cfg.APIToken))
 	mux.Handle("/api/", apiRouter)
 	mux.Handle(mcpapprove.PathPrefix, mcpapprove.Handler(broker))
@@ -109,7 +114,8 @@ func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRun
 	// The web client owns / and its pages; anything else reaches the legacy
 	// designer SPA until it is retired.
 	mux.Handle("/", web.NewHandler(web.Deps{Projects: cat.Projects, Tasks: plan, Sessions: orch, Agents: cat.Agents, Repositories: cat.Projects, EnvFiles: cat.Projects, RunCommands: cat.Projects, Documents: plan, History: ws, Code: code, Workspaces: ws, Artifacts: art, ProjectSummaries: cat.Projects, PullRequests: prs,
-		Resources: plan, Comments: plan, Notifications: noteReader, GitCredentials: creds.port(), Usage: usageSvc}, assets, uiHandler))
+		Resources: plan, Comments: plan, Notifications: noteReader, GitCredentials: creds.port(), Usage: usageSvc, TokenSavers: cat.Capabilities,
+		TokenSaverInstalls: cat.Capabilities, RepositoryIndexes: indexes.port()}, assets, uiHandler))
 
 	// The LLM proxy every claude process calls through (ADR 0006): loopback
 	// only, outside the API token and CORS, so its responses come back as

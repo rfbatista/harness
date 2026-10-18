@@ -27,6 +27,8 @@ export function makeSession(overrides = {}) {
     branch: "agent/port-tickets-1a2b3c4d",
     workspaceId: "ws1",
     workingDir: "/w/harness/.worktrees/port-tickets",
+    tokenSavers: [],
+    tokenSaversNotInstalled: [],
     updatedAt: T0,
     ...overrides,
   });
@@ -57,6 +59,8 @@ export function toDTO(session) {
     branch: session.branch || undefined,
     workspace_id: session.workspaceId || undefined,
     working_dir: session.workingDir,
+    token_savers: session.tokenSavers?.length ? [...session.tokenSavers] : undefined,
+    token_savers_not_installed: session.tokenSaversNotInstalled?.length ? [...session.tokenSaversNotInstalled] : undefined,
     updated_at: session.updatedAt.toISOString(),
   };
 }

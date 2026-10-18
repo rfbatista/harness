@@ -1,0 +1,49 @@
+package tokensavers
+
+// Section is the Token savers control (tokenSaversActivations,
+// web/src/modules/tokensavers): per saver, its value at this level and what
+// it resolves to, from which level.
+templ Section(seed Seed) {
+	<section class="[ flow ] [ flow-space-s ]" aria-labelledby="token-savers-title" x-data="tokenSaversActivations" data-seed="token-savers-seed">
+		@templ.JSONScript("token-savers-seed", seed)
+		<h2 id="token-savers-title">Token savers</h2>
+		<p class="[ text-sm color-ink-muted ]">{ seed.Lead() }</p>
+		<template x-if="error">
+			<div class="[ banner ]" data-tone="danger" role="alert">
+				<div class="[ flow ] [ flow-space-3xs grow ]">
+					<span x-text="error.message"></span>
+					<span class="[ code ]"><span x-text="error.code"></span> · <span x-text="error.next"></span></span>
+				</div>
+				<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-on:click="dismiss">Dismiss</button>
+			</div>
+		</template>
+		<div x-ignore data-ssr>
+			<div class="[ pane ]">
+				for _, a := range seed.Activations {
+					<div class="[ row ]" style="--row-columns: 7rem auto minmax(0, 1fr)" data-saver={ string(a.Saver) }>
+						<span class="[ title ] [ font-mono ]">{ string(a.Saver) }</span>
+						<select data-size="sm" data-fit disabled aria-label={ "Activation of " + string(a.Saver) }>
+							for _, c := range seed.Choices() {
+								<option value={ c.Value } selected?={ c.Value == string(a.Value) }>{ c.Label }</option>
+							}
+						</select>
+						<span class="[ text-sm color-ink-muted ]" data-resolved>{ a.Summary }</span>
+					</div>
+				}
+			</div>
+		</div>
+		<div class="[ pane ]" aria-label="Token savers" x-show="ready" style="display: none">
+			<template x-for="s in savers" x-bind:key="s.saver">
+				<div class="[ row ]" style="--row-columns: 7rem auto minmax(0, 1fr)" x-bind:data-saver="s.saver">
+					<label class="[ title ] [ font-mono ]" x-bind:for="s.inputId" x-text="s.saver"></label>
+					<select data-size="sm" data-fit x-bind:id="s.inputId" x-bind:value="s.value" x-bind:disabled="s.saving" x-bind:aria-busy="s.saving" x-on:change="choose">
+						for _, c := range seed.Choices() {
+							<option value={ c.Value }>{ c.Label }</option>
+						}
+					</select>
+					<span class="[ text-sm color-ink-muted ]" data-resolved x-text="s.summary"></span>
+				</div>
+			</template>
+		</div>
+	</section>
+}

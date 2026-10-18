@@ -26,6 +26,7 @@ import (
 	"operators-mcp/internal/adapter/in/web/projects"
 	"operators-mcp/internal/adapter/in/web/shell"
 	"operators-mcp/internal/adapter/in/web/tasks"
+	"operators-mcp/internal/adapter/in/web/tokensavers"
 	"operators-mcp/internal/adapter/in/web/usage"
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
@@ -73,9 +74,19 @@ type Deps struct {
 	// GitCredentials seeds the Git credentials page, the repositories'
 	// credential and the pull-request panel; nil leaves them out.
 	GitCredentials ports.GitCredentials
+	// TokenSaverInstalls lists the token savers for their page; nil leaves
+	// the page and its top bar link out.
+	TokenSaverInstalls ports.TokenSaverInstallReader
 	// Usage reads token usage for a project's Usage page and the task
 	// page's totals; nil leaves the page, its rail link and the totals out.
 	Usage ports.UsageDashboard
+	// TokenSavers reads token saver activations for the Token savers control
+	// of the project's Settings page, the repository's settings page and
+	// the task page; nil leaves the control out.
+	TokenSavers ports.TokenSaverActivationReader
+	// RepositoryIndexes lists the repository indexes on the Token savers
+	// page; nil leaves that section out.
+	RepositoryIndexes ports.RepositoryIndexes
 	// Now defaults to time.Now.
 	Now func() time.Time
 }
@@ -103,7 +114,7 @@ func NewHandler(deps Deps, assets *Assets, fallback http.Handler) http.Handler {
 	taskPages := tasks.Handler{
 		Projects: deps.Projects, Tasks: deps.Tasks, Sessions: deps.Sessions,
 		Agents: deps.Agents, Repositories: deps.Repositories, Docs: deps.Documents, Artifacts: deps.Artifacts, PullRequests: deps.PullRequests,
-		Resources: deps.Resources, Comments: deps.Comments, Code: deps.Code, Usage: deps.Usage,
+		Resources: deps.Resources, Comments: deps.Comments, Code: deps.Code, Usage: deps.Usage, TokenSavers: deps.TokenSavers,
 		Layout: s.layout, Render: render, Now: deps.Now,
 	}
 	if deps.Workspaces != nil {
@@ -111,7 +122,7 @@ func NewHandler(deps Deps, assets *Assets, fallback http.Handler) http.Handler {
 	}
 	projectPages := projects.Handler{
 		Projects: deps.Projects, Repositories: deps.Repositories, EnvFiles: deps.EnvFiles, RunCommands: deps.RunCommands, Summaries: deps.ProjectSummaries, Credentials: deps.GitCredentials,
-		Layout: s.layout, Render: render, Now: deps.Now,
+		TokenSavers: deps.TokenSavers, Layout: s.layout, Render: render, Now: deps.Now,
 	}
 	historyPages := history.Handler{
 		Projects: deps.Projects, Repositories: deps.Repositories, History: deps.History, Sessions: deps.Sessions, Tasks: deps.Tasks,
@@ -142,6 +153,11 @@ func NewHandler(deps Deps, assets *Assets, fallback http.Handler) http.Handler {
 	if deps.GitCredentials != nil {
 		creds := credentials.Handler{Credentials: deps.GitCredentials, Layout: s.layout, Render: render, Now: deps.Now}
 		mux.Handle("GET "+credentials.Href, s.page(creds.Page))
+	}
+	if deps.TokenSaverInstalls != nil {
+		savers := tokensavers.Handler{Savers: deps.TokenSaverInstalls, Layout: s.layout, Render: render}
+		savers.Indexes, savers.Now = deps.RepositoryIndexes, deps.Now
+		mux.Handle("GET "+tokensavers.Href, s.page(savers.Page))
 	}
 	mux.Handle("GET /projects/new", s.page(projectPages.New))
 	mux.Handle("GET /projects/{project}", s.page(taskPages.Project))
@@ -288,6 +304,9 @@ func (s *server) bareFrame(title string) shell.Frame {
 	}
 	if s.deps.GitCredentials != nil {
 		f.Top.CredentialsHref = credentials.Href
+	}
+	if s.deps.TokenSaverInstalls != nil {
+		f.Top.TokenSaversHref = tokensavers.Href
 	}
 	return f
 }

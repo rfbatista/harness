@@ -77,6 +77,11 @@ templ topBar(f Frame) {
 				@icon("key")
 			</a>
 		}
+		if f.Top.TokenSaversHref != "" {
+			<a class="[ button ]" data-variant="ghost" data-icon href={ templ.SafeURL(f.Top.TokenSaversHref) } aria-label="Token savers" title="Token savers" { currentAttrs(f.Top.OnTokenSavers)... }>
+				@icon("saver")
+			</a>
+		}
 		if f.Notifications != nil {
 			@notificationsBell(f.Notifications)
 		}

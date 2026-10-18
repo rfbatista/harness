@@ -6,6 +6,7 @@ package sessions
 import (
 	"cmp"
 	"fmt"
+	"operators-mcp/internal/adapter/in/web/tokensavers"
 	"slices"
 	"strings"
 	"time"
@@ -198,6 +199,8 @@ type PageView struct {
 	// Usage seeds the task's and its sessions' token totals; nil leaves them
 	// out (no usage reader, or they could not be read).
 	Usage *UsageTotalsSeed
+	// TokenSavers seeds the task's Token savers control; nil leaves it out.
+	TokenSavers *tokensavers.Seed
 }
 
 // UsageTotalsSeed is what usageTotalsWatch starts from: the task's and each

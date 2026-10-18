@@ -43,6 +43,12 @@ templ sessionHead(usage bool) {
 			if usage {
 				<span class="[ usage-total ]" x-data="usageTotalsChip" x-show="hasSession(selected.id)" x-text="sessionText(selected.id)" x-bind:title="sessionTitle(selected.id)"></span>
 			}
+			<template x-if="selected.tokenSavers">
+				<span class="[ token-savers ]" title="Token savers this session runs with" x-text="selected.tokenSavers"></span>
+			</template>
+			<template x-if="selected.tokenSaversMissing">
+				<span class="[ badge ]" data-tone="attention" data-token-savers-missing x-bind:title="selected.tokenSaversMissingTitle" x-text="selected.tokenSaversMissing"></span>
+			</template>
 			<template x-for="bar in statusCheckBars" x-bind:key="bar.key">
 				<span class="[ checks ]" x-text="bar.meta"></span>
 			</template>

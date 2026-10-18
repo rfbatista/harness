@@ -7,6 +7,7 @@ import (
 	"operators-mcp/internal/adapter/in/web/components"
 	"operators-mcp/internal/adapter/in/web/pullrequests"
 	"operators-mcp/internal/adapter/in/web/shell"
+	"operators-mcp/internal/adapter/in/web/tokensavers"
 )
 
 // Page is a task: its sessions in the inner list, the selected one's detail
@@ -119,6 +120,14 @@ templ Page(v PageView) {
 				@taskBand(v)
 			</div>
 			@reviewBand(v)
+			if v.TokenSavers != nil {
+				<details class="[ pad-inline-l pad-block-xs divide-bottom ]" data-token-savers>
+					<summary class="[ text-sm ]">Token savers</summary>
+					<div class="[ pad-block-s ]" style="max-inline-size: 44rem">
+						@tokensavers.Section(*v.TokenSavers)
+					</div>
+				</details>
+			}
 			<template x-if="error">
 				<div class="[ banner ] [ pad-s ]" data-tone="danger" role="alert">
 					<div class="[ flow ] [ flow-space-3xs grow ]">

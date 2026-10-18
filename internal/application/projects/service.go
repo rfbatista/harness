@@ -410,22 +410,32 @@ func (s *Service) GetRepository(_ context.Context, id string) (*domain.Repositor
 }
 
 // CreateRepository creates a git repository scoped to a project.
-func (s *Service) CreateRepository(_ context.Context, projectID, name, description, url, rootDir string) (*domain.Repository, error) {
+func (s *Service) CreateRepository(ctx context.Context, projectID, name, description, url, rootDir string) (*domain.Repository, error) {
 	if s.repositories == nil {
 		return nil, errNoRepositories
 	}
 	if s.projects.Get(projectID) == nil {
 		return nil, errProjectNotFound
 	}
-	return s.repositories.Create(projectID, name, description, url, rootDir)
+	return s.saved(ctx)(s.repositories.Create(projectID, name, description, url, rootDir))
 }
 
 // UpdateRepository updates an existing git repository.
-func (s *Service) UpdateRepository(_ context.Context, id, name, description, url, rootDir string) (*domain.Repository, error) {
+func (s *Service) UpdateRepository(ctx context.Context, id, name, description, url, rootDir string) (*domain.Repository, error) {
 	if s.repositories == nil {
 		return nil, errNoRepositories
 	}
-	return s.repositories.Update(id, name, description, url, rootDir)
+	return s.saved(ctx)(s.repositories.Update(id, name, description, url, rootDir))
+}
+
+// saved announces a repository just stored as RepositorySaved.
+func (s *Service) saved(ctx context.Context) func(*domain.Repository, error) (*domain.Repository, error) {
+	return func(r *domain.Repository, err error) (*domain.Repository, error) {
+		if err != nil || s.events == nil {
+			return r, err
+		}
+		return r, s.events.Publish(ctx, domain.RepositorySaved{RepositoryID: r.ID, ProjectID: r.ProjectID})
+	}
 }
 
 // DeleteRepository deletes a git repository by id, with its env files.

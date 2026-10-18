@@ -19,6 +19,13 @@ type RepositoryDeleted struct {
 	ProjectID    string
 }
 
+// RepositorySaved: a repository was created or updated (its root dir may
+// be new). It is published after the change is stored.
+type RepositorySaved struct {
+	RepositoryID string
+	ProjectID    string
+}
+
 // PromptDeleted: a prompt is gone. Whatever referenced it drops the reference.
 type PromptDeleted struct{ PromptID string }
 
@@ -102,6 +109,22 @@ type TicketResourceAdded struct{ Resource TicketResource }
 // TicketCommentAdded: a person commented on a task.
 type TicketCommentAdded struct{ Comment TicketComment }
 
+// TokenSaverActivationChanged: one token saver's activation was set for an
+// owner (Value inherit: its setting was removed). It is published after the
+// change is stored.
+type TokenSaverActivationChanged struct {
+	Saver     TokenSaver
+	Owner     ActivationOwner
+	ProjectID string
+	Value     ActivationValue
+}
+
+// TokenSaverInstallCompleted: a token saver was installed, or updated, at Version.
+type TokenSaverInstallCompleted struct {
+	Saver   TokenSaver
+	Version string
+}
+
 // DocumentChange is what happened to a document.
 type DocumentChange string
 
@@ -134,6 +157,7 @@ type ArtifactChanged struct {
 
 func (ProjectDeleted) EventName() string       { return "project.deleted" }
 func (RepositoryDeleted) EventName() string    { return "repository.deleted" }
+func (RepositorySaved) EventName() string      { return "repository.saved" }
 func (PromptDeleted) EventName() string        { return "prompt.deleted" }
 func (AgentDeleted) EventName() string         { return "agent.deleted" }
 func (SkillDeleted) EventName() string         { return "skill.deleted" }
@@ -151,3 +175,6 @@ func (SessionStatusChanged) EventName() string { return "session.status_changed"
 func (TicketCommentAdded) EventName() string   { return "ticket.comment_added" }
 func (DocumentChanged) EventName() string      { return "document.changed" }
 func (ArtifactChanged) EventName() string      { return "artifact.changed" }
+
+func (TokenSaverActivationChanged) EventName() string { return "token_saver.activation_changed" }
+func (TokenSaverInstallCompleted) EventName() string  { return "token_saver.install_completed" }

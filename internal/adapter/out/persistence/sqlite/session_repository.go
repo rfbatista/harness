@@ -48,6 +48,10 @@ func (r *SessionRepository) Create(s *domain.Session) (*domain.Session, error) {
 		RunnerHost:      s.RunnerHost,
 		ParentSessionID: s.ParentSessionID,
 		Mode:            string(s.Mode),
+
+		TokenSavers:             joinSavers(s.TokenSavers),
+		TokenSaversNotInstalled: joinSavers(s.TokenSaversNotInstalled),
+		CavemanIntensity:        string(s.CavemanIntensity),
 	}
 	if err := r.db.Create(m).Error; err != nil {
 		return nil, err
@@ -217,6 +221,21 @@ func (r *SessionRepository) UpdateRunner(id string, runsOn domain.Runner, host s
 		"runs_on":     string(runsOn),
 		"runner_host": host,
 		"updated_at":  time.Now().UnixMilli(),
+	})
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		return &domain.StructuredError{Code: "SESSION_NOT_FOUND", Message: "session not found"}
+	}
+	return nil
+}
+
+func (r *SessionRepository) UpdateTokenSavers(id string, active, notInstalled []domain.TokenSaver) error {
+	res := r.db.Model(&SessionModel{}).Where("id = ?", id).Updates(map[string]any{
+		"token_savers":               joinSavers(active),
+		"token_savers_not_installed": joinSavers(notInstalled),
+		"updated_at":                 time.Now().UnixMilli(),
 	})
 	if res.Error != nil {
 		return res.Error

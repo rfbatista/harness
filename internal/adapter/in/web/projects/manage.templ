@@ -3,6 +3,7 @@ package projects
 import (
 	"operators-mcp/internal/adapter/in/web/components"
 	"operators-mcp/internal/adapter/in/web/shell"
+	"operators-mcp/internal/adapter/in/web/tokensavers"
 )
 
 // ListPage is every project at a glance: whether agents work there now,
@@ -190,6 +191,10 @@ templ SettingsPage(v SettingsView) {
 							<span class="[ error ] [ text-sm ]" id="ignored-path-error"><span x-text="ignoredError.message"></span><template x-if="ignoredError.code"><span> <span class="[ font-mono ]" x-text="ignoredError.code"></span> · <span x-text="ignoredError.next"></span></span></template></span>
 						</template>
 					</section>
+
+					if v.TokenSavers != nil {
+						@tokensavers.Section(*v.TokenSavers)
+					}
 
 					<section class="[ flow ] [ flow-space-s ]" aria-labelledby="settings-repositories">
 						<h2 id="settings-repositories">Repositories and their settings</h2>

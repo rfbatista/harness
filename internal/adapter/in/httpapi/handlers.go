@@ -31,12 +31,14 @@ type Services struct {
 		ports.PromptCatalog
 	}
 	Capabilities ports.Capabilities
-	Settings     ports.SettingsEditor
-	Tools        ports.ToolRegistry
-	Tasks        ports.TaskRunner
-	Sessions     ports.Orchestration
-	Planning     ports.Planning
-	Workspaces   ports.WorkspaceManager
+	// TokenSavers reads and sets token saver activations; nil answers 503.
+	TokenSavers ports.TokenSaverActivations
+	Settings    ports.SettingsEditor
+	Tools       ports.ToolRegistry
+	Tasks       ports.TaskRunner
+	Sessions    ports.Orchestration
+	Planning    ports.Planning
+	Workspaces  ports.WorkspaceManager
 	// Artifacts records and serves what sessions publish; nil answers 503.
 	Artifacts ports.Artifacts
 	// TaskChannel is the person's side of the architect channel: task
@@ -62,6 +64,12 @@ type Services struct {
 	// Shells checks and stores what sessions do to their virtual shells'
 	// files; nil allows everything, as no path is inside a shell.
 	Shells ports.ShellEdits
+	// TokenSaverInstalls installs, updates and removes token savers; nil
+	// answers 503.
+	TokenSaverInstalls ports.TokenSaverInstalls
+	// RepositoryIndexes lists and rebuilds repositories' codegraph indexes;
+	// nil answers 503.
+	RepositoryIndexes ports.RepositoryIndexes
 }
 
 // Handler serves the application's driving ports as HTTP endpoints (the same
@@ -80,6 +88,7 @@ type Handler struct {
 		ports.PromptCatalog
 	}
 	capabilities   ports.Capabilities
+	tokenSavers    ports.TokenSaverActivations
 	settings       ports.SettingsEditor
 	toolingSvc     ports.ToolRegistry
 	execSvc        ports.TaskRunner
@@ -97,6 +106,9 @@ type Handler struct {
 	gitCredentials ports.GitCredentials
 	shells         ports.ShellEdits
 
+	tokenSaverInstalls ports.TokenSaverInstalls
+	repositoryIndexes  ports.RepositoryIndexes
+
 	streams streamRegistry // the browser tabs' live streams (stream.go)
 }
 
@@ -112,6 +124,7 @@ func NewHandler(s Services) *Handler {
 		architecture:   s.Architecture,
 		agents:         s.Agents,
 		capabilities:   s.Capabilities,
+		tokenSavers:    s.TokenSavers,
 		settings:       s.Settings,
 		toolingSvc:     s.Tools,
 		execSvc:        s.Tasks,
@@ -128,6 +141,9 @@ func NewHandler(s Services) *Handler {
 		code:           s.Code,
 		gitCredentials: s.GitCredentials,
 		shells:         s.Shells,
+
+		tokenSaverInstalls: s.TokenSaverInstalls,
+		repositoryIndexes:  s.RepositoryIndexes,
 	}
 }
 

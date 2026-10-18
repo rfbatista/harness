@@ -28,6 +28,15 @@ type WorktreeManager interface {
 	DeleteBranch(repoRoot, branch string) error
 }
 
+// GitExcludes keeps paths out of git through a repository's info/exclude
+// (driven; gitcli implements it).
+type GitExcludes interface {
+	// Exclude adds rel, anchored at the top of the repository at root, to
+	// its info/exclude under a comment saying what it is, unless git
+	// already ignores it. A directory's rel ends in "/".
+	Exclude(root, rel, what string) error
+}
+
 // GitHistory reads a checkout's history (driven; gitcli implements it).
 type GitHistory interface {
 	// Log returns up to q.Limit commits reachable from the local branches,

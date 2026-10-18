@@ -39,6 +39,8 @@ import { cookieRailPrefs } from "./modules/tasks/infrastructure/rail-prefs.js";
 import { resourcesGateway } from "./modules/tasks/infrastructure/resources-gateway.js";
 import { tasksGateway } from "./modules/tasks/infrastructure/tasks-gateway.js";
 import { registerTasks } from "./modules/tasks/presentation/register.js";
+import { tokenSaversGateway } from "./modules/tokensavers/infrastructure/tokensavers-gateway.js";
+import { registerTokenSavers } from "./modules/tokensavers/presentation/register.js";
 import { usageGateway } from "./modules/usage/infrastructure/usage-gateway.js";
 import { registerUsage } from "./modules/usage/presentation/register.js";
 import { createHljs } from "./highlight.js";
@@ -83,5 +85,6 @@ registerCode(Alpine, { gateway: codeGateway(api, events), highlighter: hljsHighl
 registerNotifications(Alpine, { gateway: notificationsGateway(api, events), alerts: desktopAlerts(), prefs, clock: systemClock, navigate });
 registerCredentials(Alpine, { gateway: credentialsGateway(api, events), clock: systemClock });
 registerUsage(Alpine, { gateway: usageGateway(api, events) });
+registerTokenSavers(Alpine, { gateway: tokenSaversGateway(api), clock: systemClock });
 
 Alpine.start();

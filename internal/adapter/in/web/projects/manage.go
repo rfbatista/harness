@@ -2,6 +2,7 @@ package projects
 
 import (
 	"net/url"
+	"operators-mcp/internal/adapter/in/web/tokensavers"
 	"strconv"
 	"strings"
 	"time"
@@ -126,6 +127,8 @@ type SettingsView struct {
 	RepositoriesHref string
 	Repositories     []SettingsRepository
 	Seed             SettingsSeed
+	// TokenSavers seeds the Token savers section; nil leaves it out.
+	TokenSavers *tokensavers.Seed
 }
 
 // SettingsRepository is a repository, as a link to its env files.
