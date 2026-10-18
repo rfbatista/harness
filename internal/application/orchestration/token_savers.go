@@ -47,7 +47,8 @@ type saverSession struct {
 type saverWiring func(s *Service, w saverSession) error
 
 var saverWirings = map[domain.TokenSaver]saverWiring{
-	domain.TokenSaverRTK: (*Service).wireRTK,
+	domain.TokenSaverRTK:       (*Service).wireRTK,
+	domain.TokenSaverCodegraph: (*Service).wireCodegraph,
 }
 
 // withTokenSavers resolves the session's savers and wires the active ones
