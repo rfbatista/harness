@@ -110,3 +110,27 @@ func TestParseDBSlowThreshold(t *testing.T) {
 		})
 	}
 }
+
+func TestParseProfiler(t *testing.T) {
+	for _, c := range []struct {
+		name    string
+		args    []string
+		env     map[string]string
+		wantOff bool
+	}{
+		{"on by default", nil, nil, false},
+		{"env off", nil, map[string]string{"PPROF": "false"}, true},
+		{"flag over env", []string{"--pprof=true"}, map[string]string{"PPROF": "false"}, false},
+		{"flag off", []string{"--pprof=false"}, nil, true},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			cfg, err := Parse(flag.NewFlagSet("test", flag.ContinueOnError), c.args, env(c.env))
+			if err != nil {
+				t.Fatalf("parse: %v", err)
+			}
+			if cfg.ProfilerOff != c.wantOff {
+				t.Errorf("ProfilerOff = %v, want %v", cfg.ProfilerOff, c.wantOff)
+			}
+		})
+	}
+}

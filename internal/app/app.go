@@ -68,6 +68,9 @@ type Config struct {
 	// downloaded from, in place of https://github.com (a mirror, or a test's
 	// fake release server). Empty uses GitHub.
 	TokenSaverReleaseBase string
+	// ProfilerOff stops the HTTP server serving Go's profiler under
+	// /debug/pprof/. Left false, the profiler answers loopback peers only.
+	ProfilerOff bool
 }
 
 // loopbackBaseURL is the base URL the spawned claude reaches this process at for
