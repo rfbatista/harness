@@ -21,12 +21,12 @@ templ indexesSection(v IndexesView) {
 				<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-on:click="dismissError">Dismiss</button>
 			</div>
 		</template>
-		<ul role="list" class="[ token-savers ]" x-ignore data-ssr>
+		<ul role="list" class="[ list ]" x-ignore data-ssr>
 			for _, r := range v.Rows() {
 				@ssrIndexRow(r)
 			}
 		</ul>
-		<ul role="list" class="[ token-savers ]">
+		<ul role="list" class="[ list ]">
 			<template x-for="i in rows" x-bind:key="i.repositoryId">
 				@liveIndexRow()
 			</template>
@@ -38,7 +38,7 @@ templ indexesSection(v IndexesView) {
 }
 
 templ ssrIndexRow(r IndexRow) {
-	<li class="[ row ] [ token-saver ]" style="--row-columns: minmax(0, 1fr) auto" data-repository-index={ r.RepositoryID }>
+	<li class="[ row ]" style="--row-columns: minmax(0, 1fr) auto" data-repository-index={ r.RepositoryID }>
 		<span class="[ flow ] [ flow-space-3xs pad-block-xs ]" style="min-inline-size: 0">
 			<span class="[ title ] [ weight-medium ]">{ r.Name }</span>
 			<span class="[ font-mono text-xs color-ink-faint ]">{ r.Checkout }</span>
@@ -50,7 +50,7 @@ templ ssrIndexRow(r IndexRow) {
 // liveIndexRow is one repository index once the browser has taken over: its
 // age, a build running or failed, and Rebuild index.
 templ liveIndexRow() {
-	<li class="[ row ] [ token-saver ]" style="--row-columns: minmax(0, 1fr) auto" x-bind:data-repository-index="i.repositoryId" x-bind:data-state="i.state">
+	<li class="[ row ]" style="--row-columns: minmax(0, 1fr) auto" x-bind:data-repository-index="i.repositoryId" x-bind:data-state="i.state">
 		<span class="[ flow ] [ flow-space-3xs pad-block-xs ]" style="min-inline-size: 0">
 			<span class="[ title ] [ weight-medium ]" x-text="i.name"></span>
 			<span class="[ font-mono text-xs color-ink-faint ]" x-text="i.checkout"></span>

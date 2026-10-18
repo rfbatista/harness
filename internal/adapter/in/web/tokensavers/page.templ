@@ -43,12 +43,12 @@ templ Page(frame shell.Frame, v View) {
 					</template>
 					<section class="[ pane ]" aria-labelledby="token-savers-title">
 						<header><h2 id="token-savers-title">Installations</h2></header>
-						<ul role="list" class="[ token-savers ]" x-ignore data-ssr>
+						<ul role="list" class="[ list ]" x-ignore data-ssr>
 							for _, r := range v.Rows() {
 								@ssrRow(r)
 							}
 						</ul>
-						<ul role="list" class="[ token-savers ]">
+						<ul role="list" class="[ list ]">
 							<template x-for="s in rows" x-bind:key="s.saver">
 								@liveRow()
 							</template>
@@ -65,7 +65,7 @@ templ Page(frame shell.Frame, v View) {
 }
 
 templ ssrRow(r Row) {
-	<li class="[ row ] [ token-saver ]" style="--row-columns: minmax(0, 1fr) auto" data-saver={ r.Saver } data-state={ string(r.State) }>
+	<li class="[ row ]" style="--row-columns: minmax(0, 1fr) auto" data-saver={ r.Saver } data-state={ string(r.State) }>
 		<span class="[ flow ] [ flow-space-3xs pad-block-xs ]" style="min-inline-size: 0">
 			<span class="[ cluster ] [ gutter-xs ]">
 				<span class="[ title ] [ weight-medium font-mono ]">{ r.Saver }</span>
@@ -83,7 +83,7 @@ templ ssrRow(r Row) {
 // liveRow is one saver once the browser has taken over: its state, versions,
 // an install's progress or failure, and what can be done with it.
 templ liveRow() {
-	<li class="[ row ] [ token-saver ]" style="--row-columns: minmax(0, 1fr) auto" x-bind:data-saver="s.saver" x-bind:data-state="s.state">
+	<li class="[ row ]" style="--row-columns: minmax(0, 1fr) auto" x-bind:data-saver="s.saver" x-bind:data-state="s.state">
 		<span class="[ flow ] [ flow-space-3xs pad-block-xs ]" style="min-inline-size: 0">
 			<span class="[ cluster ] [ gutter-xs ]">
 				<span class="[ title ] [ weight-medium font-mono ]" x-text="s.saver"></span>

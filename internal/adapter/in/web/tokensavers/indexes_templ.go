@@ -39,7 +39,7 @@ func indexesSection(v IndexesView) templ.Component {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<section class=\"[ pane ]\" aria-labelledby=\"repository-indexes-title\" x-data=\"repositoryIndexes\" data-seed=\"repository-indexes-seed\"><header><h2 id=\"repository-indexes-title\">Repository indexes</h2></header><p class=\"[ text-sm color-ink-muted ]\">codegraph's index of each repository where it is on, built in the repository's own checkout (<span class=\"[ font-mono ]\">.codegraph/</span>, kept out of git). Every new worktree starts from a copy. When a session on the repository ends and its index is more than a day old, the harness rebuilds it.</p><p class=\"[ visually-hidden ]\" role=\"status\" aria-live=\"polite\" x-text=\"announcement\"></p><template x-if=\"error\"><div class=\"[ banner ]\" data-tone=\"danger\" role=\"alert\"><div class=\"[ flow ] [ flow-space-3xs grow ]\"><span x-text=\"error.message\"></span> <span class=\"[ code ]\"><span x-text=\"error.code\"></span> · <span x-text=\"error.next\"></span></span></div><button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" x-on:click=\"dismissError\">Dismiss</button></div></template><ul role=\"list\" class=\"[ token-savers ]\" x-ignore data-ssr>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<section class=\"[ pane ]\" aria-labelledby=\"repository-indexes-title\" x-data=\"repositoryIndexes\" data-seed=\"repository-indexes-seed\"><header><h2 id=\"repository-indexes-title\">Repository indexes</h2></header><p class=\"[ text-sm color-ink-muted ]\">codegraph's index of each repository where it is on, built in the repository's own checkout (<span class=\"[ font-mono ]\">.codegraph/</span>, kept out of git). Every new worktree starts from a copy. When a session on the repository ends and its index is more than a day old, the harness rebuilds it.</p><p class=\"[ visually-hidden ]\" role=\"status\" aria-live=\"polite\" x-text=\"announcement\"></p><template x-if=\"error\"><div class=\"[ banner ]\" data-tone=\"danger\" role=\"alert\"><div class=\"[ flow ] [ flow-space-3xs grow ]\"><span x-text=\"error.message\"></span> <span class=\"[ code ]\"><span x-text=\"error.code\"></span> · <span x-text=\"error.next\"></span></span></div><button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" x-on:click=\"dismissError\">Dismiss</button></div></template><ul role=\"list\" class=\"[ list ]\" x-ignore data-ssr>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -49,7 +49,7 @@ func indexesSection(v IndexesView) templ.Component {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, "</ul><ul role=\"list\" class=\"[ token-savers ]\"><template x-for=\"i in rows\" x-bind:key=\"i.repositoryId\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, "</ul><ul role=\"list\" class=\"[ list ]\"><template x-for=\"i in rows\" x-bind:key=\"i.repositoryId\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -86,14 +86,14 @@ func ssrIndexRow(r IndexRow) templ.Component {
 			templ_7745c5c3_Var2 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "<li class=\"[ row ] [ token-saver ]\" style=\"--row-columns: minmax(0, 1fr) auto\" data-repository-index=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "<li class=\"[ row ]\" style=\"--row-columns: minmax(0, 1fr) auto\" data-repository-index=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var3 string
 		templ_7745c5c3_Var3, templ_7745c5c3_Err = templ.ResolveAttributeValue(r.RepositoryID)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `tokensavers/indexes.templ`, Line: 41, Col: 118}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `tokensavers/indexes.templ`, Line: 41, Col: 102}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var3)
 		if templ_7745c5c3_Err != nil {
@@ -169,7 +169,7 @@ func liveIndexRow() templ.Component {
 			templ_7745c5c3_Var7 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 9, "<li class=\"[ row ] [ token-saver ]\" style=\"--row-columns: minmax(0, 1fr) auto\" x-bind:data-repository-index=\"i.repositoryId\" x-bind:data-state=\"i.state\"><span class=\"[ flow ] [ flow-space-3xs pad-block-xs ]\" style=\"min-inline-size: 0\"><span class=\"[ title ] [ weight-medium ]\" x-text=\"i.name\"></span> <span class=\"[ font-mono text-xs color-ink-faint ]\" x-text=\"i.checkout\"></span> <span class=\"[ text-sm ]\" data-age x-text=\"i.stateText\"></span><template x-if=\"i.error\"><div class=\"[ banner ]\" data-tone=\"danger\" role=\"alert\"><span x-text=\"i.error\"></span></div></template></span> <span class=\"[ cluster ] [ gutter-xs ]\"><button type=\"button\" class=\"[ button ]\" data-size=\"sm\" x-bind:disabled=\"i.building\" x-bind:aria-busy=\"i.building\" x-on:click=\"rebuild(i.repositoryId)\">Rebuild index</button></span></li>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 9, "<li class=\"[ row ]\" style=\"--row-columns: minmax(0, 1fr) auto\" x-bind:data-repository-index=\"i.repositoryId\" x-bind:data-state=\"i.state\"><span class=\"[ flow ] [ flow-space-3xs pad-block-xs ]\" style=\"min-inline-size: 0\"><span class=\"[ title ] [ weight-medium ]\" x-text=\"i.name\"></span> <span class=\"[ font-mono text-xs color-ink-faint ]\" x-text=\"i.checkout\"></span> <span class=\"[ text-sm ]\" data-age x-text=\"i.stateText\"></span><template x-if=\"i.error\"><div class=\"[ banner ]\" data-tone=\"danger\" role=\"alert\"><span x-text=\"i.error\"></span></div></template></span> <span class=\"[ cluster ] [ gutter-xs ]\"><button type=\"button\" class=\"[ button ]\" data-size=\"sm\" x-bind:disabled=\"i.building\" x-bind:aria-busy=\"i.building\" x-on:click=\"rebuild(i.repositoryId)\">Rebuild index</button></span></li>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

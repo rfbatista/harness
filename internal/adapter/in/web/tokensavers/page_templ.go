@@ -79,7 +79,7 @@ func Page(frame shell.Frame, v View) templ.Component {
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "<template x-if=\"!supported\"><div class=\"[ banner ]\" data-tone=\"attention\" role=\"status\"><span x-text=\"unsupported\"></span></div></template><template x-if=\"error\"><div class=\"[ banner ]\" data-tone=\"danger\" role=\"alert\"><div class=\"[ flow ] [ flow-space-3xs grow ]\"><span x-text=\"error.message\"></span> <span class=\"[ code ]\"><span x-text=\"error.code\"></span> · <span x-text=\"error.next\"></span></span></div><button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" x-on:click=\"dismissError\">Dismiss</button></div></template><section class=\"[ pane ]\" aria-labelledby=\"token-savers-title\"><header><h2 id=\"token-savers-title\">Installations</h2></header><ul role=\"list\" class=\"[ token-savers ]\" x-ignore data-ssr>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "<template x-if=\"!supported\"><div class=\"[ banner ]\" data-tone=\"attention\" role=\"status\"><span x-text=\"unsupported\"></span></div></template><template x-if=\"error\"><div class=\"[ banner ]\" data-tone=\"danger\" role=\"alert\"><div class=\"[ flow ] [ flow-space-3xs grow ]\"><span x-text=\"error.message\"></span> <span class=\"[ code ]\"><span x-text=\"error.code\"></span> · <span x-text=\"error.next\"></span></span></div><button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" x-on:click=\"dismissError\">Dismiss</button></div></template><section class=\"[ pane ]\" aria-labelledby=\"token-savers-title\"><header><h2 id=\"token-savers-title\">Installations</h2></header><ul role=\"list\" class=\"[ list ]\" x-ignore data-ssr>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -89,7 +89,7 @@ func Page(frame shell.Frame, v View) templ.Component {
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 5, "</ul><ul role=\"list\" class=\"[ token-savers ]\"><template x-for=\"s in rows\" x-bind:key=\"s.saver\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 5, "</ul><ul role=\"list\" class=\"[ list ]\"><template x-for=\"s in rows\" x-bind:key=\"s.saver\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -146,14 +146,14 @@ func ssrRow(r Row) templ.Component {
 			templ_7745c5c3_Var4 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 8, "<li class=\"[ row ] [ token-saver ]\" style=\"--row-columns: minmax(0, 1fr) auto\" data-saver=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 8, "<li class=\"[ row ]\" style=\"--row-columns: minmax(0, 1fr) auto\" data-saver=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var5 string
 		templ_7745c5c3_Var5, templ_7745c5c3_Err = templ.ResolveAttributeValue(r.Saver)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `tokensavers/page.templ`, Line: 68, Col: 100}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `tokensavers/page.templ`, Line: 68, Col: 84}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var5)
 		if templ_7745c5c3_Err != nil {
@@ -166,7 +166,7 @@ func ssrRow(r Row) templ.Component {
 		var templ_7745c5c3_Var6 string
 		templ_7745c5c3_Var6, templ_7745c5c3_Err = templ.ResolveAttributeValue(string(r.State))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `tokensavers/page.templ`, Line: 68, Col: 131}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `tokensavers/page.templ`, Line: 68, Col: 115}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var6)
 		if templ_7745c5c3_Err != nil {
@@ -273,7 +273,7 @@ func liveRow() templ.Component {
 			templ_7745c5c3_Var11 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 18, "<li class=\"[ row ] [ token-saver ]\" style=\"--row-columns: minmax(0, 1fr) auto\" x-bind:data-saver=\"s.saver\" x-bind:data-state=\"s.state\"><span class=\"[ flow ] [ flow-space-3xs pad-block-xs ]\" style=\"min-inline-size: 0\"><span class=\"[ cluster ] [ gutter-xs ]\"><span class=\"[ title ] [ weight-medium font-mono ]\" x-text=\"s.saver\"></span> <span class=\"[ badge ]\" x-bind:data-tone=\"s.tone || null\" x-text=\"s.stateLabel\"></span></span> <span class=\"[ text-sm color-ink-muted ]\" x-text=\"s.summary\"></span> <span class=\"[ font-mono text-xs color-ink-faint ]\" x-text=\"s.versions\"></span><template x-if=\"s.notInstalled\"><div class=\"[ banner ]\" data-tone=\"attention\" data-active-not-installed><span x-text=\"s.notInstalled\"></span></div></template><template x-if=\"s.progress\"><span class=\"[ text-sm ]\" role=\"status\" x-text=\"s.progress\"></span></template><template x-if=\"s.error\"><div class=\"[ banner ]\" data-tone=\"danger\" role=\"alert\"><div class=\"[ flow ] [ flow-space-3xs grow ]\"><span x-text=\"s.error.message\"></span> <span class=\"[ code ]\"><span x-text=\"s.error.code\"></span> · <span x-text=\"s.error.next\"></span></span></div></div></template></span> <span class=\"[ cluster ] [ gutter-xs ]\"><template x-if=\"s.installLabel\"><button type=\"button\" class=\"[ button ]\" data-size=\"sm\" data-variant=\"primary\" x-on:click=\"install(s.saver)\" x-text=\"s.installLabel\"></button></template><template x-if=\"s.state === 'installing'\"><button type=\"button\" class=\"[ button ]\" data-size=\"sm\" disabled aria-busy=\"true\">Installing…</button></template><template x-if=\"s.canRemove\"><button type=\"button\" class=\"[ button ]\" data-size=\"sm\" data-variant=\"ghost\" x-bind:disabled=\"s.removing\" x-bind:aria-busy=\"s.removing\" x-on:click=\"remove(s.saver)\">Remove</button></template></span></li>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 18, "<li class=\"[ row ]\" style=\"--row-columns: minmax(0, 1fr) auto\" x-bind:data-saver=\"s.saver\" x-bind:data-state=\"s.state\"><span class=\"[ flow ] [ flow-space-3xs pad-block-xs ]\" style=\"min-inline-size: 0\"><span class=\"[ cluster ] [ gutter-xs ]\"><span class=\"[ title ] [ weight-medium font-mono ]\" x-text=\"s.saver\"></span> <span class=\"[ badge ]\" x-bind:data-tone=\"s.tone || null\" x-text=\"s.stateLabel\"></span></span> <span class=\"[ text-sm color-ink-muted ]\" x-text=\"s.summary\"></span> <span class=\"[ font-mono text-xs color-ink-faint ]\" x-text=\"s.versions\"></span><template x-if=\"s.notInstalled\"><div class=\"[ banner ]\" data-tone=\"attention\" data-active-not-installed><span x-text=\"s.notInstalled\"></span></div></template><template x-if=\"s.progress\"><span class=\"[ text-sm ]\" role=\"status\" x-text=\"s.progress\"></span></template><template x-if=\"s.error\"><div class=\"[ banner ]\" data-tone=\"danger\" role=\"alert\"><div class=\"[ flow ] [ flow-space-3xs grow ]\"><span x-text=\"s.error.message\"></span> <span class=\"[ code ]\"><span x-text=\"s.error.code\"></span> · <span x-text=\"s.error.next\"></span></span></div></div></template></span> <span class=\"[ cluster ] [ gutter-xs ]\"><template x-if=\"s.installLabel\"><button type=\"button\" class=\"[ button ]\" data-size=\"sm\" data-variant=\"primary\" x-on:click=\"install(s.saver)\" x-text=\"s.installLabel\"></button></template><template x-if=\"s.state === 'installing'\"><button type=\"button\" class=\"[ button ]\" data-size=\"sm\" disabled aria-busy=\"true\">Installing…</button></template><template x-if=\"s.canRemove\"><button type=\"button\" class=\"[ button ]\" data-size=\"sm\" data-variant=\"ghost\" x-bind:disabled=\"s.removing\" x-bind:aria-busy=\"s.removing\" x-on:click=\"remove(s.saver)\">Remove</button></template></span></li>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
