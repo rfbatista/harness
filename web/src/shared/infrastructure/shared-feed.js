@@ -52,6 +52,7 @@ export function sharedFeed({
   /** What this tab follows: path -> its followers and last status. */
   const local = new Map();
   let requested = false;
+  let holder = null; // the stream-holding tab, once heard from
 
   // A follower that throws must not keep the others from hearing.
   function each(entry, fn) {
@@ -87,6 +88,17 @@ export function sharedFeed({
         break;
       // resynced is derived here from paused then live: a new stream-holding
       // tab's stream reports a fresh connecting and live, not resynced.
+    }
+  }
+  /**
+   * The stream-holding tab changed or went away: what this tab follows is
+   * paused until the new one follows it again, then reported resynced.
+   */
+  function handover() {
+    for (const entry of local.values()) {
+      if (entry.status === FeedStatus.CONNECTING && !entry.dropped) continue; // never live: nothing missed
+      entry.dropped = true;
+      if (entry.status !== FeedStatus.PAUSED) report(entry, FeedStatus.PAUSED);
     }
   }
   function deliver(path, data) {
@@ -136,6 +148,8 @@ export function sharedFeed({
 
   function hold() {
     holding = { stream: ownStream(), relays: new Map() };
+    holder = me;
+    handover();
     post({ type: "holder" });
     relayAll(me, [...local.keys()]);
     // Held until the tab goes away: the browser releases it then.
@@ -163,9 +177,14 @@ export function sharedFeed({
       }
       return;
     }
+    if (msg.type === "holder" || msg.type === "event" || msg.type === "status") holder = msg.from;
     switch (msg.type) {
       case "holder":
+        handover();
         post({ type: "paths", paths: [...local.keys()] });
+        return;
+      case "bye":
+        if (msg.from === holder) handover();
         return;
       case "event":
         return deliver(msg.path, msg.data);

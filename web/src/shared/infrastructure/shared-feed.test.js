@@ -173,3 +173,92 @@ test("a tab that closes releases its paths", async () => {
   await flush();
   assert.deepEqual(b.posts.at(-1), { route: "/stream/unfollow", stream: "st1", path: P1 });
 });
+
+for (const crash of [false, true]) {
+  test(`when the stream-holding tab ${crash ? "crashes" : "closes"}, another tab takes the stream over and every tab resyncs`, async () => {
+    const b = browserProfile();
+    const [one, two, three] = [b.open(), b.open(), b.open()];
+    one.follow(INBOX);
+    const a = two.follow(P1);
+    const c = three.follow(P1);
+    const d = three.follow(INBOX);
+    await flush();
+    b.hello();
+    await flush();
+
+    one.close({ crash });
+    await flush();
+    assert.equal(two.streams.length, 1, "the next tab in line opens a stream");
+    for (const f of [a, c, d]) assert.equal(f.statuses.at(-1), FeedStatus.PAUSED);
+
+    b.hello("st2");
+    await flush();
+    const followed = b.posts.filter((p) => p.stream === "st2").map((p) => `${p.route} ${p.path}`);
+    assert.deepEqual(followed.sort(), [`/stream/follow ${INBOX}`, `/stream/follow ${P1}`].sort());
+    for (const f of [a, c, d]) assert.deepEqual(f.statuses.slice(-3), [FeedStatus.PAUSED, FeedStatus.RESYNCED, FeedStatus.LIVE]);
+
+    b.stream().message({ path: P1, data: { n: 1 } });
+    assert.deepEqual(a.messages, [{ n: 1 }]);
+    assert.deepEqual(c.messages, [{ n: 1 }]);
+  });
+}
+
+test("a feed that ends pauses its followers in every tab, follows again with backoff, then resyncs; other feeds stay live", async () => {
+  const b = browserProfile();
+  const [one, two] = [b.open(), b.open()];
+  const a = one.follow(P1);
+  const c = two.follow(P1);
+  const d = two.follow(INBOX);
+  await flush();
+  b.hello();
+  await flush();
+
+  b.stream().message({ path: P1, end: true });
+  for (const f of [a, c]) assert.equal(f.statuses.at(-1), FeedStatus.PAUSED);
+  assert.equal(d.statuses.at(-1), FeedStatus.LIVE);
+  assert.deepEqual(b.timers.delays(), [1000]);
+
+  b.api.refuse = true;
+  b.timers.tick();
+  await flush();
+  assert.deepEqual(b.timers.delays(), [2000], "the backoff doubles");
+  b.api.refuse = false;
+  b.timers.tick();
+  await flush();
+  for (const f of [a, c]) assert.deepEqual(f.statuses.slice(-3), [FeedStatus.PAUSED, FeedStatus.RESYNCED, FeedStatus.LIVE]);
+  assert.deepEqual(d.statuses, [FeedStatus.CONNECTING, FeedStatus.LIVE]);
+});
+
+test("a dropped stream pauses every feed in every tab, reconnects with backoff, and resyncs them all", async () => {
+  const b = browserProfile();
+  const [one, two] = [b.open(), b.open()];
+  const a = one.follow(P1);
+  const c = two.follow(INBOX);
+  await flush();
+  b.hello();
+  await flush();
+
+  b.stream().fail();
+  for (const f of [a, c]) assert.equal(f.statuses.at(-1), FeedStatus.PAUSED);
+  assert.deepEqual(b.timers.delays(), [1000]);
+  b.timers.tick();
+  b.hello("st2");
+  await flush();
+  assert.deepEqual(b.posts.filter((p) => p.stream === "st2").length, 2);
+  for (const f of [a, c]) assert.deepEqual(f.statuses.slice(-3), [FeedStatus.PAUSED, FeedStatus.RESYNCED, FeedStatus.LIVE]);
+});
+
+test("a coalesced session output delta reaches every tab unchanged", async () => {
+  const b = browserProfile();
+  const [one, two] = [b.open(), b.open()];
+  const path = "/sessions/s1/events";
+  const a = one.follow(path);
+  const c = two.follow(path);
+  await flush();
+  b.hello();
+  await flush();
+  const delta = { seq: 0, session_id: "s1", type: "output_delta", delta_kind: "text", text: "first write, second write, third" };
+  b.stream().message({ path, data: delta });
+  assert.deepEqual(a.messages, [delta]);
+  assert.deepEqual(c.messages, [delta]);
+});

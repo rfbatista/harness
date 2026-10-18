@@ -20,9 +20,10 @@ import (
 // is plain HTTP/1.1, so a stream per tab would spend Chrome's six connections
 // per host and stall the later tabs.
 
-// streamCount counts the GET /api/stream requests open right now, and ever.
+// streamCount counts the GET /api/stream requests open right now, and ever,
+// and the rail's refetches of the task list (its resync).
 type streamCount struct {
-	open, opened atomic.Int32
+	open, opened, refetched atomic.Int32
 }
 
 func (c *streamCount) wrap(next http.Handler) http.Handler {
@@ -31,6 +32,9 @@ func (c *streamCount) wrap(next http.Handler) http.Handler {
 			c.open.Add(1)
 			c.opened.Add(1)
 			defer c.open.Add(-1)
+		}
+		if r.URL.Path == "/api/list_tickets" {
+			c.refetched.Add(1)
 		}
 		next.ServeHTTP(w, r)
 	})
@@ -70,14 +74,16 @@ func newSharedStreamHarness(t *testing.T) *sharedStreamHarness {
 	return &sharedStreamHarness{railHarness: &railHarness{ctx: ctx, srv: srv, feed: feed, errs: errs}, streams: streams}
 }
 
-// openTabs opens n tabs of the one browser, each on the task page with its
-// live rail up. The first tab is the browser's own first target.
-func (h *sharedStreamHarness) openTabs(t *testing.T, n int) []context.Context {
+// openTabs opens n tabs of the one browser, in order, each on the task page
+// with its live rail up, and returns them with the functions that close them.
+func (h *sharedStreamHarness) openTabs(t *testing.T, n int) ([]context.Context, []context.CancelFunc) {
 	t.Helper()
-	tabs := []context.Context{h.ctx}
+	var tabs []context.Context
+	var closers []context.CancelFunc
 	for len(tabs) < n {
 		tab, cancel := chromedp.NewContext(h.ctx)
 		t.Cleanup(cancel)
+		closers = append(closers, cancel)
 		// The first Run opens the tab and closes it when its context ends:
 		// run it on the tab's own context, not a timeout derived from it.
 		if err := chromedp.Run(tab); err != nil {
@@ -93,7 +99,7 @@ func (h *sharedStreamHarness) openTabs(t *testing.T, n int) []context.Context {
 			t.Fatalf("tab %d of %d did not load: %v\nJS errors: %v", i+1, n, err, h.errs.all())
 		}
 	}
-	return tabs
+	return tabs, closers
 }
 
 // everyTabShows waits until each tab's rail counts want tasks in Todo.
@@ -125,7 +131,7 @@ func todoTicket(id, title string) map[string]any {
 
 func TestEightTabsShareOnePageEventStream(t *testing.T) {
 	h := newSharedStreamHarness(t)
-	tabs := h.openTabs(t, 8)
+	tabs, _ := h.openTabs(t, 8)
 
 	waitFor(t, "the project feed followed", func() bool { return h.feed.followers() >= 1 })
 	if open := h.streams.open.Load(); open != 1 {
@@ -136,5 +142,37 @@ func TestEightTabsShareOnePageEventStream(t *testing.T) {
 	if open := h.streams.open.Load(); open != 1 {
 		t.Errorf("%d /api/stream requests open after the change, want 1", open)
 	}
+	h.noErrors(t)
+}
+
+// Closing the stream-holding tab hands the stream to another tab: it opens a
+// new stream, the remaining tabs resync, and live changes reach them again.
+func TestClosingTheStreamHoldingTabHandsTheStreamOver(t *testing.T) {
+	h := newSharedStreamHarness(t)
+	tabs, closers := h.openTabs(t, 3)
+	waitFor(t, "the project feed followed", func() bool { return h.feed.followers() >= 1 })
+	if opened := h.streams.opened.Load(); opened != 1 {
+		t.Fatalf("%d streams opened by 3 tabs, want 1", opened)
+	}
+
+	refetched := h.streams.refetched.Load()
+	closers[0]() // the first tab took the lock, so it holds the stream
+	waitFor(t, "a new stream", func() bool { return h.streams.opened.Load() == 2 })
+	waitFor(t, "the old stream closed", func() bool { return h.streams.open.Load() == 1 })
+	waitFor(t, "the new stream follows the project feed", func() bool { return h.feed.followers() >= 2 })
+
+	rest := tabs[1:]
+	for i, tab := range rest {
+		ctx, cancel := context.WithTimeout(tab, 10*time.Second)
+		err := chromedp.Run(ctx, chromedp.Poll(`document.querySelector('[x-data=streamStatus]')?.dataset.state === 'live'`, nil,
+			chromedp.WithPollingInterval(100*time.Millisecond)))
+		cancel()
+		if err != nil {
+			t.Fatalf("tab %d never came back live: %v", i+2, err)
+		}
+	}
+	waitFor(t, "every remaining tab resynced", func() bool { return h.streams.refetched.Load()-refetched >= int32(len(rest)) })
+	h.feed.pushRaw(t, todoTicket("t-b0", "Review the UX for the web ui"))
+	everyTabShows(t, rest, "3")
 	h.noErrors(t)
 }
