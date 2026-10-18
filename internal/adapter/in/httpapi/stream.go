@@ -5,7 +5,6 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -64,8 +63,8 @@ type streamMessage struct {
 
 // streamRegistry holds the open streams by id. Its zero value is ready.
 type streamRegistry struct {
-	// writeTimeout bounds each write to a stream; zero means
-	// defaultStreamWriteTimeout.
+	// writeTimeout bounds each write to a stream, and to a per-feed SSE
+	// endpoint (sse.go); zero means defaultStreamWriteTimeout.
 	writeTimeout time.Duration
 
 	mu   sync.Mutex
@@ -290,33 +289,11 @@ func (h *Handler) handleStream(c echo.Context) error {
 	s := h.streams.open(c.Request().Context())
 	defer h.streams.close(s)
 
-	w := c.Response()
-	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.Header().Set("Connection", "keep-alive")
-	w.WriteHeader(http.StatusOK)
-	// The controller reaches the connection under echo's writer, whose Flush
-	// would swallow the error of a failed flush.
-	rc := http.NewResponseController(w.Writer)
-	timeout := h.streams.timeout()
-	// write sends one event, failing if the client does not take it within
-	// timeout. No lock is held while it runs.
-	write := func(event []byte) error {
-		if err := rc.SetWriteDeadline(time.Now().Add(timeout)); err != nil && !errors.Is(err, http.ErrNotSupported) {
-			return err
-		}
-		if _, err := w.Write(event); err != nil {
-			return err
-		}
-		if err := rc.Flush(); err != nil {
-			return err
-		}
-		if err := rc.SetWriteDeadline(time.Time{}); err != nil && !errors.Is(err, http.ErrNotSupported) {
-			return err
-		}
+	conn, err := openSSE(c, h.streams.timeout())
+	if err != nil {
 		return nil
 	}
-	if write(streamEvent(streamMessage{Stream: s.id})) != nil {
+	if conn.write(streamEvent(streamMessage{Stream: s.id})) != nil {
 		return nil
 	}
 
@@ -328,14 +305,14 @@ func (h *Handler) handleStream(c echo.Context) error {
 			return nil
 		case <-s.wake:
 			for m, ok := s.next(); ok; m, ok = s.next() {
-				if write(streamEvent(m)) != nil {
+				if conn.write(streamEvent(m)) != nil {
 					// A dead or stuck client: returning closes the stream
 					// and every follow on it.
 					return nil
 				}
 			}
 		case <-ticker.C:
-			if write([]byte(": ping\n\n")) != nil {
+			if conn.ping() != nil {
 				return nil
 			}
 		}

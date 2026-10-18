@@ -197,27 +197,30 @@ func (h *Handler) handleDeleteSession(c echo.Context) error {
 	return c.NoContent(http.StatusNoContent)
 }
 
+// handleSessionEvents streams a session's events: the ones missed since the
+// resume point first, then each as it happens, each persisted one with its
+// seq as the SSE id, and a comment every 15s to keep the connection alive. It
+// returns, closing the connection and cancelling the subscription, when the
+// request ends, the hub drops the follower or a write fails or times out.
 func (h *Handler) handleSessionEvents(c echo.Context) error {
 	if h.orchSvc == nil {
 		return echo.NewHTTPError(http.StatusServiceUnavailable, "orchestration not configured")
 	}
 	id := c.Param("id")
-	w := c.Response()
 	sub, replay, cancel := h.orchSvc.Subscribe(id)
 	defer cancel()
 	ch := coalesce(c.Request().Context(), sub)
 
-	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.Header().Set("Connection", "keep-alive")
-	w.WriteHeader(http.StatusOK)
-	w.Flush()
-
+	conn, err := openSSE(c, h.streams.timeout())
+	if err != nil {
+		return nil
+	}
 	backlog, sent := h.sessionBacklog(id, replay, resumeSeq(c))
 	for _, ev := range backlog {
-		writeSSE(w, ev)
+		if conn.write(sessionSSE(ev)) != nil {
+			return nil
+		}
 	}
-	w.Flush()
 
 	ticker := time.NewTicker(15 * time.Second)
 	defer ticker.Stop()
@@ -235,11 +238,13 @@ func (h *Handler) handleSessionEvents(c echo.Context) error {
 			if sent.again(ev) {
 				continue
 			}
-			writeSSE(w, ev)
-			w.Flush()
+			if conn.write(sessionSSE(ev)) != nil {
+				return nil
+			}
 		case <-ticker.C:
-			fmt.Fprint(w, ": ping\n\n")
-			w.Flush()
+			if conn.ping() != nil {
+				return nil
+			}
 		}
 	}
 }
@@ -430,15 +435,15 @@ func (s seqSet) again(ev ports.SessionEvent) bool {
 	return ok
 }
 
-func writeSSE(w http.ResponseWriter, ev ports.SessionEvent) {
+// sessionSSE is one session event on the wire.
+func sessionSSE(ev ports.SessionEvent) []byte {
 	data, _ := json.Marshal(ev)
 	// Ephemeral events (streaming deltas) carry no seq and are not resumable, so
 	// they omit the SSE id: field. Persisted events always have seq >= 1.
 	if ev.Seq > 0 {
-		fmt.Fprintf(w, "id: %d\ndata: %s\n\n", ev.Seq, data)
-		return
+		return fmt.Appendf(nil, "id: %d\ndata: %s\n\n", ev.Seq, data)
 	}
-	fmt.Fprintf(w, "data: %s\n\n", data)
+	return fmt.Appendf(nil, "data: %s\n\n", data)
 }
 
 // resumeSeq resolves the replay high-water mark for an SSE connection.
