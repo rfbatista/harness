@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -30,6 +31,23 @@ import (
 // The stream's first event is {"stream": id}. Each change after it is
 // {"path": p, "data": change}; {"path": p, "end": true} says the feed at p
 // ended (its follower fell behind) and must be followed again.
+//
+// Backpressure (ADR 0012) is per feed: each follow queues its changes on its
+// own, up to followQueueLen. The relay reading a feed never waits for the
+// connection, so the feed is never held back by it; a follow whose queue is
+// full is dropped, its queue discarded and its end sent instead, while the
+// other follows keep flowing. The writer takes one change from each follow in
+// turn, in each feed's order. A connection that cannot take a write within
+// the registry's write timeout (a dead or stuck client) closes the stream,
+// and with it every follow.
+
+// followQueueLen is how many changes a follow may have waiting to be written
+// before it is dropped.
+const followQueueLen = 256
+
+// defaultStreamWriteTimeout is how long one write to a stream may take before
+// the stream is closed.
+const defaultStreamWriteTimeout = 10 * time.Second
 
 // streamMessage is one event on a tab's stream.
 type streamMessage struct {
@@ -41,6 +59,10 @@ type streamMessage struct {
 
 // streamRegistry holds the open streams by id. Its zero value is ready.
 type streamRegistry struct {
+	// writeTimeout bounds each write to a stream; zero means
+	// defaultStreamWriteTimeout.
+	writeTimeout time.Duration
+
 	mu   sync.Mutex
 	byID map[string]*liveStream
 }
@@ -51,7 +73,7 @@ func (r *streamRegistry) open(ctx context.Context) *liveStream {
 	s := &liveStream{
 		id:      hex.EncodeToString(b[:]),
 		ctx:     ctx,
-		out:     make(chan streamMessage, 64),
+		wake:    make(chan struct{}, 1),
 		follows: map[string]*follow{},
 	}
 	r.mu.Lock()
@@ -79,17 +101,32 @@ func (r *streamRegistry) get(id string) (*liveStream, error) {
 	return nil, &domain.StructuredError{Code: "STREAM_NOT_FOUND", Message: "no open stream " + id}
 }
 
+func (r *streamRegistry) timeout() time.Duration {
+	if r.writeTimeout > 0 {
+		return r.writeTimeout
+	}
+	return defaultStreamWriteTimeout
+}
+
 // liveStream is one tab's connection and the feeds it follows.
 type liveStream struct {
-	id  string
-	ctx context.Context // the GET request's: every follow ends with it
-	out chan streamMessage
+	id   string
+	ctx  context.Context // the GET request's: every follow ends with it
+	wake chan struct{}   // a follow has something to write
 
 	mu      sync.Mutex
 	follows map[string]*follow
+	ready   []*follow // the follows with queued messages, in writing turn
 }
 
-type follow struct{ cancel context.CancelFunc }
+// follow is one feed relayed on a stream. Its queue and done are guarded by
+// the stream's mu.
+type follow struct {
+	path   string
+	cancel context.CancelFunc
+	queue  []streamMessage
+	done   bool // dropped: nothing more is queued, and nothing queued is written
+}
 
 // follow starts relaying the feed at path; following a path twice is one follow.
 func (s *liveStream) follow(h *Handler, path string) error {
@@ -104,60 +141,133 @@ func (s *liveStream) follow(h *Handler, path string) error {
 		cancel()
 		return err
 	}
-	f := &follow{cancel: cancel}
+	f := &follow{path: path, cancel: cancel}
 	s.follows[path] = f
-	go s.relay(ctx, path, f, changes)
+	go s.relay(ctx, f, changes)
 	return nil
 }
 
-func (s *liveStream) relay(ctx context.Context, path string, f *follow, changes <-chan any) {
-	send := func(m streamMessage) bool {
+// relay queues each change of the feed for the writer, never waiting on it,
+// until the feed closes or the follow is dropped.
+func (s *liveStream) relay(ctx context.Context, f *follow, changes <-chan any) {
+	for {
 		select {
-		case s.out <- m:
-			return true
 		case <-ctx.Done():
-			return false
-		}
-	}
-	for change := range changes {
-		if !send(streamMessage{Path: path, Data: change}) {
 			return
+		case change, ok := <-changes:
+			if !ok {
+				// The feed closed on its own: its follower fell behind.
+				s.end(f)
+				return
+			}
+			if !s.enqueue(f, streamMessage{Path: f.path, Data: change}) {
+				return
+			}
 		}
 	}
-	// The feed closed on its own: the follower fell behind.
+}
+
+// enqueue queues m on f, or, when f's queue is full, ends f. It says whether f
+// still follows its feed.
+func (s *liveStream) enqueue(f *follow, m streamMessage) bool {
 	s.mu.Lock()
-	if s.follows[path] == f {
-		delete(s.follows, path)
+	if f.done {
+		s.mu.Unlock()
+		return false
 	}
+	if len(f.queue) >= followQueueLen {
+		s.mu.Unlock()
+		s.end(f)
+		return false
+	}
+	s.push(f, m)
 	s.mu.Unlock()
-	if ctx.Err() == nil {
-		send(streamMessage{Path: path, End: true})
+	s.signal()
+	return true
+}
+
+// end drops f and queues its end in place of whatever it had queued, unless
+// f was already dropped (unfollowed, or the stream closed).
+func (s *liveStream) end(f *follow) {
+	s.mu.Lock()
+	if f.done {
+		s.mu.Unlock()
+		return
 	}
+	s.drop(f)
+	f.queue = nil
+	s.push(&follow{path: f.path}, streamMessage{Path: f.path, End: true})
+	s.mu.Unlock()
+	s.signal()
+}
+
+// push appends m to f's queue, giving f a writing turn if it had none. The
+// caller holds mu.
+func (s *liveStream) push(f *follow, m streamMessage) {
+	if len(f.queue) == 0 {
+		s.ready = append(s.ready, f)
+	}
+	f.queue = append(f.queue, m)
+}
+
+// drop stops f and forgets it. The caller holds mu.
+func (s *liveStream) drop(f *follow) {
+	f.done = true
 	f.cancel()
+	if s.follows[f.path] == f {
+		delete(s.follows, f.path)
+	}
+}
+
+func (s *liveStream) signal() {
+	select {
+	case s.wake <- struct{}{}:
+	default:
+	}
+}
+
+// next takes the next message to write: the head of the queue of the follow
+// whose turn it is, which then goes to the back of the line if it has more.
+func (s *liveStream) next() (streamMessage, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for len(s.ready) > 0 {
+		f := s.ready[0]
+		s.ready = s.ready[1:]
+		if f.done {
+			// Dropped while it waited: its queue is not written.
+			f.queue = nil
+			continue
+		}
+		m := f.queue[0]
+		f.queue = f.queue[1:]
+		if len(f.queue) > 0 {
+			s.ready = append(s.ready, f)
+		}
+		return m, true
+	}
+	return streamMessage{}, false
 }
 
 func (s *liveStream) unfollow(path string) {
 	s.mu.Lock()
-	f, ok := s.follows[path]
-	delete(s.follows, path)
-	s.mu.Unlock()
-	if ok {
-		f.cancel()
+	defer s.mu.Unlock()
+	if f, ok := s.follows[path]; ok {
+		s.drop(f)
 	}
 }
 
 func (s *liveStream) unfollowAll() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	for path, f := range s.follows {
-		f.cancel()
-		delete(s.follows, path)
+	for _, f := range s.follows {
+		s.drop(f)
 	}
 }
 
 // handleStream opens a tab's stream: the {"stream": id} event, then each
 // change of the feeds followed on it, and a comment every 15s to keep the
-// connection alive, until the request ends.
+// connection alive, until the request ends or a write fails or times out.
 func (h *Handler) handleStream(c echo.Context) error {
 	s := h.streams.open(c.Request().Context())
 	defer h.streams.close(s)
@@ -167,8 +277,30 @@ func (h *Handler) handleStream(c echo.Context) error {
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
 	w.WriteHeader(http.StatusOK)
-	writeStreamMessage(w, streamMessage{Stream: s.id})
-	w.Flush()
+	// The controller reaches the connection under echo's writer, whose Flush
+	// would swallow the error of a failed flush.
+	rc := http.NewResponseController(w.Writer)
+	timeout := h.streams.timeout()
+	// write sends one event, failing if the client does not take it within
+	// timeout. No lock is held while it runs.
+	write := func(event []byte) error {
+		if err := rc.SetWriteDeadline(time.Now().Add(timeout)); err != nil && !errors.Is(err, http.ErrNotSupported) {
+			return err
+		}
+		if _, err := w.Write(event); err != nil {
+			return err
+		}
+		if err := rc.Flush(); err != nil {
+			return err
+		}
+		if err := rc.SetWriteDeadline(time.Time{}); err != nil && !errors.Is(err, http.ErrNotSupported) {
+			return err
+		}
+		return nil
+	}
+	if write(streamEvent(streamMessage{Stream: s.id})) != nil {
+		return nil
+	}
 
 	ticker := time.NewTicker(15 * time.Second)
 	defer ticker.Stop()
@@ -176,19 +308,25 @@ func (h *Handler) handleStream(c echo.Context) error {
 		select {
 		case <-s.ctx.Done():
 			return nil
-		case m := <-s.out:
-			writeStreamMessage(w, m)
-			w.Flush()
+		case <-s.wake:
+			for m, ok := s.next(); ok; m, ok = s.next() {
+				if write(streamEvent(m)) != nil {
+					// A dead or stuck client: returning closes the stream
+					// and every follow on it.
+					return nil
+				}
+			}
 		case <-ticker.C:
-			fmt.Fprint(w, ": ping\n\n")
-			w.Flush()
+			if write([]byte(": ping\n\n")) != nil {
+				return nil
+			}
 		}
 	}
 }
 
-func writeStreamMessage(w http.ResponseWriter, m streamMessage) {
+func streamEvent(m streamMessage) []byte {
 	data, _ := json.Marshal(m)
-	fmt.Fprintf(w, "data: %s\n\n", data)
+	return fmt.Appendf(nil, "data: %s\n\n", data)
 }
 
 type streamFollowRequest struct {
