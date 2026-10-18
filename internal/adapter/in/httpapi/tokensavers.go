@@ -14,7 +14,7 @@ import (
 
 func (h *Handler) handleListTokenSaverActivations(c echo.Context) error {
 	if h.tokenSavers == nil {
-		return echo.NewHTTPError(http.StatusServiceUnavailable, "token savers not configured")
+		return errTokenSaversOff
 	}
 	owner := domain.ActivationOwner{Level: domain.ActivationLevel(c.QueryParam("level")), ID: c.QueryParam("owner_id")}
 	list, err := h.tokenSavers.ListTokenSaverActivations(c.Request().Context(), owner)
@@ -26,7 +26,7 @@ func (h *Handler) handleListTokenSaverActivations(c echo.Context) error {
 
 func (h *Handler) handleSetTokenSaverActivation(c echo.Context) error {
 	if h.tokenSavers == nil {
-		return echo.NewHTTPError(http.StatusServiceUnavailable, "token savers not configured")
+		return errTokenSaversOff
 	}
 	var in struct {
 		Level   string `json:"level"`

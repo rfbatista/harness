@@ -145,11 +145,7 @@ func (s *Service) installedSavers(ctx context.Context) (map[domain.TokenSaver]*d
 	if err != nil {
 		return nil, err
 	}
-	out := make(map[domain.TokenSaver]*domain.TokenSaverInstallation, len(list))
-	for _, in := range list {
-		out[in.Saver] = in
-	}
-	return out, nil
+	return domain.InstallationsBySaver(list), nil
 }
 
 // wireSaver wires one saver; false when it has no wiring or its wiring

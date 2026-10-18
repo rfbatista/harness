@@ -3,8 +3,6 @@ package capabilities
 import (
 	"cmp"
 	"context"
-	"path"
-	"strings"
 
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
@@ -275,7 +273,7 @@ func (s *Service) activationsOf(owner domain.ActivationOwner, sc activationScope
 		} else {
 			for _, r := range sc.repositories {
 				v, from := Resolve(task[saver], repositories[r.ID][saver], project[saver])
-				a.Resolved = append(a.Resolved, domain.Resolution{Value: v, Level: from, RepositoryID: r.ID, RepositoryName: repositoryName(r)})
+				a.Resolved = append(a.Resolved, domain.Resolution{Value: v, Level: from, RepositoryID: r.ID, RepositoryName: r.DisplayName()})
 			}
 		}
 		a.Summary = a.Summarize()
@@ -298,15 +296,4 @@ func (s *Service) storedValues(level domain.ActivationLevel, id string) (map[dom
 		values[a.Saver] = a.Value
 	}
 	return values, nil
-}
-
-func repositoryName(r *domain.Repository) string {
-	switch {
-	case r.Name != "":
-		return r.Name
-	case r.RootDir != "":
-		return path.Base(strings.TrimRight(r.RootDir, "/"))
-	default:
-		return r.ID
-	}
 }

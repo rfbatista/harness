@@ -103,3 +103,12 @@ func UnsupportedPlatformMessage(p Platform) string {
 func TokenSaverErr(code, message string) *StructuredError {
 	return &StructuredError{Code: code, Message: message}
 }
+
+// InstallationsBySaver indexes installations by their saver.
+func InstallationsBySaver(list []*TokenSaverInstallation) map[TokenSaver]*TokenSaverInstallation {
+	out := make(map[TokenSaver]*TokenSaverInstallation, len(list))
+	for _, in := range list {
+		out[in.Saver] = in
+	}
+	return out
+}

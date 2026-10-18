@@ -3,9 +3,7 @@ package workspaces
 import (
 	"context"
 	"log/slog"
-	"path"
 	"slices"
-	"strings"
 	"sync"
 	"time"
 
@@ -227,10 +225,8 @@ func (x *RepositoryIndexes) codegraph(ctx context.Context) string {
 		slog.Warn("repository indexes: installations not read", "err", err)
 		return ""
 	}
-	for _, in := range installed {
-		if in.Saver == domain.TokenSaverCodegraph {
-			return in.Path
-		}
+	if in := domain.InstallationsBySaver(installed)[domain.TokenSaverCodegraph]; in != nil {
+		return in.Path
 	}
 	return ""
 }
@@ -285,7 +281,7 @@ func (x *RepositoryIndexes) IndexBuilding(checkout string) bool {
 // indexOf is r's index as it stands.
 func (x *RepositoryIndexes) indexOf(r *domain.Repository, projectName string) domain.RepositoryIndex {
 	idx := domain.RepositoryIndex{
-		RepositoryID: r.ID, RepositoryName: indexRepositoryName(r),
+		RepositoryID: r.ID, RepositoryName: r.DisplayName(),
 		ProjectID: r.ProjectID, ProjectName: projectName, Checkout: r.RootDir,
 	}
 	if at, ok := x.d.Indexer.IndexBuiltAt(r.RootDir); ok {
@@ -296,11 +292,4 @@ func (x *RepositoryIndexes) indexOf(r *domain.Repository, projectName string) do
 	idx.Building, idx.Error = x.building[r.RootDir], x.failed[r.RootDir]
 	x.mu.Unlock()
 	return idx
-}
-
-func indexRepositoryName(r *domain.Repository) string {
-	if r.Name != "" {
-		return r.Name
-	}
-	return path.Base(strings.TrimRight(r.RootDir, "/"))
 }

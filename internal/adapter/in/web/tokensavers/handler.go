@@ -76,7 +76,7 @@ func (v View) Intensity() domain.CavemanIntensity {
 }
 
 // Row is one saver as the server paints it before the browser takes over;
-// the browser's domain/saver.js has the same rules.
+// the browser's domain/installation.js has the same rules.
 type Row struct {
 	Saver, Summary, StateLabel, Tone, Versions string
 	State                                      domain.TokenSaverState

@@ -1,5 +1,10 @@
 package domain
 
+import (
+	"path"
+	"strings"
+)
+
 type Repository struct {
 	ID           string   `json:"id"`
 	ProjectID    string   `json:"project_id"`
@@ -8,6 +13,19 @@ type Repository struct {
 	URL          string   `json:"url"`
 	RootDir      string   `json:"root_dir"`
 	IgnoredPaths []string `json:"ignored_paths,omitempty"`
+}
+
+// DisplayName is the repository's name, else its checkout's folder name,
+// else its id.
+func (r *Repository) DisplayName() string {
+	switch {
+	case r.Name != "":
+		return r.Name
+	case r.RootDir != "":
+		return path.Base(strings.TrimRight(r.RootDir, "/"))
+	default:
+		return r.ID
+	}
 }
 
 // GitBranch is a ref a worktree can be based on. Remote marks refs under

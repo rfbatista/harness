@@ -12,11 +12,13 @@ import (
 // harness pins (ADR 0012). Bodies are the port's types unchanged, so the
 // Token savers page's seed and list_token_savers' answer are the same bytes.
 
-var errTokenSaverInstallsOff = echo.NewHTTPError(http.StatusServiceUnavailable, "token savers not configured")
+// errTokenSaversOff answers every token saver route of a server built
+// without them.
+var errTokenSaversOff = echo.NewHTTPError(http.StatusServiceUnavailable, "token savers not configured")
 
 func (h *Handler) handleListTokenSavers(c echo.Context) error {
 	if h.tokenSaverInstalls == nil {
-		return errTokenSaverInstallsOff
+		return errTokenSaversOff
 	}
 	list, err := h.tokenSaverInstalls.ListTokenSavers(c.Request().Context())
 	if err != nil {
@@ -29,7 +31,7 @@ func (h *Handler) handleListTokenSavers(c echo.Context) error {
 // install runs in the background; list_token_savers follows it.
 func (h *Handler) handleInstallTokenSaver(c echo.Context) error {
 	if h.tokenSaverInstalls == nil {
-		return errTokenSaverInstallsOff
+		return errTokenSaversOff
 	}
 	var in struct {
 		Saver domain.TokenSaver `json:"saver"`
@@ -46,7 +48,7 @@ func (h *Handler) handleInstallTokenSaver(c echo.Context) error {
 
 func (h *Handler) handleRemoveTokenSaver(c echo.Context) error {
 	if h.tokenSaverInstalls == nil {
-		return errTokenSaverInstallsOff
+		return errTokenSaversOff
 	}
 	var in struct {
 		Saver domain.TokenSaver `json:"saver"`

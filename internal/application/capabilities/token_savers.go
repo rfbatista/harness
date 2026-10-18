@@ -254,11 +254,7 @@ func (t *tokenSavers) installed() (map[domain.TokenSaver]*domain.TokenSaverInsta
 	if err != nil {
 		return nil, err
 	}
-	out := make(map[domain.TokenSaver]*domain.TokenSaverInstallation, len(list))
-	for _, in := range list {
-		out[in.Saver] = in
-	}
-	return out, nil
+	return domain.InstallationsBySaver(list), nil
 }
 
 // status is rel's saver as the page shows it; t.mu is held.
