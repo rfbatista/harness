@@ -134,3 +134,27 @@ func TestParseProfiler(t *testing.T) {
 		})
 	}
 }
+
+func TestParseSlowRequestThreshold(t *testing.T) {
+	for _, c := range []struct {
+		name string
+		args []string
+		env  map[string]string
+		want time.Duration
+	}{
+		{"default", nil, nil, 300 * time.Millisecond},
+		{"env", nil, map[string]string{"HTTP_SLOW_REQUEST_THRESHOLD": "1s"}, time.Second},
+		{"flag over env", []string{"--http.slow-request-threshold=150ms"}, map[string]string{"HTTP_SLOW_REQUEST_THRESHOLD": "1s"}, 150 * time.Millisecond},
+		{"unparseable env", nil, map[string]string{"HTTP_SLOW_REQUEST_THRESHOLD": "slow"}, 300 * time.Millisecond},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			cfg, err := Parse(flag.NewFlagSet("test", flag.ContinueOnError), c.args, env(c.env))
+			if err != nil {
+				t.Fatalf("parse: %v", err)
+			}
+			if cfg.SlowRequestThreshold != c.want {
+				t.Errorf("SlowRequestThreshold = %v, want %v", cfg.SlowRequestThreshold, c.want)
+			}
+		})
+	}
+}

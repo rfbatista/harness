@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"operators-mcp/internal/adapter/in/httpapi"
 	"operators-mcp/internal/adapter/out/persistence/sqlite"
 	"operators-mcp/internal/app"
 )
@@ -27,6 +28,7 @@ func Parse(fs *flag.FlagSet, args []string, getenv Getenv) (app.Config, error) {
 	mcpAddr := fs.String("mcp.addr", envOr(getenv, "MCP_ADDR", ":8081"), "MCP server listen address (IDE connects here)")
 	dbPath := fs.String("db", envOr(getenv, "DB_PATH", "data.db"), "SQLite database path (e.g. data.db or :memory:)")
 	dbSlowThreshold := fs.Duration("db.slow-threshold", envDuration(getenv, "DB_SLOW_THRESHOLD", sqlite.DefaultSlowThreshold), "log every database call slower than this as a slow database call")
+	slowRequestThreshold := fs.Duration("http.slow-request-threshold", envDuration(getenv, "HTTP_SLOW_REQUEST_THRESHOLD", httpapi.DefaultSlowRequestThreshold), "log every HTTP request slower than this as a slow request, with its query count")
 	devMode := fs.Bool("dev", envBool(getenv, "DEV_MODE", false), "proxy ui://designer to the Vite dev server (run 'make web-dev' separately)")
 	claudeBin := fs.String("claude.bin", envOr(getenv, "CLAUDE_BIN", "claude"), "path to the claude CLI binary")
 	apiToken := fs.String("api.token", envOr(getenv, "CODING_POOL_TOKEN", ""), "bearer token required on /api (but /api/health); empty leaves the API open")
@@ -64,6 +66,7 @@ func Parse(fs *flag.FlagSet, args []string, getenv Getenv) (app.Config, error) {
 
 		TokenSaverReleaseBase: *tokenSaverReleaseBase,
 		ProfilerOff:           !*profiler,
+		SlowRequestThreshold:  *slowRequestThreshold,
 	}, nil
 }
 

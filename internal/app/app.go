@@ -28,6 +28,10 @@ type Config struct {
 	// DBSlowThreshold is how long a database call may take before it is
 	// logged as a slow database call. Zero uses the SQLite adapter's default.
 	DBSlowThreshold time.Duration
+	// SlowRequestThreshold is how long an HTTP request may take before it
+	// is logged as a slow request, with its query count. Zero uses the HTTP
+	// API adapter's default.
+	SlowRequestThreshold time.Duration
 	// DevMode proxies the designer resource to the Vite dev server instead of the embedded build.
 	DevMode bool
 	// Root is the default project root for tree and path operations (usually the working directory).

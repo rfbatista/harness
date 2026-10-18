@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"operators-mcp/internal/infra/querycount"
+
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
@@ -186,4 +188,38 @@ func TestOpenLogsATransactionWaitingOnTheLock(t *testing.T) {
 	}
 
 	waitedOnTheLock(t, logs.slowCalls(), "TestOpenLogsATransactionWaitingOnTheLock")
+}
+
+// Every database call, on the reader pool and the writer connection alike,
+// counts toward the tracker it is made under: a repository that takes no
+// context counts on the tracking goroutine, a statement carrying the
+// tracked context counts on any goroutine.
+func TestOpenCountsEachDatabaseCallTowardItsTracker(t *testing.T) {
+	db, _ := openLogged(t, filepath.Join(t.TempDir(), "data.db"))
+	settings := NewSettingsRepository(db)
+
+	ctx, c, stop := querycount.Track(context.Background())
+	defer stop()
+	if err := settings.Set("theme", "dark"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := settings.Get("theme"); err != nil {
+		t.Fatal(err)
+	}
+	before := c.Count()
+	done := make(chan error)
+	go func() {
+		var n int64
+		done <- db.WithContext(ctx).Model(&SettingModel{}).Count(&n).Error
+	}()
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+
+	if before != 2 {
+		t.Errorf("calls counted for Set and Get = %d, want 2", before)
+	}
+	if got := c.Count() - before; got != 1 {
+		t.Errorf("calls counted for the query on another goroutine = %d, want 1", got)
+	}
 }

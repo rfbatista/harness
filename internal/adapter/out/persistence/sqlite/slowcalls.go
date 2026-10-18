@@ -13,6 +13,8 @@ import (
 	"strings"
 	"time"
 
+	"operators-mcp/internal/infra/querycount"
+
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 )
@@ -79,7 +81,8 @@ func (s *slowCalls) gormLogger() logger.Interface {
 }
 
 // slowCallLogger times every statement GORM runs, on the writer connection
-// and the reader pool alike.
+// and the reader pool alike, and counts it toward the querycount tracker it
+// is made under.
 type slowCallLogger struct {
 	logger.Interface
 	slow *slowCalls
@@ -89,11 +92,12 @@ func (l slowCallLogger) LogMode(level logger.LogLevel) logger.Interface {
 	return slowCallLogger{Interface: l.Interface.LogMode(level), slow: l.slow}
 }
 
-// Trace logs a statement slower than the threshold. GORM times a create,
+// Trace counts a statement and logs it when slower than the threshold. GORM times a create,
 // update or delete from before its transaction begins, so the time includes
 // the wait for the write lock: when that wait is most of it, the call is
 // logged as a lock wait.
 func (l slowCallLogger) Trace(ctx context.Context, begin time.Time, fc func() (string, int64), err error) {
+	querycount.Add(ctx)
 	l.Interface.Trace(ctx, begin, fc, err)
 	elapsed := time.Since(begin)
 	if elapsed <= l.slow.threshold {
