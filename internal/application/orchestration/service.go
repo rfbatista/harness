@@ -656,6 +656,7 @@ func (s *Service) pump(sess llmkit.Session) {
 	}
 	s.runCleanup(id)
 	if sess := s.sessions.Get(id); sess != nil && sess.Status.IsTerminal() {
+		s.hub.End(id)
 		s.announce(domain.SessionEnded{SessionID: id, Status: sess.Status})
 	}
 }
@@ -1003,6 +1004,7 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 			slog.Warn("remove session worktree failed", "session", id, "workspace", workspaceID, "err", err)
 		}
 	}
+	s.hub.End(id)
 	s.mu.Lock()
 	delete(s.seq, id)
 	s.mu.Unlock()

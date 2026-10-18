@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
@@ -211,7 +212,8 @@ func (h *Handler) handleSessionEvents(c echo.Context) error {
 	w.WriteHeader(http.StatusOK)
 	w.Flush()
 
-	for _, ev := range replayFrom(replay, resumeSeq(c)) {
+	backlog, sent := h.sessionBacklog(id, replay, resumeSeq(c))
+	for _, ev := range backlog {
 		writeSSE(w, ev)
 	}
 	w.Flush()
@@ -224,7 +226,13 @@ func (h *Handler) handleSessionEvents(c echo.Context) error {
 			return nil
 		case ev, ok := <-ch:
 			if !ok {
+				// The hub closed a follower that fell behind, or the session
+				// ended: closing the connection lets the client resume from
+				// its Last-Event-ID.
 				return nil
+			}
+			if sent.again(ev) {
+				continue
 			}
 			writeSSE(w, ev)
 			w.Flush()
@@ -235,9 +243,10 @@ func (h *Handler) handleSessionEvents(c echo.Context) error {
 	}
 }
 
-// followSession is a session's events from fromSeq on — the buffered ones
+// followSession is a session's events from fromSeq on — the missed ones
 // first, then each as it happens — for a tab's stream (stream.go). Its own
 // endpoint, handleSessionEvents, also sends each event's seq as the SSE id.
+// The result closes when the hub drops the follower, so the stream says end.
 func (h *Handler) followSession(ctx context.Context, id string, fromSeq int64) (<-chan any, error) {
 	if h.orchSvc == nil {
 		return nil, echo.NewHTTPError(http.StatusServiceUnavailable, "orchestration not configured")
@@ -255,7 +264,8 @@ func (h *Handler) followSession(ctx context.Context, id string, fromSeq int64) (
 				return false
 			}
 		}
-		for _, ev := range replayFrom(replay, fromSeq) {
+		backlog, sent := h.sessionBacklog(id, replay, fromSeq)
+		for _, ev := range backlog {
 			if !send(ev) {
 				return
 			}
@@ -265,13 +275,60 @@ func (h *Handler) followSession(ctx context.Context, id string, fromSeq int64) (
 			case <-ctx.Done():
 				return
 			case ev, ok := <-ch:
-				if !ok || !send(ev) {
+				if !ok {
+					return
+				}
+				if sent.again(ev) {
+					continue
+				}
+				if !send(ev) {
 					return
 				}
 			}
 		}
 	}()
 	return out, nil
+}
+
+// sessionBacklog is what a follower resuming after fromSeq missed, taken
+// right after it subscribed: the hub's replay when it reaches back far
+// enough, else the stored log, which outlives the replay ring and the
+// session. The seqs it holds are returned too, so the same events arriving
+// live are not sent twice.
+func (h *Handler) sessionBacklog(id string, replay []ports.SessionEvent, fromSeq int64) ([]ports.SessionEvent, seqSet) {
+	backlog := replayFrom(replay, fromSeq)
+	if fromSeq > 0 && (len(replay) == 0 || replay[0].Seq > fromSeq+1) {
+		stored, err := h.orchSvc.History(id, fromSeq)
+		if err != nil {
+			slog.Warn("session backlog from the log", "session", id, "from_seq", fromSeq, "err", err)
+		} else {
+			var last int64
+			if len(stored) > 0 {
+				last = stored[len(stored)-1].Seq
+			}
+			backlog = append(stored, replayFrom(replay, last)...)
+		}
+	}
+	sent := seqSet{}
+	for _, ev := range backlog {
+		if ev.Seq > 0 {
+			sent[ev.Seq] = struct{}{}
+		}
+	}
+	return backlog, sent
+}
+
+// seqSet holds the persisted seqs a follower already got from its backlog.
+type seqSet map[int64]struct{}
+
+// again reports whether a live event was already sent with the backlog.
+// Ephemeral events carry no seq and are never repeats.
+func (s seqSet) again(ev ports.SessionEvent) bool {
+	if ev.Seq <= 0 {
+		return false
+	}
+	_, ok := s[ev.Seq]
+	return ok
 }
 
 func writeSSE(w http.ResponseWriter, ev ports.SessionEvent) {
