@@ -53,7 +53,7 @@ func (s *Service) ListTokenSaverActivations(ctx context.Context, owner domain.Ac
 	if err != nil {
 		return nil, err
 	}
-	return s.activationsOf(owner, sc)
+	return s.activationsOf(ctx, owner, sc)
 }
 
 // SetTokenSaverActivation sets one token saver for owner and returns the
@@ -83,7 +83,7 @@ func (s *Service) SetTokenSaverActivation(ctx context.Context, owner domain.Acti
 	if err := s.publish(domain.TokenSaverActivationChanged{Saver: saver, Owner: owner, ProjectID: sc.projectID, Value: value}); err != nil {
 		return nil, err
 	}
-	return s.activationsOf(owner, sc)
+	return s.activationsOf(ctx, owner, sc)
 }
 
 // RepositoriesWithTokenSaverOn answers the repositories of projectID (of
@@ -147,19 +147,19 @@ func (s *Service) reach(ctx context.Context, saver domain.TokenSaver, projectID 
 
 // ResolveTokenSavers resolves every token saver for a session. It reads only
 // what is stored, so an id that no longer exists counts as inheriting.
-func (s *Service) ResolveTokenSavers(_ context.Context, projectID, repositoryID, taskID string) ([]domain.ResolvedTokenSaver, error) {
+func (s *Service) ResolveTokenSavers(ctx context.Context, projectID, repositoryID, taskID string) ([]domain.ResolvedTokenSaver, error) {
 	if s.activations == nil {
 		return nil, errNoActivations
 	}
-	project, err := s.storedValues(domain.ActivationLevelProject, projectID)
+	project, err := s.storedValues(ctx, domain.ActivationLevelProject, projectID)
 	if err != nil {
 		return nil, err
 	}
-	repository, err := s.storedValues(domain.ActivationLevelRepository, repositoryID)
+	repository, err := s.storedValues(ctx, domain.ActivationLevelRepository, repositoryID)
 	if err != nil {
 		return nil, err
 	}
-	task, err := s.storedValues(domain.ActivationLevelTask, taskID)
+	task, err := s.storedValues(ctx, domain.ActivationLevelTask, taskID)
 	if err != nil {
 		return nil, err
 	}
@@ -234,7 +234,7 @@ func (s *Service) activationScope(ctx context.Context, owner domain.ActivationOw
 }
 
 // activationsOf reads owner's activations in its scope.
-func (s *Service) activationsOf(owner domain.ActivationOwner, sc activationScope) ([]domain.TokenSaverActivation, error) {
+func (s *Service) activationsOf(ctx context.Context, owner domain.ActivationOwner, sc activationScope) ([]domain.TokenSaverActivation, error) {
 	levels := map[domain.ActivationLevel]string{
 		domain.ActivationLevelProject:    sc.projectID,
 		domain.ActivationLevelRepository: sc.repositoryID,
@@ -242,14 +242,14 @@ func (s *Service) activationsOf(owner domain.ActivationOwner, sc activationScope
 	}
 	values := map[domain.ActivationLevel]map[domain.TokenSaver]domain.ActivationValue{}
 	for level, id := range levels {
-		v, err := s.storedValues(level, id)
+		v, err := s.storedValues(ctx, level, id)
 		if err != nil {
 			return nil, err
 		}
 		values[level] = v
 	}
 	project, repository, task := values[domain.ActivationLevelProject], values[domain.ActivationLevelRepository], values[domain.ActivationLevelTask]
-	repositories, err := s.repositoriesValues(sc.repositories)
+	repositories, err := s.repositoriesValues(ctx, sc.repositories)
 	if err != nil {
 		return nil, err
 	}
@@ -279,14 +279,14 @@ func (s *Service) activationsOf(owner domain.ActivationOwner, sc activationScope
 
 // repositoriesValues reads the stored values of repos at once, by
 // repository and saver.
-func (s *Service) repositoriesValues(repos []*domain.Repository) (map[string]map[domain.TokenSaver]domain.ActivationValue, error) {
+func (s *Service) repositoriesValues(ctx context.Context, repos []*domain.Repository) (map[string]map[domain.TokenSaver]domain.ActivationValue, error) {
 	out := make(map[string]map[domain.TokenSaver]domain.ActivationValue, len(repos))
 	ids := make([]string, 0, len(repos))
 	for _, r := range repos {
 		out[r.ID] = map[domain.TokenSaver]domain.ActivationValue{}
 		ids = append(ids, r.ID)
 	}
-	list, err := s.activations.ListOwners(domain.ActivationLevelRepository, ids)
+	list, err := s.activations.ListOwners(ctx, domain.ActivationLevelRepository, ids)
 	if err != nil {
 		return nil, err
 	}
@@ -299,12 +299,12 @@ func (s *Service) repositoriesValues(repos []*domain.Repository) (map[string]map
 }
 
 // storedValues reads one level's stored values by saver; none for an empty id.
-func (s *Service) storedValues(level domain.ActivationLevel, id string) (map[domain.TokenSaver]domain.ActivationValue, error) {
+func (s *Service) storedValues(ctx context.Context, level domain.ActivationLevel, id string) (map[domain.TokenSaver]domain.ActivationValue, error) {
 	values := map[domain.TokenSaver]domain.ActivationValue{}
 	if id == "" {
 		return values, nil
 	}
-	list, err := s.activations.List(domain.ActivationOwner{Level: level, ID: id})
+	list, err := s.activations.List(ctx, domain.ActivationOwner{Level: level, ID: id})
 	if err != nil {
 		return nil, err
 	}

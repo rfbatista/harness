@@ -220,7 +220,7 @@ func clone(c *ports.StoredGitCredential) *ports.StoredGitCredential {
 	return &cp
 }
 
-func (s *Credentials) List() ([]*ports.StoredGitCredential, error) {
+func (s *Credentials) List(_ context.Context) ([]*ports.StoredGitCredential, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	out := make([]*ports.StoredGitCredential, 0, len(s.rows))
@@ -307,7 +307,7 @@ func (s *Pins) Get(repositoryID string) (string, error) {
 	return s.pins[repositoryID].CredentialID, nil
 }
 
-func (s *Pins) ListByRepositories(repositoryIDs []string) ([]ports.RepositoryCredentialPin, error) {
+func (s *Pins) ListByRepositories(_ context.Context, repositoryIDs []string) ([]ports.RepositoryCredentialPin, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	var out []ports.RepositoryCredentialPin

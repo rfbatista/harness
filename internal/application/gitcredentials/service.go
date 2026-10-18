@@ -142,8 +142,8 @@ func publicOf(all []*ports.StoredGitCredential) []*domain.GitCredential {
 
 // ListGitCredentials is every credential, sorted by host then name, and
 // whether the store is locked, from the key ids alone.
-func (s *Service) ListGitCredentials(context.Context) (*ports.GitCredentialList, error) {
-	all, err := s.st.Credentials.List()
+func (s *Service) ListGitCredentials(ctx context.Context) (*ports.GitCredentialList, error) {
+	all, err := s.st.Credentials.List(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -157,8 +157,8 @@ func (s *Service) sorted(all []*ports.StoredGitCredential) []*domain.GitCredenti
 }
 
 // credentials is every credential, sorted.
-func (s *Service) credentials() ([]*domain.GitCredential, error) {
-	all, err := s.st.Credentials.List()
+func (s *Service) credentials(ctx context.Context) ([]*domain.GitCredential, error) {
+	all, err := s.st.Credentials.List(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -204,10 +204,10 @@ func (s *Service) clearDefault(all []*ports.StoredGitCredential, host string, ki
 }
 
 // CreateGitCredential stores a new credential, sealing its secret.
-func (s *Service) CreateGitCredential(_ context.Context, in ports.CreateGitCredential) (*domain.GitCredential, error) {
+func (s *Service) CreateGitCredential(ctx context.Context, in ports.CreateGitCredential) (*domain.GitCredential, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	all, err := s.st.Credentials.List()
+	all, err := s.st.Credentials.List(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -288,7 +288,7 @@ func find(all []*ports.StoredGitCredential, id string) *ports.StoredGitCredentia
 func (s *Service) UpdateGitCredential(ctx context.Context, in ports.UpdateGitCredential) (*domain.GitCredential, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	all, err := s.st.Credentials.List()
+	all, err := s.st.Credentials.List(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -536,7 +536,7 @@ func (s *Service) GetRepositoryCredential(ctx context.Context, repositoryID stri
 	if r == nil {
 		return nil, errRepositoryNotFound()
 	}
-	creds, err := s.credentials()
+	creds, err := s.credentials(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -553,7 +553,7 @@ func (s *Service) ListRepositoryCredentials(ctx context.Context, projectID strin
 	if s.rd.Projects.Get(ctx, projectID) == nil {
 		return nil, domain.GitCredentialError("PROJECT_NOT_FOUND", "project not found")
 	}
-	creds, err := s.credentials()
+	creds, err := s.credentials(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -562,7 +562,7 @@ func (s *Service) ListRepositoryCredentials(ctx context.Context, projectID strin
 	for _, r := range repos {
 		ids = append(ids, r.ID)
 	}
-	pins, err := s.st.Pins.ListByRepositories(ids)
+	pins, err := s.st.Pins.ListByRepositories(ctx, ids)
 	if err != nil {
 		return nil, err
 	}

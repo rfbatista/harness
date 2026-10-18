@@ -345,7 +345,7 @@ func (s *Service) write(change change) (*ports.NotificationChange, error) {
 		if err != nil || !ok {
 			return err
 		}
-		if count, err = tx.CountUnread(); err != nil {
+		if count, err = tx.CountUnread(context.Background()); err != nil {
 			return err
 		}
 		seq = s.stream.take()
@@ -413,11 +413,11 @@ func (s *Service) ListNotifications(ctx context.Context, q ports.NotificationQue
 		}
 		f.BeforeAt, f.BeforeID = at, id
 	}
-	list, err := s.repo.List(f)
+	list, err := s.repo.List(ctx, f)
 	if err != nil {
 		return nil, err
 	}
-	count, err := s.repo.CountUnread()
+	count, err := s.repo.CountUnread(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -437,7 +437,7 @@ func (s *Service) ListNotifications(ctx context.Context, q ports.NotificationQue
 // (of a project), read. An unknown id fails the whole call before anything
 // changes. Only the notifications this call changed are answered and
 // streamed; providers are not told, since read state is the inbox's.
-func (s *Service) MarkNotificationsRead(_ context.Context, req ports.MarkNotificationsRead) (*ports.NotificationChange, error) {
+func (s *Service) MarkNotificationsRead(ctx context.Context, req ports.MarkNotificationsRead) (*ports.NotificationChange, error) {
 	if (len(req.IDs) > 0) == req.All {
 		return nil, invalid("give either ids or all, not both")
 	}
@@ -460,7 +460,7 @@ func (s *Service) MarkNotificationsRead(_ context.Context, req ports.MarkNotific
 		return nil, err
 	}
 	if c == nil {
-		count, err := s.repo.CountUnread()
+		count, err := s.repo.CountUnread(ctx)
 		if err != nil {
 			return nil, err
 		}

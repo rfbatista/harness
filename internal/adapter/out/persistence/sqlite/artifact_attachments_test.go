@@ -1,6 +1,7 @@
 package sqlite
 
 import (
+	"context"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -71,7 +72,7 @@ func TestArtifactRepo_AttachedTicketIDsAreFilledInLinkOrder(t *testing.T) {
 	if got := r.FindByTarget("s1", "logo.html", ""); ids(got) != "tk3,tk2" {
 		t.Fatalf("find = %s", ids(got))
 	}
-	if got := r.List(ports.ArtifactFilter{ProjectID: "p1"}); len(got) != 1 || ids(got[0]) != "tk3,tk2" {
+	if got := r.List(context.Background(), ports.ArtifactFilter{ProjectID: "p1"}); len(got) != 1 || ids(got[0]) != "tk3,tk2" {
 		t.Fatalf("list = %d rows", len(got))
 	}
 }
@@ -84,19 +85,19 @@ func TestArtifactRepo_ListByTicketIncludesAttached(t *testing.T) {
 	time.Sleep(2 * time.Millisecond)
 	own, _ := r.Create(&domain.Artifact{SessionID: "s2", TicketID: "tk2", ProjectID: "p1", Kind: domain.ArtifactImage, Title: "Own", Path: "own.png", Revision: 1})
 	r.Attach(a.ID, "tk2")
-	if got := listIDs(r.List(ports.ArtifactFilter{TicketID: "tk2"})); got != "Own,Logo" {
+	if got := listIDs(r.List(context.Background(), ports.ArtifactFilter{TicketID: "tk2"})); got != "Own,Logo" {
 		t.Fatalf("tk2 = %s, want Own,Logo", got)
 	}
-	if got := listIDs(r.List(ports.ArtifactFilter{TicketID: "tk2", Scope: domain.ArtifactScopeProject})); got != "Logo" {
+	if got := listIDs(r.List(context.Background(), ports.ArtifactFilter{TicketID: "tk2", Scope: domain.ArtifactScopeProject})); got != "Logo" {
 		t.Fatalf("tk2 project scope = %s", got)
 	}
-	if got := listIDs(r.List(ports.ArtifactFilter{TicketID: "tk2", Scope: domain.ArtifactScopeTask})); got != "Own" {
+	if got := listIDs(r.List(context.Background(), ports.ArtifactFilter{TicketID: "tk2", Scope: domain.ArtifactScopeTask})); got != "Own" {
 		t.Fatalf("tk2 task scope = %s", got)
 	}
-	if got := listIDs(r.List(ports.ArtifactFilter{TicketID: "tk3"})); got != "" {
+	if got := listIDs(r.List(context.Background(), ports.ArtifactFilter{TicketID: "tk3"})); got != "" {
 		t.Fatalf("tk3 = %s, want nothing", got)
 	}
-	if got := listIDs(r.List(ports.ArtifactFilter{SessionID: "s2"})); got != "Own" {
+	if got := listIDs(r.List(context.Background(), ports.ArtifactFilter{SessionID: "s2"})); got != "Own" {
 		t.Fatalf("session s2 = %s", got)
 	}
 	_ = own
@@ -110,7 +111,7 @@ func TestArtifactRepo_MovingToTaskOrDeletingDropsLinks(t *testing.T) {
 	if err != nil || ids(moved) != "" {
 		t.Fatalf("move to task = %s %v", ids(moved), err)
 	}
-	if got := listIDs(r.List(ports.ArtifactFilter{TicketID: "tk2"})); got != "" {
+	if got := listIDs(r.List(context.Background(), ports.ArtifactFilter{TicketID: "tk2"})); got != "" {
 		t.Fatalf("tk2 after move = %s", got)
 	}
 	back, _ := r.SetScope(a.ID, domain.ArtifactScopeProject, true)

@@ -1,6 +1,7 @@
 package sqlite
 
 import (
+	"context"
 	"errors"
 	"time"
 
@@ -77,9 +78,9 @@ func NewGitCredentialRepository(db *gorm.DB) *GitCredentialRepository {
 	return &GitCredentialRepository{db: db}
 }
 
-func (r *GitCredentialRepository) List() ([]*ports.StoredGitCredential, error) {
+func (r *GitCredentialRepository) List(ctx context.Context) ([]*ports.StoredGitCredential, error) {
 	var ms []GitCredentialModel
-	if err := r.db.Order("id").Find(&ms).Error; err != nil {
+	if err := r.db.WithContext(ctx).Order("id").Find(&ms).Error; err != nil {
 		return nil, err
 	}
 	out := make([]*ports.StoredGitCredential, 0, len(ms))
@@ -191,12 +192,12 @@ func (r *RepositoryCredentialRepository) Get(repositoryID string) (string, error
 	return ms[0].CredentialID, nil
 }
 
-func (r *RepositoryCredentialRepository) ListByRepositories(repositoryIDs []string) ([]ports.RepositoryCredentialPin, error) {
+func (r *RepositoryCredentialRepository) ListByRepositories(ctx context.Context, repositoryIDs []string) ([]ports.RepositoryCredentialPin, error) {
 	if len(repositoryIDs) == 0 {
 		return nil, nil
 	}
 	var ms []RepositoryCredentialModel
-	if err := r.db.Where("repository_id IN ?", repositoryIDs).Order("repository_id").Find(&ms).Error; err != nil {
+	if err := r.db.WithContext(ctx).Where("repository_id IN ?", repositoryIDs).Order("repository_id").Find(&ms).Error; err != nil {
 		return nil, err
 	}
 	return repositoryPins(ms), nil

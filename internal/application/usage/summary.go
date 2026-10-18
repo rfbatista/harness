@@ -23,7 +23,7 @@ func (s *Service) UsageSummary(ctx context.Context, projectID string, r ports.Us
 		return nil, err
 	}
 	project := projectKey(projectID)
-	groups, err := s.repo.Groups(ports.UsageGroupFilter{ProjectID: project, Since: since, LongAbove: longPromptAbove})
+	groups, err := s.repo.Groups(ctx, ports.UsageGroupFilter{ProjectID: project, Since: since, LongAbove: longPromptAbove})
 	if err != nil {
 		return nil, err
 	}
@@ -64,11 +64,11 @@ func (s *Service) UsageSummary(ctx context.Context, projectID string, r ports.Us
 }
 
 // UsageTotals answers one task's or one session's totals over all time.
-func (s *Service) UsageTotals(_ context.Context, q ports.UsageTotalsQuery) (*ports.UsageTotals, error) {
+func (s *Service) UsageTotals(ctx context.Context, q ports.UsageTotalsQuery) (*ports.UsageTotals, error) {
 	if (q.TaskID == "") == (q.SessionID == "") {
 		return nil, invalid("name exactly one of task_id and session_id")
 	}
-	groups, err := s.repo.Groups(ports.UsageGroupFilter{TaskID: q.TaskID, SessionID: q.SessionID, LongAbove: longPromptAbove})
+	groups, err := s.repo.Groups(ctx, ports.UsageGroupFilter{TaskID: q.TaskID, SessionID: q.SessionID, LongAbove: longPromptAbove})
 	if err != nil {
 		return nil, err
 	}
@@ -82,11 +82,11 @@ func (s *Service) UsageTotals(_ context.Context, q ports.UsageTotalsQuery) (*por
 
 // TaskUsageTotals answers a task's totals and each given session's over all
 // time, from one read of their records.
-func (s *Service) TaskUsageTotals(_ context.Context, taskID string, sessionIDs []string) (*ports.UsageTotals, map[string]*ports.UsageTotals, error) {
+func (s *Service) TaskUsageTotals(ctx context.Context, taskID string, sessionIDs []string) (*ports.UsageTotals, map[string]*ports.UsageTotals, error) {
 	if taskID == "" {
 		return nil, nil, invalid("name a task_id")
 	}
-	groups, err := s.repo.Groups(ports.UsageGroupFilter{TaskID: taskID, SessionIDs: sessionIDs, LongAbove: longPromptAbove})
+	groups, err := s.repo.Groups(ctx, ports.UsageGroupFilter{TaskID: taskID, SessionIDs: sessionIDs, LongAbove: longPromptAbove})
 	if err != nil {
 		return nil, nil, err
 	}

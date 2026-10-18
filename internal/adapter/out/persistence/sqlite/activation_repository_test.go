@@ -1,6 +1,7 @@
 package sqlite
 
 import (
+	"context"
 	"testing"
 
 	"operators-mcp/internal/domain"
@@ -29,7 +30,7 @@ func TestActivationRepository_ListOwnersReadsTheNamedOwnersOfALevel(t *testing.T
 		}
 	}
 
-	got, err := r.ListOwners(domain.ActivationLevelRepository, []string{"r1", "r2"})
+	got, err := r.ListOwners(context.Background(), domain.ActivationLevelRepository, []string{"r1", "r2"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -43,7 +44,7 @@ func TestActivationRepository_ListOwnersReadsTheNamedOwnersOfALevel(t *testing.T
 	if len(got) != 2 || values["r1"] != domain.ActivationOn || values["r2"] != domain.ActivationOff {
 		t.Errorf("ListOwners(r1, r2) = %+v, want r1 on and r2 off", got)
 	}
-	if none, err := r.ListOwners(domain.ActivationLevelRepository, nil); err != nil || len(none) != 0 {
+	if none, err := r.ListOwners(context.Background(), domain.ActivationLevelRepository, nil); err != nil || len(none) != 0 {
 		t.Errorf("ListOwners(none) = %v, %v; want nothing", none, err)
 	}
 }

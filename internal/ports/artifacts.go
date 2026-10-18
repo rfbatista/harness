@@ -31,7 +31,7 @@ type ArtifactRepository interface {
 	// FindByTarget is the identity rule: one artifact per (session, path) or (session, url).
 	FindByTarget(sessionID, path, url string) *domain.Artifact
 	// List returns matches ordered by updated_at descending.
-	List(f ArtifactFilter) []*domain.Artifact
+	List(ctx context.Context, f ArtifactFilter) []*domain.Artifact
 	// Delete removes the record; a missing one is ARTIFACT_NOT_FOUND.
 	Delete(id string) error
 	// SetScope moves an artifact between scopes, records whether the harness

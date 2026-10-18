@@ -104,8 +104,8 @@ func (s UsageSumsRow) sums() ports.UsageSums {
 		CacheCreationInputTokens: s.CacheCreationInputTokens, CacheReadInputTokens: s.CacheReadInputTokens}
 }
 
-func (r *UsageRepository) Groups(f ports.UsageGroupFilter) ([]ports.UsageGroup, error) {
-	q := r.db.Model(&UsageRecordModel{})
+func (r *UsageRepository) Groups(ctx context.Context, f ports.UsageGroupFilter) ([]ports.UsageGroup, error) {
+	q := r.db.WithContext(ctx).Model(&UsageRecordModel{})
 	switch {
 	case f.TaskID != "" && len(f.SessionIDs) > 0:
 		q = q.Where("task_id = ? OR session_id IN ?", f.TaskID, f.SessionIDs)

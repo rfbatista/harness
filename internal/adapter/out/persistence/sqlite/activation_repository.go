@@ -1,6 +1,7 @@
 package sqlite
 
 import (
+	"context"
 	"time"
 
 	"gorm.io/gorm"
@@ -35,9 +36,9 @@ func NewActivationRepository(db *gorm.DB) *ActivationRepository {
 }
 
 // List returns owner's stored activations.
-func (r *ActivationRepository) List(owner domain.ActivationOwner) ([]domain.Activation, error) {
+func (r *ActivationRepository) List(ctx context.Context, owner domain.ActivationOwner) ([]domain.Activation, error) {
 	var models []ActivationModel
-	if err := r.db.Where("level = ? AND owner_id = ?", owner.Level, owner.ID).Order("saver").Find(&models).Error; err != nil {
+	if err := r.db.WithContext(ctx).Where("level = ? AND owner_id = ?", owner.Level, owner.ID).Order("saver").Find(&models).Error; err != nil {
 		return nil, err
 	}
 	return activations(models), nil
@@ -45,12 +46,12 @@ func (r *ActivationRepository) List(owner domain.ActivationOwner) ([]domain.Acti
 
 // ListOwners returns the stored activations of the owners ids of level, read
 // at once.
-func (r *ActivationRepository) ListOwners(level domain.ActivationLevel, ids []string) ([]domain.Activation, error) {
+func (r *ActivationRepository) ListOwners(ctx context.Context, level domain.ActivationLevel, ids []string) ([]domain.Activation, error) {
 	if len(ids) == 0 {
 		return nil, nil
 	}
 	var models []ActivationModel
-	if err := r.db.Where("level = ? AND owner_id IN ?", level, ids).Order("owner_id, saver").Find(&models).Error; err != nil {
+	if err := r.db.WithContext(ctx).Where("level = ? AND owner_id IN ?", level, ids).Order("owner_id, saver").Find(&models).Error; err != nil {
 		return nil, err
 	}
 	return activations(models), nil

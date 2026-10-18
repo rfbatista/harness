@@ -109,7 +109,7 @@ const (
 type UsageAggregates interface {
 	// Groups sums the filter's records per task, session, model and prompt
 	// size.
-	Groups(f UsageGroupFilter) ([]UsageGroup, error)
+	Groups(ctx context.Context, f UsageGroupFilter) ([]UsageGroup, error)
 	// Series sums a project's records since a time per bucket and model,
 	// oldest first.
 	Series(projectID string, since time.Time, bucket UsageBucket) ([]UsageSeriesPoint, error)

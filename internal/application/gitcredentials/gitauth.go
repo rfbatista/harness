@@ -28,7 +28,7 @@ type liveSession struct {
 
 // resolve is what remote operations on repositoryID (with origin) use now.
 func (s *Service) resolve(repositoryID, origin string) (*ports.GitResolution, []*ports.StoredGitCredential, error) {
-	all, err := s.st.Credentials.List()
+	all, err := s.st.Credentials.List(context.TODO())
 	if err != nil {
 		return nil, nil, err
 	}
