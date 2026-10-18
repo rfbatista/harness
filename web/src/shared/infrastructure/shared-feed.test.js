@@ -61,6 +61,24 @@ function browserProfile() {
   const es = fakeEventSourceClass();
   const timers = manualTimers();
   const { api, posts } = fakeApi();
+  // One clock and one heartbeat for all tabs: beat() moves the clock on and
+  // runs every tab's interval once, frozen tabs' too (they check holding).
+  let clock = 0;
+  const intervals = new Map();
+  let nextInterval = 1;
+  const heartbeat = {
+    now: () => clock,
+    setInterval(fn) {
+      const id = nextInterval++;
+      intervals.set(id, fn);
+      return id;
+    },
+    clearInterval: (id) => intervals.delete(id),
+  };
+  const beat = (ms) => {
+    clock += ms;
+    for (const fn of [...intervals.values()]) fn();
+  };
   const tabs = [];
   function open() {
     const t = cross.tab();
@@ -72,7 +90,20 @@ function browserProfile() {
         es.instances.push(this);
       }
     }
-    const f = sharedFeed({ base: "/api", api, EventSource: TabEventSource, ...timers, locks: t.locks, BroadcastChannel: t.BroadcastChannel, window: t.window });
+    let frozen = false;
+    const f = sharedFeed({
+      base: "/api",
+      api,
+      EventSource: TabEventSource,
+      ...timers,
+      locks: t.locks,
+      BroadcastChannel: t.BroadcastChannel,
+      window: t.window,
+      now: heartbeat.now,
+      // A frozen tab's interval does not run.
+      setInterval: (fn, ms) => heartbeat.setInterval(() => frozen || fn(), ms),
+      clearInterval: heartbeat.clearInterval,
+    });
     const tab = {
       feed: f,
       follow: (path) => followerOn(f, path),
@@ -81,6 +112,14 @@ function browserProfile() {
         for (const s of mine.instances) s.closed = true;
       },
       streams: mine.instances,
+      freeze() {
+        frozen = true;
+        t.freeze();
+      },
+      thaw() {
+        frozen = false;
+        t.thaw();
+      },
     };
     tabs.push(tab);
     return tab;
@@ -92,7 +131,7 @@ function browserProfile() {
     return open[0];
   };
   const hello = (id = "st1") => stream().message({ stream: id });
-  return { open, tabs, es, timers, api, posts, openStreams, stream, hello };
+  return { open, tabs, es, timers, api, posts, openStreams, stream, hello, beat };
 }
 
 const P1 = "/events?project_id=p1";
@@ -261,4 +300,75 @@ test("a coalesced session output delta reaches every tab unchanged", async () =>
   b.stream().message({ path, data: delta });
   assert.deepEqual(a.messages, [delta]);
   assert.deepEqual(c.messages, [delta]);
+});
+
+// Holds the stream in one, followed from every tab, live on st1.
+async function threeLiveTabs() {
+  const b = browserProfile();
+  const [one, two, three] = [b.open(), b.open(), b.open()];
+  const z = one.follow(INBOX);
+  const a = two.follow(P1);
+  const c = three.follow(P1);
+  await flush();
+  b.hello();
+  await flush();
+  return { b, one, two, three, z, a, c };
+}
+
+test("a frozen stream-holding tab is replaced by exactly one tab, and every tab resyncs", async () => {
+  const { b, one, two, three, a, c } = await threeLiveTabs();
+  one.freeze();
+  for (let s = 0; s < 8; s += 2) b.beat(2000);
+  assert.equal(two.streams.length, 0, "eight seconds of silence is not enough");
+  for (let s = 0; s < 4; s += 2) b.beat(2000);
+  await flush();
+
+  const taken = [two, three].filter((t) => t.streams.length > 0);
+  assert.equal(taken.length, 1, "exactly one tab takes the stream over");
+  const fresh = taken[0].streams[0];
+  assert.equal(fresh.closed, false);
+  for (const f of [a, c]) assert.equal(f.statuses.at(-1), FeedStatus.PAUSED);
+
+  fresh.message({ stream: "st2" });
+  await flush();
+  for (const f of [a, c]) assert.deepEqual(f.statuses.slice(-3), [FeedStatus.PAUSED, FeedStatus.RESYNCED, FeedStatus.LIVE]);
+  fresh.message({ path: P1, data: { n: 1 } });
+  assert.deepEqual(a.messages, [{ n: 1 }]);
+  assert.deepEqual(c.messages, [{ n: 1 }]);
+  for (let s = 0; s < 20; s += 2) b.beat(2000);
+  assert.equal(b.es.instances.length, 2, "the new stream-holding tab answers, so no one takes over again");
+});
+
+test("a stream-holding tab that answers late but within the window is not replaced", async () => {
+  const { b, one, two, three } = await threeLiveTabs();
+  one.freeze();
+  for (let s = 0; s < 6; s += 2) b.beat(2000);
+  one.thaw();
+  for (let s = 0; s < 30; s += 2) b.beat(2000);
+  await flush();
+  assert.equal(b.es.instances.length, 1);
+  assert.equal(two.streams.length + three.streams.length, 0);
+});
+
+test("a deposed stream-holding tab that wakes up closes its stream, stops relaying, and resyncs through the new one", async () => {
+  const { b, one, two, three, z, a } = await threeLiveTabs();
+  const old = one.streams[0];
+  one.freeze();
+  for (let s = 0; s < 12; s += 2) b.beat(2000);
+  await flush();
+  const taken = [two, three].find((t) => t.streams.length > 0);
+  taken.streams[0].message({ stream: "st2" });
+  await flush();
+  assert.equal(b.openStreams().length, 2, "the frozen tab cannot close its stream yet");
+
+  one.thaw();
+  await flush();
+  assert.ok(old.closed, "it closes its stream as soon as it runs");
+  assert.equal(b.openStreams().length, 1);
+  old.message({ path: P1, data: { stale: true } });
+  assert.deepEqual(a.messages, [], "nothing more is relayed from the old stream");
+
+  assert.ok(b.posts.some((p) => p.stream === "st2" && p.path === INBOX), "the new stream-holding tab follows what the woken tab follows");
+  assert.deepEqual(z.statuses.slice(-3), [FeedStatus.PAUSED, FeedStatus.RESYNCED, FeedStatus.LIVE]);
+  assert.equal(one.streams.length, 1, "it does not open another stream");
 });

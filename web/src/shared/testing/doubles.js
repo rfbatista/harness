@@ -122,9 +122,11 @@ export function fakeXHRClass() {
  * Browser tabs of one profile, for code that shares work across tabs: each
  * tab() has its own Web Locks manager and BroadcastChannel, seeing the
  * others' as the browser would. A lock is granted in request order, released
- * when its callback's promise settles, taken over by `steal`, and dropped
- * with its tab when the tab closes (or crashes). A message posted on a
- * channel reaches every other open channel of that name, synchronously.
+ * when its callback's promise settles, taken over by `steal`, withdrawn by
+ * its `signal` while waiting, and dropped with its tab when the tab closes
+ * (or crashes). A message posted on a channel reaches every other open
+ * channel of that name, synchronously. A frozen tab runs nothing: what it
+ * would hear waits until it thaws.
  */
 export function fakeCrossTab() {
   const locks = new Map(); // name -> { held: entry|null, queue: entry[] }
@@ -153,15 +155,21 @@ export function fakeCrossTab() {
     settle();
     grant(entry.name);
   }
-  function abort(entry) {
-    const err = new Error("the lock was released");
+  function abortError() {
+    const err = new Error("the lock request was aborted");
     err.name = "AbortError";
-    entry.reject(err);
+    return err;
+  }
+  function abort(entry) {
+    entry.run(() => entry.reject(abortError()));
   }
 
   function tab() {
     const mine = new Set();
     let open = true;
+    let frozen = false;
+    const waiting = []; // what a frozen tab will run when it thaws
+    const run = (fn) => (frozen ? waiting.push(fn) : fn());
 
     const tabLocks = {
       request(name, options, callback) {
@@ -170,8 +178,17 @@ export function fakeCrossTab() {
         if (!l) locks.set(name, (l = { held: null, queue: [] }));
         return new Promise((resolve, reject) => {
           if (!open) return; // a closed tab runs nothing
-          const entry = { name, callback, resolve, reject, tab: mine };
+          if (options.steal && options.signal) return reject(Object.assign(new Error("steal with a signal"), { name: "NotSupportedError" }));
+          if (options.signal?.aborted) return reject(abortError());
+          const entry = { name, callback, resolve, reject, run };
           mine.add(entry);
+          options.signal?.addEventListener("abort", () => {
+            const i = l.queue.indexOf(entry);
+            if (i < 0) return; // granted already: a signal only withdraws a waiting request
+            l.queue.splice(i, 1);
+            mine.delete(entry);
+            reject(abortError());
+          });
           if (options.steal) {
             const held = l.held;
             l.held = null;
@@ -191,6 +208,7 @@ export function fakeCrossTab() {
         this.onmessage = null;
         this.closed = false;
         this.tabOpen = () => open;
+        this.run = run;
         channels.add(this);
       }
       postMessage(data) {
@@ -198,7 +216,7 @@ export function fakeCrossTab() {
         const copy = structuredClone(data);
         for (const c of [...channels]) {
           if (c === this || c.closed || !c.tabOpen() || c.name !== this.name) continue;
-          c.onmessage?.({ data: copy });
+          c.run(() => c.onmessage?.({ data: copy }));
         }
       }
       close() {
@@ -219,6 +237,15 @@ export function fakeCrossTab() {
       locks: tabLocks,
       BroadcastChannel: FakeBroadcastChannel,
       window,
+      /** The tab hangs: it keeps its locks but runs nothing. */
+      freeze() {
+        frozen = true;
+      },
+      /** The tab runs again, first what it missed. */
+      thaw() {
+        frozen = false;
+        for (const fn of waiting.splice(0)) fn();
+      },
       /** Closes the tab: `pagehide` runs first unless it crashed. Its locks go with it. */
       close({ crash = false } = {}) {
         if (!crash) for (const fn of listeners.get("pagehide") ?? []) fn({});

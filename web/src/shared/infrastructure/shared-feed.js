@@ -10,6 +10,12 @@
 // and it follows the union on the server, counting followers per path across
 // tabs, and relays every event and status to the tabs.
 //
+// A hung stream-holding tab keeps its lock, so the others check that it still
+// answers: each pings it, and one that hears nothing for SILENCE_MS takes the
+// lock from it. The ping is answered from the message handler, so a busy or
+// throttled background tab answers in time. A deposed tab that runs again
+// closes its stream and follows through the new stream-holding tab.
+//
 // It keeps feed.js's contract, so gateways cannot tell it from stream-feed.js.
 // A browser without Web Locks or BroadcastChannel gets a stream per tab, as
 // before.
@@ -18,6 +24,8 @@ import { FeedStatus } from "../domain/feed.js";
 import { streamFeed } from "./stream-feed.js";
 
 const NAME = "harness-page-event-stream";
+const PING_MS = 2_000;
+const SILENCE_MS = 10_000;
 
 /**
  * @param {{
@@ -26,6 +34,9 @@ const NAME = "harness-page-event-stream";
  *   locks?: LockManager | null,
  *   BroadcastChannel?: typeof globalThis.BroadcastChannel | null,
  *   window?: { addEventListener: (type: string, fn: () => void) => void },
+ *   now?: () => number,
+ *   setInterval?: typeof globalThis.setInterval,
+ *   clearInterval?: typeof globalThis.clearInterval,
  *   EventSource?: typeof globalThis.EventSource,
  *   setTimeout?: typeof globalThis.setTimeout,
  *   clearTimeout?: typeof globalThis.clearTimeout,
@@ -38,6 +49,9 @@ export function sharedFeed({
   locks = globalThis.navigator?.locks,
   BroadcastChannel = globalThis.BroadcastChannel,
   window = globalThis,
+  now = () => Date.now(),
+  setInterval = globalThis.setInterval.bind(globalThis),
+  clearInterval = globalThis.clearInterval.bind(globalThis),
   EventSource = globalThis.EventSource,
   setTimeout = globalThis.setTimeout.bind(globalThis),
   clearTimeout = globalThis.clearTimeout.bind(globalThis),
@@ -51,8 +65,10 @@ export function sharedFeed({
 
   /** What this tab follows: path -> its followers and last status. */
   const local = new Map();
-  let requested = false;
+  let waiting = null; // the AbortController of this tab's queued lock request
+  let heartbeat = null;
   let holder = null; // the stream-holding tab, once heard from
+  let pingedAt = null; // when this tab pinged the stream-holding tab without an answer yet
 
   // A follower that throws must not keep the others from hearing.
   function each(entry, fn) {
@@ -147,25 +163,72 @@ export function sharedFeed({
   }
 
   function hold() {
+    waiting = null;
     holding = { stream: ownStream(), relays: new Map() };
     holder = me;
+    pingedAt = null;
     handover();
     post({ type: "holder" });
     relayAll(me, [...local.keys()]);
-    // Held until the tab goes away: the browser releases it then.
+    // Held until the tab goes away (the browser releases it then) or another
+    // tab takes it over.
     return new Promise(() => {});
   }
 
+  /** Another tab holds the stream now: close this one and follow through it. */
+  function stepDown() {
+    if (!holding) return;
+    const { relays } = holding;
+    holding = null;
+    for (const r of relays.values()) r.stop();
+    handover();
+    post({ type: "paths", paths: [...local.keys()] });
+    requestLock();
+  }
+
+  function lockRequest(options) {
+    let granted = false;
+    locks
+      .request(NAME, options, () => {
+        granted = true;
+        return hold();
+      })
+      .catch(() => {
+        // Taken over by another tab. A request this tab withdrew to steal was
+        // never granted, and says nothing about the lock it holds now.
+        if (granted) stepDown();
+      });
+  }
+
   function requestLock() {
-    if (requested) return;
-    requested = true;
-    locks.request(NAME, hold).catch(() => {});
+    if (!heartbeat) heartbeat = setInterval(check, PING_MS);
+    if (holding || waiting) return;
+    waiting = new AbortController();
+    lockRequest({ signal: waiting.signal });
+  }
+
+  /** Pings the stream-holding tab, and takes over from one that stays silent. */
+  function check() {
+    if (holding || local.size === 0) return;
+    if (pingedAt === null) {
+      pingedAt = now();
+      post({ type: "ping" });
+      return;
+    }
+    if (now() - pingedAt < SILENCE_MS) return;
+    pingedAt = null;
+    waiting?.abort();
+    waiting = null;
+    lockRequest({ steal: true });
   }
 
   channel.onmessage = ({ data: msg }) => {
     if (!msg || msg.from === me) return;
+    if (holding && msg.type === "holder") stepDown(); // it took the lock while this tab was frozen
     if (holding) {
       switch (msg.type) {
+        case "ping":
+          return post({ type: "pong" });
         case "follow":
           return relay(msg.from, msg.path);
         case "unfollow":
@@ -177,7 +240,10 @@ export function sharedFeed({
       }
       return;
     }
-    if (msg.type === "holder" || msg.type === "event" || msg.type === "status") holder = msg.from;
+    if (["holder", "event", "status", "pong"].includes(msg.type)) {
+      holder = msg.from;
+      pingedAt = null;
+    }
     switch (msg.type) {
       case "holder":
         handover();
