@@ -130,9 +130,19 @@ func TestShimsStoreWhatCommandsDoInTheShell(t *testing.T) {
 	a.ok(t, "more\n", "tee -a task/docs/notes.md >/dev/null")
 	wantDocument(t, e.document(notes), "Notes", domain.DocumentFormatMarkdown, domain.DocumentScopeTask, "# Notes\nmore\n")
 
-	// mv into a folder changes scope; mv within one renames.
-	a.ok(t, "", "mv task/docs/plan.md project/docs/")
-	wantDocument(t, e.document(doc.ID), "Plan", domain.DocumentFormatMarkdown, domain.DocumentScopeProject, "# Plan\n\nfinal\n")
+	// mv to project/docs is refused and leaves the file in place; once the
+	// person has moved it, mv within project/docs renames.
+	if r := a.run(t, "", "mv task/docs/plan.md project/docs/"); r.code != 1 || !strings.HasPrefix(r.stderr, "PROJECT_MOVE_DENIED: ") {
+		t.Fatalf("mv to project/docs = %+v, want exit 1 with PROJECT_MOVE_DENIED", r)
+	}
+	if err := hasFile(a.shell, "task/docs/plan.md", "# Plan\n\nfinal\n", doc.ID, "task", ""); err != nil {
+		t.Fatal(err)
+	}
+	wantDocument(t, e.document(doc.ID), "Plan", domain.DocumentFormatMarkdown, domain.DocumentScopeTask, "# Plan\n\nfinal\n")
+	e.post("set_document_scope", map[string]string{"document_id": doc.ID, "scope": "project"}, nil)
+	eventually(t, "the plan in project/docs", func() error {
+		return hasFile(a.shell, "project/docs/plan.md", "# Plan\n\nfinal\n", doc.ID, "project", "")
+	})
 	a.ok(t, "", "mv -f project/docs/plan.md project/docs/the-plan.md")
 	if err := hasFile(a.shell, "project/docs/the-plan.md", "# Plan\n\nfinal\n", doc.ID, "project", ""); err != nil {
 		t.Fatal(err)

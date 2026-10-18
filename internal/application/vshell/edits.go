@@ -185,6 +185,10 @@ func refuseNotOnTask(rel string) ports.ShellAnswer {
 	return refuse("NOT_ON_TASK", rel+" cannot move to task scope: the document is not linked to this task")
 }
 
+func refuseProjectMove(rel string) ports.ShellAnswer {
+	return refuse("PROJECT_MOVE_DENIED", rel+` cannot move to project scope: a person moves documents to project level ("Move to project" on the task's documents page); nothing was written`)
+}
+
 // refuseUnstored answers a write the harness would not store, so it is not
 // made at all rather than silently lost.
 func refuseUnstored(rel string, a area) ports.ShellAnswer {
@@ -387,13 +391,16 @@ func (s *Service) checkDocsAt(sh *shell, rel string) ports.ShellAnswer {
 	return allow
 }
 
-// checkMove: between task/docs and project/docs a document changes scope,
-// to task scope only when linked to this task; within a folder it is only
-// renamed.
+// checkMove: from project/docs to task/docs a document changes scope, only
+// when linked to this task; to project/docs it never does, a person moves
+// it there; within a folder it is only renamed.
 func (s *Service) checkMove(sh *shell, src, dst string) ports.ShellAnswer {
 	for _, row := range sh.under(src, ports.ShellDocument) {
 		if ans := s.stale(sh, row); !ans.Allow {
 			return ans
+		}
+		if classify(dst) == projDocs && row.Scope != string(domain.DocumentScopeProject) {
+			return refuseProjectMove(row.Path)
 		}
 		if classify(dst) == taskDocs && row.Scope != string(domain.DocumentScopeTask) && !s.onTask(sh, row.ID) {
 			return refuseNotOnTask(row.Path)
@@ -569,8 +576,9 @@ func (s *Service) commitDocRemove(sh *shell, rel string) ports.ShellAnswer {
 }
 
 // commitMove moves the documents under src to dst, once they are there:
-// scope follows the folder, format the extension; a document the move
-// wrote over is deleted.
+// scope follows the folder back to task/docs, never to project/docs (the
+// file is put back), format the extension; a document the move wrote over
+// is deleted.
 func (s *Service) commitMove(sh *shell, src, dst string) ports.ShellAnswer {
 	rows := sh.under(src, ports.ShellDocument)
 	if len(rows) == 0 {
@@ -593,7 +601,11 @@ func (s *Service) commitMove(sh *shell, src, dst string) ports.ShellAnswer {
 		}
 		scope := classify(to).scope()
 		if scope != d.Scope {
-			if scope == domain.DocumentScopeTask && !s.onTask(sh, d.ID) {
+			if scope == domain.DocumentScopeProject {
+				_ = os.Rename(sh.abs(to), sh.abs(row.Path))
+				return refuseProjectMove(row.Path)
+			}
+			if !s.onTask(sh, d.ID) {
 				delete(sh.files, row.Path)
 				_ = os.Remove(sh.abs(to))
 				s.refreshLocked(sh)

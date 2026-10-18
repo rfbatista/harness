@@ -42,6 +42,10 @@ Comments are named <yyyymmdd-hhmmss>-<author>-<short id>.md. A file you
 create in task/comments is your comment. You can edit or delete only your
 own; the others' are read-only (mode 0444), like every read-only path above.
 
+A person moves documents to project level; mv a document from task/docs
+to project/docs is refused. mv one from project/docs to task/docs makes it
+this task's, when it is linked to this task.
+
 A file you create, change or remove in task/designs publishes, revises or
 unpublishes a design; mv it to project/designs to make it a project asset,
 and back to make it the task's again. Folders under designs are kept.
@@ -57,6 +61,7 @@ A refusal starts with its code:
     READ_ONLY           the path is read-only
     COMMENT_NOT_YOURS   the comment is someone else's
     NOT_ON_TASK         the document is not linked to this task, so it cannot move to task/docs
+    PROJECT_MOVE_DENIED a person moves documents to project level; ask them to, mv back to task/docs still works
     NOT_STORED          the path is outside the folders the harness stores
     REDIRECT_DENIED     shell redirects (>, >>, &>) into this folder are not stored: use Write/Edit or tee
     SHELL_UNAVAILABLE   the harness could not be reached: redo the change once it is back

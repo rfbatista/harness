@@ -252,16 +252,30 @@ func TestDocumentFilesAreChangedMovedAndRemovedFromTheShell(t *testing.T) {
 	e.shellOp(a, "mv", func() { moveShellFile(t, a, "task/docs/the-plan.md", "task/docs/the-plan.txt") }, "task/docs/the-plan.md", "task/docs/the-plan.txt")
 	wantDocument(t, e.document(doc.ID), "Plan", domain.DocumentFormatText, domain.DocumentScopeTask, v2)
 
-	// To project/docs: project scope, in every shell of the project.
-	e.shellOp(a, "mv", func() { moveShellFile(t, a, "task/docs/the-plan.txt", "project/docs/the-plan.txt") }, "task/docs/the-plan.txt", "project/docs/the-plan.txt")
-	wantDocument(t, e.document(doc.ID), "Plan", domain.DocumentFormatText, domain.DocumentScopeProject, v2)
-	if err := hasFile(a.shell, "project/docs/the-plan.txt", v2, doc.ID, "project", ""); err != nil {
+	// To project/docs: refused; a person moves documents to project level.
+	if got, _ := e.shellCall(a, "check", "mv", "task/docs/the-plan.txt", "project/docs/the-plan.txt"); got != projectMoveDenied("task/docs/the-plan.txt") {
+		t.Fatalf("check mv to project/docs = %+v", got)
+	}
+	// Moved anyway, the commit is refused too and the file put back.
+	moveShellFile(t, a, "task/docs/the-plan.txt", "project/docs/the-plan.txt")
+	if got, _ := e.shellCall(a, "commit", "mv", "task/docs/the-plan.txt", "project/docs/the-plan.txt"); got != projectMoveDenied("task/docs/the-plan.txt") {
+		t.Fatalf("commit mv to project/docs = %+v", got)
+	}
+	wantDocument(t, e.document(doc.ID), "Plan", domain.DocumentFormatText, domain.DocumentScopeTask, v2)
+	if err := hasFile(a.shell, "task/docs/the-plan.txt", v2, doc.ID, "task", ""); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := os.Stat(filepath.Join(a.shell, "project", "docs", "the-plan.txt")); err == nil {
+		t.Fatal("the refused move left the plan in project/docs")
+	}
+
+	// The person moves it: project scope, in every shell of the project.
+	e.post("set_document_scope", map[string]string{"document_id": doc.ID, "scope": "project"}, nil)
+	eventually(t, "the moved plan in A", func() error { return hasFile(a.shell, "project/docs/plan.txt", v2, doc.ID, "project", "") })
 	eventually(t, "the moved plan in B", func() error { return hasFile(b.shell, "project/docs/plan.txt", v2, doc.ID, "project", "") })
 
-	// And back: it is linked to this task, so it may.
-	e.shellOp(a, "mv", func() { moveShellFile(t, a, "project/docs/the-plan.txt", "task/docs/the-plan.txt") }, "project/docs/the-plan.txt", "task/docs/the-plan.txt")
+	// Back to task/docs: it is linked to this task, so it may.
+	e.shellOp(a, "mv", func() { moveShellFile(t, a, "project/docs/plan.txt", "task/docs/the-plan.txt") }, "project/docs/plan.txt", "task/docs/the-plan.txt")
 	wantDocument(t, e.document(doc.ID), "Plan", domain.DocumentFormatText, domain.DocumentScopeTask, v2)
 	eventually(t, "the plan gone from B", func() error { return lacks(b.shell, doc.ID, "project/docs/plan.txt") })
 
@@ -272,6 +286,12 @@ func TestDocumentFilesAreChangedMovedAndRemovedFromTheShell(t *testing.T) {
 		}
 	}, "task/docs/drafts")
 
+	// A folder holding a document cannot move to project/docs either.
+	e.shellOp(a, "write", func() { writeShellFile(t, a, "task/docs/drafts/note.md", "# Note\n") }, "task/docs/drafts/note.md")
+	if got, _ := e.shellCall(a, "check", "mv", "task/docs/drafts", "project/docs/drafts"); got != projectMoveDenied("task/docs/drafts/note.md") {
+		t.Fatalf("check mv a folder to project/docs = %+v", got)
+	}
+
 	// rm deletes the document, and it leaves every shell.
 	e.shellOp(a, "rm", func() { removeShellFile(t, a, "task/docs/the-plan.txt") }, "task/docs/the-plan.txt")
 	if d := e.document(doc.ID); d != nil {
@@ -281,6 +301,12 @@ func TestDocumentFilesAreChangedMovedAndRemovedFromTheShell(t *testing.T) {
 		t.Fatal(err)
 	}
 	eventually(t, "the removed plan gone from the peer", func() error { return lacks(peer.shell, doc.ID, "task/docs/plan.txt") })
+}
+
+// projectMoveDenied is the refusal of moving the document at rel to project
+// level.
+func projectMoveDenied(rel string) shellAnswer {
+	return shellAnswer{Code: "PROJECT_MOVE_DENIED", Reason: "PROJECT_MOVE_DENIED: " + rel + ` cannot move to project scope: a person moves documents to project level ("Move to project" on the task's documents page); nothing was written`}
 }
 
 // A write made on a copy the harness has changed since is refused with
