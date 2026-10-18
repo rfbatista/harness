@@ -7,7 +7,7 @@
 
 import { describeError } from "../../../../shared/presentation/errors.js";
 import { readSeed } from "../../../../shared/presentation/seed.js";
-import { canRemove, installLabel, stateLabel, stateTone, versionsText } from "../../domain/installation.js";
+import { canRemove, installLabel, notInstalledNotice, stateLabel, stateTone, versionsText } from "../../domain/installation.js";
 
 const POLL_MS = 500;
 
@@ -130,6 +130,7 @@ function toRow(s) {
     versions: versionsText(s),
     installLabel: installLabel(s),
     canRemove: canRemove(s),
+    notInstalled: notInstalledNotice(s),
     removing: false,
   };
 }

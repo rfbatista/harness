@@ -17,6 +17,7 @@ export function toSaver(dto) {
     path: dto.installed?.path ?? "",
     progress: dto.progress ?? "",
     error: dto.error ? { code: dto.error.code ?? "", message: dto.error.message ?? "" } : null,
+    onSomewhere: dto.on_somewhere === true,
   };
 }
 

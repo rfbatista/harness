@@ -89,6 +89,10 @@ func (s *Service) ListTokenSavers(context.Context) (*domain.TokenSaverList, erro
 	if err != nil {
 		return nil, err
 	}
+	on, err := s.saversOn()
+	if err != nil {
+		return nil, err
+	}
 	list := &domain.TokenSaverList{Platform: t.Platform.String(), Supported: t.Platform.Supported()}
 	if !list.Supported {
 		list.Unsupported = domain.UnsupportedPlatformMessage(t.Platform)
@@ -96,7 +100,9 @@ func (s *Service) ListTokenSavers(context.Context) (*domain.TokenSaverList, erro
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	for _, rel := range t.Releases {
-		list.Savers = append(list.Savers, t.status(rel, installed[rel.Saver]))
+		st := t.status(rel, installed[rel.Saver])
+		st.OnSomewhere = on[rel.Saver]
+		list.Savers = append(list.Savers, st)
 	}
 	return list, nil
 }
@@ -128,6 +134,10 @@ func (s *Service) InstallTokenSaver(_ context.Context, saver domain.TokenSaver) 
 	if err != nil {
 		return nil, err
 	}
+	on, err := s.saversOn()
+	if err != nil {
+		return nil, err
+	}
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	if job := t.jobs[saver]; job == nil || !job.running {
@@ -136,6 +146,7 @@ func (s *Service) InstallTokenSaver(_ context.Context, saver domain.TokenSaver) 
 		go t.install(rel, asset, job)
 	}
 	st := t.status(rel, installed[saver])
+	st.OnSomewhere = on[saver]
 	return &st, nil
 }
 
@@ -146,6 +157,10 @@ func (s *Service) RemoveTokenSaver(_ context.Context, saver domain.TokenSaver) (
 		return nil, err
 	}
 	rel, err := t.release(saver)
+	if err != nil {
+		return nil, err
+	}
+	on, err := s.saversOn()
 	if err != nil {
 		return nil, err
 	}
@@ -162,7 +177,25 @@ func (s *Service) RemoveTokenSaver(_ context.Context, saver domain.TokenSaver) (
 		return nil, err
 	}
 	st := t.status(rel, nil)
+	st.OnSomewhere = on[saver]
 	return &st, nil
+}
+
+// saversOn are the savers some project, repository or task has on: those
+// whose sessions somewhere ask for them. Without activations, none.
+func (s *Service) saversOn() (map[domain.TokenSaver]bool, error) {
+	out := map[domain.TokenSaver]bool{}
+	if s.activations == nil {
+		return out, nil
+	}
+	list, err := s.activations.SaversOn()
+	if err != nil {
+		return nil, err
+	}
+	for _, saver := range list {
+		out[saver] = true
+	}
+	return out, nil
 }
 
 func (t *tokenSavers) release(saver domain.TokenSaver) (TokenSaverRelease, error) {

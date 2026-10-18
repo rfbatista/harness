@@ -4,7 +4,7 @@ import { assert, file, test } from "../../../shared/testing/test.js";
 import { needsYou } from "../domain/session.js";
 import { makeSession, T0 } from "../testing/fixtures.js";
 import { makeCheck, makeMessage } from "../testing/channel-fixtures.js";
-import { agentLabel, delegateOption, reportView, runsAs, startedBy, statusCheckView, statusView, summary, terminalView, toDetailView, toGroupViews } from "./view.js";
+import { agentLabel, delegateOption, reportView, runsAs, startedBy, statusCheckView, statusView, summary, terminalView, toDetailView, toGroupViews, tokenSaversView } from "./view.js";
 
 file("sessions/presentation/view");
 
@@ -191,4 +191,12 @@ test("a delegate as a Conversation filter option: who, on what, its word and dot
   assert.equal(delegateOption(makeSession({ status: "idle" }), names).tone, "attention");
   assert.equal(delegateOption(makeSession({ status: "failed" }), names).tone, "danger");
   assert.deepEqual([delegateOption(makeSession({ status: "done", task: "" }), names).tone, delegateOption(makeSession({ status: "done", task: "" }), names).label.endsWith("Untitled session")], ["", true]);
+});
+
+test("the token savers a session runs with, and those on for it but not installed", () => {
+  assert.deepEqual(tokenSaversView(makeSession()), { tokenSavers: "", tokenSaversMissing: "", tokenSaversMissingTitle: "" });
+  const v = tokenSaversView(makeSession({ tokenSavers: ["rtk", "caveman"], tokenSaversNotInstalled: ["codegraph"] }));
+  assert.equal(v.tokenSavers, "rtk · caveman");
+  assert.equal(v.tokenSaversMissing, "codegraph not installed");
+  assert.equal(v.tokenSaversMissingTitle, "codegraph was on for this session but not installed, so it runs without it. Install it on the Token savers page.");
 });

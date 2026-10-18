@@ -205,7 +205,30 @@ func ssrRow(r Row) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 13, "</span></span></li>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 13, "</span> ")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		if r.NotInstalled != "" {
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 14, "<div class=\"[ banner ]\" data-tone=\"attention\" data-active-not-installed><span>")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			var templ_7745c5c3_Var10 string
+			templ_7745c5c3_Var10, templ_7745c5c3_Err = templ.JoinStringErrs(r.NotInstalled)
+			if templ_7745c5c3_Err != nil {
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `tokensavers/page.templ`, Line: 73, Col: 98}
+			}
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var10))
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 15, "</span></div>")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 16, "</span></li>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -231,12 +254,12 @@ func liveRow() templ.Component {
 			}()
 		}
 		ctx = templ.InitializeContext(ctx)
-		templ_7745c5c3_Var10 := templ.GetChildren(ctx)
-		if templ_7745c5c3_Var10 == nil {
-			templ_7745c5c3_Var10 = templ.NopComponent
+		templ_7745c5c3_Var11 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var11 == nil {
+			templ_7745c5c3_Var11 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 14, "<li class=\"[ row ] [ token-saver ]\" style=\"--row-columns: minmax(0, 1fr) auto\" x-bind:data-saver=\"s.saver\" x-bind:data-state=\"s.state\"><span class=\"[ flow ] [ flow-space-3xs pad-block-xs ]\" style=\"min-inline-size: 0\"><span class=\"[ cluster ] [ gutter-xs ]\"><span class=\"[ title ] [ weight-medium font-mono ]\" x-text=\"s.saver\"></span> <span class=\"[ badge ]\" x-bind:data-tone=\"s.tone || null\" x-text=\"s.stateLabel\"></span></span> <span class=\"[ text-sm color-ink-muted ]\" x-text=\"s.summary\"></span> <span class=\"[ font-mono text-xs color-ink-faint ]\" x-text=\"s.versions\"></span><template x-if=\"s.progress\"><span class=\"[ text-sm ]\" role=\"status\" x-text=\"s.progress\"></span></template><template x-if=\"s.error\"><div class=\"[ banner ]\" data-tone=\"danger\" role=\"alert\"><div class=\"[ flow ] [ flow-space-3xs grow ]\"><span x-text=\"s.error.message\"></span> <span class=\"[ code ]\"><span x-text=\"s.error.code\"></span> · <span x-text=\"s.error.next\"></span></span></div></div></template></span> <span class=\"[ cluster ] [ gutter-xs ]\"><template x-if=\"s.installLabel\"><button type=\"button\" class=\"[ button ]\" data-size=\"sm\" data-variant=\"primary\" x-on:click=\"install(s.saver)\" x-text=\"s.installLabel\"></button></template><template x-if=\"s.state === 'installing'\"><button type=\"button\" class=\"[ button ]\" data-size=\"sm\" disabled aria-busy=\"true\">Installing…</button></template><template x-if=\"s.canRemove\"><button type=\"button\" class=\"[ button ]\" data-size=\"sm\" data-variant=\"ghost\" x-bind:disabled=\"s.removing\" x-bind:aria-busy=\"s.removing\" x-on:click=\"remove(s.saver)\">Remove</button></template></span></li>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 17, "<li class=\"[ row ] [ token-saver ]\" style=\"--row-columns: minmax(0, 1fr) auto\" x-bind:data-saver=\"s.saver\" x-bind:data-state=\"s.state\"><span class=\"[ flow ] [ flow-space-3xs pad-block-xs ]\" style=\"min-inline-size: 0\"><span class=\"[ cluster ] [ gutter-xs ]\"><span class=\"[ title ] [ weight-medium font-mono ]\" x-text=\"s.saver\"></span> <span class=\"[ badge ]\" x-bind:data-tone=\"s.tone || null\" x-text=\"s.stateLabel\"></span></span> <span class=\"[ text-sm color-ink-muted ]\" x-text=\"s.summary\"></span> <span class=\"[ font-mono text-xs color-ink-faint ]\" x-text=\"s.versions\"></span><template x-if=\"s.notInstalled\"><div class=\"[ banner ]\" data-tone=\"attention\" data-active-not-installed><span x-text=\"s.notInstalled\"></span></div></template><template x-if=\"s.progress\"><span class=\"[ text-sm ]\" role=\"status\" x-text=\"s.progress\"></span></template><template x-if=\"s.error\"><div class=\"[ banner ]\" data-tone=\"danger\" role=\"alert\"><div class=\"[ flow ] [ flow-space-3xs grow ]\"><span x-text=\"s.error.message\"></span> <span class=\"[ code ]\"><span x-text=\"s.error.code\"></span> · <span x-text=\"s.error.next\"></span></span></div></div></template></span> <span class=\"[ cluster ] [ gutter-xs ]\"><template x-if=\"s.installLabel\"><button type=\"button\" class=\"[ button ]\" data-size=\"sm\" data-variant=\"primary\" x-on:click=\"install(s.saver)\" x-text=\"s.installLabel\"></button></template><template x-if=\"s.state === 'installing'\"><button type=\"button\" class=\"[ button ]\" data-size=\"sm\" disabled aria-busy=\"true\">Installing…</button></template><template x-if=\"s.canRemove\"><button type=\"button\" class=\"[ button ]\" data-size=\"sm\" data-variant=\"ghost\" x-bind:disabled=\"s.removing\" x-bind:aria-busy=\"s.removing\" x-on:click=\"remove(s.saver)\">Remove</button></template></span></li>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

@@ -81,6 +81,12 @@ type Session struct {
 	// when the conversation does, e.g. after /clear; the CLI's SessionStart hook
 	// reports it.
 	ClaudeSessionID string `json:"claude_session_id,omitempty"`
+	// TokenSavers are the session's active savers: resolved on and installed
+	// when it started. TokenSaversNotInstalled resolved on but were not
+	// installed, so it runs without them. Both are fixed at start (ADR 0015):
+	// a resume runs with the same set.
+	TokenSavers             []TokenSaver `json:"token_savers,omitempty"`
+	TokenSaversNotInstalled []TokenSaver `json:"token_savers_not_installed,omitempty"`
 	// Resumable says a resume call would be accepted now; ResumeBlocked is the
 	// error code it would answer otherwise. Derived on read, never stored.
 	Resumable     bool      `json:"resumable"`

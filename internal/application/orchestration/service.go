@@ -118,6 +118,9 @@ type Service struct {
 	// rm, touch, mkdir) link to, first on its PATH; they call the session's
 	// SessionShellURL. Empty: sessions get no shims.
 	ShimBinary string
+	// TokenSavers says which token savers a session runs with, when it is
+	// prepared (ADR 0015). Nil: sessions run with none.
+	TokenSavers ports.SessionTokenSavers
 
 	// updates feeds the task-update turns to the courier, one at a time;
 	// deliverUpdate replaces the courier in tests.
@@ -247,6 +250,9 @@ func (s *Service) Start(ctx context.Context, req StartRequest) (*domain.Session,
 		Model:        req.ModelOverride,
 		Status:       domain.SessionStarting,
 		AutoRun:      autoRun,
+
+		TokenSavers:             p.savers.active,
+		TokenSaversNotInstalled: p.savers.notInstalled,
 	})
 	if err != nil {
 		_ = sess.Stop()
@@ -299,6 +305,7 @@ type prepared struct {
 	permission llmkit.PermissionMode
 	cleanup    func() // removes the materialized skill plugin dir and the git directory; nil if none
 	envFile    string // the session's git env file, for login shells; "" without GitAuth
+	savers     sessionSavers
 }
 
 // prepare validates a start request, provisions the session's worktree and
@@ -373,6 +380,7 @@ func (s *Service) prepare(in prepareInput) (*prepared, error) {
 		_ = s.workspaces.Discard(ws.ID)
 		return nil, err
 	}
+	savers := s.withTokenSavers(in, repo.RootDir, ws.Path, &cfg)
 	return &prepared{
 		cfg:        cfg,
 		ws:         ws,
@@ -380,6 +388,7 @@ func (s *Service) prepare(in prepareInput) (*prepared, error) {
 		permission: permission,
 		cleanup:    cleanup,
 		envFile:    envFile,
+		savers:     savers,
 	}, nil
 }
 

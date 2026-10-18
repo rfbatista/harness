@@ -533,6 +533,7 @@ func newOrchestrationService(
 		return base + httpapi.SessionShellPath(sessionID)
 	}
 	svc.ShimBinary = cfg.ShimBinary
+	svc.TokenSavers = cat.Capabilities
 	svc.Transcripts = transcripts
 	svc.TranscriptReader = transcriptReader
 	svc.Terminals = terminals
