@@ -23,11 +23,11 @@ var _ ports.WorktreeManager = (*WorktreeManager)(nil)
 // WorktreeManager creates and removes git worktrees by invoking git. Each
 // run is bounded: worktree changes by the worktree deadline, reads by the
 // read deadline (see Deadlines).
-type WorktreeManager struct{ d Deadlines }
+type WorktreeManager struct{ d config }
 
 // NewWorktreeManager returns a new git worktree manager.
 func NewWorktreeManager(opts ...Option) *WorktreeManager {
-	return &WorktreeManager{d: newDeadlines(opts)}
+	return &WorktreeManager{d: newConfig(opts)}
 }
 
 // Add creates a worktree at path with a new branch cut from baseRef, which may
@@ -113,7 +113,7 @@ func (w *WorktreeManager) ListBranches(repoRoot string) ([]domain.GitBranch, err
 func (w *WorktreeManager) branchExists(repoRoot, branch string) (bool, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), w.d.read())
 	defer cancel()
-	err := cut(ctx, "show-ref", gitCmd(ctx, repoRoot, "show-ref", "--verify", "--quiet", "refs/heads/"+branch).Run())
+	err := cut(ctx, "show-ref", w.d.gitCmd(ctx, repoRoot, "show-ref", "--verify", "--quiet", "refs/heads/"+branch).Run())
 	if timedOut(err) {
 		return false, err
 	}
@@ -126,7 +126,7 @@ func (w *WorktreeManager) branchExists(repoRoot, branch string) (bool, error) {
 func (w *WorktreeManager) run(dir string, args ...string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), w.d.worktree())
 	defer cancel()
-	cmd := gitCmd(ctx, dir, args...)
+	cmd := w.d.gitCmd(ctx, dir, args...)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {

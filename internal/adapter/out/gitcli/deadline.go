@@ -28,27 +28,52 @@ type Deadlines struct {
 	Read     time.Duration
 }
 
-// Option configures an adapter's Deadlines.
-type Option func(*Deadlines)
+// config is how an adapter runs git: which binary, and how long each run
+// may take.
+type config struct {
+	Deadlines
+	// git is the git binary each run starts; "" runs "git" from PATH.
+	git string
+}
+
+// Option configures an adapter's git runs.
+type Option func(*config)
 
 // WithWorktreeDeadline bounds each worktree add, remove and prune (and branch
 // delete) at d. Zero or less keeps DefaultWorktreeDeadline.
 func WithWorktreeDeadline(d time.Duration) Option {
-	return func(ds *Deadlines) { ds.Worktree = d }
+	return func(c *config) { c.Worktree = d }
 }
 
 // WithReadDeadline bounds each read-only git run at d. Zero or less keeps
 // DefaultReadDeadline.
 func WithReadDeadline(d time.Duration) Option {
-	return func(ds *Deadlines) { ds.Read = d }
+	return func(c *config) { c.Read = d }
 }
 
-func newDeadlines(opts []Option) Deadlines {
-	var d Deadlines
+// WithGit runs path as git (see ResolveGit). "" keeps "git", looked up on
+// PATH at each run.
+func WithGit(path string) Option {
+	return func(c *config) { c.git = path }
+}
+
+func newConfig(opts []Option) config {
+	var c config
 	for _, o := range opts {
-		o(&d)
+		o(&c)
 	}
-	return d
+	return c
+}
+
+// bin is the git binary to start.
+func (c config) bin() string { return gitBin(c.git) }
+
+// gitBin is path, or "git" when path is "".
+func gitBin(path string) string {
+	if path == "" {
+		return "git"
+	}
+	return path
 }
 
 func (d Deadlines) worktree() time.Duration {

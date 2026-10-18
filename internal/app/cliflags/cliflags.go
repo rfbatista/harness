@@ -32,6 +32,7 @@ func Parse(fs *flag.FlagSet, args []string, getenv Getenv) (app.Config, error) {
 	slowRequestThreshold := fs.Duration("http.slow-request-threshold", envDuration(getenv, "HTTP_SLOW_REQUEST_THRESHOLD", httpapi.DefaultSlowRequestThreshold), "log every HTTP request slower than this as a slow request, with its query count")
 	gitWorktreeDeadline := fs.Duration("git.worktree-deadline", envDuration(getenv, "CODING_POOL_GIT_WORKTREE_DEADLINE", gitcli.DefaultWorktreeDeadline), "how long one git worktree add, remove or prune may run before it is killed and its operation fails")
 	gitReadDeadline := fs.Duration("git.read-deadline", envDuration(getenv, "CODING_POOL_GIT_READ_DEADLINE", gitcli.DefaultReadDeadline), "how long one read-only git run may take before it is killed and its operation fails")
+	gitBin := fs.String("git.bin", envOr(getenv, "CODING_POOL_GIT_BIN", ""), "the git binary to run; empty uses the first git on PATH, or the real git behind macOS's /usr/bin/git shim")
 	devMode := fs.Bool("dev", envBool(getenv, "DEV_MODE", false), "proxy ui://designer to the Vite dev server (run 'make web-dev' separately)")
 	claudeBin := fs.String("claude.bin", envOr(getenv, "CLAUDE_BIN", "claude"), "path to the claude CLI binary")
 	apiToken := fs.String("api.token", envOr(getenv, "CODING_POOL_TOKEN", ""), "bearer token required on /api (but /api/health); empty leaves the API open")
@@ -59,6 +60,7 @@ func Parse(fs *flag.FlagSet, args []string, getenv Getenv) (app.Config, error) {
 		DBSlowThreshold:     *dbSlowThreshold,
 		GitWorktreeDeadline: *gitWorktreeDeadline,
 		GitReadDeadline:     *gitReadDeadline,
+		GitBin:              *gitBin,
 		DevMode:             *devMode,
 		Root:                root,
 		ClaudeBin:           *claudeBin,

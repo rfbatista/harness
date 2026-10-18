@@ -55,10 +55,10 @@ var _ ports.GitExcludes = Excludes{}
 
 // Excludes is ports.GitExcludes over Exclude, its git runs bounded by the
 // read deadline.
-type Excludes struct{ d Deadlines }
+type Excludes struct{ d config }
 
 // NewExcludes returns the adapter.
-func NewExcludes(opts ...Option) Excludes { return Excludes{d: newDeadlines(opts)} }
+func NewExcludes(opts ...Option) Excludes { return Excludes{d: newConfig(opts)} }
 
 func (x Excludes) Exclude(root, rel, what string) error { return x.d.exclude(root, rel, what) }
 
@@ -66,9 +66,9 @@ func (x Excludes) Exclude(root, rel, what string) error { return x.d.exclude(roo
 // repository's info/exclude, under a comment saying what it is, unless git
 // already ignores it. A directory's rel ends in "/". Its git runs are bounded
 // by DefaultReadDeadline.
-func Exclude(root, rel, what string) error { return Deadlines{}.exclude(root, rel, what) }
+func Exclude(root, rel, what string) error { return config{}.exclude(root, rel, what) }
 
-func (d Deadlines) exclude(root, rel, what string) error {
+func (d config) exclude(root, rel, what string) error {
 	ignored, err := d.gitOK(context.Background(), root, "check-ignore", "-q", "--", rel)
 	if err != nil {
 		return err

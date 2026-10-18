@@ -15,11 +15,11 @@ var _ ports.RepositoryFinder = (*RepositoryFinder)(nil)
 
 // RepositoryFinder walks a directory for git checkouts and reads their
 // origin remote with git, each run bounded by the read deadline.
-type RepositoryFinder struct{ d Deadlines }
+type RepositoryFinder struct{ d config }
 
 // NewRepositoryFinder returns the finder.
 func NewRepositoryFinder(opts ...Option) *RepositoryFinder {
-	return &RepositoryFinder{d: newDeadlines(opts)}
+	return &RepositoryFinder{d: newConfig(opts)}
 }
 
 // skipDirs are never searched: they are not where checkouts live, and some
@@ -76,7 +76,7 @@ func isCheckout(dir string) bool {
 
 // originURL is the checkout's origin remote, or "" when it has none or git
 // gives no answer in time.
-func (d Deadlines) originURL(dir string) string {
+func (d config) originURL(dir string) string {
 	out, err := d.gitOutput(context.Background(), dir, "config", "--get", "remote.origin.url")
 	if err != nil {
 		return ""

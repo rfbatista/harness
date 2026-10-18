@@ -19,18 +19,18 @@ var _ ports.BranchPublisher = (*BranchPublisher)(nil)
 // branch is ever touched, and it never forces. Its reads are bounded by the
 // read deadline; push and fetch only by the context they are given, as they
 // may rightly take longer.
-type BranchPublisher struct{ d Deadlines }
+type BranchPublisher struct{ d config }
 
 // NewBranchPublisher returns the adapter.
 func NewBranchPublisher(opts ...Option) *BranchPublisher {
-	return &BranchPublisher{d: newDeadlines(opts)}
+	return &BranchPublisher{d: newConfig(opts)}
 }
 
 // OriginURL is remote.origin.url, "" when the checkout has no origin.
 func (p BranchPublisher) OriginURL(ctx context.Context, repoRoot string) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, p.d.read())
 	defer cancel()
-	out, err := gitCmd(ctx, repoRoot, "config", "--get", "remote.origin.url").Output()
+	out, err := p.d.gitCmd(ctx, repoRoot, "config", "--get", "remote.origin.url").Output()
 	if err := cut(ctx, "config", err); timedOut(err) {
 		return "", err
 	}
@@ -52,9 +52,9 @@ func (p BranchPublisher) HasRef(ctx context.Context, repoRoot, ref string) bool 
 }
 
 // FetchBranch updates refs/remotes/origin/<branch> only.
-func (BranchPublisher) FetchBranch(ctx context.Context, repoRoot, branch string, env []string) error {
+func (p BranchPublisher) FetchBranch(ctx context.Context, repoRoot, branch string, env []string) error {
 	refspec := "refs/heads/" + branch + ":refs/remotes/origin/" + branch
-	_, err := gitNetwork(ctx, repoRoot, env, "fetch", "--quiet", "--no-tags", "origin", refspec)
+	_, err := p.d.gitNetwork(ctx, repoRoot, env, "fetch", "--quiet", "--no-tags", "origin", refspec)
 	if err != nil && strings.Contains(err.Error(), "couldn't find remote ref") {
 		return fmt.Errorf("%w: %s", ports.ErrRemoteBranchNotFound, branch)
 	}
@@ -63,9 +63,9 @@ func (BranchPublisher) FetchBranch(ctx context.Context, repoRoot, branch string,
 
 // Push publishes refs/heads/<branch> to origin under the same name and sets
 // its upstream; a rejection carries git's reason.
-func (BranchPublisher) Push(ctx context.Context, repoRoot, branch string, env []string) error {
+func (p BranchPublisher) Push(ctx context.Context, repoRoot, branch string, env []string) error {
 	ref := "refs/heads/" + branch
-	_, err := gitNetwork(ctx, repoRoot, env, "push", "--porcelain", "--set-upstream", "origin", ref+":"+ref)
+	_, err := p.d.gitNetwork(ctx, repoRoot, env, "push", "--porcelain", "--set-upstream", "origin", ref+":"+ref)
 	return err
 }
 
@@ -90,8 +90,8 @@ func (p BranchPublisher) Subjects(ctx context.Context, repoRoot, base, head stri
 // The error carries git's own output, whose reason ("! [rejected] … (non-fast-forward)")
 // porcelain push writes to stdout; an auth refusal wraps
 // ports.ErrRemoteAuthRejected.
-func gitNetwork(ctx context.Context, dir string, env []string, args ...string) (string, error) {
-	cmd := exec.CommandContext(ctx, "git", args...)
+func (d config) gitNetwork(ctx context.Context, dir string, env []string, args ...string) (string, error) {
+	cmd := exec.CommandContext(ctx, d.bin(), args...)
 	cmd.Dir = dir
 	cmd.Env = localEnv(env...)
 	cmd.WaitDelay = waitDelay

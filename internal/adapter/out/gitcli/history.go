@@ -21,10 +21,10 @@ var _ ports.GitHistory = (*History)(nil)
 
 // History reads a checkout's commit graph with git log and git show. Each
 // git run is bounded by the read deadline.
-type History struct{ d Deadlines }
+type History struct{ d config }
 
 // NewHistory returns the adapter.
-func NewHistory(opts ...Option) *History { return &History{d: newDeadlines(opts)} }
+func NewHistory(opts ...Option) *History { return &History{d: newConfig(opts)} }
 
 const (
 	defaultHistory = 300
@@ -202,10 +202,10 @@ func numstat(s string) int {
 }
 
 // gitOutput is the output of git args in dir, under the read deadline.
-func (d Deadlines) gitOutput(ctx context.Context, dir string, args ...string) (string, error) {
+func (d config) gitOutput(ctx context.Context, dir string, args ...string) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, d.read())
 	defer cancel()
-	cmd := gitCmd(ctx, dir, args...)
+	cmd := d.gitCmd(ctx, dir, args...)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	if err := cmd.Run(); err != nil {
@@ -220,10 +220,10 @@ func (d Deadlines) gitOutput(ctx context.Context, dir string, args ...string) (s
 // gitOK reports whether git args in dir succeeds, under the read deadline.
 // Only a run that ends with ctx (or the deadline) is an error: a git that
 // answers no is false.
-func (d Deadlines) gitOK(ctx context.Context, dir string, args ...string) (bool, error) {
+func (d config) gitOK(ctx context.Context, dir string, args ...string) (bool, error) {
 	ctx, cancel := context.WithTimeout(ctx, d.read())
 	defer cancel()
-	err := gitCmd(ctx, dir, args...).Run()
+	err := d.gitCmd(ctx, dir, args...).Run()
 	if err != nil && ctx.Err() != nil {
 		return false, cut(ctx, args[0], ctx.Err())
 	}
