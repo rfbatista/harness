@@ -28,7 +28,9 @@ var TokenSaversModule = fx.Module("tokensavers",
 	fx.Invoke(func(*workspaces.RepositoryIndexes) {}),
 )
 
-func useTokenSavers(cfg Config, db *gorm.DB, cat catalog.Catalog) error {
+// useTokenSavers enables installing token savers; stopping the server
+// cancels the installs that run and waits for them.
+func useTokenSavers(lc fx.Lifecycle, cfg Config, db *gorm.DB, cat catalog.Catalog) error {
 	dir, err := dataDir(cfg, "tools")
 	if err != nil {
 		return err
@@ -39,6 +41,10 @@ func useTokenSavers(cfg Config, db *gorm.DB, cat catalog.Catalog) error {
 		Dir:            dir,
 		ReleaseBaseURL: cfg.TokenSaverReleaseBase,
 	})
+	lc.Append(fx.Hook{OnStop: func(context.Context) error {
+		cat.Capabilities.CloseTokenSavers()
+		return nil
+	}})
 	return nil
 }
 

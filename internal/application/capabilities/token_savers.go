@@ -41,8 +41,13 @@ type TokenSaverDeps struct {
 }
 
 // tokenSavers installs savers; one install or remove per saver at a time.
+// Installs run in the background under ctx, which CloseTokenSavers cancels.
 type tokenSavers struct {
 	TokenSaverDeps
+
+	ctx    context.Context
+	cancel context.CancelFunc
+	work   sync.WaitGroup
 
 	mu   sync.Mutex
 	jobs map[domain.TokenSaver]*installJob
@@ -70,7 +75,8 @@ func (s *Service) UseTokenSavers(d TokenSaverDeps) {
 	if d.Platform == (domain.Platform{}) {
 		d.Platform = domain.Platform{OS: runtime.GOOS, Arch: runtime.GOARCH}
 	}
-	s.savers = &tokenSavers{TokenSaverDeps: d, jobs: map[domain.TokenSaver]*installJob{}}
+	ctx, cancel := context.WithCancel(context.Background())
+	s.savers = &tokenSavers{TokenSaverDeps: d, ctx: ctx, cancel: cancel, jobs: map[domain.TokenSaver]*installJob{}}
 	if err := s.savers.prune(); err != nil {
 		slog.Warn("token savers: old versions not pruned", "dir", d.Dir, "err", err)
 	}
@@ -98,6 +104,18 @@ func (t *tokenSavers) prune() error {
 		}
 	}
 	return nil
+}
+
+// CloseTokenSavers cancels the installs that run, as the server stops, and
+// waits for them to end. No install starts afterwards.
+func (s *Service) CloseTokenSavers() {
+	if s.savers == nil {
+		return
+	}
+	s.savers.mu.Lock()
+	s.savers.cancel()
+	s.savers.mu.Unlock()
+	s.savers.work.Wait()
 }
 
 func (s *Service) tokenSavers() (*tokenSavers, error) {
@@ -181,10 +199,17 @@ func (s *Service) InstallTokenSaver(ctx context.Context, saver domain.TokenSaver
 	}
 	t.mu.Lock()
 	defer t.mu.Unlock()
+	if t.ctx.Err() != nil {
+		return nil, domain.TokenSaverErr("UNAVAILABLE", "the server is stopping; install "+string(saver)+" once it runs again")
+	}
 	if job := t.jobs[saver]; job == nil || !job.running {
 		job = &installJob{running: true, progress: "Starting"}
 		t.jobs[saver] = job
-		go t.install(rel, asset, job, s.publish)
+		t.work.Add(1)
+		go func() {
+			defer t.work.Done()
+			t.install(rel, asset, job, s.publish)
+		}()
 	}
 	st := t.status(rel, installed[saver])
 	st.OnSomewhere = on[saver]
@@ -289,7 +314,7 @@ func (t *tokenSavers) report(job *installJob, progress string) {
 // it. Whatever fails, the staging directory goes and the previous
 // installation stays as it was.
 func (t *tokenSavers) install(rel TokenSaverRelease, asset TokenSaverAsset, job *installJob, publish func(domain.Event) error) {
-	in, err := t.fetch(context.Background(), rel, asset, job)
+	in, err := t.fetch(t.ctx, rel, asset, job)
 	t.mu.Lock()
 	job.running = false
 	if err != nil {
