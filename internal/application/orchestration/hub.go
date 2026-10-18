@@ -77,11 +77,17 @@ func (h *Hub) End(sessionID string) {
 	delete(h.replay, sessionID)
 }
 
+// subscriberBuffer is how many events a subscriber may have waiting before it
+// is closed as a slow subscriber. A burst of streamed output deltas comes
+// faster than any other event, so it is sized for one to pass while the
+// follower's goroutine waits to be scheduled.
+const subscriberBuffer = 256
+
 func (h *Hub) Subscribe(sessionID string) (<-chan SessionEvent, []SessionEvent, func()) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
-	ch := make(chan SessionEvent, 64)
+	ch := make(chan SessionEvent, subscriberBuffer)
 	id := h.nextSub
 	h.nextSub++
 	if h.subs[sessionID] == nil {
