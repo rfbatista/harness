@@ -398,3 +398,68 @@ func TestStream_AStuckClientsStreamIsClosed(t *testing.T) {
 		t.Fatalf("follow on a stuck stream = %d %v, want STREAM_NOT_FOUND", code, body)
 	}
 }
+
+// A follow whose queue is full waits for the writer, as a session resumed from
+// an old seq does while its stored events are read: it holds back only its own
+// feed. Another follow on the stream keeps taking and delivering its changes,
+// and the waiting feed arrives whole, without an end.
+func TestStream_AFollowWaitingOnAFullQueueHoldsBackOnlyItsFeed(t *testing.T) {
+	orch := newStreamOrch()
+	srv := streamServer(t, orch)
+	s := openStream(t, srv)
+	const backlog, steady = "/events?project_id=p1", "/events?project_id=p2"
+	s.post("follow", backlog)
+	s.post("follow", steady)
+
+	// The backlog is far more than one follow queues, and it never gives up on
+	// its follower: it waits, as a log read does.
+	const total = 4 * followQueueLen
+	orch.mu.Lock()
+	feed, stopped := orch.feeds["p1"], orch.stopped["p1"]
+	orch.mu.Unlock()
+	big := strings.Repeat("x", 4<<10)
+	go func() {
+		for i := range total {
+			select {
+			case feed <- ports.ProjectChange{Ticket: &domain.Ticket{ID: strconv.Itoa(i), ProjectID: "p1", Description: big}}:
+			case <-stopped:
+				return
+			}
+		}
+	}()
+
+	// Nothing is read yet, so the backlog's queue fills and its relay waits.
+	// The steady feed is still taken from without delay.
+	time.Sleep(200 * time.Millisecond)
+	const changes = 10
+	for i := range changes {
+		select {
+		case orch.feed("p2") <- ports.ProjectChange{Ticket: &domain.Ticket{ID: strconv.Itoa(i), ProjectID: "p2"}}:
+		case <-time.After(2 * time.Second):
+			t.Fatalf("the steady feed was held back by the waiting one at change %d", i)
+		}
+	}
+
+	nextBacklog, nextSteady := 0, 0
+	for nextBacklog < total || nextSteady < changes {
+		m := s.next()
+		if m["end"] == true {
+			t.Fatalf("%v ended", m["path"])
+		}
+		id := m["data"].(map[string]any)["ticket"].(map[string]any)["id"]
+		switch m["path"] {
+		case backlog:
+			if id != strconv.Itoa(nextBacklog) {
+				t.Fatalf("backlog change %v, want %d", id, nextBacklog)
+			}
+			nextBacklog++
+		case steady:
+			if id != strconv.Itoa(nextSteady) {
+				t.Fatalf("steady change %v, want %d", id, nextSteady)
+			}
+			if nextSteady++; nextSteady == changes && nextBacklog == total {
+				t.Fatal("the steady feed waited for the whole backlog")
+			}
+		}
+	}
+}
