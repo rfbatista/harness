@@ -91,6 +91,9 @@ type TokenSaverResolver interface {
 type SessionTokenSavers interface {
 	TokenSaverResolver
 	TokenSaverInstallations
+	// CavemanIntensity is the caveman intensity sessions get, full by
+	// default.
+	CavemanIntensity(ctx context.Context) domain.CavemanIntensity
 }
 
 // TokenSaverActivationRepository stores activations (driven). Inherit is

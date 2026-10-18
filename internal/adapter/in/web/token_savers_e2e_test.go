@@ -218,6 +218,38 @@ func TestTokenSaversRefuseAnUnsupportedPlatformInTheWebUI_EndToEnd(t *testing.T)
 	}
 }
 
+// The caveman intensity is full until the person sets it on the Token
+// savers page; ultra then stays across a reload and is what sessions get.
+func TestCavemanIntensityIsSetOnTheTokenSaversPage_EndToEnd(t *testing.T) {
+	assets := builtAssets(t)
+	h := newTokenSaversHarness(t, "http://127.0.0.1:1")
+	page := h.serve(assets, h.releases(strings.Repeat("0", 64)), darwinARM64)
+
+	const intensity = `(document.querySelector('#caveman-intensity')?.value ?? '')`
+	b := newBrowser(t)
+	b.run("the intensity is full by default",
+		chromedp.Navigate(page+"/token-savers"),
+		waitUntil(savers+`.length === 3`),
+		waitUntil(intensity+` === 'full'`),
+	)
+	b.run("set it to ultra",
+		chromedp.Evaluate(`(() => { const s = document.querySelector('#caveman-intensity');
+			s.value = 'ultra'; s.dispatchEvent(new Event('change', { bubbles: true })); })()`, nil),
+		waitUntil(`[...document.querySelectorAll('main [aria-live]')].some(e => e.textContent.includes('Caveman intensity set to ultra'))`),
+	)
+	b.run("ultra stays across a reload",
+		chromedp.Reload(),
+		waitUntil(savers+`.length === 3`),
+		waitUntil(intensity+` === 'ultra'`),
+	)
+	if got := h.caps.CavemanIntensity(t.Context()); got != domain.CavemanUltra {
+		t.Errorf("sessions get caveman at %q, want ultra", got)
+	}
+	if e := b.jsErrors(); len(e) > 0 {
+		t.Errorf("JavaScript errors:\n%s", strings.Join(e, "\n"))
+	}
+}
+
 var darwinARM64 = domain.Platform{OS: "darwin", Arch: "arm64"}
 
 const savers = `document.querySelectorAll('main [data-saver]:not([data-ssr] *)')`
@@ -344,7 +376,7 @@ func (h *tokenSaversHarness) serve(assets *web.Assets, list []capabilities.Token
 	cat := h.service(list, platform)
 	caps := cat.Capabilities
 	mux := http.NewServeMux()
-	mux.Handle("/api/", httpapi.NewRouter(httpapi.NewHandler(httpapi.Services{TokenSaverInstalls: caps})))
+	mux.Handle("/api/", httpapi.NewRouter(httpapi.NewHandler(httpapi.Services{TokenSaverInstalls: caps, Settings: cat.Settings})))
 	mux.Handle("/", web.NewHandler(web.Deps{Projects: cat.Projects, TokenSaverInstalls: caps}, assets, nil))
 	srv := httptest.NewServer(mux)
 	h.t.Cleanup(srv.Close)

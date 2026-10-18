@@ -66,6 +66,15 @@ func (v View) Unsupported() string {
 	return v.Seed.Unsupported
 }
 
+// Intensity is the caveman intensity the seed holds; full when it could
+// not be read.
+func (v View) Intensity() domain.CavemanIntensity {
+	if v.Seed == nil || v.Seed.CavemanIntensity == "" {
+		return domain.CavemanFull
+	}
+	return v.Seed.CavemanIntensity
+}
+
 // Row is one saver as the server paints it before the browser takes over;
 // the browser's domain/saver.js has the same rules.
 type Row struct {

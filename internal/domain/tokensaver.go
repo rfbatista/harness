@@ -140,3 +140,28 @@ type ResolvedTokenSaver struct {
 	Value ActivationValue
 	Level ActivationLevel
 }
+
+// CavemanIntensity is how terse caveman makes the agent (see the Glossary's
+// "Caveman intensity"): one machine-wide setting, full by default.
+type CavemanIntensity string
+
+// The intensities, from the least terse. caveman's ruleset is full.
+const (
+	CavemanLite  CavemanIntensity = "lite"
+	CavemanFull  CavemanIntensity = "full"
+	CavemanUltra CavemanIntensity = "ultra"
+)
+
+// SettingCavemanIntensity is the settings key holding the caveman
+// intensity. Unset means full.
+const SettingCavemanIntensity = "token_savers.caveman.intensity"
+
+// ParseCavemanIntensity is INVALID_INPUT for anything but lite, full or
+// ultra.
+func ParseCavemanIntensity(s string) (CavemanIntensity, error) {
+	switch i := CavemanIntensity(s); i {
+	case CavemanLite, CavemanFull, CavemanUltra:
+		return i, nil
+	}
+	return "", &StructuredError{Code: "INVALID_INPUT", Message: "unknown caveman intensity " + s + ": use lite, full or ultra"}
+}
