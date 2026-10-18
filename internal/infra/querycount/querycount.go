@@ -50,6 +50,16 @@ func Track(ctx context.Context) (context.Context, *Counter, func()) {
 	return context.WithValue(ctx, counterKey{}, c), c, bind(c)
 }
 
+// TrackContext starts counting the database calls whose context carries the
+// returned context's counter, and no other: unlike Track, a call made
+// without that context is not counted, on any goroutine. A test holding a
+// path to a query budget tracks with it, so the count it holds rests on the
+// context alone.
+func TrackContext(ctx context.Context) (context.Context, *Counter) {
+	c := &Counter{}
+	return context.WithValue(ctx, counterKey{}, c), c
+}
+
 // Join counts the database calls made without a context on the calling
 // goroutine for ctx's tracker, until leave: how a goroutine a handler spawns
 // keeps its calls in the request's count. Nothing tracks ctx: it does

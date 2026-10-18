@@ -100,6 +100,20 @@ func TestJoiningAnUntrackedContextCountsNothing(t *testing.T) {
 	}
 }
 
+// A tracker on the context alone counts the calls carrying its counter and
+// none made without it, not even on the goroutine that started it: a count
+// it holds rests on the context the calls carry, never on goroutine identity.
+func TestATrackerOnTheContextAloneCountsNoCallWithoutIt(t *testing.T) {
+	ctx, c := TrackContext(context.Background())
+
+	Add(ctx)
+	Add(context.Background())
+
+	if got := c.Count(); got != 1 {
+		t.Errorf("Count() = %d, want 1", got)
+	}
+}
+
 // A call carrying the counter on the tracking goroutine counts once.
 func TestACallIsCountedOnce(t *testing.T) {
 	ctx, c, stop := Track(context.Background())
