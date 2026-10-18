@@ -31,7 +31,7 @@ func TestAnnounce_ReachesSubscribersAndHistory(t *testing.T) {
 		t.Fatal("no live artifact event")
 	}
 	var found bool
-	for _, ev := range svc.History(sess.ID, 0) {
+	for _, ev := range mustHistory(t, svc, sess.ID) {
 		if ev.Type == "artifact" && ev.Artifact != nil && ev.Artifact.ID == "a1" && ev.Text == "tighter spacing" {
 			found = true
 		}

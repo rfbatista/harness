@@ -1,7 +1,10 @@
 package sqlite
 
 import (
+	"database/sql"
+	"errors"
 	"fmt"
+	"runtime"
 	"strings"
 
 	"operators-mcp/internal/domain"
@@ -10,37 +13,181 @@ import (
 	"gorm.io/gorm"
 )
 
-// Open opens a SQLite database at the given path (e.g. "file:data.db" or ":memory:").
-// It runs AutoMigrate for all models and performs data migrations.
-func Open(path string) (*gorm.DB, error) {
-	db, err := gorm.Open(sqlite.Open(path), &gorm.Config{})
+// busyTimeoutMS is how long a connection waits for SQLite's lock before a
+// call fails with "database is locked".
+const busyTimeoutMS = 5000
+
+// Open opens a SQLite database at the given path (e.g. "data.db",
+// "file:data.db" or ":memory:"). It runs AutoMigrate for all models and
+// performs data migrations.
+//
+// A file database runs in WAL (ADR 0005), switched on here when it was not.
+// The returned handle writes through the writer connection, a pool of one
+// whose transactions take the write lock when they begin, and sends reads
+// made outside a transaction to the reader pool, whose connections refuse
+// writes. Close releases both.
+//
+// Every database call slower than the slow-call threshold (WithSlowThreshold,
+// DefaultSlowThreshold when unset) is logged as a slow database call.
+func Open(path string, opts ...Option) (*gorm.DB, error) {
+	slow := newSlowCalls(opts)
+	if isMemoryDSN(path) {
+		return openMemory(path, slow)
+	}
+	db, err := openWriter(fileDSN(path, "_journal_mode=WAL", "_synchronous=NORMAL", "_txlock=immediate"), slow)
+	if err != nil {
+		return nil, err
+	}
+	writer, _ := db.DB()
+	if err := migrate(db); err != nil {
+		writer.Close()
+		return nil, err
+	}
+	// Registered after the migrations, so they run on the writer connection.
+	if err := db.Use(&readerPool{dsn: fileDSN(path, "_query_only=true")}); err != nil {
+		writer.Close()
+		return nil, fmt.Errorf("sqlite reader pool: %w", err)
+	}
+	return db, nil
+}
+
+func openMemory(path string, slow *slowCalls) (*gorm.DB, error) {
+	// Every new connection to an in-memory DSN opens its *own* empty
+	// database, so as soon as the pool grows past one connection the
+	// schema appears to vanish ("no such table: sessions"). openWriter's
+	// pool of one keeps the whole process on one database.
+	db, err := openWriter(path, slow)
+	if err != nil {
+		return nil, err
+	}
+	if err := migrate(db); err != nil {
+		return nil, err
+	}
+	return db, nil
+}
+
+// openWriter opens dsn as the writer connection, a pool of one, with slow
+// database calls logged.
+func openWriter(dsn string, slow *slowCalls) (*gorm.DB, error) {
+	pool, err := sql.Open(sqlite.DriverName, dsn)
 	if err != nil {
 		return nil, fmt.Errorf("sqlite open: %w", err)
 	}
-	if isMemoryDSN(path) {
-		// Every new connection to an in-memory DSN opens its *own* empty
-		// database, so as soon as the pool grows past one connection the
-		// schema appears to vanish ("no such table: sessions"). Pinning the
-		// pool keeps the whole process on one database.
-		sqlDB, err := db.DB()
-		if err != nil {
-			return nil, fmt.Errorf("sqlite pool: %w", err)
-		}
-		sqlDB.SetMaxOpenConns(1)
+	pool.SetMaxOpenConns(1)
+	db, err := gorm.Open(sqlite.New(sqlite.Config{Conn: &writerConn{DB: pool, slow: slow}}), &gorm.Config{Logger: slow.gormLogger()})
+	if err != nil {
+		pool.Close()
+		return nil, fmt.Errorf("sqlite open: %w", err)
 	}
-	if err := db.AutoMigrate(&ProjectModel{}, &RepositoryModel{}, &ZoneModel{}, &AgentModel{}, &PromptModel{}, &SkillModel{}, &SkillFileModel{}, &SettingModel{}, &MCPServerModel{}, &ToolModel{}, &TaskModel{}, &SessionModel{}, &SessionEventModel{}, &TicketModel{}, &DocumentModel{}, &TicketDocumentModel{}, &WorkspaceModel{}, &BoundedContextModel{}, &EnvFileModel{}, &RunCommandModel{}, &ArtifactModel{}, &ArtifactTicketModel{}, &TaskMessageModel{}, &ReviewRequestModel{}, &StatusCheckModel{}, &TicketStatusChangeModel{}, &TicketResourceModel{}, &TicketCommentModel{}, &PullRequestModel{}, &NotificationModel{}, &GitCredentialModel{}, &GitIdentityModel{}, &RepositoryCredentialModel{}, &UsageRecordModel{}); err != nil {
-		return nil, fmt.Errorf("sqlite migrate: %w", err)
-	}
-	if err := migrateAgentPromptsToEntities(db); err != nil {
-		return nil, fmt.Errorf("sqlite prompt migration: %w", err)
-	}
-	if err := migrateSkillsToFiles(db); err != nil {
-		return nil, fmt.Errorf("sqlite skill files migration: %w", err)
-	}
-	if err := migrateInteractiveRunner(db); err != nil {
-		return nil, fmt.Errorf("sqlite session runner migration: %w", err)
+	if err := measureBeginWait(db); err != nil {
+		pool.Close()
+		return nil, fmt.Errorf("sqlite slow-call logging: %w", err)
 	}
 	return db, nil
+}
+
+// fileDSN is path as a file URI with the busy timeout and params set on
+// every connection it opens.
+func fileDSN(path string, params ...string) string {
+	if !strings.HasPrefix(path, "file:") {
+		path = "file:" + path
+	}
+	sep := "?"
+	if strings.Contains(path, "?") {
+		sep = "&"
+	}
+	return path + sep + strings.Join(append([]string{fmt.Sprintf("_busy_timeout=%d", busyTimeoutMS)}, params...), "&")
+}
+
+// Close closes db's writer connection and, for a file database, its reader
+// pool.
+func Close(db *gorm.DB) error {
+	var errs []error
+	if p := readerPoolOf(db); p != nil {
+		errs = append(errs, p.pool.Close())
+	}
+	w, err := db.DB()
+	if err == nil {
+		err = w.Close()
+	}
+	return errors.Join(append(errs, err)...)
+}
+
+// Reader is db on its reader pool, which refuses writes. An in-memory
+// database has no reader pool: Reader is db itself.
+func Reader(db *gorm.DB) *gorm.DB {
+	if p := readerPoolOf(db); p != nil {
+		return p.db
+	}
+	return db
+}
+
+// readerPoolOf is db's reader pool; nil for an in-memory database.
+func readerPoolOf(db *gorm.DB) *readerPool {
+	p, _ := db.Config.Plugins[readerPoolName].(*readerPool)
+	return p
+}
+
+const readerPoolName = "harness:reader-pool"
+
+// readerPool routes reads made outside a transaction to its own connections,
+// opened query_only. Everything else (writes, transactions and the reads in
+// them, raw statements that are not a SELECT) stays on the writer connection.
+type readerPool struct {
+	dsn    string
+	pool   *sql.DB
+	db     *gorm.DB // on pool alone, for Reader
+	writer gorm.ConnPool
+}
+
+func (p *readerPool) Name() string { return readerPoolName }
+
+func (p *readerPool) Initialize(db *gorm.DB) error {
+	pool, err := sql.Open(sqlite.DriverName, p.dsn)
+	if err != nil {
+		return err
+	}
+	pool.SetMaxOpenConns(max(4, runtime.NumCPU()))
+	reader, err := gorm.Open(sqlite.New(sqlite.Config{Conn: pool}), &gorm.Config{Logger: db.Logger})
+	if err != nil {
+		pool.Close()
+		return err
+	}
+	p.pool, p.db, p.writer = pool, reader, db.ConnPool
+	if err := db.Callback().Query().Before("gorm:query").Register(readerPoolName, p.route); err != nil {
+		return err
+	}
+	return db.Callback().Row().Before("gorm:row").Register(readerPoolName, p.route)
+}
+
+func (p *readerPool) route(db *gorm.DB) {
+	if db.Statement.ConnPool != p.writer || !isRead(db.Statement.SQL.String()) {
+		return // inside a transaction, or a statement that may write
+	}
+	db.Statement.ConnPool = p.pool
+}
+
+// isRead reports whether sql, as built so far, only reads: a statement GORM
+// has yet to build (a query) or a raw SELECT.
+func isRead(sql string) bool {
+	sql = strings.TrimSpace(sql)
+	return sql == "" || len(sql) >= 6 && strings.EqualFold(sql[:6], "SELECT")
+}
+
+func migrate(db *gorm.DB) error {
+	if err := db.AutoMigrate(&ProjectModel{}, &RepositoryModel{}, &ZoneModel{}, &AgentModel{}, &PromptModel{}, &SkillModel{}, &SkillFileModel{}, &SettingModel{}, &MCPServerModel{}, &ToolModel{}, &TaskModel{}, &SessionModel{}, &SessionEventModel{}, &TicketModel{}, &DocumentModel{}, &TicketDocumentModel{}, &WorkspaceModel{}, &BoundedContextModel{}, &EnvFileModel{}, &RunCommandModel{}, &ArtifactModel{}, &ArtifactTicketModel{}, &TaskMessageModel{}, &ReviewRequestModel{}, &StatusCheckModel{}, &TicketStatusChangeModel{}, &TicketResourceModel{}, &TicketCommentModel{}, &PullRequestModel{}, &NotificationModel{}, &GitCredentialModel{}, &GitIdentityModel{}, &RepositoryCredentialModel{}, &UsageRecordModel{}); err != nil {
+		return fmt.Errorf("sqlite migrate: %w", err)
+	}
+	if err := migrateAgentPromptsToEntities(db); err != nil {
+		return fmt.Errorf("sqlite prompt migration: %w", err)
+	}
+	if err := migrateSkillsToFiles(db); err != nil {
+		return fmt.Errorf("sqlite skill files migration: %w", err)
+	}
+	if err := migrateInteractiveRunner(db); err != nil {
+		return fmt.Errorf("sqlite session runner migration: %w", err)
+	}
+	return nil
 }
 
 // migrateInteractiveRunner marks interactive sessions recorded before

@@ -1,6 +1,7 @@
 package sqlite
 
 import (
+	"errors"
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
 
@@ -96,14 +97,11 @@ func (r *SkillRepository) Create(input domain.SkillInput) (*domain.Skill, error)
 }
 
 func (r *SkillRepository) Update(id string, input domain.SkillInput) (*domain.Skill, error) {
-	var m SkillModel
-	if err := r.db.First(&m, "id = ?", id).Error; err != nil {
-		if err == gorm.ErrRecordNotFound {
-			return nil, &domain.StructuredError{Code: "SKILL_NOT_FOUND", Message: "skill not found"}
-		}
-		return nil, err
-	}
 	err := r.db.Transaction(func(tx *gorm.DB) error {
+		var m SkillModel
+		if err := firstSkill(tx, id, &m); err != nil {
+			return err
+		}
 		updates := map[string]interface{}{
 			"name":          input.Name,
 			"description":   input.Description,
@@ -126,19 +124,26 @@ func (r *SkillRepository) Update(id string, input domain.SkillInput) (*domain.Sk
 }
 
 func (r *SkillRepository) Delete(id string) error {
-	var m SkillModel
-	if err := r.db.First(&m, "id = ?", id).Error; err != nil {
-		if err == gorm.ErrRecordNotFound {
-			return &domain.StructuredError{Code: "SKILL_NOT_FOUND", Message: "skill not found"}
-		}
-		return err
-	}
 	return r.db.Transaction(func(tx *gorm.DB) error {
+		var m SkillModel
+		if err := firstSkill(tx, id, &m); err != nil {
+			return err
+		}
 		if err := tx.Where("skill_id = ?", id).Delete(&SkillFileModel{}).Error; err != nil {
 			return err
 		}
 		return tx.Delete(&m).Error
 	})
+}
+
+// firstSkill reads skill id into m inside tx, so a write that checks the
+// skill is there and then changes it is one write transaction.
+func firstSkill(tx *gorm.DB, id string, m *SkillModel) error {
+	err := tx.First(m, "id = ?", id).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return &domain.StructuredError{Code: "SKILL_NOT_FOUND", Message: "skill not found"}
+	}
+	return err
 }
 
 func (r *SkillRepository) exists(id string) bool {
@@ -155,15 +160,15 @@ func (r *SkillRepository) ListFiles(skillID string) ([]domain.SkillFile, error) 
 }
 
 func (r *SkillRepository) PutFile(skillID string, f domain.SkillFile) error {
-	if !r.exists(skillID) {
-		return &domain.StructuredError{Code: "SKILL_NOT_FOUND", Message: "skill not found"}
-	}
-	norm, ok := domain.NormalizeSkillPath(f.Path)
-	if !ok {
-		return &domain.StructuredError{Code: "INVALID_INPUT", Message: "invalid skill file path"}
-	}
-	f.Path = norm
 	return r.db.Transaction(func(tx *gorm.DB) error {
+		if err := firstSkill(tx, skillID, &SkillModel{}); err != nil {
+			return err
+		}
+		norm, ok := domain.NormalizeSkillPath(f.Path)
+		if !ok {
+			return &domain.StructuredError{Code: "INVALID_INPUT", Message: "invalid skill file path"}
+		}
+		f.Path = norm
 		if err := tx.Where("skill_id = ? AND path = ?", skillID, norm).Delete(&SkillFileModel{}).Error; err != nil {
 			return err
 		}
@@ -176,15 +181,15 @@ func (r *SkillRepository) PutFile(skillID string, f domain.SkillFile) error {
 }
 
 func (r *SkillRepository) RenameFile(skillID, oldPath, newPath string) error {
-	if !r.exists(skillID) {
-		return &domain.StructuredError{Code: "SKILL_NOT_FOUND", Message: "skill not found"}
-	}
-	from, ok1 := domain.NormalizeSkillPath(oldPath)
-	to, ok2 := domain.NormalizeSkillPath(newPath)
-	if !ok1 || !ok2 {
-		return &domain.StructuredError{Code: "INVALID_INPUT", Message: "invalid skill file path"}
-	}
 	return r.db.Transaction(func(tx *gorm.DB) error {
+		if err := firstSkill(tx, skillID, &SkillModel{}); err != nil {
+			return err
+		}
+		from, ok1 := domain.NormalizeSkillPath(oldPath)
+		to, ok2 := domain.NormalizeSkillPath(newPath)
+		if !ok1 || !ok2 {
+			return &domain.StructuredError{Code: "INVALID_INPUT", Message: "invalid skill file path"}
+		}
 		var models []SkillFileModel
 		if err := tx.Where("skill_id = ?", skillID).Find(&models).Error; err != nil {
 			return err
@@ -211,26 +216,28 @@ func (r *SkillRepository) RenameFile(skillID, oldPath, newPath string) error {
 }
 
 func (r *SkillRepository) DeleteFile(skillID, path string) error {
-	if !r.exists(skillID) {
-		return &domain.StructuredError{Code: "SKILL_NOT_FOUND", Message: "skill not found"}
-	}
-	target, ok := domain.NormalizeSkillPath(path)
-	if !ok {
-		return &domain.StructuredError{Code: "INVALID_INPUT", Message: "invalid skill file path"}
-	}
 	return r.db.Transaction(func(tx *gorm.DB) error {
+		if err := firstSkill(tx, skillID, &SkillModel{}); err != nil {
+			return err
+		}
+		target, ok := domain.NormalizeSkillPath(path)
+		if !ok {
+			return &domain.StructuredError{Code: "INVALID_INPUT", Message: "invalid skill file path"}
+		}
 		return tx.Where("skill_id = ? AND (path = ? OR path LIKE ?)",
 			skillID, target, target+"/%").Delete(&SkillFileModel{}).Error
 	})
 }
 
 func (r *SkillRepository) SetPublishState(skillID string, state domain.SkillPublishState) error {
-	if !r.exists(skillID) {
-		return &domain.StructuredError{Code: "SKILL_NOT_FOUND", Message: "skill not found"}
-	}
-	return r.db.Model(&SkillModel{}).Where("id = ?", skillID).Updates(map[string]interface{}{
-		"published_slug": state.Slug,
-		"published_at":   state.At,
-		"publish_error":  state.Error,
-	}).Error
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		if err := firstSkill(tx, skillID, &SkillModel{}); err != nil {
+			return err
+		}
+		return tx.Model(&SkillModel{}).Where("id = ?", skillID).Updates(map[string]interface{}{
+			"published_slug": state.Slug,
+			"published_at":   state.At,
+			"publish_error":  state.Error,
+		}).Error
+	})
 }

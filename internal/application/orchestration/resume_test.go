@@ -196,7 +196,11 @@ func TestResumeInteractive_ConcurrentCallsResumeOnce(t *testing.T) {
 		t.Errorf("status = %s, want running", got.Status)
 	}
 	resumed := 0
-	for _, ev := range svc.sessions.ListEvents(sess.ID, 0) {
+	stored, err := svc.sessions.ListEvents(sess.ID, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, ev := range stored {
 		if ev.Type == "status" && strings.Contains(string(ev.Payload), `"text":"resumed`) {
 			resumed++
 		}

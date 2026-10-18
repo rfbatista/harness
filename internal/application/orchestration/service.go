@@ -605,39 +605,37 @@ func (s *Service) pump(sess llmkit.Session) {
 			continue
 		}
 
-		if cur := s.sessions.Get(id); cur != nil {
-			cost, tokens, last, pend := cur.CostUSD, ports.TokensOf(cur), cur.LastAction, cur.PendingApprovals
+		var change sessionChange
+		if m := s.metricsOf(id); m != nil {
 			switch ev.Type {
 			case "output":
 				if ev.Text != "" {
-					last = truncate(ev.Text, 200)
+					m.LastAction = truncate(ev.Text, 200)
 				}
 			case "tool_use":
-				last = "tool: " + ev.ToolName
+				m.LastAction = "tool: " + ev.ToolName
 			case "usage":
-				cost += ev.CostUSD
+				m.CostUSD += ev.CostUSD
 				if ev.Usage != nil {
-					tokens.Input += ev.Usage.InputTokens
-					tokens.Output += ev.Usage.OutputTokens
-					tokens.CacheCreation += ev.Usage.CacheCreationInputTokens
-					tokens.CacheRead += ev.Usage.CacheReadInputTokens
+					m.Tokens.Input += ev.Usage.InputTokens
+					m.Tokens.Output += ev.Usage.OutputTokens
+					m.Tokens.CacheCreation += ev.Usage.CacheCreationInputTokens
+					m.Tokens.CacheRead += ev.Usage.CacheReadInputTokens
 				}
 			}
 			// A dead session has no outstanding decisions: broker.DenyAll has
 			// answered whatever was pending, and a lingering count would leave
 			// the session owing the user a decision forever.
 			if hasStatus && status.IsTerminal() {
-				pend = 0
+				m.PendingApprovals = 0
 			}
-			if err := s.sessions.UpdateMetrics(id, cost, tokens, last, pend); err != nil {
-				slog.Error("session metrics not stored", "session", id, "err", err)
-			}
+			change.metrics = m
 		}
 		if hasStatus {
-			_ = s.sessions.UpdateStatus(id, status)
 			ev.Status = status
+			change.status = status
 		}
-		s.publish(id, ev)
+		s.record(id, ev, change)
 		if ce.Type == llmkit.EventResult {
 			s.announce(domain.SessionTurnEnded{SessionID: id})
 			s.flushHeadless(id)
@@ -743,25 +741,23 @@ func (s *Service) expiryLoop() {
 // keeps working. A session that actually died gets the truth from its own exit
 // event moments later.
 func (s *Service) handleExpiry(e approval.Expiry) {
-	s.releaseApproval(e.SessionID)
-	s.publish(e.SessionID, SessionEvent{
+	s.record(e.SessionID, SessionEvent{
 		Type:     "approval_expired",
 		Status:   domain.SessionThinking,
 		ToolName: e.ToolName,
 		Text:     e.Reason,
 		Approval: &ApprovalInfo{ReqID: e.ReqID, ToolName: e.ToolName},
 		At:       time.Now(),
-	})
+	}, s.releaseApproval(e.SessionID))
 }
 
 func (s *Service) handleApproval(req approval.Request) {
-	_ = s.sessions.UpdateStatus(req.SessionID, domain.SessionWaitingApproval)
-	if cur := s.sessions.Get(req.SessionID); cur != nil {
-		if err := s.sessions.UpdateMetrics(req.SessionID, cur.CostUSD, ports.TokensOf(cur), cur.LastAction, cur.PendingApprovals+1); err != nil {
-			slog.Error("session metrics not stored", "session", req.SessionID, "err", err)
-		}
+	change := sessionChange{status: domain.SessionWaitingApproval}
+	if m := s.metricsOf(req.SessionID); m != nil {
+		m.PendingApprovals++
+		change.metrics = m
 	}
-	s.publish(req.SessionID, SessionEvent{
+	s.record(req.SessionID, SessionEvent{
 		Type:     "approval_needed",
 		Status:   domain.SessionWaitingApproval,
 		ToolName: req.ToolName,
@@ -772,7 +768,7 @@ func (s *Service) handleApproval(req approval.Request) {
 			Questions: ParseQuestions(req.ToolName, req.Input),
 		},
 		At: time.Now(),
-	})
+	}, change)
 }
 
 // Send writes one user message into the live CLI process, starting a new turn.
@@ -790,13 +786,12 @@ func (s *Service) Send(ctx context.Context, id, text string) error {
 		return err
 	}
 	s.setBusy(id, true)
-	_ = s.sessions.UpdateStatus(id, domain.SessionThinking)
-	s.publish(id, SessionEvent{
+	s.record(id, SessionEvent{
 		Type:   "user_message",
 		Status: domain.SessionThinking,
 		Text:   text,
 		At:     time.Now(),
-	})
+	}, sessionChange{status: domain.SessionThinking})
 	return nil
 }
 
@@ -860,15 +855,14 @@ func (s *Service) SetAutoRun(ctx context.Context, id string, autoRun bool) error
 	})
 
 	for _, req := range flushed {
-		s.releaseApproval(id)
-		s.publish(id, SessionEvent{
+		s.record(id, SessionEvent{
 			Type:     "approval_resolved",
 			Status:   domain.SessionThinking,
 			Text:     "auto-approved",
 			ToolName: req.ToolName,
 			Approval: &ApprovalInfo{ReqID: req.ID, ToolName: req.ToolName},
 			At:       time.Now(),
-		})
+		}, s.releaseApproval(id))
 	}
 	return nil
 }
@@ -883,32 +877,42 @@ func (s *Service) decide(id, reqID string, d approval.Decision, text string) err
 	if err := s.broker.Resolve(id, reqID, d); err != nil {
 		return &domain.StructuredError{Code: "NO_PENDING_APPROVAL", Message: err.Error()}
 	}
-	s.releaseApproval(id)
-	s.publish(id, SessionEvent{
+	s.record(id, SessionEvent{
 		Type:     "approval_resolved",
 		Status:   domain.SessionThinking,
 		Text:     text,
 		Approval: &ApprovalInfo{ReqID: reqID},
 		At:       time.Now(),
-	})
+	}, s.releaseApproval(id))
 	return nil
 }
 
 // releaseApproval is the bookkeeping every outstanding approval ends with,
 // whether it was decided or expired: one fewer pending decision, and the
 // session back to working rather than idle — idle would wrongly invite the user
-// to type mid-turn.
-func (s *Service) releaseApproval(id string) {
-	if cur := s.sessions.Get(id); cur != nil {
-		pend := cur.PendingApprovals
-		if pend > 0 {
-			pend--
+// to type mid-turn. It is stored with the event that ends the approval.
+func (s *Service) releaseApproval(id string) sessionChange {
+	change := sessionChange{status: domain.SessionThinking}
+	if m := s.metricsOf(id); m != nil {
+		if m.PendingApprovals > 0 {
+			m.PendingApprovals--
 		}
-		if err := s.sessions.UpdateMetrics(id, cur.CostUSD, ports.TokensOf(cur), cur.LastAction, pend); err != nil {
-			slog.Error("session metrics not stored", "session", id, "err", err)
-		}
+		change.metrics = m
 	}
-	_ = s.sessions.UpdateStatus(id, domain.SessionThinking)
+	return change
+}
+
+// metricsOf is the session's stored metrics, nil when it is gone or its read
+// failed (logged).
+func (s *Service) metricsOf(id string) *ports.SessionMetrics {
+	cur, err := s.sessions.Find(id)
+	if err != nil {
+		slog.Error("session not read; its metrics miss this event", "session", id, "err", err)
+	}
+	if cur == nil {
+		return nil
+	}
+	return &ports.SessionMetrics{CostUSD: cur.CostUSD, Tokens: ports.TokensOf(cur), LastAction: cur.LastAction, PendingApprovals: cur.PendingApprovals}
 }
 
 // answerSummary renders the chosen answers for the resolved timeline row.
@@ -996,8 +1000,13 @@ func (s *Service) Subscribe(id string) (<-chan SessionEvent, []SessionEvent, fun
 	return s.hub.Subscribe(id)
 }
 
-func (s *Service) History(id string, fromSeq int64) []SessionEvent {
-	stored := s.sessions.ListEvents(id, fromSeq)
+// History is the session's stored events after fromSeq, or the error its
+// read failed with.
+func (s *Service) History(id string, fromSeq int64) ([]SessionEvent, error) {
+	stored, err := s.sessions.ListEvents(id, fromSeq)
+	if err != nil {
+		return nil, fmt.Errorf("session history: %w", err)
+	}
 	out := make([]SessionEvent, 0, len(stored))
 	for _, e := range stored {
 		var ev SessionEvent
@@ -1005,11 +1014,14 @@ func (s *Service) History(id string, fromSeq int64) []SessionEvent {
 			out = append(out, ev)
 		}
 	}
-	return out
+	return out, nil
 }
 
 func (s *Service) Get(_ context.Context, id string) (*domain.Session, error) {
-	sess := s.sessions.Get(id)
+	sess, err := s.sessions.Find(id)
+	if err != nil {
+		return nil, fmt.Errorf("read session: %w", err)
+	}
 	if sess == nil {
 		return nil, &domain.StructuredError{Code: "SESSION_NOT_FOUND", Message: "session not found"}
 	}
@@ -1017,7 +1029,10 @@ func (s *Service) Get(_ context.Context, id string) (*domain.Session, error) {
 }
 
 func (s *Service) List(_ context.Context, f ports.SessionFilter) ([]*domain.Session, error) {
-	list := s.sessions.List(f)
+	list, err := s.sessions.Query(f)
+	if err != nil {
+		return nil, fmt.Errorf("list sessions: %w", err)
+	}
 	for _, sess := range list {
 		s.withResumability(sess)
 	}
@@ -1025,6 +1040,19 @@ func (s *Service) List(_ context.Context, f ports.SessionFilter) ([]*domain.Sess
 }
 
 func (s *Service) publish(sessionID string, ev SessionEvent) {
+	s.record(sessionID, ev, sessionChange{})
+}
+
+// sessionChange is what an agent event changes on its session besides its
+// log: its metrics when set, its status when set.
+type sessionChange struct {
+	metrics *ports.SessionMetrics
+	status  domain.SessionStatus
+}
+
+// record sequences ev, stores it with change in one transaction, then fans
+// it out live. A store failure is logged; the live stream still gets it.
+func (s *Service) record(sessionID string, ev SessionEvent, change sessionChange) {
 	s.mu.Lock()
 	s.seq[sessionID]++
 	ev.Seq = s.seq[sessionID]
@@ -1039,7 +1067,11 @@ func (s *Service) publish(sessionID string, ev SessionEvent) {
 		ev.At = time.Now()
 	}
 	payload, _ := json.Marshal(ev)
-	_ = s.sessions.AppendEvent(sessionID, ev.Seq, ev.Type, payload)
+	if err := s.sessions.RecordEvent(sessionID, ports.SessionEventRecord{
+		Seq: ev.Seq, Type: ev.Type, Payload: payload, Metrics: change.metrics, Status: change.status,
+	}); err != nil {
+		slog.Error("session event not stored", "session", sessionID, "seq", ev.Seq, "type", ev.Type, "err", err)
+	}
 	s.hub.Publish(sessionID, ev)
 	s.notify(sessionID, ev.Type)
 	if moved {

@@ -1,6 +1,7 @@
 package sqlite
 
 import (
+	"errors"
 	"time"
 
 	"operators-mcp/internal/domain"
@@ -54,15 +55,35 @@ func (r *SessionRepository) Create(s *domain.Session) (*domain.Session, error) {
 	return m.ToDomain(), nil
 }
 
+// Get is Find for callers that treat a failed read as not found.
 func (r *SessionRepository) Get(id string) *domain.Session {
-	var m SessionModel
-	if err := r.db.First(&m, "id = ?", id).Error; err != nil {
-		return nil
-	}
-	return m.ToDomain()
+	s, _ := r.Find(id)
+	return s
 }
 
+// Find reads a session: nil, nil when there is none, an error when the read
+// failed.
+func (r *SessionRepository) Find(id string) (*domain.Session, error) {
+	var m SessionModel
+	err := r.db.First(&m, "id = ?", id).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return m.ToDomain(), nil
+}
+
+// List is Query for callers that treat a failed read as no sessions.
 func (r *SessionRepository) List(filter ports.SessionFilter) []*domain.Session {
+	list, _ := r.Query(filter)
+	return list
+}
+
+// Query lists the sessions filter matches, newest first, or the error the
+// read failed with.
+func (r *SessionRepository) Query(filter ports.SessionFilter) ([]*domain.Session, error) {
 	q := r.db.Model(&SessionModel{})
 	if filter.ProjectID != "" {
 		q = q.Where("project_id = ?", filter.ProjectID)
@@ -83,13 +104,13 @@ func (r *SessionRepository) List(filter ports.SessionFilter) []*domain.Session {
 	q = q.Order("created_at DESC")
 	var models []SessionModel
 	if err := q.Find(&models).Error; err != nil {
-		return nil
+		return nil, err
 	}
 	out := make([]*domain.Session, 0, len(models))
 	for i := range models {
 		out = append(out, models[i].ToDomain())
 	}
-	return out
+	return out, nil
 }
 
 func (r *SessionRepository) Delete(id string) error {
@@ -106,30 +127,54 @@ func (r *SessionRepository) Delete(id string) error {
 }
 
 func (r *SessionRepository) UpdateStatus(id string, status domain.SessionStatus) error {
-	res := r.db.Model(&SessionModel{}).Where("id = ?", id).Updates(map[string]any{
-		"status":     string(status),
-		"updated_at": time.Now().UnixMilli(),
-	})
-	if res.Error != nil {
-		return res.Error
-	}
-	if res.RowsAffected == 0 {
-		return &domain.StructuredError{Code: "SESSION_NOT_FOUND", Message: "session not found"}
-	}
-	return nil
+	return updateSession(r.db, id, map[string]any{"status": string(status)})
 }
 
 func (r *SessionRepository) UpdateMetrics(id string, costUSD float64, tokens ports.SessionTokens, lastAction string, pendingApprovals int) error {
-	res := r.db.Model(&SessionModel{}).Where("id = ?", id).Updates(map[string]any{
-		"cost_usd":                    costUSD,
-		"input_tokens":                tokens.Input,
-		"output_tokens":               tokens.Output,
-		"cache_creation_input_tokens": tokens.CacheCreation,
-		"cache_read_input_tokens":     tokens.CacheRead,
-		"last_action":                 lastAction,
-		"pending_approvals":           pendingApprovals,
-		"updated_at":                  time.Now().UnixMilli(),
+	return updateSession(r.db, id, metricsColumns(ports.SessionMetrics{
+		CostUSD: costUSD, Tokens: tokens, LastAction: lastAction, PendingApprovals: pendingApprovals,
+	}))
+}
+
+// RecordEvent stores the event row, the metrics and the status in one write
+// transaction.
+func (r *SessionRepository) RecordEvent(sessionID string, ev ports.SessionEventRecord) error {
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(&SessionEventModel{
+			SessionID: sessionID, Seq: ev.Seq, Type: ev.Type, Payload: ev.Payload,
+		}).Error; err != nil {
+			return err
+		}
+		cols := map[string]any{}
+		if ev.Metrics != nil {
+			cols = metricsColumns(*ev.Metrics)
+		}
+		if ev.Status != "" {
+			cols["status"] = string(ev.Status)
+		}
+		if len(cols) == 0 {
+			return nil
+		}
+		return updateSession(tx, sessionID, cols)
 	})
+}
+
+func metricsColumns(m ports.SessionMetrics) map[string]any {
+	return map[string]any{
+		"cost_usd":                    m.CostUSD,
+		"input_tokens":                m.Tokens.Input,
+		"output_tokens":               m.Tokens.Output,
+		"cache_creation_input_tokens": m.Tokens.CacheCreation,
+		"cache_read_input_tokens":     m.Tokens.CacheRead,
+		"last_action":                 m.LastAction,
+		"pending_approvals":           m.PendingApprovals,
+	}
+}
+
+// updateSession sets cols and updated_at on session id.
+func updateSession(db *gorm.DB, id string, cols map[string]any) error {
+	cols["updated_at"] = time.Now().UnixMilli()
+	res := db.Model(&SessionModel{}).Where("id = ?", id).Updates(cols)
 	if res.Error != nil {
 		return res.Error
 	}
@@ -182,17 +227,11 @@ func (r *SessionRepository) UpdateRunner(id string, runsOn domain.Runner, host s
 	return nil
 }
 
-func (r *SessionRepository) AppendEvent(sessionID string, seq int64, typ string, payload []byte) error {
-	return r.db.Create(&SessionEventModel{
-		SessionID: sessionID, Seq: seq, Type: typ, Payload: payload,
-	}).Error
-}
-
-func (r *SessionRepository) ListEvents(sessionID string, fromSeq int64) []ports.StoredEvent {
+func (r *SessionRepository) ListEvents(sessionID string, fromSeq int64) ([]ports.StoredEvent, error) {
 	var models []SessionEventModel
 	q := r.db.Where("session_id = ? AND seq > ?", sessionID, fromSeq).Order("seq ASC")
 	if err := q.Find(&models).Error; err != nil {
-		return nil
+		return nil, err
 	}
 	out := make([]ports.StoredEvent, 0, len(models))
 	for _, m := range models {
@@ -200,7 +239,7 @@ func (r *SessionRepository) ListEvents(sessionID string, fromSeq int64) []ports.
 			Seq: m.Seq, Type: m.Type, Payload: m.Payload, At: time.UnixMilli(m.CreatedAt),
 		})
 	}
-	return out
+	return out, nil
 }
 
 // ActivityByProject answers each project's live session count and newest

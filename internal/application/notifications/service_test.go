@@ -230,8 +230,14 @@ func TestNamesAreReadWhenTheInboxIsRead(t *testing.T) {
 	}
 }
 
-// failingRepo fails every write.
+// failingRepo fails every write, inside a transaction too.
 type failingRepo struct{ ports.NotificationRepository }
+
+func (r failingRepo) Transaction(fn func(tx ports.NotificationRepository) error) error {
+	return r.NotificationRepository.Transaction(func(tx ports.NotificationRepository) error {
+		return fn(failingRepo{tx})
+	})
+}
 
 func (failingRepo) Create(*domain.Notification) (*domain.Notification, error) {
 	return nil, errors.New("disk full")
@@ -255,6 +261,75 @@ func TestAFailingStoreNeverFailsThePublisher(t *testing.T) {
 	} {
 		if err := bus.Publish(ctx, ev); err != nil {
 			t.Fatalf("publish %s = %v, want nil", ev.EventName(), err)
+		}
+	}
+}
+
+// faultyRepo fails the next write the way it is told to: its Create, or its
+// commit after the write ran.
+type faultyRepo struct {
+	ports.NotificationRepository
+	mu                     sync.Mutex
+	failCreate, failCommit bool
+}
+
+func (r *faultyRepo) fail(create, commit bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.failCreate, r.failCommit = create, commit
+}
+
+func (r *faultyRepo) Transaction(fn func(tx ports.NotificationRepository) error) error {
+	r.mu.Lock()
+	create, commit := r.failCreate, r.failCommit
+	r.failCreate, r.failCommit = false, false
+	r.mu.Unlock()
+	return r.NotificationRepository.Transaction(func(tx ports.NotificationRepository) error {
+		if create {
+			tx = failingRepo{tx}
+		}
+		if err := fn(tx); err != nil {
+			return err
+		}
+		if commit {
+			return errors.New("commit failed")
+		}
+		return nil
+	})
+}
+
+// A write that fails, before or at its commit, answers an error and never
+// holds back the changes after it: followers still get them.
+func TestAFailedWriteNeverHoldsBackTheChangesAfterIt(t *testing.T) {
+	e := notificationstest.NewEnv(t)
+	repo := &faultyRepo{NotificationRepository: e.Repo}
+	svc, err := notifications.New(repo, e.Readers(), notifications.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	fctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	changes, _ := svc.FollowNotifications(fctx)
+
+	for _, c := range []struct {
+		name           string
+		create, commit bool
+	}{{"create fails", true, false}, {"commit fails", false, true}} {
+		repo.fail(c.create, c.commit)
+		if _, err := svc.Notify(ctx, ports.NotifyRequest{ProjectID: e.ProjectA, Title: "lost: " + c.name}); err == nil {
+			t.Fatalf("%s: Notify = nil error", c.name)
+		}
+		want := "after: " + c.name
+		if _, err := svc.Notify(ctx, ports.NotifyRequest{ProjectID: e.ProjectA, Title: want}); err != nil {
+			t.Fatalf("%s: the next Notify = %v", c.name, err)
+		}
+		select {
+		case ch := <-changes:
+			if len(ch.Changed) != 1 || ch.Changed[0].Title != want {
+				t.Fatalf("%s: followers got %+v, want only %q", c.name, ch.Changed, want)
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatalf("%s: the change after the failed write never reached followers", c.name)
 		}
 	}
 }
