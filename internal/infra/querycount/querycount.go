@@ -2,12 +2,16 @@
 // such as an HTTP request, so a slow request can say how many it made and a
 // test can hold a page to a query budget.
 //
-// A call is attributed to a tracker in one of two ways. A call whose context
-// carries the tracker's counter is counted on whatever goroutine makes it.
-// A call made without such a context (repositories off the budgeted pages
-// take none yet) is counted, by Track alone, when it runs on the goroutine
-// that started tracking; on any other goroutine it is not counted.
-// TrackContext counts by the context alone.
+// A call whose context carries the tracker's counter is counted on whatever
+// goroutine makes it. TrackContext counts that way alone, and a count that
+// must hold (a page's query budget) is taken with it.
+//
+// Track adds a bridge, and it exists only for the slow-request log: routes
+// whose repositories take no context yet would otherwise log too few
+// queries. Under Track, a call made without the context is counted when it
+// runs on the goroutine that started tracking; on any other goroutine it is
+// not counted. The bridge goes once those repositories take the request's
+// context. Nothing may rely on a Track count as a guarantee.
 package querycount
 
 import (
@@ -43,7 +47,8 @@ var (
 
 // Track starts counting the database calls made for ctx: those whose
 // context carries the returned context's counter, and those made without
-// one on the calling goroutine until stop. A tracker started inside another
+// one on the calling goroutine until stop. It is for the slow-request log
+// only; see the package comment. A tracker started inside another
 // on the same goroutine takes over that goroutine's calls until it stops.
 func Track(ctx context.Context) (context.Context, *Counter, func()) {
 	c := &Counter{}

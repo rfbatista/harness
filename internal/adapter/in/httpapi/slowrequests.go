@@ -60,6 +60,9 @@ func (s *slowRequests) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	start := time.Now()
+	// Track, not TrackContext: routes whose repositories take no context yet
+	// still count their queries on this goroutine. The count is for the log
+	// only and guarantees nothing.
 	ctx, queries, stop := querycount.Track(r.Context())
 	defer stop()
 	route := &routePattern{}
