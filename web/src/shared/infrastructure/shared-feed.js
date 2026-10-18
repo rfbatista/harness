@@ -26,6 +26,8 @@ import { streamFeed } from "./stream-feed.js";
 const NAME = "harness-page-event-stream";
 const PING_MS = 2_000;
 const SILENCE_MS = 10_000;
+const FIRST_HANDOVER_DELAY_MS = 1_000;
+const MAX_HANDOVER_DELAY_MS = 30_000;
 
 /**
  * @param {{
@@ -33,7 +35,7 @@ const SILENCE_MS = 10_000;
  *   api: import("./api.js").ApiClient,
  *   locks?: LockManager | null,
  *   BroadcastChannel?: typeof globalThis.BroadcastChannel | null,
- *   window?: { addEventListener: (type: string, fn: () => void) => void },
+ *   window?: { addEventListener: (type: string, fn: (event: any) => void) => void },
  *   now?: () => number,
  *   setInterval?: typeof globalThis.setInterval,
  *   clearInterval?: typeof globalThis.clearInterval,
@@ -66,8 +68,10 @@ export function sharedFeed({
   /** What this tab follows: path -> its followers and last status. */
   const local = new Map();
   let waiting = null; // the AbortController of this tab's queued lock request
+  let stealing = false; // a steal is in flight
+  let tabLock = false;
   let heartbeat = null;
-  let holder = null; // the stream-holding tab, once heard from
+  let holderTab = null; // the stream-holding tab, once heard from
   let pingedAt = null; // when this tab pinged the stream-holding tab without an answer yet
 
   // A follower that throws must not keep the others from hearing.
@@ -123,19 +127,31 @@ export function sharedFeed({
   }
 
   // ── the stream-holding tab ──────────────────────────────────────────────
-  /** @type {null | { stream: import("./feed.js").Feed, relays: Map<string, { tabs: Set<string>, status: string, stop: () => void }> }} */
+  /**
+   * @type {null | {
+   *   stream: import("./feed.js").Feed,
+   *   relays: Map<string, { tabs: Set<string>, status: string, stop: (() => void) | null }>,
+   *   ready: boolean,
+   * }}
+   */
   let holding = null;
 
   function relay(tab, path) {
     let r = holding.relays.get(path);
     if (r) {
       r.tabs.add(tab);
-      if (tab === me) hear(path, r.status);
-      else post({ type: "status", path, status: r.status, to: tab });
+      if (r.stop) {
+        if (tab === me) hear(path, r.status);
+        else post({ type: "status", path, status: r.status, to: tab });
+      }
       return;
     }
-    r = { tabs: new Set([tab]), status: FeedStatus.CONNECTING, stop: () => {} };
+    r = { tabs: new Set([tab]), status: FeedStatus.CONNECTING, stop: null };
     holding.relays.set(path, r);
+    if (holding.ready) start(path, r);
+  }
+  /** Follows a relayed path on this tab's stream. */
+  function start(path, r) {
     r.stop = holding.stream.follow(path, {
       onMessage(data) {
         deliver(path, data);
@@ -153,7 +169,7 @@ export function sharedFeed({
     const r = holding.relays.get(path);
     if (!r || !r.tabs.delete(tab) || r.tabs.size > 0) return;
     holding.relays.delete(path);
-    r.stop();
+    r.stop?.();
   }
   /** Sets what a tab follows to paths, following and unfollowing the difference. */
   function relayAll(tab, paths) {
@@ -161,55 +177,115 @@ export function sharedFeed({
     for (const [path, r] of [...holding.relays]) if (r.tabs.has(tab) && !want.has(path)) unrelay(tab, path);
     for (const path of want) if (!holding.relays.get(path)?.tabs.has(tab)) relay(tab, path);
   }
+  function stopRelays() {
+    for (const r of holding.relays.values()) r.stop?.();
+  }
 
-  function hold() {
-    waiting = null;
-    holding = { stream: ownStream(), relays: new Map() };
-    holder = me;
+  // Handovers that follow one another quickly (tabs crashing or taking over
+  // in turn) back off like a dropped stream: the new stream-holding tab waits
+  // 1 s, doubling to 30 s, before following again. A handover after a quiet
+  // spell is at once.
+  let handedOverAt = null; // when this tab last heard of a new stream-holding tab
+  // and how long that one waited: it travels with the announcement.
+  let handoverDelay = 0;
+  function nextHandoverDelay() {
+    const quick = handedOverAt !== null && now() - handedOverAt < MAX_HANDOVER_DELAY_MS;
+    handoverDelay = quick ? Math.min(Math.max(handoverDelay * 2, FIRST_HANDOVER_DELAY_MS), MAX_HANDOVER_DELAY_MS) : 0;
+    handedOverAt = now();
+    return handoverDelay;
+  }
+
+  /** Opens this tab's stream and asks every tab what it follows. */
+  function announce() {
+    const h = { stream: ownStream(), relays: new Map(), ready: false };
+    holding = h;
+    holderTab = me;
     pingedAt = null;
     handover();
-    post({ type: "holder" });
+    const delay = nextHandoverDelay();
+    post({ type: "holder", delay });
     relayAll(me, [...local.keys()]);
+    const begin = () => {
+      if (holding !== h) return; // deposed while waiting
+      h.ready = true;
+      for (const [path, r] of h.relays) start(path, r);
+    };
+    if (delay > 0) setTimeout(begin, delay);
+    else begin();
+  }
+
+  function hold() {
+    stealing = false;
+    waiting?.abort(); // a request queued while stealing would be granted out of turn
+    waiting = null;
+    startHeartbeat();
+    announce();
     // Held until the tab goes away (the browser releases it then) or another
     // tab takes it over.
     return new Promise(() => {});
   }
 
+  /** Pauses what this tab follows and tells the stream-holding tab about it. */
+  function rejoin() {
+    handover();
+    post({ type: "paths", paths: [...local.keys()] });
+  }
+
   /** Another tab holds the stream now: close this one and follow through it. */
   function stepDown() {
     if (!holding) return;
-    const { relays } = holding;
+    stopRelays();
     holding = null;
-    for (const r of relays.values()) r.stop();
-    handover();
-    post({ type: "paths", paths: [...local.keys()] });
     requestLock();
   }
 
+  let holds = 0; // counts this tab's grants, so a late rejection is matched to its own
   function lockRequest(options) {
-    let granted = false;
-    locks
+    let grant = 0;
+    return locks
       .request(NAME, options, () => {
-        granted = true;
+        grant = ++holds;
         return hold();
       })
       .catch(() => {
         // Taken over by another tab. A request this tab withdrew to steal was
-        // never granted, and says nothing about the lock it holds now.
-        if (granted) stepDown();
+        // never granted, and an older grant says nothing about the lock it
+        // holds now.
+        if (grant !== 0 && grant === holds && holding) {
+          stepDown();
+          rejoin();
+        }
       });
   }
 
   function requestLock() {
-    if (!heartbeat) heartbeat = setInterval(check, PING_MS);
-    if (holding || waiting) return;
+    if (!tabLock) {
+      // Held for as long as this tab lives: the stream-holding tab drops the
+      // paths of a tab whose lock is gone, so a crashed tab's follows end.
+      tabLock = true;
+      locks.request(`${NAME}/tab/${me}`, () => new Promise(() => {})).catch(() => {});
+    }
+    startHeartbeat();
+    if (holding || waiting || stealing) return;
     waiting = new AbortController();
     lockRequest({ signal: waiting.signal });
   }
 
-  /** Pings the stream-holding tab, and takes over from one that stays silent. */
+  function startHeartbeat() {
+    if (!heartbeat) heartbeat = setInterval(check, PING_MS);
+  }
+
+  /**
+   * The stream-holding tab drops the paths of tabs that are gone. Every other
+   * tab pings it, and takes over from one that stays silent.
+   */
   function check() {
-    if (holding || local.size === 0) return;
+    if (holding) return sweep();
+    if (local.size === 0) {
+      clearInterval(heartbeat);
+      heartbeat = null;
+      return;
+    }
     if (pingedAt === null) {
       pingedAt = now();
       post({ type: "ping" });
@@ -219,11 +295,32 @@ export function sharedFeed({
     pingedAt = null;
     waiting?.abort();
     waiting = null;
-    lockRequest({ steal: true });
+    stealing = true;
+    lockRequest({ steal: true }).then(() => {
+      stealing = false;
+    });
+  }
+
+  async function sweep() {
+    const h = holding;
+    let state;
+    try {
+      state = await locks.query();
+    } catch {
+      return;
+    }
+    if (holding !== h) return;
+    const alive = new Set([...state.held, ...state.pending].map((l) => l.name));
+    const tabs = new Set([...h.relays.values()].flatMap((r) => [...r.tabs]));
+    for (const tab of tabs) if (tab !== me && !alive.has(`${NAME}/tab/${tab}`)) relayAll(tab, []);
   }
 
   channel.onmessage = ({ data: msg }) => {
     if (!msg || msg.from === me) return;
+    if (msg.type === "holder") {
+      handedOverAt = now();
+      handoverDelay = msg.delay ?? 0;
+    }
     if (holding && msg.type === "holder") stepDown(); // it took the lock while this tab was frozen
     if (holding) {
       switch (msg.type) {
@@ -241,16 +338,14 @@ export function sharedFeed({
       return;
     }
     if (["holder", "event", "status", "pong"].includes(msg.type)) {
-      holder = msg.from;
+      holderTab = msg.from;
       pingedAt = null;
     }
     switch (msg.type) {
       case "holder":
-        handover();
-        post({ type: "paths", paths: [...local.keys()] });
-        return;
+        return rejoin();
       case "bye":
-        if (msg.from === holder) handover();
+        if (msg.from === holderTab) handover();
         return;
       case "event":
         return deliver(msg.path, msg.data);
@@ -261,6 +356,18 @@ export function sharedFeed({
   };
 
   window.addEventListener?.("pagehide", () => post({ type: "bye" }));
+  // A page restored from the back/forward cache said bye on its way in, and
+  // missed whatever happened since: follow everything again.
+  window.addEventListener?.("pageshow", (event) => {
+    if (!event?.persisted || local.size === 0) return;
+    if (holding) {
+      stopRelays();
+      announce();
+    } else {
+      rejoin();
+      requestLock();
+    }
+  });
 
   return {
     follow(path, { onMessage, onStatus = () => {} }) {

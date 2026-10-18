@@ -20,13 +20,14 @@ import (
 // is plain HTTP/1.1, so a stream per tab would spend Chrome's six connections
 // per host and stall the later tabs.
 
-// streamCount counts the GET /api/stream requests open right now, and ever,
-// and the rail's refetches of the task list (its resync).
-type streamCount struct {
+// serverCount counts what the browser asks of the server: the GET
+// /api/stream requests open right now and ever, and the rail's refetches of
+// the task list (its resync).
+type serverCount struct {
 	open, opened, refetched atomic.Int32
 }
 
-func (c *streamCount) wrap(next http.Handler) http.Handler {
+func (c *serverCount) wrap(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api/stream" {
 			c.open.Add(1)
@@ -42,7 +43,7 @@ func (c *streamCount) wrap(next http.Handler) http.Handler {
 
 type sharedStreamHarness struct {
 	*railHarness
-	streams *streamCount
+	server *serverCount
 }
 
 // newSharedStreamHarness serves the rail's world like newRailHarness, over
@@ -62,16 +63,16 @@ func newSharedStreamHarness(t *testing.T) *sharedStreamHarness {
 	mux.Handle("/api/events", feed)
 	mux.Handle("/api/", http.NotFoundHandler())
 	mux.Handle("/", NewHandler(railWorld(), assets, nil))
-	streams := &streamCount{}
+	server := &serverCount{}
 	b := withStream(mux)
-	srv := httptest.NewUnstartedServer(streams.wrap(b))
+	srv := httptest.NewUnstartedServer(server.wrap(b))
 	srv.Listener = &closingListener{Listener: srv.Listener, onClose: b.shutdown}
 	srv.Start()
 	t.Cleanup(func() {
 		srv.CloseClientConnections()
 		srv.Close()
 	})
-	return &sharedStreamHarness{railHarness: &railHarness{ctx: ctx, srv: srv, feed: feed, errs: errs}, streams: streams}
+	return &sharedStreamHarness{railHarness: &railHarness{ctx: ctx, srv: srv, feed: feed, errs: errs}, server: server}
 }
 
 // openTabs opens n tabs of the one browser, in order, each on the task page
@@ -134,12 +135,12 @@ func TestEightTabsShareOnePageEventStream(t *testing.T) {
 	tabs, _ := h.openTabs(t, 8)
 
 	waitFor(t, "the project feed followed", func() bool { return h.feed.followers() >= 1 })
-	if open := h.streams.open.Load(); open != 1 {
+	if open := h.server.open.Load(); open != 1 {
 		t.Errorf("%d /api/stream requests open across 8 tabs, want 1", open)
 	}
 	h.feed.pushRaw(t, todoTicket("t-b0", "Review the UX for the web ui"))
 	everyTabShows(t, tabs, "3")
-	if open := h.streams.open.Load(); open != 1 {
+	if open := h.server.open.Load(); open != 1 {
 		t.Errorf("%d /api/stream requests open after the change, want 1", open)
 	}
 	h.noErrors(t)
@@ -151,14 +152,14 @@ func TestClosingTheStreamHoldingTabHandsTheStreamOver(t *testing.T) {
 	h := newSharedStreamHarness(t)
 	tabs, closers := h.openTabs(t, 3)
 	waitFor(t, "the project feed followed", func() bool { return h.feed.followers() >= 1 })
-	if opened := h.streams.opened.Load(); opened != 1 {
+	if opened := h.server.opened.Load(); opened != 1 {
 		t.Fatalf("%d streams opened by 3 tabs, want 1", opened)
 	}
 
-	refetched := h.streams.refetched.Load()
+	refetched := h.server.refetched.Load()
 	closers[0]() // the first tab took the lock, so it holds the stream
-	waitFor(t, "a new stream", func() bool { return h.streams.opened.Load() == 2 })
-	waitFor(t, "the old stream closed", func() bool { return h.streams.open.Load() == 1 })
+	waitFor(t, "a new stream", func() bool { return h.server.opened.Load() == 2 })
+	waitFor(t, "the old stream closed", func() bool { return h.server.open.Load() == 1 })
 	waitFor(t, "the new stream follows the project feed", func() bool { return h.feed.followers() >= 2 })
 
 	rest := tabs[1:]
@@ -171,7 +172,7 @@ func TestClosingTheStreamHoldingTabHandsTheStreamOver(t *testing.T) {
 			t.Fatalf("tab %d never came back live: %v", i+2, err)
 		}
 	}
-	waitFor(t, "every remaining tab resynced", func() bool { return h.streams.refetched.Load()-refetched >= int32(len(rest)) })
+	waitFor(t, "every remaining tab resynced", func() bool { return h.server.refetched.Load()-refetched >= int32(len(rest)) })
 	h.feed.pushRaw(t, todoTicket("t-b0", "Review the UX for the web ui"))
 	everyTabShows(t, rest, "3")
 	h.noErrors(t)

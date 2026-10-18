@@ -1,22 +1,9 @@
 import { FeedStatus } from "../domain/feed.js";
-import { fakeCrossTab, fakeEventSourceClass, flush, manualTimers } from "../testing/doubles.js";
+import { fakeCrossTab, fakeEventSourceClass, fakeStreamApi, flush, manualTimers } from "../testing/doubles.js";
 import { assert, file, test } from "../testing/test.js";
 import { sharedFeed } from "./shared-feed.js";
 
 file("shared/infrastructure/shared-feed");
-
-// An api whose posts are recorded; a follow fails while `refuse` says so.
-function fakeApi() {
-  const posts = [];
-  const api = {
-    refuse: false,
-    post(path, body) {
-      posts.push({ route: path, ...body });
-      return api.refuse ? Promise.reject(new Error("refused")) : Promise.resolve({});
-    },
-  };
-  return { api, posts };
-}
 
 function followerOn(f, path) {
   const statuses = [];
@@ -29,7 +16,7 @@ test("without the cross-tab APIs a tab keeps its own stream, as before", async (
   for (const missing of [{ locks: null }, { BroadcastChannel: null }]) {
     const es = fakeEventSourceClass();
     const timers = manualTimers();
-    const { api, posts } = fakeApi();
+    const { api, posts } = fakeStreamApi();
     const f = sharedFeed({ base: "/api", api, EventSource: es.EventSource, ...timers, locks: {}, BroadcastChannel: class {}, ...missing });
     const a = followerOn(f, "/events?project_id=p1");
     assert.equal(es.instances.length, 1);
@@ -60,7 +47,7 @@ function browserProfile() {
   const cross = fakeCrossTab();
   const es = fakeEventSourceClass();
   const timers = manualTimers();
-  const { api, posts } = fakeApi();
+  const { api, posts } = fakeStreamApi();
   // One clock and one heartbeat for all tabs: beat() moves the clock on and
   // runs every tab's interval once, frozen tabs' too (they check holding).
   let clock = 0;
@@ -74,6 +61,9 @@ function browserProfile() {
       return id;
     },
     clearInterval: (id) => intervals.delete(id),
+  };
+  const later = (ms) => {
+    clock += ms;
   };
   const beat = (ms) => {
     clock += ms;
@@ -112,6 +102,7 @@ function browserProfile() {
         for (const s of mine.instances) s.closed = true;
       },
       streams: mine.instances,
+      fire: (type, event) => t.fire(type, event),
       freeze() {
         frozen = true;
         t.freeze();
@@ -131,7 +122,7 @@ function browserProfile() {
     return open[0];
   };
   const hello = (id = "st1") => stream().message({ stream: id });
-  return { open, tabs, es, timers, api, posts, openStreams, stream, hello, beat };
+  return { open, tabs, es, timers, api, posts, openStreams, stream, hello, beat, later };
 }
 
 const P1 = "/events?project_id=p1";
@@ -224,6 +215,7 @@ for (const crash of [false, true]) {
     await flush();
     b.hello();
     await flush();
+    b.later(60_000); // a quiet spell: the handover is at once
 
     one.close({ crash });
     await flush();
@@ -312,6 +304,7 @@ async function threeLiveTabs() {
   await flush();
   b.hello();
   await flush();
+  b.later(60_000);
   return { b, one, two, three, z, a, c };
 }
 
@@ -371,4 +364,67 @@ test("a deposed stream-holding tab that wakes up closes its stream, stops relayi
   assert.ok(b.posts.some((p) => p.stream === "st2" && p.path === INBOX), "the new stream-holding tab follows what the woken tab follows");
   assert.deepEqual(z.statuses.slice(-3), [FeedStatus.PAUSED, FeedStatus.RESYNCED, FeedStatus.LIVE]);
   assert.equal(one.streams.length, 1, "it does not open another stream");
+});
+
+test("the stream-holding tab drops the paths of a tab that crashed", async () => {
+  const b = browserProfile();
+  const [one, two] = [b.open(), b.open()];
+  one.follow(INBOX);
+  two.follow(P1);
+  await flush();
+  b.hello();
+  await flush();
+  two.close({ crash: true });
+  b.beat(2000);
+  await flush();
+  assert.deepEqual(b.posts.at(-1), { route: "/stream/unfollow", stream: "st1", path: P1 });
+  b.beat(2000);
+  await flush();
+  assert.equal(b.posts.length, 3, "the living tab's path stays followed");
+});
+
+test("a tab restored from the back/forward cache follows its paths again and resyncs", async () => {
+  const b = browserProfile();
+  const [one, two] = [b.open(), b.open()];
+  one.follow(INBOX);
+  const a = two.follow(P1);
+  await flush();
+  b.hello();
+  await flush();
+  two.fire("pagehide");
+  await flush();
+  assert.deepEqual(b.posts.at(-1), { route: "/stream/unfollow", stream: "st1", path: P1 });
+  two.fire("pageshow", { persisted: true });
+  await flush();
+  assert.deepEqual(b.posts.at(-1), { route: "/stream/follow", stream: "st1", path: P1 });
+  assert.deepEqual(a.statuses.slice(-3), [FeedStatus.PAUSED, FeedStatus.RESYNCED, FeedStatus.LIVE]);
+});
+
+test("handovers in quick succession back off before following again", async () => {
+  const b = browserProfile();
+  const [one, two, three] = [b.open(), b.open(), b.open()];
+  one.follow(P1);
+  const a = two.follow(P1);
+  const c = three.follow(P1);
+  await flush();
+  b.hello();
+  await flush();
+
+  one.close({ crash: true });
+  await flush();
+  assert.equal(two.streams.length, 0, "a handover right after the last one waits");
+  assert.deepEqual(b.timers.delays(), [1000]);
+  b.timers.tick();
+  assert.equal(two.streams.length, 1);
+  b.hello("st2");
+  await flush();
+  for (const f of [a, c]) assert.deepEqual(f.statuses.slice(-3), [FeedStatus.PAUSED, FeedStatus.RESYNCED, FeedStatus.LIVE]);
+
+  two.close({ crash: true });
+  await flush();
+  assert.deepEqual(b.timers.delays(), [2000], "and waits twice as long the next time");
+  b.timers.tick();
+  b.hello("st3");
+  await flush();
+  assert.deepEqual(c.statuses.slice(-3), [FeedStatus.PAUSED, FeedStatus.RESYNCED, FeedStatus.LIVE]);
 });

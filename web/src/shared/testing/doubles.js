@@ -46,6 +46,19 @@ export function fakeEventSourceClass() {
   return { EventSource: FakeEventSource, instances, latest: () => instances.at(-1) };
 }
 
+/** An api whose posts are recorded; a post fails while `refuse` says so. */
+export function fakeStreamApi() {
+  const posts = [];
+  const api = {
+    refuse: false,
+    post(path, body) {
+      posts.push({ route: path, ...body });
+      return api.refuse ? Promise.reject(new Error("refused")) : Promise.resolve({});
+    },
+  };
+  return { api, posts };
+}
+
 /** setTimeout / clearTimeout that only fire when the test calls tick(). */
 export function manualTimers() {
   let nextId = 1;
@@ -172,6 +185,13 @@ export function fakeCrossTab() {
     const run = (fn) => (frozen ? waiting.push(fn) : fn());
 
     const tabLocks = {
+      async query() {
+        const all = [...locks.values()];
+        return {
+          held: all.filter((l) => l.held).map((l) => ({ name: l.held.name })),
+          pending: all.flatMap((l) => l.queue.map((e) => ({ name: e.name }))),
+        };
+      },
       request(name, options, callback) {
         if (typeof options === "function") [options, callback] = [{}, options];
         let l = locks.get(name);
@@ -237,6 +257,10 @@ export function fakeCrossTab() {
       locks: tabLocks,
       BroadcastChannel: FakeBroadcastChannel,
       window,
+      /** Fires a page event (pagehide, pageshow) on the tab's window. */
+      fire(type, event = {}) {
+        for (const fn of listeners.get(type) ?? []) fn(event);
+      },
       /** The tab hangs: it keeps its locks but runs nothing. */
       freeze() {
         frozen = true;

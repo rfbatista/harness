@@ -9,8 +9,8 @@
 // last; one that joins late is told the stream's status at once.
 //
 // This is one EventSource per path, as the feeds' own endpoints and the
-// gateways' test stubs speak. The app itself uses stream-feed.js, which keeps
-// this contract over the tab's one /api/stream connection.
+// gateways' test stubs speak. The app itself uses shared-feed.js, which keeps
+// this contract over one /api/stream connection shared by the browser's tabs.
 
 import { FeedStatus } from "../domain/feed.js";
 
