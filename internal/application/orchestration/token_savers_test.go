@@ -492,3 +492,40 @@ func TestAResumedSessionKeepsTheCavemanIntensityItStartedWith(t *testing.T) {
 	t.Cleanup(func() { _, _ = svc.EndInteractive(ctx, sess.ID, 0, false) })
 	checkCavemanWired(t, spec.AppendSystem, domain.CavemanLite)
 }
+
+// An active saver's telemetry is off whatever the env the session would
+// otherwise get says: its variables replace any value already set. A
+// session with no active saver keeps that env as it was.
+func TestAnActiveSaversTelemetryIsOffEvenWhenTheEnvTurnsItOn(t *testing.T) {
+	telemetryOn := []string{"DO_NOT_TRACK=0", "CODEGRAPH_TELEMETRY=1", "RTK_TELEMETRY_DISABLED=0"}
+	t.Run("savers active", func(t *testing.T) {
+		svc, w := newHeadlessShellService(t)
+		svc.DefaultEnv = append(svc.DefaultEnv, telemetryOn...)
+		savers := withTokenSavers(t, svc)
+		savers.install(t, domain.TokenSaverRTK, "rtk-oss")
+		savers.install(t, domain.TokenSaverCodegraph, "codegraph")
+		savers.set(t, domain.ActivationLevelProject, "p1", domain.TokenSaverRTK, domain.ActivationOn)
+		savers.set(t, domain.ActivationLevelProject, "p1", domain.TokenSaverCodegraph, domain.ActivationOn)
+
+		_, launch := startHeadless(t, svc, w.task.ID)
+		want := map[string]string{"DO_NOT_TRACK": "1", "CODEGRAPH_TELEMETRY": "0", "RTK_TELEMETRY_DISABLED": "1"}
+		for name, v := range want {
+			if launch.Env[name] != v {
+				t.Errorf("%s = %q, want %q (env %v)", name, launch.Env[name], v, launch.Env)
+			}
+		}
+	})
+	t.Run("no saver active", func(t *testing.T) {
+		svc, w := newHeadlessShellService(t)
+		svc.DefaultEnv = append(svc.DefaultEnv, telemetryOn...)
+		withTokenSavers(t, svc)
+
+		_, launch := startHeadless(t, svc, w.task.ID)
+		want := map[string]string{"DO_NOT_TRACK": "0", "CODEGRAPH_TELEMETRY": "1", "RTK_TELEMETRY_DISABLED": "0"}
+		for name, v := range want {
+			if launch.Env[name] != v {
+				t.Errorf("%s = %q, want %q (env %v)", name, launch.Env[name], v, launch.Env)
+			}
+		}
+	})
+}

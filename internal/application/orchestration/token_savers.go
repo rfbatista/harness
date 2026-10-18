@@ -231,13 +231,17 @@ func withoutFrontMatter(skill string) string {
 	return strings.TrimSpace(skill)
 }
 
-// withEnv adds each NAME=value to cfg's env unless NAME is already set
-// there, so two savers asking for the same variable set it once.
+// withEnv sets each NAME=value in cfg's env, replacing any value NAME
+// already has there in place: a saver's telemetry stays off whatever the
+// session's env says, and two savers asking for the same variable set it
+// once.
 func withEnv(cfg *llmkit.SessionConfig, kvs ...string) {
 	env := slices.Clone(cfg.Env)
 	for _, kv := range kvs {
 		name, _, _ := strings.Cut(kv, "=")
-		if !slices.ContainsFunc(env, func(e string) bool { return strings.HasPrefix(e, name+"=") }) {
+		if i := slices.IndexFunc(env, func(e string) bool { return strings.HasPrefix(e, name+"=") }); i >= 0 {
+			env[i] = kv
+		} else {
 			env = append(env, kv)
 		}
 	}

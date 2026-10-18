@@ -24,7 +24,7 @@ type fakeLaunch struct {
 }
 
 // fakeLaunchEnv are the variables fakeLaunch.Env records.
-var fakeLaunchEnv = []string{"RTK_TELEMETRY_DISABLED", "DO_NOT_TRACK", "ANTHROPIC_BASE_URL"}
+var fakeLaunchEnv = []string{"RTK_TELEMETRY_DISABLED", "DO_NOT_TRACK", "CODEGRAPH_TELEMETRY", "ANTHROPIC_BASE_URL"}
 
 func TestMain(m *testing.M) {
 	if os.Getenv("CLAUDE_FAKE") == "1" {
