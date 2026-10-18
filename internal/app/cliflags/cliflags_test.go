@@ -182,3 +182,26 @@ func TestParseGitDeadlines(t *testing.T) {
 		})
 	}
 }
+
+func TestParseGitBin(t *testing.T) {
+	for _, c := range []struct {
+		name string
+		args []string
+		env  map[string]string
+		want string
+	}{
+		{"default resolves at startup", nil, nil, ""},
+		{"env", nil, map[string]string{"CODING_POOL_GIT_BIN": "/opt/git/bin/git"}, "/opt/git/bin/git"},
+		{"flag over env", []string{"--git.bin=/usr/local/bin/git"}, map[string]string{"CODING_POOL_GIT_BIN": "/opt/git/bin/git"}, "/usr/local/bin/git"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			cfg, err := Parse(flag.NewFlagSet("test", flag.ContinueOnError), c.args, env(c.env))
+			if err != nil {
+				t.Fatalf("parse: %v", err)
+			}
+			if cfg.GitBin != c.want {
+				t.Errorf("GitBin = %q, want %q", cfg.GitBin, c.want)
+			}
+		})
+	}
+}

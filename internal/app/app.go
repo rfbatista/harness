@@ -13,6 +13,8 @@ import (
 
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxevent"
+
+	"operators-mcp/internal/adapter/out/gitcli"
 )
 
 // Config holds the process-level settings resolved from flags in main().
@@ -38,6 +40,10 @@ type Config struct {
 	// the git adapter's defaults. Push and fetch keep their own deadline.
 	GitWorktreeDeadline time.Duration
 	GitReadDeadline     time.Duration
+	// GitBin is the git binary the server runs. New resolves it once (see
+	// gitcli.ResolveGit): a value set here wins; empty uses the first git on
+	// PATH, or the real git behind macOS's /usr/bin/git shim.
+	GitBin string
 	// DevMode proxies the designer resource to the Vite dev server instead of the embedded build.
 	DevMode bool
 	// Root is the default project root for tree and path operations (usually the working directory).
@@ -102,6 +108,8 @@ func (c Config) llmProxyURL() string {
 // New builds the fully wired fx application for the given configuration.
 // Call Run on the result to start the servers and block until SIGINT/SIGTERM.
 func New(cfg Config) *fx.App {
+	cfg.GitBin = gitcli.ResolveGit(cfg.GitBin)
+	slog.Info("git", "bin", cfg.GitBin)
 	return fx.New(
 		fx.StopTimeout(stopTimeout),
 		fx.Supply(cfg),

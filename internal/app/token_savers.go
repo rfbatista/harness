@@ -58,7 +58,7 @@ func newRepositoryIndexes(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, orch
 		Installations: cat.Capabilities,
 		Activations:   cat.Capabilities,
 		Indexer:       codegraph.NewIndexer(),
-		Excludes:      gitcli.NewExcludes(cfg.gitDeadlines()...),
+		Excludes:      gitcli.NewExcludes(cfg.gitOptions()...),
 	})
 	x.Subscribe(cat.Bus)
 	orch.IndexBuilds = x

@@ -103,10 +103,10 @@ func (c Code) Patch(ctx context.Context, dir, base, head string, paths []string,
 // errPatchDone stops reading once the only file asked for is past a limit.
 var errPatchDone = errors.New("patch read far enough")
 
-func (d Deadlines) streamPatch(ctx context.Context, dir string, args []string, maxLines int, maxBytes int64, out map[string]*domain.FileDiff) error {
+func (d config) streamPatch(ctx context.Context, dir string, args []string, maxLines int, maxBytes int64, out map[string]*domain.FileDiff) error {
 	ctx, cancel := context.WithTimeout(ctx, d.read())
 	defer cancel()
-	cmd := codeCmd(ctx, dir, args...)
+	cmd := d.codeCmd(ctx, dir, args...)
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		return err

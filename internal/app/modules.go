@@ -80,23 +80,24 @@ func asPort(ctor any, iface any) any {
 	return fx.Annotate(ctor, fx.As(iface))
 }
 
-// gitDeadlines are the git adapters' options for c's deadlines.
-func (c Config) gitDeadlines() []gitcli.Option {
-	return []gitcli.Option{gitcli.WithWorktreeDeadline(c.GitWorktreeDeadline), gitcli.WithReadDeadline(c.GitReadDeadline)}
+// gitOptions are the git adapters' options for c's git binary and deadlines.
+func (c Config) gitOptions() []gitcli.Option {
+	return []gitcli.Option{gitcli.WithGit(c.GitBin), gitcli.WithWorktreeDeadline(c.GitWorktreeDeadline), gitcli.WithReadDeadline(c.GitReadDeadline)}
 }
 
-// The git adapters bound each git run by cfg's deadlines (see gitcli.Deadlines).
+// The git adapters run cfg's git, each run bound by cfg's deadlines (see
+// gitcli.Deadlines).
 func newRepositoryFinder(cfg Config) *gitcli.RepositoryFinder {
-	return gitcli.NewRepositoryFinder(cfg.gitDeadlines()...)
+	return gitcli.NewRepositoryFinder(cfg.gitOptions()...)
 }
 func newWorktreeManager(cfg Config) *gitcli.WorktreeManager {
-	return gitcli.NewWorktreeManager(cfg.gitDeadlines()...)
+	return gitcli.NewWorktreeManager(cfg.gitOptions()...)
 }
-func newGitHistory(cfg Config) *gitcli.History { return gitcli.NewHistory(cfg.gitDeadlines()...) }
+func newGitHistory(cfg Config) *gitcli.History { return gitcli.NewHistory(cfg.gitOptions()...) }
 func newBranchPublisher(cfg Config) *gitcli.BranchPublisher {
-	return gitcli.NewBranchPublisher(cfg.gitDeadlines()...)
+	return gitcli.NewBranchPublisher(cfg.gitOptions()...)
 }
-func newGitCode(cfg Config) *gitcli.Code { return gitcli.NewCode(cfg.gitDeadlines()...) }
+func newGitCode(cfg Config) *gitcli.Code { return gitcli.NewCode(cfg.gitOptions()...) }
 
 // newDB opens the SQLite database and registers a hook to close it on shutdown.
 func newDB(lc fx.Lifecycle, cfg Config) (*gorm.DB, error) {

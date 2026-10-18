@@ -22,10 +22,10 @@ var _ ports.GitCode = (*Code)(nil)
 // Code reads code out of a checkout for the code views. Every command it
 // runs only reads: no fetch, no ref or index write, no hook. Each is bounded
 // by the read deadline.
-type Code struct{ d Deadlines }
+type Code struct{ d config }
 
 // NewCode returns the adapter.
-func NewCode(opts ...Option) *Code { return &Code{d: newDeadlines(opts)} }
+func NewCode(opts ...Option) *Code { return &Code{d: newConfig(opts)} }
 
 // codeGitArgs come before every subcommand: names are printed as they are,
 // a configured fsmonitor command never runs, pathspecs are literal (":(…)"
@@ -37,8 +37,8 @@ var codeGitArgs = []string{"-c", "core.quotePath=false", "-c", "core.fsmonitor=f
 // partial clone (GIT_NO_LAZY_FETCH, git 2.44+).
 var codeGitEnv = []string{"GIT_OPTIONAL_LOCKS=0", "GIT_TERMINAL_PROMPT=0", "GIT_NO_LAZY_FETCH=1", "GIT_LITERAL_PATHSPECS=1"}
 
-func codeCmd(ctx context.Context, dir string, args ...string) *exec.Cmd {
-	cmd := exec.CommandContext(ctx, "git", append(append([]string{}, codeGitArgs...), args...)...)
+func (d config) codeCmd(ctx context.Context, dir string, args ...string) *exec.Cmd {
+	cmd := exec.CommandContext(ctx, d.bin(), append(append([]string{}, codeGitArgs...), args...)...)
 	cmd.Dir = dir
 	cmd.Env = localEnv(codeGitEnv...)
 	cmd.WaitDelay = waitDelay
@@ -46,10 +46,10 @@ func codeCmd(ctx context.Context, dir string, args ...string) *exec.Cmd {
 }
 
 // codeOutput is the output of a code read, under the read deadline.
-func (d Deadlines) codeOutput(ctx context.Context, dir string, args ...string) (string, error) {
+func (d config) codeOutput(ctx context.Context, dir string, args ...string) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, d.read())
 	defer cancel()
-	cmd := codeCmd(ctx, dir, args...)
+	cmd := d.codeCmd(ctx, dir, args...)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	if err := cmd.Run(); err != nil {
@@ -126,7 +126,7 @@ func (c Code) FirstParent(ctx context.Context, dir, commit string) (string, erro
 func (c Code) EmptyTree(ctx context.Context, dir string) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, c.d.read())
 	defer cancel()
-	cmd := codeCmd(ctx, dir, "hash-object", "-t", "tree", "--stdin")
+	cmd := c.d.codeCmd(ctx, dir, "hash-object", "-t", "tree", "--stdin")
 	cmd.Stdin = strings.NewReader("")
 	out, err := cmd.Output()
 	if err := cut(ctx, "hash-object", err); timedOut(err) {
@@ -140,7 +140,7 @@ func (c Code) EmptyTree(ctx context.Context, dir string) (string, error) {
 
 // lsTree runs ls-tree -z -l and parses its entries:
 // "<mode> <type> <object> <size>\t<path>\0", size "-" for a tree or commit.
-func (d Deadlines) lsTree(ctx context.Context, dir string, args ...string) ([]ports.GitEntry, error) {
+func (d config) lsTree(ctx context.Context, dir string, args ...string) ([]ports.GitEntry, error) {
 	out, err := d.codeOutput(ctx, dir, append([]string{"ls-tree", "-z", "-l", "--full-tree"}, args...)...)
 	if err != nil {
 		return nil, err
@@ -275,14 +275,14 @@ func (c Code) TreeAt(ctx context.Context, dir, commit, p string, recursive bool)
 
 // blobs reads small blobs in one git cat-file --batch, each cut at max
 // bytes: "<oid> blob <size>\n<content>\n" per object asked.
-func (d Deadlines) blobs(ctx context.Context, dir string, objects []string, max int) (map[string]string, error) {
+func (d config) blobs(ctx context.Context, dir string, objects []string, max int) (map[string]string, error) {
 	out := map[string]string{}
 	if len(objects) == 0 {
 		return out, nil
 	}
 	ctx, cancel := context.WithTimeout(ctx, d.read())
 	defer cancel()
-	cmd := codeCmd(ctx, dir, "cat-file", "--batch")
+	cmd := d.codeCmd(ctx, dir, "cat-file", "--batch")
 	cmd.Stdin = strings.NewReader(strings.Join(objects, "\n") + "\n")
 	raw, err := cmd.Output()
 	if err := cut(ctx, "cat-file", err); timedOut(err) {
@@ -373,7 +373,7 @@ func (c Code) UntrackedFiles(ctx context.Context, dir string) ([]string, error) 
 func (c Code) Blob(ctx context.Context, dir, object string, max int64) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(ctx, c.d.read())
 	defer cancel()
-	cmd := codeCmd(ctx, dir, "cat-file", "blob", object)
+	cmd := c.d.codeCmd(ctx, dir, "cat-file", "blob", object)
 	out, err := cmd.StdoutPipe()
 	if err != nil {
 		return nil, err
