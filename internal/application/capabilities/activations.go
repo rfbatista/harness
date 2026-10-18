@@ -190,11 +190,11 @@ func (s *Service) subscribeActivations(sub ports.EventSubscriber) {
 
 var errNoActivations = &domain.StructuredError{Code: "UNAVAILABLE", Message: "token saver activations are not configured on this server"}
 
-// activationScope is an owner placed in its project: the levels above it,
-// and for a task the repositories its sessions may run in.
+// activationScope is an owner placed in its project: the levels at and
+// above it, and for a task the repositories its sessions may run in.
 type activationScope struct {
-	projectID, repositoryID string
-	repositories            []*domain.Repository
+	projectID, repositoryID, taskID string
+	repositories                    []*domain.Repository
 }
 
 func (s *Service) activationScope(ctx context.Context, owner domain.ActivationOwner) (activationScope, error) {
@@ -227,7 +227,7 @@ func (s *Service) activationScope(ctx context.Context, owner domain.ActivationOw
 		if err != nil {
 			return activationScope{}, err
 		}
-		return activationScope{projectID: t.ProjectID, repositories: repos}, nil
+		return activationScope{projectID: t.ProjectID, taskID: t.ID, repositories: repos}, nil
 	}
 	_, err := domain.ParseActivationLevel(string(owner.Level))
 	return activationScope{}, err
@@ -235,39 +235,38 @@ func (s *Service) activationScope(ctx context.Context, owner domain.ActivationOw
 
 // activationsOf reads owner's activations in its scope.
 func (s *Service) activationsOf(owner domain.ActivationOwner, sc activationScope) ([]domain.TokenSaverActivation, error) {
-	project, err := s.storedValues(domain.ActivationLevelProject, sc.projectID)
-	if err != nil {
-		return nil, err
+	levels := map[domain.ActivationLevel]string{
+		domain.ActivationLevelProject:    sc.projectID,
+		domain.ActivationLevelRepository: sc.repositoryID,
+		domain.ActivationLevelTask:       sc.taskID,
 	}
-	repository, err := s.storedValues(domain.ActivationLevelRepository, sc.repositoryID)
-	if err != nil {
-		return nil, err
-	}
-	var task map[domain.TokenSaver]domain.ActivationValue
-	repositories := map[string]map[domain.TokenSaver]domain.ActivationValue{}
-	if owner.Level == domain.ActivationLevelTask {
-		if task, err = s.storedValues(domain.ActivationLevelTask, owner.ID); err != nil {
+	values := map[domain.ActivationLevel]map[domain.TokenSaver]domain.ActivationValue{}
+	for level, id := range levels {
+		v, err := s.storedValues(level, id)
+		if err != nil {
 			return nil, err
 		}
-		for _, r := range sc.repositories {
-			if repositories[r.ID], err = s.storedValues(domain.ActivationLevelRepository, r.ID); err != nil {
-				return nil, err
-			}
+		values[level] = v
+	}
+	project, repository, task := values[domain.ActivationLevelProject], values[domain.ActivationLevelRepository], values[domain.ActivationLevelTask]
+	repositories := map[string]map[domain.TokenSaver]domain.ActivationValue{}
+	for _, r := range sc.repositories {
+		v, err := s.storedValues(domain.ActivationLevelRepository, r.ID)
+		if err != nil {
+			return nil, err
 		}
+		repositories[r.ID] = v
+	}
+	// A project that never set a saver has it off; below it, unset inherits.
+	unset := domain.ActivationInherit
+	if owner.Level == domain.ActivationLevelProject {
+		unset = domain.ActivationOff
 	}
 
 	out := make([]domain.TokenSaverActivation, 0, len(domain.TokenSavers))
 	for _, saver := range domain.TokenSavers {
-		a := domain.TokenSaverActivation{Saver: saver}
-		switch owner.Level {
-		case domain.ActivationLevelProject:
-			a.Value = cmp.Or(project[saver], domain.ActivationOff)
-		case domain.ActivationLevelRepository:
-			a.Value = cmp.Or(repository[saver], domain.ActivationInherit)
-		default:
-			a.Value = cmp.Or(task[saver], domain.ActivationInherit)
-		}
-		if owner.Level != domain.ActivationLevelTask || len(sc.repositories) == 0 {
+		a := domain.TokenSaverActivation{Saver: saver, Value: cmp.Or(values[owner.Level][saver], unset)}
+		if len(sc.repositories) == 0 {
 			v, from := Resolve(task[saver], repository[saver], project[saver])
 			a.Resolved = []domain.Resolution{{Value: v, Level: from, RepositoryID: sc.repositoryID}}
 		} else {
