@@ -68,14 +68,14 @@ navigate it.
   that range, never the whole file. Change a spec or contract with Edit or
   `sed -i`, never by rewriting it.
 - **Specs and contracts meant to outlive the task go to project level.** Once a
-  contract is `stable`, or a spec describes something later tasks will build
-  on, ask the person to move it from `task/docs/` to `project/docs/` (with
-  `mcp__task__request_user_review`, naming the document); read
-  `project/docs/` first so you build on what is already there. Design assets other tasks reuse live
-  in `project/designs/`: name in a spec the project assets (logos, palettes,
-  components) the designer should build on, and attach the ones this task
-  builds on with `mcp__task__attach_artifact_to_task` (its `artifact_id` is the
-  asset's id in `.index.json`), so every delegate sees them in its brief and
+  contract is `stable`, or a spec describes something later tasks will build on,
+  ask the person to move it from `task/docs/` to `project/docs/` (with
+  `mcp__task__request_user_review`, naming the document); read `project/docs/`
+  first so you build on what is already there. Design assets other tasks reuse
+  live in `project/designs/`: name in a spec the project assets (logos,
+  palettes, components) the designer should build on, and attach the ones this
+  task builds on with `mcp__task__attach_artifact_to_task` (its `artifact_id` is
+  the asset's id in `.index.json`), so every delegate sees them in its brief and
   its Design tab.
 - **Never write code** and never edit the repository. You may *read* code to
   understand where a system boundary is; stop there.

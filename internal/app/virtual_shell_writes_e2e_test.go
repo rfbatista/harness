@@ -269,6 +269,23 @@ func TestDocumentFilesAreChangedMovedAndRemovedFromTheShell(t *testing.T) {
 		t.Fatal("the refused move left the plan in project/docs")
 	}
 
+	// Moved anyway over a project document, that document is kept.
+	terms := e.createDocument("Terms", "terms", "text", "project")
+	eventually(t, "the terms in A", func() error { return hasFile(a.shell, "project/docs/terms.txt", "terms", terms.ID, "project", "") })
+	moveShellFile(t, a, "task/docs/the-plan.txt", "project/docs/terms.txt")
+	if got, _ := e.shellCall(a, "commit", "mv", "task/docs/the-plan.txt", "project/docs/terms.txt"); got != projectMoveDenied("task/docs/the-plan.txt") {
+		t.Fatalf("commit mv over a project document = %+v", got)
+	}
+	if d := e.document(terms.ID); d == nil || d.Content != "terms" {
+		t.Fatalf("the project document written over: %+v", d)
+	}
+	if err := hasFile(a.shell, "project/docs/terms.txt", "terms", terms.ID, "project", ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := hasFile(a.shell, "task/docs/the-plan.txt", v2, doc.ID, "task", ""); err != nil {
+		t.Fatal(err)
+	}
+
 	// The person moves it: project scope, in every shell of the project.
 	e.post("set_document_scope", map[string]string{"document_id": doc.ID, "scope": "project"}, nil)
 	eventually(t, "the moved plan in A", func() error { return hasFile(a.shell, "project/docs/plan.txt", v2, doc.ID, "project", "") })
@@ -288,8 +305,21 @@ func TestDocumentFilesAreChangedMovedAndRemovedFromTheShell(t *testing.T) {
 
 	// A folder holding a document cannot move to project/docs either.
 	e.shellOp(a, "write", func() { writeShellFile(t, a, "task/docs/drafts/note.md", "# Note\n") }, "task/docs/drafts/note.md")
-	if got, _ := e.shellCall(a, "check", "mv", "task/docs/drafts", "project/docs/drafts"); got != projectMoveDenied("task/docs/drafts/note.md") {
+	if got, _ := e.shellCall(a, "check", "mv", "task/docs/drafts", "project/docs/drafts"); got != projectMoveDenied("task/docs/drafts") {
 		t.Fatalf("check mv a folder to project/docs = %+v", got)
+	}
+	e.shellOp(a, "write", func() { writeShellFile(t, a, "task/docs/drafts/more.md", "# More\n") }, "task/docs/drafts/more.md")
+	moveShellFile(t, a, "task/docs/drafts", "project/docs/drafts")
+	if got, _ := e.shellCall(a, "commit", "mv", "task/docs/drafts", "project/docs/drafts"); got != projectMoveDenied("task/docs/drafts") {
+		t.Fatalf("commit mv a folder to project/docs = %+v", got)
+	}
+	for _, name := range []string{"note.md", "more.md"} {
+		if _, err := os.Stat(filepath.Join(a.shell, "task", "docs", "drafts", name)); err != nil {
+			t.Fatalf("the refused folder move did not put %s back: %v", name, err)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(a.shell, "project", "docs", "drafts")); err == nil {
+		t.Fatal("the refused folder move left project/docs/drafts")
 	}
 
 	// rm deletes the document, and it leaves every shell.

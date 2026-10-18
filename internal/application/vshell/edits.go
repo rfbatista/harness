@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"html"
+	"log/slog"
 	"os"
 	"path"
 	"path/filepath"
@@ -246,6 +247,9 @@ func (s *Service) CommitShellEdit(_ context.Context, sessionID string, e ports.S
 		}
 		if !ans.Allow {
 			s.restore(sh, ed)
+			if ans.Code == "PROJECT_MOVE_DENIED" {
+				sh.dropMoved(ed.rel[1])
+			}
 		}
 		return ans
 	})
@@ -392,15 +396,15 @@ func (s *Service) checkDocsAt(sh *shell, rel string) ports.ShellAnswer {
 }
 
 // checkMove: from project/docs to task/docs a document changes scope, only
-// when linked to this task; to project/docs it never does, a person moves
-// it there; within a folder it is only renamed.
+// when linked to this task; a person moves documents to project/docs, so
+// that move is refused; within a folder it is only renamed.
 func (s *Service) checkMove(sh *shell, src, dst string) ports.ShellAnswer {
 	for _, row := range sh.under(src, ports.ShellDocument) {
 		if ans := s.stale(sh, row); !ans.Allow {
 			return ans
 		}
 		if classify(dst) == projDocs && row.Scope != string(domain.DocumentScopeProject) {
-			return refuseProjectMove(row.Path)
+			return refuseProjectMove(src)
 		}
 		if classify(dst) == taskDocs && row.Scope != string(domain.DocumentScopeTask) && !s.onTask(sh, row.ID) {
 			return refuseNotOnTask(row.Path)
@@ -576,13 +580,21 @@ func (s *Service) commitDocRemove(sh *shell, rel string) ports.ShellAnswer {
 }
 
 // commitMove moves the documents under src to dst, once they are there:
-// scope follows the folder back to task/docs, never to project/docs (the
-// file is put back), format the extension; a document the move wrote over
-// is deleted.
+// scope follows the folder, format the extension; a document the move
+// wrote over is deleted. A move of task documents to project/docs is put
+// back and refused before anything is stored.
 func (s *Service) commitMove(sh *shell, src, dst string) ports.ShellAnswer {
 	rows := sh.under(src, ports.ShellDocument)
 	if len(rows) == 0 {
 		return s.commitDocWrite(sh, dst)
+	}
+	if classify(dst) == projDocs {
+		for _, row := range rows {
+			if row.Scope != string(domain.DocumentScopeProject) {
+				sh.putBack(rows, src, dst)
+				return refuseProjectMove(src)
+			}
+		}
 	}
 	for _, row := range rows {
 		to := moved(row.Path, src, dst)
@@ -601,10 +613,6 @@ func (s *Service) commitMove(sh *shell, src, dst string) ports.ShellAnswer {
 		}
 		scope := classify(to).scope()
 		if scope != d.Scope {
-			if scope == domain.DocumentScopeProject {
-				_ = os.Rename(sh.abs(to), sh.abs(row.Path))
-				return refuseProjectMove(row.Path)
-			}
 			if !s.onTask(sh, d.ID) {
 				delete(sh.files, row.Path)
 				_ = os.Remove(sh.abs(to))
@@ -626,6 +634,35 @@ func (s *Service) commitMove(sh *shell, src, dst string) ports.ShellAnswer {
 		sh.files[to] = docRow(to, d)
 	}
 	return sh.saveIndex()
+}
+
+// putBack returns each of rows, moved from src to dst, to its place under
+// src, before anything is stored; restore then rewrites what the move wrote
+// over.
+func (sh *shell) putBack(rows []ports.ShellFile, src, dst string) {
+	for _, row := range rows {
+		from := sh.abs(moved(row.Path, src, dst))
+		if _, err := os.Lstat(from); err != nil {
+			continue
+		}
+		if err := os.MkdirAll(filepath.Dir(sh.abs(row.Path)), 0o755); err != nil {
+			slog.Warn("put back a refused move in a virtual shell", "session", sh.sessionID, "path", row.Path, "err", err)
+			continue
+		}
+		if err := os.Rename(from, sh.abs(row.Path)); err != nil {
+			slog.Warn("put back a refused move in a virtual shell", "session", sh.sessionID, "path", row.Path, "err", err)
+		}
+	}
+}
+
+// dropMoved removes the folders a refused move made under dst once they
+// are empty.
+func (sh *shell) dropMoved(dst string) {
+	for dir := dst; classify(dir) == projDocs; dir = path.Dir(dir) {
+		if info, err := os.Lstat(sh.abs(dir)); err != nil || !info.IsDir() || os.Remove(sh.abs(dir)) != nil {
+			break
+		}
+	}
 }
 
 // moved is p, under src, at its place under dst.
