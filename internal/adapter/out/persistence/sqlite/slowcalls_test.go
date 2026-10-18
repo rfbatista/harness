@@ -3,8 +3,11 @@ package sqlite
 import (
 	"context"
 	"database/sql"
+	"io"
 	"log/slog"
+	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -221,5 +224,38 @@ func TestOpenCountsEachDatabaseCallTowardItsTracker(t *testing.T) {
 	}
 	if got := c.Count() - before; got != 1 {
 		t.Errorf("calls counted for the query on another goroutine = %d, want 1", got)
+	}
+}
+
+// A read whose request ended is cut short, not failed: GORM's error line,
+// written to standard output, does not report it. A read that fails is
+// still reported.
+func TestOpenDoesNotReportAReadItsRequestGaveUp(t *testing.T) {
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	stdout := os.Stdout
+	os.Stdout = w
+	db, _ := openLogged(t, filepath.Join(t.TempDir(), "data.db"))
+	os.Stdout = stdout
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	var n int64
+	if err := db.WithContext(ctx).Model(&SettingModel{}).Count(&n).Error; err == nil {
+		t.Fatal("a read with an ended context succeeded")
+	}
+	if err := db.Raw("SELECT * FROM no_such_table").Scan(&n).Error; err == nil {
+		t.Fatal("a read of a missing table succeeded")
+	}
+	w.Close()
+	out, _ := io.ReadAll(r)
+
+	if strings.Contains(string(out), "context canceled") {
+		t.Errorf("a read its request gave up was reported as a failure:\n%s", out)
+	}
+	if !strings.Contains(string(out), "no_such_table") {
+		t.Errorf("a failed read was not reported:\n%s", out)
 	}
 }

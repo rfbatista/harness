@@ -3,6 +3,7 @@ package sqlite
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"log"
 	"log/slog"
 	"os"
@@ -95,10 +96,13 @@ func (l slowCallLogger) LogMode(level logger.LogLevel) logger.Interface {
 // Trace counts a statement and logs it when slower than the threshold. GORM times a create,
 // update or delete from before its transaction begins, so the time includes
 // the wait for the write lock: when that wait is most of it, the call is
-// logged as a lock wait.
+// logged as a lock wait. A call its caller gave up on (a request that ended)
+// is not reported as failed: it was cut short.
 func (l slowCallLogger) Trace(ctx context.Context, begin time.Time, fc func() (string, int64), err error) {
 	querycount.Add(ctx)
-	l.Interface.Trace(ctx, begin, fc, err)
+	if !errors.Is(err, context.Canceled) || ctx.Err() == nil {
+		l.Interface.Trace(ctx, begin, fc, err)
+	}
 	elapsed := time.Since(begin)
 	if elapsed <= l.slow.threshold {
 		return
