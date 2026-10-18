@@ -117,7 +117,7 @@ func architectServer(t *testing.T, messages []domain.TaskMessage, reviews ...*do
 	})
 	mux.Handle("/api/", http.NotFoundHandler()) // terminals are not under test
 	mux.Handle("/", pages)
-	srv := httptest.NewServer(withStream(mux))
+	srv := newBrowserServer(mux)
 	t.Cleanup(func() {
 		srv.CloseClientConnections() // the page's event streams never end on their own
 		srv.Close()

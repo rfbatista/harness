@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"net/http/httptest"
 	"strings"
 	"sync"
 	"testing"
@@ -101,7 +100,7 @@ func TestProjectFormsInTheBrowser(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.Handle("/api/", api)
 	mux.Handle("/", pages)
-	srv := httptest.NewServer(withStream(mux))
+	srv := newBrowserServer(mux)
 	defer srv.Close()
 
 	typeInto := func(sel, text string) chromedp.Action {

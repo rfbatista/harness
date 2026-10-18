@@ -187,7 +187,7 @@ func designServer(t *testing.T, api *scopedArtifactsAPI) *httptest.Server {
 	mux.Handle("/api/sessions/s1/terminal", http.NotFoundHandler())
 	mux.Handle("/api/", api)
 	mux.Handle("/", pages)
-	srv := httptest.NewServer(withStream(mux))
+	srv := newBrowserServer(mux)
 	t.Cleanup(func() {
 		srv.CloseClientConnections()
 		srv.Close()

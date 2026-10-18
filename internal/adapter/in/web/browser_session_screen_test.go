@@ -41,7 +41,7 @@ func sessionsPageWith(t *testing.T, sessions []*domain.Session, pty http.Handler
 	mux.Handle("/api/sessions/s1/terminal", pty)
 	mux.Handle("/api/", http.NotFoundHandler())
 	mux.Handle("/", pages)
-	srv := httptest.NewServer(withStream(mux))
+	srv := newBrowserServer(mux)
 	t.Cleanup(srv.Close)
 	return srv
 }

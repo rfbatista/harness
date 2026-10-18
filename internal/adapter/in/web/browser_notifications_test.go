@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"net/http/httptest"
 	"slices"
 	"strconv"
 	"sync"
@@ -199,7 +198,7 @@ func newInboxHarness(t *testing.T, list []*domain.Notification) *inboxHarness {
 	mux.Handle("/api/notifications/read", inbox)
 	mux.Handle("/api/", http.NotFoundHandler())
 	mux.Handle("/", NewHandler(deps, assets, nil))
-	srv := httptest.NewServer(withStream(mux))
+	srv := newBrowserServer(mux)
 	t.Cleanup(func() {
 		srv.CloseClientConnections()
 		srv.Close()

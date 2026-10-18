@@ -145,7 +145,7 @@ func historyPage(t *testing.T, s1 *domain.Session, tr *fakeTranscript) *httptest
 	mux.Handle("/api/sessions/s1/transcript", tr)
 	mux.Handle("/api/", http.NotFoundHandler())
 	mux.Handle("/", pages)
-	srv := httptest.NewServer(withStream(mux))
+	srv := newBrowserServer(mux)
 	t.Cleanup(srv.Close)
 	return srv
 }

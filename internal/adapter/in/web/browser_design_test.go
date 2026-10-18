@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -88,7 +87,7 @@ func TestDesignTabShowsArtifactsLive(t *testing.T) {
 	mux.Handle("/api/sessions/s1/terminal", http.NotFoundHandler()) // nor the terminal
 	mux.Handle("/api/", api)
 	mux.Handle("/", pages)
-	srv := httptest.NewServer(withStream(mux))
+	srv := newBrowserServer(mux)
 	defer func() {
 		srv.CloseClientConnections()
 		srv.Close()

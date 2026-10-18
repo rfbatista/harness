@@ -3,7 +3,6 @@ package web
 import (
 	"context"
 	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -77,7 +76,7 @@ func TestNewSessionAgentIsAListboxSelect(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.Handle("/api/", api)
 	mux.Handle("/", pages)
-	srv := httptest.NewServer(withStream(mux))
+	srv := newBrowserServer(mux)
 	defer srv.Close()
 
 	trigger := `document.querySelector('#new-session-agent-trigger')`

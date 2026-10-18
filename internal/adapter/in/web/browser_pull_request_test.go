@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"net/http/httptest"
 	"strings"
 	"sync"
 	"testing"
@@ -92,7 +91,7 @@ func TestPullRequestPanelInTheBrowser(t *testing.T) {
 		Agents: fakeAgents{w.agents}, Repositories: fakeRepos{w.repos}, EnvFiles: w.env, History: w.history,
 		PullRequests: w.prs, Now: func() time.Time { return now },
 	}, assets, nil))
-	srv := httptest.NewServer(withStream(mux))
+	srv := newBrowserServer(mux)
 	defer func() { srv.CloseClientConnections(); srv.Close() }() // the feed's stream stays open
 
 	shown := func(sel string) string {

@@ -56,7 +56,7 @@ func crowdedTerminalPage(t *testing.T, pty http.Handler) *httptest.Server {
 	mux.Handle("/api/sessions/s1/terminal", pty)
 	mux.Handle("/api/", http.NotFoundHandler())
 	mux.Handle("/", pages)
-	srv := httptest.NewServer(withStream(mux))
+	srv := newBrowserServer(mux)
 	t.Cleanup(srv.Close)
 	return srv
 }

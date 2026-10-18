@@ -8,25 +8,55 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"sync"
 )
+
+// newBrowserServer starts a test server for h with the tab's stream bridged
+// over it (withStream). Its streams end when the server closes: a page holds
+// one open, and httptest.Server.Close would otherwise wait for the browser to
+// drop it.
+func newBrowserServer(h http.Handler) *httptest.Server {
+	b := withStream(h)
+	srv := httptest.NewUnstartedServer(b)
+	srv.Listener = &closingListener{Listener: srv.Listener, onClose: b.shutdown}
+	srv.Start()
+	return srv
+}
+
+// closingListener tells the bridge when the server stops listening, the first
+// thing httptest.Server.Close does.
+type closingListener struct {
+	net.Listener
+	once    sync.Once
+	onClose func()
+}
+
+func (l *closingListener) Close() error {
+	l.once.Do(l.onClose)
+	return l.Listener.Close()
+}
 
 // withStream serves the tab's one live stream — GET /api/stream and its
 // follow and unfollow — over the per-path SSE handlers a browser test
 // mounts, the way the real server (httpapi/stream.go) serves it over its
 // feeds: each follow requests GET /api<path> from next and relays its data
 // lines as {"path", "data"}, and {"path", "end": true} when it ends.
-func withStream(next http.Handler) http.Handler {
-	return &streamBridge{next: next, streams: map[string]*bridgedStream{}}
+func withStream(next http.Handler) *streamBridge {
+	return &streamBridge{next: next, streams: map[string]*bridgedStream{}, done: make(chan struct{})}
 }
 
 type streamBridge struct {
 	next    http.Handler
 	mu      sync.Mutex
 	streams map[string]*bridgedStream
+	done    chan struct{} // closed when the server shuts down
 }
+
+func (b *streamBridge) shutdown() { close(b.done) }
 
 type bridgedStream struct {
 	ctx     context.Context
@@ -90,6 +120,8 @@ func (b *streamBridge) serveStream(w http.ResponseWriter, r *http.Request) {
 	for {
 		select {
 		case <-r.Context().Done():
+			return
+		case <-b.done:
 			return
 		case line := <-s.out:
 			fmt.Fprintf(w, "data: %s\n\n", line)

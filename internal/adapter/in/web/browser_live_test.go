@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"net/http/httptest"
 	"sync"
 	"testing"
 	"time"
@@ -98,7 +97,7 @@ func TestSessionsStartedElsewhereShowUpLive(t *testing.T) {
 	mux.Handle("/api/events", feed)
 	mux.Handle("/api/", http.NotFoundHandler()) // terminals are not under test
 	mux.Handle("/", pages)
-	srv := httptest.NewServer(withStream(mux))
+	srv := newBrowserServer(mux)
 	defer func() {
 		srv.CloseClientConnections() // the page's event streams never end on their own
 		srv.Close()
