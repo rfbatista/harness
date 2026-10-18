@@ -1,6 +1,7 @@
 package ports
 
 import (
+	"context"
 	"operators-mcp/internal/domain"
 
 	"github.com/rfbatista/harnesskit/mcpserver"
@@ -10,8 +11,8 @@ import (
 // ProjectRepository is the outbound port for persisting and retrieving projects.
 // A project defines the directory root that everything is based on.
 type ProjectRepository interface {
-	Get(id string) *domain.Project
-	List() []*domain.Project
+	Get(ctx context.Context, id string) *domain.Project
+	List(ctx context.Context) []*domain.Project
 	Create(name, rootDir string) (*domain.Project, error)
 	Update(id, name, rootDir string) (*domain.Project, error)
 	Delete(projectID string) error
@@ -23,8 +24,8 @@ type ProjectRepository interface {
 // repositories. A repository is a code repository scoped to a project; a project
 // can hold many repositories (one-to-many via ProjectID).
 type RepositoryRepository interface {
-	Get(id string) *domain.Repository
-	ListByProject(projectID string) []*domain.Repository
+	Get(ctx context.Context, id string) *domain.Repository
+	ListByProject(ctx context.Context, projectID string) []*domain.Repository
 	Create(projectID, name, description, url, rootDir string) (*domain.Repository, error)
 	Update(id, name, description, url, rootDir string) (*domain.Repository, error)
 	Delete(id string) error
@@ -40,7 +41,7 @@ type RepositoryRepository interface {
 // Zones are scoped to a project. Implemented by adapters (e.g. in-memory store, future DB).
 type ZoneRepository interface {
 	Get(id string) *domain.Zone
-	ListByProject(projectID string) []*domain.Zone
+	ListByProject(ctx context.Context, projectID string) []*domain.Zone
 	Create(projectID, name, pattern, purpose string, rules []domain.Prompt, agents []domain.Agent) (*domain.Zone, error)
 	Update(id, name, pattern, purpose string, rules []domain.Prompt, agents []domain.Agent) (*domain.Zone, error)
 	AssignPath(zoneID, path string) (*domain.Zone, error)
@@ -81,7 +82,7 @@ type TreeLister interface {
 // Agents can be assigned to zones and can reference prompts and skills.
 type AgentRepository interface {
 	Get(id string) *domain.Agent
-	List() []*domain.Agent
+	List(ctx context.Context) []*domain.Agent
 	Create(name, description, promptID string, skillIDs, mcpServerIDs []string) (*domain.Agent, error)
 	Update(id, name, description, promptID string, skillIDs, mcpServerIDs []string) (*domain.Agent, error)
 	Delete(id string) error

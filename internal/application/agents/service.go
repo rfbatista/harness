@@ -59,7 +59,7 @@ func (s *Service) unlink(drop func(a *domain.Agent) bool) error {
 	if s.agents == nil {
 		return nil
 	}
-	for _, a := range s.agents.List() {
+	for _, a := range s.agents.List(context.TODO()) {
 		if !drop(a) {
 			continue
 		}
@@ -84,7 +84,7 @@ func (s *Service) AgentsUsingMCPServer(serverID string) []string {
 		return nil
 	}
 	var names []string
-	for _, a := range s.agents.List() {
+	for _, a := range s.agents.List(context.TODO()) {
 		if slices.Contains(a.MCPServerIDs, serverID) {
 			names = append(names, a.Name)
 		}

@@ -1,6 +1,7 @@
 package memory
 
 import (
+	"context"
 	"sync"
 
 	"operators-mcp/internal/domain"
@@ -22,7 +23,7 @@ func NewProjectStore() *ProjectStore {
 }
 
 // Get returns the project by id, or nil if not found.
-func (s *ProjectStore) Get(id string) *domain.Project {
+func (s *ProjectStore) Get(_ context.Context, id string) *domain.Project {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	p, ok := s.projects[id]
@@ -33,7 +34,7 @@ func (s *ProjectStore) Get(id string) *domain.Project {
 }
 
 // List returns all projects.
-func (s *ProjectStore) List() []*domain.Project {
+func (s *ProjectStore) List(_ context.Context) []*domain.Project {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	out := make([]*domain.Project, 0, len(s.projects))

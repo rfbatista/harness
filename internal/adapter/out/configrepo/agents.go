@@ -1,6 +1,7 @@
 package configrepo
 
 import (
+	"context"
 	"sort"
 
 	"operators-mcp/internal/domain"
@@ -26,7 +27,7 @@ func NewAgentRepository(manifestPath string, mcpServers *MCPServerStore) *AgentR
 // List re-reads the manifest and builds every agent, in name order. An agent
 // whose skills fail to resolve (unknown/cyclic bundle) is skipped rather than
 // failing the whole list — one bad entry shouldn't hide every other agent.
-func (r *AgentRepository) List() []*domain.Agent {
+func (r *AgentRepository) List(_ context.Context) []*domain.Agent {
 	manifest, err := LoadManifest(r.ManifestPath)
 	if err != nil {
 		return nil

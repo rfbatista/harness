@@ -76,8 +76,8 @@ func (s *source) zonesOf(p string, dir bool) []string {
 	return ids
 }
 
-func (c *Code) repository(id string) (*domain.Repository, error) {
-	repo := c.d.Repositories.Get(id)
+func (c *Code) repository(ctx context.Context, id string) (*domain.Repository, error) {
+	repo := c.d.Repositories.Get(ctx, id)
 	if repo == nil {
 		return nil, &domain.StructuredError{Code: "REPOSITORY_NOT_FOUND", Message: "repository not found"}
 	}
@@ -87,9 +87,9 @@ func (c *Code) repository(id string) (*domain.Repository, error) {
 	return repo, nil
 }
 
-func (c *Code) withZones(s *source) *source {
+func (c *Code) withZones(ctx context.Context, s *source) *source {
 	if c.d.Architecture != nil {
-		s.zones = c.d.Architecture.ListZones(s.repo.ProjectID)
+		s.zones = c.d.Architecture.ListZones(ctx, s.repo.ProjectID)
 	}
 	s.match = domain.NewZoneMatcher(s.zones)
 	return s
@@ -111,7 +111,7 @@ func (c *Code) resolve(ctx context.Context, q ports.CodeSourceQuery, onDisk bool
 	if q.WorkspaceID != "" {
 		return c.resolveWorkspace(ctx, q.WorkspaceID, onDisk)
 	}
-	repo, err := c.repository(q.RepositoryID)
+	repo, err := c.repository(ctx, q.RepositoryID)
 	if err != nil {
 		return nil, err
 	}
@@ -129,7 +129,7 @@ func (c *Code) resolve(ctx context.Context, q ports.CodeSourceQuery, onDisk bool
 		return nil, err
 	}
 	s := &source{repo: repo, src: domain.CodeSource{Kind: domain.CodeSourceRef, RepositoryID: repo.ID, Ref: ref, Commit: commit}}
-	return c.withZones(s), nil
+	return c.withZones(ctx, s), nil
 }
 
 func (c *Code) resolveWorkspace(ctx context.Context, id string, onDisk bool) (*source, error) {
@@ -137,7 +137,7 @@ func (c *Code) resolveWorkspace(ctx context.Context, id string, onDisk bool) (*s
 	if ws == nil {
 		return nil, &domain.StructuredError{Code: "WORKSPACE_NOT_FOUND", Message: "workspace not found"}
 	}
-	repo, err := c.repository(ws.RepositoryID)
+	repo, err := c.repository(ctx, ws.RepositoryID)
 	if err != nil {
 		return nil, err
 	}
@@ -160,7 +160,7 @@ func (c *Code) resolveWorkspace(ctx context.Context, id string, onDisk bool) (*s
 		return nil, err
 	}
 	s.src.Commit = commit
-	return c.withZones(s), nil
+	return c.withZones(ctx, s), nil
 }
 
 // cleanPath checks a client path.

@@ -7,8 +7,8 @@ import (
 )
 
 // ListAgents returns all agents with resolved prompts, skills and MCP servers.
-func (s *Service) ListAgents(_ context.Context) ([]*domain.Agent, error) {
-	agents := s.agents.List()
+func (s *Service) ListAgents(ctx context.Context) ([]*domain.Agent, error) {
+	agents := s.agents.List(ctx)
 	for _, a := range agents {
 		s.ResolveAgentRelations(a)
 	}

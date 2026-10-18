@@ -81,7 +81,7 @@ func (s *Service) root() string {
 // ref the branch is cut from, HEAD when empty. On persistence failure the
 // worktree is removed so no orphaned directory is left behind.
 func (s *Service) Create(repositoryID, name, branch, baseRef string) (*domain.Workspace, error) {
-	repo := s.repositories.Get(repositoryID)
+	repo := s.repositories.Get(context.TODO(), repositoryID)
 	if repo == nil {
 		return nil, &domain.StructuredError{Code: "REPOSITORY_NOT_FOUND", Message: "repository not found"}
 	}
@@ -146,7 +146,7 @@ func (s *Service) writeEnvFiles(repositoryID, worktree string) error {
 
 // ListBranches returns the refs a new workspace can be based on.
 func (s *Service) ListBranches(repositoryID string) ([]domain.GitBranch, error) {
-	repo := s.repositories.Get(repositoryID)
+	repo := s.repositories.Get(context.TODO(), repositoryID)
 	if repo == nil {
 		return nil, &domain.StructuredError{Code: "REPOSITORY_NOT_FOUND", Message: "repository not found"}
 	}
@@ -157,8 +157,8 @@ func (s *Service) ListBranches(repositoryID string) ([]domain.GitBranch, error) 
 }
 
 // checkout is the repository's own checkout directory.
-func (s *Service) checkout(repositoryID string) (string, error) {
-	repo := s.repositories.Get(repositoryID)
+func (s *Service) checkout(ctx context.Context, repositoryID string) (string, error) {
+	repo := s.repositories.Get(ctx, repositoryID)
 	if repo == nil {
 		return "", &domain.StructuredError{Code: "REPOSITORY_NOT_FOUND", Message: "repository not found"}
 	}
@@ -173,7 +173,7 @@ func (s *Service) RepositoryLog(ctx context.Context, repositoryID string, q port
 	if s.history == nil {
 		return nil, &domain.StructuredError{Code: "UNAVAILABLE", Message: "repository history is not available"}
 	}
-	dir, err := s.checkout(repositoryID)
+	dir, err := s.checkout(ctx, repositoryID)
 	if err != nil {
 		return nil, err
 	}
@@ -185,7 +185,7 @@ func (s *Service) RepositoryCommit(ctx context.Context, repositoryID, hash strin
 	if s.history == nil {
 		return nil, &domain.StructuredError{Code: "UNAVAILABLE", Message: "repository history is not available"}
 	}
-	dir, err := s.checkout(repositoryID)
+	dir, err := s.checkout(ctx, repositoryID)
 	if err != nil {
 		return nil, err
 	}
@@ -204,7 +204,7 @@ func (s *Service) WorkspaceHistory(ctx context.Context, workspaceID string, limi
 	if ws == nil {
 		return nil, &domain.StructuredError{Code: "WORKSPACE_NOT_FOUND", Message: "workspace not found"}
 	}
-	root, err := s.checkout(ws.RepositoryID)
+	root, err := s.checkout(ctx, ws.RepositoryID)
 	if err != nil {
 		return nil, err
 	}
@@ -283,7 +283,7 @@ func (s *Service) Delete(id string) error {
 	if ws == nil {
 		return &domain.StructuredError{Code: "WORKSPACE_NOT_FOUND", Message: "workspace not found"}
 	}
-	if repo := s.repositories.Get(ws.RepositoryID); repo != nil && repo.RootDir != "" {
+	if repo := s.repositories.Get(context.TODO(), ws.RepositoryID); repo != nil && repo.RootDir != "" {
 		if err := s.worktrees.Remove(repo.RootDir, ws.Path); err != nil {
 			return err
 		}
@@ -302,7 +302,7 @@ func (s *Service) Discard(id string) error {
 	if ws == nil {
 		return &domain.StructuredError{Code: "WORKSPACE_NOT_FOUND", Message: "workspace not found"}
 	}
-	if repo := s.repositories.Get(ws.RepositoryID); repo != nil && repo.RootDir != "" {
+	if repo := s.repositories.Get(context.TODO(), ws.RepositoryID); repo != nil && repo.RootDir != "" {
 		if err := s.worktrees.Remove(repo.RootDir, ws.Path); err != nil {
 			return err
 		}

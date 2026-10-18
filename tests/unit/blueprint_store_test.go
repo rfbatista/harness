@@ -1,6 +1,7 @@
 package unit
 
 import (
+	"context"
 	"testing"
 
 	"operators-mcp/internal/adapter/out/persistence/memory"
@@ -34,7 +35,7 @@ func TestStore_CreateListGetUpdateAssignPath(t *testing.T) {
 		t.Errorf("AssignedAgents: got %v", z.AssignedAgents)
 	}
 
-	list := s.ListByProject(p.ID)
+	list := s.ListByProject(context.Background(), p.ID)
 	if len(list) != 1 {
 		t.Fatalf("ListByProject: got %d zones", len(list))
 	}

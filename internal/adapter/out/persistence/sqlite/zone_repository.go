@@ -1,6 +1,7 @@
 package sqlite
 
 import (
+	"context"
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
 
@@ -33,9 +34,9 @@ func (r *ZoneRepository) Get(id string) *domain.Zone {
 }
 
 // ListByProject returns all zones for the given project.
-func (r *ZoneRepository) ListByProject(projectID string) []*domain.Zone {
+func (r *ZoneRepository) ListByProject(ctx context.Context, projectID string) []*domain.Zone {
 	var models []ZoneModel
-	if err := r.db.Where("project_id = ?", projectID).Find(&models).Error; err != nil {
+	if err := r.db.WithContext(ctx).Where("project_id = ?", projectID).Find(&models).Error; err != nil {
 		return nil
 	}
 	out := make([]*domain.Zone, 0, len(models))

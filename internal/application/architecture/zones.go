@@ -1,10 +1,11 @@
 package architecture
 
+import "context"
 import "operators-mcp/internal/domain"
 
 // ListZones returns all zones for the given project with resolved rules.
-func (s *Service) ListZones(projectID string) []*domain.Zone {
-	zones := s.zones.ListByProject(projectID)
+func (s *Service) ListZones(ctx context.Context, projectID string) []*domain.Zone {
+	zones := s.zones.ListByProject(ctx, projectID)
 	for _, z := range zones {
 		s.resolveZoneRules(z)
 	}

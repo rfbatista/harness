@@ -156,7 +156,7 @@ func (s *Service) ResumeInteractive(ctx context.Context, req ports.ResumeRequest
 
 	var ticket *domain.Ticket
 	if sess.TicketID != "" && s.tickets != nil {
-		ticket = s.tickets.Get(ctx, sess.TicketID)
+		ticket = s.tickets.Get(context.WithoutCancel(ctx), sess.TicketID) // the resume goes on without the request
 	}
 	ag, err := s.resolveAgent(sess.AgentID, sess.Mode)
 	if err != nil {

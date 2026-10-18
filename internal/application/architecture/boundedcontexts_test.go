@@ -22,14 +22,14 @@ type testService struct {
 // context is not needed to test this one.
 type projectReader struct{ ports.ProjectRepository }
 
-func (r projectReader) GetProject(_ context.Context, id string) (*domain.Project, error) {
-	if p := r.Get(id); p != nil {
+func (r projectReader) GetProject(ctx context.Context, id string) (*domain.Project, error) {
+	if p := r.Get(ctx, id); p != nil {
 		return p, nil
 	}
 	return nil, &domain.StructuredError{Code: "PROJECT_NOT_FOUND", Message: "project not found"}
 }
 
-func (r projectReader) ListProjects(context.Context) ([]*domain.Project, error) { return r.List(), nil }
+func (r projectReader) ListProjects(context.Context) ([]*domain.Project, error) { return r.List(context.Background()), nil }
 
 func newBoundedContextTestService(t *testing.T) (testService, string) {
 	t.Helper()

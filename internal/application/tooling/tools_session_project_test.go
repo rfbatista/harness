@@ -26,7 +26,7 @@ func (a archList) ListBoundedContexts(projectID string) []*domain.BoundedContext
 	}
 	return a.contexts
 }
-func (a archList) ListZones(projectID string) []*domain.Zone {
+func (a archList) ListZones(_ context.Context, projectID string) []*domain.Zone {
 	if projectID != a.project {
 		return nil
 	}

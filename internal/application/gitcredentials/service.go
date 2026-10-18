@@ -32,13 +32,13 @@ const originReads = 4
 // Reads go to the store, not the projects service, so a bus handler here
 // cannot take a lock the publisher holds.
 type Repositories interface {
-	Get(id string) *domain.Repository
-	ListByProject(projectID string) []*domain.Repository
+	Get(ctx context.Context, id string) *domain.Repository
+	ListByProject(ctx context.Context, projectID string) []*domain.Repository
 }
 
 // Projects finds a project; the sqlite project store satisfies it.
 type Projects interface {
-	Get(id string) *domain.Project
+	Get(ctx context.Context, id string) *domain.Project
 }
 
 // Stores are where the context keeps its state.
@@ -369,7 +369,7 @@ func (s *Service) refuseHostChange(credentialID string) error {
 	repos := make([]map[string]string, 0, len(pins))
 	for _, p := range pins {
 		name := p.RepositoryID
-		if r := s.rd.Repositories.Get(p.RepositoryID); r != nil {
+		if r := s.rd.Repositories.Get(context.TODO(), p.RepositoryID); r != nil {
 			name = r.Name
 		}
 		repos = append(repos, map[string]string{"id": p.RepositoryID, "name": name})
@@ -428,7 +428,7 @@ func (s *Service) TestGitCredential(ctx context.Context, credentialID, repositor
 	}
 	remote := ""
 	if repositoryID != "" {
-		r := s.rd.Repositories.Get(repositoryID)
+		r := s.rd.Repositories.Get(ctx, repositoryID)
 		if r == nil {
 			return nil, errRepositoryNotFound()
 		}
@@ -532,7 +532,7 @@ func (s *Service) repositoryCredential(ctx context.Context, r *domain.Repository
 
 // GetRepositoryCredential is the repository's binding and what it resolves to.
 func (s *Service) GetRepositoryCredential(ctx context.Context, repositoryID string) (*domain.RepositoryCredential, error) {
-	r := s.rd.Repositories.Get(repositoryID)
+	r := s.rd.Repositories.Get(ctx, repositoryID)
 	if r == nil {
 		return nil, errRepositoryNotFound()
 	}
@@ -550,14 +550,14 @@ func (s *Service) GetRepositoryCredential(ctx context.Context, repositoryID stri
 // ListRepositoryCredentials answers for each of the project's repositories,
 // in its order, reading their origins a few at a time.
 func (s *Service) ListRepositoryCredentials(ctx context.Context, projectID string) ([]*domain.RepositoryCredential, error) {
-	if s.rd.Projects.Get(projectID) == nil {
+	if s.rd.Projects.Get(ctx, projectID) == nil {
 		return nil, domain.GitCredentialError("PROJECT_NOT_FOUND", "project not found")
 	}
 	creds, err := s.credentials()
 	if err != nil {
 		return nil, err
 	}
-	repos := s.rd.Repositories.ListByProject(projectID)
+	repos := s.rd.Repositories.ListByProject(ctx, projectID)
 	ids := make([]string, 0, len(repos))
 	for _, r := range repos {
 		ids = append(ids, r.ID)
@@ -595,7 +595,7 @@ func (s *Service) ListRepositoryCredentials(ctx context.Context, projectID strin
 // with nil. A pin must fit the origin's host and scheme; a repository with no
 // origin can be pinned.
 func (s *Service) SetRepositoryCredential(ctx context.Context, repositoryID string, credentialID *string) (*domain.RepositoryCredential, error) {
-	r := s.rd.Repositories.Get(repositoryID)
+	r := s.rd.Repositories.Get(ctx, repositoryID)
 	if r == nil {
 		return nil, errRepositoryNotFound()
 	}

@@ -56,7 +56,7 @@ const (
 
 // Projects finds a project; the sqlite project repository satisfies it.
 type Projects interface {
-	Get(id string) *domain.Project
+	Get(ctx context.Context, id string) *domain.Project
 }
 
 // Tickets finds a task; the sqlite ticket repository satisfies it.
@@ -493,7 +493,7 @@ func (s *Service) Notify(ctx context.Context, req ports.NotifyRequest) (*domain.
 	} else if err := domain.ValidateHarnessLink(link); err != nil {
 		return nil, err
 	}
-	if s.readers.Projects.Get(req.ProjectID) == nil {
+	if s.readers.Projects.Get(ctx, req.ProjectID) == nil {
 		return nil, &domain.StructuredError{Code: "PROJECT_NOT_FOUND", Message: "project not found"}
 	}
 	if req.TaskID != "" {
@@ -566,7 +566,7 @@ func (s *Service) named(ctx context.Context, list ...*domain.Notification) []*do
 		c := *n
 		name, ok := projects[c.ProjectID]
 		if !ok {
-			if p := s.readers.Projects.Get(c.ProjectID); p != nil {
+			if p := s.readers.Projects.Get(ctx, c.ProjectID); p != nil {
 				name = p.Name
 			}
 			projects[c.ProjectID] = name

@@ -1,6 +1,7 @@
 package sqlite
 
 import (
+	"context"
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
 
@@ -21,18 +22,18 @@ func NewRepositoryRepository(db *gorm.DB) *RepositoryRepository {
 }
 
 // Get returns the repository by id, or nil if not found.
-func (r *RepositoryRepository) Get(id string) *domain.Repository {
+func (r *RepositoryRepository) Get(ctx context.Context, id string) *domain.Repository {
 	var m RepositoryModel
-	if err := r.db.First(&m, "id = ?", id).Error; err != nil {
+	if err := r.db.WithContext(ctx).First(&m, "id = ?", id).Error; err != nil {
 		return nil
 	}
 	return m.ToDomain()
 }
 
 // ListByProject returns all repositories belonging to the given project.
-func (r *RepositoryRepository) ListByProject(projectID string) []*domain.Repository {
+func (r *RepositoryRepository) ListByProject(ctx context.Context, projectID string) []*domain.Repository {
 	var models []RepositoryModel
-	if err := r.db.Where("project_id = ?", projectID).Find(&models).Error; err != nil {
+	if err := r.db.WithContext(ctx).Where("project_id = ?", projectID).Find(&models).Error; err != nil {
 		return nil
 	}
 	out := make([]*domain.Repository, 0, len(models))

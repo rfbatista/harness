@@ -113,7 +113,7 @@ func (s *PullRequests) resolve(ctx context.Context, workspaceID string) (*target
 	if ws == nil {
 		return nil, domain.PullRequestError("WORKSPACE_NOT_FOUND", "workspace not found")
 	}
-	repo := s.d.Repositories.Get(ws.RepositoryID)
+	repo := s.d.Repositories.Get(ctx, ws.RepositoryID)
 	if repo == nil {
 		return nil, domain.PullRequestError("REPOSITORY_NOT_FOUND", "repository not found")
 	}

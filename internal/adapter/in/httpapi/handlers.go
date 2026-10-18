@@ -271,7 +271,7 @@ func (h *Handler) handleListZones(c echo.Context) error {
 	if projectID == "" {
 		return echo.NewHTTPError(http.StatusBadRequest, "project_id is required")
 	}
-	zones := h.architecture.ListZones(projectID)
+	zones := h.architecture.ListZones(c.Request().Context(), projectID)
 	return c.JSON(http.StatusOK, mcp.ListZonesOut{Zones: mcp.ZonesToDTO(zones)})
 }
 

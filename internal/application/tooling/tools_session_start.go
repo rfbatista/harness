@@ -20,8 +20,13 @@ func startPeer(ctx context.Context, scope *taskScope, sessions ports.SessionRepo
 		return nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "prompt is required: say what the new session should do"}
 	}
 
+	// A failed read must not let the limit through.
+	onTask, err := sessions.Query(ctx, ports.SessionFilter{ProjectID: scope.session.ProjectID, TicketID: scope.ticket.ID})
+	if err != nil {
+		return nil, err
+	}
 	live := 0
-	for _, s := range sessions.List(ctx, ports.SessionFilter{ProjectID: scope.session.ProjectID, TicketID: scope.ticket.ID}) {
+	for _, s := range onTask {
 		if !s.Status.IsTerminal() {
 			live++
 		}

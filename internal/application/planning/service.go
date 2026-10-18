@@ -117,7 +117,7 @@ func (s *Service) CreateTicket(ctx context.Context, projectID, title, descriptio
 	if title == "" {
 		return nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "title is required"}
 	}
-	if s.projects.Get(projectID) == nil {
+	if s.projects.Get(ctx, projectID) == nil {
 		return nil, &domain.StructuredError{Code: "PROJECT_NOT_FOUND", Message: "project not found"}
 	}
 	if status == "" {
@@ -230,7 +230,9 @@ func (s *Service) DeleteTicket(ctx context.Context, id string) error {
 func (s *Service) deleteTicket(ctx context.Context, id string) (*domain.Ticket, error) {
 	s.ticketMu.Lock()
 	defer s.ticketMu.Unlock()
-	last := s.tickets.Get(ctx, id)
+	// The task is deleted whatever happens to the request, so what it
+	// announces is read to the end too.
+	last := s.tickets.Get(context.WithoutCancel(ctx), id)
 	if err := s.tickets.Delete(id); err != nil {
 		return nil, err
 	}
@@ -256,7 +258,7 @@ func (s *Service) CreateDocument(projectID, title, content string, format domain
 	if !scope.Valid() {
 		return nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "scope must be task or project"}
 	}
-	if s.projects.Get(projectID) == nil {
+	if s.projects.Get(context.TODO(), projectID) == nil {
 		return nil, &domain.StructuredError{Code: "PROJECT_NOT_FOUND", Message: "project not found"}
 	}
 	d, err := s.documents.Create(projectID, title, content, format, scope)

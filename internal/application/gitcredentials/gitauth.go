@@ -147,7 +147,7 @@ func (s *Service) SessionEnv(ctx context.Context, sessionID, repositoryID string
 		return nil, errNoBroker
 	}
 	origin := ""
-	if r := s.rd.Repositories.Get(repositoryID); r != nil {
+	if r := s.rd.Repositories.Get(ctx, repositoryID); r != nil {
 		var err error
 		if origin, err = s.origin(ctx, r); err != nil {
 			slog.Warn("read origin for a session's git credentials", "session", sessionID, "repository", repositoryID, "err", err)

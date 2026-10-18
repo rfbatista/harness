@@ -105,7 +105,7 @@ func (c *Catalog) SetOrigin(repositoryID, originURL string) {
 	}
 }
 
-func (c *Catalog) Get(id string) *domain.Repository {
+func (c *Catalog) Get(_ context.Context, id string) *domain.Repository {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	for _, r := range c.repos {
@@ -117,7 +117,7 @@ func (c *Catalog) Get(id string) *domain.Repository {
 	return nil
 }
 
-func (c *Catalog) ListByProject(projectID string) []*domain.Repository {
+func (c *Catalog) ListByProject(_ context.Context, projectID string) []*domain.Repository {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	out := []*domain.Repository{}
@@ -134,7 +134,7 @@ func (c *Catalog) ListByProject(projectID string) []*domain.Repository {
 // methods.
 type projectGetter struct{ c *Catalog }
 
-func (p projectGetter) Get(id string) *domain.Project {
+func (p projectGetter) Get(_ context.Context, id string) *domain.Project {
 	p.c.mu.Lock()
 	defer p.c.mu.Unlock()
 	return p.c.projects[id]

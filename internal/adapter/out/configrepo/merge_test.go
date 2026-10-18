@@ -1,6 +1,7 @@
 package configrepo
 
 import (
+	"context"
 	"testing"
 
 	"github.com/rfbatista/harnesskit/mcpserver"
@@ -27,7 +28,7 @@ func newFakeAgentRepo(agents ...*domain.Agent) *fakeAgentRepo {
 }
 
 func (r *fakeAgentRepo) Get(id string) *domain.Agent { return r.byID[id] }
-func (r *fakeAgentRepo) List() []*domain.Agent {
+func (r *fakeAgentRepo) List(_ context.Context) []*domain.Agent {
 	out := make([]*domain.Agent, 0, len(r.byID))
 	for _, a := range r.byID {
 		out = append(out, a)
@@ -54,7 +55,7 @@ func TestMergedAgentRepository_ListCombinesBothSources(t *testing.T) {
 	merged := MergeAgents(db, cfg)
 
 	names := map[string]bool{}
-	for _, a := range merged.List() {
+	for _, a := range merged.List(context.Background()) {
 		names[a.Name] = true
 	}
 	if !names["designer"] || !names["go-developer"] {
@@ -67,7 +68,7 @@ func TestMergedAgentRepository_ConfigWinsOnNameCollision(t *testing.T) {
 	cfg := newFakeAgentRepo(&domain.Agent{ID: "cfg:go-developer", Name: "go-developer", Description: "live config"})
 	merged := MergeAgents(db, cfg)
 
-	got := merged.List()
+	got := merged.List(context.Background())
 	if len(got) != 1 {
 		t.Fatalf("expected the collision to collapse to 1 entry, got %d: %+v", len(got), got)
 	}

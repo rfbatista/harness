@@ -1,6 +1,7 @@
 package sqlite
 
 import (
+	"context"
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
 
@@ -21,9 +22,9 @@ func NewProjectRepository(db *gorm.DB) *ProjectRepository {
 }
 
 // Get returns the project by id, or nil if not found.
-func (r *ProjectRepository) Get(id string) *domain.Project {
+func (r *ProjectRepository) Get(ctx context.Context, id string) *domain.Project {
 	var m ProjectModel
-	if err := r.db.First(&m, "id = ?", id).Error; err != nil {
+	if err := r.db.WithContext(ctx).First(&m, "id = ?", id).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return nil
 		}
@@ -33,9 +34,9 @@ func (r *ProjectRepository) Get(id string) *domain.Project {
 }
 
 // List returns all projects.
-func (r *ProjectRepository) List() []*domain.Project {
+func (r *ProjectRepository) List(ctx context.Context) []*domain.Project {
 	var models []ProjectModel
-	if err := r.db.Find(&models).Error; err != nil {
+	if err := r.db.WithContext(ctx).Find(&models).Error; err != nil {
 		return nil
 	}
 	out := make([]*domain.Project, 0, len(models))
