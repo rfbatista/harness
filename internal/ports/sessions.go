@@ -11,6 +11,9 @@ type SessionFilter struct {
 	ProjectID string
 	AgentID   string
 	TicketID  string
+	// TicketIDs matches the sessions of any of the listed tasks; empty
+	// matches all. It reads the sessions of many tasks in one query.
+	TicketIDs []string
 	// Statuses matches any of the listed statuses; empty matches all. It is a
 	// list because one UI state covers several backend ones — a session the
 	// user sees as "running" is `running`, `idle` or `thinking` underneath.

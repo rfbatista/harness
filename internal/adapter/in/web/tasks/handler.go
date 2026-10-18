@@ -108,9 +108,10 @@ func (h Handler) Task(w http.ResponseWriter, r *http.Request) error {
 	return h.task(w, r, nil)
 }
 
-// WorkspaceReader reads a workspace (*workspaces.Service satisfies it).
+// WorkspaceReader reads workspaces, many at once (*workspaces.Service
+// satisfies it).
 type WorkspaceReader interface {
-	Get(id string) *domain.Workspace
+	GetMany(ids []string) []*domain.Workspace
 }
 
 // SessionCode serves a session's code URLs (…/sessions/{session}/code[/…]):
@@ -212,21 +213,19 @@ func (h Handler) task(w http.ResponseWriter, r *http.Request, codeRoute *code.Ro
 }
 
 // usageTotals reads the task's and each of its sessions' all-time token
-// totals; nil when one cannot be read: the totals are not worth the page.
+// totals, at once; nil when they cannot be read: the totals are not worth
+// the page.
 func (h Handler) usageTotals(ctx context.Context, projectID, taskID string, list []*domain.Session) *sessions.UsageTotalsSeed {
-	seed := &sessions.UsageTotalsSeed{ProjectID: projectID, TaskID: taskID, Sessions: make(map[string]*ports.UsageTotals, len(list))}
-	var err error
-	if seed.Task, err = h.Usage.UsageTotals(ctx, ports.UsageTotalsQuery{TaskID: taskID}); err != nil {
+	ids := make([]string, 0, len(list))
+	for _, s := range list {
+		ids = append(ids, s.ID)
+	}
+	task, bySession, err := h.Usage.TaskUsageTotals(ctx, taskID, ids)
+	if err != nil {
 		slog.Warn("task page: usage totals not read", "task", taskID, "err", err)
 		return nil
 	}
-	for _, s := range list {
-		if seed.Sessions[s.ID], err = h.Usage.UsageTotals(ctx, ports.UsageTotalsQuery{SessionID: s.ID}); err != nil {
-			slog.Warn("task page: usage totals not read", "session", s.ID, "err", err)
-			return nil
-		}
-	}
-	return seed
+	return &sessions.UsageTotalsSeed{ProjectID: projectID, TaskID: taskID, Task: task, Sessions: bySession}
 }
 
 // baseRefs names each session worktree's base branch, by workspace.
@@ -235,12 +234,9 @@ func (h Handler) baseRefs(list []*domain.Session) map[string]string {
 	if h.Workspaces == nil {
 		return out
 	}
-	for _, s := range list {
-		if s.WorkspaceID == "" {
-			continue
-		}
-		if ws := h.Workspaces.Get(s.WorkspaceID); ws != nil && ws.BaseRef != "" {
-			out[s.WorkspaceID] = ws.BaseRef
+	for _, ws := range h.Workspaces.GetMany(workspaceIDs(list)) {
+		if ws != nil && ws.BaseRef != "" {
+			out[ws.ID] = ws.BaseRef
 		}
 	}
 	return out

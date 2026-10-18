@@ -444,6 +444,25 @@ func TestTaskAndSessionUsageTotalsAgreeWithTheirRecords(t *testing.T) {
 	if other.Requests != 1 || other.TotalTokens != 7 {
 		t.Errorf("second session totals = %+v, want 1 request, 7 tokens", other)
 	}
+
+	// The task page reads the task's and its sessions' totals at once: the
+	// same totals, and zero for a session with no records.
+	taskAt, sessionsAt, err := e.Service.TaskUsageTotals(ctx, e.TaskA, []string{e.SessionA, second.SessionID, "no-records"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if taskAt.Requests != task.Requests || taskAt.TotalTokens != task.TotalTokens || !near(taskAt.EstimatedCostUSD, 3.30) {
+		t.Errorf("task A totals at once = %+v, want %+v", taskAt, task)
+	}
+	if a := sessionsAt[e.SessionA]; a == nil || a.TotalTokens != session.TotalTokens || !near(a.EstimatedCostUSD, 3.30) {
+		t.Errorf("session A totals at once = %+v, want %+v", a, session)
+	}
+	if b := sessionsAt[second.SessionID]; b == nil || b.Requests != 1 || b.TotalTokens != 7 {
+		t.Errorf("second session totals at once = %+v, want 1 request, 7 tokens", b)
+	}
+	if none := sessionsAt["no-records"]; none == nil || none.Requests != 0 || !near(none.EstimatedCostUSD, 0) {
+		t.Errorf("a session with no records at once = %+v, want zero totals", none)
+	}
 }
 
 func TestUsageQueriesRefuseInvalidInput(t *testing.T) {

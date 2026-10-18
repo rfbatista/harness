@@ -78,6 +78,16 @@ func newFakeWorkspaceRepo() *fakeWorkspaceRepo {
 
 func (f *fakeWorkspaceRepo) Get(id string) *domain.Workspace { return f.items[id] }
 
+func (f *fakeWorkspaceRepo) ListByIDs(ids []string) []*domain.Workspace {
+	var out []*domain.Workspace
+	for _, id := range ids {
+		if w, ok := f.items[id]; ok {
+			out = append(out, w)
+		}
+	}
+	return out
+}
+
 func (f *fakeWorkspaceRepo) ListByRepository(repositoryID string) []*domain.Workspace {
 	var out []*domain.Workspace
 	for _, w := range f.items {

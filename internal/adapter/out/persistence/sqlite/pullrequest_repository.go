@@ -94,6 +94,33 @@ func (r *PullRequestRepository) LatestForWorkspace(workspaceID string) *domain.P
 	return ms[0].toDomain()
 }
 
+// LatestForWorkspaces is the newest pull request of each given workspace
+// that has one, in one query, in the order of workspaceIDs; none when the
+// read fails, as LatestForWorkspace answers nil.
+func (r *PullRequestRepository) LatestForWorkspaces(workspaceIDs []string) []*domain.PullRequest {
+	if len(workspaceIDs) == 0 {
+		return []*domain.PullRequest{}
+	}
+	var ms []PullRequestModel
+	if err := r.db.Where("workspace_id IN ?", workspaceIDs).Order("created_at DESC, number DESC").Find(&ms).Error; err != nil {
+		return []*domain.PullRequest{}
+	}
+	newest := make(map[string]*domain.PullRequest, len(workspaceIDs))
+	for i := range ms {
+		if _, ok := newest[ms[i].WorkspaceID]; !ok {
+			newest[ms[i].WorkspaceID] = ms[i].toDomain()
+		}
+	}
+	out := make([]*domain.PullRequest, 0, len(newest))
+	for _, id := range workspaceIDs {
+		if pr, ok := newest[id]; ok {
+			out = append(out, pr)
+			delete(newest, id) // a workspace named twice is answered once
+		}
+	}
+	return out
+}
+
 // DeleteByProject removes every pull request record of the project.
 func (r *PullRequestRepository) DeleteByProject(projectID string) error {
 	return r.db.Where("project_id = ?", projectID).Delete(&PullRequestModel{}).Error

@@ -80,6 +80,38 @@ func (s *Service) UsageTotals(_ context.Context, q ports.UsageTotalsQuery) (*por
 	return &out, nil
 }
 
+// TaskUsageTotals answers a task's totals and each given session's over all
+// time, from one read of their records.
+func (s *Service) TaskUsageTotals(_ context.Context, taskID string, sessionIDs []string) (*ports.UsageTotals, map[string]*ports.UsageTotals, error) {
+	if taskID == "" {
+		return nil, nil, invalid("name a task_id")
+	}
+	groups, err := s.repo.Groups(ports.UsageGroupFilter{TaskID: taskID, SessionIDs: sessionIDs, LongAbove: longPromptAbove})
+	if err != nil {
+		return nil, nil, err
+	}
+	var task totaller
+	bySession := make(map[string]*totaller, len(sessionIDs))
+	for _, id := range sessionIDs {
+		bySession[id] = &totaller{}
+	}
+	for _, g := range groups {
+		if g.TaskID == taskID {
+			task.add(g)
+		}
+		if t, ok := bySession[g.SessionID]; ok {
+			t.add(g)
+		}
+	}
+	taskTotals := task.totals()
+	sessions := make(map[string]*ports.UsageTotals, len(bySession))
+	for id, t := range bySession {
+		totals := t.totals()
+		sessions[id] = &totals
+	}
+	return &taskTotals, sessions, nil
+}
+
 // span is where a range starts, and the bucket its series uses.
 func (s *Service) span(r ports.UsageRange) (time.Time, ports.UsageBucket, error) {
 	now := s.now().In(time.Local)

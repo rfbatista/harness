@@ -361,13 +361,7 @@ func (s *PullRequests) RefreshNow(ctx context.Context, workspaceID string) error
 // StoredPullRequests is the newest stored pull request of each workspace that
 // has one, from the store alone: no git, no host, no background lookup.
 func (s *PullRequests) StoredPullRequests(_ context.Context, workspaceIDs []string) ([]*domain.PullRequest, error) {
-	out := make([]*domain.PullRequest, 0, len(workspaceIDs))
-	for _, id := range workspaceIDs {
-		if pr := s.d.Store.LatestForWorkspace(id); pr != nil {
-			out = append(out, pr)
-		}
-	}
-	return out, nil
+	return s.d.Store.LatestForWorkspaces(workspaceIDs), nil
 }
 
 // refresh reads a stored pull request from the host, storing and announcing

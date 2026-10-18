@@ -118,5 +118,8 @@ type PullRequestRepository interface {
 	// LatestForWorkspace is the workspace's newest pull request, any state;
 	// nil when none.
 	LatestForWorkspace(workspaceID string) *domain.PullRequest
+	// LatestForWorkspaces is the newest pull request of each given workspace
+	// that has one, read at once.
+	LatestForWorkspaces(workspaceIDs []string) []*domain.PullRequest
 	DeleteByProject(projectID string) error
 }
