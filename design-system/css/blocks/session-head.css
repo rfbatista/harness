@@ -8,7 +8,8 @@
  *   <button class="button" data-variant="ghost" data-icon data-split-back aria-label="Sessions">‹</button>
  *   <h2>title</h2>
  *   <p class="meta"><span class="status" data-state>…</span><span class="who">agent · age</span>
- *     <span class="checks">· checks 20m</span><span class="usage-total">11K tokens · $0.42 estimated</span></p>
+ *     <span class="checks">· checks 20m</span><span class="usage-total">11K tokens · $0.42 estimated</span>
+ *     <span class="token-savers">rtk · caveman</span><span class="badge" data-tone="attention" data-token-savers-missing>codegraph not installed</span></p>
  *   <div class="actions">[PR badge] [.check-button] <a class="button" data-wide>Git history</a>
  *     [Stop] <div class="menu">⋯</div></div></header>
  * When the column is tight: agent and age hide first (< 46rem), then the
@@ -56,6 +57,10 @@
     /* The session's token totals (.usage-total, usage.css), beside agent · age. */
     & > .meta > .usage-total { flex: none; }
     @container session (width < 34rem) { & > .meta > .usage-total { display: none; } }
+    /* The token savers it runs with, and a saver on for it but not installed. */
+    & > .meta > :is(.token-savers, [data-token-savers-missing]) { flex: none; }
+    & > .meta > .token-savers { color: var(--color-ink-faint); font-size: var(--text-sm); font-family: var(--font-mono); }
+    @container session (width < 34rem) { & > .meta > .token-savers { display: none; } }
 
     & > .actions { display: flex; align-items: center; gap: var(--space-2xs); flex: none; margin-inline-start: auto; }
 
@@ -87,7 +92,7 @@
         white-space: nowrap;
       }
       & > .meta > .status { order: 0; font-size: inherit; }
-      & > .meta > :is(.who, .checks, .usage-total) { display: inline; font-size: inherit; }
+      & > .meta > :is(.who, .checks, .usage-total, .token-savers) { display: inline; font-size: inherit; }
       & > .actions { grid-area: more; }
       & > .actions > :not(.menu) { display: none; }
       & > .actions .button[data-icon] { inline-size: var(--size-touch); min-block-size: var(--size-touch); }

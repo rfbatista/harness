@@ -71,7 +71,13 @@ func (v View) Unsupported() string {
 type Row struct {
 	Saver, Summary, StateLabel, Tone, Versions string
 	State                                      domain.TokenSaverState
+	// NotInstalled is NotInstalledNotice for a saver on somewhere but not
+	// installed, else "".
+	NotInstalled string
 }
+
+// NotInstalledNotice flags a saver on somewhere but not installed.
+const NotInstalledNotice = "Turned on for some sessions but not installed, so they run without it."
 
 // Rows are the seed's savers in order.
 func (v View) Rows() []Row {
@@ -88,6 +94,9 @@ func (v View) Rows() []Row {
 // NewRow paints s.
 func NewRow(s domain.TokenSaverStatus) Row {
 	r := Row{Saver: string(s.Saver), Summary: s.Summary, State: s.State}
+	if s.OnSomewhere && s.Installed == nil {
+		r.NotInstalled = NotInstalledNotice
+	}
 	switch s.State {
 	case domain.TokenSaverInstalled:
 		r.StateLabel, r.Tone = "Installed", "signal"

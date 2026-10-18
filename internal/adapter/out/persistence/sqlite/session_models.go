@@ -1,6 +1,7 @@
 package sqlite
 
 import (
+	"strings"
 	"time"
 
 	"operators-mcp/internal/domain"
@@ -35,6 +36,10 @@ type SessionModel struct {
 	Mode                     string  `gorm:"column:mode"`
 	CreatedAt                int64   `gorm:"autoCreateTime:milli"`
 	UpdatedAt                int64   `gorm:"autoUpdateTime:milli"`
+
+	// TokenSavers and TokenSaversNotInstalled are comma-separated saver names.
+	TokenSavers             string `gorm:"column:token_savers"`
+	TokenSaversNotInstalled string `gorm:"column:token_savers_not_installed"`
 }
 
 func (SessionModel) TableName() string { return "sessions" }
@@ -70,9 +75,31 @@ func (m *SessionModel) ToDomain() *domain.Session {
 		RunnerHost:               m.RunnerHost,
 		ParentSessionID:          m.ParentSessionID,
 		Mode:                     domain.SessionMode(m.Mode),
+		TokenSavers:              splitSavers(m.TokenSavers),
+		TokenSaversNotInstalled:  splitSavers(m.TokenSaversNotInstalled),
 		CreatedAt:                time.UnixMilli(m.CreatedAt),
 		UpdatedAt:                time.UnixMilli(m.UpdatedAt),
 	}
+}
+
+// joinSavers is savers as a session row stores them.
+func joinSavers(savers []domain.TokenSaver) string {
+	names := make([]string, len(savers))
+	for i, s := range savers {
+		names[i] = string(s)
+	}
+	return strings.Join(names, ",")
+}
+
+func splitSavers(s string) []domain.TokenSaver {
+	if s == "" {
+		return nil
+	}
+	var out []domain.TokenSaver
+	for _, name := range strings.Split(s, ",") {
+		out = append(out, domain.TokenSaver(name))
+	}
+	return out
 }
 
 type SessionEventModel struct {

@@ -14,6 +14,7 @@
  * @property {string} path              the installed executable or ruleset
  * @property {string} progress
  * @property {{ code: string, message: string } | null} error
+ * @property {boolean} onSomewhere      a project, repository or task has it on
  *
  * @typedef {object} SaverList
  * @property {Saver[]} savers
@@ -70,3 +71,11 @@ export function installLabel(s) {
 export function canRemove(s) {
   return s.state !== "installing" && s.installedVersion !== "";
 }
+
+/** Why sessions run without it: on somewhere but not installed; "" otherwise. @param {Saver} s */
+export function notInstalledNotice(s) {
+  return s.onSomewhere && !s.installedVersion ? NOT_INSTALLED_NOTICE : "";
+}
+
+/** The server paints the same words (tokensavers.NotInstalledNotice in Go). */
+export const NOT_INSTALLED_NOTICE = "Turned on for some sessions but not installed, so they run without it.";

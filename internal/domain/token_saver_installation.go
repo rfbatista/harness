@@ -47,6 +47,9 @@ type TokenSaverStatus struct {
 	Progress string `json:"progress,omitempty"`
 	// Error is why the last install failed.
 	Error *TokenSaverError `json:"error,omitempty"`
+	// OnSomewhere is a project, repository or task having it on. Not
+	// installed, the sessions it is on for run without it.
+	OnSomewhere bool `json:"on_somewhere,omitempty"`
 }
 
 // TokenSaverError is a failed install as the page shows it.

@@ -95,6 +95,9 @@ func (s *Service) StartInteractive(ctx context.Context, req InteractiveRequest) 
 		RunnerHost:      runnerHost(runsOn, req.RunnerHost),
 		ParentSessionID: req.ParentSessionID,
 		Mode:            mode,
+
+		TokenSavers:             p.savers.active,
+		TokenSaversNotInstalled: p.savers.notInstalled,
 	})
 	if err == nil {
 		s.adoptCleanup(id, p.cleanup)
@@ -122,7 +125,8 @@ func (s *Service) StartInteractive(ctx context.Context, req InteractiveRequest) 
 
 // ResumeInteractive reopens an ended interactive session's conversation in
 // its worktree. The agent, skills and MCP servers are resolved again, so the
-// resumed CLI runs with the configuration they have now.
+// resumed CLI runs with the configuration they have now. Its token savers
+// are not: it runs with the ones it started with (ADR 0015).
 //
 // The permission mode is not stored, only whether the session ran unattended:
 // a session that did resumes in bypass mode, any other in the default mode.
@@ -170,6 +174,7 @@ func (s *Service) ResumeInteractive(ctx context.Context, req ports.ResumeRequest
 	if err != nil {
 		return nil, ports.AgentSpec{}, err
 	}
+	s.rewireTokenSavers(sess, &cfg)
 	spec := s.agentSpec(cfg, ports.Conversation{ID: claudeID(sess), Resume: true}, "")
 	spec.EnvFile = envFile
 	err = s.sessions.UpdateRunner(sess.ID, runsOn, runnerHost(runsOn, req.RunnerHost))

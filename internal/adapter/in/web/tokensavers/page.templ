@@ -72,6 +72,9 @@ templ ssrRow(r Row) {
 			</span>
 			<span class="[ text-sm color-ink-muted ]">{ r.Summary }</span>
 			<span class="[ font-mono text-xs color-ink-faint ]">{ r.Versions }</span>
+			if r.NotInstalled != "" {
+				<div class="[ banner ]" data-tone="attention" data-active-not-installed><span>{ r.NotInstalled }</span></div>
+			}
 		</span>
 	</li>
 }
@@ -87,6 +90,9 @@ templ liveRow() {
 			</span>
 			<span class="[ text-sm color-ink-muted ]" x-text="s.summary"></span>
 			<span class="[ font-mono text-xs color-ink-faint ]" x-text="s.versions"></span>
+			<template x-if="s.notInstalled">
+				<div class="[ banner ]" data-tone="attention" data-active-not-installed><span x-text="s.notInstalled"></span></div>
+			</template>
 			<template x-if="s.progress">
 				<span class="[ text-sm ]" role="status" x-text="s.progress"></span>
 			</template>

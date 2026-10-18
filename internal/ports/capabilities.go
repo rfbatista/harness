@@ -85,6 +85,14 @@ type TokenSaverResolver interface {
 	ResolveTokenSavers(ctx context.Context, projectID, repositoryID, taskID string) ([]domain.ResolvedTokenSaver, error)
 }
 
+// SessionTokenSavers is what Orchestration asks Capabilities when it
+// prepares an agent session: how each saver resolves for it, and which are
+// installed. *capabilities.Service satisfies it.
+type SessionTokenSavers interface {
+	TokenSaverResolver
+	TokenSaverInstallations
+}
+
 // TokenSaverActivationRepository stores activations (driven). Inherit is
 // never stored: it is the absence of a row.
 type TokenSaverActivationRepository interface {
@@ -100,4 +108,7 @@ type TokenSaverActivationRepository interface {
 	DeleteOwner(owner domain.ActivationOwner) error
 	// DeleteProject removes every activation in the project, at every level.
 	DeleteProject(projectID string) error
+	// SaversOn returns the savers with an activation stored on at some
+	// level, each once.
+	SaversOn() ([]domain.TokenSaver, error)
 }

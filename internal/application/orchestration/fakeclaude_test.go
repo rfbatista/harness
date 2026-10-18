@@ -19,7 +19,12 @@ type fakeLaunch struct {
 	Shell    string   `json:"shell"`     // HARNESS_SHELL
 	ShellURL string   `json:"shell_url"` // HARNESS_SHELL_URL
 	Path     string   `json:"path"`      // PATH
+	// Env holds the variables of fakeLaunchEnv the CLI was given.
+	Env map[string]string `json:"env"`
 }
+
+// fakeLaunchEnv are the variables fakeLaunch.Env records.
+var fakeLaunchEnv = []string{"RTK_TELEMETRY_DISABLED", "DO_NOT_TRACK", "ANTHROPIC_BASE_URL"}
 
 func TestMain(m *testing.M) {
 	if os.Getenv("CLAUDE_FAKE") == "1" {
@@ -31,8 +36,14 @@ func TestMain(m *testing.M) {
 
 func runFakeClaude() {
 	if os.Getenv("CLAUDE_FAKE_RECORD") == "1" {
+		env := map[string]string{}
+		for _, name := range fakeLaunchEnv {
+			if v, ok := os.LookupEnv(name); ok {
+				env[name] = v
+			}
+		}
 		b, _ := json.Marshal(fakeLaunch{Args: os.Args[1:], Shell: os.Getenv("HARNESS_SHELL"),
-			ShellURL: os.Getenv("HARNESS_SHELL_URL"), Path: os.Getenv("PATH")})
+			ShellURL: os.Getenv("HARNESS_SHELL_URL"), Path: os.Getenv("PATH"), Env: env})
 		_ = os.WriteFile(fakeLaunchFile+".tmp", b, 0o644)
 		_ = os.Rename(fakeLaunchFile+".tmp", fakeLaunchFile)
 	}

@@ -184,7 +184,25 @@ export function toDetailView(session, now, agentNames) {
     stoppable: !isTerminal(session),
     repositoryId: session.repositoryId,
     workspaceId: session.workspaceId,
+    ...tokenSaversView(session),
     ...terminalView(session),
+  };
+}
+
+/**
+ * The token savers a session runs with, beside its usage, and the ones on
+ * for it that were not installed.
+ * @returns {{ tokenSavers: string, tokenSaversMissing: string, tokenSaversMissingTitle: string }}
+ */
+export function tokenSaversView(session) {
+  const missing = session.tokenSaversNotInstalled ?? [];
+  const names = missing.join(", ");
+  return {
+    tokenSavers: (session.tokenSavers ?? []).join(" · "),
+    tokenSaversMissing: missing.length ? `${names} not installed` : "",
+    tokenSaversMissingTitle: missing.length
+      ? `${names} ${missing.length === 1 ? "was" : "were"} on for this session but not installed, so it runs without ${missing.length === 1 ? "it" : "them"}. Install ${missing.length === 1 ? "it" : "them"} on the Token savers page.`
+      : "",
   };
 }
 

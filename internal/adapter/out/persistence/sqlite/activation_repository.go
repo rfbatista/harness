@@ -87,6 +87,19 @@ func (r *ActivationRepository) DeleteOwner(owner domain.ActivationOwner) error {
 	return r.db.Where("level = ? AND owner_id = ?", owner.Level, owner.ID).Delete(&ActivationModel{}).Error
 }
 
+// SaversOn returns the savers stored on for some owner.
+func (r *ActivationRepository) SaversOn() ([]domain.TokenSaver, error) {
+	var names []string
+	if err := r.db.Model(&ActivationModel{}).Where("value = ?", domain.ActivationOn).Distinct().Order("saver").Pluck("saver", &names).Error; err != nil {
+		return nil, err
+	}
+	out := make([]domain.TokenSaver, len(names))
+	for i, n := range names {
+		out[i] = domain.TokenSaver(n)
+	}
+	return out, nil
+}
+
 // DeleteProject removes every activation in the project, at every level.
 func (r *ActivationRepository) DeleteProject(projectID string) error {
 	return r.db.Where("project_id = ?", projectID).Delete(&ActivationModel{}).Error
