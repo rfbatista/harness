@@ -57,6 +57,7 @@ var PersistenceModule = fx.Module("persistence",
 		asPort(sqlite.NewRepositoryRepository, new(ports.RepositoryRepository)),
 		asPort(sqlite.NewEnvFileRepository, new(ports.EnvFileRepository)),
 		asPort(sqlite.NewRunCommandRepository, new(ports.RunCommandRepository)),
+		asPort(sqlite.NewActivationRepository, new(ports.TokenSaverActivationRepository)),
 		asPort(sqlite.NewZoneRepository, new(ports.ZoneRepository)),
 		newAgentRepository,
 		asPort(sqlite.NewPromptRepository, new(ports.PromptRepository)),
@@ -164,6 +165,7 @@ type catalogParams struct {
 	EnvFiles        ports.EnvFileRepository
 	EnvFileIO       ports.EnvFileIO
 	RunCommands     ports.RunCommandRepository
+	Activations     ports.TokenSaverActivationRepository
 	Cfg             Config
 }
 
@@ -186,6 +188,7 @@ func newCatalog(p catalogParams) catalog.Catalog {
 		EnvFiles:         p.EnvFiles,
 		EnvFileIO:        p.EnvFileIO,
 		RunCommands:      p.RunCommands,
+		Activations:      p.Activations,
 		DefaultRoot:      p.Cfg.Root,
 	})
 }
@@ -197,10 +200,12 @@ var PlanningModule = fx.Module("planning",
 )
 
 // bindProjectActivity lets the projects context read its projects' tasks and
-// sessions (summaries, the delete guard). The catalog is built before
-// planning and orchestration, so the read ports are bound late.
+// sessions (summaries, the delete guard), and capabilities a task-level
+// activation's task. The catalog is built before planning and
+// orchestration, so the read ports are bound late.
 func bindProjectActivity(cat catalog.Catalog, plan *planning.Service, orch *orchestration.Service) {
 	cat.Projects.UseActivity(plan, orch)
+	cat.Capabilities.UseTasks(plan)
 }
 
 // newPlanningService builds the planning service and points its ticket,

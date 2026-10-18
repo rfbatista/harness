@@ -7,7 +7,8 @@
 //
 //	architecture ──reads──▶ projects (root dir), agents (zone rule prompts)
 //	agents       ──reads──▶ capabilities (skills, MCP servers)
-//	capabilities ──reads──▶ settings (publish root), agents (MCP server usage)
+//	capabilities ──reads──▶ settings (publish root), agents (MCP server usage),
+//	                        projects (an activation's project and repositories)
 //
 //	ProjectDeleted   ──▶ architecture drops the project's zones and bounded contexts
 //	PromptDeleted    ──▶ architecture drops it from zone rules
@@ -15,6 +16,8 @@
 //	SkillDeleted     ──▶ agents unlink it (a failure cancels the delete)
 //	MCPServerDeleted ──▶ agents unlink it (a failure cancels the delete)
 //	SettingsChanged  ──▶ capabilities migrates published skills to a new root
+//	ProjectDeleted, RepositoryDeleted, TicketDeleted
+//	                 ──▶ capabilities drops the owner's token saver activations
 package catalog
 
 import (
@@ -51,6 +54,8 @@ type Deps struct {
 	EnvFileIO ports.EnvFileIO
 	// RunCommands keeps repositories' saved run commands; nil disables them.
 	RunCommands ports.RunCommandRepository
+	// Activations keeps token saver activations; nil disables them.
+	Activations ports.TokenSaverActivationRepository
 	DefaultRoot string
 	// Bus carries the domain events; nil creates one.
 	Bus *eventbus.Bus
@@ -75,17 +80,19 @@ func New(d Deps) Catalog {
 	}
 
 	st := settings.NewService(d.Settings, bus)
+	pr := projects.NewService(d.Projects, d.Repositories, bus)
 	caps := capabilities.NewService(capabilities.Deps{
-		Skills:     d.Skills,
-		MCPServers: d.MCPServers,
-		Tools:      d.Tools,
-		Settings:   st,
-		Publisher:  d.Publisher,
-		Events:     bus,
+		Skills:      d.Skills,
+		MCPServers:  d.MCPServers,
+		Tools:       d.Tools,
+		Settings:    st,
+		Publisher:   d.Publisher,
+		Events:      bus,
+		Activations: d.Activations,
+		Projects:    pr,
 	})
 	ag := agents.NewService(d.Agents, d.Prompts, caps, bus)
 	caps.UseMCPServerUsage(ag)
-	pr := projects.NewService(d.Projects, d.Repositories, bus)
 	if d.RepositoryFinder != nil {
 		pr.UseFinder(d.RepositoryFinder)
 	}

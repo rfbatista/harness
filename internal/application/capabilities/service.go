@@ -1,5 +1,6 @@
 // Package capabilities is the capabilities bounded context: what an agent can
-// be equipped with — skills, MCP servers and user-defined tools.
+// be equipped with — skills, MCP servers, user-defined tools, and the token
+// savers' activations at project, repository and task level.
 //
 // The skill and MCP server use cases live in harnesskit; this context supplies
 // what the library deliberately does not know: where the publish root is set
@@ -36,6 +37,12 @@ type Service struct {
 	settings ports.SettingsReader // nil: publishing is not configured
 	events   ports.EventPublisher // nil: deletes are not announced
 	usage    atomic.Pointer[ports.MCPServerUsage]
+
+	// activations and projects keep token saver activations; nil: they are
+	// UNAVAILABLE. tasks is bound late (UseTasks).
+	activations ports.TokenSaverActivationRepository
+	projects    ActivationProjects
+	tasks       atomic.Pointer[ports.TicketReader]
 }
 
 // Deps are the Service's collaborators. Settings and Publisher are optional:
@@ -48,11 +55,15 @@ type Deps struct {
 	Settings   ports.SettingsReader
 	Publisher  ports.SkillPublisher
 	Events     ports.EventPublisher
+	// Activations and Projects keep token saver activations; without both
+	// they are UNAVAILABLE.
+	Activations ports.TokenSaverActivationRepository
+	Projects    ActivationProjects
 }
 
 // NewService returns the capabilities context.
 func NewService(d Deps) *Service {
-	s := &Service{tools: d.Tools, settings: d.Settings, events: d.Events}
+	s := &Service{tools: d.Tools, settings: d.Settings, events: d.Events, activations: d.Activations, projects: d.Projects}
 	s.skills = skill.NewService(d.Skills).WithHooks(skill.Hooks{
 		BeforeDeleteRow: func(sk *domain.Skill) error {
 			return s.publish(domain.SkillDeleted{SkillID: sk.ID})
@@ -92,6 +103,7 @@ func (s *Service) Subscribe(sub ports.EventSubscriber) {
 		}
 		return nil
 	})
+	s.subscribeActivations(sub)
 }
 
 // SkillService returns the skill use cases, for callers that build tool groups

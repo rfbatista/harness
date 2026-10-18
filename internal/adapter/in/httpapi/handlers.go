@@ -31,12 +31,14 @@ type Services struct {
 		ports.PromptCatalog
 	}
 	Capabilities ports.Capabilities
-	Settings     ports.SettingsEditor
-	Tools        ports.ToolRegistry
-	Tasks        ports.TaskRunner
-	Sessions     ports.Orchestration
-	Planning     ports.Planning
-	Workspaces   ports.WorkspaceManager
+	// TokenSavers reads and sets token saver activations; nil answers 503.
+	TokenSavers ports.TokenSaverActivations
+	Settings    ports.SettingsEditor
+	Tools       ports.ToolRegistry
+	Tasks       ports.TaskRunner
+	Sessions    ports.Orchestration
+	Planning    ports.Planning
+	Workspaces  ports.WorkspaceManager
 	// Artifacts records and serves what sessions publish; nil answers 503.
 	Artifacts ports.Artifacts
 	// TaskChannel is the person's side of the architect channel: task
@@ -80,6 +82,7 @@ type Handler struct {
 		ports.PromptCatalog
 	}
 	capabilities   ports.Capabilities
+	tokenSavers    ports.TokenSaverActivations
 	settings       ports.SettingsEditor
 	toolingSvc     ports.ToolRegistry
 	execSvc        ports.TaskRunner
@@ -112,6 +115,7 @@ func NewHandler(s Services) *Handler {
 		architecture:   s.Architecture,
 		agents:         s.Agents,
 		capabilities:   s.Capabilities,
+		tokenSavers:    s.TokenSavers,
 		settings:       s.Settings,
 		toolingSvc:     s.Tools,
 		execSvc:        s.Tasks,

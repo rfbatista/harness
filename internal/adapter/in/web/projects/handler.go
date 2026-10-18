@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"operators-mcp/internal/adapter/in/web/tokensavers"
 	"path"
 	"strings"
 	"time"
@@ -33,6 +34,9 @@ type Handler struct {
 	// Credentials paints each repository's git credential on its page; nil
 	// leaves it out.
 	Credentials ports.GitCredentials
+	// TokenSavers paints the Token savers control on the project's and the
+	// repository's settings pages; nil leaves it out.
+	TokenSavers ports.TokenSaverActivationReader
 	Layout      shell.Layout
 	Render      shell.Renderer
 	Now         func() time.Time
@@ -69,7 +73,9 @@ func (h Handler) Settings(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	return h.Render(w, r, http.StatusOK, SettingsPage(NewSettingsView(frame, project, repos)))
+	v := NewSettingsView(frame, project, repos)
+	v.TokenSavers = tokensavers.Read(ctx, h.TokenSavers, domain.ActivationOwner{Level: domain.ActivationLevelProject, ID: project.ID})
+	return h.Render(w, r, http.StatusOK, SettingsPage(v))
 }
 
 // New is the new-project form.
@@ -173,6 +179,7 @@ func (h Handler) EnvFileList(w http.ResponseWriter, r *http.Request) error {
 		Files:          files,
 		Seed:           EnvFilesSeed{RepositoryID: repo.ID, EnvFiles: files},
 		RunCommands:    runCommands,
+		TokenSavers:    tokensavers.Read(ctx, h.TokenSavers, domain.ActivationOwner{Level: domain.ActivationLevelRepository, ID: repo.ID}),
 	}))
 }
 
@@ -184,6 +191,8 @@ type EnvFilesView struct {
 	Seed                                            EnvFilesSeed
 	// RunCommands seeds the Run commands section; nil leaves it out.
 	RunCommands *RunCommandsSeed
+	// TokenSavers seeds the Token savers section; nil leaves it out.
+	TokenSavers *tokensavers.Seed
 }
 
 // RunCommandsSeed is what runsCommandsSettings starts from, in the API's shape.

@@ -20,5 +20,6 @@ func SQLiteDeps(db *gorm.DB) Deps {
 		MCPServers:      sqlite.NewMCPServerRepository(db),
 		Tools:           sqlite.NewToolRepository(db),
 		Settings:        sqlite.NewSettingsRepository(db),
+		Activations:     sqlite.NewActivationRepository(db),
 	}
 }

@@ -57,6 +57,10 @@ func NewRouter(h *Handler, opts ...Option) *echo.Echo {
 	g.POST("/save_repository_run_command", h.handleSaveRunCommand)
 	g.POST("/delete_repository_run_command", h.handleDeleteRunCommand)
 
+	// token saver activations of a project, repository or task
+	g.GET("/list_token_saver_activations", h.handleListTokenSaverActivations)
+	g.POST("/set_token_saver_activation", h.handleSetTokenSaverActivation)
+
 	// application runs: a repository's app run from a session's worktree
 	g.GET("/list_runs", h.handleListRuns)
 	g.POST("/start_run", h.handleStartRun)
