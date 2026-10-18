@@ -89,7 +89,7 @@ func (s *Service) ListTokenSavers(ctx context.Context) (*domain.TokenSaverList, 
 	if err != nil {
 		return nil, err
 	}
-	on, err := s.saversOn()
+	on, err := s.saversOn(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -130,7 +130,7 @@ func (s *Service) InstalledTokenSavers(context.Context) ([]*domain.TokenSaverIns
 }
 
 // InstallTokenSaver starts installing the pinned version of saver.
-func (s *Service) InstallTokenSaver(_ context.Context, saver domain.TokenSaver) (*domain.TokenSaverStatus, error) {
+func (s *Service) InstallTokenSaver(ctx context.Context, saver domain.TokenSaver) (*domain.TokenSaverStatus, error) {
 	t, err := s.tokenSavers()
 	if err != nil {
 		return nil, err
@@ -147,7 +147,7 @@ func (s *Service) InstallTokenSaver(_ context.Context, saver domain.TokenSaver) 
 	if err != nil {
 		return nil, err
 	}
-	on, err := s.saversOn()
+	on, err := s.saversOn(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -164,7 +164,7 @@ func (s *Service) InstallTokenSaver(_ context.Context, saver domain.TokenSaver) 
 }
 
 // RemoveTokenSaver deletes saver's files, every version, and its installation.
-func (s *Service) RemoveTokenSaver(_ context.Context, saver domain.TokenSaver) (*domain.TokenSaverStatus, error) {
+func (s *Service) RemoveTokenSaver(ctx context.Context, saver domain.TokenSaver) (*domain.TokenSaverStatus, error) {
 	t, err := s.tokenSavers()
 	if err != nil {
 		return nil, err
@@ -173,7 +173,7 @@ func (s *Service) RemoveTokenSaver(_ context.Context, saver domain.TokenSaver) (
 	if err != nil {
 		return nil, err
 	}
-	on, err := s.saversOn()
+	on, err := s.saversOn(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -194,19 +194,20 @@ func (s *Service) RemoveTokenSaver(_ context.Context, saver domain.TokenSaver) (
 	return &st, nil
 }
 
-// saversOn are the savers some project, repository or task has on: those
-// whose sessions somewhere ask for them. Without activations, none.
-func (s *Service) saversOn() (map[domain.TokenSaver]bool, error) {
+// saversOn are the savers that would reach some session: they resolve on
+// for at least one repository, through its project or itself, or some task
+// turns them on. Without activations, none.
+func (s *Service) saversOn(ctx context.Context) (map[domain.TokenSaver]bool, error) {
 	out := map[domain.TokenSaver]bool{}
-	if s.activations == nil {
+	if s.activations == nil || s.projects == nil {
 		return out, nil
 	}
-	list, err := s.activations.SaversOn()
-	if err != nil {
-		return nil, err
-	}
-	for _, saver := range list {
-		out[saver] = true
+	for _, saver := range domain.TokenSavers {
+		r, err := s.reach(ctx, saver, "")
+		if err != nil {
+			return nil, err
+		}
+		out[saver] = r.taskOn || len(r.repositories) > 0
 	}
 	return out, nil
 }

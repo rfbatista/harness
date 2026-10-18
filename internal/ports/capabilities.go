@@ -111,7 +111,4 @@ type TokenSaverActivationRepository interface {
 	DeleteOwner(owner domain.ActivationOwner) error
 	// DeleteProject removes every activation in the project, at every level.
 	DeleteProject(projectID string) error
-	// SaversOn returns the savers with an activation stored on at some
-	// level, each once.
-	SaversOn() ([]domain.TokenSaver, error)
 }

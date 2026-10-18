@@ -93,33 +93,54 @@ func (s *Service) SetTokenSaverActivation(ctx context.Context, owner domain.Acti
 // their sessions without a task, or on for some task of their project (a
 // task's setting wins in every repository).
 func (s *Service) RepositoriesWithTokenSaverOn(ctx context.Context, saver domain.TokenSaver, projectID string) ([]string, error) {
+	r, err := s.reach(ctx, saver, projectID)
+	if err != nil {
+		return nil, err
+	}
+	return r.repositories, nil
+}
+
+// saverReach is where a saver's stored activations take it.
+type saverReach struct {
+	// repositories are those where it resolves on, as
+	// RepositoriesWithTokenSaverOn answers them.
+	repositories []string
+	// taskOn: some task turns it on.
+	taskOn bool
+}
+
+// reach reads where saver resolves on in projectID (every project when
+// empty).
+func (s *Service) reach(ctx context.Context, saver domain.TokenSaver, projectID string) (saverReach, error) {
 	if s.activations == nil || s.projects == nil {
-		return nil, errNoActivations
+		return saverReach{}, errNoActivations
 	}
 	stored, err := s.activations.ListSaver(saver)
 	if err != nil {
-		return nil, err
+		return saverReach{}, err
 	}
 	// Only a project holding some "on" can have a repository resolve on.
 	projects := map[string]bool{} // project → a task of it turns saver on
 	values := map[domain.ActivationOwner]domain.ActivationValue{}
+	var out saverReach
 	for _, a := range stored {
 		values[a.Owner] = a.Value
 		if a.Value == domain.ActivationOn && (projectID == "" || a.ProjectID == projectID) {
-			projects[a.ProjectID] = projects[a.ProjectID] || a.Owner.Level == domain.ActivationLevelTask
+			taskOn := a.Owner.Level == domain.ActivationLevelTask
+			projects[a.ProjectID] = projects[a.ProjectID] || taskOn
+			out.taskOn = out.taskOn || taskOn
 		}
 	}
-	var out []string
 	for p, taskOn := range projects {
 		repos, err := s.projects.ListRepositories(ctx, p)
 		if err != nil {
-			return nil, err
+			return saverReach{}, err
 		}
 		project := values[domain.ActivationOwner{Level: domain.ActivationLevelProject, ID: p}]
 		for _, r := range repos {
 			repository := values[domain.ActivationOwner{Level: domain.ActivationLevelRepository, ID: r.ID}]
 			if v, _ := Resolve("", repository, project); taskOn || v == domain.ActivationOn {
-				out = append(out, r.ID)
+				out.repositories = append(out.repositories, r.ID)
 			}
 		}
 	}
