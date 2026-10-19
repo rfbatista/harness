@@ -190,11 +190,12 @@ func (s *Service) SetTaskStatus(ctx context.Context, bySessionID string, status 
 	if status == domain.TicketStatusDone {
 		return nil, domain.ErrTaskDoneIsThePersons()
 	}
-	if a := sc.architect(); a != nil && a.ID != bySessionID {
+	a := sc.architect()
+	if a != nil && a.ID != bySessionID {
 		return nil, &domain.StructuredError{Code: "TASK_STATUS_OWNED_BY_ARCHITECT",
 			Message: "the task's architect session (" + a.ID + ") owns its status: report to it with message_architect instead"}
 	}
-	return s.tickets.PatchTicket(ctx, sc.ticket.ID, ports.TicketPatch{Status: &status, StatusReason: reason, BySessionID: bySessionID})
+	return s.tickets.PatchTicket(ctx, sc.ticket.ID, ports.TicketPatch{Status: &status, StatusReason: reason, BySessionID: bySessionID, ByArchitect: a != nil})
 }
 
 // checkAttachments refuses documents not linked to the task and artifacts not
@@ -347,8 +348,9 @@ func (s *Service) DecorateSessions(ctx context.Context, sessions ...*domain.Sess
 	}
 }
 
-// DecorateTickets fills each ticket's architect and pending review count,
-// in two queries however many tickets it is given.
+// DecorateTickets fills each ticket's architect, pending review count and
+// the label of the session that made its last move, in two queries however
+// many tickets it is given.
 func (s *Service) DecorateTickets(ctx context.Context, tickets ...*domain.Ticket) {
 	var ids []string
 	for _, tk := range tickets {
@@ -361,6 +363,15 @@ func (s *Service) DecorateTickets(ctx context.Context, tickets ...*domain.Ticket
 	}
 	byTicket := s.sessionsByTicket(ctx, ids)
 	pending := s.reviews.CountPendingByTask(ctx, uniq(ids))
+	// label names a session by its agent, reading each agent once.
+	names := map[string]string{}
+	label := func(sess *domain.Session) string {
+		if name, ok := names[sess.AgentID]; ok {
+			return name
+		}
+		names[sess.AgentID] = s.agentName(sess)
+		return names[sess.AgentID]
+	}
 	for _, tk := range tickets {
 		if tk == nil {
 			continue
@@ -371,6 +382,14 @@ func (s *Service) DecorateTickets(ctx context.Context, tickets ...*domain.Ticket
 			tk.ArchitectSessionID = &id
 		}
 		tk.PendingReviews = pending[tk.ID]
+		if lm := tk.LastMove; lm != nil && lm.SessionID != "" {
+			// Only a session on the task moves it, so it is among them.
+			for _, sess := range byTicket[tk.ID] {
+				if sess.ID == lm.SessionID {
+					lm.SessionLabel = label(sess)
+				}
+			}
+		}
 	}
 }
 

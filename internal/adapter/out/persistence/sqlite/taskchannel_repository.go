@@ -279,6 +279,26 @@ func (r *TaskStatusChangeRepository) Append(c *domain.TaskStatusChange) error {
 	}).Error
 }
 
+func (r *TaskStatusChangeRepository) LatestByTasks(ctx context.Context, taskIDs []string) map[string]*domain.TaskStatusChange {
+	out := map[string]*domain.TaskStatusChange{}
+	if len(taskIDs) == 0 {
+		return out
+	}
+	var models []TicketStatusChangeModel
+	err := r.db.WithContext(ctx).Table("ticket_status_changes AS c").
+		Where("c.ticket_id IN ?", taskIDs).
+		Where(`NOT EXISTS (SELECT 1 FROM ticket_status_changes n WHERE n.ticket_id = c.ticket_id
+			AND (n.at > c.at OR (n.at = c.at AND n.id > c.id)))`).
+		Find(&models).Error
+	if err != nil {
+		return out
+	}
+	for i := range models {
+		out[models[i].TicketID] = models[i].ToDomain()
+	}
+	return out
+}
+
 func (r *TaskStatusChangeRepository) ListByTask(taskID string) []*domain.TaskStatusChange {
 	var models []TicketStatusChangeModel
 	if err := r.db.Where("ticket_id = ?", taskID).Order("at ASC, id ASC").Find(&models).Error; err != nil {

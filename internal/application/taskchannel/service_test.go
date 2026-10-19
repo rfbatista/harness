@@ -324,7 +324,7 @@ func TestStatusAuthority(t *testing.T) {
 		t.Fatalf("the architect moves it: %+v %v", tk, err)
 	}
 	n := f.feed.count(func(c ports.ProjectChange) bool {
-		return c.TaskStatus != nil && c.TaskStatus.By == domain.ChangedBySession && c.TaskStatus.BySessionID == "arch" && c.TaskStatus.Reason == "plans in"
+		return c.TaskStatus != nil && c.TaskStatus.By == domain.ChangedByArchitect && c.TaskStatus.BySessionID == "arch" && c.TaskStatus.Reason == "plans in"
 	})
 	if n != 1 {
 		t.Fatalf("task_status on the feed: %d", n)
@@ -458,5 +458,57 @@ func TestReviewsAreAnnouncedOnTheBus(t *testing.T) {
 	}
 	if !slices.Equal(got, want) {
 		t.Fatalf("announced %+v\nwant %+v", got, want)
+	}
+}
+
+type agentNames map[string]string
+
+func (a agentNames) GetAgent(_ context.Context, id string) (*domain.Agent, error) {
+	return &domain.Agent{ID: id, Name: a[id]}, nil
+}
+
+// startAs records a session that runs agentID on the task, as start does.
+func (f *fixture) startAs(t *testing.T, id, agentID string, mode domain.SessionMode) {
+	t.Helper()
+	if _, err := f.sessions.Create(&domain.Session{ID: id, ProjectID: f.project, TicketID: f.ticket, AgentID: agentID, Mode: mode, Status: domain.SessionRunning, Interactive: true}); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(2 * time.Millisecond) // created_at orders architects
+	if err := f.bus.Publish(ctx, domain.SessionStarted{SessionID: id, ProjectID: f.project, TicketID: f.ticket, Mode: mode}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// A move by the task's architect is the architect's last move; a move by a
+// session that is not its architect is a session's. Both name the session by
+// its agent, and stay so when the roles change later.
+func TestLastMove_NamesTheArchitectOrTheSession(t *testing.T) {
+	f := newFixture(t)
+	f.svc.Agents = agentNames{"agent-go": "go-developer", "agent-arch": "architect-agent"}
+	f.startAs(t, "peer", "agent-go", "")
+
+	tk, err := f.svc.SetTaskStatus(ctx, "peer", domain.TicketStatusInProgress, "picking it up")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if lm := tk.LastMove; lm == nil || lm.Status != domain.TicketStatusInProgress || lm.By != domain.ChangedBySession ||
+		lm.SessionID != "peer" || lm.SessionLabel != "go-developer" || lm.Reason != "picking it up" || lm.At.IsZero() {
+		t.Fatalf("a peer's move: %+v", tk.LastMove)
+	}
+
+	f.startAs(t, "arch", "agent-arch", domain.SessionModeArchitect)
+	tk, err = f.svc.SetTaskStatus(ctx, "arch", domain.TicketStatusReview, "plans in")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if lm := tk.LastMove; lm == nil || lm.By != domain.ChangedByArchitect || lm.SessionID != "arch" || lm.SessionLabel != "architect-agent" || lm.Reason != "plans in" || !tk.StatusSince.Equal(lm.At) {
+		t.Fatalf("the architect's move: %+v", tk.LastMove)
+	}
+
+	// Another architect takes over: the move stays the one its architect made.
+	f.startAs(t, "arch2", "", domain.SessionModeArchitect)
+	got, _ := f.plan.GetTicket(ctx, f.ticket)
+	if lm := got.LastMove; lm == nil || lm.By != domain.ChangedByArchitect || lm.SessionID != "arch" || lm.SessionLabel != "architect-agent" {
+		t.Fatalf("read back after the roles changed: %+v", got.LastMove)
 	}
 }
