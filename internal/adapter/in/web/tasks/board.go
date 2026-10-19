@@ -26,10 +26,10 @@ type Column struct {
 // BuildBoard groups a project's tasks by status with the same per-task
 // activity the rail shows. Archived tasks are not on it.
 func BuildBoard(projectID string, tasks []*domain.Ticket, list []*domain.Session) Board {
+	// unarchived returns a new slice, so sorting it leaves the caller's alone.
 	tasks = unarchived(tasks)
 	byTask := activityByTask(list)
 	byStatus := map[string][]shell.Link{}
-	tasks = slices.Clone(tasks)
 	slices.SortStableFunc(tasks, func(a, b *domain.Ticket) int { return b.StatusSince.Compare(a.StatusSince) })
 	for _, t := range tasks {
 		byStatus[string(t.Status)] = append(byStatus[string(t.Status)], card(projectID, t, byTask, ""))
