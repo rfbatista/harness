@@ -149,9 +149,9 @@ func SessionTaskTools(planningSvc ports.Planning, sessions ports.SessionReposito
 		},
 		{
 			Name: "update_task_status",
-			Description: "Set the status of this session's task so the board stays true as the work moves. Move it to in_progress " +
-				"when you pick the work up, to review when it is ready for a person to look at, and to done when you are told it " +
-				"is accepted. Only the status changes. The same status again is fine. Give a reason when you change it. If this " +
+			Description: "Set the status of this session's task so the board stays true as the work moves: in_progress when you " +
+				"pick the work up, review when it is ready for the person to check; only the person moves it to done. Asking " +
+				"for done fails with TASK_DONE_IS_THE_PERSONS. Only the status changes. The same status again is fine. Give a reason when you change it. If this " +
 				"task has an architect and you are its delegate, this fails with TASK_STATUS_OWNED_BY_ARCHITECT: report to the " +
 				"architect with message_architect instead.",
 			InputSchema: schemaFromJSON(`{"type":"object","required":["status"],"properties":{"status":{"type":"string","enum":["backlog","todo","in_progress","review","done"],"description":"The task's new status."},` +

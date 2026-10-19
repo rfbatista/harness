@@ -65,7 +65,7 @@ func errorHandler(err error, c echo.Context) {
 			"GIT_CREDENTIAL_MISSING":
 			writeCoded(c, http.StatusBadRequest, err, se)
 			return
-		case "ARTIFACT_NOT_YOURS", "ARCHITECT_ONLY", "TASK_STATUS_OWNED_BY_ARCHITECT", "SESSION_NOT_ON_TASK",
+		case "ARTIFACT_NOT_YOURS", "ARCHITECT_ONLY", "TASK_STATUS_OWNED_BY_ARCHITECT", "TASK_DONE_IS_THE_PERSONS", "SESSION_NOT_ON_TASK",
 			"COMMENT_NOT_YOURS",
 			"RESOURCE_NOT_ON_TASK", "COMMENT_NOT_ON_TASK": // MCP only; no route answers them
 			writeCoded(c, http.StatusForbidden, err, se)

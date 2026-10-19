@@ -79,7 +79,8 @@ func modePrompt(mode domain.SessionMode, tk *domain.Ticket, typed string) string
 			"start_task_session in mode implement: the delegate writes tickets, asks you to review them, and implements " +
 			"them once you approve. Write documents only in your virtual shell, no other local files.\n\n" +
 			"You own this task's status: move it with update_task_status and a reason, based on what your " +
-			"delegates report. They report to you; their messages, status checks and the person's review " +
+			"delegates report: review when the finished work is ready for the person; the person moves it to " +
+			"done after checking it. They report to you; their messages, status checks and the person's review " +
 			"answers arrive as turns starting with [task message …] or [status check …]. Answer each one " +
 			"(reply_to_session), ask the person for review with request_user_review when something needs " +
 			"their eye, and tune loops with set_status_check. When the person adds a resource or a comment to the " +

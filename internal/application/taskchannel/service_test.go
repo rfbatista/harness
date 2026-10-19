@@ -130,6 +130,7 @@ type fixture struct {
 	feed     *feed
 	streams  *streams
 	bus      *eventbus.Bus
+	history  *sqlite.TaskStatusChangeRepository
 	project  string
 	ticket   string
 	clock    time.Time
@@ -158,7 +159,8 @@ func newFixture(t *testing.T) *fixture {
 	f.svc.SetClock(f.now)
 	f.svc.Delivery, f.svc.Feed, f.svc.Announcer = f.del, f.feed, f.streams
 	f.svc.Subscribe(f.bus)
-	plan.StatusHistory, plan.Events, plan.Decorator = sqlite.NewTaskStatusChangeRepository(db), f.bus, f.svc
+	f.history = sqlite.NewTaskStatusChangeRepository(db)
+	plan.StatusHistory, plan.Events, plan.Decorator = f.history, f.bus, f.svc
 	return f
 }
 
