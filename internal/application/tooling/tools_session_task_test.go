@@ -188,7 +188,7 @@ func TestSessionTaskTools_UpdateTaskStatus_OnlyItsOwnTask(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	out, err := f.call(t, f.sessionID, "update_task_status", map[string]any{"status": "done", "task_id": other.ID, "ticket_id": other.ID})
+	out, err := f.call(t, f.sessionID, "update_task_status", map[string]any{"status": "review", "task_id": other.ID, "ticket_id": other.ID})
 	if err != nil {
 		t.Fatal(err)
 	}

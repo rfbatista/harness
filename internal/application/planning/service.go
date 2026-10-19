@@ -10,6 +10,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/rfbatista/harnesskit/tool"
+
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
 )
@@ -113,6 +115,15 @@ func (s *Service) statusMoved(ctx context.Context, tk *domain.Ticket, patch port
 	}
 }
 
+// bySession reports whether a call comes from an agent session: one named by
+// the patch, or one whose tool call tagged the context. Anything else is the
+// person.
+func bySession(ctx context.Context, bySessionID string) bool {
+	return bySessionID != "" || tool.SessionIDFrom(ctx) != ""
+}
+
+// CreateTicket creates a task. A session cannot create one in done: only the
+// person moves a task there.
 func (s *Service) CreateTicket(ctx context.Context, projectID, title, description string, status domain.TicketStatus) (*domain.Ticket, error) {
 	if title == "" {
 		return nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "title is required"}
@@ -125,6 +136,9 @@ func (s *Service) CreateTicket(ctx context.Context, projectID, title, descriptio
 	}
 	if !validTicketStatus(status) {
 		return nil, &domain.StructuredError{Code: "INVALID_STATUS", Message: "invalid ticket status"}
+	}
+	if status == domain.TicketStatusDone && bySession(ctx, "") {
+		return nil, domain.ErrTaskDoneIsThePersons()
 	}
 	s.ticketMu.Lock()
 	defer s.ticketMu.Unlock()
@@ -162,10 +176,15 @@ func (s *Service) UpdateTicket(ctx context.Context, id, title, description strin
 
 // PatchTicket changes only the fields patch carries. It reads the ticket,
 // applies the patch, validates the result and writes it back whole, since the
-// repository replaces every column. An unchanged ticket is not written.
+// repository replaces every column. An unchanged ticket is not written. A
+// session's patch into done is TASK_DONE_IS_THE_PERSONS and changes nothing.
 func (s *Service) PatchTicket(ctx context.Context, id string, patch ports.TicketPatch) (*domain.Ticket, error) {
 	if id == "" {
 		return nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "ticket_id is required"}
+	}
+	// Refused before anything is read or written: no other field of the call applies.
+	if patch.Status != nil && *patch.Status == domain.TicketStatusDone && bySession(ctx, patch.BySessionID) {
+		return nil, domain.ErrTaskDoneIsThePersons()
 	}
 	s.ticketMu.Lock()
 	defer s.ticketMu.Unlock()

@@ -13,6 +13,13 @@ const (
 	TicketStatusDone       TicketStatus = "done"
 )
 
+// ErrTaskDoneIsThePersons refuses a session moving a task into done: only the
+// person does that, after checking the work (ADR 0013).
+func ErrTaskDoneIsThePersons() error {
+	return &StructuredError{Code: "TASK_DONE_IS_THE_PERSONS",
+		Message: "Only the person moves a task to done. Move it to review when the work is ready for them to check."}
+}
+
 // Ticket is a human-facing work item that agents act on, scoped to a Project.
 // Over its lifetime a ticket may spawn one or more execution Tasks/Sessions
 // (that dispatch link is not yet implemented).

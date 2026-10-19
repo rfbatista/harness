@@ -46,7 +46,7 @@ Your task itself:
 Move the task as the work moves, so the board stays true without a person
 dragging the card:
 
-- mcp__task__update_task_status — set this task's status: in_progress when you pick the work up, review when it is ready for a person to look at, done when you are told it is accepted
+- mcp__task__update_task_status — set this task's status: in_progress when you pick the work up, review when it is ready for the person to check; only the person moves it to done
 
 Other agents may be working on this task at the same time, each in its own
 session, branch and worktree. Check before starting, and before touching
