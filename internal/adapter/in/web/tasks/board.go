@@ -2,10 +2,14 @@ package tasks
 
 import (
 	"strconv"
+	"time"
 
 	"operators-mcp/internal/adapter/in/web/shell"
 	"operators-mcp/internal/domain"
 )
+
+// now is the board's clock; tests stop it.
+var now = time.Now
 
 // Board is the project's tasks as the kanban board's first paint: one column
 // per status in board order (Statuses), every column present even when
@@ -18,16 +22,50 @@ type Board struct {
 // Column is one status and its tasks.
 type Column struct {
 	Status, Label string
-	Cards         []shell.Link
+	Cards         []Card
 }
+
+// Waiting: Review holds tasks, which wait for the person's check.
+func (c Column) Waiting() bool { return c.Status == "review" && len(c.Cards) > 0 }
+
+// EmptyText is what the column says when it has no task.
+func (c Column) EmptyText() string {
+	switch c.Status {
+	case "review":
+		return "Nothing waiting for your check."
+	case "done":
+		return "No done tasks. Drag a checked task here from Review."
+	}
+	return "No tasks"
+}
+
+// Card is a task as the board draws it: its link and activity, then its
+// signals, its last move and its time in column.
+type Card struct {
+	shell.Link
+	Status string
+	// LiveState is the dot: "waiting" when a session waits on the person,
+	// "running" when one runs, "" when quiet. Reviews have their own badge.
+	LiveState, LiveWord string
+	Merge               *MergeBadge
+	Lead, Who, Reason   string
+	// At is when the task entered its column, to the minute; "" when unknown.
+	At    string
+	Age   string
+	Stale bool
+}
+
+// HasSignals: the card has a live dot, a reviews badge or a merge badge.
+func (c Card) HasSignals() bool { return c.LiveState != "" || c.Reviews > 0 || c.Merge != nil }
 
 // BuildBoard groups a project's tasks by status with the same per-task
 // activity the rail shows.
 func BuildBoard(projectID string, tasks []*domain.Ticket, list []*domain.Session) Board {
 	byTask := activityByTask(list)
-	byStatus := map[string][]shell.Link{}
+	at := now()
+	byStatus := map[string][]Card{}
 	for _, t := range tasks {
-		byStatus[string(t.Status)] = append(byStatus[string(t.Status)], card(projectID, t, byTask, ""))
+		byStatus[string(t.Status)] = append(byStatus[string(t.Status)], boardCard(projectID, t, byTask, at))
 	}
 	b := Board{}
 	for _, st := range Statuses {
@@ -44,6 +82,41 @@ func (b Board) Empty() bool {
 		}
 	}
 	return true
+}
+
+// boardCard is a task's card at a moment.
+func boardCard(projectID string, t *domain.Ticket, byTask map[string]activity, at time.Time) Card {
+	a := byTask[t.ID]
+	f := cardFactsOf(t)
+	status := string(t.Status)
+	c := Card{Link: card(projectID, t, byTask, ""), Status: status, Merge: mergeBadge(status, f.merge)}
+	switch {
+	case a.attention:
+		c.LiveState, c.LiveWord = "waiting", "waiting"
+	case a.live > 0:
+		c.LiveState, c.LiveWord = "running", strconv.Itoa(a.live)+" live"
+	}
+	c.Lead, c.Who, c.Reason = lastMoveLine(f.lastMove)
+	c.Age, c.Stale = cardAge(status, f.statusSince, at)
+	if !f.statusSince.IsZero() {
+		c.At = exactTime(f.statusSince)
+	}
+	return c
+}
+
+// cardFacts is what a card reads beyond the task's status and title.
+type cardFacts struct {
+	statusSince time.Time
+	lastMove    *lastMove
+	merge       *mergeState
+}
+
+// cardFactsOf reads a task's card facts. Until the Ticket carries the task
+// board contract's fields (status_since, last_move, merge_state), a task
+// reads as never moved, in its column since it was created, with no merge
+// state; the live board takes over with the real fields.
+func cardFactsOf(t *domain.Ticket) cardFacts {
+	return cardFacts{statusSince: t.CreatedAt}
 }
 
 // reviewsWord is a card's reviews badge: "1 review", "2 reviews". The

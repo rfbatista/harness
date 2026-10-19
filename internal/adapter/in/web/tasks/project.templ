@@ -62,38 +62,22 @@ templ noTasks(projectID string) {
 
 // ssrBoard is the first paint: complete without JavaScript, ignored by Alpine.
 templ ssrBoard(b Board) {
-	<div class="[ board ]" aria-label="Tasks by status">
+	<div class="[ board ]" data-board aria-label="Tasks by status">
 		for _, c := range b.Columns {
-			<section class="[ column ]" aria-label={ c.Label }>
+			<section class="[ column ]" data-column={ c.Status } aria-label={ c.Label } { waitingAttrs(c.Waiting())... }>
 				<header>
-					<span class="[ label ]">{ c.Label }</span><span class="[ badge ]">{ strconv.Itoa(len(c.Cards)) }</span>
+					<h2>{ c.Label }</h2>
+					<span class="[ count ]">{ strconv.Itoa(len(c.Cards)) }</span>
+					if c.Waiting() {
+						<p class="[ sub ]">Waiting for your check</p>
+					}
 				</header>
 				<div class="[ cards ]">
-					for _, l := range c.Cards {
-						<article class="[ card ]" data-task-id={ l.TaskID }>
-							<a class="[ title ]" href={ templ.SafeURL(l.Href) }>{ l.Label }</a>
-							<div class="[ meta ]">
-								if l.LiveState() != "" {
-									<span class="[ status ]" data-state={ l.LiveState() } data-dot-only>
-										<span class="[ visually-hidden ]">{ l.LiveWord() }</span>
-									</span>
-								}
-								if l.Live > 0 {
-									<span class="[ count ]" title="live sessions">{ strconv.Itoa(l.Live) }</span>
-								}
-								if l.Reviews > 0 {
-									@components.Badge(reviewsWord(l.Reviews), "attention")
-								}
-								<select data-size="sm" data-fit data-variant="ghost" data-task-id={ l.TaskID } aria-label={ "Move " + l.Label + " to" } x-on:change="moveTo">
-									for _, st := range Statuses {
-										<option value={ st.Value } { selectedIf(st.Value == c.Status)... }>{ st.Label }</option>
-									}
-								</select>
-							</div>
-						</article>
+					for _, card := range c.Cards {
+						@ssrCard(card, c.Status)
 					}
 					if len(c.Cards) == 0 {
-						<p class="[ none ]">No tasks</p>
+						<p class="[ column-empty ]">{ c.EmptyText() }</p>
 					}
 				</div>
 			</section>
@@ -101,39 +85,132 @@ templ ssrBoard(b Board) {
 	</div>
 }
 
+// ssrCard is one card of the first paint.
+templ ssrCard(c Card, column string) {
+	<article class="[ card ]" data-task-id={ c.TaskID } data-status={ c.Status }>
+		<div class="[ top ]">
+			<a class="[ title ]" href={ templ.SafeURL(c.Href) }>{ c.Label }</a>
+			<select data-size="sm" data-fit data-variant="ghost" data-task-id={ c.TaskID } aria-label={ "Move " + c.Label + " to" } x-on:change="moveTo">
+				for _, st := range Statuses {
+					<option value={ st.Value } { selectedIf(st.Value == column)... }>{ st.Label }</option>
+				}
+			</select>
+		</div>
+		if c.HasSignals() {
+			<div class="[ signals ]">
+				if c.LiveState != "" {
+					<span class="[ status ]" data-state={ c.LiveState }>{ c.LiveWord }</span>
+				}
+				if c.Reviews > 0 {
+					<span class="[ badge reviews ]">
+						@cardGlyph("review")
+						{ reviewsWord(c.Reviews) }
+					</span>
+				}
+				if c.Merge != nil {
+					<span class="[ badge merge ]" data-merge-state={ c.Merge.State }>
+						@mergeGlyphs()
+						{ c.Merge.Word }
+					</span>
+				}
+			</div>
+		}
+		<p class="[ last-move ]" data-last-move>
+			<span>
+				{ c.Lead + " " }<span class="[ who ]">{ c.Who }</span>
+				if c.At != "" {
+					<span class="[ at ]">{ " · " + c.At }</span>
+				}
+			</span>
+			if c.Age != "" {
+				<span class="[ age ]" data-age title={ "In this column since " + c.At } { staleAttrs(c.Stale)... }>{ c.Age }</span>
+			}
+		</p>
+		if c.Reason != "" {
+			<p class="[ reason ]">{ c.Reason }</p>
+		}
+	</article>
+}
+
 // liveBoard is the same markup bound to tasksBoard's columns.
 templ liveBoard() {
-	<div class="[ board ]" aria-label="Tasks by status">
+	<div class="[ board ]" data-board aria-label="Tasks by status">
 		<template x-for="column in columns" x-bind:key="column.status">
-			<section class="[ column ]" x-bind:aria-label="column.label">
+			<section class="[ column ]" x-bind:data-column="column.status" x-bind:aria-label="column.label" x-bind:data-waiting="column.waiting">
 				<header>
-					<span class="[ label ]" x-text="column.label"></span><span class="[ badge ]" x-text="column.count"></span>
+					<h2 x-text="column.label"></h2>
+					<span class="[ count ]" x-text="column.count"></span>
+					<p class="[ sub ]" x-show="column.waiting" x-text="column.sub"></p>
 				</header>
 				<div class="[ cards ]">
 					<template x-for="card in column.cards" x-bind:key="card.id">
-						<article class="[ card ]" x-bind:data-task-id="card.id" x-bind:data-fresh="card.fresh">
-							<a class="[ title ]" x-bind:href="card.href" x-text="card.title"></a>
-							<div class="[ meta ]">
-								<span class="[ status ]" data-dot-only x-show="card.hasDot" x-bind:data-state="card.state">
-									<span class="[ visually-hidden ]" x-text="card.word"></span>
-								</span>
-								<span class="[ count ]" title="live sessions" x-show="card.hasCount" x-text="card.live"></span>
-								<template x-if="card.hasReviews">
-									<span class="[ badge ]" data-tone="attention" x-text="card.reviews"></span>
-								</template>
+						<article class="[ card ]" x-bind:data-task-id="card.id" x-bind:data-status="card.status" x-bind:data-fresh="card.fresh">
+							<div class="[ top ]">
+								<a class="[ title ]" x-bind:href="card.href" x-text="card.title"></a>
 								<select data-size="sm" data-fit data-variant="ghost" x-bind:data-task-id="card.id" x-bind:aria-label="card.moveLabel" x-bind:value="card.status" x-on:change="moveTo">
 									for _, st := range Statuses {
 										<option value={ st.Value }>{ st.Label }</option>
 									}
 								</select>
 							</div>
+							<div class="[ signals ]" x-show="card.hasSignals">
+								<span class="[ status ]" x-show="card.hasLive" x-bind:data-state="card.liveState" x-text="card.liveWord"></span>
+								<template x-if="card.hasReviews">
+									<span class="[ badge reviews ]">
+										@cardGlyph("review")
+										<span x-text="card.reviews"></span>
+									</span>
+								</template>
+								<template x-if="card.hasMerge">
+									<span class="[ badge merge ]" x-bind:data-merge-state="card.mergeState">
+										@mergeGlyphs()
+										<span x-text="card.mergeWord"></span>
+									</span>
+								</template>
+							</div>
+							<p class="[ last-move ]" data-last-move>
+								<span>
+									<span x-text="card.lead"></span> <span class="[ who ]" x-text="card.who"></span><span class="[ at ]" x-text="card.at"></span>
+								</span>
+								<span class="[ age ]" data-age x-show="card.age" x-bind:title="card.ageTitle" x-bind:data-stale="card.stale" x-text="card.age"></span>
+							</p>
+							<p class="[ reason ]" x-show="card.hasReason" x-text="card.reason"></p>
 						</article>
 					</template>
-					<p class="[ none ]" x-show="column.isEmpty">No tasks</p>
+					<p class="[ column-empty ]" x-show="column.isEmpty" x-text="column.emptyText"></p>
 				</div>
 			</section>
 		</template>
 	</div>
+}
+
+// mergeGlyphs is every merge badge glyph; the badge's data-merge-state shows
+// the one that applies (board.css), so the server and the live board share
+// the markup.
+templ mergeGlyphs() {
+	@cardGlyph("merged")
+	@cardGlyph("partial")
+	@cardGlyph("not_merged")
+	@cardGlyph("unknown")
+}
+
+// cardGlyph is a 16px line glyph of the board, decorative: the word beside it
+// carries the meaning.
+templ cardGlyph(name string) {
+	<svg class="[ glyph ]" data-glyph={ name } aria-hidden="true" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+		switch name {
+			case "merged":
+				<circle cx="8" cy="8" r="6.25"></circle><path d="M5.3 8.2l1.8 1.8 3.6-3.8"></path>
+			case "partial":
+				<circle cx="8" cy="8" r="6.25"></circle><path d="M8 1.75a6.25 6.25 0 0 1 0 12.5z" fill="currentColor" stroke="none"></path>
+			case "not_merged":
+				<circle cx="8" cy="8" r="6.25"></circle>
+			case "unknown":
+				<circle cx="8" cy="8" r="6.25" stroke-dasharray="2.4 2.2"></circle><path d="M6.4 6.3a1.7 1.7 0 1 1 2.3 1.6c-.5.2-.7.6-.7 1.1v.3"></path><circle cx="8" cy="11.3" r=".55" fill="currentColor" stroke="none"></circle>
+			case "review":
+				<path d="M2 4.5h12M2 8h7M2 11.5h5"></path><path d="M10.5 11l1.5 1.5 2.5-3"></path>
+		}
+	</svg>
 }
 
 // NewTaskPage creates a task in the project.

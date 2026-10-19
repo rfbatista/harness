@@ -61,6 +61,7 @@ import "../src/modules/sessions/presentation/screenPrefs.test.js";
 import "../src/modules/sessions/presentation/view.test.js";
 import "../src/modules/tasks/domain/activity.test.js";
 import "../src/modules/tasks/domain/board.test.js";
+import "../src/modules/tasks/domain/card.test.js";
 import "../src/modules/tasks/domain/comments.test.js";
 import "../src/modules/tasks/domain/documents.test.js";
 import "../src/modules/tasks/domain/items.test.js";

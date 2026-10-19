@@ -9,3 +9,19 @@ func selectedIf(selected bool) templ.Attributes {
 	}
 	return templ.Attributes{}
 }
+
+// waitingAttrs marks Review while it holds tasks waiting for the person's check.
+func waitingAttrs(waiting bool) templ.Attributes {
+	if waiting {
+		return templ.Attributes{"data-waiting": true}
+	}
+	return templ.Attributes{}
+}
+
+// staleAttrs marks a card's age past its column's stale threshold.
+func staleAttrs(stale bool) templ.Attributes {
+	if stale {
+		return templ.Attributes{"data-stale": true}
+	}
+	return templ.Attributes{}
+}

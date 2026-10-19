@@ -16,7 +16,30 @@ export function toTask(dto) {
     architectSessionId: dto.architect_session_id ?? "",
     pendingReviews: Number(dto.pending_reviews ?? 0),
     updatedAt: Date.parse(dto.updated_at ?? "") || 0,
+    createdAt: time(dto.created_at),
+    // A task never moved entered its column when it was created.
+    statusSince: time(dto.status_since) || time(dto.created_at),
+    archivedAt: time(dto.archived_at),
+    lastMove: toLastMove(dto.last_move),
+    mergeState: toMergeState(dto.merge_state),
   });
+}
+
+/** ms since the epoch; 0 when absent, unreadable or the server's zero time (year 1). */
+function time(s) {
+  const ms = Date.parse(s ?? "");
+  return ms > 0 ? ms : 0;
+}
+
+/** Old events carry no last move; a malformed one is left out rather than failing the task. */
+function toLastMove(m) {
+  if (!m || typeof m.by !== "string" || !isStatus(m.status)) return null;
+  return Object.freeze({ status: m.status, by: m.by, sessionId: m.session_id ?? "", sessionLabel: m.session_label ?? "", reason: m.reason ?? "", at: time(m.at) });
+}
+
+function toMergeState(m) {
+  if (!m || typeof m.state !== "string") return null;
+  return Object.freeze({ state: m.state, merged: Number(m.merged ?? 0), total: Number(m.total ?? 0) });
 }
 
 /**

@@ -20,10 +20,16 @@ export function applyTaskChange(tasks, change) {
   return tasks.map((t, i) => (i === at ? change.task : t));
 }
 
-/** @returns {Record<string, Task[]>} every status, in STATUSES order, tasks in list order */
+/**
+ * Every status, in STATUSES order; in each, the task that entered it last on
+ * top (status_since, newest first), as the server renders the board. Ties keep
+ * list order; a task whose time is unknown goes last.
+ * @returns {Record<string, Task[]>}
+ */
 export function byStatus(tasks) {
   const out = Object.fromEntries(STATUSES.map((s) => [s.value, []]));
   for (const t of tasks) out[t.status]?.push(t);
+  for (const list of Object.values(out)) list.sort((a, b) => (b.statusSince || 0) - (a.statusSince || 0));
   return out;
 }
 

@@ -10,6 +10,11 @@ export function makeTask(overrides = {}) {
     architectSessionId: "",
     pendingReviews: 0,
     updatedAt: 0,
+    createdAt: 0,
+    statusSince: 0,
+    archivedAt: 0,
+    lastMove: null,
+    mergeState: null,
     ...overrides,
   });
 }
@@ -25,5 +30,14 @@ export function taskDTO(t) {
     architect_session_id: t.architectSessionId || null,
     pending_reviews: t.pendingReviews,
     updated_at: t.updatedAt ? new Date(t.updatedAt).toISOString() : undefined,
+    created_at: iso(t.createdAt),
+    status_since: iso(t.statusSince),
+    archived_at: t.archivedAt ? iso(t.archivedAt) : null,
+    last_move: t.lastMove
+      ? { status: t.lastMove.status, by: t.lastMove.by, session_id: t.lastMove.sessionId || undefined, session_label: t.lastMove.sessionLabel || undefined, reason: t.lastMove.reason || undefined, at: iso(t.lastMove.at) }
+      : null,
+    merge_state: t.mergeState ? { ...t.mergeState } : null,
   };
 }
+
+const iso = (ms) => (ms ? new Date(ms).toISOString() : undefined);

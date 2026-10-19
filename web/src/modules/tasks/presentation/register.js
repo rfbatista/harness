@@ -34,5 +34,5 @@ export function registerTasks(Alpine, deps) {
   Alpine.data("tasksTaskEditor", taskEditor({ ...deps, store }));
   Alpine.data("tasksRail", rail({ gateway: deps.rail, store, prefs: deps.railPrefs, navigate: deps.navigate }));
   Alpine.data("tasksRailToggle", railToggle({ store }));
-  Alpine.data("tasksBoard", board({ gateway: deps.gateway, store }));
+  Alpine.data("tasksBoard", board({ gateway: deps.gateway, store, clock: deps.clock }));
 }

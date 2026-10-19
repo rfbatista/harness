@@ -324,7 +324,7 @@ func TestProjectPagePutsItsTasksOnTheRailAndTheProjectInThePicker(t *testing.T) 
 	heads := []string{"Backlog", "Todo", "In progress", "Review", "Done"}
 	last := -1
 	for _, h := range heads {
-		i := strings.Index(body, `<span class="[ label ]">`+h+`</span><span class="[ badge ]">`)
+		i := strings.Index(body, `<h2>`+h+`</h2><span class="[ count ]">`)
 		if i < 0 || i < last {
 			t.Errorf("column %q missing or out of order (index %d after %d)", h, i, last)
 		}

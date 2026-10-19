@@ -342,31 +342,38 @@
 
       <section class="[ flow ] [ flow-space-m ]">
         <h2>Board</h2>
-        <div class="[ board ]" aria-label="Tasks by status" style="padding: 0">
-          <section class="[ column ]" aria-label="Todo">
-            <header><span class="[ label ]">Todo</span><span class="[ badge ]">1</span></header>
+        <p class="[ color-ink-muted ]">Columns newest move first. Review is the only coloured column while it holds tasks. The merge badge is a glyph and a word: merged stays neutral, partial and not merged ask for a look, unknown is dashed.</p>
+        <div class="[ cluster ]"><span class="[ badge merge ]" data-merge-state="merged"><svg class="[ glyph ]" data-glyph="merged" aria-hidden="true" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6.25"/><path d="M5.3 8.2l1.8 1.8 3.6-3.8"/></svg><svg class="[ glyph ]" data-glyph="partial" aria-hidden="true" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6.25"/><path d="M8 1.75a6.25 6.25 0 0 1 0 12.5z" fill="currentColor" stroke="none"/></svg><svg class="[ glyph ]" data-glyph="not_merged" aria-hidden="true" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6.25"/></svg><svg class="[ glyph ]" data-glyph="unknown" aria-hidden="true" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6.25" stroke-dasharray="2.4 2.2"/><path d="M6.4 6.3a1.7 1.7 0 1 1 2.3 1.6c-.5.2-.7.6-.7 1.1v.3"/><circle cx="8" cy="11.3" r=".55" fill="currentColor" stroke="none"/></svg>Merged</span><span class="[ badge merge ]" data-merge-state="partial"><svg class="[ glyph ]" data-glyph="merged" aria-hidden="true" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6.25"/><path d="M5.3 8.2l1.8 1.8 3.6-3.8"/></svg><svg class="[ glyph ]" data-glyph="partial" aria-hidden="true" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6.25"/><path d="M8 1.75a6.25 6.25 0 0 1 0 12.5z" fill="currentColor" stroke="none"/></svg><svg class="[ glyph ]" data-glyph="not_merged" aria-hidden="true" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6.25"/></svg><svg class="[ glyph ]" data-glyph="unknown" aria-hidden="true" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6.25" stroke-dasharray="2.4 2.2"/><path d="M6.4 6.3a1.7 1.7 0 1 1 2.3 1.6c-.5.2-.7.6-.7 1.1v.3"/><circle cx="8" cy="11.3" r=".55" fill="currentColor" stroke="none"/></svg>1 of 2 merged</span><span class="[ badge merge ]" data-merge-state="not_merged"><svg class="[ glyph ]" data-glyph="merged" aria-hidden="true" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6.25"/><path d="M5.3 8.2l1.8 1.8 3.6-3.8"/></svg><svg class="[ glyph ]" data-glyph="partial" aria-hidden="true" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6.25"/><path d="M8 1.75a6.25 6.25 0 0 1 0 12.5z" fill="currentColor" stroke="none"/></svg><svg class="[ glyph ]" data-glyph="not_merged" aria-hidden="true" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6.25"/></svg><svg class="[ glyph ]" data-glyph="unknown" aria-hidden="true" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6.25" stroke-dasharray="2.4 2.2"/><path d="M6.4 6.3a1.7 1.7 0 1 1 2.3 1.6c-.5.2-.7.6-.7 1.1v.3"/><circle cx="8" cy="11.3" r=".55" fill="currentColor" stroke="none"/></svg>Not merged</span><span class="[ badge merge ]" data-merge-state="unknown"><svg class="[ glyph ]" data-glyph="merged" aria-hidden="true" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6.25"/><path d="M5.3 8.2l1.8 1.8 3.6-3.8"/></svg><svg class="[ glyph ]" data-glyph="partial" aria-hidden="true" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6.25"/><path d="M8 1.75a6.25 6.25 0 0 1 0 12.5z" fill="currentColor" stroke="none"/></svg><svg class="[ glyph ]" data-glyph="not_merged" aria-hidden="true" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6.25"/></svg><svg class="[ glyph ]" data-glyph="unknown" aria-hidden="true" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6.25" stroke-dasharray="2.4 2.2"/><path d="M6.4 6.3a1.7 1.7 0 1 1 2.3 1.6c-.5.2-.7.6-.7 1.1v.3"/><circle cx="8" cy="11.3" r=".55" fill="currentColor" stroke="none"/></svg>Unknown</span><span class="[ badge reviews ]"><svg class="[ glyph ]" data-glyph="review" aria-hidden="true" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4.5h12M2 8h7M2 11.5h5"/><path d="M10.5 11l1.5 1.5 2.5-3"/></svg>1 review</span></div>
+        <div class="[ board ]" data-board aria-label="Tasks by status" style="padding: 0; block-size: auto">
+          <section class="[ column ]" data-column="in_progress" aria-label="In progress">
+            <header><h2>In progress</h2><span class="[ count ]">2</span></header>
             <div class="[ cards ]">
-              <article class="[ card ]" data-fresh>
-                <a class="[ title ]" href="#">Write docs/TUI.md live section</a>
-                <div class="[ meta ]"></div>
+              <article class="[ card ]" data-task-id="t1" data-status="in_progress" data-fresh>
+                <div class="[ top ]"><a class="[ title ]" href="#">Archive routes on the server</a></div>
+                <div class="[ signals ]"><span class="[ status ]" data-state="running">2 live</span><span class="[ badge reviews ]"><svg class="[ glyph ]" data-glyph="review" aria-hidden="true" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4.5h12M2 8h7M2 11.5h5"/><path d="M10.5 11l1.5 1.5 2.5-3"/></svg>1 review</span></div>
+                <p class="[ last-move ]" data-last-move><span>Moved here by <span class="[ who ]">architect</span><span class="[ at ]"> · Oct 19, 09:12</span></span><span class="[ age ]" data-age>35m</span></p>
+                <p class="[ reason ]">Delegated to go-developer: archive, restore and archive all, with TASK_NOT_DONE and TASK_ARCHIVED.</p>
+              </article>
+              <article class="[ card ]" data-task-id="t2" data-status="in_progress">
+                <div class="[ top ]"><a class="[ title ]" href="#">Spillway proxy usage sink</a></div>
+                <div class="[ signals ]"><span class="[ status ]" data-state="waiting">waiting</span></div>
+                <p class="[ last-move ]" data-last-move><span>Moved here by <span class="[ who ]">go-developer</span></span><span class="[ age ]" data-age data-stale>5d · stale</span></p>
               </article>
             </div>
           </section>
-          <section class="[ column ]" aria-label="In progress">
-            <header><span class="[ label ]">In progress</span><span class="[ badge ]">1</span></header>
+          <section class="[ column ]" data-column="review" data-waiting aria-label="Review">
+            <header><h2>Review</h2><span class="[ count ]">1</span><p class="[ sub ]">Waiting for your check</p></header>
             <div class="[ cards ]">
-              <article class="[ card ]">
-                <a class="[ title ]" href="#">Add SSE feed</a>
-                <div class="[ meta ]">
-                  <span class="[ status ]" data-state="waiting" data-dot-only><span class="[ visually-hidden ]">waiting on you</span></span>
-                  <span class="[ count ]" title="live sessions">3</span>
-                </div>
+              <article class="[ card ]" data-task-id="t3" data-status="review">
+                <div class="[ top ]"><a class="[ title ]" href="#">Task board redesign</a></div>
+                <div class="[ signals ]"><span class="[ badge merge ]" data-merge-state="partial"><svg class="[ glyph ]" data-glyph="merged" aria-hidden="true" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6.25"/><path d="M5.3 8.2l1.8 1.8 3.6-3.8"/></svg><svg class="[ glyph ]" data-glyph="partial" aria-hidden="true" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6.25"/><path d="M8 1.75a6.25 6.25 0 0 1 0 12.5z" fill="currentColor" stroke="none"/></svg><svg class="[ glyph ]" data-glyph="not_merged" aria-hidden="true" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6.25"/></svg><svg class="[ glyph ]" data-glyph="unknown" aria-hidden="true" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6.25" stroke-dasharray="2.4 2.2"/><path d="M6.4 6.3a1.7 1.7 0 1 1 2.3 1.6c-.5.2-.7.6-.7 1.1v.3"/><circle cx="8" cy="11.3" r=".55" fill="currentColor" stroke="none"/></svg>1 of 2 merged</span></div>
+                <p class="[ last-move ]" data-last-move><span>Moved here by <span class="[ who ]">architect</span></span><span class="[ age ]" data-age>1h</span></p>
               </article>
             </div>
           </section>
-          <section class="[ column ]" aria-label="Review">
-            <header><span class="[ label ]">Review</span><span class="[ badge ]">0</span></header>
-            <div class="[ cards ]"><p class="[ none ]">No tasks</p></div>
+          <section class="[ column ]" data-column="done" aria-label="Done">
+            <header><h2>Done</h2><span class="[ count ]">0</span></header>
+            <div class="[ cards ]"><p class="[ column-empty ]">No done tasks. Drag a checked task here from Review.</p></div>
           </section>
         </div>
       </section>

@@ -16,14 +16,18 @@ import { toColumns } from "../boardView.js";
 /** How long a task that arrived or moved over the feed stays highlighted. */
 export const FRESH_MS = 8_000;
 
+/** How often the cards' time in column refreshes. */
+export const AGE_TICK_MS = 60_000;
+
 /**
  * @param {{
  *   gateway: import("../../domain/ports.js").TaskGateway,
  *   store: import("./rail.js").RailStore,
  *   setTimeout?: typeof globalThis.setTimeout,
+ *   clock?: { now: () => Date },
  * }} deps
  */
-export const board = ({ gateway, store, setTimeout = globalThis.setTimeout.bind(globalThis) }) => () => {
+export const board = ({ gateway, store, setTimeout = globalThis.setTimeout.bind(globalThis), clock = { now: () => new Date() } }) => () => {
   /** The component's root (<main>): $el inside an event handler is the element that fired, not the root. */
   let root = null;
 
@@ -47,9 +51,11 @@ export const board = ({ gateway, store, setTimeout = globalThis.setTimeout.bind(
     moves: {},
     /** A move's confirmed status whose echo may still arrive, per card. */
     echoes: {},
+    /** What the cards' time in column is measured against; it moves once a minute, so nothing reorders. */
+    now: clock.now(),
 
     get columns() {
-      return toColumns(store.tasks, { projectId: this.projectId, byTask: store.byTask, fresh: new Set(this.freshIds) });
+      return toColumns(store.tasks, { projectId: this.projectId, byTask: store.byTask, fresh: new Set(this.freshIds), now: this.now });
     },
     get hasTasks() {
       return store.seeded && store.tasks.length > 0;
@@ -61,6 +67,11 @@ export const board = ({ gateway, store, setTimeout = globalThis.setTimeout.bind(
     init() {
       root = this.$el;
       this.projectId = this.$el.dataset.projectId ?? "";
+      const tick = () => {
+        this.now = clock.now();
+        setTimeout(tick, AGE_TICK_MS);
+      };
+      setTimeout(tick, AGE_TICK_MS);
       if (!store.seeded) return; // the server's rendering stays as it is
       // Alpine has rendered the live board; drop the server-rendered copy.
       this.$nextTick(() => {

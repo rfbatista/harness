@@ -4,11 +4,12 @@ import { manualTimers } from "../../../../shared/testing/doubles.js";
 import { assert, file, test } from "../../../../shared/testing/test.js";
 import { memoryTasks } from "../../infrastructure/memory-gateway.js";
 import { makeTask } from "../../testing/fixtures.js";
-import { board, FRESH_MS } from "./board.js";
+import { fixedClock } from "../../../../shared/infrastructure/clock.js";
+import { AGE_TICK_MS, board, FRESH_MS } from "./board.js";
 
 file("tasks/presentation/board");
 
-function setup({ tasks = [makeTask()], seeded = true } = {}) {
+function setup({ tasks = [makeTask()], seeded = true, clock = fixedClock("2026-10-19T12:00:00Z") } = {}) {
   const store = { byTask: {}, tasks, seeded };
   const memory = memoryTasks({ projects: ["p1"], tasks });
   const el = document.createElement("main");
@@ -17,9 +18,9 @@ function setup({ tasks = [makeTask()], seeded = true } = {}) {
   ssr.dataset.ssr = "";
   el.append(ssr);
   const timers = manualTimers();
-  const mounted = mount(board({ gateway: memory.gateway, store, setTimeout: timers.setTimeout }), { el });
+  const mounted = mount(board({ gateway: memory.gateway, store, setTimeout: timers.setTimeout, clock }), { el });
   mounted.instance.init();
-  return { ...mounted, store, el, memory, timers };
+  return { ...mounted, store, el, memory, timers, clock };
 }
 
 /** The change event a card's select fires. */
@@ -110,7 +111,7 @@ test("a task moved elsewhere is washed for a while and announced", () => {
   instance.taskChanged(changed({ kind: "task-upsert", task: moved }, makeTask()));
   assert.equal(instance.columns[3].cards[0].fresh, true);
   assert.equal(instance.announcement, "Add SSE feed moved to Review");
-  assert.deepEqual(timers.delays(), [FRESH_MS]);
+  assert.deepEqual(timers.delays(), [AGE_TICK_MS, FRESH_MS]);
   timers.tick();
   assert.equal(instance.columns[3].cards[0].fresh, false);
 });
@@ -250,4 +251,16 @@ test("after a move the card's select keeps the focus, in its new column", async 
   assert.equal(document.activeElement?.closest(".card")?.dataset.status, "review");
   await p;
   el.remove();
+});
+
+test("each card's time in column moves on once a minute, without reordering the column", () => {
+  const since = (iso) => Date.parse(iso);
+  const { instance, timers, clock } = setup({
+    tasks: [makeTask({ id: "a", statusSince: since("2026-10-19T11:58:00Z") }), makeTask({ id: "b", statusSince: since("2026-10-19T11:50:00Z") })],
+  });
+  assert.deepEqual(instance.columns[2].cards.map((c) => `${c.id}:${c.age}`), ["a:2m", "b:10m"]);
+  assert.ok(timers.delays().includes(AGE_TICK_MS));
+  clock.set("2026-10-19T12:05:00Z");
+  timers.tick();
+  assert.deepEqual(instance.columns[2].cards.map((c) => `${c.id}:${c.age}`), ["a:7m", "b:15m"]);
 });
