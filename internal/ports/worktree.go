@@ -53,3 +53,27 @@ type GitHistory interface {
 	// the other way round (behind).
 	Divergence(ctx context.Context, dir, base, branch string) (ahead, behind int, err error)
 }
+
+// BranchMergeReader reads, in a repository's main checkout, how a set of its
+// branches stand against the repository's default branch.
+type BranchMergeReader interface {
+	// BranchMerges answers for each of branches (by name), and names the
+	// default branch it compared them with: "" when the repository has none.
+	BranchMerges(ctx context.Context, repoRoot string, branches []BranchBase) (BranchMerges, error)
+}
+
+// BranchBase is a branch and the ref it was cut from ("" for HEAD).
+type BranchBase struct{ Branch, Base string }
+
+// BranchMerges is the answer of BranchMergeReader.BranchMerges.
+type BranchMerges struct {
+	DefaultBranch string
+	Branches      map[string]BranchMerge
+}
+
+// BranchMerge is how one branch stands: whether it still exists, whether it
+// carries commits of its own since it was cut, and whether the local default
+// branch contains its tip.
+type BranchMerge struct {
+	Exists, Ahead, Merged bool
+}

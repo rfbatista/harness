@@ -112,9 +112,18 @@ type SessionDecorator interface {
 }
 
 // TicketDecorator fills the derived fields (ArchitectSessionID,
-// PendingReviews) of tickets about to be shown.
+// PendingReviews, MergeState) of tickets about to be shown.
 type TicketDecorator interface {
 	DecorateTickets(ctx context.Context, tickets ...*domain.Ticket)
+}
+
+// TicketDecorators is one TicketDecorator made of several, run in order.
+type TicketDecorators []TicketDecorator
+
+func (ds TicketDecorators) DecorateTickets(ctx context.Context, tickets ...*domain.Ticket) {
+	for _, d := range ds {
+		d.DecorateTickets(ctx, tickets...)
+	}
 }
 
 // TurnDelivery puts text into a running session as a user turn. The
