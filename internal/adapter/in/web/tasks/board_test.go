@@ -59,3 +59,25 @@ func TestBoardWithoutTasksIsEmptyButKeepsItsColumns(t *testing.T) {
 		t.Fatalf("board = %+v", b)
 	}
 }
+
+func TestBoardListsEachColumnNewestStatusSinceFirst(t *testing.T) {
+	at := func(h int) time.Time { return time.Date(2026, 10, 19, h, 0, 0, 0, time.UTC) }
+	tasks := []*domain.Ticket{
+		{ID: "t-old", Title: "Oldest move", Status: domain.TicketStatusReview, StatusSince: at(8)},
+		{ID: "t-new", Title: "Newest move", Status: domain.TicketStatusReview, StatusSince: at(11)},
+		{ID: "t-mid", Title: "Middle move", Status: domain.TicketStatusReview, StatusSince: at(9)},
+		{ID: "t-todo", Title: "Waiting", Status: domain.TicketStatusTodo, StatusSince: at(7)},
+	}
+	b := BuildBoard("p1", tasks, nil)
+
+	var review []string
+	for _, l := range b.Columns[3].Cards {
+		review = append(review, l.TaskID)
+	}
+	if got := strings.Join(review, ","); got != "t-new,t-mid,t-old" {
+		t.Fatalf("review column = %s, want t-new,t-mid,t-old", got)
+	}
+	if todo := b.Columns[1].Cards; len(todo) != 1 || todo[0].TaskID != "t-todo" {
+		t.Errorf("todo column = %+v", todo)
+	}
+}

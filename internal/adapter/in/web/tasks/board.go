@@ -1,6 +1,7 @@
 package tasks
 
 import (
+	"slices"
 	"strconv"
 
 	"operators-mcp/internal/adapter/in/web/shell"
@@ -9,7 +10,8 @@ import (
 
 // Board is the project's tasks as the kanban board's first paint: one column
 // per status in board order (Statuses), every column present even when
-// empty, cards in the order the tasks were listed. The browser
+// empty, each column's cards newest status_since first (the order the
+// browser keeps, so the handover does not jump). The browser
 // (web/src/modules/tasks, tasksBoard) keeps it live from the rail's seed.
 type Board struct {
 	Columns []Column
@@ -27,6 +29,8 @@ func BuildBoard(projectID string, tasks []*domain.Ticket, list []*domain.Session
 	tasks = unarchived(tasks)
 	byTask := activityByTask(list)
 	byStatus := map[string][]shell.Link{}
+	tasks = slices.Clone(tasks)
+	slices.SortStableFunc(tasks, func(a, b *domain.Ticket) int { return b.StatusSince.Compare(a.StatusSince) })
 	for _, t := range tasks {
 		byStatus[string(t.Status)] = append(byStatus[string(t.Status)], card(projectID, t, byTask, ""))
 	}

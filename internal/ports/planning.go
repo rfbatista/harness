@@ -100,6 +100,9 @@ type TicketPatch struct {
 	// empty BySessionID is a person. They are recorded only when it does.
 	StatusReason string
 	BySessionID  string
+	// ByArchitect says BySessionID is the task's architect at the time of
+	// the move, so the history keeps the role it moved it in.
+	ByArchitect bool
 }
 
 // TicketPatcher applies a partial change to one ticket. A present blank title

@@ -10,6 +10,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/rfbatista/harnesskit/tool"
+
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
 )
@@ -85,21 +87,53 @@ func (s *Service) announce(tk *domain.Ticket, deleted bool) {
 	}
 }
 
-// decorate fills the tickets' derived fields, when a decorator is wired.
+// decorate fills the tickets' derived fields: their last move and
+// status_since from the status history, then what the decorator, when wired,
+// knows.
 func (s *Service) decorate(ctx context.Context, tickets ...*domain.Ticket) {
+	s.fillLastMoves(ctx, tickets)
 	if s.Decorator != nil {
 		s.Decorator.DecorateTickets(ctx, tickets...)
 	}
 }
 
-// statusMoved records a status move and announces it. A failure to record
-// is logged: the move itself already happened.
-func (s *Service) statusMoved(ctx context.Context, tk *domain.Ticket, patch ports.TicketPatch) {
+// fillLastMoves sets each ticket's last move and status_since from its most
+// recent status change, read in one query. A ticket never moved keeps a nil
+// last move and has been in its status since it was created.
+func (s *Service) fillLastMoves(ctx context.Context, tickets []*domain.Ticket) {
+	if s.StatusHistory == nil {
+		return
+	}
+	ids := make([]string, 0, len(tickets))
+	for _, tk := range tickets {
+		if tk != nil {
+			ids = append(ids, tk.ID)
+		}
+	}
+	latest := s.StatusHistory.LatestByTasks(ctx, ids)
+	for _, tk := range tickets {
+		if tk == nil {
+			continue
+		}
+		tk.LastMove, tk.StatusSince = nil, tk.CreatedAt
+		if c := latest[tk.ID]; c != nil {
+			tk.LastMove = &domain.LastMove{Status: c.Status, By: c.By, SessionID: c.BySessionID, Reason: c.Reason, At: c.At}
+			tk.StatusSince = c.At
+		}
+	}
+}
+
+// recordMove records a status move in the history, with who made it and why.
+// A failure to record is logged: the move itself already happened.
+func (s *Service) recordMove(tk *domain.Ticket, patch ports.TicketPatch) domain.TaskStatusChange {
 	c := domain.TaskStatusChange{
 		TaskID: tk.ID, ProjectID: tk.ProjectID, Status: tk.Status, Reason: patch.StatusReason,
 		BySessionID: patch.BySessionID, By: domain.ChangedByPerson, At: time.Now(),
 	}
-	if c.BySessionID != "" {
+	switch {
+	case c.BySessionID != "" && patch.ByArchitect:
+		c.By = domain.ChangedByArchitect
+	case c.BySessionID != "":
 		c.By = domain.ChangedBySession
 	}
 	if s.StatusHistory != nil {
@@ -107,6 +141,11 @@ func (s *Service) statusMoved(ctx context.Context, tk *domain.Ticket, patch port
 			slog.Warn("record task status change", "ticket", tk.ID, "err", err)
 		}
 	}
+	return c
+}
+
+// statusMoved announces a recorded status move as TicketStatusChanged.
+func (s *Service) statusMoved(ctx context.Context, tk *domain.Ticket, c domain.TaskStatusChange) {
 	if s.Events != nil {
 		if err := s.Events.Publish(ctx, domain.TicketStatusChanged{Change: c}); err != nil {
 			slog.Warn("announce task status change", "ticket", tk.ID, "err", err)
@@ -114,6 +153,15 @@ func (s *Service) statusMoved(ctx context.Context, tk *domain.Ticket, patch port
 	}
 }
 
+// bySession reports whether a call comes from an agent session: one named by
+// the patch, or one whose tool call tagged the context. Anything else is the
+// person.
+func bySession(ctx context.Context, bySessionID string) bool {
+	return bySessionID != "" || tool.SessionIDFrom(ctx) != ""
+}
+
+// CreateTicket creates a task. A session cannot create one in done: only the
+// person moves a task there.
 func (s *Service) CreateTicket(ctx context.Context, projectID, title, description string, status domain.TicketStatus) (*domain.Ticket, error) {
 	if title == "" {
 		return nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "title is required"}
@@ -126,6 +174,9 @@ func (s *Service) CreateTicket(ctx context.Context, projectID, title, descriptio
 	}
 	if !validTicketStatus(status) {
 		return nil, &domain.StructuredError{Code: "INVALID_STATUS", Message: "invalid ticket status"}
+	}
+	if status == domain.TicketStatusDone && bySession(ctx, "") {
+		return nil, domain.ErrTaskDoneIsThePersons()
 	}
 	s.ticketMu.Lock()
 	defer s.ticketMu.Unlock()
@@ -164,10 +215,15 @@ func (s *Service) UpdateTicket(ctx context.Context, id, title, description strin
 
 // PatchTicket changes only the fields patch carries. It reads the ticket,
 // applies the patch, validates the result and writes it back whole, since the
-// repository replaces every column. An unchanged ticket is not written.
+// repository replaces every column. An unchanged ticket is not written. A
+// session's patch into done is TASK_DONE_IS_THE_PERSONS and changes nothing.
 func (s *Service) PatchTicket(ctx context.Context, id string, patch ports.TicketPatch) (*domain.Ticket, error) {
 	if id == "" {
 		return nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "ticket_id is required"}
+	}
+	// Refused before anything is read or written: no other field of the call applies.
+	if patch.Status != nil && *patch.Status == domain.TicketStatusDone && bySession(ctx, patch.BySessionID) {
+		return nil, domain.ErrTaskDoneIsThePersons()
 	}
 	s.ticketMu.Lock()
 	defer s.ticketMu.Unlock()
@@ -202,11 +258,18 @@ func (s *Service) PatchTicket(ctx context.Context, id string, patch ports.Ticket
 	if err != nil {
 		return nil, err
 	}
+	// The move is recorded before the ticket is decorated, so what is
+	// announced and answered carries it as its last move.
+	var move *domain.TaskStatusChange
+	if status != existing.Status {
+		c := s.recordMove(tk, patch)
+		move = &c
+	}
 	// The write is done: the change goes out whole even if the request ends.
 	s.decorate(context.WithoutCancel(ctx), tk)
 	s.announce(tk, false)
-	if status != existing.Status {
-		s.statusMoved(ctx, tk, patch)
+	if move != nil {
+		s.statusMoved(ctx, tk, *move)
 	}
 	return tk, nil
 }
