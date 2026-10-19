@@ -1,5 +1,6 @@
 package sqlite
 
+import "context"
 import "testing"
 
 func TestRepositoryRepo_CRUD(t *testing.T) {
@@ -20,7 +21,7 @@ func TestRepositoryRepo_CRUD(t *testing.T) {
 		t.Fatalf("IgnoredPaths should be non-nil, got %+v", repo)
 	}
 
-	if got := r.Get(repo.ID); got == nil || got.RootDir != "/src/api" {
+	if got := r.Get(context.Background(), repo.ID); got == nil || got.RootDir != "/src/api" {
 		t.Fatalf("Get failed: %+v", got)
 	}
 
@@ -36,17 +37,17 @@ func TestRepositoryRepo_CRUD(t *testing.T) {
 	if _, err := r.Create("p1", "web", "", "https://example.com/web.git", "/src/web"); err != nil {
 		t.Fatal(err)
 	}
-	if list := r.ListByProject("p1"); len(list) != 2 {
+	if list := r.ListByProject(context.Background(), "p1"); len(list) != 2 {
 		t.Fatalf("ListByProject want 2 got %d", len(list))
 	}
-	if list := r.ListByProject("other"); len(list) != 0 {
+	if list := r.ListByProject(context.Background(), "other"); len(list) != 0 {
 		t.Fatalf("ListByProject other want 0 got %d", len(list))
 	}
 
 	if err := r.Delete(repo.ID); err != nil {
 		t.Fatal(err)
 	}
-	if got := r.Get(repo.ID); got != nil {
+	if got := r.Get(context.Background(), repo.ID); got != nil {
 		t.Fatalf("expected nil after delete, got %+v", got)
 	}
 	if err := r.Delete("missing"); err == nil {

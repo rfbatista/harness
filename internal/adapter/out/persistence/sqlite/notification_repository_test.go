@@ -1,6 +1,7 @@
 package sqlite_test
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -53,7 +54,7 @@ func TestNotificationRepositoryPagesNewestFirst(t *testing.T) {
 	var all []*domain.Notification
 	f := ports.NotificationFilter{Limit: 2}
 	for {
-		page, err := r.List(f)
+		page, err := r.List(context.Background(), f)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -86,16 +87,16 @@ func TestNotificationRepositoryFilters(t *testing.T) {
 	b := seed(t, r, domain.Notification{ProjectID: "p2", Title: "b", CreatedAt: now.Add(-2 * time.Second), ReadAt: &now})
 	c := seed(t, r, domain.Notification{ProjectID: "p1", Title: "c", CreatedAt: now.Add(-1 * time.Second), ResolvedAt: &now})
 
-	if got, _ := r.List(ports.NotificationFilter{ProjectID: "p1"}); len(got) != 2 || got[0].ID != c.ID || got[1].ID != a.ID {
+	if got, _ := r.List(context.Background(), ports.NotificationFilter{ProjectID: "p1"}); len(got) != 2 || got[0].ID != c.ID || got[1].ID != a.ID {
 		t.Fatalf("project p1 = %v", ids(got))
 	}
-	if got, _ := r.List(ports.NotificationFilter{UnreadOnly: true}); len(got) != 1 || got[0].ID != a.ID {
+	if got, _ := r.List(context.Background(), ports.NotificationFilter{UnreadOnly: true}); len(got) != 1 || got[0].ID != a.ID {
 		t.Fatalf("unread = %v", ids(got))
 	}
-	if got, _ := r.List(ports.NotificationFilter{Since: a.CreatedAt}); len(got) != 2 || got[1].ID != b.ID {
+	if got, _ := r.List(context.Background(), ports.NotificationFilter{Since: a.CreatedAt}); len(got) != 2 || got[1].ID != b.ID {
 		t.Fatalf("since a = %v", ids(got))
 	}
-	if n, _ := r.CountUnread(); n != 1 {
+	if n, _ := r.CountUnread(context.Background()); n != 1 {
 		t.Fatalf("CountUnread = %d", n)
 	}
 }
@@ -176,7 +177,7 @@ func TestNotificationRepositoryCountsAgentPostsAndPrunes(t *testing.T) {
 	if err := r.DeleteByProject("p1"); err != nil {
 		t.Fatal(err)
 	}
-	if got, _ := r.List(ports.NotificationFilter{ProjectID: "p1"}); len(got) != 0 {
+	if got, _ := r.List(context.Background(), ports.NotificationFilter{ProjectID: "p1"}); len(got) != 0 {
 		t.Fatalf("after DeleteByProject = %v", ids(got))
 	}
 }

@@ -2,6 +2,8 @@ package orchestration
 
 import (
 	"context"
+	"slices"
+	"sync"
 	"testing"
 	"time"
 
@@ -185,4 +187,71 @@ func TestFeed_ResumeAndEndCarryResumability(t *testing.T) {
 	if got.Status != domain.SessionDone || !got.Resumable || got.ResumeBlocked != "" {
 		t.Fatalf("after end = %+v", got)
 	}
+}
+
+// followerCounts records what the feed reports of its followers.
+type followerCounts struct {
+	mu     sync.Mutex
+	counts map[string][]int
+}
+
+func (o *followerCounts) ProjectFollowers(projectID string, followers int) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	o.counts[projectID] = append(o.counts[projectID], followers)
+}
+
+func (o *followerCounts) of(projectID string) []int {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	return slices.Clone(o.counts[projectID])
+}
+
+// waitCounts waits for the reported counts of projectID, since a follower
+// leaves once its context's end is noticed.
+func (o *followerCounts) waitCounts(t *testing.T, projectID string, want ...int) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for !slices.Equal(o.of(projectID), want) {
+		if time.Now().After(deadline) {
+			t.Fatalf("%s followers reported %v, want %v", projectID, o.of(projectID), want)
+		}
+		time.Sleep(time.Millisecond)
+	}
+}
+
+// The feed tells its observer how many follow each project as followers come
+// and go, whether they leave or are dropped for falling behind.
+func TestFeed_ReportsEachProjectsFollowers(t *testing.T) {
+	svc, _ := newInteractiveService(t)
+	seen := &followerCounts{counts: map[string][]int{}}
+	svc.ObserveFeedFollowers(seen)
+
+	ctx1, leave1 := context.WithCancel(context.Background())
+	defer leave1()
+	if _, err := svc.FollowProject(ctx1, "p1"); err != nil {
+		t.Fatal(err)
+	}
+	ctx2, leave2 := context.WithCancel(context.Background())
+	defer leave2()
+	if _, err := svc.FollowProject(ctx2, "p1"); err != nil {
+		t.Fatal(err)
+	}
+	follow(t, svc, "p2")
+	seen.waitCounts(t, "p1", 1, 2)
+	seen.waitCounts(t, "p2", 1)
+
+	leave1()
+	seen.waitCounts(t, "p1", 1, 2, 1)
+	leave2()
+	seen.waitCounts(t, "p1", 1, 2, 1, 0)
+
+	sess, _ := startInteractive(t, svc, InteractiveRequest{})
+	slow := follow(t, svc, "p1")
+	for range feedBuffer + 1 {
+		svc.publish(sess.ID, SessionEvent{Type: "status", Text: "busy"})
+	}
+	for range slow {
+	}
+	seen.waitCounts(t, "p1", 1, 2, 1, 0, 1, 0)
 }

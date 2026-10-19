@@ -1,6 +1,7 @@
 package sqlite
 
 import (
+	"context"
 	"time"
 
 	"gorm.io/gorm"
@@ -93,8 +94,8 @@ func (r *NotificationRepository) AnyByCause(causeKey string) bool {
 	return n > 0
 }
 
-func (r *NotificationRepository) List(f ports.NotificationFilter) ([]*domain.Notification, error) {
-	q := r.db.Model(&NotificationModel{})
+func (r *NotificationRepository) List(ctx context.Context, f ports.NotificationFilter) ([]*domain.Notification, error) {
+	q := r.db.WithContext(ctx).Model(&NotificationModel{})
 	if f.ProjectID != "" {
 		q = q.Where("project_id = ?", f.ProjectID)
 	}
@@ -118,9 +119,9 @@ func (r *NotificationRepository) List(f ports.NotificationFilter) ([]*domain.Not
 	return toNotifications(ms), nil
 }
 
-func (r *NotificationRepository) CountUnread() (int, error) {
+func (r *NotificationRepository) CountUnread(ctx context.Context) (int, error) {
 	var n int64
-	err := r.db.Model(&NotificationModel{}).Where(unreadWhere).Count(&n).Error
+	err := r.db.WithContext(ctx).Model(&NotificationModel{}).Where(unreadWhere).Count(&n).Error
 	return int(n), err
 }
 

@@ -21,6 +21,7 @@ func NewRouter(h *Handler, opts ...Option) *echo.Echo {
 	e.HideBanner = true
 	e.HidePort = true
 	e.HTTPErrorHandler = errorHandler
+	e.Use(reportRoute)
 
 	g := e.Group("/api")
 	if o.token != "" {

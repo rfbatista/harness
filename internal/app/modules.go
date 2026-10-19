@@ -80,6 +80,26 @@ func asPort(ctor any, iface any) any {
 	return fx.Annotate(ctor, fx.As(iface))
 }
 
+// gitOptions are the git adapters' options for c's git binary and deadlines.
+func (c Config) gitOptions() []gitcli.Option {
+	return []gitcli.Option{gitcli.WithGit(c.GitBin), gitcli.WithWorktreeDeadline(c.GitWorktreeDeadline), gitcli.WithReadDeadline(c.GitReadDeadline)}
+}
+
+// The git adapters run cfg's git, each run bound by cfg's deadlines (see
+// gitcli.Deadlines).
+func newRepositoryFinder(cfg Config) *gitcli.RepositoryFinder {
+	return gitcli.NewRepositoryFinder(cfg.gitOptions()...)
+}
+func newWorktreeManager(cfg Config) *gitcli.WorktreeManager {
+	return gitcli.NewWorktreeManager(cfg.gitOptions()...)
+}
+func newEnvFiles(cfg Config) *gitcli.EnvFiles { return gitcli.NewEnvFiles(cfg.gitOptions()...) }
+func newGitHistory(cfg Config) *gitcli.History { return gitcli.NewHistory(cfg.gitOptions()...) }
+func newBranchPublisher(cfg Config) *gitcli.BranchPublisher {
+	return gitcli.NewBranchPublisher(cfg.gitOptions()...)
+}
+func newGitCode(cfg Config) *gitcli.Code { return gitcli.NewCode(cfg.gitOptions()...) }
+
 // newDB opens the SQLite database and registers a hook to close it on shutdown.
 func newDB(lc fx.Lifecycle, cfg Config) (*gorm.DB, error) {
 	db, err := sqlite.Open(cfg.DBPath, sqlite.WithSlowThreshold(cfg.DBSlowThreshold))
@@ -138,8 +158,8 @@ var CatalogModule = fx.Module("catalog",
 		asPort(filesystem.NewMatcher, new(ports.PathMatcher)),
 		asPort(filesystem.NewLister, new(ports.TreeLister)),
 		asPort(skillfs.NewPublisher, new(ports.SkillPublisher)),
-		asPort(gitcli.NewRepositoryFinder, new(ports.RepositoryFinder)),
-		asPort(gitcli.NewEnvFiles, new(ports.EnvFileIO)),
+		asPort(newRepositoryFinder, new(ports.RepositoryFinder)),
+		asPort(newEnvFiles, new(ports.EnvFileIO)),
 		newCatalog,
 	),
 )
@@ -586,11 +606,11 @@ func registerRuntimeShutdown(lc fx.Lifecycle, m llmkit.Manager) {
 // service (isolated worktrees of a repository, tracked in the database).
 var WorkspacesModule = fx.Module("workspaces",
 	fx.Provide(
-		asPort(gitcli.NewWorktreeManager, new(ports.WorktreeManager)),
-		asPort(gitcli.NewHistory, new(ports.GitHistory)),
-		asPort(gitcli.NewBranchPublisher, new(ports.BranchPublisher)),
+		asPort(newWorktreeManager, new(ports.WorktreeManager)),
+		asPort(newGitHistory, new(ports.GitHistory)),
+		asPort(newBranchPublisher, new(ports.BranchPublisher)),
 		asPort(githubapi.New, new(ports.CodeHost)),
-		asPort(gitcli.NewCode, new(ports.GitCode)),
+		asPort(newGitCode, new(ports.GitCode)),
 		asPort(filesystem.NewWorktreeFiles, new(ports.WorktreeFiles)),
 		newWorkspacesService,
 		newPullRequestsService,
@@ -609,10 +629,12 @@ func newCodeBrowser(ws ports.WorkspaceRepository, repos ports.RepositoryReposito
 }
 
 // registerCodeWatcher announces code_changed on the orchestration's project
-// feed while a workspace's session runs, polling from start to stop.
+// feed while a workspace's session runs and someone follows its project's
+// feed, polling from start to stop.
 func registerCodeWatcher(lc fx.Lifecycle, sessions ports.SessionRepository, ws ports.WorkspaceRepository, git ports.GitCode, orch *orchestration.Service, cat catalog.Catalog) {
 	w := workspaces.NewCodeWatcher(workspaces.CodeWatcherDeps{Sessions: sessions, Workspaces: ws, Git: git, Feed: orch})
 	w.Subscribe(cat.Bus)
+	orch.ObserveFeedFollowers(w)
 	lc.Append(fx.Hook{
 		OnStart: func(context.Context) error {
 			w.Start()

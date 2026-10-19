@@ -1,6 +1,7 @@
 package sqlite
 
 import (
+	"context"
 	"time"
 
 	"gorm.io/gorm"
@@ -71,8 +72,8 @@ func (r *ArtifactRepository) FindByTarget(sessionID, path, url string) *domain.A
 	return r.withLinks(m.ToDomain())[0]
 }
 
-func (r *ArtifactRepository) List(f ports.ArtifactFilter) []*domain.Artifact {
-	q := r.db.Model(&ArtifactModel{})
+func (r *ArtifactRepository) List(ctx context.Context, f ports.ArtifactFilter) []*domain.Artifact {
+	q := r.db.WithContext(ctx).Model(&ArtifactModel{})
 	if f.SessionID != "" {
 		q = q.Where("session_id = ?", f.SessionID)
 	}

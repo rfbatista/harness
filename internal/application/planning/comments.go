@@ -13,14 +13,14 @@ import (
 // from its MCP tools). The person deletes any comment but edits only their
 // own; a session edits and deletes only what it wrote.
 
-func (s *Service) ListTicketComments(_ context.Context, ticketID string, since time.Time) ([]*domain.TicketComment, error) {
+func (s *Service) ListTicketComments(ctx context.Context, ticketID string, since time.Time) ([]*domain.TicketComment, error) {
 	if s.Comments == nil {
 		return nil, errNoComments
 	}
-	if _, err := s.ticket(ticketID); err != nil {
+	if _, err := s.ticket(ctx, ticketID); err != nil {
 		return nil, err
 	}
-	return s.Comments.List(ticketID, since), nil
+	return s.Comments.List(ctx, ticketID, since), nil
 }
 
 func (s *Service) AddTicketComment(ctx context.Context, ticketID, body string) (*domain.TicketComment, error) {
@@ -44,7 +44,7 @@ func (s *Service) addComment(ctx context.Context, ticketID string, author domain
 	if s.Comments == nil {
 		return nil, errNoComments
 	}
-	tk, err := s.ticket(ticketID)
+	tk, err := s.ticket(ctx, ticketID)
 	if err != nil {
 		return nil, err
 	}
@@ -54,7 +54,7 @@ func (s *Service) addComment(ctx context.Context, ticketID string, author domain
 	}
 	s.resourceMu.Lock()
 	defer s.resourceMu.Unlock()
-	if err := s.stillThere(tk.ID); err != nil {
+	if err := s.stillThere(ctx, tk.ID); err != nil {
 		return nil, err
 	}
 	author.TicketID, author.ProjectID, author.Body = tk.ID, tk.ProjectID, b

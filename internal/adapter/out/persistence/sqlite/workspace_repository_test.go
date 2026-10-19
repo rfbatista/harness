@@ -1,6 +1,7 @@
 package sqlite
 
 import (
+	"context"
 	"testing"
 
 	"operators-mcp/internal/domain"
@@ -24,10 +25,10 @@ func TestWorkspaceRepo_CRUD(t *testing.T) {
 		t.Fatalf("CreatedAt should be set: %+v", ws)
 	}
 
-	if got := r.Get(ws.ID); got == nil || got.Path != "/tmp/wt/feature-x" {
+	if got := r.Get(context.Background(), ws.ID); got == nil || got.Path != "/tmp/wt/feature-x" {
 		t.Fatalf("Get failed: %+v", got)
 	}
-	if got := r.Get("missing"); got != nil {
+	if got := r.Get(context.Background(), "missing"); got != nil {
 		t.Fatalf("Get missing should be nil, got %+v", got)
 	}
 
@@ -37,6 +38,9 @@ func TestWorkspaceRepo_CRUD(t *testing.T) {
 	}
 	if list := r.ListByRepository("r1"); len(list) != 2 {
 		t.Fatalf("ListByRepository want 2 got %d", len(list))
+	}
+	if list := r.ListByIDs(context.Background(), []string{ws.ID, "missing"}); len(list) != 1 || list[0].ID != ws.ID {
+		t.Fatalf("ListByIDs want only %s, got %+v", ws.ID, list)
 	}
 	if list := r.ListByRepository("other"); len(list) != 0 {
 		t.Fatalf("ListByRepository other want 0 got %d", len(list))
@@ -54,7 +58,7 @@ func TestWorkspaceRepo_CRUD(t *testing.T) {
 	if err := r.Delete(ws.ID); err != nil {
 		t.Fatal(err)
 	}
-	if got := r.Get(ws.ID); got != nil {
+	if got := r.Get(context.Background(), ws.ID); got != nil {
 		t.Fatalf("expected nil after delete, got %+v", got)
 	}
 	if err := r.Delete("missing"); err == nil {

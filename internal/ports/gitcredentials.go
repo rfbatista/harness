@@ -107,7 +107,7 @@ type StoredGitCredential struct {
 
 // GitCredentialRepository keeps credentials (driven).
 type GitCredentialRepository interface {
-	List() ([]*StoredGitCredential, error)
+	List(ctx context.Context) ([]*StoredGitCredential, error)
 	// Get is nil, nil when there is no such credential.
 	Get(id string) (*StoredGitCredential, error)
 	// Create stores c and assigns its id.
@@ -135,6 +135,9 @@ type RepositoryCredentialPin struct {
 type RepositoryCredentialRepository interface {
 	// Get is "" when the repository is not pinned.
 	Get(repositoryID string) (string, error)
+	// ListByRepositories is the pins of any of repositoryIDs, read at once;
+	// a repository not pinned has none.
+	ListByRepositories(ctx context.Context, repositoryIDs []string) ([]RepositoryCredentialPin, error)
 	Put(pin RepositoryCredentialPin) error
 	Delete(repositoryID string) error
 	// ListByCredential is every pin on credentialID.

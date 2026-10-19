@@ -85,9 +85,9 @@ func (s *Service) announce(tk *domain.Ticket, deleted bool) {
 }
 
 // decorate fills the tickets' derived fields, when a decorator is wired.
-func (s *Service) decorate(tickets ...*domain.Ticket) {
+func (s *Service) decorate(ctx context.Context, tickets ...*domain.Ticket) {
 	if s.Decorator != nil {
-		s.Decorator.DecorateTickets(tickets...)
+		s.Decorator.DecorateTickets(ctx, tickets...)
 	}
 }
 
@@ -113,11 +113,11 @@ func (s *Service) statusMoved(ctx context.Context, tk *domain.Ticket, patch port
 	}
 }
 
-func (s *Service) CreateTicket(_ context.Context, projectID, title, description string, status domain.TicketStatus) (*domain.Ticket, error) {
+func (s *Service) CreateTicket(ctx context.Context, projectID, title, description string, status domain.TicketStatus) (*domain.Ticket, error) {
 	if title == "" {
 		return nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "title is required"}
 	}
-	if s.projects.Get(projectID) == nil {
+	if s.projects.Get(ctx, projectID) == nil {
 		return nil, &domain.StructuredError{Code: "PROJECT_NOT_FOUND", Message: "project not found"}
 	}
 	if status == "" {
@@ -132,23 +132,24 @@ func (s *Service) CreateTicket(_ context.Context, projectID, title, description 
 	if err != nil {
 		return nil, err
 	}
-	s.decorate(tk)
+	// The write is done: the change goes out whole even if the request ends.
+	s.decorate(context.WithoutCancel(ctx), tk)
 	s.announce(tk, false)
 	return tk, nil
 }
 
-func (s *Service) GetTicket(_ context.Context, id string) (*domain.Ticket, error) {
-	tk := s.tickets.Get(id)
+func (s *Service) GetTicket(ctx context.Context, id string) (*domain.Ticket, error) {
+	tk := s.tickets.Get(ctx, id)
 	if tk == nil {
 		return nil, &domain.StructuredError{Code: "TICKET_NOT_FOUND", Message: "ticket not found"}
 	}
-	s.decorate(tk)
+	s.decorate(ctx, tk)
 	return tk, nil
 }
 
-func (s *Service) ListTickets(_ context.Context, projectID string) ([]*domain.Ticket, error) {
-	tickets := s.tickets.ListByProject(projectID)
-	s.decorate(tickets...)
+func (s *Service) ListTickets(ctx context.Context, projectID string) ([]*domain.Ticket, error) {
+	tickets := s.tickets.ListByProject(ctx, projectID)
+	s.decorate(ctx, tickets...)
 	return tickets, nil
 }
 
@@ -168,7 +169,7 @@ func (s *Service) PatchTicket(ctx context.Context, id string, patch ports.Ticket
 	}
 	s.ticketMu.Lock()
 	defer s.ticketMu.Unlock()
-	existing := s.tickets.Get(id)
+	existing := s.tickets.Get(ctx, id)
 	if existing == nil {
 		return nil, &domain.StructuredError{Code: "TICKET_NOT_FOUND", Message: "ticket not found"}
 	}
@@ -189,14 +190,15 @@ func (s *Service) PatchTicket(ctx context.Context, id string, patch ports.Ticket
 		status = *patch.Status
 	}
 	if title == existing.Title && description == existing.Description && status == existing.Status {
-		s.decorate(existing)
+		s.decorate(ctx, existing)
 		return existing, nil
 	}
 	tk, err := s.tickets.Update(id, title, description, status)
 	if err != nil {
 		return nil, err
 	}
-	s.decorate(tk)
+	// The write is done: the change goes out whole even if the request ends.
+	s.decorate(context.WithoutCancel(ctx), tk)
 	s.announce(tk, false)
 	if status != existing.Status {
 		s.statusMoved(ctx, tk, patch)
@@ -210,7 +212,7 @@ func (s *Service) PatchTicket(ctx context.Context, id string, patch ports.Ticket
 // TicketDeleted (outside ticketMu: its handlers take their own locks) so other
 // contexts drop what they kept about the task.
 func (s *Service) DeleteTicket(ctx context.Context, id string) error {
-	last, err := s.deleteTicket(id)
+	last, err := s.deleteTicket(ctx, id)
 	if err != nil {
 		return err
 	}
@@ -225,10 +227,12 @@ func (s *Service) DeleteTicket(ctx context.Context, id string) error {
 	return nil
 }
 
-func (s *Service) deleteTicket(id string) (*domain.Ticket, error) {
+func (s *Service) deleteTicket(ctx context.Context, id string) (*domain.Ticket, error) {
 	s.ticketMu.Lock()
 	defer s.ticketMu.Unlock()
-	last := s.tickets.Get(id)
+	// The task is deleted whatever happens to the request, so what it
+	// announces is read to the end too.
+	last := s.tickets.Get(context.WithoutCancel(ctx), id)
 	if err := s.tickets.Delete(id); err != nil {
 		return nil, err
 	}
@@ -254,7 +258,7 @@ func (s *Service) CreateDocument(projectID, title, content string, format domain
 	if !scope.Valid() {
 		return nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "scope must be task or project"}
 	}
-	if s.projects.Get(projectID) == nil {
+	if s.projects.Get(context.TODO(), projectID) == nil {
 		return nil, &domain.StructuredError{Code: "PROJECT_NOT_FOUND", Message: "project not found"}
 	}
 	d, err := s.documents.Create(projectID, title, content, format, scope)
@@ -343,7 +347,7 @@ func (s *Service) documentChanged(d *domain.Document, err error, ticketID string
 // --- Links ---
 
 func (s *Service) LinkDocument(ticketID, documentID string) error {
-	tk := s.tickets.Get(ticketID)
+	tk := s.tickets.Get(context.TODO(), ticketID)
 	if tk == nil {
 		return &domain.StructuredError{Code: "TICKET_NOT_FOUND", Message: "ticket not found"}
 	}
@@ -365,8 +369,14 @@ func (s *Service) UnlinkDocument(ticketID, documentID string) error {
 	return err
 }
 
-func (s *Service) ListTicketDocuments(ticketID string) []*domain.Document {
-	return s.documents.ListByTicket(ticketID)
+func (s *Service) ListTicketDocuments(ctx context.Context, ticketID string) []*domain.Document {
+	return s.documents.ListByTicket(ctx, ticketID)
+}
+
+// ListTasksDocuments is the documents linked to any of ticketIDs, each once,
+// read at once.
+func (s *Service) ListTasksDocuments(ctx context.Context, ticketIDs []string) []*domain.Document {
+	return s.documents.ListByTickets(ctx, ticketIDs)
 }
 
 // ListDocumentTickets is the tickets a document is linked to, as stored; a
@@ -374,7 +384,7 @@ func (s *Service) ListTicketDocuments(ticketID string) []*domain.Document {
 func (s *Service) ListDocumentTickets(documentID string) []*domain.Ticket {
 	var out []*domain.Ticket
 	for _, id := range s.documents.ListTicketIDsByDocument(documentID) {
-		if tk := s.tickets.Get(id); tk != nil {
+		if tk := s.tickets.Get(context.TODO(), id); tk != nil {
 			out = append(out, tk)
 		}
 	}

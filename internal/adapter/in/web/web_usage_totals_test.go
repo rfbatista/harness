@@ -30,6 +30,22 @@ func (f fakeUsage) UsageTotals(_ context.Context, q ports.UsageTotalsQuery) (*po
 	}
 }
 
+// TaskUsageTotals answers the task's and its sessions' totals as UsageTotals
+// does, one by one.
+func (f fakeUsage) TaskUsageTotals(ctx context.Context, taskID string, sessionIDs []string) (*ports.UsageTotals, map[string]*ports.UsageTotals, error) {
+	task, err := f.UsageTotals(ctx, ports.UsageTotalsQuery{TaskID: taskID})
+	if err != nil {
+		return nil, nil, err
+	}
+	sessions := make(map[string]*ports.UsageTotals, len(sessionIDs))
+	for _, id := range sessionIDs {
+		if sessions[id], err = f.UsageTotals(ctx, ports.UsageTotalsQuery{SessionID: id}); err != nil {
+			return nil, nil, err
+		}
+	}
+	return task, sessions, nil
+}
+
 func TestTaskAndSessionPagesShowTheirUsageTotals(t *testing.T) {
 	var asked []string
 	w := board()

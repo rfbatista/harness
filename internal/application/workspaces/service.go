@@ -8,6 +8,7 @@ import (
 	"errors"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/rfbatista/harnesskit/errs"
 
@@ -80,7 +81,7 @@ func (s *Service) root() string {
 // ref the branch is cut from, HEAD when empty. On persistence failure the
 // worktree is removed so no orphaned directory is left behind.
 func (s *Service) Create(repositoryID, name, branch, baseRef string) (*domain.Workspace, error) {
-	repo := s.repositories.Get(repositoryID)
+	repo := s.repositories.Get(context.TODO(), repositoryID)
 	if repo == nil {
 		return nil, &domain.StructuredError{Code: "REPOSITORY_NOT_FOUND", Message: "repository not found"}
 	}
@@ -145,7 +146,7 @@ func (s *Service) writeEnvFiles(repositoryID, worktree string) error {
 
 // ListBranches returns the refs a new workspace can be based on.
 func (s *Service) ListBranches(repositoryID string) ([]domain.GitBranch, error) {
-	repo := s.repositories.Get(repositoryID)
+	repo := s.repositories.Get(context.TODO(), repositoryID)
 	if repo == nil {
 		return nil, &domain.StructuredError{Code: "REPOSITORY_NOT_FOUND", Message: "repository not found"}
 	}
@@ -156,8 +157,8 @@ func (s *Service) ListBranches(repositoryID string) ([]domain.GitBranch, error) 
 }
 
 // checkout is the repository's own checkout directory.
-func (s *Service) checkout(repositoryID string) (string, error) {
-	repo := s.repositories.Get(repositoryID)
+func (s *Service) checkout(ctx context.Context, repositoryID string) (string, error) {
+	repo := s.repositories.Get(ctx, repositoryID)
 	if repo == nil {
 		return "", &domain.StructuredError{Code: "REPOSITORY_NOT_FOUND", Message: "repository not found"}
 	}
@@ -172,7 +173,7 @@ func (s *Service) RepositoryLog(ctx context.Context, repositoryID string, q port
 	if s.history == nil {
 		return nil, &domain.StructuredError{Code: "UNAVAILABLE", Message: "repository history is not available"}
 	}
-	dir, err := s.checkout(repositoryID)
+	dir, err := s.checkout(ctx, repositoryID)
 	if err != nil {
 		return nil, err
 	}
@@ -184,7 +185,7 @@ func (s *Service) RepositoryCommit(ctx context.Context, repositoryID, hash strin
 	if s.history == nil {
 		return nil, &domain.StructuredError{Code: "UNAVAILABLE", Message: "repository history is not available"}
 	}
-	dir, err := s.checkout(repositoryID)
+	dir, err := s.checkout(ctx, repositoryID)
 	if err != nil {
 		return nil, err
 	}
@@ -199,11 +200,11 @@ func (s *Service) WorkspaceHistory(ctx context.Context, workspaceID string, limi
 	if s.history == nil {
 		return nil, &domain.StructuredError{Code: "UNAVAILABLE", Message: "repository history is not available"}
 	}
-	ws := s.workspaces.Get(workspaceID)
+	ws := s.workspaces.Get(ctx, workspaceID)
 	if ws == nil {
 		return nil, &domain.StructuredError{Code: "WORKSPACE_NOT_FOUND", Message: "workspace not found"}
 	}
-	root, err := s.checkout(ws.RepositoryID)
+	root, err := s.checkout(ctx, ws.RepositoryID)
 	if err != nil {
 		return nil, err
 	}
@@ -217,33 +218,56 @@ func (s *Service) WorkspaceHistory(ctx context.Context, workspaceID string, limi
 		}
 	}
 
-	st, err := s.history.Status(ctx, ws.Path)
-	switch {
-	case errs.Code(err) == "WORKSPACE_MISSING":
-		out.Gone = true
-	case err != nil:
-		return nil, err
-	default:
-		out.Head, out.Changes = st.Head, st.Changes
-	}
-
 	refs := []string{ws.Branch}
 	if out.Base != "" && out.Base != ws.Branch {
 		refs = append(refs, out.Base)
+	}
+	// The worktree's status, the divergence and the graph are independent
+	// git reads, so they run side by side.
+	var (
+		wg                sync.WaitGroup
+		st                *domain.WorktreeStatus
+		statusErr, logErr error
+	)
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		st, statusErr = s.history.Status(ctx, ws.Path)
+	}()
+	go func() {
+		defer wg.Done()
+		// The repository's checkout holds every branch; read the graph
+		// there, so it shows even after the worktree is gone.
+		out.Commits, logErr = s.history.Log(ctx, root, ports.HistoryQuery{Limit: limit, Refs: refs})
+	}()
+	if len(refs) > 1 {
+		var err error
 		if out.Ahead, out.Behind, err = s.history.Divergence(ctx, root, out.Base, ws.Branch); err != nil {
 			out.Ahead, out.Behind = 0, 0 // a base that no longer resolves: no counts
 		}
 	}
-	// The repository's checkout holds every branch; read the graph there,
-	// so it shows even after the worktree is gone.
-	if out.Commits, err = s.history.Log(ctx, root, ports.HistoryQuery{Limit: limit, Refs: refs}); err != nil {
-		return nil, err
+	wg.Wait()
+
+	switch {
+	case errs.Code(statusErr) == "WORKSPACE_MISSING":
+		out.Gone = true
+	case statusErr != nil:
+		return nil, statusErr
+	default:
+		out.Head, out.Changes = st.Head, st.Changes
+	}
+	if logErr != nil {
+		return nil, logErr
 	}
 	return out, nil
 }
 
 // Get returns the workspace by id, or nil if not found.
-func (s *Service) Get(id string) *domain.Workspace { return s.workspaces.Get(id) }
+func (s *Service) Get(ctx context.Context, id string) *domain.Workspace { return s.workspaces.Get(ctx, id) }
+
+// GetMany returns the given workspaces, read at once; unknown ids are left
+// out.
+func (s *Service) GetMany(ctx context.Context, ids []string) []*domain.Workspace { return s.workspaces.ListByIDs(ctx, ids) }
 
 // ListByRepository returns all workspaces of the given repository.
 func (s *Service) ListByRepository(repositoryID string) []*domain.Workspace {
@@ -255,11 +279,11 @@ func (s *Service) ListByRepository(repositoryID string) []*domain.Workspace {
 // The branch is left in place: it is what a deleted session's committed work
 // survives on. Use Discard, never Delete, for spawn rollback.
 func (s *Service) Delete(id string) error {
-	ws := s.workspaces.Get(id)
+	ws := s.workspaces.Get(context.TODO(), id)
 	if ws == nil {
 		return &domain.StructuredError{Code: "WORKSPACE_NOT_FOUND", Message: "workspace not found"}
 	}
-	if repo := s.repositories.Get(ws.RepositoryID); repo != nil && repo.RootDir != "" {
+	if repo := s.repositories.Get(context.TODO(), ws.RepositoryID); repo != nil && repo.RootDir != "" {
 		if err := s.worktrees.Remove(repo.RootDir, ws.Path); err != nil {
 			return err
 		}
@@ -274,11 +298,11 @@ func (s *Service) Delete(id string) error {
 // surviving to poison a retry with a stale BRANCH_EXISTS. Session deletion
 // must keep using Delete, which preserves the branch.
 func (s *Service) Discard(id string) error {
-	ws := s.workspaces.Get(id)
+	ws := s.workspaces.Get(context.TODO(), id)
 	if ws == nil {
 		return &domain.StructuredError{Code: "WORKSPACE_NOT_FOUND", Message: "workspace not found"}
 	}
-	if repo := s.repositories.Get(ws.RepositoryID); repo != nil && repo.RootDir != "" {
+	if repo := s.repositories.Get(context.TODO(), ws.RepositoryID); repo != nil && repo.RootDir != "" {
 		if err := s.worktrees.Remove(repo.RootDir, ws.Path); err != nil {
 			return err
 		}

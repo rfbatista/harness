@@ -41,7 +41,7 @@ type Sessions interface {
 
 // Tickets finds a task; the sqlite ticket repository satisfies it.
 type Tickets interface {
-	Get(id string) *domain.Ticket
+	Get(ctx context.Context, id string) *domain.Ticket
 }
 
 // Readers are what the service reads from other contexts.
@@ -106,7 +106,7 @@ func (s *Service) Record(ctx context.Context, r ports.UsageRequest) {
 		s.log.Error("usage record not stored", "id", r.ID, "attribution", r.Attribution, "model", r.Model, "err", err)
 		return
 	}
-	s.decorate([]*domain.UsageRecord{rec})
+	s.decorate(ctx, []*domain.UsageRecord{rec})
 	s.broadcast(rec)
 }
 
@@ -157,7 +157,7 @@ func (s *Service) FollowUsage(ctx context.Context, projectID string) (<-chan *do
 }
 
 // ListRecentUsage answers a project's recent usage records, newest first.
-func (s *Service) ListRecentUsage(_ context.Context, q ports.UsageQuery) (*ports.UsageRecords, error) {
+func (s *Service) ListRecentUsage(ctx context.Context, q ports.UsageQuery) (*ports.UsageRecords, error) {
 	limit := q.Limit
 	if limit == 0 {
 		limit = defaultLimit
@@ -169,13 +169,13 @@ func (s *Service) ListRecentUsage(_ context.Context, q ports.UsageQuery) (*ports
 	if err != nil {
 		return nil, err
 	}
-	s.decorate(list)
+	s.decorate(ctx, list)
 	return &ports.UsageRecords{Records: list}, nil
 }
 
 // decorate fills what a record carries beyond what is stored.
-func (s *Service) decorate(list []*domain.UsageRecord) {
-	titles := s.titler()
+func (s *Service) decorate(ctx context.Context, list []*domain.UsageRecord) {
+	titles := s.titler(ctx)
 	for _, r := range list {
 		r.EstimatedCostUSD = estimatedCost(r)
 		r.TaskTitle = titles(r.TaskID)

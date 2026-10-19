@@ -42,6 +42,9 @@ type UsageDashboard interface {
 	ListRecentUsage(ctx context.Context, q UsageQuery) (*UsageRecords, error)
 	UsageSummary(ctx context.Context, projectID string, r UsageRange) (*UsageSummary, error)
 	UsageTotals(ctx context.Context, q UsageTotalsQuery) (*UsageTotals, error)
+	// TaskUsageTotals answers a task's totals and each given session's, over
+	// all time, read at once: what UsageTotals answers for each of them.
+	TaskUsageTotals(ctx context.Context, taskID string, sessionIDs []string) (task *UsageTotals, sessions map[string]*UsageTotals, err error)
 }
 
 // UsageReader is what the API reads of token usage.
@@ -60,8 +63,11 @@ type UsageGroupFilter struct {
 	ProjectID string
 	TaskID    string
 	SessionID string
-	Since     time.Time
-	LongAbove int64
+	// SessionIDs, with TaskID, also selects these sessions' records: one
+	// read for a task and its sessions.
+	SessionIDs []string
+	Since      time.Time
+	LongAbove  int64
 }
 
 // UsageSums are token sums over a set of records.
@@ -103,7 +109,7 @@ const (
 type UsageAggregates interface {
 	// Groups sums the filter's records per task, session, model and prompt
 	// size.
-	Groups(f UsageGroupFilter) ([]UsageGroup, error)
+	Groups(ctx context.Context, f UsageGroupFilter) ([]UsageGroup, error)
 	// Series sums a project's records since a time per bucket and model,
 	// oldest first.
 	Series(projectID string, since time.Time, bucket UsageBucket) ([]UsageSeriesPoint, error)

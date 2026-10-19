@@ -62,9 +62,9 @@ type gitCredentialsParams struct {
 // registerGitCredentials checks git on start and sweeps what a previous run
 // left: operation directories, and the git directories of sessions that are
 // no longer running.
-func registerGitCredentials(lc fx.Lifecycle, svc *gitcredentials.Service, sessions ports.SessionRepository) {
+func registerGitCredentials(lc fx.Lifecycle, cfg Config, svc *gitcredentials.Service, sessions ports.SessionRepository) {
 	lc.Append(fx.Hook{OnStart: func(ctx context.Context) error {
-		if err := gitcli.CheckVersion(); err != nil {
+		if err := gitcli.CheckVersion(cfg.GitBin); err != nil {
 			slog.Error("git credentials", "err", err)
 		}
 		return svc.Sweep(ctx, func(id string) (string, bool) {
@@ -95,12 +95,12 @@ func newGitCredentialsService(p gitCredentialsParams) (*gitcredentials.Service, 
 		},
 		gitcredentials.Readers{Repositories: p.Repositories, Projects: p.Projects, Origins: p.Git},
 		box, nil)
-	broker, err := gitcli.NewAuthBroker(filepath.Join(dataDir, "git"), gitcli.MachineExcludesFile())
+	broker, err := gitcli.NewAuthBroker(filepath.Join(dataDir, "git"), gitcli.MachineExcludesFile(p.Cfg.GitBin))
 	if err != nil {
 		return nil, err
 	}
 	svc.Broker = broker
-	svc.Tester = &gitcli.Probe{Broker: broker, GitHub: githubapi.New().User}
+	svc.Tester = &gitcli.Probe{Broker: broker, GitHub: githubapi.New().User, Git: p.Cfg.GitBin}
 	svc.Subscribe(p.Cat.Bus)
 	return svc, nil
 }

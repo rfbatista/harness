@@ -1,6 +1,7 @@
 package sqlite
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -115,6 +116,9 @@ func TestReviewRequestRepo_ListUpdateCount(t *testing.T) {
 	if n := r.CountPending("t"); n != 1 {
 		t.Fatalf("pending after respond = %d", n)
 	}
+	if got := r.CountPendingByTask(context.Background(), []string{"t", "t2", "t3"}); len(got) != 2 || got["t"] != 1 || got["t2"] != 1 {
+		t.Fatalf("pending by task = %v, want t and t2 at 1 and t3 left out", got)
+	}
 	if err := r.Update(&domain.ReviewRequest{ID: "ghost"}); err == nil {
 		t.Fatal("ghost update must fail")
 	}
@@ -149,6 +153,9 @@ func TestStatusCheckRepo_SaveListActive(t *testing.T) {
 	}
 	if n := len(r.ListByArchitect("arch")); n != 3 {
 		t.Fatalf("by architect = %d", n)
+	}
+	if got := r.ListByDelegates(context.Background(), []string{"d3", "ghost", "d1"}); len(got) != 2 || got[0].DelegateSessionID != "d1" || got[1].DelegateSessionID != "d3" {
+		t.Fatalf("by delegates d3, ghost, d1: %+v", got)
 	}
 	if r.Get("ghost") != nil {
 		t.Fatal("ghost")

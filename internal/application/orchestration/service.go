@@ -48,7 +48,7 @@ type Catalog struct {
 // ticketResolver is the slice of the planning ticket store the orchestration
 // needs to validate spawn-into-ticket requests. ports.TicketRepository satisfies it.
 type ticketResolver interface {
-	Get(id string) *domain.Ticket
+	Get(ctx context.Context, id string) *domain.Ticket
 }
 
 type Service struct {
@@ -275,7 +275,7 @@ func (s *Service) Start(ctx context.Context, req StartRequest) (*domain.Session,
 	if err := s.Send(ctx, sess.ID(), req.Task); err != nil {
 		slog.Error("send initial task failed", "session", sess.ID(), "err", err)
 	}
-	return s.withResumability(created), nil
+	return s.withResumability(ctx, created), nil
 }
 
 // prepareInput is what every way of starting a session shares: enough to
@@ -325,7 +325,7 @@ func (s *Service) prepare(ctx context.Context, in prepareInput) (*prepared, erro
 
 	var ticket *domain.Ticket
 	if in.TicketID != "" {
-		tk, err := s.ticketIn(in.ProjectID, in.TicketID)
+		tk, err := s.ticketIn(ctx, in.ProjectID, in.TicketID)
 		if err != nil {
 			return nil, err
 		}
@@ -497,11 +497,11 @@ func (s *Service) withShims(id string, cfg *llmkit.SessionConfig, cleanup func()
 }
 
 // ticketIn loads a ticket and checks it belongs to the project.
-func (s *Service) ticketIn(projectID, ticketID string) (*domain.Ticket, error) {
+func (s *Service) ticketIn(ctx context.Context, projectID, ticketID string) (*domain.Ticket, error) {
 	if s.tickets == nil {
 		return nil, &domain.StructuredError{Code: "TICKET_NOT_FOUND", Message: "tickets are not available"}
 	}
-	tk := s.tickets.Get(ticketID)
+	tk := s.tickets.Get(ctx, ticketID)
 	if tk == nil {
 		return nil, &domain.StructuredError{Code: "TICKET_NOT_FOUND", Message: "ticket not found"}
 	}
@@ -656,6 +656,7 @@ func (s *Service) pump(sess llmkit.Session) {
 	}
 	s.runCleanup(id)
 	if sess := s.sessions.Get(id); sess != nil && sess.Status.IsTerminal() {
+		s.hub.End(id)
 		s.announce(domain.SessionEnded{SessionID: id, Status: sess.Status})
 	}
 }
@@ -918,7 +919,7 @@ func (s *Service) releaseApproval(id string) sessionChange {
 // metricsOf is the session's stored metrics, nil when it is gone or its read
 // failed (logged).
 func (s *Service) metricsOf(id string) *ports.SessionMetrics {
-	cur, err := s.sessions.Find(id)
+	cur, err := s.sessions.Find(context.Background(), id)
 	if err != nil {
 		slog.Error("session not read; its metrics miss this event", "session", id, "err", err)
 	}
@@ -1003,6 +1004,7 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 			slog.Warn("remove session worktree failed", "session", id, "workspace", workspaceID, "err", err)
 		}
 	}
+	s.hub.End(id)
 	s.mu.Lock()
 	delete(s.seq, id)
 	s.mu.Unlock()
@@ -1030,24 +1032,27 @@ func (s *Service) History(id string, fromSeq int64) ([]SessionEvent, error) {
 	return out, nil
 }
 
-func (s *Service) Get(_ context.Context, id string) (*domain.Session, error) {
-	sess, err := s.sessions.Find(id)
+func (s *Service) Get(ctx context.Context, id string) (*domain.Session, error) {
+	sess, err := s.sessions.Find(ctx, id)
 	if err != nil {
 		return nil, fmt.Errorf("read session: %w", err)
 	}
 	if sess == nil {
 		return nil, &domain.StructuredError{Code: "SESSION_NOT_FOUND", Message: "session not found"}
 	}
-	return s.withResumability(sess), nil
+	return s.withResumability(ctx, sess), nil
 }
 
-func (s *Service) List(_ context.Context, f ports.SessionFilter) ([]*domain.Session, error) {
-	list, err := s.sessions.Query(f)
+func (s *Service) List(ctx context.Context, f ports.SessionFilter) ([]*domain.Session, error) {
+	list, err := s.sessions.Query(ctx, f)
 	if err != nil {
 		return nil, fmt.Errorf("list sessions: %w", err)
 	}
 	for _, sess := range list {
-		s.withResumability(sess)
+		s.fillResumability(sess)
+	}
+	if s.Decorator != nil {
+		s.Decorator.DecorateSessions(ctx, list...) // the whole list at once: its queries do not grow with it
 	}
 	return list, nil
 }

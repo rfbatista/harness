@@ -108,14 +108,19 @@ func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRun
 		// Each repository's codegraph index, built in its checkout.
 		RepositoryIndexes: indexes.port(),
 	}), httpapi.WithToken(cfg.APIToken))
-	mux.Handle("/api/", apiRouter)
+	// Requests slower than the threshold are logged with their query count.
+	// An approval waits on a person, so it is never a slow request.
+	slow := func(h http.Handler) http.Handler {
+		return httpapi.SlowRequestLog(h, httpapi.WithSlowRequestThreshold(cfg.SlowRequestThreshold))
+	}
+	mux.Handle("/api/", slow(apiRouter))
 	mux.Handle(mcpapprove.PathPrefix, mcpapprove.Handler(broker))
-	mux.Handle(mcpsession.PathPrefix, mcpsession.TaskHandler(sessionTaskTools(cat, orch, plan, sessions, art, channel, notifier)))
+	mux.Handle(mcpsession.PathPrefix, slow(mcpsession.TaskHandler(sessionTaskTools(cat, orch, plan, sessions, art, channel, notifier))))
 	// The web client owns / and its pages; anything else reaches the legacy
 	// designer SPA until it is retired.
-	mux.Handle("/", web.NewHandler(web.Deps{Projects: cat.Projects, Tasks: plan, Sessions: orch, Agents: cat.Agents, Repositories: cat.Projects, EnvFiles: cat.Projects, RunCommands: cat.Projects, Documents: plan, History: ws, Code: code, Workspaces: ws, Artifacts: art, ProjectSummaries: cat.Projects, PullRequests: prs,
+	mux.Handle("/", slow(web.NewHandler(web.Deps{Projects: cat.Projects, Tasks: plan, Sessions: orch, Agents: cat.Agents, Repositories: cat.Projects, EnvFiles: cat.Projects, RunCommands: cat.Projects, Documents: plan, History: ws, Code: code, Workspaces: ws, Artifacts: art, ProjectSummaries: cat.Projects, PullRequests: prs,
 		Resources: plan, Comments: plan, Notifications: noteReader, GitCredentials: creds.port(), Usage: usageSvc, TokenSavers: cat.Capabilities,
-		TokenSaverInstalls: cat.Capabilities, RepositoryIndexes: indexes.port()}, assets, uiHandler))
+		TokenSaverInstalls: cat.Capabilities, RepositoryIndexes: indexes.port()}, assets, uiHandler)))
 
 	// The LLM proxy every claude process calls through (ADR 0006): loopback
 	// only, outside the API token and CORS, so its responses come back as
@@ -128,7 +133,7 @@ func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRun
 	root.Handle(llm.PathPrefix, llmProxy)
 	root.Handle("/", httpapi.CORSMiddleware(mux))
 
-	srv := &http.Server{Addr: cfg.HTTPAddr, Handler: root}
+	srv := newHTTPServer(cfg.HTTPAddr, withProfiler(!cfg.ProfilerOff, root))
 	lc.Append(fx.Hook{
 		OnStart: func(context.Context) error {
 			ln, err := net.Listen("tcp", srv.Addr)

@@ -1,5 +1,6 @@
 package agents
 
+import "context"
 import "operators-mcp/internal/domain"
 
 // ListPrompts returns all prompts.
@@ -28,7 +29,7 @@ func (s *Service) DeletePrompt(id string) error {
 	if s.prompts.Get(id) == nil {
 		return &domain.StructuredError{Code: "PROMPT_NOT_FOUND", Message: "prompt not found"}
 	}
-	for _, a := range s.agents.List() {
+	for _, a := range s.agents.List(context.TODO()) {
 		if a.PromptID == id {
 			if _, err := s.agents.Update(a.ID, a.Name, a.Description, "", a.SkillIDs, a.MCPServerIDs); err != nil {
 				return err

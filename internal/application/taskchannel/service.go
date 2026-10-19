@@ -32,7 +32,7 @@ var (
 type Tickets interface {
 	GetTicket(ctx context.Context, id string) (*domain.Ticket, error)
 	PatchTicket(ctx context.Context, id string, patch ports.TicketPatch) (*domain.Ticket, error)
-	ListTicketDocuments(ticketID string) []*domain.Document
+	ListTicketDocuments(ctx context.Context, ticketID string) []*domain.Document
 }
 
 // Repositories are the channel's own tables.
@@ -135,11 +135,11 @@ func (s *Service) scopeOf(ctx context.Context, sessionID string) (*scope, error)
 	if err != nil {
 		return nil, err
 	}
-	return &scope{session: sess, ticket: tk, all: s.taskSessions(sess.TicketID)}, nil
+	return &scope{session: sess, ticket: tk, all: s.taskSessions(ctx, sess.TicketID)}, nil
 }
 
-func (s *Service) taskSessions(ticketID string) []*domain.Session {
-	return s.sessions.List(ports.SessionFilter{TicketID: ticketID})
+func (s *Service) taskSessions(ctx context.Context, ticketID string) []*domain.Session {
+	return s.sessions.List(ctx, ports.SessionFilter{TicketID: ticketID})
 }
 
 // architectScope is the caller's scope when the caller is its task's
@@ -156,12 +156,12 @@ func (s *Service) architectScope(ctx context.Context, architectID string) (*scop
 }
 
 // TaskArchitect is the task's architect session, or nil.
-func (s *Service) TaskArchitect(_ context.Context, taskID string) (*domain.Session, error) {
-	return domain.TaskArchitect(s.taskSessions(taskID)), nil
+func (s *Service) TaskArchitect(ctx context.Context, taskID string) (*domain.Session, error) {
+	return domain.TaskArchitect(s.taskSessions(ctx, taskID)), nil
 }
 
 // SessionRole is what the session is on its task.
-func (s *Service) SessionRole(_ context.Context, sessionID string) (domain.SessionRole, error) {
+func (s *Service) SessionRole(ctx context.Context, sessionID string) (domain.SessionRole, error) {
 	sess := s.sessions.Get(sessionID)
 	if sess == nil {
 		return "", notFound("SESSION_NOT_FOUND", "session not found")
@@ -169,7 +169,7 @@ func (s *Service) SessionRole(_ context.Context, sessionID string) (domain.Sessi
 	if sess.TicketID == "" {
 		return domain.RolePeer, nil
 	}
-	role, _ := domain.RoleOf(sessionID, s.taskSessions(sess.TicketID))
+	role, _ := domain.RoleOf(sessionID, s.taskSessions(ctx, sess.TicketID))
 	return role, nil
 }
 
@@ -197,7 +197,7 @@ func (s *Service) SetTaskStatus(ctx context.Context, bySessionID string, status 
 func (s *Service) checkAttachments(ctx context.Context, ticketID string, docs, artifacts []string) error {
 	if len(docs) > 0 {
 		linked := map[string]bool{}
-		for _, d := range s.tickets.ListTicketDocuments(ticketID) {
+		for _, d := range s.tickets.ListTicketDocuments(ctx, ticketID) {
 			linked[d.ID] = true
 		}
 		for _, id := range docs {
@@ -288,7 +288,7 @@ func (s *Service) emitCheck(c *domain.StatusCheck, firedAt *time.Time, delivered
 	s.tell(ports.SessionEvent{Type: "status_check", StatusCheck: ev, At: s.now()}, c.ArchitectSessionID, c.DelegateSessionID)
 	// The delegate's record carries its loop.
 	if d := s.sessions.Get(c.DelegateSessionID); d != nil && s.Feed != nil {
-		s.DecorateSessions(d)
+		s.DecorateSessions(context.Background(), d)
 		s.Feed.AnnounceChange(ports.ProjectChange{Session: d})
 	}
 }
@@ -296,7 +296,7 @@ func (s *Service) emitCheck(c *domain.StatusCheck, firedAt *time.Time, delivered
 func (s *Service) emitStatus(c domain.TaskStatusChange) {
 	s.feed(ports.ProjectChange{TaskStatus: &c})
 	var live []string
-	for _, sess := range s.taskSessions(c.TaskID) {
+	for _, sess := range s.taskSessions(context.Background(), c.TaskID) {
 		if !sess.Status.IsTerminal() {
 			live = append(live, sess.ID)
 		}
@@ -307,42 +307,87 @@ func (s *Service) emitStatus(c domain.TaskStatusChange) {
 // --- decorating ---
 
 // DecorateSessions fills each session's role, its task's architect and the
-// loop checking on it.
-func (s *Service) DecorateSessions(sessions ...*domain.Session) {
-	byTicket := map[string][]*domain.Session{}
+// loop checking on it. However many sessions it is given, it reads their
+// tasks' sessions in one query and their loops in another.
+func (s *Service) DecorateSessions(ctx context.Context, sessions ...*domain.Session) {
+	var ticketIDs, sessionIDs []string
 	for _, sess := range sessions {
 		if sess == nil {
 			continue
 		}
 		sess.Role, sess.ArchitectSessionID, sess.StatusCheck = domain.RolePeer, nil, nil
-		if sess.TicketID == "" {
+		if sess.TicketID != "" {
+			ticketIDs = append(ticketIDs, sess.TicketID)
+			sessionIDs = append(sessionIDs, sess.ID)
+		}
+	}
+	if len(ticketIDs) == 0 {
+		return
+	}
+	byTicket := s.sessionsByTicket(ctx, ticketIDs)
+	checks := make(map[string]*domain.StatusCheck, len(sessionIDs))
+	for _, c := range s.checks.ListByDelegates(ctx, uniq(sessionIDs)) {
+		checks[c.DelegateSessionID] = c
+	}
+	for _, sess := range sessions {
+		if sess == nil || sess.TicketID == "" {
 			continue
 		}
-		all, ok := byTicket[sess.TicketID]
-		if !ok {
-			all = s.taskSessions(sess.TicketID)
-			byTicket[sess.TicketID] = all
-		}
-		role, arch := domain.RoleOf(sess.ID, all)
+		role, arch := domain.RoleOf(sess.ID, byTicket[sess.TicketID])
 		sess.Role = role
 		if arch != "" {
 			sess.ArchitectSessionID = &arch
 		}
-		sess.StatusCheck = s.checks.Get(sess.ID)
+		sess.StatusCheck = checks[sess.ID]
 	}
 }
 
-// DecorateTickets fills each ticket's architect and pending review count.
-func (s *Service) DecorateTickets(tickets ...*domain.Ticket) {
+// DecorateTickets fills each ticket's architect and pending review count,
+// in two queries however many tickets it is given.
+func (s *Service) DecorateTickets(ctx context.Context, tickets ...*domain.Ticket) {
+	var ids []string
+	for _, tk := range tickets {
+		if tk != nil {
+			ids = append(ids, tk.ID)
+		}
+	}
+	if len(ids) == 0 {
+		return
+	}
+	byTicket := s.sessionsByTicket(ctx, ids)
+	pending := s.reviews.CountPendingByTask(ctx, uniq(ids))
 	for _, tk := range tickets {
 		if tk == nil {
 			continue
 		}
 		tk.ArchitectSessionID = nil
-		if a := domain.TaskArchitect(s.taskSessions(tk.ID)); a != nil {
+		if a := domain.TaskArchitect(byTicket[tk.ID]); a != nil {
 			id := a.ID
 			tk.ArchitectSessionID = &id
 		}
-		tk.PendingReviews = s.reviews.CountPending(tk.ID)
+		tk.PendingReviews = pending[tk.ID]
 	}
+}
+
+// sessionsByTicket reads the sessions of the given tasks in one query, by
+// task, each task's newest first.
+func (s *Service) sessionsByTicket(ctx context.Context, ticketIDs []string) map[string][]*domain.Session {
+	out := map[string][]*domain.Session{}
+	for _, sess := range s.sessions.List(ctx, ports.SessionFilter{TicketIDs: uniq(ticketIDs)}) {
+		out[sess.TicketID] = append(out[sess.TicketID], sess)
+	}
+	return out
+}
+
+// uniq is ids without repeats, in their first order.
+func uniq(ids []string) []string {
+	seen := make(map[string]bool, len(ids))
+	out := make([]string, 0, len(ids))
+	for _, id := range ids {
+		if !seen[id] {
+			seen[id] = true
+			out = append(out, id)
+		}
+	}
+	return out
 }

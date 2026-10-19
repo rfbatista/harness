@@ -7,21 +7,25 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"operators-mcp/internal/domain"
+	"operators-mcp/internal/infra/readshare"
 	"operators-mcp/internal/ports"
 )
 
 var _ ports.GitHistory = (*History)(nil)
 
-// History reads a checkout's commit graph with git log and git show.
-type History struct{}
+// History reads a checkout's commit graph with git log and git show. Each
+// git run is bounded by the read deadline.
+type History struct{ d config }
 
 // NewHistory returns the adapter.
-func NewHistory() *History { return &History{} }
+func NewHistory(opts ...Option) *History { return &History{d: newConfig(opts)} }
 
 const (
 	defaultHistory = 300
@@ -34,38 +38,32 @@ const (
 // Log lists commits children-first (--topo-order), so a graph can be laid out
 // row by row. Decorations are read fully qualified to tell branches, remote
 // branches and tags apart.
-func (History) Log(ctx context.Context, repoRoot string, q ports.HistoryQuery) ([]domain.Commit, error) {
+func (h History) Log(ctx context.Context, repoRoot string, q ports.HistoryQuery) ([]domain.Commit, error) {
 	limit := q.Limit
 	if limit <= 0 {
 		limit = defaultHistory
 	}
 	limit = min(limit, domain.MaxHistory)
 	args := []string{"log", "--topo-order", "--decorate=full", "--format=" + commitFormat, "-n", strconv.Itoa(limit)}
+	var out string
+	var err error
 	if len(q.Refs) > 0 {
-		// Only these refs; --end-of-options keeps a ref from reading as an option.
-		args = append(args, "--end-of-options")
-		resolved := 0
-		for _, ref := range q.Refs {
-			if gitOK(ctx, repoRoot, "rev-parse", "--verify", "--quiet", "--end-of-options", ref+"^{commit}") {
-				args = append(args, ref)
-				resolved++
-			}
-		}
-		if resolved == 0 {
-			return []domain.Commit{}, nil // none of them resolves
-		}
+		out, err = h.logRefs(ctx, repoRoot, args, q.Refs)
 	} else {
 		args = append(args, "--branches", "--tags")
 		if q.Remotes {
 			args = append(args, "--remotes")
 		}
 		// HEAD too, for a detached checkout; an empty repository has none.
-		if gitOK(ctx, repoRoot, "rev-parse", "--verify", "--quiet", "HEAD") {
+		hasHead, headErr := h.d.gitOK(ctx, repoRoot, "rev-parse", "--verify", "--quiet", "HEAD")
+		if headErr != nil {
+			return nil, headErr
+		}
+		if hasHead {
 			args = append(args, "HEAD")
 		}
+		out, err = h.d.gitOutput(ctx, repoRoot, append(args, "--")...)
 	}
-	args = append(args, "--")
-	out, err := gitOutput(ctx, repoRoot, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -84,13 +82,47 @@ func (History) Log(ctx context.Context, repoRoot string, q ports.HistoryQuery) (
 	return commits, nil
 }
 
+// logRefs runs the log args over refs only, leaving out those that do not
+// resolve; "" when none does. Refs that all resolve, the usual case, take one
+// git run; only a log that fails checks them one by one.
+func (h History) logRefs(ctx context.Context, repoRoot string, args, refs []string) (string, error) {
+	// --end-of-options keeps a ref from reading as an option. Each argument
+	// list is a copy of its own, sharing no array with the caller's or
+	// another run's.
+	args = slices.Concat(args, []string{"--end-of-options"})
+	out, err := h.d.gitOutput(ctx, repoRoot, slices.Concat(args, refs, []string{"--"})...)
+	if err == nil || timedOut(err) {
+		return out, err
+	}
+	resolved := 0
+	for _, ref := range refs {
+		ok, err := h.d.gitOK(ctx, repoRoot, "rev-parse", "--verify", "--quiet", "--end-of-options", ref+"^{commit}")
+		if err != nil {
+			return "", err
+		}
+		if ok {
+			args = append(args, ref)
+			resolved++
+		}
+	}
+	if resolved == 0 {
+		return "", nil // none of them resolves
+	}
+	return h.d.gitOutput(ctx, repoRoot, append(args, "--")...)
+}
+
 // Show reads one commit's full message and the files it changed, against
 // its first parent for a merge.
-func (History) Show(ctx context.Context, repoRoot, hash string) (*domain.CommitDetail, error) {
-	if !domain.ValidCommitHash(hash) || !gitOK(ctx, repoRoot, "cat-file", "-e", hash+"^{commit}") {
+func (h History) Show(ctx context.Context, repoRoot, hash string) (*domain.CommitDetail, error) {
+	if !domain.ValidCommitHash(hash) {
 		return nil, &domain.StructuredError{Code: "COMMIT_NOT_FOUND", Message: "commit " + hash + " not found in this repository"}
 	}
-	out, err := gitOutput(ctx, repoRoot, "show", "--no-patch", "--decorate=full", "--format="+strings.TrimSuffix(commitFormat, "%x1e")+"%x1f%b", hash, "--")
+	if ok, err := h.d.gitOK(ctx, repoRoot, "cat-file", "-e", hash+"^{commit}"); err != nil {
+		return nil, err
+	} else if !ok {
+		return nil, &domain.StructuredError{Code: "COMMIT_NOT_FOUND", Message: "commit " + hash + " not found in this repository"}
+	}
+	out, err := h.d.gitOutput(ctx, repoRoot, "show", "--no-patch", "--decorate=full", "--format="+strings.TrimSuffix(commitFormat, "%x1e")+"%x1f%b", hash, "--")
 	if err != nil {
 		return nil, err
 	}
@@ -102,7 +134,7 @@ func (History) Show(ctx context.Context, repoRoot, hash string) (*domain.CommitD
 	if err != nil {
 		return nil, err
 	}
-	stat, err := gitOutput(ctx, repoRoot, "show", "--numstat", "--format=", "--diff-merges=first-parent", hash, "--")
+	stat, err := h.d.gitOutput(ctx, repoRoot, "show", "--numstat", "--format=", "--diff-merges=first-parent", hash, "--")
 	if err != nil {
 		return nil, err
 	}
@@ -172,47 +204,92 @@ func numstat(s string) int {
 	return n
 }
 
-func gitOutput(ctx context.Context, dir string, args ...string) (string, error) {
-	cmd := gitCmd(ctx, dir, args...)
+// gitOutput is the output of git args in dir, under the read deadline.
+func (d config) gitOutput(ctx context.Context, dir string, args ...string) (string, error) {
+	ctx, cancel := context.WithTimeout(ctx, d.read())
+	defer cancel()
+	cmd := d.gitCmd(ctx, dir, args...)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	if err := cmd.Run(); err != nil {
+		if err := cut(ctx, args[0], err); timedOut(err) {
+			return "", err
+		}
 		return "", fmt.Errorf("git %s: %w: %s", args[0], err, strings.TrimSpace(stderr.String()))
 	}
 	return stdout.String(), nil
 }
 
-func gitOK(ctx context.Context, dir string, args ...string) bool {
-	cmd := gitCmd(ctx, dir, args...)
-	return cmd.Run() == nil
+// gitOK reports whether git args in dir succeeds, under the read deadline.
+// Only a run that ends with ctx (or the deadline) is an error: a git that
+// answers no is false.
+func (d config) gitOK(ctx context.Context, dir string, args ...string) (bool, error) {
+	ctx, cancel := context.WithTimeout(ctx, d.read())
+	defer cancel()
+	err := d.gitCmd(ctx, dir, args...).Run()
+	if err != nil && ctx.Err() != nil {
+		return false, cut(ctx, args[0], ctx.Err())
+	}
+	return err == nil, nil
 }
 
 // Status reads where a checkout is: HEAD, its branch, and every uncommitted
 // change (staged, unstaged, untracked) with its line counts against HEAD.
-func (History) Status(ctx context.Context, dir string) (*domain.WorktreeStatus, error) {
+// Within a unit of work that shares its reads (a page load), a checkout's
+// status is read once for all who ask, and must not be changed.
+func (h History) Status(ctx context.Context, dir string) (*domain.WorktreeStatus, error) {
+	return readshare.Do(ctx, "git status\x00"+dir, func() (*domain.WorktreeStatus, error) { return h.status(ctx, dir) })
+}
+
+func (h History) status(ctx context.Context, dir string) (*domain.WorktreeStatus, error) {
 	if _, err := os.Stat(dir); errors.Is(err, fs.ErrNotExist) {
 		return nil, &domain.StructuredError{Code: "WORKSPACE_MISSING", Message: "the worktree " + dir + " is no longer on disk"}
 	}
+	// The four reads are independent, so they run side by side: a page that
+	// shows a worktree waits for the slowest git run, not for their sum.
+	var head, branch, porcelain, stat gitResult
+	var wg sync.WaitGroup
+	for _, run := range []struct {
+		out  *gitResult
+		args []string
+	}{
+		{&head, []string{"rev-parse", "--verify", "--quiet", "HEAD"}},
+		{&branch, []string{"symbolic-ref", "--quiet", "--short", "HEAD"}},
+		{&porcelain, []string{"status", "--porcelain=v1", "-z", "--untracked-files=all"}},
+		{&stat, []string{"diff", "HEAD", "--numstat", "-z", "--"}},
+	} {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			run.out.text, run.out.err = h.d.gitOutput(ctx, dir, run.args...)
+		}()
+	}
+	wg.Wait()
+
 	st := &domain.WorktreeStatus{Changes: []domain.WorkingChange{}}
-	if out, err := gitOutput(ctx, dir, "rev-parse", "--verify", "--quiet", "HEAD"); err == nil {
-		st.Head = strings.TrimSpace(out)
+	// An empty repository has no HEAD and a detached one no branch: only a
+	// git that gave no answer in time fails the status.
+	if head.err == nil {
+		st.Head = strings.TrimSpace(head.text)
+	} else if timedOut(head.err) {
+		return nil, head.err
 	}
-	if out, err := gitOutput(ctx, dir, "symbolic-ref", "--quiet", "--short", "HEAD"); err == nil {
-		st.Branch = strings.TrimSpace(out)
+	if branch.err == nil {
+		st.Branch = strings.TrimSpace(branch.text)
+	} else if timedOut(branch.err) {
+		return nil, branch.err
 	}
-	porcelain, err := gitOutput(ctx, dir, "status", "--porcelain=v1", "-z", "--untracked-files=all")
-	if err != nil {
-		return nil, err
+	if porcelain.err != nil {
+		return nil, porcelain.err
 	}
 	counts := map[string][2]int{}
-	if st.Head != "" {
-		stat, err := gitOutput(ctx, dir, "diff", "HEAD", "--numstat", "-z", "--")
-		if err != nil {
-			return nil, err
+	if st.Head != "" { // with no HEAD there is nothing to diff against, and the diff failed
+		if stat.err != nil {
+			return nil, stat.err
 		}
-		counts = parseNumstatZ(stat)
+		counts = parseNumstatZ(stat.text)
 	}
-	entries := strings.Split(porcelain, "\x00")
+	entries := strings.Split(porcelain.text, "\x00")
 	for i := 0; i < len(entries); i++ {
 		e := entries[i]
 		if len(e) < 4 {
@@ -229,6 +306,12 @@ func (History) Status(ctx context.Context, dir string) (*domain.WorktreeStatus, 
 		st.Changes = append(st.Changes, ch)
 	}
 	return st, nil
+}
+
+// gitResult is one git run's output or error.
+type gitResult struct {
+	text string
+	err  error
 }
 
 // parseNumstatZ reads `git diff --numstat -z`: "added\tdeleted\tpath\0", or for
@@ -252,8 +335,8 @@ func parseNumstatZ(out string) map[string][2]int {
 }
 
 // Divergence counts commits on either side of base...branch.
-func (History) Divergence(ctx context.Context, dir, base, branch string) (int, int, error) {
-	out, err := gitOutput(ctx, dir, "rev-list", "--left-right", "--count", "--end-of-options", base+"..."+branch, "--")
+func (h History) Divergence(ctx context.Context, dir, base, branch string) (int, int, error) {
+	out, err := h.d.gitOutput(ctx, dir, "rev-list", "--left-right", "--count", "--end-of-options", base+"..."+branch, "--")
 	if err != nil {
 		return 0, 0, err
 	}

@@ -1,6 +1,7 @@
 package portstest
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -60,7 +61,7 @@ type StaticArchitecture struct {
 	Contexts  []*domain.BoundedContext
 }
 
-func (a StaticArchitecture) ListZones(projectID string) []*domain.Zone {
+func (a StaticArchitecture) ListZones(_ context.Context, projectID string) []*domain.Zone {
 	if projectID != a.ProjectID {
 		return nil
 	}

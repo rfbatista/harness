@@ -19,15 +19,15 @@ import (
 // Tickets is ports.TicketReader over the ticket table the links join.
 type Tickets struct{ Repo *sqlite.TicketRepository }
 
-func (t Tickets) GetTicket(_ context.Context, id string) (*domain.Ticket, error) {
-	if tk := t.Repo.Get(id); tk != nil {
+func (t Tickets) GetTicket(ctx context.Context, id string) (*domain.Ticket, error) {
+	if tk := t.Repo.Get(ctx, id); tk != nil {
 		return tk, nil
 	}
 	return nil, &domain.StructuredError{Code: "TICKET_NOT_FOUND", Message: "ticket not found"}
 }
 
-func (t Tickets) ListTickets(_ context.Context, projectID string) ([]*domain.Ticket, error) {
-	return t.Repo.ListByProject(projectID), nil
+func (t Tickets) ListTickets(ctx context.Context, projectID string) ([]*domain.Ticket, error) {
+	return t.Repo.ListByProject(ctx, projectID), nil
 }
 
 // New returns an artifacts service over an in-memory database holding tasks

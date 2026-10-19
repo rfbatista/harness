@@ -1,6 +1,7 @@
 package sqlite
 
 import (
+	"context"
 	"time"
 
 	"gorm.io/gorm"
@@ -188,6 +189,25 @@ func (r *ReviewRequestRepository) CountPending(taskID string) int {
 	return int(n)
 }
 
+// CountPendingByTask counts each task's pending review requests in one
+// query; a task with none is left out.
+func (r *ReviewRequestRepository) CountPendingByTask(ctx context.Context, taskIDs []string) map[string]int {
+	out := make(map[string]int, len(taskIDs))
+	if len(taskIDs) == 0 {
+		return out
+	}
+	var rows []struct {
+		TaskID string
+		N      int
+	}
+	r.db.WithContext(ctx).Model(&ReviewRequestModel{}).Select("task_id, COUNT(*) AS n").
+		Where("task_id IN ? AND state = ?", taskIDs, string(domain.ReviewPending)).Group("task_id").Scan(&rows)
+	for _, row := range rows {
+		out[row.TaskID] = row.N
+	}
+	return out
+}
+
 // StatusCheckRepository persists status-check loops in SQLite via GORM.
 type StatusCheckRepository struct{ db *gorm.DB }
 
@@ -207,6 +227,14 @@ func (r *StatusCheckRepository) Get(delegateSessionID string) *domain.StatusChec
 		return nil
 	}
 	return ms[0].ToDomain()
+}
+
+// ListByDelegates is the loops of the given delegates, in one query.
+func (r *StatusCheckRepository) ListByDelegates(ctx context.Context, delegateSessionIDs []string) []*domain.StatusCheck {
+	if len(delegateSessionIDs) == 0 {
+		return nil
+	}
+	return r.find(r.db.WithContext(ctx).Where("delegate_session_id IN ?", delegateSessionIDs).Order("delegate_session_id ASC"))
 }
 
 func (r *StatusCheckRepository) ListByTask(taskID string) []*domain.StatusCheck {

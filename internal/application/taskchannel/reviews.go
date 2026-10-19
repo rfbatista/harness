@@ -84,7 +84,7 @@ func (s *Service) ListProjectReviewRequests(_ context.Context, projectID string,
 // RespondReview settles a pending review with the person's decision and
 // delivers it to the architect that asked; if that one is not running, to
 // the task's current architect.
-func (s *Service) RespondReview(_ context.Context, reviewID string, decision domain.ReviewState, note string) (*domain.ReviewRequest, bool, error) {
+func (s *Service) RespondReview(ctx context.Context, reviewID string, decision domain.ReviewState, note string) (*domain.ReviewRequest, bool, error) {
 	if decision != domain.ReviewApproved && decision != domain.ReviewChangesRequested {
 		return nil, false, invalid("decision must be approved or changes_requested")
 	}
@@ -106,9 +106,11 @@ func (s *Service) RespondReview(_ context.Context, reviewID string, decision dom
 	}
 	s.emitReview(r)
 
+	// The response is stored: it reaches the architect even if the request
+	// ends now.
 	to := s.sessions.Get(r.ArchitectSessionID)
 	if to == nil || to.Status.IsTerminal() {
-		to = domain.TaskArchitect(s.taskSessions(r.TaskID))
+		to = domain.TaskArchitect(s.taskSessions(context.WithoutCancel(ctx), r.TaskID))
 	}
 	if to == nil || to.Status.IsTerminal() || s.Delivery == nil {
 		return r, false, nil

@@ -108,7 +108,7 @@ func (s *Service) eachZone(f func(z *domain.Zone) error) error {
 		return err
 	}
 	for _, p := range projects {
-		for _, z := range s.zones.ListByProject(p.ID) {
+		for _, z := range s.zones.ListByProject(context.TODO(), p.ID) {
 			if err := f(z); err != nil {
 				return err
 			}

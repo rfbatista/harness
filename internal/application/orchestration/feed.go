@@ -23,8 +23,30 @@ var quietEvents = map[string]bool{
 
 // feed fans a project's changes (sessions and tickets) out to its followers.
 type feed struct {
-	mu   sync.Mutex
-	subs map[string]map[chan ports.SessionChange]struct{} // by project ID
+	mu       sync.Mutex
+	subs     map[string]map[chan ports.SessionChange]struct{} // by project ID
+	observer ports.FeedFollowersObserver                      // nil: nobody asked
+}
+
+// ObserveFeedFollowers tells o how many follow each project's feed every time
+// that changes, starting with the projects followed now.
+func (s *Service) ObserveFeedFollowers(o ports.FeedFollowersObserver) {
+	s.feed.mu.Lock()
+	defer s.feed.mu.Unlock()
+	s.feed.observer = o
+	for pid, subs := range s.feed.subs {
+		if len(subs) > 0 {
+			o.ProjectFollowers(pid, len(subs))
+		}
+	}
+}
+
+// followersChanged reports projectID's followers to the observer. Called with
+// mu held, so the reports come in the order the changes happened.
+func (f *feed) followersChanged(projectID string) {
+	if f.observer != nil {
+		f.observer.ProjectFollowers(projectID, len(f.subs[projectID]))
+	}
 }
 
 // FollowProject follows projectID's sessions and tickets until ctx ends.
@@ -41,6 +63,7 @@ func (s *Service) FollowProject(ctx context.Context, projectID string) (<-chan p
 		s.feed.subs[projectID] = map[chan ports.SessionChange]struct{}{}
 	}
 	s.feed.subs[projectID][c] = struct{}{}
+	s.feed.followersChanged(projectID)
 	s.feed.mu.Unlock()
 
 	go func() {
@@ -57,6 +80,7 @@ func (f *feed) drop(projectID string, c chan ports.SessionChange) {
 	if _, ok := f.subs[projectID][c]; ok {
 		delete(f.subs[projectID], c)
 		close(c)
+		f.followersChanged(projectID)
 	}
 }
 
@@ -66,13 +90,18 @@ func (f *feed) send(change ports.SessionChange) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	pid := change.ProjectID()
+	dropped := false
 	for c := range f.subs[pid] {
 		select {
 		case c <- change:
 		default:
 			delete(f.subs[pid], c)
 			close(c)
+			dropped = true
 		}
+	}
+	if dropped {
+		f.followersChanged(pid)
 	}
 }
 
@@ -83,7 +112,7 @@ func (s *Service) notify(sessionID, eventType string) {
 		return
 	}
 	if sess := s.sessions.Get(sessionID); sess != nil {
-		s.feed.send(ports.SessionChange{Session: s.withResumability(sess)})
+		s.feed.send(ports.SessionChange{Session: s.withResumability(context.Background(), sess)})
 	}
 }
 

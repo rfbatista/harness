@@ -115,7 +115,7 @@ func (s *Service) deliverTaskUpdate(u taskUpdate) {
 	// One wait for the shells per update, shared by its sessions, so the
 	// courier is held at most shellPathWait whatever their number.
 	deadline := time.Now().Add(shellPathWait)
-	for _, sess := range s.sessions.List(ports.SessionFilter{TicketID: u.ticketID}) {
+	for _, sess := range s.sessions.List(context.Background(), ports.SessionFilter{TicketID: u.ticketID}) {
 		if sess.TicketID != u.ticketID || sess.Status.IsTerminal() {
 			continue
 		}

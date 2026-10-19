@@ -125,13 +125,13 @@ var (
 )
 
 // ListProjects returns all projects.
-func (s *Service) ListProjects(_ context.Context) ([]*domain.Project, error) {
-	return s.projects.List(), nil
+func (s *Service) ListProjects(ctx context.Context) ([]*domain.Project, error) {
+	return s.projects.List(ctx), nil
 }
 
 // GetProject returns one project by id, or PROJECT_NOT_FOUND.
-func (s *Service) GetProject(_ context.Context, projectID string) (*domain.Project, error) {
-	p := s.projects.Get(projectID)
+func (s *Service) GetProject(ctx context.Context, projectID string) (*domain.Project, error) {
+	p := s.projects.Get(ctx, projectID)
 	if p == nil {
 		return nil, errProjectNotFound
 	}
@@ -162,13 +162,13 @@ func (s *Service) CreateProject(_ context.Context, name, rootDir string) (*domai
 // value. The create rules apply only to a field that changes, so a project
 // stored before them (a colliding name, a root that is gone) can still have
 // its other field edited.
-func (s *Service) UpdateProject(_ context.Context, projectID, name, rootDir string) (*domain.Project, error) {
+func (s *Service) UpdateProject(ctx context.Context, projectID, name, rootDir string) (*domain.Project, error) {
 	if projectID == "" {
 		return nil, errProjectIDMissing
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	cur := s.projects.Get(projectID)
+	cur := s.projects.Get(ctx, projectID)
 	if cur == nil {
 		return nil, errProjectNotFound
 	}
@@ -195,7 +195,7 @@ func (s *Service) UpdateProject(_ context.Context, projectID, name, rootDir stri
 // nameFree is PROJECT_NAME_TAKEN when a project other than exceptID already
 // has name.
 func (s *Service) nameFree(name, exceptID string) error {
-	for _, p := range s.projects.List() {
+	for _, p := range s.projects.List(context.TODO()) {
 		if p.ID != exceptID && domain.SameProjectName(p.Name, name) {
 			return &domain.StructuredError{Code: "PROJECT_NAME_TAKEN", Message: "another project is already called " + p.Name}
 		}
@@ -239,7 +239,7 @@ func (s *Service) DeleteProject(ctx context.Context, projectID string) error {
 func (s *Service) deleteProject(ctx context.Context, projectID string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	p := s.projects.Get(projectID)
+	p := s.projects.Get(ctx, projectID)
 	if p == nil {
 		return errProjectNotFound
 	}
@@ -247,7 +247,8 @@ func (s *Service) deleteProject(ctx context.Context, projectID string) error {
 		return err
 	}
 	if s.repositories != nil {
-		for _, r := range s.repositories.ListByProject(projectID) {
+		// A read cut short here would leave the repositories' config behind.
+		for _, r := range s.repositories.ListByProject(context.WithoutCancel(ctx), projectID) {
 			if err := s.deleteRepositoryConfig(r.ID); err != nil {
 				return err
 			}
@@ -328,7 +329,7 @@ func (s *Service) ListProjectSummaries(ctx context.Context) ([]ports.ProjectSumm
 			return nil, err
 		}
 	}
-	list := s.projects.List()
+	list := s.projects.List(ctx)
 	out := make([]ports.ProjectSummary, 0, len(list))
 	for _, p := range list {
 		t, se := tasks[p.ID], sessions[p.ID]
@@ -390,18 +391,18 @@ func (s *Service) announced(p *domain.Project, err error) (*domain.Project, erro
 var errNoRepositories = &domain.StructuredError{Code: "INTERNAL", Message: "repository store not configured"}
 
 // ListRepositories returns all git repositories for the given project.
-func (s *Service) ListRepositories(_ context.Context, projectID string) ([]*domain.Repository, error) {
+func (s *Service) ListRepositories(ctx context.Context, projectID string) ([]*domain.Repository, error) {
 	if s.repositories == nil {
 		return nil, nil
 	}
-	return s.repositories.ListByProject(projectID), nil
+	return s.repositories.ListByProject(ctx, projectID), nil
 }
 
 // GetRepository returns one repository by id, or REPOSITORY_NOT_FOUND.
-func (s *Service) GetRepository(_ context.Context, id string) (*domain.Repository, error) {
+func (s *Service) GetRepository(ctx context.Context, id string) (*domain.Repository, error) {
 	var r *domain.Repository
 	if s.repositories != nil {
-		r = s.repositories.Get(id)
+		r = s.repositories.Get(ctx, id)
 	}
 	if r == nil {
 		return nil, &domain.StructuredError{Code: "REPOSITORY_NOT_FOUND", Message: "repository not found"}
@@ -414,7 +415,7 @@ func (s *Service) CreateRepository(ctx context.Context, projectID, name, descrip
 	if s.repositories == nil {
 		return nil, errNoRepositories
 	}
-	if s.projects.Get(projectID) == nil {
+	if s.projects.Get(ctx, projectID) == nil {
 		return nil, errProjectNotFound
 	}
 	return s.saved(ctx)(s.repositories.Create(projectID, name, description, url, rootDir))
@@ -443,7 +444,9 @@ func (s *Service) DeleteRepository(ctx context.Context, id string) error {
 	if s.repositories == nil {
 		return errNoRepositories
 	}
-	r := s.repositories.Get(id)
+	// The repository is deleted whatever happens to the request, so what it
+	// announces is read to the end too.
+	r := s.repositories.Get(context.WithoutCancel(ctx), id)
 	if err := s.repositories.Delete(id); err != nil {
 		return err
 	}
@@ -478,7 +481,7 @@ func (s *Service) runCommandRepository(repositoryID string) error {
 	if s.runCommands == nil || s.repositories == nil {
 		return &domain.StructuredError{Code: "INTERNAL", Message: "run command store not configured"}
 	}
-	if s.repositories.Get(repositoryID) == nil {
+	if s.repositories.Get(context.TODO(), repositoryID) == nil {
 		return &domain.StructuredError{Code: "REPOSITORY_NOT_FOUND", Message: "repository not found"}
 	}
 	return nil
@@ -521,7 +524,7 @@ func (s *Service) envRepository(repositoryID string) (*domain.Repository, error)
 	if s.envFiles == nil || s.repositories == nil {
 		return nil, errNoEnvFiles
 	}
-	r := s.repositories.Get(repositoryID)
+	r := s.repositories.Get(context.TODO(), repositoryID)
 	if r == nil {
 		return nil, &domain.StructuredError{Code: "REPOSITORY_NOT_FOUND", Message: "repository not found"}
 	}

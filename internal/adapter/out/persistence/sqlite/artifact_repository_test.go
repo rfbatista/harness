@@ -1,6 +1,7 @@
 package sqlite
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -59,7 +60,7 @@ func TestArtifactRepo_UpdateAndListOrder(t *testing.T) {
 	time.Sleep(2 * time.Millisecond)
 	second, _ := r.Create(&domain.Artifact{SessionID: "s2", TicketID: "tk1", Kind: domain.ArtifactImage, Title: "B", Path: "b.png", Revision: 1})
 
-	list := r.List(ports.ArtifactFilter{TicketID: "tk1"})
+	list := r.List(context.Background(), ports.ArtifactFilter{TicketID: "tk1"})
 	if len(list) != 2 || list[0].ID != second.ID {
 		t.Fatalf("newest first expected, got %+v", list)
 	}
@@ -72,10 +73,10 @@ func TestArtifactRepo_UpdateAndListOrder(t *testing.T) {
 	if got.Title != "A2" || got.Note != "tweaked" || got.Revision != 2 || got.SizeBytes != 99 {
 		t.Fatalf("update lost fields: %+v", got)
 	}
-	if list = r.List(ports.ArtifactFilter{TicketID: "tk1"}); list[0].ID != first.ID {
+	if list = r.List(context.Background(), ports.ArtifactFilter{TicketID: "tk1"}); list[0].ID != first.ID {
 		t.Fatalf("updated artifact must list first, got %+v", list)
 	}
-	if list = r.List(ports.ArtifactFilter{SessionID: "s2"}); len(list) != 1 || list[0].ID != second.ID {
+	if list = r.List(context.Background(), ports.ArtifactFilter{SessionID: "s2"}); len(list) != 1 || list[0].ID != second.ID {
 		t.Fatalf("session filter = %+v", list)
 	}
 }
@@ -100,10 +101,10 @@ func TestArtifactRepo_DeleteAndDeleteTaskScopedBySession(t *testing.T) {
 	if len(ids) != 1 || ids[0] != b.ID {
 		t.Fatalf("deleted ids = %v, want [%s]", ids, b.ID)
 	}
-	if left := r.List(ports.ArtifactFilter{SessionID: "s1"}); len(left) != 1 || left[0].ID != kept.ID {
+	if left := r.List(context.Background(), ports.ArtifactFilter{SessionID: "s1"}); len(left) != 1 || left[0].ID != kept.ID {
 		t.Fatalf("s1 should keep only its project artifact, has %+v", left)
 	}
-	if left := r.List(ports.ArtifactFilter{SessionID: "s2"}); len(left) != 1 {
+	if left := r.List(context.Background(), ports.ArtifactFilter{SessionID: "s2"}); len(left) != 1 {
 		t.Fatalf("s2 lost its artifact: %+v", left)
 	}
 }
@@ -129,16 +130,16 @@ func TestArtifactRepo_ScopeDefaultsAndFilters(t *testing.T) {
 	if got := r.Get(proj.ID); got.Scope != domain.ArtifactScopeProject || !got.Snapshot {
 		t.Fatalf("project artifact = %+v", got)
 	}
-	if got := r.List(ports.ArtifactFilter{ProjectID: "p1"}); len(got) != 3 {
+	if got := r.List(context.Background(), ports.ArtifactFilter{ProjectID: "p1"}); len(got) != 3 {
 		t.Fatalf("project filter = %d artifacts", len(got))
 	}
-	if got := r.List(ports.ArtifactFilter{ProjectID: "p1", Scope: domain.ArtifactScopeProject}); len(got) != 1 || got[0].ID != proj.ID {
+	if got := r.List(context.Background(), ports.ArtifactFilter{ProjectID: "p1", Scope: domain.ArtifactScopeProject}); len(got) != 1 || got[0].ID != proj.ID {
 		t.Fatalf("project scope = %+v", got)
 	}
-	if got := r.List(ports.ArtifactFilter{TicketID: "tk1", Scope: domain.ArtifactScopeTask}); len(got) != 2 {
+	if got := r.List(context.Background(), ports.ArtifactFilter{TicketID: "tk1", Scope: domain.ArtifactScopeTask}); len(got) != 2 {
 		t.Fatalf("task scope must count the legacy row, got %+v", got)
 	}
-	if got := r.List(ports.ArtifactFilter{TicketID: "tk1", Scope: domain.ArtifactScopeProject}); len(got) != 0 {
+	if got := r.List(context.Background(), ports.ArtifactFilter{TicketID: "tk1", Scope: domain.ArtifactScopeProject}); len(got) != 0 {
 		t.Fatalf("tk1 has no project artifacts, got %+v", got)
 	}
 }

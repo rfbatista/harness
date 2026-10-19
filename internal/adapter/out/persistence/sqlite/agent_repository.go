@@ -1,6 +1,7 @@
 package sqlite
 
 import (
+	"context"
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
 
@@ -33,9 +34,9 @@ func (r *AgentRepository) Get(id string) *domain.Agent {
 }
 
 // List returns all agents.
-func (r *AgentRepository) List() []*domain.Agent {
+func (r *AgentRepository) List(ctx context.Context) []*domain.Agent {
 	var models []AgentModel
-	if err := r.db.Find(&models).Error; err != nil {
+	if err := r.db.WithContext(ctx).Find(&models).Error; err != nil {
 		return nil
 	}
 	out := make([]*domain.Agent, 0, len(models))

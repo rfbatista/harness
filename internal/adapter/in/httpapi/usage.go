@@ -67,7 +67,7 @@ func (h *Handler) handleUsageEvents(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	return streamSSE(c, records, func(r any) any { return r })
+	return h.streamSSE(c, records)
 }
 
 func (h *Handler) followUsage(ctx context.Context, projectID string) (<-chan any, error) {

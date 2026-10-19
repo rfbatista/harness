@@ -29,19 +29,33 @@ func localEnv(extra ...string) []string {
 	return append(env, extra...)
 }
 
-// gitCmd is git args in dir ("" keeps the working directory) with localEnv.
-func gitCmd(ctx context.Context, dir string, args ...string) *exec.Cmd {
-	cmd := exec.CommandContext(ctx, "git", args...)
+// gitCmd is git args in dir ("" keeps the working directory) with localEnv,
+// killed when ctx ends. Its output pipes are let go waitDelay after the kill.
+func (d config) gitCmd(ctx context.Context, dir string, args ...string) *exec.Cmd {
+	cmd := exec.CommandContext(ctx, d.bin(), args...)
 	cmd.Dir = dir
 	cmd.Env = localEnv()
+	cmd.WaitDelay = waitDelay
 	return cmd
+}
+
+// startupOutput is the output of a run of git (see gitBin) made once while
+// the server starts, bounded by DefaultReadDeadline.
+func startupOutput(git string, args ...string) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), DefaultReadDeadline)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, gitBin(git), args...)
+	cmd.WaitDelay = waitDelay
+	out, err := cmd.Output()
+	return out, cut(ctx, args[0], err)
 }
 
 // MachineExcludesFile is the machine's global core.excludesFile, with ~
 // expanded; "" when it has none. It is a path, not a credential: sessions
-// keep ignoring what the person ignores everywhere.
-func MachineExcludesFile() string {
-	out, err := exec.Command("git", "config", "--global", "--path", "--get", "core.excludesFile").Output()
+// keep ignoring what the person ignores everywhere. git is the binary to ask
+// ("" runs "git" from PATH).
+func MachineExcludesFile(git string) string {
+	out, err := startupOutput(git, "config", "--global", "--path", "--get", "core.excludesFile")
 	if err != nil {
 		return ""
 	}
@@ -52,9 +66,10 @@ func MachineExcludesFile() string {
 // which the harness's credential isolation relies on.
 var minGit = [2]int{2, 32}
 
-// CheckVersion is an error when git is missing or older than 2.32.
-func CheckVersion() error {
-	out, err := exec.Command("git", "version").Output()
+// CheckVersion is an error when git ("" runs "git" from PATH) is missing or
+// older than 2.32.
+func CheckVersion(git string) error {
+	out, err := startupOutput(git, "version")
 	if err != nil {
 		return fmt.Errorf("git version: %w", err)
 	}

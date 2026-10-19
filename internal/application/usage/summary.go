@@ -14,7 +14,7 @@ const topN = 10
 
 // UsageSummary answers a project's usage over r: totals, tokens over time
 // split by model, and the top tasks and sessions by tokens.
-func (s *Service) UsageSummary(_ context.Context, projectID string, r ports.UsageRange) (*ports.UsageSummary, error) {
+func (s *Service) UsageSummary(ctx context.Context, projectID string, r ports.UsageRange) (*ports.UsageSummary, error) {
 	if r == "" {
 		r = ports.UsageToday
 	}
@@ -23,7 +23,7 @@ func (s *Service) UsageSummary(_ context.Context, projectID string, r ports.Usag
 		return nil, err
 	}
 	project := projectKey(projectID)
-	groups, err := s.repo.Groups(ports.UsageGroupFilter{ProjectID: project, Since: since, LongAbove: longPromptAbove})
+	groups, err := s.repo.Groups(ctx, ports.UsageGroupFilter{ProjectID: project, Since: since, LongAbove: longPromptAbove})
 	if err != nil {
 		return nil, err
 	}
@@ -50,7 +50,7 @@ func (s *Service) UsageSummary(_ context.Context, projectID string, r ports.Usag
 		sum.Series[i] = ports.UsageSeriesTokens{Start: p.Start, Model: p.Model, InputTokens: p.InputTokens, OutputTokens: p.OutputTokens,
 			CacheCreationInputTokens: p.CacheCreationInputTokens, CacheReadInputTokens: p.CacheReadInputTokens, TotalTokens: total(p.UsageSums)}
 	}
-	titles := s.titler()
+	titles := s.titler(ctx)
 	sum.TopTasks = []ports.UsageByTask{}
 	for _, id := range ranked(tasks) {
 		sum.TopTasks = append(sum.TopTasks, ports.UsageByTask{TaskID: id, TaskTitle: titles(id), Totals: tasks[id].totals()})
@@ -64,11 +64,11 @@ func (s *Service) UsageSummary(_ context.Context, projectID string, r ports.Usag
 }
 
 // UsageTotals answers one task's or one session's totals over all time.
-func (s *Service) UsageTotals(_ context.Context, q ports.UsageTotalsQuery) (*ports.UsageTotals, error) {
+func (s *Service) UsageTotals(ctx context.Context, q ports.UsageTotalsQuery) (*ports.UsageTotals, error) {
 	if (q.TaskID == "") == (q.SessionID == "") {
 		return nil, invalid("name exactly one of task_id and session_id")
 	}
-	groups, err := s.repo.Groups(ports.UsageGroupFilter{TaskID: q.TaskID, SessionID: q.SessionID, LongAbove: longPromptAbove})
+	groups, err := s.repo.Groups(ctx, ports.UsageGroupFilter{TaskID: q.TaskID, SessionID: q.SessionID, LongAbove: longPromptAbove})
 	if err != nil {
 		return nil, err
 	}
@@ -78,6 +78,38 @@ func (s *Service) UsageTotals(_ context.Context, q ports.UsageTotalsQuery) (*por
 	}
 	out := t.totals()
 	return &out, nil
+}
+
+// TaskUsageTotals answers a task's totals and each given session's over all
+// time, from one read of their records.
+func (s *Service) TaskUsageTotals(ctx context.Context, taskID string, sessionIDs []string) (*ports.UsageTotals, map[string]*ports.UsageTotals, error) {
+	if taskID == "" {
+		return nil, nil, invalid("name a task_id")
+	}
+	groups, err := s.repo.Groups(ctx, ports.UsageGroupFilter{TaskID: taskID, SessionIDs: sessionIDs, LongAbove: longPromptAbove})
+	if err != nil {
+		return nil, nil, err
+	}
+	var task totaller
+	bySession := make(map[string]*totaller, len(sessionIDs))
+	for _, id := range sessionIDs {
+		bySession[id] = &totaller{}
+	}
+	for _, g := range groups {
+		if g.TaskID == taskID {
+			task.add(g)
+		}
+		if t, ok := bySession[g.SessionID]; ok {
+			t.add(g)
+		}
+	}
+	taskTotals := task.totals()
+	sessions := make(map[string]*ports.UsageTotals, len(bySession))
+	for id, t := range bySession {
+		totals := t.totals()
+		sessions[id] = &totals
+	}
+	return &taskTotals, sessions, nil
 }
 
 // span is where a range starts, and the bucket its series uses.
@@ -96,7 +128,7 @@ func (s *Service) span(r ports.UsageRange) (time.Time, ports.UsageBucket, error)
 }
 
 // titler looks task titles up once each.
-func (s *Service) titler() func(id string) string {
+func (s *Service) titler(ctx context.Context) func(id string) string {
 	titles := map[string]string{}
 	return func(id string) string {
 		if id == "" {
@@ -104,7 +136,7 @@ func (s *Service) titler() func(id string) string {
 		}
 		title, ok := titles[id]
 		if !ok {
-			if t := s.readers.Tickets.Get(id); t != nil {
+			if t := s.readers.Tickets.Get(ctx, id); t != nil {
 				title = t.Title
 			}
 			titles[id] = title

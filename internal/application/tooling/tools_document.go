@@ -141,7 +141,7 @@ func DocumentTools(planningSvc ports.DocumentLibrary) []domain.Tool {
 				if ticketID == "" {
 					return nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "ticket_id is required"}
 				}
-				return map[string]any{"documents": planningSvc.ListTicketDocuments(ticketID)}, nil
+				return map[string]any{"documents": planningSvc.ListTicketDocuments(ctx, ticketID)}, nil
 			},
 		},
 	}

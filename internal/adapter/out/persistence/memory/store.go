@@ -1,6 +1,7 @@
 package memory
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"sync"
@@ -35,7 +36,7 @@ func (s *Store) Get(id string) *domain.Zone {
 }
 
 // ListByProject returns all zones for the given project.
-func (s *Store) ListByProject(projectID string) []*domain.Zone {
+func (s *Store) ListByProject(_ context.Context, projectID string) []*domain.Zone {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	out := make([]*domain.Zone, 0)

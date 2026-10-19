@@ -1,6 +1,7 @@
 package ports
 
 import (
+	"context"
 	"time"
 
 	"operators-mcp/internal/domain"
@@ -11,6 +12,9 @@ type SessionFilter struct {
 	ProjectID string
 	AgentID   string
 	TicketID  string
+	// TicketIDs matches the sessions of any of the listed tasks; empty
+	// matches all. It reads the sessions of many tasks in one query.
+	TicketIDs []string
 	// Statuses matches any of the listed statuses; empty matches all. It is a
 	// list because one UI state covers several backend ones — a session the
 	// user sees as "running" is `running`, `idle` or `thinking` underneath.
@@ -101,10 +105,10 @@ type SessionRepository interface {
 	// Get and List answer a failed read as not found and as no sessions.
 	// The session path reads through Find and Query instead, which report it.
 	Get(id string) *domain.Session
-	List(filter SessionFilter) []*domain.Session
+	List(ctx context.Context, filter SessionFilter) []*domain.Session
 	// Find reads a session: nil, nil when there is none.
-	Find(id string) (*domain.Session, error)
-	Query(filter SessionFilter) ([]*domain.Session, error)
+	Find(ctx context.Context, id string) (*domain.Session, error)
+	Query(ctx context.Context, filter SessionFilter) ([]*domain.Session, error)
 	// Delete removes the session and its event log.
 	Delete(id string) error
 	// ActivityByProject answers each project's live session count and newest

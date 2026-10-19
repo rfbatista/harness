@@ -1,6 +1,7 @@
 package sqlite
 
 import (
+	"context"
 	"slices"
 	"testing"
 	"time"
@@ -24,7 +25,7 @@ func TestTicketRepo_CRUD(t *testing.T) {
 	if tk.ID == "" || tk.Status != domain.TicketStatusBacklog || tk.CreatedAt.IsZero() {
 		t.Fatalf("bad create: %+v", tk)
 	}
-	if got := r.Get(tk.ID); got == nil || got.Title != "Fix login" {
+	if got := r.Get(context.Background(), tk.ID); got == nil || got.Title != "Fix login" {
 		t.Fatalf("Get failed: %+v", got)
 	}
 
@@ -36,17 +37,17 @@ func TestTicketRepo_CRUD(t *testing.T) {
 		t.Fatalf("bad update: %+v", upd)
 	}
 
-	if list := r.ListByProject("p1"); len(list) != 1 {
+	if list := r.ListByProject(context.Background(), "p1"); len(list) != 1 {
 		t.Fatalf("ListByProject want 1 got %d", len(list))
 	}
-	if list := r.ListByProject("other"); len(list) != 0 {
+	if list := r.ListByProject(context.Background(), "other"); len(list) != 0 {
 		t.Fatalf("ListByProject other want 0 got %d", len(list))
 	}
 
 	if err := r.Delete(tk.ID); err != nil {
 		t.Fatal(err)
 	}
-	if got := r.Get(tk.ID); got != nil {
+	if got := r.Get(context.Background(), tk.ID); got != nil {
 		t.Fatalf("expected nil after delete, got %+v", got)
 	}
 	if err := r.Delete("missing"); err == nil {
@@ -75,7 +76,7 @@ func TestDocumentRepo_CRUDAndLinks(t *testing.T) {
 	}
 
 	// A document exists standalone (no ticket) until linked.
-	if got := docs.ListByTicket(tk.ID); len(got) != 0 {
+	if got := docs.ListByTicket(context.Background(), tk.ID); len(got) != 0 {
 		t.Fatalf("expected 0 linked docs, got %d", len(got))
 	}
 
@@ -86,7 +87,7 @@ func TestDocumentRepo_CRUDAndLinks(t *testing.T) {
 	if err := docs.Link(tk.ID, d1.ID); err != nil {
 		t.Fatalf("second Link should be a no-op, got %v", err)
 	}
-	if got := docs.ListByTicket(tk.ID); len(got) != 1 || got[0].ID != d1.ID {
+	if got := docs.ListByTicket(context.Background(), tk.ID); len(got) != 1 || got[0].ID != d1.ID {
 		t.Fatalf("ListByTicket after link bad: %+v", got)
 	}
 
@@ -106,7 +107,7 @@ func TestDocumentRepo_CRUDAndLinks(t *testing.T) {
 	if err := docs.Unlink(tk2.ID, d1.ID); err != nil {
 		t.Fatal(err)
 	}
-	if got := docs.ListByTicket(tk2.ID); len(got) != 0 {
+	if got := docs.ListByTicket(context.Background(), tk2.ID); len(got) != 0 {
 		t.Fatalf("expected 0 after unlink, got %d", len(got))
 	}
 
@@ -117,14 +118,48 @@ func TestDocumentRepo_CRUDAndLinks(t *testing.T) {
 	if err := docs.Delete(d1.ID); err != nil {
 		t.Fatal(err)
 	}
-	if got := tickets.Get(tk2.ID); got == nil {
+	if got := tickets.Get(context.Background(), tk2.ID); got == nil {
 		t.Fatal("ticket should survive document deletion")
 	}
-	if got := docs.ListByTicket(tk2.ID); len(got) != 0 {
+	if got := docs.ListByTicket(context.Background(), tk2.ID); len(got) != 0 {
 		t.Fatalf("join rows should be gone after doc delete, got %d", len(got))
 	}
 	if err := docs.Delete("missing"); err == nil {
 		t.Fatal("expected error deleting missing document")
+	}
+}
+
+// The documents of many tickets come in one read, each document once however
+// many of the tickets it is linked to.
+func TestDocumentRepo_ListByTicketsListsEachLinkedDocumentOnce(t *testing.T) {
+	db, err := Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	tickets := NewTicketRepository(db)
+	docs := NewDocumentRepository(db)
+	a, _ := tickets.Create("p1", "A", "", domain.TicketStatusBacklog)
+	b, _ := tickets.Create("p1", "B", "", domain.TicketStatusBacklog)
+	c, _ := tickets.Create("p1", "C", "", domain.TicketStatusBacklog)
+	shared, _ := docs.Create("p1", "Spec", "# spec", domain.DocumentFormatMarkdown, domain.DocumentScopeTask)
+	own, _ := docs.Create("p1", "Plan", "# plan", domain.DocumentFormatMarkdown, domain.DocumentScopeTask)
+	other, _ := docs.Create("p1", "Notes", "# notes", domain.DocumentFormatMarkdown, domain.DocumentScopeTask)
+	for _, link := range [][2]string{{a.ID, shared.ID}, {b.ID, shared.ID}, {b.ID, own.ID}, {c.ID, other.ID}} {
+		if err := docs.Link(link[0], link[1]); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	var got []string
+	for _, d := range docs.ListByTickets(context.Background(), []string{a.ID, b.ID}) {
+		got = append(got, d.Title)
+	}
+	slices.Sort(got)
+	if want := []string{"Plan", "Spec"}; !slices.Equal(got, want) {
+		t.Errorf("ListByTickets(a, b) = %v, want %v", got, want)
+	}
+	if got := docs.ListByTickets(context.Background(), nil); len(got) != 0 {
+		t.Errorf("ListByTickets(nil) = %d documents, want none", len(got))
 	}
 }
 
@@ -251,7 +286,7 @@ func TestDocumentRepo_ScopePersistsFiltersAndMoves(t *testing.T) {
 	if moved.Scope != domain.DocumentScopeProject || !moved.UpdatedAt.After(plan.UpdatedAt) {
 		t.Fatalf("move: %+v (was %v)", moved, plan.UpdatedAt)
 	}
-	if got := docs.ListByTicket(t1.ID); len(got) != 1 || got[0].Scope != domain.DocumentScopeProject {
+	if got := docs.ListByTicket(context.Background(), t1.ID); len(got) != 1 || got[0].Scope != domain.DocumentScopeProject {
 		t.Fatalf("the task lost the moved document: %+v", got)
 	}
 	linked := docs.ListTicketIDsByDocument(plan.ID)

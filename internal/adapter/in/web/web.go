@@ -29,6 +29,7 @@ import (
 	"operators-mcp/internal/adapter/in/web/tokensavers"
 	"operators-mcp/internal/adapter/in/web/usage"
 	"operators-mcp/internal/domain"
+	"operators-mcp/internal/infra/readshare"
 	"operators-mcp/internal/ports"
 )
 
@@ -94,7 +95,7 @@ type Deps struct {
 // CodeWorkspaces is what the code pages read of the workspaces:
 // *workspaces.Service satisfies it.
 type CodeWorkspaces interface {
-	Get(id string) *domain.Workspace
+	GetMany(ctx context.Context, ids []string) []*domain.Workspace
 	ListBranches(repositoryID string) ([]domain.GitBranch, error)
 }
 
@@ -107,6 +108,14 @@ func NewHandler(deps Deps, assets *Assets, fallback http.Handler) http.Handler {
 	}
 	if fallback == nil {
 		fallback = http.NotFoundHandler()
+	}
+	// Every page and the layout around it share one read of the project's
+	// tickets and sessions per request (see pageLists).
+	if deps.Tasks != nil {
+		deps.Tasks = sharedTickets{deps.Tasks}
+	}
+	if deps.Sessions != nil {
+		deps.Sessions = sharedSessions{deps.Sessions}
 	}
 	s := &server{deps: deps, assets: assets}
 
@@ -211,7 +220,10 @@ type server struct {
 // page adapts a page handler: an error becomes the error page for its code.
 func (s *server) page(h shell.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		r = r.WithContext(shell.WithCollapsed(r.Context(), r)) // the rail's folded groups, for the layout
+		ctx := shell.WithCollapsed(r.Context(), r) // the rail's folded groups, for the layout
+		// One read of what the page, its layout and its parts read alike:
+		// the project's ticket and session lists, a worktree's status.
+		r = r.WithContext(readshare.With(ctx))
 		if err := h(w, r); err != nil {
 			s.renderError(w, r, err)
 		}
@@ -315,6 +327,11 @@ func (s *server) bareFrame(title string) shell.Frame {
 // the code, and what to do next. A *_NOT_FOUND is a 404; anything uncoded is
 // a 500 whose details stay in the log.
 func (s *server) renderError(w http.ResponseWriter, r *http.Request, err error) {
+	if r.Context().Err() != nil {
+		// The request ended: nobody reads the page, and the reads it cut
+		// short are not a server fault.
+		return
+	}
 	code := errs.Code(err)
 	status, message := http.StatusInternalServerError, "Something went wrong on the server."
 	switch {

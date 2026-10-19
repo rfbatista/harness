@@ -110,3 +110,98 @@ func TestParseDBSlowThreshold(t *testing.T) {
 		})
 	}
 }
+
+func TestParseProfiler(t *testing.T) {
+	for _, c := range []struct {
+		name    string
+		args    []string
+		env     map[string]string
+		wantOff bool
+	}{
+		{"on by default", nil, nil, false},
+		{"env off", nil, map[string]string{"PPROF": "false"}, true},
+		{"flag over env", []string{"--pprof=true"}, map[string]string{"PPROF": "false"}, false},
+		{"flag off", []string{"--pprof=false"}, nil, true},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			cfg, err := Parse(flag.NewFlagSet("test", flag.ContinueOnError), c.args, env(c.env))
+			if err != nil {
+				t.Fatalf("parse: %v", err)
+			}
+			if cfg.ProfilerOff != c.wantOff {
+				t.Errorf("ProfilerOff = %v, want %v", cfg.ProfilerOff, c.wantOff)
+			}
+		})
+	}
+}
+
+func TestParseSlowRequestThreshold(t *testing.T) {
+	for _, c := range []struct {
+		name string
+		args []string
+		env  map[string]string
+		want time.Duration
+	}{
+		{"default", nil, nil, 300 * time.Millisecond},
+		{"env", nil, map[string]string{"HTTP_SLOW_REQUEST_THRESHOLD": "1s"}, time.Second},
+		{"flag over env", []string{"--http.slow-request-threshold=150ms"}, map[string]string{"HTTP_SLOW_REQUEST_THRESHOLD": "1s"}, 150 * time.Millisecond},
+		{"unparseable env", nil, map[string]string{"HTTP_SLOW_REQUEST_THRESHOLD": "slow"}, 300 * time.Millisecond},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			cfg, err := Parse(flag.NewFlagSet("test", flag.ContinueOnError), c.args, env(c.env))
+			if err != nil {
+				t.Fatalf("parse: %v", err)
+			}
+			if cfg.SlowRequestThreshold != c.want {
+				t.Errorf("SlowRequestThreshold = %v, want %v", cfg.SlowRequestThreshold, c.want)
+			}
+		})
+	}
+}
+
+func TestParseGitDeadlines(t *testing.T) {
+	for _, c := range []struct {
+		name               string
+		args               []string
+		env                map[string]string
+		worktree, readOnly time.Duration
+	}{
+		{"default", nil, nil, 60 * time.Second, 10 * time.Second},
+		{"env", nil, map[string]string{"CODING_POOL_GIT_WORKTREE_DEADLINE": "2m", "CODING_POOL_GIT_READ_DEADLINE": "3s"}, 2 * time.Minute, 3 * time.Second},
+		{"flag over env", []string{"--git.worktree-deadline=90s", "--git.read-deadline=5s"}, map[string]string{"CODING_POOL_GIT_WORKTREE_DEADLINE": "2m", "CODING_POOL_GIT_READ_DEADLINE": "3s"}, 90 * time.Second, 5 * time.Second},
+		{"unparseable env", nil, map[string]string{"CODING_POOL_GIT_WORKTREE_DEADLINE": "long", "CODING_POOL_GIT_READ_DEADLINE": "short"}, 60 * time.Second, 10 * time.Second},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			cfg, err := Parse(flag.NewFlagSet("test", flag.ContinueOnError), c.args, env(c.env))
+			if err != nil {
+				t.Fatalf("parse: %v", err)
+			}
+			if cfg.GitWorktreeDeadline != c.worktree || cfg.GitReadDeadline != c.readOnly {
+				t.Errorf("git deadlines = %v, %v; want %v, %v", cfg.GitWorktreeDeadline, cfg.GitReadDeadline, c.worktree, c.readOnly)
+			}
+		})
+	}
+}
+
+func TestParseGitBin(t *testing.T) {
+	for _, c := range []struct {
+		name string
+		args []string
+		env  map[string]string
+		want string
+	}{
+		{"default resolves at startup", nil, nil, ""},
+		{"env", nil, map[string]string{"CODING_POOL_GIT_BIN": "/opt/git/bin/git"}, "/opt/git/bin/git"},
+		{"flag over env", []string{"--git.bin=/usr/local/bin/git"}, map[string]string{"CODING_POOL_GIT_BIN": "/opt/git/bin/git"}, "/usr/local/bin/git"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			cfg, err := Parse(flag.NewFlagSet("test", flag.ContinueOnError), c.args, env(c.env))
+			if err != nil {
+				t.Fatalf("parse: %v", err)
+			}
+			if cfg.GitBin != c.want {
+				t.Errorf("GitBin = %q, want %q", cfg.GitBin, c.want)
+			}
+		})
+	}
+}

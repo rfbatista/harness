@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 
+	"operators-mcp/internal/adapter/in/httpapi"
+	"operators-mcp/internal/adapter/out/gitcli"
 	"operators-mcp/internal/adapter/out/persistence/sqlite"
 	"operators-mcp/internal/app"
 )
@@ -27,6 +29,10 @@ func Parse(fs *flag.FlagSet, args []string, getenv Getenv) (app.Config, error) {
 	mcpAddr := fs.String("mcp.addr", envOr(getenv, "MCP_ADDR", ":8081"), "MCP server listen address (IDE connects here)")
 	dbPath := fs.String("db", envOr(getenv, "DB_PATH", "data.db"), "SQLite database path (e.g. data.db or :memory:)")
 	dbSlowThreshold := fs.Duration("db.slow-threshold", envDuration(getenv, "DB_SLOW_THRESHOLD", sqlite.DefaultSlowThreshold), "log every database call slower than this as a slow database call")
+	slowRequestThreshold := fs.Duration("http.slow-request-threshold", envDuration(getenv, "HTTP_SLOW_REQUEST_THRESHOLD", httpapi.DefaultSlowRequestThreshold), "log every HTTP request slower than this as a slow request, with its query count")
+	gitWorktreeDeadline := fs.Duration("git.worktree-deadline", envDuration(getenv, "CODING_POOL_GIT_WORKTREE_DEADLINE", gitcli.DefaultWorktreeDeadline), "how long one git worktree add, remove or prune may run before it is killed and its operation fails")
+	gitReadDeadline := fs.Duration("git.read-deadline", envDuration(getenv, "CODING_POOL_GIT_READ_DEADLINE", gitcli.DefaultReadDeadline), "how long one read-only git run may take before it is killed and its operation fails")
+	gitBin := fs.String("git.bin", envOr(getenv, "CODING_POOL_GIT_BIN", ""), "the git binary to run; empty uses the first git on PATH, or the real git behind macOS's /usr/bin/git shim")
 	devMode := fs.Bool("dev", envBool(getenv, "DEV_MODE", false), "proxy ui://designer to the Vite dev server (run 'make web-dev' separately)")
 	claudeBin := fs.String("claude.bin", envOr(getenv, "CLAUDE_BIN", "claude"), "path to the claude CLI binary")
 	apiToken := fs.String("api.token", envOr(getenv, "CODING_POOL_TOKEN", ""), "bearer token required on /api (but /api/health); empty leaves the API open")
@@ -36,6 +42,7 @@ func Parse(fs *flag.FlagSet, args []string, getenv Getenv) (app.Config, error) {
 	approvalTimeout := fs.Duration("approval.timeout", envDuration(getenv, "APPROVAL_TIMEOUT", 24*time.Hour), "how long a session waits for the user to answer an approval or question")
 	dotfilesAgentsDir := fs.String("dotfiles.agents-dir", envOr(getenv, "DOTFILES_AGENTS_DIR", ""), "path to a dotfiles-style agents/ directory (agents.json + skills/) to read Agent/Skill/MCPServer data from live, alongside the database")
 	tokenSaverReleaseBase := fs.String("token-savers.release-base", envOr(getenv, "TOKEN_SAVER_RELEASE_BASE", ""), "where token savers' pinned releases are downloaded from instead of https://github.com (<base>/<owner>/<repo>/releases/download/<tag>/<asset>)")
+	profiler := fs.Bool("pprof", envBool(getenv, "PPROF", true), "serve Go's profiler, goroutine dump included, under /debug/pprof/ to loopback peers only")
 
 	if err := fs.Parse(args); err != nil {
 		return app.Config{}, err
@@ -47,21 +54,26 @@ func Parse(fs *flag.FlagSet, args []string, getenv Getenv) (app.Config, error) {
 	}
 
 	return app.Config{
-		HTTPAddr:          *httpAddr,
-		MCPAddr:           *mcpAddr,
-		DBPath:            *dbPath,
-		DBSlowThreshold:   *dbSlowThreshold,
-		DevMode:           *devMode,
-		Root:              root,
-		ClaudeBin:         *claudeBin,
-		SessionShell:      *sessionShell,
-		APIToken:          *apiToken,
-		ClaudeLogStdout:   *claudeLogStdout,
-		ClaudeTextModel:   *claudeTextModel,
-		ApprovalTimeout:   *approvalTimeout,
-		DotfilesAgentsDir: *dotfilesAgentsDir,
+		HTTPAddr:            *httpAddr,
+		MCPAddr:             *mcpAddr,
+		DBPath:              *dbPath,
+		DBSlowThreshold:     *dbSlowThreshold,
+		GitWorktreeDeadline: *gitWorktreeDeadline,
+		GitReadDeadline:     *gitReadDeadline,
+		GitBin:              *gitBin,
+		DevMode:             *devMode,
+		Root:                root,
+		ClaudeBin:           *claudeBin,
+		SessionShell:        *sessionShell,
+		APIToken:            *apiToken,
+		ClaudeLogStdout:     *claudeLogStdout,
+		ClaudeTextModel:     *claudeTextModel,
+		ApprovalTimeout:     *approvalTimeout,
+		DotfilesAgentsDir:   *dotfilesAgentsDir,
 
 		TokenSaverReleaseBase: *tokenSaverReleaseBase,
+		ProfilerOff:           !*profiler,
+		SlowRequestThreshold:  *slowRequestThreshold,
 	}, nil
 }
 

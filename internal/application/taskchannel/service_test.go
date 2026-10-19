@@ -410,8 +410,8 @@ func TestDecorateSessions(t *testing.T) {
 	f.start(t, "dev", "arch", "", nil)
 	f.start(t, "sub", "dev", "", nil)
 	f.start(t, "peer", "", "", nil)
-	all := f.sessions.List(ports.SessionFilter{TicketID: f.ticket})
-	f.svc.DecorateSessions(all...)
+	all := f.sessions.List(ctx, ports.SessionFilter{TicketID: f.ticket})
+	f.svc.DecorateSessions(context.Background(), all...)
 	want := map[string]domain.SessionRole{"arch": domain.RoleArchitect, "dev": domain.RoleDelegate, "sub": domain.RoleDelegate, "peer": domain.RolePeer}
 	for _, s := range all {
 		if s.Role != want[s.ID] || s.ArchitectSessionID == nil || *s.ArchitectSessionID != "arch" {

@@ -70,7 +70,7 @@ func (s *Service) Subscribe(sub ports.EventSubscriber) {
 		unlockSession := s.lockSession(ev.SessionID)
 		had := map[string]*domain.Artifact{}
 		var keys []string
-		for _, a := range s.artifacts.List(ports.ArtifactFilter{SessionID: ev.SessionID}) {
+		for _, a := range s.artifacts.List(context.Background(), ports.ArtifactFilter{SessionID: ev.SessionID}) {
 			had[a.ID] = a
 			keys = append(keys, artifactKey(a.ID))
 		}
@@ -350,11 +350,11 @@ func (s *Service) takeSnapshot(a *domain.Artifact) error {
 	return nil
 }
 
-func (s *Service) ListProjectArtifacts(_ context.Context, projectID string) ([]*domain.Artifact, error) {
+func (s *Service) ListProjectArtifacts(ctx context.Context, projectID string) ([]*domain.Artifact, error) {
 	if projectID == "" {
 		return nil, invalid("project id is required")
 	}
-	return s.artifacts.List(ports.ArtifactFilter{ProjectID: projectID, Scope: domain.ArtifactScopeProject}), nil
+	return s.artifacts.List(ctx, ports.ArtifactFilter{ProjectID: projectID, Scope: domain.ArtifactScopeProject}), nil
 }
 
 func (s *Service) snapshotRoot(id string, revision int) string {
@@ -379,11 +379,11 @@ func (s *Service) dropSnapshot(id string) {
 	os.RemoveAll(filepath.Join(s.StoreDir, id))
 }
 
-func (s *Service) ListTaskArtifacts(_ context.Context, ticketID string) ([]*domain.Artifact, error) {
+func (s *Service) ListTaskArtifacts(ctx context.Context, ticketID string) ([]*domain.Artifact, error) {
 	if ticketID == "" {
 		return nil, invalid("ticket id is required")
 	}
-	return s.artifacts.List(ports.ArtifactFilter{TicketID: ticketID}), nil
+	return s.artifacts.List(ctx, ports.ArtifactFilter{TicketID: ticketID}), nil
 }
 
 func (s *Service) GetArtifact(_ context.Context, id string) (*domain.Artifact, error) {
@@ -394,14 +394,14 @@ func (s *Service) GetArtifact(_ context.Context, id string) (*domain.Artifact, e
 	return a, nil
 }
 
-func (s *Service) ListArtifacts(_ context.Context, f ports.ArtifactFilter) ([]*domain.Artifact, error) {
+func (s *Service) ListArtifacts(ctx context.Context, f ports.ArtifactFilter) ([]*domain.Artifact, error) {
 	if f.SessionID == "" && f.TicketID == "" && f.ProjectID == "" {
 		return nil, invalid("session_id, ticket_id or project_id is required")
 	}
 	if f.Scope != "" && !f.Scope.Valid() {
 		return nil, invalid("scope must be task or project")
 	}
-	return s.artifacts.List(f), nil
+	return s.artifacts.List(ctx, f), nil
 }
 
 // DeleteArtifact is a person removing an artifact, in either scope. A

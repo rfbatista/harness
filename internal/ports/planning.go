@@ -9,8 +9,8 @@ import (
 // TicketRepository is the outbound port for persisting and retrieving tickets.
 // Tickets are scoped to a project.
 type TicketRepository interface {
-	Get(id string) *domain.Ticket
-	ListByProject(projectID string) []*domain.Ticket
+	Get(ctx context.Context, id string) *domain.Ticket
+	ListByProject(ctx context.Context, projectID string) []*domain.Ticket
 	Create(projectID, title, description string, status domain.TicketStatus) (*domain.Ticket, error)
 	Update(id, title, description string, status domain.TicketStatus) (*domain.Ticket, error)
 	Delete(id string) error
@@ -28,7 +28,9 @@ type TicketRepository interface {
 type DocumentRepository interface {
 	Get(id string) *domain.Document
 	ListByProject(projectID string, scope domain.DocumentScope) []*domain.Document
-	ListByTicket(ticketID string) []*domain.Document
+	ListByTicket(ctx context.Context, ticketID string) []*domain.Document
+	// ListByTickets lists the documents linked to any of ticketIDs, each once.
+	ListByTickets(ctx context.Context, ticketIDs []string) []*domain.Document
 	ListTicketIDsByDocument(documentID string) []string
 	Create(projectID, title, content string, format domain.DocumentFormat, scope domain.DocumentScope) (*domain.Document, error)
 	Update(id, title, content string, format domain.DocumentFormat) (*domain.Document, error)
@@ -56,15 +58,16 @@ type TicketReader interface {
 // agents in task/docs of their virtual shell, or linked by a person): what the
 // task's documents page needs. Planning implements it.
 type TicketDocumentReader interface {
-	ListTicketDocuments(ticketID string) []*domain.Document
+	ListTicketDocuments(ctx context.Context, ticketID string) []*domain.Document
 }
 
 // DocumentReader reads what the documents pages show: a task's linked
-// documents, a project's documents by scope (the project library lists
-// project-scoped ones), and the tasks a document is linked to. Planning
-// implements it.
+// documents, the documents of several tasks at once (the reviews inbox), a
+// project's documents by scope (the project library lists project-scoped
+// ones), and the tasks a document is linked to. Planning implements it.
 type DocumentReader interface {
 	TicketDocumentReader
+	ListTasksDocuments(ctx context.Context, ticketIDs []string) []*domain.Document
 	ListDocuments(projectID string, scope domain.DocumentScope) []*domain.Document
 	ListDocumentTickets(documentID string) []*domain.Ticket
 }
@@ -124,7 +127,7 @@ type DocumentLibrary interface {
 	DeleteDocument(id string) error
 	LinkDocument(ticketID, documentID string) error
 	UnlinkDocument(ticketID, documentID string) error
-	ListTicketDocuments(ticketID string) []*domain.Document
+	ListTicketDocuments(ctx context.Context, ticketID string) []*domain.Document
 	ListDocumentTickets(documentID string) []*domain.Ticket
 }
 

@@ -19,7 +19,7 @@ func ZoneTools(bpSvc ports.ZoneCatalog) []domain.Tool {
 				if projectID == "" {
 					return nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "project_id is required"}
 				}
-				zones := bpSvc.ListZones(projectID)
+				zones := bpSvc.ListZones(ctx, projectID)
 				return map[string]any{"zones": zones}, nil
 			},
 		},

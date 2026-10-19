@@ -121,7 +121,7 @@ func TestLinkDocument_CrossProjectRejected(t *testing.T) {
 	if err := svc.LinkDocument(tk.ID, doc.ID); err != nil {
 		t.Fatalf("same-project link should succeed: %v", err)
 	}
-	if got := svc.ListTicketDocuments(tk.ID); len(got) != 1 {
+	if got := svc.ListTicketDocuments(context.Background(), tk.ID); len(got) != 1 {
 		t.Fatalf("want 1 linked doc, got %d", len(got))
 	}
 
@@ -435,7 +435,7 @@ func TestSetDocumentScope_MovesKeepsLinksAndIsIdempotent(t *testing.T) {
 	if err != nil || moved.Scope != domain.DocumentScopeProject || !moved.UpdatedAt.After(d.UpdatedAt) {
 		t.Fatalf("move: %+v, %v", moved, err)
 	}
-	if got := svc.ListTicketDocuments(tk.ID); len(got) != 1 || got[0].Scope != domain.DocumentScopeProject {
+	if got := svc.ListTicketDocuments(ctx, tk.ID); len(got) != 1 || got[0].Scope != domain.DocumentScopeProject {
 		t.Fatalf("the move unlinked the document from its task: %+v", got)
 	}
 	if got := svc.ListDocumentTickets(d.ID); len(got) != 1 || got[0].ID != tk.ID || got[0].Title != "Ship it" {
@@ -472,7 +472,7 @@ func TestSetDocumentScope_MovesKeepsLinksAndIsIdempotent(t *testing.T) {
 
 type decoratorFunc func(...*domain.Ticket)
 
-func (f decoratorFunc) DecorateTickets(tks ...*domain.Ticket) { f(tks...) }
+func (f decoratorFunc) DecorateTickets(_ context.Context, tks ...*domain.Ticket) { f(tks...) }
 
 // A status move is recorded with who made it and why, and announced as
 // TicketStatusChanged; a patch that keeps the status records nothing.
@@ -554,7 +554,7 @@ func TestTickets_DeleteIsPublished(t *testing.T) {
 	bus := eventbus.New()
 	var seen []domain.TicketDeleted
 	ports.On(bus, func(_ context.Context, ev domain.TicketDeleted) error {
-		if tickets.Get(ev.TicketID) != nil {
+		if tickets.Get(context.Background(), ev.TicketID) != nil {
 			t.Errorf("TicketDeleted published while %s is still stored", ev.TicketID)
 		}
 		seen = append(seen, ev)

@@ -59,7 +59,7 @@ func sessionProjectTools(planningSvc ports.Planning, sessions ports.SessionRepos
 				if arch == nil {
 					return nil, &domain.StructuredError{Code: "UNAVAILABLE", Message: "the project's architecture is not available on this server"}
 				}
-				return architectureMap(arch, scope.session.ProjectID), nil
+				return architectureMap(ctx, arch, scope.session.ProjectID), nil
 			},
 		},
 		{
@@ -112,10 +112,10 @@ type contextSummary struct {
 }
 
 // architectureMap groups a project's zones under their bounded contexts.
-func architectureMap(arch ports.ArchitectureMap, projectID string) map[string]any {
+func architectureMap(ctx context.Context, arch ports.ArchitectureMap, projectID string) map[string]any {
 	byContext := map[string][]zoneSummary{}
 	unassigned := []zoneSummary{}
-	for _, z := range arch.ListZones(projectID) {
+	for _, z := range arch.ListZones(ctx, projectID) {
 		zs := zoneSummary{Name: z.Name, Pattern: z.Pattern, Purpose: z.Purpose}
 		if z.BoundedContextID == "" {
 			unassigned = append(unassigned, zs)

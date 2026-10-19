@@ -58,7 +58,7 @@ func catalogOf(f *fakeResolver) Catalog {
 
 type fakeTickets map[string]*domain.Ticket
 
-func (f fakeTickets) Get(id string) *domain.Ticket { return f[id] }
+func (f fakeTickets) Get(_ context.Context, id string) *domain.Ticket { return f[id] }
 
 // fakeProvisioner stands in for workspaces.Service: it hands out real
 // directories so the CLI has somewhere to run, and records what it was asked for.

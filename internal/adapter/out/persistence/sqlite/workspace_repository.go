@@ -1,6 +1,7 @@
 package sqlite
 
 import (
+	"context"
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
 
@@ -21,9 +22,9 @@ func NewWorkspaceRepository(db *gorm.DB) *WorkspaceRepository {
 }
 
 // Get returns the workspace by id, or nil if not found.
-func (r *WorkspaceRepository) Get(id string) *domain.Workspace {
+func (r *WorkspaceRepository) Get(ctx context.Context, id string) *domain.Workspace {
 	var m WorkspaceModel
-	if err := r.db.First(&m, "id = ?", id).Error; err != nil {
+	if err := r.db.WithContext(ctx).First(&m, "id = ?", id).Error; err != nil {
 		return nil
 	}
 	return m.ToDomain()
@@ -33,6 +34,23 @@ func (r *WorkspaceRepository) Get(id string) *domain.Workspace {
 func (r *WorkspaceRepository) ListByRepository(repositoryID string) []*domain.Workspace {
 	var models []WorkspaceModel
 	if err := r.db.Where("repository_id = ?", repositoryID).Find(&models).Error; err != nil {
+		return nil
+	}
+	out := make([]*domain.Workspace, 0, len(models))
+	for i := range models {
+		out = append(out, models[i].ToDomain())
+	}
+	return out
+}
+
+// ListByIDs returns the given workspaces in one query; unknown ids are left
+// out.
+func (r *WorkspaceRepository) ListByIDs(ctx context.Context, ids []string) []*domain.Workspace {
+	if len(ids) == 0 {
+		return nil
+	}
+	var models []WorkspaceModel
+	if err := r.db.WithContext(ctx).Where("id IN ?", ids).Find(&models).Error; err != nil {
 		return nil
 	}
 	out := make([]*domain.Workspace, 0, len(models))

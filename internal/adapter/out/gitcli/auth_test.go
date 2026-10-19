@@ -397,12 +397,12 @@ func TestLocalCommandsCannotAuthenticate(t *testing.T) {
 		t.Fatal("the planted helpers were not used by a plain git; the test proves nothing")
 	}
 	m.reset(t)
-	if out, err := gitCmd(context.Background(), dir, "ls-remote", "origin").CombinedOutput(); err == nil {
+	if out, err := (config{}).gitCmd(context.Background(), dir, "ls-remote", "origin").CombinedOutput(); err == nil {
 		t.Fatalf("a local command authenticated with the machine's helper: %s", out)
 	}
 	m.untouched(t)
 	// The machine's config is still read for everything else.
-	out, err := gitCmd(context.Background(), dir, "config", "user.email").Output()
+	out, err := (config{}).gitCmd(context.Background(), dir, "config", "user.email").Output()
 	if err != nil || strings.TrimSpace(string(out)) != "machine@example.com" {
 		t.Fatalf("user.email = %q, %v: local commands should still read the machine's config", out, err)
 	}

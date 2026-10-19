@@ -522,7 +522,7 @@ func TestCreatePushesAndOpensThePullRequest(t *testing.T) {
 	if *pr != want {
 		t.Fatalf("created %+v\nwant    %+v", *pr, want)
 	}
-	if stored := f.store.LatestForWorkspace(f.ws.ID); stored == nil || stored.Number != 1 {
+	if stored := f.store.LatestForWorkspace(context.Background(), f.ws.ID); stored == nil || stored.Number != 1 {
 		t.Fatalf("stored %+v", stored)
 	}
 	if got := f.feed.pullRequests(); len(got) != 1 || got[0].Number != 1 {
@@ -619,7 +619,7 @@ func TestCreateRefusals(t *testing.T) {
 			if !strings.HasPrefix(se.Message, c.code+": ") || !strings.Contains(se.Message, c.reason) {
 				t.Fatalf("message %q should start with %s and carry %q", se.Message, c.code, c.reason)
 			}
-			if f.store.LatestForWorkspace(f.ws.ID) != nil || len(f.feed.pullRequests()) != 0 {
+			if f.store.LatestForWorkspace(context.Background(), f.ws.ID) != nil || len(f.feed.pullRequests()) != 0 {
 				t.Fatal("a refused create stored or announced a PR")
 			}
 		})
@@ -642,7 +642,7 @@ func TestCreateAdoptsAPROpenedOutsideTheHarness(t *testing.T) {
 	if len(f.git.pushes) != 0 {
 		t.Fatal("pushed although a PR already stood open")
 	}
-	if stored := f.store.LatestForWorkspace(f.ws.ID); stored == nil || stored.Number != 7 || stored.Title != "By hand" {
+	if stored := f.store.LatestForWorkspace(context.Background(), f.ws.ID); stored == nil || stored.Number != 7 || stored.Title != "By hand" {
 		t.Fatalf("stored %+v", stored)
 	}
 	if got := f.feed.pullRequests(); len(got) != 1 || got[0].Number != 7 {
@@ -735,7 +735,7 @@ func TestProjectDeletedRemovesItsPullRequests(t *testing.T) {
 	if err := f.bus.Publish(context.Background(), domain.ProjectDeleted{ProjectID: "p1"}); err != nil {
 		t.Fatal(err)
 	}
-	if f.store.LatestForWorkspace(f.ws.ID) != nil {
+	if f.store.LatestForWorkspace(context.Background(), f.ws.ID) != nil {
 		t.Fatal("the record outlived its project")
 	}
 }

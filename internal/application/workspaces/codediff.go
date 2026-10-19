@@ -48,11 +48,11 @@ func (c *Code) planDiff(ctx context.Context, q ports.CodeDiffQuery) (*diffPlan, 
 	case !domain.ValidRefName(q.Base) || !domain.ValidRefName(q.Head):
 		return nil, invalid("base and head must be branch, tag or commit names")
 	}
-	repo, err := c.repository(q.RepositoryID)
+	repo, err := c.repository(ctx, q.RepositoryID)
 	if err != nil {
 		return nil, err
 	}
-	s := c.withZones(&source{repo: repo, src: domain.CodeSource{Kind: domain.CodeSourceRef, RepositoryID: repo.ID}})
+	s := c.withZones(ctx, &source{repo: repo, src: domain.CodeSource{Kind: domain.CodeSourceRef, RepositoryID: repo.ID}})
 	plan := &diffPlan{src: s, dir: repo.RootDir}
 	if q.Commit != "" {
 		commit, err := c.d.Git.ResolveCommit(ctx, repo.RootDir, q.Commit)

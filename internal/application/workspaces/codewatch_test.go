@@ -23,6 +23,13 @@ type scriptedSnapshots struct {
 	ports.GitCode
 	mu    sync.Mutex
 	state map[string]string // path → fingerprint
+	calls int               // snapshots taken
+}
+
+func (g *scriptedSnapshots) taken() int {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return g.calls
 }
 
 func (g *scriptedSnapshots) set(path, fp string) {
@@ -34,6 +41,7 @@ func (g *scriptedSnapshots) set(path, fp string) {
 func (g *scriptedSnapshots) Snapshot(_ context.Context, dir string) (string, string, error) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
+	g.calls++
 	fp, ok := g.state[dir]
 	if !ok {
 		return "", "", os.ErrNotExist
@@ -72,7 +80,16 @@ type watchFixture struct {
 	now      time.Time
 }
 
+// newWatchFixture watches with someone following project p1's feed.
 func newWatchFixture(t *testing.T) *watchFixture {
+	t.Helper()
+	f := newUnfollowedWatchFixture(t)
+	f.watcher.ProjectFollowers("p1", 1)
+	return f
+}
+
+// newUnfollowedWatchFixture watches with nobody following any feed.
+func newUnfollowedWatchFixture(t *testing.T) *watchFixture {
 	t.Helper()
 	db, err := sqlite.Open(":memory:")
 	if err != nil {
@@ -185,6 +202,51 @@ func TestCodeWatcherWatchesOnlyWhileASessionRuns(t *testing.T) {
 	f.publish(t, domain.SessionDeleted{SessionID: "s2"})
 	if w := f.watcher.Watched(); len(w) != 0 {
 		t.Fatalf("a deleted session: watched = %v", w)
+	}
+}
+
+func TestCodeWatcherPollsOnlyWhileTheProjectFeedIsFollowed(t *testing.T) {
+	f := newUnfollowedWatchFixture(t)
+	f.session(t, "s1", f.ws.ID, domain.SessionRunning)
+	f.publish(t, domain.SessionStatusChanged{SessionID: "s1", Status: domain.SessionRunning})
+	f.poll()
+	f.git.set("/wt/a", "2")
+	f.poll()
+	if n := f.git.taken(); n != 0 {
+		t.Fatalf("nobody follows p1: %d git snapshots", n)
+	}
+
+	// Another project's follower does not make p1's worktrees worth a look.
+	f.watcher.ProjectFollowers("p2", 1)
+	f.poll()
+	if n := f.git.taken(); n != 0 {
+		t.Fatalf("only p2 is followed: %d git snapshots", n)
+	}
+
+	f.watcher.ProjectFollowers("p1", 1)
+	if got := f.poll(); len(got) != 0 {
+		t.Fatalf("the first look after following only records: %v", got)
+	}
+	f.watcher.ProjectFollowers("p1", 2)
+	f.git.set("/wt/a", "3")
+	if got := f.poll(); len(got) != 1 || got[0].WorkspaceID != f.ws.ID || got[0].ProjectID != "p1" || got[0].Head != "head-3" {
+		t.Fatalf("followed: changes = %v", got)
+	}
+
+	f.watcher.ProjectFollowers("p1", 1)
+	f.git.set("/wt/a", "4")
+	if got := f.poll(); len(got) != 1 {
+		t.Fatalf("one of two followers left: changes = %v", got)
+	}
+
+	f.watcher.ProjectFollowers("p1", 0)
+	before := f.git.taken()
+	f.git.set("/wt/a", "5")
+	if got := f.poll(); len(got) != 0 {
+		t.Fatalf("the last follower left: changes = %v", got)
+	}
+	if n := f.git.taken(); n != before {
+		t.Fatalf("the last follower left: %d more git snapshots", n-before)
 	}
 }
 

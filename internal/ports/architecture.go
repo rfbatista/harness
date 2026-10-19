@@ -1,5 +1,6 @@
 package ports
 
+import "context"
 import "operators-mcp/internal/domain"
 
 // Driving ports of the architecture context: how a project's code is carved
@@ -8,7 +9,7 @@ import "operators-mcp/internal/domain"
 
 // ZoneCatalog manages a project's zones and the paths assigned to them.
 type ZoneCatalog interface {
-	ListZones(projectID string) []*domain.Zone
+	ListZones(ctx context.Context, projectID string) []*domain.Zone
 	GetZone(zoneID string) *domain.Zone
 	CreateZone(projectID, name, pattern, purpose string, rules []domain.Prompt, agents []domain.Agent) (*domain.Zone, error)
 	UpdateZone(zoneID, name, pattern, purpose string, rules []domain.Prompt, agents []domain.Agent) (*domain.Zone, error)
@@ -32,7 +33,7 @@ type BoundedContextCatalog interface {
 // up: the bounded contexts and the zones that belong to them.
 type ArchitectureMap interface {
 	ListBoundedContexts(projectID string) []*domain.BoundedContext
-	ListZones(projectID string) []*domain.Zone
+	ListZones(ctx context.Context, projectID string) []*domain.Zone
 }
 
 // PathExplorer reads a project's file tree. root overrides the project's root

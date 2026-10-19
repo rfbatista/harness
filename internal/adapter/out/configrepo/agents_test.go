@@ -1,6 +1,7 @@
 package configrepo
 
 import (
+	"context"
 	"path/filepath"
 	"reflect"
 	"testing"
@@ -28,7 +29,7 @@ func newFixtureAgentRepo(t *testing.T) (*AgentRepository, string) {
 
 func TestAgentRepository_ListBuildsEveryAgentWithResolvedSkillIDs(t *testing.T) {
 	repo, _ := newFixtureAgentRepo(t)
-	got := repo.List()
+	got := repo.List(context.Background())
 	if len(got) != 2 {
 		t.Fatalf("expected 2 agents, got %d: %+v", len(got), got)
 	}

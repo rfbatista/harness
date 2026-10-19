@@ -22,7 +22,7 @@ func (h *Handler) handleEvents(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	return streamSSE(c, changes, func(ch any) any { return ch })
+	return h.streamSSE(c, changes)
 }
 
 func (h *Handler) followProject(ctx context.Context, projectID string) (<-chan any, error) {
@@ -37,17 +37,15 @@ func (h *Handler) followProject(ctx context.Context, projectID string) (<-chan a
 }
 
 // streamSSE writes each value from changes as one `data:` line of JSON, and a
-// comment every 15s to keep the connection alive, until the request ends or
+// comment every 15s to keep the connection alive, until the request ends,
 // changes closes (the follower fell behind: the client reloads and connects
-// again).
-func streamSSE[T any](c echo.Context, changes <-chan T, wire func(T) any) error {
+// again) or a write fails or times out (a dead or stuck client).
+func (h *Handler) streamSSE(c echo.Context, changes <-chan any) error {
 	ctx := c.Request().Context()
-	w := c.Response()
-	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.Header().Set("Connection", "keep-alive")
-	w.WriteHeader(http.StatusOK)
-	w.Flush()
+	conn, err := openSSE(c, h.streams.timeout())
+	if err != nil {
+		return nil
+	}
 
 	ticker := time.NewTicker(15 * time.Second)
 	defer ticker.Stop()
@@ -59,12 +57,14 @@ func streamSSE[T any](c echo.Context, changes <-chan T, wire func(T) any) error 
 			if !ok {
 				return nil
 			}
-			data, _ := json.Marshal(wire(change))
-			fmt.Fprintf(w, "data: %s\n\n", data)
-			w.Flush()
+			data, _ := json.Marshal(change)
+			if conn.write(fmt.Appendf(nil, "data: %s\n\n", data)) != nil {
+				return nil
+			}
 		case <-ticker.C:
-			fmt.Fprint(w, ": ping\n\n")
-			w.Flush()
+			if conn.ping() != nil {
+				return nil
+			}
 		}
 	}
 }

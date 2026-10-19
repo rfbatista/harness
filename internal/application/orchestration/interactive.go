@@ -38,7 +38,7 @@ func (s *Service) StartInteractive(ctx context.Context, req InteractiveRequest) 
 	if _, err := s.catalog.Projects.GetProject(ctx, req.ProjectID); err != nil {
 		return nil, ports.AgentSpec{}, err
 	}
-	ticket, err := s.ticketIn(req.ProjectID, req.TicketID)
+	ticket, err := s.ticketIn(ctx, req.ProjectID, req.TicketID)
 	if err != nil {
 		return nil, ports.AgentSpec{}, err
 	}
@@ -113,7 +113,7 @@ func (s *Service) StartInteractive(ctx context.Context, req InteractiveRequest) 
 				return nil, ports.AgentSpec{}, err
 			}
 		}
-		return s.withResumability(created), spec, nil
+		return s.withResumability(ctx, created), spec, nil
 	}
 	// Not recorded: nothing will ever run in this worktree, and its branch is
 	// seconds old with no commits, so Discard (not Delete) is safe.
@@ -156,7 +156,7 @@ func (s *Service) ResumeInteractive(ctx context.Context, req ports.ResumeRequest
 
 	var ticket *domain.Ticket
 	if sess.TicketID != "" && s.tickets != nil {
-		ticket = s.tickets.Get(sess.TicketID)
+		ticket = s.tickets.Get(context.WithoutCancel(ctx), sess.TicketID) // the resume goes on without the request
 	}
 	ag, err := s.resolveAgent(sess.AgentID, sess.Mode)
 	if err != nil {
@@ -196,7 +196,7 @@ func (s *Service) ResumeInteractive(ctx context.Context, req ports.ResumeRequest
 			return nil, ports.AgentSpec{}, err
 		}
 	}
-	return s.withResumability(s.sessions.Get(sess.ID)), spec, nil
+	return s.withResumability(ctx, s.sessions.Get(sess.ID)), spec, nil
 }
 
 // claimResume marks id as being resumed; false when another call already is.
@@ -234,16 +234,22 @@ func (s *Service) resumeBlock(sess *domain.Session) error {
 // withResumability fills sess's derived fields — Resumable and
 // ResumeBlocked, and through the Decorator its role — for a session about to
 // leave the service. Nil stays nil.
-func (s *Service) withResumability(sess *domain.Session) *domain.Session {
+func (s *Service) withResumability(ctx context.Context, sess *domain.Session) *domain.Session {
 	if sess == nil {
 		return nil
 	}
-	sess.ResumeBlocked = errs.Code(s.resumeBlock(sess))
-	sess.Resumable = sess.ResumeBlocked == ""
+	s.fillResumability(sess)
 	if s.Decorator != nil {
-		s.Decorator.DecorateSessions(sess)
+		s.Decorator.DecorateSessions(ctx, sess)
 	}
 	return sess
+}
+
+// fillResumability fills sess's Resumable and ResumeBlocked. It reads no
+// database: an ended interactive session stats its transcript, nothing else.
+func (s *Service) fillResumability(sess *domain.Session) {
+	sess.ResumeBlocked = errs.Code(s.resumeBlock(sess))
+	sess.Resumable = sess.ResumeBlocked == ""
 }
 
 // claudeID is the claude conversation sess resumes into.
@@ -322,7 +328,7 @@ func (s *Service) end(id string, exitCode int, closedByUser bool) (*domain.Sessi
 	}
 	s.runCleanup(id)
 	if sess.Status.IsTerminal() {
-		return s.withResumability(sess), nil
+		return s.withResumability(context.Background(), sess), nil
 	}
 
 	status, text := domain.SessionDone, "exited"
@@ -336,8 +342,9 @@ func (s *Service) end(id string, exitCode int, closedByUser bool) (*domain.Sessi
 		return nil, err
 	}
 	s.publish(id, SessionEvent{Type: "done", Status: status, Text: text, At: time.Now()})
+	s.hub.End(id)
 	s.announce(domain.SessionEnded{SessionID: id, Status: status})
-	return s.withResumability(s.sessions.Get(id)), nil
+	return s.withResumability(context.Background(), s.sessions.Get(id)), nil
 }
 
 // RecordClaudeSession stores the claude conversation an interactive session is

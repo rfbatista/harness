@@ -105,7 +105,7 @@ func (c *Catalog) SetOrigin(repositoryID, originURL string) {
 	}
 }
 
-func (c *Catalog) Get(id string) *domain.Repository {
+func (c *Catalog) Get(_ context.Context, id string) *domain.Repository {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	for _, r := range c.repos {
@@ -117,7 +117,7 @@ func (c *Catalog) Get(id string) *domain.Repository {
 	return nil
 }
 
-func (c *Catalog) ListByProject(projectID string) []*domain.Repository {
+func (c *Catalog) ListByProject(_ context.Context, projectID string) []*domain.Repository {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	out := []*domain.Repository{}
@@ -134,7 +134,7 @@ func (c *Catalog) ListByProject(projectID string) []*domain.Repository {
 // methods.
 type projectGetter struct{ c *Catalog }
 
-func (p projectGetter) Get(id string) *domain.Project {
+func (p projectGetter) Get(_ context.Context, id string) *domain.Project {
 	p.c.mu.Lock()
 	defer p.c.mu.Unlock()
 	return p.c.projects[id]
@@ -220,7 +220,7 @@ func clone(c *ports.StoredGitCredential) *ports.StoredGitCredential {
 	return &cp
 }
 
-func (s *Credentials) List() ([]*ports.StoredGitCredential, error) {
+func (s *Credentials) List(_ context.Context) ([]*ports.StoredGitCredential, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	out := make([]*ports.StoredGitCredential, 0, len(s.rows))
@@ -305,6 +305,18 @@ func (s *Pins) Get(repositoryID string) (string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.pins[repositoryID].CredentialID, nil
+}
+
+func (s *Pins) ListByRepositories(_ context.Context, repositoryIDs []string) ([]ports.RepositoryCredentialPin, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var out []ports.RepositoryCredentialPin
+	for _, id := range repositoryIDs {
+		if p, ok := s.pins[id]; ok {
+			out = append(out, p)
+		}
+	}
+	return out, nil
 }
 
 func (s *Pins) Put(pin ports.RepositoryCredentialPin) error {

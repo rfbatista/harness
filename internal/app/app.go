@@ -13,6 +13,8 @@ import (
 
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxevent"
+
+	"operators-mcp/internal/adapter/out/gitcli"
 )
 
 // Config holds the process-level settings resolved from flags in main().
@@ -28,6 +30,20 @@ type Config struct {
 	// DBSlowThreshold is how long a database call may take before it is
 	// logged as a slow database call. Zero uses the SQLite adapter's default.
 	DBSlowThreshold time.Duration
+	// SlowRequestThreshold is how long an HTTP request may take before it
+	// is logged as a slow request, with its query count. Zero uses the HTTP
+	// API adapter's default.
+	SlowRequestThreshold time.Duration
+	// GitWorktreeDeadline bounds each git run that adds, removes or prunes a
+	// worktree; GitReadDeadline each git run that only reads. A git that
+	// gives no answer in time is killed and its operation fails. Zero uses
+	// the git adapter's defaults. Push and fetch keep their own deadline.
+	GitWorktreeDeadline time.Duration
+	GitReadDeadline     time.Duration
+	// GitBin is the git binary the server runs. New resolves it once (see
+	// gitcli.ResolveGit): a value set here wins; empty uses the first git on
+	// PATH, or the real git behind macOS's /usr/bin/git shim.
+	GitBin string
 	// DevMode proxies the designer resource to the Vite dev server instead of the embedded build.
 	DevMode bool
 	// Root is the default project root for tree and path operations (usually the working directory).
@@ -68,6 +84,9 @@ type Config struct {
 	// downloaded from, in place of https://github.com (a mirror, or a test's
 	// fake release server). Empty uses GitHub.
 	TokenSaverReleaseBase string
+	// ProfilerOff stops the HTTP server serving Go's profiler under
+	// /debug/pprof/. Left false, the profiler answers loopback peers only.
+	ProfilerOff bool
 }
 
 // loopbackBaseURL is the base URL the spawned claude reaches this process at for
@@ -89,6 +108,8 @@ func (c Config) llmProxyURL() string {
 // New builds the fully wired fx application for the given configuration.
 // Call Run on the result to start the servers and block until SIGINT/SIGTERM.
 func New(cfg Config) *fx.App {
+	cfg.GitBin = gitcli.ResolveGit(cfg.GitBin)
+	slog.Info("git", "bin", cfg.GitBin)
 	return fx.New(
 		fx.StopTimeout(stopTimeout),
 		fx.Supply(cfg),

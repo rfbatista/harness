@@ -1,6 +1,7 @@
 package configrepo
 
 import (
+	"context"
 	"github.com/rfbatista/harnesskit/mcpserver"
 	"github.com/rfbatista/harnesskit/skill"
 
@@ -14,7 +15,7 @@ import (
 
 type agentRepo interface {
 	Get(id string) *domain.Agent
-	List() []*domain.Agent
+	List(ctx context.Context) []*domain.Agent
 	Create(name, description, promptID string, skillIDs, mcpServerIDs []string) (*domain.Agent, error)
 	Update(id, name, description, promptID string, skillIDs, mcpServerIDs []string) (*domain.Agent, error)
 	Delete(id string) error
@@ -57,14 +58,14 @@ func MergeAgents(db, cfg agentRepo) *MergedAgentRepository {
 	return &MergedAgentRepository{DB: db, Cfg: cfg}
 }
 
-func (m *MergedAgentRepository) List() []*domain.Agent {
+func (m *MergedAgentRepository) List(ctx context.Context) []*domain.Agent {
 	byName := map[string]*domain.Agent{}
 	var order []string
-	for _, a := range m.DB.List() {
+	for _, a := range m.DB.List(ctx) {
 		byName[a.Name] = a
 		order = append(order, a.Name)
 	}
-	for _, a := range m.Cfg.List() {
+	for _, a := range m.Cfg.List(ctx) {
 		if _, exists := byName[a.Name]; !exists {
 			order = append(order, a.Name)
 		}

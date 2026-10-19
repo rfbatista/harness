@@ -20,11 +20,12 @@ import (
 var _ ports.GitCode = (*Code)(nil)
 
 // Code reads code out of a checkout for the code views. Every command it
-// runs only reads: no fetch, no ref or index write, no hook.
-type Code struct{}
+// runs only reads: no fetch, no ref or index write, no hook. Each is bounded
+// by the read deadline.
+type Code struct{ d config }
 
 // NewCode returns the adapter.
-func NewCode() *Code { return &Code{} }
+func NewCode(opts ...Option) *Code { return &Code{d: newConfig(opts)} }
 
 // codeGitArgs come before every subcommand: names are printed as they are,
 // a configured fsmonitor command never runs, pathspecs are literal (":(…)"
@@ -36,18 +37,25 @@ var codeGitArgs = []string{"-c", "core.quotePath=false", "-c", "core.fsmonitor=f
 // partial clone (GIT_NO_LAZY_FETCH, git 2.44+).
 var codeGitEnv = []string{"GIT_OPTIONAL_LOCKS=0", "GIT_TERMINAL_PROMPT=0", "GIT_NO_LAZY_FETCH=1", "GIT_LITERAL_PATHSPECS=1"}
 
-func codeCmd(ctx context.Context, dir string, args ...string) *exec.Cmd {
-	cmd := exec.CommandContext(ctx, "git", append(append([]string{}, codeGitArgs...), args...)...)
+func (d config) codeCmd(ctx context.Context, dir string, args ...string) *exec.Cmd {
+	cmd := exec.CommandContext(ctx, d.bin(), append(append([]string{}, codeGitArgs...), args...)...)
 	cmd.Dir = dir
 	cmd.Env = localEnv(codeGitEnv...)
+	cmd.WaitDelay = waitDelay
 	return cmd
 }
 
-func codeOutput(ctx context.Context, dir string, args ...string) (string, error) {
-	cmd := codeCmd(ctx, dir, args...)
+// codeOutput is the output of a code read, under the read deadline.
+func (d config) codeOutput(ctx context.Context, dir string, args ...string) (string, error) {
+	ctx, cancel := context.WithTimeout(ctx, d.read())
+	defer cancel()
+	cmd := d.codeCmd(ctx, dir, args...)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	if err := cmd.Run(); err != nil {
+		if err := cut(ctx, args[0], err); timedOut(err) {
+			return "", err
+		}
 		return "", fmt.Errorf("git %s: %w: %s", args[0], err, strings.TrimSpace(stderr.String()))
 	}
 	return stdout.String(), nil
@@ -62,11 +70,14 @@ func pathNotFound(p string) error {
 }
 
 // ResolveCommit resolves ref to the full hash of the commit it names.
-func (Code) ResolveCommit(ctx context.Context, dir, ref string) (string, error) {
-	out, err := codeOutput(ctx, dir, "rev-parse", "--verify", "--quiet", "--end-of-options", ref+"^{commit}")
+func (c Code) ResolveCommit(ctx context.Context, dir, ref string) (string, error) {
+	out, err := c.d.codeOutput(ctx, dir, "rev-parse", "--verify", "--quiet", "--end-of-options", ref+"^{commit}")
 	if err != nil {
 		if ctx.Err() != nil {
 			return "", ctx.Err()
+		}
+		if timedOut(err) {
+			return "", err
 		}
 		return "", refNotFound(ref)
 	}
@@ -74,11 +85,14 @@ func (Code) ResolveCommit(ctx context.Context, dir, ref string) (string, error) 
 }
 
 // CurrentBranch is the branch checked out in dir, "" when detached.
-func (Code) CurrentBranch(ctx context.Context, dir string) (string, error) {
-	out, err := codeOutput(ctx, dir, "symbolic-ref", "--quiet", "--short", "HEAD")
+func (c Code) CurrentBranch(ctx context.Context, dir string) (string, error) {
+	out, err := c.d.codeOutput(ctx, dir, "symbolic-ref", "--quiet", "--short", "HEAD")
 	if err != nil {
 		if ctx.Err() != nil {
 			return "", ctx.Err()
+		}
+		if timedOut(err) {
+			return "", err
 		}
 		return "", nil
 	}
@@ -86,8 +100,8 @@ func (Code) CurrentBranch(ctx context.Context, dir string) (string, error) {
 }
 
 // MergeBase is the best common ancestor of a and b.
-func (Code) MergeBase(ctx context.Context, dir, a, b string) (string, error) {
-	out, err := codeOutput(ctx, dir, "merge-base", "--end-of-options", a, b)
+func (c Code) MergeBase(ctx context.Context, dir, a, b string) (string, error) {
+	out, err := c.d.codeOutput(ctx, dir, "merge-base", "--end-of-options", a, b)
 	if err != nil {
 		return "", err
 	}
@@ -95,8 +109,8 @@ func (Code) MergeBase(ctx context.Context, dir, a, b string) (string, error) {
 }
 
 // FirstParent is commit's first parent, "" for a root commit.
-func (Code) FirstParent(ctx context.Context, dir, commit string) (string, error) {
-	out, err := codeOutput(ctx, dir, "rev-list", "--parents", "-n", "1", "--end-of-options", commit, "--")
+func (c Code) FirstParent(ctx context.Context, dir, commit string) (string, error) {
+	out, err := c.d.codeOutput(ctx, dir, "rev-list", "--parents", "-n", "1", "--end-of-options", commit, "--")
 	if err != nil {
 		return "", err
 	}
@@ -109,10 +123,15 @@ func (Code) FirstParent(ctx context.Context, dir, commit string) (string, error)
 
 // EmptyTree names the empty tree in the repository's hash format. hash-object
 // without -w writes nothing.
-func (Code) EmptyTree(ctx context.Context, dir string) (string, error) {
-	cmd := codeCmd(ctx, dir, "hash-object", "-t", "tree", "--stdin")
+func (c Code) EmptyTree(ctx context.Context, dir string) (string, error) {
+	ctx, cancel := context.WithTimeout(ctx, c.d.read())
+	defer cancel()
+	cmd := c.d.codeCmd(ctx, dir, "hash-object", "-t", "tree", "--stdin")
 	cmd.Stdin = strings.NewReader("")
 	out, err := cmd.Output()
+	if err := cut(ctx, "hash-object", err); timedOut(err) {
+		return "", err
+	}
 	if err != nil {
 		return "", fmt.Errorf("git hash-object: %w", err)
 	}
@@ -121,8 +140,8 @@ func (Code) EmptyTree(ctx context.Context, dir string) (string, error) {
 
 // lsTree runs ls-tree -z -l and parses its entries:
 // "<mode> <type> <object> <size>\t<path>\0", size "-" for a tree or commit.
-func lsTree(ctx context.Context, dir string, args ...string) ([]ports.GitEntry, error) {
-	out, err := codeOutput(ctx, dir, append([]string{"ls-tree", "-z", "-l", "--full-tree"}, args...)...)
+func (d config) lsTree(ctx context.Context, dir string, args ...string) ([]ports.GitEntry, error) {
+	out, err := d.codeOutput(ctx, dir, append([]string{"ls-tree", "-z", "-l", "--full-tree"}, args...)...)
 	if err != nil {
 		return nil, err
 	}
@@ -170,7 +189,7 @@ func (c Code) PathKind(ctx context.Context, dir, commit, p string) (ports.GitEnt
 	segs := strings.Split(p, "/")
 	for i := range segs {
 		sub := strings.Join(segs[:i+1], "/")
-		found, err := lsTree(ctx, dir, "--end-of-options", commit, "--", sub)
+		found, err := c.d.lsTree(ctx, dir, "--end-of-options", commit, "--", sub)
 		if err != nil {
 			return ports.GitEntry{}, err
 		}
@@ -230,7 +249,7 @@ func (c Code) TreeAt(ctx context.Context, dir, commit, p string, recursive bool)
 	if p != "" {
 		args = append(args, "--", p+"/")
 	}
-	entries, err := lsTree(ctx, dir, args...)
+	entries, err := c.d.lsTree(ctx, dir, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -241,7 +260,7 @@ func (c Code) TreeAt(ctx context.Context, dir, commit, p string, recursive bool)
 				links = append(links, e.Object)
 			}
 		}
-		targets, err := blobs(ctx, dir, links, maxLinkTarget)
+		targets, err := c.d.blobs(ctx, dir, links, maxLinkTarget)
 		if err != nil {
 			return nil, err
 		}
@@ -256,14 +275,19 @@ func (c Code) TreeAt(ctx context.Context, dir, commit, p string, recursive bool)
 
 // blobs reads small blobs in one git cat-file --batch, each cut at max
 // bytes: "<oid> blob <size>\n<content>\n" per object asked.
-func blobs(ctx context.Context, dir string, objects []string, max int) (map[string]string, error) {
+func (d config) blobs(ctx context.Context, dir string, objects []string, max int) (map[string]string, error) {
 	out := map[string]string{}
 	if len(objects) == 0 {
 		return out, nil
 	}
-	cmd := codeCmd(ctx, dir, "cat-file", "--batch")
+	ctx, cancel := context.WithTimeout(ctx, d.read())
+	defer cancel()
+	cmd := d.codeCmd(ctx, dir, "cat-file", "--batch")
 	cmd.Stdin = strings.NewReader(strings.Join(objects, "\n") + "\n")
 	raw, err := cmd.Output()
+	if err := cut(ctx, "cat-file", err); timedOut(err) {
+		return nil, err
+	}
 	if err != nil {
 		return nil, fmt.Errorf("git cat-file --batch: %w", err)
 	}
@@ -290,7 +314,7 @@ func blobs(ctx context.Context, dir string, objects []string, max int) (map[stri
 // with deleted marking what is gone from disk, and the untracked files git
 // does not ignore.
 func (c Code) WorktreeEntries(ctx context.Context, dir string, deleted bool) ([]ports.GitEntry, error) {
-	staged, err := codeOutput(ctx, dir, "ls-files", "-z", "-s", "--full-name")
+	staged, err := c.d.codeOutput(ctx, dir, "ls-files", "-z", "-s", "--full-name")
 	if err != nil {
 		return nil, err
 	}
@@ -306,7 +330,7 @@ func (c Code) WorktreeEntries(ctx context.Context, dir string, deleted bool) ([]
 		entries = append(entries, ports.GitEntry{Path: p, Kind: kindOfMode(mode), Size: -1})
 	}
 	if deleted {
-		out, err := codeOutput(ctx, dir, "ls-files", "-z", "-d", "--full-name")
+		out, err := c.d.codeOutput(ctx, dir, "ls-files", "-z", "-d", "--full-name")
 		if err != nil {
 			return nil, err
 		}
@@ -331,8 +355,8 @@ func (c Code) WorktreeEntries(ctx context.Context, dir string, deleted bool) ([]
 }
 
 // UntrackedFiles lists the untracked files git does not ignore.
-func (Code) UntrackedFiles(ctx context.Context, dir string) ([]string, error) {
-	out, err := codeOutput(ctx, dir, "ls-files", "-z", "-o", "--exclude-standard", "--full-name")
+func (c Code) UntrackedFiles(ctx context.Context, dir string) ([]string, error) {
+	out, err := c.d.codeOutput(ctx, dir, "ls-files", "-z", "-o", "--exclude-standard", "--full-name")
 	if err != nil {
 		return nil, err
 	}
@@ -346,10 +370,10 @@ func (Code) UntrackedFiles(ctx context.Context, dir string) ([]string, error) {
 }
 
 // Blob reads at most max bytes of the blob, stopping git once it has them.
-func (Code) Blob(ctx context.Context, dir, object string, max int64) ([]byte, error) {
-	ctx, cancel := context.WithCancel(ctx)
+func (c Code) Blob(ctx context.Context, dir, object string, max int64) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(ctx, c.d.read())
 	defer cancel()
-	cmd := codeCmd(ctx, dir, "cat-file", "blob", object)
+	cmd := c.d.codeCmd(ctx, dir, "cat-file", "blob", object)
 	out, err := cmd.StdoutPipe()
 	if err != nil {
 		return nil, err
@@ -368,6 +392,9 @@ func (Code) Blob(ctx context.Context, dir, object string, max int64) ([]byte, er
 	if readErr != nil {
 		return nil, readErr
 	}
+	if err := cut(ctx, "cat-file", waitErr); timedOut(err) {
+		return nil, err
+	}
 	if full && waitErr != nil {
 		return nil, fmt.Errorf("git cat-file %s: %w: %s", object, waitErr, strings.TrimSpace(stderr.String()))
 	}
@@ -377,13 +404,16 @@ func (Code) Blob(ctx context.Context, dir, object string, max int64) ([]byte, er
 // Snapshot fingerprints a worktree: HEAD, git status, and the size and
 // modification time of every path status lists, since status alone does
 // not change when an already modified file is edited again.
-func (Code) Snapshot(ctx context.Context, dir string) (string, string, error) {
-	head, err := codeOutput(ctx, dir, "rev-parse", "--verify", "--quiet", "HEAD")
+func (c Code) Snapshot(ctx context.Context, dir string) (string, string, error) {
+	head, err := c.d.codeOutput(ctx, dir, "rev-parse", "--verify", "--quiet", "HEAD")
 	if err != nil && ctx.Err() != nil {
 		return "", "", ctx.Err()
 	}
+	if timedOut(err) {
+		return "", "", err
+	}
 	head = strings.TrimSpace(head)
-	status, err := codeOutput(ctx, dir, "status", "--porcelain=v1", "-z", "--untracked-files=all")
+	status, err := c.d.codeOutput(ctx, dir, "status", "--porcelain=v1", "-z", "--untracked-files=all")
 	if err != nil {
 		return "", "", err
 	}

@@ -1,6 +1,7 @@
 package sqlite
 
 import (
+	"context"
 	"path/filepath"
 	"testing"
 
@@ -34,14 +35,32 @@ func TestSessionRepo_ListMatchesAnyStatus(t *testing.T) {
 		}
 	}
 
-	alive := r.List(ports.SessionFilter{
+	alive := r.List(context.Background(), ports.SessionFilter{
 		Statuses: []domain.SessionStatus{domain.SessionRunning, domain.SessionIdle, domain.SessionThinking},
 	})
 	if len(alive) != 2 {
 		t.Fatalf("want 2 alive sessions, got %d", len(alive))
 	}
-	if all := r.List(ports.SessionFilter{}); len(all) != 3 {
+	if all := r.List(context.Background(), ports.SessionFilter{}); len(all) != 3 {
 		t.Fatalf("empty filter must match all, got %d", len(all))
+	}
+}
+
+// The sessions of many tasks are read in one query, newest first.
+func TestSessionRepo_ListMatchesAnyOfTheTickets(t *testing.T) {
+	r := newTestDB(t)
+	for _, s := range []struct{ id, ticket string }{{"a", "t1"}, {"b", "t2"}, {"c", "t3"}, {"d", ""}} {
+		if _, err := r.Create(&domain.Session{ID: s.id, ProjectID: "p1", TicketID: s.ticket, Task: "t", Status: domain.SessionDone}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got := r.List(context.Background(), ports.SessionFilter{TicketIDs: []string{"t1", "t3"}})
+	ids := []string{}
+	for _, s := range got {
+		ids = append(ids, s.ID)
+	}
+	if len(ids) != 2 || !(ids[0] == "a" && ids[1] == "c" || ids[0] == "c" && ids[1] == "a") {
+		t.Fatalf("sessions of t1 and t3 = %v, want a and c", ids)
 	}
 }
 
@@ -178,10 +197,10 @@ func TestSessionRepo_CRUDAndEvents(t *testing.T) {
 		t.Fatalf("metrics not persisted: %+v", got)
 	}
 
-	if list := r.List(ports.SessionFilter{ProjectID: "p1"}); len(list) != 1 {
+	if list := r.List(context.Background(), ports.SessionFilter{ProjectID: "p1"}); len(list) != 1 {
 		t.Fatalf("List want 1 got %d", len(list))
 	}
-	if list := r.List(ports.SessionFilter{Statuses: []domain.SessionStatus{domain.SessionDone}}); len(list) != 0 {
+	if list := r.List(context.Background(), ports.SessionFilter{Statuses: []domain.SessionStatus{domain.SessionDone}}); len(list) != 0 {
 		t.Fatalf("List by status want 0 got %d", len(list))
 	}
 
@@ -296,20 +315,20 @@ func TestSessionRepository_FailedReadsReportErrors(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if s, err := repo.Find("missing"); s != nil || err != nil {
+	if s, err := repo.Find(context.Background(), "missing"); s != nil || err != nil {
 		t.Fatalf("Find(missing) = %v, %v; want nil, nil", s, err)
 	}
-	if s, err := repo.Find(created.ID); s == nil || err != nil {
+	if s, err := repo.Find(context.Background(), created.ID); s == nil || err != nil {
 		t.Fatalf("Find = %v, %v", s, err)
 	}
 
 	if err := Close(db); err != nil {
 		t.Fatal(err)
 	}
-	if s, err := repo.Find(created.ID); err == nil {
+	if s, err := repo.Find(context.Background(), created.ID); err == nil {
 		t.Errorf("Find on a failed read = %v, nil; want an error", s)
 	}
-	if list, err := repo.Query(ports.SessionFilter{}); err == nil {
+	if list, err := repo.Query(context.Background(), ports.SessionFilter{}); err == nil {
 		t.Errorf("Query on a failed read = %v, nil; want an error", list)
 	}
 	if evs, err := repo.ListEvents(created.ID, 0); err == nil {

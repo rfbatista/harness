@@ -1,6 +1,7 @@
 package memory
 
 import (
+	"context"
 	"sync"
 
 	"operators-mcp/internal/domain"
@@ -33,7 +34,7 @@ func (s *AgentStore) Get(id string) *domain.Agent {
 }
 
 // List returns all agents.
-func (s *AgentStore) List() []*domain.Agent {
+func (s *AgentStore) List(_ context.Context) []*domain.Agent {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	out := make([]*domain.Agent, 0, len(s.agents))

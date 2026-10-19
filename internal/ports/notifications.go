@@ -109,8 +109,8 @@ type NotificationRepository interface {
 	OpenByCause(causeKey string) *domain.Notification
 	// AnyByCause says whether any notification ever had causeKey.
 	AnyByCause(causeKey string) bool
-	List(f NotificationFilter) ([]*domain.Notification, error)
-	CountUnread() (int, error)
+	List(ctx context.Context, f NotificationFilter) ([]*domain.Notification, error)
+	CountUnread(ctx context.Context) (int, error)
 	// MarkRead sets read_at on those of ids not read yet and answers them.
 	MarkRead(ids []string, at time.Time) ([]*domain.Notification, error)
 	// MarkAllRead sets read_at on every unread one (of projectID, when set).

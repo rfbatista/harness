@@ -74,7 +74,7 @@ func (h *Handler) handleNotificationEvents(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	return streamSSE(c, changes, func(ch any) any { return ch })
+	return h.streamSSE(c, changes)
 }
 
 func (h *Handler) followNotifications(ctx context.Context) (<-chan any, error) {

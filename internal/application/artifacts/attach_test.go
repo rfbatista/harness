@@ -17,14 +17,14 @@ import (
 type fakeTickets struct{ repo *sqlite.TicketRepository }
 
 func (f fakeTickets) GetTicket(_ context.Context, id string) (*domain.Ticket, error) {
-	if tk := f.repo.Get(id); tk != nil {
+	if tk := f.repo.Get(ctx, id); tk != nil {
 		return tk, nil
 	}
 	return nil, &domain.StructuredError{Code: "TICKET_NOT_FOUND", Message: "ticket not found"}
 }
 
 func (f fakeTickets) ListTickets(_ context.Context, projectID string) ([]*domain.Ticket, error) {
-	return f.repo.ListByProject(projectID), nil
+	return f.repo.ListByProject(ctx, projectID), nil
 }
 
 // fakeSink records feed changes and, at the moment of each, what the

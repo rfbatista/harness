@@ -42,7 +42,7 @@ func (h *Handler) handleProjectEvents(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	return streamSSE(c, changes, func(ev any) any { return ev })
+	return h.streamSSE(c, changes)
 }
 
 func (h *Handler) followCatalog(ctx context.Context) (<-chan any, error) {

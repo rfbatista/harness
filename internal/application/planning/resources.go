@@ -50,11 +50,11 @@ func (s *Service) resourcesReady() error {
 }
 
 // ticket is the task id names, or TICKET_NOT_FOUND.
-func (s *Service) ticket(id string) (*domain.Ticket, error) {
+func (s *Service) ticket(ctx context.Context, id string) (*domain.Ticket, error) {
 	if id == "" {
 		return nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "ticket_id is required"}
 	}
-	tk := s.tickets.Get(id)
+	tk := s.tickets.Get(ctx, id)
 	if tk == nil {
 		return nil, &domain.StructuredError{Code: "TICKET_NOT_FOUND", Message: "ticket not found"}
 	}
@@ -65,8 +65,8 @@ func (s *Service) ticket(id string) (*domain.Ticket, error) {
 // on its way. Callers hold resourceMu, which a task's deletion takes to drop
 // what it had, so an addition lands either before that, and goes with it, or
 // not at all.
-func (s *Service) stillThere(ticketID string) error {
-	if s.tickets.Get(ticketID) == nil {
+func (s *Service) stillThere(ctx context.Context, ticketID string) error {
+	if s.tickets.Get(ctx, ticketID) == nil {
 		return &domain.StructuredError{Code: "TICKET_NOT_FOUND", Message: "ticket not found"}
 	}
 	return nil
@@ -107,14 +107,14 @@ func (s *Service) resourceAdded(ctx context.Context, r *domain.TicketResource) {
 	s.raise(ctx, domain.TicketResourceAdded{Resource: *r})
 }
 
-func (s *Service) ListTicketResources(_ context.Context, ticketID string) ([]*domain.TicketResource, error) {
+func (s *Service) ListTicketResources(ctx context.Context, ticketID string) ([]*domain.TicketResource, error) {
 	if err := s.resourcesReady(); err != nil {
 		return nil, err
 	}
-	if _, err := s.ticket(ticketID); err != nil {
+	if _, err := s.ticket(ctx, ticketID); err != nil {
 		return nil, err
 	}
-	list := s.Resources.ListByTicket(ticketID)
+	list := s.Resources.ListByTicket(ctx, ticketID)
 	s.withContentURL(list...)
 	return list, nil
 }
@@ -138,7 +138,7 @@ func (s *Service) UploadTicketResource(ctx context.Context, up ports.ResourceUpl
 	if err := s.resourcesReady(); err != nil {
 		return nil, err
 	}
-	tk, err := s.ticket(up.TicketID)
+	tk, err := s.ticket(ctx, up.TicketID)
 	if err != nil {
 		return nil, err
 	}
@@ -168,7 +168,7 @@ func (s *Service) UploadTicketResource(ctx context.Context, up ports.ResourceUpl
 
 	s.resourceMu.Lock()
 	defer s.resourceMu.Unlock()
-	if err := s.stillThere(tk.ID); err != nil {
+	if err := s.stillThere(ctx, tk.ID); err != nil {
 		staged.Discard()
 		return nil, err
 	}
@@ -210,7 +210,7 @@ func (s *Service) AddTicketLink(ctx context.Context, ticketID, rawURL, title str
 	if err := s.resourcesReady(); err != nil {
 		return nil, err
 	}
-	tk, err := s.ticket(ticketID)
+	tk, err := s.ticket(ctx, ticketID)
 	if err != nil {
 		return nil, err
 	}
@@ -226,7 +226,7 @@ func (s *Service) AddTicketLink(ctx context.Context, ticketID, rawURL, title str
 	}
 	s.resourceMu.Lock()
 	defer s.resourceMu.Unlock()
-	if err := s.stillThere(tk.ID); err != nil {
+	if err := s.stillThere(ctx, tk.ID); err != nil {
 		return nil, err
 	}
 	r, err := s.Resources.Create(&domain.TicketResource{
