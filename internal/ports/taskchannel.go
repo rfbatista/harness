@@ -205,4 +205,7 @@ type TaskStatusChangeRepository interface {
 	Append(c *domain.TaskStatusChange) error
 	// ListByTask is oldest first.
 	ListByTask(taskID string) []*domain.TaskStatusChange
+	// LatestByTasks is each task's most recent move, by task, read in one
+	// query however many tasks it is given. A task never moved is absent.
+	LatestByTasks(ctx context.Context, taskIDs []string) map[string]*domain.TaskStatusChange
 }
