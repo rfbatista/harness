@@ -4,15 +4,19 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"operators-mcp/internal/domain"
 )
+
+var archivedAt = time.Date(2026, 10, 1, 12, 0, 0, 0, time.UTC)
 
 func TestBoardHasEveryColumnInOrderWithTheTasksAndTheirActivity(t *testing.T) {
 	tasks := []*domain.Ticket{
 		{ID: "t-done", Title: "Ship it", Status: domain.TicketStatusDone},
 		{ID: "t-feed", Title: "Add SSE feed", Status: domain.TicketStatusInProgress},
 		{ID: "t-port", Title: "Port tickets", Status: domain.TicketStatusInProgress},
+		{ID: "t-old", Title: "Archived", Status: domain.TicketStatusDone, ArchivedAt: &archivedAt}, // off the board
 	}
 	sessions := []*domain.Session{
 		{ID: "s1", TicketID: "t-feed", Status: domain.SessionRunning},

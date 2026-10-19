@@ -18,6 +18,7 @@ import (
 var (
 	_ ports.Planning           = (*Service)(nil)
 	_ ports.TaskActivityReader = (*Service)(nil)
+	_ ports.TicketArchiver     = (*Service)(nil)
 )
 
 // Service implements ticket/document use-cases over the outbound ports.
@@ -147,6 +148,7 @@ func (s *Service) GetTicket(ctx context.Context, id string) (*domain.Ticket, err
 	return tk, nil
 }
 
+// ListTickets lists a project's tickets that are not archived.
 func (s *Service) ListTickets(ctx context.Context, projectID string) ([]*domain.Ticket, error) {
 	tickets := s.tickets.ListByProject(ctx, projectID)
 	s.decorate(ctx, tickets...)
@@ -189,6 +191,9 @@ func (s *Service) PatchTicket(ctx context.Context, id string, patch ports.Ticket
 		}
 		status = *patch.Status
 	}
+	if status != existing.Status && existing.ArchivedAt != nil {
+		return nil, &domain.StructuredError{Code: "TASK_ARCHIVED", Message: "the task is archived; restore it before changing its status"}
+	}
 	if title == existing.Title && description == existing.Description && status == existing.Status {
 		s.decorate(ctx, existing)
 		return existing, nil
@@ -203,6 +208,56 @@ func (s *Service) PatchTicket(ctx context.Context, id string, patch ports.Ticket
 	if status != existing.Status {
 		s.statusMoved(ctx, tk, patch)
 	}
+	return tk, nil
+}
+
+// ListArchivedTickets lists a project's archived tickets, newest archived
+// first.
+func (s *Service) ListArchivedTickets(ctx context.Context, projectID string) ([]*domain.Ticket, error) {
+	tickets := s.tickets.ListArchivedByProject(ctx, projectID)
+	s.decorate(ctx, tickets...)
+	return tickets, nil
+}
+
+// ArchiveTicket takes a done ticket off the board, keeping everything it
+// has. A ticket that is not done is TASK_NOT_DONE; an archived one is
+// answered as it is.
+func (s *Service) ArchiveTicket(ctx context.Context, id string) (*domain.Ticket, error) {
+	return s.setArchived(ctx, id, true)
+}
+
+// RestoreTicket puts an archived ticket back on the board, still done. A
+// ticket that is not archived is answered as it is.
+func (s *Service) RestoreTicket(ctx context.Context, id string) (*domain.Ticket, error) {
+	return s.setArchived(ctx, id, false)
+}
+
+func (s *Service) setArchived(ctx context.Context, id string, archive bool) (*domain.Ticket, error) {
+	s.ticketMu.Lock()
+	defer s.ticketMu.Unlock()
+	existing := s.tickets.Get(ctx, id)
+	if existing == nil {
+		return nil, &domain.StructuredError{Code: "TICKET_NOT_FOUND", Message: "ticket not found"}
+	}
+	if (existing.ArchivedAt != nil) == archive {
+		s.decorate(ctx, existing)
+		return existing, nil
+	}
+	var at *time.Time
+	if archive {
+		if existing.Status != domain.TicketStatusDone {
+			return nil, &domain.StructuredError{Code: "TASK_NOT_DONE", Message: "only a done task can be archived"}
+		}
+		now := time.Now()
+		at = &now
+	}
+	tk, err := s.tickets.SetArchived(id, at)
+	if err != nil {
+		return nil, err
+	}
+	// The write is done: the change goes out whole even if the request ends.
+	s.decorate(context.WithoutCancel(ctx), tk)
+	s.announce(tk, false)
 	return tk, nil
 }
 

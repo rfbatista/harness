@@ -2,6 +2,7 @@ package ports
 
 import (
 	"context"
+	"time"
 
 	"operators-mcp/internal/domain"
 )
@@ -10,9 +11,15 @@ import (
 // Tickets are scoped to a project.
 type TicketRepository interface {
 	Get(ctx context.Context, id string) *domain.Ticket
+	// ListByProject lists a project's tickets that are not archived.
 	ListByProject(ctx context.Context, projectID string) []*domain.Ticket
+	// ListArchivedByProject lists a project's archived tickets, newest
+	// archived first.
+	ListArchivedByProject(ctx context.Context, projectID string) []*domain.Ticket
 	Create(projectID, title, description string, status domain.TicketStatus) (*domain.Ticket, error)
 	Update(id, title, description string, status domain.TicketStatus) (*domain.Ticket, error)
+	// SetArchived archives the ticket at at, or restores it when at is nil.
+	SetArchived(id string, at *time.Time) (*domain.Ticket, error)
 	Delete(id string) error
 	// ActivityByProject answers each project's open task count and newest
 	// update, for every project that has tasks.
@@ -101,6 +108,18 @@ type TicketPatch struct {
 // field rely on it). A patch that changes nothing is a no-op.
 type TicketPatcher interface {
 	PatchTicket(ctx context.Context, id string, patch TicketPatch) (*domain.Ticket, error)
+}
+
+// TicketArchiver archives a done ticket and restores it: the person's alone,
+// never a session's. Archiving a ticket that is not done is TASK_NOT_DONE;
+// archiving an archived one and restoring an unarchived one change nothing
+// and answer the ticket. While archived, a ticket cannot change status
+// (TASK_ARCHIVED) and leaves ListTickets; ListArchivedTickets lists the
+// project's archived tickets, newest archived first.
+type TicketArchiver interface {
+	ArchiveTicket(ctx context.Context, id string) (*domain.Ticket, error)
+	RestoreTicket(ctx context.Context, id string) (*domain.Ticket, error)
+	ListArchivedTickets(ctx context.Context, projectID string) ([]*domain.Ticket, error)
 }
 
 // TicketAnnouncer puts a ticket change on the project feed, so the board and
