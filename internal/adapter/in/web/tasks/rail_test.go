@@ -16,6 +16,7 @@ func TestRailGroupsTasksInKanbanOrderWithTheirSessions(t *testing.T) {
 		{ID: "t-feed", Title: "Add SSE feed", Status: domain.TicketStatusInProgress},
 		{ID: "t-todo", Title: "Write docs", Status: domain.TicketStatusTodo},
 		{ID: "t-port", Title: "Port tickets", Status: domain.TicketStatusInProgress},
+		{ID: "t-old", Title: "Archived", Status: domain.TicketStatusDone, ArchivedAt: &archivedAt}, // off the rail
 	}
 	sessions := []*domain.Session{
 		// One task, several sessions at once: two live, one waiting on you, one over.
@@ -47,6 +48,11 @@ func TestRailGroupsTasksInKanbanOrderWithTheirSessions(t *testing.T) {
 	}
 	if href := rail.Groups[0].Links[0].Href; href != "/projects/p1/tasks/t-feed" {
 		t.Errorf("href = %q", href)
+	}
+	for _, tk := range rail.Seed.Tasks {
+		if tk.ID == "t-old" {
+			t.Errorf("the seed carries the archived task")
+		}
 	}
 }
 

@@ -95,6 +95,7 @@ func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRun
 		// What a person adds to a task: files, images, audio, links, comments.
 		TaskResources: plan,
 		TaskComments:  plan,
+		TaskArchive:   plan,
 		PullRequests:  prs,
 		Notifications: notes,
 		Usage:         usageSvc,

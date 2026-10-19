@@ -31,8 +31,16 @@ func (r *TicketRepository) Get(ctx context.Context, id string) *domain.Ticket {
 }
 
 func (r *TicketRepository) ListByProject(ctx context.Context, projectID string) []*domain.Ticket {
+	return r.list(r.db.WithContext(ctx).Where("project_id = ? AND archived_at IS NULL", projectID))
+}
+
+func (r *TicketRepository) ListArchivedByProject(ctx context.Context, projectID string) []*domain.Ticket {
+	return r.list(r.db.WithContext(ctx).Where("project_id = ? AND archived_at IS NOT NULL", projectID).Order("archived_at DESC"))
+}
+
+func (r *TicketRepository) list(q *gorm.DB) []*domain.Ticket {
 	var models []TicketModel
-	if err := r.db.WithContext(ctx).Where("project_id = ?", projectID).Find(&models).Error; err != nil {
+	if err := q.Find(&models).Error; err != nil {
 		return nil
 	}
 	out := make([]*domain.Ticket, 0, len(models))
@@ -69,6 +77,26 @@ func (r *TicketRepository) Update(id, title, description string, status domain.T
 	if err := r.db.Model(&m).Updates(updates).Error; err != nil {
 		return nil, err
 	}
+	if err := r.db.First(&m, "id = ?", id).Error; err != nil {
+		return nil, err
+	}
+	return m.ToDomain(), nil
+}
+
+func (r *TicketRepository) SetArchived(id string, at *time.Time) (*domain.Ticket, error) {
+	var ms *int64
+	if at != nil {
+		v := at.UnixMilli()
+		ms = &v
+	}
+	res := r.db.Model(&TicketModel{}).Where("id = ?", id).Update("archived_at", ms)
+	if res.Error != nil {
+		return nil, res.Error
+	}
+	if res.RowsAffected == 0 {
+		return nil, &domain.StructuredError{Code: "TICKET_NOT_FOUND", Message: "ticket not found"}
+	}
+	var m TicketModel
 	if err := r.db.First(&m, "id = ?", id).Error; err != nil {
 		return nil, err
 	}

@@ -24,8 +24,9 @@ type Column struct {
 }
 
 // BuildBoard groups a project's tasks by status with the same per-task
-// activity the rail shows.
+// activity the rail shows. Archived tasks are not on it.
 func BuildBoard(projectID string, tasks []*domain.Ticket, list []*domain.Session) Board {
+	tasks = unarchived(tasks)
 	byTask := activityByTask(list)
 	byStatus := map[string][]shell.Link{}
 	tasks = slices.Clone(tasks)
@@ -38,6 +39,18 @@ func BuildBoard(projectID string, tasks []*domain.Ticket, list []*domain.Session
 		b.Columns = append(b.Columns, Column{Status: st.Value, Label: st.Label, Cards: byStatus[st.Value]})
 	}
 	return b
+}
+
+// unarchived leaves out the archived tasks: neither the board nor the rail
+// shows them, whatever list they are handed.
+func unarchived(tasks []*domain.Ticket) []*domain.Ticket {
+	out := tasks[:0:0]
+	for _, t := range tasks {
+		if t.ArchivedAt == nil {
+			out = append(out, t)
+		}
+	}
+	return out
 }
 
 // Empty: no task in any column.
