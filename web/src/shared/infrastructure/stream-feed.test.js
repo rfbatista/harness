@@ -1,27 +1,14 @@
 import { FeedStatus } from "../domain/feed.js";
-import { fakeEventSourceClass, flush, manualTimers } from "../testing/doubles.js";
+import { fakeEventSourceClass, fakeStreamApi, flush, manualTimers } from "../testing/doubles.js";
 import { assert, file, test } from "../testing/test.js";
 import { streamFeed } from "./stream-feed.js";
 
 file("shared/infrastructure/stream-feed");
 
-// An api whose posts are recorded; a follow fails while `refuse` says so.
-function fakeApi() {
-  const posts = [];
-  const api = {
-    refuse: false,
-    post(path, body) {
-      posts.push({ route: path, ...body });
-      return api.refuse ? Promise.reject(new Error("refused")) : Promise.resolve({});
-    },
-  };
-  return { api, posts };
-}
-
 function setup() {
   const es = fakeEventSourceClass();
   const timers = manualTimers();
-  const { api, posts } = fakeApi();
+  const { api, posts } = fakeStreamApi();
   const f = streamFeed({ base: "/api", api, EventSource: es.EventSource, ...timers });
   const follower = (path = "/events?project_id=p1") => {
     const statuses = [];
@@ -191,7 +178,7 @@ test("leaving everything during a reconnect cancels it; following again opens a 
 
 test("a follower that throws does not keep the message from the others", async () => {
   const es = fakeEventSourceClass();
-  const f = streamFeed({ base: "/api", api: fakeApi().api, EventSource: es.EventSource, ...manualTimers() });
+  const f = streamFeed({ base: "/api", api: fakeStreamApi().api, EventSource: es.EventSource, ...manualTimers() });
   f.follow("/events", { onMessage: () => { throw new Error("boom"); } });
   const got = [];
   f.follow("/events", { onMessage: (m) => got.push(m) });

@@ -406,6 +406,8 @@ func TestArchitectChannelInTheWebUI_EndToEnd(t *testing.T) {
 		chromedp.Navigate(e.url("/projects/"+e.project)),
 		poll(`(`+badge+`) === '2 reviews'`),
 		both("6-board"),
+		// A change made before the page follows its feed is not news to it.
+		poll(`document.querySelector('[x-data=streamStatus]')?.dataset.state === 'live'`),
 	)
 	pending, err := e.channel.ListReviewRequests(e.ctx, e.ticket, domain.ReviewPending)
 	if err != nil || len(pending) != 2 {

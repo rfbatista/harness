@@ -95,6 +95,7 @@ import "../src/modules/usage/presentation/view.test.js";
 import "../src/screen-theme.test.js";
 import "../src/shared/infrastructure/api.test.js";
 import "../src/shared/infrastructure/feed.test.js";
+import "../src/shared/infrastructure/shared-feed.test.js";
 import "../src/shared/infrastructure/stream-feed.test.js";
 import "../src/shared/infrastructure/upload.test.js";
 import "../src/shared/presentation/components/combobox.test.js";
