@@ -173,7 +173,9 @@ func (s *Service) SessionRole(ctx context.Context, sessionID string) (domain.Ses
 	return role, nil
 }
 
-// SetTaskStatus moves the session's task, under the authority rule.
+// SetTaskStatus moves the session's task, under the authority rule. No session
+// moves a task into done, and that refusal wins over the architect owning the
+// status: done is the person's.
 func (s *Service) SetTaskStatus(ctx context.Context, bySessionID string, status domain.TicketStatus, reason string) (*domain.Ticket, error) {
 	if status == "" {
 		return nil, invalid("status is required: one of backlog, todo, in_progress, review, done")
@@ -184,6 +186,9 @@ func (s *Service) SetTaskStatus(ctx context.Context, bySessionID string, status 
 	sc, err := s.scopeOf(ctx, bySessionID)
 	if err != nil {
 		return nil, err
+	}
+	if status == domain.TicketStatusDone {
+		return nil, domain.ErrTaskDoneIsThePersons()
 	}
 	if a := sc.architect(); a != nil && a.ID != bySessionID {
 		return nil, &domain.StructuredError{Code: "TASK_STATUS_OWNED_BY_ARCHITECT",
