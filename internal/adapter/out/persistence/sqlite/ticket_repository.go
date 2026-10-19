@@ -118,23 +118,25 @@ func (r *TicketRepository) Delete(id string) error {
 	return r.db.Delete(&m).Error
 }
 
-// ActivityByProject answers each project's open task count and newest
-// update, in one query.
+// ActivityByProject answers each project's open and archived task counts
+// and newest update, in one query.
 func (r *TicketRepository) ActivityByProject() (map[string]ports.TaskActivity, error) {
 	var rows []struct {
 		ProjectID string
 		Open      int
+		Archived  int
 		Last      int64
 	}
 	err := r.db.Model(&TicketModel{}).
-		Select("project_id, SUM(CASE WHEN status <> ? THEN 1 ELSE 0 END) AS open, MAX(updated_at) AS last", string(domain.TicketStatusDone)).
+		Select("project_id, SUM(CASE WHEN status <> ? THEN 1 ELSE 0 END) AS open, "+
+			"SUM(CASE WHEN archived_at IS NOT NULL THEN 1 ELSE 0 END) AS archived, MAX(updated_at) AS last", string(domain.TicketStatusDone)).
 		Group("project_id").Scan(&rows).Error
 	if err != nil {
 		return nil, err
 	}
 	out := make(map[string]ports.TaskActivity, len(rows))
 	for _, row := range rows {
-		out[row.ProjectID] = ports.TaskActivity{OpenCount: row.Open, LastUpdatedAt: time.UnixMilli(row.Last)}
+		out[row.ProjectID] = ports.TaskActivity{OpenCount: row.Open, ArchivedCount: row.Archived, LastUpdatedAt: time.UnixMilli(row.Last)}
 	}
 	return out, nil
 }

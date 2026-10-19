@@ -15,6 +15,9 @@ import (
 // (web/src/modules/tasks, tasksBoard) keeps it live from the rail's seed.
 type Board struct {
 	Columns []Column
+	// ArchivedCount counts the project's archived tasks, for the
+	// "Archived (N)" link.
+	ArchivedCount int
 }
 
 // Column is one status and its tasks.

@@ -134,6 +134,14 @@ type world struct {
 	prs       ports.PullRequests
 	creds     ports.GitCredentials
 	usage     ports.UsageDashboard
+	archived  fakeArchivedCounts
+}
+
+// fakeArchivedCounts counts each project's archived tasks like planning.
+type fakeArchivedCounts map[string]int
+
+func (f fakeArchivedCounts) ArchivedTaskCount(_ context.Context, projectID string) (int, error) {
+	return f[projectID], nil
 }
 
 // fakeSummaries counts like the projects context: nil leaves /projects unserved.
@@ -181,6 +189,9 @@ func newTestHandler(t *testing.T, w world) http.Handler {
 	}
 	if w.usage != nil {
 		deps.Usage = w.usage
+	}
+	if w.archived != nil {
+		deps.ArchivedTasks = w.archived
 	}
 	return NewHandler(deps, builtAssets(t), fallback)
 }
@@ -703,5 +714,19 @@ func TestBuiltMeansTheAppBundles(t *testing.T) {
 	}
 	if a.URL("document.css") != "/static/document.css" {
 		t.Fatalf("an unbuilt stylesheet has a versioned url: %q", a.URL("document.css"))
+	}
+}
+
+// The project page and its shell carry the project's archived task count, for
+// the "Archived (N)" link.
+func TestProjectPageCarriesTheArchivedCount(t *testing.T) {
+	w := board()
+	w.archived = fakeArchivedCounts{"p1": 2, "p2": 5}
+	rec := get(t, newTestHandler(t, w), "/projects/p1")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("got %d:\n%s", rec.Code, rec.Body)
+	}
+	if body := rec.Body.String(); !strings.Contains(body, `"archived_count":2`) {
+		t.Errorf("the rail seed does not carry archived_count 2:\n%s", body)
 	}
 }

@@ -85,7 +85,11 @@ func (h Handler) Project(w http.ResponseWriter, r *http.Request) error {
 	frame.Live = true             // the stream bar shows the connection…
 	frame.Rail.ReportsFeed = true // …which the rail, the page's one feed, reports
 	frame.Rail.Page = shell.PageBoard
-	return h.Render(w, r, http.StatusOK, ProjectPage(frame, project.ID, project.Name, BuildBoard(project.ID, list, live)))
+	board := BuildBoard(project.ID, list, live)
+	if frame.Rail.Seed != nil {
+		board.ArchivedCount = frame.Rail.Seed.ArchivedCount
+	}
+	return h.Render(w, r, http.StatusOK, ProjectPage(frame, project.ID, project.Name, board))
 }
 
 // New serves GET /projects/{project}/tasks/new: the new-task form.

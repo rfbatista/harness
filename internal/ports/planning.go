@@ -21,8 +21,8 @@ type TicketRepository interface {
 	// SetArchived archives the ticket at at, or restores it when at is nil.
 	SetArchived(id string, at *time.Time) (*domain.Ticket, error)
 	Delete(id string) error
-	// ActivityByProject answers each project's open task count and newest
-	// update, for every project that has tasks.
+	// ActivityByProject answers each project's open and archived task
+	// counts and newest update, for every project that has tasks.
 	ActivityByProject() (map[string]TaskActivity, error)
 }
 
@@ -118,11 +118,20 @@ type TicketPatcher interface {
 // archiving an archived one and restoring an unarchived one change nothing
 // and answer the ticket. While archived, a ticket cannot change status
 // (TASK_ARCHIVED) and leaves ListTickets; ListArchivedTickets lists the
-// project's archived tickets, newest archived first.
+// project's archived tickets, newest archived first. ArchiveDoneTickets
+// archives every done ticket of the project that is not archived yet and
+// answers their ids, never nil.
 type TicketArchiver interface {
 	ArchiveTicket(ctx context.Context, id string) (*domain.Ticket, error)
 	RestoreTicket(ctx context.Context, id string) (*domain.Ticket, error)
 	ListArchivedTickets(ctx context.Context, projectID string) ([]*domain.Ticket, error)
+	ArchiveDoneTickets(ctx context.Context, projectID string) ([]string, error)
+}
+
+// ArchivedTaskCounter counts a project's archived tasks, for the project
+// page's "Archived (N)" link. Planning implements it.
+type ArchivedTaskCounter interface {
+	ArchivedTaskCount(ctx context.Context, projectID string) (int, error)
 }
 
 // TicketAnnouncer puts a ticket change on the project feed, so the board and

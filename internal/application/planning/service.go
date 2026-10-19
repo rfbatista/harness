@@ -18,9 +18,10 @@ import (
 
 // Service satisfies every driving port of this package, checked at compile time.
 var (
-	_ ports.Planning           = (*Service)(nil)
-	_ ports.TaskActivityReader = (*Service)(nil)
-	_ ports.TicketArchiver     = (*Service)(nil)
+	_ ports.Planning            = (*Service)(nil)
+	_ ports.TaskActivityReader  = (*Service)(nil)
+	_ ports.TicketArchiver      = (*Service)(nil)
+	_ ports.ArchivedTaskCounter = (*Service)(nil)
 )
 
 // Service implements ticket/document use-cases over the outbound ports.
@@ -324,6 +325,34 @@ func (s *Service) setArchived(ctx context.Context, id string, archive bool) (*do
 	return tk, nil
 }
 
+// ArchiveDoneTickets archives every done ticket of the project that is not
+// archived yet, announcing each, and answers their ids; none is an empty
+// list. An unknown project is PROJECT_NOT_FOUND.
+func (s *Service) ArchiveDoneTickets(ctx context.Context, projectID string) ([]string, error) {
+	if s.projects.Get(ctx, projectID) == nil {
+		return nil, &domain.StructuredError{Code: "PROJECT_NOT_FOUND", Message: "project not found"}
+	}
+	s.ticketMu.Lock()
+	defer s.ticketMu.Unlock()
+	// The writes go out whole even if the request ends midway.
+	ctx = context.WithoutCancel(ctx)
+	ids := []string{}
+	now := time.Now()
+	for _, tk := range s.tickets.ListByProject(ctx, projectID) {
+		if tk.Status != domain.TicketStatusDone {
+			continue
+		}
+		archived, err := s.tickets.SetArchived(tk.ID, &now)
+		if err != nil {
+			return ids, err
+		}
+		s.decorate(ctx, archived)
+		s.announce(archived, false)
+		ids = append(ids, archived.ID)
+	}
+	return ids, nil
+}
+
 // DeleteTicket removes the ticket and announces it with its last known state,
 // so followers know which project's board loses the card.
 // DeleteTicket deletes a task, announces it on the feed, then publishes
@@ -513,4 +542,14 @@ func (s *Service) ListDocumentTickets(documentID string) []*domain.Ticket {
 // task update: what a project summary shows.
 func (s *Service) TaskActivityByProject(_ context.Context) (map[string]ports.TaskActivity, error) {
 	return s.tickets.ActivityByProject()
+}
+
+// ArchivedTaskCount counts the project's archived tasks; a project without
+// tasks has none.
+func (s *Service) ArchivedTaskCount(_ context.Context, projectID string) (int, error) {
+	activity, err := s.tickets.ActivityByProject()
+	if err != nil {
+		return 0, err
+	}
+	return activity[projectID].ArchivedCount, nil
 }
