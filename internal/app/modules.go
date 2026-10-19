@@ -349,8 +349,8 @@ var TaskChannelModule = fx.Module("taskchannel",
 // newTaskChannelService builds the channel and points the orchestration and
 // planning at it: sessions and tickets leave them decorated with their role
 // fields, status moves are recorded and announced, and the orchestration's
-// role-aware brief asks it for roles.
-func newTaskChannelService(db *gorm.DB, sessions ports.SessionRepository, plan *planning.Service, orch *orchestration.Service, art *artifacts.Service, cat catalog.Catalog) *taskchannel.Service {
+// role-aware brief asks it for roles. Tickets also carry their merge state.
+func newTaskChannelService(db *gorm.DB, sessions ports.SessionRepository, plan *planning.Service, orch *orchestration.Service, art *artifacts.Service, cat catalog.Catalog, merges *workspaces.MergeStates) *taskchannel.Service {
 	svc := taskchannel.New(sessions, plan, taskchannel.Repositories{
 		Messages: sqlite.NewTaskMessageRepository(db),
 		Reviews:  sqlite.NewReviewRequestRepository(db),
@@ -359,7 +359,8 @@ func newTaskChannelService(db *gorm.DB, sessions ports.SessionRepository, plan *
 	svc.Delivery, svc.Announcer, svc.Feed, svc.Artifacts, svc.Agents = orch, orch, orch, art, cat.Agents
 	svc.Subscribe(cat.Bus)
 	orch.Roles, orch.Decorator = svc, svc
-	plan.Decorator, plan.StatusHistory = svc, sqlite.NewTaskStatusChangeRepository(db) // plan.Events is the bus already
+	plan.Decorator = ports.TicketDecorators{svc, merges}
+	plan.StatusHistory = sqlite.NewTaskStatusChangeRepository(db) // plan.Events is the bus already
 	return svc
 }
 
@@ -615,6 +616,7 @@ var WorkspacesModule = fx.Module("workspaces",
 		newWorkspacesService,
 		newPullRequestsService,
 		newCodeBrowser,
+		newMergeStates,
 	),
 	fx.Invoke(registerCodeWatcher),
 )
@@ -644,6 +646,14 @@ func registerCodeWatcher(lc fx.Lifecycle, sessions ports.SessionRepository, ws p
 			w.Stop()
 			return nil
 		},
+	})
+}
+
+// newMergeStates reads how much of each review or done task's code landed
+// in its repository's default branch.
+func newMergeStates(cfg Config, sessions ports.SessionRepository, ws ports.WorkspaceRepository, repos ports.RepositoryRepository) *workspaces.MergeStates {
+	return workspaces.NewMergeStates(workspaces.MergeStateDeps{
+		Sessions: sessions, Workspaces: ws, Repositories: repos, Git: gitcli.NewBranchMerges(cfg.gitOptions()...),
 	})
 }
 

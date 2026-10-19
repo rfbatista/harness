@@ -286,7 +286,7 @@ func TestArchitectChannel_EndToEnd(t *testing.T) {
 		t.Fatalf("a delegate's move is refused: %v", err)
 	}
 	e.mustTool(arch.ID, "update_task_status", map[string]any{"status": "in_progress", "reason": "delegated the server plan"})
-	e.sawOnFeed("task_status", `"status":"in_progress"`, `"by":"session"`, `"by_session_id":"`+arch.ID+`"`, `"reason":"delegated the server plan"`)
+	e.sawOnFeed("task_status", `"status":"in_progress"`, `"by":"architect"`, `"by_session_id":"`+arch.ID+`"`, `"reason":"delegated the server plan"`)
 
 	// The architect asks the person for a review; the person answers in the
 	// UI; the answer reaches the architect at its next Stop.
