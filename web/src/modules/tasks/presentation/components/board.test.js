@@ -340,3 +340,45 @@ test("a Done card's menu offers Archive; other cards' do not", () => {
   const { instance } = setup({ tasks: [makeTask({ id: "a", status: "done" }), makeTask({ id: "b", status: "review" })] });
   assert.deepEqual([instance.columns[4].cards[0].canArchive, instance.columns[3].cards[0].canArchive], [true, false]);
 });
+
+const doneTasks = (n) => Array.from({ length: n }, (_, i) => makeTask({ id: `d${i}`, title: `Done ${i}`, status: "done" }));
+
+test("Archive all asks first, in page; Cancel closes it and sends nothing", () => {
+  const { instance, memory } = setup({ tasks: [makeTask(), ...doneTasks(3)] });
+  assert.deepEqual([instance.archiveAll.shows, instance.archiveAll.open], [true, false]);
+  instance.askArchiveAll();
+  assert.deepEqual([instance.archiveAll.open, instance.archiveAll.confirm], [true, "Archive 3"]);
+  instance.cancelArchiveAll();
+  assert.equal(instance.archiveAll.open, false);
+  assert.deepEqual(memory.calls, []);
+});
+
+test("Archive all, confirmed: one request, the cards leave, the count goes up once, the column and the live region say how many", async () => {
+  const { instance, store, memory } = setup({ tasks: [makeTask(), ...doneTasks(3)] });
+  store.archivedCount = 2;
+  instance.askArchiveAll();
+  const server = { done: null };
+  const real = memory.gateway.archiveDoneTasks;
+  memory.gateway.archiveDoneTasks = (pid) => new Promise((resolve) => (server.done = () => resolve(real(pid))));
+  const p = instance.confirmArchiveAll();
+  assert.deepEqual([instance.archiveAll.phase, instance.archiveAll.title, store.tasks.length], ["busy", "Archiving 3…", 4], "not optimistic: the cards stay, faded");
+  // One echo arrives before the answer: the rail already took that card off and counted it.
+  store.tasks = store.tasks.filter((t) => t.id !== "d0");
+  store.archivedCount = 3;
+  server.done();
+  await p;
+  assert.deepEqual(store.tasks.map((t) => t.id), ["t1"]);
+  assert.deepEqual([store.archivedCount, instance.archiveAll.emptyText, instance.announcement], [5, "3 tasks archived.", "Archived 3 tasks."]);
+});
+
+test("Archive all refused: nothing leaves, the strip says so and can try again", async () => {
+  const { instance, store, memory } = setup({ tasks: doneTasks(2) });
+  memory.gateway.archiveDoneTasks = async () => {
+    throw new StructuredError(Codes.NETWORK, "The harness server is not reachable.");
+  };
+  instance.askArchiveAll();
+  await instance.confirmArchiveAll();
+  assert.deepEqual([instance.archiveAll.phase, instance.archiveAll.title, store.tasks.length, instance.archiveAllError.code], ["failed", "Couldn't archive. Nothing changed.", 2, Codes.NETWORK]);
+  instance.dismissArchiveAll();
+  assert.deepEqual([instance.archiveAll.phase, instance.archiveAllError], ["rest", null]);
+});

@@ -109,6 +109,9 @@
     overscroll-behavior: contain;
   }
 
+  /* "Archive all" in flight: the cards it takes fade until the server answers. */
+  .board > .column[data-archiving] .card { opacity: 0.5; }
+
   .board .column-empty {
     display: grid;
     place-items: center;
@@ -119,6 +122,9 @@
     font-size: var(--text-xs);
     color: var(--color-ink-faint);
     text-align: center;
+
+    & > .glyph { inline-size: 1rem; block-size: 1rem; }
+    & a { font-weight: var(--weight-medium); }
   }
 
   .board .card {

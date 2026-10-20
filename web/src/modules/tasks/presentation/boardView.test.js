@@ -1,6 +1,6 @@
 import { assert, file, test } from "../../../shared/testing/test.js";
 import { makeTask } from "../testing/fixtures.js";
-import { toColumns } from "./boardView.js";
+import { archiveAllView, toColumns } from "./boardView.js";
 
 file("tasks/presentation/boardView");
 
@@ -75,4 +75,19 @@ test("a card with a move in flight is pending and says where it goes; one that w
 test("each card's Move to… menu lists the statuses, its own checked, and opens on the next step", () => {
   const [card] = toColumns([makeTask({ status: "review" })], ctx())[3].cards;
   assert.deepEqual(card.choices.map((c) => `${c.key}:${c.label}:${c.current}:${c.initial}`), ["1:Backlog:false:false", "2:Todo:false:false", "3:In progress:false:false", "4:Review:true:false", "5:Done:false:true"]);
+});
+
+test("Archive all: the button shows while Done holds cards; the strip names the count, live, in each state", () => {
+  assert.deepEqual(archiveAllView({ phase: "rest", done: 14 }), { shows: true, open: false, phase: "rest", title: "", body: "", confirm: "", emptyText: "", asking: false, busy: false, failed: false, tone: null });
+  assert.equal(archiveAllView({ phase: "rest", done: 0 }).shows, false);
+  const confirm = archiveAllView({ phase: "confirm", done: 14 });
+  assert.deepEqual([confirm.open, confirm.title, confirm.body, confirm.confirm], [true, "Archive all 14 done tasks?", "They leave the board and the rail. Nothing is lost: restore any of them from Archived.", "Archive 14"]);
+  assert.deepEqual([archiveAllView({ phase: "confirm", done: 15 }).confirm, archiveAllView({ phase: "confirm", done: 1 }).title], ["Archive 15", "Archive all 1 done task?"], "the count follows Done while the strip is open");
+  assert.deepEqual([archiveAllView({ phase: "confirm", done: 0 }).open, archiveAllView({ phase: "confirm", done: 0 }).phase], [false, "rest"], "Done emptied: the strip closes");
+  assert.deepEqual([archiveAllView({ phase: "busy", done: 14 }).title, archiveAllView({ phase: "busy", done: 14 }).open], ["Archiving 14…", true]);
+  const failed = archiveAllView({ phase: "failed", done: 14 });
+  assert.deepEqual([failed.open, failed.title], [true, "Couldn't archive. Nothing changed."]);
+  const done = archiveAllView({ phase: "done", done: 0, archived: 14 });
+  assert.deepEqual([done.open, done.shows, done.emptyText], [false, false, "14 tasks archived."]);
+  assert.equal(archiveAllView({ phase: "done", done: 1, archived: 14 }).emptyText, "", "a card landed in Done meanwhile: the column shows it instead");
 });

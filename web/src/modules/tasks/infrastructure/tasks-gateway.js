@@ -39,6 +39,12 @@ export function tasksGateway(api) {
       return toTask(body?.ticket);
     },
 
+    async archiveDoneTasks(projectId) {
+      const body = await api.post("/archive_done_tickets", { project_id: projectId });
+      if (!Array.isArray(body?.ids)) bad("expected {archived, ids: [...]}");
+      return { archived: Number(body.archived ?? body.ids.length), ids: body.ids };
+    },
+
     async restoreTask(id) {
       const body = await api.post("/restore_ticket", { id });
       return toTask(body?.ticket);

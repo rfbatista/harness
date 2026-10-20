@@ -72,6 +72,9 @@ templ ssrBoard(b Board) {
 				<header>
 					<h2>{ c.Label }</h2>
 					<span class="[ count ]">{ strconv.Itoa(len(c.Cards)) }</span>
+					if c.Status == "done" && len(c.Cards) > 0 {
+						<div class="[ actions ]"><button type="button" class="[ button ]" data-size="sm" data-archive-all>Archive all</button></div>
+					}
 					if c.Waiting() {
 						<p class="[ sub ]">Waiting for your check</p>
 					}
@@ -136,12 +139,18 @@ templ ssrCard(c Card, column string) {
 templ liveBoard() {
 	<div class="[ board ]" data-board aria-label="Tasks by status">
 		<template x-for="column in columns" x-bind:key="column.status">
-			<section class="[ column ]" x-bind:data-column="column.status" x-bind:aria-label="column.label" x-bind:data-waiting="column.waiting">
+			<section class="[ column ]" x-bind:data-column="column.status" x-bind:aria-label="column.label" x-bind:data-waiting="column.waiting" x-bind:data-archiving="column.archiving">
 				<header>
 					<h2 x-text="column.label"></h2>
 					<span class="[ count ]" x-text="column.count"></span>
+					<div class="[ actions ]" x-show="column.isDone">
+						<button type="button" class="[ button ]" data-size="sm" data-archive-all x-show="archiveAll.shows" x-on:click="askArchiveAll">Archive all</button>
+					</div>
 					<p class="[ sub ]" x-show="column.waiting" x-text="column.sub"></p>
 				</header>
+				<template x-if="column.isDone">
+					@archiveAllStrip()
+				</template>
 				<div class="[ cards ]">
 					<template x-for="card in column.cards" x-bind:key="card.id">
 						<article class="[ card ]" x-bind:data-task-id="card.id" x-bind:data-status="card.status" x-bind:data-fresh="card.fresh" x-bind:data-pending="card.pending" x-bind:data-failed="card.failed">
@@ -174,10 +183,35 @@ templ liveBoard() {
 							<p class="[ note ]" role="status" x-show="card.note" x-text="card.note"></p>
 						</article>
 					</template>
-					<p class="[ column-empty ]" x-show="column.isEmpty" x-text="column.emptyText"></p>
+					<p class="[ column-empty ]" x-show="column.showsEmpty" x-text="column.emptyText"></p>
+					<p class="[ column-empty ]" data-archived-receipt x-show="column.receipt">
+						@cardGlyph("archive")
+						<span><span x-text="column.receipt"></span> <a x-bind:href="archivedHref">View Archived</a></span>
+					</p>
 				</div>
 			</section>
 		</template>
+	</div>
+}
+
+// archiveAllStrip is the Done column's in-page confirmation of "Archive
+// all" (never window.confirm): it names the count, then says it is archiving,
+// or that it failed with the error and Try again.
+templ archiveAllStrip() {
+	<div class="[ confirm-strip ]" data-confirm="archive-all" role="group" aria-labelledby="archive-all-title" x-show="archiveAll.open" x-bind:data-tone="archiveAll.tone" x-on:keydown.escape="cancelArchiveAll">
+		<h3 id="archive-all-title" x-text="archiveAll.title"></h3>
+		<p x-show="archiveAll.body" x-text="archiveAll.body"></p>
+		<template x-if="archiveAllError">
+			<p class="[ code ]"><span x-text="archiveAllError.message"></span> · <span x-text="archiveAllError.code"></span> · <span x-text="archiveAllError.next"></span></p>
+		</template>
+		<div class="[ actions ]" x-show="archiveAll.asking">
+			<button type="button" class="[ button ]" data-variant="primary" data-size="sm" x-bind:aria-busy="archiveAll.busy" x-on:click="confirmArchiveAll" x-text="archiveAll.confirm"></button>
+			<button type="button" class="[ button ]" data-size="sm" x-bind:disabled="archiveAll.busy" x-on:click="cancelArchiveAll">Cancel</button>
+		</div>
+		<div class="[ actions ]" x-show="archiveAll.failed">
+			<button type="button" class="[ button ]" data-variant="primary" data-size="sm" x-on:click="confirmArchiveAll">Try again</button>
+			<button type="button" class="[ button ]" data-size="sm" x-on:click="dismissArchiveAll">Dismiss</button>
+		</div>
 	</div>
 }
 

@@ -74,6 +74,12 @@ export function memoryTasks({ projects = [], tasks = [], sessions = [], document
       return archived;
     },
 
+    async archiveDoneTasks(projectId) {
+      const ids = [...store.values()].filter((t) => t.projectId === projectId && t.status === "done" && !t.archivedAt).map((t) => t.id);
+      for (const id of ids) store.set(id, Object.freeze({ ...store.get(id), archivedAt: now() }));
+      return { archived: ids.length, ids };
+    },
+
     async restoreTask(id) {
       const task = store.get(id);
       if (!task) throw new StructuredError(Codes.TICKET_NOT_FOUND, "ticket not found", 404);

@@ -89,6 +89,18 @@ export function taskGatewayContract(name, makeSubject) {
     await assert.rejects(subject.gateway.restoreTask("ghost"), Codes.TICKET_NOT_FOUND);
   });
 
+  contract("archiveDoneTasks archives every done task on the board and says which; none left is zero", async () => {
+    const subject = makeSubject({
+      projects: ["p1"],
+      tasks: [makeTask({ id: "a", status: "done" }), makeTask({ id: "b", status: "done" }), makeTask({ id: "c", status: "review" })],
+      sessions: [],
+    });
+    const result = await subject.gateway.archiveDoneTasks("p1");
+    assert.deepEqual([result.archived, [...result.ids].sort()], [2, ["a", "b"]]);
+    assert.deepEqual(subject.tasks().filter((t) => !t.archivedAt).map((t) => t.id), ["c"]);
+    assert.deepEqual(await subject.gateway.archiveDoneTasks("p1"), { archived: 0, ids: [] });
+  });
+
   contract("deleteTask removes it; twice is TICKET_NOT_FOUND", async () => {
     const subject = makeSubject({ projects: ["p1"], tasks: [makeTask()], sessions: [] });
     await subject.gateway.deleteTask("t1");

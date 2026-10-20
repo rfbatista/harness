@@ -20,6 +20,9 @@
  *           archived one again changes nothing. Rejects with TASK_NOT_DONE or
  *           TICKET_NOT_FOUND. An archived task's status cannot change
  *           (TASK_ARCHIVED) until it is restored.
+ * @property {(projectId: string) => Promise<{ archived: number, ids: string[] }>} archiveDoneTasks
+ *           Archives every done task of the project still on the board, at
+ *           once, and says which.
  * @property {(id: string) => Promise<Task>} restoreTask
  *           Puts an archived task back in Done; one on the board is a no-op.
  *           Rejects with TICKET_NOT_FOUND.

@@ -13,7 +13,7 @@ import { Codes, codeOf } from "../../../../shared/domain/errors.js";
 import { describeError } from "../../../../shared/presentation/errors.js";
 import { applyTaskChange, describeChange } from "../../domain/board.js";
 import { STATUSES } from "../../domain/task.js";
-import { toColumns } from "../boardView.js";
+import { archiveAllView, toColumns } from "../boardView.js";
 
 /** How long a task that arrived or moved over the feed stays highlighted. */
 export const FRESH_MS = 8_000;
@@ -60,6 +60,11 @@ export const board = ({ gateway, store, setTimeout = globalThis.setTimeout.bind(
     moves: {},
     /** A move's confirmed status whose echo may still arrive, per card. */
     echoes: {},
+    /** "Archive all": rest, confirm, busy, done or failed; archived is how many the last one took. */
+    archiveAllPhase: "rest",
+    archivedByAll: 0,
+    /** Why the last "Archive all" failed, for the strip. */
+    archiveAllError: null,
     /** "Archived (N)" as the server painted it, until the rail's store has its own count. */
     ssrArchivedCount: 0,
     /** What the cards' time in column is measured against; it moves once a minute, so nothing reorders. */
@@ -67,7 +72,18 @@ export const board = ({ gateway, store, setTimeout = globalThis.setTimeout.bind(
 
     get columns() {
       const pending = Object.fromEntries(Object.entries(this.moves).map(([id, m]) => [id, m.pending.at(-1)]));
-      return toColumns(store.tasks, { projectId: this.projectId, byTask: store.byTask, fresh: new Set(this.freshIds), now: this.now, pending, failed: new Set(this.failedIds) });
+      const columns = toColumns(store.tasks, { projectId: this.projectId, byTask: store.byTask, fresh: new Set(this.freshIds), now: this.now, pending, failed: new Set(this.failedIds) });
+      // Done carries "Archive all": its strip, its fading cards and the receipt in place of the empty text.
+      const all = this.archiveAll;
+      return columns.map((c) => {
+        const isDone = c.status === "done";
+        const receipt = isDone ? all.emptyText : "";
+        return { ...c, isDone, archiving: isDone && all.busy, receipt, showsEmpty: c.isEmpty && !receipt };
+      });
+    },
+    get archiveAll() {
+      const done = store.tasks.filter((t) => t.status === "done").length;
+      return archiveAllView({ phase: this.archiveAllPhase, done, archived: this.archivedByAll });
     },
     get archivedLink() {
       return `Archived (${store.seeded ? (store.archivedCount ?? 0) : this.ssrArchivedCount})`;
@@ -179,6 +195,48 @@ export const board = ({ gateway, store, setTimeout = globalThis.setTimeout.bind(
         this.error = describeError(err);
         this.announcement = `Couldn't move ${task.title} to ${statusLabel(status)}.`;
         if (refocus) this.refocus(taskId);
+      }
+    },
+
+    /** "Archive all" opens its in-page confirmation, its button focused. */
+    askArchiveAll() {
+      this.archiveAllPhase = "confirm";
+      this.archiveAllError = null;
+      this.$nextTick(() => root?.querySelector('[data-confirm="archive-all"] [data-variant="primary"]')?.focus());
+    },
+
+    cancelArchiveAll() {
+      this.archiveAllPhase = "rest";
+      this.$nextTick(() => root?.querySelector("[data-archive-all]")?.focus());
+    },
+
+    dismissArchiveAll() {
+      this.archiveAllPhase = "rest";
+      this.archiveAllError = null;
+    },
+
+    /**
+     * Archives all of Done in one request. Not optimistic: the cards fade
+     * until the server answers. A card the feed already took off was counted
+     * by the rail; the rest are counted here, once.
+     */
+    async confirmArchiveAll() {
+      if (this.archiveAllPhase === "busy") return;
+      this.archiveAllPhase = "busy";
+      this.archiveAllError = null;
+      try {
+        const { archived, ids } = await gateway.archiveDoneTasks(this.projectId);
+        const gone = new Set(ids);
+        const still = store.tasks.filter((t) => gone.has(t.id)).length;
+        store.tasks = store.tasks.filter((t) => !gone.has(t.id));
+        store.archivedCount = (store.archivedCount ?? 0) + still;
+        this.archivedByAll = archived;
+        this.archiveAllPhase = "done";
+        this.announcement = `Archived ${archived} ${archived === 1 ? "task" : "tasks"}.`;
+        this.$nextTick(() => root?.querySelector("[data-archived-receipt] a")?.focus());
+      } catch (err) {
+        this.archiveAllError = describeError(err);
+        this.archiveAllPhase = "failed";
       }
     },
 

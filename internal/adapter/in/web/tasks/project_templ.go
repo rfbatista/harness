@@ -361,13 +361,19 @@ func ssrBoard(b Board) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			if c.Waiting() {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 23, "<p class=\"[ sub ]\">Waiting for your check</p>")
+			if c.Status == "done" && len(c.Cards) > 0 {
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 23, "<div class=\"[ actions ]\"><button type=\"button\" class=\"[ button ]\" data-size=\"sm\" data-archive-all>Archive all</button></div>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 24, "</header><div class=\"[ cards ]\">")
+			if c.Waiting() {
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 24, "<p class=\"[ sub ]\">Waiting for your check</p>")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 25, "</header><div class=\"[ cards ]\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -378,30 +384,30 @@ func ssrBoard(b Board) templ.Component {
 				}
 			}
 			if len(c.Cards) == 0 {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 25, "<p class=\"[ column-empty ]\">")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 26, "<p class=\"[ column-empty ]\">")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var19 string
 				templ_7745c5c3_Var19, templ_7745c5c3_Err = templ.JoinStringErrs(c.EmptyText())
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `tasks/project.templ`, Line: 84, Col: 49}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `tasks/project.templ`, Line: 87, Col: 49}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var19))
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 26, "</p>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 27, "</p>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 27, "</div></section>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 28, "</div></section>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 28, "</div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 29, "</div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -431,101 +437,101 @@ func ssrCard(c Card, column string) templ.Component {
 			templ_7745c5c3_Var20 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 29, "<article class=\"[ card ]\" data-task-id=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 30, "<article class=\"[ card ]\" data-task-id=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var21 string
 		templ_7745c5c3_Var21, templ_7745c5c3_Err = templ.ResolveAttributeValue(c.TaskID)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `tasks/project.templ`, Line: 94, Col: 50}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `tasks/project.templ`, Line: 97, Col: 50}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var21)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 30, "\" data-status=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 31, "\" data-status=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var22 string
 		templ_7745c5c3_Var22, templ_7745c5c3_Err = templ.ResolveAttributeValue(c.Status)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `tasks/project.templ`, Line: 94, Col: 75}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `tasks/project.templ`, Line: 97, Col: 75}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var22)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 31, "\"><div class=\"[ top ]\"><a class=\"[ title ]\" href=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 32, "\"><div class=\"[ top ]\"><a class=\"[ title ]\" href=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var23 templ.SafeURL
 		templ_7745c5c3_Var23, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL(c.Href))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `tasks/project.templ`, Line: 96, Col: 52}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `tasks/project.templ`, Line: 99, Col: 52}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var23))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 32, "\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 33, "\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var24 string
 		templ_7745c5c3_Var24, templ_7745c5c3_Err = templ.JoinStringErrs(c.Label)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `tasks/project.templ`, Line: 96, Col: 64}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `tasks/project.templ`, Line: 99, Col: 64}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var24))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 33, "</a> <button type=\"button\" class=\"[ button move-to ]\" data-variant=\"ghost\" data-size=\"sm\" aria-haspopup=\"menu\" aria-expanded=\"false\">Move to…<span class=\"[ chevron ]\" aria-hidden=\"true\"></span></button></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 34, "</a> <button type=\"button\" class=\"[ button move-to ]\" data-variant=\"ghost\" data-size=\"sm\" aria-haspopup=\"menu\" aria-expanded=\"false\">Move to…<span class=\"[ chevron ]\" aria-hidden=\"true\"></span></button></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		if c.HasSignals() {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 34, "<div class=\"[ signals ]\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 35, "<div class=\"[ signals ]\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			if c.LiveState != "" {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 35, "<span class=\"[ status ]\" data-state=\"")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 36, "<span class=\"[ status ]\" data-state=\"")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var25 string
 				templ_7745c5c3_Var25, templ_7745c5c3_Err = templ.ResolveAttributeValue(c.LiveState)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `tasks/project.templ`, Line: 102, Col: 54}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `tasks/project.templ`, Line: 105, Col: 54}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var25)
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 36, "\">")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 37, "\">")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var26 string
 				templ_7745c5c3_Var26, templ_7745c5c3_Err = templ.JoinStringErrs(c.LiveWord)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `tasks/project.templ`, Line: 102, Col: 69}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `tasks/project.templ`, Line: 105, Col: 69}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var26))
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 37, "</span> ")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 38, "</span> ")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 			}
 			if c.Reviews > 0 {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 38, "<span class=\"[ badge reviews ]\">")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 39, "<span class=\"[ badge reviews ]\">")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -536,32 +542,32 @@ func ssrCard(c Card, column string) templ.Component {
 				var templ_7745c5c3_Var27 string
 				templ_7745c5c3_Var27, templ_7745c5c3_Err = templ.JoinStringErrs(reviewsWord(c.Reviews))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `tasks/project.templ`, Line: 107, Col: 30}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `tasks/project.templ`, Line: 110, Col: 30}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var27))
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 39, "</span> ")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 40, "</span> ")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 			}
 			if c.Merge != nil {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 40, "<span class=\"[ badge merge ]\" data-merge-state=\"")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 41, "<span class=\"[ badge merge ]\" data-merge-state=\"")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var28 string
 				templ_7745c5c3_Var28, templ_7745c5c3_Err = templ.ResolveAttributeValue(c.Merge.State)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `tasks/project.templ`, Line: 111, Col: 67}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `tasks/project.templ`, Line: 114, Col: 67}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var28)
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 41, "\">")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 42, "\">")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -572,90 +578,90 @@ func ssrCard(c Card, column string) templ.Component {
 				var templ_7745c5c3_Var29 string
 				templ_7745c5c3_Var29, templ_7745c5c3_Err = templ.JoinStringErrs(c.Merge.Word)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `tasks/project.templ`, Line: 113, Col: 20}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `tasks/project.templ`, Line: 116, Col: 20}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var29))
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 42, "</span>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 43, "</span>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 43, "</div>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 44, "</div>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 44, "<p class=\"[ last-move ]\" data-last-move><span>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 45, "<p class=\"[ last-move ]\" data-last-move><span>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var30 string
 		templ_7745c5c3_Var30, templ_7745c5c3_Err = templ.JoinStringErrs(c.Lead + " ")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `tasks/project.templ`, Line: 120, Col: 18}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `tasks/project.templ`, Line: 123, Col: 18}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var30))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 45, "<span class=\"[ who ]\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 46, "<span class=\"[ who ]\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var31 string
 		templ_7745c5c3_Var31, templ_7745c5c3_Err = templ.JoinStringErrs(c.Who)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `tasks/project.templ`, Line: 120, Col: 49}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `tasks/project.templ`, Line: 123, Col: 49}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var31))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 46, "</span> ")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 47, "</span> ")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		if c.At != "" {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 47, "<span class=\"[ at ]\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 48, "<span class=\"[ at ]\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var32 string
 			templ_7745c5c3_Var32, templ_7745c5c3_Err = templ.JoinStringErrs(" · " + c.At)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `tasks/project.templ`, Line: 122, Col: 41}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `tasks/project.templ`, Line: 125, Col: 41}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var32))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 48, "</span>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 49, "</span>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 49, "</span> ")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 50, "</span> ")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		if c.Age != "" {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 50, "<span class=\"[ age ]\" data-age title=\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 51, "<span class=\"[ age ]\" data-age title=\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var33 string
 			templ_7745c5c3_Var33, templ_7745c5c3_Err = templ.ResolveAttributeValue("In this column since " + c.At)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `tasks/project.templ`, Line: 126, Col: 73}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `tasks/project.templ`, Line: 129, Col: 73}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var33)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 51, "\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 52, "\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -663,48 +669,48 @@ func ssrCard(c Card, column string) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 52, ">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 53, ">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var34 string
 			templ_7745c5c3_Var34, templ_7745c5c3_Err = templ.JoinStringErrs(c.Age)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `tasks/project.templ`, Line: 126, Col: 110}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `tasks/project.templ`, Line: 129, Col: 110}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var34))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 53, "</span>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 54, "</span>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 54, "</p>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 55, "</p>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		if c.Reason != "" {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 55, "<p class=\"[ reason ]\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 56, "<p class=\"[ reason ]\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var35 string
 			templ_7745c5c3_Var35, templ_7745c5c3_Err = templ.JoinStringErrs(c.Reason)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `tasks/project.templ`, Line: 130, Col: 35}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `tasks/project.templ`, Line: 133, Col: 35}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var35))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 56, "</p>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 57, "</p>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 57, "</article>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 58, "</article>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -734,7 +740,15 @@ func liveBoard() templ.Component {
 			templ_7745c5c3_Var36 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 58, "<div class=\"[ board ]\" data-board aria-label=\"Tasks by status\"><template x-for=\"column in columns\" x-bind:key=\"column.status\"><section class=\"[ column ]\" x-bind:data-column=\"column.status\" x-bind:aria-label=\"column.label\" x-bind:data-waiting=\"column.waiting\"><header><h2 x-text=\"column.label\"></h2><span class=\"[ count ]\" x-text=\"column.count\"></span><p class=\"[ sub ]\" x-show=\"column.waiting\" x-text=\"column.sub\"></p></header><div class=\"[ cards ]\"><template x-for=\"card in column.cards\" x-bind:key=\"card.id\"><article class=\"[ card ]\" x-bind:data-task-id=\"card.id\" x-bind:data-status=\"card.status\" x-bind:data-fresh=\"card.fresh\" x-bind:data-pending=\"card.pending\" x-bind:data-failed=\"card.failed\"><div class=\"[ top ]\"><a class=\"[ title ]\" x-bind:href=\"card.href\" x-text=\"card.title\"></a>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 59, "<div class=\"[ board ]\" data-board aria-label=\"Tasks by status\"><template x-for=\"column in columns\" x-bind:key=\"column.status\"><section class=\"[ column ]\" x-bind:data-column=\"column.status\" x-bind:aria-label=\"column.label\" x-bind:data-waiting=\"column.waiting\" x-bind:data-archiving=\"column.archiving\"><header><h2 x-text=\"column.label\"></h2><span class=\"[ count ]\" x-text=\"column.count\"></span><div class=\"[ actions ]\" x-show=\"column.isDone\"><button type=\"button\" class=\"[ button ]\" data-size=\"sm\" data-archive-all x-show=\"archiveAll.shows\" x-on:click=\"askArchiveAll\">Archive all</button></div><p class=\"[ sub ]\" x-show=\"column.waiting\" x-text=\"column.sub\"></p></header><template x-if=\"column.isDone\">")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = archiveAllStrip().Render(ctx, templ_7745c5c3_Buffer)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 60, "</template><div class=\"[ cards ]\"><template x-for=\"card in column.cards\" x-bind:key=\"card.id\"><article class=\"[ card ]\" x-bind:data-task-id=\"card.id\" x-bind:data-status=\"card.status\" x-bind:data-fresh=\"card.fresh\" x-bind:data-pending=\"card.pending\" x-bind:data-failed=\"card.failed\"><div class=\"[ top ]\"><a class=\"[ title ]\" x-bind:href=\"card.href\" x-text=\"card.title\"></a>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -742,7 +756,7 @@ func liveBoard() templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 59, "</div><div class=\"[ signals ]\" x-show=\"card.hasSignals\"><span class=\"[ status ]\" x-show=\"card.hasLive\" x-bind:data-state=\"card.liveState\" x-text=\"card.liveWord\"></span><template x-if=\"card.hasReviews\"><span class=\"[ badge reviews ]\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 61, "</div><div class=\"[ signals ]\" x-show=\"card.hasSignals\"><span class=\"[ status ]\" x-show=\"card.hasLive\" x-bind:data-state=\"card.liveState\" x-text=\"card.liveWord\"></span><template x-if=\"card.hasReviews\"><span class=\"[ badge reviews ]\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -750,7 +764,7 @@ func liveBoard() templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 60, "<span x-text=\"card.reviews\"></span></span></template><template x-if=\"card.hasMerge\"><span class=\"[ badge merge ]\" x-bind:data-merge-state=\"card.mergeState\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 62, "<span x-text=\"card.reviews\"></span></span></template><template x-if=\"card.hasMerge\"><span class=\"[ badge merge ]\" x-bind:data-merge-state=\"card.mergeState\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -758,7 +772,47 @@ func liveBoard() templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 61, "<span x-text=\"card.mergeWord\"></span></span></template></div><p class=\"[ last-move ]\" data-last-move><span><span x-text=\"card.lead\"></span> <span class=\"[ who ]\" x-text=\"card.who\"></span><span class=\"[ at ]\" x-text=\"card.at\"></span></span> <span class=\"[ age ]\" data-age x-show=\"card.age\" x-bind:title=\"card.ageTitle\" x-bind:data-stale=\"card.stale\" x-text=\"card.age\"></span></p><p class=\"[ reason ]\" x-show=\"card.hasReason\" x-text=\"card.reason\"></p><p class=\"[ note ]\" role=\"status\" x-show=\"card.note\" x-text=\"card.note\"></p></article></template><p class=\"[ column-empty ]\" x-show=\"column.isEmpty\" x-text=\"column.emptyText\"></p></div></section></template></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 63, "<span x-text=\"card.mergeWord\"></span></span></template></div><p class=\"[ last-move ]\" data-last-move><span><span x-text=\"card.lead\"></span> <span class=\"[ who ]\" x-text=\"card.who\"></span><span class=\"[ at ]\" x-text=\"card.at\"></span></span> <span class=\"[ age ]\" data-age x-show=\"card.age\" x-bind:title=\"card.ageTitle\" x-bind:data-stale=\"card.stale\" x-text=\"card.age\"></span></p><p class=\"[ reason ]\" x-show=\"card.hasReason\" x-text=\"card.reason\"></p><p class=\"[ note ]\" role=\"status\" x-show=\"card.note\" x-text=\"card.note\"></p></article></template><p class=\"[ column-empty ]\" x-show=\"column.showsEmpty\" x-text=\"column.emptyText\"></p><p class=\"[ column-empty ]\" data-archived-receipt x-show=\"column.receipt\">")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = cardGlyph("archive").Render(ctx, templ_7745c5c3_Buffer)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 64, "<span><span x-text=\"column.receipt\"></span> <a x-bind:href=\"archivedHref\">View Archived</a></span></p></div></section></template></div>")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		return nil
+	})
+}
+
+// archiveAllStrip is the Done column's in-page confirmation of "Archive
+// all" (never window.confirm): it names the count, then says it is archiving,
+// or that it failed with the error and Try again.
+func archiveAllStrip() templ.Component {
+	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
+		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
+		if templ_7745c5c3_CtxErr := ctx.Err(); templ_7745c5c3_CtxErr != nil {
+			return templ_7745c5c3_CtxErr
+		}
+		templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
+		if !templ_7745c5c3_IsBuffer {
+			defer func() {
+				templ_7745c5c3_BufErr := templruntime.ReleaseBuffer(templ_7745c5c3_Buffer)
+				if templ_7745c5c3_Err == nil {
+					templ_7745c5c3_Err = templ_7745c5c3_BufErr
+				}
+			}()
+		}
+		ctx = templ.InitializeContext(ctx)
+		templ_7745c5c3_Var37 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var37 == nil {
+			templ_7745c5c3_Var37 = templ.NopComponent
+		}
+		ctx = templ.ClearChildren(ctx)
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 65, "<div class=\"[ confirm-strip ]\" data-confirm=\"archive-all\" role=\"group\" aria-labelledby=\"archive-all-title\" x-show=\"archiveAll.open\" x-bind:data-tone=\"archiveAll.tone\" x-on:keydown.escape=\"cancelArchiveAll\"><h3 id=\"archive-all-title\" x-text=\"archiveAll.title\"></h3><p x-show=\"archiveAll.body\" x-text=\"archiveAll.body\"></p><template x-if=\"archiveAllError\"><p class=\"[ code ]\"><span x-text=\"archiveAllError.message\"></span> · <span x-text=\"archiveAllError.code\"></span> · <span x-text=\"archiveAllError.next\"></span></p></template><div class=\"[ actions ]\" x-show=\"archiveAll.asking\"><button type=\"button\" class=\"[ button ]\" data-variant=\"primary\" data-size=\"sm\" x-bind:aria-busy=\"archiveAll.busy\" x-on:click=\"confirmArchiveAll\" x-text=\"archiveAll.confirm\"></button> <button type=\"button\" class=\"[ button ]\" data-size=\"sm\" x-bind:disabled=\"archiveAll.busy\" x-on:click=\"cancelArchiveAll\">Cancel</button></div><div class=\"[ actions ]\" x-show=\"archiveAll.failed\"><button type=\"button\" class=\"[ button ]\" data-variant=\"primary\" data-size=\"sm\" x-on:click=\"confirmArchiveAll\">Try again</button> <button type=\"button\" class=\"[ button ]\" data-size=\"sm\" x-on:click=\"dismissArchiveAll\">Dismiss</button></div></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -786,12 +840,12 @@ func moveMenu() templ.Component {
 			}()
 		}
 		ctx = templ.InitializeContext(ctx)
-		templ_7745c5c3_Var37 := templ.GetChildren(ctx)
-		if templ_7745c5c3_Var37 == nil {
-			templ_7745c5c3_Var37 = templ.NopComponent
+		templ_7745c5c3_Var38 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var38 == nil {
+			templ_7745c5c3_Var38 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 62, "<div class=\"[ menu ]\" x-data=\"menu\" data-align=\"end\" x-on:menu-select=\"menuSelect\"><button type=\"button\" class=\"[ button move-to ]\" data-variant=\"ghost\" data-size=\"sm\" x-bind:aria-disabled=\"card.pending ? 'true' : null\">Move to…<span class=\"[ chevron ]\" aria-hidden=\"true\"></span></button><div class=\"[ popup ]\" role=\"menu\"><div class=\"[ group ]\" aria-hidden=\"true\">Move to</div><template x-for=\"choice in card.choices\" x-bind:key=\"choice.status\"><button type=\"button\" role=\"menuitemradio\" data-action=\"move\" x-bind:data-value=\"choice.status\" x-bind:data-key=\"choice.key\" x-bind:aria-checked=\"choice.current\" x-bind:aria-disabled=\"choice.current\" x-bind:data-skip=\"choice.current\" x-bind:data-initial=\"choice.initial\"><span x-text=\"choice.label\"></span><kbd x-text=\"choice.key\"></kbd></button></template><hr role=\"separator\"><template x-if=\"card.canArchive\"><button type=\"button\" role=\"menuitem\" data-action=\"archive\" data-key=\"a\">Archive<kbd>A</kbd></button></template><a role=\"menuitem\" x-bind:href=\"card.href\">Open task</a></div></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 66, "<div class=\"[ menu ]\" x-data=\"menu\" data-align=\"end\" x-on:menu-select=\"menuSelect\"><button type=\"button\" class=\"[ button move-to ]\" data-variant=\"ghost\" data-size=\"sm\" x-bind:aria-disabled=\"card.pending ? 'true' : null\">Move to…<span class=\"[ chevron ]\" aria-hidden=\"true\"></span></button><div class=\"[ popup ]\" role=\"menu\"><div class=\"[ group ]\" aria-hidden=\"true\">Move to</div><template x-for=\"choice in card.choices\" x-bind:key=\"choice.status\"><button type=\"button\" role=\"menuitemradio\" data-action=\"move\" x-bind:data-value=\"choice.status\" x-bind:data-key=\"choice.key\" x-bind:aria-checked=\"choice.current\" x-bind:aria-disabled=\"choice.current\" x-bind:data-skip=\"choice.current\" x-bind:data-initial=\"choice.initial\"><span x-text=\"choice.label\"></span><kbd x-text=\"choice.key\"></kbd></button></template><hr role=\"separator\"><template x-if=\"card.canArchive\"><button type=\"button\" role=\"menuitem\" data-action=\"archive\" data-key=\"a\">Archive<kbd>A</kbd></button></template><a role=\"menuitem\" x-bind:href=\"card.href\">Open task</a></div></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -818,9 +872,9 @@ func mergeGlyphs() templ.Component {
 			}()
 		}
 		ctx = templ.InitializeContext(ctx)
-		templ_7745c5c3_Var38 := templ.GetChildren(ctx)
-		if templ_7745c5c3_Var38 == nil {
-			templ_7745c5c3_Var38 = templ.NopComponent
+		templ_7745c5c3_Var39 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var39 == nil {
+			templ_7745c5c3_Var39 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
 		templ_7745c5c3_Err = cardGlyph("merged").Render(ctx, templ_7745c5c3_Buffer)
@@ -861,66 +915,66 @@ func cardGlyph(name string) templ.Component {
 			}()
 		}
 		ctx = templ.InitializeContext(ctx)
-		templ_7745c5c3_Var39 := templ.GetChildren(ctx)
-		if templ_7745c5c3_Var39 == nil {
-			templ_7745c5c3_Var39 = templ.NopComponent
+		templ_7745c5c3_Var40 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var40 == nil {
+			templ_7745c5c3_Var40 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 63, "<svg class=\"[ glyph ]\" data-glyph=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 67, "<svg class=\"[ glyph ]\" data-glyph=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		var templ_7745c5c3_Var40 string
-		templ_7745c5c3_Var40, templ_7745c5c3_Err = templ.ResolveAttributeValue(name)
+		var templ_7745c5c3_Var41 string
+		templ_7745c5c3_Var41, templ_7745c5c3_Err = templ.ResolveAttributeValue(name)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `tasks/project.templ`, Line: 218, Col: 41}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `tasks/project.templ`, Line: 252, Col: 41}
 		}
-		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var40)
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var41)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 64, "\" aria-hidden=\"true\" viewBox=\"0 0 16 16\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 68, "\" aria-hidden=\"true\" viewBox=\"0 0 16 16\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		switch name {
 		case "merged":
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 65, "<circle cx=\"8\" cy=\"8\" r=\"6.25\"></circle><path d=\"M5.3 8.2l1.8 1.8 3.6-3.8\"></path>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 69, "<circle cx=\"8\" cy=\"8\" r=\"6.25\"></circle><path d=\"M5.3 8.2l1.8 1.8 3.6-3.8\"></path>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		case "partial":
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 66, "<circle cx=\"8\" cy=\"8\" r=\"6.25\"></circle><path d=\"M8 1.75a6.25 6.25 0 0 1 0 12.5z\" fill=\"currentColor\" stroke=\"none\"></path>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 70, "<circle cx=\"8\" cy=\"8\" r=\"6.25\"></circle><path d=\"M8 1.75a6.25 6.25 0 0 1 0 12.5z\" fill=\"currentColor\" stroke=\"none\"></path>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		case "not_merged":
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 67, "<circle cx=\"8\" cy=\"8\" r=\"6.25\"></circle>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 71, "<circle cx=\"8\" cy=\"8\" r=\"6.25\"></circle>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		case "unknown":
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 68, "<circle cx=\"8\" cy=\"8\" r=\"6.25\" stroke-dasharray=\"2.4 2.2\"></circle><path d=\"M6.4 6.3a1.7 1.7 0 1 1 2.3 1.6c-.5.2-.7.6-.7 1.1v.3\"></path><circle cx=\"8\" cy=\"11.3\" r=\".55\" fill=\"currentColor\" stroke=\"none\"></circle>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 72, "<circle cx=\"8\" cy=\"8\" r=\"6.25\" stroke-dasharray=\"2.4 2.2\"></circle><path d=\"M6.4 6.3a1.7 1.7 0 1 1 2.3 1.6c-.5.2-.7.6-.7 1.1v.3\"></path><circle cx=\"8\" cy=\"11.3\" r=\".55\" fill=\"currentColor\" stroke=\"none\"></circle>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		case "review":
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 69, "<path d=\"M2 4.5h12M2 8h7M2 11.5h5\"></path><path d=\"M10.5 11l1.5 1.5 2.5-3\"></path>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 73, "<path d=\"M2 4.5h12M2 8h7M2 11.5h5\"></path><path d=\"M10.5 11l1.5 1.5 2.5-3\"></path>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		case "archive":
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 70, "<rect x=\"1.75\" y=\"2.75\" width=\"12.5\" height=\"3\" rx=\"1\"></rect><path d=\"M3 5.75v6.5a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1v-6.5M6.5 8.5h3\"></path>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 74, "<rect x=\"1.75\" y=\"2.75\" width=\"12.5\" height=\"3\" rx=\"1\"></rect><path d=\"M3 5.75v6.5a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1v-6.5M6.5 8.5h3\"></path>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		case "restore":
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 71, "<path d=\"M3 8a5 5 0 1 0 1.5-3.6\"></path><path d=\"M3 2.5v2.5h2.5\"></path>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 75, "<path d=\"M3 8a5 5 0 1 0 1.5-3.6\"></path><path d=\"M3 2.5v2.5h2.5\"></path>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 72, "</svg>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 76, "</svg>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -945,12 +999,12 @@ func NewTaskPage(f shell.Frame, projectID, projectName string) templ.Component {
 			}()
 		}
 		ctx = templ.InitializeContext(ctx)
-		templ_7745c5c3_Var41 := templ.GetChildren(ctx)
-		if templ_7745c5c3_Var41 == nil {
-			templ_7745c5c3_Var41 = templ.NopComponent
+		templ_7745c5c3_Var42 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var42 == nil {
+			templ_7745c5c3_Var42 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Var42 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
+		templ_7745c5c3_Var43 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 			templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 			templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
 			if !templ_7745c5c3_IsBuffer {
@@ -962,101 +1016,101 @@ func NewTaskPage(f shell.Frame, projectID, projectName string) templ.Component {
 				}()
 			}
 			ctx = templ.InitializeContext(ctx)
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 73, "<main id=\"main\" class=\"[ frame ]\"><header class=\"[ toolbar ]\"><a class=\"[ crumb ]\" href=\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 77, "<main id=\"main\" class=\"[ frame ]\"><header class=\"[ toolbar ]\"><a class=\"[ crumb ]\" href=\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			var templ_7745c5c3_Var43 templ.SafeURL
-			templ_7745c5c3_Var43, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL("/projects/" + projectID))
+			var templ_7745c5c3_Var44 templ.SafeURL
+			templ_7745c5c3_Var44, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL("/projects/" + projectID))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `tasks/project.templ`, Line: 243, Col: 71}
-			}
-			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var43))
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 74, "\">")
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
-			var templ_7745c5c3_Var44 string
-			templ_7745c5c3_Var44, templ_7745c5c3_Err = templ.JoinStringErrs(projectName)
-			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `tasks/project.templ`, Line: 243, Col: 87}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `tasks/project.templ`, Line: 277, Col: 71}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var44))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 75, " /</a><h1>New task</h1></header><div data-scroll><form class=\"[ wrapper flow ] [ region ]\" style=\"--wrapper-max: 44rem\" x-data=\"tasksNewTask\" data-project-id=\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 78, "\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var45 string
-			templ_7745c5c3_Var45, templ_7745c5c3_Err = templ.ResolveAttributeValue(projectID)
+			templ_7745c5c3_Var45, templ_7745c5c3_Err = templ.JoinStringErrs(projectName)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `tasks/project.templ`, Line: 247, Col: 124}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `tasks/project.templ`, Line: 277, Col: 87}
 			}
-			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var45)
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var45))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 76, "\" x-on:submit.prevent=\"submit\"><div class=\"[ field ]\"><label for=\"task-title\">Title</label> <input id=\"task-title\" autocomplete=\"off\" required autofocus x-model=\"title\" placeholder=\"Add the SSE feed to orchestration\"></div><div class=\"[ field ]\"><label for=\"task-description\">Description <span class=\"[ color-ink-faint weight-regular ]\">(optional)</span></label> <textarea id=\"task-description\" x-model=\"description\" placeholder=\"What done looks like. Agents get this as their brief.\"></textarea></div><div class=\"[ field ]\"><label for=\"task-status\">Status</label> <select id=\"task-status\" x-model=\"status\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 79, " /</a><h1>New task</h1></header><div data-scroll><form class=\"[ wrapper flow ] [ region ]\" style=\"--wrapper-max: 44rem\" x-data=\"tasksNewTask\" data-project-id=\"")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			var templ_7745c5c3_Var46 string
+			templ_7745c5c3_Var46, templ_7745c5c3_Err = templ.ResolveAttributeValue(projectID)
+			if templ_7745c5c3_Err != nil {
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `tasks/project.templ`, Line: 281, Col: 124}
+			}
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var46)
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 80, "\" x-on:submit.prevent=\"submit\"><div class=\"[ field ]\"><label for=\"task-title\">Title</label> <input id=\"task-title\" autocomplete=\"off\" required autofocus x-model=\"title\" placeholder=\"Add the SSE feed to orchestration\"></div><div class=\"[ field ]\"><label for=\"task-description\">Description <span class=\"[ color-ink-faint weight-regular ]\">(optional)</span></label> <textarea id=\"task-description\" x-model=\"description\" placeholder=\"What done looks like. Agents get this as their brief.\"></textarea></div><div class=\"[ field ]\"><label for=\"task-status\">Status</label> <select id=\"task-status\" x-model=\"status\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			for _, st := range Statuses {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 77, "<option value=\"")
-				if templ_7745c5c3_Err != nil {
-					return templ_7745c5c3_Err
-				}
-				var templ_7745c5c3_Var46 string
-				templ_7745c5c3_Var46, templ_7745c5c3_Err = templ.ResolveAttributeValue(st.Value)
-				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `tasks/project.templ`, Line: 260, Col: 32}
-				}
-				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var46)
-				if templ_7745c5c3_Err != nil {
-					return templ_7745c5c3_Err
-				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 78, "\">")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 81, "<option value=\"")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var47 string
-				templ_7745c5c3_Var47, templ_7745c5c3_Err = templ.JoinStringErrs(st.Label)
+				templ_7745c5c3_Var47, templ_7745c5c3_Err = templ.ResolveAttributeValue(st.Value)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `tasks/project.templ`, Line: 260, Col: 45}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `tasks/project.templ`, Line: 294, Col: 32}
 				}
-				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var47))
-				if templ_7745c5c3_Err != nil {
-					return templ_7745c5c3_Err
-				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 79, "</option>")
+				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var47)
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 82, "\">")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				var templ_7745c5c3_Var48 string
+				templ_7745c5c3_Var48, templ_7745c5c3_Err = templ.JoinStringErrs(st.Label)
+				if templ_7745c5c3_Err != nil {
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `tasks/project.templ`, Line: 294, Col: 45}
+				}
+				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var48))
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 83, "</option>")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 80, "</select></div><template x-if=\"error\"><div class=\"[ banner ]\" data-tone=\"danger\" role=\"alert\"><div class=\"[ flow ] [ flow-space-3xs ]\"><span x-text=\"error.message\"></span> <span class=\"[ code ]\"><span x-text=\"error.code\"></span> · <span x-text=\"error.next\"></span></span></div></div></template><div class=\"[ cluster ]\"><button type=\"submit\" class=\"[ button ]\" data-variant=\"primary\" disabled x-bind:disabled=\"cannotSubmit\" x-bind:aria-busy=\"submitting\">Create task</button> <a class=\"[ button ]\" data-variant=\"ghost\" href=\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 84, "</select></div><template x-if=\"error\"><div class=\"[ banner ]\" data-tone=\"danger\" role=\"alert\"><div class=\"[ flow ] [ flow-space-3xs ]\"><span x-text=\"error.message\"></span> <span class=\"[ code ]\"><span x-text=\"error.code\"></span> · <span x-text=\"error.next\"></span></span></div></div></template><div class=\"[ cluster ]\"><button type=\"submit\" class=\"[ button ]\" data-variant=\"primary\" disabled x-bind:disabled=\"cannotSubmit\" x-bind:aria-busy=\"submitting\">Create task</button> <a class=\"[ button ]\" data-variant=\"ghost\" href=\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			var templ_7745c5c3_Var48 templ.SafeURL
-			templ_7745c5c3_Var48, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL("/projects/" + projectID))
+			var templ_7745c5c3_Var49 templ.SafeURL
+			templ_7745c5c3_Var49, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL("/projects/" + projectID))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `tasks/project.templ`, Line: 274, Col: 95}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `tasks/project.templ`, Line: 308, Col: 95}
 			}
-			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var48))
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var49))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 81, "\">Cancel</a></div></form></div></main>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 85, "\">Cancel</a></div></form></div></main>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			return nil
 		})
-		templ_7745c5c3_Err = shell.AppShell(f).Render(templ.WithChildren(ctx, templ_7745c5c3_Var42), templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = shell.AppShell(f).Render(templ.WithChildren(ctx, templ_7745c5c3_Var43), templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

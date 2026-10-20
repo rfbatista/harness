@@ -27,6 +27,8 @@ export function stubTasksApi(world) {
         }
         case "POST /api/archive_ticket":
           return jsonResponse(200, { ticket: taskDTO(await gateway.archiveTask(body.id)) });
+        case "POST /api/archive_done_tickets":
+          return jsonResponse(200, await gateway.archiveDoneTasks(body.project_id));
         case "POST /api/restore_ticket":
           return jsonResponse(200, { ticket: taskDTO(await gateway.restoreTask(body.id)) });
         case "POST /api/delete_ticket":

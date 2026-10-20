@@ -87,3 +87,27 @@ function toCard(task, { projectId, activity, fresh, now, pendingTo, failed }) {
     canArchive: task.status === "done",
   };
 }
+
+/**
+ * "Archive all" on the Done header and its in-page confirmation strip, as
+ * the markup binds them. phase: rest (the button), confirm, busy (one
+ * request, not optimistic), done (the column says how many went), failed.
+ * The strip's count follows Done while it is open; Done emptying closes it.
+ * @param {{ phase: "rest"|"confirm"|"busy"|"done"|"failed", done: number, archived?: number }} state
+ */
+export function archiveAllView({ phase, done, archived = 0 }) {
+  if (phase === "confirm" && done === 0) phase = "rest";
+  const tasks = (n) => `${n} done ${n === 1 ? "task" : "tasks"}`;
+  const view = { shows: done > 0 && (phase === "rest" || phase === "done"), open: false, phase, title: "", body: "", confirm: "", emptyText: "", asking: false, busy: false, failed: false, tone: null };
+  switch (phase) {
+    case "confirm":
+      return { ...view, open: true, asking: true, title: `Archive all ${tasks(done)}?`, body: "They leave the board and the rail. Nothing is lost: restore any of them from Archived.", confirm: `Archive ${done}` };
+    case "busy":
+      return { ...view, open: true, asking: true, busy: true, title: `Archiving ${done}…`, confirm: `Archive ${done}` };
+    case "failed":
+      return { ...view, open: true, failed: true, tone: "danger", title: "Couldn't archive. Nothing changed." };
+    case "done":
+      return { ...view, emptyText: done === 0 ? `${archived} ${archived === 1 ? "task" : "tasks"} archived.` : "" };
+  }
+  return view;
+}
