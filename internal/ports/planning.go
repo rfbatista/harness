@@ -133,6 +133,20 @@ type TicketAnnouncer interface {
 	AnnounceTicket(tk *domain.Ticket, deleted bool)
 }
 
+// TicketReannouncer puts a task on the project feed again, read and
+// decorated as it is now, when one of its derived fields (its merge state)
+// changed without the task being written. Planning implements it.
+type TicketReannouncer interface {
+	ReannounceTicket(ctx context.Context, id string)
+}
+
+// MergeStateRefresher computes a task's merge state from git now and keeps
+// it, so the next decoration of the task carries it. Planning calls it when a
+// task moves into review or done.
+type MergeStateRefresher interface {
+	Refresh(ctx context.Context, taskID string) (domain.MergeState, error)
+}
+
 // DocumentLibrary manages a project's documents and their links to tickets.
 // CreateDocument with an empty format writes markdown and with an empty scope
 // a project document (what the API means by "created at the project");
