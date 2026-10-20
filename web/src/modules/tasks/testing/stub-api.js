@@ -6,7 +6,7 @@ import { jsonResponse } from "../../../shared/testing/doubles.js";
 import { memoryTasks } from "../infrastructure/memory-gateway.js";
 import { taskDTO } from "./fixtures.js";
 
-const STATUS = { PROJECT_NOT_FOUND: 404, TICKET_NOT_FOUND: 404, DOCUMENT_NOT_FOUND: 404, INVALID_INPUT: 400, INVALID_STATUS: 400 };
+const STATUS = { PROJECT_NOT_FOUND: 404, TICKET_NOT_FOUND: 404, DOCUMENT_NOT_FOUND: 404, INVALID_INPUT: 400, INVALID_STATUS: 400, TASK_NOT_DONE: 409, TASK_ARCHIVED: 409 };
 
 export function stubTasksApi(world) {
   const memory = memoryTasks(world);
@@ -25,6 +25,10 @@ export function stubTasksApi(world) {
           const t = await gateway.updateTask({ id: body.ticket_id, title: body.title, description: body.description, status: body.status });
           return jsonResponse(200, { ticket: taskDTO(t) });
         }
+        case "POST /api/archive_ticket":
+          return jsonResponse(200, { ticket: taskDTO(await gateway.archiveTask(body.id)) });
+        case "POST /api/restore_ticket":
+          return jsonResponse(200, { ticket: taskDTO(await gateway.restoreTask(body.id)) });
         case "POST /api/delete_ticket":
           await gateway.deleteTask(body.ticket_id);
           return new Response(null, { status: 204 });

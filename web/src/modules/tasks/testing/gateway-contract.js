@@ -69,6 +69,26 @@ export function taskGatewayContract(name, makeSubject) {
     await assert.rejects(subject.gateway.moveTask("ghost", "todo"), Codes.TICKET_NOT_FOUND);
   });
 
+  contract("archiveTask archives a done task, twice is a no-op; a task that is not done is TASK_NOT_DONE", async () => {
+    const subject = makeSubject({ projects: ["p1"], tasks: [makeTask({ status: "done" }), makeTask({ id: "t2", status: "review" })], sessions: [] });
+    const archived = await subject.gateway.archiveTask("t1");
+    assert.deepEqual([archived.id, archived.status, archived.archivedAt > 0], ["t1", "done", true]);
+    assert.equal((await subject.gateway.archiveTask("t1")).archivedAt, archived.archivedAt, "archiving again changes nothing");
+    await assert.rejects(subject.gateway.archiveTask("t2"), Codes.TASK_NOT_DONE);
+    await assert.rejects(subject.gateway.archiveTask("ghost"), Codes.TICKET_NOT_FOUND);
+  });
+
+  contract("restoreTask puts an archived task back in Done; an archived task cannot move until then", async () => {
+    const subject = makeSubject({ projects: ["p1"], tasks: [makeTask({ status: "done" })], sessions: [] });
+    await subject.gateway.archiveTask("t1");
+    await assert.rejects(subject.gateway.moveTask("t1", "review"), Codes.TASK_ARCHIVED);
+    const restored = await subject.gateway.restoreTask("t1");
+    assert.deepEqual([restored.status, restored.archivedAt], ["done", 0]);
+    assert.equal((await subject.gateway.restoreTask("t1")).archivedAt, 0, "restoring a task on the board is a no-op");
+    assert.equal((await subject.gateway.moveTask("t1", "review")).status, "review");
+    await assert.rejects(subject.gateway.restoreTask("ghost"), Codes.TICKET_NOT_FOUND);
+  });
+
   contract("deleteTask removes it; twice is TICKET_NOT_FOUND", async () => {
     const subject = makeSubject({ projects: ["p1"], tasks: [makeTask()], sessions: [] });
     await subject.gateway.deleteTask("t1");

@@ -262,4 +262,21 @@
       }
     }
   }
+
+  /* "Archived (N)" in the board's toolbar, right after the project name. */
+  .archived-link {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2xs);
+    min-block-size: var(--size-control-sm);
+    padding-inline: var(--space-xs);
+    border-radius: var(--radius-sm);
+    color: var(--color-ink-muted);
+    font-size: var(--text-sm);
+    font-weight: var(--weight-medium);
+    text-decoration: none;
+
+    &:hover { background: var(--color-hover); color: var(--color-ink); }
+    & > .glyph { inline-size: 1rem; block-size: 1rem; }
+  }
 }

@@ -84,5 +84,6 @@ function toCard(task, { projectId, activity, fresh, now, pendingTo, failed }) {
     failed,
     note: pendingTo ? `Moving to ${statusLabel(pendingTo)}…` : failed ? "Move failed" : "",
     choices: moveChoices(task.status),
+    canArchive: task.status === "done",
   };
 }

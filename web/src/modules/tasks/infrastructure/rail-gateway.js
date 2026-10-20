@@ -86,7 +86,7 @@ export function railGateway(api, feed) {
       if (!seed || typeof seed.project_id !== "string" || !Array.isArray(seed.sessions) || !Array.isArray(seed.tasks)) {
         bad("rail seed without project_id, sessions and tasks");
       }
-      return { projectId: seed.project_id, sessions: seed.sessions.map(toRailSession), tasks: toTasks(seed.tasks) };
+      return { projectId: seed.project_id, sessions: seed.sessions.map(toRailSession), tasks: toTasks(seed.tasks), archivedCount: Number(seed.archived_count ?? 0) };
     },
     async listSessions(projectId) {
       const body = await api.get("/sessions", { project_id: projectId });
@@ -95,6 +95,11 @@ export function railGateway(api, feed) {
     },
     async listTasks(projectId) {
       const body = await api.get("/list_tickets", { project_id: projectId });
+      if (!Array.isArray(body?.tickets)) bad("expected {tickets: [...]}");
+      return toTasks(body.tickets);
+    },
+    async listArchived(projectId) {
+      const body = await api.get("/tickets", { project_id: projectId, archived: "true" });
       if (!Array.isArray(body?.tickets)) bad("expected {tickets: [...]}");
       return toTasks(body.tickets);
     },

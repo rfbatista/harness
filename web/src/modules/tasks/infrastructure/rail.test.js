@@ -25,6 +25,7 @@ railGatewayContract("http", (world) => {
   const fetch = async (input) => {
     const url = new URL(input, "http://harness.test");
     if (url.pathname === "/api/sessions") return jsonResponse(200, { sessions: (await memory.gateway.listSessions()).map(toDTO) });
+    if (url.pathname === "/api/tickets" && url.searchParams.get("archived") === "true") return jsonResponse(200, { tickets: (await memory.gateway.listArchived(url.searchParams.get("project_id"))).map(taskDTO) });
     if (url.pathname === "/api/list_tickets") return jsonResponse(200, { tickets: (await memory.gateway.listTasks()).map(taskDTO) });
     return jsonResponse(404, { error: "no route" });
   };

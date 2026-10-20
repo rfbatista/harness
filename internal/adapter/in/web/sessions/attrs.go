@@ -63,3 +63,11 @@ func waitingLine(n int) string {
 	}
 	return strconv.Itoa(n) + " reviews wait on you"
 }
+
+// hiddenUnless paints an element hidden until the live page shows it.
+func hiddenUnless(shown bool) templ.Attributes {
+	if shown {
+		return templ.Attributes{}
+	}
+	return templ.Attributes{"hidden": true}
+}

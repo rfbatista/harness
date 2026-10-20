@@ -16,6 +16,8 @@ const NEXT_STEP = {
   [Codes.PROJECT_ROOT_INVALID]: "give the absolute path of an existing directory on the server's machine (~ is fine)",
   [Codes.PROJECT_HAS_RUNNING_SESSIONS]: "stop its running sessions from their tasks, then delete again",
   [Codes.TICKET_NOT_FOUND]: "it was deleted; pick a task on the rail",
+  [Codes.TASK_NOT_DONE]: "only a done task can be archived; move it to Done first",
+  [Codes.TASK_ARCHIVED]: "it is archived; restore it from Archived first",
   [Codes.DOCUMENT_NOT_FOUND]: "it was deleted; reload the page",
   [Codes.ARTIFACT_NOT_FOUND]: "it was deleted; reload the page",
   [Codes.ARTIFACT_NOT_PROMOTABLE]: "only a file a live session published can be kept; ask the agent to publish it as a file, then move it",

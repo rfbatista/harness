@@ -12,9 +12,19 @@ import { STATUSES } from "./task.js";
 /** The rail's group order: what is moving first, done last. A permutation of STATUSES. */
 export const RAIL_ORDER = Object.freeze(["in_progress", "review", "todo", "backlog", "done"]);
 
-/** Applies one feed change. A changed task keeps its place in the list, so a move does not shuffle its column. */
+/** The tasks of a list that belong on the board and the rail: every one not archived. */
+export const onBoard = (tasks) => tasks.filter((t) => !t.archivedAt);
+
+/**
+ * Applies one feed change. A changed task keeps its place in the list, so a
+ * move does not shuffle its column. An archived task leaves the list, and a
+ * restored one (archived_at cleared) comes back.
+ */
 export function applyTaskChange(tasks, change) {
-  if (change.kind === "task-deleted") return tasks.filter((t) => t.id !== change.id);
+  if (change.kind === "task-deleted" || change.task.archivedAt) {
+    const id = change.kind === "task-deleted" ? change.id : change.task.id;
+    return tasks.filter((t) => t.id !== id);
+  }
   const at = tasks.findIndex((t) => t.id === change.task.id);
   if (at < 0) return [...tasks, change.task];
   return tasks.map((t, i) => (i === at ? change.task : t));
@@ -52,6 +62,7 @@ const label = (status) => STATUSES.find((s) => s.value === status)?.label ?? sta
 export function describeChange(previous, change) {
   if (change.kind === "task-deleted") return previous ? `${previous.title} was removed` : "";
   const t = change.task;
+  if (t.archivedAt) return previous ? `${previous.title} was archived` : "";
   if (!previous) return `${t.title} was added to ${label(t.status)}`;
   if (previous.status !== t.status) return `${previous.title} moved to ${label(t.status)}`;
   if (previous.title !== t.title) return `${previous.title} was renamed to ${t.title}`;

@@ -42,6 +42,8 @@ export const taskEditor =
       deletingTask: false,
       taskDeleteProblem: "",
       taskError: null,
+      /** Archive or Restore is on its way. */
+      archiving: false,
 
       get title() {
         return this.task?.title ?? "";
@@ -73,6 +75,19 @@ export const taskEditor =
         if (!change) return null;
         const architectSessionId = this.storedTask?.architectSessionId || this.task.architectSessionId || "";
         return statusChangeView(change, { architectSessionId, now: this.now });
+      },
+      get isArchived() {
+        return Boolean(this.task?.archivedAt);
+      },
+      /** Only a done task on the board can be archived. */
+      get canArchive() {
+        return this.task?.status === "done" && !this.isArchived;
+      },
+      /** "Archived Oct 18.": the archived banner's lead. */
+      get archivedWhen() {
+        if (!this.isArchived) return "";
+        const d = new Date(this.task.archivedAt);
+        return `Archived ${d.toLocaleDateString("en-US", { month: "short", day: "numeric" })}.`;
       },
       get statusLine() {
         return this.statusChange?.line ?? "";
@@ -118,6 +133,30 @@ export const taskEditor =
           this.taskError = describeError(err);
         } finally {
           this.movingStatus = false;
+        }
+      },
+
+      /** Takes the done task off the board; the page reloads to show it archived. */
+      archiveTask() {
+        return this.setArchived(() => gateway.archiveTask(this.task.id));
+      },
+
+      /** Puts the archived task back in Done, on the board. */
+      restoreTask() {
+        return this.setArchived(() => gateway.restoreTask(this.task.id));
+      },
+
+      async setArchived(send) {
+        if (!this.task || this.archiving) return;
+        this.archiving = true;
+        this.taskError = null;
+        try {
+          this.task = await send();
+          reload();
+        } catch (err) {
+          this.taskError = describeError(err);
+        } finally {
+          this.archiving = false;
         }
       },
 

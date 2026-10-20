@@ -23,6 +23,15 @@ function setup({ tasks = [makeTask()], seeded = true, clock = fixedClock("2026-1
   return { ...mounted, store, el, memory, timers, clock };
 }
 
+/** A card's menu wrapper, the target of its menu-select. */
+function cardMenu(taskId) {
+  const card = document.createElement("article");
+  card.dataset.taskId = taskId;
+  const menu = document.createElement("div");
+  card.append(menu);
+  return menu;
+}
+
 /** The task-changed event tasksRail dispatches after applying a feed change. */
 const changed = (change, previous) => ({ detail: { change, previous } });
 
@@ -281,4 +290,53 @@ test("each card's time in column moves on once a minute, without reordering the 
   clock.set("2026-10-19T12:05:00Z");
   timers.tick();
   assert.deepEqual(instance.columns[2].cards.map((c) => `${c.id}:${c.age}`), ["a:7m", "b:15m"]);
+});
+
+test("Archive takes a done card off the board at once; the server confirms it, the count goes up and it is announced", async () => {
+  const done = makeTask({ id: "t-done", title: "Ship it", status: "done" });
+  const { instance, store, memory } = setup({ tasks: [makeTask(), done] });
+  store.archivedCount = 3;
+  const p = instance.menuSelect({ target: cardMenu("t-done"), detail: { action: "archive" } });
+  assert.deepEqual(store.tasks.map((t) => t.id), ["t1"], "gone before the server answers");
+  await p;
+  assert.ok(memory.tasks().find((t) => t.id === "t-done").archivedAt > 0);
+  assert.deepEqual([store.archivedCount, instance.archivedLink, instance.announcement, instance.error], [4, "Archived (4)", "Archived Ship it.", null]);
+  // The feed's echo: the rail found nothing to remove and tells the board.
+  instance.taskChanged(changed({ kind: "task-upsert", task: { ...done, archivedAt: 9 } }, null));
+  assert.deepEqual([instance.announcement, instance.freshIds], ["Archived Ship it.", []]);
+});
+
+test("a refused archive brings the card back where it was, with the error", async () => {
+  const done = makeTask({ id: "t-done", title: "Ship it", status: "done" });
+  const { instance, store, memory } = setup({ tasks: [done, makeTask()] });
+  memory.gateway.archiveTask = async () => {
+    throw new StructuredError(Codes.TASK_NOT_DONE, "only a done task can be archived", 409);
+  };
+  await instance.archive("t-done");
+  assert.deepEqual(store.tasks.map((t) => t.id), ["t-done", "t1"]);
+  assert.deepEqual([instance.error.code, instance.announcement], [Codes.TASK_NOT_DONE, "Couldn't archive Ship it."]);
+});
+
+test("someone else archiving a card takes it off and says so", () => {
+  const done = makeTask({ id: "t-done", title: "Ship it", status: "done" });
+  const { instance, store } = setup({ tasks: [makeTask(), done] });
+  store.tasks = [makeTask()]; // the rail applied it
+  instance.taskChanged(changed({ kind: "task-upsert", task: { ...done, archivedAt: 9 } }, done));
+  assert.equal(instance.announcement, "Ship it was archived");
+});
+
+test("Archived (N) shows the server's count until the rail has its own", () => {
+  const { instance, store, el } = setup({ seeded: false });
+  el.dataset.archivedCount = "7";
+  instance.init();
+  assert.equal(instance.archivedLink, "Archived (7)");
+  store.seeded = true;
+  store.archivedCount = 8;
+  assert.equal(instance.archivedLink, "Archived (8)");
+  assert.equal(instance.archivedHref, "/projects/p1/archived");
+});
+
+test("a Done card's menu offers Archive; other cards' do not", () => {
+  const { instance } = setup({ tasks: [makeTask({ id: "a", status: "done" }), makeTask({ id: "b", status: "review" })] });
+  assert.deepEqual([instance.columns[4].cards[0].canArchive, instance.columns[3].cards[0].canArchive], [true, false]);
 });

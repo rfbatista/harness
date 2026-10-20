@@ -29,7 +29,7 @@ export function registerTasks(Alpine, deps) {
   Alpine.data("tasksResourceWatch", resourceWatch(deps));
 
   // The project's live model, shared by the rail, its links and the board.
-  Alpine.store("tasksRail", { byTask: {}, tasks: [], seeded: false, drawerOpen: false, statusChanges: {} });
+  Alpine.store("tasksRail", { byTask: {}, tasks: [], seeded: false, drawerOpen: false, statusChanges: {}, archivedCount: 0 });
   const store = Alpine.store("tasksRail");
   Alpine.data("tasksTaskEditor", taskEditor({ ...deps, store }));
   Alpine.data("tasksRail", rail({ gateway: deps.rail, store, prefs: deps.railPrefs, navigate: deps.navigate }));

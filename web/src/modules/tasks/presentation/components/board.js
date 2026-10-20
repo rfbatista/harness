@@ -60,12 +60,20 @@ export const board = ({ gateway, store, setTimeout = globalThis.setTimeout.bind(
     moves: {},
     /** A move's confirmed status whose echo may still arrive, per card. */
     echoes: {},
+    /** "Archived (N)" as the server painted it, until the rail's store has its own count. */
+    ssrArchivedCount: 0,
     /** What the cards' time in column is measured against; it moves once a minute, so nothing reorders. */
     now: clock.now(),
 
     get columns() {
       const pending = Object.fromEntries(Object.entries(this.moves).map(([id, m]) => [id, m.pending.at(-1)]));
       return toColumns(store.tasks, { projectId: this.projectId, byTask: store.byTask, fresh: new Set(this.freshIds), now: this.now, pending, failed: new Set(this.failedIds) });
+    },
+    get archivedLink() {
+      return `Archived (${store.seeded ? (store.archivedCount ?? 0) : this.ssrArchivedCount})`;
+    },
+    get archivedHref() {
+      return `/projects/${encodeURIComponent(this.projectId)}/archived`;
     },
     get hasTasks() {
       return store.seeded && store.tasks.length > 0;
@@ -77,6 +85,7 @@ export const board = ({ gateway, store, setTimeout = globalThis.setTimeout.bind(
     init() {
       root = this.$el;
       this.projectId = this.$el.dataset.projectId ?? "";
+      this.ssrArchivedCount = Number(this.$el.dataset.archivedCount ?? 0);
       const tick = () => {
         this.now = clock.now();
         setTimeout(tick, AGE_TICK_MS);
@@ -95,6 +104,39 @@ export const board = ({ gateway, store, setTimeout = globalThis.setTimeout.bind(
       const { action, value } = event.detail;
       const taskId = event.target.closest?.("[data-task-id]")?.dataset.taskId;
       if (action === "move" && taskId) this.move(taskId, value, { refocus: true });
+      if (action === "archive" && taskId) this.archive(taskId);
+    },
+
+    /**
+     * Archives a done card: it leaves the board at once and comes back where
+     * it was if the server refuses. The focus goes to the next card in Done,
+     * else to "Archive all", else to "Archived (N)".
+     */
+    async archive(taskId) {
+      const at = store.tasks.findIndex((t) => t.id === taskId);
+      if (at < 0) return;
+      const task = store.tasks[at];
+      const done = this.columns.find((c) => c.status === "done").cards.map((c) => c.id);
+      const i = done.indexOf(taskId);
+      const next = done[i + 1] ?? done[i - 1] ?? "";
+      this.error = null;
+      store.tasks = store.tasks.filter((t) => t.id !== taskId);
+      this.$nextTick(() => {
+        const target =
+          (next && root?.querySelector(`.card[data-task-id="${CSS.escape(next)}"] .move-to`)) ||
+          root?.querySelector("[data-archive-all]") ||
+          root?.querySelector(".archived-link");
+        target?.focus();
+      });
+      try {
+        await gateway.archiveTask(taskId);
+        store.archivedCount = (store.archivedCount ?? 0) + 1;
+        this.announcement = `Archived ${task.title}.`;
+      } catch (err) {
+        if (!store.tasks.some((t) => t.id === taskId)) store.tasks = [...store.tasks.slice(0, at), task, ...store.tasks.slice(at)];
+        this.error = describeError(err);
+        this.announcement = `Couldn't archive ${task.title}.`;
+      }
     },
 
     /**
@@ -205,6 +247,13 @@ export const board = ({ gateway, store, setTimeout = globalThis.setTimeout.bind(
         return;
       }
       const { id, status } = change.task;
+      if (change.task.archivedAt) {
+        delete this.moves[id];
+        delete this.echoes[id];
+        // Not on this board before (its own archive's echo, or one it never showed): no news.
+        if (previous) this.announcement = describeChange(previous, change);
+        return;
+      }
       const move = this.moves[id];
       if (move?.pending.includes(status)) {
         const { newest } = this.settle(id, status);

@@ -1,0 +1,24 @@
+/*
+ * Archived — what the person sees of an archived task (ADR 0014).
+ * The task page's banner, in place of the status picker: neutral, since
+ * nothing is wrong.
+ * <div class="archived-banner" role="note"><p><strong>Archived Oct 18.</strong> It is off the board; its status is Done.</p>
+ *   <button class="button" data-size="sm">Restore</button></div>
+ */
+
+@layer blocks {
+  .archived-banner {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-s);
+    margin: var(--space-s) var(--space-l) 0;
+    padding: var(--space-s) var(--space-m);
+    border: var(--border-width) solid var(--color-line-strong);
+    border-radius: var(--radius-sm);
+    background: var(--color-panel);
+    font-size: var(--text-sm);
+
+    & > .button { margin-inline-start: auto; }
+  }
+}

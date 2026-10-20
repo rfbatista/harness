@@ -34,6 +34,16 @@ export function tasksGateway(api) {
       return gateway.updateTask({ id, status });
     },
 
+    async archiveTask(id) {
+      const body = await api.post("/archive_ticket", { id });
+      return toTask(body?.ticket);
+    },
+
+    async restoreTask(id) {
+      const body = await api.post("/restore_ticket", { id });
+      return toTask(body?.ticket);
+    },
+
     async deleteTask(id) {
       await api.post("/delete_ticket", { ticket_id: id });
     },

@@ -13,9 +13,13 @@ import (
 // columns live from the rail's store and removes the server copy.
 templ ProjectPage(f shell.Frame, projectID, projectName string, b Board) {
 	@shell.AppShell(f) {
-		<main id="main" class="[ frame ]" x-data="tasksBoard" data-project-id={ projectID } x-on:task-changed.window="taskChanged">
+		<main id="main" class="[ frame ]" x-data="tasksBoard" data-project-id={ projectID } data-archived-count={ strconv.Itoa(b.ArchivedCount) } x-on:task-changed.window="taskChanged">
 			<header class="[ toolbar ]">
 				<h1>{ projectName }</h1>
+				<a class="[ archived-link ]" href={ templ.SafeURL(ArchivedHref(projectID)) }>
+					@cardGlyph("archive")
+					<span x-text="archivedLink">{ "Archived (" + strconv.Itoa(b.ArchivedCount) + ")" }</span>
+				</a>
 				<div class="[ actions ]">
 					<a class="[ button ]" data-variant="ghost" data-size="sm" href={ templ.SafeURL(projects.RepositoriesHref(projectID)) }>Repositories</a>
 					<a class="[ button ]" data-variant="ghost" data-size="sm" href={ templ.SafeURL(projects.SettingsHref(projectID)) }>Settings</a>
@@ -190,6 +194,9 @@ templ moveMenu() {
 				<button type="button" role="menuitemradio" data-action="move" x-bind:data-value="choice.status" x-bind:data-key="choice.key" x-bind:aria-checked="choice.current" x-bind:aria-disabled="choice.current" x-bind:data-skip="choice.current" x-bind:data-initial="choice.initial"><span x-text="choice.label"></span><kbd x-text="choice.key"></kbd></button>
 			</template>
 			<hr role="separator"/>
+			<template x-if="card.canArchive">
+				<button type="button" role="menuitem" data-action="archive" data-key="a">Archive<kbd>A</kbd></button>
+			</template>
 			<a role="menuitem" x-bind:href="card.href">Open task</a>
 		</div>
 	</div>
@@ -220,6 +227,10 @@ templ cardGlyph(name string) {
 				<circle cx="8" cy="8" r="6.25" stroke-dasharray="2.4 2.2"></circle><path d="M6.4 6.3a1.7 1.7 0 1 1 2.3 1.6c-.5.2-.7.6-.7 1.1v.3"></path><circle cx="8" cy="11.3" r=".55" fill="currentColor" stroke="none"></circle>
 			case "review":
 				<path d="M2 4.5h12M2 8h7M2 11.5h5"></path><path d="M10.5 11l1.5 1.5 2.5-3"></path>
+			case "archive":
+				<rect x="1.75" y="2.75" width="12.5" height="3" rx="1"></rect><path d="M3 5.75v6.5a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1v-6.5M6.5 8.5h3"></path>
+			case "restore":
+				<path d="M3 8a5 5 0 1 0 1.5-3.6"></path><path d="M3 2.5v2.5h2.5"></path>
 		}
 	</svg>
 }

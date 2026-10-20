@@ -160,6 +160,23 @@ func (f NewSessionForm) DefaultRepository() string {
 	return f.Repositories[0].ID
 }
 
+// Archived: the task is off the board (ADR 0014); its page shows the archived
+// banner and Restore instead of the status picker.
+func (v PageView) Archived() bool { return v.Task != nil && v.Task.ArchivedAt != nil }
+
+// ArchivedWhen is the archived banner's lead: "Archived Oct 18.".
+func (v PageView) ArchivedWhen() string {
+	if !v.Archived() {
+		return ""
+	}
+	return "Archived " + v.Task.ArchivedAt.Local().Format("Jan 2") + "."
+}
+
+// CanArchive: a done task on the board offers Archive beside its status.
+func (v PageView) CanArchive() bool {
+	return v.Task != nil && v.Task.Status == domain.TicketStatusDone && !v.Archived()
+}
+
 // StatusChoice is one option of the task's status picker.
 type StatusChoice struct {
 	Value, Label string

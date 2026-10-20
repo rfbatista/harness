@@ -61,6 +61,7 @@
 @import url("./blocks/list.css");
 @import url("./blocks/row.css");
 @import url("./blocks/board.css");
+@import url("./blocks/archived.css");
 @import url("./blocks/tabs.css");
 @import url("./blocks/session.css");
 @import url("./blocks/session-head.css");

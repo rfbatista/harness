@@ -18,7 +18,7 @@
 import { FeedStatus } from "../../../../shared/domain/feed.js";
 import { readSeed } from "../../../../shared/presentation/seed.js";
 import { activityByTask, applyRailChange } from "../../domain/activity.js";
-import { applyTaskChange } from "../../domain/board.js";
+import { applyTaskChange, onBoard } from "../../domain/board.js";
 import { needsYou, railGroups } from "../../domain/rail.js";
 import { toGroupView } from "../railView.js";
 import { FRESH_MS } from "./board.js";
@@ -41,6 +41,7 @@ const NAV_ITEMS = "h3 > button, a[data-task-id], .more > details > summary";
  *   seeded: boolean,
  *   drawerOpen: boolean,  the phone drawer is open
  *   statusChanges?: Record<string, import("../../domain/board.js").StatusChange>,  the latest move per task seen over the feed
+ *   archivedCount?: number,  the project's archived tasks, for "Archived (N)"
  * }} RailStore
  */
 
@@ -168,7 +169,8 @@ export const rail = ({ gateway, store, prefs, navigate, timers = globalThis, isN
       }
       this.projectId = seed.projectId;
       sessions = seed.sessions;
-      store.tasks = seed.tasks;
+      store.tasks = onBoard(seed.tasks);
+      store.archivedCount = seed.archivedCount;
       store.seeded = true;
       this.collapsed = prefs.collapsed();
       this.recount();
@@ -203,6 +205,7 @@ export const rail = ({ gateway, store, prefs, navigate, timers = globalThis, isN
         const id = change.kind === "task-deleted" ? change.id : change.task.id;
         const previous = store.tasks.find((t) => t.id === id) ?? null;
         store.tasks = applyTaskChange(store.tasks, change);
+        this.countArchived(change, previous);
         if (change.kind === "task-upsert" && (!previous || previous.status !== change.task.status)) this.markFresh(id);
         this.$dispatch("task-changed", { change, previous });
       } else {
@@ -225,7 +228,27 @@ export const rail = ({ gateway, store, prefs, navigate, timers = globalThis, isN
         sessions = list.value;
         this.recount();
       }
-      if (tasks.status === "fulfilled") store.tasks = tasks.value;
+      if (tasks.status === "fulfilled") store.tasks = onBoard(tasks.value);
+      this.recountArchived();
+    },
+
+    /**
+     * Keeps "Archived (N)" in step: a task the store had that arrives
+     * archived adds one. A done task the store did not have may be a restore
+     * (or a new task); only the server knows, so the count is read again.
+     */
+    countArchived(change, previous) {
+      if (change.kind !== "task-upsert") return;
+      if (change.task.archivedAt && previous) store.archivedCount += 1;
+      else if (!change.task.archivedAt && !previous && change.task.status === "done") this.recountArchived();
+    },
+
+    async recountArchived() {
+      try {
+        store.archivedCount = (await gateway.listArchived(this.projectId)).length;
+      } catch {
+        // keeps the count it shows until the next change or resync
+      }
     },
 
     recount() {

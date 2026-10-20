@@ -1,6 +1,6 @@
 import { assert, file, test } from "../../../shared/testing/test.js";
 import { makeTask } from "../testing/fixtures.js";
-import { applyTaskChange, byStatus, describeChange, moveChoices, RAIL_ORDER } from "./board.js";
+import { applyTaskChange, byStatus, describeChange, moveChoices, onBoard, RAIL_ORDER } from "./board.js";
 import { STATUSES } from "./task.js";
 
 file("tasks/domain/board");
@@ -62,4 +62,24 @@ test("the Move to… menu lists every status with its key, the current one check
   ]);
   const initial = (status) => moveChoices(status).find((c) => c.initial).status;
   assert.deepEqual(["backlog", "todo", "in_progress", "done"].map(initial), ["todo", "in_progress", "review", "review"], "Done opens on Review, so a stray Enter stays reversible");
+});
+
+test("an archived task leaves the board and the rail; restored, it comes back", () => {
+  let tasks = [makeTask({ id: "t1", status: "done" }), makeTask({ id: "t2", status: "todo" })];
+  tasks = applyTaskChange(tasks, { kind: "task-upsert", task: makeTask({ id: "t1", status: "done", archivedAt: 1 }) });
+  assert.deepEqual(tasks.map((t) => t.id), ["t2"]);
+  tasks = applyTaskChange(tasks, { kind: "task-upsert", task: makeTask({ id: "t1", status: "done", archivedAt: 1 }) });
+  assert.deepEqual(tasks.map((t) => t.id), ["t2"], "the same archive again changes nothing");
+  tasks = applyTaskChange(tasks, { kind: "task-upsert", task: makeTask({ id: "t1", status: "done" }) });
+  assert.deepEqual(tasks.map((t) => `${t.id}:${t.status}`), ["t2:todo", "t1:done"]);
+});
+
+test("a list the server sent keeps only the tasks on the board", () => {
+  assert.deepEqual(onBoard([makeTask({ id: "a" }), makeTask({ id: "b", status: "done", archivedAt: 5 })]).map((t) => t.id), ["a"]);
+});
+
+test("an archive reads as such", () => {
+  const done = makeTask({ status: "done" });
+  assert.equal(describeChange(done, { kind: "task-upsert", task: { ...done, archivedAt: 1 } }), "Add SSE feed was archived");
+  assert.equal(describeChange(null, { kind: "task-upsert", task: { ...done, archivedAt: 1 } }), "", "a task archived before this page knew it is no news");
 });

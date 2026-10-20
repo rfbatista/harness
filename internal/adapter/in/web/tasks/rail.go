@@ -41,6 +41,11 @@ func NewTaskHref(projectID string) string {
 	return "/projects/" + url.PathEscape(projectID) + "/tasks/new"
 }
 
+// ArchivedHref is the project's Archived view.
+func ArchivedHref(projectID string) string {
+	return "/projects/" + url.PathEscape(projectID) + "/archived"
+}
+
 // Href is a task's page.
 func Href(projectID, taskID string) string {
 	return "/projects/" + url.PathEscape(projectID) + "/tasks/" + url.PathEscape(taskID)

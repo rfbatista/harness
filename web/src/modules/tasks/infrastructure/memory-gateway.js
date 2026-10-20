@@ -21,6 +21,9 @@ export function memoryTasks({ projects = [], tasks = [], sessions = [], document
   const calls = [];
   /** A test hook: when set, updateTask throws what it returns. */
   let refuse = null;
+  /** Each archive is a moment after the last, so archived tasks order newest first. */
+  let clock = Date.parse("2026-10-19T12:00:00Z");
+  const now = () => (clock += 1000);
 
   const check = (title, status) => {
     if (!title?.trim()) throw new StructuredError(Codes.INVALID_INPUT, "title is required", 400);
@@ -45,6 +48,7 @@ export function memoryTasks({ projects = [], tasks = [], sessions = [], document
       const task = store.get(id);
       if (!task) throw new StructuredError(Codes.TICKET_NOT_FOUND, "ticket not found", 404);
       if (title !== undefined && !title.trim()) throw new StructuredError(Codes.INVALID_INPUT, "title is required", 400);
+      if (status !== undefined && task.archivedAt) throw new StructuredError(Codes.TASK_ARCHIVED, "the task is archived; restore it before changing its status", 409);
       if (status !== undefined && !isStatus(status)) throw new StructuredError(Codes.INVALID_INPUT, "status must be one of backlog, todo, in_progress, review, done", 400);
       const updated = Object.freeze({
         ...task,
@@ -58,6 +62,25 @@ export function memoryTasks({ projects = [], tasks = [], sessions = [], document
 
     moveTask(id, status) {
       return gateway.updateTask({ id, status });
+    },
+
+    async archiveTask(id) {
+      const task = store.get(id);
+      if (!task) throw new StructuredError(Codes.TICKET_NOT_FOUND, "ticket not found", 404);
+      if (task.archivedAt) return task;
+      if (task.status !== "done") throw new StructuredError(Codes.TASK_NOT_DONE, "only a done task can be archived", 409);
+      const archived = Object.freeze({ ...task, archivedAt: now() });
+      store.set(id, archived);
+      return archived;
+    },
+
+    async restoreTask(id) {
+      const task = store.get(id);
+      if (!task) throw new StructuredError(Codes.TICKET_NOT_FOUND, "ticket not found", 404);
+      if (!task.archivedAt) return task;
+      const restored = Object.freeze({ ...task, archivedAt: 0 });
+      store.set(id, restored);
+      return restored;
     },
 
     async deleteTask(id) {
