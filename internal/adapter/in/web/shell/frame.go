@@ -222,6 +222,10 @@ type Link struct {
 	Attention bool
 	// Reviews counts the review requests waiting on the person.
 	Reviews int
+	// Merge is a Review or Done task's merge state (the data-merge-state
+	// hook) and MergeText the rail's lower-case word, "1/2 merged"; both ""
+	// when there is none.
+	Merge, MergeText string
 }
 
 // DocumentTitle is the <title>: the page's own title, then the app.
@@ -364,13 +368,16 @@ func (l Link) Waiting() bool { return l.Reviews == 0 && l.Attention }
 // Running: live sessions and nothing waiting.
 func (l Link) Running() bool { return !l.Attention && l.Live > 0 }
 
+// Merging: nothing comes before the merge glyph and word.
+func (l Link) Merging() bool { return l.Merge != "" && !l.Attention && l.Live == 0 }
+
 // MetaLead and MetaTail are the hidden words around the meta item, so the
 // link reads "Redesign sidebar, running, 2 live sessions".
 func (l Link) MetaLead() string {
 	switch {
 	case l.Running():
 		return ", running, "
-	case l.Attention:
+	case l.Attention, l.Merging():
 		return ", "
 	default:
 		return ""

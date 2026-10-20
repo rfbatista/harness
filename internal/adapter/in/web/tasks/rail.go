@@ -171,7 +171,7 @@ func statusLabel(st domain.TicketStatus) string {
 // card is a task as the rail links it and the board draws it.
 func card(projectID string, t *domain.Ticket, byTask map[string]activity, currentTaskID string) shell.Link {
 	a := byTask[t.ID]
-	return shell.Link{
+	l := shell.Link{
 		TaskID:    t.ID,
 		Label:     t.Title,
 		Href:      Href(projectID, t.ID),
@@ -180,6 +180,10 @@ func card(projectID string, t *domain.Ticket, byTask map[string]activity, curren
 		Attention: a.attention || t.PendingReviews > 0,
 		Reviews:   t.PendingReviews,
 	}
+	if m := mergeBadge(string(t.Status), cardFactsOf(t).merge); m != nil {
+		l.Merge, l.MergeText = m.State, m.Rail
+	}
+	return l
 }
 
 func known(s domain.TicketStatus) bool {

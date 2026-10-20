@@ -190,3 +190,29 @@ func TestRailCountsWhatNeedsThePerson(t *testing.T) {
 		t.Errorf("needs you = %d", n)
 	}
 }
+
+// A Review or Done row carries its merge state for the meta item; the row
+// shows it only when nothing comes first (shell.Link.Merging).
+func TestRailRowsCarryTheMergeStateOfReviewAndDone(t *testing.T) {
+	merge := func(kind string, merged, total int) *domain.MergeState {
+		return &domain.MergeState{State: domain.MergeKind(kind), Merged: merged, Total: total}
+	}
+	rail := BuildRail("p1",
+		[]*domain.Ticket{
+			{ID: "r1", Title: "Partial", Status: domain.TicketStatusReview, MergeState: merge("partial", 1, 2)},
+			{ID: "d1", Title: "Merged", Status: domain.TicketStatusDone, MergeState: merge("merged", 1, 1)},
+			{ID: "d2", Title: "None", Status: domain.TicketStatusDone, MergeState: merge("none", 0, 0)},
+			{ID: "d3", Title: "Missing", Status: domain.TicketStatusDone},
+			{ID: "i1", Title: "Moving", Status: domain.TicketStatusInProgress, MergeState: merge("merged", 1, 1)},
+		}, nil, "", nil)
+	var got []string
+	for _, g := range rail.Groups {
+		for _, l := range g.Links {
+			got = append(got, fmt.Sprintf("%s=%s/%s", l.Label, l.Merge, l.MergeText))
+		}
+	}
+	want := "Moving=/,Partial=partial/1/2 merged,Merged=merged/merged,None=/,Missing=/"
+	if strings.Join(got, ",") != want {
+		t.Errorf("rail merges:\n%s\nwant:\n%s", strings.Join(got, ","), want)
+	}
+}

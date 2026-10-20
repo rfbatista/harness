@@ -8,6 +8,10 @@
  *   <a class="button">New task</a> <nav class="nav" aria-label="Project">…</nav> <nav class="nav" aria-label="Tasks">…</nav>
  * </div>
  * <div class="scrim" data-open?></div>
+ * A task row's merge meta, .meta[data-merge-state], is a glyph and a
+ * lower-case word with no box: ink-faint, attention-strong for partial and
+ * not merged. It holds every glyph (svg[data-glyph]) and shows the one its
+ * state names, as .badge.merge does.
  * Exceptions: data-open (the drawer is shown).
  */
 
@@ -80,6 +84,19 @@
 
       @media (prefers-reduced-motion: reduce) { transition: none; }
     }
+  }
+
+  .rail .nav .meta[data-merge-state] {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-3xs);
+
+    & > .glyph { inline-size: 0.875rem; block-size: 0.875rem; flex-shrink: 0; }
+    &:is([data-merge-state="partial"], [data-merge-state="not_merged"]) { color: var(--color-attention-strong); }
+    &:not([data-merge-state="merged"]) > [data-glyph="merged"],
+    &:not([data-merge-state="partial"]) > [data-glyph="partial"],
+    &:not([data-merge-state="not_merged"]) > [data-glyph="not_merged"],
+    &:not([data-merge-state="unknown"]) > [data-glyph="unknown"] { display: none; }
   }
 
   /* The page dimmed behind the open drawer. */
