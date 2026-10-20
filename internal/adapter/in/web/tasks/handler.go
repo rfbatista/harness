@@ -44,9 +44,12 @@ type Handler struct {
 	Workspaces WorkspaceReader
 	// TokenSavers seeds the task's Token savers control; nil leaves it out.
 	TokenSavers ports.TokenSaverActivationReader
-	Layout      shell.Layout
-	Render      shell.Renderer
-	Now         func() time.Time
+	// Archived lists the project's archived tasks for the Archived view;
+	// nil lists none.
+	ArchivedTasks ArchivedLister
+	Layout        shell.Layout
+	Render        shell.Renderer
+	Now           func() time.Time
 }
 
 // workspaceIDs are the sessions' worktrees, each once.
@@ -90,6 +93,35 @@ func (h Handler) Project(w http.ResponseWriter, r *http.Request) error {
 		board.ArchivedCount = frame.Rail.Seed.ArchivedCount
 	}
 	return h.Render(w, r, http.StatusOK, ProjectPage(frame, project.ID, project.Name, board))
+}
+
+// ArchivedLister lists a project's archived tasks, newest archived first: what
+// the Archived view reads (ports.TicketArchiver has it).
+type ArchivedLister interface {
+	ListArchivedTickets(ctx context.Context, projectID string) ([]*domain.Ticket, error)
+}
+
+// Archived serves GET /projects/{project}/archived: the project's archived
+// tasks, with Restore and Delete (ADR 0014), kept live over the project feed.
+func (h Handler) Archived(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+	project, err := h.Projects.GetProject(ctx, r.PathValue("project"))
+	if err != nil {
+		return err
+	}
+	list := []*domain.Ticket{}
+	if h.ArchivedTasks != nil {
+		if list, err = h.ArchivedTasks.ListArchivedTickets(ctx, project.ID); err != nil {
+			return err
+		}
+	}
+	frame, err := h.Layout(ctx, "Archived · "+project.Name, project.ID, "")
+	if err != nil {
+		return err
+	}
+	frame.Live = true
+	frame.Rail.ReportsFeed = true
+	return h.Render(w, r, http.StatusOK, ArchivedPage(frame, project.ID, project.Name, BuildArchived(project.ID, list)))
 }
 
 // New serves GET /projects/{project}/tasks/new: the new-task form.

@@ -1,5 +1,6 @@
 // The tasks module's Alpine components.
 
+import { archived } from "./components/archived.js";
 import { board } from "./components/board.js";
 import { documentScope } from "./components/documentScope.js";
 import { documentWatch } from "./components/documentWatch.js";
@@ -35,4 +36,5 @@ export function registerTasks(Alpine, deps) {
   Alpine.data("tasksRail", rail({ gateway: deps.rail, store, prefs: deps.railPrefs, navigate: deps.navigate }));
   Alpine.data("tasksRailToggle", railToggle({ store }));
   Alpine.data("tasksBoard", board({ gateway: deps.gateway, store, clock: deps.clock }));
+  Alpine.data("tasksArchived", archived({ gateway: deps.gateway }));
 }

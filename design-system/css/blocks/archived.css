@@ -1,5 +1,11 @@
 /*
  * Archived — what the person sees of an archived task (ADR 0014).
+ * The Archived view's list: newest archived first, each row its title and
+ * dates on the left, Restore and Delete on the right, and its delete
+ * confirmation or error underneath; a row restored or deleted collapses to a
+ * one-line receipt ([data-receipt]); [data-busy] fades it while it goes.
+ * <ul class="archived-list" data-archived-list><li class="archived-row" data-task-id="t1">
+ *   <div class="open"><div class="what"><a class="title">…</a><p class="dates">…</p></div><div class="actions">…</div></div></li></ul>
  * The task page's banner, in place of the status picker: neutral, since
  * nothing is wrong.
  * <div class="archived-banner" role="note"><p><strong>Archived Oct 18.</strong> It is off the board; its status is Done.</p>
@@ -20,5 +26,93 @@
     font-size: var(--text-sm);
 
     & > .button { margin-inline-start: auto; }
+  }
+
+  .archived-summary {
+    padding: var(--space-m) var(--space-l) var(--space-s);
+    color: var(--color-ink-muted);
+    font-size: var(--text-sm);
+  }
+
+  .archived-list {
+    display: grid;
+    padding: 0 var(--space-l) var(--space-l);
+    list-style: none;
+  }
+
+  .archived-row {
+    border-block-end: var(--border-width) solid var(--color-line);
+    transition: opacity var(--duration-quick) var(--ease-out);
+
+    &:hover { background: var(--color-hover); }
+
+    & .open, &:not(:has(.open)) {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: center;
+      gap: var(--space-2xs) var(--space-l);
+      min-block-size: 3.25rem;
+      padding: var(--space-s) var(--space-xs) var(--space-s) var(--space-s);
+    }
+
+    &[data-receipt] { display: block; }
+
+    & .what { display: grid; gap: var(--space-3xs); min-inline-size: 0; }
+
+    & .title {
+      color: var(--color-ink);
+      font-weight: var(--weight-medium);
+      text-decoration: none;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+
+      &:hover { text-decoration: underline; }
+    }
+
+    & .dates {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: var(--space-2xs) var(--space-m);
+      font-size: var(--text-xs);
+      color: var(--color-ink-faint);
+    }
+
+    & .actions { display: flex; align-items: center; gap: var(--space-xs); }
+    & .confirm-strip, & .row-error { grid-column: 1 / -1; margin: var(--space-2xs) 0 0; }
+    &[data-busy] .what { opacity: 0.55; }
+
+    & .busy-note {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--space-2xs);
+      font-size: var(--text-xs);
+      font-weight: var(--weight-medium);
+      color: var(--color-ink-muted);
+    }
+
+    & .receipt {
+      display: flex;
+      align-items: center;
+      gap: var(--space-s);
+      min-block-size: 2.5rem;
+      padding-inline: var(--space-s);
+      font-size: var(--text-sm);
+      color: var(--color-ink-muted);
+
+      & > .glyph { inline-size: 1rem; block-size: 1rem; color: var(--color-ink-faint); }
+    }
+  }
+
+  .row-error {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--space-2xs) var(--space-s);
+    font-size: var(--text-xs);
+    color: var(--color-danger);
+
+    & .code { font-family: var(--font-mono); color: var(--color-ink-faint); }
   }
 }
