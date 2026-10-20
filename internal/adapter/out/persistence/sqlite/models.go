@@ -566,6 +566,7 @@ type WorkspaceModel struct {
 	Branch       string
 	Path         string
 	BaseRef      string `gorm:"column:base_ref"`
+	BaseSHA      string `gorm:"column:base_sha"`
 	CreatedAt    time.Time
 }
 
@@ -584,6 +585,7 @@ func (m *WorkspaceModel) ToDomain() *domain.Workspace {
 		Branch:       m.Branch,
 		Path:         m.Path,
 		BaseRef:      m.BaseRef,
+		BaseSHA:      m.BaseSHA,
 		CreatedAt:    m.CreatedAt,
 	}
 }

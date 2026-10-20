@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -131,6 +132,22 @@ func gitRun(t *testing.T, dir string, args ...string) {
 	}
 }
 
+// gitOut runs git in dir and answers its trimmed output.
+func gitOut(t *testing.T, dir string, args ...string) string {
+	t.Helper()
+	out, err := exec.Command("git", append([]string{"-C", dir}, args...)...).Output()
+	if err != nil {
+		t.Fatalf("git %v: %v", args, err)
+	}
+	return strings.TrimSpace(string(out))
+}
+
+// forgetReflog drops the branch's reflog, as git does when it expires.
+func (f *mergeFixture) forgetReflog(branch string) {
+	f.t.Helper()
+	gitRun(f.t, f.repoDir, "reflog", "expire", "--expire=now", "refs/heads/"+branch)
+}
+
 func (f *mergeFixture) task(status domain.TicketStatus) string {
 	f.t.Helper()
 	tk, err := f.plan.CreateTicket(f.ctx, f.projectID, "task", "", status)
@@ -141,11 +158,23 @@ func (f *mergeFixture) task(status domain.TicketStatus) string {
 }
 
 // session gives the task a session whose worktree holds a new branch cut
-// from base, with commits commits of its own.
+// from base, with commits commits of its own. Its workspace records no base
+// commit, as those made before the harness stored one.
 func (f *mergeFixture) session(taskID, branch, base string, commits int) {
+	f.t.Helper()
+	f.sessionAt(taskID, branch, base, commits, false)
+}
+
+// sessionAt is session; withBaseSHA records the commit the branch was cut at
+// on its workspace, as the harness does for new workspaces.
+func (f *mergeFixture) sessionAt(taskID, branch, base string, commits int, withBaseSHA bool) {
 	f.t.Helper()
 	path := filepath.Join(f.t.TempDir(), branch)
 	gitRun(f.t, f.repoDir, "worktree", "add", "-b", branch, path, base)
+	baseSHA := ""
+	if withBaseSHA {
+		baseSHA = gitOut(f.t, f.repoDir, "rev-parse", "refs/heads/"+branch)
+	}
 	f.worktrees[branch] = path
 	for i := range commits {
 		name := filepath.Join(path, branch+".txt")
@@ -155,7 +184,7 @@ func (f *mergeFixture) session(taskID, branch, base string, commits int) {
 		gitRun(f.t, path, "add", ".")
 		gitRun(f.t, path, "commit", "-m", branch)
 	}
-	ws, err := sqlite.NewWorkspaceRepository(f.db).Create(domain.Workspace{RepositoryID: f.repoID, Name: branch, Branch: branch, Path: path, BaseRef: base})
+	ws, err := sqlite.NewWorkspaceRepository(f.db).Create(domain.Workspace{RepositoryID: f.repoID, Name: branch, Branch: branch, Path: path, BaseRef: base, BaseSHA: baseSHA})
 	if err != nil {
 		f.t.Fatal(err)
 	}
@@ -222,6 +251,63 @@ func TestAReviewTaskReadsHowManyOfItsBranchesAreMerged(t *testing.T) {
 			wantMerge(t, f.read(id), c.want)
 		})
 	}
+}
+
+// A merged branch has nothing ahead of its base by name; the commit its
+// workspace was cut at still tells it carries work of its own, whatever its
+// reflog kept.
+func TestAMergedBranchCountsByTheCommitItsWorkspaceWasCutAt(t *testing.T) {
+	f := newMergeFixture(t, "main")
+	id := f.task(domain.TicketStatusReview)
+	f.sessionAt(id, "feat", "main", 1, true)
+	f.merge("feat")
+	f.forgetReflog("feat")
+	wantMerge(t, f.read(id), domain.MergeState{State: domain.MergeMerged, Merged: 1, Total: 1})
+}
+
+// A workspace the harness makes records the commit its branch was cut at, so
+// the branch still counts once merged and its reflog is gone.
+func TestAWorkspaceTheHarnessMakesKeepsTheCommitItWasCutAt(t *testing.T) {
+	f := newMergeFixture(t, "main")
+	settings := sqlite.NewSettingsRepository(f.db)
+	if err := settings.Set(domain.SettingWorkspacesRoot, t.TempDir()); err != nil {
+		t.Fatal(err)
+	}
+	svc := workspaces.NewService(sqlite.NewWorkspaceRepository(f.db), sqlite.NewRepositoryRepository(f.db), gitcli.NewWorktreeManager(), settings)
+	cut := gitOut(t, f.repoDir, "rev-parse", "refs/heads/main")
+	ws, err := svc.Create(f.repoID, "feat", "feat", "main")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ws.BaseSHA != cut {
+		t.Fatalf("base sha = %q, want %q", ws.BaseSHA, cut)
+	}
+	if err := os.WriteFile(filepath.Join(ws.Path, "feat.txt"), []byte("a"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitRun(t, ws.Path, "add", ".")
+	gitRun(t, ws.Path, "commit", "-m", "feat")
+	id := f.task(domain.TicketStatusReview)
+	if _, err := sqlite.NewSessionRepository(f.db).Create(&domain.Session{
+		ProjectID: f.projectID, TicketID: id, RepositoryID: f.repoID, WorkspaceID: ws.ID, Branch: "feat",
+		Status: domain.SessionDone, CreatedAt: time.Now(),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	f.merge("feat")
+	f.forgetReflog("feat")
+	wantMerge(t, f.read(id), domain.MergeState{State: domain.MergeMerged, Merged: 1, Total: 1})
+}
+
+// A workspace from before the base commit was stored, whose reflog expired,
+// falls back to the commits ahead of its base: once merged there are none.
+func TestAnOldWorkspaceWithoutReflogFallsBackToItsBaseByName(t *testing.T) {
+	f := newMergeFixture(t, "main")
+	id := f.task(domain.TicketStatusReview)
+	f.session(id, "feat", "main", 1)
+	f.merge("feat")
+	f.forgetReflog("feat")
+	wantMerge(t, f.read(id), domain.MergeState{State: domain.MergeNone})
 }
 
 func TestADoneTaskCarriesItsMergeStateToo(t *testing.T) {

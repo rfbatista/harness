@@ -159,6 +159,9 @@ type RailSeed struct {
 	ProjectID string           `json:"project_id"`
 	Sessions  []RailSession    `json:"sessions"`
 	Tasks     []*domain.Ticket `json:"tasks"`
+	// ArchivedCount counts the project's archived tasks, which Tasks leaves
+	// out: the "Archived (N)" link.
+	ArchivedCount int `json:"archived_count"`
 }
 
 // RailSession is a session as the rail counts it.

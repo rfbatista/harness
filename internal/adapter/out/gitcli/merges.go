@@ -23,11 +23,12 @@ func NewBranchMerges(opts ...Option) *BranchMerges { return &BranchMerges{d: new
 // the local branch of that name, so a merge not yet pushed counts.
 //
 // A branch has commits of its own when its tip moved since it was cut. Its
-// base cannot tell: a workspace records the base by name (main), and once the
-// branch is merged the base holds every commit of it. The branch's reflog
-// can: its oldest entry is where it was created. Without a reflog (expired,
-// or core.logAllRefUpdates off) it falls back to the commits ahead of its
-// base, which misses a branch already merged.
+// base by name cannot tell: once the branch is merged the base holds every
+// commit of it. The commit the workspace recorded when it was cut can. A
+// workspace made before that was recorded falls back to the branch's reflog,
+// whose oldest entry is where it was created, and without a reflog (expired,
+// or core.logAllRefUpdates off) to the commits ahead of its base, which
+// misses a branch already merged.
 func (m BranchMerges) BranchMerges(ctx context.Context, root string, branches []ports.BranchBase) (ports.BranchMerges, error) {
 	out, err := m.d.gitOutput(ctx, root, "for-each-ref", "--format=%(refname) %(objectname) %(symref)", "refs/heads/", "refs/remotes/origin/HEAD")
 	if err != nil {
@@ -79,6 +80,9 @@ func (m BranchMerges) BranchMerges(ctx context.Context, root string, branches []
 
 // ahead reports whether branch b, at tip, moved since it was cut.
 func (m BranchMerges) ahead(ctx context.Context, root string, b ports.BranchBase, tip, defaultBranch string) (bool, error) {
+	if b.BaseSHA != "" {
+		return tip != b.BaseSHA, nil
+	}
 	out, err := m.d.gitOutput(ctx, root, "log", "-g", "--format=%H", "refs/heads/"+b.Branch, "--")
 	if err != nil {
 		return false, err

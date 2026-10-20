@@ -15,8 +15,9 @@ var ErrBranchExists = errors.New("branch already exists")
 // WorktreeManager is the outbound port for materializing and removing git
 // worktrees on disk. repoRoot is the repository's main checkout; path is the
 // worktree directory; branch is created at baseRef (HEAD when baseRef is empty).
+// Add answers the commit the branch was cut at.
 type WorktreeManager interface {
-	Add(repoRoot, path, branch, baseRef string) error
+	Add(repoRoot, path, branch, baseRef string) (baseSHA string, err error)
 	Remove(repoRoot, path string) error
 	// ListBranches returns local branches first, then remote-tracking ones,
 	// each group alphabetically. Symbolic */HEAD aliases are excluded.
@@ -62,8 +63,9 @@ type BranchMergeReader interface {
 	BranchMerges(ctx context.Context, repoRoot string, branches []BranchBase) (BranchMerges, error)
 }
 
-// BranchBase is a branch and the ref it was cut from ("" for HEAD).
-type BranchBase struct{ Branch, Base string }
+// BranchBase is a branch, the ref it was cut from ("" for HEAD) and the
+// commit it was cut at ("" when its workspace did not record it).
+type BranchBase struct{ Branch, Base, BaseSHA string }
 
 // BranchMerges is the answer of BranchMergeReader.BranchMerges.
 type BranchMerges struct {

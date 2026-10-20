@@ -82,7 +82,7 @@ func TestHTTP_ListProjectSummaries_WireShape(t *testing.T) {
 	busy, _ := svc.CreateProject(ctx, "busy", t.TempDir())
 	idle, _ := svc.CreateProject(ctx, "Idle", t.TempDir())
 	at := time.Date(2026, 10, 7, 12, 0, 0, 0, time.UTC)
-	act.tasks[busy.ID] = ports.TaskActivity{OpenCount: 2, LastUpdatedAt: at}
+	act.tasks[busy.ID] = ports.TaskActivity{OpenCount: 2, ArchivedCount: 3, LastUpdatedAt: at}
 	act.sessions[busy.ID] = ports.SessionActivity{LiveCount: 1, LastActivityAt: at.Add(-time.Hour)}
 
 	resp, err = http.Get(srv.URL + "/api/list_project_summaries")
@@ -104,6 +104,7 @@ func TestHTTP_ListProjectSummaries_WireShape(t *testing.T) {
 			"project":               `{"id":"` + busy.ID + `","name":"busy","root_dir":"` + busy.RootDir + `"}`,
 			"repository_count":      `0`,
 			"open_task_count":       `2`,
+			"archived_count":        `3`,
 			"running_session_count": `1`,
 			"last_activity_at":      `"2026-10-07T12:00:00Z"`,
 		},
@@ -111,6 +112,7 @@ func TestHTTP_ListProjectSummaries_WireShape(t *testing.T) {
 			"project":               `{"id":"` + idle.ID + `","name":"Idle","root_dir":"` + idle.RootDir + `"}`,
 			"repository_count":      `0`,
 			"open_task_count":       `0`,
+			"archived_count":        `0`,
 			"running_session_count": `0`,
 			"last_activity_at":      `null`,
 		},

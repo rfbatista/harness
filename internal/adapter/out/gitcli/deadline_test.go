@@ -55,7 +55,7 @@ func TestAWorktreeOperationAgainstAHungGitFailsAfterItsDeadline(t *testing.T) {
 	// show-ref answers at once; only the worktree runs hang.
 	w := NewWorktreeManager(WithReadDeadline(5*time.Second), WithWorktreeDeadline(1500*time.Millisecond))
 
-	took, err := returnsWithin(t, 10*time.Second, func() error { return w.Add(repo, path, "feature", "") })
+	took, err := returnsWithin(t, 10*time.Second, func() error { _, err := w.Add(repo, path, "feature", ""); return err })
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("Add = %v, want a deadline error", err)
 	}
