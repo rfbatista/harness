@@ -1,20 +1,27 @@
 // The project root's kanban board. It renders the rail's store (the project's
 // tasks and per-task activity, kept live by tasksRail over the project feed),
 // so a task an agent creates or moves shows here as it happens. A card opens
-// the task; its select moves it, optimistically, with a status-only update.
+// the task; its "Move to…" menu moves it, optimistically, with a status-only
+// update.
 //
 //   <main x-data="tasksBoard" data-project-id="p1" x-on:task-changed.window="taskChanged">
 //     <div x-ignore data-ssr>…first paint…</div>
 //     <template x-if="hasTasks"> … x-for="column in columns" …
-//       <select data-task-id="t1" x-on:change="moveTo">
+//       <article data-task-id="t1"> … <div class="menu" x-data="menu" x-on:menu-select="menuSelect">
 
 import { Codes, codeOf } from "../../../../shared/domain/errors.js";
 import { describeError } from "../../../../shared/presentation/errors.js";
 import { applyTaskChange, describeChange } from "../../domain/board.js";
+import { STATUSES } from "../../domain/task.js";
 import { toColumns } from "../boardView.js";
 
 /** How long a task that arrived or moved over the feed stays highlighted. */
 export const FRESH_MS = 8_000;
+
+const statusLabel = (status) => STATUSES.find((s) => s.value === status)?.label ?? status;
+
+/** How long a card that went back after a refused move says "Move failed". */
+export const FAILED_MS = 4_000;
 
 /** How often the cards' time in column refreshes. */
 export const AGE_TICK_MS = 60_000;
@@ -40,6 +47,8 @@ export const board = ({ gateway, store, setTimeout = globalThis.setTimeout.bind(
     announcement: "",
     /** Tasks that just arrived or moved over the feed. */
     freshIds: [],
+    /** Cards that went back after a refused move, for FAILED_MS. */
+    failedIds: [],
     /**
      * This board's own moves per card, so a response, a failure and the
      * feed's echo are told apart from other people's changes: `base` is the
@@ -55,7 +64,8 @@ export const board = ({ gateway, store, setTimeout = globalThis.setTimeout.bind(
     now: clock.now(),
 
     get columns() {
-      return toColumns(store.tasks, { projectId: this.projectId, byTask: store.byTask, fresh: new Set(this.freshIds), now: this.now });
+      const pending = Object.fromEntries(Object.entries(this.moves).map(([id, m]) => [id, m.pending.at(-1)]));
+      return toColumns(store.tasks, { projectId: this.projectId, byTask: store.byTask, fresh: new Set(this.freshIds), now: this.now, pending, failed: new Set(this.failedIds) });
     },
     get hasTasks() {
       return store.seeded && store.tasks.length > 0;
@@ -80,20 +90,29 @@ export const board = ({ gateway, store, setTimeout = globalThis.setTimeout.bind(
       });
     },
 
-    /** The card's select changed: move the task, optimistically. */
-    async moveTo(event) {
-      const select = event.target;
-      const { taskId } = select.dataset;
-      const status = select.value;
+    /** A card's "Move to…" menu chose an item. */
+    menuSelect(event) {
+      const { action, value } = event.detail;
+      const taskId = event.target.closest?.("[data-task-id]")?.dataset.taskId;
+      if (action === "move" && taskId) this.move(taskId, value, { refocus: true });
+    },
+
+    /**
+     * Moves a card, optimistically: it lands on top of its new column at
+     * once, faded until the server answers, and goes back if the server
+     * refuses. The one path for the menu and a drop. refocus keeps the
+     * keyboard on the card's "Move to…" in whichever column it ends up.
+     */
+    async move(taskId, status, { refocus = false } = {}) {
       const task = store.tasks.find((t) => t.id === taskId);
       if (!task || task.status === status) return;
-      const focused = select.ownerDocument?.activeElement === select;
-      const move = this.moves[taskId] ?? { base: task.status, pending: [] };
-      this.moves = { ...this.moves, [taskId]: { base: move.base, pending: [...move.pending, status] } };
+      const move = this.moves[taskId] ?? { base: task.status, baseSince: task.statusSince, pending: [] };
+      this.moves = { ...this.moves, [taskId]: { ...move, pending: [...move.pending, status] } };
       delete this.echoes[taskId];
+      this.failedIds = this.failedIds.filter((x) => x !== taskId);
       this.error = null;
-      this.show(taskId, status);
-      if (focused) this.refocus(taskId);
+      this.show(taskId, status, clock.now().getTime());
+      if (refocus) this.refocus(taskId);
       try {
         const saved = await gateway.moveTask(taskId, status);
         const { newest } = this.settle(taskId, status);
@@ -103,26 +122,37 @@ export const board = ({ gateway, store, setTimeout = globalThis.setTimeout.bind(
         }
         store.tasks = applyTaskChange(store.tasks, { kind: "task-upsert", task: saved });
         this.expectEcho(taskId, saved.status);
-        this.announcement = describeChange(task, { kind: "task-upsert", task: saved });
+        this.announcement = `Moved ${task.title} to ${statusLabel(saved.status)}.`;
       } catch (err) {
-        const { newest, base } = this.settle(taskId, status);
+        const { newest, base, baseSince } = this.settle(taskId, status);
         if (codeOf(err) === Codes.TICKET_NOT_FOUND) {
           store.tasks = applyTaskChange(store.tasks, { kind: "task-deleted", id: taskId });
           delete this.moves[taskId];
         } else if (newest) {
           this.show(taskId, newest);
         } else if (store.tasks.find((t) => t.id === taskId)?.status === status) {
-          this.show(taskId, base); // nobody else changed it meanwhile: back to what the server holds
+          this.show(taskId, base, baseSince); // nobody else changed it meanwhile: back to what the server holds
+          this.flagFailed(taskId);
         }
         this.error = describeError(err);
-        if (focused) this.refocus(taskId);
+        this.announcement = `Couldn't move ${task.title} to ${statusLabel(status)}.`;
+        if (refocus) this.refocus(taskId);
       }
     },
 
-    /** Puts a status on a card, keeping the rest of the task as the store has it. */
-    show(taskId, status) {
+    /** Puts a status on a card, keeping the rest of the task as the store has it; since, when given, is when it entered it. */
+    show(taskId, status, since) {
       const task = store.tasks.find((t) => t.id === taskId);
-      if (task && task.status !== status) store.tasks = applyTaskChange(store.tasks, { kind: "task-upsert", task: { ...task, status } });
+      if (!task || (task.status === status && since === undefined)) return;
+      store.tasks = applyTaskChange(store.tasks, { kind: "task-upsert", task: { ...task, status, statusSince: since ?? task.statusSince } });
+    },
+
+    /** A card that went back after a refused move says so for a while. */
+    flagFailed(taskId) {
+      this.failedIds = [...this.failedIds, taskId];
+      setTimeout(() => {
+        this.failedIds = this.failedIds.filter((x) => x !== taskId);
+      }, FAILED_MS);
     },
 
     /**
@@ -132,16 +162,17 @@ export const board = ({ gateway, store, setTimeout = globalThis.setTimeout.bind(
      */
     settle(taskId, status) {
       const move = this.moves[taskId];
-      if (!move) return { newest: null, base: undefined };
+      if (!move) return { newest: null, base: undefined, baseSince: undefined };
       const pending = [...move.pending];
       const at = pending.indexOf(status);
       if (at >= 0) pending.splice(at, 1);
       if (pending.length === 0) {
-        delete this.moves[taskId];
-        return { newest: null, base: move.base };
+        const { [taskId]: _, ...rest } = this.moves;
+        this.moves = rest;
+        return { newest: null, base: move.base, baseSince: move.baseSince };
       }
-      this.moves = { ...this.moves, [taskId]: { base: move.base, pending } };
-      return { newest: pending.at(-1), base: move.base };
+      this.moves = { ...this.moves, [taskId]: { ...move, pending } };
+      return { newest: pending.at(-1), base: move.base, baseSince: move.baseSince };
     },
 
     /** The server confirmed a move; its echo on the feed, should it still come, is not news. */
@@ -152,11 +183,10 @@ export const board = ({ gateway, store, setTimeout = globalThis.setTimeout.bind(
       }, FRESH_MS);
     },
 
-    /** Keeps the keyboard on the card's select after Alpine re-rendered it in another column. */
+    /** Keeps the keyboard on the card's "Move to…" after Alpine re-rendered it in another column. */
     refocus(taskId) {
       this.$nextTick(() => {
-        const select = root?.querySelector(`.card[data-task-id="${CSS.escape(taskId)}"] select`);
-        select?.focus();
+        root?.querySelector(`.card[data-task-id="${CSS.escape(taskId)}"] .move-to`)?.focus();
       });
     },
 
@@ -179,7 +209,7 @@ export const board = ({ gateway, store, setTimeout = globalThis.setTimeout.bind(
       if (move?.pending.includes(status)) {
         const { newest } = this.settle(id, status);
         if (newest) {
-          this.moves = { ...this.moves, [id]: { ...this.moves[id], base: status } };
+          this.moves = { ...this.moves, [id]: { ...this.moves[id], base: status, baseSince: change.task.statusSince } };
           this.show(id, newest);
         }
         return;
@@ -188,7 +218,7 @@ export const board = ({ gateway, store, setTimeout = globalThis.setTimeout.bind(
         delete this.echoes[id];
         return;
       }
-      if (move) this.moves = { ...this.moves, [id]: { ...move, base: status } }; // someone else moved it: that is what the server holds now
+      if (move) this.moves = { ...this.moves, [id]: { ...move, base: status, baseSince: change.task.statusSince } }; // someone else moved it: that is what the server holds now
       this.announcement = describeChange(previous, change);
       this.freshIds = [...this.freshIds, id];
       setTimeout(() => {

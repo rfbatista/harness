@@ -1,6 +1,6 @@
 import { assert, file, test } from "../../../shared/testing/test.js";
 import { makeTask } from "../testing/fixtures.js";
-import { applyTaskChange, byStatus, describeChange, RAIL_ORDER } from "./board.js";
+import { applyTaskChange, byStatus, describeChange, moveChoices, RAIL_ORDER } from "./board.js";
 import { STATUSES } from "./task.js";
 
 file("tasks/domain/board");
@@ -49,4 +49,17 @@ test("a change reads as what happened to the task", () => {
   assert.equal(describeChange(t, { kind: "task-upsert", task: { ...t, title: "Add the SSE feed" } }), "Add SSE feed was renamed to Add the SSE feed");
   assert.equal(describeChange(t, { kind: "task-upsert", task: { ...t, description: "longer" } }), "");
   assert.equal(describeChange(null, { kind: "task-deleted", id: "ghost" }), "");
+});
+
+test("the Move to… menu lists every status with its key, the current one checked, and opens on the next step", () => {
+  const review = moveChoices("review");
+  assert.deepEqual(review.map((c) => `${c.key}:${c.status}:${c.label}:${c.current}:${c.initial}`), [
+    "1:backlog:Backlog:false:false",
+    "2:todo:Todo:false:false",
+    "3:in_progress:In progress:false:false",
+    "4:review:Review:true:false",
+    "5:done:Done:false:true",
+  ]);
+  const initial = (status) => moveChoices(status).find((c) => c.initial).status;
+  assert.deepEqual(["backlog", "todo", "in_progress", "done"].map(initial), ["todo", "in_progress", "review", "review"], "Done opens on Review, so a stray Enter stays reversible");
 });

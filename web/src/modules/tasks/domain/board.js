@@ -33,6 +33,19 @@ export function byStatus(tasks) {
   return out;
 }
 
+/**
+ * The "Move to…" menu's statuses for a task in `status`, in board order: each
+ * with its key (1 to 5), the current one marked. initial is where the menu
+ * opens: the status after the current one, the most likely next step; from
+ * Done it is Review, so an accidental Enter stays reversible.
+ * @returns {{ status: string, label: string, key: string, current: boolean, initial: boolean }[]}
+ */
+export function moveChoices(status) {
+  const at = STATUSES.findIndex((s) => s.value === status);
+  const next = at === STATUSES.length - 1 ? at - 1 : at + 1;
+  return STATUSES.map((s, i) => ({ status: s.value, label: s.label, key: String(i + 1), current: i === at, initial: i === next }));
+}
+
 const label = (status) => STATUSES.find((s) => s.value === status)?.label ?? status;
 
 /** How a change reads to a person; "" when nothing worth saying changed. */

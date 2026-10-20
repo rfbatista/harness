@@ -62,3 +62,17 @@ test("Review asks for the person's check while it holds cards; empty columns say
   const review = toColumns([makeTask({ status: "review" })], ctx())[3];
   assert.deepEqual([review.waiting, review.sub], [true, "Waiting for your check"]);
 });
+
+test("a card with a move in flight is pending and says where it goes; one that went back says the move failed", () => {
+  const cols = toColumns([makeTask({ id: "a", status: "done" }), makeTask({ id: "b", status: "review" }), makeTask({ id: "c", status: "review" })], ctx({ pending: { a: "done" }, failed: new Set(["b"]) }));
+  const [a] = cols[4].cards;
+  const [b, c] = cols[3].cards;
+  assert.deepEqual([a.pending, a.failed, a.note], [true, false, "Moving to Done…"]);
+  assert.deepEqual([b.pending, b.failed, b.note], [false, true, "Move failed"]);
+  assert.deepEqual([c.pending, c.failed, c.note], [false, false, ""]);
+});
+
+test("each card's Move to… menu lists the statuses, its own checked, and opens on the next step", () => {
+  const [card] = toColumns([makeTask({ status: "review" })], ctx())[3].cards;
+  assert.deepEqual(card.choices.map((c) => `${c.key}:${c.label}:${c.current}:${c.initial}`), ["1:Backlog:false:false", "2:Todo:false:false", "3:In progress:false:false", "4:Review:true:false", "5:Done:false:true"]);
+});

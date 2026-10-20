@@ -15,6 +15,9 @@
 // Output: `menu-select` on the wrapper with { action, value? } (value from
 // data-value on menuitemradio / menuitemcheckbox). An item with
 // aria-disabled="true" stays focusable, so it can be found, and does nothing.
+// Optional, per item: data-initial is where the menu opens (instead of the
+// first item); data-skip leaves the item out of the arrows, Home and End;
+// data-key="1" runs the item when that key is pressed in the open menu.
 
 import { defaultEnv, floating, holdDialogCancel, isPrintable, typeahead, uid } from "./popup.js";
 
@@ -93,7 +96,7 @@ export class MenuButton {
     this.releaseCancel = holdDialogCancel(this.root);
     this.floating.open({ sheet });
     const items = this.items();
-    const item = at === "last" ? items[items.length - 1] : items[0];
+    const item = at === "last" ? items[items.length - 1] : (items.find((it) => it.hasAttribute("data-initial")) ?? items[0]);
     if (item) this.focusItem(item);
   }
 
@@ -142,19 +145,25 @@ export class MenuButton {
   menuKey(e) {
     const items = this.items();
     const i = items.indexOf(/** @type {HTMLElement} */ (this.doc.activeElement));
-    const go = (k) => items.length && this.focusItem(items[(k + items.length) % items.length]);
+    // The arrows step over data-skip items, from wherever the focus is.
+    const step = (from, by) => {
+      for (let k = 1; k <= items.length; k++) {
+        const it = items[(((from + by * k) % items.length) + items.length) % items.length];
+        if (!it.hasAttribute("data-skip")) return this.focusItem(it);
+      }
+    };
     switch (e.key) {
       case "ArrowDown":
-        go(i + 1);
+        step(i < 0 ? -1 : i, 1);
         break;
       case "ArrowUp":
-        go(i < 0 ? items.length - 1 : i - 1);
+        step(i < 0 ? items.length : i, -1);
         break;
       case "Home":
-        go(0);
+        step(-1, 1);
         break;
       case "End":
-        go(items.length - 1);
+        step(items.length, -1);
         break;
       case "Escape":
         this.close({ refocus: true });
@@ -174,6 +183,11 @@ export class MenuButton {
         break;
       default: {
         if (!isPrintable(e)) return;
+        const shortcut = items.find((it) => it.dataset.key && it.dataset.key.toLowerCase() === e.key.toLowerCase());
+        if (shortcut) {
+          this.activate(shortcut);
+          break;
+        }
         const k = this.typeahead.find(e.key, items.map((it) => it.textContent.trim()), i);
         if (k >= 0) this.focusItem(items[k]);
       }
