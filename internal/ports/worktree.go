@@ -15,8 +15,9 @@ var ErrBranchExists = errors.New("branch already exists")
 // WorktreeManager is the outbound port for materializing and removing git
 // worktrees on disk. repoRoot is the repository's main checkout; path is the
 // worktree directory; branch is created at baseRef (HEAD when baseRef is empty).
+// Add answers the commit the branch was cut at.
 type WorktreeManager interface {
-	Add(repoRoot, path, branch, baseRef string) error
+	Add(repoRoot, path, branch, baseRef string) (baseSHA string, err error)
 	Remove(repoRoot, path string) error
 	// ListBranches returns local branches first, then remote-tracking ones,
 	// each group alphabetically. Symbolic */HEAD aliases are excluded.
@@ -52,4 +53,29 @@ type GitHistory interface {
 	// Divergence counts the commits branch has that base lacks (ahead) and
 	// the other way round (behind).
 	Divergence(ctx context.Context, dir, base, branch string) (ahead, behind int, err error)
+}
+
+// BranchMergeReader reads, in a repository's main checkout, how a set of its
+// branches stand against the repository's default branch.
+type BranchMergeReader interface {
+	// BranchMerges answers for each of branches (by name), and names the
+	// default branch it compared them with: "" when the repository has none.
+	BranchMerges(ctx context.Context, repoRoot string, branches []BranchBase) (BranchMerges, error)
+}
+
+// BranchBase is a branch, the ref it was cut from ("" for HEAD) and the
+// commit it was cut at ("" when its workspace did not record it).
+type BranchBase struct{ Branch, Base, BaseSHA string }
+
+// BranchMerges is the answer of BranchMergeReader.BranchMerges.
+type BranchMerges struct {
+	DefaultBranch string
+	Branches      map[string]BranchMerge
+}
+
+// BranchMerge is how one branch stands: whether it still exists, whether it
+// carries commits of its own since it was cut, and whether the local default
+// branch contains its tip.
+type BranchMerge struct {
+	Exists, Ahead, Merged bool
 }

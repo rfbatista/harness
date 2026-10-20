@@ -1,6 +1,7 @@
 package tasks
 
 import (
+	"slices"
 	"strconv"
 	"time"
 
@@ -13,10 +14,14 @@ var now = time.Now
 
 // Board is the project's tasks as the kanban board's first paint: one column
 // per status in board order (Statuses), every column present even when
-// empty, cards in the order the tasks were listed. The browser
+// empty, each column's cards newest status_since first (the order the
+// browser keeps, so the handover does not jump). The browser
 // (web/src/modules/tasks, tasksBoard) keeps it live from the rail's seed.
 type Board struct {
 	Columns []Column
+	// ArchivedCount counts the project's archived tasks, for the
+	// "Archived (N)" link.
+	ArchivedCount int
 }
 
 // Column is one status and its tasks.
@@ -59,11 +64,14 @@ type Card struct {
 func (c Card) HasSignals() bool { return c.LiveState != "" || c.Reviews > 0 || c.Merge != nil }
 
 // BuildBoard groups a project's tasks by status with the same per-task
-// activity the rail shows.
+// activity the rail shows. Archived tasks are not on it.
 func BuildBoard(projectID string, tasks []*domain.Ticket, list []*domain.Session) Board {
+	// unarchived returns a new slice, so sorting it leaves the caller's alone.
+	tasks = unarchived(tasks)
 	byTask := activityByTask(list)
 	at := now()
 	byStatus := map[string][]Card{}
+	slices.SortStableFunc(tasks, func(a, b *domain.Ticket) int { return b.StatusSince.Compare(a.StatusSince) })
 	for _, t := range tasks {
 		byStatus[string(t.Status)] = append(byStatus[string(t.Status)], boardCard(projectID, t, byTask, at))
 	}
@@ -72,6 +80,18 @@ func BuildBoard(projectID string, tasks []*domain.Ticket, list []*domain.Session
 		b.Columns = append(b.Columns, Column{Status: st.Value, Label: st.Label, Cards: byStatus[st.Value]})
 	}
 	return b
+}
+
+// unarchived leaves out the archived tasks: neither the board nor the rail
+// shows them, whatever list they are handed.
+func unarchived(tasks []*domain.Ticket) []*domain.Ticket {
+	out := tasks[:0:0]
+	for _, t := range tasks {
+		if t.ArchivedAt == nil {
+			out = append(out, t)
+		}
+	}
+	return out
 }
 
 // Empty: no task in any column.
@@ -111,12 +131,20 @@ type cardFacts struct {
 	merge       *mergeState
 }
 
-// cardFactsOf reads a task's card facts. Until the Ticket carries the task
-// board contract's fields (status_since, last_move, merge_state), a task
-// reads as never moved, in its column since it was created, with no merge
-// state; the live board takes over with the real fields.
+// cardFactsOf reads a task's card facts from its Ticket. A Ticket read
+// without them (status_since zero) is in its column since it was created.
 func cardFactsOf(t *domain.Ticket) cardFacts {
-	return cardFacts{statusSince: t.CreatedAt}
+	f := cardFacts{statusSince: t.StatusSince}
+	if f.statusSince.IsZero() {
+		f.statusSince = t.CreatedAt
+	}
+	if m := t.LastMove; m != nil {
+		f.lastMove = &lastMove{Status: string(m.Status), By: string(m.By), SessionLabel: m.SessionLabel, Reason: m.Reason, At: m.At}
+	}
+	if m := t.MergeState; m != nil {
+		f.merge = &mergeState{State: string(m.State), Merged: m.Merged, Total: m.Total}
+	}
+	return f
 }
 
 // reviewsWord is a card's reviews badge: "1 review", "2 reviews". The

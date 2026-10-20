@@ -66,7 +66,7 @@ func TestListViewLinksEachProjectAndSeedsTheAPIShape(t *testing.T) {
 		t.Errorf("row = %+v", r)
 	}
 	seed, _ := json.Marshal(v.Seed)
-	want := `{"summaries":[{"project":{"id":"p 1","name":"harness","root_dir":"/src/harness"},"repository_count":1,"open_task_count":0,"running_session_count":0,"last_activity_at":"2026-10-07T11:00:00Z"}]}`
+	want := `{"summaries":[{"project":{"id":"p 1","name":"harness","root_dir":"/src/harness"},"repository_count":1,"open_task_count":0,"archived_count":0,"running_session_count":0,"last_activity_at":"2026-10-07T11:00:00Z"}]}`
 	if string(seed) != want {
 		t.Errorf("seed =\n%s\nwant\n%s", seed, want)
 	}

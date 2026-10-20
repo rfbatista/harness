@@ -36,13 +36,13 @@ type fakeWorktree struct {
 	lastBaseRef     string
 }
 
-func (f *fakeWorktree) Add(repoRoot, path, branch, baseRef string) error {
+func (f *fakeWorktree) Add(repoRoot, path, branch, baseRef string) (string, error) {
 	f.lastBranch, f.lastBaseRef = branch, baseRef
 	if f.addErr != nil {
-		return f.addErr
+		return "", f.addErr
 	}
 	f.added = append(f.added, path)
-	return nil
+	return "", nil
 }
 
 func (f *fakeWorktree) Remove(repoRoot, path string) error {

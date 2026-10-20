@@ -112,9 +112,18 @@ type SessionDecorator interface {
 }
 
 // TicketDecorator fills the derived fields (ArchitectSessionID,
-// PendingReviews) of tickets about to be shown.
+// PendingReviews, MergeState) of tickets about to be shown.
 type TicketDecorator interface {
 	DecorateTickets(ctx context.Context, tickets ...*domain.Ticket)
+}
+
+// TicketDecorators is one TicketDecorator made of several, run in order.
+type TicketDecorators []TicketDecorator
+
+func (ds TicketDecorators) DecorateTickets(ctx context.Context, tickets ...*domain.Ticket) {
+	for _, d := range ds {
+		d.DecorateTickets(ctx, tickets...)
+	}
 }
 
 // TurnDelivery puts text into a running session as a user turn. The
@@ -196,4 +205,7 @@ type TaskStatusChangeRepository interface {
 	Append(c *domain.TaskStatusChange) error
 	// ListByTask is oldest first.
 	ListByTask(taskID string) []*domain.TaskStatusChange
+	// LatestByTasks is each task's most recent move, by task, read in one
+	// query however many tasks it is given. A task never moved is absent.
+	LatestByTasks(ctx context.Context, taskIDs []string) map[string]*domain.TaskStatusChange
 }

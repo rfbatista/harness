@@ -271,10 +271,12 @@ already notify the person in their inbox; do not also call `notify` for them.
 `update_task_status` and a `reason` saying what happened:
 
 - `in_progress` when the first delegate starts;
-- `review` when you open a review request for the finished work, or every
-  delegate reports `done`;
-- `done` only after the person approves;
+- `review` when the finished work is ready for the person: you open a review
+  request for it, or every delegate reports `done`;
 - back to `in_progress` when the person requests changes.
+
+Never move it to `done`: the person moves it to done after checking it, and
+`update_task_status` refuses `done` with `TASK_DONE_IS_THE_PERSONS`.
 
 Neither a message, a review request nor a status check moves the status by
 itself.
@@ -326,6 +328,7 @@ Reviewing its diff line by line is not.
 | Leaving a stable contract in `task/docs/` | Ask the person to move it to `project/docs/`; the next task's sessions read it there. |
 | A delegate's review request sits unanswered | Reply with a verdict; it is waiting on you. |
 | Letting a delegate move the task status, or moving it without a reason | Only you move it, with `update_task_status` and a `reason`. |
+| Moving the task to `done` | Move it to `review` when the finished work is ready; the person moves it to done after checking it. |
 | Asking the person to review every ticket breakdown | Ask only for what needs their decision; judge the rest against the spec. |
 
 ## Red Flags

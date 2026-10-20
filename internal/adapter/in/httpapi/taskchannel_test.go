@@ -118,7 +118,7 @@ func TestHTTP_ArchitectChannel(t *testing.T) {
 func TestHTTP_ArchitectChannelErrorCodes(t *testing.T) {
 	want := map[string]int{
 		"REVIEW_NOT_FOUND": 404, "STATUS_CHECK_NOT_FOUND": 404, "MESSAGE_NOT_FOUND": 404, "NO_ARCHITECT": 404,
-		"REVIEW_NOT_PENDING": 409, "ARCHITECT_ONLY": 403, "TASK_STATUS_OWNED_BY_ARCHITECT": 403, "SESSION_NOT_ON_TASK": 403,
+		"REVIEW_NOT_PENDING": 409, "ARCHITECT_ONLY": 403, "TASK_STATUS_OWNED_BY_ARCHITECT": 403, "TASK_DONE_IS_THE_PERSONS": 403, "SESSION_NOT_ON_TASK": 403,
 	}
 	for code, status := range want {
 		ch := &fakeChannel{respond: &domain.StructuredError{Code: code, Message: "x"}}

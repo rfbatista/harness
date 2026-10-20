@@ -90,8 +90,9 @@ func seed(projectID string, tasks []*domain.Ticket, list []*domain.Session) *she
 // task are not on the rail. Every known status has its group, empty or not;
 // collapsed holds the groups the person folded (shell.ParseCollapsed). The
 // seed is always there, so the browser follows the project even before its
-// first task.
+// first task. Archived tasks are neither on the rail nor in its seed.
 func BuildRail(projectID string, tasks []*domain.Ticket, list []*domain.Session, currentTaskID string, collapsed map[string]bool) shell.Rail {
+	tasks = unarchived(tasks)
 	rail := shell.Rail{Seed: seed(projectID, tasks, list), Current: currentTaskID}
 	if len(tasks) == 0 {
 		rail.Empty = "No tasks yet."
