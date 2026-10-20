@@ -212,8 +212,14 @@ func (f *mergeFixture) deleteBranch(branch string) {
 	gitRun(f.t, f.repoDir, "branch", "-D", branch)
 }
 
+// read reads the task once the background refresh its first read asks for,
+// if any, is done.
 func (f *mergeFixture) read(taskID string) *domain.MergeState {
 	f.t.Helper()
+	if _, err := f.plan.GetTicket(f.ctx, taskID); err != nil {
+		f.t.Fatal(err)
+	}
+	f.merges.Wait()
 	tk, err := f.plan.GetTicket(f.ctx, taskID)
 	if err != nil {
 		f.t.Fatal(err)
@@ -590,4 +596,23 @@ func TestLoadingTheBoardComputesUnreadMergeStatesInTheBackground(t *testing.T) {
 	}
 	f.announced(n, a, domain.MergeState{State: domain.MergeNotMerged, Merged: 0, Total: 1})
 	f.announced(n, b, domain.MergeState{State: domain.MergeMerged, Merged: 1, Total: 1})
+}
+
+// A board, or a task page, with a single task in review runs no git while it
+// is read either: the read answers null and the state follows on the feed.
+func TestReadingASingleTaskRunsNoGitOnTheRequest(t *testing.T) {
+	f := newMergeFixture(t, "main")
+	tk, err := sqlite.NewTicketRepository(f.db).Create(f.projectID, "task", "", domain.TicketStatusReview)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.session(tk.ID, "feat", "main", 1)
+	f.merge("feat")
+
+	n := f.feed.len()
+	list, err := f.plan.ListTickets(f.ctx, f.projectID)
+	if err != nil || len(list) != 1 || list[0].MergeState != nil {
+		t.Fatalf("list = %v, %v; want the task with no merge state yet", list, err)
+	}
+	f.announced(n, tk.ID, domain.MergeState{State: domain.MergeMerged, Merged: 1, Total: 1})
 }

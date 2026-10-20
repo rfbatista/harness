@@ -231,6 +231,7 @@ func (s *Service) PatchTicket(ctx context.Context, id string, patch ports.Ticket
 	if patch.Status != nil && *patch.Status == domain.TicketStatusDone && bySession(ctx, patch.BySessionID) {
 		return nil, domain.ErrTaskDoneIsThePersons()
 	}
+	s.refreshMergeState(context.WithoutCancel(ctx), id, patch.Status)
 	s.ticketMu.Lock()
 	defer s.ticketMu.Unlock()
 	existing := s.tickets.Get(ctx, id)
@@ -270,7 +271,6 @@ func (s *Service) PatchTicket(ctx context.Context, id string, patch ports.Ticket
 	if status != existing.Status {
 		c := s.recordMove(tk, patch)
 		move = &c
-		s.refreshMergeState(context.WithoutCancel(ctx), tk)
 	}
 	// The write is done: the change goes out whole even if the request ends.
 	s.decorate(context.WithoutCancel(ctx), tk)
@@ -281,14 +281,18 @@ func (s *Service) PatchTicket(ctx context.Context, id string, patch ports.Ticket
 	return tk, nil
 }
 
-// refreshMergeState computes the merge state of a task that moved into review
-// or done, before it is decorated and announced.
-func (s *Service) refreshMergeState(ctx context.Context, tk *domain.Ticket) {
-	if s.MergeRefresher == nil || (tk.Status != domain.TicketStatusReview && tk.Status != domain.TicketStatusDone) {
+// refreshMergeState computes the merge state of a task about to move into
+// review or done, so the move is decorated and announced with it. It runs
+// git before ticketMu is taken: other task writes never wait on it.
+func (s *Service) refreshMergeState(ctx context.Context, id string, to *domain.TicketStatus) {
+	if s.MergeRefresher == nil || to == nil || (*to != domain.TicketStatusReview && *to != domain.TicketStatusDone) {
 		return
 	}
-	if _, err := s.MergeRefresher.Refresh(ctx, tk.ID); err != nil {
-		slog.Warn("refresh task merge state", "ticket", tk.ID, "err", err)
+	if tk := s.tickets.Get(ctx, id); tk == nil || tk.Status == *to || tk.ArchivedAt != nil {
+		return
+	}
+	if _, err := s.MergeRefresher.Refresh(ctx, id); err != nil {
+		slog.Warn("refresh task merge state", "ticket", id, "err", err)
 	}
 }
 
