@@ -22,6 +22,7 @@ var (
 	_ ports.TaskActivityReader  = (*Service)(nil)
 	_ ports.TicketArchiver      = (*Service)(nil)
 	_ ports.ArchivedTaskCounter = (*Service)(nil)
+	_ ports.TicketReannouncer   = (*Service)(nil)
 )
 
 // Service implements ticket/document use-cases over the outbound ports.
@@ -42,6 +43,10 @@ type Service struct {
 	// Decorator fills a ticket's derived fields (its architect, its pending
 	// reviews) before it is returned or announced. Nil leaves them empty.
 	Decorator ports.TicketDecorator
+	// MergeRefresher computes a task's merge state afresh when it moves into
+	// review or done, so the move is announced with it. Nil leaves the
+	// decorator's cached state.
+	MergeRefresher ports.MergeStateRefresher
 
 	// Resources, Comments and Blobs keep what a person adds to a task. Nil
 	// Resources or Blobs leaves resources unavailable; nil Comments, comments.
@@ -265,6 +270,7 @@ func (s *Service) PatchTicket(ctx context.Context, id string, patch ports.Ticket
 	if status != existing.Status {
 		c := s.recordMove(tk, patch)
 		move = &c
+		s.refreshMergeState(context.WithoutCancel(ctx), tk)
 	}
 	// The write is done: the change goes out whole even if the request ends.
 	s.decorate(context.WithoutCancel(ctx), tk)
@@ -273,6 +279,30 @@ func (s *Service) PatchTicket(ctx context.Context, id string, patch ports.Ticket
 		s.statusMoved(ctx, tk, *move)
 	}
 	return tk, nil
+}
+
+// refreshMergeState computes the merge state of a task that moved into review
+// or done, before it is decorated and announced.
+func (s *Service) refreshMergeState(ctx context.Context, tk *domain.Ticket) {
+	if s.MergeRefresher == nil || (tk.Status != domain.TicketStatusReview && tk.Status != domain.TicketStatusDone) {
+		return
+	}
+	if _, err := s.MergeRefresher.Refresh(ctx, tk.ID); err != nil {
+		slog.Warn("refresh task merge state", "ticket", tk.ID, "err", err)
+	}
+}
+
+// ReannounceTicket announces the task as it is now, in order with its writes.
+// A task that is gone announces nothing.
+func (s *Service) ReannounceTicket(ctx context.Context, id string) {
+	s.ticketMu.Lock()
+	defer s.ticketMu.Unlock()
+	tk := s.tickets.Get(ctx, id)
+	if tk == nil {
+		return
+	}
+	s.decorate(ctx, tk)
+	s.announce(tk, false)
 }
 
 // ListArchivedTickets lists a project's archived tickets, newest archived
