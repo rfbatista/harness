@@ -91,9 +91,9 @@ func NewMergeStates(d MergeStateDeps) *MergeStates {
 
 // DecorateTickets fills the merge state of each review or done task that is
 // not archived, and clears every other's. It reads the tasks' branches from
-// the database at once and serves what is kept; git runs in the background
-// for a stale or missing state, which a list leaves null meanwhile. A single
-// task is computed at once when it has none for its branches.
+// the database at once and serves what is kept; it never runs git itself, so
+// a stale or missing state is refreshed in the background (and left null
+// meanwhile when none was kept) and the task announced again when it changed.
 func (s *MergeStates) DecorateTickets(ctx context.Context, tickets ...*domain.Ticket) {
 	var due []*domain.Ticket
 	for _, tk := range tickets {
@@ -101,8 +101,10 @@ func (s *MergeStates) DecorateTickets(ctx context.Context, tickets ...*domain.Ti
 			continue
 		}
 		tk.MergeState = nil
-		if tk.ArchivedAt == nil && (tk.Status == domain.TicketStatusReview || tk.Status == domain.TicketStatusDone) {
+		if tk.CarriesMergeState() {
 			due = append(due, tk)
+		} else {
+			s.forget(tk.ID)
 		}
 	}
 	if len(due) == 0 {
@@ -122,12 +124,6 @@ func (s *MergeStates) DecorateTickets(ctx context.Context, tickets ...*domain.Ti
 		same := ok && e.branches == branches.key()
 		switch {
 		case same && now.Sub(e.at) < MergeStateFreshFor:
-		case len(due) == 1 && !same:
-			var err error
-			if e.state, err = s.store(ctx, tk.ID, branches); err != nil {
-				slog.Warn("read task merge state", "ticket", tk.ID, "err", err)
-			}
-			ok = true
 		default:
 			s.enqueue(tk.ID)
 		}
@@ -136,6 +132,13 @@ func (s *MergeStates) DecorateTickets(ctx context.Context, tickets ...*domain.Ti
 			tk.MergeState = &st
 		}
 	}
+}
+
+// forget drops what is kept for a task that no longer carries a merge state.
+func (s *MergeStates) forget(taskID string) {
+	s.mu.Lock()
+	delete(s.cache, taskID)
+	s.mu.Unlock()
 }
 
 // Refresh computes the task's merge state from git and keeps it.
@@ -297,7 +300,8 @@ func (s *MergeStates) work() {
 // computed). Any other task is left alone: it carries no merge state.
 func (s *MergeStates) refreshAndAnnounce(ctx context.Context, taskID string) {
 	tk := s.d.Tickets.Get(ctx, taskID)
-	if tk == nil || tk.ArchivedAt != nil || (tk.Status != domain.TicketStatusReview && tk.Status != domain.TicketStatusDone) {
+	if tk == nil || !tk.CarriesMergeState() {
+		s.forget(taskID)
 		return
 	}
 	s.mu.Lock()

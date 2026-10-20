@@ -50,6 +50,12 @@ type Ticket struct {
 	MergeState  *MergeState `json:"merge_state"`
 }
 
+// CarriesMergeState reports whether the task shows a merge state: it is in
+// review or done and still on the board.
+func (t *Ticket) CarriesMergeState() bool {
+	return t.ArchivedAt == nil && (t.Status == TicketStatusReview || t.Status == TicketStatusDone)
+}
+
 // LastMove is a task's most recent status change, as the board shows it.
 type LastMove struct {
 	Status TicketStatus  `json:"status"`
