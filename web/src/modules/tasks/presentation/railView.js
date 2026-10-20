@@ -4,7 +4,7 @@
 
 import { count } from "../../../shared/presentation/format.js";
 import { linkState } from "../domain/activity.js";
-import { matchParts, needsYou } from "../domain/rail.js";
+import { matchParts, needsYou, railMeta } from "../domain/rail.js";
 import { taskHref } from "./boardView.js";
 
 const QUIET = Object.freeze({ live: 0, attention: false });
@@ -22,8 +22,8 @@ const QUIET = Object.freeze({ live: 0, attention: false });
  */
 
 /**
- * A task's row: its dot, one meta item (reviews badge > "waiting" > "N live")
- * and the hidden words around it that make the link's name read
+ * A task's row: its dot, one meta item (reviews badge > "waiting" > "N live" >
+ * the merge glyph and word, railMeta) and the hidden words around it that make the link's name read
  * "Fix flaky test, waiting on you".
  * @param {import("../domain/task.js").Task} task
  * @param {RowContext} ctx
@@ -31,9 +31,10 @@ const QUIET = Object.freeze({ live: 0, attention: false });
 export function toRow(task, ctx) {
   const activity = ctx.byTask[task.id] ?? QUIET;
   const { state } = linkState(activity, task.pendingReviews);
-  const hasReviews = task.pendingReviews > 0;
-  const isWaiting = !hasReviews && activity.attention;
-  const isLive = !hasReviews && !isWaiting && activity.live > 0;
+  const meta = railMeta(task, activity);
+  const hasReviews = meta.kind === "reviews";
+  const isWaiting = meta.kind === "waiting";
+  const isLive = meta.kind === "live";
   const { before, match, after } = matchParts(task.title, ctx.query);
   return {
     id: task.id,
@@ -48,7 +49,10 @@ export function toRow(task, ctx) {
     isWaiting,
     isLive,
     liveText: `${activity.live} live`,
-    lead: isLive ? ", running, " : hasReviews || isWaiting ? ", " : "",
+    hasMerge: meta.merge !== null,
+    mergeState: meta.merge?.state ?? null,
+    mergeText: meta.merge?.rail ?? "",
+    lead: isLive ? ", running, " : meta.kind ? ", " : "",
     tail: hasReviews ? " waiting on you" : isWaiting ? " on you" : isLive ? (activity.live === 1 ? " session" : " sessions") : "",
     before,
     match,

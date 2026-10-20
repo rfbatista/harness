@@ -362,6 +362,11 @@ templ railLink(l Link) {
 			<span class="[ meta ]" data-tone="attention">waiting</span>
 		} else if l.Running() {
 			<span class="[ meta ]">{ strconv.Itoa(l.Live) } live</span>
+		} else if l.Merging() {
+			<span class="[ meta ]" data-merge-state={ l.Merge }>
+				@mergeGlyphs()
+				{ l.MergeText }
+			</span>
 		}
 		<span class="[ visually-hidden ]">{ l.MetaTail() }</span>
 	</a>
@@ -445,6 +450,10 @@ templ railLiveLink() {
 		<span class="[ badge ]" data-tone="attention" x-show="row.hasReviews" x-text="row.reviewsText"></span>
 		<span class="[ meta ]" data-tone="attention" x-show="row.isWaiting">waiting</span>
 		<span class="[ meta ]" x-show="row.isLive" x-text="row.liveText"></span>
+		<span class="[ meta ]" x-show="row.hasMerge" x-bind:data-merge-state="row.mergeState">
+			@mergeGlyphs()
+			<span x-text="row.mergeText"></span>
+		</span>
 		<span class="[ visually-hidden ]" x-text="row.tail"></span>
 	</a>
 }
