@@ -99,7 +99,7 @@ export function railGateway(api, feed) {
       return toTasks(body.tickets);
     },
     async listArchived(projectId) {
-      const body = await api.get("/tickets", { project_id: projectId, archived: "true" });
+      const body = await api.get("/list_tickets", { project_id: projectId, archived: "true" });
       if (!Array.isArray(body?.tickets)) bad("expected {tickets: [...]}");
       return toTasks(body.tickets);
     },
