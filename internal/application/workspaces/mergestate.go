@@ -143,7 +143,7 @@ func (s *MergeStates) branches(ctx context.Context, taskIDs ...string) map[strin
 			if out[task] == nil {
 				out[task] = taskBranches{}
 			}
-			b := ports.BranchBase{Branch: ws.Branch, Base: ws.BaseRef}
+			b := ports.BranchBase{Branch: ws.Branch, Base: ws.BaseRef, BaseSHA: ws.BaseSHA}
 			if !slices.Contains(out[task][ws.RepositoryID], b) {
 				out[task][ws.RepositoryID] = append(out[task][ws.RepositoryID], b)
 			}

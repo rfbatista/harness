@@ -73,6 +73,7 @@ func (r *WorkspaceRepository) Create(w domain.Workspace) (*domain.Workspace, err
 		Branch:       w.Branch,
 		Path:         w.Path,
 		BaseRef:      w.BaseRef,
+		BaseSHA:      w.BaseSHA,
 	}
 	if err := r.db.Create(m).Error; err != nil {
 		return nil, err

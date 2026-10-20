@@ -13,6 +13,9 @@ type Workspace struct {
 	Path         string `json:"path"`
 	// BaseRef is the ref the branch was cut from; "" for workspaces made
 	// before it was recorded, or cut from the repository's HEAD.
-	BaseRef   string    `json:"base_ref,omitempty"`
+	BaseRef string `json:"base_ref,omitempty"`
+	// BaseSHA is the commit the branch was cut at; "" for workspaces made
+	// before it was recorded.
+	BaseSHA   string    `json:"base_sha,omitempty"`
 	CreatedAt time.Time `json:"created_at"`
 }
