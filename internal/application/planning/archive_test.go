@@ -241,3 +241,111 @@ func TestArchiveAndRestoreAreAnnounced(t *testing.T) {
 		t.Errorf("restore announced as %+v", got[1])
 	}
 }
+
+// Archive all takes exactly the done tasks that are still on the board off
+// it, answers which, and announces each once.
+func TestArchiveAllDoneArchivesOnlyTheDoneTasksOnTheBoard(t *testing.T) {
+	f := newArchiveFixture(t)
+	ctx := context.Background()
+	first := f.doneTask(t, "First")
+	second := f.doneTask(t, "Second")
+	already := f.doneTask(t, "Already")
+	if _, err := f.svc.ArchiveTicket(ctx, already.ID); err != nil {
+		t.Fatal(err)
+	}
+	inReview, err := f.svc.CreateTicket(ctx, f.pid, "Waiting", "", domain.TicketStatusReview)
+	if err != nil {
+		t.Fatal(err)
+	}
+	before := len(f.feed.all())
+
+	got, err := f.svc.ArchiveDoneTickets(ctx, f.pid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 || !(got[0] == first.ID && got[1] == second.ID || got[0] == second.ID && got[1] == first.ID) {
+		t.Fatalf("archived %v, want %s and %s", got, first.ID, second.ID)
+	}
+	announced := f.feed.all()[before:]
+	if len(announced) != 2 {
+		t.Fatalf("announced %d changes, want one per archived task: %+v", len(announced), announced)
+	}
+	for _, a := range announced {
+		if a.deleted || a.ticket.ArchivedAt == nil || (a.ticket.ID != first.ID && a.ticket.ID != second.ID) {
+			t.Errorf("announced %+v", a)
+		}
+	}
+	list, err := f.svc.ListTickets(ctx, f.pid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if left := ids(list); len(left) != 1 || left[0] != inReview.ID {
+		t.Fatalf("board = %v, want only %s", left, inReview.ID)
+	}
+}
+
+// On a project with nothing done, archive all archives nothing and says so
+// with an empty list, not a missing one.
+func TestArchiveAllDoneOnAProjectWithNothingDone(t *testing.T) {
+	f := newArchiveFixture(t)
+	ctx := context.Background()
+	if _, err := f.svc.CreateTicket(ctx, f.pid, "Waiting", "", domain.TicketStatusReview); err != nil {
+		t.Fatal(err)
+	}
+	before := len(f.feed.all())
+	got, err := f.svc.ArchiveDoneTickets(ctx, f.pid)
+	if err != nil || got == nil || len(got) != 0 {
+		t.Fatalf("archive all = %#v, %v; want an empty list", got, err)
+	}
+	if n := len(f.feed.all()) - before; n != 0 {
+		t.Errorf("announced %d changes, want none", n)
+	}
+	if _, err := f.svc.ArchiveDoneTickets(ctx, "nope"); code(err) != "PROJECT_NOT_FOUND" {
+		t.Fatalf("unknown project: %v", err)
+	}
+}
+
+// The archived count follows archiving and restoring; the open count never
+// moves, since archived tasks are done.
+func TestTheArchivedCountFollowsArchiveAndRestore(t *testing.T) {
+	f := newArchiveFixture(t)
+	ctx := context.Background()
+	if _, err := f.svc.CreateTicket(ctx, f.pid, "Open", "", domain.TicketStatusTodo); err != nil {
+		t.Fatal(err)
+	}
+	first := f.doneTask(t, "First")
+	f.doneTask(t, "Second")
+	counts := func() (archived, open int) {
+		t.Helper()
+		n, err := f.svc.ArchivedTaskCount(ctx, f.pid)
+		if err != nil {
+			t.Fatal(err)
+		}
+		activity, err := f.svc.TaskActivityByProject(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if a := activity[f.pid]; a.ArchivedCount != n {
+			t.Fatalf("project activity counts %d archived, the project page %d", a.ArchivedCount, n)
+		}
+		return n, activity[f.pid].OpenCount
+	}
+	if a, o := counts(); a != 0 || o != 1 {
+		t.Fatalf("before archiving: archived %d open %d, want 0 and 1", a, o)
+	}
+	if _, err := f.svc.ArchiveDoneTickets(ctx, f.pid); err != nil {
+		t.Fatal(err)
+	}
+	if a, o := counts(); a != 2 || o != 1 {
+		t.Fatalf("after archiving all: archived %d open %d, want 2 and 1", a, o)
+	}
+	if _, err := f.svc.RestoreTicket(ctx, first.ID); err != nil {
+		t.Fatal(err)
+	}
+	if a, o := counts(); a != 1 || o != 1 {
+		t.Fatalf("after restoring one: archived %d open %d, want 1 and 1", a, o)
+	}
+	if n, err := f.svc.ArchivedTaskCount(ctx, "empty"); err != nil || n != 0 {
+		t.Fatalf("a project without tasks: %d, %v", n, err)
+	}
+}

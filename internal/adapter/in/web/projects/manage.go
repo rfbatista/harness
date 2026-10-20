@@ -47,6 +47,7 @@ type SummaryDTO struct {
 	Project             *domain.Project `json:"project"`
 	RepositoryCount     int             `json:"repository_count"`
 	OpenTaskCount       int             `json:"open_task_count"`
+	ArchivedCount       int             `json:"archived_count"`
 	RunningSessionCount int             `json:"running_session_count"`
 	LastActivityAt      *time.Time      `json:"last_activity_at"`
 }
@@ -67,7 +68,7 @@ func NewListView(frame shell.Frame, summaries []ports.ProjectSummary, now time.T
 		})
 		v.Seed.Summaries = append(v.Seed.Summaries, SummaryDTO{
 			Project: p, RepositoryCount: s.RepositoryCount, OpenTaskCount: s.OpenTaskCount,
-			RunningSessionCount: s.RunningSessionCount, LastActivityAt: s.LastActivityAt,
+			ArchivedCount: s.ArchivedCount, RunningSessionCount: s.RunningSessionCount, LastActivityAt: s.LastActivityAt,
 		})
 		running += s.RunningSessionCount
 	}

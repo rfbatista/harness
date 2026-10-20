@@ -128,6 +128,28 @@ func (h *Handler) setArchived(c echo.Context, archive bool) error {
 	return c.JSON(http.StatusOK, map[string]any{"ticket": tk})
 }
 
+// handleArchiveDoneTickets clears the project's Done column: it archives
+// every done task still on the board and answers how many and which.
+func (h *Handler) handleArchiveDoneTickets(c echo.Context) error {
+	if h.archive == nil {
+		return errArchiveOff
+	}
+	var in struct {
+		ProjectID string `json:"project_id"`
+	}
+	if err := bindJSON(c, &in); err != nil {
+		return err
+	}
+	ids, err := h.archive.ArchiveDoneTickets(c.Request().Context(), in.ProjectID)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, struct {
+		Archived int      `json:"archived"`
+		IDs      []string `json:"ids"`
+	}{len(ids), ids})
+}
+
 // --- Documents ---
 
 // handleListDocuments lists a project's documents; scope narrows to task or

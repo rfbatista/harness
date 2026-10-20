@@ -121,7 +121,7 @@ func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRun
 	// designer SPA until it is retired.
 	mux.Handle("/", slow(web.NewHandler(web.Deps{Projects: cat.Projects, Tasks: plan, Sessions: orch, Agents: cat.Agents, Repositories: cat.Projects, EnvFiles: cat.Projects, RunCommands: cat.Projects, Documents: plan, History: ws, Code: code, Workspaces: ws, Artifacts: art, ProjectSummaries: cat.Projects, PullRequests: prs,
 		Resources: plan, Comments: plan, Notifications: noteReader, GitCredentials: creds.port(), Usage: usageSvc, TokenSavers: cat.Capabilities,
-		TokenSaverInstalls: cat.Capabilities, RepositoryIndexes: indexes.port()}, assets, uiHandler)))
+		TokenSaverInstalls: cat.Capabilities, RepositoryIndexes: indexes.port(), ArchivedTasks: plan}, assets, uiHandler)))
 
 	// The LLM proxy every claude process calls through (ADR 0006): loopback
 	// only, outside the API token and CORS, so its responses come back as

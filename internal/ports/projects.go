@@ -155,6 +155,8 @@ type ProjectSummary struct {
 	RepositoryCount int
 	// OpenTaskCount counts the project's tasks that are not done.
 	OpenTaskCount int
+	// ArchivedCount counts the project's archived tasks.
+	ArchivedCount int
 	// RunningSessionCount counts its live sessions (not done, failed or
 	// stopped).
 	RunningSessionCount int
@@ -190,6 +192,8 @@ type ProjectCatalogFeed interface {
 type TaskActivity struct {
 	// OpenCount counts the tasks that are not done.
 	OpenCount int
+	// ArchivedCount counts the archived tasks (all of them done).
+	ArchivedCount int
 	// LastUpdatedAt is the newest task update.
 	LastUpdatedAt time.Time
 }

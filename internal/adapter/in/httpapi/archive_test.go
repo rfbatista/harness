@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -81,5 +82,25 @@ func TestHTTP_ArchiveRefusalsAreConflicts(t *testing.T) {
 	archived := archivedDoneTask(t, h, pid, "Shipped")
 	if code, out := postTicket(t, h, "/api/update_ticket", map[string]any{"ticket_id": archived, "status": "todo"}); code != http.StatusConflict || out["code"] != "TASK_ARCHIVED" {
 		t.Fatalf("moving an archived task = %d %v", code, out)
+	}
+}
+
+func TestHTTP_ArchiveDoneTickets(t *testing.T) {
+	h, pid := newPlanningHandler(t)
+	post := func() (int, string) {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodPost, "/api/archive_done_tickets", strings.NewReader(`{"project_id":"`+pid+`"}`))
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		NewRouter(h).ServeHTTP(rec, req)
+		return rec.Code, strings.TrimSpace(rec.Body.String())
+	}
+	if code, body := post(); code != http.StatusOK || body != `{"archived":0,"ids":[]}` {
+		t.Fatalf("archive_done_tickets with nothing done = %d %s", code, body)
+	}
+	_, out := postTicket(t, h, "/api/create_ticket", map[string]any{"project_id": pid, "title": "Shipped", "status": "done"})
+	id := ticketIn(t, out)["id"].(string)
+	if code, body := post(); code != http.StatusOK || body != `{"archived":1,"ids":["`+id+`"]}` {
+		t.Fatalf("archive_done_tickets = %d %s", code, body)
 	}
 }

@@ -88,6 +88,9 @@ type Deps struct {
 	// RepositoryIndexes lists the repository indexes on the Token savers
 	// page; nil leaves that section out.
 	RepositoryIndexes ports.RepositoryIndexes
+	// ArchivedTasks counts the project's archived tasks for the project
+	// page and the shell (the "Archived (N)" link); nil counts none.
+	ArchivedTasks ports.ArchivedTaskCounter
 	// Now defaults to time.Now.
 	Now func() time.Time
 }
@@ -273,6 +276,11 @@ func (s *server) layout(ctx context.Context, title, projectID, taskID string) (s
 		return shell.Frame{}, err
 	}
 	frame.Rail = tasks.BuildRail(projectID, list, live, taskID, shell.CollapsedFrom(ctx))
+	if s.deps.ArchivedTasks != nil {
+		if frame.Rail.Seed.ArchivedCount, err = s.deps.ArchivedTasks.ArchivedTaskCount(ctx, projectID); err != nil {
+			return shell.Frame{}, err
+		}
+	}
 	frame.Rail.BoardHref = tasks.BoardHref(projectID)
 	if s.deps.Code != nil {
 		frame.Rail.CodeHref = code.IndexHref(projectID)
