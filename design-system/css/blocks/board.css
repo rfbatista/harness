@@ -15,7 +15,9 @@
  *     </div></section></div>
  * Exceptions: .column[data-waiting] (Review holds tasks: filled amber count
  * and sub-line); .card[data-fresh] (moved or arrived over the live feed);
- * .age[data-stale] (past its column's threshold, with the word "stale").
+ * .age[data-stale] (past its column's threshold, with the word "stale");
+ * .card[data-pending] (a move in flight: dashed, faded, its .note at full
+ * contrast); .card[data-failed] (back after a refused move, red edge).
  * The reason unclamps, and the exact time shows, on hover or focus within.
  */
 
@@ -155,7 +157,50 @@
       &:hover { text-decoration: underline; }
     }
 
-    & > .top > select { flex-shrink: 0; }
+    & .move-to {
+      --_ink: var(--color-ink-faint);
+
+      flex-shrink: 0;
+      margin-block-start: -0.125rem;
+      margin-inline-end: calc(var(--space-2xs) * -1);
+      padding-inline: var(--space-xs);
+      gap: var(--space-2xs);
+      font-size: var(--text-xs);
+
+      @media (pointer: coarse) {
+        min-block-size: var(--size-touch);
+        padding-inline: var(--space-s);
+      }
+    }
+
+    &:is(:hover, :focus-within) .move-to { --_ink: var(--color-ink-muted); }
+    & .move-to[aria-expanded="true"] { --_ink: var(--color-ink); }
+
+    & .note {
+      display: flex;
+      align-items: center;
+      gap: var(--space-2xs);
+      font-size: var(--text-xs);
+      font-weight: var(--weight-medium);
+    }
+
+    &[data-pending] {
+      border-style: dashed;
+      border-color: var(--color-line-control);
+      background: transparent;
+      cursor: progress;
+
+      & > :not(.note) { opacity: 0.55; }
+      & .note { color: var(--color-ink-muted); }
+    }
+
+    &[data-failed] {
+      border-color: var(--color-danger);
+      box-shadow: inset 3px 0 0 var(--color-danger);
+
+      & .note { color: var(--color-danger); }
+      & .note::before { content: "⚠"; }
+    }
 
     & .signals {
       display: flex;

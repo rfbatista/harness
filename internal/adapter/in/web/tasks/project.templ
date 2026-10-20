@@ -90,11 +90,7 @@ templ ssrCard(c Card, column string) {
 	<article class="[ card ]" data-task-id={ c.TaskID } data-status={ c.Status }>
 		<div class="[ top ]">
 			<a class="[ title ]" href={ templ.SafeURL(c.Href) }>{ c.Label }</a>
-			<select data-size="sm" data-fit data-variant="ghost" data-task-id={ c.TaskID } aria-label={ "Move " + c.Label + " to" } x-on:change="moveTo">
-				for _, st := range Statuses {
-					<option value={ st.Value } { selectedIf(st.Value == column)... }>{ st.Label }</option>
-				}
-			</select>
+			<button type="button" class="[ button move-to ]" data-variant="ghost" data-size="sm" aria-haspopup="menu" aria-expanded="false">Move to…<span class="[ chevron ]" aria-hidden="true"></span></button>
 		</div>
 		if c.HasSignals() {
 			<div class="[ signals ]">
@@ -144,14 +140,10 @@ templ liveBoard() {
 				</header>
 				<div class="[ cards ]">
 					<template x-for="card in column.cards" x-bind:key="card.id">
-						<article class="[ card ]" x-bind:data-task-id="card.id" x-bind:data-status="card.status" x-bind:data-fresh="card.fresh">
+						<article class="[ card ]" x-bind:data-task-id="card.id" x-bind:data-status="card.status" x-bind:data-fresh="card.fresh" x-bind:data-pending="card.pending" x-bind:data-failed="card.failed">
 							<div class="[ top ]">
 								<a class="[ title ]" x-bind:href="card.href" x-text="card.title"></a>
-								<select data-size="sm" data-fit data-variant="ghost" x-bind:data-task-id="card.id" x-bind:aria-label="card.moveLabel" x-bind:value="card.status" x-on:change="moveTo">
-									for _, st := range Statuses {
-										<option value={ st.Value }>{ st.Label }</option>
-									}
-								</select>
+								@moveMenu()
 							</div>
 							<div class="[ signals ]" x-show="card.hasSignals">
 								<span class="[ status ]" x-show="card.hasLive" x-bind:data-state="card.liveState" x-text="card.liveWord"></span>
@@ -175,12 +167,31 @@ templ liveBoard() {
 								<span class="[ age ]" data-age x-show="card.age" x-bind:title="card.ageTitle" x-bind:data-stale="card.stale" x-text="card.age"></span>
 							</p>
 							<p class="[ reason ]" x-show="card.hasReason" x-text="card.reason"></p>
+							<p class="[ note ]" role="status" x-show="card.note" x-text="card.note"></p>
 						</article>
 					</template>
 					<p class="[ column-empty ]" x-show="column.isEmpty" x-text="column.emptyText"></p>
 				</div>
 			</section>
 		</template>
+	</div>
+}
+
+// moveMenu is a live card's "Move to…" menu (the design system's menu
+// button): the statuses as radio items with their keys, the current one
+// checked and left out of the arrows, then "Open task". tasksBoard's
+// menuSelect moves the card.
+templ moveMenu() {
+	<div class="[ menu ]" x-data="menu" data-align="end" x-on:menu-select="menuSelect">
+		<button type="button" class="[ button move-to ]" data-variant="ghost" data-size="sm" x-bind:aria-disabled="card.pending ? 'true' : null">Move to…<span class="[ chevron ]" aria-hidden="true"></span></button>
+		<div class="[ popup ]" role="menu">
+			<div class="[ group ]" aria-hidden="true">Move to</div>
+			<template x-for="choice in card.choices" x-bind:key="choice.status">
+				<button type="button" role="menuitemradio" data-action="move" x-bind:data-value="choice.status" x-bind:data-key="choice.key" x-bind:aria-checked="choice.current" x-bind:aria-disabled="choice.current" x-bind:data-skip="choice.current" x-bind:data-initial="choice.initial"><span x-text="choice.label"></span><kbd x-text="choice.key"></kbd></button>
+			</template>
+			<hr role="separator"/>
+			<a role="menuitem" x-bind:href="card.href">Open task</a>
+		</div>
 	</div>
 }
 

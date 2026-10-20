@@ -80,7 +80,7 @@ export class MenuButton {
 
   /** @param {"first" | "last"} at */
   open(at) {
-    if (this.trigger.disabled) return;
+    if (this.trigger.disabled || this.trigger.getAttribute("aria-disabled") === "true") return;
     const sheet = this.floating.isPhone();
     this.popup.querySelector(":scope > header")?.remove();
     if (sheet) {

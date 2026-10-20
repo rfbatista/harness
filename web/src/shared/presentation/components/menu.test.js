@@ -246,3 +246,17 @@ test("an item's data-key runs it straight away, in either case; a disabled one d
     f.done();
   }
 });
+
+test("a trigger with aria-disabled keeps the focus and does not open", () => {
+  const f = statusFixture();
+  try {
+    f.trigger.setAttribute("aria-disabled", "true");
+    f.trigger.focus();
+    key(f.trigger, "Enter");
+    f.trigger.click();
+    assert.ok(!f.m.isOpen);
+    assert.equal(document.activeElement, f.trigger);
+  } finally {
+    f.done();
+  }
+});

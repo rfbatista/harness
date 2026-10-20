@@ -316,10 +316,10 @@ func TestProjectPagePutsItsTasksOnTheRailAndTheProjectInThePicker(t *testing.T) 
 		`x-for="card in column.cards"`,
 		`class="[ card ]" data-task-id="t-feed"`,
 		`class="[ title ]" href="/projects/p1/tasks/t-feed">Add SSE feed</a>`,
-		// Moving a card: the task page's status select, on every card.
-		`<select data-size="sm" data-fit data-variant="ghost" data-task-id="t-feed" aria-label="Move Add SSE feed to" x-on:change="moveTo">`,
-		`<option value="in_progress" selected>In progress</option>`,
-		`x-bind:value="card.status" x-on:change="moveTo"`,
+		// Moving a card: its "Move to…" menu, on every card.
+		`aria-haspopup="menu" aria-expanded="false">Move to…`,
+		`x-data="menu" data-align="end" x-on:menu-select="menuSelect"`,
+		`role="menuitemradio" data-action="move"`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("project page is missing %q", want)

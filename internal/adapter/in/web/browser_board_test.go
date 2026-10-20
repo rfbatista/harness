@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/chromedp/chromedp"
+	"github.com/chromedp/chromedp/kb"
 
 	"operators-mcp/internal/domain"
 )
@@ -82,8 +83,9 @@ func TestProjectBoardComesAliveInTheBrowser(t *testing.T) {
 	}
 }
 
-// TestMovingACardOnTheBoard: a card's select sends a status-only update and
-// the card lands in the chosen column.
+// TestMovingACardOnTheBoard: a card's "Move to…" menu opens on the next
+// status, its number key moves the card with a status-only update, and the
+// focus stays on the card's "Move to…" in its new column.
 func TestMovingACardOnTheBoard(t *testing.T) {
 	assets, err := NewAssets()
 	if err != nil {
@@ -103,22 +105,30 @@ func TestMovingACardOnTheBoard(t *testing.T) {
 	srv := newBrowserServer(mux)
 	defer srv.Close()
 
+	moveTo := `document.querySelector('.board .card[data-task-id="t-docs"] .move-to')`
 	var review, todo []string
-	var focused string
+	var opened, focused string
 	err = chromedp.Run(ctx,
 		chromedp.EmulateViewport(1280, 800),
 		chromedp.Navigate(srv.URL+"/projects/p1"),
 		chromedp.Poll(`document.querySelector('[data-ssr]') === null`, nil, chromedp.WithPollingTimeout(10*time.Second)),
-		// A keyboard user: the select has the focus when it changes.
-		chromedp.Evaluate(`document.querySelector('.board .card[data-task-id="t-docs"] select').focus()`, nil),
-		setField(`.board .card[data-task-id="t-docs"] select`, "review", "change"),
+		chromedp.Evaluate(moveTo+`.focus()`, nil),
+		chromedp.KeyEvent(kb.ArrowDown),
+		chromedp.Poll(`document.activeElement?.getAttribute('role') === 'menuitemradio'`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Evaluate(`document.activeElement.textContent.trim()`, &opened),
+		shot("move-menu"),
+		chromedp.KeyEvent("4"),
 		chromedp.Poll(cardsIn("Review")+`.includes('Write docs')`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Poll(`!document.querySelector('.board .card[data-pending]')`, nil, chromedp.WithPollingTimeout(5*time.Second)),
 		chromedp.Evaluate(cardsIn("Review"), &review),
 		chromedp.Evaluate(cardsIn("Todo"), &todo),
-		chromedp.Evaluate(`(document.activeElement?.tagName ?? '') + ' ' + (document.activeElement?.closest('.card')?.dataset.taskId ?? '')`, &focused),
+		chromedp.Evaluate(`(document.activeElement?.textContent.trim() ?? '') + ' ' + (document.activeElement?.closest('.card')?.dataset.status ?? '')`, &focused),
 	)
 	if err != nil {
 		t.Fatalf("%v\nAPI:\n%s\nJS errors: %v", err, api.log(), errs.all())
+	}
+	if opened != "In progress3" {
+		t.Errorf("the menu opened on %q, want the next status, In progress", opened)
 	}
 	if want := `/api/update_ticket {"status":"review","ticket_id":"t-docs"}`; api.log() != want {
 		t.Errorf("API calls:\n%s\nwant:\n%s", api.log(), want)
@@ -126,8 +136,8 @@ func TestMovingACardOnTheBoard(t *testing.T) {
 	if fmt.Sprint(review) != "[Write docs]" || fmt.Sprint(todo) != "[]" {
 		t.Errorf("review %v, todo %v", review, todo)
 	}
-	if focused != "SELECT t-docs" {
-		t.Errorf("after the move the focus is on %q, want the moved card's select", focused)
+	if focused != "Move to… review" {
+		t.Errorf("after the move the focus is on %q, want the moved card's Move to…", focused)
 	}
 	if e := errs.all(); len(e) > 0 {
 		t.Errorf("JavaScript errors:\n%s", strings.Join(e, "\n"))
