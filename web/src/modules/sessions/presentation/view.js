@@ -179,6 +179,8 @@ export function toDetailView(session, now, agentNames) {
     state: status.state,
     word: status.word,
     agent: runsAs(session, agentNames),
+    /** Who the agent's messages in History are from: its name, "claude" without one. */
+    speaker: session.agentId ? agentLabel(session.agentId, agentNames) : "claude",
     lastAction: session.lastAction || "Nothing yet.",
     updated: relativeTime(session.updatedAt, now),
     stoppable: !isTerminal(session),

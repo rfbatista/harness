@@ -17,6 +17,7 @@ export const entryDTO = (e) => ({
   tool: e.tool,
   is_error: e.isError,
   truncated: e.truncated,
+  html: e.html,
 });
 
 export function stubTranscriptApi(world) {

@@ -172,7 +172,7 @@ export const sessionsPage = ({
     get historyPanels() {
       if (!this.showingHistory) return [];
       const live = this.selected.stoppable;
-      return [{ key: `${this.selected.id}:${live ? "live" : "ended"}`, sessionId: this.selected.id, live }];
+      return [{ key: `${this.selected.id}:${live ? "live" : "ended"}`, sessionId: this.selected.id, live, agent: this.selected.speaker }];
     },
     get showingApp() {
       return this.showingSession && this.detailTab === "app";

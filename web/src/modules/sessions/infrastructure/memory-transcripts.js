@@ -24,6 +24,7 @@ export function memoryTranscripts(world = {}) {
       tool: fields.tool ?? "",
       isError: fields.isError ?? false,
       truncated: fields.truncated ?? false,
+      html: fields.html ?? "",
     });
 
   for (const [id, list] of Object.entries(world.transcripts ?? {})) files.set(id, list.map(entry));
