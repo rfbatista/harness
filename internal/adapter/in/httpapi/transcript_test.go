@@ -69,7 +69,7 @@ func TestHTTP_SessionTranscript(t *testing.T) {
 		`{"type":"assistant","timestamp":"2026-10-13T12:00:01.000Z","message":{"role":"assistant","content":[{"type":"thinking","thinking":"…"},{"type":"tool_use","id":"toolu_1","name":"Bash","input":{"command":"go test ./..."}}]}}`,
 		`{"type":"user","timestamp":"2026-10-13T12:00:02.000Z","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_1","content":"FAIL","is_error":true}]},"toolUseResult":{"stdout":"FAIL"}}`,
 		`{"type":"ai-title","aiTitle":"Fix tests"}`,
-		`{"type":"assistant","timestamp":"2026-10-13T12:00:03.000Z","message":{"role":"assistant","content":[{"type":"text","text":"Fixed."}]}}`,
+		`{"type":"assistant","timestamp":"2026-10-13T12:00:03.000Z","message":{"role":"assistant","content":[{"type":"text","text":"**Fixed.** <img src=x onerror=alert(1)>"}]}}`,
 	}
 	if err := os.WriteFile(filepath.Join(proj, id+".jsonl"), []byte(strings.Join(lines, "\n")+"\n"), 0o644); err != nil {
 		t.Fatal(err)
@@ -93,14 +93,14 @@ func TestHTTP_SessionTranscript(t *testing.T) {
 		keys = append(keys, k)
 	}
 	slices.Sort(keys)
-	if want := []string{"at", "cursor", "is_error", "kind", "text", "tool", "truncated"}; !slices.Equal(keys, want) {
+	if want := []string{"at", "cursor", "html", "is_error", "kind", "text", "tool", "truncated"}; !slices.Equal(keys, want) {
 		t.Errorf("entry fields = %v, want %v", keys, want)
 	}
 	want := []map[string]any{
-		{"kind": "user", "text": "fix the tests", "tool": "", "is_error": false, "at": "2026-10-13T12:00:00.000Z"},
-		{"kind": "tool_use", "text": "go test ./...", "tool": "Bash", "is_error": false},
-		{"kind": "tool_result", "text": "FAIL", "tool": "Bash", "is_error": true},
-		{"kind": "assistant", "text": "Fixed.", "tool": "", "is_error": false},
+		{"kind": "user", "text": "fix the tests", "html": "<p>fix the tests</p>\n", "tool": "", "is_error": false, "at": "2026-10-13T12:00:00.000Z"},
+		{"kind": "tool_use", "text": "go test ./...", "html": "", "tool": "Bash", "is_error": false},
+		{"kind": "tool_result", "text": "FAIL", "html": "", "tool": "Bash", "is_error": true},
+		{"kind": "assistant", "text": "**Fixed.** <img src=x onerror=alert(1)>", "html": "<p><strong>Fixed.</strong> <!-- raw HTML omitted --></p>\n", "tool": "", "is_error": false},
 	}
 	for i, w := range want {
 		for k, v := range w {
@@ -114,7 +114,7 @@ func TestHTTP_SessionTranscript(t *testing.T) {
 	}
 
 	status, page := transcriptGet(t, env.srv.URL, id, "limit=2")
-	if status != http.StatusOK || !slices.Equal(entryTexts(page), []string{"FAIL", "Fixed."}) || page["has_older"] != true {
+	if status != http.StatusOK || !slices.Equal(entryTexts(page), []string{"FAIL", "**Fixed.** <img src=x onerror=alert(1)>"}) || page["has_older"] != true {
 		t.Fatalf("newest two = %d %v", status, page)
 	}
 	_, older := transcriptGet(t, env.srv.URL, id, "limit=2&before="+url.QueryEscape(page["first_cursor"].(string)))

@@ -13,6 +13,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 
+	"operators-mcp/internal/adapter/in/markdown"
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
 )
@@ -112,7 +113,33 @@ func (h *Handler) handleSessionTranscript(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	return c.JSON(http.StatusOK, page)
+	return c.JSON(http.StatusOK, transcriptPageWithHTML(page))
+}
+
+// transcriptEntryJSON is an entry as the API writes it: the reader's fields
+// plus html, its text rendered as Markdown (T7).
+type transcriptEntryJSON struct {
+	ports.TranscriptEntry
+	HTML string `json:"html"`
+}
+
+type transcriptPageJSON struct {
+	ports.TranscriptPage
+	Entries []transcriptEntryJSON `json:"entries"`
+}
+
+// transcriptPageWithHTML renders what a person or the agent wrote: user and
+// assistant text is Markdown, so it gets html. Tool calls, their output and
+// system notes are not Markdown and keep html "".
+func transcriptPageWithHTML(page ports.TranscriptPage) transcriptPageJSON {
+	out := transcriptPageJSON{TranscriptPage: page, Entries: make([]transcriptEntryJSON, len(page.Entries))}
+	for i, e := range page.Entries {
+		out.Entries[i] = transcriptEntryJSON{TranscriptEntry: e}
+		if e.Kind == ports.TranscriptUser || e.Kind == ports.TranscriptAssistant {
+			out.Entries[i].HTML = markdown.HTML(e.Text)
+		}
+	}
+	return out
 }
 
 func (h *Handler) handleSessionMessages(c echo.Context) error {
