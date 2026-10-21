@@ -796,10 +796,10 @@ test("History: the session's saved conversation, for running and ended sessions,
   assert.deepEqual(instance.historyPanels, [], "mounted only while its tab is in front");
   instance.showHistory();
   assert.deepEqual([instance.historyTabSelected, instance.agentTabSelected, instance.paneTools, instance.noteOnly], [true, false, null, null]);
-  assert.deepEqual(instance.historyPanels, [{ key: "live:live", sessionId: "live", live: true }]);
+  assert.deepEqual(instance.historyPanels, [{ key: "live:live", sessionId: "live", live: true, agent: "backend" }]);
   assert.deepEqual(asked(dispatched, "terminal-focus-requested"), []);
   instance.select("gone");
-  assert.deepEqual(instance.historyPanels, [{ key: "gone:ended", sessionId: "gone", live: false }], "History stays on another session, ended or not");
+  assert.deepEqual(instance.historyPanels, [{ key: "gone:ended", sessionId: "gone", live: false, agent: "backend" }], "History stays on another session, ended or not");
   instance.showAgent();
   assert.deepEqual(instance.historyPanels, []);
   instance.destroy();

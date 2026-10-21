@@ -1,0 +1,487 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>History tab — chat view</title>
+<!-- Built by design/tools/build.py from design/src/history-chat.html; edit the source. -->
+<style data-ds></style>
+<style data-kit></style>
+<style>
+/* ── Proposed block: .chat (replaces .transcript in the History tab) ──────
+ * <section class="chat" data-scroll role="log" tabindex="0" aria-label="Conversation history">
+ *   <div class="older">…</div>
+ *   <div class="day"><span>Today</span></div>
+ *   <article class="turn" data-who="person">…<div class="bubble prose">…</div></article>
+ *   <article class="turn" data-who="agent"><header>…</header><div class="prose">…</div></article>
+ *   <div class="activity">…<ol class="calls"><li class="call">…</li></ol></div>
+ *   <p class="sys">…</p>
+ *   <div class="working">…</div>
+ *   <button class="button jump">…</button>
+ * </section>
+ */
+@layer blocks {
+  .history-pane { display: grid; grid-template-rows: auto auto minmax(0, 1fr); container-type: inline-size; border: 1px solid var(--color-line); border-radius: var(--radius-md); overflow: hidden; background: var(--color-canvas); color: var(--color-ink); font-family: var(--font-sans); font-size: var(--text-base); }
+
+  .mock-tabs { display: flex; align-items: center; gap: var(--space-2xs); min-block-size: 2.5rem; padding-inline: var(--space-m); border-block-end: 1px solid var(--color-line); font-size: var(--text-sm); }
+  .mock-tabs > span { padding: var(--space-xs) var(--space-s); color: var(--color-ink-muted); border-radius: var(--radius-sm); }
+  .mock-tabs > span[aria-selected="true"] { color: var(--color-ink); font-weight: var(--weight-medium); box-shadow: inset 0 -2px 0 var(--color-signal); border-radius: 0; }
+
+  /* The bar above the log: what is shown, and the reader's controls. */
+  .chat-bar { display: flex; align-items: center; gap: var(--space-s); padding: var(--space-xs) var(--space-m); border-block-end: 1px solid var(--color-line); font-size: var(--text-sm); color: var(--color-ink-muted); }
+  .chat-bar > .count { margin-inline-end: auto; display: flex; align-items: center; gap: var(--space-xs); }
+  .chat-bar .live { inline-size: 0.5rem; block-size: 0.5rem; border-radius: 50%; background: var(--color-success); box-shadow: 0 0 0 3px var(--color-success-wash); }
+  .chat-bar .live[data-state="ended"] { background: var(--color-ink-faint); box-shadow: none; }
+  .chat-bar label { display: inline-flex; align-items: center; gap: var(--space-2xs); cursor: pointer; user-select: none; }
+  .chat-bar .search { display: inline-flex; align-items: center; gap: var(--space-2xs); block-size: var(--size-control-sm); padding-inline: var(--space-s); border: 1px solid var(--color-line-control); border-radius: var(--radius-sm); background: var(--color-canvas); color: var(--color-ink-faint); min-inline-size: 15rem; }
+  .chat-bar .search .hits { flex: none; font-size: var(--text-xs); color: var(--color-ink-faint); font-variant-numeric: tabular-nums; }
+  .chat-bar .search input { border: 0; background: none; outline: none; inline-size: 100%; font-size: var(--text-sm); color: var(--color-ink); }
+
+  .chat { display: flex; flex-direction: column; gap: var(--space-l); padding: var(--space-l) var(--space-l) var(--space-xl); overflow: auto; overflow-anchor: none; position: relative; background: var(--color-canvas); }
+  .chat:focus-visible { outline-offset: calc(var(--border-focus-width) * -1); }
+  .chat > * { inline-size: 100%; max-inline-size: 50rem; margin-inline: auto; }
+
+  .chat > .older { display: flex; justify-content: center; color: var(--color-ink-faint); font-size: var(--text-xs); }
+  .chat > .day { display: flex; align-items: center; gap: var(--space-s); color: var(--color-ink-faint); font-size: var(--text-xs); font-weight: var(--weight-medium); text-transform: uppercase; letter-spacing: 0.06em; }
+  .chat > .day::before, .chat > .day::after { content: ""; flex: 1; border-block-start: 1px solid var(--color-line); }
+
+  /* A turn: who spoke, when, what they said (Markdown). */
+  .turn { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-2xs); position: relative; }
+  .activity { min-inline-size: 0; }
+  .turn > header { display: flex; align-items: baseline; gap: var(--space-xs); font-size: var(--text-xs); color: var(--color-ink-faint); }
+  .turn > header .who { color: var(--color-ink); font-weight: var(--weight-medium); font-size: var(--text-sm); }
+  .turn > header .avatar { align-self: center; display: inline-grid; place-items: center; inline-size: 1.25rem; block-size: 1.25rem; border-radius: 50%; font-size: 0.7rem; font-weight: var(--weight-bold); background: var(--color-signal-wash); color: var(--color-signal); }
+  .turn > header time { font-variant-numeric: tabular-nums; }
+  .turn .tools-row { margin-inline-start: auto; display: flex; gap: var(--space-2xs); opacity: 0; transition: opacity var(--duration-quick) var(--ease-out); }
+  .turn:hover .tools-row, .turn:focus-within .tools-row { opacity: 1; }
+  .icon-btn { display: inline-flex; align-items: center; gap: 0.25rem; block-size: 1.375rem; padding-inline: var(--space-xs); border: 1px solid var(--color-line); border-radius: var(--radius-sm); background: var(--color-canvas); color: var(--color-ink-muted); font-size: var(--text-xs); cursor: pointer; }
+  .icon-btn:hover { color: var(--color-ink); background: var(--color-hover); }
+
+  .turn[data-who="person"] { justify-items: end; }
+  .turn[data-who="person"] > header { flex-direction: row-reverse; }
+  .turn[data-who="person"] > header .avatar { background: var(--color-attention-wash); color: var(--color-attention-strong); }
+  .turn[data-who="person"] .tools-row { margin-inline-start: 0; margin-inline-end: auto; }
+  .turn > .bubble { max-inline-size: min(85%, 40rem); padding: var(--space-s) var(--space-m); border-radius: var(--radius-md) var(--radius-md) var(--radius-xs) var(--radius-md); background: var(--color-signal-wash); border: 1px solid color-mix(in oklab, var(--color-signal) 20%, transparent); }
+  .turn[data-who="agent"] > .prose { padding-inline-start: calc(1.25rem + var(--space-xs)); max-inline-size: none; }
+
+  /* Long messages fold to a readable height until shown in full. */
+  .turn [data-clamped] { max-block-size: 18rem; overflow: hidden; mask-image: linear-gradient(to bottom, #000 75%, transparent); }
+  .turn .more { justify-self: start; margin-inline-start: calc(1.25rem + var(--space-xs)); }
+
+  .turn .cut { display: block; margin-block-start: var(--space-2xs); color: var(--color-ink-faint); font-size: var(--text-xs); font-style: italic; }
+
+  /* Markdown inside a turn: the system's .prose plus code-block chrome. */
+  .chat .prose { max-inline-size: none; font-size: var(--text-base); overflow-wrap: anywhere; }
+  .chat .prose > * + * { margin-block-start: var(--space-s); }
+  .chat .prose :is(h1, h2, h3, h4) { margin-block-start: var(--space-m); }
+  .chat .prose h1 { font-size: var(--text-lg); }
+  .chat .prose h2 { font-size: var(--text-md); }
+  .chat .prose :is(h3, h4) { font-size: var(--text-base); }
+  .chat .prose table { display: block; overflow-x: auto; max-inline-size: 100%; }
+  .chat .codeblock { border: 1px solid var(--color-line); border-radius: var(--radius-sm); background: var(--color-sunken); overflow: hidden; }
+  .chat .codeblock > .head { display: flex; align-items: center; justify-content: space-between; padding: var(--space-3xs) var(--space-2xs) var(--space-3xs) var(--space-s); border-block-end: 1px solid var(--color-line); font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-ink-faint); }
+  .chat .codeblock > pre { margin: 0; border: 0; border-radius: 0; background: none; max-block-size: 22rem; overflow: auto; }
+  .chat .prose code { font-family: var(--font-mono); tab-size: 4; }
+  .chat .prose .path, .chat .prose a { color: var(--color-signal); }
+
+  /* Tool activity between two turns: one card, opened on demand. */
+  .activity { padding-inline-start: calc(1.25rem + var(--space-xs)); }
+  .activity > .summary { display: flex; align-items: center; gap: var(--space-xs); inline-size: 100%; padding: var(--space-xs) var(--space-s); border: 1px solid var(--color-line); border-radius: var(--radius-sm); background: var(--color-sunken); color: var(--color-ink-muted); font: inherit; font-size: var(--text-sm); text-align: start; cursor: pointer; }
+  .activity > .summary:hover { color: var(--color-ink); background: var(--color-hover); }
+  .activity > .summary::before { content: "▸"; color: var(--color-ink-faint); }
+  .activity > .summary[aria-expanded="true"]::before { content: "▾"; }
+  .activity > .summary[aria-expanded="true"] { border-end-start-radius: 0; border-end-end-radius: 0; }
+  .activity > .summary .names { flex: 1; min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--color-ink-faint); }
+  .activity > .summary .n { color: var(--color-ink); font-weight: var(--weight-medium); }
+  .activity .flag { flex: none; display: inline-flex; align-items: center; gap: 0.25rem; padding: 0 var(--space-xs); border-radius: var(--radius-round); font-size: var(--text-xs); }
+  .activity .flag[data-tone="danger"] { background: var(--color-danger-wash); color: var(--color-danger); border: 1px solid color-mix(in oklab, var(--color-danger) 45%, transparent); font-weight: var(--weight-medium); }
+  .activity .flag[data-tone="busy"] { background: var(--color-signal-wash); color: var(--color-signal); }
+  .calls { list-style: none; padding: 0; margin: 0; border: 1px solid var(--color-line); border-block-start: 0; border-end-start-radius: var(--radius-sm); border-end-end-radius: var(--radius-sm); }
+  .call + .call { border-block-start: 1px solid var(--color-line); }
+  .call > button { display: grid; grid-template-columns: 1rem auto minmax(0, 1fr) auto; align-items: baseline; gap: var(--space-xs); inline-size: 100%; padding: var(--space-xs) var(--space-s); border: 0; background: none; color: var(--color-ink-muted); font-family: var(--font-mono); font-size: var(--text-xs); text-align: start; cursor: pointer; }
+  .call > button:hover { background: var(--color-hover); }
+  .call .st { text-align: center; color: var(--color-success); }
+  .call[data-state="error"] .st, .call[data-state="error"] .gist { color: var(--color-danger); }
+  .call[data-state="running"] .st { color: var(--color-signal); }
+  .call .tool { color: var(--color-ink); font-weight: var(--weight-medium); }
+  .call .gist { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .call .meta { color: var(--color-ink-faint); }
+  .call > .io { display: grid; gap: var(--space-2xs); padding: 0 var(--space-s) var(--space-s) calc(1rem + var(--space-s) + var(--space-xs)); }
+  .call > .io > .lbl { font-size: var(--text-xs); color: var(--color-ink-faint); text-transform: uppercase; letter-spacing: 0.05em; }
+  .call > .io > pre { margin: 0; max-block-size: 16rem; overflow: auto; padding: var(--space-xs) var(--space-s); border: 1px solid var(--color-line); border-radius: var(--radius-sm); background: var(--color-sunken); font-family: var(--font-mono); font-size: var(--text-xs); white-space: pre-wrap; overflow-wrap: anywhere; color: var(--color-ink); }
+  .call[data-state="error"] > .io > pre.out { border-color: color-mix(in oklab, var(--color-danger) 40%, transparent); background: var(--color-danger-wash); }
+
+  .chat > .sys { display: flex; justify-content: center; }
+  .chat > .sys > span { padding: var(--space-3xs) var(--space-s); border-radius: var(--radius-round); background: var(--color-sunken); color: var(--color-ink-faint); font-size: var(--text-xs); font-style: italic; }
+
+  .chat > .working { display: flex; align-items: center; gap: var(--space-xs); padding-inline-start: calc(1.25rem + var(--space-xs)); color: var(--color-ink-faint); font-size: var(--text-sm); }
+  .working .dots { display: inline-flex; gap: 3px; }
+  .working .dots i { inline-size: 5px; block-size: 5px; border-radius: 50%; background: currentColor; animation: blink 1.2s infinite both; }
+  .working .dots i:nth-child(2) { animation-delay: 0.2s; }
+  .working .dots i:nth-child(3) { animation-delay: 0.4s; }
+  @keyframes blink { 0%, 80%, 100% { opacity: 0.25; } 40% { opacity: 1; } }
+  @media (prefers-reduced-motion: reduce) { .working .dots i { animation: none; opacity: 0.6; } }
+
+  .chat > .jump { position: sticky; inset-block-end: 0; inline-size: auto; align-self: center; margin-block-start: auto; box-shadow: var(--shadow-float); border-radius: var(--radius-round); }
+
+  mark { background: var(--color-attention-wash); color: inherit; border-radius: 2px; outline: 1px solid color-mix(in oklab, var(--color-attention) 40%, transparent); }
+
+  .chat .empty-state { margin: auto; text-align: center; color: var(--color-ink-muted); display: grid; gap: var(--space-2xs); max-inline-size: 30ch; }
+  .chat .empty-state strong { color: var(--color-ink); }
+  .skel { display: grid; gap: var(--space-xs); }
+  .skel i { display: block; block-size: 0.7rem; border-radius: var(--radius-xs); background: var(--color-sunken); }
+  .skel[data-who="person"] { justify-items: end; }
+  .err-note { display: flex; align-items: center; gap: var(--space-s); padding: var(--space-s) var(--space-m); border-radius: var(--radius-sm); background: var(--color-danger-wash); color: var(--color-danger); font-size: var(--text-sm); }
+  .err-note > span { flex: 1; }
+
+  /* Narrow column: no avatars or indent, bubbles take the width. */
+  @container (width < 30rem) {
+    .chat { padding-inline: var(--space-s); gap: var(--space-m); }
+    .turn > header .avatar { display: none; }
+    .turn[data-who="agent"] > .prose, .activity, .chat > .working, .turn .more { padding-inline-start: 0; margin-inline-start: 0; }
+    .turn > .bubble { max-inline-size: 92%; }
+    .chat-bar .search { min-inline-size: 0; flex: 1; }
+    .chat-bar > .count { display: none; }
+    .chat-bar .opt-text { display: none; }
+  }
+}
+.page .frames { display: grid; gap: var(--space-l); grid-template-columns: repeat(auto-fit, minmax(min(100%, 40rem), 1fr)); align-items: start; }
+.page .chat .prose h1 { font-size: var(--text-lg); }
+.page .small { display: grid; gap: var(--space-l); grid-template-columns: repeat(auto-fit, minmax(min(100%, 24rem), 1fr)); align-items: start; }
+</style>
+</head>
+<body>
+<main class="page">
+  <header>
+    <h1>History tab — chat view</h1>
+    <p>A proposal for the session's History tab. It reads like a chat: what you asked sits on the right, what the agent answered on the left, and the agent's Markdown is rendered. Tool calls between two answers fold into one quiet card you open when you want the detail. It uses the same data the History tab reads today (the transcript endpoint's entries), so nothing new is required from the server to ship it. Every frame is live: open the cards, toggle tools, search.</p>
+  </header>
+
+  <section class="part">
+    <h2>1 · Running session · desktop</h2>
+    <p class="lede">The newest messages sit at the bottom. While the session runs, a quiet "Working" line shows that the agent is between turns. Hover an answer to copy its Markdown or a link to it. In the dark frame the reader has scrolled up and three new entries arrived, so a "Jump to latest" pill appears.</p>
+    <div class="frames">
+      <div><p class="cap">Light · running, one tool card open</p><div data-chat='{"theme":"light","h":760,"open":[1],"running":true}'></div></div>
+      <div><p class="cap">Dark · scrolled up, 3 new below</p><div data-chat='{"theme":"dark","h":760,"jump":3,"running":true,"scrollTop":260}'></div></div>
+    </div>
+    <ol class="specs">
+      <li><strong>Person turn</strong> <code>.turn[data-who=person]</code>: a right-aligned bubble in the signal wash. The text is Markdown too, since people paste code and lists.</li>
+      <li><strong>Agent turn</strong> <code>.turn[data-who=agent]</code>: no bubble, full width up to a 50rem reading column, rendered with the system's <code>.prose</code>. Consecutive assistant entries without tools between them merge into one turn.</li>
+      <li><strong>Tool activity</strong> <code>.activity</code>: every <code>tool_use</code> and <code>tool_result</code> between two turns becomes one card. The card shows the count, the tool names, and a red flag when a call failed. Open it to see each call paired with its result; open a call to read its input and output in mono.</li>
+      <li><strong>System</strong> <code>.sys</code>: a small centred pill, such as "Session resumed" or "Context compacted".</li>
+      <li><strong>Day divider</strong> <code>.day</code> between entries on different days. Times show as HH:MM beside the speaker, the full timestamp in the tooltip.</li>
+      <li><strong>Long answers</strong> fold at 18rem with a "Show all" button, like the Conversation tab's <code>data-clamped</code>.</li>
+    </ol>
+  </section>
+
+  <section class="part">
+    <h2>2 · The bar: tools on or off, and search</h2>
+    <p class="lede">"Show tools" off leaves only the conversation between you and the agent. A failed call still leaves a small red marker so failures never disappear. Search highlights matches in the loaded entries and steps through them with Enter. The choice to show tools is remembered per browser.</p>
+    <div class="frames">
+      <div><p class="cap">Light · tools hidden</p><div data-chat='{"theme":"light","h":620,"tools":false}'></div></div>
+      <div><p class="cap">Dark · searching "flaky"</p><div data-chat='{"theme":"dark","h":620,"search":"flaky"}'></div></div>
+    </div>
+  </section>
+
+  <section class="part">
+    <h2>3 · What the agent's Markdown renders to</h2>
+    <p class="lede">Agents answer in GitHub-flavoured Markdown: headings, lists, task lists, tables, quotes, fenced code and inline code. Code blocks get the language label and a Copy button. A <code class="tok">path/to/file.go:42</code> in inline code is tinted as a path, a natural hook for linking into the Code tab later. Raw HTML in the text is shown as text and never run.</p>
+    <div class="frames">
+      <div><p class="cap">Light · Markdown specimen</p><div data-chat='{"theme":"light","h":820,"set":"md"}'></div></div>
+      <div><p class="cap">Dark · Markdown specimen</p><div data-chat='{"theme":"dark","h":820,"set":"md"}'></div></div>
+    </div>
+  </section>
+
+  <section class="part">
+    <h2>4 · States</h2>
+    <p class="lede">The same states the History tab has today, restyled for the chat view.</p>
+    <div class="small">
+      <div><p class="cap">Loading · light</p><div data-chat='{"theme":"light","h":360,"state":"loading"}'></div></div>
+      <div><p class="cap">No saved conversation yet · dark</p><div data-chat='{"theme":"dark","h":360,"state":"empty"}'></div></div>
+      <div><p class="cap">Could not load · light</p><div data-chat='{"theme":"light","h":360,"state":"error"}'></div></div>
+      <div><p class="cap">Ended session, start of conversation · dark</p><div data-chat='{"theme":"dark","h":360,"set":"short","ended":true}'></div></div>
+      <div><p class="cap">Text cut at 16 KiB · light</p><div data-chat='{"theme":"light","h":360,"set":"cut"}'></div></div>
+      <div><p class="cap">Narrow column, under 30rem · dark</p><div data-chat='{"theme":"dark","h":560,"w":380,"open":[0]}'></div></div>
+    </div>
+  </section>
+
+  <section class="part">
+    <h2>5 · How each transcript entry maps</h2>
+    <table class="spec">
+      <thead><tr><th>Entry kind</th><th>Shown as</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td>user</td><td>Person turn, right bubble</td><td>Markdown rendered. Text the harness injected, such as a task-update turn, keeps the person style with a "harness" label.</td></tr>
+        <tr><td>assistant</td><td>Agent turn, prose</td><td>Markdown rendered. Adjacent assistant entries merge into one turn.</td></tr>
+        <tr><td>tool_use</td><td>A call row inside the activity card</td><td>The tool name and the one-line summary from the server.</td></tr>
+        <tr><td>tool_result</td><td>The output of the call above it</td><td>Paired in order with the open call of the same tool. A result with no call becomes its own row. is_error gives the red mark and flag.</td></tr>
+        <tr><td>system</td><td>Centred pill</td><td>Plain text.</td></tr>
+        <tr><td>truncated</td><td>"Cut at 16 KiB" note under the text</td><td>Unchanged from today.</td></tr>
+      </tbody>
+    </table>
+    <ol class="specs">
+      <li><strong>Markdown rendering</strong> is the one real choice. Option A: the browser renders it with a small vendored renderer in <code>web/third_party</code>, escaping raw HTML. Option B: the server renders it with the goldmark setup the documents already use and adds an <code>html</code> field to each entry. B keeps one Markdown look across the app but changes the transcript contract, so it goes through the architect.</li>
+      <li><strong>Pairing calls with results</strong> works by order today. An optional <code>tool_use_id</code> on both kinds would make parallel calls pair exactly. That would be an additive contract change.</li>
+      <li><strong>Unchanged behaviour</strong>: Load older at the top, polling with <code>after=</code> every 2 s while visible, a log region that the keyboard can scroll, windowing for long conversations.</li>
+    </ol>
+  </section>
+</main>
+
+<script>
+(() => {
+  const esc = (s) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+
+  // ── A small, safe Markdown renderer (escape first, then a GFM subset). ──
+  function inline(s) {
+    const codes = [];
+    s = s.replace(/`([^`]+)`/g, (_, c) => { codes.push(c); return "\u0000" + (codes.length - 1) + "\u0000"; });
+    s = esc(s)
+      .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+      .replace(/(^|[^*])\*([^*\s][^*]*)\*/g, "$1<em>$2</em>")
+      .replace(/~~([^~]+)~~/g, "<del>$1</del>")
+      .replace(/\[([^\]]+)\]\((https?:[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+    return s.replace(/\u0000(\d+)\u0000/g, (_, i) => {
+      const c = codes[+i];
+      const path = /^[\w./-]+\.\w+(:\d+)?$/.test(c) && c.includes("/");
+      return `<code${path ? ' class="path"' : ""}>${esc(c)}</code>`;
+    });
+  }
+  function md(src) {
+    const L = src.replace(/\r/g, "").split("\n");
+    let out = "", i = 0;
+    const para = [];
+    const flush = () => { if (para.length) { out += "<p>" + inline(para.join(" ")) + "</p>"; para.length = 0; } };
+    while (i < L.length) {
+      const l = L[i];
+      let m;
+      if ((m = l.match(/^```(\w*)/))) {
+        flush(); const lang = m[1]; const body = []; i++;
+        while (i < L.length && !L[i].startsWith("```")) body.push(L[i++]);
+        i++;
+        out += `<div class="codeblock"><div class="head"><span>${esc(lang || "text")}</span><button type="button" class="icon-btn" data-copy>Copy</button></div><pre><code>${esc(body.join("\n"))}</code></pre></div>`;
+        continue;
+      }
+      if (!l.trim()) { flush(); i++; continue; }
+      if ((m = l.match(/^(#{1,4})\s+(.*)/))) { flush(); out += `<h${m[1].length}>${inline(m[2])}</h${m[1].length}>`; i++; continue; }
+      if (/^(-{3,}|\*{3,})$/.test(l.trim())) { flush(); out += "<hr>"; i++; continue; }
+      if (l.startsWith(">")) {
+        flush(); const q = [];
+        while (i < L.length && L[i].startsWith(">")) q.push(L[i++].replace(/^>\s?/, ""));
+        out += "<blockquote>" + md(q.join("\n")) + "</blockquote>"; continue;
+      }
+      if (/^\|.*\|\s*$/.test(l) && i + 1 < L.length && /^\|[\s:|-]+\|\s*$/.test(L[i + 1])) {
+        flush(); const cells = (r) => r.trim().slice(1, -1).split("|").map((c) => inline(c.trim()));
+        let t = "<table><thead><tr>" + cells(l).map((c) => `<th>${c}</th>`).join("") + "</tr></thead><tbody>";
+        i += 2;
+        while (i < L.length && /^\|.*\|\s*$/.test(L[i])) t += "<tr>" + cells(L[i++]).map((c) => `<td>${c}</td>`).join("") + "</tr>";
+        out += t + "</tbody></table>"; continue;
+      }
+      if (/^\s*([-*]|\d+\.)\s+/.test(l)) {
+        flush(); const ordered = /^\s*\d+\./.test(l); let items = "";
+        while (i < L.length && /^\s*([-*]|\d+\.)\s+/.test(L[i])) {
+          let t = L[i++].replace(/^\s*([-*]|\d+\.)\s+/, "");
+          while (i < L.length && /^\s{2,}\S/.test(L[i]) && !/^\s*([-*]|\d+\.)\s+/.test(L[i])) t += " " + L[i++].trim();
+          const task = t.match(/^\[( |x)\]\s+(.*)/);
+          items += task ? `<li><input type="checkbox" disabled${task[1] === "x" ? " checked" : ""}> ${inline(task[2])}</li>` : `<li>${inline(t)}</li>`;
+        }
+        out += ordered ? `<ol>${items}</ol>` : `<ul>${items}</ul>`; continue;
+      }
+      para.push(l.trim()); i++;
+    }
+    flush();
+    return out;
+  }
+
+  // ── Sample transcripts, in the endpoint's Entry shape. ──
+  const day = (d, h, m) => new Date(2026, 9, d, h, m);
+  const E = (kind, text, at, extra = {}) => ({ kind, text, at, tool: "", is_error: false, truncated: false, ...extra });
+  const tu = (tool, text, at) => E("tool_use", text, at, { tool });
+  const tr = (tool, text, at, err) => E("tool_result", text, at, { tool, is_error: !!err });
+
+  const MAIN = [
+    E("system", "Session started · agent claude · branch agent/flaky-docs-test", day(20, 17, 2)),
+    E("user", "The documents page test fails about half the time on main. Can you find out **why** and fix it?\n\n`TestProjectDocumentsPageListsEachDocumentOnceAndNamesItsTasks`", day(20, 17, 2)),
+    E("assistant", "I'll reproduce it first, then read the page's list code.", day(20, 17, 3)),
+    tu("Bash", "go test ./internal/adapter/in/web -run TestProjectDocumentsPage -count=10", day(20, 17, 3)),
+    tr("Bash", "--- FAIL: TestProjectDocumentsPageListsEachDocumentOnceAndNamesItsTasks (2.41s)\n    browser_documents_test.go:88: document \"ADR-0004\" listed 2 times, want 1\nFAIL\nok   4 passed, 6 failed", day(20, 17, 4), true),
+    tu("Grep", "\"documentsList\" in internal/adapter/in/web", day(20, 17, 4)),
+    tr("Grep", "internal/adapter/in/web/documents/list.go:41\ninternal/adapter/in/web/documents/list.go:77", day(20, 17, 4)),
+    tu("Read", "internal/adapter/in/web/documents/list.go", day(20, 17, 4)),
+    tr("Read", "func documentsList(…) {\n  rows := append(project, linked...)\n  …\n}", day(20, 17, 4)),
+    E("assistant", "Found it. The list is built from **two** sources and a document linked to a task appears in both:\n\n1. the project's documents\n2. each task's linked documents\n\nWhen the stream echo arrives before the first render, `list.go:77` appends the linked set a second time. The fix is to key rows by document id.\n\n```go\nseen := map[string]bool{}\nfor _, d := range append(project, linked...) {\n\tif seen[d.ID] { continue }\n\tseen[d.ID] = true\n\trows = append(rows, d)\n}\n```", day(20, 17, 6)),
+    E("user", "Makes sense. Go ahead, and run it 20 times after.", day(20, 17, 8)),
+    tu("Edit", "internal/adapter/in/web/documents/list.go (+7 −2)", day(20, 17, 8)),
+    tr("Edit", "The file was updated.", day(20, 17, 8)),
+    tu("Bash", "go test ./internal/adapter/in/web -run TestProjectDocumentsPage -count=20", day(20, 17, 9)),
+    tr("Bash", "ok  \toperators-mcp/internal/adapter/in/web\t48.112s", day(20, 17, 10)),
+    E("system", "Session resumed", day(21, 9, 12)),
+    E("assistant", "## Done\n\nThe test passed **20 of 20** runs.\n\n| Run | Before | After |\n|---|---|---|\n| `-count=10` | 4 / 10 | 10 / 10 |\n| `-count=20` | — | 20 / 20 |\n\n- [x] Rows keyed by document id\n- [x] Regression test for a document linked to two tasks\n- [ ] Remove the note from the flaky-tests memory once merged\n\n> The other flaky test on this page, `TestProjectDocumentsLibraryInTheBrowser`, has a different cause. I left it alone.", day(21, 9, 14)),
+    tu("Bash", "git commit -m \"fix(web): documents list keys rows by id\"", day(21, 9, 15)),
+  ];
+  const MD = [
+    E("user", "Summarise the options for rendering Markdown in the History tab.", day(21, 10, 1)),
+    E("assistant", "# Rendering Markdown\n\nTwo workable options, with a **recommendation** at the end.\n\n## Option A: in the browser\n\n- Vendor a small renderer into `web/third_party`\n- Escape raw HTML, so `<script>` shows as text\n- Works with polling, since each entry renders on arrival\n\n## Option B: on the server\n\n1. Reuse the goldmark setup from `internal/adapter/in/web/code/view.go:120`\n2. Add an `html` field to each entry\n3. ~~Keep the plain text~~ Keep `text` for copy and search\n\n| | Browser | Server |\n|---|---|---|\n| Contract change | No | Yes |\n| Same look as documents | Close | Exact |\n| New dependency | Yes | No |\n\n```js\nconst html = renderMarkdown(entry.text, { html: false });\n```\n\n> Recommendation: **B**, if the architect agrees to the contract change. See [CommonMark](https://commonmark.org).\n\n---\n\nRaw HTML stays text: <b>not bold</b>.", day(21, 10, 2)),
+  ];
+  const SHORT = [
+    E("user", "Rebase this branch on main and push it.", day(18, 14, 20)),
+    tu("Bash", "git fetch origin && git rebase origin/main", day(18, 14, 20)),
+    tr("Bash", "Successfully rebased and updated refs/heads/agent/x.", day(18, 14, 21)),
+    tu("Bash", "git push --force-with-lease", day(18, 14, 21)),
+    tr("Bash", "To origin\n + 1a2b3c…4d5e6f agent/x -> agent/x (forced update)", day(18, 14, 21)),
+    E("assistant", "Rebased onto `main` with no conflicts and pushed.", day(18, 14, 22)),
+    E("system", "Session ended", day(18, 14, 22)),
+  ];
+  const CUT = [
+    E("user", "Print the whole migration log.", day(21, 11, 0)),
+    E("assistant", "Here is the log:\n\n```text\n2026-10-21 10:58:01 apply 0041_add_messages_index … ok\n2026-10-21 10:58:02 apply 0042_backfill_messages … 18,201 rows\n2026-10-21 10:58:09 apply 0043_drop_legacy_column … ok\n…\n```", day(21, 11, 1), { truncated: true }),
+  ];
+  const SETS = { main: MAIN, md: MD, short: SHORT, cut: CUT };
+
+  // ── Entries → chat items (merge turns, group tools, pair results). ──
+  function items(entries) {
+    const out = [];
+    let act = null;
+    for (const e of entries) {
+      if (e.kind === "tool_use" || e.kind === "tool_result") {
+        if (!act) { act = { type: "activity", calls: [] }; out.push(act); }
+        if (e.kind === "tool_use") act.calls.push({ tool: e.tool, input: e.text, out: null, err: false, at: e.at });
+        else {
+          const c = act.calls.find((c) => c.out === null && c.tool === e.tool);
+          if (c) { c.out = e.text; c.err = e.is_error; } else act.calls.push({ tool: e.tool, input: "", out: e.text, err: e.is_error, at: e.at });
+        }
+        continue;
+      }
+      act = null;
+      const last = out[out.length - 1];
+      if (e.kind === "assistant" && last && last.type === "turn" && last.who === "agent") { last.text += "\n\n" + e.text; last.cut ||= e.truncated; continue; }
+      if (e.kind === "system") { out.push({ type: "sys", text: e.text, at: e.at }); continue; }
+      out.push({ type: "turn", who: e.kind === "user" ? "person" : "agent", text: e.text, at: e.at, cut: e.truncated });
+    }
+    return out;
+  }
+
+  const two = (n) => String(n).padStart(2, "0");
+  const hm = (d) => `${two(d.getHours())}:${two(d.getMinutes())}`;
+  const dayLabel = (d) => d.getDate() === 21 ? "Today" : d.getDate() === 20 ? "Yesterday" : d.toLocaleDateString("en", { weekday: "long", day: "numeric", month: "short" });
+
+  function render(host, o) {
+    const entries = SETS[o.set || "main"];
+    const running = !!o.running;
+    const tabs = `<div class="mock-tabs"><span>Agent</span><span aria-selected="true">History</span><span>Code</span><span>Design</span></div>`;
+    const bar = `<div class="chat-bar">
+      <span class="count"><span class="live" data-state="${running ? "live" : "ended"}" title="${running ? "Session running" : "Session ended"}"></span>${entries.length} entries</span>
+      <label class="search">⌕<input type="search" placeholder="Search history" value="${esc(o.search || "")}" aria-label="Search history"><span class="hits" aria-live="polite"></span></label>
+      <label><input type="checkbox" data-tools ${o.tools === false ? "" : "checked"}><span>Show tools</span></label>
+    </div>`;
+    host.className = "history-pane";
+    host.dataset.theme = o.theme;
+    host.style.blockSize = o.h + "px";
+    if (o.w) host.style.inlineSize = o.w + "px";
+    let body = "";
+    if (o.state === "loading") {
+      body = [["agent", 70, 90, 40], ["person", 45], ["agent", 85, 60, 75, 30]].map(([w, ...ls]) => `<div class="skel" data-who="${w}" aria-hidden="true">${ls.map((p) => `<i style="inline-size:${p}%"></i>`).join("")}</div>`).join("") + `<p class="sys"><span>Loading the conversation…</span></p>`;
+    } else if (o.state === "empty") {
+      body = `<div class="empty-state"><strong>No saved conversation yet</strong><span>It appears here once the agent has written its first turn.</span></div>`;
+    } else if (o.state === "error") {
+      body = `<div class="err-note" role="status"><span><strong>History could not load.</strong> The server did not answer.</span><button type="button" class="button" data-size="sm">Retry</button></div>`;
+    } else {
+      body = draw(items(entries), o, running);
+    }
+    host.innerHTML = tabs + bar + `<section class="chat" data-scroll role="log" tabindex="0" aria-label="Conversation history">${body}</section>`;
+    wire(host, o);
+  }
+
+  function draw(list, o, running) {
+    let html = o.set === "short" || o.set === "md" || o.set === "cut" ? `<div class="older"><span>Start of the conversation</span></div>` : `<div class="older"><button type="button" class="button" data-variant="ghost" data-size="sm">Load older</button></div>`;
+    let lastDay = null, ai = 0;
+    const showTools = o.tools !== false;
+    for (const it of list) {
+      const d = it.at || (it.calls && it.calls[0].at);
+      if (d && d.getDate() !== lastDay) { html += `<div class="day"><span>${dayLabel(d)}</span></div>`; lastDay = d.getDate(); }
+      if (it.type === "sys") { html += `<p class="sys"><span>${esc(it.text)} · ${hm(it.at)}</span></p>`; continue; }
+      if (it.type === "activity") {
+        const idx = ai++;
+        const failed = it.calls.filter((c) => c.err).length;
+        const busy = it.calls.some((c) => c.out === null) && running;
+        if (!showTools) {
+          if (failed) html += `<div class="activity"><span class="flag" data-tone="danger">✕ ${failed} tool call failed</span></div>`;
+          continue;
+        }
+        const counts = {};
+        it.calls.forEach((c) => (counts[c.tool] = (counts[c.tool] || 0) + 1));
+        const names = Object.entries(counts).map(([t, n]) => (n > 1 ? `${t} ×${n}` : t)).join(", ");
+        const open = (o.open || []).includes(idx);
+        html += `<div class="activity"><button type="button" class="summary" aria-expanded="${open}"><span class="n">${it.calls.length} tool call${it.calls.length > 1 ? "s" : ""}</span><span class="names">${esc(names)}</span>${failed ? `<span class="flag" data-tone="danger">✕ ${failed} failed</span>` : ""}${busy ? `<span class="flag" data-tone="busy">running</span>` : ""}</button>`;
+        html += `<ol class="calls" ${open ? "" : "hidden"}>` + it.calls.map((c, k) => {
+          const state = c.out === null ? (running ? "running" : "none") : c.err ? "error" : "ok";
+          const st = { ok: "✓", error: "✕", running: "…", none: "·" }[state];
+          const lines = c.out ? c.out.split("\n").length : 0;
+          const callOpen = open && c.err;
+          return `<li class="call" data-state="${state}"><button type="button" aria-expanded="${callOpen}"><span class="st" aria-label="${state}">${st}</span><span class="tool">${esc(c.tool)}</span><span class="gist">${esc(c.input || (c.out || "").split("\n")[0])}</span><span class="meta">${lines > 1 ? lines + " lines" : ""}</span></button><div class="io" ${callOpen ? "" : "hidden"}>${c.input ? `<span class="lbl">Input</span><pre>${esc(c.input)}</pre>` : ""}${c.out !== null ? `<span class="lbl">${c.err ? "Error" : "Output"}</span><pre class="out">${esc(c.out)}</pre>` : `<span class="lbl">Waiting for the result</span>`}</div></li>`;
+        }).join("") + `</ol></div>`;
+        continue;
+      }
+      const person = it.who === "person";
+      const long = !person && it.text.length > 900 && o.set === "main";
+      html += `<article class="turn" data-who="${it.who}"><header><span class="avatar" aria-hidden="true">${person ? "R" : "C"}</span><span class="who">${person ? "You" : "claude"}</span><time title="${it.at.toLocaleString()}" datetime="${it.at.toISOString()}">${hm(it.at)}</time><span class="tools-row"><button type="button" class="icon-btn" data-copy>Copy</button><button type="button" class="icon-btn">Link</button></span></header>`;
+      html += person ? `<div class="bubble prose">${md(it.text)}</div>` : `<div class="prose"${long ? " data-clamped" : ""}>${md(it.text)}</div>`;
+      if (long) html += `<button type="button" class="button more" data-variant="ghost" data-size="sm">Show all</button>`;
+      if (it.cut) html += `<span class="cut" style="padding-inline-start:1.75rem">Cut at 16 KiB. The full text is in the session's transcript file.</span>`;
+      html += `</article>`;
+    }
+    if (running) html += `<div class="working" role="status"><span class="dots" aria-hidden="true"><i></i><i></i><i></i></span>claude is working…</div>`;
+    if (o.jump) html += `<button type="button" class="button jump" data-size="sm">${o.jump} new · Jump to latest ↓</button>`;
+    return html;
+  }
+
+  function highlight(root, q) {
+    root.querySelectorAll("mark").forEach((m) => m.replaceWith(...m.childNodes));
+    root.normalize();
+    const hits = root.parentElement.querySelector(".hits");
+    hits.textContent = "";
+    if (!q) return;
+    const re = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi");
+    const walk = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, { acceptNode: (n) => n.parentElement.closest(".prose, .bubble, .gist, pre") ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT });
+    const nodes = []; while (walk.nextNode()) nodes.push(walk.currentNode);
+    for (const n of nodes) {
+      if (!re.test(n.data)) continue; re.lastIndex = 0;
+      const span = document.createElement("span");
+      span.innerHTML = esc(n.data).replace(re, (m) => `<mark>${m}</mark>`);
+      n.replaceWith(...span.childNodes);
+    }
+    const n = root.querySelectorAll("mark").length;
+    hits.textContent = n ? `${n} found · Enter for next` : "No match";
+  }
+
+  function wire(host, o) {
+    const chat = host.querySelector(".chat");
+    host.addEventListener("click", (ev) => {
+      const sum = ev.target.closest(".activity > .summary");
+      if (sum) { const x = sum.getAttribute("aria-expanded") !== "true"; sum.setAttribute("aria-expanded", x); sum.nextElementSibling.hidden = !x; return; }
+      const call = ev.target.closest(".call > button");
+      if (call) { const x = call.getAttribute("aria-expanded") !== "true"; call.setAttribute("aria-expanded", x); call.nextElementSibling.hidden = !x; return; }
+      const more = ev.target.closest(".more");
+      if (more) { more.previousElementSibling.removeAttribute("data-clamped"); more.remove(); return; }
+      const copy = ev.target.closest("[data-copy]");
+      if (copy) { const t = copy.textContent; copy.textContent = "Copied"; setTimeout(() => (copy.textContent = t), 1200); return; }
+      const jump = ev.target.closest(".jump");
+      if (jump) { chat.scrollTo({ top: chat.scrollHeight, behavior: "smooth" }); jump.remove(); }
+    });
+    host.querySelector("[data-tools]").addEventListener("change", (ev) => { render(host, { ...o, tools: ev.target.checked, open: [], jump: 0, scrollTop: undefined, search: host.querySelector("input[type=search]").value }); });
+    const s = host.querySelector("input[type=search]");
+    s.addEventListener("input", () => highlight(chat, s.value.trim()));
+    s.addEventListener("keydown", (ev) => {
+      if (ev.key !== "Enter") return;
+      const marks = [...chat.querySelectorAll("mark")]; if (!marks.length) return;
+      host._mi = ((host._mi ?? -1) + 1) % marks.length;
+      marks[host._mi].scrollIntoView({ block: "center", behavior: "smooth" });
+      host.querySelector(".hits").textContent = `${host._mi + 1} of ${marks.length}`;
+    });
+    if (o.search) highlight(chat, o.search);
+    requestAnimationFrame(() => { chat.scrollTop = o.scrollTop ?? chat.scrollHeight; });
+  }
+
+  document.querySelectorAll("[data-chat]").forEach((el) => render(el, JSON.parse(el.dataset.chat)));
+})();
+</script>
+</body>
+</html>

@@ -52,14 +52,14 @@ export function transcriptGatewayContract(name, makeSubject) {
     assert.deepEqual([texts(rest), rest.hasNewer], [["5"], false]);
   });
 
-  contract("an entry keeps its kind, time, tool, error and cut", async () => {
+  contract("an entry keeps its kind, time, tool, error, cut and rendered html", async () => {
     const at = new Date(T0.getTime() + 60_000);
     const { gateway } = makeSubject({
-      transcripts: { s1: [{ kind: "tool_result", text: "boom", tool: "Bash", isError: true, truncated: true, at }, { kind: "user", text: "hi" }] },
+      transcripts: { s1: [{ kind: "tool_result", text: "boom", tool: "Bash", isError: true, truncated: true, at }, { kind: "user", text: "**hi**", html: "<p><strong>hi</strong></p>" }] },
     });
     const [result, user] = (await gateway.page("s1")).entries;
-    assert.deepEqual([result.kind, result.tool, result.isError, result.truncated, result.at?.toISOString()], ["tool_result", "Bash", true, true, at.toISOString()]);
-    assert.deepEqual([user.kind, user.tool, user.isError, user.at], ["user", "", false, null]);
+    assert.deepEqual([result.kind, result.tool, result.isError, result.truncated, result.at?.toISOString(), result.html], ["tool_result", "Bash", true, true, at.toISOString(), ""]);
+    assert.deepEqual([user.kind, user.tool, user.isError, user.at, user.html], ["user", "", false, null, "<p><strong>hi</strong></p>"]);
   });
 
   contract("a session without a saved conversation rejects with SESSION_TRANSCRIPT_MISSING until one appears", async () => {

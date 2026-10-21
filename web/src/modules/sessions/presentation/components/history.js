@@ -1,11 +1,11 @@
-// A session's History tab: its saved conversation, read-only, newest at the
-// bottom (the contract "Harness server ↔ Web UI — agent session history",
-// T1–T6). It is what the terminal no longer holds: claude draws on the
+// A session's History tab: its saved conversation as a chat, read-only,
+// newest at the bottom (the contract "Harness server ↔ Web UI — agent session
+// history", T1–T7). It is what the terminal no longer holds: claude draws on the
 // alternate screen, which keeps no scrollback.
 //
 //   <template x-for="panel in historyPanels" x-bind:key="panel.key">
 //     <section class="[ frame ]" x-data="sessionsHistory(panel)"> …
-//       <div class="[ transcript ]" data-scroll role="log" x-on:scroll="onScroll"> …
+//       <div class="[ chat ]" data-scroll role="log" x-on:scroll="onScroll"> …
 //
 // Mounted only while the tab is in front, keyed on the session and whether
 // it runs. It opens on the newest page; scrolling near the top shows older
@@ -14,11 +14,12 @@
 // bottom follows, one who scrolled up stays put and is offered Jump to
 // latest. Thousands of entries stay smooth: every loaded entry is kept, but
 // only a window of them is rendered, moved as the reader nears its edges,
-// keeping the line they look at where it was.
+// keeping the line they look at where it was. The reader can hide the tool
+// calls (remembered per browser) and search what is loaded.
 
 import { describeError } from "../../../../shared/presentation/errors.js";
 import { isStaleCursor, isTranscriptMissing, TRANSCRIPT_PAGE } from "../../domain/transcript.js";
-import { historyLine } from "../historyView.js";
+import { chatItems, historyEntry, isWorking, matches } from "../historyView.js";
 
 /** The catch-up interval while the session runs (T5: no more often than every 2 s). */
 export const POLL_MS = 2_000;
@@ -31,15 +32,27 @@ const NEAR_BOTTOM_PX = 48;
 const EDGE_PX = 240;
 /** Catching up stops after this many pages in one go; the next poll goes on. */
 const MAX_PAGES_PER_POLL = 10;
+/** Where the reader's choice to show tool calls is kept. */
+export const TOOLS_KEY = "harness.history.showTools";
+/** The CSS highlight that marks search matches. */
+const HIGHLIGHT = "history-match";
 
 /**
  * @param {{
  *   transcripts: import("../../domain/ports.js").TranscriptGateway,
  *   timers?: { setTimeout: typeof globalThis.setTimeout, clearTimeout: typeof globalThis.clearTimeout },
  *   pageVisible?: () => boolean,  the browser tab is in front
+ *   storage?: Pick<Storage, "getItem" | "setItem"> | null,  where showTools is kept
+ *   clipboard?: { writeText(text: string): Promise<void> } | null,
  * }} deps
  */
-export const history = ({ transcripts, timers = globalThis, pageVisible = () => globalThis.document?.visibilityState !== "hidden" }) => (panel = {}) => {
+export const history = ({
+  transcripts,
+  timers = globalThis,
+  pageVisible = () => globalThis.document?.visibilityState !== "hidden",
+  storage = safeStorage(),
+  clipboard = globalThis.navigator?.clipboard ?? null,
+}) => (panel = {}) => {
   let pollTimer = 0;
   let busy = false;
   let gone = false;
@@ -50,12 +63,19 @@ export const history = ({ transcripts, timers = globalThis, pageVisible = () => 
    */
   let root = null;
   const logEl = () => root?.querySelector("[role=log]") ?? null;
-  /** Lines already built, by cursor: entries never change once written. */
+  /** Entries already built, by cursor: entries never change once written. */
   const built = new Map();
+  const build = (e) => {
+    let b = built.get(e.cursor);
+    if (!b) built.set(e.cursor, (b = historyEntry(e)));
+    return b;
+  };
 
   return {
     sessionId: panel.sessionId ?? "",
     live: panel.live === true,
+    /** Who the agent's messages are from. */
+    agent: panel.agent || "Agent",
     /** loading → ready, or missing (no saved conversation yet), or failed (the first page did not load) */
     state: "loading",
     /** Why the last request failed, while it shows. */
@@ -71,15 +91,34 @@ export const history = ({ transcripts, timers = globalThis, pageVisible = () => 
     following: true,
     /** Entries that arrived below while the reader was scrolled up. */
     newCount: 0,
+    /** Activity cards, calls and long messages the reader opened, by key. */
     expandedIds: [],
+    /** The tool calls show between the messages. */
+    showTools: storage?.getItem(TOOLS_KEY) !== "false",
+    /** What the reader searches for, and which match is current (-1: none yet). */
+    query: "",
+    hit: -1,
 
     // ── what the markup binds ────────────────────────────────────────────
-    get lines() {
-      return this.entries.slice(this.start, this.end).map((e) => {
-        let line = built.get(e.cursor);
-        if (!line) built.set(e.cursor, (line = historyLine(e)));
-        return line;
-      });
+    /** The rendered window's entries. */
+    get rendered() {
+      return this.entries.slice(this.start, this.end).map(build);
+    },
+    get items() {
+      return chatItems(this.rendered, { agent: this.agent, live: this.live && this.end === this.entries.length, showTools: this.showTools });
+    },
+    /** The agent is between its turns, below the newest message. */
+    get working() {
+      return this.showsLog && this.end === this.entries.length && isWorking(this.entries, this.live);
+    },
+    get hits() {
+      return matches(this.entries.map(build), this.query, this.showTools);
+    },
+    get searchLabel() {
+      if (this.query.trim() === "") return "";
+      const n = this.hits.length;
+      if (n === 0) return "No match";
+      return this.hit < 0 ? `${n} found` : `${this.hit + 1} of ${n}`;
     },
     get showsLog() {
       return this.state === "ready";
@@ -107,12 +146,110 @@ export const history = ({ transcripts, timers = globalThis, pageVisible = () => 
     get jumpLabel() {
       return this.newCount > 0 ? `${this.newCount} new · Jump to latest` : "Jump to latest";
     },
-    expanded(line) {
-      return this.expandedIds.includes(line.cursor);
+    /** An activity card, a call or a long message (by its key or cursor) is open. */
+    expanded(id) {
+      return this.expandedIds.includes(id);
     },
-    toggle(line) {
-      const id = line.cursor;
+    toggle(id) {
       this.expandedIds = this.expandedIds.includes(id) ? this.expandedIds.filter((x) => x !== id) : [...this.expandedIds, id];
+      this.repaint();
+    },
+    get workingLabel() {
+      return `${this.agent} is working…`;
+    },
+    moreLabel(part) {
+      return this.expandedIds.includes(part.cursor) ? "Show less" : "Show all";
+    },
+    /** A long message folded until shown in full. */
+    clamped(part) {
+      return part.long && !this.expandedIds.includes(part.cursor);
+    },
+
+    toggleTools() {
+      this.showTools = !this.showTools;
+      storage?.setItem(TOOLS_KEY, String(this.showTools));
+      this.hit = -1;
+      this.repaint();
+    },
+
+    // ── search ───────────────────────────────────────────────────────────
+    onSearch() {
+      this.hit = -1;
+      this.repaint();
+    },
+    /** Enter: the next match; Shift+Enter: the one before; Escape: clear. */
+    onSearchKey(event) {
+      if (event.key === "Escape" && this.query !== "") {
+        event.preventDefault();
+        this.query = "";
+        this.onSearch();
+        return;
+      }
+      if (event.key !== "Enter") return;
+      event.preventDefault();
+      this.step(event.shiftKey ? -1 : 1);
+    },
+    /** Move to the next (1) or previous (-1) match: into the window, its card open, in view. */
+    step(by) {
+      const hits = this.hits;
+      if (hits.length === 0) return;
+      this.hit = this.hit < 0 ? (by > 0 ? 0 : hits.length - 1) : (this.hit + by + hits.length) % hits.length;
+      const cursor = hits[this.hit];
+      const at = this.entries.findIndex((e) => e.cursor === cursor);
+      if (at < this.start || at >= this.end) {
+        this.start = Math.max(0, Math.min(at - CHUNK, this.entries.length - MAX_LINES));
+        this.end = Math.min(this.entries.length, this.start + MAX_LINES);
+        this.following = false;
+      }
+      const card = this.items.find((it) => it.type === "activity" && it.calls.some((c) => c.cursors.includes(cursor)));
+      if (card) {
+        const call = card.calls.find((c) => c.cursors.includes(cursor));
+        this.expandedIds = [...new Set([...this.expandedIds, card.key, call.key])];
+      }
+      this.repaint(() => {
+        const el = logEl()?.querySelector(`[data-cursor="${CSS.escape(cursor)}"], [data-cursors~="${CSS.escape(cursor)}"]`);
+        el?.scrollIntoView({ block: "center" });
+      });
+    },
+
+    /**
+     * A message's Markdown, as the server rendered it in safe mode (T7), into
+     * its element, with its code blocks dressed. Its html never changes, so
+     * it is placed once.
+     */
+    placeHtml(el, part) {
+      if (el.dataset.placed === part.cursor) return;
+      el.dataset.placed = part.cursor;
+      el.innerHTML = part.html;
+      decorateCode(el);
+      if (this.query.trim() !== "") this.repaint();
+    },
+
+    // ── copying ──────────────────────────────────────────────────────────
+    /** A message's Markdown, as written. */
+    copyTurn(item, event) {
+      return this.copy(item.parts.map((p) => p.text).join("\n\n"), event?.currentTarget);
+    },
+    /** Clicks inside rendered Markdown: a code block's Copy. */
+    onLogClick(event) {
+      const button = event.target?.closest?.("[data-copy-code]");
+      if (!button) return;
+      const code = button.closest(".codeblock")?.querySelector("code");
+      if (code) this.copy(code.textContent, button);
+    },
+    async copy(text, button) {
+      if (!clipboard) return;
+      try {
+        await clipboard.writeText(text);
+      } catch {
+        return;
+      }
+      if (!button) return;
+      const label = button.textContent;
+      button.textContent = "Copied";
+      timers.setTimeout(() => {
+        button.textContent = label;
+      }, 1_200);
     },
 
     // ── lifecycle ────────────────────────────────────────────────────────
@@ -140,7 +277,7 @@ export const history = ({ transcripts, timers = globalThis, pageVisible = () => 
         this.newCount = 0;
         this.error = "";
         this.state = "ready";
-        this.$nextTick(() => this.scrollToEnd());
+        this.repaint(() => this.scrollToEnd());
       } catch (err) {
         if (gone) return;
         if (isTranscriptMissing(err)) {
@@ -198,12 +335,13 @@ export const history = ({ transcripts, timers = globalThis, pageVisible = () => 
       if (this.following) {
         this.end = this.entries.length;
         this.start = Math.max(this.start, this.end - MAX_LINES);
-        this.$nextTick(() => this.scrollToEnd());
+        this.repaint(() => this.scrollToEnd());
         return;
       }
       // Below a reader who scrolled up: they stay where they are.
       this.newCount += added.length;
       if (windowAtEnd) this.end = Math.min(this.entries.length, this.start + MAX_LINES);
+      this.repaint();
     },
 
     // ── reading ──────────────────────────────────────────────────────────
@@ -263,7 +401,7 @@ export const history = ({ transcripts, timers = globalThis, pageVisible = () => 
       this.start = Math.max(0, this.end - MAX_LINES);
       this.following = true;
       this.newCount = 0;
-      this.$nextTick(() => this.scrollToEnd());
+      this.repaint(() => this.scrollToEnd());
     },
 
     /** Retry after a failure: the first page again, or the catch-up. */
@@ -293,13 +431,82 @@ export const history = ({ transcripts, timers = globalThis, pageVisible = () => 
 
     /** After the window moved: that line back where it was. */
     restore(kept) {
-      if (!kept) return;
-      this.$nextTick(() => {
+      if (!kept) return this.repaint();
+      this.repaint(() => {
         const log = logEl();
         const el = log?.querySelector(`[data-cursor="${CSS.escape(kept.cursor)}"]`);
         if (!el) return;
         log.scrollTop += el.getBoundingClientRect().top - log.getBoundingClientRect().top - kept.offset;
       });
     },
+
+    /** After the next render: search matches get their highlight, then then(). */
+    repaint(then) {
+      this.$nextTick(() => {
+        const log = logEl();
+        if (typeof Node !== "undefined" && log instanceof Node) highlight(log, this.query);
+        then?.();
+      });
+    },
   };
 };
+
+/** localStorage, or null where it is not allowed. */
+function safeStorage() {
+  try {
+    return globalThis.localStorage ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Each code block in rendered Markdown gets a head with its language and a
+ * Copy button, once: the server's html never changes, so neither does it.
+ */
+function decorateCode(root) {
+  for (const pre of root.querySelectorAll("pre:not([data-decorated], .in, .out)")) {
+    pre.dataset.decorated = "";
+    const lang = /language-([\w+-]+)/.exec(pre.querySelector("code")?.className ?? "")?.[1] ?? "text";
+    const block = document.createElement("div");
+    block.className = "codeblock";
+    const head = document.createElement("div");
+    head.className = "head";
+    const name = document.createElement("span");
+    name.textContent = lang;
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "button";
+    button.dataset.variant = "ghost";
+    button.dataset.size = "sm";
+    button.dataset.copyCode = "";
+    button.textContent = "Copy";
+    head.append(name, button);
+    pre.replaceWith(block);
+    block.append(head, pre);
+  }
+}
+
+/** Marks every match of query in the log's text with the CSS highlight. */
+function highlight(log, query) {
+  const registry = globalThis.CSS?.highlights;
+  if (!registry || typeof Highlight === "undefined") return;
+  const q = query.trim().toLowerCase();
+  if (q === "") {
+    registry.delete(HIGHLIGHT);
+    return;
+  }
+  const ranges = [];
+  const walk = document.createTreeWalker(log, NodeFilter.SHOW_TEXT);
+  for (let node = walk.nextNode(); node; node = walk.nextNode()) {
+    if (!node.parentElement?.closest("[data-searchable]")) continue;
+    const text = node.data.toLowerCase();
+    for (let i = text.indexOf(q); i !== -1; i = text.indexOf(q, i + q.length)) {
+      const range = new Range();
+      range.setStart(node, i);
+      range.setEnd(node, i + q.length);
+      ranges.push(range);
+    }
+  }
+  registry.set(HIGHLIGHT, new Highlight(...ranges));
+}

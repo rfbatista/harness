@@ -3,12 +3,29 @@ package sessions
 import "operators-mcp/internal/adapter/in/web/components"
 
 // historyPanel is the History tab: the session's saved conversation
-// (sessionsHistory), read-only, newest at the bottom, in the design system's
-// transcript block. Every line is an agent's or a person's text and is bound
-// with x-text. The log is focusable, so the keyboard scrolls it; tool lines
-// open with Enter or Space.
+// (sessionsHistory) as a chat, read-only, newest at the bottom, in the design
+// system's chat block. A person's messages are bubbles, the agent's are its
+// Markdown rendered, and the tool calls between two messages fold into one
+// card. Text is bound with x-text; only an entry's html, which the server
+// rendered from Markdown in safe mode (contract T7), is placed as HTML, by
+// placeHtml (the CSP build of Alpine has no x-html).
+// The log is focusable, so the keyboard scrolls it; cards and calls open with
+// Enter or Space.
 templ historyPanel() {
 	<section class="[ frame ]" aria-label="History" x-data="sessionsHistory(panel)">
+		<template x-if="showsLog">
+			<div class="[ chat-bar ]">
+				<label class="[ search ]">
+					<span class="[ visually-hidden ]">Search history</span>
+					<input type="search" placeholder="Search history" x-model="query" x-on:input="onSearch" x-on:keydown="onSearchKey"/>
+					<span class="[ hits ]" aria-live="polite" x-text="searchLabel"></span>
+				</label>
+				<label class="[ toggle ]">
+					<input type="checkbox" x-bind:checked="showTools" x-on:change="toggleTools"/>
+					<span>Show tools</span>
+				</label>
+			</div>
+		</template>
 		<template x-if="showsError">
 			<div class="[ pane-note ]" data-tone="danger" role="status">
 				<span class="[ text ]"><strong>History could not load.</strong> <span x-text="error"></span></span>
@@ -22,7 +39,7 @@ templ historyPanel() {
 			@components.Empty("No saved conversation yet", "It appears here once the agent has written its first turn.")
 		</template>
 		<template x-if="showsLog">
-			<div class="[ transcript ]" data-scroll role="log" tabindex="0" aria-label="Conversation history" x-on:scroll="onScroll">
+			<div class="[ chat ]" data-scroll role="log" tabindex="0" aria-label="Conversation history" x-on:scroll="onScroll" x-on:click="onLogClick">
 				<div class="[ older ]">
 					<template x-if="canLoadOlder">
 						<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-bind:aria-busy="loadingOlder" x-on:click="older">Load older</button>
@@ -31,27 +48,93 @@ templ historyPanel() {
 						<span>Start of the conversation</span>
 					</template>
 				</div>
-				<template x-for="line in lines" x-bind:key="line.cursor">
-					<div class="[ line ]" x-bind:data-kind="line.kind" x-bind:data-cursor="line.cursor">
-						<time x-bind:title="line.stamp" x-text="line.time"></time>
-						<span class="[ mark ]" aria-hidden="true" x-text="line.mark"></span>
-						<template x-if="!line.fold">
-							<!-- One line: the log keeps white space, so none between these. -->
-							<span class="[ text ]"><span x-text="line.text"></span><template x-if="line.cut"><span class="[ cut ]">cut at 16 KiB</span></template></span>
+				<template x-for="item in items" x-bind:key="item.key">
+					<div class="[ item ]" x-bind:data-type="item.type">
+						<template x-if="item.type === 'day'">
+							<div class="[ day ]"><span x-text="item.label"></span></div>
 						</template>
-						<template x-if="line.fold">
-							<div class="[ fold ]">
-								<button type="button" class="[ summary ]" x-bind:aria-expanded="expanded(line)" x-on:click="toggle(line)">
-									<span class="[ tool ]" x-text="line.tool"></span>
-									<span class="[ gist ]" x-text="line.gist"></span>
-									<span class="[ meta ]" x-text="line.meta"></span>
+						<template x-if="item.type === 'system'">
+							<p class="[ note ]" x-bind:data-cursor="item.cursor"><span data-searchable x-text="item.label"></span> <time x-bind:title="item.stamp" x-text="item.time"></time></p>
+						</template>
+						<template x-if="item.type === 'turn'">
+							<article class="[ turn ]" x-bind:data-who="item.who">
+								<header>
+									<span class="[ avatar ]" aria-hidden="true" x-text="item.initial"></span>
+									<span class="[ who ]" x-text="item.name"></span>
+									<time x-bind:title="item.stamp" x-text="item.time"></time>
+									<span class="[ actions ]">
+										<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-on:click="copyTurn(item, $event)">Copy</button>
+									</span>
+								</header>
+								<template x-for="part in item.parts" x-bind:key="part.cursor">
+									<div class="[ part ]" x-bind:data-cursor="part.cursor">
+										<template x-if="part.html">
+											<div class="[ prose ]" data-searchable x-bind:data-clamped="clamped(part)" x-effect="placeHtml($el, part)"></div>
+										</template>
+										<template x-if="!part.html">
+											<p class="[ prose plain ]" data-searchable x-bind:data-clamped="clamped(part)" x-text="part.text"></p>
+										</template>
+										<template x-if="part.long">
+											<button type="button" class="[ button more ]" data-variant="ghost" data-size="sm" x-bind:aria-expanded="expanded(part.cursor)" x-on:click="toggle(part.cursor)" x-text="moreLabel(part)"></button>
+										</template>
+										<template x-if="part.cut">
+											<span class="[ cut ]">Cut at 16 KiB</span>
+										</template>
+									</div>
+								</template>
+							</article>
+						</template>
+						<template x-if="item.type === 'failed'">
+							<p class="[ activity-flag ]" x-bind:data-cursor="item.cursor"><span class="[ flag ]" data-tone="danger" x-text="item.summary"></span></p>
+						</template>
+						<template x-if="item.type === 'activity'">
+							<div class="[ activity ]" x-bind:data-cursor="item.cursor">
+								<button type="button" class="[ summary ]" x-bind:aria-expanded="expanded(item.key)" x-on:click="toggle(item.key)">
+									<span class="[ count ]" x-text="item.summary"></span>
+									<span class="[ names ]" x-text="item.names"></span>
+									<template x-if="item.failed > 0">
+										<span class="[ flag ]" data-tone="danger" x-text="item.failedLabel"></span>
+									</template>
+									<template x-if="item.running">
+										<span class="[ flag ]" data-tone="busy">running</span>
+									</template>
 								</button>
-								<template x-if="expanded(line)">
-									<pre class="[ detail ]"><span x-text="line.text"></span><template x-if="line.cut"><span class="[ cut ]">cut at 16 KiB</span></template></pre>
+								<template x-if="expanded(item.key)">
+									<ol class="[ calls ]">
+										<template x-for="call in item.calls" x-bind:key="call.key">
+											<li class="[ call ]" x-bind:data-state="call.state" x-bind:data-cursors="call.cursorList">
+												<button type="button" x-bind:aria-expanded="expanded(call.key)" x-on:click="toggle(call.key)">
+													<span class="[ mark ]" x-bind:aria-label="call.state" x-text="call.mark"></span>
+													<span class="[ tool ]" x-text="call.tool"></span>
+													<span class="[ gist ]" data-searchable x-text="call.gist"></span>
+													<span class="[ meta ]" x-text="call.meta"></span>
+												</button>
+												<template x-if="expanded(call.key)">
+													<div class="[ io ]">
+														<template x-if="call.input">
+															<pre class="[ in ]" data-searchable x-text="call.input"></pre>
+														</template>
+														<template x-if="call.hasOutput">
+															<pre class="[ out ]" data-searchable x-text="call.output"></pre>
+														</template>
+														<template x-if="!call.hasOutput">
+															<span class="[ waiting ]">No result yet</span>
+														</template>
+														<template x-if="call.cut">
+															<span class="[ cut ]">Cut at 16 KiB</span>
+														</template>
+													</div>
+												</template>
+											</li>
+										</template>
+									</ol>
 								</template>
 							</div>
 						</template>
 					</div>
+				</template>
+				<template x-if="working">
+					<div class="[ working ]" role="status"><span class="[ dots ]" aria-hidden="true"><i></i><i></i><i></i></span> <span x-text="workingLabel"></span></div>
 				</template>
 				<template x-if="showsJump">
 					<button type="button" class="[ button jump ]" data-size="sm" x-on:click="jump" x-text="jumpLabel"></button>

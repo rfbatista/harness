@@ -18,6 +18,7 @@ export function toTranscriptEntry(dto) {
     tool: typeof dto.tool === "string" ? dto.tool : "",
     isError: dto.is_error === true,
     truncated: dto.truncated === true,
+    html: typeof dto.html === "string" ? dto.html : "",
   });
 }
 
