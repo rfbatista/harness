@@ -54,7 +54,7 @@ func wiredResources(t *testing.T) wired {
 	if err != nil {
 		t.Fatal(err)
 	}
-	tk, err := plan.CreateTicket(ctx, p.ID, "Task", "", domain.TicketStatusTodo)
+	tk, err := plan.CreateTicket(ctx, p.ID, "Task", "", domain.TicketStatusTodo, "")
 	if err != nil {
 		t.Fatal(err)
 	}

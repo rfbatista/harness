@@ -54,7 +54,7 @@ type (
 func (s *Screen) load() tea.Cmd {
 	board, sessions, pid := s.board, s.sessions, s.project.ID
 	return nav.Call(func(ctx context.Context) tea.Msg {
-		ts, err := board.ListTickets(ctx, pid)
+		ts, err := board.ListTickets(ctx, pid, ports.TicketFilter{})
 		if err != nil {
 			return loadedMsg{projectID: pid, err: err}
 		}
@@ -157,6 +157,19 @@ func sortTickets(ts []*domain.Ticket) []*domain.Ticket {
 	return ts
 }
 
+// parentOf is the feature task t belongs to, nil for a top-level task (or
+// when the parent is not in the list).
+func (s *Screen) parentOf(t *domain.Ticket) *domain.Ticket {
+	if !t.IsChild() {
+		return nil
+	}
+	i := slices.IndexFunc(s.tickets, func(p *domain.Ticket) bool { return p.ID == t.ParentID })
+	if i < 0 {
+		return nil
+	}
+	return s.tickets[i]
+}
+
 func (s *Screen) sessionCount(ticketID string) int {
 	n := 0
 	for _, x := range s.recorded {
@@ -187,7 +200,11 @@ func (s *Screen) View(width, height int) (string, *tea.Cursor) {
 		if n := s.panes.LiveIn(t.ID); n > 0 {
 			live = ui.Live.Render(fmt.Sprintf("● %d live", n))
 		}
-		row := " " + ui.Fit(ui.Dim.Render(ui.StatusLabel(t.Status)), 12) + " " + ui.Fit(t.Title, titleW) + " " + ui.Fit(sessions, 12) + " " + live
+		title := t.Title
+		if parent := s.parentOf(t); parent != nil {
+			title += " " + ui.Dim.Render("↳ "+parent.Title)
+		}
+		row := " " + ui.Fit(ui.Dim.Render(ui.StatusLabel(t.Status)), 12) + " " + ui.Fit(title, titleW) + " " + ui.Fit(sessions, 12) + " " + live
 		rows = append(rows, ui.Row(row, i == s.cursor, width))
 	}
 	rows = append(rows, ui.Note.Render(" enter open · esc back · r refresh · q quit"))

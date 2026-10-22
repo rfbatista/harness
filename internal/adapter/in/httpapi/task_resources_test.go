@@ -32,7 +32,7 @@ func newResourcesHandler(t *testing.T) (*Handler, *planning.Service, string) {
 	svc := planning.NewService(sqlite.NewTicketRepository(db), sqlite.NewDocumentRepository(db), projects)
 	svc.Resources, svc.Comments = sqlite.NewTicketResourceRepository(db), sqlite.NewTicketCommentRepository(db)
 	svc.Blobs, svc.ContentURL = blobstore.New(t.TempDir()), TicketResourceContentPath
-	tk, err := svc.CreateTicket(context.Background(), p.ID, "Task", "", "")
+	tk, err := svc.CreateTicket(context.Background(), p.ID, "Task", "", "", "")
 	if err != nil {
 		t.Fatal(err)
 	}

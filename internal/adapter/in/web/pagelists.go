@@ -18,9 +18,13 @@ import (
 // sharedTickets reads a project's tickets once per request.
 type sharedTickets struct{ ports.TicketReader }
 
-func (t sharedTickets) ListTickets(ctx context.Context, projectID string) ([]*domain.Ticket, error) {
-	list, err := readshare.Do(ctx, "tickets\x00"+projectID, func() ([]*domain.Ticket, error) {
-		return t.TicketReader.ListTickets(ctx, projectID)
+func (t sharedTickets) ListTickets(ctx context.Context, projectID string, filter ports.TicketFilter) ([]*domain.Ticket, error) {
+	key := "tickets\x00" + projectID
+	if filter.ParentID != nil {
+		key += "\x00parent\x00" + *filter.ParentID
+	}
+	list, err := readshare.Do(ctx, key, func() ([]*domain.Ticket, error) {
+		return t.TicketReader.ListTickets(ctx, projectID, filter)
 	})
 	return slices.Clone(list), err // each caller may sort its own copy
 }

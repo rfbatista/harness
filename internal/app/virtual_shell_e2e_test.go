@@ -43,6 +43,7 @@ type shellE2E struct {
 	orch    *orchestration.Service
 	plan    *planning.Service
 	srv     *httptest.Server
+	cat     catalog.Catalog
 	project string
 	repo    string
 }
@@ -62,7 +63,6 @@ func newShellE2E(t *testing.T) *shellE2E {
 
 	e := &shellE2E{t: t, ctx: context.Background()}
 	var (
-		cat      catalog.Catalog
 		sessions ports.SessionRepository
 		channel  *taskchannel.Service
 		art      *artifacts.Service
@@ -72,7 +72,7 @@ func newShellE2E(t *testing.T) *shellE2E {
 		fx.Supply(Config{HTTPAddr: "127.0.0.1:0", MCPAddr: "127.0.0.1:0", DBPath: ":memory:", Root: dir, ClaudeBin: fake, SessionShell: "direct"}),
 		PersistenceModule, CatalogModule, PlanningModule, WorkspacesModule,
 		AgentRuntimeModule, TaskChannelModule, TextProcessingModule,
-		fx.Populate(&e.orch, &e.plan, &channel, &art, &cat, &sessions, &shells),
+		fx.Populate(&e.orch, &e.plan, &channel, &art, &e.cat, &sessions, &shells),
 		fx.NopLogger,
 	)
 	if err := app.Start(e.ctx); err != nil {
@@ -80,6 +80,7 @@ func newShellE2E(t *testing.T) *shellE2E {
 	}
 	t.Cleanup(func() { _ = app.Stop(context.Background()) })
 
+	cat := e.cat
 	if _, err := cat.Settings.UpdateSettings(map[string]string{domain.SettingWorkspacesRoot: filepath.Join(dir, "worktrees")}); err != nil {
 		t.Fatal(err)
 	}
@@ -105,7 +106,7 @@ func newShellE2E(t *testing.T) *shellE2E {
 
 func (e *shellE2E) task(title string) string {
 	e.t.Helper()
-	tk, err := e.plan.CreateTicket(e.ctx, e.project, title, "", domain.TicketStatusInProgress)
+	tk, err := e.plan.CreateTicket(e.ctx, e.project, title, "", domain.TicketStatusInProgress, "")
 	if err != nil {
 		e.t.Fatal(err)
 	}
@@ -122,7 +123,13 @@ type runningSession struct {
 
 func (e *shellE2E) start(ticketID string) runningSession {
 	e.t.Helper()
-	sess, spec, err := e.orch.StartInteractive(e.ctx, ports.InteractiveRequest{ProjectID: e.project, RepositoryID: e.repo, TicketID: ticketID, Mode: "implement"})
+	return e.startWith(ports.InteractiveRequest{ProjectID: e.project, RepositoryID: e.repo, TicketID: ticketID, Mode: "implement"})
+}
+
+// startWith starts an interactive session from req and finds its shell.
+func (e *shellE2E) startWith(req ports.InteractiveRequest) runningSession {
+	e.t.Helper()
+	sess, spec, err := e.orch.StartInteractive(e.ctx, req)
 	if err != nil {
 		e.t.Fatal(err)
 	}
@@ -323,16 +330,21 @@ func TestDocumentChangesReachEveryRunningShell(t *testing.T) {
 		}
 		return nil
 	})
-	if err := lacks(b.shell, doc.ID); err != nil {
-		t.Fatalf("B saw A's task document: %v", err)
+	eventually(t, "A's task document under A's folder in B", func() error {
+		return hasFile(b.shell, "tasks/"+taskA+"/docs/plan-notes.md", "# Plan\n\nsecond draft\n", doc.ID, "task", "")
+	})
+	if _, err := os.Stat(filepath.Join(b.shell, "task", "docs", "plan-notes.md")); err == nil {
+		t.Fatal("B got A's task document as its own")
 	}
 
 	// Moved to project scope, it goes to project/docs, in every shell.
 	e.post("set_document_scope", map[string]string{"document_id": doc.ID, "scope": "project"}, nil)
 	for name, s := range map[string]runningSession{"A": a, "B": b} {
 		eventually(t, "the moved document in "+name, func() error {
-			if _, err := os.Stat(filepath.Join(s.shell, "task", "docs", "plan-notes.md")); err == nil {
-				return fmt.Errorf("task/docs/plan-notes.md is still there")
+			for _, p := range []string{"task/docs/plan-notes.md", "tasks/" + taskA + "/docs/plan-notes.md"} {
+				if _, err := os.Stat(filepath.Join(s.shell, filepath.FromSlash(p))); err == nil {
+					return fmt.Errorf("%s is still there", p)
+				}
 			}
 			return hasFile(s.shell, "project/docs/renamed-plan.md", "# Plan\n\nsecond draft\n", doc.ID, "project", "")
 		})
@@ -359,12 +371,15 @@ func TestDocumentChangesReachEveryRunningShell(t *testing.T) {
 	eventually(t, "the linked document in B", func() error {
 		return hasFile(b.shell, "task/docs/b-notes.txt", "plain words", notes.ID, "task", "")
 	})
-	if err := lacks(a.shell, notes.ID); err != nil {
-		t.Fatalf("A saw B's task document: %v", err)
-	}
+	eventually(t, "B's task document under B's folder in A", func() error {
+		return hasFile(a.shell, "tasks/"+taskB+"/docs/b-notes.txt", "plain words", notes.ID, "task", "")
+	})
 	e.post("unlink_document_from_ticket", map[string]string{"ticket_id": taskB, "document_id": notes.ID}, nil)
 	eventually(t, "the unlinked document gone from B", func() error {
 		return lacks(b.shell, notes.ID, "task/docs/b-notes.txt")
+	})
+	eventually(t, "the unlinked document gone from A", func() error {
+		return lacks(a.shell, notes.ID, "tasks/"+taskB+"/docs/b-notes.txt")
 	})
 }
 

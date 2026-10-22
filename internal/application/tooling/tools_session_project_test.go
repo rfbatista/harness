@@ -61,7 +61,7 @@ func projectToolsFixture(t *testing.T, deps func(projectID string) projectDeps) 
 	sessions := sqlite.NewSessionRepository(db)
 	plan := planning.NewService(sqlite.NewTicketRepository(db), sqlite.NewDocumentRepository(db), projects)
 	proj, _ := projects.Create("p", t.TempDir())
-	task, _ := plan.CreateTicket(context.Background(), proj.ID, "Export CSV", "", domain.TicketStatusInProgress)
+	task, _ := plan.CreateTicket(context.Background(), proj.ID, "Export CSV", "", domain.TicketStatusInProgress, "")
 	if _, err := sessions.Create(&domain.Session{ID: "me", ProjectID: proj.ID, TicketID: task.ID, RepositoryID: "r-api", Status: domain.SessionRunning}); err != nil {
 		t.Fatal(err)
 	}
@@ -160,6 +160,48 @@ func TestSessionProjectTools_Unavailable(t *testing.T) {
 	for _, name := range []string{"list_project_repositories", "list_bounded_contexts", "list_agents"} {
 		if _, err := call(name); errs.Code(err) != "UNAVAILABLE" {
 			t.Errorf("%s without its dependency: err = %v, want UNAVAILABLE", name, err)
+		}
+	}
+}
+
+// A session with no task (a project-level product session, ADR 0016) still
+// sees its project: the project tools scope by the session's project, not
+// its task.
+func TestProjectToolsWorkInASessionWithoutATask(t *testing.T) {
+	db, err := sqlite.Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	projects := sqlite.NewProjectRepository(db)
+	sessions := sqlite.NewSessionRepository(db)
+	plan := planning.NewService(sqlite.NewTicketRepository(db), sqlite.NewDocumentRepository(db), projects)
+	proj, _ := projects.Create("p", t.TempDir())
+	if _, err := sessions.Create(&domain.Session{ID: "free", ProjectID: proj.ID, RepositoryID: "r-api", Task: "Product: p", Status: domain.SessionRunning, Mode: domain.SessionModeProduct}); err != nil {
+		t.Fatal(err)
+	}
+	repos := scopedRepos{proj.ID: {{ID: "r-api", Name: "api"}}}
+	arch := archList{project: proj.ID, contexts: []*domain.BoundedContext{{ID: "bc1", ProjectID: proj.ID, Name: "Billing"}}}
+	agents := agentList{{ID: "a1", Name: "Go Developer"}}
+	tools := map[string]domain.Tool{}
+	for _, tl := range SessionTaskTools(plan, sessions, agents, arch, PeerStarter{Repositories: repos}, ArtifactTooling{}, nil, NotificationTooling{}) {
+		tools[tl.Name] = tl
+	}
+	ctx := WithSessionID(context.Background(), "free")
+	for name, key := range map[string]string{"list_project_repositories": "repositories", "list_bounded_contexts": "bounded_contexts", "list_agents": "agents"} {
+		out, err := tools[name].Handler(ctx, map[string]any{})
+		if err != nil {
+			t.Fatalf("%s without a task: %v", name, err)
+		}
+		b, _ := json.Marshal(out)
+		var m map[string]any
+		_ = json.Unmarshal(b, &m)
+		if list, _ := m[key].([]any); len(list) != 1 {
+			t.Errorf("%s = %s, want one %s", name, b, key)
+		}
+	}
+	for _, name := range []string{"get_task", "update_task_status", "start_task_session", "list_task_sessions"} {
+		if _, err := tools[name].Handler(ctx, map[string]any{"status": "review", "prompt": "go"}); errs.Code(err) != "SESSION_HAS_NO_TASK" {
+			t.Errorf("%s without a task = %v, want SESSION_HAS_NO_TASK", name, err)
 		}
 	}
 }

@@ -15,6 +15,27 @@ func (s *Service) RequestUserReview(ctx context.Context, architectID string, in 
 	if err != nil {
 		return nil, err
 	}
+	return s.openReview(ctx, sc, architectID, in)
+}
+
+// RequestUserReviewOn opens a review on a task of the session's project for
+// a session that has no task of its own (ADR 0016). The task's architect,
+// when it has one, owns its reviews: ARCHITECT_ONLY. The answer comes back
+// to the session that asked, as for an architect.
+func (s *Service) RequestUserReviewOn(ctx context.Context, bySessionID, taskID string, in ports.ReviewRequestInput) (*domain.ReviewRequest, error) {
+	sc, err := s.projectScope(ctx, bySessionID, taskID)
+	if err != nil {
+		return nil, err
+	}
+	if sc.architect() != nil {
+		return nil, errArchitectOnly
+	}
+	return s.openReview(ctx, sc, bySessionID, in)
+}
+
+// openReview stores a pending review on the scoped task, asked by askerID,
+// once its text and attachments check out.
+func (s *Service) openReview(ctx context.Context, sc *scope, askerID string, in ports.ReviewRequestInput) (*domain.ReviewRequest, error) {
 	if strings.TrimSpace(in.Subject) == "" || strings.TrimSpace(in.Body) == "" {
 		return nil, invalid("subject and body are required")
 	}
@@ -26,7 +47,7 @@ func (s *Service) RequestUserReview(ctx context.Context, architectID string, in 
 	}
 	now := s.now()
 	r, err := s.reviews.Create(&domain.ReviewRequest{
-		TaskID: sc.ticket.ID, ProjectID: sc.ticket.ProjectID, ArchitectSessionID: architectID,
+		TaskID: sc.ticket.ID, ProjectID: sc.ticket.ProjectID, ArchitectSessionID: askerID,
 		AboutSessionID: in.AboutSessionID, Subject: strings.TrimSpace(in.Subject), Body: in.Body,
 		DocumentIDs: ids(in.DocumentIDs), ArtifactIDs: ids(in.ArtifactIDs),
 		State: domain.ReviewPending, CreatedAt: now, UpdatedAt: now,

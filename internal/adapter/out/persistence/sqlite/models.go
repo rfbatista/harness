@@ -449,8 +449,10 @@ type TicketModel struct {
 	Title       string
 	Description string
 	Status      string
-	CreatedAt   int64 `gorm:"autoCreateTime:milli"`
-	UpdatedAt   int64 `gorm:"autoUpdateTime:milli"`
+	// ParentID is the feature task this ticket belongs to; "" when none.
+	ParentID  string `gorm:"column:parent_id;index"`
+	CreatedAt int64  `gorm:"autoCreateTime:milli"`
+	UpdatedAt int64  `gorm:"autoUpdateTime:milli"`
 }
 
 func (TicketModel) TableName() string { return "tickets" }
@@ -465,6 +467,7 @@ func (m *TicketModel) ToDomain() *domain.Ticket {
 		Title:       m.Title,
 		Description: m.Description,
 		Status:      domain.TicketStatus(m.Status),
+		ParentID:    m.ParentID,
 		CreatedAt:   time.UnixMilli(m.CreatedAt),
 		UpdatedAt:   time.UnixMilli(m.UpdatedAt),
 	}

@@ -34,7 +34,7 @@ func newTaskServer(t *testing.T) (baseURL, ticketID, root string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	tk, err := plan.CreateTicket(context.Background(), proj.ID, "Ship the thing", "", domain.TicketStatusTodo)
+	tk, err := plan.CreateTicket(context.Background(), proj.ID, "Ship the thing", "", domain.TicketStatusTodo, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -147,7 +147,7 @@ func TestTaskHandler_ListsTheOtherSessionsOnTheTask(t *testing.T) {
 	sessions := sqlite.NewSessionRepository(db)
 	plan := planning.NewService(sqlite.NewTicketRepository(db), sqlite.NewDocumentRepository(db), projects)
 	proj, _ := projects.Create("p", t.TempDir())
-	tk, _ := plan.CreateTicket(context.Background(), proj.ID, "Ship the thing", "", domain.TicketStatusTodo)
+	tk, _ := plan.CreateTicket(context.Background(), proj.ID, "Ship the thing", "", domain.TicketStatusTodo, "")
 	for _, s := range []*domain.Session{
 		{ID: "sess-1", ProjectID: proj.ID, TicketID: tk.ID, Task: "build it", Status: domain.SessionRunning},
 		{ID: "sess-2", ProjectID: proj.ID, TicketID: tk.ID, Task: "review it", Status: domain.SessionIdle, Branch: "feat/review"},

@@ -30,8 +30,8 @@ func peersFixture(t *testing.T) (call func(sessionID string, args map[string]any
 	sessions := sqlite.NewSessionRepository(db)
 	plan := planning.NewService(sqlite.NewTicketRepository(db), sqlite.NewDocumentRepository(db), projects)
 	proj, _ := projects.Create("p", t.TempDir())
-	task, _ := plan.CreateTicket(context.Background(), proj.ID, "Add SSE feed", "", domain.TicketStatusInProgress)
-	other, _ := plan.CreateTicket(context.Background(), proj.ID, "Write docs", "", domain.TicketStatusTodo)
+	task, _ := plan.CreateTicket(context.Background(), proj.ID, "Add SSE feed", "", domain.TicketStatusInProgress, "")
+	other, _ := plan.CreateTicket(context.Background(), proj.ID, "Write docs", "", domain.TicketStatusTodo, "")
 
 	for _, s := range []*domain.Session{
 		{ID: "me", ProjectID: proj.ID, TicketID: task.ID, Task: "implement", Status: domain.SessionRunning, Branch: "feat/me"},

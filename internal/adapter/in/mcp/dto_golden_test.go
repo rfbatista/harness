@@ -121,3 +121,30 @@ func TestGolden_SkillToDTO(t *testing.T) {
 		}
 	}
 }
+
+// Ticket is the task DTO of the HTTP API and the ticket tools. parent_id and
+// children_count are always present ("" and 0 for a top-level task without
+// children), so clients read one shape; description is left out when empty,
+// as it always was.
+func TestGolden_TicketDTO(t *testing.T) {
+	at := time.Date(2026, 8, 23, 10, 30, 0, 0, time.UTC)
+	tk := &domain.Ticket{
+		ID: "tk1", ProjectID: "p1", Title: "Child task", Description: "the brief",
+		Status: domain.TicketStatusTodo, ParentID: "feat1", CreatedAt: at, UpdatedAt: at,
+		PendingReviews: 1,
+	}
+	want := `{"id":"tk1","project_id":"p1","title":"Child task","description":"the brief",` +
+		`"status":"todo","parent_id":"feat1","created_at":"2026-08-23T10:30:00Z",` +
+		`"updated_at":"2026-08-23T10:30:00Z","architect_session_id":null,"pending_reviews":1,"children_count":0}`
+	if got := marshal(t, tk); got != want {
+		t.Errorf("domain.Ticket JSON drifted\n got: %s\nwant: %s", got, want)
+	}
+
+	top := &domain.Ticket{ID: "tk2", ProjectID: "p1", Title: "Feature", Status: domain.TicketStatusBacklog, CreatedAt: at, UpdatedAt: at, ChildrenCount: 3}
+	want = `{"id":"tk2","project_id":"p1","title":"Feature","status":"backlog","parent_id":"",` +
+		`"created_at":"2026-08-23T10:30:00Z","updated_at":"2026-08-23T10:30:00Z",` +
+		`"architect_session_id":null,"pending_reviews":0,"children_count":3}`
+	if got := marshal(t, top); got != want {
+		t.Errorf("top-level domain.Ticket JSON drifted\n got: %s\nwant: %s", got, want)
+	}
+}

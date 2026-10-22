@@ -67,7 +67,7 @@ func (nopCloser) Close() error { return nil }
 // in a project that has more.
 type shellWorld struct {
 	plan                    *planning.Service
-	task                    *domain.Ticket
+	task, other             *domain.Ticket
 	planDoc, notesA, notesB *domain.Document
 	glossary, architecture  *domain.Document
 	byPerson, byOther       *domain.TicketComment
@@ -102,10 +102,11 @@ func withShells(t *testing.T, svc *Service) *shellWorld {
 		}
 	}
 	w := &shellWorld{plan: plan}
-	w.task, err = plan.CreateTicket(ctx, p.ID, "Ship the thing", "with care", domain.TicketStatusInProgress)
+	w.task, err = plan.CreateTicket(ctx, p.ID, "Ship the thing", "with care", domain.TicketStatusInProgress, "")
 	must(err)
-	other, err := plan.CreateTicket(ctx, p.ID, "Elsewhere", "", "")
+	w.other, err = plan.CreateTicket(ctx, p.ID, "Elsewhere", "", "", "")
 	must(err)
+	other := w.other
 
 	doc := func(title, content string, format domain.DocumentFormat, scope domain.DocumentScope, link string) *domain.Document {
 		t.Helper()
@@ -199,17 +200,18 @@ func checkShell(t *testing.T, dir string, w *shellWorld) {
 		plainNotes, otherNotes = w.notesB, w.notesA
 	}
 	want := map[string]shellFile{
-		"task/docs/plan-rollout.html":                  {0o644, planPage},
-		"task/docs/notes.md":                           {0o644, plainNotes.Content},
-		"task/docs/notes-" + otherNotes.ID[:8] + ".md": {0o644, otherNotes.Content},
-		"project/docs/glossary.md":                     {0o644, "# Terms\n"},
-		"project/docs/architecture.md":                 {0o644, "# Layers\n"},
-		commentName(w.byPerson, "person"):              {0o444, "Please hurry"},
-		commentName(w.byOther, "go-developer"):         {0o444, "On it"},
-		"task/resources/spec.pdf":                      {0o444, "%PDF-1.4 spec"},
-		"task/designs/design/home.html":                {0o644, "<h1>home</h1>"},
-		"project/designs/brand/logo.svg":               {0o644, "<svg/>"},
-		"project/designs/brand/palette.css":            {0o644, ":root{}"},
+		"task/docs/plan-rollout.html":                         {0o644, planPage},
+		"task/docs/notes.md":                                  {0o644, plainNotes.Content},
+		"task/docs/notes-" + otherNotes.ID[:8] + ".md":        {0o644, otherNotes.Content},
+		"project/docs/glossary.md":                            {0o644, "# Terms\n"},
+		"project/docs/architecture.md":                        {0o644, "# Layers\n"},
+		"tasks/" + w.other.ID + "/docs/other-task-s-notes.md": {0o644, "# Not ours\n"},
+		commentName(w.byPerson, "person"):                     {0o444, "Please hurry"},
+		commentName(w.byOther, "go-developer"):                {0o444, "On it"},
+		"task/resources/spec.pdf":                             {0o444, "%PDF-1.4 spec"},
+		"task/designs/design/home.html":                       {0o644, "<h1>home</h1>"},
+		"project/designs/brand/logo.svg":                      {0o644, "<svg/>"},
+		"project/designs/brand/palette.css":                   {0o644, ":root{}"},
 	}
 	for path, wf := range want {
 		gf, ok := got[path]

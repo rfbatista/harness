@@ -61,6 +61,11 @@ To see the project around the task, and who to hand work to:
 - mcp__task__list_bounded_contexts — its bounded contexts, with their language and zones
 - mcp__task__list_agents — the agents a session can run as, and what each is for
 
+The project's tasks, to shape the work around this one:
+
+- mcp__task__list_project_tasks — the project's tasks: id, title, status, parent_id; with parent_id, the children of one
+- mcp__task__create_task — create a task in this project; parent_id defaults to this task, "" makes a top-level task
+
 A dev server you started shows in the Design tab too (files go in task/designs/):
 
 - mcp__task__publish_artifact — publish a dev server's loopback URL; publish it again to refresh it

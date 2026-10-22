@@ -10,6 +10,7 @@ package portstest
 
 import (
 	"context"
+	"slices"
 	"testing"
 	"time"
 
@@ -25,6 +26,26 @@ func wantCode(t *testing.T, err error, code string) {
 	if got := errs.Code(err); got != code {
 		t.Fatalf("error code = %q (err %v), want %q", got, err, code)
 	}
+}
+
+// mustTicket returns a helper that fails the test on err and returns tk
+// otherwise, so a board call can be used as a value: must(b.GetTicket(...)).
+func mustTicket(t *testing.T) func(tk *domain.Ticket, err error) *domain.Ticket {
+	return func(tk *domain.Ticket, err error) *domain.Ticket {
+		t.Helper()
+		if err != nil {
+			t.Fatal(err)
+		}
+		return tk
+	}
+}
+
+func ticketIDs(list []*domain.Ticket) []string {
+	ids := make([]string, 0, len(list))
+	for _, tk := range list {
+		ids = append(ids, tk.ID)
+	}
+	return ids
 }
 
 // ProjectsConformance runs the projects contract against a fresh, empty
@@ -182,7 +203,7 @@ func TicketBoardConformance(t *testing.T, newPort func(t *testing.T) (board port
 
 	t.Run("round trip", func(t *testing.T) {
 		b, pid := newPort(t)
-		created, err := b.CreateTicket(ctx, pid, "Ship it", "with care", domain.TicketStatusTodo)
+		created, err := b.CreateTicket(ctx, pid, "Ship it", "with care", domain.TicketStatusTodo, "")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -193,7 +214,7 @@ func TicketBoardConformance(t *testing.T, newPort func(t *testing.T) (board port
 		if got.Title != "Ship it" || got.Status != domain.TicketStatusTodo || got.ProjectID != pid {
 			t.Fatalf("GetTicket = %+v, want the created ticket", got)
 		}
-		list, err := b.ListTickets(ctx, pid)
+		list, err := b.ListTickets(ctx, pid, ports.TicketFilter{})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -213,17 +234,160 @@ func TicketBoardConformance(t *testing.T, newPort func(t *testing.T) (board port
 		b, pid := newPort(t)
 		_, err := b.GetTicket(ctx, "missing")
 		wantCode(t, err, "TICKET_NOT_FOUND")
-		_, err = b.CreateTicket(ctx, "missing", "T", "", "")
+		_, err = b.CreateTicket(ctx, "missing", "T", "", "", "")
 		wantCode(t, err, "PROJECT_NOT_FOUND")
-		_, err = b.CreateTicket(ctx, pid, "", "", "")
+		_, err = b.CreateTicket(ctx, pid, "", "", "", "")
 		wantCode(t, err, "INVALID_INPUT")
-		_, err = b.CreateTicket(ctx, pid, "T", "", domain.TicketStatus("weird"))
+		_, err = b.CreateTicket(ctx, pid, "T", "", domain.TicketStatus("weird"), "")
 		wantCode(t, err, "INVALID_STATUS")
+	})
+
+	t.Run("parent relation", func(t *testing.T) {
+		b, pid := newPort(t)
+		must := mustTicket(t)
+		feature := must(b.CreateTicket(ctx, pid, "Feature", "", "", ""))
+		if feature.ParentID != "" {
+			t.Fatalf("a ticket created without a parent has parent %q", feature.ParentID)
+		}
+		child := must(b.CreateTicket(ctx, pid, "Child", "", "", feature.ID))
+		if child.ParentID != feature.ID {
+			t.Fatalf("CreateTicket with a parent = parent %q, want %s", child.ParentID, feature.ID)
+		}
+		if got := must(b.GetTicket(ctx, child.ID)); got.ParentID != feature.ID {
+			t.Fatalf("GetTicket reads parent %q, want %s", got.ParentID, feature.ID)
+		}
+		loner := must(b.CreateTicket(ctx, pid, "Loner", "", "", ""))
+
+		all, err := b.ListTickets(ctx, pid, ports.TicketFilter{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(all) != 3 {
+			t.Fatalf("ListTickets without a filter = %d tickets, want the feature, its child and the loner", len(all))
+		}
+		children, err := b.ListTickets(ctx, pid, ports.TicketFilter{ParentID: &feature.ID})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(children) != 1 || children[0].ID != child.ID {
+			t.Fatalf("ListTickets of the feature's children = %s, want only %s", ticketIDs(children), child.ID)
+		}
+		topLevel := ""
+		top, err := b.ListTickets(ctx, pid, ports.TicketFilter{ParentID: &topLevel})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if ids := ticketIDs(top); len(top) != 2 || !slices.Contains(ids, feature.ID) || !slices.Contains(ids, loner.ID) {
+			t.Fatalf("ListTickets of the top-level tickets = %s, want the feature and the loner", ids)
+		}
+
+		// A full update keeps the parent; the patch moves it.
+		if got := must(b.UpdateTicket(ctx, child.ID, "Child renamed", "", domain.TicketStatusTodo)); got.ParentID != feature.ID {
+			t.Fatalf("UpdateTicket dropped the parent: %q", got.ParentID)
+		}
+		patcher, ok := b.(ports.TicketPatcher)
+		if !ok {
+			t.Skip("board is not a TicketPatcher")
+		}
+		if got := must(patcher.PatchTicket(ctx, loner.ID, ports.TicketPatch{ParentID: &feature.ID})); got.ParentID != feature.ID {
+			t.Fatalf("PatchTicket to a parent = parent %q, want %s", got.ParentID, feature.ID)
+		}
+		title := "Loner renamed"
+		if got := must(patcher.PatchTicket(ctx, loner.ID, ports.TicketPatch{Title: &title})); got.ParentID != feature.ID {
+			t.Fatalf("a patch without parent_id dropped the parent: %q", got.ParentID)
+		}
+		if got := must(patcher.PatchTicket(ctx, loner.ID, ports.TicketPatch{ParentID: &topLevel})); got.ParentID != "" {
+			t.Fatalf("PatchTicket with an empty parent_id kept the parent: %q", got.ParentID)
+		}
+	})
+
+	t.Run("parent invalid", func(t *testing.T) {
+		b, pid := newPort(t)
+		must := mustTicket(t)
+		feature := must(b.CreateTicket(ctx, pid, "Feature", "", "", ""))
+		child := must(b.CreateTicket(ctx, pid, "Child", "", "", feature.ID))
+		loner := must(b.CreateTicket(ctx, pid, "Loner", "", "", ""))
+
+		_, err := b.CreateTicket(ctx, pid, "Orphan", "", "", "missing")
+		wantCode(t, err, domain.CodeTicketParentInvalid)
+		_, err = b.CreateTicket(ctx, pid, "Grandchild", "", "", child.ID)
+		wantCode(t, err, domain.CodeTicketParentInvalid)
+
+		patcher, ok := b.(ports.TicketPatcher)
+		if !ok {
+			t.Skip("board is not a TicketPatcher")
+		}
+		missing := "missing"
+		_, err = patcher.PatchTicket(ctx, loner.ID, ports.TicketPatch{ParentID: &missing})
+		wantCode(t, err, domain.CodeTicketParentInvalid)
+		_, err = patcher.PatchTicket(ctx, loner.ID, ports.TicketPatch{ParentID: &loner.ID})
+		wantCode(t, err, domain.CodeTicketParentInvalid)
+		_, err = patcher.PatchTicket(ctx, loner.ID, ports.TicketPatch{ParentID: &child.ID})
+		wantCode(t, err, domain.CodeTicketParentInvalid)
+		// The feature has a child, so it cannot become a child itself.
+		_, err = patcher.PatchTicket(ctx, feature.ID, ports.TicketPatch{ParentID: &loner.ID})
+		wantCode(t, err, domain.CodeTicketParentInvalid)
+
+		// Nothing above moved anything.
+		for _, want := range []struct{ id, parent string }{{feature.ID, ""}, {child.ID, feature.ID}, {loner.ID, ""}} {
+			if got := must(b.GetTicket(ctx, want.id)); got.ParentID != want.parent {
+				t.Fatalf("ticket %s has parent %q after refused patches, want %q", want.id, got.ParentID, want.parent)
+			}
+		}
+	})
+
+	t.Run("children count and delete guard", func(t *testing.T) {
+		b, pid := newPort(t)
+		must := mustTicket(t)
+		feature := must(b.CreateTicket(ctx, pid, "Feature", "", "", ""))
+		first := must(b.CreateTicket(ctx, pid, "First", "", "", feature.ID))
+		second := must(b.CreateTicket(ctx, pid, "Second", "", "", feature.ID))
+		loner := must(b.CreateTicket(ctx, pid, "Loner", "", "", ""))
+
+		// children_count is derived on every read: get and each list item.
+		if got := must(b.GetTicket(ctx, feature.ID)); got.ChildrenCount != 2 {
+			t.Fatalf("GetTicket of the feature counts %d children, want 2", got.ChildrenCount)
+		}
+		if got := must(b.GetTicket(ctx, first.ID)); got.ChildrenCount != 0 {
+			t.Fatalf("GetTicket of a child counts %d children, want 0", got.ChildrenCount)
+		}
+		all, err := b.ListTickets(ctx, pid, ports.TicketFilter{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		counts := map[string]int{}
+		for _, tk := range all {
+			counts[tk.ID] = tk.ChildrenCount
+		}
+		if counts[feature.ID] != 2 || counts[first.ID] != 0 || counts[second.ID] != 0 || counts[loner.ID] != 0 {
+			t.Fatalf("ListTickets children counts = %v, want 2 on the feature and 0 elsewhere", counts)
+		}
+
+		// A feature task cannot be deleted while it has children.
+		wantCode(t, b.DeleteTicket(ctx, feature.ID), domain.CodeTicketHasChildren)
+		if _, err := b.GetTicket(ctx, feature.ID); err != nil {
+			t.Fatalf("the refused delete removed the feature: %v", err)
+		}
+		if err := b.DeleteTicket(ctx, first.ID); err != nil {
+			t.Fatalf("deleting a child: %v", err)
+		}
+		if got := must(b.GetTicket(ctx, feature.ID)); got.ChildrenCount != 1 {
+			t.Fatalf("after deleting a child the feature counts %d children, want 1", got.ChildrenCount)
+		}
+		wantCode(t, b.DeleteTicket(ctx, feature.ID), domain.CodeTicketHasChildren)
+		if err := b.DeleteTicket(ctx, second.ID); err != nil {
+			t.Fatalf("deleting the last child: %v", err)
+		}
+		if err := b.DeleteTicket(ctx, feature.ID); err != nil {
+			t.Fatalf("deleting the feature once its children are gone: %v", err)
+		}
+		_, err = b.GetTicket(ctx, feature.ID)
+		wantCode(t, err, "TICKET_NOT_FOUND")
 	})
 
 	t.Run("deleted ticket is gone", func(t *testing.T) {
 		b, pid := newPort(t)
-		created, err := b.CreateTicket(ctx, pid, "T", "", "")
+		created, err := b.CreateTicket(ctx, pid, "T", "", "", "")
 		if err != nil {
 			t.Fatal(err)
 		}

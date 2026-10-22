@@ -261,8 +261,11 @@ func TestPrompts_NameNoRemovedTool(t *testing.T) {
 	for _, role := range []domain.SessionRole{domain.RolePeer, domain.RoleDelegate, domain.RoleArchitect} {
 		texts["brief/"+string(role)] = taskBrief(tk, role, taskCounts{})
 	}
+	project := &domain.Project{ID: "p1", Name: "harness"}
+	texts["brief/project"] = projectBrief(projectBriefInput{Project: project})
+	texts["prompt/project"] = modePrompt(domain.SessionModeProduct, nil, project, "")
 	for mode, names := range modeSkillNames {
-		texts["prompt/"+string(mode)] = modePrompt(mode, tk, "")
+		texts["prompt/"+string(mode)] = modePrompt(mode, tk, nil, "")
 		for _, skill := range names {
 			files, err := modeSkillFiles(skill)
 			if err != nil {
@@ -290,7 +293,9 @@ func TestPrompts_NameNoRemovedTool(t *testing.T) {
 // Every task tool a prompt names exists: the brief for each role and the
 // mode skills never point an agent at a tool the server does not serve.
 func TestPrompts_NameOnlyRealTaskTools(t *testing.T) {
-	texts := map[string]string{}
+	texts := map[string]string{
+		"brief/project": projectBrief(projectBriefInput{Project: &domain.Project{ID: "p1", Name: "harness"}}),
+	}
 	for _, role := range []domain.SessionRole{domain.RolePeer, domain.RoleDelegate, domain.RoleArchitect} {
 		texts["brief/"+string(role)] = taskBrief(&domain.Ticket{ID: "tk1", Title: "Ship the thing"}, role, taskCounts{})
 	}

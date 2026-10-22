@@ -135,7 +135,9 @@ func (f fakeTickets) GetTicket(_ context.Context, id string) (*domain.Ticket, er
 	return nil, &domain.StructuredError{Code: "TICKET_NOT_FOUND", Message: "no"}
 }
 
-func (f fakeTickets) ListTickets(context.Context, string) ([]*domain.Ticket, error) { return nil, nil }
+func (f fakeTickets) ListTickets(context.Context, string, ports.TicketFilter) ([]*domain.Ticket, error) {
+	return nil, nil
+}
 
 // feedRecorder is a ports.ProjectChangeSink that keeps what was announced.
 type feedRecorder struct {

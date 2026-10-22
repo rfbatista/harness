@@ -36,6 +36,7 @@ type sessionMode struct {
 var sessionModes = []sessionMode{
 	{domain.SessionModeDefault, "default", "the agent as it is"},
 	{domain.SessionModeArchitect, "architect", "specs per application as task documents, delegated to planning agents"},
+	{domain.SessionModeProduct, "product", "interviews you into a PRD on this task and one child task per piece of work"},
 }
 
 // picker collects what a new session needs: which agent (or plain claude),
@@ -138,8 +139,11 @@ func (p *picker) key(s *Screen, msg tea.KeyPressMsg) tea.Cmd {
 			return s.start(p.agents[p.agent], sessionModes[p.mode].mode, p.repos[p.repo].ID, strings.TrimSpace(p.prompt.Value()))
 		}
 		if p.step == stepPrompt {
-			if sessionModes[p.mode].mode == domain.SessionModeArchitect {
+			switch sessionModes[p.mode].mode {
+			case domain.SessionModeArchitect:
 				p.prompt.Placeholder = "optional — the architect starts from the task; enter to start"
+			case domain.SessionModeProduct:
+				p.prompt.Placeholder = "optional — the product manager starts from the task; enter to start"
 			}
 			return p.prompt.Focus()
 		}

@@ -211,7 +211,7 @@ func TestARefusedCommitPutsTheShellBack(t *testing.T) {
 
 	stray := filepath.Join(a.shell, "task", "stray.md")
 	writeShellFile(t, a, "task/stray.md", "# Stray\n")
-	notStored := "NOT_STORED: task/stray.md is outside the folders the harness stores (task/docs, project/docs, task/comments, task/designs, project/designs); nothing was written"
+	notStored := "NOT_STORED: task/stray.md is outside the folders the harness stores (task/docs, project/docs, tasks/<id>/docs, task/comments, task/designs, project/designs); nothing was written"
 	if out := runHook(t, a, e.srv.URL, "PostToolUse", editTools, editInput("Write", stray)); !sameJSON(out, blocked(notStored)) {
 		t.Fatalf("PostToolUse on a file the harness does not store = %s, want %s", out, blocked(notStored))
 	}

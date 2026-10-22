@@ -74,7 +74,7 @@ func notify(ctx context.Context, n ports.Notifier, req ports.NotifyRequest, args
 // sessionNotificationTools let a session read the inbox and post to it, as
 // itself: what it posts is attributed to the session, its task and its
 // project.
-func sessionNotificationTools(planningSvc ports.Planning, sessions ports.SessionRepository, nt NotificationTooling) []domain.Tool {
+func sessionNotificationTools(sessions ports.SessionRepository, nt NotificationTooling) []domain.Tool {
 	return []domain.Tool{
 		{
 			Name: "list_notifications",
@@ -89,7 +89,7 @@ func sessionNotificationTools(planningSvc ports.Planning, sessions ports.Session
 				if nt.Notifier == nil {
 					return nil, errNotificationsOff
 				}
-				scope, err := resolveTaskScope(ctx, planningSvc, sessions)
+				sess, err := resolveProjectScope(ctx, sessions)
 				if err != nil {
 					return nil, err
 				}
@@ -100,7 +100,7 @@ func sessionNotificationTools(planningSvc ports.Planning, sessions ports.Session
 				switch getString(args, "scope", "all") {
 				case "all":
 				case "project":
-					q.ProjectID = scope.session.ProjectID
+					q.ProjectID = sess.ProjectID
 				default:
 					return nil, invalidInput("scope must be all or project")
 				}
@@ -120,12 +120,14 @@ func sessionNotificationTools(planningSvc ports.Planning, sessions ports.Session
 				if nt.Notifier == nil {
 					return nil, errNotificationsOff
 				}
-				scope, err := resolveTaskScope(ctx, planningSvc, sessions)
+				// A session with no task (a project-level product session)
+				// posts as the session and its project alone.
+				sess, err := resolveProjectScope(ctx, sessions)
 				if err != nil {
 					return nil, err
 				}
 				return notify(ctx, nt.Notifier, ports.NotifyRequest{
-					SessionID: scope.session.ID, ProjectID: scope.ticket.ProjectID, TaskID: scope.ticket.ID,
+					SessionID: sess.ID, ProjectID: sess.ProjectID, TaskID: sess.TicketID,
 				}, args)
 			},
 		},

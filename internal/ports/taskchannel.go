@@ -68,6 +68,13 @@ type TaskChannel interface {
 	// RequestUserReview opens a pending review request for the person.
 	// ARCHITECT_ONLY.
 	RequestUserReview(ctx context.Context, architectID string, req ReviewRequestInput) (*domain.ReviewRequest, error)
+	// RequestUserReviewOn is RequestUserReview for a session that has no
+	// task of its own (a project-level product session, ADR 0016): it opens
+	// the review on taskID, a task of its project, and the person's answer
+	// comes back to it. INVALID_INPUT when the session works on a task (it
+	// asks on that one), TICKET_NOT_FOUND, TASK_NOT_ON_PROJECT when the task
+	// is in another project, ARCHITECT_ONLY when the task has an architect.
+	RequestUserReviewOn(ctx context.Context, bySessionID, taskID string, req ReviewRequestInput) (*domain.ReviewRequest, error)
 	// WithdrawReview withdraws a pending review request. ARCHITECT_ONLY,
 	// REVIEW_NOT_FOUND, REVIEW_NOT_PENDING.
 	WithdrawReview(ctx context.Context, architectID, reviewID string) (*domain.ReviewRequest, error)
@@ -82,6 +89,12 @@ type TaskChannel interface {
 	// only the architect may: anyone else gets TASK_STATUS_OWNED_BY_ARCHITECT.
 	// reason is optional, at most domain.MaxStatusReasonLen characters.
 	SetTaskStatus(ctx context.Context, bySessionID string, status domain.TicketStatus, reason string) (*domain.Ticket, error)
+	// SetTaskStatusOn is SetTaskStatus for a session that has no task of its
+	// own: it moves taskID, a task of its project, under the same authority
+	// rule (TASK_STATUS_OWNED_BY_ARCHITECT when the task has an architect).
+	// INVALID_INPUT when the session works on a task, TICKET_NOT_FOUND,
+	// TASK_NOT_ON_PROJECT.
+	SetTaskStatusOn(ctx context.Context, bySessionID, taskID string, status domain.TicketStatus, reason string) (*domain.Ticket, error)
 	// SetStatusCheck sets the interval of the loop on one of the architect's
 	// delegates: 0 pauses it, a value in [2, 240] resumes or retunes it. A
 	// missing loop is created only for a delegate the architect started

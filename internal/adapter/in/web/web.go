@@ -264,7 +264,7 @@ func (s *server) layout(ctx context.Context, title, projectID, taskID string) (s
 		return frame, nil
 	}
 
-	list, err := s.deps.Tasks.ListTickets(ctx, projectID)
+	list, err := s.deps.Tasks.ListTickets(ctx, projectID, ports.TicketFilter{})
 	if err != nil {
 		return shell.Frame{}, err
 	}

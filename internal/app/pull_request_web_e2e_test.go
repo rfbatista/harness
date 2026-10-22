@@ -88,7 +88,7 @@ func TestPullRequestsInTheWebUI_EndToEnd(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	task, err := s.plan.CreateTicket(ctx, p.ID, "Create pull request", "Open a PR from the UI", domain.TicketStatusInProgress)
+	task, err := s.plan.CreateTicket(ctx, p.ID, "Create pull request", "Open a PR from the UI", domain.TicketStatusInProgress, "")
 	if err != nil {
 		t.Fatal(err)
 	}

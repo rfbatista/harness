@@ -119,6 +119,11 @@ To see the project around the task, and who to hand work to:
 - mcp__task__list_bounded_contexts — its bounded contexts, with their language and zones
 - mcp__task__list_agents — the agents a session can run as, and what each is for
 
+The project's tasks, to shape the work around this one:
+
+- mcp__task__list_project_tasks — the project's tasks: id, title, status, parent_id; with parent_id, the children of one
+- mcp__task__create_task — create a task in this project; parent_id defaults to this task, "" makes a top-level task
+
 A dev server you started shows in the Design tab too (files go in task/designs/):
 
 - mcp__task__publish_artifact — publish a dev server's loopback URL; publish it again to refresh it
@@ -284,4 +289,141 @@ func (s *Service) attachedAssets(tk *domain.Ticket) []*domain.Artifact {
 		}
 	}
 	return attached
+}
+
+// projectBriefInput is what a project-level session (a product session with
+// no task, ADR 0016) is briefed on: the project, its repositories and its
+// bounded contexts. Repositories and Contexts may be empty.
+type projectBriefInput struct {
+	Project      *domain.Project
+	Repositories []*domain.Repository
+	Contexts     []*domain.BoundedContext
+}
+
+// briefProject gathers the brief of a project-level session on p. A failed
+// listing leaves that part out: the brief is help, not a gate.
+func (s *Service) briefProject(p *domain.Project) projectBriefInput {
+	in := projectBriefInput{Project: p}
+	if p == nil {
+		return in
+	}
+	if s.catalog.Repositories != nil {
+		repos, err := s.catalog.Repositories.ListRepositories(context.Background(), p.ID)
+		if err != nil {
+			slog.Warn("list the project's repositories for its brief", "project", p.ID, "err", err)
+		}
+		in.Repositories = repos
+	}
+	if s.catalog.Contexts != nil {
+		in.Contexts = s.catalog.Contexts.ListBoundedContexts(p.ID)
+	}
+	return in
+}
+
+// applyProjectContext is applyTaskContext for a session that has no task:
+// the per-session task MCP server and its allow-list as for a task session
+// (the tools that need a task answer SESSION_HAS_NO_TASK), and the project
+// brief in place of the task brief.
+func applyProjectContext(cfg *llmkit.SessionConfig, in projectBriefInput, taskServerURL string) {
+	if in.Project == nil {
+		return
+	}
+	if taskServerURL != "" {
+		cfg.MCPServers = append(cfg.MCPServers, llmkit.MCPServerSpec{
+			Name:      taskServerName,
+			Transport: "http",
+			URL:       taskServerURL,
+		})
+	}
+	for _, name := range tooling.SessionTaskToolNames {
+		cfg.AllowedTools = append(cfg.AllowedTools, llmkit.MCPToolRef(taskServerName, name))
+	}
+	cfg.AppendSystem = appendSection(cfg.AppendSystem, projectBrief(in))
+}
+
+// projectBrief is the block describing the project a session with no task
+// works on, the virtual shell holding its documents, how to create the
+// feature task and its children, and which task tools do not apply here.
+func projectBrief(in projectBriefInput) string {
+	var b strings.Builder
+	p := in.Project
+	b.WriteString("## Your project\n\n")
+	b.WriteString("You are working on project " + p.Name + " with no task: a product session that defines a feature.\n")
+	b.WriteString("You create the feature task yourself, then its PRD, then one child task and one brief per piece of work.\n")
+	if len(in.Repositories) > 0 {
+		b.WriteString("\nRepositories (one application each):\n\n")
+		for _, r := range in.Repositories {
+			line := "- " + r.Name
+			if d := strings.TrimSpace(r.Description); d != "" {
+				line += " — " + d
+			}
+			b.WriteString(line + "\n")
+		}
+	}
+	if len(in.Contexts) > 0 {
+		b.WriteString("\nBounded contexts:\n\n")
+		for _, c := range in.Contexts {
+			line := "- " + c.Name
+			if d := strings.TrimSpace(c.Purpose); d != "" {
+				line += " — " + d
+			}
+			b.WriteString(line + "\n")
+		}
+	}
+	b.WriteString(`
+The project's documents, designs and every task's documents are files in
+your virtual shell, $HARNESS_SHELL ("Your virtual shell" below names its
+path; its README.md maps the layout and the rules). Work on them with your
+ordinary tools; none of it takes a tool call:
+
+- Read with Read, grep, ls and sed -n. .index.json lists every file with its id, kind, scope and version.
+- Write with Write, Edit, sed -i, tee, cp, mv, rm, touch and mkdir. Each change is checked before it lands and stored once it has. Shell redirects (>, >>) into the folder are refused: they would not be stored.
+
+What the folders hold:
+
+- tasks/<id>/docs/ — a task's documents, one folder per task of the project (ls tasks/ lists their ids). A file you create there is a new document on that task, titled by its first heading. This is where the PRD goes (under the feature task) and each brief (under its child). Any text format: .md, .html, .txt.
+- project/docs/ — the project's documents: architecture, conventions, decisions, the specs and contracts tasks build on. Read them before the interview; a person moves documents to project level, so write yours onto a task.
+- project/designs/ — the project's design assets. Read-only here.
+
+This session has no task, so there is no task/ folder: no task.json, comments,
+resources or designs of its own.
+
+Files can be large. grep for what you need, read that range with sed -n or
+Read with offset and limit, never the whole file; change a part with Edit
+or sed -i rather than rewriting it.
+
+A refused write says why, starting with its code:
+
+- BASE_VERSION_STALE — the file changed since you got it and has been refreshed: read it again and redo the change
+- READ_ONLY — the path is not yours to change
+- REDIRECT_DENIED — write with Write, Edit or tee instead of > or >>
+- TASK_NOT_FOUND, TASK_NOT_ON_PROJECT — tasks/<id> names no task of this project: create it first with mcp__task__create_task
+- NOT_STORED — the path is outside the folders the harness stores (here: tasks/<id>/docs and project/docs); nothing was written
+- SHELL_UNAVAILABLE — the harness could not be reached: redo the change once it is back
+
+The project's tasks, and how to create the feature and its children:
+
+- mcp__task__list_project_tasks — the project's tasks: id, title, status, parent_id; with parent_id, the children of one
+- mcp__task__create_task — create a task in this project. Pass parent_id "" explicitly for the feature task (there is no session task to default to), then the feature task's id for each child
+
+To see the project around the feature, and who will implement it:
+
+- mcp__task__list_project_repositories — the project's repositories: its applications
+- mcp__task__list_bounded_contexts — its bounded contexts, with their language and zones
+- mcp__task__list_agents — the agents a session can run as, and what each is for
+
+To ask for review once the PRD and the briefs are written, name the feature
+task with task_id: only a session with no task of its own passes it.
+
+- mcp__task__request_user_review — task_id the feature task: attach the PRD (its id in .index.json; only the feature task's own documents attach) and name each child task by id and title in the body. The person's answer comes back to you as a turn
+- mcp__task__update_task_status — task_id the feature task: move it to review with a reason when you ask for the review
+
+The tools that act on a session's own task answer SESSION_HAS_NO_TASK here:
+mcp__task__get_task, mcp__task__start_task_session, mcp__task__list_task_sessions,
+the rest of the architect channel, mcp__task__publish_artifact and the attach
+tools; mcp__task__request_user_review and mcp__task__update_task_status do too
+without task_id. If the review cannot be opened, tell the person with notify.
+
+These tools always act on this session's project; they take no project id.`)
+	return b.String() + "\n\n" + notificationsSection
 }

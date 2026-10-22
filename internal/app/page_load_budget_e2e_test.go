@@ -198,7 +198,7 @@ func (b *budgetProject) addTickets(n int) {
 	b.t.Helper()
 	reviews := sqlite.NewReviewRequestRepository(b.db)
 	for range n {
-		tk, err := b.plan.CreateTicket(b.ctx, b.project, fmt.Sprintf("Task %02d", len(b.tickets)), "A task of the budget project.", domain.TicketStatusInProgress)
+		tk, err := b.plan.CreateTicket(b.ctx, b.project, fmt.Sprintf("Task %02d", len(b.tickets)), "A task of the budget project.", domain.TicketStatusInProgress, "")
 		if err != nil {
 			b.t.Fatal(err)
 		}
