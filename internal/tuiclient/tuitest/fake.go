@@ -212,12 +212,12 @@ func (f *Fake) RemoveRepositoryIgnoredPath(context.Context, string, string) (*do
 
 // --- tickets --------------------------------------------------------------------
 
-func (f *Fake) ListTickets(_ context.Context, projectID string) ([]*domain.Ticket, error) {
+func (f *Fake) ListTickets(_ context.Context, projectID string, filter ports.TicketFilter) ([]*domain.Ticket, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	var out []*domain.Ticket
 	for _, t := range f.Tickets {
-		if t.ProjectID == projectID {
+		if t.ProjectID == projectID && (filter.ParentID == nil || t.ParentID == *filter.ParentID) {
 			out = append(out, t)
 		}
 	}
@@ -235,7 +235,7 @@ func (f *Fake) GetTicket(_ context.Context, id string) (*domain.Ticket, error) {
 	return nil, notFound("TICKET_NOT_FOUND", "ticket")
 }
 
-func (f *Fake) CreateTicket(context.Context, string, string, string, domain.TicketStatus) (*domain.Ticket, error) {
+func (f *Fake) CreateTicket(context.Context, string, string, string, domain.TicketStatus, string) (*domain.Ticket, error) {
 	return nil, errReadOnly
 }
 

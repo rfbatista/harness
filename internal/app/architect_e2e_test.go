@@ -91,7 +91,7 @@ func newArchE2E(t *testing.T) *archE2E {
 	if err != nil {
 		t.Fatal(err)
 	}
-	tk, err := e.plan.CreateTicket(e.ctx, p.ID, "Architect highlights", "", domain.TicketStatusTodo)
+	tk, err := e.plan.CreateTicket(e.ctx, p.ID, "Architect highlights", "", domain.TicketStatusTodo, "")
 	if err != nil {
 		t.Fatal(err)
 	}

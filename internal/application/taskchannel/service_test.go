@@ -125,6 +125,7 @@ func (s *streams) Announce(id string, ev ports.SessionEvent) {
 type fixture struct {
 	svc      *taskchannel.Service
 	plan     *planning.Service
+	projects *sqlite.ProjectRepository
 	sessions *sqlite.SessionRepository
 	del      *delivery
 	feed     *feed
@@ -147,9 +148,9 @@ func newFixture(t *testing.T) *fixture {
 	projects := sqlite.NewProjectRepository(db)
 	p, _ := projects.Create("proj", "/tmp/proj")
 	plan := planning.NewService(sqlite.NewTicketRepository(db), sqlite.NewDocumentRepository(db), projects)
-	f := &fixture{plan: plan, sessions: sqlite.NewSessionRepository(db), feed: &feed{}, streams: &streams{got: map[string][]string{}},
+	f := &fixture{plan: plan, projects: projects, sessions: sqlite.NewSessionRepository(db), feed: &feed{}, streams: &streams{got: map[string][]string{}},
 		bus: eventbus.New(), project: p.ID, clock: time.Date(2026, 10, 7, 9, 0, 0, 0, time.UTC)}
-	tk, _ := plan.CreateTicket(context.Background(), p.ID, "Architect highlights", "", domain.TicketStatusTodo)
+	tk, _ := plan.CreateTicket(context.Background(), p.ID, "Architect highlights", "", domain.TicketStatusTodo, "")
 	f.ticket = tk.ID
 	f.del = newDelivery(f.now)
 	f.svc = taskchannel.New(f.sessions, plan, taskchannel.Repositories{

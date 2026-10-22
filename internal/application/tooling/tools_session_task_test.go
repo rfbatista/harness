@@ -42,7 +42,7 @@ func newTaskToolsFixture(t *testing.T) *taskToolsFixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	tk, err := plan.CreateTicket(context.Background(), proj.ID, "Ship the thing", "with care", domain.TicketStatusInProgress)
+	tk, err := plan.CreateTicket(context.Background(), proj.ID, "Ship the thing", "with care", domain.TicketStatusInProgress, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -180,15 +180,18 @@ func TestSessionTaskTools_UpdateTaskStatus_Input(t *testing.T) {
 	wantCode(t, err, "SESSION_NOT_FOUND")
 }
 
-// There is no task id to pass: one smuggled into the arguments is ignored and
-// the session's own task is the one that moves.
+// A session on a task moves only that task: a task_id is refused (it is
+// for a session with no task), and a ticket_id is no argument at all, so it
+// is ignored and the session's own task is the one that moves.
 func TestSessionTaskTools_UpdateTaskStatus_OnlyItsOwnTask(t *testing.T) {
 	f := newTaskToolsFixture(t)
-	other, err := f.plan.CreateTicket(context.Background(), f.projectID, "Elsewhere", "", domain.TicketStatusTodo)
+	other, err := f.plan.CreateTicket(context.Background(), f.projectID, "Elsewhere", "", domain.TicketStatusTodo, "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	out, err := f.call(t, f.sessionID, "update_task_status", map[string]any{"status": "done", "task_id": other.ID, "ticket_id": other.ID})
+	_, err = f.call(t, f.sessionID, "update_task_status", map[string]any{"status": "done", "task_id": other.ID})
+	wantCode(t, err, "INVALID_INPUT")
+	out, err := f.call(t, f.sessionID, "update_task_status", map[string]any{"status": "done", "ticket_id": other.ID})
 	if err != nil {
 		t.Fatal(err)
 	}

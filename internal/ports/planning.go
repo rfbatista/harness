@@ -11,8 +11,10 @@ import (
 type TicketRepository interface {
 	Get(ctx context.Context, id string) *domain.Ticket
 	ListByProject(ctx context.Context, projectID string) []*domain.Ticket
-	Create(projectID, title, description string, status domain.TicketStatus) (*domain.Ticket, error)
-	Update(id, title, description string, status domain.TicketStatus) (*domain.Ticket, error)
+	// Create and Update carry the parent as parentID; "" is a top-level
+	// ticket. Update replaces every column, the parent included.
+	Create(projectID, title, description string, status domain.TicketStatus, parentID string) (*domain.Ticket, error)
+	Update(id, title, description string, status domain.TicketStatus, parentID string) (*domain.Ticket, error)
 	Delete(id string) error
 	// ActivityByProject answers each project's open task count and newest
 	// update, for every project that has tasks.
@@ -47,11 +49,19 @@ type DocumentRepository interface {
 
 // Driving ports of the planning service. *planning.Service satisfies them.
 
+// TicketFilter narrows ListTickets within a project. The zero value lists
+// every ticket of the project, children included. A non-nil ParentID lists
+// the children of that ticket only; pointing it at "" lists the top-level
+// tickets.
+type TicketFilter struct {
+	ParentID *string
+}
+
 // TicketReader reads a project's tickets: what a page that only shows tasks
 // needs. Network-safe like TicketBoard, which embeds it.
 type TicketReader interface {
 	GetTicket(ctx context.Context, id string) (*domain.Ticket, error)
-	ListTickets(ctx context.Context, projectID string) ([]*domain.Ticket, error)
+	ListTickets(ctx context.Context, projectID string, filter TicketFilter) ([]*domain.Ticket, error)
 }
 
 // TicketDocumentReader reads the documents linked to a task (written by its
@@ -75,9 +85,15 @@ type DocumentReader interface {
 // TicketBoard manages a project's tickets (tasks, in the UI). It is
 // network-safe: tui-client implements it over HTTP, so every method takes a
 // context and reports failure, including TICKET_NOT_FOUND, as an error.
+//
+// CreateTicket takes the parent as parentID: "" creates a top-level ticket,
+// anything else must name a top-level ticket of the same project, or the
+// create is refused with domain.CodeTicketParentInvalid. UpdateTicket
+// replaces the text and status and keeps the parent; the parent moves
+// through TicketPatcher.
 type TicketBoard interface {
 	TicketReader
-	CreateTicket(ctx context.Context, projectID, title, description string, status domain.TicketStatus) (*domain.Ticket, error)
+	CreateTicket(ctx context.Context, projectID, title, description string, status domain.TicketStatus, parentID string) (*domain.Ticket, error)
 	UpdateTicket(ctx context.Context, id, title, description string, status domain.TicketStatus) (*domain.Ticket, error)
 	DeleteTicket(ctx context.Context, id string) error
 }
@@ -89,6 +105,11 @@ type TicketPatch struct {
 	Title       *string
 	Description *string
 	Status      *domain.TicketStatus
+	// ParentID moves the ticket under a feature task; pointing it at ""
+	// makes it top-level again. A parent the ticket cannot take (see
+	// domain.Ticket.CheckParent) is refused with
+	// domain.CodeTicketParentInvalid.
+	ParentID *string
 	// StatusReason and BySessionID say why and by whom the status moves; an
 	// empty BySessionID is a person. They are recorded only when it does.
 	StatusReason string

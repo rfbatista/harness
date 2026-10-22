@@ -70,7 +70,7 @@ func (h Handler) Project(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	list, err := h.Tasks.ListTickets(ctx, project.ID)
+	list, err := h.Tasks.ListTickets(ctx, project.ID, ports.TicketFilter{})
 	if err != nil {
 		return err
 	}
@@ -161,7 +161,7 @@ func (h Handler) task(w http.ResponseWriter, r *http.Request, codeRoute *code.Ro
 	if view.Seed.Artifacts, err = h.designArtifacts(ctx, ports.ArtifactFilter{TicketID: task.ID}); err != nil {
 		return err
 	}
-	tickets, err := h.Tasks.ListTickets(ctx, project.ID)
+	tickets, err := h.Tasks.ListTickets(ctx, project.ID, ports.TicketFilter{})
 	if err != nil {
 		return err
 	}

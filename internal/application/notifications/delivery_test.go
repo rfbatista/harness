@@ -215,7 +215,7 @@ func TestAProviderGetsTheNotificationWithItsNames(t *testing.T) {
 	done := make(chan struct{})
 	cap := &capture{f: func(n domain.Notification) { got = n; close(done) }}
 	r2 := newDeliveryRig(t, notifications.Provider{Delivery: cap, Defaults: notifications.Defaults{Enabled: true}})
-	tk, err := r2.Tickets.Create(r2.ProjectA, "Ship", "", domain.TicketStatusTodo)
+	tk, err := r2.Tickets.Create(r2.ProjectA, "Ship", "", domain.TicketStatusTodo, "")
 	if err != nil {
 		t.Fatal(err)
 	}

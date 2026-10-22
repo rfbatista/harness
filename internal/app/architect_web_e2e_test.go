@@ -109,7 +109,7 @@ func newArchWeb(t *testing.T) *archWeb {
 	if err != nil {
 		t.Fatal(err)
 	}
-	tk, err := e.plan.CreateTicket(e.ctx, p.ID, "Architect highlights", "Highlight the architect; let delegates talk to it; let it ask the person for reviews.", domain.TicketStatusTodo)
+	tk, err := e.plan.CreateTicket(e.ctx, p.ID, "Architect highlights", "Highlight the architect; let delegates talk to it; let it ask the person for reviews.", domain.TicketStatusTodo, "")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -18,7 +18,7 @@ func TestTicketRepo_CRUD(t *testing.T) {
 	}
 	r := NewTicketRepository(db)
 
-	tk, err := r.Create("p1", "Fix login", "users cannot log in", domain.TicketStatusBacklog)
+	tk, err := r.Create("p1", "Fix login", "users cannot log in", domain.TicketStatusBacklog, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -29,7 +29,7 @@ func TestTicketRepo_CRUD(t *testing.T) {
 		t.Fatalf("Get failed: %+v", got)
 	}
 
-	upd, err := r.Update(tk.ID, "Fix login now", "urgent", domain.TicketStatusInProgress)
+	upd, err := r.Update(tk.ID, "Fix login now", "urgent", domain.TicketStatusInProgress, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -63,7 +63,7 @@ func TestDocumentRepo_CRUDAndLinks(t *testing.T) {
 	tickets := NewTicketRepository(db)
 	docs := NewDocumentRepository(db)
 
-	tk, err := tickets.Create("p1", "Ticket", "", domain.TicketStatusBacklog)
+	tk, err := tickets.Create("p1", "Ticket", "", domain.TicketStatusBacklog, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -100,7 +100,7 @@ func TestDocumentRepo_CRUDAndLinks(t *testing.T) {
 	}
 
 	// Re-link, then Unlink.
-	tk2, _ := tickets.Create("p1", "T2", "", domain.TicketStatusBacklog)
+	tk2, _ := tickets.Create("p1", "T2", "", domain.TicketStatusBacklog, "")
 	if err := docs.Link(tk2.ID, d1.ID); err != nil {
 		t.Fatal(err)
 	}
@@ -138,9 +138,9 @@ func TestDocumentRepo_ListByTicketsListsEachLinkedDocumentOnce(t *testing.T) {
 	}
 	tickets := NewTicketRepository(db)
 	docs := NewDocumentRepository(db)
-	a, _ := tickets.Create("p1", "A", "", domain.TicketStatusBacklog)
-	b, _ := tickets.Create("p1", "B", "", domain.TicketStatusBacklog)
-	c, _ := tickets.Create("p1", "C", "", domain.TicketStatusBacklog)
+	a, _ := tickets.Create("p1", "A", "", domain.TicketStatusBacklog, "")
+	b, _ := tickets.Create("p1", "B", "", domain.TicketStatusBacklog, "")
+	c, _ := tickets.Create("p1", "C", "", domain.TicketStatusBacklog, "")
 	shared, _ := docs.Create("p1", "Spec", "# spec", domain.DocumentFormatMarkdown, domain.DocumentScopeTask)
 	own, _ := docs.Create("p1", "Plan", "# plan", domain.DocumentFormatMarkdown, domain.DocumentScopeTask)
 	other, _ := docs.Create("p1", "Notes", "# notes", domain.DocumentFormatMarkdown, domain.DocumentScopeTask)
@@ -271,8 +271,8 @@ func TestDocumentRepo_ScopePersistsFiltersAndMoves(t *testing.T) {
 	}
 
 	// A move keeps the ticket links and is a new version; the links are listable.
-	t1, _ := tickets.Create("p1", "T1", "", domain.TicketStatusBacklog)
-	t2, _ := tickets.Create("p1", "T2", "", domain.TicketStatusBacklog)
+	t1, _ := tickets.Create("p1", "T1", "", domain.TicketStatusBacklog, "")
+	t2, _ := tickets.Create("p1", "T2", "", domain.TicketStatusBacklog, "")
 	for _, tk := range []*domain.Ticket{t1, t2} {
 		if err := docs.Link(tk.ID, plan.ID); err != nil {
 			t.Fatal(err)

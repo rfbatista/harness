@@ -142,6 +142,32 @@ func (s *Service) taskSessions(ctx context.Context, ticketID string) []*domain.S
 	return s.sessions.List(ctx, ports.SessionFilter{TicketID: ticketID})
 }
 
+// projectScope is the scope of a session that has no task of its own on
+// taskID, a task of its project: how a project-level product session (ADR
+// 0016) reaches the feature task it created. A session that works on a task
+// acts on that one and gets INVALID_INPUT here; a task of another project
+// is TASK_NOT_ON_PROJECT.
+func (s *Service) projectScope(ctx context.Context, sessionID, taskID string) (*scope, error) {
+	sess := s.sessions.Get(sessionID)
+	if sess == nil {
+		return nil, notFound("SESSION_NOT_FOUND", "session not found")
+	}
+	if sess.TicketID != "" {
+		return nil, invalid("this session works on task " + sess.TicketID + ": it acts on that task, so task_id is not for it")
+	}
+	if taskID == "" {
+		return nil, invalid("task_id is required: this session has no task of its own")
+	}
+	tk, err := s.tickets.GetTicket(ctx, taskID)
+	if err != nil {
+		return nil, err
+	}
+	if tk.ProjectID != sess.ProjectID {
+		return nil, &domain.StructuredError{Code: "TASK_NOT_ON_PROJECT", Message: "task " + taskID + " is in another project"}
+	}
+	return &scope{session: sess, ticket: tk, all: s.taskSessions(ctx, taskID)}, nil
+}
+
 // architectScope is the caller's scope when the caller is its task's
 // architect; ARCHITECT_ONLY otherwise.
 func (s *Service) architectScope(ctx context.Context, architectID string) (*scope, error) {
@@ -175,16 +201,44 @@ func (s *Service) SessionRole(ctx context.Context, sessionID string) (domain.Ses
 
 // SetTaskStatus moves the session's task, under the authority rule.
 func (s *Service) SetTaskStatus(ctx context.Context, bySessionID string, status domain.TicketStatus, reason string) (*domain.Ticket, error) {
-	if status == "" {
-		return nil, invalid("status is required: one of backlog, todo, in_progress, review, done")
-	}
-	if len([]rune(reason)) > domain.MaxStatusReasonLen {
-		return nil, invalid("reason is too long: at most 280 characters")
+	if err := checkStatusMove(status, reason); err != nil {
+		return nil, err
 	}
 	sc, err := s.scopeOf(ctx, bySessionID)
 	if err != nil {
 		return nil, err
 	}
+	return s.moveTask(ctx, sc, bySessionID, status, reason)
+}
+
+// SetTaskStatusOn moves a task of the session's project for a session that
+// has no task of its own, under the same authority rule.
+func (s *Service) SetTaskStatusOn(ctx context.Context, bySessionID, taskID string, status domain.TicketStatus, reason string) (*domain.Ticket, error) {
+	if err := checkStatusMove(status, reason); err != nil {
+		return nil, err
+	}
+	sc, err := s.projectScope(ctx, bySessionID, taskID)
+	if err != nil {
+		return nil, err
+	}
+	return s.moveTask(ctx, sc, bySessionID, status, reason)
+}
+
+// checkStatusMove is the cheap part of a status move: a status, and a
+// reason that fits.
+func checkStatusMove(status domain.TicketStatus, reason string) error {
+	if status == "" {
+		return invalid("status is required: one of backlog, todo, in_progress, review, done")
+	}
+	if len([]rune(reason)) > domain.MaxStatusReasonLen {
+		return invalid("reason is too long: at most 280 characters")
+	}
+	return nil
+}
+
+// moveTask moves the scoped task as bySessionID: when the task has an
+// architect, only the architect may.
+func (s *Service) moveTask(ctx context.Context, sc *scope, bySessionID string, status domain.TicketStatus, reason string) (*domain.Ticket, error) {
 	if a := sc.architect(); a != nil && a.ID != bySessionID {
 		return nil, &domain.StructuredError{Code: "TASK_STATUS_OWNED_BY_ARCHITECT",
 			Message: "the task's architect session (" + a.ID + ") owns its status: report to it with message_architect instead"}

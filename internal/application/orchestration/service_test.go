@@ -28,14 +28,14 @@ type fakeResolver struct {
 }
 
 func (f *fakeResolver) GetProject(_ context.Context, id string) (*domain.Project, error) {
-	if id == "p1" {
+	if id == f.proj.ID {
 		return f.proj, nil
 	}
 	return nil, &domain.StructuredError{Code: "PROJECT_NOT_FOUND", Message: "project not found"}
 }
 
 func (f *fakeResolver) GetRepository(_ context.Context, id string) (*domain.Repository, error) {
-	if id == "r1" {
+	if id == f.repo.ID {
 		return f.repo, nil
 	}
 	return nil, &domain.StructuredError{Code: "REPOSITORY_NOT_FOUND", Message: "repository not found"}
@@ -51,9 +51,23 @@ func (f *fakeResolver) ResolveAgentRelations(a *domain.Agent) {}
 func (f *fakeResolver) ListMCPServers() []*domain.MCPServer   { return nil }
 func (f *fakeResolver) GetZone(id string) *domain.Zone        { return nil }
 
+func (f *fakeResolver) ListRepositories(_ context.Context, projectID string) ([]*domain.Repository, error) {
+	if projectID != f.repo.ProjectID {
+		return nil, nil
+	}
+	return []*domain.Repository{f.repo}, nil
+}
+
+func (f *fakeResolver) ListBoundedContexts(projectID string) []*domain.BoundedContext {
+	if projectID != f.proj.ID {
+		return nil
+	}
+	return []*domain.BoundedContext{{ID: "bc1", ProjectID: projectID, Name: "Billing", Purpose: "invoices and payments"}}
+}
+
 // catalogOf serves every catalog read from one fake.
 func catalogOf(f *fakeResolver) Catalog {
-	return Catalog{Projects: f, Repositories: f, Agents: f, MCPServers: f, Zones: f}
+	return Catalog{Projects: f, Repositories: f, Agents: f, MCPServers: f, Zones: f, Contexts: f}
 }
 
 type fakeTickets map[string]*domain.Ticket
@@ -140,7 +154,7 @@ func newTestServiceWithBin(t *testing.T, bin string) (*Service, *approval.Broker
 	hub := NewHub(64)
 	root := t.TempDir()
 	res := &fakeResolver{
-		proj: &domain.Project{ID: "p1", RootDir: root},
+		proj: &domain.Project{ID: "p1", Name: "harness", RootDir: root},
 		repo: &domain.Repository{ID: "r1", ProjectID: "p1", Name: "api", RootDir: root},
 	}
 	tickets := fakeTickets{

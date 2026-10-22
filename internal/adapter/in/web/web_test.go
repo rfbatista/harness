@@ -41,7 +41,7 @@ func (f fakeTickets) GetTicket(_ context.Context, id string) (*domain.Ticket, er
 	return nil, errs.Newf("TICKET_NOT_FOUND", "ticket %s not found", id)
 }
 
-func (f fakeTickets) ListTickets(_ context.Context, projectID string) ([]*domain.Ticket, error) {
+func (f fakeTickets) ListTickets(_ context.Context, projectID string, filter ports.TicketFilter) ([]*domain.Ticket, error) {
 	var out []*domain.Ticket
 	for _, t := range f.list {
 		if t.ProjectID == projectID {

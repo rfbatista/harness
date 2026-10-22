@@ -57,7 +57,7 @@ func TestSessionComments_EndToEnd(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	tk, err := plan.CreateTicket(ctx, p.ID, "Task", "", domain.TicketStatusInProgress)
+	tk, err := plan.CreateTicket(ctx, p.ID, "Task", "", domain.TicketStatusInProgress, "")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -141,7 +141,7 @@ func resourcesServer(t *testing.T) (*httpclient.Client, string) {
 	svc := planning.NewService(sqlite.NewTicketRepository(db), sqlite.NewDocumentRepository(db), projectRepo)
 	svc.Resources, svc.Comments = sqlite.NewTicketResourceRepository(db), sqlite.NewTicketCommentRepository(db)
 	svc.Blobs, svc.ContentURL = blobstore.New(t.TempDir()), httpapi.TicketResourceContentPath
-	tk, err := svc.CreateTicket(context.Background(), p.ID, "Task", "", "")
+	tk, err := svc.CreateTicket(context.Background(), p.ID, "Task", "", "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -160,7 +160,7 @@ func sessionCommentsServer(t *testing.T) (*httpclient.Client, string, portstest.
 	}
 	svc := planning.NewService(sqlite.NewTicketRepository(db), sqlite.NewDocumentRepository(db), projectRepo)
 	svc.Comments = sqlite.NewTicketCommentRepository(db)
-	tk, err := svc.CreateTicket(context.Background(), p.ID, "Task", "", "")
+	tk, err := svc.CreateTicket(context.Background(), p.ID, "Task", "", "", "")
 	if err != nil {
 		t.Fatal(err)
 	}

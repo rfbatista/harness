@@ -93,7 +93,7 @@ func newRepositoryFinder(cfg Config) *gitcli.RepositoryFinder {
 func newWorktreeManager(cfg Config) *gitcli.WorktreeManager {
 	return gitcli.NewWorktreeManager(cfg.gitOptions()...)
 }
-func newEnvFiles(cfg Config) *gitcli.EnvFiles { return gitcli.NewEnvFiles(cfg.gitOptions()...) }
+func newEnvFiles(cfg Config) *gitcli.EnvFiles  { return gitcli.NewEnvFiles(cfg.gitOptions()...) }
 func newGitHistory(cfg Config) *gitcli.History { return gitcli.NewHistory(cfg.gitOptions()...) }
 func newBranchPublisher(cfg Config) *gitcli.BranchPublisher {
 	return gitcli.NewBranchPublisher(cfg.gitOptions()...)
@@ -540,6 +540,7 @@ func newOrchestrationService(
 		Agents:       cat.Agents,
 		MCPServers:   cat.Capabilities,
 		Zones:        cat.Architecture,
+		Contexts:     cat.Architecture,
 	}, tickets, ws)
 	base := cfg.loopbackBaseURL()
 	// The route belongs to an inbound adapter, so the application layer is
