@@ -33,6 +33,8 @@ export function toChildRows(children, { projectId, documents }) {
       status: t.status,
       statusLabel: statusLabel(t.status),
       done: t.status === "done",
+      /** What x-bind sets on the row: present for a done task, absent otherwise. */
+      doneAttr: t.status === "done" ? "" : null,
       documents: docs,
       noDocuments: docs.length === 0,
       docCount: docs.length === 0 ? "" : `${docs.length} ${docs.length === 1 ? "doc" : "docs"}`,

@@ -17,7 +17,7 @@
 @layer blocks {
   .context-strip {
     display: grid;
-    grid-template-columns: var(--space-m) repeat(3, max-content) minmax(0, 1fr);
+    grid-template-columns: var(--space-m) repeat(3, minmax(0, max-content)) minmax(0, 1fr);
     grid-template-rows: var(--size-band-strip) auto;
     flex: none;
     background: var(--color-panel);
@@ -41,6 +41,8 @@
     color: var(--_tone);
     font-size: var(--text-sm);
     white-space: nowrap;
+    min-inline-size: 0;
+    overflow: hidden;
 
     &:hover { background: var(--color-hover); }
     &:focus-visible { outline-offset: calc(var(--border-focus-width) * -1); }
@@ -66,6 +68,13 @@
 
     &[data-quiet] .label { color: var(--color-ink-muted); font-weight: var(--weight-regular); }
 
+    /* A button that shortens on a narrow strip keeps its full name in aria-label. */
+    @media (width < 64rem) {
+      & .phrase { display: none; }
+      & .label[data-short] { font-size: 0; }
+      & .label[data-short]::after { content: attr(data-short); font-size: var(--text-sm); }
+    }
+
     &[data-tone="attention"] {
       --_tone: var(--color-attention);
       &::before { content: ""; inline-size: 0.5rem; block-size: 0.5rem; border-radius: var(--radius-round); background: var(--color-attention); }
@@ -84,6 +93,9 @@
     max-block-size: var(--size-band-cap);
     background: var(--color-raised);
     border-block-start: var(--border-width) solid var(--color-line);
+    animation: band-open var(--duration-quick) var(--ease-out);
+
+    @media (prefers-reduced-motion: reduce) { animation: none; }
 
     & > [data-band-scroll] {
       flex: 1 1 auto;
@@ -99,9 +111,14 @@
       min-block-size: var(--size-control-md);
       font-size: var(--text-sm);
 
+      & > .badge { justify-self: start; }
       &:last-child { border-block-end: 0; }
       &[data-done] .title { color: var(--color-ink-faint); }
     }
+  }
+
+  @keyframes band-open {
+    from { opacity: 0; }
   }
 
   .band-head {

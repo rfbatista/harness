@@ -51,7 +51,7 @@ func descriptionAttrs(description string) templ.Attributes {
 // reads the requests: amber when some wait on the person, hidden when none do.
 func reviewsButtonAttrs(pending int) templ.Attributes {
 	if pending > 0 {
-		return templ.Attributes{"data-tone": "attention"}
+		return templ.Attributes{"data-tone": "attention", "aria-label": "Reviews, " + strconv.Itoa(pending) + " waiting"}
 	}
 	return templ.Attributes{"hidden": true}
 }
@@ -139,6 +139,21 @@ func featurePhrase(f *FeatureView) string {
 		parts = append(parts, "all done")
 	}
 	return strings.Join(parts, " · ")
+}
+
+// featureName is the Feature button's accessible name, which a narrow strip
+// keeps whole while it hides the phrase: "Feature, 16 children, 3 in review,
+// 2 in progress". The browser's featureSummary says the same.
+func featureName(f *FeatureView) string {
+	n := len(childrenOf(f))
+	name := "Feature, " + strconv.Itoa(n) + " children"
+	if n == 1 {
+		name = "Feature, 1 child"
+	}
+	if phrase := featurePhrase(f); phrase != "" {
+		name += ", " + strings.ReplaceAll(phrase, " · ", ", ")
+	}
+	return name
 }
 
 // featureShowing is the Feature panel's header line: "Showing 16 tasks".
