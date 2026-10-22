@@ -413,7 +413,7 @@ func StartedBy(s *domain.Session, others map[string]*domain.Session, agentNames 
 func toRow(s *domain.Session, selectedID string, agentNames map[string]string, now time.Time, others map[string]*domain.Session, depth int) Row {
 	st := statusOf(s)
 	title := RowTitle(s)
-	agent := RunsAs(s, agentNames)
+	agent := RunsOn(s, agentNames)
 	return Row{
 		ID:        s.ID,
 		Title:     title,
@@ -626,6 +626,16 @@ func RunsAs(s *domain.Session, names map[string]string) string {
 		return agent
 	}
 	return agent + " as " + string(s.Mode)
+}
+
+// RunsOn is RunsAs with the model the session runs on, as its row in the
+// list says it: "plain claude as architect on opus". The browser's runsOn
+// (view.js) says the same.
+func RunsOn(s *domain.Session, names map[string]string) string {
+	if s.Model == "" {
+		return RunsAs(s, names)
+	}
+	return RunsAs(s, names) + " on " + s.Model
 }
 
 // RelativeTime is how long ago then was, as the pages write it: "now",

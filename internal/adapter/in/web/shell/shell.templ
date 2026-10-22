@@ -82,6 +82,11 @@ templ topBar(f Frame) {
 				@icon("saver")
 			</a>
 		}
+		if f.Top.ModelsHref != "" {
+			<a class="[ button ]" data-variant="ghost" data-icon href={ templ.SafeURL(f.Top.ModelsHref) } aria-label="Models" title="Models" { currentAttrs(f.Top.OnModels)... }>
+				@icon("model")
+			</a>
+		}
 		if f.Notifications != nil {
 			@notificationsBell(f.Notifications)
 		}

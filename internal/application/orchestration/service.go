@@ -146,6 +146,9 @@ type Service struct {
 	// IndexBuilds says when a repository index build runs on a checkout, so
 	// a session start does not copy an index being written. Nil: never.
 	IndexBuilds ports.RepositoryIndexBuilds
+	// Settings holds the architect and implementation models a new session
+	// starts with when its start names none. Nil: the built-in ones.
+	Settings ports.SettingsReader
 
 	// updates feeds the task-update turns to the courier, one at a time;
 	// deliverUpdate replaces the courier in tests.

@@ -140,6 +140,22 @@ func TestRunsAs(t *testing.T) {
 	}
 }
 
+func TestRunsOn(t *testing.T) {
+	names := map[string]string{"a1": "Reviewer"}
+	for _, c := range []struct {
+		s    *domain.Session
+		want string
+	}{
+		{&domain.Session{AgentID: "a1"}, "Reviewer"},
+		{&domain.Session{Mode: domain.SessionModeArchitect, Model: "opus"}, "plain claude as architect on opus"},
+		{&domain.Session{AgentID: "a1", Model: "sonnet"}, "Reviewer on sonnet"},
+	} {
+		if got := RunsOn(c.s, names); got != c.want {
+			t.Errorf("RunsOn(%+v) = %q, want %q", c.s, got, c.want)
+		}
+	}
+}
+
 func TestRelativeTimeMatchesTheBrowser(t *testing.T) {
 	now := time.Date(2026, 10, 2, 14, 0, 0, 0, time.UTC)
 	cases := map[time.Duration]string{

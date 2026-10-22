@@ -12,6 +12,7 @@ export function makeSession(overrides = {}) {
     task: "Port tickets screen to httpclient",
     agentId: "backend",
     mode: "",
+    model: "",
     status: "running",
     pendingApprovals: 0,
     lastAction: "",

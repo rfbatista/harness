@@ -10,6 +10,8 @@ import "../src/modules/credentials/infrastructure/gateways.test.js";
 import "../src/modules/credentials/presentation/components/gitCredentialsPage.test.js";
 import "../src/modules/credentials/presentation/components/repositoryCredential.test.js";
 import "../src/modules/credentials/presentation/view.test.js";
+import "../src/modules/models/infrastructure/models-gateway.test.js";
+import "../src/modules/models/presentation/components/modelTier.test.js";
 import "../src/modules/notifications/domain/notification.test.js";
 import "../src/modules/notifications/infrastructure/gateways.test.js";
 import "../src/modules/notifications/presentation/store.test.js";

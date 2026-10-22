@@ -92,8 +92,13 @@ func icon(name string) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
+		case "model":
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 13, "<svg aria-hidden=\"true\" viewBox=\"0 0 16 16\"><path d=\"M4.75 4.75h6.5v6.5h-6.5z M6.5 1.75v3 M9.5 1.75v3 M6.5 11.25v3 M9.5 11.25v3 M1.75 6.5h3 M1.75 9.5h3 M11.25 6.5h3 M11.25 9.5h3\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linejoin=\"round\" stroke-linecap=\"round\"></path></svg>")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
 		case "rail":
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 13, "<svg aria-hidden=\"true\" viewBox=\"0 0 16 16\"><path d=\"M2 2.75h12v10.5H2z M6 2.75v10.5\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linejoin=\"round\"></path></svg>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 14, "<svg aria-hidden=\"true\" viewBox=\"0 0 16 16\"><path d=\"M2 2.75h12v10.5H2z M6 2.75v10.5\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linejoin=\"round\"></path></svg>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

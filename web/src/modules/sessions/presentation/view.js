@@ -30,6 +30,12 @@ export function runsAs(session, agentNames = {}) {
   return session.mode ? `${agent} as ${session.mode}` : agent;
 }
 
+/** runsAs with the model, as a session's row says it: "plain claude as architect on opus". Mirrors RunsOn (view.go). */
+export function runsOn(session, agentNames = {}) {
+  const agent = runsAs(session, agentNames);
+  return session.model ? `${agent} on ${session.model}` : agent;
+}
+
 /**
  * How the session that started this one reads: its agent, or "another
  * session" when it is not among others; "" when a person started it. The BFF's
@@ -106,7 +112,7 @@ export function toRowView(session, { selectedId, now, agentNames, others = [], f
     meta:
       session.role === "delegate"
         ? delegateMeta(session, { now, agentNames, messages })
-        : meta(runsAs(session, agentNames), startedBy(session, others, agentNames), relativeTime(session.updatedAt, now)),
+        : meta(runsOn(session, agentNames), startedBy(session, others, agentNames), relativeTime(session.updatedAt, now)),
     selected: session.id === selectedId,
     fresh,
     attention: needsYou(session),
@@ -140,7 +146,7 @@ export function toGroupViews(sessions, { selectedId, now, agentNames, fresh = ne
  * delegateMeta (view.go) renders the same before the messages load.
  */
 function delegateMeta(session, { now, agentNames, messages }) {
-  const parts = [runsAs(session, agentNames)];
+  const parts = [runsOn(session, agentNames)];
   if (messages) parts.push(reportView(lastReportOf(messages, session.id), now));
   if (session.statusCheck) parts.push(statusCheckView(session.statusCheck, now).short);
   if (parts.length === 1) parts.push(relativeTime(session.updatedAt, now));

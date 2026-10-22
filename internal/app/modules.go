@@ -556,6 +556,7 @@ func newOrchestrationService(
 	}
 	svc.ShimBinary = cfg.ShimBinary
 	svc.TokenSavers = cat.Capabilities
+	svc.Settings = cat.Settings
 	svc.Transcripts = transcripts
 	svc.TranscriptReader = transcriptReader
 	svc.Terminals = terminals

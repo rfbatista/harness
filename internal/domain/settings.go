@@ -25,6 +25,10 @@ func ValidateSetting(key, value string) error {
 		if _, err := ParseCavemanIntensity(value); err != nil {
 			return err
 		}
+	case SettingModelArchitect, SettingModelImplementation:
+		if err := validateModelSetting(key, value); err != nil {
+			return err
+		}
 	}
 	return validateProviderSetting(key, value)
 }

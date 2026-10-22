@@ -61,6 +61,7 @@ func (s *Service) StartInteractive(ctx context.Context, req InteractiveRequest) 
 	// A task can hold several sessions at once, so the branch carries part of
 	// the session id: two sessions on one task must never race for one branch.
 	// A session with no task is named after the product work on its project.
+	model := s.sessionModel(mode, req.ParentSessionID, req.Model)
 	id := llmkit.NewSessionID()
 	task, branch := "Product: "+project.Name, defaultBranchName("product "+project.Name)
 	if ticket != nil {
@@ -75,7 +76,7 @@ func (s *Service) StartInteractive(ctx context.Context, req InteractiveRequest) 
 		TicketID:     req.TicketID,
 		Branch:       branch + "-" + id[:8],
 		BaseBranch:   req.BaseBranch,
-		Model:        req.Model,
+		Model:        model,
 		AutoAccept:   req.AutoAccept,
 		Mode:         mode,
 		Role:         s.newSessionRole(ctx, mode, req.ParentSessionID),
@@ -97,7 +98,7 @@ func (s *Service) StartInteractive(ctx context.Context, req InteractiveRequest) 
 		TicketID:        req.TicketID,
 		Task:            task,
 		WorkingDir:      p.cfg.WorkingDir,
-		Model:           req.Model,
+		Model:           model,
 		Status:          domain.SessionRunning,
 		AutoRun:         p.permission == llmkit.PermissionBypass,
 		Interactive:     true,
@@ -542,4 +543,20 @@ func (s *Service) agentSpec(cfg llmkit.SessionConfig, conv ports.Conversation, p
 		spec.HookURL = s.SessionHookURL(cfg.ID)
 	}
 	return spec
+}
+
+// sessionModel is the model a new session starts with: the one its start
+// names, else its tier's from the settings (domain.ResolveSessionModel).
+func (s *Service) sessionModel(mode domain.SessionMode, parentSessionID, named string) string {
+	if named != "" {
+		return named
+	}
+	var architect, implementation string
+	if s.Settings != nil {
+		architect = s.Settings.Setting(domain.SettingModelArchitect)
+		implementation = s.Settings.Setting(domain.SettingModelImplementation)
+	}
+	return domain.ResolveSessionModel(mode, parentSessionID != "",
+		domain.TierModel(architect, domain.DefaultArchitectModel),
+		domain.TierModel(implementation, domain.DefaultImplementationModel))
 }

@@ -5,7 +5,7 @@ import { assert, file, test } from "../../../shared/testing/test.js";
 import { needsYou } from "../domain/session.js";
 import { makeSession, T0 } from "../testing/fixtures.js";
 import { makeCheck, makeMessage } from "../testing/channel-fixtures.js";
-import { agentLabel, delegateOption, reportView, rowTitle, runsAs, startedBy, statusCheckView, statusView, summary, terminalView, toDetailView, toGroupViews, tokenSaversView } from "./view.js";
+import { agentLabel, delegateOption, reportView, rowTitle, runsAs, runsOn, startedBy, statusCheckView, statusView, summary, terminalView, toDetailView, toGroupViews, tokenSaversView } from "./view.js";
 
 file("sessions/presentation/view");
 
@@ -96,6 +96,9 @@ test("a session started in a mode reads as its agent in that mode", () => {
   assert.equal(runsAs(makeSession({ agentId: "a1" }), { a1: "Reviewer" }), "Reviewer");
   assert.equal(runsAs(makeSession({ agentId: "", mode: "architect" })), "plain claude as architect");
   assert.equal(runsAs(makeSession({ agentId: "a1", mode: "design" }), { a1: "Reviewer" }), "Reviewer as design");
+  assert.equal(runsOn(makeSession({ agentId: "", mode: "architect", model: "opus" })), "plain claude as architect on opus");
+  assert.equal(runsOn(makeSession({ agentId: "a1", model: "sonnet" }), { a1: "Reviewer" }), "Reviewer on sonnet");
+  assert.equal(runsOn(makeSession({ agentId: "a1" }), { a1: "Reviewer" }), "Reviewer");
 });
 
 test("summary counts what is waiting", () => {
