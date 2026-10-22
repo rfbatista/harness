@@ -138,7 +138,7 @@ func TestGitCredentialRoutesAnswerTheContractsStatusCodes(t *testing.T) {
 		{"GET", "/api/list_repository_credentials", "", 400, "INVALID_INPUT"},
 		{"GET", "/api/list_repository_credentials?project_id=missing", "", 404, "PROJECT_NOT_FOUND"},
 		{"POST", "/api/set_repository_credential", `{"repository_id":"` + repo + `","credential_id":"` + gitlab.ID + `"}`, 400, domain.CodeGitCredentialHostMismatch},
-		{"POST", "/api/set_repository_credential", `{"repository_id":"` + repo + `","credential_id":"` + key.ID + `"}`, 400, domain.CodeGitCredentialKindMismatch},
+		{"POST", "/api/set_repository_credential", `{"repository_id":"` + repo + `","credential_id":"` + key.ID + `"}`, 200, ""},
 		{"POST", "/api/set_repository_credential", `{"repository_id":"` + repo + `","credential_id":"` + c.ID + `"}`, 200, ""},
 		{"POST", "/api/set_repository_credential", `{"repository_id":"` + repo + `","credential_id":null}`, 200, ""},
 		{"POST", "/api/delete_git_credential", `{"credential_id":"missing"}`, 404, domain.CodeGitCredentialNotFound},

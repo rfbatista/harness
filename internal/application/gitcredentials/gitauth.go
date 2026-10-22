@@ -13,10 +13,6 @@ import (
 
 var _ ports.GitAuth = (*Service)(nil)
 
-// githubHost is where gh and the pull requests go when origin is not on a
-// code host the harness knows.
-const githubHost = "github.com"
-
 // liveSession is a session with a git directory: what its sockets resolve
 // from on every request, and its gitconfig is rewritten from when the
 // identity changes. The origin is read once, when the session starts or
@@ -44,15 +40,7 @@ func (s *Service) resolve(repositoryID, origin string) (*ports.GitResolution, []
 		res.Remote = &u
 	}
 	res.Push = domain.ResolveGitCredential(creds, pinned, res.Remote)
-	apiHost := githubHost
-	if res.Remote != nil {
-		apiHost = res.Remote.Host
-	}
-	if res.Push != nil && res.Push.Kind == domain.GitHTTPSToken && res.Push.Host == apiHost {
-		res.GitHub = res.Push
-	} else {
-		res.GitHub = domain.CredentialFor(creds, apiHost, domain.GitHTTPSToken)
-	}
+	res.GitHub = domain.GitHubCredential(creds, res.Push, res.Remote)
 	return res, all, nil
 }
 

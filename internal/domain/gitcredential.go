@@ -68,9 +68,12 @@ type RepositoryCredentialBinding struct {
 // RepositoryCredential is a repository's binding with what a push from it
 // would use now, and its origin (userinfo stripped; nil when it has none).
 type RepositoryCredential struct {
-	Binding   RepositoryCredentialBinding `json:"binding"`
-	Resolved  *GitCredential              `json:"resolved"`
-	RemoteURL *string                     `json:"remote_url"`
+	Binding  RepositoryCredentialBinding `json:"binding"`
+	Resolved *GitCredential              `json:"resolved"`
+	// PullRequests is the https token GitHub API calls on the repository
+	// would use now; nil when there is none. An ssh_key never serves them.
+	PullRequests *GitCredential `json:"pull_requests"`
+	RemoteURL    *string        `json:"remote_url"`
 }
 
 // GitTime is t as credentials carry it: UTC, whole seconds.
@@ -172,6 +175,25 @@ type GitRemoteURL struct {
 	Host string
 }
 
+// Takes reports whether a credential of kind serves the remote: the kind its
+// scheme names, or, for an https remote without an explicit port, an SSH key
+// of the host (the SSH fallback: its SSH port is the default one).
+func (r GitRemoteURL) Takes(kind GitCredentialKind) bool {
+	switch {
+	case r.Kind == "":
+		return false
+	case r.Kind == kind:
+		return true
+	}
+	return r.Kind == GitHTTPSToken && kind == GitSSHKey && !strings.Contains(r.Host, ":")
+}
+
+// UsesSSHFallback reports whether pushing to the remote with c goes over SSH
+// although the remote is an https one.
+func (r GitRemoteURL) UsesSSHFallback(c *GitCredential) bool {
+	return c != nil && r.Kind == GitHTTPSToken && c.Kind == GitSSHKey
+}
+
 // ParseGitRemoteURL reads raw as https://host/…, http://host/…,
 // ssh://[user@]host[:port]/… or scp-like user@host:path. Local paths and
 // file:// are not remotes.
@@ -247,8 +269,9 @@ func StripURLUserinfo(raw string) string {
 
 // ResolveGitCredential is the credential a remote operation on remote uses
 // (§4 of the Web UI contract): the pinned one when it exists; otherwise the
-// default credential of remote's kind for its host, or the only one; nil
-// when nothing resolves. remote nil (no origin) resolves only a pin.
+// default credential of remote's kind for its host, or the only one, then
+// (an https remote without a port) the host's default SSH key, or its only
+// one; nil when nothing resolves. remote nil (no origin) resolves only a pin.
 func ResolveGitCredential(creds []*GitCredential, pinnedID string, remote *GitRemoteURL) *GitCredential {
 	if pinnedID != "" {
 		for _, c := range creds {
@@ -260,7 +283,27 @@ func ResolveGitCredential(creds []*GitCredential, pinnedID string, remote *GitRe
 	if remote == nil || remote.Kind == "" {
 		return nil
 	}
-	return CredentialFor(creds, remote.Host, remote.Kind)
+	if c := CredentialFor(creds, remote.Host, remote.Kind); c != nil {
+		return c
+	}
+	if remote.Kind != GitSSHKey && remote.Takes(GitSSHKey) {
+		return CredentialFor(creds, remote.Host, GitSSHKey)
+	}
+	return nil
+}
+
+// GitHubCredential is the https token GitHub API calls use: the push
+// credential when it is a token of apiHost, else the host's default token or
+// its only one. apiHost is the remote's host, or github.com with no remote.
+func GitHubCredential(creds []*GitCredential, push *GitCredential, remote *GitRemoteURL) *GitCredential {
+	apiHost := "github.com"
+	if remote != nil {
+		apiHost = remote.Host
+	}
+	if push != nil && push.Kind == GitHTTPSToken && push.Host == apiHost {
+		return push
+	}
+	return CredentialFor(creds, apiHost, GitHTTPSToken)
 }
 
 // CredentialFor is the default credential of kind for host, or the only one;

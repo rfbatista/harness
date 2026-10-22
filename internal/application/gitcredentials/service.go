@@ -527,6 +527,7 @@ func (s *Service) repositoryCredential(ctx context.Context, r *domain.Repository
 		}
 	}
 	out.Resolved = domain.ResolveGitCredential(creds, pinned, remote)
+	out.PullRequests = domain.GitHubCredential(creds, out.Resolved, remote)
 	return out, nil
 }
 
@@ -639,7 +640,7 @@ func checkPin(c domain.GitCredential, origin domain.GitRemoteURL) error {
 	case c.Host != origin.Host:
 		return domain.GitCredentialError(domain.CodeGitCredentialHostMismatch,
 			"the credential is for "+c.Host+" but origin is on "+origin.Host)
-	case origin.Kind != c.Kind:
+	case !origin.Takes(c.Kind):
 		want := "an https_token"
 		if origin.Kind == domain.GitSSHKey {
 			want = "an ssh_key"
