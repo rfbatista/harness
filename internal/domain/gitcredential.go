@@ -209,14 +209,14 @@ func SSHFallbackBase(host, user string) string {
 // of a host without a port.
 func SSHFallbackURL(origin, user string) (string, bool) {
 	r, ok := ParseGitRemoteURL(origin)
-	if !ok || !r.Takes(GitSSHKey) || r.Kind != GitHTTPSToken {
+	if !ok || r.Kind != GitHTTPSToken || !r.Takes(GitSSHKey) {
 		return "", false
 	}
 	u, err := url.Parse(strings.TrimSpace(origin))
 	if err != nil {
 		return "", false
 	}
-	return SSHFallbackBase(u.Hostname(), user) + strings.TrimPrefix(u.Path, "/"), true
+	return SSHFallbackBase(r.Host, user) + strings.TrimPrefix(u.Path, "/"), true
 }
 
 // ParseGitRemoteURL reads raw as https://host/…, http://host/…,

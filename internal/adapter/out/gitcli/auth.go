@@ -285,8 +285,8 @@ func (a *AuthBroker) gitconfig(m ports.GitAuthMaterial) string {
 	if f := m.SSHFallback; f != nil {
 		// Only this host's https URLs, and only here: the checkout's own
 		// remote is never rewritten.
-		fmt.Fprintf(&b, "[url %s]\n\tinsteadOf = %s\n\tinsteadOf = %s\n",
-			configValue(domain.SSHFallbackBase(f.Host, f.User)), configValue("https://"+f.Host+"/"), configValue("http://"+f.Host+"/"))
+		fmt.Fprintf(&b, "[url %s]\n\tinsteadOf = %s\n",
+			configValue(domain.SSHFallbackBase(f.Host, f.User)), configValue("https://"+f.Host+"/"))
 	}
 	return b.String()
 }
