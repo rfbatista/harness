@@ -39,6 +39,8 @@ import { cookieRailPrefs } from "./modules/tasks/infrastructure/rail-prefs.js";
 import { resourcesGateway } from "./modules/tasks/infrastructure/resources-gateway.js";
 import { tasksGateway } from "./modules/tasks/infrastructure/tasks-gateway.js";
 import { registerTasks } from "./modules/tasks/presentation/register.js";
+import { modelsGateway } from "./modules/models/infrastructure/models-gateway.js";
+import { registerModels } from "./modules/models/presentation/register.js";
 import { tokenSaversGateway } from "./modules/tokensavers/infrastructure/tokensavers-gateway.js";
 import { registerTokenSavers } from "./modules/tokensavers/presentation/register.js";
 import { usageGateway } from "./modules/usage/infrastructure/usage-gateway.js";
@@ -87,5 +89,6 @@ registerNotifications(Alpine, { gateway: notificationsGateway(api, events), aler
 registerCredentials(Alpine, { gateway: credentialsGateway(api, events), clock: systemClock });
 registerUsage(Alpine, { gateway: usageGateway(api, events) });
 registerTokenSavers(Alpine, { gateway: tokenSaversGateway(api), clock: systemClock });
+registerModels(Alpine, { gateway: modelsGateway(api) });
 
 Alpine.start();

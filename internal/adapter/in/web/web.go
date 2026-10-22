@@ -22,6 +22,7 @@ import (
 	"operators-mcp/internal/adapter/in/web/credentials"
 	"operators-mcp/internal/adapter/in/web/history"
 	"operators-mcp/internal/adapter/in/web/home"
+	"operators-mcp/internal/adapter/in/web/models"
 	"operators-mcp/internal/adapter/in/web/notifications"
 	"operators-mcp/internal/adapter/in/web/projects"
 	"operators-mcp/internal/adapter/in/web/shell"
@@ -78,6 +79,9 @@ type Deps struct {
 	// TokenSaverInstalls lists the token savers for their page; nil leaves
 	// the page and its top bar link out.
 	TokenSaverInstalls ports.TokenSaverInstallReader
+	// Settings reads each session tier's model for the Models page; nil
+	// leaves the page and its top bar link out.
+	Settings ports.SettingsReader
 	// Usage reads token usage for a project's Usage page and the task
 	// page's totals; nil leaves the page, its rail link and the totals out.
 	Usage ports.UsageDashboard
@@ -167,6 +171,10 @@ func NewHandler(deps Deps, assets *Assets, fallback http.Handler) http.Handler {
 		savers := tokensavers.Handler{Savers: deps.TokenSaverInstalls, Layout: s.layout, Render: render}
 		savers.Indexes, savers.Now = deps.RepositoryIndexes, deps.Now
 		mux.Handle("GET "+tokensavers.Href, s.page(savers.Page))
+	}
+	if deps.Settings != nil {
+		modelsPage := models.Handler{Settings: deps.Settings, Layout: s.layout, Render: render}
+		mux.Handle("GET "+models.Href, s.page(modelsPage.Page))
 	}
 	mux.Handle("GET /projects/new", s.page(projectPages.New))
 	mux.Handle("GET /projects/{project}", s.page(taskPages.Project))
@@ -319,6 +327,9 @@ func (s *server) bareFrame(title string) shell.Frame {
 	}
 	if s.deps.TokenSaverInstalls != nil {
 		f.Top.TokenSaversHref = tokensavers.Href
+	}
+	if s.deps.Settings != nil {
+		f.Top.ModelsHref = models.Href
 	}
 	return f
 }

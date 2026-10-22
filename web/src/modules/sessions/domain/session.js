@@ -15,6 +15,7 @@
  * @property {string} ticketId          the task it works on; "" for none. A task can run several sessions at once.
  * @property {string} task              what the session was asked to do
  * @property {string} agentId           "" when no agent persona is attached
+ * @property {string} model             the model it runs on (a CLI alias such as "opus"); "" when the CLI chose
  * @property {""|"architect"|"implement"|"design"|"product"} mode  the role it was started in on top of its agent; "" for none. A "product" session may run with no task (ticketId ""): a feature brainstorm at project level.
  * @property {SessionStatus} status
  * @property {number} pendingApprovals  tool calls waiting for the developer

@@ -23,6 +23,7 @@ export function toSession(dto) {
     task: dto.task ?? "",
     agentId: dto.agent_id ?? "",
     mode: dto.mode ?? "",
+    model: dto.model ?? "",
     status: dto.status,
     pendingApprovals: Number(dto.pending_approvals ?? 0),
     lastAction: dto.last_action ?? "",

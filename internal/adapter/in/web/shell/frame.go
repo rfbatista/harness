@@ -97,6 +97,10 @@ type TopBar struct {
 	TokenSaversHref string
 	// OnTokenSavers marks the Token savers page as the current page.
 	OnTokenSavers bool
+	// ModelsHref is the Models page; "" when it is not served.
+	ModelsHref string
+	// OnModels marks the Models page as the current page.
+	OnModels bool
 }
 
 // Option is one project in the picker.

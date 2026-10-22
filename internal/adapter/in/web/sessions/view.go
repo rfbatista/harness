@@ -617,15 +617,18 @@ func AgentLabel(id string, names map[string]string) string {
 	}
 }
 
-// RunsAs is how a session's agent reads with the mode it was started in:
-// "Reviewer", "plain claude as architect". The browser's runsAs (view.js)
-// says the same.
+// RunsAs is how a session's agent reads with the mode it was started in and
+// the model it runs on: "Reviewer", "plain claude as architect on opus". The
+// browser's runsAs (view.js) says the same.
 func RunsAs(s *domain.Session, names map[string]string) string {
 	agent := AgentLabel(s.AgentID, names)
-	if s.Mode == domain.SessionModeDefault {
-		return agent
+	if s.Mode != domain.SessionModeDefault {
+		agent += " as " + string(s.Mode)
 	}
-	return agent + " as " + string(s.Mode)
+	if s.Model != "" {
+		agent += " on " + s.Model
+	}
+	return agent
 }
 
 // RelativeTime is how long ago then was, as the pages write it: "now",

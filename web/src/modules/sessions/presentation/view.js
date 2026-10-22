@@ -24,10 +24,12 @@ export function agentLabel(agentId, agentNames = {}) {
   return agentNames[agentId] || agentId;
 }
 
-/** How a session's agent reads with its mode: "Reviewer", "plain claude as architect". Mirrors RunsAs (view.go). */
+/** How a session's agent reads with its mode and model: "Reviewer", "plain claude as architect on opus". Mirrors RunsAs (view.go). */
 export function runsAs(session, agentNames = {}) {
-  const agent = agentLabel(session.agentId, agentNames);
-  return session.mode ? `${agent} as ${session.mode}` : agent;
+  let agent = agentLabel(session.agentId, agentNames);
+  if (session.mode) agent += ` as ${session.mode}`;
+  if (session.model) agent += ` on ${session.model}`;
+  return agent;
 }
 
 /**
