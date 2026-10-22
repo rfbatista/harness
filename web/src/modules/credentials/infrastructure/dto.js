@@ -37,7 +37,7 @@ export function toIdentity(dto) {
   return Object.freeze({ name: dto.name, email: dto.email });
 }
 
-/** {binding: {repository_id, credential_id}, resolved, remote_url} */
+/** {binding: {repository_id, credential_id}, resolved, pull_requests, remote_url} */
 export function toRepositoryCredential(dto) {
   const id = dto?.binding?.repository_id;
   if (typeof id !== "string" || id === "") bad("repository credential without a repository_id");
@@ -46,6 +46,7 @@ export function toRepositoryCredential(dto) {
     repositoryId: id,
     credentialId: typeof pin === "string" && pin !== "" ? pin : null,
     resolved: dto.resolved ? toCredential(dto.resolved) : null,
+    pullRequests: dto.pull_requests ? toCredential(dto.pull_requests) : null,
     remoteUrl: typeof dto.remote_url === "string" && dto.remote_url !== "" ? dto.remote_url : null,
   });
 }

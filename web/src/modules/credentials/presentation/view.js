@@ -2,7 +2,7 @@
 // with the same rules (internal/adapter/in/web/credentials/view.go).
 
 import { relativeTime } from "../../../shared/presentation/format.js";
-import { kindLabel, remoteOf } from "../domain/credential.js";
+import { kindLabel, remoteOf, takes, usesSshFallback } from "../domain/credential.js";
 
 /** The Git credentials page. */
 export const CREDENTIALS_HREF = "/git-credentials";
@@ -51,19 +51,37 @@ export function testLine(result) {
 }
 
 /**
- * What a repository's pushes use, in words, and what to do when nothing fits.
+ * What a repository's pushes use and what its pull requests use, each in
+ * words, and what to do when nothing fits.
  * @param {import("../domain/credential.js").RepositoryCredential} rc
- * @returns {{ state: "pinned"|"automatic"|"none"|"local", text: string, name: string, addHref: string }}
+ * @returns {{ state: "pinned"|"automatic"|"none"|"local", text: string, name: string, addHref: string, pullText: string, pullAddHref: string }}
  */
 export function bindingLine(rc) {
   const remote = remoteOf(rc.remoteUrl);
-  if (rc.credentialId && rc.resolved) return { state: "pinned", name: rc.resolved.name, text: "pinned", addHref: "" };
+  const push = pushLine(rc, remote);
+  const pull = remote && rc.remoteUrl ? pullLine(rc, remote) : { text: "", addHref: "" };
+  return { ...push, pullText: pull.text, pullAddHref: pull.addHref };
+}
+
+function pushLine(rc, remote) {
+  const fallback = usesSshFallback(remote, rc.resolved);
+  if (rc.credentialId && rc.resolved) return { state: "pinned", name: rc.resolved.name, text: fallback ? "pinned (SSH fallback)" : "pinned", addHref: "" };
   if (!rc.remoteUrl) return { state: "local", name: "", text: "Local only: no remote, no credential needed.", addHref: "" };
   if (rc.resolved) {
-    const why = rc.resolved.isDefault ? `default for ${rc.resolved.host}` : `the only ${kindLabel(rc.resolved.kind)} for ${rc.resolved.host}`;
-    return { state: "automatic", name: rc.resolved.name, text: `automatic (${why})`, addHref: "" };
+    const c = rc.resolved;
+    let why = c.isDefault ? `default for ${c.host}` : `the only ${kindLabel(c.kind)} for ${c.host}`;
+    if (fallback) why = `SSH fallback: ${c.isDefault ? `default ${kindLabel(c.kind)} for ${c.host}` : why}`;
+    return { state: "automatic", name: c.name, text: `automatic (${why})`, addHref: "" };
   }
   if (!remote) return { state: "none", name: "", text: "The origin is not an https or ssh URL, so no credential applies.", addHref: "" };
-  const what = remote.kind === "ssh_key" ? "SSH key" : "token";
-  return { state: "none", name: "", text: `No ${what} for ${remote.host}: pushes and pull requests from this repository will fail.`, addHref: addHref(remote.host, remote.kind) };
+  const what = remote.kind === "ssh_key" ? "SSH key" : takes(remote, "ssh_key") ? "token or SSH key" : "token";
+  return { state: "none", name: "", text: `No ${what} for ${remote.host}: pushes from this repository will fail.`, addHref: addHref(remote.host, remote.kind) };
+}
+
+/** Pull requests take only a token: GitHub's API refuses an SSH key. */
+function pullLine(rc, remote) {
+  const c = rc.pullRequests ?? null;
+  if (!c) return { text: `Pull requests: no token for ${remote.host}, so they will fail.`, addHref: addHref(remote.host, "https_token") };
+  const why = rc.credentialId && rc.resolved?.id === c.id ? "pinned" : c.isDefault ? `default for ${c.host}` : `the only ${kindLabel(c.kind)} for ${c.host}`;
+  return { text: `Pull requests: ${c.name} (${why})`, addHref: "" };
 }
