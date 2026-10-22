@@ -26,9 +26,10 @@ const ANSWERED = { approved: "You approved", changes_requested: "You asked for c
  * @param {{
  *   gateway: import("../../domain/ports.js").ReviewGateway,
  *   clock: import("../../../../shared/infrastructure/clock.js").Clock,
- * }} deps
+ *   hash?: () => string,
+ * }} deps  hash is the page's URL fragment: a link to a review (#review-{id}) or to #reviews
  */
-export const reviewsInbox = ({ gateway, clock }) => () => {
+export const reviewsInbox = ({ gateway, clock, hash = () => globalThis.location?.hash ?? "" }) => () => {
   let unfollow = () => {};
   let ticker = null;
   /** The component's root: inside a handler $el is the element that fired. */
@@ -56,6 +57,8 @@ export const reviewsInbox = ({ gateway, clock }) => () => {
     answeringId: "",
     /** The panel shows every waiting request, not just the first. */
     moreOpen: false,
+    /** The page's link to a review has been followed, once the requests were read. */
+    linkFollowed: false,
 
     // ── what the markup binds ────────────────────────────────────────────
     get forTask() {
@@ -201,9 +204,30 @@ export const reviewsInbox = ({ gateway, clock }) => () => {
         for (const r of this.reviews) this.ensureDraft(r.id);
         this.loaded = true;
         this.now = clock.now();
+        this.$dispatch("reviews-read", { has: this.hasPending || this.hasSettled });
+        this.followLink();
       } catch (err) {
         this.error = describeError(err);
       }
+    },
+
+    /**
+     * The page was opened on a link to #reviews or to one review (#review-{id}):
+     * show that review, unfolded, and focus it (its panel was opened by the strip).
+     */
+    followLink() {
+      if (this.linkFollowed || !this.forTask) return;
+      this.linkFollowed = true;
+      const target = hash();
+      if (target === "#reviews") return this.$nextTick(() => root?.querySelector("[data-reviews-heading]")?.focus?.());
+      if (!target.startsWith("#review-")) return;
+      const id = decodeURIComponent(target.slice("#review-".length));
+      if (this.moreCards.some((c) => c.id === id)) this.moreOpen = true;
+      this.$nextTick(() => {
+        const heading = [...(root?.querySelectorAll("article.review") ?? [])].find((a) => a.id === `review-${id}`)?.querySelector("[data-review-heading]");
+        heading?.scrollIntoView?.({ block: "nearest" });
+        heading?.focus?.();
+      });
     },
 
     ensureDraft(id) {

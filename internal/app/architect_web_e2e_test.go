@@ -344,7 +344,7 @@ func TestArchitectChannelInTheWebUI_EndToEnd(t *testing.T) {
 	button := `document.querySelector('[data-band="reviews"]')`
 	p.run(t, "a review request arrives",
 		poll(`!!`+button+` && !`+button+`.hidden && `+band+`.querySelectorAll('.review').length === 1`),
-		chromedp.Evaluate(button+`.click()`, nil),
+		chromedp.Evaluate(button+`.click()`, nil), // an arriving request does not open the panel
 		poll(band+`.checkVisibility()`),
 		both("3-review-band"),
 	)

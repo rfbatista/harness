@@ -43,7 +43,8 @@ export function toChildRows(children, { projectId, documents }) {
 /**
  * What the strip's Feature button says: how many children, and the phrase
  * for what needs the person or is moving ("3 in review · 2 in progress",
- * "all done", or nothing).
+ * "all done", or nothing). name is the button's accessible name: a narrow
+ * strip drops the phrase from sight, not from the name.
  * @param {{ status: string }[]} rows
  */
 export function featureSummary(rows) {
@@ -52,5 +53,7 @@ export function featureSummary(rows) {
   if (count("review") > 0) parts.push(`${count("review")} in review`);
   if (count("in_progress") > 0) parts.push(`${count("in_progress")} in progress`);
   if (parts.length === 0 && rows.length > 0 && count("done") === rows.length) parts.push("all done");
-  return { has: rows.length > 0, count: String(rows.length), phrase: parts.join(" · ") };
+  const phrase = parts.join(" · ");
+  const children = `${rows.length} ${rows.length === 1 ? "child" : "children"}`;
+  return { has: rows.length > 0, count: String(rows.length), phrase, name: ["Feature", children, ...parts].join(", ") };
 }

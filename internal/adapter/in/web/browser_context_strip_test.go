@@ -285,7 +285,7 @@ func TestTheReviewsPanelFoldsTheWaitingRequestsInsideTheCap(t *testing.T) {
 
 	cards := `[...document.querySelectorAll('[data-band-panel="reviews"] .review')].filter(c => c.checkVisibility())`
 	scroller := `document.querySelector('[data-band-panel="reviews"] [data-band-scroll]')`
-	var label, tone, closedExpanded, firstCard, fold, foldAfter string
+	var label, tone, openExpanded, firstCard, fold, foldAfter string
 	var visibleCards, allCards int
 	var panelHeight, innerHeight, listTop, clientHeight, scrollHeight float64
 	err := chromedp.Run(ctx,
@@ -294,8 +294,7 @@ func TestTheReviewsPanelFoldsTheWaitingRequestsInsideTheCap(t *testing.T) {
 		chromedp.Poll(pageReady+` && `+reviewsBtn+`.textContent.includes('3')`, nil, chromedp.WithPollingTimeout(10*time.Second)),
 		chromedp.Evaluate(reviewsBtn+`.textContent.replace(/\s+/g, ' ').trim()`, &label),
 		chromedp.Evaluate(reviewsBtn+`.dataset.tone ?? ''`, &tone),
-		chromedp.Evaluate(reviewsBtn+`.getAttribute('aria-expanded')`, &closedExpanded),
-		chromedp.Evaluate(reviewsBtn+`.click()`, nil),
+		chromedp.Evaluate(reviewsBtn+`.getAttribute('aria-expanded')`, &openExpanded),
 		chromedp.Poll(cards+`.length === 1`, nil, chromedp.WithPollingTimeout(5*time.Second)),
 		chromedp.Evaluate(cards+`[0].querySelector('h3').textContent`, &firstCard),
 		chromedp.Evaluate(`document.querySelector('[data-band-panel="reviews"] [data-more]').textContent.trim()`, &fold),
@@ -316,8 +315,8 @@ func TestTheReviewsPanelFoldsTheWaitingRequestsInsideTheCap(t *testing.T) {
 	if label != "Reviews 3 waiting" || tone != "attention" {
 		t.Errorf("the Reviews button reads %q in tone %q", label, tone)
 	}
-	if closedExpanded != "false" {
-		t.Errorf("the panel starts closed (aria-expanded %q)", closedExpanded)
+	if openExpanded != "true" {
+		t.Errorf("a waiting request opens Reviews on a first visit (aria-expanded %q)", openExpanded)
 	}
 	if firstCard != "Review number 3" {
 		t.Errorf("the first card is %q, want the newest", firstCard)
@@ -377,7 +376,8 @@ func TestOpeningAnotherBandClosesTheOpenOne(t *testing.T) {
 }
 
 // Answering a request moves it under Earlier reviews with the panel open; a
-// request raised over the feed bumps the count and does not open the panel.
+// request raised over the feed bumps the count and does not open a closed
+// panel.
 func TestTheReviewsPanelFollowsAnswersAndArrivalsWithoutMoving(t *testing.T) {
 	reviews := pendingReviews(1)
 	srv, feed := architectServer(t, nil, reviews...)
@@ -390,12 +390,13 @@ func TestTheReviewsPanelFollowsAnswersAndArrivalsWithoutMoving(t *testing.T) {
 		chromedp.EmulateViewport(1280, 800),
 		chromedp.Navigate(srv.URL+"/projects/p1/tasks/t1"),
 		chromedp.Poll(pageReady+` && `+label+` === 'Reviews 1 waiting'`, nil, chromedp.WithPollingTimeout(10*time.Second)),
-		chromedp.Evaluate(reviewsBtn+`.click()`, nil),
 		chromedp.Poll(`!!`+reviewsPanel+`.querySelector('.review')`, nil, chromedp.WithPollingTimeout(5*time.Second)),
 		chromedp.Evaluate(reviewsPanel+`.querySelector('.review button').click()`, nil), // Approve
 		chromedp.Poll(label+` === 'Reviews 1 settled'`, nil, chromedp.WithPollingTimeout(5*time.Second)),
 		chromedp.Evaluate(label, &afterAnswer),
 		chromedp.Evaluate(`(`+reviewsPanel+`.textContent.includes('Nothing waits on you.') && `+reviewsPanel+`.checkVisibility()) + ' ' + `+reviewsPanel+`.querySelector('details summary').textContent`, &earlier),
+		chromedp.Evaluate(reviewsBtn+`.click()`, nil), // close it
+		chromedp.Poll(`!`+panelOpen(reviewsPanel), nil, chromedp.WithPollingTimeout(5*time.Second)),
 		chromedp.ActionFunc(func(context.Context) error {
 			for feed.followers() == 0 {
 				time.Sleep(20 * time.Millisecond)
@@ -418,8 +419,8 @@ func TestTheReviewsPanelFollowsAnswersAndArrivalsWithoutMoving(t *testing.T) {
 	if earner := strings.TrimSpace(earlier); earner != "true Earlier reviews (1)" {
 		t.Errorf("the open panel says %q", earner)
 	}
-	if afterArrival != "Reviews 1 waiting" || !openAfterArrival {
-		t.Errorf("after the arrival: %q, panel still open %v", afterArrival, openAfterArrival)
+	if afterArrival != "Reviews 1 waiting" || openAfterArrival {
+		t.Errorf("after the arrival: %q, panel open %v (a request that arrives does not open the panel)", afterArrival, openAfterArrival)
 	}
 	if e := errs.all(); len(e) > 0 {
 		t.Errorf("JavaScript errors:\n%s", strings.Join(e, "\n"))
@@ -501,5 +502,165 @@ func TestNoTokenSaversMeansNoTokenSaversButton(t *testing.T) {
 	}
 	if present {
 		t.Error("a Token savers button without token savers")
+	}
+}
+
+const bandCookie = `(document.cookie.split('; ').find(c => c.startsWith('task_band=')) ?? '').slice('task_band='.length)`
+
+func panelOpen(sel string) string { return `(` + sel + `.checkVisibility())` }
+
+// First visit, nothing stored: Reviews opens while a request waits, and
+// every panel is closed when none does.
+func TestTheStripOpensReviewsOnAFirstVisitOnlyWhileARequestWaits(t *testing.T) {
+	waiting, _ := architectServer(t, nil, pendingReviews(2)...)
+	quiet, _ := stripServer(t, bandedDeps())
+	ctx, errs := browser(t)
+
+	var withReview, withoutReview bool
+	var cookie string
+	err := chromedp.Run(ctx,
+		chromedp.EmulateViewport(1280, 800),
+		chromedp.Navigate(waiting.URL+"/projects/p1/tasks/t1"),
+		chromedp.Poll(pageReady+` && `+panelOpen(reviewsPanel), nil, chromedp.WithPollingTimeout(10*time.Second)),
+		chromedp.Evaluate(panelOpen(reviewsPanel), &withReview),
+		chromedp.Evaluate(bandCookie, &cookie),
+		chromedp.Navigate(quiet+"/projects/p1/tasks/t-feed"),
+		chromedp.Poll(pageReady, nil, chromedp.WithPollingTimeout(10*time.Second)),
+		chromedp.Evaluate(`[...document.querySelectorAll('[data-band-panel]')].some(p => p.checkVisibility())`, &withoutReview),
+	)
+	if err != nil {
+		t.Fatalf("%v\nJS errors: %v", err, errs.all())
+	}
+	if !withReview {
+		t.Error("a waiting request does not open Reviews on a first visit")
+	}
+	if cookie != "" {
+		t.Errorf("a default wrote the cookie: %q", cookie)
+	}
+	if withoutReview {
+		t.Error("a panel is open on a first visit with nothing waiting")
+	}
+	if e := errs.all(); len(e) > 0 {
+		t.Errorf("JavaScript errors:\n%s", strings.Join(e, "\n"))
+	}
+}
+
+// The panel left open is remembered: after a reload the server's paint
+// already has it open (scripts off), and so does the live page.
+func TestTheOpenPanelSurvivesAReloadAndTheServerPaintsItOpen(t *testing.T) {
+	url, _ := stripServer(t, bandedDeps())
+	ctx, errs := browser(t)
+
+	page := url + "/projects/p1/tasks/t-feed"
+	var cookie string
+	var painted, paintedExpanded, live bool
+	err := chromedp.Run(ctx,
+		chromedp.EmulateViewport(1280, 800),
+		chromedp.Navigate(page),
+		chromedp.Poll(pageReady, nil, chromedp.WithPollingTimeout(10*time.Second)),
+		chromedp.Evaluate(stripBtn+`.click()`, nil),
+		chromedp.Poll(panelOpen(stripPanel), nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Evaluate(bandCookie, &cookie),
+		emulation.SetScriptExecutionDisabled(true),
+		chromedp.Navigate(page),
+		chromedp.Evaluate(panelOpen(stripPanel), &painted),
+		chromedp.Evaluate(stripBtn+`.getAttribute('aria-expanded') === 'true'`, &paintedExpanded),
+		emulation.SetScriptExecutionDisabled(false),
+		chromedp.Navigate(page),
+		chromedp.Poll(pageReady, nil, chromedp.WithPollingTimeout(10*time.Second)),
+		chromedp.Evaluate(panelOpen(stripPanel), &live),
+	)
+	if err != nil {
+		t.Fatalf("%v\nJS errors: %v", err, errs.all())
+	}
+	if cookie != "feature" {
+		t.Errorf("task_band = %q after opening Feature, want feature", cookie)
+	}
+	if !painted || !paintedExpanded {
+		t.Errorf("the server's paint has Feature open: panel %v, aria-expanded %v", painted, paintedExpanded)
+	}
+	if !live {
+		t.Error("the live page lost the open panel")
+	}
+	if e := errs.all(); len(e) > 0 {
+		t.Errorf("JavaScript errors:\n%s", strings.Join(e, "\n"))
+	}
+}
+
+// Closing the open panel stores "none": after a reload every panel is
+// closed, yet the amber Reviews button still shows.
+func TestClosingThePanelIsRememberedAndAWaitingReviewStaysOnTheStrip(t *testing.T) {
+	srv, _ := architectServer(t, nil, pendingReviews(2)...)
+	ctx, errs := browser(t)
+
+	page := srv.URL + "/projects/p1/tasks/t1"
+	var cookie, label, tone string
+	var anyOpen bool
+	err := chromedp.Run(ctx,
+		chromedp.EmulateViewport(1280, 800),
+		chromedp.Navigate(page),
+		chromedp.Poll(pageReady+` && `+panelOpen(reviewsPanel), nil, chromedp.WithPollingTimeout(10*time.Second)),
+		chromedp.Evaluate(reviewsBtn+`.click()`, nil),
+		chromedp.Poll(`!`+panelOpen(reviewsPanel), nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Evaluate(bandCookie, &cookie),
+		chromedp.Navigate(page),
+		chromedp.Poll(pageReady+` && `+reviewsBtn+`.textContent.includes('2')`, nil, chromedp.WithPollingTimeout(10*time.Second)),
+		chromedp.Evaluate(`[...document.querySelectorAll('[data-band-panel]')].some(p => p.checkVisibility())`, &anyOpen),
+		chromedp.Evaluate(reviewsBtn+`.textContent.replace(/\s+/g, ' ').trim()`, &label),
+		chromedp.Evaluate(reviewsBtn+`.dataset.tone ?? ''`, &tone),
+	)
+	if err != nil {
+		t.Fatalf("%v\nJS errors: %v", err, errs.all())
+	}
+	if cookie != "none" {
+		t.Errorf("task_band = %q after closing the panel, want none", cookie)
+	}
+	if anyOpen {
+		t.Error("a stored none still opens a panel")
+	}
+	if label != "Reviews 2 waiting" || tone != "attention" {
+		t.Errorf("the amber button after a reload: %q in tone %q", label, tone)
+	}
+}
+
+// A link to a review opens Reviews for the visit, unfolds the review and
+// focuses it, and writes nothing to the cookie.
+func TestALinkToAReviewOpensItsPanelWithoutRememberingIt(t *testing.T) {
+	srv, _ := architectServer(t, nil, pendingReviews(3)...) // rv1, the oldest, sits in the fold
+	ctx, errs := browser(t)
+
+	page := srv.URL + "/projects/p1/tasks/t1"
+	var cookie, focused, heading string
+	var open bool
+	err := chromedp.Run(ctx,
+		chromedp.EmulateViewport(1280, 800),
+		chromedp.Navigate(page),
+		chromedp.Poll(pageReady+` && `+panelOpen(reviewsPanel), nil, chromedp.WithPollingTimeout(10*time.Second)),
+		chromedp.Evaluate(reviewsBtn+`.click()`, nil), // store none
+		chromedp.Poll(`!`+panelOpen(reviewsPanel), nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Navigate(page+"?visit=review#review-rv1"),
+		chromedp.Poll(pageReady+` && !!document.getElementById('review-rv1')?.checkVisibility()`, nil, chromedp.WithPollingTimeout(10*time.Second)),
+		chromedp.Poll(`document.activeElement?.closest('article')?.id === 'review-rv1'`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Evaluate(panelOpen(reviewsPanel), &open),
+		chromedp.Evaluate(`document.activeElement.closest('article').id`, &focused),
+		chromedp.Evaluate(bandCookie, &cookie),
+		chromedp.Navigate(page+"?visit=heading#reviews"),
+		chromedp.Poll(pageReady+` && document.activeElement?.hasAttribute('data-reviews-heading')`, nil, chromedp.WithPollingTimeout(10*time.Second)),
+		chromedp.Evaluate(`document.activeElement.textContent.trim()`, &heading),
+	)
+	if err != nil {
+		t.Fatalf("%v\nJS errors: %v", err, errs.all())
+	}
+	if !open || focused != "review-rv1" {
+		t.Errorf("the link opens Reviews (%v) and focuses the review (%q)", open, focused)
+	}
+	if cookie != "none" {
+		t.Errorf("a link changed the cookie to %q, want it left at none", cookie)
+	}
+	if !strings.Contains(heading, "3 reviews wait on you") {
+		t.Errorf("#reviews focuses %q, want the panel's heading", heading)
+	}
+	if e := errs.all(); len(e) > 0 {
+		t.Errorf("JavaScript errors:\n%s", strings.Join(e, "\n"))
 	}
 }

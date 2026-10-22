@@ -7,7 +7,7 @@ package components
 // keeps the note on screen, read-only, until dismissed. The body is the
 // architect's text: x-text, never HTML.
 templ ReviewCard() {
-	<article class="[ review ]" x-bind:data-withdrawn="card.withdrawn">
+	<article class="[ review ]" x-bind:id="card.anchor" x-bind:data-withdrawn="card.withdrawn">
 		<h3 tabindex="-1" data-review-heading x-text="card.subject"></h3>
 		<p class="[ meta ]"><span x-text="card.byline"></span> · <span x-text="card.age"></span></p>
 		<p class="[ body ]" x-text="card.body"></p>

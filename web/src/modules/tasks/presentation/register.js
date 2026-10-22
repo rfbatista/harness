@@ -17,6 +17,7 @@ import { taskResources } from "./components/taskResources.js";
  *   gateway: import("../domain/ports.js").TaskGateway,
  *   rail: import("../domain/ports.js").RailGateway,
  *   railPrefs: import("../domain/ports.js").RailPrefs,
+ *   bandPrefs: import("../domain/ports.js").BandPrefs,
  *   navigate: (url: string) => void,
  *   reload: () => void,
  *   resources: import("../domain/ports.js").ResourceGateway,
@@ -38,5 +39,5 @@ export function registerTasks(Alpine, deps) {
   Alpine.data("tasksRailToggle", railToggle({ store }));
   Alpine.data("tasksBoard", board({ gateway: deps.gateway, store }));
   Alpine.data("tasksFeature", feature({ store }));
-  Alpine.data("tasksContextStrip", contextStrip());
+  Alpine.data("tasksContextStrip", contextStrip({ prefs: deps.bandPrefs }));
 }

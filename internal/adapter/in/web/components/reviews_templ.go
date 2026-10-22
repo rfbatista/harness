@@ -35,7 +35,7 @@ func ReviewCard() templ.Component {
 			templ_7745c5c3_Var1 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<article class=\"[ review ]\" x-bind:data-withdrawn=\"card.withdrawn\"><h3 tabindex=\"-1\" data-review-heading x-text=\"card.subject\"></h3><p class=\"[ meta ]\"><span x-text=\"card.byline\"></span> · <span x-text=\"card.age\"></span></p><p class=\"[ body ]\" x-text=\"card.body\"></p>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<article class=\"[ review ]\" x-bind:id=\"card.anchor\" x-bind:data-withdrawn=\"card.withdrawn\"><h3 tabindex=\"-1\" data-review-heading x-text=\"card.subject\"></h3><p class=\"[ meta ]\"><span x-text=\"card.byline\"></span> · <span x-text=\"card.age\"></span></p><p class=\"[ body ]\" x-text=\"card.body\"></p>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

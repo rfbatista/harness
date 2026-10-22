@@ -48,3 +48,9 @@ test("a feature with no children has nothing for the strip to show", () => {
   const none = featureSummary([]);
   assert.deepEqual([none.has, none.count, none.phrase], [false, "0", ""]);
 });
+
+test("the feature button's accessible name carries the count and the phrase, in words", () => {
+  assert.equal(featureSummary(rowsOf("review", "in_progress", "todo")).name, "Feature, 3 children, 1 in review, 1 in progress");
+  assert.equal(featureSummary(rowsOf("todo")).name, "Feature, 1 child");
+  assert.equal(featureSummary(rowsOf("done")).name, "Feature, 1 child, all done");
+});

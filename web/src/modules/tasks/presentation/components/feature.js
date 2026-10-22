@@ -58,6 +58,9 @@ export const feature = ({ store }) => () => ({
   get phrase() {
     return this.summary.phrase;
   },
+  get buttonName() {
+    return this.summary.name;
+  },
   /** The panel's header line and its scroll region's name. */
   get showing() {
     const n = this.children.length;

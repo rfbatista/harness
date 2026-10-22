@@ -167,7 +167,7 @@ templ Page(v PageView) {
 // the one open band's panel under it (tasksContextStrip owns which). A band
 // that has nothing is painted hidden and appears once it has.
 templ contextStrip(v PageView) {
-	<div class="[ context-strip ]" role="group" aria-label="Task context" x-data="tasksContextStrip">
+	<div class="[ context-strip ]" role="group" aria-label="Task context" x-data="tasksContextStrip" data-open={ v.OpenBand() } data-stored={ v.Band } x-on:reviews-read="reviewsRead">
 		@reviewsBand(v)
 		@featureBand(v)
 		@tokenSaversBand(v)
@@ -201,7 +201,7 @@ templ reviewsBand(v PageView) {
 				id="band-reviews-button"
 				data-band="reviews"
 				aria-controls="band-reviews"
-				aria-expanded="false"
+				aria-expanded={ strconv.FormatBool(v.OpenBand() == "reviews") }
 				x-bind:aria-expanded="expanded('reviews')"
 				x-on:click="toggle('reviews')"
 				x-bind:hidden="!summary.has"
@@ -221,7 +221,7 @@ templ reviewsBand(v PageView) {
 				aria-label="Review requests"
 				data-band-panel="reviews"
 				x-show="expanded('reviews') && summary.has"
-				style="display: none"
+				{ shownIf(v.OpenBand() == "reviews")... }
 			>
 				<div class="[ reviews ]" data-band-scroll tabindex="0" x-bind:data-attention="attentionAttr">
 					if v.PendingReviews > 0 {
@@ -285,7 +285,7 @@ templ tokenSaversBand(v PageView) {
 				data-band="token-savers"
 				data-quiet
 				aria-controls="band-token-savers"
-				aria-expanded="false"
+				aria-expanded={ strconv.FormatBool(v.OpenBand() == "token-savers") }
 				x-bind:aria-expanded="expanded('token-savers')"
 				x-on:click="toggle('token-savers')"
 			>
@@ -299,7 +299,7 @@ templ tokenSaversBand(v PageView) {
 				data-band-panel="token-savers"
 				data-token-savers
 				x-show="expanded('token-savers')"
-				style="display: none"
+				{ shownIf(v.OpenBand() == "token-savers")... }
 			>
 				<div class="[ pad-inline-l pad-block-s ]" data-band-scroll tabindex="0">
 					<div style="max-inline-size: 44rem">
@@ -332,7 +332,7 @@ templ featureBand(v PageView) {
 			id="band-feature-button"
 			data-band="feature"
 			aria-controls="band-feature"
-			aria-expanded="false"
+			aria-expanded={ strconv.FormatBool(v.OpenBand() == "feature") }
 			x-bind:aria-expanded="expanded('feature')"
 			x-on:click="toggle('feature')"
 			x-bind:hidden="!hasChildren"
@@ -351,7 +351,7 @@ templ featureBand(v PageView) {
 			aria-labelledby="band-feature-button"
 			data-band-panel="feature"
 			x-show="expanded('feature') && hasChildren"
-			style="display: none"
+			{ shownIf(v.OpenBand() == "feature")... }
 		>
 			<header class="[ band-head ]">
 				<span x-text="showing">{ featureShowing(v.Feature) }</span>

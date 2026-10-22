@@ -341,8 +341,7 @@ func TestPersonAnswersTheArchitectsReviewRequests(t *testing.T) {
 		chromedp.EmulateViewport(1280, 900),
 		chromedp.Navigate(srv.URL+"/projects/p1/tasks/t1"),
 		chromedp.Poll(`!!document.querySelector('[data-band="reviews"]:not([hidden])')`, nil, chromedp.WithPollingTimeout(10*time.Second)),
-		// The panel opens on the button; the second request is folded behind "1 more waiting".
-		chromedp.Evaluate(`document.querySelector('[data-band="reviews"]').click()`, nil),
+		// A waiting request opens the panel; the second one is folded behind "1 more waiting".
 		chromedp.Poll(cards+`.length === 1`, nil, chromedp.WithPollingTimeout(5*time.Second)),
 		chromedp.Evaluate(`document.querySelector('[aria-label="Review requests"] [data-more]').click()`, nil),
 		chromedp.Poll(cards+`.length === 2`, nil, chromedp.WithPollingTimeout(5*time.Second)),
