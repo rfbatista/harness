@@ -24,12 +24,16 @@ export function agentLabel(agentId, agentNames = {}) {
   return agentNames[agentId] || agentId;
 }
 
-/** How a session's agent reads with its mode and model: "Reviewer", "plain claude as architect on opus". Mirrors RunsAs (view.go). */
+/** How a session's agent reads with its mode: "Reviewer", "plain claude as architect". Mirrors RunsAs (view.go). */
 export function runsAs(session, agentNames = {}) {
-  let agent = agentLabel(session.agentId, agentNames);
-  if (session.mode) agent += ` as ${session.mode}`;
-  if (session.model) agent += ` on ${session.model}`;
-  return agent;
+  const agent = agentLabel(session.agentId, agentNames);
+  return session.mode ? `${agent} as ${session.mode}` : agent;
+}
+
+/** runsAs with the model, as a session's row says it: "plain claude as architect on opus". Mirrors RunsOn (view.go). */
+export function runsOn(session, agentNames = {}) {
+  const agent = runsAs(session, agentNames);
+  return session.model ? `${agent} on ${session.model}` : agent;
 }
 
 /**
@@ -108,7 +112,7 @@ export function toRowView(session, { selectedId, now, agentNames, others = [], f
     meta:
       session.role === "delegate"
         ? delegateMeta(session, { now, agentNames, messages })
-        : meta(runsAs(session, agentNames), startedBy(session, others, agentNames), relativeTime(session.updatedAt, now)),
+        : meta(runsOn(session, agentNames), startedBy(session, others, agentNames), relativeTime(session.updatedAt, now)),
     selected: session.id === selectedId,
     fresh,
     attention: needsYou(session),
@@ -142,7 +146,7 @@ export function toGroupViews(sessions, { selectedId, now, agentNames, fresh = ne
  * delegateMeta (view.go) renders the same before the messages load.
  */
 function delegateMeta(session, { now, agentNames, messages }) {
-  const parts = [runsAs(session, agentNames)];
+  const parts = [runsOn(session, agentNames)];
   if (messages) parts.push(reportView(lastReportOf(messages, session.id), now));
   if (session.statusCheck) parts.push(statusCheckView(session.statusCheck, now).short);
   if (parts.length === 1) parts.push(relativeTime(session.updatedAt, now));

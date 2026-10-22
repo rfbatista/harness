@@ -133,11 +133,25 @@ func TestRunsAs(t *testing.T) {
 		{&domain.Session{Mode: domain.SessionModeArchitect}, "plain claude as architect"},
 		{&domain.Session{AgentID: "a1", Mode: domain.SessionModeArchitect}, "Reviewer as architect"},
 		{&domain.Session{AgentID: "a1", Mode: domain.SessionMode("design")}, "Reviewer as design"},
-		{&domain.Session{Mode: domain.SessionModeArchitect, Model: "opus"}, "plain claude as architect on opus"},
-		{&domain.Session{AgentID: "a1", Model: "sonnet"}, "Reviewer on sonnet"},
 	} {
 		if got := RunsAs(c.s, names); got != c.want {
 			t.Errorf("RunsAs(%+v) = %q, want %q", c.s, got, c.want)
+		}
+	}
+}
+
+func TestRunsOn(t *testing.T) {
+	names := map[string]string{"a1": "Reviewer"}
+	for _, c := range []struct {
+		s    *domain.Session
+		want string
+	}{
+		{&domain.Session{AgentID: "a1"}, "Reviewer"},
+		{&domain.Session{Mode: domain.SessionModeArchitect, Model: "opus"}, "plain claude as architect on opus"},
+		{&domain.Session{AgentID: "a1", Model: "sonnet"}, "Reviewer on sonnet"},
+	} {
+		if got := RunsOn(c.s, names); got != c.want {
+			t.Errorf("RunsOn(%+v) = %q, want %q", c.s, got, c.want)
 		}
 	}
 }
