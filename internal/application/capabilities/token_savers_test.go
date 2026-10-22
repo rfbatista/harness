@@ -3,6 +3,7 @@ package capabilities
 import (
 	"context"
 	"io"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -100,6 +101,31 @@ func TestStartingTokenSaversMakesRelativeInstallationPathsAbsolute(t *testing.T)
 	wantPath, _ := filepath.Abs("tools/codegraph/v1.6.2/codegraph-darwin-arm64/bin/codegraph")
 	if in.Dir != wantDir || in.Path != wantPath {
 		t.Errorf("installation = %q, %q; want %q, %q", in.Dir, in.Path, wantDir, wantPath)
+	}
+}
+
+// A person moved the data dir: an installation recorded at the old place
+// points at the new one when its version is there, and one that is not
+// there is left as recorded.
+func TestStartingTokenSaversRelocatesInstallationsOfAMovedDataDir(t *testing.T) {
+	tools := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(tools, "rtk", "v0.30.1"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	installs := &memoryInstallations{list: []*domain.TokenSaverInstallation{
+		{Saver: domain.TokenSaverRTK, Version: "v0.30.1", Dir: "/old/data/tools/rtk/v0.30.1", Path: "/old/data/tools/rtk/v0.30.1/rtk"},
+		{Saver: domain.TokenSaverCodegraph, Version: "v1.6.2", Dir: "/old/data/tools/codegraph/v1.6.2", Path: "/old/data/tools/codegraph/v1.6.2/bin/codegraph"},
+	}}
+	s := NewService(Deps{})
+	s.UseTokenSavers(TokenSaverDeps{Installations: installs, Downloads: &blockingDownloads{}, Dir: tools})
+	defer s.CloseTokenSavers()
+
+	rtk, codegraph := installs.list[0], installs.list[1]
+	if want := filepath.Join(tools, "rtk", "v0.30.1"); rtk.Dir != want || rtk.Path != filepath.Join(want, "rtk") {
+		t.Errorf("rtk = %q, %q; want %q, %q", rtk.Dir, rtk.Path, want, filepath.Join(want, "rtk"))
+	}
+	if codegraph.Dir != "/old/data/tools/codegraph/v1.6.2" {
+		t.Errorf("codegraph moved to %q, though its version is not in the new data dir", codegraph.Dir)
 	}
 }
 

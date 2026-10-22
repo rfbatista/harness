@@ -101,6 +101,10 @@ type TopBar struct {
 	ModelsHref string
 	// OnModels marks the Models page as the current page.
 	OnModels bool
+	// ServerHref is the Server page; "" when it is not served.
+	ServerHref string
+	// OnServer marks the Server page as the current page.
+	OnServer bool
 }
 
 // Option is one project in the picker.

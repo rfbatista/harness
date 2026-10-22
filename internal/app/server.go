@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"path/filepath"
 	"time"
 
 	"go.uber.org/fx"
@@ -16,6 +17,7 @@ import (
 	"operators-mcp/internal/adapter/in/mcpsession"
 	"operators-mcp/internal/adapter/in/ui"
 	"operators-mcp/internal/adapter/in/web"
+	"operators-mcp/internal/adapter/in/web/serversettings"
 	"operators-mcp/internal/app/catalog"
 	"operators-mcp/internal/application/apps"
 	"operators-mcp/internal/application/artifacts"
@@ -120,7 +122,7 @@ func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRun
 	// designer SPA until it is retired.
 	mux.Handle("/", slow(web.NewHandler(web.Deps{Projects: cat.Projects, Tasks: plan, Sessions: orch, Agents: cat.Agents, Repositories: cat.Projects, EnvFiles: cat.Projects, RunCommands: cat.Projects, Documents: plan, History: ws, Code: code, Workspaces: ws, Artifacts: art, ProjectSummaries: cat.Projects, PullRequests: prs,
 		Resources: plan, Comments: plan, Notifications: noteReader, GitCredentials: creds.port(), Usage: usageSvc, TokenSavers: cat.Capabilities,
-		TokenSaverInstalls: cat.Capabilities, RepositoryIndexes: indexes.port(), Settings: cat.Settings}, assets, uiHandler)))
+		TokenSaverInstalls: cat.Capabilities, RepositoryIndexes: indexes.port(), Settings: cat.Settings, DataPaths: dataPaths(cfg)}, assets, uiHandler)))
 
 	// The LLM proxy every claude process calls through (ADR 0006): loopback
 	// only, outside the API token and CORS, so its responses come back as
@@ -252,4 +254,23 @@ func exposed(addr string) bool {
 	}
 	ip := net.ParseIP(host)
 	return ip == nil || !ip.IsLoopback()
+}
+
+// dataPaths are where the server keeps its data, for the Server page.
+func dataPaths(cfg Config) *serversettings.Paths {
+	p := &serversettings.Paths{Source: cfg.DataDirSource, Database: cfg.DBPath}
+	if cfg.inMemory() {
+		p.Database = ":memory:"
+	} else if db, err := filepath.Abs(cfg.DBPath); err == nil {
+		p.Database = db
+	}
+	root, err := cfg.dataRoot()
+	if err != nil {
+		slog.Warn("server page: data dir not resolved", "err", err)
+	}
+	p.DataDir = root
+	if root != "" && p.Source == "" {
+		p.Source = "the database path"
+	}
+	return p
 }

@@ -100,8 +100,15 @@ func newBranchPublisher(cfg Config) *gitcli.BranchPublisher {
 }
 func newGitCode(cfg Config) *gitcli.Code { return gitcli.NewCode(cfg.gitOptions()...) }
 
-// newDB opens the SQLite database and registers a hook to close it on shutdown.
+// newDB opens the SQLite database and registers a hook to close it on
+// shutdown. The database's folder is made first: the default data dir,
+// ~/.harness, may not exist yet.
 func newDB(lc fx.Lifecycle, cfg Config) (*gorm.DB, error) {
+	if !cfg.inMemory() {
+		if err := os.MkdirAll(filepath.Dir(cfg.DBPath), 0o700); err != nil {
+			return nil, fmt.Errorf("make the database's folder: %w", err)
+		}
+	}
 	db, err := sqlite.Open(cfg.DBPath, sqlite.WithSlowThreshold(cfg.DBSlowThreshold))
 	if err != nil {
 		return nil, err
@@ -257,14 +264,19 @@ func newPlanningService(
 	return svc, nil
 }
 
-// dataDir is name next to the database, or a fresh temporary directory for
-// an in-memory one. It is always absolute: token savers installed under it
-// run from checkouts and worktrees, where a relative path points nowhere.
+// dataDir is name in the data dir (Config.DataDir, or the database's
+// folder), or a fresh temporary directory when there is none. It is always
+// absolute: token savers installed under it run from checkouts and
+// worktrees, where a relative path points nowhere.
 func dataDir(cfg Config, name string) (string, error) {
-	if cfg.DBPath == "" || cfg.DBPath == ":memory:" {
+	root, err := cfg.dataRoot()
+	if err != nil {
+		return "", err
+	}
+	if root == "" {
 		return os.MkdirTemp("", "harness-"+name+"-")
 	}
-	return filepath.Abs(filepath.Join(filepath.Dir(cfg.DBPath), name))
+	return filepath.Join(root, name), nil
 }
 
 // ExecutionModule wires the Genkit-backed execution layer: the LLM client, the
