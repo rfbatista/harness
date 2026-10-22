@@ -847,7 +847,10 @@ templ taskBand(v PageView) {
 		</p>
 	</template>
 	<template x-if="showsDescription">
-		<p class="[ brief ]" x-text="description">{ v.TaskDescription }</p>
+		<div class="[ brief ]" x-bind:data-open="descriptionOpenAttr">
+			<p x-ref="description" x-effect="measureDescription()" x-text="description">{ v.TaskDescription }</p>
+			<button type="button" class="[ more ]" x-show="descriptionOverflows" style="display: none" x-bind:aria-expanded="descriptionOpen" x-on:click="toggleDescription" x-text="descriptionToggleWord">More</button>
+		</div>
 	</template>
 	<template x-if="editingTask">
 		<form class="[ flow ] [ flow-space-s pad-l divide-bottom ]" x-on:submit.prevent="save" x-on:keydown.escape="cancelEditTask">

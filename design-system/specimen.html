@@ -748,6 +748,32 @@
         </div>
       </section>
 
+      <section class="[ flow ] [ flow-space-m ]" id="context-strip">
+        <h2>Context strip</h2>
+        <p class="[ color-ink-muted ]">One row of summary buttons above the agents, one <code>band-panel</code> open at a time, capped at <code>--size-band-cap</code> and scrolling inside. <code>data-tone="attention"</code> is the one loud button; <code>data-quiet</code> the quiet one.</p>
+        <div style="border: 1px solid var(--color-line); border-radius: var(--radius-md); overflow: hidden; max-inline-size: 52rem">
+          <div class="[ context-strip ]" role="group" aria-label="Task context">
+            <div style="display: contents">
+              <button type="button" class="[ cs-btn ]" data-tone="attention" aria-expanded="false" aria-label="Reviews, 3 waiting"><span class="[ label ]">Reviews</span> <span class="[ badge ]" data-tone="attention">3</span> <span class="[ phrase ]">waiting</span><span class="[ chevron ]" aria-hidden="true"></span></button>
+            </div>
+            <div style="display: contents">
+              <button type="button" class="[ cs-btn ]" aria-expanded="true" aria-controls="specimen-band" aria-label="Feature, 3 children, 1 in review"><span class="[ label ]">Feature</span> <span class="[ badge ]">3</span> <span class="[ phrase ]">1 in review</span><span class="[ chevron ]" aria-hidden="true"></span></button>
+              <section class="[ band-panel ]" id="specimen-band" aria-label="Feature">
+                <header class="[ band-head ]"><span>Showing 3 tasks</span><a class="[ button ]" data-variant="ghost" data-size="sm" href="#">PRD: Exports</a></header>
+                <div class="[ list ]" data-band-scroll tabindex="0" role="list" aria-label="Child tasks, 3">
+                  <div class="[ row ]" role="listitem"><span class="[ badge ]" data-status="review">review</span><span class="[ title ]"><a href="#">CSV export</a></span><span class="[ meta ]">2 docs</span></div>
+                  <div class="[ row ]" role="listitem"><span class="[ badge ]" data-status="todo">todo</span><span class="[ title ]"><a href="#">PDF export</a></span><span class="[ meta ]"></span></div>
+                  <div class="[ row ]" role="listitem" data-done><span class="[ badge ]" data-status="done">done</span><span class="[ title ]"><a href="#">Export button</a></span><span class="[ meta ]">1 doc</span></div>
+                </div>
+              </section>
+            </div>
+            <div style="display: contents">
+              <button type="button" class="[ cs-btn ]" data-quiet aria-expanded="false"><span class="[ label ]" data-short="Savers">Token savers</span><span class="[ chevron ]" aria-hidden="true"></span></button>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <section class="[ flow ] [ flow-space-m ]" id="notifications">
         <h2>Notifications</h2>
         <p class="[ color-ink-muted ]">The bell ends the <code>topbar</code>, with an <code>attention</code> badge for the unread count across projects: none at 0, the number, then <em>99+</em> (the accessible name keeps the exact count). Each item is a <code>notification</code> row: an <code>action</code> one takes the amber rule and <em>Needs you</em>; unread is a filled dot and a bold title; <code>settled</code> is muted and says so. The panel clamps bodies to two lines; the inbox page shows them whole.</p>
