@@ -23,6 +23,13 @@ import (
 // A test pushes feed messages through the returned sseFeed.
 func architectServer(t *testing.T, messages []domain.TaskMessage, reviews ...*domain.ReviewRequest) (*httptest.Server, *sseFeed) {
 	t.Helper()
+	return architectServerWith(t, nil, messages, reviews...)
+}
+
+// architectServerWith is architectServer with more tasks in the project, such
+// as the children that make the task a feature.
+func architectServerWith(t *testing.T, more []*domain.Ticket, messages []domain.TaskMessage, reviews ...*domain.ReviewRequest) (*httptest.Server, *sseFeed) {
+	t.Helper()
 	if messages == nil {
 		messages = []domain.TaskMessage{} // the server sends [], never null
 	}
@@ -38,9 +45,9 @@ func architectServer(t *testing.T, messages []domain.TaskMessage, reviews ...*do
 	next := now.Add(6*time.Minute + 30*time.Second)
 	pages := NewHandler(Deps{
 		Projects: fakeProjects{[]*domain.Project{{ID: "p1", Name: "coding_pool"}}},
-		Tasks: fakeTickets{[]*domain.Ticket{
+		Tasks: fakeTickets{append([]*domain.Ticket{
 			{ID: "t1", ProjectID: "p1", Title: "Architect highlights", Status: domain.TicketStatusInProgress, ArchitectSessionID: &arch, PendingReviews: pendingOf(reviews)},
-		}},
+		}, more...)},
 		Agents:       fakeAgents{[]*domain.Agent{{ID: "a-arch", Name: "software-architect"}, {ID: "a-go", Name: "go-developer"}, {ID: "a-web", Name: "frontend-developer"}}},
 		Repositories: fakeRepos{[]*domain.Repository{{ID: "r1", ProjectID: "p1", Name: "harness"}}},
 		Sessions: fakeSessions{[]*domain.Session{
@@ -333,7 +340,12 @@ func TestPersonAnswersTheArchitectsReviewRequests(t *testing.T) {
 	if err := chromedp.Run(ctx,
 		chromedp.EmulateViewport(1280, 900),
 		chromedp.Navigate(srv.URL+"/projects/p1/tasks/t1"),
-		chromedp.Poll(cards+`.length === 2`, nil, chromedp.WithPollingTimeout(10*time.Second)),
+		chromedp.Poll(`!!document.querySelector('[data-band="reviews"]:not([hidden])')`, nil, chromedp.WithPollingTimeout(10*time.Second)),
+		// The panel opens on the button; the second request is folded behind "1 more waiting".
+		chromedp.Evaluate(`document.querySelector('[data-band="reviews"]').click()`, nil),
+		chromedp.Poll(cards+`.length === 1`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Evaluate(`document.querySelector('[aria-label="Review requests"] [data-more]').click()`, nil),
+		chromedp.Poll(cards+`.length === 2`, nil, chromedp.WithPollingTimeout(5*time.Second)),
 		chromedp.Evaluate(band, &first),
 		shot("reviews-band"),
 		// Request changes without a note: stopped at the field.

@@ -195,3 +195,65 @@ test("a task that never had an architect reads nothing, yet shows a request that
   assert.deepEqual(dispatched.at(-1), { name: "announce", detail: { text: "The architect asks for your review: First one" } }, "told to the page's live region");
   instance.destroy();
 });
+
+const waiting = (n) => Array.from({ length: n }, (_, i) => makeReview({ id: `rv${i + 1}`, subject: `Review ${i + 1}`, createdAt: at(i) }));
+
+test("the strip's button: how many wait, in the waiting tone, and the server's count until the list is read", async () => {
+  const { instance } = await setup({ reviews: waiting(3) });
+  assert.deepEqual([instance.summary.has, instance.summary.tone, instance.summary.count, instance.summary.phrase], [true, "attention", "3", "waiting"]);
+  instance.destroy();
+
+  const el = seededElement(seed);
+  el.dataset.ticketId = "t1";
+  el.dataset.architect = "";
+  el.dataset.pending = "2";
+  const memory = memoryReviews({ reviews: [], now: () => at(5) });
+  const painted = mount(reviewsInbox({ gateway: memory.gateway, clock: fixedClock(at(5)) }), { el });
+  painted.instance.init(); // not read yet
+  assert.deepEqual([painted.instance.summary.has, painted.instance.summary.tone, painted.instance.summary.count, painted.instance.summary.phrase], [true, "attention", "2", "waiting"]);
+  painted.instance.destroy();
+});
+
+test("with nothing waiting the button counts the settled requests in a neutral tone, and is gone when there are none", async () => {
+  const { instance } = await setup({ reviews: [makeReview({ state: "approved" })] });
+  assert.deepEqual([instance.summary.has, instance.summary.tone, instance.summary.count, instance.summary.phrase], [true, null, "1", "settled"]);
+  instance.destroy();
+  const none = await setup({ reviews: [] });
+  assert.equal(none.instance.summary.has, false);
+  none.instance.destroy();
+});
+
+test("a request list that cannot be read says so on the button", async () => {
+  const el = seededElement(seed);
+  el.dataset.ticketId = "t1";
+  el.dataset.architect = "";
+  const gateway = { listForTask: async () => Promise.reject(new Error("down")), follow: () => () => {} };
+  const { instance } = mount(reviewsInbox({ gateway, clock: fixedClock(at(5)) }), { el });
+  instance.init();
+  await flush();
+  assert.deepEqual([instance.summary.has, instance.summary.count, instance.summary.phrase], [true, "", "couldn't load"]);
+  instance.destroy();
+});
+
+test("the panel shows the first waiting request in full and folds the others behind a button", async () => {
+  const { instance } = await setup({ reviews: waiting(3) });
+  assert.deepEqual([instance.firstCards.length, instance.moreCards.length, instance.hasMore, instance.moreLabel], [1, 2, true, "2 more waiting"]);
+  assert.equal(instance.firstCards[0].subject, "Review 3", "newest first");
+  instance.toggleMore();
+  assert.deepEqual([instance.moreOpen, instance.moreLabel], [true, "Hide 2"]);
+  instance.toggleMore();
+  assert.equal(instance.moreLabel, "2 more waiting");
+  const one = await setup({ reviews: waiting(1) });
+  assert.deepEqual([one.instance.hasMore, one.instance.moreCards.length], [false, 0]);
+  instance.destroy();
+  one.instance.destroy();
+});
+
+test("the panel says nothing waits when only settled requests are left", async () => {
+  const { instance } = await setup({ reviews: [makeReview({ state: "approved" })] });
+  assert.deepEqual([instance.nothingWaits, instance.hasSettled], [true, true]);
+  const waits = await setup({ reviews: waiting(1) });
+  assert.equal(waits.instance.nothingWaits, false);
+  instance.destroy();
+  waits.instance.destroy();
+});

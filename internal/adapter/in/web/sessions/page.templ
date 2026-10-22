@@ -127,15 +127,6 @@ templ Page(v PageView) {
 			</div>
 			@contextStrip(v)
 			}
-			@reviewBand(v)
-			if v.TokenSavers != nil {
-				<details class="[ pad-inline-l pad-block-xs divide-bottom ]" data-token-savers>
-					<summary class="[ text-sm ]">Token savers</summary>
-					<div class="[ pad-block-s ]" style="max-inline-size: 44rem">
-						@tokensavers.Section(*v.TokenSavers)
-					</div>
-				</details>
-			}
 			<template x-if="error">
 				<div class="[ banner ] [ pad-s ]" data-tone="danger" role="alert">
 					<div class="[ flow ] [ flow-space-3xs grow ]">
@@ -177,8 +168,147 @@ templ Page(v PageView) {
 // that has nothing is painted hidden and appears once it has.
 templ contextStrip(v PageView) {
 	<div class="[ context-strip ]" role="group" aria-label="Task context" x-data="tasksContextStrip">
+		@reviewsBand(v)
 		@featureBand(v)
+		@tokenSaversBand(v)
 	</div>
+}
+
+// reviewsBand is the requests the task's architect raised for the person
+// (reviewsInbox, scoped to the task): its button says how many wait, in the
+// amber waiting tone, and its panel shows the newest first, the others
+// behind "N more waiting", then the settled ones under "Earlier reviews".
+// The server paints how many wait (task.pending_reviews) until the browser
+// has read them; a task with none paints the button hidden, and it appears
+// once the architect raises one. Its announcements go to the page's live
+// region (the announce event), so the page keeps one.
+templ reviewsBand(v PageView) {
+	if v.Reviews != nil {
+		@templ.JSONScript("reviews-seed", v.Reviews)
+		<div
+			style="display: contents"
+			x-data="reviewsInbox"
+			data-seed="reviews-seed"
+			data-ticket-id={ v.Reviews.TicketID }
+			data-pending={ strconv.Itoa(v.PendingReviews) }
+			if v.Task.ArchitectSessionID != nil {
+				data-architect
+			}
+		>
+			<button
+				type="button"
+				class="[ cs-btn ]"
+				id="band-reviews-button"
+				data-band="reviews"
+				aria-controls="band-reviews"
+				aria-expanded="false"
+				x-bind:aria-expanded="expanded('reviews')"
+				x-on:click="toggle('reviews')"
+				x-bind:hidden="!summary.has"
+				x-bind:data-tone="summary.tone"
+				{ reviewsButtonAttrs(v.PendingReviews)... }
+			>
+				<span class="[ label ]">Reviews</span>
+				{ " " }
+				<span class="[ badge ]" x-text="summary.count" x-show="summary.count !== ''" x-bind:data-tone="summary.tone" { toneAttrs(v.PendingReviews > 0)... } { shownIf(v.PendingReviews > 0)... }>{ strconv.Itoa(v.PendingReviews) }</span>
+				{ " " }
+				<span class="[ phrase ]" x-text="summary.phrase">{ reviewsPhrase(v.PendingReviews) }</span>
+				<span class="[ chevron ]" aria-hidden="true"></span>
+			</button>
+			<section
+				class="[ band-panel ]"
+				id="band-reviews"
+				aria-label="Review requests"
+				data-band-panel="reviews"
+				x-show="expanded('reviews') && summary.has"
+				style="display: none"
+			>
+				<div class="[ reviews ]" data-band-scroll tabindex="0" x-bind:data-attention="attentionAttr">
+					if v.PendingReviews > 0 {
+						<div class="[ flow ] [ flow-space-s ]" x-show="notLoaded">
+							<p class="[ reviews-head ]">
+								@components.Status("waiting", "waiting")
+								<span>{ waitingLine(v.PendingReviews) }</span>
+							</p>
+							<span class="[ skeleton ]" style="--skeleton-width: 50%"></span>
+							<span class="[ skeleton ]" style="--skeleton-width: 80%"></span>
+						</div>
+					}
+					@components.ReviewsError()
+					<template x-if="hasPending">
+						<div class="[ flow ] [ flow-space-2xs ]">
+							<h2 class="[ reviews-head ]" tabindex="-1" data-reviews-heading>
+								<span class="[ status ]" data-state="waiting">waiting</span>
+								<span x-text="headline"></span>
+							</h2>
+							<template x-for="card in firstCards" x-bind:key="card.id">
+								@components.ReviewCard()
+							</template>
+							<template x-if="hasMore">
+								<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" data-more x-bind:aria-expanded="moreOpen" x-on:click="toggleMore" x-text="moreLabel"></button>
+							</template>
+							<template x-if="moreOpen">
+								<div class="[ flow ] [ flow-space-2xs ]">
+									<template x-for="card in moreCards" x-bind:key="card.id">
+										@components.ReviewCard()
+									</template>
+								</div>
+							</template>
+						</div>
+					</template>
+					<template x-if="nothingWaits">
+						<p>Nothing waits on you.</p>
+					</template>
+					<template x-if="hasSettled">
+						<details>
+							<summary x-text="settledLabel"></summary>
+							<template x-for="card in settledCards" x-bind:key="card.id">
+								@components.SettledReviewCard()
+							</template>
+						</details>
+					</template>
+				</div>
+			</section>
+		</div>
+	}
+}
+
+// tokenSaversBand is the task's Token savers control: a quiet last button
+// whose panel is the control itself. Left out when the server sends none.
+templ tokenSaversBand(v PageView) {
+	if v.TokenSavers != nil {
+		<div style="display: contents">
+			<button
+				type="button"
+				class="[ cs-btn ]"
+				id="band-token-savers-button"
+				data-band="token-savers"
+				data-quiet
+				aria-controls="band-token-savers"
+				aria-expanded="false"
+				x-bind:aria-expanded="expanded('token-savers')"
+				x-on:click="toggle('token-savers')"
+			>
+				<span class="[ label ]">Token savers</span>
+				<span class="[ chevron ]" aria-hidden="true"></span>
+			</button>
+			<section
+				class="[ band-panel ]"
+				id="band-token-savers"
+				aria-labelledby="band-token-savers-button"
+				data-band-panel="token-savers"
+				data-token-savers
+				x-show="expanded('token-savers')"
+				style="display: none"
+			>
+				<div class="[ pad-inline-l pad-block-s ]" data-band-scroll tabindex="0">
+					<div style="max-inline-size: 44rem">
+						@tokensavers.Section(*v.TokenSavers)
+					</div>
+				</div>
+			</section>
+		</div>
+	}
 }
 
 // featureBand is the feature task's PRD and child tasks (ADR 0016). The

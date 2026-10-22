@@ -48,3 +48,17 @@ export function toCard(r, { names, projectId, now }) {
 
 /** "1 review waits on you", "3 reviews wait on you". */
 export const waitingLine = (n) => `${count(n, "review")} ${n === 1 ? "waits" : "wait"} on you`;
+
+/**
+ * What the strip's Reviews button says. Until the list is read, the server's
+ * count of waiting requests stands; a list that cannot be read says so.
+ * @param {{ loaded: boolean, error: unknown, pending: number, settled: number, painted: number }} state
+ * @returns {{ has: boolean, tone: "attention" | null, count: string, phrase: string }}
+ */
+export function reviewsSummary({ loaded, error, pending, settled, painted }) {
+  if (!loaded && error) return { has: true, tone: null, count: "", phrase: "couldn't load" };
+  const waiting = loaded ? pending : painted;
+  if (waiting > 0) return { has: true, tone: "attention", count: String(waiting), phrase: "waiting" };
+  if (loaded && settled > 0) return { has: true, tone: null, count: String(settled), phrase: "settled" };
+  return { has: false, tone: null, count: "", phrase: "" };
+}

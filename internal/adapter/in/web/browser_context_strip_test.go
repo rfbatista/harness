@@ -249,3 +249,257 @@ func TestTheContextStripFollowsTheChildrenLive(t *testing.T) {
 		t.Errorf("JavaScript errors:\n%s", strings.Join(e, "\n"))
 	}
 }
+
+const (
+	reviewsBtn   = `document.querySelector('[data-band="reviews"]')`
+	reviewsPanel = `document.querySelector('[data-band-panel="reviews"]')`
+)
+
+// pendingReviews are n requests waiting on the person, the first the oldest.
+func pendingReviews(n int) []*domain.ReviewRequest {
+	now := time.Now()
+	var out []*domain.ReviewRequest
+	for i := 0; i < n; i++ {
+		at := now.Add(-time.Duration(n-i) * time.Minute)
+		out = append(out, &domain.ReviewRequest{ID: fmt.Sprintf("rv%d", i+1), TaskID: "t1", ProjectID: "p1", ArchitectSessionID: "s-arch", AboutSessionID: "s-server",
+			Subject: fmt.Sprintf("Review number %d", i+1), Body: "Three specs and two contracts.\nPlease check the status authority rule.", DocumentIDs: []string{}, ArtifactIDs: []string{},
+			State: domain.ReviewPending, CreatedAt: at, UpdatedAt: at})
+	}
+	return out
+}
+
+func featureChildren(n int) []*domain.Ticket {
+	var out []*domain.Ticket
+	for i := 0; i < n; i++ {
+		out = append(out, &domain.Ticket{ID: fmt.Sprintf("c%02d", i), ProjectID: "p1", Title: fmt.Sprintf("Child task %d", i), Status: domain.TicketStatusTodo, ParentID: "t1"})
+	}
+	return out
+}
+
+// Three requests wait: the strip says so in the waiting tone; the panel shows
+// the newest in full and folds the others behind "2 more waiting", inside the
+// cap, with the agents still on screen.
+func TestTheReviewsPanelFoldsTheWaitingRequestsInsideTheCap(t *testing.T) {
+	srv, _ := architectServer(t, nil, pendingReviews(3)...)
+	ctx, errs := browser(t)
+
+	cards := `[...document.querySelectorAll('[data-band-panel="reviews"] .review')].filter(c => c.checkVisibility())`
+	scroller := `document.querySelector('[data-band-panel="reviews"] [data-band-scroll]')`
+	var label, tone, closedExpanded, firstCard, fold, foldAfter string
+	var visibleCards, allCards int
+	var panelHeight, innerHeight, listTop, clientHeight, scrollHeight float64
+	err := chromedp.Run(ctx,
+		chromedp.EmulateViewport(1280, 800),
+		chromedp.Navigate(srv.URL+"/projects/p1/tasks/t1"),
+		chromedp.Poll(pageReady+` && `+reviewsBtn+`.textContent.includes('3')`, nil, chromedp.WithPollingTimeout(10*time.Second)),
+		chromedp.Evaluate(reviewsBtn+`.textContent.replace(/\s+/g, ' ').trim()`, &label),
+		chromedp.Evaluate(reviewsBtn+`.dataset.tone ?? ''`, &tone),
+		chromedp.Evaluate(reviewsBtn+`.getAttribute('aria-expanded')`, &closedExpanded),
+		chromedp.Evaluate(reviewsBtn+`.click()`, nil),
+		chromedp.Poll(cards+`.length === 1`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Evaluate(cards+`[0].querySelector('h3').textContent`, &firstCard),
+		chromedp.Evaluate(`document.querySelector('[data-band-panel="reviews"] [data-more]').textContent.trim()`, &fold),
+		chromedp.Evaluate(`document.querySelector('[data-band-panel="reviews"] [data-more]').click()`, nil),
+		chromedp.Poll(cards+`.length === 3`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Evaluate(`document.querySelector('[data-band-panel="reviews"] [data-more]').textContent.trim()`, &foldAfter),
+		chromedp.Evaluate(`document.querySelectorAll('[data-band-panel="reviews"] .review').length`, &allCards),
+		chromedp.Evaluate(cards+`.length`, &visibleCards),
+		chromedp.Evaluate(reviewsPanel+`.getBoundingClientRect().height`, &panelHeight),
+		chromedp.Evaluate(scroller+`.clientHeight`, &clientHeight),
+		chromedp.Evaluate(scroller+`.scrollHeight`, &scrollHeight),
+		chromedp.Evaluate(`window.innerHeight`, &innerHeight),
+		chromedp.Evaluate(`document.querySelector('[role=listbox]').getBoundingClientRect().top`, &listTop),
+	)
+	if err != nil {
+		t.Fatalf("%v\nJS errors: %v", err, errs.all())
+	}
+	if label != "Reviews 3 waiting" || tone != "attention" {
+		t.Errorf("the Reviews button reads %q in tone %q", label, tone)
+	}
+	if closedExpanded != "false" {
+		t.Errorf("the panel starts closed (aria-expanded %q)", closedExpanded)
+	}
+	if firstCard != "Review number 3" {
+		t.Errorf("the first card is %q, want the newest", firstCard)
+	}
+	if fold != "2 more waiting" || foldAfter != "Hide 2" {
+		t.Errorf("the fold button reads %q, then %q", fold, foldAfter)
+	}
+	if visibleCards != 3 || allCards != 3 {
+		t.Errorf("after unfolding: %d visible of %d cards, want 3", visibleCards, allCards)
+	}
+	if limit := innerHeight * 0.3; panelHeight > limit+1 {
+		t.Errorf("the panel is %.0fpx high, over the 30svh cap of %.0fpx", panelHeight, limit)
+	}
+	if scrollHeight <= clientHeight {
+		t.Errorf("three cards scroll inside the panel: scrollHeight %.0f, clientHeight %.0f", scrollHeight, clientHeight)
+	}
+	if listTop+120 > innerHeight {
+		t.Errorf("the agent list starts at %.0fpx of a %.0fpx viewport", listTop, innerHeight)
+	}
+	if e := errs.all(); len(e) > 0 {
+		t.Errorf("JavaScript errors:\n%s", strings.Join(e, "\n"))
+	}
+}
+
+// One panel at a time: opening Reviews closes Feature, and the other way.
+func TestOpeningAnotherBandClosesTheOpenOne(t *testing.T) {
+	srv, _ := architectServerWith(t, featureChildren(3), nil, pendingReviews(1)...)
+	ctx, errs := browser(t)
+
+	open := func(sel string) string { return `(` + sel + `.checkVisibility())` }
+	var order, expanded string
+	err := chromedp.Run(ctx,
+		chromedp.EmulateViewport(1280, 800),
+		chromedp.Navigate(srv.URL+"/projects/p1/tasks/t1"),
+		chromedp.Poll(pageReady, nil, chromedp.WithPollingTimeout(10*time.Second)),
+		chromedp.Evaluate(`[...document.querySelectorAll('[aria-label="Task context"] [data-band]')].filter(b => b.checkVisibility()).map(b => b.dataset.band).join(',')`, &order),
+		chromedp.Evaluate(stripBtn+`.click()`, nil),
+		chromedp.Poll(open(`document.querySelector('[data-band-panel="feature"]')`), nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Evaluate(reviewsBtn+`.click()`, nil),
+		chromedp.Poll(open(reviewsPanel)+` && !`+open(stripPanel), nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Evaluate(stripBtn+`.getAttribute('aria-expanded') + ',' + `+reviewsBtn+`.getAttribute('aria-expanded')`, &expanded),
+		chromedp.Evaluate(stripBtn+`.click()`, nil),
+		chromedp.Poll(open(stripPanel)+` && !`+open(reviewsPanel), nil, chromedp.WithPollingTimeout(5*time.Second)),
+	)
+	if err != nil {
+		t.Fatalf("%v\nJS errors: %v", err, errs.all())
+	}
+	if order != "reviews,feature" {
+		t.Errorf("the strip's buttons are %q, want reviews then feature", order)
+	}
+	if expanded != "false,true" {
+		t.Errorf("aria-expanded feature,reviews = %q", expanded)
+	}
+	if e := errs.all(); len(e) > 0 {
+		t.Errorf("JavaScript errors:\n%s", strings.Join(e, "\n"))
+	}
+}
+
+// Answering a request moves it under Earlier reviews with the panel open; a
+// request raised over the feed bumps the count and does not open the panel.
+func TestTheReviewsPanelFollowsAnswersAndArrivalsWithoutMoving(t *testing.T) {
+	reviews := pendingReviews(1)
+	srv, feed := architectServer(t, nil, reviews...)
+	ctx, errs := browser(t)
+
+	label := `(` + reviewsBtn + `.textContent.replace(/\s+/g, ' ').trim())`
+	var afterAnswer, afterArrival, earlier string
+	var openAfterArrival bool
+	err := chromedp.Run(ctx,
+		chromedp.EmulateViewport(1280, 800),
+		chromedp.Navigate(srv.URL+"/projects/p1/tasks/t1"),
+		chromedp.Poll(pageReady+` && `+label+` === 'Reviews 1 waiting'`, nil, chromedp.WithPollingTimeout(10*time.Second)),
+		chromedp.Evaluate(reviewsBtn+`.click()`, nil),
+		chromedp.Poll(`!!`+reviewsPanel+`.querySelector('.review')`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Evaluate(reviewsPanel+`.querySelector('.review button').click()`, nil), // Approve
+		chromedp.Poll(label+` === 'Reviews 1 settled'`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Evaluate(label, &afterAnswer),
+		chromedp.Evaluate(`(`+reviewsPanel+`.textContent.includes('Nothing waits on you.') && `+reviewsPanel+`.checkVisibility()) + ' ' + `+reviewsPanel+`.querySelector('details summary').textContent`, &earlier),
+		chromedp.ActionFunc(func(context.Context) error {
+			for feed.followers() == 0 {
+				time.Sleep(20 * time.Millisecond)
+			}
+			at := time.Now()
+			feed.pushRaw(t, map[string]any{"review_request": &domain.ReviewRequest{ID: "rv9", TaskID: "t1", ProjectID: "p1", ArchitectSessionID: "s-arch", Subject: "Board badge wording",
+				Body: "Look.", DocumentIDs: []string{}, ArtifactIDs: []string{}, State: domain.ReviewPending, CreatedAt: at, UpdatedAt: at}})
+			return nil
+		}),
+		chromedp.Poll(label+` === 'Reviews 1 waiting'`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Evaluate(label, &afterArrival),
+		chromedp.Evaluate(reviewsPanel+`.checkVisibility()`, &openAfterArrival),
+	)
+	if err != nil {
+		t.Fatalf("%v\nJS errors: %v", err, errs.all())
+	}
+	if afterAnswer != "Reviews 1 settled" {
+		t.Errorf("after approving: %q", afterAnswer)
+	}
+	if earner := strings.TrimSpace(earlier); earner != "true Earlier reviews (1)" {
+		t.Errorf("the open panel says %q", earner)
+	}
+	if afterArrival != "Reviews 1 waiting" || !openAfterArrival {
+		t.Errorf("after the arrival: %q, panel still open %v", afterArrival, openAfterArrival)
+	}
+	if e := errs.all(); len(e) > 0 {
+		t.Errorf("JavaScript errors:\n%s", strings.Join(e, "\n"))
+	}
+}
+
+type fakeSaverActivations struct{}
+
+func (fakeSaverActivations) ListTokenSaverActivations(context.Context, domain.ActivationOwner) ([]domain.TokenSaverActivation, error) {
+	return []domain.TokenSaverActivation{
+		{Saver: domain.TokenSaverRTK, Value: domain.ActivationInherit, Summary: "inherit — resolves off (project)"},
+		{Saver: domain.TokenSaverCodegraph, Value: domain.ActivationOn, Summary: "on — resolves on (task)"},
+	}, nil
+}
+
+// Token savers is the strip's quiet last button; its panel is the existing
+// section, inside the cap, and one panel at a time still holds.
+func TestTheTokenSaversButtonOpensTheSectionAsTheLastPanel(t *testing.T) {
+	deps := bandedDeps()
+	deps.TokenSavers = fakeSaverActivations{}
+	url, _ := stripServer(t, deps)
+	ctx, errs := browser(t)
+
+	savers := `document.querySelector('[data-band="token-savers"]')`
+	panel := `document.querySelector('[data-band-panel="token-savers"]')`
+	var order, label string
+	var panelOpen, featureClosed, hook bool
+	var panelHeight, innerHeight float64
+	err := chromedp.Run(ctx,
+		chromedp.EmulateViewport(1280, 800),
+		chromedp.Navigate(url+"/projects/p1/tasks/t-feed"),
+		chromedp.Poll(pageReady, nil, chromedp.WithPollingTimeout(10*time.Second)),
+		chromedp.Evaluate(`[...document.querySelectorAll('[aria-label="Task context"] [data-band]')].filter(b => b.checkVisibility()).map(b => b.dataset.band).join(',')`, &order),
+		chromedp.Evaluate(savers+`.textContent.replace(/\s+/g, ' ').trim()`, &label),
+		chromedp.Evaluate(savers+`.click()`, nil),
+		chromedp.Poll(panel+`.checkVisibility() && !!`+panel+`.querySelector('[data-saver="rtk"]:not([data-ssr] *)')`, nil, chromedp.WithPollingTimeout(10*time.Second)),
+		chromedp.Evaluate(panel+`.checkVisibility()`, &panelOpen),
+		chromedp.Evaluate(`!!`+panel+`.querySelector('[data-token-savers]') || `+panel+`.hasAttribute('data-token-savers')`, &hook),
+		chromedp.Evaluate(panel+`.getBoundingClientRect().height`, &panelHeight),
+		chromedp.Evaluate(`window.innerHeight`, &innerHeight),
+		chromedp.Evaluate(stripBtn+`.click()`, nil),
+		chromedp.Poll(stripPanel+`.checkVisibility() && !`+panel+`.checkVisibility()`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Evaluate(`!`+panel+`.checkVisibility()`, &featureClosed),
+	)
+	if err != nil {
+		t.Fatalf("%v\nJS errors: %v", err, errs.all())
+	}
+	if order != "feature,token-savers" || label != "Token savers" {
+		t.Errorf("buttons %q; the last reads %q", order, label)
+	}
+	if !panelOpen || !hook {
+		t.Errorf("the section opens in the panel: visible %v, data-token-savers %v", panelOpen, hook)
+	}
+	if limit := innerHeight * 0.3; panelHeight > limit+1 {
+		t.Errorf("the panel is %.0fpx high, over the 30svh cap of %.0fpx", panelHeight, limit)
+	}
+	if !featureClosed {
+		t.Error("opening Feature leaves Token savers open")
+	}
+	if e := errs.all(); len(e) > 0 {
+		t.Errorf("JavaScript errors:\n%s", strings.Join(e, "\n"))
+	}
+}
+
+// With no token savers served there is no button for them.
+func TestNoTokenSaversMeansNoTokenSaversButton(t *testing.T) {
+	url, _ := stripServer(t, bandedDeps())
+	ctx, errs := browser(t)
+
+	var present bool
+	err := chromedp.Run(ctx,
+		chromedp.EmulateViewport(1280, 800),
+		chromedp.Navigate(url+"/projects/p1/tasks/t-feed"),
+		chromedp.Poll(pageReady, nil, chromedp.WithPollingTimeout(10*time.Second)),
+		chromedp.Evaluate(`!!document.querySelector('[data-band="token-savers"]')`, &present),
+	)
+	if err != nil {
+		t.Fatalf("%v\nJS errors: %v", err, errs.all())
+	}
+	if present {
+		t.Error("a Token savers button without token savers")
+	}
+}

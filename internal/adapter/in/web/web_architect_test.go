@@ -67,19 +67,31 @@ func sessionsFirstPaint(body string) string {
 	return list[:strings.Index(list, `x-for="group in groups"`)]
 }
 
+// tagAt is the opening tag that contains marker: from its "<" to its ">".
+func tagAt(body, marker string) string {
+	at := strings.Index(body, marker)
+	if at < 0 {
+		return ""
+	}
+	return body[strings.LastIndex(body[:at], "<") : at+strings.Index(body[at:], ">")+1]
+}
+
 func TestTaskPagePaintsTheReviewsWaitingOnThePerson(t *testing.T) {
 	w := architectWorld()
 	w.tickets[0].PendingReviews = 2
 	body := get(t, newTestHandler(t, w), "/projects/p1/tasks/t-feed").Body.String()
-	band := body[strings.Index(body, `aria-label="Review requests"`):]
-	band = band[:strings.Index(band, ">")]
-	for _, want := range []string{`x-data="reviewsInbox"`, `data-ticket-id="t-feed"`, `data-pending="2"`, ` data-attention`} {
+	band := tagAt(body, `x-data="reviewsInbox"`)
+	for _, want := range []string{`data-ticket-id="t-feed"`, `data-pending="2"`} {
 		if !strings.Contains(band, want) {
 			t.Errorf("the band %q lacks %s", band, want)
 		}
 	}
-	if strings.Contains(band, " hidden") {
-		t.Errorf("a band with reviews waiting is hidden: %q", band)
+	button := tagAt(body, `data-band="reviews"`)
+	if !strings.Contains(button, `data-tone="attention"`) || strings.Contains(button, " hidden") {
+		t.Errorf("the Reviews button of a task with reviews waiting is amber and shown: %q", button)
+	}
+	if !strings.Contains(body, `x-text="summary.count"`) || !strings.Contains(body, `x-text="summary.phrase">waiting</span>`) {
+		t.Error("the button paints how many wait before the browser reads them")
 	}
 	for _, want := range []string{
 		"2 reviews wait on you",
@@ -95,10 +107,9 @@ func TestTaskPagePaintsTheReviewsWaitingOnThePerson(t *testing.T) {
 
 func TestTaskPageWithNoReviewsPaintsTheBandHidden(t *testing.T) {
 	body := get(t, newTestHandler(t, board()), "/projects/p1/tasks/t-feed").Body.String()
-	band := body[strings.Index(body, `aria-label="Review requests"`):]
-	band = band[:strings.Index(band, ">")]
-	if !strings.Contains(band, " hidden") || strings.Contains(band, " data-attention") {
-		t.Errorf("a band with nothing waiting should be painted hidden and quiet: %q", band)
+	button := tagAt(body, `data-band="reviews"`)
+	if !strings.Contains(button, " hidden") || strings.Contains(button, `data-tone="attention"`) {
+		t.Errorf("a Reviews button with nothing waiting should be painted hidden and quiet: %q", button)
 	}
 	if strings.Contains(body, "wait on you") {
 		t.Error("nothing waits, yet the page says something does")

@@ -26,7 +26,7 @@ templ ReviewCard() {
 					<textarea x-bind:id="card.noteId" rows="2" x-model="card.draft.note" x-bind:aria-invalid="card.invalid" x-bind:aria-describedby="card.errorId"></textarea>
 					<span class="[ error ]" x-bind:id="card.errorId" x-text="card.draft.problem"></span>
 				</div>
-				<div class="[ cluster ] [ gutter-xs ]">
+				<div class="[ actions ] [ cluster ] [ gutter-xs ]">
 					<button type="button" class="[ button ]" x-bind:data-variant="card.approveVariant" data-size="sm" x-bind:aria-busy="card.draft.busy" x-bind:disabled="card.draft.busy" x-on:click="approve(card.id)">Approve</button>
 					<button type="button" class="[ button ]" data-size="sm" x-bind:disabled="card.draft.busy" x-on:click="requestChanges(card.id)">Request changes</button>
 				</div>

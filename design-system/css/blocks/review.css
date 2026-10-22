@@ -1,8 +1,8 @@
 /*
  * Review — the requests the task's architect raised for the person. .reviews
- * is the band under the task header (and the project inbox's list): amber,
- * because it waits on the person (data-attention), with its own scroll so a
- * long one never pushes the sessions off screen. .review is one request:
+ * is the list in the task page's reviews panel (and the project inbox's):
+ * amber, because it waits on the person (data-attention); the panel caps and
+ * scrolls it (context-strip.css). .review is one request:
  * subject, byline, the architect's text, links, then the note and the answer.
  * Exceptions: data-withdrawn (a request withdrawn while answered: quiet).
  * .reviews-inbox: the project inbox's scroll region, one .reviews per task.
@@ -12,8 +12,6 @@
   .reviews {
     display: grid;
     gap: var(--space-s);
-    max-block-size: 50vh;
-    overflow-y: auto;
     padding: var(--space-m) var(--space-l);
     border-block-end: var(--border-width) solid var(--color-line);
 
@@ -31,11 +29,6 @@
       font-size: var(--text-sm);
       cursor: pointer;
     }
-  }
-
-  .reviews-inbox > .reviews {
-    max-block-size: none;
-    overflow: visible;
   }
 
   .review {
@@ -71,6 +64,14 @@
     }
 
     & textarea { min-block-size: 3.5rem; }
+
+    /* The answer's buttons stay reachable when a long card scrolls in its panel. */
+    & .actions {
+      position: sticky;
+      inset-block-end: 0;
+      padding-block: var(--space-xs);
+      background: var(--color-raised);
+    }
 
     &[data-withdrawn] { color: var(--color-ink-muted); }
   }

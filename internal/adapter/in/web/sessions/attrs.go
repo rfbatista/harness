@@ -47,13 +47,30 @@ func descriptionAttrs(description string) templ.Attributes {
 	return templ.Attributes{}
 }
 
-// bandAttrs paints the review band before the browser reads the requests:
-// amber when some wait on the person, hidden when none do.
-func bandAttrs(pending int) templ.Attributes {
+// reviewsButtonAttrs paints the strip's Reviews button before the browser
+// reads the requests: amber when some wait on the person, hidden when none do.
+func reviewsButtonAttrs(pending int) templ.Attributes {
 	if pending > 0 {
-		return templ.Attributes{"data-attention": true}
+		return templ.Attributes{"data-tone": "attention"}
 	}
 	return templ.Attributes{"hidden": true}
+}
+
+// toneAttrs paints the amber tone on what waits on the person.
+func toneAttrs(attention bool) templ.Attributes {
+	if attention {
+		return templ.Attributes{"data-tone": "attention"}
+	}
+	return templ.Attributes{}
+}
+
+// reviewsPhrase is the Reviews button's state phrase before the browser
+// reads the requests.
+func reviewsPhrase(pending int) string {
+	if pending > 0 {
+		return "waiting"
+	}
+	return ""
 }
 
 // waitingLine is how many requests wait: "1 review waits on you". The

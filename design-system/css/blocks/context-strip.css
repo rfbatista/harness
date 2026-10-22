@@ -68,6 +68,7 @@
 
     &[data-tone="attention"] {
       --_tone: var(--color-attention);
+      &::before { content: ""; inline-size: 0.5rem; block-size: 0.5rem; border-radius: var(--radius-round); background: var(--color-attention); }
       background: var(--color-attention-wash);
 
       & :is(.label, .phrase) { color: var(--color-attention-strong); }

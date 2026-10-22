@@ -16,7 +16,7 @@ import { FeedStatus } from "../../../../shared/domain/feed.js";
 import { describeError } from "../../../../shared/presentation/errors.js";
 import { readSeed } from "../../../../shared/presentation/seed.js";
 import { isPending, noteProblem, upsertReview } from "../../domain/review.js";
-import { toCard, waitingLine } from "../view.js";
+import { reviewsSummary, toCard, waitingLine } from "../view.js";
 
 const TICK_MS = 30_000;
 
@@ -54,6 +54,8 @@ export const reviewsInbox = ({ gateway, clock }) => () => {
     hasArchitect: false,
     /** The request whose answer is in flight: its echo is not news. */
     answeringId: "",
+    /** The panel shows every waiting request, not just the first. */
+    moreOpen: false,
 
     // ── what the markup binds ────────────────────────────────────────────
     get forTask() {
@@ -72,6 +74,29 @@ export const reviewsInbox = ({ gateway, clock }) => () => {
     get settledCards() {
       if (!this.forTask) return [];
       return this.reviews.filter((r) => !isPending(r) && !this.withdrawnWhileWriting(r)).map((r) => this.card(r));
+    },
+    /** The strip's Reviews button. */
+    get summary() {
+      return reviewsSummary({ loaded: this.loaded, error: this.error, pending: this.pendingCount, settled: this.settledCards.length, painted: this.paintedPending });
+    },
+    /** The panel: the first waiting request in full, the others behind "N more waiting". */
+    get firstCards() {
+      return this.pendingCards.slice(0, 1);
+    },
+    get moreCards() {
+      return this.pendingCards.slice(1);
+    },
+    get hasMore() {
+      return this.moreCards.length > 0;
+    },
+    get moreLabel() {
+      return this.moreOpen ? `Hide ${this.moreCards.length}` : `${this.moreCards.length} more waiting`;
+    },
+    get nothingWaits() {
+      return this.loaded && !this.hasPending;
+    },
+    toggleMore() {
+      this.moreOpen = !this.moreOpen;
     },
     get pendingCount() {
       return this.reviews.filter(isPending).length;
