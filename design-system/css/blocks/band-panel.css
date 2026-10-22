@@ -29,6 +29,14 @@
       &:focus-visible { outline: var(--border-focus-width) solid var(--color-focus); outline-offset: calc(var(--border-focus-width) * -1); }
     }
 
+    /* A long request scrolls under its answer's buttons: they stay reachable. */
+    & .review .actions {
+      position: sticky;
+      inset-block-end: 0;
+      padding-block: var(--space-xs);
+      background: var(--color-raised);
+    }
+
     & .row {
       --row-columns: 5.25rem minmax(0, 1fr) auto;
       min-block-size: var(--size-control-md);

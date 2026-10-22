@@ -17,9 +17,11 @@
 @layer blocks {
   .context-strip {
     display: grid;
-    grid-template-columns: var(--space-m) repeat(3, minmax(0, max-content)) minmax(0, 1fr);
+    grid-template-columns: var(--space-m) repeat(3, max-content) minmax(0, 1fr);
     grid-template-rows: var(--size-band-strip) auto;
     flex: none;
+    overflow-x: auto;
+    scrollbar-width: none;
     background: var(--color-panel);
     border-block-end: var(--border-width) solid var(--color-line);
 
@@ -41,8 +43,7 @@
     color: var(--_tone);
     font-size: var(--text-sm);
     white-space: nowrap;
-    min-inline-size: 0;
-    overflow: hidden;
+    flex: none;
 
     &:hover { background: var(--color-hover); }
     &:focus-visible { outline-offset: calc(var(--border-focus-width) * -1); }

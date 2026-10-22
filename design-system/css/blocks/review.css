@@ -65,13 +65,6 @@
 
     & textarea { min-block-size: 3.5rem; }
 
-    /* The answer's buttons stay reachable when a long card scrolls in its panel. */
-    & .actions {
-      position: sticky;
-      inset-block-end: 0;
-      padding-block: var(--space-xs);
-      background: var(--color-raised);
-    }
 
     &[data-withdrawn] { color: var(--color-ink-muted); }
   }
