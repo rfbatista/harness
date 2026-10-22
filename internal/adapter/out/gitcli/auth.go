@@ -262,7 +262,7 @@ func (a *AuthBroker) write(dir, sockets string, m ports.GitAuthMaterial) ([]stri
 			return nil, err
 		}
 	}
-	if err := writeFile(filepath.Join(dir, gitconfigFile), a.gitconfig(m.Identity), 0o600); err != nil {
+	if err := writeFile(filepath.Join(dir, gitconfigFile), a.gitconfig(m), 0o600); err != nil {
 		return nil, err
 	}
 	env := a.env(dir, sockets, m)
@@ -272,7 +272,8 @@ func (a *AuthBroker) write(dir, sockets string, m ports.GitAuthMaterial) ([]stri
 	return env, nil
 }
 
-func (a *AuthBroker) gitconfig(id *domain.GitIdentity) string {
+func (a *AuthBroker) gitconfig(m ports.GitAuthMaterial) string {
+	id := m.Identity
 	var b strings.Builder
 	b.WriteString("# Written by the harness; the machine's git config is not read.\n[user]\n\tuseConfigOnly = true\n")
 	if id != nil {
@@ -280,6 +281,12 @@ func (a *AuthBroker) gitconfig(id *domain.GitIdentity) string {
 	}
 	if a.ExcludesFile != "" {
 		fmt.Fprintf(&b, "[core]\n\texcludesFile = %s\n", configValue(a.ExcludesFile))
+	}
+	if f := m.SSHFallback; f != nil {
+		// Only this host's https URLs, and only here: the checkout's own
+		// remote is never rewritten.
+		fmt.Fprintf(&b, "[url %s]\n\tinsteadOf = %s\n\tinsteadOf = %s\n",
+			configValue(domain.SSHFallbackBase(f.Host, f.User)), configValue("https://"+f.Host+"/"), configValue("http://"+f.Host+"/"))
 	}
 	return b.String()
 }

@@ -194,6 +194,31 @@ func (r GitRemoteURL) UsesSSHFallback(c *GitCredential) bool {
 	return c != nil && r.Kind == GitHTTPSToken && c.Kind == GitSSHKey
 }
 
+// SSHFallbackBase is the ssh prefix that replaces "https://host/" while the
+// SSH fallback applies: "user@host:". user defaults to git, the user of every
+// code host.
+func SSHFallbackBase(host, user string) string {
+	if user == "" {
+		user = "git"
+	}
+	return user + "@" + host + ":"
+}
+
+// SSHFallbackURL is the ssh form of an https origin, "user@host:path", the
+// path as it is, including any .git suffix; false when origin is no https URL
+// of a host without a port.
+func SSHFallbackURL(origin, user string) (string, bool) {
+	r, ok := ParseGitRemoteURL(origin)
+	if !ok || !r.Takes(GitSSHKey) || r.Kind != GitHTTPSToken {
+		return "", false
+	}
+	u, err := url.Parse(strings.TrimSpace(origin))
+	if err != nil {
+		return "", false
+	}
+	return SSHFallbackBase(u.Hostname(), user) + strings.TrimPrefix(u.Path, "/"), true
+}
+
 // ParseGitRemoteURL reads raw as https://host/…, http://host/…,
 // ssh://[user@]host[:port]/… or scp-like user@host:path. Local paths and
 // file:// are not remotes.

@@ -77,6 +77,9 @@ func (s *Service) material(res *ports.GitResolution, all []*ports.StoredGitCrede
 			m.HTTPS = &ports.GitHTTPSLogin{Host: c.Host, Username: c.Username, Token: v}
 		case domain.GitSSHKey:
 			m.SSHKey = v
+			if res.Remote != nil && res.Remote.UsesSSHFallback(c) {
+				m.SSHFallback = &ports.GitSSHFallback{Host: res.Remote.Host, User: c.Username}
+			}
 		}
 	}
 	if c := res.GitHub; c != nil {
@@ -192,7 +195,7 @@ func sessionNote(res *ports.GitResolution, locked bool) string {
 	case locked:
 		return "Git: the harness's credential store is locked (its encryption key is missing), so git push, fetch and gh will fail." + tail
 	case res.Push == nil:
-		return "Git: no stored credential for " + res.Remote.Host + " (" + string(res.Remote.Kind) + "), so git push and fetch to origin will fail." + tail
+		return "Git: no stored " + missingCredential(res.Remote) + " for " + res.Remote.Host + ", so git push and fetch to origin will fail." + tail
 	}
 	return ""
 }
@@ -286,4 +289,16 @@ func (s *Service) GitHubToken(_ context.Context, repositoryID, originURL string)
 		return nil, "", err
 	}
 	return res.GitHub, cs.Secret, nil
+}
+
+// missingCredential names what the person can add for remote: an https
+// origin without a port takes a token or an SSH key.
+func missingCredential(remote *domain.GitRemoteURL) string {
+	switch {
+	case remote.Kind == domain.GitSSHKey:
+		return "SSH key"
+	case remote.Takes(domain.GitSSHKey):
+		return "token or SSH key"
+	}
+	return "token"
 }

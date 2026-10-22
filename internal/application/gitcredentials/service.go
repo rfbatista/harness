@@ -446,6 +446,12 @@ func (s *Service) TestGitCredential(ctx context.Context, credentialID, repositor
 	if s.Tester == nil {
 		return &ports.GitCredentialTest{OK: false, Message: "testing credentials is not available on this server"}, nil
 	}
+	if cred.Kind == domain.GitSSHKey {
+		// Pushes to an https origin go over ssh with the key: test that.
+		if u, ok := domain.SSHFallbackURL(remote, cred.Username); ok {
+			remote = u
+		}
+	}
 	res, err := s.Tester.Test(ctx, cred, remote)
 	if err != nil {
 		return nil, err
