@@ -2,6 +2,7 @@ package cliflags
 
 import (
 	"flag"
+	"path/filepath"
 	"testing"
 	"time"
 )
@@ -12,11 +13,11 @@ func env(m map[string]string) func(string) string {
 
 func TestParseDefaults(t *testing.T) {
 	fs := flag.NewFlagSet("test", flag.ContinueOnError)
-	cfg, err := Parse(fs, nil, env(nil))
+	cfg, err := Parse(fs, nil, env(map[string]string{"HOME": "/home/me"}))
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}
-	if cfg.HTTPAddr != ":8080" || cfg.MCPAddr != ":8081" || cfg.DBPath != "data.db" {
+	if cfg.HTTPAddr != ":8080" || cfg.MCPAddr != ":8081" || cfg.DBPath != "/home/me/.harness/data.db" || cfg.DataDir != "/home/me/.harness" {
 		t.Fatalf("unexpected defaults: %+v", cfg)
 	}
 	if cfg.ClaudeBin != "claude" || !cfg.ClaudeLogStdout || cfg.ApprovalTimeout != 24*time.Hour {
@@ -201,6 +202,42 @@ func TestParseGitBin(t *testing.T) {
 			}
 			if cfg.GitBin != c.want {
 				t.Errorf("GitBin = %q, want %q", cfg.GitBin, c.want)
+			}
+		})
+	}
+}
+
+func TestParseDataDir(t *testing.T) {
+	cwd, err := filepath.Abs(".")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []struct {
+		name            string
+		args            []string
+		env             map[string]string
+		dir, db, source string
+	}{
+		{"default", nil, nil, "/home/me/.harness", "/home/me/.harness/data.db", "the default (~/.harness)"},
+		{"env", nil, map[string]string{"HARNESS_DATA_DIR": "/srv/harness"}, "/srv/harness", "/srv/harness/data.db", "the HARNESS_DATA_DIR environment variable"},
+		{"flag over env", []string{"--data.dir=/opt/h"}, map[string]string{"HARNESS_DATA_DIR": "/srv/harness"}, "/opt/h", "/opt/h/data.db", "the -data.dir flag"},
+		{"tilde", nil, map[string]string{"HARNESS_DATA_DIR": "~/h"}, "/home/me/h", "/home/me/h/data.db", "the HARNESS_DATA_DIR environment variable"},
+		{"a named database keeps its folder", nil, map[string]string{"DB_PATH": "data.db"}, cwd, "data.db", "the database path (DB_PATH)"},
+		{"the database flag", []string{"--db=/var/lib/h/h.db"}, nil, "/var/lib/h", "/var/lib/h/h.db", "the database path (-db)"},
+		{"a named data dir beats the database's folder", nil, map[string]string{"HARNESS_DATA_DIR": "/srv/harness", "DB_PATH": "/var/h.db"}, "/srv/harness", "/var/h.db", "the HARNESS_DATA_DIR environment variable"},
+		{"in memory has none", []string{"--db=:memory:"}, nil, "", ":memory:", ""},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			e := map[string]string{"HOME": "/home/me"}
+			for k, v := range c.env {
+				e[k] = v
+			}
+			cfg, err := Parse(flag.NewFlagSet("test", flag.ContinueOnError), c.args, env(e))
+			if err != nil {
+				t.Fatalf("parse: %v", err)
+			}
+			if cfg.DataDir != c.dir || cfg.DBPath != c.db || cfg.DataDirSource != c.source {
+				t.Errorf("data dir %q, db %q, source %q; want %q, %q, %q", cfg.DataDir, cfg.DBPath, cfg.DataDirSource, c.dir, c.db, c.source)
 			}
 		})
 	}

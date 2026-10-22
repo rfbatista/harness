@@ -25,6 +25,7 @@ import (
 	"operators-mcp/internal/adapter/in/web/models"
 	"operators-mcp/internal/adapter/in/web/notifications"
 	"operators-mcp/internal/adapter/in/web/projects"
+	"operators-mcp/internal/adapter/in/web/serversettings"
 	"operators-mcp/internal/adapter/in/web/shell"
 	"operators-mcp/internal/adapter/in/web/tasks"
 	"operators-mcp/internal/adapter/in/web/tokensavers"
@@ -82,6 +83,9 @@ type Deps struct {
 	// Settings reads each session tier's model for the Models page; nil
 	// leaves the page and its top bar link out.
 	Settings ports.SettingsReader
+	// DataPaths are where the server keeps its data, for the Server page;
+	// nil leaves the page and its top bar link out.
+	DataPaths *serversettings.Paths
 	// Usage reads token usage for a project's Usage page and the task
 	// page's totals; nil leaves the page, its rail link and the totals out.
 	Usage ports.UsageDashboard
@@ -175,6 +179,10 @@ func NewHandler(deps Deps, assets *Assets, fallback http.Handler) http.Handler {
 	if deps.Settings != nil {
 		modelsPage := models.Handler{Settings: deps.Settings, Layout: s.layout, Render: render}
 		mux.Handle("GET "+models.Href, s.page(modelsPage.Page))
+	}
+	if deps.DataPaths != nil {
+		serverPage := serversettings.Handler{Paths: *deps.DataPaths, Layout: s.layout, Render: render}
+		mux.Handle("GET "+serversettings.Href, s.page(serverPage.Page))
 	}
 	mux.Handle("GET /projects/new", s.page(projectPages.New))
 	mux.Handle("GET /projects/{project}", s.page(taskPages.Project))
@@ -330,6 +338,9 @@ func (s *server) bareFrame(title string) shell.Frame {
 	}
 	if s.deps.Settings != nil {
 		f.Top.ModelsHref = models.Href
+	}
+	if s.deps.DataPaths != nil {
+		f.Top.ServerHref = serversettings.Href
 	}
 	return f
 }

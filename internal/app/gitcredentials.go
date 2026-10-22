@@ -105,15 +105,16 @@ func newGitCredentialsService(p gitCredentialsParams) (*gitcredentials.Service, 
 	return svc, nil
 }
 
-// secretsDir is the data dir, absolute: where the database is, or a fresh
-// temporary directory for an in-memory one. secret.key and git/ go there.
-// Absolute, because sessions run git from their worktrees, never from the
-// server's working directory.
+// secretsDir is the data dir, absolute (Config.DataDir, or the database's
+// folder), or a fresh temporary directory when there is none. secret.key
+// and git/ go there. Absolute, because sessions run git from their
+// worktrees, never from the server's working directory.
 func secretsDir(cfg Config) (string, error) {
-	if cfg.DBPath == "" || cfg.DBPath == ":memory:" {
-		return os.MkdirTemp("", "harness-secrets-")
+	root, err := cfg.dataRoot()
+	if err != nil || root != "" {
+		return root, err
 	}
-	return filepath.Abs(filepath.Dir(cfg.DBPath))
+	return os.MkdirTemp("", "harness-secrets-")
 }
 
 // optionalGitCredentials is the credentials context when

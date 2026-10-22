@@ -1,0 +1,46 @@
+package serversettings
+
+import "operators-mcp/internal/adapter/in/web/shell"
+
+// Page is /server.
+templ Page(frame shell.Frame, v View) {
+	@shell.AppShell(frame) {
+		<main id="main" class="[ frame ]">
+			<header class="[ toolbar ]">
+				<h1>Server</h1>
+			</header>
+			<div data-scroll>
+				<div class="[ wrapper flow ] [ region ]" style="--wrapper-max: 52rem">
+					if v.InMemory {
+						<p class="[ color-ink-muted ]">This server runs on an in-memory database. It has no data dir: what it keeps goes to temporary directories and is gone when it stops.</p>
+					} else {
+						<p class="[ color-ink-muted ]">Where this server keeps its data. To move it, stop the server, move the folder, and start it again with <span class="[ code ]">HARNESS_DATA_DIR</span> or <span class="[ code ]">-data.dir</span> naming the new place. The server never moves your data itself.</p>
+					}
+					<section class="[ pane ]" aria-labelledby="server-data-title">
+						<header><h2 id="server-data-title">Data dir</h2></header>
+						<ul role="list" class="[ list ]">
+							if !v.InMemory {
+								<li class="[ flow ] [ flow-space-2xs ]" data-data-dir>
+									<div class="[ row ]" style="--row-columns: 9rem auto">
+										<span class="[ title ]">Data dir</span>
+										<span class="[ code ]">{ v.DataDir }</span>
+									</div>
+									<p class="[ text-sm color-ink-muted ]">Set by { v.Source }.</p>
+								</li>
+							}
+							for _, row := range v.Rows {
+								<li class="[ flow ] [ flow-space-2xs ]">
+									<div class="[ row ]" style="--row-columns: 9rem auto">
+										<span class="[ title ]">{ row.Title }</span>
+										<span class="[ code ]">{ row.Path }</span>
+									</div>
+									<p class="[ text-sm color-ink-muted ]">{ row.Lead }</p>
+								</li>
+							}
+						</ul>
+					</section>
+				</div>
+			</div>
+		</main>
+	}
+}
