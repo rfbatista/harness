@@ -76,7 +76,7 @@ func TestProjectManagementInTheWebUI_EndToEnd(t *testing.T) {
 	if _, err := cat.Projects.CreateProject(ctx, "coding_pool", poolDir); err != nil {
 		t.Fatal(err)
 	}
-	task, err := plan.CreateTicket(ctx, harness.ID, "Project management", "", domain.TicketStatusInProgress)
+	task, err := plan.CreateTicket(ctx, harness.ID, "Project management", "", domain.TicketStatusInProgress, "")
 	if err != nil {
 		t.Fatal(err)
 	}

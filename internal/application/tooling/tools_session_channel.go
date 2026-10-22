@@ -33,6 +33,18 @@ func sessionChannelTools(planningSvc ports.Planning, sessions ports.SessionRepos
 		}
 		return scope, nil
 	}
+	// scopedNamed is scoped for a tool that also takes task_id from a
+	// session with no task of its own.
+	scopedNamed := func(ctx context.Context, args map[string]any) (*taskScope, error) {
+		scope, err := resolveNamedTaskScope(ctx, planningSvc, sessions, args)
+		if err != nil {
+			return nil, err
+		}
+		if channel == nil {
+			return nil, &domain.StructuredError{Code: "UNAVAILABLE", Message: "the architect channel is not available on this server"}
+		}
+		return scope, nil
+	}
 
 	return []domain.Tool{
 		{
@@ -146,8 +158,10 @@ func sessionChannelTools(planningSvc ports.Planning, sessions ports.SessionRepos
 			Description: "Architect only. Ask the person to review something: a plan, a branch, a document, an artifact. " +
 				"It shows in the web UI until they approve or request changes; their answer reaches you as a turn with " +
 				"review_response in the header. Opening a review does not change the task status: move it yourself with " +
-				"update_task_status.",
+				"update_task_status. " + taskIDAdvice + " The review then opens on that task, and only its own documents " +
+				"attach: name other tasks (id and title) in body.",
 			InputSchema: schemaFromJSON(`{"type":"object","required":["subject","body"],"properties":{` +
+				taskIDSchema + `,` +
 				`"subject":{"type":"string","description":"What to review, in a few words."},` +
 				`"body":{"type":"string","description":"What the person should look at and what you need from them."},` +
 				`"about_session_id":{"type":"string","description":"The delegate whose work it is."},` +
@@ -155,7 +169,7 @@ func sessionChannelTools(planningSvc ports.Planning, sessions ports.SessionRepos
 				`"artifact_ids":{"type":"array","items":{"type":"string"},"description":"Task artifacts to review."}}}`),
 			Source: "code",
 			Handler: func(ctx context.Context, args map[string]any) (any, error) {
-				scope, err := scoped(ctx)
+				scope, err := scopedNamed(ctx, args)
 				if err != nil {
 					return nil, err
 				}
@@ -163,13 +177,19 @@ func sessionChannelTools(planningSvc ports.Planning, sessions ports.SessionRepos
 				if err != nil {
 					return nil, err
 				}
-				review, err := channel.RequestUserReview(ctx, scope.session.ID, ports.ReviewRequestInput{
+				in := ports.ReviewRequestInput{
 					Subject:        getString(args, "subject", ""),
 					Body:           body,
 					AboutSessionID: getString(args, "about_session_id", ""),
 					DocumentIDs:    getStringSlice(args, "document_ids"),
 					ArtifactIDs:    getStringSlice(args, "artifact_ids"),
-				})
+				}
+				var review *domain.ReviewRequest
+				if scope.named {
+					review, err = channel.RequestUserReviewOn(ctx, scope.session.ID, scope.ticket.ID, in)
+				} else {
+					review, err = channel.RequestUserReview(ctx, scope.session.ID, in)
+				}
 				if err != nil {
 					return nil, err
 				}

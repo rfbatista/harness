@@ -78,11 +78,29 @@ export const MAX_DEPTH = 3;
  * messages: the task's messages once loaded (undefined before), for a
  * delegate's last report.
  */
+/**
+ * A session's row title: what it was asked to do; with no prompt, "Untitled
+ * session", or "Feature brainstorm" for a session with no task (where a task's
+ * title would otherwise say what it is about). The BFF's RowTitle (view.go)
+ * says the same; web/testdata/views/session-title.json pins both.
+ */
+export function rowTitle(session) {
+  if (session.task) return session.task;
+  return session.ticketId ? "Untitled session" : "Feature brainstorm";
+}
+
+/** The project's sessions page (its feature brainstorms), with one session open. */
+export function projectSessionsHref(projectId, sessionId = "") {
+  const href = `/projects/${encodeURIComponent(projectId)}/sessions`;
+  return sessionId ? `${href}?session=${encodeURIComponent(sessionId)}` : href;
+}
+
 export function toRowView(session, { selectedId, now, agentNames, others = [], fresh = false, depth = 0, messages }) {
   const status = statusView(session);
+  const title = rowTitle(session);
   return {
     id: session.id,
-    title: session.task || "Untitled session",
+    title,
     state: status.state,
     word: status.word,
     meta:
@@ -93,7 +111,7 @@ export function toRowView(session, { selectedId, now, agentNames, others = [], f
     fresh,
     attention: needsYou(session),
     resumable: terminalView(session).resumable,
-    resumeLabel: `Resume ${session.task || "Untitled session"}`,
+    resumeLabel: `Resume ${title}`,
     role: session.role,
     depth: Math.min(depth, MAX_DEPTH),
     // What x-bind sets: null leaves the attribute off a peer's row.

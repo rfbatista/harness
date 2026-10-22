@@ -99,7 +99,7 @@ func (w *tokenSaverWorld) addRepository() *domain.Repository {
 
 func (w *tokenSaverWorld) addTask() *domain.Ticket {
 	w.t.Helper()
-	task, err := w.plan.CreateTicket(w.ctx, w.project.ID, "Cut tokens", "", domain.TicketStatusInProgress)
+	task, err := w.plan.CreateTicket(w.ctx, w.project.ID, "Cut tokens", "", domain.TicketStatusInProgress, "")
 	if err != nil {
 		w.t.Fatal(err)
 	}

@@ -76,6 +76,7 @@ registerSessions(Alpine, {
   createScreen,
   clock: systemClock,
   prefs,
+  navigate,
 });
 
 registerRuns(Alpine, { gateway: runsGateway(api) });

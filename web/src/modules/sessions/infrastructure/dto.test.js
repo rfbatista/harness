@@ -127,3 +127,10 @@ test("an unknown role or a malformed status check is BAD_RESPONSE", () => {
   assert.throws(() => toStatusCheck({ ...check, next_at: "soon" }), Codes.BAD_RESPONSE);
   assert.throws(() => toSession({ ...wire, status_check: { ...check, every_minutes: "ten" } }), Codes.BAD_RESPONSE);
 });
+
+test("a start with no task sends no ticket_id at all: the server reads an empty string as a task", () => {
+  const body = toStartBody({ projectId: "p1", ticketId: "", repositoryId: "r1", agentId: "", mode: "product", prompt: "", autoAccept: "off" });
+  assert.ok(!("ticket_id" in JSON.parse(JSON.stringify(body))), "ticket_id left out");
+  assert.equal(body.mode, "product");
+  assert.equal(toSession({ ...wire, ticket_id: undefined, mode: "product" }).ticketId, "");
+});

@@ -68,7 +68,7 @@ func (h Handler) ProjectDesign(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	tickets, err := h.Tasks.ListTickets(ctx, project.ID)
+	tickets, err := h.Tasks.ListTickets(ctx, project.ID, ports.TicketFilter{})
 	if err != nil {
 		return err
 	}

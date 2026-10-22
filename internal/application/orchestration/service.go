@@ -36,13 +36,35 @@ type Catalog struct {
 	Projects interface {
 		GetProject(ctx context.Context, id string) (*domain.Project, error)
 	}
-	Repositories ports.RepositoryReader
-	Agents       interface {
+	Repositories interface {
+		ports.RepositoryReader
+		ports.RepositoryLister
+	}
+	Agents interface {
 		GetAgent(ctx context.Context, id string) (*domain.Agent, error)
 		ResolveAgentRelations(a *domain.Agent)
 	}
 	MCPServers interface{ ListMCPServers() []*domain.MCPServer }
 	Zones      ports.ZoneReader
+	// Contexts lists a project's bounded contexts for the brief of a
+	// project-level session; nil leaves them out of it.
+	Contexts interface {
+		ListBoundedContexts(projectID string) []*domain.BoundedContext
+	}
+}
+
+// sessionSubject is what a session works on: its task, or, for a
+// project-level product session (ADR 0016), its project alone.
+type sessionSubject struct {
+	project *domain.Project
+	ticket  *domain.Ticket // nil for a session with no task
+	mode    domain.SessionMode
+}
+
+// projectLevel says the session has no task and works on its project: only
+// a mode that runs without a task does, and only with its project in hand.
+func (sub sessionSubject) projectLevel() bool {
+	return sub.ticket == nil && sub.project != nil && !sub.mode.NeedsTask()
 }
 
 // ticketResolver is the slice of the planning ticket store the orchestration
@@ -319,17 +341,18 @@ func (s *Service) prepare(ctx context.Context, in prepareInput) (*prepared, erro
 	if in.ProjectID == "" {
 		return nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "project_id is required"}
 	}
-	if _, err := s.catalog.Projects.GetProject(ctx, in.ProjectID); err != nil {
+	proj, err := s.catalog.Projects.GetProject(ctx, in.ProjectID)
+	if err != nil {
 		return nil, err
 	}
 
-	var ticket *domain.Ticket
+	subject := sessionSubject{project: proj, mode: in.Mode}
 	if in.TicketID != "" {
 		tk, err := s.ticketIn(ctx, in.ProjectID, in.TicketID)
 		if err != nil {
 			return nil, err
 		}
-		ticket = tk
+		subject.ticket = tk
 	}
 
 	if in.RepositoryID == "" {
@@ -373,8 +396,8 @@ func (s *Service) prepare(ctx context.Context, in prepareInput) (*prepared, erro
 		id = llmkit.NewSessionID()
 	}
 	permission := parseAutoAccept(in.AutoAccept)
-	cfg := s.sessionConfig(id, ws.Path, in.Model, in.AllowedTools, permission, ag, ticket, in.ZoneID, in.Role)
-	cleanup, err := s.withShell(id, ticket, &cfg, ag.cleanup)
+	cfg := s.sessionConfig(id, ws.Path, in.Model, in.AllowedTools, permission, ag, subject, in.ZoneID, in.Role)
+	cleanup, err := s.withShell(id, subject, &cfg, ag.cleanup)
 	if err != nil {
 		_ = s.workspaces.Discard(ws.ID)
 		return nil, err
@@ -423,16 +446,23 @@ func (s *Service) withGit(id, repositoryID string, cfg *llmkit.SessionConfig, cl
 	}, nil
 }
 
-// withShell gives a session with a task its virtual shell: made and filled
-// now, passed with --add-dir and HARNESS_SHELL, named in the brief, with
-// the edit proxy's hooks in its claude settings. The
-// cleanup it answers runs cleanup and removes the shell. A session with no
-// task, or a service without Shells, changes nothing.
-func (s *Service) withShell(id string, ticket *domain.Ticket, cfg *llmkit.SessionConfig, cleanup func()) (func(), error) {
-	if s.Shells == nil || ticket == nil {
+// withShell gives a session with a task, or a project-level one, its
+// virtual shell: made and filled now, passed with --add-dir and
+// HARNESS_SHELL, named in the brief, with the edit proxy's hooks in its
+// claude settings. The cleanup it answers runs cleanup and removes the
+// shell. A headless session with no task, or a service without Shells,
+// changes nothing.
+func (s *Service) withShell(id string, subject sessionSubject, cfg *llmkit.SessionConfig, cleanup func()) (func(), error) {
+	if s.Shells == nil || (subject.ticket == nil && !subject.projectLevel()) {
 		return cleanup, nil
 	}
-	dir, err := s.Shells.Open(context.TODO(), id, ticket.ID)
+	var scope ports.ShellScope
+	if subject.ticket != nil {
+		scope.TicketID = subject.ticket.ID
+	} else {
+		scope.ProjectID = subject.project.ID
+	}
+	dir, err := s.Shells.Open(context.TODO(), id, scope)
 	if err != nil {
 		if cleanup != nil {
 			cleanup()
@@ -553,9 +583,11 @@ func (s *Service) resolveAgent(agentID string, mode domain.SessionMode) (resolve
 }
 
 // sessionConfig builds the CLI configuration shared by headless and
-// interactive sessions: the agent's prompt and skills, the task brief and
-// task MCP server, the agent's MCP servers and the zone's extra dirs.
-func (s *Service) sessionConfig(id, dir, model string, allowedTools []string, permission llmkit.PermissionMode, ag resolvedAgent, ticket *domain.Ticket, zoneID string, role domain.SessionRole) llmkit.SessionConfig {
+// interactive sessions: the agent's prompt and skills, the task brief (or
+// a project-level session's project brief) and task MCP server, the
+// agent's MCP servers and the zone's extra dirs.
+func (s *Service) sessionConfig(id, dir, model string, allowedTools []string, permission llmkit.PermissionMode, ag resolvedAgent, subject sessionSubject, zoneID string, role domain.SessionRole) llmkit.SessionConfig {
+	ticket := subject.ticket
 	cfg := llmkit.SessionConfig{
 		ID:           id,
 		WorkingDir:   dir,
@@ -577,7 +609,11 @@ func (s *Service) sessionConfig(id, dir, model string, allowedTools []string, pe
 	if s.TaskServerURL != nil {
 		taskURL = s.TaskServerURL(id)
 	}
-	applyTaskContext(&cfg, ticket, taskURL, role, s.taskCounts(ticket))
+	if subject.projectLevel() {
+		applyProjectContext(&cfg, s.briefProject(subject.project), taskURL)
+	} else {
+		applyTaskContext(&cfg, ticket, taskURL, role, s.taskCounts(ticket))
+	}
 	if section := attachedAssetsSection(s.attachedAssets(ticket)); section != "" {
 		cfg.AppendSystem = appendSection(cfg.AppendSystem, section)
 	}

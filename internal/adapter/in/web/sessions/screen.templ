@@ -219,12 +219,14 @@ templ paneTabs() {
 			</button>
 			<button type="button" role="tab" x-bind:aria-selected="historyTabSelected" x-on:click="showHistory">History</button>
 			<button type="button" role="tab" x-bind:aria-selected="appTabSelected" x-on:click="showApp">App</button>
-			<button type="button" role="tab" x-bind:aria-selected="designTabSelected" x-on:click="showDesign">
-				Design
-				<template x-if="designBadge">
-					<span class="[ badge ]" data-tone="signal" x-text="designBadge"></span>
-				</template>
-			</button>
+			<template x-if="hasTask">
+				<button type="button" role="tab" x-bind:aria-selected="designTabSelected" x-on:click="showDesign">
+					Design
+					<template x-if="designBadge">
+						<span class="[ badge ]" data-tone="signal" x-text="designBadge"></span>
+					</template>
+				</button>
+			</template>
 			<template x-if="hasCode">
 				<button type="button" role="tab" x-bind:aria-selected="codeTabSelected" x-on:click="showCode">
 					Code

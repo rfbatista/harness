@@ -72,7 +72,7 @@ func TestASessionEditsAndDeletesOnlyItsOwnComments(t *testing.T) {
 	theirs, _ := f.svc.AddSessionComment(ctx, f.ticketID, other, "theirs")
 	persons, _ := f.svc.AddTicketComment(ctx, f.ticketID, "the person's")
 	tk, _ := f.svc.GetTicket(ctx, f.ticketID)
-	elsewhere, err := f.svc.CreateTicket(ctx, tk.ProjectID, "Other", "", "")
+	elsewhere, err := f.svc.CreateTicket(ctx, tk.ProjectID, "Other", "", "", "")
 	if err != nil {
 		t.Fatal(err)
 	}

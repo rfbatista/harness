@@ -134,7 +134,7 @@ func TestPullRequests_EndToEnd(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	tk, err := s.plan.CreateTicket(ctx, p.ID, "Create pull request", "Open a PR from the UI", domain.TicketStatusInProgress)
+	tk, err := s.plan.CreateTicket(ctx, p.ID, "Create pull request", "Open a PR from the UI", domain.TicketStatusInProgress, "")
 	if err != nil {
 		t.Fatal(err)
 	}

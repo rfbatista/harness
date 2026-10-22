@@ -53,7 +53,7 @@ func (r *rig) list(t *testing.T, q ports.NotificationQuery) *ports.NotificationP
 
 func (r *rig) task(t *testing.T, projectID, title string) *domain.Ticket {
 	t.Helper()
-	tk, err := r.Tickets.Create(projectID, title, "", domain.TicketStatusTodo)
+	tk, err := r.Tickets.Create(projectID, title, "", domain.TicketStatusTodo, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -221,7 +221,7 @@ func TestNamesAreReadWhenTheInboxIsRead(t *testing.T) {
 	if _, err := r.Projects.Update(r.ProjectA, "Renamed", ""); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := r.Tickets.Update(tk.ID, "Ship it", "", tk.Status); err != nil {
+	if _, err := r.Tickets.Update(tk.ID, "Ship it", "", tk.Status, ""); err != nil {
 		t.Fatal(err)
 	}
 	n := r.list(t, ports.NotificationQuery{}).Notifications[0]

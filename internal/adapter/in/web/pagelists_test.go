@@ -17,9 +17,9 @@ type countingTickets struct {
 	lists *int
 }
 
-func (c countingTickets) ListTickets(ctx context.Context, projectID string) ([]*domain.Ticket, error) {
+func (c countingTickets) ListTickets(ctx context.Context, projectID string, filter ports.TicketFilter) ([]*domain.Ticket, error) {
 	*c.lists++
-	return c.fakeTickets.ListTickets(ctx, projectID)
+	return c.fakeTickets.ListTickets(ctx, projectID, filter)
 }
 
 type countingSessions struct {

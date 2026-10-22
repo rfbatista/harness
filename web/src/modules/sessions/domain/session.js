@@ -15,7 +15,7 @@
  * @property {string} ticketId          the task it works on; "" for none. A task can run several sessions at once.
  * @property {string} task              what the session was asked to do
  * @property {string} agentId           "" when no agent persona is attached
- * @property {""|"architect"|"implement"|"design"} mode  the role it was started in on top of its agent; "" for none
+ * @property {""|"architect"|"implement"|"design"|"product"} mode  the role it was started in on top of its agent; "" for none. A "product" session may run with no task (ticketId ""): a feature brainstorm at project level.
  * @property {SessionStatus} status
  * @property {number} pendingApprovals  tool calls waiting for the developer
  * @property {string} lastAction        "" until the agent has done something
@@ -55,7 +55,15 @@ export const Status = Object.freeze({
 export const STATUSES = Object.freeze(Object.values(Status));
 
 /** The roles a session can be started in on top of its agent. */
-export const MODES = Object.freeze(["", "architect", "implement", "design"]);
+export const MODES = Object.freeze(["", "architect", "implement", "design", "product"]);
+
+/** The one mode a session may start in with no task (ADR 0016). */
+export const PRODUCT_MODE = "product";
+
+/** Why a start request cannot run without a task, or "" when it can. */
+export function noTaskProblem(mode) {
+  return (mode ?? "") === PRODUCT_MODE ? "" : "Only a product session can start without a task.";
+}
 
 /** The process behind the session is gone for good (domain.SessionStatus.IsTerminal). */
 export const isTerminal = (session) =>

@@ -76,7 +76,7 @@ func NewEnv(t *testing.T, opts ...Option) *Env {
 		if err != nil {
 			t.Fatal(err)
 		}
-		tk, err := tickets.Create(proj.ID, p.task, "", domain.TicketStatusTodo)
+		tk, err := tickets.Create(proj.ID, p.task, "", domain.TicketStatusTodo, "")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -100,7 +100,7 @@ type Added struct{ TaskID, SessionID string }
 // AddSession records a task titled title in project with one session on it.
 func (e *Env) AddSession(t *testing.T, project, title string) Added {
 	t.Helper()
-	tk, err := sqlite.NewTicketRepository(e.DB).Create(project, title, "", domain.TicketStatusTodo)
+	tk, err := sqlite.NewTicketRepository(e.DB).Create(project, title, "", domain.TicketStatusTodo, "")
 	if err != nil {
 		t.Fatal(err)
 	}

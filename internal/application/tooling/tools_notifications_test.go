@@ -28,7 +28,7 @@ func newNotesFixture(t *testing.T) *notesFixture {
 	e := notificationstest.NewEnv(t)
 	svc := e.Service(t, notifications.Options{})
 	plan := planning.NewService(e.Tickets, sqlite.NewDocumentRepository(e.DB), e.Projects)
-	tk, err := plan.CreateTicket(context.Background(), e.ProjectA, "Ship", "", domain.TicketStatusInProgress)
+	tk, err := plan.CreateTicket(context.Background(), e.ProjectA, "Ship", "", domain.TicketStatusInProgress, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -36,7 +36,7 @@ func newNotesFixture(t *testing.T) *notesFixture {
 		t.Fatal(err)
 	}
 	f := &notesFixture{env: e, svc: svc, task: tk, session: map[string]domain.Tool{}, global: map[string]domain.Tool{}}
-	for _, tl := range sessionNotificationTools(plan, e.Sessions, NotificationTooling{Notifier: svc}) {
+	for _, tl := range sessionNotificationTools(e.Sessions, NotificationTooling{Notifier: svc}) {
 		f.session[tl.Name] = tl
 	}
 	for _, tl := range NotificationTools(svc) {
@@ -144,7 +144,7 @@ func TestNotificationToolsNeedASessionOnATask(t *testing.T) {
 	if err == nil {
 		t.Fatal("notify with no session succeeded")
 	}
-	off := sessionNotificationTools(nil, nil, NotificationTooling{})
+	off := sessionNotificationTools(nil, NotificationTooling{})
 	for _, tl := range off {
 		_, err := tl.Handler(WithSessionID(context.Background(), "sess-1"), map[string]any{"title": "t"})
 		wantCode(t, err, "UNAVAILABLE")
@@ -196,5 +196,32 @@ func TestGlobalNotificationTools(t *testing.T) {
 	out, _ = f.callGlobal("list_notifications", map[string]any{"limit": 5})
 	if out["count"] != 5 {
 		t.Fatalf("limit 5 = %+v", out["count"])
+	}
+}
+
+// A session with no task (a project-level product session, ADR 0016) can
+// still post to the inbox and read it: the notification is attributed to the
+// session and its project alone, linked to the project's board.
+func TestSessionNotifyWorksInASessionWithoutATask(t *testing.T) {
+	f := newNotesFixture(t)
+	if _, err := f.env.Sessions.Create(&domain.Session{ID: "free", ProjectID: f.env.ProjectA, Task: "Product: Alpha", Status: domain.SessionRunning, Mode: domain.SessionModeProduct}); err != nil {
+		t.Fatal(err)
+	}
+	ctx := WithSessionID(context.Background(), "free")
+	out, err := f.session["notify"].Handler(ctx, map[string]any{"title": "PRD ready", "body": "review the feature task", "level": "action"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	n := out.(map[string]any)["notification"].(*domain.Notification)
+	if n.SessionID != "free" || n.TaskID != "" || n.ProjectID != f.env.ProjectA || n.Link != domain.ProjectLink(f.env.ProjectA) ||
+		n.ProjectName != "Alpha" || n.TaskTitle != "" || n.Level != domain.NotificationAction {
+		t.Fatalf("notified = %+v", n)
+	}
+	listed, err := f.session["list_notifications"].Handler(ctx, map[string]any{"scope": "project"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := listed.(map[string]any)["notifications"]; len(got.([]*domain.Notification)) == 0 {
+		t.Fatalf("list_notifications without a task = %+v", listed)
 	}
 }

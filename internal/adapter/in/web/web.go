@@ -198,7 +198,7 @@ func NewHandler(deps Deps, assets *Assets, fallback http.Handler) http.Handler {
 	mux.Handle("GET /projects/{project}/documents/{document}", s.page(taskPages.ProjectDocuments))
 	mux.Handle("GET /projects/{project}/documents/{document}/view", s.page(taskPages.ProjectDocumentView))
 	mux.HandleFunc("GET /projects/{project}/{$}", toProject)
-	mux.HandleFunc("GET /projects/{project}/sessions", toProject) // the old page; sessions now live under their task
+	mux.Handle("GET /projects/{project}/sessions", s.page(taskPages.ProjectSessions)) // the project's feature brainstorms: sessions with no task
 	mux.Handle("GET /projects/{project}/tasks/new", s.page(taskPages.New))
 	mux.Handle("GET /projects/{project}/tasks/{task}", s.page(taskPages.Task))
 	mux.Handle("GET /projects/{project}/tasks/{task}/sessions/{session}/history", s.page(historyPages.Session))
@@ -264,7 +264,7 @@ func (s *server) layout(ctx context.Context, title, projectID, taskID string) (s
 		return frame, nil
 	}
 
-	list, err := s.deps.Tasks.ListTickets(ctx, projectID)
+	list, err := s.deps.Tasks.ListTickets(ctx, projectID, ports.TicketFilter{})
 	if err != nil {
 		return shell.Frame{}, err
 	}

@@ -804,3 +804,29 @@ test("History: the session's saved conversation, for running and ended sessions,
   assert.deepEqual(instance.historyPanels, []);
   instance.destroy();
 });
+
+test("the project's sessions page has no task: it keeps the ticket-less sessions only, with no Design, Code or history", async () => {
+  const brainstorm = makeSession({ id: "brain", ticketId: "", mode: "product", task: "", status: "idle" });
+  const onTask = makeSession({ id: "run", ticketId: "t1" });
+  const memory = memoryGateway({ projects: ["p1"], sessions: [brainstorm, onTask], now: () => T0 });
+  const el = seededElement({ project_id: "p1", ticket_id: "", sessions: [brainstorm, onTask].map(toDTO), agent_names: {}, repository_names: {}, code: true });
+  const { instance, tick } = mount(sessionsPage({ gateway: memory.gateway, clock: fixedClock(T0), channel: memoryChannel({ messages: [] }).gateway, location: { search: "" } }), { el });
+  instance.init();
+  tick();
+  assert.equal(instance.hasTask, false);
+  assert.deepEqual(instance.sessions.map((s) => s.id), ["brain"], "only the ticket-less sessions");
+  assert.equal(instance.groups[0].rows[0].title, "Feature brainstorm");
+  assert.equal(instance.selectedId, "brain");
+  assert.equal(instance.historyHref, "", "no task, no git history page");
+  assert.equal(instance.hasCode, false, "no task, no code URLs");
+  assert.deepEqual(instance.designPanels, [], "no task, no design assets page");
+  instance.showDesign();
+  instance.select("brain");
+  assert.equal(instance.detailTab, "agent", "the Design tab falls back to the terminal");
+
+  memory.upsert(makeSession({ id: "other", ticketId: "t2", status: "idle" }));
+  assert.equal(instance.sessions.some((s) => s.id === "other"), false, "a task's session stays out");
+  memory.upsert(makeSession({ id: "second", ticketId: "", mode: "product", status: "running" }));
+  assert.ok(instance.sessions.some((s) => s.id === "second"), "another brainstorm arrives");
+  instance.destroy();
+});

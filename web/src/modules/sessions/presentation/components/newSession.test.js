@@ -138,3 +138,32 @@ test("when branches cannot be listed the session still starts, off the checkout"
   await instance.submit();
   assert.equal(dispatched[0].name, "session-created");
 });
+
+test("product mode interviews first, writes no code, and starts on the page's task as the feature", async () => {
+  const { instance, dispatched } = setup();
+  instance.mode = "product";
+  assert.ok(instance.product);
+  assert.ok(instance.promptPlaceholder.includes("interviews you"), instance.promptPlaceholder);
+  assert.ok(instance.modeHint.includes("task-product"), instance.modeHint);
+  assert.ok(instance.modeHint.includes("never writes code"), instance.modeHint);
+  await instance.submit();
+  assert.deepEqual([dispatched[0].detail.session.mode, dispatched[0].detail.session.ticketId], ["product", "t1"]);
+});
+
+test("with no task the form is locked to product mode and starts a feature brainstorm on the project", async () => {
+  const memory = memoryGateway({ projects: ["p1"], repositories: { r1: "p1" }, branches: BRANCHES });
+  const form = document.createElement("form");
+  form.dataset.defaultRepository = "r1";
+  const mounted = mount(() => newSession({ gateway: memory.gateway })("p1", "", "product"), { el: form });
+  mounted.instance.init();
+  const { instance, dispatched } = mounted;
+  assert.equal(instance.mode, "product");
+  assert.equal(instance.lockedMode, "product");
+  assert.equal(instance.cannotSubmit, false);
+  await instance.submit();
+  const { session } = dispatched[0].detail;
+  assert.deepEqual([session.ticketId, session.mode], ["", "product"]);
+  instance.mode = "";
+  assert.ok(instance.problem.includes("without a task"), "no other mode starts without a task");
+  assert.equal(instance.cannotSubmit, true);
+});

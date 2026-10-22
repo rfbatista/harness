@@ -5,13 +5,15 @@ import (
 
 	"operators-mcp/internal/adapter/in/web/components"
 	"operators-mcp/internal/adapter/in/web/projects"
+	"operators-mcp/internal/adapter/in/web/sessions"
 	"operators-mcp/internal/adapter/in/web/shell"
 )
 
 // ProjectPage is the project root: its tasks as a kanban board. The server
 // renders the first paint inside [data-ssr]; tasksBoard renders the same
-// columns live from the rail's store and removes the server copy.
-templ ProjectPage(f shell.Frame, projectID, projectName string, b Board) {
+// columns live from the rail's store and removes the server copy. form is
+// the brainstorm dialog's choices (sessionsBrainstorm).
+templ ProjectPage(f shell.Frame, projectID, projectName string, b Board, form sessions.NewSessionForm) {
 	@shell.AppShell(f) {
 		<main id="main" class="[ frame ]" x-data="tasksBoard" data-project-id={ projectID } x-on:task-changed.window="taskChanged">
 			<header class="[ toolbar ]">
@@ -19,6 +21,7 @@ templ ProjectPage(f shell.Frame, projectID, projectName string, b Board) {
 				<div class="[ actions ]">
 					<a class="[ button ]" data-variant="ghost" data-size="sm" href={ templ.SafeURL(projects.RepositoriesHref(projectID)) }>Repositories</a>
 					<a class="[ button ]" data-variant="ghost" data-size="sm" href={ templ.SafeURL(projects.SettingsHref(projectID)) }>Settings</a>
+					@brainstormAction(projectID, form)
 					<a class="[ button ]" data-variant="primary" data-size="sm" href={ templ.SafeURL(NewTaskHref(projectID)) }>New task</a>
 				</div>
 			</header>
@@ -51,6 +54,57 @@ templ ProjectPage(f shell.Frame, projectID, projectName string, b Board) {
 	}
 }
 
+// brainstormAction starts a feature brainstorm from the board: a product-mode
+// session with no task. The button opens a dialog with the agent and the
+// repository; Start goes to the session on the project's sessions page.
+// Without a repository the button leads to the repositories page instead.
+templ brainstormAction(projectID string, form sessions.NewSessionForm) {
+	if !form.CanStart() {
+		<a class="[ button ]" data-variant="ghost" data-size="sm" href={ templ.SafeURL(projects.RepositoriesHref(projectID)) } title="Add a repository to this project first: a session runs in one." data-brainstorm-needs-repository>Brainstorm a feature</a>
+	} else {
+		<span style="display: contents" x-data="sessionsBrainstorm" data-project-id={ projectID } data-default-repository={ form.DefaultRepository() }>
+			<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" id="brainstorm-open" aria-haspopup="dialog" aria-controls="brainstorm" x-on:click="open">Brainstorm a feature</button>
+			<div class="[ popup ]" role="dialog" id="brainstorm" popover="manual" data-trap aria-labelledby="brainstorm-title" x-data="popupDialog" x-on:dialog-open.window="openFrom($event)">
+				<form class="[ confirm-panel ] [ flow ]" x-on:submit.prevent="start">
+					<h3 id="brainstorm-title" class="[ color-ink ]">Brainstorm a feature</h3>
+					<p>A product-mode session with no task. The agent interviews you, writes the PRD on a new feature task and creates one child task per piece of work, each with a brief.</p>
+					<div class="[ field ]">
+						<label for="brainstorm-agent">Agent</label>
+						<div class="[ dropdown ]" x-data="dropdown">
+							<select id="brainstorm-agent" x-model="agentId" data-initial-focus>
+								<option value="" data-description="claude with no agent definition">Plain claude</option>
+								for _, a := range form.Agents {
+									<option value={ a.ID } { descriptionAttrs(a.Description)... }>{ a.Name }</option>
+								}
+							</select>
+						</div>
+					</div>
+					<div class="[ field ]">
+						<label for="brainstorm-repository">Repository</label>
+						<select id="brainstorm-repository" x-model="repositoryId">
+							for _, r := range form.Repositories {
+								<option value={ r.ID }>{ r.Name }</option>
+							}
+						</select>
+					</div>
+					<template x-if="error">
+						<div class="[ banner ]" data-tone="danger" role="alert">
+							<div class="[ flow ] [ flow-space-3xs ]">
+								<span x-text="error.message"></span>
+								<span class="[ code ]"><span x-text="error.code"></span> · <span x-text="error.next"></span></span>
+							</div>
+						</div>
+					</template>
+					<footer class="[ cluster ]">
+						<button type="submit" class="[ button ]" data-variant="primary" data-size="sm" x-bind:disabled="cannotStart" x-bind:aria-busy="starting">Start brainstorm</button>
+						<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-on:click="close()">Cancel</button>
+					</footer>
+				</form>
+			</div>
+		</span>
+	}
+}
+
 // noTasks is the empty state: what a task is, and the way to make one.
 templ noTasks(projectID string) {
 	@components.Empty("No tasks in this project yet", "A task is a piece of work agents take on, in one or more sessions.") {
@@ -71,8 +125,14 @@ templ ssrBoard(b Board) {
 				<div class="[ cards ]">
 					for _, l := range c.Cards {
 						<article class="[ card ]" data-task-id={ l.TaskID }>
+							if l.Parent != "" {
+								<span class="[ parent ]" data-parent-title>{ l.Parent }</span>
+							}
 							<a class="[ title ]" href={ templ.SafeURL(l.Href) }>{ l.Label }</a>
 							<div class="[ meta ]">
+								if l.Children > 0 {
+									<span class="[ badge ]" data-children>{ ChildrenWord(l.Children) }</span>
+								}
 								if l.LiveState() != "" {
 									<span class="[ status ]" data-state={ l.LiveState() } data-dot-only>
 										<span class="[ visually-hidden ]">{ l.LiveWord() }</span>
@@ -112,8 +172,14 @@ templ liveBoard() {
 				<div class="[ cards ]">
 					<template x-for="card in column.cards" x-bind:key="card.id">
 						<article class="[ card ]" x-bind:data-task-id="card.id" x-bind:data-fresh="card.fresh">
+							<template x-if="card.hasParent">
+								<span class="[ parent ]" data-parent-title x-text="card.parentTitle"></span>
+							</template>
 							<a class="[ title ]" x-bind:href="card.href" x-text="card.title"></a>
 							<div class="[ meta ]">
+								<template x-if="card.hasChildren">
+									<span class="[ badge ]" data-children x-text="card.children"></span>
+								</template>
 								<span class="[ status ]" data-dot-only x-show="card.hasDot" x-bind:data-state="card.state">
 									<span class="[ visually-hidden ]" x-text="card.word"></span>
 								</span>

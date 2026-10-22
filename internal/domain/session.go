@@ -138,14 +138,24 @@ const (
 	// SessionModeDesign produces components, images and videos and publishes
 	// each one to the Design tab of the web UI as it is made (publish_artifact).
 	SessionModeDesign SessionMode = "design"
+	// SessionModeProduct is the product manager: it interviews the person on a
+	// feature until its scope is confirmed, writes the PRD on the feature task,
+	// creates one child task per piece of work with a brief each, and asks for
+	// review. It never writes code.
+	SessionModeProduct SessionMode = "product"
 )
+
+// NeedsTask says a session in this mode must run on a task. Only a product
+// session may run on its project alone (ADR 0016): it creates the feature
+// task itself.
+func (m SessionMode) NeedsTask() bool { return m != SessionModeProduct }
 
 // ParseSessionMode reads a mode as clients send it; empty is the default.
 func ParseSessionMode(s string) (SessionMode, error) {
 	switch m := SessionMode(s); m {
-	case SessionModeDefault, SessionModeArchitect, SessionModeImplement, SessionModeDesign:
+	case SessionModeDefault, SessionModeArchitect, SessionModeImplement, SessionModeDesign, SessionModeProduct:
 		return m, nil
 	default:
-		return "", &StructuredError{Code: "INVALID_INPUT", Message: "unknown session mode " + s + `: use "", "architect", "implement" or "design"`}
+		return "", &StructuredError{Code: "INVALID_INPUT", Message: "unknown session mode " + s + `: use "", "architect", "implement", "design" or "product"`}
 	}
 }

@@ -112,11 +112,15 @@ export function toChange(dto) {
   return { kind: "upsert", session: toSession(dto?.session) };
 }
 
-/** POST /api/start_interactive_session body: always run on the server's terminal host. */
+/**
+ * POST /api/start_interactive_session body: always run on the server's
+ * terminal host. A project-level session has no ticket_id at all (the server
+ * accepts a missing one only with mode product; an empty string is not missing).
+ */
 export function toStartBody(req) {
   return {
     project_id: req.projectId,
-    ticket_id: req.ticketId,
+    ticket_id: req.ticketId || undefined,
     repository_id: req.repositoryId,
     agent_id: req.agentId || undefined,
     mode: req.mode || undefined,

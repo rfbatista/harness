@@ -74,7 +74,7 @@ func TestTaskResourcesAndCommentsInTheWebUI_EndToEnd(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	task, err := plan.CreateTicket(ctx, project.ID, "Add assets and comments", "", domain.TicketStatusInProgress)
+	task, err := plan.CreateTicket(ctx, project.ID, "Add assets and comments", "", domain.TicketStatusInProgress, "")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -35,16 +35,16 @@ func newArtifactToolsFixture(t *testing.T) *artifactToolsFixture {
 	sessions := sqlite.NewSessionRepository(db)
 	plan := planning.NewService(sqlite.NewTicketRepository(db), sqlite.NewDocumentRepository(db), projects)
 	proj, _ := projects.Create("p", t.TempDir())
-	tk, err := plan.CreateTicket(context.Background(), proj.ID, "Design the card", "", domain.TicketStatusInProgress)
+	tk, err := plan.CreateTicket(context.Background(), proj.ID, "Design the card", "", domain.TicketStatusInProgress, "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	other, err := plan.CreateTicket(context.Background(), proj.ID, "Design the logo", "", domain.TicketStatusInProgress)
+	other, err := plan.CreateTicket(context.Background(), proj.ID, "Design the logo", "", domain.TicketStatusInProgress, "")
 	if err != nil {
 		t.Fatal(err)
 	}
 	proj2, _ := projects.Create("p2", t.TempDir())
-	foreign, err := plan.CreateTicket(context.Background(), proj2.ID, "Elsewhere", "", domain.TicketStatusInProgress)
+	foreign, err := plan.CreateTicket(context.Background(), proj2.ID, "Elsewhere", "", domain.TicketStatusInProgress, "")
 	if err != nil {
 		t.Fatal(err)
 	}
