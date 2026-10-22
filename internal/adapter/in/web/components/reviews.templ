@@ -7,7 +7,7 @@ package components
 // keeps the note on screen, read-only, until dismissed. The body is the
 // architect's text: x-text, never HTML.
 templ ReviewCard() {
-	<article class="[ review ]" x-bind:data-withdrawn="card.withdrawn">
+	<article class="[ review ]" x-bind:id="card.anchor" x-bind:data-withdrawn="card.withdrawn">
 		<h3 tabindex="-1" data-review-heading x-text="card.subject"></h3>
 		<p class="[ meta ]"><span x-text="card.byline"></span> · <span x-text="card.age"></span></p>
 		<p class="[ body ]" x-text="card.body"></p>
@@ -26,7 +26,7 @@ templ ReviewCard() {
 					<textarea x-bind:id="card.noteId" rows="2" x-model="card.draft.note" x-bind:aria-invalid="card.invalid" x-bind:aria-describedby="card.errorId"></textarea>
 					<span class="[ error ]" x-bind:id="card.errorId" x-text="card.draft.problem"></span>
 				</div>
-				<div class="[ cluster ] [ gutter-xs ]">
+				<div class="[ actions ] [ cluster ] [ gutter-xs ]">
 					<button type="button" class="[ button ]" x-bind:data-variant="card.approveVariant" data-size="sm" x-bind:aria-busy="card.draft.busy" x-bind:disabled="card.draft.busy" x-on:click="approve(card.id)">Approve</button>
 					<button type="button" class="[ button ]" data-size="sm" x-bind:disabled="card.draft.busy" x-on:click="requestChanges(card.id)">Request changes</button>
 				</div>

@@ -26,6 +26,7 @@ export const taskEditor =
   ({ gateway, navigate, reload, store = { tasks: [], statusChanges: {} }, clock = { now: () => new Date() } }) =>
   () => {
     let ticker = null;
+    let onResize = () => {};
     return {
       /** @type {import("../../domain/task.js").Task | null} */
       task: null,
@@ -42,6 +43,10 @@ export const taskEditor =
       deletingTask: false,
       taskDeleteProblem: "",
       taskError: null,
+      /** The description shows whole, not clamped to two lines. */
+      descriptionOpen: false,
+      /** The clamped description is longer than its two lines: there is more to show. */
+      descriptionOverflows: false,
 
       get title() {
         return this.task?.title ?? "";
@@ -55,6 +60,13 @@ export const taskEditor =
       /** The description shows under the title, except while it is edited. */
       get showsDescription() {
         return this.hasDescription && !this.editingTask;
+      },
+      get descriptionToggleWord() {
+        return this.descriptionOpen ? "Less" : "More";
+      },
+      /** What x-bind sets on the note: present while the description shows whole. */
+      get descriptionOpenAttr() {
+        return this.descriptionOpen ? "" : null;
       },
       get cannotSaveTask() {
         return this.savingTask || titleProblem(this.draftTitle) !== "";
@@ -90,12 +102,32 @@ export const taskEditor =
           return;
         }
         ticker = setInterval(() => (this.now = clock.now()), TICK_MS);
+        onResize = () => this.measureDescription();
+        window.addEventListener("resize", onResize);
         // Moved elsewhere (the architect, another tab): the picker follows.
         this.$watch("storedStatus", (status) => this.follow(status));
       },
 
       destroy() {
         clearInterval(ticker);
+        window.removeEventListener("resize", onResize);
+      },
+
+      /**
+       * Whether the clamped description has more than its two lines. Measured
+       * while it is clamped (and again on a resize, which can make it fit or
+       * not); an open one keeps its toggle so it can be closed.
+       */
+      measureDescription() {
+        this.$nextTick(() => {
+          const text = this.$refs.description;
+          if (!text || this.descriptionOpen) return;
+          this.descriptionOverflows = text.scrollHeight > text.clientHeight + 1;
+        });
+      },
+
+      toggleDescription() {
+        this.descriptionOpen = !this.descriptionOpen;
       },
 
       /** The task's status changed over the feed: show it, unless this page is saving its own. */

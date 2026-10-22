@@ -230,6 +230,9 @@ type PageView struct {
 	// task without children (the section still mounts, hidden, so a first
 	// child arriving over the feed shows it).
 	Feature *FeatureView
+	// Band is the panel the person left open (the task_band cookie): a key,
+	// "none", or "" when unset.
+	Band string
 	// Parent links a child task's feature task in the crumbs; nil when
 	// top-level.
 	Parent *ParentLink

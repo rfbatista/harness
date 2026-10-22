@@ -114,3 +114,12 @@ export {};
  * @property {() => string[]} collapsed  status keys; [] when none or unreadable
  * @property {(keys: string[]) => void} setCollapsed  remembers them; [] forgets
  */
+
+/**
+ * The context strip's open panel, one preference per browser (the task_band
+ * cookie, infrastructure/band-prefs.js).
+ *
+ * @typedef {object} BandPrefs
+ * @property {() => string} open  "reviews", "feature", "token-savers" or "none"; "" when unset or unreadable
+ * @property {(key: string) => void} setOpen  remembers it; an unknown key is ignored
+ */

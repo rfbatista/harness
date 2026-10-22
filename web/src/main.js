@@ -35,6 +35,7 @@ import { terminalGateway } from "./modules/sessions/infrastructure/terminal-gate
 import { transcriptGateway } from "./modules/sessions/infrastructure/transcript-gateway.js";
 import { registerSessions } from "./modules/sessions/presentation/register.js";
 import { railGateway } from "./modules/tasks/infrastructure/rail-gateway.js";
+import { cookieBandPrefs } from "./modules/tasks/infrastructure/band-prefs.js";
 import { cookieRailPrefs } from "./modules/tasks/infrastructure/rail-prefs.js";
 import { resourcesGateway } from "./modules/tasks/infrastructure/resources-gateway.js";
 import { tasksGateway } from "./modules/tasks/infrastructure/tasks-gateway.js";
@@ -63,6 +64,7 @@ registerTasks(Alpine, {
   gateway: tasksGateway(api),
   rail: railGateway(api, events),
   railPrefs: cookieRailPrefs(),
+  bandPrefs: cookieBandPrefs(),
   resources: resourcesGateway(api, events, xhrUpload({ base: "/api" })),
   navigate,
   reload,

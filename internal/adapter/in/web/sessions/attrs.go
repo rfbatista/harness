@@ -2,6 +2,7 @@ package sessions
 
 import (
 	"strconv"
+	"strings"
 
 	"github.com/a-h/templ"
 )
@@ -46,13 +47,30 @@ func descriptionAttrs(description string) templ.Attributes {
 	return templ.Attributes{}
 }
 
-// bandAttrs paints the review band before the browser reads the requests:
-// amber when some wait on the person, hidden when none do.
-func bandAttrs(pending int) templ.Attributes {
+// reviewsButtonAttrs paints the strip's Reviews button before the browser
+// reads the requests: amber when some wait on the person, hidden when none do.
+func reviewsButtonAttrs(pending int) templ.Attributes {
 	if pending > 0 {
-		return templ.Attributes{"data-attention": true}
+		return templ.Attributes{"data-tone": "attention", "aria-label": "Reviews, " + strconv.Itoa(pending) + " waiting"}
 	}
 	return templ.Attributes{"hidden": true}
+}
+
+// toneAttrs paints the amber tone on what waits on the person.
+func toneAttrs(attention bool) templ.Attributes {
+	if attention {
+		return templ.Attributes{"data-tone": "attention"}
+	}
+	return templ.Attributes{}
+}
+
+// reviewsPhrase is the Reviews button's state phrase before the browser
+// reads the requests.
+func reviewsPhrase(pending int) string {
+	if pending > 0 {
+		return "waiting"
+	}
+	return ""
 }
 
 // waitingLine is how many requests wait: "1 review waits on you". The
@@ -80,4 +98,92 @@ func featureCount(f *FeatureView) string {
 		return "0"
 	}
 	return strconv.Itoa(len(f.Children))
+}
+
+// hiddenIf paints an element hidden until the browser decides to show it
+// (x-bind:hidden), like shownIf but for the hidden attribute.
+func hiddenIf(hidden bool) templ.Attributes {
+	if hidden {
+		return templ.Attributes{"hidden": true}
+	}
+	return templ.Attributes{}
+}
+
+// doneAttr marks a child row whose task is done: its title is muted.
+func doneAttr(done bool) templ.Attributes {
+	if done {
+		return templ.Attributes{"data-done": true}
+	}
+	return templ.Attributes{}
+}
+
+// featurePhrase is what the strip's Feature button says beside the count:
+// "3 in review · 2 in progress", "all done", or nothing. The browser's
+// featureSummary (tasks/presentation/featureView.js) says the same.
+func featurePhrase(f *FeatureView) string {
+	if f == nil || len(f.Children) == 0 {
+		return ""
+	}
+	count := map[string]int{}
+	for _, c := range f.Children {
+		count[c.Status]++
+	}
+	var parts []string
+	if n := count["review"]; n > 0 {
+		parts = append(parts, strconv.Itoa(n)+" in review")
+	}
+	if n := count["in_progress"]; n > 0 {
+		parts = append(parts, strconv.Itoa(n)+" in progress")
+	}
+	if len(parts) == 0 && count["done"] == len(f.Children) {
+		parts = append(parts, "all done")
+	}
+	return strings.Join(parts, " · ")
+}
+
+// featureName is the Feature button's accessible name, which a narrow strip
+// keeps whole while it hides the phrase: "Feature, 16 children, 3 in review,
+// 2 in progress". The browser's featureSummary says the same.
+func featureName(f *FeatureView) string {
+	n := len(childrenOf(f))
+	name := "Feature, " + strconv.Itoa(n) + " children"
+	if n == 1 {
+		name = "Feature, 1 child"
+	}
+	if phrase := featurePhrase(f); phrase != "" {
+		name += ", " + strings.ReplaceAll(phrase, " · ", ", ")
+	}
+	return name
+}
+
+// featureShowing is the Feature panel's header line: "Showing 16 tasks".
+func featureShowing(f *FeatureView) string {
+	n := len(childrenOf(f))
+	if n == 1 {
+		return "Showing 1 task"
+	}
+	return "Showing " + strconv.Itoa(n) + " tasks"
+}
+
+// featureScrollLabel names the Feature panel's scroll region: "Child tasks, 16".
+func featureScrollLabel(f *FeatureView) string {
+	return "Child tasks, " + strconv.Itoa(len(childrenOf(f)))
+}
+
+func childrenOf(f *FeatureView) []ChildView {
+	if f == nil {
+		return nil
+	}
+	return f.Children
+}
+
+// docCount is a child row's document count in words; nothing for none.
+func docCount(n int) string {
+	switch n {
+	case 0:
+		return ""
+	case 1:
+		return "1 doc"
+	}
+	return strconv.Itoa(n) + " docs"
 }
