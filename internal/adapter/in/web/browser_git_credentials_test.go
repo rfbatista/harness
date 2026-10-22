@@ -260,6 +260,60 @@ func TestRepositoriesArePinnedFromTheirRowInTheBrowser(t *testing.T) {
 	}
 }
 
+// A person with only an SSH key for github.com pins it to a repository cloned
+// over https, and the row says what pushes and pull requests each use.
+func TestAnSSHKeyIsPinnedToAnHTTPSRepositoryFromItsRowInTheBrowser(t *testing.T) {
+	h := newCredentialsHarness(t)
+	bg := context.Background()
+	key, err := h.fake.CreateGitCredential(bg, ports.CreateGitCredential{Name: "laptop-key", Kind: domain.GitSSHKey, Host: "github.com", Generate: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, errs := browser(t)
+	row := func(name string) string {
+		return `[...document.querySelectorAll('main .row')].find(r => r.querySelector('[x-data="repositoryCredential"]') && r.textContent.includes('` + name + `'))`
+	}
+	text := func(name, part string) string {
+		return `(` + row(name) + `)?.querySelector('[x-data="repositoryCredential"] > ` + part + `')?.textContent.replace(/\s+/g, ' ').trim()`
+	}
+	var automatic, pushes, pulls string
+	err = chromedp.Run(ctx,
+		chromedp.EmulateViewport(1280, 900),
+		chromedp.Navigate(h.srv.URL+"/projects/"+h.projectID+"/repositories"),
+		credPoll(`!document.querySelector('main [data-ssr]')`),
+		credPoll(`(`+text("harness", "span")+` ?? '').includes('SSH fallback')`),
+		chromedp.Evaluate(text("harness", "span"), &automatic),
+		credPoll(`(`+row("harness")+`).querySelector('.dropdown .trigger')?.getAttribute('aria-labelledby') && document.getElementById((`+row("harness")+`).querySelector('.dropdown .trigger').getAttribute('aria-labelledby').split(' ')[0]).textContent === 'Credential'`),
+		chromedp.Evaluate(`(`+row("harness")+`).querySelector('.dropdown .trigger').focus(); true`, nil),
+		rawKey("Enter", 13),
+		credPoll(`(`+row("harness")+`).querySelector('.dropdown .trigger').getAttribute('aria-expanded') === 'true'`),
+		// Automatic first, then the key: the picker lists it for an https origin.
+		rawKey("ArrowDown", 40),
+		rawKey("Enter", 13),
+		credPoll(`(`+text("harness", "span")+` ?? '').includes('laptop-key · pinned')`),
+		chromedp.Evaluate(text("harness", "span"), &pushes),
+		chromedp.Evaluate(text("harness", ".repository-pull-requests"), &pulls),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "automatic (SSH fallback: the only SSH key for github.com)"; !strings.Contains(automatic, want) {
+		t.Errorf("before pinning the row says %q, want %q", automatic, want)
+	}
+	if want := "laptop-key · pinned (SSH fallback)"; !strings.Contains(pushes, want) {
+		t.Errorf("pushes say %q, want %q", pushes, want)
+	}
+	if want := "Pull requests: no token for github.com"; !strings.Contains(pulls, want) || !strings.Contains(pulls, "Add a token") {
+		t.Errorf("pull requests say %q, want %q and a link to add a token", pulls, want)
+	}
+	if rc, _ := h.fake.GetRepositoryCredential(bg, h.repos["harness"]); rc.Binding.CredentialID == nil || *rc.Binding.CredentialID != key.ID {
+		t.Errorf("binding = %+v", rc.Binding)
+	}
+	if got := errs.all(); len(got) > 0 {
+		t.Errorf("console errors: %v", got)
+	}
+}
+
 func TestGitCredentialsPageFitsAPhone(t *testing.T) {
 	h := newCredentialsHarness(t)
 	if _, err := h.fake.CreateGitCredential(context.Background(), ports.CreateGitCredential{Name: "a-rather-long-credential-name-for-a-phone", Kind: domain.GitSSHKey, Host: "git.example-enterprise-host.com:2222", Generate: true}); err != nil {

@@ -60,13 +60,17 @@ func normalizeHost(s string) string {
 	return h
 }
 
-// BindingLine is what a repository's pushes use, in words, and where to add
-// a credential when nothing fits.
+// BindingLine is what a repository's pushes use and what its pull requests
+// use, each in words, and where to add a credential when nothing fits.
 type BindingLine struct {
 	State   string `json:"state"` // pinned, automatic, none, local
 	Name    string `json:"name"`
 	Text    string `json:"text"`
 	AddHref string `json:"add_href"`
+	// PullText says what pull requests use; "" when the repository has no
+	// remote to open one on. GitHub's API takes only a token, never a key.
+	PullText    string `json:"pull_text"`
+	PullAddHref string `json:"pull_add_href"`
 }
 
 // LineOf reads a repository's credential as its row says it.
@@ -75,8 +79,26 @@ func LineOf(rc *domain.RepositoryCredential) BindingLine {
 	if rc.RemoteURL != nil {
 		remote = *rc.RemoteURL
 	}
+	r, readable := RemoteOf(remote)
+	line := pushLine(rc, remote, r, readable)
+	if remote != "" && readable {
+		line.PullText, line.PullAddHref = pullLine(rc, r)
+	}
+	return line
+}
+
+// viaSSH is true when rc's credential is an SSH key serving an https origin.
+func viaSSH(rc *domain.RepositoryCredential, r Remote, readable bool) bool {
+	return readable && r.Kind == domain.GitHTTPSToken && rc.Resolved != nil && rc.Resolved.Kind == domain.GitSSHKey
+}
+
+func pushLine(rc *domain.RepositoryCredential, remote string, r Remote, readable bool) BindingLine {
 	if rc.Binding.CredentialID != nil && rc.Resolved != nil {
-		return BindingLine{State: "pinned", Name: rc.Resolved.Name, Text: "pinned"}
+		text := "pinned"
+		if viaSSH(rc, r, readable) {
+			text += " (SSH fallback)"
+		}
+		return BindingLine{State: "pinned", Name: rc.Resolved.Name, Text: text}
 	}
 	if remote == "" {
 		return BindingLine{State: "local", Text: "Local only: no remote, no credential needed."}
@@ -86,17 +108,41 @@ func LineOf(rc *domain.RepositoryCredential) BindingLine {
 		if c.IsDefault {
 			why = "default for " + c.Host
 		}
+		if viaSSH(rc, r, readable) {
+			if c.IsDefault {
+				why = "default " + KindLabel(c.Kind) + " for " + c.Host
+			}
+			why = "SSH fallback: " + why
+		}
 		return BindingLine{State: "automatic", Name: c.Name, Text: "automatic (" + why + ")"}
 	}
-	r, ok := RemoteOf(remote)
-	if !ok {
+	if !readable {
 		return BindingLine{State: "none", Text: "The origin is not an https or ssh URL, so no credential applies."}
 	}
 	what := "token"
 	if r.Kind == domain.GitSSHKey {
 		what = "SSH key"
+	} else if !strings.Contains(r.Host, ":") {
+		what = "token or SSH key"
 	}
-	return BindingLine{State: "none", Text: "No " + what + " for " + r.Host + ": pushes and pull requests from this repository will fail.", AddHref: AddHref(r.Host, string(r.Kind))}
+	return BindingLine{State: "none", Text: "No " + what + " for " + r.Host + ": pushes from this repository will fail.", AddHref: AddHref(r.Host, string(r.Kind))}
+}
+
+// pullLine says what pull requests on r use: the token resolved for them, or
+// that there is none and where to add one.
+func pullLine(rc *domain.RepositoryCredential, r Remote) (text, addHref string) {
+	c := rc.PullRequests
+	if c == nil {
+		return "Pull requests: no token for " + r.Host + ", so they will fail.", AddHref(r.Host, string(domain.GitHTTPSToken))
+	}
+	why := "the only " + KindLabel(c.Kind) + " for " + c.Host
+	switch {
+	case rc.Binding.CredentialID != nil && rc.Resolved != nil && rc.Resolved.ID == c.ID:
+		why = "pinned"
+	case c.IsDefault:
+		why = "default for " + c.Host
+	}
+	return "Pull requests: " + c.Name + " (" + why + ")", ""
 }
 
 // RepositoriesSeed is what the Repositories page's repositoryCredential rows

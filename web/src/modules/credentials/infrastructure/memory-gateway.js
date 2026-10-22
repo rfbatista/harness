@@ -7,7 +7,7 @@
 
 import { Codes, StructuredError } from "../../../shared/domain/errors.js";
 import { FeedStatus } from "../../../shared/domain/feed.js";
-import { DEFAULT_USERNAME, applyChange, automaticFor, identityProblem, normalizeHost, remoteOf, sorted } from "../domain/credential.js";
+import { DEFAULT_USERNAME, applyChange, automaticFor, identityProblem, credentialFor, normalizeHost, remoteOf, sorted, takes } from "../domain/credential.js";
 import { toPageSeed, toRepositoriesSeed } from "./dto.js";
 
 /** The passphrase that opens the fake's encrypted keys. */
@@ -81,8 +81,15 @@ export function memoryCredentials({ credentials = [], identity = null, repositor
 
   /** What a push from repo would use now: its pin, else the default (or only) credential for its origin. */
   const resolve = (repo) => (repo.credentialId ? find(repo.credentialId) : automaticFor(list, repo.remoteUrl));
-  const repositoryCredential = (repo) =>
-    Object.freeze({ repositoryId: repo.id, credentialId: repo.credentialId ?? null, resolved: resolve(repo), remoteUrl: repo.remoteUrl ?? null });
+  /** The https token GitHub API calls on repo would use: its push credential when that is a token of the host, else the host's default or only one. */
+  const pullRequestsFor = (repo, resolved) => {
+    const host = remoteOf(repo.remoteUrl)?.host ?? "github.com";
+    return resolved?.kind === "https_token" && resolved.host === host ? resolved : credentialFor(list, host, "https_token");
+  };
+  const repositoryCredential = (repo) => {
+    const resolved = resolve(repo);
+    return Object.freeze({ repositoryId: repo.id, credentialId: repo.credentialId ?? null, resolved, pullRequests: pullRequestsFor(repo, resolved), remoteUrl: repo.remoteUrl ?? null });
+  };
 
   /** @type {import("../domain/ports.js").CredentialGateway} */
   const gateway = {
@@ -217,7 +224,7 @@ export function memoryCredentials({ credentials = [], identity = null, repositor
         const credential = mustFind(credentialId);
         const remote = remoteOf(repo.remoteUrl);
         if (remote && credential.host !== remote.host) fail(Codes.GIT_CREDENTIAL_HOST_MISMATCH, `${credential.name} is for ${credential.host}, origin is on ${remote.host}`, 400);
-        if (remote && credential.kind !== remote.kind) fail(Codes.GIT_CREDENTIAL_KIND_MISMATCH, `origin takes a ${remote.kind}`, 400);
+        if (remote && !takes(remote, credential.kind)) fail(Codes.GIT_CREDENTIAL_KIND_MISMATCH, `origin takes a ${remote.kind}`, 400);
       }
       repos = repos.map((r) => (r.id === repositoryId ? { ...r, credentialId: credentialId || null } : r));
       return repositoryCredential(mustFindRepo(repositoryId));

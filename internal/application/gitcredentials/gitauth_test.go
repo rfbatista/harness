@@ -1,6 +1,7 @@
 package gitcredentials_test
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -122,7 +123,7 @@ func TestASessionIsServedEveryChangeWithNoSecretOnDisk(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(sg.Note, "no stored credential for github.com (https_token)") {
+	if !strings.Contains(sg.Note, "no stored token or SSH key for github.com") {
 		t.Fatalf("note with nothing stored: %q", sg.Note)
 	}
 	if envOf(sg.Env, "GH_TOKEN") != gitcli.NoGitHubToken {
@@ -229,5 +230,173 @@ func TestTheSweepKeepsOnlyRunningSessions(t *testing.T) {
 	}
 	if got := password(t, sg.Env); got != "ghp_servicetest0001" {
 		t.Fatalf("a swept-in running session is served %q", got)
+	}
+}
+
+// originURL is what git answers for origin in a checkout whose remote is
+// remote, run with env: the URL after the harness's own rewrites.
+func originURL(t *testing.T, env []string, remote string) string {
+	t.Helper()
+	repo := t.TempDir()
+	run := func(args ...string) []byte {
+		cmd := exec.Command("git", args...)
+		cmd.Dir = repo
+		cmd.Env = append(os.Environ(), env...)
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+		return out
+	}
+	run("init", "-q")
+	run("remote", "add", "origin", remote)
+	return strings.TrimSpace(string(run("ls-remote", "--get-url", "origin")))
+}
+
+func sshKey(t *testing.T, p ports.GitCredentials, name, host, username string) *domain.GitCredential {
+	t.Helper()
+	c, err := p.CreateGitCredential(ctx, ports.CreateGitCredential{Name: name, Kind: domain.GitSSHKey, Host: host, Username: username, Generate: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return c
+}
+
+func TestAnSSHKeyServesAnHTTPSOriginInASessionUntilATokenIsAdded(t *testing.T) {
+	const https = "https://github.com/acme/api.git"
+	env, _ := withFiles(t)
+	_, repo := env.AddRepository(t, "", "api", https)
+	_, other := env.AddRepository(t, "", "gitlab", "https://gitlab.com/acme/api.git")
+	sshKey(t, env.Service, "key", "github.com", "octocat")
+
+	sg, err := env.Service.SessionEnv(ctx, "s1", repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sg.Note != "" {
+		t.Fatalf("a key serves the origin, so there is nothing to tell the agent: %q", sg.Note)
+	}
+	if got := originURL(t, sg.Env, https); got != "octocat@github.com:acme/api.git" {
+		t.Fatalf("with only a key, git reaches %q", got)
+	}
+	if got := originURL(t, sg.Env, "https://gitlab.com/acme/api.git"); got != "https://gitlab.com/acme/api.git" {
+		t.Fatalf("another host is rewritten too: %q", got)
+	}
+
+	// The running session follows: a token for the host takes the origin back.
+	tok := githubToken(t, env.Service, "GitHub")
+	if got := originURL(t, sg.Env, https); got != https {
+		t.Fatalf("with a token, git reaches %q", got)
+	}
+	// And so does pinning the key.
+	if _, err := env.Service.SetRepositoryCredential(ctx, repo, ptr(sshKeyID(t, env.Service))); err != nil {
+		t.Fatal(err)
+	}
+	if got := originURL(t, sg.Env, https); got != "octocat@github.com:acme/api.git" {
+		t.Fatalf("pinned key: git reaches %q", got)
+	}
+	if _, err := env.Service.SetRepositoryCredential(ctx, repo, nil); err != nil {
+		t.Fatal(err)
+	}
+	if got := originURL(t, sg.Env, https); got != https {
+		t.Fatalf("unpinned: git reaches %q", got)
+	}
+	if err := env.Service.DeleteGitCredential(ctx, tok.ID); err != nil {
+		t.Fatal(err)
+	}
+	if got := originURL(t, sg.Env, https); got != "octocat@github.com:acme/api.git" {
+		t.Fatalf("token deleted: git reaches %q", got)
+	}
+	// The repository of another host is untouched by all of it.
+	og, err := env.Service.SessionEnv(ctx, "s2", other)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := originURL(t, og.Env, "https://gitlab.com/acme/api.git"); got != "https://gitlab.com/acme/api.git" {
+		t.Fatalf("a repository of another host: %q", got)
+	}
+}
+
+func sshKeyID(t *testing.T, p ports.GitCredentials) string {
+	t.Helper()
+	list, err := p.ListGitCredentials(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range list.Credentials {
+		if c.Kind == domain.GitSSHKey {
+			return c.ID
+		}
+	}
+	t.Fatal("no ssh key")
+	return ""
+}
+
+func ptr[T any](v T) *T { return &v }
+
+func TestAnSSHKeyServesAnHTTPSOriginInAnOperation(t *testing.T) {
+	const https = "https://github.com/acme/api.git"
+	env, _ := withFiles(t)
+	_, repo := env.AddRepository(t, "", "api", https)
+	sshKey(t, env.Service, "key", "github.com", "")
+	op, err := env.Service.Operation(ctx, repo, https)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer op.Release()
+	if got := originURL(t, op.Env, https); got != "git@github.com:acme/api.git" {
+		t.Fatalf("an operation with only a key reaches %q", got)
+	}
+	githubToken(t, env.Service, "GitHub")
+	op2, err := env.Service.Operation(ctx, repo, https)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer op2.Release()
+	if got := originURL(t, op2.Env, https); got != https {
+		t.Fatalf("an operation with a token reaches %q", got)
+	}
+}
+
+func TestAnHTTPSOriginWithAPortIsNeverRewritten(t *testing.T) {
+	const https = "https://git.example.com:8443/acme/api.git"
+	env, _ := withFiles(t)
+	_, repo := env.AddRepository(t, "", "api", https)
+	sshKey(t, env.Service, "key", "git.example.com", "")
+	sg, err := env.Service.SessionEnv(ctx, "s1", repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := originURL(t, sg.Env, https); got != https {
+		t.Fatalf("an origin with a port reaches %q", got)
+	}
+	if !strings.Contains(sg.Note, "no stored token for git.example.com:8443") {
+		t.Fatalf("nothing resolves, the note should say what to add: %q", sg.Note)
+	}
+}
+
+// recordingTester answers ok and remembers what it was asked.
+type recordingTester struct{ got []string }
+
+func (r *recordingTester) Test(_ context.Context, c ports.GitCredentialSecret, remoteURL string) (*ports.GitCredentialTest, error) {
+	r.got = append(r.got, string(c.Kind)+" "+remoteURL)
+	return &ports.GitCredentialTest{OK: true, Message: "ok", CheckedURL: remoteURL}, nil
+}
+
+func TestTestingAnSSHKeyAgainstAnHTTPSRepositoryChecksSSHToTheHost(t *testing.T) {
+	env, _ := withFiles(t)
+	_, repo := env.AddRepository(t, "", "api", "https://github.com/acme/api.git")
+	key := sshKey(t, env.Service, "key", "github.com", "octocat")
+	tok := githubToken(t, env.Service, "GitHub")
+	tester := &recordingTester{}
+	env.Service.Tester = tester
+	for _, id := range []string{key.ID, tok.ID} {
+		if _, err := env.Service.TestGitCredential(ctx, id, repo); err != nil {
+			t.Fatal(err)
+		}
+	}
+	want := []string{"ssh_key octocat@github.com:acme/api.git", "https_token https://github.com/acme/api.git"}
+	if len(tester.got) != 2 || tester.got[0] != want[0] || tester.got[1] != want[1] {
+		t.Fatalf("tester asked %q, want %q", tester.got, want)
 	}
 }

@@ -27,6 +27,7 @@
  * @property {string} repositoryId
  * @property {string|null} credentialId   its pin; null resolves automatically
  * @property {Credential|null} resolved   what a push would use now; null when nothing does
+ * @property {Credential|null} [pullRequests]  the https token GitHub API calls would use now; never an ssh_key
  * @property {string|null} remoteUrl      origin without userinfo; null when there is none
  *
  * @typedef {object} TestResult
@@ -83,6 +84,24 @@ export function remoteOf(url) {
   return null;
 }
 
+/**
+ * Whether a credential of kind serves the origin: the kind its scheme names,
+ * or, for an https origin without an explicit port, an SSH key of the host
+ * (the SSH fallback).
+ * @param {{ host: string, kind: Kind }} remote
+ * @param {Kind} kind
+ */
+export const takes = (remote, kind) => remote.kind === kind || (remote.kind === "https_token" && kind === "ssh_key" && !remote.host.includes(":"));
+
+/** Whether a push with this credential goes over SSH to an https origin. */
+export const usesSshFallback = (remote, credential) => !!remote && !!credential && remote.kind === "https_token" && credential.kind === "ssh_key";
+
+/** The default credential of kind for host, else the only one. */
+export function credentialFor(credentials, host, kind) {
+  const fits = credentials.filter((c) => c.host === host && c.kind === kind);
+  return fits.find((c) => c.isDefault) ?? (fits.length === 1 ? fits[0] : null);
+}
+
 const byHostThenName = (a, b) => a.host.localeCompare(b.host) || a.name.toLowerCase().localeCompare(b.name.toLowerCase()) || a.id.localeCompare(b.id);
 
 /** Sorted as the server lists them: by host, then name. */
@@ -114,20 +133,22 @@ export function candidatesFor(credentials, remoteUrl) {
   if (!remoteUrl) return sorted(credentials);
   const remote = remoteOf(remoteUrl);
   if (!remote) return [];
-  return sorted(credentials.filter((c) => c.host === remote.host && c.kind === remote.kind));
+  return sorted(credentials.filter((c) => c.host === remote.host && takes(remote, c.kind)));
 }
 
 /**
  * What an origin resolves to without a pin (the contract's §4): the default
- * credential of its host and kind, else the only one; null when none fits.
+ * credential of its host and kind, else the only one; an https origin without
+ * a port then takes the host's SSH key the same way. Null when none fits.
  * @param {Credential[]} credentials
  * @param {string|null} remoteUrl
  */
 export function automaticFor(credentials, remoteUrl) {
   const remote = remoteOf(remoteUrl);
   if (!remote) return null;
-  const fits = credentials.filter((c) => c.host === remote.host && c.kind === remote.kind);
-  return fits.find((c) => c.isDefault) ?? (fits.length === 1 ? fits[0] : null);
+  const own = credentialFor(credentials, remote.host, remote.kind);
+  if (own || !takes(remote, "ssh_key")) return own;
+  return credentialFor(credentials, remote.host, "ssh_key");
 }
 
 /**

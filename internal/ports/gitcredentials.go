@@ -180,6 +180,16 @@ type GitAuthMaterial struct {
 	HTTPS       *GitHTTPSLogin
 	SSHKey      domain.Secret
 	GitHubToken domain.Secret
+	// SSHFallback is set while SSHKey serves an https origin: git then goes
+	// over ssh to the host instead of https. The checkout's remote is left
+	// alone.
+	SSHFallback *GitSSHFallback
+}
+
+// GitSSHFallback is the host whose https URLs go over ssh, as User.
+type GitSSHFallback struct {
+	Host string
+	User string
 }
 
 // GitAuthSource reads a git directory's material from the store. The

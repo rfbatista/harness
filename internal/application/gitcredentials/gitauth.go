@@ -13,10 +13,6 @@ import (
 
 var _ ports.GitAuth = (*Service)(nil)
 
-// githubHost is where gh and the pull requests go when origin is not on a
-// code host the harness knows.
-const githubHost = "github.com"
-
 // liveSession is a session with a git directory: what its sockets resolve
 // from on every request, and its gitconfig is rewritten from when the
 // identity changes. The origin is read once, when the session starts or
@@ -44,15 +40,7 @@ func (s *Service) resolve(repositoryID, origin string) (*ports.GitResolution, []
 		res.Remote = &u
 	}
 	res.Push = domain.ResolveGitCredential(creds, pinned, res.Remote)
-	apiHost := githubHost
-	if res.Remote != nil {
-		apiHost = res.Remote.Host
-	}
-	if res.Push != nil && res.Push.Kind == domain.GitHTTPSToken && res.Push.Host == apiHost {
-		res.GitHub = res.Push
-	} else {
-		res.GitHub = domain.CredentialFor(creds, apiHost, domain.GitHTTPSToken)
-	}
+	res.GitHub = domain.GitHubCredential(creds, res.Push, res.Remote)
 	return res, all, nil
 }
 
@@ -89,6 +77,9 @@ func (s *Service) material(res *ports.GitResolution, all []*ports.StoredGitCrede
 			m.HTTPS = &ports.GitHTTPSLogin{Host: c.Host, Username: c.Username, Token: v}
 		case domain.GitSSHKey:
 			m.SSHKey = v
+			if res.Remote != nil && res.Remote.UsesSSHFallback(c) {
+				m.SSHFallback = &ports.GitSSHFallback{Host: res.Remote.Host, User: c.Username}
+			}
 		}
 	}
 	if c := res.GitHub; c != nil {
@@ -204,7 +195,7 @@ func sessionNote(res *ports.GitResolution, locked bool) string {
 	case locked:
 		return "Git: the harness's credential store is locked (its encryption key is missing), so git push, fetch and gh will fail." + tail
 	case res.Push == nil:
-		return "Git: no stored credential for " + res.Remote.Host + " (" + string(res.Remote.Kind) + "), so git push and fetch to origin will fail." + tail
+		return "Git: no stored " + missingCredential(res.Remote) + " for " + res.Remote.Host + ", so git push and fetch to origin will fail." + tail
 	}
 	return ""
 }
@@ -298,4 +289,16 @@ func (s *Service) GitHubToken(_ context.Context, repositoryID, originURL string)
 		return nil, "", err
 	}
 	return res.GitHub, cs.Secret, nil
+}
+
+// missingCredential names what the person can add for remote: an https
+// origin without a port takes a token or an SSH key.
+func missingCredential(remote *domain.GitRemoteURL) string {
+	switch {
+	case remote.Kind == domain.GitSSHKey:
+		return "SSH key"
+	case remote.Takes(domain.GitSSHKey):
+		return "token or SSH key"
+	}
+	return "token"
 }
