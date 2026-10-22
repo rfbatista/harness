@@ -46,9 +46,9 @@ func TestBuildFeatureListsChildrenInOrderWithTheirDocumentsAndThePRD(t *testing.
 		}
 		got = append(got, line)
 	}
-	want := []string{
-		"c2/done//projects/p1/tasks/c2",
+	want := []string{ // in progress before done, whatever the list order
 		"c1/in progress//projects/p1/tasks/c1 Brief: CSV@/projects/p1/tasks/c1/documents/b-new Brief: CSV (draft)@/projects/p1/tasks/c1/documents/b-old",
+		"c2/done//projects/p1/tasks/c2",
 	}
 	if len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
 		t.Errorf("children =\n%v\nwant\n%v", got, want)

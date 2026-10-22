@@ -1,6 +1,7 @@
 package tasks
 
 import (
+	"slices"
 	"strings"
 	"time"
 
@@ -17,8 +18,20 @@ func isPRD(d *domain.Document) bool {
 	return strings.HasPrefix(strings.ToLower(strings.TrimSpace(d.Title)), prdPrefix)
 }
 
+// childOrder is the order the strip's Feature panel lists children in: what
+// waits on the person first. The browser's toChildRows says the same.
+var childOrder = []string{"review", "in_progress", "todo", "backlog", "done"}
+
+func childRank(status string) int {
+	if i := slices.Index(childOrder, status); i >= 0 {
+		return i
+	}
+	return len(childOrder)
+}
+
 // BuildFeature is the task's feature section: its children (the project's
-// tasks whose parent it is, in list order) with their documents, newest
+// tasks whose parent it is, in review, in progress, todo, backlog, done
+// order; ties in list order) with their documents, newest
 // first, and its PRD (the newest of its own documents titled "PRD: …"). nil
 // when the task has no children. docsOf reads a child's documents; nil reads
 // none.
@@ -39,6 +52,7 @@ func BuildFeature(projectID string, task *domain.Ticket, tickets []*domain.Ticke
 	if len(children) == 0 {
 		return nil
 	}
+	slices.SortStableFunc(children, func(a, b sessions.ChildView) int { return childRank(a.Status) - childRank(b.Status) })
 	view := &sessions.FeatureView{Children: children}
 	for _, d := range newestFirst(docs) {
 		if isPRD(d) {

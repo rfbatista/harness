@@ -441,16 +441,19 @@ func featureBoard() world {
 func TestFeatureTaskPageShowsItsPRDAndChildren(t *testing.T) {
 	body := get(t, newTestHandler(t, featureBoard()), "/projects/p1/tasks/t-feed").Body.String()
 	for _, want := range []string{
-		`x-data="tasksFeature" data-task-id="t-feed" data-project-id="p1" data-seed="feature-seed" x-show="hasChildren">`,
+		`x-data="tasksFeature"`,
+		`data-band="feature"`,
+		`role="group" aria-label="Task context"`,
 		`<script id="feature-seed" type="application/json">`,
 		`"documents":{"t-docs":[{"Title":"Brief: Write docs","Href":"/projects/p1/tasks/t-docs/documents/d-brief","Updated":"1m"}]}`,
-		`<h2 id="feature-title">Feature</h2>`,
 		`x-text="count">1</span>`,
+		`x-text="showing">Showing 1 task</span>`,
+		`aria-label="Child tasks, 1"`,
 		`href="/projects/p1/tasks/t-feed/documents/d-prd" data-prd title="updated 1h">PRD: SSE feed</a>`,
 		`data-child-id="t-docs"`,
 		`<a href="/projects/p1/tasks/t-docs">Write docs</a>`,
 		`data-status="todo">todo</span>`,
-		`<a href="/projects/p1/tasks/t-docs/documents/d-brief" title="updated 1m">Brief: Write docs</a>`,
+		`<span class="[ meta ]">1 doc</span>`,
 		`x-for="child in children"`,
 	} {
 		if !strings.Contains(body, want) {
@@ -467,7 +470,7 @@ func TestChildTaskPageLinksItsParentAndHidesTheFeatureSection(t *testing.T) {
 	if !strings.Contains(body, `<a class="[ crumb ]" href="/projects/p1/tasks/t-feed" data-parent-task="t-feed" title="The feature task this task belongs to">Add SSE feed /</a>`) {
 		t.Error("a child's crumbs must lead to its feature task")
 	}
-	if !strings.Contains(body, `x-show="hasChildren" style="display: none"`) || strings.Contains(body, ` data-child-id="`) { // the live x-bind stays
+	if !strings.Contains(body, `data-children="0"`) || !strings.Contains(body, `data-band="feature"`) || strings.Contains(body, ` data-child-id="`) { // the live x-bind stays
 		t.Error("a task without children mounts the section hidden, with no rows")
 	}
 	plain := get(t, newTestHandler(t, board()), "/projects/p1/tasks/t-feed").Body.String()

@@ -125,7 +125,7 @@ templ Page(v PageView) {
 				</header>
 				@taskBand(v)
 			</div>
-			@featureSection(v)
+			@contextStrip(v)
 			}
 			@reviewBand(v)
 			if v.TokenSavers != nil {
@@ -171,69 +171,85 @@ templ Page(v PageView) {
 	}
 }
 
-// featureSection is the feature task's PRD and child tasks (ADR 0016). The
+// contextStrip is what the page says about the task's context, in one row
+// above the agents: a summary button per band with something to show, and
+// the one open band's panel under it (tasksContextStrip owns which). A band
+// that has nothing is painted hidden and appears once it has.
+templ contextStrip(v PageView) {
+	<div class="[ context-strip ]" role="group" aria-label="Task context" x-data="tasksContextStrip">
+		@featureBand(v)
+	</div>
+}
+
+// featureBand is the feature task's PRD and child tasks (ADR 0016). The
 // server paints the children it read; tasksFeature re-renders them from the
 // rail's store, so a child an agent creates while the page is open appears
-// (its documents come with a reload). Hidden until there is a child.
-templ featureSection(v PageView) {
+// (its documents come with a reload). Its button is hidden until there is a
+// child.
+templ featureBand(v PageView) {
 	<div
-		class="[ feature ]"
-		role="region"
-		aria-labelledby="feature-title"
+		style="display: contents"
 		x-data="tasksFeature"
 		data-task-id={ v.Seed.TicketID }
 		data-project-id={ v.ProjectID }
 		data-seed="feature-seed"
-		x-show="hasChildren"
-		{ shownIf(v.Feature != nil)... }
+		data-children={ featureCount(v.Feature) }
 	>
 		@templ.JSONScript("feature-seed", v.FeatureSeed())
-		<header class="[ section-head ]">
-			<h2 id="feature-title">Feature</h2>
+		<button
+			type="button"
+			class="[ cs-btn ]"
+			id="band-feature-button"
+			data-band="feature"
+			aria-controls="band-feature"
+			aria-expanded="false"
+			x-bind:aria-expanded="expanded('feature')"
+			x-on:click="toggle('feature')"
+			x-bind:hidden="!hasChildren"
+			{ hiddenIf(v.Feature == nil)... }
+		>
+			<span class="[ label ]">Feature</span>
+			{ " " }
 			<span class="[ badge ]" x-text="count">{ featureCount(v.Feature) }</span>
-			if v.Feature != nil && v.Feature.PRD != nil {
-				<div class="[ actions ]">
+			{ " " }
+			<span class="[ phrase ]" x-text="phrase">{ featurePhrase(v.Feature) }</span>
+			<span class="[ chevron ]" aria-hidden="true"></span>
+		</button>
+		<section
+			class="[ band-panel feature ]"
+			id="band-feature"
+			aria-labelledby="band-feature-button"
+			data-band-panel="feature"
+			x-show="expanded('feature') && hasChildren"
+			style="display: none"
+		>
+			<header class="[ band-head ]">
+				<span x-text="showing">{ featureShowing(v.Feature) }</span>
+				if v.Feature != nil && v.Feature.PRD != nil {
 					<a class="[ button ]" data-variant="ghost" data-size="sm" href={ templ.SafeURL(v.Feature.PRD.Href) } data-prd title={ "updated " + v.Feature.PRD.Updated }>{ v.Feature.PRD.Title }</a>
-				</div>
-			}
-		</header>
-		<div class="[ list ] [ divide-bottom ]" aria-label="Child tasks" style="--row-columns: minmax(0, 1fr) auto">
-			<div x-ignore data-ssr role="group">
-				if v.Feature != nil {
-					for _, c := range v.Feature.Children {
-						<div class="[ row ]" data-stacked data-child-id={ c.ID }>
-							<span class="[ title ]"><a href={ templ.SafeURL(c.Href) }>{ c.Title }</a></span>
-							<span class="[ badge ]" data-status={ c.Status }>{ c.StatusLabel }</span>
-							<span class="[ meta ]">
-								if len(c.Documents) == 0 {
-									No documents yet
-								}
-								for i, d := range c.Documents {
-									if i > 0 {
-										{ " · " }
-									}
-									<a href={ templ.SafeURL(d.Href) } title={ "updated " + d.Updated }>{ d.Title }</a>
-								}
-							</span>
-						</div>
-					}
 				}
-			</div>
-			<template x-for="child in children" x-bind:key="child.id">
-				<div class="[ row ]" data-stacked x-bind:data-child-id="child.id">
-					<span class="[ title ]"><a x-bind:href="child.href" x-text="child.title"></a></span>
-					<span class="[ badge ]" x-bind:data-status="child.status" x-text="child.statusLabel"></span>
-					<span class="[ meta ]">
-						<template x-if="child.noDocuments">
-							<span>No documents yet</span>
-						</template>
-						<template x-for="d in child.documents" x-bind:key="d.href">
-							<span><template x-if="d.after"><span>{ " · " }</span></template><a x-bind:href="d.href" x-bind:title="d.updatedTitle" x-text="d.title"></a></span>
-						</template>
-					</span>
+			</header>
+			<div class="[ list ]" data-band-scroll tabindex="0" x-bind:aria-label="scrollLabel" aria-label={ featureScrollLabel(v.Feature) }>
+				<div x-ignore data-ssr role="group">
+					if v.Feature != nil {
+						for _, c := range v.Feature.Children {
+							<div class="[ row ]" data-child-id={ c.ID } { doneAttr(c.Status == "done")... }>
+								<span class="[ badge ]" data-status={ c.Status }>{ c.StatusLabel }</span>
+								<span class="[ title ]"><a href={ templ.SafeURL(c.Href) }>{ c.Title }</a></span>
+								<span class="[ meta ]">{ docCount(len(c.Documents)) }</span>
+							</div>
+						}
+					}
 				</div>
-			</template>
-		</div>
+				<template x-for="child in children" x-bind:key="child.id">
+					<div class="[ row ]" x-bind:data-child-id="child.id" x-bind:data-done="child.done ? '' : null">
+						<span class="[ badge ]" x-bind:data-status="child.status" x-text="child.statusLabel"></span>
+						<span class="[ title ]"><a x-bind:href="child.href" x-text="child.title"></a></span>
+						<span class="[ meta ]" x-text="child.docCount"></span>
+					</div>
+				</template>
+			</div>
+		</section>
 	</div>
 }
 

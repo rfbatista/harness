@@ -80,6 +80,7 @@ import "../src/modules/tasks/infrastructure/rail.test.js";
 import "../src/modules/tasks/infrastructure/resources.test.js";
 import "../src/modules/tasks/presentation/boardView.test.js";
 import "../src/modules/tasks/presentation/components/board.test.js";
+import "../src/modules/tasks/presentation/components/contextStrip.test.js";
 import "../src/modules/tasks/presentation/components/documentScope.test.js";
 import "../src/modules/tasks/presentation/components/documentWatch.test.js";
 import "../src/modules/tasks/presentation/components/feature.test.js";

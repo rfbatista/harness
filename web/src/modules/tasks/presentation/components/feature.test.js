@@ -5,11 +5,12 @@ import { feature } from "./feature.js";
 
 file("tasks/presentation/feature");
 
-function setup({ tasks, seeded = true, documents = {} } = {}) {
+function setup({ tasks, seeded = true, documents = {}, painted = 0 } = {}) {
   const store = { byTask: {}, tasks, seeded };
   const el = seededElement({ documents }, "feature-seed");
   el.dataset.taskId = "f1";
   el.dataset.projectId = "p1";
+  el.dataset.children = String(painted);
   const ssr = el.ownerDocument.createElement("div");
   ssr.dataset.ssr = "";
   el.append(ssr);
@@ -49,8 +50,14 @@ test("a child that arrives over the feed appears with no documents yet; a move c
 });
 
 test("without the rail's seed the server's rendering stays", () => {
-  const { instance, el } = setup({ tasks: [], seeded: false });
-  el.style.display = "";
+  const { instance, el } = setup({ tasks: [], seeded: false, painted: 2 });
   assert.equal(instance.hasChildren, true, "whatever the server painted shows");
   assert.ok(el.querySelector("[data-ssr]") !== null);
+});
+
+test("the strip's button and panel read the children: count, phrase, header line and scroll label", () => {
+  const { instance, store } = setup({ tasks: [featureTask, makeTask({ id: "c1", status: "review", parentId: "f1" }), makeTask({ id: "c2", status: "todo", parentId: "f1" })] });
+  assert.deepEqual([instance.count, instance.phrase, instance.showing, instance.scrollLabel], ["2", "1 in review", "Showing 2 tasks", "Child tasks, 2"]);
+  store.tasks = store.tasks.filter((t) => t.id !== "c2");
+  assert.deepEqual([instance.showing, instance.scrollLabel], ["Showing 1 task", "Child tasks, 1"]);
 });

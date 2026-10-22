@@ -377,15 +377,15 @@ func TestAChildArrivingOverTheFeedJoinsTheFeatureSection(t *testing.T) {
 		}),
 		chromedp.Poll(`document.querySelector('.feature .row[data-child-id="t-new"]') !== null && document.querySelector('.feature .row[data-child-id="t-docs"] .badge')?.textContent === 'In progress'`, nil, chromedp.WithPollingTimeout(10*time.Second)),
 		chromedp.Evaluate(rows, &after),
-		chromedp.Evaluate(`document.querySelector('.feature .section-head .badge').textContent`, &count),
+		chromedp.Evaluate(`document.querySelector('[data-band="feature"] .badge').textContent`, &count),
 	)
 	if err != nil {
 		t.Fatalf("%v\nJS errors: %v", err, errs.all())
 	}
-	if fmt.Sprint(painted) != "[t-docs:Todo:No documents yet]" {
+	if fmt.Sprint(painted) != "[t-docs:Todo:]" {
 		t.Errorf("first paint rows = %v", painted)
 	}
-	if fmt.Sprint(after) != "[t-docs:In progress:No documents yet t-new:Backlog:No documents yet]" || count != "2" {
+	if fmt.Sprint(after) != "[t-docs:In progress: t-new:Backlog:]" || count != "2" {
 		t.Errorf("after the feed: rows %v, count %q", after, count)
 	}
 	if e := errs.all(); len(e) > 0 {
