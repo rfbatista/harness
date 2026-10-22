@@ -27,30 +27,41 @@ export function memoryTasks({ projects = [], tasks = [], sessions = [], document
     if (!isStatus(status)) throw new StructuredError(Codes.INVALID_STATUS, "invalid ticket status", 400);
   };
 
+  /** The server's parent invariant: same project, one level, never itself (TICKET_PARENT_INVALID). */
+  const checkParent = (projectId, parentId, selfId = "") => {
+    if (!parentId) return;
+    const parent = store.get(parentId);
+    const invalid = !parent || parent.projectId !== projectId || parentId === selfId || parent.parentId;
+    if (invalid) throw new StructuredError(Codes.TICKET_PARENT_INVALID, "parent must be a top-level task of the same project", 400);
+  };
+
   /** @type {import("../domain/ports.js").TaskGateway} */
   const gateway = {
     decodeTask: toTask,
 
-    async createTask({ projectId, title, description, status }) {
+    async createTask({ projectId, title, description, status, parentId }) {
       check(title, status);
       if (!known.has(projectId)) throw new StructuredError(Codes.PROJECT_NOT_FOUND, "project not found", 404);
-      const task = Object.freeze({ id: `task-${next++}`, projectId, title: title.trim(), description: description ?? "", status });
+      checkParent(projectId, parentId);
+      const task = Object.freeze({ id: `task-${next++}`, projectId, title: title.trim(), description: description ?? "", status, parentId: parentId ?? "" });
       store.set(task.id, task);
       return task;
     },
 
-    async updateTask({ id, title, description, status }) {
-      calls.push({ updateTask: { id, ...(title !== undefined && { title }), ...(description !== undefined && { description }), ...(status !== undefined && { status }) } });
+    async updateTask({ id, title, description, status, parentId }) {
+      calls.push({ updateTask: { id, ...(title !== undefined && { title }), ...(description !== undefined && { description }), ...(status !== undefined && { status }), ...(parentId !== undefined && { parentId }) } });
       if (refuse) throw refuse();
       const task = store.get(id);
       if (!task) throw new StructuredError(Codes.TICKET_NOT_FOUND, "ticket not found", 404);
       if (title !== undefined && !title.trim()) throw new StructuredError(Codes.INVALID_INPUT, "title is required", 400);
       if (status !== undefined && !isStatus(status)) throw new StructuredError(Codes.INVALID_INPUT, "status must be one of backlog, todo, in_progress, review, done", 400);
+      if (parentId !== undefined) checkParent(task.projectId, parentId, id);
       const updated = Object.freeze({
         ...task,
         ...(title !== undefined && { title: title.trim() }),
         ...(description !== undefined && { description }),
         ...(status !== undefined && { status }),
+        ...(parentId !== undefined && { parentId }),
       });
       store.set(id, updated);
       return updated;

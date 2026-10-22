@@ -63,3 +63,21 @@ func waitingLine(n int) string {
 	}
 	return strconv.Itoa(n) + " reviews wait on you"
 }
+
+// shownIf hides an element the server knows is empty until Alpine shows it
+// (x-show sets display itself, so the hidden attribute would fight it).
+func shownIf(shown bool) templ.Attributes {
+	if shown {
+		return templ.Attributes{}
+	}
+	return templ.Attributes{"style": "display: none"}
+}
+
+// featureCount is the feature section's badge: how many children the server
+// painted ("0" with none; the browser keeps it current).
+func featureCount(f *FeatureView) string {
+	if f == nil {
+		return "0"
+	}
+	return strconv.Itoa(len(f.Children))
+}

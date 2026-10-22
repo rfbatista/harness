@@ -1,10 +1,11 @@
 import fixture from "../../../../testdata/views/session-status.json" with { type: "json" };
 import checks from "../../../../testdata/views/status-check.json" with { type: "json" };
+import fixture_titles from "../../../../testdata/views/session-title.json" with { type: "json" };
 import { assert, file, test } from "../../../shared/testing/test.js";
 import { needsYou } from "../domain/session.js";
 import { makeSession, T0 } from "../testing/fixtures.js";
 import { makeCheck, makeMessage } from "../testing/channel-fixtures.js";
-import { agentLabel, delegateOption, reportView, runsAs, startedBy, statusCheckView, statusView, summary, terminalView, toDetailView, toGroupViews, tokenSaversView } from "./view.js";
+import { agentLabel, delegateOption, reportView, rowTitle, runsAs, startedBy, statusCheckView, statusView, summary, terminalView, toDetailView, toGroupViews, tokenSaversView } from "./view.js";
 
 file("sessions/presentation/view");
 
@@ -199,4 +200,13 @@ test("the token savers a session runs with, and those on for it but not installe
   assert.equal(v.tokenSavers, "rtk · caveman");
   assert.equal(v.tokenSaversMissing, "codegraph not installed");
   assert.equal(v.tokenSaversMissingTitle, "codegraph was on for this session but not installed, so it runs without it. Install it on the Token savers page.");
+});
+
+test("row titles match the shared fixture: a session with no task is a feature brainstorm (parity with the BFF)", () => {
+  for (const c of fixture_titles.cases) {
+    assert.equal(rowTitle(makeSession({ task: c.task, ticketId: c.ticket_id })), c.title, `${JSON.stringify(c)}`);
+  }
+  const [group] = toGroupViews([makeSession({ id: "b", task: "", ticketId: "" })], { selectedId: null, now: T0, agentNames: {} });
+  assert.equal(group.rows[0].title, "Feature brainstorm");
+  assert.equal(group.rows[0].resumeLabel, "Resume Feature brainstorm");
 });

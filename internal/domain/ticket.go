@@ -22,8 +22,12 @@ type Ticket struct {
 	Title       string       `json:"title"`
 	Description string       `json:"description,omitempty"`
 	Status      TicketStatus `json:"status"`
-	CreatedAt   time.Time    `json:"created_at"`
-	UpdatedAt   time.Time    `json:"updated_at"`
+	// ParentID is the feature task this one belongs to, one level deep and
+	// in the same project (ADR 0016); empty when top-level. A task with
+	// children is a feature task.
+	ParentID  string    `json:"parent_id"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 
 	// ArchitectSessionID and PendingReviews are derived when a ticket is
 	// read, never stored: the task's architect session, and how many review

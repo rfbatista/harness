@@ -1,6 +1,7 @@
 // The sessions module's Alpine components. Names are global: module
 // components carry the module prefix.
 
+import { brainstorm } from "./components/brainstorm.js";
 import { conversation } from "./components/conversation.js";
 import { designLibrary } from "./components/designLibrary.js";
 import { designWatch } from "./components/designWatch.js";
@@ -25,6 +26,7 @@ import { screenPrefs } from "./screenPrefs.js";
  *   clock: import("../../../shared/infrastructure/clock.js").Clock,
  *   channel?: import("../domain/ports.js").ChannelGateway,  the architect channel
  *   prefs?: import("../../../shared/infrastructure/storage.js").Preferences,  this browser's text size and focus mode
+ *   navigate?: (url: string) => void,  where "Brainstorm a feature" goes once its session starts
  * }} deps
  */
 export function registerSessions(Alpine, deps) {
@@ -38,6 +40,7 @@ export function registerSessions(Alpine, deps) {
   Alpine.data("sessionsConversation", conversation({ ...deps, channelStore }));
   Alpine.data("sessionsStatusCheck", statusCheck(deps));
   Alpine.data("sessionsNewSession", newSession(deps));
+  Alpine.data("sessionsBrainstorm", brainstorm({ ...deps, navigate: deps.navigate ?? (() => {}) }));
   const textSize = () => screen?.textSize();
   Alpine.data("sessionsTerminal", terminal({ ...deps, textSize }));
   Alpine.data("sessionsDesignPanel", designPanel(deps));

@@ -75,6 +75,18 @@ export function sessionGatewayContract(name, makeSubject, makeSession) {
     assert.equal(idle.task, "");
   });
 
+  contract("start without a task is accepted only in product mode: a feature brainstorm on the project", async () => {
+    const { gateway } = makeSubject({ projects: ["p1"], sessions: [] });
+    const base = { projectId: "p1", ticketId: "", repositoryId: "r1", agentId: "", prompt: "", autoAccept: "off", size: { cols: 80, rows: 24 } };
+    const brainstorm = await gateway.start({ ...base, mode: "product" });
+    assert.equal(brainstorm.ticketId, "", "no task");
+    assert.equal(brainstorm.mode, "product");
+    assert.deepEqual((await gateway.list({ projectId: "p1" })).map((s) => s.id), [brainstorm.id], "it is on the project's list");
+    await assert.rejects(gateway.start({ ...base }), Codes.INVALID_INPUT);
+    await assert.rejects(gateway.start({ ...base, mode: "architect" }), Codes.INVALID_INPUT);
+    assert.equal((await gateway.start({ ...base, ticketId: "t1", mode: "product" })).ticketId, "t1", "product on a task makes that task the feature");
+  });
+
   contract("start keeps the mode it was asked for and refuses an unknown one", async () => {
     const { gateway } = makeSubject({ projects: ["p1"], sessions: [] });
     const base = { projectId: "p1", ticketId: "t1", repositoryId: "r1", agentId: "", prompt: "", autoAccept: "off", size: { cols: 80, rows: 24 } };

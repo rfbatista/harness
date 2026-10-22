@@ -1,0 +1,9 @@
+{
+  "$comment": "How a session's row is titled: its prompt; with none, Untitled session on a task, Feature brainstorm with no task (ADR 0016 product mode). Read by web/src/modules/sessions/presentation/view.test.js and internal/adapter/in/web/sessions/view_test.go.",
+  "cases": [
+    { "task": "write the plan", "ticket_id": "t1", "title": "write the plan" },
+    { "task": "write the plan", "ticket_id": "", "title": "write the plan" },
+    { "task": "", "ticket_id": "t1", "title": "Untitled session" },
+    { "task": "", "ticket_id": "", "title": "Feature brainstorm" }
+  ]
+}

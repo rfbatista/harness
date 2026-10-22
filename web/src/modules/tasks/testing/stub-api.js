@@ -6,7 +6,7 @@ import { jsonResponse } from "../../../shared/testing/doubles.js";
 import { memoryTasks } from "../infrastructure/memory-gateway.js";
 import { taskDTO } from "./fixtures.js";
 
-const STATUS = { PROJECT_NOT_FOUND: 404, TICKET_NOT_FOUND: 404, DOCUMENT_NOT_FOUND: 404, INVALID_INPUT: 400, INVALID_STATUS: 400 };
+const STATUS = { PROJECT_NOT_FOUND: 404, TICKET_NOT_FOUND: 404, DOCUMENT_NOT_FOUND: 404, INVALID_INPUT: 400, INVALID_STATUS: 400, TICKET_PARENT_INVALID: 400 };
 
 export function stubTasksApi(world) {
   const memory = memoryTasks(world);
@@ -18,11 +18,11 @@ export function stubTasksApi(world) {
     try {
       switch (`${init.method ?? "GET"} ${url.pathname}`) {
         case "POST /api/create_ticket": {
-          const t = await gateway.createTask({ projectId: body.project_id, title: body.title, description: body.description, status: body.status });
+          const t = await gateway.createTask({ projectId: body.project_id, title: body.title, description: body.description, status: body.status, parentId: body.parent_id });
           return jsonResponse(200, { ticket: taskDTO(t) });
         }
         case "POST /api/update_ticket": {
-          const t = await gateway.updateTask({ id: body.ticket_id, title: body.title, description: body.description, status: body.status });
+          const t = await gateway.updateTask({ id: body.ticket_id, title: body.title, description: body.description, status: body.status, parentId: body.parent_id });
           return jsonResponse(200, { ticket: taskDTO(t) });
         }
         case "POST /api/delete_ticket":

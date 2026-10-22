@@ -23,7 +23,9 @@ type docReader struct {
 	tickets []*domain.Ticket
 }
 
-func (r docReader) ListTicketDocuments(_ context.Context, ticketID string) []*domain.Document { return r.docs[ticketID] }
+func (r docReader) ListTicketDocuments(_ context.Context, ticketID string) []*domain.Document {
+	return r.docs[ticketID]
+}
 
 func (r docReader) ListTasksDocuments(_ context.Context, ticketIDs []string) []*domain.Document {
 	seen := map[string]bool{}
@@ -58,17 +60,15 @@ func (r docReader) ListDocuments(projectID string, scope domain.DocumentScope) [
 	return out
 }
 
+// ListDocumentTickets lists in ticket order (r.tickets is a slice; r.docs a
+// map), so a document's tasks come out the same way every run.
 func (r docReader) ListDocumentTickets(documentID string) []*domain.Ticket {
 	var out []*domain.Ticket
-	for ticketID, docs := range r.docs {
-		for _, d := range docs {
-			if d.ID != documentID || ticketID == "" {
-				continue
-			}
-			for _, tk := range r.tickets {
-				if tk.ID == ticketID {
-					out = append(out, tk)
-				}
+	for _, tk := range r.tickets {
+		for _, d := range r.docs[tk.ID] {
+			if d.ID == documentID {
+				out = append(out, tk)
+				break
 			}
 		}
 	}

@@ -1,7 +1,7 @@
 import { assert, file, test } from "../../../shared/testing/test.js";
 import { makeSession, T0 } from "../testing/fixtures.js";
 import roles from "../../../../testdata/views/session-roles.json" with { type: "json" };
-import { applyChange, canResume, displayOrder, group, needsYou, ofTask } from "./session.js";
+import { applyChange, canResume, displayOrder, group, MODES, needsYou, noTaskProblem, ofTask } from "./session.js";
 
 file("sessions/domain/session");
 
@@ -77,4 +77,11 @@ test("the architect leads its group with its delegates under it (shared fixture)
 test("the display order is the groups' order, for J and K", () => {
   const c = roles.cases[1];
   assert.deepEqual(displayOrder(c.sessions.map(fromFixture)), ["arch", "web", "server", "server-tests", "deep", "deeper", "peer"]);
+});
+
+test("only a product session may start without a task", () => {
+  assert.equal(noTaskProblem("product"), "");
+  assert.ok(noTaskProblem(""));
+  assert.ok(noTaskProblem("architect"));
+  assert.ok(MODES.includes("product"));
 });

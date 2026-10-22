@@ -18,16 +18,52 @@ type Board struct {
 // Column is one status and its tasks.
 type Column struct {
 	Status, Label string
-	Cards         []shell.Link
+	Cards         []Card
+}
+
+// Card is one task on the board: the rail's link and activity, plus the
+// feature cues (ADR 0016): Parent is the feature task's title on a child
+// ("" when top-level, or when the parent is not among the project's tasks);
+// Children counts a feature task's children. The browser's toCard
+// (boardView.js) derives the same from the store's task list;
+// web/testdata/views/feature-cues.json pins the words.
+type Card struct {
+	shell.Link
+	Parent   string
+	Children int
+}
+
+// ChildrenWord is the children badge: "1 task", "3 tasks"; "" for none. The
+// browser's childrenWord (tasks/domain/feature.js) says the same.
+func ChildrenWord(n int) string {
+	if n < 1 {
+		return ""
+	}
+	if n == 1 {
+		return "1 task"
+	}
+	return strconv.Itoa(n) + " tasks"
 }
 
 // BuildBoard groups a project's tasks by status with the same per-task
-// activity the rail shows.
+// activity the rail shows, and the feature cues from the same list.
 func BuildBoard(projectID string, tasks []*domain.Ticket, list []*domain.Session) Board {
 	byTask := activityByTask(list)
-	byStatus := map[string][]shell.Link{}
+	titles := make(map[string]string, len(tasks))
+	children := map[string]int{}
 	for _, t := range tasks {
-		byStatus[string(t.Status)] = append(byStatus[string(t.Status)], card(projectID, t, byTask, ""))
+		titles[t.ID] = t.Title
+	}
+	for _, t := range tasks {
+		if _, known := titles[t.ParentID]; t.ParentID != "" && known {
+			children[t.ParentID]++
+		}
+	}
+	byStatus := map[string][]Card{}
+	for _, t := range tasks {
+		byStatus[string(t.Status)] = append(byStatus[string(t.Status)], Card{
+			Link: card(projectID, t, byTask, ""), Parent: titles[t.ParentID], Children: children[t.ID],
+		})
 	}
 	b := Board{}
 	for _, st := range Statuses {

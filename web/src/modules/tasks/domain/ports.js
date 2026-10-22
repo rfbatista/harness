@@ -7,12 +7,15 @@
  * @typedef {import("./task.js").TaskStatus} TaskStatus
  *
  * @typedef {object} TaskGateway
- * @property {(input: { projectId: string, title: string, description: string, status: TaskStatus }) => Promise<Task>} createTask
- *           Rejects with INVALID_INPUT (no title), INVALID_STATUS or PROJECT_NOT_FOUND.
- * @property {(input: { id: string, title?: string, description?: string, status?: TaskStatus }) => Promise<Task>} updateTask
+ * @property {(input: { projectId: string, title: string, description: string, status: TaskStatus, parentId?: string }) => Promise<Task>} createTask
+ *           parentId makes it a child of that feature task (same project, one
+ *           level). Rejects with INVALID_INPUT (no title), INVALID_STATUS,
+ *           PROJECT_NOT_FOUND or TICKET_PARENT_INVALID.
+ * @property {(input: { id: string, title?: string, description?: string, status?: TaskStatus, parentId?: string }) => Promise<Task>} updateTask
  *           Sends only the keys given; an omitted one keeps its value on the
- *           server. Rejects with INVALID_INPUT (title given but blank, or an
- *           unknown status) or TICKET_NOT_FOUND.
+ *           server; parentId "" clears the parent. Rejects with INVALID_INPUT
+ *           (title given but blank, or an unknown status), TICKET_NOT_FOUND or
+ *           TICKET_PARENT_INVALID.
  * @property {(id: string, status: TaskStatus) => Promise<Task>} moveTask
  *           A status-only update: what the board sends when a card is moved.
  * @property {(id: string) => Promise<void>} deleteTask

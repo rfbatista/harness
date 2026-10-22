@@ -12,7 +12,7 @@ import { mergeMessages, newestAt, upsertMessage } from "../../domain/channel.js"
 import { applyChange, displayOrder, group, INITIAL_TERMINAL_SIZE, isTerminal, ofTask } from "../../domain/session.js";
 import { artifactTitle, taskDesignHref } from "../artifactView.js";
 import { announceMessage } from "../channelView.js";
-import { delegateOption, startedBy, statusCheckView, summary, toDetailView, toGroupViews } from "../view.js";
+import { delegateOption, rowTitle, startedBy, statusCheckView, summary, toDetailView, toGroupViews } from "../view.js";
 import { DEFAULT_TEXT_SIZE, nextTextSize, TEXT_SIZES } from "../screenPrefs.js";
 
 const TICK_MS = 30_000;
@@ -130,6 +130,10 @@ export const sessionsPage = ({
     },
     get hasSelection() {
       return this.selected !== null;
+    },
+    /** The page is a task's. The project's sessions page (its feature brainstorms, ticketId "") has no task: no Design or Code tab, no git history link, no conversation. */
+    get hasTask() {
+      return this.ticketId !== "";
     },
     get isEmpty() {
       return this.sessions.length === 0;
@@ -279,7 +283,7 @@ export const sessionsPage = ({
     },
     /** The selected session's git history page; "" for a session without a worktree. */
     get historyHref() {
-      const session = this.showingSession ? this.sessions.find((s) => s.id === this.selectedId) : null;
+      const session = this.showingSession && this.hasTask ? this.sessions.find((s) => s.id === this.selectedId) : null;
       if (!session?.workspaceId) return "";
       const p = encodeURIComponent(this.projectId);
       const t = encodeURIComponent(this.ticketId);
@@ -293,7 +297,7 @@ export const sessionsPage = ({
     },
     /** The session whose Design panel to mount, keyed on its id; mounted whenever a session shows, so publishes are counted behind the other tabs. */
     get designPanels() {
-      if (!this.showingSession) return [];
+      if (!this.showingSession || !this.hasTask) return [];
       // Keyed on liveness too: the panel reads it once, so a resumed session gets a fresh one that follows again.
       const live = this.selected.stoppable;
       return [{ key: `${this.selected.id}:${live ? "live" : "ended"}`, sessionId: this.selected.id, live, designHref: taskDesignHref(this.projectId, this.ticketId) }];
@@ -306,7 +310,7 @@ export const sessionsPage = ({
     },
     /** The selected session has a worktree whose code the Code tab can read. */
     get hasCode() {
-      return this.codeEnabled && this.showingSession && !!this.selected?.workspaceId;
+      return this.codeEnabled && this.hasTask && this.showingSession && !!this.selected?.workspaceId;
     },
     get showingCode() {
       return this.hasCode && this.detailTab === "code";
@@ -470,7 +474,7 @@ export const sessionsPage = ({
      * messages and follow new ones. A task without one never asks.
      */
     followChannel() {
-      if (!channel || unfollowChannel || !this.hasArchitect) return;
+      if (!channel || unfollowChannel || !this.hasTask || !this.hasArchitect) return;
       unfollowChannel = channel.follow(
         this.projectId,
         (event) => this.channelEvent(event),
@@ -520,7 +524,7 @@ export const sessionsPage = ({
     /** A session started elsewhere joined the task: highlight it for a moment and say so. */
     arrived(session) {
       const by = startedBy(session, this.sessions, this.agentNames);
-      const title = session.task || "Untitled session";
+      const title = rowTitle(session);
       this.announcement = by ? `${by} started a session: ${title}` : `A session started: ${title}`;
       this.freshIds = [...this.freshIds, session.id];
       setTimeout(() => {
@@ -653,9 +657,10 @@ export const sessionsPage = ({
         this.unseenMessages = 0;
       }
       this.selectedId = id;
-      // A peer has no conversation, a session without a worktree no code: fall back to its terminal.
+      // A peer has no conversation, a session without a worktree no code, a brainstorm no design: fall back to its terminal.
       if (this.detailTab === "conversation" && this.selectedRole() === "") this.detailTab = "agent";
       if (this.detailTab === "code" && !this.hasCode) this.detailTab = "agent";
+      if (this.detailTab === "design" && !this.hasTask) this.detailTab = "agent";
       this.creating = false;
       if (this.keptTerminalId !== id) this.keptTerminalId = null;
     },

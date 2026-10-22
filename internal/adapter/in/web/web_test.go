@@ -402,6 +402,7 @@ func TestTaskPageListsItsSessionsBesideTheDetail(t *testing.T) {
 		`<option value="backend">Backend dev</option>`,
 		`<option value="r-kit">harnesskit</option>`,
 		`<label for="new-session-permissions-edits">Accept file edits</label>`,
+		`<option value="product" data-description="Interviews you, writes the PRD on this task and creates one child task per piece of work, each with a brief">Product</option>`,
 		`data-action="ask-delete"`, // ⋯ → the confirm
 		`x-on:click="act('delete')"`,
 		`"agent_names":{`,
@@ -422,6 +423,124 @@ func TestTaskPageListsItsSessionsBesideTheDetail(t *testing.T) {
 	}
 	if regexp.MustCompile(`"sessions":\[\{[^]]*"id":"s1"`).FindString(body) == "" {
 		t.Error("the seed does not carry the task's sessions in the API's shape")
+	}
+}
+
+// featureBoard is board() with Add SSE feed as a feature task: Write docs
+// is its child with a brief, and a PRD sits on the feature.
+func featureBoard() world {
+	w := board()
+	w.tickets[1].ParentID = "t-feed" // Write docs
+	w.docs = fakeDocs{
+		"t-feed": {{ID: "d-prd", ProjectID: "p1", Title: "PRD: SSE feed", Format: domain.DocumentFormatMarkdown, Content: "# PRD", UpdatedAt: now.Add(-time.Hour)}},
+		"t-docs": {{ID: "d-brief", ProjectID: "p1", Title: "Brief: Write docs", Format: domain.DocumentFormatMarkdown, Content: "# Brief", UpdatedAt: now.Add(-time.Minute)}},
+	}
+	return w
+}
+
+func TestFeatureTaskPageShowsItsPRDAndChildren(t *testing.T) {
+	body := get(t, newTestHandler(t, featureBoard()), "/projects/p1/tasks/t-feed").Body.String()
+	for _, want := range []string{
+		`x-data="tasksFeature" data-task-id="t-feed" data-project-id="p1" data-seed="feature-seed" x-show="hasChildren">`,
+		`<script id="feature-seed" type="application/json">`,
+		`"documents":{"t-docs":[{"Title":"Brief: Write docs","Href":"/projects/p1/tasks/t-docs/documents/d-brief","Updated":"1m"}]}`,
+		`<h2 id="feature-title">Feature</h2>`,
+		`x-text="count">1</span>`,
+		`href="/projects/p1/tasks/t-feed/documents/d-prd" data-prd title="updated 1h">PRD: SSE feed</a>`,
+		`data-child-id="t-docs"`,
+		`<a href="/projects/p1/tasks/t-docs">Write docs</a>`,
+		`data-status="todo">todo</span>`,
+		`<a href="/projects/p1/tasks/t-docs/documents/d-brief" title="updated 1m">Brief: Write docs</a>`,
+		`x-for="child in children"`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("feature page is missing %q", want)
+		}
+	}
+	if strings.Contains(body, `data-parent-task=`) {
+		t.Error("a feature task has no parent crumb")
+	}
+}
+
+func TestChildTaskPageLinksItsParentAndHidesTheFeatureSection(t *testing.T) {
+	body := get(t, newTestHandler(t, featureBoard()), "/projects/p1/tasks/t-docs").Body.String()
+	if !strings.Contains(body, `<a class="[ crumb ]" href="/projects/p1/tasks/t-feed" data-parent-task="t-feed" title="The feature task this task belongs to">Add SSE feed /</a>`) {
+		t.Error("a child's crumbs must lead to its feature task")
+	}
+	if !strings.Contains(body, `x-show="hasChildren" style="display: none"`) || strings.Contains(body, ` data-child-id="`) { // the live x-bind stays
+		t.Error("a task without children mounts the section hidden, with no rows")
+	}
+	plain := get(t, newTestHandler(t, board()), "/projects/p1/tasks/t-feed").Body.String()
+	if strings.Contains(plain, `data-parent-task=`) || strings.Contains(plain, ` data-child-id="`) || !strings.Contains(plain, `x-data="tasksFeature"`) {
+		t.Error("a plain task has neither cue, but still mounts the section for a first child arriving live")
+	}
+}
+
+func TestProjectBoardOffersToBrainstormAFeature(t *testing.T) {
+	body := get(t, newTestHandler(t, board()), "/projects/p1").Body.String()
+	for _, want := range []string{
+		`x-data="sessionsBrainstorm" data-project-id="p1" data-default-repository="r-harness"`,
+		`id="brainstorm-open" aria-haspopup="dialog" aria-controls="brainstorm" x-on:click="open">Brainstorm a feature</button>`,
+		`role="dialog" id="brainstorm" popover="manual" data-trap aria-labelledby="brainstorm-title" x-data="popupDialog"`,
+		`x-on:submit.prevent="start"`,
+		`<option value="" data-description="claude with no agent definition">Plain claude</option>`,
+		`<option value="backend">Backend dev</option>`,
+		`<option value="r-kit">harnesskit</option>`,
+		`x-bind:disabled="cannotStart"`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("board is missing %q", want)
+		}
+	}
+	if strings.Contains(body, "not ours") {
+		t.Error("another project's repository leaked into the brainstorm dialog")
+	}
+
+	w := board()
+	w.repos = nil
+	body = get(t, newTestHandler(t, w), "/projects/p1").Body.String()
+	if !strings.Contains(body, `href="/projects/p1/repositories" title="Add a repository to this project first: a session runs in one." data-brainstorm-needs-repository>Brainstorm a feature</a>`) || strings.Contains(body, `x-data="sessionsBrainstorm"`) {
+		t.Error("without a repository the board must lead to the repositories page instead of the dialog")
+	}
+}
+
+func TestProjectSessionsPageListsTheFeatureBrainstorms(t *testing.T) {
+	w := board()
+	w.sessions = append(w.sessions,
+		&domain.Session{ID: "b1", ProjectID: "p1", TicketID: "", Mode: "product", Task: "", Status: domain.SessionIdle, UpdatedAt: now.Add(-time.Minute)},
+		&domain.Session{ID: "b2", ProjectID: "p2", TicketID: "", Mode: "product", Task: "elsewhere", Status: domain.SessionRunning, UpdatedAt: now},
+	)
+	rec := get(t, newTestHandler(t, w), "/projects/p1/sessions")
+	body := rec.Body.String()
+	if rec.Code != http.StatusOK {
+		t.Fatalf("got %d:\n%s", rec.Code, body)
+	}
+	for _, want := range []string{
+		`<title>Feature brainstorms · harness</title>`,
+		`<h1>Feature brainstorms</h1>`,
+		`x-data="sessionsPage"`,
+		`"ticket_id":""`,
+		`aria-label="Feature brainstorms of this project"`,
+		`Feature brainstorm</span>`, // the ticket-less session's row, with no prompt
+		`1 session · 1 waiting`,
+		`x-on:click="startCreating"`,
+		`x-data="sessionsNewSession(projectId, ticketId)"`,
+		`data-locked-mode="product"`,
+		`<h2>New feature brainstorm</h2>`,
+		`Product — the only mode that runs without a task.`,
+		`<option value="r-kit">harnesskit</option>`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("project sessions page is missing %q", want)
+		}
+	}
+	for _, leak := range []string{"implement this task", "draft the docs", "elsewhere", `x-data="tasksTaskEditor"`, `askDeleteTask`, `id="new-session-mode"`, `data-design-assets`} {
+		if strings.Contains(body, leak) {
+			t.Errorf("the project sessions page must not show %q", leak)
+		}
+	}
+	if regexp.MustCompile(`"sessions":\[\{[^]]*"id":"b1"`).FindString(body) == "" {
+		t.Error("the seed does not carry the ticket-less session")
 	}
 }
 
@@ -649,7 +768,6 @@ func TestRedirects(t *testing.T) {
 		"/switch-project?project=p2": "/projects/p2",
 		"/switch-project":            "/",
 		"/projects/p1/":              "/projects/p1",
-		"/projects/p1/sessions":      "/projects/p1", // the old page
 	}
 	for path, want := range cases {
 		rec := get(t, h, path)

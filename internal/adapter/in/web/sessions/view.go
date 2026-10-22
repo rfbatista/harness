@@ -148,6 +148,19 @@ type NewSessionForm struct {
 	Repositories []Option
 }
 
+// NewSessionFormOf offers the agents and the project's repositories, in the
+// order given: the task page's form and the board's brainstorm dialog share it.
+func NewSessionFormOf(agents []*domain.Agent, repos []*domain.Repository) NewSessionForm {
+	form := NewSessionForm{}
+	for _, a := range agents {
+		form.Agents = append(form.Agents, Option{ID: a.ID, Name: a.Name, Description: a.Description})
+	}
+	for _, r := range repos {
+		form.Repositories = append(form.Repositories, Option{ID: r.ID, Name: r.Name})
+	}
+	return form
+}
+
 // CanStart reports whether the project has a repository to run a session in.
 func (f NewSessionForm) CanStart() bool { return len(f.Repositories) > 0 }
 
@@ -166,10 +179,22 @@ type StatusChoice struct {
 	Selected     bool
 }
 
-// PageView is everything page.templ renders: one task and its sessions.
+// BrainstormsTitle heads the project's sessions page: the sessions that run
+// with no task (product mode, ADR 0016).
+const BrainstormsTitle = "Feature brainstorms"
+
+// productMode is the session mode that may run with no task, as the API
+// spells it (domain.SessionMode "product"; the web client carries modes as
+// strings).
+const productMode = "product"
+
+// PageView is everything page.templ renders: one task and its sessions, or
+// the project's ticket-less sessions (its feature brainstorms) when Task is
+// nil.
 type PageView struct {
 	Frame shell.Frame
-	// Task seeds the task editor (tasksTaskEditor), in the API's shape.
+	// Task seeds the task editor (tasksTaskEditor), in the API's shape; nil
+	// on the project's sessions page, which has no task to edit.
 	Task            *domain.Ticket
 	TaskDescription string
 	StatusChoices   []StatusChoice
@@ -201,6 +226,63 @@ type PageView struct {
 	Usage *UsageTotalsSeed
 	// TokenSavers seeds the task's Token savers control; nil leaves it out.
 	TokenSavers *tokensavers.Seed
+	// Feature is the feature section: the task's PRD and children; nil on a
+	// task without children (the section still mounts, hidden, so a first
+	// child arriving over the feed shows it).
+	Feature *FeatureView
+	// Parent links a child task's feature task in the crumbs; nil when
+	// top-level.
+	Parent *ParentLink
+}
+
+// FeatureView is the task page's feature section (ADR 0016): the feature
+// task's PRD, if an agent wrote one, and its child tasks with their
+// documents. Built by tasks.BuildFeature; nil on a task without children.
+type FeatureView struct {
+	PRD      *DocLink
+	Children []ChildView
+}
+
+// ChildView is one child task in the section: a link to its page, its
+// status, and its documents (each a link to the child's documents page with
+// that document open).
+type ChildView struct {
+	ID, Title, Href, Status, StatusLabel string
+	Documents                            []DocLink
+}
+
+// DocLink is a document as the section links it.
+type DocLink struct {
+	Title, Href, Updated string
+}
+
+// ParentLink is a child task's way to its feature task: the crumb before
+// the task's title.
+type ParentLink struct {
+	ID, Title, Href string
+}
+
+// FeatureSeed is what tasksFeature starts from: the children's documents by
+// child id, as painted, so a child that arrives over the feed renders with
+// the same row (its documents come with a reload). Never null.
+type FeatureSeed struct {
+	Documents map[string][]DocLink `json:"documents"`
+}
+
+// FeatureSeed builds the seed from the section; empty without one.
+func (v PageView) FeatureSeed() FeatureSeed {
+	seed := FeatureSeed{Documents: map[string][]DocLink{}}
+	if v.Feature == nil {
+		return seed
+	}
+	for _, c := range v.Feature.Children {
+		docs := c.Documents
+		if docs == nil {
+			docs = []DocLink{}
+		}
+		seed.Documents[c.ID] = docs
+	}
+	return seed
 }
 
 // UsageTotalsSeed is what usageTotalsWatch starts from: the task's and each
@@ -216,8 +298,30 @@ type UsageTotalsSeed struct {
 // Empty reports a project without sessions.
 func (v PageView) Empty() bool { return len(v.Groups) == 0 }
 
-// NewPageView builds the page for a task's sessions at time now. The first
-// session on screen starts selected, as the browser's page component does.
+// HasTask: the page is a task's, not the project's brainstorms.
+func (v PageView) HasTask() bool { return v.Task != nil }
+
+// LockedMode is the one mode the page's new-session form may start in:
+// "product" on the project's sessions page (no other mode runs without a
+// task), "" where the form offers every mode.
+func (v PageView) LockedMode() string {
+	if v.HasTask() {
+		return ""
+	}
+	return productMode
+}
+
+// ListLabel names the session list for assistive technology.
+func (v PageView) ListLabel() string {
+	if v.HasTask() {
+		return "Sessions of this task"
+	}
+	return "Feature brainstorms of this project"
+}
+
+// NewPageView builds the page for a task's sessions at time now, or, with a
+// nil task, for the project's ticket-less sessions. The first session on
+// screen starts selected, as the browser's page component does.
 func NewPageView(frame shell.Frame, project *domain.Project, task *domain.Ticket, list []*domain.Session, agents []*domain.Agent, repos []*domain.Repository, now time.Time) PageView {
 	if list == nil {
 		list = []*domain.Session{} // the seed must be [], never null
@@ -229,16 +333,14 @@ func NewPageView(frame shell.Frame, project *domain.Project, task *domain.Ticket
 	}
 
 	names := make(map[string]string, len(agents))
-	form := NewSessionForm{}
 	for _, a := range agents {
 		names[a.ID] = a.Name
-		form.Agents = append(form.Agents, Option{ID: a.ID, Name: a.Name, Description: a.Description})
 	}
 	repoNames := make(map[string]string, len(repos))
 	for _, r := range repos {
 		repoNames[r.ID] = r.Name
-		form.Repositories = append(form.Repositories, Option{ID: r.ID, Name: r.Name})
 	}
+	form := NewSessionFormOf(agents, repos)
 
 	byID := make(map[string]*domain.Session, len(list))
 	for _, s := range list {
@@ -253,21 +355,41 @@ func NewPageView(frame shell.Frame, project *domain.Project, task *domain.Ticket
 		views = append(views, Group{Key: g.key, Label: groupLabels[g.key], Tone: groupTones[g.key], Count: len(rows), Rows: rows})
 	}
 
-	return PageView{
-		Frame:           frame,
-		ProjectID:       project.ID,
-		ProjectName:     project.Name,
-		TaskTitle:       task.Title,
-		Task:            task,
-		TaskDescription: task.Description,
-		TaskStatus:      StatusLabel(task.Status),
-		PendingReviews:  task.PendingReviews,
-		Summary:         summary(list),
-		Groups:          views,
-		Seed: Seed{ProjectID: project.ID, TicketID: task.ID, Sessions: list, AgentNames: names, RepositoryNames: repoNames,
+	v := PageView{
+		Frame:       frame,
+		ProjectID:   project.ID,
+		ProjectName: project.Name,
+		TaskTitle:   BrainstormsTitle,
+		Summary:     summary(list),
+		Groups:      views,
+		Seed: Seed{ProjectID: project.ID, Sessions: list, AgentNames: names, RepositoryNames: repoNames,
 			Artifacts: []*domain.Artifact{}, Tasks: []TaskLink{}},
 		NewSession: form,
 	}
+	if task != nil {
+		v.Task = task
+		v.TaskTitle = task.Title
+		v.TaskDescription = task.Description
+		v.TaskStatus = StatusLabel(task.Status)
+		v.PendingReviews = task.PendingReviews
+		v.Seed.TicketID = task.ID
+	}
+	return v
+}
+
+// RowTitle is a session's row title: what it was asked to do; with no
+// prompt, "Untitled session", or "Feature brainstorm" for a session that
+// runs with no task (where a task's title would otherwise say what it is
+// about). The browser's rowTitle (view.js) says the same;
+// web/testdata/views/session-title.json pins both.
+func RowTitle(s *domain.Session) string {
+	if s.Task != "" {
+		return s.Task
+	}
+	if s.TicketID == "" {
+		return "Feature brainstorm"
+	}
+	return "Untitled session"
 }
 
 // StatusLabel is a task status as words: "in progress".
@@ -290,10 +412,7 @@ func StartedBy(s *domain.Session, others map[string]*domain.Session, agentNames 
 
 func toRow(s *domain.Session, selectedID string, agentNames map[string]string, now time.Time, others map[string]*domain.Session, depth int) Row {
 	st := statusOf(s)
-	title := s.Task
-	if title == "" {
-		title = "Untitled session"
-	}
+	title := RowTitle(s)
 	agent := RunsAs(s, agentNames)
 	return Row{
 		ID:        s.ID,
