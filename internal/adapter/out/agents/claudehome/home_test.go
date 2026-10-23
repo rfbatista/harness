@@ -144,3 +144,31 @@ func TestATighterLoginFileIsLeftAlone(t *testing.T) {
 		t.Errorf("login file mode = %o, want 400 kept", m)
 	}
 }
+
+func TestTheHomeHoldsALoginOnlyWhenItsCredentialsFileHasAClaudeAccountLogin(t *testing.T) {
+	for name, tc := range map[string]struct {
+		content *string
+		want    bool
+	}{
+		"no file":      {nil, false},
+		"login":        {ptr(`{"claudeAiOauth":{"accessToken":"a","refreshToken":"r"}}`), true},
+		"other keys":   {ptr(`{"mcpOAuth":{},"claudeAiOauth":{"accessToken":"a"}}`), true},
+		"empty":        {ptr(``), false},
+		"not json":     {ptr(`claudeAiOauth`), false},
+		"no login key": {ptr(`{"mcpOAuth":{}}`), false},
+		"null login":   {ptr(`{"claudeAiOauth":null}`), false},
+		"string login": {ptr(`{"claudeAiOauth":"x"}`), false},
+	} {
+		h := NewHome(t.TempDir())
+		if tc.content != nil {
+			if err := os.WriteFile(filepath.Join(h.Path(), ".credentials.json"), []byte(*tc.content), 0o600); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if got := h.HasLogin(); got != tc.want {
+			t.Errorf("%s: HasLogin = %v, want %v", name, got, tc.want)
+		}
+	}
+}
+
+func ptr(s string) *string { return &s }

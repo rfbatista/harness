@@ -133,3 +133,20 @@ func seed(m map[string]any) {
 		m["theme"] = "dark"
 	}
 }
+
+// HasLogin says whether the home holds a Claude account login: a
+// .credentials.json that parses as JSON with a claudeAiOauth object. It
+// reads the file and starts no process; the content is never returned.
+func (h Home) HasLogin() bool {
+	if h.dir == "" {
+		return false
+	}
+	b, err := os.ReadFile(filepath.Join(h.dir, credentialsFile))
+	if err != nil {
+		return false
+	}
+	var f struct {
+		Login map[string]json.RawMessage `json:"claudeAiOauth"`
+	}
+	return json.Unmarshal(b, &f) == nil && f.Login != nil
+}

@@ -497,7 +497,7 @@ func sessionAllow(env []string) []ports.SandboxPath {
 	for _, e := range env {
 		name, v, _ := strings.Cut(e, "=")
 		switch name {
-		case ports.ShimDirEnv:
+		case ports.ShimDirEnv, ports.KeychainShimDirEnv:
 			out = append(out, ports.SandboxPath{Path: v})
 		case "GIT_CONFIG_GLOBAL", "GIT_CONFIG_VALUE_1":
 			if name == "GIT_CONFIG_VALUE_1" {

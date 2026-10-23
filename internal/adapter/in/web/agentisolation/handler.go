@@ -47,8 +47,10 @@ type Handler struct {
 	// HomeExposed says the agent home is in an unignored git work tree; nil
 	// shows no warning.
 	HomeExposed func() bool
-	Layout      shell.Layout
-	Render      shell.Renderer
+	// HasLogin says the agent home holds a Claude login; nil: none.
+	HasLogin func() bool
+	Layout   shell.Layout
+	Render   shell.Renderer
 }
 
 // View is what the page renders: one view per section.
@@ -81,6 +83,7 @@ func (h Handler) View(ctx context.Context) View {
 		Sandbox:    NewSandboxView(h.Sandbox, h.Driver),
 	}
 	v.Credential.HomeExposed = h.HomeExposed != nil && h.HomeExposed()
+	v.Credential.Login = h.HasLogin != nil && h.HasLogin()
 	if h.Builtin != nil {
 		v.Sandbox.Builtin = h.Builtin()
 	}
