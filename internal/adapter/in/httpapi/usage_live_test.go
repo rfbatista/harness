@@ -431,3 +431,17 @@ func TestTheLiveStreamAnswers503WithoutTheUsageService(t *testing.T) {
 		t.Fatalf("status %d", resp.StatusCode)
 	}
 }
+
+func TestADocumentAssistantCallIsFilteredToTheProjectNamedInItsAttribution(t *testing.T) {
+	srv, e := liveServer(t)
+	r := openLive(t, srv, e.ProjectA, nil)
+	ctx := context.Background()
+	e.Service.Started(ctx, startReq("other", "harness:document-assistant:"+e.ProjectB, `{}`))
+	e.Service.Started(ctx, startReq("mine", "harness:document-assistant:"+e.ProjectA, `{}`))
+
+	ev := r.next()
+	if ev.Data["id"] != "mine" || ev.Data["kind"] != "document-assistant" || ev.Data["project_id"] != e.ProjectA {
+		t.Fatalf("document assistant call = %+v", ev.Data)
+	}
+	r.nothingMore()
+}

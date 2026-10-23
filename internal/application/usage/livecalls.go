@@ -96,8 +96,9 @@ func (s *Service) resolveCall(ctx context.Context, attribution string) callOwner
 	o := callOwner{kind: "system"}
 	switch {
 	case attribution == "" || attribution == ports.UsageSystemAttribution:
-	case attribution == documentAssistantAttribution:
+	case attribution == documentAssistantAttribution || strings.HasPrefix(attribution, documentAssistantAttribution+":"):
 		o.kind = "document-assistant"
+		o.projectID = strings.TrimPrefix(strings.TrimPrefix(attribution, documentAssistantAttribution), ":")
 	default:
 		if sess := s.readers.Sessions.Get(attribution); sess != nil {
 			o.session, o.projectID, o.kind = sess, sess.ProjectID, "session"
@@ -112,7 +113,7 @@ func (s *Service) resolveCall(ctx context.Context, attribution string) callOwner
 }
 
 // documentAssistantAttribution is what the document assistant's calls are
-// attributed to.
+// attributed to, with ":<project id>" appended.
 const documentAssistantAttribution = "harness:document-assistant"
 
 // liveViewer is one live call viewer's queue.
