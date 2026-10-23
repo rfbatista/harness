@@ -69,6 +69,7 @@ import "../src/modules/sessions/presentation/historyView.test.js";
 import "../src/modules/sessions/presentation/pages/sessionsPage.test.js";
 import "../src/modules/sessions/presentation/screenPrefs.test.js";
 import "../src/modules/sessions/presentation/view.test.js";
+import "../src/modules/settings/presentation/components/settingFlag.test.js";
 import "../src/modules/tasks/domain/activity.test.js";
 import "../src/modules/tasks/domain/board.test.js";
 import "../src/modules/tasks/domain/comments.test.js";

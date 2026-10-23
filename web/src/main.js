@@ -50,6 +50,8 @@ import { tasksGateway } from "./modules/tasks/infrastructure/tasks-gateway.js";
 import { registerTasks } from "./modules/tasks/presentation/register.js";
 import { modelsGateway } from "./modules/models/infrastructure/models-gateway.js";
 import { registerModels } from "./modules/models/presentation/register.js";
+import { settingsGateway } from "./modules/settings/infrastructure/settings-gateway.js";
+import { registerSettings } from "./modules/settings/presentation/register.js";
 import { tokenSaversGateway } from "./modules/tokensavers/infrastructure/tokensavers-gateway.js";
 import { registerTokenSavers } from "./modules/tokensavers/presentation/register.js";
 import { usageGateway } from "./modules/usage/infrastructure/usage-gateway.js";
@@ -105,5 +107,6 @@ registerSandbox(Alpine, { gateway: sandboxGateway(api) });
 registerClaude(Alpine, { gateway: claudeGateway(api) });
 registerAgentCredential(Alpine, { gateway: agentCredentialGateway(api) });
 registerAgentIsolation(Alpine);
+registerSettings(Alpine, { gateway: settingsGateway(api) });
 
 Alpine.start();

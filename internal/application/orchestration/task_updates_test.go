@@ -289,7 +289,7 @@ func TestResourcesSectionCounts(t *testing.T) {
 		{1, 0, "This task has 1 resource and no comments."},
 		{3, 5, "This task has 3 resources and 5 comments."},
 	} {
-		if got := resourcesSection(taskCounts{c.r, c.c, true}); !strings.Contains(got, c.want) {
+		if got := resourcesSection(taskCounts{resources: c.r, comments: c.c, known: true}); !strings.Contains(got, c.want) {
 			t.Errorf("%d/%d: lacks %q:\n%s", c.r, c.c, c.want, got)
 		}
 	}

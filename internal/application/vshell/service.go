@@ -55,6 +55,8 @@ type Sources struct {
 	Designs   ports.ShellDesignWriter
 	Sessions  ports.SessionRepository
 	Agents    ports.AgentLister
+	// Settings holds "Agents move documents to project"; nil reads it as off.
+	Settings ports.SettingsReader
 }
 
 // Service makes, fills, refreshes and removes sessions' shells, and keeps
@@ -301,6 +303,33 @@ func (s *Service) Subscribe(sub ports.EventSubscriber) {
 		s.changed(ev.ProjectID, "")
 		return nil
 	})
+	// The README says which rule applies to moving documents to project.
+	ports.On(sub, func(_ context.Context, ev domain.SettingsChanged) error {
+		if ev.Key == domain.SettingAgentsMoveDocuments {
+			s.changedEverywhere()
+		}
+		return nil
+	})
+}
+
+// changedEverywhere brings up to date every running shell.
+func (s *Service) changedEverywhere() {
+	s.mu.Lock()
+	due := make([]*shell, 0, len(s.shells))
+	for _, sh := range s.shells {
+		due = append(due, sh)
+	}
+	s.mu.Unlock()
+	for _, sh := range due {
+		s.kick(sh)
+	}
+}
+
+// agentsMove reads the setting "Agents move documents to project", off while
+// unset or unreadable (ADR 0020). It is read at each move and each refresh,
+// never kept.
+func (s *Service) agentsMove() bool {
+	return s.src.Settings != nil && domain.AgentsMoveDocuments(s.src.Settings.Setting(domain.SettingAgentsMoveDocuments))
 }
 
 // AnnounceChange hears a task's comments and resources change, as planning

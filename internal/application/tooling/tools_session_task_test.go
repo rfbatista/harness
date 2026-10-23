@@ -213,3 +213,13 @@ func TestSessionTaskTools_UpdateTaskStatus_DeletedTask(t *testing.T) {
 	_, err := f.call(t, f.sessionID, "update_task_status", map[string]any{"status": "done"})
 	wantCode(t, err, "TICKET_NOT_FOUND")
 }
+
+// Only the person decides whether agents move documents to project level
+// (ADR 0020): no tool a session is given reads or writes global settings.
+func TestSessionTaskToolsLackTheSettingsTools(t *testing.T) {
+	for _, name := range SessionTaskToolNames {
+		if name == "update_settings" || name == "get_settings" {
+			t.Errorf("SessionTaskToolNames lists %s", name)
+		}
+	}
+}

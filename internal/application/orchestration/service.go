@@ -683,9 +683,13 @@ func (s *Service) sessionConfig(id, dir, model string, allowedTools []string, pe
 		taskURL = s.TaskServerURL(id)
 	}
 	if subject.projectLevel() {
-		applyProjectContext(&cfg, s.briefProject(subject.project), taskURL)
+		in := s.briefProject(subject.project)
+		in.AgentsMove = s.agentsMoveDocuments()
+		applyProjectContext(&cfg, in, taskURL)
 	} else {
-		applyTaskContext(&cfg, ticket, taskURL, role, s.taskCounts(ticket))
+		counts := s.taskCounts(ticket)
+		counts.agentsMove = s.agentsMoveDocuments()
+		applyTaskContext(&cfg, ticket, taskURL, role, counts)
 	}
 	if section := attachedAssetsSection(s.attachedAssets(ticket)); section != "" {
 		cfg.AppendSystem = appendSection(cfg.AppendSystem, section)
