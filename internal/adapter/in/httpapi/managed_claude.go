@@ -59,6 +59,23 @@ func (h *Handler) handleSwitchManagedClaude(c echo.Context) error {
 	})
 }
 
+func (h *Handler) handleCancelManagedClaudeInstall(c echo.Context) error {
+	if h.managedClaude == nil {
+		return errManagedClaudeOff
+	}
+	st, err := h.managedClaude.Cancel()
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, h.managedClaudeOut(st))
+}
+
+func (h *Handler) handleRemoveManagedClaudeVersion(c echo.Context) error {
+	return h.managedClaudeChange(c, func(_ context.Context, v string) (ports.ManagedClaudeState, error) {
+		return h.managedClaude.Remove(v)
+	})
+}
+
 func (h *Handler) managedClaudeChange(c echo.Context, change func(context.Context, string) (ports.ManagedClaudeState, error)) error {
 	if h.managedClaude == nil {
 		return errManagedClaudeOff

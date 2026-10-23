@@ -14,6 +14,7 @@ package agentisolation
 
 import (
 	"net/http"
+	"strings"
 
 	"operators-mcp/internal/adapter/in/web/shell"
 	"operators-mcp/internal/ports"
@@ -36,12 +37,16 @@ type Handler struct {
 	// resolve to; nil shows none installed.
 	Claude    ports.ManagedClaude
 	ClaudeBin ports.ManagedClaudeBin
-	Layout    shell.Layout
-	Render    shell.Renderer
+	// Builtin is the allowlist every session gets, for the Sandbox section's
+	// read-only list; nil lists none.
+	Builtin func() []ports.SandboxBuiltinGroup
+	Layout  shell.Layout
+	Render  shell.Renderer
 }
 
 // View is what the page renders: one view per section.
 type View struct {
+	Summary    Summary
 	Credential CredentialView
 	Claude     ClaudeView
 	Sandbox    SandboxView
@@ -54,16 +59,25 @@ func (h Handler) Page(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	frame.Top.OnAgentIsolation = true
-	return h.Render(w, r, http.StatusOK, Page(frame, h.View()))
+	v := h.View()
+	// An "Allow this path" link from a session's Sandbox tab brings the path
+	// to put in the add-path field. It is only shown, never saved.
+	v.Sandbox.AllowPath = strings.TrimSpace(r.URL.Query().Get("allow_path"))
+	return h.Render(w, r, http.StatusOK, Page(frame, v))
 }
 
 // View reads each section's state.
 func (h Handler) View() View {
-	return View{
+	v := View{
 		Credential: NewCredentialView(h.Credential, h.OAuth, h.ClaudeBin),
 		Claude:     NewClaudeView(h.Claude, h.ClaudeBin),
 		Sandbox:    NewSandboxView(h.Sandbox, h.Driver),
 	}
+	if h.Builtin != nil {
+		v.Sandbox.Builtin = h.Builtin()
+	}
+	v.Summary = NewSummary(v.Credential, v.Claude, v.Sandbox)
+	return v
 }
 
 // Blocks says whether something on the page stops agents from starting: the

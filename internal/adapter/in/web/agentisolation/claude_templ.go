@@ -68,7 +68,7 @@ func claudeSection(v ClaudeView) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "</span></header><div class=\"[ flow ] [ flow-space-m ]\" style=\"padding: var(--space-l)\"><p class=\"[ visually-hidden ]\" role=\"status\" aria-live=\"polite\" x-text=\"announcement\"></p><p class=\"[ color-ink-muted ]\">The claude CLI every agent runs. It sits in the harness data directory with its auto-updater off, so a new release reaches agents only when you pick it. Your own <span class=\"[ font-mono ]\">claude</span> is never used or changed.</p><div class=\"[ banner ]\" data-tone=\"attention\" role=\"status\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "</span></header><div class=\"[ flow ] [ flow-space-m ]\" style=\"padding: var(--space-l)\"><p class=\"[ visually-hidden ]\" role=\"status\" aria-live=\"polite\" x-text=\"announcement\"></p><p class=\"[ hint ]\" role=\"status\" aria-live=\"polite\" data-switch-line style=\"display: none\" x-show=\"hasSwitchLine\" x-text=\"switchLine\"></p><p class=\"[ color-ink-muted ]\">The claude CLI every agent runs. It sits in the harness data directory with its auto-updater off, so a new release reaches agents only when you pick it. Your own <span class=\"[ font-mono ]\">claude</span> is never used or changed.</p><div class=\"[ banner ]\" data-tone=\"attention\" role=\"status\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -83,7 +83,7 @@ func claudeSection(v ClaudeView) templ.Component {
 		var templ_7745c5c3_Var4 string
 		templ_7745c5c3_Var4, templ_7745c5c3_Err = templ.JoinStringErrs(v.Bin)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `agentisolation/claude.templ`, Line: 19, Col: 135}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `agentisolation/claude.templ`, Line: 20, Col: 135}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var4))
 		if templ_7745c5c3_Err != nil {
@@ -112,7 +112,7 @@ func claudeSection(v ClaudeView) templ.Component {
 		var templ_7745c5c3_Var5 string
 		templ_7745c5c3_Var5, templ_7745c5c3_Err = templ.JoinStringErrs(v.FailedTitle())
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `agentisolation/claude.templ`, Line: 27, Col: 51}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `agentisolation/claude.templ`, Line: 28, Col: 51}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var5))
 		if templ_7745c5c3_Err != nil {
@@ -125,7 +125,7 @@ func claudeSection(v ClaudeView) templ.Component {
 		var templ_7745c5c3_Var6 string
 		templ_7745c5c3_Var6, templ_7745c5c3_Err = templ.JoinStringErrs(v.FailedMessage())
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `agentisolation/claude.templ`, Line: 28, Col: 70}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `agentisolation/claude.templ`, Line: 29, Col: 70}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var6))
 		if templ_7745c5c3_Err != nil {
@@ -153,7 +153,7 @@ func claudeSection(v ClaudeView) templ.Component {
 				var templ_7745c5c3_Var7 string
 				templ_7745c5c3_Var7, templ_7745c5c3_Err = templ.ResolveAttributeValue(r.Version)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `agentisolation/claude.templ`, Line: 47, Col: 70}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `agentisolation/claude.templ`, Line: 48, Col: 70}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var7)
 				if templ_7745c5c3_Err != nil {
@@ -166,7 +166,7 @@ func claudeSection(v ClaudeView) templ.Component {
 				var templ_7745c5c3_Var8 string
 				templ_7745c5c3_Var8, templ_7745c5c3_Err = templ.JoinStringErrs(r.Version)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `agentisolation/claude.templ`, Line: 48, Col: 47}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `agentisolation/claude.templ`, Line: 49, Col: 47}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var8))
 				if templ_7745c5c3_Err != nil {
@@ -189,7 +189,7 @@ func claudeSection(v ClaudeView) templ.Component {
 				var templ_7745c5c3_Var9 string
 				templ_7745c5c3_Var9, templ_7745c5c3_Err = templ.JoinStringErrs(r.Date)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `agentisolation/claude.templ`, Line: 52, Col: 39}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `agentisolation/claude.templ`, Line: 53, Col: 39}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var9))
 				if templ_7745c5c3_Err != nil {
@@ -208,7 +208,7 @@ func claudeSection(v ClaudeView) templ.Component {
 				var templ_7745c5c3_Var10 string
 				templ_7745c5c3_Var10, templ_7745c5c3_Err = templ.JoinStringErrs(v.InstallingVersion())
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `agentisolation/claude.templ`, Line: 57, Col: 59}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `agentisolation/claude.templ`, Line: 58, Col: 59}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var10))
 				if templ_7745c5c3_Err != nil {
@@ -224,7 +224,7 @@ func claudeSection(v ClaudeView) templ.Component {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 22, "</div><p class=\"[ color-ink-muted ]\" style=\"display: none\" x-show=\"showEmpty\">Nothing installed yet.</p><ul role=\"list\" class=\"[ list ]\" aria-label=\"Installed versions\" style=\"display: none\" x-show=\"showList\"><template x-for=\"r in rows\" x-bind:key=\"r.version\"><li class=\"[ row ] [ claude-version ]\" x-bind:data-version=\"r.version\"><span class=\"[ font-mono ]\" x-text=\"r.version\"></span> <span class=\"[ badge ]\" data-tone=\"signal\" x-show=\"r.active\">agents use this</span> <span class=\"[ hint ]\" x-text=\"r.date\"></span> <button type=\"button\" class=\"[ button ]\" data-size=\"sm\" x-show=\"r.canUse\" x-bind:aria-label=\"r.useLabel\" x-bind:disabled=\"busy\" x-on:click=\"use\">Use this</button></li></template><li class=\"[ row ] [ claude-installing ]\" role=\"status\" style=\"display: none\" x-show=\"isInstalling\"><span class=\"[ font-mono ]\" x-text=\"installingLabel\"></span> <progress style=\"display: none\" x-show=\"progressKnown\" x-bind:value=\"progressValue\" x-bind:max=\"progressMax\" aria-label=\"Install progress\"></progress> <span class=\"[ hint ]\" x-text=\"progressText\"></span></li></ul><div class=\"[ cluster ] [ gutter-xs ]\" style=\"display: none; align-items: center\" x-show=\"hasVersions\"><label class=\"[ hint ]\" for=\"claude-version\">Install another version</label> <select id=\"claude-version\" class=\"[ font-mono ]\" data-size=\"sm\" data-fit x-ref=\"version\" x-show=\"picker\" x-bind:aria-busy=\"loadingReleases\"><template x-for=\"o in options\" x-bind:key=\"o.version\"><option x-bind:value=\"o.version\" x-bind:disabled=\"o.taken\" x-text=\"o.label\"></option></template></select> <span class=\"[ hint ]\" style=\"display: none\" x-show=\"loadingReleases\">Loading versions…</span> <span class=\"[ error ]\" style=\"display: none\" role=\"status\" x-show=\"releasesFailed\">Could not load versions. Try again.</span> <button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" style=\"display: none\" x-show=\"releasesFailed\" x-on:click=\"loadReleases\">Retry</button> <input class=\"[ font-mono text-sm ]\" style=\"display: none\" x-show=\"releasesFailed\" x-ref=\"typed\" aria-label=\"Version\" placeholder=\"2.1.52\" autocomplete=\"off\" autocapitalize=\"off\" spellcheck=\"false\"> <button type=\"button\" class=\"[ button ]\" x-bind:disabled=\"cannotInstall\" x-on:click=\"installPicked\">Install</button> <span class=\"[ hint ]\">Installing does not switch. New sessions use the version marked above.</span></div></div></section>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 22, "</div><p class=\"[ color-ink-muted ]\" style=\"display: none\" x-show=\"showEmpty\">Nothing installed yet.</p><ul role=\"list\" class=\"[ list ]\" aria-label=\"Installed versions\" style=\"display: none\" x-show=\"showList\"><template x-for=\"r in rows\" x-bind:key=\"r.version\"><li class=\"[ row ] [ claude-version ]\" x-bind:data-version=\"r.version\"><span class=\"[ font-mono ]\" x-text=\"r.version\"></span> <span class=\"[ badge ]\" data-tone=\"signal\" x-show=\"r.active\">agents use this</span> <span class=\"[ hint ]\" x-text=\"r.date\"></span> <button type=\"button\" class=\"[ button ]\" data-size=\"sm\" x-show=\"r.canUse\" x-bind:aria-label=\"r.useLabel\" x-bind:disabled=\"busy\" x-on:click=\"use\">Use this</button> <button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" x-show=\"r.canRemove\" x-bind:aria-label=\"r.removeLabel\" x-bind:disabled=\"busy\" x-on:click=\"remove\">Remove</button></li></template><li class=\"[ row ] [ claude-installing ]\" role=\"status\" style=\"display: none\" x-show=\"isInstalling\"><span class=\"[ font-mono ]\" x-text=\"installingLabel\"></span> <progress style=\"display: none\" x-show=\"progressKnown\" x-bind:value=\"progressValue\" x-bind:max=\"progressMax\" aria-label=\"Install progress\"></progress> <span class=\"[ hint ]\" x-text=\"progressText\"></span> <button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" x-bind:aria-label=\"cancelLabel\" x-bind:disabled=\"busy\" x-on:click=\"cancel\">Cancel</button></li></ul><div class=\"[ cluster ] [ gutter-xs ]\" style=\"display: none; align-items: center\" x-show=\"hasVersions\"><label class=\"[ hint ]\" for=\"claude-version\">Install another version</label> <select id=\"claude-version\" class=\"[ font-mono ]\" data-size=\"sm\" data-fit x-ref=\"version\" x-show=\"picker\" x-bind:aria-busy=\"loadingReleases\"><template x-for=\"o in options\" x-bind:key=\"o.version\"><option x-bind:value=\"o.version\" x-bind:disabled=\"o.taken\" x-text=\"o.label\"></option></template></select> <span class=\"[ hint ]\" style=\"display: none\" x-show=\"loadingReleases\">Loading versions…</span> <span class=\"[ error ]\" style=\"display: none\" role=\"status\" x-show=\"releasesFailed\">Could not load versions. Try again.</span> <button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" style=\"display: none\" x-show=\"releasesFailed\" x-on:click=\"loadReleases\">Retry</button> <input class=\"[ font-mono text-sm ]\" style=\"display: none\" x-show=\"releasesFailed\" x-ref=\"typed\" aria-label=\"Version\" placeholder=\"2.1.52\" autocomplete=\"off\" autocapitalize=\"off\" spellcheck=\"false\"> <button type=\"button\" class=\"[ button ]\" x-bind:disabled=\"cannotInstall\" x-on:click=\"installPicked\">Install</button> <span class=\"[ hint ]\">Installing does not switch. New sessions use the version marked above.</span></div></div></section>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

@@ -46,3 +46,10 @@ func sandboxDriver(svc *orchestration.Service) func() ports.SandboxDriver {
 // platformSandboxDriver is the platform's driver, which the runtime stack
 // also uses to confine the sessions it hosts; nil where there is none.
 func platformSandboxDriver() ports.SandboxDriver { return runtime.PlatformSandboxDriver() }
+
+// sandboxBuiltin is the allowlist the orchestration gives every session, for
+// the Agent isolation page. It reads the service each time, like
+// sandboxDriver, so the page lists what the policy builder is given.
+func sandboxBuiltin(svc *orchestration.Service) func() []ports.SandboxBuiltinGroup {
+	return func() []ports.SandboxBuiltinGroup { return svc.Sandbox.Builtin() }
+}

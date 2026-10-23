@@ -148,6 +148,8 @@ func NewRouter(h *Handler, opts ...Option) *echo.Echo {
 	g.GET("/list_managed_claude_releases", h.handleListManagedClaudeReleases)
 	g.POST("/install_managed_claude", h.handleInstallManagedClaude)
 	g.POST("/switch_managed_claude", h.handleSwitchManagedClaude)
+	g.POST("/cancel_managed_claude_install", h.handleCancelManagedClaudeInstall)
+	g.POST("/remove_managed_claude_version", h.handleRemoveManagedClaudeVersion)
 	// agent credential (the Agent isolation page)
 	g.GET("/get_agent_credential", h.handleGetAgentCredential)
 	g.POST("/set_agent_credential", h.handleSetAgentCredential)

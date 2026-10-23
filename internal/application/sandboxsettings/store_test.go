@@ -2,6 +2,8 @@ package sandboxsettings
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
 	"slices"
 	"testing"
 
@@ -121,6 +123,41 @@ func TestChangingOrRemovingAPathNotInTheListIsRefused(t *testing.T) {
 		var se *domain.StructuredError
 		if !errors.As(err, &se) || se.Code != "SANDBOX_PATH_NOT_FOUND" {
 			t.Fatalf("err = %v, want SANDBOX_PATH_NOT_FOUND", err)
+		}
+	}
+}
+
+func TestAPathThatDoesNotExistYetIsWarnedAboutAndStillSaved(t *testing.T) {
+	s, _ := newStore(t)
+	s.Home = t.TempDir()
+	if _, err := s.AddPath(ports.SandboxPath{Path: "~/never-made"}); err != nil {
+		t.Fatalf("a missing path is refused: %v", err)
+	}
+	if got := s.PathWarnings("~/never-made"); !slices.Equal(got, []string{WarnMissing}) {
+		t.Fatalf("warnings = %v", got)
+	}
+	if got := s.PathWarnings(s.Home); len(got) != 0 {
+		t.Fatalf("an existing folder is warned about: %v", got)
+	}
+}
+
+func TestACredentialFolderIsWarnedAboutWhetherOrNotItExists(t *testing.T) {
+	home := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(home, ".ssh"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	s := &Store{Home: home}
+	for path, want := range map[string][]string{
+		"~/.ssh":                   {WarnCredentials},
+		home + "/.ssh/keys":        {WarnMissing, WarnCredentials},
+		"~/.aws":                   {WarnMissing, WarnCredentials},
+		"~/.config/gcloud/configs": {WarnMissing, WarnCredentials},
+		"~/.kube":                  {WarnMissing, WarnCredentials},
+		"~/.sshfoo":                {WarnMissing},
+		"~/.config":                {WarnMissing},
+	} {
+		if got := s.PathWarnings(path); !slices.Equal(got, want) {
+			t.Errorf("%s: warnings = %v, want %v", path, got, want)
 		}
 	}
 }

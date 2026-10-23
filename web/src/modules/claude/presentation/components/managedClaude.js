@@ -13,6 +13,13 @@ const MB = 1024 * 1024;
 /** @param {number} bytes */
 const megabytes = (bytes) => `${Math.max(1, Math.round(bytes / MB))} MB`;
 
+/**
+ * The sentence naming the running sessions that keep their version.
+ * @param {number} n
+ * @param {string} version
+ */
+const keepLine = (n, version) => (n > 0 ? ` ${n} running session${n === 1 ? " keeps" : "s keep"} ${version}.` : "");
+
 /** @param {{ gateway: import("../../domain/ports.js").ClaudeGateway, pollMs?: number }} deps */
 export const managedClaude = ({ gateway, pollMs = 400 }) => () => ({
   current: "",
@@ -31,6 +38,8 @@ export const managedClaude = ({ gateway, pollMs = 400 }) => () => ({
   error: null,
   busy: false,
   announcement: "",
+  /** What the last switch did, for the person to read: who keeps what. */
+  switchLine: "",
   timer: 0,
 
   init() {
@@ -51,6 +60,7 @@ export const managedClaude = ({ gateway, pollMs = 400 }) => () => ({
     this.failed = state.failed;
     this.overridden = state.overridden;
     this.bin = state.bin;
+    this.$dispatch("isolation-chip", { section: "claude", ...this.summary });
   },
 
   // ── What the section shows ──────────────────────────────────────────
@@ -90,6 +100,21 @@ export const managedClaude = ({ gateway, pollMs = 400 }) => () => ({
   get overrideText() {
     return `Agents run ${this.bin}. The version you choose below is saved but not used.`;
   },
+  /** The page's summary chip for this section. */
+  get summary() {
+    if (this.isNone) {
+      if (this.overridden) return { text: "claude: override", tone: "signal", blocks: false };
+      if (this.installing) return { text: "claude: installing", tone: "", blocks: true };
+      return { text: "claude: not installed", tone: "danger", blocks: true };
+    }
+    return { text: `claude: ${this.current}`, tone: "signal", blocks: false };
+  },
+  get hasSwitchLine() {
+    return this.switchLine !== "";
+  },
+  get cancelLabel() {
+    return this.installing ? `Cancel install of ${this.installing.version}` : "";
+  },
   get rows() {
     return this.installed.map((v) => ({
       version: v.version,
@@ -97,6 +122,8 @@ export const managedClaude = ({ gateway, pollMs = 400 }) => () => ({
       date: v.installedAt ? new Date(v.installedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" }) : "",
       canUse: !v.active,
       useLabel: `Use ${v.version}`,
+      canRemove: !v.active,
+      removeLabel: `Remove ${v.version}`,
     }));
   },
   get installingVersion() {
@@ -182,6 +209,7 @@ export const managedClaude = ({ gateway, pollMs = 400 }) => () => ({
   },
   /** @param {string} version */
   async start(version) {
+    this.switchLine = "";
     if (await this.run(() => gateway.install(version))) this.poll();
   },
   poll() {
@@ -203,13 +231,38 @@ export const managedClaude = ({ gateway, pollMs = 400 }) => () => ({
     }, pollMs);
   },
 
+  async cancel() {
+    const version = this.installing?.version ?? "";
+    if (await this.run(() => gateway.cancel())) {
+      clearTimeout(this.timer);
+      this.announcement = `Install of ${version} cancelled.`;
+      this.loadReleases();
+    }
+  },
+
   // ── Switch ──────────────────────────────────────────────────────────
   /** @param {Event} event a row button's click */
   async use(event) {
     const row = /** @type {HTMLElement} */ (/** @type {HTMLElement} */ (event.currentTarget).closest("[data-version]"));
     const version = row.dataset.version ?? "";
-    if (await this.run(() => gateway.use(version))) {
-      this.announcement = `New sessions will use ${version}.`;
+    const before = this.current;
+    let kept = 0;
+    if (await this.run(async () => {
+      const state = await gateway.use(version);
+      kept = state.keepingSessions ?? 0;
+      return state;
+    })) {
+      this.switchLine = `New sessions will use ${version}.${keepLine(kept, before)}`;
+      this.loadReleases();
+    }
+  },
+  /** @param {Event} event a row button's click */
+  async remove(event) {
+    const row = /** @type {HTMLElement} */ (/** @type {HTMLElement} */ (event.currentTarget).closest("[data-version]"));
+    const version = row.dataset.version ?? "";
+    if (await this.run(() => gateway.remove(version))) {
+      this.switchLine = "";
+      this.announcement = `Removed ${version}.`;
       this.loadReleases();
     }
   },

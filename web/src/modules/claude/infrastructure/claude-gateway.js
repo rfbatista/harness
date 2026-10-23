@@ -21,6 +21,7 @@ function toState(body) {
     failed: b.failed ? { version: String(b.failed.version), message: String(b.failed.message) } : null,
     overridden: b.overridden === true,
     bin: String(b.bin ?? ""),
+    keepingSessions: Number(b.keepingSessions ?? 0),
   };
 }
 
@@ -38,5 +39,7 @@ export function claudeGateway(api) {
     },
     install: async (version) => toState(await api.post("/install_managed_claude", { version })),
     use: async (version) => toState(await api.post("/switch_managed_claude", { version })),
+    cancel: async () => toState(await api.post("/cancel_managed_claude_install", {})),
+    remove: async (version) => toState(await api.post("/remove_managed_claude_version", { version })),
   };
 }

@@ -21,6 +21,7 @@
  * @property {{ version: string, message: string } | null} failed
  * @property {boolean} overridden  -claude.bin / $CLAUDE_BIN decides.
  * @property {string} bin  The binary agents run.
+ * @property {number} keepingSessions  In the answer to a switch: running sessions that keep the version they started with.
  *
  * @typedef {object} ClaudeReleases
  * @property {string} latest
@@ -31,6 +32,8 @@
  * @property {() => Promise<ClaudeReleases>} releases  Rejects when the release server cannot be reached.
  * @property {(version: string) => Promise<ClaudeState>} install  "latest", "stable" or X.Y.Z; starts the install.
  * @property {(version: string) => Promise<ClaudeState>} use  Switches agents to an installed version.
+ * @property {() => Promise<ClaudeState>} cancel  Stops the install that runs; nothing it downloaded stays.
+ * @property {(version: string) => Promise<ClaudeState>} remove  Deletes an installed version that is not the current one.
  */
 
 export {};

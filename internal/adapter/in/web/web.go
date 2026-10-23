@@ -95,6 +95,9 @@ type Deps struct {
 	// override included). Nil leaves the section showing none installed.
 	ManagedClaude    ports.ManagedClaude
 	ManagedClaudeBin ports.ManagedClaudeBin
+	// SandboxBuiltin lists the allowlist every session gets, for the page's
+	// read-only list; nil lists none.
+	SandboxBuiltin func() []ports.SandboxBuiltinGroup
 	// AgentCredential fills the Agent isolation page's credential section
 	// (status only, never the value); nil shows it as not set.
 	AgentCredential ports.AgentCredential
@@ -200,7 +203,7 @@ func NewHandler(deps Deps, assets *Assets, fallback http.Handler) http.Handler {
 	}
 	if deps.SandboxSettings != nil {
 		isolation := agentisolation.Handler{Sandbox: deps.SandboxSettings, Driver: deps.SandboxDriver, Credential: deps.AgentCredential, OAuth: deps.AgentOAuth, Layout: s.layout, Render: render,
-			Claude: deps.ManagedClaude, ClaudeBin: deps.ManagedClaudeBin}
+			Claude: deps.ManagedClaude, ClaudeBin: deps.ManagedClaudeBin, Builtin: deps.SandboxBuiltin}
 		mux.Handle("GET "+agentisolation.Href, s.page(isolation.Page))
 	}
 	if deps.DataPaths != nil {

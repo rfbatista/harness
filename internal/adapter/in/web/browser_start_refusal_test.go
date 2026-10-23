@@ -39,6 +39,7 @@ func (fakeSandboxSwitch) AddPath(ports.SandboxPath) ([]ports.SandboxPath, error)
 }
 func (fakeSandboxSwitch) SetPathAccess(string, bool) ([]ports.SandboxPath, error) { return nil, nil }
 func (fakeSandboxSwitch) RemovePath(string) ([]ports.SandboxPath, error)          { return nil, nil }
+func (fakeSandboxSwitch) PathWarnings(string) []string                            { return nil }
 
 // refusingStartAPI answers a start the way the harness refuses one with no
 // credential and no managed claude yet: a coded error with what is missing.

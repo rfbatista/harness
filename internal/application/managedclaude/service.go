@@ -49,6 +49,9 @@ type Deps struct {
 	// Platform is the release platform key ("darwin-arm64", "linux-x64",
 	// "linux-x64-musl"); this machine's when empty.
 	Platform string
+	// RunningSessions counts the agent sessions running now; a switch names
+	// that many as keeping the version they started with. Nil: none.
+	RunningSessions func() int
 }
 
 // Service installs and switches managed claude versions.
@@ -57,6 +60,7 @@ type Service struct {
 	dir       string
 	base      string
 	platform  string
+	running   func() int
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -65,12 +69,17 @@ type Service struct {
 	mu         sync.Mutex // guards the fields below and the files under dir
 	installing *ports.ManagedClaudeInstall
 	failed     *ports.ManagedClaudeFailure
+	// stopInstall ends the install that runs; installDone closes when it has
+	// ended; cancelled says the person asked, so nothing is reported failed.
+	stopInstall context.CancelFunc
+	installDone chan struct{}
+	cancelled   bool
 }
 
 // New builds the service and clears what an interrupted install left.
 func New(d Deps) *Service {
 	ctx, cancel := context.WithCancel(context.Background())
-	s := &Service{downloads: d.Downloads, dir: d.Dir, base: strings.TrimRight(d.BaseURL, "/"), platform: d.Platform, ctx: ctx, cancel: cancel}
+	s := &Service{downloads: d.Downloads, dir: d.Dir, base: strings.TrimRight(d.BaseURL, "/"), platform: d.Platform, running: d.RunningSessions, ctx: ctx, cancel: cancel}
 	if s.base == "" {
 		s.base = DefaultBaseURL
 	}
@@ -227,8 +236,46 @@ func (s *Service) Install(_ context.Context, version string) (ports.ManagedClaud
 	}
 	s.failed = nil
 	s.installing = &ports.ManagedClaudeInstall{Version: version, Total: -1}
+	ictx, stop := context.WithCancel(s.ctx)
+	s.stopInstall, s.installDone, s.cancelled = stop, make(chan struct{}), false
 	s.wg.Add(1)
-	go s.run(version)
+	go s.run(ictx, version, s.installDone)
+	return s.state(), nil
+}
+
+// Cancel stops the install that runs and waits for it to end: what it had
+// downloaded is removed and no failure is reported. With none running it
+// changes nothing.
+func (s *Service) Cancel() (ports.ManagedClaudeState, error) {
+	s.mu.Lock()
+	if s.installing == nil {
+		defer s.mu.Unlock()
+		return s.state(), nil
+	}
+	s.cancelled = true
+	s.stopInstall()
+	done := s.installDone
+	s.mu.Unlock()
+	<-done
+	return s.State(), nil
+}
+
+// Remove deletes an installed version that is not the current one.
+func (s *Service) Remove(version string) (ports.ManagedClaudeState, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if !versionRE.MatchString(version) {
+		return ports.ManagedClaudeState{}, invalid("Enter an installed version.")
+	}
+	if _, err := os.Stat(filepath.Join(s.versionDir(version), "claude")); err != nil {
+		return ports.ManagedClaudeState{}, &domain.StructuredError{Code: "MANAGED_CLAUDE_VERSION_NOT_FOUND", Message: version + " is not installed."}
+	}
+	if version == s.current() {
+		return ports.ManagedClaudeState{}, &domain.StructuredError{Code: "MANAGED_CLAUDE_VERSION_CURRENT", Message: version + " is the version agents use. Switch to another version first."}
+	}
+	if err := os.RemoveAll(s.versionDir(version)); err != nil {
+		return ports.ManagedClaudeState{}, err
+	}
 	return s.state(), nil
 }
 
@@ -240,12 +287,16 @@ func (s *Service) progress(done, total int64) {
 	}
 }
 
-func (s *Service) run(requested string) {
+func (s *Service) run(ctx context.Context, requested string, done chan struct{}) {
 	defer s.wg.Done()
-	version, err := s.install(requested)
+	defer close(done)
+	version, err := s.install(ctx, requested)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.installing = nil
+	if s.cancelled && err != nil {
+		return
+	}
 	if err != nil {
 		if version == "" {
 			version = requested
@@ -270,8 +321,7 @@ type manifest struct {
 
 // install downloads, verifies and places a version; nothing is placed unless
 // the checksum matches. Answers the concrete version it worked on.
-func (s *Service) install(requested string) (string, error) {
-	ctx := s.ctx
+func (s *Service) install(ctx context.Context, requested string) (string, error) {
 	version := requested
 	if requested == "latest" || requested == "stable" {
 		v, err := s.channel(ctx, requested)
@@ -353,10 +403,15 @@ func (s *Service) Switch(version string) (ports.ManagedClaudeState, error) {
 	if !versionRE.MatchString(version) {
 		return ports.ManagedClaudeState{}, invalid("Enter an installed version.")
 	}
+	was := s.current()
 	if err := s.activate(version); err != nil {
 		return ports.ManagedClaudeState{}, err
 	}
-	return s.state(), nil
+	st := s.state()
+	if was != "" && was != version && s.running != nil {
+		st.KeepingSessions = s.running()
+	}
+	return st, nil
 }
 
 // activate points current at the version, atomically, then removes the old

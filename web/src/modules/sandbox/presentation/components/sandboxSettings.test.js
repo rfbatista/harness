@@ -114,6 +114,39 @@ test("access is switched and a path removed from its row", async () => {
   assert.equal(instance.isEmpty, true);
 });
 
+test("a path that does not exist yet, or is a credential folder, carries a warning and is still listed", async () => {
+  const gateway = fakeGateway();
+  const { instance } = mounted(gateway);
+  gateway.addPath = async (path, write) => ({
+    enabled: true,
+    driver: "seatbelt",
+    paths: [{ path: "~/.aws", write, warnings: ["missing", "credentials"] }, { path: "/opt/cache", write: false, warnings: [] }],
+  });
+  instance.newPath = "~/.aws";
+  await instance.add();
+  const [aws, cache] = instance.rows;
+  assert.equal(aws.missingWarning, "This folder does not exist yet. It will apply once it does.");
+  assert.equal(aws.credentialsWarning, "This folder usually holds credentials.");
+  assert.equal(cache.missingWarning, "");
+  assert.equal(cache.credentialsWarning, "");
+  assert.equal(instance.pathError, "");
+});
+
+test("a path from an Allow this path link is in the field, not saved", () => {
+  const gateway = fakeGateway();
+  const { instance } = mounted(gateway, { ...seed, allowPath: "/Users/me/.cache/pnpm" });
+  assert.equal(instance.newPath, "/Users/me/.cache/pnpm");
+  assert.equal(instance.prefilled, true);
+  assert.deepEqual(gateway.calls, []);
+  assert.equal(instance.rows.length, 1);
+});
+
+test("the summary says on, off or no driver", () => {
+  assert.deepEqual(mounted().instance.summary, { text: "Sandbox: on", tone: "signal", blocks: false });
+  assert.deepEqual(mounted(fakeGateway(), { ...seed, enabled: false }).instance.summary, { text: "Sandbox: off", tone: "attention", blocks: false });
+  assert.deepEqual(mounted(fakeGateway(), { ...seed, driver: "" }).instance.summary, { text: "Sandbox: no driver", tone: "danger", blocks: true });
+});
+
 test("a platform without a driver is named", () => {
   assert.equal(mounted(fakeGateway(), { ...seed, driver: "" }).instance.noDriver, true);
   assert.equal(mounted().instance.noDriver, false);

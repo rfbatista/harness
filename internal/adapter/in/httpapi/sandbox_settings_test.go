@@ -114,3 +114,23 @@ func TestSandboxSettingsAreUnavailableWithoutAStore(t *testing.T) {
 		t.Fatalf("status = %d, want 503", rec.Code)
 	}
 }
+
+func TestSandboxPathsCarryTheirWarningsAndAreStillSaved(t *testing.T) {
+	h, _ := sandboxHandler(t, nil)
+	rec := postJSON(t, h, "/add_sandbox_path", map[string]any{"path": "~/.ssh-never-made/keys"})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("add = %d %s", rec.Code, rec.Body)
+	}
+	var b struct {
+		Paths []struct {
+			Path     string   `json:"path"`
+			Warnings []string `json:"warnings"`
+		} `json:"paths"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &b); err != nil || len(b.Paths) != 1 {
+		t.Fatalf("body = %s, %v", rec.Body, err)
+	}
+	if got := b.Paths[0].Warnings; len(got) != 1 || got[0] != "missing" {
+		t.Fatalf("warnings = %v", got)
+	}
+}

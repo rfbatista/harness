@@ -113,3 +113,27 @@ func TestManagedClaudeEndpointsAnswer503WhenNotConfigured(t *testing.T) {
 		t.Fatalf("status = %d", rec.Code)
 	}
 }
+
+func TestManagedClaudeInstallCanBeCancelledAndANonCurrentVersionRemovedOverHTTP(t *testing.T) {
+	h := managedClaudeHandler(t, "")
+	postJSON(t, h, "/install_managed_claude", map[string]any{"version": "latest"})
+	var b managedClaudeBody
+	for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline); time.Sleep(5 * time.Millisecond) {
+		b = managedClaudeBody{}
+		json.Unmarshal(getJSON(t, h, "/get_managed_claude").Body.Bytes(), &b)
+		if b.Installing == nil {
+			break
+		}
+	}
+	if rec := postJSON(t, h, "/cancel_managed_claude_install", map[string]any{}); rec.Code != http.StatusOK {
+		t.Fatalf("cancel with nothing running = %d %s", rec.Code, rec.Body)
+	}
+	rec := postJSON(t, h, "/remove_managed_claude_version", map[string]any{"version": "2.1.52"})
+	json.Unmarshal(rec.Body.Bytes(), &b)
+	if rec.Code != http.StatusConflict || b.Code != "MANAGED_CLAUDE_VERSION_CURRENT" {
+		t.Fatalf("removing the current version = %d %s", rec.Code, rec.Body)
+	}
+	if rec := postJSON(t, h, "/remove_managed_claude_version", map[string]any{"version": "9.9.9"}); rec.Code != http.StatusNotFound {
+		t.Fatalf("removing a missing version = %d", rec.Code)
+	}
+}
