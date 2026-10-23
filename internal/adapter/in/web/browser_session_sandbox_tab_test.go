@@ -191,7 +191,7 @@ func TestAllowPathOpensTheAgentIsolationSettingsWithThePathFilledIn(t *testing.T
 		poll(`document.querySelector('[data-violation-detail]')?.textContent.includes('id_ed25519')`),
 		chromedp.Evaluate(`String(!!document.querySelector('[data-violation-detail] a[data-allow-path]'))`, &sshAllow),
 	)
-	if want := "/agent?allow_path=%2FUsers%2Fme%2F.cache%2Fpnpm%2Fstore%2Ftmp#sandbox"; href != want {
+	if want := "/agent-isolation?allow_path=%2FUsers%2Fme%2F.cache%2Fpnpm%2Fstore%2Ftmp#sandbox"; href != want {
 		t.Errorf("Allow path href = %q, want %q", href, want)
 	}
 	if !strings.Contains(detail, "Applies to new sessions") {

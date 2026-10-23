@@ -42,5 +42,5 @@ test("credential paths are never offered for allowing, and say why", () => {
 });
 
 test("Allow path goes to the settings' sandbox section with the path", () => {
-  assert.equal(allowPathHref("/Users/me/.cache/pnpm"), "/agent?allow_path=%2FUsers%2Fme%2F.cache%2Fpnpm#sandbox");
+  assert.equal(allowPathHref("/Users/me/.cache/pnpm"), "/agent-isolation?allow_path=%2FUsers%2Fme%2F.cache%2Fpnpm#sandbox");
 });
