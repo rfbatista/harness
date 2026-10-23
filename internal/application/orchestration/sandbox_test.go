@@ -135,6 +135,12 @@ func TestSandbox_PolicyAlwaysHoldsTheAgentHomeShellTempDirAndGitCommonDir(t *tes
 			if p.WorkingDir != sess.WorkingDir {
 				t.Errorf("working dir %q, want %q", p.WorkingDir, sess.WorkingDir)
 			}
+			parent := filepath.Dir(w.home)
+			for _, list := range [][]string{p.Readable, p.Writable} {
+				if slices.Contains(list, parent) {
+					t.Errorf("agent home's parent %s listed for %s: %v", parent, sess.ID, list)
+				}
+			}
 		})
 	}
 }

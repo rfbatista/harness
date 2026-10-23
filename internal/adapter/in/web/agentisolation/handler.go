@@ -40,8 +40,11 @@ type Handler struct {
 	// Builtin is the allowlist every session gets, for the Sandbox section's
 	// read-only list; nil lists none.
 	Builtin func() []ports.SandboxBuiltinGroup
-	Layout  shell.Layout
-	Render  shell.Renderer
+	// HomeExposed says the agent home is in an unignored git work tree; nil
+	// shows no warning.
+	HomeExposed func() bool
+	Layout      shell.Layout
+	Render      shell.Renderer
 }
 
 // View is what the page renders: one view per section.
@@ -73,6 +76,7 @@ func (h Handler) View() View {
 		Claude:     NewClaudeView(h.Claude, h.ClaudeBin),
 		Sandbox:    NewSandboxView(h.Sandbox, h.Driver),
 	}
+	v.Credential.HomeExposed = h.HomeExposed != nil && h.HomeExposed()
 	if h.Builtin != nil {
 		v.Sandbox.Builtin = h.Builtin()
 	}

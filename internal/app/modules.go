@@ -559,6 +559,20 @@ func newAgentClaudeHome(cfg Config) (claudehome.Home, error) {
 	return h, h.Ensure()
 }
 
+// agentHomeExposed checks once, now, whether the agent Claude home lies in a
+// git work tree that does not ignore it, logs a warning if so, and returns
+// the answer for the Agent isolation page.
+func agentHomeExposed(cfg Config) func() bool {
+	exposed := false
+	if dir, err := agentClaudeHomeDir(cfg); err == nil {
+		exposed = gitcli.HomeExposedToGit(cfg.GitBin, dir)
+		if exposed {
+			slog.Warn("the agent home is inside a git work tree and not ignored: add it to .gitignore", "dir", dir)
+		}
+	}
+	return func() bool { return exposed }
+}
+
 // legacyClaudeDir is the person's own ~/.claude, searched read-only for
 // transcripts older than the agent Claude home.
 func legacyClaudeDir() string {

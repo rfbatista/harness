@@ -81,3 +81,66 @@ func TestHomeTrustsSessionWorktreesIdempotently(t *testing.T) {
 		t.Errorf("projects = %v", projects)
 	}
 }
+
+func mode(t *testing.T, path string) os.FileMode {
+	t.Helper()
+	fi, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return fi.Mode().Perm()
+}
+
+func TestAFreshHomeIsPrivate(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "claude-home")
+	if err := NewHome(dir).Ensure(); err != nil {
+		t.Fatal(err)
+	}
+	if m := mode(t, dir); m != 0o700 {
+		t.Errorf("home mode = %o, want 700", m)
+	}
+}
+
+func TestALooserHomeIsTightenedAndItsLoginFileRepairedWithoutBeingRead(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "claude-home")
+	if err := os.Mkdir(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cred := filepath.Join(dir, ".credentials.json")
+	secret := "sk-ant-oat01-do-not-touch"
+	if err := os.WriteFile(cred, []byte(secret), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(cred, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := NewHome(dir).Ensure(); err != nil {
+		t.Fatal(err)
+	}
+	if m := mode(t, dir); m != 0o700 {
+		t.Errorf("home mode = %o, want 700", m)
+	}
+	if m := mode(t, cred); m != 0o600 {
+		t.Errorf("login file mode = %o, want 600", m)
+	}
+	if b, _ := os.ReadFile(cred); string(b) != secret {
+		t.Errorf("login file content changed: %q", b)
+	}
+}
+
+func TestATighterLoginFileIsLeftAlone(t *testing.T) {
+	dir := t.TempDir()
+	cred := filepath.Join(dir, ".credentials.json")
+	if err := os.WriteFile(cred, []byte("x"), 0o400); err != nil {
+		t.Fatal(err)
+	}
+	if err := NewHome(dir).Ensure(); err != nil {
+		t.Fatal(err)
+	}
+	if m := mode(t, cred); m != 0o400 {
+		t.Errorf("login file mode = %o, want 400 kept", m)
+	}
+}

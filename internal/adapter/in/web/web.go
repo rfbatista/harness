@@ -104,6 +104,10 @@ type Deps struct {
 	// AgentOAuth is the credential section's Sign in with Claude flow; nil
 	// leaves the button disabled.
 	AgentOAuth ports.AgentOAuth
+	// AgentHomeExposed says the agent Claude home lies in a git work tree
+	// that does not ignore it; the credential section then warns. Nil: no
+	// check.
+	AgentHomeExposed func() bool
 	// DataPaths are where the server keeps its data, for the Server page;
 	// nil leaves the page and its top bar link out.
 	DataPaths *serversettings.Paths
@@ -203,7 +207,7 @@ func NewHandler(deps Deps, assets *Assets, fallback http.Handler) http.Handler {
 	}
 	if deps.SandboxSettings != nil {
 		isolation := agentisolation.Handler{Sandbox: deps.SandboxSettings, Driver: deps.SandboxDriver, Credential: deps.AgentCredential, OAuth: deps.AgentOAuth, Layout: s.layout, Render: render,
-			Claude: deps.ManagedClaude, ClaudeBin: deps.ManagedClaudeBin, Builtin: deps.SandboxBuiltin}
+			Claude: deps.ManagedClaude, ClaudeBin: deps.ManagedClaudeBin, Builtin: deps.SandboxBuiltin, HomeExposed: deps.AgentHomeExposed}
 		mux.Handle("GET "+agentisolation.Href, s.page(isolation.Page))
 	}
 	if deps.DataPaths != nil {

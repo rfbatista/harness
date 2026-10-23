@@ -10,6 +10,9 @@ type CredentialView struct {
 	OAuth ports.AgentOAuthState
 	// CanSignIn says the flow can run: it is wired and a claude is installed.
 	CanSignIn bool
+	// HomeExposed: the agent home is in a git work tree that does not ignore
+	// it (see homeWarning).
+	HomeExposed bool
 }
 
 // CredentialSeed is what the section's component takes over from: the body of
