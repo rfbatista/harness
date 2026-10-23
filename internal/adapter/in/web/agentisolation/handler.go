@@ -26,6 +26,8 @@ const Href = "/agent-isolation"
 type Handler struct {
 	// Sandbox is the person's sandbox switch and extra paths.
 	Sandbox ports.SandboxSettings
+	// Credential is the agent credential; nil shows it as not set.
+	Credential ports.AgentCredential
 	// Driver is the platform's sandbox driver; a nil func or result is none.
 	Driver func() ports.SandboxDriver
 	// Claude and ClaudeBin are the managed claude and the binary agents
@@ -56,7 +58,7 @@ func (h Handler) Page(w http.ResponseWriter, r *http.Request) error {
 // View reads each section's state.
 func (h Handler) View() View {
 	return View{
-		Credential: NewCredentialView(),
+		Credential: NewCredentialView(h.Credential),
 		Claude:     NewClaudeView(h.Claude, h.ClaudeBin),
 		Sandbox:    NewSandboxView(h.Sandbox, h.Driver),
 	}

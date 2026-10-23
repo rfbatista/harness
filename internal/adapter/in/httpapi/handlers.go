@@ -80,6 +80,9 @@ type Services struct {
 	// included); nil reads as no override.
 	ManagedClaude    ports.ManagedClaude
 	ManagedClaudeBin ports.ManagedClaudeBin
+	// AgentCredential keeps the credential agents sign in with; nil answers
+	// 503.
+	AgentCredential ports.AgentCredential
 }
 
 // Handler serves the application's driving ports as HTTP endpoints (the same
@@ -124,6 +127,7 @@ type Handler struct {
 
 	managedClaude    ports.ManagedClaude
 	managedClaudeBin ports.ManagedClaudeBin
+	agentCredential  ports.AgentCredential
 
 	streams streamRegistry // the browser tabs' live streams (stream.go)
 }
@@ -166,6 +170,7 @@ func NewHandler(s Services) *Handler {
 
 		managedClaude:    s.ManagedClaude,
 		managedClaudeBin: s.ManagedClaudeBin,
+		agentCredential:  s.AgentCredential,
 	}
 }
 

@@ -21,6 +21,8 @@ import { sandboxGateway } from "./modules/sandbox/infrastructure/sandbox-gateway
 import { claudeGateway } from "./modules/claude/infrastructure/claude-gateway.js";
 import { registerClaude } from "./modules/claude/presentation/register.js";
 import { registerSandbox } from "./modules/sandbox/presentation/register.js";
+import { agentCredentialGateway } from "./modules/agentcredential/infrastructure/agent-credential-gateway.js";
+import { registerAgentCredential } from "./modules/agentcredential/presentation/register.js";
 import { registerCredentials } from "./modules/credentials/presentation/register.js";
 import { hljsHighlighter } from "./modules/code/infrastructure/hljs-highlighter.js";
 import { registerCode } from "./modules/code/presentation/register.js";
@@ -100,5 +102,6 @@ registerTokenSavers(Alpine, { gateway: tokenSaversGateway(api), clock: systemClo
 registerModels(Alpine, { gateway: modelsGateway(api) });
 registerSandbox(Alpine, { gateway: sandboxGateway(api) });
 registerClaude(Alpine, { gateway: claudeGateway(api) });
+registerAgentCredential(Alpine, { gateway: agentCredentialGateway(api) });
 
 Alpine.start();
