@@ -133,4 +133,4 @@ tool github.com/a-h/templ/cmd/templ
 // monitoring and live dashboard").
 replace github.com/rfbatista/spillway => /Users/renandonatofernandesbatista/.coding-pool/worktrees/spillway-1c1a3c843c28b129/agent-monitor-usage-c48ef1ce
 
-replace github.com/rfbatista/llmkit => /Users/renandonatofernandesbatista/.coding-pool/worktrees/llmkit-sandbox-3a44472
+replace github.com/rfbatista/llmkit => /Users/renandonatofernandesbatista/projetos/pessoal/personal_projects/llmkit
