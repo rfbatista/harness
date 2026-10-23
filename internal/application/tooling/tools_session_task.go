@@ -36,6 +36,7 @@ var SessionTaskToolNames = []string{
 	"list_review_requests",
 	"set_status_check",
 	"list_status_checks",
+	"merge_session_branch",
 	"list_notifications",
 	"notify",
 }
@@ -50,6 +51,9 @@ const MaxLiveTaskSessions = 8
 type PeerStarter struct {
 	Sessions     ports.InteractiveSessions
 	Repositories ports.RepositoryLister
+	// Merger merges a delegate's branch for merge_session_branch; nil leaves
+	// that tool answering that it is unavailable.
+	Merger ports.BranchMerger
 }
 
 // ArtifactTooling is what the artifact tools need: the publisher, and how to
@@ -195,6 +199,7 @@ func SessionTaskTools(planningSvc ports.Planning, sessions ports.SessionReposito
 		},
 	}
 	tools = append(tools, sessionChannelTools(planningSvc, sessions, channel)...)
+	tools = append(tools, sessionMergeTools(planningSvc, sessions, channel, start.Merger)...)
 	tools = append(tools, sessionProjectTools(sessions, agents, arch, start.Repositories)...)
 	tools = append(tools, sessionTasksTools(planningSvc, sessions)...)
 	tools = append(tools, sessionNotificationTools(sessions, notes)...)
