@@ -9,6 +9,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
@@ -91,6 +92,26 @@ func parseStatus(out string) (ports.CheckoutState, []string) {
 func field(line string, n int) string {
 	parts := strings.SplitN(line, " ", n)
 	return parts[len(parts)-1]
+}
+
+// BranchCommittedAfter lists the committer dates of the commits branch has
+// that defaultBranch lacks, in one git run, and says whether any is later
+// than since (compared in whole seconds).
+func (m Merger) BranchCommittedAfter(ctx context.Context, dir, branch, defaultBranch string, since time.Time) (bool, error) {
+	out, err := m.d.gitOutput(ctx, dir, "log", "--format=%ct", "--end-of-options", "refs/heads/"+defaultBranch+"..refs/heads/"+branch)
+	if err != nil {
+		return false, err
+	}
+	for _, f := range strings.Fields(out) {
+		ct, err := strconv.ParseInt(f, 10, 64)
+		if err != nil {
+			return false, err
+		}
+		if ct > since.Unix() {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 // Merge merges branch into the checked-out branch with --no-ff.
