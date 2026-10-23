@@ -42,6 +42,7 @@
 /* Blocks */
 @import url("./blocks/app-shell.css");
 @import url("./blocks/topbar.css");
+@import url("./blocks/switch.css");
 @import url("./blocks/rail.css");
 @import url("./blocks/nav.css");
 @import url("./blocks/group.css");

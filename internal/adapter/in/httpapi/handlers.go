@@ -70,6 +70,11 @@ type Services struct {
 	// RepositoryIndexes lists and rebuilds repositories' codegraph indexes;
 	// nil answers 503.
 	RepositoryIndexes ports.RepositoryIndexes
+	// SandboxSettings keeps the person's sandbox switch and extra paths; nil
+	// answers 503. SandboxDriver says which driver the platform has (nil
+	// result: none).
+	SandboxSettings ports.SandboxSettings
+	SandboxDriver   func() ports.SandboxDriver
 }
 
 // Handler serves the application's driving ports as HTTP endpoints (the same
@@ -109,6 +114,9 @@ type Handler struct {
 	tokenSaverInstalls ports.TokenSaverInstalls
 	repositoryIndexes  ports.RepositoryIndexes
 
+	sandboxSettings ports.SandboxSettings
+	sandboxDriver   func() ports.SandboxDriver
+
 	streams streamRegistry // the browser tabs' live streams (stream.go)
 }
 
@@ -144,6 +152,9 @@ func NewHandler(s Services) *Handler {
 
 		tokenSaverInstalls: s.TokenSaverInstalls,
 		repositoryIndexes:  s.RepositoryIndexes,
+
+		sandboxSettings: s.SandboxSettings,
+		sandboxDriver:   s.SandboxDriver,
 	}
 }
 

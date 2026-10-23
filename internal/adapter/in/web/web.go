@@ -18,6 +18,7 @@ import (
 	"github.com/a-h/templ"
 	"github.com/rfbatista/harnesskit/errs"
 
+	"operators-mcp/internal/adapter/in/web/agentisolation"
 	"operators-mcp/internal/adapter/in/web/code"
 	"operators-mcp/internal/adapter/in/web/credentials"
 	"operators-mcp/internal/adapter/in/web/history"
@@ -83,6 +84,12 @@ type Deps struct {
 	// Settings reads each session tier's model for the Models page; nil
 	// leaves the page and its top bar link out.
 	Settings ports.SettingsReader
+	// SandboxSettings and SandboxDriver fill the Agent isolation page: the
+	// person's sandbox switch and extra paths, and the driver the platform
+	// has (a nil func or result: none). A nil SandboxSettings leaves the page
+	// and its top bar link out.
+	SandboxSettings ports.SandboxSettings
+	SandboxDriver   func() ports.SandboxDriver
 	// DataPaths are where the server keeps its data, for the Server page;
 	// nil leaves the page and its top bar link out.
 	DataPaths *serversettings.Paths
@@ -179,6 +186,10 @@ func NewHandler(deps Deps, assets *Assets, fallback http.Handler) http.Handler {
 	if deps.Settings != nil {
 		modelsPage := models.Handler{Settings: deps.Settings, Layout: s.layout, Render: render}
 		mux.Handle("GET "+models.Href, s.page(modelsPage.Page))
+	}
+	if deps.SandboxSettings != nil {
+		isolation := agentisolation.Handler{Sandbox: deps.SandboxSettings, Driver: deps.SandboxDriver, Layout: s.layout, Render: render}
+		mux.Handle("GET "+agentisolation.Href, s.page(isolation.Page))
 	}
 	if deps.DataPaths != nil {
 		serverPage := serversettings.Handler{Paths: *deps.DataPaths, Layout: s.layout, Render: render}
@@ -338,6 +349,10 @@ func (s *server) bareFrame(title string) shell.Frame {
 	}
 	if s.deps.Settings != nil {
 		f.Top.ModelsHref = models.Href
+	}
+	if s.deps.SandboxSettings != nil {
+		f.Top.AgentIsolationHref = agentisolation.Href
+		f.Top.AgentIsolationAttention = agentisolation.Blocks(s.deps.SandboxSettings, s.deps.SandboxDriver)
 	}
 	if s.deps.DataPaths != nil {
 		f.Top.ServerHref = serversettings.Href
