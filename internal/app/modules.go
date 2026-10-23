@@ -349,12 +349,14 @@ var AgentRuntimeModule = fx.Module("agentruntime",
 		newSandboxSettings,
 		newManagedClaude,
 		newManagedClaudeBin,
+		newAgentReadiness,
 		newAppsService,
 		asPort(sqlite.NewArtifactRepository, new(ports.ArtifactRepository)),
 		newArtifactsService,
 		newVirtualShells,
 	),
-	fx.Invoke(registerRuntimeShutdown, registerServerSessions, bindVirtualShells, bindSandboxSettings),
+	fx.Invoke(registerRuntimeShutdown, registerServerSessions, bindVirtualShells, bindSandboxSettings,
+		bindAgentReadiness),
 )
 
 // TaskChannelModule wires the architect channel: its tables, the service,
@@ -640,8 +642,8 @@ var TextProcessingModule = fx.Module("textprocessing",
 // newOneShotter is the claude driver the one-shots run on: llmkit's one-shot
 // mode, routed through the LLM proxy like every other claude mode. One-shots
 // need nothing else of a manager, so the module keeps its own.
-func newOneShotter(cfg Config) claudetext.OneShotter {
-	return claude.New(llmkit.Options{Bin: cfg.ClaudeBin, ProxyURL: cfg.llmProxyURL()})
+func newOneShotter(cfg Config, ready optionalAgentReadiness) claudetext.OneShotter {
+	return claudetext.Gated(claude.New(llmkit.Options{Bin: cfg.ClaudeBin, ProxyURL: cfg.llmProxyURL()}), ready.check())
 }
 
 func newSummarizer(cfg Config, c claudetext.OneShotter) *claudetext.Summarizer {

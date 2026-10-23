@@ -86,3 +86,32 @@ func TestCLIFailuresAndCancellationSurface(t *testing.T) {
 		t.Errorf("err = %v, want context.Canceled", err)
 	}
 }
+
+func TestAGatedOneShotIsRefusedWithTheSameErrorAndNeverRunsTheCLI(t *testing.T) {
+	refusal := &domain.StructuredError{Code: "AGENT_CREDENTIAL_MISSING", Message: "Agent not started: no agent credential. (/agent-isolation#credential)"}
+	fake := &fakeOneShot{}
+	missing := true
+	c := Gated(fake, func(context.Context) error {
+		if missing {
+			return refusal
+		}
+		return nil
+	})
+	ctx := context.Background()
+	if _, err := NewSummarizer(c, "claude", "").Summarize(ctx, "text"); err != error(refusal) {
+		t.Errorf("summary err = %v", err)
+	}
+	if _, err := NewTranslator(c, "claude", "").Translate(ctx, "text", "French"); err != error(refusal) {
+		t.Errorf("translation err = %v", err)
+	}
+	if _, err := NewTextGenerator(c, "claude", "").GenerateText(ctx, "write"); err != error(refusal) {
+		t.Errorf("generation err = %v", err)
+	}
+	if len(fake.got) != 0 {
+		t.Fatalf("the CLI ran %d times for refused one-shots", len(fake.got))
+	}
+	missing = false
+	if out, err := NewSummarizer(c, "claude", "").Summarize(ctx, "text"); err != nil || out != "done" {
+		t.Fatalf("after the prerequisite is met: %q, %v", out, err)
+	}
+}

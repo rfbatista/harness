@@ -1,11 +1,13 @@
 package httpapi
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"strings"
 	"testing"
 
+	"operators-mcp/internal/application/agentready"
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
 )
@@ -256,5 +258,46 @@ func TestHTTP_StartInteractiveSessionWithoutATask(t *testing.T) {
 		if status != http.StatusBadRequest || refused.Code != "INVALID_INPUT" {
 			t.Errorf("mode %q without a ticket = %d %q, want 400 INVALID_INPUT", mode, status, refused.Code)
 		}
+	}
+}
+
+// A start the gate refuses reaches the HTTP response whole: a status the web
+// client can tell from a bug, the code, the message with the page anchor, and
+// the list of what is missing in the details. Nothing is spawned.
+func TestHTTP_AStartRefusedForMissingPrerequisitesAnswersTheirNamesAndAnchors(t *testing.T) {
+	env := newSessionTestEnv(t)
+	defer env.srv.Close()
+	env.orch.Ready = &agentready.Gate{
+		Credential:    func() bool { return false },
+		SandboxOn:     func() bool { return true },
+		SandboxDriver: func() bool { return false },
+	}
+	for _, path := range []string{"/api/start_interactive_session", "/api/sessions"} {
+		body := `{"project_id":"p1","repository_id":"r1","ticket_id":"tk1","task":"hi"}`
+		resp, err := http.Post(env.srv.URL+path, "application/json", strings.NewReader(body))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var out struct {
+			Error   string `json:"error"`
+			Code    string `json:"code"`
+			Details struct {
+				Missing []struct{ Code, Anchor string } `json:"missing"`
+			} `json:"details"`
+		}
+		_ = json.NewDecoder(resp.Body).Decode(&out)
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusServiceUnavailable || out.Code != "AGENT_CREDENTIAL_MISSING" {
+			t.Fatalf("%s = %d %q, want 503 AGENT_CREDENTIAL_MISSING", path, resp.StatusCode, out.Code)
+		}
+		if !strings.Contains(out.Error, "no agent credential") || !strings.Contains(out.Error, "/agent-isolation#credential") || !strings.Contains(out.Error, "no sandbox driver") {
+			t.Errorf("%s message = %q", path, out.Error)
+		}
+		if len(out.Details.Missing) != 2 || out.Details.Missing[1].Code != "SANDBOX_DRIVER_MISSING" || out.Details.Missing[1].Anchor != "/agent-isolation#sandbox" {
+			t.Errorf("%s details = %+v", path, out.Details)
+		}
+	}
+	if got, _ := env.orch.List(context.Background(), ports.SessionFilter{}); len(got) != 0 {
+		t.Errorf("a refused start left %d sessions", len(got))
 	}
 }

@@ -131,3 +131,25 @@ func (t *Translator) Translate(ctx context.Context, text, targetLanguage string)
 	}
 	return t.cli.run(ctx, fmt.Sprintf(translateSystemPrompt, strings.TrimSpace(targetLanguage)), text)
 }
+
+// Gated refuses every one-shot with what check answers, before the CLI runs:
+// a one-shot is an agent process like a session, so it needs the same agent
+// credential, managed claude and sandbox driver. A nil check lets all through.
+func Gated(inner OneShotter, check func(ctx context.Context) error) OneShotter {
+	if check == nil {
+		return inner
+	}
+	return gated{inner: inner, check: check}
+}
+
+type gated struct {
+	inner OneShotter
+	check func(ctx context.Context) error
+}
+
+func (g gated) OneShot(ctx context.Context, req claude.OneShotRequest) (claude.OneShotResult, error) {
+	if err := g.check(ctx); err != nil {
+		return claude.OneShotResult{}, err
+	}
+	return g.inner.OneShot(ctx, req)
+}

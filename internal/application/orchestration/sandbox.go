@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 
+	"operators-mcp/internal/application/agentready"
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
 )
@@ -153,8 +154,7 @@ func (s *Service) sandbox(ctx context.Context, in prepareInput, id string, repo 
 		return sandboxed{facts: &domain.SandboxFacts{Visibility: domain.SandboxUnrestricted}}, nil
 	}
 	if sb.Driver == nil {
-		return sandboxed{}, &domain.StructuredError{Code: "SANDBOX_DRIVER_MISSING",
-			Message: "the agent sandbox is on but this platform has no sandbox driver; turn the sandbox off in settings to run agents without it"}
+		return sandboxed{}, agentready.SandboxDriverMissing()
 	}
 	sess := SandboxSession{
 		Mode:         in.Mode,

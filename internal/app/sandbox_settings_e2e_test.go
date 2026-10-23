@@ -38,7 +38,7 @@ func TestSandboxSettings_ASessionStartedAfterAChangeSeesIt_EndToEnd(t *testing.T
 		store *sandboxsettings.Store
 	)
 	fxApp := fx.New(
-		fx.Supply(Config{HTTPAddr: "127.0.0.1:0", MCPAddr: "127.0.0.1:0", DBPath: ":memory:", Root: dir, ClaudeBin: "claude", SessionShell: "direct"}),
+		fx.Supply(Config{HTTPAddr: "127.0.0.1:0", MCPAddr: "127.0.0.1:0", DBPath: ":memory:", Root: dir, ClaudeBin: "/bin/true", SessionShell: "direct"}),
 		PersistenceModule, CatalogModule, PlanningModule, WorkspacesModule,
 		AgentRuntimeModule, TaskChannelModule, TextProcessingModule,
 		fx.Populate(&cat, &orch, &store),
