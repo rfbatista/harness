@@ -13,6 +13,7 @@ const state = {
   failed: null,
   overridden: false,
   bin: "/data/claude/current",
+  keepingSessions: 0,
 };
 
 function gatewayOver(answer) {
@@ -35,6 +36,20 @@ test("install and use post their version and answer the state", async () => {
     [
       ["/api/install_managed_claude", { version: "latest" }],
       ["/api/switch_managed_claude", { version: "2.1.52" }],
+    ],
+  );
+});
+
+test("cancel and remove post to their endpoints and read the sessions a switch leaves behind", async () => {
+  const { gateway, calls } = gatewayOver({ ...state, keepingSessions: 3 });
+  await gateway.cancel();
+  const after = await gateway.remove("2.1.47");
+  assert.equal(after.keepingSessions, 3);
+  assert.deepEqual(
+    calls.map((c) => [c.url, JSON.parse(c.init.body)]),
+    [
+      ["/api/cancel_managed_claude_install", {}],
+      ["/api/remove_managed_claude_version", { version: "2.1.47" }],
     ],
   );
 });

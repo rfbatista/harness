@@ -12,7 +12,11 @@ function toState(body) {
   return {
     enabled: b.enabled,
     driver: typeof b.driver === "string" ? b.driver : "",
-    paths: b.paths.map((/** @type {any} */ p) => ({ path: String(p.path), write: p.write === true })),
+    paths: b.paths.map((/** @type {any} */ p) => ({
+      path: String(p.path),
+      write: p.write === true,
+      warnings: Array.isArray(p.warnings) ? p.warnings.map(String) : [],
+    })),
   };
 }
 

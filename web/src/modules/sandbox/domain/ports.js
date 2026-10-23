@@ -6,6 +6,7 @@
  * @typedef {object} SandboxPath
  * @property {string} path  As the person wrote it: absolute, or starting with ~.
  * @property {boolean} write  Read and write; false is read-only.
+ * @property {string[]} [warnings]  "missing" (nothing there yet) and "credentials" (a folder that usually holds credentials); they never block saving.
  *
  * @typedef {object} SandboxState
  * @property {boolean} enabled

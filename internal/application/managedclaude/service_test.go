@@ -287,3 +287,86 @@ func TestTheOverrideWinsOverTheManagedClaude(t *testing.T) {
 		t.Error("not installed after the install")
 	}
 }
+
+func TestCancellingARunningInstallLeavesNothingBehind(t *testing.T) {
+	rs := newReleaseServer(t, "2.1.52")
+	rs.hold, rs.halfSent = make(chan struct{}), make(chan struct{})
+	t.Cleanup(func() { close(rs.hold) })
+	s := newService(t, rs)
+	if _, err := s.Install(context.Background(), "2.1.52"); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-rs.halfSent:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the download never started")
+	}
+	st, err := s.Cancel()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.Installing != nil || st.Failed != nil || len(st.Installed) != 0 || st.Current != "" {
+		t.Fatalf("after Cancel: %+v", st)
+	}
+	left, _ := filepath.Glob(filepath.Join(filepath.Dir(s.Path()), "versions", "*"))
+	if len(left) != 0 {
+		t.Fatalf("a cancelled install left %v", left)
+	}
+	if _, err := s.Install(context.Background(), "2.1.52"); err != nil {
+		t.Fatalf("a new install after Cancel: %v", err)
+	}
+}
+
+func TestCancelWithNoInstallRunningChangesNothing(t *testing.T) {
+	rs := newReleaseServer(t, "2.1.47")
+	s := newService(t, rs)
+	install(t, s, "2.1.47")
+	st, err := s.Cancel()
+	if err != nil || st.Current != "2.1.47" || st.Failed != nil {
+		t.Fatalf("Cancel = %+v, %v", st, err)
+	}
+}
+
+func TestANonCurrentVersionCanBeRemovedAndTheCurrentOneCannot(t *testing.T) {
+	rs := newReleaseServer(t, "2.1.47", "2.1.52")
+	s := newService(t, rs)
+	install(t, s, "2.1.47")
+	install(t, s, "2.1.52")
+
+	if _, err := s.Remove("2.1.47"); err == nil || !strings.Contains(err.Error(), "MANAGED_CLAUDE_VERSION_CURRENT") {
+		t.Fatalf("removing the current version: %v", err)
+	}
+	if _, err := s.Remove("9.9.9"); err == nil || !strings.Contains(err.Error(), "MANAGED_CLAUDE_VERSION_NOT_FOUND") {
+		t.Fatalf("removing a version that is not installed: %v", err)
+	}
+	st, err := s.Remove("2.1.52")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(st.Installed) != 1 || st.Installed[0].Version != "2.1.47" || st.Current != "2.1.47" || run(t, s) != "2.1.47" {
+		t.Fatalf("after Remove: %+v", st)
+	}
+	if _, err := os.Stat(filepath.Join(filepath.Dir(s.Path()), "versions", "2.1.52")); !os.IsNotExist(err) {
+		t.Fatalf("the removed version's files remain: %v", err)
+	}
+}
+
+func TestASwitchCountsTheRunningSessionsThatKeepTheirVersion(t *testing.T) {
+	rs := newReleaseServer(t, "2.1.47", "2.1.52")
+	running := 3
+	s := managedclaude.New(managedclaude.Deps{Downloads: releases.NewClient(), Dir: filepath.Join(t.TempDir(), "claude"), BaseURL: rs.URL, Platform: platform,
+		RunningSessions: func() int { return running }})
+	t.Cleanup(s.Close)
+	install(t, s, "2.1.47")
+	install(t, s, "2.1.52")
+	st, err := s.Switch("2.1.52")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.KeepingSessions != 3 {
+		t.Fatalf("KeepingSessions = %d, want 3", st.KeepingSessions)
+	}
+	if again := s.State(); again.KeepingSessions != 0 {
+		t.Fatalf("a plain State carries the switch's count: %d", again.KeepingSessions)
+	}
+}

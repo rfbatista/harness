@@ -77,6 +77,14 @@ export const agentCredential = ({ gateway }) => () => ({
     this.isSet = status.set;
     this.kind = status.kind;
     this.updated = status.updated;
+    this.$dispatch("isolation-chip", { section: "credential", ...this.summary });
+  },
+
+  /** The page's summary chip for this section. */
+  get summary() {
+    return this.isSet
+      ? { text: "Credential: set", tone: "signal", blocks: false }
+      : { text: "Credential: missing", tone: "danger", blocks: true };
   },
 
   get notSet() {

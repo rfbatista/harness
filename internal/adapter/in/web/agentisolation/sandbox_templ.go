@@ -211,17 +211,59 @@ func sandboxSection(v SandboxView) templ.Component {
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 20, "\">Remove</button></li>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 20, "\">Remove</button> ")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				if r.Missing != "" {
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 21, "<span class=\"[ hint ] [ path-warning ]\" data-warning=\"missing\" data-tone=\"attention\">")
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+					var templ_7745c5c3_Var11 string
+					templ_7745c5c3_Var11, templ_7745c5c3_Err = templ.JoinStringErrs(r.Missing)
+					if templ_7745c5c3_Err != nil {
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `agentisolation/sandbox.templ`, Line: 67, Col: 106}
+					}
+					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var11))
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 22, "</span> ")
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+				}
+				if r.Credentials != "" {
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 23, "<span class=\"[ hint ] [ path-warning ]\" data-warning=\"credentials\" data-tone=\"attention\">")
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+					var templ_7745c5c3_Var12 string
+					templ_7745c5c3_Var12, templ_7745c5c3_Err = templ.JoinStringErrs(r.Credentials)
+					if templ_7745c5c3_Err != nil {
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `agentisolation/sandbox.templ`, Line: 70, Col: 114}
+					}
+					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var12))
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 24, "</span>")
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+				}
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 25, "</li>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 21, "</ul>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 26, "</ul>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 22, "</div><template x-if=\"isEmpty\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 27, "</div><template x-if=\"isEmpty\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -229,7 +271,142 @@ func sandboxSection(v SandboxView) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 23, "</template><ul role=\"list\" class=\"[ list ]\" aria-labelledby=\"sandbox-paths-title\" x-show=\"hasPaths\"><template x-for=\"r in rows\" x-bind:key=\"r.path\"><li class=\"[ row ] [ sandbox-path ]\" x-bind:data-path=\"r.path\"><span class=\"[ path font-mono text-sm ]\" x-text=\"r.path\"></span> <select data-size=\"sm\" data-fit x-bind:aria-label=\"r.accessLabel\" x-bind:value=\"r.access\" x-on:change=\"setAccess\"><option value=\"read\">Read-only</option> <option value=\"write\">Read and write</option></select> <button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" x-bind:aria-label=\"r.removeLabel\" x-on:click=\"remove\">Remove</button></li></template></ul><form class=\"[ cluster ] [ gutter-xs ]\" style=\"align-items: flex-start\" novalidate autocomplete=\"off\" x-on:submit.prevent=\"add\"><div class=\"[ field ]\" style=\"flex: 1 1 14rem\"><label for=\"sandbox-new-path\" class=\"[ visually-hidden ]\">Path</label> <input id=\"sandbox-new-path\" class=\"[ font-mono text-sm ]\" autocomplete=\"off\" autocapitalize=\"off\" spellcheck=\"false\" placeholder=\"~/.cache/pnpm\" aria-describedby=\"sandbox-path-error\" x-model=\"newPath\" x-on:input=\"editPath\" x-bind:aria-invalid=\"pathInvalid\"> <span class=\"[ error ]\" id=\"sandbox-path-error\" role=\"alert\" style=\"display: none\" x-show=\"pathInvalid\" x-text=\"pathError\"></span></div><select id=\"sandbox-new-access\" data-size=\"sm\" data-fit aria-label=\"Access\" x-model=\"newAccess\"><option value=\"read\">Read-only</option> <option value=\"write\">Read and write</option></select> <button type=\"submit\" class=\"[ button ]\" x-bind:disabled=\"busy\">Add path</button></form></div></div></section>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 28, "</template><ul role=\"list\" class=\"[ list ]\" aria-labelledby=\"sandbox-paths-title\" x-show=\"hasPaths\"><template x-for=\"r in rows\" x-bind:key=\"r.path\"><li class=\"[ row ] [ sandbox-path ]\" x-bind:data-path=\"r.path\"><span class=\"[ path font-mono text-sm ]\" x-text=\"r.path\"></span> <select data-size=\"sm\" data-fit x-bind:aria-label=\"r.accessLabel\" x-bind:value=\"r.access\" x-on:change=\"setAccess\"><option value=\"read\">Read-only</option> <option value=\"write\">Read and write</option></select> <button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" x-bind:aria-label=\"r.removeLabel\" x-on:click=\"remove\">Remove</button> <span class=\"[ hint ] [ path-warning ]\" data-warning=\"missing\" data-tone=\"attention\" style=\"display: none\" x-show=\"r.missingWarning\" x-text=\"r.missingWarning\"></span> <span class=\"[ hint ] [ path-warning ]\" data-warning=\"credentials\" data-tone=\"attention\" style=\"display: none\" x-show=\"r.credentialsWarning\" x-text=\"r.credentialsWarning\"></span></li></template></ul><p class=\"[ hint ]\" data-prefilled data-tone=\"attention\" role=\"status\"")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templ.RenderAttributes(ctx, templ_7745c5c3_Buffer, shownIf(v.AllowPath != ""))
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 29, " x-show=\"prefilled\">This path came from a session's Sandbox tab. Choose its access and press Add path to allow it. Nothing is saved until you do.</p><form class=\"[ cluster ] [ gutter-xs ]\" style=\"align-items: flex-start\" novalidate autocomplete=\"off\" x-on:submit.prevent=\"add\"><div class=\"[ field ]\" style=\"flex: 1 1 14rem\"><label for=\"sandbox-new-path\" class=\"[ visually-hidden ]\">Path</label> <input id=\"sandbox-new-path\" class=\"[ font-mono text-sm ]\" autocomplete=\"off\" autocapitalize=\"off\" spellcheck=\"false\" placeholder=\"~/.cache/pnpm\" value=\"")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		var templ_7745c5c3_Var13 string
+		templ_7745c5c3_Var13, templ_7745c5c3_Err = templ.ResolveAttributeValue(v.AllowPath)
+		if templ_7745c5c3_Err != nil {
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `agentisolation/sandbox.templ`, Line: 98, Col: 171}
+		}
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var13)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 30, "\" x-ref=\"path\" aria-describedby=\"sandbox-path-error\" x-model=\"newPath\" x-on:input=\"editPath\" x-bind:aria-invalid=\"pathInvalid\"> <span class=\"[ error ]\" id=\"sandbox-path-error\" role=\"alert\" style=\"display: none\" x-show=\"pathInvalid\" x-text=\"pathError\"></span></div><select id=\"sandbox-new-access\" data-size=\"sm\" data-fit aria-label=\"Access\" x-model=\"newAccess\"><option value=\"read\">Read-only</option> <option value=\"write\">Read and write</option></select> <button type=\"submit\" class=\"[ button ]\" x-bind:disabled=\"busy\">Add path</button></form></div><details id=\"sandbox-builtin\" class=\"[ flow ] [ flow-space-s ]\"><summary>")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		var templ_7745c5c3_Var14 string
+		templ_7745c5c3_Var14, templ_7745c5c3_Err = templ.JoinStringErrs(v.BuiltinSummary())
+		if templ_7745c5c3_Err != nil {
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `agentisolation/sandbox.templ`, Line: 109, Col: 33}
+		}
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var14))
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 31, "</summary><p class=\"[ hint ]\">Every agent session may touch these besides its own worktree and the extra paths. The paths a session gets from its own environment (its PATH shims and git credential files) are made per session and not listed.</p>")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		for _, g := range v.Builtin {
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 32, "<h4>")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			var templ_7745c5c3_Var15 string
+			templ_7745c5c3_Var15, templ_7745c5c3_Err = templ.JoinStringErrs(g.Title)
+			if templ_7745c5c3_Err != nil {
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `agentisolation/sandbox.templ`, Line: 112, Col: 18}
+			}
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var15))
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 33, "</h4><ul role=\"list\" class=\"[ list ]\" aria-label=\"")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			var templ_7745c5c3_Var16 string
+			templ_7745c5c3_Var16, templ_7745c5c3_Err = templ.ResolveAttributeValue(g.Title)
+			if templ_7745c5c3_Err != nil {
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `agentisolation/sandbox.templ`, Line: 113, Col: 58}
+			}
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var16)
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 34, "\">")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			for _, e := range g.Entries {
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 35, "<li class=\"[ row ] [ builtin-path ]\">")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				if e.Path != "" {
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 36, "<span class=\"[ path font-mono text-sm ]\">")
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+					var templ_7745c5c3_Var17 string
+					templ_7745c5c3_Var17, templ_7745c5c3_Err = templ.JoinStringErrs(e.Path)
+					if templ_7745c5c3_Err != nil {
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `agentisolation/sandbox.templ`, Line: 117, Col: 58}
+					}
+					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var17))
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 37, "</span> ")
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+				}
+				if e.Label != "" {
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 38, "<span class=\"[ hint ]\">")
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+					var templ_7745c5c3_Var18 string
+					templ_7745c5c3_Var18, templ_7745c5c3_Err = templ.JoinStringErrs(e.Label)
+					if templ_7745c5c3_Err != nil {
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `agentisolation/sandbox.templ`, Line: 120, Col: 41}
+					}
+					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var18))
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 39, "</span> ")
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+				}
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 40, "<span class=\"[ hint ]\">")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				var templ_7745c5c3_Var19 string
+				templ_7745c5c3_Var19, templ_7745c5c3_Err = templ.JoinStringErrs(AccessWord(e.Write))
+				if templ_7745c5c3_Err != nil {
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `agentisolation/sandbox.templ`, Line: 122, Col: 52}
+				}
+				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var19))
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 41, "</span></li>")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 42, "</ul>")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 43, "</details></div></section>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -253,12 +430,12 @@ func noPaths() templ.Component {
 			}()
 		}
 		ctx = templ.InitializeContext(ctx)
-		templ_7745c5c3_Var11 := templ.GetChildren(ctx)
-		if templ_7745c5c3_Var11 == nil {
-			templ_7745c5c3_Var11 = templ.NopComponent
+		templ_7745c5c3_Var20 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var20 == nil {
+			templ_7745c5c3_Var20 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 24, "<p class=\"[ color-ink-muted ]\">No extra paths. Agents get the built-in allowlist only. Add a folder if a build tool needs its cache.</p>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 44, "<p class=\"[ color-ink-muted ]\">No extra paths. Agents get the built-in allowlist only. Add a folder if a build tool needs its cache.</p>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

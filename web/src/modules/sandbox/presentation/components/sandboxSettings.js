@@ -10,6 +10,9 @@
 import { describeError } from "../../../../shared/presentation/errors.js";
 import { readSeed } from "../../../../shared/presentation/seed.js";
 
+const MISSING = "This folder does not exist yet. It will apply once it does.";
+const CREDENTIALS = "This folder usually holds credentials.";
+
 /** @param {{ gateway: import("../../domain/ports.js").SandboxGateway }} deps */
 export const sandboxSettings = ({ gateway }) => () => ({
   enabled: true,
@@ -25,9 +28,17 @@ export const sandboxSettings = ({ gateway }) => () => ({
   confirming: false,
   busy: false,
   announcement: "",
+  /** The path an "Allow this path" link brought: in the field, not saved. */
+  prefilled: false,
 
   init() {
-    this.apply(readSeed(this.$el));
+    const seed = readSeed(this.$el);
+    this.apply(seed);
+    if (seed.allowPath) {
+      this.newPath = seed.allowPath;
+      this.prefilled = true;
+      this.$nextTick(() => this.$refs.path?.focus());
+    }
     for (const node of this.$el.querySelectorAll("[data-ssr]")) node.remove();
   },
 
@@ -36,6 +47,14 @@ export const sandboxSettings = ({ gateway }) => () => ({
     this.enabled = state.enabled;
     this.driver = state.driver;
     this.paths = state.paths;
+    this.$dispatch("isolation-chip", { section: "sandbox", ...this.summary });
+  },
+
+  /** The page's summary chip for this section. */
+  get summary() {
+    if (!this.enabled) return { text: "Sandbox: off", tone: "attention", blocks: false };
+    if (this.noDriver) return { text: "Sandbox: no driver", tone: "danger", blocks: true };
+    return { text: "Sandbox: on", tone: "signal", blocks: false };
   },
 
   get rows() {
@@ -44,6 +63,8 @@ export const sandboxSettings = ({ gateway }) => () => ({
       access: p.write ? "write" : "read",
       accessLabel: `Access for ${p.path}`,
       removeLabel: `Remove ${p.path}`,
+      missingWarning: (p.warnings ?? []).includes("missing") ? MISSING : "",
+      credentialsWarning: (p.warnings ?? []).includes("credentials") ? CREDENTIALS : "",
     }));
   },
   get isEmpty() {
@@ -114,6 +135,7 @@ export const sandboxSettings = ({ gateway }) => () => ({
     try {
       this.apply(await gateway.addPath(this.newPath, this.newAccess === "write"));
       this.newPath = "";
+      this.prefilled = false;
       this.announcement = "Path added.";
     } catch (err) {
       const described = describeError(err);

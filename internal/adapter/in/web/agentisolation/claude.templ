@@ -14,6 +14,7 @@ templ claudeSection(v ClaudeView) {
 		</header>
 		<div class="[ flow ] [ flow-space-m ]" style="padding: var(--space-l)">
 			<p class="[ visually-hidden ]" role="status" aria-live="polite" x-text="announcement"></p>
+			<p class="[ hint ]" role="status" aria-live="polite" data-switch-line style="display: none" x-show="hasSwitchLine" x-text="switchLine"></p>
 			<p class="[ color-ink-muted ]">The claude CLI every agent runs. It sits in the harness data directory with its auto-updater off, so a new release reaches agents only when you pick it. Your own <span class="[ font-mono ]">claude</span> is never used or changed.</p>
 			<div class="[ banner ]" data-tone="attention" role="status" { shownIf(v.Overridden)... } x-show="overridden">
 				<span><strong>Overridden by <span class="[ font-mono ]">-claude.bin</span>.</strong> <span x-text="overrideText">Agents run { v.Bin }. The version you choose below is saved but not used.</span></span>
@@ -68,12 +69,14 @@ templ claudeSection(v ClaudeView) {
 						<span class="[ badge ]" data-tone="signal" x-show="r.active">agents use this</span>
 						<span class="[ hint ]" x-text="r.date"></span>
 						<button type="button" class="[ button ]" data-size="sm" x-show="r.canUse" x-bind:aria-label="r.useLabel" x-bind:disabled="busy" x-on:click="use">Use this</button>
+						<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-show="r.canRemove" x-bind:aria-label="r.removeLabel" x-bind:disabled="busy" x-on:click="remove">Remove</button>
 					</li>
 				</template>
 				<li class="[ row ] [ claude-installing ]" role="status" style="display: none" x-show="isInstalling">
 					<span class="[ font-mono ]" x-text="installingLabel"></span>
 					<progress style="display: none" x-show="progressKnown" x-bind:value="progressValue" x-bind:max="progressMax" aria-label="Install progress"></progress>
 					<span class="[ hint ]" x-text="progressText"></span>
+					<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-bind:aria-label="cancelLabel" x-bind:disabled="busy" x-on:click="cancel">Cancel</button>
 				</li>
 			</ul>
 			<div class="[ cluster ] [ gutter-xs ]" style="display: none; align-items: center" x-show="hasVersions">

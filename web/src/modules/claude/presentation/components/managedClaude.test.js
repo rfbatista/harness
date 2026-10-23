@@ -94,5 +94,53 @@ test("Use this switches and says new sessions use it", async () => {
   await instance.use({ currentTarget: button });
   assert.deepEqual(calls, ["2.1.52"]);
   assert.equal(instance.current, "2.1.52");
-  assert.equal(instance.announcement, "New sessions will use 2.1.52.");
+  assert.equal(instance.switchLine, "New sessions will use 2.1.52.");
+});
+
+test("a switch names how many running sessions keep the version they started with", async () => {
+  const row = document.createElement("li");
+  row.dataset.version = "2.1.52";
+  const button = document.createElement("button");
+  row.append(button);
+  for (const [n, line] of [
+    [3, "New sessions will use 2.1.52. 3 running sessions keep 2.1.47."],
+    [1, "New sessions will use 2.1.52. 1 running session keeps 2.1.47."],
+  ]) {
+    const { instance } = mounted(installed("2.1.47", "2.1.52"), { use: async () => ({ ...installed("2.1.52"), keepingSessions: n }) });
+    await instance.use({ currentTarget: button });
+    assert.equal(instance.switchLine, line);
+  }
+});
+
+test("an installed version that is not current can be removed, the current one is not offered", async () => {
+  const calls = [];
+  const { instance } = mounted(installed("2.1.52", "2.1.47"), { remove: async (v) => (calls.push(v), installed("2.1.52")) });
+  assert.deepEqual(instance.rows.map((r) => [r.version, r.canRemove]), [["2.1.52", false], ["2.1.47", true]]);
+  const row = document.createElement("li");
+  row.dataset.version = "2.1.47";
+  const button = document.createElement("button");
+  row.append(button);
+  await instance.remove({ currentTarget: button });
+  assert.deepEqual(calls, ["2.1.47"]);
+  assert.deepEqual(instance.rows.map((r) => r.version), ["2.1.52"]);
+  assert.equal(instance.announcement, "Removed 2.1.47.");
+});
+
+test("Cancel stops the install and leaves no install or failure on the page", async () => {
+  let cancelled = false;
+  const running = { ...installed("2.1.52"), installing: { version: "2.1.60", done: 10, total: 100 } };
+  const { instance } = mounted(running, { cancel: async () => ((cancelled = true), installed("2.1.52")), get: async () => running });
+  assert.equal(instance.isInstalling, true);
+  await instance.cancel();
+  assert.equal(cancelled, true);
+  assert.equal(instance.isInstalling, false);
+  assert.equal(instance.hasFailed, false);
+  assert.equal(instance.announcement, "Install of 2.1.60 cancelled.");
+});
+
+test("the summary names the claude as the page's chips do", () => {
+  assert.deepEqual(mounted(none).instance.summary, { text: "claude: not installed", tone: "danger", blocks: true });
+  assert.deepEqual(mounted(installed("2.1.52")).instance.summary, { text: "claude: 2.1.52", tone: "signal", blocks: false });
+  assert.deepEqual(mounted({ ...none, overridden: true, bin: "/x" }).instance.summary, { text: "claude: override", tone: "signal", blocks: false });
+  assert.deepEqual(mounted({ ...none, installing: { version: "2.1.60", done: 0, total: -1 } }).instance.summary, { text: "claude: installing", tone: "", blocks: true });
 });

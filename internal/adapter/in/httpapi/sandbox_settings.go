@@ -18,14 +18,21 @@ type sandboxSettingsOut struct {
 	Enabled bool `json:"enabled"`
 	// Driver names the mechanism that confines agents; empty when the
 	// platform has none.
-	Driver string              `json:"driver"`
-	Paths  []ports.SandboxPath `json:"paths"`
+	Driver string           `json:"driver"`
+	Paths  []sandboxPathOut `json:"paths"`
+}
+
+// sandboxPathOut is an extra path with what is worth a second look about it
+// ("missing", "credentials"); the warnings never block saving.
+type sandboxPathOut struct {
+	ports.SandboxPath
+	Warnings []string `json:"warnings"`
 }
 
 func (h *Handler) sandboxState(c echo.Context) error {
-	out := sandboxSettingsOut{Enabled: h.sandboxSettings.Enabled(), Paths: h.sandboxSettings.Paths()}
-	if out.Paths == nil {
-		out.Paths = []ports.SandboxPath{}
+	out := sandboxSettingsOut{Enabled: h.sandboxSettings.Enabled(), Paths: []sandboxPathOut{}}
+	for _, p := range h.sandboxSettings.Paths() {
+		out.Paths = append(out.Paths, sandboxPathOut{SandboxPath: p, Warnings: h.sandboxSettings.PathWarnings(p.Path)})
 	}
 	if h.sandboxDriver != nil {
 		if d := h.sandboxDriver(); d != nil {

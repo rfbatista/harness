@@ -14,24 +14,41 @@ type SandboxView struct {
 	// Driver names the mechanism ("" when the platform has none).
 	Driver string
 	Paths  []ports.SandboxPath
+	// Warnings are what is worth a second look about each path, by path.
+	Warnings map[string][]string
+	// Builtin is the allowlist every session gets, read-only on the page.
+	Builtin []ports.SandboxBuiltinGroup
+	// AllowPath is a path an "Allow this path" link brought: it opens in the
+	// add-path field and is not saved.
+	AllowPath string
 }
 
 // SandboxSeed is what the section's component takes over from: the body of
 // GET /api/get_sandbox_settings.
 type SandboxSeed struct {
-	Enabled bool                `json:"enabled"`
-	Driver  string              `json:"driver"`
-	Paths   []ports.SandboxPath `json:"paths"`
+	Enabled   bool       `json:"enabled"`
+	Driver    string     `json:"driver"`
+	Paths     []PathSeed `json:"paths"`
+	AllowPath string     `json:"allowPath,omitempty"`
+}
+
+// PathSeed is an extra path in the seed, with its warning codes.
+type PathSeed struct {
+	ports.SandboxPath
+	Warnings []string `json:"warnings"`
 }
 
 // NewSandboxView reads the sandbox settings; without a store the sandbox
 // shows as on with no paths.
 func NewSandboxView(settings ports.SandboxSettings, driver func() ports.SandboxDriver) SandboxView {
-	v := SandboxView{Enabled: true, Paths: []ports.SandboxPath{}}
+	v := SandboxView{Enabled: true, Paths: []ports.SandboxPath{}, Warnings: map[string][]string{}}
 	if settings != nil {
 		v.Enabled = settings.Enabled()
 		if paths := settings.Paths(); paths != nil {
 			v.Paths = paths
+		}
+		for _, p := range v.Paths {
+			v.Warnings[p.Path] = settings.PathWarnings(p.Path)
 		}
 	}
 	if driver != nil {
@@ -44,7 +61,15 @@ func NewSandboxView(settings ports.SandboxSettings, driver func() ports.SandboxD
 
 // Seed is the section's seed.
 func (v SandboxView) Seed() SandboxSeed {
-	return SandboxSeed{Enabled: v.Enabled, Driver: v.Driver, Paths: v.Paths}
+	paths := make([]PathSeed, 0, len(v.Paths))
+	for _, p := range v.Paths {
+		w := v.Warnings[p.Path]
+		if w == nil {
+			w = []string{}
+		}
+		paths = append(paths, PathSeed{SandboxPath: p, Warnings: w})
+	}
+	return SandboxSeed{Enabled: v.Enabled, Driver: v.Driver, Paths: paths, AllowPath: v.AllowPath}
 }
 
 // NoDriver: the platform has no sandbox driver.
@@ -107,7 +132,16 @@ type PathRow struct {
 	Access      string // "read" or "write"
 	AccessLabel string
 	RemoveLabel string
+	// Missing and Credentials are the warnings under the path, "" for none.
+	Missing     string
+	Credentials string
 }
+
+// The words under a path that is worth a second look.
+const (
+	MissingWarning     = "This folder does not exist yet. It will apply once it does."
+	CredentialsWarning = "This folder usually holds credentials."
+)
 
 // Rows are the extra paths for the first paint.
 func (v SandboxView) Rows() []PathRow {
@@ -117,7 +151,38 @@ func (v SandboxView) Rows() []PathRow {
 		if p.Write {
 			access = "write"
 		}
-		rows = append(rows, PathRow{Path: p.Path, Access: access, AccessLabel: "Access for " + p.Path, RemoveLabel: "Remove " + p.Path})
+		row := PathRow{Path: p.Path, Access: access, AccessLabel: "Access for " + p.Path, RemoveLabel: "Remove " + p.Path}
+		for _, w := range v.Warnings[p.Path] {
+			switch w {
+			case "missing":
+				row.Missing = MissingWarning
+			case "credentials":
+				row.Credentials = CredentialsWarning
+			}
+		}
+		rows = append(rows, row)
 	}
 	return rows
+}
+
+// BuiltinCount is how many paths the built-in allowlist names.
+func (v SandboxView) BuiltinCount() int {
+	n := 0
+	for _, g := range v.Builtin {
+		n += len(g.Entries)
+	}
+	return n
+}
+
+// BuiltinSummary is the closed details' summary line.
+func (v SandboxView) BuiltinSummary() string {
+	return "Built-in allowlist (" + strconv.Itoa(v.BuiltinCount()) + " paths, not editable)"
+}
+
+// AccessWord says what an entry of the built-in allowlist may do.
+func AccessWord(write bool) string {
+	if write {
+		return "Read and write"
+	}
+	return "Read-only"
 }

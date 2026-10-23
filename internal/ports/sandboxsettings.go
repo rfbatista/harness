@@ -16,4 +16,22 @@ type SandboxSettings interface {
 	SetPathAccess(path string, write bool) ([]SandboxPath, error)
 	// RemovePath drops a listed path.
 	RemovePath(path string) ([]SandboxPath, error)
+	// PathWarnings says what is worth a second look about a path, as codes:
+	// "missing" (nothing exists there yet) and "credentials" (it is in a
+	// folder that usually holds credentials). Warnings never block saving.
+	PathWarnings(path string) []string
+}
+
+// SandboxBuiltinEntry is one thing the sandbox always allows.
+type SandboxBuiltinEntry struct {
+	// Label says what it is; Path is where, empty when it is per session.
+	Label string `json:"label"`
+	Path  string `json:"path"`
+	Write bool   `json:"write"`
+}
+
+// SandboxBuiltinGroup is a titled run of the built-in allowlist.
+type SandboxBuiltinGroup struct {
+	Title   string                `json:"title"`
+	Entries []SandboxBuiltinEntry `json:"entries"`
 }

@@ -19,6 +19,7 @@ import { codeGateway } from "./modules/code/infrastructure/code-gateway.js";
 import { credentialsGateway } from "./modules/credentials/infrastructure/credentials-gateway.js";
 import { sandboxGateway } from "./modules/sandbox/infrastructure/sandbox-gateway.js";
 import { claudeGateway } from "./modules/claude/infrastructure/claude-gateway.js";
+import { registerAgentIsolation } from "./modules/agentisolation/presentation/register.js";
 import { registerClaude } from "./modules/claude/presentation/register.js";
 import { registerSandbox } from "./modules/sandbox/presentation/register.js";
 import { agentCredentialGateway } from "./modules/agentcredential/infrastructure/agent-credential-gateway.js";
@@ -103,5 +104,6 @@ registerModels(Alpine, { gateway: modelsGateway(api) });
 registerSandbox(Alpine, { gateway: sandboxGateway(api) });
 registerClaude(Alpine, { gateway: claudeGateway(api) });
 registerAgentCredential(Alpine, { gateway: agentCredentialGateway(api) });
+registerAgentIsolation(Alpine);
 
 Alpine.start();

@@ -5,7 +5,7 @@ import { sandboxGateway } from "./sandbox-gateway.js";
 
 file("sandbox/infrastructure/sandbox-gateway");
 
-const state = { enabled: false, driver: "seatbelt", paths: [{ path: "/opt/cache", write: true }] };
+const state = { enabled: false, driver: "seatbelt", paths: [{ path: "/opt/cache", write: true, warnings: ["missing"] }] };
 
 function gatewayOver(answer = state) {
   const { fetch, calls } = fakeFetch(() => jsonResponse(200, answer));

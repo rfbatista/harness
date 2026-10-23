@@ -24,6 +24,12 @@ type ManagedClaude interface {
 	// Switch makes an installed version the one agents use and removes the
 	// others. Refuses MANAGED_CLAUDE_VERSION_NOT_FOUND.
 	Switch(version string) (ManagedClaudeState, error)
+	// Cancel stops the install that runs and removes what it downloaded,
+	// reporting no failure; with none running it changes nothing.
+	Cancel() (ManagedClaudeState, error)
+	// Remove deletes an installed version that is not the current one.
+	// Refuses MANAGED_CLAUDE_VERSION_CURRENT and MANAGED_CLAUDE_VERSION_NOT_FOUND.
+	Remove(version string) (ManagedClaudeState, error)
 }
 
 // ManagedClaudeState is what the person sees of the managed claude.
@@ -38,6 +44,9 @@ type ManagedClaudeState struct {
 	// Failed is the last install that failed, nil when it succeeded or a new
 	// one started.
 	Failed *ManagedClaudeFailure `json:"failed"`
+	// KeepingSessions is, in the answer to a switch, how many running
+	// sessions keep the version they started with; 0 in every other answer.
+	KeepingSessions int `json:"keepingSessions"`
 }
 
 // ManagedClaudeVersion is one installed version.
