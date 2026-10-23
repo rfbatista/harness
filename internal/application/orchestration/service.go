@@ -106,6 +106,16 @@ type Service struct {
 	// nothing of the machine's (see "Contract: Harness server ↔ Agent
 	// sessions — git credentials"). Nil leaves sessions' git as it is.
 	GitAuth ports.GitAuth
+	// AgentCredential gives each agent process the env entries ("NAME=value")
+	// of the agent credential (ADR 0018), read at every start and resume. Nil
+	// or empty adds nothing.
+	AgentCredential func() []string
+	// Ready refuses an agent start while the agent credential, the managed
+	// claude or the sandbox driver is missing (agentready.Gate). Nil enforces
+	// nothing.
+	Ready interface {
+		Check(ctx context.Context) error
+	}
 	// Roles says what a session is on its task, for the role-aware brief. Nil:
 	// every session is a peer.
 	Roles interface {
@@ -149,6 +159,9 @@ type Service struct {
 	// Settings holds the architect and implementation models a new session
 	// starts with when its start names none. Nil: the built-in ones.
 	Settings ports.SettingsReader
+	// Sandbox is the agent sandbox step of a session start (ADR 0017). Nil:
+	// sessions run unconfined.
+	Sandbox *Sandbox
 
 	// updates feeds the task-update turns to the courier, one at a time;
 	// deliverUpdate replaces the courier in tests.
@@ -211,6 +224,7 @@ func (s *Service) Start(ctx context.Context, req StartRequest) (*domain.Session,
 		Model:        req.ModelOverride,
 		AllowedTools: req.AllowedTools,
 		AutoAccept:   req.AutoAccept,
+		Headless:     true,
 	})
 	if err != nil {
 		return nil, err
@@ -282,6 +296,7 @@ func (s *Service) Start(ctx context.Context, req StartRequest) (*domain.Session,
 		TokenSavers:             p.savers.active,
 		TokenSaversNotInstalled: p.savers.notInstalled,
 		CavemanIntensity:        p.savers.cavemanIntensity,
+		Sandbox:                 p.sandbox.facts,
 	})
 	if err != nil {
 		_ = sess.Stop()
@@ -289,6 +304,11 @@ func (s *Service) Start(ctx context.Context, req StartRequest) (*domain.Session,
 		return nil, fmt.Errorf("persist session: %w", err)
 	}
 	provisioned = nil
+	if stop := s.collectViolations(sess.ID(), p.cfg.WorkingDir, p.sandbox.facts); stop != nil {
+		s.mu.Lock()
+		s.cleanups[sess.ID()] = withViolations(s.cleanups[sess.ID()], stop)
+		s.mu.Unlock()
+	}
 
 	go s.pump(sess)
 
@@ -322,6 +342,9 @@ type prepareInput struct {
 	Mode         domain.SessionMode
 	// Role is what the session will be on its task, for the brief; empty is a peer.
 	Role domain.SessionRole
+	// Headless is a session llmkit runs itself, wrapping its command with the
+	// session's sandbox; false is one a terminal runs.
+	Headless bool
 }
 
 // prepared is a session whose worktree exists and whose configuration is
@@ -335,6 +358,7 @@ type prepared struct {
 	cleanup    func() // removes the materialized skill plugin dir and the git directory; nil if none
 	envFile    string // the session's git env file, for login shells; "" without GitAuth
 	savers     sessionSavers
+	sandbox    sandboxed
 }
 
 // prepare validates a start request, provisions the session's worktree and
@@ -386,6 +410,13 @@ func (s *Service) prepare(ctx context.Context, in prepareInput) (*prepared, erro
 		return nil, err
 	}
 
+	if err := s.ready(ctx); err != nil {
+		if ag.cleanup != nil {
+			ag.cleanup()
+		}
+		return nil, err
+	}
+
 	ws, err := s.workspaces.Create(in.RepositoryID, domain.Slug(in.Branch), in.Branch, in.BaseBranch)
 	if err != nil {
 		if ag.cleanup != nil {
@@ -410,8 +441,29 @@ func (s *Service) prepare(ctx context.Context, in prepareInput) (*prepared, erro
 		_ = s.workspaces.Discard(ws.ID)
 		return nil, err
 	}
+	s.withAgentCredential(&cfg)
 	savers := s.withTokenSavers(ctx, in, repo.RootDir, ws.Path, &cfg)
+	cleanup, err = s.withTempDir(id, &cfg, cleanup)
+	if err != nil {
+		_ = s.workspaces.Discard(ws.ID)
+		return nil, err
+	}
+	sb, err := s.sandbox(ctx, in, id, repo, ws.Path, cfg.Env)
+	if err != nil {
+		if cleanup != nil {
+			cleanup()
+		}
+		_ = s.workspaces.Discard(ws.ID)
+		return nil, err
+	}
+	if sb.wrap != nil {
+		cfg.Wrap = sb.wrap
+	}
+	if sb.policy != nil {
+		withClaudeSandboxOff(&cfg)
+	}
 	return &prepared{
+		sandbox:    sb,
 		cfg:        cfg,
 		ws:         ws,
 		branch:     in.Branch,
@@ -420,6 +472,24 @@ func (s *Service) prepare(ctx context.Context, in prepareInput) (*prepared, erro
 		envFile:    envFile,
 		savers:     savers,
 	}, nil
+}
+
+// ready is the refusal of a start while something agents need is missing.
+func (s *Service) ready(ctx context.Context) error {
+	if s.Ready == nil {
+		return nil
+	}
+	return s.Ready.Check(ctx)
+}
+
+// withAgentCredential adds the agent credential to the agent process env.
+func (s *Service) withAgentCredential(cfg *llmkit.SessionConfig) {
+	if s.AgentCredential == nil {
+		return
+	}
+	if env := s.AgentCredential(); len(env) > 0 {
+		cfg.Env = append(slices.Clone(cfg.Env), env...)
+	}
 }
 
 // withGit gives the session's processes its git directory's environment and

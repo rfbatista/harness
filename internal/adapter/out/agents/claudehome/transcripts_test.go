@@ -54,3 +54,22 @@ func TestTranscripts_EncodesLikeTheCLI(t *testing.T) {
 		t.Errorf("encoded = %q, want %q", got, want)
 	}
 }
+
+func TestTranscripts_CanResumeFromTheLegacyHome(t *testing.T) {
+	agent, legacy := t.TempDir(), t.TempDir()
+	work := t.TempDir()
+	put(t, legacy, work, "old", "{}")
+	put(t, agent, work, "new", "{}")
+	tr := Transcripts{Dir: agent, Legacy: legacy}
+	for _, id := range []string{"old", "new"} {
+		if err := tr.CanResume(work, id); err != nil {
+			t.Errorf("%s: %v", id, err)
+		}
+	}
+	if got := code(tr.CanResume(work, "none")); got != "SESSION_TRANSCRIPT_MISSING" {
+		t.Errorf("unknown = %q", got)
+	}
+	if got := code(Transcripts{Dir: agent}.CanResume(work, "old")); got != "SESSION_TRANSCRIPT_MISSING" {
+		t.Errorf("without a legacy home = %q", got)
+	}
+}

@@ -6,6 +6,8 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"operators-mcp/internal/application/managedclaude"
+	"operators-mcp/internal/application/sandboxsettings"
 	"path/filepath"
 	"time"
 
@@ -50,7 +52,7 @@ var ServerModule = fx.Module("server",
 
 // registerHTTPServer mounts the UI and JSON API on a mux and serves it,
 // shutting down gracefully when fx stops.
-func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRunner *apps.Service, ts *tooling.Service, exec *execution.Service, orch *orchestration.Service, plan *planning.Service, ws *workspaces.Service, broker *approval.Broker, sessions ports.SessionRepository, art *artifacts.Service, channel *taskchannel.Service, prs *workspaces.PullRequests, code ports.CodeBrowser, inbox optionalNotifications, creds optionalGitCredentials, shells *vshell.Service, usageSvc *usage.Service, indexes optionalRepositoryIndexes) error {
+func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRunner *apps.Service, ts *tooling.Service, exec *execution.Service, orch *orchestration.Service, plan *planning.Service, ws *workspaces.Service, broker *approval.Broker, sessions ports.SessionRepository, art *artifacts.Service, channel *taskchannel.Service, prs *workspaces.PullRequests, code ports.CodeBrowser, inbox optionalNotifications, creds optionalGitCredentials, shells *vshell.Service, usageSvc *usage.Service, indexes optionalRepositoryIndexes, sandboxStore *sandboxsettings.Store, managedClaude *managedclaude.Service, claudeBin ports.ManagedClaudeBin, agentCred optionalAgentCredential) error {
 	uiHandler, err := ui.SPAHandler(ui.Dist)
 	if err != nil {
 		return err
@@ -109,6 +111,16 @@ func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRun
 		TokenSaverInstalls: cat.Capabilities,
 		// Each repository's codegraph index, built in its checkout.
 		RepositoryIndexes: indexes.port(),
+		// The Agent isolation page's switch and extra paths.
+		SandboxSettings: sandboxStore,
+		SandboxDriver:   sandboxDriver(orch),
+		// The managed claude agents run, and which binary they resolve to.
+		ManagedClaude:    managedClaude,
+		ManagedClaudeBin: claudeBin,
+		// The credential agents sign in with: status only.
+		AgentCredential: agentCred.port(),
+		// The Sign in with Claude flow that stores it.
+		AgentOAuth: agentCred.oauth(),
 	}), httpapi.WithToken(cfg.APIToken))
 	// Requests slower than the threshold are logged with their query count.
 	// An approval waits on a person, so it is never a slow request.
@@ -122,7 +134,9 @@ func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRun
 	// designer SPA until it is retired.
 	mux.Handle("/", slow(web.NewHandler(web.Deps{Projects: cat.Projects, Tasks: plan, Sessions: orch, Agents: cat.Agents, Repositories: cat.Projects, EnvFiles: cat.Projects, RunCommands: cat.Projects, Documents: plan, History: ws, Code: code, Workspaces: ws, Artifacts: art, ProjectSummaries: cat.Projects, PullRequests: prs,
 		Resources: plan, Comments: plan, Notifications: noteReader, GitCredentials: creds.port(), Usage: usageSvc, TokenSavers: cat.Capabilities,
-		TokenSaverInstalls: cat.Capabilities, RepositoryIndexes: indexes.port(), Settings: cat.Settings, DataPaths: dataPaths(cfg)}, assets, uiHandler)))
+		TokenSaverInstalls: cat.Capabilities, RepositoryIndexes: indexes.port(), Settings: cat.Settings, DataPaths: dataPaths(cfg), SandboxSettings: sandboxStore, SandboxDriver: sandboxDriver(orch), SandboxBuiltin: sandboxBuiltin(orch),
+		ManagedClaude: managedClaude, ManagedClaudeBin: claudeBin, AgentCredential: agentCred.port(),
+		AgentOAuth: agentCred.oauth()}, assets, uiHandler)))
 
 	// The LLM proxy every claude process calls through (ADR 0006): loopback
 	// only, outside the API token and CORS, so its responses come back as

@@ -66,9 +66,11 @@ const MaxDepth = 3
 type Row struct {
 	ID, Title, State, Word, Meta string
 	Selected, Attention          bool
-	Role                         string
-	Depth                        int
-	Badge                        string
+	// Unsandboxed: the session started with the sandbox off.
+	Unsandboxed bool
+	Role        string
+	Depth       int
+	Badge       string
 }
 
 // Group is one triage group with its rows.
@@ -418,16 +420,17 @@ func toRow(s *domain.Session, selectedID string, agentNames map[string]string, n
 	title := RowTitle(s)
 	agent := RunsOn(s, agentNames)
 	return Row{
-		ID:        s.ID,
-		Title:     title,
-		State:     st.State,
-		Word:      st.Word,
-		Meta:      rowMeta(s, agent, others, agentNames, now),
-		Selected:  s.ID == selectedID,
-		Attention: NeedsYou(s),
-		Role:      string(s.Role),
-		Depth:     min(depth, MaxDepth),
-		Badge:     badge(s),
+		ID:          s.ID,
+		Title:       title,
+		State:       st.State,
+		Word:        st.Word,
+		Meta:        rowMeta(s, agent, others, agentNames, now),
+		Selected:    s.ID == selectedID,
+		Attention:   NeedsYou(s),
+		Unsandboxed: unsandboxed(s),
+		Role:        string(s.Role),
+		Depth:       min(depth, MaxDepth),
+		Badge:       badge(s),
 	}
 }
 
@@ -435,6 +438,18 @@ func toRow(s *domain.Session, selectedID string, agentNames map[string]string, n
 // of who started it (the tree shows that); the browser adds its last report
 // once the task's messages have loaded (delegateMeta in view.js).
 func rowMeta(s *domain.Session, agent string, others map[string]*domain.Session, agentNames map[string]string, now time.Time) string {
+	text := baseRowMeta(s, agent, others, agentNames, now)
+	if unsandboxed(s) {
+		text += " · unsandboxed"
+	}
+	return text
+}
+
+// unsandboxed is true for a session that started with the sandbox off, not
+// for one from before the sandbox existed.
+func unsandboxed(s *domain.Session) bool { return s.Sandbox != nil && !s.Sandbox.Sandboxed }
+
+func baseRowMeta(s *domain.Session, agent string, others map[string]*domain.Session, agentNames map[string]string, now time.Time) string {
 	if s.Role != domain.RoleDelegate {
 		return meta(agent, StartedBy(s, others, agentNames), relativeTime(s.UpdatedAt, now))
 	}

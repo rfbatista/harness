@@ -132,6 +132,7 @@ templ Page(v PageView) {
 					<div class="[ flow ] [ flow-space-3xs grow ]">
 						<span x-text="error.message"></span>
 						<span class="[ code ]"><span x-text="error.code"></span> · <span x-text="error.next"></span></span>
+						<template x-for="link in error.links"><a href="/agent-isolation" x-bind:href="link.href" x-text="link.text" data-refusal-link></a></template>
 					</div>
 					<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-on:click="dismissError">Dismiss</button>
 				</div>
@@ -431,7 +432,7 @@ templ ssrRows(v PageView) {
 				@components.Badge(strconv.Itoa(g.Count), g.Tone)
 			</div>
 			for _, r := range g.Rows {
-				<div class="[ row ]" data-stacked role="option" data-session-id={ r.ID } aria-selected={ strconv.FormatBool(r.Selected) } { attentionAttrs(r.Attention)... } { roleAttrs(r.Role, r.Depth)... }>
+				<div class="[ row ]" data-stacked role="option" data-session-id={ r.ID } aria-selected={ strconv.FormatBool(r.Selected) } { attentionAttrs(r.Attention)... } { roleAttrs(r.Role, r.Depth)... } { unsandboxedAttrs(r.Unsandboxed)... }>
 					@components.Status(r.State, r.Word)
 					<span class="[ title ]">
 						if r.Badge != "" {
@@ -455,7 +456,7 @@ templ liveRows() {
 				<span class="[ badge ]" x-bind:data-tone="group.tone" x-text="group.count"></span>
 			</div>
 			<template x-for="row in group.rows" x-bind:key="row.id">
-				<div class="[ row ]" data-stacked role="option" x-bind:data-session-id="row.id" x-bind:aria-selected="row.selected" x-bind:data-attention="row.attention" x-bind:data-fresh="row.fresh" x-bind:data-role="row.roleAttr" x-bind:data-depth="row.depthAttr" x-on:click="open(row.id)">
+				<div class="[ row ]" data-stacked role="option" x-bind:data-session-id="row.id" x-bind:aria-selected="row.selected" x-bind:data-attention="row.attention" x-bind:data-fresh="row.fresh" x-bind:data-role="row.roleAttr" x-bind:data-depth="row.depthAttr" x-bind:data-unsandboxed="row.unsandboxedAttr" x-on:click="open(row.id)">
 					<span class="[ status ]" x-bind:data-state="row.state" x-text="row.word"></span>
 					<span class="[ title ]">
 						<template x-if="row.badge">
@@ -500,6 +501,9 @@ templ detail(form NewSessionForm, paint *code.View, usage bool, lockedMode strin
 				</template>
 				<template x-for="panel in historyPanels" x-bind:key="panel.key">
 					@historyPanel()
+				</template>
+				<template x-for="panel in sandboxPanels" x-bind:key="panel.key">
+					@sandboxPanel()
 				</template>
 				<template x-for="panel in appPanels" x-bind:key="panel.key">
 					@appPanel()
@@ -633,6 +637,7 @@ templ newSessionForm(form NewSessionForm, lockedMode string) {
 				<div class="[ flow ] [ flow-space-3xs ]">
 					<span x-text="error.message"></span>
 					<span class="[ code ]"><span x-text="error.code"></span> · <span x-text="error.next"></span></span>
+					<template x-for="link in error.links"><a href="/agent-isolation" x-bind:href="link.href" x-text="link.text" data-refusal-link></a></template>
 				</div>
 			</div>
 		</template>
@@ -741,6 +746,7 @@ templ appPanel() {
 					<div class="[ flow ] [ flow-space-3xs ]">
 						<span x-text="error.message"></span>
 						<span class="[ code ]"><span x-text="error.code"></span> · <span x-text="error.next"></span></span>
+						<template x-for="link in error.links"><a href="/agent-isolation" x-bind:href="link.href" x-text="link.text" data-refusal-link></a></template>
 					</div>
 				</div>
 			</template>
@@ -796,6 +802,7 @@ templ designPanel() {
 					<div class="[ flow ] [ flow-space-3xs grow ]">
 						<span x-text="error.message"></span>
 						<span class="[ code ]"><span x-text="error.code"></span> · <span x-text="error.next"></span></span>
+						<template x-for="link in error.links"><a href="/agent-isolation" x-bind:href="link.href" x-text="link.text" data-refusal-link></a></template>
 					</div>
 					<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-on:click="dismissError">Dismiss</button>
 				</div>

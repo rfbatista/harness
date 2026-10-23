@@ -94,6 +94,10 @@ type Config struct {
 	// downloaded from, in place of https://github.com (a mirror, or a test's
 	// fake release server). Empty uses GitHub.
 	TokenSaverReleaseBase string
+	// ManagedClaudeReleaseBase is where the managed claude is downloaded
+	// from, in place of https://downloads.claude.ai/claude-code-releases (a
+	// mirror, or a test's fake release server). Empty uses the official one.
+	ManagedClaudeReleaseBase string
 	// ProfilerOff stops the HTTP server serving Go's profiler under
 	// /debug/pprof/. Left false, the profiler answers loopback peers only.
 	ProfilerOff bool

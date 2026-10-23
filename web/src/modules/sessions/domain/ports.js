@@ -215,3 +215,15 @@
  */
 
 export {};
+
+/**
+ * A session's sandbox violations, newest first. Implemented by
+ * infrastructure/sandbox-gateway.js (GET /api/sessions/{id}/sandbox/violations).
+ *
+ * @typedef {import("./sandbox.js").ViolationLog} ViolationLog
+ *
+ * @typedef {object} SandboxGateway
+ * @property {(sessionId: string, signal?: AbortSignal) => Promise<ViolationLog>} violations
+ *           Rejects with SESSION_NOT_FOUND. `available` is false where the
+ *           platform collects none (Linux).
+ */

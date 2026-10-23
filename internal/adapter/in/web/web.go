@@ -18,6 +18,7 @@ import (
 	"github.com/a-h/templ"
 	"github.com/rfbatista/harnesskit/errs"
 
+	"operators-mcp/internal/adapter/in/web/agentisolation"
 	"operators-mcp/internal/adapter/in/web/code"
 	"operators-mcp/internal/adapter/in/web/credentials"
 	"operators-mcp/internal/adapter/in/web/history"
@@ -83,6 +84,26 @@ type Deps struct {
 	// Settings reads each session tier's model for the Models page; nil
 	// leaves the page and its top bar link out.
 	Settings ports.SettingsReader
+	// SandboxSettings and SandboxDriver fill the Agent isolation page: the
+	// person's sandbox switch and extra paths, and the driver the platform
+	// has (a nil func or result: none). A nil SandboxSettings leaves the page
+	// and its top bar link out.
+	SandboxSettings ports.SandboxSettings
+	SandboxDriver   func() ports.SandboxDriver
+	// ManagedClaude and ManagedClaudeBin fill the page's Managed claude
+	// section: the installed versions, and the binary agents resolve to (the
+	// override included). Nil leaves the section showing none installed.
+	ManagedClaude    ports.ManagedClaude
+	ManagedClaudeBin ports.ManagedClaudeBin
+	// SandboxBuiltin lists the allowlist every session gets, for the page's
+	// read-only list; nil lists none.
+	SandboxBuiltin func() []ports.SandboxBuiltinGroup
+	// AgentCredential fills the Agent isolation page's credential section
+	// (status only, never the value); nil shows it as not set.
+	AgentCredential ports.AgentCredential
+	// AgentOAuth is the credential section's Sign in with Claude flow; nil
+	// leaves the button disabled.
+	AgentOAuth ports.AgentOAuth
 	// DataPaths are where the server keeps its data, for the Server page;
 	// nil leaves the page and its top bar link out.
 	DataPaths *serversettings.Paths
@@ -179,6 +200,11 @@ func NewHandler(deps Deps, assets *Assets, fallback http.Handler) http.Handler {
 	if deps.Settings != nil {
 		modelsPage := models.Handler{Settings: deps.Settings, Layout: s.layout, Render: render}
 		mux.Handle("GET "+models.Href, s.page(modelsPage.Page))
+	}
+	if deps.SandboxSettings != nil {
+		isolation := agentisolation.Handler{Sandbox: deps.SandboxSettings, Driver: deps.SandboxDriver, Credential: deps.AgentCredential, OAuth: deps.AgentOAuth, Layout: s.layout, Render: render,
+			Claude: deps.ManagedClaude, ClaudeBin: deps.ManagedClaudeBin, Builtin: deps.SandboxBuiltin}
+		mux.Handle("GET "+agentisolation.Href, s.page(isolation.Page))
 	}
 	if deps.DataPaths != nil {
 		serverPage := serversettings.Handler{Paths: *deps.DataPaths, Settings: deps.Settings, Layout: s.layout, Render: render}
@@ -338,6 +364,10 @@ func (s *server) bareFrame(title string) shell.Frame {
 	}
 	if s.deps.Settings != nil {
 		f.Top.ModelsHref = models.Href
+	}
+	if s.deps.SandboxSettings != nil {
+		f.Top.AgentIsolationHref = agentisolation.Href
+		f.Top.AgentIsolationAttention = agentisolation.Blocks(s.deps.SandboxSettings, s.deps.SandboxDriver, s.deps.AgentCredential, s.deps.ManagedClaudeBin)
 	}
 	if s.deps.DataPaths != nil {
 		f.Top.ServerHref = serversettings.Href

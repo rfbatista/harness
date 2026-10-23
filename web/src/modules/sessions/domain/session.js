@@ -30,6 +30,7 @@
  * @property {import("./channel.js").StatusCheck | null} statusCheck  the loop checking on it, on a delegate the architect started
  * @property {readonly string[]} tokenSavers              the token savers it runs with, fixed when it started
  * @property {readonly string[]} tokenSaversNotInstalled  savers on for it but not installed, so it runs without them
+ * @property {{ sandboxed: boolean, visibility: string, driver: string } | null} sandbox  what its sandbox was when it started or last resumed; null for a session from before the sandbox
  * @property {Date} updatedAt
  *
  * @typedef {"architect"|"delegate"|""} Role  "" is a peer: started by a person, or outside the architect's tree

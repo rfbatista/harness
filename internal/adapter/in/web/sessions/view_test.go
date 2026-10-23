@@ -395,3 +395,26 @@ func TestProjectPageViewHasNoTaskAndLocksTheFormToProduct(t *testing.T) {
 		t.Errorf("task page view = %+v", task)
 	}
 }
+
+// Only a session that started with the sandbox off is marked in the list; one
+// from before the sandbox existed is not.
+func TestOnlyAnUnsandboxedSessionsRowSaysSo(t *testing.T) {
+	now := time.Now()
+	row := func(f *domain.SandboxFacts) Row {
+		s := &domain.Session{ID: "s", UpdatedAt: now, Sandbox: f}
+		return toRow(s, "", nil, now, map[string]*domain.Session{"s": s}, 0)
+	}
+	for name, tc := range map[string]struct {
+		facts *domain.SandboxFacts
+		want  bool
+	}{
+		"before the sandbox": {nil, false},
+		"sandboxed":          {&domain.SandboxFacts{Sandboxed: true, Visibility: domain.SandboxOwnRepo}, false},
+		"sandbox off":        {&domain.SandboxFacts{Visibility: domain.SandboxUnrestricted}, true},
+	} {
+		r := row(tc.facts)
+		if r.Unsandboxed != tc.want || strings.HasSuffix(r.Meta, " · unsandboxed") != tc.want {
+			t.Errorf("%s: unsandboxed=%v meta=%q, want %v", name, r.Unsandboxed, r.Meta, tc.want)
+		}
+	}
+}

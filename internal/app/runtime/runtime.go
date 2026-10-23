@@ -7,12 +7,15 @@ package runtime
 import (
 	"context"
 	"fmt"
+	"path/filepath"
+	"slices"
 
 	"github.com/rfbatista/llmkit"
 	"github.com/rfbatista/llmkit/claude"
 	"go.uber.org/fx"
 
 	"operators-mcp/internal/adapter/out/agents/claudecli"
+	"operators-mcp/internal/adapter/out/agents/claudehome"
 	"operators-mcp/internal/adapter/out/agents/command"
 	"operators-mcp/internal/adapter/out/ptyunix"
 	"operators-mcp/internal/adapter/out/shell"
@@ -30,6 +33,16 @@ type Config struct {
 	// ProxyURL is the LLM proxy claude calls through (ADR 0006); empty
 	// leaves claude calling the API directly, as tui-client does for now.
 	ProxyURL string
+	// ConfigDir is the Claude home every claude runs in (ADR 0018); empty
+	// runs the person's own. With one, claude starts isolated from the
+	// person's configuration and trusts each session's worktree in it.
+	ConfigDir string
+	// Sandbox confines the sessions whose spec carries a policy; nil refuses
+	// them (a policy never runs unconfined by accident).
+	Sandbox ports.SandboxDriver
+	// SandboxAllow is added to every policy on this host, beside the Claude
+	// home and claude's install dir, which are always allowed.
+	SandboxAllow []ports.SandboxPath
 }
 
 // Module provides ports.Launcher (claude, through llmkit), ports.Shell,
@@ -61,7 +74,39 @@ func newClaude(cfg Config) claudecli.Launcher {
 	if bin == "" {
 		bin = "claude"
 	}
-	return claudecli.NewLauncher(claude.New(llmkit.Options{Bin: bin, ProxyURL: cfg.ProxyURL}))
+	l := claudecli.NewLauncher(claude.New(llmkit.Options{
+		Bin: bin, ProxyURL: cfg.ProxyURL, ConfigDir: cfg.ConfigDir, Isolated: cfg.ConfigDir != "",
+	}))
+	allow := slices.Clone(cfg.SandboxAllow)
+	if cfg.ConfigDir != "" {
+		l = l.WithHome(claudehome.NewHome(cfg.ConfigDir))
+		allow = append(allow, ports.SandboxPath{Path: cfg.ConfigDir, Write: true})
+	}
+	for _, d := range ClaudeInstallDirs(bin) {
+		allow = append(allow, ports.SandboxPath{Path: d})
+	}
+	if cfg.Sandbox != nil {
+		l = l.WithSandbox(cfg.Sandbox, allow...)
+	}
+	return l
+}
+
+// ClaudeInstallDirs are the directories a sandboxed claude must read to run:
+// where bin is, and where its symlinks lead. A bare name the shell finds
+// has none.
+func ClaudeInstallDirs(bin string) []string {
+	if !filepath.IsAbs(bin) {
+		return nil
+	}
+	dirs := []string{filepath.Dir(bin)}
+	if r, err := filepath.EvalSymlinks(bin); err == nil {
+		dirs = append(dirs, filepath.Dir(r))
+		// <managed dir>/versions/<version>/claude: the whole managed dir.
+		if filepath.Base(filepath.Dir(filepath.Dir(r))) == "versions" {
+			dirs = append(dirs, filepath.Dir(filepath.Dir(filepath.Dir(r))))
+		}
+	}
+	return slices.Compact(dirs)
 }
 
 // newHost runs claude for sessions, and plain command lines for the

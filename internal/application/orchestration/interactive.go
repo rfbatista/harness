@@ -87,6 +87,7 @@ func (s *Service) StartInteractive(ctx context.Context, req InteractiveRequest) 
 
 	spec := s.agentSpec(p.cfg, ports.Conversation{ID: id}, modePrompt(mode, ticket, project, req.Prompt))
 	spec.EnvFile = p.envFile
+	confineSpec(&spec, p.sandbox.policy)
 	created, err := s.sessions.Create(&domain.Session{
 		ID:              id,
 		ProjectID:       req.ProjectID,
@@ -111,9 +112,10 @@ func (s *Service) StartInteractive(ctx context.Context, req InteractiveRequest) 
 		TokenSavers:             p.savers.active,
 		TokenSaversNotInstalled: p.savers.notInstalled,
 		CavemanIntensity:        p.savers.cavemanIntensity,
+		Sandbox:                 p.sandbox.facts,
 	})
 	if err == nil {
-		s.adoptCleanup(id, p.cleanup)
+		s.adoptCleanup(id, withViolations(p.cleanup, s.collectViolations(id, p.cfg.WorkingDir, p.sandbox.facts)))
 		s.courier.setTurn(id, startTurn(spec))
 		s.publish(id, SessionEvent{Type: "status", Status: domain.SessionRunning, Text: startedText(runsOn), At: time.Now()})
 		// Announced before the CLI runs, so the architect channel has the
@@ -181,6 +183,12 @@ func (s *Service) ResumeInteractive(ctx context.Context, req ports.ResumeRequest
 	if err != nil {
 		return nil, ports.AgentSpec{}, err
 	}
+	if err := s.ready(ctx); err != nil {
+		if ag.cleanup != nil {
+			ag.cleanup()
+		}
+		return nil, ports.AgentSpec{}, err
+	}
 	permission := llmkit.PermissionAsk
 	if sess.AutoRun {
 		permission = llmkit.PermissionBypass
@@ -194,10 +202,28 @@ func (s *Service) ResumeInteractive(ctx context.Context, req ports.ResumeRequest
 	if err != nil {
 		return nil, ports.AgentSpec{}, err
 	}
+	s.withAgentCredential(&cfg)
 	s.rewireTokenSavers(ctx, sess, &cfg)
+	// A resume starts under the rules now in force, not the ones it started
+	// under, and records them.
+	cleanup, err = s.withTempDir(sess.ID, &cfg, cleanup)
+	if err != nil {
+		return nil, ports.AgentSpec{}, err
+	}
+	sb, err := s.resumeSandbox(ctx, sess, cfg.Env)
+	if err != nil {
+		if cleanup != nil {
+			cleanup()
+		}
+		return nil, ports.AgentSpec{}, err
+	}
 	spec := s.agentSpec(cfg, ports.Conversation{ID: claudeID(sess), Resume: true}, "")
 	spec.EnvFile = envFile
+	confineSpec(&spec, sb.policy)
 	err = s.sessions.UpdateRunner(sess.ID, runsOn, runnerHost(runsOn, req.RunnerHost))
+	if err == nil && sb.facts != nil {
+		err = s.sessions.UpdateSandbox(sess.ID, *sb.facts)
+	}
 	if err == nil {
 		err = s.sessions.UpdateStatus(sess.ID, domain.SessionRunning)
 	}
@@ -207,7 +233,7 @@ func (s *Service) ResumeInteractive(ctx context.Context, req ports.ResumeRequest
 		}
 		return nil, ports.AgentSpec{}, err
 	}
-	s.adoptCleanup(sess.ID, cleanup)
+	s.adoptCleanup(sess.ID, withViolations(cleanup, s.collectViolations(sess.ID, sess.WorkingDir, sb.facts)))
 	s.courier.setTurn(sess.ID, turnIdle) // a resumed conversation waits for its next prompt
 	s.publish(sess.ID, SessionEvent{Type: "status", Status: domain.SessionRunning, Text: "resumed" + strings.TrimPrefix(startedText(runsOn), "started"), At: time.Now()})
 	if runsOn == domain.RunnerServer {
@@ -216,6 +242,20 @@ func (s *Service) ResumeInteractive(ctx context.Context, req ports.ResumeRequest
 		}
 	}
 	return s.withResumability(ctx, s.sessions.Get(sess.ID)), spec, nil
+}
+
+// resumeSandbox is the sandbox step of a resume: the session's policy under
+// the current settings.
+func (s *Service) resumeSandbox(ctx context.Context, sess *domain.Session, env []string) (sandboxed, error) {
+	repo := &domain.Repository{}
+	if s.Sandbox != nil && sess.RepositoryID != "" {
+		r, err := s.catalog.Repositories.GetRepository(ctx, sess.RepositoryID)
+		if err != nil {
+			return sandboxed{}, err
+		}
+		repo = r
+	}
+	return s.sandbox(ctx, prepareInput{ProjectID: sess.ProjectID, Mode: sess.Mode}, sess.ID, repo, sess.WorkingDir, env)
 }
 
 // claimResume marks id as being resumed; false when another call already is.

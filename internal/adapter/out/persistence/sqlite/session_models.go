@@ -41,6 +41,27 @@ type SessionModel struct {
 	TokenSavers             string `gorm:"column:token_savers"`
 	TokenSaversNotInstalled string `gorm:"column:token_savers_not_installed"`
 	CavemanIntensity        string `gorm:"column:caveman_intensity"`
+
+	// The sandbox facts. A visibility of "" is a session from before the
+	// sandbox: it has none.
+	Sandboxed         bool   `gorm:"column:sandboxed"`
+	SandboxVisibility string `gorm:"column:sandbox_visibility"`
+	SandboxDriver     string `gorm:"column:sandbox_driver"`
+}
+
+func (m *SessionModel) setSandbox(f *domain.SandboxFacts) {
+	if f == nil {
+		m.Sandboxed, m.SandboxVisibility, m.SandboxDriver = false, "", ""
+		return
+	}
+	m.Sandboxed, m.SandboxVisibility, m.SandboxDriver = f.Sandboxed, f.Visibility, f.Driver
+}
+
+func (m *SessionModel) sandbox() *domain.SandboxFacts {
+	if m.SandboxVisibility == "" {
+		return nil
+	}
+	return &domain.SandboxFacts{Sandboxed: m.Sandboxed, Visibility: m.SandboxVisibility, Driver: m.SandboxDriver}
 }
 
 func (SessionModel) TableName() string { return "sessions" }
@@ -79,6 +100,7 @@ func (m *SessionModel) ToDomain() *domain.Session {
 		TokenSavers:              splitSavers(m.TokenSavers),
 		TokenSaversNotInstalled:  splitSavers(m.TokenSaversNotInstalled),
 		CavemanIntensity:         domain.CavemanIntensity(m.CavemanIntensity),
+		Sandbox:                  m.sandbox(),
 		CreatedAt:                time.UnixMilli(m.CreatedAt),
 		UpdatedAt:                time.UnixMilli(m.UpdatedAt),
 	}
@@ -114,3 +136,15 @@ type SessionEventModel struct {
 }
 
 func (SessionEventModel) TableName() string { return "session_events" }
+
+// SandboxViolationModel is one thing the sandbox denied a session's process.
+type SandboxViolationModel struct {
+	ID        uint   `gorm:"primaryKey;autoIncrement"`
+	SessionID string `gorm:"column:session_id;index"`
+	WhenMs    int64  `gorm:"column:when_ms"`
+	Operation string `gorm:"column:operation"`
+	Path      string `gorm:"column:path"`
+	Process   string `gorm:"column:process"`
+}
+
+func (SandboxViolationModel) TableName() string { return "sandbox_violations" }

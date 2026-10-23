@@ -6,12 +6,16 @@ package claudecli
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"os"
+	"slices"
 	"strings"
 
 	"github.com/rfbatista/llmkit"
 	"github.com/rfbatista/llmkit/claude"
 
+	"operators-mcp/internal/adapter/out/agents/claudehome"
 	"operators-mcp/internal/ports"
 )
 
@@ -26,10 +30,35 @@ type Interactive interface {
 }
 
 // Launcher starts interactive claude sessions.
-type Launcher struct{ claude Interactive }
+type Launcher struct {
+	claude Interactive
+	// sandbox confines a session whose spec carries a policy; allow is what
+	// this host adds to every such policy (its Claude home, its claude's
+	// install dir).
+	sandbox ports.SandboxDriver
+	allow   []ports.SandboxPath
+	// home, when set, is the Claude home claude runs in; each session's
+	// worktree is trusted in it before the start.
+	home *claudehome.Home
+}
 
 // NewLauncher returns the launcher starting claude through c.
 func NewLauncher(c Interactive) Launcher { return Launcher{claude: c} }
+
+// WithSandbox makes l confine sessions whose spec has a policy with d, adding
+// allow to the policy. Without a driver such a spec is refused: it never runs
+// unconfined by accident.
+func (l Launcher) WithSandbox(d ports.SandboxDriver, allow ...ports.SandboxPath) Launcher {
+	l.sandbox, l.allow = d, allow
+	return l
+}
+
+// WithHome has l trust each session's worktree in h before starting claude,
+// so a fresh Claude home shows no trust prompt.
+func (l Launcher) WithHome(h claudehome.Home) Launcher {
+	l.home = &h
+	return l
+}
 
 func (Launcher) Kind() string { return Kind }
 
@@ -41,13 +70,64 @@ func (l Launcher) Launch(ctx context.Context, spec ports.AgentSpec, size ports.T
 	if err != nil {
 		return nil, err
 	}
+	if spec.Sandbox != nil && l.sandbox == nil {
+		return nil, fmt.Errorf("claudecli: the session is sandboxed but this host has no sandbox driver")
+	}
+	if spec.Sandbox != nil {
+		// The session's temp dir is made where the session runs, which is
+		// not always where the server did.
+		for _, e := range spec.Env {
+			if dir, ok := strings.CutPrefix(e, "TMPDIR="); ok && dir != "" {
+				if err := os.MkdirAll(dir, 0o700); err != nil {
+					return nil, fmt.Errorf("claudecli: make the session's temp dir: %w", err)
+				}
+			}
+		}
+	}
+	if l.home != nil && spec.Dir != "" {
+		if err := l.home.TrustFolder(spec.Dir); err != nil {
+			return nil, fmt.Errorf("claudecli: trust the worktree in the agent home: %w", err)
+		}
+	}
 	cfg.Size = claude.TermSize{Cols: size.Cols, Rows: size.Rows}
 	cfg.Wrap = func(c claude.Command) (claude.Command, error) {
-		ps, err := sh.Prepare(ctx, ports.ShellCommand{Program: c.Path, Args: c.Args, Dir: c.Dir, Env: c.Env, EnvFile: spec.EnvFile})
+		shellCmd := ports.ShellCommand{Program: c.Path, Args: c.Args, Dir: c.Dir, Env: c.Env, EnvFile: spec.EnvFile}
+		if spec.Sandbox == nil {
+			ps, err := sh.Prepare(ctx, shellCmd)
+			if err != nil {
+				return claude.Command{}, err
+			}
+			return claude.Command{Path: ps.Path, Args: ps.Args, Dir: ps.Dir, Env: ps.Env, Files: c.Files}, nil
+		}
+		policy := *spec.Sandbox
+		for _, p := range l.allow {
+			if p.Write {
+				policy.Writable = append(slices.Clone(policy.Writable), p.Path)
+			} else {
+				policy.Readable = append(slices.Clone(policy.Readable), p.Path)
+			}
+		}
+		for _, f := range c.Files {
+			policy.Readable = append(slices.Clone(policy.Readable), f)
+		}
+		confine := func(cmd ports.SandboxCommand) (ports.SandboxCommand, error) { return l.sandbox.Wrap(policy, cmd) }
+		var ps ports.ProcessSpec
+		var err error
+		if cs, ok := sh.(ports.ConfiningShell); ok {
+			// A login shell runs outside the sandbox, so its profile reads
+			// the home directory; only the claude it execs is confined.
+			ps, err = cs.PrepareConfined(ctx, shellCmd, confine)
+		} else {
+			if ps, err = sh.Prepare(ctx, shellCmd); err == nil {
+				var w ports.SandboxCommand
+				w, err = confine(ports.SandboxCommand{Path: ps.Path, Args: ps.Args, Dir: ps.Dir, Env: ps.Env})
+				ps = ports.ProcessSpec{Path: w.Path, Args: w.Args, Dir: w.Dir, Env: w.Env}
+			}
+		}
 		if err != nil {
 			return claude.Command{}, err
 		}
-		return claude.Command{Path: ps.Path, Args: ps.Args, Dir: ps.Dir, Env: ps.Env}, nil
+		return claude.Command{Path: ps.Path, Args: ps.Args, Dir: ps.Dir, Env: ps.Env, Files: c.Files}, nil
 	}
 	t, err := l.claude.StartInteractive(ctx, cfg)
 	if err != nil {
@@ -80,7 +160,7 @@ func Config(spec ports.AgentSpec) (claude.InteractiveConfig, error) {
 		AllowedTools: spec.AllowedTools,
 		Prompt:       spec.Prompt,
 		Attribution:  spec.SessionID,
-		Settings:     sessionSettings(spec.HookURL, spec.Hooks),
+		Settings:     sessionSettings(spec.HookURL, spec.Hooks, spec.Settings),
 	}
 	switch spec.Permission {
 	case "accept_edits":
@@ -101,8 +181,8 @@ func Config(spec ports.AgentSpec) (claude.InteractiveConfig, error) {
 // with the hook's name added as event=: SessionStart names the conversation,
 // UserPromptSubmit starts a turn and Stop ends one. The spec's more hooks (a
 // task session's edit proxy) are added beside them. --settings layers over
-// the user's own settings rather than replacing them. Nil when there are no
-// hooks.
+// the user's own settings rather than replacing them. extra are the spec's
+// other settings keys, merged verbatim. Nil when there are neither.
 //
 // The hooks must never disturb the session. SessionStart's and
 // UserPromptSubmit's stdout would be added to claude's context, so their
@@ -110,7 +190,7 @@ func Config(spec ports.AgentSpec) (claude.InteractiveConfig, error) {
 // claude turns that waited for this one to end ({"decision":"block",...}),
 // and it is empty otherwise. A server that is down only costs the
 // five-second timeout, and the session goes on as if it had answered nothing.
-func sessionSettings(url string, more map[string][]ports.HookGroup) *claude.Settings {
+func sessionSettings(url string, more map[string][]ports.HookGroup, extra map[string]json.RawMessage) *claude.Settings {
 	hooks := map[claude.HookEvent][]claude.HookMatcher{}
 	if url != "" {
 		sep := "&"
@@ -135,10 +215,14 @@ func sessionSettings(url string, more map[string][]ports.HookGroup) *claude.Sett
 			hooks[claude.HookEvent(event)] = append(hooks[claude.HookEvent(event)], m)
 		}
 	}
-	if len(hooks) == 0 {
+	if len(hooks) == 0 && len(extra) == 0 {
 		return nil
 	}
-	return &claude.Settings{Hooks: hooks}
+	s := &claude.Settings{Extra: extra}
+	if len(hooks) > 0 {
+		s.Hooks = hooks
+	}
+	return s
 }
 
 // terminal is llmkit's terminal as the host runs it.

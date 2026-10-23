@@ -136,6 +136,29 @@ func NewRouter(h *Handler, opts ...Option) *echo.Echo {
 	g.GET("/get_settings", h.handleGetSettings)
 	g.POST("/update_settings", h.handleUpdateSettings)
 
+	// agent sandbox settings (the Agent isolation page)
+	g.GET("/get_sandbox_settings", h.handleGetSandboxSettings)
+	g.POST("/set_sandbox_enabled", h.handleSetSandboxEnabled)
+	g.POST("/add_sandbox_path", h.handleAddSandboxPath)
+	g.POST("/update_sandbox_path", h.handleUpdateSandboxPath)
+	g.POST("/remove_sandbox_path", h.handleRemoveSandboxPath)
+
+	// managed claude (the Agent isolation page)
+	g.GET("/get_managed_claude", h.handleGetManagedClaude)
+	g.GET("/list_managed_claude_releases", h.handleListManagedClaudeReleases)
+	g.POST("/install_managed_claude", h.handleInstallManagedClaude)
+	g.POST("/switch_managed_claude", h.handleSwitchManagedClaude)
+	g.POST("/cancel_managed_claude_install", h.handleCancelManagedClaudeInstall)
+	g.POST("/remove_managed_claude_version", h.handleRemoveManagedClaudeVersion)
+	// agent credential (the Agent isolation page)
+	g.GET("/get_agent_credential", h.handleGetAgentCredential)
+	g.POST("/set_agent_credential", h.handleSetAgentCredential)
+	g.POST("/remove_agent_credential", h.handleRemoveAgentCredential)
+	g.GET("/get_agent_oauth", h.handleGetAgentOAuth)
+	g.POST("/start_agent_oauth", h.handleStartAgentOAuth)
+	g.POST("/submit_agent_oauth_code", h.handleSubmitAgentOAuthCode)
+	g.POST("/cancel_agent_oauth", h.handleCancelAgentOAuth)
+
 	// mcp servers
 	g.GET("/list_mcp_servers", h.handleListMCPServers)
 	g.GET("/get_mcp_server", h.handleGetMCPServer)
@@ -166,6 +189,7 @@ func NewRouter(h *Handler, opts ...Option) *echo.Echo {
 	g.GET("/sessions/:id/terminal", h.handleSessionTerminal) // WebSocket upgrade
 	g.GET("/sessions/:id/history", h.handleSessionHistory)
 	g.GET("/sessions/:id/transcript", h.handleSessionTranscript)
+	g.GET("/sessions/:id/sandbox/violations", h.handleSessionSandboxViolations)
 
 	// artifacts: what sessions publish for the Design tab. The /view/ routes
 	// are loaded as plain subresources (<img>, <video>, <iframe>), under the

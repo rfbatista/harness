@@ -1,0 +1,14 @@
+package agentisolation
+
+// summaryChips is the row of chips under the intro: credential, claude and
+// sandbox in one glance, each a link to its section. isolationSummary
+// (web/src/modules/agentisolation) keeps them in step as the sections change.
+templ summaryChips(s Summary) {
+	<nav class="[ cluster ] [ gutter-xs ]" aria-label="Summary" x-data="isolationSummary" data-seed="isolation-summary-seed" x-on:isolation-chip.window="take">
+		@templ.JSONScript("isolation-summary-seed", s)
+		<a href="#credential" class="[ badge ]" data-chip="credential" data-tone={ s.Credential.Tone } x-bind:data-tone="credential.tone" x-text="credential.text">{ s.Credential.Text }</a>
+		<a href="#claude" class="[ badge ]" data-chip="claude" data-tone={ s.Claude.Tone } x-bind:data-tone="claude.tone" x-text="claude.text">{ s.Claude.Text }</a>
+		<a href="#sandbox" class="[ badge ]" data-chip="sandbox" data-tone={ s.Sandbox.Tone } x-bind:data-tone="sandbox.tone" x-text="sandbox.text">{ s.Sandbox.Text }</a>
+		<span class="[ hint ]" { shownIf(s.Blocked())... } x-show="blocked">Agents cannot start until this is fixed.</span>
+	</nav>
+}
