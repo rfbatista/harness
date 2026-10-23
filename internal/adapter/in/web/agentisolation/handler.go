@@ -28,6 +28,8 @@ type Handler struct {
 	Sandbox ports.SandboxSettings
 	// Credential is the agent credential; nil shows it as not set.
 	Credential ports.AgentCredential
+	// OAuth is the Sign in with Claude flow; nil disables the button.
+	OAuth ports.AgentOAuth
 	// Driver is the platform's sandbox driver; a nil func or result is none.
 	Driver func() ports.SandboxDriver
 	// Claude and ClaudeBin are the managed claude and the binary agents
@@ -58,7 +60,7 @@ func (h Handler) Page(w http.ResponseWriter, r *http.Request) error {
 // View reads each section's state.
 func (h Handler) View() View {
 	return View{
-		Credential: NewCredentialView(h.Credential),
+		Credential: NewCredentialView(h.Credential, h.OAuth, h.ClaudeBin),
 		Claude:     NewClaudeView(h.Claude, h.ClaudeBin),
 		Sandbox:    NewSandboxView(h.Sandbox, h.Driver),
 	}

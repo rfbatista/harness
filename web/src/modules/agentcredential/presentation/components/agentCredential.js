@@ -8,11 +8,25 @@
 // The value is typed into an uncontrolled password input, sent once, and
 // cleared on save, cancel and pagehide. It is never held in component state
 // and never shown again.
+//
+// Sign in with Claude runs `claude setup-token` on the server. The flow's
+// state lives there, so the seed carries it and a page that was left finds
+// the same panel; while it runs the page counts the time down and asks the
+// server how it is going. Neither the token nor the pasted code is held here.
 
 import { describeError } from "../../../../shared/presentation/errors.js";
 import { readSeed } from "../../../../shared/presentation/seed.js";
 
 const KIND_NAMES = { oauth: "OAuth token", api_key: "Anthropic API key" };
+const ACTIVE = ["starting", "waiting_for_code", "checking"];
+/** How often the page asks the server how the flow is going, in ticks of a second. */
+const POLL_EVERY = 2;
+
+/** "9:05" for 545 seconds. */
+export function clock(seconds) {
+  const s = Math.max(0, Math.floor(seconds));
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+}
 
 /** The kind a pasted value's prefix says it is, or "" when it does not say. */
 export function kindOf(value) {
@@ -34,10 +48,28 @@ export const agentCredential = ({ gateway }) => () => ({
   busy: false,
   error: null,
   announcement: "",
+  canSignIn: false,
+  /** @type {import("../../domain/ports.js").OAuthPhase} */
+  phase: "idle",
+  oauthUrl: "",
+  oauthMessage: "",
+  oauthDetail: "",
+  remaining: 0,
+  ticks: 0,
+  /** This page saw the flow finish: the success banner stays until it is left. */
+  signInSaved: false,
+  timer: 0,
 
   init() {
-    this.apply(readSeed(this.$el));
+    const seed = readSeed(this.$el);
+    this.apply(seed);
+    this.canSignIn = seed.can_sign_in === true;
+    // A flow that finished before this page loaded is not news; a failure is.
+    if (seed.oauth && seed.oauth.phase !== "done") this.applyOAuth(seed.oauth);
     for (const node of this.$el.querySelectorAll("[data-ssr]")) node.remove();
+  },
+  destroy() {
+    this.stopTimer();
   },
 
   /** @param {import("../../domain/ports.js").CredentialStatus} status */
@@ -66,7 +98,7 @@ export const agentCredential = ({ gateway }) => () => ({
     return this.isSet ? "Replace with a pasted token or key" : "Paste a token or key";
   },
   get pasteTone() {
-    return this.isSet ? "" : "primary";
+    return this.isSet || this.canSignIn ? "" : "primary";
   },
   get oauthChosen() {
     return this.chosen === "oauth";
@@ -76,6 +108,144 @@ export const agentCredential = ({ gateway }) => () => ({
   },
   get noPasteForm() {
     return !this.pasting;
+  },
+  get signingIn() {
+    return ACTIVE.includes(this.phase);
+  },
+  get starting() {
+    return this.phase === "starting";
+  },
+  get hasUrl() {
+    return this.oauthUrl !== "";
+  },
+  get signInFailed() {
+    return this.phase === "failed";
+  },
+  get hasDetail() {
+    return this.oauthDetail !== "";
+  },
+  get noSignInHint() {
+    return !this.canSignIn;
+  },
+  get signInDisabled() {
+    return this.busy || this.signingIn || !this.canSignIn;
+  },
+  get pasteDisabled() {
+    return this.busy || this.signingIn;
+  },
+  get codeDisabled() {
+    return this.phase !== "waiting_for_code";
+  },
+  get signInLabel() {
+    return this.isSet ? "Sign in again" : "Sign in with Claude";
+  },
+  get signInTone() {
+    return this.isSet ? "" : "primary";
+  },
+  get oauthStatusLine() {
+    if (this.phase === "checking") return "Checking the code with Claude…";
+    if (this.phase === "waiting_for_code") return `Waiting for the code · ${clock(this.remaining)} left`;
+    return "";
+  },
+
+  async startSignIn() {
+    if (this.signInDisabled) return;
+    this.error = null;
+    this.pasting = false;
+    this.confirming = false;
+    this.signInSaved = false;
+    this.busy = true;
+    try {
+      this.applyOAuth(await gateway.oauthStart());
+    } catch (err) {
+      this.error = describeError(err);
+      this.refreshSignIn();
+    } finally {
+      this.busy = false;
+    }
+  },
+  /** @param {import("../../domain/ports.js").OAuthState} state */
+  applyOAuth(state) {
+    const was = this.phase;
+    this.phase = state.phase;
+    this.oauthUrl = state.url;
+    this.oauthMessage = state.message;
+    this.oauthDetail = state.detail;
+    this.remaining = state.remaining_seconds;
+    if (ACTIVE.includes(state.phase)) this.startTimer();
+    else this.stopTimer();
+    if (state.phase === "done" && ACTIVE.includes(was)) this.finishSignIn();
+  },
+  /** The flow stored the token: the section shows the credential set. */
+  async finishSignIn() {
+    this.signInSaved = true;
+    this.announcement = "Credential saved.";
+    try {
+      this.apply(await gateway.get());
+    } catch (err) {
+      this.error = describeError(err);
+    }
+    this.phase = "idle";
+  },
+  startTimer() {
+    if (this.timer) return;
+    this.timer = window.setInterval(() => this.tick(), 1000);
+  },
+  stopTimer() {
+    window.clearInterval(this.timer);
+    this.timer = 0;
+  },
+  tick() {
+    this.remaining = Math.max(0, this.remaining - 1);
+    this.ticks += 1;
+    if (this.ticks % POLL_EVERY === 0) this.refreshSignIn();
+  },
+  async refreshSignIn() {
+    try {
+      this.applyOAuth(await gateway.oauthState());
+    } catch {
+      // The next tick asks again.
+    }
+  },
+  /** Called with the code field in view: the panel's form submit. */
+  async submitCode() {
+    const field = /** @type {HTMLInputElement} */ (this.$refs.code);
+    if (this.busy || !field) return;
+    this.busy = true;
+    this.error = null;
+    try {
+      this.applyOAuth(await gateway.oauthSubmit(field.value));
+      field.value = "";
+    } catch (err) {
+      this.error = describeError(err);
+    } finally {
+      this.busy = false;
+    }
+  },
+  async cancelSignIn() {
+    this.error = null;
+    try {
+      this.applyOAuth(await gateway.oauthCancel());
+      this.clearValue();
+      this.$nextTick(() => this.$refs.signin?.focus());
+    } catch (err) {
+      this.error = describeError(err);
+    }
+  },
+  async dismissSignIn() {
+    await this.cancelSignIn();
+  },
+  /** The link opens in a new tab; step 3 is next, so the code field is ready. */
+  opened() {
+    this.$nextTick(() => this.$refs.code?.focus());
+  },
+  async copyLink() {
+    try {
+      await navigator.clipboard.writeText(this.oauthUrl);
+      this.announcement = "Link copied.";
+    } catch {
+      this.announcement = "Could not copy the link. Select it and copy it by hand.";
+    }
   },
 
   startPaste() {
@@ -117,8 +287,10 @@ export const agentCredential = ({ gateway }) => () => ({
     }
   },
   clearValue() {
-    const field = /** @type {HTMLInputElement | undefined} */ (this.$refs.value);
-    if (field) field.value = "";
+    for (const ref of [this.$refs.value, this.$refs.code]) {
+      const field = /** @type {HTMLInputElement | undefined} */ (ref);
+      if (field) field.value = "";
+    }
   },
   /** The page is going away: the value must not outlive it in a restored page. */
   pagehide() {

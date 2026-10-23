@@ -83,6 +83,9 @@ type Services struct {
 	// AgentCredential keeps the credential agents sign in with; nil answers
 	// 503.
 	AgentCredential ports.AgentCredential
+	// AgentOAuth runs the sign-in flow that stores the agent credential; nil
+	// answers 503.
+	AgentOAuth ports.AgentOAuth
 }
 
 // Handler serves the application's driving ports as HTTP endpoints (the same
@@ -128,6 +131,7 @@ type Handler struct {
 	managedClaude    ports.ManagedClaude
 	managedClaudeBin ports.ManagedClaudeBin
 	agentCredential  ports.AgentCredential
+	agentOAuth       ports.AgentOAuth
 
 	streams streamRegistry // the browser tabs' live streams (stream.go)
 }
@@ -171,6 +175,7 @@ func NewHandler(s Services) *Handler {
 		managedClaude:    s.ManagedClaude,
 		managedClaudeBin: s.ManagedClaudeBin,
 		agentCredential:  s.AgentCredential,
+		agentOAuth:       s.AgentOAuth,
 	}
 }
 
