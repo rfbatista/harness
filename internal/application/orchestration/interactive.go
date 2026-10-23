@@ -183,6 +183,12 @@ func (s *Service) ResumeInteractive(ctx context.Context, req ports.ResumeRequest
 	if err != nil {
 		return nil, ports.AgentSpec{}, err
 	}
+	if err := s.ready(ctx); err != nil {
+		if ag.cleanup != nil {
+			ag.cleanup()
+		}
+		return nil, ports.AgentSpec{}, err
+	}
 	permission := llmkit.PermissionAsk
 	if sess.AutoRun {
 		permission = llmkit.PermissionBypass

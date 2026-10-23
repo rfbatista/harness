@@ -64,8 +64,16 @@ func (h Handler) View() View {
 	}
 }
 
-// Blocks says whether something on the page stops agents from starting; the
-// top bar's link then carries the attention mark.
-func Blocks(sandbox ports.SandboxSettings, driver func() ports.SandboxDriver) bool {
-	return NewSandboxView(sandbox, driver).Blocks()
+// Blocks says whether something on the page stops agents from starting: the
+// sandbox is on without a driver, the agent credential is not set, or the
+// managed claude is not installed and not overridden. The top bar's link then
+// carries the attention mark. A nil credential or bin is not enforced.
+func Blocks(sandbox ports.SandboxSettings, driver func() ports.SandboxDriver, credential ports.AgentCredential, bin ports.ManagedClaudeBin) bool {
+	if NewSandboxView(sandbox, driver).Blocks() {
+		return true
+	}
+	if credential != nil && !credential.Status().Set {
+		return true
+	}
+	return bin != nil && !bin.Installed()
 }

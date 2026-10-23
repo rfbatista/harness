@@ -94,7 +94,10 @@ func errorHandler(err error, c echo.Context) {
 			writeCoded(c, http.StatusConflict, err, se)
 			return
 		case "CLAUDE_CLI_NOT_FOUND", "AGENT_CLI_NOT_FOUND", "SERVER_HOSTING_UNAVAILABLE", "PR_TOOL_UNAVAILABLE",
-			"GIT_CREDENTIAL_STORE_LOCKED", "TOKEN_SAVER_UNSUPPORTED_PLATFORM":
+			"GIT_CREDENTIAL_STORE_LOCKED", "TOKEN_SAVER_UNSUPPORTED_PLATFORM",
+			// An agent cannot start until the Agent isolation page is done.
+			"AGENT_CREDENTIAL_MISSING", "MANAGED_CLAUDE_MISSING", "MANAGED_CLAUDE_INSTALLING",
+			"MANAGED_CLAUDE_INSTALL_FAILED", "SANDBOX_DRIVER_MISSING":
 			// The request is well-formed; the machine just cannot run agents
 			// or token savers, or reach the code host as the person.
 			writeCoded(c, http.StatusServiceUnavailable, err, se)

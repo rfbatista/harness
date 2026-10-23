@@ -110,6 +110,12 @@ type Service struct {
 	// of the agent credential (ADR 0018), read at every start and resume. Nil
 	// or empty adds nothing.
 	AgentCredential func() []string
+	// Ready refuses an agent start while the agent credential, the managed
+	// claude or the sandbox driver is missing (agentready.Gate). Nil enforces
+	// nothing.
+	Ready interface {
+		Check(ctx context.Context) error
+	}
 	// Roles says what a session is on its task, for the role-aware brief. Nil:
 	// every session is a peer.
 	Roles interface {
@@ -400,6 +406,13 @@ func (s *Service) prepare(ctx context.Context, in prepareInput) (*prepared, erro
 		return nil, err
 	}
 
+	if err := s.ready(ctx); err != nil {
+		if ag.cleanup != nil {
+			ag.cleanup()
+		}
+		return nil, err
+	}
+
 	ws, err := s.workspaces.Create(in.RepositoryID, domain.Slug(in.Branch), in.Branch, in.BaseBranch)
 	if err != nil {
 		if ag.cleanup != nil {
@@ -444,6 +457,14 @@ func (s *Service) prepare(ctx context.Context, in prepareInput) (*prepared, erro
 		envFile:    envFile,
 		savers:     savers,
 	}, nil
+}
+
+// ready is the refusal of a start while something agents need is missing.
+func (s *Service) ready(ctx context.Context) error {
+	if s.Ready == nil {
+		return nil
+	}
+	return s.Ready.Check(ctx)
 }
 
 // withAgentCredential adds the agent credential to the agent process env.

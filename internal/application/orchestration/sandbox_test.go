@@ -358,3 +358,50 @@ func TestSandboxFacts_ASessionFromBeforeTheSandboxHasNoneAndResumesFine(t *testi
 		t.Errorf("facts = %+v, want none", got)
 	}
 }
+
+// readiness is a Ready that refuses every start.
+type readiness struct{ err error }
+
+func (r readiness) Check(context.Context) error { return r.err }
+
+func TestReady_ARefusedStartSpawnsNothingAndLeavesNoWorktree(t *testing.T) {
+	w := newSandboxWorld(t)
+	w.svc.Transcripts = fakeTranscripts{}
+	ctx := context.Background()
+	sess, _ := w.start(t, "implement")
+	if _, err := w.svc.EndInteractive(ctx, sess.ID, 0, false); err != nil {
+		t.Fatal(err)
+	}
+	prov := w.svc.workspaces.(*fakeProvisioner)
+	created, calls := len(prov.created), len(w.driver.Calls())
+
+	refusal := &domain.StructuredError{Code: "AGENT_CREDENTIAL_MISSING", Message: "Agent not started: no agent credential."}
+	w.svc.Ready = readiness{err: refusal}
+
+	_, _, err := w.svc.StartInteractive(ctx, InteractiveRequest{ProjectID: "p1", RepositoryID: "r1", TicketID: "tk1", Mode: "implement", RunsOn: domain.RunnerTUI})
+	if err != error(refusal) {
+		t.Errorf("StartInteractive err = %v", err)
+	}
+	if _, err = w.svc.Start(ctx, StartRequest{ProjectID: "p1", RepositoryID: "r1", Task: "hello"}); err != error(refusal) {
+		t.Errorf("Start err = %v", err)
+	}
+	if _, _, err = w.svc.ResumeInteractive(ctx, ports.ResumeRequest{SessionID: sess.ID}); err != error(refusal) {
+		t.Errorf("ResumeInteractive err = %v", err)
+	}
+	if len(prov.created) != created || len(w.driver.Calls()) != calls {
+		t.Errorf("a refused start spawned: worktrees %d -> %d, driver calls %d -> %d", created, len(prov.created), calls, len(w.driver.Calls()))
+	}
+
+	w.svc.Ready = readiness{} // what was missing is added: the next start proceeds
+	if _, _, err := w.svc.StartInteractive(ctx, InteractiveRequest{ProjectID: "p1", RepositoryID: "r1", TicketID: "tk1", Mode: "implement", RunsOn: domain.RunnerTUI}); err != nil {
+		t.Fatalf("next start: %v", err)
+	}
+}
+
+func TestReady_NothingMissingEnforcesNothingWithoutAGate(t *testing.T) {
+	w := newSandboxWorld(t)
+	if w.svc.Ready != nil {
+		t.Fatal("a service built without a gate must not enforce one")
+	}
+	w.start(t, "implement")
+}
