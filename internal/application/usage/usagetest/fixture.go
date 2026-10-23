@@ -54,6 +54,9 @@ type Option func(*usage.Options)
 // WithClock sets the service's clock.
 func WithClock(now func() time.Time) Option { return func(o *usage.Options) { o.Clock = now } }
 
+// WithLiveCallBuffer sets how many events a live call viewer may have waiting.
+func WithLiveCallBuffer(n int) Option { return func(o *usage.Options) { o.LiveCallBuffer = n } }
+
 // NewEnv opens the database, records the projects, tasks and sessions, and
 // builds the service.
 func NewEnv(t *testing.T, opts ...Option) *Env {
