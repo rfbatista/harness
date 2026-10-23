@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 
 	"operators-mcp/internal/adapter/in/web/shell"
+	"operators-mcp/internal/domain"
+	"operators-mcp/internal/ports"
 )
 
 // Href is the Server page.
@@ -25,7 +27,9 @@ type Paths struct {
 
 // Handler serves GET /server.
 type Handler struct {
-	Paths  Paths
+	Paths Paths
+	// Settings paints the switches; nil shows each at its default.
+	Settings ports.SettingsReader
 	Layout shell.Layout
 	Render shell.Renderer
 }
@@ -37,7 +41,11 @@ func (h Handler) Page(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	frame.Top.OnServer = true
-	return h.Render(w, r, http.StatusOK, Page(frame, NewView(h.Paths)))
+	v := NewView(h.Paths)
+	if h.Settings != nil {
+		v.AgentsMoveDocuments = domain.AgentsMoveDocuments(h.Settings.Setting(domain.SettingAgentsMoveDocuments))
+	}
+	return h.Render(w, r, http.StatusOK, Page(frame, v))
 }
 
 // View is what the page renders.
@@ -48,6 +56,9 @@ type View struct {
 	Source   string
 	// Rows are what the data dir holds, each with its path.
 	Rows []Row
+	// AgentsMoveDocuments is the stored "Agents move documents to project"
+	// switch, off while unset.
+	AgentsMoveDocuments bool
 }
 
 // Row is one thing the data dir holds.

@@ -1,6 +1,9 @@
 package serversettings
 
-import "operators-mcp/internal/adapter/in/web/shell"
+import (
+	"operators-mcp/internal/adapter/in/web/shell"
+	"operators-mcp/internal/domain"
+)
 
 // Page is /server.
 templ Page(frame shell.Frame, v View) {
@@ -37,6 +40,28 @@ templ Page(frame shell.Frame, v View) {
 									<p class="[ text-sm color-ink-muted ]">{ row.Lead }</p>
 								</li>
 							}
+						</ul>
+					</section>
+					<section class="[ pane ]" aria-labelledby="server-agents-title">
+						<header><h2 id="server-agents-title">Agents</h2></header>
+						<ul role="list" class="[ list ]">
+							<li class="[ flow ] [ flow-space-2xs ]" x-data="settingFlag" data-setting={ domain.SettingAgentsMoveDocuments }>
+								<p class="[ visually-hidden ]" role="status" aria-live="polite" x-text="announcement"></p>
+								<template x-if="error">
+									<div class="[ banner ]" data-tone="danger" role="alert">
+										<div class="[ flow ] [ flow-space-3xs grow ]">
+											<span x-text="error.message"></span>
+											<span class="[ code ]"><span x-text="error.code"></span> · <span x-text="error.next"></span></span>
+										</div>
+										<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-on:click="dismissError">Dismiss</button>
+									</div>
+								</template>
+								<label class="[ row ]" style="--row-columns: 9rem auto">
+									<span class="[ title ]">Agents move documents to project</span>
+									<input type="checkbox" data-setting={ domain.SettingAgentsMoveDocuments } checked?={ v.AgentsMoveDocuments } x-bind:disabled="saving" x-bind:aria-busy="saving" x-on:change="choose"/>
+								</label>
+								<p class="[ text-sm color-ink-muted ]">While on, a session on a task moves that task's documents to project level with a plain mv in its virtual shell, with no approval and no notification. While off, only you do, with "Move to project". Designs are not affected.</p>
+							</li>
 						</ul>
 					</section>
 				</div>

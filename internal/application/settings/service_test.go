@@ -78,6 +78,25 @@ func TestUpdateSettings_TakesOnlyACavemanIntensity(t *testing.T) {
 	}
 }
 
+func TestUpdateSettings_TakesOnlyTrueOrFalseForAgentsMovingDocuments(t *testing.T) {
+	svc, _ := newTestService(t)
+	if got := svc.Setting(domain.SettingAgentsMoveDocuments); got != "" {
+		t.Fatalf("unset setting = %q, want empty", got)
+	}
+	for _, v := range []string{"true", "false"} {
+		if _, err := svc.UpdateSettings(map[string]string{domain.SettingAgentsMoveDocuments: v}); err != nil {
+			t.Fatalf("%s: %v", v, err)
+		}
+	}
+	for _, v := range []string{"", "yes", "True", "1"} {
+		_, err := svc.UpdateSettings(map[string]string{domain.SettingAgentsMoveDocuments: v})
+		var se *domain.StructuredError
+		if !errors.As(err, &se) || se.Code != "INVALID_INPUT" {
+			t.Errorf("%q: expected INVALID_INPUT, got %v", v, err)
+		}
+	}
+}
+
 func TestUpdateSettings_AnnouncesOnlyChanges(t *testing.T) {
 	svc, bus := newTestService(t)
 	var got []domain.SettingsChanged
