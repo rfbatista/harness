@@ -235,6 +235,29 @@ func TestProjectBrief_IsUnchanged(t *testing.T) {
 	}
 }
 
+// The project brief states the setting too; pinned with it on.
+func TestProjectBrief_WhileAgentsMoveDocuments(t *testing.T) {
+	got := projectBrief(projectBriefInput{
+		Project:      &domain.Project{ID: "p1", Name: "harness"},
+		Repositories: []*domain.Repository{{ID: "r1", Name: "api", Description: "the server"}},
+		Contexts:     []*domain.BoundedContext{{ID: "bc1", Name: "Billing", Purpose: "invoices and payments"}},
+		AgentsMove:   true,
+	})
+	const golden = "testdata/project_brief_agents_move.golden"
+	if os.Getenv("UPDATE_GOLDEN") != "" {
+		if err := os.WriteFile(golden, []byte(got), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	want, err := os.ReadFile(golden)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != string(want) {
+		t.Fatalf("the project brief with the setting on changed:\n%s", got)
+	}
+}
+
 // pointCatalogAt makes the test catalog's project and repository the one
 // the planning world (withShells) holds, so a project-level shell lists its
 // tasks.

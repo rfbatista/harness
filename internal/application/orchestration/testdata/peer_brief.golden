@@ -16,7 +16,7 @@ with your ordinary tools; none of it takes a tool call:
 What the folders hold:
 
 - task/docs/ — this task's documents. A file you create there is a new document linked to this task, titled by its first heading. Any text format: .md, .html, .txt.
-- project/docs/ — the project's documents: architecture, conventions, decisions, the specs and contracts other tasks build on. A person moves documents to project level: once one in task/docs/ says something the next task needs, not just this one, ask them to move it, in a task comment or a message to your architect. mv one from project/docs/ back to task/docs/ to make it this task's again.
+- project/docs/ — the project's documents: architecture, conventions, decisions, the specs and contracts other tasks build on. The setting "Agents move documents to project" was off when this session started, so a person moves documents to project level: once one in task/docs/ says something the next task needs, not just this one, ask them to move it, in a task comment or a message to your architect. mv one from project/docs/ back to task/docs/ to make it this task's again.
 - task/comments/ — the task's comments, one file each (see "Resources and comments").
 - task/resources/ — what the person added: uploads under their names, links in links.md. Read-only.
 - task/designs/ — what this task published to the web UI's Design tab. A file you create there is published, a change publishes a new revision, rm unpublishes it.
@@ -35,7 +35,7 @@ A refused write says why, starting with its code:
 - READ_ONLY, COMMENT_NOT_YOURS — the path is not yours to change
 - REDIRECT_DENIED — write with Write, Edit or tee instead of > or >>
 - NOT_ON_TASK — only a document linked to this task can move to task/docs/
-- PROJECT_MOVE_DENIED — a document cannot move to project/docs/: ask the person to move it
+- PROJECT_MOVE_DENIED — a document cannot move to project/docs/: ask the person to move it, or to turn on "Agents move documents to project"
 - NOT_STORED — the path is outside the folders the harness stores; nothing was written
 - SHELL_UNAVAILABLE — the harness could not be reached: redo the change once it is back
 

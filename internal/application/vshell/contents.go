@@ -22,7 +22,7 @@ import (
 func (s *Service) contents(ctx context.Context, sh *shell, tk *domain.Ticket) (*builder, error) {
 	b := &builder{now: time.Now()}
 	sessionID := sh.sessionID
-	b.fixed(ports.ShellFile{Path: "README.md", Kind: ports.ShellReadme, Title: "README", UpdatedAt: b.now}, []byte(readme))
+	b.fixed(ports.ShellFile{Path: "README.md", Kind: ports.ShellReadme, Title: "README", UpdatedAt: b.now}, []byte(readmeFor(s.agentsMove())))
 
 	if tk == nil {
 		if err := b.documents(ctx, s.src.Tickets, s.src.Documents, sh.projID, nil); err != nil {

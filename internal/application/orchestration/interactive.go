@@ -545,6 +545,12 @@ func (s *Service) agentSpec(cfg llmkit.SessionConfig, conv ports.Conversation, p
 	return spec
 }
 
+// agentsMoveDocuments is the setting "Agents move documents to project" now;
+// a brief states it as its session starts (ADR 0020).
+func (s *Service) agentsMoveDocuments() bool {
+	return s.Settings != nil && domain.AgentsMoveDocuments(s.Settings.Setting(domain.SettingAgentsMoveDocuments))
+}
+
 // sessionModel is the model a new session starts with: the one its start
 // names, else its tier's from the settings (domain.ResolveSessionModel).
 func (s *Service) sessionModel(mode domain.SessionMode, parentSessionID, named string) string {

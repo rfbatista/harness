@@ -40,7 +40,7 @@ implementer — finds your work there and nowhere else.
 |---|---|
 | `task/docs/` | This task's documents: the PRD. A file you create here is a new document linked to this task. |
 | `tasks/<id>/docs/` | Another task's documents, for any task of the project: a child's brief. A file you create here is a document linked to that task. |
-| `project/docs/` | The project's documents: Glossary, ADRs, architecture, stable contracts. Read them first; a person moves documents here. |
+| `project/docs/` | The project's documents: Glossary, ADRs, architecture, stable contracts. Read them first. This session has no task, so it moves none: write yours onto a task, and a session on that task moves it if the setting "Agents move documents to project" is on; otherwise a person does. |
 | `task/comments/` | The task's comments. A file you write here is your comment to the person. |
 | `task/resources/` | What the person added: uploads, and links in `links.md`. Read-only. |
 | `.index.json` | Every file's `id` (the document id you attach to reviews), kind, scope and version. |

@@ -345,7 +345,7 @@ func TestDocumentFilesAreChangedMovedAndRemovedFromTheShell(t *testing.T) {
 // projectMoveDenied is the refusal of moving the document at rel to project
 // level.
 func projectMoveDenied(rel string) shellAnswer {
-	return shellAnswer{Code: "PROJECT_MOVE_DENIED", Reason: "PROJECT_MOVE_DENIED: " + rel + ` cannot move to project scope: a person moves documents to project level ("Move to project" on the task's documents page); nothing was written`}
+	return shellAnswer{Code: "PROJECT_MOVE_DENIED", Reason: "PROJECT_MOVE_DENIED: " + rel + ` cannot move to project scope: only a person moves documents to project level ("Move to project" on the task's documents page), unless they turn on "Agents move documents to project" on the Server page; nothing was written`}
 }
 
 // A write made on a copy the harness has changed since is refused with

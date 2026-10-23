@@ -181,7 +181,7 @@ func NewHandler(deps Deps, assets *Assets, fallback http.Handler) http.Handler {
 		mux.Handle("GET "+models.Href, s.page(modelsPage.Page))
 	}
 	if deps.DataPaths != nil {
-		serverPage := serversettings.Handler{Paths: *deps.DataPaths, Layout: s.layout, Render: render}
+		serverPage := serversettings.Handler{Paths: *deps.DataPaths, Settings: deps.Settings, Layout: s.layout, Render: render}
 		mux.Handle("GET "+serversettings.Href, s.page(serverPage.Page))
 	}
 	mux.Handle("GET /projects/new", s.page(projectPages.New))

@@ -184,10 +184,14 @@ func commentUpdateText(c domain.TicketComment, path string) string {
 }
 
 // taskCounts is how many resources and comments a task has; known is false
-// when they could not be read.
+// when they could not be read. It also carries what else the brief states of
+// the moment the session starts.
 type taskCounts struct {
 	resources, comments int
 	known               bool
+	// agentsMove is the setting "Agents move documents to project" as the
+	// session starts; the brief states it.
+	agentsMove bool
 }
 
 // resourcesSection is the brief's part on what the person adds to the task.

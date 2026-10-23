@@ -48,12 +48,15 @@ navigate it.
   rewriting a long document. A new file's first heading is its title, so start
   every document with `# <title>`. Markdown is the natural format; any text works.
 - **Move** with `mv` within a folder to rename, or from `project/docs/` back to
-  `task/docs/`; `rm` deletes one. A person moves documents to project level:
-  `mv` into `project/docs/` is refused with `PROJECT_MOVE_DENIED`.
+  `task/docs/`; `rm` deletes one. If the setting "Agents move documents to
+  project" is on (your brief says so), `mv task/docs/<file> project/docs/`
+  moves one of this task's documents to project level yourself; otherwise a
+  person moves it and the `mv` is refused with `PROJECT_MOVE_DENIED`.
 - **Refusals** start with a code. `BASE_VERSION_STALE`: someone changed the
   file and it was refreshed — read it again and redo your change. `READ_ONLY`,
   `COMMENT_NOT_YOURS`, `NOT_ON_TASK`, `NOT_STORED`: that path is not yours to
-  write. `PROJECT_MOVE_DENIED`: ask the person to move the document.
+  write. `PROJECT_MOVE_DENIED`: the setting "Agents move documents to project"
+  is off, or the document is another task's; ask the person to move it.
   `REDIRECT_DENIED`: use Write, Edit or `tee`, not `>`.
   `SHELL_UNAVAILABLE`: nothing was stored; redo it once the harness is back.
 
@@ -69,8 +72,10 @@ navigate it.
   `sed -i`, never by rewriting it.
 - **Specs and contracts meant to outlive the task go to project level.** Once a
   contract is `stable`, or a spec describes something later tasks will build on,
-  ask the person to move it from `task/docs/` to `project/docs/` (with
-  `mcp__task__request_user_review`, naming the document); read `project/docs/`
+  move it from `task/docs/` to `project/docs/`: if the setting "Agents move
+  documents to project" is on, `mv` it yourself; otherwise ask the person to
+  move it (with `mcp__task__request_user_review`, naming the document), and
+  do not open a review request for a move you can make yourself. Read `project/docs/`
   first so you build on what is already there. Design assets other tasks reuse
   live in `project/designs/`: name in a spec the project assets (logos,
   palettes, components) the designer should build on, and attach the ones this
@@ -323,7 +328,7 @@ Reviewing its diff line by line is not.
 | One combined spec for several applications | One spec document and one delegate per application. |
 | Writing an agent's name in a spec and stopping | Delegation is `start_task_session`; the label alone hands off nothing. |
 | Duplicating documents an earlier session wrote | `ls` and `grep` first; edit what exists. |
-| Leaving a stable contract in `task/docs/` | Ask the person to move it to `project/docs/`; the next task's sessions read it there. |
+| Leaving a stable contract in `task/docs/` | If the setting "Agents move documents to project" is on, `mv` it to `project/docs/`; otherwise ask the person to move it. The next task's sessions read it there. |
 | A delegate's review request sits unanswered | Reply with a verdict; it is waiting on you. |
 | Letting a delegate move the task status, or moving it without a reason | Only you move it, with `update_task_status` and a `reason`. |
 | Asking the person to review every ticket breakdown | Ask only for what needs their decision; judge the rest against the spec. |

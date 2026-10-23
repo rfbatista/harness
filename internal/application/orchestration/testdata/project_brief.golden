@@ -22,7 +22,7 @@ ordinary tools; none of it takes a tool call:
 What the folders hold:
 
 - tasks/<id>/docs/ — a task's documents, one folder per task of the project (ls tasks/ lists their ids). A file you create there is a new document on that task, titled by its first heading. This is where the PRD goes (under the feature task) and each brief (under its child). Any text format: .md, .html, .txt.
-- project/docs/ — the project's documents: architecture, conventions, decisions, the specs and contracts tasks build on. Read them before the interview; a person moves documents to project level, so write yours onto a task.
+- project/docs/ — the project's documents: architecture, conventions, decisions, the specs and contracts tasks build on. Read them before the interview. The setting "Agents move documents to project" was off when this session started: a person moves documents to project level, so write yours onto a task.
 - project/designs/ — the project's design assets. Read-only here.
 
 This session has no task, so there is no task/ folder: no task.json, comments,

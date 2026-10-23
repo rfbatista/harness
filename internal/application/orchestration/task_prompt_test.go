@@ -109,7 +109,7 @@ func TestApplyTaskContext_BriefTeachesTheShell(t *testing.T) {
 		"\n- task/docs/ — ", "\n- project/docs/ — ", "\n- task/comments/ — ", "\n- task/resources/ — ",
 		"\n- task/designs/ — ", "\n- project/designs/ — ",
 		"Read, grep", "sed -n", "Write, Edit, sed -i, tee, cp, mv, rm",
-		"architecture, conventions, decisions", "A person moves documents to project level",
+		"architecture, conventions, decisions", "so a person moves documents to project level",
 		"\n- BASE_VERSION_STALE — ", "\n- READ_ONLY, COMMENT_NOT_YOURS — ", "\n- REDIRECT_DENIED — ",
 		"\n- NOT_ON_TASK — ", "\n- PROJECT_MOVE_DENIED — ", "\n- NOT_STORED — ", "\n- SHELL_UNAVAILABLE — ",
 	} {
@@ -161,13 +161,58 @@ func TestApplyTaskContext_BriefNamesProjectAssets(t *testing.T) {
 
 // A session with no architect keeps today's brief, byte for byte.
 func TestTaskBrief_PeerIsUnchanged(t *testing.T) {
-	want, err := os.ReadFile("testdata/peer_brief.golden")
+	tk := &domain.Ticket{ID: "tk1", Title: "Ship the thing", Description: "with care", Status: domain.TicketStatusInProgress}
+	got := taskBrief(tk, domain.RolePeer, taskCounts{})
+	const golden = "testdata/peer_brief.golden"
+	if os.Getenv("UPDATE_GOLDEN") != "" {
+		if err := os.WriteFile(golden, []byte(got), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	want, err := os.ReadFile(golden)
 	if err != nil {
 		t.Fatal(err)
 	}
-	tk := &domain.Ticket{ID: "tk1", Title: "Ship the thing", Description: "with care", Status: domain.TicketStatusInProgress}
-	if got := taskBrief(tk, domain.RolePeer, taskCounts{}); got != string(want) {
+	if got != string(want) {
 		t.Fatalf("the peer brief changed:\n%s", got)
+	}
+}
+
+// A session started while "Agents move documents to project" is on is told
+// to move documents itself; the brief is pinned byte for byte.
+func TestTaskBrief_PeerWhileAgentsMoveDocuments(t *testing.T) {
+	tk := &domain.Ticket{ID: "tk1", Title: "Ship the thing", Description: "with care", Status: domain.TicketStatusInProgress}
+	got := taskBrief(tk, domain.RolePeer, taskCounts{agentsMove: true})
+	const golden = "testdata/peer_brief_agents_move.golden"
+	if os.Getenv("UPDATE_GOLDEN") != "" {
+		if err := os.WriteFile(golden, []byte(got), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	want, err := os.ReadFile(golden)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != string(want) {
+		t.Fatalf("the peer brief with the setting on changed:\n%s", got)
+	}
+}
+
+// Every role's brief gives the instruction that matches the setting.
+func TestTaskBrief_StatesWhoMovesDocumentsToProject(t *testing.T) {
+	tk := &domain.Ticket{ID: "tk1", Title: "Ship the thing"}
+	for _, role := range []domain.SessionRole{domain.RolePeer, domain.RoleDelegate, domain.RoleArchitect} {
+		off := taskBrief(tk, role, taskCounts{})
+		on := taskBrief(tk, role, taskCounts{agentsMove: true})
+		if !strings.Contains(off, "ask them to move it") || strings.Contains(off, "mv it to project/docs/") {
+			t.Errorf("%s brief with the setting off:\n%s", role, off)
+		}
+		if !strings.Contains(on, "mv it to project/docs/") || strings.Contains(on, "ask them to move it") {
+			t.Errorf("%s brief with the setting on:\n%s", role, on)
+		}
+		if !strings.Contains(off, "was off when this session started") || !strings.Contains(on, "was on when this session started") {
+			t.Errorf("%s brief does not state the setting's value", role)
+		}
 	}
 }
 
@@ -255,7 +300,7 @@ func TestPrompts_NameNoRemovedTool(t *testing.T) {
 	tk := &domain.Ticket{ID: "tk1", Title: "Ship the thing"}
 	texts := map[string]string{
 		"shell":     shellSection("/tmp/harness-shell-1"),
-		"resources": resourcesSection(taskCounts{1, 2, true}),
+		"resources": resourcesSection(taskCounts{resources: 1, comments: 2, known: true}),
 		"attached":  attachedAssetsSection([]*domain.Artifact{{ID: "a1", TicketID: "tk9", Title: "Logo", Kind: domain.ArtifactPage}}),
 	}
 	for _, role := range []domain.SessionRole{domain.RolePeer, domain.RoleDelegate, domain.RoleArchitect} {
@@ -327,6 +372,29 @@ func TestTaskBrief_ReadsAndEditsFilesInParts(t *testing.T) {
 	for _, want := range []string{"grep for what you need", "sed -n", "offset and limit, never the whole file", "change a part with Edit\nor sed -i"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("brief lacks %q", want)
+		}
+	}
+}
+
+// A mode skill never tells a session that only a person moves documents to
+// project level without the setting that changes it (ADR 0020).
+func TestModeSkills_MovingDocumentsFollowsTheSetting(t *testing.T) {
+	old := regexp.MustCompile(`(?i)(a person moves documents|ask the person to move)`)
+	for _, names := range modeSkillNames {
+		for _, skill := range names {
+			files, err := modeSkillFiles(skill)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, f := range files {
+				flat := strings.Join(strings.Fields(f.Content), " ")
+				for _, at := range old.FindAllStringIndex(flat, -1) {
+					from, to := max(0, at[0]-300), min(len(flat), at[1]+300)
+					if !strings.Contains(flat[from:to], "Agents move documents to project") {
+						t.Errorf("%s/%s says a person moves documents without naming the setting: %q", skill, f.Path, flat[at[0]:at[1]])
+					}
+				}
+			}
 		}
 	}
 }
