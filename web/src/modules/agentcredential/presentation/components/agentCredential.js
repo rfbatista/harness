@@ -9,10 +9,11 @@
 // cleared on save, cancel and pagehide. It is never held in component state
 // and never shown again.
 //
-// Sign in with Claude runs `claude setup-token` on the server. The flow's
-// state lives there, so the seed carries it and a page that was left finds
-// the same panel; while it runs the page counts the time down and asks the
-// server how it is going. Neither the token nor the pasted code is held here.
+// Sign in with Claude runs `claude auth login` on the server, in the agents'
+// own Claude home. The flow's state lives there, so the seed carries it and a
+// page that was left finds the same panel; while it runs the page counts the
+// time down and asks the server how it is going. Claude keeps the login; the
+// pasted code is not held here.
 
 import { describeError } from "../../../../shared/presentation/errors.js";
 import { readSeed } from "../../../../shared/presentation/seed.js";
@@ -184,10 +185,10 @@ export const agentCredential = ({ gateway }) => () => ({
     else this.stopTimer();
     if (state.phase === "done" && ACTIVE.includes(was)) this.finishSignIn();
   },
-  /** The flow stored the token: the section shows the credential set. */
+  /** Claude is signed in: the panel closes on a confirmation. */
   async finishSignIn() {
     this.signInSaved = true;
-    this.announcement = "Credential saved.";
+    this.announcement = "Signed in with Claude.";
     try {
       this.apply(await gateway.get());
     } catch (err) {

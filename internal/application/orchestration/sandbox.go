@@ -104,6 +104,10 @@ type SandboxSession struct {
 	// OneShot marks a one-shot claude call: it sees only its temp dir (also
 	// its working directory), the agent home and Allow, never a repository.
 	OneShot bool
+	// Login marks the sign-in's claude (`auth login`, `auth status`): like a
+	// one-shot it sees only its temp dir, the agent home and Allow, never a
+	// repository, and not even the person's git config.
+	Login bool
 }
 
 // hiddenPaths are the repository checkouts and the workspaces root that
@@ -142,10 +146,12 @@ func BuildSandboxPolicy(s SandboxSession) ports.SandboxPolicy {
 		}
 	}
 	add(s.AgentHome, true)
-	for _, p := range gitConfigPaths(s.UserHome, s.ConfigHome) {
-		add(p, false)
+	if !s.Login {
+		for _, p := range gitConfigPaths(s.UserHome, s.ConfigHome) {
+			add(p, false)
+		}
 	}
-	if s.OneShot {
+	if s.OneShot || s.Login {
 		add(s.TempDir, true)
 		if resolved, err := filepath.EvalSymlinks(s.TempDir); err == nil && s.TempDir != "" {
 			add(resolved, true)
@@ -262,6 +268,30 @@ func (b *Sandbox) OneShotWrap(allow []ports.SandboxPath) (llmkit.WrapFunc, error
 		sess.WorkspacesRoot = b.WorkspacesRoot()
 	}
 	return sandboxWrap(b.Driver, sess), nil
+}
+
+// LoginWrap confines the sign-in's claude (`auth login`, `auth status`) under
+// the driver with the agent-home-only policy: the agent home writable, the
+// command's own temp dir (TMPDIR in its env), allow (claude's install dirs)
+// readable, no repository, no git config, nothing else of the person's home;
+// so claude cannot reach their keychain and keeps the login as
+// .credentials.json in the agent home. It follows the platform, not the
+// sandbox switch: the login is confined whenever there is a driver. Nil is a
+// platform without one.
+func (b *Sandbox) LoginWrap(allow []ports.SandboxPath) func(ports.SandboxCommand) (ports.SandboxCommand, error) {
+	if b == nil || b.Driver == nil {
+		return nil
+	}
+	return func(c ports.SandboxCommand) (ports.SandboxCommand, error) {
+		sess := SandboxSession{Login: true, TempDir: sessionTempDir(c.Env), AgentHome: b.Home, Allow: allow}
+		if b.Checkouts != nil {
+			sess.Repositories = b.Checkouts()
+		}
+		if b.WorkspacesRoot != nil {
+			sess.WorkspacesRoot = b.WorkspacesRoot()
+		}
+		return b.Driver.Wrap(BuildSandboxPolicy(sess), c)
+	}
 }
 
 // claudeSandboxOff is the settings value that keeps claude's own Bash sandbox
