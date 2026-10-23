@@ -18,6 +18,8 @@ import { registerNotifications } from "./modules/notifications/presentation/regi
 import { codeGateway } from "./modules/code/infrastructure/code-gateway.js";
 import { credentialsGateway } from "./modules/credentials/infrastructure/credentials-gateway.js";
 import { sandboxGateway } from "./modules/sandbox/infrastructure/sandbox-gateway.js";
+import { claudeGateway } from "./modules/claude/infrastructure/claude-gateway.js";
+import { registerClaude } from "./modules/claude/presentation/register.js";
 import { registerSandbox } from "./modules/sandbox/presentation/register.js";
 import { registerCredentials } from "./modules/credentials/presentation/register.js";
 import { hljsHighlighter } from "./modules/code/infrastructure/hljs-highlighter.js";
@@ -34,7 +36,7 @@ import { artifactsGateway } from "./modules/sessions/infrastructure/artifacts-ga
 import { channelGateway } from "./modules/sessions/infrastructure/channel-gateway.js";
 import { sessionsGateway } from "./modules/sessions/infrastructure/sessions-gateway.js";
 import { terminalGateway } from "./modules/sessions/infrastructure/terminal-gateway.js";
-import { sandboxGateway } from "./modules/sessions/infrastructure/sandbox-gateway.js";
+import { sandboxGateway as sessionSandboxGateway } from "./modules/sessions/infrastructure/sandbox-gateway.js";
 import { transcriptGateway } from "./modules/sessions/infrastructure/transcript-gateway.js";
 import { registerSessions } from "./modules/sessions/presentation/register.js";
 import { railGateway } from "./modules/tasks/infrastructure/rail-gateway.js";
@@ -79,7 +81,7 @@ registerSessions(Alpine, {
   channel: channelGateway(api, events),
   terminals: terminalGateway({ base: "/api" }),
   transcripts: transcriptGateway(api),
-  sandbox: sandboxGateway(api),
+  sandbox: sessionSandboxGateway(api),
   runTerminals: terminalGateway({ base: "/api", path: (id) => `/runs/${encodeURIComponent(id)}/terminal` }),
   createScreen,
   clock: systemClock,
@@ -97,5 +99,6 @@ registerUsage(Alpine, { gateway: usageGateway(api, events) });
 registerTokenSavers(Alpine, { gateway: tokenSaversGateway(api), clock: systemClock });
 registerModels(Alpine, { gateway: modelsGateway(api) });
 registerSandbox(Alpine, { gateway: sandboxGateway(api) });
+registerClaude(Alpine, { gateway: claudeGateway(api) });
 
 Alpine.start();

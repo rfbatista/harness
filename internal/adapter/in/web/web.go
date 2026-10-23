@@ -90,6 +90,11 @@ type Deps struct {
 	// and its top bar link out.
 	SandboxSettings ports.SandboxSettings
 	SandboxDriver   func() ports.SandboxDriver
+	// ManagedClaude and ManagedClaudeBin fill the page's Managed claude
+	// section: the installed versions, and the binary agents resolve to (the
+	// override included). Nil leaves the section showing none installed.
+	ManagedClaude    ports.ManagedClaude
+	ManagedClaudeBin ports.ManagedClaudeBin
 	// DataPaths are where the server keeps its data, for the Server page;
 	// nil leaves the page and its top bar link out.
 	DataPaths *serversettings.Paths
@@ -188,7 +193,8 @@ func NewHandler(deps Deps, assets *Assets, fallback http.Handler) http.Handler {
 		mux.Handle("GET "+models.Href, s.page(modelsPage.Page))
 	}
 	if deps.SandboxSettings != nil {
-		isolation := agentisolation.Handler{Sandbox: deps.SandboxSettings, Driver: deps.SandboxDriver, Layout: s.layout, Render: render}
+		isolation := agentisolation.Handler{Sandbox: deps.SandboxSettings, Driver: deps.SandboxDriver, Layout: s.layout, Render: render,
+			Claude: deps.ManagedClaude, ClaudeBin: deps.ManagedClaudeBin}
 		mux.Handle("GET "+agentisolation.Href, s.page(isolation.Page))
 	}
 	if deps.DataPaths != nil {

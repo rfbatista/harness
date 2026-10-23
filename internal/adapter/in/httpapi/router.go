@@ -143,6 +143,12 @@ func NewRouter(h *Handler, opts ...Option) *echo.Echo {
 	g.POST("/update_sandbox_path", h.handleUpdateSandboxPath)
 	g.POST("/remove_sandbox_path", h.handleRemoveSandboxPath)
 
+	// managed claude (the Agent isolation page)
+	g.GET("/get_managed_claude", h.handleGetManagedClaude)
+	g.GET("/list_managed_claude_releases", h.handleListManagedClaudeReleases)
+	g.POST("/install_managed_claude", h.handleInstallManagedClaude)
+	g.POST("/switch_managed_claude", h.handleSwitchManagedClaude)
+
 	// mcp servers
 	g.GET("/list_mcp_servers", h.handleListMCPServers)
 	g.GET("/get_mcp_server", h.handleGetMCPServer)

@@ -75,6 +75,11 @@ type Services struct {
 	// result: none).
 	SandboxSettings ports.SandboxSettings
 	SandboxDriver   func() ports.SandboxDriver
+	// ManagedClaude installs and switches the claude agents run; nil answers
+	// 503. ManagedClaudeBin says which binary agents run (the override
+	// included); nil reads as no override.
+	ManagedClaude    ports.ManagedClaude
+	ManagedClaudeBin ports.ManagedClaudeBin
 }
 
 // Handler serves the application's driving ports as HTTP endpoints (the same
@@ -117,6 +122,9 @@ type Handler struct {
 	sandboxSettings ports.SandboxSettings
 	sandboxDriver   func() ports.SandboxDriver
 
+	managedClaude    ports.ManagedClaude
+	managedClaudeBin ports.ManagedClaudeBin
+
 	streams streamRegistry // the browser tabs' live streams (stream.go)
 }
 
@@ -155,6 +163,9 @@ func NewHandler(s Services) *Handler {
 
 		sandboxSettings: s.SandboxSettings,
 		sandboxDriver:   s.SandboxDriver,
+
+		managedClaude:    s.ManagedClaude,
+		managedClaudeBin: s.ManagedClaudeBin,
 	}
 }
 

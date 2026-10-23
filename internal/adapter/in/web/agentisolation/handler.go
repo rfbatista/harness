@@ -28,8 +28,12 @@ type Handler struct {
 	Sandbox ports.SandboxSettings
 	// Driver is the platform's sandbox driver; a nil func or result is none.
 	Driver func() ports.SandboxDriver
-	Layout shell.Layout
-	Render shell.Renderer
+	// Claude and ClaudeBin are the managed claude and the binary agents
+	// resolve to; nil shows none installed.
+	Claude    ports.ManagedClaude
+	ClaudeBin ports.ManagedClaudeBin
+	Layout    shell.Layout
+	Render    shell.Renderer
 }
 
 // View is what the page renders: one view per section.
@@ -53,7 +57,7 @@ func (h Handler) Page(w http.ResponseWriter, r *http.Request) error {
 func (h Handler) View() View {
 	return View{
 		Credential: NewCredentialView(),
-		Claude:     NewClaudeView(),
+		Claude:     NewClaudeView(h.Claude, h.ClaudeBin),
 		Sandbox:    NewSandboxView(h.Sandbox, h.Driver),
 	}
 }
