@@ -77,6 +77,11 @@ type SandboxSession struct {
 	// it commits into.
 	Worktree     string
 	GitCommonDir string
+	// OwnGitDir is the session's own admin entry under GitCommonDir/worktrees
+	// (empty for a checkout that is not a linked worktree). A writing session
+	// gets every other entry of that directory read-only, so a prune or gc it
+	// runs cannot delete the worktrees it cannot see.
+	OwnGitDir string
 	// Repositories are the checkouts of every repository of the project, for
 	// every mode: the mode decides which are granted, the rest are hidden.
 	Repositories []string
@@ -159,13 +164,13 @@ func BuildSandboxPolicy(s SandboxSession) ports.SandboxPolicy {
 		}
 	case domain.SessionModeArchitect:
 		add(s.Worktree, true)
-		add(s.GitCommonDir, true)
+		addGitDir(add, s)
 		for _, r := range s.Repositories {
 			add(r, false)
 		}
 	default:
 		add(s.Worktree, true)
-		add(s.GitCommonDir, true)
+		addGitDir(add, s)
 	}
 	for _, p := range slices.Concat(s.Allow, s.Extra) {
 		add(p.Path, p.Write)
@@ -174,6 +179,20 @@ func BuildSandboxPolicy(s SandboxSession) ports.SandboxPolicy {
 	policy := splitPolicy(all, s.Worktree)
 	policy.Hidden = hiddenPaths(s, all)
 	return policy
+}
+
+// addGitDir grants the common git directory read-write, its worktrees
+// directory read-only as a whole, then the session's own entry in it
+// read-write: the drivers let the deeper rule win, so the other worktrees'
+// admin entries stay out of reach while commits, refs and objects still work.
+// A session cannot create worktrees under it; the harness makes them.
+func addGitDir(add func(string, bool), s SandboxSession) {
+	if s.GitCommonDir == "" {
+		return
+	}
+	add(s.GitCommonDir, true)
+	add(filepath.Join(s.GitCommonDir, "worktrees"), false)
+	add(s.OwnGitDir, true)
 }
 
 // gitConfigPaths are the person's git config: ~/.gitconfig and the git
@@ -342,6 +361,7 @@ func (s *Service) sandbox(ctx context.Context, in prepareInput, id string, repo 
 		Mode:         in.Mode,
 		Worktree:     worktree,
 		GitCommonDir: gitCommonDir(worktree, repo.RootDir),
+		OwnGitDir:    ownGitDir(worktree),
 		AgentHome:    sb.Home,
 		UserHome:     sb.UserHome,
 		ConfigHome:   sb.ConfigHome,
@@ -446,25 +466,12 @@ func sessionAllow(env []string) []ports.SandboxPath {
 // commondir. A worktree with neither commits into its repository's .git.
 func gitCommonDir(worktree, repoRoot string) string {
 	fallback := filepath.Join(repoRoot, ".git")
-	link := filepath.Join(worktree, ".git")
-	fi, err := os.Stat(link)
-	if err != nil {
+	dir := ownGitDir(worktree)
+	if dir == "" {
+		if fi, err := os.Stat(filepath.Join(worktree, ".git")); err == nil && fi.IsDir() {
+			return filepath.Join(worktree, ".git")
+		}
 		return fallback
-	}
-	if fi.IsDir() {
-		return link
-	}
-	b, err := os.ReadFile(link)
-	if err != nil {
-		return fallback
-	}
-	dir, ok := strings.CutPrefix(strings.TrimSpace(string(b)), "gitdir:")
-	if !ok {
-		return fallback
-	}
-	dir = strings.TrimSpace(dir)
-	if !filepath.IsAbs(dir) {
-		dir = filepath.Join(worktree, dir)
 	}
 	if c, err := os.ReadFile(filepath.Join(dir, "commondir")); err == nil {
 		common := strings.TrimSpace(string(c))
@@ -474,6 +481,24 @@ func gitCommonDir(worktree, repoRoot string) string {
 		return filepath.Clean(common)
 	}
 	return filepath.Dir(filepath.Dir(dir))
+}
+
+// ownGitDir is the admin entry a linked worktree's .git file points at
+// (<common>/worktrees/<name>); empty when .git is not such a file.
+func ownGitDir(worktree string) string {
+	b, err := os.ReadFile(filepath.Join(worktree, ".git"))
+	if err != nil {
+		return ""
+	}
+	dir, ok := strings.CutPrefix(strings.TrimSpace(string(b)), "gitdir:")
+	if !ok {
+		return ""
+	}
+	dir = strings.TrimSpace(dir)
+	if !filepath.IsAbs(dir) {
+		dir = filepath.Join(worktree, dir)
+	}
+	return filepath.Clean(dir)
 }
 
 // collectViolations starts following the sandbox violations of a sandboxed

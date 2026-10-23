@@ -455,3 +455,114 @@ func TestTheSharedXcrunCacheCanNeitherBeWrittenNorCreated(t *testing.T) {
 		}
 	}
 }
+
+// worktreeFixture is a real repository with the session's own worktree and
+// two others, outside $HOME and the temp dir, and the policy the builder
+// makes for the own one: the git dir writable, its worktrees dir read-only,
+// the own entry writable.
+type worktreeFixture struct {
+	repo, own, other, gone string
+	git, worktrees         string
+	policy                 ports.SandboxPolicy
+}
+
+func newWorktreeFixture(t *testing.T) worktreeFixture {
+	t.Helper()
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("no git")
+	}
+	root := outsideDir(t)
+	f := worktreeFixture{repo: filepath.Join(root, "repo"), own: filepath.Join(root, "own"), other: filepath.Join(root, "other"), gone: filepath.Join(root, "gone")}
+	g := func(args ...string) {
+		t.Helper()
+		c := exec.Command("git", append([]string{"-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false"}, args...)...)
+		c.Dir = f.repo
+		c.Env = gitFreeEnv()
+		if out, err := c.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	os.MkdirAll(f.repo, 0o755)
+	g("init", "-q")
+	g("commit", "-q", "--allow-empty", "-m", "init")
+	g("worktree", "add", "-q", "-b", "own", f.own)
+	g("worktree", "add", "-q", "-b", "other", f.other)
+	g("worktree", "add", "-q", "-b", "gone", f.gone)
+	// The gone worktree's checkout is deleted: its admin entry is what a
+	// prune would remove.
+	if err := os.RemoveAll(f.gone); err != nil {
+		t.Fatal(err)
+	}
+	f.git = filepath.Join(f.repo, ".git")
+	f.worktrees = filepath.Join(f.git, "worktrees")
+	f.policy = ports.SandboxPolicy{
+		WorkingDir: f.own,
+		Writable:   []string{f.own, f.git, filepath.Join(f.worktrees, "own")},
+		Readable:   []string{f.worktrees},
+	}
+	return f
+}
+
+func TestOtherWorktreesAdminEntriesStayReadOnlyWhileTheOwnWorktreeCommits(t *testing.T) {
+	d := requireSeatbelt(t)
+	f := newWorktreeFixture(t)
+
+	out, err := run(t, d, f.policy, `echo hi > file.txt && git add file.txt && git -c user.name=t -c user.email=t@t -c commit.gpgsign=false commit -q -m work && git log --oneline | wc -l`)
+	if err != nil || !strings.HasSuffix(strings.TrimSpace(out), "2") {
+		t.Fatalf("commit in the own worktree: %v %q", err, out)
+	}
+
+	// Control: without the read-only worktrees dir, prune removes the entry
+	// of the worktree whose checkout is gone.
+	open := f.policy
+	open.Readable = nil
+	if out, err := run(t, d, open, `git worktree prune`); err != nil {
+		t.Fatalf("control prune: %v %s", err, out)
+	}
+	if _, err := os.Stat(filepath.Join(f.worktrees, "gone")); err == nil {
+		t.Fatal("control: prune left the entry, so the test proves nothing")
+	}
+}
+
+func TestPruneInTheSandboxLeavesAnOtherWorktreesAdminEntryAndCheckout(t *testing.T) {
+	d := requireSeatbelt(t)
+	f := newWorktreeFixture(t)
+	os.WriteFile(filepath.Join(f.other, "keep.txt"), []byte("keep"), 0o644)
+
+	run(t, d, f.policy, `git worktree prune`)
+	for _, p := range []string{filepath.Join(f.worktrees, "gone"), filepath.Join(f.worktrees, "other", "HEAD"), filepath.Join(f.worktrees, "own", "HEAD"), filepath.Join(f.other, "keep.txt")} {
+		if _, err := os.Stat(p); err != nil {
+			t.Errorf("%s is gone: %v", p, err)
+		}
+	}
+	if out, err := run(t, d, f.policy, `echo x > `+filepath.Join(f.worktrees, "other", "HEAD")); err == nil {
+		t.Fatalf("wrote another worktree's entry: %s", out)
+	}
+	if out, err := run(t, d, f.policy, `cat `+filepath.Join(f.worktrees, "other", "HEAD")); err != nil {
+		t.Fatalf("could not read another worktree's entry: %v %s", err, out)
+	}
+}
+
+func TestAWriteToAnOtherWorktreesAdminEntryIsCaptured(t *testing.T) {
+	d := requireSeatbelt(t)
+	f := newWorktreeFixture(t)
+	target := filepath.Join(f.worktrees, "other", "HEAD")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	cmd, err := d.Wrap(f.policy, ports.SandboxCommand{Path: "/bin/sh", Args: []string{"-c", "sleep 3; echo x > " + target + "; sleep 3"}, Dir: f.own, Env: gitFreeEnv()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := exec.CommandContext(ctx, cmd.Path, cmd.Args...)
+	c.Dir, c.Env = cmd.Dir, cmd.Env
+	if err := c.Start(); err != nil {
+		t.Fatal(err)
+	}
+	defer c.Wait()
+	ch, err := NewCollector().Follow(ctx, f.own)
+	if err != nil {
+		t.Skipf("unified log not available: %v", err)
+	}
+	waitViolation(t, ch, target)
+}
