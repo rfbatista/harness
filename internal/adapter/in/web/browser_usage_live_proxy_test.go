@@ -129,6 +129,23 @@ func TestLiveCallLogShowsACallMadeThroughTheProxyOnlyWhileStarted(t *testing.T) 
 		t.Errorf("the Request tab shows %q, want the request body", tree)
 	}
 
+	// Searched: a second call arrives while live, and a word found only in
+	// the first call's request narrows the log to it, highlighted.
+	callProxy("Second question")
+	err = chromedp.Run(ctx,
+		poll(count("live-call")+` === 2`),
+		click("live-tab-request"),
+		chromedp.Evaluate(`(() => { const i = document.querySelector('[data-testid=live-search]'); i.value = 'first question'; i.dispatchEvent(new Event('input', { bubbles: true })); })()`, nil),
+		poll(count("live-call")+` === 1`),
+		poll(text("live-count")+` === '1 of 2 calls'`),
+		poll(`document.querySelectorAll('[data-testid=live-tree] mark.json-match').length > 0`),
+		chromedp.Evaluate(`(() => { const i = document.querySelector('[data-testid=live-search]'); i.value = ''; i.dispatchEvent(new Event('input', { bubbles: true })); })()`, nil),
+		poll(count("live-call")+` === 2`),
+	)
+	if err != nil {
+		t.Fatalf("%v\nJS errors: %v", err, errs.all())
+	}
+
 	// Stopped: the stream closes, capture goes off, and a further call adds
 	// no entry.
 	err = chromedp.Run(ctx,
@@ -139,14 +156,14 @@ func TestLiveCallLogShowsACallMadeThroughTheProxyOnlyWhileStarted(t *testing.T) 
 		t.Fatalf("%v\nJS errors: %v", err, errs.all())
 	}
 	eventually(t, func() bool { return !e.Service.Enabled() }, "capture is still on after Stop")
-	callProxy("Second question")
+	callProxy("Third question")
 	time.Sleep(500 * time.Millisecond)
 	var after float64
 	if err := chromedp.Run(ctx, chromedp.Evaluate(count("live-call"), &after)); err != nil {
 		t.Fatal(err)
 	}
-	if after != 1 {
-		t.Errorf("%v entries after Stop and a further call, want still 1", after)
+	if after != 2 {
+		t.Errorf("%v entries after Stop and a further call, want still 2", after)
 	}
 	if es := errs.all(); len(es) > 0 {
 		t.Errorf("JavaScript errors on the page:\n%s", strings.Join(es, "\n"))
