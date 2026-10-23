@@ -35,7 +35,7 @@ func ValidateSetting(key, value string) error {
 			return err
 		}
 	case SettingAgentsMoveDocuments:
-		if value != "true" && value != "false" {
+		if value != "" && value != "true" && value != "false" {
 			return &StructuredError{Code: "INVALID_INPUT", Message: key + " must be true or false"}
 		}
 	case SettingModelArchitect, SettingModelImplementation:

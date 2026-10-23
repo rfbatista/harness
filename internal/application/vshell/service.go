@@ -332,18 +332,6 @@ func (s *Service) agentsMove() bool {
 	return s.src.Settings != nil && domain.AgentsMoveDocuments(s.src.Settings.Setting(domain.SettingAgentsMoveDocuments))
 }
 
-// agentsMoveOnce reads the setting on first use only, so a multi-file mv
-// reads it once.
-func (s *Service) agentsMoveOnce() func() bool {
-	var read, on bool
-	return func() bool {
-		if !read {
-			read, on = true, s.agentsMove()
-		}
-		return on
-	}
-}
-
 // AnnounceChange hears a task's comments and resources change, as planning
 // puts them on the project feed (ports.ProjectChangeSink).
 func (s *Service) AnnounceChange(c ports.ProjectChange) {

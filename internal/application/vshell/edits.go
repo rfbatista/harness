@@ -257,14 +257,14 @@ func refuseOtherTaskMove(rel string) ports.ShellAnswer {
 // movesToProject says whether row, moved to dst, may become a project
 // document: while the setting is on, a document of the session's own task
 // (in task/docs) may. ok false answers the refusal.
-func movesToProject(sh *shell, row ports.ShellFile, src, dst string, agentsMove func() bool) (ports.ShellAnswer, bool) {
+func movesToProject(sh *shell, row ports.ShellFile, src, dst string, agentsMove bool) (ports.ShellAnswer, bool) {
 	if classify(dst) != projDocs || row.Scope == string(domain.DocumentScopeProject) {
 		return ports.ShellAnswer{}, true
 	}
 	switch {
 	case classify(row.Path) != taskDocs:
 		return refuseOtherTaskMove(src), false
-	case !agentsMove():
+	case !agentsMove:
 		return refuseProjectMove(src), false
 	}
 	if over, ok := sh.files[moved(row.Path, src, dst)]; ok && over.ID != row.ID && over.Scope == string(domain.DocumentScopeProject) {
@@ -542,7 +542,7 @@ func (s *Service) checkDocsAt(sh *shell, rel string) ports.ShellAnswer {
 // only when linked to that task; a person moves documents to project/docs,
 // so that move is refused; within a folder it is only renamed.
 func (s *Service) checkMove(ctx context.Context, sh *shell, src, dst string) ports.ShellAnswer {
-	agentsMove := s.agentsMoveOnce()
+	agentsMove := classify(dst) == projDocs && s.agentsMove()
 	for _, row := range sh.under(src, ports.ShellDocument) {
 		if ans := s.stale(sh, row); !ans.Allow {
 			return ans
@@ -742,7 +742,7 @@ func (s *Service) commitMove(ctx context.Context, sh *shell, src, dst string) po
 	if len(rows) == 0 {
 		return s.commitDocWrite(sh, dst)
 	}
-	agentsMove := s.agentsMoveOnce()
+	agentsMove := classify(dst) == projDocs && s.agentsMove()
 	for _, row := range rows {
 		if ans, ok := movesToProject(sh, row, src, dst, agentsMove); !ok {
 			sh.putBack(rows, src, dst)

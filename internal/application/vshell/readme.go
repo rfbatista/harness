@@ -118,6 +118,6 @@ refused; ask them to move it, or to turn the setting on. Moving one from
 project/docs to task/docs makes it this task's, when it is linked to this
 task.`
 
-const moveDeniedOn = `    PROJECT_MOVE_DENIED only your own task's documents move to project/docs`
+const moveDeniedOn = `    PROJECT_MOVE_DENIED only your own task's documents move to project/docs, while "Agents move documents to project" is on`
 
 const moveDeniedOff = `    PROJECT_MOVE_DENIED only a person moves a document to project/docs unless they turn on "Agents move documents to project": ask them to`
