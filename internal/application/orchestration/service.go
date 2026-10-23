@@ -293,6 +293,11 @@ func (s *Service) Start(ctx context.Context, req StartRequest) (*domain.Session,
 		return nil, fmt.Errorf("persist session: %w", err)
 	}
 	provisioned = nil
+	if stop := s.collectViolations(sess.ID(), p.cfg.WorkingDir, p.sandbox.facts); stop != nil {
+		s.mu.Lock()
+		s.cleanups[sess.ID()] = withViolations(s.cleanups[sess.ID()], stop)
+		s.mu.Unlock()
+	}
 
 	go s.pump(sess)
 

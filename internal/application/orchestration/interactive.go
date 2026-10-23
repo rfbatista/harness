@@ -115,7 +115,7 @@ func (s *Service) StartInteractive(ctx context.Context, req InteractiveRequest) 
 		Sandbox:                 p.sandbox.facts,
 	})
 	if err == nil {
-		s.adoptCleanup(id, p.cleanup)
+		s.adoptCleanup(id, withViolations(p.cleanup, s.collectViolations(id, p.cfg.WorkingDir, p.sandbox.facts)))
 		s.courier.setTurn(id, startTurn(spec))
 		s.publish(id, SessionEvent{Type: "status", Status: domain.SessionRunning, Text: startedText(runsOn), At: time.Now()})
 		// Announced before the CLI runs, so the architect channel has the
@@ -222,7 +222,7 @@ func (s *Service) ResumeInteractive(ctx context.Context, req ports.ResumeRequest
 		}
 		return nil, ports.AgentSpec{}, err
 	}
-	s.adoptCleanup(sess.ID, cleanup)
+	s.adoptCleanup(sess.ID, withViolations(cleanup, s.collectViolations(sess.ID, sess.WorkingDir, sb.facts)))
 	s.courier.setTurn(sess.ID, turnIdle) // a resumed conversation waits for its next prompt
 	s.publish(sess.ID, SessionEvent{Type: "status", Status: domain.SessionRunning, Text: "resumed" + strings.TrimPrefix(startedText(runsOn), "started"), At: time.Now()})
 	if runsOn == domain.RunnerServer {

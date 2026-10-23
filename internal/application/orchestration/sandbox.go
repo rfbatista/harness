@@ -2,6 +2,7 @@ package orchestration
 
 import (
 	"context"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"slices"
@@ -37,6 +38,11 @@ type Sandbox struct {
 	Allow func(sessionID string) []ports.SandboxPath
 	// Extra are the paths the person adds in settings. Nil: none.
 	Extra ports.SandboxExtraPaths
+	// Violations follows what the sandbox denies a session's processes, where
+	// the platform can. Nil: none is collected (Linux).
+	Violations ports.SandboxViolationSource
+	// ViolationStore keeps what Violations follows. Nil: nothing is kept.
+	ViolationStore ports.SandboxViolationStore
 }
 
 // SandboxSwitch is the Enabled of a Sandbox that follows the SettingSandbox
@@ -226,4 +232,64 @@ func gitCommonDir(worktree, repoRoot string) string {
 		return filepath.Clean(common)
 	}
 	return filepath.Dir(filepath.Dir(dir))
+}
+
+// collectViolations starts following the sandbox violations of a sandboxed
+// session's process tree, storing each for the session. The returned stop ends
+// it; it is nil when nothing is collected. Call it before the session's process
+// runs, so nothing it is denied is missed.
+func (s *Service) collectViolations(id, workingDir string, facts *domain.SandboxFacts) (stop func()) {
+	sb := s.Sandbox
+	if sb == nil || sb.Violations == nil || sb.ViolationStore == nil || facts == nil || !facts.Sandboxed {
+		return nil
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	ch, err := sb.Violations.Follow(ctx, workingDir)
+	if err != nil {
+		cancel()
+		slog.Warn("follow sandbox violations failed", "session", id, "err", err)
+		return nil
+	}
+	go func() {
+		for v := range ch {
+			if err := sb.ViolationStore.AddSandboxViolation(id, v); err != nil {
+				slog.Warn("store sandbox violation failed", "session", id, "err", err)
+			}
+		}
+	}()
+	return cancel
+}
+
+// withViolations joins stop to cleanup, so collection ends with the session.
+func withViolations(cleanup, stop func()) func() {
+	if stop == nil {
+		return cleanup
+	}
+	return func() {
+		stop()
+		if cleanup != nil {
+			cleanup()
+		}
+	}
+}
+
+// SandboxViolations lists what the sandbox denied the session.
+func (s *Service) SandboxViolations(id string) (ports.SandboxViolationLog, error) {
+	log := ports.SandboxViolationLog{Violations: []ports.SandboxViolation{}}
+	if s.sessions.Get(id) == nil {
+		return log, &domain.StructuredError{Code: "SESSION_NOT_FOUND", Message: "session not found"}
+	}
+	sb := s.Sandbox
+	if sb == nil || sb.Violations == nil || sb.ViolationStore == nil {
+		return log, nil
+	}
+	log.Available = true
+	got, err := sb.ViolationStore.SandboxViolations(id)
+	if err != nil {
+		return log, err
+	}
+	if got != nil {
+		log.Violations = got
+	}
+	return log, nil
 }

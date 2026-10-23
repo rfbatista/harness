@@ -66,3 +66,17 @@ type SandboxViolationSource interface {
 	// closes.
 	Follow(ctx context.Context, workingDir string) (<-chan SandboxViolation, error)
 }
+
+// MaxSandboxViolations is how many violations the harness keeps per session:
+// the most recent ones.
+const MaxSandboxViolations = 1000
+
+// SandboxViolationStore keeps a session's sandbox violations: the latest
+// MaxSandboxViolations, dropped with the session.
+type SandboxViolationStore interface {
+	// AddSandboxViolation stores v for the session, dropping its oldest
+	// violations beyond the cap.
+	AddSandboxViolation(sessionID string, v SandboxViolation) error
+	// SandboxViolations are the session's stored violations, newest first.
+	SandboxViolations(sessionID string) ([]SandboxViolation, error)
+}

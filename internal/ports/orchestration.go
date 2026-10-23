@@ -189,6 +189,7 @@ type Orchestration interface {
 	TurnHooks
 	TerminalAccess
 	SessionTranscripts
+	SessionSandboxViolations
 }
 
 // SessionTranscripts reads the conversation a session's claude saved,
@@ -198,6 +199,19 @@ type SessionTranscripts interface {
 	// a resume would continue. Errors are StructuredErrors coded
 	// SESSION_NOT_FOUND, SESSION_TRANSCRIPT_MISSING or INVALID_INPUT.
 	SessionTranscript(ctx context.Context, id string, q TranscriptQuery) (TranscriptPage, error)
+}
+
+// SandboxViolationLog is a session's sandbox violations, newest first, and
+// whether this platform collects them at all.
+type SandboxViolationLog struct {
+	Available  bool               `json:"available"`
+	Violations []SandboxViolation `json:"violations"`
+}
+
+// SessionSandboxViolations lists what the agent sandbox denied a session.
+type SessionSandboxViolations interface {
+	// SandboxViolations answers SESSION_NOT_FOUND for an unknown session.
+	SandboxViolations(id string) (SandboxViolationLog, error)
 }
 
 // StartRequest starts a headless session.

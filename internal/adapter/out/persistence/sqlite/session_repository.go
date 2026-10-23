@@ -131,8 +131,40 @@ func (r *SessionRepository) Delete(id string) error {
 		if res.RowsAffected == 0 {
 			return &domain.StructuredError{Code: "SESSION_NOT_FOUND", Message: "session not found"}
 		}
+		if err := tx.Delete(&SandboxViolationModel{}, "session_id = ?", id).Error; err != nil {
+			return err
+		}
 		return tx.Delete(&SessionEventModel{}, "session_id = ?", id).Error
 	})
+}
+
+var _ ports.SandboxViolationStore = (*SessionRepository)(nil)
+
+// AddSandboxViolation stores v and drops the session's oldest violations
+// beyond ports.MaxSandboxViolations.
+func (r *SessionRepository) AddSandboxViolation(sessionID string, v ports.SandboxViolation) error {
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(&SandboxViolationModel{SessionID: sessionID, WhenMs: v.When.UnixMilli(),
+			Operation: v.Operation, Path: v.Path, Process: v.Process}).Error; err != nil {
+			return err
+		}
+		return tx.Exec(`DELETE FROM sandbox_violations WHERE session_id = ? AND id NOT IN
+			(SELECT id FROM sandbox_violations WHERE session_id = ? ORDER BY id DESC LIMIT ?)`,
+			sessionID, sessionID, ports.MaxSandboxViolations).Error
+	})
+}
+
+// SandboxViolations are the session's stored violations, newest stored first.
+func (r *SessionRepository) SandboxViolations(sessionID string) ([]ports.SandboxViolation, error) {
+	var models []SandboxViolationModel
+	if err := r.db.Where("session_id = ?", sessionID).Order("id DESC").Find(&models).Error; err != nil {
+		return nil, err
+	}
+	out := make([]ports.SandboxViolation, 0, len(models))
+	for _, m := range models {
+		out = append(out, ports.SandboxViolation{When: time.UnixMilli(m.WhenMs), Operation: m.Operation, Path: m.Path, Process: m.Process})
+	}
+	return out, nil
 }
 
 func (r *SessionRepository) UpdateStatus(id string, status domain.SessionStatus) error {

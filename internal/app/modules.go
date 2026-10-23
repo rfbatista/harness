@@ -337,7 +337,7 @@ var AgentRuntimeModule = fx.Module("agentruntime",
 		newClaudeManager,
 		newBroker,
 		newHub,
-		asPort(sqlite.NewSessionRepository, new(ports.SessionRepository)),
+		fx.Annotate(sqlite.NewSessionRepository, fx.As(new(ports.SessionRepository), new(ports.SandboxViolationStore))),
 		newAgentClaudeHome,
 		asPort(newClaudeTranscripts, new(ports.ClaudeTranscripts)),
 		asPort(newClaudeTranscriptReader, new(ports.ClaudeTranscriptReader)),
@@ -576,6 +576,8 @@ func newOrchestrationService(
 	transcriptReader ports.ClaudeTranscriptReader,
 	terminals ports.TerminalHost,
 	sandboxDriver ports.SandboxDriver,
+	violations ports.SandboxViolationSource,
+	violationStore ports.SandboxViolationStore,
 	agentHome claudehome.Home,
 ) *orchestration.Service {
 	svc := orchestration.NewService(runtime, broker, hub, sessions, orchestration.Catalog{
@@ -611,6 +613,9 @@ func newOrchestrationService(
 		Driver:  sandboxDriver,
 		Enabled: orchestration.SandboxSwitch(cat.Settings),
 		Home:    agentHome.Path(),
+
+		Violations:     violations,
+		ViolationStore: violationStore,
 	}
 	return svc
 }
