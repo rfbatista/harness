@@ -75,6 +75,9 @@ type Services struct {
 	// result: none).
 	SandboxSettings ports.SandboxSettings
 	SandboxDriver   func() ports.SandboxDriver
+	// AgentCredential keeps the credential agents sign in with; nil answers
+	// 503.
+	AgentCredential ports.AgentCredential
 }
 
 // Handler serves the application's driving ports as HTTP endpoints (the same
@@ -117,6 +120,8 @@ type Handler struct {
 	sandboxSettings ports.SandboxSettings
 	sandboxDriver   func() ports.SandboxDriver
 
+	agentCredential ports.AgentCredential
+
 	streams streamRegistry // the browser tabs' live streams (stream.go)
 }
 
@@ -155,6 +160,8 @@ func NewHandler(s Services) *Handler {
 
 		sandboxSettings: s.SandboxSettings,
 		sandboxDriver:   s.SandboxDriver,
+
+		agentCredential: s.AgentCredential,
 	}
 }
 

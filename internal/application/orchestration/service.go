@@ -106,6 +106,10 @@ type Service struct {
 	// nothing of the machine's (see "Contract: Harness server ↔ Agent
 	// sessions — git credentials"). Nil leaves sessions' git as it is.
 	GitAuth ports.GitAuth
+	// AgentCredential gives each agent process the env entries ("NAME=value")
+	// of the agent credential (ADR 0018), read at every start and resume. Nil
+	// or empty adds nothing.
+	AgentCredential func() []string
 	// Roles says what a session is on its task, for the role-aware brief. Nil:
 	// every session is a peer.
 	Roles interface {
@@ -420,6 +424,7 @@ func (s *Service) prepare(ctx context.Context, in prepareInput) (*prepared, erro
 		_ = s.workspaces.Discard(ws.ID)
 		return nil, err
 	}
+	s.withAgentCredential(&cfg)
 	savers := s.withTokenSavers(ctx, in, repo.RootDir, ws.Path, &cfg)
 	sb, err := s.sandbox(ctx, in, id, repo, ws.Path, cfg.Env)
 	if err != nil {
@@ -439,6 +444,16 @@ func (s *Service) prepare(ctx context.Context, in prepareInput) (*prepared, erro
 		envFile:    envFile,
 		savers:     savers,
 	}, nil
+}
+
+// withAgentCredential adds the agent credential to the agent process env.
+func (s *Service) withAgentCredential(cfg *llmkit.SessionConfig) {
+	if s.AgentCredential == nil {
+		return
+	}
+	if env := s.AgentCredential(); len(env) > 0 {
+		cfg.Env = append(slices.Clone(cfg.Env), env...)
+	}
 }
 
 // withGit gives the session's processes its git directory's environment and

@@ -17,8 +17,10 @@ import { notificationsGateway } from "./modules/notifications/infrastructure/not
 import { registerNotifications } from "./modules/notifications/presentation/register.js";
 import { codeGateway } from "./modules/code/infrastructure/code-gateway.js";
 import { credentialsGateway } from "./modules/credentials/infrastructure/credentials-gateway.js";
-import { sandboxGateway } from "./modules/sandbox/infrastructure/sandbox-gateway.js";
+import { sandboxGateway as sandboxSettingsGateway } from "./modules/sandbox/infrastructure/sandbox-gateway.js";
 import { registerSandbox } from "./modules/sandbox/presentation/register.js";
+import { agentCredentialGateway } from "./modules/agentcredential/infrastructure/agent-credential-gateway.js";
+import { registerAgentCredential } from "./modules/agentcredential/presentation/register.js";
 import { registerCredentials } from "./modules/credentials/presentation/register.js";
 import { hljsHighlighter } from "./modules/code/infrastructure/hljs-highlighter.js";
 import { registerCode } from "./modules/code/presentation/register.js";
@@ -96,6 +98,7 @@ registerCredentials(Alpine, { gateway: credentialsGateway(api, events), clock: s
 registerUsage(Alpine, { gateway: usageGateway(api, events) });
 registerTokenSavers(Alpine, { gateway: tokenSaversGateway(api), clock: systemClock });
 registerModels(Alpine, { gateway: modelsGateway(api) });
-registerSandbox(Alpine, { gateway: sandboxGateway(api) });
+registerSandbox(Alpine, { gateway: sandboxSettingsGateway(api) });
+registerAgentCredential(Alpine, { gateway: agentCredentialGateway(api) });
 
 Alpine.start();

@@ -196,6 +196,7 @@ func (s *Service) ResumeInteractive(ctx context.Context, req ports.ResumeRequest
 	if err != nil {
 		return nil, ports.AgentSpec{}, err
 	}
+	s.withAgentCredential(&cfg)
 	s.rewireTokenSavers(ctx, sess, &cfg)
 	// A resume starts under the rules now in force, not the ones it started
 	// under, and records them.

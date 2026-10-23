@@ -90,6 +90,9 @@ type Deps struct {
 	// and its top bar link out.
 	SandboxSettings ports.SandboxSettings
 	SandboxDriver   func() ports.SandboxDriver
+	// AgentCredential fills the Agent isolation page's credential section
+	// (status only, never the value); nil shows it as not set.
+	AgentCredential ports.AgentCredential
 	// DataPaths are where the server keeps its data, for the Server page;
 	// nil leaves the page and its top bar link out.
 	DataPaths *serversettings.Paths
@@ -188,7 +191,7 @@ func NewHandler(deps Deps, assets *Assets, fallback http.Handler) http.Handler {
 		mux.Handle("GET "+models.Href, s.page(modelsPage.Page))
 	}
 	if deps.SandboxSettings != nil {
-		isolation := agentisolation.Handler{Sandbox: deps.SandboxSettings, Driver: deps.SandboxDriver, Layout: s.layout, Render: render}
+		isolation := agentisolation.Handler{Sandbox: deps.SandboxSettings, Driver: deps.SandboxDriver, Credential: deps.AgentCredential, Layout: s.layout, Render: render}
 		mux.Handle("GET "+agentisolation.Href, s.page(isolation.Page))
 	}
 	if deps.DataPaths != nil {

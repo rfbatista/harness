@@ -24,8 +24,11 @@ import (
 // secret box keyed from HARNESS_SECRET_KEY or the data dir's secret.key, and
 // its bus subscriptions. It provides *gitcredentials.Service.
 var GitCredentialsModule = fx.Module("gitcredentials",
+	fx.Provide(newSecretBox),
 	fx.Provide(newGitCredentialsService),
+	fx.Provide(newAgentCredential),
 	fx.Invoke(registerGitCredentials, bindGitCredentials),
+	fx.Invoke(bindAgentCredential),
 )
 
 // gitCredentialUsers are what runs git in session worktrees, when the graph
@@ -57,6 +60,7 @@ type gitCredentialsParams struct {
 	Repositories ports.RepositoryRepository
 	Git          ports.BranchPublisher
 	Cat          catalog.Catalog
+	Box          *secretbox.Box
 }
 
 // registerGitCredentials checks git on start and sweeps what a previous run
@@ -77,13 +81,20 @@ func registerGitCredentials(lc fx.Lifecycle, cfg Config, svc *gitcredentials.Ser
 	}})
 }
 
-func newGitCredentialsService(p gitCredentialsParams) (*gitcredentials.Service, error) {
-	dataDir, err := secretsDir(p.Cfg)
+// newSecretBox is the one box that seals every secret the harness keeps
+// (git credentials, the agent credential): keyed from HARNESS_SECRET_KEY or
+// the data dir's secret.key. One box, because two would both try to create
+// the key file.
+func newSecretBox(cfg Config) (*secretbox.Box, error) {
+	dataDir, err := secretsDir(cfg)
 	if err != nil {
 		return nil, err
 	}
-	keyFile := filepath.Join(dataDir, "secret.key")
-	box, err := secretbox.New(os.Getenv(secretbox.EnvKey), keyFile)
+	return secretbox.New(os.Getenv(secretbox.EnvKey), filepath.Join(dataDir, "secret.key"))
+}
+
+func newGitCredentialsService(p gitCredentialsParams) (*gitcredentials.Service, error) {
+	dataDir, err := secretsDir(p.Cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -94,7 +105,7 @@ func newGitCredentialsService(p gitCredentialsParams) (*gitcredentials.Service, 
 			Pins:        sqlite.NewRepositoryCredentialRepository(p.DB),
 		},
 		gitcredentials.Readers{Repositories: p.Repositories, Projects: p.Projects, Origins: p.Git},
-		box, nil)
+		p.Box, nil)
 	broker, err := gitcli.NewAuthBroker(filepath.Join(dataDir, "git"), gitcli.MachineExcludesFile(p.Cfg.GitBin))
 	if err != nil {
 		return nil, err
