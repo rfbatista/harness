@@ -342,6 +342,8 @@ var AgentRuntimeModule = fx.Module("agentruntime",
 		asPort(newClaudeTranscripts, new(ports.ClaudeTranscripts)),
 		asPort(newClaudeTranscriptReader, new(ports.ClaudeTranscriptReader)),
 		newOrchestrationService,
+		platformSandboxDriver,
+		platformSandboxViolations,
 		newAppsService,
 		asPort(sqlite.NewArtifactRepository, new(ports.ArtifactRepository)),
 		newArtifactsService,
@@ -573,6 +575,8 @@ func newOrchestrationService(
 	transcripts ports.ClaudeTranscripts,
 	transcriptReader ports.ClaudeTranscriptReader,
 	terminals ports.TerminalHost,
+	sandboxDriver ports.SandboxDriver,
+	agentHome claudehome.Home,
 ) *orchestration.Service {
 	svc := orchestration.NewService(runtime, broker, hub, sessions, orchestration.Catalog{
 		Projects:     cat.Projects,
@@ -601,6 +605,15 @@ func newOrchestrationService(
 	svc.TranscriptReader = transcriptReader
 	svc.Terminals = terminals
 	svc.Events = cat.Bus
+	// A platform without a driver runs sessions unconfined for now (Linux's
+	// driver comes later); with one, the sandbox switch applies.
+	if sandboxDriver != nil {
+		svc.Sandbox = &orchestration.Sandbox{
+			Driver:  sandboxDriver,
+			Enabled: orchestration.SandboxSwitch(cat.Settings),
+			Home:    agentHome.Path(),
+		}
+	}
 	return svc
 }
 
