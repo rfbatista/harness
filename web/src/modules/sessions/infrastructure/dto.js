@@ -42,6 +42,7 @@ export function toSession(dto) {
     tokenSavers: names(dto.token_savers),
     tokenSaversNotInstalled: names(dto.token_savers_not_installed),
     sandbox: toSandbox(dto.sandbox),
+    lastMerge: toMergeResult(dto.last_merge),
     updatedAt,
   });
 }
@@ -50,6 +51,26 @@ export function toSession(dto) {
 function toSandbox(dto) {
   if (!dto || typeof dto.visibility !== "string" || dto.visibility === "") return null;
   return Object.freeze({ sandboxed: dto.sandboxed === true, visibility: dto.visibility, driver: dto.driver ?? "" });
+}
+
+/**
+ * How the newest merge of a session's branch ended (domain.MergeResult), as
+ * the session carries it and POST /api/sessions/{id}/merge answers it; null
+ * for a session never merged.
+ * @returns {import("../domain/session.js").MergeResult | null}
+ */
+export function toMergeResult(dto) {
+  if (!dto || typeof dto !== "object") return null;
+  const at = new Date(dto.at);
+  if (Number.isNaN(at.getTime())) bad("a merge result with an invalid at");
+  return Object.freeze({
+    at,
+    merged: dto.merged === true,
+    into: dto.into ?? "",
+    head: dto.head ?? "",
+    code: dto.code ?? "",
+    message: dto.message ?? "",
+  });
 }
 
 /**

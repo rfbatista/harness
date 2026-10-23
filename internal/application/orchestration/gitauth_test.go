@@ -153,3 +153,28 @@ func TestWithoutAnAgentCredentialTheEnvCarriesNone(t *testing.T) {
 		}
 	}
 }
+
+// A restart under the same id while the first start's cleanup is pending: the
+// session's git directory has one path per session, so the old cleanup must
+// not remove what the restart is using; the restart's own cleanup does.
+func TestAFirstStartsCleanupLeavesTheRestartsGitDirectoryAlone(t *testing.T) {
+	svc, _ := newInteractiveService(t)
+	git := &fakeGitAuth{}
+	svc.GitAuth = git
+	sess, _ := startInteractive(t, svc, InteractiveRequest{})
+	if err := svc.sessions.UpdateStatus(sess.ID, domain.SessionDone); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := svc.ResumeInteractive(context.Background(), ports.ResumeRequest{SessionID: sess.ID}); err != nil {
+		t.Fatal(err)
+	}
+	if got := git.endedSessions(); len(got) != 0 {
+		t.Fatalf("the first start's cleanup removed the git directory %v the restart uses", got)
+	}
+	if _, err := svc.EndInteractive(context.Background(), sess.ID, 0, false); err != nil {
+		t.Fatal(err)
+	}
+	if got := git.endedSessions(); !slices.Equal(got, []string{sess.ID}) {
+		t.Fatalf("ended %v, want the restart's own cleanup to remove it once", got)
+	}
+}

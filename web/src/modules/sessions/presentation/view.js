@@ -225,6 +225,7 @@ export function toDetailView(session, now, agentNames) {
     stoppable: !isTerminal(session),
     repositoryId: session.repositoryId,
     workspaceId: session.workspaceId,
+    branch: session.branch,
     ...tokenSaversView(session),
     ...sandboxView(session),
     sandboxFacts: factsView(session),

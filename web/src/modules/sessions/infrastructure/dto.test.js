@@ -29,6 +29,16 @@ test("maps the wire format to a frozen domain session", () => {
   assert.equal("cost_usd" in s, false, "fields the UI does not use stay behind");
 });
 
+test("the newest merge result comes with the session, and a session never merged has none", () => {
+  assert.equal(toSession(wire).lastMerge, null);
+  const merged = toSession({ ...wire, last_merge: { at: "2026-10-23T12:00:00Z", merged: true, into: "main", head: "abc123" } }).lastMerge;
+  assert.deepEqual([merged.merged, merged.into, merged.head, merged.code, merged.message], [true, "main", "abc123", "", ""]);
+  const refused = toSession({ ...wire, last_merge: { at: "2026-10-23T12:01:00Z", code: "MERGE_CONFLICT", message: "conflicts in a.txt" } }).lastMerge;
+  assert.deepEqual([refused.merged, refused.code, refused.message, refused.head], [false, "MERGE_CONFLICT", "conflicts in a.txt", ""]);
+  assert.ok(Object.isFrozen(refused));
+  assert.throws(() => toSession({ ...wire, last_merge: { at: "later" } }), Codes.BAD_RESPONSE);
+});
+
 test("a malformed session is BAD_RESPONSE", () => {
   assert.throws(() => toSession({ ...wire, id: "" }), Codes.BAD_RESPONSE);
   assert.throws(() => toSession({ ...wire, status: "exploded" }), Codes.BAD_RESPONSE);

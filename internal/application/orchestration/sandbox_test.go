@@ -135,6 +135,12 @@ func TestSandbox_PolicyAlwaysHoldsTheAgentHomeShellTempDirAndGitCommonDir(t *tes
 			if p.WorkingDir != sess.WorkingDir {
 				t.Errorf("working dir %q, want %q", p.WorkingDir, sess.WorkingDir)
 			}
+			parent := filepath.Dir(w.home)
+			for _, list := range [][]string{p.Readable, p.Writable} {
+				if slices.Contains(list, parent) {
+					t.Errorf("agent home's parent %s listed for %s: %v", parent, sess.ID, list)
+				}
+			}
 		})
 	}
 }
@@ -480,5 +486,47 @@ func TestBuildSandboxPolicy_AHiddenPathUnderAGrantedOneIsNotHidden(t *testing.T)
 	want := []string{"/opt/r", "/opt/other", "/ws"}
 	if !slices.Equal(p.Hidden, want) {
 		t.Errorf("Hidden = %v, want %v", p.Hidden, want)
+	}
+}
+
+// linkWorktree makes the session's worktree a linked one of a common git dir
+// with the given sibling entries, answering the common dir.
+func (w *sandboxWorld) linkWorktree(siblings ...string) string {
+	common := filepath.Join(filepath.Dir(w.wsRoot), filepath.Base(w.wsRoot)+"-common.git")
+	w.svc.workspaces.(*fakeProvisioner).onCreate = func(dir string) {
+		_ = os.WriteFile(filepath.Join(dir, ".git"), []byte("gitdir: "+filepath.Join(common, "worktrees", "own")+"\n"), 0o644)
+		for _, n := range append([]string{"own"}, siblings...) {
+			_ = os.MkdirAll(filepath.Join(common, "worktrees", n), 0o755)
+		}
+		_ = os.WriteFile(filepath.Join(common, "worktrees", "own", "commondir"), []byte("../..\n"), 0o644)
+	}
+	return common
+}
+
+func TestSandbox_OtherWorktreesAdminEntriesAreReadOnlyAndOnlyTheOwnEntryIsWritable(t *testing.T) {
+	for _, mode := range []string{"implement", "design", "", "architect"} {
+		for name, siblings := range map[string][]string{"with other worktrees": {"a", "b"}, "alone": nil} {
+			t.Run("mode "+mode+" "+name, func(t *testing.T) {
+				w := newSandboxWorld(t)
+				common := w.linkWorktree(siblings...)
+				_, p := w.start(t, mode)
+				if !slices.Contains(p.Writable, common) {
+					t.Errorf("common dir not writable: %v", p.Writable)
+				}
+				if !slices.Contains(p.Readable, filepath.Join(common, "worktrees")) {
+					t.Errorf("worktrees dir not read-only: %v", p.Readable)
+				}
+				own := filepath.Join(common, "worktrees", "own")
+				if !slices.Contains(p.Writable, own) {
+					t.Errorf("own entry not writable: %v", p.Writable)
+				}
+				for _, s := range siblings {
+					other := filepath.Join(common, "worktrees", s)
+					if slices.Contains(p.Writable, other) || slices.Contains(p.Writable, filepath.Join(common, "worktrees")) {
+						t.Errorf("other entry %s writable: %v", s, p.Writable)
+					}
+				}
+			})
+		}
 	}
 }

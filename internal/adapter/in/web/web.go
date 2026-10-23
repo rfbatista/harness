@@ -104,6 +104,17 @@ type Deps struct {
 	// AgentOAuth is the credential section's Sign in with Claude flow; nil
 	// leaves the button disabled.
 	AgentOAuth ports.AgentOAuth
+	// AgentAuth is `claude auth status` of the agent home, read when the page
+	// loads; nil shows no account.
+	AgentAuth ports.AgentAuth
+	// AgentHomeExposed says the agent Claude home lies in a git work tree
+	// that does not ignore it; the credential section then warns. Nil: no
+	// check.
+	AgentHomeExposed func() bool
+	// AgentLogin says the agent home holds a Claude login, which agents use
+	// before the pasted credential; the credential section says which is in
+	// use. Nil: no login.
+	AgentLogin func() bool
 	// DataPaths are where the server keeps its data, for the Server page;
 	// nil leaves the page and its top bar link out.
 	DataPaths *serversettings.Paths
@@ -202,8 +213,8 @@ func NewHandler(deps Deps, assets *Assets, fallback http.Handler) http.Handler {
 		mux.Handle("GET "+models.Href, s.page(modelsPage.Page))
 	}
 	if deps.SandboxSettings != nil {
-		isolation := agentisolation.Handler{Sandbox: deps.SandboxSettings, Driver: deps.SandboxDriver, Credential: deps.AgentCredential, OAuth: deps.AgentOAuth, Layout: s.layout, Render: render,
-			Claude: deps.ManagedClaude, ClaudeBin: deps.ManagedClaudeBin, Builtin: deps.SandboxBuiltin}
+		isolation := agentisolation.Handler{Sandbox: deps.SandboxSettings, Driver: deps.SandboxDriver, Credential: deps.AgentCredential, OAuth: deps.AgentOAuth, Auth: deps.AgentAuth, Layout: s.layout, Render: render,
+			Claude: deps.ManagedClaude, ClaudeBin: deps.ManagedClaudeBin, Builtin: deps.SandboxBuiltin, HomeExposed: deps.AgentHomeExposed, HasLogin: deps.AgentLogin}
 		mux.Handle("GET "+agentisolation.Href, s.page(isolation.Page))
 	}
 	if deps.DataPaths != nil {
@@ -367,7 +378,7 @@ func (s *server) bareFrame(title string) shell.Frame {
 	}
 	if s.deps.SandboxSettings != nil {
 		f.Top.AgentIsolationHref = agentisolation.Href
-		f.Top.AgentIsolationAttention = agentisolation.Blocks(s.deps.SandboxSettings, s.deps.SandboxDriver, s.deps.AgentCredential, s.deps.ManagedClaudeBin)
+		f.Top.AgentIsolationAttention = agentisolation.Blocks(s.deps.SandboxSettings, s.deps.SandboxDriver, s.deps.AgentCredential, s.deps.AgentLogin, s.deps.ManagedClaudeBin)
 	}
 	if s.deps.DataPaths != nil {
 		f.Top.ServerHref = serversettings.Href

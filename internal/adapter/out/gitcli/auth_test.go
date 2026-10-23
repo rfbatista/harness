@@ -815,3 +815,44 @@ func TestThePublisherAuthenticatesOnlyThroughItsEnvironment(t *testing.T) {
 	}
 	m.untouched(t)
 }
+
+// A session's global git config begins with an include of the person's own
+// files, and the harness's settings follow it: a key both set resolves to the
+// harness value, a key only the person sets is read from their file. An
+// operation's config includes nothing. Real git, a stand-in home.
+func TestASessionConfigIncludesThePersonsFirstAndTheHarnessWins(t *testing.T) {
+	home := t.TempDir()
+	personal := filepath.Join(home, ".gitconfig")
+	if err := os.WriteFile(personal, []byte("[user]\n\tname = Person\n\temail = person@example.com\n[alias]\n\tco = checkout\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	b := newBroker(t)
+	b.IncludeFiles = []string{personal, filepath.Join(home, "absent")}
+	src := fixed(ports.GitAuthMaterial{Identity: &domain.GitIdentity{Name: "Harness", Email: "harness@example.com"}})
+	env, _, err := b.OpenSession("s1", src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer b.CloseSession("s1")
+	get := func(env []string, key string) string {
+		t.Helper()
+		cmd := exec.Command("git", "config", "--get", key)
+		cmd.Env = append([]string{"PATH=" + os.Getenv("PATH"), "HOME=" + home}, env...)
+		out, _ := cmd.Output()
+		return strings.TrimSpace(string(out))
+	}
+	if got := get(env, "user.name"); got != "Harness" {
+		t.Errorf("user.name = %q, want the harness value", got)
+	}
+	if got := get(env, "alias.co"); got != "checkout" {
+		t.Errorf("alias.co = %q, want the person's value", got)
+	}
+	opEnv, done, err := b.OpenOperation(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer done()
+	if got := get(opEnv, "alias.co"); got != "" {
+		t.Errorf("an operation read the person's config: alias.co = %q", got)
+	}
+}

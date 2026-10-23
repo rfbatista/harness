@@ -13,6 +13,7 @@
 package agentisolation
 
 import (
+	"context"
 	"net/http"
 	"strings"
 
@@ -31,6 +32,9 @@ type Handler struct {
 	Credential ports.AgentCredential
 	// OAuth is the Sign in with Claude flow; nil disables the button.
 	OAuth ports.AgentOAuth
+	// Auth is `claude auth status` of the agent home, read at each page load
+	// with a bounded wait; nil shows no account.
+	Auth ports.AgentAuth
 	// Driver is the platform's sandbox driver; a nil func or result is none.
 	Driver func() ports.SandboxDriver
 	// Claude and ClaudeBin are the managed claude and the binary agents
@@ -40,8 +44,13 @@ type Handler struct {
 	// Builtin is the allowlist every session gets, for the Sandbox section's
 	// read-only list; nil lists none.
 	Builtin func() []ports.SandboxBuiltinGroup
-	Layout  shell.Layout
-	Render  shell.Renderer
+	// HomeExposed says the agent home is in an unignored git work tree; nil
+	// shows no warning.
+	HomeExposed func() bool
+	// HasLogin says the agent home holds a Claude login; nil: none.
+	HasLogin func() bool
+	Layout   shell.Layout
+	Render   shell.Renderer
 }
 
 // View is what the page renders: one view per section.
@@ -59,7 +68,7 @@ func (h Handler) Page(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	frame.Top.OnAgentIsolation = true
-	v := h.View()
+	v := h.View(r.Context())
 	// An "Allow this path" link from a session's Sandbox tab brings the path
 	// to put in the add-path field. It is only shown, never saved.
 	v.Sandbox.AllowPath = strings.TrimSpace(r.URL.Query().Get("allow_path"))
@@ -67,12 +76,14 @@ func (h Handler) Page(w http.ResponseWriter, r *http.Request) error {
 }
 
 // View reads each section's state.
-func (h Handler) View() View {
+func (h Handler) View(ctx context.Context) View {
 	v := View{
-		Credential: NewCredentialView(h.Credential, h.OAuth, h.ClaudeBin),
+		Credential: NewCredentialView(ctx, h.Credential, h.OAuth, h.Auth, h.ClaudeBin),
 		Claude:     NewClaudeView(h.Claude, h.ClaudeBin),
 		Sandbox:    NewSandboxView(h.Sandbox, h.Driver),
 	}
+	v.Credential.HomeExposed = h.HomeExposed != nil && h.HomeExposed()
+	v.Credential.Login = h.HasLogin != nil && h.HasLogin()
 	if h.Builtin != nil {
 		v.Sandbox.Builtin = h.Builtin()
 	}
@@ -84,11 +95,11 @@ func (h Handler) View() View {
 // sandbox is on without a driver, the agent credential is not set, or the
 // managed claude is not installed and not overridden. The top bar's link then
 // carries the attention mark. A nil credential or bin is not enforced.
-func Blocks(sandbox ports.SandboxSettings, driver func() ports.SandboxDriver, credential ports.AgentCredential, bin ports.ManagedClaudeBin) bool {
+func Blocks(sandbox ports.SandboxSettings, driver func() ports.SandboxDriver, credential ports.AgentCredential, hasLogin func() bool, bin ports.ManagedClaudeBin) bool {
 	if NewSandboxView(sandbox, driver).Blocks() {
 		return true
 	}
-	if credential != nil && !credential.Status().Set {
+	if credential != nil && !credential.Status().Set && (hasLogin == nil || !hasLogin()) {
 		return true
 	}
 	return bin != nil && !bin.Installed()

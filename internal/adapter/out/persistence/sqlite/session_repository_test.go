@@ -4,6 +4,7 @@ import (
 	"context"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
@@ -376,5 +377,46 @@ func TestSessionSandboxFacts(t *testing.T) {
 	}
 	if err := repo.UpdateSandbox("missing", off); err == nil {
 		t.Fatal("UpdateSandbox on a missing session succeeded")
+	}
+}
+
+// The newest merge result persists with the session; a session from before
+// merging (its columns NULL) reads back with none.
+func TestSessionLastMerge(t *testing.T) {
+	db, err := Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	repo := NewSessionRepository(db)
+	if _, err := repo.Create(&domain.Session{ID: "s"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Exec(`INSERT INTO sessions (id, status) VALUES ('old', 'done')`).Error; err != nil {
+		t.Fatal(err)
+	}
+	if got := repo.Get("old"); got == nil || got.LastMerge != nil {
+		t.Fatalf("a row from before merging reads %+v", got)
+	}
+	if repo.Get("s").LastMerge != nil {
+		t.Fatal("a session never merged has a result")
+	}
+	at := time.UnixMilli(1_760_000_000_000)
+	merged := domain.MergeResult{At: at, Merged: true, Into: "main", Head: "abc123"}
+	if err := repo.UpdateMerge("s", merged); err != nil {
+		t.Fatal(err)
+	}
+	if got := repo.Get("s").LastMerge; got == nil || !got.At.Equal(at) || *got != merged {
+		t.Fatalf("stored = %+v, want %+v", got, merged)
+	}
+	refused := domain.MergeResult{At: at.Add(time.Minute), Code: domain.MergeConflict, Message: "conflicts in a.txt", Into: "main"}
+	if err := repo.UpdateMerge("s", refused); err != nil {
+		t.Fatal(err)
+	}
+	got := repo.Get("s").LastMerge
+	if got == nil || got.Merged || got.Code != domain.MergeConflict || got.Message != "conflicts in a.txt" || got.Head != "" {
+		t.Fatalf("after a refusal = %+v", got)
+	}
+	if err := repo.UpdateMerge("missing", merged); err == nil {
+		t.Fatal("UpdateMerge on a missing session succeeded")
 	}
 }

@@ -18,6 +18,7 @@ import (
 	"operators-mcp/internal/application/gitcredentials"
 	"operators-mcp/internal/application/orchestration"
 	"operators-mcp/internal/application/planning"
+	"operators-mcp/internal/application/taskchannel"
 	"operators-mcp/internal/application/workspaces"
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
@@ -26,15 +27,17 @@ import (
 // prServer is the wired server stack on a database file, with real git and
 // only the code host faked.
 type prServer struct {
-	app   *fx.App
-	cat   catalog.Catalog
-	orch  *orchestration.Service
-	plan  *planning.Service
-	ws    *workspaces.Service
-	prs   *workspaces.PullRequests
-	sess  ports.SessionRepository
-	creds *gitcredentials.Service
-	e     *archE2E
+	app     *fx.App
+	cat     catalog.Catalog
+	orch    *orchestration.Service
+	plan    *planning.Service
+	ws      *workspaces.Service
+	prs     *workspaces.PullRequests
+	merge   *workspaces.Merges
+	channel *taskchannel.Service
+	sess    ports.SessionRepository
+	creds   *gitcredentials.Service
+	e       *archE2E
 }
 
 // e2eToken is the GitHub token the e2e servers store.
@@ -64,7 +67,7 @@ func startPRServer(t *testing.T, dir, dbPath string, host *githubapitest.FakeHos
 		PersistenceModule, CatalogModule, PlanningModule, WorkspacesModule, GitCredentialsModule,
 		AgentRuntimeModule, TaskChannelModule, TextProcessingModule, ToolingModule,
 		WithCodeHost(host),
-		fx.Populate(&s.cat, &s.orch, &s.plan, &s.ws, &s.prs, &s.sess, &s.creds),
+		fx.Populate(&s.cat, &s.orch, &s.plan, &s.ws, &s.prs, &s.merge, &s.channel, &s.sess, &s.creds),
 		fx.NopLogger,
 	)
 	if err := s.app.Start(context.Background()); err != nil {

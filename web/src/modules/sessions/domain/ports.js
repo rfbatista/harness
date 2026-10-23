@@ -64,6 +64,24 @@
  */
 
 /**
+ * Merging a session's branch into its repository's default branch, in the
+ * local checkout, which the harness server does (ADR 0021). Implemented by
+ * infrastructure/merge-gateway.js (GET and POST /api/sessions/{id}/merge).
+ *
+ * @typedef {import("./session.js").MergeResult} MergeResult
+ * @typedef {{ available: boolean, into: string, reason: string }} MergeOffer
+ *          whether a merge applies, into which branch, and the code saying why not
+ *
+ * @typedef {object} MergeGateway
+ * @property {(sessionId: string, signal?: AbortSignal) => Promise<MergeOffer>} offer
+ *           Rejects with SESSION_NOT_FOUND.
+ * @property {(sessionId: string) => Promise<MergeResult>} merge
+ *           Merges with --no-ff. A refusal rejects with its code and reason
+ *           (MERGE_CHECKOUT_DIRTY, MERGE_WRONG_BRANCH, MERGE_ALREADY_MERGED,
+ *           MERGE_CONFLICT, …); it is on the session's lastMerge too.
+ */
+
+/**
  * The architect channel on a task: the messages between its architect and
  * the delegates, and the status-check loops on them. Implemented by
  * infrastructure/channel-gateway.js (the Web UI contract's routes and the

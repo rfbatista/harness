@@ -94,6 +94,10 @@ type Session struct {
 	// moved when it is resumed (the rules it starts under); nil for sessions
 	// from before the sandbox existed.
 	Sandbox *SandboxFacts `json:"sandbox,omitempty"`
+	// LastMerge is the result of the newest attempt to merge the session's
+	// branch into its repository's default branch (the merged commit, or the
+	// refusal and its reason); nil before any attempt.
+	LastMerge *MergeResult `json:"last_merge,omitempty"`
 	// Resumable says a resume call would be accepted now; ResumeBlocked is the
 	// error code it would answer otherwise. Derived on read, never stored.
 	Resumable     bool      `json:"resumable"`

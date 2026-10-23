@@ -9,10 +9,18 @@
 // cleared on save, cancel and pagehide. It is never held in component state
 // and never shown again.
 //
-// Sign in with Claude runs `claude setup-token` on the server. The flow's
-// state lives there, so the seed carries it and a page that was left finds
-// the same panel; while it runs the page counts the time down and asks the
-// server how it is going. Neither the token nor the pasted code is held here.
+// Who agents are signed in as comes from `claude auth status`, run on the
+// server under the sandbox driver: read when the page loads (the seed), after
+// a sign-in and after a sign out, never polled and never taken from the login
+// file. A status that cannot be read is "could not check". The page shows the
+// account claude prints and nothing of the login. Signed in, the pasted
+// credential is the secondary option, collapsed behind a button.
+//
+// Sign in with Claude runs `claude auth login` on the server, in the agents'
+// own Claude home. The flow's state lives there, so the seed carries it and a
+// page that was left finds the same panel; while it runs the page counts the
+// time down and asks the server how it is going. Claude keeps the login; the
+// pasted code is not held here.
 
 import { describeError } from "../../../../shared/presentation/errors.js";
 import { readSeed } from "../../../../shared/presentation/seed.js";
@@ -59,9 +67,19 @@ export const agentCredential = ({ gateway }) => () => ({
   /** This page saw the flow finish: the success banner stays until it is left. */
   signInSaved: false,
   timer: 0,
+  /** `claude auth status`: an account is signed in. */
+  signedIn: false,
+  account: "",
+  subscription: "",
+  /** False when the status could not be read. */
+  checkedOk: true,
+  authChecking: false,
+  /** The pasted credential's part is open; it is shut while signed in. */
+  secondaryOpen: true,
 
   init() {
     const seed = readSeed(this.$el);
+    this.setAuth(seed.auth);
     this.apply(seed);
     this.canSignIn = seed.can_sign_in === true;
     // A flow that finished before this page loaded is not news; a failure is.
@@ -80,21 +98,55 @@ export const agentCredential = ({ gateway }) => () => ({
     this.$dispatch("isolation-chip", { section: "credential", ...this.summary });
   },
 
+  /**
+   * What `claude auth status` said. The pasted credential's part shuts when
+   * an account is signed in and opens when none is.
+   * @param {import("../../domain/ports.js").AuthStatus | undefined} auth
+   */
+  setAuth(auth) {
+    this.signedIn = auth?.signed_in === true;
+    this.account = auth?.account ?? "";
+    this.subscription = auth?.subscription ?? "";
+    this.checkedOk = auth ? auth.checked_ok !== false : true;
+    this.secondaryOpen = !this.signedIn || this.pasting;
+    this.$dispatch("isolation-chip", { section: "credential", ...this.summary });
+  },
+
   /** The page's summary chip for this section. */
   get summary() {
+    if (this.signedIn) return { text: "Credential: signed in", tone: "signal", blocks: false };
     return this.isSet
       ? { text: "Credential: set", tone: "signal", blocks: false }
       : { text: "Credential: missing", tone: "danger", blocks: true };
   },
 
   get notSet() {
-    return !this.isSet;
+    return !this.isSet && !this.signedIn;
   },
   get chipText() {
+    if (this.signedIn) return "Signed in";
     return this.isSet ? "Set" : "Not set";
   },
   get chipTone() {
-    return this.isSet ? "signal" : "danger";
+    return this.isSet || this.signedIn ? "signal" : "danger";
+  },
+  get hasSubscription() {
+    return this.subscription !== "";
+  },
+  get notSignedInLine() {
+    return !this.signedIn && this.checkedOk && !this.authChecking && this.canSignIn;
+  },
+  get couldNotCheck() {
+    return !this.checkedOk && !this.authChecking;
+  },
+  get signInShown() {
+    return !this.signedIn;
+  },
+  get signOutDisabled() {
+    return this.busy || this.signingIn;
+  },
+  get secondaryExpanded() {
+    return String(this.secondaryOpen);
   },
   get kindName() {
     return KIND_NAMES[this.kind] ?? "";
@@ -145,7 +197,7 @@ export const agentCredential = ({ gateway }) => () => ({
     return this.phase !== "waiting_for_code";
   },
   get signInLabel() {
-    return this.isSet ? "Sign in again" : "Sign in with Claude";
+    return "Sign in with Claude";
   },
   get signInTone() {
     return this.isSet ? "" : "primary";
@@ -184,16 +236,48 @@ export const agentCredential = ({ gateway }) => () => ({
     else this.stopTimer();
     if (state.phase === "done" && ACTIVE.includes(was)) this.finishSignIn();
   },
-  /** The flow stored the token: the section shows the credential set. */
+  /** Claude is signed in: the panel closes on a confirmation. */
   async finishSignIn() {
     this.signInSaved = true;
-    this.announcement = "Credential saved.";
+    this.announcement = "Signed in with Claude.";
     try {
       this.apply(await gateway.get());
     } catch (err) {
       this.error = describeError(err);
     }
+    await this.checkAuth();
     this.phase = "idle";
+  },
+  /** Asks `claude auth status`; a failure is "could not check". */
+  async checkAuth() {
+    this.authChecking = true;
+    try {
+      this.setAuth(await gateway.authStatus());
+    } catch {
+      this.setAuth({ signed_in: false, account: "", subscription: "", auth_method: "", checked_ok: false });
+    } finally {
+      this.authChecking = false;
+    }
+  },
+  /** Runs `claude auth logout` on the server, then shows what the status says. */
+  async signOut() {
+    if (this.signOutDisabled) return;
+    this.busy = true;
+    this.error = null;
+    try {
+      this.setAuth(await gateway.signOut());
+      this.announcement = "Signed out of Claude.";
+      this.$nextTick(() => this.$refs.signin?.focus());
+    } catch (err) {
+      this.error = describeError(err);
+      await this.checkAuth();
+    } finally {
+      this.busy = false;
+    }
+  },
+  toggleSecondary() {
+    if (this.secondaryOpen && this.pasting) this.cancelPaste();
+    this.secondaryOpen = !this.secondaryOpen;
   },
   startTimer() {
     if (this.timer) return;

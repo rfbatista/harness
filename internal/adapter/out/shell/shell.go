@@ -86,8 +86,10 @@ func (l Login) PrepareConfined(ctx context.Context, cmd ports.ShellCommand, conf
 	return l.Prepare(ctx, cmd)
 }
 
-// shimsFirst puts the session's shim dir, if it has one, first on PATH.
-const shimsFirst = `if [ -n "$` + ports.ShimDirEnv + `" ]; then PATH="$` + ports.ShimDirEnv + `:$PATH"; export PATH; fi; `
+// shimsFirst puts the session's shim dir, if it has one, first on PATH, and
+// its keychain shim dir and then its developer bin, if it has them, right
+// after it.
+const shimsFirst = `PATH="${` + ports.ShimDirEnv + `:+$` + ports.ShimDirEnv + `:}${` + ports.KeychainShimDirEnv + `:+$` + ports.KeychainShimDirEnv + `:}${` + ports.DeveloperBinEnv + `:+$` + ports.DeveloperBinEnv + `:}$PATH"; export PATH; `
 
 func (Login) CheckDir(_ context.Context, dir string) error { return checkDir(dir) }
 

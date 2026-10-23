@@ -36,7 +36,15 @@ type Sandbox struct {
 	Bin string
 	// Home is the agent Claude home.
 	Home string
-	// TempDir gives a session its temp dir. Nil: the system's.
+	// UserHome is the person's home directory and ConfigHome their
+	// XDG_CONFIG_HOME (empty when unset): their git config is read-only to
+	// every session, so git inside the sandbox sees their identity and
+	// aliases. Empty UserHome: none.
+	UserHome, ConfigHome string
+	// TempDir gives the path prefix of a session's temp dir: each start makes
+	// its own dir as <prefix>-<random> beside it (0700), so a start never
+	// shares a dir with the one before it under the same id. Nil: the
+	// system's temp dir.
 	TempDir func(sessionID string) string
 	// Allow gives the allowlist a session adds to the baseline: token-saver
 	// dirs, toolchain dirs and caches, llmkit's Files, the harness's git
@@ -72,6 +80,11 @@ type SandboxSession struct {
 	// it commits into.
 	Worktree     string
 	GitCommonDir string
+	// OwnGitDir is the session's own admin entry under GitCommonDir/worktrees
+	// (empty for a checkout that is not a linked worktree). A writing session
+	// gets every other entry of that directory read-only, so a prune or gc it
+	// runs cannot delete the worktrees it cannot see.
+	OwnGitDir string
 	// Repositories are the checkouts of every repository of the project, for
 	// every mode: the mode decides which are granted, the rest are hidden.
 	Repositories []string
@@ -82,12 +95,19 @@ type SandboxSession struct {
 	VirtualShell string
 	TempDir      string
 	AgentHome    string
+	// UserHome and ConfigHome are the person's home and XDG config home; their
+	// git config is read-only in every mode, never their ssh folder.
+	UserHome, ConfigHome string
 	// Allow is the rest of the allowlist; Extra the person's own paths.
 	Allow []ports.SandboxPath
 	Extra []ports.SandboxPath
 	// OneShot marks a one-shot claude call: it sees only its temp dir (also
 	// its working directory), the agent home and Allow, never a repository.
 	OneShot bool
+	// Login marks the sign-in's claude (`auth login`, `auth status`): like a
+	// one-shot it sees only its temp dir, the agent home and Allow, never a
+	// repository, and not even the person's git config.
+	Login bool
 }
 
 // hiddenPaths are the repository checkouts and the workspaces root that
@@ -126,7 +146,12 @@ func BuildSandboxPolicy(s SandboxSession) ports.SandboxPolicy {
 		}
 	}
 	add(s.AgentHome, true)
-	if s.OneShot {
+	if !s.Login {
+		for _, p := range gitConfigPaths(s.UserHome, s.ConfigHome) {
+			add(p, false)
+		}
+	}
+	if s.OneShot || s.Login {
 		add(s.TempDir, true)
 		if resolved, err := filepath.EvalSymlinks(s.TempDir); err == nil && s.TempDir != "" {
 			add(resolved, true)
@@ -148,13 +173,13 @@ func BuildSandboxPolicy(s SandboxSession) ports.SandboxPolicy {
 		}
 	case domain.SessionModeArchitect:
 		add(s.Worktree, true)
-		add(s.GitCommonDir, true)
+		addGitDir(add, s)
 		for _, r := range s.Repositories {
 			add(r, false)
 		}
 	default:
 		add(s.Worktree, true)
-		add(s.GitCommonDir, true)
+		addGitDir(add, s)
 	}
 	for _, p := range slices.Concat(s.Allow, s.Extra) {
 		add(p.Path, p.Write)
@@ -163,6 +188,34 @@ func BuildSandboxPolicy(s SandboxSession) ports.SandboxPolicy {
 	policy := splitPolicy(all, s.Worktree)
 	policy.Hidden = hiddenPaths(s, all)
 	return policy
+}
+
+// addGitDir grants the common git directory read-write, its worktrees
+// directory read-only as a whole, then the session's own entry in it
+// read-write: the drivers let the deeper rule win, so the other worktrees'
+// admin entries stay out of reach while commits, refs and objects still work.
+// A session cannot create worktrees under it; the harness makes them.
+func addGitDir(add func(string, bool), s SandboxSession) {
+	if s.GitCommonDir == "" {
+		return
+	}
+	add(s.GitCommonDir, true)
+	add(filepath.Join(s.GitCommonDir, "worktrees"), false)
+	add(s.OwnGitDir, true)
+}
+
+// gitConfigPaths are the person's git config: ~/.gitconfig and the git
+// folder of ~/.config and of XDG_CONFIG_HOME. Credential folders (~/.ssh)
+// are never among them: pushes use the harness's git credentials.
+func gitConfigPaths(home, xdg string) []string {
+	if home == "" {
+		return nil
+	}
+	out := []string{filepath.Join(home, ".gitconfig"), filepath.Join(home, ".config", "git")}
+	if xdg != "" {
+		out = append(out, filepath.Join(xdg, "git"))
+	}
+	return out
 }
 
 // splitPolicy sorts paths into the policy's readable and writable sets: a
@@ -207,7 +260,7 @@ func (b *Sandbox) OneShotWrap(allow []ports.SandboxPath) (llmkit.WrapFunc, error
 	// lock files under TMPDIR, so a read-only cwd would fail calls that
 	// otherwise work. A one-shot runs no tools and sees no repository, which
 	// is why it does not get a temp dir of its own as a session does.
-	sess := SandboxSession{OneShot: true, TempDir: os.TempDir(), AgentHome: b.Home, Allow: allow}
+	sess := SandboxSession{OneShot: true, TempDir: os.TempDir(), AgentHome: b.Home, UserHome: b.UserHome, ConfigHome: b.ConfigHome, Allow: allow}
 	if b.Checkouts != nil {
 		sess.Repositories = b.Checkouts()
 	}
@@ -215,6 +268,30 @@ func (b *Sandbox) OneShotWrap(allow []ports.SandboxPath) (llmkit.WrapFunc, error
 		sess.WorkspacesRoot = b.WorkspacesRoot()
 	}
 	return sandboxWrap(b.Driver, sess), nil
+}
+
+// LoginWrap confines the sign-in's claude (`auth login`, `auth status`) under
+// the driver with the agent-home-only policy: the agent home writable, the
+// command's own temp dir (TMPDIR in its env), allow (claude's install dirs)
+// readable, no repository, no git config, nothing else of the person's home;
+// so claude cannot reach their keychain and keeps the login as
+// .credentials.json in the agent home. It follows the platform, not the
+// sandbox switch: the login is confined whenever there is a driver. Nil is a
+// platform without one.
+func (b *Sandbox) LoginWrap(allow []ports.SandboxPath) func(ports.SandboxCommand) (ports.SandboxCommand, error) {
+	if b == nil || b.Driver == nil {
+		return nil
+	}
+	return func(c ports.SandboxCommand) (ports.SandboxCommand, error) {
+		sess := SandboxSession{Login: true, TempDir: sessionTempDir(c.Env), AgentHome: b.Home, Allow: allow}
+		if b.Checkouts != nil {
+			sess.Repositories = b.Checkouts()
+		}
+		if b.WorkspacesRoot != nil {
+			sess.WorkspacesRoot = b.WorkspacesRoot()
+		}
+		return b.Driver.Wrap(BuildSandboxPolicy(sess), c)
+	}
 }
 
 // claudeSandboxOff is the settings value that keeps claude's own Bash sandbox
@@ -267,11 +344,14 @@ func (s *Service) withTempDir(id string, cfg *llmkit.SessionConfig, cleanup func
 	if !sb.on() || sb.Driver == nil || sb.TempDir == nil {
 		return cleanup, nil
 	}
-	dir := sb.TempDir(id)
-	if dir == "" {
+	prefix := sb.TempDir(id)
+	if prefix == "" {
 		return cleanup, nil
 	}
-	if err := os.MkdirAll(dir, 0o700); err != nil {
+	// One dir per start: a cleanup of an earlier start under the same id
+	// removes only its own, never the live one.
+	dir, err := mkdirTempBeside(prefix)
+	if err != nil {
 		if cleanup != nil {
 			cleanup()
 		}
@@ -284,6 +364,28 @@ func (s *Service) withTempDir(id string, cfg *llmkit.SessionConfig, cleanup func
 		}
 		_ = os.RemoveAll(dir)
 	}, nil
+}
+
+// mkdirTempBeside makes a 0700 dir named prefix-<random> in prefix's parent.
+// The name stays short: unix socket paths under it have a length limit.
+func mkdirTempBeside(prefix string) (string, error) {
+	parent := filepath.Dir(prefix)
+	if err := os.MkdirAll(parent, 0o700); err != nil {
+		return "", err
+	}
+	return os.MkdirTemp(parent, filepath.Base(prefix)+"-*")
+}
+
+// sessionTempDir is the temp dir the session's env names (withTempDir), the
+// one the policy must grant; the system's without one.
+func sessionTempDir(env []string) string {
+	dir := os.TempDir()
+	for _, e := range env {
+		if v, ok := strings.CutPrefix(e, "TMPDIR="); ok && v != "" {
+			dir = v
+		}
+	}
+	return dir
 }
 
 // sandboxed is the outcome of the sandbox step.
@@ -317,11 +419,11 @@ func (s *Service) sandbox(ctx context.Context, in prepareInput, id string, repo 
 		Mode:         in.Mode,
 		Worktree:     worktree,
 		GitCommonDir: gitCommonDir(worktree, repo.RootDir),
+		OwnGitDir:    ownGitDir(worktree),
 		AgentHome:    sb.Home,
-		TempDir:      os.TempDir(),
-	}
-	if sb.TempDir != nil {
-		sess.TempDir = sb.TempDir(id)
+		UserHome:     sb.UserHome,
+		ConfigHome:   sb.ConfigHome,
+		TempDir:      sessionTempDir(env),
 	}
 	repos, err := s.catalog.Repositories.ListRepositories(ctx, in.ProjectID)
 	if err != nil {
@@ -395,7 +497,7 @@ func sessionAllow(env []string) []ports.SandboxPath {
 	for _, e := range env {
 		name, v, _ := strings.Cut(e, "=")
 		switch name {
-		case ports.ShimDirEnv:
+		case ports.ShimDirEnv, ports.KeychainShimDirEnv:
 			out = append(out, ports.SandboxPath{Path: v})
 		case "GIT_CONFIG_GLOBAL", "GIT_CONFIG_VALUE_1":
 			if name == "GIT_CONFIG_VALUE_1" {
@@ -419,25 +521,12 @@ func sessionAllow(env []string) []ports.SandboxPath {
 // commondir. A worktree with neither commits into its repository's .git.
 func gitCommonDir(worktree, repoRoot string) string {
 	fallback := filepath.Join(repoRoot, ".git")
-	link := filepath.Join(worktree, ".git")
-	fi, err := os.Stat(link)
-	if err != nil {
+	dir := ownGitDir(worktree)
+	if dir == "" {
+		if fi, err := os.Stat(filepath.Join(worktree, ".git")); err == nil && fi.IsDir() {
+			return filepath.Join(worktree, ".git")
+		}
 		return fallback
-	}
-	if fi.IsDir() {
-		return link
-	}
-	b, err := os.ReadFile(link)
-	if err != nil {
-		return fallback
-	}
-	dir, ok := strings.CutPrefix(strings.TrimSpace(string(b)), "gitdir:")
-	if !ok {
-		return fallback
-	}
-	dir = strings.TrimSpace(dir)
-	if !filepath.IsAbs(dir) {
-		dir = filepath.Join(worktree, dir)
 	}
 	if c, err := os.ReadFile(filepath.Join(dir, "commondir")); err == nil {
 		common := strings.TrimSpace(string(c))
@@ -447,6 +536,24 @@ func gitCommonDir(worktree, repoRoot string) string {
 		return filepath.Clean(common)
 	}
 	return filepath.Dir(filepath.Dir(dir))
+}
+
+// ownGitDir is the admin entry a linked worktree's .git file points at
+// (<common>/worktrees/<name>); empty when .git is not such a file.
+func ownGitDir(worktree string) string {
+	b, err := os.ReadFile(filepath.Join(worktree, ".git"))
+	if err != nil {
+		return ""
+	}
+	dir, ok := strings.CutPrefix(strings.TrimSpace(string(b)), "gitdir:")
+	if !ok {
+		return ""
+	}
+	dir = strings.TrimSpace(dir)
+	if !filepath.IsAbs(dir) {
+		dir = filepath.Join(worktree, dir)
+	}
+	return filepath.Clean(dir)
 }
 
 // collectViolations starts following the sandbox violations of a sandboxed

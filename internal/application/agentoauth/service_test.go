@@ -3,10 +3,12 @@
 package agentoauth_test
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -15,28 +17,49 @@ import (
 	"time"
 
 	"operators-mcp/internal/adapter/out/ptyunix"
-	"operators-mcp/internal/application/agentcredential"
 	"operators-mcp/internal/application/agentoauth"
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
 )
 
-// fakeSetupToken stands in for `claude setup-token`: it prints an
-// authorization URL, waits for the code on stdin and prints a token for the
-// right one. It records where it ran, so the tests can see the config dir.
-const fakeSetupToken = `#!/bin/sh
+// fakeClaude stands in for the managed claude. `auth login --claudeai`
+// prints an authorization URL, waits for the code on stdin and, for the right
+// one, keeps a login in CLAUDE_CONFIG_DIR as the real claude does; `auth
+// status` prints JSON from that file. It records where it ran, so the tests
+// can see the config dir and the env.
+const fakeClaude = `#!/bin/sh
 dir=$(dirname "$0")
-[ "$1" = setup-token ] || exit 2
+if [ "$1 $2" = "auth status" ]; then
+  if [ "$FAKE_STATUS" = out ] || [ ! -f "$CLAUDE_CONFIG_DIR/.credentials.json" ]; then
+    echo '{"loggedIn": false, "authMethod": "none"}'
+    exit 1
+  fi
+  echo '{"loggedIn": true, "authMethod": "claude.ai", "subscriptionType": "max", "email": "p@example.com"}'
+  exit 0
+fi
+if [ "$1 $2" = "auth logout" ]; then
+  pwd > "$dir/logout-cwd"
+  if [ "$FAKE_LOGOUT" = fail ]; then
+    echo "logout failed: sk-ant-oat01-leaked" >&2
+    exit 1
+  fi
+  rm -f "$CLAUDE_CONFIG_DIR/.credentials.json"
+  exit 0
+fi
+[ "$1 $2 $3" = "auth login --claudeai" ] || exit 2
 echo $$ > "$dir/pid"
 echo "$CLAUDE_CONFIG_DIR" > "$dir/config-dir"
-echo "Open this URL to sign in:"
-echo "https://claude.ai/oauth/authorize?code=true&client_id=fake&state=abc123"
-printf "Paste the code here: "
+env > "$dir/env"
+pwd > "$dir/cwd"
+echo "Opening browser to sign in..."
+echo "If the browser didn't open, visit: https://claude.ai/oauth/authorize?code=true&client_id=fake&state=abc123"
+printf "Paste code here if prompted > "
 read code
 if [ "$code" = "good-code" ]; then
   echo
-  echo "Your OAuth token (valid for 1 year):"
-  echo "sk-ant-oat01-faketokenvalue"
+  echo '{"claudeAiOauth":{"accessToken":"sk-ant-oat01-faketokenvalue"}}' > "$CLAUDE_CONFIG_DIR/.credentials.json"
+  echo "Login successful."
+  [ "$FAKE_MODE" = hang ] && sleep 60
   exit 0
 fi
 if [ "$FAKE_MODE" = tui ]; then
@@ -59,34 +82,6 @@ func (b bin) Bin() string      { return b.path }
 func (b bin) Installed() bool  { return b.path != "" }
 func (b bin) Overridden() bool { return false }
 
-type memStore struct {
-	mu  sync.Mutex
-	rec *ports.AgentCredentialRecord
-}
-
-func (m *memStore) Get() (*ports.AgentCredentialRecord, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return m.rec, nil
-}
-func (m *memStore) Put(r ports.AgentCredentialRecord) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.rec = &r
-	return nil
-}
-func (m *memStore) Delete() error { m.mu.Lock(); defer m.mu.Unlock(); m.rec = nil; return nil }
-
-type plainBox struct{}
-
-func (plainBox) KeyID() string { return "k" }
-func (plainBox) Seal(p []byte, _ bool) ([]byte, string, error) {
-	return append([]byte("sealed:"), p...), "k", nil
-}
-func (plainBox) Open(s []byte) ([]byte, error) {
-	return []byte(strings.TrimPrefix(string(s), "sealed:")), nil
-}
-
 // clock is a hand-turned clock: After hands out a channel the test fires.
 type clock struct {
 	mu   sync.Mutex
@@ -108,11 +103,12 @@ func (c *clock) advance(d time.Duration) {
 }
 
 type rig struct {
-	svc  *agentoauth.Service
-	cred *agentcredential.Service
-	clk  *clock
-	dir  string
-	home string
+	svc *agentoauth.Service
+	clk *clock
+	// wrapped are the commands the driver was handed.
+	wrapped *[]ports.SandboxCommand
+	dir     string
+	home    string
 }
 
 func newRig(t *testing.T, script string) *rig {
@@ -128,10 +124,17 @@ func newRig(t *testing.T, script string) *rig {
 	}
 	home := filepath.Join(dir, "agent-home")
 	clk := newClock()
-	cred := agentcredential.New(&memStore{}, plainBox{}, clk.Now)
-	svc := agentoauth.New(agentoauth.Deps{Bin: bin{path}, ConfigDir: home, PTY: ptyunix.New(), Credential: cred, Now: clk.Now, After: clk.After})
+	var wrapped []ports.SandboxCommand
+	var mu sync.Mutex
+	wrap := func(c ports.SandboxCommand) (ports.SandboxCommand, error) {
+		mu.Lock()
+		defer mu.Unlock()
+		wrapped = append(wrapped, c)
+		return c, nil
+	}
+	svc := agentoauth.New(agentoauth.Deps{Bin: bin{path}, ConfigDir: home, PTY: ptyunix.New(), Wrap: wrap, Now: clk.Now, After: clk.After})
 	t.Cleanup(svc.Close)
-	return &rig{svc: svc, cred: cred, clk: clk, dir: dir, home: home}
+	return &rig{svc: svc, clk: clk, dir: dir, home: home, wrapped: &wrapped}
 }
 
 func (r *rig) waitPhase(t *testing.T, phase string) ports.AgentOAuthState {
@@ -190,7 +193,7 @@ func asJSON(t *testing.T, v any) string {
 const authURL = "https://claude.ai/oauth/authorize?code=true&client_id=fake&state=abc123"
 
 func TestStartingTheFlowShowsTheAuthorizationURLAndRunsInTheAgentClaudeHome(t *testing.T) {
-	r := newRig(t, fakeSetupToken)
+	r := newRig(t, fakeClaude)
 	st, err := r.svc.Start()
 	if err != nil || st.Phase == ports.AgentOAuthIdle {
 		t.Fatalf("start = %+v, %v", st, err)
@@ -214,8 +217,8 @@ func TestStartingTheFlowShowsTheAuthorizationURLAndRunsInTheAgentClaudeHome(t *t
 	}
 }
 
-func TestSubmittingTheCodeStoresTheTokenAsTheOAuthCredentialAndNeverShowsIt(t *testing.T) {
-	r := newRig(t, fakeSetupToken)
+func TestSubmittingTheCodeEndsTheFlowOnceClaudeExitsCleanlyAndIsSignedIn(t *testing.T) {
+	r := newRig(t, fakeClaude)
 	if _, err := r.svc.Start(); err != nil {
 		t.Fatal(err)
 	}
@@ -224,11 +227,8 @@ func TestSubmittingTheCodeStoresTheTokenAsTheOAuthCredentialAndNeverShowsIt(t *t
 		t.Fatal(err)
 	}
 	done := r.waitPhase(t, ports.AgentOAuthDone)
-	if st := r.cred.Status(); !st.Set || st.Kind != ports.AgentCredentialOAuth {
-		t.Fatalf("credential = %+v", st)
-	}
-	if env := r.cred.Env(); len(env) != 1 || env[0] != "CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-faketokenvalue" {
-		t.Fatalf("env = %v", env)
+	if st, err := r.svc.Status(context.Background()); err != nil || !st.LoggedIn || st.Email != "p@example.com" || st.SubscriptionType != "max" {
+		t.Fatalf("status = %+v, %v", st, err)
 	}
 	for _, st := range []ports.AgentOAuthState{waiting, done, r.svc.State()} {
 		if j := asJSON(t, st); strings.Contains(j, "faketokenvalue") || strings.Contains(j, "good-code") {
@@ -241,7 +241,7 @@ func TestSubmittingTheCodeStoresTheTokenAsTheOAuthCredentialAndNeverShowsIt(t *t
 }
 
 func TestASecondStartWhileOneRunsIsRefused(t *testing.T) {
-	r := newRig(t, fakeSetupToken)
+	r := newRig(t, fakeClaude)
 	if _, err := r.svc.Start(); err != nil {
 		t.Fatal(err)
 	}
@@ -255,10 +255,7 @@ func TestASecondStartWhileOneRunsIsRefused(t *testing.T) {
 }
 
 func TestCancelKillsTheProcessAndLeavesThePreviousCredentialUntouched(t *testing.T) {
-	r := newRig(t, fakeSetupToken)
-	if _, err := r.cred.Set(ports.AgentCredentialAPIKey, "sk-ant-api03-before"); err != nil {
-		t.Fatal(err)
-	}
+	r := newRig(t, fakeClaude)
 	if _, err := r.svc.Start(); err != nil {
 		t.Fatal(err)
 	}
@@ -270,17 +267,14 @@ func TestCancelKillsTheProcessAndLeavesThePreviousCredentialUntouched(t *testing
 	if !gone(pid) {
 		t.Error("cancel left the process running")
 	}
-	if env := r.cred.Env(); len(env) != 1 || env[0] != "ANTHROPIC_API_KEY=sk-ant-api03-before" {
-		t.Errorf("credential changed: %v", env)
-	}
+	r.noLogin(t)
 	if _, err := r.svc.Start(); err != nil {
 		t.Errorf("a new flow after cancel: %v", err)
 	}
 }
 
 func TestAFailingProcessEndsTheFlowWithItsLastLineAndChangesNothing(t *testing.T) {
-	r := newRig(t, fakeSetupToken)
-	_, _ = r.cred.Set(ports.AgentCredentialAPIKey, "sk-ant-api03-before")
+	r := newRig(t, fakeClaude)
 	if _, err := r.svc.Start(); err != nil {
 		t.Fatal(err)
 	}
@@ -292,9 +286,7 @@ func TestAFailingProcessEndsTheFlowWithItsLastLineAndChangesNothing(t *testing.T
 	if !strings.Contains(st.Message, "Nothing was saved") || st.Detail != "invalid code" {
 		t.Errorf("failed state = %+v", st)
 	}
-	if env := r.cred.Env(); len(env) != 1 || env[0] != "ANTHROPIC_API_KEY=sk-ant-api03-before" {
-		t.Errorf("credential changed: %v", env)
-	}
+	r.noLogin(t)
 	if _, err := r.svc.Start(); err != nil {
 		t.Errorf("start again after a failure: %v", err)
 	}
@@ -302,19 +294,19 @@ func TestAFailingProcessEndsTheFlowWithItsLastLineAndChangesNothing(t *testing.T
 
 func TestKeyboardModeResetsAreNotTheFailureDetail(t *testing.T) {
 	t.Setenv("FAKE_MODE", "tui")
-	r := newRig(t, fakeSetupToken)
+	r := newRig(t, fakeClaude)
 	_, _ = r.svc.Start()
 	r.waitPhase(t, ports.AgentOAuthWaitingForCode)
 	_, _ = r.svc.Submit("bad-code")
 	st := r.waitPhase(t, ports.AgentOAuthFailed)
-	if st.Detail == "" || strings.ContainsAny(st.Detail, "[<>\x1b") {
+	if st.Detail == "" || strings.ContainsAny(st.Detail, "\x1b") || strings.Contains(st.Detail, "[>4m") || strings.Contains(st.Detail, "[<u") {
 		t.Errorf("detail = %q", st.Detail)
 	}
 }
 
 func TestTheLastLineNeverCarriesATokenOrTheCode(t *testing.T) {
 	t.Setenv("FAKE_MODE", "leaky")
-	r := newRig(t, fakeSetupToken)
+	r := newRig(t, fakeClaude)
 	_, _ = r.svc.Start()
 	r.waitPhase(t, ports.AgentOAuthWaitingForCode)
 	_, _ = r.svc.Submit("secret-code-123")
@@ -325,8 +317,7 @@ func TestTheLastLineNeverCarriesATokenOrTheCode(t *testing.T) {
 }
 
 func TestTheFlowTimesOutWithAClearMessageAndKillsTheProcess(t *testing.T) {
-	r := newRig(t, fakeSetupToken)
-	_, _ = r.cred.Set(ports.AgentCredentialAPIKey, "sk-ant-api03-before")
+	r := newRig(t, fakeClaude)
 	if _, err := r.svc.Start(); err != nil {
 		t.Fatal(err)
 	}
@@ -340,13 +331,11 @@ func TestTheFlowTimesOutWithAClearMessageAndKillsTheProcess(t *testing.T) {
 	if !gone(pid) {
 		t.Error("timeout left the process running")
 	}
-	if len(r.cred.Env()) != 1 || !strings.HasPrefix(r.cred.Env()[0], "ANTHROPIC_API_KEY=") {
-		t.Errorf("credential changed: %v", r.cred.Env())
-	}
+	r.noLogin(t)
 }
 
 func TestClosingTheServiceKillsTheProcess(t *testing.T) {
-	r := newRig(t, fakeSetupToken)
+	r := newRig(t, fakeClaude)
 	_, _ = r.svc.Start()
 	r.waitPhase(t, ports.AgentOAuthWaitingForCode)
 	pid := r.pid(t)
@@ -367,7 +356,7 @@ func TestWithoutAManagedClaudeTheFlowDoesNotStart(t *testing.T) {
 }
 
 func TestACodeNeedsAWaitingFlow(t *testing.T) {
-	r := newRig(t, fakeSetupToken)
+	r := newRig(t, fakeClaude)
 	if _, err := r.svc.Submit("x"); code(err) != "AGENT_OAUTH_NOT_WAITING" {
 		t.Errorf("submit without a flow = %v", err)
 	}
@@ -375,5 +364,152 @@ func TestACodeNeedsAWaitingFlow(t *testing.T) {
 	r.waitPhase(t, ports.AgentOAuthWaitingForCode)
 	if _, err := r.svc.Submit("  "); code(err) != "INVALID_INPUT" {
 		t.Errorf("empty code = %v", err)
+	}
+}
+
+// noLogin fails when a login was kept in the agent home.
+func (r *rig) noLogin(t *testing.T) {
+	t.Helper()
+	if _, err := os.Stat(filepath.Join(r.home, ".credentials.json")); err == nil {
+		t.Error("a login was kept although the flow did not finish")
+	}
+}
+
+func TestACleanExitThatIsNotSignedInEndsTheFlowWithoutALogin(t *testing.T) {
+	t.Setenv("FAKE_STATUS", "out")
+	r := newRig(t, fakeClaude)
+	_, _ = r.svc.Start()
+	r.waitPhase(t, ports.AgentOAuthWaitingForCode)
+	_, _ = r.svc.Submit("good-code")
+	st := r.waitPhase(t, ports.AgentOAuthFailed)
+	if !strings.Contains(st.Message, "Nothing was saved") {
+		t.Errorf("failed state = %+v", st)
+	}
+	if !gone(r.pid(t)) {
+		t.Error("the process outlived the flow")
+	}
+	if st, err := r.svc.Status(context.Background()); err != nil || st.LoggedIn {
+		t.Errorf("status = %+v, %v", st, err)
+	}
+}
+
+func TestCancelDuringTheStatusCheckEndsTheFlow(t *testing.T) {
+	t.Setenv("FAKE_MODE", "hang")
+	r := newRig(t, fakeClaude)
+	_, _ = r.svc.Start()
+	r.waitPhase(t, ports.AgentOAuthWaitingForCode)
+	_, _ = r.svc.Submit("good-code")
+	time.Sleep(300 * time.Millisecond)
+	if st := r.svc.Cancel(); st.Phase != ports.AgentOAuthIdle {
+		t.Fatalf("after cancel: %+v", st)
+	}
+	if !gone(r.pid(t)) {
+		t.Error("cancel left the process running")
+	}
+}
+
+func TestTheLoginRunsUnderTheDriverInTheAgentHomeWithNoCredentialVariables(t *testing.T) {
+	t.Setenv("ANTHROPIC_API_KEY", "sk-ant-api03-person")
+	t.Setenv("CLAUDE_CODE_OAUTH_TOKEN", "sk-ant-oat01-person")
+	t.Setenv("ANTHROPIC_AUTH_TOKEN", "person-auth")
+	t.Setenv("BROWSER", "firefox")
+	r := newRig(t, fakeClaude)
+	_, _ = r.svc.Start()
+	r.waitPhase(t, ports.AgentOAuthWaitingForCode)
+	cmds := *r.wrapped
+	if len(cmds) != 1 {
+		t.Fatalf("driver was handed %d commands, want the login", len(cmds))
+	}
+	if got := strings.Join(cmds[0].Args, " "); got != "auth login --claudeai" {
+		t.Errorf("args = %q", got)
+	}
+	env, _ := os.ReadFile(filepath.Join(r.dir, "env"))
+	for _, bad := range []string{"ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_AUTH_TOKEN", "sk-ant", "firefox"} {
+		if strings.Contains(string(env), bad) {
+			t.Errorf("the login's env carries %s", bad)
+		}
+	}
+	for _, want := range []string{"CLAUDE_CONFIG_DIR=" + r.home, "BROWSER=/usr/bin/true"} {
+		if !strings.Contains(string(env), want+"\n") {
+			t.Errorf("the login's env lacks %s", want)
+		}
+	}
+	tmp := ""
+	for _, kv := range cmds[0].Env {
+		if v, ok := strings.CutPrefix(kv, "TMPDIR="); ok {
+			tmp = v
+		}
+	}
+	if tmp == "" || tmp == os.TempDir() {
+		t.Errorf("the login has no temp dir of its own: %q", tmp)
+	}
+	if cmds[0].Dir != r.home {
+		t.Errorf("dir = %q, want the agent home", cmds[0].Dir)
+	}
+	r.svc.Cancel()
+	if !gone(r.pid(t)) {
+		t.Fatal("process outlived the cancel")
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		if _, err := os.Stat(tmp); err != nil {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Error("the login's temp dir was left behind")
+}
+
+// Logout runs `claude auth logout` the way the login runs, and what the status
+// says afterwards is the answer: the login is gone.
+func TestLogoutRunsUnderTheDriverInTheAgentHomeAndSignsTheHomeOut(t *testing.T) {
+	r := newRig(t, fakeClaude)
+	_, _ = r.svc.Start()
+	r.waitPhase(t, ports.AgentOAuthWaitingForCode)
+	_, _ = r.svc.Submit("good-code")
+	r.waitPhase(t, ports.AgentOAuthDone)
+	if st, err := r.svc.Status(context.Background()); err != nil || !st.LoggedIn {
+		t.Fatalf("before logout: %+v, %v", st, err)
+	}
+	if err := r.svc.Logout(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	r.noLogin(t)
+	if st, err := r.svc.Status(context.Background()); err != nil || st.LoggedIn {
+		t.Errorf("after logout: %+v, %v", st, err)
+	}
+	var logout *ports.SandboxCommand
+	for _, c := range *r.wrapped {
+		if strings.Join(c.Args, " ") == "auth logout" {
+			logout = &c
+		}
+	}
+	if logout == nil {
+		t.Fatalf("the driver was not handed the logout: %+v", *r.wrapped)
+	}
+	if logout.Dir != r.home {
+		t.Errorf("logout dir = %q, want the agent home", logout.Dir)
+	}
+	if !slices.Contains(logout.Env, "CLAUDE_CONFIG_DIR="+r.home) {
+		t.Errorf("logout env lacks the agent home")
+	}
+}
+
+func TestAFailingLogoutIsAnErrorWithItsLastLineAndNoToken(t *testing.T) {
+	t.Setenv("FAKE_LOGOUT", "fail")
+	r := newRig(t, fakeClaude)
+	err := r.svc.Logout(context.Background())
+	if code(err) != "AGENT_SIGN_OUT_FAILED" {
+		t.Fatalf("err = %v", err)
+	}
+	if strings.Contains(err.Error(), "sk-ant") || !strings.Contains(err.Error(), "logout failed") {
+		t.Errorf("message = %q", err)
+	}
+}
+
+func TestLogoutWithoutAManagedClaudeIsRefused(t *testing.T) {
+	r := newRig(t, "")
+	if code(r.svc.Logout(context.Background())) != "CLAUDE_CLI_NOT_FOUND" {
+		t.Error("logout ran without a claude")
 	}
 }

@@ -158,6 +158,8 @@ func NewRouter(h *Handler, opts ...Option) *echo.Echo {
 	g.POST("/start_agent_oauth", h.handleStartAgentOAuth)
 	g.POST("/submit_agent_oauth_code", h.handleSubmitAgentOAuthCode)
 	g.POST("/cancel_agent_oauth", h.handleCancelAgentOAuth)
+	g.GET("/get_agent_auth_status", h.handleGetAgentAuthStatus)
+	g.POST("/sign_out_agent_auth", h.handleSignOutAgentAuth)
 
 	// mcp servers
 	g.GET("/list_mcp_servers", h.handleListMCPServers)
@@ -190,6 +192,9 @@ func NewRouter(h *Handler, opts ...Option) *echo.Echo {
 	g.GET("/sessions/:id/history", h.handleSessionHistory)
 	g.GET("/sessions/:id/transcript", h.handleSessionTranscript)
 	g.GET("/sessions/:id/sandbox/violations", h.handleSessionSandboxViolations)
+	// merging a session's branch into its repository's default branch, in the local checkout
+	g.GET("/sessions/:id/merge", h.handleSessionMergeOffer)
+	g.POST("/sessions/:id/merge", h.handleSessionMerge)
 
 	// artifacts: what sessions publish for the Design tab. The /view/ routes
 	// are loaded as plain subresources (<img>, <video>, <iframe>), under the

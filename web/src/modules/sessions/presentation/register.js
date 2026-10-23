@@ -8,6 +8,7 @@ import { designWatch } from "./components/designWatch.js";
 import { taskDesign } from "./components/taskDesign.js";
 import { designPanel } from "./components/designPanel.js";
 import { history } from "./components/history.js";
+import { merge } from "./components/merge.js";
 import { sandbox } from "./components/sandbox.js";
 import { newSession } from "./components/newSession.js";
 import { terminal } from "./components/terminal.js";
@@ -22,6 +23,7 @@ import { screenPrefs } from "./screenPrefs.js";
  *   terminals: import("../domain/ports.js").TerminalGateway,
  *   transcripts: import("../domain/ports.js").TranscriptGateway,  sessions' saved conversations, for the History tab
  *   sandbox: import("../domain/ports.js").SandboxGateway,  sessions' sandbox violations, for the Sandbox tab
+ *   merge?: import("../domain/ports.js").MergeGateway,  merging a session's branch, for the Merge tab
  *   artifacts: import("../domain/ports.js").ArtifactGateway,
  *   runTerminals?: import("../domain/ports.js").TerminalGateway,  application runs' terminals
  *   createScreen: import("./components/terminal.js").CreateScreen,
@@ -48,6 +50,7 @@ export function registerSessions(Alpine, deps) {
   Alpine.data("sessionsDesignPanel", designPanel(deps));
   Alpine.data("sessionsHistory", history(deps));
   Alpine.data("sessionsSandbox", sandbox(deps));
+  if (deps.merge) Alpine.data("sessionsMerge", merge({ merge: deps.merge }));
   Alpine.data("sessionsDesignLibrary", designLibrary(deps));
   Alpine.data("sessionsTaskDesign", taskDesign(deps));
   Alpine.data("sessionsDesignWatch", designWatch(deps));

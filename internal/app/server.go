@@ -52,7 +52,7 @@ var ServerModule = fx.Module("server",
 
 // registerHTTPServer mounts the UI and JSON API on a mux and serves it,
 // shutting down gracefully when fx stops.
-func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRunner *apps.Service, ts *tooling.Service, exec *execution.Service, orch *orchestration.Service, plan *planning.Service, ws *workspaces.Service, broker *approval.Broker, sessions ports.SessionRepository, art *artifacts.Service, channel *taskchannel.Service, prs *workspaces.PullRequests, code ports.CodeBrowser, inbox optionalNotifications, creds optionalGitCredentials, shells *vshell.Service, usageSvc *usage.Service, indexes optionalRepositoryIndexes, sandboxStore *sandboxsettings.Store, managedClaude *managedclaude.Service, claudeBin ports.ManagedClaudeBin, agentCred optionalAgentCredential) error {
+func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRunner *apps.Service, ts *tooling.Service, exec *execution.Service, orch *orchestration.Service, plan *planning.Service, ws *workspaces.Service, broker *approval.Broker, sessions ports.SessionRepository, art *artifacts.Service, channel *taskchannel.Service, prs *workspaces.PullRequests, merges *workspaces.Merges, code ports.CodeBrowser, inbox optionalNotifications, creds optionalGitCredentials, shells *vshell.Service, usageSvc *usage.Service, indexes optionalRepositoryIndexes, sandboxStore *sandboxsettings.Store, managedClaude *managedclaude.Service, claudeBin ports.ManagedClaudeBin, agentCred optionalAgentCredential) error {
 	uiHandler, err := ui.SPAHandler(ui.Dist)
 	if err != nil {
 		return err
@@ -100,6 +100,7 @@ func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRun
 		TaskResources: plan,
 		TaskComments:  plan,
 		PullRequests:  prs,
+		Merges:        merges,
 		Notifications: notes,
 		Usage:         usageSvc,
 		LiveCalls:     usageSvc,
@@ -122,6 +123,7 @@ func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRun
 		AgentCredential: agentCred.port(),
 		// The Sign in with Claude flow that stores it.
 		AgentOAuth: agentCred.oauth(),
+		AgentAuth:  agentCred.auth(),
 	}), httpapi.WithToken(cfg.APIToken))
 	// Requests slower than the threshold are logged with their query count.
 	// An approval waits on a person, so it is never a slow request.
@@ -130,14 +132,14 @@ func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRun
 	}
 	mux.Handle("/api/", slow(apiRouter))
 	mux.Handle(mcpapprove.PathPrefix, mcpapprove.Handler(broker))
-	mux.Handle(mcpsession.PathPrefix, slow(mcpsession.TaskHandler(sessionTaskTools(cat, orch, plan, sessions, art, channel, notifier))))
+	mux.Handle(mcpsession.PathPrefix, slow(mcpsession.TaskHandler(sessionTaskTools(cat, orch, plan, sessions, art, channel, notifier, merges))))
 	// The web client owns / and its pages; anything else reaches the legacy
 	// designer SPA until it is retired.
 	mux.Handle("/", slow(web.NewHandler(web.Deps{Projects: cat.Projects, Tasks: plan, Sessions: orch, Agents: cat.Agents, Repositories: cat.Projects, EnvFiles: cat.Projects, RunCommands: cat.Projects, Documents: plan, History: ws, Code: code, Workspaces: ws, Artifacts: art, ProjectSummaries: cat.Projects, PullRequests: prs,
 		Resources: plan, Comments: plan, Notifications: noteReader, GitCredentials: creds.port(), Usage: usageSvc, TokenSavers: cat.Capabilities,
 		TokenSaverInstalls: cat.Capabilities, RepositoryIndexes: indexes.port(), Settings: cat.Settings, DataPaths: dataPaths(cfg), SandboxSettings: sandboxStore, SandboxDriver: sandboxDriver(orch), SandboxBuiltin: sandboxBuiltin(orch),
 		ManagedClaude: managedClaude, ManagedClaudeBin: claudeBin, AgentCredential: agentCred.port(),
-		AgentOAuth: agentCred.oauth()}, assets, uiHandler)))
+		AgentOAuth: agentCred.oauth(), AgentAuth: agentCred.auth(), AgentHomeExposed: agentHomeExposed(cfg), AgentLogin: agentHasLogin(cfg)}, assets, uiHandler)))
 
 	// The LLM proxy every claude process calls through (ADR 0006): loopback
 	// only, outside the API token and CORS, so its responses come back as
@@ -189,9 +191,9 @@ type optionalNotifications struct {
 
 // sessionTaskTools are the tools each session reaches on its own task
 // endpoint, /mcp/task/{session}.
-func sessionTaskTools(cat catalog.Catalog, orch *orchestration.Service, plan *planning.Service, sessions ports.SessionRepository, art *artifacts.Service, channel *taskchannel.Service, notifier ports.Notifier) []domain.Tool {
+func sessionTaskTools(cat catalog.Catalog, orch *orchestration.Service, plan *planning.Service, sessions ports.SessionRepository, art *artifacts.Service, channel *taskchannel.Service, notifier ports.Notifier, merges ports.BranchMerger) []domain.Tool {
 	return tooling.SessionTaskTools(plan, sessions, cat.Agents, cat.Architecture,
-		tooling.PeerStarter{Sessions: orch, Repositories: cat.Projects},
+		tooling.PeerStarter{Sessions: orch, Repositories: cat.Projects, Merger: merges},
 		tooling.ArtifactTooling{Publisher: art, Attachments: art, ViewURL: httpapi.ArtifactViewPath}, channel,
 		tooling.NotificationTooling{Notifier: notifier})
 }

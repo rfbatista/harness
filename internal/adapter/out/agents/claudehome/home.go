@@ -38,6 +38,32 @@ func (h Home) Ensure() error {
 	})
 }
 
+// credentialsFile is the login claude keeps in the home, plaintext.
+const credentialsFile = ".credentials.json"
+
+// secure makes the home private (0700, tightening a looser existing mode)
+// and repairs a looser login file to 0600. The file's content is never read.
+func (h Home) secure() error {
+	if err := os.MkdirAll(h.dir, 0o700); err != nil {
+		return err
+	}
+	if err := os.Chmod(h.dir, 0o700); err != nil {
+		return err
+	}
+	cred := filepath.Join(h.dir, credentialsFile)
+	fi, err := os.Stat(cred)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if fi.Mode().IsRegular() && fi.Mode().Perm()&0o077 != 0 {
+		return os.Chmod(cred, 0o600)
+	}
+	return nil
+}
+
 // TrustFolder marks dir (and, as claude treats trust, what is under it) as
 // trusted, so the "do you trust this folder" prompt does not appear for
 // session worktrees: projects[dir].hasTrustDialogAccepted = true. It also
@@ -62,7 +88,7 @@ func (h Home) TrustFolder(dir string) error {
 // update applies f to the config file's object and writes it back when it
 // changed, atomically.
 func (h Home) update(f func(map[string]any)) error {
-	if err := os.MkdirAll(h.dir, 0o700); err != nil {
+	if err := h.secure(); err != nil {
 		return err
 	}
 	path := filepath.Join(h.dir, ".claude.json")
@@ -106,4 +132,21 @@ func seed(m map[string]any) {
 	if _, ok := m["theme"]; !ok {
 		m["theme"] = "dark"
 	}
+}
+
+// HasLogin says whether the home holds a Claude account login: a
+// .credentials.json that parses as JSON with a claudeAiOauth object. It
+// reads the file and starts no process; the content is never returned.
+func (h Home) HasLogin() bool {
+	if h.dir == "" {
+		return false
+	}
+	b, err := os.ReadFile(filepath.Join(h.dir, credentialsFile))
+	if err != nil {
+		return false
+	}
+	var f struct {
+		Login map[string]json.RawMessage `json:"claudeAiOauth"`
+	}
+	return json.Unmarshal(b, &f) == nil && f.Login != nil
 }

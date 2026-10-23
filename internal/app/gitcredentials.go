@@ -26,7 +26,7 @@ import (
 var GitCredentialsModule = fx.Module("gitcredentials",
 	fx.Provide(newSecretBox),
 	fx.Provide(newGitCredentialsService),
-	fx.Provide(newAgentCredential),
+	fx.Provide(newAgentCredential, newKeychainShim),
 	fx.Provide(newAgentOAuth),
 	fx.Invoke(registerGitCredentials, bindGitCredentials),
 	fx.Invoke(bindAgentCredential),
@@ -111,6 +111,7 @@ func newGitCredentialsService(p gitCredentialsParams) (*gitcredentials.Service, 
 	if err != nil {
 		return nil, err
 	}
+	broker.IncludeFiles = personalGitConfigs()
 	svc.Broker = broker
 	svc.Tester = &gitcli.Probe{Broker: broker, GitHub: githubapi.New().User, Git: p.Cfg.GitBin}
 	svc.Subscribe(p.Cat.Bus)
@@ -144,4 +145,18 @@ func (o optionalGitCredentials) port() ports.GitCredentials {
 		return nil
 	}
 	return o.Service
+}
+
+// personalGitConfigs are the person's own git config files a session's global
+// config includes first: the XDG one, then ~/.gitconfig (git's own order).
+func personalGitConfigs() []string {
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		return nil
+	}
+	xdg := os.Getenv("XDG_CONFIG_HOME")
+	if xdg == "" {
+		xdg = filepath.Join(home, ".config")
+	}
+	return []string{filepath.Join(xdg, "git", "config"), filepath.Join(home, ".gitconfig")}
 }

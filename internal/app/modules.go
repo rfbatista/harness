@@ -24,9 +24,11 @@ import (
 	"operators-mcp/internal/adapter/out/agents/claudetext"
 	"operators-mcp/internal/adapter/out/blobstore"
 	"operators-mcp/internal/adapter/out/configrepo"
+	"operators-mcp/internal/adapter/out/developerdir"
 	"operators-mcp/internal/adapter/out/filesystem"
 	"operators-mcp/internal/adapter/out/gitcli"
 	"operators-mcp/internal/adapter/out/githubapi"
+	"operators-mcp/internal/adapter/out/keychainshim"
 	"operators-mcp/internal/adapter/out/persistence/sqlite"
 	"operators-mcp/internal/app/catalog"
 	"operators-mcp/internal/application/agentcredential"
@@ -34,6 +36,7 @@ import (
 	"operators-mcp/internal/application/artifacts"
 	"operators-mcp/internal/application/execution"
 	"operators-mcp/internal/application/gitcredentials"
+	"operators-mcp/internal/application/keychainpath"
 	"operators-mcp/internal/application/orchestration"
 	"operators-mcp/internal/application/planning"
 	"operators-mcp/internal/application/taskchannel"
@@ -99,7 +102,8 @@ func newGitHistory(cfg Config) *gitcli.History { return gitcli.NewHistory(cfg.gi
 func newBranchPublisher(cfg Config) *gitcli.BranchPublisher {
 	return gitcli.NewBranchPublisher(cfg.gitOptions()...)
 }
-func newGitCode(cfg Config) *gitcli.Code { return gitcli.NewCode(cfg.gitOptions()...) }
+func newGitMerger(cfg Config) *gitcli.Merger { return gitcli.NewMerger(cfg.gitOptions()...) }
+func newGitCode(cfg Config) *gitcli.Code     { return gitcli.NewCode(cfg.gitOptions()...) }
 
 // newDB opens the SQLite database and registers a hook to close it on
 // shutdown. The database's folder is made first: the default data dir,
@@ -557,6 +561,29 @@ func newAgentClaudeHome(cfg Config) (claudehome.Home, error) {
 	return h, h.Ensure()
 }
 
+// agentHomeExposed checks once, now, whether the agent Claude home lies in a
+// git work tree that does not ignore it, logs a warning if so, and returns
+// the answer for the Agent isolation page.
+func agentHomeExposed(cfg Config) func() bool {
+	exposed := false
+	if dir, err := agentClaudeHomeDir(cfg); err == nil {
+		exposed = gitcli.HomeExposedToGit(cfg.GitBin, dir)
+		if exposed {
+			slog.Warn("the agent home is inside a git work tree and not ignored: add it to .gitignore", "dir", dir)
+		}
+	}
+	return func() bool { return exposed }
+}
+
+// agentHasLogin says, at each call, whether the agent Claude home holds a
+// Claude login: the file is read, no process is started.
+func agentHasLogin(cfg Config) func() bool {
+	return func() bool {
+		dir, err := agentClaudeHomeDir(cfg)
+		return err == nil && claudehome.NewHome(dir).HasLogin()
+	}
+}
+
 // legacyClaudeDir is the person's own ~/.claude, searched read-only for
 // transcripts older than the agent Claude home.
 func legacyClaudeDir() string {
@@ -618,6 +645,7 @@ func newOrchestrationService(
 		return base + httpapi.SessionShellPath(sessionID)
 	}
 	svc.ShimBinary = cfg.ShimBinary
+	svc.DeveloperBin = developerdir.Bin
 	svc.TokenSavers = cat.Capabilities
 	svc.Settings = cat.Settings
 	svc.Transcripts = transcripts
@@ -635,15 +663,20 @@ func newOrchestrationService(
 		Driver:  sandboxDriver,
 		Enabled: orchestration.SandboxSwitch(cat.Settings),
 		Home:    agentHome.Path(),
-		Bin:     claudeBin.Bin(),
-		Allow:   func(string) []ports.SandboxPath { return allow },
+		// Their git config is read-only to a session; not their ssh folder.
+		UserHome:   userHome,
+		ConfigHome: os.Getenv("XDG_CONFIG_HOME"),
+		Bin:        claudeBin.Bin(),
+		Allow:      func(string) []ports.SandboxPath { return allow },
 		// What no session grants is hidden: the workspaces root and, for
 		// one-shots, every checkout.
 		WorkspacesRoot: ws.Root,
 		Checkouts:      func() []string { return allCheckouts(cat.Projects) },
-		// Each session gets a temp dir of its own, never the system's, which
-		// every session (and each one's virtual shell) shares.
-		TempDir: func(id string) string { return filepath.Join(os.TempDir(), "harness-session-"+shortID(id)) },
+		// Each session start gets a temp dir of its own, never the system's,
+		// which every session (and each one's virtual shell) shares: this is
+		// its name prefix, the start adds a random suffix. Short, so a unix
+		// socket path under it stays within the platform's limit.
+		TempDir: func(id string) string { return filepath.Join(os.TempDir(), "harness-session-"+id[:min(len(id), 8)]) },
 
 		Violations:     violations,
 		ViolationStore: violationStore,
@@ -696,6 +729,7 @@ type oneShotParts struct {
 	Credential *agentcredential.Service `optional:"true"`
 	Bin        ports.ManagedClaudeBin   `optional:"true"`
 	Home       claudehome.Home          `optional:"true"`
+	KC         *keychainshim.Dir        `optional:"true"`
 }
 
 // newOneShotter is the claude driver the one-shots run on: llmkit's one-shot
@@ -712,7 +746,7 @@ func newOneShotter(cfg Config, p oneShotParts) claudetext.OneShotter {
 	home := p.Home.Path()
 	one := claudetext.OneShotter(oneShotClaude(bin, home, cfg.llmProxyURL()))
 	if p.Orch != nil && p.Credential != nil {
-		one = claudetext.Confined(one, oneShotPrep(p.Orch.Sandbox, p.Credential.Env, bin))
+		one = claudetext.Confined(one, oneShotPrep(p.Orch.Sandbox, oneShotEnv(p.Credential.Env, p.Home.HasLogin, p.KC.Path()), bin, p.KC.Path()))
 	}
 	return claudetext.Gated(one, p.Ready.check())
 }
@@ -727,14 +761,27 @@ func oneShotClaude(bin, home, proxyURL string) *claude.Manager {
 // and, with the sandbox on, the wrap confining it. The sandbox's policy for a
 // one-shot names no repository; claude's install dirs are the one thing
 // beyond its temp dir and the agent home it may read.
-func oneShotPrep(sb *orchestration.Sandbox, credential func() []string, bin string) func() ([]string, llmkit.WrapFunc, error) {
-	allow := sandboxAllowlist(allowSources{ClaudeDirs: runtime.ClaudeInstallDirs(bin)})
+// readable are further directories it may read, the security shim's.
+func oneShotPrep(sb *orchestration.Sandbox, credential func() []string, bin string, readable ...string) func() ([]string, llmkit.WrapFunc, error) {
+	allow := sandboxAllowlist(allowSources{ClaudeDirs: append(runtime.ClaudeInstallDirs(bin), readable...)})
 	return func() ([]string, llmkit.WrapFunc, error) {
 		wrap, err := sb.OneShotWrap(allow)
 		if err != nil {
 			return nil, nil, err
 		}
 		return credential(), wrap, nil
+	}
+}
+
+// oneShotEnv is the env entries of a one-shot: the pasted credential unless
+// the agent home holds a login, and the security shim's dir on PATH.
+func oneShotEnv(pasted func() []string, login func() bool, shimDir string) func() []string {
+	return func() []string {
+		var env []string
+		if !login() {
+			env = pasted()
+		}
+		return append(env, keychainpath.Env(os.Environ(), shimDir)...)
 	}
 }
 
@@ -766,11 +813,13 @@ var WorkspacesModule = fx.Module("workspaces",
 		asPort(newWorktreeManager, new(ports.WorktreeManager)),
 		asPort(newGitHistory, new(ports.GitHistory)),
 		asPort(newBranchPublisher, new(ports.BranchPublisher)),
+		asPort(newGitMerger, new(ports.GitMerger)),
 		asPort(githubapi.New, new(ports.CodeHost)),
 		asPort(newGitCode, new(ports.GitCode)),
 		asPort(filesystem.NewWorktreeFiles, new(ports.WorktreeFiles)),
 		newWorkspacesService,
 		newPullRequestsService,
+		newMergesService,
 		newCodeBrowser,
 	),
 	fx.Invoke(registerCodeWatcher),
@@ -855,6 +904,19 @@ func newPullRequestsService(
 		return nil
 	}})
 	return svc
+}
+
+// newMergesService merges a session's branch into its repository's default
+// branch in the local checkout, and announces the result on the
+// orchestration's project feed.
+func newMergesService(
+	sessions ports.SessionRepository,
+	ws ports.WorkspaceRepository,
+	repos ports.RepositoryRepository,
+	git ports.GitMerger,
+	orch *orchestration.Service,
+) *workspaces.Merges {
+	return workspaces.NewMerges(workspaces.MergeDeps{Sessions: sessions, Workspaces: ws, Repositories: repos, Git: git, Announce: orch})
 }
 
 // shortID is the part of a session id that names its temp dir: short enough

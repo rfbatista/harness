@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"io/fs"
 	"os"
@@ -627,6 +628,77 @@ func TestALoginSessionWithoutShimsKeepsTheProfilesPath(t *testing.T) {
 	path := string(waitFile(t, filepath.Join(sess.WorkingDir, "path")))
 	if !strings.HasPrefix(path, "/usr/bin:/bin:") {
 		t.Errorf("PATH = %q, want the profile's, starting /usr/bin:/bin:", path)
+	}
+	if err := svc.Stop(context.Background(), sess.ID); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// On macOS a session's PATH runs the developer directory's usr/bin right
+// after its shims, so git and clang run directly and never through the
+// /usr/bin xcrun shim. The lookup runs once, however many sessions start.
+func TestASessionsPathPutsTheDeveloperBinRightAfterItsShims(t *testing.T) {
+	svc, _, _ := newTestService(t)
+	svc.DefaultEnv = append(svc.DefaultEnv, "CLAUDE_FAKE_RECORD=1")
+	w := withShells(t, svc)
+	svc.ShimBinary = "/opt/harness/server"
+	lookups := 0
+	svc.DeveloperBin = func() (string, error) { lookups++; return "/Applications/Xcode.app/Contents/Developer/usr/bin", nil }
+	for i := 0; i < 2; i++ {
+		sess, err := svc.Start(context.Background(), StartRequest{ProjectID: "p1", RepositoryID: "r1", TicketID: w.task.ID, Task: "go"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		var launch fakeLaunch
+		if err := json.Unmarshal(waitFile(t, filepath.Join(sess.WorkingDir, fakeLaunchFile)), &launch); err != nil {
+			t.Fatal(err)
+		}
+		parts := strings.SplitN(launch.Path, string(os.PathListSeparator), 3)
+		if len(parts) != 3 || parts[1] != "/Applications/Xcode.app/Contents/Developer/usr/bin" || parts[2] != os.Getenv("PATH") {
+			t.Fatalf("PATH = %q, want shims, the developer bin, then the server's PATH", launch.Path)
+		}
+		if !strings.HasPrefix(filepath.Base(parts[0]), "harness-shims-") {
+			t.Errorf("first PATH entry %q is not the shim dir", parts[0])
+		}
+		_ = svc.Stop(context.Background(), sess.ID)
+	}
+	if lookups != 1 {
+		t.Errorf("developer bin looked up %d times, want once", lookups)
+	}
+}
+
+func TestASessionStartsWithoutTheDeveloperBinWhenItsLookupFails(t *testing.T) {
+	svc, _, _ := newTestService(t)
+	svc.DefaultEnv = append(svc.DefaultEnv, "CLAUDE_FAKE_RECORD=1")
+	w := withShells(t, svc)
+	svc.ShimBinary = "/opt/harness/server"
+	svc.DeveloperBin = func() (string, error) { return "", errors.New("xcode-select: no developer directory") }
+	sess, err := svc.Start(context.Background(), StartRequest{ProjectID: "p1", RepositoryID: "r1", TicketID: w.task.ID, Task: "go"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var launch fakeLaunch
+	if err := json.Unmarshal(waitFile(t, filepath.Join(sess.WorkingDir, fakeLaunchFile)), &launch); err != nil {
+		t.Fatal(err)
+	}
+	checkShimsFirst(t, launch.Path)
+	_ = svc.Stop(context.Background(), sess.ID)
+}
+
+// A login shell's profile may reorder PATH; the developer bin goes back
+// right after the shims, ahead of /usr/bin's xcrun shims.
+func TestALoginSessionKeepsTheDeveloperBinRightAfterItsShims(t *testing.T) {
+	svc := newLoginHostedService(t, scriptAgent{script: `printf '%s' "$PATH" > path; printf 'ready\r\n'; cat`})
+	w := withShells(t, svc)
+	svc.ShimBinary = "/opt/harness/server"
+	svc.DeveloperBin = func() (string, error) { return "/Applications/Xcode.app/Contents/Developer/usr/bin", nil }
+	sess, _ := startInteractive(t, svc, InteractiveRequest{ProjectID: "p1", RepositoryID: "r1", TicketID: w.task.ID,
+		RunsOn: domain.RunnerServer, Size: ports.TermSize{Cols: 80, Rows: 24}})
+
+	path := string(waitFile(t, filepath.Join(sess.WorkingDir, "path")))
+	parts := strings.SplitN(path, string(os.PathListSeparator), 3)
+	if len(parts) != 3 || parts[1] != "/Applications/Xcode.app/Contents/Developer/usr/bin" || !strings.HasPrefix(parts[2], "/usr/bin:/bin:") {
+		t.Errorf("PATH = %q, want shims, the developer bin, then the profile's", path)
 	}
 	if err := svc.Stop(context.Background(), sess.ID); err != nil {
 		t.Fatal(err)

@@ -1,14 +1,19 @@
 // Package agentoauth signs agents in with the person's Claude subscription
-// (ADR 0018): it runs `claude setup-token` with the managed claude in the
-// agent Claude home, on a terminal, hands the authorization URL to the
-// person, writes the code they paste to the process and stores the token it
-// prints as the agent credential. One flow runs at a time and its state lives
-// here, so a page that was left finds it again. The token and the code never
-// leave the package except into the credential store and the process.
+// (ADR 0022): it runs `claude auth login --claudeai` with the managed claude
+// in the agent Claude home, on a terminal, under the sandbox driver with the
+// agent-home-only policy (so claude cannot reach the person's keychain and
+// keeps the login as .credentials.json in the agent home). It hands the
+// authorization URL to the person and writes the code they paste to the
+// process; the flow is done when claude exits cleanly and `claude auth
+// status` reports a signed-in account. The harness stores no token. One flow
+// runs at a time and its state lives here, so a page that was left finds it
+// again. The code never leaves the package except into the process.
 package agentoauth
 
 import (
 	"bytes"
+	"context"
+	"errors"
 	"os"
 	"regexp"
 	"strconv"
@@ -26,7 +31,10 @@ const DefaultTimeout = 10 * time.Minute
 // enterDelay is how long the code sits in the prompt before Enter is pressed.
 const enterDelay = 150 * time.Millisecond
 
-var _ ports.AgentOAuth = (*Service)(nil)
+var (
+	_ ports.AgentOAuth = (*Service)(nil)
+	_ ports.AgentAuth  = (*Service)(nil)
+)
 
 // Deps are what the flow runs on.
 type Deps struct {
@@ -34,13 +42,14 @@ type Deps struct {
 	Bin ports.ManagedClaudeBin
 	// ConfigDir is the agent Claude home, passed as CLAUDE_CONFIG_DIR.
 	ConfigDir string
-	// PTY runs the process: setup-token wants a terminal.
+	// PTY runs the login: claude wants a terminal.
 	PTY ports.PTY
-	// Credential receives the token.
-	Credential ports.AgentCredential
 	// Env is the environment the process starts from; nil is os.Environ. The
 	// variables that would sign it in or move its home are dropped.
 	Env func() []string
+	// Wrap confines the login and the status under the sandbox driver; nil
+	// runs them unwrapped.
+	Wrap Wrap
 	// Now and After are the clock; nil are the system's.
 	Now   func() time.Time
 	After func(time.Duration) <-chan time.Time
@@ -50,7 +59,8 @@ type Deps struct {
 
 // Service is the OAuth flow.
 type Service struct {
-	d Deps
+	d    Deps
+	auth *Auth
 
 	mu     sync.Mutex
 	cur    *flow
@@ -68,6 +78,11 @@ type flow struct {
 	out      bytes.Buffer
 	code     string
 	done     chan struct{}
+	// ctx ends with the flow: it stops a status check that runs.
+	ctx    context.Context
+	cancel context.CancelFunc
+	// cleanup removes the process's private temp dir.
+	cleanup func()
 }
 
 // New builds the service.
@@ -84,7 +99,19 @@ func New(d Deps) *Service {
 	if d.Env == nil {
 		d.Env = os.Environ
 	}
-	return &Service{d: d}
+	return &Service{d: d, auth: NewAuth(AuthDeps{Bin: d.Bin, ConfigDir: d.ConfigDir, Env: d.Env, Wrap: d.Wrap})}
+}
+
+// Status is `claude auth status` in the agent Claude home, run the way the
+// login runs.
+func (s *Service) Status(ctx context.Context) (ports.AgentAuthStatus, error) {
+	return s.auth.Status(ctx)
+}
+
+// Logout is `claude auth logout` in the agent Claude home, run the way the
+// login runs.
+func (s *Service) Logout(ctx context.Context) error {
+	return s.auth.Logout(ctx)
 }
 
 func (s *Service) State() ports.AgentOAuthState {
@@ -111,43 +138,26 @@ func (s *Service) Start() (ports.AgentOAuthState, error) {
 	if s.cur != nil || s.closed {
 		return ports.AgentOAuthState{}, &domain.StructuredError{Code: "AGENT_OAUTH_BUSY", Message: "A sign-in is already open. Finish or cancel it first."}
 	}
-	if s.d.Bin == nil || !s.d.Bin.Installed() {
-		return ports.AgentOAuthState{}, &domain.StructuredError{Code: "CLAUDE_CLI_NOT_FOUND", Message: "Sign in needs the managed claude. Install it first."}
-	}
-	if err := os.MkdirAll(s.d.ConfigDir, 0o700); err != nil {
-		return ports.AgentOAuthState{}, err
-	}
-	proc, err := s.d.PTY.Start(ports.ProcessSpec{
-		Path: s.d.Bin.Bin(),
-		Args: []string{"setup-token"},
-		Dir:  s.d.ConfigDir,
-		Env:  s.env(),
-	}, ports.TermSize{Cols: 4000, Rows: 24})
+	spec, cleanup, err := s.auth.spec("auth", "login", "--claudeai")
 	if err != nil {
+		if code(err) != "" {
+			return ports.AgentOAuthState{}, err
+		}
 		return ports.AgentOAuthState{}, &domain.StructuredError{Code: "CLAUDE_CLI_NOT_FOUND", Message: "Could not run the managed claude: " + err.Error()}
 	}
-	f := &flow{proc: proc, phase: ports.AgentOAuthStarting, deadline: s.d.Now().Add(s.d.Timeout), done: make(chan struct{})}
+	proc, err := s.d.PTY.Start(spec, ports.TermSize{Cols: 4000, Rows: 24})
+	if err != nil {
+		cleanup()
+		return ports.AgentOAuthState{}, &domain.StructuredError{Code: "CLAUDE_CLI_NOT_FOUND", Message: "Could not run the managed claude: " + err.Error()}
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	f := &flow{proc: proc, phase: ports.AgentOAuthStarting, deadline: s.d.Now().Add(s.d.Timeout), done: make(chan struct{}), ctx: ctx, cancel: cancel, cleanup: cleanup}
 	s.cur, s.result = f, ports.AgentOAuthState{}
 	timeout := s.d.After(s.d.Timeout)
 	s.wg.Add(2)
 	go s.read(f)
 	go s.watch(f, timeout)
 	return s.stateLocked(), nil
-}
-
-// env is the process's environment: the base without anything that signs in
-// or moves the Claude home, then the agent Claude home.
-func (s *Service) env() []string {
-	var env []string
-	for _, kv := range s.d.Env() {
-		name, _, _ := strings.Cut(kv, "=")
-		switch name {
-		case "CLAUDE_CONFIG_DIR", "CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN":
-			continue
-		}
-		env = append(env, kv)
-	}
-	return append(env, "CLAUDE_CONFIG_DIR="+s.d.ConfigDir)
 }
 
 func (s *Service) Submit(code string) (ports.AgentOAuthState, error) {
@@ -219,6 +229,7 @@ func (s *Service) endLocked(f *flow, result ports.AgentOAuthState) {
 		return
 	}
 	s.cur, s.result = nil, result
+	f.cancel()
 	_ = f.proc.Signal(os.Kill)
 }
 
@@ -250,9 +261,19 @@ func (s *Service) read(f *flow) {
 	}
 	exit, _ := f.proc.Wait()
 	_ = f.proc.Close()
+	f.cleanup()
+	// A clean exit is only the first half: what claude says about the home
+	// decides, asked outside the lock (it takes a moment, and a cancel ends
+	// it through f.ctx).
+	signedIn := false
+	if exit == 0 {
+		st, err := s.auth.Status(f.ctx)
+		signedIn = err == nil && st.LoggedIn
+	}
 	s.mu.Lock()
-	s.settleLocked(f, exit)
+	s.settleLocked(f, exit, signedIn)
 	s.mu.Unlock()
+	f.cancel()
 	close(f.done)
 }
 
@@ -268,25 +289,23 @@ func (s *Service) output(f *flow, p []byte) {
 	}
 }
 
-// settleLocked decides a flow whose process ended on its own: a token after
-// a clean exit is stored, anything else is a failure that saves nothing.
-func (s *Service) settleLocked(f *flow, exit int) {
+// settleLocked decides a flow whose process ended on its own: a clean exit
+// with a signed-in status is done, anything else a failure that saved nothing.
+func (s *Service) settleLocked(f *flow, exit int, signedIn bool) {
 	if s.cur != f {
 		return
 	}
-	text := clean(f.out.String())
-	token := tokenRe.FindString(text)
-	if f.phase == ports.AgentOAuthChecking && exit == 0 && token != "" {
-		if _, err := s.d.Credential.Set(ports.AgentCredentialOAuth, token); err != nil {
-			s.cur, s.result = nil, ports.AgentOAuthState{Phase: ports.AgentOAuthFailed, Message: "The token could not be saved. Nothing was saved."}
-			return
-		}
+	if exit == 0 && signedIn {
 		s.cur, s.result = nil, ports.AgentOAuthState{Phase: ports.AgentOAuthDone}
 		return
 	}
+	text := clean(f.out.String())
 	detail := lastLine(text, f.code)
 	if detail == "" {
-		detail = "claude exited with code " + strconv.Itoa(exit) + " without printing a token"
+		detail = "claude exited with code " + strconv.Itoa(exit) + " without signing in"
+	}
+	if exit == 0 {
+		detail = "claude says no account is signed in"
 	}
 	s.cur, s.result = nil, ports.AgentOAuthState{
 		Phase:   ports.AgentOAuthFailed,
@@ -296,7 +315,7 @@ func (s *Service) settleLocked(f *flow, exit int) {
 }
 
 var (
-	urlRe   = regexp.MustCompile(`(https?://\S+)\s`)
+	urlRe   = regexp.MustCompile(`(https?://[^\s<>]+)[\s>]`)
 	tokenRe = regexp.MustCompile(`sk-ant-oat[A-Za-z0-9_-]+`)
 	ansiRe  = regexp.MustCompile(`\x1b\[[0-?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(\x07|\x1b\\)|\x1b[()][A-Za-z0-9]`)
 )
@@ -323,6 +342,15 @@ func lastLine(text, code string) string {
 			line = string(r[:200]) + "…"
 		}
 		return line
+	}
+	return ""
+}
+
+// code is the StructuredError code of err, empty for any other error.
+func code(err error) string {
+	var se *domain.StructuredError
+	if errors.As(err, &se) {
+		return se.Code
 	}
 	return ""
 }

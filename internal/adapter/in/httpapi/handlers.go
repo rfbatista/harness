@@ -51,6 +51,9 @@ type Services struct {
 	// PullRequests opens workspaces' branches as pull requests; nil answers
 	// 503.
 	PullRequests ports.PullRequests
+	// Merges merges a session's branch into its repository's default branch
+	// in the local checkout; nil answers 503.
+	Merges ports.BranchMerger
 	// Notifications is the person's inbox across every project; nil answers
 	// 503.
 	Notifications ports.Notifications
@@ -89,6 +92,9 @@ type Services struct {
 	// AgentOAuth runs the sign-in flow that stores the agent credential; nil
 	// answers 503.
 	AgentOAuth ports.AgentOAuth
+	// AgentAuth reads and ends the login the agent home keeps (`claude auth
+	// status` and `claude auth logout`); nil answers 503.
+	AgentAuth ports.AgentAuth
 }
 
 // Handler serves the application's driving ports as HTTP endpoints (the same
@@ -119,6 +125,7 @@ type Handler struct {
 	resources      ports.TaskResources
 	comments       ports.TaskComments
 	pullRequests   ports.PullRequests
+	merges         ports.BranchMerger
 	notifications  ports.Notifications
 	usage          ports.UsageReader
 	liveCalls      ports.LiveCalls
@@ -136,6 +143,7 @@ type Handler struct {
 	managedClaudeBin ports.ManagedClaudeBin
 	agentCredential  ports.AgentCredential
 	agentOAuth       ports.AgentOAuth
+	agentAuth        ports.AgentAuth
 
 	streams streamRegistry // the browser tabs' live streams (stream.go)
 }
@@ -164,6 +172,7 @@ func NewHandler(s Services) *Handler {
 		resources:      s.TaskResources,
 		comments:       s.TaskComments,
 		pullRequests:   s.PullRequests,
+		merges:         s.Merges,
 		notifications:  s.Notifications,
 		usage:          s.Usage,
 		liveCalls:      s.LiveCalls,
@@ -181,6 +190,7 @@ func NewHandler(s Services) *Handler {
 		managedClaudeBin: s.ManagedClaudeBin,
 		agentCredential:  s.AgentCredential,
 		agentOAuth:       s.AgentOAuth,
+		agentAuth:        s.AgentAuth,
 	}
 }
 

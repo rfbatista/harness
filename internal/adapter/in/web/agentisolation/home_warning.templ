@@ -1,0 +1,12 @@
+package agentisolation
+
+// homeWarning is the credential section's line for an agent home that git
+// could commit: shown only when it lies in a work tree that does not ignore
+// it. Plain server-rendered text: it is checked once at start.
+templ homeWarning(exposed bool) {
+	if exposed {
+		<div id="credential-home-exposed" class="[ banner ]" data-tone="attention" role="alert">
+			<span>The agent home is inside a git work tree and not ignored: add it to .gitignore.</span>
+		</div>
+	}
+}

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"operators-mcp/internal/application/keychainpath"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -110,6 +111,15 @@ type Service struct {
 	// of the agent credential (ADR 0018), read at every start and resume. Nil
 	// or empty adds nothing.
 	AgentCredential func() []string
+	// AgentLogin says whether the agent home holds a Claude login (ADR
+	// 0022), read at every start and resume without starting a process. When
+	// it does, agents use it and AgentCredential is not put in their env.
+	// Nil: no login.
+	AgentLogin func() bool
+	// KeychainShimDir holds the macOS `security` shim, put on every agent
+	// process's PATH right after the edit-proxy shims. Empty: none (not
+	// macOS, or no shim binary).
+	KeychainShimDir string
 	// Ready refuses an agent start while the agent credential, the managed
 	// claude or the sandbox driver is missing (agentready.Gate). Nil enforces
 	// nothing.
@@ -174,6 +184,9 @@ type Service struct {
 	// announced on the bus only when it actually changes.
 	statuses map[string]domain.SessionStatus
 	cleanups map[string]func()
+	// gitStarts counts, by session id, the starts that opened its git
+	// directory: only the latest one's cleanup removes it.
+	gitStarts map[string]uint64
 	// busy marks sessions with a turn in flight: set when a user message is
 	// written to the CLI, cleared by the "result" line that ends the turn. It
 	// exists so a late "system"/init — the CLI emits it after initializing,
@@ -187,6 +200,13 @@ type Service struct {
 	// its status check until the session is recorded running, so two calls at
 	// once cannot both pass the check.
 	resuming map[string]bool
+
+	// DeveloperBin finds the active developer directory's usr/bin (macOS's
+	// xcode-select -p). It is asked once per server run; nil, an error or ""
+	// mean sessions run without it.
+	DeveloperBin func() (string, error)
+	devOnce      sync.Once
+	devBin       string
 }
 
 func NewService(runtime llmkit.Manager, broker *approval.Broker, hub *Hub, sessions ports.SessionRepository, catalog Catalog, tickets ticketResolver, workspaces ports.WorkspaceProvisioner) *Service {
@@ -442,6 +462,7 @@ func (s *Service) prepare(ctx context.Context, in prepareInput) (*prepared, erro
 		return nil, err
 	}
 	s.withAgentCredential(&cfg)
+	s.withKeychainShim(&cfg)
 	savers := s.withTokenSavers(ctx, in, repo.RootDir, ws.Path, &cfg)
 	cleanup, err = s.withTempDir(id, &cfg, cleanup)
 	if err != nil {
@@ -482,12 +503,24 @@ func (s *Service) ready(ctx context.Context) error {
 	return s.Ready.Check(ctx)
 }
 
-// withAgentCredential adds the agent credential to the agent process env.
+// withAgentCredential adds the agent credential to the agent process env,
+// unless the agent home holds a login: the login wins and the pasted
+// credential is only a fallback for a home without one.
 func (s *Service) withAgentCredential(cfg *llmkit.SessionConfig) {
-	if s.AgentCredential == nil {
+	if s.AgentCredential == nil || (s.AgentLogin != nil && s.AgentLogin()) {
 		return
 	}
 	if env := s.AgentCredential(); len(env) > 0 {
+		cfg.Env = append(slices.Clone(cfg.Env), env...)
+	}
+}
+
+// withKeychainShim puts the security shim's dir on the agent process's PATH,
+// after the edit-proxy shims it already has and before its developer bin, so
+// claude never reaches the person's keychain. Without a dir it changes
+// nothing.
+func (s *Service) withKeychainShim(cfg *llmkit.SessionConfig) {
+	if env := keychainpath.Env(cfg.Env, s.KeychainShimDir); env != nil {
 		cfg.Env = append(slices.Clone(cfg.Env), env...)
 	}
 }
@@ -511,11 +544,29 @@ func (s *Service) withGit(id, repositoryID string, cfg *llmkit.SessionConfig, cl
 	if sg.Note != "" {
 		cfg.AppendSystem = appendSection(cfg.AppendSystem, sg.Note)
 	}
+	// The git directory has one path per session, so a start that comes
+	// after this one under the id owns it: this start's cleanup, running
+	// later, leaves it to the successor's.
+	s.mu.Lock()
+	if s.gitStarts == nil {
+		s.gitStarts = map[string]uint64{}
+	}
+	s.gitStarts[id]++
+	mine := s.gitStarts[id]
+	s.mu.Unlock()
 	return sg.EnvFile, func() {
 		if cleanup != nil {
 			cleanup()
 		}
-		s.GitAuth.EndSession(id)
+		s.mu.Lock()
+		current := s.gitStarts[id] == mine
+		if current {
+			delete(s.gitStarts, id)
+		}
+		s.mu.Unlock()
+		if current {
+			s.GitAuth.EndSession(id)
+		}
 	}, nil
 }
 
@@ -565,6 +616,7 @@ func (s *Service) withShell(id string, subject sessionSubject, cfg *llmkit.Sessi
 // the dir. Without ShimBinary it changes nothing.
 func (s *Service) withShims(id string, cfg *llmkit.SessionConfig, cleanup func()) (func(), error) {
 	if s.ShimBinary == "" {
+		s.withDeveloperBin(cfg)
 		return cleanup, nil
 	}
 	fail := func(err error) (func(), error) {
@@ -584,6 +636,10 @@ func (s *Service) withShims(id string, cfg *llmkit.SessionConfig, cleanup func()
 		}
 	}
 	path := dir
+	if bin := s.developerBin(); bin != "" {
+		path += string(os.PathListSeparator) + bin
+		cfg.Env = append(slices.Clone(cfg.Env), ports.DeveloperBinEnv+"="+bin)
+	}
 	if inherited := os.Getenv("PATH"); inherited != "" {
 		path += string(os.PathListSeparator) + inherited
 	}
@@ -597,6 +653,35 @@ func (s *Service) withShims(id string, cfg *llmkit.SessionConfig, cleanup func()
 		}
 		_ = os.RemoveAll(dir)
 	}, nil
+}
+
+// developerBin is the active developer directory's usr/bin, looked up once
+// per server run; "" when there is none or the lookup fails (the session
+// then runs without it).
+func (s *Service) developerBin() string {
+	s.devOnce.Do(func() {
+		if s.DeveloperBin == nil {
+			return
+		}
+		if dir, err := s.DeveloperBin(); err == nil {
+			s.devBin = dir
+		}
+	})
+	return s.devBin
+}
+
+// withDeveloperBin puts the developer bin first on a PATH of the server's
+// own, for a session that has no shims.
+func (s *Service) withDeveloperBin(cfg *llmkit.SessionConfig) {
+	bin := s.developerBin()
+	if bin == "" {
+		return
+	}
+	path := bin
+	if inherited := os.Getenv("PATH"); inherited != "" {
+		path += string(os.PathListSeparator) + inherited
+	}
+	cfg.Env = append(slices.Clone(cfg.Env), "PATH="+path, ports.DeveloperBinEnv+"="+bin)
 }
 
 // ticketIn loads a ticket and checks it belongs to the project.

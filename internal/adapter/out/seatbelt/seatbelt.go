@@ -73,24 +73,37 @@ func (d *Driver) Wrap(policy ports.SandboxPolicy, cmd ports.SandboxCommand) (por
 	}
 	b.WriteString(")\n(allow file-read-metadata)\n")
 
-	readable, err := pr.all(policy.Readable)
-	if err != nil {
-		return ports.SandboxCommand{}, err
+	// Later rules win, so the paths go in by depth, parents first: a read-only
+	// path is write-denied then read-allowed, a writable one allowed, and a
+	// nested path (the other worktrees' entries inside a writable git dir, the
+	// session's own entry inside those) overrides what encloses it. A
+	// read-only path outside the home stays read-only too.
+	type rule struct {
+		path  string
+		write bool
 	}
-	writable, err := pr.all(policy.Writable)
-	if err != nil {
-		return ports.SandboxCommand{}, err
+	var rules []rule
+	for _, p := range policy.Readable {
+		rules = append(rules, rule{p, false})
 	}
-	// Later rules win: a read-only path is write-denied first, so a repository
-	// outside the home stays read-only too, then the allows follow.
-	for _, p := range readable {
-		fmt.Fprintf(&b, "(deny file-write* (with message %s) (subpath %s))\n", tag, p)
+	for _, p := range policy.Writable {
+		rules = append(rules, rule{p, true})
 	}
-	for _, p := range readable {
-		fmt.Fprintf(&b, "(allow file-read* (subpath %s))\n", p)
-	}
-	for _, p := range writable {
-		fmt.Fprintf(&b, "(allow file-read* file-write* (subpath %s))\n", p)
+	slices.SortStableFunc(rules, func(a, b rule) int {
+		return strings.Count(filepath.Clean(a.path), "/") - strings.Count(filepath.Clean(b.path), "/")
+	})
+	for _, r := range rules {
+		vs, err := pr.variants(r.path)
+		if err != nil {
+			return ports.SandboxCommand{}, err
+		}
+		for _, p := range vs {
+			if r.write {
+				fmt.Fprintf(&b, "(allow file-read* file-write* (subpath %s))\n", p)
+			} else {
+				fmt.Fprintf(&b, "(deny file-write* (with message %s) (subpath %s))\n(allow file-read* (subpath %s))\n", tag, p, p)
+			}
+		}
 	}
 
 	args := []string{}
@@ -125,16 +138,22 @@ func (p *profile) variants(path string) ([]string, error) {
 	if strings.ContainsRune(path, 0) {
 		return nil, fmt.Errorf("sandbox: path %q has a NUL byte", path)
 	}
+	var out []string
+	for _, v := range variantPaths(path) {
+		out = append(out, p.param(v))
+	}
+	return out, nil
+}
+
+// variantPaths are path cleaned and, when it differs, as the file system
+// resolves it.
+func variantPaths(path string) []string {
 	path = filepath.Clean(path)
 	vs := []string{path}
 	if r := resolve(path); r != path {
 		vs = append(vs, r)
 	}
-	var out []string
-	for _, v := range vs {
-		out = append(out, p.param(v))
-	}
-	return out, nil
+	return vs
 }
 
 func (p *profile) all(paths []string) ([]string, error) {

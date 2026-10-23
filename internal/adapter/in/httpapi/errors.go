@@ -90,6 +90,10 @@ func errorHandler(err error, c echo.Context) {
 			"ARTIFACT_NOT_IN_PROJECT", "ARTIFACT_PROJECT_MISMATCH", "ARTIFACT_PRODUCER_TASK",
 			"PROJECT_NAME_TAKEN", "PROJECT_HAS_RUNNING_SESSIONS", "TICKET_HAS_CHILDREN",
 			"PR_NO_COMMITS", "PR_ALREADY_EXISTS", "GIT_CREDENTIAL_NAME_TAKEN", "TOKEN_SAVER_BUSY", "TOKEN_SAVER_NOT_INSTALLED",
+			// A merge refused for what the checkout or the branch is: the
+			// request is fine, the state is in the way.
+			"MERGE_NO_BRANCH", "MERGE_NO_CHECKOUT", "MERGE_CHECKOUT_DIRTY", "MERGE_WRONG_BRANCH",
+			"MERGE_ALREADY_MERGED", "MERGE_CONFLICT", "MERGE_BRANCH_NOT_FOUND",
 			"MANAGED_CLAUDE_BUSY", "MANAGED_CLAUDE_VERSION_INSTALLED", "MANAGED_CLAUDE_VERSION_CURRENT", "AGENT_OAUTH_BUSY", "AGENT_OAUTH_NOT_WAITING":
 			writeCoded(c, http.StatusConflict, err, se)
 			return
@@ -101,6 +105,9 @@ func errorHandler(err error, c echo.Context) {
 			// The request is well-formed; the machine just cannot run agents
 			// or token savers, or reach the code host as the person.
 			writeCoded(c, http.StatusServiceUnavailable, err, se)
+			return
+		case "MERGE_FAILED", "AGENT_SIGN_OUT_FAILED":
+			writeCoded(c, http.StatusInternalServerError, err, se)
 			return
 		case "PR_PUSH_FAILED", "PR_CREATE_FAILED", "GIT_CREDENTIAL_REJECTED":
 			// The remote or the code host refused; its reason is in the message.

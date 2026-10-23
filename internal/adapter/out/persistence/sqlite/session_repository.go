@@ -284,6 +284,29 @@ func (r *SessionRepository) UpdateSandbox(id string, facts domain.SandboxFacts) 
 	return nil
 }
 
+func (r *SessionRepository) UpdateMerge(id string, res domain.MergeResult) error {
+	at := res.At
+	if at.IsZero() {
+		at = time.Now()
+	}
+	out := r.db.Model(&SessionModel{}).Where("id = ?", id).Updates(map[string]any{
+		"merge_at_ms":   at.UnixMilli(),
+		"merged":        res.Merged,
+		"merge_into":    res.Into,
+		"merge_head":    res.Head,
+		"merge_code":    res.Code,
+		"merge_message": res.Message,
+		"updated_at":    time.Now().UnixMilli(),
+	})
+	if out.Error != nil {
+		return out.Error
+	}
+	if out.RowsAffected == 0 {
+		return &domain.StructuredError{Code: "SESSION_NOT_FOUND", Message: "session not found"}
+	}
+	return nil
+}
+
 func (r *SessionRepository) UpdateTokenSavers(id string, active, notInstalled []domain.TokenSaver) error {
 	res := r.db.Model(&SessionModel{}).Where("id = ?", id).Updates(map[string]any{
 		"token_savers":               joinSavers(active),

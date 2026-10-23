@@ -153,3 +153,38 @@ func TestRender_AHiddenPathUnderABoundSystemDirIsMaskedBeforeGrantedPathsNestedI
 		t.Errorf("a path that is not under a bound dir needs no mask: %v", args)
 	}
 }
+
+func TestRender_ThePersonsGitConfigIsBoundReadOnlyAfterTheHomeIsHidden(t *testing.T) {
+	p := ports.SandboxPolicy{
+		WorkingDir: "/home/me/wt", Writable: []string{"/home/me/wt"},
+		Readable: []string{"/home/me/.gitconfig", "/home/me/.config/git", "/xdg/git"},
+	}
+	args := Render(p, "/home/me")
+	home := index(args, "--tmpfs", "/home/me")
+	for _, path := range p.Readable {
+		i := index(args, "--ro-bind-try", path, path)
+		if i < 0 || (strings.HasPrefix(path, "/home/me") && i < home) {
+			t.Errorf("%s not bound read-only after the home mask: %v", path, args)
+		}
+		if has(args, "--bind-try", path, path) {
+			t.Errorf("%s bound read-write", path)
+		}
+	}
+	if has(args, "--ro-bind-try", "/home/me/.ssh", "/home/me/.ssh") {
+		t.Errorf("ssh bound: %v", args)
+	}
+}
+
+func TestOtherWorktreeEntriesAreBoundReadOnlyAndTheOwnEntryReadWriteAfterIt(t *testing.T) {
+	git := "/srv/repo/.git"
+	args := Render(ports.SandboxPolicy{
+		Writable: []string{git, git + "/worktrees/own"},
+		Readable: []string{git + "/worktrees"},
+	}, "/home/u")
+	common := index(args, "--bind-try", git, git)
+	ro := index(args, "--ro-bind-try", git+"/worktrees", git+"/worktrees")
+	own := index(args, "--bind-try", git+"/worktrees/own", git+"/worktrees/own")
+	if common < 0 || ro < 0 || own < 0 || !(common < ro && ro < own) {
+		t.Fatalf("want common < ro worktrees < own entry, got %d %d %d: %v", common, ro, own, args)
+	}
+}

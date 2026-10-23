@@ -1,0 +1,9 @@
+package agentisolation
+
+// activeCredential says which credential agents use; nothing when they have
+// none.
+templ activeCredential(line string) {
+	if line != "" {
+		<p id="credential-active"><strong>{ line }</strong></p>
+	}
+}
