@@ -20,6 +20,8 @@ import (
 var (
 	_ ports.Shell = Direct{}
 	_ ports.Shell = Login{}
+
+	_ ports.ConfiningShell = Login{}
 )
 
 // Direct executes the program with this process's environment plus the
@@ -70,6 +72,18 @@ func (l Login) Prepare(_ context.Context, cmd ports.ShellCommand) (ports.Process
 		args = append([]string{"-l", "-c", `f=$1; shift; . "$f"; ` + shimsFirst + `exec "$@"`, "login", cmd.EnvFile, cmd.Program}, cmd.Args...)
 	}
 	return ports.ProcessSpec{Path: sh, Args: args, Dir: cmd.Dir, Env: env(cmd)}, nil
+}
+
+// PrepareConfined runs the login shell as Prepare does, but the program it
+// execs is cmd confined: the profile is sourced outside the confinement and
+// only the program, and what it starts, is inside it.
+func (l Login) PrepareConfined(ctx context.Context, cmd ports.ShellCommand, confine func(ports.SandboxCommand) (ports.SandboxCommand, error)) (ports.ProcessSpec, error) {
+	w, err := confine(ports.SandboxCommand{Path: cmd.Program, Args: slices.Clone(cmd.Args), Dir: cmd.Dir, Env: cmd.Env})
+	if err != nil {
+		return ports.ProcessSpec{}, err
+	}
+	cmd.Program, cmd.Args, cmd.Dir, cmd.Env = w.Path, w.Args, w.Dir, w.Env
+	return l.Prepare(ctx, cmd)
 }
 
 // shimsFirst puts the session's shim dir, if it has one, first on PATH.

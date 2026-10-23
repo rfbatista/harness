@@ -78,13 +78,13 @@ func (l Launcher) Launch(ctx context.Context, spec ports.AgentSpec, size ports.T
 	}
 	cfg.Size = claude.TermSize{Cols: size.Cols, Rows: size.Rows}
 	cfg.Wrap = func(c claude.Command) (claude.Command, error) {
-		ps, err := sh.Prepare(ctx, ports.ShellCommand{Program: c.Path, Args: c.Args, Dir: c.Dir, Env: c.Env, EnvFile: spec.EnvFile})
-		if err != nil {
-			return claude.Command{}, err
-		}
-		out := claude.Command{Path: ps.Path, Args: ps.Args, Dir: ps.Dir, Env: ps.Env, Files: c.Files}
+		shellCmd := ports.ShellCommand{Program: c.Path, Args: c.Args, Dir: c.Dir, Env: c.Env, EnvFile: spec.EnvFile}
 		if spec.Sandbox == nil {
-			return out, nil
+			ps, err := sh.Prepare(ctx, shellCmd)
+			if err != nil {
+				return claude.Command{}, err
+			}
+			return claude.Command{Path: ps.Path, Args: ps.Args, Dir: ps.Dir, Env: ps.Env, Files: c.Files}, nil
 		}
 		policy := *spec.Sandbox
 		for _, p := range l.allow {
@@ -97,11 +97,24 @@ func (l Launcher) Launch(ctx context.Context, spec ports.AgentSpec, size ports.T
 		for _, f := range c.Files {
 			policy.Readable = append(slices.Clone(policy.Readable), f)
 		}
-		w, err := l.sandbox.Wrap(policy, ports.SandboxCommand{Path: out.Path, Args: out.Args, Dir: out.Dir, Env: out.Env})
+		confine := func(cmd ports.SandboxCommand) (ports.SandboxCommand, error) { return l.sandbox.Wrap(policy, cmd) }
+		var ps ports.ProcessSpec
+		var err error
+		if cs, ok := sh.(ports.ConfiningShell); ok {
+			// A login shell runs outside the sandbox, so its profile reads
+			// the home directory; only the claude it execs is confined.
+			ps, err = cs.PrepareConfined(ctx, shellCmd, confine)
+		} else {
+			if ps, err = sh.Prepare(ctx, shellCmd); err == nil {
+				var w ports.SandboxCommand
+				w, err = confine(ports.SandboxCommand{Path: ps.Path, Args: ps.Args, Dir: ps.Dir, Env: ps.Env})
+				ps = ports.ProcessSpec{Path: w.Path, Args: w.Args, Dir: w.Dir, Env: w.Env}
+			}
+		}
 		if err != nil {
 			return claude.Command{}, err
 		}
-		return claude.Command{Path: w.Path, Args: w.Args, Dir: w.Dir, Env: w.Env, Files: c.Files}, nil
+		return claude.Command{Path: ps.Path, Args: ps.Args, Dir: ps.Dir, Env: ps.Env, Files: c.Files}, nil
 	}
 	t, err := l.claude.StartInteractive(ctx, cfg)
 	if err != nil {
