@@ -131,6 +131,6 @@ tool github.com/a-h/templ/cmd/templ
 
 // Local until the person pushes the tag (see "Spec: harness — token usage
 // monitoring and live dashboard").
-replace github.com/rfbatista/spillway => /Users/renandonatofernandesbatista/.coding-pool/worktrees/spillway-1c1a3c843c28b129/agent-log-usage-api-calls-3a60816d
+replace github.com/rfbatista/spillway => /Users/renandonatofernandesbatista/projetos/pessoal/personal_projects/llm-proxy
 
 replace github.com/rfbatista/llmkit => /Users/renandonatofernandesbatista/projetos/pessoal/personal_projects/llmkit
