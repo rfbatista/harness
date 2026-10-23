@@ -17,16 +17,21 @@ import (
 	"operators-mcp/internal/application/agentoauth"
 )
 
-const fakeSetupToken = `#!/bin/sh
-[ "$1" = setup-token ] || exit 2
-echo "https://claude.ai/oauth/authorize?state=abc"
-printf "Paste the code here: "
+const fakeClaude = `#!/bin/sh
+if [ "$1 $2" = "auth status" ]; then
+  [ -f "$CLAUDE_CONFIG_DIR/.credentials.json" ] && { echo '{"loggedIn": true}'; exit 0; }
+  echo '{"loggedIn": false}'
+  exit 1
+fi
+[ "$1 $2 $3" = "auth login --claudeai" ] || exit 2
+echo "If the browser didn't open, visit: https://claude.ai/oauth/authorize?state=abc"
+printf "Paste code here if prompted > "
 read code
 if [ "$code" != "good-code" ]; then
   echo "invalid code"
   exit 1
 fi
-echo "sk-ant-oat01-httpsecret"
+echo '{"token":"sk-ant-oat01-httpsecret"}' > "$CLAUDE_CONFIG_DIR/.credentials.json"
 `
 
 type fixedBin string
@@ -50,7 +55,7 @@ func waitOAuthPhase(t *testing.T, h *Handler, phase string) string {
 func TestTheOAuthFlowIsStartedResumedAnsweredAndCancelledOverHTTPWithoutTheTokenEverShowing(t *testing.T) {
 	dir := t.TempDir()
 	script := filepath.Join(dir, "claude")
-	if err := os.WriteFile(script, []byte(fakeSetupToken), 0o755); err != nil {
+	if err := os.WriteFile(script, []byte(fakeClaude), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	db, err := sqlite.Open(":memory:")
@@ -62,7 +67,7 @@ func TestTheOAuthFlowIsStartedResumedAnsweredAndCancelledOverHTTPWithoutTheToken
 		t.Fatal(err)
 	}
 	cred := agentcredential.New(sqlite.NewAgentCredentialRepository(db), box, nil)
-	oauth := agentoauth.New(agentoauth.Deps{Bin: fixedBin(script), ConfigDir: filepath.Join(dir, "home"), PTY: ptyunix.New(), Credential: cred})
+	oauth := agentoauth.New(agentoauth.Deps{Bin: fixedBin(script), ConfigDir: filepath.Join(dir, "home"), PTY: ptyunix.New()})
 	t.Cleanup(oauth.Close)
 	h := NewHandler(Services{AgentCredential: cred, AgentOAuth: oauth})
 
@@ -89,8 +94,8 @@ func TestTheOAuthFlowIsStartedResumedAnsweredAndCancelledOverHTTPWithoutTheToken
 	if strings.Contains(body, "httpsecret") || strings.Contains(body, "good-code") {
 		t.Errorf("state carries a secret: %s", body)
 	}
-	if got := getJSON(t, h, "/get_agent_credential").Body.String(); !strings.Contains(got, `"set":true`) || !strings.Contains(got, `"oauth"`) {
-		t.Errorf("credential = %s", got)
+	if got := getJSON(t, h, "/get_agent_credential").Body.String(); !strings.Contains(got, `"set":false`) {
+		t.Errorf("the harness stored a credential for the login: %s", got)
 	}
 	if rec := postJSON(t, h, "/submit_agent_oauth_code", map[string]any{"code": "x"}); rec.Code != http.StatusConflict {
 		t.Errorf("submit without a flow = %d %s", rec.Code, rec.Body)
