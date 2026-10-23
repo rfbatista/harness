@@ -39,6 +39,10 @@ if [ "$code" = "good-code" ]; then
   echo "sk-ant-oat01-faketokenvalue"
   exit 0
 fi
+if [ "$FAKE_MODE" = tui ]; then
+  printf '\033[>4m\033[<u'
+  exit 1
+fi
 if [ "$FAKE_MODE" = leaky ]; then
   echo "failed with sk-ant-oat01-leaked and $code"
   exit 1
@@ -293,6 +297,18 @@ func TestAFailingProcessEndsTheFlowWithItsLastLineAndChangesNothing(t *testing.T
 	}
 	if _, err := r.svc.Start(); err != nil {
 		t.Errorf("start again after a failure: %v", err)
+	}
+}
+
+func TestKeyboardModeResetsAreNotTheFailureDetail(t *testing.T) {
+	t.Setenv("FAKE_MODE", "tui")
+	r := newRig(t, fakeSetupToken)
+	_, _ = r.svc.Start()
+	r.waitPhase(t, ports.AgentOAuthWaitingForCode)
+	_, _ = r.svc.Submit("bad-code")
+	st := r.waitPhase(t, ports.AgentOAuthFailed)
+	if st.Detail == "" || strings.ContainsAny(st.Detail, "[<>\x1b") {
+		t.Errorf("detail = %q", st.Detail)
 	}
 }
 

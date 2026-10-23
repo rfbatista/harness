@@ -11,6 +11,7 @@ import (
 	"bytes"
 	"os"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -21,6 +22,9 @@ import (
 
 // DefaultTimeout is how long a flow may wait for the person.
 const DefaultTimeout = 10 * time.Minute
+
+// enterDelay is how long the code sits in the prompt before Enter is pressed.
+const enterDelay = 150 * time.Millisecond
 
 var _ ports.AgentOAuth = (*Service)(nil)
 
@@ -159,10 +163,33 @@ func (s *Service) Submit(code string) (ports.AgentOAuthState, error) {
 	}
 	f.code = code
 	f.phase = ports.AgentOAuthChecking
-	if _, err := f.proc.Write([]byte(code + "\r")); err != nil {
+	// The code and the Enter go as two writes: claude's terminal UI reads a
+	// burst that ends in a newline as a paste, and a paste does not submit.
+	if _, err := f.proc.Write([]byte(code)); err != nil {
+		s.endLocked(f, ports.AgentOAuthState{Phase: ports.AgentOAuthFailed, Message: "The code could not be sent to Claude. Nothing was saved."})
+		return s.stateLocked(), nil
+	}
+	s.wg.Add(1)
+	go s.enter(f)
+	return s.stateLocked(), nil
+}
+
+// enter presses Enter once the pasted code has settled in the prompt.
+func (s *Service) enter(f *flow) {
+	defer s.wg.Done()
+	select {
+	case <-time.After(enterDelay):
+	case <-f.done:
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.cur != f {
+		return
+	}
+	if _, err := f.proc.Write([]byte("\r")); err != nil {
 		s.endLocked(f, ports.AgentOAuthState{Phase: ports.AgentOAuthFailed, Message: "The code could not be sent to Claude. Nothing was saved."})
 	}
-	return s.stateLocked(), nil
 }
 
 func (s *Service) Cancel() ports.AgentOAuthState {
@@ -257,17 +284,21 @@ func (s *Service) settleLocked(f *flow, exit int) {
 		s.cur, s.result = nil, ports.AgentOAuthState{Phase: ports.AgentOAuthDone}
 		return
 	}
+	detail := lastLine(text, f.code)
+	if detail == "" {
+		detail = "claude exited with code " + strconv.Itoa(exit) + " without printing a token"
+	}
 	s.cur, s.result = nil, ports.AgentOAuthState{
 		Phase:   ports.AgentOAuthFailed,
 		Message: "The sign-in did not finish. Nothing was saved.",
-		Detail:  lastLine(text, f.code),
+		Detail:  detail,
 	}
 }
 
 var (
 	urlRe   = regexp.MustCompile(`(https?://\S+)\s`)
 	tokenRe = regexp.MustCompile(`sk-ant-oat[A-Za-z0-9_-]+`)
-	ansiRe  = regexp.MustCompile(`\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(\x07|\x1b\\)|\x1b[()][A-Za-z0-9]`)
+	ansiRe  = regexp.MustCompile(`\x1b\[[0-?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(\x07|\x1b\\)|\x1b[()][A-Za-z0-9]`)
 )
 
 // clean is terminal output as plain lines.
