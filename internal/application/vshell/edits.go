@@ -262,10 +262,10 @@ func movesToProject(sh *shell, row ports.ShellFile, src, dst string, agentsMove 
 		return ports.ShellAnswer{}, true
 	}
 	switch {
-	case classify(row.Path) != taskDocs:
-		return refuseOtherTaskMove(src), false
 	case !agentsMove:
 		return refuseProjectMove(src), false
+	case classify(row.Path) != taskDocs:
+		return refuseOtherTaskMove(src), false
 	}
 	if over, ok := sh.files[moved(row.Path, src, dst)]; ok && over.ID != row.ID && over.Scope == string(domain.DocumentScopeProject) {
 		return refuse("PROJECT_MOVE_DENIED", dst+" is a project document: a move to project level does not write over one; nothing was written"), false
