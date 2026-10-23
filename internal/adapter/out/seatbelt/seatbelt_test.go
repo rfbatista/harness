@@ -385,26 +385,49 @@ func gitHome(t *testing.T) (*Driver, string, ports.SandboxPolicy) {
 	return d, home, p
 }
 
-func TestGitInsideReadsTheStandInGitConfigWithoutXcrunErrorsAndStillCannotReadSSH(t *testing.T) {
+func TestGitInsideReadsTheStandInGitConfigAndStillCannotReadSSH(t *testing.T) {
 	d, home, p := gitHome(t)
-	out, err := run(t, d, p, `unset GIT_CONFIG_GLOBAL; git init -q . && git config user.name && echo hi > f && git add f && git status --short && git commit -q -m one && git log --oneline | wc -l`, "HOME="+home)
+	out, err := run(t, d, p, `unset GIT_CONFIG_GLOBAL; git init -q . && git config user.name && echo hi > f && git add f && git status --short && git commit -q -m one && git log --oneline | wc -l`, "HOME="+home, "PATH="+developerBin(t)+":"+os.Getenv("PATH"))
 	if err != nil {
 		t.Fatalf("%v\n%s", err, out)
 	}
 	if !strings.HasPrefix(out, "Stand In\n") {
 		t.Errorf("user.name not read from the stand-in .gitconfig: %q", out)
 	}
-	if strings.Contains(out, "xcrun") || strings.Contains(out, "not permitted") {
-		t.Errorf("git printed an error: %q", out)
-	}
 	if out, err := run(t, d, p, `cat `+filepath.Join(home, ".ssh", "id_rsa")); err == nil {
 		t.Errorf("read the stand-in ssh key: %s", out)
 	}
 }
 
-// Only the cache files of Apple's git and xcrun are let through the system
-// temp dir; any other file in it stays denied, for reading and writing.
-func TestOnlyAppleGitCacheFilesAreOpenInTheSystemTempDir(t *testing.T) {
+// With the active developer directory's usr/bin first on PATH, git runs
+// directly and not through /usr/bin's xcrun shim, so it prints no xcrun
+// error even though the shim's shared cache cannot be written.
+func TestGitWithTheDeveloperBinFirstPrintsNoXcrunError(t *testing.T) {
+	d, home, p := gitHome(t)
+	bin := developerBin(t)
+	out, err := run(t, d, p, `unset GIT_CONFIG_GLOBAL; git init -q . && echo hi > f && git add f && git status --short && git commit -q -m one && git log --oneline | wc -l`,
+		"HOME="+home, "PATH="+bin+":"+os.Getenv("PATH"))
+	if err != nil {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	if strings.Contains(out, "xcrun") || strings.Contains(out, "not permitted") {
+		t.Errorf("git printed an error: %q", out)
+	}
+}
+
+func developerBin(t *testing.T) string {
+	t.Helper()
+	out, err := exec.Command("xcode-select", "-p").Output()
+	if err != nil {
+		t.Skipf("no developer directory: %v", err)
+	}
+	return filepath.Join(strings.TrimSpace(string(out)), "usr", "bin")
+}
+
+// The shared xcrun cache in the system temp dir is a user-wide file the
+// person's own xcrun runs tools from: a session can neither write nor create
+// it, nor any file in that dir.
+func TestTheSharedXcrunCacheCanNeitherBeWrittenNorCreated(t *testing.T) {
 	d, _, p := gitHome(t)
 	tmp := os.TempDir()
 	other, err := os.CreateTemp(tmp, "harness-seatbelt-other-")
@@ -415,22 +438,20 @@ func TestOnlyAppleGitCacheFilesAreOpenInTheSystemTempDir(t *testing.T) {
 	other.Close()
 	t.Cleanup(func() { os.Remove(other.Name()) })
 	if out, err := run(t, d, p, `cat `+other.Name()); err == nil {
-		t.Errorf("read a non-xcrun file in the system temp dir: %s", out)
+		t.Errorf("read a file in the system temp dir: %s", out)
 	}
-	if out, err := run(t, d, p, `echo x > `+filepath.Join(tmp, "harness-seatbelt-new-"+filepath.Base(p.WorkingDir))); err == nil {
-		t.Errorf("created a non-xcrun file in the system temp dir: %s", out)
-	}
-	for _, name := range []string{"xcrun_db-a.b", "xcrun_db_other", "xcrun_dbx"} {
+	// Opening for append changes no byte of the person's real cache, but
+	// succeeds only when the policy allows writing it.
+	for _, name := range []string{"xcrun_db", "xcrun_db-harnessT0", "harness-seatbelt-new"} {
 		path := filepath.Join(tmp, name)
-		if out, err := run(t, d, p, `echo x > `+path); err == nil {
-			os.Remove(path)
-			t.Errorf("wrote %s", name)
-			_ = out
+		_, statErr := os.Stat(path)
+		existed := statErr == nil
+		if out, err := run(t, d, p, `: >> `+path); err == nil {
+			t.Errorf("wrote %s: %s", name, out)
 		}
-	}
-	probe := filepath.Join(tmp, "xcrun_db-harnessT0")
-	t.Cleanup(func() { os.Remove(probe) })
-	if out, err := run(t, d, p, `echo x > `+probe); err != nil {
-		t.Errorf("could not write an xcrun cache file: %v %s", err, out)
+		if _, err := os.Stat(path); err == nil && !existed {
+			os.Remove(path)
+			t.Errorf("created %s", name)
+		}
 	}
 }

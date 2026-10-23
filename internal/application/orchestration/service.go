@@ -187,6 +187,13 @@ type Service struct {
 	// its status check until the session is recorded running, so two calls at
 	// once cannot both pass the check.
 	resuming map[string]bool
+
+	// DeveloperBin finds the active developer directory's usr/bin (macOS's
+	// xcode-select -p). It is asked once per server run; nil, an error or ""
+	// mean sessions run without it.
+	DeveloperBin func() (string, error)
+	devOnce      sync.Once
+	devBin       string
 }
 
 func NewService(runtime llmkit.Manager, broker *approval.Broker, hub *Hub, sessions ports.SessionRepository, catalog Catalog, tickets ticketResolver, workspaces ports.WorkspaceProvisioner) *Service {
@@ -565,6 +572,7 @@ func (s *Service) withShell(id string, subject sessionSubject, cfg *llmkit.Sessi
 // the dir. Without ShimBinary it changes nothing.
 func (s *Service) withShims(id string, cfg *llmkit.SessionConfig, cleanup func()) (func(), error) {
 	if s.ShimBinary == "" {
+		s.withDeveloperBin(cfg)
 		return cleanup, nil
 	}
 	fail := func(err error) (func(), error) {
@@ -584,6 +592,10 @@ func (s *Service) withShims(id string, cfg *llmkit.SessionConfig, cleanup func()
 		}
 	}
 	path := dir
+	if bin := s.developerBin(); bin != "" {
+		path += string(os.PathListSeparator) + bin
+		cfg.Env = append(slices.Clone(cfg.Env), ports.DeveloperBinEnv+"="+bin)
+	}
 	if inherited := os.Getenv("PATH"); inherited != "" {
 		path += string(os.PathListSeparator) + inherited
 	}
@@ -597,6 +609,35 @@ func (s *Service) withShims(id string, cfg *llmkit.SessionConfig, cleanup func()
 		}
 		_ = os.RemoveAll(dir)
 	}, nil
+}
+
+// developerBin is the active developer directory's usr/bin, looked up once
+// per server run; "" when there is none or the lookup fails (the session
+// then runs without it).
+func (s *Service) developerBin() string {
+	s.devOnce.Do(func() {
+		if s.DeveloperBin == nil {
+			return
+		}
+		if dir, err := s.DeveloperBin(); err == nil {
+			s.devBin = dir
+		}
+	})
+	return s.devBin
+}
+
+// withDeveloperBin puts the developer bin first on a PATH of the server's
+// own, for a session that has no shims.
+func (s *Service) withDeveloperBin(cfg *llmkit.SessionConfig) {
+	bin := s.developerBin()
+	if bin == "" {
+		return
+	}
+	path := bin
+	if inherited := os.Getenv("PATH"); inherited != "" {
+		path += string(os.PathListSeparator) + inherited
+	}
+	cfg.Env = append(slices.Clone(cfg.Env), "PATH="+path, ports.DeveloperBinEnv+"="+bin)
 }
 
 // ticketIn loads a ticket and checks it belongs to the project.

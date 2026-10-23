@@ -24,6 +24,7 @@ import (
 	"operators-mcp/internal/adapter/out/agents/claudetext"
 	"operators-mcp/internal/adapter/out/blobstore"
 	"operators-mcp/internal/adapter/out/configrepo"
+	"operators-mcp/internal/adapter/out/developerdir"
 	"operators-mcp/internal/adapter/out/filesystem"
 	"operators-mcp/internal/adapter/out/gitcli"
 	"operators-mcp/internal/adapter/out/githubapi"
@@ -618,6 +619,7 @@ func newOrchestrationService(
 		return base + httpapi.SessionShellPath(sessionID)
 	}
 	svc.ShimBinary = cfg.ShimBinary
+	svc.DeveloperBin = developerdir.Bin
 	svc.TokenSavers = cat.Capabilities
 	svc.Settings = cat.Settings
 	svc.Transcripts = transcripts
