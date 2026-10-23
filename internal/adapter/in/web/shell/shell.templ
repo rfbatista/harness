@@ -87,6 +87,11 @@ templ topBar(f Frame) {
 				@icon("model")
 			</a>
 		}
+		if f.Top.AgentIsolationHref != "" {
+			<a class="[ button ]" data-variant="ghost" data-icon href={ templ.SafeURL(f.Top.AgentIsolationHref) } aria-label="Agent isolation" title="Agent isolation" { currentAttrs(f.Top.OnAgentIsolation)... } { blockingAttrs(f.Top.AgentIsolationAttention)... }>
+				@icon("shield")
+			</a>
+		}
 		if f.Top.ServerHref != "" {
 			<a class="[ button ]" data-variant="ghost" data-icon href={ templ.SafeURL(f.Top.ServerHref) } aria-label="Server" title="Server" { currentAttrs(f.Top.OnServer)... }>
 				@icon("server")

@@ -101,6 +101,13 @@ type TopBar struct {
 	ModelsHref string
 	// OnModels marks the Models page as the current page.
 	OnModels bool
+	// AgentIsolationHref is the Agent isolation page; "" when it is not served.
+	AgentIsolationHref string
+	// OnAgentIsolation marks the Agent isolation page as the current page.
+	OnAgentIsolation bool
+	// AgentIsolationAttention puts the amber mark on its link: something
+	// there blocks agents from starting.
+	AgentIsolationAttention bool
 	// ServerHref is the Server page; "" when it is not served.
 	ServerHref string
 	// OnServer marks the Server page as the current page.
@@ -252,6 +259,15 @@ type Handler func(w http.ResponseWriter, r *http.Request) error
 
 // Renderer writes a page with a status code.
 type Renderer func(w http.ResponseWriter, r *http.Request, status int, page templ.Component) error
+
+// blockingAttrs marks a top bar link whose page has something that blocks
+// agents from starting.
+func blockingAttrs(blocking bool) templ.Attributes {
+	if blocking {
+		return templ.Attributes{"data-blocking": "true"}
+	}
+	return templ.Attributes{}
+}
 
 // currentAttrs marks the current link with aria-current="page" and adds
 // nothing to the others.
