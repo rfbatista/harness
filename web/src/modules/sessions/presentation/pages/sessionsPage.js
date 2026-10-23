@@ -32,6 +32,7 @@ export const FRESH_MS = 8_000;
  *   clock: import("../../../../shared/infrastructure/clock.js").Clock,
  *   channel?: import("../../domain/ports.js").ChannelGateway,  the architect channel; without it the page shows none
  *   channelStore?: ChannelStore,
+ *   merge?: import("../../domain/ports.js").MergeGateway,  merging a session's branch; without it there is no Merge tab
  *   location?: { search: string },  ?session=<id> opens that session (a comment links to the session that wrote it)
  *   prefs?: ReturnType<typeof import("../screenPrefs.js").screenPrefs>,  this browser's text size and focus mode
  *   shell?: { setFocus: (on: boolean) => void },  the app shell around the page (focus mode hides the rail and more)
@@ -44,6 +45,7 @@ export const sessionsPage = ({
   clock,
   channel = null,
   channelStore = { messages: [], loaded: false },
+  merge = null,
   setTimeout = globalThis.setTimeout.bind(globalThis),
   location = globalThis.location,
   history = globalThis.history,
@@ -192,6 +194,27 @@ export const sessionsPage = ({
       if (!this.showingSandbox) return [];
       const live = this.selected.stoppable;
       return [{ key: `${this.selected.id}:${live ? "live" : "ended"}`, sessionId: this.selected.id, live, facts: this.selected.sandboxFacts }];
+    },
+    /** A session with a branch has a Merge tab, where a merge into the default branch is offered when it applies. */
+    get hasMergeTab() {
+      return merge !== null && this.showingSession && this.selected.branch !== "";
+    },
+    get showingMerge() {
+      return this.hasMergeTab && this.detailTab === "merge";
+    },
+    get mergeTabSelected() {
+      return this.detailTab === "merge";
+    },
+    /**
+     * The Merge tab's panel, keyed on the session and on its newest merge
+     * result: the result arrives with the session on the feed, and a change
+     * mounts a fresh panel that asks again whether a merge applies.
+     */
+    get mergePanels() {
+      if (!this.showingMerge) return [];
+      const session = this.sessions.find((s) => s.id === this.selectedId);
+      const last = session.lastMerge;
+      return [{ key: `${session.id}:${last ? last.at.getTime() : 0}`, sessionId: session.id, branch: session.branch, last }];
     },
     get showingApp() {
       return this.showingSession && this.detailTab === "app";
@@ -583,6 +606,11 @@ export const sessionsPage = ({
       this.leaveCode();
       this.detailTab = "sandbox";
     },
+    /** The Merge tab: merge the branch into the repository's default branch. */
+    showMerge() {
+      this.leaveCode();
+      this.detailTab = "merge";
+    },
     showApp() {
       this.leaveCode();
       this.detailTab = "app";
@@ -682,6 +710,7 @@ export const sessionsPage = ({
       if (this.detailTab === "code" && !this.hasCode) this.detailTab = "agent";
       if (this.detailTab === "design" && !this.hasTask) this.detailTab = "agent";
       this.creating = false;
+      if (this.detailTab === "merge" && !this.hasMergeTab) this.detailTab = "agent";
       if (this.keptTerminalId !== id) this.keptTerminalId = null;
     },
 

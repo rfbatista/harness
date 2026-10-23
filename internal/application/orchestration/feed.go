@@ -116,6 +116,11 @@ func (s *Service) notify(sessionID, eventType string) {
 	}
 }
 
+// AnnounceSession puts the session's current record on the project feed, after
+// something outside its own events changed it, such as the result of merging
+// its branch (ports.SessionChangeAnnouncer).
+func (s *Service) AnnounceSession(sessionID string) { s.notify(sessionID, "") }
+
 // AnnounceTicket puts a ticket change on the project feed, next to the session
 // changes, exactly as planning applied it. Planning calls it after every
 // create, update and delete (ports.TicketAnnouncer).
