@@ -11,12 +11,30 @@
 
 import { Codes, codeOf } from "../../../../shared/domain/errors.js";
 import { describeError } from "../../../../shared/presentation/errors.js";
-import { applyTaskChange, describeChange } from "../../domain/board.js";
+import { applyTaskChange, describeChange, dropMove } from "../../domain/board.js";
 import { STATUSES } from "../../domain/task.js";
 import { archiveAllView, toColumns } from "../boardView.js";
 
 /** How long a task that arrived or moved over the feed stays highlighted. */
 export const FRESH_MS = 8_000;
+
+/** How close to an edge, in px, the pointer scrolls the board or a column while dragging, and by how much. */
+const EDGE = 48;
+const STEP = 16;
+
+/** Scrolls the board sideways near its left or right edge, and the column near its top or bottom. */
+function autoScroll(boardEl, cardsEl, { clientX, clientY }) {
+  const nudge = (el, axis, at) => {
+    if (!el?.getBoundingClientRect) return;
+    const r = el.getBoundingClientRect();
+    const [start, end] = axis === "x" ? [r.left, r.right] : [r.top, r.bottom];
+    const by = at < start + EDGE ? -STEP : at > end - EDGE ? STEP : 0;
+    if (by && axis === "x") el.scrollLeft += by;
+    if (by && axis === "y") el.scrollTop += by;
+  };
+  nudge(boardEl, "x", clientX);
+  nudge(cardsEl, "y", clientY);
+}
 
 const statusLabel = (status) => STATUSES.find((s) => s.value === status)?.label ?? status;
 
@@ -32,11 +50,16 @@ export const AGE_TICK_MS = 60_000;
  *   store: import("./rail.js").RailStore,
  *   setTimeout?: typeof globalThis.setTimeout,
  *   clock?: { now: () => Date },
+ *   isFine?: () => boolean,  a fine pointer (mouse, pen, trackpad): cards drag; touch uses the menu
  * }} deps
  */
-export const board = ({ gateway, store, setTimeout = globalThis.setTimeout.bind(globalThis), clock = { now: () => new Date() } }) => () => {
+export const board =
+  ({ gateway, store, setTimeout = globalThis.setTimeout.bind(globalThis), clock = { now: () => new Date() }, isFine = () => globalThis.matchMedia?.("(pointer: fine)").matches ?? false }) =>
+  () => {
   /** The component's root (<main>): $el inside an event handler is the element that fired, not the root. */
   let root = null;
+  /** The last press on a card was on its title link or a button: no drag starts from there. */
+  let pressedControl = false;
 
   return {
     projectId: "",
@@ -60,6 +83,10 @@ export const board = ({ gateway, store, setTimeout = globalThis.setTimeout.bind(
     moves: {},
     /** A move's confirmed status whose echo may still arrive, per card. */
     echoes: {},
+    /** The card being dragged, its column, and the column under the pointer ("" for none); null when no drag. */
+    drag: null,
+    /** A fine pointer, read once: cards drag only there. */
+    fine: false,
     /** "Archive all": rest, confirm, busy, done or failed; archived is how many the last one took. */
     archiveAllPhase: "rest",
     archivedByAll: 0,
@@ -72,7 +99,7 @@ export const board = ({ gateway, store, setTimeout = globalThis.setTimeout.bind(
 
     get columns() {
       const pending = Object.fromEntries(Object.entries(this.moves).map(([id, m]) => [id, m.pending.at(-1)]));
-      const columns = toColumns(store.tasks, { projectId: this.projectId, byTask: store.byTask, fresh: new Set(this.freshIds), now: this.now, pending, failed: new Set(this.failedIds) });
+      const columns = toColumns(store.tasks, { projectId: this.projectId, byTask: store.byTask, fresh: new Set(this.freshIds), now: this.now, pending, failed: new Set(this.failedIds), drag: this.drag, fine: this.fine });
       // Done carries "Archive all": its strip, its fading cards and the receipt in place of the empty text.
       const all = this.archiveAll;
       return columns.map((c) => {
@@ -80,6 +107,9 @@ export const board = ({ gateway, store, setTimeout = globalThis.setTimeout.bind(
         const receipt = isDone ? all.emptyText : "";
         return { ...c, isDone, archiving: isDone && all.busy, receipt, showsEmpty: c.isEmpty && !receipt };
       });
+    },
+    get dragging() {
+      return this.drag !== null;
     },
     get archiveAll() {
       const done = store.tasks.filter((t) => t.status === "done").length;
@@ -102,6 +132,7 @@ export const board = ({ gateway, store, setTimeout = globalThis.setTimeout.bind(
       root = this.$el;
       this.projectId = this.$el.dataset.projectId ?? "";
       this.ssrArchivedCount = Number(this.$el.dataset.archivedCount ?? 0);
+      this.fine = isFine();
       const tick = () => {
         this.now = clock.now();
         setTimeout(tick, AGE_TICK_MS);
@@ -196,6 +227,62 @@ export const board = ({ gateway, store, setTimeout = globalThis.setTimeout.bind(
         this.announcement = `Couldn't move ${task.title} to ${statusLabel(status)}.`;
         if (refocus) this.refocus(taskId);
       }
+    },
+
+    /** A press inside a card: remembered, so a drag from its title link or a button does not start. */
+    pointerDown(event) {
+      pressedControl = Boolean(event.target.closest?.("a, button"));
+    },
+
+    /**
+     * A card is picked up (native drag, fine pointer only): a ghost holds its
+     * place and the other columns become drop targets. No drag starts from
+     * the title link or the menu button, or for a card whose move is in flight.
+     */
+    dragStart(event) {
+      const id = event.target.closest?.("[data-task-id]")?.dataset.taskId ?? "";
+      const task = store.tasks.find((t) => t.id === id);
+      if (!task || !this.fine || pressedControl || this.moves[id]) {
+        event.preventDefault();
+        return;
+      }
+      event.dataTransfer?.setData("text/plain", id);
+      if (event.dataTransfer) event.dataTransfer.effectAllowed = "move";
+      this.drag = { id, from: task.status, over: "" };
+    },
+
+    /** The dragged card is over a column: it previews the drop, and near an edge the board or the column scrolls. */
+    dragOver(event) {
+      if (!this.drag) return;
+      const column = event.target.closest?.("[data-column]");
+      if (!column) return;
+      event.preventDefault();
+      if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
+      const over = column.dataset.column;
+      if (this.drag.over !== over) this.drag = { ...this.drag, over };
+      autoScroll(root?.querySelector("[data-board]"), column.querySelector(".cards"), event);
+    },
+
+    /** The pointer left a column for somewhere that is no column. */
+    dragLeave(event) {
+      if (!this.drag || event.relatedTarget?.closest?.("[data-column]")) return;
+      this.drag = { ...this.drag, over: "" };
+    },
+
+    /** The card is dropped on a column: the same move as the menu's, or nothing on its own column. */
+    drop(event) {
+      event.preventDefault();
+      const id = this.drag?.id ?? "";
+      const to = event.target.closest?.("[data-column]")?.dataset.column ?? "";
+      this.drag = null;
+      const m = dropMove(store.tasks.find((t) => t.id === id) ?? null, to, { pending: Boolean(this.moves[id]) });
+      return m ? this.move(m.taskId, m.status) : undefined;
+    },
+
+    /** The drag ended without a drop (Escape, or outside any column): everything snaps back, nothing is sent. */
+    dragEnd() {
+      this.drag = null;
+      pressedControl = false;
     },
 
     /** "Archive all" opens its in-page confirmation, its button focused. */
@@ -299,12 +386,14 @@ export const board = ({ gateway, store, setTimeout = globalThis.setTimeout.bind(
     taskChanged(event) {
       const { change, previous } = event.detail;
       if (change.kind === "task-deleted") {
+        if (this.drag?.id === change.id) this.drag = null;
         delete this.moves[change.id];
         delete this.echoes[change.id];
         this.announcement = describeChange(previous, change);
         return;
       }
       const { id, status } = change.task;
+      if (this.drag?.id === id) this.drag = null; // changed elsewhere mid-drag: the drag is off, the change announced below
       if (change.task.archivedAt) {
         delete this.moves[id];
         delete this.echoes[id];

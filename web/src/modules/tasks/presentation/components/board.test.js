@@ -9,7 +9,7 @@ import { AGE_TICK_MS, board, FAILED_MS, FRESH_MS } from "./board.js";
 
 file("tasks/presentation/board");
 
-function setup({ tasks = [makeTask()], seeded = true, clock = fixedClock("2026-10-19T12:00:00Z") } = {}) {
+function setup({ tasks = [makeTask()], seeded = true, clock = fixedClock("2026-10-19T12:00:00Z"), fine = true } = {}) {
   const store = { byTask: {}, tasks, seeded };
   const memory = memoryTasks({ projects: ["p1"], tasks });
   const el = document.createElement("main");
@@ -18,7 +18,7 @@ function setup({ tasks = [makeTask()], seeded = true, clock = fixedClock("2026-1
   ssr.dataset.ssr = "";
   el.append(ssr);
   const timers = manualTimers();
-  const mounted = mount(board({ gateway: memory.gateway, store, setTimeout: timers.setTimeout, clock }), { el });
+  const mounted = mount(board({ gateway: memory.gateway, store, setTimeout: timers.setTimeout, clock, isFine: () => fine }), { el });
   mounted.instance.init();
   return { ...mounted, store, el, memory, timers, clock };
 }
@@ -381,4 +381,86 @@ test("Archive all refused: nothing leaves, the strip says so and can try again",
   assert.deepEqual([instance.archiveAll.phase, instance.archiveAll.title, store.tasks.length, instance.archiveAllError.code], ["failed", "Couldn't archive. Nothing changed.", 2, Codes.NETWORK]);
   instance.dismissArchiveAll();
   assert.deepEqual([instance.archiveAll.phase, instance.archiveAllError], ["rest", null]);
+});
+
+/** A drag event on a card or a column, as the browser fires it. */
+function dragEvent(el, over = {}) {
+  const data = {};
+  return {
+    target: el,
+    clientX: 0,
+    clientY: 0,
+    relatedTarget: null,
+    defaultPrevented: false,
+    preventDefault() {
+      this.defaultPrevented = true;
+    },
+    dataTransfer: { setData: (k, v) => (data[k] = v), effectAllowed: "", dropEffect: "" },
+    ...over,
+  };
+}
+const cardEl = (id) => {
+  const card = document.createElement("article");
+  card.dataset.taskId = id;
+  return card;
+};
+const columnEl = (status) => {
+  const col = document.createElement("section");
+  col.dataset.column = status;
+  return col;
+};
+
+test("dragging a card to another column previews it there; the drop moves it like the menu does", async () => {
+  const { instance, store, memory } = setup({ tasks: [makeTask({ status: "review" })] });
+  const start = dragEvent(cardEl("t1"));
+  instance.dragStart(start);
+  assert.deepEqual([start.defaultPrevented, instance.dragging, instance.columns[3].dragOrigin, instance.columns[3].cards[0].ghost], [false, true, true, true]);
+  const over = dragEvent(columnEl("done"));
+  instance.dragOver(over);
+  assert.deepEqual([over.defaultPrevented, instance.columns[4].dropOver, instance.columns[4].countText], [true, true, "0 → 1"]);
+  const p = instance.drop(dragEvent(columnEl("done")));
+  assert.deepEqual([instance.dragging, store.tasks[0].status], [false, "done"], "optimistic, at once");
+  await p;
+  assert.deepEqual(memory.calls.at(-1), { updateTask: { id: "t1", status: "done" } });
+  instance.dragEnd(dragEvent(cardEl("t1")));
+  assert.equal(store.tasks[0].status, "done");
+});
+
+test("a drop on its own column, or a drag that ends outside any column, sends nothing", () => {
+  const { instance, memory } = setup({ tasks: [makeTask({ status: "review" })] });
+  instance.dragStart(dragEvent(cardEl("t1")));
+  instance.dragOver(dragEvent(columnEl("review")));
+  assert.deepEqual([instance.columns[3].dropSelf, instance.columns[3].selfText], [true, "Already in Review"]);
+  instance.drop(dragEvent(columnEl("review")));
+  instance.dragStart(dragEvent(cardEl("t1")));
+  instance.dragEnd(dragEvent(cardEl("t1")));
+  assert.deepEqual([memory.calls, instance.dragging, instance.announcement], [[], false, ""]);
+});
+
+test("no drag starts from the title link or the menu button, on a coarse pointer, or for a card mid-move", async () => {
+  const { instance, memory } = setup({ tasks: [makeTask({ status: "review" })] });
+  const link = document.createElement("a");
+  cardEl("t1").append(link);
+  instance.pointerDown({ target: link });
+  const fromLink = dragEvent(cardEl("t1"));
+  instance.dragStart(fromLink);
+  assert.deepEqual([fromLink.defaultPrevented, instance.dragging], [true, false]);
+  instance.pointerDown({ target: cardEl("t1") });
+  memory.gateway.moveTask = () => new Promise(() => {}); // never answers
+  instance.move("t1", "done");
+  const midMove = dragEvent(cardEl("t1"));
+  instance.dragStart(midMove);
+  assert.deepEqual([midMove.defaultPrevented, instance.dragging], [true, false]);
+  const coarse = setup({ tasks: [makeTask()], fine: false });
+  const touch = dragEvent(cardEl("t1"));
+  coarse.instance.dragStart(touch);
+  assert.deepEqual([touch.defaultPrevented, coarse.instance.columns[2].cards[0].draggable], [true, false]);
+});
+
+test("the dragged card changed elsewhere cancels the drag and says so", () => {
+  const { instance, store } = setup({ tasks: [makeTask({ status: "review" })] });
+  instance.dragStart(dragEvent(cardEl("t1")));
+  store.tasks = [makeTask({ status: "todo" })];
+  instance.taskChanged(changed({ kind: "task-upsert", task: makeTask({ status: "todo" }) }, makeTask({ status: "review" })));
+  assert.deepEqual([instance.dragging, instance.announcement], [false, "Add SSE feed moved to Todo"]);
 });

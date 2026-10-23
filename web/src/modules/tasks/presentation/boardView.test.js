@@ -91,3 +91,22 @@ test("Archive all: the button shows while Done holds cards; the strip names the 
   assert.deepEqual([done.open, done.shows, done.emptyText], [false, false, "14 tasks archived."]);
   assert.equal(archiveAllView({ phase: "done", done: 1, archived: 14 }).emptyText, "", "a card landed in Done meanwhile: the column shows it instead");
 });
+
+test("while a card is dragged: its place holds a ghost, the column under it previews the count and says where it goes", () => {
+  const tasks = [makeTask({ id: "a", status: "review" }), makeTask({ id: "b", status: "done" })];
+  const cols = toColumns(tasks, ctx({ drag: { id: "a", from: "review", over: "done" }, fine: true }));
+  const review = cols[3];
+  const done = cols[4];
+  assert.deepEqual([review.dragOrigin, review.dropOver, review.dropSelf, review.cards[0].ghost], [true, false, false, true]);
+  assert.deepEqual([done.dropOver, done.countText, done.dropText], [true, "1 → 2", "Drop to move to Done"]);
+  assert.equal(cols[0].countText, "0", "other columns keep their count");
+  const self = toColumns(tasks, ctx({ drag: { id: "a", from: "review", over: "review" }, fine: true }))[3];
+  assert.deepEqual([self.dropSelf, self.dropOver, self.selfText, self.countText], [true, false, "Already in Review", "1"]);
+});
+
+test("cards drag on a fine pointer only, and never while their move is in flight", () => {
+  const tasks = [makeTask({ id: "a" }), makeTask({ id: "b" })];
+  const fine = toColumns(tasks, ctx({ fine: true, pending: { b: "in_progress" } }))[2].cards;
+  assert.deepEqual(fine.map((c) => `${c.id}:${c.draggable}`).sort(), ["a:true", "b:false"]);
+  assert.deepEqual(toColumns(tasks, ctx({ fine: false }))[2].cards.map((c) => c.draggable), [false, false]);
+});

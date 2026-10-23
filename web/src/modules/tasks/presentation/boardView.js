@@ -30,17 +30,29 @@ export const taskHref = (projectId, taskId) => `/projects/${encodeURIComponent(p
  *   now: Date,
  *   pending?: Record<string, string>,  per card with a move in flight, the status it goes to
  *   failed?: Set<string>,              cards that went back after a refused move
+ *   drag?: { id: string, from: string, over: string } | null,  the card being dragged, its column, and the column under the pointer ("" for none)
+ *   fine?: boolean,                    a fine pointer: cards drag (touch uses the menu)
  * }} ctx
  */
-export function toColumns(tasks, { projectId, byTask, fresh, now, pending = {}, failed = new Set() }) {
+export function toColumns(tasks, { projectId, byTask, fresh, now, pending = {}, failed = new Set(), drag = null, fine = false }) {
   const cols = byStatus(tasks);
   return STATUSES.map(({ value, label }) => {
-    const cards = cols[value].map((t) => toCard(t, { projectId, activity: byTask[t.id] ?? QUIET, fresh: fresh.has(t.id), now, pendingTo: pending[t.id] ?? "", failed: failed.has(t.id) }));
+    const cards = cols[value].map((t) =>
+      toCard(t, { projectId, activity: byTask[t.id] ?? QUIET, fresh: fresh.has(t.id), now, pendingTo: pending[t.id] ?? "", failed: failed.has(t.id), ghost: drag?.id === t.id, fine }),
+    );
     const waiting = value === "review" && cards.length > 0;
+    const under = Boolean(drag) && drag.over === value;
+    const dropOver = under && drag.from !== value;
     return {
       status: value,
       label,
       count: cards.length,
+      countText: dropOver ? `${cards.length} → ${cards.length + 1}` : String(cards.length),
+      dragOrigin: Boolean(drag) && drag.from === value,
+      dropOver,
+      dropSelf: under && drag.from === value,
+      dropText: `Drop to move to ${label}`,
+      selfText: `Already in ${label}`,
       isEmpty: cards.length === 0,
       emptyText: EMPTY[value] ?? "No tasks",
       waiting,
@@ -50,7 +62,7 @@ export function toColumns(tasks, { projectId, byTask, fresh, now, pending = {}, 
   });
 }
 
-function toCard(task, { projectId, activity, fresh, now, pendingTo, failed }) {
+function toCard(task, { projectId, activity, fresh, now, pendingTo, failed, ghost = false, fine = false }) {
   // The reviews badge says the reviews; the dot is about sessions only.
   const { state } = linkState(activity);
   const merge = mergeBadge(task);
@@ -85,6 +97,8 @@ function toCard(task, { projectId, activity, fresh, now, pendingTo, failed }) {
     note: pendingTo ? `Moving to ${statusLabel(pendingTo)}…` : failed ? "Move failed" : "",
     choices: moveChoices(task.status),
     canArchive: task.status === "done",
+    ghost,
+    draggable: fine && pendingTo === "",
   };
 }
 

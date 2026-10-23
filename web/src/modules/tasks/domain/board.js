@@ -2,7 +2,7 @@
 // reads. The rail shows the same tasks in its own order (RAIL_ORDER, the
 // BFF's `kanban` in internal/adapter/in/web/tasks/rail.go).
 
-import { STATUSES } from "./task.js";
+import { isStatus, STATUSES } from "./task.js";
 
 /**
  * @typedef {import("./task.js").Task} Task
@@ -54,6 +54,19 @@ export function moveChoices(status) {
   const at = STATUSES.findIndex((s) => s.value === status);
   const next = at === STATUSES.length - 1 ? at - 1 : at + 1;
   return STATUSES.map((s, i) => ({ status: s.value, label: s.label, key: String(i + 1), current: i === at, initial: i === next }));
+}
+
+/**
+ * The move a drop turns into: the card to the column it was dropped on.
+ * null for a drop on its own column, outside any column (to is ""), of a
+ * card that is gone, or of one whose move is still in flight.
+ * @param {Task | null} task
+ * @param {string} to  the column's status, "" when none
+ * @returns {{ taskId: string, status: string } | null}
+ */
+export function dropMove(task, to, { pending = false } = {}) {
+  if (!task || pending || !isStatus(to) || to === task.status) return null;
+  return { taskId: task.id, status: to };
 }
 
 const label = (status) => STATUSES.find((s) => s.value === status)?.label ?? status;

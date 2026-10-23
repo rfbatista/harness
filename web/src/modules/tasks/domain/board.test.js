@@ -1,6 +1,6 @@
 import { assert, file, test } from "../../../shared/testing/test.js";
 import { makeTask } from "../testing/fixtures.js";
-import { applyTaskChange, byStatus, describeChange, moveChoices, onBoard, RAIL_ORDER } from "./board.js";
+import { applyTaskChange, byStatus, describeChange, dropMove, moveChoices, onBoard, RAIL_ORDER } from "./board.js";
 import { STATUSES } from "./task.js";
 
 file("tasks/domain/board");
@@ -82,4 +82,14 @@ test("an archive reads as such", () => {
   const done = makeTask({ status: "done" });
   assert.equal(describeChange(done, { kind: "task-upsert", task: { ...done, archivedAt: 1 } }), "Add SSE feed was archived");
   assert.equal(describeChange(null, { kind: "task-upsert", task: { ...done, archivedAt: 1 } }), "", "a task archived before this page knew it is no news");
+});
+
+test("a drop on another column is a move there; on its own column, outside any column, or of a card mid-move, nothing", () => {
+  const task = makeTask({ status: "review" });
+  assert.deepEqual(dropMove(task, "done"), { taskId: "t1", status: "done" });
+  assert.equal(dropMove(task, "review"), null, "its own column: no request");
+  assert.equal(dropMove(task, ""), null, "outside any column: cancelled");
+  assert.equal(dropMove(task, "someday"), null, "not a column");
+  assert.equal(dropMove(null, "done"), null, "the card is gone");
+  assert.equal(dropMove(task, "done", { pending: true }), null, "a card with a move in flight does not move again");
 });
