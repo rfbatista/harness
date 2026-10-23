@@ -77,7 +77,7 @@ with your ordinary tools; none of it takes a tool call:
 What the folders hold:
 
 - task/docs/ — this task's documents. A file you create there is a new document linked to this task, titled by its first heading. Any text format: .md, .html, .txt.
-- project/docs/ — the project's documents: architecture, conventions, decisions, the specs and contracts other tasks build on. A person moves documents to project level: once one in task/docs/ says something the next task needs, not just this one, ask them to move it, in a task comment or a message to your architect. mv one from project/docs/ back to task/docs/ to make it this task's again.
+- project/docs/ — the project's documents: architecture, conventions, decisions, the specs and contracts other tasks build on. ` + moveDocsLine(counts.agentsMove) + ` mv one from project/docs/ back to task/docs/ to make it this task's again.
 - task/comments/ — the task's comments, one file each (see "Resources and comments").
 - task/resources/ — what the person added: uploads under their names, links in links.md. Read-only.
 - task/designs/ — what this task published to the web UI's Design tab. A file you create there is published, a change publishes a new revision, rm unpublishes it.
@@ -96,7 +96,7 @@ A refused write says why, starting with its code:
 - READ_ONLY, COMMENT_NOT_YOURS — the path is not yours to change
 - REDIRECT_DENIED — write with Write, Edit or tee instead of > or >>
 - NOT_ON_TASK — only a document linked to this task can move to task/docs/
-- PROJECT_MOVE_DENIED — a document cannot move to project/docs/: ask the person to move it
+- PROJECT_MOVE_DENIED — ` + moveDeniedLine(counts.agentsMove) + `
 - NOT_STORED — the path is outside the folders the harness stores; nothing was written
 - SHELL_UNAVAILABLE — the harness could not be reached: redo the change once it is back
 
@@ -137,6 +137,33 @@ task/designs/attached.md. Its artifact_id is its id in .index.json:
 
 These tools always act on this task; they take no project or task id.`)
 	return b.String() + "\n\n" + resourcesSection(counts) + "\n\n" + notificationsSection
+}
+
+// moveDocsLine tells a session on a task who moves its documents to project
+// level, by the value of "Agents move documents to project" when it started
+// (ADR 0020).
+func moveDocsLine(agentsMove bool) string {
+	if agentsMove {
+		return `The setting "Agents move documents to project" was on when this session started: once a document in task/docs/ says something the next task needs, not just this one, mv it to project/docs/ yourself, with no approval and no notification. Only this task's own documents move.`
+	}
+	return `The setting "Agents move documents to project" was off when this session started, so a person moves documents to project level: once one in task/docs/ says something the next task needs, not just this one, ask them to move it, in a task comment or a message to your architect.`
+}
+
+// moveDeniedLine is the brief's PROJECT_MOVE_DENIED entry for the setting.
+func moveDeniedLine(agentsMove bool) string {
+	if agentsMove {
+		return `a document cannot move to project/docs/: only your own task's documents move, and only while "Agents move documents to project" is on; if it was turned off, ask the person to move it`
+	}
+	return `a document cannot move to project/docs/: ask the person to move it, or to turn on "Agents move documents to project"`
+}
+
+// projectMoveLine is the project brief's part on moving documents: this
+// session has no task, so it moves none itself.
+func projectMoveLine(agentsMove bool) string {
+	if agentsMove {
+		return `The setting "Agents move documents to project" was on when this session started: a session on a task moves that task's documents here itself, but this session has no task, so write yours onto a task.`
+	}
+	return `The setting "Agents move documents to project" was off when this session started: a person moves documents to project level, so write yours onto a task.`
 }
 
 // notificationsSection names the inbox tools and what notify is for (see
@@ -298,6 +325,9 @@ type projectBriefInput struct {
 	Project      *domain.Project
 	Repositories []*domain.Repository
 	Contexts     []*domain.BoundedContext
+	// AgentsMove is the setting "Agents move documents to project" as the
+	// session starts.
+	AgentsMove bool
 }
 
 // briefProject gathers the brief of a project-level session on p. A failed
@@ -382,7 +412,7 @@ ordinary tools; none of it takes a tool call:
 What the folders hold:
 
 - tasks/<id>/docs/ — a task's documents, one folder per task of the project (ls tasks/ lists their ids). A file you create there is a new document on that task, titled by its first heading. This is where the PRD goes (under the feature task) and each brief (under its child). Any text format: .md, .html, .txt.
-- project/docs/ — the project's documents: architecture, conventions, decisions, the specs and contracts tasks build on. Read them before the interview; a person moves documents to project level, so write yours onto a task.
+- project/docs/ — the project's documents: architecture, conventions, decisions, the specs and contracts tasks build on. Read them before the interview. ` + projectMoveLine(in.AgentsMove) + `
 - project/designs/ — the project's design assets. Read-only here.
 
 This session has no task, so there is no task/ folder: no task.json, comments,
