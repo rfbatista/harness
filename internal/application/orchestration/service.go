@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"operators-mcp/internal/application/keychainpath"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -110,6 +111,15 @@ type Service struct {
 	// of the agent credential (ADR 0018), read at every start and resume. Nil
 	// or empty adds nothing.
 	AgentCredential func() []string
+	// AgentLogin says whether the agent home holds a Claude login (ADR
+	// 0022), read at every start and resume without starting a process. When
+	// it does, agents use it and AgentCredential is not put in their env.
+	// Nil: no login.
+	AgentLogin func() bool
+	// KeychainShimDir holds the macOS `security` shim, put on every agent
+	// process's PATH right after the edit-proxy shims. Empty: none (not
+	// macOS, or no shim binary).
+	KeychainShimDir string
 	// Ready refuses an agent start while the agent credential, the managed
 	// claude or the sandbox driver is missing (agentready.Gate). Nil enforces
 	// nothing.
@@ -452,6 +462,7 @@ func (s *Service) prepare(ctx context.Context, in prepareInput) (*prepared, erro
 		return nil, err
 	}
 	s.withAgentCredential(&cfg)
+	s.withKeychainShim(&cfg)
 	savers := s.withTokenSavers(ctx, in, repo.RootDir, ws.Path, &cfg)
 	cleanup, err = s.withTempDir(id, &cfg, cleanup)
 	if err != nil {
@@ -492,12 +503,24 @@ func (s *Service) ready(ctx context.Context) error {
 	return s.Ready.Check(ctx)
 }
 
-// withAgentCredential adds the agent credential to the agent process env.
+// withAgentCredential adds the agent credential to the agent process env,
+// unless the agent home holds a login: the login wins and the pasted
+// credential is only a fallback for a home without one.
 func (s *Service) withAgentCredential(cfg *llmkit.SessionConfig) {
-	if s.AgentCredential == nil {
+	if s.AgentCredential == nil || (s.AgentLogin != nil && s.AgentLogin()) {
 		return
 	}
 	if env := s.AgentCredential(); len(env) > 0 {
+		cfg.Env = append(slices.Clone(cfg.Env), env...)
+	}
+}
+
+// withKeychainShim puts the security shim's dir on the agent process's PATH,
+// after the edit-proxy shims it already has and before its developer bin, so
+// claude never reaches the person's keychain. Without a dir it changes
+// nothing.
+func (s *Service) withKeychainShim(cfg *llmkit.SessionConfig) {
+	if env := keychainpath.Env(cfg.Env, s.KeychainShimDir); env != nil {
 		cfg.Env = append(slices.Clone(cfg.Env), env...)
 	}
 }

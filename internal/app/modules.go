@@ -28,6 +28,7 @@ import (
 	"operators-mcp/internal/adapter/out/filesystem"
 	"operators-mcp/internal/adapter/out/gitcli"
 	"operators-mcp/internal/adapter/out/githubapi"
+	"operators-mcp/internal/adapter/out/keychainshim"
 	"operators-mcp/internal/adapter/out/persistence/sqlite"
 	"operators-mcp/internal/app/catalog"
 	"operators-mcp/internal/application/agentcredential"
@@ -35,6 +36,7 @@ import (
 	"operators-mcp/internal/application/artifacts"
 	"operators-mcp/internal/application/execution"
 	"operators-mcp/internal/application/gitcredentials"
+	"operators-mcp/internal/application/keychainpath"
 	"operators-mcp/internal/application/orchestration"
 	"operators-mcp/internal/application/planning"
 	"operators-mcp/internal/application/taskchannel"
@@ -573,6 +575,15 @@ func agentHomeExposed(cfg Config) func() bool {
 	return func() bool { return exposed }
 }
 
+// agentHasLogin says, at each call, whether the agent Claude home holds a
+// Claude login: the file is read, no process is started.
+func agentHasLogin(cfg Config) func() bool {
+	return func() bool {
+		dir, err := agentClaudeHomeDir(cfg)
+		return err == nil && claudehome.NewHome(dir).HasLogin()
+	}
+}
+
 // legacyClaudeDir is the person's own ~/.claude, searched read-only for
 // transcripts older than the agent Claude home.
 func legacyClaudeDir() string {
@@ -718,6 +729,7 @@ type oneShotParts struct {
 	Credential *agentcredential.Service `optional:"true"`
 	Bin        ports.ManagedClaudeBin   `optional:"true"`
 	Home       claudehome.Home          `optional:"true"`
+	KC         *keychainshim.Dir        `optional:"true"`
 }
 
 // newOneShotter is the claude driver the one-shots run on: llmkit's one-shot
@@ -734,7 +746,7 @@ func newOneShotter(cfg Config, p oneShotParts) claudetext.OneShotter {
 	home := p.Home.Path()
 	one := claudetext.OneShotter(oneShotClaude(bin, home, cfg.llmProxyURL()))
 	if p.Orch != nil && p.Credential != nil {
-		one = claudetext.Confined(one, oneShotPrep(p.Orch.Sandbox, p.Credential.Env, bin))
+		one = claudetext.Confined(one, oneShotPrep(p.Orch.Sandbox, oneShotEnv(p.Credential.Env, p.Home.HasLogin, p.KC.Path()), bin, p.KC.Path()))
 	}
 	return claudetext.Gated(one, p.Ready.check())
 }
@@ -749,14 +761,27 @@ func oneShotClaude(bin, home, proxyURL string) *claude.Manager {
 // and, with the sandbox on, the wrap confining it. The sandbox's policy for a
 // one-shot names no repository; claude's install dirs are the one thing
 // beyond its temp dir and the agent home it may read.
-func oneShotPrep(sb *orchestration.Sandbox, credential func() []string, bin string) func() ([]string, llmkit.WrapFunc, error) {
-	allow := sandboxAllowlist(allowSources{ClaudeDirs: runtime.ClaudeInstallDirs(bin)})
+// readable are further directories it may read, the security shim's.
+func oneShotPrep(sb *orchestration.Sandbox, credential func() []string, bin string, readable ...string) func() ([]string, llmkit.WrapFunc, error) {
+	allow := sandboxAllowlist(allowSources{ClaudeDirs: append(runtime.ClaudeInstallDirs(bin), readable...)})
 	return func() ([]string, llmkit.WrapFunc, error) {
 		wrap, err := sb.OneShotWrap(allow)
 		if err != nil {
 			return nil, nil, err
 		}
 		return credential(), wrap, nil
+	}
+}
+
+// oneShotEnv is the env entries of a one-shot: the pasted credential unless
+// the agent home holds a login, and the security shim's dir on PATH.
+func oneShotEnv(pasted func() []string, login func() bool, shimDir string) func() []string {
+	return func() []string {
+		var env []string
+		if !login() {
+			env = pasted()
+		}
+		return append(env, keychainpath.Env(os.Environ(), shimDir)...)
 	}
 }
 

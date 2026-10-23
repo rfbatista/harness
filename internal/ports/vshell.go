@@ -77,6 +77,16 @@ const ShimDirEnv = "HARNESS_SHIM_DIR"
 // after its profile.
 const DeveloperBinEnv = "HARNESS_DEVELOPER_BIN"
 
+// SecurityShimCommand is the macOS `security` shim, a link to the shim
+// binary: it answers "not found" for Claude's keychain item and passes every
+// other call to the real /usr/bin/security (ADR 0022).
+const SecurityShimCommand = "security"
+
+// KeychainShimDirEnv names, in an agent process's environment, the directory
+// holding the security shim. It goes on PATH right after the edit-proxy
+// shims and before the developer bin; a login shell puts it back there.
+const KeychainShimDirEnv = "HARNESS_KEYCHAIN_SHIM_DIR"
+
 // The environment a task session's shell is named in: ShellDirEnv is the
 // shell's absolute path, ShellURLEnv its edit endpoints' base
 // (…/api/sessions/{id}/shell), which the PATH shims call.

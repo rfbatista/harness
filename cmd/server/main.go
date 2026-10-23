@@ -11,8 +11,9 @@ import (
 )
 
 // The server binary is also task sessions' PATH shim: each session's shim
-// dir links sed, tee, cp, mv, rm, touch and mkdir to it, so it works as
-// built, under `go run` and under Air alike, with nothing else to build.
+// dir links sed, tee, cp, mv, rm, touch and mkdir to it, and on macOS the
+// keychain shim dir links security to it, so it works as built, under
+// `go run` and under Air alike, with nothing else to build.
 func main() {
 	if shim.Is(os.Args[0]) {
 		os.Exit(shim.Main())

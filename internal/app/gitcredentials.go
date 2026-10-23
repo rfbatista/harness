@@ -26,7 +26,7 @@ import (
 var GitCredentialsModule = fx.Module("gitcredentials",
 	fx.Provide(newSecretBox),
 	fx.Provide(newGitCredentialsService),
-	fx.Provide(newAgentCredential),
+	fx.Provide(newAgentCredential, newKeychainShim),
 	fx.Provide(newAgentOAuth),
 	fx.Invoke(registerGitCredentials, bindGitCredentials),
 	fx.Invoke(bindAgentCredential),

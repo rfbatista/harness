@@ -5,6 +5,7 @@ import (
 
 	"go.uber.org/fx"
 
+	"operators-mcp/internal/adapter/out/agents/claudehome"
 	"operators-mcp/internal/application/agentcredential"
 	"operators-mcp/internal/application/agentready"
 	"operators-mcp/internal/application/managedclaude"
@@ -23,6 +24,7 @@ type agentReadinessParts struct {
 	Managed    *managedclaude.Service   `optional:"true"`
 	Bin        ports.ManagedClaudeBin   `optional:"true"`
 	Sandbox    *sandboxsettings.Store   `optional:"true"`
+	Home       claudehome.Home          `optional:"true"`
 }
 
 // newAgentReadiness is the check every agent start and one-shot goes through:
@@ -31,7 +33,9 @@ type agentReadinessParts struct {
 func newAgentReadiness(p agentReadinessParts) *agentready.Gate {
 	g := &agentready.Gate{}
 	if p.Credential != nil {
-		g.Credential = func() bool { return p.Credential.Status().Set }
+		// A login in the agent home satisfies the requirement as a pasted
+		// credential does (ADR 0022).
+		g.Credential = func() bool { return p.Home.HasLogin() || p.Credential.Status().Set }
 	}
 	if p.Bin != nil {
 		g.Bin = p.Bin

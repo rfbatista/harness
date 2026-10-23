@@ -2,17 +2,22 @@ package app
 
 import (
 	"context"
+	"os"
+
+	goruntime "runtime"
 
 	"go.uber.org/fx"
 	"gorm.io/gorm"
 
 	"operators-mcp/internal/adapter/out/agents/claudehome"
+	"operators-mcp/internal/adapter/out/keychainshim"
 	"operators-mcp/internal/adapter/out/persistence/sqlite"
 	"operators-mcp/internal/adapter/out/ptyunix"
 	"operators-mcp/internal/adapter/out/secretbox"
 	"operators-mcp/internal/app/runtime"
 	"operators-mcp/internal/application/agentcredential"
 	"operators-mcp/internal/application/agentoauth"
+	"operators-mcp/internal/application/keychainpath"
 	"operators-mcp/internal/application/orchestration"
 	"operators-mcp/internal/ports"
 )
@@ -27,10 +32,36 @@ func newAgentCredential(db *gorm.DB, box *secretbox.Box) *agentcredential.Servic
 
 // bindAgentCredential gives sessions the credential in their env at each
 // start and resume.
-func bindAgentCredential(svc *agentcredential.Service, u gitCredentialUsers) {
+//
+// Which one agents use is decided at each start (ADR 0022): a login in the
+// agent home wins, the pasted credential is the fallback. The `security` shim
+// keeps claude's login out of the person's keychain.
+func bindAgentCredential(svc *agentcredential.Service, u gitCredentialUsers, home claudehome.Home, kc *keychainshim.Dir) {
 	if u.Orch != nil {
 		u.Orch.AgentCredential = svc.Env
+		u.Orch.AgentLogin = home.HasLogin
+		u.Orch.KeychainShimDir = kc.Path()
 	}
+}
+
+// newKeychainShim makes the dir holding the `security` shim, on macOS, and
+// removes it when the server stops.
+func newKeychainShim(lc fx.Lifecycle, cfg Config) (*keychainshim.Dir, error) {
+	d, err := keychainshim.New(cfg.ShimBinary, goruntime.GOOS)
+	if err != nil {
+		return nil, err
+	}
+	lc.Append(fx.Hook{OnStop: func(context.Context) error {
+		d.Close()
+		return nil
+	}})
+	return d, nil
+}
+
+// withKeychainShim is env with the shim dir on its PATH, the env of the
+// login, status and logout commands and of a one-shot.
+func withKeychainShim(env []string, dir string) []string {
+	return append(env, keychainpath.Env(env, dir)...)
 }
 
 // oauthParts are what the sign-in flow runs on; the orchestration's sandbox is
@@ -41,6 +72,7 @@ type oauthParts struct {
 	Bin  ports.ManagedClaudeBin
 	Home claudehome.Home
 	Orch *orchestration.Service `optional:"true"`
+	KC   *keychainshim.Dir
 }
 
 // sandbox is the orchestration's sandbox step, nil without one.
@@ -57,7 +89,8 @@ func (p oauthParts) sandbox() *orchestration.Sandbox {
 // reaches the person's keychain. Stopping the server kills the process that
 // runs.
 func newAgentOAuth(lc fx.Lifecycle, p oauthParts) *agentoauth.Service {
-	svc := agentoauth.New(agentoauth.Deps{Bin: p.Bin, ConfigDir: p.Home.Path(), PTY: ptyunix.New(), Wrap: loginWrap(p.sandbox(), p.Bin)})
+	svc := agentoauth.New(agentoauth.Deps{Bin: p.Bin, ConfigDir: p.Home.Path(), PTY: ptyunix.New(), Wrap: loginWrap(p.sandbox(), p.Bin, p.KC.Path()),
+		Env: func() []string { return withKeychainShim(os.Environ(), p.KC.Path()) }})
 	lc.Append(fx.Hook{OnStop: func(context.Context) error {
 		svc.Close()
 		return nil
@@ -69,14 +102,15 @@ func newAgentOAuth(lc fx.Lifecycle, p oauthParts) *agentoauth.Service {
 // or not the agent sandbox is switched on: claude's install dir is the one
 // thing it may read beyond its temp dir and the agent home. Nil without a
 // driver.
-func loginWrap(sb *orchestration.Sandbox, bin ports.ManagedClaudeBin) agentoauth.Wrap {
+// readable are further directories it may read, the security shim's.
+func loginWrap(sb *orchestration.Sandbox, bin ports.ManagedClaudeBin, readable ...string) agentoauth.Wrap {
 	if sb == nil || sb.Driver == nil {
 		return nil
 	}
 	return func(c ports.SandboxCommand) (ports.SandboxCommand, error) {
 		// Read at each login: the managed claude may have been installed or
 		// switched since the server started.
-		allow := sandboxAllowlist(allowSources{ClaudeDirs: runtime.ClaudeInstallDirs(bin.Bin())})
+		allow := sandboxAllowlist(allowSources{ClaudeDirs: append(runtime.ClaudeInstallDirs(bin.Bin()), readable...)})
 		return sb.LoginWrap(allow)(c)
 	}
 }

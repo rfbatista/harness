@@ -13,6 +13,9 @@ type CredentialView struct {
 	// HomeExposed: the agent home is in a git work tree that does not ignore
 	// it (see homeWarning).
 	HomeExposed bool
+	// Login: the agent home holds a Claude login, which agents use before
+	// the pasted credential.
+	Login bool
 }
 
 // CredentialSeed is what the section's component takes over from: the body of
@@ -117,4 +120,18 @@ func (v CredentialView) PasteTone() string {
 		return ""
 	}
 	return "primary"
+}
+
+// ActiveLine says which credential agents use: the login wins, the pasted
+// credential is the fallback. Empty when agents have neither.
+func (v CredentialView) ActiveLine() string {
+	switch {
+	case v.Login && v.Status.Set:
+		return "Agents use your Claude login; the pasted credential is only a fallback"
+	case v.Login:
+		return "Agents use your Claude login"
+	case v.Status.Set:
+		return "Agents use the pasted API key or token"
+	}
+	return ""
 }
