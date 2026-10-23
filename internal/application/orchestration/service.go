@@ -174,6 +174,9 @@ type Service struct {
 	// announced on the bus only when it actually changes.
 	statuses map[string]domain.SessionStatus
 	cleanups map[string]func()
+	// gitStarts counts, by session id, the starts that opened its git
+	// directory: only the latest one's cleanup removes it.
+	gitStarts map[string]uint64
 	// busy marks sessions with a turn in flight: set when a user message is
 	// written to the CLI, cleared by the "result" line that ends the turn. It
 	// exists so a late "system"/init — the CLI emits it after initializing,
@@ -518,11 +521,29 @@ func (s *Service) withGit(id, repositoryID string, cfg *llmkit.SessionConfig, cl
 	if sg.Note != "" {
 		cfg.AppendSystem = appendSection(cfg.AppendSystem, sg.Note)
 	}
+	// The git directory has one path per session, so a start that comes
+	// after this one under the id owns it: this start's cleanup, running
+	// later, leaves it to the successor's.
+	s.mu.Lock()
+	if s.gitStarts == nil {
+		s.gitStarts = map[string]uint64{}
+	}
+	s.gitStarts[id]++
+	mine := s.gitStarts[id]
+	s.mu.Unlock()
 	return sg.EnvFile, func() {
 		if cleanup != nil {
 			cleanup()
 		}
-		s.GitAuth.EndSession(id)
+		s.mu.Lock()
+		current := s.gitStarts[id] == mine
+		if current {
+			delete(s.gitStarts, id)
+		}
+		s.mu.Unlock()
+		if current {
+			s.GitAuth.EndSession(id)
+		}
 	}, nil
 }
 

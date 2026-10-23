@@ -41,7 +41,10 @@ type Sandbox struct {
 	// every session, so git inside the sandbox sees their identity and
 	// aliases. Empty UserHome: none.
 	UserHome, ConfigHome string
-	// TempDir gives a session its temp dir. Nil: the system's.
+	// TempDir gives the path prefix of a session's temp dir: each start makes
+	// its own dir as <prefix>-<random> beside it (0700), so a start never
+	// shares a dir with the one before it under the same id. Nil: the
+	// system's temp dir.
 	TempDir func(sessionID string) string
 	// Allow gives the allowlist a session adds to the baseline: token-saver
 	// dirs, toolchain dirs and caches, llmkit's Files, the harness's git
@@ -311,11 +314,14 @@ func (s *Service) withTempDir(id string, cfg *llmkit.SessionConfig, cleanup func
 	if !sb.on() || sb.Driver == nil || sb.TempDir == nil {
 		return cleanup, nil
 	}
-	dir := sb.TempDir(id)
-	if dir == "" {
+	prefix := sb.TempDir(id)
+	if prefix == "" {
 		return cleanup, nil
 	}
-	if err := os.MkdirAll(dir, 0o700); err != nil {
+	// One dir per start: a cleanup of an earlier start under the same id
+	// removes only its own, never the live one.
+	dir, err := mkdirTempBeside(prefix)
+	if err != nil {
 		if cleanup != nil {
 			cleanup()
 		}
@@ -328,6 +334,28 @@ func (s *Service) withTempDir(id string, cfg *llmkit.SessionConfig, cleanup func
 		}
 		_ = os.RemoveAll(dir)
 	}, nil
+}
+
+// mkdirTempBeside makes a 0700 dir named prefix-<random> in prefix's parent.
+// The name stays short: unix socket paths under it have a length limit.
+func mkdirTempBeside(prefix string) (string, error) {
+	parent := filepath.Dir(prefix)
+	if err := os.MkdirAll(parent, 0o700); err != nil {
+		return "", err
+	}
+	return os.MkdirTemp(parent, filepath.Base(prefix)+"-*")
+}
+
+// sessionTempDir is the temp dir the session's env names (withTempDir), the
+// one the policy must grant; the system's without one.
+func sessionTempDir(env []string) string {
+	dir := os.TempDir()
+	for _, e := range env {
+		if v, ok := strings.CutPrefix(e, "TMPDIR="); ok && v != "" {
+			dir = v
+		}
+	}
+	return dir
 }
 
 // sandboxed is the outcome of the sandbox step.
@@ -365,10 +393,7 @@ func (s *Service) sandbox(ctx context.Context, in prepareInput, id string, repo 
 		AgentHome:    sb.Home,
 		UserHome:     sb.UserHome,
 		ConfigHome:   sb.ConfigHome,
-		TempDir:      os.TempDir(),
-	}
-	if sb.TempDir != nil {
-		sess.TempDir = sb.TempDir(id)
+		TempDir:      sessionTempDir(env),
 	}
 	repos, err := s.catalog.Repositories.ListRepositories(ctx, in.ProjectID)
 	if err != nil {

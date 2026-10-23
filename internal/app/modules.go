@@ -647,9 +647,11 @@ func newOrchestrationService(
 		// one-shots, every checkout.
 		WorkspacesRoot: ws.Root,
 		Checkouts:      func() []string { return allCheckouts(cat.Projects) },
-		// Each session gets a temp dir of its own, never the system's, which
-		// every session (and each one's virtual shell) shares.
-		TempDir: func(id string) string { return filepath.Join(os.TempDir(), "harness-session-"+shortID(id)) },
+		// Each session start gets a temp dir of its own, never the system's,
+		// which every session (and each one's virtual shell) shares: this is
+		// its name prefix, the start adds a random suffix. Short, so a unix
+		// socket path under it stays within the platform's limit.
+		TempDir: func(id string) string { return filepath.Join(os.TempDir(), "harness-session-"+id[:min(len(id), 8)]) },
 
 		Violations:     violations,
 		ViolationStore: violationStore,
