@@ -190,6 +190,9 @@ func NewRouter(h *Handler, opts ...Option) *echo.Echo {
 	g.GET("/sessions/:id/history", h.handleSessionHistory)
 	g.GET("/sessions/:id/transcript", h.handleSessionTranscript)
 	g.GET("/sessions/:id/sandbox/violations", h.handleSessionSandboxViolations)
+	// merging a session's branch into its repository's default branch, in the local checkout
+	g.GET("/sessions/:id/merge", h.handleSessionMergeOffer)
+	g.POST("/sessions/:id/merge", h.handleSessionMerge)
 
 	// artifacts: what sessions publish for the Design tab. The /view/ routes
 	// are loaded as plain subresources (<img>, <video>, <iframe>), under the

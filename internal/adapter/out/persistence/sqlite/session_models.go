@@ -47,6 +47,23 @@ type SessionModel struct {
 	Sandboxed         bool   `gorm:"column:sandboxed"`
 	SandboxVisibility string `gorm:"column:sandbox_visibility"`
 	SandboxDriver     string `gorm:"column:sandbox_driver"`
+
+	// The newest merge of the session's branch: when it was tried (ms; 0 is
+	// never), whether it merged, the branch it merged into and its new HEAD,
+	// or the refusal's code and message. Rows from before it read as no merge.
+	MergeAtMs    int64  `gorm:"column:merge_at_ms"`
+	Merged       bool   `gorm:"column:merged"`
+	MergeInto    string `gorm:"column:merge_into"`
+	MergeHead    string `gorm:"column:merge_head"`
+	MergeCode    string `gorm:"column:merge_code"`
+	MergeMessage string `gorm:"column:merge_message"`
+}
+
+func (m *SessionModel) lastMerge() *domain.MergeResult {
+	if m.MergeAtMs == 0 {
+		return nil
+	}
+	return &domain.MergeResult{At: time.UnixMilli(m.MergeAtMs), Merged: m.Merged, Into: m.MergeInto, Head: m.MergeHead, Code: m.MergeCode, Message: m.MergeMessage}
 }
 
 func (m *SessionModel) setSandbox(f *domain.SandboxFacts) {
@@ -101,6 +118,7 @@ func (m *SessionModel) ToDomain() *domain.Session {
 		TokenSaversNotInstalled:  splitSavers(m.TokenSaversNotInstalled),
 		CavemanIntensity:         domain.CavemanIntensity(m.CavemanIntensity),
 		Sandbox:                  m.sandbox(),
+		LastMerge:                m.lastMerge(),
 		CreatedAt:                time.UnixMilli(m.CreatedAt),
 		UpdatedAt:                time.UnixMilli(m.UpdatedAt),
 	}

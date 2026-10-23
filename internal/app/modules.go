@@ -100,7 +100,8 @@ func newGitHistory(cfg Config) *gitcli.History { return gitcli.NewHistory(cfg.gi
 func newBranchPublisher(cfg Config) *gitcli.BranchPublisher {
 	return gitcli.NewBranchPublisher(cfg.gitOptions()...)
 }
-func newGitCode(cfg Config) *gitcli.Code { return gitcli.NewCode(cfg.gitOptions()...) }
+func newGitMerger(cfg Config) *gitcli.Merger { return gitcli.NewMerger(cfg.gitOptions()...) }
+func newGitCode(cfg Config) *gitcli.Code     { return gitcli.NewCode(cfg.gitOptions()...) }
 
 // newDB opens the SQLite database and registers a hook to close it on
 // shutdown. The database's folder is made first: the default data dir,
@@ -771,11 +772,13 @@ var WorkspacesModule = fx.Module("workspaces",
 		asPort(newWorktreeManager, new(ports.WorktreeManager)),
 		asPort(newGitHistory, new(ports.GitHistory)),
 		asPort(newBranchPublisher, new(ports.BranchPublisher)),
+		asPort(newGitMerger, new(ports.GitMerger)),
 		asPort(githubapi.New, new(ports.CodeHost)),
 		asPort(newGitCode, new(ports.GitCode)),
 		asPort(filesystem.NewWorktreeFiles, new(ports.WorktreeFiles)),
 		newWorkspacesService,
 		newPullRequestsService,
+		newMergesService,
 		newCodeBrowser,
 	),
 	fx.Invoke(registerCodeWatcher),
@@ -860,6 +863,19 @@ func newPullRequestsService(
 		return nil
 	}})
 	return svc
+}
+
+// newMergesService merges a session's branch into its repository's default
+// branch in the local checkout, and announces the result on the
+// orchestration's project feed.
+func newMergesService(
+	sessions ports.SessionRepository,
+	ws ports.WorkspaceRepository,
+	repos ports.RepositoryRepository,
+	git ports.GitMerger,
+	orch *orchestration.Service,
+) *workspaces.Merges {
+	return workspaces.NewMerges(workspaces.MergeDeps{Sessions: sessions, Workspaces: ws, Repositories: repos, Git: git, Announce: orch})
 }
 
 // shortID is the part of a session id that names its temp dir: short enough

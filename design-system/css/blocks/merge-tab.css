@@ -1,0 +1,26 @@
+/*
+ * Merge tab — merge a session's branch into the repository's default branch,
+ * from the harness server. One action and the newest result under it.
+ * <section class="frame" aria-label="Merge"><div class="merge-tab" data-scroll>
+ *   <h3>…</h3><p class="explain">…</p>
+ *   <div class="actions"><button class="button" data-variant="primary" data-merge>Merge into main</button></div>
+ *   <div class="note" data-merge-unavailable>…</div>
+ *   <div class="banner" data-merge-result data-tone="signal|danger" role="status">…</div></div></section>
+ */
+
+@layer blocks {
+  .merge-tab {
+    display: grid;
+    align-content: start;
+    gap: var(--space-m);
+    padding: var(--space-m);
+    overflow-y: auto;
+    min-block-size: 0;
+
+    & h3 { font-size: var(--text-md); }
+    & .explain { color: var(--color-ink-muted); font-size: var(--text-sm); max-inline-size: 60ch; }
+    & .actions { display: flex; gap: var(--space-xs); }
+    & .note { border: var(--border-width) dashed var(--color-line); border-radius: var(--radius-sm); padding: var(--space-s) var(--space-m); color: var(--color-ink-muted); }
+    & [data-merge-result] { overflow-wrap: anywhere; }
+  }
+}

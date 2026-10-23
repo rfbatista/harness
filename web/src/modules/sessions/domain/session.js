@@ -31,7 +31,16 @@
  * @property {readonly string[]} tokenSavers              the token savers it runs with, fixed when it started
  * @property {readonly string[]} tokenSaversNotInstalled  savers on for it but not installed, so it runs without them
  * @property {{ sandboxed: boolean, visibility: string, driver: string } | null} sandbox  what its sandbox was when it started or last resumed; null for a session from before the sandbox
+ * @property {MergeResult | null} lastMerge  how the newest merge of its branch ended; null when never tried
  * @property {Date} updatedAt
+ *
+ * @typedef {object} MergeResult  merged: the new HEAD of `into`; refused: the code and the reason
+ * @property {Date} at
+ * @property {boolean} merged
+ * @property {string} into     the default branch merged into; "" when not known
+ * @property {string} head     the new HEAD of `into`, "" for a refusal
+ * @property {string} code     MERGE_NO_BRANCH, MERGE_NO_CHECKOUT, MERGE_CHECKOUT_DIRTY, MERGE_WRONG_BRANCH, MERGE_ALREADY_MERGED, MERGE_CONFLICT, MERGE_BRANCH_NOT_FOUND or MERGE_FAILED; "" when merged
+ * @property {string} message  the reason, readable
  *
  * @typedef {"architect"|"delegate"|""} Role  "" is a peer: started by a person, or outside the architect's tree
  *
