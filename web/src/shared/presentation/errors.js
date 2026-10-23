@@ -16,6 +16,8 @@ const NEXT_STEP = {
   [Codes.PROJECT_ROOT_INVALID]: "give the absolute path of an existing directory on the server's machine (~ is fine)",
   [Codes.PROJECT_HAS_RUNNING_SESSIONS]: "stop its running sessions from their tasks, then delete again",
   [Codes.TICKET_NOT_FOUND]: "it was deleted; pick a task on the rail",
+  [Codes.TICKET_PARENT_INVALID]: "a parent is a top-level task of the same project",
+  [Codes.TICKET_HAS_CHILDREN]: "delete or move its child tasks first",
   [Codes.DOCUMENT_NOT_FOUND]: "it was deleted; reload the page",
   [Codes.ARTIFACT_NOT_FOUND]: "it was deleted; reload the page",
   [Codes.ARTIFACT_NOT_PROMOTABLE]: "only a file a live session published can be kept; ask the agent to publish it as a file, then move it",
@@ -46,15 +48,41 @@ const NEXT_STEP = {
   [Codes.GIT_CREDENTIAL_MISSING]: "add a credential for that host in Git credentials",
   [Codes.GIT_CREDENTIAL_REJECTED]: "replace its secret in Git credentials, then retry",
   [Codes.GIT_CREDENTIAL_STORE_LOCKED]: "give the server its key (HARNESS_SECRET_KEY or secret.key in its data directory), then retry",
+  [Codes.AGENT_CREDENTIAL_MISSING]: "add the credential in Agent isolation, then start again",
+  [Codes.MANAGED_CLAUDE_MISSING]: "install it in Agent isolation, then start again",
+  [Codes.MANAGED_CLAUDE_INSTALLING]: "it installs on its own; start again when it is done",
+  [Codes.MANAGED_CLAUDE_INSTALL_FAILED]: "retry the install in Agent isolation, then start again",
+  [Codes.SANDBOX_DRIVER_MISSING]: "install a driver or turn the sandbox off in Agent isolation, then start again",
   [Codes.BAD_RESPONSE]: "the server and the web client disagree; reload the page",
 };
 
+// The Agent isolation page's sections an agent refusal sends the person to.
+const FIX_LINKS = {
+  [Codes.AGENT_CREDENTIAL_MISSING]: { href: "/agent-isolation#credential", text: "Add one in Agent isolation settings" },
+  [Codes.MANAGED_CLAUDE_MISSING]: { href: "/agent-isolation#claude", text: "Install it in Agent isolation settings" },
+  [Codes.MANAGED_CLAUDE_INSTALLING]: { href: "/agent-isolation#claude", text: "Follow the install in Agent isolation settings" },
+  [Codes.MANAGED_CLAUDE_INSTALL_FAILED]: { href: "/agent-isolation#claude", text: "Retry the install in Agent isolation settings" },
+  [Codes.SANDBOX_DRIVER_MISSING]: { href: "/agent-isolation#sandbox", text: "Install a driver or turn the sandbox off" },
+};
+
+/**
+ * One link per thing a refused agent start is missing: the error's details
+ * list them all, so the person fixes them in one visit.
+ * @param {unknown} err
+ * @returns {{ href: string, text: string }[]}
+ */
+function fixLinks(err) {
+  const missing = /** @type {{ missing?: { code: string }[] }} */ (err instanceof Error && "details" in err ? err.details : null)?.missing;
+  const codes = Array.isArray(missing) ? missing.map((m) => m.code) : [codeOf(err)];
+  return codes.filter((c) => FIX_LINKS[c]).map((c) => FIX_LINKS[c]);
+}
+
 /**
  * @param {unknown} err
- * @returns {{ message: string, code: string, next: string }}
+ * @returns {{ message: string, code: string, next: string, links: { href: string, text: string }[] }}
  */
 export function describeError(err) {
   const code = codeOf(err);
   const message = err instanceof Error && err.message ? err.message : "Something went wrong.";
-  return { message, code, next: NEXT_STEP[code] ?? "retry, or check the server log" };
+  return { message, code, next: NEXT_STEP[code] ?? "retry, or check the server log", links: fixLinks(err) };
 }

@@ -54,6 +54,9 @@ type Option func(*usage.Options)
 // WithClock sets the service's clock.
 func WithClock(now func() time.Time) Option { return func(o *usage.Options) { o.Clock = now } }
 
+// WithLiveCallBuffer sets how many events a live call viewer may have waiting.
+func WithLiveCallBuffer(n int) Option { return func(o *usage.Options) { o.LiveCallBuffer = n } }
+
 // NewEnv opens the database, records the projects, tasks and sessions, and
 // builds the service.
 func NewEnv(t *testing.T, opts ...Option) *Env {
@@ -76,7 +79,7 @@ func NewEnv(t *testing.T, opts ...Option) *Env {
 		if err != nil {
 			t.Fatal(err)
 		}
-		tk, err := tickets.Create(proj.ID, p.task, "", domain.TicketStatusTodo)
+		tk, err := tickets.Create(proj.ID, p.task, "", domain.TicketStatusTodo, "")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -100,7 +103,7 @@ type Added struct{ TaskID, SessionID string }
 // AddSession records a task titled title in project with one session on it.
 func (e *Env) AddSession(t *testing.T, project, title string) Added {
 	t.Helper()
-	tk, err := sqlite.NewTicketRepository(e.DB).Create(project, title, "", domain.TicketStatusTodo)
+	tk, err := sqlite.NewTicketRepository(e.DB).Create(project, title, "", domain.TicketStatusTodo, "")
 	if err != nil {
 		t.Fatal(err)
 	}

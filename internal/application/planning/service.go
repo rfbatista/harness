@@ -5,7 +5,9 @@ package planning
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -168,7 +170,7 @@ func bySession(ctx context.Context, bySessionID string) bool {
 
 // CreateTicket creates a task. A session cannot create one in done: only the
 // person moves a task there.
-func (s *Service) CreateTicket(ctx context.Context, projectID, title, description string, status domain.TicketStatus) (*domain.Ticket, error) {
+func (s *Service) CreateTicket(ctx context.Context, projectID, title, description string, status domain.TicketStatus, parentID string) (*domain.Ticket, error) {
 	if title == "" {
 		return nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "title is required"}
 	}
@@ -186,7 +188,10 @@ func (s *Service) CreateTicket(ctx context.Context, projectID, title, descriptio
 	}
 	s.ticketMu.Lock()
 	defer s.ticketMu.Unlock()
-	tk, err := s.tickets.Create(projectID, title, description, status)
+	if err := s.checkParent(ctx, &domain.Ticket{ProjectID: projectID}, parentID); err != nil {
+		return nil, err
+	}
+	tk, err := s.tickets.Create(projectID, title, description, status, parentID)
 	if err != nil {
 		return nil, err
 	}
@@ -201,15 +206,43 @@ func (s *Service) GetTicket(ctx context.Context, id string) (*domain.Ticket, err
 	if tk == nil {
 		return nil, &domain.StructuredError{Code: "TICKET_NOT_FOUND", Message: "ticket not found"}
 	}
+	s.withChildren(ctx, tk)
 	s.decorate(ctx, tk)
 	return tk, nil
 }
 
 // ListTickets lists a project's tickets that are not archived.
-func (s *Service) ListTickets(ctx context.Context, projectID string) ([]*domain.Ticket, error) {
+func (s *Service) ListTickets(ctx context.Context, projectID string, filter ports.TicketFilter) ([]*domain.Ticket, error) {
 	tickets := s.tickets.ListByProject(ctx, projectID)
+	countChildren(append(tickets, s.tickets.ListArchivedByProject(ctx, projectID)...), tickets...)
+	if filter.ParentID != nil {
+		tickets = slices.DeleteFunc(tickets, func(tk *domain.Ticket) bool { return tk.ParentID != *filter.ParentID })
+	}
 	s.decorate(ctx, tickets...)
 	return tickets, nil
+}
+
+// withChildren fills tk's ChildrenCount from its project's tickets: the
+// count is derived on read, never stored. It is the one place a single
+// ticket's children are counted; a listing counts its own in one pass.
+func (s *Service) withChildren(ctx context.Context, tk *domain.Ticket) {
+	all := s.tickets.ListByProject(ctx, tk.ProjectID)
+	// An archived child is still a child: it counts.
+	countChildren(append(all, s.tickets.ListArchivedByProject(ctx, tk.ProjectID)...), tk)
+}
+
+// countChildren fills ChildrenCount on each of tickets from all, the
+// project's every ticket, in one pass.
+func countChildren(all []*domain.Ticket, tickets ...*domain.Ticket) {
+	counts := make(map[string]int, len(tickets))
+	for _, tk := range all {
+		if tk.IsChild() {
+			counts[tk.ParentID]++
+		}
+	}
+	for _, tk := range tickets {
+		tk.ChildrenCount = counts[tk.ID]
+	}
 }
 
 // UpdateTicket replaces every field. It is the patch with every field present,
@@ -238,7 +271,7 @@ func (s *Service) PatchTicket(ctx context.Context, id string, patch ports.Ticket
 	if existing == nil {
 		return nil, &domain.StructuredError{Code: "TICKET_NOT_FOUND", Message: "ticket not found"}
 	}
-	title, description, status := existing.Title, existing.Description, existing.Status
+	title, description, status, parentID := existing.Title, existing.Description, existing.Status, existing.ParentID
 	if patch.Title != nil {
 		if strings.TrimSpace(*patch.Title) == "" {
 			return nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "title is required"}
@@ -257,11 +290,18 @@ func (s *Service) PatchTicket(ctx context.Context, id string, patch ports.Ticket
 	if status != existing.Status && existing.ArchivedAt != nil {
 		return nil, &domain.StructuredError{Code: "TASK_ARCHIVED", Message: "the task is archived; restore it before changing its status"}
 	}
-	if title == existing.Title && description == existing.Description && status == existing.Status {
+	if patch.ParentID != nil {
+		if err := s.checkParent(ctx, existing, *patch.ParentID); err != nil {
+			return nil, err
+		}
+		parentID = *patch.ParentID
+	}
+	if title == existing.Title && description == existing.Description && status == existing.Status && parentID == existing.ParentID {
+		s.withChildren(ctx, existing)
 		s.decorate(ctx, existing)
 		return existing, nil
 	}
-	tk, err := s.tickets.Update(id, title, description, status)
+	tk, err := s.tickets.Update(id, title, description, status, parentID)
 	if err != nil {
 		return nil, err
 	}
@@ -273,6 +313,7 @@ func (s *Service) PatchTicket(ctx context.Context, id string, patch ports.Ticket
 		move = &c
 	}
 	// The write is done: the change goes out whole even if the request ends.
+	s.withChildren(context.WithoutCancel(ctx), tk)
 	s.decorate(context.WithoutCancel(ctx), tk)
 	s.announce(tk, false)
 	if move != nil {
@@ -387,6 +428,21 @@ func (s *Service) ArchiveDoneTickets(ctx context.Context, projectID string) ([]s
 	return ids, nil
 }
 
+// checkParent refuses a parent that child (its ID empty while it is being
+// created) cannot take, with CodeTicketParentInvalid; "" is no parent and
+// always fine. The pure rules are domain.Ticket.CheckParent; this looks up
+// what they need: the parent, and whether child already has children.
+func (s *Service) checkParent(ctx context.Context, child *domain.Ticket, parentID string) error {
+	if parentID == "" {
+		return nil
+	}
+	parent := s.tickets.Get(ctx, parentID)
+	if child.ID != "" {
+		s.withChildren(ctx, child)
+	}
+	return child.CheckParent(parent, child.ChildrenCount > 0)
+}
+
 // DeleteTicket removes the ticket and announces it with its last known state,
 // so followers know which project's board loses the card.
 // DeleteTicket deletes a task, announces it on the feed, then publishes
@@ -414,6 +470,15 @@ func (s *Service) deleteTicket(ctx context.Context, id string) (*domain.Ticket, 
 	// The task is deleted whatever happens to the request, so what it
 	// announces is read to the end too.
 	last := s.tickets.Get(context.WithoutCancel(ctx), id)
+	if last != nil {
+		s.withChildren(context.WithoutCancel(ctx), last)
+		if last.ChildrenCount > 0 {
+			return nil, &domain.StructuredError{
+				Code:    domain.CodeTicketHasChildren,
+				Message: fmt.Sprintf("the task still has %d child task(s): delete or move them first", last.ChildrenCount),
+			}
+		}
+	}
 	if err := s.tickets.Delete(id); err != nil {
 		return nil, err
 	}

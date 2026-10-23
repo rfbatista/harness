@@ -1,7 +1,9 @@
 package tasks
 
 import (
+	"encoding/json"
 	"fmt"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -79,5 +81,52 @@ func TestBoardListsEachColumnNewestStatusSinceFirst(t *testing.T) {
 	}
 	if todo := b.Columns[1].Cards; len(todo) != 1 || todo[0].TaskID != "t-todo" {
 		t.Errorf("todo column = %+v", todo)
+	}
+}
+
+func TestBoardFeatureCuesMatchTheSharedFixture(t *testing.T) {
+	raw, err := os.ReadFile("../../../../../web/testdata/views/feature-cues.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fixture struct {
+		ChildrenWords []struct {
+			Count int    `json:"count"`
+			Word  string `json:"word"`
+		} `json:"children_words"`
+		Tasks []struct {
+			ID, Title, Status string
+			ParentID          string `json:"parent_id"`
+		} `json:"tasks"`
+		Cards []struct {
+			ID, Parent, Children string
+		} `json:"cards"`
+	}
+	if err := json.Unmarshal(raw, &fixture); err != nil {
+		t.Fatal(err)
+	}
+	for _, w := range fixture.ChildrenWords {
+		if got := ChildrenWord(w.Count); got != w.Word {
+			t.Errorf("ChildrenWord(%d) = %q, want %q", w.Count, got, w.Word)
+		}
+	}
+	var tasks []*domain.Ticket
+	for _, tk := range fixture.Tasks {
+		tasks = append(tasks, &domain.Ticket{ID: tk.ID, Title: tk.Title, Status: domain.TicketStatus(tk.Status), ParentID: tk.ParentID})
+	}
+	cards := map[string]Card{}
+	for _, c := range BuildBoard("p1", tasks, nil).Columns {
+		for _, card := range c.Cards {
+			cards[card.TaskID] = card
+		}
+	}
+	if len(cards) != len(fixture.Cards) {
+		t.Fatalf("%d cards, want %d", len(cards), len(fixture.Cards))
+	}
+	for _, want := range fixture.Cards {
+		card := cards[want.ID]
+		if card.Parent != want.Parent || ChildrenWord(card.Children) != want.Children {
+			t.Errorf("card %s: parent %q children %q, want %q / %q", want.ID, card.Parent, ChildrenWord(card.Children), want.Parent, want.Children)
+		}
 	}
 }

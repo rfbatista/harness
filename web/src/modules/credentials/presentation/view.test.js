@@ -1,6 +1,6 @@
 import views from "../../../../testdata/views/git-credentials.json" with { type: "json" };
 import { assert, file, test } from "../../../shared/testing/test.js";
-import { remoteOf } from "../domain/credential.js";
+import { candidatesFor, remoteOf } from "../domain/credential.js";
 import { toCredential } from "../infrastructure/dto.js";
 import { at, makeCredential, makeKey } from "../testing/fixtures.js";
 import { addHref, bindingLine, credentialHref, credentialRow, lastUsedLabel, testLine } from "./view.js";
@@ -29,7 +29,7 @@ test("a test result reads the server's message with what was checked", () => {
 test("a binding reads pinned, automatic, local, or what to add", () => {
   const work = makeCredential();
   const remote = "https://github.com/acme/harness.git";
-  assert.deepEqual(bindingLine({ repositoryId: "r", credentialId: "gc-work", resolved: work, remoteUrl: remote }), { state: "pinned", name: "work-token", text: "pinned", addHref: "" });
+  assert.deepEqual(bindingLine({ repositoryId: "r", credentialId: "gc-work", resolved: work, pullRequests: work, remoteUrl: remote }), { state: "pinned", name: "work-token", text: "pinned", addHref: "", pullText: "Pull requests: work-token (pinned)", pullAddHref: "" });
   assert.equal(bindingLine({ repositoryId: "r", credentialId: null, resolved: work, remoteUrl: remote }).text, "automatic (default for github.com)");
   assert.equal(bindingLine({ repositoryId: "r", credentialId: null, resolved: null, remoteUrl: null }).state, "local");
   const none = bindingLine({ repositoryId: "r", credentialId: null, resolved: null, remoteUrl: "git@github.com:acme/infra.git" });
@@ -52,7 +52,12 @@ test("rows, origins and bindings read as the Go pages paint them", () => {
   }
   for (const c of views.bindings) {
     const resolved = c.resolved ? pick(c.resolved) : null;
-    const line = bindingLine({ repositoryId: "r", credentialId: c.pinned && resolved ? resolved.id : null, resolved, remoteUrl: c.remote_url });
-    assert.deepEqual(line, { state: c.line.state, name: c.line.name, text: c.line.text, addHref: c.line.add_href }, JSON.stringify(c));
+    const pullRequests = c.pull_requests ? pick(c.pull_requests) : null;
+    const line = bindingLine({ repositoryId: "r", credentialId: c.pinned && resolved ? resolved.id : null, resolved, pullRequests, remoteUrl: c.remote_url });
+    assert.deepEqual(line, { state: c.line.state, name: c.line.name, text: c.line.text, addHref: c.line.add_href, pullText: c.line.pull_text, pullAddHref: c.line.pull_add_href }, JSON.stringify(c));
+  }
+  const all = [toCredential(views.credential), toCredential(views.key)];
+  for (const c of views.pickers) {
+    assert.deepEqual(candidatesFor(all, c.remote_url).map((x) => x.id), c.candidates, c.remote_url);
   }
 });

@@ -16,7 +16,7 @@ import { FeedStatus } from "../../../../shared/domain/feed.js";
 import { describeError } from "../../../../shared/presentation/errors.js";
 import { readSeed } from "../../../../shared/presentation/seed.js";
 import { isPending, noteProblem, upsertReview } from "../../domain/review.js";
-import { toCard, waitingLine } from "../view.js";
+import { reviewsSummary, toCard, waitingLine } from "../view.js";
 
 const TICK_MS = 30_000;
 
@@ -26,9 +26,10 @@ const ANSWERED = { approved: "You approved", changes_requested: "You asked for c
  * @param {{
  *   gateway: import("../../domain/ports.js").ReviewGateway,
  *   clock: import("../../../../shared/infrastructure/clock.js").Clock,
- * }} deps
+ *   hash?: () => string,
+ * }} deps  hash is the page's URL fragment: a link to a review (#review-{id}) or to #reviews
  */
-export const reviewsInbox = ({ gateway, clock }) => () => {
+export const reviewsInbox = ({ gateway, clock, hash = () => globalThis.location?.hash ?? "" }) => () => {
   let unfollow = () => {};
   let ticker = null;
   /** The component's root: inside a handler $el is the element that fired. */
@@ -54,6 +55,10 @@ export const reviewsInbox = ({ gateway, clock }) => () => {
     hasArchitect: false,
     /** The request whose answer is in flight: its echo is not news. */
     answeringId: "",
+    /** The panel shows every waiting request, not just the first. */
+    moreOpen: false,
+    /** The page's link to a review has been followed, once the requests were read. */
+    linkFollowed: false,
 
     // ── what the markup binds ────────────────────────────────────────────
     get forTask() {
@@ -72,6 +77,29 @@ export const reviewsInbox = ({ gateway, clock }) => () => {
     get settledCards() {
       if (!this.forTask) return [];
       return this.reviews.filter((r) => !isPending(r) && !this.withdrawnWhileWriting(r)).map((r) => this.card(r));
+    },
+    /** The strip's Reviews button. */
+    get summary() {
+      return reviewsSummary({ loaded: this.loaded, error: this.error, pending: this.pendingCount, settled: this.settledCards.length, painted: this.paintedPending });
+    },
+    /** The panel: the first waiting request in full, the others behind "N more waiting". */
+    get firstCards() {
+      return this.pendingCards.slice(0, 1);
+    },
+    get moreCards() {
+      return this.pendingCards.slice(1);
+    },
+    get hasMore() {
+      return this.moreCards.length > 0;
+    },
+    get moreLabel() {
+      return this.moreOpen ? `Hide ${this.moreCards.length}` : `${this.moreCards.length} more waiting`;
+    },
+    get nothingWaits() {
+      return this.loaded && !this.hasPending;
+    },
+    toggleMore() {
+      this.moreOpen = !this.moreOpen;
     },
     get pendingCount() {
       return this.reviews.filter(isPending).length;
@@ -176,9 +204,30 @@ export const reviewsInbox = ({ gateway, clock }) => () => {
         for (const r of this.reviews) this.ensureDraft(r.id);
         this.loaded = true;
         this.now = clock.now();
+        this.$dispatch("reviews-read", { has: this.hasPending || this.hasSettled });
+        this.followLink();
       } catch (err) {
         this.error = describeError(err);
       }
+    },
+
+    /**
+     * The page was opened on a link to #reviews or to one review (#review-{id}):
+     * show that review, unfolded, and focus it (its panel was opened by the strip).
+     */
+    followLink() {
+      if (this.linkFollowed || !this.forTask) return;
+      this.linkFollowed = true;
+      const target = hash();
+      if (target === "#reviews") return this.$nextTick(() => root?.querySelector("[data-reviews-heading]")?.focus?.());
+      if (!target.startsWith("#review-")) return;
+      const id = decodeURIComponent(target.slice("#review-".length));
+      if (this.moreCards.some((c) => c.id === id)) this.moreOpen = true;
+      this.$nextTick(() => {
+        const heading = [...(root?.querySelectorAll("article.review") ?? [])].find((a) => a.id === `review-${id}`)?.querySelector("[data-review-heading]");
+        heading?.scrollIntoView?.({ block: "nearest" });
+        heading?.focus?.();
+      });
     },
 
     ensureDraft(id) {

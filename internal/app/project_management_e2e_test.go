@@ -47,8 +47,8 @@ func TestProjectManagement_WiredGraph(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	task, _ := plan.CreateTicket(ctx, p.ID, "Projects screen", "", domain.TicketStatusInProgress)
-	if _, err := plan.CreateTicket(ctx, p.ID, "Shipped", "", domain.TicketStatusDone); err != nil {
+	task, _ := plan.CreateTicket(ctx, p.ID, "Projects screen", "", domain.TicketStatusInProgress, "")
+	if _, err := plan.CreateTicket(ctx, p.ID, "Shipped", "", domain.TicketStatusDone, ""); err != nil {
 		t.Fatal(err)
 	}
 	live, err := sessions.Create(&domain.Session{ID: "s-live", ProjectID: p.ID, TicketID: task.ID, Task: "build", Status: domain.SessionRunning})

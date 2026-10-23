@@ -1,12 +1,15 @@
 // The sessions module's Alpine components. Names are global: module
 // components carry the module prefix.
 
+import { brainstorm } from "./components/brainstorm.js";
 import { conversation } from "./components/conversation.js";
 import { designLibrary } from "./components/designLibrary.js";
 import { designWatch } from "./components/designWatch.js";
 import { taskDesign } from "./components/taskDesign.js";
 import { designPanel } from "./components/designPanel.js";
 import { history } from "./components/history.js";
+import { merge } from "./components/merge.js";
+import { sandbox } from "./components/sandbox.js";
 import { newSession } from "./components/newSession.js";
 import { terminal } from "./components/terminal.js";
 import { statusCheck } from "./components/statusCheck.js";
@@ -19,12 +22,15 @@ import { screenPrefs } from "./screenPrefs.js";
  *   gateway: import("../domain/ports.js").SessionGateway,
  *   terminals: import("../domain/ports.js").TerminalGateway,
  *   transcripts: import("../domain/ports.js").TranscriptGateway,  sessions' saved conversations, for the History tab
+ *   sandbox: import("../domain/ports.js").SandboxGateway,  sessions' sandbox violations, for the Sandbox tab
+ *   merge?: import("../domain/ports.js").MergeGateway,  merging a session's branch, for the Merge tab
  *   artifacts: import("../domain/ports.js").ArtifactGateway,
  *   runTerminals?: import("../domain/ports.js").TerminalGateway,  application runs' terminals
  *   createScreen: import("./components/terminal.js").CreateScreen,
  *   clock: import("../../../shared/infrastructure/clock.js").Clock,
  *   channel?: import("../domain/ports.js").ChannelGateway,  the architect channel
  *   prefs?: import("../../../shared/infrastructure/storage.js").Preferences,  this browser's text size and focus mode
+ *   navigate?: (url: string) => void,  where "Brainstorm a feature" goes once its session starts
  * }} deps
  */
 export function registerSessions(Alpine, deps) {
@@ -38,10 +44,13 @@ export function registerSessions(Alpine, deps) {
   Alpine.data("sessionsConversation", conversation({ ...deps, channelStore }));
   Alpine.data("sessionsStatusCheck", statusCheck(deps));
   Alpine.data("sessionsNewSession", newSession(deps));
+  Alpine.data("sessionsBrainstorm", brainstorm({ ...deps, navigate: deps.navigate ?? (() => {}) }));
   const textSize = () => screen?.textSize();
   Alpine.data("sessionsTerminal", terminal({ ...deps, textSize }));
   Alpine.data("sessionsDesignPanel", designPanel(deps));
   Alpine.data("sessionsHistory", history(deps));
+  Alpine.data("sessionsSandbox", sandbox(deps));
+  if (deps.merge) Alpine.data("sessionsMerge", merge({ merge: deps.merge }));
   Alpine.data("sessionsDesignLibrary", designLibrary(deps));
   Alpine.data("sessionsTaskDesign", taskDesign(deps));
   Alpine.data("sessionsDesignWatch", designWatch(deps));

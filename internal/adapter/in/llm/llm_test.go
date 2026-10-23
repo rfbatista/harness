@@ -72,14 +72,26 @@ func (u *upstream) requests() []seenRequest {
 // harness serves /llm/ and /api/ the way the server mounts them.
 func harness(t *testing.T, up *upstream) (*httptest.Server, *usagetest.Env) {
 	t.Helper()
-	e := usagetest.NewEnv(t)
-	proxy, err := llm.Handler(llm.Config{Upstream: up.URL, Sink: e.Service})
+	return harnessWith(t, up, nil, nil)
+}
+
+// harnessWith is harness with the live call capture wired the way the server
+// wires it (a nil wrap passes the usage service as it is), a router option
+// and fixture options.
+func harnessWith(t *testing.T, up *upstream, wrap func(ports.CallCapture) ports.CallCapture, routerOpts []httpapi.Option, opts ...usagetest.Option) (*httptest.Server, *usagetest.Env) {
+	t.Helper()
+	e := usagetest.NewEnv(t, opts...)
+	var capture ports.CallCapture = e.Service
+	if wrap != nil {
+		capture = wrap(capture)
+	}
+	proxy, err := llm.Handler(llm.Config{Upstream: up.URL, Sink: e.Service, Capture: capture})
 	if err != nil {
 		t.Fatal(err)
 	}
 	mux := http.NewServeMux()
 	mux.Handle(llm.PathPrefix, proxy)
-	mux.Handle("/api/", httpapi.NewRouter(httpapi.NewHandler(httpapi.Services{Usage: e.Service})))
+	mux.Handle("/api/", httpapi.NewRouter(httpapi.NewHandler(httpapi.Services{Usage: e.Service, LiveCalls: e.Service}), routerOpts...))
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 	return srv, e

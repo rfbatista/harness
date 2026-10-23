@@ -109,7 +109,7 @@ func newArchWeb(t *testing.T) *archWeb {
 	if err != nil {
 		t.Fatal(err)
 	}
-	tk, err := e.plan.CreateTicket(e.ctx, p.ID, "Architect highlights", "Highlight the architect; let delegates talk to it; let it ask the person for reviews.", domain.TicketStatusTodo)
+	tk, err := e.plan.CreateTicket(e.ctx, p.ID, "Architect highlights", "Highlight the architect; let delegates talk to it; let it ask the person for reviews.", domain.TicketStatusTodo, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -341,8 +341,11 @@ func TestArchitectChannelInTheWebUI_EndToEnd(t *testing.T) {
 	// The architect asks the person for a review: the band shows it live.
 	e.as(arch.ID, "request_user_review", map[string]any{"subject": "Server plan ready for sign-off", "body": "Please check the status authority rule\nand the status-check defaults.", "about_session_id": server})
 	band := `document.querySelector('[aria-label="Review requests"]')`
+	button := `document.querySelector('[data-band="reviews"]')`
 	p.run(t, "a review request arrives",
-		poll(`!!`+band+` && !`+band+`.hidden && `+band+`.querySelectorAll('.review').length === 1`),
+		poll(`!!`+button+` && !`+button+`.hidden && `+band+`.querySelectorAll('.review').length === 1`),
+		chromedp.Evaluate(button+`.click()`, nil), // an arriving request does not open the panel
+		poll(band+`.checkVisibility()`),
 		both("3-review-band"),
 	)
 	if got := p.text(t, band+`.innerText`); !strings.Contains(got, "1 review waits on you") || !strings.Contains(got, "about plain claude · Architect highlights") {

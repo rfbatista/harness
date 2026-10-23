@@ -46,7 +46,8 @@ test("credentials group by host in the server's order", () => {
 test("a repository can be pinned to credentials of its origin's host and kind; without an origin, any", () => {
   const list = [makeCredential(), makeKey(), makeCredential({ id: "gl", name: "gl", host: "gitlab.com" })];
   const ids = (url) => candidatesFor(list, url).map((c) => c.id);
-  assert.deepEqual(ids("https://github.com/a/b.git"), ["gc-work"]);
+  assert.deepEqual(ids("https://github.com/a/b.git"), ["gc-key", "gc-work"], "an SSH key of the host serves an https origin");
+  assert.deepEqual(candidatesFor([makeKey({ host: "git.example.com:8443" })], "https://git.example.com:8443/a/b.git").map((c) => c.id), [], "but not one with a port");
   assert.deepEqual(ids("git@github.com:a/b.git"), ["gc-key"]);
   assert.deepEqual(ids("https://bitbucket.org/a/b.git"), []);
   assert.deepEqual(ids(null), ["gc-key", "gc-work", "gl"]);
@@ -96,7 +97,11 @@ test("without a pin an origin resolves to the default of its host and kind, else
   const work = makeCredential({ isDefault: false });
   const spare = makeCredential({ id: "spare", name: "spare", isDefault: false });
   assert.equal(automaticFor([key, work], "https://github.com/a/b.git")?.id, "gc-work", "the only token");
-  assert.equal(automaticFor([key, work, spare], "https://github.com/a/b.git"), null, "two tokens, no default");
+  assert.equal(automaticFor([key, work, spare], "https://github.com/a/b.git")?.id, "gc-key", "two tokens, no default: the host's only SSH key");
+  assert.equal(automaticFor([work, spare], "https://github.com/a/b.git"), null, "two tokens, no default, no key");
+  assert.equal(automaticFor([key, spare, work].slice(0, 1), "https://github.com/a/b.git")?.id, "gc-key", "no token: the only SSH key");
+  assert.equal(automaticFor([key, makeKey({ id: "k2", name: "k2", isDefault: true })], "https://github.com/a/b.git")?.id, "k2", "no token: the default SSH key");
+  assert.equal(automaticFor([makeKey({ host: "git.example.com:8443" })], "https://git.example.com:8443/a/b.git"), null, "no key on an origin with a port");
   assert.equal(automaticFor([key, work, { ...spare, isDefault: true }], "https://github.com/a/b.git")?.id, "spare");
   assert.equal(automaticFor([key, work], "git@github.com:a/b.git")?.id, "gc-key");
   assert.equal(automaticFor([key, work], null), null);

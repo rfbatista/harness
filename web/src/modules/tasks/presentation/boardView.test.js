@@ -1,4 +1,6 @@
+import cues from "../../../../testdata/views/feature-cues.json" with { type: "json" };
 import { assert, file, test } from "../../../shared/testing/test.js";
+import { childrenWord } from "../domain/feature.js";
 import { makeTask } from "../testing/fixtures.js";
 import { toColumns } from "./boardView.js";
 
@@ -20,4 +22,14 @@ test("a card with reviews waiting on the person says how many, in amber, and its
   assert.deepEqual([cards.t1.reviews, cards.t1.hasReviews, cards.t1.state, cards.t1.word], ["2 reviews", true, "waiting", "waiting on you"]);
   assert.equal(cards.t2.reviews, "1 review");
   assert.deepEqual([cards.t3.reviews, cards.t3.hasReviews, cards.t3.hasDot], ["", false, false]);
+});
+
+test("feature cues match the shared fixture: a child names its parent, a feature counts its children (parity with the BFF)", () => {
+  const tasks = cues.tasks.map((t) => makeTask({ id: t.id, title: t.title, status: t.status, parentId: t.parent_id }));
+  const cards = Object.fromEntries(toColumns(tasks, { projectId: "p1", byTask: {}, fresh: new Set() }).flatMap((c) => c.cards).map((c) => [c.id, c]));
+  for (const want of cues.cards) {
+    const card = cards[want.id];
+    assert.deepEqual([card.parentTitle, card.hasParent, card.children, card.hasChildren], [want.parent, want.parent !== "", want.children, want.children !== ""], want.id);
+  }
+  for (const w of cues.children_words) assert.equal(childrenWord(w.count), w.word);
 });

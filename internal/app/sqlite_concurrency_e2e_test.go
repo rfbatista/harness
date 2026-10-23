@@ -139,7 +139,7 @@ func startFreezeServer(t *testing.T, dir, dbPath string, inbox bool) *freezeE2E 
 	if err != nil {
 		t.Fatal(err)
 	}
-	tk, err := plan.CreateTicket(e.ctx, p.ID, "Freeze", "", domain.TicketStatusTodo)
+	tk, err := plan.CreateTicket(e.ctx, p.ID, "Freeze", "", domain.TicketStatusTodo, "")
 	if err != nil {
 		t.Fatal(err)
 	}

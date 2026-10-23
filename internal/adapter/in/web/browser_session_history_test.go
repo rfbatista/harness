@@ -21,7 +21,7 @@ import (
 
 // A session's History tab in the browser, against a fake of
 // GET /api/sessions/{id}/transcript that pages as the contract
-// "Harness server ↔ Web UI — agent session history" says (T1–T6).
+// "Harness server ↔ Web UI — agent session history" says (T1–T7).
 
 type transcriptEntry struct {
 	Cursor    string `json:"cursor"`
@@ -31,6 +31,7 @@ type transcriptEntry struct {
 	Tool      string `json:"tool"`
 	IsError   bool   `json:"is_error"`
 	Truncated bool   `json:"truncated"`
+	HTML      string `json:"html"`
 }
 
 // fakeTranscript is one session's saved conversation; nil entries means
@@ -46,7 +47,9 @@ type transcriptRequest struct {
 	at            time.Time
 }
 
-// numberedEntries are "entry 1".."entry n", alternating a person and the agent.
+// numberedEntries are "entry 1".."entry n", alternating a person and the
+// agent; the agent's come with the server's rendered html (T7), the person's
+// without, so both ways a message shows are on screen.
 func numberedEntries(from, n int) []transcriptEntry {
 	out := make([]transcriptEntry, n)
 	for i := range out {
@@ -56,6 +59,9 @@ func numberedEntries(from, n int) []transcriptEntry {
 			kind = "user"
 		}
 		out[i] = transcriptEntry{Cursor: fmt.Sprintf("c%06d", k), At: time.Date(2026, 10, 13, 9, k%60, 0, 0, time.UTC).Format(time.RFC3339), Kind: kind, Text: fmt.Sprintf("entry %d", k)}
+		if kind == "assistant" {
+			out[i].HTML = fmt.Sprintf("<p>entry %d</p>\n", k)
+		}
 	}
 	return out
 }
@@ -151,22 +157,33 @@ func historyPage(t *testing.T, s1 *domain.Session, tr *fakeTranscript) *httptest
 }
 
 const (
-	historyLog   = `document.querySelector('.session .transcript[role=log]')`
-	historyLines = `[...document.querySelectorAll('.session .transcript > .line')]`
+	historyLog = `document.querySelector('.session .chat[role=log]')`
+	// Every rendered message, note and tool card: the elements that carry an
+	// entry's cursor.
+	historyLines = `[...document.querySelectorAll('.session .chat [data-cursor]')]`
 	// The log shows its bottom.
 	historyAtBottom = `(l => !!l && l.scrollHeight - l.scrollTop - l.clientHeight < 4)(` + historyLog + `)`
-	historyJump     = `document.querySelector('.session .transcript > .jump')`
+	historyJump     = `document.querySelector('.session .chat > .jump')`
 )
 
-// lineTop is where the line whose text is exactly text sits below the log's
-// top, in px; null while it is not rendered.
-func lineTop(text string) string {
-	return fmt.Sprintf(`(() => { const el = %s.find(l => l.querySelector('.text')?.textContent === %q); return el ? el.getBoundingClientRect().top - %s.getBoundingClientRect().top : null })()`, historyLines, text, historyLog)
+// childTexts is the text of each child of the element el evaluates to,
+// joined by spaces (flex children carry no white space between them).
+func childTexts(el string) string {
+	return `(e => e ? [...e.children].map(c => c.textContent.trim()).filter(Boolean).join(' ') : '')(` + el + `)`
 }
 
-// hasLine: the line whose text is exactly text is rendered.
+// lineText is a rendered entry's text, as a JS function of its element.
+const lineText = `(l => l.querySelector('[data-searchable]')?.textContent.trim())`
+
+// lineTop is where the message whose text is exactly text sits below the
+// log's top, in px; null while it is not rendered.
+func lineTop(text string) string {
+	return fmt.Sprintf(`(() => { const el = %s.find(l => %s(l) === %q); return el ? el.getBoundingClientRect().top - %s.getBoundingClientRect().top : null })()`, historyLines, lineText, text, historyLog)
+}
+
+// hasLine: the message whose text is exactly text is rendered.
 func hasLine(text string) string {
-	return fmt.Sprintf(`%s.some(l => l.querySelector('.text')?.textContent === %q)`, historyLines, text)
+	return fmt.Sprintf(`%s.some(l => %s(l) === %q)`, historyLines, lineText, text)
 }
 
 // openHistory opens the task page at width×height on s1's History tab.
@@ -228,7 +245,7 @@ func TestHistoryShowsTheNewestAndLoadsOlderWithoutAJump(t *testing.T) {
 		chromedp.Evaluate(historyLog+`.scrollTop = 0`, nil),
 		chromedp.Poll(hasLine("entry 1"), nil, chromedp.WithPollingTimeout(5*time.Second)),
 		chromedp.Evaluate(historyLog+`.scrollTop = 0`, nil),
-		chromedp.Poll(`document.querySelector('.session .transcript > .older').textContent.includes('Start of the conversation')`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Poll(`document.querySelector('.session .chat > .older').textContent.includes('Start of the conversation')`, nil, chromedp.WithPollingTimeout(5*time.Second)),
 	)
 	if err != nil {
 		t.Fatalf("%v\nJS errors: %v", err, errs.all())
@@ -296,7 +313,7 @@ func TestHistoryCatchesUpWithoutMovingAReaderWhoScrolledUp(t *testing.T) {
 	)
 	if err != nil {
 		var state string
-		_ = chromedp.Run(ctx, chromedp.Evaluate(`(l => JSON.stringify({top: l.scrollTop, h: l.scrollHeight, c: l.clientHeight, lines: `+historyLines+`.length, last: `+historyLines+`.at(-1)?.textContent, jump: `+historyJump+`?.textContent}))(`+historyLog+`)`, &state))
+		_ = chromedp.Run(ctx, chromedp.Evaluate(`(l => JSON.stringify({top: l.scrollTop, h: l.scrollHeight, c: l.clientHeight, lines: `+historyLines+`.length, last: `+lineText+`(`+historyLines+`.at(-1)), jump: `+historyJump+`?.textContent}))(`+historyLog+`)`, &state))
 		t.Fatalf("%v (jump %q; %s)\nJS errors: %v", err, label, state, errs.all())
 	}
 	shoot(t, ctx, "history-desktop-dark")
@@ -374,25 +391,31 @@ func TestHistoryOfAnEndedSessionAndOfOneWithoutATranscript(t *testing.T) {
 	noJSErrors(t, errs)
 }
 
-// Agent text is text: markup in it is shown, never run. The tab, the log and
-// a tool line are reached with the keyboard, and Enter opens the tool line.
-func TestHistoryIsTextAndWorksFromTheKeyboard(t *testing.T) {
+// History is a chat. The agent's Markdown shows as the server rendered it;
+// text without html is text, so markup in it is shown, never run. The tab,
+// the log and a tool card are reached with the keyboard: Enter opens the
+// card, then a call, which shows what it ran.
+func TestHistoryIsAChatAndWorksFromTheKeyboard(t *testing.T) {
 	tr := &fakeTranscript{entries: []transcriptEntry{
 		{Cursor: "a", Kind: "user", Text: `<img src=x onerror="window.__pwned=1">`},
 		{Cursor: "b", Kind: "tool_use", Tool: "Bash", Text: "git status --short"},
 		{Cursor: "c", Kind: "tool_result", Tool: "Bash", Text: " M a.js\n M b.js", IsError: true},
+		{Cursor: "d", Kind: "assistant", Text: "**Fixed** in `a.go`\n\n```go\nx := 1\n```", HTML: "<p><strong>Fixed</strong> in <code>a.go</code></p>\n<pre><code class=\"language-go\">x := 1\n</code></pre>\n"},
 	}}
 	srv := historyPage(t, liveSession(), tr)
 	ctx, errs := openHistory(t, srv, 1280, 800, "light")
 	var pwned, imgs int
-	var shown, expanded, detail string
+	var shown, bold, lang, card, call, ran string
 	var reached []string
 	err := chromedp.Run(ctx,
 		chromedp.Poll(historyLines+`.length === 3`, nil, chromedp.WithPollingTimeout(10*time.Second)),
 		chromedp.Sleep(200*time.Millisecond),
 		chromedp.Evaluate(`window.__pwned ? 1 : 0`, &pwned),
 		chromedp.Evaluate(historyLog+`.querySelectorAll('img').length`, &imgs),
-		chromedp.Evaluate(historyLines+`[0].querySelector('.text').textContent`, &shown),
+		chromedp.Evaluate(`document.querySelector('.session .turn[data-who=person] .prose').textContent`, &shown),
+		chromedp.Evaluate(`document.querySelector('.session .turn[data-who=agent] .prose strong')?.textContent ?? ''`, &bold),
+		chromedp.Evaluate(childTexts(`document.querySelector('.session .turn[data-who=agent] .codeblock .head')`), &lang),
+		chromedp.Evaluate(childTexts(`document.querySelector('.session .activity .summary')`), &card),
 		chromedp.Focus(`.pane-tabs [role=tab][aria-selected=true]`, chromedp.ByQuery),
 		chromedp.ActionFunc(func(ctx context.Context) error {
 			for i := 0; i < 20; i++ {
@@ -408,33 +431,43 @@ func TestHistoryIsTextAndWorksFromTheKeyboard(t *testing.T) {
 					return nil
 				}
 			}
-			return fmt.Errorf("Tab never reached a tool line: %v", reached)
+			return fmt.Errorf("Tab never reached a tool card: %v", reached)
 		}),
 		chromedp.KeyEvent(kb.Enter),
-		chromedp.Poll(`document.activeElement.getAttribute('aria-expanded') === 'true'`, nil, chromedp.WithPollingTimeout(2*time.Second)),
-		chromedp.Evaluate(`document.activeElement.getAttribute('aria-expanded')`, &expanded),
-		chromedp.Evaluate(`(d => d && getComputedStyle(d).display !== 'none' ? d.textContent : '')(document.activeElement.parentElement.querySelector('.detail'))`, &detail),
+		chromedp.Poll(`document.activeElement.getAttribute('aria-expanded') === 'true' && !!document.querySelector('.session .call > button')`, nil, chromedp.WithPollingTimeout(2*time.Second)),
+		chromedp.KeyEvent(kb.Tab),
+		chromedp.Evaluate(`document.activeElement.closest('.call')?.dataset.state ?? document.activeElement.tagName`, &call),
+		chromedp.KeyEvent(kb.Enter),
+		chromedp.Poll(`!!document.querySelector('.session .call .io .in')`, nil, chromedp.WithPollingTimeout(2*time.Second)),
+		chromedp.Evaluate(`document.querySelector('.session .call .io .in').textContent`, &ran),
 	)
 	if err != nil {
 		t.Fatalf("%v (reached %v)\nJS errors: %v", err, reached, errs.all())
 	}
 	shoot(t, ctx, "history-desktop-light")
 	if pwned != 0 || imgs != 0 {
-		t.Errorf("agent text became markup: %d images, ran %d", imgs, pwned)
+		t.Errorf("text without html became markup: %d images, ran %d", imgs, pwned)
 	}
 	if shown != `<img src=x onerror="window.__pwned=1">` {
-		t.Errorf("the user line reads %q", shown)
+		t.Errorf("the person's message reads %q", shown)
+	}
+	if bold != "Fixed" {
+		t.Errorf("the agent's Markdown did not render: bold %q", bold)
+	}
+	if lang != "go Copy" {
+		t.Errorf("the code block's head reads %q, want its language and Copy", lang)
+	}
+	if card != "1 tool call Bash 1 failed" {
+		t.Errorf("the tool card reads %q", card)
 	}
 	if !slices.Contains(reached, "log") {
 		t.Errorf("Tab went %v, never through the log", reached)
 	}
-	if detail != "git status --short" {
-		t.Errorf("Enter on the tool line shows %q", detail)
+	if call != "error" {
+		t.Errorf("Tab after the card reached %q, want the failed call", call)
 	}
-	var errorKind string
-	_ = chromedp.Run(ctx, chromedp.Evaluate(historyLines+`[2].dataset.kind`, &errorKind))
-	if errorKind != "error" {
-		t.Errorf("a failed tool result is %q, want marked as an error", errorKind)
+	if ran != "git status --short" {
+		t.Errorf("Enter on the call shows %q", ran)
 	}
 	noJSErrors(t, errs)
 }
@@ -447,7 +480,7 @@ func TestHistoryOnAPhone(t *testing.T) {
 	srv := historyPage(t, liveSession(), tr)
 	ctx, errs := browser(t)
 	var problems string
-	var timeShown bool
+	var avatarShown bool
 	err := chromedp.Run(ctx,
 		chromedp.EmulateViewport(320, 640),
 		emulateColorScheme("dark"),
@@ -462,7 +495,7 @@ func TestHistoryOnAPhone(t *testing.T) {
 			`+historyLog+`.scrollWidth > `+historyLog+`.clientWidth + 1 ? 'the log scrolls sideways' : '',
 			`+historyLog+`.scrollHeight > `+historyLog+`.clientHeight ? '' : 'the log does not scroll',
 			(r => r.right <= 320 && r.left >= 0 ? '' : 'the log is off screen')(`+historyLog+`.getBoundingClientRect())].filter(Boolean).join(', ')`, &problems),
-		chromedp.Evaluate(`getComputedStyle(`+historyLines+`[0].querySelector('time')).display !== 'none'`, &timeShown),
+		chromedp.Evaluate(`getComputedStyle(document.querySelector('.session .turn .avatar')).display !== 'none'`, &avatarShown),
 	)
 	if err != nil {
 		t.Fatalf("%v\nJS errors: %v", err, errs.all())
@@ -471,8 +504,8 @@ func TestHistoryOnAPhone(t *testing.T) {
 	if problems != "" {
 		t.Errorf("at 320px: %s", problems)
 	}
-	if timeShown {
-		t.Error("at 320px the time column should fold away")
+	if avatarShown {
+		t.Error("at 320px the avatars should fold away")
 	}
 	noJSErrors(t, errs)
 }

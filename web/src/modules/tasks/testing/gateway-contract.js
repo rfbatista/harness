@@ -51,6 +51,20 @@ export function taskGatewayContract(name, makeSubject) {
     assert.deepEqual([t.projectId, t.title, t.description, t.status], ["p1", "Write docs", "the TUI section", "todo"]);
   });
 
+  contract("createTask with a parent makes a child of that feature task; one level only", async () => {
+    const { gateway } = makeSubject({ projects: ["p1"], tasks: [makeTask({ id: "f1", title: "Exports" })], sessions: [] });
+    const child = await gateway.createTask({ projectId: "p1", title: "CSV export", description: "", status: "todo", parentId: "f1" });
+    assert.equal(child.parentId, "f1");
+    const top = await gateway.createTask({ projectId: "p1", title: "Plain", description: "", status: "todo" });
+    assert.equal(top.parentId, "", "no parent given: top-level");
+    await assert.rejects(gateway.createTask({ projectId: "p1", title: "x", description: "", status: "todo", parentId: child.id }), Codes.TICKET_PARENT_INVALID);
+    await assert.rejects(gateway.createTask({ projectId: "p1", title: "x", description: "", status: "todo", parentId: "ghost" }), Codes.TICKET_PARENT_INVALID);
+    const cleared = await gateway.updateTask({ id: child.id, parentId: "" });
+    assert.equal(cleared.parentId, "", "an empty parent clears it");
+    assert.equal((await gateway.updateTask({ id: child.id, title: "CSV" })).parentId, "", "absent keeps it");
+    await assert.rejects(gateway.updateTask({ id: "f1", parentId: "f1" }), Codes.TICKET_PARENT_INVALID);
+  });
+
   contract("createTask refuses a missing title, an unknown status or project", async () => {
     const { gateway } = makeSubject({ projects: ["p1"], tasks: [], sessions: [] });
     await assert.rejects(gateway.createTask({ projectId: "p1", title: " ", description: "", status: "todo" }), Codes.INVALID_INPUT);

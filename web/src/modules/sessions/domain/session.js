@@ -15,7 +15,8 @@
  * @property {string} ticketId          the task it works on; "" for none. A task can run several sessions at once.
  * @property {string} task              what the session was asked to do
  * @property {string} agentId           "" when no agent persona is attached
- * @property {""|"architect"|"implement"|"design"} mode  the role it was started in on top of its agent; "" for none
+ * @property {string} model             the model it runs on (a CLI alias such as "opus"); "" when the CLI chose
+ * @property {""|"architect"|"implement"|"design"|"product"} mode  the role it was started in on top of its agent; "" for none. A "product" session may run with no task (ticketId ""): a feature brainstorm at project level.
  * @property {SessionStatus} status
  * @property {number} pendingApprovals  tool calls waiting for the developer
  * @property {string} lastAction        "" until the agent has done something
@@ -29,7 +30,17 @@
  * @property {import("./channel.js").StatusCheck | null} statusCheck  the loop checking on it, on a delegate the architect started
  * @property {readonly string[]} tokenSavers              the token savers it runs with, fixed when it started
  * @property {readonly string[]} tokenSaversNotInstalled  savers on for it but not installed, so it runs without them
+ * @property {{ sandboxed: boolean, visibility: string, driver: string } | null} sandbox  what its sandbox was when it started or last resumed; null for a session from before the sandbox
+ * @property {MergeResult | null} lastMerge  how the newest merge of its branch ended; null when never tried
  * @property {Date} updatedAt
+ *
+ * @typedef {object} MergeResult  merged: the new HEAD of `into`; refused: the code and the reason
+ * @property {Date} at
+ * @property {boolean} merged
+ * @property {string} into     the default branch merged into; "" when not known
+ * @property {string} head     the new HEAD of `into`, "" for a refusal
+ * @property {string} code     MERGE_NO_BRANCH, MERGE_NO_CHECKOUT, MERGE_CHECKOUT_DIRTY, MERGE_WRONG_BRANCH, MERGE_ALREADY_MERGED, MERGE_CONFLICT, MERGE_BRANCH_NOT_FOUND or MERGE_FAILED; "" when merged
+ * @property {string} message  the reason, readable
  *
  * @typedef {"architect"|"delegate"|""} Role  "" is a peer: started by a person, or outside the architect's tree
  *
@@ -55,7 +66,15 @@ export const Status = Object.freeze({
 export const STATUSES = Object.freeze(Object.values(Status));
 
 /** The roles a session can be started in on top of its agent. */
-export const MODES = Object.freeze(["", "architect", "implement", "design"]);
+export const MODES = Object.freeze(["", "architect", "implement", "design", "product"]);
+
+/** The one mode a session may start in with no task (ADR 0016). */
+export const PRODUCT_MODE = "product";
+
+/** Why a start request cannot run without a task, or "" when it can. */
+export function noTaskProblem(mode) {
+  return (mode ?? "") === PRODUCT_MODE ? "" : "Only a product session can start without a task.";
+}
 
 /** The process behind the session is gone for good (domain.SessionStatus.IsTerminal). */
 export const isTerminal = (session) =>

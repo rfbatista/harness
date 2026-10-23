@@ -82,6 +82,21 @@ templ topBar(f Frame) {
 				@icon("saver")
 			</a>
 		}
+		if f.Top.ModelsHref != "" {
+			<a class="[ button ]" data-variant="ghost" data-icon href={ templ.SafeURL(f.Top.ModelsHref) } aria-label="Models" title="Models" { currentAttrs(f.Top.OnModels)... }>
+				@icon("model")
+			</a>
+		}
+		if f.Top.AgentIsolationHref != "" {
+			<a class="[ button ]" data-variant="ghost" data-icon href={ templ.SafeURL(f.Top.AgentIsolationHref) } aria-label="Agent isolation" title="Agent isolation" { currentAttrs(f.Top.OnAgentIsolation)... } { blockingAttrs(f.Top.AgentIsolationAttention)... }>
+				@icon("shield")
+			</a>
+		}
+		if f.Top.ServerHref != "" {
+			<a class="[ button ]" data-variant="ghost" data-icon href={ templ.SafeURL(f.Top.ServerHref) } aria-label="Server" title="Server" { currentAttrs(f.Top.OnServer)... }>
+				@icon("server")
+			</a>
+		}
 		if f.Notifications != nil {
 			@notificationsBell(f.Notifications)
 		}

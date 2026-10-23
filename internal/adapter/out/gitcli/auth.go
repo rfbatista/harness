@@ -76,6 +76,11 @@ type AuthBroker struct {
 	// into every gitconfig; "" when it has none. It is a path, not a
 	// credential.
 	ExcludesFile string
+	// IncludeFiles are the person's own git config files, included first in
+	// every session's global config (not an operation's), so identity, aliases
+	// and ignores work; the harness's settings follow and win. A file that is
+	// not there is skipped by git.
+	IncludeFiles []string
 	// Inherited is the server's own environment, which decides which
 	// identity variables must be overwritten; nil reads os.Environ.
 	Inherited []string
@@ -132,7 +137,7 @@ func (a *AuthBroker) OpenSession(sessionID string, src ports.GitAuthSource) ([]s
 	if err != nil {
 		return nil, "", err
 	}
-	env, err := a.open(dir, src)
+	env, err := a.open(dir, src, true)
 	if err != nil {
 		return nil, "", err
 	}
@@ -170,7 +175,7 @@ func (a *AuthBroker) OpenOperation(src ports.GitAuthSource) ([]string, func(), e
 		return nil, nil, err
 	}
 	dir := filepath.Join(a.Root, "ops", hex.EncodeToString(b[:]))
-	env, err := a.open(dir, src)
+	env, err := a.open(dir, src, false)
 	if err != nil {
 		_ = a.close(dir)
 		return nil, nil, err
@@ -208,7 +213,7 @@ func (a *AuthBroker) SweepOperations() error {
 }
 
 // open writes dir's files from src's material now and serves its sockets.
-func (a *AuthBroker) open(dir string, src ports.GitAuthSource) ([]string, error) {
+func (a *AuthBroker) open(dir string, src ports.GitAuthSource, includes bool) ([]string, error) {
 	m, err := src()
 	if err != nil {
 		return nil, err
@@ -226,7 +231,7 @@ func (a *AuthBroker) open(dir string, src ports.GitAuthSource) ([]string, error)
 		a.served[dir] = s
 	}
 	s.setSource(src)
-	env, err := a.write(dir, s.sockets, m)
+	env, err := a.write(dir, s.sockets, m, includes)
 	if err != nil {
 		return nil, err
 	}
@@ -248,7 +253,7 @@ func (a *AuthBroker) close(dir string) error {
 
 // write fills dir and answers the environment that points git at it and at
 // its sockets.
-func (a *AuthBroker) write(dir, sockets string, m ports.GitAuthMaterial) ([]string, error) {
+func (a *AuthBroker) write(dir, sockets string, m ports.GitAuthMaterial, includes bool) ([]string, error) {
 	if err := os.MkdirAll(filepath.Join(dir, ghDir), 0o700); err != nil {
 		return nil, err
 	}
@@ -262,7 +267,7 @@ func (a *AuthBroker) write(dir, sockets string, m ports.GitAuthMaterial) ([]stri
 			return nil, err
 		}
 	}
-	if err := writeFile(filepath.Join(dir, gitconfigFile), a.gitconfig(m.Identity), 0o600); err != nil {
+	if err := writeFile(filepath.Join(dir, gitconfigFile), a.gitconfig(m, includes), 0o600); err != nil {
 		return nil, err
 	}
 	env := a.env(dir, sockets, m)
@@ -272,14 +277,27 @@ func (a *AuthBroker) write(dir, sockets string, m ports.GitAuthMaterial) ([]stri
 	return env, nil
 }
 
-func (a *AuthBroker) gitconfig(id *domain.GitIdentity) string {
+func (a *AuthBroker) gitconfig(m ports.GitAuthMaterial, includes bool) string {
+	id := m.Identity
 	var b strings.Builder
-	b.WriteString("# Written by the harness; the machine's git config is not read.\n[user]\n\tuseConfigOnly = true\n")
+	b.WriteString("# Written by the harness. A session's config includes the person's own files\n# first; what follows wins.\n")
+	if includes {
+		for _, f := range a.IncludeFiles {
+			fmt.Fprintf(&b, "[include]\n\tpath = %s\n", configValue(f))
+		}
+	}
+	b.WriteString("[user]\n\tuseConfigOnly = true\n")
 	if id != nil {
 		fmt.Fprintf(&b, "\tname = %s\n\temail = %s\n", configValue(id.Name), configValue(id.Email))
 	}
 	if a.ExcludesFile != "" {
 		fmt.Fprintf(&b, "[core]\n\texcludesFile = %s\n", configValue(a.ExcludesFile))
+	}
+	if f := m.SSHFallback; f != nil {
+		// Only this host's https URLs, and only here: the checkout's own
+		// remote is never rewritten.
+		fmt.Fprintf(&b, "[url %s]\n\tinsteadOf = %s\n",
+			configValue(domain.SSHFallbackBase(f.Host, f.User)), configValue("https://"+f.Host+"/"))
 	}
 	return b.String()
 }

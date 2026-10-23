@@ -63,6 +63,8 @@ func TestUsagePageRendersWithItsSeedAndTheRailLinksIt(t *testing.T) {
 		`"top_tasks":[{"task_id":"t-feed"`,
 		`"records":[{"id":"req-7"`,
 		`x-effect="draw($el)"`,
+		`x-data="liveCallLog" data-project-id="p1"`,
+		`data-testid="live-toggle"`,
 		`Estimated cost`,
 	} {
 		if !strings.Contains(body, want) {

@@ -16,16 +16,18 @@ export function tasksGateway(api) {
   const gateway = {
     decodeTask: toTask,
 
-    async createTask({ projectId, title, description, status }) {
-      const body = await api.post("/create_ticket", { project_id: projectId, title, description, status });
-      return toTask(body?.ticket);
+    async createTask({ projectId, title, description, status, parentId }) {
+      const body = { project_id: projectId, title, description, status };
+      if (parentId) body.parent_id = parentId;
+      return toTask((await api.post("/create_ticket", body))?.ticket);
     },
 
-    async updateTask({ id, title, description, status }) {
+    async updateTask({ id, title, description, status, parentId }) {
       const body = { ticket_id: id };
       if (title !== undefined) body.title = title;
       if (description !== undefined) body.description = description;
       if (status !== undefined) body.status = status;
+      if (parentId !== undefined) body.parent_id = parentId; // "" clears it; absent keeps it
       const res = await api.post("/update_ticket", body);
       return toTask(res?.ticket);
     },

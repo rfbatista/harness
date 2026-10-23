@@ -38,10 +38,13 @@ type TranscriptReader struct {
 	// Dir is the CLI's config directory; empty means $CLAUDE_CONFIG_DIR, else
 	// ~/.claude.
 	Dir string
+	// Legacy is searched, read-only, for what Dir does not have (see
+	// Transcripts.Legacy). Dir wins when both hold a conversation.
+	Legacy string
 
 	mu      sync.Mutex
-	paths   map[string]string // conversation id → path relative to projects/
-	indexes map[string]*index // by relative path
+	paths   map[string]string // conversation id → config dir + path relative to projects/
+	indexes map[string]*index // by config dir + relative path
 	clock   uint64
 }
 
@@ -62,15 +65,21 @@ func (r *TranscriptReader) ReadTranscript(dir, id string, q ports.TranscriptQuer
 	if !conversationID.MatchString(id) {
 		return ports.TranscriptPage{}, missing(id)
 	}
-	root, err := os.OpenRoot(filepath.Join(Transcripts{Dir: r.Dir}.root(), "projects"))
-	if err != nil {
-		return ports.TranscriptPage{}, missing(id)
+	var f *os.File
+	var rel string
+	for _, dir0 := range (Transcripts{Dir: r.Dir, Legacy: r.Legacy}).roots() {
+		root, err := os.OpenRoot(filepath.Join(dir0, "projects"))
+		if err != nil {
+			continue
+		}
+		rel, f = r.open(root, dir0, dir, id)
+		root.Close()
+		if f != nil {
+			break
+		}
 	}
-	defer root.Close()
-
-	rel, f, err := r.open(root, dir, id)
-	if err != nil {
-		return ports.TranscriptPage{}, err
+	if f == nil {
+		return ports.TranscriptPage{}, missing(id)
 	}
 	defer f.Close()
 
@@ -87,11 +96,14 @@ func (r *TranscriptReader) ReadTranscript(dir, id string, q ports.TranscriptQuer
 // files it under the directory it ran in, spelled as given or with symlinks
 // resolved; when that directory is gone and neither spelling finds it, the
 // projects directory is searched for the id, which is a UUID.
-func (r *TranscriptReader) open(root *os.Root, dir, id string) (string, *os.File, error) {
+func (r *TranscriptReader) open(root *os.Root, home, dir, id string) (string, *os.File) {
 	name := id + ".jsonl"
 	r.mu.Lock()
-	cached := r.paths[id]
+	cached, ok := strings.CutPrefix(r.paths[id], home+"\x00")
 	r.mu.Unlock()
+	if !ok {
+		cached = ""
+	}
 
 	candidates := []string{cached}
 	if dir != "" {
@@ -105,13 +117,13 @@ func (r *TranscriptReader) open(root *os.Root, dir, id string) (string, *os.File
 			continue
 		}
 		if f, err := openFile(root, rel); err == nil {
-			r.remember(id, rel)
-			return rel, f, nil
+			r.remember(id, home+"\x00"+rel)
+			return home + "\x00" + rel, f
 		}
 	}
 	entries, err := fs.ReadDir(root.FS(), ".")
 	if err != nil {
-		return "", nil, missing(id)
+		return "", nil
 	}
 	for _, e := range entries {
 		if !e.IsDir() {
@@ -119,11 +131,11 @@ func (r *TranscriptReader) open(root *os.Root, dir, id string) (string, *os.File
 		}
 		rel := e.Name() + "/" + name
 		if f, err := openFile(root, rel); err == nil {
-			r.remember(id, rel)
-			return rel, f, nil
+			r.remember(id, home+"\x00"+rel)
+			return home + "\x00" + rel, f
 		}
 	}
-	return "", nil, missing(id)
+	return "", nil
 }
 
 // openFile opens a regular file under root, read-only. Root refuses any

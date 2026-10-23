@@ -54,11 +54,17 @@ type Services struct {
 	// PullRequests opens workspaces' branches as pull requests; nil answers
 	// 503.
 	PullRequests ports.PullRequests
+	// Merges merges a session's branch into its repository's default branch
+	// in the local checkout; nil answers 503.
+	Merges ports.BranchMerger
 	// Notifications is the person's inbox across every project; nil answers
 	// 503.
 	Notifications ports.Notifications
 	// Usage reads the token usage the LLM proxy measured; nil answers 503.
 	Usage ports.UsageReader
+	// LiveCalls opens the live call stream of a project's Usage page; nil
+	// answers 503.
+	LiveCalls ports.LiveCalls
 	// Code reads code for the code views (/api/code/*); nil answers 503.
 	Code ports.CodeBrowser
 	// GitCredentials keeps the credentials git remote operations use; nil
@@ -73,6 +79,25 @@ type Services struct {
 	// RepositoryIndexes lists and rebuilds repositories' codegraph indexes;
 	// nil answers 503.
 	RepositoryIndexes ports.RepositoryIndexes
+	// SandboxSettings keeps the person's sandbox switch and extra paths; nil
+	// answers 503. SandboxDriver says which driver the platform has (nil
+	// result: none).
+	SandboxSettings ports.SandboxSettings
+	SandboxDriver   func() ports.SandboxDriver
+	// ManagedClaude installs and switches the claude agents run; nil answers
+	// 503. ManagedClaudeBin says which binary agents run (the override
+	// included); nil reads as no override.
+	ManagedClaude    ports.ManagedClaude
+	ManagedClaudeBin ports.ManagedClaudeBin
+	// AgentCredential keeps the credential agents sign in with; nil answers
+	// 503.
+	AgentCredential ports.AgentCredential
+	// AgentOAuth runs the sign-in flow that stores the agent credential; nil
+	// answers 503.
+	AgentOAuth ports.AgentOAuth
+	// AgentAuth reads and ends the login the agent home keeps (`claude auth
+	// status` and `claude auth logout`); nil answers 503.
+	AgentAuth ports.AgentAuth
 }
 
 // Handler serves the application's driving ports as HTTP endpoints (the same
@@ -104,14 +129,25 @@ type Handler struct {
 	comments       ports.TaskComments
 	archive        ports.TicketArchiver
 	pullRequests   ports.PullRequests
+	merges         ports.BranchMerger
 	notifications  ports.Notifications
 	usage          ports.UsageReader
+	liveCalls      ports.LiveCalls
 	code           ports.CodeBrowser
 	gitCredentials ports.GitCredentials
 	shells         ports.ShellEdits
 
 	tokenSaverInstalls ports.TokenSaverInstalls
 	repositoryIndexes  ports.RepositoryIndexes
+
+	sandboxSettings ports.SandboxSettings
+	sandboxDriver   func() ports.SandboxDriver
+
+	managedClaude    ports.ManagedClaude
+	managedClaudeBin ports.ManagedClaudeBin
+	agentCredential  ports.AgentCredential
+	agentOAuth       ports.AgentOAuth
+	agentAuth        ports.AgentAuth
 
 	streams streamRegistry // the browser tabs' live streams (stream.go)
 }
@@ -141,14 +177,25 @@ func NewHandler(s Services) *Handler {
 		comments:       s.TaskComments,
 		archive:        s.TaskArchive,
 		pullRequests:   s.PullRequests,
+		merges:         s.Merges,
 		notifications:  s.Notifications,
 		usage:          s.Usage,
+		liveCalls:      s.LiveCalls,
 		code:           s.Code,
 		gitCredentials: s.GitCredentials,
 		shells:         s.Shells,
 
 		tokenSaverInstalls: s.TokenSaverInstalls,
 		repositoryIndexes:  s.RepositoryIndexes,
+
+		sandboxSettings: s.SandboxSettings,
+		sandboxDriver:   s.SandboxDriver,
+
+		managedClaude:    s.ManagedClaude,
+		managedClaudeBin: s.ManagedClaudeBin,
+		agentCredential:  s.AgentCredential,
+		agentOAuth:       s.AgentOAuth,
+		agentAuth:        s.AgentAuth,
 	}
 }
 

@@ -80,6 +80,9 @@ func (s *Service) UseTokenSavers(d TokenSaverDeps) {
 	if err := s.savers.absolutize(); err != nil {
 		slog.Warn("token savers: relative installation paths not made absolute", "err", err)
 	}
+	if err := s.savers.relocate(); err != nil {
+		slog.Warn("token savers: installations in a moved data dir not relocated", "err", err)
+	}
 	if err := s.savers.prune(); err != nil {
 		slog.Warn("token savers: old versions not pruned", "dir", d.Dir, "err", err)
 	}
@@ -106,6 +109,35 @@ func (t *tokenSavers) absolutize() error {
 			return err
 		}
 		if err := t.Installations.Put(&fixed); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// relocate rewrites installations recorded outside Dir whose version is
+// under Dir, as after a person moved the data dir: their recorded paths
+// point at the old place, where nothing is any more.
+func (t *tokenSavers) relocate() error {
+	list, err := t.Installations.List()
+	if err != nil {
+		return err
+	}
+	for _, in := range list {
+		dir := filepath.Join(t.Dir, string(in.Saver), in.Version)
+		if in.Dir == dir {
+			continue
+		}
+		if info, err := os.Stat(dir); err != nil || !info.IsDir() {
+			continue
+		}
+		rel, err := filepath.Rel(in.Dir, in.Path)
+		if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			continue // its file was never inside its dir
+		}
+		moved := *in
+		moved.Dir, moved.Path = dir, filepath.Join(dir, rel)
+		if err := t.Installations.Put(&moved); err != nil {
 			return err
 		}
 	}

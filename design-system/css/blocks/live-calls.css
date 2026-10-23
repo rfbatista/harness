@@ -1,0 +1,182 @@
+/*
+ * Live call log — the Usage page's Live view: the LLM calls of the project as
+ * they happen, one collapsed row each, oldest first, that expands into tabs
+ * (Request, Response, Message, Usage) whose values are JSON trees with folding
+ * objects and arrays (<details>).
+ * <section class="live-calls">
+ *   <div class="live-calls-bar"><span class="badge">…</span><button class="button">Start</button><span class="count">…</span></div>
+ *   <ol class="call-list"><li class="call" data-call data-failed>
+ *     <div class="call-summary"><button class="expander" aria-expanded><time>…</time><span class="spinner"></span>
+ *       <span class="request">…</span><span class="http-status">…</span></button><a class="session">…</a><a class="task">…</a>
+ *       <span class="model">…</span><span class="figures">…</span></div>
+ *     <div class="call-body"><div class="tabs" role="tablist">…</div><div class="call-actions">…</div><div class="json-tree">…</div></div>
+ *   </li><li class="call-missed">…</li></ol>
+ * </section>
+ * The JSON colours are the syntax tokens (syntax.css); the tree is text only.
+ */
+
+@layer blocks {
+  .live-calls-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-xs) var(--space-s);
+    padding-inline: var(--space-l);
+
+    & input[type="search"] { inline-size: 14rem; }
+
+    & .count {
+      display: inline-flex;
+      gap: var(--space-s);
+      margin-inline-start: auto;
+      color: var(--color-ink-faint);
+      font-size: var(--text-sm);
+      font-variant-numeric: tabular-nums;
+    }
+  }
+
+  .call-list {
+    display: grid;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+
+    & > li + li { border-block-start: var(--border-width) solid var(--color-line); }
+    & > .call[data-failed] { box-shadow: inset 3px 0 0 var(--color-danger); }
+  }
+
+  .call-summary {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--space-2xs) var(--space-s);
+    padding: var(--space-xs) var(--space-l);
+    font-size: var(--text-sm);
+
+    &:hover { background: var(--color-sunken); }
+
+    & .expander {
+      display: inline-flex;
+      align-items: baseline;
+      gap: var(--space-s);
+      padding: 0;
+      border: 0;
+      background: none;
+      color: var(--color-ink);
+      font: inherit;
+      text-align: start;
+      cursor: pointer;
+    }
+    & time { color: var(--color-ink-faint); font-variant-numeric: tabular-nums; }
+    & .request { font-family: var(--font-mono); font-size: var(--text-xs); }
+    & .http-status { font-variant-numeric: tabular-nums; color: var(--color-ink-muted); }
+    & .model { color: var(--color-ink-muted); font-family: var(--font-mono); font-size: var(--text-xs); }
+    & .session, & .task {
+      min-inline-size: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    & .session { flex: 0 1 12rem; }
+    & .task { flex: 1 1 8rem; }
+    & .figures {
+      display: inline-flex;
+      gap: var(--space-s);
+      margin-inline-start: auto;
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
+    & .duration { color: var(--color-ink-faint); }
+  }
+
+  .call[data-failed] .call-summary .http-status { color: var(--color-danger); }
+
+  /* In flight: a quiet ring where the status will be. */
+  .call .spinner {
+    inline-size: 0.75rem;
+    block-size: 0.75rem;
+    align-self: center;
+    border: 2px solid var(--color-line);
+    border-block-start-color: var(--color-ink-muted);
+    border-radius: 50%;
+    animation: button-spin 700ms linear infinite;
+
+    @media (prefers-reduced-motion: reduce) { animation-duration: 3s; }
+  }
+
+  .call-missed {
+    padding: var(--space-xs) var(--space-l);
+    border-block: var(--border-width) dashed var(--color-attention);
+    background: var(--color-attention-wash);
+    font-size: var(--text-sm);
+  }
+
+  .call-body {
+    display: grid;
+    gap: var(--space-2xs);
+    padding: 0 var(--space-l) var(--space-s);
+
+    & .tabs { padding-inline: 0; }
+  }
+
+  .call-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--space-xs);
+  }
+
+  .call-note {
+    margin: 0;
+    color: var(--color-ink-faint);
+    font-size: var(--text-sm);
+  }
+
+  .json-tree {
+    overflow-x: auto;
+    padding: var(--space-xs) var(--space-s);
+    border-radius: var(--radius-sm);
+    background: var(--color-code);
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    line-height: 1.6;
+
+    & .json-fold { display: inline; }
+    & .json-fold > summary {
+      display: inline;
+      list-style: none;
+      cursor: pointer;
+    }
+    & .json-fold > summary::-webkit-details-marker { display: none; }
+    & .json-fold > summary::before {
+      content: "▾";
+      display: inline-block;
+      inline-size: 1.5ch;
+      color: var(--color-ink-faint);
+    }
+    & .json-fold:not([open]) > summary::before { content: "▸"; }
+    & .json-fold:not([open]) > summary::after { content: "…"; color: var(--color-ink-faint); }
+    & .json-size {
+      margin-inline: var(--space-3xs);
+      color: var(--color-ink-faint);
+      font-family: var(--font-sans);
+    }
+    & .json-fold[open] > summary .json-size { display: none; }
+    & .json-members { padding-inline-start: 2ch; }
+    & .json-member { white-space: pre-wrap; overflow-wrap: anywhere; }
+    & .json-key { color: var(--color-tok-attr); }
+    & .json-string { color: var(--color-tok-string); }
+    & .json-number { color: var(--color-tok-number); }
+    & :is(.json-boolean, .json-null) { color: var(--color-tok-keyword); }
+    & .json-punct { color: var(--color-ink-muted); }
+    & .json-match {
+      border-radius: 2px;
+      background: var(--color-attention-wash);
+      box-shadow: 0 0 0 1px var(--color-attention);
+      color: inherit;
+    }
+
+    @media (forced-colors: active) {
+      & [class^="json-"] { color: CanvasText; }
+    }
+  }
+}

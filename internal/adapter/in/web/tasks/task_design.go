@@ -55,7 +55,7 @@ func (h Handler) TaskDesign(w http.ResponseWriter, r *http.Request) error {
 	if task.ProjectID != project.ID {
 		return errs.Newf("TICKET_NOT_FOUND", "task %s is not in project %s", task.ID, project.Name)
 	}
-	tickets, err := h.Tasks.ListTickets(ctx, project.ID)
+	tickets, err := h.Tasks.ListTickets(ctx, project.ID, ports.TicketFilter{})
 	if err != nil {
 		return err
 	}

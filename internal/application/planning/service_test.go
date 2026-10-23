@@ -55,7 +55,7 @@ func code(err error) string {
 func TestCreateTicket_DefaultsAndValidation(t *testing.T) {
 	svc, pid := newService(t)
 
-	tk, err := svc.CreateTicket(context.Background(), pid, "T", "", "")
+	tk, err := svc.CreateTicket(context.Background(), pid, "T", "", "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -63,13 +63,13 @@ func TestCreateTicket_DefaultsAndValidation(t *testing.T) {
 		t.Fatalf("want default backlog, got %q", tk.Status)
 	}
 
-	if _, err := svc.CreateTicket(context.Background(), pid, "", "", ""); code(err) != "INVALID_INPUT" {
+	if _, err := svc.CreateTicket(context.Background(), pid, "", "", "", ""); code(err) != "INVALID_INPUT" {
 		t.Fatalf("want INVALID_INPUT, got %v", err)
 	}
-	if _, err := svc.CreateTicket(context.Background(), "nope", "T", "", ""); code(err) != "PROJECT_NOT_FOUND" {
+	if _, err := svc.CreateTicket(context.Background(), "nope", "T", "", "", ""); code(err) != "PROJECT_NOT_FOUND" {
 		t.Fatalf("want PROJECT_NOT_FOUND, got %v", err)
 	}
-	if _, err := svc.CreateTicket(context.Background(), pid, "T", "", domain.TicketStatus("weird")); code(err) != "INVALID_STATUS" {
+	if _, err := svc.CreateTicket(context.Background(), pid, "T", "", domain.TicketStatus("weird"), ""); code(err) != "INVALID_STATUS" {
 		t.Fatalf("want INVALID_STATUS, got %v", err)
 	}
 }
@@ -78,7 +78,7 @@ func TestUpdateTicket_EmptyStatusKeepsCurrent(t *testing.T) {
 	svc, pid := newService(t)
 
 	// Create a ticket (defaults to backlog).
-	tk, err := svc.CreateTicket(context.Background(), pid, "T", "", "")
+	tk, err := svc.CreateTicket(context.Background(), pid, "T", "", "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -116,7 +116,7 @@ func TestUpdateTicket_EmptyStatusKeepsCurrent(t *testing.T) {
 func TestLinkDocument_CrossProjectRejected(t *testing.T) {
 	svc, pid := newService(t)
 
-	tk, _ := svc.CreateTicket(context.Background(), pid, "T", "", "")
+	tk, _ := svc.CreateTicket(context.Background(), pid, "T", "", "", "")
 	doc, _ := svc.CreateDocument(pid, "D", "body", domain.DocumentFormatMarkdown, "")
 	if err := svc.LinkDocument(tk.ID, doc.ID); err != nil {
 		t.Fatalf("same-project link should succeed: %v", err)
@@ -145,7 +145,7 @@ func TestLinkDocument_CrossProjectRejected(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	tk2, err := svc2.CreateTicket(context.Background(), p1id, "T2", "", "")
+	tk2, err := svc2.CreateTicket(context.Background(), p1id, "T2", "", "", "")
 	if err != nil {
 		t.Fatalf("failed to create ticket in project 1: %v", err)
 	}
@@ -166,7 +166,7 @@ func statusp(s domain.TicketStatus) *domain.TicketStatus { return &s }
 // move and the task page's text-only edit both leave the rest alone.
 func TestPatchTicket_OnlyPresentFieldsChange(t *testing.T) {
 	svc, pid := newService(t)
-	tk, err := svc.CreateTicket(context.Background(), pid, "Ship it", "with care", domain.TicketStatusTodo)
+	tk, err := svc.CreateTicket(context.Background(), pid, "Ship it", "with care", domain.TicketStatusTodo, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -192,7 +192,7 @@ func TestPatchTicket_OnlyPresentFieldsChange(t *testing.T) {
 // updated_at untouched.
 func TestPatchTicket_SameStatusIsIdempotent(t *testing.T) {
 	svc, pid := newService(t)
-	tk, _ := svc.CreateTicket(context.Background(), pid, "T", "", domain.TicketStatusInProgress)
+	tk, _ := svc.CreateTicket(context.Background(), pid, "T", "", domain.TicketStatusInProgress, "")
 
 	again, err := svc.PatchTicket(context.Background(), tk.ID, ports.TicketPatch{Status: statusp(domain.TicketStatusInProgress)})
 	if err != nil {
@@ -205,7 +205,7 @@ func TestPatchTicket_SameStatusIsIdempotent(t *testing.T) {
 
 func TestPatchTicket_Validation(t *testing.T) {
 	svc, pid := newService(t)
-	tk, _ := svc.CreateTicket(context.Background(), pid, "T", "d", domain.TicketStatusTodo)
+	tk, _ := svc.CreateTicket(context.Background(), pid, "T", "d", domain.TicketStatusTodo, "")
 	ctx := context.Background()
 
 	if _, err := svc.PatchTicket(ctx, "", ports.TicketPatch{}); code(err) != "INVALID_INPUT" {
@@ -240,7 +240,7 @@ func TestPatchTicket_Validation(t *testing.T) {
 // field present. Its invalid-status code follows the HTTP contract.
 func TestUpdateTicket_IsTheFullPatch(t *testing.T) {
 	svc, pid := newService(t)
-	tk, _ := svc.CreateTicket(context.Background(), pid, "T", "d", domain.TicketStatusTodo)
+	tk, _ := svc.CreateTicket(context.Background(), pid, "T", "d", domain.TicketStatusTodo, "")
 
 	got, err := svc.UpdateTicket(context.Background(), tk.ID, "T2", "", domain.TicketStatusDone)
 	if err != nil {
@@ -288,7 +288,7 @@ func TestTickets_ChangesAreAnnounced(t *testing.T) {
 	svc.Announcer = rec
 	ctx := context.Background()
 
-	tk, err := svc.CreateTicket(ctx, pid, "Ship it", "", domain.TicketStatusTodo)
+	tk, err := svc.CreateTicket(ctx, pid, "Ship it", "", domain.TicketStatusTodo, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -330,7 +330,7 @@ func TestTickets_ChangesAreAnnounced(t *testing.T) {
 // nothing panics.
 func TestTickets_NoAnnouncerIsFine(t *testing.T) {
 	svc, pid := newService(t)
-	tk, err := svc.CreateTicket(context.Background(), pid, "T", "", "")
+	tk, err := svc.CreateTicket(context.Background(), pid, "T", "", "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -349,7 +349,7 @@ func TestTickets_ConcurrentPatchesAnnounceInOrder(t *testing.T) {
 	rec := &recorder{}
 	svc.Announcer = rec
 	ctx := context.Background()
-	tk, err := svc.CreateTicket(ctx, pid, "T", "", domain.TicketStatusBacklog)
+	tk, err := svc.CreateTicket(ctx, pid, "T", "", domain.TicketStatusBacklog, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -425,7 +425,7 @@ func TestDocumentScope_DefaultsValidatesAndLists(t *testing.T) {
 func TestSetDocumentScope_MovesKeepsLinksAndIsIdempotent(t *testing.T) {
 	svc, pid := newService(t)
 	ctx := context.Background()
-	tk, _ := svc.CreateTicket(ctx, pid, "Ship it", "", "")
+	tk, _ := svc.CreateTicket(ctx, pid, "Ship it", "", "", "")
 	d, _ := svc.CreateDocument(pid, "Plan", "body", "", domain.DocumentScopeTask)
 	if err := svc.LinkDocument(tk.ID, d.ID); err != nil {
 		t.Fatal(err)
@@ -494,7 +494,7 @@ func TestTickets_StatusMovesAreRecordedAndAnnounced(t *testing.T) {
 	svc.StatusHistory, svc.Events = history, bus
 	ctx := context.Background()
 
-	tk, _ := svc.CreateTicket(ctx, p.ID, "Ship it", "", domain.TicketStatusTodo)
+	tk, _ := svc.CreateTicket(ctx, p.ID, "Ship it", "", domain.TicketStatusTodo, "")
 	if _, err := svc.PatchTicket(ctx, tk.ID, ports.TicketPatch{Status: statusp(domain.TicketStatusInProgress), StatusReason: "picked up", BySessionID: "arch"}); err != nil {
 		t.Fatal(err)
 	}
@@ -528,9 +528,9 @@ func TestTickets_AreDecorated(t *testing.T) {
 		}
 	})
 	ctx := context.Background()
-	tk, _ := svc.CreateTicket(ctx, pid, "a", "", "")
+	tk, _ := svc.CreateTicket(ctx, pid, "a", "", "", "")
 	got, _ := svc.GetTicket(ctx, tk.ID)
-	list, _ := svc.ListTickets(ctx, pid)
+	list, _ := svc.ListTickets(ctx, pid, ports.TicketFilter{})
 	same, _ := svc.PatchTicket(ctx, tk.ID, ports.TicketPatch{})
 	moved, _ := svc.PatchTicket(ctx, tk.ID, ports.TicketPatch{Status: statusp(domain.TicketStatusDone)})
 	for name, x := range map[string]*domain.Ticket{"create": tk, "get": got, "list": list[0], "no-op patch": same, "patch": moved} {
@@ -563,7 +563,7 @@ func TestTickets_DeleteIsPublished(t *testing.T) {
 	svc.Events = bus
 	ctx := context.Background()
 
-	tk, _ := svc.CreateTicket(ctx, p.ID, "Gone soon", "", domain.TicketStatusTodo)
+	tk, _ := svc.CreateTicket(ctx, p.ID, "Gone soon", "", domain.TicketStatusTodo, "")
 	if err := svc.DeleteTicket(ctx, tk.ID); err != nil {
 		t.Fatal(err)
 	}
@@ -591,8 +591,8 @@ func TestTickets_CarryTheirLastMoveAndStatusSince(t *testing.T) {
 	svc.StatusHistory, svc.Announcer = sqlite.NewTaskStatusChangeRepository(db), rec
 	ctx := context.Background()
 
-	still, _ := svc.CreateTicket(ctx, p.ID, "Never moved", "", domain.TicketStatusTodo)
-	tk, _ := svc.CreateTicket(ctx, p.ID, "Ship it", "", domain.TicketStatusTodo)
+	still, _ := svc.CreateTicket(ctx, p.ID, "Never moved", "", domain.TicketStatusTodo, "")
+	tk, _ := svc.CreateTicket(ctx, p.ID, "Ship it", "", domain.TicketStatusTodo, "")
 	before := time.Now().Add(-time.Millisecond)
 	moved, err := svc.PatchTicket(ctx, tk.ID, ports.TicketPatch{Status: statusp(domain.TicketStatusReview), StatusReason: "looks done"})
 	if err != nil {
@@ -613,7 +613,7 @@ func TestTickets_CarryTheirLastMoveAndStatusSince(t *testing.T) {
 		t.Errorf("announced after the move: %+v", last)
 	}
 
-	list, _ := svc.ListTickets(ctx, p.ID)
+	list, _ := svc.ListTickets(ctx, p.ID, ports.TicketFilter{})
 	byID := map[string]*domain.Ticket{}
 	for _, x := range list {
 		byID[x.ID] = x
@@ -626,5 +626,31 @@ func TestTickets_CarryTheirLastMoveAndStatusSince(t *testing.T) {
 	}
 	if got, _ := svc.GetTicket(ctx, still.ID); got.LastMove != nil || !got.StatusSince.Equal(got.CreatedAt) {
 		t.Errorf("never-moved task read alone: %+v", got)
+	}
+}
+
+// A parent in another project is refused on create and on patch; the
+// conformance suite covers the other TICKET_PARENT_INVALID cases, which need
+// one project only.
+func TestTicketParent_AnotherProjectRejected(t *testing.T) {
+	svc, projects, pid := newServiceWithProjectRepo(t)
+	other, err := projects.Create("other", "/tmp/other")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	feature, err := svc.CreateTicket(ctx, other.ID, "Feature elsewhere", "", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.CreateTicket(ctx, pid, "Child", "", "", feature.ID); code(err) != domain.CodeTicketParentInvalid {
+		t.Fatalf("create under another project's task: want %s, got %v", domain.CodeTicketParentInvalid, err)
+	}
+	loner, err := svc.CreateTicket(ctx, pid, "Loner", "", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.PatchTicket(ctx, loner.ID, ports.TicketPatch{ParentID: &feature.ID}); code(err) != domain.CodeTicketParentInvalid {
+		t.Fatalf("patch under another project's task: want %s, got %v", domain.CodeTicketParentInvalid, err)
 	}
 }

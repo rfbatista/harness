@@ -46,10 +46,16 @@ templ Page(v PageView) {
 				@templ.JSONScript("usage-totals-seed", v.Usage)
 				<div x-data="usageTotalsWatch" data-seed="usage-totals-seed" hidden></div>
 			}
+			if !v.HasTask() {
+				@brainstormsHeader(v)
+			} else {
 			<div x-data="tasksTaskEditor" data-seed="task-seed">
 				@templ.JSONScript("task-seed", v.Task)
 				<header class="[ toolbar ]">
 					<a class="[ crumb ]" href={ templ.SafeURL("/projects/" + v.ProjectID) }>{ v.ProjectName } /</a>
+					if v.Parent != nil {
+						<a class="[ crumb ]" href={ templ.SafeURL(v.Parent.Href) } data-parent-task={ v.Parent.ID } title="The feature task this task belongs to">{ v.Parent.Title } /</a>
+					}
 					<h1 x-text="title">{ v.TaskTitle }</h1>
 					<select data-size="sm" data-fit aria-label="Task status" x-model="status" x-on:change="changeStatus">
 						for _, st := range v.StatusChoices {
@@ -119,20 +125,14 @@ templ Page(v PageView) {
 				</header>
 				@taskBand(v)
 			</div>
-			@reviewBand(v)
-			if v.TokenSavers != nil {
-				<details class="[ pad-inline-l pad-block-xs divide-bottom ]" data-token-savers>
-					<summary class="[ text-sm ]">Token savers</summary>
-					<div class="[ pad-block-s ]" style="max-inline-size: 44rem">
-						@tokensavers.Section(*v.TokenSavers)
-					</div>
-				</details>
+			@contextStrip(v)
 			}
 			<template x-if="error">
 				<div class="[ banner ] [ pad-s ]" data-tone="danger" role="alert">
 					<div class="[ flow ] [ flow-space-3xs grow ]">
 						<span x-text="error.message"></span>
 						<span class="[ code ]"><span x-text="error.code"></span> · <span x-text="error.next"></span></span>
+						<template x-for="link in error.links"><a href="/agent-isolation" x-bind:href="link.href" x-text="link.text" data-refusal-link></a></template>
 					</div>
 					<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-on:click="dismissError">Dismiss</button>
 				</div>
@@ -142,7 +142,7 @@ templ Page(v PageView) {
 				<div
 					class="[ list ] [ divide-end ]"
 					role="listbox"
-					aria-label="Sessions of this task"
+					aria-label={ v.ListLabel() }
 					tabindex="0"
 					x-ref="list"
 					x-on:keydown.enter.self.prevent="openSelected"
@@ -154,12 +154,268 @@ templ Page(v PageView) {
 					@ssrRows(v)
 					@liveRows()
 					<template x-if="isEmpty">
-						@components.Empty("No sessions for this task yet", "A session is an agent working on this task. Start one from the TUI: open the task and press n.")
+						@emptyList(v)
 					</template>
 				</div>
-				@detail(v.NewSession, v.Code, v.Usage != nil)
+				@detail(v.NewSession, v.Code, v.Usage != nil, v.LockedMode())
 			</div>
 		</main>
+	}
+}
+
+// contextStrip is what the page says about the task's context, in one row
+// above the agents: a summary button per band with something to show, and
+// the one open band's panel under it (tasksContextStrip owns which). A band
+// that has nothing is painted hidden and appears once it has.
+templ contextStrip(v PageView) {
+	<div class="[ context-strip ]" role="group" aria-label="Task context" x-data="tasksContextStrip" data-open={ v.OpenBand() } data-stored={ v.Band } x-on:keydown="key" x-on:reviews-read="reviewsRead">
+		@reviewsBand(v)
+		@featureBand(v)
+		@tokenSaversBand(v)
+	</div>
+}
+
+// reviewsBand is the requests the task's architect raised for the person
+// (reviewsInbox, scoped to the task): its button says how many wait, in the
+// amber waiting tone, and its panel shows the newest first, the others
+// behind "N more waiting", then the settled ones under "Earlier reviews".
+// The server paints how many wait (task.pending_reviews) until the browser
+// has read them; a task with none paints the button hidden, and it appears
+// once the architect raises one. Its announcements go to the page's live
+// region (the announce event), so the page keeps one.
+templ reviewsBand(v PageView) {
+	if v.Reviews != nil {
+		@templ.JSONScript("reviews-seed", v.Reviews)
+		<div
+			style="display: contents"
+			x-data="reviewsInbox"
+			data-seed="reviews-seed"
+			data-ticket-id={ v.Reviews.TicketID }
+			data-pending={ strconv.Itoa(v.PendingReviews) }
+			if v.Task.ArchitectSessionID != nil {
+				data-architect
+			}
+		>
+			<button
+				type="button"
+				class="[ cs-btn ]"
+				id="band-reviews-button"
+				data-band="reviews"
+				aria-controls="band-reviews"
+				aria-expanded={ strconv.FormatBool(v.OpenBand() == "reviews") }
+				x-bind:aria-expanded="expanded('reviews')"
+				x-on:click="toggle('reviews')"
+				x-bind:hidden="!summary.has"
+				x-bind:data-tone="summary.tone"
+				x-bind:aria-label="summary.name"
+				{ reviewsButtonAttrs(v.PendingReviews)... }
+			>
+				<span class="[ label ]">Reviews</span>
+				{ " " }
+				<span class="[ badge ]" x-text="summary.count" x-show="summary.count !== ''" x-bind:data-tone="summary.tone" { toneAttrs(v.PendingReviews > 0)... } { shownIf(v.PendingReviews > 0)... }>{ strconv.Itoa(v.PendingReviews) }</span>
+				{ " " }
+				<span class="[ phrase ]" x-text="summary.phrase">{ reviewsPhrase(v.PendingReviews) }</span>
+				<span class="[ chevron ]" aria-hidden="true"></span>
+			</button>
+			<section
+				class="[ band-panel ]"
+				id="band-reviews"
+				aria-label="Review requests"
+				data-band-panel="reviews"
+				x-show="expanded('reviews') && summary.has"
+				{ shownIf(v.OpenBand() == "reviews")... }
+			>
+				<div class="[ reviews ]" data-band-scroll tabindex="0" aria-labelledby="band-reviews-button" x-bind:data-attention="attentionAttr">
+					if v.PendingReviews > 0 {
+						<div class="[ flow ] [ flow-space-s ]" x-show="notLoaded">
+							<p class="[ reviews-head ]">
+								@components.Status("waiting", "waiting")
+								<span>{ waitingLine(v.PendingReviews) }</span>
+							</p>
+							<span class="[ skeleton ]" style="--skeleton-width: 50%"></span>
+							<span class="[ skeleton ]" style="--skeleton-width: 80%"></span>
+						</div>
+					}
+					@components.ReviewsError()
+					<template x-if="hasPending">
+						<div class="[ flow ] [ flow-space-2xs ]">
+							<h2 class="[ reviews-head ]" tabindex="-1" data-reviews-heading>
+								<span class="[ status ]" data-state="waiting">waiting</span>
+								<span x-text="headline"></span>
+							</h2>
+							<template x-for="card in firstCards" x-bind:key="card.id">
+								@components.ReviewCard()
+							</template>
+							<template x-if="hasMore">
+								<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" data-more x-bind:aria-expanded="moreOpen" x-on:click="toggleMore" x-text="moreLabel"></button>
+							</template>
+							<template x-if="moreOpen">
+								<div class="[ flow ] [ flow-space-2xs ]">
+									<template x-for="card in moreCards" x-bind:key="card.id">
+										@components.ReviewCard()
+									</template>
+								</div>
+							</template>
+						</div>
+					</template>
+					<template x-if="nothingWaits">
+						<p>Nothing waits on you.</p>
+					</template>
+					<template x-if="hasSettled">
+						<details>
+							<summary x-text="settledLabel"></summary>
+							<template x-for="card in settledCards" x-bind:key="card.id">
+								@components.SettledReviewCard()
+							</template>
+						</details>
+					</template>
+				</div>
+			</section>
+		</div>
+	}
+}
+
+// tokenSaversBand is the task's Token savers control: a quiet last button
+// whose panel is the control itself. Left out when the server sends none.
+templ tokenSaversBand(v PageView) {
+	if v.TokenSavers != nil {
+		<div style="display: contents">
+			<button
+				type="button"
+				class="[ cs-btn ]"
+				id="band-token-savers-button"
+				data-band="token-savers"
+				data-quiet
+				aria-controls="band-token-savers"
+				aria-expanded={ strconv.FormatBool(v.OpenBand() == "token-savers") }
+				x-bind:aria-expanded="expanded('token-savers')"
+				x-on:click="toggle('token-savers')"
+			>
+				<span class="[ label ]" data-short="Savers">Token savers</span>
+				<span class="[ chevron ]" aria-hidden="true"></span>
+			</button>
+			<section
+				class="[ band-panel ]"
+				id="band-token-savers"
+				aria-labelledby="band-token-savers-button"
+				data-band-panel="token-savers"
+				data-token-savers
+				x-show="expanded('token-savers')"
+				{ shownIf(v.OpenBand() == "token-savers")... }
+			>
+				<div class="[ pad-inline-l pad-block-s ]" data-band-scroll tabindex="0" aria-labelledby="band-token-savers-button">
+					<div style="max-inline-size: 44rem">
+						@tokensavers.Section(*v.TokenSavers)
+					</div>
+				</div>
+			</section>
+		</div>
+	}
+}
+
+// featureBand is the feature task's PRD and child tasks (ADR 0016). The
+// server paints the children it read; tasksFeature re-renders them from the
+// rail's store, so a child an agent creates while the page is open appears
+// (its documents come with a reload). Its button is hidden until there is a
+// child.
+templ featureBand(v PageView) {
+	<div
+		style="display: contents"
+		x-data="tasksFeature"
+		data-task-id={ v.Seed.TicketID }
+		data-project-id={ v.ProjectID }
+		data-seed="feature-seed"
+		data-children={ featureCount(v.Feature) }
+	>
+		@templ.JSONScript("feature-seed", v.FeatureSeed())
+		<button
+			type="button"
+			class="[ cs-btn ]"
+			id="band-feature-button"
+			data-band="feature"
+			aria-controls="band-feature"
+			aria-expanded={ strconv.FormatBool(v.OpenBand() == "feature") }
+			x-bind:aria-expanded="expanded('feature')"
+			x-on:click="toggle('feature')"
+			x-bind:hidden="!hasChildren"
+			x-bind:aria-label="buttonName"
+			aria-label={ featureName(v.Feature) }
+			{ hiddenIf(v.Feature == nil)... }
+		>
+			<span class="[ label ]">Feature</span>
+			{ " " }
+			<span class="[ badge ]" x-text="count">{ featureCount(v.Feature) }</span>
+			{ " " }
+			<span class="[ phrase ]" x-text="phrase">{ featurePhrase(v.Feature) }</span>
+			<span class="[ chevron ]" aria-hidden="true"></span>
+		</button>
+		<section
+			class="[ band-panel feature ]"
+			id="band-feature"
+			aria-labelledby="band-feature-button"
+			data-band-panel="feature"
+			x-show="expanded('feature') && hasChildren"
+			{ shownIf(v.OpenBand() == "feature")... }
+		>
+			<header class="[ band-head ]">
+				<span x-text="showing">{ featureShowing(v.Feature) }</span>
+				if v.Feature != nil && v.Feature.PRD != nil {
+					<a class="[ button ]" data-variant="ghost" data-size="sm" href={ templ.SafeURL(v.Feature.PRD.Href) } data-prd title={ "updated " + v.Feature.PRD.Updated }>{ v.Feature.PRD.Title }</a>
+				}
+			</header>
+			<div class="[ list ]" role="list" data-band-scroll tabindex="0" x-bind:aria-label="scrollLabel" aria-label={ featureScrollLabel(v.Feature) }>
+				<div x-ignore data-ssr role="presentation">
+					if v.Feature != nil {
+						for _, c := range v.Feature.Children {
+							<div class="[ row ]" role="listitem" data-child-id={ c.ID } { doneAttr(c.Status == "done")... }>
+								<span class="[ badge ]" data-status={ c.Status }>{ c.StatusLabel }</span>
+								<span class="[ title ]"><a href={ templ.SafeURL(c.Href) }>{ c.Title }</a></span>
+								<span class="[ meta ]">{ docCount(len(c.Documents)) }</span>
+							</div>
+						}
+					}
+				</div>
+				<template x-for="child in children" x-bind:key="child.id">
+					<div class="[ row ]" role="listitem" x-bind:data-child-id="child.id" x-bind:data-done="child.doneAttr">
+						<span class="[ badge ]" x-bind:data-status="child.status" x-text="child.statusLabel"></span>
+						<span class="[ title ]"><a x-bind:href="child.href" x-text="child.title"></a></span>
+						<span class="[ meta ]" x-text="child.docCount"></span>
+					</div>
+				</template>
+			</div>
+		</section>
+	</div>
+}
+
+// brainstormsHeader heads the project's sessions page: its feature
+// brainstorms, the product-mode sessions that run with no task. There is no
+// task to edit, so no task band.
+templ brainstormsHeader(v PageView) {
+	<header class="[ toolbar ]">
+		<a class="[ crumb ]" href={ templ.SafeURL("/projects/" + v.ProjectID) }>{ v.ProjectName } /</a>
+		<h1>{ BrainstormsTitle }</h1>
+		<span class="[ color-ink-faint text-sm ]" x-text="summary">{ v.Summary }</span>
+		<div class="[ actions ]">
+			if v.NewSession.CanStart() {
+				<button type="button" class="[ button ]" data-variant="primary" data-size="sm" disabled x-bind:disabled="cannotCreate" x-on:click="startCreating">
+					New session <kbd>N</kbd>
+				</button>
+			} else {
+				<a class="[ button ]" data-size="sm" href={ templ.SafeURL("/projects/" + v.ProjectID + "/repositories") }>Add a repository</a>
+				<button type="button" class="[ button ]" data-variant="primary" data-size="sm" disabled title="Add a repository to this project first: a session runs in one.">
+					New session
+				</button>
+			}
+		</div>
+	</header>
+}
+
+// emptyList is the list's empty state: a task's, or the project's brainstorms.
+templ emptyList(v PageView) {
+	if v.HasTask() {
+		@components.Empty("No sessions for this task yet", "A session is an agent working on this task. Start one from the TUI: open the task and press n.")
+	} else {
+		@components.Empty("No feature brainstorms yet", "A feature brainstorm is a product-mode session with no task: the agent interviews you, writes the PRD on a new feature task and creates one child task per piece of work. Start one with New session, or from the board.")
 	}
 }
 
@@ -168,7 +424,7 @@ templ Page(v PageView) {
 templ ssrRows(v PageView) {
 	<div x-ignore data-ssr role="group">
 		if v.Empty() {
-			@components.Empty("No sessions for this task yet", "A session is an agent working on this task. Start one from the TUI: open the task and press n.")
+			@emptyList(v)
 		}
 		for _, g := range v.Groups {
 			<div class="[ group ]">
@@ -176,7 +432,7 @@ templ ssrRows(v PageView) {
 				@components.Badge(strconv.Itoa(g.Count), g.Tone)
 			</div>
 			for _, r := range g.Rows {
-				<div class="[ row ]" data-stacked role="option" data-session-id={ r.ID } aria-selected={ strconv.FormatBool(r.Selected) } { attentionAttrs(r.Attention)... } { roleAttrs(r.Role, r.Depth)... }>
+				<div class="[ row ]" data-stacked role="option" data-session-id={ r.ID } aria-selected={ strconv.FormatBool(r.Selected) } { attentionAttrs(r.Attention)... } { roleAttrs(r.Role, r.Depth)... } { unsandboxedAttrs(r.Unsandboxed)... }>
 					@components.Status(r.State, r.Word)
 					<span class="[ title ]">
 						if r.Badge != "" {
@@ -200,7 +456,7 @@ templ liveRows() {
 				<span class="[ badge ]" x-bind:data-tone="group.tone" x-text="group.count"></span>
 			</div>
 			<template x-for="row in group.rows" x-bind:key="row.id">
-				<div class="[ row ]" data-stacked role="option" x-bind:data-session-id="row.id" x-bind:aria-selected="row.selected" x-bind:data-attention="row.attention" x-bind:data-fresh="row.fresh" x-bind:data-role="row.roleAttr" x-bind:data-depth="row.depthAttr" x-on:click="open(row.id)">
+				<div class="[ row ]" data-stacked role="option" x-bind:data-session-id="row.id" x-bind:aria-selected="row.selected" x-bind:data-attention="row.attention" x-bind:data-fresh="row.fresh" x-bind:data-role="row.roleAttr" x-bind:data-depth="row.depthAttr" x-bind:data-unsandboxed="row.unsandboxedAttr" x-on:click="open(row.id)">
 					<span class="[ status ]" x-bind:data-state="row.state" x-text="row.word"></span>
 					<span class="[ title ]">
 						<template x-if="row.badge">
@@ -222,13 +478,13 @@ templ liveRows() {
 // detail is the right-hand pane: the new-session form while creating,
 // otherwise the selected session. Alpine renders it, since it follows the
 // selection.
-templ detail(form NewSessionForm, paint *code.View, usage bool) {
+templ detail(form NewSessionForm, paint *code.View, usage bool, lockedMode string) {
 	<section class="[ frame ]" aria-label="Session detail" x-on:keydown.window.n="startCreatingFromKey">
 		if paint != nil {
 			@code.Static(*paint)
 		}
 		<template x-if="creating">
-			@newSessionForm(form)
+			@newSessionForm(form, lockedMode)
 		</template>
 		<template x-if="showingSession">
 			<section class="[ session ]" aria-label="Session">
@@ -245,6 +501,12 @@ templ detail(form NewSessionForm, paint *code.View, usage bool) {
 				</template>
 				<template x-for="panel in historyPanels" x-bind:key="panel.key">
 					@historyPanel()
+				</template>
+				<template x-for="panel in sandboxPanels" x-bind:key="panel.key">
+					@sandboxPanel()
+				</template>
+				<template x-for="panel in mergePanels" x-bind:key="panel.key">
+					@mergePanel()
 				</template>
 				<template x-for="panel in appPanels" x-bind:key="panel.key">
 					@appPanel()
@@ -271,20 +533,31 @@ templ detail(form NewSessionForm, paint *code.View, usage bool) {
 
 // newSessionForm starts an interactive session on this task, in a terminal
 // on the server. The choices are rendered by the server; sessionsNewSession
-// submits them to the API and the page attaches to the new terminal.
-templ newSessionForm(form NewSessionForm) {
+// submits them to the API and the page attaches to the new terminal. With
+// lockedMode "product" (the project's sessions page, which has no task) the
+// Mode field is a line saying so: no other mode starts without a task.
+templ newSessionForm(form NewSessionForm, lockedMode string) {
 	<form
 		class="[ flow ] [ pad-l ]"
 		x-data="sessionsNewSession(projectId, ticketId)"
 		data-default-repository={ form.DefaultRepository() }
+		data-locked-mode={ lockedMode }
 		x-on:submit.prevent="submit"
 		x-on:keydown.escape="cancel"
 	>
-		<h2>New session</h2>
+		if lockedMode == "" {
+			<h2>New session</h2>
+		} else {
+			<h2>New feature brainstorm</h2>
+		}
 		<div class="[ field ]">
 			<label for="new-session-prompt">First message <span class="[ color-ink-faint weight-regular ]">(optional)</span></label>
 			<textarea id="new-session-prompt" class="[ font-mono text-sm ]" x-bind:placeholder="promptPlaceholder" x-model="prompt" x-ref="prompt"></textarea>
-			<span class="[ hint ]">claude starts in a terminal on the server, on this task's branch.</span>
+			if lockedMode == "" {
+				<span class="[ hint ]">claude starts in a terminal on the server, on this task's branch.</span>
+			} else {
+				<span class="[ hint ]">claude starts in a terminal on the server, on its own branch of the repository.</span>
+			}
 		</div>
 		<div class="[ switcher ]">
 			<div class="[ field ]">
@@ -299,15 +572,21 @@ templ newSessionForm(form NewSessionForm) {
 				</div>
 			</div>
 			<div class="[ field ]">
-				<label for="new-session-mode">Mode</label>
-				<div class="[ dropdown ]" x-data="dropdown">
-					<select id="new-session-mode" x-model="mode">
-						<option value="" data-description="Runs the agent as it is">Default</option>
-						<option value="architect" data-description="Grills you on the design, writes per-application specs and delegates them">Architect</option>
-						<option value="implement" data-description="Turns a spec into reviewed tickets, then implements them test first">Implement</option>
-						<option value="design" data-description="Publishes pages, images and videos as it works">Design</option>
-					</select>
-				</div>
+				if lockedMode == "" {
+					<label for="new-session-mode">Mode</label>
+					<div class="[ dropdown ]" x-data="dropdown">
+						<select id="new-session-mode" x-model="mode">
+							<option value="" data-description="Runs the agent as it is">Default</option>
+							<option value="architect" data-description="Grills you on the design, writes per-application specs and delegates them">Architect</option>
+							<option value="implement" data-description="Turns a spec into reviewed tickets, then implements them test first">Implement</option>
+							<option value="design" data-description="Publishes pages, images and videos as it works">Design</option>
+							<option value="product" data-description="Interviews you, writes the PRD on this task and creates one child task per piece of work, each with a brief">Product</option>
+						</select>
+					</div>
+				} else {
+					<span class="[ label ]">Mode</span>
+					<span data-locked-mode-word>Product — the only mode that runs without a task.</span>
+				}
 				<span class="[ hint ]" x-text="modeHint"></span>
 			</div>
 			<div class="[ field ]">
@@ -361,6 +640,7 @@ templ newSessionForm(form NewSessionForm) {
 				<div class="[ flow ] [ flow-space-3xs ]">
 					<span x-text="error.message"></span>
 					<span class="[ code ]"><span x-text="error.code"></span> · <span x-text="error.next"></span></span>
+					<template x-for="link in error.links"><a href="/agent-isolation" x-bind:href="link.href" x-text="link.text" data-refusal-link></a></template>
 				</div>
 			</div>
 		</template>
@@ -469,6 +749,7 @@ templ appPanel() {
 					<div class="[ flow ] [ flow-space-3xs ]">
 						<span x-text="error.message"></span>
 						<span class="[ code ]"><span x-text="error.code"></span> · <span x-text="error.next"></span></span>
+						<template x-for="link in error.links"><a href="/agent-isolation" x-bind:href="link.href" x-text="link.text" data-refusal-link></a></template>
 					</div>
 				</div>
 			</template>
@@ -524,6 +805,7 @@ templ designPanel() {
 					<div class="[ flow ] [ flow-space-3xs grow ]">
 						<span x-text="error.message"></span>
 						<span class="[ code ]"><span x-text="error.code"></span> · <span x-text="error.next"></span></span>
+						<template x-for="link in error.links"><a href="/agent-isolation" x-bind:href="link.href" x-text="link.text" data-refusal-link></a></template>
 					</div>
 					<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-on:click="dismissError">Dismiss</button>
 				</div>
@@ -575,7 +857,10 @@ templ taskBand(v PageView) {
 		</p>
 	</template>
 	<template x-if="showsDescription">
-		<p class="[ brief ]" x-text="description">{ v.TaskDescription }</p>
+		<div class="[ brief ]" x-bind:data-open="descriptionOpenAttr">
+			<p x-ref="description" x-effect="measureDescription()" x-text="description">{ v.TaskDescription }</p>
+			<button type="button" class="[ more ]" x-show="descriptionOverflows" style="display: none" x-bind:aria-expanded="descriptionOpen" x-on:click="toggleDescription" x-text="descriptionToggleWord">More</button>
+		</div>
 	</template>
 	<template x-if="editingTask">
 		<form class="[ flow ] [ flow-space-s pad-l divide-bottom ]" x-on:submit.prevent="save" x-on:keydown.escape="cancelEditTask">

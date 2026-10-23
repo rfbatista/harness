@@ -55,6 +55,8 @@ type Sources struct {
 	Designs   ports.ShellDesignWriter
 	Sessions  ports.SessionRepository
 	Agents    ports.AgentLister
+	// Settings holds "Agents move documents to project"; nil reads it as off.
+	Settings ports.SettingsReader
 }
 
 // Service makes, fills, refreshes and removes sessions' shells, and keeps
@@ -99,10 +101,21 @@ type shell struct {
 // Open makes the session's shell in a fresh temp dir and fills it before
 // answering its path. A session that had a shell gets a new one and the old
 // one is removed. The shell hears changes from the moment it is filled.
-func (s *Service) Open(ctx context.Context, sessionID, ticketID string) (string, error) {
-	tk, err := s.src.Tickets.GetTicket(ctx, ticketID)
-	if err != nil {
-		return "", err
+//
+// A scope with no TicketID opens a project-level shell: project/ and the
+// project's tasks under tasks/, no task/ (ADR 0016).
+func (s *Service) Open(ctx context.Context, sessionID string, scope ports.ShellScope) (string, error) {
+	var tk *domain.Ticket
+	projID := scope.ProjectID
+	if scope.TicketID != "" {
+		var err error
+		if tk, err = s.src.Tickets.GetTicket(ctx, scope.TicketID); err != nil {
+			return "", err
+		}
+		projID = tk.ProjectID
+	}
+	if projID == "" {
+		return "", &domain.StructuredError{Code: "INVALID_INPUT", Message: "a shell is opened on a task or a project"}
 	}
 	dir, err := os.MkdirTemp("", "harness-shell-*")
 	if err != nil {
@@ -112,7 +125,7 @@ func (s *Service) Open(ctx context.Context, sessionID, ticketID string) (string,
 	if err != nil {
 		realDir = dir
 	}
-	sh := &shell{dir: dir, realDir: realDir, sessionID: sessionID, ticketID: tk.ID, projID: tk.ProjectID, files: map[string]ports.ShellFile{}}
+	sh := &shell{dir: dir, realDir: realDir, sessionID: sessionID, ticketID: scope.TicketID, projID: projID, files: map[string]ports.ShellFile{}}
 	// Held until filled: a change heard meanwhile refreshes it after.
 	sh.mu.Lock()
 	s.mu.Lock()
@@ -142,19 +155,55 @@ func (s *Service) Open(ctx context.Context, sessionID, ticketID string) (string,
 	return dir, nil
 }
 
-// fill makes the layout's folders and writes every file. The caller holds
-// sh.mu.
+// fill makes the layout's folders and writes every file; a shell with no
+// task (tk nil) gets no task/ folder. The caller holds sh.mu.
 func (s *Service) fill(ctx context.Context, sh *shell, tk *domain.Ticket) error {
-	for _, d := range []string{"task/docs", "task/comments", "task/resources", "task/designs", "project/docs", "project/designs"} {
+	dirs := []string{"project/docs", "project/designs", tasksDir}
+	if tk != nil {
+		dirs = append(dirs, "task/docs", "task/comments", "task/resources", "task/designs")
+	}
+	for _, d := range dirs {
 		if err := os.MkdirAll(sh.abs(d), 0o755); err != nil {
 			return err
 		}
 	}
-	b, err := s.contents(ctx, sh.sessionID, tk)
+	b, err := s.contents(ctx, sh, tk)
 	if err != nil {
 		return err
 	}
 	return sh.sync(b)
+}
+
+// tasksDir is the folder holding the other tasks of the project, one folder
+// each named by its id, with its documents under docs.
+const tasksDir = "tasks"
+
+// TaskDocsDir is the shell folder of task id's documents.
+func TaskDocsDir(id string) string { return tasksDir + "/" + id + "/docs" }
+
+// syncTasks makes each listed task's folder and removes the folder of a
+// task that is gone, once nothing indexed is left in it.
+func (sh *shell) syncTasks(ids []string) error {
+	want := map[string]bool{}
+	for _, id := range ids {
+		want[id] = true
+		if err := os.MkdirAll(sh.abs(TaskDocsDir(id)), 0o755); err != nil {
+			return err
+		}
+	}
+	entries, err := os.ReadDir(sh.abs(tasksDir))
+	if err != nil {
+		return err
+	}
+	for _, ent := range entries {
+		if want[ent.Name()] || len(sh.under(tasksDir+"/"+ent.Name(), "")) > 0 {
+			continue
+		}
+		if err := os.RemoveAll(sh.abs(tasksDir + "/" + ent.Name())); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // Close removes dir, and forgets the session's shell while dir is still it.
@@ -254,6 +303,33 @@ func (s *Service) Subscribe(sub ports.EventSubscriber) {
 		s.changed(ev.ProjectID, "")
 		return nil
 	})
+	// The README says which rule applies to moving documents to project.
+	ports.On(sub, func(_ context.Context, ev domain.SettingsChanged) error {
+		if ev.Key == domain.SettingAgentsMoveDocuments {
+			s.changedEverywhere()
+		}
+		return nil
+	})
+}
+
+// changedEverywhere brings up to date every running shell.
+func (s *Service) changedEverywhere() {
+	s.mu.Lock()
+	due := make([]*shell, 0, len(s.shells))
+	for _, sh := range s.shells {
+		due = append(due, sh)
+	}
+	s.mu.Unlock()
+	for _, sh := range due {
+		s.kick(sh)
+	}
+}
+
+// agentsMove reads the setting "Agents move documents to project", off while
+// unset or unreadable (ADR 0020). It is read at each move and each refresh,
+// never kept.
+func (s *Service) agentsMove() bool {
+	return s.src.Settings != nil && domain.AgentsMoveDocuments(s.src.Settings.Setting(domain.SettingAgentsMoveDocuments))
 }
 
 // AnnounceChange hears a task's comments and resources change, as planning
@@ -268,11 +344,12 @@ func (s *Service) AnnounceChange(c ports.ProjectChange) {
 }
 
 // AnnounceTicket hears a task change, its title, description or status
-// among them, as planning announces it: the task's shells rewrite
-// task/task.json (ports.TicketAnnouncer).
+// among them, or its creation or deletion, as planning announces it: the
+// task's shells rewrite task/task.json, and every shell of the project its
+// folder under tasks/ (ports.TicketAnnouncer).
 func (s *Service) AnnounceTicket(tk *domain.Ticket, deleted bool) {
-	if tk != nil && !deleted {
-		s.changed(tk.ProjectID, tk.ID)
+	if tk != nil {
+		s.changed(tk.ProjectID, "")
 	}
 }
 
@@ -336,12 +413,15 @@ func (s *Service) refreshLocked(sh *shell) {
 		return
 	}
 	ctx := context.Background()
-	tk, err := s.src.Tickets.GetTicket(ctx, sh.ticketID)
-	if err != nil {
-		slog.Warn("refresh a virtual shell", "session", sh.sessionID, "err", err)
-		return
+	var tk *domain.Ticket
+	if sh.ticketID != "" {
+		var err error
+		if tk, err = s.src.Tickets.GetTicket(ctx, sh.ticketID); err != nil {
+			slog.Warn("refresh a virtual shell", "session", sh.sessionID, "err", err)
+			return
+		}
 	}
-	b, err := s.contents(ctx, sh.sessionID, tk)
+	b, err := s.contents(ctx, sh, tk)
 	if err == nil {
 		err = sh.sync(b)
 	}
@@ -382,6 +462,9 @@ func (sh *shell) sync(b *builder) error {
 		}
 	}
 	b.place(prev, sh.held)
+	if err := sh.syncTasks(b.tasks); err != nil {
+		return err
+	}
 
 	keep := map[string]bool{}
 	changed := false

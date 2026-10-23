@@ -5,8 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"os/exec"
+	"slices"
 	"strings"
 
+	"github.com/rfbatista/llmkit"
 	"github.com/rfbatista/llmkit/claude"
 
 	"operators-mcp/internal/domain"
@@ -130,4 +132,52 @@ func (t *Translator) Translate(ctx context.Context, text, targetLanguage string)
 		return "", &domain.StructuredError{Code: "INVALID_INPUT", Message: "targetLanguage is required"}
 	}
 	return t.cli.run(ctx, fmt.Sprintf(translateSystemPrompt, strings.TrimSpace(targetLanguage)), text)
+}
+
+// Gated refuses every one-shot with what check answers, before the CLI runs:
+// a one-shot is an agent process like a session, so it needs the same agent
+// credential, managed claude and sandbox driver. A nil check lets all through.
+func Gated(inner OneShotter, check func(ctx context.Context) error) OneShotter {
+	if check == nil {
+		return inner
+	}
+	return gated{inner: inner, check: check}
+}
+
+type gated struct {
+	inner OneShotter
+	check func(ctx context.Context) error
+}
+
+func (g gated) OneShot(ctx context.Context, req claude.OneShotRequest) (claude.OneShotResult, error) {
+	if err := g.check(ctx); err != nil {
+		return claude.OneShotResult{}, err
+	}
+	return g.inner.OneShot(ctx, req)
+}
+
+// Confined prepares every one-shot for the agent isolation: prepare is asked
+// at each call for the env entries of the agent credential and the wrap that
+// runs the CLI under the sandbox (nil with the sandbox off). Its error refuses
+// the call before the CLI runs. A nil prepare leaves the request as it is.
+func Confined(inner OneShotter, prepare func() ([]string, llmkit.WrapFunc, error)) OneShotter {
+	if prepare == nil {
+		return inner
+	}
+	return confined{inner: inner, prepare: prepare}
+}
+
+type confined struct {
+	inner   OneShotter
+	prepare func() ([]string, llmkit.WrapFunc, error)
+}
+
+func (c confined) OneShot(ctx context.Context, req claude.OneShotRequest) (claude.OneShotResult, error) {
+	env, wrap, err := c.prepare()
+	if err != nil {
+		return claude.OneShotResult{}, err
+	}
+	req.Env = append(slices.Clone(req.Env), env...)
+	req.Wrap = wrap
+	return c.inner.OneShot(ctx, req)
 }

@@ -12,7 +12,7 @@ import { mergeMessages, newestAt, upsertMessage } from "../../domain/channel.js"
 import { applyChange, displayOrder, group, INITIAL_TERMINAL_SIZE, isTerminal, ofTask } from "../../domain/session.js";
 import { artifactTitle, taskDesignHref } from "../artifactView.js";
 import { announceMessage } from "../channelView.js";
-import { delegateOption, startedBy, statusCheckView, summary, toDetailView, toGroupViews } from "../view.js";
+import { delegateOption, rowTitle, startedBy, statusCheckView, summary, toDetailView, toGroupViews } from "../view.js";
 import { DEFAULT_TEXT_SIZE, nextTextSize, TEXT_SIZES } from "../screenPrefs.js";
 
 const TICK_MS = 30_000;
@@ -32,6 +32,7 @@ export const FRESH_MS = 8_000;
  *   clock: import("../../../../shared/infrastructure/clock.js").Clock,
  *   channel?: import("../../domain/ports.js").ChannelGateway,  the architect channel; without it the page shows none
  *   channelStore?: ChannelStore,
+ *   merge?: import("../../domain/ports.js").MergeGateway,  merging a session's branch; without it there is no Merge tab
  *   location?: { search: string },  ?session=<id> opens that session (a comment links to the session that wrote it)
  *   prefs?: ReturnType<typeof import("../screenPrefs.js").screenPrefs>,  this browser's text size and focus mode
  *   shell?: { setFocus: (on: boolean) => void },  the app shell around the page (focus mode hides the rail and more)
@@ -44,6 +45,7 @@ export const sessionsPage = ({
   clock,
   channel = null,
   channelStore = { messages: [], loaded: false },
+  merge = null,
   setTimeout = globalThis.setTimeout.bind(globalThis),
   location = globalThis.location,
   history = globalThis.history,
@@ -87,7 +89,7 @@ export const sessionsPage = ({
     /** This browser's terminal text size, in px, and focus mode. */
     textSize: prefs.textSize(),
     focusMode: prefs.focus(),
-    /** The detail pane's tab: the agent's terminal, its saved conversation (history), the application run from the worktree, what the session designed, its code or its conversation with the architect. */
+    /** The detail pane's tab: the agent's terminal, its saved conversation (history), the application run from the worktree, what the session designed, its code, its conversation with the architect or its sandbox. */
     detailTab: "agent",
     /** Sessions that just arrived over the feed (started elsewhere: by an agent, the TUI). */
     freshIds: [],
@@ -131,6 +133,10 @@ export const sessionsPage = ({
     get hasSelection() {
       return this.selected !== null;
     },
+    /** The page is a task's. The project's sessions page (its feature brainstorms, ticketId "") has no task: no Design or Code tab, no git history link, no conversation. */
+    get hasTask() {
+      return this.ticketId !== "";
+    },
     get isEmpty() {
       return this.sessions.length === 0;
     },
@@ -172,7 +178,43 @@ export const sessionsPage = ({
     get historyPanels() {
       if (!this.showingHistory) return [];
       const live = this.selected.stoppable;
-      return [{ key: `${this.selected.id}:${live ? "live" : "ended"}`, sessionId: this.selected.id, live }];
+      return [{ key: `${this.selected.id}:${live ? "live" : "ended"}`, sessionId: this.selected.id, live, agent: this.selected.speaker }];
+    },
+    get showingSandbox() {
+      return this.showingSession && this.detailTab === "sandbox";
+    },
+    get sandboxTabSelected() {
+      return this.detailTab === "sandbox";
+    },
+    /**
+     * The Sandbox tab's panel, keyed on the session and on liveness. Its
+     * facts are those the session started under.
+     */
+    get sandboxPanels() {
+      if (!this.showingSandbox) return [];
+      const live = this.selected.stoppable;
+      return [{ key: `${this.selected.id}:${live ? "live" : "ended"}`, sessionId: this.selected.id, live, facts: this.selected.sandboxFacts }];
+    },
+    /** A session with a branch has a Merge tab, where a merge into the default branch is offered when it applies. */
+    get hasMergeTab() {
+      return merge !== null && this.showingSession && this.selected.branch !== "";
+    },
+    get showingMerge() {
+      return this.hasMergeTab && this.detailTab === "merge";
+    },
+    get mergeTabSelected() {
+      return this.detailTab === "merge";
+    },
+    /**
+     * The Merge tab's panel, keyed on the session and on its newest merge
+     * result: the result arrives with the session on the feed, and a change
+     * mounts a fresh panel that asks again whether a merge applies.
+     */
+    get mergePanels() {
+      if (!this.showingMerge) return [];
+      const session = this.sessions.find((s) => s.id === this.selectedId);
+      const last = session.lastMerge;
+      return [{ key: `${session.id}:${last ? last.at.getTime() : 0}`, sessionId: session.id, branch: session.branch, last }];
     },
     get showingApp() {
       return this.showingSession && this.detailTab === "app";
@@ -279,7 +321,7 @@ export const sessionsPage = ({
     },
     /** The selected session's git history page; "" for a session without a worktree. */
     get historyHref() {
-      const session = this.showingSession ? this.sessions.find((s) => s.id === this.selectedId) : null;
+      const session = this.showingSession && this.hasTask ? this.sessions.find((s) => s.id === this.selectedId) : null;
       if (!session?.workspaceId) return "";
       const p = encodeURIComponent(this.projectId);
       const t = encodeURIComponent(this.ticketId);
@@ -293,7 +335,7 @@ export const sessionsPage = ({
     },
     /** The session whose Design panel to mount, keyed on its id; mounted whenever a session shows, so publishes are counted behind the other tabs. */
     get designPanels() {
-      if (!this.showingSession) return [];
+      if (!this.showingSession || !this.hasTask) return [];
       // Keyed on liveness too: the panel reads it once, so a resumed session gets a fresh one that follows again.
       const live = this.selected.stoppable;
       return [{ key: `${this.selected.id}:${live ? "live" : "ended"}`, sessionId: this.selected.id, live, designHref: taskDesignHref(this.projectId, this.ticketId) }];
@@ -306,7 +348,7 @@ export const sessionsPage = ({
     },
     /** The selected session has a worktree whose code the Code tab can read. */
     get hasCode() {
-      return this.codeEnabled && this.showingSession && !!this.selected?.workspaceId;
+      return this.codeEnabled && this.hasTask && this.showingSession && !!this.selected?.workspaceId;
     },
     get showingCode() {
       return this.hasCode && this.detailTab === "code";
@@ -470,7 +512,7 @@ export const sessionsPage = ({
      * messages and follow new ones. A task without one never asks.
      */
     followChannel() {
-      if (!channel || unfollowChannel || !this.hasArchitect) return;
+      if (!channel || unfollowChannel || !this.hasTask || !this.hasArchitect) return;
       unfollowChannel = channel.follow(
         this.projectId,
         (event) => this.channelEvent(event),
@@ -520,7 +562,7 @@ export const sessionsPage = ({
     /** A session started elsewhere joined the task: highlight it for a moment and say so. */
     arrived(session) {
       const by = startedBy(session, this.sessions, this.agentNames);
-      const title = session.task || "Untitled session";
+      const title = rowTitle(session);
       this.announcement = by ? `${by} started a session: ${title}` : `A session started: ${title}`;
       this.freshIds = [...this.freshIds, session.id];
       setTimeout(() => {
@@ -558,6 +600,16 @@ export const sessionsPage = ({
     showHistory() {
       this.leaveCode();
       this.detailTab = "history";
+    },
+    /** The Sandbox tab: what the session ran under and what the sandbox denied it. */
+    showSandbox() {
+      this.leaveCode();
+      this.detailTab = "sandbox";
+    },
+    /** The Merge tab: merge the branch into the repository's default branch. */
+    showMerge() {
+      this.leaveCode();
+      this.detailTab = "merge";
     },
     showApp() {
       this.leaveCode();
@@ -653,10 +705,12 @@ export const sessionsPage = ({
         this.unseenMessages = 0;
       }
       this.selectedId = id;
-      // A peer has no conversation, a session without a worktree no code: fall back to its terminal.
+      // A peer has no conversation, a session without a worktree no code, a brainstorm no design: fall back to its terminal.
       if (this.detailTab === "conversation" && this.selectedRole() === "") this.detailTab = "agent";
       if (this.detailTab === "code" && !this.hasCode) this.detailTab = "agent";
+      if (this.detailTab === "design" && !this.hasTask) this.detailTab = "agent";
       this.creating = false;
+      if (this.detailTab === "merge" && !this.hasMergeTab) this.detailTab = "agent";
       if (this.keptTerminalId !== id) this.keptTerminalId = null;
     },
 

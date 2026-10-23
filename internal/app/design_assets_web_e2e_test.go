@@ -71,9 +71,9 @@ func TestDesignAssetsAttachedToTasksInTheWebUI_EndToEnd(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	brand, _ := plan.CreateTicket(ctx, p.ID, "Brand refresh", "", domain.TicketStatusInProgress)
-	checkout, _ := plan.CreateTicket(ctx, p.ID, "Checkout", "", domain.TicketStatusTodo)
-	if _, err := plan.CreateTicket(ctx, p.ID, "Landing", "", domain.TicketStatusTodo); err != nil {
+	brand, _ := plan.CreateTicket(ctx, p.ID, "Brand refresh", "", domain.TicketStatusInProgress, "")
+	checkout, _ := plan.CreateTicket(ctx, p.ID, "Checkout", "", domain.TicketStatusTodo, "")
+	if _, err := plan.CreateTicket(ctx, p.ID, "Landing", "", domain.TicketStatusTodo, ""); err != nil {
 		t.Fatal(err)
 	}
 	worktree := t.TempDir()

@@ -40,7 +40,7 @@ func newArchiveFixture(t *testing.T) *archiveFixture {
 func (f *archiveFixture) doneTask(t *testing.T, title string) *domain.Ticket {
 	t.Helper()
 	ctx := context.Background()
-	tk, err := f.svc.CreateTicket(ctx, f.pid, title, "", domain.TicketStatusReview)
+	tk, err := f.svc.CreateTicket(ctx, f.pid, title, "", domain.TicketStatusReview, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -138,7 +138,7 @@ func TestArchiveAndRestoreAreNoOpsTheSecondTime(t *testing.T) {
 func TestAnArchivedTaskKeepsItsStatusUntilRestored(t *testing.T) {
 	f := newArchiveFixture(t)
 	ctx := context.Background()
-	inReview, err := f.svc.CreateTicket(ctx, f.pid, "Waiting", "", domain.TicketStatusReview)
+	inReview, err := f.svc.CreateTicket(ctx, f.pid, "Waiting", "", domain.TicketStatusReview, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -185,7 +185,7 @@ func TestAnArchivedTaskKeepsItsStatusUntilRestored(t *testing.T) {
 func TestArchivedTasksLeaveTheListAndHaveTheirOwn(t *testing.T) {
 	f := newArchiveFixture(t)
 	ctx := context.Background()
-	open, err := f.svc.CreateTicket(ctx, f.pid, "Open", "", domain.TicketStatusTodo)
+	open, err := f.svc.CreateTicket(ctx, f.pid, "Open", "", domain.TicketStatusTodo, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -200,7 +200,7 @@ func TestArchivedTasksLeaveTheListAndHaveTheirOwn(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	list, err := f.svc.ListTickets(ctx, f.pid)
+	list, err := f.svc.ListTickets(ctx, f.pid, ports.TicketFilter{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -253,7 +253,7 @@ func TestArchiveAllDoneArchivesOnlyTheDoneTasksOnTheBoard(t *testing.T) {
 	if _, err := f.svc.ArchiveTicket(ctx, already.ID); err != nil {
 		t.Fatal(err)
 	}
-	inReview, err := f.svc.CreateTicket(ctx, f.pid, "Waiting", "", domain.TicketStatusReview)
+	inReview, err := f.svc.CreateTicket(ctx, f.pid, "Waiting", "", domain.TicketStatusReview, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -275,7 +275,7 @@ func TestArchiveAllDoneArchivesOnlyTheDoneTasksOnTheBoard(t *testing.T) {
 			t.Errorf("announced %+v", a)
 		}
 	}
-	list, err := f.svc.ListTickets(ctx, f.pid)
+	list, err := f.svc.ListTickets(ctx, f.pid, ports.TicketFilter{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -289,7 +289,7 @@ func TestArchiveAllDoneArchivesOnlyTheDoneTasksOnTheBoard(t *testing.T) {
 func TestArchiveAllDoneOnAProjectWithNothingDone(t *testing.T) {
 	f := newArchiveFixture(t)
 	ctx := context.Background()
-	if _, err := f.svc.CreateTicket(ctx, f.pid, "Waiting", "", domain.TicketStatusReview); err != nil {
+	if _, err := f.svc.CreateTicket(ctx, f.pid, "Waiting", "", domain.TicketStatusReview, ""); err != nil {
 		t.Fatal(err)
 	}
 	before := len(f.feed.all())
@@ -310,7 +310,7 @@ func TestArchiveAllDoneOnAProjectWithNothingDone(t *testing.T) {
 func TestTheArchivedCountFollowsArchiveAndRestore(t *testing.T) {
 	f := newArchiveFixture(t)
 	ctx := context.Background()
-	if _, err := f.svc.CreateTicket(ctx, f.pid, "Open", "", domain.TicketStatusTodo); err != nil {
+	if _, err := f.svc.CreateTicket(ctx, f.pid, "Open", "", domain.TicketStatusTodo, ""); err != nil {
 		t.Fatal(err)
 	}
 	first := f.doneTask(t, "First")

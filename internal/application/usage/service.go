@@ -56,6 +56,9 @@ type Options struct {
 	Logger *slog.Logger
 	// Clock defaults to time.Now.
 	Clock func() time.Time
+	// LiveCallBuffer is how many events a live call viewer may have waiting
+	// before the ones that do not fit are discarded; zero means the default.
+	LiveCallBuffer int
 }
 
 // Service implements the usage sink and ports.UsageReader.
@@ -69,12 +72,21 @@ type Service struct {
 	// the database or the network.
 	mu        sync.Mutex
 	followers map[string]map[chan *domain.UsageRecord]struct{}
+
+	// liveMu guards viewers, the connected live call viewers.
+	liveMu     sync.Mutex
+	viewers    map[*liveViewer]struct{}
+	liveBuffer int
 }
 
 // New returns the service.
 func New(repo ports.UsageRepository, readers Readers, opts Options) *Service {
 	s := &Service{repo: repo, readers: readers, log: opts.Logger, now: opts.Clock,
-		followers: map[string]map[chan *domain.UsageRecord]struct{}{}}
+		followers: map[string]map[chan *domain.UsageRecord]struct{}{},
+		viewers:   map[*liveViewer]struct{}{}, liveBuffer: opts.LiveCallBuffer}
+	if s.liveBuffer <= 0 {
+		s.liveBuffer = defaultLiveCallBuffer
+	}
 	if s.log == nil {
 		s.log = slog.Default()
 	}

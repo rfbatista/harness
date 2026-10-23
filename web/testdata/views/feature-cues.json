@@ -1,0 +1,22 @@
+{
+  "$comment": "The board's feature cues (ADR 0016): how a feature task's children are counted in words, and when a child names its parent. Read by web/src/modules/tasks/presentation/boardView.test.js and internal/adapter/in/web/tasks/board_test.go so first paint and the live board agree.",
+  "children_words": [
+    { "count": 0, "word": "" },
+    { "count": 1, "word": "1 task" },
+    { "count": 3, "word": "3 tasks" }
+  ],
+  "tasks": [
+    { "id": "f1", "title": "Exports", "status": "in_progress", "parent_id": "" },
+    { "id": "c1", "title": "CSV export", "status": "todo", "parent_id": "f1" },
+    { "id": "c2", "title": "PDF export", "status": "done", "parent_id": "f1" },
+    { "id": "orphan", "title": "Lost", "status": "todo", "parent_id": "gone" },
+    { "id": "t1", "title": "Plain", "status": "backlog", "parent_id": "" }
+  ],
+  "cards": [
+    { "id": "f1", "parent": "", "children": "2 tasks" },
+    { "id": "c1", "parent": "Exports", "children": "" },
+    { "id": "c2", "parent": "Exports", "children": "" },
+    { "id": "orphan", "parent": "", "children": "" },
+    { "id": "t1", "parent": "", "children": "" }
+  ]
+}

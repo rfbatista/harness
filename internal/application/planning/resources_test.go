@@ -81,7 +81,7 @@ func newResourceFixture(t *testing.T) *resourceFixture {
 	f.svc.Resources, f.svc.Comments = sqlite.NewTicketResourceRepository(db), sqlite.NewTicketCommentRepository(db)
 	f.svc.Blobs, f.svc.Feed, f.svc.Events = blobstore.New(f.blobDir), f.feed, bus
 	f.svc.ContentURL = func(id string) string { return "/api/ticket_resources/" + id + "/content" }
-	tk, err := f.svc.CreateTicket(context.Background(), p.ID, "Task", "", "")
+	tk, err := f.svc.CreateTicket(context.Background(), p.ID, "Task", "", "", "")
 	if err != nil {
 		t.Fatal(err)
 	}

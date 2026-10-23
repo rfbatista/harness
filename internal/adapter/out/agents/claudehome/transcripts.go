@@ -20,6 +20,10 @@ type Transcripts struct {
 	// Dir is the CLI's config directory; empty means $CLAUDE_CONFIG_DIR, else
 	// ~/.claude.
 	Dir string
+	// Legacy is a second config directory searched, read-only, when Dir has
+	// no such conversation: the person's own ~/.claude, whose transcripts
+	// predate the agent Claude home. Empty means none.
+	Legacy string
 }
 
 var nonAlnum = regexp.MustCompile(`[^A-Za-z0-9]`)
@@ -29,20 +33,30 @@ func (t Transcripts) CanResume(dir, id string) error {
 	if fi, err := os.Stat(dir); err != nil || !fi.IsDir() {
 		return &domain.StructuredError{Code: "WORKSPACE_MISSING", Message: "the session's worktree no longer exists: " + dir}
 	}
-	root := t.root()
 	// The CLI may record the directory as given or with symlinks resolved
 	// (/tmp against /private/tmp on macOS), so both spellings are accepted.
 	candidates := []string{dir}
 	if real, err := filepath.EvalSymlinks(dir); err == nil && real != dir {
 		candidates = append(candidates, real)
 	}
-	for _, d := range candidates {
-		p := filepath.Join(root, "projects", nonAlnum.ReplaceAllString(d, "-"), id+".jsonl")
-		if _, err := os.Stat(p); err == nil {
-			return nil
+	for _, root := range t.roots() {
+		for _, d := range candidates {
+			p := filepath.Join(root, "projects", nonAlnum.ReplaceAllString(d, "-"), id+".jsonl")
+			if _, err := os.Stat(p); err == nil {
+				return nil
+			}
 		}
 	}
 	return &domain.StructuredError{Code: "SESSION_TRANSCRIPT_MISSING", Message: "claude has no saved conversation " + id + " for " + dir}
+}
+
+// roots are the config directories to look in, the agent Claude home first.
+func (t Transcripts) roots() []string {
+	roots := []string{t.root()}
+	if t.Legacy != "" && t.Legacy != roots[0] {
+		roots = append(roots, t.Legacy)
+	}
+	return roots
 }
 
 func (t Transcripts) root() string {

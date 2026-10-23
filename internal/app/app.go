@@ -8,6 +8,7 @@ package app
 
 import (
 	"log/slog"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -27,6 +28,15 @@ type Config struct {
 	MCPAddr string
 	// DBPath is the SQLite database path (e.g. "data.db" or ":memory:").
 	DBPath string
+	// DataDir is the absolute directory the harness keeps its data in: the
+	// database by default, and tools/, artifacts/, task-resources/, git/ and
+	// secret.key always. cliflags resolves it. Empty: the database's folder,
+	// or temporary directories for an in-memory database.
+	DataDir string
+	// DataDirSource says where DataDir came from, in words, for the Server
+	// page: the -data.dir flag, HARNESS_DATA_DIR, the database path, or the
+	// default.
+	DataDirSource string
 	// DBSlowThreshold is how long a database call may take before it is
 	// logged as a slow database call. Zero uses the SQLite adapter's default.
 	DBSlowThreshold time.Duration
@@ -84,9 +94,28 @@ type Config struct {
 	// downloaded from, in place of https://github.com (a mirror, or a test's
 	// fake release server). Empty uses GitHub.
 	TokenSaverReleaseBase string
+	// ManagedClaudeReleaseBase is where the managed claude is downloaded
+	// from, in place of https://downloads.claude.ai/claude-code-releases (a
+	// mirror, or a test's fake release server). Empty uses the official one.
+	ManagedClaudeReleaseBase string
 	// ProfilerOff stops the HTTP server serving Go's profiler under
 	// /debug/pprof/. Left false, the profiler answers loopback peers only.
 	ProfilerOff bool
+}
+
+// inMemory reports whether the database lives in memory only.
+func (c Config) inMemory() bool { return c.DBPath == "" || c.DBPath == ":memory:" }
+
+// dataRoot is DataDir, or the database's folder when it is unset, always
+// absolute; "" when neither names a place on disk.
+func (c Config) dataRoot() (string, error) {
+	if c.DataDir != "" {
+		return filepath.Abs(c.DataDir)
+	}
+	if c.inMemory() {
+		return "", nil
+	}
+	return filepath.Abs(filepath.Dir(c.DBPath))
 }
 
 // loopbackBaseURL is the base URL the spawned claude reaches this process at for
@@ -110,6 +139,9 @@ func (c Config) llmProxyURL() string {
 func New(cfg Config) *fx.App {
 	cfg.GitBin = gitcli.ResolveGit(cfg.GitBin)
 	slog.Info("git", "bin", cfg.GitBin)
+	if cfg.DataDir != "" {
+		slog.Info("data dir", "dir", cfg.DataDir, "set by", cfg.DataDirSource, "db", cfg.DBPath)
+	}
 	return fx.New(
 		fx.StopTimeout(stopTimeout),
 		fx.Supply(cfg),

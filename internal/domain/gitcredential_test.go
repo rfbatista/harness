@@ -70,6 +70,10 @@ func TestResolveGitCredential(t *testing.T) {
 	tokB := &GitCredential{ID: "b", Kind: GitHTTPSToken, Host: "github.com"}
 	tokDefault := &GitCredential{ID: "d", Kind: GitHTTPSToken, Host: "github.com", IsDefault: true}
 	key := &GitCredential{ID: "k", Kind: GitSSHKey, Host: "github.com"}
+	keyB := &GitCredential{ID: "kb", Kind: GitSSHKey, Host: "github.com"}
+	keyDefault := &GitCredential{ID: "kd", Kind: GitSSHKey, Host: "github.com", IsDefault: true}
+	keyPort := &GitCredential{ID: "kp", Kind: GitSSHKey, Host: "git.example.com:8443"}
+	httpsPort := &GitRemoteURL{Kind: GitHTTPSToken, Host: "git.example.com:8443"}
 	other := &GitCredential{ID: "o", Kind: GitHTTPSToken, Host: "gitlab.com"}
 	https := &GitRemoteURL{Kind: GitHTTPSToken, Host: "github.com"}
 	ssh := &GitRemoteURL{Kind: GitSSHKey, Host: "github.com"}
@@ -95,6 +99,12 @@ func TestResolveGitCredential(t *testing.T) {
 		{"no origin resolves only a pin", []*GitCredential{tokA}, "", nil, ""},
 		{"no origin, pinned", []*GitCredential{tokA}, "a", nil, "a"},
 		{"another host resolves nothing", []*GitCredential{other}, "", https, ""},
+		{"https origin falls back to the only key", []*GitCredential{key, other}, "", https, "k"},
+		{"https origin: a token beats a key", []*GitCredential{key, tokA}, "", https, "a"},
+		{"https origin: the default key beats another", []*GitCredential{key, keyDefault}, "", https, "kd"},
+		{"https origin: two keys, no default: none", []*GitCredential{key, keyB}, "", https, ""},
+		{"https origin with a port takes no key", []*GitCredential{keyPort}, "", httpsPort, ""},
+		{"ssh origin never takes a token", []*GitCredential{tokA}, "", ssh, ""},
 		{"git:// takes none", []*GitCredential{tokA}, "", &GitRemoteURL{Host: "github.com"}, ""},
 	} {
 		if got := id(ResolveGitCredential(c.creds, c.pinned, c.remote)); got != c.want {
@@ -124,5 +134,25 @@ func TestSecretNeverPrints(t *testing.T) {
 	}
 	if err := json.Unmarshal([]byte(`{"token":"abc"}`), &back); err != nil || back.Token.Reveal() != "abc" {
 		t.Fatalf("decoding a secret: %v %q", err, back.Token.Reveal())
+	}
+}
+
+func TestAnSSHKeyServesAnHTTPSOriginOnlyWithoutAPort(t *testing.T) {
+	for _, c := range []struct {
+		remote GitRemoteURL
+		kind   GitCredentialKind
+		want   bool
+	}{
+		{GitRemoteURL{Kind: GitHTTPSToken, Host: "github.com"}, GitHTTPSToken, true},
+		{GitRemoteURL{Kind: GitHTTPSToken, Host: "github.com"}, GitSSHKey, true},
+		{GitRemoteURL{Kind: GitHTTPSToken, Host: "git.example.com:8443"}, GitSSHKey, false},
+		{GitRemoteURL{Kind: GitHTTPSToken, Host: "git.example.com:8443"}, GitHTTPSToken, true},
+		{GitRemoteURL{Kind: GitSSHKey, Host: "github.com"}, GitSSHKey, true},
+		{GitRemoteURL{Kind: GitSSHKey, Host: "github.com"}, GitHTTPSToken, false},
+		{GitRemoteURL{Host: "github.com"}, GitSSHKey, false},
+	} {
+		if got := c.remote.Takes(c.kind); got != c.want {
+			t.Errorf("%+v takes %s = %v, want %v", c.remote, c.kind, got, c.want)
+		}
 	}
 }

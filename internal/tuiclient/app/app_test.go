@@ -320,6 +320,44 @@ func TestClient_ArchitectModeStep(t *testing.T) {
 	r.until("pane labelled with the mode", r.shows(" 1 claude (architect) "))
 }
 
+// The picker offers Product: a session on the task that interviews the person
+// into a PRD and child tasks.
+func TestClient_ProductModeStep(t *testing.T) {
+	be := fixture()
+	r := newRun(t, be, nil)
+	r.openTask()
+
+	r.press("n")
+	r.until("picker", r.shows("plain claude"))
+	r.press("enter")
+	r.until("mode step", r.shows("product"))
+	r.press("down", "down", "enter")
+	r.until("prompt step", r.shows("the product manager starts from the task"))
+	r.press("enter")
+	r.until("session", func() bool { _, ok := be.Session("s1"); return ok })
+
+	if s, _ := be.Session("s1"); s.Mode != domain.SessionModeProduct || s.AgentID != "" {
+		t.Fatalf("picked plain claude as product manager, got agent %q mode %q", s.AgentID, s.Mode)
+	}
+	r.until("pane labelled with the mode", r.shows(" 1 claude (product) "))
+}
+
+// The tasks screen shows which feature a child task belongs to: its row
+// carries the parent's title.
+func TestClient_TasksScreenNamesAChildTasksParent(t *testing.T) {
+	be := fixture()
+	be.Tickets = append(be.Tickets,
+		&domain.Ticket{ID: "t-child", ProjectID: "p1", Title: "Write the brief", Status: domain.TicketStatusTodo, ParentID: "t1"},
+	)
+	r := newRun(t, be, nil)
+	r.press("enter")
+	r.until("tasks", r.shows("Write the brief"))
+	r.until("the child names its parent", r.shows("Write the brief ↳ Fix flaky tests"))
+	if strings.Contains(r.view(), "Old work ↳") || strings.Contains(r.view(), "Fix flaky tests ↳") {
+		t.Fatalf("a top-level task names a parent:\n%s", r.view())
+	}
+}
+
 func TestClient_PanesSurviveLeavingTheTask(t *testing.T) {
 	r := newRun(t, fixture(), map[string]string{"one": `printf 'first agent\r\n'; cat`})
 	r.openTask()

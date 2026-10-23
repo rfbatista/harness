@@ -1,0 +1,26 @@
+package agentisolation
+
+import "operators-mcp/internal/adapter/in/web/shell"
+
+// Page is /agent-isolation: the intro, then the three sections in the order
+// that puts what blocks agents first. Each section is its own partial
+// (credentialSection, claudeSection, sandboxSection) with its own anchor and
+// component, so none of them depends on another.
+templ Page(frame shell.Frame, v View) {
+	@shell.AppShell(frame) {
+		<main id="main" class="[ frame ]">
+			<header class="[ toolbar ]">
+				<h1>Agent isolation</h1>
+			</header>
+			<div data-scroll>
+				<div class="[ wrapper flow ] [ region ]" style="--wrapper-max: 52rem">
+					<p class="[ color-ink-muted ]">Agents run in their own sandbox, with their own Claude home, credential and claude version. Nothing here touches your own <span class="[ font-mono ]">claude</span> install or login.</p>
+					@summaryChips(v.Summary)
+					@credentialSection(v.Credential)
+					@claudeSection(v.Claude)
+					@sandboxSection(v.Sandbox)
+				</div>
+			</div>
+		</main>
+	}
+}

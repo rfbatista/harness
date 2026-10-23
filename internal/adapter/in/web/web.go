@@ -18,12 +18,15 @@ import (
 	"github.com/a-h/templ"
 	"github.com/rfbatista/harnesskit/errs"
 
+	"operators-mcp/internal/adapter/in/web/agentisolation"
 	"operators-mcp/internal/adapter/in/web/code"
 	"operators-mcp/internal/adapter/in/web/credentials"
 	"operators-mcp/internal/adapter/in/web/history"
 	"operators-mcp/internal/adapter/in/web/home"
+	"operators-mcp/internal/adapter/in/web/models"
 	"operators-mcp/internal/adapter/in/web/notifications"
 	"operators-mcp/internal/adapter/in/web/projects"
+	"operators-mcp/internal/adapter/in/web/serversettings"
 	"operators-mcp/internal/adapter/in/web/shell"
 	"operators-mcp/internal/adapter/in/web/tasks"
 	"operators-mcp/internal/adapter/in/web/tokensavers"
@@ -78,6 +81,43 @@ type Deps struct {
 	// TokenSaverInstalls lists the token savers for their page; nil leaves
 	// the page and its top bar link out.
 	TokenSaverInstalls ports.TokenSaverInstallReader
+	// Settings reads each session tier's model for the Models page; nil
+	// leaves the page and its top bar link out.
+	Settings ports.SettingsReader
+	// SandboxSettings and SandboxDriver fill the Agent isolation page: the
+	// person's sandbox switch and extra paths, and the driver the platform
+	// has (a nil func or result: none). A nil SandboxSettings leaves the page
+	// and its top bar link out.
+	SandboxSettings ports.SandboxSettings
+	SandboxDriver   func() ports.SandboxDriver
+	// ManagedClaude and ManagedClaudeBin fill the page's Managed claude
+	// section: the installed versions, and the binary agents resolve to (the
+	// override included). Nil leaves the section showing none installed.
+	ManagedClaude    ports.ManagedClaude
+	ManagedClaudeBin ports.ManagedClaudeBin
+	// SandboxBuiltin lists the allowlist every session gets, for the page's
+	// read-only list; nil lists none.
+	SandboxBuiltin func() []ports.SandboxBuiltinGroup
+	// AgentCredential fills the Agent isolation page's credential section
+	// (status only, never the value); nil shows it as not set.
+	AgentCredential ports.AgentCredential
+	// AgentOAuth is the credential section's Sign in with Claude flow; nil
+	// leaves the button disabled.
+	AgentOAuth ports.AgentOAuth
+	// AgentAuth is `claude auth status` of the agent home, read when the page
+	// loads; nil shows no account.
+	AgentAuth ports.AgentAuth
+	// AgentHomeExposed says the agent Claude home lies in a git work tree
+	// that does not ignore it; the credential section then warns. Nil: no
+	// check.
+	AgentHomeExposed func() bool
+	// AgentLogin says the agent home holds a Claude login, which agents use
+	// before the pasted credential; the credential section says which is in
+	// use. Nil: no login.
+	AgentLogin func() bool
+	// DataPaths are where the server keeps its data, for the Server page;
+	// nil leaves the page and its top bar link out.
+	DataPaths *serversettings.Paths
 	// Usage reads token usage for a project's Usage page and the task
 	// page's totals; nil leaves the page, its rail link and the totals out.
 	Usage ports.UsageDashboard
@@ -171,6 +211,19 @@ func NewHandler(deps Deps, assets *Assets, fallback http.Handler) http.Handler {
 		savers.Indexes, savers.Now = deps.RepositoryIndexes, deps.Now
 		mux.Handle("GET "+tokensavers.Href, s.page(savers.Page))
 	}
+	if deps.Settings != nil {
+		modelsPage := models.Handler{Settings: deps.Settings, Layout: s.layout, Render: render}
+		mux.Handle("GET "+models.Href, s.page(modelsPage.Page))
+	}
+	if deps.SandboxSettings != nil {
+		isolation := agentisolation.Handler{Sandbox: deps.SandboxSettings, Driver: deps.SandboxDriver, Credential: deps.AgentCredential, OAuth: deps.AgentOAuth, Auth: deps.AgentAuth, Layout: s.layout, Render: render,
+			Claude: deps.ManagedClaude, ClaudeBin: deps.ManagedClaudeBin, Builtin: deps.SandboxBuiltin, HomeExposed: deps.AgentHomeExposed, HasLogin: deps.AgentLogin}
+		mux.Handle("GET "+agentisolation.Href, s.page(isolation.Page))
+	}
+	if deps.DataPaths != nil {
+		serverPage := serversettings.Handler{Paths: *deps.DataPaths, Settings: deps.Settings, Layout: s.layout, Render: render}
+		mux.Handle("GET "+serversettings.Href, s.page(serverPage.Page))
+	}
 	mux.Handle("GET /projects/new", s.page(projectPages.New))
 	mux.Handle("GET /projects/{project}", s.page(taskPages.Project))
 	mux.Handle("GET /projects/{project}/settings", s.page(projectPages.Settings))
@@ -201,7 +254,7 @@ func NewHandler(deps Deps, assets *Assets, fallback http.Handler) http.Handler {
 	mux.Handle("GET /projects/{project}/documents/{document}", s.page(taskPages.ProjectDocuments))
 	mux.Handle("GET /projects/{project}/documents/{document}/view", s.page(taskPages.ProjectDocumentView))
 	mux.HandleFunc("GET /projects/{project}/{$}", toProject)
-	mux.HandleFunc("GET /projects/{project}/sessions", toProject) // the old page; sessions now live under their task
+	mux.Handle("GET /projects/{project}/sessions", s.page(taskPages.ProjectSessions)) // the project's feature brainstorms: sessions with no task
 	mux.Handle("GET /projects/{project}/tasks/new", s.page(taskPages.New))
 	mux.Handle("GET /projects/{project}/tasks/{task}", s.page(taskPages.Task))
 	mux.Handle("GET /projects/{project}/tasks/{task}/sessions/{session}/history", s.page(historyPages.Session))
@@ -267,7 +320,7 @@ func (s *server) layout(ctx context.Context, title, projectID, taskID string) (s
 		return frame, nil
 	}
 
-	list, err := s.deps.Tasks.ListTickets(ctx, projectID)
+	list, err := s.deps.Tasks.ListTickets(ctx, projectID, ports.TicketFilter{})
 	if err != nil {
 		return shell.Frame{}, err
 	}
@@ -327,6 +380,16 @@ func (s *server) bareFrame(title string) shell.Frame {
 	}
 	if s.deps.TokenSaverInstalls != nil {
 		f.Top.TokenSaversHref = tokensavers.Href
+	}
+	if s.deps.Settings != nil {
+		f.Top.ModelsHref = models.Href
+	}
+	if s.deps.SandboxSettings != nil {
+		f.Top.AgentIsolationHref = agentisolation.Href
+		f.Top.AgentIsolationAttention = agentisolation.Blocks(s.deps.SandboxSettings, s.deps.SandboxDriver, s.deps.AgentCredential, s.deps.AgentLogin, s.deps.ManagedClaudeBin)
+	}
+	if s.deps.DataPaths != nil {
+		f.Top.ServerHref = serversettings.Href
 	}
 	return f
 }

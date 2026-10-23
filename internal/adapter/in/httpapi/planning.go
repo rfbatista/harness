@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/labstack/echo/v4"
@@ -20,7 +21,17 @@ func (h *Handler) handleListTickets(c echo.Context) error {
 	if projectID == "" {
 		return echo.NewHTTPError(http.StatusBadRequest, "project_id is required")
 	}
-	list := h.planningSvc.ListTickets
+	// parent_id narrows the list to one feature task's children; present but
+	// empty, to the top-level tasks; absent, every task of the project.
+	// archived=true lists only the archived tasks instead, newest first.
+	var filter ports.TicketFilter
+	if q := c.QueryParams(); q.Has("parent_id") {
+		parentID := q.Get("parent_id")
+		filter.ParentID = &parentID
+	}
+	list := func(ctx context.Context, projectID string) ([]*domain.Ticket, error) {
+		return h.planningSvc.ListTickets(ctx, projectID, filter)
+	}
 	if c.QueryParam("archived") == "true" {
 		if h.archive == nil {
 			return errArchiveOff
@@ -48,11 +59,12 @@ func (h *Handler) handleCreateTicket(c echo.Context) error {
 		Title       string `json:"title"`
 		Description string `json:"description"`
 		Status      string `json:"status"`
+		ParentID    string `json:"parent_id"`
 	}
 	if err := bindJSON(c, &in); err != nil {
 		return err
 	}
-	tk, err := h.planningSvc.CreateTicket(c.Request().Context(), in.ProjectID, in.Title, in.Description, domain.TicketStatus(in.Status))
+	tk, err := h.planningSvc.CreateTicket(c.Request().Context(), in.ProjectID, in.Title, in.Description, domain.TicketStatus(in.Status), in.ParentID)
 	if err != nil {
 		return err
 	}
@@ -61,18 +73,20 @@ func (h *Handler) handleCreateTicket(c echo.Context) error {
 
 // handleUpdateTicket is a partial update: a key absent from the body (or null)
 // keeps its value. The board sends only ticket_id and status to move a card;
-// an editor sends title and description to save text without moving it.
+// an editor sends title and description to save text without moving it; a
+// parent_id of "" makes the task top-level again.
 func (h *Handler) handleUpdateTicket(c echo.Context) error {
 	var in struct {
 		TicketID    string  `json:"ticket_id"`
 		Title       *string `json:"title"`
 		Description *string `json:"description"`
 		Status      *string `json:"status"`
+		ParentID    *string `json:"parent_id"`
 	}
 	if err := bindJSON(c, &in); err != nil {
 		return err
 	}
-	patch := ports.TicketPatch{Title: in.Title, Description: in.Description}
+	patch := ports.TicketPatch{Title: in.Title, Description: in.Description, ParentID: in.ParentID}
 	if in.Status != nil {
 		st := domain.TicketStatus(*in.Status)
 		patch.Status = &st

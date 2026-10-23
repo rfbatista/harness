@@ -178,19 +178,16 @@ func mustFlag(t *testing.T, args []string, name string) string {
 }
 
 // The architect's specs and contracts are what other tasks build on; its
-// skill says a person moves them to project level, and that the shell
-// refuses the architect's own mv.
+// skill says to mv them to project level itself while "Agents move
+// documents to project" is on, and to ask the person otherwise.
 func TestStartInteractive_ArchitectSkillNamesProjectDocuments(t *testing.T) {
 	svc, _ := newInteractiveService(t)
 	_, launch := startInteractive(t, svc, InteractiveRequest{Mode: "architect"})
 	body := pluginSkill(t, launch, "task-architecture")
-	for _, want := range []string{"project/docs/", "project level", "ask the person", "PROJECT_MOVE_DENIED"} {
+	for _, want := range []string{"project/docs/", "project level", "ask the person", "PROJECT_MOVE_DENIED", "Agents move documents to project"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("task-architecture SKILL.md lacks %q", want)
 		}
-	}
-	if strings.Contains(body, "mv task/docs/contract") || strings.Contains(body, "`mv` it to `project/docs/`") {
-		t.Error("task-architecture SKILL.md still tells the architect to mv documents to project/docs/")
 	}
 }
 
@@ -237,7 +234,7 @@ func TestStartInteractive_ArchitectCoordinatesDelegates(t *testing.T) {
 	for _, want := range []string{
 		"mcp__task__reply_to_session", "mcp__task__list_task_messages", "mcp__task__request_user_review",
 		"mcp__task__withdraw_user_review", "mcp__task__list_review_requests", "mcp__task__set_status_check",
-		"mcp__task__list_status_checks", "mcp__task__update_task_status",
+		"mcp__task__list_status_checks", "mcp__task__merge_session_branch", "mcp__task__update_task_status",
 		"[task message", "[status check", "review_response", "verdict", "reason", "status_check_minutes",
 		"## Coordinating Delegates",
 	} {
@@ -260,7 +257,7 @@ func TestStartInteractive_ArchitectCoordinatesDelegates(t *testing.T) {
 // them in parts, with shell tools.
 func TestStartInteractive_SkillsReadInParts(t *testing.T) {
 	svc, _ := newInteractiveService(t)
-	for mode, skill := range map[string]string{"architect": "task-architecture", "implement": "task-implement-spec", "design": "design-artifacts"} {
+	for mode, skill := range map[string]string{"architect": "task-architecture", "implement": "task-implement-spec", "design": "design-artifacts", "product": "task-product"} {
 		_, launch := startInteractive(t, svc, InteractiveRequest{Mode: mode})
 		body := pluginSkill(t, launch, skill)
 		for _, w := range []string{"grep -n", "sed -n", "never the whole", "Edit", "BASE_VERSION_STALE"} {
@@ -353,4 +350,73 @@ func TestResumeInteractive_KeepsTheImplementSkills(t *testing.T) {
 		t.Fatal(err)
 	}
 	pluginFile(t, launchOf(t, spec), "task-tdd", "mocking.md")
+}
+
+// Product mode is the product manager on a feature task: its skill ships with
+// the PRD and brief formats, and its opening prompt names the interview, the
+// PRD, the child tasks and their briefs, the review, and what it never does.
+func TestStartInteractive_ProductMode(t *testing.T) {
+	svc, _ := newInteractiveService(t)
+	svc.tickets.(fakeTickets)["tk1"].Description = "People want to export their data."
+	sess, launch := startInteractive(t, svc, InteractiveRequest{Mode: "product", Prompt: "Keep it to CSV for now."})
+
+	if sess.Mode != domain.SessionModeProduct {
+		t.Fatalf("mode = %q, want product", sess.Mode)
+	}
+	if got := sessionOf(svc, sess.ID); got == nil || got.Mode != domain.SessionModeProduct {
+		t.Fatalf("mode not persisted: %+v", got)
+	}
+	body := pluginSkill(t, launch, "task-product")
+	for _, want := range []string{"name: task-product", "# PRD: ", "task/docs/", "tasks/<id>/docs/", "`mcp__task__create_task`", "`mcp__task__list_project_tasks`", "SESSION_HAS_NO_TASK",
+		"mcp__task__request_user_review", "mcp__task__update_task_status", "task/comments/",
+		"as the empty string `\"\"`", "PRD-FORMAT.md", "TASK-BRIEF-FORMAT.md", "confirms", "BASE_VERSION_STALE", "REDIRECT_DENIED"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("task-product SKILL.md lacks %q", want)
+		}
+	}
+	if !strings.Contains(body, "never") || !strings.Contains(body, "start_task_session") {
+		t.Error("task-product SKILL.md does not forbid writing code and starting implementation sessions")
+	}
+	prd := pluginFile(t, launch, "task-product", "PRD-FORMAT.md")
+	for _, want := range []string{"# PRD: <feature>", "## Goal", "## Users", "## Scope in", "## Scope out", "## Risks", "## Open questions", "## Child tasks"} {
+		if !strings.Contains(prd, want) {
+			t.Errorf("PRD-FORMAT.md lacks %q", want)
+		}
+	}
+	brief := pluginFile(t, launch, "task-product", "TASK-BRIEF-FORMAT.md")
+	for _, want := range []string{"# Brief: <task>", "## What to build", "## Acceptance criteria", "## Boundaries touched", "## Out of scope", "tasks/<id>/docs/"} {
+		if !strings.Contains(brief, want) {
+			t.Errorf("TASK-BRIEF-FORMAT.md lacks %q", want)
+		}
+	}
+	p := launch.Spec.Prompt
+	if !strings.HasPrefix(p, "Use the task-product skill on task tk1: Ship the thing") || !strings.Contains(p, "People want to export their data.") ||
+		!strings.HasSuffix(p, "Keep it to CSV for now.") {
+		t.Errorf("first message = %q", p)
+	}
+	for _, want := range []string{"goal", "users", "scope", "risks", "PRD: ", "task/docs/", "create_task", "tasks/<id>/docs/", "TASK-BRIEF-FORMAT.md",
+		"request_user_review", "update_task_status", "task/comments/", "Never write code", "never start implementation sessions"} {
+		if !strings.Contains(p, want) {
+			t.Errorf("product prompt lacks %q:\n%s", want, p)
+		}
+	}
+	// The product skill must not drag the architect or implement ones along.
+	for _, other := range []string{"task-architecture", "task-implement-spec"} {
+		if _, err := os.Stat(filepath.Join(mustFlag(t, launch.Args, "--plugin-dir"), "skills", other)); err == nil {
+			t.Errorf("product mode attached the %s skill", other)
+		}
+	}
+}
+
+func TestResumeInteractive_KeepsTheProductSkill(t *testing.T) {
+	svc, _ := newInteractiveService(t)
+	sess, _ := startInteractive(t, svc, InteractiveRequest{Mode: "product"})
+	if _, err := svc.EndInteractive(context.Background(), sess.ID, 0, false); err != nil {
+		t.Fatal(err)
+	}
+	_, spec, err := svc.ResumeInteractive(context.Background(), ports.ResumeRequest{SessionID: sess.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	pluginFile(t, launchOf(t, spec), "task-product", "PRD-FORMAT.md")
 }

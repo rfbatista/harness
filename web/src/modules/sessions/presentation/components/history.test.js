@@ -4,7 +4,7 @@ import { flush, manualTimers } from "../../../../shared/testing/doubles.js";
 import { assert, file, test } from "../../../../shared/testing/test.js";
 import { memoryTranscripts } from "../../infrastructure/memory-transcripts.js";
 import { numbered } from "../../testing/transcript-contract.js";
-import { CHUNK, history, MAX_LINES, POLL_MS } from "./history.js";
+import { CHUNK, history, MAX_LINES, POLL_MS, TOOLS_KEY } from "./history.js";
 
 file("sessions/presentation/history");
 
@@ -20,19 +20,25 @@ function fakeLog({ scrollHeight = 10_000, clientHeight = 500, scrollTop = 0 } = 
   };
 }
 
-async function make({ transcripts = { s1: numbered(5) }, live = false, visible = () => true } = {}) {
+/** A Storage as far as the component uses it. */
+function memoryStorage(values = {}) {
+  const map = new Map(Object.entries(values));
+  return { getItem: (k) => map.get(k) ?? null, setItem: (k, v) => map.set(k, String(v)), map };
+}
+
+async function make({ transcripts = { s1: numbered(5) }, live = false, visible = () => true, storage = memoryStorage(), clipboard = null, agent } = {}) {
   const memory = memoryTranscripts({ transcripts });
   const timers = manualTimers();
   const log = fakeLog();
   const el = { querySelector: (selector) => (selector === "[role=log]" ? log : null) };
-  const mounted = mount(() => history({ transcripts: memory.gateway, timers, pageVisible: visible })({ sessionId: "s1", live }), { el });
+  const mounted = mount(() => history({ transcripts: memory.gateway, timers, pageVisible: visible, storage, clipboard })({ sessionId: "s1", live, agent }), { el });
   mounted.instance.init();
   await flush();
   mounted.tick();
-  return { ...mounted, memory, timers, log };
+  return { ...mounted, memory, timers, log, storage };
 }
 
-const texts = (instance) => instance.lines.map((l) => l.text);
+const texts = (instance) => instance.rendered.map((l) => l.text);
 
 test("opens on the newest page, scrolled to the bottom", async () => {
   const { instance, log, memory } = await make({ transcripts: { s1: numbered(300) } });
@@ -61,7 +67,7 @@ test("only a window of lines renders; moving it over loaded lines asks the serve
     await instance.older();
   }
   assert.deepEqual([instance.entries.length, instance.hasOlder], [1000, false]);
-  assert.deepEqual([instance.start, instance.end, instance.lines.length], [0, MAX_LINES, MAX_LINES]);
+  assert.deepEqual([instance.start, instance.end, instance.rendered.length], [0, MAX_LINES, MAX_LINES]);
   const calls = memory.calls.length;
   instance.later();
   assert.deepEqual([instance.start, instance.end], [CHUNK, MAX_LINES + CHUNK]);
@@ -153,13 +159,102 @@ test("a catch-up that fails keeps the lines and says why; the next one clears it
   assert.equal(instance.showsError, false);
 });
 
-test("a tool line opens and closes on its own", async () => {
+test("the conversation reads as a chat: turns from the person and the named agent, tool calls in one card", async () => {
+  const { instance } = await make({
+    agent: "backend",
+    transcripts: {
+      s1: [
+        { kind: "user", text: "fix it", html: "<p>fix it</p>" },
+        { kind: "tool_use", tool: "Bash", text: "ls" },
+        { kind: "tool_result", tool: "Bash", text: "a\nb" },
+        { kind: "assistant", text: "**Done**", html: "<p><strong>Done</strong></p>" },
+      ],
+    },
+  });
+  assert.deepEqual(instance.items.map((i) => [i.type, i.name ?? i.summary]), [["turn", "You"], ["activity", "1 tool call"], ["turn", "backend"]]);
+  assert.equal(instance.items[2].parts[0].html, "<p><strong>Done</strong></p>");
+});
+
+test("a card and each of its calls open and close on their own", async () => {
   const { instance } = await make({ transcripts: { s1: [{ kind: "tool_use", tool: "Bash", text: "ls" }, { kind: "tool_result", tool: "Bash", text: "a\nb" }] } });
-  const [call, result] = instance.lines;
-  instance.toggle(result);
-  assert.deepEqual([instance.expanded(call), instance.expanded(result)], [false, true]);
-  instance.toggle(result);
-  assert.equal(instance.expanded(result), false);
+  const card = instance.items[0];
+  const call = card.calls[0];
+  instance.toggle(card.key);
+  assert.deepEqual([instance.expanded(card.key), instance.expanded(call.key)], [true, false]);
+  instance.toggle(call.key);
+  assert.deepEqual([instance.expanded(card.key), instance.expanded(call.key)], [true, true]);
+  instance.toggle(card.key);
+  assert.equal(instance.expanded(card.key), false);
+});
+
+test("a long message folds until shown in full", async () => {
+  const { instance } = await make({ transcripts: { s1: [{ kind: "assistant", text: "x".repeat(5_000) }] } });
+  const part = instance.items[0].parts[0];
+  assert.deepEqual([instance.clamped(part), instance.moreLabel(part)], [true, "Show all"]);
+  instance.toggle(part.cursor);
+  assert.deepEqual([instance.clamped(part), instance.moreLabel(part)], [false, "Show less"]);
+});
+
+test("hiding the tool calls is remembered in this browser", async () => {
+  const transcripts = { s1: [{ kind: "user", text: "go" }, { kind: "tool_use", tool: "Bash", text: "ls" }, { kind: "tool_result", tool: "Bash", text: "a" }] };
+  const { instance, storage } = await make({ transcripts });
+  assert.deepEqual([instance.showTools, instance.items.length], [true, 2]);
+  instance.toggleTools();
+  assert.deepEqual([instance.showTools, instance.items.length, storage.map.get(TOOLS_KEY)], [false, 1, "false"]);
+  const again = await make({ transcripts, storage });
+  assert.equal(again.instance.showTools, false);
+});
+
+test("search counts what matches and steps through it, opening the card a match is in", async () => {
+  const { instance } = await make({
+    transcripts: {
+      s1: [
+        { kind: "user", text: "Why is it flaky?" },
+        { kind: "tool_use", tool: "Bash", text: "go test -run Flaky" },
+        { kind: "tool_result", tool: "Bash", text: "ok" },
+        { kind: "assistant", text: "Not flaky now." },
+      ],
+    },
+  });
+  assert.equal(instance.searchLabel, "");
+  instance.query = "FLAKY";
+  instance.onSearch();
+  assert.deepEqual([instance.hits.length, instance.searchLabel], [3, "3 found"]);
+  instance.onSearchKey({ key: "Enter", shiftKey: false, preventDefault() {} });
+  instance.onSearchKey({ key: "Enter", shiftKey: false, preventDefault() {} });
+  const card = instance.items[1];
+  assert.deepEqual([instance.searchLabel, instance.expanded(card.key), instance.expanded(card.calls[0].key)], ["2 of 3", true, true]);
+  instance.onSearchKey({ key: "Enter", shiftKey: true, preventDefault() {} });
+  assert.equal(instance.searchLabel, "1 of 3");
+  instance.onSearchKey({ key: "Escape", preventDefault() {} });
+  assert.deepEqual([instance.query, instance.searchLabel], ["", ""]);
+  instance.query = "nothing like it";
+  instance.onSearch();
+  assert.equal(instance.searchLabel, "No match");
+});
+
+test("search brings a match outside the rendered window into it", async () => {
+  const { instance } = await make({ transcripts: { s1: [{ kind: "user", text: "needle" }, ...numbered(1000)] } });
+  while (instance.hasOlder || instance.start > 0) await instance.older();
+  instance.jump();
+  assert.equal(instance.start > 0, true);
+  instance.query = "needle";
+  instance.step(1);
+  assert.deepEqual([instance.start, instance.rendered[0].text, instance.following], [0, "needle", false]);
+});
+
+test("Copy puts a message's Markdown, as written, on the clipboard", async () => {
+  const copied = [];
+  const { instance } = await make({ clipboard: { writeText: async (t) => void copied.push(t) }, transcripts: { s1: [{ kind: "assistant", text: "**a**" }, { kind: "assistant", text: "b" }] } });
+  await instance.copyTurn(instance.items[0]);
+  assert.deepEqual(copied, ["**a**\n\nb"]);
+});
+
+test("the agent is working below the newest message while the session runs", async () => {
+  const { instance } = await make({ live: true, transcripts: { s1: [{ kind: "user", text: "go" }] }, agent: "backend" });
+  assert.deepEqual([instance.working, instance.workingLabel], [true, "backend is working…"]);
+  const ended = await make({ live: false, transcripts: { s1: [{ kind: "user", text: "go" }] } });
+  assert.equal(ended.instance.working, false);
 });
 
 test("a cursor the server no longer takes starts History again from the newest page, without an error", async () => {

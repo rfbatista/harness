@@ -38,6 +38,7 @@ const (
 	layout                  // the shell's own folders
 	readOnly                // README, index, task.json, resources, attached.md, urls.md
 	taskDocs                // task/docs/…: task documents
+	tasksDocs               // tasks/<id>/docs/…: another task's documents
 	projDocs                // project/docs/…: project documents
 	taskDesigns             // task/designs/…: the task's designs
 	projDesigns             // project/designs/…: project assets, changed only by mv
@@ -59,10 +60,12 @@ func classify(rel string) area {
 	switch {
 	case readOnlyFiles[rel] || strings.HasPrefix(rel, "task/resources/"):
 		return readOnly
-	case layoutDirs[rel]:
+	case layoutDirs[rel] || rel == tasksDir || tasksLayout(rel):
 		return layout
 	case strings.HasPrefix(rel, "task/docs/"):
 		return taskDocs
+	case taskOf(rel) != "":
+		return tasksDocs
 	case strings.HasPrefix(rel, "project/docs/"):
 		return projDocs
 	case strings.HasPrefix(rel, "task/designs/"):
@@ -75,12 +78,39 @@ func classify(rel string) area {
 	return unstored
 }
 
-func (a area) docs() bool { return a == taskDocs || a == projDocs }
+// taskPath splits a path under tasks/<id>/ into the task's id and the rest
+// of the path inside that task's folder ("" for the folder itself). ok is
+// false for a path anywhere else, tasks/ itself included.
+func taskPath(rel string) (id, rest string, ok bool) {
+	dir, after, found := strings.Cut(rel, "/")
+	if dir != tasksDir || !found {
+		return "", "", false
+	}
+	id, rest, _ = strings.Cut(after, "/")
+	return id, rest, id != ""
+}
+
+// taskOf is the id of the task whose documents rel is in, under
+// tasks/<id>/docs/, "" anywhere else.
+func taskOf(rel string) string {
+	if id, rest, ok := taskPath(rel); ok && strings.HasPrefix(rest, "docs/") && rest != "docs/" {
+		return id
+	}
+	return ""
+}
+
+// tasksLayout says rel is a task's own folder under tasks/, or its docs.
+func tasksLayout(rel string) bool {
+	_, rest, ok := taskPath(rel)
+	return ok && (rest == "" || rest == "docs")
+}
+
+func (a area) docs() bool { return a == taskDocs || a == tasksDocs || a == projDocs }
 
 func (a area) designs() bool { return a == taskDesigns || a == projDesigns }
 
 func (a area) scope() domain.DocumentScope {
-	if a == taskDocs {
+	if a == taskDocs || a == tasksDocs {
 		return domain.DocumentScopeTask
 	}
 	return domain.DocumentScopeProject
@@ -182,12 +212,65 @@ func refuseRedirect() ports.ShellAnswer {
 	return refuse("REDIRECT_DENIED", "shell redirects into $HARNESS_SHELL are not stored; use Write/Edit or tee")
 }
 
-func refuseNotOnTask(rel string) ports.ShellAnswer {
-	return refuse("NOT_ON_TASK", rel+" cannot move to task scope: the document is not linked to this task")
+// refuseNotOnTask: the document at rel cannot move to the task whose docs
+// dst is (this task for task/docs).
+func refuseNotOnTask(rel, dst string) ports.ShellAnswer {
+	which := "this task"
+	if id := taskOf(dst); id != "" {
+		which = "task " + id
+	}
+	return refuse("NOT_ON_TASK", rel+" cannot move to task scope: the document is not linked to "+which)
+}
+
+func refuseTaskMove(src, dst string) ports.ShellAnswer {
+	return refuse("TASK_MOVE_DENIED", src+" cannot move to "+dst+": a document stays on its task; write it there instead; nothing was written")
+}
+
+func refuseTaskUnknown(rel, id string) ports.ShellAnswer {
+	return refuse("TASK_NOT_FOUND", rel+": there is no task "+id+" in this project; nothing was written")
+}
+
+func refuseTaskElsewhere(rel, id string) ports.ShellAnswer {
+	return refuse("TASK_NOT_ON_PROJECT", rel+": task "+id+" is in another project; nothing was written")
+}
+
+func refuseOwnTask(rel string) ports.ShellAnswer {
+	return refuse("NOT_STORED", rel+" is this session's own task: its documents are in task/docs; nothing was written")
+}
+
+// refuseNoTask: the shell belongs to a session with no task, so it has no
+// task/ folder; documents go onto a task under tasks/<id>/docs.
+func refuseNoTask(rel string) ports.ShellAnswer {
+	return refuse("NOT_STORED", rel+": this session has no task, so there is no task/ folder; write documents under tasks/<id>/docs (create_task first) or project/docs; nothing was written")
 }
 
 func refuseProjectMove(rel string) ports.ShellAnswer {
-	return refuse("PROJECT_MOVE_DENIED", rel+` cannot move to project scope: a person moves documents to project level ("Move to project" on the task's documents page); nothing was written`)
+	return refuse("PROJECT_MOVE_DENIED", rel+` cannot move to project scope: only a person moves documents to project level ("Move to project" on the task's documents page), unless they turn on "Agents move documents to project" on the Server page; nothing was written`)
+}
+
+// refuseOtherTaskMove: a session moves only its own task's documents to
+// project level, whatever the setting.
+func refuseOtherTaskMove(rel string) ports.ShellAnswer {
+	return refuse("PROJECT_MOVE_DENIED", rel+" cannot move to project scope: a session moves only its own task's documents (task/docs) to project level; nothing was written")
+}
+
+// movesToProject says whether row, moved to dst, may become a project
+// document: while the setting is on, a document of the session's own task
+// (in task/docs) may. ok false answers the refusal.
+func movesToProject(sh *shell, row ports.ShellFile, src, dst string, agentsMove bool) (ports.ShellAnswer, bool) {
+	if classify(dst) != projDocs || row.Scope == string(domain.DocumentScopeProject) {
+		return ports.ShellAnswer{}, true
+	}
+	switch {
+	case !agentsMove:
+		return refuseProjectMove(src), false
+	case classify(row.Path) != taskDocs:
+		return refuseOtherTaskMove(src), false
+	}
+	if over, ok := sh.files[moved(row.Path, src, dst)]; ok && over.ID != row.ID && over.Scope == string(domain.DocumentScopeProject) {
+		return refuse("PROJECT_MOVE_DENIED", dst+" is a project document: a move to project level does not write over one; nothing was written"), false
+	}
+	return ports.ShellAnswer{}, true
 }
 
 // refuseUnstored answers a write the harness would not store, so it is not
@@ -201,7 +284,7 @@ func refuseUnstored(rel string, a area) ports.ShellAnswer {
 	case layout:
 		return refuse("NOT_STORED", rel+" is one of the shell's own folders; nothing was written")
 	}
-	return refuse("NOT_STORED", rel+" is outside the folders the harness stores (task/docs, project/docs, task/comments, task/designs, project/designs); nothing was written")
+	return refuse("NOT_STORED", rel+" is outside the folders the harness stores (task/docs, project/docs, tasks/<id>/docs, task/comments, task/designs, project/designs); nothing was written")
 }
 
 func refuseCrossMove(src, dst string) ports.ShellAnswer {
@@ -241,7 +324,7 @@ func (s *Service) CommitShellEdit(ctx context.Context, sessionID string, e ports
 		if sh.skipped {
 			s.kick(sh)
 		}
-		ans := refuseArea(ed)
+		ans := s.refuseAreas(ctx, sh, ed)
 		if ans.Allow {
 			ans = s.commit(ctx, sh, ed)
 		}
@@ -278,6 +361,66 @@ func (s *Service) withShell(sessionID string, e ports.ShellEdit, do func(*shell,
 		return refuseRedirect()
 	}
 	return do(sh, ed)
+}
+
+// refuseAreas refuses an edit of a read-only path, of one whose writes are
+// not stored, of task/ in a shell that has no task, of a task folder that
+// is not another task of the project, or a move of a document to another
+// task's docs.
+func (s *Service) refuseAreas(ctx context.Context, sh *shell, ed edit) ports.ShellAnswer {
+	if sh.ticketID == "" {
+		for i, rel := range ed.rel {
+			if ed.in[i] && (rel == "task" || strings.HasPrefix(rel, "task/")) {
+				return refuseNoTask(rel)
+			}
+		}
+	}
+	if ans := refuseArea(ed); !ans.Allow {
+		return ans
+	}
+	for i, rel := range ed.rel {
+		if ed.in[i] {
+			if ans := s.refuseTask(ctx, sh, rel); !ans.Allow {
+				return ans
+			}
+		}
+	}
+	if ed.op == "mv" && ed.in[0] && ed.in[1] {
+		src, dst := ed.rel[0], ed.rel[1]
+		if from, to := classify(src), classify(dst); from.docs() && to.docs() && from.scope() == domain.DocumentScopeTask && to.scope() == domain.DocumentScopeTask && sh.taskAt(src) != sh.taskAt(dst) {
+			return refuseTaskMove(src, dst)
+		}
+	}
+	return allow
+}
+
+// refuseTask refuses a path under tasks/ that names no other task of the
+// session's project.
+func (s *Service) refuseTask(ctx context.Context, sh *shell, rel string) ports.ShellAnswer {
+	id := taskNamed(rel)
+	switch {
+	case id == "":
+		return allow
+	case id == sh.ticketID:
+		return refuseOwnTask(rel)
+	}
+	tk, err := s.src.Tickets.GetTicket(ctx, id)
+	switch {
+	case errs.HasCode(err, "TICKET_NOT_FOUND"):
+		return refuseTaskUnknown(rel, id)
+	case err != nil:
+		return refuseErr(err)
+	case tk.ProjectID != sh.projID:
+		return refuseTaskElsewhere(rel, id)
+	}
+	return allow
+}
+
+// taskNamed is the task id in rel's first folder under tasks/, "" when rel
+// is not there.
+func taskNamed(rel string) string {
+	id, _, _ := taskPath(rel)
+	return id
 }
 
 // refuseArea refuses an edit of a read-only path, or of one whose writes
@@ -344,7 +487,7 @@ func refuseMoveArea(ed edit) ports.ShellAnswer {
 // check is CheckShellEdit with sh held: the paths' areas, then the
 // session's copies of what the edit touches.
 func (s *Service) check(ctx context.Context, sh *shell, ed edit) ports.ShellAnswer {
-	if ans := refuseArea(ed); !ans.Allow {
+	if ans := s.refuseAreas(ctx, sh, ed); !ans.Allow {
 		return ans
 	}
 	switch ed.op {
@@ -395,19 +538,20 @@ func (s *Service) checkDocsAt(sh *shell, rel string) ports.ShellAnswer {
 	return allow
 }
 
-// checkMove: from project/docs to task/docs a document changes scope, only
-// when linked to this task; a person moves documents to project/docs, so
-// that move is refused; within a folder it is only renamed.
+// checkMove: from project/docs to a task's docs a document changes scope,
+// only when linked to that task; a person moves documents to project/docs,
+// so that move is refused; within a folder it is only renamed.
 func (s *Service) checkMove(ctx context.Context, sh *shell, src, dst string) ports.ShellAnswer {
+	agentsMove := classify(dst) == projDocs && s.agentsMove()
 	for _, row := range sh.under(src, ports.ShellDocument) {
 		if ans := s.stale(sh, row); !ans.Allow {
 			return ans
 		}
-		if classify(dst) == projDocs && row.Scope != string(domain.DocumentScopeProject) {
-			return refuseProjectMove(src)
+		if ans, ok := movesToProject(sh, row, src, dst, agentsMove); !ok {
+			return ans
 		}
-		if classify(dst) == taskDocs && row.Scope != string(domain.DocumentScopeTask) && !s.onTask(ctx, sh, row.ID) {
-			return refuseNotOnTask(row.Path)
+		if classify(dst).scope() == domain.DocumentScopeTask && row.Scope != string(domain.DocumentScopeTask) && !s.onTask(ctx, sh.taskAt(dst), row.ID) {
+			return refuseNotOnTask(row.Path, dst)
 		}
 		if over, ok := sh.files[moved(row.Path, src, dst)]; ok && over.ID != row.ID {
 			if ans := s.stale(sh, over); !ans.Allow {
@@ -455,8 +599,9 @@ func (s *Service) storedVersion(sh *shell, row ports.ShellFile) string {
 	return "deleted"
 }
 
-func (s *Service) onTask(ctx context.Context, sh *shell, docID string) bool {
-	for _, d := range s.src.Documents.ListTicketDocuments(ctx, sh.ticketID) {
+// onTask says the document is linked to the task.
+func (s *Service) onTask(ctx context.Context, ticketID, docID string) bool {
+	for _, d := range s.src.Documents.ListTicketDocuments(ctx, ticketID) {
 		if d.ID == docID {
 			return true
 		}
@@ -556,10 +701,19 @@ func (s *Service) createDocument(sh *shell, rel, content string) ports.ShellAnsw
 	if err != nil {
 		return refuseErr(err)
 	}
-	if err := s.src.Writes.LinkDocument(sh.ticketID, d.ID); err != nil {
+	if err := s.src.Writes.LinkDocument(sh.taskAt(rel), d.ID); err != nil {
 		return refuseErr(err)
 	}
 	return sh.record(rel, d)
+}
+
+// taskAt is the task a document file at rel belongs to: the one named in
+// tasks/<id>/docs, else the session's own.
+func (sh *shell) taskAt(rel string) string {
+	if id := taskOf(rel); id != "" {
+		return id
+	}
+	return sh.ticketID
 }
 
 // commitDocRemove deletes the documents whose files under rel are gone.
@@ -588,12 +742,11 @@ func (s *Service) commitMove(ctx context.Context, sh *shell, src, dst string) po
 	if len(rows) == 0 {
 		return s.commitDocWrite(sh, dst)
 	}
-	if classify(dst) == projDocs {
-		for _, row := range rows {
-			if row.Scope != string(domain.DocumentScopeProject) {
-				sh.putBack(rows, src, dst)
-				return refuseProjectMove(src)
-			}
+	agentsMove := classify(dst) == projDocs && s.agentsMove()
+	for _, row := range rows {
+		if ans, ok := movesToProject(sh, row, src, dst, agentsMove); !ok {
+			sh.putBack(rows, src, dst)
+			return ans
 		}
 	}
 	for _, row := range rows {
@@ -613,11 +766,11 @@ func (s *Service) commitMove(ctx context.Context, sh *shell, src, dst string) po
 		}
 		scope := classify(to).scope()
 		if scope != d.Scope {
-			if !s.onTask(ctx, sh, d.ID) {
+			if !s.onTask(ctx, sh.taskAt(to), d.ID) {
 				delete(sh.files, row.Path)
 				_ = os.Remove(sh.abs(to))
 				s.refreshLocked(sh)
-				return refuseNotOnTask(row.Path)
+				return refuseNotOnTask(row.Path, to)
 			}
 			var err error
 			if d, err = s.src.Writes.SetDocumentScope(d.ID, scope); err != nil {
@@ -673,11 +826,11 @@ func moved(p, src, dst string) string {
 	return dst + strings.TrimPrefix(p, src)
 }
 
-// under is the rows of kind at rel or in the folder rel.
+// under is the rows of kind (any kind when "") at rel or in the folder rel.
 func (sh *shell) under(rel, kind string) []ports.ShellFile {
 	var out []ports.ShellFile
 	for p, row := range sh.files {
-		if row.Kind == kind && (p == rel || strings.HasPrefix(p, rel+"/")) {
+		if (kind == "" || row.Kind == kind) && (p == rel || strings.HasPrefix(p, rel+"/")) {
 			out = append(out, row)
 		}
 	}

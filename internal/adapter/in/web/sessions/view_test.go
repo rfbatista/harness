@@ -48,10 +48,10 @@ func TestPageViewGroupsForTriageAndSelectsTheFirstRow(t *testing.T) {
 	now := time.Date(2026, 10, 2, 14, 0, 0, 0, time.UTC)
 	at := func(m int) time.Time { return now.Add(time.Duration(-m) * time.Minute) }
 	list := []*domain.Session{
-		{ID: "old-run", Task: "a", Status: domain.SessionRunning, UpdatedAt: at(30)},
-		{ID: "done", Task: "b", Status: domain.SessionDone, UpdatedAt: at(1)},
-		{ID: "new-run", Task: "", AgentID: "backend", Status: domain.SessionThinking, UpdatedAt: at(5)},
-		{ID: "turn", Task: "d", Status: domain.SessionIdle, UpdatedAt: at(90)},
+		{ID: "old-run", TicketID: "t1", Task: "a", Status: domain.SessionRunning, UpdatedAt: at(30)},
+		{ID: "done", TicketID: "t1", Task: "b", Status: domain.SessionDone, UpdatedAt: at(1)},
+		{ID: "new-run", TicketID: "t1", Task: "", AgentID: "backend", Status: domain.SessionThinking, UpdatedAt: at(5)},
+		{ID: "turn", TicketID: "t1", Task: "d", Status: domain.SessionIdle, UpdatedAt: at(90)},
 	}
 	v := NewPageView(shell.Frame{}, &domain.Project{ID: "p1", Name: "coding_pool"}, &domain.Ticket{ID: "t1", Title: "Add SSE feed", Status: domain.TicketStatusInProgress}, list,
 		[]*domain.Agent{{ID: "backend", Name: "Backend dev"}}, []*domain.Repository{{ID: "r1", Name: "harness"}}, now)
@@ -136,6 +136,22 @@ func TestRunsAs(t *testing.T) {
 	} {
 		if got := RunsAs(c.s, names); got != c.want {
 			t.Errorf("RunsAs(%+v) = %q, want %q", c.s, got, c.want)
+		}
+	}
+}
+
+func TestRunsOn(t *testing.T) {
+	names := map[string]string{"a1": "Reviewer"}
+	for _, c := range []struct {
+		s    *domain.Session
+		want string
+	}{
+		{&domain.Session{AgentID: "a1"}, "Reviewer"},
+		{&domain.Session{Mode: domain.SessionModeArchitect, Model: "opus"}, "plain claude as architect on opus"},
+		{&domain.Session{AgentID: "a1", Model: "sonnet"}, "Reviewer on sonnet"},
+	} {
+		if got := RunsOn(c.s, names); got != c.want {
+			t.Errorf("RunsOn(%+v) = %q, want %q", c.s, got, c.want)
 		}
 	}
 }
@@ -326,5 +342,79 @@ func TestNewSessionFormCarriesEachAgentsDescription(t *testing.T) {
 	}
 	if fmt.Sprint(view.NewSession.Agents) != fmt.Sprint(want) {
 		t.Errorf("Agents = %+v, want %+v", view.NewSession.Agents, want)
+	}
+}
+
+func TestRowTitleMatchesTheSharedFixture(t *testing.T) {
+	raw, err := os.ReadFile("../../../../../web/testdata/views/session-title.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fixture struct {
+		Cases []struct {
+			T      string `json:"task"`
+			Ticket string `json:"ticket_id"`
+			Want   string `json:"title"`
+		} `json:"cases"`
+	}
+	if err := json.Unmarshal(raw, &fixture); err != nil {
+		t.Fatal(err)
+	}
+	if len(fixture.Cases) == 0 {
+		t.Fatal("empty fixture")
+	}
+	for _, c := range fixture.Cases {
+		if got := RowTitle(&domain.Session{Task: c.T, TicketID: c.Ticket}); got != c.Want {
+			t.Errorf("RowTitle(task=%q, ticket=%q) = %q, want %q", c.T, c.Ticket, got, c.Want)
+		}
+	}
+}
+
+func TestProjectPageViewHasNoTaskAndLocksTheFormToProduct(t *testing.T) {
+	now := time.Date(2026, 10, 2, 14, 0, 0, 0, time.UTC)
+	list := []*domain.Session{{ID: "b1", Task: "", Mode: "product", Status: domain.SessionIdle, UpdatedAt: now}}
+	v := NewPageView(shell.Frame{}, &domain.Project{ID: "p1", Name: "coding_pool"}, nil, list, nil, []*domain.Repository{{ID: "r1", Name: "harness"}}, now)
+	if v.HasTask() || v.Task != nil || v.TaskTitle != BrainstormsTitle || v.LockedMode() != "product" {
+		t.Errorf("project page view = %+v", v)
+	}
+	if v.ListLabel() != "Feature brainstorms of this project" {
+		t.Errorf("list label = %q", v.ListLabel())
+	}
+	b, err := json.Marshal(v.Seed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(b), `"ticket_id":""`) {
+		t.Errorf("the seed must carry an empty ticket id, so the browser keeps ticket-less sessions only: %s", b)
+	}
+	if v.Groups[0].Rows[0].Title != "Feature brainstorm" {
+		t.Errorf("row = %+v", v.Groups[0].Rows[0])
+	}
+	task := NewPageView(shell.Frame{}, &domain.Project{ID: "p1"}, &domain.Ticket{ID: "t1", Title: "Add SSE feed"}, nil, nil, nil, now)
+	if !task.HasTask() || task.LockedMode() != "" || task.ListLabel() != "Sessions of this task" {
+		t.Errorf("task page view = %+v", task)
+	}
+}
+
+// Only a session that started with the sandbox off is marked in the list; one
+// from before the sandbox existed is not.
+func TestOnlyAnUnsandboxedSessionsRowSaysSo(t *testing.T) {
+	now := time.Now()
+	row := func(f *domain.SandboxFacts) Row {
+		s := &domain.Session{ID: "s", UpdatedAt: now, Sandbox: f}
+		return toRow(s, "", nil, now, map[string]*domain.Session{"s": s}, 0)
+	}
+	for name, tc := range map[string]struct {
+		facts *domain.SandboxFacts
+		want  bool
+	}{
+		"before the sandbox": {nil, false},
+		"sandboxed":          {&domain.SandboxFacts{Sandboxed: true, Visibility: domain.SandboxOwnRepo}, false},
+		"sandbox off":        {&domain.SandboxFacts{Visibility: domain.SandboxUnrestricted}, true},
+	} {
+		r := row(tc.facts)
+		if r.Unsandboxed != tc.want || strings.HasSuffix(r.Meta, " · unsandboxed") != tc.want {
+			t.Errorf("%s: unsandboxed=%v meta=%q, want %v", name, r.Unsandboxed, r.Meta, tc.want)
+		}
 	}
 }

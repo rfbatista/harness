@@ -2,6 +2,7 @@ package ports
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"os"
 
@@ -71,6 +72,14 @@ type AgentSpec struct {
 	// never lets a shell read its values as code. Other agents ignore it.
 	Dotenv       []domain.EnvVar `json:"dotenv,omitempty"`
 	Conversation Conversation    `json:"conversation"`
+	// Sandbox is the policy the agent sandbox confines the process by; nil
+	// runs it unconfined.
+	Sandbox *SandboxPolicy `json:"sandbox,omitempty"`
+	// Settings are more top-level claude settings keys, each a JSON value,
+	// merged into --settings verbatim. A sandboxed session carries
+	// {"sandbox":{"enabled":false}}: claude's own Bash sandbox must not nest
+	// inside the agent sandbox.
+	Settings map[string]json.RawMessage `json:"settings,omitempty"`
 }
 
 // HookGroup is one entry of a claude settings hook event: the commands run
@@ -128,6 +137,18 @@ type Shell interface {
 	// CheckDir reports WORKSPACE_MISSING unless dir exists in the shell's
 	// environment.
 	CheckDir(ctx context.Context, dir string) error
+}
+
+// ConfiningShell is a Shell that runs a program inside another process of its
+// own (a login shell that sources a profile and execs it). Such a shell takes
+// the confinement of the program itself, so that wrapper runs unconfined and
+// only the program is. A Shell without it is confined as a whole.
+type ConfiningShell interface {
+	Shell
+	// PrepareConfined is Prepare with confine applied to the program's own
+	// command line (its Program, Args, Dir and Env), not to the process
+	// that starts it.
+	PrepareConfined(ctx context.Context, cmd ShellCommand, confine func(SandboxCommand) (SandboxCommand, error)) (ProcessSpec, error)
 }
 
 // ProcessSpec is a concrete local process.

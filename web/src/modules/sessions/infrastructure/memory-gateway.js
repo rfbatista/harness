@@ -5,7 +5,7 @@
 
 import { Codes, StructuredError } from "../../../shared/domain/errors.js";
 import { FeedStatus } from "../../../shared/domain/feed.js";
-import { isTerminal, MODES, Status } from "../domain/session.js";
+import { isTerminal, MODES, noTaskProblem, Status } from "../domain/session.js";
 import { toSeed } from "./dto.js";
 
 /**
@@ -65,6 +65,7 @@ export function memoryGateway({ projects = [], sessions = [], repositories = {},
         throw new StructuredError(Codes.CROSS_PROJECT_ACCESS, "repository does not belong to project", 400);
       }
       if (!MODES.includes(mode ?? "")) throw new StructuredError(Codes.INVALID_INPUT, `unknown mode "${mode}"`, 400);
+      if (!ticketId && noTaskProblem(mode)) throw new StructuredError(Codes.INVALID_INPUT, "ticket_id is required unless mode is product", 400);
       const session = Object.freeze({
         id: `mem-${nextId++}`,
         projectId,

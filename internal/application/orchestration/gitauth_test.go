@@ -3,6 +3,7 @@ package orchestration
 import (
 	"context"
 	"errors"
+	"fmt"
 	"slices"
 	"strings"
 	"sync"
@@ -114,5 +115,66 @@ func TestWithoutGitAuthNothingChanges(t *testing.T) {
 	_, launch := startInteractive(t, svc, InteractiveRequest{})
 	if launch.Spec.EnvFile != "" {
 		t.Fatalf("env file %q without GitAuth", launch.Spec.EnvFile)
+	}
+}
+
+func TestASessionStartsWithTheAgentCredentialInItsEnv(t *testing.T) {
+	svc, _ := newInteractiveService(t)
+	svc.AgentCredential = func() []string { return []string{"CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat-secret"} }
+	sess, launch := startInteractive(t, svc, InteractiveRequest{})
+	if !slices.Contains(launch.Spec.Env, "CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat-secret") {
+		t.Fatalf("env %v lacks the agent credential", launch.Spec.Env)
+	}
+	if got := svc.sessions.Get(sess.ID); strings.Contains(fmt.Sprintf("%+v", got), "sk-ant-oat-secret") {
+		t.Fatalf("the session record carries the credential: %+v", got)
+	}
+
+	// A resume reads the credential as it is now.
+	svc.AgentCredential = func() []string { return []string{"ANTHROPIC_API_KEY=sk-ant-api-new"} }
+	if _, err := svc.EndInteractive(context.Background(), sess.ID, 0, false); err != nil {
+		t.Fatal(err)
+	}
+	_, spec, err := svc.ResumeInteractive(context.Background(), ports.ResumeRequest{SessionID: sess.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Contains(spec.Env, "ANTHROPIC_API_KEY=sk-ant-api-new") || slices.Contains(spec.Env, "CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat-secret") {
+		t.Fatalf("resume env %v", spec.Env)
+	}
+}
+
+func TestWithoutAnAgentCredentialTheEnvCarriesNone(t *testing.T) {
+	svc, _ := newInteractiveService(t)
+	svc.AgentCredential = func() []string { return nil }
+	_, launch := startInteractive(t, svc, InteractiveRequest{})
+	for _, e := range launch.Spec.Env {
+		if strings.HasPrefix(e, "CLAUDE_CODE_OAUTH_TOKEN=") || strings.HasPrefix(e, "ANTHROPIC_API_KEY=") {
+			t.Fatalf("env carries %q without a credential", e)
+		}
+	}
+}
+
+// A restart under the same id while the first start's cleanup is pending: the
+// session's git directory has one path per session, so the old cleanup must
+// not remove what the restart is using; the restart's own cleanup does.
+func TestAFirstStartsCleanupLeavesTheRestartsGitDirectoryAlone(t *testing.T) {
+	svc, _ := newInteractiveService(t)
+	git := &fakeGitAuth{}
+	svc.GitAuth = git
+	sess, _ := startInteractive(t, svc, InteractiveRequest{})
+	if err := svc.sessions.UpdateStatus(sess.ID, domain.SessionDone); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := svc.ResumeInteractive(context.Background(), ports.ResumeRequest{SessionID: sess.ID}); err != nil {
+		t.Fatal(err)
+	}
+	if got := git.endedSessions(); len(got) != 0 {
+		t.Fatalf("the first start's cleanup removed the git directory %v the restart uses", got)
+	}
+	if _, err := svc.EndInteractive(context.Background(), sess.ID, 0, false); err != nil {
+		t.Fatal(err)
+	}
+	if got := git.endedSessions(); !slices.Equal(got, []string{sess.ID}) {
+		t.Fatalf("ended %v, want the restart's own cleanup to remove it once", got)
 	}
 }

@@ -559,3 +559,11 @@ func waitForPendingCount(t *testing.T, srv *httptest.Server, sessionID string, w
 	}
 	t.Fatalf("pending_approvals = %d, want %d", got, want)
 }
+
+func (s *stubResolver) ListRepositories(ctx context.Context, projectID string) ([]*domain.Repository, error) {
+	r, err := s.GetRepository(ctx, "r1")
+	if err != nil {
+		return nil, err
+	}
+	return []*domain.Repository{r}, nil
+}

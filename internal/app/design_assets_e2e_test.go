@@ -51,8 +51,8 @@ func TestDesignAssetsAttachedToTasks_EndToEnd(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	producer, _ := plan.CreateTicket(ctx, p.ID, "Logo", "", domain.TicketStatusTodo)
-	board, _ := plan.CreateTicket(ctx, p.ID, "Board", "", domain.TicketStatusTodo)
+	producer, _ := plan.CreateTicket(ctx, p.ID, "Logo", "", domain.TicketStatusTodo, "")
+	board, _ := plan.CreateTicket(ctx, p.ID, "Board", "", domain.TicketStatusTodo, "")
 	worktree := t.TempDir()
 	if _, err := sessions.Create(&domain.Session{ID: "s-design", ProjectID: p.ID, TicketID: producer.ID, Task: "logo", WorkingDir: worktree, Status: domain.SessionDone}); err != nil {
 		t.Fatal(err)

@@ -4,6 +4,7 @@ package app
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -196,8 +197,11 @@ func TestFilesCreatedInTheShellBecomeDocuments(t *testing.T) {
 			return hasFile(s.shell, "project/docs/plain-words.txt", txt, plain, "project", "")
 		})
 	}
-	if err := lacks(b.shell, notes); err != nil {
-		t.Fatalf("another task's shell got the task document: %v", err)
+	eventually(t, "the task document under A's folder in B", func() error {
+		return hasFile(b.shell, "tasks/"+taskA+"/docs/shell-notes.md", md, notes, "task", domain.DocumentVersion(md))
+	})
+	if _, err := os.Stat(filepath.Join(b.shell, "task", "docs", "shell-notes.md")); err == nil {
+		t.Fatal("another task's shell got the task document as its own")
 	}
 
 	// The writer's shell keeps the names it chose, with no second copy.
@@ -294,7 +298,12 @@ func TestDocumentFilesAreChangedMovedAndRemovedFromTheShell(t *testing.T) {
 	// Back to task/docs: it is linked to this task, so it may.
 	e.shellOp(a, "mv", func() { moveShellFile(t, a, "project/docs/plan.txt", "task/docs/the-plan.txt") }, "project/docs/plan.txt", "task/docs/the-plan.txt")
 	wantDocument(t, e.document(doc.ID), "Plan", domain.DocumentFormatText, domain.DocumentScopeTask, v2)
-	eventually(t, "the plan gone from B", func() error { return lacks(b.shell, doc.ID, "project/docs/plan.txt") })
+	eventually(t, "the plan under A's folder in B", func() error {
+		if _, err := os.Stat(filepath.Join(b.shell, "project", "docs", "plan.txt")); err == nil {
+			return fmt.Errorf("project/docs/plan.txt is still there")
+		}
+		return hasFile(b.shell, "tasks/"+taskA+"/docs/plan.txt", v2, doc.ID, "task", "")
+	})
 
 	// mkdir under docs is allowed.
 	e.shellOp(a, "mkdir", func() {
@@ -336,7 +345,7 @@ func TestDocumentFilesAreChangedMovedAndRemovedFromTheShell(t *testing.T) {
 // projectMoveDenied is the refusal of moving the document at rel to project
 // level.
 func projectMoveDenied(rel string) shellAnswer {
-	return shellAnswer{Code: "PROJECT_MOVE_DENIED", Reason: "PROJECT_MOVE_DENIED: " + rel + ` cannot move to project scope: a person moves documents to project level ("Move to project" on the task's documents page); nothing was written`}
+	return shellAnswer{Code: "PROJECT_MOVE_DENIED", Reason: "PROJECT_MOVE_DENIED: " + rel + ` cannot move to project scope: only a person moves documents to project level ("Move to project" on the task's documents page), unless they turn on "Agents move documents to project" on the Server page; nothing was written`}
 }
 
 // A write made on a copy the harness has changed since is refused with

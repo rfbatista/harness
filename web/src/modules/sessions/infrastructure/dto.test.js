@@ -29,6 +29,16 @@ test("maps the wire format to a frozen domain session", () => {
   assert.equal("cost_usd" in s, false, "fields the UI does not use stay behind");
 });
 
+test("the newest merge result comes with the session, and a session never merged has none", () => {
+  assert.equal(toSession(wire).lastMerge, null);
+  const merged = toSession({ ...wire, last_merge: { at: "2026-10-23T12:00:00Z", merged: true, into: "main", head: "abc123" } }).lastMerge;
+  assert.deepEqual([merged.merged, merged.into, merged.head, merged.code, merged.message], [true, "main", "abc123", "", ""]);
+  const refused = toSession({ ...wire, last_merge: { at: "2026-10-23T12:01:00Z", code: "MERGE_CONFLICT", message: "conflicts in a.txt" } }).lastMerge;
+  assert.deepEqual([refused.merged, refused.code, refused.message, refused.head], [false, "MERGE_CONFLICT", "conflicts in a.txt", ""]);
+  assert.ok(Object.isFrozen(refused));
+  assert.throws(() => toSession({ ...wire, last_merge: { at: "later" } }), Codes.BAD_RESPONSE);
+});
+
 test("a malformed session is BAD_RESPONSE", () => {
   assert.throws(() => toSession({ ...wire, id: "" }), Codes.BAD_RESPONSE);
   assert.throws(() => toSession({ ...wire, status: "exploded" }), Codes.BAD_RESPONSE);
@@ -126,4 +136,11 @@ test("an unknown role or a malformed status check is BAD_RESPONSE", () => {
   assert.throws(() => toStatusCheck({ ...check, delegate_session_id: "" }), Codes.BAD_RESPONSE);
   assert.throws(() => toStatusCheck({ ...check, next_at: "soon" }), Codes.BAD_RESPONSE);
   assert.throws(() => toSession({ ...wire, status_check: { ...check, every_minutes: "ten" } }), Codes.BAD_RESPONSE);
+});
+
+test("a start with no task sends no ticket_id at all: the server reads an empty string as a task", () => {
+  const body = toStartBody({ projectId: "p1", ticketId: "", repositoryId: "r1", agentId: "", mode: "product", prompt: "", autoAccept: "off" });
+  assert.ok(!("ticket_id" in JSON.parse(JSON.stringify(body))), "ticket_id left out");
+  assert.equal(body.mode, "product");
+  assert.equal(toSession({ ...wire, ticket_id: undefined, mode: "product" }).ticketId, "");
 });

@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/rfbatista/harnesskit/errs"
+
 	"operators-mcp/internal/adapter/out/persistence/sqlite"
 	"operators-mcp/internal/application/planning"
 	"operators-mcp/internal/domain"
@@ -230,5 +232,72 @@ func TestDocumentTools_Scope(t *testing.T) {
 		if raw, _ := json.Marshal(byName[name].InputSchema); !bytes.Contains(raw, []byte(`"enum":["task","project"]`)) {
 			t.Errorf("%s schema lacks the scope enum: %s", name, raw)
 		}
+	}
+}
+
+// The ticket tools carry parent_id like the HTTP routes: create_ticket takes
+// it, list_tickets filters by it, update_ticket moves with it and clears on "".
+func TestTicketTools_ParentID(t *testing.T) {
+	db, err := sqlite.Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	projects := sqlite.NewProjectRepository(db)
+	p, _ := projects.Create("proj", "/tmp/proj")
+	svc := planning.NewService(sqlite.NewTicketRepository(db), sqlite.NewDocumentRepository(db), projects)
+	byName := map[string]domain.Tool{}
+	for _, tl := range TicketTools(svc) {
+		byName[tl.Name] = tl
+	}
+	ctx := context.Background()
+	ticketOf := func(out any, err error) *domain.Ticket {
+		t.Helper()
+		if err != nil {
+			t.Fatal(err)
+		}
+		return out.(map[string]any)["ticket"].(*domain.Ticket)
+	}
+	feature := ticketOf(byName["create_ticket"].Handler(ctx, map[string]any{"project_id": p.ID, "title": "Feature"}))
+	child := ticketOf(byName["create_ticket"].Handler(ctx, map[string]any{"project_id": p.ID, "title": "Child", "parent_id": feature.ID}))
+	if child.ParentID != feature.ID {
+		t.Fatalf("create_ticket with parent_id = parent %q, want %s", child.ParentID, feature.ID)
+	}
+	loner := ticketOf(byName["create_ticket"].Handler(ctx, map[string]any{"project_id": p.ID, "title": "Loner"}))
+
+	out, err := byName["list_tickets"].Handler(ctx, map[string]any{"project_id": p.ID, "parent_id": feature.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if lst := out.(map[string]any)["tickets"].([]*domain.Ticket); len(lst) != 1 || lst[0].ID != child.ID {
+		t.Fatalf("list_tickets with parent_id = %v, want only the child", lst)
+	}
+	out, err = byName["list_tickets"].Handler(ctx, map[string]any{"project_id": p.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if lst := out.(map[string]any)["tickets"].([]*domain.Ticket); len(lst) != 3 {
+		t.Fatalf("list_tickets without parent_id = %d tickets, want all three", len(lst))
+	}
+	// A present but empty parent_id is a filter, as over HTTP: the top-level
+	// tickets only, not every ticket.
+	out, err = byName["list_tickets"].Handler(ctx, map[string]any{"project_id": p.ID, "parent_id": ""})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if lst := out.(map[string]any)["tickets"].([]*domain.Ticket); len(lst) != 2 || lst[0].IsChild() || lst[1].IsChild() {
+		t.Fatalf("list_tickets with parent_id \"\" = %d tickets, want only the feature and the loner", len(lst))
+	}
+
+	if got := ticketOf(byName["update_ticket"].Handler(ctx, map[string]any{"ticket_id": loner.ID, "parent_id": feature.ID})); got.ParentID != feature.ID {
+		t.Fatalf("update_ticket to a parent = %q", got.ParentID)
+	}
+	if got := ticketOf(byName["update_ticket"].Handler(ctx, map[string]any{"ticket_id": loner.ID, "title": "Loner renamed"})); got.ParentID != feature.ID {
+		t.Fatalf("update_ticket without parent_id dropped the parent: %q", got.ParentID)
+	}
+	if got := ticketOf(byName["update_ticket"].Handler(ctx, map[string]any{"ticket_id": loner.ID, "parent_id": ""})); got.ParentID != "" {
+		t.Fatalf("update_ticket with an empty parent_id kept the parent: %q", got.ParentID)
+	}
+	if _, err := byName["create_ticket"].Handler(ctx, map[string]any{"project_id": p.ID, "title": "Grandchild", "parent_id": child.ID}); errs.Code(err) != domain.CodeTicketParentInvalid {
+		t.Fatalf("create_ticket under a child: want %s, got %v", domain.CodeTicketParentInvalid, err)
 	}
 }

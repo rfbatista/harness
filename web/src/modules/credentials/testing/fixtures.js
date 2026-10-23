@@ -63,6 +63,7 @@ export function repositoryCredentialDTO(rc) {
   return {
     binding: { repository_id: rc.repositoryId, credential_id: rc.credentialId },
     resolved: rc.resolved ? credentialDTO(rc.resolved) : null,
+    pull_requests: rc.pullRequests ? credentialDTO(rc.pullRequests) : null,
     remote_url: rc.remoteUrl,
   };
 }

@@ -150,7 +150,7 @@ func (f *mergeFixture) forgetReflog(branch string) {
 
 func (f *mergeFixture) task(status domain.TicketStatus) string {
 	f.t.Helper()
-	tk, err := f.plan.CreateTicket(f.ctx, f.projectID, "task", "", status)
+	tk, err := f.plan.CreateTicket(f.ctx, f.projectID, "task", "", status, "")
 	if err != nil {
 		f.t.Fatal(err)
 	}
@@ -390,7 +390,7 @@ func TestASecondReadServesTheCachedMergeStateUntilItIsRefreshed(t *testing.T) {
 
 	f.merge("feat")
 	wantMerge(t, f.read(id), notMerged)
-	list, err := f.plan.ListTickets(f.ctx, f.projectID)
+	list, err := f.plan.ListTickets(f.ctx, f.projectID, ports.TicketFilter{})
 	if err != nil || len(list) != 1 {
 		t.Fatalf("list = %v, %v", list, err)
 	}
@@ -547,7 +547,7 @@ func TestLoadingTheBoardServesAStaleMergeStateThenAnnouncesTheRefreshedOne(t *te
 	wantMerge(t, f.read(id), notMerged)
 	board := func() *domain.MergeState {
 		t.Helper()
-		list, err := f.plan.ListTickets(f.ctx, f.projectID)
+		list, err := f.plan.ListTickets(f.ctx, f.projectID, ports.TicketFilter{})
 		if err != nil || len(list) != 1 {
 			t.Fatalf("list = %v, %v", list, err)
 		}
@@ -573,7 +573,7 @@ func TestLoadingTheBoardComputesUnreadMergeStatesInTheBackground(t *testing.T) {
 	f := newMergeFixture(t, "main")
 	// Stored without planning, as on a server just started: nothing read yet.
 	stored := func(status domain.TicketStatus) string {
-		tk, err := sqlite.NewTicketRepository(f.db).Create(f.projectID, "task", "", status)
+		tk, err := sqlite.NewTicketRepository(f.db).Create(f.projectID, "task", "", status, "")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -585,7 +585,7 @@ func TestLoadingTheBoardComputesUnreadMergeStatesInTheBackground(t *testing.T) {
 	f.merge("feat-b")
 
 	n := f.feed.len()
-	list, err := f.plan.ListTickets(f.ctx, f.projectID)
+	list, err := f.plan.ListTickets(f.ctx, f.projectID, ports.TicketFilter{})
 	if err != nil || len(list) != 2 {
 		t.Fatalf("list = %v, %v", list, err)
 	}
@@ -602,7 +602,7 @@ func TestLoadingTheBoardComputesUnreadMergeStatesInTheBackground(t *testing.T) {
 // is read either: the read answers null and the state follows on the feed.
 func TestReadingASingleTaskRunsNoGitOnTheRequest(t *testing.T) {
 	f := newMergeFixture(t, "main")
-	tk, err := sqlite.NewTicketRepository(f.db).Create(f.projectID, "task", "", domain.TicketStatusReview)
+	tk, err := sqlite.NewTicketRepository(f.db).Create(f.projectID, "task", "", domain.TicketStatusReview, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -610,7 +610,7 @@ func TestReadingASingleTaskRunsNoGitOnTheRequest(t *testing.T) {
 	f.merge("feat")
 
 	n := f.feed.len()
-	list, err := f.plan.ListTickets(f.ctx, f.projectID)
+	list, err := f.plan.ListTickets(f.ctx, f.projectID, ports.TicketFilter{})
 	if err != nil || len(list) != 1 || list[0].MergeState != nil {
 		t.Fatalf("list = %v, %v; want the task with no merge state yet", list, err)
 	}

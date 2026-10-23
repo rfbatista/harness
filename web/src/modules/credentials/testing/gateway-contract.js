@@ -168,13 +168,19 @@ export function credentialGatewayContract(name, makeSubject) {
     const { gateway } = makeSubject(world());
     const pinned = await gateway.setRepositoryCredential("r-https", "gc-spare");
     assert.deepEqual([pinned.credentialId, pinned.resolved?.id], ["gc-spare", "gc-spare"]);
-    await assert.rejects(gateway.setRepositoryCredential("r-https", "gc-key"), Codes.GIT_CREDENTIAL_KIND_MISMATCH);
+    await assert.rejects(gateway.setRepositoryCredential("r-ssh", "gc-work"), Codes.GIT_CREDENTIAL_KIND_MISMATCH);
     await assert.rejects(gateway.setRepositoryCredential("r-https", "gc-gitlab"), Codes.GIT_CREDENTIAL_HOST_MISMATCH);
     await assert.rejects(gateway.setRepositoryCredential("r-https", "ghost"), Codes.GIT_CREDENTIAL_NOT_FOUND);
     await assert.rejects(gateway.setRepositoryCredential("ghost", null), Codes.REPOSITORY_NOT_FOUND);
     assert.equal((await gateway.setRepositoryCredential("r-local", "gc-key")).credentialId, "gc-key");
     const automatic = await gateway.setRepositoryCredential("r-https", null);
     assert.deepEqual([automatic.credentialId, automatic.resolved?.id], [null, "gc-work"]);
+  });
+
+  contract("an SSH key of the host serves an https origin: it can be pinned, and pull requests keep the token", async () => {
+    const { gateway } = makeSubject(world());
+    const pinned = await gateway.setRepositoryCredential("r-https", "gc-key");
+    assert.deepEqual([pinned.credentialId, pinned.resolved?.id, pinned.pullRequests?.id], ["gc-key", "gc-key", "gc-work"]);
   });
 
   contract("a locked store still lists, deletes, renames, pins and saves the identity; what needs a secret is STORE_LOCKED", async () => {

@@ -25,6 +25,13 @@
  *             onStatus: (status: FeedStatus) => void) => () => void} follow
  *           Each usage record stored for the project from now on, until the
  *           returned function is called.
+ * @property {(projectId: string, handlers: {
+ *             onEvent: (type: string, data: any) => void,
+ *             onStatus: (status: FeedStatus) => void }) => () => void} openLive
+ *           The project's live call stream as an EventSource of its own: each
+ *           `call.started`, `call.finished` and `calls.missed` with its data
+ *           parsed, and `connecting`, `live` (on `ready`) and `paused` as
+ *           status. The returned function closes it and releases the connection.
  */
 
 export {};

@@ -24,7 +24,7 @@
     & li + li { margin-block-start: var(--space-3xs); }
     & li:has(> input[type="checkbox"]) { list-style: none; margin-inline-start: calc(var(--space-l) * -1); }
 
-    & a { color: var(--color-signal-ink); text-decoration: underline; text-underline-offset: 0.15em; }
+    & a { color: var(--color-signal); text-decoration: underline; text-underline-offset: 0.15em; }
 
     & :not(pre) > code {
       padding: 0.1em 0.3em;

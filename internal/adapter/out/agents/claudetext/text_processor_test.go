@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/rfbatista/llmkit"
+
 	"operators-mcp/internal/domain"
 )
 
@@ -84,5 +86,77 @@ func TestCLIFailuresAndCancellationSurface(t *testing.T) {
 	cancel()
 	if _, err := NewSummarizer(&fakeOneShot{}, "claude", "").Summarize(ctx, "text"); !errors.Is(err, context.Canceled) {
 		t.Errorf("err = %v, want context.Canceled", err)
+	}
+}
+
+func TestAGatedOneShotIsRefusedWithTheSameErrorAndNeverRunsTheCLI(t *testing.T) {
+	refusal := &domain.StructuredError{Code: "AGENT_CREDENTIAL_MISSING", Message: "Agent not started: no agent credential. (/agent-isolation#credential)"}
+	fake := &fakeOneShot{}
+	missing := true
+	c := Gated(fake, func(context.Context) error {
+		if missing {
+			return refusal
+		}
+		return nil
+	})
+	ctx := context.Background()
+	if _, err := NewSummarizer(c, "claude", "").Summarize(ctx, "text"); err != error(refusal) {
+		t.Errorf("summary err = %v", err)
+	}
+	if _, err := NewTranslator(c, "claude", "").Translate(ctx, "text", "French"); err != error(refusal) {
+		t.Errorf("translation err = %v", err)
+	}
+	if _, err := NewTextGenerator(c, "claude", "").GenerateText(ctx, "write"); err != error(refusal) {
+		t.Errorf("generation err = %v", err)
+	}
+	if len(fake.got) != 0 {
+		t.Fatalf("the CLI ran %d times for refused one-shots", len(fake.got))
+	}
+	missing = false
+	if out, err := NewSummarizer(c, "claude", "").Summarize(ctx, "text"); err != nil || out != "done" {
+		t.Fatalf("after the prerequisite is met: %q, %v", out, err)
+	}
+}
+
+func TestConfinedGivesEveryOneShotTheCredentialEnvAndTheWrapPreparedForIt(t *testing.T) {
+	f := &fakeOneShot{}
+	wrapped := false
+	wrap := func(c llmkit.Command) (llmkit.Command, error) { wrapped = true; return c, nil }
+	one := Confined(f, func() ([]string, llmkit.WrapFunc, error) {
+		return []string{"CLAUDE_CODE_OAUTH_TOKEN=tok"}, wrap, nil
+	})
+	if _, err := NewSummarizer(one, "claude", "").Summarize(context.Background(), "text"); err != nil {
+		t.Fatal(err)
+	}
+	req := f.got[0]
+	if len(req.Env) != 1 || req.Env[0] != "CLAUDE_CODE_OAUTH_TOKEN=tok" || req.Wrap == nil {
+		t.Fatalf("request = %+v, want the credential env and a wrap", req)
+	}
+	_, _ = req.Wrap(llmkit.Command{})
+	if !wrapped || req.Attribution != "harness:system" || req.Input != "text" {
+		t.Errorf("wrapped=%v request=%+v, want the prepared wrap and the request otherwise unchanged", wrapped, req)
+	}
+}
+
+func TestConfinedRefusesWithThePreparationErrorBeforeTheCLIRuns(t *testing.T) {
+	f := &fakeOneShot{}
+	boom := errors.New("no sandbox driver")
+	one := Confined(f, func() ([]string, llmkit.WrapFunc, error) { return nil, nil, boom })
+	if _, err := NewTranslator(one, "claude", "").Translate(context.Background(), "hi", "French"); !errors.Is(err, boom) {
+		t.Fatalf("err = %v, want the preparation error", err)
+	}
+	if len(f.got) != 0 {
+		t.Errorf("claude was called %d times, want none", len(f.got))
+	}
+}
+
+func TestConfinedWithoutAWrapRunsTheCommandAsItWas(t *testing.T) {
+	f := &fakeOneShot{}
+	one := Confined(f, func() ([]string, llmkit.WrapFunc, error) { return nil, nil, nil })
+	if _, err := NewTextGenerator(one, "claude", "").GenerateText(context.Background(), "p"); err != nil {
+		t.Fatal(err)
+	}
+	if f.got[0].Wrap != nil {
+		t.Errorf("Wrap = non-nil, want none with the sandbox off")
 	}
 }

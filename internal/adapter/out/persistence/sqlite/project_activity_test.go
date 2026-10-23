@@ -35,11 +35,11 @@ func TestTicketRepo_ActivityByProject(t *testing.T) {
 	r := NewTicketRepository(db)
 	var newest *domain.Ticket
 	for _, s := range []domain.TicketStatus{domain.TicketStatusBacklog, domain.TicketStatusReview, domain.TicketStatusDone} {
-		if newest, err = r.Create("p1", "t", "", s); err != nil {
+		if newest, err = r.Create("p1", "t", "", s, ""); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if _, err := r.Create("p2", "t", "", domain.TicketStatusDone); err != nil {
+	if _, err := r.Create("p2", "t", "", domain.TicketStatusDone, ""); err != nil {
 		t.Fatal(err)
 	}
 	got, err := r.ActivityByProject()

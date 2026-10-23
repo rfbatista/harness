@@ -92,7 +92,7 @@ an exception.
 
 ## Blocks: small, contextual components
 
-A block styles one UI context (`button`, `row`, `nav`, `transcript`, …) on top of
+A block styles one UI context (`button`, `row`, `nav`, `chat`, …) on top of
 everything above it. Rules:
 
 - **One file per block** in `css/blocks/`, at most 80–100 lines. If a block
@@ -101,7 +101,7 @@ everything above it. Rules:
   elements and short element classes directly: `.nav a`, `.toolbar h1`,
   `.row .title`, `.pane > header`. No BEM `__element` names.
 - Use the **child combinator** where the block can contain other blocks
-  (`.pane > header`, `.transcript > .line`), so styles never leak into a nested block.
+  (`.pane > header`, `.chat > .older`), so styles never leak into a nested block.
 - Prefer **semantic and ARIA hooks** over classes: `[role="tab"]`,
   `[role="option"]`, `<time>`, `<header>`.
 - Read only **semantic tokens** (`var(--color-panel)`, `var(--space-m)`). A raw

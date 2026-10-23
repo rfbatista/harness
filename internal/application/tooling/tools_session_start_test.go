@@ -57,7 +57,7 @@ func startFixtureWith(t *testing.T, autoRun, canStart bool) (start func(args map
 	sessions := sqlite.NewSessionRepository(db)
 	plan := planning.NewService(sqlite.NewTicketRepository(db), sqlite.NewDocumentRepository(db), projects)
 	proj, _ := projects.Create("p", t.TempDir())
-	task, _ := plan.CreateTicket(context.Background(), proj.ID, "Add SSE feed", "", domain.TicketStatusInProgress)
+	task, _ := plan.CreateTicket(context.Background(), proj.ID, "Add SSE feed", "", domain.TicketStatusInProgress, "")
 	if _, err := sessions.Create(&domain.Session{ID: "me", ProjectID: proj.ID, TicketID: task.ID, RepositoryID: "r-api",
 		Status: domain.SessionRunning, AutoRun: autoRun}); err != nil {
 		t.Fatal(err)
@@ -209,5 +209,26 @@ func TestStartTaskSession_UnavailableWithoutAStarter(t *testing.T) {
 	start, _, _ := startFixtureWith(t, false, false)
 	if _, err := start(map[string]any{"prompt": "x"}); errs.Code(err) != "UNAVAILABLE" {
 		t.Fatalf("got %v", err)
+	}
+}
+
+// A product session shapes a feature into a PRD and child tasks; the tool
+// offers the mode and passes it through.
+func TestStartTaskSession_OffersProductMode(t *testing.T) {
+	start, starter, _ := startFixture(t, false)
+	if _, err := start(map[string]any{"prompt": "shape the export feature", "mode": "product"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := starter.got[0].Mode; got != "product" {
+		t.Fatalf("mode = %q, want product", got)
+	}
+	for _, tl := range SessionTaskTools(nil, nil, nil, nil, PeerStarter{}, ArtifactTooling{}, nil, NotificationTooling{}) {
+		if tl.Name != "start_task_session" {
+			continue
+		}
+		schema, _ := json.Marshal(tl.InputSchema)
+		if !strings.Contains(string(schema), `"product"`) || !strings.Contains(string(schema), "product: ") {
+			t.Fatalf("start_task_session schema does not offer and describe product: %s", schema)
+		}
 	}
 }
