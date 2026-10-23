@@ -1,6 +1,6 @@
 import { assert, file, test } from "../../../shared/testing/test.js";
 import { makeTask } from "../testing/fixtures.js";
-import { archiveAllView, toColumns } from "./boardView.js";
+import { archiveAllView, jumpChips, toColumns } from "./boardView.js";
 
 file("tasks/presentation/boardView");
 
@@ -109,4 +109,17 @@ test("cards drag on a fine pointer only, and never while their move is in flight
   const fine = toColumns(tasks, ctx({ fine: true, pending: { b: "in_progress" } }))[2].cards;
   assert.deepEqual(fine.map((c) => `${c.id}:${c.draggable}`).sort(), ["a:true", "b:false"]);
   assert.deepEqual(toColumns(tasks, ctx({ fine: false }))[2].cards.map((c) => c.draggable), [false, false]);
+});
+
+test("the narrow screen's jump chips: one link per column with its count; Review asks for a look while it holds cards; a bumped chip rings", () => {
+  const cols = toColumns([makeTask({ id: "a", status: "review" }), makeTask({ id: "b", status: "done" }), makeTask({ id: "c", status: "done" })], ctx());
+  const chips = jumpChips(cols, { bumped: "done" });
+  assert.deepEqual(chips.map((c) => `${c.href}|${c.label}|${c.count}|${c.waiting}|${c.bumped}`), [
+    "#column-backlog|Backlog|0|false|false",
+    "#column-todo|Todo|0|false|false",
+    "#column-in_progress|In progress|0|false|false",
+    "#column-review|Review|1|true|false",
+    "#column-done|Done|2|false|true",
+  ]);
+  assert.equal(jumpChips(toColumns([], ctx()), { bumped: "" })[3].waiting, false, "an empty Review is quiet");
 });

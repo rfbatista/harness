@@ -740,7 +740,7 @@ func liveBoard() templ.Component {
 			templ_7745c5c3_Var36 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 59, "<div class=\"[ board ]\" data-board aria-label=\"Tasks by status\" x-bind:data-dragging=\"dragging\"><template x-for=\"column in columns\" x-bind:key=\"column.status\"><section class=\"[ column ]\" x-bind:data-column=\"column.status\" x-bind:aria-label=\"column.label\" x-bind:data-waiting=\"column.waiting\" x-bind:data-archiving=\"column.archiving\" x-bind:data-drag-origin=\"column.dragOrigin\" x-bind:data-drop=\"column.dropOver ? 'over' : null\" x-bind:data-drop-self=\"column.dropSelf\" x-on:dragover=\"dragOver\" x-on:dragleave=\"dragLeave\" x-on:drop=\"drop\"><header><h2 x-text=\"column.label\"></h2><span class=\"[ count ]\" x-bind:aria-label=\"column.count\" x-text=\"column.countText\"></span><div class=\"[ actions ]\" x-show=\"column.isDone\"><button type=\"button\" class=\"[ button ]\" data-size=\"sm\" data-archive-all x-show=\"archiveAll.shows\" x-on:click=\"askArchiveAll\">Archive all</button></div><p class=\"[ sub ]\" x-show=\"column.waiting\" x-text=\"column.sub\"></p></header><template x-if=\"column.isDone\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 59, "<div class=\"[ board-page ]\"><nav class=\"[ jump ]\" aria-label=\"Jump to a column\"><template x-for=\"chip in chips\" x-bind:key=\"chip.status\"><a x-bind:href=\"chip.href\" x-bind:data-waiting=\"chip.waiting\" x-bind:data-bumped=\"chip.bumped\"><span x-text=\"chip.label\"></span> <b x-text=\"chip.count\"></b></a></template></nav><div class=\"[ board ]\" data-board aria-label=\"Tasks by status\" x-bind:data-dragging=\"dragging\"><template x-for=\"column in columns\" x-bind:key=\"column.status\"><section class=\"[ column ]\" x-bind:id=\"column.anchor\" x-bind:data-column=\"column.status\" x-bind:aria-label=\"column.label\" x-bind:data-waiting=\"column.waiting\" x-bind:data-archiving=\"column.archiving\" x-bind:data-drag-origin=\"column.dragOrigin\" x-bind:data-drop=\"column.dropOver ? 'over' : null\" x-bind:data-drop-self=\"column.dropSelf\" x-on:dragover=\"dragOver\" x-on:dragleave=\"dragLeave\" x-on:drop=\"drop\"><header><h2 x-text=\"column.label\"></h2><span class=\"[ count ]\" x-bind:aria-label=\"column.count\" x-text=\"column.countText\"></span><div class=\"[ actions ]\" x-show=\"column.isDone\"><button type=\"button\" class=\"[ button ]\" data-size=\"sm\" data-archive-all x-show=\"archiveAll.shows\" x-on:click=\"askArchiveAll\">Archive all</button></div><p class=\"[ sub ]\" x-show=\"column.waiting\" x-text=\"column.sub\"></p></header><template x-if=\"column.isDone\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -788,7 +788,7 @@ func liveBoard() templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 65, "<span><span x-text=\"column.receipt\"></span> <a x-bind:href=\"archivedHref\">View Archived</a></span></p></div></section></template></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 65, "<span><span x-text=\"column.receipt\"></span> <a x-bind:href=\"archivedHref\">View Archived</a></span></p></div></section></template></div></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -935,7 +935,7 @@ func cardGlyph(name string) templ.Component {
 		var templ_7745c5c3_Var41 string
 		templ_7745c5c3_Var41, templ_7745c5c3_Err = templ.ResolveAttributeValue(name)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `tasks/project.templ`, Line: 258, Col: 41}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `tasks/project.templ`, Line: 265, Col: 41}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var41)
 		if templ_7745c5c3_Err != nil {
@@ -1036,7 +1036,7 @@ func NewTaskPage(f shell.Frame, projectID, projectName string) templ.Component {
 			var templ_7745c5c3_Var44 templ.SafeURL
 			templ_7745c5c3_Var44, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL("/projects/" + projectID))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `tasks/project.templ`, Line: 285, Col: 71}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `tasks/project.templ`, Line: 292, Col: 71}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var44))
 			if templ_7745c5c3_Err != nil {
@@ -1049,7 +1049,7 @@ func NewTaskPage(f shell.Frame, projectID, projectName string) templ.Component {
 			var templ_7745c5c3_Var45 string
 			templ_7745c5c3_Var45, templ_7745c5c3_Err = templ.JoinStringErrs(projectName)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `tasks/project.templ`, Line: 285, Col: 87}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `tasks/project.templ`, Line: 292, Col: 87}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var45))
 			if templ_7745c5c3_Err != nil {
@@ -1062,7 +1062,7 @@ func NewTaskPage(f shell.Frame, projectID, projectName string) templ.Component {
 			var templ_7745c5c3_Var46 string
 			templ_7745c5c3_Var46, templ_7745c5c3_Err = templ.ResolveAttributeValue(projectID)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `tasks/project.templ`, Line: 289, Col: 124}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `tasks/project.templ`, Line: 296, Col: 124}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var46)
 			if templ_7745c5c3_Err != nil {
@@ -1080,7 +1080,7 @@ func NewTaskPage(f shell.Frame, projectID, projectName string) templ.Component {
 				var templ_7745c5c3_Var47 string
 				templ_7745c5c3_Var47, templ_7745c5c3_Err = templ.ResolveAttributeValue(st.Value)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `tasks/project.templ`, Line: 302, Col: 32}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `tasks/project.templ`, Line: 309, Col: 32}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var47)
 				if templ_7745c5c3_Err != nil {
@@ -1093,7 +1093,7 @@ func NewTaskPage(f shell.Frame, projectID, projectName string) templ.Component {
 				var templ_7745c5c3_Var48 string
 				templ_7745c5c3_Var48, templ_7745c5c3_Err = templ.JoinStringErrs(st.Label)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `tasks/project.templ`, Line: 302, Col: 45}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `tasks/project.templ`, Line: 309, Col: 45}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var48))
 				if templ_7745c5c3_Err != nil {
@@ -1111,7 +1111,7 @@ func NewTaskPage(f shell.Frame, projectID, projectName string) templ.Component {
 			var templ_7745c5c3_Var49 templ.SafeURL
 			templ_7745c5c3_Var49, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL("/projects/" + projectID))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `tasks/project.templ`, Line: 316, Col: 95}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `tasks/project.templ`, Line: 323, Col: 95}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var49))
 			if templ_7745c5c3_Err != nil {

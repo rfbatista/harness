@@ -5,11 +5,11 @@ import { assert, file, test } from "../../../../shared/testing/test.js";
 import { memoryTasks } from "../../infrastructure/memory-gateway.js";
 import { makeTask } from "../../testing/fixtures.js";
 import { fixedClock } from "../../../../shared/infrastructure/clock.js";
-import { AGE_TICK_MS, board, FAILED_MS, FRESH_MS } from "./board.js";
+import { AGE_TICK_MS, board, BUMP_MS, FAILED_MS, FRESH_MS } from "./board.js";
 
 file("tasks/presentation/board");
 
-function setup({ tasks = [makeTask()], seeded = true, clock = fixedClock("2026-10-19T12:00:00Z"), fine = true } = {}) {
+function setup({ tasks = [makeTask()], seeded = true, clock = fixedClock("2026-10-19T12:00:00Z"), fine = true, narrow = false } = {}) {
   const store = { byTask: {}, tasks, seeded };
   const memory = memoryTasks({ projects: ["p1"], tasks });
   const el = document.createElement("main");
@@ -18,7 +18,7 @@ function setup({ tasks = [makeTask()], seeded = true, clock = fixedClock("2026-1
   ssr.dataset.ssr = "";
   el.append(ssr);
   const timers = manualTimers();
-  const mounted = mount(board({ gateway: memory.gateway, store, setTimeout: timers.setTimeout, clock, isFine: () => fine }), { el });
+  const mounted = mount(board({ gateway: memory.gateway, store, setTimeout: timers.setTimeout, clock, isFine: () => fine, isNarrow: () => narrow }), { el });
   mounted.instance.init();
   return { ...mounted, store, el, memory, timers, clock };
 }
@@ -463,4 +463,19 @@ test("the dragged card changed elsewhere cancels the drag and says so", () => {
   store.tasks = [makeTask({ status: "todo" })];
   instance.taskChanged(changed({ kind: "task-upsert", task: makeTask({ status: "todo" }) }, makeTask({ status: "review" })));
   assert.deepEqual([instance.dragging, instance.announcement], [false, "Add SSE feed moved to Todo"]);
+});
+
+test("on a narrow screen a menu move rings its new column's chip for a moment", async () => {
+  const { instance, timers } = setup({ narrow: true });
+  await instance.menuSelect({ target: cardMenu("t1"), detail: { action: "move", value: "done" } });
+  assert.deepEqual(instance.chips.filter((c) => c.bumped).map((c) => c.status), ["done"]);
+  assert.ok(timers.delays().includes(BUMP_MS));
+  timers.tick();
+  assert.deepEqual(instance.chips.filter((c) => c.bumped), []);
+});
+
+test("on a wide screen a menu move rings no chip", async () => {
+  const { instance } = setup();
+  await instance.menuSelect({ target: cardMenu("t1"), detail: { action: "move", value: "done" } });
+  assert.deepEqual(instance.chips.filter((c) => c.bumped), []);
 });

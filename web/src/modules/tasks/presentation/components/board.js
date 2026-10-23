@@ -13,7 +13,7 @@ import { Codes, codeOf } from "../../../../shared/domain/errors.js";
 import { describeError } from "../../../../shared/presentation/errors.js";
 import { applyTaskChange, describeChange, dropMove } from "../../domain/board.js";
 import { STATUSES } from "../../domain/task.js";
-import { archiveAllView, toColumns } from "../boardView.js";
+import { archiveAllView, jumpChips, toColumns } from "../boardView.js";
 
 /** How long a task that arrived or moved over the feed stays highlighted. */
 export const FRESH_MS = 8_000;
@@ -38,6 +38,9 @@ function autoScroll(boardEl, cardsEl, { clientX, clientY }) {
 
 const statusLabel = (status) => STATUSES.find((s) => s.value === status)?.label ?? status;
 
+/** How long a jump chip rings after a menu move filled its column. */
+export const BUMP_MS = 1_200;
+
 /** How long a card that went back after a refused move says "Move failed". */
 export const FAILED_MS = 4_000;
 
@@ -51,10 +54,11 @@ export const AGE_TICK_MS = 60_000;
  *   setTimeout?: typeof globalThis.setTimeout,
  *   clock?: { now: () => Date },
  *   isFine?: () => boolean,  a fine pointer (mouse, pen, trackpad): cards drag; touch uses the menu
+ *   isNarrow?: () => boolean,  below 48rem: the columns scroll sideways under jump chips
  * }} deps
  */
 export const board =
-  ({ gateway, store, setTimeout = globalThis.setTimeout.bind(globalThis), clock = { now: () => new Date() }, isFine = () => globalThis.matchMedia?.("(pointer: fine)").matches ?? false }) =>
+  ({ gateway, store, setTimeout = globalThis.setTimeout.bind(globalThis), clock = { now: () => new Date() }, isFine = () => globalThis.matchMedia?.("(pointer: fine)").matches ?? false, isNarrow = () => globalThis.matchMedia?.("(width < 48rem)").matches ?? false }) =>
   () => {
   /** The component's root (<main>): $el inside an event handler is the element that fired, not the root. */
   let root = null;
@@ -87,6 +91,8 @@ export const board =
     drag: null,
     /** A fine pointer, read once: cards drag only there. */
     fine: false,
+    /** The column whose jump chip rings after a menu move on a narrow screen; "" for none. */
+    bumped: "",
     /** "Archive all": rest, confirm, busy, done or failed; archived is how many the last one took. */
     archiveAllPhase: "rest",
     archivedByAll: 0,
@@ -107,6 +113,10 @@ export const board =
         const receipt = isDone ? all.emptyText : "";
         return { ...c, isDone, archiving: isDone && all.busy, receipt, showsEmpty: c.isEmpty && !receipt };
       });
+    },
+    /** The narrow screen's jump chips, one per column. */
+    get chips() {
+      return jumpChips(this.columns, { bumped: this.bumped });
     },
     get dragging() {
       return this.drag !== null;
@@ -150,7 +160,10 @@ export const board =
     menuSelect(event) {
       const { action, value } = event.detail;
       const taskId = event.target.closest?.("[data-task-id]")?.dataset.taskId;
-      if (action === "move" && taskId) this.move(taskId, value, { refocus: true });
+      if (action === "move" && taskId) {
+        this.bump(value);
+        this.move(taskId, value, { refocus: true });
+      }
       if (action === "archive" && taskId) this.archive(taskId);
     },
 
@@ -370,10 +383,23 @@ export const board =
       }, FRESH_MS);
     },
 
-    /** Keeps the keyboard on the card's "Move to…" after Alpine re-rendered it in another column. */
+    /** On a narrow screen the scroller stays put after a menu move; the target column's chip rings instead. */
+    bump(status) {
+      if (!isNarrow()) return;
+      this.bumped = status;
+      setTimeout(() => {
+        if (this.bumped === status) this.bumped = "";
+      }, BUMP_MS);
+    },
+
+    /**
+     * Keeps the keyboard on the card's "Move to…" after Alpine re-rendered it
+     * in another column, without scrolling to it: on a narrow screen losing
+     * one's place is worse than the focus being off screen.
+     */
     refocus(taskId) {
       this.$nextTick(() => {
-        root?.querySelector(`.card[data-task-id="${CSS.escape(taskId)}"] .move-to`)?.focus();
+        root?.querySelector(`.card[data-task-id="${CSS.escape(taskId)}"] .move-to`)?.focus({ preventScroll: isNarrow() });
       });
     },
 

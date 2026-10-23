@@ -137,66 +137,73 @@ templ ssrCard(c Card, column string) {
 
 // liveBoard is the same markup bound to tasksBoard's columns.
 templ liveBoard() {
-	<div class="[ board ]" data-board aria-label="Tasks by status" x-bind:data-dragging="dragging">
-		<template x-for="column in columns" x-bind:key="column.status">
-			<section class="[ column ]" x-bind:data-column="column.status" x-bind:aria-label="column.label" x-bind:data-waiting="column.waiting" x-bind:data-archiving="column.archiving" x-bind:data-drag-origin="column.dragOrigin" x-bind:data-drop="column.dropOver ? 'over' : null" x-bind:data-drop-self="column.dropSelf" x-on:dragover="dragOver" x-on:dragleave="dragLeave" x-on:drop="drop">
-				<header>
-					<h2 x-text="column.label"></h2>
-					<span class="[ count ]" x-bind:aria-label="column.count" x-text="column.countText"></span>
-					<div class="[ actions ]" x-show="column.isDone">
-						<button type="button" class="[ button ]" data-size="sm" data-archive-all x-show="archiveAll.shows" x-on:click="askArchiveAll">Archive all</button>
-					</div>
-					<p class="[ sub ]" x-show="column.waiting" x-text="column.sub"></p>
-				</header>
-				<template x-if="column.isDone">
-					@archiveAllStrip()
-				</template>
-				<div class="[ cards ]">
-					<p class="[ drop-slot ]" aria-hidden="true">
-						@cardGlyph("drop")
-						<span x-text="column.dropText"></span>
-					</p>
-					<p class="[ drop-self ]" aria-hidden="true" x-text="column.selfText"></p>
-					<template x-for="card in column.cards" x-bind:key="card.id">
-						<article class="[ card ]" x-bind:data-task-id="card.id" x-bind:data-status="card.status" x-bind:data-fresh="card.fresh" x-bind:data-pending="card.pending" x-bind:data-failed="card.failed" x-bind:data-ghost="card.ghost" x-bind:draggable="card.draggable ? 'true' : null" x-on:pointerdown="pointerDown" x-on:dragstart="dragStart" x-on:dragend="dragEnd">
-							<span class="[ grip ]" aria-hidden="true"></span>
-							<div class="[ top ]">
-								<a class="[ title ]" draggable="false" x-bind:href="card.href" x-text="card.title"></a>
-								@moveMenu()
-							</div>
-							<div class="[ signals ]" x-show="card.hasSignals">
-								<span class="[ status ]" x-show="card.hasLive" x-bind:data-state="card.liveState" x-text="card.liveWord"></span>
-								<template x-if="card.hasReviews">
-									<span class="[ badge reviews ]">
-										@cardGlyph("review")
-										<span x-text="card.reviews"></span>
-									</span>
-								</template>
-								<template x-if="card.hasMerge">
-									<span class="[ badge merge ]" x-bind:data-merge-state="card.mergeState">
-										@mergeGlyphs()
-										<span x-text="card.mergeWord"></span>
-									</span>
-								</template>
-							</div>
-							<p class="[ last-move ]" data-last-move>
-								<span>
-									<span x-text="card.lead"></span> <span class="[ who ]" x-text="card.who"></span><span class="[ at ]" x-text="card.at"></span>
-								</span>
-								<span class="[ age ]" data-age x-show="card.age" x-bind:title="card.ageTitle" x-bind:data-stale="card.stale" x-text="card.age"></span>
-							</p>
-							<p class="[ reason ]" x-show="card.hasReason" x-text="card.reason"></p>
-							<p class="[ note ]" role="status" x-show="card.note" x-text="card.note"></p>
-						</article>
+	<div class="[ board-page ]">
+		<nav class="[ jump ]" aria-label="Jump to a column">
+			<template x-for="chip in chips" x-bind:key="chip.status">
+				<a x-bind:href="chip.href" x-bind:data-waiting="chip.waiting" x-bind:data-bumped="chip.bumped"><span x-text="chip.label"></span> <b x-text="chip.count"></b></a>
+			</template>
+		</nav>
+		<div class="[ board ]" data-board aria-label="Tasks by status" x-bind:data-dragging="dragging">
+			<template x-for="column in columns" x-bind:key="column.status">
+				<section class="[ column ]" x-bind:id="column.anchor" x-bind:data-column="column.status" x-bind:aria-label="column.label" x-bind:data-waiting="column.waiting" x-bind:data-archiving="column.archiving" x-bind:data-drag-origin="column.dragOrigin" x-bind:data-drop="column.dropOver ? 'over' : null" x-bind:data-drop-self="column.dropSelf" x-on:dragover="dragOver" x-on:dragleave="dragLeave" x-on:drop="drop">
+					<header>
+						<h2 x-text="column.label"></h2>
+						<span class="[ count ]" x-bind:aria-label="column.count" x-text="column.countText"></span>
+						<div class="[ actions ]" x-show="column.isDone">
+							<button type="button" class="[ button ]" data-size="sm" data-archive-all x-show="archiveAll.shows" x-on:click="askArchiveAll">Archive all</button>
+						</div>
+						<p class="[ sub ]" x-show="column.waiting" x-text="column.sub"></p>
+					</header>
+					<template x-if="column.isDone">
+						@archiveAllStrip()
 					</template>
-					<p class="[ column-empty ]" x-show="column.showsEmpty" x-text="column.emptyText"></p>
-					<p class="[ column-empty ]" data-archived-receipt x-show="column.receipt">
-						@cardGlyph("archive")
-						<span><span x-text="column.receipt"></span> <a x-bind:href="archivedHref">View Archived</a></span>
-					</p>
-				</div>
-			</section>
-		</template>
+					<div class="[ cards ]">
+						<p class="[ drop-slot ]" aria-hidden="true">
+							@cardGlyph("drop")
+							<span x-text="column.dropText"></span>
+						</p>
+						<p class="[ drop-self ]" aria-hidden="true" x-text="column.selfText"></p>
+						<template x-for="card in column.cards" x-bind:key="card.id">
+							<article class="[ card ]" x-bind:data-task-id="card.id" x-bind:data-status="card.status" x-bind:data-fresh="card.fresh" x-bind:data-pending="card.pending" x-bind:data-failed="card.failed" x-bind:data-ghost="card.ghost" x-bind:draggable="card.draggable ? 'true' : null" x-on:pointerdown="pointerDown" x-on:dragstart="dragStart" x-on:dragend="dragEnd">
+								<span class="[ grip ]" aria-hidden="true"></span>
+								<div class="[ top ]">
+									<a class="[ title ]" draggable="false" x-bind:href="card.href" x-text="card.title"></a>
+									@moveMenu()
+								</div>
+								<div class="[ signals ]" x-show="card.hasSignals">
+									<span class="[ status ]" x-show="card.hasLive" x-bind:data-state="card.liveState" x-text="card.liveWord"></span>
+									<template x-if="card.hasReviews">
+										<span class="[ badge reviews ]">
+											@cardGlyph("review")
+											<span x-text="card.reviews"></span>
+										</span>
+									</template>
+									<template x-if="card.hasMerge">
+										<span class="[ badge merge ]" x-bind:data-merge-state="card.mergeState">
+											@mergeGlyphs()
+											<span x-text="card.mergeWord"></span>
+										</span>
+									</template>
+								</div>
+								<p class="[ last-move ]" data-last-move>
+									<span>
+										<span x-text="card.lead"></span> <span class="[ who ]" x-text="card.who"></span><span class="[ at ]" x-text="card.at"></span>
+									</span>
+									<span class="[ age ]" data-age x-show="card.age" x-bind:title="card.ageTitle" x-bind:data-stale="card.stale" x-text="card.age"></span>
+								</p>
+								<p class="[ reason ]" x-show="card.hasReason" x-text="card.reason"></p>
+								<p class="[ note ]" role="status" x-show="card.note" x-text="card.note"></p>
+							</article>
+						</template>
+						<p class="[ column-empty ]" x-show="column.showsEmpty" x-text="column.emptyText"></p>
+						<p class="[ column-empty ]" data-archived-receipt x-show="column.receipt">
+							@cardGlyph("archive")
+							<span><span x-text="column.receipt"></span> <a x-bind:href="archivedHref">View Archived</a></span>
+						</p>
+					</div>
+				</section>
+			</template>
+		</div>
 	</div>
 }
 

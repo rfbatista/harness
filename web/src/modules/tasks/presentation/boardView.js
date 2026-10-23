@@ -45,6 +45,7 @@ export function toColumns(tasks, { projectId, byTask, fresh, now, pending = {}, 
     const dropOver = under && drag.from !== value;
     return {
       status: value,
+      anchor: columnAnchor(value),
       label,
       count: cards.length,
       countText: dropOver ? `${cards.length} → ${cards.length + 1}` : String(cards.length),
@@ -124,4 +125,19 @@ export function archiveAllView({ phase, done, archived = 0 }) {
       return { ...view, emptyText: done === 0 ? `${archived} ${archived === 1 ? "task" : "tasks"} archived.` : "" };
   }
   return view;
+}
+
+/** A column's anchor: the jump chips link to it. */
+export const columnAnchor = (status) => `column-${status}`;
+
+/**
+ * The narrow screen's jump chips (below 48rem): one anchor link per column,
+ * with its label and count, never tabs, so every column stays in the
+ * scroller. Review's chip asks for a look while it holds cards; bumped is the
+ * column a menu move just filled, whose chip rings for a moment.
+ * @param {{ status: string, label: string, count: number, waiting: boolean }[]} columns
+ * @param {{ bumped: string }} ctx
+ */
+export function jumpChips(columns, { bumped }) {
+  return columns.map((c) => ({ status: c.status, href: `#${columnAnchor(c.status)}`, label: c.label, count: c.count, waiting: c.waiting, bumped: c.status === bumped }));
 }

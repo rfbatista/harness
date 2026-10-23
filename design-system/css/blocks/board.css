@@ -362,4 +362,66 @@
     &:hover { background: var(--color-hover); color: var(--color-ink); }
     & > .glyph { inline-size: 1rem; block-size: 1rem; }
   }
+
+  /*
+   * The live board under its jump chips. The chips show below 48rem only,
+   * where the columns become a sideways scroller with snap, each 86% wide so
+   * the next one peeks in. .jump a[data-waiting]: Review holds cards;
+   * [data-bumped]: a menu move just filled that column.
+   */
+  .board-page {
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
+    block-size: 100%;
+  }
+
+  .jump {
+    display: none;
+    gap: var(--space-xs);
+    padding: var(--space-s) var(--space-m);
+    overflow-x: auto;
+    border-block-end: var(--border-width) solid var(--color-line);
+    scrollbar-width: none;
+
+    & a {
+      display: inline-flex;
+      flex-shrink: 0;
+      align-items: center;
+      gap: var(--space-xs);
+      min-block-size: var(--size-control-md);
+      padding-inline: var(--space-s);
+      border: var(--border-width) solid var(--color-line);
+      border-radius: var(--radius-round);
+      background: var(--color-raised);
+      color: var(--color-ink-muted);
+      font-size: var(--text-sm);
+      text-decoration: none;
+      transition: box-shadow var(--duration-quick) var(--ease-out);
+    }
+
+    & a > b { font-weight: var(--weight-medium); color: var(--color-ink); }
+
+    & a[data-waiting] {
+      border-color: color-mix(in oklch, var(--color-attention-strong) 45%, transparent);
+      background: var(--color-attention-wash);
+      color: var(--color-attention-strong);
+
+      & > b { color: var(--color-attention-strong); }
+    }
+
+    & a[data-bumped] { box-shadow: 0 0 0 2px var(--color-signal); }
+  }
+
+  @media (width < 48rem) {
+    .jump { display: flex; }
+
+    .board {
+      grid-auto-columns: 86%;
+      gap: var(--space-s);
+      padding-inline: var(--space-m);
+      scroll-snap-type: x mandatory;
+
+      & > .column { scroll-snap-align: center; scroll-margin-inline: var(--space-m); }
+    }
+  }
 }
