@@ -19,6 +19,14 @@ func attentionAttrs(attention bool) templ.Attributes {
 // roleAttrs places a row in the architect's group: data-role on the
 // architect and its delegates, data-depth on a delegate (the .row block
 // indents by it). A peer gets neither, as before.
+// unsandboxedAttrs marks the row of a session that ran without the sandbox.
+func unsandboxedAttrs(unsandboxed bool) templ.Attributes {
+	if unsandboxed {
+		return templ.Attributes{"data-unsandboxed": true}
+	}
+	return templ.Attributes{}
+}
+
 func roleAttrs(role string, depth int) templ.Attributes {
 	a := templ.Attributes{}
 	if role != "" {

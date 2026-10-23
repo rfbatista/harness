@@ -224,3 +224,137 @@ func (f *fakeShells) Open(context.Context, string, ports.ShellScope) (string, er
 	return f.dir, nil
 }
 func (f *fakeShells) Close(string, string) {}
+
+func TestSandboxFacts_EachModeRecordsItsRepositoryVisibilityAndTheDriver(t *testing.T) {
+	for mode, want := range map[string]string{
+		"implement": domain.SandboxOwnRepo,
+		"design":    domain.SandboxOwnRepo,
+		"":          domain.SandboxOwnRepo,
+		"architect": domain.SandboxAllReposReadOnly,
+		"product":   domain.SandboxAllReposReadOnly,
+	} {
+		t.Run("mode "+mode, func(t *testing.T) {
+			w := newSandboxWorld(t)
+			sess, _ := w.start(t, mode)
+			got := w.svc.sessions.Get(sess.ID).Sandbox
+			if got == nil || !got.Sandboxed || got.Visibility != want || got.Driver != "recording" {
+				t.Errorf("stored facts = %+v, want sandboxed, %q, driver recording", got, want)
+			}
+			if sess.Sandbox == nil || *sess.Sandbox != *got {
+				t.Errorf("returned facts = %+v, stored %+v", sess.Sandbox, got)
+			}
+		})
+	}
+}
+
+func TestSandboxFacts_AHeadlessSessionRecordsThemToo(t *testing.T) {
+	w := newSandboxWorld(t)
+	sess, err := w.svc.Start(context.Background(), StartRequest{ProjectID: "p1", RepositoryID: "r1", Task: "hello"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = w.svc.Stop(context.Background(), sess.ID) })
+	got := w.svc.sessions.Get(sess.ID).Sandbox
+	if got == nil || !got.Sandboxed || got.Visibility != domain.SandboxOwnRepo {
+		t.Errorf("facts = %+v", got)
+	}
+}
+
+func TestSandboxFacts_ASessionStartedWithTheSandboxOffRecordsNotSandboxed(t *testing.T) {
+	w := newSandboxWorld(t)
+	w.off = true
+	sess, _, err := w.svc.StartInteractive(context.Background(), InteractiveRequest{ProjectID: "p1", RepositoryID: "r1", TicketID: "tk1", Mode: "implement", RunsOn: domain.RunnerTUI})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := w.svc.sessions.Get(sess.ID).Sandbox
+	if got == nil || got.Sandboxed || got.Visibility != domain.SandboxUnrestricted || got.Driver != "" {
+		t.Errorf("facts = %+v, want not sandboxed and unrestricted", got)
+	}
+}
+
+func TestSandboxFacts_ARunningSessionKeepsItsFactsWhenSettingsChange(t *testing.T) {
+	w := newSandboxWorld(t)
+	sess, _ := w.start(t, "implement")
+	w.off = true
+	if got := w.svc.sessions.Get(sess.ID).Sandbox; got == nil || !got.Sandboxed {
+		t.Errorf("facts after the switch = %+v", got)
+	}
+}
+
+func TestSandboxFacts_AResumeRecordsTheRulesItStartsUnderAndWrapsItsCommand(t *testing.T) {
+	w := newSandboxWorld(t)
+	w.svc.Transcripts = fakeTranscripts{}
+	ctx := context.Background()
+	sess, _ := w.start(t, "implement")
+	if _, err := w.svc.EndInteractive(ctx, sess.ID, 0, false); err != nil {
+		t.Fatal(err)
+	}
+
+	w.off = true // the person switches the sandbox off, then resumes
+	resumed, spec, err := w.svc.ResumeInteractive(ctx, ports.ResumeRequest{SessionID: sess.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := w.svc.sessions.Get(sess.ID).Sandbox; got == nil || got.Sandboxed || got.Visibility != domain.SandboxUnrestricted {
+		t.Errorf("after resuming with the sandbox off: %+v", got)
+	}
+	if resumed.Sandbox == nil || resumed.Sandbox.Sandboxed || spec.Sandbox != nil {
+		t.Errorf("returned %+v, spec policy %v", resumed.Sandbox, spec.Sandbox)
+	}
+
+	if _, err := w.svc.EndInteractive(ctx, sess.ID, 0, false); err != nil {
+		t.Fatal(err)
+	}
+	w.off = false // and back on
+	_, spec, err = w.svc.ResumeInteractive(ctx, ports.ResumeRequest{SessionID: sess.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := w.svc.sessions.Get(sess.ID).Sandbox
+	if got == nil || !got.Sandboxed || got.Visibility != domain.SandboxOwnRepo || got.Driver != "recording" {
+		t.Errorf("after resuming with the sandbox on: %+v", got)
+	}
+	calls := w.driver.Calls()
+	if spec.Sandbox == nil || len(calls) != 2 || !slices.Contains(calls[1].Policy.Writable, sess.WorkingDir) {
+		t.Errorf("resume policy %v, driver calls %d", spec.Sandbox, len(calls))
+	}
+}
+
+func TestSandboxFacts_AResumedArchitectSeesEveryRepositoryAgain(t *testing.T) {
+	w := newSandboxWorld(t)
+	w.svc.Transcripts = fakeTranscripts{}
+	sess, _ := w.start(t, "architect")
+	if _, err := w.svc.EndInteractive(context.Background(), sess.ID, 0, false); err != nil {
+		t.Fatal(err)
+	}
+	_, spec, err := w.svc.ResumeInteractive(context.Background(), ports.ResumeRequest{SessionID: sess.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range []string{"r2", "r3"} {
+		if !slices.Contains(spec.Sandbox.Readable, w.repos[id]) {
+			t.Errorf("%s not readable on resume: %v", id, spec.Sandbox.Readable)
+		}
+	}
+	if got := w.svc.sessions.Get(sess.ID).Sandbox; got == nil || got.Visibility != domain.SandboxAllReposReadOnly {
+		t.Errorf("facts = %+v", got)
+	}
+}
+
+func TestSandboxFacts_ASessionFromBeforeTheSandboxHasNoneAndResumesFine(t *testing.T) {
+	svc, _ := newInteractiveService(t) // no Sandbox step wired
+	sess, _ := startInteractive(t, svc, InteractiveRequest{})
+	if sess.Sandbox != nil {
+		t.Fatalf("facts without a sandbox step: %+v", sess.Sandbox)
+	}
+	if _, err := svc.EndInteractive(context.Background(), sess.ID, 0, false); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := svc.ResumeInteractive(context.Background(), ports.ResumeRequest{SessionID: sess.ID}); err != nil {
+		t.Fatal(err)
+	}
+	if got := svc.sessions.Get(sess.ID).Sandbox; got != nil {
+		t.Errorf("facts = %+v, want none", got)
+	}
+}

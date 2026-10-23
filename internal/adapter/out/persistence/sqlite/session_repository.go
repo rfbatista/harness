@@ -54,6 +54,7 @@ func (r *SessionRepository) Create(s *domain.Session) (*domain.Session, error) {
 		TokenSaversNotInstalled: joinSavers(s.TokenSaversNotInstalled),
 		CavemanIntensity:        string(s.CavemanIntensity),
 	}
+	m.setSandbox(s.Sandbox)
 	if err := r.db.Create(m).Error; err != nil {
 		return nil, err
 	}
@@ -225,6 +226,22 @@ func (r *SessionRepository) UpdateRunner(id string, runsOn domain.Runner, host s
 		"runs_on":     string(runsOn),
 		"runner_host": host,
 		"updated_at":  time.Now().UnixMilli(),
+	})
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		return &domain.StructuredError{Code: "SESSION_NOT_FOUND", Message: "session not found"}
+	}
+	return nil
+}
+
+func (r *SessionRepository) UpdateSandbox(id string, facts domain.SandboxFacts) error {
+	res := r.db.Model(&SessionModel{}).Where("id = ?", id).Updates(map[string]any{
+		"sandboxed":          facts.Sandboxed,
+		"sandbox_visibility": facts.Visibility,
+		"sandbox_driver":     facts.Driver,
+		"updated_at":         time.Now().UnixMilli(),
 	})
 	if res.Error != nil {
 		return res.Error

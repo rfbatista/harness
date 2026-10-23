@@ -41,8 +41,15 @@ export function toSession(dto) {
     workingDir: dto.working_dir ?? "",
     tokenSavers: names(dto.token_savers),
     tokenSaversNotInstalled: names(dto.token_savers_not_installed),
+    sandbox: toSandbox(dto.sandbox),
     updatedAt,
   });
+}
+
+/** The sandbox facts a session started under; null for one from before the sandbox. */
+function toSandbox(dto) {
+  if (!dto || typeof dto.visibility !== "string" || dto.visibility === "") return null;
+  return Object.freeze({ sandboxed: dto.sandboxed === true, visibility: dto.visibility, driver: dto.driver ?? "" });
 }
 
 /**

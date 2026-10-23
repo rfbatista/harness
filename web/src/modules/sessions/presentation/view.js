@@ -51,6 +51,16 @@ function meta(agent, by, when) {
   return by ? `${agent} · started by ${by} · ${when}` : `${agent} · ${when}`;
 }
 
+/** A row's faint line; a session that ran without the sandbox says so last. */
+function rowMetaOf(session, text) {
+  return isUnsandboxed(session) ? `${text} · unsandboxed` : text;
+}
+
+/** True only for a session that started with the sandbox off; one from before the sandbox is not. */
+export function isUnsandboxed(session) {
+  return session.sandbox != null && !session.sandbox.sandboxed;
+}
+
 const GROUP_LABEL = { architect: "Architect", "needs-you": "Needs you", active: "Running", finished: "Earlier" };
 
 /** @returns {{ state: string, word: string }} */
@@ -109,10 +119,14 @@ export function toRowView(session, { selectedId, now, agentNames, others = [], f
     title,
     state: status.state,
     word: status.word,
-    meta:
+    meta: rowMetaOf(
+      session,
       session.role === "delegate"
         ? delegateMeta(session, { now, agentNames, messages })
         : meta(runsOn(session, agentNames), startedBy(session, others, agentNames), relativeTime(session.updatedAt, now)),
+    ),
+    // What x-bind sets: null leaves the attribute off a sandboxed row.
+    unsandboxedAttr: isUnsandboxed(session) ? "" : null,
     selected: session.id === selectedId,
     fresh,
     attention: needsYou(session),
@@ -211,7 +225,27 @@ export function toDetailView(session, now, agentNames) {
     repositoryId: session.repositoryId,
     workspaceId: session.workspaceId,
     ...tokenSaversView(session),
+    ...sandboxView(session),
     ...terminalView(session),
+  };
+}
+
+const VISIBILITY_WORDS = { "own repo": "Own worktree only", "all repos, read-only": "All repos read-only", unrestricted: "No repository limits" };
+
+/**
+ * The chips of a session's sandbox facts (UX 6): quiet "Sandboxed" and its
+ * repository visibility, or the amber "Not sandboxed" when it started with
+ * the sandbox off. A session from before the sandbox has none.
+ * @returns {{ sandboxChip: string, sandboxTone: string | null, visibilityChip: string }}
+ */
+export function sandboxView(session) {
+  const f = session.sandbox;
+  if (!f) return { sandboxChip: "", sandboxTone: null, visibilityChip: "" };
+  const architect = session.mode === "architect" && f.visibility === "all repos, read-only";
+  return {
+    sandboxChip: f.sandboxed ? "Sandboxed" : "Not sandboxed",
+    sandboxTone: f.sandboxed ? null : "attention",
+    visibilityChip: architect ? "Own worktree + all repos read-only" : (VISIBILITY_WORDS[f.visibility] ?? f.visibility),
   };
 }
 

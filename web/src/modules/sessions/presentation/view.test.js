@@ -5,7 +5,7 @@ import { assert, file, test } from "../../../shared/testing/test.js";
 import { needsYou } from "../domain/session.js";
 import { makeSession, T0 } from "../testing/fixtures.js";
 import { makeCheck, makeMessage } from "../testing/channel-fixtures.js";
-import { agentLabel, delegateOption, reportView, rowTitle, runsAs, runsOn, startedBy, statusCheckView, statusView, summary, terminalView, toDetailView, toGroupViews, tokenSaversView } from "./view.js";
+import { agentLabel, delegateOption, reportView, rowTitle, runsAs, runsOn, startedBy, statusCheckView, statusView, summary, terminalView, toDetailView, toGroupViews, sandboxView, tokenSaversView } from "./view.js";
 
 file("sessions/presentation/view");
 
@@ -203,6 +203,24 @@ test("the token savers a session runs with, and those on for it but not installe
   assert.equal(v.tokenSavers, "rtk · caveman");
   assert.equal(v.tokenSaversMissing, "codegraph not installed");
   assert.equal(v.tokenSaversMissingTitle, "codegraph was on for this session but not installed, so it runs without it. Install it on the Token savers page.");
+});
+
+test("the sandbox chips: quiet when sandboxed, amber only when the sandbox was off, none before the sandbox", () => {
+  const on = (visibility, mode = "") => sandboxView(makeSession({ mode, sandbox: { sandboxed: true, visibility, driver: "seatbelt" } }));
+  assert.deepEqual(sandboxView(makeSession()), { sandboxChip: "", sandboxTone: null, visibilityChip: "" });
+  assert.deepEqual(on("own repo"), { sandboxChip: "Sandboxed", sandboxTone: null, visibilityChip: "Own worktree only" });
+  assert.equal(on("all repos, read-only", "architect").visibilityChip, "Own worktree + all repos read-only");
+  assert.equal(on("all repos, read-only", "product").visibilityChip, "All repos read-only");
+  assert.deepEqual(sandboxView(makeSession({ sandbox: { sandboxed: false, visibility: "unrestricted", driver: "" } })), { sandboxChip: "Not sandboxed", sandboxTone: "attention", visibilityChip: "No repository limits" });
+});
+
+test("a row says unsandboxed only for a session that ran without the sandbox", () => {
+  const row = (sandbox) => toGroupViews([makeSession({ sandbox })], { selectedId: null, now: T0, agentNames: {} })[0].rows[0];
+  assert.equal(row(null).meta.includes("unsandboxed"), false);
+  assert.equal(row({ sandboxed: true, visibility: "own repo", driver: "seatbelt" }).meta.includes("unsandboxed"), false);
+  const off = row({ sandboxed: false, visibility: "unrestricted", driver: "" });
+  assert.ok(off.meta.endsWith(" · unsandboxed"), off.meta);
+  assert.equal(off.unsandboxedAttr, "");
 });
 
 test("row titles match the shared fixture: a session with no task is a feature brainstorm (parity with the BFF)", () => {

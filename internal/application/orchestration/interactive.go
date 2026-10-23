@@ -112,6 +112,7 @@ func (s *Service) StartInteractive(ctx context.Context, req InteractiveRequest) 
 		TokenSavers:             p.savers.active,
 		TokenSaversNotInstalled: p.savers.notInstalled,
 		CavemanIntensity:        p.savers.cavemanIntensity,
+		Sandbox:                 p.sandbox.facts,
 	})
 	if err == nil {
 		s.adoptCleanup(id, p.cleanup)
@@ -196,9 +197,22 @@ func (s *Service) ResumeInteractive(ctx context.Context, req ports.ResumeRequest
 		return nil, ports.AgentSpec{}, err
 	}
 	s.rewireTokenSavers(ctx, sess, &cfg)
+	// A resume starts under the rules now in force, not the ones it started
+	// under, and records them.
+	sb, err := s.resumeSandbox(ctx, sess, cfg.Env)
+	if err != nil {
+		if cleanup != nil {
+			cleanup()
+		}
+		return nil, ports.AgentSpec{}, err
+	}
 	spec := s.agentSpec(cfg, ports.Conversation{ID: claudeID(sess), Resume: true}, "")
 	spec.EnvFile = envFile
+	spec.Sandbox = sb.policy
 	err = s.sessions.UpdateRunner(sess.ID, runsOn, runnerHost(runsOn, req.RunnerHost))
+	if err == nil && sb.facts != nil {
+		err = s.sessions.UpdateSandbox(sess.ID, *sb.facts)
+	}
 	if err == nil {
 		err = s.sessions.UpdateStatus(sess.ID, domain.SessionRunning)
 	}
@@ -217,6 +231,20 @@ func (s *Service) ResumeInteractive(ctx context.Context, req ports.ResumeRequest
 		}
 	}
 	return s.withResumability(ctx, s.sessions.Get(sess.ID)), spec, nil
+}
+
+// resumeSandbox is the sandbox step of a resume: the session's policy under
+// the current settings.
+func (s *Service) resumeSandbox(ctx context.Context, sess *domain.Session, env []string) (sandboxed, error) {
+	repo := &domain.Repository{}
+	if s.Sandbox != nil && sess.RepositoryID != "" {
+		r, err := s.catalog.Repositories.GetRepository(ctx, sess.RepositoryID)
+		if err != nil {
+			return sandboxed{}, err
+		}
+		repo = r
+	}
+	return s.sandbox(ctx, prepareInput{ProjectID: sess.ProjectID, Mode: sess.Mode}, sess.ID, repo, sess.WorkingDir, env)
 }
 
 // claimResume marks id as being resumed; false when another call already is.

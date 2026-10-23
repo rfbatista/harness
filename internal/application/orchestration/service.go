@@ -285,6 +285,7 @@ func (s *Service) Start(ctx context.Context, req StartRequest) (*domain.Session,
 		TokenSavers:             p.savers.active,
 		TokenSaversNotInstalled: p.savers.notInstalled,
 		CavemanIntensity:        p.savers.cavemanIntensity,
+		Sandbox:                 p.sandbox.facts,
 	})
 	if err != nil {
 		_ = sess.Stop()
