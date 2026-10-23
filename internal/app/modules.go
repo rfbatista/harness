@@ -637,6 +637,9 @@ func newOrchestrationService(
 		Home:    agentHome.Path(),
 		Bin:     claudeBin.Bin(),
 		Allow:   func(string) []ports.SandboxPath { return allow },
+		// Each session gets a temp dir of its own, never the system's, which
+		// every session (and each one's virtual shell) shares.
+		TempDir: func(id string) string { return filepath.Join(os.TempDir(), "harness-session-"+shortID(id)) },
 
 		Violations:     violations,
 		ViolationStore: violationStore,
@@ -825,4 +828,13 @@ func newPullRequestsService(
 		return nil
 	}})
 	return svc
+}
+
+// shortID is the part of a session id that names its temp dir: short enough
+// to keep unix socket paths under the 104 byte limit, long enough to be unique.
+func shortID(id string) string {
+	if len(id) > 12 {
+		return id[:12]
+	}
+	return id
 }

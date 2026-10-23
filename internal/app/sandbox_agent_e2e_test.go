@@ -37,6 +37,13 @@ code=$(curl -s -o /dev/null -w '%%{http_code}' -X POST -H 'Content-Type: applica
 echo "mcp-code=$code" >> "$r"
 cat "$E2E_SECRET" >> "$r" 2>/dev/null
 echo "secret-read=$?" >> "$r"
+echo "tmpdir=$TMPDIR" >> "$r"
+echo mine > "$TMPDIR/own.txt"
+echo "own-temp-write=$?" >> "$r"
+cat "$E2E_OTHER_TEMP/note" >> "$r" 2>/dev/null
+echo "other-temp-read=$?" >> "$r"
+(echo x > "$E2E_OTHER_TEMP/planted") 2>/dev/null
+echo "other-temp-write=$?" >> "$r"
 `
 
 // TestAgentSandbox_ASessionRunsItsToolsUnderTheRealDriver_EndToEnd launches a
@@ -65,6 +72,19 @@ func TestAgentSandbox_ASessionRunsItsToolsUnderTheRealDriver_EndToEnd(t *testing
 	}
 	if spec.Sandbox == nil {
 		t.Fatal("the session has no sandbox policy")
+	}
+	// Another session's temp dir, which this session must not reach.
+	_, other, err := e.orch.StartInteractive(e.ctx, ports.InteractiveRequest{ProjectID: e.project, RepositoryID: e.repo, TicketID: taskID, Mode: "implement"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	otherTemp := envValue(other.Env, "TMPDIR")
+	if otherTemp == "" || otherTemp == envValue(spec.Env, "TMPDIR") {
+		t.Fatalf("sessions share a temp dir: %q and %q", otherTemp, envValue(spec.Env, "TMPDIR"))
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(otherTemp); _ = os.RemoveAll(envValue(spec.Env, "TMPDIR")) })
+	if err := os.WriteFile(filepath.Join(otherTemp, "note"), []byte("OTHER-SESSION-TEMP"), 0o600); err != nil {
+		t.Fatal(err)
 	}
 	shellDir := envValue(spec.Env, "HARNESS_SHELL")
 	doc := e.createDocument("Plan", "# Plan\n\ndraft\n", "markdown", "task")
@@ -98,13 +118,16 @@ func TestAgentSandbox_ASessionRunsItsToolsUnderTheRealDriver_EndToEnd(t *testing
 	agentHome := claudehome.NewHome(filepath.Join(dir, "claude-home"))
 	result := filepath.Join(dir, "result.txt")
 	spec.Env = append(spec.Env,
-		"E2E_RESULT="+result, "E2E_WORKTREE="+spec.Dir, "E2E_SECRET="+secret,
+		"E2E_RESULT="+result, "E2E_OTHER_TEMP="+otherTemp, "E2E_WORKTREE="+spec.Dir, "E2E_SECRET="+secret,
 		"E2E_MCP_URL="+e.srv.URL+mcpsession.PathPrefix+spec.SessionID,
 		"GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_NOSYSTEM=1")
 
 	launcher := claudecli.NewLauncher(claude.New(llmkit.Options{Bin: script, ConfigDir: agentHome.Path(), Isolated: true})).
 		WithHome(agentHome).
-		WithSandbox(e.orch.Sandbox.Driver, ports.SandboxPath{Path: agentHome.Path(), Write: true})
+		WithSandbox(e.orch.Sandbox.Driver, ports.SandboxPath{Path: agentHome.Path(), Write: true},
+			// The stand-in claude and its report sit in a temp dir, which the
+			// driver closes like any other.
+			ports.SandboxPath{Path: dir, Write: true})
 	proc, err := launcher.Launch(context.Background(), spec, ports.TermSize{Cols: 80, Rows: 24}, shell.Direct{})
 	if err != nil {
 		t.Fatal(err)
@@ -122,6 +145,7 @@ func TestAgentSandbox_ASessionRunsItsToolsUnderTheRealDriver_EndToEnd(t *testing
 	got := string(b)
 	for _, want := range []string{
 		"config=" + agentHome.Path(), "autoupdater=1", "shim-edit=0", "git-commit=0",
+		"tmpdir=" + envValue(spec.Env, "TMPDIR"), "own-temp-write=0", "other-temp-read=1", "other-temp-write=1",
 	} {
 		if !strings.Contains(got, want+"\n") {
 			t.Errorf("the agent's report lacks %q:\n%s", want, got)
@@ -135,6 +159,12 @@ func TestAgentSandbox_ASessionRunsItsToolsUnderTheRealDriver_EndToEnd(t *testing
 	}
 	if strings.Contains(got, "STAND-IN-SECRET") || !strings.Contains(got, "secret-read=1\n") {
 		t.Errorf("the agent read a secret under the home:\n%s", got)
+	}
+	if strings.Contains(got, "OTHER-SESSION-TEMP") {
+		t.Errorf("the agent read another session's temp dir:\n%s", got)
+	}
+	if _, err := os.Stat(filepath.Join(otherTemp, "planted")); err == nil {
+		t.Error("the agent wrote into another session's temp dir")
 	}
 	wantDocument(t, e.document(doc.ID), "Plan", "markdown", "task", "# Plan\n\nfinal\n")
 	out, err := exec.Command("git", "-C", spec.Dir, "log", "-1", "--format=%s").Output()

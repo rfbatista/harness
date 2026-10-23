@@ -127,3 +127,20 @@ func TestTheSessionHooksReportToTheServer(t *testing.T) {
 		t.Errorf("PreToolUse hooks = %+v, want the spec's edit proxy", pre)
 	}
 }
+
+func TestASpecsExtraSettingsReachClaudesSettings(t *testing.T) {
+	cfg, err := Config(ports.AgentSpec{
+		SessionID: "s1", Conversation: ports.Conversation{ID: "c1"},
+		Settings: map[string]json.RawMessage{"sandbox": json.RawMessage(`{"enabled":false}`)},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := cfg.Settings.MarshalJSON()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(b) != `{"sandbox":{"enabled":false}}` {
+		t.Errorf("settings = %s", b)
+	}
+}

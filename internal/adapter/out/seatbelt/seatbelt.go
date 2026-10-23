@@ -52,9 +52,16 @@ func (d *Driver) Wrap(policy ports.SandboxPolicy, cmd ports.SandboxCommand) (por
 	if err != nil {
 		return ports.SandboxCommand{}, err
 	}
+	// The system temp dir is shared by every process of the user, other
+	// sessions' included, so it is closed like the home: a session reaches
+	// only the temp dir its policy names.
+	temps, err := pr.variants(os.TempDir())
+	if err != nil {
+		return ports.SandboxCommand{}, err
+	}
 	tag := pr.param(tagFor(policy.WorkingDir))
 	fmt.Fprintf(&b, "(deny file-read* file-write* (with message %s)", tag)
-	for _, p := range homes {
+	for _, p := range append(homes, temps...) {
 		fmt.Fprintf(&b, " (subpath %s)", p)
 	}
 	b.WriteString(")\n(allow file-read-metadata)\n")

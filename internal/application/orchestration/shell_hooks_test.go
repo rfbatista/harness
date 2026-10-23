@@ -18,6 +18,7 @@ type claudeSettings struct {
 		Matcher string `json:"matcher"`
 		Hooks   []struct{ Type, Command string }
 	} `json:"hooks"`
+	Sandbox *struct{ Enabled *bool } `json:"sandbox"`
 }
 
 func settingsOf(t *testing.T, args []string) claudeSettings {

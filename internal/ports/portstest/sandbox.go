@@ -2,7 +2,9 @@ package portstest
 
 import (
 	"context"
+	"slices"
 	"sync"
+	"time"
 
 	"operators-mcp/internal/ports"
 )
@@ -21,6 +23,9 @@ type RecordingSandboxDriver struct {
 	calls []SandboxCall
 	// Err, if set, is what Wrap answers.
 	Err error
+	// Block, if set, holds each Follow until it is closed or the Follow's
+	// context ends: a log stream that is slow to come up, or never does.
+	Block chan struct{}
 }
 
 var _ ports.SandboxDriver = (*RecordingSandboxDriver)(nil)
@@ -52,6 +57,9 @@ type FakeViolationSource struct {
 	follows []*fakeFollow
 	// Err, if set, is what Follow answers.
 	Err error
+	// Block, if set, holds each Follow until it is closed or the Follow's
+	// context ends: a log stream that is slow to come up, or never does.
+	Block chan struct{}
 }
 
 type fakeFollow struct {
@@ -74,6 +82,13 @@ func (f *FakeViolationSource) Follow(ctx context.Context, workingDir string) (<-
 		<-ctx.Done()
 		close(fl.ch)
 	}()
+	if f.Block != nil {
+		select {
+		case <-f.Block:
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}
 	return fl.ch, nil
 }
 
@@ -98,7 +113,18 @@ func (f *FakeViolationSource) Follows() int {
 
 // Emit delivers v to every running Follow of workingDir, returning once they
 // have taken it.
+//
+// A session follows in the background, so Emit first waits (up to a second)
+// for a Follow of workingDir to have been made.
 func (f *FakeViolationSource) Emit(workingDir string, v ports.SandboxViolation) {
+	for deadline := time.Now().Add(time.Second); time.Now().Before(deadline); time.Sleep(time.Millisecond) {
+		f.mu.Lock()
+		seen := slices.ContainsFunc(f.follows, func(fl *fakeFollow) bool { return fl.dir == workingDir })
+		f.mu.Unlock()
+		if seen {
+			break
+		}
+	}
 	f.mu.Lock()
 	fs := append([]*fakeFollow(nil), f.follows...)
 	f.mu.Unlock()

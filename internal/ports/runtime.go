@@ -2,6 +2,7 @@ package ports
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"os"
 
@@ -74,6 +75,11 @@ type AgentSpec struct {
 	// Sandbox is the policy the agent sandbox confines the process by; nil
 	// runs it unconfined.
 	Sandbox *SandboxPolicy `json:"sandbox,omitempty"`
+	// Settings are more top-level claude settings keys, each a JSON value,
+	// merged into --settings verbatim. A sandboxed session carries
+	// {"sandbox":{"enabled":false}}: claude's own Bash sandbox must not nest
+	// inside the agent sandbox.
+	Settings map[string]json.RawMessage `json:"settings,omitempty"`
 }
 
 // HookGroup is one entry of a claude settings hook event: the commands run

@@ -87,7 +87,7 @@ func (s *Service) StartInteractive(ctx context.Context, req InteractiveRequest) 
 
 	spec := s.agentSpec(p.cfg, ports.Conversation{ID: id}, modePrompt(mode, ticket, project, req.Prompt))
 	spec.EnvFile = p.envFile
-	spec.Sandbox = p.sandbox.policy
+	confineSpec(&spec, p.sandbox.policy)
 	created, err := s.sessions.Create(&domain.Session{
 		ID:              id,
 		ProjectID:       req.ProjectID,
@@ -206,6 +206,10 @@ func (s *Service) ResumeInteractive(ctx context.Context, req ports.ResumeRequest
 	s.rewireTokenSavers(ctx, sess, &cfg)
 	// A resume starts under the rules now in force, not the ones it started
 	// under, and records them.
+	cleanup, err = s.withTempDir(sess.ID, &cfg, cleanup)
+	if err != nil {
+		return nil, ports.AgentSpec{}, err
+	}
 	sb, err := s.resumeSandbox(ctx, sess, cfg.Env)
 	if err != nil {
 		if cleanup != nil {
@@ -215,7 +219,7 @@ func (s *Service) ResumeInteractive(ctx context.Context, req ports.ResumeRequest
 	}
 	spec := s.agentSpec(cfg, ports.Conversation{ID: claudeID(sess), Resume: true}, "")
 	spec.EnvFile = envFile
-	spec.Sandbox = sb.policy
+	confineSpec(&spec, sb.policy)
 	err = s.sessions.UpdateRunner(sess.ID, runsOn, runnerHost(runsOn, req.RunnerHost))
 	if err == nil && sb.facts != nil {
 		err = s.sessions.UpdateSandbox(sess.ID, *sb.facts)

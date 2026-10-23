@@ -2,6 +2,8 @@ package orchestration
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -10,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/rfbatista/llmkit"
+	"github.com/rfbatista/llmkit/claude"
 
 	"operators-mcp/internal/application/agentready"
 	"operators-mcp/internal/domain"
@@ -162,7 +165,81 @@ func (b *Sandbox) OneShotWrap(allow []ports.SandboxPath) (llmkit.WrapFunc, error
 	if b.Driver == nil {
 		return nil, agentready.SandboxDriverMissing()
 	}
+	// The system temp dir stays read-write here: llmkit's contract makes it
+	// the one-shot's working directory, and claude writes its scratch and
+	// lock files under TMPDIR, so a read-only cwd would fail calls that
+	// otherwise work. A one-shot runs no tools and sees no repository, which
+	// is why it does not get a temp dir of its own as a session does.
 	return sandboxWrap(b.Driver, SandboxSession{OneShot: true, TempDir: os.TempDir(), AgentHome: b.Home, Allow: allow}), nil
+}
+
+// claudeSandboxOff is the settings value that keeps claude's own Bash sandbox
+// off: inside the agent sandbox it would nest a second Seatbelt, and a
+// repository's .claude/settings.json (project settings are read) could switch
+// it on. --settings is flag-level, which outranks project settings.
+var claudeSandboxOff = json.RawMessage(`{"enabled":false}`)
+
+// withClaudeSandboxOff adds claudeSandboxOff to a headless session's
+// --settings, next to what it already has.
+func withClaudeSandboxOff(cfg *llmkit.SessionConfig) {
+	var dc claude.Config
+	switch d := cfg.Driver.(type) {
+	case nil:
+	case claude.Config:
+		dc = d
+	default:
+		return
+	}
+	var settings claude.Settings
+	if dc.Settings != nil {
+		settings = *dc.Settings
+	}
+	extra := make(map[string]json.RawMessage, len(settings.Extra)+1)
+	for k, v := range settings.Extra {
+		extra[k] = v
+	}
+	extra["sandbox"] = claudeSandboxOff
+	settings.Extra = extra
+	dc.Settings = &settings
+	cfg.Driver = dc
+}
+
+// confineSpec marks an interactive spec as running under policy: the policy
+// itself and the claude settings that go with it. A nil policy leaves it
+// unconfined.
+func confineSpec(spec *ports.AgentSpec, policy *ports.SandboxPolicy) {
+	spec.Sandbox = policy
+	if policy != nil {
+		spec.Settings = map[string]json.RawMessage{"sandbox": claudeSandboxOff}
+	}
+}
+
+// withTempDir gives a sandboxed session its own temp dir: made 0700 before
+// the start, named by TMPDIR, TMP and TEMP in its env so its tools use it,
+// and removed with the session (the cleanup it answers runs cleanup first).
+// Without a Sandbox that is on, with a driver and a TempDir, it does nothing.
+func (s *Service) withTempDir(id string, cfg *llmkit.SessionConfig, cleanup func()) (func(), error) {
+	sb := s.Sandbox
+	if !sb.on() || sb.Driver == nil || sb.TempDir == nil {
+		return cleanup, nil
+	}
+	dir := sb.TempDir(id)
+	if dir == "" {
+		return cleanup, nil
+	}
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		if cleanup != nil {
+			cleanup()
+		}
+		return nil, fmt.Errorf("prepare the session's temp dir: %w", err)
+	}
+	cfg.Env = append(slices.Clone(cfg.Env), "TMPDIR="+dir, "TMP="+dir, "TEMP="+dir)
+	return func() {
+		if cleanup != nil {
+			cleanup()
+		}
+		_ = os.RemoveAll(dir)
+	}, nil
 }
 
 // sandboxed is the outcome of the sandbox step.
@@ -329,21 +406,23 @@ func gitCommonDir(worktree, repoRoot string) string {
 
 // collectViolations starts following the sandbox violations of a sandboxed
 // session's process tree, storing each for the session. The returned stop ends
-// it; it is nil when nothing is collected. Call it before the session's process
-// runs, so nothing it is denied is missed.
+// it; it is nil when nothing is collected. Collection starts in the background,
+// so a denial in the first moments of the process may be missed.
 func (s *Service) collectViolations(id, workingDir string, facts *domain.SandboxFacts) (stop func()) {
 	sb := s.Sandbox
 	if sb == nil || sb.Violations == nil || sb.ViolationStore == nil || facts == nil || !facts.Sandboxed {
 		return nil
 	}
+	// The log stream can take seconds to attach, so it is followed in the
+	// background: a start is never delayed or refused by the collector, and a
+	// stream that cannot be followed only means no violations are recorded.
 	ctx, cancel := context.WithCancel(context.Background())
-	ch, err := sb.Violations.Follow(ctx, workingDir)
-	if err != nil {
-		cancel()
-		slog.Warn("follow sandbox violations failed", "session", id, "err", err)
-		return nil
-	}
 	go func() {
+		ch, err := sb.Violations.Follow(ctx, workingDir)
+		if err != nil {
+			slog.Debug("follow sandbox violations failed", "session", id, "err", err)
+			return
+		}
 		for v := range ch {
 			if err := sb.ViolationStore.AddSandboxViolation(id, v); err != nil {
 				slog.Warn("store sandbox violation failed", "session", id, "err", err)

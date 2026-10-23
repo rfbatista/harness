@@ -443,6 +443,11 @@ func (s *Service) prepare(ctx context.Context, in prepareInput) (*prepared, erro
 	}
 	s.withAgentCredential(&cfg)
 	savers := s.withTokenSavers(ctx, in, repo.RootDir, ws.Path, &cfg)
+	cleanup, err = s.withTempDir(id, &cfg, cleanup)
+	if err != nil {
+		_ = s.workspaces.Discard(ws.ID)
+		return nil, err
+	}
 	sb, err := s.sandbox(ctx, in, id, repo, ws.Path, cfg.Env)
 	if err != nil {
 		if cleanup != nil {
@@ -453,6 +458,9 @@ func (s *Service) prepare(ctx context.Context, in prepareInput) (*prepared, erro
 	}
 	if sb.wrap != nil {
 		cfg.Wrap = sb.wrap
+	}
+	if sb.policy != nil {
+		withClaudeSandboxOff(&cfg)
 	}
 	return &prepared{
 		sandbox:    sb,

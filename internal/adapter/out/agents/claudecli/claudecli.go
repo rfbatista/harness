@@ -6,7 +6,9 @@ package claudecli
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"os"
 	"slices"
 	"strings"
 
@@ -70,6 +72,17 @@ func (l Launcher) Launch(ctx context.Context, spec ports.AgentSpec, size ports.T
 	}
 	if spec.Sandbox != nil && l.sandbox == nil {
 		return nil, fmt.Errorf("claudecli: the session is sandboxed but this host has no sandbox driver")
+	}
+	if spec.Sandbox != nil {
+		// The session's temp dir is made where the session runs, which is
+		// not always where the server did.
+		for _, e := range spec.Env {
+			if dir, ok := strings.CutPrefix(e, "TMPDIR="); ok && dir != "" {
+				if err := os.MkdirAll(dir, 0o700); err != nil {
+					return nil, fmt.Errorf("claudecli: make the session's temp dir: %w", err)
+				}
+			}
+		}
 	}
 	if l.home != nil && spec.Dir != "" {
 		if err := l.home.TrustFolder(spec.Dir); err != nil {
@@ -147,7 +160,7 @@ func Config(spec ports.AgentSpec) (claude.InteractiveConfig, error) {
 		AllowedTools: spec.AllowedTools,
 		Prompt:       spec.Prompt,
 		Attribution:  spec.SessionID,
-		Settings:     sessionSettings(spec.HookURL, spec.Hooks),
+		Settings:     sessionSettings(spec.HookURL, spec.Hooks, spec.Settings),
 	}
 	switch spec.Permission {
 	case "accept_edits":
@@ -168,8 +181,8 @@ func Config(spec ports.AgentSpec) (claude.InteractiveConfig, error) {
 // with the hook's name added as event=: SessionStart names the conversation,
 // UserPromptSubmit starts a turn and Stop ends one. The spec's more hooks (a
 // task session's edit proxy) are added beside them. --settings layers over
-// the user's own settings rather than replacing them. Nil when there are no
-// hooks.
+// the user's own settings rather than replacing them. extra are the spec's
+// other settings keys, merged verbatim. Nil when there are neither.
 //
 // The hooks must never disturb the session. SessionStart's and
 // UserPromptSubmit's stdout would be added to claude's context, so their
@@ -177,7 +190,7 @@ func Config(spec ports.AgentSpec) (claude.InteractiveConfig, error) {
 // claude turns that waited for this one to end ({"decision":"block",...}),
 // and it is empty otherwise. A server that is down only costs the
 // five-second timeout, and the session goes on as if it had answered nothing.
-func sessionSettings(url string, more map[string][]ports.HookGroup) *claude.Settings {
+func sessionSettings(url string, more map[string][]ports.HookGroup, extra map[string]json.RawMessage) *claude.Settings {
 	hooks := map[claude.HookEvent][]claude.HookMatcher{}
 	if url != "" {
 		sep := "&"
@@ -202,10 +215,14 @@ func sessionSettings(url string, more map[string][]ports.HookGroup) *claude.Sett
 			hooks[claude.HookEvent(event)] = append(hooks[claude.HookEvent(event)], m)
 		}
 	}
-	if len(hooks) == 0 {
+	if len(hooks) == 0 && len(extra) == 0 {
 		return nil
 	}
-	return &claude.Settings{Hooks: hooks}
+	s := &claude.Settings{Extra: extra}
+	if len(hooks) > 0 {
+		s.Hooks = hooks
+	}
+	return s
 }
 
 // terminal is llmkit's terminal as the host runs it.
