@@ -345,3 +345,36 @@ func mustListEvents(t *testing.T, r *SessionRepository, sessionID string, fromSe
 	}
 	return evs
 }
+
+// The sandbox facts persist with the session, a resume moves them, and a
+// session stored without any (from before the sandbox) reads back with none.
+func TestSessionSandboxFacts(t *testing.T) {
+	db, err := Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	repo := NewSessionRepository(db)
+	facts := domain.SandboxFacts{Sandboxed: true, Visibility: domain.SandboxAllReposReadOnly, Driver: "seatbelt"}
+	if _, err := repo.Create(&domain.Session{ID: "with", Sandbox: &facts}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repo.Create(&domain.Session{ID: "legacy"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := repo.Get("with").Sandbox; got == nil || *got != facts {
+		t.Fatalf("stored facts = %+v, want %+v", got, facts)
+	}
+	if got := repo.Get("legacy").Sandbox; got != nil {
+		t.Fatalf("a session without facts reads back %+v", got)
+	}
+	off := domain.SandboxFacts{Visibility: domain.SandboxUnrestricted}
+	if err := repo.UpdateSandbox("with", off); err != nil {
+		t.Fatal(err)
+	}
+	if got := repo.Get("with").Sandbox; got == nil || *got != off {
+		t.Fatalf("after UpdateSandbox = %+v, want %+v", got, off)
+	}
+	if err := repo.UpdateSandbox("missing", off); err == nil {
+		t.Fatal("UpdateSandbox on a missing session succeeded")
+	}
+}

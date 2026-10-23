@@ -129,6 +129,9 @@ type sandboxed struct {
 	// runtime builds its own; the app hands this step's wrap to llmkit once
 	// llmkit takes one for every mode.
 	command ports.SandboxCommand
+	// facts are what the session records about its sandbox; nil when the
+	// service has no Sandbox step at all.
+	facts *domain.SandboxFacts
 }
 
 // sandbox is the sandbox step of a session start: with the sandbox on it
@@ -137,8 +140,11 @@ type sandboxed struct {
 // refused.
 func (s *Service) sandbox(ctx context.Context, in prepareInput, id string, repo *domain.Repository, worktree string, env []string) (sandboxed, error) {
 	sb := s.Sandbox
-	if !sb.on() {
+	if sb == nil {
 		return sandboxed{}, nil
+	}
+	if !sb.on() {
+		return sandboxed{facts: &domain.SandboxFacts{Visibility: domain.SandboxUnrestricted}}, nil
 	}
 	if sb.Driver == nil {
 		return sandboxed{}, &domain.StructuredError{Code: "SANDBOX_DRIVER_MISSING",
@@ -183,7 +189,8 @@ func (s *Service) sandbox(ctx context.Context, in prepareInput, id string, repo 
 	if err != nil {
 		return sandboxed{}, err
 	}
-	return sandboxed{policy: &policy, command: cmd}, nil
+	facts := &domain.SandboxFacts{Sandboxed: true, Visibility: domain.SandboxVisibilityFor(in.Mode), Driver: sb.Driver.Name()}
+	return sandboxed{policy: &policy, command: cmd, facts: facts}, nil
 }
 
 // gitCommonDir is the git directory a worktree commits into, read from the

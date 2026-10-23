@@ -90,6 +90,10 @@ type Session struct {
 	// CavemanIntensity is the intensity caveman was wired at when it is
 	// active, fixed at start with the savers.
 	CavemanIntensity CavemanIntensity `json:"caveman_intensity,omitempty"`
+	// Sandbox is what the session's agent runs under, fixed when it starts and
+	// moved when it is resumed (the rules it starts under); nil for sessions
+	// from before the sandbox existed.
+	Sandbox *SandboxFacts `json:"sandbox,omitempty"`
 	// Resumable says a resume call would be accepted now; ResumeBlocked is the
 	// error code it would answer otherwise. Derived on read, never stored.
 	Resumable     bool      `json:"resumable"`
@@ -158,4 +162,35 @@ func ParseSessionMode(s string) (SessionMode, error) {
 	default:
 		return "", &StructuredError{Code: "INVALID_INPUT", Message: "unknown session mode " + s + `: use "", "architect", "implement", "design" or "product"`}
 	}
+}
+
+// Repository visibility a session's sandbox gave its agent.
+const (
+	// SandboxOwnRepo: the session's own worktree only.
+	SandboxOwnRepo = "own repo"
+	// SandboxAllReposReadOnly: every repository of the project, read-only
+	// (alongside the architect's own worktree, which it can write).
+	SandboxAllReposReadOnly = "all repos, read-only"
+	// SandboxUnrestricted: the sandbox was off, so no repository limits.
+	SandboxUnrestricted = "unrestricted"
+)
+
+// SandboxFacts are what a session's sandbox was when its agent started.
+type SandboxFacts struct {
+	// Sandboxed is false when the sandbox was off.
+	Sandboxed bool `json:"sandboxed"`
+	// Visibility is SandboxOwnRepo, SandboxAllReposReadOnly or, with the
+	// sandbox off, SandboxUnrestricted.
+	Visibility string `json:"visibility"`
+	// Driver names the mechanism that confined it; empty with the sandbox off.
+	Driver string `json:"driver,omitempty"`
+}
+
+// SandboxVisibilityFor is the repository visibility a sandbox gives a session
+// of mode: architect and product see every repository of the project.
+func SandboxVisibilityFor(mode SessionMode) string {
+	if mode == SessionModeArchitect || mode == SessionModeProduct {
+		return SandboxAllReposReadOnly
+	}
+	return SandboxOwnRepo
 }

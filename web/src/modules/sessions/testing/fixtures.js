@@ -30,6 +30,7 @@ export function makeSession(overrides = {}) {
     workingDir: "/w/harness/.worktrees/port-tickets",
     tokenSavers: [],
     tokenSaversNotInstalled: [],
+    sandbox: null,
     updatedAt: T0,
     ...overrides,
   });
@@ -62,6 +63,7 @@ export function toDTO(session) {
     working_dir: session.workingDir,
     token_savers: session.tokenSavers?.length ? [...session.tokenSavers] : undefined,
     token_savers_not_installed: session.tokenSaversNotInstalled?.length ? [...session.tokenSaversNotInstalled] : undefined,
+    sandbox: session.sandbox ? { sandboxed: session.sandbox.sandboxed, visibility: session.sandbox.visibility, driver: session.sandbox.driver || undefined } : undefined,
     updated_at: session.updatedAt.toISOString(),
   };
 }

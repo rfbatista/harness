@@ -49,6 +49,12 @@ templ sessionHead(usage bool) {
 			<template x-if="selected.tokenSaversMissing">
 				<span class="[ badge ]" data-tone="attention" data-token-savers-missing x-bind:title="selected.tokenSaversMissingTitle" x-text="selected.tokenSaversMissing"></span>
 			</template>
+			<template x-if="selected.sandboxChip">
+				<span class="[ sandbox-chips ]" data-sandbox-chips>
+					<span class="[ badge ]" data-sandbox x-bind:data-tone="selected.sandboxTone" x-text="selected.sandboxChip"></span>
+					<span class="[ badge ]" data-sandbox-visibility x-bind:data-tone="selected.sandboxTone" x-text="selected.visibilityChip"></span>
+				</span>
+			</template>
 			<template x-for="bar in statusCheckBars" x-bind:key="bar.key">
 				<span class="[ checks ]" x-text="bar.meta"></span>
 			</template>
