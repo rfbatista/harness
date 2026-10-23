@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"operators-mcp/internal/ports"
@@ -59,9 +60,15 @@ func (d *Driver) Wrap(policy ports.SandboxPolicy, cmd ports.SandboxCommand) (por
 	if err != nil {
 		return ports.SandboxCommand{}, err
 	}
+	hidden, err := pr.all(policy.Hidden)
+	if err != nil {
+		return ports.SandboxCommand{}, err
+	}
 	tag := pr.param(tagFor(policy.WorkingDir))
 	fmt.Fprintf(&b, "(deny file-read* file-write* (with message %s)", tag)
-	for _, p := range append(homes, temps...) {
+	// Hidden paths are denied wherever they lie; the allows below re-open
+	// what the policy grants inside them.
+	for _, p := range slices.Concat(homes, temps, hidden) {
 		fmt.Fprintf(&b, " (subpath %s)", p)
 	}
 	b.WriteString(")\n(allow file-read-metadata)\n")

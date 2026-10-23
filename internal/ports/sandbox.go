@@ -24,6 +24,11 @@ type SandboxPolicy struct {
 	WorkingDir string   `json:"working_dir"`
 	Readable   []string `json:"readable,omitempty"`
 	Writable   []string `json:"writable,omitempty"`
+	// Hidden are paths the process may neither read nor write: the project
+	// repository checkouts and the workspaces root its mode does not grant,
+	// wherever they lie. A Readable or Writable path inside a hidden one stays
+	// reachable.
+	Hidden []string `json:"hidden,omitempty"`
 }
 
 // SandboxCommand is a command line as a sandbox driver wraps it.

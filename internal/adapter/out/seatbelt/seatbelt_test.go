@@ -275,3 +275,92 @@ func gitFreeEnv() []string {
 	}
 	return append(env, "GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL=/dev/null")
 }
+
+// outsideDir makes a scratch directory neither under $HOME nor under the
+// system temp dir, the two places the profile denies on its own.
+func outsideDir(t *testing.T) string {
+	t.Helper()
+	dir, err := os.MkdirTemp("/private/var/tmp", "harness-seatbelt-outside-")
+	if err != nil {
+		t.Skipf("cannot write outside $HOME and the temp dir: %v", err)
+	}
+	t.Cleanup(func() { os.RemoveAll(dir) })
+	real, _ := filepath.EvalSymlinks(dir)
+	home, _ := os.UserHomeDir()
+	temp, _ := filepath.EvalSymlinks(os.TempDir())
+	for _, denied := range []string{home, temp} {
+		if real == denied || strings.HasPrefix(real, denied+"/") {
+			t.Skipf("%s is under %s, which the profile denies anyway", real, denied)
+		}
+	}
+	return real
+}
+
+func TestAHiddenPathOutsideHomeAndTempIsNeitherReadNorWrittenButAGrantedPathInsideItIs(t *testing.T) {
+	d := requireSeatbelt(t)
+	root := outsideDir(t)
+	// A workspaces root holding the session's worktree, and a repository
+	// checkout elsewhere: neither is under $HOME or the temp dir.
+	wsRoot, wt := filepath.Join(root, "ws"), filepath.Join(root, "ws", "r", "wt")
+	repo := filepath.Join(root, "repo")
+	os.MkdirAll(wt, 0o755)
+	os.MkdirAll(repo, 0o755)
+	os.WriteFile(filepath.Join(repo, "a.txt"), []byte("SECRET"), 0o644)
+	os.WriteFile(filepath.Join(wsRoot, "other.txt"), []byte("SECRET"), 0o644)
+	p := ports.SandboxPolicy{WorkingDir: wt, Writable: []string{wt}, Hidden: []string{repo, wsRoot}}
+
+	if out, err := run(t, d, p, `echo mine > `+wt+`/f && cat `+wt+`/f`); err != nil || strings.TrimSpace(out) != "mine" {
+		t.Fatalf("own worktree inside the hidden root: %v %q", err, out)
+	}
+	for name, script := range map[string]string{
+		"read a hidden repository":  `cat ` + repo + `/a.txt`,
+		"write a hidden repository": `echo x > ` + repo + `/b.txt`,
+		"read the hidden root":      `cat ` + wsRoot + `/other.txt`,
+		"write the hidden root":     `echo x > ` + wsRoot + `/c.txt`,
+	} {
+		if out, err := run(t, d, p, script); err == nil || strings.Contains(out, "SECRET") {
+			t.Errorf("%s: %v %q", name, err, out)
+		}
+	}
+	for _, f := range []string{filepath.Join(repo, "b.txt"), filepath.Join(wsRoot, "c.txt")} {
+		if _, err := os.Stat(f); err == nil {
+			t.Errorf("%s was written", f)
+		}
+	}
+	// Without Hidden the same paths are open: the deny is what closes them.
+	open := ports.SandboxPolicy{WorkingDir: wt, Writable: []string{wt}}
+	if out, err := run(t, d, open, `cat `+repo+`/a.txt`); err != nil || out != "SECRET" {
+		t.Fatalf("control: %v %q", err, out)
+	}
+}
+
+func TestADenialOfAHiddenRepositoryIsCaptured(t *testing.T) {
+	d := requireSeatbelt(t)
+	root := outsideDir(t)
+	repo, wt := filepath.Join(root, "repo"), filepath.Join(root, "wt")
+	os.MkdirAll(repo, 0o755)
+	os.MkdirAll(wt, 0o755)
+	secret := filepath.Join(repo, "a.txt")
+	os.WriteFile(secret, []byte("SECRET"), 0o644)
+	p := ports.SandboxPolicy{WorkingDir: wt, Writable: []string{wt}, Hidden: []string{repo}}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	cmd, err := d.Wrap(p, ports.SandboxCommand{Path: "/bin/sh", Args: []string{"-c", "sleep 3; cat " + secret + "; sleep 3"}, Dir: wt, Env: gitFreeEnv()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := exec.CommandContext(ctx, cmd.Path, cmd.Args...)
+	c.Dir, c.Env = cmd.Dir, cmd.Env
+	if err := c.Start(); err != nil {
+		t.Fatal(err)
+	}
+	defer c.Wait()
+	ch, err := NewCollector().Follow(ctx, wt)
+	if err != nil {
+		t.Skipf("unified log not available: %v", err)
+	}
+	if got := waitViolation(t, ch, secret); got.Operation != "file-read-data" {
+		t.Fatalf("violation %+v", got)
+	}
+}

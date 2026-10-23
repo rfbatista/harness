@@ -49,6 +49,12 @@ func (d *Driver) ViolationsAvailable() bool { return false }
 
 // Wrap answers bwrap running cmd confined by policy.
 func (d *Driver) Wrap(policy ports.SandboxPolicy, cmd ports.SandboxCommand) (ports.SandboxCommand, error) {
+	// A mask needs a directory to mount on: a hidden path that does not exist
+	// is not there to see either.
+	policy.Hidden = slices.DeleteFunc(slices.Clone(policy.Hidden), func(p string) bool {
+		_, err := os.Stat(p)
+		return err != nil
+	})
 	args := Render(policy, d.home)
 	args = append(args, "--", cmd.Path)
 	args = append(args, cmd.Args...)
@@ -66,6 +72,21 @@ func Render(policy ports.SandboxPolicy, home string) []string {
 	args = append(args, "--dev", "/dev", "--proc", "/proc", "--tmpfs", "/tmp")
 	if home != "" {
 		args = append(args, "--tmpfs", filepath.Clean(home))
+	}
+	// A hidden path under a bound system dir (/opt, /var) would show through
+	// the bind, so it is masked with an empty tmpfs, before the policy's own
+	// binds so a granted path nested inside is bound over the mask. Elsewhere
+	// nothing is bound, so there is nothing to hide.
+	var masks []string
+	for _, h := range policy.Hidden {
+		h = filepath.Clean(h)
+		if h != "." && underAny(h, systemDirs) && !slices.Contains(masks, h) {
+			masks = append(masks, h)
+		}
+	}
+	slices.SortStableFunc(masks, func(a, b string) int { return strings.Count(a, "/") - strings.Count(b, "/") })
+	for _, m := range masks {
+		args = append(args, "--tmpfs", m)
 	}
 	type bind struct {
 		path  string
@@ -97,4 +118,9 @@ func Render(policy ports.SandboxPolicy, home string) []string {
 		args = append(args, "--chdir", filepath.Clean(policy.WorkingDir))
 	}
 	return args
+}
+
+// underAny says whether path is inside (not equal to) one of dirs.
+func underAny(path string, dirs []string) bool {
+	return slices.ContainsFunc(dirs, func(d string) bool { return strings.HasPrefix(path, d+"/") })
 }

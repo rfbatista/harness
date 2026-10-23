@@ -637,6 +637,10 @@ func newOrchestrationService(
 		Home:    agentHome.Path(),
 		Bin:     claudeBin.Bin(),
 		Allow:   func(string) []ports.SandboxPath { return allow },
+		// What no session grants is hidden: the workspaces root and, for
+		// one-shots, every checkout.
+		WorkspacesRoot: ws.Root,
+		Checkouts:      func() []string { return allCheckouts(cat.Projects) },
 		// Each session gets a temp dir of its own, never the system's, which
 		// every session (and each one's virtual shell) shares.
 		TempDir: func(id string) string { return filepath.Join(os.TempDir(), "harness-session-"+shortID(id)) },
@@ -645,6 +649,29 @@ func newOrchestrationService(
 		ViolationStore: violationStore,
 	}
 	return svc
+}
+
+// allCheckouts lists the checkout of every repository of every project.
+func allCheckouts(projects interface {
+	ports.ProjectReader
+	ports.RepositoryLister
+}) []string {
+	ctx := context.Background()
+	all, err := projects.ListProjects(ctx)
+	if err != nil {
+		return nil
+	}
+	var out []string
+	for _, p := range all {
+		repos, err := projects.ListRepositories(ctx, p.ID)
+		if err != nil {
+			continue
+		}
+		for _, r := range repos {
+			out = append(out, r.RootDir)
+		}
+	}
+	return out
 }
 
 // TextProcessingModule binds the one-shot Claude CLI adapters to the text

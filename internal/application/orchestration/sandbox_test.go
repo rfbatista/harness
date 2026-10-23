@@ -22,6 +22,8 @@ type sandboxWorld struct {
 	home   string
 	extra  []ports.SandboxPath
 	off    bool
+	// wsRoot is the workspaces root the sandbox is told about.
+	wsRoot string
 }
 
 func newSandboxWorld(t *testing.T) *sandboxWorld {
@@ -37,11 +39,13 @@ func newSandboxWorld(t *testing.T) *sandboxWorld {
 	}
 	w.repos["r1"] = res.repo.RootDir
 	svc.Sandbox = &Sandbox{
-		Driver:  w.driver,
-		Enabled: func() bool { return !w.off },
-		Home:    w.home,
-		Extra:   func() []ports.SandboxPath { return w.extra },
+		Driver:         w.driver,
+		Enabled:        func() bool { return !w.off },
+		Home:           w.home,
+		Extra:          func() []ports.SandboxPath { return w.extra },
+		WorkspacesRoot: func() string { return w.wsRoot },
 	}
+	w.wsRoot = t.TempDir()
 	return w
 }
 
@@ -404,4 +408,77 @@ func TestReady_NothingMissingEnforcesNothingWithoutAGate(t *testing.T) {
 		t.Fatal("a service built without a gate must not enforce one")
 	}
 	w.start(t, "implement")
+}
+
+// ownTempDir gives each session a temp dir of its own, as the app does: the
+// checkouts of these tests live in the shared system temp dir, which would
+// otherwise be granted wholesale.
+func (w *sandboxWorld) ownTempDir() {
+	w.svc.Sandbox.TempDir = func(id string) string { return filepath.Join(os.TempDir(), "harness-session-"+id) }
+}
+
+func TestSandbox_HiddenListsEveryRepositoryAndTheWorkspacesRootThatTheModeDoesNotGrant(t *testing.T) {
+	for _, mode := range []string{"implement", "design", ""} {
+		t.Run("mode "+mode, func(t *testing.T) {
+			w := newSandboxWorld(t)
+			w.ownTempDir()
+			sess, p := w.start(t, mode)
+			for _, want := range []string{w.repos["r1"], w.repos["r2"], w.repos["r3"], w.wsRoot} {
+				if !slices.Contains(p.Hidden, want) {
+					t.Errorf("%s is not hidden from a %q session: %v", want, mode, p.Hidden)
+				}
+			}
+			for _, granted := range []string{sess.WorkingDir, filepath.Join(w.repos["r1"], ".git")} {
+				if slices.Contains(p.Hidden, granted) {
+					t.Errorf("granted %s is hidden", granted)
+				}
+			}
+		})
+	}
+
+	t.Run("architect and product hide none of the repositories they are granted", func(t *testing.T) {
+		for _, mode := range []string{"architect", "product"} {
+			w := newSandboxWorld(t)
+			w.ownTempDir()
+			_, p := w.start(t, mode)
+			for _, id := range []string{"r1", "r2", "r3"} {
+				if slices.Contains(p.Hidden, w.repos[id]) {
+					t.Errorf("%s hides granted %s: %v", mode, id, p.Hidden)
+				}
+			}
+			if !slices.Contains(p.Hidden, w.wsRoot) {
+				t.Errorf("%s does not hide the workspaces root: %v", mode, p.Hidden)
+			}
+		}
+	})
+
+	t.Run("a one-shot hides every checkout and the workspaces root", func(t *testing.T) {
+		w := newSandboxWorld(t)
+		w.wsRoot = "/Volumes/ws"
+		w.svc.Sandbox.Checkouts = func() []string { return []string{"/opt/a", "/Volumes/x/b"} }
+		wrap, err := w.svc.Sandbox.OneShotWrap(nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := wrap(commandIn("/tmp")); err != nil {
+			t.Fatal(err)
+		}
+		p := w.driver.Calls()[0].Policy
+		for _, want := range []string{"/opt/a", "/Volumes/x/b", w.wsRoot} {
+			if !slices.Contains(p.Hidden, want) {
+				t.Errorf("%s not hidden from a one-shot: %v", want, p.Hidden)
+			}
+		}
+	})
+}
+
+func TestBuildSandboxPolicy_AHiddenPathUnderAGrantedOneIsNotHidden(t *testing.T) {
+	p := BuildSandboxPolicy(SandboxSession{
+		Mode: domain.SessionModeImplement, Worktree: "/ws/r/wt", GitCommonDir: "/opt/r/.git",
+		Repositories: []string{"/opt/r", "/ws/r/wt/vendored", "/opt/other"}, WorkspacesRoot: "/ws",
+	})
+	want := []string{"/opt/r", "/opt/other", "/ws"}
+	if !slices.Equal(p.Hidden, want) {
+		t.Errorf("Hidden = %v, want %v", p.Hidden, want)
+	}
 }

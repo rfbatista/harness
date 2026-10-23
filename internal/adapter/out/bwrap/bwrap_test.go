@@ -3,6 +3,7 @@ package bwrap
 import (
 	"errors"
 	"slices"
+	"strings"
 	"testing"
 
 	"operators-mcp/internal/ports"
@@ -129,5 +130,26 @@ func TestNew_AMissingBwrapMakesTheDriverUnavailable(t *testing.T) {
 	d, err = lookup(func(string) (string, error) { return "/usr/bin/bwrap", nil })
 	if err != nil || d == nil {
 		t.Fatalf("driver=%v err=%v", d, err)
+	}
+}
+
+func TestRender_AHiddenPathUnderABoundSystemDirIsMaskedBeforeGrantedPathsNestedInIt(t *testing.T) {
+	args := Render(ports.SandboxPolicy{
+		WorkingDir: "/opt/ws/wt",
+		Writable:   []string{"/opt/ws/wt"},
+		Hidden:     []string{"/opt/ws", "/opt/repo", "/srv/elsewhere"},
+	}, "/home/u")
+	join := strings.Join(args, " ")
+	mask := strings.Index(join, "--tmpfs /opt/ws ")
+	opt := strings.Index(join, "--ro-bind-try /opt /opt")
+	bind := strings.Index(join, "--bind-try /opt/ws/wt /opt/ws/wt")
+	if opt < 0 || mask < opt || bind < mask {
+		t.Fatalf("want /opt bound, then /opt/ws masked, then the worktree bound: %v", args)
+	}
+	if !strings.Contains(join, "--tmpfs /opt/repo") {
+		t.Errorf("/opt/repo not masked: %v", args)
+	}
+	if strings.Contains(join, "/srv/elsewhere") {
+		t.Errorf("a path that is not under a bound dir needs no mask: %v", args)
 	}
 }

@@ -47,6 +47,12 @@ type Sandbox struct {
 	// Violations follows what the sandbox denies a session's processes, where
 	// the platform can. Nil: none is collected (Linux).
 	Violations ports.SandboxViolationSource
+	// WorkspacesRoot gives the directory session worktrees are made under, read
+	// at each session start. Nil: none is hidden.
+	WorkspacesRoot func() string
+	// Checkouts gives every project repository checkout of the install, for
+	// the one-shot calls, which see no project. Nil: none.
+	Checkouts func() []string
 	// ViolationStore keeps what Violations follows. Nil: nothing is kept.
 	ViolationStore ports.SandboxViolationStore
 }
@@ -66,8 +72,12 @@ type SandboxSession struct {
 	// it commits into.
 	Worktree     string
 	GitCommonDir string
-	// Repositories are the checkouts of every repository of the project.
+	// Repositories are the checkouts of every repository of the project, for
+	// every mode: the mode decides which are granted, the rest are hidden.
 	Repositories []string
+	// WorkspacesRoot is the directory session worktrees are made under; it is
+	// hidden, the session's own worktree inside it granted.
+	WorkspacesRoot string
 	// VirtualShell is the session's shell; empty without one.
 	VirtualShell string
 	TempDir      string
@@ -80,8 +90,31 @@ type SandboxSession struct {
 	OneShot bool
 }
 
+// hiddenPaths are the repository checkouts and the workspaces root that
+// nothing granted reaches into: each one the policy does not grant, listed
+// once. A path equal to or inside a granted one is not hidden (the grant
+// would be cut off); a grant inside a hidden path is re-allowed after the
+// deny, so it stays reachable.
+func hiddenPaths(s SandboxSession, granted []ports.SandboxPath) []string {
+	var hidden []string
+	for _, p := range append(slices.Clone(s.Repositories), s.WorkspacesRoot) {
+		if p == "" {
+			continue
+		}
+		p = filepath.Clean(p)
+		inside := slices.ContainsFunc(granted, func(g ports.SandboxPath) bool {
+			return p == g.Path || strings.HasPrefix(p, g.Path+"/")
+		})
+		if !inside && !slices.Contains(hidden, p) {
+			hidden = append(hidden, p)
+		}
+	}
+	return hidden
+}
+
 // BuildSandboxPolicy turns a session into its sandbox policy. It alone
-// decides repository visibility by mode: implement, design and default see
+// decides repository visibility by mode (what is not granted lands in Hidden,
+// wherever it lies): implement, design and default see
 // their own worktree and git directory read-write; architect also reads every
 // other repository of the project; product reads every repository and writes
 // none.
@@ -101,7 +134,9 @@ func BuildSandboxPolicy(s SandboxSession) ports.SandboxPolicy {
 		for _, p := range s.Allow {
 			add(p.Path, p.Write)
 		}
-		return splitPolicy(all, s.TempDir)
+		policy := splitPolicy(all, s.TempDir)
+		policy.Hidden = hiddenPaths(s, all)
+		return policy
 	}
 	add(s.VirtualShell, true)
 	add(s.TempDir, true)
@@ -125,7 +160,9 @@ func BuildSandboxPolicy(s SandboxSession) ports.SandboxPolicy {
 		add(p.Path, p.Write)
 	}
 
-	return splitPolicy(all, s.Worktree)
+	policy := splitPolicy(all, s.Worktree)
+	policy.Hidden = hiddenPaths(s, all)
+	return policy
 }
 
 // splitPolicy sorts paths into the policy's readable and writable sets: a
@@ -170,7 +207,14 @@ func (b *Sandbox) OneShotWrap(allow []ports.SandboxPath) (llmkit.WrapFunc, error
 	// lock files under TMPDIR, so a read-only cwd would fail calls that
 	// otherwise work. A one-shot runs no tools and sees no repository, which
 	// is why it does not get a temp dir of its own as a session does.
-	return sandboxWrap(b.Driver, SandboxSession{OneShot: true, TempDir: os.TempDir(), AgentHome: b.Home, Allow: allow}), nil
+	sess := SandboxSession{OneShot: true, TempDir: os.TempDir(), AgentHome: b.Home, Allow: allow}
+	if b.Checkouts != nil {
+		sess.Repositories = b.Checkouts()
+	}
+	if b.WorkspacesRoot != nil {
+		sess.WorkspacesRoot = b.WorkspacesRoot()
+	}
+	return sandboxWrap(b.Driver, sess), nil
 }
 
 // claudeSandboxOff is the settings value that keeps claude's own Bash sandbox
@@ -279,14 +323,15 @@ func (s *Service) sandbox(ctx context.Context, in prepareInput, id string, repo 
 	if sb.TempDir != nil {
 		sess.TempDir = sb.TempDir(id)
 	}
-	if in.Mode == domain.SessionModeArchitect || in.Mode == domain.SessionModeProduct {
-		repos, err := s.catalog.Repositories.ListRepositories(ctx, in.ProjectID)
-		if err != nil {
-			return sandboxed{}, err
-		}
-		for _, r := range repos {
-			sess.Repositories = append(sess.Repositories, r.RootDir)
-		}
+	repos, err := s.catalog.Repositories.ListRepositories(ctx, in.ProjectID)
+	if err != nil {
+		return sandboxed{}, err
+	}
+	for _, r := range repos {
+		sess.Repositories = append(sess.Repositories, r.RootDir)
+	}
+	if sb.WorkspacesRoot != nil {
+		sess.WorkspacesRoot = sb.WorkspacesRoot()
 	}
 	for _, e := range env {
 		if v, ok := strings.CutPrefix(e, ports.ShellDirEnv+"="); ok {
