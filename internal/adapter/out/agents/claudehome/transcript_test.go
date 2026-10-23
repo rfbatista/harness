@@ -467,3 +467,43 @@ func BenchmarkTranscriptFirstIndex(b *testing.B) {
 		}
 	}
 }
+
+// put writes conversation id holding lines for work under config dir dir.
+func put(t *testing.T, dir, work, id string, lines ...string) {
+	t.Helper()
+	real, _ := filepath.EvalSymlinks(work)
+	proj := filepath.Join(dir, "projects", nonAlnum.ReplaceAllString(real, "-"))
+	if err := os.MkdirAll(proj, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(proj, id+".jsonl"), []byte(strings.Join(lines, "\n")+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestReadTranscriptFallsBackToTheLegacyHomeAndPrefersTheAgentHome(t *testing.T) {
+	agent, legacy := t.TempDir(), t.TempDir()
+	work := filepath.Join(t.TempDir(), "agent-x")
+	if err := os.MkdirAll(work, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	put(t, legacy, work, "old", userText("from legacy"))
+	put(t, legacy, work, "both", userText("legacy copy"))
+	put(t, agent, work, "both", userText("agent copy"))
+	put(t, agent, work, "new", userText("from agent"))
+	r := &TranscriptReader{Dir: agent, Legacy: legacy}
+
+	for id, want := range map[string]string{"old": "from legacy", "new": "from agent", "both": "agent copy"} {
+		p, err := r.ReadTranscript(work, id, ports.TranscriptQuery{Limit: 10})
+		if err != nil || len(p.Entries) != 1 || p.Entries[0].Text != want {
+			t.Errorf("%s: %+v, %v; want %q", id, p, err, want)
+		}
+	}
+	if _, err := r.ReadTranscript(work, "none", ports.TranscriptQuery{Limit: 10}); code(err) != "SESSION_TRANSCRIPT_MISSING" {
+		t.Errorf("unknown: %v", err)
+	}
+	// Found by id alone once the worktree is gone, in the legacy home too.
+	if _, err := r.ReadTranscript("", "old", ports.TranscriptQuery{Limit: 10}); err != nil {
+		t.Errorf("legacy without a directory: %v", err)
+	}
+}

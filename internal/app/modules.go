@@ -338,6 +338,7 @@ var AgentRuntimeModule = fx.Module("agentruntime",
 		newBroker,
 		newHub,
 		asPort(sqlite.NewSessionRepository, new(ports.SessionRepository)),
+		newAgentClaudeHome,
 		asPort(newClaudeTranscripts, new(ports.ClaudeTranscripts)),
 		asPort(newClaudeTranscriptReader, new(ports.ClaudeTranscriptReader)),
 		newOrchestrationService,
@@ -523,10 +524,37 @@ func newBroker(m llmkit.Manager) (*approval.Broker, error) {
 	return gated.Approvals(), nil
 }
 
-func newClaudeTranscripts() claudehome.Transcripts { return claudehome.Transcripts{} }
+// agentClaudeHomeDir is the agent Claude home in the data dir.
+func agentClaudeHomeDir(cfg Config) (string, error) { return dataDir(cfg, "claude-home") }
 
-func newClaudeTranscriptReader() *claudehome.TranscriptReader {
-	return claudehome.NewTranscriptReader("")
+// newAgentClaudeHome creates and seeds the agent Claude home, so an
+// interactive claude started with its path as CLAUDE_CONFIG_DIR meets no
+// first-run prompt.
+func newAgentClaudeHome(cfg Config) (claudehome.Home, error) {
+	dir, err := agentClaudeHomeDir(cfg)
+	if err != nil {
+		return claudehome.Home{}, err
+	}
+	h := claudehome.NewHome(dir)
+	return h, h.Ensure()
+}
+
+// legacyClaudeDir is the person's own ~/.claude, searched read-only for
+// transcripts older than the agent Claude home.
+func legacyClaudeDir() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(home, ".claude")
+}
+
+func newClaudeTranscripts(h claudehome.Home) claudehome.Transcripts {
+	return claudehome.Transcripts{Dir: h.Path(), Legacy: legacyClaudeDir()}
+}
+
+func newClaudeTranscriptReader(h claudehome.Home) *claudehome.TranscriptReader {
+	return &claudehome.TranscriptReader{Dir: h.Path(), Legacy: legacyClaudeDir()}
 }
 
 func newHub() *orchestration.Hub { return orchestration.NewHub(256) }
