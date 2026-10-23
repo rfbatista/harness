@@ -95,11 +95,11 @@ func (h Handler) View(ctx context.Context) View {
 // sandbox is on without a driver, the agent credential is not set, or the
 // managed claude is not installed and not overridden. The top bar's link then
 // carries the attention mark. A nil credential or bin is not enforced.
-func Blocks(sandbox ports.SandboxSettings, driver func() ports.SandboxDriver, credential ports.AgentCredential, bin ports.ManagedClaudeBin) bool {
+func Blocks(sandbox ports.SandboxSettings, driver func() ports.SandboxDriver, credential ports.AgentCredential, hasLogin func() bool, bin ports.ManagedClaudeBin) bool {
 	if NewSandboxView(sandbox, driver).Blocks() {
 		return true
 	}
-	if credential != nil && !credential.Status().Set {
+	if credential != nil && !credential.Status().Set && (hasLogin == nil || !hasLogin()) {
 		return true
 	}
 	return bin != nil && !bin.Installed()

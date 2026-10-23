@@ -378,7 +378,7 @@ func (s *server) bareFrame(title string) shell.Frame {
 	}
 	if s.deps.SandboxSettings != nil {
 		f.Top.AgentIsolationHref = agentisolation.Href
-		f.Top.AgentIsolationAttention = agentisolation.Blocks(s.deps.SandboxSettings, s.deps.SandboxDriver, s.deps.AgentCredential, s.deps.ManagedClaudeBin)
+		f.Top.AgentIsolationAttention = agentisolation.Blocks(s.deps.SandboxSettings, s.deps.SandboxDriver, s.deps.AgentCredential, s.deps.AgentLogin, s.deps.ManagedClaudeBin)
 	}
 	if s.deps.DataPaths != nil {
 		f.Top.ServerHref = serversettings.Href
