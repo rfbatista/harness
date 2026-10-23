@@ -29,6 +29,7 @@ import (
 	"operators-mcp/internal/adapter/out/githubapi"
 	"operators-mcp/internal/adapter/out/persistence/sqlite"
 	"operators-mcp/internal/app/catalog"
+	"operators-mcp/internal/application/agentcredential"
 	"operators-mcp/internal/application/apps"
 	"operators-mcp/internal/application/artifacts"
 	"operators-mcp/internal/application/execution"
@@ -655,11 +656,56 @@ var TextProcessingModule = fx.Module("textprocessing",
 	),
 )
 
+// oneShotParts are what the one-shots run on, each when the graph has it:
+// what is absent leaves the one-shot as it was.
+type oneShotParts struct {
+	fx.In
+
+	Ready      optionalAgentReadiness
+	Orch       *orchestration.Service   `optional:"true"`
+	Credential *agentcredential.Service `optional:"true"`
+	Bin        ports.ManagedClaudeBin   `optional:"true"`
+	Home       claudehome.Home          `optional:"true"`
+}
+
 // newOneShotter is the claude driver the one-shots run on: llmkit's one-shot
 // mode, routed through the LLM proxy like every other claude mode. One-shots
-// need nothing else of a manager, so the module keeps its own.
-func newOneShotter(cfg Config, ready optionalAgentReadiness) claudetext.OneShotter {
-	return claudetext.Gated(claude.New(llmkit.Options{Bin: cfg.ClaudeBin, ProxyURL: cfg.llmProxyURL()}), ready.check())
+// need nothing else of a manager, so the module keeps its own. Like a session
+// it runs the managed claude (or the -claude.bin override) isolated in the
+// agent Claude home, with the agent credential, under the sandbox when it is
+// on (ADR 0017, 0018), after the readiness gate.
+func newOneShotter(cfg Config, p oneShotParts) claudetext.OneShotter {
+	bin := cfg.ClaudeBin
+	if p.Bin != nil {
+		bin = p.Bin.Bin()
+	}
+	home := p.Home.Path()
+	one := claudetext.OneShotter(oneShotClaude(bin, home, cfg.llmProxyURL()))
+	if p.Orch != nil && p.Credential != nil {
+		one = claudetext.Confined(one, oneShotPrep(p.Orch.Sandbox, p.Credential.Env, bin))
+	}
+	return claudetext.Gated(one, p.Ready.check())
+}
+
+// oneShotClaude is the manager one-shots run on: isolated in the agent
+// Claude home when there is one.
+func oneShotClaude(bin, home, proxyURL string) *claude.Manager {
+	return claude.New(llmkit.Options{Bin: bin, ConfigDir: home, Isolated: home != "", ProxyURL: proxyURL})
+}
+
+// oneShotPrep prepares each one-shot: the env entries of the agent credential
+// and, with the sandbox on, the wrap confining it. The sandbox's policy for a
+// one-shot names no repository; claude's install dirs are the one thing
+// beyond its temp dir and the agent home it may read.
+func oneShotPrep(sb *orchestration.Sandbox, credential func() []string, bin string) func() ([]string, llmkit.WrapFunc, error) {
+	allow := sandboxAllowlist(allowSources{ClaudeDirs: runtime.ClaudeInstallDirs(bin)})
+	return func() ([]string, llmkit.WrapFunc, error) {
+		wrap, err := sb.OneShotWrap(allow)
+		if err != nil {
+			return nil, nil, err
+		}
+		return credential(), wrap, nil
+	}
 }
 
 func newSummarizer(cfg Config, c claudetext.OneShotter) *claudetext.Summarizer {

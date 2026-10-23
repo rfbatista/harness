@@ -72,6 +72,9 @@ type SandboxSession struct {
 	// Allow is the rest of the allowlist; Extra the person's own paths.
 	Allow []ports.SandboxPath
 	Extra []ports.SandboxPath
+	// OneShot marks a one-shot claude call: it sees only its temp dir (also
+	// its working directory), the agent home and Allow, never a repository.
+	OneShot bool
 }
 
 // BuildSandboxPolicy turns a session into its sandbox policy. It alone
@@ -87,6 +90,16 @@ func BuildSandboxPolicy(s SandboxSession) ports.SandboxPolicy {
 		}
 	}
 	add(s.AgentHome, true)
+	if s.OneShot {
+		add(s.TempDir, true)
+		if resolved, err := filepath.EvalSymlinks(s.TempDir); err == nil && s.TempDir != "" {
+			add(resolved, true)
+		}
+		for _, p := range s.Allow {
+			add(p.Path, p.Write)
+		}
+		return splitPolicy(all, s.TempDir)
+	}
 	add(s.VirtualShell, true)
 	add(s.TempDir, true)
 	switch s.Mode {
@@ -109,7 +122,13 @@ func BuildSandboxPolicy(s SandboxSession) ports.SandboxPolicy {
 		add(p.Path, p.Write)
 	}
 
-	policy := ports.SandboxPolicy{WorkingDir: s.Worktree}
+	return splitPolicy(all, s.Worktree)
+}
+
+// splitPolicy sorts paths into the policy's readable and writable sets: a
+// path that is writable anywhere is writable, each path listed once.
+func splitPolicy(all []ports.SandboxPath, workingDir string) ports.SandboxPolicy {
+	policy := ports.SandboxPolicy{WorkingDir: workingDir}
 	writable := map[string]bool{}
 	for _, p := range all {
 		if p.Write {
@@ -129,6 +148,21 @@ func BuildSandboxPolicy(s SandboxSession) ports.SandboxPolicy {
 		}
 	}
 	return policy
+}
+
+// OneShotWrap is the WrapFunc confining a one-shot claude call (a summary, a
+// translation, generated text), read at each call: nil with the sandbox off,
+// the missing-driver refusal when it is on without one. The policy exposes no
+// repository: the one-shot's temp dir, the agent home and allow (claude's
+// install dirs), through the same policy builder as a session's.
+func (b *Sandbox) OneShotWrap(allow []ports.SandboxPath) (llmkit.WrapFunc, error) {
+	if !b.on() {
+		return nil, nil
+	}
+	if b.Driver == nil {
+		return nil, agentready.SandboxDriverMissing()
+	}
+	return sandboxWrap(b.Driver, SandboxSession{OneShot: true, TempDir: os.TempDir(), AgentHome: b.Home, Allow: allow}), nil
 }
 
 // sandboxed is the outcome of the sandbox step.

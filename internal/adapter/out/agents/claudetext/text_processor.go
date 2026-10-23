@@ -5,8 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"os/exec"
+	"slices"
 	"strings"
 
+	"github.com/rfbatista/llmkit"
 	"github.com/rfbatista/llmkit/claude"
 
 	"operators-mcp/internal/domain"
@@ -152,4 +154,30 @@ func (g gated) OneShot(ctx context.Context, req claude.OneShotRequest) (claude.O
 		return claude.OneShotResult{}, err
 	}
 	return g.inner.OneShot(ctx, req)
+}
+
+// Confined prepares every one-shot for the agent isolation: prepare is asked
+// at each call for the env entries of the agent credential and the wrap that
+// runs the CLI under the sandbox (nil with the sandbox off). Its error refuses
+// the call before the CLI runs. A nil prepare leaves the request as it is.
+func Confined(inner OneShotter, prepare func() ([]string, llmkit.WrapFunc, error)) OneShotter {
+	if prepare == nil {
+		return inner
+	}
+	return confined{inner: inner, prepare: prepare}
+}
+
+type confined struct {
+	inner   OneShotter
+	prepare func() ([]string, llmkit.WrapFunc, error)
+}
+
+func (c confined) OneShot(ctx context.Context, req claude.OneShotRequest) (claude.OneShotResult, error) {
+	env, wrap, err := c.prepare()
+	if err != nil {
+		return claude.OneShotResult{}, err
+	}
+	req.Env = append(slices.Clone(req.Env), env...)
+	req.Wrap = wrap
+	return c.inner.OneShot(ctx, req)
 }
