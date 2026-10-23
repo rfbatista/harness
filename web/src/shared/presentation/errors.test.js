@@ -23,3 +23,15 @@ test("project management refusals say what to do next", () => {
     assert.ok(view.next !== "retry, or check the server log", `${code} has its own next step`);
   }
 });
+
+test("a refused agent start links to the sections of the Agent isolation page that fix it", () => {
+  const one = describeError(new StructuredError(Codes.AGENT_CREDENTIAL_MISSING, "no credential", 503));
+  assert.deepEqual(one.links.map((l) => l.href), ["/agent-isolation#credential"]);
+  assert.ok(one.next !== "retry, or check the server log");
+
+  const details = { missing: [{ code: Codes.MANAGED_CLAUDE_INSTALLING }, { code: Codes.SANDBOX_DRIVER_MISSING }] };
+  const several = describeError(new StructuredError(Codes.MANAGED_CLAUDE_INSTALLING, "installing", 503, details));
+  assert.deepEqual(several.links.map((l) => l.href), ["/agent-isolation#claude", "/agent-isolation#sandbox"]);
+
+  assert.deepEqual(describeError(new StructuredError(Codes.INVALID_INPUT, "x", 400)).links, []);
+});

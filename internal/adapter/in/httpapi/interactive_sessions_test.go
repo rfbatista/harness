@@ -1,11 +1,13 @@
 package httpapi
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"strings"
 	"testing"
 
+	"operators-mcp/internal/application/agentready"
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
 )
@@ -51,6 +53,12 @@ func TestHTTP_StartInteractiveSessionMode(t *testing.T) {
 		`{"project_id":"p1","repository_id":"r1","ticket_id":"tk1","mode":"implement"}`)
 	if status != http.StatusCreated || implement.Session.Mode != domain.SessionModeImplement || !strings.Contains(implement.Agent.Prompt, "task-implement-spec") {
 		t.Fatalf("implement start = %d %+v / prompt %q", status, implement.Session, implement.Agent.Prompt)
+	}
+
+	status, product := post(t, srv.URL+"/api/start_interactive_session",
+		`{"project_id":"p1","repository_id":"r1","ticket_id":"tk1","mode":"product"}`)
+	if status != http.StatusCreated || product.Session.Mode != domain.SessionModeProduct || !strings.Contains(product.Agent.Prompt, "task-product") {
+		t.Fatalf("product start = %d %+v / prompt %q", status, product.Session, product.Agent.Prompt)
 	}
 
 	status, refused := post(t, srv.URL+"/api/start_interactive_session",
@@ -199,5 +207,97 @@ func TestHTTP_ResumeHeadlessSession(t *testing.T) {
 	status, out := post(t, srv.URL+"/api/resume_interactive_session", `{"session_id":"`+created.Session.ID+`"}`)
 	if status != http.StatusConflict || out.Code != "SESSION_NOT_INTERACTIVE" {
 		t.Fatalf("resume headless = %d %q, want 409 SESSION_NOT_INTERACTIVE", status, out.Code)
+	}
+}
+
+// A product-mode session starts on the project with no task (ADR 0016): it
+// is recorded with an empty ticket_id and listed among the project's
+// sessions; any other mode without a ticket is 400 INVALID_INPUT.
+func TestHTTP_StartInteractiveSessionWithoutATask(t *testing.T) {
+	srv := newSessionTestServer(t)
+	defer srv.Close()
+
+	status, started := post(t, srv.URL+"/api/start_interactive_session",
+		`{"project_id":"p1","repository_id":"r1","mode":"product","prompt":"Export"}`)
+	if status != http.StatusCreated {
+		t.Fatalf("product start without a ticket = %d (%s), want 201", status, started.Code)
+	}
+	if started.Session.TicketID != "" || started.Session.ProjectID != "p1" || started.Session.Mode != domain.SessionModeProduct ||
+		!strings.HasPrefix(started.Agent.Prompt, "Use the task-product skill on project ") {
+		t.Fatalf("session = %+v / prompt %q", started.Session, started.Agent.Prompt)
+	}
+
+	resp, err := http.Get(srv.URL + "/api/sessions?project_id=p1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	var listed struct {
+		Sessions []map[string]any `json:"sessions"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&listed); err != nil {
+		t.Fatal(err)
+	}
+	var found bool
+	for _, s := range listed.Sessions {
+		if s["id"] != started.Session.ID {
+			continue
+		}
+		found = true
+		if ticket, _ := s["ticket_id"].(string); ticket != "" {
+			t.Fatalf("the project's sessions list the ticket-less session with ticket_id %q", ticket)
+		}
+	}
+	if !found {
+		t.Fatalf("the project's sessions do not list %s: %v", started.Session.ID, listed.Sessions)
+	}
+
+	for _, mode := range []string{"architect", "implement", "design", ""} {
+		status, refused := post(t, srv.URL+"/api/start_interactive_session",
+			`{"project_id":"p1","repository_id":"r1","mode":"`+mode+`"}`)
+		if status != http.StatusBadRequest || refused.Code != "INVALID_INPUT" {
+			t.Errorf("mode %q without a ticket = %d %q, want 400 INVALID_INPUT", mode, status, refused.Code)
+		}
+	}
+}
+
+// A start the gate refuses reaches the HTTP response whole: a status the web
+// client can tell from a bug, the code, the message with the page anchor, and
+// the list of what is missing in the details. Nothing is spawned.
+func TestHTTP_AStartRefusedForMissingPrerequisitesAnswersTheirNamesAndAnchors(t *testing.T) {
+	env := newSessionTestEnv(t)
+	defer env.srv.Close()
+	env.orch.Ready = &agentready.Gate{
+		Credential:    func() bool { return false },
+		SandboxOn:     func() bool { return true },
+		SandboxDriver: func() bool { return false },
+	}
+	for _, path := range []string{"/api/start_interactive_session", "/api/sessions"} {
+		body := `{"project_id":"p1","repository_id":"r1","ticket_id":"tk1","task":"hi"}`
+		resp, err := http.Post(env.srv.URL+path, "application/json", strings.NewReader(body))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var out struct {
+			Error   string `json:"error"`
+			Code    string `json:"code"`
+			Details struct {
+				Missing []struct{ Code, Anchor string } `json:"missing"`
+			} `json:"details"`
+		}
+		_ = json.NewDecoder(resp.Body).Decode(&out)
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusServiceUnavailable || out.Code != "AGENT_CREDENTIAL_MISSING" {
+			t.Fatalf("%s = %d %q, want 503 AGENT_CREDENTIAL_MISSING", path, resp.StatusCode, out.Code)
+		}
+		if !strings.Contains(out.Error, "no agent credential") || !strings.Contains(out.Error, "/agent-isolation#credential") || !strings.Contains(out.Error, "no sandbox driver") {
+			t.Errorf("%s message = %q", path, out.Error)
+		}
+		if len(out.Details.Missing) != 2 || out.Details.Missing[1].Code != "SANDBOX_DRIVER_MISSING" || out.Details.Missing[1].Anchor != "/agent-isolation#sandbox" {
+			t.Errorf("%s details = %+v", path, out.Details)
+		}
+	}
+	if got, _ := env.orch.List(context.Background(), ports.SessionFilter{}); len(got) != 0 {
+		t.Errorf("a refused start left %d sessions", len(got))
 	}
 }

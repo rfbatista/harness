@@ -99,7 +99,7 @@ func (w *tokenSaverWorld) addRepository() *domain.Repository {
 
 func (w *tokenSaverWorld) addTask() *domain.Ticket {
 	w.t.Helper()
-	task, err := w.plan.CreateTicket(w.ctx, w.project.ID, "Cut tokens", "", domain.TicketStatusInProgress)
+	task, err := w.plan.CreateTicket(w.ctx, w.project.ID, "Cut tokens", "", domain.TicketStatusInProgress, "")
 	if err != nil {
 		w.t.Fatal(err)
 	}
@@ -141,11 +141,11 @@ func saverRow(saver string) string {
 	return activationsSection + `?.querySelector('[data-saver="` + saver + `"]:not([data-ssr] *)')`
 }
 
-// tokenSaversReady waits for the control's live rows (the details holding
-// it on the task page is opened first).
+// tokenSaversReady waits for the control's live rows (the strip's panel
+// holding it on the task page is opened first).
 func tokenSaversReady() chromedp.Action {
 	return chromedp.Tasks{
-		chromedp.Evaluate(`document.querySelector('details[data-token-savers]')?.setAttribute('open', '')`, nil),
+		chromedp.Evaluate(`(() => { const b = document.querySelector('[data-band="token-savers"]'); if (b && b.getAttribute('aria-expanded') !== 'true') b.click() })()`, nil),
 		waitUntil(activationsSection + ` && !` + activationsSection + `.querySelector('[data-ssr]') && !!` + saverRow("rtk")),
 	}
 }

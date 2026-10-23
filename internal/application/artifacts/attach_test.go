@@ -23,7 +23,7 @@ func (f fakeTickets) GetTicket(_ context.Context, id string) (*domain.Ticket, er
 	return nil, &domain.StructuredError{Code: "TICKET_NOT_FOUND", Message: "ticket not found"}
 }
 
-func (f fakeTickets) ListTickets(_ context.Context, projectID string) ([]*domain.Ticket, error) {
+func (f fakeTickets) ListTickets(_ context.Context, projectID string, _ ports.TicketFilter) ([]*domain.Ticket, error) {
 	return f.repo.ListByProject(ctx, projectID), nil
 }
 

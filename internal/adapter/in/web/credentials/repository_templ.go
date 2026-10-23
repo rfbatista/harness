@@ -155,9 +155,60 @@ func RepositoryLine(line BindingLine) templ.Component {
 				}
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 9, "</span>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 9, "</span> ")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
+		}
+		if line.PullText != "" {
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 10, "<span class=\"[ repository-pull-requests ] [ text-sm color-ink-muted ]\">")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			var templ_7745c5c3_Var9 string
+			templ_7745c5c3_Var9, templ_7745c5c3_Err = templ.JoinStringErrs(line.PullText)
+			if templ_7745c5c3_Err != nil {
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `credentials/repository.templ`, Line: 26, Col: 18}
+			}
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var9))
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 11, " ")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			if line.PullAddHref != "" {
+				var templ_7745c5c3_Var10 string
+				templ_7745c5c3_Var10, templ_7745c5c3_Err = templ.JoinStringErrs(" ")
+				if templ_7745c5c3_Err != nil {
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `credentials/repository.templ`, Line: 28, Col: 9}
+				}
+				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var10))
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 12, "<a href=\"")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				var templ_7745c5c3_Var11 templ.SafeURL
+				templ_7745c5c3_Var11, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL(line.PullAddHref))
+				if templ_7745c5c3_Err != nil {
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `credentials/repository.templ`, Line: 28, Col: 52}
+				}
+				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var11))
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 13, "\">Add a token</a>")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 14, "</span>")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
 		}
 		return nil
 	})
@@ -184,12 +235,12 @@ func RepositoryCredential() templ.Component {
 			}()
 		}
 		ctx = templ.InitializeContext(ctx)
-		templ_7745c5c3_Var9 := templ.GetChildren(ctx)
-		if templ_7745c5c3_Var9 == nil {
-			templ_7745c5c3_Var9 = templ.NopComponent
+		templ_7745c5c3_Var12 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var12 == nil {
+			templ_7745c5c3_Var12 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 10, "<div class=\"[ repository-credential ] [ flow ] [ flow-space-2xs ]\" x-data=\"repositoryCredential\" x-bind:data-repository-id=\"r.id\" x-bind:data-repository-name=\"r.name\"><span class=\"[ cluster ] [ gutter-xs ] [ text-sm ]\" x-bind:data-state=\"line.state\"><template x-if=\"line.name\"><span>Credential: <b x-text=\"line.name\"></b> · <span x-text=\"line.text\"></span></span></template><template x-if=\"!line.name\"><span x-bind:class=\"line.state === 'none' ? 'color-attention' : 'color-ink-muted'\" x-text=\"line.text\"></span></template><template x-if=\"line.addHref\"><a x-bind:href=\"line.addHref\">Add one</a></template></span><template x-if=\"known\"><span class=\"[ cluster ] [ gutter-xs ]\"><div class=\"[ dropdown ]\" x-data=\"dropdown\" data-size=\"sm\" data-fit x-bind:data-error=\"pickError || null\" x-bind:aria-busy=\"busy\" x-on:dropdown-retry=\"retry\"><select aria-label=\"Credential\" x-bind:aria-label=\"pickLabel\" x-effect=\"fill($el)\" x-on:change=\"pick($event.target)\"></select></div><button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" x-bind:disabled=\"cannotTest\" x-bind:aria-busy=\"testing\" x-on:click=\"test\">Test</button></span></template><template x-if=\"testText\"><span class=\"[ text-sm ]\" role=\"status\" x-bind:class=\"testOk ? 'color-success' : 'color-danger'\" x-text=\"testText\"></span></template></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 15, "<div class=\"[ repository-credential ] [ flow ] [ flow-space-2xs ]\" x-data=\"repositoryCredential\" x-bind:data-repository-id=\"r.id\" x-bind:data-repository-name=\"r.name\"><span class=\"[ cluster ] [ gutter-xs ] [ text-sm ]\" x-bind:data-state=\"line.state\"><template x-if=\"line.name\"><span>Credential: <b x-text=\"line.name\"></b> · <span x-text=\"line.text\"></span></span></template><template x-if=\"!line.name\"><span x-bind:class=\"line.state === 'none' ? 'color-attention' : 'color-ink-muted'\" x-text=\"line.text\"></span></template><template x-if=\"line.addHref\"><a x-bind:href=\"line.addHref\">Add one</a></template></span><template x-if=\"line.pullText\"><span class=\"[ repository-pull-requests ] [ text-sm color-ink-muted ]\"><span x-text=\"line.pullText\"></span><template x-if=\"line.pullAddHref\"><a x-bind:href=\"line.pullAddHref\">Add a token</a></template></span></template><template x-if=\"known\"><span class=\"[ cluster ] [ gutter-xs ]\"><div class=\"[ dropdown ]\" x-data=\"dropdown\" data-size=\"sm\" data-fit x-bind:data-error=\"pickError || null\" x-bind:aria-busy=\"busy\" x-on:dropdown-retry=\"retry\"><select aria-label=\"Credential\" x-bind:aria-label=\"pickLabel\" x-effect=\"fill($el)\" x-on:change=\"pick($event.target)\"></select></div><button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" x-bind:disabled=\"cannotTest\" x-bind:aria-busy=\"testing\" x-on:click=\"test\">Test</button></span></template><template x-if=\"testText\"><span class=\"[ text-sm ]\" role=\"status\" x-bind:class=\"testOk ? 'color-success' : 'color-danger'\" x-text=\"testText\"></span></template></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

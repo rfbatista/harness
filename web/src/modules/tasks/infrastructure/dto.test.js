@@ -39,3 +39,10 @@ test("a malformed last move or merge state is left out rather than failing the t
   const t = toTask({ id: "t1", status: "review", last_move: { by: "person" }, merge_state: { merged: 1 } });
   assert.deepEqual([t.lastMove, t.mergeState], [null, null]);
 });
+
+test("a task reads its parent; none, null or absent is top-level", () => {
+  assert.equal(toTask({ id: "c1", status: "todo", parent_id: "f1" }).parentId, "f1");
+  assert.equal(toTask({ id: "t1", status: "todo", parent_id: "" }).parentId, "");
+  assert.equal(toTask({ id: "t1", status: "todo", parent_id: null }).parentId, "");
+  assert.equal(toTask({ id: "t1", status: "todo" }).parentId, "");
+});

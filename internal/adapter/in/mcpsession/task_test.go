@@ -12,10 +12,12 @@ import (
 	mcplib "github.com/mark3labs/mcp-go/mcp"
 
 	"operators-mcp/internal/adapter/out/persistence/sqlite"
+	"operators-mcp/internal/application/agentready"
 	"operators-mcp/internal/application/artifacts"
 	"operators-mcp/internal/application/planning"
 	"operators-mcp/internal/application/tooling"
 	"operators-mcp/internal/domain"
+	"operators-mcp/internal/ports"
 )
 
 // newTaskServer serves the task tools over HTTP against an in-memory database
@@ -34,7 +36,7 @@ func newTaskServer(t *testing.T) (baseURL, ticketID, root string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	tk, err := plan.CreateTicket(context.Background(), proj.ID, "Ship the thing", "", domain.TicketStatusTodo)
+	tk, err := plan.CreateTicket(context.Background(), proj.ID, "Ship the thing", "", domain.TicketStatusTodo, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -147,7 +149,7 @@ func TestTaskHandler_ListsTheOtherSessionsOnTheTask(t *testing.T) {
 	sessions := sqlite.NewSessionRepository(db)
 	plan := planning.NewService(sqlite.NewTicketRepository(db), sqlite.NewDocumentRepository(db), projects)
 	proj, _ := projects.Create("p", t.TempDir())
-	tk, _ := plan.CreateTicket(context.Background(), proj.ID, "Ship the thing", "", domain.TicketStatusTodo)
+	tk, _ := plan.CreateTicket(context.Background(), proj.ID, "Ship the thing", "", domain.TicketStatusTodo, "")
 	for _, s := range []*domain.Session{
 		{ID: "sess-1", ProjectID: proj.ID, TicketID: tk.ID, Task: "build it", Status: domain.SessionRunning},
 		{ID: "sess-2", ProjectID: proj.ID, TicketID: tk.ID, Task: "review it", Status: domain.SessionIdle, Branch: "feat/review"},
@@ -268,5 +270,62 @@ func TestTaskHandler_DoneIsThePersons(t *testing.T) {
 	}
 	if txt := textOf(t, res); !strings.Contains(txt, `"status":"todo"`) {
 		t.Fatalf("the task moved: %s", txt)
+	}
+}
+
+// refusingStarter starts peers the way orchestration does behind the gate:
+// with the agent credential missing, nothing starts.
+type refusingStarter struct{ gate *agentready.Gate }
+
+func (r refusingStarter) StartInteractive(ctx context.Context, _ ports.InteractiveRequest) (*domain.Session, ports.AgentSpec, error) {
+	return nil, ports.AgentSpec{}, r.gate.Check(ctx)
+}
+func (refusingStarter) ResumeInteractive(context.Context, ports.ResumeRequest) (*domain.Session, ports.AgentSpec, error) {
+	return nil, ports.AgentSpec{}, nil
+}
+func (refusingStarter) EndInteractive(context.Context, string, int, bool) (*domain.Session, error) {
+	return nil, nil
+}
+
+type apiRepo []*domain.Repository
+
+func (r apiRepo) ListRepositories(context.Context, string) ([]*domain.Repository, error) {
+	return r, nil
+}
+
+// An agent that starts a child session while an agent prerequisite is missing
+// is told what is missing and where to fix it. The code does not cross MCP:
+// the message is what the agent has, so it names both.
+func TestTaskHandler_AStartRefusedForAMissingPrerequisiteTellsTheAgentWhatIsMissing(t *testing.T) {
+	db, err := sqlite.Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	projects := sqlite.NewProjectRepository(db)
+	sessions := sqlite.NewSessionRepository(db)
+	plan := planning.NewService(sqlite.NewTicketRepository(db), sqlite.NewDocumentRepository(db), projects)
+	proj, _ := projects.Create("p", t.TempDir())
+	tk, _ := plan.CreateTicket(context.Background(), proj.ID, "Ship the thing", "", domain.TicketStatusTodo, "")
+	if _, err := sessions.Create(&domain.Session{ID: "sess-1", ProjectID: proj.ID, TicketID: tk.ID, RepositoryID: "r1", Task: "go", Status: domain.SessionRunning}); err != nil {
+		t.Fatal(err)
+	}
+	peers := tooling.PeerStarter{
+		Sessions:     refusingStarter{&agentready.Gate{Credential: func() bool { return false }}},
+		Repositories: apiRepo{{ID: "r1", Name: "api"}},
+	}
+	srv := httptest.NewServer(TaskHandler(tooling.SessionTaskTools(plan, sessions, nil, nil, peers, tooling.ArtifactTooling{}, nil, tooling.NotificationTooling{})))
+	t.Cleanup(srv.Close)
+
+	c := dial(t, srv.URL+PathPrefix+"sess-1")
+	var call mcplib.CallToolRequest
+	call.Params.Name = "start_task_session"
+	call.Params.Arguments = map[string]any{"prompt": "write the tests"}
+	res, err := c.CallTool(context.Background(), call)
+	if err != nil {
+		t.Fatal(err)
+	}
+	msg := textOf(t, res)
+	if !res.IsError || !strings.Contains(msg, "no agent credential") || !strings.Contains(msg, "/agent-isolation#credential") {
+		t.Fatalf("error=%v message=%q", res.IsError, msg)
 	}
 }

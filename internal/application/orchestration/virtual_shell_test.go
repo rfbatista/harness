@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"io/fs"
 	"os"
@@ -67,7 +68,7 @@ func (nopCloser) Close() error { return nil }
 // in a project that has more.
 type shellWorld struct {
 	plan                    *planning.Service
-	task                    *domain.Ticket
+	task, other             *domain.Ticket
 	planDoc, notesA, notesB *domain.Document
 	glossary, architecture  *domain.Document
 	byPerson, byOther       *domain.TicketComment
@@ -102,10 +103,11 @@ func withShells(t *testing.T, svc *Service) *shellWorld {
 		}
 	}
 	w := &shellWorld{plan: plan}
-	w.task, err = plan.CreateTicket(ctx, p.ID, "Ship the thing", "with care", domain.TicketStatusInProgress)
+	w.task, err = plan.CreateTicket(ctx, p.ID, "Ship the thing", "with care", domain.TicketStatusInProgress, "")
 	must(err)
-	other, err := plan.CreateTicket(ctx, p.ID, "Elsewhere", "", "")
+	w.other, err = plan.CreateTicket(ctx, p.ID, "Elsewhere", "", "", "")
 	must(err)
+	other := w.other
 
 	doc := func(title, content string, format domain.DocumentFormat, scope domain.DocumentScope, link string) *domain.Document {
 		t.Helper()
@@ -199,17 +201,18 @@ func checkShell(t *testing.T, dir string, w *shellWorld) {
 		plainNotes, otherNotes = w.notesB, w.notesA
 	}
 	want := map[string]shellFile{
-		"task/docs/plan-rollout.html":                  {0o644, planPage},
-		"task/docs/notes.md":                           {0o644, plainNotes.Content},
-		"task/docs/notes-" + otherNotes.ID[:8] + ".md": {0o644, otherNotes.Content},
-		"project/docs/glossary.md":                     {0o644, "# Terms\n"},
-		"project/docs/architecture.md":                 {0o644, "# Layers\n"},
-		commentName(w.byPerson, "person"):              {0o444, "Please hurry"},
-		commentName(w.byOther, "go-developer"):         {0o444, "On it"},
-		"task/resources/spec.pdf":                      {0o444, "%PDF-1.4 spec"},
-		"task/designs/design/home.html":                {0o644, "<h1>home</h1>"},
-		"project/designs/brand/logo.svg":               {0o644, "<svg/>"},
-		"project/designs/brand/palette.css":            {0o644, ":root{}"},
+		"task/docs/plan-rollout.html":                         {0o644, planPage},
+		"task/docs/notes.md":                                  {0o644, plainNotes.Content},
+		"task/docs/notes-" + otherNotes.ID[:8] + ".md":        {0o644, otherNotes.Content},
+		"project/docs/glossary.md":                            {0o644, "# Terms\n"},
+		"project/docs/architecture.md":                        {0o644, "# Layers\n"},
+		"tasks/" + w.other.ID + "/docs/other-task-s-notes.md": {0o644, "# Not ours\n"},
+		commentName(w.byPerson, "person"):                     {0o444, "Please hurry"},
+		commentName(w.byOther, "go-developer"):                {0o444, "On it"},
+		"task/resources/spec.pdf":                             {0o444, "%PDF-1.4 spec"},
+		"task/designs/design/home.html":                       {0o644, "<h1>home</h1>"},
+		"project/designs/brand/logo.svg":                      {0o644, "<svg/>"},
+		"project/designs/brand/palette.css":                   {0o644, ":root{}"},
 	}
 	for path, wf := range want {
 		gf, ok := got[path]
@@ -625,6 +628,77 @@ func TestALoginSessionWithoutShimsKeepsTheProfilesPath(t *testing.T) {
 	path := string(waitFile(t, filepath.Join(sess.WorkingDir, "path")))
 	if !strings.HasPrefix(path, "/usr/bin:/bin:") {
 		t.Errorf("PATH = %q, want the profile's, starting /usr/bin:/bin:", path)
+	}
+	if err := svc.Stop(context.Background(), sess.ID); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// On macOS a session's PATH runs the developer directory's usr/bin right
+// after its shims, so git and clang run directly and never through the
+// /usr/bin xcrun shim. The lookup runs once, however many sessions start.
+func TestASessionsPathPutsTheDeveloperBinRightAfterItsShims(t *testing.T) {
+	svc, _, _ := newTestService(t)
+	svc.DefaultEnv = append(svc.DefaultEnv, "CLAUDE_FAKE_RECORD=1")
+	w := withShells(t, svc)
+	svc.ShimBinary = "/opt/harness/server"
+	lookups := 0
+	svc.DeveloperBin = func() (string, error) { lookups++; return "/Applications/Xcode.app/Contents/Developer/usr/bin", nil }
+	for i := 0; i < 2; i++ {
+		sess, err := svc.Start(context.Background(), StartRequest{ProjectID: "p1", RepositoryID: "r1", TicketID: w.task.ID, Task: "go"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		var launch fakeLaunch
+		if err := json.Unmarshal(waitFile(t, filepath.Join(sess.WorkingDir, fakeLaunchFile)), &launch); err != nil {
+			t.Fatal(err)
+		}
+		parts := strings.SplitN(launch.Path, string(os.PathListSeparator), 3)
+		if len(parts) != 3 || parts[1] != "/Applications/Xcode.app/Contents/Developer/usr/bin" || parts[2] != os.Getenv("PATH") {
+			t.Fatalf("PATH = %q, want shims, the developer bin, then the server's PATH", launch.Path)
+		}
+		if !strings.HasPrefix(filepath.Base(parts[0]), "harness-shims-") {
+			t.Errorf("first PATH entry %q is not the shim dir", parts[0])
+		}
+		_ = svc.Stop(context.Background(), sess.ID)
+	}
+	if lookups != 1 {
+		t.Errorf("developer bin looked up %d times, want once", lookups)
+	}
+}
+
+func TestASessionStartsWithoutTheDeveloperBinWhenItsLookupFails(t *testing.T) {
+	svc, _, _ := newTestService(t)
+	svc.DefaultEnv = append(svc.DefaultEnv, "CLAUDE_FAKE_RECORD=1")
+	w := withShells(t, svc)
+	svc.ShimBinary = "/opt/harness/server"
+	svc.DeveloperBin = func() (string, error) { return "", errors.New("xcode-select: no developer directory") }
+	sess, err := svc.Start(context.Background(), StartRequest{ProjectID: "p1", RepositoryID: "r1", TicketID: w.task.ID, Task: "go"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var launch fakeLaunch
+	if err := json.Unmarshal(waitFile(t, filepath.Join(sess.WorkingDir, fakeLaunchFile)), &launch); err != nil {
+		t.Fatal(err)
+	}
+	checkShimsFirst(t, launch.Path)
+	_ = svc.Stop(context.Background(), sess.ID)
+}
+
+// A login shell's profile may reorder PATH; the developer bin goes back
+// right after the shims, ahead of /usr/bin's xcrun shims.
+func TestALoginSessionKeepsTheDeveloperBinRightAfterItsShims(t *testing.T) {
+	svc := newLoginHostedService(t, scriptAgent{script: `printf '%s' "$PATH" > path; printf 'ready\r\n'; cat`})
+	w := withShells(t, svc)
+	svc.ShimBinary = "/opt/harness/server"
+	svc.DeveloperBin = func() (string, error) { return "/Applications/Xcode.app/Contents/Developer/usr/bin", nil }
+	sess, _ := startInteractive(t, svc, InteractiveRequest{ProjectID: "p1", RepositoryID: "r1", TicketID: w.task.ID,
+		RunsOn: domain.RunnerServer, Size: ports.TermSize{Cols: 80, Rows: 24}})
+
+	path := string(waitFile(t, filepath.Join(sess.WorkingDir, "path")))
+	parts := strings.SplitN(path, string(os.PathListSeparator), 3)
+	if len(parts) != 3 || parts[1] != "/Applications/Xcode.app/Contents/Developer/usr/bin" || !strings.HasPrefix(parts[2], "/usr/bin:/bin:") {
+		t.Errorf("PATH = %q, want shims, the developer bin, then the profile's", path)
 	}
 	if err := svc.Stop(context.Background(), sess.ID); err != nil {
 		t.Fatal(err)

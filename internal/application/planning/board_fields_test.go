@@ -8,6 +8,7 @@ import (
 
 	"operators-mcp/internal/adapter/out/persistence/sqlite"
 	"operators-mcp/internal/application/planning"
+	"operators-mcp/internal/ports"
 )
 
 // A task carries the task board's fields from the start: unarchived, in its
@@ -15,7 +16,7 @@ import (
 func TestATaskCarriesTheBoardFieldsWithTheirDefaults(t *testing.T) {
 	svc, pid := newService(t)
 	ctx := context.Background()
-	tk, err := svc.CreateTicket(ctx, pid, "T", "", "")
+	tk, err := svc.CreateTicket(ctx, pid, "T", "", "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -62,7 +63,7 @@ func TestADatabaseFromBeforeArchivingListsItsTasksUnarchived(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := sqlite.NewTicketRepository(db).Create(p.ID, "old", "", "done"); err != nil {
+	if _, err := sqlite.NewTicketRepository(db).Create(p.ID, "old", "", "done", ""); err != nil {
 		t.Fatal(err)
 	}
 	if err := db.Exec("ALTER TABLE tickets DROP COLUMN archived_at").Error; err != nil {
@@ -78,7 +79,7 @@ func TestADatabaseFromBeforeArchivingListsItsTasksUnarchived(t *testing.T) {
 	}
 	projects = sqlite.NewProjectRepository(db)
 	svc := planning.NewService(sqlite.NewTicketRepository(db), sqlite.NewDocumentRepository(db), projects)
-	tickets, err := svc.ListTickets(context.Background(), p.ID)
+	tickets, err := svc.ListTickets(context.Background(), p.ID, ports.TicketFilter{})
 	if err != nil {
 		t.Fatal(err)
 	}

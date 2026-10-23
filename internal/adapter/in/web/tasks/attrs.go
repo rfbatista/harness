@@ -25,3 +25,12 @@ func staleAttrs(stale bool) templ.Attributes {
 	}
 	return templ.Attributes{}
 }
+
+// descriptionAttrs gives an option its second line in a Listbox select
+// (data-description), and leaves it off when there is none.
+func descriptionAttrs(description string) templ.Attributes {
+	if description != "" {
+		return templ.Attributes{"data-description": description}
+	}
+	return templ.Attributes{}
+}

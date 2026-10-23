@@ -23,6 +23,8 @@
  * .column[data-drop-self] says "Already in …"; .column[data-drag-origin]
  * dims its other cards; .card[data-ghost] holds the dragged card's place.
  * The reason unclamps, and the exact time shows, on hover or focus within.
+ * A child task's card names its feature task above the title (.parent); a
+ * feature task's card counts its children in a badge ([data-children]).
  */
 
 @layer blocks {
@@ -214,6 +216,16 @@
       overflow: hidden;
 
       &:hover { text-decoration: underline; }
+    }
+
+    & > .parent {
+      font-size: var(--text-xs);
+      color: var(--color-ink-faint);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+
+      &::before { content: "↳ "; }
     }
 
     & .move-to {

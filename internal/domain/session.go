@@ -90,6 +90,14 @@ type Session struct {
 	// CavemanIntensity is the intensity caveman was wired at when it is
 	// active, fixed at start with the savers.
 	CavemanIntensity CavemanIntensity `json:"caveman_intensity,omitempty"`
+	// Sandbox is what the session's agent runs under, fixed when it starts and
+	// moved when it is resumed (the rules it starts under); nil for sessions
+	// from before the sandbox existed.
+	Sandbox *SandboxFacts `json:"sandbox,omitempty"`
+	// LastMerge is the result of the newest attempt to merge the session's
+	// branch into its repository's default branch (the merged commit, or the
+	// refusal and its reason); nil before any attempt.
+	LastMerge *MergeResult `json:"last_merge,omitempty"`
 	// Resumable says a resume call would be accepted now; ResumeBlocked is the
 	// error code it would answer otherwise. Derived on read, never stored.
 	Resumable     bool      `json:"resumable"`
@@ -138,14 +146,55 @@ const (
 	// SessionModeDesign produces components, images and videos and publishes
 	// each one to the Design tab of the web UI as it is made (publish_artifact).
 	SessionModeDesign SessionMode = "design"
+	// SessionModeProduct is the product manager: it interviews the person on a
+	// feature until its scope is confirmed, writes the PRD on the feature task,
+	// creates one child task per piece of work with a brief each, and asks for
+	// review. It never writes code.
+	SessionModeProduct SessionMode = "product"
 )
+
+// NeedsTask says a session in this mode must run on a task. Only a product
+// session may run on its project alone (ADR 0016): it creates the feature
+// task itself.
+func (m SessionMode) NeedsTask() bool { return m != SessionModeProduct }
 
 // ParseSessionMode reads a mode as clients send it; empty is the default.
 func ParseSessionMode(s string) (SessionMode, error) {
 	switch m := SessionMode(s); m {
-	case SessionModeDefault, SessionModeArchitect, SessionModeImplement, SessionModeDesign:
+	case SessionModeDefault, SessionModeArchitect, SessionModeImplement, SessionModeDesign, SessionModeProduct:
 		return m, nil
 	default:
-		return "", &StructuredError{Code: "INVALID_INPUT", Message: "unknown session mode " + s + `: use "", "architect", "implement" or "design"`}
+		return "", &StructuredError{Code: "INVALID_INPUT", Message: "unknown session mode " + s + `: use "", "architect", "implement", "design" or "product"`}
 	}
+}
+
+// Repository visibility a session's sandbox gave its agent.
+const (
+	// SandboxOwnRepo: the session's own worktree only.
+	SandboxOwnRepo = "own repo"
+	// SandboxAllReposReadOnly: every repository of the project, read-only
+	// (alongside the architect's own worktree, which it can write).
+	SandboxAllReposReadOnly = "all repos, read-only"
+	// SandboxUnrestricted: the sandbox was off, so no repository limits.
+	SandboxUnrestricted = "unrestricted"
+)
+
+// SandboxFacts are what a session's sandbox was when its agent started.
+type SandboxFacts struct {
+	// Sandboxed is false when the sandbox was off.
+	Sandboxed bool `json:"sandboxed"`
+	// Visibility is SandboxOwnRepo, SandboxAllReposReadOnly or, with the
+	// sandbox off, SandboxUnrestricted.
+	Visibility string `json:"visibility"`
+	// Driver names the mechanism that confined it; empty with the sandbox off.
+	Driver string `json:"driver,omitempty"`
+}
+
+// SandboxVisibilityFor is the repository visibility a sandbox gives a session
+// of mode: architect and product see every repository of the project.
+func SandboxVisibilityFor(mode SessionMode) string {
+	if mode == SessionModeArchitect || mode == SessionModeProduct {
+		return SandboxAllReposReadOnly
+	}
+	return SandboxOwnRepo
 }

@@ -320,9 +320,6 @@ func GitCredentialsConformance(t *testing.T, newPort func(t *testing.T) (ports.G
 		gitlab := token(t, p, "gl", "gitlab.com", false)
 		_, err = p.SetRepositoryCredential(ctx, repo, &gitlab.ID)
 		wantCode(t, err, domain.CodeGitCredentialHostMismatch)
-		key := generated(t, p, "key", "github.com")
-		_, err = p.SetRepositoryCredential(ctx, repo, &key.ID)
-		wantCode(t, err, domain.CodeGitCredentialKindMismatch)
 		_, err = p.SetRepositoryCredential(ctx, repo, ptr("missing"))
 		wantCode(t, err, domain.CodeGitCredentialNotFound)
 		rc, err = p.SetRepositoryCredential(ctx, repo, nil)
@@ -336,6 +333,47 @@ func GitCredentialsConformance(t *testing.T, newPort func(t *testing.T) (ports.G
 		wantCode(t, err, "REPOSITORY_NOT_FOUND")
 		_, err = p.SetRepositoryCredential(ctx, "missing", nil)
 		wantCode(t, err, "REPOSITORY_NOT_FOUND")
+	})
+
+	t.Run("an ssh key serves an https origin without a port", func(t *testing.T) {
+		p, fx := newPort(t)
+		_, repo := fx.AddRepository(t, "", "widgets", "https://github.com/acme/widgets.git")
+		key := generated(t, p, "key", "github.com")
+		rc, err := p.GetRepositoryCredential(ctx, repo)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if rc.Resolved == nil || rc.Resolved.ID != key.ID || rc.PullRequests != nil {
+			t.Fatalf("only a key: resolved %+v, pull requests %+v", rc.Resolved, rc.PullRequests)
+		}
+		tok := token(t, p, "token", "github.com", false)
+		if rc, _ = p.GetRepositoryCredential(ctx, repo); rc.Resolved == nil || rc.Resolved.ID != tok.ID || rc.PullRequests == nil || rc.PullRequests.ID != tok.ID {
+			t.Fatalf("a token beats the key: resolved %+v, pull requests %+v", rc.Resolved, rc.PullRequests)
+		}
+		rc, err = p.SetRepositoryCredential(ctx, repo, &key.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if rc.Resolved == nil || rc.Resolved.ID != key.ID || rc.PullRequests == nil || rc.PullRequests.ID != tok.ID {
+			t.Fatalf("pinned key: resolved %+v, pull requests %+v", rc.Resolved, rc.PullRequests)
+		}
+		noSecrets(t, rc)
+	})
+
+	t.Run("an ssh key is refused on an https origin with a port, and a token on an ssh origin", func(t *testing.T) {
+		p, fx := newPort(t)
+		_, porty := fx.AddRepository(t, "", "porty", "https://git.example.com:8443/acme/widgets.git")
+		_, ssh := fx.AddRepository(t, "", "ssh", "git@github.com:acme/widgets.git")
+		portKey := generated(t, p, "port-key", "git.example.com:8443")
+		tok := token(t, p, "token", "github.com", false)
+		_, err := p.SetRepositoryCredential(ctx, porty, &portKey.ID)
+		wantCode(t, err, domain.CodeGitCredentialKindMismatch)
+		_, err = p.SetRepositoryCredential(ctx, ssh, &tok.ID)
+		wantCode(t, err, domain.CodeGitCredentialKindMismatch)
+		rc, _ := p.GetRepositoryCredential(ctx, porty)
+		if rc.Resolved != nil {
+			t.Fatalf("an https origin with a port resolved %+v", rc.Resolved)
+		}
 	})
 
 	t.Run("an ssh origin resolves an ssh key; a repository without origin can be pinned", func(t *testing.T) {

@@ -13,6 +13,7 @@ export function toTask(dto) {
     title: dto.title ?? "",
     description: dto.description ?? "",
     status: dto.status,
+    parentId: dto.parent_id ?? "",
     architectSessionId: dto.architect_session_id ?? "",
     pendingReviews: Number(dto.pending_reviews ?? 0),
     updatedAt: Date.parse(dto.updated_at ?? "") || 0,

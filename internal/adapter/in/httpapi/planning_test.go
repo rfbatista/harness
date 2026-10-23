@@ -309,3 +309,152 @@ func TestHTTP_DocumentScopeOnTheWire(t *testing.T) {
 		t.Fatalf("unknown scope: %d %v", code, out)
 	}
 }
+
+// listTicketIDs lists a project's tickets over the router, with the raw
+// query string appended (e.g. "&parent_id=x"), and returns their ids.
+func listTicketIDs(t *testing.T, h *Handler, pid, query string) []string {
+	t.Helper()
+	rec := getJSON(t, h, "/list_tickets?project_id="+pid+query)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("list_tickets%s = %d %s", query, rec.Code, rec.Body.String())
+	}
+	var out struct {
+		Tickets []struct {
+			ID string `json:"id"`
+		} `json:"tickets"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
+		t.Fatal(err)
+	}
+	ids := make([]string, 0, len(out.Tickets))
+	for _, tk := range out.Tickets {
+		ids = append(ids, tk.ID)
+	}
+	return ids
+}
+
+func TestHTTP_TicketParent_OnTheWire(t *testing.T) {
+	h, pid := newPlanningHandler(t)
+	code, out := postTicket(t, h, "/api/create_ticket", map[string]any{"project_id": pid, "title": "Feature"})
+	if code != http.StatusOK {
+		t.Fatalf("create feature = %d %v", code, out)
+	}
+	feature := ticketIn(t, out)
+	if v, ok := feature["parent_id"]; !ok || v != "" {
+		t.Fatalf("a top-level ticket carries parent_id %v (present %v), want \"\"", v, ok)
+	}
+	featureID := feature["id"].(string)
+
+	// create_ticket with parent_id, read back by get_ticket.
+	code, out = postTicket(t, h, "/api/create_ticket", map[string]any{"project_id": pid, "title": "Child", "parent_id": featureID})
+	if code != http.StatusOK {
+		t.Fatalf("create child = %d %v", code, out)
+	}
+	childID := ticketIn(t, out)["id"].(string)
+	rec := getJSON(t, h, "/get_ticket?ticket_id="+childID)
+	var got map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if tk := ticketIn(t, got); tk["parent_id"] != featureID {
+		t.Fatalf("get_ticket parent_id = %v, want %s", tk["parent_id"], featureID)
+	}
+
+	// update_ticket: absent keeps, a parent moves, "" clears.
+	code, out = postTicket(t, h, "/api/create_ticket", map[string]any{"project_id": pid, "title": "Loner"})
+	if code != http.StatusOK {
+		t.Fatalf("create loner = %d %v", code, out)
+	}
+	lonerID := ticketIn(t, out)["id"].(string)
+	code, out = postTicket(t, h, "/api/update_ticket", map[string]any{"ticket_id": lonerID, "parent_id": featureID})
+	if code != http.StatusOK || ticketIn(t, out)["parent_id"] != featureID {
+		t.Fatalf("update to a parent = %d %v", code, out)
+	}
+	code, out = postTicket(t, h, "/api/update_ticket", map[string]any{"ticket_id": lonerID, "title": "Loner renamed"})
+	if code != http.StatusOK || ticketIn(t, out)["parent_id"] != featureID {
+		t.Fatalf("update without parent_id moved the ticket = %d %v", code, out)
+	}
+	code, out = postTicket(t, h, "/api/update_ticket", map[string]any{"ticket_id": lonerID, "parent_id": ""})
+	if code != http.StatusOK || ticketIn(t, out)["parent_id"] != "" {
+		t.Fatalf("update with an empty parent_id kept the parent = %d %v", code, out)
+	}
+
+	// list_tickets: no filter lists every task, children included; parent_id
+	// lists one feature's children.
+	if ids := listTicketIDs(t, h, pid, ""); len(ids) != 3 {
+		t.Fatalf("list_tickets without a filter = %v, want the feature, its child and the loner", ids)
+	}
+	if ids := listTicketIDs(t, h, pid, "&parent_id="+featureID); len(ids) != 1 || ids[0] != childID {
+		t.Fatalf("list_tickets?parent_id = %v, want only %s", ids, childID)
+	}
+	if ids := listTicketIDs(t, h, pid, "&parent_id="); len(ids) != 2 {
+		t.Fatalf("list_tickets with an empty parent_id = %v, want the two top-level tickets", ids)
+	}
+
+	// An invalid parent is TICKET_PARENT_INVALID, 400.
+	code, out = postTicket(t, h, "/api/create_ticket", map[string]any{"project_id": pid, "title": "Grandchild", "parent_id": childID})
+	if code != http.StatusBadRequest || out["code"] != "TICKET_PARENT_INVALID" {
+		t.Fatalf("create under a child = %d %v, want 400 TICKET_PARENT_INVALID", code, out)
+	}
+	code, out = postTicket(t, h, "/api/update_ticket", map[string]any{"ticket_id": lonerID, "parent_id": "missing"})
+	if code != http.StatusBadRequest || out["code"] != "TICKET_PARENT_INVALID" {
+		t.Fatalf("update to a missing parent = %d %v, want 400 TICKET_PARENT_INVALID", code, out)
+	}
+}
+
+func TestHTTP_DeleteTicket_RefusedWhileItHasChildren(t *testing.T) {
+	h, pid := newPlanningHandler(t)
+	code, out := postTicket(t, h, "/api/create_ticket", map[string]any{"project_id": pid, "title": "Feature"})
+	if code != http.StatusOK {
+		t.Fatalf("create feature = %d %v", code, out)
+	}
+	featureID := ticketIn(t, out)["id"].(string)
+	code, out = postTicket(t, h, "/api/create_ticket", map[string]any{"project_id": pid, "title": "Child", "parent_id": featureID})
+	if code != http.StatusOK {
+		t.Fatalf("create child = %d %v", code, out)
+	}
+	childID := ticketIn(t, out)["id"].(string)
+
+	// get_ticket and every list_tickets item carry children_count.
+	rec := getJSON(t, h, "/get_ticket?ticket_id="+featureID)
+	var got map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if n, ok := ticketIn(t, got)["children_count"]; !ok || n != float64(1) {
+		t.Fatalf("get_ticket children_count = %v (present %v), want 1", n, ok)
+	}
+	rec = getJSON(t, h, "/list_tickets?project_id="+pid)
+	var listed struct {
+		Tickets []map[string]any `json:"tickets"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &listed); err != nil {
+		t.Fatal(err)
+	}
+	counts := map[string]any{}
+	for _, tk := range listed.Tickets {
+		n, ok := tk["children_count"]
+		if !ok {
+			t.Fatalf("list_tickets item %v has no children_count", tk["id"])
+		}
+		counts[tk["id"].(string)] = n
+	}
+	if counts[featureID] != float64(1) || counts[childID] != float64(0) {
+		t.Fatalf("list_tickets children counts = %v, want 1 on the feature and 0 on the child", counts)
+	}
+
+	// The feature cannot go while its child exists; the child, then the feature, can.
+	code, out = postTicket(t, h, "/api/delete_ticket", map[string]any{"ticket_id": featureID})
+	if code != http.StatusConflict || out["code"] != "TICKET_HAS_CHILDREN" {
+		t.Fatalf("delete a feature with a child = %d %v, want 409 TICKET_HAS_CHILDREN", code, out)
+	}
+	if code, out = postTicket(t, h, "/api/delete_ticket", map[string]any{"ticket_id": childID}); code != http.StatusNoContent {
+		t.Fatalf("delete the child = %d %v", code, out)
+	}
+	if code, out = postTicket(t, h, "/api/delete_ticket", map[string]any{"ticket_id": featureID}); code != http.StatusNoContent {
+		t.Fatalf("delete the feature after its child = %d %v", code, out)
+	}
+	if rec := getJSON(t, h, "/get_ticket?ticket_id="+featureID); rec.Code != http.StatusNotFound {
+		t.Fatalf("the deleted feature is still there: %d", rec.Code)
+	}
+}

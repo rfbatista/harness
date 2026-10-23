@@ -11,7 +11,7 @@ import (
 // repositories (its applications), how the code is carved into bounded
 // contexts and zones, and the agents it can hand work to. They are read-only
 // and, like the task tools, scoped by the session id, never by arguments.
-func sessionProjectTools(planningSvc ports.Planning, sessions ports.SessionRepository, agents ports.AgentLister, arch ports.ArchitectureMap, repos ports.RepositoryLister) []domain.Tool {
+func sessionProjectTools(sessions ports.SessionRepository, agents ports.AgentLister, arch ports.ArchitectureMap, repos ports.RepositoryLister) []domain.Tool {
 	noArgs := schemaFromJSON(`{"type":"object","properties":{}}`)
 	return []domain.Tool{
 		{
@@ -21,14 +21,14 @@ func sessionProjectTools(planningSvc ports.Planning, sessions ports.SessionRepos
 			InputSchema: noArgs,
 			Source:      "code",
 			Handler: func(ctx context.Context, args map[string]any) (any, error) {
-				scope, err := resolveTaskScope(ctx, planningSvc, sessions)
+				sess, err := resolveProjectScope(ctx, sessions)
 				if err != nil {
 					return nil, err
 				}
 				if repos == nil {
 					return nil, &domain.StructuredError{Code: "UNAVAILABLE", Message: "repositories are not available on this server"}
 				}
-				list, err := repos.ListRepositories(ctx, scope.session.ProjectID)
+				list, err := repos.ListRepositories(ctx, sess.ProjectID)
 				if err != nil {
 					return nil, err
 				}
@@ -39,7 +39,7 @@ func sessionProjectTools(planningSvc ports.Planning, sessions ports.SessionRepos
 						"name":        r.Name,
 						"description": r.Description,
 						"url":         r.URL,
-						"yours":       r.ID == scope.session.RepositoryID,
+						"yours":       r.ID == sess.RepositoryID,
 					})
 				}
 				return map[string]any{"count": len(out), "repositories": out}, nil
@@ -52,14 +52,14 @@ func sessionProjectTools(planningSvc ports.Planning, sessions ports.SessionRepos
 			InputSchema: noArgs,
 			Source:      "code",
 			Handler: func(ctx context.Context, args map[string]any) (any, error) {
-				scope, err := resolveTaskScope(ctx, planningSvc, sessions)
+				sess, err := resolveProjectScope(ctx, sessions)
 				if err != nil {
 					return nil, err
 				}
 				if arch == nil {
 					return nil, &domain.StructuredError{Code: "UNAVAILABLE", Message: "the project's architecture is not available on this server"}
 				}
-				return architectureMap(ctx, arch, scope.session.ProjectID), nil
+				return architectureMap(ctx, arch, sess.ProjectID), nil
 			},
 		},
 		{
@@ -69,7 +69,7 @@ func sessionProjectTools(planningSvc ports.Planning, sessions ports.SessionRepos
 			InputSchema: noArgs,
 			Source:      "code",
 			Handler: func(ctx context.Context, args map[string]any) (any, error) {
-				if _, err := resolveTaskScope(ctx, planningSvc, sessions); err != nil {
+				if _, err := resolveProjectScope(ctx, sessions); err != nil {
 					return nil, err
 				}
 				if agents == nil {

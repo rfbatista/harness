@@ -136,6 +136,31 @@ func NewRouter(h *Handler, opts ...Option) *echo.Echo {
 	g.GET("/get_settings", h.handleGetSettings)
 	g.POST("/update_settings", h.handleUpdateSettings)
 
+	// agent sandbox settings (the Agent isolation page)
+	g.GET("/get_sandbox_settings", h.handleGetSandboxSettings)
+	g.POST("/set_sandbox_enabled", h.handleSetSandboxEnabled)
+	g.POST("/add_sandbox_path", h.handleAddSandboxPath)
+	g.POST("/update_sandbox_path", h.handleUpdateSandboxPath)
+	g.POST("/remove_sandbox_path", h.handleRemoveSandboxPath)
+
+	// managed claude (the Agent isolation page)
+	g.GET("/get_managed_claude", h.handleGetManagedClaude)
+	g.GET("/list_managed_claude_releases", h.handleListManagedClaudeReleases)
+	g.POST("/install_managed_claude", h.handleInstallManagedClaude)
+	g.POST("/switch_managed_claude", h.handleSwitchManagedClaude)
+	g.POST("/cancel_managed_claude_install", h.handleCancelManagedClaudeInstall)
+	g.POST("/remove_managed_claude_version", h.handleRemoveManagedClaudeVersion)
+	// agent credential (the Agent isolation page)
+	g.GET("/get_agent_credential", h.handleGetAgentCredential)
+	g.POST("/set_agent_credential", h.handleSetAgentCredential)
+	g.POST("/remove_agent_credential", h.handleRemoveAgentCredential)
+	g.GET("/get_agent_oauth", h.handleGetAgentOAuth)
+	g.POST("/start_agent_oauth", h.handleStartAgentOAuth)
+	g.POST("/submit_agent_oauth_code", h.handleSubmitAgentOAuthCode)
+	g.POST("/cancel_agent_oauth", h.handleCancelAgentOAuth)
+	g.GET("/get_agent_auth_status", h.handleGetAgentAuthStatus)
+	g.POST("/sign_out_agent_auth", h.handleSignOutAgentAuth)
+
 	// mcp servers
 	g.GET("/list_mcp_servers", h.handleListMCPServers)
 	g.GET("/get_mcp_server", h.handleGetMCPServer)
@@ -166,6 +191,10 @@ func NewRouter(h *Handler, opts ...Option) *echo.Echo {
 	g.GET("/sessions/:id/terminal", h.handleSessionTerminal) // WebSocket upgrade
 	g.GET("/sessions/:id/history", h.handleSessionHistory)
 	g.GET("/sessions/:id/transcript", h.handleSessionTranscript)
+	g.GET("/sessions/:id/sandbox/violations", h.handleSessionSandboxViolations)
+	// merging a session's branch into its repository's default branch, in the local checkout
+	g.GET("/sessions/:id/merge", h.handleSessionMergeOffer)
+	g.POST("/sessions/:id/merge", h.handleSessionMerge)
 
 	// artifacts: what sessions publish for the Design tab. The /view/ routes
 	// are loaded as plain subresources (<img>, <video>, <iframe>), under the
@@ -244,6 +273,7 @@ func NewRouter(h *Handler, opts ...Option) *echo.Echo {
 	g.GET("/projects/:project/usage", h.handleUsageSummary) // ?range=today|7d|30d
 	g.GET("/projects/:project/usage/records", h.handleListUsageRecords)
 	g.GET("/projects/:project/usage/events", h.handleUsageEvents) // each record as it is stored (SSE)
+	g.GET("/projects/:project/usage/live", h.handleUsageLive)     // the project's LLM calls as they happen (SSE)
 	g.GET("/usage/totals", h.handleUsageTotals)                   // ?task_id= or ?session_id=
 
 	// git credentials: what every git remote operation authenticates with

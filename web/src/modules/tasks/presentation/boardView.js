@@ -6,6 +6,7 @@ import { count } from "../../../shared/presentation/format.js";
 import { linkState } from "../domain/activity.js";
 import { byStatus, moveChoices } from "../domain/board.js";
 import { age, exactTime, lastMoveLine, mergeBadge } from "../domain/card.js";
+import { childrenOf, childrenWord, parentOf } from "../domain/feature.js";
 import { STATUSES } from "../domain/task.js";
 
 const QUIET = Object.freeze({ live: 0, attention: false });
@@ -38,7 +39,7 @@ export function toColumns(tasks, { projectId, byTask, fresh, now, pending = {}, 
   const cols = byStatus(tasks);
   return STATUSES.map(({ value, label }) => {
     const cards = cols[value].map((t) =>
-      toCard(t, { projectId, activity: byTask[t.id] ?? QUIET, fresh: fresh.has(t.id), now, pendingTo: pending[t.id] ?? "", failed: failed.has(t.id), ghost: drag?.id === t.id, fine }),
+      toCard(t, { projectId, activity: byTask[t.id] ?? QUIET, fresh: fresh.has(t.id), now, pendingTo: pending[t.id] ?? "", failed: failed.has(t.id), ghost: drag?.id === t.id, fine, all: tasks }),
     );
     const waiting = value === "review" && cards.length > 0;
     const under = Boolean(drag) && drag.over === value;
@@ -63,16 +64,23 @@ export function toColumns(tasks, { projectId, byTask, fresh, now, pending = {}, 
   });
 }
 
-function toCard(task, { projectId, activity, fresh, now, pendingTo, failed, ghost = false, fine = false }) {
+/** all: every task of the project, for the feature cues (the parent's title, the children count). */
+function toCard(task, { projectId, activity, fresh, now, pendingTo, failed, ghost = false, fine = false, all = [] }) {
   // The reviews badge says the reviews; the dot is about sessions only.
   const { state } = linkState(activity);
   const merge = mergeBadge(task);
   const move = lastMoveLine(task);
   const time = age(task, now);
   const since = time.since ? exactTime(time.since) : "";
+  const parentTitle = parentOf(all, task)?.title ?? "";
+  const children = childrenWord(childrenOf(all, task).length);
   return {
     id: task.id,
     title: task.title,
+    parentTitle,
+    hasParent: parentTitle !== "",
+    children,
+    hasChildren: children !== "",
     href: taskHref(projectId, task.id),
     status: task.status,
     fresh,
@@ -84,7 +92,7 @@ function toCard(task, { projectId, activity, fresh, now, pendingTo, failed, ghos
     hasMerge: merge !== null,
     mergeState: merge?.state ?? "",
     mergeWord: merge?.word ?? "",
-    hasSignals: state !== "" || task.pendingReviews > 0 || merge !== null,
+    hasSignals: children !== "" || state !== "" || task.pendingReviews > 0 || merge !== null,
     lead: move.lead,
     who: move.who,
     reason: move.reason,

@@ -1,4 +1,6 @@
+import cues from "../../../../testdata/views/feature-cues.json" with { type: "json" };
 import { assert, file, test } from "../../../shared/testing/test.js";
+import { childrenWord } from "../domain/feature.js";
 import { makeTask } from "../testing/fixtures.js";
 import { archiveAllView, jumpChips, toColumns } from "./boardView.js";
 
@@ -122,4 +124,14 @@ test("the narrow screen's jump chips: one link per column with its count; Review
     "#column-done|Done|2|false|true",
   ]);
   assert.equal(jumpChips(toColumns([], ctx()), { bumped: "" })[3].waiting, false, "an empty Review is quiet");
+});
+
+test("feature cues match the shared fixture: a child names its parent, a feature counts its children (parity with the BFF)", () => {
+  const tasks = cues.tasks.map((t) => makeTask({ id: t.id, title: t.title, status: t.status, parentId: t.parent_id }));
+  const cards = Object.fromEntries(toColumns(tasks, { projectId: "p1", byTask: {}, fresh: new Set() }).flatMap((c) => c.cards).map((c) => [c.id, c]));
+  for (const want of cues.cards) {
+    const card = cards[want.id];
+    assert.deepEqual([card.parentTitle, card.hasParent, card.children, card.hasChildren], [want.parent, want.parent !== "", want.children, want.children !== ""], want.id);
+  }
+  for (const w of cues.children_words) assert.equal(childrenWord(w.count), w.word);
 });

@@ -40,10 +40,11 @@ const (
 // VirtualShells makes and removes task sessions' virtual shells.
 type VirtualShells interface {
 	// Open makes the session's shell, fills it with its task's and
-	// project's resources, records what it was filled with as the
-	// session's base versions, and answers the shell's absolute path. A
-	// session opened again gets a fresh shell; the old one is removed.
-	Open(ctx context.Context, sessionID, ticketID string) (string, error)
+	// project's resources (its project's alone for a shell with no task),
+	// records what it was filled with as the session's base versions, and
+	// answers the shell's absolute path. A session opened again gets a
+	// fresh shell; the old one is removed.
+	Open(ctx context.Context, sessionID string, scope ShellScope) (string, error)
 	// Close removes the shell at dir, and forgets the session's base
 	// versions while dir is still its shell, so closing an old shell never
 	// touches a newer one. A shell already gone is not an error.
@@ -68,6 +69,23 @@ var ShellShimCommands = []string{"sed", "tee", "cp", "mv", "rm", "touch", "mkdir
 // A shell that runs a profile before the program puts it back first on
 // PATH, so a profile that reorders PATH cannot bypass the shims.
 const ShimDirEnv = "HARNESS_SHIM_DIR"
+
+// DeveloperBinEnv names, in a session's environment, the active developer
+// directory's usr/bin on macOS. It goes right after the shims on PATH, so
+// git and clang run directly and not through /usr/bin's xcrun shim, whose
+// shared cache the sandbox keeps read-only. A login shell puts it back there
+// after its profile.
+const DeveloperBinEnv = "HARNESS_DEVELOPER_BIN"
+
+// SecurityShimCommand is the macOS `security` shim, a link to the shim
+// binary: it answers "not found" for Claude's keychain item and passes every
+// other call to the real /usr/bin/security (ADR 0022).
+const SecurityShimCommand = "security"
+
+// KeychainShimDirEnv names, in an agent process's environment, the directory
+// holding the security shim. It goes on PATH right after the edit-proxy
+// shims and before the developer bin; a login shell puts it back there.
+const KeychainShimDirEnv = "HARNESS_KEYCHAIN_SHIM_DIR"
 
 // The environment a task session's shell is named in: ShellDirEnv is the
 // shell's absolute path, ShellURLEnv its edit endpoints' base
@@ -130,4 +148,13 @@ type ShellDocumentWriter interface {
 	SetDocumentScope(id string, scope domain.DocumentScope) (*domain.Document, error)
 	DeleteDocument(id string) error
 	LinkDocument(ticketID, documentID string) error
+}
+
+// ShellScope is what a session's shell is opened on: its task, or, with no
+// TicketID, its project alone (a project-level product session, ADR 0016).
+// ProjectID is read only when TicketID is empty; a task's shell is in the
+// task's project.
+type ShellScope struct {
+	ProjectID string
+	TicketID  string
 }

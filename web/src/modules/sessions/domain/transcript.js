@@ -19,6 +19,8 @@ export const TRANSCRIPT_PAGE = 200;
  * @property {string} tool     the tool's name on tool_use / tool_result, else ""
  * @property {boolean} isError a tool_result that failed
  * @property {boolean} truncated the server cut the text at 16 KiB
+ * @property {string} html     user / assistant: the text as Markdown, rendered
+ *                             and made safe by the server (T7); "" otherwise
  *
  * @typedef {object} TranscriptPage
  * @property {TranscriptEntry[]} entries  always oldest → newest

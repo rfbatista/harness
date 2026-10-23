@@ -40,7 +40,7 @@ func newArchiveFixture(t *testing.T) *archiveFixture {
 func (f *archiveFixture) doneTask(t *testing.T, title string) *domain.Ticket {
 	t.Helper()
 	ctx := context.Background()
-	tk, err := f.svc.CreateTicket(ctx, f.pid, title, "", domain.TicketStatusReview)
+	tk, err := f.svc.CreateTicket(ctx, f.pid, title, "", domain.TicketStatusReview, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -138,7 +138,7 @@ func TestArchiveAndRestoreAreNoOpsTheSecondTime(t *testing.T) {
 func TestAnArchivedTaskKeepsItsStatusUntilRestored(t *testing.T) {
 	f := newArchiveFixture(t)
 	ctx := context.Background()
-	inReview, err := f.svc.CreateTicket(ctx, f.pid, "Waiting", "", domain.TicketStatusReview)
+	inReview, err := f.svc.CreateTicket(ctx, f.pid, "Waiting", "", domain.TicketStatusReview, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -185,7 +185,7 @@ func TestAnArchivedTaskKeepsItsStatusUntilRestored(t *testing.T) {
 func TestArchivedTasksLeaveTheListAndHaveTheirOwn(t *testing.T) {
 	f := newArchiveFixture(t)
 	ctx := context.Background()
-	open, err := f.svc.CreateTicket(ctx, f.pid, "Open", "", domain.TicketStatusTodo)
+	open, err := f.svc.CreateTicket(ctx, f.pid, "Open", "", domain.TicketStatusTodo, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -200,7 +200,7 @@ func TestArchivedTasksLeaveTheListAndHaveTheirOwn(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	list, err := f.svc.ListTickets(ctx, f.pid)
+	list, err := f.svc.ListTickets(ctx, f.pid, ports.TicketFilter{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -253,7 +253,7 @@ func TestArchiveAllDoneArchivesOnlyTheDoneTasksOnTheBoard(t *testing.T) {
 	if _, err := f.svc.ArchiveTicket(ctx, already.ID); err != nil {
 		t.Fatal(err)
 	}
-	inReview, err := f.svc.CreateTicket(ctx, f.pid, "Waiting", "", domain.TicketStatusReview)
+	inReview, err := f.svc.CreateTicket(ctx, f.pid, "Waiting", "", domain.TicketStatusReview, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -275,7 +275,7 @@ func TestArchiveAllDoneArchivesOnlyTheDoneTasksOnTheBoard(t *testing.T) {
 			t.Errorf("announced %+v", a)
 		}
 	}
-	list, err := f.svc.ListTickets(ctx, f.pid)
+	list, err := f.svc.ListTickets(ctx, f.pid, ports.TicketFilter{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -289,7 +289,7 @@ func TestArchiveAllDoneArchivesOnlyTheDoneTasksOnTheBoard(t *testing.T) {
 func TestArchiveAllDoneOnAProjectWithNothingDone(t *testing.T) {
 	f := newArchiveFixture(t)
 	ctx := context.Background()
-	if _, err := f.svc.CreateTicket(ctx, f.pid, "Waiting", "", domain.TicketStatusReview); err != nil {
+	if _, err := f.svc.CreateTicket(ctx, f.pid, "Waiting", "", domain.TicketStatusReview, ""); err != nil {
 		t.Fatal(err)
 	}
 	before := len(f.feed.all())
@@ -310,7 +310,7 @@ func TestArchiveAllDoneOnAProjectWithNothingDone(t *testing.T) {
 func TestTheArchivedCountFollowsArchiveAndRestore(t *testing.T) {
 	f := newArchiveFixture(t)
 	ctx := context.Background()
-	if _, err := f.svc.CreateTicket(ctx, f.pid, "Open", "", domain.TicketStatusTodo); err != nil {
+	if _, err := f.svc.CreateTicket(ctx, f.pid, "Open", "", domain.TicketStatusTodo, ""); err != nil {
 		t.Fatal(err)
 	}
 	first := f.doneTask(t, "First")
@@ -347,5 +347,34 @@ func TestTheArchivedCountFollowsArchiveAndRestore(t *testing.T) {
 	}
 	if n, err := f.svc.ArchivedTaskCount(ctx, "empty"); err != nil || n != 0 {
 		t.Fatalf("a project without tasks: %d, %v", n, err)
+	}
+}
+
+// An archived child task still belongs to its feature: the feature counts it
+// and cannot be deleted while it has it.
+func TestAnArchivedChildStillCountsForItsFeature(t *testing.T) {
+	f := newArchiveFixture(t)
+	ctx := context.Background()
+	feature, err := f.svc.CreateTicket(ctx, f.pid, "Feature", "", domain.TicketStatusInProgress, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	child := f.doneTask(t, "Child")
+	if _, err := f.svc.PatchTicket(ctx, child.ID, ports.TicketPatch{ParentID: &feature.ID}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.svc.ArchiveTicket(ctx, child.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	if got, _ := f.svc.GetTicket(ctx, feature.ID); got.ChildrenCount != 1 {
+		t.Fatalf("feature children = %d, want the archived child counted", got.ChildrenCount)
+	}
+	list, _ := f.svc.ListTickets(ctx, f.pid, ports.TicketFilter{})
+	if len(list) != 1 || list[0].ID != feature.ID || list[0].ChildrenCount != 1 {
+		t.Fatalf("list = %+v, want the feature alone, counting its archived child", list)
+	}
+	if err := f.svc.DeleteTicket(ctx, feature.ID); code(err) != domain.CodeTicketHasChildren {
+		t.Fatalf("delete a feature with an archived child: want %s, got %v", domain.CodeTicketHasChildren, err)
 	}
 }

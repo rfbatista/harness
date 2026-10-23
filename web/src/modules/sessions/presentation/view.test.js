@@ -1,10 +1,11 @@
 import fixture from "../../../../testdata/views/session-status.json" with { type: "json" };
 import checks from "../../../../testdata/views/status-check.json" with { type: "json" };
+import fixture_titles from "../../../../testdata/views/session-title.json" with { type: "json" };
 import { assert, file, test } from "../../../shared/testing/test.js";
 import { needsYou } from "../domain/session.js";
 import { makeSession, T0 } from "../testing/fixtures.js";
 import { makeCheck, makeMessage } from "../testing/channel-fixtures.js";
-import { agentLabel, delegateOption, reportView, runsAs, startedBy, statusCheckView, statusView, summary, terminalView, toDetailView, toGroupViews, tokenSaversView } from "./view.js";
+import { agentLabel, delegateOption, reportView, rowTitle, runsAs, runsOn, startedBy, statusCheckView, statusView, summary, terminalView, toDetailView, toGroupViews, sandboxView, tokenSaversView } from "./view.js";
 
 file("sessions/presentation/view");
 
@@ -95,6 +96,9 @@ test("a session started in a mode reads as its agent in that mode", () => {
   assert.equal(runsAs(makeSession({ agentId: "a1" }), { a1: "Reviewer" }), "Reviewer");
   assert.equal(runsAs(makeSession({ agentId: "", mode: "architect" })), "plain claude as architect");
   assert.equal(runsAs(makeSession({ agentId: "a1", mode: "design" }), { a1: "Reviewer" }), "Reviewer as design");
+  assert.equal(runsOn(makeSession({ agentId: "", mode: "architect", model: "opus" })), "plain claude as architect on opus");
+  assert.equal(runsOn(makeSession({ agentId: "a1", model: "sonnet" }), { a1: "Reviewer" }), "Reviewer on sonnet");
+  assert.equal(runsOn(makeSession({ agentId: "a1" }), { a1: "Reviewer" }), "Reviewer");
 });
 
 test("summary counts what is waiting", () => {
@@ -199,4 +203,31 @@ test("the token savers a session runs with, and those on for it but not installe
   assert.equal(v.tokenSavers, "rtk · caveman");
   assert.equal(v.tokenSaversMissing, "codegraph not installed");
   assert.equal(v.tokenSaversMissingTitle, "codegraph was on for this session but not installed, so it runs without it. Install it on the Token savers page.");
+});
+
+test("the sandbox chips: quiet when sandboxed, amber only when the sandbox was off, none before the sandbox", () => {
+  const on = (visibility, mode = "") => sandboxView(makeSession({ mode, sandbox: { sandboxed: true, visibility, driver: "seatbelt" } }));
+  assert.deepEqual(sandboxView(makeSession()), { sandboxChip: "", sandboxTone: null, visibilityChip: "" });
+  assert.deepEqual(on("own repo"), { sandboxChip: "Sandboxed", sandboxTone: null, visibilityChip: "Own worktree only" });
+  assert.equal(on("all repos, read-only", "architect").visibilityChip, "Own worktree + all repos read-only");
+  assert.equal(on("all repos, read-only", "product").visibilityChip, "All repos read-only");
+  assert.deepEqual(sandboxView(makeSession({ sandbox: { sandboxed: false, visibility: "unrestricted", driver: "" } })), { sandboxChip: "Not sandboxed", sandboxTone: "attention", visibilityChip: "No repository limits" });
+});
+
+test("a row says unsandboxed only for a session that ran without the sandbox", () => {
+  const row = (sandbox) => toGroupViews([makeSession({ sandbox })], { selectedId: null, now: T0, agentNames: {} })[0].rows[0];
+  assert.equal(row(null).meta.includes("unsandboxed"), false);
+  assert.equal(row({ sandboxed: true, visibility: "own repo", driver: "seatbelt" }).meta.includes("unsandboxed"), false);
+  const off = row({ sandboxed: false, visibility: "unrestricted", driver: "" });
+  assert.ok(off.meta.endsWith(" · unsandboxed"), off.meta);
+  assert.equal(off.unsandboxedAttr, "");
+});
+
+test("row titles match the shared fixture: a session with no task is a feature brainstorm (parity with the BFF)", () => {
+  for (const c of fixture_titles.cases) {
+    assert.equal(rowTitle(makeSession({ task: c.task, ticketId: c.ticket_id })), c.title, `${JSON.stringify(c)}`);
+  }
+  const [group] = toGroupViews([makeSession({ id: "b", task: "", ticketId: "" })], { selectedId: null, now: T0, agentNames: {} });
+  assert.equal(group.rows[0].title, "Feature brainstorm");
+  assert.equal(group.rows[0].resumeLabel, "Resume Feature brainstorm");
 });

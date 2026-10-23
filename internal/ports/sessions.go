@@ -127,6 +127,10 @@ type SessionRepository interface {
 	// UpdateRunner records where an interactive session now runs; resuming
 	// can move it.
 	UpdateRunner(id string, runsOn domain.Runner, host string) error
+	// UpdateSandbox records the sandbox facts a resumed session starts under.
+	UpdateSandbox(id string, facts domain.SandboxFacts) error
+	// UpdateMerge records how the newest merge of the session's branch ended.
+	UpdateMerge(id string, r domain.MergeResult) error
 	// UpdateTokenSavers records the session's active savers and those on
 	// but not installed; a resume moves a saver removed since the start.
 	UpdateTokenSavers(id string, active, notInstalled []domain.TokenSaver) error

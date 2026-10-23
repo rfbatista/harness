@@ -12,6 +12,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -201,9 +203,22 @@ func Options(cfg Config) fx.Option {
 	opts := []fx.Option{fx.Supply(cfg, &OrphansStopped{}), Client, Orphans}
 	if cfg.RunsOn == domain.RunnerTUI {
 		opts = append(opts,
-			fx.Supply(runtime.Config{ClaudeBin: cfg.Claude, Shell: cfg.Shell}),
+			fx.Supply(tuiRuntimeConfig(cfg)),
 			runtime.Module,
 		)
 	}
 	return fx.Options(append(opts, Program)...)
+}
+
+// tuiRuntimeConfig is the runtime a RunnerTUI session runs on: claude in a
+// Claude home of this machine's own (the server's is not here), under this
+// platform's sandbox driver, which confines the sessions the server sends
+// with a policy. The server's agent credential reaches claude in the
+// session's env.
+func tuiRuntimeConfig(cfg Config) runtime.Config {
+	rc := runtime.Config{ClaudeBin: cfg.Claude, Shell: cfg.Shell, Sandbox: runtime.PlatformSandboxDriver()}
+	if dir, err := os.UserConfigDir(); err == nil {
+		rc.ConfigDir = filepath.Join(dir, "harness", "claude-home")
+	}
+	return rc
 }

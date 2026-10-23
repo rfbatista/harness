@@ -76,6 +76,9 @@ func (s *Service) root() string {
 	return expanded
 }
 
+// Root is the directory session worktrees are made under.
+func (s *Service) Root() string { return s.root() }
+
 // Create materializes a git worktree for the repository and persists the
 // workspace. branch defaults to the workspace slug when empty; baseRef is the
 // ref the branch is cut from, HEAD when empty. On persistence failure the

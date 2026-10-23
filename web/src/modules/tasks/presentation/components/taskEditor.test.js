@@ -140,3 +140,24 @@ test("a refused archive shows the coded error and stays", async () => {
   await instance.archiveTask();
   assert.deepEqual([instance.taskError.code, reloads(), instance.archiving], [Codes.TASK_NOT_DONE, 0, false]);
 });
+
+test("the description toggle shows only when the clamped text overflows, and says More or Less", () => {
+  const { instance, tick } = setup();
+  const text = { scrollHeight: 120, clientHeight: 40 };
+  instance.$refs = { description: text };
+  const measure = () => {
+    instance.measureDescription();
+    tick();
+  };
+  measure();
+  assert.deepEqual([instance.descriptionOverflows, instance.descriptionToggleWord, instance.descriptionOpen], [true, "More", false]);
+  instance.toggleDescription();
+  assert.deepEqual([instance.descriptionOpen, instance.descriptionToggleWord], [true, "Less"]);
+  text.clientHeight = 120; // open: nothing overflows, but the toggle stays to close it
+  measure();
+  assert.equal(instance.descriptionOverflows, true, "an open description keeps its Less");
+  instance.toggleDescription();
+  text.scrollHeight = text.clientHeight = 30;
+  measure();
+  assert.equal(instance.descriptionOverflows, false, "a short description has no toggle");
+});

@@ -120,7 +120,7 @@ func TestNotifications_WiredServer(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	tk, err := plan.CreateTicket(ctx, p.ID, "Notifications", "", domain.TicketStatusInProgress)
+	tk, err := plan.CreateTicket(ctx, p.ID, "Notifications", "", domain.TicketStatusInProgress, "")
 	if err != nil {
 		t.Fatal(err)
 	}

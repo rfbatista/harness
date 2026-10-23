@@ -1,22 +1,47 @@
 /*
  * Brief — a task's description under its title: prose as written (line
- * breaks kept), quieter than the work around it, scrolling when long.
- * <p class="brief">…</p>
+ * breaks kept), quieter than the work around it, clamped to two lines with a
+ * More / Less toggle that shows only when the text overflows (data-open: shown whole).
+ * <div class="brief"><p>…</p><button class="more">More</button></div>
  * .status-change: who moved the task's status last and why, one line above
  * it; the reason truncates (its full text is the title).
  */
 
 @layer blocks {
   .brief {
+    display: grid;
+    gap: var(--space-3xs);
+    justify-items: start;
     max-inline-size: none;
-    max-block-size: 7.5rem;
-    overflow: auto;
     padding: var(--space-s) var(--space-l);
     border-block-end: var(--border-width) solid var(--color-line);
     background: var(--color-canvas);
     color: var(--color-ink-muted);
     font-size: var(--text-sm);
-    white-space: pre-wrap;
+
+    & > p {
+      display: -webkit-box;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 2;
+      max-inline-size: var(--size-measure);
+      overflow: hidden;
+      overflow-wrap: anywhere;
+      white-space: pre-wrap;
+    }
+
+    &[data-open] > p {
+      display: block;
+      -webkit-line-clamp: unset;
+    }
+
+    & > .more {
+      padding: 0;
+      border: 0;
+      background: none;
+      color: var(--color-signal-strong);
+      font-size: var(--text-sm);
+      cursor: pointer;
+    }
   }
 
   .status-change {

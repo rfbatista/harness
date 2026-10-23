@@ -128,9 +128,13 @@ func rtkHook(path string) string { return "'" + path + "' hook claude" }
 
 // checkRTKWired checks a session's settings carry rtk's Bash hook beside
 // the edit proxy's, and its env turns rtk's telemetry off without touching
-// where its LLM requests go.
+// where its LLM requests go. rtk's dir comes first on its PATH, ahead of
+// what was there: the hook rewrites commands to a bare "rtk …".
 func checkRTKWired(t *testing.T, s claudeSettings, env map[string]string, rtk string) {
 	t.Helper()
+	if path := filepath.SplitList(env["PATH"]); len(path) < 2 || path[0] != filepath.Dir(rtk) {
+		t.Errorf("PATH = %q, want %q first, then the rest", env["PATH"], filepath.Dir(rtk))
+	}
 	bash := s.hookCommands("PreToolUse", "Bash")
 	if !slices.Contains(bash, rtkHook(rtk)) {
 		t.Errorf("PreToolUse Bash hooks %q lack rtk's %q", bash, rtkHook(rtk))
@@ -155,6 +159,9 @@ func checkNoSavers(t *testing.T, s claudeSettings, env map[string]string) {
 	}
 	if env["RTK_TELEMETRY_DISABLED"] != "" || env["DO_NOT_TRACK"] != "" {
 		t.Errorf("rtk's env is set: %v", env)
+	}
+	if strings.Contains(env["PATH"], "v0.0.0-test") {
+		t.Errorf("a saver's dir is on PATH: %q", env["PATH"])
 	}
 }
 

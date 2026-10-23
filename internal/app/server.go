@@ -6,6 +6,9 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"operators-mcp/internal/application/managedclaude"
+	"operators-mcp/internal/application/sandboxsettings"
+	"path/filepath"
 	"time"
 
 	"go.uber.org/fx"
@@ -16,6 +19,7 @@ import (
 	"operators-mcp/internal/adapter/in/mcpsession"
 	"operators-mcp/internal/adapter/in/ui"
 	"operators-mcp/internal/adapter/in/web"
+	"operators-mcp/internal/adapter/in/web/serversettings"
 	"operators-mcp/internal/app/catalog"
 	"operators-mcp/internal/application/apps"
 	"operators-mcp/internal/application/artifacts"
@@ -48,7 +52,7 @@ var ServerModule = fx.Module("server",
 
 // registerHTTPServer mounts the UI and JSON API on a mux and serves it,
 // shutting down gracefully when fx stops.
-func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRunner *apps.Service, ts *tooling.Service, exec *execution.Service, orch *orchestration.Service, plan *planning.Service, ws *workspaces.Service, broker *approval.Broker, sessions ports.SessionRepository, art *artifacts.Service, channel *taskchannel.Service, prs *workspaces.PullRequests, code ports.CodeBrowser, inbox optionalNotifications, creds optionalGitCredentials, shells *vshell.Service, usageSvc *usage.Service, indexes optionalRepositoryIndexes) error {
+func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRunner *apps.Service, ts *tooling.Service, exec *execution.Service, orch *orchestration.Service, plan *planning.Service, ws *workspaces.Service, broker *approval.Broker, sessions ports.SessionRepository, art *artifacts.Service, channel *taskchannel.Service, prs *workspaces.PullRequests, merges *workspaces.Merges, code ports.CodeBrowser, inbox optionalNotifications, creds optionalGitCredentials, shells *vshell.Service, usageSvc *usage.Service, indexes optionalRepositoryIndexes, sandboxStore *sandboxsettings.Store, managedClaude *managedclaude.Service, claudeBin ports.ManagedClaudeBin, agentCred optionalAgentCredential) error {
 	uiHandler, err := ui.SPAHandler(ui.Dist)
 	if err != nil {
 		return err
@@ -97,8 +101,10 @@ func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRun
 		TaskComments:  plan,
 		TaskArchive:   plan,
 		PullRequests:  prs,
+		Merges:        merges,
 		Notifications: notes,
 		Usage:         usageSvc,
+		LiveCalls:     usageSvc,
 		Code:          code,
 		// The git credentials every remote operation authenticates with.
 		GitCredentials: creds.port(),
@@ -108,6 +114,17 @@ func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRun
 		TokenSaverInstalls: cat.Capabilities,
 		// Each repository's codegraph index, built in its checkout.
 		RepositoryIndexes: indexes.port(),
+		// The Agent isolation page's switch and extra paths.
+		SandboxSettings: sandboxStore,
+		SandboxDriver:   sandboxDriver(orch),
+		// The managed claude agents run, and which binary they resolve to.
+		ManagedClaude:    managedClaude,
+		ManagedClaudeBin: claudeBin,
+		// The credential agents sign in with: status only.
+		AgentCredential: agentCred.port(),
+		// The Sign in with Claude flow that stores it.
+		AgentOAuth: agentCred.oauth(),
+		AgentAuth:  agentCred.auth(),
 	}), httpapi.WithToken(cfg.APIToken))
 	// Requests slower than the threshold are logged with their query count.
 	// An approval waits on a person, so it is never a slow request.
@@ -116,17 +133,19 @@ func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRun
 	}
 	mux.Handle("/api/", slow(apiRouter))
 	mux.Handle(mcpapprove.PathPrefix, mcpapprove.Handler(broker))
-	mux.Handle(mcpsession.PathPrefix, slow(mcpsession.TaskHandler(sessionTaskTools(cat, orch, plan, sessions, art, channel, notifier))))
+	mux.Handle(mcpsession.PathPrefix, slow(mcpsession.TaskHandler(sessionTaskTools(cat, orch, plan, sessions, art, channel, notifier, merges))))
 	// The web client owns / and its pages; anything else reaches the legacy
 	// designer SPA until it is retired.
 	mux.Handle("/", slow(web.NewHandler(web.Deps{Projects: cat.Projects, Tasks: plan, Sessions: orch, Agents: cat.Agents, Repositories: cat.Projects, EnvFiles: cat.Projects, RunCommands: cat.Projects, Documents: plan, History: ws, Code: code, Workspaces: ws, Artifacts: art, ProjectSummaries: cat.Projects, PullRequests: prs,
 		Resources: plan, Comments: plan, Notifications: noteReader, GitCredentials: creds.port(), Usage: usageSvc, TokenSavers: cat.Capabilities,
-		TokenSaverInstalls: cat.Capabilities, RepositoryIndexes: indexes.port(), ArchivedTasks: plan, ArchivedList: plan}, assets, uiHandler)))
+		TokenSaverInstalls: cat.Capabilities, RepositoryIndexes: indexes.port(), Settings: cat.Settings, DataPaths: dataPaths(cfg), SandboxSettings: sandboxStore, SandboxDriver: sandboxDriver(orch), SandboxBuiltin: sandboxBuiltin(orch),
+		ManagedClaude: managedClaude, ManagedClaudeBin: claudeBin, AgentCredential: agentCred.port(),
+		AgentOAuth: agentCred.oauth(), AgentAuth: agentCred.auth(), AgentHomeExposed: agentHomeExposed(cfg), AgentLogin: agentHasLogin(cfg), ArchivedTasks: plan}, assets, uiHandler)))
 
 	// The LLM proxy every claude process calls through (ADR 0006): loopback
 	// only, outside the API token and CORS, so its responses come back as
 	// the upstream sent them and no web page is invited to use it.
-	llmProxy, err := llm.Handler(llm.Config{Sink: usageSvc})
+	llmProxy, err := llm.Handler(llm.Config{Sink: usageSvc, Capture: usageSvc})
 	if err != nil {
 		return err
 	}
@@ -173,9 +192,9 @@ type optionalNotifications struct {
 
 // sessionTaskTools are the tools each session reaches on its own task
 // endpoint, /mcp/task/{session}.
-func sessionTaskTools(cat catalog.Catalog, orch *orchestration.Service, plan *planning.Service, sessions ports.SessionRepository, art *artifacts.Service, channel *taskchannel.Service, notifier ports.Notifier) []domain.Tool {
+func sessionTaskTools(cat catalog.Catalog, orch *orchestration.Service, plan *planning.Service, sessions ports.SessionRepository, art *artifacts.Service, channel *taskchannel.Service, notifier ports.Notifier, merges ports.BranchMerger) []domain.Tool {
 	return tooling.SessionTaskTools(plan, sessions, cat.Agents, cat.Architecture,
-		tooling.PeerStarter{Sessions: orch, Repositories: cat.Projects},
+		tooling.PeerStarter{Sessions: orch, Repositories: cat.Projects, Merger: merges},
 		tooling.ArtifactTooling{Publisher: art, Attachments: art, ViewURL: httpapi.ArtifactViewPath}, channel,
 		tooling.NotificationTooling{Notifier: notifier})
 }
@@ -253,4 +272,23 @@ func exposed(addr string) bool {
 	}
 	ip := net.ParseIP(host)
 	return ip == nil || !ip.IsLoopback()
+}
+
+// dataPaths are where the server keeps its data, for the Server page.
+func dataPaths(cfg Config) *serversettings.Paths {
+	p := &serversettings.Paths{Source: cfg.DataDirSource, Database: cfg.DBPath}
+	if cfg.inMemory() {
+		p.Database = ":memory:"
+	} else if db, err := filepath.Abs(cfg.DBPath); err == nil {
+		p.Database = db
+	}
+	root, err := cfg.dataRoot()
+	if err != nil {
+		slog.Warn("server page: data dir not resolved", "err", err)
+	}
+	p.DataDir = root
+	if root != "" && p.Source == "" {
+		p.Source = "the database path"
+	}
+	return p
 }

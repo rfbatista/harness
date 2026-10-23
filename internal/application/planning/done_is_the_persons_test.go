@@ -37,7 +37,7 @@ func TestTickets_OnlyThePersonMovesATaskToDone(t *testing.T) {
 	person := context.Background()
 	session := tool.WithSessionID(person, "sess-1")
 
-	tk, _ := svc.CreateTicket(person, p.ID, "Ship it", "", domain.TicketStatusReview)
+	tk, _ := svc.CreateTicket(person, p.ID, "Ship it", "", domain.TicketStatusReview, "")
 
 	_, err = svc.PatchTicket(person, tk.ID, ports.TicketPatch{Status: statusp(domain.TicketStatusDone), BySessionID: "sess-1"})
 	refusedAsThePersons(t, err)
@@ -53,9 +53,9 @@ func TestTickets_OnlyThePersonMovesATaskToDone(t *testing.T) {
 		t.Fatalf("a refused move is not recorded: %+v", h)
 	}
 
-	_, err = svc.CreateTicket(session, p.ID, "Already shipped", "", domain.TicketStatusDone)
+	_, err = svc.CreateTicket(session, p.ID, "Already shipped", "", domain.TicketStatusDone, "")
 	refusedAsThePersons(t, err)
-	if list, _ := svc.ListTickets(person, p.ID); len(list) != 1 {
+	if list, _ := svc.ListTickets(person, p.ID, ports.TicketFilter{}); len(list) != 1 {
 		t.Fatalf("a refused create creates nothing: %d tasks", len(list))
 	}
 

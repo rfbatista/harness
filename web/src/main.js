@@ -17,6 +17,13 @@ import { notificationsGateway } from "./modules/notifications/infrastructure/not
 import { registerNotifications } from "./modules/notifications/presentation/register.js";
 import { codeGateway } from "./modules/code/infrastructure/code-gateway.js";
 import { credentialsGateway } from "./modules/credentials/infrastructure/credentials-gateway.js";
+import { sandboxGateway } from "./modules/sandbox/infrastructure/sandbox-gateway.js";
+import { claudeGateway } from "./modules/claude/infrastructure/claude-gateway.js";
+import { registerAgentIsolation } from "./modules/agentisolation/presentation/register.js";
+import { registerClaude } from "./modules/claude/presentation/register.js";
+import { registerSandbox } from "./modules/sandbox/presentation/register.js";
+import { agentCredentialGateway } from "./modules/agentcredential/infrastructure/agent-credential-gateway.js";
+import { registerAgentCredential } from "./modules/agentcredential/presentation/register.js";
 import { registerCredentials } from "./modules/credentials/presentation/register.js";
 import { hljsHighlighter } from "./modules/code/infrastructure/hljs-highlighter.js";
 import { registerCode } from "./modules/code/presentation/register.js";
@@ -32,13 +39,20 @@ import { artifactsGateway } from "./modules/sessions/infrastructure/artifacts-ga
 import { channelGateway } from "./modules/sessions/infrastructure/channel-gateway.js";
 import { sessionsGateway } from "./modules/sessions/infrastructure/sessions-gateway.js";
 import { terminalGateway } from "./modules/sessions/infrastructure/terminal-gateway.js";
+import { mergeGateway } from "./modules/sessions/infrastructure/merge-gateway.js";
+import { sandboxGateway as sessionSandboxGateway } from "./modules/sessions/infrastructure/sandbox-gateway.js";
 import { transcriptGateway } from "./modules/sessions/infrastructure/transcript-gateway.js";
 import { registerSessions } from "./modules/sessions/presentation/register.js";
 import { railGateway } from "./modules/tasks/infrastructure/rail-gateway.js";
+import { cookieBandPrefs } from "./modules/tasks/infrastructure/band-prefs.js";
 import { cookieRailPrefs } from "./modules/tasks/infrastructure/rail-prefs.js";
 import { resourcesGateway } from "./modules/tasks/infrastructure/resources-gateway.js";
 import { tasksGateway } from "./modules/tasks/infrastructure/tasks-gateway.js";
 import { registerTasks } from "./modules/tasks/presentation/register.js";
+import { modelsGateway } from "./modules/models/infrastructure/models-gateway.js";
+import { registerModels } from "./modules/models/presentation/register.js";
+import { settingsGateway } from "./modules/settings/infrastructure/settings-gateway.js";
+import { registerSettings } from "./modules/settings/presentation/register.js";
 import { tokenSaversGateway } from "./modules/tokensavers/infrastructure/tokensavers-gateway.js";
 import { registerTokenSavers } from "./modules/tokensavers/presentation/register.js";
 import { usageGateway } from "./modules/usage/infrastructure/usage-gateway.js";
@@ -61,6 +75,7 @@ registerTasks(Alpine, {
   gateway: tasksGateway(api),
   rail: railGateway(api, events),
   railPrefs: cookieRailPrefs(),
+  bandPrefs: cookieBandPrefs(),
   resources: resourcesGateway(api, events, xhrUpload({ base: "/api" })),
   navigate,
   reload,
@@ -72,10 +87,13 @@ registerSessions(Alpine, {
   channel: channelGateway(api, events),
   terminals: terminalGateway({ base: "/api" }),
   transcripts: transcriptGateway(api),
+  sandbox: sessionSandboxGateway(api),
+  merge: mergeGateway(api),
   runTerminals: terminalGateway({ base: "/api", path: (id) => `/runs/${encodeURIComponent(id)}/terminal` }),
   createScreen,
   clock: systemClock,
   prefs,
+  navigate,
 });
 
 registerRuns(Alpine, { gateway: runsGateway(api) });
@@ -86,5 +104,11 @@ registerNotifications(Alpine, { gateway: notificationsGateway(api, events), aler
 registerCredentials(Alpine, { gateway: credentialsGateway(api, events), clock: systemClock });
 registerUsage(Alpine, { gateway: usageGateway(api, events) });
 registerTokenSavers(Alpine, { gateway: tokenSaversGateway(api), clock: systemClock });
+registerModels(Alpine, { gateway: modelsGateway(api) });
+registerSandbox(Alpine, { gateway: sandboxGateway(api) });
+registerClaude(Alpine, { gateway: claudeGateway(api) });
+registerAgentCredential(Alpine, { gateway: agentCredentialGateway(api) });
+registerAgentIsolation(Alpine);
+registerSettings(Alpine, { gateway: settingsGateway(api) });
 
 Alpine.start();

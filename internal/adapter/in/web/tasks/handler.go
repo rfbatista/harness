@@ -73,11 +73,20 @@ func (h Handler) Project(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	list, err := h.Tasks.ListTickets(ctx, project.ID)
+	list, err := h.Tasks.ListTickets(ctx, project.ID, ports.TicketFilter{})
 	if err != nil {
 		return err
 	}
 	live, err := h.Sessions.List(ctx, ports.SessionFilter{ProjectID: project.ID})
+	if err != nil {
+		return err
+	}
+	// The brainstorm dialog's choices: an agent and a repository.
+	agents, err := h.Agents.ListAgents(ctx)
+	if err != nil {
+		return err
+	}
+	repos, err := h.Repositories.ListRepositories(ctx, project.ID)
 	if err != nil {
 		return err
 	}
@@ -92,7 +101,53 @@ func (h Handler) Project(w http.ResponseWriter, r *http.Request) error {
 	if frame.Rail.Seed != nil {
 		board.ArchivedCount = frame.Rail.Seed.ArchivedCount
 	}
-	return h.Render(w, r, http.StatusOK, ProjectPage(frame, project.ID, project.Name, board))
+	return h.Render(w, r, http.StatusOK, ProjectPage(frame, project.ID, project.Name, board, sessions.NewSessionFormOf(agents, repos)))
+}
+
+// ProjectSessions serves GET /projects/{project}/sessions: the project's
+// feature brainstorms, the sessions that run with no task (product mode).
+// The page is the task page without its task; ?session=<id> opens one.
+func (h Handler) ProjectSessions(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+	project, err := h.Projects.GetProject(ctx, r.PathValue("project"))
+	if err != nil {
+		return err
+	}
+	all, err := h.Sessions.List(ctx, ports.SessionFilter{ProjectID: project.ID})
+	if err != nil {
+		return err
+	}
+	list := ticketless(all)
+	agents, err := h.Agents.ListAgents(ctx)
+	if err != nil {
+		return err
+	}
+	repos, err := h.Repositories.ListRepositories(ctx, project.ID)
+	if err != nil {
+		return err
+	}
+	frame, err := h.Layout(ctx, sessions.BrainstormsTitle, project.ID, "")
+	if err != nil {
+		return err
+	}
+	frame.Live = true // sessionsPage follows the project's feed
+	view := sessions.NewPageView(frame, project, nil, list, agents, repos, h.Now())
+	if h.PullRequests != nil {
+		view.PullRequests = pullrequests.NewWatchSeed(ctx, h.PullRequests, project.ID, workspaceIDs(list))
+	}
+	return h.Render(w, r, http.StatusOK, sessions.Page(view))
+}
+
+// ticketless keeps the sessions that run with no task. The session filter
+// reads an empty ticket as "any", so the page filters here.
+func ticketless(list []*domain.Session) []*domain.Session {
+	out := []*domain.Session{}
+	for _, s := range list {
+		if s.TicketID == "" {
+			out = append(out, s)
+		}
+	}
+	return out
 }
 
 // ArchivedLister lists a project's archived tasks, newest archived first: what
@@ -197,14 +252,17 @@ func (h Handler) task(w http.ResponseWriter, r *http.Request, codeRoute *code.Ro
 	if view.Seed.Artifacts, err = h.designArtifacts(ctx, ports.ArtifactFilter{TicketID: task.ID}); err != nil {
 		return err
 	}
-	tickets, err := h.Tasks.ListTickets(ctx, project.ID)
+	tickets, err := h.Tasks.ListTickets(ctx, project.ID, ports.TicketFilter{})
 	if err != nil {
 		return err
 	}
 	view.Seed.Tasks = designTasks(tickets, project.ID)
+	view.Parent = ParentOf(project.ID, task, tickets)
 	var docs []*domain.Document
+	var docsOf func(string) []*domain.Document
 	if h.Docs != nil {
 		docs = h.Docs.ListTicketDocuments(ctx, task.ID)
+		docsOf = func(id string) []*domain.Document { return h.Docs.ListTicketDocuments(ctx, id) }
 		view.Documents = &sessions.DocumentsLink{
 			Href:      DocumentsHref(project.ID, task.ID, ""),
 			TicketID:  task.ID,
@@ -222,6 +280,7 @@ func (h Handler) task(w http.ResponseWriter, r *http.Request, codeRoute *code.Ro
 			view.Resources = resourcesLink(project.ID, task.ID, resources, comments)
 		}
 	}
+	view.Feature = BuildFeature(project.ID, task, tickets, docs, docsOf, h.Now())
 	view.Reviews = reviewsSeed(project.ID, task.ID, list, agents, []*domain.Ticket{task}, docs)
 	if h.PullRequests != nil {
 		view.PullRequests = pullrequests.NewWatchSeed(ctx, h.PullRequests, project.ID, workspaceIDs(list))
@@ -230,6 +289,7 @@ func (h Handler) task(w http.ResponseWriter, r *http.Request, codeRoute *code.Ro
 		view.Usage = h.usageTotals(ctx, project.ID, task.ID, list)
 	}
 	view.TokenSavers = tokensavers.Read(ctx, h.TokenSavers, domain.ActivationOwner{Level: domain.ActivationLevelTask, ID: task.ID})
+	view.Band = sessions.BandFrom(r)
 	for _, st := range Statuses {
 		view.StatusChoices = append(view.StatusChoices, sessions.StatusChoice{Value: st.Value, Label: st.Label, Selected: st.Value == string(task.Status)})
 	}

@@ -98,6 +98,14 @@ func (f *fakeChannel) RequestUserReview(_ context.Context, architectID string, r
 	return &domain.ReviewRequest{ID: "r1", Subject: req.Subject, State: domain.ReviewPending}, nil
 }
 
+func (f *fakeChannel) RequestUserReviewOn(_ context.Context, bySessionID, taskID string, req ports.ReviewRequestInput) (*domain.ReviewRequest, error) {
+	if err := f.record("RequestUserReviewOn"); err != nil {
+		return nil, err
+	}
+	f.caller, f.target, f.review = bySessionID, taskID, req
+	return &domain.ReviewRequest{ID: "r1", TaskID: taskID, Subject: req.Subject, State: domain.ReviewPending}, nil
+}
+
 func (f *fakeChannel) WithdrawReview(_ context.Context, architectID, reviewID string) (*domain.ReviewRequest, error) {
 	if err := f.record("WithdrawReview"); err != nil {
 		return nil, err
@@ -126,6 +134,14 @@ func (f *fakeChannel) SetTaskStatus(_ context.Context, by string, status domain.
 	return &domain.Ticket{ID: "tk", Status: status}, nil
 }
 
+func (f *fakeChannel) SetTaskStatusOn(_ context.Context, by, taskID string, status domain.TicketStatus, reason string) (*domain.Ticket, error) {
+	if err := f.record("SetTaskStatusOn"); err != nil {
+		return nil, err
+	}
+	f.caller, f.target, f.status, f.reason = by, taskID, status, reason
+	return &domain.Ticket{ID: taskID, Status: status}, nil
+}
+
 func (f *fakeChannel) SetStatusCheck(_ context.Context, architectID, delegateID string, every int) (*domain.StatusCheck, error) {
 	if err := f.record("SetStatusCheck"); err != nil {
 		return nil, err
@@ -146,10 +162,14 @@ var _ ports.TaskChannel = (*fakeChannel)(nil)
 // channelFixture: one task with an architect ("arch"), its delegate ("dlg")
 // and a peer a person started ("peer"), served by the tools over ch.
 type channelFixture struct {
-	ch      *fakeChannel
-	tools   map[string]domain.Tool
-	starter *fakeStarter
-	taskID  string
+	ch        *fakeChannel
+	tools     map[string]domain.Tool
+	starter   *fakeStarter
+	taskID    string
+	projectID string
+	plan      *planning.Service
+	projects  *sqlite.ProjectRepository
+	sessions  *sqlite.SessionRepository
 }
 
 func newChannelFixture(t *testing.T) *channelFixture {
@@ -162,7 +182,7 @@ func newChannelFixture(t *testing.T) *channelFixture {
 	sessions := sqlite.NewSessionRepository(db)
 	plan := planning.NewService(sqlite.NewTicketRepository(db), sqlite.NewDocumentRepository(db), projects)
 	proj, _ := projects.Create("p", t.TempDir())
-	task, _ := plan.CreateTicket(context.Background(), proj.ID, "Architect highlights", "", domain.TicketStatusInProgress)
+	task, _ := plan.CreateTicket(context.Background(), proj.ID, "Architect highlights", "", domain.TicketStatusInProgress, "")
 	for _, s := range []*domain.Session{
 		{ID: "arch", ProjectID: proj.ID, TicketID: task.ID, RepositoryID: "r-api", Status: domain.SessionRunning, Mode: domain.SessionModeArchitect},
 		{ID: "dlg", ProjectID: proj.ID, TicketID: task.ID, RepositoryID: "r-api", Status: domain.SessionRunning, ParentSessionID: "arch"},
@@ -183,7 +203,7 @@ func newChannelFixture(t *testing.T) *channelFixture {
 		PeerStarter{Sessions: starter, Repositories: repoList{{ID: "r-api", Name: "api"}}}, ArtifactTooling{}, ch, NotificationTooling{}) {
 		tools[tl.Name] = tl
 	}
-	return &channelFixture{ch: ch, tools: tools, starter: starter, taskID: task.ID}
+	return &channelFixture{ch: ch, tools: tools, starter: starter, taskID: task.ID, projectID: proj.ID, plan: plan, projects: projects, sessions: sessions}
 }
 
 // call runs a tool as sessionID and reads the result as the agent does: JSON.

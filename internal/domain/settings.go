@@ -13,6 +13,15 @@ const SettingSkillsPublishRoot = "skills.publish_root"
 // worktrees are created under. Empty means the built-in default.
 const SettingWorkspacesRoot = "workspaces.root"
 
+// SettingAgentsMoveDocuments is the settings key behind "Agents move
+// documents to project": "true" lets a session move its task's documents to
+// project level; unset or "false", only the person does (ADR 0020).
+const SettingAgentsMoveDocuments = "documents.agents_move_to_project"
+
+// AgentsMoveDocuments reports whether the stored value of
+// SettingAgentsMoveDocuments allows agent sessions to move documents.
+func AgentsMoveDocuments(value string) bool { return value == "true" }
+
 // ValidateSetting checks a setting's value before it is stored. Keys without
 // rules accept anything.
 func ValidateSetting(key, value string) error {
@@ -23,6 +32,14 @@ func ValidateSetting(key, value string) error {
 		}
 	case SettingCavemanIntensity:
 		if _, err := ParseCavemanIntensity(value); err != nil {
+			return err
+		}
+	case SettingAgentsMoveDocuments:
+		if value != "" && value != "true" && value != "false" {
+			return &StructuredError{Code: "INVALID_INPUT", Message: key + " must be true or false"}
+		}
+	case SettingModelArchitect, SettingModelImplementation:
+		if err := validateModelSetting(key, value); err != nil {
 			return err
 		}
 	}

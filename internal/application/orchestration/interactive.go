@@ -29,22 +29,28 @@ func (s *Service) StartInteractive(ctx context.Context, req InteractiveRequest) 
 	if req.ProjectID == "" {
 		return nil, ports.AgentSpec{}, &domain.StructuredError{Code: "INVALID_INPUT", Message: "project_id is required"}
 	}
-	if req.TicketID == "" {
-		return nil, ports.AgentSpec{}, &domain.StructuredError{Code: "INVALID_INPUT", Message: "ticket_id is required"}
-	}
-	// prepare checks the project too, but the ticket is needed first (its
-	// title names the branch), and a missing project must not read as a
-	// ticket that belongs elsewhere.
-	if _, err := s.catalog.Projects.GetProject(ctx, req.ProjectID); err != nil {
-		return nil, ports.AgentSpec{}, err
-	}
-	ticket, err := s.ticketIn(ctx, req.ProjectID, req.TicketID)
-	if err != nil {
-		return nil, ports.AgentSpec{}, err
-	}
+	// The mode comes first: only a product-mode session may start with no
+	// task, on its project alone (ADR 0016).
 	mode, err := domain.ParseSessionMode(req.Mode)
 	if err != nil {
 		return nil, ports.AgentSpec{}, err
+	}
+	if req.TicketID == "" && mode.NeedsTask() {
+		return nil, ports.AgentSpec{}, &domain.StructuredError{Code: "INVALID_INPUT", Message: "ticket_id is required"}
+	}
+	// The project is read before the ticket, though prepare checks it too:
+	// a missing project must answer PROJECT_NOT_FOUND, not read as a ticket
+	// that belongs elsewhere. The ticket, when there is one, comes next: its
+	// title names the branch, so both are in hand before prepare runs.
+	project, err := s.catalog.Projects.GetProject(ctx, req.ProjectID)
+	if err != nil {
+		return nil, ports.AgentSpec{}, err
+	}
+	var ticket *domain.Ticket
+	if req.TicketID != "" {
+		if ticket, err = s.ticketIn(ctx, req.ProjectID, req.TicketID); err != nil {
+			return nil, ports.AgentSpec{}, err
+		}
 	}
 	if req.StatusCheckMinutes != nil {
 		if err := domain.ValidStatusCheckMinutes(*req.StatusCheckMinutes); err != nil {
@@ -54,7 +60,13 @@ func (s *Service) StartInteractive(ctx context.Context, req InteractiveRequest) 
 
 	// A task can hold several sessions at once, so the branch carries part of
 	// the session id: two sessions on one task must never race for one branch.
+	// A session with no task is named after the product work on its project.
+	model := s.sessionModel(mode, req.ParentSessionID, req.Model)
 	id := llmkit.NewSessionID()
+	task, branch := "Product: "+project.Name, defaultBranchName("product "+project.Name)
+	if ticket != nil {
+		task, branch = ticket.Title, defaultBranchName(ticket.Title)
+	}
 	p, err := s.prepare(ctx, prepareInput{
 		ID:           id,
 		ProjectID:    req.ProjectID,
@@ -62,9 +74,9 @@ func (s *Service) StartInteractive(ctx context.Context, req InteractiveRequest) 
 		AgentID:      req.AgentID,
 		ZoneID:       req.ZoneID,
 		TicketID:     req.TicketID,
-		Branch:       defaultBranchName(ticket.Title) + "-" + id[:8],
+		Branch:       branch + "-" + id[:8],
 		BaseBranch:   req.BaseBranch,
-		Model:        req.Model,
+		Model:        model,
 		AutoAccept:   req.AutoAccept,
 		Mode:         mode,
 		Role:         s.newSessionRole(ctx, mode, req.ParentSessionID),
@@ -73,8 +85,9 @@ func (s *Service) StartInteractive(ctx context.Context, req InteractiveRequest) 
 		return nil, ports.AgentSpec{}, err
 	}
 
-	spec := s.agentSpec(p.cfg, ports.Conversation{ID: id}, modePrompt(mode, ticket, req.Prompt))
+	spec := s.agentSpec(p.cfg, ports.Conversation{ID: id}, modePrompt(mode, ticket, project, req.Prompt))
 	spec.EnvFile = p.envFile
+	confineSpec(&spec, p.sandbox.policy)
 	created, err := s.sessions.Create(&domain.Session{
 		ID:              id,
 		ProjectID:       req.ProjectID,
@@ -84,9 +97,9 @@ func (s *Service) StartInteractive(ctx context.Context, req InteractiveRequest) 
 		AgentID:         req.AgentID,
 		ZoneID:          req.ZoneID,
 		TicketID:        req.TicketID,
-		Task:            ticket.Title,
+		Task:            task,
 		WorkingDir:      p.cfg.WorkingDir,
-		Model:           req.Model,
+		Model:           model,
 		Status:          domain.SessionRunning,
 		AutoRun:         p.permission == llmkit.PermissionBypass,
 		Interactive:     true,
@@ -99,9 +112,10 @@ func (s *Service) StartInteractive(ctx context.Context, req InteractiveRequest) 
 		TokenSavers:             p.savers.active,
 		TokenSaversNotInstalled: p.savers.notInstalled,
 		CavemanIntensity:        p.savers.cavemanIntensity,
+		Sandbox:                 p.sandbox.facts,
 	})
 	if err == nil {
-		s.adoptCleanup(id, p.cleanup)
+		s.adoptCleanup(id, withViolations(p.cleanup, s.collectViolations(id, p.cfg.WorkingDir, p.sandbox.facts)))
 		s.courier.setTurn(id, startTurn(spec))
 		s.publish(id, SessionEvent{Type: "status", Status: domain.SessionRunning, Text: startedText(runsOn), At: time.Now()})
 		// Announced before the CLI runs, so the architect channel has the
@@ -154,20 +168,33 @@ func (s *Service) ResumeInteractive(ctx context.Context, req ports.ResumeRequest
 		return nil, ports.AgentSpec{}, err
 	}
 
-	var ticket *domain.Ticket
+	subject := sessionSubject{mode: sess.Mode}
 	if sess.TicketID != "" && s.tickets != nil {
-		ticket = s.tickets.Get(context.WithoutCancel(ctx), sess.TicketID) // the resume goes on without the request
+		subject.ticket = s.tickets.Get(context.WithoutCancel(ctx), sess.TicketID) // the resume goes on without the request
+	}
+	if sess.TicketID == "" && !sess.Mode.NeedsTask() {
+		// A session with no task is briefed on its project again, and its
+		// shell is the project's: the project has to be there.
+		if subject.project, err = s.catalog.Projects.GetProject(context.WithoutCancel(ctx), sess.ProjectID); err != nil {
+			return nil, ports.AgentSpec{}, err
+		}
 	}
 	ag, err := s.resolveAgent(sess.AgentID, sess.Mode)
 	if err != nil {
+		return nil, ports.AgentSpec{}, err
+	}
+	if err := s.ready(ctx); err != nil {
+		if ag.cleanup != nil {
+			ag.cleanup()
+		}
 		return nil, ports.AgentSpec{}, err
 	}
 	permission := llmkit.PermissionAsk
 	if sess.AutoRun {
 		permission = llmkit.PermissionBypass
 	}
-	cfg := s.sessionConfig(sess.ID, sess.WorkingDir, sess.Model, nil, permission, ag, ticket, sess.ZoneID, s.sessionRole(ctx, sess.ID))
-	cleanup, err := s.withShell(sess.ID, ticket, &cfg, ag.cleanup)
+	cfg := s.sessionConfig(sess.ID, sess.WorkingDir, sess.Model, nil, permission, ag, subject, sess.ZoneID, s.sessionRole(ctx, sess.ID))
+	cleanup, err := s.withShell(sess.ID, subject, &cfg, ag.cleanup)
 	if err != nil {
 		return nil, ports.AgentSpec{}, err
 	}
@@ -175,10 +202,29 @@ func (s *Service) ResumeInteractive(ctx context.Context, req ports.ResumeRequest
 	if err != nil {
 		return nil, ports.AgentSpec{}, err
 	}
+	s.withAgentCredential(&cfg)
+	s.withKeychainShim(&cfg)
 	s.rewireTokenSavers(ctx, sess, &cfg)
+	// A resume starts under the rules now in force, not the ones it started
+	// under, and records them.
+	cleanup, err = s.withTempDir(sess.ID, &cfg, cleanup)
+	if err != nil {
+		return nil, ports.AgentSpec{}, err
+	}
+	sb, err := s.resumeSandbox(ctx, sess, cfg.Env)
+	if err != nil {
+		if cleanup != nil {
+			cleanup()
+		}
+		return nil, ports.AgentSpec{}, err
+	}
 	spec := s.agentSpec(cfg, ports.Conversation{ID: claudeID(sess), Resume: true}, "")
 	spec.EnvFile = envFile
+	confineSpec(&spec, sb.policy)
 	err = s.sessions.UpdateRunner(sess.ID, runsOn, runnerHost(runsOn, req.RunnerHost))
+	if err == nil && sb.facts != nil {
+		err = s.sessions.UpdateSandbox(sess.ID, *sb.facts)
+	}
 	if err == nil {
 		err = s.sessions.UpdateStatus(sess.ID, domain.SessionRunning)
 	}
@@ -188,7 +234,7 @@ func (s *Service) ResumeInteractive(ctx context.Context, req ports.ResumeRequest
 		}
 		return nil, ports.AgentSpec{}, err
 	}
-	s.adoptCleanup(sess.ID, cleanup)
+	s.adoptCleanup(sess.ID, withViolations(cleanup, s.collectViolations(sess.ID, sess.WorkingDir, sb.facts)))
 	s.courier.setTurn(sess.ID, turnIdle) // a resumed conversation waits for its next prompt
 	s.publish(sess.ID, SessionEvent{Type: "status", Status: domain.SessionRunning, Text: "resumed" + strings.TrimPrefix(startedText(runsOn), "started"), At: time.Now()})
 	if runsOn == domain.RunnerServer {
@@ -197,6 +243,20 @@ func (s *Service) ResumeInteractive(ctx context.Context, req ports.ResumeRequest
 		}
 	}
 	return s.withResumability(ctx, s.sessions.Get(sess.ID)), spec, nil
+}
+
+// resumeSandbox is the sandbox step of a resume: the session's policy under
+// the current settings.
+func (s *Service) resumeSandbox(ctx context.Context, sess *domain.Session, env []string) (sandboxed, error) {
+	repo := &domain.Repository{}
+	if s.Sandbox != nil && sess.RepositoryID != "" {
+		r, err := s.catalog.Repositories.GetRepository(ctx, sess.RepositoryID)
+		if err != nil {
+			return sandboxed{}, err
+		}
+		repo = r
+	}
+	return s.sandbox(ctx, prepareInput{ProjectID: sess.ProjectID, Mode: sess.Mode}, sess.ID, repo, sess.WorkingDir, env)
 }
 
 // claimResume marks id as being resumed; false when another call already is.
@@ -524,4 +584,26 @@ func (s *Service) agentSpec(cfg llmkit.SessionConfig, conv ports.Conversation, p
 		spec.HookURL = s.SessionHookURL(cfg.ID)
 	}
 	return spec
+}
+
+// agentsMoveDocuments is the setting "Agents move documents to project" now;
+// a brief states it as its session starts (ADR 0020).
+func (s *Service) agentsMoveDocuments() bool {
+	return s.Settings != nil && domain.AgentsMoveDocuments(s.Settings.Setting(domain.SettingAgentsMoveDocuments))
+}
+
+// sessionModel is the model a new session starts with: the one its start
+// names, else its tier's from the settings (domain.ResolveSessionModel).
+func (s *Service) sessionModel(mode domain.SessionMode, parentSessionID, named string) string {
+	if named != "" {
+		return named
+	}
+	var architect, implementation string
+	if s.Settings != nil {
+		architect = s.Settings.Setting(domain.SettingModelArchitect)
+		implementation = s.Settings.Setting(domain.SettingModelImplementation)
+	}
+	return domain.ResolveSessionModel(mode, parentSessionID != "",
+		domain.TierModel(architect, domain.DefaultArchitectModel),
+		domain.TierModel(implementation, domain.DefaultImplementationModel))
 }

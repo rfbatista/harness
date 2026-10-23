@@ -14,10 +14,10 @@
  *
  * @typedef {object} StartRequest  an interactive session on a task, run in a PTY on the server
  * @property {string} projectId
- * @property {string} ticketId
+ * @property {string} ticketId      "" starts it on the project with no task: accepted only with mode "product"
  * @property {string} repositoryId  where its worktree is cut
  * @property {string} agentId       "" runs plain claude
- * @property {""|"architect"|"implement"|"design"} [mode] a role on top of the agent: "architect" grills the person, shapes the task into specs and delegates them; "implement" turns a Spec task document into reviewed tickets and implements them; "design" publishes components and media to the Design tab
+ * @property {""|"architect"|"implement"|"design"|"product"} [mode] a role on top of the agent: "architect" grills the person, shapes the task into specs and delegates them; "implement" turns a Spec task document into reviewed tickets and implements them; "design" publishes components and media to the Design tab; "product" interviews the person, writes a PRD and creates child tasks with briefs, never code
  * @property {string} prompt        the optional first message; "" opens claude waiting for you
  * @property {"off"|"edits"|"all"} autoAccept  which tool calls run without asking
  * @property {string} [baseBranch]  the branch its worktree branches off; "" means the checkout's HEAD
@@ -37,7 +37,8 @@
  * @property {(request: StartRequest) => Promise<Session>} start
  *           Starts an interactive session on the server's terminal host: cuts
  *           its worktree and branch, then runs claude in a PTY. Rejects with
- *           INVALID_INPUT (no repository), PROJECT_NOT_FOUND, TICKET_NOT_FOUND,
+ *           INVALID_INPUT (no repository, or no task in a mode other than
+ *           product), PROJECT_NOT_FOUND, TICKET_NOT_FOUND,
  *           CROSS_PROJECT_ACCESS, CLAUDE_CLI_NOT_FOUND or
  *           SERVER_HOSTING_UNAVAILABLE.
  * @property {(repositoryId: string) => Promise<Branch[]>} listBranches
@@ -60,6 +61,24 @@
  *             onChange: (change: SessionChange) => void,
  *             onStatus: (status: FeedStatus) => void) => () => void} follow
  *           Follows the project's changes until the returned function is called.
+ */
+
+/**
+ * Merging a session's branch into its repository's default branch, in the
+ * local checkout, which the harness server does (ADR 0021). Implemented by
+ * infrastructure/merge-gateway.js (GET and POST /api/sessions/{id}/merge).
+ *
+ * @typedef {import("./session.js").MergeResult} MergeResult
+ * @typedef {{ available: boolean, into: string, reason: string }} MergeOffer
+ *          whether a merge applies, into which branch, and the code saying why not
+ *
+ * @typedef {object} MergeGateway
+ * @property {(sessionId: string, signal?: AbortSignal) => Promise<MergeOffer>} offer
+ *           Rejects with SESSION_NOT_FOUND.
+ * @property {(sessionId: string) => Promise<MergeResult>} merge
+ *           Merges with --no-ff. A refusal rejects with its code and reason
+ *           (MERGE_CHECKOUT_DIRTY, MERGE_WRONG_BRANCH, MERGE_ALREADY_MERGED,
+ *           MERGE_CONFLICT, …); it is on the session's lastMerge too.
  */
 
 /**
@@ -214,3 +233,15 @@
  */
 
 export {};
+
+/**
+ * A session's sandbox violations, newest first. Implemented by
+ * infrastructure/sandbox-gateway.js (GET /api/sessions/{id}/sandbox/violations).
+ *
+ * @typedef {import("./sandbox.js").ViolationLog} ViolationLog
+ *
+ * @typedef {object} SandboxGateway
+ * @property {(sessionId: string, signal?: AbortSignal) => Promise<ViolationLog>} violations
+ *           Rejects with SESSION_NOT_FOUND. `available` is false where the
+ *           platform collects none (Linux).
+ */

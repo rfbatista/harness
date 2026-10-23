@@ -50,12 +50,12 @@ func (r *TicketRepository) list(q *gorm.DB) []*domain.Ticket {
 	return out
 }
 
-func (r *TicketRepository) Create(projectID, title, description string, status domain.TicketStatus) (*domain.Ticket, error) {
+func (r *TicketRepository) Create(projectID, title, description string, status domain.TicketStatus, parentID string) (*domain.Ticket, error) {
 	id, err := genID()
 	if err != nil {
 		return nil, err
 	}
-	m := &TicketModel{ID: id, ProjectID: projectID, Title: title, Description: description, Status: string(status)}
+	m := &TicketModel{ID: id, ProjectID: projectID, Title: title, Description: description, Status: string(status), ParentID: parentID}
 	if err := r.db.Create(m).Error; err != nil {
 		return nil, err
 	}
@@ -65,7 +65,7 @@ func (r *TicketRepository) Create(projectID, title, description string, status d
 	return m.ToDomain(), nil
 }
 
-func (r *TicketRepository) Update(id, title, description string, status domain.TicketStatus) (*domain.Ticket, error) {
+func (r *TicketRepository) Update(id, title, description string, status domain.TicketStatus, parentID string) (*domain.Ticket, error) {
 	var m TicketModel
 	if err := r.db.First(&m, "id = ?", id).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
@@ -73,7 +73,7 @@ func (r *TicketRepository) Update(id, title, description string, status domain.T
 		}
 		return nil, err
 	}
-	updates := map[string]interface{}{"title": title, "description": description, "status": string(status)}
+	updates := map[string]interface{}{"title": title, "description": description, "status": string(status), "parent_id": parentID}
 	if err := r.db.Model(&m).Updates(updates).Error; err != nil {
 		return nil, err
 	}

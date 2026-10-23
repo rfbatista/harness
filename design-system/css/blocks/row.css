@@ -49,6 +49,9 @@
       white-space: nowrap;
     }
 
+    /* A session that ran without the sandbox says so in its meta, in attention ink. */
+    &[data-unsandboxed] .meta { color: var(--color-attention-strong); }
+
     &:is([aria-selected="true"], [aria-current="true"], [aria-current="page"]) { background: var(--color-selected); }
     &[data-attention] { background: var(--color-attention-wash); }
     &[data-attention][aria-selected="true"] {

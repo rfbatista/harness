@@ -23,6 +23,8 @@ var SessionTaskToolNames = []string{
 	"list_project_repositories",
 	"list_bounded_contexts",
 	"list_agents",
+	"create_task",
+	"list_project_tasks",
 	"publish_artifact",
 	"attach_artifact_to_task",
 	"detach_artifact_from_task",
@@ -34,6 +36,7 @@ var SessionTaskToolNames = []string{
 	"list_review_requests",
 	"set_status_check",
 	"list_status_checks",
+	"merge_session_branch",
 	"list_notifications",
 	"notify",
 }
@@ -48,6 +51,9 @@ const MaxLiveTaskSessions = 8
 type PeerStarter struct {
 	Sessions     ports.InteractiveSessions
 	Repositories ports.RepositoryLister
+	// Merger merges a delegate's branch for merge_session_branch; nil leaves
+	// that tool answering that it is unavailable.
+	Merger ports.BranchMerger
 }
 
 // ArtifactTooling is what the artifact tools need: the publisher, and how to
@@ -94,7 +100,7 @@ func SessionTaskTools(planningSvc ports.Planning, sessions ports.SessionReposito
 				`"agent":{"type":"string","description":"The agent to run, by name or id. Default: none (plain claude)."},` +
 				`"repository":{"type":"string","description":"The repository to work in, by name or id. Default: yours."},` +
 				`"base_branch":{"type":"string","description":"The branch its worktree branches off. Default: the repository's default branch."},` +
-				`"mode":{"type":"string","enum":["","architect","implement","design"],"description":"architect: the session grills the person on its prompt, shapes it into per-application specs and delegates them. implement: the session turns a Spec task document into tickets, has the architect review them, then implements them test first on its branch. design: the session produces components, images and videos and publishes each to the Design tab. Default: none."},` +
+				`"mode":{"type":"string","enum":["","architect","implement","design","product"],"description":"architect: the session grills the person on its prompt, shapes it into per-application specs and delegates them. implement: the session turns a Spec task document into tickets, has the architect review them, then implements them test first on its branch. design: the session produces components, images and videos and publishes each to the Design tab. product: the session interviews the person on a feature, writes its PRD on the task, creates one child task per piece of work with a brief each, and asks for review; it never writes code. Default: none."},` +
 				`"status_check_minutes":{"type":"integer","minimum":0,"maximum":240,"description":"Architect only: minutes between the checks that wake you about this session, 2–240; 0 for no loop. Default: 10."}}}`),
 			Source: "code",
 			Handler: func(ctx context.Context, args map[string]any) (any, error) {
@@ -153,12 +159,13 @@ func SessionTaskTools(planningSvc ports.Planning, sessions ports.SessionReposito
 				"pick the work up, review when it is ready for the person to check; only the person moves it to done. Asking " +
 				"for done fails with TASK_DONE_IS_THE_PERSONS. Only the status changes. The same status again is fine. Give a reason when you change it. If this " +
 				"task has an architect and you are its delegate, this fails with TASK_STATUS_OWNED_BY_ARCHITECT: report to the " +
-				"architect with message_architect instead.",
+				"architect with message_architect instead. " + taskIDAdvice,
 			InputSchema: schemaFromJSON(`{"type":"object","required":["status"],"properties":{"status":{"type":"string","enum":["backlog","todo","in_progress","review","done"],"description":"The task's new status."},` +
+				taskIDSchema + `,` +
 				`"reason":{"type":"string","maxLength":` + strconv.Itoa(domain.MaxStatusReasonLen) + `,"description":"Why the status moves, in a sentence."}}}`),
 			Source: "code",
 			Handler: func(ctx context.Context, args map[string]any) (any, error) {
-				scope, err := resolveTaskScope(ctx, planningSvc, sessions)
+				scope, err := resolveNamedTaskScope(ctx, planningSvc, sessions, args)
 				if err != nil {
 					return nil, err
 				}
@@ -170,12 +177,18 @@ func SessionTaskTools(planningSvc ports.Planning, sessions ports.SessionReposito
 				if utf8.RuneCountInString(reason) > domain.MaxStatusReasonLen {
 					return nil, invalidInput("reason is limited to " + strconv.Itoa(domain.MaxStatusReasonLen) + " characters")
 				}
-				// The task comes from the session, never from the arguments.
+				// The task comes from the session; only a session with no task
+				// names one, of its own project (resolveNamedTaskScope).
 				var tk *domain.Ticket
-				if channel != nil {
+				switch {
+				case channel != nil && scope.named:
+					tk, err = channel.SetTaskStatusOn(ctx, scope.session.ID, scope.ticket.ID, status, reason)
+				case channel != nil:
 					// The channel enforces that only the architect moves a task that has one.
 					tk, err = channel.SetTaskStatus(ctx, scope.session.ID, status, reason)
-				} else {
+				case scope.named:
+					tk, err = planningSvc.PatchTicket(ctx, scope.ticket.ID, ports.TicketPatch{Status: &status, StatusReason: reason, BySessionID: scope.session.ID})
+				default:
 					tk, err = planningSvc.PatchTicket(ctx, scope.ticket.ID, ports.TicketPatch{Status: &status})
 				}
 				if err != nil {
@@ -186,8 +199,10 @@ func SessionTaskTools(planningSvc ports.Planning, sessions ports.SessionReposito
 		},
 	}
 	tools = append(tools, sessionChannelTools(planningSvc, sessions, channel)...)
-	tools = append(tools, sessionProjectTools(planningSvc, sessions, agents, arch, start.Repositories)...)
-	tools = append(tools, sessionNotificationTools(planningSvc, sessions, notes)...)
+	tools = append(tools, sessionMergeTools(planningSvc, sessions, channel, start.Merger)...)
+	tools = append(tools, sessionProjectTools(sessions, agents, arch, start.Repositories)...)
+	tools = append(tools, sessionTasksTools(planningSvc, sessions)...)
+	tools = append(tools, sessionNotificationTools(sessions, notes)...)
 	return codedTools(append(tools, sessionArtifactTools(planningSvc, sessions, artifacts)...))
 }
 
@@ -289,10 +304,46 @@ func taskRoles(ctx context.Context, scope *taskScope, channel ports.TaskChannel)
 }
 
 // taskScope is the task a session is allowed to act on: resolved once per call
-// from the session id in the context, never from the tool arguments.
+// from the session id in the context. Only a session with no task of its own
+// names one in the arguments (named), and only a task of its project.
 type taskScope struct {
 	session *domain.Session
 	ticket  *domain.Ticket
+	named   bool
+}
+
+// taskIDAdvice and taskIDSchema describe the task_id that request_user_review
+// and update_task_status take from a session with no task (ADR 0016).
+const taskIDAdvice = "A session with no task of its own (a product session on a project) passes task_id, a task of its " +
+	"project such as the feature task it created; a session on a task never does."
+
+const taskIDSchema = `"task_id":{"type":"string","description":"Only for a session with no task of its own: the task of this project to act on, such as the feature task you created. A session on a task acts on that task and is refused a task_id (INVALID_INPUT)."}`
+
+// resolveNamedTaskScope is resolveTaskScope for the tools a session with no
+// task may aim at a task of its project with task_id. Without task_id it is
+// resolveTaskScope (SESSION_HAS_NO_TASK for a ticket-less session). With one,
+// a session on a task is refused (INVALID_INPUT: it acts on its own task),
+// and the task must be in the session's project (TASK_NOT_ON_PROJECT).
+func resolveNamedTaskScope(ctx context.Context, planningSvc ports.Planning, sessions ports.SessionRepository, args map[string]any) (*taskScope, error) {
+	taskID := strings.TrimSpace(getString(args, "task_id", ""))
+	if taskID == "" {
+		return resolveTaskScope(ctx, planningSvc, sessions)
+	}
+	sess, err := resolveProjectScope(ctx, sessions)
+	if err != nil {
+		return nil, err
+	}
+	if sess.TicketID != "" {
+		return nil, invalidInput("this session works on task " + sess.TicketID + " and acts on it: task_id is only for a session with no task")
+	}
+	tk, err := planningSvc.GetTicket(ctx, taskID)
+	if err != nil {
+		return nil, err
+	}
+	if tk.ProjectID != sess.ProjectID {
+		return nil, &domain.StructuredError{Code: "TASK_NOT_ON_PROJECT", Message: "task " + taskID + " is in another project"}
+	}
+	return &taskScope{session: sess, ticket: tk, named: true}, nil
 }
 
 func resolveTaskScope(ctx context.Context, planningSvc ports.Planning, sessions ports.SessionRepository) (*taskScope, error) {

@@ -24,15 +24,19 @@ import (
 	"operators-mcp/internal/adapter/out/agents/claudetext"
 	"operators-mcp/internal/adapter/out/blobstore"
 	"operators-mcp/internal/adapter/out/configrepo"
+	"operators-mcp/internal/adapter/out/developerdir"
 	"operators-mcp/internal/adapter/out/filesystem"
 	"operators-mcp/internal/adapter/out/gitcli"
 	"operators-mcp/internal/adapter/out/githubapi"
+	"operators-mcp/internal/adapter/out/keychainshim"
 	"operators-mcp/internal/adapter/out/persistence/sqlite"
 	"operators-mcp/internal/app/catalog"
+	"operators-mcp/internal/application/agentcredential"
 	"operators-mcp/internal/application/apps"
 	"operators-mcp/internal/application/artifacts"
 	"operators-mcp/internal/application/execution"
 	"operators-mcp/internal/application/gitcredentials"
+	"operators-mcp/internal/application/keychainpath"
 	"operators-mcp/internal/application/orchestration"
 	"operators-mcp/internal/application/planning"
 	"operators-mcp/internal/application/taskchannel"
@@ -98,10 +102,18 @@ func newGitHistory(cfg Config) *gitcli.History { return gitcli.NewHistory(cfg.gi
 func newBranchPublisher(cfg Config) *gitcli.BranchPublisher {
 	return gitcli.NewBranchPublisher(cfg.gitOptions()...)
 }
-func newGitCode(cfg Config) *gitcli.Code { return gitcli.NewCode(cfg.gitOptions()...) }
+func newGitMerger(cfg Config) *gitcli.Merger { return gitcli.NewMerger(cfg.gitOptions()...) }
+func newGitCode(cfg Config) *gitcli.Code     { return gitcli.NewCode(cfg.gitOptions()...) }
 
-// newDB opens the SQLite database and registers a hook to close it on shutdown.
+// newDB opens the SQLite database and registers a hook to close it on
+// shutdown. The database's folder is made first: the default data dir,
+// ~/.harness, may not exist yet.
 func newDB(lc fx.Lifecycle, cfg Config) (*gorm.DB, error) {
+	if !cfg.inMemory() {
+		if err := os.MkdirAll(filepath.Dir(cfg.DBPath), 0o700); err != nil {
+			return nil, fmt.Errorf("make the database's folder: %w", err)
+		}
+	}
 	db, err := sqlite.Open(cfg.DBPath, sqlite.WithSlowThreshold(cfg.DBSlowThreshold))
 	if err != nil {
 		return nil, err
@@ -257,14 +269,19 @@ func newPlanningService(
 	return svc, nil
 }
 
-// dataDir is name next to the database, or a fresh temporary directory for
-// an in-memory one. It is always absolute: token savers installed under it
-// run from checkouts and worktrees, where a relative path points nowhere.
+// dataDir is name in the data dir (Config.DataDir, or the database's
+// folder), or a fresh temporary directory when there is none. It is always
+// absolute: token savers installed under it run from checkouts and
+// worktrees, where a relative path points nowhere.
 func dataDir(cfg Config, name string) (string, error) {
-	if cfg.DBPath == "" || cfg.DBPath == ":memory:" {
+	root, err := cfg.dataRoot()
+	if err != nil {
+		return "", err
+	}
+	if root == "" {
 		return os.MkdirTemp("", "harness-"+name+"-")
 	}
-	return filepath.Abs(filepath.Join(filepath.Dir(cfg.DBPath), name))
+	return filepath.Join(root, name), nil
 }
 
 // ExecutionModule wires the Genkit-backed execution layer: the LLM client, the
@@ -325,16 +342,26 @@ var AgentRuntimeModule = fx.Module("agentruntime",
 		newClaudeManager,
 		newBroker,
 		newHub,
-		asPort(sqlite.NewSessionRepository, new(ports.SessionRepository)),
+		sqlite.NewSessionRepository,
+		func(r *sqlite.SessionRepository) ports.SessionRepository { return r },
+		func(r *sqlite.SessionRepository) ports.SandboxViolationStore { return r },
+		newAgentClaudeHome,
 		asPort(newClaudeTranscripts, new(ports.ClaudeTranscripts)),
 		asPort(newClaudeTranscriptReader, new(ports.ClaudeTranscriptReader)),
 		newOrchestrationService,
+		platformSandboxDriver,
+		platformSandboxViolations,
+		newSandboxSettings,
+		newManagedClaude,
+		newManagedClaudeBin,
+		newAgentReadiness,
 		newAppsService,
 		asPort(sqlite.NewArtifactRepository, new(ports.ArtifactRepository)),
 		newArtifactsService,
 		newVirtualShells,
 	),
-	fx.Invoke(registerRuntimeShutdown, registerServerSessions, bindVirtualShells),
+	fx.Invoke(registerRuntimeShutdown, registerServerSessions, bindVirtualShells, bindSandboxSettings,
+		bindAgentReadiness),
 )
 
 // TaskChannelModule wires the architect channel: its tables, the service,
@@ -409,7 +436,7 @@ func newArtifactsService(cfg Config, repo ports.ArtifactRepository, sessions por
 // planning and their designs through the artifacts.
 func newVirtualShells(plan *planning.Service, art *artifacts.Service, sessions ports.SessionRepository, cat catalog.Catalog) *vshell.Service {
 	return vshell.New(vshell.Sources{Tickets: plan, Documents: plan, Comments: plan, Resources: plan, Artifacts: art, Writes: plan,
-		Designs: art, Sessions: sessions, Agents: cat.Agents})
+		Designs: art, Sessions: sessions, Agents: cat.Agents, Settings: cat.Settings})
 }
 
 // bindVirtualShells gives every session with a task its virtual shell, and
@@ -455,8 +482,11 @@ func newAppsService(orch *orchestration.Service, cat catalog.Catalog, host ports
 	return svc
 }
 
-func newRuntimeConfig(cfg Config) runtime.Config {
-	return runtime.Config{ClaudeBin: cfg.ClaudeBin, Shell: cfg.SessionShell, ProxyURL: cfg.llmProxyURL()}
+func newRuntimeConfig(cfg Config, bin ports.ManagedClaudeBin, home claudehome.Home, driver ports.SandboxDriver) runtime.Config {
+	return runtime.Config{
+		ClaudeBin: bin.Bin(), Shell: cfg.SessionShell, ProxyURL: cfg.llmProxyURL(),
+		ConfigDir: home.Path(), Sandbox: driver,
+	}
 }
 
 // registerServerSessions reconciles the interactive sessions the server runs
@@ -480,10 +510,15 @@ func registerServerSessions(lc fx.Lifecycle, svc *orchestration.Service) {
 	})
 }
 
-func newClaudeManager(cfg Config) llmkit.Manager {
+// newClaudeManager is the headless runtime: every agent claude runs from the
+// managed install (or the -claude.bin override) in the agent Claude home,
+// isolated from the person's own configuration (ADR 0018).
+func newClaudeManager(cfg Config, bin ports.ManagedClaudeBin, home claudehome.Home) llmkit.Manager {
 	base := cfg.loopbackBaseURL()
 	return claude.New(llmkit.Options{
-		Bin: cfg.ClaudeBin,
+		Bin:       bin.Bin(),
+		ConfigDir: home.Path(),
+		Isolated:  true,
 		ApprovalURL: func(sessionID string) string {
 			return base + mcpapprove.PathPrefix + sessionID
 		},
@@ -513,10 +548,60 @@ func newBroker(m llmkit.Manager) (*approval.Broker, error) {
 	return gated.Approvals(), nil
 }
 
-func newClaudeTranscripts() claudehome.Transcripts { return claudehome.Transcripts{} }
+// agentClaudeHomeDir is the agent Claude home in the data dir.
+func agentClaudeHomeDir(cfg Config) (string, error) { return dataDir(cfg, "claude-home") }
 
-func newClaudeTranscriptReader() *claudehome.TranscriptReader {
-	return claudehome.NewTranscriptReader("")
+// newAgentClaudeHome creates and seeds the agent Claude home, so an
+// interactive claude started with its path as CLAUDE_CONFIG_DIR meets no
+// first-run prompt.
+func newAgentClaudeHome(cfg Config) (claudehome.Home, error) {
+	dir, err := agentClaudeHomeDir(cfg)
+	if err != nil {
+		return claudehome.Home{}, err
+	}
+	h := claudehome.NewHome(dir)
+	return h, h.Ensure()
+}
+
+// agentHomeExposed checks once, now, whether the agent Claude home lies in a
+// git work tree that does not ignore it, logs a warning if so, and returns
+// the answer for the Agent isolation page.
+func agentHomeExposed(cfg Config) func() bool {
+	exposed := false
+	if dir, err := agentClaudeHomeDir(cfg); err == nil {
+		exposed = gitcli.HomeExposedToGit(cfg.GitBin, dir)
+		if exposed {
+			slog.Warn("the agent home is inside a git work tree and not ignored: add it to .gitignore", "dir", dir)
+		}
+	}
+	return func() bool { return exposed }
+}
+
+// agentHasLogin says, at each call, whether the agent Claude home holds a
+// Claude login: the file is read, no process is started.
+func agentHasLogin(cfg Config) func() bool {
+	return func() bool {
+		dir, err := agentClaudeHomeDir(cfg)
+		return err == nil && claudehome.NewHome(dir).HasLogin()
+	}
+}
+
+// legacyClaudeDir is the person's own ~/.claude, searched read-only for
+// transcripts older than the agent Claude home.
+func legacyClaudeDir() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(home, ".claude")
+}
+
+func newClaudeTranscripts(h claudehome.Home) claudehome.Transcripts {
+	return claudehome.Transcripts{Dir: h.Path(), Legacy: legacyClaudeDir()}
+}
+
+func newClaudeTranscriptReader(h claudehome.Home) *claudehome.TranscriptReader {
+	return &claudehome.TranscriptReader{Dir: h.Path(), Legacy: legacyClaudeDir()}
 }
 
 func newHub() *orchestration.Hub { return orchestration.NewHub(256) }
@@ -525,7 +610,7 @@ func newHub() *orchestration.Hub { return orchestration.NewHub(256) }
 // reads to set sessions up.
 func newOrchestrationService(
 	cfg Config,
-	runtime llmkit.Manager,
+	manager llmkit.Manager,
 	broker *approval.Broker,
 	hub *orchestration.Hub,
 	sessions ports.SessionRepository,
@@ -535,13 +620,19 @@ func newOrchestrationService(
 	transcripts ports.ClaudeTranscripts,
 	transcriptReader ports.ClaudeTranscriptReader,
 	terminals ports.TerminalHost,
+	sandboxDriver ports.SandboxDriver,
+	violations ports.SandboxViolationSource,
+	violationStore ports.SandboxViolationStore,
+	agentHome claudehome.Home,
+	claudeBin ports.ManagedClaudeBin,
 ) *orchestration.Service {
-	svc := orchestration.NewService(runtime, broker, hub, sessions, orchestration.Catalog{
+	svc := orchestration.NewService(manager, broker, hub, sessions, orchestration.Catalog{
 		Projects:     cat.Projects,
 		Repositories: cat.Projects,
 		Agents:       cat.Agents,
 		MCPServers:   cat.Capabilities,
 		Zones:        cat.Architecture,
+		Contexts:     cat.Architecture,
 	}, tickets, ws)
 	base := cfg.loopbackBaseURL()
 	// The route belongs to an inbound adapter, so the application layer is
@@ -556,12 +647,66 @@ func newOrchestrationService(
 		return base + httpapi.SessionShellPath(sessionID)
 	}
 	svc.ShimBinary = cfg.ShimBinary
+	svc.DeveloperBin = developerdir.Bin
 	svc.TokenSavers = cat.Capabilities
+	svc.Settings = cat.Settings
 	svc.Transcripts = transcripts
 	svc.TranscriptReader = transcriptReader
 	svc.Terminals = terminals
 	svc.Events = cat.Bus
+	toolsDir, _ := dataDir(cfg, "tools")
+	userHome, _ := os.UserHomeDir()
+	allow := sandboxAllowlist(allowSources{
+		Home: userHome, ToolsDir: toolsDir, ClaudeDirs: runtime.ClaudeInstallDirs(claudeBin.Bin()), Getenv: os.Getenv,
+	})
+	// A platform without a driver leaves Driver nil: with the sandbox on,
+	// a session start then refuses (ADR 0017).
+	svc.Sandbox = &orchestration.Sandbox{
+		Driver:  sandboxDriver,
+		Enabled: orchestration.SandboxSwitch(cat.Settings),
+		Home:    agentHome.Path(),
+		// Their git config is read-only to a session; not their ssh folder.
+		UserHome:   userHome,
+		ConfigHome: os.Getenv("XDG_CONFIG_HOME"),
+		Bin:        claudeBin.Bin(),
+		Allow:      func(string) []ports.SandboxPath { return allow },
+		// What no session grants is hidden: the workspaces root and, for
+		// one-shots, every checkout.
+		WorkspacesRoot: ws.Root,
+		Checkouts:      func() []string { return allCheckouts(cat.Projects) },
+		// Each session start gets a temp dir of its own, never the system's,
+		// which every session (and each one's virtual shell) shares: this is
+		// its name prefix, the start adds a random suffix. Short, so a unix
+		// socket path under it stays within the platform's limit.
+		TempDir: func(id string) string { return filepath.Join(os.TempDir(), "harness-session-"+id[:min(len(id), 8)]) },
+
+		Violations:     violations,
+		ViolationStore: violationStore,
+	}
 	return svc
+}
+
+// allCheckouts lists the checkout of every repository of every project.
+func allCheckouts(projects interface {
+	ports.ProjectReader
+	ports.RepositoryLister
+}) []string {
+	ctx := context.Background()
+	all, err := projects.ListProjects(ctx)
+	if err != nil {
+		return nil
+	}
+	var out []string
+	for _, p := range all {
+		repos, err := projects.ListRepositories(ctx, p.ID)
+		if err != nil {
+			continue
+		}
+		for _, r := range repos {
+			out = append(out, r.RootDir)
+		}
+	}
+	return out
 }
 
 // TextProcessingModule binds the one-shot Claude CLI adapters to the text
@@ -576,11 +721,70 @@ var TextProcessingModule = fx.Module("textprocessing",
 	),
 )
 
+// oneShotParts are what the one-shots run on, each when the graph has it:
+// what is absent leaves the one-shot as it was.
+type oneShotParts struct {
+	fx.In
+
+	Ready      optionalAgentReadiness
+	Orch       *orchestration.Service   `optional:"true"`
+	Credential *agentcredential.Service `optional:"true"`
+	Bin        ports.ManagedClaudeBin   `optional:"true"`
+	Home       claudehome.Home          `optional:"true"`
+	KC         *keychainshim.Dir        `optional:"true"`
+}
+
 // newOneShotter is the claude driver the one-shots run on: llmkit's one-shot
 // mode, routed through the LLM proxy like every other claude mode. One-shots
-// need nothing else of a manager, so the module keeps its own.
-func newOneShotter(cfg Config) claudetext.OneShotter {
-	return claude.New(llmkit.Options{Bin: cfg.ClaudeBin, ProxyURL: cfg.llmProxyURL()})
+// need nothing else of a manager, so the module keeps its own. Like a session
+// it runs the managed claude (or the -claude.bin override) isolated in the
+// agent Claude home, with the agent credential, under the sandbox when it is
+// on (ADR 0017, 0018), after the readiness gate.
+func newOneShotter(cfg Config, p oneShotParts) claudetext.OneShotter {
+	bin := cfg.ClaudeBin
+	if p.Bin != nil {
+		bin = p.Bin.Bin()
+	}
+	home := p.Home.Path()
+	one := claudetext.OneShotter(oneShotClaude(bin, home, cfg.llmProxyURL()))
+	if p.Orch != nil && p.Credential != nil {
+		one = claudetext.Confined(one, oneShotPrep(p.Orch.Sandbox, oneShotEnv(p.Credential.Env, p.Home.HasLogin, p.KC.Path()), bin, p.KC.Path()))
+	}
+	return claudetext.Gated(one, p.Ready.check())
+}
+
+// oneShotClaude is the manager one-shots run on: isolated in the agent
+// Claude home when there is one.
+func oneShotClaude(bin, home, proxyURL string) *claude.Manager {
+	return claude.New(llmkit.Options{Bin: bin, ConfigDir: home, Isolated: home != "", ProxyURL: proxyURL})
+}
+
+// oneShotPrep prepares each one-shot: the env entries of the agent credential
+// and, with the sandbox on, the wrap confining it. The sandbox's policy for a
+// one-shot names no repository; claude's install dirs are the one thing
+// beyond its temp dir and the agent home it may read.
+// readable are further directories it may read, the security shim's.
+func oneShotPrep(sb *orchestration.Sandbox, credential func() []string, bin string, readable ...string) func() ([]string, llmkit.WrapFunc, error) {
+	allow := sandboxAllowlist(allowSources{ClaudeDirs: append(runtime.ClaudeInstallDirs(bin), readable...)})
+	return func() ([]string, llmkit.WrapFunc, error) {
+		wrap, err := sb.OneShotWrap(allow)
+		if err != nil {
+			return nil, nil, err
+		}
+		return credential(), wrap, nil
+	}
+}
+
+// oneShotEnv is the env entries of a one-shot: the pasted credential unless
+// the agent home holds a login, and the security shim's dir on PATH.
+func oneShotEnv(pasted func() []string, login func() bool, shimDir string) func() []string {
+	return func() []string {
+		var env []string
+		if !login() {
+			env = pasted()
+		}
+		return append(env, keychainpath.Env(os.Environ(), shimDir)...)
+	}
 }
 
 func newSummarizer(cfg Config, c claudetext.OneShotter) *claudetext.Summarizer {
@@ -611,11 +815,13 @@ var WorkspacesModule = fx.Module("workspaces",
 		asPort(newWorktreeManager, new(ports.WorktreeManager)),
 		asPort(newGitHistory, new(ports.GitHistory)),
 		asPort(newBranchPublisher, new(ports.BranchPublisher)),
+		asPort(newGitMerger, new(ports.GitMerger)),
 		asPort(githubapi.New, new(ports.CodeHost)),
 		asPort(newGitCode, new(ports.GitCode)),
 		asPort(filesystem.NewWorktreeFiles, new(ports.WorktreeFiles)),
 		newWorkspacesService,
 		newPullRequestsService,
+		newMergesService,
 		newCodeBrowser,
 		newMergeStates,
 	),
@@ -717,4 +923,26 @@ func newPullRequestsService(
 		return nil
 	}})
 	return svc
+}
+
+// newMergesService merges a session's branch into its repository's default
+// branch in the local checkout, and announces the result on the
+// orchestration's project feed.
+func newMergesService(
+	sessions ports.SessionRepository,
+	ws ports.WorkspaceRepository,
+	repos ports.RepositoryRepository,
+	git ports.GitMerger,
+	orch *orchestration.Service,
+) *workspaces.Merges {
+	return workspaces.NewMerges(workspaces.MergeDeps{Sessions: sessions, Workspaces: ws, Repositories: repos, Git: git, Announce: orch})
+}
+
+// shortID is the part of a session id that names its temp dir: short enough
+// to keep unix socket paths under the 104 byte limit, long enough to be unique.
+func shortID(id string) string {
+	if len(id) > 12 {
+		return id[:12]
+	}
+	return id
 }

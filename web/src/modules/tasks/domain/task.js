@@ -11,6 +11,7 @@
  * @property {string} title
  * @property {string} description
  * @property {TaskStatus} status
+ * @property {string} parentId            the feature task it belongs to; "" when top-level (one level deep, see feature.js)
  * @property {string} architectSessionId  the task's architect session; "" when it has none
  * @property {number} pendingReviews      review requests the architect raised that wait on the person
  * @property {number} updatedAt           when it last changed, ms since the epoch; 0 when unknown (Done is ordered by it)

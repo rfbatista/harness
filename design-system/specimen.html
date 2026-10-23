@@ -369,6 +369,15 @@
                 <div class="[ signals ]"><span class="[ badge merge ]" data-merge-state="partial"><svg class="[ glyph ]" data-glyph="merged" aria-hidden="true" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6.25"/><path d="M5.3 8.2l1.8 1.8 3.6-3.8"/></svg><svg class="[ glyph ]" data-glyph="partial" aria-hidden="true" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6.25"/><path d="M8 1.75a6.25 6.25 0 0 1 0 12.5z" fill="currentColor" stroke="none"/></svg><svg class="[ glyph ]" data-glyph="not_merged" aria-hidden="true" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6.25"/></svg><svg class="[ glyph ]" data-glyph="unknown" aria-hidden="true" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6.25" stroke-dasharray="2.4 2.2"/><path d="M6.4 6.3a1.7 1.7 0 1 1 2.3 1.6c-.5.2-.7.6-.7 1.1v.3"/><circle cx="8" cy="11.3" r=".55" fill="currentColor" stroke="none"/></svg>1 of 2 merged</span></div>
                 <p class="[ last-move ]" data-last-move><span>Moved here by <span class="[ who ]">architect</span></span><span class="[ age ]" data-age>1h</span></p>
               </article>
+              <article class="[ card ]">
+                <a class="[ title ]" href="#">Exports</a>
+                <div class="[ meta ]"><span class="[ badge ]">2 tasks</span></div>
+              </article>
+              <article class="[ card ]">
+                <span class="[ parent ]">Exports</span>
+                <a class="[ title ]" href="#">CSV export</a>
+                <div class="[ meta ]"></div>
+              </article>
             </div>
           </section>
           <section class="[ column ]" data-column="done" aria-label="Done">
@@ -743,6 +752,32 @@
           <h3>On a phone: the sheets</h3>
           <p class="[ color-ink-muted ]">Below 48rem the scripted variants open as bottom sheets. These frames are this page at 375px, each with one sheet open (served from the repository root).</p>
           <div class="[ cluster ] [ gutter-l ]" data-phone-frames></div>
+        </div>
+      </section>
+
+      <section class="[ flow ] [ flow-space-m ]" id="context-strip">
+        <h2>Context strip</h2>
+        <p class="[ color-ink-muted ]">One row of summary buttons above the agents, one <code>band-panel</code> open at a time, capped at <code>--size-band-cap</code> and scrolling inside. <code>data-tone="attention"</code> is the one loud button; <code>data-quiet</code> the quiet one.</p>
+        <div style="border: 1px solid var(--color-line); border-radius: var(--radius-md); overflow: hidden; max-inline-size: 52rem">
+          <div class="[ context-strip ]" role="group" aria-label="Task context">
+            <div style="display: contents">
+              <button type="button" class="[ cs-btn ]" data-tone="attention" aria-expanded="false" aria-label="Reviews, 3 waiting"><span class="[ label ]">Reviews</span> <span class="[ badge ]" data-tone="attention">3</span> <span class="[ phrase ]">waiting</span><span class="[ chevron ]" aria-hidden="true"></span></button>
+            </div>
+            <div style="display: contents">
+              <button type="button" class="[ cs-btn ]" aria-expanded="true" aria-controls="specimen-band" aria-label="Feature, 3 children, 1 in review"><span class="[ label ]">Feature</span> <span class="[ badge ]">3</span> <span class="[ phrase ]">1 in review</span><span class="[ chevron ]" aria-hidden="true"></span></button>
+              <section class="[ band-panel ]" id="specimen-band" aria-label="Feature">
+                <header class="[ band-head ]"><span>Showing 3 tasks</span><a class="[ button ]" data-variant="ghost" data-size="sm" href="#">PRD: Exports</a></header>
+                <div class="[ list ]" data-band-scroll tabindex="0" role="list" aria-label="Child tasks, 3">
+                  <div class="[ row ]" role="listitem"><span class="[ badge ]" data-status="review">review</span><span class="[ title ]"><a href="#">CSV export</a></span><span class="[ meta ]">2 docs</span></div>
+                  <div class="[ row ]" role="listitem"><span class="[ badge ]" data-status="todo">todo</span><span class="[ title ]"><a href="#">PDF export</a></span><span class="[ meta ]"></span></div>
+                  <div class="[ row ]" role="listitem" data-done><span class="[ badge ]" data-status="done">done</span><span class="[ title ]"><a href="#">Export button</a></span><span class="[ meta ]">1 doc</span></div>
+                </div>
+              </section>
+            </div>
+            <div style="display: contents">
+              <button type="button" class="[ cs-btn ]" data-quiet aria-expanded="false"><span class="[ label ]" data-short="Savers">Token savers</span><span class="[ chevron ]" aria-hidden="true"></span></button>
+            </div>
+          </div>
         </div>
       </section>
 

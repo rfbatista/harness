@@ -269,19 +269,18 @@ const Kit = (() => {
 
   // --- history: the saved conversation, read-only ---------------------------
   const HISTORY = [
-    ["user", "›", "14:02", "Why does the agent tab stop scrolling?"],
-    ["agent", "⏺", "14:02", "claude draws on the alternate screen, so the terminal keeps no history. The full conversation is here."],
-    ["tool", "⌁", "14:02", null, "Grep", "onData|wheel in web/src"],
-    ["tool", "⌁", "14:03", null, "Bash", "git status --short", "3 lines"],
-    ["error", "✕", "14:03", null, "Bash", "exit 1 · go test ./internal/...", "48 lines"],
-    ["agent", "⏺", "14:04", "Fixed: the wheel now pages claude's own view, and History reads the transcript."],
+    ["person", "14:02", "<p>Why does the agent tab stop scrolling?</p>"],
+    ["agent", "14:02", "<p>claude draws on the <strong>alternate screen</strong>, so the terminal keeps no history. The full conversation is here.</p>"],
+    ["tools", "14:03", "3 tool calls", "Grep, Bash ×2", 1],
+    ["agent", "14:04", "<p>Fixed: the wheel now pages claude's own view, and History reads the transcript.</p>"],
   ];
   function history(o) {
-    const lines = HISTORY.map(([kind, mark, at, text, tool, gist, meta]) => text !== null
-      ? `<p class="line" data-kind="${kind}"><time>${at}</time><span class="mark" aria-hidden="true">${mark}</span><span class="text">${esc(text)}</span></p>`
-      : `<div class="line" data-kind="${kind}"><time>${at}</time><span class="mark" aria-hidden="true">${mark}</span><div class="fold"><button class="summary" aria-expanded="false"><span class="tool">${tool}</span><span class="gist">${esc(gist)}</span>${meta ? `<span class="meta">${meta}</span>` : ""}</button><pre class="detail"></pre></div></div>`).join("");
+    const items = HISTORY.map(([kind, at, a, b, failed]) => kind === "tools"
+      ? `<div class="item"><div class="activity"><button class="summary" aria-expanded="false"><span class="count">${a}</span><span class="names">${b}</span>${failed ? `<span class="flag" data-tone="danger">${failed} failed</span>` : ""}</button></div></div>`
+      : `<div class="item"><article class="turn" data-who="${kind}"><header><span class="avatar" aria-hidden="true">${kind === "person" ? "Y" : "C"}</span><span class="who">${kind === "person" ? "You" : "claude"}</span><time>${at}</time></header><div class="part"><div class="prose">${a}</div></div></article></div>`).join("");
     const jump = o.jump ? `<button class="button jump" data-size="sm">${o.jump} new · Jump to latest</button>` : "";
-    return `<section class="frame" aria-label="History"><div class="transcript" data-scroll role="log" tabindex="0" aria-label="Conversation history"><div class="older"><button class="button" data-variant="ghost" data-size="sm">Load older</button></div>${lines}${jump}</div></section>`;
+    const bar = `<div class="chat-bar"><label class="search"><input type="search" placeholder="Search history"></label><label class="toggle"><input type="checkbox" checked> Show tools</label></div>`;
+    return `<section class="frame" aria-label="History">${bar}<div class="chat" data-scroll role="log" tabindex="0" aria-label="Conversation history"><div class="older"><button class="button" data-variant="ghost" data-size="sm">Load older</button></div>${items}${jump}</div></section>`;
   }
 
   // --- a whole session column ----------------------------------------------

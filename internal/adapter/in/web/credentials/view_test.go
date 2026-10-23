@@ -28,6 +28,7 @@ func TestViewsMatchTheBrowser(t *testing.T) {
 		Bindings []struct {
 			Pinned    bool
 			Resolved  *string
+			PullReqs  *string `json:"pull_requests"`
 			RemoteURL *string `json:"remote_url"`
 			Line      BindingLine
 		}
@@ -69,6 +70,10 @@ func TestViewsMatchTheBrowser(t *testing.T) {
 			if c.Pinned {
 				rc.Binding.CredentialID = &cred.ID
 			}
+		}
+		if c.PullReqs != nil {
+			cred := pick(*c.PullReqs)
+			rc.PullRequests = &cred
 		}
 		if got := LineOf(rc); got != c.Line {
 			t.Errorf("LineOf(%+v) = %+v, want %+v", c, got, c.Line)

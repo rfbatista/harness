@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 
@@ -162,7 +163,9 @@ func (s *Service) wireSaver(saver domain.TokenSaver, w saverSession) bool {
 }
 
 // wireRTK runs rtk's own hook before every Bash call, beside the edit
-// proxy's, with its telemetry off. rtk's config stays wherever rtk keeps it.
+// proxy's, with its telemetry off. The hook rewrites a command to a bare
+// "rtk …", so rtk's dir goes first on the session's PATH too. rtk's config
+// stays wherever rtk keeps it.
 func (s *Service) wireRTK(w saverSession) error {
 	hook := []claude.Hook{{Type: "command", Command: shellQuote(w.installation.Path) + " hook claude"}}
 	dc, ok := withHooks(w.cfg.Driver, map[claude.HookEvent][]claude.HookMatcher{
@@ -173,6 +176,7 @@ func (s *Service) wireRTK(w saverSession) error {
 	}
 	w.cfg.Driver = dc
 	withEnv(w.cfg, "RTK_TELEMETRY_DISABLED=1", "DO_NOT_TRACK=1")
+	withPathDir(w.cfg, filepath.Dir(w.installation.Path))
 	return nil
 }
 
@@ -241,6 +245,19 @@ func withEnv(cfg *llmkit.SessionConfig, kvs ...string) {
 		}
 	}
 	cfg.Env = env
+}
+
+// withPathDir puts dir first on cfg's PATH: the PATH cfg's env already has
+// (the shims'), or the server's own when it has none.
+func withPathDir(cfg *llmkit.SessionConfig, dir string) {
+	path := os.Getenv("PATH")
+	if i := slices.IndexFunc(cfg.Env, func(e string) bool { return strings.HasPrefix(e, "PATH=") }); i >= 0 {
+		path = strings.TrimPrefix(cfg.Env[i], "PATH=")
+	}
+	if path != "" {
+		dir += string(os.PathListSeparator) + path
+	}
+	withEnv(cfg, "PATH="+dir)
 }
 
 // shellQuote is s as one word of a POSIX shell command.

@@ -16,9 +16,25 @@ import (
 
 // contents is every file a session's shell should hold but the index, in
 // the contract's layout. Files named after what they hold get their path
-// when the builder places them.
-func (s *Service) contents(ctx context.Context, sessionID string, tk *domain.Ticket) (*builder, error) {
+// when the builder places them. A shell with no task (tk nil) holds the
+// project's documents and designs and every project task's documents under
+// tasks/, nothing under task/.
+func (s *Service) contents(ctx context.Context, sh *shell, tk *domain.Ticket) (*builder, error) {
 	b := &builder{now: time.Now()}
+	sessionID := sh.sessionID
+	b.fixed(ports.ShellFile{Path: "README.md", Kind: ports.ShellReadme, Title: "README", UpdatedAt: b.now}, []byte(readmeFor(s.agentsMove())))
+
+	if tk == nil {
+		if err := b.documents(ctx, s.src.Tickets, s.src.Documents, sh.projID, nil); err != nil {
+			return nil, err
+		}
+		if s.src.Artifacts != nil {
+			if err := b.designs(ctx, s.src.Artifacts, sh.projID, nil); err != nil {
+				return nil, err
+			}
+		}
+		return b, nil
+	}
 
 	taskJSON, err := json.MarshalIndent(struct {
 		ID                 string  `json:"id"`
@@ -30,10 +46,11 @@ func (s *Service) contents(ctx context.Context, sessionID string, tk *domain.Tic
 	if err != nil {
 		return nil, err
 	}
-	b.fixed(ports.ShellFile{Path: "README.md", Kind: ports.ShellReadme, Title: "README", UpdatedAt: b.now}, []byte(readme))
 	b.fixed(ports.ShellFile{Path: "task/task.json", Kind: ports.ShellTask, ID: tk.ID, Scope: "task", Title: tk.Title, UpdatedAt: tk.UpdatedAt}, append(taskJSON, '\n'))
 
-	b.documents(ctx, s.src.Documents, tk)
+	if err := b.documents(ctx, s.src.Tickets, s.src.Documents, tk.ProjectID, tk); err != nil {
+		return nil, err
+	}
 	if err := b.comments(ctx, s.src.Comments, tk.ID, sessionID); err != nil {
 		return nil, err
 	}
@@ -41,7 +58,7 @@ func (s *Service) contents(ctx context.Context, sessionID string, tk *domain.Tic
 		return nil, err
 	}
 	if s.src.Artifacts != nil {
-		if err := b.designs(ctx, s.src.Artifacts, tk); err != nil {
+		if err := b.designs(ctx, s.src.Artifacts, tk.ProjectID, tk); err != nil {
 			return nil, err
 		}
 	}
@@ -69,9 +86,11 @@ type file struct {
 	dropped bool
 }
 
-// builder collects a shell's files.
+// builder collects a shell's files, and the other tasks of the project,
+// each of which has a folder under tasks/.
 type builder struct {
 	files []*file
+	tasks []string
 	now   time.Time
 }
 
@@ -128,40 +147,60 @@ func (b *builder) place(prev map[string]string, held func(string) bool) {
 func fileKey(f ports.ShellFile) string { return f.Kind + "|" + f.ID }
 
 // documents: those linked to the task with scope task in task/docs, every
-// project document in project/docs; oldest first, so the older of two with
-// one title keeps the plain name. A document keeps its file while the
-// file's extension still goes with its format.
-func (b *builder) documents(ctx context.Context, src ports.DocumentReader, tk *domain.Ticket) {
-	var taskDocs []*domain.Document
-	for _, d := range src.ListTicketDocuments(ctx, tk.ID) {
+// project document in project/docs, and every other task's task documents
+// in tasks/<id>/docs. With no task (tk nil), every task of the project is
+// under tasks/.
+func (b *builder) documents(ctx context.Context, tickets ports.TicketReader, src ports.DocumentReader, projectID string, tk *domain.Ticket) error {
+	own := ""
+	if tk != nil {
+		own = tk.ID
+		b.docs("task/docs/", domain.DocumentScopeTask, taskScoped(src.ListTicketDocuments(ctx, tk.ID)))
+	}
+	b.docs("project/docs/", domain.DocumentScopeProject, src.ListDocuments(projectID, domain.DocumentScopeProject))
+	others, err := tickets.ListTickets(ctx, projectID, ports.TicketFilter{})
+	if err != nil {
+		return err
+	}
+	for _, other := range others {
+		if other.ID == own {
+			continue
+		}
+		b.tasks = append(b.tasks, other.ID)
+		b.docs(TaskDocsDir(other.ID)+"/", domain.DocumentScopeTask, taskScoped(src.ListTicketDocuments(ctx, other.ID)))
+	}
+	return nil
+}
+
+// taskScoped is the documents of list that are not project scope.
+func taskScoped(list []*domain.Document) []*domain.Document {
+	var out []*domain.Document
+	for _, d := range list {
 		if d.Scope != domain.DocumentScopeProject {
-			taskDocs = append(taskDocs, d)
+			out = append(out, d)
 		}
 	}
-	for _, set := range []struct {
-		folder string
-		scope  domain.DocumentScope
-		docs   []*domain.Document
-	}{
-		{"task/docs/", domain.DocumentScopeTask, taskDocs},
-		{"project/docs/", domain.DocumentScopeProject, src.ListDocuments(tk.ProjectID, domain.DocumentScopeProject)},
-	} {
-		docs := slices.Clone(set.docs)
-		slices.SortFunc(docs, func(a, c *domain.Document) int {
-			if n := a.CreatedAt.Compare(c.CreatedAt); n != 0 {
-				return n
-			}
-			return strings.Compare(a.ID, c.ID)
-		})
-		for _, d := range docs {
-			format := d.Format
-			b.named(set.folder, DocumentFileName(d.Title, d.Format), &file{
-				meta: ports.ShellFile{Kind: ports.ShellDocument, ID: d.ID, Scope: string(set.scope),
-					Version: domain.DocumentVersion(d.Content), Title: d.Title, UpdatedAt: d.UpdatedAt},
-				content: []byte(d.Content),
-				keep:    func(p string) bool { return DocumentFormatOf(p) == format },
-			})
+	return out
+}
+
+// docs adds the documents of one folder, oldest first, so the older of two
+// with one title keeps the plain name. A document keeps its file while the
+// file's extension still goes with its format.
+func (b *builder) docs(folder string, scope domain.DocumentScope, list []*domain.Document) {
+	docs := slices.Clone(list)
+	slices.SortFunc(docs, func(a, c *domain.Document) int {
+		if n := a.CreatedAt.Compare(c.CreatedAt); n != 0 {
+			return n
 		}
+		return strings.Compare(a.ID, c.ID)
+	})
+	for _, d := range docs {
+		format := d.Format
+		b.named(folder, DocumentFileName(d.Title, d.Format), &file{
+			meta: ports.ShellFile{Kind: ports.ShellDocument, ID: d.ID, Scope: string(scope),
+				Version: domain.DocumentVersion(d.Content), Title: d.Title, UpdatedAt: d.UpdatedAt},
+			content: []byte(d.Content),
+			keep:    func(p string) bool { return DocumentFormatOf(p) == format },
+		})
 	}
 }
 
@@ -217,13 +256,17 @@ func readResource(ctx context.Context, src ports.TaskResourceFiles, id string) (
 // designs: the task's own artifacts in task/designs, every project asset in
 // project/designs (url ones listed in urls.md), and the assets attached to
 // the task listed in attached.md. An artifact's bytes are read only when the
-// shell lacks its revision.
-func (b *builder) designs(ctx context.Context, src ports.ArtifactReader, tk *domain.Ticket) error {
-	onTask, err := src.ListArtifacts(ctx, ports.ArtifactFilter{TicketID: tk.ID})
-	if err != nil {
-		return err
+// shell lacks its revision. With no task (tk nil), only the project's
+// assets.
+func (b *builder) designs(ctx context.Context, src ports.ArtifactReader, projectID string, tk *domain.Ticket) error {
+	var onTask []*domain.Artifact
+	if tk != nil {
+		var err error
+		if onTask, err = src.ListArtifacts(ctx, ports.ArtifactFilter{TicketID: tk.ID}); err != nil {
+			return err
+		}
 	}
-	inProject, err := src.ListArtifacts(ctx, ports.ArtifactFilter{ProjectID: tk.ProjectID, Scope: domain.ArtifactScopeProject})
+	inProject, err := src.ListArtifacts(ctx, ports.ArtifactFilter{ProjectID: projectID, Scope: domain.ArtifactScopeProject})
 	if err != nil {
 		return err
 	}
@@ -242,19 +285,21 @@ func (b *builder) designs(ctx context.Context, src ports.ArtifactReader, tk *dom
 		where[a.ID] = f
 		b.named(folder, ArtifactFileName(a), f)
 	}
-	var taskURLs strings.Builder
-	taskURLs.WriteString("# Design URLs\n\nDev-server URLs published on this task, not files.\n\n")
-	for _, a := range oldestFirst(onTask) {
-		if a.TicketID != tk.ID || a.Scope == domain.ArtifactScopeProject {
-			continue
+	if tk != nil {
+		var taskURLs strings.Builder
+		taskURLs.WriteString("# Design URLs\n\nDev-server URLs published on this task, not files.\n\n")
+		for _, a := range oldestFirst(onTask) {
+			if a.TicketID != tk.ID || a.Scope == domain.ArtifactScopeProject {
+				continue
+			}
+			if a.Kind == domain.ArtifactURL {
+				fmt.Fprintf(&taskURLs, "- [%s](%s)\n", a.Title, a.URL)
+				continue
+			}
+			put("task/designs/", a)
 		}
-		if a.Kind == domain.ArtifactURL {
-			fmt.Fprintf(&taskURLs, "- [%s](%s)\n", a.Title, a.URL)
-			continue
-		}
-		put("task/designs/", a)
+		b.fixed(ports.ShellFile{Path: "task/designs/urls.md", Kind: ports.ShellDesignURL, Scope: "task", Title: "Design URLs", UpdatedAt: b.now}, []byte(taskURLs.String()))
 	}
-	b.fixed(ports.ShellFile{Path: "task/designs/urls.md", Kind: ports.ShellDesignURL, Scope: "task", Title: "Design URLs", UpdatedAt: b.now}, []byte(taskURLs.String()))
 	var urls strings.Builder
 	urls.WriteString("# Design URLs\n\nProject design assets that are URLs, not files.\n\n")
 	urlsFile := &file{meta: ports.ShellFile{Path: "project/designs/urls.md"}}
@@ -267,22 +312,24 @@ func (b *builder) designs(ctx context.Context, src ports.ArtifactReader, tk *dom
 		put("project/designs/", a)
 	}
 
-	var attachedHere []*domain.Artifact
-	for _, a := range oldestFirst(onTask) {
-		if a.Scope == domain.ArtifactScopeProject && a.AttachedTo(tk.ID) {
-			attachedHere = append(attachedHere, a)
-		}
-	}
-	b.generated(ports.ShellFile{Path: "task/designs/attached.md", Kind: ports.ShellAttached, Scope: "task", Title: "Attached project assets", UpdatedAt: b.now}, func() []byte {
-		var attached strings.Builder
-		attached.WriteString("# Attached project assets\n\nProject design assets attached to this task: title → where it is in this shell.\n\n")
-		for _, a := range attachedHere {
-			if f := where[a.ID]; f != nil && !f.dropped {
-				fmt.Fprintf(&attached, "- %s → %s\n", a.Title, f.meta.Path)
+	if tk != nil {
+		var attachedHere []*domain.Artifact
+		for _, a := range oldestFirst(onTask) {
+			if a.Scope == domain.ArtifactScopeProject && a.AttachedTo(tk.ID) {
+				attachedHere = append(attachedHere, a)
 			}
 		}
-		return []byte(attached.String())
-	})
+		b.generated(ports.ShellFile{Path: "task/designs/attached.md", Kind: ports.ShellAttached, Scope: "task", Title: "Attached project assets", UpdatedAt: b.now}, func() []byte {
+			var attached strings.Builder
+			attached.WriteString("# Attached project assets\n\nProject design assets attached to this task: title → where it is in this shell.\n\n")
+			for _, a := range attachedHere {
+				if f := where[a.ID]; f != nil && !f.dropped {
+					fmt.Fprintf(&attached, "- %s → %s\n", a.Title, f.meta.Path)
+				}
+			}
+			return []byte(attached.String())
+		})
+	}
 	b.fixed(ports.ShellFile{Path: "project/designs/urls.md", Kind: ports.ShellDesignURL, Scope: "project", Title: "Design URLs", UpdatedAt: b.now}, []byte(urls.String()))
 	return nil
 }

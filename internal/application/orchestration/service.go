@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"operators-mcp/internal/application/keychainpath"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -36,13 +37,35 @@ type Catalog struct {
 	Projects interface {
 		GetProject(ctx context.Context, id string) (*domain.Project, error)
 	}
-	Repositories ports.RepositoryReader
-	Agents       interface {
+	Repositories interface {
+		ports.RepositoryReader
+		ports.RepositoryLister
+	}
+	Agents interface {
 		GetAgent(ctx context.Context, id string) (*domain.Agent, error)
 		ResolveAgentRelations(a *domain.Agent)
 	}
 	MCPServers interface{ ListMCPServers() []*domain.MCPServer }
 	Zones      ports.ZoneReader
+	// Contexts lists a project's bounded contexts for the brief of a
+	// project-level session; nil leaves them out of it.
+	Contexts interface {
+		ListBoundedContexts(projectID string) []*domain.BoundedContext
+	}
+}
+
+// sessionSubject is what a session works on: its task, or, for a
+// project-level product session (ADR 0016), its project alone.
+type sessionSubject struct {
+	project *domain.Project
+	ticket  *domain.Ticket // nil for a session with no task
+	mode    domain.SessionMode
+}
+
+// projectLevel says the session has no task and works on its project: only
+// a mode that runs without a task does, and only with its project in hand.
+func (sub sessionSubject) projectLevel() bool {
+	return sub.ticket == nil && sub.project != nil && !sub.mode.NeedsTask()
 }
 
 // ticketResolver is the slice of the planning ticket store the orchestration
@@ -84,6 +107,25 @@ type Service struct {
 	// nothing of the machine's (see "Contract: Harness server ↔ Agent
 	// sessions — git credentials"). Nil leaves sessions' git as it is.
 	GitAuth ports.GitAuth
+	// AgentCredential gives each agent process the env entries ("NAME=value")
+	// of the agent credential (ADR 0018), read at every start and resume. Nil
+	// or empty adds nothing.
+	AgentCredential func() []string
+	// AgentLogin says whether the agent home holds a Claude login (ADR
+	// 0022), read at every start and resume without starting a process. When
+	// it does, agents use it and AgentCredential is not put in their env.
+	// Nil: no login.
+	AgentLogin func() bool
+	// KeychainShimDir holds the macOS `security` shim, put on every agent
+	// process's PATH right after the edit-proxy shims. Empty: none (not
+	// macOS, or no shim binary).
+	KeychainShimDir string
+	// Ready refuses an agent start while the agent credential, the managed
+	// claude or the sandbox driver is missing (agentready.Gate). Nil enforces
+	// nothing.
+	Ready interface {
+		Check(ctx context.Context) error
+	}
 	// Roles says what a session is on its task, for the role-aware brief. Nil:
 	// every session is a peer.
 	Roles interface {
@@ -124,6 +166,12 @@ type Service struct {
 	// IndexBuilds says when a repository index build runs on a checkout, so
 	// a session start does not copy an index being written. Nil: never.
 	IndexBuilds ports.RepositoryIndexBuilds
+	// Settings holds the architect and implementation models a new session
+	// starts with when its start names none. Nil: the built-in ones.
+	Settings ports.SettingsReader
+	// Sandbox is the agent sandbox step of a session start (ADR 0017). Nil:
+	// sessions run unconfined.
+	Sandbox *Sandbox
 
 	// updates feeds the task-update turns to the courier, one at a time;
 	// deliverUpdate replaces the courier in tests.
@@ -136,6 +184,9 @@ type Service struct {
 	// announced on the bus only when it actually changes.
 	statuses map[string]domain.SessionStatus
 	cleanups map[string]func()
+	// gitStarts counts, by session id, the starts that opened its git
+	// directory: only the latest one's cleanup removes it.
+	gitStarts map[string]uint64
 	// busy marks sessions with a turn in flight: set when a user message is
 	// written to the CLI, cleared by the "result" line that ends the turn. It
 	// exists so a late "system"/init — the CLI emits it after initializing,
@@ -149,6 +200,13 @@ type Service struct {
 	// its status check until the session is recorded running, so two calls at
 	// once cannot both pass the check.
 	resuming map[string]bool
+
+	// DeveloperBin finds the active developer directory's usr/bin (macOS's
+	// xcode-select -p). It is asked once per server run; nil, an error or ""
+	// mean sessions run without it.
+	DeveloperBin func() (string, error)
+	devOnce      sync.Once
+	devBin       string
 }
 
 func NewService(runtime llmkit.Manager, broker *approval.Broker, hub *Hub, sessions ports.SessionRepository, catalog Catalog, tickets ticketResolver, workspaces ports.WorkspaceProvisioner) *Service {
@@ -186,6 +244,7 @@ func (s *Service) Start(ctx context.Context, req StartRequest) (*domain.Session,
 		Model:        req.ModelOverride,
 		AllowedTools: req.AllowedTools,
 		AutoAccept:   req.AutoAccept,
+		Headless:     true,
 	})
 	if err != nil {
 		return nil, err
@@ -257,6 +316,7 @@ func (s *Service) Start(ctx context.Context, req StartRequest) (*domain.Session,
 		TokenSavers:             p.savers.active,
 		TokenSaversNotInstalled: p.savers.notInstalled,
 		CavemanIntensity:        p.savers.cavemanIntensity,
+		Sandbox:                 p.sandbox.facts,
 	})
 	if err != nil {
 		_ = sess.Stop()
@@ -264,6 +324,11 @@ func (s *Service) Start(ctx context.Context, req StartRequest) (*domain.Session,
 		return nil, fmt.Errorf("persist session: %w", err)
 	}
 	provisioned = nil
+	if stop := s.collectViolations(sess.ID(), p.cfg.WorkingDir, p.sandbox.facts); stop != nil {
+		s.mu.Lock()
+		s.cleanups[sess.ID()] = withViolations(s.cleanups[sess.ID()], stop)
+		s.mu.Unlock()
+	}
 
 	go s.pump(sess)
 
@@ -297,6 +362,9 @@ type prepareInput struct {
 	Mode         domain.SessionMode
 	// Role is what the session will be on its task, for the brief; empty is a peer.
 	Role domain.SessionRole
+	// Headless is a session llmkit runs itself, wrapping its command with the
+	// session's sandbox; false is one a terminal runs.
+	Headless bool
 }
 
 // prepared is a session whose worktree exists and whose configuration is
@@ -310,6 +378,7 @@ type prepared struct {
 	cleanup    func() // removes the materialized skill plugin dir and the git directory; nil if none
 	envFile    string // the session's git env file, for login shells; "" without GitAuth
 	savers     sessionSavers
+	sandbox    sandboxed
 }
 
 // prepare validates a start request, provisions the session's worktree and
@@ -319,17 +388,18 @@ func (s *Service) prepare(ctx context.Context, in prepareInput) (*prepared, erro
 	if in.ProjectID == "" {
 		return nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "project_id is required"}
 	}
-	if _, err := s.catalog.Projects.GetProject(ctx, in.ProjectID); err != nil {
+	proj, err := s.catalog.Projects.GetProject(ctx, in.ProjectID)
+	if err != nil {
 		return nil, err
 	}
 
-	var ticket *domain.Ticket
+	subject := sessionSubject{project: proj, mode: in.Mode}
 	if in.TicketID != "" {
 		tk, err := s.ticketIn(ctx, in.ProjectID, in.TicketID)
 		if err != nil {
 			return nil, err
 		}
-		ticket = tk
+		subject.ticket = tk
 	}
 
 	if in.RepositoryID == "" {
@@ -360,6 +430,13 @@ func (s *Service) prepare(ctx context.Context, in prepareInput) (*prepared, erro
 		return nil, err
 	}
 
+	if err := s.ready(ctx); err != nil {
+		if ag.cleanup != nil {
+			ag.cleanup()
+		}
+		return nil, err
+	}
+
 	ws, err := s.workspaces.Create(in.RepositoryID, domain.Slug(in.Branch), in.Branch, in.BaseBranch)
 	if err != nil {
 		if ag.cleanup != nil {
@@ -373,8 +450,8 @@ func (s *Service) prepare(ctx context.Context, in prepareInput) (*prepared, erro
 		id = llmkit.NewSessionID()
 	}
 	permission := parseAutoAccept(in.AutoAccept)
-	cfg := s.sessionConfig(id, ws.Path, in.Model, in.AllowedTools, permission, ag, ticket, in.ZoneID, in.Role)
-	cleanup, err := s.withShell(id, ticket, &cfg, ag.cleanup)
+	cfg := s.sessionConfig(id, ws.Path, in.Model, in.AllowedTools, permission, ag, subject, in.ZoneID, in.Role)
+	cleanup, err := s.withShell(id, subject, &cfg, ag.cleanup)
 	if err != nil {
 		_ = s.workspaces.Discard(ws.ID)
 		return nil, err
@@ -384,8 +461,30 @@ func (s *Service) prepare(ctx context.Context, in prepareInput) (*prepared, erro
 		_ = s.workspaces.Discard(ws.ID)
 		return nil, err
 	}
+	s.withAgentCredential(&cfg)
+	s.withKeychainShim(&cfg)
 	savers := s.withTokenSavers(ctx, in, repo.RootDir, ws.Path, &cfg)
+	cleanup, err = s.withTempDir(id, &cfg, cleanup)
+	if err != nil {
+		_ = s.workspaces.Discard(ws.ID)
+		return nil, err
+	}
+	sb, err := s.sandbox(ctx, in, id, repo, ws.Path, cfg.Env)
+	if err != nil {
+		if cleanup != nil {
+			cleanup()
+		}
+		_ = s.workspaces.Discard(ws.ID)
+		return nil, err
+	}
+	if sb.wrap != nil {
+		cfg.Wrap = sb.wrap
+	}
+	if sb.policy != nil {
+		withClaudeSandboxOff(&cfg)
+	}
 	return &prepared{
+		sandbox:    sb,
 		cfg:        cfg,
 		ws:         ws,
 		branch:     in.Branch,
@@ -394,6 +493,36 @@ func (s *Service) prepare(ctx context.Context, in prepareInput) (*prepared, erro
 		envFile:    envFile,
 		savers:     savers,
 	}, nil
+}
+
+// ready is the refusal of a start while something agents need is missing.
+func (s *Service) ready(ctx context.Context) error {
+	if s.Ready == nil {
+		return nil
+	}
+	return s.Ready.Check(ctx)
+}
+
+// withAgentCredential adds the agent credential to the agent process env,
+// unless the agent home holds a login: the login wins and the pasted
+// credential is only a fallback for a home without one.
+func (s *Service) withAgentCredential(cfg *llmkit.SessionConfig) {
+	if s.AgentCredential == nil || (s.AgentLogin != nil && s.AgentLogin()) {
+		return
+	}
+	if env := s.AgentCredential(); len(env) > 0 {
+		cfg.Env = append(slices.Clone(cfg.Env), env...)
+	}
+}
+
+// withKeychainShim puts the security shim's dir on the agent process's PATH,
+// after the edit-proxy shims it already has and before its developer bin, so
+// claude never reaches the person's keychain. Without a dir it changes
+// nothing.
+func (s *Service) withKeychainShim(cfg *llmkit.SessionConfig) {
+	if env := keychainpath.Env(cfg.Env, s.KeychainShimDir); env != nil {
+		cfg.Env = append(slices.Clone(cfg.Env), env...)
+	}
 }
 
 // withGit gives the session's processes its git directory's environment and
@@ -415,24 +544,49 @@ func (s *Service) withGit(id, repositoryID string, cfg *llmkit.SessionConfig, cl
 	if sg.Note != "" {
 		cfg.AppendSystem = appendSection(cfg.AppendSystem, sg.Note)
 	}
+	// The git directory has one path per session, so a start that comes
+	// after this one under the id owns it: this start's cleanup, running
+	// later, leaves it to the successor's.
+	s.mu.Lock()
+	if s.gitStarts == nil {
+		s.gitStarts = map[string]uint64{}
+	}
+	s.gitStarts[id]++
+	mine := s.gitStarts[id]
+	s.mu.Unlock()
 	return sg.EnvFile, func() {
 		if cleanup != nil {
 			cleanup()
 		}
-		s.GitAuth.EndSession(id)
+		s.mu.Lock()
+		current := s.gitStarts[id] == mine
+		if current {
+			delete(s.gitStarts, id)
+		}
+		s.mu.Unlock()
+		if current {
+			s.GitAuth.EndSession(id)
+		}
 	}, nil
 }
 
-// withShell gives a session with a task its virtual shell: made and filled
-// now, passed with --add-dir and HARNESS_SHELL, named in the brief, with
-// the edit proxy's hooks in its claude settings. The
-// cleanup it answers runs cleanup and removes the shell. A session with no
-// task, or a service without Shells, changes nothing.
-func (s *Service) withShell(id string, ticket *domain.Ticket, cfg *llmkit.SessionConfig, cleanup func()) (func(), error) {
-	if s.Shells == nil || ticket == nil {
+// withShell gives a session with a task, or a project-level one, its
+// virtual shell: made and filled now, passed with --add-dir and
+// HARNESS_SHELL, named in the brief, with the edit proxy's hooks in its
+// claude settings. The cleanup it answers runs cleanup and removes the
+// shell. A headless session with no task, or a service without Shells,
+// changes nothing.
+func (s *Service) withShell(id string, subject sessionSubject, cfg *llmkit.SessionConfig, cleanup func()) (func(), error) {
+	if s.Shells == nil || (subject.ticket == nil && !subject.projectLevel()) {
 		return cleanup, nil
 	}
-	dir, err := s.Shells.Open(context.TODO(), id, ticket.ID)
+	var scope ports.ShellScope
+	if subject.ticket != nil {
+		scope.TicketID = subject.ticket.ID
+	} else {
+		scope.ProjectID = subject.project.ID
+	}
+	dir, err := s.Shells.Open(context.TODO(), id, scope)
 	if err != nil {
 		if cleanup != nil {
 			cleanup()
@@ -462,6 +616,7 @@ func (s *Service) withShell(id string, ticket *domain.Ticket, cfg *llmkit.Sessio
 // the dir. Without ShimBinary it changes nothing.
 func (s *Service) withShims(id string, cfg *llmkit.SessionConfig, cleanup func()) (func(), error) {
 	if s.ShimBinary == "" {
+		s.withDeveloperBin(cfg)
 		return cleanup, nil
 	}
 	fail := func(err error) (func(), error) {
@@ -481,6 +636,10 @@ func (s *Service) withShims(id string, cfg *llmkit.SessionConfig, cleanup func()
 		}
 	}
 	path := dir
+	if bin := s.developerBin(); bin != "" {
+		path += string(os.PathListSeparator) + bin
+		cfg.Env = append(slices.Clone(cfg.Env), ports.DeveloperBinEnv+"="+bin)
+	}
 	if inherited := os.Getenv("PATH"); inherited != "" {
 		path += string(os.PathListSeparator) + inherited
 	}
@@ -494,6 +653,35 @@ func (s *Service) withShims(id string, cfg *llmkit.SessionConfig, cleanup func()
 		}
 		_ = os.RemoveAll(dir)
 	}, nil
+}
+
+// developerBin is the active developer directory's usr/bin, looked up once
+// per server run; "" when there is none or the lookup fails (the session
+// then runs without it).
+func (s *Service) developerBin() string {
+	s.devOnce.Do(func() {
+		if s.DeveloperBin == nil {
+			return
+		}
+		if dir, err := s.DeveloperBin(); err == nil {
+			s.devBin = dir
+		}
+	})
+	return s.devBin
+}
+
+// withDeveloperBin puts the developer bin first on a PATH of the server's
+// own, for a session that has no shims.
+func (s *Service) withDeveloperBin(cfg *llmkit.SessionConfig) {
+	bin := s.developerBin()
+	if bin == "" {
+		return
+	}
+	path := bin
+	if inherited := os.Getenv("PATH"); inherited != "" {
+		path += string(os.PathListSeparator) + inherited
+	}
+	cfg.Env = append(slices.Clone(cfg.Env), "PATH="+path, ports.DeveloperBinEnv+"="+bin)
 }
 
 // ticketIn loads a ticket and checks it belongs to the project.
@@ -553,9 +741,11 @@ func (s *Service) resolveAgent(agentID string, mode domain.SessionMode) (resolve
 }
 
 // sessionConfig builds the CLI configuration shared by headless and
-// interactive sessions: the agent's prompt and skills, the task brief and
-// task MCP server, the agent's MCP servers and the zone's extra dirs.
-func (s *Service) sessionConfig(id, dir, model string, allowedTools []string, permission llmkit.PermissionMode, ag resolvedAgent, ticket *domain.Ticket, zoneID string, role domain.SessionRole) llmkit.SessionConfig {
+// interactive sessions: the agent's prompt and skills, the task brief (or
+// a project-level session's project brief) and task MCP server, the
+// agent's MCP servers and the zone's extra dirs.
+func (s *Service) sessionConfig(id, dir, model string, allowedTools []string, permission llmkit.PermissionMode, ag resolvedAgent, subject sessionSubject, zoneID string, role domain.SessionRole) llmkit.SessionConfig {
+	ticket := subject.ticket
 	cfg := llmkit.SessionConfig{
 		ID:           id,
 		WorkingDir:   dir,
@@ -577,7 +767,15 @@ func (s *Service) sessionConfig(id, dir, model string, allowedTools []string, pe
 	if s.TaskServerURL != nil {
 		taskURL = s.TaskServerURL(id)
 	}
-	applyTaskContext(&cfg, ticket, taskURL, role, s.taskCounts(ticket))
+	if subject.projectLevel() {
+		in := s.briefProject(subject.project)
+		in.AgentsMove = s.agentsMoveDocuments()
+		applyProjectContext(&cfg, in, taskURL)
+	} else {
+		counts := s.taskCounts(ticket)
+		counts.agentsMove = s.agentsMoveDocuments()
+		applyTaskContext(&cfg, ticket, taskURL, role, counts)
+	}
 	if section := attachedAssetsSection(s.attachedAssets(ticket)); section != "" {
 		cfg.AppendSystem = appendSection(cfg.AppendSystem, section)
 	}

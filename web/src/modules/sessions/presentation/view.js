@@ -1,6 +1,7 @@
 // Sessions as the markup binds them. The browser twin of the BFF's
 // sessions/view.go; web/testdata/views/session-status.json pins both.
 
+import { factsView } from "./sandboxView.js";
 import { count, relativeTime } from "../../../shared/presentation/format.js";
 import { lastReportOf } from "../domain/channel.js";
 import { canResume, group, hasLiveTerminal, isTerminal, needsYou } from "../domain/session.js";
@@ -30,6 +31,12 @@ export function runsAs(session, agentNames = {}) {
   return session.mode ? `${agent} as ${session.mode}` : agent;
 }
 
+/** runsAs with the model, as a session's row says it: "plain claude as architect on opus". Mirrors RunsOn (view.go). */
+export function runsOn(session, agentNames = {}) {
+  const agent = runsAs(session, agentNames);
+  return session.model ? `${agent} on ${session.model}` : agent;
+}
+
 /**
  * How the session that started this one reads: its agent, or "another
  * session" when it is not among others; "" when a person started it. The BFF's
@@ -43,6 +50,16 @@ export function startedBy(session, others, agentNames = {}) {
 
 function meta(agent, by, when) {
   return by ? `${agent} · started by ${by} · ${when}` : `${agent} · ${when}`;
+}
+
+/** A row's faint line; a session that ran without the sandbox says so last. */
+function rowMetaOf(session, text) {
+  return isUnsandboxed(session) ? `${text} · unsandboxed` : text;
+}
+
+/** True only for a session that started with the sandbox off; one from before the sandbox is not. */
+export function isUnsandboxed(session) {
+  return session.sandbox != null && !session.sandbox.sandboxed;
 }
 
 const GROUP_LABEL = { architect: "Architect", "needs-you": "Needs you", active: "Running", finished: "Earlier" };
@@ -78,22 +95,44 @@ export const MAX_DEPTH = 3;
  * messages: the task's messages once loaded (undefined before), for a
  * delegate's last report.
  */
+/**
+ * A session's row title: what it was asked to do; with no prompt, "Untitled
+ * session", or "Feature brainstorm" for a session with no task (where a task's
+ * title would otherwise say what it is about). The BFF's RowTitle (view.go)
+ * says the same; web/testdata/views/session-title.json pins both.
+ */
+export function rowTitle(session) {
+  if (session.task) return session.task;
+  return session.ticketId ? "Untitled session" : "Feature brainstorm";
+}
+
+/** The project's sessions page (its feature brainstorms), with one session open. */
+export function projectSessionsHref(projectId, sessionId = "") {
+  const href = `/projects/${encodeURIComponent(projectId)}/sessions`;
+  return sessionId ? `${href}?session=${encodeURIComponent(sessionId)}` : href;
+}
+
 export function toRowView(session, { selectedId, now, agentNames, others = [], fresh = false, depth = 0, messages }) {
   const status = statusView(session);
+  const title = rowTitle(session);
   return {
     id: session.id,
-    title: session.task || "Untitled session",
+    title,
     state: status.state,
     word: status.word,
-    meta:
+    meta: rowMetaOf(
+      session,
       session.role === "delegate"
         ? delegateMeta(session, { now, agentNames, messages })
-        : meta(runsAs(session, agentNames), startedBy(session, others, agentNames), relativeTime(session.updatedAt, now)),
+        : meta(runsOn(session, agentNames), startedBy(session, others, agentNames), relativeTime(session.updatedAt, now)),
+    ),
+    // What x-bind sets: null leaves the attribute off a sandboxed row.
+    unsandboxedAttr: isUnsandboxed(session) ? "" : null,
     selected: session.id === selectedId,
     fresh,
     attention: needsYou(session),
     resumable: terminalView(session).resumable,
-    resumeLabel: `Resume ${session.task || "Untitled session"}`,
+    resumeLabel: `Resume ${title}`,
     role: session.role,
     depth: Math.min(depth, MAX_DEPTH),
     // What x-bind sets: null leaves the attribute off a peer's row.
@@ -122,7 +161,7 @@ export function toGroupViews(sessions, { selectedId, now, agentNames, fresh = ne
  * delegateMeta (view.go) renders the same before the messages load.
  */
 function delegateMeta(session, { now, agentNames, messages }) {
-  const parts = [runsAs(session, agentNames)];
+  const parts = [runsOn(session, agentNames)];
   if (messages) parts.push(reportView(lastReportOf(messages, session.id), now));
   if (session.statusCheck) parts.push(statusCheckView(session.statusCheck, now).short);
   if (parts.length === 1) parts.push(relativeTime(session.updatedAt, now));
@@ -179,13 +218,37 @@ export function toDetailView(session, now, agentNames) {
     state: status.state,
     word: status.word,
     agent: runsAs(session, agentNames),
+    /** Who the agent's messages in History are from: its name, "claude" without one. */
+    speaker: session.agentId ? agentLabel(session.agentId, agentNames) : "claude",
     lastAction: session.lastAction || "Nothing yet.",
     updated: relativeTime(session.updatedAt, now),
     stoppable: !isTerminal(session),
     repositoryId: session.repositoryId,
     workspaceId: session.workspaceId,
+    branch: session.branch,
     ...tokenSaversView(session),
+    ...sandboxView(session),
+    sandboxFacts: factsView(session),
     ...terminalView(session),
+  };
+}
+
+const VISIBILITY_WORDS = { "own repo": "Own worktree only", "all repos, read-only": "All repos read-only", unrestricted: "No repository limits" };
+
+/**
+ * The chips of a session's sandbox facts (UX 6): quiet "Sandboxed" and its
+ * repository visibility, or the amber "Not sandboxed" when it started with
+ * the sandbox off. A session from before the sandbox has none.
+ * @returns {{ sandboxChip: string, sandboxTone: string | null, visibilityChip: string }}
+ */
+export function sandboxView(session) {
+  const f = session.sandbox;
+  if (!f) return { sandboxChip: "", sandboxTone: null, visibilityChip: "" };
+  const architect = session.mode === "architect" && f.visibility === "all repos, read-only";
+  return {
+    sandboxChip: f.sandboxed ? "Sandboxed" : "Not sandboxed",
+    sandboxTone: f.sandboxed ? null : "attention",
+    visibilityChip: architect ? "Own worktree + all repos read-only" : (VISIBILITY_WORDS[f.visibility] ?? f.visibility),
   };
 }
 

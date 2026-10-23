@@ -49,6 +49,12 @@ templ sessionHead(usage bool) {
 			<template x-if="selected.tokenSaversMissing">
 				<span class="[ badge ]" data-tone="attention" data-token-savers-missing x-bind:title="selected.tokenSaversMissingTitle" x-text="selected.tokenSaversMissing"></span>
 			</template>
+			<template x-if="selected.sandboxChip">
+				<span class="[ sandbox-chips ]" data-sandbox-chips>
+					<button type="button" class="[ badge ]" data-sandbox title="Open the Sandbox tab" x-bind:data-tone="selected.sandboxTone" x-text="selected.sandboxChip" x-on:click="showSandbox"></button>
+					<button type="button" class="[ badge ]" data-sandbox-visibility title="Open the Sandbox tab" x-bind:data-tone="selected.sandboxTone" x-text="selected.visibilityChip" x-on:click="showSandbox"></button>
+				</span>
+			</template>
 			<template x-for="bar in statusCheckBars" x-bind:key="bar.key">
 				<span class="[ checks ]" x-text="bar.meta"></span>
 			</template>
@@ -219,12 +225,14 @@ templ paneTabs() {
 			</button>
 			<button type="button" role="tab" x-bind:aria-selected="historyTabSelected" x-on:click="showHistory">History</button>
 			<button type="button" role="tab" x-bind:aria-selected="appTabSelected" x-on:click="showApp">App</button>
-			<button type="button" role="tab" x-bind:aria-selected="designTabSelected" x-on:click="showDesign">
-				Design
-				<template x-if="designBadge">
-					<span class="[ badge ]" data-tone="signal" x-text="designBadge"></span>
-				</template>
-			</button>
+			<template x-if="hasTask">
+				<button type="button" role="tab" x-bind:aria-selected="designTabSelected" x-on:click="showDesign">
+					Design
+					<template x-if="designBadge">
+						<span class="[ badge ]" data-tone="signal" x-text="designBadge"></span>
+					</template>
+				</button>
+			</template>
 			<template x-if="hasCode">
 				<button type="button" role="tab" x-bind:aria-selected="codeTabSelected" x-on:click="showCode">
 					Code
@@ -234,6 +242,10 @@ templ paneTabs() {
 				</button>
 			</template>
 			@conversationTab()
+			<template x-if="hasMergeTab">
+				<button type="button" role="tab" x-bind:aria-selected="mergeTabSelected" x-on:click="showMerge">Merge</button>
+			</template>
+			<button type="button" role="tab" data-quiet x-bind:aria-selected="sandboxTabSelected" x-on:click="showSandbox">Sandbox</button>
 		</div>
 		<template x-if="paneTools">
 			@paneTools()

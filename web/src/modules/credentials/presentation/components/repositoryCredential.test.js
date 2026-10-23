@@ -52,14 +52,16 @@ test("each row says what its pushes use: automatic, pinned, nothing fits, or loc
   assert.deepEqual([none.state, none.addHref], ["none", "/git-credentials?host=gitlab.example.com&kind=https_token"]);
   assert.ok(none.text.includes("gitlab.example.com"));
   assert.equal(row("r-local").line.state, "local");
+  assert.equal(row("r-https").line.pullText, "Pull requests: work-token (default for github.com)");
 });
 
 test("the picker offers Automatic, then the credentials of the origin's host and kind only", async () => {
   const { row } = await setup();
   const options = row("r-https").options;
-  assert.deepEqual(options.map((o) => [o.value, o.label, o.meta]), [["", "Automatic", ""], ["spare", "spare", ""], ["gc-work", "work-token", "default"]]);
+  assert.deepEqual(options.map((o) => [o.value, o.label, o.meta]), [["", "Automatic", ""], ["gc-key", "laptop-key", ""], ["spare", "spare", ""], ["gc-work", "work-token", "default"]]);
   assert.equal(options[0].description, "Uses work-token now");
-  assert.equal(options[2].description, "HTTPS token · x-access-token · …1234");
+  assert.equal(options[1].description, "SSH key · git · SHA256:abcdef");
+  assert.equal(options[3].description, "HTTPS token · x-access-token · …1234");
   assert.deepEqual(row("r-ssh").options.map((o) => o.value), ["", "gc-key"]);
   assert.equal(row("r-gitlab").options[0].description, "Nothing fits now");
 });
