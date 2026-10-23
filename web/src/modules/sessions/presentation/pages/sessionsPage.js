@@ -87,7 +87,7 @@ export const sessionsPage = ({
     /** This browser's terminal text size, in px, and focus mode. */
     textSize: prefs.textSize(),
     focusMode: prefs.focus(),
-    /** The detail pane's tab: the agent's terminal, its saved conversation (history), the application run from the worktree, what the session designed, its code or its conversation with the architect. */
+    /** The detail pane's tab: the agent's terminal, its saved conversation (history), the application run from the worktree, what the session designed, its code, its conversation with the architect or its sandbox. */
     detailTab: "agent",
     /** Sessions that just arrived over the feed (started elsewhere: by an agent, the TUI). */
     freshIds: [],
@@ -177,6 +177,21 @@ export const sessionsPage = ({
       if (!this.showingHistory) return [];
       const live = this.selected.stoppable;
       return [{ key: `${this.selected.id}:${live ? "live" : "ended"}`, sessionId: this.selected.id, live, agent: this.selected.speaker }];
+    },
+    get showingSandbox() {
+      return this.showingSession && this.detailTab === "sandbox";
+    },
+    get sandboxTabSelected() {
+      return this.detailTab === "sandbox";
+    },
+    /**
+     * The Sandbox tab's panel, keyed on the session and on liveness. Its
+     * facts are those the session started under.
+     */
+    get sandboxPanels() {
+      if (!this.showingSandbox) return [];
+      const live = this.selected.stoppable;
+      return [{ key: `${this.selected.id}:${live ? "live" : "ended"}`, sessionId: this.selected.id, live, facts: this.selected.sandboxFacts }];
     },
     get showingApp() {
       return this.showingSession && this.detailTab === "app";
@@ -562,6 +577,11 @@ export const sessionsPage = ({
     showHistory() {
       this.leaveCode();
       this.detailTab = "history";
+    },
+    /** The Sandbox tab: what the session ran under and what the sandbox denied it. */
+    showSandbox() {
+      this.leaveCode();
+      this.detailTab = "sandbox";
     },
     showApp() {
       this.leaveCode();

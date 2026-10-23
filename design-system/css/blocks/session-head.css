@@ -9,7 +9,7 @@
  *   <h2>title</h2>
  *   <p class="meta"><span class="status" data-state>…</span><span class="who">agent · age</span>
  *     <span class="checks">· checks 20m</span><span class="usage-total">11K tokens · $0.42 estimated</span>
- *     <span class="sandbox-chips"><span class="badge" data-sandbox>Sandboxed</span><span class="badge" data-sandbox-visibility>Own worktree only</span></span>
+ *     <span class="sandbox-chips"><button class="badge" data-sandbox title="Open the Sandbox tab">Sandboxed</button><button class="badge" data-sandbox-visibility title="Open the Sandbox tab">Own worktree only</button></span>
  *     <span class="token-savers">rtk · caveman</span><span class="badge" data-tone="attention" data-token-savers-missing>codegraph not installed</span></p>
  *   <div class="actions">[PR badge] [.check-button] <a class="button" data-wide>Git history</a>
  *     [Stop] <div class="menu">⋯</div></div></header>
@@ -65,6 +65,9 @@
 
     /* The sandbox facts: quiet badges, the amber one only when it ran without the sandbox. */
     & > .meta > .sandbox-chips { display: inline-flex; gap: var(--space-2xs); flex: none; }
+    /* The chips are buttons that open the Sandbox tab. */
+    & > .meta > .sandbox-chips > button.badge { background-color: transparent; font-family: inherit; cursor: pointer; }
+    & > .meta > .sandbox-chips > button.badge:hover { border-color: var(--color-line-strong); }
     @container session (width < 34rem) { & > .meta > .sandbox-chips > [data-sandbox-visibility] { display: none; } }
     @media (width < 48rem) { & > .meta > .sandbox-chips > [data-sandbox-visibility] { display: none; } }
 

@@ -1,6 +1,7 @@
 // Sessions as the markup binds them. The browser twin of the BFF's
 // sessions/view.go; web/testdata/views/session-status.json pins both.
 
+import { factsView } from "./sandboxView.js";
 import { count, relativeTime } from "../../../shared/presentation/format.js";
 import { lastReportOf } from "../domain/channel.js";
 import { canResume, group, hasLiveTerminal, isTerminal, needsYou } from "../domain/session.js";
@@ -226,6 +227,7 @@ export function toDetailView(session, now, agentNames) {
     workspaceId: session.workspaceId,
     ...tokenSaversView(session),
     ...sandboxView(session),
+    sandboxFacts: factsView(session),
     ...terminalView(session),
   };
 }

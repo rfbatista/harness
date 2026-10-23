@@ -501,6 +501,9 @@ templ detail(form NewSessionForm, paint *code.View, usage bool, lockedMode strin
 				<template x-for="panel in historyPanels" x-bind:key="panel.key">
 					@historyPanel()
 				</template>
+				<template x-for="panel in sandboxPanels" x-bind:key="panel.key">
+					@sandboxPanel()
+				</template>
 				<template x-for="panel in appPanels" x-bind:key="panel.key">
 					@appPanel()
 				</template>

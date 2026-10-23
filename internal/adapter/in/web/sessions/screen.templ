@@ -51,8 +51,8 @@ templ sessionHead(usage bool) {
 			</template>
 			<template x-if="selected.sandboxChip">
 				<span class="[ sandbox-chips ]" data-sandbox-chips>
-					<span class="[ badge ]" data-sandbox x-bind:data-tone="selected.sandboxTone" x-text="selected.sandboxChip"></span>
-					<span class="[ badge ]" data-sandbox-visibility x-bind:data-tone="selected.sandboxTone" x-text="selected.visibilityChip"></span>
+					<button type="button" class="[ badge ]" data-sandbox title="Open the Sandbox tab" x-bind:data-tone="selected.sandboxTone" x-text="selected.sandboxChip" x-on:click="showSandbox"></button>
+					<button type="button" class="[ badge ]" data-sandbox-visibility title="Open the Sandbox tab" x-bind:data-tone="selected.sandboxTone" x-text="selected.visibilityChip" x-on:click="showSandbox"></button>
 				</span>
 			</template>
 			<template x-for="bar in statusCheckBars" x-bind:key="bar.key">
@@ -242,6 +242,7 @@ templ paneTabs() {
 				</button>
 			</template>
 			@conversationTab()
+			<button type="button" role="tab" data-quiet x-bind:aria-selected="sandboxTabSelected" x-on:click="showSandbox">Sandbox</button>
 		</div>
 		<template x-if="paneTools">
 			@paneTools()
