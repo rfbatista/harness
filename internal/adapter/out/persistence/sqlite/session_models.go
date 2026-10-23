@@ -136,3 +136,15 @@ type SessionEventModel struct {
 }
 
 func (SessionEventModel) TableName() string { return "session_events" }
+
+// SandboxViolationModel is one thing the sandbox denied a session's process.
+type SandboxViolationModel struct {
+	ID        uint   `gorm:"primaryKey;autoIncrement"`
+	SessionID string `gorm:"column:session_id;index"`
+	WhenMs    int64  `gorm:"column:when_ms"`
+	Operation string `gorm:"column:operation"`
+	Path      string `gorm:"column:path"`
+	Process   string `gorm:"column:process"`
+}
+
+func (SandboxViolationModel) TableName() string { return "sandbox_violations" }

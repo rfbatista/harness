@@ -39,6 +39,7 @@ import "../src/modules/sandbox/presentation/components/sandboxSettings.test.js";
 import "../src/modules/sessions/domain/artifact.test.js";
 import "../src/modules/sessions/domain/brainstorm.test.js";
 import "../src/modules/sessions/domain/channel.test.js";
+import "../src/modules/sessions/domain/sandbox.test.js";
 import "../src/modules/sessions/domain/session.test.js";
 import "../src/modules/sessions/infrastructure/artifact-dto.test.js";
 import "../src/modules/sessions/infrastructure/artifacts.test.js";

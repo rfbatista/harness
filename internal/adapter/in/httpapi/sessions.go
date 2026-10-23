@@ -506,3 +506,16 @@ func replayFrom(events []ports.SessionEvent, fromSeq int64) []ports.SessionEvent
 	}
 	return out
 }
+
+// handleSessionSandboxViolations lists what the agent sandbox denied the
+// session, newest first, and whether this platform collects them at all.
+func (h *Handler) handleSessionSandboxViolations(c echo.Context) error {
+	if h.orchSvc == nil {
+		return echo.NewHTTPError(http.StatusServiceUnavailable, "orchestration not configured")
+	}
+	log, err := h.orchSvc.SandboxViolations(c.Param("id"))
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, log)
+}

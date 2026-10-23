@@ -1,0 +1,155 @@
+package sessions
+
+// sandboxPanel is the Sandbox tab (UX 7): part 1, the sandbox the session ran
+// under, shown at once; part 2, the denied access the sandbox recorded for it
+// (sessionsSandbox). Quiet by design: no color but the amber "Ran without the
+// sandbox", no count anywhere but inside the panel.
+templ sandboxPanel() {
+	<section class="[ frame ]" aria-label="Sandbox" x-data="sessionsSandbox(panel)">
+		<div class="[ sandbox-tab ]" data-scroll>
+			<section class="[ part ]" aria-labelledby="sandbox-facts-title">
+				<h3 id="sandbox-facts-title">This session's sandbox</h3>
+				<dl class="[ facts ]" data-sandbox-facts>
+					<template x-if="facts.kind === 'legacy'">
+						<div><dt>Status</dt><dd>This session started before the sandbox existed.</dd></div>
+					</template>
+					<template x-if="facts.kind === 'off'">
+						<div><dt>Status</dt><dd><strong x-text="facts.status"></strong> The sandbox was off when it started.</dd></div>
+					</template>
+					<template x-if="facts.kind === 'on'">
+						<div><dt>Status</dt><dd x-text="facts.status"></dd></div>
+					</template>
+					<template x-if="facts.kind === 'on'">
+						<div><dt>Driver</dt><dd class="[ font-mono ]" x-text="facts.driver"></dd></div>
+					</template>
+					<template x-if="facts.kind === 'on'">
+						<div>
+							<dt>Repositories</dt>
+							<dd>
+								<ul class="[ repos ]">
+									<template x-for="repo in facts.repositories" x-bind:key="repo.name">
+										<li><span class="[ font-mono ]" x-text="repo.name"></span><span class="[ badge ]" x-text="repo.access"></span></li>
+									</template>
+								</ul>
+							</dd>
+						</div>
+					</template>
+					<template x-if="facts.kind === 'on'">
+						<div><dt>Extra paths</dt><dd>The paths added in settings. <a x-bind:href="facts.settingsHref">Settings</a></dd></div>
+					</template>
+				</dl>
+			</section>
+			<section class="[ part ]" aria-labelledby="sandbox-denied-title">
+				<h3 id="sandbox-denied-title">
+					Denied access
+					<template x-if="hasList">
+						<span class="[ summary ]" data-violation-summary x-text="summary"></span>
+					</template>
+				</h3>
+				<template x-if="facts.kind === 'off'">
+					<div class="[ note ]" data-sandbox-note>
+						<p><strong>This session ran without the sandbox.</strong> Nothing was recorded. The sandbox was off when it started. <a x-bind:href="facts.settingsHref">Agent isolation settings</a></p>
+					</div>
+				</template>
+				<template x-if="facts.kind === 'legacy'">
+					<div class="[ note ]" data-sandbox-note>
+						<p><strong>This session started before the sandbox existed.</strong> Nothing was recorded.</p>
+					</div>
+				</template>
+				<template x-if="hasLog">
+					<p class="[ explain ]">Reads and writes the sandbox refused while this agent ran. Usually harmless: tools probe, fail and carry on. Look here when the agent says it cannot read or write something.</p>
+				</template>
+				<template x-if="isUnavailable">
+					<div class="[ note ]" data-sandbox-note>
+						<p><strong>Violation collection is not available on this platform.</strong> The sandbox still applies.</p>
+					</div>
+				</template>
+				<template x-if="isLoading">
+					<div class="[ skeletons ]" aria-busy="true" aria-label="Loading the sandbox log">
+						<span data-skeleton></span>
+						<span data-skeleton></span>
+						<span data-skeleton></span>
+					</div>
+				</template>
+				<template x-if="isFailed">
+					<div class="[ banner ]" data-tone="danger" role="alert">
+						<div class="[ flow ] [ flow-space-3xs ]">
+							<p><strong>Could not load the sandbox log.</strong></p>
+							<p class="[ code ]" x-text="error"></p>
+							<p>The session's own data is fine. Try again.</p>
+						</div>
+						<button type="button" class="[ button ]" data-size="sm" x-on:click="retry">Retry</button>
+					</div>
+				</template>
+				<template x-if="isEmpty">
+					<div class="[ note ]" data-sandbox-note>
+						<p><strong>Nothing was denied.</strong> The sandbox did not refuse a single read or write in this session.</p>
+					</div>
+				</template>
+				<template x-if="hasList">
+					<div class="[ toolbar ]">
+						<div class="[ segmented ]" role="group" aria-label="Operation" data-size="sm">
+							<button type="button" data-operation="all" x-bind:aria-pressed="isAccess('all')" x-on:click="setAccess('all')">All</button>
+							<button type="button" data-operation="read" x-bind:aria-pressed="isAccess('read')" x-on:click="setAccess('read')">Read</button>
+							<button type="button" data-operation="write" x-bind:aria-pressed="isAccess('write')" x-on:click="setAccess('write')">Write</button>
+							<button type="button" data-operation="other" x-bind:aria-pressed="isAccess('other')" x-on:click="setAccess('other')">Other</button>
+						</div>
+						<label class="[ search ]">
+							<span class="[ visually-hidden ]">Filter path or process</span>
+							<input type="search" class="[ font-mono ]" placeholder="Filter path or process" x-model="query"/>
+						</label>
+						<label class="[ toggle ]">
+							<input type="checkbox" data-group-repeats x-bind:checked="grouped" x-on:change="toggleGrouped"/>
+							<span>Group repeats</span>
+						</label>
+						<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-on:click="copyText($event)">Copy as text</button>
+					</div>
+				</template>
+				<template x-if="hasList">
+					<div class="[ violations ]" role="listbox" aria-label="Denied access">
+						<template x-for="row in rows" x-bind:key="row.key">
+							<button type="button" role="option" class="[ violation ]" data-violation x-bind:aria-selected="isOpen(row)" x-on:click="toggle(row)">
+								<time x-bind:title="row.stamp" x-text="row.time"></time>
+								<span class="[ access ]" x-text="row.access"></span>
+								<span class="[ path ]" x-bind:title="row.path"><bdi x-text="row.path"></bdi></span>
+								<span class="[ process ]" x-text="row.process"></span>
+								<span class="[ count ]" x-text="row.count"></span>
+							</button>
+						</template>
+						<template x-if="noMatch">
+							<p class="[ no-match ]" data-no-match>No denied access matches this filter. <button type="button" class="[ link ]" x-on:click="clearFilters">Clear filters</button>.</p>
+						</template>
+					</div>
+				</template>
+				<template x-if="hasOpen">
+					<div class="[ detail ]" data-violation-detail>
+						<dl>
+							<dt>Path</dt>
+							<dd class="[ font-mono ]" x-text="open.path"></dd>
+							<dt>Denied</dt>
+							<dd x-text="open.denied"></dd>
+							<template x-if="hasHint">
+								<dt>Why</dt>
+							</template>
+							<template x-if="hasHint">
+								<dd x-text="open.hint"></dd>
+							</template>
+						</dl>
+						<div class="[ actions ]">
+							<template x-if="canAllow">
+								<a class="[ button ]" data-size="sm" data-allow-path x-bind:href="open.allowHref">Allow this path…</a>
+							</template>
+							<template x-if="canAllow">
+								<span class="[ hint ]">Opens the Agent isolation settings with this path filled in. Applies to new sessions.</span>
+							</template>
+							<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-on:click="copyPath(open, $event)">Copy path</button>
+						</div>
+					</div>
+				</template>
+				<template x-if="hasList">
+					<p class="[ footer ]" x-text="footer"></p>
+				</template>
+			</section>
+		</div>
+	</section>
+}
