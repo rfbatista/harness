@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 
@@ -72,6 +73,11 @@ func (d *Driver) Wrap(policy ports.SandboxPolicy, cmd ports.SandboxCommand) (por
 		fmt.Fprintf(&b, " (subpath %s)", p)
 	}
 	b.WriteString(")\n(allow file-read-metadata)\n")
+	// Apple's git and xcrun keep a cache file in the system temp dir, whatever
+	// TMPDIR says; only those are let through it.
+	for _, re := range pr.xcrunCaches(os.TempDir()) {
+		fmt.Fprintf(&b, "(allow file-read* file-write* (regex %s))\n", re)
+	}
 
 	readable, err := pr.all(policy.Readable)
 	if err != nil {
@@ -125,16 +131,33 @@ func (p *profile) variants(path string) ([]string, error) {
 	if strings.ContainsRune(path, 0) {
 		return nil, fmt.Errorf("sandbox: path %q has a NUL byte", path)
 	}
+	var out []string
+	for _, v := range variantPaths(path) {
+		out = append(out, p.param(v))
+	}
+	return out, nil
+}
+
+// xcrunCaches are regular expressions, as parameters, matching the cache
+// files Apple's git and xcrun create in dir (xcrun_db-XXXXXXXX): the name and
+// nothing else in it. Each variant of dir gets one.
+func (p *profile) xcrunCaches(dir string) []string {
+	var out []string
+	for _, v := range variantPaths(dir) {
+		out = append(out, p.param("^"+regexp.QuoteMeta(v)+"/xcrun_db(-[A-Za-z0-9]+)?$"))
+	}
+	return out
+}
+
+// variantPaths are path cleaned and, when it differs, as the file system
+// resolves it.
+func variantPaths(path string) []string {
 	path = filepath.Clean(path)
 	vs := []string{path}
 	if r := resolve(path); r != path {
 		vs = append(vs, r)
 	}
-	var out []string
-	for _, v := range vs {
-		out = append(out, p.param(v))
-	}
-	return out, nil
+	return vs
 }
 
 func (p *profile) all(paths []string) ([]string, error) {

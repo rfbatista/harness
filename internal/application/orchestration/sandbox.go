@@ -36,6 +36,11 @@ type Sandbox struct {
 	Bin string
 	// Home is the agent Claude home.
 	Home string
+	// UserHome is the person's home directory and ConfigHome their
+	// XDG_CONFIG_HOME (empty when unset): their git config is read-only to
+	// every session, so git inside the sandbox sees their identity and
+	// aliases. Empty UserHome: none.
+	UserHome, ConfigHome string
 	// TempDir gives a session its temp dir. Nil: the system's.
 	TempDir func(sessionID string) string
 	// Allow gives the allowlist a session adds to the baseline: token-saver
@@ -82,6 +87,9 @@ type SandboxSession struct {
 	VirtualShell string
 	TempDir      string
 	AgentHome    string
+	// UserHome and ConfigHome are the person's home and XDG config home; their
+	// git config is read-only in every mode, never their ssh folder.
+	UserHome, ConfigHome string
 	// Allow is the rest of the allowlist; Extra the person's own paths.
 	Allow []ports.SandboxPath
 	Extra []ports.SandboxPath
@@ -126,6 +134,9 @@ func BuildSandboxPolicy(s SandboxSession) ports.SandboxPolicy {
 		}
 	}
 	add(s.AgentHome, true)
+	for _, p := range gitConfigPaths(s.UserHome, s.ConfigHome) {
+		add(p, false)
+	}
 	if s.OneShot {
 		add(s.TempDir, true)
 		if resolved, err := filepath.EvalSymlinks(s.TempDir); err == nil && s.TempDir != "" {
@@ -163,6 +174,20 @@ func BuildSandboxPolicy(s SandboxSession) ports.SandboxPolicy {
 	policy := splitPolicy(all, s.Worktree)
 	policy.Hidden = hiddenPaths(s, all)
 	return policy
+}
+
+// gitConfigPaths are the person's git config: ~/.gitconfig and the git
+// folder of ~/.config and of XDG_CONFIG_HOME. Credential folders (~/.ssh)
+// are never among them: pushes use the harness's git credentials.
+func gitConfigPaths(home, xdg string) []string {
+	if home == "" {
+		return nil
+	}
+	out := []string{filepath.Join(home, ".gitconfig"), filepath.Join(home, ".config", "git")}
+	if xdg != "" {
+		out = append(out, filepath.Join(xdg, "git"))
+	}
+	return out
 }
 
 // splitPolicy sorts paths into the policy's readable and writable sets: a
@@ -207,7 +232,7 @@ func (b *Sandbox) OneShotWrap(allow []ports.SandboxPath) (llmkit.WrapFunc, error
 	// lock files under TMPDIR, so a read-only cwd would fail calls that
 	// otherwise work. A one-shot runs no tools and sees no repository, which
 	// is why it does not get a temp dir of its own as a session does.
-	sess := SandboxSession{OneShot: true, TempDir: os.TempDir(), AgentHome: b.Home, Allow: allow}
+	sess := SandboxSession{OneShot: true, TempDir: os.TempDir(), AgentHome: b.Home, UserHome: b.UserHome, ConfigHome: b.ConfigHome, Allow: allow}
 	if b.Checkouts != nil {
 		sess.Repositories = b.Checkouts()
 	}
@@ -318,6 +343,8 @@ func (s *Service) sandbox(ctx context.Context, in prepareInput, id string, repo 
 		Worktree:     worktree,
 		GitCommonDir: gitCommonDir(worktree, repo.RootDir),
 		AgentHome:    sb.Home,
+		UserHome:     sb.UserHome,
+		ConfigHome:   sb.ConfigHome,
 		TempDir:      os.TempDir(),
 	}
 	if sb.TempDir != nil {

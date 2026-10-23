@@ -635,8 +635,11 @@ func newOrchestrationService(
 		Driver:  sandboxDriver,
 		Enabled: orchestration.SandboxSwitch(cat.Settings),
 		Home:    agentHome.Path(),
-		Bin:     claudeBin.Bin(),
-		Allow:   func(string) []ports.SandboxPath { return allow },
+		// Their git config is read-only to a session; not their ssh folder.
+		UserHome:   userHome,
+		ConfigHome: os.Getenv("XDG_CONFIG_HOME"),
+		Bin:        claudeBin.Bin(),
+		Allow:      func(string) []ports.SandboxPath { return allow },
 		// What no session grants is hidden: the workspaces root and, for
 		// one-shots, every checkout.
 		WorkspacesRoot: ws.Root,

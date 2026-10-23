@@ -364,3 +364,73 @@ func TestADenialOfAHiddenRepositoryIsCaptured(t *testing.T) {
 		t.Fatalf("violation %+v", got)
 	}
 }
+
+// gitHome is a stand-in home under the real one, with a git config the
+// policy reads and an ssh key it does not; the person's own files are never
+// read. The driver treats it as the home.
+func gitHome(t *testing.T) (*Driver, string, ports.SandboxPolicy) {
+	t.Helper()
+	d := requireSeatbelt(t)
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("no git")
+	}
+	home := homeDir(t)
+	d.Home = func() (string, error) { return home, nil }
+	wt := filepath.Join(home, "wt")
+	os.MkdirAll(wt, 0o755)
+	os.MkdirAll(filepath.Join(home, ".ssh"), 0o700)
+	os.WriteFile(filepath.Join(home, ".gitconfig"), []byte("[user]\n\tname = Stand In\n\temail = stand@in.test\n[commit]\n\tgpgsign = false\n"), 0o644)
+	os.WriteFile(filepath.Join(home, ".ssh", "id_rsa"), []byte("secret"), 0o600)
+	p := ports.SandboxPolicy{WorkingDir: wt, Writable: []string{wt}, Readable: []string{filepath.Join(home, ".gitconfig"), filepath.Join(home, ".config", "git")}}
+	return d, home, p
+}
+
+func TestGitInsideReadsTheStandInGitConfigWithoutXcrunErrorsAndStillCannotReadSSH(t *testing.T) {
+	d, home, p := gitHome(t)
+	out, err := run(t, d, p, `unset GIT_CONFIG_GLOBAL; git init -q . && git config user.name && echo hi > f && git add f && git status --short && git commit -q -m one && git log --oneline | wc -l`, "HOME="+home)
+	if err != nil {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	if !strings.HasPrefix(out, "Stand In\n") {
+		t.Errorf("user.name not read from the stand-in .gitconfig: %q", out)
+	}
+	if strings.Contains(out, "xcrun") || strings.Contains(out, "not permitted") {
+		t.Errorf("git printed an error: %q", out)
+	}
+	if out, err := run(t, d, p, `cat `+filepath.Join(home, ".ssh", "id_rsa")); err == nil {
+		t.Errorf("read the stand-in ssh key: %s", out)
+	}
+}
+
+// Only the cache files of Apple's git and xcrun are let through the system
+// temp dir; any other file in it stays denied, for reading and writing.
+func TestOnlyAppleGitCacheFilesAreOpenInTheSystemTempDir(t *testing.T) {
+	d, _, p := gitHome(t)
+	tmp := os.TempDir()
+	other, err := os.CreateTemp(tmp, "harness-seatbelt-other-")
+	if err != nil {
+		t.Skipf("cannot write to the system temp dir: %v", err)
+	}
+	other.WriteString("data")
+	other.Close()
+	t.Cleanup(func() { os.Remove(other.Name()) })
+	if out, err := run(t, d, p, `cat `+other.Name()); err == nil {
+		t.Errorf("read a non-xcrun file in the system temp dir: %s", out)
+	}
+	if out, err := run(t, d, p, `echo x > `+filepath.Join(tmp, "harness-seatbelt-new-"+filepath.Base(p.WorkingDir))); err == nil {
+		t.Errorf("created a non-xcrun file in the system temp dir: %s", out)
+	}
+	for _, name := range []string{"xcrun_db-a.b", "xcrun_db_other", "xcrun_dbx"} {
+		path := filepath.Join(tmp, name)
+		if out, err := run(t, d, p, `echo x > `+path); err == nil {
+			os.Remove(path)
+			t.Errorf("wrote %s", name)
+			_ = out
+		}
+	}
+	probe := filepath.Join(tmp, "xcrun_db-harnessT0")
+	t.Cleanup(func() { os.Remove(probe) })
+	if out, err := run(t, d, p, `echo x > `+probe); err != nil {
+		t.Errorf("could not write an xcrun cache file: %v %s", err, out)
+	}
+}

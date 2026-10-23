@@ -34,7 +34,7 @@ func (b *Sandbox) Builtin() []ports.SandboxBuiltinGroup {
 	session := func(mode domain.SessionMode) ports.SandboxPolicy {
 		return BuildSandboxPolicy(SandboxSession{
 			Mode: mode, Worktree: worktree, GitCommonDir: gitDir, Repositories: []string{repos},
-			VirtualShell: shell, TempDir: temp, AgentHome: b.Home,
+			VirtualShell: shell, TempDir: temp, AgentHome: b.Home, UserHome: b.UserHome, ConfigHome: b.ConfigHome,
 		})
 	}
 	entries := func(p ports.SandboxPolicy, labels map[string]string, prefix string) []ports.SandboxBuiltinEntry {
@@ -47,11 +47,15 @@ func (b *Sandbox) Builtin() []ports.SandboxBuiltinGroup {
 		return out
 	}
 
-	fixed := entries(session(domain.SessionModeImplement), map[string]string{
+	labels := map[string]string{
 		b.Home: "Agent Claude home",
 		shell:  "The session's virtual shell",
 		temp:   "Temp dir",
-	}, "")
+	}
+	for _, p := range gitConfigPaths(b.UserHome, b.ConfigHome) {
+		labels[p] = "Your git config"
+	}
+	fixed := entries(session(domain.SessionModeImplement), labels, "")
 	byMode := []struct {
 		title string
 		mode  domain.SessionMode
