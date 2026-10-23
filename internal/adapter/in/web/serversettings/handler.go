@@ -30,8 +30,8 @@ type Handler struct {
 	Paths Paths
 	// Settings paints the switches; nil shows each at its default.
 	Settings ports.SettingsReader
-	Layout shell.Layout
-	Render shell.Renderer
+	Layout   shell.Layout
+	Render   shell.Renderer
 }
 
 // Page renders the page.

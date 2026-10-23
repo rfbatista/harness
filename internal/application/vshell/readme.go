@@ -3,6 +3,7 @@ package vshell
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"strings"
 )
 
 // Version names the content of a file the harness writes that has no
@@ -14,7 +15,7 @@ func Version(content []byte) string {
 }
 
 // readme is the shell's README.md: a short map of the layout and its rules.
-const readme = `# Virtual shell
+const readmeTemplate = `# Virtual shell
 
 This folder holds your task's, your project's and the project's other
 tasks' resources as files. The harness keeps it in step with what is
@@ -43,9 +44,7 @@ Comments are named <yyyymmdd-hhmmss>-<author>-<short id>.md. A file you
 create in task/comments is your comment. You can edit or delete only your
 own; the others' are read-only (mode 0444), like every read-only path above.
 
-A person moves documents to project level: moving one from task/docs to
-project/docs is refused. Moving one from project/docs to task/docs makes
-it this task's, when it is linked to this task.
+{{MOVE_DOCS}}
 
 Every other task of the project has a folder tasks/<task-id>/docs/ (ls
 tasks/ lists their ids), with the rules of task/docs/: a file you write
@@ -77,7 +76,7 @@ A refusal starts with its code:
     READ_ONLY           the path is read-only
     COMMENT_NOT_YOURS   the comment is someone else's
     NOT_ON_TASK         the document is not linked to that task, so it cannot move to its docs
-    PROJECT_MOVE_DENIED only a person moves a document to project/docs: ask them to
+{{MOVE_DENIED}}
     TASK_MOVE_DENIED    a document stays on its task: write it onto the other task instead
     TASK_NOT_FOUND      tasks/<task-id> names no task of this project
     TASK_NOT_ON_PROJECT tasks/<task-id> names a task of another project
@@ -94,3 +93,31 @@ The commands' common options are understood; abbreviated long options,
 options after the file names, and cp -R src/ with a trailing slash are not,
 so write those another way.
 `
+
+// readmeFor is the shell's README at the current value of the setting
+// "Agents move documents to project" (ADR 0020): which rule applies to a
+// move from task/docs to project/docs.
+func readmeFor(agentsMove bool) string {
+	moveDocs, moveDenied := moveDocsOff, moveDeniedOff
+	if agentsMove {
+		moveDocs, moveDenied = moveDocsOn, moveDeniedOn
+	}
+	return strings.NewReplacer("{{MOVE_DOCS}}", moveDocs, "{{MOVE_DENIED}}", moveDenied).Replace(readmeTemplate)
+}
+
+const moveDocsOn = `The setting "Agents move documents to project" is on: mv task/docs/<file>
+project/docs/ makes one of this task's documents a project document, with
+no approval. Do it once a document says something the next task needs, not
+just this one. A document of another task (tasks/<task-id>/docs/) does not
+move. Moving one from project/docs to task/docs makes it this task's
+again, when it is linked to this task.`
+
+const moveDocsOff = `The setting "Agents move documents to project" is off: only a person moves
+documents to project level, so moving one from task/docs to project/docs is
+refused; ask them to move it, or to turn the setting on. Moving one from
+project/docs to task/docs makes it this task's, when it is linked to this
+task.`
+
+const moveDeniedOn = `    PROJECT_MOVE_DENIED only your own task's documents move to project/docs`
+
+const moveDeniedOff = `    PROJECT_MOVE_DENIED only a person moves a document to project/docs unless they turn on "Agents move documents to project": ask them to`

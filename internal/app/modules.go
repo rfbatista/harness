@@ -419,7 +419,7 @@ func newArtifactsService(cfg Config, repo ports.ArtifactRepository, sessions por
 // planning and their designs through the artifacts.
 func newVirtualShells(plan *planning.Service, art *artifacts.Service, sessions ports.SessionRepository, cat catalog.Catalog) *vshell.Service {
 	return vshell.New(vshell.Sources{Tickets: plan, Documents: plan, Comments: plan, Resources: plan, Artifacts: art, Writes: plan,
-		Designs: art, Sessions: sessions, Agents: cat.Agents})
+		Designs: art, Sessions: sessions, Agents: cat.Agents, Settings: cat.Settings})
 }
 
 // bindVirtualShells gives every session with a task its virtual shell, and
