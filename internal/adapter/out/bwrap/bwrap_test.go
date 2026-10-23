@@ -174,3 +174,17 @@ func TestRender_ThePersonsGitConfigIsBoundReadOnlyAfterTheHomeIsHidden(t *testin
 		t.Errorf("ssh bound: %v", args)
 	}
 }
+
+func TestOtherWorktreeEntriesAreBoundReadOnlyAndTheOwnEntryReadWriteAfterIt(t *testing.T) {
+	git := "/srv/repo/.git"
+	args := Render(ports.SandboxPolicy{
+		Writable: []string{git, git + "/worktrees/own"},
+		Readable: []string{git + "/worktrees"},
+	}, "/home/u")
+	common := index(args, "--bind-try", git, git)
+	ro := index(args, "--ro-bind-try", git+"/worktrees", git+"/worktrees")
+	own := index(args, "--bind-try", git+"/worktrees/own", git+"/worktrees/own")
+	if common < 0 || ro < 0 || own < 0 || !(common < ro && ro < own) {
+		t.Fatalf("want common < ro worktrees < own entry, got %d %d %d: %v", common, ro, own, args)
+	}
+}

@@ -79,24 +79,37 @@ func (d *Driver) Wrap(policy ports.SandboxPolicy, cmd ports.SandboxCommand) (por
 		fmt.Fprintf(&b, "(allow file-read* file-write* (regex %s))\n", re)
 	}
 
-	readable, err := pr.all(policy.Readable)
-	if err != nil {
-		return ports.SandboxCommand{}, err
+	// Later rules win, so the paths go in by depth, parents first: a read-only
+	// path is write-denied then read-allowed, a writable one allowed, and a
+	// nested path (the other worktrees' entries inside a writable git dir, the
+	// session's own entry inside those) overrides what encloses it. A
+	// read-only path outside the home stays read-only too.
+	type rule struct {
+		path  string
+		write bool
 	}
-	writable, err := pr.all(policy.Writable)
-	if err != nil {
-		return ports.SandboxCommand{}, err
+	var rules []rule
+	for _, p := range policy.Readable {
+		rules = append(rules, rule{p, false})
 	}
-	// Later rules win: a read-only path is write-denied first, so a repository
-	// outside the home stays read-only too, then the allows follow.
-	for _, p := range readable {
-		fmt.Fprintf(&b, "(deny file-write* (with message %s) (subpath %s))\n", tag, p)
+	for _, p := range policy.Writable {
+		rules = append(rules, rule{p, true})
 	}
-	for _, p := range readable {
-		fmt.Fprintf(&b, "(allow file-read* (subpath %s))\n", p)
-	}
-	for _, p := range writable {
-		fmt.Fprintf(&b, "(allow file-read* file-write* (subpath %s))\n", p)
+	slices.SortStableFunc(rules, func(a, b rule) int {
+		return strings.Count(filepath.Clean(a.path), "/") - strings.Count(filepath.Clean(b.path), "/")
+	})
+	for _, r := range rules {
+		vs, err := pr.variants(r.path)
+		if err != nil {
+			return ports.SandboxCommand{}, err
+		}
+		for _, p := range vs {
+			if r.write {
+				fmt.Fprintf(&b, "(allow file-read* file-write* (subpath %s))\n", p)
+			} else {
+				fmt.Fprintf(&b, "(deny file-write* (with message %s) (subpath %s))\n(allow file-read* (subpath %s))\n", tag, p, p)
+			}
+		}
 	}
 
 	args := []string{}
