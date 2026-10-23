@@ -104,6 +104,8 @@ import "../src/modules/tasks/presentation/railView.test.js";
 import "../src/modules/tasks/presentation/statusChange.test.js";
 import "../src/modules/tokensavers/infrastructure/gateways.test.js";
 import "../src/modules/usage/domain/format.test.js";
+import "../src/modules/usage/domain/liveCalls.test.js";
+import "../src/modules/usage/domain/message.test.js";
 import "../src/modules/usage/domain/totals.test.js";
 import "../src/modules/usage/domain/usage.test.js";
 import "../src/modules/usage/infrastructure/dto.test.js";
