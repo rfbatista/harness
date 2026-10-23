@@ -605,14 +605,12 @@ func newOrchestrationService(
 	svc.TranscriptReader = transcriptReader
 	svc.Terminals = terminals
 	svc.Events = cat.Bus
-	// A platform without a driver runs sessions unconfined for now (Linux's
-	// driver comes later); with one, the sandbox switch applies.
-	if sandboxDriver != nil {
-		svc.Sandbox = &orchestration.Sandbox{
-			Driver:  sandboxDriver,
-			Enabled: orchestration.SandboxSwitch(cat.Settings),
-			Home:    agentHome.Path(),
-		}
+	// A platform without a driver leaves Driver nil: with the sandbox on,
+	// a session start then refuses (ADR 0017).
+	svc.Sandbox = &orchestration.Sandbox{
+		Driver:  sandboxDriver,
+		Enabled: orchestration.SandboxSwitch(cat.Settings),
+		Home:    agentHome.Path(),
 	}
 	return svc
 }
