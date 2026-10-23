@@ -23,7 +23,11 @@
     gap: var(--space-xs) var(--space-s);
     padding-inline: var(--space-l);
 
+    & input[type="search"] { inline-size: 14rem; }
+
     & .count {
+      display: inline-flex;
+      gap: var(--space-s);
       margin-inline-start: auto;
       color: var(--color-ink-faint);
       font-size: var(--text-sm);

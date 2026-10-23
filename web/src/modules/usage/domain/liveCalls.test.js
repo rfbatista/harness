@@ -8,7 +8,9 @@ import {
   emptyLog,
   entriesOf,
   filterItems,
+  filterOptions,
   isInFlight,
+  matchTab,
   searchMatches,
 } from "./liveCalls.js";
 
@@ -203,4 +205,42 @@ test("a marker stays in the filtered log", () => {
 test("counts give shown, total and missed", () => {
   assert.deepEqual(countsOf(sample(), {}), { shown: 5, total: 5, missed: 1 });
   assert.deepEqual(countsOf(sample(), { hideNoProject: true }), { shown: 3, total: 5, missed: 1 });
+});
+
+test("filter options come from the entries held: sessions, tasks and models, once each", () => {
+  const opts = filterOptions(sample());
+  assert.deepEqual(opts.sessions, [{ value: "s1", label: "Port the parser" }, { value: "s2", label: "S2" }]);
+  assert.deepEqual(opts.tasks, [{ value: "t1", label: "Parser" }, { value: "t2", label: "T2" }]);
+  assert.deepEqual(opts.models, ["m-opus", "m-sonnet"]);
+});
+
+test("filter options of an empty log are empty, and a clear empties them", () => {
+  assert.deepEqual(filterOptions(emptyLog()), { sessions: [], tasks: [], models: [] });
+  assert.deepEqual(filterOptions(clearLog()), { sessions: [], tasks: [], models: [] });
+});
+
+test("a session or task without a title is labelled by its id", () => {
+  const l = log(["call.started", started({ session: { id: "0123456789abcdef", title: "" }, task: { id: "t9", title: "" } })]);
+  assert.deepEqual(filterOptions(l).sessions, [{ value: "0123456789abcdef", label: "Session 01234567" }]);
+  assert.deepEqual(filterOptions(l).tasks, [{ value: "t9", label: "Untitled task" }]);
+});
+
+test("a new entry that does not match the filter still counts in the total", () => {
+  const l = applyEvent(sample(), "call.started", started({ id: "f", session: { id: "s9", title: "S9" } }));
+  assert.deepEqual(countsOf(l, { session: "s2" }), { shown: 1, total: 6, missed: 1 });
+});
+
+test("the tab a search opens: the first of request, response and usage holding a match", () => {
+  const [e] = entriesOf(log(["call.started", started()], ["call.finished", finished()]));
+  assert.equal(matchTab(e, "hello"), "request");
+  assert.equal(matchTab(e, "content-type"), "request", "the request comes first");
+  assert.equal(matchTab(e, "input_tokens"), "usage");
+  assert.equal(matchTab(e, "hi"), "response", "only the response has it");
+});
+
+test("a search with no match in a tab, or a blank one, opens none", () => {
+  const [e] = entriesOf(log(["call.started", started()], ["call.finished", finished()]));
+  assert.equal(matchTab(e, "port the parser"), "", "the session title is in no tab");
+  assert.equal(matchTab(e, "zzz"), "");
+  assert.equal(matchTab(e, " "), "");
 });

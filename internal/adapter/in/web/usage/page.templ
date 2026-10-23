@@ -150,7 +150,49 @@ templ Page(frame shell.Frame, projectID, projectName string, seed Seed) {
 						</div>
 					</header>
 					<div class="[ live-calls-bar ]">
-						<span class="[ count ]" data-testid="live-count" x-text="count"></span>
+						<div class="[ field ]">
+							<label for="live-search" class="[ visually-hidden ]">Search the calls' JSON</label>
+							<input id="live-search" type="search" placeholder="Search the calls' JSON" autocomplete="off" data-testid="live-search" x-model="query"/>
+						</div>
+						<select data-size="sm" data-fit aria-label="Session" data-testid="live-filter-session" x-model="session">
+							<option value="">Any session</option>
+							<template x-for="o in options.sessions" x-bind:key="o.value">
+								<option x-bind:value="o.value" x-text="o.label"></option>
+							</template>
+						</select>
+						<select data-size="sm" data-fit aria-label="Task" data-testid="live-filter-task" x-model="task">
+							<option value="">Any task</option>
+							<template x-for="o in options.tasks" x-bind:key="o.value">
+								<option x-bind:value="o.value" x-text="o.label"></option>
+							</template>
+						</select>
+						<select data-size="sm" data-fit aria-label="Model" data-testid="live-filter-model" x-model="model">
+							<option value="">Any model</option>
+							<template x-for="m in options.models" x-bind:key="m">
+								<option x-bind:value="m" x-text="m"></option>
+							</template>
+						</select>
+						<select data-size="sm" data-fit aria-label="Status" data-testid="live-filter-status" x-model="statusClass">
+							<option value="">Any status</option>
+							<option value="2xx">2xx</option>
+							<option value="4xx5xx">4xx / 5xx</option>
+							<option value="error">Error</option>
+							<option value="inflight">In flight</option>
+						</select>
+						<div class="[ field ]" data-inline>
+							<label><input type="checkbox" data-testid="live-filter-streamed" x-model="streamed"/> Streamed</label>
+						</div>
+						<div class="[ field ]" data-inline>
+							<label><input type="checkbox" data-testid="live-filter-no-project" x-model="hideNoProject"/> Hide calls with no project</label>
+						</div>
+						<div class="[ field ]" data-inline>
+							<label><input type="checkbox" data-testid="live-auto-scroll" x-model="autoScroll"/> Auto-scroll</label>
+						</div>
+						<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" data-testid="live-clear" x-on:click="clear">Clear</button>
+						<span class="[ count ]">
+							<span data-testid="live-count" x-text="count"></span>
+							<span data-testid="live-missed-count" x-show="missedText" x-text="missedText"></span>
+						</span>
 					</div>
 					<template x-if="error">
 						<div class="[ banner ]" data-tone="danger" role="alert">
@@ -162,7 +204,7 @@ templ Page(frame shell.Frame, projectID, projectName string, seed Seed) {
 						</div>
 					</template>
 					<p class="[ usage-hint ]" data-testid="live-empty" x-show="empty" x-text="emptyText"></p>
-					<ol role="list" class="[ call-list ]" data-testid="live-calls">
+					<ol role="list" class="[ call-list ]" data-testid="live-calls" x-ref="list">
 						<template x-for="row in rows" x-bind:key="row.id">
 							<li x-bind:class="row.cls" x-bind:data-call="row.call" x-bind:data-failed="row.failed" x-bind:data-id="row.id" x-bind:data-testid="row.testid">
 								<template x-if="row.marker">

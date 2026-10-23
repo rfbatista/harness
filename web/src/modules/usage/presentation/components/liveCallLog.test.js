@@ -96,7 +96,7 @@ test("a call appears in flight and is completed in place", () => {
   assert.deepEqual(instance.rows.map((r) => [r.id, r.inFlight, r.status]), [["c1", true, ""]]);
   gateway.stream.onEvent("call.finished", finished());
   assert.deepEqual(instance.rows.map((r) => [r.id, r.inFlight, r.status]), [["c1", false, "200"]]);
-  assert.equal(instance.count, "1 call");
+  assert.equal(instance.count, "1 of 1 call");
 });
 
 test("a missed calls marker shows inline, in order, and counts", () => {
@@ -227,4 +227,175 @@ test("a tree is drawn once per value, so a redraw keeps what the person folded",
   gateway.stream.onEvent("call.started", started({ id: "c2" }));
   instance.renderTree(el, instance.rows[0]);
   assert.equal(el.querySelectorAll("details")[1].open, false);
+});
+
+// search, filters, clear, auto-scroll
+
+/** A page that has received a few calls. */
+function filled() {
+  const p = page();
+  p.instance.toggle();
+  const send = (type, data) => p.gateway.stream.onEvent(type, data);
+  send("call.started", started({ id: "a", session: { id: "s1", title: "Port the parser" }, task: { id: "t1", title: "Parser" } }));
+  send("call.finished", finished({ id: "a", model: "m-sonnet" }));
+  send("call.started", started({ id: "b", session: { id: "s2", title: "Fix the build" }, task: { id: "t2", title: "Build" }, request: { method: "POST", path: "/v1/messages", query: "", headers: {}, body: { messages: [{ role: "user", content: "needle in here" }] } } }));
+  send("call.finished", finished({ id: "b", status: 500, model: "m-opus", streamed: true }));
+  send("call.started", started({ id: "c", project_id: null, session: null, task: null, kind: "system" }));
+  return { ...p, send };
+}
+
+const rowIds = (instance) => instance.rows.map((r) => r.id);
+
+test("the count reads shown of total, and a new call that does not match still counts in the total", () => {
+  const { instance, send } = filled();
+  assert.equal(instance.count, "3 of 3 calls");
+  instance.model = "m-opus";
+  assert.equal(instance.count, "1 of 3 calls");
+  send("call.started", started({ id: "d" }));
+  assert.equal(instance.count, "1 of 4 calls");
+  assert.deepEqual(rowIds(instance), ["b"]);
+});
+
+test("the missed calls count shows apart from the count, and reads nothing when none", () => {
+  const { instance, send } = filled();
+  assert.equal(instance.missedText, "");
+  send("calls.missed", missed(3));
+  assert.equal(instance.missedText, "3 missed");
+  send("calls.missed", missed(2));
+  assert.equal(instance.missedText, "5 missed");
+});
+
+test("the search narrows the rows to the entries whose JSON holds it, new ones included", () => {
+  const { instance, send } = filled();
+  instance.query = "NEEDLE";
+  assert.deepEqual(rowIds(instance), ["b"]);
+  send("call.started", started({ id: "d", request: { method: "POST", path: "/v1/x", query: "", headers: {}, body: "a needle" } }));
+  assert.deepEqual(rowIds(instance), ["b", "d"]);
+  assert.equal(instance.count, "2 of 4 calls");
+});
+
+test("a row with a match opens to the tab holding it, and the tree gets the search", () => {
+  const { instance } = filled();
+  assert.equal(instance.rows[0].open, false);
+  instance.query = "needle";
+  const [row] = instance.rows;
+  assert.equal(row.open, true);
+  assert.equal(row.tab, "request");
+  assert.equal(row.query, "needle");
+  instance.query = "";
+  assert.equal(instance.rows.find((r) => r.id === "b").open, false);
+});
+
+test("a row the person closed stays closed while the search holds", () => {
+  const { instance } = filled();
+  instance.query = "needle";
+  instance.expand(click("b"));
+  assert.equal(instance.rows[0].open, false);
+  instance.expand(click("b"));
+  assert.equal(instance.rows[0].open, true);
+});
+
+test("a tab the person picked is kept when the search changes", () => {
+  const { instance } = filled();
+  instance.query = "needle";
+  instance.pickTab(click("b", { tab: "usage" }));
+  instance.query = "needl";
+  assert.equal(instance.rows[0].tab, "usage");
+});
+
+test("the filter options come from the entries held", () => {
+  const { instance } = filled();
+  assert.deepEqual(instance.options.sessions.map((o) => o.value), ["s2", "s1"]);
+  assert.deepEqual(instance.options.tasks.map((o) => o.label), ["Build", "Parser"]);
+  assert.deepEqual(instance.options.models, ["m-opus", "m-sonnet"]);
+});
+
+test("a chosen option stays offered after its entries are gone", () => {
+  const { instance } = filled();
+  instance.session = "s1";
+  instance.clear();
+  assert.deepEqual(instance.options.sessions.map((o) => o.value), ["s1"]);
+});
+
+test("filters by session, task, status class, streamed and no project", () => {
+  const { instance } = filled();
+  instance.session = "s2";
+  assert.deepEqual(rowIds(instance), ["b"]);
+  instance.session = "";
+  instance.task = "t1";
+  assert.deepEqual(rowIds(instance), ["a"]);
+  instance.task = "";
+  instance.statusClass = "4xx5xx";
+  assert.deepEqual(rowIds(instance), ["b"]);
+  instance.statusClass = "inflight";
+  assert.deepEqual(rowIds(instance), ["c"]);
+  instance.statusClass = "";
+  instance.streamed = true;
+  assert.deepEqual(rowIds(instance), ["b"]);
+  instance.streamed = false;
+  instance.hideNoProject = true;
+  assert.deepEqual(rowIds(instance), ["a", "b"]);
+});
+
+test("a missed calls marker stays shown under a filter", () => {
+  const { instance, send } = filled();
+  send("calls.missed", missed(1));
+  instance.model = "m-opus";
+  assert.deepEqual(rowIds(instance), ["b", "missed-1"]);
+});
+
+test("Clear empties the log, the counts and the open rows; the stream keeps running", () => {
+  const { instance, send, gateway } = filled();
+  send("calls.missed", missed(2));
+  instance.expand(click("a"));
+  instance.clear();
+  assert.equal(instance.rows.length, 0);
+  assert.equal(instance.count, "0 of 0 calls");
+  assert.equal(instance.missedText, "");
+  assert.equal(instance.empty, true);
+  assert.equal(instance.running, true);
+  assert.equal(gateway.closed, 0);
+  send("call.started", started({ id: "a" }));
+  assert.equal(instance.rows[0].open, false, "a call that comes after is a new one");
+});
+
+/** A list whose newest row records that it was scrolled to. */
+function scrollList(instance) {
+  const scrolled = [];
+  const last = { matches: (sel) => sel === "li", scrollIntoView: (o) => scrolled.push(o) };
+  instance.$refs = { list: { lastElementChild: last } };
+  return scrolled;
+}
+
+test("auto-scroll is on by default and follows each new entry to the newest", () => {
+  const { instance, send, tick } = filled();
+  assert.equal(instance.autoScroll, true);
+  tick();
+  const scrolled = scrollList(instance);
+  send("call.started", started({ id: "d" }));
+  tick();
+  assert.equal(scrolled.length, 1);
+});
+
+test("a call finishing does not scroll; turned off, nothing follows", () => {
+  const { instance, send, tick, set } = filled();
+  tick();
+  const scrolled = scrollList(instance);
+  send("call.finished", finished({ id: "c" }));
+  tick();
+  assert.equal(scrolled.length, 0);
+  set("autoScroll", false);
+  send("call.started", started({ id: "d" }));
+  tick();
+  assert.equal(scrolled.length, 0);
+});
+
+test("turning auto-scroll back on goes to the newest at once", () => {
+  const { instance, tick, set } = filled();
+  tick();
+  set("autoScroll", false);
+  const scrolled = scrollList(instance);
+  set("autoScroll", true);
+  tick();
+  assert.equal(scrolled.length, 1);
 });
