@@ -71,6 +71,9 @@ type AgentSpec struct {
 	// never lets a shell read its values as code. Other agents ignore it.
 	Dotenv       []domain.EnvVar `json:"dotenv,omitempty"`
 	Conversation Conversation    `json:"conversation"`
+	// Sandbox is the policy the agent sandbox confines the process by; nil
+	// runs it unconfined.
+	Sandbox *SandboxPolicy `json:"sandbox,omitempty"`
 }
 
 // HookGroup is one entry of a claude settings hook event: the commands run

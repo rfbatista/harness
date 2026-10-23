@@ -25,6 +25,8 @@ type fakeResolver struct {
 	proj   *domain.Project
 	repo   *domain.Repository
 	agents map[string]*domain.Agent
+	// others are more repositories of the project.
+	others []*domain.Repository
 }
 
 func (f *fakeResolver) GetProject(_ context.Context, id string) (*domain.Project, error) {
@@ -55,7 +57,7 @@ func (f *fakeResolver) ListRepositories(_ context.Context, projectID string) ([]
 	if projectID != f.repo.ProjectID {
 		return nil, nil
 	}
-	return []*domain.Repository{f.repo}, nil
+	return append([]*domain.Repository{f.repo}, f.others...), nil
 }
 
 func (f *fakeResolver) ListBoundedContexts(projectID string) []*domain.BoundedContext {
@@ -90,6 +92,8 @@ type fakeProvisioner struct {
 	// exercise the rollback path for a failure that happens after
 	// provisioning, without needing the real claude CLI to be absent.
 	omitMkdir bool
+	// onCreate, if set, runs on each new worktree's directory.
+	onCreate func(dir string)
 }
 
 func (f *fakeProvisioner) Create(repositoryID, name, branch, baseRef string) (*domain.Workspace, error) {
@@ -107,6 +111,9 @@ func (f *fakeProvisioner) Create(repositoryID, name, branch, baseRef string) (*d
 		if err := os.MkdirAll(ws.Path, 0o755); err != nil {
 			return nil, err
 		}
+	}
+	if f.onCreate != nil {
+		f.onCreate(ws.Path)
 	}
 	f.created = append(f.created, ws)
 	f.baseRefs = append(f.baseRefs, baseRef)

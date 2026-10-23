@@ -87,6 +87,7 @@ func (s *Service) StartInteractive(ctx context.Context, req InteractiveRequest) 
 
 	spec := s.agentSpec(p.cfg, ports.Conversation{ID: id}, modePrompt(mode, ticket, project, req.Prompt))
 	spec.EnvFile = p.envFile
+	spec.Sandbox = p.sandbox.policy
 	created, err := s.sessions.Create(&domain.Session{
 		ID:              id,
 		ProjectID:       req.ProjectID,

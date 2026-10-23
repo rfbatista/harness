@@ -149,6 +149,9 @@ type Service struct {
 	// Settings holds the architect and implementation models a new session
 	// starts with when its start names none. Nil: the built-in ones.
 	Settings ports.SettingsReader
+	// Sandbox is the agent sandbox step of a session start (ADR 0017). Nil:
+	// sessions run unconfined.
+	Sandbox *Sandbox
 
 	// updates feeds the task-update turns to the courier, one at a time;
 	// deliverUpdate replaces the courier in tests.
@@ -335,6 +338,7 @@ type prepared struct {
 	cleanup    func() // removes the materialized skill plugin dir and the git directory; nil if none
 	envFile    string // the session's git env file, for login shells; "" without GitAuth
 	savers     sessionSavers
+	sandbox    sandboxed
 }
 
 // prepare validates a start request, provisions the session's worktree and
@@ -411,7 +415,16 @@ func (s *Service) prepare(ctx context.Context, in prepareInput) (*prepared, erro
 		return nil, err
 	}
 	savers := s.withTokenSavers(ctx, in, repo.RootDir, ws.Path, &cfg)
+	sb, err := s.sandbox(ctx, in, id, repo, ws.Path, cfg.Env)
+	if err != nil {
+		if cleanup != nil {
+			cleanup()
+		}
+		_ = s.workspaces.Discard(ws.ID)
+		return nil, err
+	}
 	return &prepared{
+		sandbox:    sb,
 		cfg:        cfg,
 		ws:         ws,
 		branch:     in.Branch,
