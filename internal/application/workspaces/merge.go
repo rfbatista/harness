@@ -118,6 +118,28 @@ func (s *Merges) MergeOffer(ctx context.Context, sessionID string) (*ports.Merge
 	return &ports.MergeOffer{Available: true, Into: into}, nil
 }
 
+// BranchChangedSince says whether the session's branch gained a commit, not on
+// the default branch, committed after since. The default branch is the one the
+// workspace was cut from, else the one the checkout has checked out.
+func (s *Merges) BranchChangedSince(ctx context.Context, sessionID string, since time.Time) (bool, error) {
+	t, err := s.target(ctx, sessionID)
+	if err != nil {
+		return false, err
+	}
+	into := t.base
+	if into == "" {
+		st, err := s.d.Git.Checkout(ctx, t.root)
+		if err != nil {
+			return false, err
+		}
+		into = st.Branch
+	}
+	if into == "" {
+		return false, errors.New("the default branch is not known")
+	}
+	return s.d.Git.BranchCommittedAfter(ctx, t.root, t.sess.Branch, into, since)
+}
+
 // MergeSessionBranch merges the session's branch with --no-ff into the
 // repository's default branch, and records how it ended on the session: the
 // new HEAD, or the refusal. The default branch is the one the workspace was

@@ -4,10 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"operators-mcp/internal/application/tooling"
 	"operators-mcp/internal/domain"
@@ -205,5 +207,58 @@ func TestArchitectMergesADelegatesBranch_EndToEnd(t *testing.T) {
 
 	if got := f.remoteRefs(t); got != remote {
 		t.Errorf("origin changed:\nbefore %s\nafter  %s", remote, got)
+	}
+}
+
+// commitAt commits a new file in dir with the committer date at.
+func commitAt(t *testing.T, dir, name string, at time.Time) {
+	t.Helper()
+	if err := os.WriteFile(filepath.Join(dir, name), []byte(name+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitE2E(t, dir, "add", ".")
+	cmd := exec.Command("git", "-c", "user.email=e2e@test", "-c", "user.name=e2e", "commit", "-q", "-m", "Add "+name)
+	cmd.Dir = dir
+	cmd.Env = append(os.Environ(), "GIT_COMMITTER_DATE="+at.Format(time.RFC3339))
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git commit: %v\n%s", err, out)
+	}
+}
+
+// A branch that gained a commit (by committer date) after the person approved
+// is not merged until a newer approval; commits all earlier merge.
+func TestArchitectMergeRefusesABranchChangedAfterApproval_EndToEnd(t *testing.T) {
+	f := startMergeFixture(t)
+	f.architect(t, "arch", f.task)
+
+	// Every commit predates the approval: it merges.
+	ws := f.session(t, "old", nil)
+	commitAt(t, ws.Path, "old.txt", time.Now().Add(-48*time.Hour))
+	f.review(t, "arch", "old", domain.ReviewApproved)
+	if _, err := f.mergeTool(t, "arch", "old"); err != nil {
+		t.Fatalf("a branch unchanged since approval is refused: %v", err)
+	}
+
+	// A commit dated after the approval: refused, the checkout untouched.
+	ws = f.session(t, "late", map[string]string{"late.txt": "x\n"})
+	f.review(t, "arch", "late", domain.ReviewApproved)
+	commitAt(t, ws.Path, "after.txt", time.Now().Add(time.Hour))
+	snap := f.snapshot(t)
+	_, err := f.mergeTool(t, "arch", "late")
+	wantRefusal(t, err, "MERGE_NOT_APPROVED", "the branch changed after the person approved; request a new review")
+	if f.snapshot(t) != snap {
+		t.Error("a refused merge changed the checkout")
+	}
+
+	// A commit made after an approval, then a newer approval: it merges.
+	ws = f.session(t, "redo", map[string]string{"redo.txt": "x\n"})
+	f.review(t, "arch", "redo", domain.ReviewApproved)
+	commitAt(t, ws.Path, "more.txt", time.Now().Add(2*time.Second))
+	_, err = f.mergeTool(t, "arch", "redo")
+	wantRefusal(t, err, "MERGE_NOT_APPROVED", "request a new review")
+	time.Sleep(3200 * time.Millisecond)
+	f.review(t, "arch", "redo", domain.ReviewApproved)
+	if _, err := f.mergeTool(t, "arch", "redo"); err != nil {
+		t.Fatalf("a newer approval after the last commit is refused: %v", err)
 	}
 }

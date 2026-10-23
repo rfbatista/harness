@@ -59,3 +59,7 @@ func TestHTTP_SessionMergeOffer(t *testing.T) {
 		t.Fatalf("unconfigured = %d", code)
 	}
 }
+
+func (f *fakeMerger) BranchChangedSince(context.Context, string, time.Time) (bool, error) {
+	return false, nil
+}

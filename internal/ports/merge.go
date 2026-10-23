@@ -2,6 +2,7 @@ package ports
 
 import (
 	"context"
+	"time"
 
 	"operators-mcp/internal/domain"
 )
@@ -19,6 +20,10 @@ type BranchMerger interface {
 	// MergeOffer says whether the session has a branch and a checkout a merge
 	// could apply to, and into which branch it would merge.
 	MergeOffer(ctx context.Context, sessionID string) (*MergeOffer, error)
+	// BranchChangedSince reports whether the session's branch has a commit,
+	// not yet on the default branch, whose committer date is later than since
+	// (1s precision). An error means it could not be told.
+	BranchChangedSince(ctx context.Context, sessionID string, since time.Time) (bool, error)
 }
 
 // MergeOffer is whether a merge applies to a session.
@@ -58,6 +63,10 @@ type GitMerger interface {
 	// like any failed merge, is aborted and checked to have left HEAD, index
 	// and working tree as they were. It never pushes.
 	Merge(ctx context.Context, dir, branch string) (head string, err error)
+	// BranchCommittedAfter reports whether branch has a commit that
+	// defaultBranch lacks and whose committer date is later than since, at
+	// one-second precision. It runs one git command.
+	BranchCommittedAfter(ctx context.Context, dir, branch, defaultBranch string, since time.Time) (bool, error)
 }
 
 // SessionChangeAnnouncer puts a session's current record on its project's feed
