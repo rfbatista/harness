@@ -102,6 +102,7 @@ func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRun
 		PullRequests:  prs,
 		Notifications: notes,
 		Usage:         usageSvc,
+		LiveCalls:     usageSvc,
 		Code:          code,
 		// The git credentials every remote operation authenticates with.
 		GitCredentials: creds.port(),

@@ -265,6 +265,7 @@ func NewRouter(h *Handler, opts ...Option) *echo.Echo {
 	g.GET("/projects/:project/usage", h.handleUsageSummary) // ?range=today|7d|30d
 	g.GET("/projects/:project/usage/records", h.handleListUsageRecords)
 	g.GET("/projects/:project/usage/events", h.handleUsageEvents) // each record as it is stored (SSE)
+	g.GET("/projects/:project/usage/live", h.handleUsageLive)     // the project's LLM calls as they happen (SSE)
 	g.GET("/usage/totals", h.handleUsageTotals)                   // ?task_id= or ?session_id=
 
 	// git credentials: what every git remote operation authenticates with

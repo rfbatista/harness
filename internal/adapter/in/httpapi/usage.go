@@ -2,8 +2,11 @@ package httpapi
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/labstack/echo/v4"
 
@@ -79,4 +82,55 @@ func (h *Handler) followUsage(ctx context.Context, projectID string) (<-chan any
 		return nil, err
 	}
 	return relayAs(ctx, records, func(r *domain.UsageRecord) any { return r }), nil
+}
+
+// handleUsageLive godoc
+// @Summary Live LLM calls of a project
+// @Description Streams, as server-sent events, the LLM calls of a project and the calls of no project that start while the stream is open: `ready` first, then `call.started`, `call.finished` and `calls.missed` events, each with a JSON `data` line. Opening the stream turns call capture on for as long as it is open; nothing is stored and no backlog is sent. A viewer that cannot keep up gets `calls.missed` with a count and stays connected. Credential header values are `[redacted]`.
+// @Tags usage
+// @Produce text/event-stream
+// @Param project path string true "Project id, or _harness for calls of no project"
+// @Success 200 {string} string "event stream"
+// @Failure 401 {object} map[string]string
+// @Failure 503 {object} map[string]string
+// @Router /projects/{project}/usage/live [get]
+func (h *Handler) handleUsageLive(c echo.Context) error {
+	if h.liveCalls == nil {
+		return errUsageOff
+	}
+	project := c.Param("project")
+	viewer := h.liveCalls.OpenLiveCalls(project)
+	defer viewer.Close()
+
+	conn, err := openSSE(c, h.streams.timeout())
+	if err != nil {
+		return nil
+	}
+	if conn.write(liveEvent(ports.LiveCallEvent{Name: ports.LiveCallReady, Data: map[string]string{"project_id": project}})) != nil {
+		return nil
+	}
+	ctx := c.Request().Context()
+	ticker := time.NewTicker(15 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-viewer.Ready():
+			for ev, ok := viewer.Take(); ok; ev, ok = viewer.Take() {
+				if conn.write(liveEvent(ev)) != nil {
+					return nil
+				}
+			}
+		case <-ticker.C:
+			if conn.ping() != nil {
+				return nil
+			}
+		}
+	}
+}
+
+func liveEvent(ev ports.LiveCallEvent) []byte {
+	data, _ := json.Marshal(ev.Data)
+	return fmt.Appendf(nil, "event: %s\ndata: %s\n\n", ev.Name, data)
 }

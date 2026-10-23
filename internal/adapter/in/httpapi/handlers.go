@@ -56,6 +56,9 @@ type Services struct {
 	Notifications ports.Notifications
 	// Usage reads the token usage the LLM proxy measured; nil answers 503.
 	Usage ports.UsageReader
+	// LiveCalls opens the live call stream of a project's Usage page; nil
+	// answers 503.
+	LiveCalls ports.LiveCalls
 	// Code reads code for the code views (/api/code/*); nil answers 503.
 	Code ports.CodeBrowser
 	// GitCredentials keeps the credentials git remote operations use; nil
@@ -118,6 +121,7 @@ type Handler struct {
 	pullRequests   ports.PullRequests
 	notifications  ports.Notifications
 	usage          ports.UsageReader
+	liveCalls      ports.LiveCalls
 	code           ports.CodeBrowser
 	gitCredentials ports.GitCredentials
 	shells         ports.ShellEdits
@@ -162,6 +166,7 @@ func NewHandler(s Services) *Handler {
 		pullRequests:   s.PullRequests,
 		notifications:  s.Notifications,
 		usage:          s.Usage,
+		liveCalls:      s.LiveCalls,
 		code:           s.Code,
 		gitCredentials: s.GitCredentials,
 		shells:         s.Shells,
