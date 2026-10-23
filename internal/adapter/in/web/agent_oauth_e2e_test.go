@@ -40,6 +40,7 @@ if [ "$1 $2" = "auth status" ]; then
   echo '{"loggedIn": false}'
   exit 1
 fi
+if [ "$1 $2" = "auth logout" ]; then rm -f "$CLAUDE_CONFIG_DIR/.credentials.json"; exit 0; fi
 [ "$1 $2 $3" = "auth login --claudeai" ] || exit 2
 echo $$ > "$dir/pid"
 echo "Opening browser to sign in..."
@@ -90,8 +91,8 @@ func oauthRig(t *testing.T, installed bool) (srv *httptest.Server, cred *agentcr
 	oauth := agentoauth.New(agentoauth.Deps{Bin: bin, ConfigDir: filepath.Join(dir, "home"), PTY: ptyunix.New()})
 	t.Cleanup(oauth.Close)
 	mux := http.NewServeMux()
-	mux.Handle("/api/", httpapi.NewRouter(httpapi.NewHandler(httpapi.Services{Settings: cat.Settings, AgentCredential: cred, AgentOAuth: oauth, ManagedClaudeBin: bin})))
-	mux.Handle("/", web.NewHandler(web.Deps{Projects: cat.Projects, Settings: cat.Settings, SandboxSettings: &sandboxsettings.Store{Settings: cat.Settings, Home: "/home/ana"}, AgentCredential: cred, AgentOAuth: oauth, ManagedClaudeBin: bin}, builtAssets(t), nil))
+	mux.Handle("/api/", httpapi.NewRouter(httpapi.NewHandler(httpapi.Services{Settings: cat.Settings, AgentCredential: cred, AgentOAuth: oauth, AgentAuth: oauth, ManagedClaudeBin: bin})))
+	mux.Handle("/", web.NewHandler(web.Deps{Projects: cat.Projects, Settings: cat.Settings, SandboxSettings: &sandboxsettings.Store{Settings: cat.Settings, Home: "/home/ana"}, AgentCredential: cred, AgentOAuth: oauth, AgentAuth: oauth, ManagedClaudeBin: bin}, builtAssets(t), nil))
 	srv = httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 	return srv, cred, dir
@@ -165,7 +166,11 @@ func TestSignInWithClaudeInTheBrowser_EndToEnd(t *testing.T) {
 	if !processGone(dir) {
 		t.Error("the process outlived the flow")
 	}
-	b.run("Sign in again, then Cancel: the panel goes",
+	b.run("the section shows the signed-in account; Sign out, sign in again, then Cancel: the panel goes",
+		waitUntil(credHas+`('Sign out')`),
+		waitUntil(credChip+` === 'Credential: signed in'`),
+		chromedp.Evaluate(credClick+`('Sign out')`, nil),
+		waitUntil(credHas+`('Sign in with Claude')`),
 		chromedp.Evaluate(credClick+`('Sign in with Claude')`, nil),
 		waitUntil(`document.querySelector('#credential a[href*="oauth/authorize"]')?.checkVisibility() === true`),
 		chromedp.Evaluate(credClick+`('Cancel sign-in')`, nil),

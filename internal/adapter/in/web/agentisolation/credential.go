@@ -1,6 +1,26 @@
 package agentisolation
 
-import "operators-mcp/internal/ports"
+import (
+	"context"
+	"time"
+
+	"operators-mcp/internal/ports"
+)
+
+// StatusTimeout bounds the `claude auth status` the page waits for when it
+// loads: a slower one shows as "could not check" and the page renders anyway.
+const StatusTimeout = 5 * time.Second
+
+// AuthView is what `claude auth status` says about the agent home: the
+// account fields it prints, never a token or the login file's content.
+type AuthView struct {
+	SignedIn     bool   `json:"signed_in"`
+	Account      string `json:"account"`
+	Subscription string `json:"subscription"`
+	AuthMethod   string `json:"auth_method"`
+	// CheckedOK is false when the status could not be read in time.
+	CheckedOK bool `json:"checked_ok"`
+}
 
 // CredentialView is the Agent credential section (#credential): whether agents
 // have a credential and its kind. It never holds the value.
@@ -8,6 +28,9 @@ type CredentialView struct {
 	Status ports.AgentCredentialStatus
 	// OAuth is the sign-in flow now; never holds the token.
 	OAuth ports.AgentOAuthState
+	// Auth is the login the agent home keeps, from `claude auth status`
+	// read when the page loads (never from the login file).
+	Auth AuthView
 	// CanSignIn says the flow can run: it is wired and a claude is installed.
 	CanSignIn bool
 	// HomeExposed: the agent home is in a git work tree that does not ignore
@@ -22,13 +45,15 @@ type CredentialSeed struct {
 	ports.AgentCredentialStatus
 	OAuth     ports.AgentOAuthState `json:"oauth"`
 	CanSignIn bool                  `json:"can_sign_in"`
+	Auth      AuthView              `json:"auth"`
 }
 
-// NewCredentialView reads the credential's status and the sign-in flow;
-// without a store it shows as not set, without the flow or a claude the
-// sign-in is not offered.
-func NewCredentialView(c ports.AgentCredential, oauth ports.AgentOAuth, bin ports.ManagedClaudeBin) CredentialView {
-	v := CredentialView{OAuth: ports.AgentOAuthState{Phase: ports.AgentOAuthIdle}}
+// NewCredentialView reads the credential's status, the sign-in flow and, with
+// a claude to ask, who the agent home is signed in as (bounded by
+// StatusTimeout); without a store it shows as not set, without the flow or a
+// claude the sign-in is not offered.
+func NewCredentialView(ctx context.Context, c ports.AgentCredential, oauth ports.AgentOAuth, auth ports.AgentAuth, bin ports.ManagedClaudeBin) CredentialView {
+	v := CredentialView{OAuth: ports.AgentOAuthState{Phase: ports.AgentOAuthIdle}, Auth: AuthView{CheckedOK: true}}
 	if c != nil {
 		v.Status = c.Status()
 	}
@@ -36,21 +61,50 @@ func NewCredentialView(c ports.AgentCredential, oauth ports.AgentOAuth, bin port
 		v.OAuth = oauth.State()
 		v.CanSignIn = bin != nil && bin.Installed()
 	}
+	if auth != nil && bin != nil && bin.Installed() {
+		ctx, cancel := context.WithTimeout(ctx, StatusTimeout)
+		defer cancel()
+		v.Auth = NewAuthView(auth.Status(ctx))
+	}
 	return v
 }
 
-// Seed is the section's seed.
-func (v CredentialView) Seed() CredentialSeed {
-	return CredentialSeed{AgentCredentialStatus: v.Status, OAuth: v.OAuth, CanSignIn: v.CanSignIn}
+// NewAuthView is the answer of a status read; a failure is not checked.
+func NewAuthView(st ports.AgentAuthStatus, err error) AuthView {
+	if err != nil {
+		return AuthView{}
+	}
+	return AuthView{SignedIn: st.LoggedIn, Account: st.Email, Subscription: st.SubscriptionType, AuthMethod: st.AuthMethod, CheckedOK: true}
 }
 
-// SignInLabel is the sign-in button: again when a credential is set.
-func (v CredentialView) SignInLabel() string {
-	if v.Status.Set {
-		return "Sign in again"
+// SignedIn: `claude auth status` reports an account.
+func (v CredentialView) SignedIn() bool { return v.Auth.SignedIn }
+
+// SignedOut: the status was read and there is no account (and a claude
+// that could have said so).
+func (v CredentialView) SignedOut() bool { return v.Auth.CheckedOK && !v.Auth.SignedIn && v.CanSignIn }
+
+// Unchecked: the status could not be read.
+func (v CredentialView) Unchecked() bool { return !v.Auth.CheckedOK }
+
+// AccountName is the email claude printed, or a plain word without one.
+func (v CredentialView) AccountName() string {
+	if v.Auth.Account != "" {
+		return v.Auth.Account
 	}
-	return "Sign in with Claude"
+	return "Claude account"
 }
+
+// NoCredential: agents have neither a pasted credential nor a login.
+func (v CredentialView) NoCredential() bool { return !v.Status.Set && !v.Auth.SignedIn }
+
+// Seed is the section's seed.
+func (v CredentialView) Seed() CredentialSeed {
+	return CredentialSeed{AgentCredentialStatus: v.Status, OAuth: v.OAuth, CanSignIn: v.CanSignIn, Auth: v.Auth}
+}
+
+// SignInLabel is the sign-in button.
+func (v CredentialView) SignInLabel() string { return "Sign in with Claude" }
 
 // SignInTone is the sign-in button's variant: primary while nothing is set.
 func (v CredentialView) SignInTone() string {
@@ -60,6 +114,17 @@ func (v CredentialView) SignInTone() string {
 	return "primary"
 }
 
+// SecondaryExpanded is the toggle's aria-expanded.
+func (v CredentialView) SecondaryExpanded() string {
+	if v.SecondaryOpen() {
+		return "true"
+	}
+	return "false"
+}
+
+// SecondaryOpen: the pasted credential shows unless the person is signed in.
+func (v CredentialView) SecondaryOpen() bool { return !v.Auth.SignedIn }
+
 // SignInDisabled: no claude to run, or a flow already runs.
 func (v CredentialView) SignInDisabled() bool { return !v.CanSignIn }
 
@@ -67,10 +132,13 @@ func (v CredentialView) SignInDisabled() bool { return !v.CanSignIn }
 func (v CredentialView) Set() bool { return v.Status.Set }
 
 // NotSet: agents cannot start for want of one.
-func (v CredentialView) NotSet() bool { return !v.Status.Set }
+func (v CredentialView) NotSet() bool { return v.NoCredential() }
 
 // ChipText and ChipTone are the section's status chip.
 func (v CredentialView) ChipText() string {
+	if v.Auth.SignedIn {
+		return "Signed in"
+	}
 	if v.Status.Set {
 		return "Set"
 	}
@@ -78,7 +146,7 @@ func (v CredentialView) ChipText() string {
 }
 
 func (v CredentialView) ChipTone() string {
-	if v.Status.Set {
+	if v.Status.Set || v.Auth.SignedIn {
 		return "signal"
 	}
 	return "danger"

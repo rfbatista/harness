@@ -158,6 +158,8 @@ func NewRouter(h *Handler, opts ...Option) *echo.Echo {
 	g.POST("/start_agent_oauth", h.handleStartAgentOAuth)
 	g.POST("/submit_agent_oauth_code", h.handleSubmitAgentOAuthCode)
 	g.POST("/cancel_agent_oauth", h.handleCancelAgentOAuth)
+	g.GET("/get_agent_auth_status", h.handleGetAgentAuthStatus)
+	g.POST("/sign_out_agent_auth", h.handleSignOutAgentAuth)
 
 	// mcp servers
 	g.GET("/list_mcp_servers", h.handleListMCPServers)

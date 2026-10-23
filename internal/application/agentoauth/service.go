@@ -108,6 +108,12 @@ func (s *Service) Status(ctx context.Context) (ports.AgentAuthStatus, error) {
 	return s.auth.Status(ctx)
 }
 
+// Logout is `claude auth logout` in the agent Claude home, run the way the
+// login runs.
+func (s *Service) Logout(ctx context.Context) error {
+	return s.auth.Logout(ctx)
+}
+
 func (s *Service) State() ports.AgentOAuthState {
 	s.mu.Lock()
 	defer s.mu.Unlock()

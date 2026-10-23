@@ -17,8 +17,11 @@ import (
 // LoginWrap. Nil runs the command as it is.
 type Wrap func(ports.SandboxCommand) (ports.SandboxCommand, error)
 
-// statusTimeout bounds one `claude auth status`.
+// statusTimeout bounds one `claude auth status` or `claude auth logout`.
 const statusTimeout = 30 * time.Second
+
+// killDelay is how long a killed process may hold its output open.
+const killDelay = 2 * time.Second
 
 // AuthDeps are what a claude of the sign-in runs on.
 type AuthDeps struct {
@@ -109,7 +112,7 @@ func (a *Auth) Status(ctx context.Context) (ports.AgentAuthStatus, error) {
 	ctx, cancel := context.WithTimeout(ctx, statusTimeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, spec.Path, spec.Args...)
-	cmd.Dir, cmd.Env = spec.Dir, spec.Env
+	cmd.Dir, cmd.Env, cmd.WaitDelay = spec.Dir, spec.Env, killDelay
 	var out bytes.Buffer
 	cmd.Stdout = &out
 	runErr := cmd.Run()
@@ -126,4 +129,30 @@ func (a *Auth) Status(ctx context.Context) (ports.AgentAuthStatus, error) {
 		return ports.AgentAuthStatus{}, err
 	}
 	return ports.AgentAuthStatus{LoggedIn: got.LoggedIn, AuthMethod: got.AuthMethod, SubscriptionType: got.SubscriptionType, Email: got.Email}, nil
+}
+
+// Logout runs `claude auth logout`, which removes the login the agent home
+// keeps. Its last output line, with any token blotted out, says why it failed.
+func (a *Auth) Logout(ctx context.Context) error {
+	spec, cleanup, err := a.spec("auth", "logout")
+	if err != nil {
+		return err
+	}
+	defer cleanup()
+	ctx, cancel := context.WithTimeout(ctx, statusTimeout)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, spec.Path, spec.Args...)
+	cmd.Dir, cmd.Env, cmd.WaitDelay = spec.Dir, spec.Env, killDelay
+	var out bytes.Buffer
+	cmd.Stdout, cmd.Stderr = &out, &out
+	if err := cmd.Run(); err != nil {
+		msg := "Sign out did not finish."
+		if detail := lastLine(clean(out.String()), ""); detail != "" {
+			msg += " Claude said: " + detail
+		} else {
+			msg += " " + err.Error()
+		}
+		return &domain.StructuredError{Code: "AGENT_SIGN_OUT_FAILED", Message: msg}
+	}
+	return nil
 }

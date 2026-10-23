@@ -3,6 +3,7 @@
 package app
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"slices"
@@ -122,5 +123,79 @@ func TestTheLoginRunsUnderTheDriverWithTheAgentHomeOnlyPolicy(t *testing.T) {
 func TestWithoutADriverTheLoginRunsUnwrapped(t *testing.T) {
 	if loginWrap(&orchestration.Sandbox{}, loginBin("/x/claude")) != nil || loginWrap(nil, loginBin("/x/claude")) != nil {
 		t.Error("a platform without a driver has no wrap")
+	}
+}
+
+// fakeAuthClaude answers `auth status` and `auth logout` from the login file
+// in the agent home, after trying to read $LOGIN_SECRET (a stand-in for the
+// person's files) and recording how that went.
+const fakeAuthClaude = `#!/bin/sh
+cat "$LOGIN_SECRET" >/dev/null 2>&1
+echo "$1_$2 secret_read=$?" >> "$CLAUDE_CONFIG_DIR/probe"
+if [ "$1 $2" = "auth status" ]; then
+  [ -f "$CLAUDE_CONFIG_DIR/.credentials.json" ] && { echo '{"loggedIn": true, "authMethod": "claude.ai", "email": "p@example.com"}'; exit 0; }
+  echo '{"loggedIn": false}'
+  exit 1
+fi
+[ "$1 $2" = "auth logout" ] || exit 2
+rm -f "$CLAUDE_CONFIG_DIR/.credentials.json"
+`
+
+// statusAndLogout reads the status of a signed-in agent home, signs it out
+// and reads the status again, through the wiring's loginWrap under driver.
+func statusAndLogout(t *testing.T, driver ports.SandboxDriver) (home string, before, after ports.AgentAuthStatus) {
+	t.Helper()
+	dir := t.TempDir()
+	bin := filepath.Join(dir, "claude")
+	if err := os.WriteFile(bin, []byte(fakeAuthClaude), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	home = filepath.Join(t.TempDir(), "agent-home")
+	if err := os.MkdirAll(home, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(home, ".credentials.json"), []byte("{}"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	sb := &orchestration.Sandbox{Driver: driver, Home: home, Enabled: func() bool { return false }}
+	auth := agentoauth.NewAuth(agentoauth.AuthDeps{Bin: loginBin(bin), ConfigDir: home, Wrap: loginWrap(sb, loginBin(bin))})
+	ctx := context.Background()
+	var err error
+	if before, err = auth.Status(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := auth.Logout(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if after, err = auth.Status(ctx); err != nil {
+		t.Fatal(err)
+	}
+	return home, before, after
+}
+
+// The status and the logout go to the driver like the login, under the
+// agent-home-only policy.
+func TestTheStatusAndTheLogoutRunUnderTheDriverWithTheAgentHomeOnlyPolicy(t *testing.T) {
+	d := &portstest.RecordingSandboxDriver{}
+	home, before, after := statusAndLogout(t, d)
+	if !before.LoggedIn || after.LoggedIn {
+		t.Errorf("status before = %+v, after = %+v", before, after)
+	}
+	calls := d.Calls()
+	var args []string
+	for _, c := range calls {
+		args = append(args, strings.Join(c.Command.Args, " "))
+		if !slices.Contains(c.Policy.Writable, home) {
+			t.Errorf("writable = %v, want the agent home", c.Policy.Writable)
+		}
+		userHome, _ := os.UserHomeDir()
+		for _, p := range slices.Concat(c.Policy.Readable, c.Policy.Writable) {
+			if (userHome != "" && strings.HasPrefix(p, userHome+"/")) || strings.Contains(p, ".ssh") || strings.Contains(p, "Keychains") {
+				t.Errorf("policy grants %q", p)
+			}
+		}
+	}
+	if want := []string{"auth status", "auth logout", "auth status"}; !slices.Equal(args, want) {
+		t.Errorf("driver wrapped %q, want %q", args, want)
 	}
 }

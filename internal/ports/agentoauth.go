@@ -73,4 +73,8 @@ type AgentAuth interface {
 	// Status runs `claude auth status` and answers what it reports. A claude
 	// that cannot run, or whose answer cannot be read, is an error.
 	Status(ctx context.Context) (AgentAuthStatus, error)
+	// Logout runs `claude auth logout` the same way, removing the login the
+	// agent home keeps. AGENT_SIGN_OUT_FAILED when claude refuses or fails,
+	// CLAUDE_CLI_NOT_FOUND when there is no managed claude.
+	Logout(ctx context.Context) error
 }

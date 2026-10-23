@@ -98,6 +98,15 @@ func (o optionalAgentCredential) oauth() ports.AgentOAuth {
 	return o.OAuth
 }
 
+// auth is the sign-in service as the port that reads and ends the login, nil
+// (untyped) when absent.
+func (o optionalAgentCredential) auth() ports.AgentAuth {
+	if o.OAuth == nil {
+		return nil
+	}
+	return o.OAuth
+}
+
 // port is the service as the driving port, nil (untyped) when absent.
 func (o optionalAgentCredential) port() ports.AgentCredential {
 	if o.Service == nil {

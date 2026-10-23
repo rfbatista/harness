@@ -8,6 +8,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -34,6 +35,15 @@ if [ "$1 $2" = "auth status" ]; then
     exit 1
   fi
   echo '{"loggedIn": true, "authMethod": "claude.ai", "subscriptionType": "max", "email": "p@example.com"}'
+  exit 0
+fi
+if [ "$1 $2" = "auth logout" ]; then
+  pwd > "$dir/logout-cwd"
+  if [ "$FAKE_LOGOUT" = fail ]; then
+    echo "logout failed: sk-ant-oat01-leaked" >&2
+    exit 1
+  fi
+  rm -f "$CLAUDE_CONFIG_DIR/.credentials.json"
   exit 0
 fi
 [ "$1 $2 $3" = "auth login --claudeai" ] || exit 2
@@ -448,4 +458,58 @@ func TestTheLoginRunsUnderTheDriverInTheAgentHomeWithNoCredentialVariables(t *te
 		time.Sleep(10 * time.Millisecond)
 	}
 	t.Error("the login's temp dir was left behind")
+}
+
+// Logout runs `claude auth logout` the way the login runs, and what the status
+// says afterwards is the answer: the login is gone.
+func TestLogoutRunsUnderTheDriverInTheAgentHomeAndSignsTheHomeOut(t *testing.T) {
+	r := newRig(t, fakeClaude)
+	_, _ = r.svc.Start()
+	r.waitPhase(t, ports.AgentOAuthWaitingForCode)
+	_, _ = r.svc.Submit("good-code")
+	r.waitPhase(t, ports.AgentOAuthDone)
+	if st, err := r.svc.Status(context.Background()); err != nil || !st.LoggedIn {
+		t.Fatalf("before logout: %+v, %v", st, err)
+	}
+	if err := r.svc.Logout(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	r.noLogin(t)
+	if st, err := r.svc.Status(context.Background()); err != nil || st.LoggedIn {
+		t.Errorf("after logout: %+v, %v", st, err)
+	}
+	var logout *ports.SandboxCommand
+	for _, c := range *r.wrapped {
+		if strings.Join(c.Args, " ") == "auth logout" {
+			logout = &c
+		}
+	}
+	if logout == nil {
+		t.Fatalf("the driver was not handed the logout: %+v", *r.wrapped)
+	}
+	if logout.Dir != r.home {
+		t.Errorf("logout dir = %q, want the agent home", logout.Dir)
+	}
+	if !slices.Contains(logout.Env, "CLAUDE_CONFIG_DIR="+r.home) {
+		t.Errorf("logout env lacks the agent home")
+	}
+}
+
+func TestAFailingLogoutIsAnErrorWithItsLastLineAndNoToken(t *testing.T) {
+	t.Setenv("FAKE_LOGOUT", "fail")
+	r := newRig(t, fakeClaude)
+	err := r.svc.Logout(context.Background())
+	if code(err) != "AGENT_SIGN_OUT_FAILED" {
+		t.Fatalf("err = %v", err)
+	}
+	if strings.Contains(err.Error(), "sk-ant") || !strings.Contains(err.Error(), "logout failed") {
+		t.Errorf("message = %q", err)
+	}
+}
+
+func TestLogoutWithoutAManagedClaudeIsRefused(t *testing.T) {
+	r := newRig(t, "")
+	if code(r.svc.Logout(context.Background())) != "CLAUDE_CLI_NOT_FOUND" {
+		t.Error("logout ran without a claude")
+	}
 }

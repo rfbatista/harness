@@ -28,6 +28,9 @@ func (s Summary) Blocked() bool { return s.Credential.Blocks || s.Claude.Blocks 
 
 // Summary is the credential's chip.
 func (v CredentialView) Summary() Chip {
+	if v.SignedIn() {
+		return Chip{Text: "Credential: signed in", Tone: "signal"}
+	}
 	if v.Set() {
 		return Chip{Text: "Credential: set", Tone: "signal"}
 	}

@@ -80,25 +80,36 @@ func credentialSection(v CredentialView) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
+		if v.SignedIn() {
+			templ_7745c5c3_Err = signedInFacts(v.AccountName(), v.Auth.Subscription).Render(ctx, templ_7745c5c3_Buffer)
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+		} else if v.SignedOut() {
+			templ_7745c5c3_Err = notSignedIn().Render(ctx, templ_7745c5c3_Buffer)
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+		} else if v.Unchecked() {
+			templ_7745c5c3_Err = couldNotCheck().Render(ctx, templ_7745c5c3_Buffer)
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+		}
 		if v.NotSet() {
 			templ_7745c5c3_Err = noCredential().Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-		} else {
-			templ_7745c5c3_Err = credentialFacts(v.KindName(), v.SavedDate()).Render(ctx, templ_7745c5c3_Buffer)
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 6, "</div><div class=\"[ banner ]\" data-tone=\"danger\" role=\"alert\" style=\"display: none\" x-show=\"notSet\"><span><strong>No credential. Agents cannot start.</strong> Paste a token or key.</span></div><div class=\"[ flow ] [ flow-space-3xs ]\" style=\"display: none\" x-show=\"isSet\"><p><span class=\"[ color-ink-muted ]\">Kind</span> <strong x-text=\"kindName\"></strong></p><p><span class=\"[ color-ink-muted ]\">Saved</span> <span x-text=\"savedDate\"></span></p></div><template x-if=\"error\"><div class=\"[ banner ]\" data-tone=\"danger\" role=\"alert\"><div class=\"[ flow ] [ flow-space-3xs grow ]\"><span x-text=\"error.message\"></span> <span class=\"[ code ]\"><span x-text=\"error.code\"></span> · <span x-text=\"error.next\"></span></span></div><button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" x-on:click=\"dismissError\">Dismiss</button></div></template><div class=\"[ cluster ] [ gutter-xs ]\"><button type=\"button\" class=\"[ button ]\" data-variant=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 6, "</div><div class=\"[ flow ] [ flow-space-3xs ]\" style=\"display: none\" x-show=\"signedIn\"><p><span class=\"[ color-ink-muted ]\">Claude</span> <strong>Signed in</strong></p><p><span class=\"[ color-ink-muted ]\">Account</span> <span x-text=\"account\"></span></p><p style=\"display: none\" x-show=\"hasSubscription\"><span class=\"[ color-ink-muted ]\">Subscription</span> <span x-text=\"subscription\"></span></p></div><p style=\"display: none\" x-show=\"notSignedInLine\"><span class=\"[ color-ink-muted ]\">Claude</span> <strong>Not signed in</strong></p><p style=\"display: none\" x-show=\"authChecking\"><span class=\"[ color-ink-muted ]\">Checking the Claude sign-in…</span></p><div class=\"[ banner ]\" data-tone=\"attention\" role=\"status\" style=\"display: none\" x-show=\"couldNotCheck\"><div class=\"[ cluster ] [ gutter-xs ] [ grow ]\"><span><strong>Could not check the Claude sign-in.</strong> Agents may still use it.</span> <button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" x-on:click=\"checkAuth\">Check again</button></div></div><div class=\"[ banner ]\" data-tone=\"danger\" role=\"alert\" style=\"display: none\" x-show=\"notSet\"><span><strong>No credential. Agents cannot start.</strong> Paste a token or key.</span></div><template x-if=\"error\"><div class=\"[ banner ]\" data-tone=\"danger\" role=\"alert\"><div class=\"[ flow ] [ flow-space-3xs grow ]\"><span x-text=\"error.message\"></span> <span class=\"[ code ]\"><span x-text=\"error.code\"></span> · <span x-text=\"error.next\"></span></span></div><button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" x-on:click=\"dismissError\">Dismiss</button></div></template><div class=\"[ cluster ] [ gutter-xs ]\"><button type=\"button\" class=\"[ button ]\" data-variant=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var4 string
 		templ_7745c5c3_Var4, templ_7745c5c3_Err = templ.ResolveAttributeValue(v.SignInTone())
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `agentisolation/credential.templ`, Line: 43, Col: 74}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `agentisolation/credential.templ`, Line: 57, Col: 74}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var4)
 		if templ_7745c5c3_Err != nil {
@@ -114,46 +125,89 @@ func credentialSection(v CredentialView) templ.Component {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 9, " x-bind:data-variant=\"signInTone\" x-bind:disabled=\"signInDisabled\" x-ref=\"signin\" x-text=\"signInLabel\" x-on:click=\"startSignIn\">")
+		templ_7745c5c3_Err = templ.RenderAttributes(ctx, templ_7745c5c3_Buffer, shownIf(!v.SignedIn()))
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 9, " x-show=\"signInShown\" x-bind:data-variant=\"signInTone\" x-bind:disabled=\"signInDisabled\" x-ref=\"signin\" x-text=\"signInLabel\" x-on:click=\"startSignIn\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var5 string
 		templ_7745c5c3_Var5, templ_7745c5c3_Err = templ.JoinStringErrs(v.SignInLabel())
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `agentisolation/credential.templ`, Line: 43, Col: 254}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `agentisolation/credential.templ`, Line: 57, Col: 305}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var5))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 10, "</button> <button type=\"button\" class=\"[ button ]\" data-variant=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 10, "</button> <button type=\"button\" class=\"[ button ]\" data-variant=\"danger\"")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templ.RenderAttributes(ctx, templ_7745c5c3_Buffer, shownIf(v.SignedIn()))
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 11, " x-ref=\"signout\" x-show=\"signedIn\" x-bind:disabled=\"signOutDisabled\" x-on:click=\"signOut\">Sign out</button></div><p class=\"[ hint ]\" style=\"display: none\" x-show=\"noSignInHint\">Sign in needs the managed claude. <a href=\"#claude\">Install it first.</a></p><div class=\"[ flow ] [ flow-space-s ]\" role=\"group\" aria-labelledby=\"credential-oauth-title\" style=\"display: none\" x-show=\"signingIn\"><h3 id=\"credential-oauth-title\">Sign in with Claude</h3><ol class=\"[ flow ] [ flow-space-s ]\"><li class=\"[ flow ] [ flow-space-3xs ]\"><strong>Open the sign-in page</strong><p style=\"display: none\" x-show=\"starting\"><span class=\"[ color-ink-muted ]\">Starting </span><span class=\"[ font-mono ]\">claude auth login</span><span class=\"[ color-ink-muted ]\">…</span></p><div class=\"[ flow ] [ flow-space-3xs ]\" style=\"display: none\" x-show=\"hasUrl\"><div class=\"[ cluster ] [ gutter-xs ]\"><a class=\"[ button ]\" data-variant=\"primary\" data-size=\"sm\" target=\"_blank\" rel=\"noopener noreferrer\" x-bind:href=\"oauthUrl\" x-on:click=\"opened\">Open in a new tab ↗</a> <button type=\"button\" class=\"[ button ]\" data-size=\"sm\" x-on:click=\"copyLink\">Copy link</button></div><p class=\"[ font-mono text-sm ]\" style=\"overflow-wrap: anywhere\" x-text=\"oauthUrl\"></p></div></li><li class=\"[ flow ] [ flow-space-3xs ]\"><strong>Approve access in your browser</strong><p class=\"[ color-ink-muted ]\">Sign in to Claude if asked, then choose Authorize. Claude shows a code.</p></li><li class=\"[ flow ] [ flow-space-3xs ]\"><strong>Paste the code here</strong><form class=\"[ cluster ] [ gutter-xs ]\" novalidate autocomplete=\"off\" x-on:submit.prevent=\"submitCode\"><label class=\"[ visually-hidden ]\" for=\"credential-oauth-code\">Code from Claude</label> <input id=\"credential-oauth-code\" type=\"password\" class=\"[ font-mono text-sm ]\" style=\"width: 20rem\" autocomplete=\"off\" autocapitalize=\"off\" spellcheck=\"false\" x-ref=\"code\" x-bind:disabled=\"codeDisabled\"> <button type=\"submit\" class=\"[ button ]\" data-variant=\"primary\" data-size=\"sm\" x-bind:disabled=\"codeDisabled\">Save code</button></form></li></ol><p role=\"status\" aria-live=\"polite\" class=\"[ color-ink-muted ]\" x-text=\"oauthStatusLine\"></p><div class=\"[ cluster ] [ gutter-xs ]\"><button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" x-on:click=\"cancelSignIn\">Cancel sign-in</button></div></div><div id=\"credential-oauth-failed\" class=\"[ banner ]\" data-tone=\"danger\" role=\"alert\" style=\"display: none\" x-show=\"signInFailed\"><div class=\"[ flow ] [ flow-space-3xs grow ]\"><span><strong x-text=\"oauthMessage\"></strong></span> <span class=\"[ font-mono text-sm ]\" style=\"display: none\" x-show=\"hasDetail\" x-text=\"oauthDetail\"></span><div class=\"[ cluster ] [ gutter-xs ]\"><button type=\"button\" class=\"[ button ]\" data-size=\"sm\" x-bind:disabled=\"signInDisabled\" x-on:click=\"startSignIn\">Start again</button> <button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" x-on:click=\"dismissSignIn\">Dismiss</button></div></div></div><div class=\"[ banner ]\" data-tone=\"signal\" role=\"status\" style=\"display: none\" x-show=\"signInSaved\"><span><strong>Signed in.</strong> Claude keeps the login in the agents' own home; agents started from now on use it.</span></div><button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" aria-expanded=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var6 string
-		templ_7745c5c3_Var6, templ_7745c5c3_Err = templ.ResolveAttributeValue(v.PasteTone())
+		templ_7745c5c3_Var6, templ_7745c5c3_Err = templ.ResolveAttributeValue(v.SecondaryExpanded())
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `agentisolation/credential.templ`, Line: 44, Col: 73}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `agentisolation/credential.templ`, Line: 106, Col: 117}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var6)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 11, "\" x-bind:data-variant=\"pasteTone\" x-ref=\"paste\" x-text=\"pasteLabel\" x-bind:disabled=\"pasteDisabled\" x-on:click=\"startPaste\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 12, "\" x-bind:aria-expanded=\"secondaryExpanded\" x-ref=\"secondary\" x-on:click=\"toggleSecondary\">Use an API key or token instead</button><div class=\"[ flow ] [ flow-space-m ]\"")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templ.RenderAttributes(ctx, templ_7745c5c3_Buffer, shownIf(v.SecondaryOpen()))
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 13, " x-show=\"secondaryOpen\"><div x-ignore data-ssr class=\"[ flow ] [ flow-space-m ]\">")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		if v.Set() {
+			templ_7745c5c3_Err = credentialFacts(v.KindName(), v.SavedDate()).Render(ctx, templ_7745c5c3_Buffer)
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 14, "</div><div class=\"[ flow ] [ flow-space-3xs ]\" style=\"display: none\" x-show=\"isSet\"><p><span class=\"[ color-ink-muted ]\">Kind</span> <strong x-text=\"kindName\"></strong></p><p><span class=\"[ color-ink-muted ]\">Saved</span> <span x-text=\"savedDate\"></span></p></div><div class=\"[ cluster ] [ gutter-xs ]\"><button type=\"button\" class=\"[ button ]\" data-variant=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var7 string
-		templ_7745c5c3_Var7, templ_7745c5c3_Err = templ.JoinStringErrs(v.PasteLabel())
+		templ_7745c5c3_Var7, templ_7745c5c3_Err = templ.ResolveAttributeValue(v.PasteTone())
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `agentisolation/credential.templ`, Line: 44, Col: 214}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `agentisolation/credential.templ`, Line: 118, Col: 74}
 		}
-		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var7))
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var7)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 12, "</button> <button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" x-ref=\"remove\" style=\"display: none\" x-show=\"isSet\" x-bind:disabled=\"pasteDisabled\" x-on:click=\"askRemove\">Remove</button></div><p class=\"[ hint ]\" style=\"display: none\" x-show=\"noSignInHint\">Sign in needs the managed claude. <a href=\"#claude\">Install it first.</a></p><div class=\"[ banner ]\" data-tone=\"attention\" role=\"alertdialog\" aria-labelledby=\"credential-remove-title\" aria-describedby=\"credential-remove-text\" style=\"display: none\" x-show=\"confirming\" x-on:keydown.escape=\"keep\"><div class=\"[ flow ] [ flow-space-xs grow ]\"><h3 id=\"credential-remove-title\">Remove the agent credential?</h3><p id=\"credential-remove-text\">Running sessions keep working until they end. New agents cannot start until you add another.</p><div class=\"[ cluster ] [ gutter-xs ]\"><button type=\"button\" class=\"[ button ]\" data-variant=\"danger\" data-size=\"sm\" x-on:click=\"remove\">Remove credential</button> <button type=\"button\" class=\"[ button ]\" data-size=\"sm\" x-ref=\"keep\" x-on:click=\"keep\">Keep it</button></div></div></div><div class=\"[ flow ] [ flow-space-s ]\" role=\"group\" aria-labelledby=\"credential-oauth-title\" style=\"display: none\" x-show=\"signingIn\"><h3 id=\"credential-oauth-title\">Sign in with Claude</h3><ol class=\"[ flow ] [ flow-space-s ]\"><li class=\"[ flow ] [ flow-space-3xs ]\"><strong>Open the sign-in page</strong><p style=\"display: none\" x-show=\"starting\"><span class=\"[ color-ink-muted ]\">Starting </span><span class=\"[ font-mono ]\">claude auth login</span><span class=\"[ color-ink-muted ]\">…</span></p><div class=\"[ flow ] [ flow-space-3xs ]\" style=\"display: none\" x-show=\"hasUrl\"><div class=\"[ cluster ] [ gutter-xs ]\"><a class=\"[ button ]\" data-variant=\"primary\" data-size=\"sm\" target=\"_blank\" rel=\"noopener noreferrer\" x-bind:href=\"oauthUrl\" x-on:click=\"opened\">Open in a new tab ↗</a> <button type=\"button\" class=\"[ button ]\" data-size=\"sm\" x-on:click=\"copyLink\">Copy link</button></div><p class=\"[ font-mono text-sm ]\" style=\"overflow-wrap: anywhere\" x-text=\"oauthUrl\"></p></div></li><li class=\"[ flow ] [ flow-space-3xs ]\"><strong>Approve access in your browser</strong><p class=\"[ color-ink-muted ]\">Sign in to Claude if asked, then choose Authorize. Claude shows a code.</p></li><li class=\"[ flow ] [ flow-space-3xs ]\"><strong>Paste the code here</strong><form class=\"[ cluster ] [ gutter-xs ]\" novalidate autocomplete=\"off\" x-on:submit.prevent=\"submitCode\"><label class=\"[ visually-hidden ]\" for=\"credential-oauth-code\">Code from Claude</label> <input id=\"credential-oauth-code\" type=\"password\" class=\"[ font-mono text-sm ]\" style=\"width: 20rem\" autocomplete=\"off\" autocapitalize=\"off\" spellcheck=\"false\" x-ref=\"code\" x-bind:disabled=\"codeDisabled\"> <button type=\"submit\" class=\"[ button ]\" data-variant=\"primary\" data-size=\"sm\" x-bind:disabled=\"codeDisabled\">Save code</button></form></li></ol><p role=\"status\" aria-live=\"polite\" class=\"[ color-ink-muted ]\" x-text=\"oauthStatusLine\"></p><div class=\"[ cluster ] [ gutter-xs ]\"><button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" x-on:click=\"cancelSignIn\">Cancel sign-in</button></div></div><div id=\"credential-oauth-failed\" class=\"[ banner ]\" data-tone=\"danger\" role=\"alert\" style=\"display: none\" x-show=\"signInFailed\"><div class=\"[ flow ] [ flow-space-3xs grow ]\"><span><strong x-text=\"oauthMessage\"></strong></span> <span class=\"[ font-mono text-sm ]\" style=\"display: none\" x-show=\"hasDetail\" x-text=\"oauthDetail\"></span><div class=\"[ cluster ] [ gutter-xs ]\"><button type=\"button\" class=\"[ button ]\" data-size=\"sm\" x-bind:disabled=\"signInDisabled\" x-on:click=\"startSignIn\">Start again</button> <button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" x-on:click=\"dismissSignIn\">Dismiss</button></div></div></div><div class=\"[ banner ]\" data-tone=\"signal\" role=\"status\" style=\"display: none\" x-show=\"signInSaved\"><span><strong>Signed in.</strong> Claude keeps the login in the agents' own home; agents started from now on use it.</span></div><form class=\"[ flow ] [ flow-space-s ]\" style=\"display: none\" novalidate autocomplete=\"off\" x-show=\"pasting\" x-on:submit.prevent=\"save\"><fieldset class=\"[ flow ] [ flow-space-3xs ]\"><legend>Kind</legend> <label><input type=\"radio\" name=\"credential-kind\" value=\"oauth\" checked x-bind:checked=\"oauthChosen\" x-on:change=\"chooseKind\"> OAuth token <span class=\"[ hint ]\">from <span class=\"[ font-mono ]\">claude setup-token</span>, starts with sk-ant-oat</span></label> <label><input type=\"radio\" name=\"credential-kind\" value=\"api_key\" x-bind:checked=\"apiKeyChosen\" x-on:change=\"chooseKind\"> Anthropic API key <span class=\"[ hint ]\">starts with sk-ant-api</span></label></fieldset><div class=\"[ field ]\"><label for=\"credential-value\">Token or key</label> <input id=\"credential-value\" type=\"password\" class=\"[ font-mono text-sm ]\" autocomplete=\"off\" autocapitalize=\"off\" spellcheck=\"false\" x-ref=\"value\" x-on:input=\"detectKind\"></div><div class=\"[ cluster ] [ gutter-xs ]\"><button type=\"submit\" class=\"[ button ]\" data-variant=\"primary\" x-bind:disabled=\"busy\">Save credential</button> <button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" x-on:click=\"cancelPaste\">Cancel</button></div></form></div></section>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 15, "\" x-bind:data-variant=\"pasteTone\" x-ref=\"paste\" x-text=\"pasteLabel\" x-bind:disabled=\"pasteDisabled\" x-on:click=\"startPaste\">")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		var templ_7745c5c3_Var8 string
+		templ_7745c5c3_Var8, templ_7745c5c3_Err = templ.JoinStringErrs(v.PasteLabel())
+		if templ_7745c5c3_Err != nil {
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `agentisolation/credential.templ`, Line: 118, Col: 215}
+		}
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var8))
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 16, "</button> <button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" x-ref=\"remove\" style=\"display: none\" x-show=\"isSet\" x-bind:disabled=\"pasteDisabled\" x-on:click=\"askRemove\">Remove</button></div><div class=\"[ banner ]\" data-tone=\"attention\" role=\"alertdialog\" aria-labelledby=\"credential-remove-title\" aria-describedby=\"credential-remove-text\" style=\"display: none\" x-show=\"confirming\" x-on:keydown.escape=\"keep\"><div class=\"[ flow ] [ flow-space-xs grow ]\"><h3 id=\"credential-remove-title\">Remove the agent credential?</h3><p id=\"credential-remove-text\">Running sessions keep working until they end. New agents cannot start until you add another.</p><div class=\"[ cluster ] [ gutter-xs ]\"><button type=\"button\" class=\"[ button ]\" data-variant=\"danger\" data-size=\"sm\" x-on:click=\"remove\">Remove credential</button> <button type=\"button\" class=\"[ button ]\" data-size=\"sm\" x-ref=\"keep\" x-on:click=\"keep\">Keep it</button></div></div></div><form class=\"[ flow ] [ flow-space-s ]\" style=\"display: none\" novalidate autocomplete=\"off\" x-show=\"pasting\" x-on:submit.prevent=\"save\"><fieldset class=\"[ flow ] [ flow-space-3xs ]\"><legend>Kind</legend> <label><input type=\"radio\" name=\"credential-kind\" value=\"oauth\" checked x-bind:checked=\"oauthChosen\" x-on:change=\"chooseKind\"> OAuth token <span class=\"[ hint ]\">from <span class=\"[ font-mono ]\">claude setup-token</span>, starts with sk-ant-oat</span></label> <label><input type=\"radio\" name=\"credential-kind\" value=\"api_key\" x-bind:checked=\"apiKeyChosen\" x-on:change=\"chooseKind\"> Anthropic API key <span class=\"[ hint ]\">starts with sk-ant-api</span></label></fieldset><div class=\"[ field ]\"><label for=\"credential-value\">Token or key</label> <input id=\"credential-value\" type=\"password\" class=\"[ font-mono text-sm ]\" autocomplete=\"off\" autocapitalize=\"off\" spellcheck=\"false\" x-ref=\"value\" x-on:input=\"detectKind\"></div><div class=\"[ cluster ] [ gutter-xs ]\"><button type=\"submit\" class=\"[ button ]\" data-variant=\"primary\" x-bind:disabled=\"busy\">Save credential</button> <button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" x-on:click=\"cancelPaste\">Cancel</button></div></form></div></div></section>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -177,12 +231,12 @@ func noCredential() templ.Component {
 			}()
 		}
 		ctx = templ.InitializeContext(ctx)
-		templ_7745c5c3_Var8 := templ.GetChildren(ctx)
-		if templ_7745c5c3_Var8 == nil {
-			templ_7745c5c3_Var8 = templ.NopComponent
+		templ_7745c5c3_Var9 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var9 == nil {
+			templ_7745c5c3_Var9 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 13, "<div class=\"[ banner ]\" data-tone=\"danger\" role=\"alert\"><span><strong>No credential. Agents cannot start.</strong> Paste a token or key.</span></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 17, "<div class=\"[ banner ]\" data-tone=\"danger\" role=\"alert\"><span><strong>No credential. Agents cannot start.</strong> Paste a token or key.</span></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -206,38 +260,161 @@ func credentialFacts(kind, saved string) templ.Component {
 			}()
 		}
 		ctx = templ.InitializeContext(ctx)
-		templ_7745c5c3_Var9 := templ.GetChildren(ctx)
-		if templ_7745c5c3_Var9 == nil {
-			templ_7745c5c3_Var9 = templ.NopComponent
+		templ_7745c5c3_Var10 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var10 == nil {
+			templ_7745c5c3_Var10 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 14, "<div class=\"[ flow ] [ flow-space-3xs ]\"><p><span class=\"[ color-ink-muted ]\">Kind</span> <strong>")
-		if templ_7745c5c3_Err != nil {
-			return templ_7745c5c3_Err
-		}
-		var templ_7745c5c3_Var10 string
-		templ_7745c5c3_Var10, templ_7745c5c3_Err = templ.JoinStringErrs(kind)
-		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `agentisolation/credential.templ`, Line: 136, Col: 65}
-		}
-		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var10))
-		if templ_7745c5c3_Err != nil {
-			return templ_7745c5c3_Err
-		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 15, "</strong></p><p><span class=\"[ color-ink-muted ]\">Saved</span> <span>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 18, "<div class=\"[ flow ] [ flow-space-3xs ]\"><p><span class=\"[ color-ink-muted ]\">Kind</span> <strong>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var11 string
-		templ_7745c5c3_Var11, templ_7745c5c3_Err = templ.JoinStringErrs(saved)
+		templ_7745c5c3_Var11, templ_7745c5c3_Err = templ.JoinStringErrs(kind)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `agentisolation/credential.templ`, Line: 137, Col: 65}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `agentisolation/credential.templ`, Line: 165, Col: 65}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var11))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 16, "</span></p></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 19, "</strong></p><p><span class=\"[ color-ink-muted ]\">Saved</span> <span>")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		var templ_7745c5c3_Var12 string
+		templ_7745c5c3_Var12, templ_7745c5c3_Err = templ.JoinStringErrs(saved)
+		if templ_7745c5c3_Err != nil {
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `agentisolation/credential.templ`, Line: 166, Col: 65}
+		}
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var12))
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 20, "</span></p></div>")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		return nil
+	})
+}
+
+func signedInFacts(account, subscription string) templ.Component {
+	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
+		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
+		if templ_7745c5c3_CtxErr := ctx.Err(); templ_7745c5c3_CtxErr != nil {
+			return templ_7745c5c3_CtxErr
+		}
+		templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
+		if !templ_7745c5c3_IsBuffer {
+			defer func() {
+				templ_7745c5c3_BufErr := templruntime.ReleaseBuffer(templ_7745c5c3_Buffer)
+				if templ_7745c5c3_Err == nil {
+					templ_7745c5c3_Err = templ_7745c5c3_BufErr
+				}
+			}()
+		}
+		ctx = templ.InitializeContext(ctx)
+		templ_7745c5c3_Var13 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var13 == nil {
+			templ_7745c5c3_Var13 = templ.NopComponent
+		}
+		ctx = templ.ClearChildren(ctx)
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 21, "<div class=\"[ flow ] [ flow-space-3xs ]\"><p><span class=\"[ color-ink-muted ]\">Claude</span> <strong>Signed in</strong></p><p><span class=\"[ color-ink-muted ]\">Account</span> <span>")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		var templ_7745c5c3_Var14 string
+		templ_7745c5c3_Var14, templ_7745c5c3_Err = templ.JoinStringErrs(account)
+		if templ_7745c5c3_Err != nil {
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `agentisolation/credential.templ`, Line: 173, Col: 69}
+		}
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var14))
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 22, "</span></p>")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		if subscription != "" {
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 23, "<p><span class=\"[ color-ink-muted ]\">Subscription</span> <span>")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			var templ_7745c5c3_Var15 string
+			templ_7745c5c3_Var15, templ_7745c5c3_Err = templ.JoinStringErrs(subscription)
+			if templ_7745c5c3_Err != nil {
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `agentisolation/credential.templ`, Line: 175, Col: 80}
+			}
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var15))
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 24, "</span></p>")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 25, "</div>")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		return nil
+	})
+}
+
+func notSignedIn() templ.Component {
+	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
+		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
+		if templ_7745c5c3_CtxErr := ctx.Err(); templ_7745c5c3_CtxErr != nil {
+			return templ_7745c5c3_CtxErr
+		}
+		templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
+		if !templ_7745c5c3_IsBuffer {
+			defer func() {
+				templ_7745c5c3_BufErr := templruntime.ReleaseBuffer(templ_7745c5c3_Buffer)
+				if templ_7745c5c3_Err == nil {
+					templ_7745c5c3_Err = templ_7745c5c3_BufErr
+				}
+			}()
+		}
+		ctx = templ.InitializeContext(ctx)
+		templ_7745c5c3_Var16 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var16 == nil {
+			templ_7745c5c3_Var16 = templ.NopComponent
+		}
+		ctx = templ.ClearChildren(ctx)
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 26, "<p><span class=\"[ color-ink-muted ]\">Claude</span> <strong>Not signed in</strong></p>")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		return nil
+	})
+}
+
+func couldNotCheck() templ.Component {
+	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
+		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
+		if templ_7745c5c3_CtxErr := ctx.Err(); templ_7745c5c3_CtxErr != nil {
+			return templ_7745c5c3_CtxErr
+		}
+		templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
+		if !templ_7745c5c3_IsBuffer {
+			defer func() {
+				templ_7745c5c3_BufErr := templruntime.ReleaseBuffer(templ_7745c5c3_Buffer)
+				if templ_7745c5c3_Err == nil {
+					templ_7745c5c3_Err = templ_7745c5c3_BufErr
+				}
+			}()
+		}
+		ctx = templ.InitializeContext(ctx)
+		templ_7745c5c3_Var17 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var17 == nil {
+			templ_7745c5c3_Var17 = templ.NopComponent
+		}
+		ctx = templ.ClearChildren(ctx)
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 27, "<div class=\"[ banner ]\" data-tone=\"attention\" role=\"status\"><span><strong>Could not check the Claude sign-in.</strong> Agents may still use it.</span></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

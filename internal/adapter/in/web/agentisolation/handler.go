@@ -13,6 +13,7 @@
 package agentisolation
 
 import (
+	"context"
 	"net/http"
 	"strings"
 
@@ -31,6 +32,9 @@ type Handler struct {
 	Credential ports.AgentCredential
 	// OAuth is the Sign in with Claude flow; nil disables the button.
 	OAuth ports.AgentOAuth
+	// Auth is `claude auth status` of the agent home, read at each page load
+	// with a bounded wait; nil shows no account.
+	Auth ports.AgentAuth
 	// Driver is the platform's sandbox driver; a nil func or result is none.
 	Driver func() ports.SandboxDriver
 	// Claude and ClaudeBin are the managed claude and the binary agents
@@ -62,7 +66,7 @@ func (h Handler) Page(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	frame.Top.OnAgentIsolation = true
-	v := h.View()
+	v := h.View(r.Context())
 	// An "Allow this path" link from a session's Sandbox tab brings the path
 	// to put in the add-path field. It is only shown, never saved.
 	v.Sandbox.AllowPath = strings.TrimSpace(r.URL.Query().Get("allow_path"))
@@ -70,9 +74,9 @@ func (h Handler) Page(w http.ResponseWriter, r *http.Request) error {
 }
 
 // View reads each section's state.
-func (h Handler) View() View {
+func (h Handler) View(ctx context.Context) View {
 	v := View{
-		Credential: NewCredentialView(h.Credential, h.OAuth, h.ClaudeBin),
+		Credential: NewCredentialView(ctx, h.Credential, h.OAuth, h.Auth, h.ClaudeBin),
 		Claude:     NewClaudeView(h.Claude, h.ClaudeBin),
 		Sandbox:    NewSandboxView(h.Sandbox, h.Driver),
 	}

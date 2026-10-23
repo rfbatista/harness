@@ -106,7 +106,7 @@ func errorHandler(err error, c echo.Context) {
 			// or token savers, or reach the code host as the person.
 			writeCoded(c, http.StatusServiceUnavailable, err, se)
 			return
-		case "MERGE_FAILED":
+		case "MERGE_FAILED", "AGENT_SIGN_OUT_FAILED":
 			writeCoded(c, http.StatusInternalServerError, err, se)
 			return
 		case "PR_PUSH_FAILED", "PR_CREATE_FAILED", "GIT_CREDENTIAL_REJECTED":

@@ -83,3 +83,42 @@ func TestTheRealClaudeLoginPrintsItsURLUnderTheRealSeatbelt_Darwin(t *testing.T)
 		t.Error("a cancelled login kept a credential")
 	}
 }
+
+// TestTheStatusAndTheLogoutUnderTheRealSeatbelt_Darwin runs the stand-in
+// `claude auth status` and `claude auth logout` under the host's real sandbox
+// driver: they see and remove the login in the agent home and cannot read a
+// file under the person's home.
+func TestTheStatusAndTheLogoutUnderTheRealSeatbelt_Darwin(t *testing.T) {
+	if _, err := exec.LookPath("sandbox-exec"); err != nil {
+		t.Skip("sandbox-exec is not available")
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Skip("no home directory")
+	}
+	secretDir, err := os.MkdirTemp(home, ".harness-login-secret-")
+	if err != nil {
+		t.Skip("cannot write under the home directory")
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(secretDir) })
+	secret := filepath.Join(secretDir, "token")
+	if err := os.WriteFile(secret, []byte("hunter2"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("LOGIN_SECRET", secret)
+
+	agentHome, before, after := statusAndLogout(t, seatbelt.New())
+	if !before.LoggedIn || before.Email != "p@example.com" {
+		t.Errorf("status before logout = %+v", before)
+	}
+	if after.LoggedIn {
+		t.Errorf("status after logout = %+v, want signed out", after)
+	}
+	if _, err := os.Stat(filepath.Join(agentHome, ".credentials.json")); err == nil {
+		t.Error("logout under the sandbox left the login")
+	}
+	probe, _ := os.ReadFile(filepath.Join(agentHome, "probe"))
+	if !strings.Contains(string(probe), "auth_status secret_read=1") || !strings.Contains(string(probe), "auth_logout secret_read=1") || strings.Contains(string(probe), "secret_read=0") {
+		t.Errorf("probe = %q: the stand-in secret was readable, or a command did not run", probe)
+	}
+}

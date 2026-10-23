@@ -16,6 +16,21 @@ function toStatus(body) {
   };
 }
 
+/** @param {unknown} body @returns {import("../domain/ports.js").AuthStatus} */
+function toAuth(body) {
+  const b = /** @type {any} */ (body);
+  if (typeof b?.signed_in !== "boolean") {
+    throw new StructuredError(Codes.BAD_RESPONSE, "Unexpected sign-in status.");
+  }
+  return {
+    signed_in: b.signed_in,
+    account: typeof b.account === "string" ? b.account : "",
+    subscription: typeof b.subscription === "string" ? b.subscription : "",
+    auth_method: typeof b.auth_method === "string" ? b.auth_method : "",
+    checked_ok: b.checked_ok !== false,
+  };
+}
+
 const PHASES = ["idle", "starting", "waiting_for_code", "checking", "done", "failed"];
 
 /** @param {unknown} body @returns {import("../domain/ports.js").OAuthState} */
@@ -45,6 +60,8 @@ export function agentCredentialGateway(api) {
     oauthState: async () => toOAuth(await api.get("/get_agent_oauth")),
     oauthStart: async () => toOAuth(await api.post("/start_agent_oauth", {})),
     oauthSubmit: async (code) => toOAuth(await api.post("/submit_agent_oauth_code", { code })),
+    authStatus: async () => toAuth(await api.get("/get_agent_auth_status")),
+    signOut: async () => toAuth(await api.post("/sign_out_agent_auth", {})),
     oauthCancel: async () => toOAuth(await api.post("/cancel_agent_oauth", {})),
   };
 }

@@ -21,6 +21,15 @@
  * @property {() => Promise<OAuthState>} oauthStart  Rejects with AGENT_OAUTH_BUSY while one runs.
  * @property {(code: string) => Promise<OAuthState>} oauthSubmit
  * @property {() => Promise<OAuthState>} oauthCancel  Kills the process and clears the state.
+ * @property {() => Promise<AuthStatus>} authStatus  `claude auth status` as it is now.
+ * @property {() => Promise<AuthStatus>} signOut  Runs `claude auth logout`, answers the status after.
+ *
+ * @typedef {object} AuthStatus  What `claude auth status` printed; never a token.
+ * @property {boolean} signed_in
+ * @property {string} account  The email, "" when claude prints none.
+ * @property {string} subscription
+ * @property {string} auth_method
+ * @property {boolean} checked_ok  False when the status could not be read.
  *
  * @typedef {"idle" | "starting" | "waiting_for_code" | "checking" | "done" | "failed"} OAuthPhase
  *
