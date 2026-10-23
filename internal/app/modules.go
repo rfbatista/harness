@@ -475,8 +475,11 @@ func newAppsService(orch *orchestration.Service, cat catalog.Catalog, host ports
 	return svc
 }
 
-func newRuntimeConfig(cfg Config) runtime.Config {
-	return runtime.Config{ClaudeBin: cfg.ClaudeBin, Shell: cfg.SessionShell, ProxyURL: cfg.llmProxyURL()}
+func newRuntimeConfig(cfg Config, bin ports.ManagedClaudeBin, home claudehome.Home, driver ports.SandboxDriver) runtime.Config {
+	return runtime.Config{
+		ClaudeBin: bin.Bin(), Shell: cfg.SessionShell, ProxyURL: cfg.llmProxyURL(),
+		ConfigDir: home.Path(), Sandbox: driver,
+	}
 }
 
 // registerServerSessions reconciles the interactive sessions the server runs
@@ -500,10 +503,15 @@ func registerServerSessions(lc fx.Lifecycle, svc *orchestration.Service) {
 	})
 }
 
-func newClaudeManager(cfg Config) llmkit.Manager {
+// newClaudeManager is the headless runtime: every agent claude runs from the
+// managed install (or the -claude.bin override) in the agent Claude home,
+// isolated from the person's own configuration (ADR 0018).
+func newClaudeManager(cfg Config, bin ports.ManagedClaudeBin, home claudehome.Home) llmkit.Manager {
 	base := cfg.loopbackBaseURL()
 	return claude.New(llmkit.Options{
-		Bin: cfg.ClaudeBin,
+		Bin:       bin.Bin(),
+		ConfigDir: home.Path(),
+		Isolated:  true,
 		ApprovalURL: func(sessionID string) string {
 			return base + mcpapprove.PathPrefix + sessionID
 		},
@@ -572,7 +580,7 @@ func newHub() *orchestration.Hub { return orchestration.NewHub(256) }
 // reads to set sessions up.
 func newOrchestrationService(
 	cfg Config,
-	runtime llmkit.Manager,
+	manager llmkit.Manager,
 	broker *approval.Broker,
 	hub *orchestration.Hub,
 	sessions ports.SessionRepository,
@@ -586,8 +594,9 @@ func newOrchestrationService(
 	violations ports.SandboxViolationSource,
 	violationStore ports.SandboxViolationStore,
 	agentHome claudehome.Home,
+	claudeBin ports.ManagedClaudeBin,
 ) *orchestration.Service {
-	svc := orchestration.NewService(runtime, broker, hub, sessions, orchestration.Catalog{
+	svc := orchestration.NewService(manager, broker, hub, sessions, orchestration.Catalog{
 		Projects:     cat.Projects,
 		Repositories: cat.Projects,
 		Agents:       cat.Agents,
@@ -614,12 +623,19 @@ func newOrchestrationService(
 	svc.TranscriptReader = transcriptReader
 	svc.Terminals = terminals
 	svc.Events = cat.Bus
+	toolsDir, _ := dataDir(cfg, "tools")
+	userHome, _ := os.UserHomeDir()
+	allow := sandboxAllowlist(allowSources{
+		Home: userHome, ToolsDir: toolsDir, ClaudeDirs: runtime.ClaudeInstallDirs(claudeBin.Bin()), Getenv: os.Getenv,
+	})
 	// A platform without a driver leaves Driver nil: with the sandbox on,
 	// a session start then refuses (ADR 0017).
 	svc.Sandbox = &orchestration.Sandbox{
 		Driver:  sandboxDriver,
 		Enabled: orchestration.SandboxSwitch(cat.Settings),
 		Home:    agentHome.Path(),
+		Bin:     claudeBin.Bin(),
+		Allow:   func(string) []ports.SandboxPath { return allow },
 
 		Violations:     violations,
 		ViolationStore: violationStore,

@@ -5,8 +5,11 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
+
+	"github.com/rfbatista/llmkit"
 
 	"operators-mcp/internal/application/agentready"
 	"operators-mcp/internal/domain"
@@ -26,8 +29,7 @@ type Sandbox struct {
 	// Enabled says whether the sandbox is on, read at each session start. Nil
 	// is on.
 	Enabled func() bool
-	// Bin is the claude the command names, for the driver to wrap. Empty:
-	// "claude".
+	// Bin is the claude the interactive dry-run wrap names. Empty: "claude".
 	Bin string
 	// Home is the agent Claude home.
 	Home string
@@ -132,10 +134,10 @@ func BuildSandboxPolicy(s SandboxSession) ports.SandboxPolicy {
 // sandboxed is the outcome of the sandbox step.
 type sandboxed struct {
 	policy *ports.SandboxPolicy
-	// command is the session's command as the driver wrapped it. The headless
-	// runtime builds its own; the app hands this step's wrap to llmkit once
-	// llmkit takes one for every mode.
-	command ports.SandboxCommand
+	// wrap is what llmkit runs on the session's final command: the driver's
+	// wrap under the session's policy, with the files llmkit made for the
+	// process added to it. Nil when the session is not sandboxed.
+	wrap llmkit.WrapFunc
 	// facts are what the session records about its sandbox; nil when the
 	// service has no Sandbox step at all.
 	facts *domain.SandboxFacts
@@ -186,17 +188,74 @@ func (s *Service) sandbox(ctx context.Context, in prepareInput, id string, repo 
 	if sb.Extra != nil {
 		sess.Extra = sb.Extra()
 	}
+	sess.Allow = append(sess.Allow, sessionAllow(env)...)
 	policy := BuildSandboxPolicy(sess)
-	bin := sb.Bin
-	if bin == "" {
-		bin = "claude"
-	}
-	cmd, err := sb.Driver.Wrap(policy, ports.SandboxCommand{Path: bin, Dir: worktree, Env: env})
-	if err != nil {
-		return sandboxed{}, err
+	if !in.Headless {
+		// An interactive session is wrapped where its terminal runs, from
+		// this policy; wrapping once here refuses a start the driver cannot
+		// confine before anything is provisioned for it.
+		bin := sb.Bin
+		if bin == "" {
+			bin = "claude"
+		}
+		if _, err := sb.Driver.Wrap(policy, ports.SandboxCommand{Path: bin, Dir: worktree, Env: env}); err != nil {
+			return sandboxed{}, err
+		}
 	}
 	facts := &domain.SandboxFacts{Sandboxed: true, Visibility: domain.SandboxVisibilityFor(in.Mode), Driver: sb.Driver.Name()}
-	return sandboxed{policy: &policy, command: cmd, facts: facts}, nil
+	return sandboxed{policy: &policy, wrap: sandboxWrap(sb.Driver, sess), facts: facts}, nil
+}
+
+// sandboxWrap is the WrapFunc confining a headless session's claude: the
+// session's policy plus the files llmkit made for that process, read-only
+// (the MCP config, the instructions dir), under the driver. The driver's
+// error stops the start; llmkit removes the files it made.
+func sandboxWrap(driver ports.SandboxDriver, sess SandboxSession) llmkit.WrapFunc {
+	return func(c llmkit.Command) (llmkit.Command, error) {
+		s := sess
+		s.Allow = slices.Clone(sess.Allow)
+		for _, f := range c.Files {
+			s.Allow = append(s.Allow, ports.SandboxPath{Path: f})
+		}
+		out, err := driver.Wrap(BuildSandboxPolicy(s), ports.SandboxCommand{Path: c.Path, Args: c.Args, Dir: c.Dir, Env: c.Env})
+		if err != nil {
+			return llmkit.Command{}, err
+		}
+		return llmkit.Command{Path: out.Path, Args: out.Args, Dir: out.Dir, Env: out.Env, Files: c.Files}, nil
+	}
+}
+
+var (
+	knownHostsOption = regexp.MustCompile(`UserKnownHostsFile=([^'\s]+)`)
+	credSocketOption = regexp.MustCompile(`--socket '([^']+)'`)
+)
+
+// sessionAllow are the paths a session's own env names that its processes
+// must reach: its PATH shims, and the git material the harness made for it
+// (its git directory, the known_hosts ssh updates, the sockets of its
+// ssh-agent and credential cache).
+func sessionAllow(env []string) []ports.SandboxPath {
+	var out []ports.SandboxPath
+	for _, e := range env {
+		name, v, _ := strings.Cut(e, "=")
+		switch name {
+		case ports.ShimDirEnv:
+			out = append(out, ports.SandboxPath{Path: v})
+		case "GIT_CONFIG_GLOBAL", "GIT_CONFIG_VALUE_1":
+			if name == "GIT_CONFIG_VALUE_1" {
+				if m := credSocketOption.FindStringSubmatch(v); m != nil {
+					out = append(out, ports.SandboxPath{Path: filepath.Dir(m[1]), Write: true})
+				}
+			} else if v != "" {
+				out = append(out, ports.SandboxPath{Path: filepath.Dir(v), Write: true})
+			}
+		case "GIT_SSH_COMMAND":
+			if m := knownHostsOption.FindStringSubmatch(v); m != nil {
+				out = append(out, ports.SandboxPath{Path: m[1], Write: true})
+			}
+		}
+	}
+	return out
 }
 
 // gitCommonDir is the git directory a worktree commits into, read from the

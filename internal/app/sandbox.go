@@ -4,6 +4,7 @@ import (
 	"os"
 
 	"operators-mcp/internal/app/catalog"
+	"operators-mcp/internal/app/runtime"
 	"operators-mcp/internal/application/orchestration"
 	"operators-mcp/internal/application/sandboxsettings"
 	"operators-mcp/internal/ports"
@@ -41,3 +42,7 @@ func sandboxDriver(svc *orchestration.Service) func() ports.SandboxDriver {
 		return svc.Sandbox.Driver
 	}
 }
+
+// platformSandboxDriver is the platform's driver, which the runtime stack
+// also uses to confine the sessions it hosts; nil where there is none.
+func platformSandboxDriver() ports.SandboxDriver { return runtime.PlatformSandboxDriver() }

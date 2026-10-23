@@ -224,6 +224,7 @@ func (s *Service) Start(ctx context.Context, req StartRequest) (*domain.Session,
 		Model:        req.ModelOverride,
 		AllowedTools: req.AllowedTools,
 		AutoAccept:   req.AutoAccept,
+		Headless:     true,
 	})
 	if err != nil {
 		return nil, err
@@ -341,6 +342,9 @@ type prepareInput struct {
 	Mode         domain.SessionMode
 	// Role is what the session will be on its task, for the brief; empty is a peer.
 	Role domain.SessionRole
+	// Headless is a session llmkit runs itself, wrapping its command with the
+	// session's sandbox; false is one a terminal runs.
+	Headless bool
 }
 
 // prepared is a session whose worktree exists and whose configuration is
@@ -446,6 +450,9 @@ func (s *Service) prepare(ctx context.Context, in prepareInput) (*prepared, erro
 		}
 		_ = s.workspaces.Discard(ws.ID)
 		return nil, err
+	}
+	if sb.wrap != nil {
+		cfg.Wrap = sb.wrap
 	}
 	return &prepared{
 		sandbox:    sb,
