@@ -71,7 +71,13 @@
     & .request { font-family: var(--font-mono); font-size: var(--text-xs); }
     & .http-status { font-variant-numeric: tabular-nums; color: var(--color-ink-muted); }
     & .model { color: var(--color-ink-muted); font-family: var(--font-mono); font-size: var(--text-xs); }
-    & .session, & .task { min-inline-size: 0; overflow-wrap: anywhere; }
+    & .session, & .task {
+      min-inline-size: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    & .session { flex: 0 1 12rem; }
     & .task { flex: 1 1 8rem; }
     & .figures {
       display: inline-flex;
