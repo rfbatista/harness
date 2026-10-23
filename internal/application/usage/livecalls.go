@@ -2,6 +2,7 @@ package usage
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"strings"
 	"sync"
@@ -55,7 +56,7 @@ func (s *Service) Started(ctx context.Context, r ports.CapturedRequest) {
 		return
 	}
 	who := s.resolveCall(ctx, r.Attribution)
-	ev := ports.LiveCallEvent{Name: ports.LiveCallStarted, Data: startedEvent(r, who)}
+	ev := ports.LiveCallEvent{Name: ports.LiveCallStarted, Data: lazily(func() any { return startedEvent(r, who) })}
 	for _, v := range s.liveViewers() {
 		if who.projectID == "" || who.projectID == v.project {
 			v.offerStarted(r.ID, ev)
@@ -68,10 +69,27 @@ func (s *Service) Finished(ctx context.Context, c ports.CapturedCall) {
 	if !s.Enabled() {
 		return
 	}
-	ev := ports.LiveCallEvent{Name: ports.LiveCallFinished, Data: finishedEvent(c)}
+	ev := ports.LiveCallEvent{Name: ports.LiveCallFinished, Data: lazily(func() any { return finishedEvent(c) })}
 	for _, v := range s.liveViewers() {
 		v.offerFinished(c.ID, ev)
 	}
+}
+
+// lazyJSON builds an event's JSON on the first marshal, which a viewer's own
+// goroutine does, so decoding and parsing a body never run on the proxy's
+// path. Viewers share the one result.
+type lazyJSON struct {
+	once  sync.Once
+	build func() any
+	out   []byte
+	err   error
+}
+
+func lazily(build func() any) *lazyJSON { return &lazyJSON{build: build} }
+
+func (l *lazyJSON) MarshalJSON() ([]byte, error) {
+	l.once.Do(func() { l.out, l.err = json.Marshal(l.build()) })
+	return l.out, l.err
 }
 
 func (s *Service) liveViewers() []*liveViewer {
