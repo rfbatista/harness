@@ -349,3 +349,32 @@ func TestTheArchivedCountFollowsArchiveAndRestore(t *testing.T) {
 		t.Fatalf("a project without tasks: %d, %v", n, err)
 	}
 }
+
+// An archived child task still belongs to its feature: the feature counts it
+// and cannot be deleted while it has it.
+func TestAnArchivedChildStillCountsForItsFeature(t *testing.T) {
+	f := newArchiveFixture(t)
+	ctx := context.Background()
+	feature, err := f.svc.CreateTicket(ctx, f.pid, "Feature", "", domain.TicketStatusInProgress, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	child := f.doneTask(t, "Child")
+	if _, err := f.svc.PatchTicket(ctx, child.ID, ports.TicketPatch{ParentID: &feature.ID}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.svc.ArchiveTicket(ctx, child.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	if got, _ := f.svc.GetTicket(ctx, feature.ID); got.ChildrenCount != 1 {
+		t.Fatalf("feature children = %d, want the archived child counted", got.ChildrenCount)
+	}
+	list, _ := f.svc.ListTickets(ctx, f.pid, ports.TicketFilter{})
+	if len(list) != 1 || list[0].ID != feature.ID || list[0].ChildrenCount != 1 {
+		t.Fatalf("list = %+v, want the feature alone, counting its archived child", list)
+	}
+	if err := f.svc.DeleteTicket(ctx, feature.ID); code(err) != domain.CodeTicketHasChildren {
+		t.Fatalf("delete a feature with an archived child: want %s, got %v", domain.CodeTicketHasChildren, err)
+	}
+}
