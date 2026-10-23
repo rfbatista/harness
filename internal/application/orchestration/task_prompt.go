@@ -230,7 +230,8 @@ are your work queue. Answer each one:
 - mcp__task__withdraw_user_review — withdraw a review request that is no longer needed
 - mcp__task__list_review_requests — your review requests and where each stands
 - mcp__task__set_status_check — change how often you are woken about a delegate (2–240 minutes), or 0 to pause
-- mcp__task__list_status_checks — every status-check loop on this task`
+- mcp__task__list_status_checks — every status-check loop on this task
+- mcp__task__merge_session_branch — once the person approved your review request about a delegate (about_session_id), have the server merge its branch into the default branch of the local checkout; it refuses, saying why, on a dirty checkout, a wrong branch or a conflict`
 	}
 	return `Move the task as the work moves, so the board stays true without a person
 dragging the card:

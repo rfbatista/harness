@@ -118,6 +118,7 @@ navigate it.
 | `mcp__task__list_review_requests` | The review requests you raised, and where each stands |
 | `mcp__task__set_status_check` | Change or pause the loop that wakes you about a delegate |
 | `mcp__task__list_status_checks` | Every status-check loop on the task |
+| `mcp__task__merge_session_branch` | Merge a delegate's branch (`--no-ff`, no push) into the local checkout's default branch, once the person approved a review request about it; refused with the reason on a dirty checkout, wrong branch or conflict |
 | `mcp__task__update_task_status` | Move the task's status, with a `reason`; only you can |
 
 ## The Architect's Loop

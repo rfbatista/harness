@@ -234,7 +234,7 @@ func TestStartInteractive_ArchitectCoordinatesDelegates(t *testing.T) {
 	for _, want := range []string{
 		"mcp__task__reply_to_session", "mcp__task__list_task_messages", "mcp__task__request_user_review",
 		"mcp__task__withdraw_user_review", "mcp__task__list_review_requests", "mcp__task__set_status_check",
-		"mcp__task__list_status_checks", "mcp__task__update_task_status",
+		"mcp__task__list_status_checks", "mcp__task__merge_session_branch", "mcp__task__update_task_status",
 		"[task message", "[status check", "review_response", "verdict", "reason", "status_check_minutes",
 		"## Coordinating Delegates",
 	} {

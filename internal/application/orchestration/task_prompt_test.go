@@ -129,6 +129,7 @@ func TestApplyTaskContext_BriefTeachesTheShell(t *testing.T) {
 var channelTools = []string{
 	"message_architect", "reply_to_session", "list_task_messages", "request_user_review",
 	"withdraw_user_review", "list_review_requests", "set_status_check", "list_status_checks",
+	"merge_session_branch",
 }
 
 func TestApplyTaskContext_BriefNamesEveryTaskTool(t *testing.T) {
