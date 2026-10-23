@@ -25,6 +25,9 @@ type Config struct {
 	// Upstream defaults to the Anthropic API.
 	Upstream string
 	Sink     ports.UsageSink
+	// Capture receives the calls the proxy serves while it is enabled (the
+	// live call log). Optional: nil means no capture.
+	Capture ports.CallCapture
 	// Logger defaults to slog.Default.
 	Logger *slog.Logger
 }
@@ -37,7 +40,11 @@ func Handler(cfg Config) (http.Handler, error) {
 	if logger == nil {
 		logger = slog.Default()
 	}
-	proxy, err := llmproxy.New(llmproxy.Config{Upstream: cfg.Upstream, Sink: sink{cfg.Sink}, Logger: logger})
+	pc := llmproxy.Config{Upstream: cfg.Upstream, Sink: sink{cfg.Sink}, Logger: logger}
+	if cfg.Capture != nil {
+		pc.Capture = capture{cfg.Capture}
+	}
+	proxy, err := llmproxy.New(pc)
 	if err != nil {
 		return nil, err
 	}
@@ -48,12 +55,36 @@ func Handler(cfg Config) (http.Handler, error) {
 type sink struct{ r ports.UsageSink }
 
 func (s sink) Record(ctx context.Context, r llmproxy.UsageRecord) {
-	s.r.Record(ctx, ports.UsageRequest{
+	s.r.Record(ctx, usageRequest(r))
+}
+
+func usageRequest(r llmproxy.UsageRecord) ports.UsageRequest {
+	return ports.UsageRequest{
 		ID: r.ID, Attribution: r.Attribution, Method: r.Method, Path: r.Path, Model: r.Model,
 		Status: r.Status, Streamed: r.Streamed, StartedAt: r.StartedAt, EndedAt: r.EndedAt,
 		InputTokens: r.InputTokens, OutputTokens: r.OutputTokens,
 		CacheCreationInputTokens: r.CacheCreationInputTokens, CacheReadInputTokens: r.CacheReadInputTokens,
 		Error: r.Error,
+	}
+}
+
+// capture hands spillway's captured calls to the harness's call capture,
+// field by field.
+type capture struct{ c ports.CallCapture }
+
+func (c capture) Enabled() bool { return c.c.Enabled() }
+
+func (c capture) Started(ctx context.Context, r llmproxy.CapturedRequest) {
+	c.c.Started(ctx, ports.CapturedRequest{
+		ID: r.ID, Attribution: r.Attribution, Method: r.Method, Path: r.Path, Query: r.Query,
+		Header: r.Header, Body: r.Body, StartedAt: r.StartedAt,
+	})
+}
+
+func (c capture) Finished(ctx context.Context, call llmproxy.CapturedCall) {
+	c.c.Finished(ctx, ports.CapturedCall{
+		ID: call.ID, Status: call.Status, Header: call.Header, Body: call.Body,
+		Streamed: call.Streamed, Usage: usageRequest(call.Usage),
 	})
 }
 

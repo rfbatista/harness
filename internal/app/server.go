@@ -142,7 +142,7 @@ func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRun
 	// The LLM proxy every claude process calls through (ADR 0006): loopback
 	// only, outside the API token and CORS, so its responses come back as
 	// the upstream sent them and no web page is invited to use it.
-	llmProxy, err := llm.Handler(llm.Config{Sink: usageSvc})
+	llmProxy, err := llm.Handler(llm.Config{Sink: usageSvc, Capture: usageSvc})
 	if err != nil {
 		return err
 	}
