@@ -1,5 +1,10 @@
 package ports
 
+import (
+	"context"
+	"time"
+)
+
 // The agent sandbox (ADR 0017): the OS-level confinement every agent claude
 // process runs in. A sandbox driver applies it; the policy says what the
 // process may touch.
@@ -41,3 +46,23 @@ type SandboxDriver interface {
 // SandboxExtraPaths are the paths the person adds to the sandbox allowlist
 // in settings, read at each session start.
 type SandboxExtraPaths func() []SandboxPath
+
+// SandboxViolation is one thing the sandbox denied a process: when, which
+// operation, on what path (or other target), and the process's name.
+type SandboxViolation struct {
+	When      time.Time `json:"when"`
+	Operation string    `json:"operation"`
+	Path      string    `json:"path,omitempty"`
+	Process   string    `json:"process"`
+}
+
+// SandboxViolationSource follows the violations a platform records for a
+// process tree. Optional next to a SandboxDriver: a platform without one
+// collects none.
+type SandboxViolationSource interface {
+	// Follow streams the violations of the processes confined with a policy
+	// whose WorkingDir is workingDir (the session's worktree) and everything
+	// they spawn, from when Follow returns until ctx ends; the channel then
+	// closes.
+	Follow(ctx context.Context, workingDir string) (<-chan SandboxViolation, error)
+}
