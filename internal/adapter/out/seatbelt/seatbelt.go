@@ -86,7 +86,9 @@ func (d *Driver) Wrap(policy ports.SandboxPolicy, cmd ports.SandboxCommand) (por
 	for _, p := range policy.Readable {
 		rules = append(rules, rule{p, false})
 	}
-	for _, p := range policy.Writable {
+	// A create-only directory is writable here: the builder lists the entries
+	// that exist as read-only paths, deeper, so they override this.
+	for _, p := range slices.Concat(policy.Writable, policy.CreateOnly) {
 		rules = append(rules, rule{p, true})
 	}
 	slices.SortStableFunc(rules, func(a, b rule) int {

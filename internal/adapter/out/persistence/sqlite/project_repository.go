@@ -55,11 +55,14 @@ func (r *ProjectRepository) Create(name, rootDir string) (*domain.Project, error
 	if err != nil {
 		return nil, err
 	}
+	on := true
 	m := &ProjectModel{
 		ID:           id,
 		Name:         name,
 		RootDir:      rootDir,
 		IgnoredPaths: stringSlice{},
+
+		AgentsReadAllRepos: &on,
 	}
 	if err := r.db.Create(m).Error; err != nil {
 		return nil, err
@@ -155,5 +158,21 @@ func (r *ProjectRepository) RemoveIgnoredPath(projectID, path string) (*domain.P
 	if err := r.db.Model(&m).Update("ignored_paths", m.IgnoredPaths).Error; err != nil {
 		return nil, err
 	}
+	return m.ToDomain(), nil
+}
+
+// SetAgentsReadAllRepos stores whether agents may read every repository of the project.
+func (r *ProjectRepository) SetAgentsReadAllRepos(projectID string, on bool) (*domain.Project, error) {
+	var m ProjectModel
+	if err := r.db.First(&m, "id = ?", projectID).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, &domain.StructuredError{Code: "PROJECT_NOT_FOUND", Message: "project not found"}
+		}
+		return nil, err
+	}
+	if err := r.db.Model(&m).Update("agents_read_all_repos", on).Error; err != nil {
+		return nil, err
+	}
+	m.AgentsReadAllRepos = &on
 	return m.ToDomain(), nil
 }

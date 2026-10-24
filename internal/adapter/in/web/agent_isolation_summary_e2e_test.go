@@ -325,7 +325,7 @@ func TestTheBuiltinAllowlistIsAClosedListOfWhatTheBuilderGives(t *testing.T) {
 		waitUntil(`document.querySelector('#sandbox-builtin') !== null && document.querySelector('#sandbox-builtin').open === false`),
 		chromedp.Evaluate(`document.querySelector('#sandbox-builtin summary').textContent.trim()`, &summary),
 	)
-	if summary != "Built-in allowlist (13 paths, not editable)" {
+	if summary != "Built-in allowlist (17 paths, not editable)" {
 		t.Errorf("summary = %q", summary)
 	}
 	var text string

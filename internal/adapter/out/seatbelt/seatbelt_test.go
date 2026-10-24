@@ -566,3 +566,27 @@ func TestAWriteToAnOtherWorktreesAdminEntryIsCaptured(t *testing.T) {
 	}
 	waitViolation(t, ch, target)
 }
+
+func TestACreateOnlyDirTakesNewEntriesWhileTheReadOnlyOnesOnTopStayUntouchable(t *testing.T) {
+	d := requireSeatbelt(t)
+	root := homeDir(t)
+	dir, old := filepath.Join(root, "dir"), filepath.Join(root, "dir", "old")
+	os.MkdirAll(old, 0o755)
+	os.WriteFile(filepath.Join(old, "f"), []byte("keep"), 0o644)
+	p := ports.SandboxPolicy{WorkingDir: root, CreateOnly: []string{dir}, Readable: []string{old}}
+
+	if out, err := run(t, d, p, `mkdir `+dir+`/new && echo x > `+dir+`/new/f && mv `+dir+`/new `+dir+`/new2 && rm -r `+dir+`/new2`); err != nil {
+		t.Fatalf("a new entry is made, changed and removed: %v %s", err, out)
+	}
+	for name, script := range map[string]string{
+		"rewrite": `echo x > ` + old + `/f`, "delete a file": `rm ` + old + `/f`,
+		"delete the entry": `rm -r ` + old, "rename the entry": `mv ` + old + ` ` + dir + `/moved`,
+	} {
+		if out, err := run(t, d, p, script); err == nil {
+			t.Errorf("%s worked: %s", name, out)
+		}
+	}
+	if b, err := os.ReadFile(filepath.Join(old, "f")); err != nil || string(b) != "keep" {
+		t.Errorf("old entry = %q, %v", b, err)
+	}
+}

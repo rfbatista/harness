@@ -244,7 +244,8 @@ const VISIBILITY_WORDS = { "own repo": "Own worktree only", "all repos, read-onl
 export function sandboxView(session) {
   const f = session.sandbox;
   if (!f) return { sandboxChip: "", sandboxTone: null, visibilityChip: "" };
-  const architect = session.mode === "architect" && f.visibility === "all repos, read-only";
+  // Every mode but product writes its own worktree; with all repos readable it reads the rest.
+  const architect = session.mode !== "product" && f.visibility === "all repos, read-only";
   return {
     sandboxChip: f.sandboxed ? "Sandboxed" : "Not sandboxed",
     sandboxTone: f.sandboxed ? null : "attention",

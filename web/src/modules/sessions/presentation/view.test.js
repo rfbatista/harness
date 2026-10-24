@@ -210,6 +210,7 @@ test("the sandbox chips: quiet when sandboxed, amber only when the sandbox was o
   assert.deepEqual(sandboxView(makeSession()), { sandboxChip: "", sandboxTone: null, visibilityChip: "" });
   assert.deepEqual(on("own repo"), { sandboxChip: "Sandboxed", sandboxTone: null, visibilityChip: "Own worktree only" });
   assert.equal(on("all repos, read-only", "architect").visibilityChip, "Own worktree + all repos read-only");
+  assert.equal(on("all repos, read-only", "implement").visibilityChip, "Own worktree + all repos read-only");
   assert.equal(on("all repos, read-only", "product").visibilityChip, "All repos read-only");
   assert.deepEqual(sandboxView(makeSession({ sandbox: { sandboxed: false, visibility: "unrestricted", driver: "" } })), { sandboxChip: "Not sandboxed", sandboxTone: "attention", visibilityChip: "No repository limits" });
 });

@@ -91,6 +91,12 @@ func (p *Projects) RemoveIgnoredPath(ctx context.Context, projectID, path string
 	return out.Project, err
 }
 
+func (p *Projects) SetProjectAgentsReadAllRepos(ctx context.Context, projectID string, on bool) (*domain.Project, error) {
+	var out projectOut
+	err := p.c.post(ctx, "/api/set_project_agents_read_all_repos", map[string]any{"project_id": projectID, "enabled": on}, &out)
+	return out.Project, err
+}
+
 type repositoryOut struct {
 	Repository *domain.Repository `json:"repository"`
 }

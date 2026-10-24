@@ -182,6 +182,9 @@ type ProjectModel struct {
 	Name         string
 	RootDir      string      `gorm:"column:root_dir"`
 	IgnoredPaths stringSlice `gorm:"column:ignored_paths"`
+	// AgentsReadAllRepos is null for a row stored before the setting existed,
+	// which reads as on.
+	AgentsReadAllRepos *bool `gorm:"column:agents_read_all_repos"`
 }
 
 // TableName overrides the table name.
@@ -201,6 +204,8 @@ func (m *ProjectModel) ToDomain() *domain.Project {
 		Name:         m.Name,
 		RootDir:      m.RootDir,
 		IgnoredPaths: paths,
+
+		AgentsReadAllRepos: m.AgentsReadAllRepos == nil || *m.AgentsReadAllRepos,
 	}
 }
 

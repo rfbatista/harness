@@ -244,6 +244,8 @@ type ProjectDTO struct {
 	Name         string   `json:"name"`
 	RootDir      string   `json:"root_dir"`
 	IgnoredPaths []string `json:"ignored_paths,omitempty"`
+	// AgentsReadAllRepos is whether agents can read every repository of the project.
+	AgentsReadAllRepos bool `json:"agents_read_all_repos"`
 }
 
 // ZoneDTO is the MCP/JSON representation of a zone (snake_case for API contract).
@@ -280,6 +282,8 @@ func ProjectToDTO(p *domain.Project) *ProjectDTO {
 		Name:         p.Name,
 		RootDir:      p.RootDir,
 		IgnoredPaths: ignored,
+
+		AgentsReadAllRepos: p.AgentsReadAllRepos,
 	}
 }
 

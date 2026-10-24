@@ -61,6 +61,12 @@ type Sandbox struct {
 	// Checkouts gives every project repository checkout of the install, for
 	// the one-shot calls, which see no project. Nil: none.
 	Checkouts func() []string
+	// ReadAllRepos says whether a project's agents read the main checkout of
+	// every repository of the project (ADR 0023), read at each session start;
+	// the project "" is a one-shot, which sees no project. Nil, and a project
+	// that is unknown, are on: the setting defaults on. The app wires it to the
+	// project's setting.
+	ReadAllRepos func(projectID string) bool
 	// ViolationStore keeps what Violations follows. Nil: nothing is kept.
 	ViolationStore ports.SandboxViolationStore
 }
@@ -69,6 +75,12 @@ type Sandbox struct {
 // setting.
 func SandboxSwitch(r ports.SettingsReader) func() bool {
 	return func() bool { return r == nil || r.Setting(SettingSandbox) != "off" }
+}
+
+// readAllRepos says whether the project's agents read every repository: the
+// hook's answer, on without one (the setting defaults on).
+func (b *Sandbox) readAllRepos(projectID string) bool {
+	return b.ReadAllRepos == nil || b.ReadAllRepos(projectID)
 }
 
 func (b *Sandbox) on() bool { return b != nil && (b.Enabled == nil || b.Enabled()) }
@@ -88,6 +100,12 @@ type SandboxSession struct {
 	// Repositories are the checkouts of every repository of the project, for
 	// every mode: the mode decides which are granted, the rest are hidden.
 	Repositories []string
+	// ReadAllRepos is the project's setting that lets agents read every
+	// repository (ADR 0023): with it every mode, and a one-shot, reads the main
+	// checkout of every repository of Repositories, its own included, read-only.
+	// Off, the per-mode rules apply. The Go zero value is off; the default of
+	// the setting (on) is applied where the setting is read.
+	ReadAllRepos bool
 	// WorkspacesRoot is the directory session worktrees are made under; it is
 	// hidden, the session's own worktree inside it granted.
 	WorkspacesRoot string
@@ -156,6 +174,9 @@ func BuildSandboxPolicy(s SandboxSession) ports.SandboxPolicy {
 		if resolved, err := filepath.EvalSymlinks(s.TempDir); err == nil && s.TempDir != "" {
 			add(resolved, true)
 		}
+		if s.OneShot && s.ReadAllRepos {
+			addRepositories(add, s)
+		}
 		for _, p := range s.Allow {
 			add(p.Path, p.Write)
 		}
@@ -165,43 +186,65 @@ func BuildSandboxPolicy(s SandboxSession) ports.SandboxPolicy {
 	}
 	add(s.VirtualShell, true)
 	add(s.TempDir, true)
+	var createOnly string
 	switch s.Mode {
 	case domain.SessionModeProduct:
 		add(s.Worktree, false)
-		for _, r := range s.Repositories {
-			add(r, false)
-		}
+		addRepositories(add, s)
 	case domain.SessionModeArchitect:
 		add(s.Worktree, true)
-		addGitDir(add, s)
-		for _, r := range s.Repositories {
-			add(r, false)
-		}
+		createOnly = addGitDir(add, s)
+		addRepositories(add, s)
 	default:
 		add(s.Worktree, true)
-		addGitDir(add, s)
+		createOnly = addGitDir(add, s)
+		if s.ReadAllRepos {
+			addRepositories(add, s)
+		}
 	}
 	for _, p := range slices.Concat(s.Allow, s.Extra) {
 		add(p.Path, p.Write)
 	}
 
 	policy := splitPolicy(all, s.Worktree)
+	if createOnly != "" {
+		policy.CreateOnly = []string{createOnly}
+	}
 	policy.Hidden = hiddenPaths(s, all)
 	return policy
 }
 
-// addGitDir grants the common git directory read-write, its worktrees
-// directory read-only as a whole, then the session's own entry in it
-// read-write: the drivers let the deeper rule win, so the other worktrees'
-// admin entries stay out of reach while commits, refs and objects still work.
-// A session cannot create worktrees under it; the harness makes them.
-func addGitDir(add func(string, bool), s SandboxSession) {
+// addRepositories grants every repository checkout of the project read-only. A
+// writable path inside one (the session's git directory) is deeper and wins.
+func addRepositories(add func(string, bool), s SandboxSession) {
+	for _, r := range s.Repositories {
+		add(r, false)
+	}
+}
+
+// addGitDir grants the common git directory read-write and answers its
+// worktrees directory, which the policy makes create-only: a session can add
+// its own worktrees there (`git worktree add`), but every other entry that
+// exists is granted read-only, and the session's own entry read-write. The
+// drivers let the deeper rule win, so a prune or gc the session runs cannot
+// delete the worktrees it cannot see. Entries other sessions add after the
+// policy is built are not listed; the next start lists them.
+func addGitDir(add func(string, bool), s SandboxSession) string {
 	if s.GitCommonDir == "" {
-		return
+		return ""
 	}
 	add(s.GitCommonDir, true)
-	add(filepath.Join(s.GitCommonDir, "worktrees"), false)
+	dir := filepath.Join(s.GitCommonDir, "worktrees")
+	own := filepath.Clean(s.OwnGitDir)
+	if entries, err := os.ReadDir(dir); err == nil {
+		for _, e := range entries {
+			if p := filepath.Join(dir, e.Name()); p != own {
+				add(p, false)
+			}
+		}
+	}
 	add(s.OwnGitDir, true)
+	return dir
 }
 
 // gitConfigPaths are the person's git config: ~/.gitconfig and the git
@@ -260,7 +303,9 @@ func (b *Sandbox) OneShotWrap(allow []ports.SandboxPath) (llmkit.WrapFunc, error
 	// lock files under TMPDIR, so a read-only cwd would fail calls that
 	// otherwise work. A one-shot runs no tools and sees no repository, which
 	// is why it does not get a temp dir of its own as a session does.
-	sess := SandboxSession{OneShot: true, TempDir: os.TempDir(), AgentHome: b.Home, UserHome: b.UserHome, ConfigHome: b.ConfigHome, Allow: allow}
+	// A one-shot sees no project: it reads every checkout of the install when
+	// the setting is on for no project in particular (its default).
+	sess := SandboxSession{OneShot: true, TempDir: os.TempDir(), AgentHome: b.Home, UserHome: b.UserHome, ConfigHome: b.ConfigHome, Allow: allow, ReadAllRepos: b.readAllRepos("")}
 	if b.Checkouts != nil {
 		sess.Repositories = b.Checkouts()
 	}
@@ -424,6 +469,7 @@ func (s *Service) sandbox(ctx context.Context, in prepareInput, id string, repo 
 		UserHome:     sb.UserHome,
 		ConfigHome:   sb.ConfigHome,
 		TempDir:      sessionTempDir(env),
+		ReadAllRepos: sb.readAllRepos(in.ProjectID),
 	}
 	repos, err := s.catalog.Repositories.ListRepositories(ctx, in.ProjectID)
 	if err != nil {
@@ -460,7 +506,11 @@ func (s *Service) sandbox(ctx context.Context, in prepareInput, id string, repo 
 			return sandboxed{}, err
 		}
 	}
-	facts := &domain.SandboxFacts{Sandboxed: true, Visibility: domain.SandboxVisibilityFor(in.Mode), Driver: sb.Driver.Name()}
+	visibility := domain.SandboxVisibilityFor(in.Mode)
+	if sess.ReadAllRepos {
+		visibility = domain.SandboxAllReposReadOnly
+	}
+	facts := &domain.SandboxFacts{Sandboxed: true, Visibility: visibility, Driver: sb.Driver.Name()}
 	return sandboxed{policy: &policy, wrap: sandboxWrap(sb.Driver, sess), facts: facts}, nil
 }
 

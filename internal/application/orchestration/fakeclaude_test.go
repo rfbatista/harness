@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"testing"
 )
 
@@ -21,6 +22,9 @@ type fakeLaunch struct {
 	Path     string   `json:"path"`      // PATH
 	// Env holds the variables of fakeLaunchEnv the CLI was given.
 	Env map[string]string `json:"env"`
+	// Resolved is where the CLI's own PATH finds rtk, tee and sed, as
+	// `command -v` would: a real lookup in the process that was started.
+	Resolved map[string]string `json:"resolved"`
 }
 
 // fakeLaunchEnv are the variables fakeLaunch.Env records.
@@ -42,8 +46,14 @@ func runFakeClaude() {
 				env[name] = v
 			}
 		}
+		resolved := map[string]string{}
+		for _, name := range []string{"rtk", "tee", "sed"} {
+			if p, err := exec.LookPath(name); err == nil {
+				resolved[name] = p
+			}
+		}
 		b, _ := json.Marshal(fakeLaunch{Args: os.Args[1:], Shell: os.Getenv("HARNESS_SHELL"),
-			ShellURL: os.Getenv("HARNESS_SHELL_URL"), Path: os.Getenv("PATH"), Env: env})
+			ShellURL: os.Getenv("HARNESS_SHELL_URL"), Path: os.Getenv("PATH"), Env: env, Resolved: resolved})
 		_ = os.WriteFile(fakeLaunchFile+".tmp", b, 0o644)
 		_ = os.Rename(fakeLaunchFile+".tmp", fakeLaunchFile)
 	}

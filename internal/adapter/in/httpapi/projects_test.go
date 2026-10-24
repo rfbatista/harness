@@ -101,7 +101,7 @@ func TestHTTP_ListProjectSummaries_WireShape(t *testing.T) {
 	}
 	want := []map[string]string{
 		{
-			"project":               `{"id":"` + busy.ID + `","name":"busy","root_dir":"` + busy.RootDir + `"}`,
+			"project":               `{"id":"` + busy.ID + `","name":"busy","root_dir":"` + busy.RootDir + `","agents_read_all_repos":true}`,
 			"repository_count":      `0`,
 			"open_task_count":       `2`,
 			"archived_count":        `3`,
@@ -109,7 +109,7 @@ func TestHTTP_ListProjectSummaries_WireShape(t *testing.T) {
 			"last_activity_at":      `"2026-10-07T12:00:00Z"`,
 		},
 		{
-			"project":               `{"id":"` + idle.ID + `","name":"Idle","root_dir":"` + idle.RootDir + `"}`,
+			"project":               `{"id":"` + idle.ID + `","name":"Idle","root_dir":"` + idle.RootDir + `","agents_read_all_repos":true}`,
 			"repository_count":      `0`,
 			"open_task_count":       `0`,
 			"archived_count":        `0`,
@@ -232,10 +232,10 @@ func TestHTTP_ProjectEvents_StreamsEachChange(t *testing.T) {
 	postProjectJSON(t, srv.URL+"/api/delete_project", map[string]any{"project_id": id})
 
 	want := []string{
-		`{"project":{"id":"` + id + `","name":"Live","root_dir":"` + dir + `"}}`,
-		`{"project":{"id":"` + id + `","name":"Renamed","root_dir":"` + dir + `"}}`,
-		`{"project":{"id":"` + id + `","name":"Renamed","root_dir":"` + dir + `","ignored_paths":["dist"]}}`,
-		`{"project":{"id":"` + id + `","name":"Renamed","root_dir":"` + dir + `"}}`,
+		`{"project":{"id":"` + id + `","name":"Live","root_dir":"` + dir + `","agents_read_all_repos":true}}`,
+		`{"project":{"id":"` + id + `","name":"Renamed","root_dir":"` + dir + `","agents_read_all_repos":true}}`,
+		`{"project":{"id":"` + id + `","name":"Renamed","root_dir":"` + dir + `","ignored_paths":["dist"],"agents_read_all_repos":true}}`,
+		`{"project":{"id":"` + id + `","name":"Renamed","root_dir":"` + dir + `","agents_read_all_repos":true}}`,
 		`{"project":{"id":"` + id + `"},"deleted":true}`,
 	}
 	lines := make(chan string)
@@ -257,5 +257,60 @@ func TestHTTP_ProjectEvents_StreamsEachChange(t *testing.T) {
 		case <-time.After(2 * time.Second):
 			t.Fatalf("event %d never came; want %s", i, w)
 		}
+	}
+}
+
+func TestHTTP_ProjectAgentsReadAllRepos_IsOnTurnsOffAndFollows(t *testing.T) {
+	srv, _, _ := newProjectsServer(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, srv.URL+"/api/project_events", nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	_, body := postProjectJSON(t, srv.URL+"/api/create_project", map[string]any{"name": "Reach", "root_dir": t.TempDir()})
+	var created struct {
+		Project struct {
+			ID                 string `json:"id"`
+			AgentsReadAllRepos bool   `json:"agents_read_all_repos"`
+		} `json:"project"`
+	}
+	json.Unmarshal([]byte(body), &created)
+	id := created.Project.ID
+	if !strings.Contains(body, `"agents_read_all_repos":true`) {
+		t.Fatalf("a new project reads %s, want the setting ON", body)
+	}
+
+	status, body := postProjectJSON(t, srv.URL+"/api/set_project_agents_read_all_repos", map[string]any{"project_id": id, "enabled": false})
+	if status != http.StatusOK || !strings.Contains(body, `"agents_read_all_repos":false`) {
+		t.Fatalf("turn off = %d %s", status, body)
+	}
+	listed, err := http.Get(srv.URL + "/api/list_projects")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var buf bytes.Buffer
+	buf.ReadFrom(listed.Body)
+	listed.Body.Close()
+	if !strings.Contains(buf.String(), `"agents_read_all_repos":false`) {
+		t.Fatalf("list_projects = %s, want the setting OFF", buf.String())
+	}
+	status, _ = postProjectJSON(t, srv.URL+"/api/set_project_agents_read_all_repos", map[string]any{"project_id": "ghost", "enabled": true})
+	if status != http.StatusNotFound {
+		t.Fatalf("unknown project = %d, want 404", status)
+	}
+
+	sc := bufio.NewScanner(resp.Body)
+	var seen []string
+	for len(seen) < 2 && sc.Scan() {
+		if data, ok := strings.CutPrefix(sc.Text(), "data: "); ok {
+			seen = append(seen, data)
+		}
+	}
+	if len(seen) < 2 || !strings.Contains(seen[1], `"agents_read_all_repos":false`) {
+		t.Fatalf("feed = %v, want the change with the setting OFF second", seen)
 	}
 }

@@ -57,6 +57,11 @@ export function projectsGateway(api, events) {
       return toProject(body?.project);
     },
 
+    async setAgentsReadAllRepos(projectId, enabled) {
+      const body = await api.post("/set_project_agents_read_all_repos", { project_id: projectId, enabled });
+      return toProject(body?.project);
+    },
+
     followCatalog(onChange, onStatus = () => {}) {
       return events.follow("/project_events", {
         onMessage(data) {
