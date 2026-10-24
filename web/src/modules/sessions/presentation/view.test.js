@@ -1,11 +1,12 @@
 import fixture from "../../../../testdata/views/session-status.json" with { type: "json" };
 import checks from "../../../../testdata/views/status-check.json" with { type: "json" };
+import rowFixture from "../../../../testdata/views/session-row.json" with { type: "json" };
 import fixture_titles from "../../../../testdata/views/session-title.json" with { type: "json" };
 import { assert, file, test } from "../../../shared/testing/test.js";
 import { needsYou } from "../domain/session.js";
 import { makeSession, T0 } from "../testing/fixtures.js";
 import { makeCheck, makeMessage } from "../testing/channel-fixtures.js";
-import { agentLabel, delegateOption, reportView, rowTitle, runsAs, runsOn, startedBy, statusCheckView, statusView, summary, terminalView, toDetailView, toGroupViews, sandboxView, tokenSaversView } from "./view.js";
+import { agentLabel, delegateOption, rowTitle, runsAs, runsOn, startedBy, statusCheckView, statusView, summary, terminalView, toDetailView, toGroupViews, toRowView, sandboxView, tokenSaversView } from "./view.js";
 
 file("sessions/presentation/view");
 
@@ -27,7 +28,7 @@ test("group views carry labels, counts and the selection", () => {
   assert.deepEqual(groups.map((g) => `${g.label}:${g.count}`), ["Needs you:1", "Running:1"]);
   assert.deepEqual(groups.map((g) => g.tone), ["attention", null]);
   const row = groups[1].rows[0];
-  assert.deepEqual([row.title, row.meta, row.selected, row.attention], ["Untitled session", "backend · 5m", true, false]);
+  assert.deepEqual([row.agent, row.when, row.selected, row.attention], ["backend", "5m", true, false]);
 });
 
 test("the detail pane attaches only to a live terminal on the server, and says why otherwise", () => {
@@ -81,7 +82,7 @@ test("the detail and the row both carry whether Resume shows", () => {
   assert.equal(toDetailView(s, T0, {}).resumable, true);
   const [group] = toGroupViews([s], { selectedId: null, now: T0, agentNames: {} });
   assert.equal(group.rows[0].resumable, true);
-  assert.equal(group.rows[0].resumeLabel, "Resume Port tickets screen to httpclient", "the row's button names its session");
+  assert.equal(group.rows[0].resumeLabel, "Resume backend", "the row's button names its agent");
   const [running] = toGroupViews([makeSession()], { selectedId: null, now: T0, agentNames: {} });
   assert.equal(running.rows[0].resumable, false);
 });
@@ -117,7 +118,7 @@ test("who started a session: its parent's agent, another session, or nobody", ()
   const [row] = toGroupViews([peer, lead], { selectedId: null, now: T0, agentNames: names })
     .flatMap((g) => g.rows)
     .filter((r) => r.id === "peer");
-  assert.ok(row.meta.startsWith("Backend dev · started by Backend dev · "), row.meta);
+  assert.deepEqual([row.detail.kind, row.detail.lead, row.detail.text], ["by", "started by", "Backend dev"]);
 });
 
 test("the architect's group leads, its row badged, its delegates indented (deeper ones capped at 3)", () => {
@@ -151,37 +152,54 @@ test("a status check reads the same as on first paint (shared fixture)", () => {
   }
 });
 
-test("a report reads as its status and age", () => {
-  const ago = (m) => new Date(T0.getTime() - m * 60_000);
-  assert.equal(reportView(makeMessage({ status: "ready_for_review", createdAt: ago(4) }), T0), "ready for review 4m");
-  assert.equal(reportView(makeMessage({ status: "blocked", createdAt: ago(0) }), T0), "blocked now");
-  assert.equal(reportView(makeMessage({ status: "", createdAt: ago(61) }), T0), "reported 1h");
-  assert.equal(reportView(null, T0), "no report yet");
-});
-
-test("a delegate's row says its last report and its next check instead of who started it", () => {
+test("a delegate's row says its last report and its next check once the messages load", () => {
   const ago = (m) => new Date(T0.getTime() - m * 60_000);
   const list = [
     makeSession({ id: "arch", role: "architect", mode: "architect", updatedAt: ago(9) }),
     makeSession({ id: "d1", role: "delegate", parentSessionId: "arch", statusCheck: makeCheck({ nextAt: new Date(T0.getTime() + 6 * 60_000) }), updatedAt: ago(8) }),
     makeSession({ id: "d2", role: "delegate", parentSessionId: "d1", updatedAt: ago(7) }),
   ];
-  const names = { backend: "go-developer" };
-  const metaOf = (opts) => Object.fromEntries(toGroupViews(list, { selectedId: null, now: T0, agentNames: names, ...opts })[0].rows.map((r) => [r.id, r.meta]));
+  const detailsOf = (opts) => Object.fromEntries(toGroupViews(list, { selectedId: null, now: T0, agentNames: {}, ...opts })[0].rows.map((r) => [r.id, r.detail]));
 
   // Before the messages load: what the server renders too.
-  assert.deepEqual(metaOf({}), {
-    arch: "go-developer as architect · 9m",
-    d1: "go-developer · check in 6m",
-    d2: "go-developer · 7m",
+  assert.deepEqual(detailsOf({}), {
+    arch: null,
+    d1: { kind: "none", lead: "", text: "", check: "check in 6m" },
+    d2: null,
   });
   // Loaded: each delegate's last report, or none yet.
-  const messages = [makeMessage({ fromSessionId: "d1", status: "ready_for_review", createdAt: ago(4) })];
-  assert.deepEqual(metaOf({ messages }), {
-    arch: "go-developer as architect · 9m",
-    d1: "go-developer · ready for review 4m · check in 6m",
-    d2: "go-developer · no report yet",
+  const messages = [makeMessage({ fromSessionId: "d1", status: "ready_for_review", createdAt: ago(4), body: "Done." })];
+  assert.deepEqual(detailsOf({ messages }), {
+    arch: null,
+    d1: { kind: "review", lead: "ready for review", text: "“Done.”", check: "check in 6m" },
+    d2: { kind: "none", lead: "no report yet", text: "", check: "" },
   });
+});
+
+test("rows match the shared fixture (parity with the BFF)", () => {
+  const ago = (m) => new Date(T0.getTime() - m * 60_000);
+  for (const c of rowFixture.cases) {
+    const sessions = c.sessions.map((f) =>
+      makeSession({
+        id: f.id, agentId: f.agent_id, role: f.role ?? "", mode: f.mode ?? "", model: f.model ?? "", status: f.status,
+        pendingApprovals: f.pending_approvals ?? 0, task: f.task, ticketId: f.ticket_id ?? "t1", parentSessionId: f.parent ?? "",
+        updatedAt: ago(f.ago), sandbox: f.sandboxed === false ? { sandboxed: false, visibility: "unrestricted", driver: "" } : null,
+        statusCheck: f.check ? makeCheck({ state: f.check.state, everyMinutes: f.check.every, nextAt: new Date(T0.getTime() + f.check.next_in * 60_000) }) : null,
+      }),
+    );
+    const messages = c.messages_loaded
+      ? c.report ? [makeMessage({ fromSessionId: c.report.from, status: c.report.status, createdAt: ago(c.report.ago), body: c.report.body })] : []
+      : undefined;
+    const session = sessions.find((s) => s.id === c.row);
+    const got = toRowView(session, { selectedId: null, now: T0, agentNames: rowFixture.agent_names, others: sessions, taskTitle: c.task_title, messages });
+    const want = c.expect;
+    assert.deepEqual(
+      { agent: got.agent, leadsWithTitle: got.leadsWithTitle, mode: got.mode, model: got.model, badge: got.badge, chip: got.chip, word: got.word, state: got.state, when: got.when, detail: got.detail, detailText: got.detailText, resumeLabel: got.resumeLabel, unsandboxedAttr: got.unsandboxedAttr },
+      want,
+      c.name,
+    );
+    assert.equal("title" in got || "meta" in got, false, `${c.name}: no title or meta`);
+  }
 });
 
 test("a delegate as a Conversation filter option: who, on what, its word and dot", () => {
@@ -217,10 +235,10 @@ test("the sandbox chips: quiet when sandboxed, amber only when the sandbox was o
 
 test("a row says unsandboxed only for a session that ran without the sandbox", () => {
   const row = (sandbox) => toGroupViews([makeSession({ sandbox })], { selectedId: null, now: T0, agentNames: {} })[0].rows[0];
-  assert.equal(row(null).meta.includes("unsandboxed"), false);
-  assert.equal(row({ sandboxed: true, visibility: "own repo", driver: "seatbelt" }).meta.includes("unsandboxed"), false);
+  assert.equal(row(null).detailText.includes("unsandboxed"), false);
+  assert.equal(row({ sandboxed: true, visibility: "own repo", driver: "seatbelt" }).detailText.includes("unsandboxed"), false);
   const off = row({ sandboxed: false, visibility: "unrestricted", driver: "" });
-  assert.ok(off.meta.endsWith(" · unsandboxed"), off.meta);
+  assert.ok(off.detailText.includes(" · unsandboxed"), off.detailText);
   assert.equal(off.unsandboxedAttr, "");
 });
 
@@ -229,6 +247,6 @@ test("row titles match the shared fixture: a session with no task is a feature b
     assert.equal(rowTitle(makeSession({ task: c.task, ticketId: c.ticket_id })), c.title, `${JSON.stringify(c)}`);
   }
   const [group] = toGroupViews([makeSession({ id: "b", task: "", ticketId: "" })], { selectedId: null, now: T0, agentNames: {} });
-  assert.equal(group.rows[0].title, "Feature brainstorm");
-  assert.equal(group.rows[0].resumeLabel, "Resume Feature brainstorm");
+  assert.equal(group.rows[0].agent, "Feature brainstorm");
+  assert.equal(group.rows[0].leadAttr, "title");
 });

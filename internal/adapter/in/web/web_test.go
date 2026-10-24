@@ -404,8 +404,8 @@ func TestTaskPageListsItsSessionsBesideTheDetail(t *testing.T) {
 		`implement this task`,
 		`review &lt;the&gt; plan`, // escaped in markup
 		`your turn`,
-		`Reviewer · 2m`,          // the agent's name, not its id
-		`2 sessions · 1 waiting`, // one task, several sessions
+		`<span class="[ agent ]">Reviewer</span>`, // the agent's name, not its id
+		`2 sessions · 1 waiting`,                  // one task, several sessions
 		`x-on:click="startCreating"`,
 		`x-data="sessionsNewSession(projectId, ticketId)"`,
 		`data-default-repository="r-harness"`,

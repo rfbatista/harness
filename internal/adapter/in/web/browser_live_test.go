@@ -135,12 +135,12 @@ func TestSessionsStartedElsewhereShowUpLive(t *testing.T) {
 		ID: "docs", ProjectID: "p1", TicketID: "t2", Task: "Draft the docs", Status: domain.SessionIdle, UpdatedAt: now,
 	}})
 
-	peerRow := `[...document.querySelectorAll('[role=listbox] .row')].find(r => r.textContent.includes('Write the feed tests'))`
+	peerRow := `[...document.querySelectorAll('[role=listbox] .row')].find(r => r.dataset.sessionId === 'peer')`
 	var meta, announced, t1After, t2After, t2Dot string
 	var fresh bool
 	err = chromedp.Run(ctx,
 		chromedp.Poll(`!!`+peerRow, nil, chromedp.WithPollingTimeout(5*time.Second)),
-		chromedp.Evaluate(peerRow+`.querySelector('.meta').textContent`, &meta),
+		chromedp.Evaluate(`[...`+peerRow+`.querySelector('.detail').children].map(c => c.textContent.trim()).filter(Boolean).join(' ')`, &meta),
 		chromedp.Evaluate(peerRow+`.hasAttribute('data-fresh')`, &fresh),
 		chromedp.Evaluate(`document.querySelector('[role=status][aria-live=polite]').textContent`, &announced),
 		chromedp.Poll(count("t2")+` === 'waiting'`, nil, chromedp.WithPollingTimeout(5*time.Second)),
@@ -151,8 +151,8 @@ func TestSessionsStartedElsewhereShowUpLive(t *testing.T) {
 	if err != nil {
 		t.Fatalf("%v\nJS errors: %v", err, errs.all())
 	}
-	if want := "plain claude · started by Lead dev · "; len(meta) < len(want) || meta[:len(want)] != want {
-		t.Errorf("row meta = %q, want it to start %q", meta, want)
+	if want := "started by Lead dev"; meta != want {
+		t.Errorf("row detail = %q, want %q", meta, want)
 	}
 	if !fresh {
 		t.Error("the arriving row is not highlighted")

@@ -27,6 +27,23 @@ func unsandboxedAttrs(unsandboxed bool) templ.Attributes {
 	return templ.Attributes{}
 }
 
+// leadAttrs marks a row that leads with its title, not its agent: a feature
+// brainstorm, which has no task.
+func leadAttrs(leadsWithTitle bool) templ.Attributes {
+	if leadsWithTitle {
+		return templ.Attributes{"data-lead": "title"}
+	}
+	return templ.Attributes{}
+}
+
+// chipToneAttrs paints a status chip's tone; neutral ("") has none.
+func chipToneAttrs(tone string) templ.Attributes {
+	if tone != "" {
+		return templ.Attributes{"data-tone": tone}
+	}
+	return templ.Attributes{}
+}
+
 func roleAttrs(role string, depth int) templ.Attributes {
 	a := templ.Attributes{}
 	if role != "" {

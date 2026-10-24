@@ -286,16 +286,16 @@ func TestArchitectChannelInTheWebUI_EndToEnd(t *testing.T) {
 	if want1, want2 := arch.ID+":architect:0 "+webUI+":delegate:1 "+server+":delegate:1", arch.ID+":architect:0 "+server+":delegate:1 "+webUI+":delegate:1"; order != want1 && order != want2 {
 		t.Errorf("rows: %s", order)
 	}
-	if badge := p.text(t, row(arch.ID)+`.querySelector('.title .badge').textContent`); badge != "architect" {
+	if badge := p.text(t, row(arch.ID)+`.querySelector('.who .badge').textContent`); badge != "architect" {
 		t.Errorf("the architect's badge: %q", badge)
 	}
-	if meta := p.text(t, row(server)+`.querySelector('.meta').textContent`); !strings.Contains(meta, "check in 9m") && !strings.Contains(meta, "check in 10m") {
+	if meta := p.text(t, row(server)+`.querySelector('.detail').textContent`); !strings.Contains(meta, "check in 9m") && !strings.Contains(meta, "check in 10m") {
 		t.Errorf("the server delegate's meta lacks its next check: %q", meta)
 	}
 
 	// The server delegate reports live; its row says so.
 	e.as(server, "message_architect", map[string]any{"kind": "status_report", "status": "ready_for_review", "body": "The port and the scheduler are done.\nTests are green."})
-	p.run(t, "a report arrives", poll(row(server)+`.querySelector('.meta').textContent.includes('ready for review')`))
+	p.run(t, "a report arrives", poll(row(server)+`.querySelector('.detail').textContent.includes('ready for review')`))
 
 	// The architect's Conversation shows it; the architect replies, live.
 	p.run(t, "open the architect's conversation",
@@ -328,7 +328,7 @@ func TestArchitectChannelInTheWebUI_EndToEnd(t *testing.T) {
 		both("2-status-check"),
 		chromedp.Evaluate(toggle+`.click()`, nil),
 		poll(checks+`?.textContent.includes('paused')`),
-		poll(row(server)+`.querySelector('.meta').textContent.includes('checks paused')`),
+		poll(row(server)+`.querySelector('.detail').textContent.includes('checks paused')`),
 	)
 	e.checkState(domain.StatusCheckPaused, 0)
 	p.run(t, "resume them",

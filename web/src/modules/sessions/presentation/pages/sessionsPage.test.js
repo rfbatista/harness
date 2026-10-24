@@ -292,7 +292,7 @@ test("a session started elsewhere arrives live: highlighted for a moment, announ
   const row = instance.groups.flatMap((g) => g.rows).find((r) => r.id === "peer");
   assert.ok(row, "the new session is in the list");
   assert.ok(row.fresh);
-  assert.ok(row.meta.includes("started by Backend dev"), row.meta);
+  assert.deepEqual([row.detail.lead, row.detail.text], ["started by", "Backend dev"]);
   assert.equal(instance.announcement, "Backend dev started a session: Write the feed tests");
 
   memory.update("peer", { status: "idle" });
@@ -326,7 +326,23 @@ test("a session with a worktree links its git history", () => {
 test("rows show the agent's name", () => {
   const { instance } = setup();
   const row = instance.groups.flatMap((g) => g.rows).find((r) => r.id === "run");
-  assert.ok(row.meta.startsWith("Backend dev · "), row.meta);
+  assert.equal(row.agent, "Backend dev");
+  instance.destroy();
+});
+
+test("no row on a task page shows the task's title; a prompt that differs is quoted", () => {
+  const sessions = [
+    makeSession({ id: "same", task: "Port tickets", agentId: "backend", status: "running" }),
+    makeSession({ id: "other", task: "Fix the flake", agentId: "backend", status: "running" }),
+  ];
+  const memory = memoryGateway({ projects: ["p1"], sessions, now: () => T0 });
+  const el = seededElement({ project_id: "p1", ticket_id: "t1", task_title: "Port tickets", sessions: sessions.map(toDTO), agent_names: { backend: "Backend dev" } });
+  const { instance } = mount(sessionsPage({ gateway: memory.gateway, clock: fixedClock(T0) }), { el });
+  instance.init();
+  const rows = Object.fromEntries(instance.groups.flatMap((g) => g.rows).map((r) => [r.id, r]));
+  assert.equal(rows.same.detail, null);
+  assert.deepEqual([rows.other.detail.kind, rows.other.detail.text], ["prompt", "“Fix the flake”"]);
+  assert.equal(Object.values(rows).some((r) => r.detailText.includes("Port tickets")), false);
   instance.destroy();
 });
 
@@ -513,10 +529,10 @@ function architectSetup({ messages = [], sessions } = {}) {
 test("a task with an architect loads its messages, and a delegate's row says its last report", async () => {
   const { instance, channelStore } = architectSetup({ messages: [makeMessage({ fromSessionId: "d1", status: "ready_for_review", createdAt: T0 })] });
   const d1 = () => instance.groups[0].rows.find((r) => r.id === "d1");
-  assert.equal(d1().meta, "go-developer · now", "before the messages load, as the server rendered it");
+  assert.equal(d1().detail, null, "before the messages load, as the server rendered it");
   await flush();
   assert.equal(channelStore.loaded, true);
-  assert.equal(d1().meta, "go-developer · ready for review now");
+  assert.deepEqual([d1().detail.kind, d1().detail.lead, d1().when], ["review", "ready for review", "now"]);
   instance.destroy();
 });
 
@@ -527,7 +543,8 @@ test("a new report over the feed updates the delegate's row; another task's mess
   channel.send({ taskId: "t9", fromSessionId: "x", toSessionId: "y", kind: "question", body: "Not ours" });
   await flush();
   assert.deepEqual(channelStore.messages.map((m) => m.body), ["Need the port."]);
-  assert.equal(instance.groups[0].rows.find((r) => r.id === "d1").meta, "go-developer · blocked now");
+  const d1 = instance.groups[0].rows.find((r) => r.id === "d1");
+  assert.deepEqual([d1.detail.kind, d1.detail.text], ["blocked", "“Need the port.”"]);
   instance.destroy();
 });
 
@@ -598,7 +615,7 @@ test("a delegate with a loop gets a status-check bar; a change patches its row a
 
   instance.statusCheckChanged({ detail: { check: makeCheck({ everyMinutes: 0, state: "paused", nextAt: null }) } });
   assert.deepEqual([instance.statusCheckBars[0].key, instance.statusCheckBars[0].remembered], ["d1:paused:0", 15], "the interval before the pause is kept for Resume");
-  assert.ok(instance.groups[0].rows.find((r) => r.id === "d1").meta.endsWith("checks paused"));
+  assert.equal(instance.groups[0].rows.find((r) => r.id === "d1").detail.check, "checks paused");
   instance.destroy();
 });
 
@@ -815,7 +832,7 @@ test("the project's sessions page has no task: it keeps the ticket-less sessions
   tick();
   assert.equal(instance.hasTask, false);
   assert.deepEqual(instance.sessions.map((s) => s.id), ["brain"], "only the ticket-less sessions");
-  assert.equal(instance.groups[0].rows[0].title, "Feature brainstorm");
+  assert.equal(instance.groups[0].rows[0].agent, "Feature brainstorm");
   assert.equal(instance.selectedId, "brain");
   assert.equal(instance.historyHref, "", "no task, no git history page");
   assert.equal(instance.hasCode, false, "no task, no code URLs");

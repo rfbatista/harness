@@ -180,12 +180,12 @@ func TestArchitectLeadsTheTaskAndTalksWithItsDelegates(t *testing.T) {
 	srv, feed := architectServer(t, []domain.TaskMessage{report})
 	ctx, errs := browser(t)
 
-	rows := `[...document.querySelectorAll('[role=listbox] .row')].map(r => r.querySelector('.title').textContent.trim() + ' | ' + r.querySelector('.meta').textContent.trim())`
+	rows := `[...document.querySelectorAll('[role=listbox] .row')].map(` + sessionRowText + `)`
 	var order []string
 	if err := chromedp.Run(ctx,
 		chromedp.EmulateViewport(1280, 800),
 		chromedp.Navigate(srv.URL+"/projects/p1/tasks/t1"),
-		chromedp.Poll(`[...document.querySelectorAll('[role=listbox] .row[data-role=delegate] .meta')].some(m => m.textContent.includes('ready for review'))`, nil, chromedp.WithPollingTimeout(10*time.Second)),
+		chromedp.Poll(`[...document.querySelectorAll('[role=listbox] .row[data-role=delegate] .detail .lead')].some(m => m.textContent.includes('ready for review'))`, nil, chromedp.WithPollingTimeout(10*time.Second)),
 		chromedp.Evaluate(rows, &order),
 		shot("architect-list"),
 	); err != nil {
@@ -194,10 +194,10 @@ func TestArchitectLeadsTheTaskAndTalksWithItsDelegates(t *testing.T) {
 		t.Fatalf("%v\nrows: %q\nJS errors: %v", err, dump, errs.all())
 	}
 	want := []string{
-		"architect Shape the architect highlights | software-architect as architect · 1h",
-		"Web UI: review inbox | frontend-developer · no report yet",
-		"Server: architect channel | go-developer · ready for review 4m · check in 6m",
-		"A person's own session | plain claude · now",
+		"software-architect | 1h",
+		"frontend-developer | no report yet | 20m",
+		"go-developer | ready for review | “Port and scheduler done. Tests green.” | check in 6m | 4m",
+		"plain claude | prompt | “A person's own session” | now",
 	}
 	if len(order) != len(want) {
 		t.Fatalf("rows = %q, want %q", order, want)
@@ -254,7 +254,7 @@ func TestPersonPausesAndResumesADelegatesStatusChecks(t *testing.T) {
 	ctx, errs := browser(t)
 
 	button := `(document.querySelector('.session-head .check-button')?.textContent ?? '').replace(/\s+/g, ' ').trim()`
-	serverRow := `[...document.querySelectorAll('[role=listbox] .row')].find(r => r.textContent.includes('Server: architect channel'))`
+	serverRow := `[...document.querySelectorAll('[role=listbox] .row')].find(r => r.dataset.sessionId === 's-server')`
 	picked := `(() => { const s = document.querySelector('#session-checks-every'); return s ? s.options[s.selectedIndex]?.textContent ?? '' : ''; })()`
 	panel := `(document.querySelector('#session-checks:popover-open')?.textContent ?? '').replace(/\s+/g, ' ').trim()`
 	openPanel := chromedp.Evaluate(`document.querySelector('.session-head .check-button').click()`, nil)
@@ -279,7 +279,7 @@ func TestPersonPausesAndResumesADelegatesStatusChecks(t *testing.T) {
 		clickButton(`#session-checks`, "Pause checks"),
 		chromedp.Poll(`(`+button+`).includes('paused')`, nil, chromedp.WithPollingTimeout(5*time.Second)),
 		chromedp.Evaluate(button, &paused),
-		chromedp.Evaluate(serverRow+`.querySelector('.meta').textContent`, &row),
+		chromedp.Evaluate(serverRow+`.querySelector('.detail').textContent`, &row),
 		openPanel,
 		clickButton(`#session-checks`, "Resume checks"),
 		chromedp.Poll(`(`+button+`).includes('next')`, nil, chromedp.WithPollingTimeout(5*time.Second)),
