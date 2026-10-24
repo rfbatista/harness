@@ -682,7 +682,7 @@ func newOrchestrationService(
 		// which every session (and each one's virtual shell) shares: this is
 		// its name prefix, the start adds a random suffix. Short, so a unix
 		// socket path under it stays within the platform's limit.
-		TempDir: func(id string) string { return filepath.Join(os.TempDir(), "harness-session-"+id[:min(len(id), 8)]) },
+		TempDir: func(id string) string { return sessionTempPrefix(os.TempDir(), id) },
 
 		Violations:     violations,
 		ViolationStore: violationStore,
@@ -963,4 +963,14 @@ func shortID(id string) string {
 		return id[:12]
 	}
 	return id
+}
+
+// sessionTempPrefix is the name prefix of a session's temp dir under base:
+// hs-<8 id characters>; each start adds "-" and nine random digits. It is as
+// short as it is because Playwright's browser MCP server keeps a unix socket
+// at <temp dir>/browser/<14 characters>.sock and refuses a path over 103
+// bytes; a macOS system temp dir is already 50 bytes, so the whole session
+// temp dir may take 25 more. The name stays short, never "harness-session-".
+func sessionTempPrefix(base, id string) string {
+	return filepath.Join(base, "hs-"+id[:min(len(id), 8)])
 }

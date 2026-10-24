@@ -382,15 +382,15 @@ func confineSpec(spec *ports.AgentSpec, policy *ports.SandboxPolicy) {
 
 // chromeSection is what a sandboxed session's system prompt says about Chrome
 // (contract "sandboxed Chrome", section 2; ADR 0024).
-const chromeSection = "You run inside the agent sandbox (`HARNESS_SANDBOX` names its driver). Start Chrome or Chromium with `--no-sandbox`: its own sandbox cannot nest inside this one. `MAC_CHROMIUM_TMPDIR` is already set to your temp dir; keep Chrome's `--user-data-dir` under `$TMPDIR` too."
+const chromeSection = "You run inside the agent sandbox (`HARNESS_SANDBOX` names its driver). Start Chrome or Chromium with `--no-sandbox`: its own sandbox cannot nest inside this one. `MAC_CHROMIUM_TMPDIR` is already set to your temp dir; keep Chrome's `--user-data-dir` under `$TMPDIR` too. Prefer the `mcp__browser__*` tools to drive a browser."
 
 // withTempDir gives a sandboxed session its own temp dir: made 0700 before
 // the start, named by TMPDIR, TMP and TEMP in its env so its tools use it,
 // and removed with the session (the cleanup it answers runs cleanup first).
 // It also gives the session what Chrome needs inside the sandbox (ADR 0024):
 // the sandbox marker, HARNESS_SANDBOX, set to the driver's name, the prompt
-// section that says how to start Chrome, and with the seatbelt driver
-// MAC_CHROMIUM_TMPDIR, the same dir as TMPDIR. Without a Sandbox that is on,
+// section that says how to start Chrome, the browser MCP server (ADR 0025),
+// and with the seatbelt driver MAC_CHROMIUM_TMPDIR, the same dir as TMPDIR. Without a Sandbox that is on,
 // with a driver, it does nothing.
 func (s *Service) withTempDir(id string, cfg *llmkit.SessionConfig, cleanup func()) (func(), error) {
 	sb := s.Sandbox
@@ -401,10 +401,12 @@ func (s *Service) withTempDir(id string, cfg *llmkit.SessionConfig, cleanup func
 	cfg.Env = append(slices.Clone(cfg.Env), ports.SandboxMarkerEnv+"="+driver)
 	cfg.AppendSystem = appendSection(cfg.AppendSystem, chromeSection)
 	if sb.TempDir == nil {
+		withBrowserServer(cfg, "", sb.UserHome)
 		return cleanup, nil
 	}
 	prefix := sb.TempDir(id)
 	if prefix == "" {
+		withBrowserServer(cfg, "", sb.UserHome)
 		return cleanup, nil
 	}
 	// One dir per start: a cleanup of an earlier start under the same id
@@ -417,9 +419,12 @@ func (s *Service) withTempDir(id string, cfg *llmkit.SessionConfig, cleanup func
 		return nil, fmt.Errorf("prepare the session's temp dir: %w", err)
 	}
 	cfg.Env = append(cfg.Env, "TMPDIR="+dir, "TMP="+dir, "TEMP="+dir)
+	browserDir := ""
 	if driver == "seatbelt" {
 		cfg.Env = append(cfg.Env, ports.ChromiumTmpdirEnv+"="+dir)
+		browserDir = dir
 	}
+	withBrowserServer(cfg, browserDir, sb.UserHome)
 	return func() {
 		if cleanup != nil {
 			cleanup()

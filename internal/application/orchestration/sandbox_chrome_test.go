@@ -13,7 +13,7 @@ import (
 
 // wantChromeSection is the contract's system prompt section, in a sandboxed
 // session only.
-const wantChromeSection = "You run inside the agent sandbox (`HARNESS_SANDBOX` names its driver). Start Chrome or Chromium with `--no-sandbox`: its own sandbox cannot nest inside this one. `MAC_CHROMIUM_TMPDIR` is already set to your temp dir; keep Chrome's `--user-data-dir` under `$TMPDIR` too."
+const wantChromeSection = "You run inside the agent sandbox (`HARNESS_SANDBOX` names its driver). Start Chrome or Chromium with `--no-sandbox`: its own sandbox cannot nest inside this one. `MAC_CHROMIUM_TMPDIR` is already set to your temp dir; keep Chrome's `--user-data-dir` under `$TMPDIR` too. Prefer the `mcp__browser__*` tools to drive a browser."
 
 // lastEnvValue is the value a process would see: the last entry wins.
 func lastEnvValue(env []string, name string) (string, bool) {

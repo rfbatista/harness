@@ -19,12 +19,6 @@
       "headers": {
         "Authorization": "Bearer ${POSTMAN_MCP_TOKEN}"
       }
-    },
-    "playwright": {
-      "command": "npx",
-      "args": [
-        "@playwright/mcp@latest"
-      ]
     }
   }
 }
