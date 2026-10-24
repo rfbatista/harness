@@ -1,4 +1,4 @@
-import { Codes } from "../../../../shared/domain/errors.js";
+import { Codes, StructuredError } from "../../../../shared/domain/errors.js";
 import { flush } from "../../../../shared/testing/doubles.js";
 import { mount, seededElement } from "../../../../shared/testing/alpine.js";
 import { assert, file, test } from "../../../../shared/testing/test.js";
@@ -139,4 +139,23 @@ test("deleted elsewhere: the page says so and stops writing", async () => {
   assert.equal(instance.deletedElsewhere, true);
   instance.name = "x";
   assert.equal(instance.cannotSave, true);
+});
+
+test("the agent-read toggle starts on, saves on change, follows another tab, and keeps its state when the save fails", async () => {
+  const { instance, memory } = setup();
+  assert.equal(instance.readAll, true);
+
+  const box = { checked: false };
+  await instance.chooseReadAll({ target: box });
+  assert.deepEqual([instance.readAll, (await memory.gateway.listProjectSummaries()).find((x) => x.project.id === "p1").project.agentsReadAllRepos], [false, false]);
+
+  await memory.gateway.setAgentsReadAllRepos("p1", true); // another tab
+  assert.equal(instance.readAll, true);
+
+  memory.gateway.setAgentsReadAllRepos = async () => {
+    throw new StructuredError(Codes.BAD_RESPONSE, "disk full", 500);
+  };
+  box.checked = false;
+  await instance.chooseReadAll({ target: box });
+  assert.deepEqual([instance.readAll, box.checked, instance.readAllError.message], [true, true, "disk full"]);
 });

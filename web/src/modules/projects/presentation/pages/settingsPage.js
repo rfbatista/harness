@@ -46,6 +46,9 @@ export const settingsPage = ({ gateway, navigate }) => () => ({
   refusal: null,
   deletedElsewhere: false,
   error: null,
+  /** The agent-read toggle's own failure; the toggle stays as it was. */
+  readAllError: null,
+  savingReadAll: false,
   ready: false,
   stopFeed: () => {},
 
@@ -98,6 +101,13 @@ export const settingsPage = ({ gateway, navigate }) => () => ({
   get cannotAddPath() {
     return !this.ready || this.addingPath || this.deletedElsewhere;
   },
+  /** Agents can read every repository of the project, as the server has it. */
+  get readAll() {
+    return this.project.agentsReadAllRepos;
+  },
+  get cannotChooseReadAll() {
+    return !this.ready || this.savingReadAll || this.deletedElsewhere;
+  },
   get cannotAskDelete() {
     return !this.ready || this.deletedElsewhere;
   },
@@ -134,7 +144,7 @@ export const settingsPage = ({ gateway, navigate }) => () => ({
     if (next.id !== this.project.id) return;
     // Our own save answers for itself; its echo may come first.
     if (this.saving) {
-      this.project = { ...this.project, ignoredPaths: next.ignoredPaths };
+      this.project = { ...this.project, ignoredPaths: next.ignoredPaths, agentsReadAllRepos: next.agentsReadAllRepos };
       return;
     }
     const wasDirty = this.isDirty;
@@ -208,6 +218,23 @@ export const settingsPage = ({ gateway, navigate }) => () => ({
       this.ignoredError = describeError(err);
     } finally {
       this.removingPath = "";
+    }
+  },
+
+  /** The toggle saves on change; a failed save puts it back as it was. */
+  async chooseReadAll(event) {
+    if (this.savingReadAll) return;
+    const checkbox = event.target;
+    this.savingReadAll = true;
+    this.readAllError = null;
+    try {
+      const saved = await gateway.setAgentsReadAllRepos(this.project.id, checkbox.checked);
+      this.project = { ...this.project, agentsReadAllRepos: saved.agentsReadAllRepos };
+    } catch (err) {
+      this.readAllError = describeError(err);
+      checkbox.checked = this.project.agentsReadAllRepos;
+    } finally {
+      this.savingReadAll = false;
     }
   },
 

@@ -79,6 +79,17 @@ type DeleteProjectIn struct {
 	ProjectID string `json:"project_id" jsonschema:"required"`
 }
 
+// SetProjectAgentsReadAllReposIn is the input for set_project_agents_read_all_repos.
+type SetProjectAgentsReadAllReposIn struct {
+	ProjectID string `json:"project_id" jsonschema:"required"`
+	Enabled   bool   `json:"enabled"`
+}
+
+// SetProjectAgentsReadAllReposOut is the output for set_project_agents_read_all_repos.
+type SetProjectAgentsReadAllReposOut struct {
+	Project *ProjectDTO `json:"project"`
+}
+
 // AddIgnoredPathIn is the input for add_ignored_path.
 type AddIgnoredPathIn struct {
 	ProjectID string `json:"project_id" jsonschema:"required"`

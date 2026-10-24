@@ -18,6 +18,7 @@ type ProjectRepository interface {
 	Delete(projectID string) error
 	AddIgnoredPath(projectID, path string) (*domain.Project, error)
 	RemoveIgnoredPath(projectID, path string) (*domain.Project, error)
+	SetAgentsReadAllRepos(projectID string, on bool) (*domain.Project, error)
 }
 
 // RepositoryRepository is the outbound port for persisting and retrieving

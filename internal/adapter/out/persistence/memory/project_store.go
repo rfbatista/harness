@@ -58,6 +58,8 @@ func (s *ProjectStore) Create(name, rootDir string) (*domain.Project, error) {
 		Name:         name,
 		RootDir:      rootDir,
 		IgnoredPaths: []string{},
+
+		AgentsReadAllRepos: true,
 	}
 	s.mu.Lock()
 	s.projects[id] = p
@@ -139,5 +141,17 @@ func (s *ProjectStore) RemoveIgnoredPath(projectID, path string) (*domain.Projec
 		}
 	}
 	p.IgnoredPaths = filtered
+	return cloneProject(p), nil
+}
+
+// SetAgentsReadAllRepos stores whether agents may read every repository of the project.
+func (s *ProjectStore) SetAgentsReadAllRepos(projectID string, on bool) (*domain.Project, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	p, ok := s.projects[projectID]
+	if !ok {
+		return nil, &domain.StructuredError{Code: "PROJECT_NOT_FOUND", Message: "project not found"}
+	}
+	p.AgentsReadAllRepos = on
 	return cloneProject(p), nil
 }
