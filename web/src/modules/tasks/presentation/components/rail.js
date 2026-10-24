@@ -83,6 +83,8 @@ export const rail = ({ gateway, store, prefs, navigate, timers = globalThis, isN
   let announcing = [];
   let announceTimer = null;
   let resultTimer = null;
+  /** The feed has been live once: changes before then (a merge state computed while the page loaded) were never delivered. */
+  let wentLive = false;
 
   return {
     projectId: "",
@@ -188,9 +190,17 @@ export const rail = ({ gateway, store, prefs, navigate, timers = globalThis, isN
       );
     },
 
+    /**
+     * The feed's state. On its first live, and on every resync, the lists are
+     * read again: the seed was painted before the stream opened, and what the
+     * server announced in between (a merge state it had just computed) never
+     * reached this page.
+     */
     feedStatus(status) {
       if (this.reportsFeed) this.$dispatch("feed-status", status);
-      if (status === FeedStatus.RESYNCED) this.resync();
+      const first = status === FeedStatus.LIVE && !wentLive;
+      if (status === FeedStatus.LIVE) wentLive = true;
+      if (first || status === FeedStatus.RESYNCED) this.resync();
     },
 
     /** One feed change: a task's, or a session's. */
