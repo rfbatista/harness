@@ -672,8 +672,10 @@ func newOrchestrationService(
 		// one-shots, every checkout.
 		WorkspacesRoot: ws.Root,
 		Checkouts:      func() []string { return allCheckouts(cat.Projects) },
-		// ReadAllRepos stays unset: every project reads every repository (the
-		// setting's default) until it is wired to the project's own setting.
+		// A project's agents read every repository of it unless the person
+		// turned that off on the project's settings page; a one-shot has no
+		// project and keeps the default.
+		ReadAllRepos: func(projectID string) bool { return projectReadsAll(cat.Projects, projectID) },
 		// Each session start gets a temp dir of its own, never the system's,
 		// which every session (and each one's virtual shell) shares: this is
 		// its name prefix, the start adds a random suffix. Short, so a unix
@@ -684,6 +686,20 @@ func newOrchestrationService(
 		ViolationStore: violationStore,
 	}
 	return svc
+}
+
+// projectReadsAll is the project's setting "Agents can read every repository
+// of this project". An unknown project, a failed read and a one-shot (no
+// project) keep the setting's default, on.
+func projectReadsAll(projects ports.ProjectReader, projectID string) bool {
+	if projectID == "" {
+		return true
+	}
+	p, err := projects.GetProject(context.Background(), projectID)
+	if err != nil || p == nil {
+		return true
+	}
+	return p.AgentsReadAllRepos
 }
 
 // allCheckouts lists the checkout of every repository of every project.
