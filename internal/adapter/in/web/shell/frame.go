@@ -32,6 +32,9 @@ type Frame struct {
 	// Notifications is the top bar's bell; nil leaves it out (the inbox is
 	// not served).
 	Notifications *Bell
+	// Helper is whether the writing helper can run: the pens on the page take
+	// their state from it.
+	Helper Helper
 }
 
 // Bell is the top bar's way to the inbox: the global unread count, painted

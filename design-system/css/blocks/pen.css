@@ -1,0 +1,111 @@
+/*
+ * Pen — the magic pen that opens the writing helper on a text field.
+ * <div class="pen-host"><div class="pen-field" data-kind="line|text"><input|textarea><button class="pen">…</button></div> <section class="helper">…</section></div>
+ *
+ * .pen-host    wraps the field and its panel; the panel sits under the field,
+ *              or above it with data-above (a field at the bottom of its pane).
+ * .pen-field   wraps an input or textarea that has the writing helper.
+ *              Exceptions: data-kind="line" (input) | "text" (textarea);
+ *              data-open (the helper is open: the field takes the signal edge);
+ *              data-changed (one-shot ring after the helper wrote the field).
+ * .pen         the magic pen trigger inside the field's end edge.
+ *              Exceptions: data-busy (helper is thinking), aria-expanded="true".
+ * No new token: every value is an existing token or a mix of two.
+ */
+
+@layer blocks {
+  .pen-host {
+    display: flex;
+    flex-direction: column;
+    min-inline-size: 0;
+
+    &[data-above] > .helper {
+      order: -1;
+      margin-block: 0 var(--space-xs);
+    }
+  }
+
+  .pen-field {
+    position: relative;
+
+    & > textarea { padding-block-end: calc(var(--size-control-sm) + var(--space-xs)); }
+    &[data-kind="line"] > input { padding-inline-end: calc(var(--size-control-sm) + var(--space-m)); }
+
+    /* The open panel and its field read as one thing: the field takes the signal edge. */
+    &[data-open] > :is(input, textarea) { border-color: var(--color-signal); }
+
+    &[data-changed] > :is(input, textarea) {
+      animation: pen-written var(--duration-signal) var(--ease-out);
+    }
+  }
+
+  @keyframes pen-written {
+    from { border-color: var(--color-signal); box-shadow: 0 0 0 3px var(--color-signal-wash); }
+  }
+
+  /* A real button at rest (hairline and fill), so it is found without hovering. */
+  .pen {
+    position: absolute;
+    inset-inline-end: var(--space-xs);
+    inset-block-end: var(--space-xs);
+    display: inline-grid;
+    place-items: center;
+    inline-size: var(--size-control-sm);
+    block-size: var(--size-control-sm);
+    padding: 0;
+    border: var(--border-width) solid var(--color-line-strong);
+    border-radius: var(--radius-sm);
+    background: var(--color-raised);
+    color: var(--color-ink-muted);
+    transition: color var(--duration-instant) var(--ease-out),
+      background-color var(--duration-instant) var(--ease-out),
+      border-color var(--duration-instant) var(--ease-out);
+
+    /* Clear of the textarea's resize grip. */
+    .pen-field[data-kind="text"] > & { inset-inline-end: var(--space-xl); }
+
+    .pen-field[data-kind="line"] > & {
+      inset-block: 0;
+      margin-block: auto;
+      inset-inline-end: var(--space-2xs);
+    }
+
+    & > svg { inline-size: 1rem; block-size: 1rem; }
+
+    &:hover {
+      border-color: var(--color-signal);
+      background: color-mix(in oklch, var(--color-signal) 8%, var(--color-raised));
+      color: var(--color-signal);
+    }
+
+    .pen-field:focus-within > & { color: var(--color-signal); border-color: color-mix(in oklch, var(--color-signal) 45%, var(--color-line-strong)); }
+
+    &[aria-expanded="true"] {
+      border-color: var(--color-signal);
+      background: var(--color-signal);
+      color: var(--color-signal-ink);
+    }
+
+    &:focus-visible {
+      outline: var(--border-focus-width) solid var(--color-focus);
+      outline-offset: var(--border-focus-offset);
+    }
+
+    &:disabled {
+      border-style: dashed;
+      border-color: var(--color-line-strong);
+      background: transparent;
+      color: var(--color-ink-faint);
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    /* Thinking: the sparkle twinkles. Reduced motion keeps it still. */
+    &[data-busy] .spark { animation: pen-twinkle 1s ease-in-out infinite; }
+    @media (prefers-reduced-motion: reduce) { &[data-busy] .spark { animation: none; } }
+  }
+
+  @keyframes pen-twinkle {
+    50% { opacity: 0.25; }
+  }
+}

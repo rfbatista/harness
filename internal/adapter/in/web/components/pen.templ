@@ -1,0 +1,258 @@
+package components
+
+import "strconv"
+
+// WritingPen wraps a text field with the magic pen and its writing helper
+// panel (web/src/modules/writinghelper, the writingPen component). The field
+// is the child: an input or textarea that keeps its own id, label and
+// x-model. The panel never changes it until the person accepts a draft.
+//
+// Never put a pen on credentials, env values, saved commands or code and
+// monospace fields.
+templ WritingPen(p Pen) {
+	<div
+		class="[ pen-host ]"
+		x-data="writingPen"
+		x-on:keydown.window="windowKey($event)"
+		data-kind={ p.Kind }
+		data-noun={ p.Noun }
+		data-label={ p.Label }
+		data-project-id={ p.ProjectID }
+		data-project-name={ p.ProjectName }
+		data-panel-id={ p.ID }
+		data-siblings={ p.SiblingsJSON() }
+		data-helper-available={ strconv.FormatBool(p.Available) }
+		data-helper-reason={ p.Reason }
+		data-helper-fix-url={ p.FixURL }
+		data-above?={ p.Above }
+	>
+		<div class="[ pen-field ]" data-kind={ p.FieldKind() } x-bind:data-open="isOpen" x-bind:data-changed="ringed">
+			{ children... }
+			<button
+				type="button"
+				class="[ pen ]"
+				aria-haspopup="dialog"
+				aria-expanded="false"
+				aria-controls={ p.ID + "-panel" }
+				aria-label={ p.PenLabel() }
+				title={ p.PenTitle() }
+				disabled?={ !p.Available }
+				x-bind:aria-expanded="isOpen"
+				x-bind:aria-label="penLabel"
+				x-bind:title="penTitle"
+				x-bind:disabled="penDisabled"
+				x-bind:data-busy="isBusy"
+				x-on:click="toggle"
+			>
+				@penGlyph()
+			</button>
+		</div>
+		<div class="[ helper-scrim ]" style="display: none" x-show="isSheetOpen" x-on:click="close(true)"></div>
+		<section
+			id={ p.ID + "-panel" }
+			class="[ helper ]"
+			role="dialog"
+			aria-modal="false"
+			style="display: none"
+			x-show="isOpen"
+			x-bind:aria-label="panelLabel"
+			x-bind:data-sheet="sheet"
+			x-on:keydown="panelKey($event)"
+		>
+			<header>
+				@penGlyph()
+				<h2>Writing helper</h2>
+				<span class="[ reads ]">
+					<span>Reads</span>
+					<template x-for="name in reads" x-bind:key="name">
+						<span x-text="name"></span>
+					</template>
+				</span>
+				<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" data-icon aria-label="Close the helper (Esc)" x-on:click="close(true)">
+					@closeGlyph()
+				</button>
+			</header>
+			<div class="[ body ]" aria-live="polite" style="display: none" x-show="showStart">
+				<p class="[ lead ]" x-text="startLead"></p>
+				<div class="[ ask ]">
+					<label for={ p.ID + "-start" } x-text="startQuestion"></label>
+					<input id={ p.ID + "-start" } autocomplete="off" x-bind:placeholder="startPlaceholder" x-bind:value="intentValue" x-on:input="intentInput($event)"/>
+					<div class="[ chips ]" style="display: none" x-show="hasStartChip">
+						<button type="button" class="[ chip ]" x-on:click="draftFromSibling" x-text="startChip"></button>
+					</div>
+				</div>
+			</div>
+			<footer style="display: none" x-show="showStart">
+				<span class="[ hint ]"><kbd>⌘</kbd><kbd>↵</kbd> continue</span>
+				<span class="[ actions ]">
+					<button type="button" class="[ button ]" data-size="sm" data-variant="primary" data-primary x-bind:disabled="cannotContinue" x-on:click="continueStart">Continue</button>
+				</span>
+			</footer>
+			<div class="[ body ]" aria-live="polite" style="display: none" x-show="showReading">
+				<div class="[ thinking ]">
+					<p>
+						@penGlyph()
+						<span x-text="readingText">Reading what you wrote…</span>
+					</p>
+					<span class="[ skeleton ]" style="--skeleton-width: 92%"></span>
+					<span class="[ skeleton ]" style="--skeleton-width: 78%"></span>
+					<span class="[ skeleton ]" style="--skeleton-width: 55%"></span>
+				</div>
+			</div>
+			<footer style="display: none" x-show="showReading">
+				<span class="[ hint ]">This takes a few seconds. Your field stays editable.</span>
+				<button type="button" class="[ button ]" data-size="sm" data-variant="ghost" data-primary x-on:click="stop">Stop</button>
+			</footer>
+			<div class="[ body ]" aria-live="polite" style="display: none" x-show="showQuestions">
+				<p class="[ lead ]">Your text is a good start. Answer any of these, skip the rest.</p>
+				<template x-for="q in questionRows" x-bind:key="q.id">
+					<div class="[ ask ]" x-bind:data-answered="q.answered">
+						<label x-bind:for="q.inputId">
+							<span x-text="q.text"></span>
+							<span class="[ why ]" x-text="q.why"></span>
+						</label>
+						<input x-bind:id="q.inputId" autocomplete="off" placeholder="Your answer, or pick one" x-bind:value="q.value" x-on:input="answerInput(q.id, $event)"/>
+						<div class="[ chips ]">
+							<template x-for="chip in q.chips" x-bind:key="chip.text">
+								<button type="button" class="[ chip ]" x-bind:aria-pressed="chip.pressed" x-on:click="pickChip(q.id, chip.text)" x-text="chip.text"></button>
+							</template>
+						</div>
+					</div>
+				</template>
+			</div>
+			<footer style="display: none" x-show="showQuestions">
+				<span class="[ hint ]">
+					<span class="[ steps ]" aria-hidden="true">
+						<template x-for="mark in stepMarks" x-bind:key="mark.id">
+							<i x-bind:data-done="mark.done"></i>
+						</template>
+					</span>
+					<span x-text="answeredText"></span>
+				</span>
+				<span class="[ actions ]">
+					<button type="button" class="[ button ]" data-size="sm" data-variant="ghost" x-on:click="skipQuestions">Skip questions</button>
+					<button type="button" class="[ button ]" data-size="sm" data-variant="primary" data-primary x-on:click="draft()">Draft <kbd>⌘↵</kbd></button>
+				</span>
+			</footer>
+			<div class="[ body ]" aria-live="polite" style="display: none" x-show="showGood">
+				<div class="[ banner ]" data-tone="signal">
+					@checkGlyph()
+					<span>This already says what it needs to. Nothing is missing.</span>
+				</div>
+				<div class="[ chips ]">
+					<template x-for="chip in lightEditChips" x-bind:key="chip">
+						<button type="button" class="[ chip ]" x-on:click="refineChip(chip)" x-text="chip"></button>
+					</template>
+				</div>
+			</div>
+			<div class="[ body ]" aria-live="polite" style="display: none" x-show="showDrafting">
+				<span class="[ lead ]">Drafting…</span>
+				<div class="[ draft ]" data-streaming x-effect="paintDraft($el)"></div>
+			</div>
+			<footer style="display: none" x-show="showDrafting">
+				<span class="[ hint ]">Your field is untouched until you choose.</span>
+				<button type="button" class="[ button ]" data-size="sm" data-variant="ghost" data-primary x-on:click="stop">Stop</button>
+			</footer>
+			<div class="[ body ]" aria-live="polite" style="display: none" x-show="showProposal">
+				<div class="[ repel ]">
+					<span class="[ lead ]" x-text="proposalLead">Proposed description</span>
+					<span class="[ seg ]" role="group" aria-label="Show">
+						<button type="button" x-bind:aria-pressed="changesPressed" x-on:click="showChanges">Changes</button>
+						<button type="button" x-bind:aria-pressed="cleanPressed" x-on:click="showClean">Clean</button>
+					</span>
+				</div>
+				<div class="[ draft ]" x-effect="paintDraft($el)"></div>
+				<p class="[ lead text-xs ]" style="display: none" x-show="hasGaps" x-text="gapText"></p>
+				<div class="[ chips ]">
+					<template x-for="chip in refineChips" x-bind:key="chip">
+						<button type="button" class="[ chip ]" x-on:click="refineChip(chip)" x-text="chip"></button>
+					</template>
+				</div>
+			</div>
+			<div class="[ body ]" aria-live="polite" style="display: none" x-show="showStale">
+				<div class="[ banner ]" data-tone="attention" role="alert">
+					@alertGlyph()
+					<span x-text="staleMessage"></span>
+				</div>
+				<div class="[ draft ]" data-stale x-effect="paintDraft($el)"></div>
+			</div>
+			<div class="[ body ]" aria-live="polite" style="display: none" x-show="showTitles">
+				<p class="[ lead ]" x-text="titlesLead"></p>
+				<div class="[ options ]" role="listbox" aria-label="Title options">
+					<template x-for="row in titleRows" x-bind:key="row.key">
+						<button type="button" role="option" aria-selected="false" x-on:click="pick(row.index)">
+							<kbd x-text="row.number"></kbd>
+							<span x-text="row.text"></span>
+						</button>
+					</template>
+				</div>
+			</div>
+			<footer style="display: none" x-show="showTitles">
+				<span class="[ hint ]"><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> pick</span>
+				<span class="[ actions ]">
+					<button type="button" class="[ button ]" data-size="sm" data-variant="ghost" data-primary x-on:click="threeMore">Three more</button>
+				</span>
+			</footer>
+			<div class="[ body ]" aria-live="polite" style="display: none" x-show="showError">
+				<div class="[ banner ]" data-tone="danger" role="alert">
+					@alertGlyph()
+					<div class="[ flow ] [ flow-space-3xs ]">
+						<span x-text="errorMessage"></span>
+						<span class="[ code ]"><span x-text="errorCode"></span> · <span x-text="errorNext"></span></span>
+					</div>
+				</div>
+			</div>
+			<footer style="display: none" x-show="showError">
+				<span class="[ hint ]">Answers you gave are kept.</span>
+				<span class="[ actions ]">
+					<button type="button" class="[ button ]" data-size="sm" data-variant="ghost" x-on:click="close(true)">Close</button>
+					<button type="button" class="[ button ]" data-size="sm" data-variant="primary" data-primary x-on:click="retry">Try again</button>
+				</span>
+			</footer>
+			<footer style="display: none" x-show="showRefine">
+				<div class="[ refine ]">
+					<input aria-label="Ask for a change" autocomplete="off" data-refine x-model="refineText" x-bind:placeholder="refinePlaceholder"/>
+				</div>
+				<span class="[ actions ]" style="display: none" x-show="showProposal">
+					<button type="button" class="[ button ]" data-size="sm" data-variant="ghost" x-on:click="close(true)">Discard</button>
+					<button type="button" class="[ button ]" data-size="sm" data-variant="primary" data-primary x-on:click="use">Use this <kbd>⌘↵</kbd></button>
+				</span>
+			</footer>
+			<footer style="display: none" x-show="showStale">
+				<div class="[ refine ]">
+					<input aria-label="Ask for a change" autocomplete="off" data-refine x-model="refineText" placeholder="Ask for a change…"/>
+				</div>
+				<span class="[ actions ]">
+					<button type="button" class="[ button ]" data-size="sm" data-variant="ghost" x-on:click="close(true)">Discard</button>
+					<button type="button" class="[ button ]" data-size="sm" x-on:click="useAnyway">Use anyway</button>
+					<button type="button" class="[ button ]" data-size="sm" data-variant="primary" data-primary x-on:click="redraft">Redraft with my edits</button>
+				</span>
+			</footer>
+		</section>
+		<div class="[ toast-region ]" aria-live="polite" style="display: none" x-show="hasToast">
+			<div class="[ toast ]" role="status">
+				@checkGlyph()
+				<span class="[ grow ]" x-text="toastMessage"></span>
+				<a href="/" class="[ button ]" data-size="sm" style="display: none" x-show="toastHasLink" x-bind:href="toastHref">Fix it</a>
+				<button type="button" class="[ button ]" data-size="sm" style="display: none" x-show="toastCanUndo" x-on:click="undo">Undo <kbd>⌘Z</kbd></button>
+				<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-on:click="dismissToast">Dismiss</button>
+			</div>
+		</div>
+	</div>
+}
+
+templ penGlyph() {
+	<svg aria-hidden="true" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.6 3.4l2 2L6.2 11.8l-2.7.7.7-2.7z"></path><path d="M9.3 4.7l2 2"></path><path class="[ spark ]" d="M3.5 1.75v2.5M2.25 3h2.5M13 10.25v2.5M11.75 11.5h2.5"></path></svg>
+}
+
+templ closeGlyph() {
+	<svg aria-hidden="true" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8"></path></svg>
+}
+
+templ alertGlyph() {
+	<svg aria-hidden="true" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M8 2l6.5 11.5h-13z"></path><path d="M8 6.5v3M8 11.6v.1"></path></svg>
+}
+
+templ checkGlyph() {
+	<svg aria-hidden="true" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5l3 3 7-7"></path></svg>
+}

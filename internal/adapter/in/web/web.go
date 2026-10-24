@@ -38,9 +38,12 @@ import (
 
 // Deps are the driving ports the pages read. Each page takes the narrowest.
 type Deps struct {
-	Projects ports.ProjectReader
-	Tasks    ports.TicketReader
-	Sessions ports.SessionReader
+	// WritingHelper says whether the magic pens can run (the readiness check
+	// behind WRITING_HELPER_UNAVAILABLE); nil leaves every pen unavailable.
+	WritingHelper func(ctx context.Context) shell.Helper
+	Projects      ports.ProjectReader
+	Tasks         ports.TicketReader
+	Sessions      ports.SessionReader
 	// Agents and Repositories fill the new-session form.
 	Agents       ports.AgentLister
 	Repositories ports.RepositoryLister
@@ -306,6 +309,9 @@ func switchProject(w http.ResponseWriter, r *http.Request) {
 func (s *server) layout(ctx context.Context, title, projectID, taskID string) (shell.Frame, error) {
 	frame := s.bareFrame(title)
 	frame.Notifications = s.bell(ctx)
+	if s.deps.WritingHelper != nil {
+		frame.Helper = s.deps.WritingHelper(ctx)
+	}
 	all, err := s.deps.Projects.ListProjects(ctx)
 	if err != nil {
 		return shell.Frame{}, err

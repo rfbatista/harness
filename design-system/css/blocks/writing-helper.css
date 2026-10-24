@@ -1,0 +1,343 @@
+/*
+ * Writing helper — the non-modal panel under a field with a magic pen (pen.css).
+ * <section class="helper" role="dialog" aria-modal="false"><header>…</header><div class="body">…</div><footer>…</footer></section>
+ * Exceptions: data-sheet (phone bottom sheet, over a .helper-scrim).
+ *
+ * .ask         one question; .chips / .chip the one-click answers;
+ * .seg         a two-way toggle (Changes / Clean); .draft the proposed text;
+ * .options     title suggestions; .refine the "ask for a change" line;
+ * .steps       marks showing how many questions are answered;
+ * .thinking    the reading state.
+ * No new token: every value is an existing token or a mix of two.
+ */
+
+@layer blocks {
+  .helper {
+    display: flex;
+    flex-direction: column;
+    margin-block-start: var(--space-xs);
+    border: var(--border-width) solid var(--color-line-strong);
+    border-radius: var(--radius-md);
+    background: var(--color-raised);
+    /* The signal edge on top ties the panel to the pen that opened it. */
+    box-shadow: inset 0 2px 0 var(--color-signal), var(--shadow-float);
+    font-size: var(--text-sm);
+    animation: helper-in var(--duration-quick) var(--ease-out-expo);
+
+    & > header {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: var(--space-xs) var(--space-s);
+      padding: var(--space-s) var(--space-xs) var(--space-xs) var(--space-m);
+      border-block-end: var(--border-width) solid var(--color-line);
+
+      & > svg {
+        flex-shrink: 0;
+        inline-size: 1.5rem;
+        block-size: 1.5rem;
+        padding: 0.25rem;
+        border-radius: var(--radius-sm);
+        background: var(--color-signal-wash);
+        color: var(--color-signal);
+      }
+      & > h2 { font-size: var(--text-sm); font-weight: var(--weight-bold); }
+    }
+
+    /* What the helper reads: shown so the person knows what leaves the field. */
+    & .reads {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--space-2xs);
+      align-items: center;
+      margin-inline-end: auto;
+      font-size: var(--text-xs);
+      color: var(--color-ink-muted);
+
+      & > span:not(:first-child) {
+        padding: 0 var(--space-xs);
+        border: var(--border-width) solid var(--color-line);
+        border-radius: var(--radius-round);
+        background: var(--color-panel);
+        color: var(--color-ink-muted);
+        line-height: 1.25rem;
+      }
+    }
+
+    & > .body {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-l);
+      padding: var(--space-m);
+      max-block-size: 26rem;
+      overflow-y: auto;
+    }
+
+    & > footer {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: var(--space-xs) var(--space-s);
+      padding: var(--space-s) var(--space-s) var(--space-s) var(--space-m);
+      border-block-start: var(--border-width) solid var(--color-line);
+      background: var(--color-panel);
+      border-end-start-radius: calc(var(--radius-md) - var(--border-width));
+      border-end-end-radius: calc(var(--radius-md) - var(--border-width));
+
+      & > .hint {
+        display: flex;
+        align-items: center;
+        gap: var(--space-s);
+        margin-inline-end: auto;
+        font-size: var(--text-xs);
+        color: var(--color-ink-muted);
+      }
+      & > .actions { display: flex; align-items: center; gap: var(--space-xs); margin-inline-start: auto; }
+    }
+
+    & .lead { color: var(--color-ink-muted); }
+
+    /* Phone: a bottom sheet over a scrim; the footer stays above the keyboard. */
+    &[data-sheet] {
+      position: fixed;
+      inset: auto 0 0;
+      z-index: var(--z-dialog);
+      margin: 0;
+      border-radius: var(--radius-md) var(--radius-md) 0 0;
+      border-inline: 0;
+      max-block-size: 85%;
+      animation-name: sheet-in;
+
+      /* The grabber says "this is a sheet". Dragging is not required: Close and Esc work. */
+      & > header::before {
+        content: "";
+        flex-basis: 100%;
+        block-size: 4px;
+        inline-size: 2.5rem;
+        margin: 0 auto var(--space-2xs);
+        border-radius: var(--radius-round);
+        background: var(--color-line-strong);
+      }
+      & > header > h2 { margin-inline-end: auto; }
+      & > header .reads { order: 3; flex-basis: 100%; }
+      & > .body { max-block-size: none; flex: 1; }
+      & > footer {
+        border-radius: 0;
+        padding-block-end: max(var(--space-s), env(safe-area-inset-bottom));
+      }
+      & .chip { min-block-size: 2rem; padding-inline: var(--space-m); }
+      & .ask > input { min-block-size: 2.5rem; font-size: var(--text-md); }
+    }
+  }
+
+  @keyframes helper-in {
+    from { opacity: 0; transform: translateY(-4px); }
+  }
+  @keyframes sheet-in {
+    from { transform: translateY(24px); opacity: 0; }
+  }
+
+  /* One question the helper asks to fill a gap. The number is a counter, so it stays in step. */
+  .ask {
+    display: grid;
+    grid-template-columns: 1.25rem 1fr;
+    gap: var(--space-xs) var(--space-s);
+    counter-increment: ask;
+
+    &::before {
+      content: counter(ask);
+      grid-area: 1 / 1;
+      display: grid;
+      place-items: center;
+      inline-size: 1.25rem;
+      block-size: 1.25rem;
+      border: var(--border-width) solid var(--color-line-strong);
+      border-radius: var(--radius-round);
+      color: var(--color-ink-muted);
+      font-size: var(--text-xs);
+      font-weight: var(--weight-medium);
+    }
+    & > label {
+      display: flex;
+      flex-direction: column;
+      grid-column: 2;
+      font-weight: var(--weight-medium);
+      color: var(--color-ink);
+    }
+    & .why { font-weight: var(--weight-regular); font-size: var(--text-xs); color: var(--color-ink-muted); }
+    & > :is(input, .chips) { grid-column: 2; }
+    & > input { font-size: var(--text-sm); }
+
+    &[data-answered]::before {
+      content: "✓";
+      border-color: var(--color-success);
+      background: var(--color-success-wash);
+      color: var(--color-success);
+    }
+  }
+  .helper > .body:has(> .ask) { counter-reset: ask; }
+
+  /* How many of the three questions are answered. The count is also written out. */
+  .steps {
+    display: inline-flex;
+    gap: var(--space-2xs);
+
+    & > i {
+      inline-size: 1rem;
+      block-size: 4px;
+      border-radius: var(--radius-round);
+      background: var(--color-line-strong);
+      &[data-done] { background: var(--color-success); }
+    }
+  }
+
+  .chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-xs);
+  }
+
+  /* Scoped: the Combobox has a .chip of its own. */
+  .helper .chip {
+    display: inline-flex;
+    block-size: auto;
+    white-space: normal;
+    align-items: center;
+    gap: var(--space-2xs);
+    min-block-size: 1.5rem;
+    padding: 0 var(--space-s);
+    border: var(--border-width) solid var(--color-line-strong);
+    border-radius: var(--radius-round);
+    background: var(--color-raised);
+    color: var(--color-ink-muted);
+    font-size: var(--text-xs);
+    line-height: 1;
+    text-align: start;
+    transition: background-color var(--duration-instant) var(--ease-out),
+      border-color var(--duration-instant) var(--ease-out);
+
+    &:hover { color: var(--color-ink); border-color: var(--color-line-control); background: linear-gradient(var(--color-hover), var(--color-hover)), var(--color-raised); }
+    &[aria-pressed="true"] { border-color: var(--color-signal); background: var(--color-signal-wash); color: var(--color-ink); }
+    &[aria-pressed="true"]::before { content: "✓"; color: var(--color-signal); font-weight: var(--weight-bold); }
+    &:focus-visible { outline: var(--border-focus-width) solid var(--color-focus); outline-offset: 1px; }
+  }
+
+  /* Two-way toggle: Changes / Clean. */
+  .seg {
+    display: inline-flex;
+    padding: 2px;
+    border: var(--border-width) solid var(--color-line-strong);
+    border-radius: var(--radius-sm);
+    background: var(--color-sunken);
+
+    & > button {
+      min-block-size: 1.375rem;
+      padding: 0 var(--space-s);
+      border: 0;
+      border-radius: var(--radius-xs);
+      background: transparent;
+      color: var(--color-ink-muted);
+      font-size: var(--text-xs);
+
+      &[aria-pressed="true"] { background: var(--color-raised); color: var(--color-ink); box-shadow: 0 0 0 1px var(--color-line-strong); }
+      &:focus-visible { outline: var(--border-focus-width) solid var(--color-focus); outline-offset: 1px; }
+    }
+  }
+
+  /* The proposed text. ins/del show what changes against the field. */
+  .draft {
+    padding: var(--space-m) var(--space-l);
+    border: var(--border-width) solid var(--color-line);
+    border-inline-start: 3px solid var(--color-signal);
+    border-radius: var(--radius-sm);
+    background: var(--color-canvas);
+    font-size: var(--text-base);
+    line-height: var(--leading-normal);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+
+    & ins { text-decoration: underline; text-decoration-color: var(--color-signal); text-decoration-thickness: 2px; text-underline-offset: 3px; background: var(--color-signal-wash); }
+    & del { color: var(--color-ink-muted); text-decoration: line-through; text-decoration-color: var(--color-danger); }
+    & del + ins { margin-inline-start: 0.25ch; }
+    &[data-view="clean"] del { display: none; }
+    &[data-view="clean"] del + ins { margin-inline-start: 0; }
+    &[data-view="clean"] ins { background: none; text-decoration: none; }
+
+    /* A gap the person did not answer: visible, never invented. */
+    & .gap {
+      padding: 0 var(--space-2xs);
+      border-radius: var(--radius-xs);
+      border-block-end: var(--border-width) dashed var(--color-attention);
+      background: var(--color-attention-wash);
+      color: var(--color-attention);
+      font-weight: var(--weight-medium);
+    }
+
+    &[data-streaming]::after {
+      content: "";
+      display: inline-block;
+      inline-size: 0.5ch;
+      block-size: 1em;
+      margin-inline-start: 1px;
+      vertical-align: text-bottom;
+      background: var(--color-signal);
+      animation: pen-twinkle 1s steps(2) infinite;
+      @media (prefers-reduced-motion: reduce) { animation: none; }
+    }
+
+    &[data-stale] { opacity: 0.6; border-inline-start-color: var(--color-line-strong); }
+  }
+
+  /* Title suggestions: pick one, the field takes it. */
+  .options {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2xs);
+
+    & button {
+      display: flex;
+      align-items: center;
+      gap: var(--space-m);
+      inline-size: 100%;
+      min-block-size: var(--size-control-md);
+      padding: var(--space-xs) var(--space-s);
+      border: var(--border-width) solid var(--color-line);
+      border-radius: var(--radius-sm);
+      background: var(--color-canvas);
+      text-align: start;
+      font-size: var(--text-base);
+      transition: background-color var(--duration-instant) var(--ease-out),
+        border-color var(--duration-instant) var(--ease-out);
+
+      &:hover { background: var(--color-signal-wash); border-color: var(--color-signal); }
+      &:focus-visible { outline: var(--border-focus-width) solid var(--color-focus); outline-offset: 1px; border-color: var(--color-signal); }
+    }
+  }
+
+  /* The refine line: ask the helper for a change in your own words. */
+  .refine {
+    display: flex;
+    gap: var(--space-xs);
+    flex: 1 1 14rem;
+
+    & > input { min-block-size: var(--size-control-sm); font-size: var(--text-sm); }
+  }
+
+  .thinking {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-s);
+
+    & > p { display: flex; align-items: center; gap: var(--space-s); color: var(--color-ink-muted); }
+    & > p > svg { inline-size: 1rem; block-size: 1rem; color: var(--color-signal); }
+    & > p > svg .spark { animation: pen-twinkle 1s ease-in-out infinite; @media (prefers-reduced-motion: reduce) { animation: none; } }
+  }
+
+  /* Behind the phone sheet: the page stays visible but out of reach. */
+  .helper-scrim {
+    position: fixed;
+    inset: 0;
+    z-index: var(--z-overlay);
+    background: color-mix(in oklch, var(--color-ink) 35%, transparent);
+  }
+}

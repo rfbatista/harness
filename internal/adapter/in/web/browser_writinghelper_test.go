@@ -1,0 +1,734 @@
+package web
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"os"
+	"path/filepath"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/chromedp/cdproto/emulation"
+	"github.com/chromedp/chromedp"
+
+	"operators-mcp/internal/adapter/in/web/shell"
+	"operators-mcp/internal/domain"
+)
+
+// The writing helper (the magic pen) in a real browser, against a fake
+// run_writing_helper_step that answers the contract's SSE stream. The step
+// endpoint itself belongs to the server; these tests are about the pen, the
+// panel and what they do to the field.
+
+// fakeHelperAPI answers POST /api/run_writing_helper_step like the server
+// does and records every request. Everything else goes to the ticket API.
+type fakeHelperAPI struct {
+	*fakeTicketsAPI
+	mu    sync.Mutex
+	steps []map[string]any
+	// refuse answers every step with WRITING_HELPER_UNAVAILABLE.
+	refuse bool
+	// failDraft makes the next draft end with an error event.
+	failDraft bool
+	// hold blocks a step until the channel closes (Stop tests).
+	hold chan struct{}
+	// draft is the text a draft step streams and returns.
+	draft string
+}
+
+const defaultHelperDraft = "Add a magic pen to the task title and description.\n\nDone when: [open: what done looks like]"
+
+func newFakeHelperAPI() *fakeHelperAPI {
+	return &fakeHelperAPI{
+		fakeTicketsAPI: &fakeTicketsAPI{sessions: map[string][]map[string]string{}, tickets: map[string]map[string]string{}},
+		draft:          defaultHelperDraft,
+	}
+}
+
+func (f *fakeHelperAPI) requests() []map[string]any {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]map[string]any(nil), f.steps...)
+}
+
+func (f *fakeHelperAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path != "/api/run_writing_helper_step" {
+		f.fakeTicketsAPI.ServeHTTP(w, r)
+		return
+	}
+	var in map[string]any
+	_ = json.NewDecoder(r.Body).Decode(&in)
+	f.mu.Lock()
+	f.steps = append(f.steps, in)
+	refuse, failDraft, hold, draft := f.refuse, f.failDraft, f.hold, f.draft
+	if in["step"] == "draft" {
+		f.failDraft = false
+	}
+	f.mu.Unlock()
+
+	if refuse {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_ = json.NewEncoder(w).Encode(map[string]string{"code": "WRITING_HELPER_UNAVAILABLE", "message": "Claude is not signed in", "fix_url": "/agent-isolation#credential"})
+		return
+	}
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.WriteHeader(http.StatusOK)
+	flusher, _ := w.(http.Flusher)
+	event := func(name string, data any) {
+		b, _ := json.Marshal(data)
+		fmt.Fprintf(w, "event: %s\ndata: %s\n\n", name, b)
+		flusher.Flush()
+	}
+	if hold != nil {
+		select {
+		case <-hold:
+		case <-r.Context().Done():
+			return
+		}
+	}
+	switch in["step"] {
+	case "analyze":
+		event("result", map[string]any{"already_good": false, "questions": []map[string]any{
+			{"id": "q1", "text": "Which fields get the pen first?", "why": "Your text says titles; the draft should name them.", "chips": []string{"Task title and description", "Every field"}},
+			{"id": "q2", "text": "How will you know it is done?", "why": "No done criteria yet.", "chips": []string{"A person drafts it in a minute"}},
+		}})
+	case "titles":
+		n := 0
+		if ex, ok := in["exclude"].([]any); ok {
+			n = len(ex)
+		}
+		event("result", map[string]any{"titles": []string{fmt.Sprintf("Title option %d", n+1), fmt.Sprintf("Title option %d", n+2), fmt.Sprintf("Title option %d", n+3)}})
+	case "draft":
+		if failDraft {
+			event("delta", map[string]string{"text": "Add "})
+			event("error", map[string]string{"code": "WRITING_HELPER_FAILED", "message": "The helper stopped before it finished."})
+			return
+		}
+		for _, word := range strings.SplitAfter(draft, " ") {
+			event("delta", map[string]string{"text": word})
+			time.Sleep(5 * time.Millisecond)
+		}
+		event("result", map[string]string{"text": draft})
+	}
+}
+
+// helperBrowser serves the pages with the fake step API and the helper
+// available (or not).
+func helperBrowser(t *testing.T, api *fakeHelperAPI, helper shell.Helper) (context.Context, string, *errorLog) {
+	t.Helper()
+	assets, err := NewAssets()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !assets.Built() {
+		t.Skip("browser test: web client not built; run `make web`")
+	}
+	ctx, errs := browser(t)
+	pages := NewHandler(Deps{
+		Projects: fakeProjects{[]*domain.Project{{ID: "p1", Name: "coding_pool"}}},
+		Tasks: fakeTickets{[]*domain.Ticket{
+			{ID: "t-new", ProjectID: "p1", Title: "Write docs", Description: "The TUI's live section.", Status: domain.TicketStatusTodo},
+		}},
+		Sessions:      fakeSessions{},
+		Agents:        fakeAgents{},
+		Repositories:  fakeRepos{},
+		WritingHelper: func(context.Context) shell.Helper { return helper },
+	}, assets, nil)
+	mux := http.NewServeMux()
+	mux.Handle("/api/", api)
+	mux.Handle("/", pages)
+	srv := newBrowserServer(mux)
+	t.Cleanup(srv.Close)
+	return ctx, srv.URL, errs
+}
+
+var whAvailable = shell.Helper{Available: true}
+
+// pressKey dispatches a keydown on the element, as a person's key would.
+func whKey(selector, key string, mods string) chromedp.Action {
+	js := fmt.Sprintf(`(() => {
+		const el = document.querySelector(%q);
+		el.focus();
+		el.dispatchEvent(new KeyboardEvent('keydown', { key: %q, %s bubbles: true, cancelable: true }));
+		return true;
+	})()`, selector, key, mods)
+	return chromedp.Evaluate(js, nil)
+}
+
+const whCtrl = "ctrlKey: true,"
+
+func whPoll(js string) chromedp.Action {
+	return chromedp.Poll(js, nil, chromedp.WithPollingTimeout(5*time.Second))
+}
+
+// whPanelShown is true when the writing helper panel is on screen.
+const whPanelShown = `(() => { const p = document.querySelector('.helper'); return !!p && getComputedStyle(p).display !== 'none'; })()`
+
+// phaseShown is true when the panel shows a body with the text.
+func whPhase(text string) string {
+	return fmt.Sprintf(`(() => { const p = document.querySelector('.helper'); return !!p && getComputedStyle(p).display !== 'none' && Array.from(p.querySelectorAll('.body')).some((b) => getComputedStyle(b).display !== 'none' && b.textContent.includes(%q)); })()`, text)
+}
+
+// clickIn clicks the first visible button in the panel whose text starts with label.
+func whClick(scope, label string) chromedp.Action {
+	js := fmt.Sprintf(`(() => {
+		const b = Array.from(document.querySelectorAll(%q + ' button')).find((x) => x.textContent.trim().startsWith(%q) && x.checkVisibility() && !x.disabled);
+		if (!b) return false;
+		b.click();
+		return true;
+	})()`, scope, label)
+	return chromedp.ActionFunc(func(ctx context.Context) error {
+		deadline := time.Now().Add(5 * time.Second)
+		for {
+			var ok bool
+			if err := chromedp.Evaluate(js, &ok).Do(ctx); err != nil {
+				return err
+			}
+			if ok {
+				return nil
+			}
+			if time.Now().After(deadline) {
+				return fmt.Errorf("no enabled %q button under %s", label, scope)
+			}
+			time.Sleep(50 * time.Millisecond)
+		}
+	})
+}
+
+// whShot saves the page as name-scheme.png in WRITING_HELPER_SHOTS, once per
+// color scheme; without it, it does nothing.
+func whShot(name string) chromedp.Action {
+	dir := os.Getenv("WRITING_HELPER_SHOTS")
+	if dir == "" {
+		return chromedp.ActionFunc(func(context.Context) error { return nil })
+	}
+	var tasks chromedp.Tasks
+	for _, scheme := range []string{"light", "dark"} {
+		var buf []byte
+		tasks = append(tasks,
+			emulation.SetEmulatedMedia().WithFeatures([]*emulation.MediaFeature{{Name: "prefers-color-scheme", Value: scheme}, {Name: "prefers-reduced-motion", Value: "reduce"}}),
+			chromedp.Sleep(150*time.Millisecond),
+			chromedp.CaptureScreenshot(&buf),
+			chromedp.ActionFunc(func(context.Context) error { return os.WriteFile(filepath.Join(dir, name+"-"+scheme+".png"), buf, 0o644) }),
+		)
+	}
+	return tasks
+}
+
+func whPenReady(selector string) chromedp.Action {
+	return whPoll(fmt.Sprintf(`!!document.querySelector(%q)?._x_dataStack`, selector))
+}
+
+func TestWritingHelperDescriptionFlowInTheBrowser(t *testing.T) {
+	api := newFakeHelperAPI()
+	ctx, url, errs := helperBrowser(t, api, whAvailable)
+
+	var label, haspopup, expanded, tip string
+	err := chromedp.Run(ctx,
+		chromedp.EmulateViewport(1280, 900),
+		chromedp.Navigate(url+"/projects/p1/tasks/new"),
+		chromedp.WaitVisible(`#task-description`, chromedp.ByQuery),
+		whPenReady(`.pen-host`),
+		chromedp.Evaluate(`document.querySelector('.pen').getAttribute('aria-label')`, &label),
+		chromedp.Evaluate(`document.querySelector('.pen').getAttribute('aria-haspopup')`, &haspopup),
+		chromedp.Evaluate(`document.querySelector('.pen').getAttribute('aria-expanded')`, &expanded),
+		chromedp.Evaluate(`document.querySelector('.pen').title`, &tip),
+		setField(`#task-title`, "Add helper", "input"),
+		setField(`#task-description`, "rough text", "input"),
+		whShot("pen-rest"),
+	)
+	if err != nil {
+		t.Fatalf("pen: %v\nJS errors: %v", err, errs.all())
+	}
+	if label != "Write the description with the helper" || haspopup != "dialog" || expanded != "false" || tip != "Write the description with the helper ⌘J" {
+		t.Errorf("pen: label %q, haspopup %q, expanded %q, title %q", label, haspopup, expanded, tip)
+	}
+
+	// The pen opens the panel, which reads and asks.
+	var reads string
+	var open string
+	err = chromedp.Run(ctx,
+		chromedp.Click(`.pen`, chromedp.ByQuery),
+		whPoll(whPhase("Which fields get the pen first?")),
+		whShot("questions"),
+		chromedp.Evaluate(`[...document.querySelectorAll('.helper .reads > span')].map((e) => e.textContent).join(' ')`, &reads),
+		chromedp.Evaluate(`document.querySelector('.pen').getAttribute('aria-expanded')`, &open),
+	)
+	if err != nil {
+		t.Fatalf("open: %v\nJS errors: %v", err, errs.all())
+	}
+	if reads != "Reads Description Title project coding_pool" {
+		t.Errorf("reads = %q", reads)
+	}
+	if open != "true" {
+		t.Errorf("aria-expanded = %q after opening", open)
+	}
+	if steps := api.requests(); len(steps) != 1 || steps[0]["step"] != "analyze" {
+		t.Fatalf("steps = %v, want one analyze", steps)
+	}
+
+	// Answer one with its chip, one by typing, and draft.
+	var count, field string
+	err = chromedp.Run(ctx,
+		whClick(`.helper`, "Task title and description"),
+		whPoll(`[...document.querySelectorAll('.helper footer .hint')].find((e) => e.checkVisibility())?.textContent.includes('1 of 2 answered')`),
+		chromedp.Focus(`.helper .ask:nth-of-type(2) input`, chromedp.ByQuery),
+		chromedp.SendKeys(`.helper .ask:nth-of-type(2) input`, "A person drafts it in a minute", chromedp.ByQuery),
+		whPoll(`[...document.querySelectorAll('.helper footer .hint')].find((e) => e.checkVisibility())?.textContent.includes('2 of 2 answered')`),
+		chromedp.Evaluate(`[...document.querySelectorAll('.helper footer .hint')].find((e) => e.checkVisibility())?.textContent.trim()`, &count),
+		whClick(`.helper`, "Draft"),
+		whPoll(whPhase("Proposed description")),
+		whShot("proposal"),
+		chromedp.Evaluate(`document.querySelector('#task-description').value`, &field),
+	)
+	if err != nil {
+		t.Fatalf("draft: %v\nJS errors: %v", err, errs.all())
+	}
+	if field != "rough text" {
+		t.Errorf("the field changed before Use this: %q", field)
+	}
+	steps := api.requests()
+	if len(steps) != 2 || steps[1]["step"] != "draft" {
+		t.Fatalf("steps = %v, want analyze then draft", steps)
+	}
+	answers, _ := steps[1]["answers"].([]any)
+	if len(answers) != 2 {
+		t.Errorf("answers = %v", steps[1]["answers"])
+	}
+	if sib, _ := steps[1]["siblings"].([]any); len(sib) != 1 {
+		t.Errorf("siblings = %v", steps[1]["siblings"])
+	}
+
+	// The proposal is marked against the field: insertions, removals and the open gap.
+	var marks string
+	err = chromedp.Run(ctx,
+		chromedp.Evaluate(`(() => { const d = document.querySelector('.helper .draft'); return [d.querySelectorAll('ins').length > 0, d.querySelectorAll('del').length > 0, d.querySelector('.gap')?.textContent].join('|'); })()`, &marks),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if marks != "true|true|[open: what done looks like]" {
+		t.Errorf("marks = %q", marks)
+	}
+
+	// Use this: the panel closes, the field takes the draft, focus returns, a toast offers Undo.
+	var after, active, toast string
+	var ticketBody, at string
+	err = chromedp.Run(ctx,
+		whClick(`.helper`, "Use this"),
+		whPoll(`!`+whPanelShown),
+		chromedp.Evaluate(`document.querySelector('#task-description').value`, &after),
+		chromedp.Evaluate(`document.activeElement.id`, &active),
+		whPoll(`!!document.querySelector('.toast')?.checkVisibility()`),
+		chromedp.Evaluate(`document.querySelector('.toast').textContent.replace(/\s+/g, ' ').trim()`, &toast),
+		whShot("used"),
+	)
+	if err != nil {
+		t.Fatalf("use: %v\nJS errors: %v", err, errs.all())
+	}
+	if after != defaultHelperDraft {
+		t.Errorf("field = %q, want the draft", after)
+	}
+	if active != "task-description" {
+		t.Errorf("focus = %q, want the field", active)
+	}
+	if !strings.Contains(toast, "Description replaced by the helper's draft") || !strings.Contains(toast, "Undo") {
+		t.Errorf("toast = %q", toast)
+	}
+
+	// The form's own state followed the write.
+	err = chromedp.Run(ctx,
+		clickButton(`main form`, "Create task"),
+		waitForPath(url+"/projects/p1/tasks/t-new", &at),
+	)
+	if err != nil {
+		t.Fatalf("create: %v\nJS errors: %v", err, errs.all())
+	}
+	ticketBody = api.log()
+	if !strings.Contains(ticketBody, `"description":"Add a magic pen to the task title and description.\n\nDone when: [open: what done looks like]"`) {
+		t.Errorf("the created task did not take the helper's text:\n%s", ticketBody)
+	}
+	if e := errs.all(); len(e) > 0 {
+		t.Errorf("JavaScript errors:\n%s", strings.Join(e, "\n"))
+	}
+}
+
+func TestWritingHelperUndoRestoresTheFieldInTheBrowser(t *testing.T) {
+	api := newFakeHelperAPI()
+	ctx, url, errs := helperBrowser(t, api, whAvailable)
+
+	var undone string
+	err := chromedp.Run(ctx,
+		chromedp.EmulateViewport(1280, 900),
+		chromedp.Navigate(url+"/projects/p1/tasks/new"),
+		whPenReady(`.pen-host`),
+		setField(`#task-description`, "rough text", "input"),
+		whKey(`#task-description`, "j", whCtrl),
+		whPoll(whPhase("How will you know")),
+		whClick(`.helper`, "Skip questions"),
+		whPoll(whPhase("Proposed description")),
+		whKey(`#task-description`, "Enter", `metaKey: true,`),
+		whPoll(`!`+whPanelShown),
+		whPoll(`document.querySelector('#task-description').value.startsWith('Add a magic pen')`),
+		whClick(`.toast`, "Undo"),
+		whPoll(`document.querySelector('#task-description').value === 'rough text'`),
+		chromedp.Evaluate(`document.querySelector('#task-description').value`, &undone),
+		whPoll(`!document.querySelector('.toast')?.checkVisibility()`),
+	)
+	if err != nil {
+		t.Fatalf("undo: %v\nJS errors: %v", err, errs.all())
+	}
+	if undone != "rough text" {
+		t.Errorf("after Undo the field is %q", undone)
+	}
+	// Skip questions sent a draft with no answers.
+	steps := api.requests()
+	if len(steps) != 2 || steps[1]["step"] != "draft" || steps[1]["answers"] != nil {
+		t.Errorf("steps = %v", steps)
+	}
+	if e := errs.all(); len(e) > 0 {
+		t.Errorf("JavaScript errors:\n%s", strings.Join(e, "\n"))
+	}
+}
+
+func TestWritingHelperLeavesTheFieldAloneInTheBrowser(t *testing.T) {
+	api := newFakeHelperAPI()
+	ctx, url, errs := helperBrowser(t, api, whAvailable)
+
+	var field, active string
+	var stale bool
+	err := chromedp.Run(ctx,
+		chromedp.EmulateViewport(1280, 900),
+		chromedp.Navigate(url+"/projects/p1/tasks/new"),
+		whPenReady(`.pen-host`),
+		setField(`#task-description`, "rough text", "input"),
+
+		// Esc closes without changing the field, and hands the focus back.
+		whKey(`#task-description`, "j", whCtrl),
+		whPoll(whPhase("Which fields get the pen first?")),
+		whKey(`.helper .ask input`, "Escape", ""),
+		whPoll(`!`+whPanelShown),
+		chromedp.Evaluate(`document.querySelector('#task-description').value`, &field),
+		chromedp.Evaluate(`document.activeElement.id`, &active),
+	)
+	if err != nil {
+		t.Fatalf("esc: %v\nJS errors: %v", err, errs.all())
+	}
+	if field != "rough text" || active != "task-description" {
+		t.Errorf("after Esc: field %q, focus %q", field, active)
+	}
+
+	// Typing after a draft marks it stale; Use anyway still applies it.
+	err = chromedp.Run(ctx,
+		whKey(`#task-description`, "j", whCtrl),
+		whPoll(whPhase("How will you know")),
+		whClick(`.helper`, "Skip questions"),
+		whPoll(whPhase("Proposed description")),
+		setField(`#task-description`, "rough text, edited", "input"),
+		whPoll(whPhase("You changed the description after this draft")),
+		chromedp.Evaluate(`getComputedStyle(document.querySelector('.helper .draft[data-stale]')).opacity === '0.6'`, &stale),
+		whClick(`.helper`, "Use anyway"),
+		whPoll(`!`+whPanelShown),
+		whPoll(`document.querySelector('#task-description').value.startsWith('Add a magic pen')`),
+	)
+	if err != nil {
+		t.Fatalf("stale: %v\nJS errors: %v", err, errs.all())
+	}
+	if !stale {
+		t.Error("a stale draft is not dimmed")
+	}
+
+	// Redraft with my edits sends a fresh draft from the field as it is now.
+	err = chromedp.Run(ctx,
+		setField(`#task-description`, "second text", "input"),
+		whKey(`#task-description`, "j", whCtrl),
+		whPoll(whPhase("How will you know")),
+		whClick(`.helper`, "Skip questions"),
+		whPoll(whPhase("Proposed description")),
+		setField(`#task-description`, "second text edited", "input"),
+		whPoll(whPhase("You changed the description")),
+		whClick(`.helper`, "Redraft with my edits"),
+		whPoll(whPhase("Proposed description")),
+	)
+	if err != nil {
+		t.Fatalf("redraft: %v\nJS errors: %v", err, errs.all())
+	}
+	last := api.requests()[len(api.requests())-1]
+	if f, _ := last["field"].(map[string]any); f["text"] != "second text edited" || last["step"] != "draft" {
+		t.Errorf("the redraft sent %v", last)
+	}
+
+	if e := errs.all(); len(e) > 0 {
+		t.Errorf("JavaScript errors:\n%s", strings.Join(e, "\n"))
+	}
+}
+
+func TestWritingHelperFailureKeepsAnswersInTheBrowser(t *testing.T) {
+	api := newFakeHelperAPI()
+	ctx, url, errs := helperBrowser(t, api, whAvailable)
+
+	var banner, field string
+	err := chromedp.Run(ctx,
+		chromedp.EmulateViewport(1280, 900),
+		chromedp.Navigate(url+"/projects/p1/tasks/new"),
+		whPenReady(`.pen-host`),
+		setField(`#task-description`, "rough text", "input"),
+		whKey(`#task-description`, "j", whCtrl),
+		whPoll(whPhase("Which fields get the pen first?")),
+		whClick(`.helper`, "Every field"),
+	)
+	if err != nil {
+		t.Fatalf("setup: %v\nJS errors: %v", err, errs.all())
+	}
+	api.mu.Lock()
+	api.failDraft = true
+	api.mu.Unlock()
+	err = chromedp.Run(ctx,
+		whClick(`.helper`, "Draft"),
+		whPoll(whPhase("WRITING_HELPER_FAILED")),
+		chromedp.Evaluate(`[...document.querySelectorAll('.helper [role=alert]')].find((e) => e.checkVisibility()).textContent.replace(/\s+/g, ' ').trim()`, &banner),
+		chromedp.Evaluate(`document.querySelector('#task-description').value`, &field),
+		whClick(`.helper`, "Try again"),
+		whPoll(whPhase("Proposed description")),
+	)
+	if err != nil {
+		t.Fatalf("failure: %v\nJS errors: %v", err, errs.all())
+	}
+	if !strings.Contains(banner, "The helper stopped before it finished.") || !strings.Contains(banner, "Your description is unchanged.") || field != "rough text" {
+		t.Errorf("banner %q, field %q", banner, field)
+	}
+	// The retry sent the same answers again.
+	steps := api.requests()
+	if len(steps) != 3 {
+		t.Fatalf("steps = %d, want analyze, failed draft and retry", len(steps))
+	}
+	if fmt.Sprint(steps[1]["answers"]) != fmt.Sprint(steps[2]["answers"]) || steps[2]["answers"] == nil {
+		t.Errorf("answers were not kept: %v then %v", steps[1]["answers"], steps[2]["answers"])
+	}
+	if e := errs.all(); len(e) > 0 {
+		t.Errorf("JavaScript errors:\n%s", strings.Join(e, "\n"))
+	}
+}
+
+func TestWritingHelperStopWhileDraftingInTheBrowser(t *testing.T) {
+	api := newFakeHelperAPI()
+	ctx, url, errs := helperBrowser(t, api, whAvailable)
+
+	err := chromedp.Run(ctx,
+		chromedp.EmulateViewport(1280, 900),
+		chromedp.Navigate(url+"/projects/p1/tasks/new"),
+		whPenReady(`.pen-host`),
+		setField(`#task-description`, "rough text", "input"),
+		whKey(`#task-description`, "j", whCtrl),
+		whPoll(whPhase("Which fields get the pen first?")),
+	)
+	if err != nil {
+		t.Fatalf("setup: %v\nJS errors: %v", err, errs.all())
+	}
+	hold := make(chan struct{})
+	api.mu.Lock()
+	api.hold = hold
+	api.mu.Unlock()
+	var field string
+	err = chromedp.Run(ctx,
+		whClick(`.helper`, "Draft"),
+		whPoll(whPhase("Drafting")),
+		whClick(`.helper`, "Stop"),
+		whPoll(whPhase("Which fields get the pen first?")),
+		chromedp.Evaluate(`document.querySelector('#task-description').value`, &field),
+	)
+	close(hold)
+	if err != nil {
+		t.Fatalf("stop: %v\nJS errors: %v", err, errs.all())
+	}
+	if field != "rough text" {
+		t.Errorf("field = %q after Stop", field)
+	}
+	if e := errs.all(); len(e) > 0 {
+		t.Errorf("JavaScript errors:\n%s", strings.Join(e, "\n"))
+	}
+}
+
+func TestWritingHelperEmptyFieldStartsFromTheTitleInTheBrowser(t *testing.T) {
+	api := newFakeHelperAPI()
+	ctx, url, errs := helperBrowser(t, api, whAvailable)
+
+	var chip string
+	err := chromedp.Run(ctx,
+		chromedp.EmulateViewport(1280, 900),
+		chromedp.Navigate(url+"/projects/p1/tasks/new"),
+		whPenReady(`.pen-host`),
+		setField(`#task-title`, "AI helper for text", "input"),
+		chromedp.Click(`.pen`, chromedp.ByQuery),
+		whPoll(whPhase("What is this task about?")),
+		chromedp.Evaluate(`document.querySelector('.helper .chips .chip').textContent.trim()`, &chip),
+		whClick(`.helper`, "Draft from the title"),
+		whPoll(whPhase("Proposed description")),
+	)
+	if err != nil {
+		t.Fatalf("start: %v\nJS errors: %v", err, errs.all())
+	}
+	if chip != "Draft from the title" {
+		t.Errorf("chip = %q", chip)
+	}
+	steps := api.requests()
+	if len(steps) != 1 || steps[0]["step"] != "draft" || steps[0]["answers"] != nil {
+		t.Errorf("steps = %v, want one draft with no answers", steps)
+	}
+	if e := errs.all(); len(e) > 0 {
+		t.Errorf("JavaScript errors:\n%s", strings.Join(e, "\n"))
+	}
+}
+
+func TestWritingHelperUnavailableDisablesThePensInTheBrowser(t *testing.T) {
+	api := newFakeHelperAPI()
+	ctx, url, errs := helperBrowser(t, api, shell.Helper{Reason: "Claude is not signed in", FixURL: "/agent-isolation#credential"})
+
+	var disabled bool
+	var label, title string
+	err := chromedp.Run(ctx,
+		chromedp.EmulateViewport(1280, 900),
+		chromedp.Navigate(url+"/projects/p1/tasks/new"),
+		whPenReady(`.pen-host`),
+		chromedp.Evaluate(`document.querySelector('.pen').disabled`, &disabled),
+		chromedp.Evaluate(`document.querySelector('.pen').getAttribute('aria-label')`, &label),
+		chromedp.Evaluate(`document.querySelector('.pen').title`, &title),
+		setField(`#task-description`, "still works", "input"),
+		whKey(`#task-description`, "j", whCtrl),
+		chromedp.Sleep(200*time.Millisecond),
+	)
+	if err != nil {
+		t.Fatalf("unavailable: %v\nJS errors: %v", err, errs.all())
+	}
+	if !disabled || label != "Writing helper unavailable" || !strings.Contains(title, "Claude is not signed in") {
+		t.Errorf("disabled %v, label %q, title %q", disabled, label, title)
+	}
+	if len(api.requests()) != 0 {
+		t.Errorf("an unavailable pen sent a step: %v", api.requests())
+	}
+	var shown bool
+	if err := chromedp.Run(ctx, chromedp.Evaluate(whPanelShown, &shown)); err != nil || shown {
+		t.Errorf("panel shown = %v (%v)", shown, err)
+	}
+	if e := errs.all(); len(e) > 0 {
+		t.Errorf("JavaScript errors:\n%s", strings.Join(e, "\n"))
+	}
+}
+
+func TestWritingHelperRefusalSwitchesThePensOffInTheBrowser(t *testing.T) {
+	api := newFakeHelperAPI()
+	api.refuse = true
+	ctx, url, errs := helperBrowser(t, api, whAvailable)
+
+	var disabled bool
+	var toast string
+	err := chromedp.Run(ctx,
+		chromedp.EmulateViewport(1280, 900),
+		chromedp.Navigate(url+"/projects/p1/tasks/new"),
+		whPenReady(`.pen-host`),
+		setField(`#task-description`, "rough text", "input"),
+		chromedp.Click(`.pen`, chromedp.ByQuery),
+		whPoll(`document.querySelector('.pen').disabled`),
+		chromedp.Evaluate(`document.querySelector('.pen').disabled`, &disabled),
+		whPoll(`!!document.querySelector('.toast')?.checkVisibility()`),
+		chromedp.Evaluate(`document.querySelector('.toast').textContent.replace(/\s+/g, ' ').trim()`, &toast),
+	)
+	if err != nil {
+		t.Fatalf("refusal: %v\nJS errors: %v", err, errs.all())
+	}
+	if !disabled || !strings.Contains(toast, "Claude is not signed in") {
+		t.Errorf("disabled %v, toast %q", disabled, toast)
+	}
+	var shown bool
+	if err := chromedp.Run(ctx, chromedp.Evaluate(whPanelShown, &shown)); err != nil || shown {
+		t.Errorf("panel shown = %v (%v)", shown, err)
+	}
+	if e := errs.all(); len(e) > 0 {
+		t.Errorf("JavaScript errors:\n%s", strings.Join(e, "\n"))
+	}
+}
+
+func TestWritingHelperIsABottomSheetOnAPhoneInTheBrowser(t *testing.T) {
+	api := newFakeHelperAPI()
+	ctx, url, errs := helperBrowser(t, api, whAvailable)
+
+	var position, scrim string
+	err := chromedp.Run(ctx,
+		chromedp.EmulateViewport(480, 800),
+		chromedp.Navigate(url+"/projects/p1/tasks/new"),
+		whPenReady(`.pen-host`),
+		setField(`#task-description`, "rough text", "input"),
+		chromedp.Click(`.pen`, chromedp.ByQuery),
+		whPoll(whPhase("Which fields get the pen first?")),
+		chromedp.Evaluate(`getComputedStyle(document.querySelector('.helper')).position`, &position),
+		chromedp.Evaluate(`getComputedStyle(document.querySelector('.helper-scrim')).display`, &scrim),
+	)
+	if err != nil {
+		t.Fatalf("sheet: %v\nJS errors: %v", err, errs.all())
+	}
+	if position != "fixed" || scrim == "none" {
+		t.Errorf("position %q, scrim display %q", position, scrim)
+	}
+	if e := errs.all(); len(e) > 0 {
+		t.Errorf("JavaScript errors:\n%s", strings.Join(e, "\n"))
+	}
+}
+
+func TestWritingHelperInTheTaskEditDialogInTheBrowser(t *testing.T) {
+	api := newFakeHelperAPI()
+	ctx, url, errs := helperBrowser(t, api, whAvailable)
+
+	var after string
+	var sibling any
+	err := chromedp.Run(ctx,
+		chromedp.EmulateViewport(1280, 900),
+		chromedp.Navigate(url+"/projects/p1/tasks/t-new"),
+		clickButton(`main header`, "Edit"),
+		chromedp.WaitVisible(`#task-edit-description`, chromedp.ByQuery),
+		whPoll(`!!document.querySelector('#task-edit-description').closest('.pen-host')?._x_dataStack`),
+		setField(`#task-edit-title`, "Write the live docs", "input"),
+		whKey(`#task-edit-description`, "j", whCtrl),
+		whPoll(whPhase("Which fields get the pen first?")),
+		whClick(`.helper`, "Skip questions"),
+		whPoll(whPhase("Proposed description")),
+		// Esc closes the helper, not the edit form.
+		whKey(`#task-edit-description`, "Escape", ""),
+		whPoll(`!`+whPanelShown),
+		chromedp.Evaluate(`!!document.querySelector('#task-edit-description')`, &sibling),
+	)
+	if err != nil {
+		t.Fatalf("edit: %v\nJS errors: %v", err, errs.all())
+	}
+	if sibling != true {
+		t.Error("Esc in the open helper closed the edit form too")
+	}
+	err = chromedp.Run(ctx,
+		whKey(`#task-edit-description`, "j", whCtrl),
+		whPoll(whPhase("How will you know")),
+		whClick(`.helper`, "Skip questions"),
+		whPoll(whPhase("Proposed description")),
+		whClick(`.helper`, "Use this"),
+		whPoll(`document.querySelector('#task-edit-description').value.startsWith('Add a magic pen')`),
+		clickButton(`main`, "Save"),
+		whPoll(`!document.querySelector('#task-edit-description')`),
+		chromedp.Evaluate(`document.querySelector('.brief > p')?.textContent ?? ''`, &after),
+	)
+	if err != nil {
+		t.Fatalf("save: %v\nJS errors: %v", err, errs.all())
+	}
+	last := api.requests()[len(api.requests())-1]
+	if f, _ := last["field"].(map[string]any); f["kind"] != "task_description" {
+		t.Errorf("last step = %v", last)
+	}
+	if !strings.Contains(api.log(), `"description":"Add a magic pen to the task title and description.`) {
+		t.Errorf("the save did not carry the helper's text:\n%s", api.log())
+	}
+	if e := errs.all(); len(e) > 0 {
+		t.Errorf("JavaScript errors:\n%s", strings.Join(e, "\n"))
+	}
+}

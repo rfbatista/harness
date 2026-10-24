@@ -366,7 +366,14 @@ templ NewTaskPage(f shell.Frame, projectID, projectName string) {
 					</div>
 					<div class="[ field ]">
 						<label for="task-description">Description <span class="[ color-ink-faint weight-regular ]">(optional)</span></label>
-						<textarea id="task-description" x-model="description" placeholder="What done looks like. Agents get this as their brief."></textarea>
+						@components.WritingPen(components.Pen{
+							ID: "pen-task-description", Kind: "task_description", Noun: "description", Label: "Description",
+							ProjectID: projectID, ProjectName: projectName,
+							Siblings:  []components.PenSibling{{Label: "Title", Selector: "#task-title"}},
+							Available: f.Helper.Available, Reason: f.Helper.Reason, FixURL: f.Helper.FixURL,
+						}) {
+							<textarea id="task-description" x-model="description" placeholder="What done looks like. Agents get this as their brief."></textarea>
+						}
 					</div>
 					<div class="[ field ]">
 						<label for="task-status">Status</label>
