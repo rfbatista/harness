@@ -1,7 +1,6 @@
 package httpapi
 
 import (
-	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -23,28 +22,6 @@ func archivedDoneTask(t *testing.T, h *Handler, pid, title string) string {
 	return id
 }
 
-func listTicketIDs(t *testing.T, h *Handler, query string) []string {
-	t.Helper()
-	req := httptest.NewRequest(http.MethodGet, "/api/list_tickets?"+query, nil)
-	rec := httptest.NewRecorder()
-	NewRouter(h).ServeHTTP(rec, req)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("list_tickets?%s = %d %s", query, rec.Code, rec.Body.String())
-	}
-	var out struct {
-		Tickets []struct {
-			ID string `json:"id"`
-		} `json:"tickets"`
-	}
-	if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
-		t.Fatal(err)
-	}
-	ids := []string{}
-	for _, tk := range out.Tickets {
-		ids = append(ids, tk.ID)
-	}
-	return ids
-}
 
 func TestHTTP_ArchiveTicketAndTheArchivedList(t *testing.T) {
 	h, pid := newPlanningHandler(t)
@@ -52,10 +29,10 @@ func TestHTTP_ArchiveTicketAndTheArchivedList(t *testing.T) {
 	open := ticketIn(t, out)["id"].(string)
 	archived := archivedDoneTask(t, h, pid, "Shipped")
 
-	if got := listTicketIDs(t, h, "project_id="+pid); len(got) != 1 || got[0] != open {
+	if got := listTicketIDs(t, h, pid, ""); len(got) != 1 || got[0] != open {
 		t.Fatalf("default list = %v, want only %s", got, open)
 	}
-	if got := listTicketIDs(t, h, "project_id="+pid+"&archived=true"); len(got) != 1 || got[0] != archived {
+	if got := listTicketIDs(t, h, pid, "&archived=true"); len(got) != 1 || got[0] != archived {
 		t.Fatalf("archived list = %v, want only %s", got, archived)
 	}
 }
