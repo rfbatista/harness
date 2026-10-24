@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"os/exec"
 	"strings"
 	"sync"
@@ -25,13 +26,18 @@ import (
 
 const repoRoot = "../../../.."
 
+// sandboxed: the test runs inside an agent sandbox, which sets
+// MAC_CHROMIUM_TMPDIR to a directory it can write to (Chrome's socket goes
+// there). Chrome's own sandbox cannot nest inside it, so it runs without one.
+func sandboxed() bool { return os.Getenv("MAC_CHROMIUM_TMPDIR") != "" }
+
 func browser(t *testing.T) (context.Context, *errorLog) {
 	t.Helper()
 	if testing.Short() {
 		t.Skip("browser test: skipped in -short mode")
 	}
 	ctx, cancelAlloc := chromedp.NewExecAllocator(context.Background(),
-		append(chromedp.DefaultExecAllocatorOptions[:], chromedp.Flag("disable-extensions", true))...)
+		append(chromedp.DefaultExecAllocatorOptions[:], chromedp.Flag("disable-extensions", true), chromedp.Flag("no-sandbox", sandboxed()))...)
 	ctx, cancelBrowser := chromedp.NewContext(ctx)
 	ctx, cancelTimeout := context.WithTimeout(ctx, 60*time.Second)
 	t.Cleanup(func() { cancelTimeout(); cancelBrowser(); cancelAlloc() })
