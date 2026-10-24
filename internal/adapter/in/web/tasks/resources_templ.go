@@ -8,7 +8,10 @@ package tasks
 import "github.com/a-h/templ"
 import templruntime "github.com/a-h/templ/runtime"
 
-import "operators-mcp/internal/adapter/in/web/shell"
+import (
+	"operators-mcp/internal/adapter/in/web/components"
+	"operators-mcp/internal/adapter/in/web/shell"
+)
 
 // TaskResourcesPage is a task's resources and comments: files, images, audio
 // and links the person added (tasksResources renders the rows from the seed),
@@ -65,7 +68,7 @@ func TaskResourcesPage(v TaskResourcesView) templ.Component {
 			var templ_7745c5c3_Var3 templ.SafeURL
 			templ_7745c5c3_Var3, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL("/projects/" + v.ProjectID))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `tasks/resources.templ`, Line: 26, Col: 73}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `tasks/resources.templ`, Line: 29, Col: 73}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var3))
 			if templ_7745c5c3_Err != nil {
@@ -78,7 +81,7 @@ func TaskResourcesPage(v TaskResourcesView) templ.Component {
 			var templ_7745c5c3_Var4 string
 			templ_7745c5c3_Var4, templ_7745c5c3_Err = templ.JoinStringErrs(v.ProjectName)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `tasks/resources.templ`, Line: 26, Col: 91}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `tasks/resources.templ`, Line: 29, Col: 91}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var4))
 			if templ_7745c5c3_Err != nil {
@@ -91,7 +94,7 @@ func TaskResourcesPage(v TaskResourcesView) templ.Component {
 			var templ_7745c5c3_Var5 templ.SafeURL
 			templ_7745c5c3_Var5, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL(v.TaskHref))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `tasks/resources.templ`, Line: 27, Col: 57}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `tasks/resources.templ`, Line: 30, Col: 57}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var5))
 			if templ_7745c5c3_Err != nil {
@@ -104,7 +107,7 @@ func TaskResourcesPage(v TaskResourcesView) templ.Component {
 			var templ_7745c5c3_Var6 string
 			templ_7745c5c3_Var6, templ_7745c5c3_Err = templ.JoinStringErrs(v.TaskTitle)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `tasks/resources.templ`, Line: 27, Col: 73}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `tasks/resources.templ`, Line: 30, Col: 73}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var6))
 			if templ_7745c5c3_Err != nil {
@@ -118,7 +121,7 @@ func TaskResourcesPage(v TaskResourcesView) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = commentsColumn().Render(ctx, templ_7745c5c3_Buffer)
+			templ_7745c5c3_Err = commentsColumn(v).Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -313,7 +316,7 @@ func uploadRow() templ.Component {
 	})
 }
 
-func commentsColumn() templ.Component {
+func commentsColumn(v TaskResourcesView) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 		if templ_7745c5c3_CtxErr := ctx.Err(); templ_7745c5c3_CtxErr != nil {
@@ -334,7 +337,59 @@ func commentsColumn() templ.Component {
 			templ_7745c5c3_Var10 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 22, "<section class=\"[ comments-col ]\" id=\"comments\" aria-labelledby=\"comments-title\"><header class=\"[ section-head ]\"><h2 id=\"comments-title\">Comments</h2><span class=\"[ badge ]\" x-text=\"commentCount\" x-bind:aria-label=\"commentCountLabel\"></span></header><div class=\"[ scroll ]\"><ol class=\"[ thread ]\" aria-labelledby=\"comments-title\"><template x-for=\"c in commentRows\" x-bind:key=\"c.id\"><li class=\"[ comment ]\" x-bind:data-comment-id=\"c.id\" x-bind:data-fresh=\"c.fresh\" x-bind:data-editing=\"c.editing\" x-bind:data-confirming=\"c.confirming\" x-bind:aria-busy=\"c.busy\"><header><template x-if=\"!c.authorHref\"><strong data-author x-text=\"c.author\"></strong></template><template x-if=\"c.authorHref\"><strong data-author><a x-bind:href=\"c.authorHref\" x-bind:title=\"c.authorLabel\" x-text=\"c.author\"></a></strong></template><template x-if=\"c.bySession\"><span class=\"[ badge ]\" data-tone=\"signal\" data-agent-mark>Agent</span></template><time x-bind:datetime=\"c.datetime\" x-bind:title=\"c.dateTitle\" x-text=\"c.age\"></time><template x-if=\"c.edited\"><span class=\"[ edited ]\" x-bind:title=\"c.editedTitle\">edited</span></template><template x-if=\"!c.editing && !c.confirming\"><div class=\"[ actions ] [ cluster ] [ gutter-2xs ]\"><template x-if=\"c.canEdit\"><button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" data-edit x-bind:aria-label=\"c.editLabel\" x-bind:disabled=\"cannotAdd\" x-on:click=\"startEdit(c.id)\">Edit</button></template><button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" data-delete x-bind:aria-label=\"c.deleteLabel\" x-bind:disabled=\"cannotAdd\" x-on:click=\"askDeleteComment(c.id)\">Delete</button></div></template></header><template x-if=\"c.editing\"><div class=\"[ flow ] [ flow-space-xs ]\"><textarea aria-label=\"Edit comment\" x-model=\"editText\" x-on:keydown.meta.enter.prevent=\"saveEdit\" x-on:keydown.ctrl.enter.prevent=\"saveEdit\" x-on:keydown.escape.prevent=\"cancelEdit\"></textarea><template x-if=\"editError\"><p class=\"[ text-xs color-danger ]\" role=\"alert\" x-text=\"editError\"></p></template><div class=\"[ repel ]\"><span class=\"[ text-xs color-ink-faint ]\">Edits are not sent to running sessions.</span> <span class=\"[ cluster ] [ gutter-xs ]\"><button type=\"button\" class=\"[ button ]\" data-variant=\"primary\" data-size=\"sm\" x-bind:aria-busy=\"c.busy\" x-on:click=\"saveEdit\">Save</button> <button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" x-on:click=\"cancelEdit\">Cancel</button></span></div></div></template><template x-if=\"!c.editing\"><p class=\"[ body ]\" x-text=\"c.body\"></p></template><template x-if=\"c.confirming\"><div class=\"[ confirm ]\" role=\"group\" aria-label=\"Delete this comment?\"><span><strong>Delete this comment?</strong> Sessions that already got it keep their copy.</span> <span class=\"[ cluster ] [ gutter-xs ]\"><button type=\"button\" class=\"[ button ]\" data-variant=\"danger\" data-size=\"sm\" x-bind:aria-busy=\"c.busy\" x-on:click=\"confirmDeleteComment\">Delete</button> <button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" data-keep x-on:click=\"keepComment\">Keep it</button></span></div></template></li></template></ol><template x-if=\"hasNoComments\"><p class=\"[ empty-note ]\">No comments yet. Write what the agents should keep in mind: a decision, a correction, a pointer to one of the resources.</p></template></div><form class=\"[ composer ]\" novalidate x-on:submit.prevent=\"send\"><label for=\"comment-body\" class=\"[ visually-hidden ]\">Write a comment</label> <textarea id=\"comment-body\" placeholder=\"Write a comment…\" aria-describedby=\"composer-hint composer-count\" data-composer x-bind:disabled=\"cannotAdd\" x-model=\"draft\" x-on:keydown.meta.enter.prevent=\"send\" x-on:keydown.ctrl.enter.prevent=\"send\"></textarea><template x-if=\"composerError\"><p class=\"[ text-xs color-danger ]\" role=\"alert\" x-text=\"composerError\"></p></template><footer><span class=\"[ hint ]\" id=\"composer-hint\">Plain text. Sessions running on this task get each new comment as a message; edits are not sent.</span> <span class=\"[ count ]\" id=\"composer-count\" x-show=\"showsCounter\" x-bind:data-tone=\"counterTone\" x-text=\"counter\"></span> <button type=\"submit\" class=\"[ button ]\" data-variant=\"primary\" data-size=\"sm\" x-bind:disabled=\"cannotSend\" x-bind:aria-busy=\"sending\">Comment <kbd>⌘↵</kbd></button></footer></form></section>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 22, "<section class=\"[ comments-col ]\" id=\"comments\" aria-labelledby=\"comments-title\"><header class=\"[ section-head ]\"><h2 id=\"comments-title\">Comments</h2><span class=\"[ badge ]\" x-text=\"commentCount\" x-bind:aria-label=\"commentCountLabel\"></span></header><div class=\"[ scroll ]\"><ol class=\"[ thread ]\" aria-labelledby=\"comments-title\"><template x-for=\"c in commentRows\" x-bind:key=\"c.id\"><li class=\"[ comment ]\" x-bind:data-comment-id=\"c.id\" x-bind:data-fresh=\"c.fresh\" x-bind:data-editing=\"c.editing\" x-bind:data-confirming=\"c.confirming\" x-bind:aria-busy=\"c.busy\"><header><template x-if=\"!c.authorHref\"><strong data-author x-text=\"c.author\"></strong></template><template x-if=\"c.authorHref\"><strong data-author><a x-bind:href=\"c.authorHref\" x-bind:title=\"c.authorLabel\" x-text=\"c.author\"></a></strong></template><template x-if=\"c.bySession\"><span class=\"[ badge ]\" data-tone=\"signal\" data-agent-mark>Agent</span></template><time x-bind:datetime=\"c.datetime\" x-bind:title=\"c.dateTitle\" x-text=\"c.age\"></time><template x-if=\"c.edited\"><span class=\"[ edited ]\" x-bind:title=\"c.editedTitle\">edited</span></template><template x-if=\"!c.editing && !c.confirming\"><div class=\"[ actions ] [ cluster ] [ gutter-2xs ]\"><template x-if=\"c.canEdit\"><button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" data-edit x-bind:aria-label=\"c.editLabel\" x-bind:disabled=\"cannotAdd\" x-on:click=\"startEdit(c.id)\">Edit</button></template><button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" data-delete x-bind:aria-label=\"c.deleteLabel\" x-bind:disabled=\"cannotAdd\" x-on:click=\"askDeleteComment(c.id)\">Delete</button></div></template></header><template x-if=\"c.editing\"><div class=\"[ flow ] [ flow-space-xs ]\">")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Var11 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
+			templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
+			templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
+			if !templ_7745c5c3_IsBuffer {
+				defer func() {
+					templ_7745c5c3_BufErr := templruntime.ReleaseBuffer(templ_7745c5c3_Buffer)
+					if templ_7745c5c3_Err == nil {
+						templ_7745c5c3_Err = templ_7745c5c3_BufErr
+					}
+				}()
+			}
+			ctx = templ.InitializeContext(ctx)
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 23, "<textarea aria-label=\"Edit comment\" x-model=\"editText\" x-on:keydown.meta.enter.prevent=\"saveEdit\" x-on:keydown.ctrl.enter.prevent=\"saveEdit\" x-on:keydown.escape.prevent=\"cancelEdit\"></textarea>")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			return nil
+		})
+		templ_7745c5c3_Err = components.WritingPen(commentPen("pen-comment-edit", v)).Render(templ.WithChildren(ctx, templ_7745c5c3_Var11), templ_7745c5c3_Buffer)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 24, "<template x-if=\"editError\"><p class=\"[ text-xs color-danger ]\" role=\"alert\" x-text=\"editError\"></p></template><div class=\"[ repel ]\"><span class=\"[ text-xs color-ink-faint ]\">Edits are not sent to running sessions.</span> <span class=\"[ cluster ] [ gutter-xs ]\"><button type=\"button\" class=\"[ button ]\" data-variant=\"primary\" data-size=\"sm\" x-bind:aria-busy=\"c.busy\" x-on:click=\"saveEdit\">Save</button> <button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" x-on:click=\"cancelEdit\">Cancel</button></span></div></div></template><template x-if=\"!c.editing\"><p class=\"[ body ]\" x-text=\"c.body\"></p></template><template x-if=\"c.confirming\"><div class=\"[ confirm ]\" role=\"group\" aria-label=\"Delete this comment?\"><span><strong>Delete this comment?</strong> Sessions that already got it keep their copy.</span> <span class=\"[ cluster ] [ gutter-xs ]\"><button type=\"button\" class=\"[ button ]\" data-variant=\"danger\" data-size=\"sm\" x-bind:aria-busy=\"c.busy\" x-on:click=\"confirmDeleteComment\">Delete</button> <button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" data-keep x-on:click=\"keepComment\">Keep it</button></span></div></template></li></template></ol><template x-if=\"hasNoComments\"><p class=\"[ empty-note ]\">No comments yet. Write what the agents should keep in mind: a decision, a correction, a pointer to one of the resources.</p></template></div><form class=\"[ composer ]\" novalidate x-on:submit.prevent=\"send\"><label for=\"comment-body\" class=\"[ visually-hidden ]\">Write a comment</label>")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Var12 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
+			templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
+			templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
+			if !templ_7745c5c3_IsBuffer {
+				defer func() {
+					templ_7745c5c3_BufErr := templruntime.ReleaseBuffer(templ_7745c5c3_Buffer)
+					if templ_7745c5c3_Err == nil {
+						templ_7745c5c3_Err = templ_7745c5c3_BufErr
+					}
+				}()
+			}
+			ctx = templ.InitializeContext(ctx)
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 25, "<textarea id=\"comment-body\" placeholder=\"Write a comment…\" aria-describedby=\"composer-hint composer-count\" data-composer x-bind:disabled=\"cannotAdd\" x-model=\"draft\" x-on:keydown.meta.enter.prevent=\"send\" x-on:keydown.ctrl.enter.prevent=\"send\"></textarea>")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			return nil
+		})
+		templ_7745c5c3_Err = components.WritingPen(commentPen("pen-comment", v)).Render(templ.WithChildren(ctx, templ_7745c5c3_Var12), templ_7745c5c3_Buffer)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 26, "<template x-if=\"composerError\"><p class=\"[ text-xs color-danger ]\" role=\"alert\" x-text=\"composerError\"></p></template><footer><span class=\"[ hint ]\" id=\"composer-hint\">Plain text. Sessions running on this task get each new comment as a message; edits are not sent.</span> <span class=\"[ count ]\" id=\"composer-count\" x-show=\"showsCounter\" x-bind:data-tone=\"counterTone\" x-text=\"counter\"></span> <button type=\"submit\" class=\"[ button ]\" data-variant=\"primary\" data-size=\"sm\" x-bind:disabled=\"cannotSend\" x-bind:aria-busy=\"sending\">Comment <kbd>⌘↵</kbd></button></footer></form></section>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -358,12 +413,12 @@ func lightbox() templ.Component {
 			}()
 		}
 		ctx = templ.InitializeContext(ctx)
-		templ_7745c5c3_Var11 := templ.GetChildren(ctx)
-		if templ_7745c5c3_Var11 == nil {
-			templ_7745c5c3_Var11 = templ.NopComponent
+		templ_7745c5c3_Var13 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var13 == nil {
+			templ_7745c5c3_Var13 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 23, "<dialog class=\"[ lightbox ]\" aria-labelledby=\"lightbox-name\" x-on:close=\"lightboxClosed\" x-on:click=\"lightboxClick\" x-on:keydown.left.prevent=\"previousImage\" x-on:keydown.right.prevent=\"nextImage\"><div class=\"[ stage ]\"><img x-bind:src=\"lightboxSrc\" x-bind:alt=\"lightboxTitle\"><template x-if=\"lightboxSteps\"><button type=\"button\" class=\"[ button step ]\" data-icon data-dir=\"prev\" aria-label=\"Previous image\" x-on:click=\"previousImage\"><svg viewBox=\"0 0 16 16\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" aria-hidden=\"true\"><path d=\"M10 3.5L5.5 8l4.5 4.5\"></path></svg></button></template><template x-if=\"lightboxSteps\"><button type=\"button\" class=\"[ button step ]\" data-icon data-dir=\"next\" aria-label=\"Next image\" x-on:click=\"nextImage\"><svg viewBox=\"0 0 16 16\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" aria-hidden=\"true\"><path d=\"M6 3.5L10.5 8 6 12.5\"></path></svg></button></template></div><footer><div class=\"[ text ]\"><span class=\"[ name ]\" id=\"lightbox-name\" x-text=\"lightboxTitle\"></span> <span class=\"[ meta ]\" x-text=\"lightboxMeta\"></span></div><div class=\"[ cluster ] [ gutter-xs ]\"><a class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" target=\"_blank\" rel=\"noopener noreferrer\" x-bind:href=\"lightboxSrc\">Open in a new tab</a> <a class=\"[ button ]\" data-size=\"sm\" download x-bind:href=\"lightboxDownload\">Download</a> <button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" data-lightbox-close autofocus x-on:click=\"closeLightbox\">Close <kbd>Esc</kbd></button></div></footer></dialog>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 27, "<dialog class=\"[ lightbox ]\" aria-labelledby=\"lightbox-name\" x-on:close=\"lightboxClosed\" x-on:click=\"lightboxClick\" x-on:keydown.left.prevent=\"previousImage\" x-on:keydown.right.prevent=\"nextImage\"><div class=\"[ stage ]\"><img x-bind:src=\"lightboxSrc\" x-bind:alt=\"lightboxTitle\"><template x-if=\"lightboxSteps\"><button type=\"button\" class=\"[ button step ]\" data-icon data-dir=\"prev\" aria-label=\"Previous image\" x-on:click=\"previousImage\"><svg viewBox=\"0 0 16 16\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" aria-hidden=\"true\"><path d=\"M10 3.5L5.5 8l4.5 4.5\"></path></svg></button></template><template x-if=\"lightboxSteps\"><button type=\"button\" class=\"[ button step ]\" data-icon data-dir=\"next\" aria-label=\"Next image\" x-on:click=\"nextImage\"><svg viewBox=\"0 0 16 16\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" aria-hidden=\"true\"><path d=\"M6 3.5L10.5 8 6 12.5\"></path></svg></button></template></div><footer><div class=\"[ text ]\"><span class=\"[ name ]\" id=\"lightbox-name\" x-text=\"lightboxTitle\"></span> <span class=\"[ meta ]\" x-text=\"lightboxMeta\"></span></div><div class=\"[ cluster ] [ gutter-xs ]\"><a class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" target=\"_blank\" rel=\"noopener noreferrer\" x-bind:href=\"lightboxSrc\">Open in a new tab</a> <a class=\"[ button ]\" data-size=\"sm\" download x-bind:href=\"lightboxDownload\">Download</a> <button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" data-lightbox-close autofocus x-on:click=\"closeLightbox\">Close <kbd>Esc</kbd></button></div></footer></dialog>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -387,12 +442,12 @@ func iconUpload() templ.Component {
 			}()
 		}
 		ctx = templ.InitializeContext(ctx)
-		templ_7745c5c3_Var12 := templ.GetChildren(ctx)
-		if templ_7745c5c3_Var12 == nil {
-			templ_7745c5c3_Var12 = templ.NopComponent
+		templ_7745c5c3_Var14 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var14 == nil {
+			templ_7745c5c3_Var14 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 24, "<svg viewBox=\"0 0 16 16\" width=\"16\" height=\"16\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" aria-hidden=\"true\"><path d=\"M8 10.5V2.5M5 5.5l3-3 3 3M2.5 10v3.5h11V10\"></path></svg>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 28, "<svg viewBox=\"0 0 16 16\" width=\"16\" height=\"16\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" aria-hidden=\"true\"><path d=\"M8 10.5V2.5M5 5.5l3-3 3 3M2.5 10v3.5h11V10\"></path></svg>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -416,12 +471,12 @@ func iconLink() templ.Component {
 			}()
 		}
 		ctx = templ.InitializeContext(ctx)
-		templ_7745c5c3_Var13 := templ.GetChildren(ctx)
-		if templ_7745c5c3_Var13 == nil {
-			templ_7745c5c3_Var13 = templ.NopComponent
+		templ_7745c5c3_Var15 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var15 == nil {
+			templ_7745c5c3_Var15 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 25, "<svg viewBox=\"0 0 16 16\" width=\"16\" height=\"16\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" aria-hidden=\"true\"><path d=\"M6.5 9.5l3-3M7 4.5l1-1a2.8 2.8 0 014 4l-1 1M9 11.5l-1 1a2.8 2.8 0 01-4-4l1-1\"></path></svg>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 29, "<svg viewBox=\"0 0 16 16\" width=\"16\" height=\"16\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" aria-hidden=\"true\"><path d=\"M6.5 9.5l3-3M7 4.5l1-1a2.8 2.8 0 014 4l-1 1M9 11.5l-1 1a2.8 2.8 0 01-4-4l1-1\"></path></svg>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -445,12 +500,12 @@ func iconAudio() templ.Component {
 			}()
 		}
 		ctx = templ.InitializeContext(ctx)
-		templ_7745c5c3_Var14 := templ.GetChildren(ctx)
-		if templ_7745c5c3_Var14 == nil {
-			templ_7745c5c3_Var14 = templ.NopComponent
+		templ_7745c5c3_Var16 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var16 == nil {
+			templ_7745c5c3_Var16 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 26, "<svg viewBox=\"0 0 16 16\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" aria-hidden=\"true\"><path d=\"M2.5 6v4M5.5 3.5v9M8.5 5.5v5M11.5 2.5v11M14 6.5v3\"></path></svg>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 30, "<svg viewBox=\"0 0 16 16\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" aria-hidden=\"true\"><path d=\"M2.5 6v4M5.5 3.5v9M8.5 5.5v5M11.5 2.5v11M14 6.5v3\"></path></svg>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -474,12 +529,12 @@ func iconDownload() templ.Component {
 			}()
 		}
 		ctx = templ.InitializeContext(ctx)
-		templ_7745c5c3_Var15 := templ.GetChildren(ctx)
-		if templ_7745c5c3_Var15 == nil {
-			templ_7745c5c3_Var15 = templ.NopComponent
+		templ_7745c5c3_Var17 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var17 == nil {
+			templ_7745c5c3_Var17 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 27, "<svg viewBox=\"0 0 16 16\" width=\"16\" height=\"16\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" aria-hidden=\"true\"><path d=\"M8 2.5v8M5 7.5l3 3 3-3M2.5 13.5h11\"></path></svg>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 31, "<svg viewBox=\"0 0 16 16\" width=\"16\" height=\"16\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" aria-hidden=\"true\"><path d=\"M8 2.5v8M5 7.5l3 3 3-3M2.5 13.5h11\"></path></svg>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -503,12 +558,12 @@ func iconWarning() templ.Component {
 			}()
 		}
 		ctx = templ.InitializeContext(ctx)
-		templ_7745c5c3_Var16 := templ.GetChildren(ctx)
-		if templ_7745c5c3_Var16 == nil {
-			templ_7745c5c3_Var16 = templ.NopComponent
+		templ_7745c5c3_Var18 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var18 == nil {
+			templ_7745c5c3_Var18 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 28, "<svg viewBox=\"0 0 16 16\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" aria-hidden=\"true\"><path d=\"M8 2l6.5 11.5h-13z\"></path><path d=\"M8 6.5v3M8 11.5v.01\"></path></svg>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 32, "<svg viewBox=\"0 0 16 16\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" aria-hidden=\"true\"><path d=\"M8 2l6.5 11.5h-13z\"></path><path d=\"M8 6.5v3M8 11.5v.01\"></path></svg>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

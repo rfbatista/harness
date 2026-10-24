@@ -934,11 +934,25 @@ templ taskBand(v PageView) {
 		<form class="[ flow ] [ flow-space-s pad-l divide-bottom ]" x-on:submit.prevent="save" x-on:keydown.escape="cancelEditTask">
 			<div class="[ field ]">
 				<label for="task-edit-title">Title</label>
-				<input id="task-edit-title" autocomplete="off" x-model="draftTitle" x-ref="title"/>
+				@components.WritingPen(components.Pen{
+					ID: "pen-task-edit-title", Kind: "task_title", Noun: "title", Label: "Title",
+					ProjectID: v.ProjectID, ProjectName: v.ProjectName,
+					Siblings:  []components.PenSibling{{Label: "Description", Selector: "#task-edit-description"}},
+					Available: v.Frame.Helper.Available, Reason: v.Frame.Helper.Reason, FixURL: v.Frame.Helper.FixURL,
+				}) {
+					<input id="task-edit-title" autocomplete="off" x-model="draftTitle"/>
+				}
 			</div>
 			<div class="[ field ]">
 				<label for="task-edit-description">Description</label>
-				<textarea id="task-edit-description" x-model="draftDescription"></textarea>
+				@components.WritingPen(components.Pen{
+					ID: "pen-task-edit-description", Kind: "task_description", Noun: "description", Label: "Description",
+					ProjectID: v.ProjectID, ProjectName: v.ProjectName,
+					Siblings:  []components.PenSibling{{Label: "Title", Selector: "#task-edit-title"}},
+					Available: v.Frame.Helper.Available, Reason: v.Frame.Helper.Reason, FixURL: v.Frame.Helper.FixURL,
+				}) {
+					<textarea id="task-edit-description" x-model="draftDescription"></textarea>
+				}
 			</div>
 			<div class="[ cluster ]">
 				<button type="submit" class="[ button ]" data-variant="primary" data-size="sm" x-bind:disabled="cannotSaveTask" x-bind:aria-busy="savingTask">Save</button>

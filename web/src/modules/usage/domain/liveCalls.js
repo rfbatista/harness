@@ -17,7 +17,7 @@ export const MAX_ENTRIES = 500;
  * @property {string} projectId  "" for calls with no project
  * @property {{id: string, title: string}|null} session
  * @property {{id: string, title: string}|null} task
- * @property {string} kind  "session" | "system" | "document-assistant"
+ * @property {string} kind  "session" | "system" | "document-assistant" | "writing-helper"
  * @property {{method: string, path: string, query: string, headers: object, body: unknown}} request
  * @property {boolean} finished
  * @property {boolean} noLongerInFlight  unfinished, and its finish may have been missed

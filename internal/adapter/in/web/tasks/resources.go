@@ -8,6 +8,7 @@ import (
 
 	"github.com/rfbatista/harnesskit/errs"
 
+	"operators-mcp/internal/adapter/in/web/components"
 	"operators-mcp/internal/adapter/in/web/sessions"
 	"operators-mcp/internal/adapter/in/web/shell"
 	"operators-mcp/internal/domain"
@@ -28,8 +29,10 @@ type TaskResourcesView struct {
 	ProjectName string
 	TaskID      string
 	TaskTitle   string
-	TaskHref    string
-	Seed        TaskResourcesSeed
+	// TaskDescription is read by the writing helper beside a comment.
+	TaskDescription string
+	TaskHref        string
+	Seed            TaskResourcesSeed
 }
 
 // TaskResourcesSeed is the task-resources-seed JSON: the task's resources
@@ -81,7 +84,7 @@ func (h Handler) TaskResources(w http.ResponseWriter, r *http.Request) error {
 	frame.Hints = []shell.Hint{{Keys: []string{"⌘V"}, Label: "paste an image"}}
 	view := TaskResourcesView{
 		Frame: frame, ProjectID: project.ID, ProjectName: project.Name,
-		TaskID: task.ID, TaskTitle: task.Title, TaskHref: Href(project.ID, task.ID),
+		TaskID: task.ID, TaskTitle: task.Title, TaskDescription: task.Description, TaskHref: Href(project.ID, task.ID),
 		Seed: TaskResourcesSeed{ProjectID: project.ID, TicketID: task.ID, Resources: resources, Comments: comments, SessionIDs: sessionIDs},
 	}
 	return h.Render(w, r, http.StatusOK, TaskResourcesPage(view))
@@ -128,5 +131,21 @@ func resourcesLink(projectID, taskID string, resources []*domain.TicketResource,
 		CommentIDs:  strings.Join(cids, ","),
 		Resources:   len(resources),
 		Comments:    len(comments),
+	}
+}
+
+// commentPen is the magic pen on a comment field: it reads the task's title
+// and description beside the comment, and its panel opens above the field,
+// which sits at the bottom of its pane.
+func commentPen(id string, v TaskResourcesView) components.Pen {
+	return components.Pen{
+		ID: id, Kind: "comment", Noun: "comment", Label: "Comment",
+		ProjectID: v.ProjectID, ProjectName: v.ProjectName,
+		Siblings: []components.PenSibling{
+			{Label: "Task title", Text: v.TaskTitle},
+			{Label: "Task description", Text: v.TaskDescription},
+		},
+		Available: v.Frame.Helper.Available, Reason: v.Frame.Helper.Reason, FixURL: v.Frame.Helper.FixURL,
+		Above: id == "pen-comment",
 	}
 }

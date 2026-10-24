@@ -57,6 +57,8 @@ import { tokenSaversGateway } from "./modules/tokensavers/infrastructure/tokensa
 import { registerTokenSavers } from "./modules/tokensavers/presentation/register.js";
 import { usageGateway } from "./modules/usage/infrastructure/usage-gateway.js";
 import { registerUsage } from "./modules/usage/presentation/register.js";
+import { stepGateway } from "./modules/writinghelper/infrastructure/step-gateway.js";
+import { registerWritingHelper } from "./modules/writinghelper/presentation/register.js";
 import { createHljs } from "./highlight.js";
 import { createScreen } from "./xterm-screen.js";
 import { startSwapRegions } from "./swap-regions.js";
@@ -110,5 +112,6 @@ registerClaude(Alpine, { gateway: claudeGateway(api) });
 registerAgentCredential(Alpine, { gateway: agentCredentialGateway(api) });
 registerAgentIsolation(Alpine);
 registerSettings(Alpine, { gateway: settingsGateway(api) });
+registerWritingHelper(Alpine, { gateway: stepGateway({ base: "/api" }) });
 
 Alpine.start();

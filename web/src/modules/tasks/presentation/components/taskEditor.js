@@ -197,7 +197,8 @@ export const taskEditor =
         this.draftDescription = this.description;
         this.confirmingTaskDelete = false;
         this.editingTask = true;
-        this.$nextTick(() => this.$refs.title?.focus());
+        // By id, not x-ref: the title sits inside the writing helper's own x-data.
+        this.$nextTick(() => document.getElementById("task-edit-title")?.focus());
       },
 
       cancelEditTask() {

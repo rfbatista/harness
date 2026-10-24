@@ -16,6 +16,7 @@ export function makeRecord(over = {}) {
   const r = {
     id: `req-${++seq}`,
     projectId: "p1",
+    attribution: "session:s1",
     taskId: "t1",
     taskTitle: "Add the feed",
     sessionId: "s1",

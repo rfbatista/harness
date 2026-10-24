@@ -82,7 +82,8 @@ test("a record maps to the domain's names, with its total", () => {
   assert.equal(toRecord({ ...wireRecord, estimated_cost_usd: null }).costUsd, null);
   assert.equal(toRecord({ ...wireRecord, task_id: undefined, session_id: undefined }).taskId, "");
   assert.ok(Object.isFrozen(r));
-  assert.equal("attribution" in r, false, "fields the page does not use stay behind");
+  assert.equal(r.attribution, "s1", "who the call was for, so the feed can name the harness's own spend");
+  assert.equal(toRecord({ ...wireRecord, attribution: undefined }).attribution, "");
 });
 
 test("a page of records and the page's seed", () => {

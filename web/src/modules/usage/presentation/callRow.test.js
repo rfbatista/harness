@@ -57,6 +57,12 @@ test("a call with no session or task is the harness's own", () => {
   assert.equal(row.taskHref, "");
 });
 
+test("a writing helper call is named for it, not for the harness", () => {
+  const row = callRow(inFlight({ session: null, task: null, kind: "writing-helper", project_id: "p1" }), "p1");
+  assert.equal(row.session, "Writing helper");
+  assert.equal(row.sessionHref, "");
+});
+
 test("the tabs: request, response, message and usage; only the request exists while in flight", () => {
   const tabs = callTabs(inFlight());
   assert.deepEqual(tabs.map((t) => t.id), ["request", "response", "message", "usage"]);

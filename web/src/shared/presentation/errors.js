@@ -55,6 +55,8 @@ const NEXT_STEP = {
   [Codes.MANAGED_CLAUDE_INSTALLING]: "it installs on its own; start again when it is done",
   [Codes.MANAGED_CLAUDE_INSTALL_FAILED]: "retry the install in Agent isolation, then start again",
   [Codes.SANDBOX_DRIVER_MISSING]: "install a driver or turn the sandbox off in Agent isolation, then start again",
+  [Codes.WRITING_HELPER_FAILED]: "try again; if it keeps failing, check the Claude login in Settings",
+  [Codes.WRITING_HELPER_UNAVAILABLE]: "sign in to Claude or fix the agent setup, then reload the page",
   [Codes.BAD_RESPONSE]: "the server and the web client disagree; reload the page",
 };
 

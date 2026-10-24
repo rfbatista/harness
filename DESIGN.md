@@ -378,6 +378,11 @@ The `sunken` well where a session's output is read: mono 13px, a grid of `time |
 - **Empty state:** left-aligned in a 30rem column: 22px headline, one sentence that teaches what the thing is, then the primary action and a ghost alternative.
 - **Skeleton:** 0.75em bars with a slow linear sweep; static under reduced motion. Used in place of spinners inside content.
 
+### Magic pen and writing helper
+- **Pen** (`.pen` in a `.pen-field`): an icon button inside a text field's end edge, always visible. A hairline and `raised` fill at rest, `signal` when the field has focus or the panel is open, dashed and faint when disabled ("Writing helper unavailable"). On a textarea it sits bottom-right clear of the resize grip; on a one-line input it is centred. The sparkle twinkles while the helper thinks; still under reduced motion. The field takes the `signal` edge while its panel is open and rings once when the helper writes it.
+- **Helper panel** (`.helper`): non-modal, in flow under the field at the field's width (above it with `data-above`, for a field at the bottom of its pane), `raised` with `line-strong` border, a 2px `signal` top edge and Float shadow. Header (pen, title, "Reads …" chips, close), a scrolling `.body`, a `panel` footer with a hint and the actions. Under 40rem it is a bottom sheet (`data-sheet`) over a `.helper-scrim`.
+- **Inside the panel:** numbered `.ask` questions (why line, input, `.chips`), `.draft` text marked with `ins` (underlined, signal wash) and `del` (struck through), `.gap` for an open placeholder (attention, dashed), `.seg` Changes/Clean, `.options` for title picks. The helper never writes the field: only Use this does, with a toast and Undo.
+
 ## 6. Do's and Don'ts
 
 ### Do:

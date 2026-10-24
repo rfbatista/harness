@@ -22,8 +22,9 @@
  *             topTasks: TaskUsage[], topSessions: SessionUsage[] }} UsageSummary
  *
  * One finished LLM request. taskId and sessionId are "" for the harness's own
- * spend; costUsd is null when its model has no price.
- * @typedef {{ id: string, projectId: string, taskId: string, taskTitle: string, sessionId: string, model: string,
+ * spend, which attribution names ("harness:writing-helper"); costUsd is null
+ * when its model has no price.
+ * @typedef {{ id: string, projectId: string, attribution: string, taskId: string, taskTitle: string, sessionId: string, model: string,
  *             status: number, streamed: boolean, startedAt: Date, durationMs: number,
  *             input: number, output: number, cacheWrite: number, cacheRead: number, total: number,
  *             costUsd: number|null, error: string }} UsageRecord

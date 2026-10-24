@@ -140,10 +140,13 @@ export function sessionRows(list, projectId, rangeTotal) {
 
 const clockTime = (d) => [d.getHours(), d.getMinutes(), d.getSeconds()].map((x) => String(x).padStart(2, "0")).join(":");
 
+/** What the harness's own spend is called: the writing helper's has a name, the rest is the harness's. */
+const harnessSpend = (attribution) => (attribution === "harness:writing-helper" ? "Writing helper" : "Harness");
+
 /** @param {import("../domain/usage.js").UsageRecord} r */
 export function feedRow(r, projectId) {
   let task = r.taskTitle || "Untitled task";
-  if (!r.taskId) task = r.sessionId ? "No task" : "Harness";
+  if (!r.taskId) task = r.sessionId ? "No task" : harnessSpend(r.attribution);
   const failed = r.error !== "" || r.status >= 400;
   return {
     id: r.id,
