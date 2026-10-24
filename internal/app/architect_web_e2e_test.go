@@ -191,10 +191,15 @@ type person struct {
 	errors []string
 }
 
+// sandboxed: the test runs inside an agent sandbox, which sets
+// MAC_CHROMIUM_TMPDIR to a directory it can write to (Chrome's socket goes
+// there). Chrome's own sandbox cannot nest inside it, so it runs without one.
+func sandboxed() bool { return os.Getenv("MAC_CHROMIUM_TMPDIR") != "" }
+
 func newPerson(t *testing.T) *person {
 	t.Helper()
 	ctx, cancelAlloc := chromedp.NewExecAllocator(context.Background(),
-		append(chromedp.DefaultExecAllocatorOptions[:], chromedp.Flag("disable-extensions", true),
+		append(chromedp.DefaultExecAllocatorOptions[:], chromedp.Flag("disable-extensions", true), chromedp.Flag("no-sandbox", sandboxed()),
 			chromedp.Flag("ignore-certificate-errors", true))...)
 	ctx, cancelBrowser := chromedp.NewContext(ctx)
 	ctx, cancelTimeout := context.WithTimeout(ctx, 120*time.Second)

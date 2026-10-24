@@ -258,7 +258,7 @@ func TestTaskResourcesAndCommentsInTheWebUI_EndToEnd(t *testing.T) {
 func newTLSBrowser(t *testing.T) *browser {
 	t.Helper()
 	ctx, cancelAlloc := chromedp.NewExecAllocator(context.Background(),
-		append(chromedp.DefaultExecAllocatorOptions[:], chromedp.Flag("disable-extensions", true), chromedp.Flag("ignore-certificate-errors", true))...)
+		append(chromedp.DefaultExecAllocatorOptions[:], chromedp.Flag("disable-extensions", true), chromedp.Flag("no-sandbox", sandboxed()), chromedp.Flag("ignore-certificate-errors", true))...)
 	ctx, cancelBrowser := chromedp.NewContext(ctx)
 	ctx, cancelTimeout := context.WithTimeout(ctx, 180*time.Second)
 	t.Cleanup(func() { cancelTimeout(); cancelBrowser(); cancelAlloc() })

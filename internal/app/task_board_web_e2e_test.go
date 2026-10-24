@@ -138,8 +138,10 @@ func TestTheTaskBoardInTheWebUI_EndToEnd(t *testing.T) {
 		waitFor(`document.querySelector('.archived-link').textContent.trim() === 'Archived (2)'`),
 	)
 
+	// The link, followed as a navigation: a click would race the next poll against the page unloading.
+	archived := p.text(t, `document.querySelector('.archived-link').href`)
 	p.run(t, "the person opens Archived and restores the checked task",
-		chromedp.Evaluate(`document.querySelector('.archived-link').click()`, nil),
+		chromedp.Navigate(archived),
 		waitFor(`location.pathname.endsWith('/archived') && !!document.querySelector('[data-archived-list] [data-task-id="`+check.ID+`"] [data-restore]')`),
 		chromedp.Evaluate(`document.querySelector('[data-archived-list] [data-task-id="`+check.ID+`"] [data-restore]').click()`, nil),
 		waitFor(`(document.querySelector('[data-archived-list] [data-task-id="`+check.ID+`"]')?.innerText ?? '').includes('restored to Done')`),

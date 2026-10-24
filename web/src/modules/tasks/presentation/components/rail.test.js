@@ -102,6 +102,20 @@ test("after a resync it reads the sessions and the tasks again, quietly", async 
   assert.equal(nav.dispatched.some((d) => d.name === "rail-announce"), false, "a resync is not news");
 });
 
+test("when the feed first goes live it reads the tasks again, so a change announced before the connect is not lost", async () => {
+  const { memory, store, nav } = setup({ tasks: [makeTask({ status: "review" })] });
+  // The server computed the merge state and announced it before this page's stream was open.
+  memory.replaceTasks([makeTask({ status: "review", mergeState: { state: "not_merged", merged: 0, total: 1 } })]);
+  await flush(); // the feed reports live
+  await flush();
+  assert.deepEqual(store.tasks.map((t) => t.mergeState?.state ?? null), ["not_merged"]);
+  assert.equal(nav.dispatched.some((d) => d.name === "rail-announce"), false, "catching up is not news");
+  memory.replaceTasks([makeTask({ status: "review", mergeState: { state: "merged", merged: 1, total: 1 } })]);
+  memory.status(FeedStatus.LIVE);
+  await flush();
+  assert.equal(store.tasks[0].mergeState.state, "not_merged", "only the first live reads again; later ones follow the feed");
+});
+
 test("a resync still refreshes the sessions when the tasks cannot be read, and the other way round", async () => {
   const { memory, store, link } = setup({ tasks: [makeTask(), makeTask({ id: "t3", title: "Third", status: "todo" })] });
   await flush();
