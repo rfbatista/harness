@@ -29,8 +29,12 @@
 
     &:is([data-kind="page"], [data-kind="url"]) > .stage {
       display: block;
+      place-items: normal;
       padding: 0;
       overflow: hidden;
+
+      /* Wrappers between the stage and the frame fill it; they do not rely on how a browser aligns block children. */
+      & .frame { inline-size: 100%; }
     }
 
     & iframe {
