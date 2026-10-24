@@ -175,3 +175,88 @@ test("the Alpine component wires the menu on init", () => {
   instance.destroy();
   root.remove();
 });
+
+/** A status menu: a checked item left out of the arrows, a starting item, and shortcut keys. */
+function statusFixture() {
+  const root = document.createElement("div");
+  root.className = "menu";
+  root.innerHTML = `
+    <button type="button" class="button">Move to…</button>
+    <div role="menu">
+      <button type="button" role="menuitemradio" data-action="move" data-value="todo" data-key="1" aria-checked="false">Todo <kbd>1</kbd></button>
+      <button type="button" role="menuitemradio" data-action="move" data-value="review" data-key="2" aria-checked="true" aria-disabled="true" data-skip>Review <kbd>2</kbd></button>
+      <button type="button" role="menuitemradio" data-action="move" data-value="done" data-key="3" aria-checked="false" data-initial>Done <kbd>3</kbd></button>
+      <button type="button" role="menuitem" data-action="archive" data-key="a">Archive <kbd>A</kbd></button>
+    </div>`;
+  document.body.append(root);
+  const m = new MenuButton(root, env());
+  const picks = [];
+  root.addEventListener("menu-select", (e) => picks.push(e.detail));
+  return { m, root, picks, trigger: m.trigger, done: () => (m.close(), root.remove()) };
+}
+
+test("a menu opens on its data-initial item, by keys and by click", () => {
+  const f = statusFixture();
+  try {
+    f.trigger.focus();
+    key(f.trigger, "Enter");
+    assert.ok(focusedText().startsWith("Done"));
+    key(document.activeElement, "Escape");
+    f.trigger.click();
+    assert.ok(focusedText().startsWith("Done"));
+  } finally {
+    f.done();
+  }
+});
+
+test("the arrows, Home and End leave out a data-skip item", () => {
+  const f = statusFixture();
+  try {
+    f.trigger.focus();
+    key(f.trigger, "Enter");
+    key(document.activeElement, "ArrowUp");
+    assert.ok(focusedText().startsWith("Todo"), "↑ from Done skips the checked Review");
+    key(document.activeElement, "ArrowDown");
+    assert.ok(focusedText().startsWith("Done"));
+    key(document.activeElement, "End");
+    assert.ok(focusedText().startsWith("Archive"));
+    key(document.activeElement, "Home");
+    assert.ok(focusedText().startsWith("Todo"));
+  } finally {
+    f.done();
+  }
+});
+
+test("an item's data-key runs it straight away, in either case; a disabled one does nothing", () => {
+  const f = statusFixture();
+  try {
+    f.trigger.focus();
+    key(f.trigger, "Enter");
+    key(document.activeElement, "3");
+    assert.deepEqual(f.picks, [{ action: "move", value: "done" }]);
+    assert.ok(!f.m.isOpen);
+    key(f.trigger, "Enter");
+    key(document.activeElement, "A");
+    assert.deepEqual(f.picks.at(-1), { action: "archive" });
+    key(f.trigger, "Enter");
+    key(document.activeElement, "2");
+    assert.equal(f.picks.length, 2, "the checked, disabled status sends nothing");
+    assert.ok(f.m.isOpen);
+  } finally {
+    f.done();
+  }
+});
+
+test("a trigger with aria-disabled keeps the focus and does not open", () => {
+  const f = statusFixture();
+  try {
+    f.trigger.setAttribute("aria-disabled", "true");
+    f.trigger.focus();
+    key(f.trigger, "Enter");
+    f.trigger.click();
+    assert.ok(!f.m.isOpen);
+    assert.equal(document.activeElement, f.trigger);
+  } finally {
+    f.done();
+  }
+});

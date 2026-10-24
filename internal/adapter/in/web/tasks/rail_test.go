@@ -16,6 +16,7 @@ func TestRailGroupsTasksInKanbanOrderWithTheirSessions(t *testing.T) {
 		{ID: "t-feed", Title: "Add SSE feed", Status: domain.TicketStatusInProgress},
 		{ID: "t-todo", Title: "Write docs", Status: domain.TicketStatusTodo},
 		{ID: "t-port", Title: "Port tickets", Status: domain.TicketStatusInProgress},
+		{ID: "t-old", Title: "Archived", Status: domain.TicketStatusDone, ArchivedAt: &archivedAt}, // off the rail
 	}
 	sessions := []*domain.Session{
 		// One task, several sessions at once: two live, one waiting on you, one over.
@@ -47,6 +48,11 @@ func TestRailGroupsTasksInKanbanOrderWithTheirSessions(t *testing.T) {
 	}
 	if href := rail.Groups[0].Links[0].Href; href != "/projects/p1/tasks/t-feed" {
 		t.Errorf("href = %q", href)
+	}
+	for _, tk := range rail.Seed.Tasks {
+		if tk.ID == "t-old" {
+			t.Errorf("the seed carries the archived task")
+		}
 	}
 }
 
@@ -182,5 +188,31 @@ func TestRailCountsWhatNeedsThePerson(t *testing.T) {
 		[]*domain.Session{{ID: "s1", TicketID: "t2", Status: domain.SessionIdle}}, "", nil)
 	if n := rail.NeedsYou(); n != 2 {
 		t.Errorf("needs you = %d", n)
+	}
+}
+
+// A Review or Done row carries its merge state for the meta item; the row
+// shows it only when nothing comes first (shell.Link.Merging).
+func TestRailRowsCarryTheMergeStateOfReviewAndDone(t *testing.T) {
+	merge := func(kind string, merged, total int) *domain.MergeState {
+		return &domain.MergeState{State: domain.MergeKind(kind), Merged: merged, Total: total}
+	}
+	rail := BuildRail("p1",
+		[]*domain.Ticket{
+			{ID: "r1", Title: "Partial", Status: domain.TicketStatusReview, MergeState: merge("partial", 1, 2)},
+			{ID: "d1", Title: "Merged", Status: domain.TicketStatusDone, MergeState: merge("merged", 1, 1)},
+			{ID: "d2", Title: "None", Status: domain.TicketStatusDone, MergeState: merge("none", 0, 0)},
+			{ID: "d3", Title: "Missing", Status: domain.TicketStatusDone},
+			{ID: "i1", Title: "Moving", Status: domain.TicketStatusInProgress, MergeState: merge("merged", 1, 1)},
+		}, nil, "", nil)
+	var got []string
+	for _, g := range rail.Groups {
+		for _, l := range g.Links {
+			got = append(got, fmt.Sprintf("%s=%s/%s", l.Label, l.Merge, l.MergeText))
+		}
+	}
+	want := "Moving=/,Partial=partial/1/2 merged,Merged=merged/merged,None=/,Missing=/"
+	if strings.Join(got, ",") != want {
+		t.Errorf("rail merges:\n%s\nwant:\n%s", strings.Join(got, ","), want)
 	}
 }

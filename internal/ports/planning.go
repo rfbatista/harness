@@ -2,6 +2,7 @@ package ports
 
 import (
 	"context"
+	"time"
 
 	"operators-mcp/internal/domain"
 )
@@ -10,14 +11,20 @@ import (
 // Tickets are scoped to a project.
 type TicketRepository interface {
 	Get(ctx context.Context, id string) *domain.Ticket
+	// ListByProject lists a project's tickets that are not archived.
 	ListByProject(ctx context.Context, projectID string) []*domain.Ticket
+	// ListArchivedByProject lists a project's archived tickets, newest
+	// archived first.
+	ListArchivedByProject(ctx context.Context, projectID string) []*domain.Ticket
 	// Create and Update carry the parent as parentID; "" is a top-level
 	// ticket. Update replaces every column, the parent included.
 	Create(projectID, title, description string, status domain.TicketStatus, parentID string) (*domain.Ticket, error)
 	Update(id, title, description string, status domain.TicketStatus, parentID string) (*domain.Ticket, error)
+	// SetArchived archives the ticket at at, or restores it when at is nil.
+	SetArchived(id string, at *time.Time) (*domain.Ticket, error)
 	Delete(id string) error
-	// ActivityByProject answers each project's open task count and newest
-	// update, for every project that has tasks.
+	// ActivityByProject answers each project's open and archived task
+	// counts and newest update, for every project that has tasks.
 	ActivityByProject() (map[string]TaskActivity, error)
 }
 
@@ -114,6 +121,9 @@ type TicketPatch struct {
 	// empty BySessionID is a person. They are recorded only when it does.
 	StatusReason string
 	BySessionID  string
+	// ByArchitect says BySessionID is the task's architect at the time of
+	// the move, so the history keeps the role it moved it in.
+	ByArchitect bool
 }
 
 // TicketPatcher applies a partial change to one ticket. A present blank title
@@ -124,12 +134,47 @@ type TicketPatcher interface {
 	PatchTicket(ctx context.Context, id string, patch TicketPatch) (*domain.Ticket, error)
 }
 
+// TicketArchiver archives a done ticket and restores it: the person's alone,
+// never a session's. Archiving a ticket that is not done is TASK_NOT_DONE;
+// archiving an archived one and restoring an unarchived one change nothing
+// and answer the ticket. While archived, a ticket cannot change status
+// (TASK_ARCHIVED) and leaves ListTickets; ListArchivedTickets lists the
+// project's archived tickets, newest archived first. ArchiveDoneTickets
+// archives every done ticket of the project that is not archived yet and
+// answers their ids, never nil.
+type TicketArchiver interface {
+	ArchiveTicket(ctx context.Context, id string) (*domain.Ticket, error)
+	RestoreTicket(ctx context.Context, id string) (*domain.Ticket, error)
+	ListArchivedTickets(ctx context.Context, projectID string) ([]*domain.Ticket, error)
+	ArchiveDoneTickets(ctx context.Context, projectID string) ([]string, error)
+}
+
+// ArchivedTaskCounter counts a project's archived tasks, for the project
+// page's "Archived (N)" link. Planning implements it.
+type ArchivedTaskCounter interface {
+	ArchivedTaskCount(ctx context.Context, projectID string) (int, error)
+}
+
 // TicketAnnouncer puts a ticket change on the project feed, so the board and
 // the rail move while the developer watches. The orchestration, which owns
 // the feed, implements it; planning calls it after every create, update and
 // delete. deleted marks the ticket's last message.
 type TicketAnnouncer interface {
 	AnnounceTicket(tk *domain.Ticket, deleted bool)
+}
+
+// TicketReannouncer puts a task on the project feed again, read and
+// decorated as it is now, when one of its derived fields (its merge state)
+// changed without the task being written. Planning implements it.
+type TicketReannouncer interface {
+	ReannounceTicket(ctx context.Context, id string)
+}
+
+// MergeStateRefresher computes a task's merge state from git now and keeps
+// it, so the next decoration of the task carries it. Planning calls it when a
+// task moves into review or done.
+type MergeStateRefresher interface {
+	Refresh(ctx context.Context, taskID string) (domain.MergeState, error)
 }
 
 // DocumentLibrary manages a project's documents and their links to tickets.

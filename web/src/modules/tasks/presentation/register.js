@@ -1,5 +1,6 @@
 // The tasks module's Alpine components.
 
+import { archived } from "./components/archived.js";
 import { board } from "./components/board.js";
 import { documentScope } from "./components/documentScope.js";
 import { contextStrip } from "./components/contextStrip.js";
@@ -32,12 +33,13 @@ export function registerTasks(Alpine, deps) {
   Alpine.data("tasksResourceWatch", resourceWatch(deps));
 
   // The project's live model, shared by the rail, its links and the board.
-  Alpine.store("tasksRail", { byTask: {}, tasks: [], seeded: false, drawerOpen: false, statusChanges: {} });
+  Alpine.store("tasksRail", { byTask: {}, tasks: [], seeded: false, drawerOpen: false, statusChanges: {}, archivedCount: 0 });
   const store = Alpine.store("tasksRail");
   Alpine.data("tasksTaskEditor", taskEditor({ ...deps, store }));
   Alpine.data("tasksRail", rail({ gateway: deps.rail, store, prefs: deps.railPrefs, navigate: deps.navigate }));
   Alpine.data("tasksRailToggle", railToggle({ store }));
-  Alpine.data("tasksBoard", board({ gateway: deps.gateway, store }));
+  Alpine.data("tasksBoard", board({ gateway: deps.gateway, store, clock: deps.clock }));
+  Alpine.data("tasksArchived", archived({ gateway: deps.gateway }));
   Alpine.data("tasksFeature", feature({ store }));
   Alpine.data("tasksContextStrip", contextStrip({ prefs: deps.bandPrefs }));
 }

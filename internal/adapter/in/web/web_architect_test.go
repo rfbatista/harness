@@ -123,10 +123,12 @@ func TestBoardAndRailSayWhereReviewsWaitOnThePerson(t *testing.T) {
 	body := get(t, newTestHandler(t, w), "/projects/p1").Body.String()
 	card := body[strings.Index(body, `<article class="[ card ]" data-task-id="t-docs"`):]
 	card = card[:strings.Index(card, "</article>")]
-	for _, want := range []string{`<span class="[ badge ]" data-tone="attention">2 reviews</span>`, `data-state="waiting"`, "waiting on you"} {
-		if !strings.Contains(card, want) {
-			t.Errorf("the t-docs card lacks %q:\n%s", want, card)
-		}
+	// The reviews have their own badge; the card's dot is about sessions only.
+	if !strings.Contains(card, `<span class="[ badge reviews ]">`) || !strings.Contains(card, "2 reviews</span>") {
+		t.Errorf("the t-docs card lacks its reviews badge:\n%s", card)
+	}
+	if strings.Contains(card, `data-state="waiting"`) {
+		t.Errorf("no session of t-docs waits, yet its card says one does:\n%s", card)
 	}
 	for _, want := range []string{
 		`href="/projects/p1/reviews"`,

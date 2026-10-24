@@ -1,6 +1,6 @@
 import { assert, file, test } from "../../../shared/testing/test.js";
 import { makeTask } from "../testing/fixtures.js";
-import { DONE_CAP, matchParts, needsYou, normalize, railGroups } from "./rail.js";
+import { DONE_CAP, matchParts, needsYou, normalize, railGroups, railMeta } from "./rail.js";
 
 file("tasks/domain/rail");
 
@@ -77,4 +77,25 @@ test("normalize folds case and accents; matchParts splits around the first match
   assert.deepEqual(matchParts("Café design", "cafe"), { before: "", match: "Café", after: " design" });
   assert.deepEqual(matchParts("Write docs", ""), { before: "Write docs", match: "", after: "" });
   assert.deepEqual(matchParts("Write docs", "zzz"), { before: "Write docs", match: "", after: "" });
+});
+
+test("a row's meta is the first that applies: reviews, waiting, N live, then the merge word on Review and Done", () => {
+  const merged = { state: "merged", merged: 1, total: 1 };
+  const meta = (over, activity) => {
+    const m = railMeta(makeTask(over), activity);
+    return m.kind === "merge" ? `merge ${m.merge.state} ${m.merge.rail}` : m.kind;
+  };
+  assert.equal(meta({ status: "done", pendingReviews: 1, mergeState: merged }, { live: 2, attention: true }), "reviews");
+  assert.equal(meta({ status: "done", mergeState: merged }, { live: 2, attention: true }), "waiting");
+  assert.equal(meta({ status: "done", mergeState: merged }, { live: 2, attention: false }), "live");
+  assert.equal(meta({ status: "done", mergeState: merged }), "merge merged merged");
+  assert.equal(meta({ status: "review", mergeState: { state: "partial", merged: 1, total: 2 } }, QUIET), "merge partial 1/2 merged");
+  assert.equal(meta({ status: "review", mergeState: { state: "not_merged", merged: 0, total: 1 } }), "merge not_merged not merged");
+  assert.equal(meta({ status: "done", mergeState: { state: "unknown", merged: 0, total: 0 } }), "merge unknown unknown");
+  assert.equal(meta({ status: "done", mergeState: { state: "none", merged: 0, total: 0 } }), "", "none shows nothing");
+  assert.equal(meta({ status: "done", mergeState: null }), "", "null shows nothing");
+  assert.equal(meta({ status: "in_progress", mergeState: merged }), "", "only Review and Done carry it");
+  const { mergeState: _, ...old } = makeTask({ status: "done" });
+  assert.equal(railMeta(old).kind, "", "an old event without merge_state");
+  assert.equal(meta({}), "");
 });

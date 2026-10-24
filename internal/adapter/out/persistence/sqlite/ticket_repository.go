@@ -31,8 +31,16 @@ func (r *TicketRepository) Get(ctx context.Context, id string) *domain.Ticket {
 }
 
 func (r *TicketRepository) ListByProject(ctx context.Context, projectID string) []*domain.Ticket {
+	return r.list(r.db.WithContext(ctx).Where("project_id = ? AND archived_at IS NULL", projectID))
+}
+
+func (r *TicketRepository) ListArchivedByProject(ctx context.Context, projectID string) []*domain.Ticket {
+	return r.list(r.db.WithContext(ctx).Where("project_id = ? AND archived_at IS NOT NULL", projectID).Order("archived_at DESC"))
+}
+
+func (r *TicketRepository) list(q *gorm.DB) []*domain.Ticket {
 	var models []TicketModel
-	if err := r.db.WithContext(ctx).Where("project_id = ?", projectID).Find(&models).Error; err != nil {
+	if err := q.Find(&models).Error; err != nil {
 		return nil
 	}
 	out := make([]*domain.Ticket, 0, len(models))
@@ -75,6 +83,26 @@ func (r *TicketRepository) Update(id, title, description string, status domain.T
 	return m.ToDomain(), nil
 }
 
+func (r *TicketRepository) SetArchived(id string, at *time.Time) (*domain.Ticket, error) {
+	var ms *int64
+	if at != nil {
+		v := at.UnixMilli()
+		ms = &v
+	}
+	res := r.db.Model(&TicketModel{}).Where("id = ?", id).Update("archived_at", ms)
+	if res.Error != nil {
+		return nil, res.Error
+	}
+	if res.RowsAffected == 0 {
+		return nil, &domain.StructuredError{Code: "TICKET_NOT_FOUND", Message: "ticket not found"}
+	}
+	var m TicketModel
+	if err := r.db.First(&m, "id = ?", id).Error; err != nil {
+		return nil, err
+	}
+	return m.ToDomain(), nil
+}
+
 func (r *TicketRepository) Delete(id string) error {
 	var m TicketModel
 	if err := r.db.First(&m, "id = ?", id).Error; err != nil {
@@ -90,23 +118,25 @@ func (r *TicketRepository) Delete(id string) error {
 	return r.db.Delete(&m).Error
 }
 
-// ActivityByProject answers each project's open task count and newest
-// update, in one query.
+// ActivityByProject answers each project's open and archived task counts
+// and newest update, in one query.
 func (r *TicketRepository) ActivityByProject() (map[string]ports.TaskActivity, error) {
 	var rows []struct {
 		ProjectID string
 		Open      int
+		Archived  int
 		Last      int64
 	}
 	err := r.db.Model(&TicketModel{}).
-		Select("project_id, SUM(CASE WHEN status <> ? THEN 1 ELSE 0 END) AS open, MAX(updated_at) AS last", string(domain.TicketStatusDone)).
+		Select("project_id, SUM(CASE WHEN status <> ? THEN 1 ELSE 0 END) AS open, "+
+			"SUM(CASE WHEN archived_at IS NOT NULL THEN 1 ELSE 0 END) AS archived, MAX(updated_at) AS last", string(domain.TicketStatusDone)).
 		Group("project_id").Scan(&rows).Error
 	if err != nil {
 		return nil, err
 	}
 	out := make(map[string]ports.TaskActivity, len(rows))
 	for _, row := range rows {
-		out[row.ProjectID] = ports.TaskActivity{OpenCount: row.Open, LastUpdatedAt: time.UnixMilli(row.Last)}
+		out[row.ProjectID] = ports.TaskActivity{OpenCount: row.Open, ArchivedCount: row.Archived, LastUpdatedAt: time.UnixMilli(row.Last)}
 	}
 	return out, nil
 }

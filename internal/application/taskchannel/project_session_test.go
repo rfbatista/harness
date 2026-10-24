@@ -109,3 +109,15 @@ func TestProjectSession_DefersToTheTasksArchitect(t *testing.T) {
 	_, err = f.svc.SetTaskStatusOn(ctx, "pm", f.ticket, domain.TicketStatusReview, "")
 	wantCode(t, err, "TASK_STATUS_OWNED_BY_ARCHITECT")
 }
+
+// A session with no task of its own cannot move a task of its project into
+// done either: only the person does, and the task stays where it was.
+func TestProjectSession_CannotMoveATaskToDone(t *testing.T) {
+	f := newFixture(t)
+	f.startFree(t, "pm")
+	_, err := f.svc.SetTaskStatusOn(ctx, "pm", f.ticket, domain.TicketStatusDone, "shipped")
+	wantCode(t, err, "TASK_DONE_IS_THE_PERSONS")
+	if tk, _ := f.plan.GetTicket(ctx, f.ticket); tk.Status == domain.TicketStatusDone {
+		t.Fatalf("the task moved to done: %+v", tk)
+	}
+}

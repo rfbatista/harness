@@ -16,7 +16,8 @@ import (
 // server copy once the template has rendered.
 templ Page(v PageView) {
 	@shell.AppShell(v.Frame) {
-		<main id="main"
+		<main
+			id="main"
 			class="[ frame ]"
 			x-data="sessionsPage"
 			data-seed="sessions-seed"
@@ -57,11 +58,14 @@ templ Page(v PageView) {
 						<a class="[ crumb ]" href={ templ.SafeURL(v.Parent.Href) } data-parent-task={ v.Parent.ID } title="The feature task this task belongs to">{ v.Parent.Title } /</a>
 					}
 					<h1 x-text="title">{ v.TaskTitle }</h1>
-					<select data-size="sm" data-fit aria-label="Task status" x-model="status" x-on:change="changeStatus">
-						for _, st := range v.StatusChoices {
-							<option value={ st.Value } { selectedAttrs(st.Selected)... }>{ st.Label }</option>
-						}
-					</select>
+					if !v.Archived() {
+						<select data-size="sm" data-fit aria-label="Task status" x-model="status" x-on:change="changeStatus">
+							for _, st := range v.StatusChoices {
+								<option value={ st.Value } { selectedAttrs(st.Selected)... }>{ st.Label }</option>
+							}
+						</select>
+						<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-show="canArchive" x-bind:aria-busy="archiving" x-on:click="archiveTask" { hiddenUnless(v.CanArchive())... }>Archive</button>
+					}
 					<span class="[ color-ink-faint text-sm ]" x-text="summary">{ v.Summary }</span>
 					if v.Usage != nil {
 						<span class="[ usage-total ]" x-data="usageTotalsChip" x-show="hasTask" x-text="taskText" x-bind:title="taskTitle"></span>
@@ -123,6 +127,12 @@ templ Page(v PageView) {
 						}
 					</div>
 				</header>
+				if v.Archived() {
+					<div class="[ archived-banner ]" role="note">
+						<p><strong x-text="archivedWhen">{ v.ArchivedWhen() }</strong> It is off the board; its status is Done.</p>
+						<button type="button" class="[ button ]" data-size="sm" x-bind:aria-busy="archiving" x-on:click="restoreTask">Restore</button>
+					</div>
+				}
 				@taskBand(v)
 			</div>
 			@contextStrip(v)

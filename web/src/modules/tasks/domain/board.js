@@ -2,7 +2,7 @@
 // reads. The rail shows the same tasks in its own order (RAIL_ORDER, the
 // BFF's `kanban` in internal/adapter/in/web/tasks/rail.go).
 
-import { STATUSES } from "./task.js";
+import { isStatus, STATUSES } from "./task.js";
 
 /**
  * @typedef {import("./task.js").Task} Task
@@ -12,19 +12,61 @@ import { STATUSES } from "./task.js";
 /** The rail's group order: what is moving first, done last. A permutation of STATUSES. */
 export const RAIL_ORDER = Object.freeze(["in_progress", "review", "todo", "backlog", "done"]);
 
-/** Applies one feed change. A changed task keeps its place in the list, so a move does not shuffle its column. */
+/** The tasks of a list that belong on the board and the rail: every one not archived. */
+export const onBoard = (tasks) => tasks.filter((t) => !t.archivedAt);
+
+/**
+ * Applies one feed change. A changed task keeps its place in the list, so a
+ * move does not shuffle its column. An archived task leaves the list, and a
+ * restored one (archived_at cleared) comes back.
+ */
 export function applyTaskChange(tasks, change) {
-  if (change.kind === "task-deleted") return tasks.filter((t) => t.id !== change.id);
+  if (change.kind === "task-deleted" || change.task.archivedAt) {
+    const id = change.kind === "task-deleted" ? change.id : change.task.id;
+    return tasks.filter((t) => t.id !== id);
+  }
   const at = tasks.findIndex((t) => t.id === change.task.id);
   if (at < 0) return [...tasks, change.task];
   return tasks.map((t, i) => (i === at ? change.task : t));
 }
 
-/** @returns {Record<string, Task[]>} every status, in STATUSES order, tasks in list order */
+/**
+ * Every status, in STATUSES order; in each, the task that entered it last on
+ * top (status_since, newest first), as the server renders the board. Ties keep
+ * list order; a task whose time is unknown goes last.
+ * @returns {Record<string, Task[]>}
+ */
 export function byStatus(tasks) {
   const out = Object.fromEntries(STATUSES.map((s) => [s.value, []]));
   for (const t of tasks) out[t.status]?.push(t);
+  for (const list of Object.values(out)) list.sort((a, b) => (b.statusSince || 0) - (a.statusSince || 0));
   return out;
+}
+
+/**
+ * The "Move to…" menu's statuses for a task in `status`, in board order: each
+ * with its key (1 to 5), the current one marked. initial is where the menu
+ * opens: the status after the current one, the most likely next step; from
+ * Done it is Review, so an accidental Enter stays reversible.
+ * @returns {{ status: string, label: string, key: string, current: boolean, initial: boolean }[]}
+ */
+export function moveChoices(status) {
+  const at = STATUSES.findIndex((s) => s.value === status);
+  const next = at === STATUSES.length - 1 ? at - 1 : at + 1;
+  return STATUSES.map((s, i) => ({ status: s.value, label: s.label, key: String(i + 1), current: i === at, initial: i === next }));
+}
+
+/**
+ * The move a drop turns into: the card to the column it was dropped on.
+ * null for a drop on its own column, outside any column (to is ""), of a
+ * card that is gone, or of one whose move is still in flight.
+ * @param {Task | null} task
+ * @param {string} to  the column's status, "" when none
+ * @returns {{ taskId: string, status: string } | null}
+ */
+export function dropMove(task, to, { pending = false } = {}) {
+  if (!task || pending || !isStatus(to) || to === task.status) return null;
+  return { taskId: task.id, status: to };
 }
 
 const label = (status) => STATUSES.find((s) => s.value === status)?.label ?? status;
@@ -33,6 +75,7 @@ const label = (status) => STATUSES.find((s) => s.value === status)?.label ?? sta
 export function describeChange(previous, change) {
   if (change.kind === "task-deleted") return previous ? `${previous.title} was removed` : "";
   const t = change.task;
+  if (t.archivedAt) return previous ? `${previous.title} was archived` : "";
   if (!previous) return `${t.title} was added to ${label(t.status)}`;
   if (previous.status !== t.status) return `${previous.title} moved to ${label(t.status)}`;
   if (previous.title !== t.title) return `${previous.title} was renamed to ${t.title}`;

@@ -203,7 +203,8 @@ func statusSection(role domain.SessionRole) string {
 	switch role {
 	case domain.RoleDelegate:
 		return `This task has an architect: the session that shaped it and delegated your part.
-It owns the task status. Do not call update_task_status; it is refused.
+It owns the task status, and only the person moves it to done.
+Do not call update_task_status; it is refused.
 Talk to the architect instead:
 
 - mcp__task__message_architect — kind review_request when your plan or work is ready for review (attach the documents and artifacts by id, from .index.json); kind status_report at each milestone, when you finish, and as soon as you are blocked (status working, blocked, ready_for_review or done); kind question when you need a decision
@@ -217,7 +218,7 @@ Sessions you start on this task also report to the architect.`
 under you can move it. Move it as the work moves, always with a reason, based on
 what your delegates report:
 
-- mcp__task__update_task_status — set this task's status with a reason: in_progress when the first delegate starts, review when the finished work is ready for the person, done when they accept it
+- mcp__task__update_task_status — set this task's status with a reason: in_progress when the first delegate starts, review when the finished work is ready for the person; the person moves it to done after checking it
 
 Your delegates report to you. Their messages, the status checks that wake you
 about them, and the person's answers to your review requests arrive as new turns
@@ -236,7 +237,7 @@ are your work queue. Answer each one:
 	return `Move the task as the work moves, so the board stays true without a person
 dragging the card:
 
-- mcp__task__update_task_status — set this task's status: in_progress when you pick the work up, review when it is ready for a person to look at, done when you are told it is accepted`
+- mcp__task__update_task_status — set this task's status: in_progress when you pick the work up, review when it is ready for the person to check; only the person moves it to done`
 }
 
 // newSessionRole is the role a session about to start will have, worked out

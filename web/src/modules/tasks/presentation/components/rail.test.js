@@ -11,13 +11,13 @@ file("tasks/presentation/rail");
 
 const s = (id, ticketId, status, pendingApprovals = 0) => ({ id, ticketId, status, pendingApprovals });
 
-function setup({ tasks = [makeTask()], currentTask = "t1", reportsFeed = false, sessions = [s("a", "t1", "running")], collapsed = [], narrow = false } = {}) {
-  const memory = memoryRail({ projectId: "p1", sessions, tasks });
+function setup({ tasks = [makeTask()], currentTask = "t1", reportsFeed = false, sessions = [s("a", "t1", "running")], collapsed = [], narrow = false, archived = [] } = {}) {
+  const memory = memoryRail({ projectId: "p1", sessions, tasks, archived });
   const store = { byTask: {}, tasks: [], seeded: false, drawerOpen: false };
   const prefs = memoryRailPrefs(collapsed);
   const timers = manualTimers();
   const visited = [];
-  const el = seededElement({ project_id: "p1", sessions, tasks: tasks.map(taskDTO) }, "rail-seed");
+  const el = seededElement({ project_id: "p1", sessions, tasks: tasks.map(taskDTO), archived_count: archived.length }, "rail-seed");
   el.dataset.currentTask = currentTask;
   if (reportsFeed) el.dataset.reportsFeed = "";
   const nav = mount(rail({ gateway: memory.gateway, store, prefs, navigate: (url) => visited.push(url), timers, isNarrow: () => narrow }), { el });
@@ -248,4 +248,28 @@ test("/ focuses the filter, but not from a text field or the terminal, and opens
   const e = key("/", { target: document.body });
   nav.instance.globalKey(e);
   assert.deepEqual([e.defaultPrevented, store.drawerOpen], [true, true]);
+});
+
+test("an archived task leaves the store at once and the archived count goes up; a restored one comes back and the count is read again", async () => {
+  const done = makeTask({ id: "t-done", title: "Ship it", status: "done" });
+  const { memory, store, group } = setup({ tasks: [makeTask(), done], archived: [makeTask({ id: "t-old", status: "done", archivedAt: 1 })] });
+  await flush();
+  assert.equal(store.archivedCount, 1);
+  memory.emit({ kind: "task-upsert", task: { ...done, archivedAt: 5 } });
+  assert.deepEqual([store.tasks.map((t) => t.id), group("done").countText, store.archivedCount], [["t1"], "0", 2]);
+  memory.emit({ kind: "task-upsert", task: { ...done, archivedAt: 5 } });
+  assert.equal(store.archivedCount, 2, "the same archive again is not counted twice");
+  memory.emit({ kind: "task-upsert", task: done });
+  await flush();
+  assert.deepEqual([store.tasks.map((t) => t.id), store.archivedCount], [["t1", "t-done"], 1]);
+});
+
+test("a seed or a resync that carries an archived task keeps it off the store", async () => {
+  const { memory, store, nav } = setup({ tasks: [makeTask(), makeTask({ id: "t-gone", status: "done", archivedAt: 1 })] });
+  assert.deepEqual(store.tasks.map((t) => t.id), ["t1"]);
+  memory.replaceTasks([makeTask(), makeTask({ id: "t-gone", status: "done", archivedAt: 1 })]);
+  memory.status(FeedStatus.RESYNCED);
+  await flush();
+  assert.deepEqual(store.tasks.map((t) => t.id), ["t1"]);
+  assert.ok(nav.instance);
 });

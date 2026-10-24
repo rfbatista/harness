@@ -376,8 +376,8 @@ var TaskChannelModule = fx.Module("taskchannel",
 // newTaskChannelService builds the channel and points the orchestration and
 // planning at it: sessions and tickets leave them decorated with their role
 // fields, status moves are recorded and announced, and the orchestration's
-// role-aware brief asks it for roles.
-func newTaskChannelService(db *gorm.DB, sessions ports.SessionRepository, plan *planning.Service, orch *orchestration.Service, art *artifacts.Service, cat catalog.Catalog) *taskchannel.Service {
+// role-aware brief asks it for roles. Tickets also carry their merge state.
+func newTaskChannelService(db *gorm.DB, sessions ports.SessionRepository, plan *planning.Service, orch *orchestration.Service, art *artifacts.Service, cat catalog.Catalog, merges *workspaces.MergeStates) *taskchannel.Service {
 	svc := taskchannel.New(sessions, plan, taskchannel.Repositories{
 		Messages: sqlite.NewTaskMessageRepository(db),
 		Reviews:  sqlite.NewReviewRequestRepository(db),
@@ -386,7 +386,9 @@ func newTaskChannelService(db *gorm.DB, sessions ports.SessionRepository, plan *
 	svc.Delivery, svc.Announcer, svc.Feed, svc.Artifacts, svc.Agents = orch, orch, orch, art, cat.Agents
 	svc.Subscribe(cat.Bus)
 	orch.Roles, orch.Decorator = svc, svc
-	plan.Decorator, plan.StatusHistory = svc, sqlite.NewTaskStatusChangeRepository(db) // plan.Events is the bus already
+	plan.Decorator = ports.TicketDecorators{svc, merges}
+	plan.MergeRefresher = merges
+	plan.StatusHistory = sqlite.NewTaskStatusChangeRepository(db) // plan.Events is the bus already
 	return svc
 }
 
@@ -839,6 +841,7 @@ var WorkspacesModule = fx.Module("workspaces",
 		newPullRequestsService,
 		newMergesService,
 		newCodeBrowser,
+		newMergeStates,
 	),
 	fx.Invoke(registerCodeWatcher),
 )
@@ -854,9 +857,9 @@ func newCodeBrowser(ws ports.WorkspaceRepository, repos ports.RepositoryReposito
 
 // registerCodeWatcher announces code_changed on the orchestration's project
 // feed while a workspace's session runs and someone follows its project's
-// feed, polling from start to stop.
-func registerCodeWatcher(lc fx.Lifecycle, sessions ports.SessionRepository, ws ports.WorkspaceRepository, git ports.GitCode, orch *orchestration.Service, cat catalog.Catalog) {
-	w := workspaces.NewCodeWatcher(workspaces.CodeWatcherDeps{Sessions: sessions, Workspaces: ws, Git: git, Feed: orch})
+// feed, polling from start to stop. The merge states hear each change too.
+func registerCodeWatcher(lc fx.Lifecycle, sessions ports.SessionRepository, ws ports.WorkspaceRepository, git ports.GitCode, orch *orchestration.Service, merges *workspaces.MergeStates, cat catalog.Catalog) {
+	w := workspaces.NewCodeWatcher(workspaces.CodeWatcherDeps{Sessions: sessions, Workspaces: ws, Git: git, Feed: changeSinks{orch, merges}})
 	w.Subscribe(cat.Bus)
 	orch.ObserveFeedFollowers(w)
 	lc.Append(fx.Hook{
@@ -869,6 +872,21 @@ func registerCodeWatcher(lc fx.Lifecycle, sessions ports.SessionRepository, ws p
 			return nil
 		},
 	})
+}
+
+// newMergeStates reads how much of each review or done task's code landed
+// in its repository's default branch, announcing a task through planning when
+// its merge state changes, and stops its background refreshes on shutdown.
+func newMergeStates(lc fx.Lifecycle, cfg Config, sessions ports.SessionRepository, ws ports.WorkspaceRepository, repos ports.RepositoryRepository, tickets ports.TicketRepository, plan *planning.Service) *workspaces.MergeStates {
+	svc := workspaces.NewMergeStates(workspaces.MergeStateDeps{
+		Sessions: sessions, Workspaces: ws, Repositories: repos, Git: gitcli.NewBranchMerges(cfg.gitOptions()...),
+		Tickets: tickets, Announcer: plan,
+	})
+	lc.Append(fx.Hook{OnStop: func(context.Context) error {
+		svc.Close()
+		return nil
+	}})
+	return svc
 }
 
 func newWorkspacesService(
@@ -895,8 +913,8 @@ func WithCodeHost(host ports.CodeHost) fx.Option {
 
 // newPullRequestsService opens workspaces' branches as pull requests with
 // the stored git credentials only. It announces on the orchestration's
-// project feed, reads the task of a workspace's session from planning for the
-// suggested title and body, drops a deleted project's records, and stops its
+// project feed and to the merge states, reads the task of a workspace's
+// session from planning for the suggested title and body, drops a deleted project's records, and stops its
 // background host lookups on shutdown.
 func newPullRequestsService(
 	lc fx.Lifecycle,
@@ -909,12 +927,13 @@ func newPullRequestsService(
 	sessions ports.SessionRepository,
 	plan *planning.Service,
 	orch *orchestration.Service,
+	merges *workspaces.MergeStates,
 	cat catalog.Catalog,
 	creds *gitcredentials.Service,
 ) *workspaces.PullRequests {
 	svc := workspaces.NewPullRequests(workspaces.PullRequestDeps{
 		Workspaces: ws, Repositories: repos, History: history, Git: git, Host: host, Store: store,
-		Sessions: sessions, Tickets: plan, Feed: orch, Auth: creds,
+		Sessions: sessions, Tickets: plan, Feed: changeSinks{orch, merges}, Auth: creds,
 	})
 	svc.Subscribe(cat.Bus)
 	lc.Append(fx.Hook{OnStop: func(context.Context) error {

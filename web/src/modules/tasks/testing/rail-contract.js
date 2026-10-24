@@ -33,7 +33,14 @@ export function railGatewayContract(name, makeSubject) {
 
   contract("decodes the seed the rail embeds", () => {
     const subject = makeSubject(world());
-    assert.deepEqual(subject.gateway.decodeSeed(subject.seed), { projectId: "p1", sessions: [session("a", "t1", "running")], tasks: [makeTask()] });
+    assert.deepEqual(subject.gateway.decodeSeed(subject.seed), { projectId: "p1", sessions: [session("a", "t1", "running")], tasks: [makeTask()], archivedCount: 0 });
+    assert.equal(subject.gateway.decodeSeed({ ...subject.seed, archived_count: 37 }).archivedCount, 37);
+  });
+
+  contract("lists the project's archived tasks, newest archived first", async () => {
+    const archived = [makeTask({ id: "old", status: "done", archivedAt: Date.parse("2026-10-18T10:00:00Z") }), makeTask({ id: "new", status: "done", archivedAt: Date.parse("2026-10-19T10:00:00Z") })];
+    const { gateway } = makeSubject({ ...world(), archived });
+    assert.deepEqual((await gateway.listArchived("p1")).map((t) => t.id), ["new", "old"]);
   });
 
   contract("a seed task it cannot read is left out; the rest still decode (the server may know a status this client does not)", () => {

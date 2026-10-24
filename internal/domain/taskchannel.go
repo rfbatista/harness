@@ -247,6 +247,9 @@ type StatusChanger string
 const (
 	ChangedBySession StatusChanger = "session"
 	ChangedByPerson  StatusChanger = "person"
+	// ChangedByArchitect is a move by the session that was the task's
+	// architect when it moved it.
+	ChangedByArchitect StatusChanger = "architect"
 )
 
 // MaxStatusReasonLen caps the reason given with a status change.

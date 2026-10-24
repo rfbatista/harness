@@ -575,6 +575,60 @@ func TestTickets_DeleteIsPublished(t *testing.T) {
 	}
 }
 
+// A task carries its last move and the time it entered its status, read from
+// the status history: the person's move names no session, a task never moved
+// has no last move and has been in its status since it was created, and the
+// ticket announced after a move already carries the new last move.
+func TestTickets_CarryTheirLastMoveAndStatusSince(t *testing.T) {
+	db, err := sqlite.Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	projects := sqlite.NewProjectRepository(db)
+	p, _ := projects.Create("proj", "/tmp/proj")
+	svc := planning.NewService(sqlite.NewTicketRepository(db), sqlite.NewDocumentRepository(db), projects)
+	rec := &recorder{}
+	svc.StatusHistory, svc.Announcer = sqlite.NewTaskStatusChangeRepository(db), rec
+	ctx := context.Background()
+
+	still, _ := svc.CreateTicket(ctx, p.ID, "Never moved", "", domain.TicketStatusTodo, "")
+	tk, _ := svc.CreateTicket(ctx, p.ID, "Ship it", "", domain.TicketStatusTodo, "")
+	before := time.Now().Add(-time.Millisecond)
+	moved, err := svc.PatchTicket(ctx, tk.ID, ports.TicketPatch{Status: statusp(domain.TicketStatusReview), StatusReason: "looks done"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	lm := moved.LastMove
+	if lm == nil || lm.Status != domain.TicketStatusReview || lm.By != domain.ChangedByPerson || lm.Reason != "looks done" ||
+		lm.SessionID != "" || lm.SessionLabel != "" || lm.At.Before(before) {
+		t.Fatalf("last move after the person's move: %+v", lm)
+	}
+	if !moved.StatusSince.Equal(lm.At) {
+		t.Errorf("status_since %v, want the move's time %v", moved.StatusSince, lm.At)
+	}
+	announced := rec.all()
+	last := announced[len(announced)-1].ticket
+	if last.ID != tk.ID || last.LastMove == nil || last.LastMove.Status != domain.TicketStatusReview || !last.StatusSince.Equal(lm.At) {
+		t.Errorf("announced after the move: %+v", last)
+	}
+
+	list, _ := svc.ListTickets(ctx, p.ID, ports.TicketFilter{})
+	byID := map[string]*domain.Ticket{}
+	for _, x := range list {
+		byID[x.ID] = x
+	}
+	if got := byID[tk.ID]; got.LastMove == nil || !got.LastMove.At.Equal(lm.At) || got.LastMove.Reason != "looks done" {
+		t.Errorf("listed moved task: %+v", got.LastMove)
+	}
+	if got := byID[still.ID]; got.LastMove != nil || !got.StatusSince.Equal(got.CreatedAt) {
+		t.Errorf("never-moved task: last move %+v, status_since %v, created_at %v", got.LastMove, got.StatusSince, got.CreatedAt)
+	}
+	if got, _ := svc.GetTicket(ctx, still.ID); got.LastMove != nil || !got.StatusSince.Equal(got.CreatedAt) {
+		t.Errorf("never-moved task read alone: %+v", got)
+	}
+}
+
 // A parent in another project is refused on create and on patch; the
 // conformance suite covers the other TICKET_PARENT_INVALID cases, which need
 // one project only.

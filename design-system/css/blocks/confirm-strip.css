@@ -1,0 +1,35 @@
+/*
+ * Confirm strip — an in-page confirmation under a column header or inside a
+ * row, never a modal: the board stays live behind it and focus has a home.
+ * <div class="confirm-strip" data-confirm="archive-all"><h3>Archive all 14 done tasks?</h3><p>…</p>
+ *   <div class="actions"><button class="button" data-variant="primary">Archive 14</button><button class="button">Cancel</button></div></div>
+ * Exceptions: data-tone="danger" (a lossy step, or a failure: red title,
+ * red-tinted edge); .code (the error's code and next step, in mono).
+ */
+
+@layer blocks {
+  .confirm-strip {
+    display: grid;
+    gap: var(--space-xs);
+    margin: 0 var(--space-xs) var(--space-xs);
+    padding: var(--space-m);
+    border: var(--border-width) solid var(--color-line-strong);
+    border-radius: var(--radius-sm);
+    background: var(--color-raised);
+    font-size: var(--text-sm);
+    animation: popup-in var(--duration-quick) var(--ease-out);
+
+    & > h3 { font-size: var(--text-sm); font-weight: var(--weight-bold); }
+    & > p { color: var(--color-ink-muted); font-size: var(--text-xs); line-height: var(--leading-snug); }
+    & > .code { font-family: var(--font-mono); color: var(--color-ink-faint); }
+    & > .actions { display: flex; flex-wrap: wrap; gap: var(--space-xs); margin-block-start: var(--space-2xs); }
+
+    &[data-tone="danger"] {
+      border-color: color-mix(in oklch, var(--color-danger) 45%, var(--color-line-strong));
+
+      & > h3 { color: var(--color-danger); }
+    }
+
+    @media (prefers-reduced-motion: reduce) { animation: none; }
+  }
+}

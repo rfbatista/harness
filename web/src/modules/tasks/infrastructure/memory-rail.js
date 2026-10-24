@@ -9,21 +9,26 @@ import { toTasks } from "./dto.js";
  *   projectId?: string,
  *   sessions?: import("../domain/activity.js").RailSession[],
  *   tasks?: import("../domain/task.js").Task[],
+ *   archived?: import("../domain/task.js").Task[],
  * }} [world]
  */
-export function memoryRail({ projectId = "p1", sessions = [], tasks = [] } = {}) {
+export function memoryRail({ projectId = "p1", sessions = [], tasks = [], archived = [] } = {}) {
   let list = [...sessions];
   let taskList = [...tasks];
+  let archivedList = [...archived];
   const followers = new Set();
 
   /** @type {import("../domain/ports.js").RailGateway} */
   const gateway = {
-    decodeSeed: (seed) => ({ projectId: seed.project_id, sessions: seed.sessions.map((s) => ({ ...s })), tasks: toTasks(seed.tasks) }),
+    decodeSeed: (seed) => ({ projectId: seed.project_id, sessions: seed.sessions.map((s) => ({ ...s })), tasks: toTasks(seed.tasks), archivedCount: Number(seed.archived_count ?? 0) }),
     async listSessions() {
       return [...list];
     },
     async listTasks() {
       return [...taskList];
+    },
+    async listArchived() {
+      return [...archivedList].sort((a, b) => b.archivedAt - a.archivedAt);
     },
     follow(pid, onChange, onStatus) {
       const f = { pid, onChange, onStatus };
@@ -42,7 +47,8 @@ export function memoryRail({ projectId = "p1", sessions = [], tasks = [] } = {})
       } else if (change.kind === "task-upsert" || change.kind === "task-deleted") {
         const id = change.kind === "task-deleted" ? change.id : change.task.id;
         taskList = taskList.filter((t) => t.id !== id);
-        if (change.kind === "task-upsert") taskList.push(change.task);
+        archivedList = archivedList.filter((t) => t.id !== id);
+        if (change.kind === "task-upsert") (change.task.archivedAt ? archivedList : taskList).push(change.task);
       } else {
         list = list.filter((s) => s.id !== (change.kind === "deleted" ? change.id : change.session.id));
         if (change.kind === "upsert") list.push(change.session);

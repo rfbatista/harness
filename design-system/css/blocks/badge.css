@@ -1,4 +1,11 @@
-/* Badge — neutral metadata, counts, tags. Exception: data-tone. */
+/*
+ * Badge — neutral metadata, counts, tags. Exception: data-tone.
+ * .badge.merge[data-merge-state] is a task's merge badge: a glyph and a word,
+ * never colour alone. Merged stays neutral (Done goes quiet); partial and not
+ * merged take the attention tone; unknown is dashed. It holds every glyph
+ * (svg[data-glyph]) and shows the one its state names.
+ * .badge.reviews is the reviews waiting on the person, in the attention tone.
+ */
 
 @layer blocks {
   .badge {
@@ -26,5 +33,27 @@
     /* Amber text on a fill reads attention-strong (4.5:1 on panel and washes). */
     &[data-tone="attention"] { --_tone: var(--color-attention-strong); }
     &[data-tone="danger"] { --_tone: var(--color-danger); }
+  }
+
+  .badge > .glyph {
+    inline-size: 0.875rem;
+    block-size: 0.875rem;
+    flex-shrink: 0;
+  }
+
+  .badge:is(.merge[data-merge-state="partial"], .merge[data-merge-state="not_merged"], .reviews) {
+    --_tone: var(--color-attention-strong);
+
+    border-color: color-mix(in oklch, var(--_tone) 38%, transparent);
+    background: color-mix(in oklch, var(--_tone) 11%, transparent);
+  }
+
+  .badge.merge {
+    &[data-merge-state="merged"] > .glyph { color: var(--color-ink); }
+    &[data-merge-state="unknown"] { border-style: dashed; border-color: var(--color-line-control); }
+    &:not([data-merge-state="merged"]) > [data-glyph="merged"],
+    &:not([data-merge-state="partial"]) > [data-glyph="partial"],
+    &:not([data-merge-state="not_merged"]) > [data-glyph="not_merged"],
+    &:not([data-merge-state="unknown"]) > [data-glyph="unknown"] { display: none; }
   }
 }

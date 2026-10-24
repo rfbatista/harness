@@ -134,6 +134,14 @@ type world struct {
 	prs       ports.PullRequests
 	creds     ports.GitCredentials
 	usage     ports.UsageDashboard
+	archived  fakeArchivedCounts
+}
+
+// fakeArchivedCounts counts each project's archived tasks like planning.
+type fakeArchivedCounts map[string]int
+
+func (f fakeArchivedCounts) ArchivedTaskCount(_ context.Context, projectID string) (int, error) {
+	return f[projectID], nil
 }
 
 // fakeSummaries counts like the projects context: nil leaves /projects unserved.
@@ -181,6 +189,9 @@ func newTestHandler(t *testing.T, w world) http.Handler {
 	}
 	if w.usage != nil {
 		deps.Usage = w.usage
+	}
+	if w.archived != nil {
+		deps.ArchivedTasks = w.archived
 	}
 	return NewHandler(deps, builtAssets(t), fallback)
 }
@@ -305,10 +316,10 @@ func TestProjectPagePutsItsTasksOnTheRailAndTheProjectInThePicker(t *testing.T) 
 		`x-for="card in column.cards"`,
 		`class="[ card ]" data-task-id="t-feed"`,
 		`class="[ title ]" href="/projects/p1/tasks/t-feed">Add SSE feed</a>`,
-		// Moving a card: the task page's status select, on every card.
-		`<select data-size="sm" data-fit data-variant="ghost" data-task-id="t-feed" aria-label="Move Add SSE feed to" x-on:change="moveTo">`,
-		`<option value="in_progress" selected>In progress</option>`,
-		`x-bind:value="card.status" x-on:change="moveTo"`,
+		// Moving a card: its "Move to…" menu, on every card.
+		`aria-haspopup="menu" aria-expanded="false">Move to…`,
+		`x-data="menu" data-align="end" x-on:menu-select="menuSelect"`,
+		`role="menuitemradio" data-action="move"`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("project page is missing %q", want)
@@ -324,7 +335,7 @@ func TestProjectPagePutsItsTasksOnTheRailAndTheProjectInThePicker(t *testing.T) 
 	heads := []string{"Backlog", "Todo", "In progress", "Review", "Done"}
 	last := -1
 	for _, h := range heads {
-		i := strings.Index(body, `<span class="[ label ]">`+h+`</span><span class="[ badge ]">`)
+		i := strings.Index(body, `<h2>`+h+`</h2><span class="[ count ]">`)
 		if i < 0 || i < last {
 			t.Errorf("column %q missing or out of order (index %d after %d)", h, i, last)
 		}
@@ -824,5 +835,19 @@ func TestBuiltMeansTheAppBundles(t *testing.T) {
 	}
 	if a.URL("document.css") != "/static/document.css" {
 		t.Fatalf("an unbuilt stylesheet has a versioned url: %q", a.URL("document.css"))
+	}
+}
+
+// The project page and its shell carry the project's archived task count, for
+// the "Archived (N)" link.
+func TestProjectPageCarriesTheArchivedCount(t *testing.T) {
+	w := board()
+	w.archived = fakeArchivedCounts{"p1": 2, "p2": 5}
+	rec := get(t, newTestHandler(t, w), "/projects/p1")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("got %d:\n%s", rec.Code, rec.Body)
+	}
+	if body := rec.Body.String(); !strings.Contains(body, `"archived_count":2`) {
+		t.Errorf("the rail seed does not carry archived_count 2:\n%s", body)
 	}
 }

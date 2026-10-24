@@ -128,6 +128,12 @@ type Deps struct {
 	// RepositoryIndexes lists the repository indexes on the Token savers
 	// page; nil leaves that section out.
 	RepositoryIndexes ports.RepositoryIndexes
+	// ArchivedTasks counts the project's archived tasks for the project
+	// page and the shell (the "Archived (N)" link); nil counts none.
+	ArchivedTasks ports.ArchivedTaskCounter
+	// ArchivedList lists the project's archived tasks for the Archived view;
+	// nil lists none.
+	ArchivedList tasks.ArchivedLister
 	// Now defaults to time.Now.
 	Now func() time.Time
 }
@@ -164,7 +170,7 @@ func NewHandler(deps Deps, assets *Assets, fallback http.Handler) http.Handler {
 		Projects: deps.Projects, Tasks: deps.Tasks, Sessions: deps.Sessions,
 		Agents: deps.Agents, Repositories: deps.Repositories, Docs: deps.Documents, Artifacts: deps.Artifacts, PullRequests: deps.PullRequests,
 		Resources: deps.Resources, Comments: deps.Comments, Code: deps.Code, Usage: deps.Usage, TokenSavers: deps.TokenSavers,
-		Layout: s.layout, Render: render, Now: deps.Now,
+		ArchivedTasks: deps.ArchivedList, Layout: s.layout, Render: render, Now: deps.Now,
 	}
 	if deps.Workspaces != nil {
 		taskPages.Workspaces = deps.Workspaces
@@ -243,6 +249,7 @@ func NewHandler(deps Deps, assets *Assets, fallback http.Handler) http.Handler {
 	}
 	mux.Handle("GET /projects/{project}/design", s.page(taskPages.ProjectDesign))
 	mux.Handle("GET /projects/{project}/reviews", s.page(taskPages.Reviews))
+	mux.Handle("GET /projects/{project}/archived", s.page(taskPages.Archived))
 	if deps.Usage != nil {
 		usagePage := usage.Handler{Projects: deps.Projects, Usage: deps.Usage, Layout: s.layout, Render: render}
 		mux.Handle("GET /projects/{project}/usage", s.page(usagePage.Page))
@@ -326,6 +333,11 @@ func (s *server) layout(ctx context.Context, title, projectID, taskID string) (s
 		return shell.Frame{}, err
 	}
 	frame.Rail = tasks.BuildRail(projectID, list, live, taskID, shell.CollapsedFrom(ctx))
+	if s.deps.ArchivedTasks != nil {
+		if frame.Rail.Seed.ArchivedCount, err = s.deps.ArchivedTasks.ArchivedTaskCount(ctx, projectID); err != nil {
+			return shell.Frame{}, err
+		}
+	}
 	frame.Rail.BoardHref = tasks.BoardHref(projectID)
 	if s.deps.Code != nil {
 		frame.Rail.CodeHref = code.IndexHref(projectID)

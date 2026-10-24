@@ -114,7 +114,8 @@ func (s *Service) Create(repositoryID, name, branch, baseRef string) (*domain.Wo
 	}
 	path := filepath.Join(s.root(), repoSlug, slug)
 
-	if err := s.worktrees.Add(repo.RootDir, path, branch, baseRef); err != nil {
+	baseSHA, err := s.worktrees.Add(repo.RootDir, path, branch, baseRef)
+	if err != nil {
 		if errors.Is(err, ports.ErrBranchExists) {
 			return nil, &domain.StructuredError{Code: "BRANCH_EXISTS", Message: "branch " + branch + " already exists"}
 		}
@@ -128,7 +129,7 @@ func (s *Service) Create(repositoryID, name, branch, baseRef string) (*domain.Wo
 		_ = s.worktrees.Remove(repo.RootDir, path)
 		return nil, &domain.StructuredError{Code: "ENV_FILE_WRITE_FAILED", Message: "writing the repository's env files into the worktree failed: " + err.Error()}
 	}
-	ws, err := s.workspaces.Create(domain.Workspace{RepositoryID: repositoryID, Name: slug, Branch: branch, Path: path, BaseRef: baseRef})
+	ws, err := s.workspaces.Create(domain.Workspace{RepositoryID: repositoryID, Name: slug, Branch: branch, Path: path, BaseRef: baseRef, BaseSHA: baseSHA})
 	if err != nil {
 		_ = s.worktrees.Remove(repo.RootDir, path)
 		return nil, err

@@ -54,7 +54,7 @@ func TestWorktreeManager_AddNewBranch(t *testing.T) {
 	w := NewWorktreeManager()
 	path := filepath.Join(t.TempDir(), "ws", "feature-x")
 
-	if err := w.Add(repo, path, "feature-x", ""); err != nil {
+	if _, err := w.Add(repo, path, "feature-x", ""); err != nil {
 		t.Fatal(err)
 	}
 	// A linked worktree has a .git *file* pointing at the main repository.
@@ -77,7 +77,7 @@ func TestWorktreeManager_AddFromBaseBranch(t *testing.T) {
 
 	w := NewWorktreeManager()
 	path := filepath.Join(t.TempDir(), "ws", "feature-y")
-	if err := w.Add(repo, path, "feature-y", "base"); err != nil {
+	if _, err := w.Add(repo, path, "feature-y", "base"); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(filepath.Join(path, "BASE.md")); err != nil {
@@ -93,7 +93,7 @@ func TestWorktreeManager_AddFromRemoteRef(t *testing.T) {
 
 	w := NewWorktreeManager()
 	path := filepath.Join(t.TempDir(), "ws", "feature-z")
-	if err := w.Add(repo, path, "feature-z", "origin/main"); err != nil {
+	if _, err := w.Add(repo, path, "feature-z", "origin/main"); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(filepath.Join(path, "README.md")); err != nil {
@@ -107,7 +107,7 @@ func TestWorktreeManager_AddExistingBranchFails(t *testing.T) {
 
 	w := NewWorktreeManager()
 	path := filepath.Join(t.TempDir(), "ws", "spare")
-	err := w.Add(repo, path, "spare", "main")
+	_, err := w.Add(repo, path, "spare", "main")
 	if !errors.Is(err, ports.ErrBranchExists) {
 		t.Fatalf("Add on an existing branch = %v, want ports.ErrBranchExists", err)
 	}
@@ -118,7 +118,7 @@ func TestWorktreeManager_Remove(t *testing.T) {
 	w := NewWorktreeManager()
 	path := filepath.Join(t.TempDir(), "ws", "gone")
 
-	if err := w.Add(repo, path, "gone", ""); err != nil {
+	if _, err := w.Add(repo, path, "gone", ""); err != nil {
 		t.Fatal(err)
 	}
 	if err := w.Remove(repo, path); err != nil {
@@ -134,7 +134,7 @@ func TestWorktreeManager_RemoveToleratesOutOfBandDeletedDirectory(t *testing.T) 
 	w := NewWorktreeManager()
 	path := filepath.Join(t.TempDir(), "ws", "vanished")
 
-	if err := w.Add(repo, path, "vanished", ""); err != nil {
+	if _, err := w.Add(repo, path, "vanished", ""); err != nil {
 		t.Fatal(err)
 	}
 
@@ -155,7 +155,7 @@ func TestWorktreeManager_RemoveToleratesOutOfBandDeletedDirectory(t *testing.T) 
 
 	// The stale registration must be gone too: adding a new worktree with a
 	// different branch at the same path should succeed cleanly.
-	if err := w.Add(repo, path, "vanished-again", ""); err != nil {
+	if _, err := w.Add(repo, path, "vanished-again", ""); err != nil {
 		t.Fatalf("Add at the same path should succeed after prune, got: %v", err)
 	}
 }
@@ -169,7 +169,7 @@ func TestWorktreeManager_AddRejectsOptionLikeBaseRef(t *testing.T) {
 	w := NewWorktreeManager()
 	path := filepath.Join(t.TempDir(), "ws", "injected")
 
-	err := w.Add(repo, path, "injected", "--lock")
+	_, err := w.Add(repo, path, "injected", "--lock")
 	if err == nil {
 		t.Fatal("expected an error for an option-shaped baseRef")
 	}
@@ -200,7 +200,7 @@ func TestWorktreeManager_DeleteBranch(t *testing.T) {
 
 func TestWorktreeManager_AddErrorIncludesStderr(t *testing.T) {
 	w := NewWorktreeManager()
-	err := w.Add(t.TempDir(), filepath.Join(t.TempDir(), "x"), "b", "")
+	_, err := w.Add(t.TempDir(), filepath.Join(t.TempDir(), "x"), "b", "")
 	if err == nil {
 		t.Fatal("expected error adding worktree in a non-git directory")
 	}

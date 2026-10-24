@@ -4,6 +4,7 @@
 // live copy takes over without a visible change.
 
 import { RAIL_ORDER } from "./board.js";
+import { mergeBadge } from "./card.js";
 import { STATUSES } from "./task.js";
 
 /** How many done tasks show before "Show N more"; the BFF's DoneCap. */
@@ -27,6 +28,22 @@ const QUIET = Object.freeze({ live: 0, attention: false });
 
 /** A session waits on the person, or a review request does. */
 export const needsYou = (task, activity = QUIET) => activity.attention || task.pendingReviews > 0;
+
+/**
+ * A row's one meta item, the first that applies: the reviews badge,
+ * "waiting", "N live", then on Review and Done the merge glyph and word;
+ * kind is "" when nothing does. The rail shows no last move or age.
+ * @param {Task} task
+ * @param {Activity} [activity]
+ * @returns {{ kind: "reviews" | "waiting" | "live" | "merge" | "", merge: ReturnType<typeof mergeBadge> }}
+ */
+export function railMeta(task, activity = QUIET) {
+  if (task.pendingReviews > 0) return { kind: "reviews", merge: null };
+  if (activity.attention) return { kind: "waiting", merge: null };
+  if (activity.live > 0) return { kind: "live", merge: null };
+  const merge = mergeBadge(task);
+  return { kind: merge ? "merge" : "", merge };
+}
 
 /** Lower case, without accents: how the filter compares. */
 export const normalize = (s) => s.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();

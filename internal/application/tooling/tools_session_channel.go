@@ -157,9 +157,9 @@ func sessionChannelTools(planningSvc ports.Planning, sessions ports.SessionRepos
 			Name: "request_user_review",
 			Description: "Architect only. Ask the person to review something: a plan, a branch, a document, an artifact. " +
 				"It shows in the web UI until they approve or request changes; their answer reaches you as a turn with " +
-				"review_response in the header. Opening a review does not change the task status: move it yourself with " +
-				"update_task_status. " + taskIDAdvice + " The review then opens on that task, and only its own documents " +
-				"attach: name other tasks (id and title) in body.",
+				"review_response in the header. Opening a review does not change the task status: move it to review yourself " +
+				"with update_task_status; the person moves it to done after checking it. " + taskIDAdvice + " The review then " +
+				"opens on that task, and only its own documents attach: name other tasks (id and title) in body.",
 			InputSchema: schemaFromJSON(`{"type":"object","required":["subject","body"],"properties":{` +
 				taskIDSchema + `,` +
 				`"subject":{"type":"string","description":"What to review, in a few words."},` +

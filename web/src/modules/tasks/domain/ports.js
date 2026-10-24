@@ -18,6 +18,17 @@
  *           TICKET_PARENT_INVALID.
  * @property {(id: string, status: TaskStatus) => Promise<Task>} moveTask
  *           A status-only update: what the board sends when a card is moved.
+ * @property {(id: string) => Promise<Task>} archiveTask
+ *           Takes a done task off the board, keeping everything it has; an
+ *           archived one again changes nothing. Rejects with TASK_NOT_DONE or
+ *           TICKET_NOT_FOUND. An archived task's status cannot change
+ *           (TASK_ARCHIVED) until it is restored.
+ * @property {(projectId: string) => Promise<{ archived: number, ids: string[] }>} archiveDoneTasks
+ *           Archives every done task of the project still on the board, at
+ *           once, and says which.
+ * @property {(id: string) => Promise<Task>} restoreTask
+ *           Puts an archived task back in Done; one on the board is a no-op.
+ *           Rejects with TICKET_NOT_FOUND.
  * @property {(id: string) => Promise<void>} deleteTask
  *           Rejects with TICKET_NOT_FOUND.
  * @property {(projectId: string, taskId: string) => Promise<{ total: number, live: number }>} countSessions
@@ -43,8 +54,10 @@
  * @typedef {RailChange | import("./board.js").TaskChange | import("./board.js").StatusChangeEvent} ProjectChange
  *
  * @typedef {object} RailGateway
- * @property {(seed: unknown) => { projectId: string, sessions: RailSession[], tasks: Task[] }} decodeSeed
+ * @property {(seed: unknown) => { projectId: string, sessions: RailSession[], tasks: Task[], archivedCount: number }} decodeSeed
  *           Reads the rail's embedded seed. Throws BAD_RESPONSE when malformed.
+ * @property {(projectId: string) => Promise<Task[]>} listArchived
+ *           The project's archived tasks, newest archived first.
  * @property {(projectId: string) => Promise<RailSession[]>} listSessions
  *           The project's sessions now: after the feed resyncs.
  * @property {(projectId: string) => Promise<Task[]>} listTasks

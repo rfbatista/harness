@@ -1,0 +1,124 @@
+package tasks
+
+import (
+	"operators-mcp/internal/adapter/in/web/components"
+	"operators-mcp/internal/adapter/in/web/shell"
+)
+
+// ArchivedPage is the project's Archived view (ADR 0014): a list, not a
+// board, since archived tasks have no status to move between. The server
+// paints the first rows inside [data-ssr]; tasksArchived renders the same
+// rows live from the seed, follows the feed and removes the server copy.
+templ ArchivedPage(f shell.Frame, projectID, projectName string, a Archived) {
+	@shell.AppShell(f) {
+		@templ.JSONScript("archived-seed", a.Seed)
+		<main id="main" class="[ frame ]" x-data="tasksArchived" data-seed="archived-seed" x-on:task-changed.window="taskChanged">
+			<header class="[ toolbar ]">
+				<a class="[ crumb ]" href={ templ.SafeURL("/projects/" + projectID) }>{ projectName } /</a>
+				<h1>Archived</h1>
+				<div class="[ actions ]">
+					<a class="[ button ]" data-variant="ghost" data-size="sm" href={ templ.SafeURL("/projects/" + projectID) }>Back to the board</a>
+				</div>
+			</header>
+			<p class="[ visually-hidden ]" role="status" aria-live="polite" x-text="announcement"></p>
+			<div data-scroll>
+				<div x-ignore data-ssr>
+					if len(a.Rows) == 0 {
+						@noArchived()
+					} else {
+						<p class="[ archived-summary ]">{ a.Summary() }</p>
+						<ul class="[ archived-list ]" data-archived-list>
+							for _, r := range a.Rows {
+								<li class="[ archived-row ]" data-task-id={ r.TaskID }>
+									<div class="[ what ]">
+										<a class="[ title ]" href={ templ.SafeURL(r.Href) }>{ r.Title }</a>
+										<p class="[ dates ]">
+											<span>{ r.Finished }</span>
+											<span>{ r.Archived }</span>
+											if r.Merge != nil {
+												<span class="[ badge merge ]" data-merge-state={ r.Merge.State }>
+													@mergeGlyphs()
+													{ r.Merge.Word }
+												</span>
+											}
+										</p>
+									</div>
+									<div class="[ actions ]">
+										<button type="button" class="[ button ]" data-size="sm">Restore</button>
+										<button type="button" class="[ button ]" data-variant="ghost" data-size="sm">Delete</button>
+									</div>
+								</li>
+							}
+						</ul>
+					}
+				</div>
+				<template x-if="ready">
+					@liveArchived()
+				</template>
+			</div>
+		</main>
+	}
+}
+
+// noArchived is the empty state: where archived tasks come from.
+templ noArchived() {
+	@components.Empty("No archived tasks.", "When Done fills up, archive tasks from a card's “Move to…” menu or with “Archive all”. They come here, and you can restore them any time.")
+}
+
+// liveArchived is the same list bound to tasksArchived's rows: a row asks
+// before deleting, in place, and collapses to a receipt once it is restored
+// or deleted.
+templ liveArchived() {
+	<div>
+		<template x-if="isEmpty">
+			@noArchived()
+		</template>
+		<p class="[ archived-summary ]" x-show="summary" x-text="summary"></p>
+		<ul class="[ archived-list ]" data-archived-list>
+			<template x-for="row in rows" x-bind:key="row.id">
+				<li class="[ archived-row ]" x-bind:data-task-id="row.id" x-bind:data-busy="row.busy" x-bind:data-receipt="row.receipt ? true : null">
+					<template x-if="row.receipt">
+						<p class="[ receipt ]">
+							@cardGlyph("archive")
+							<span x-text="row.receipt"></span>
+							<a x-show="row.restoredReceipt" x-bind:href="boardHref">Open on the board</a>
+						</p>
+					</template>
+					<template x-if="!row.receipt">
+						<div class="[ open ]">
+							<div class="[ what ]">
+								<a class="[ title ]" x-bind:href="row.href" x-text="row.title"></a>
+								<p class="[ dates ]">
+									<span x-text="row.finished"></span>
+									<span x-text="row.archived"></span>
+									<template x-if="row.hasMerge">
+										<span class="[ badge merge ]" x-bind:data-merge-state="row.mergeState">
+											@mergeGlyphs()
+											<span x-text="row.mergeWord"></span>
+										</span>
+									</template>
+								</p>
+							</div>
+							<div class="[ actions ]">
+								<span class="[ busy-note ]" x-show="row.busy" x-text="row.busyText"></span>
+								<button type="button" class="[ button ]" data-size="sm" data-restore x-show="!row.busy" x-on:click="restore">Restore</button>
+								<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" data-delete x-show="!row.busy" x-on:click="askDelete">Delete</button>
+							</div>
+							<div class="[ confirm-strip ]" data-confirm="delete" data-tone="danger" role="group" x-show="row.confirming" x-on:keydown.escape="cancelDelete">
+								<h3 x-text="row.confirmTitle"></h3>
+								<p>Its sessions' history, documents, comments and resources go too. This cannot be undone. Restore keeps everything.</p>
+								<div class="[ actions ]">
+									<button type="button" class="[ button ]" data-size="sm" data-cancel x-on:click="cancelDelete">Cancel</button>
+									<button type="button" class="[ button ]" data-variant="danger" data-size="sm" x-on:click="confirmDelete">Delete forever</button>
+								</div>
+							</div>
+							<template x-if="row.error">
+								<p class="[ row-error ]"><span x-text="row.error.message"></span><span class="[ code ]"><span x-text="row.error.code"></span> · <span x-text="row.error.next"></span></span></p>
+							</template>
+						</div>
+					</template>
+				</li>
+			</template>
+		</ul>
+	</div>
+}

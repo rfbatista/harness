@@ -1,4 +1,4 @@
-import { Codes } from "../../../../shared/domain/errors.js";
+import { Codes, StructuredError } from "../../../../shared/domain/errors.js";
 import { mount, seededElement } from "../../../../shared/testing/alpine.js";
 import { assert, file, test } from "../../../../shared/testing/test.js";
 import { memoryTasks } from "../../infrastructure/memory-gateway.js";
@@ -109,6 +109,36 @@ test("the picker does not follow the echo of the page's own move", () => {
   instance.follow("done");
   assert.equal(instance.task.status, "in_progress");
   instance.destroy();
+});
+
+test("a done task offers Archive; archiving it reloads the page, which then shows the archived banner", async () => {
+  const { instance, memory, reloads } = setup({ task: makeTask({ status: "done" }) });
+  assert.deepEqual([instance.canArchive, instance.isArchived], [true, false]);
+  await instance.archiveTask();
+  assert.ok(memory.tasks()[0].archivedAt > 0);
+  assert.equal(reloads(), 1);
+});
+
+test("a task that is not done offers no Archive", () => {
+  const { instance } = setup();
+  assert.equal(instance.canArchive, false);
+});
+
+test("an archived task says when it was archived and restores to Done", async () => {
+  const archivedAt = new Date(2026, 9, 18, 12).getTime();
+  const { instance, memory, reloads } = setup({ task: makeTask({ status: "done", archivedAt }) });
+  assert.deepEqual([instance.isArchived, instance.canArchive, instance.archivedWhen], [true, false, "Archived Oct 18."]);
+  await instance.restoreTask();
+  assert.deepEqual([memory.tasks()[0].archivedAt, reloads()], [0, 1]);
+});
+
+test("a refused archive shows the coded error and stays", async () => {
+  const { instance, memory, reloads } = setup({ task: makeTask({ status: "done" }) });
+  memory.gateway.archiveTask = async () => {
+    throw new StructuredError(Codes.TASK_NOT_DONE, "only a done task can be archived", 409);
+  };
+  await instance.archiveTask();
+  assert.deepEqual([instance.taskError.code, reloads(), instance.archiving], [Codes.TASK_NOT_DONE, 0, false]);
 });
 
 test("the description toggle shows only when the clamped text overflows, and says More or Less", () => {

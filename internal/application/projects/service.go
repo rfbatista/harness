@@ -337,6 +337,7 @@ func (s *Service) ListProjectSummaries(ctx context.Context) ([]ports.ProjectSumm
 			Project:             p,
 			RepositoryCount:     repos[p.ID],
 			OpenTaskCount:       t.OpenCount,
+			ArchivedCount:       t.ArchivedCount,
 			RunningSessionCount: se.LiveCount,
 			LastActivityAt:      newest(t.LastUpdatedAt, se.LastActivityAt),
 		})

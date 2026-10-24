@@ -427,7 +427,7 @@ func TestReviewInboxAndBoardFollowWhatWaitsOnThePerson(t *testing.T) {
 	}
 
 	// The board: the card's badge and the rail's count follow the ticket change.
-	badge := `(document.querySelector('.board .card[data-task-id=t1] .badge[data-tone=attention]')?.textContent ?? '')`
+	badge := `(document.querySelector('.board .card[data-task-id=t1] .badge.reviews')?.textContent ?? '').trim()`
 	railCount := `(document.querySelector('nav[aria-label="Project"] [x-text=reviewsCount]')?.textContent ?? '')`
 	var before, after, railAfter string
 	if err := chromedp.Run(ctx,

@@ -38,22 +38,30 @@ func NewWorktreeManager(opts ...Option) *WorktreeManager {
 // path and baseRef sit after a "--" so git's parse-options cannot reinterpret
 // either as a flag: without it, a baseRef like "--lock" would permute into an
 // option and silently lock the worktree instead of failing as an invalid ref.
-func (w *WorktreeManager) Add(repoRoot, path, branch, baseRef string) error {
+//
+// It answers the commit the new branch points at, read once the worktree
+// exists: a failure to read it leaves it empty rather than undoing the
+// worktree, since the commit is only a hint for the merge state.
+func (w *WorktreeManager) Add(repoRoot, path, branch, baseRef string) (string, error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return err
+		return "", err
 	}
 	exists, err := w.branchExists(repoRoot, branch)
 	if err != nil {
-		return err
+		return "", err
 	}
 	if exists {
-		return fmt.Errorf("%w: %s", ports.ErrBranchExists, branch)
+		return "", fmt.Errorf("%w: %s", ports.ErrBranchExists, branch)
 	}
 	args := []string{"worktree", "add", "-b", branch, "--", path}
 	if baseRef != "" {
 		args = append(args, baseRef)
 	}
-	return w.run(repoRoot, args...)
+	if err := w.run(repoRoot, args...); err != nil {
+		return "", err
+	}
+	sha, _ := w.d.gitOutput(context.Background(), repoRoot, "rev-parse", "--verify", "--end-of-options", "refs/heads/"+branch)
+	return strings.TrimSpace(sha), nil
 }
 
 // DeleteBranch force-deletes a local branch. Callers must only use this on a

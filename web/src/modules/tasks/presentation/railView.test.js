@@ -22,6 +22,15 @@ test("a row's meta is one item: the reviews badge, else waiting, else N live", (
   assert.deepEqual([review.reviewsText, review.lead, review.tail], ["1 review", ", ", " waiting on you"]);
 });
 
+test("a quiet Review or Done row shows the merge glyph and word, and its state hook only when there is one", () => {
+  const partial = toRow(makeTask({ status: "review", mergeState: { state: "partial", merged: 1, total: 2 } }), ctx());
+  assert.deepEqual([partial.hasMerge, partial.mergeState, partial.mergeText, partial.lead, partial.tail], [true, "partial", "1/2 merged", ", ", ""]);
+  const live = toRow(makeTask({ status: "done", mergeState: { state: "merged", merged: 1, total: 1 } }), ctx({ byTask: { t1: { live: 1, attention: false } } }));
+  assert.deepEqual([live.isLive, live.hasMerge, live.mergeState], [true, false, null]);
+  const none = toRow(makeTask({ status: "done", mergeState: { state: "none", merged: 0, total: 0 } }), ctx());
+  assert.deepEqual([none.hasMerge, none.mergeState, none.mergeText, none.lead], [false, null, "", ""]);
+});
+
 test("a row links its task, marks it current, fresh, signalled or peeking, and splits the title around the match", () => {
   const row = toRow(makeTask({ title: "Add SSE feed" }), ctx({ currentId: "t1", fresh: new Set(["t1"]), signal: new Set(["t1"]), focusedId: "t1", query: "sse" }));
   assert.deepEqual([row.href, row.current, row.fresh, row.signal, row.peek], ["/projects/p1/tasks/t1", "page", true, true, true]);

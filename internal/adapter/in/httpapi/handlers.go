@@ -48,6 +48,9 @@ type Services struct {
 	// files, images, audio, links and comments. Nil answers 503.
 	TaskResources ports.TaskResources
 	TaskComments  ports.TaskComments
+	// TaskArchive archives and restores done tasks and lists the archived
+	// ones: the person's alone, never a session's. Nil answers 503.
+	TaskArchive ports.TicketArchiver
 	// PullRequests opens workspaces' branches as pull requests; nil answers
 	// 503.
 	PullRequests ports.PullRequests
@@ -124,6 +127,7 @@ type Handler struct {
 	channel        ports.TaskChannelUI
 	resources      ports.TaskResources
 	comments       ports.TaskComments
+	archive        ports.TicketArchiver
 	pullRequests   ports.PullRequests
 	merges         ports.BranchMerger
 	notifications  ports.Notifications
@@ -171,6 +175,7 @@ func NewHandler(s Services) *Handler {
 		channel:        s.TaskChannel,
 		resources:      s.TaskResources,
 		comments:       s.TaskComments,
+		archive:        s.TaskArchive,
 		pullRequests:   s.PullRequests,
 		merges:         s.Merges,
 		notifications:  s.Notifications,

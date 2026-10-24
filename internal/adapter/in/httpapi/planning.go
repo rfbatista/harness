@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/labstack/echo/v4"
@@ -11,6 +12,10 @@ import (
 
 // --- Tickets ---
 
+var errArchiveOff = echo.NewHTTPError(http.StatusServiceUnavailable, "task archive not configured")
+
+// handleListTickets lists a project's tasks that are not archived, or with
+// archived=true only the archived ones, newest archived first.
 func (h *Handler) handleListTickets(c echo.Context) error {
 	projectID := c.QueryParam("project_id")
 	if projectID == "" {
@@ -18,12 +23,22 @@ func (h *Handler) handleListTickets(c echo.Context) error {
 	}
 	// parent_id narrows the list to one feature task's children; present but
 	// empty, to the top-level tasks; absent, every task of the project.
+	// archived=true lists only the archived tasks instead, newest first.
 	var filter ports.TicketFilter
 	if q := c.QueryParams(); q.Has("parent_id") {
 		parentID := q.Get("parent_id")
 		filter.ParentID = &parentID
 	}
-	tickets, err := h.planningSvc.ListTickets(c.Request().Context(), projectID, filter)
+	list := func(ctx context.Context, projectID string) ([]*domain.Ticket, error) {
+		return h.planningSvc.ListTickets(ctx, projectID, filter)
+	}
+	if c.QueryParam("archived") == "true" {
+		if h.archive == nil {
+			return errArchiveOff
+		}
+		list = h.archive.ListArchivedTickets
+	}
+	tickets, err := list(c.Request().Context(), projectID)
 	if err != nil {
 		return err
 	}
@@ -94,6 +109,59 @@ func (h *Handler) handleDeleteTicket(c echo.Context) error {
 		return err
 	}
 	return c.NoContent(http.StatusNoContent)
+}
+
+// handleArchiveTicket archives a done task; the person's route alone.
+func (h *Handler) handleArchiveTicket(c echo.Context) error {
+	return h.setArchived(c, true)
+}
+
+// handleRestoreTicket puts an archived task back on the board, still done.
+func (h *Handler) handleRestoreTicket(c echo.Context) error {
+	return h.setArchived(c, false)
+}
+
+func (h *Handler) setArchived(c echo.Context, archive bool) error {
+	if h.archive == nil {
+		return errArchiveOff
+	}
+	var in struct {
+		ID string `json:"id"`
+	}
+	if err := bindJSON(c, &in); err != nil {
+		return err
+	}
+	set := h.archive.RestoreTicket
+	if archive {
+		set = h.archive.ArchiveTicket
+	}
+	tk, err := set(c.Request().Context(), in.ID)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, map[string]any{"ticket": tk})
+}
+
+// handleArchiveDoneTickets clears the project's Done column: it archives
+// every done task still on the board and answers how many and which.
+func (h *Handler) handleArchiveDoneTickets(c echo.Context) error {
+	if h.archive == nil {
+		return errArchiveOff
+	}
+	var in struct {
+		ProjectID string `json:"project_id"`
+	}
+	if err := bindJSON(c, &in); err != nil {
+		return err
+	}
+	ids, err := h.archive.ArchiveDoneTickets(c.Request().Context(), in.ProjectID)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, struct {
+		Archived int      `json:"archived"`
+		IDs      []string `json:"ids"`
+	}{len(ids), ids})
 }
 
 // --- Documents ---

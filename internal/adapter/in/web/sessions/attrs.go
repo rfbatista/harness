@@ -90,6 +90,14 @@ func waitingLine(n int) string {
 	return strconv.Itoa(n) + " reviews wait on you"
 }
 
+// hiddenUnless paints an element hidden until the live page shows it.
+func hiddenUnless(shown bool) templ.Attributes {
+	if shown {
+		return templ.Attributes{}
+	}
+	return templ.Attributes{"hidden": true}
+}
+
 // shownIf hides an element the server knows is empty until Alpine shows it
 // (x-show sets display itself, so the hidden attribute would fight it).
 func shownIf(shown bool) templ.Attributes {

@@ -243,6 +243,36 @@ func TestTaskHandler_UpdateTaskStatus(t *testing.T) {
 	}
 }
 
+// A session asking for done is refused with the words the session contract
+// gives, and its task stays where it was.
+func TestTaskHandler_DoneIsThePersons(t *testing.T) {
+	baseURL, _, _ := newTaskServer(t)
+	c := dial(t, baseURL+PathPrefix+"sess-1")
+	ctx := context.Background()
+
+	var call mcplib.CallToolRequest
+	call.Params.Name = "update_task_status"
+	call.Params.Arguments = map[string]any{"status": "done", "reason": "finished"}
+	res, err := c.CallTool(ctx, call)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "Only the person moves a task to done. Move it to review when the work is ready for them to check."
+	if !res.IsError || !strings.Contains(textOf(t, res), want) {
+		t.Fatalf("update_task_status to done: want the refusal %q, got %s", want, textOf(t, res))
+	}
+
+	call = mcplib.CallToolRequest{}
+	call.Params.Name = "get_task"
+	res, err = c.CallTool(ctx, call)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if txt := textOf(t, res); !strings.Contains(txt, `"status":"todo"`) {
+		t.Fatalf("the task moved: %s", txt)
+	}
+}
+
 // refusingStarter starts peers the way orchestration does behind the gate:
 // with the agent credential missing, nothing starts.
 type refusingStarter struct{ gate *agentready.Gate }

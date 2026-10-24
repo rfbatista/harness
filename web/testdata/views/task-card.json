@@ -1,0 +1,35 @@
+{
+  "$comment": "How a task card on the board reads its signals: the time in column (and the stale flag), the last move line, and the merge badge. First painted by internal/adapter/in/web/tasks (board.go) and then by web/src/modules/tasks/domain/card.js. Read by both sides' tests (tasks/board_test.go, domain/card.test.js). Times are UTC at noon so a local time zone does not move the date.",
+  "now": "2026-10-19T12:00:00Z",
+  "ages": [
+    { "status": "todo", "since": "2026-10-19T11:59:30Z", "age": "now", "stale": false },
+    { "status": "todo", "since": "2026-10-19T11:56:00Z", "age": "4m", "stale": false },
+    { "status": "todo", "since": "2026-10-19T10:00:00Z", "age": "2h", "stale": false },
+    { "status": "todo", "since": "2026-10-18T10:00:00Z", "age": "yesterday", "stale": false },
+    { "status": "todo", "since": "2026-10-14T12:00:00Z", "age": "5d", "stale": false },
+    { "status": "backlog", "since": "2026-09-20T12:00:00Z", "age": "29d", "stale": false },
+    { "status": "backlog", "since": "2026-09-19T12:00:00Z", "age": "Sep 19", "stale": false },
+    { "status": "backlog", "since": "2025-09-01T12:00:00Z", "age": "Sep 1, 2025", "stale": false },
+    { "status": "in_progress", "since": "2026-10-16T11:00:00Z", "age": "3d · stale", "stale": true },
+    { "status": "in_progress", "since": "2026-10-16T13:00:00Z", "age": "2d", "stale": false },
+    { "status": "review", "since": "2026-10-17T11:00:00Z", "age": "2d · stale", "stale": true },
+    { "status": "review", "since": "2026-10-17T13:00:00Z", "age": "yesterday", "stale": false },
+    { "status": "done", "since": "2026-10-09T12:00:00Z", "age": "10d", "stale": false }
+  ],
+  "lastMoves": [
+    { "last_move": null, "lead": "Created by", "who": "you", "reason": "" },
+    { "last_move": { "status": "todo", "by": "person", "at": "2026-10-19T09:12:00Z" }, "lead": "Moved here by", "who": "you", "reason": "" },
+    { "last_move": { "status": "in_progress", "by": "architect", "session_id": "s-arch", "session_label": "designer", "reason": "Delegated to go-developer.", "at": "2026-10-19T09:12:00Z" }, "lead": "Moved here by", "who": "architect", "reason": "Delegated to go-developer." },
+    { "last_move": { "status": "review", "by": "session", "session_id": "s-go", "session_label": "go-developer", "reason": "All tests pass.", "at": "2026-10-19T09:12:00Z" }, "lead": "Moved here by", "who": "go-developer", "reason": "All tests pass." },
+    { "last_move": { "status": "review", "by": "session", "session_id": "s-x", "at": "2026-10-19T09:12:00Z" }, "lead": "Moved here by", "who": "a session", "reason": "" }
+  ],
+  "merges": [
+    { "status": "review", "merge_state": { "state": "merged", "merged": 1, "total": 1 }, "badge": { "state": "merged", "word": "Merged", "rail": "merged" } },
+    { "status": "review", "merge_state": { "state": "partial", "merged": 1, "total": 2 }, "badge": { "state": "partial", "word": "1 of 2 merged", "rail": "1/2 merged" } },
+    { "status": "done", "merge_state": { "state": "not_merged", "merged": 0, "total": 3 }, "badge": { "state": "not_merged", "word": "Not merged", "rail": "not merged" } },
+    { "status": "done", "merge_state": { "state": "unknown", "merged": 0, "total": 2 }, "badge": { "state": "unknown", "word": "Unknown", "rail": "unknown" } },
+    { "status": "done", "merge_state": { "state": "none", "merged": 0, "total": 0 }, "badge": null },
+    { "status": "review", "merge_state": null, "badge": null },
+    { "status": "in_progress", "merge_state": { "state": "merged", "merged": 1, "total": 1 }, "badge": null }
+  ]
+}

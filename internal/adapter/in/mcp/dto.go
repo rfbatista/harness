@@ -418,6 +418,7 @@ type ProjectSummaryDTO struct {
 	Project             *ProjectDTO `json:"project"`
 	RepositoryCount     int         `json:"repository_count"`
 	OpenTaskCount       int         `json:"open_task_count"`
+	ArchivedCount       int         `json:"archived_count"`
 	RunningSessionCount int         `json:"running_session_count"`
 	// LastActivityAt is RFC 3339, null when the project has no activity.
 	LastActivityAt *time.Time `json:"last_activity_at"`
@@ -436,6 +437,7 @@ func ProjectSummariesToDTO(list []ports.ProjectSummary) []ProjectSummaryDTO {
 			Project:             ProjectToDTO(s.Project),
 			RepositoryCount:     s.RepositoryCount,
 			OpenTaskCount:       s.OpenTaskCount,
+			ArchivedCount:       s.ArchivedCount,
 			RunningSessionCount: s.RunningSessionCount,
 			LastActivityAt:      s.LastActivityAt,
 		})

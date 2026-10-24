@@ -21,7 +21,7 @@ func newPlanningHandler(t *testing.T) (*Handler, string) {
 	projects := sqlite.NewProjectRepository(db)
 	p, _ := projects.Create("proj", "/tmp/proj")
 	svc := planning.NewService(sqlite.NewTicketRepository(db), sqlite.NewDocumentRepository(db), projects)
-	return &Handler{planningSvc: svc}, p.ID
+	return &Handler{planningSvc: svc, archive: svc}, p.ID
 }
 
 func TestHTTP_CreateAndListTickets(t *testing.T) {

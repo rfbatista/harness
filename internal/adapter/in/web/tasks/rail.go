@@ -41,6 +41,11 @@ func NewTaskHref(projectID string) string {
 	return "/projects/" + url.PathEscape(projectID) + "/tasks/new"
 }
 
+// ArchivedHref is the project's Archived view.
+func ArchivedHref(projectID string) string {
+	return "/projects/" + url.PathEscape(projectID) + "/archived"
+}
+
 // Href is a task's page.
 func Href(projectID, taskID string) string {
 	return "/projects/" + url.PathEscape(projectID) + "/tasks/" + url.PathEscape(taskID)
@@ -90,8 +95,9 @@ func seed(projectID string, tasks []*domain.Ticket, list []*domain.Session) *she
 // task are not on the rail. Every known status has its group, empty or not;
 // collapsed holds the groups the person folded (shell.ParseCollapsed). The
 // seed is always there, so the browser follows the project even before its
-// first task.
+// first task. Archived tasks are neither on the rail nor in its seed.
 func BuildRail(projectID string, tasks []*domain.Ticket, list []*domain.Session, currentTaskID string, collapsed map[string]bool) shell.Rail {
+	tasks = unarchived(tasks)
 	rail := shell.Rail{Seed: seed(projectID, tasks, list), Current: currentTaskID}
 	if len(tasks) == 0 {
 		rail.Empty = "No tasks yet."
@@ -165,7 +171,7 @@ func statusLabel(st domain.TicketStatus) string {
 // card is a task as the rail links it and the board draws it.
 func card(projectID string, t *domain.Ticket, byTask map[string]activity, currentTaskID string) shell.Link {
 	a := byTask[t.ID]
-	return shell.Link{
+	l := shell.Link{
 		TaskID:    t.ID,
 		Label:     t.Title,
 		Href:      Href(projectID, t.ID),
@@ -174,6 +180,10 @@ func card(projectID string, t *domain.Ticket, byTask map[string]activity, curren
 		Attention: a.attention || t.PendingReviews > 0,
 		Reviews:   t.PendingReviews,
 	}
+	if m := mergeBadge(string(t.Status), cardFactsOf(t).merge); m != nil {
+		l.Merge, l.MergeText = m.State, m.Rail
+	}
+	return l
 }
 
 func known(s domain.TicketStatus) bool {

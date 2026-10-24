@@ -15,6 +15,14 @@
  * @property {string} architectSessionId  the task's architect session; "" when it has none
  * @property {number} pendingReviews      review requests the architect raised that wait on the person
  * @property {number} updatedAt           when it last changed, ms since the epoch; 0 when unknown (Done is ordered by it)
+ * @property {number} createdAt           ms since the epoch; 0 when unknown
+ * @property {number} statusSince         when it entered its status, ms since the epoch; 0 when unknown (the board's order)
+ * @property {number} archivedAt          when it was archived, ms since the epoch; 0 when it is not archived
+ * @property {LastMove | null} lastMove   its latest status move; null when it never moved
+ * @property {MergeState | null} mergeState  whether its branches landed; Review and Done only, null otherwise
+ *
+ * @typedef {{ status: TaskStatus, by: "person"|"architect"|"session", sessionId: string, sessionLabel: string, reason: string, at: number }} LastMove
+ * @typedef {{ state: "merged"|"partial"|"not_merged"|"unknown"|"none", merged: number, total: number }} MergeState
  */
 
 /** The statuses in board order, with how they read. */
