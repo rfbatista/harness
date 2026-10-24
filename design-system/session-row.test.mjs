@@ -68,8 +68,14 @@ test("the detail's vertical gap is a border, so a clipped third line cannot show
 
 test("a check with no lead or quote has no separator", () => {
   assert.match(variant, /\.check/);
-  assert.match(variant, /\.check \{[^}]*&:not\(:first-child\)::before \{ content: "· "/);
-  assert.doesNotMatch(variant, /\.check::before/);
+  assert.match(variant, /:is\(\.lead, \.quote\) ~ \.check::before \{ content: "· "/);
+  assert.doesNotMatch(variant, /\.check \{[^}]*::before/);
+});
+
+test("the variant's structural selectors do not depend on <template> siblings", () => {
+  // Alpine keeps <template> elements (x-if, x-for) among the real children.
+  const css = variant.replace(/\/\*[\s\S]*?\*\//g, "");
+  assert.doesNotMatch(css, /:(first|last|only)-(child|of-type)|:nth-/);
 });
 
 test("data-dot-only reserves no width", () => {

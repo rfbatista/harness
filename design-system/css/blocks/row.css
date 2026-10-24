@@ -256,13 +256,16 @@
       font-weight: var(--weight-medium);
     }
 
-    /* The separator only follows a lead or a quote: a lone check has nothing to separate from. */
+    /*
+     * The separator only follows a rendered lead or quote: a lone check has
+     * nothing to separate from. Not :first-child: Alpine leaves its <template>
+     * elements as siblings, so a check is never the first child there.
+     */
     & > .detail .check {
       color: var(--color-ink-faint);
       white-space: nowrap;
-
-      &:not(:first-child)::before { content: "· "; }
     }
+    & > .detail :is(.lead, .quote) ~ .check::before { content: "· "; }
 
     & > .action { grid-area: action; align-self: start; }
 
