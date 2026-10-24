@@ -1,0 +1,44 @@
+[
+  {
+    "name": "pt rough description",
+    "language": "pt",
+    "field": {"kind": "task_description", "text": "fazer o export ficar mais rapido, ta lento demais pra relatorio grande"},
+    "siblings": [{"label": "Title", "text": "Export lento"}],
+    "forbidden": ["csv", "pdf", "excel", "xlsx", "postgres", "redis", "segundos", "minutos", "%"]
+  },
+  {
+    "name": "en rough description",
+    "language": "en",
+    "field": {"kind": "task_description", "text": "login page is broken on mobile sometimes, users complain"},
+    "siblings": [{"label": "Title", "text": "Fix login on mobile"}],
+    "forbidden": ["safari", "chrome", "android", "ios", "oauth", "jwt", "percent", "%"]
+  },
+  {
+    "name": "en empty description with a title",
+    "language": "en",
+    "field": {"kind": "task_description", "text": ""},
+    "siblings": [{"label": "Title", "text": "Add dark mode to the settings page"}],
+    "forbidden": ["tailwind", "css variables", "localstorage", "prefers-color-scheme", "react", "%"]
+  },
+  {
+    "name": "en already complete description",
+    "language": "en",
+    "field": {"kind": "task_description", "text": "Users cannot reset their password when their email contains a plus sign: the reset link is generated for the address with the plus sign removed, so the mail goes to the wrong mailbox.\n\nExpected: the link is sent to the exact address the user typed.\n\nAcceptance criteria:\n- A user with the address ana+test@example.com receives the reset mail.\n- A test covers an address with a plus sign.\n- Addresses without a plus sign behave as before."},
+    "siblings": [{"label": "Title", "text": "Password reset mail goes to the wrong address when the email has a plus sign"}],
+    "forbidden": ["sendgrid", "ses", "smtp", "hotfix"]
+  },
+  {
+    "name": "pt comment",
+    "language": "pt",
+    "field": {"kind": "comment", "text": "testei aqui e nao funciona no safari, so no chrome"},
+    "siblings": [{"label": "Task title", "text": "Botão de exportar relatório"}, {"label": "Task description", "text": "Adicionar um botão que exporta o relatório da tela atual."}],
+    "forbidden": ["firefox", "edge", "versão", "ios", "macos", "console", "%"]
+  },
+  {
+    "name": "pt title",
+    "language": "pt",
+    "field": {"kind": "task_title", "text": "arrumar login"},
+    "siblings": [{"label": "Description", "text": "O login falha quando a senha tem acento."}],
+    "forbidden": []
+  }
+]

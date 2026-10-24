@@ -98,6 +98,8 @@ type Services struct {
 	// AgentAuth reads and ends the login the agent home keeps (`claude auth
 	// status` and `claude auth logout`); nil answers 503.
 	AgentAuth ports.AgentAuth
+	// WritingHelper runs the writing helper's steps; nil answers 503.
+	WritingHelper ports.WritingHelper
 }
 
 // Handler serves the application's driving ports as HTTP endpoints (the same
@@ -149,6 +151,8 @@ type Handler struct {
 	agentOAuth       ports.AgentOAuth
 	agentAuth        ports.AgentAuth
 
+	writingHelper ports.WritingHelper
+
 	streams streamRegistry // the browser tabs' live streams (stream.go)
 }
 
@@ -196,6 +200,8 @@ func NewHandler(s Services) *Handler {
 		agentCredential:  s.AgentCredential,
 		agentOAuth:       s.AgentOAuth,
 		agentAuth:        s.AgentAuth,
+
+		writingHelper: s.WritingHelper,
 	}
 }
 

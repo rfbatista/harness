@@ -238,3 +238,44 @@ func TestAnOverriddenClaudeIsNeverInstalled(t *testing.T) {
 }
 
 var _ ports.ManagedClaude = (*managedclaude.Service)(nil)
+
+// Peek is what a page render asks: it names what is missing like Check, but
+// never starts anything.
+func TestPeekReportsAMissingManagedClaudeWithoutStartingAnInstall(t *testing.T) {
+	rs := newReleaseServer(t)
+	w := newWorld(t, rs)
+	ctx := context.Background()
+
+	for range 2 {
+		err := w.gate.Peek(ctx)
+		if errs.Code(err) != "MANAGED_CLAUDE_MISSING" || !strings.Contains(err.Error(), "/agent-isolation#claude") {
+			t.Fatalf("peek = %v (%s)", err, errs.Code(err))
+		}
+	}
+	if w.managed.State().Installing != nil {
+		t.Fatal("peek began an install")
+	}
+}
+
+func TestPeekReportsARunningInstallAsUnavailableAndOtherGapsLikeCheck(t *testing.T) {
+	rs := newReleaseServer(t)
+	w := newWorld(t, rs)
+	ctx := context.Background()
+	_ = w.gate.Check(ctx) // starts the install
+	if err := w.gate.Peek(ctx); errs.Code(err) != "MANAGED_CLAUDE_INSTALLING" {
+		t.Fatalf("peek during the install = %v", err)
+	}
+	rs.release()
+	settle(t, w.managed)
+	if err := w.gate.Peek(ctx); err != nil {
+		t.Fatalf("peek when ready = %v", err)
+	}
+	w.cred = false
+	if got := details(t, w.gate.Peek(ctx)); len(got) != 1 || got[0]["code"] != agentready.CodeCredentialMissing {
+		t.Fatalf("peek without a credential = %v", got)
+	}
+	var nilGate *agentready.Gate
+	if nilGate.Peek(ctx) != nil {
+		t.Fatal("a nil gate enforces nothing")
+	}
+}
