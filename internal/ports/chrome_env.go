@@ -15,9 +15,16 @@ const SandboxMarkerEnv = "HARNESS_SANDBOX"
 // temp dir.
 const ChromiumTmpdirEnv = "MAC_CHROMIUM_TMPDIR"
 
+// PlaywrightSocketsEnv is the env var Playwright reads for the directory of
+// its unix sockets. The browser MCP server gets it in its own env, under
+// seatbelt, set to the session's temp dir (ADR 0025).
+const PlaywrightSocketsEnv = "PWTEST_SOCKETS_DIR"
+
 // PinChromeEnv answers final with the two sandbox-marker variables exactly as
 // declared says: whatever final carries of them (a server env that leaked in)
-// is dropped, then declared's entries are added. A variable declared does not
+// is dropped, then declared's entries are added; the browser server's own
+// env is set apart, so nothing of PWTEST_SOCKETS_DIR reaches claude from the
+// server env either. A variable declared does not
 // name is absent from the answer, not empty: Chromium checks that
 // MAC_CHROMIUM_TMPDIR is set, not that it has a value.
 func PinChromeEnv(final, declared []string) []string {
@@ -31,5 +38,5 @@ func PinChromeEnv(final, declared []string) []string {
 }
 
 func isChromeEnv(e string) bool {
-	return strings.HasPrefix(e, SandboxMarkerEnv+"=") || strings.HasPrefix(e, ChromiumTmpdirEnv+"=")
+	return strings.HasPrefix(e, SandboxMarkerEnv+"=") || strings.HasPrefix(e, ChromiumTmpdirEnv+"=") || strings.HasPrefix(e, PlaywrightSocketsEnv+"=")
 }

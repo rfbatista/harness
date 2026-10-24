@@ -33,6 +33,7 @@ func chromeWorld(t *testing.T, driver string) *sandboxWorld {
 	w.driver.DriverName = driver
 	t.Setenv("HARNESS_SANDBOX", "leaked")
 	t.Setenv("MAC_CHROMIUM_TMPDIR", "/leaked")
+	t.Setenv("PWTEST_SOCKETS_DIR", "/leaked")
 	return w
 }
 
@@ -96,8 +97,10 @@ func TestSandboxChrome_ABubblewrapSessionGetsOnlyTheMarker(t *testing.T) {
 	if v, _ := lastEnvValue(env, "HARNESS_SANDBOX"); v != "bubblewrap" {
 		t.Errorf("HARNESS_SANDBOX=%q, want bubblewrap", v)
 	}
-	if v, ok := lastEnvValue(env, "MAC_CHROMIUM_TMPDIR"); ok {
-		t.Errorf("MAC_CHROMIUM_TMPDIR=%q set under bubblewrap", v)
+	for _, name := range []string{"MAC_CHROMIUM_TMPDIR", "PWTEST_SOCKETS_DIR"} {
+		if v, ok := lastEnvValue(env, name); ok {
+			t.Errorf("%s=%q reaches claude under bubblewrap", name, v)
+		}
 	}
 }
 
@@ -127,12 +130,12 @@ func TestSandboxChrome_AnUnsandboxedSessionHasNeitherVariableEvenFromTheServerEn
 	if p.cfg.Wrap == nil {
 		t.Fatal("no wrap: the server env would reach the session")
 	}
-	leaky := []string{"A=1", "HARNESS_SANDBOX=leaked", "MAC_CHROMIUM_TMPDIR=/leaked"}
+	leaky := []string{"A=1", "HARNESS_SANDBOX=leaked", "MAC_CHROMIUM_TMPDIR=/leaked", "PWTEST_SOCKETS_DIR=/leaked"}
 	out, err := p.cfg.Wrap(llmkit.Command{Env: leaky})
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, name := range []string{"HARNESS_SANDBOX", "MAC_CHROMIUM_TMPDIR"} {
+	for _, name := range []string{"HARNESS_SANDBOX", "MAC_CHROMIUM_TMPDIR", "PWTEST_SOCKETS_DIR"} {
 		for _, e := range out.Env {
 			if strings.HasPrefix(e, name+"=") {
 				t.Errorf("env has %q, want no %s entry at all", e, name)
@@ -151,7 +154,7 @@ func TestSandboxChrome_AnUnsandboxedInteractiveSessionDeclaresNeither(t *testing
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, name := range []string{"HARNESS_SANDBOX", "MAC_CHROMIUM_TMPDIR"} {
+	for _, name := range []string{"HARNESS_SANDBOX", "MAC_CHROMIUM_TMPDIR", "PWTEST_SOCKETS_DIR"} {
 		if v, ok := lastEnvValue(spec.Env, name); ok {
 			t.Errorf("%s=%q declared by an unsandboxed session", name, v)
 		}

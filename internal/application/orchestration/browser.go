@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 
 	"github.com/rfbatista/llmkit"
+
+	"operators-mcp/internal/ports"
 )
 
 // browserServerName names the browser MCP server in a session's config, and
@@ -35,7 +37,7 @@ func withBrowserServer(cfg *llmkit.SessionConfig, tmpDir, userHome string) {
 		Args:      []string{"-y", "@playwright/mcp@" + playwrightMCPVersion, "--headless", "--isolated", "--browser", "chrome", "--no-sandbox"},
 	}
 	if tmpDir != "" {
-		spec.Env = map[string]string{"PWTEST_SOCKETS_DIR": tmpDir, "HOME": tmpDir}
+		spec.Env = map[string]string{ports.PlaywrightSocketsEnv: tmpDir, "HOME": tmpDir}
 		if cache := npmCache(userHome); cache != "" {
 			spec.Env["npm_config_cache"] = cache
 		}
