@@ -1,5 +1,5 @@
 // Invariants of the session row variant (ADR 0029) that text can check. Pixel
-// layout is proven in a browser, not here. Run: node --test design-system/
+// layout is proven in a browser, not here. Run: node --test design-system/session-row.test.mjs
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
@@ -61,7 +61,8 @@ test("the detail clamps to two lines and line 1 does not truncate", () => {
 
 test("a check with no lead or quote has no separator", () => {
   assert.match(variant, /\.check/);
-  assert.match(variant, /\.check:not\(:first-child\)::before|\.check:first-child::before\s*\{\s*content:\s*none/);
+  assert.match(variant, /\.check \{[^}]*&:not\(:first-child\)::before \{ content: "· "/);
+  assert.doesNotMatch(variant, /\.check::before/);
 });
 
 test("data-dot-only reserves no width", () => {
