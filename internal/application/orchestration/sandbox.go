@@ -488,7 +488,7 @@ type sandboxed struct {
 // builds the session's policy and has the driver wrap its command. Off, or
 // without a Sandbox, it does nothing; on without a driver, the start is
 // refused.
-func (s *Service) sandbox(ctx context.Context, in prepareInput, id string, repo *domain.Repository, worktree string, env []string) (sandboxed, error) {
+func (s *Service) sandbox(ctx context.Context, in prepareInput, id string, repo *domain.Repository, worktree string, env, skillDirs []string) (sandboxed, error) {
 	sb := s.Sandbox
 	if sb == nil {
 		return sandboxed{}, nil
@@ -532,6 +532,7 @@ func (s *Service) sandbox(ctx context.Context, in prepareInput, id string, repo 
 		sess.Extra = sb.Extra()
 	}
 	sess.Allow = append(sess.Allow, sessionAllow(env)...)
+	sess.Allow = append(sess.Allow, skillDirGrants(skillDirs)...)
 	policy := BuildSandboxPolicy(sess)
 	if !in.Headless {
 		// An interactive session is wrapped where its terminal runs, from
@@ -551,6 +552,21 @@ func (s *Service) sandbox(ctx context.Context, in prepareInput, id string, repo 
 	}
 	facts := &domain.SandboxFacts{Sandboxed: true, Visibility: visibility, Driver: sb.Driver.Name()}
 	return sandboxed{policy: &policy, wrap: sandboxWrap(sb.Driver, sess), facts: facts}, nil
+}
+
+// skillDirGrants are the session's skill plugin dirs, read-only (ADR 0028): the
+// server writes them outside the session's own dirs, and claude drops a plugin
+// it cannot read. A dir reached through a symlink is also granted by its real
+// path, which seatbelt matches; a dir that cannot be resolved only by its own.
+func skillDirGrants(dirs []string) []ports.SandboxPath {
+	var out []ports.SandboxPath
+	for _, d := range dirs {
+		out = append(out, ports.SandboxPath{Path: d})
+		if resolved, err := filepath.EvalSymlinks(d); err == nil && resolved != d {
+			out = append(out, ports.SandboxPath{Path: resolved})
+		}
+	}
+	return out
 }
 
 // sandboxWrap is the WrapFunc confining a headless session's claude: the
