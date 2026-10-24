@@ -31,9 +31,9 @@ func (b *Sandbox) Builtin() []ports.SandboxBuiltinGroup {
 		temp = b.TempDir("")
 	}
 	temp = filepath.Clean(temp)
-	session := func(mode domain.SessionMode) ports.SandboxPolicy {
+	session := func(mode domain.SessionMode, readAll bool) ports.SandboxPolicy {
 		return BuildSandboxPolicy(SandboxSession{
-			Mode: mode, Worktree: worktree, GitCommonDir: gitDir, Repositories: []string{repos},
+			Mode: mode, Worktree: worktree, GitCommonDir: gitDir, Repositories: []string{repos}, ReadAllRepos: readAll,
 			VirtualShell: shell, TempDir: temp, AgentHome: b.Home, UserHome: b.UserHome, ConfigHome: b.ConfigHome,
 		})
 	}
@@ -55,7 +55,7 @@ func (b *Sandbox) Builtin() []ports.SandboxBuiltinGroup {
 	for _, p := range gitConfigPaths(b.UserHome, b.ConfigHome) {
 		labels[p] = "Your git config"
 	}
-	fixed := entries(session(domain.SessionModeImplement), labels, "")
+	fixed := entries(session(domain.SessionModeImplement, false), labels, "")
 	byMode := []struct {
 		title string
 		mode  domain.SessionMode
@@ -66,12 +66,26 @@ func (b *Sandbox) Builtin() []ports.SandboxBuiltinGroup {
 	}
 	var modes []ports.SandboxBuiltinEntry
 	for _, m := range byMode {
-		modes = append(modes, entries(session(m.mode), map[string]string{
+		modes = append(modes, entries(session(m.mode, false), map[string]string{
 			worktree: "own worktree",
 			gitDir:   "its git directory",
 			repos:    "every repository of the project",
 		}, m.title)...)
 	}
+
+	// With the project's setting on (the default), every mode and every one-shot
+	// also reads the main checkout of every repository, the session's own
+	// included; the builder grants it, this lists what it grants.
+	var readAll []ports.SandboxBuiltinEntry
+	for _, m := range byMode {
+		readAll = append(readAll, entries(session(m.mode, true), map[string]string{
+			repos: "every repository of the project, its own checkout included",
+		}, m.title)...)
+	}
+	oneShot := BuildSandboxPolicy(SandboxSession{OneShot: true, Repositories: []string{repos}, ReadAllRepos: true, TempDir: temp})
+	readAll = append(readAll, entries(oneShot, map[string]string{
+		repos: "every repository of the project, its own checkout included",
+	}, "One-shot calls: ")...)
 
 	var standing []ports.SandboxBuiltinEntry
 	if b.Allow != nil {
@@ -82,6 +96,7 @@ func (b *Sandbox) Builtin() []ports.SandboxBuiltinGroup {
 	return []ports.SandboxBuiltinGroup{
 		{Title: "Every session", Entries: fixed},
 		{Title: "Repositories by mode", Entries: modes},
+		{Title: "Repositories when agents can read every repository (default)", Entries: readAll},
 		{Title: "Tools, toolchains and caches", Entries: standing},
 	}
 }

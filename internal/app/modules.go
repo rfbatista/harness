@@ -672,6 +672,8 @@ func newOrchestrationService(
 		// one-shots, every checkout.
 		WorkspacesRoot: ws.Root,
 		Checkouts:      func() []string { return allCheckouts(cat.Projects) },
+		// ReadAllRepos stays unset: every project reads every repository (the
+		// setting's default) until it is wired to the project's own setting.
 		// Each session start gets a temp dir of its own, never the system's,
 		// which every session (and each one's virtual shell) shares: this is
 		// its name prefix, the start adds a random suffix. Short, so a unix

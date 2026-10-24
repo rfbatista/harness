@@ -98,7 +98,9 @@ func Render(policy ports.SandboxPolicy, home string) []string {
 			binds = append(binds, bind{filepath.Clean(p), false})
 		}
 	}
-	for _, p := range policy.Writable {
+	// A create-only directory is bound writable, the entries that exist (listed
+	// in Readable) read-only on top: parents first, so the mounts nest.
+	for _, p := range slices.Concat(policy.Writable, policy.CreateOnly) {
 		if p != "" {
 			binds = append(binds, bind{filepath.Clean(p), true})
 		}

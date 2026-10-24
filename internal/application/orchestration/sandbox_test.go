@@ -22,6 +22,9 @@ type sandboxWorld struct {
 	home   string
 	extra  []ports.SandboxPath
 	off    bool
+	// readAll is the project's setting that agents read every repository; off
+	// here, so these tests keep exercising the per-mode rules.
+	readAll bool
 	// wsRoot is the workspaces root the sandbox is told about.
 	wsRoot string
 }
@@ -44,6 +47,7 @@ func newSandboxWorld(t *testing.T) *sandboxWorld {
 		Home:           w.home,
 		Extra:          func() []ports.SandboxPath { return w.extra },
 		WorkspacesRoot: func() string { return w.wsRoot },
+		ReadAllRepos:   func(string) bool { return w.readAll },
 	}
 	w.wsRoot = t.TempDir()
 	return w
@@ -513,17 +517,20 @@ func TestSandbox_OtherWorktreesAdminEntriesAreReadOnlyAndOnlyTheOwnEntryIsWritab
 				if !slices.Contains(p.Writable, common) {
 					t.Errorf("common dir not writable: %v", p.Writable)
 				}
-				if !slices.Contains(p.Readable, filepath.Join(common, "worktrees")) {
-					t.Errorf("worktrees dir not read-only: %v", p.Readable)
+				if !slices.Equal(p.CreateOnly, []string{filepath.Join(common, "worktrees")}) {
+					t.Errorf("worktrees dir not create-only: %v", p.CreateOnly)
 				}
 				own := filepath.Join(common, "worktrees", "own")
 				if !slices.Contains(p.Writable, own) {
 					t.Errorf("own entry not writable: %v", p.Writable)
 				}
+				if slices.Contains(p.Writable, filepath.Join(common, "worktrees")) {
+					t.Errorf("worktrees dir writable as a whole: %v", p.Writable)
+				}
 				for _, s := range siblings {
 					other := filepath.Join(common, "worktrees", s)
-					if slices.Contains(p.Writable, other) || slices.Contains(p.Writable, filepath.Join(common, "worktrees")) {
-						t.Errorf("other entry %s writable: %v", s, p.Writable)
+					if slices.Contains(p.Writable, other) || !slices.Contains(p.Readable, other) {
+						t.Errorf("other entry %s not read-only: readable %v writable %v", s, p.Readable, p.Writable)
 					}
 				}
 			})
