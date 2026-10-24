@@ -43,6 +43,7 @@ import (
 	"operators-mcp/internal/application/tooling"
 	"operators-mcp/internal/application/vshell"
 	"operators-mcp/internal/application/workspaces"
+	"operators-mcp/internal/application/writinghelper"
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/infra"
 	"operators-mcp/internal/ports"
@@ -731,8 +732,9 @@ func allCheckouts(projects interface {
 // processing ports. Each port gets its own adapter so a consumer depends on the
 // single capability it uses rather than on "the text processor".
 var TextProcessingModule = fx.Module("textprocessing",
-	fx.Provide(fx.Private, newOneShotter),
+	fx.Provide(fx.Private, newOneShotter, newStreamOneShotter),
 	fx.Provide(
+		newWritingHelper,
 		asPort(newSummarizer, new(ports.Summarizer)),
 		asPort(newTextGenerator, new(ports.TextGenerator)),
 		asPort(newTranslator, new(ports.Translator)),
@@ -759,16 +761,55 @@ type oneShotParts struct {
 // agent Claude home, with the agent credential, under the sandbox when it is
 // on (ADR 0017, 0018), after the readiness gate.
 func newOneShotter(cfg Config, p oneShotParts) claudetext.OneShotter {
-	bin := cfg.ClaudeBin
-	if p.Bin != nil {
-		bin = p.Bin.Bin()
-	}
-	home := p.Home.Path()
-	one := claudetext.OneShotter(oneShotClaude(bin, home, cfg.llmProxyURL()))
-	if p.Orch != nil && p.Credential != nil {
-		one = claudetext.Confined(one, oneShotPrep(p.Orch.Sandbox, oneShotEnv(p.Credential.Env, p.Home.HasLogin, p.KC.Path()), bin, p.KC.Path()))
+	bin := oneShotBin(cfg, p)
+	one := claudetext.OneShotter(oneShotClaude(bin, p.Home.Path(), cfg.llmProxyURL()))
+	if prep := oneShotPreparer(bin, p); prep != nil {
+		one = claudetext.Confined(one, prep)
 	}
 	return claudetext.Gated(one, p.Ready.check())
+}
+
+// newStreamOneShotter is newOneShotter's streaming twin, for the writing
+// helper (ADR 0026): the same claude, home, credential, sandbox and gate.
+func newStreamOneShotter(cfg Config, p oneShotParts) claudetext.StreamOneShotter {
+	bin := oneShotBin(cfg, p)
+	one := claudetext.StreamOneShotter(oneShotClaude(bin, p.Home.Path(), cfg.llmProxyURL()))
+	if prep := oneShotPreparer(bin, p); prep != nil {
+		one = claudetext.ConfinedStream(one, prep)
+	}
+	return claudetext.GatedStream(one, p.Ready.check())
+}
+
+// oneShotBin is the claude binary one-shots run.
+func oneShotBin(cfg Config, p oneShotParts) string {
+	if p.Bin != nil {
+		return p.Bin.Bin()
+	}
+	return cfg.ClaudeBin
+}
+
+// oneShotPreparer prepares each one-shot for the agent isolation, nil when
+// the graph has no sandbox or credential.
+func oneShotPreparer(bin string, p oneShotParts) func() ([]string, llmkit.WrapFunc, error) {
+	if p.Orch == nil || p.Credential == nil {
+		return nil
+	}
+	return oneShotPrep(p.Orch.Sandbox, oneShotEnv(p.Credential.Env, p.Home.HasLogin, p.KC.Path()), bin, p.KC.Path())
+}
+
+// newWritingHelper is the writing helper over the streaming one-shot, the
+// global model setting and the project catalog. Its readiness is the gate
+// every one-shot is behind.
+func newWritingHelper(cat catalog.Catalog, one claudetext.StreamOneShotter, p oneShotParts) *writinghelper.Service {
+	return writinghelper.New(streamer{one}, cat.Settings, cat.Projects, p.Ready.check())
+}
+
+// streamer adapts the streaming one-shot to the writing helper's port.
+type streamer struct{ one claudetext.StreamOneShotter }
+
+func (s streamer) Stream(ctx context.Context, c writinghelper.StreamCall, onText func(string)) (string, error) {
+	res, err := s.one.OneShotStream(ctx, claude.OneShotRequest{System: c.System, Input: c.Input, Model: c.Model, Attribution: c.Attribution}, onText)
+	return res.Text, err
 }
 
 // oneShotClaude is the manager one-shots run on: isolated in the agent
