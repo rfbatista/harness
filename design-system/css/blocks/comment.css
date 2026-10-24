@@ -34,7 +34,8 @@
     }
     &[data-editing] {
       background: var(--color-canvas);
-      & > textarea { min-block-size: 6rem; }
+      & > textarea,
+      & .pen-field > textarea { min-block-size: 6rem; }
     }
     &[data-confirming] { background: var(--color-danger-wash); }
     & > .confirm {
@@ -57,7 +58,8 @@
     flex-direction: column;
     gap: var(--space-xs);
     padding: var(--space-m) var(--space-l) var(--space-l);
-    & > textarea { min-block-size: 5.5rem; resize: vertical; field-sizing: content; max-block-size: 20rem; }
+    & > textarea,
+    & .pen-field > textarea { min-block-size: 5.5rem; resize: vertical; field-sizing: content; max-block-size: 20rem; }
     & > footer {
       display: flex;
       flex-wrap: wrap;

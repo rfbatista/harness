@@ -56,6 +56,25 @@ func (f *fakeHelperAPI) requests() []map[string]any {
 }
 
 func (f *fakeHelperAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	switch r.URL.Path {
+	case "/api/add_ticket_comment", "/api/update_ticket_comment":
+		var in map[string]string
+		_ = json.NewDecoder(r.Body).Decode(&in)
+		b, _ := json.Marshal(in)
+		f.fakeTicketsAPI.mu.Lock()
+		f.fakeTicketsAPI.calls = append(f.fakeTicketsAPI.calls, r.URL.Path+" "+string(b))
+		f.fakeTicketsAPI.mu.Unlock()
+		id := in["comment_id"]
+		if id == "" {
+			id = "c-new"
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"comment": map[string]any{
+			"id": id, "ticket_id": "t-new", "project_id": "p1", "author": "person", "session_id": "", "agent_name": "",
+			"body": in["body"], "created_at": time.Now().Format(time.RFC3339), "updated_at": time.Now().Format(time.RFC3339),
+		}})
+		return
+	}
 	if r.URL.Path != "/api/run_writing_helper_step" {
 		f.fakeTicketsAPI.ServeHTTP(w, r)
 		return
@@ -134,9 +153,14 @@ func helperBrowser(t *testing.T, api *fakeHelperAPI, helper shell.Helper) (conte
 		Tasks: fakeTickets{[]*domain.Ticket{
 			{ID: "t-new", ProjectID: "p1", Title: "Write docs", Description: "The TUI's live section.", Status: domain.TicketStatusTodo},
 		}},
-		Sessions:      fakeSessions{},
-		Agents:        fakeAgents{},
-		Repositories:  fakeRepos{},
+		Sessions:     fakeSessions{},
+		Agents:       fakeAgents{},
+		Repositories: fakeRepos{},
+		Resources:    fakeResources{},
+		Comments: fakeComments{{
+			ID: "c1", TicketID: "t-new", ProjectID: "p1", Author: domain.CommentByPerson, Body: "pen should be visible",
+			CreatedAt: time.Now().Add(-time.Hour), UpdatedAt: time.Now().Add(-time.Hour),
+		}},
 		WritingHelper: func(context.Context) shell.Helper { return helper },
 	}, assets, nil)
 	mux := http.NewServeMux()
@@ -214,7 +238,9 @@ func whShot(name string) chromedp.Action {
 			emulation.SetEmulatedMedia().WithFeatures([]*emulation.MediaFeature{{Name: "prefers-color-scheme", Value: scheme}, {Name: "prefers-reduced-motion", Value: "reduce"}}),
 			chromedp.Sleep(150*time.Millisecond),
 			chromedp.CaptureScreenshot(&buf),
-			chromedp.ActionFunc(func(context.Context) error { return os.WriteFile(filepath.Join(dir, name+"-"+scheme+".png"), buf, 0o644) }),
+			chromedp.ActionFunc(func(context.Context) error {
+				return os.WriteFile(filepath.Join(dir, name+"-"+scheme+".png"), buf, 0o644)
+			}),
 		)
 	}
 	return tasks
@@ -865,6 +891,127 @@ func TestWritingHelperTitleInTheTaskEditDialogInTheBrowser(t *testing.T) {
 	steps := api.requests()
 	if sib, _ := steps[0]["siblings"].([]any); len(sib) != 1 {
 		t.Errorf("the title step read %v", steps[0]["siblings"])
+	}
+	if e := errs.all(); len(e) > 0 {
+		t.Errorf("JavaScript errors:\n%s", strings.Join(e, "\n"))
+	}
+}
+
+func TestWritingHelperCommentComposerInTheBrowser(t *testing.T) {
+	api := newFakeHelperAPI()
+	ctx, url, errs := helperBrowser(t, api, whAvailable)
+
+	var reads string
+	var geometry, field, active string
+	err := chromedp.Run(ctx,
+		chromedp.EmulateViewport(1280, 900),
+		chromedp.Navigate(url+"/projects/p1/tasks/t-new/resources"),
+		chromedp.WaitVisible(`#comment-body`, chromedp.ByQuery),
+		whPoll(`!!document.querySelector('[data-panel-id=pen-comment]')?._x_dataStack`),
+		whPoll(`document.querySelector('main [data-summary]')?.textContent.includes('1 comment')`),
+		setField(`#comment-body`, "pen should be visible always not on hover", "input"),
+		chromedp.Click(`#comment-body ~ .pen`, chromedp.ByQuery),
+		whPoll(whPhase("Which fields get the pen first?")),
+		whShot("comment"),
+		chromedp.Evaluate(`[...document.querySelectorAll('#pen-comment-panel .reads > span')].map((e) => e.textContent).join(' | ')`, &reads),
+		// The panel opens above the composer's field.
+		chromedp.Evaluate(`(() => {
+			const panel = document.querySelector('#pen-comment-panel').getBoundingClientRect();
+			const input = document.querySelector('#comment-body').getBoundingClientRect();
+			return panel.bottom <= input.top + 1 ? 'above' : 'below';
+		})()`, &geometry),
+		whClick(`#pen-comment-panel`, "Skip questions"),
+		whPoll(whPhase("Proposed comment")),
+		// ⌘↵ while the helper is open runs its primary action, not the composer's send.
+		whKey(`#comment-body`, "Enter", `metaKey: true,`),
+		whPoll(`!`+whPanelShown),
+		chromedp.Evaluate(`document.querySelector('#comment-body').value`, &field),
+		chromedp.Evaluate(`document.activeElement.id`, &active),
+	)
+	if err != nil {
+		t.Fatalf("comment: %v\nJS errors: %v", err, errs.all())
+	}
+	if reads != "Reads | Comment | Task title | Task description | project coding_pool" {
+		t.Errorf("reads = %q", reads)
+	}
+	if geometry != "above" {
+		t.Errorf("the panel is %s the composer's field", geometry)
+	}
+	if field != defaultHelperDraft || active != "comment-body" {
+		t.Errorf("field %q, focus %q", field, active)
+	}
+	if strings.Contains(api.log(), "add_ticket_comment") {
+		t.Errorf("⌘↵ in the open helper sent the comment:\n%s", api.log())
+	}
+	steps := api.requests()
+	if f, _ := steps[0]["field"].(map[string]any); f["kind"] != "comment" {
+		t.Errorf("field = %v", steps[0]["field"])
+	}
+	sib, _ := steps[0]["siblings"].([]any)
+	if len(sib) != 2 {
+		t.Errorf("siblings = %v, want the task's title and description", steps[0]["siblings"])
+	}
+
+	// The composer's own send takes the helper's text.
+	err = chromedp.Run(ctx,
+		whKey(`#comment-body`, "Enter", `metaKey: true,`),
+		whPoll(`document.querySelectorAll('main .thread .comment').length === 2`),
+	)
+	if err != nil {
+		t.Fatalf("send: %v\nJS errors: %v", err, errs.all())
+	}
+	if !strings.Contains(api.log(), `/api/add_ticket_comment {"body":"Add a magic pen to the task title and description.\n\nDone when: [open: what done looks like]","ticket_id":"t-new"}`) {
+		t.Errorf("the comment sent was not the draft:\n%s", api.log())
+	}
+	if e := errs.all(); len(e) > 0 {
+		t.Errorf("JavaScript errors:\n%s", strings.Join(e, "\n"))
+	}
+}
+
+func TestWritingHelperCommentEditBoxInTheBrowser(t *testing.T) {
+	api := newFakeHelperAPI()
+	ctx, url, errs := helperBrowser(t, api, whAvailable)
+
+	var stillEditing bool
+	var value string
+	err := chromedp.Run(ctx,
+		chromedp.EmulateViewport(1280, 900),
+		chromedp.Navigate(url+"/projects/p1/tasks/t-new/resources"),
+		chromedp.WaitVisible(`#comment-body`, chromedp.ByQuery),
+		whPoll(`document.querySelectorAll('main .thread .comment').length === 1`),
+		whPoll(`document.querySelector('main [data-summary]')?.textContent.includes('1 comment')`),
+		whClick(`main .thread`, "Edit"),
+		chromedp.WaitVisible(`textarea[aria-label="Edit comment"]`, chromedp.ByQuery),
+		whPoll(`!!document.querySelector('textarea[aria-label="Edit comment"]').closest('.pen-host')?._x_dataStack`),
+		chromedp.Click(`textarea[aria-label="Edit comment"] ~ .pen`, chromedp.ByQuery),
+		whPoll(whPhase("Which fields get the pen first?")),
+		whClick(`#pen-comment-edit-panel`, "Skip questions"),
+		whPoll(whPhase("Proposed comment")),
+		// Esc closes the helper, not the edit.
+		whKey(`textarea[aria-label="Edit comment"]`, "Escape", ""),
+		whPoll(`!`+whPanelShown),
+		chromedp.Evaluate(`!!document.querySelector('textarea[aria-label="Edit comment"]')`, &stillEditing),
+		chromedp.Click(`textarea[aria-label="Edit comment"] ~ .pen`, chromedp.ByQuery),
+		whPoll(whPhase("Which fields get the pen first?")),
+		whClick(`#pen-comment-edit-panel`, "Skip questions"),
+		whPoll(whPhase("Proposed comment")),
+		whClick(`#pen-comment-edit-panel`, "Use this"),
+		whPoll(`document.querySelector('textarea[aria-label="Edit comment"]').value.startsWith('Add a magic pen')`),
+		chromedp.Evaluate(`document.querySelector('textarea[aria-label="Edit comment"]').value`, &value),
+		whClick(`main .thread`, "Save"),
+		whPoll(`!document.querySelector('textarea[aria-label="Edit comment"]')`),
+	)
+	if err != nil {
+		t.Fatalf("edit: %v\nJS errors: %v", err, errs.all())
+	}
+	if !stillEditing {
+		t.Error("Esc in the open helper cancelled the edit")
+	}
+	if value != defaultHelperDraft {
+		t.Errorf("edit box = %q", value)
+	}
+	if !strings.Contains(api.log(), `/api/update_ticket_comment {"body":"Add a magic pen`) {
+		t.Errorf("the edit did not save the helper's text:\n%s", api.log())
 	}
 	if e := errs.all(); len(e) > 0 {
 		t.Errorf("JavaScript errors:\n%s", strings.Join(e, "\n"))

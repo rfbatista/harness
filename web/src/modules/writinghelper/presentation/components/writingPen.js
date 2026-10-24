@@ -408,20 +408,20 @@ export const writingPen = ({ gateway, coordinator, setTimeout: later = globalThi
     /** "Continue" on the start question. */
     continueStart() {
       if (this.cannotContinue) return;
-      return this.draft();
+      return this.runDraft();
     },
 
     /** "Draft from the title": no answer, the siblings carry it. */
     draftFromSibling() {
       this.panel = model.setIntent(this.panel, "");
-      return this.draft();
+      return this.runDraft();
     },
 
     /**
      * Draft, from the answers (or none: Skip questions). A refine passes the
      * proposal it changes as `base`.
      */
-    draft({ request = "", base = "" } = {}) {
+    runDraft({ request = "", base = "" } = {}) {
       const baseline = field?.value ?? "";
       const answers = model.answersFor(this.panel);
       lastDraft = { request, base };
@@ -434,7 +434,7 @@ export const writingPen = ({ gateway, coordinator, setTimeout: later = globalThi
 
     skipQuestions() {
       this.panel = { ...this.panel, answers: {} };
-      return this.draft();
+      return this.runDraft();
     },
 
     /** A chip under the proposal, the light edits, or the refine line. */
@@ -442,7 +442,7 @@ export const writingPen = ({ gateway, coordinator, setTimeout: later = globalThi
       const text = (request ?? "").trim();
       if (!text) return;
       this.refineText = "";
-      return this.draft({ request: text, base: this.panel.phase === "proposal" ? this.panel.draft : "" });
+      return this.runDraft({ request: text, base: this.panel.phase === "proposal" ? this.panel.draft : "" });
     },
 
     refineChip(chip) {
@@ -462,7 +462,7 @@ export const writingPen = ({ gateway, coordinator, setTimeout: later = globalThi
 
     /** Redraft with my edits: a fresh draft from the field as it is now. */
     redraft() {
-      return this.draft();
+      return this.runDraft();
     },
 
     stop() {
@@ -479,7 +479,7 @@ export const writingPen = ({ gateway, coordinator, setTimeout: later = globalThi
 
     retry() {
       const step = this.panel.retry;
-      if (step === "draft") return this.draft(lastDraft);
+      if (step === "draft") return this.runDraft(lastDraft);
       this.panel = model.reading(this.panel, step);
       return this.runRead();
     },
@@ -616,7 +616,7 @@ export const writingPen = ({ gateway, coordinator, setTimeout: later = globalThi
         case "start":
           return this.continueStart();
         case "questions":
-          return this.draft();
+          return this.runDraft();
         case "proposal":
           return this.panel.stale ? this.redraft() : this.use();
         case "error":

@@ -1,6 +1,9 @@
 package tasks
 
-import "operators-mcp/internal/adapter/in/web/shell"
+import (
+	"operators-mcp/internal/adapter/in/web/components"
+	"operators-mcp/internal/adapter/in/web/shell"
+)
 
 // TaskResourcesPage is a task's resources and comments: files, images, audio
 // and links the person added (tasksResources renders the rows from the seed),
@@ -41,7 +44,7 @@ templ TaskResourcesPage(v TaskResourcesView) {
 			</template>
 			<div class="[ resources-page ]" data-scroll>
 				@resourcesColumn()
-				@commentsColumn()
+				@commentsColumn(v)
 			</div>
 			@lightbox()
 			<div class="[ toast-region ]" aria-live="polite">
@@ -294,7 +297,7 @@ templ uploadRow() {
 	</li>
 }
 
-templ commentsColumn() {
+templ commentsColumn(v TaskResourcesView) {
 	<section class="[ comments-col ]" id="comments" aria-labelledby="comments-title">
 		<header class="[ section-head ]">
 			<h2 id="comments-title">Comments</h2>
@@ -336,13 +339,15 @@ templ commentsColumn() {
 						</header>
 						<template x-if="c.editing">
 							<div class="[ flow ] [ flow-space-xs ]">
-								<textarea
-									aria-label="Edit comment"
-									x-model="editText"
-									x-on:keydown.meta.enter.prevent="saveEdit"
-									x-on:keydown.ctrl.enter.prevent="saveEdit"
-									x-on:keydown.escape.prevent="cancelEdit"
-								></textarea>
+								@components.WritingPen(commentPen("pen-comment-edit", v)) {
+									<textarea
+										aria-label="Edit comment"
+										x-model="editText"
+										x-on:keydown.meta.enter.prevent="saveEdit"
+										x-on:keydown.ctrl.enter.prevent="saveEdit"
+										x-on:keydown.escape.prevent="cancelEdit"
+									></textarea>
+								}
 								<template x-if="editError">
 									<p class="[ text-xs color-danger ]" role="alert" x-text="editError"></p>
 								</template>
@@ -376,16 +381,18 @@ templ commentsColumn() {
 		</div>
 		<form class="[ composer ]" novalidate x-on:submit.prevent="send">
 			<label for="comment-body" class="[ visually-hidden ]">Write a comment</label>
-			<textarea
-				id="comment-body"
-				placeholder="Write a comment…"
-				aria-describedby="composer-hint composer-count"
-				data-composer
-				x-bind:disabled="cannotAdd"
-				x-model="draft"
-				x-on:keydown.meta.enter.prevent="send"
-				x-on:keydown.ctrl.enter.prevent="send"
-			></textarea>
+			@components.WritingPen(commentPen("pen-comment", v)) {
+				<textarea
+					id="comment-body"
+					placeholder="Write a comment…"
+					aria-describedby="composer-hint composer-count"
+					data-composer
+					x-bind:disabled="cannotAdd"
+					x-model="draft"
+					x-on:keydown.meta.enter.prevent="send"
+					x-on:keydown.ctrl.enter.prevent="send"
+				></textarea>
+			}
 			<template x-if="composerError">
 				<p class="[ text-xs color-danger ]" role="alert" x-text="composerError"></p>
 			</template>

@@ -70,7 +70,7 @@ test("drafting streams into the panel and leaves the field alone until Use this"
   const { instance, gateway, field, done } = setup({ text: "rough text" }, { draft: "A clear brief." });
   instance.open();
   await settle();
-  const first = instance.draft();
+  const first = instance.runDraft();
   assert.equal(instance.showDrafting, true);
   await first;
   assert.equal(instance.showProposal, true);
@@ -86,7 +86,7 @@ test("Use this replaces the field, closes the panel, offers Undo and Undo restor
   field.addEventListener("input", () => inputs.push(field.value));
   instance.open();
   await settle();
-  await instance.draft();
+  await instance.runDraft();
   instance.use();
   assert.equal(field.value, "A clear brief.");
   assert.equal(instance.isOpen, false);
@@ -103,7 +103,7 @@ test("the toast goes by itself after a while", async () => {
   const { instance, timers, done } = setup({ text: "rough text" }, { draft: "A clear brief." });
   instance.open();
   await settle();
-  await instance.draft();
+  await instance.runDraft();
   instance.use();
   assert.equal(instance.hasToast, true);
   timers.at(-1)();
@@ -128,7 +128,7 @@ test("Stop during a draft goes back to the questions and keeps the answers", asy
   await settle();
   instance.pickChip("q1", "Every field");
   const release = gateway.gate();
-  instance.draft();
+  instance.runDraft();
   assert.equal(instance.showDrafting, true);
   instance.stop();
   release();
@@ -142,7 +142,7 @@ test("typing in the field after a draft marks it stale", async () => {
   const { instance, field, done } = setup({ text: "rough text" });
   instance.open();
   await settle();
-  await instance.draft();
+  await instance.runDraft();
   field.value = "rough text, edited";
   instance.fieldEdited();
   assert.equal(instance.showStale, true);
@@ -156,7 +156,7 @@ test("a failed step shows the error, keeps the answers, and Try again runs it ag
   await settle();
   instance.pickChip("q1", "Every field");
   gateway.failNext("WRITING_HELPER_FAILED", "claude stopped");
-  await instance.draft();
+  await instance.runDraft();
   assert.equal(instance.showError, true);
   assert.equal(instance.errorCode, "WRITING_HELPER_FAILED");
   assert.equal(instance.errorMessage, "claude stopped Your description is unchanged.");
@@ -171,7 +171,7 @@ test("a refine sends the current draft and the request, and keeps the answers", 
   instance.open();
   await settle();
   instance.pickChip("q1", "Every field");
-  await instance.draft();
+  await instance.runDraft();
   await instance.refineChip("Shorter");
   const last = gateway.calls.at(-1);
   assert.equal(last.draft, "Brief.");
@@ -303,7 +303,7 @@ test("the diff view paints insertions, removals and gaps and the clean view only
   const { instance, done } = setup({ text: "rough text" }, { draft: "A clear brief [open: owner]" });
   instance.open();
   await settle();
-  await instance.draft();
+  await instance.runDraft();
   const el = document.createElement("div");
   instance.paintDraft(el);
   assert.equal(el.querySelectorAll("ins").length > 0, true);
@@ -322,5 +322,14 @@ test("StructuredError from the gateway keeps its code in the panel", async () =>
   instance.open();
   await settle();
   assert.equal(instance.errorCode, "NETWORK");
+  done();
+});
+
+test("the component keeps off the names the wrapped fields bind to, which would shadow the page's own", () => {
+  const { instance, done } = setup({ text: "x" });
+  // x-model and handlers on the field resolve against the pen's scope first.
+  const pageNames = ["title", "description", "status", "draft", "draftTitle", "draftDescription", "editText", "send", "saveEdit", "cancelEdit", "cannotAdd", "cannotSend"];
+  const mine = Object.getOwnPropertyNames(instance);
+  assert.deepEqual(pageNames.filter((name) => mine.includes(name)), []);
   done();
 });
