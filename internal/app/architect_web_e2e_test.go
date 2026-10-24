@@ -32,6 +32,7 @@ import (
 	"operators-mcp/internal/application/tooling"
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
+	"operators-mcp/internal/testsupport/chromeopts"
 )
 
 // The architect channel in the web UI, end to end: the server as it runs (a
@@ -194,7 +195,7 @@ type person struct {
 func newPerson(t *testing.T) *person {
 	t.Helper()
 	ctx, cancelAlloc := chromedp.NewExecAllocator(context.Background(),
-		append(chromedp.DefaultExecAllocatorOptions[:], chromedp.Flag("disable-extensions", true),
+		chromeopts.Options(chromedp.Flag("disable-extensions", true),
 			chromedp.Flag("ignore-certificate-errors", true))...)
 	ctx, cancelBrowser := chromedp.NewContext(ctx)
 	ctx, cancelTimeout := context.WithTimeout(ctx, 120*time.Second)

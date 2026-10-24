@@ -17,6 +17,7 @@ import (
 	"github.com/chromedp/chromedp/kb"
 
 	"operators-mcp/internal/domain"
+	"operators-mcp/internal/testsupport/chromeopts"
 )
 
 // These tests run real JavaScript in headless Chrome: the browser unit suite
@@ -31,7 +32,7 @@ func browser(t *testing.T) (context.Context, *errorLog) {
 		t.Skip("browser test: skipped in -short mode")
 	}
 	ctx, cancelAlloc := chromedp.NewExecAllocator(context.Background(),
-		append(chromedp.DefaultExecAllocatorOptions[:], chromedp.Flag("disable-extensions", true))...)
+		chromeopts.Options(chromedp.Flag("disable-extensions", true))...)
 	ctx, cancelBrowser := chromedp.NewContext(ctx)
 	ctx, cancelTimeout := context.WithTimeout(ctx, 60*time.Second)
 	t.Cleanup(func() { cancelTimeout(); cancelBrowser(); cancelAlloc() })

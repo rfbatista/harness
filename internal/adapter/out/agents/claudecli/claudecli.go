@@ -91,6 +91,9 @@ func (l Launcher) Launch(ctx context.Context, spec ports.AgentSpec, size ports.T
 	}
 	cfg.Size = claude.TermSize{Cols: size.Cols, Rows: size.Rows}
 	cfg.Wrap = func(c claude.Command) (claude.Command, error) {
+		// llmkit starts claude with the server's env under the spec's; the
+		// sandbox marker variables are the spec's alone (ADR 0024).
+		c.Env = ports.PinChromeEnv(c.Env, spec.Env)
 		shellCmd := ports.ShellCommand{Program: c.Path, Args: c.Args, Dir: c.Dir, Env: c.Env, EnvFile: spec.EnvFile}
 		if spec.Sandbox == nil {
 			ps, err := sh.Prepare(ctx, shellCmd)

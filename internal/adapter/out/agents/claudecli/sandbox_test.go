@@ -236,3 +236,25 @@ func TestALoginShellSourcesItsProfileOutsideTheSandboxAndOnlyClaudeIsConfined(t 
 		t.Errorf("claude read the secret: %q", s)
 	}
 }
+
+func TestTheSandboxMarkerEnvIsExactlyWhatTheSpecDeclares(t *testing.T) {
+	leaky := []string{"A=1", "HARNESS_SANDBOX=leaked", "MAC_CHROMIUM_TMPDIR=/leaked"}
+	for name, tc := range map[string]struct {
+		spec ports.AgentSpec
+		want []string
+	}{
+		"unsandboxed": {ports.AgentSpec{Kind: Kind, SessionID: "s1", Dir: "/work", Env: []string{"A=1"}, Conversation: ports.Conversation{ID: "c1"}}, []string{"A=1"}},
+		"bubblewrap":  {ports.AgentSpec{Kind: Kind, SessionID: "s1", Dir: "/work", Env: []string{"A=1", "HARNESS_SANDBOX=bubblewrap"}, Conversation: ports.Conversation{ID: "c1"}}, []string{"A=1", "HARNESS_SANDBOX=bubblewrap"}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			w := &wrapping{cmd: claude.Command{Path: "claude", Env: leaky}}
+			_, err := NewLauncher(w).Launch(context.Background(), tc.spec, ports.TermSize{Cols: 80, Rows: 24}, preparedShell{})
+			if !errors.Is(err, errCaptured) {
+				t.Fatal(err)
+			}
+			if !slices.Equal(w.out.Env, tc.want) {
+				t.Errorf("env %v, want %v", w.out.Env, tc.want)
+			}
+		})
+	}
+}
