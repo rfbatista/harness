@@ -483,6 +483,7 @@ func (s *Service) prepare(ctx context.Context, in prepareInput) (*prepared, erro
 	if sb.policy != nil {
 		withClaudeSandboxOff(&cfg)
 	}
+	withChromeEnvPinned(&cfg)
 	return &prepared{
 		sandbox:    sb,
 		cfg:        cfg,

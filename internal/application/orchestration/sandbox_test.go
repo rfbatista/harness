@@ -424,7 +424,7 @@ func TestReady_NothingMissingEnforcesNothingWithoutAGate(t *testing.T) {
 // checkouts of these tests live in the shared system temp dir, which would
 // otherwise be granted wholesale.
 func (w *sandboxWorld) ownTempDir() {
-	w.svc.Sandbox.TempDir = func(id string) string { return filepath.Join(os.TempDir(), "harness-session-"+id) }
+	w.svc.Sandbox.TempDir = func(id string) string { return filepath.Join(os.TempDir(), "hs-"+id) }
 }
 
 func TestSandbox_HiddenListsEveryRepositoryAndTheWorkspacesRootThatTheModeDoesNotGrant(t *testing.T) {

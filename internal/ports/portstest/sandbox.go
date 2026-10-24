@@ -21,6 +21,8 @@ type SandboxCall struct {
 type RecordingSandboxDriver struct {
 	mu    sync.Mutex
 	calls []SandboxCall
+	// DriverName is what Name answers; empty: "recording".
+	DriverName string
 	// Err, if set, is what Wrap answers.
 	Err error
 	// Block, if set, holds each Follow until it is closed or the Follow's
@@ -30,7 +32,12 @@ type RecordingSandboxDriver struct {
 
 var _ ports.SandboxDriver = (*RecordingSandboxDriver)(nil)
 
-func (d *RecordingSandboxDriver) Name() string { return "recording" }
+func (d *RecordingSandboxDriver) Name() string {
+	if d.DriverName != "" {
+		return d.DriverName
+	}
+	return "recording"
+}
 
 func (d *RecordingSandboxDriver) Wrap(p ports.SandboxPolicy, c ports.SandboxCommand) (ports.SandboxCommand, error) {
 	d.mu.Lock()
