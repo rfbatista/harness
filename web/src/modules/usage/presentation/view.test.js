@@ -80,4 +80,6 @@ test("a feed row says when, what model, which task, how many tokens and the esti
   assert.equal(feedRow(makeRecord({ status: 529, error: "overloaded" }), "p1").failed, true);
   assert.equal(feedRow(makeRecord({ taskId: "", taskTitle: "", sessionId: "" }), "p1").task, "Harness", "the harness's own spend");
   assert.equal(feedRow(makeRecord({ taskId: "", taskTitle: "" }), "p1").task, "No task", "a session without a task");
+  assert.equal(feedRow(makeRecord({ taskId: "", taskTitle: "", sessionId: "", attribution: "harness:writing-helper" }), "p1").task, "Writing helper", "the writing helper's spend");
+  assert.equal(feedRow(makeRecord({ taskId: "", taskTitle: "", sessionId: "", attribution: "harness:system" }), "p1").task, "Harness");
 });

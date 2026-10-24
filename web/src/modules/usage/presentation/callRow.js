@@ -10,10 +10,12 @@ const pad = (n) => String(n).padStart(2, "0");
 const clockTime = (d) => `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
 const taskHref = (projectId, taskId) => (taskId ? `/projects/${enc(projectId)}/tasks/${enc(taskId)}` : "");
 
+const ASSISTANTS = { "document-assistant": "Document assistant", "writing-helper": "Writing helper" };
+
 /** Calls with no project are the harness's own; the row's project is the page's. */
 const sessionLabel = (e) => {
   if (e.session) return e.session.title || `Session ${e.session.id.slice(0, 8)}`;
-  return e.kind === "document-assistant" ? "Document assistant" : "Harness";
+  return ASSISTANTS[e.kind] ?? "Harness";
 };
 
 /** @param {import("../domain/liveCalls.js").CallEntry} e @param {string} projectId */

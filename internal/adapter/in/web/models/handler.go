@@ -8,11 +8,15 @@ package models
 
 import (
 	"net/http"
+	"slices"
 
 	"operators-mcp/internal/adapter/in/web/shell"
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
 )
+
+// SettingWritingHelper is the writing helper's model setting.
+const SettingWritingHelper = "models.assistants.writing_helper"
 
 // Href is the Models page.
 const Href = "/models"
@@ -32,12 +36,20 @@ func (h Handler) Page(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	frame.Top.OnModels = true
-	return h.Render(w, r, http.StatusOK, Page(frame, NewView(h.Settings)))
+	v := NewView(h.Settings)
+	if !frame.Helper.Available {
+		for i := range v.Assistants {
+			v.Assistants[i].UnavailableReason, v.Assistants[i].FixURL = frame.Helper.Reason, frame.Helper.FixURL
+		}
+	}
+	return h.Render(w, r, http.StatusOK, Page(frame, v))
 }
 
-// View is what the page renders: one row per tier.
+// View is what the page renders: one row per session tier, and one per
+// assistant (a one-off conversation the harness runs, not an agent session).
 type View struct {
-	Tiers []Tier
+	Tiers      []Tier
+	Assistants []Tier
 }
 
 // Tier is one session tier with the model its select shows.
@@ -45,20 +57,39 @@ type Tier struct {
 	Key, Title, Lead string
 	// Current is the stored value, or the built-in model while it is unset.
 	Current string
+	// NoDefault leaves "default: the CLI chooses" out: the CLI's default may
+	// be a slow model, and an assistant wants a fast one.
+	NoDefault bool
+	// BuiltIn is the model used while the setting is unset; its label reads
+	// "(default)".
+	BuiltIn string
+	// UnavailableReason says why the assistant cannot run, and FixURL where
+	// to fix it; empty when it can.
+	UnavailableReason, FixURL string
 }
 
 // Choice is one model a tier's select offers.
 type Choice struct{ Value, Label string }
 
 // Choices are the models a tier takes, in domain.ModelChoices' order.
-func (Tier) Choices() []Choice {
+func (t Tier) Choices() []Choice {
 	out := make([]Choice, 0, len(domain.ModelChoices))
 	for _, m := range domain.ModelChoices {
+		if m == domain.ModelDefault && t.NoDefault {
+			continue
+		}
 		label := m
 		if m == domain.ModelDefault {
 			label = "default: the CLI chooses"
 		}
+		if m == t.BuiltIn {
+			label += " (default)"
+		}
 		out = append(out, Choice{Value: m, Label: label})
+	}
+	if t.NoDefault {
+		// An assistant wants a fast model: the quickest first.
+		slices.Reverse(out)
 	}
 	return out
 }
@@ -83,6 +114,15 @@ func NewView(settings ports.SettingsReader) View {
 			Title:   "Implementation",
 			Lead:    "Sessions another session started, through start_task_session: they carry out a part of the plan.",
 			Current: current(domain.SettingModelImplementation, domain.DefaultImplementationModel),
+		},
+	}, Assistants: []Tier{
+		{
+			Key:       SettingWritingHelper,
+			Title:     "Writing helper",
+			Lead:      "The magic pen in task titles, descriptions and comments. It runs a few short turns per press, so a fast model keeps it responsive. Applies to every project.",
+			Current:   current(SettingWritingHelper, "haiku"),
+			NoDefault: true,
+			BuiltIn:   "haiku",
 		},
 	}}
 }

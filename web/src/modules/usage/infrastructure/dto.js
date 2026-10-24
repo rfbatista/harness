@@ -64,6 +64,7 @@ export function toRecord(dto) {
   const r = {
     id: dto.id,
     projectId: str(dto.project_id),
+    attribution: str(dto.attribution),
     taskId: str(dto.task_id),
     taskTitle: str(dto.task_title),
     sessionId: str(dto.session_id),
