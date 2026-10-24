@@ -167,11 +167,11 @@ func whPoll(js string) chromedp.Action {
 }
 
 // whPanelShown is true when the writing helper panel is on screen.
-const whPanelShown = `(() => { const p = document.querySelector('.helper'); return !!p && getComputedStyle(p).display !== 'none'; })()`
+const whPanelShown = `[...document.querySelectorAll('.helper')].some((p) => getComputedStyle(p).display !== 'none')`
 
 // phaseShown is true when the panel shows a body with the text.
 func whPhase(text string) string {
-	return fmt.Sprintf(`(() => { const p = document.querySelector('.helper'); return !!p && getComputedStyle(p).display !== 'none' && Array.from(p.querySelectorAll('.body')).some((b) => getComputedStyle(b).display !== 'none' && b.textContent.includes(%q)); })()`, text)
+	return fmt.Sprintf(`[...document.querySelectorAll('.helper')].some((p) => getComputedStyle(p).display !== 'none' && Array.from(p.querySelectorAll('.body')).some((b) => getComputedStyle(b).display !== 'none' && b.textContent.includes(%q)))`, text)
 }
 
 // clickIn clicks the first visible button in the panel whose text starts with label.
@@ -233,11 +233,11 @@ func TestWritingHelperDescriptionFlowInTheBrowser(t *testing.T) {
 		chromedp.EmulateViewport(1280, 900),
 		chromedp.Navigate(url+"/projects/p1/tasks/new"),
 		chromedp.WaitVisible(`#task-description`, chromedp.ByQuery),
-		whPenReady(`.pen-host`),
-		chromedp.Evaluate(`document.querySelector('.pen').getAttribute('aria-label')`, &label),
-		chromedp.Evaluate(`document.querySelector('.pen').getAttribute('aria-haspopup')`, &haspopup),
-		chromedp.Evaluate(`document.querySelector('.pen').getAttribute('aria-expanded')`, &expanded),
-		chromedp.Evaluate(`document.querySelector('.pen').title`, &tip),
+		whPenReady(`[data-panel-id=pen-task-description]`),
+		chromedp.Evaluate(`document.querySelector('#task-description ~ .pen').getAttribute('aria-label')`, &label),
+		chromedp.Evaluate(`document.querySelector('#task-description ~ .pen').getAttribute('aria-haspopup')`, &haspopup),
+		chromedp.Evaluate(`document.querySelector('#task-description ~ .pen').getAttribute('aria-expanded')`, &expanded),
+		chromedp.Evaluate(`document.querySelector('#task-description ~ .pen').title`, &tip),
 		setField(`#task-title`, "Add helper", "input"),
 		setField(`#task-description`, "rough text", "input"),
 		whShot("pen-rest"),
@@ -253,11 +253,11 @@ func TestWritingHelperDescriptionFlowInTheBrowser(t *testing.T) {
 	var reads string
 	var open string
 	err = chromedp.Run(ctx,
-		chromedp.Click(`.pen`, chromedp.ByQuery),
+		chromedp.Click(`#task-description ~ .pen`, chromedp.ByQuery),
 		whPoll(whPhase("Which fields get the pen first?")),
 		whShot("questions"),
-		chromedp.Evaluate(`[...document.querySelectorAll('.helper .reads > span')].map((e) => e.textContent).join(' ')`, &reads),
-		chromedp.Evaluate(`document.querySelector('.pen').getAttribute('aria-expanded')`, &open),
+		chromedp.Evaluate(`[...document.querySelectorAll('#pen-task-description-panel .reads > span')].map((e) => e.textContent).join(' ')`, &reads),
+		chromedp.Evaluate(`document.querySelector('#task-description ~ .pen').getAttribute('aria-expanded')`, &open),
 	)
 	if err != nil {
 		t.Fatalf("open: %v\nJS errors: %v", err, errs.all())
@@ -275,13 +275,13 @@ func TestWritingHelperDescriptionFlowInTheBrowser(t *testing.T) {
 	// Answer one with its chip, one by typing, and draft.
 	var count, field string
 	err = chromedp.Run(ctx,
-		whClick(`.helper`, "Task title and description"),
-		whPoll(`[...document.querySelectorAll('.helper footer .hint')].find((e) => e.checkVisibility())?.textContent.includes('1 of 2 answered')`),
-		chromedp.Focus(`.helper .ask:nth-of-type(2) input`, chromedp.ByQuery),
-		chromedp.SendKeys(`.helper .ask:nth-of-type(2) input`, "A person drafts it in a minute", chromedp.ByQuery),
-		whPoll(`[...document.querySelectorAll('.helper footer .hint')].find((e) => e.checkVisibility())?.textContent.includes('2 of 2 answered')`),
-		chromedp.Evaluate(`[...document.querySelectorAll('.helper footer .hint')].find((e) => e.checkVisibility())?.textContent.trim()`, &count),
-		whClick(`.helper`, "Draft"),
+		whClick(`#pen-task-description-panel`, "Task title and description"),
+		whPoll(`[...document.querySelectorAll('#pen-task-description-panel footer .hint')].find((e) => e.checkVisibility())?.textContent.includes('1 of 2 answered')`),
+		chromedp.Focus(`#pen-task-description-panel .ask:nth-of-type(2) input`, chromedp.ByQuery),
+		chromedp.SendKeys(`#pen-task-description-panel .ask:nth-of-type(2) input`, "A person drafts it in a minute", chromedp.ByQuery),
+		whPoll(`[...document.querySelectorAll('#pen-task-description-panel footer .hint')].find((e) => e.checkVisibility())?.textContent.includes('2 of 2 answered')`),
+		chromedp.Evaluate(`[...document.querySelectorAll('#pen-task-description-panel footer .hint')].find((e) => e.checkVisibility())?.textContent.trim()`, &count),
+		whClick(`#pen-task-description-panel`, "Draft"),
 		whPoll(whPhase("Proposed description")),
 		whShot("proposal"),
 		chromedp.Evaluate(`document.querySelector('#task-description').value`, &field),
@@ -307,7 +307,7 @@ func TestWritingHelperDescriptionFlowInTheBrowser(t *testing.T) {
 	// The proposal is marked against the field: insertions, removals and the open gap.
 	var marks string
 	err = chromedp.Run(ctx,
-		chromedp.Evaluate(`(() => { const d = document.querySelector('.helper .draft'); return [d.querySelectorAll('ins').length > 0, d.querySelectorAll('del').length > 0, d.querySelector('.gap')?.textContent].join('|'); })()`, &marks),
+		chromedp.Evaluate(`(() => { const d = document.querySelector('#pen-task-description-panel .draft'); return [d.querySelectorAll('ins').length > 0, d.querySelectorAll('del').length > 0, d.querySelector('.gap')?.textContent].join('|'); })()`, &marks),
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -320,12 +320,12 @@ func TestWritingHelperDescriptionFlowInTheBrowser(t *testing.T) {
 	var after, active, toast string
 	var ticketBody, at string
 	err = chromedp.Run(ctx,
-		whClick(`.helper`, "Use this"),
+		whClick(`#pen-task-description-panel`, "Use this"),
 		whPoll(`!`+whPanelShown),
 		chromedp.Evaluate(`document.querySelector('#task-description').value`, &after),
 		chromedp.Evaluate(`document.activeElement.id`, &active),
-		whPoll(`!!document.querySelector('.toast')?.checkVisibility()`),
-		chromedp.Evaluate(`document.querySelector('.toast').textContent.replace(/\s+/g, ' ').trim()`, &toast),
+		whPoll(`!!document.querySelector('#pen-task-description-panel ~ .toast-region .toast')?.checkVisibility()`),
+		chromedp.Evaluate(`document.querySelector('#pen-task-description-panel ~ .toast-region .toast').textContent.replace(/\s+/g, ' ').trim()`, &toast),
 		whShot("used"),
 	)
 	if err != nil {
@@ -366,19 +366,19 @@ func TestWritingHelperUndoRestoresTheFieldInTheBrowser(t *testing.T) {
 	err := chromedp.Run(ctx,
 		chromedp.EmulateViewport(1280, 900),
 		chromedp.Navigate(url+"/projects/p1/tasks/new"),
-		whPenReady(`.pen-host`),
+		whPenReady(`[data-panel-id=pen-task-description]`),
 		setField(`#task-description`, "rough text", "input"),
 		whKey(`#task-description`, "j", whCtrl),
 		whPoll(whPhase("How will you know")),
-		whClick(`.helper`, "Skip questions"),
+		whClick(`#pen-task-description-panel`, "Skip questions"),
 		whPoll(whPhase("Proposed description")),
 		whKey(`#task-description`, "Enter", `metaKey: true,`),
 		whPoll(`!`+whPanelShown),
 		whPoll(`document.querySelector('#task-description').value.startsWith('Add a magic pen')`),
-		whClick(`.toast`, "Undo"),
+		whClick(`#pen-task-description-panel ~ .toast-region`, "Undo"),
 		whPoll(`document.querySelector('#task-description').value === 'rough text'`),
 		chromedp.Evaluate(`document.querySelector('#task-description').value`, &undone),
-		whPoll(`!document.querySelector('.toast')?.checkVisibility()`),
+		whPoll(`!document.querySelector('#pen-task-description-panel ~ .toast-region .toast')?.checkVisibility()`),
 	)
 	if err != nil {
 		t.Fatalf("undo: %v\nJS errors: %v", err, errs.all())
@@ -405,13 +405,13 @@ func TestWritingHelperLeavesTheFieldAloneInTheBrowser(t *testing.T) {
 	err := chromedp.Run(ctx,
 		chromedp.EmulateViewport(1280, 900),
 		chromedp.Navigate(url+"/projects/p1/tasks/new"),
-		whPenReady(`.pen-host`),
+		whPenReady(`[data-panel-id=pen-task-description]`),
 		setField(`#task-description`, "rough text", "input"),
 
 		// Esc closes without changing the field, and hands the focus back.
 		whKey(`#task-description`, "j", whCtrl),
 		whPoll(whPhase("Which fields get the pen first?")),
-		whKey(`.helper .ask input`, "Escape", ""),
+		whKey(`#pen-task-description-panel .ask input`, "Escape", ""),
 		whPoll(`!`+whPanelShown),
 		chromedp.Evaluate(`document.querySelector('#task-description').value`, &field),
 		chromedp.Evaluate(`document.activeElement.id`, &active),
@@ -427,12 +427,12 @@ func TestWritingHelperLeavesTheFieldAloneInTheBrowser(t *testing.T) {
 	err = chromedp.Run(ctx,
 		whKey(`#task-description`, "j", whCtrl),
 		whPoll(whPhase("How will you know")),
-		whClick(`.helper`, "Skip questions"),
+		whClick(`#pen-task-description-panel`, "Skip questions"),
 		whPoll(whPhase("Proposed description")),
 		setField(`#task-description`, "rough text, edited", "input"),
 		whPoll(whPhase("You changed the description after this draft")),
-		chromedp.Evaluate(`getComputedStyle(document.querySelector('.helper .draft[data-stale]')).opacity === '0.6'`, &stale),
-		whClick(`.helper`, "Use anyway"),
+		chromedp.Evaluate(`getComputedStyle(document.querySelector('#pen-task-description-panel .draft[data-stale]')).opacity === '0.6'`, &stale),
+		whClick(`#pen-task-description-panel`, "Use anyway"),
 		whPoll(`!`+whPanelShown),
 		whPoll(`document.querySelector('#task-description').value.startsWith('Add a magic pen')`),
 	)
@@ -448,11 +448,11 @@ func TestWritingHelperLeavesTheFieldAloneInTheBrowser(t *testing.T) {
 		setField(`#task-description`, "second text", "input"),
 		whKey(`#task-description`, "j", whCtrl),
 		whPoll(whPhase("How will you know")),
-		whClick(`.helper`, "Skip questions"),
+		whClick(`#pen-task-description-panel`, "Skip questions"),
 		whPoll(whPhase("Proposed description")),
 		setField(`#task-description`, "second text edited", "input"),
 		whPoll(whPhase("You changed the description")),
-		whClick(`.helper`, "Redraft with my edits"),
+		whClick(`#pen-task-description-panel`, "Redraft with my edits"),
 		whPoll(whPhase("Proposed description")),
 	)
 	if err != nil {
@@ -476,11 +476,11 @@ func TestWritingHelperFailureKeepsAnswersInTheBrowser(t *testing.T) {
 	err := chromedp.Run(ctx,
 		chromedp.EmulateViewport(1280, 900),
 		chromedp.Navigate(url+"/projects/p1/tasks/new"),
-		whPenReady(`.pen-host`),
+		whPenReady(`[data-panel-id=pen-task-description]`),
 		setField(`#task-description`, "rough text", "input"),
 		whKey(`#task-description`, "j", whCtrl),
 		whPoll(whPhase("Which fields get the pen first?")),
-		whClick(`.helper`, "Every field"),
+		whClick(`#pen-task-description-panel`, "Every field"),
 	)
 	if err != nil {
 		t.Fatalf("setup: %v\nJS errors: %v", err, errs.all())
@@ -489,11 +489,11 @@ func TestWritingHelperFailureKeepsAnswersInTheBrowser(t *testing.T) {
 	api.failDraft = true
 	api.mu.Unlock()
 	err = chromedp.Run(ctx,
-		whClick(`.helper`, "Draft"),
+		whClick(`#pen-task-description-panel`, "Draft"),
 		whPoll(whPhase("WRITING_HELPER_FAILED")),
-		chromedp.Evaluate(`[...document.querySelectorAll('.helper [role=alert]')].find((e) => e.checkVisibility()).textContent.replace(/\s+/g, ' ').trim()`, &banner),
+		chromedp.Evaluate(`[...document.querySelectorAll('#pen-task-description-panel [role=alert]')].find((e) => e.checkVisibility()).textContent.replace(/\s+/g, ' ').trim()`, &banner),
 		chromedp.Evaluate(`document.querySelector('#task-description').value`, &field),
-		whClick(`.helper`, "Try again"),
+		whClick(`#pen-task-description-panel`, "Try again"),
 		whPoll(whPhase("Proposed description")),
 	)
 	if err != nil {
@@ -522,7 +522,7 @@ func TestWritingHelperStopWhileDraftingInTheBrowser(t *testing.T) {
 	err := chromedp.Run(ctx,
 		chromedp.EmulateViewport(1280, 900),
 		chromedp.Navigate(url+"/projects/p1/tasks/new"),
-		whPenReady(`.pen-host`),
+		whPenReady(`[data-panel-id=pen-task-description]`),
 		setField(`#task-description`, "rough text", "input"),
 		whKey(`#task-description`, "j", whCtrl),
 		whPoll(whPhase("Which fields get the pen first?")),
@@ -536,9 +536,9 @@ func TestWritingHelperStopWhileDraftingInTheBrowser(t *testing.T) {
 	api.mu.Unlock()
 	var field string
 	err = chromedp.Run(ctx,
-		whClick(`.helper`, "Draft"),
+		whClick(`#pen-task-description-panel`, "Draft"),
 		whPoll(whPhase("Drafting")),
-		whClick(`.helper`, "Stop"),
+		whClick(`#pen-task-description-panel`, "Stop"),
 		whPoll(whPhase("Which fields get the pen first?")),
 		chromedp.Evaluate(`document.querySelector('#task-description').value`, &field),
 	)
@@ -564,10 +564,10 @@ func TestWritingHelperEmptyFieldStartsFromTheTitleInTheBrowser(t *testing.T) {
 		chromedp.Navigate(url+"/projects/p1/tasks/new"),
 		whPenReady(`.pen-host`),
 		setField(`#task-title`, "AI helper for text", "input"),
-		chromedp.Click(`.pen`, chromedp.ByQuery),
+		chromedp.Click(`#task-description ~ .pen`, chromedp.ByQuery),
 		whPoll(whPhase("What is this task about?")),
-		chromedp.Evaluate(`document.querySelector('.helper .chips .chip').textContent.trim()`, &chip),
-		whClick(`.helper`, "Draft from the title"),
+		chromedp.Evaluate(`document.querySelector('#pen-task-description-panel .chips .chip').textContent.trim()`, &chip),
+		whClick(`#pen-task-description-panel`, "Draft from the title"),
 		whPoll(whPhase("Proposed description")),
 	)
 	if err != nil {
@@ -594,10 +594,10 @@ func TestWritingHelperUnavailableDisablesThePensInTheBrowser(t *testing.T) {
 	err := chromedp.Run(ctx,
 		chromedp.EmulateViewport(1280, 900),
 		chromedp.Navigate(url+"/projects/p1/tasks/new"),
-		whPenReady(`.pen-host`),
-		chromedp.Evaluate(`document.querySelector('.pen').disabled`, &disabled),
-		chromedp.Evaluate(`document.querySelector('.pen').getAttribute('aria-label')`, &label),
-		chromedp.Evaluate(`document.querySelector('.pen').title`, &title),
+		whPenReady(`[data-panel-id=pen-task-description]`),
+		chromedp.Evaluate(`document.querySelector('#task-description ~ .pen').disabled`, &disabled),
+		chromedp.Evaluate(`document.querySelector('#task-description ~ .pen').getAttribute('aria-label')`, &label),
+		chromedp.Evaluate(`document.querySelector('#task-description ~ .pen').title`, &title),
 		setField(`#task-description`, "still works", "input"),
 		whKey(`#task-description`, "j", whCtrl),
 		chromedp.Sleep(200*time.Millisecond),
@@ -630,13 +630,13 @@ func TestWritingHelperRefusalSwitchesThePensOffInTheBrowser(t *testing.T) {
 	err := chromedp.Run(ctx,
 		chromedp.EmulateViewport(1280, 900),
 		chromedp.Navigate(url+"/projects/p1/tasks/new"),
-		whPenReady(`.pen-host`),
+		whPenReady(`[data-panel-id=pen-task-description]`),
 		setField(`#task-description`, "rough text", "input"),
-		chromedp.Click(`.pen`, chromedp.ByQuery),
-		whPoll(`document.querySelector('.pen').disabled`),
-		chromedp.Evaluate(`document.querySelector('.pen').disabled`, &disabled),
-		whPoll(`!!document.querySelector('.toast')?.checkVisibility()`),
-		chromedp.Evaluate(`document.querySelector('.toast').textContent.replace(/\s+/g, ' ').trim()`, &toast),
+		chromedp.Click(`#task-description ~ .pen`, chromedp.ByQuery),
+		whPoll(`document.querySelector('#task-description ~ .pen').disabled`),
+		chromedp.Evaluate(`document.querySelector('#task-description ~ .pen').disabled`, &disabled),
+		whPoll(`!!document.querySelector('#pen-task-description-panel ~ .toast-region .toast')?.checkVisibility()`),
+		chromedp.Evaluate(`document.querySelector('#pen-task-description-panel ~ .toast-region .toast').textContent.replace(/\s+/g, ' ').trim()`, &toast),
 	)
 	if err != nil {
 		t.Fatalf("refusal: %v\nJS errors: %v", err, errs.all())
@@ -661,12 +661,12 @@ func TestWritingHelperIsABottomSheetOnAPhoneInTheBrowser(t *testing.T) {
 	err := chromedp.Run(ctx,
 		chromedp.EmulateViewport(480, 800),
 		chromedp.Navigate(url+"/projects/p1/tasks/new"),
-		whPenReady(`.pen-host`),
+		whPenReady(`[data-panel-id=pen-task-description]`),
 		setField(`#task-description`, "rough text", "input"),
-		chromedp.Click(`.pen`, chromedp.ByQuery),
+		chromedp.Click(`#task-description ~ .pen`, chromedp.ByQuery),
 		whPoll(whPhase("Which fields get the pen first?")),
-		chromedp.Evaluate(`getComputedStyle(document.querySelector('.helper')).position`, &position),
-		chromedp.Evaluate(`getComputedStyle(document.querySelector('.helper-scrim')).display`, &scrim),
+		chromedp.Evaluate(`getComputedStyle(document.querySelector('#pen-task-description-panel')).position`, &position),
+		chromedp.Evaluate(`getComputedStyle(document.querySelector('[data-panel-id=pen-task-description] .helper-scrim')).display`, &scrim),
 	)
 	if err != nil {
 		t.Fatalf("sheet: %v\nJS errors: %v", err, errs.all())
@@ -694,7 +694,7 @@ func TestWritingHelperInTheTaskEditDialogInTheBrowser(t *testing.T) {
 		setField(`#task-edit-title`, "Write the live docs", "input"),
 		whKey(`#task-edit-description`, "j", whCtrl),
 		whPoll(whPhase("Which fields get the pen first?")),
-		whClick(`.helper`, "Skip questions"),
+		whClick(`#pen-task-edit-description-panel`, "Skip questions"),
 		whPoll(whPhase("Proposed description")),
 		// Esc closes the helper, not the edit form.
 		whKey(`#task-edit-description`, "Escape", ""),
@@ -710,9 +710,9 @@ func TestWritingHelperInTheTaskEditDialogInTheBrowser(t *testing.T) {
 	err = chromedp.Run(ctx,
 		whKey(`#task-edit-description`, "j", whCtrl),
 		whPoll(whPhase("How will you know")),
-		whClick(`.helper`, "Skip questions"),
+		whClick(`#pen-task-edit-description-panel`, "Skip questions"),
 		whPoll(whPhase("Proposed description")),
-		whClick(`.helper`, "Use this"),
+		whClick(`#pen-task-edit-description-panel`, "Use this"),
 		whPoll(`document.querySelector('#task-edit-description').value.startsWith('Add a magic pen')`),
 		clickButton(`main`, "Save"),
 		whPoll(`!document.querySelector('#task-edit-description')`),
@@ -727,6 +727,144 @@ func TestWritingHelperInTheTaskEditDialogInTheBrowser(t *testing.T) {
 	}
 	if !strings.Contains(api.log(), `"description":"Add a magic pen to the task title and description.`) {
 		t.Errorf("the save did not carry the helper's text:\n%s", api.log())
+	}
+	if e := errs.all(); len(e) > 0 {
+		t.Errorf("JavaScript errors:\n%s", strings.Join(e, "\n"))
+	}
+}
+
+func TestWritingHelperTitleOptionsInTheBrowser(t *testing.T) {
+	api := newFakeHelperAPI()
+	ctx, url, errs := helperBrowser(t, api, whAvailable)
+
+	var geometry string
+	var picked, undone, toast, active string
+	err := chromedp.Run(ctx,
+		chromedp.EmulateViewport(1280, 900),
+		chromedp.Navigate(url+"/projects/p1/tasks/new"),
+		chromedp.WaitVisible(`#task-title`, chromedp.ByQuery),
+		whPoll(`!!document.querySelector('#task-title').closest('.pen-host')?._x_dataStack`),
+		setField(`#task-description`, "A pen that helps write task text", "input"),
+		// The pen sits centred at the end of the one-line field.
+		chromedp.Evaluate(`(() => {
+			const input = document.querySelector('#task-title').getBoundingClientRect();
+			const pen = document.querySelector('#task-title ~ .pen').getBoundingClientRect();
+			const mid = (r) => Math.round((r.top + r.bottom) / 2);
+			return [mid(input) === mid(pen) || Math.abs(mid(input) - mid(pen)) <= 1, pen.right <= input.right, pen.left > input.left + input.width / 2].join('|');
+		})()`, &geometry),
+		chromedp.Click(`#task-title ~ .pen`, chromedp.ByQuery),
+		whPoll(whPhase("Title option 1")),
+		whShot("titles"),
+		whPoll(`document.activeElement.getAttribute('role') === 'option'`),
+		chromedp.Evaluate(`document.activeElement.getAttribute('role')`, &active),
+	)
+	if err != nil {
+		t.Fatalf("titles: %v\nJS errors: %v", err, errs.all())
+	}
+	if geometry != "true|true|true" {
+		t.Errorf("pen geometry = %q", geometry)
+	}
+	if active != "option" {
+		t.Errorf("focus role = %q, want the first option", active)
+	}
+	steps := api.requests()
+	if len(steps) != 1 || steps[0]["step"] != "titles" {
+		t.Fatalf("steps = %v, want one titles step", steps)
+	}
+	if f, _ := steps[0]["field"].(map[string]any); f["kind"] != "task_title" {
+		t.Errorf("field = %v", steps[0]["field"])
+	}
+	if sib, _ := steps[0]["siblings"].([]any); len(sib) != 1 {
+		t.Errorf("siblings = %v", steps[0]["siblings"])
+	}
+
+	// Three more asks again, naming what was offered.
+	err = chromedp.Run(ctx,
+		whClick(`.helper`, "Three more"),
+		whPoll(whPhase("Title option 4")),
+	)
+	if err != nil {
+		t.Fatalf("three more: %v\nJS errors: %v", err, errs.all())
+	}
+	steps = api.requests()
+	if ex, _ := steps[1]["exclude"].([]any); len(steps) != 2 || len(ex) != 3 {
+		t.Errorf("exclude = %v", steps[1]["exclude"])
+	}
+
+	// The key 2 picks the second option like Use this: the field takes it, with Undo.
+	err = chromedp.Run(ctx,
+		whKey(`.helper .options button`, "2", ""),
+		whPoll(`!`+whPanelShown),
+		chromedp.Evaluate(`document.querySelector('#task-title').value`, &picked),
+		chromedp.Evaluate(`document.activeElement.id`, &active),
+		whPoll(`!!document.querySelector('.toast')?.checkVisibility()`),
+		chromedp.Evaluate(`document.querySelector('.toast').textContent.replace(/\s+/g, ' ').trim()`, &toast),
+		whClick(`.toast`, "Undo"),
+		whPoll(`document.querySelector('#task-title').value === ''`),
+		chromedp.Evaluate(`document.querySelector('#task-title').value`, &undone),
+	)
+	if err != nil {
+		t.Fatalf("pick: %v\nJS errors: %v", err, errs.all())
+	}
+	if picked != "Title option 5" || undone != "" || active != "task-title" {
+		t.Errorf("picked %q, after Undo %q, focus %q", picked, undone, active)
+	}
+	if !strings.Contains(toast, "Title replaced by the helper's pick") {
+		t.Errorf("toast = %q", toast)
+	}
+
+	// A digit typed in the title field is typed, not a pick.
+	err = chromedp.Run(ctx,
+		chromedp.Click(`#task-title ~ .pen`, chromedp.ByQuery),
+		whPoll(whPhase("Title option")),
+		chromedp.Focus(`#task-title`, chromedp.ByQuery),
+		chromedp.SendKeys(`#task-title`, "1", chromedp.ByQuery),
+		chromedp.Evaluate(`document.querySelector('#task-title').value`, &picked),
+	)
+	if err != nil {
+		t.Fatalf("typing: %v\nJS errors: %v", err, errs.all())
+	}
+	if picked != "1" {
+		t.Errorf("a digit in the field gave %q", picked)
+	}
+	if e := errs.all(); len(e) > 0 {
+		t.Errorf("JavaScript errors:\n%s", strings.Join(e, "\n"))
+	}
+}
+
+func TestWritingHelperTitleInTheTaskEditDialogInTheBrowser(t *testing.T) {
+	api := newFakeHelperAPI()
+	ctx, url, errs := helperBrowser(t, api, whAvailable)
+
+	var focused string
+	err := chromedp.Run(ctx,
+		chromedp.EmulateViewport(1280, 900),
+		chromedp.Navigate(url+"/projects/p1/tasks/t-new"),
+		clickButton(`main header`, "Edit"),
+		chromedp.WaitVisible(`#task-edit-title`, chromedp.ByQuery),
+		// The title still takes the focus when the editor opens.
+		whPoll(`document.activeElement.id === 'task-edit-title'`),
+		chromedp.Evaluate(`document.activeElement.id`, &focused),
+		whPoll(`!!document.querySelector('#task-edit-title').closest('.pen-host')?._x_dataStack`),
+		chromedp.Click(`#task-edit-title ~ .pen`, chromedp.ByQuery),
+		whPoll(whPhase("Title option 1")),
+		whKey(`.helper .options button`, "3", ""),
+		whPoll(`document.querySelector('#task-edit-title').value === 'Title option 3'`),
+		clickButton(`main`, "Save"),
+		whPoll(`!document.querySelector('#task-edit-title')`),
+	)
+	if err != nil {
+		t.Fatalf("edit title: %v\nJS errors: %v", err, errs.all())
+	}
+	if focused != "task-edit-title" {
+		t.Errorf("focus = %q", focused)
+	}
+	if !strings.Contains(api.log(), `"title":"Title option 3"`) {
+		t.Errorf("the save did not carry the picked title:\n%s", api.log())
+	}
+	steps := api.requests()
+	if sib, _ := steps[0]["siblings"].([]any); len(sib) != 1 {
+		t.Errorf("the title step read %v", steps[0]["siblings"])
 	}
 	if e := errs.all(); len(e) > 0 {
 		t.Errorf("JavaScript errors:\n%s", strings.Join(e, "\n"))

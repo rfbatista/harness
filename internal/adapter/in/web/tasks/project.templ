@@ -362,7 +362,14 @@ templ NewTaskPage(f shell.Frame, projectID, projectName string) {
 				<form class="[ wrapper flow ] [ region ]" style="--wrapper-max: 44rem" x-data="tasksNewTask" data-project-id={ projectID } x-on:submit.prevent="submit">
 					<div class="[ field ]">
 						<label for="task-title">Title</label>
-						<input id="task-title" autocomplete="off" required autofocus x-model="title" placeholder="Add the SSE feed to orchestration"/>
+						@components.WritingPen(components.Pen{
+							ID: "pen-task-title", Kind: "task_title", Noun: "title", Label: "Title",
+							ProjectID: projectID, ProjectName: projectName,
+							Siblings:  []components.PenSibling{{Label: "Description", Selector: "#task-description"}},
+							Available: f.Helper.Available, Reason: f.Helper.Reason, FixURL: f.Helper.FixURL,
+						}) {
+							<input id="task-title" autocomplete="off" required autofocus x-model="title" placeholder="Add the SSE feed to orchestration"/>
+						}
 					</div>
 					<div class="[ field ]">
 						<label for="task-description">Description <span class="[ color-ink-faint weight-regular ]">(optional)</span></label>

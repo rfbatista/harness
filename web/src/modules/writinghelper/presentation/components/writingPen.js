@@ -25,6 +25,9 @@ import { isShown, isTextTarget, replaceField } from "../field.js";
 const TOAST_MS = 10_000;
 /** How long the field's ring from the helper's write lasts (matches --duration-signal). */
 const RING_MS = 900;
+/** How often, and how far apart, the focus looks for the first question or option while the panel paints. */
+const SETTLE_TRIES = 6;
+const SETTLE_MS = 40;
 /** Under this width the panel is a bottom sheet. */
 const SHEET_QUERY = "(max-width: 40rem)";
 
@@ -626,22 +629,27 @@ export const writingPen = ({ gateway, coordinator, setTimeout: later = globalThi
 
     /** After a phase change, keep the focus somewhere that is still shown. */
     settleFocus() {
-      this.$nextTick(() => {
-        if (!root || !this.isOpen) return;
-        const active = document.activeElement;
-        const panel = root.querySelector(".helper");
-        if (!panel) return;
-        const first = [".ask input", ".options button", "footer [data-primary]", "header button"]
-          .map((s) => Array.from(panel.querySelectorAll(s)).find((el) => isShown(/** @type {HTMLElement} */ (el))))
-          .find(Boolean);
-        const inPanelBody = active && panel.contains(active) && isShown(/** @type {HTMLElement} */ (active));
-        // The panel's first input or option wins on arrival; elsewhere keep what the person was on.
-        if ((this.panel.phase === "questions" || this.panel.phase === "start" || this.panel.phase === "titles") && !(active instanceof HTMLInputElement && inPanelBody)) {
-          /** @type {HTMLElement | undefined} */ (first)?.focus();
-        } else if (!inPanelBody && active !== field) {
-          /** @type {HTMLElement | undefined} */ (first)?.focus();
-        }
-      });
+      // After the render: the questions and options come from x-for and x-show,
+      // which paint a tick after the phase flips, so look again a few times.
+      this.$nextTick(() => this.settle(0));
+    },
+
+    settle(attempt) {
+      if (!root || !this.isOpen) return;
+      const panel = root.querySelector(".helper");
+      if (!panel) return;
+      const first = [".ask input", ".options button", "footer [data-primary]", "header button"]
+        .map((selector) => Array.from(panel.querySelectorAll(selector)).find((el) => isShown(/** @type {HTMLElement} */ (el))))
+        .find(Boolean);
+      const active = document.activeElement;
+      const kept = Boolean(active) && panel.contains(active) && isShown(/** @type {HTMLElement} */ (active));
+      // Arriving at the questions, the start question or the options: the first one takes the focus,
+      // unless the person is already on one. Elsewhere only a lost focus is found again.
+      const arriving = ["start", "questions", "titles"].includes(this.panel.phase);
+      const onAnInput = kept && /** @type {Element} */ (active).matches(".ask input, .options button");
+      if (arriving ? !onAnInput : !kept && active !== field) /** @type {HTMLElement | undefined} */ (first)?.focus();
+      const arrived = document.activeElement?.matches?.(".ask input, .options button");
+      if (arriving && !arrived && attempt < SETTLE_TRIES) globalThis.setTimeout(() => this.settle(attempt + 1), SETTLE_MS);
     },
   };
 };
