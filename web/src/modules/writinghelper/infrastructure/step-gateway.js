@@ -65,7 +65,9 @@ async function readStream(body, onDelta) {
     }
     if (name === "delta") onDelta?.(String(payload.text ?? ""));
     else if (name === "result") result = payload;
-    else if (name === "error") error = new StructuredError(payload.code ?? Codes.WRITING_HELPER_FAILED, payload.message ?? "The helper failed.");
+    else if (name === "error") {
+      error = new StructuredError(payload.code ?? Codes.WRITING_HELPER_FAILED, payload.message ?? "The helper failed.", undefined, payload.fix_url ? { fix_url: payload.fix_url } : undefined);
+    }
   });
 
   const reader = body.getReader();

@@ -82,3 +82,9 @@ test("aborting the signal rejects with an AbortError and passes the signal to fe
   assert.ok(!(err instanceof StructuredError));
   assert.equal(calls[0].init.signal, controller.signal);
 });
+
+test("an error event may carry the fix link too", async () => {
+  const { fetch } = fakeFetch(() => streamOf('event: error\ndata: {"code":"WRITING_HELPER_UNAVAILABLE","message":"not signed in","fix_url":"/agent-isolation#credential"}\n\n'));
+  const err = await assert.rejects(stepGateway({ base: "/api", fetch }).runStep(request), "WRITING_HELPER_UNAVAILABLE");
+  assert.equal(err.details.fix_url, "/agent-isolation#credential");
+});
