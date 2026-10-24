@@ -1,5 +1,7 @@
 package domain
 
+import "slices"
+
 // A session runs on one of two model tiers. An architect session plans the
 // task, so it gets the architect model; a session another session started
 // (through the start_task_session tool) carries out part of that plan, so it
@@ -68,4 +70,35 @@ func ResolveSessionModel(mode SessionMode, startedBySession bool, architect, imp
 	default:
 		return ""
 	}
+}
+
+// The writing helper (ADR 0026) is an assistant, not a session: one global
+// model setting, haiku while unset. "default" is not offered, because the CLI's
+// own default may be a slow model for a field that a person is waiting on.
+const (
+	// SettingModelWritingHelper is the settings key holding the writing
+	// helper's model.
+	SettingModelWritingHelper = "models.assistants.writing_helper"
+	// DefaultWritingHelperModel is the model while the setting is unset.
+	DefaultWritingHelperModel = "haiku"
+)
+
+// WritingHelperModelChoices are the values the writing helper's setting
+// accepts, in the order a person is offered them.
+var WritingHelperModelChoices = []string{"haiku", "sonnet", "opus", "fable"}
+
+func validateWritingHelperModel(key, value string) error {
+	if value == "" || slices.Contains(WritingHelperModelChoices, value) {
+		return nil
+	}
+	return &StructuredError{Code: "INVALID_INPUT", Message: key + ` must be one of "haiku", "sonnet", "opus" or "fable"`}
+}
+
+// WritingHelperModel reads the writing helper's stored setting: unset, or a
+// value it does not accept, takes the built-in model.
+func WritingHelperModel(stored string) string {
+	if slices.Contains(WritingHelperModelChoices, stored) {
+		return stored
+	}
+	return DefaultWritingHelperModel
 }
