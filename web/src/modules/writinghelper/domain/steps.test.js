@@ -51,8 +51,9 @@ test("a text over the limit is refused before anything is sent", () => {
   assert.ok(err.message.includes("20,000"));
 });
 
-test("a sibling over the limit is refused too", () => {
-  assert.throws(() => stepRequest("analyze", { ...base, siblings: [{ label: "Title", text: "x".repeat(MAX_TEXT + 1) }] }), "INVALID_INPUT");
+test("a sibling over the limit is cut, not refused: it is only context", () => {
+  const body = stepRequest("analyze", { ...base, siblings: [{ label: "Title", text: "x".repeat(MAX_TEXT + 1) }] });
+  assert.equal(body.siblings[0].text.length, MAX_TEXT);
 });
 
 test("more than four siblings are cut to four", () => {

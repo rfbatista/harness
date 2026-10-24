@@ -517,7 +517,7 @@ func TestWritingHelperFailureKeepsAnswersInTheBrowser(t *testing.T) {
 	err = chromedp.Run(ctx,
 		whClick(`#pen-task-description-panel`, "Draft"),
 		whPoll(whPhase("WRITING_HELPER_FAILED")),
-		chromedp.Evaluate(`[...document.querySelectorAll('#pen-task-description-panel [role=alert]')].find((e) => e.checkVisibility()).textContent.replace(/\s+/g, ' ').trim()`, &banner),
+		chromedp.Evaluate(`[...document.querySelectorAll('#pen-task-description-panel .banner[data-tone=danger]')].find((e) => e.checkVisibility()).textContent.replace(/\s+/g, ' ').trim()`, &banner),
 		chromedp.Evaluate(`document.querySelector('#task-description').value`, &field),
 		whClick(`#pen-task-description-panel`, "Try again"),
 		whPoll(whPhase("Proposed description")),

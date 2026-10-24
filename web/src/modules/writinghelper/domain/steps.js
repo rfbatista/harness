@@ -27,8 +27,11 @@ const tooLong = (what) =>
  */
 export function stepRequest(step, { projectId, kind, text, siblings = [], answers = [], draft = "", request = "", exclude = [] }) {
   if (text.length > MAX_TEXT) throw tooLong("text");
-  const read = siblings.filter((s) => s.text.trim() !== "").slice(0, MAX_SIBLINGS);
-  for (const s of read) if (s.text.length > MAX_TEXT) throw tooLong(s.label.toLowerCase());
+  // A sibling is context: a long one is cut, where the field itself is refused.
+  const read = siblings
+    .filter((s) => s.text.trim() !== "")
+    .slice(0, MAX_SIBLINGS)
+    .map((s) => (s.text.length > MAX_TEXT ? { ...s, text: s.text.slice(0, MAX_TEXT) } : s));
   if (draft.length > MAX_TEXT) throw tooLong("draft");
   if (request.length > MAX_TEXT) throw tooLong("request");
 

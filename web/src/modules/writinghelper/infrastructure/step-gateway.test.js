@@ -83,6 +83,12 @@ test("aborting the signal rejects with an AbortError and passes the signal to fe
   assert.equal(calls[0].init.signal, controller.signal);
 });
 
+test("an event whose data is not an object is a bad answer, not a lost connection", async () => {
+  const { fetch } = fakeFetch(() => streamOf("event: delta\ndata: null\n\n"));
+  const err = await assert.rejects(stepGateway({ base: "/api", fetch }).runStep(request), "WRITING_HELPER_FAILED");
+  assert.ok(err.message.includes("cannot be read"));
+});
+
 test("an error event may carry the fix link too", async () => {
   const { fetch } = fakeFetch(() => streamOf('event: error\ndata: {"code":"WRITING_HELPER_UNAVAILABLE","message":"not signed in","fix_url":"/agent-isolation#credential"}\n\n'));
   const err = await assert.rejects(stepGateway({ base: "/api", fetch }).runStep(request), "WRITING_HELPER_UNAVAILABLE");

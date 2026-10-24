@@ -308,8 +308,11 @@ export const writingPen = ({ gateway, coordinator, setTimeout: later = globalThi
     },
 
     /** Paints the draft: the word diff against the field's text, or the clean text. Called from x-effect. */
-    paintDraft(el) {
+    paintDraft(el, role) {
       const s = this.panel;
+      // Three draft elements watch the panel; only the one on show pays for a diff.
+      const shown = role === "drafting" ? this.showDrafting : role === "stale" ? this.showStale : this.showProposal;
+      if (!shown) return;
       const view = s.stale ? "clean" : s.view;
       el.dataset.view = view;
       el.innerHTML = diffHtml(wordDiff(s.baseline, s.draft));
@@ -649,7 +652,7 @@ export const writingPen = ({ gateway, coordinator, setTimeout: later = globalThi
       const onAnInput = kept && /** @type {Element} */ (active).matches(".ask input, .options button");
       if (arriving ? !onAnInput : !kept && active !== field) /** @type {HTMLElement | undefined} */ (first)?.focus();
       const arrived = document.activeElement?.matches?.(".ask input, .options button");
-      if (arriving && !arrived && attempt < SETTLE_TRIES) globalThis.setTimeout(() => this.settle(attempt + 1), SETTLE_MS);
+      if (arriving && !arrived && attempt < SETTLE_TRIES) later(() => this.settle(attempt + 1), SETTLE_MS);
     },
   };
 };

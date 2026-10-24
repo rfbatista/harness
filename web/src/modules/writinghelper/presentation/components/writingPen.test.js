@@ -305,13 +305,13 @@ test("the diff view paints insertions, removals and gaps and the clean view only
   await settle();
   await instance.runDraft();
   const el = document.createElement("div");
-  instance.paintDraft(el);
+  instance.paintDraft(el, "proposal");
   assert.equal(el.querySelectorAll("ins").length > 0, true);
   assert.equal(el.querySelectorAll("del").length > 0, true);
   assert.equal(el.querySelector(".gap").textContent, "[open: owner]");
   assert.equal(el.dataset.view, "changes");
   instance.showClean();
-  instance.paintDraft(el);
+  instance.paintDraft(el, "proposal");
   assert.equal(el.dataset.view, "clean");
   done();
 });

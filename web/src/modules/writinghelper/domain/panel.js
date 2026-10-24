@@ -112,7 +112,8 @@ export const canContinue = (s) => filled(s.intent);
 
 /** A draft (or a refine of one) starts: the field's text is the baseline staleness is measured from. */
 export function drafting(s, { baseline, request = "" }) {
-  const keep = s.phase === "drafting" ? s.from : { phase: s.phase, draft: s.draft };
+  // Stop goes back to where the person was; a retry from an error keeps the place the failed draft began.
+  const keep = s.phase === "drafting" || s.phase === "error" ? s.from : { phase: s.phase, draft: s.draft };
   return { ...s, phase: "drafting", step: "draft", draft: "", baseline, request, stale: false, from: keep, error: null };
 }
 

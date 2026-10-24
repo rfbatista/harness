@@ -143,6 +143,14 @@ test("stopping while reading closes the panel", () => {
   assert.equal(panel.stopped(panel.opened({ kind: "comment", text: "x" })).phase, "closed");
 });
 
+test("stopping a retried draft does not go back to the error it replaced", () => {
+  let s = panel.setAnswer(asking(), "q1", "a");
+  s = panel.failed(panel.drafting(s, { baseline: "x" }), { code: "X", message: "m", next: "n" });
+  s = panel.stopped(panel.drafting(s, { baseline: "x" }));
+  assert.equal(s.phase, "questions");
+  assert.equal(s.answers.q1, "a");
+});
+
 test("a failure keeps the answers and remembers what to retry", () => {
   let s = panel.setAnswer(asking(), "q1", "a");
   s = panel.failed(panel.drafting(s, { baseline: "x" }), { code: "WRITING_HELPER_FAILED", message: "stopped", next: "try again" });

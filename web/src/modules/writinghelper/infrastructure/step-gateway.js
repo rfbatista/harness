@@ -63,6 +63,10 @@ async function readStream(body, onDelta) {
       error ??= failed("The helper sent an answer that cannot be read.");
       return;
     }
+    if (payload === null || typeof payload !== "object") {
+      error ??= failed("The helper sent an answer that cannot be read.");
+      return;
+    }
     if (name === "delta") onDelta?.(String(payload.text ?? ""));
     else if (name === "result") result = payload;
     else if (name === "error") {

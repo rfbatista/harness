@@ -147,7 +147,7 @@ templ WritingPen(p Pen) {
 			</div>
 			<div class="[ body ]" aria-live="polite" style="display: none" x-show="showDrafting">
 				<span class="[ lead ]">Drafting…</span>
-				<div class="[ draft ]" data-streaming x-effect="paintDraft($el)"></div>
+				<div class="[ draft ]" data-streaming x-effect="paintDraft($el, 'drafting')"></div>
 			</div>
 			<footer style="display: none" x-show="showDrafting">
 				<span class="[ hint ]">Your field is untouched until you choose.</span>
@@ -161,7 +161,7 @@ templ WritingPen(p Pen) {
 						<button type="button" x-bind:aria-pressed="cleanPressed" x-on:click="showClean">Clean</button>
 					</span>
 				</div>
-				<div class="[ draft ]" x-effect="paintDraft($el)"></div>
+				<div class="[ draft ]" x-effect="paintDraft($el, 'proposal')"></div>
 				<p class="[ lead text-xs ]" style="display: none" x-show="hasGaps" x-text="gapText"></p>
 				<div class="[ chips ]">
 					<template x-for="chip in refineChips" x-bind:key="chip">
@@ -170,11 +170,11 @@ templ WritingPen(p Pen) {
 				</div>
 			</div>
 			<div class="[ body ]" aria-live="polite" style="display: none" x-show="showStale">
-				<div class="[ banner ]" data-tone="attention" role="alert">
+				<div class="[ banner ]" data-tone="attention">
 					@alertGlyph()
 					<span x-text="staleMessage"></span>
 				</div>
-				<div class="[ draft ]" data-stale x-effect="paintDraft($el)"></div>
+				<div class="[ draft ]" data-stale x-effect="paintDraft($el, 'stale')"></div>
 			</div>
 			<div class="[ body ]" aria-live="polite" style="display: none" x-show="showTitles">
 				<p class="[ lead ]" x-text="titlesLead"></p>
@@ -194,7 +194,7 @@ templ WritingPen(p Pen) {
 				</span>
 			</footer>
 			<div class="[ body ]" aria-live="polite" style="display: none" x-show="showError">
-				<div class="[ banner ]" data-tone="danger" role="alert">
+				<div class="[ banner ]" data-tone="danger">
 					@alertGlyph()
 					<div class="[ flow ] [ flow-space-3xs ]">
 						<span x-text="errorMessage"></span>
