@@ -56,90 +56,32 @@ type Streamer interface {
 	Stream(ctx context.Context, call StreamCall, onText func(string)) (string, error)
 }
 
+// The request, events and results are the HTTP API's too, so they are
+// declared as ports.
+type (
+	Request       = ports.WritingHelperRequest
+	Field         = ports.WritingHelperField
+	Sibling       = ports.WritingHelperSibling
+	Answer        = ports.WritingHelperAnswer
+	Question      = ports.WritingHelperQuestion
+	AnalyzeResult = ports.WritingHelperAnalyzeResult
+	DraftResult   = ports.WritingHelperDraftResult
+	TitlesResult  = ports.WritingHelperTitlesResult
+	Delta         = ports.WritingHelperDelta
+	Event         = ports.WritingHelperEvent
+	Availability  = ports.WritingHelperAvailability
+)
+
+// Event names, which the HTTP layer uses as the SSE event names.
+const (
+	EventDelta  = ports.WritingHelperEventDelta
+	EventResult = ports.WritingHelperEventResult
+)
+
 // ProjectReader reads the project the step is for, PROJECT_NOT_FOUND when it
 // does not exist.
 type ProjectReader interface {
 	GetProject(ctx context.Context, projectID string) (*domain.Project, error)
-}
-
-// Field is the text the person is writing and what it is.
-type Field struct {
-	Kind string `json:"kind"`
-	Text string `json:"text"`
-}
-
-// Sibling is another field of the same form.
-type Sibling struct {
-	Label string `json:"label"`
-	Text  string `json:"text"`
-}
-
-// Answer is a question the person answered.
-type Answer struct {
-	Question string `json:"question"`
-	Answer   string `json:"answer"`
-}
-
-// Request is one step, as the browser sends it.
-type Request struct {
-	ProjectID string    `json:"project_id"`
-	Step      string    `json:"step"`
-	Field     Field     `json:"field"`
-	Siblings  []Sibling `json:"siblings"`
-	Answers   []Answer  `json:"answers"`
-	// Draft and Request make a draft step a refine.
-	Draft   string   `json:"draft"`
-	Request string   `json:"request"`
-	Exclude []string `json:"exclude"`
-}
-
-// Question is what the analyze step asks.
-type Question struct {
-	ID    string   `json:"id"`
-	Text  string   `json:"text"`
-	Why   string   `json:"why"`
-	Chips []string `json:"chips"`
-}
-
-// AnalyzeResult is the result of the analyze step.
-type AnalyzeResult struct {
-	AlreadyGood bool       `json:"already_good"`
-	Questions   []Question `json:"questions"`
-}
-
-// DraftResult is the result of the draft step: the whole draft.
-type DraftResult struct {
-	Text string `json:"text"`
-}
-
-// TitlesResult is the result of the titles step.
-type TitlesResult struct {
-	Titles []string `json:"titles"`
-}
-
-// Delta is a piece of a draft as it is written.
-type Delta struct {
-	Text string `json:"text"`
-}
-
-// Event names, which the HTTP layer uses as the SSE event names.
-const (
-	EventDelta  = "delta"
-	EventResult = "result"
-)
-
-// Event is something a step reports: a Delta (name "delta") or a result.
-type Event struct {
-	Name string
-	Data any
-}
-
-// Availability says whether the helper can run now and, when it cannot, why
-// and where to fix it.
-type Availability struct {
-	Available bool
-	Reason    string
-	FixURL    string
 }
 
 // Service runs the steps.
@@ -372,3 +314,5 @@ func stripFence(s string) string {
 	s = strings.TrimPrefix(s, "json")
 	return strings.TrimSpace(strings.TrimSuffix(strings.TrimSpace(s), "```"))
 }
+
+var _ ports.WritingHelper = (*Service)(nil)
