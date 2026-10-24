@@ -2,6 +2,7 @@ package app
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"operators-mcp/internal/ports"
@@ -38,6 +39,22 @@ func TestTheSandboxAllowlistHoldsToolchainsCachesTokenSaversAndClaudesInstall(t 
 			t.Errorf("%s: found %v write %v, want write %v", path, found, write, wantWrite)
 		}
 	}
+}
+
+// A token saver's binary dir, which goes on a session's PATH, sits under the
+// tools dir the standing allowlist already reads: nothing else is added.
+func TestATokenSaversBinaryDirIsReadableUnderTheStandingAllow(t *testing.T) {
+	list := sandboxAllowlist(allowSources{Home: "/home/p", ToolsDir: "/data/tools", Getenv: func(string) string { return "" }})
+	dir := "/data/tools/rtk/v0.37.0"
+	for _, p := range list {
+		if rel, err := filepath.Rel(p.Path, dir); err == nil && !strings.HasPrefix(rel, "..") {
+			if p.Write {
+				t.Errorf("%s is writable", p.Path)
+			}
+			return
+		}
+	}
+	t.Errorf("%s is not readable under %v", dir, list)
 }
 
 func TestTheSandboxAllowlistFollowsTheToolchainEnvAndNeverReachesTheClaudeHomeOfThePerson(t *testing.T) {

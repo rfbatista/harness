@@ -13,6 +13,7 @@ import (
 	"github.com/rfbatista/llmkit/claude"
 
 	"operators-mcp/internal/domain"
+	"operators-mcp/internal/ports"
 )
 
 // A session's token savers (ADR 0015): preparing it asks Capabilities once
@@ -247,17 +248,37 @@ func withEnv(cfg *llmkit.SessionConfig, kvs ...string) {
 	cfg.Env = env
 }
 
-// withPathDir puts dir first on cfg's PATH: the PATH cfg's env already has
-// (the shims'), or the server's own when it has none.
+// withPathDir puts a token saver's dir on cfg's one PATH, right after the
+// edit-proxy shim dir (a saver's binary never shadows a shim, which enforce
+// the virtual shell's rules) and ahead of the rest: the PATH cfg's env
+// already has, or the server's own when it has none. The dir is also named
+// under ports.SaverBinDirsEnv for a login shell to put back.
 func withPathDir(cfg *llmkit.SessionConfig, dir string) {
-	path := os.Getenv("PATH")
-	if i := slices.IndexFunc(cfg.Env, func(e string) bool { return strings.HasPrefix(e, "PATH=") }); i >= 0 {
-		path = strings.TrimPrefix(cfg.Env[i], "PATH=")
+	path, shims, savers := os.Getenv("PATH"), "", ""
+	for _, kv := range cfg.Env {
+		switch name, v, _ := strings.Cut(kv, "="); name {
+		case "PATH":
+			path = v
+		case ports.ShimDirEnv:
+			shims = v
+		case ports.SaverBinDirsEnv:
+			savers = v
+		}
 	}
+	var parts []string
 	if path != "" {
-		dir += string(os.PathListSeparator) + path
+		parts = filepath.SplitList(path)
 	}
-	withEnv(cfg, "PATH="+dir)
+	at := 0
+	if shims != "" && len(parts) > 0 && parts[0] == shims {
+		at = 1
+	}
+	parts = slices.Insert(parts, at, dir)
+	setPath(cfg, strings.Join(parts, string(os.PathListSeparator)))
+	if savers != "" {
+		dir += string(os.PathListSeparator) + savers
+	}
+	withEnv(cfg, ports.SaverBinDirsEnv+"="+dir)
 }
 
 // shellQuote is s as one word of a POSIX shell command.
