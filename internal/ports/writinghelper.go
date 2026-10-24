@@ -87,6 +87,12 @@ type WritingHelperAvailability struct {
 	FixURL    string
 }
 
+// WritingHelperReadiness tells the pages whether the helper can run.
+type WritingHelperReadiness interface {
+	// Availability says whether a step could run now.
+	Availability(ctx context.Context) WritingHelperAvailability
+}
+
 // WritingHelper runs the writing helper's steps.
 type WritingHelper interface {
 	// Run runs one step and reports its events in order. A refusal before

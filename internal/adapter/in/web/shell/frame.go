@@ -32,6 +32,19 @@ type Frame struct {
 	// Notifications is the top bar's bell; nil leaves it out (the inbox is
 	// not served).
 	Notifications *Bell
+	// Helper says whether the writing helper can run. Every page that renders
+	// a magic pen paints it as attributes; the browser disables the pens when
+	// it is unavailable.
+	Helper WritingHelper
+}
+
+// WritingHelper is the writing helper's readiness, from the same check that
+// answers WRITING_HELPER_UNAVAILABLE.
+type WritingHelper struct {
+	Available bool
+	// Reason and FixURL say why the helper cannot run and where to fix it;
+	// empty while it can.
+	Reason, FixURL string
 }
 
 // Bell is the top bar's way to the inbox: the global unread count, painted

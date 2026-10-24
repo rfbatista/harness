@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"operators-mcp/internal/domain"
+	"operators-mcp/internal/ports"
 )
 
 type settings map[string]string
@@ -49,5 +50,54 @@ func TestTiersShowTheStoredModels(t *testing.T) {
 	}
 	if got := selected(t, v.Tiers[1]); got != domain.ModelDefault {
 		t.Errorf("implementation selects %q, want default", got)
+	}
+}
+
+func TestTheAssistantsPaneHasTheWritingHelperRowAtHaikuWhileUnset(t *testing.T) {
+	v := NewView(settings{})
+	if len(v.Assistants) != 1 {
+		t.Fatalf("assistants = %+v, want one row", v.Assistants)
+	}
+	a := v.Assistants[0]
+	if a.Key != domain.SettingModelWritingHelper || a.Title != "Writing helper" || a.Current != "haiku" || a.BuiltIn != "haiku" || !a.NoDefault {
+		t.Errorf("row = %+v", a)
+	}
+	if !strings.HasPrefix(a.Lead, "The magic pen in task titles, descriptions and comments.") {
+		t.Errorf("lead = %q", a.Lead)
+	}
+	if a.UnavailableReason != "" || a.FixURL != "" {
+		t.Errorf("an unchecked row is available: %+v", a)
+	}
+}
+
+func TestTheWritingHelperRowShowsTheStoredModel(t *testing.T) {
+	v := NewView(settings{domain.SettingModelWritingHelper: "sonnet"})
+	if got := selected(t, v.Assistants[0]); got != "sonnet" {
+		t.Errorf("selects %q, want sonnet", got)
+	}
+}
+
+func TestTheWritingHelperRowOffersTheFourModelsAndNeverDefault(t *testing.T) {
+	var got []string
+	for _, c := range NewView(settings{}).Assistants[0].Choices() {
+		got = append(got, c.Value+"|"+c.Label)
+	}
+	if strings.Join(got, ",") != "haiku|haiku (default),sonnet|sonnet,opus|opus,fable|fable" {
+		t.Fatalf("choices = %v", got)
+	}
+	if n := len(NewView(settings{}).Tiers[0].Choices()); n != len(domain.ModelChoices) {
+		t.Errorf("the session tiers still offer default: %d choices", n)
+	}
+}
+
+func TestAnUnavailableHelperPutsItsReasonAndFixURLOnTheRow(t *testing.T) {
+	v := NewView(settings{}).WithWritingHelper(ports.WritingHelperAvailability{Reason: "no agent credential", FixURL: "/agent-isolation#credential"})
+	a := v.Assistants[0]
+	if a.UnavailableReason != "no agent credential" || a.FixURL != "/agent-isolation#credential" {
+		t.Fatalf("row = %+v", a)
+	}
+	ok := NewView(settings{}).WithWritingHelper(ports.WritingHelperAvailability{Available: true})
+	if ok.Assistants[0].UnavailableReason != "" {
+		t.Errorf("an available helper has no reason: %+v", ok.Assistants[0])
 	}
 }
