@@ -11,6 +11,7 @@ import (
 func TestOptionsAddNoSandboxOnlyUnderTheMarker(t *testing.T) {
 	base := len(chromedp.DefaultExecAllocatorOptions)
 	t.Setenv("HARNESS_SANDBOX", "")
+	t.Setenv("MAC_CHROMIUM_TMPDIR", "")
 	if got := len(Options()); got != base {
 		t.Errorf("no marker: %d options, want the %d defaults", got, base)
 	}
@@ -23,5 +24,10 @@ func TestOptionsAddNoSandboxOnlyUnderTheMarker(t *testing.T) {
 	}
 	if got := len(Options(chromedp.Flag("a", true))); got != base+2 {
 		t.Errorf("marker and an extra: %d options, want %d", got, base+2)
+	}
+	t.Setenv("HARNESS_SANDBOX", "")
+	t.Setenv("MAC_CHROMIUM_TMPDIR", "/tmp/x")
+	if got := len(Options()); got != base+1 {
+		t.Errorf("MAC_CHROMIUM_TMPDIR alone: %d options, want %d", got, base+1)
 	}
 }
