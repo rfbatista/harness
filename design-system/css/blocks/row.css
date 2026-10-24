@@ -197,7 +197,11 @@
     /*
      * The report is a callout: a tinted block with a rule in the report's
      * tone, a status pill, the quote in ink. Two lines, then an ellipsis;
-     * the whole text stays in the row's title.
+     * the whole text stays in the row's title. The vertical gap is a
+     * transparent border, not padding: overflow clips at the padding box, so
+     * padding would show the top of a third line. The tint paints under the
+     * border, and the rule is a background layer so the transparent borders
+     * do not mitre it.
      */
     & > .detail {
       --_tone: var(--color-line-strong);
@@ -211,10 +215,12 @@
       overflow: hidden;
       overflow-wrap: anywhere;
       margin-block-start: var(--space-3xs);
-      padding: var(--space-2xs) var(--space-s);
-      border-inline-start: 2px solid var(--_tone);
+      padding-inline: calc(var(--space-s) + 2px) var(--space-s);
+      border-block: var(--space-2xs) solid transparent;
       border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
-      background: color-mix(in oklch, var(--_tone) 9%, transparent);
+      background:
+        linear-gradient(var(--_tone), var(--_tone)) 0 0 / 2px 100% no-repeat border-box,
+        color-mix(in oklch, var(--_tone) 9%, transparent);
       color: var(--color-ink);
       font-size: var(--text-sm);
       line-height: var(--leading-snug);

@@ -135,7 +135,7 @@ check: web ## what to run before calling work done: build, vet, race tests
 	go build $(PKGS)
 	go vet $(PKGS)
 	go test -race $(PKGS)
-	node --test design-system/session-row.test.mjs
+	$(MAKE) test-design-system
 
 deps: ## download Go modules
 	go mod download

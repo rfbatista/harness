@@ -59,6 +59,13 @@ test("the detail clamps to two lines and line 1 does not truncate", () => {
   assert.ok(agent && !/nowrap|ellipsis/.test(agent), ".agent must wrap");
 });
 
+test("the detail's vertical gap is a border, so a clipped third line cannot show in padding", () => {
+  const rule = variant.match(/& > \.detail \{[^}]*\}/)?.[0] ?? "";
+  assert.ok(rule, "no .detail rule");
+  assert.doesNotMatch(rule, /padding-block|padding:|border-inline-start/);
+  assert.match(rule, /border-block:[^;]*transparent/);
+});
+
 test("a check with no lead or quote has no separator", () => {
   assert.match(variant, /\.check/);
   assert.match(variant, /\.check \{[^}]*&:not\(:first-child\)::before \{ content: "· "/);
