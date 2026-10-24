@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"os/exec"
+	"slices"
 	"strings"
 	"unicode/utf8"
 
@@ -39,6 +40,7 @@ const (
 	maxTextLen   = 20000
 	maxSiblings  = 4
 	maxAnswers   = 3
+	maxExclude   = 50
 	maxQuestions = 3
 	maxChips     = 4
 	titleCount   = 3
@@ -89,21 +91,23 @@ type Service struct {
 	streamer Streamer
 	settings ports.SettingsReader
 	projects ProjectReader
-	check    func(context.Context) error
+	peek     func(context.Context) error
 }
 
-// New returns the service. check is the readiness check that gates every
-// agent process; nil means always ready.
-func New(streamer Streamer, settings ports.SettingsReader, projects ProjectReader, check func(context.Context) error) *Service {
-	return &Service{streamer: streamer, settings: settings, projects: projects, check: check}
+// New returns the service. peek is the readiness state a page render reads: it
+// must never start anything, such as an install. The steps themselves are
+// gated by the streamer's own check. A nil peek means always ready.
+func New(streamer Streamer, settings ports.SettingsReader, projects ProjectReader, peek func(context.Context) error) *Service {
+	return &Service{streamer: streamer, settings: settings, projects: projects, peek: peek}
 }
 
-// Availability runs the readiness check, without starting a step.
+// Availability reads the readiness state without starting a step or an
+// install.
 func (s *Service) Availability(ctx context.Context) Availability {
-	if s.check == nil {
+	if s.peek == nil {
 		return Availability{Available: true}
 	}
-	err := s.check(ctx)
+	err := s.peek(ctx)
 	if err == nil {
 		return Availability{Available: true}
 	}
@@ -177,9 +181,15 @@ func validate(r Request) error {
 	if len(r.Answers) > maxAnswers {
 		return invalid("at most 3 answers")
 	}
-	texts := []string{r.Field.Text, r.Draft, r.Request}
+	if len(r.Exclude) > maxExclude {
+		return invalid("at most 50 excluded titles")
+	}
+	texts := slices.Concat([]string{r.Field.Text, r.Draft, r.Request}, r.Exclude)
 	for _, sb := range r.Siblings {
-		texts = append(texts, sb.Text)
+		texts = append(texts, sb.Label, sb.Text)
+	}
+	for _, a := range r.Answers {
+		texts = append(texts, a.Question, a.Answer)
 	}
 	for _, t := range texts {
 		if utf8.RuneCountInString(t) > maxTextLen {
@@ -298,21 +308,24 @@ func decode(req Request, text string) (any, error) {
 			if r.Titles[i] == "" || seen[norm(t)] {
 				return nil, failed("the helper gave an empty or repeated title")
 			}
+			seen[norm(t)] = true
 		}
 		return r, nil
 	}
 }
 
-func norm(s string) string { return strings.ToLower(strings.TrimSpace(s)) }
-
-// stripFence removes a markdown code fence around a JSON answer.
-func stripFence(s string) string {
-	if !strings.HasPrefix(s, "```") {
-		return s
-	}
-	s = strings.TrimPrefix(s, "```")
-	s = strings.TrimPrefix(s, "json")
-	return strings.TrimSpace(strings.TrimSuffix(strings.TrimSpace(s), "```"))
+// norm is what two titles are compared by: case, spacing and a closing
+// full stop do not make a title new.
+func norm(s string) string {
+	return strings.TrimRight(strings.ToLower(strings.Join(strings.Fields(s), " ")), ".!")
 }
 
-var _ ports.WritingHelper = (*Service)(nil)
+// stripFence cuts a JSON answer out of what the model wrapped it in: a code
+// fence, or a sentence before or after it.
+func stripFence(s string) string {
+	start, end := strings.Index(s, "{"), strings.LastIndex(s, "}")
+	if start < 0 || end < start {
+		return s
+	}
+	return s[start : end+1]
+}

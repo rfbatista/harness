@@ -52,7 +52,7 @@ func (h *Handler) handleRunWritingHelperStep(c echo.Context) error {
 	var se *domain.StructuredError
 	if !errors.As(err, &se) {
 		if conn != nil {
-			emit(ports.WritingHelperEvent{Name: "error", Data: errorEvent{Code: "WRITING_HELPER_FAILED", Message: err.Error()}})
+			emit(ports.WritingHelperEvent{Name: "error", Data: errorEvent{Code: "WRITING_HELPER_FAILED", Message: "the step failed"}})
 			return nil
 		}
 		return err
@@ -60,27 +60,37 @@ func (h *Handler) handleRunWritingHelperStep(c echo.Context) error {
 	if conn == nil && se.Code != "WRITING_HELPER_FAILED" {
 		return h.writingHelperRefusal(c, err, se)
 	}
-	emit(ports.WritingHelperEvent{Name: "error", Data: errorEvent{Code: se.Code, Message: se.Message}})
+	emit(ports.WritingHelperEvent{Name: "error", Data: errorEvent{Code: se.Code, Message: se.Message, FixURL: fixURLOf(err)}})
 	return nil
 }
 
 type errorEvent struct {
 	Code    string `json:"code"`
 	Message string `json:"message"`
+	FixURL  string `json:"fix_url,omitempty"`
+}
+
+// fixURLOf is where an unavailable helper's error says to fix it, "" for any
+// other error.
+func fixURLOf(err error) string {
+	var de *domain.DetailedError
+	if errors.As(err, &de) {
+		if d, ok := de.Details.(map[string]string); ok {
+			return d["fix_url"]
+		}
+	}
+	return ""
 }
 
 // writingHelperRefusal answers a refusal as the usual JSON error. An
-// unavailable helper is a 409 that adds where to fix it.
+// unavailable helper is a 503 that adds where to fix it.
 func (h *Handler) writingHelperRefusal(c echo.Context, err error, se *domain.StructuredError) error {
 	if se.Code != writingHelperUnavailable {
 		return err
 	}
 	body := errorBody(se.Message, se.Code)
-	var de *domain.DetailedError
-	if errors.As(err, &de) {
-		if d, ok := de.Details.(map[string]string); ok && d["fix_url"] != "" {
-			body["fix_url"] = d["fix_url"]
-		}
+	if fix := fixURLOf(err); fix != "" {
+		body["fix_url"] = fix
 	}
-	return c.JSON(http.StatusConflict, body)
+	return c.JSON(http.StatusServiceUnavailable, body)
 }

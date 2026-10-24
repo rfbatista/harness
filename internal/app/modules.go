@@ -798,10 +798,11 @@ func oneShotPreparer(bin string, p oneShotParts) func() ([]string, llmkit.WrapFu
 }
 
 // newWritingHelper is the writing helper over the streaming one-shot, the
-// global model setting and the project catalog. Its readiness is the gate
-// every one-shot is behind.
+// global model setting and the project catalog. Its steps are behind the gate
+// every one-shot is behind (the streaming one-shotter's); what a page shows is
+// the gate's state, read without starting an install.
 func newWritingHelper(cat catalog.Catalog, one claudetext.StreamOneShotter, p oneShotParts) *writinghelper.Service {
-	return writinghelper.New(streamer{one}, cat.Settings, cat.Projects, p.Ready.check())
+	return writinghelper.New(streamer{one}, cat.Settings, cat.Projects, p.Ready.peek())
 }
 
 // streamer adapts the streaming one-shot to the writing helper's port.

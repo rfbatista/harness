@@ -43,8 +43,9 @@ func systemPrompt(step string) string {
 	}
 }
 
-// quote escapes what would close a block early, so field text stays data.
-func quote(s string) string { return strings.ReplaceAll(s, "</", "&lt;/") }
+// quote escapes every "<", so text cannot close a block early or open one
+// of its own: whatever the person wrote stays data.
+func quote(s string) string { return strings.ReplaceAll(s, "<", "&lt;") }
 
 func block(b *strings.Builder, tag, attr, text string) {
 	if attr != "" {

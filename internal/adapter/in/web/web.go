@@ -134,9 +134,6 @@ type Deps struct {
 	// ArchivedList lists the project's archived tasks for the Archived view;
 	// nil lists none.
 	ArchivedList tasks.ArchivedLister
-	// WritingHelper says whether the writing helper can run, for the pens of
-	// every page and the Models page's row; nil reads as unavailable.
-	WritingHelper ports.WritingHelperReadiness
 	// Now defaults to time.Now.
 	Now func() time.Time
 }
@@ -166,7 +163,7 @@ func NewHandler(deps Deps, assets *Assets, fallback http.Handler) http.Handler {
 	if deps.Sessions != nil {
 		deps.Sessions = sharedSessions{deps.Sessions}
 	}
-	s := &server{deps: deps, assets: assets, helper: newHelperCache(deps.WritingHelper, deps.Now)}
+	s := &server{deps: deps, assets: assets}
 
 	homePage := home.Handler{Projects: deps.Projects, Layout: s.layout, Render: render}
 	taskPages := tasks.Handler{
@@ -218,7 +215,7 @@ func NewHandler(deps Deps, assets *Assets, fallback http.Handler) http.Handler {
 		mux.Handle("GET "+tokensavers.Href, s.page(savers.Page))
 	}
 	if deps.Settings != nil {
-		modelsPage := models.Handler{Settings: deps.Settings, Helper: s.helper.availability, Layout: s.layout, Render: render}
+		modelsPage := models.Handler{Settings: deps.Settings, Layout: s.layout, Render: render}
 		mux.Handle("GET "+models.Href, s.page(modelsPage.Page))
 	}
 	if deps.SandboxSettings != nil {
@@ -278,7 +275,6 @@ func NewHandler(deps Deps, assets *Assets, fallback http.Handler) http.Handler {
 type server struct {
 	deps   Deps
 	assets *Assets
-	helper *helperCache
 }
 
 // page adapts a page handler: an error becomes the error page for its code.
@@ -310,7 +306,6 @@ func switchProject(w http.ResponseWriter, r *http.Request) {
 func (s *server) layout(ctx context.Context, title, projectID, taskID string) (shell.Frame, error) {
 	frame := s.bareFrame(title)
 	frame.Notifications = s.bell(ctx)
-	frame.Helper = s.helper.get(ctx)
 	all, err := s.deps.Projects.ListProjects(ctx)
 	if err != nil {
 		return shell.Frame{}, err

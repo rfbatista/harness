@@ -69,3 +69,12 @@ func (o optionalAgentReadiness) check() func(context.Context) error {
 	}
 	return o.Gate.Check
 }
+
+// peek is the gate's Peek, nil when the graph has no gate: the state of the
+// readiness, read without starting an install.
+func (o optionalAgentReadiness) peek() func(context.Context) error {
+	if o.Gate == nil {
+		return nil
+	}
+	return o.Gate.Peek
+}

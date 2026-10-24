@@ -110,7 +110,7 @@ func TestRefusalsBeforeTheStreamAreJSONErrorsWithTheirStatus(t *testing.T) {
 	}{
 		{&domain.StructuredError{Code: "INVALID_INPUT", Message: "bad step"}, http.StatusBadRequest, "INVALID_INPUT"},
 		{&domain.StructuredError{Code: "PROJECT_NOT_FOUND", Message: "no project"}, http.StatusNotFound, "PROJECT_NOT_FOUND"},
-		{unavailable, http.StatusConflict, "WRITING_HELPER_UNAVAILABLE"},
+		{unavailable, http.StatusServiceUnavailable, "WRITING_HELPER_UNAVAILABLE"},
 	} {
 		f := newFakeWritingHelper()
 		f.err = tc.err

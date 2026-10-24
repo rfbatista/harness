@@ -62,7 +62,14 @@ type problem struct {
 // code is the first one's and its details list every one with its anchor. It
 // never waits: a missing managed claude starts installing and the check
 // answers MANAGED_CLAUDE_INSTALLING until the install is done.
-func (g *Gate) Check(ctx context.Context) error {
+func (g *Gate) Check(ctx context.Context) error { return g.check(ctx, true) }
+
+// Peek answers like Check but only reads: a missing managed claude is
+// reported, not installed. A page render asks it, so that showing a page never
+// starts anything.
+func (g *Gate) Peek(ctx context.Context) error { return g.check(ctx, false) }
+
+func (g *Gate) check(ctx context.Context, install bool) error {
 	if g == nil {
 		return nil
 	}
@@ -73,7 +80,7 @@ func (g *Gate) Check(ctx context.Context) error {
 			AnchorCredential})
 	}
 	if g.Bin != nil && !g.Bin.Installed() {
-		ps = append(ps, g.claudeProblem(ctx))
+		ps = append(ps, g.claudeProblem(ctx, install))
 	}
 	if g.SandboxOn != nil && g.SandboxDriver != nil && g.SandboxOn() && !g.SandboxDriver() {
 		ps = append(ps, SandboxProblem())
@@ -91,7 +98,7 @@ func SandboxProblem() problem {
 // SandboxDriverMissing is the error of a sandbox that is on with no driver.
 func SandboxDriverMissing() error { return refusal([]problem{SandboxProblem()}) }
 
-func (g *Gate) claudeProblem(ctx context.Context) problem {
+func (g *Gate) claudeProblem(ctx context.Context, install bool) problem {
 	missing := problem{CodeClaudeMissing,
 		"no managed claude. Agents run a claude that the harness installs and keeps. Install it in Agent isolation settings",
 		AnchorClaude}
@@ -99,7 +106,7 @@ func (g *Gate) claudeProblem(ctx context.Context) problem {
 		return missing
 	}
 	st := g.Managed.State()
-	if st.Installing == nil && st.Failed == nil {
+	if install && st.Installing == nil && st.Failed == nil {
 		started, err := g.Managed.Install(ctx, "stable")
 		switch {
 		case err == nil:

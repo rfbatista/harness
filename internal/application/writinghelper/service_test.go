@@ -115,7 +115,7 @@ func TestFieldTextCannotCloseItsQuotedBlock(t *testing.T) {
 	if _, err := newRig(f).run(t, req); err != nil {
 		t.Fatal(err)
 	}
-	if n := strings.Count(f.calls[0].Input, "</field>"); n != 1 {
+	if n := strings.Count(f.calls[0].Input, "</field>"); n != 1 || strings.Contains(f.calls[0].Input, "x </field>") {
 		t.Fatalf("input closes the field block %d times, want once:\n%s", n, f.calls[0].Input)
 	}
 }
@@ -343,5 +343,46 @@ func TestAvailabilityReportsTheGatesReasonAndFixURL(t *testing.T) {
 	}
 	if a := newRig(&fakeStreamer{}).svc.Availability(context.Background()); !a.Available {
 		t.Fatalf("no check should mean available: %+v", a)
+	}
+}
+
+func TestProseAroundTheJSONAnswerIsIgnored(t *testing.T) {
+	f := &fakeStreamer{answer: "Here you go:\n```json\n{\"titles\":[\"a\",\"b\",\"c\"]}\n```\nHope it helps!"}
+	req := descReq("titles")
+	req.Field.Kind = "task_title"
+	if _, err := newRig(f).run(t, req); err != nil {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestTitlesThatRepeatEachOtherOrDifferOnlyByCaseSpacingOrAFullStopAreRefused(t *testing.T) {
+	req := descReq("titles")
+	req.Field.Kind = "task_title"
+	req.Exclude = []string{"Fix login"}
+	for name, answer := range map[string]string{
+		"among themselves": `{"titles":["Fix auth","fix  auth","Other"]}`,
+		"with a full stop": `{"titles":["Fix login.","b","c"]}`,
+	} {
+		if _, err := newRig(&fakeStreamer{answer: answer}).run(t, req); code(err) != "WRITING_HELPER_FAILED" {
+			t.Errorf("%s: err = %v", name, err)
+		}
+	}
+}
+
+func TestEveryTextOfARequestIsBounded(t *testing.T) {
+	long := strings.Repeat("x", 20001)
+	cases := map[string]func(*writinghelper.Request){
+		"long answer":   func(r *writinghelper.Request) { r.Answers = []writinghelper.Answer{{Question: "q", Answer: long}} },
+		"long question": func(r *writinghelper.Request) { r.Answers = []writinghelper.Answer{{Question: long, Answer: "a"}} },
+		"long label":    func(r *writinghelper.Request) { r.Siblings[0].Label = long },
+		"long exclude":  func(r *writinghelper.Request) { r.Exclude = []string{long} },
+		"many exclude":  func(r *writinghelper.Request) { r.Exclude = make([]string, 51) },
+	}
+	for name, mutate := range cases {
+		req := descReq("titles")
+		mutate(&req)
+		if _, err := newRig(&fakeStreamer{}).run(t, req); code(err) != "INVALID_INPUT" {
+			t.Errorf("%s: err = %v", name, err)
+		}
 	}
 }
