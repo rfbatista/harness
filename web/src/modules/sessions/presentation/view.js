@@ -48,15 +48,6 @@ export function startedBy(session, others, agentNames = {}) {
   return parent ? agentLabel(parent.agentId, agentNames) : "another session";
 }
 
-function meta(agent, by, when) {
-  return by ? `${agent} · started by ${by} · ${when}` : `${agent} · ${when}`;
-}
-
-/** A row's faint line; a session that ran without the sandbox says so last. */
-function rowMetaOf(session, text) {
-  return isUnsandboxed(session) ? `${text} · unsandboxed` : text;
-}
-
 /** True only for a session that started with the sandbox off; one from before the sandbox is not. */
 export function isUnsandboxed(session) {
   return session.sandbox != null && !session.sandbox.sandboxed;
@@ -112,69 +103,114 @@ export function projectSessionsHref(projectId, sessionId = "") {
   return sessionId ? `${href}?session=${encodeURIComponent(sessionId)}` : href;
 }
 
-export function toRowView(session, { selectedId, now, agentNames, others = [], fresh = false, depth = 0, messages }) {
+/** The status word's chip tone on a row: only the uncommon states have a chip. */
+const CHIP_TONE = { thinking: "signal", "your turn": "attention", approval: "attention", failed: "danger" };
+const NO_CHIP = new Set(["running", "done"]);
+
+/** A row's status chip, null for running and done. */
+function chipOf(status) {
+  return NO_CHIP.has(status.word) ? null : { word: status.word, tone: CHIP_TONE[status.word] ?? null };
+}
+
+const quoted = (text) => `“${text.replace(/\s+/g, " ").trim()}”`;
+
+/** A report's status as the row's detail kind. */
+const REPORT_KIND = { working: "working", ready_for_review: "review", blocked: "blocked", done: "done" };
+
+/**
+ * The detail under a row's first line: approvals pending, a delegate's report
+ * and check, who started it, or a prompt that is not the task's title; null
+ * when there is none. The BFF's rowDetail (view.go) says the same before the
+ * messages load; web/testdata/views/session-row.json pins both.
+ * @returns {{ kind: string, lead: string, text: string, check: string } | null}
+ */
+function detailOf(session, { now, agentNames, others, taskTitle, report, loaded }) {
+  if (!isTerminal(session) && session.pendingApprovals > 0) {
+    const n = session.pendingApprovals;
+    return { kind: "approval", lead: n === 1 ? "1 approval pending" : `${n} approvals pending`, text: "", check: "" };
+  }
+  if (session.role === "delegate") {
+    const check = session.statusCheck ? statusCheckView(session.statusCheck, now).short : "";
+    if (!loaded) return check ? { kind: "none", lead: "", text: "", check } : null;
+    if (!report) return { kind: "none", lead: "no report yet", text: "", check };
+    return {
+      kind: REPORT_KIND[report.status] ?? "working",
+      lead: REPORT_WORD[report.status] ?? "reported",
+      text: report.body ? quoted(report.body) : "",
+      check,
+    };
+  }
+  const by = startedBy(session, others, agentNames);
+  if (by) return { kind: "by", lead: "started by", text: by, check: "" };
+  if (session.role !== "architect" && taskTitle && session.task && session.task !== taskTitle) {
+    return { kind: "prompt", lead: "prompt", text: quoted(session.task), check: "" };
+  }
+  return null;
+}
+
+/**
+ * A row as the markup binds it: its agent (a brainstorm's title), mode and
+ * model, a status chip for the uncommon states, when, and the detail. The
+ * BFF's toRow (view.go) says the same; session-row.json pins both. taskTitle
+ * is the page's task, whose title no row repeats.
+ */
+export function toRowView(session, { selectedId, now, agentNames, others = [], fresh = false, depth = 0, messages, taskTitle = "" }) {
   const status = statusView(session);
-  const title = rowTitle(session);
+  const leadsWithTitle = !session.ticketId;
+  const agent = leadsWithTitle ? rowTitle(session) : agentLabel(session.agentId, agentNames);
+  const architect = session.role === "architect";
+  const loaded = session.role === "delegate" && messages !== undefined;
+  const report = loaded ? lastReportOf(messages, session.id) : null;
+  const detail = detailOf(session, { now, agentNames, others, taskTitle, report, loaded });
+  const when = relativeTime(report ? report.createdAt : session.updatedAt, now);
+  const mode = architect ? "" : session.mode || "";
+  const model = session.model || "";
+  const facts = [detail ? [detail.lead, detail.text].filter(Boolean).join(" ") : "", detail?.check];
   return {
     id: session.id,
-    title,
+    agent,
+    leadsWithTitle,
+    // What x-bind sets: null leaves the attribute off a row led by its agent.
+    leadAttr: leadsWithTitle ? "title" : null,
+    mode,
+    model,
+    badge: architect ? "architect" : "",
+    chip: chipOf(status),
     state: status.state,
     word: status.word,
-    meta: rowMetaOf(
-      session,
-      session.role === "delegate"
-        ? delegateMeta(session, { now, agentNames, messages })
-        : meta(runsOn(session, agentNames), startedBy(session, others, agentNames), relativeTime(session.updatedAt, now)),
-    ),
+    when,
+    detail,
+    // Every fact the detail's clamp may hide, for the row's tooltip.
+    detailText: [agent, mode, model, isUnsandboxed(session) ? "unsandboxed" : "", ...facts, status.word, when].filter(Boolean).join(" · "),
     // What x-bind sets: null leaves the attribute off a sandboxed row.
+    unsandboxed: isUnsandboxed(session),
     unsandboxedAttr: isUnsandboxed(session) ? "" : null,
     selected: session.id === selectedId,
     fresh,
     attention: needsYou(session),
     resumable: terminalView(session).resumable,
-    resumeLabel: `Resume ${title}`,
+    resumeLabel: `Resume ${agent}`,
     role: session.role,
     depth: Math.min(depth, MAX_DEPTH),
     // What x-bind sets: null leaves the attribute off a peer's row.
     roleAttr: session.role || null,
     depthAttr: depth > 0 ? String(Math.min(depth, MAX_DEPTH)) : null,
-    badge: session.role === "architect" ? "architect" : "",
     workspaceId: session.workspaceId,
   };
 }
 
 /** fresh: the ids of sessions that just arrived over the feed, highlighted for a moment. */
-export function toGroupViews(sessions, { selectedId, now, agentNames, fresh = new Set(), messages }) {
+export function toGroupViews(sessions, { selectedId, now, agentNames, fresh = new Set(), messages, taskTitle = "" }) {
   return group(sessions).map(({ key, sessions: members, depth = {} }) => ({
     key,
     label: GROUP_LABEL[key],
     tone: key === "needs-you" ? "attention" : null,
     count: members.length,
-    rows: members.map((s) => toRowView(s, { selectedId, now, agentNames, others: sessions, fresh: fresh.has(s.id), depth: depth[s.id] ?? 0, messages })),
+    rows: members.map((s) => toRowView(s, { selectedId, now, agentNames, others: sessions, fresh: fresh.has(s.id), depth: depth[s.id] ?? 0, messages, taskTitle })),
   }));
 }
 
-/**
- * A delegate's faint line: its agent, its last report (once the messages are
- * loaded) and its status check. Who started it shows in the tree, so it is
- * not repeated; when it changed shows only when nothing else does. The BFF's
- * delegateMeta (view.go) renders the same before the messages load.
- */
-function delegateMeta(session, { now, agentNames, messages }) {
-  const parts = [runsOn(session, agentNames)];
-  if (messages) parts.push(reportView(lastReportOf(messages, session.id), now));
-  if (session.statusCheck) parts.push(statusCheckView(session.statusCheck, now).short);
-  if (parts.length === 1) parts.push(relativeTime(session.updatedAt, now));
-  return parts.join(" · ");
-}
-
 const REPORT_WORD = { working: "working", blocked: "blocked", ready_for_review: "ready for review", done: "done" };
-
-/** A delegate's last report as its row says it: "ready for review 4m"; "no report yet". */
-export function reportView(report, now) {
-  if (!report) return "no report yet";
-  return `${REPORT_WORD[report.status] ?? "reported"} ${relativeTime(report.createdAt, now)}`;
-}
 
 /** How long until then, as the meta column writes it: "6m", "1h"; "" when it is due. */
 function until(then, now) {

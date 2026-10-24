@@ -61,17 +61,41 @@ func NeedsYou(s *domain.Session) bool {
 // the last step. The browser's MAX_DEPTH (view.js) is the same.
 const MaxDepth = 3
 
-// Row is one session in the list. Role, Depth and Badge place it in the
-// architect's group: the architect badged, its delegates indented.
+// Row is one session in the list, as the contract's session row renders it
+// (ADR 0029). Role, Depth and Badge place it in the architect's group: the
+// architect badged, its delegates drawn under it. The browser's toRowView
+// (view.js) says the same; web/testdata/views/session-row.json pins both.
 type Row struct {
-	ID, Title, State, Word, Meta string
-	Selected, Attention          bool
+	ID, State, Word     string
+	Selected, Attention bool
+	// Agent is the agent's name; a feature brainstorm, which has no task,
+	// leads with its title instead (LeadsWithTitle).
+	Agent          string
+	LeadsWithTitle bool
+	// Mode and Model are the row's tags; the architect's Badge replaces its mode.
+	Mode, Model string
+	Badge       string
+	// Chip names a state other than running and done; nil for those.
+	Chip *Chip
+	When string
+	// Detail sits under the first line; nil when there is none.
+	Detail *Detail
+	// DetailText joins every fact the detail's clamp may hide: the row's tooltip.
+	DetailText  string
+	ResumeLabel string
 	// Unsandboxed: the session started with the sandbox off.
 	Unsandboxed bool
 	Role        string
 	Depth       int
-	Badge       string
 }
+
+// Chip is a row's status word for the uncommon states, with its tone
+// ("signal", "attention", "danger", or "" for neutral).
+type Chip struct{ Word, Tone string }
+
+// Detail is the callout under a row's first line. Kind is its data-report:
+// working, review, blocked, done, none, approval, by or prompt.
+type Detail struct{ Kind, Lead, Text, Check string }
 
 // Group is one triage group with its rows.
 type Group struct {
@@ -109,8 +133,10 @@ type DocumentsLink struct {
 // (GET /api/sessions plus the task), decoded by the sessions gateway.
 // AgentNames lets live updates show an agent's name, as the first paint does.
 type Seed struct {
-	ProjectID  string            `json:"project_id"`
-	TicketID   string            `json:"ticket_id"`
+	ProjectID string `json:"project_id"`
+	TicketID  string `json:"ticket_id"`
+	// TaskTitle is the task's title, which no row repeats as its prompt.
+	TaskTitle  string            `json:"task_title,omitempty"`
 	Sessions   []*domain.Session `json:"sessions"`
 	AgentNames map[string]string `json:"agent_names"`
 	// RepositoryNames lets the App tab say which repository a run's code
@@ -368,11 +394,15 @@ func NewPageView(frame shell.Frame, project *domain.Project, task *domain.Ticket
 	for _, s := range list {
 		byID[s.ID] = s
 	}
+	taskTitle := ""
+	if task != nil {
+		taskTitle = task.Title
+	}
 	views := make([]Group, 0, len(groups))
 	for _, g := range groups {
 		rows := make([]Row, 0, len(g.sessions))
 		for _, s := range g.sessions {
-			rows = append(rows, toRow(s, selected, names, now, byID, g.depth[s.ID]))
+			rows = append(rows, toRow(s, selected, names, now, byID, g.depth[s.ID], taskTitle))
 		}
 		views = append(views, Group{Key: g.key, Label: groupLabels[g.key], Tone: groupTones[g.key], Count: len(rows), Rows: rows})
 	}
@@ -395,6 +425,7 @@ func NewPageView(frame shell.Frame, project *domain.Project, task *domain.Ticket
 		v.TaskStatus = StatusLabel(task.Status)
 		v.PendingReviews = task.PendingReviews
 		v.Seed.TicketID = task.ID
+		v.Seed.TaskTitle = task.Title
 	}
 	return v
 }
@@ -432,49 +463,101 @@ func StartedBy(s *domain.Session, others map[string]*domain.Session, agentNames 
 	return "another session"
 }
 
-func toRow(s *domain.Session, selectedID string, agentNames map[string]string, now time.Time, others map[string]*domain.Session, depth int) Row {
+func toRow(s *domain.Session, selectedID string, agentNames map[string]string, now time.Time, others map[string]*domain.Session, depth int, taskTitle string) Row {
 	st := statusOf(s)
-	title := RowTitle(s)
-	agent := RunsOn(s, agentNames)
+	leadsWithTitle := s.TicketID == ""
+	agent := AgentLabel(s.AgentID, agentNames)
+	if leadsWithTitle {
+		agent = RowTitle(s)
+	}
+	mode := string(s.Mode)
+	if s.Role == domain.RoleArchitect {
+		mode = ""
+	}
+	detail := rowDetail(s, others, agentNames, taskTitle, now)
+	when := relativeTime(s.UpdatedAt, now)
+	facts := []string{agent, mode, s.Model}
+	if unsandboxed(s) {
+		facts = append(facts, "unsandboxed")
+	}
+	if detail != nil {
+		facts = append(facts, strings.TrimSpace(detail.Lead+" "+detail.Text), detail.Check)
+	}
+	facts = append(facts, st.Word, when)
 	return Row{
-		ID:          s.ID,
-		Title:       title,
-		State:       st.State,
-		Word:        st.Word,
-		Meta:        rowMeta(s, agent, others, agentNames, now),
-		Selected:    s.ID == selectedID,
-		Attention:   NeedsYou(s),
-		Unsandboxed: unsandboxed(s),
-		Role:        string(s.Role),
-		Depth:       min(depth, MaxDepth),
-		Badge:       badge(s),
+		ID:             s.ID,
+		Agent:          agent,
+		LeadsWithTitle: leadsWithTitle,
+		Mode:           mode,
+		Model:          s.Model,
+		Badge:          badge(s),
+		Chip:           chipOf(st),
+		State:          st.State,
+		Word:           st.Word,
+		When:           when,
+		Detail:         detail,
+		DetailText:     joinFacts(facts),
+		ResumeLabel:    "Resume " + agent,
+		Selected:       s.ID == selectedID,
+		Attention:      NeedsYou(s),
+		Unsandboxed:    unsandboxed(s),
+		Role:           string(s.Role),
+		Depth:          min(depth, MaxDepth),
 	}
 }
 
-// rowMeta is a row's faint line. A delegate's says its status check instead
-// of who started it (the tree shows that); the browser adds its last report
-// once the task's messages have loaded (delegateMeta in view.js).
-func rowMeta(s *domain.Session, agent string, others map[string]*domain.Session, agentNames map[string]string, now time.Time) string {
-	text := baseRowMeta(s, agent, others, agentNames, now)
-	if unsandboxed(s) {
-		text += " · unsandboxed"
+// joinFacts joins the non-empty facts with " · ".
+func joinFacts(facts []string) string {
+	kept := make([]string, 0, len(facts))
+	for _, f := range facts {
+		if f != "" {
+			kept = append(kept, f)
+		}
 	}
-	return text
+	return strings.Join(kept, " · ")
+}
+
+var chipTones = map[string]string{"thinking": "signal", "your turn": "attention", "approval": "attention", "failed": "danger"}
+
+// chipOf is the row's status chip: nil for running and done.
+func chipOf(st StatusView) *Chip {
+	if st.Word == "running" || st.Word == "done" {
+		return nil
+	}
+	return &Chip{Word: st.Word, Tone: chipTones[st.Word]}
+}
+
+// rowDetail is the callout under a row's first line, first match wins:
+// approvals pending, a delegate's status check (its report needs the task's
+// messages, which the browser adds once they load), who started it, a prompt
+// that is not the task's title; nil when there is none. The browser's
+// detailOf (view.js) says the same.
+func rowDetail(s *domain.Session, others map[string]*domain.Session, agentNames map[string]string, taskTitle string, now time.Time) *Detail {
+	if !s.Status.IsTerminal() && s.PendingApprovals > 0 {
+		lead := "1 approval pending"
+		if s.PendingApprovals != 1 {
+			lead = fmt.Sprintf("%d approvals pending", s.PendingApprovals)
+		}
+		return &Detail{Kind: "approval", Lead: lead}
+	}
+	if s.Role == domain.RoleDelegate {
+		if s.StatusCheck == nil {
+			return nil
+		}
+		return &Detail{Kind: "none", Check: StatusCheckOf(s.StatusCheck, now).Short}
+	}
+	if by := StartedBy(s, others, agentNames); by != "" {
+		return &Detail{Kind: "by", Lead: "started by", Text: by}
+	}
+	if s.Role != domain.RoleArchitect && taskTitle != "" && s.Task != "" && s.Task != taskTitle {
+		return &Detail{Kind: "prompt", Lead: "prompt", Text: "“" + strings.Join(strings.Fields(s.Task), " ") + "”"}
+	}
+	return nil
 }
 
 // unsandboxed is true for a session that started with the sandbox off, not
 // for one from before the sandbox existed.
 func unsandboxed(s *domain.Session) bool { return s.Sandbox != nil && !s.Sandbox.Sandboxed }
-
-func baseRowMeta(s *domain.Session, agent string, others map[string]*domain.Session, agentNames map[string]string, now time.Time) string {
-	if s.Role != domain.RoleDelegate {
-		return meta(agent, StartedBy(s, others, agentNames), relativeTime(s.UpdatedAt, now))
-	}
-	if s.StatusCheck != nil {
-		return agent + " · " + StatusCheckOf(s.StatusCheck, now).Short
-	}
-	return agent + " · " + relativeTime(s.UpdatedAt, now)
-}
 
 // CheckView is a status-check loop as the page shows it: the .status state,
 // the row's short word and the header's detail.
@@ -697,13 +780,4 @@ func count(n int, noun string) string {
 		return fmt.Sprintf("%d %s", n, noun)
 	}
 	return fmt.Sprintf("%d %ss", n, noun)
-}
-
-// meta is a row's faint line: the agent, who started it (if a session did),
-// and when it last changed.
-func meta(agent, startedBy, when string) string {
-	if startedBy == "" {
-		return agent + " · " + when
-	}
-	return agent + " · started by " + startedBy + " · " + when
 }

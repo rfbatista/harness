@@ -95,6 +95,10 @@ func noStore(h http.Handler) http.Handler {
 	})
 }
 
+// sessionRowText reads a session row as the list shows it: its agent, the
+// parts of its detail, and when, joined by " | ". Pass it to map().
+const sessionRowText = `r => [r.querySelector('.agent').textContent, ...[...(r.querySelector('.detail')?.children ?? [])].map(c => c.textContent), r.querySelector('.when').textContent].map(s => s.trim()).filter(Boolean).join(' | ')`
+
 func TestBrowserSuite(t *testing.T) {
 	ctx, _ := browser(t)
 	srv := httptest.NewServer(noStore(http.FileServer(http.Dir(repoRoot))))
@@ -142,7 +146,7 @@ func TestSessionsPageComesAliveInTheBrowser(t *testing.T) {
 		Repositories: fakeRepos{[]*domain.Repository{{ID: "r1", ProjectID: "p1", Name: "harness"}}},
 		Sessions: fakeSessions{[]*domain.Session{
 			// One task, three sessions at once.
-			{ID: "s1", ProjectID: "p1", TicketID: "t1", Task: "Add SSE feed", Status: domain.SessionIdle, UpdatedAt: recent},
+			{ID: "s1", ProjectID: "p1", TicketID: "t1", AgentID: "a1", Task: "Add SSE feed", Status: domain.SessionIdle, UpdatedAt: recent},
 			{ID: "s2", ProjectID: "p1", TicketID: "t1", Task: "Port tickets", Status: domain.SessionRunning, UpdatedAt: recent.Add(-time.Minute)},
 			{ID: "s3", ProjectID: "p1", TicketID: "t1", Task: "Bump harnesskit", Status: domain.SessionFailed, UpdatedAt: recent.Add(-time.Hour)},
 		}},
@@ -157,10 +161,10 @@ func TestSessionsPageComesAliveInTheBrowser(t *testing.T) {
 		chromedp.Navigate(srv.URL+"/projects/p1/tasks/t1"),
 		// Alpine has taken over once the server-rendered copy is gone.
 		chromedp.Poll(`document.querySelector('[data-ssr]') === null`, nil, chromedp.WithPollingTimeout(10*time.Second)),
-		chromedp.Evaluate(`[...document.querySelectorAll('.list [role=group] .row .title')].map(e => e.textContent)`, &rows),
+		chromedp.Evaluate(`[...document.querySelectorAll('.list [role=group] .row')].map(`+sessionRowText+`)`, &rows),
 		chromedp.Evaluate(`[...document.querySelectorAll('.list [role=group] > .group > span:first-child')].map(e => e.textContent)`, &groups),
 		chromedp.Evaluate(`String(document.querySelectorAll('[data-ssr]').length)`, &ssrLeft),
-		chromedp.Click(`//div[contains(@class,'row')][.//span[text()='Port tickets']]`, chromedp.BySearch),
+		chromedp.Click(`//div[contains(@class,'row')][.//span[text()='“Port tickets”']]`, chromedp.BySearch),
 		chromedp.Poll(`document.querySelector('main section h2')?.textContent === 'Port tickets'`, nil, chromedp.WithPollingTimeout(5*time.Second)),
 		chromedp.Evaluate(`document.querySelector('main section h2')?.textContent ?? ''`, &detail),
 
@@ -188,7 +192,7 @@ func TestSessionsPageComesAliveInTheBrowser(t *testing.T) {
 		t.Fatalf("%v\nJS errors: %v", err, errs.all())
 	}
 
-	if got := fmt.Sprint(rows); got != "[Add SSE feed Port tickets Bump harnesskit]" {
+	if got := fmt.Sprint(rows); got != "[Reviewer | now plain claude | prompt | “Port tickets” | 1m plain claude | prompt | “Bump harnesskit” | 1h]" {
 		t.Errorf("live rows = %s", got)
 	}
 	if got := fmt.Sprint(groups); got != "[Needs you Running Earlier]" {

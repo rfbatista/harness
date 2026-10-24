@@ -74,7 +74,7 @@ func TestTheSessionHeadShowsItsSandboxFacts(t *testing.T) {
 		chromedp.Poll(head+`?.querySelector('h2')?.textContent === 'sandboxed one' && `+chips("[data-sandbox]")+` !== ''`, nil, chromedp.WithPollingTimeout(10*time.Second)),
 		chromedp.Evaluate(chips("[data-sandbox], [data-sandbox-visibility]"), &onChips),
 		chromedp.Evaluate(`[...document.querySelectorAll('[role=option][data-unsandboxed]')].filter(r => !r.closest('[data-ssr]')).map(r => r.dataset.sessionId).join(',')`, &unsandboxedRows),
-		chromedp.Evaluate(`Object.fromEntries(['s1','s3','s4'].map(id => [id, [...document.querySelectorAll('[role=option][data-session-id="' + id + '"]')].find(r => !r.closest('[data-ssr]'))?.querySelector('.meta')?.textContent ?? '']))`, &rowMeta),
+		chromedp.Evaluate(`Object.fromEntries(['s1','s3','s4'].map(id => [id, [...document.querySelectorAll('[role=option][data-session-id="' + id + '"]')].find(r => !r.closest('[data-ssr]'))?.title ?? '']))`, &rowMeta),
 	)
 	if err != nil {
 		t.Fatalf("%v\nJS errors: %v", err, errs.all())

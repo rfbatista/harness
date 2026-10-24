@@ -1,0 +1,285 @@
+{
+  "$comment": "How a session's row reads on the sessions page (ADR 0029): who it is, its mode and model, a status chip for uncommon states, when, and a detail under it. `now` is 2026-10-02T14:00:00Z; `ago` is minutes before now and `next_in` minutes after it. `row` names the session whose row is checked among `sessions`; `task_title` is the page's task (empty on the project's brainstorm page). `report` is a message the delegate sent, and `messages_loaded` says the task's messages have loaded: the server never has them, so view_test.go skips the cases where it is true, and the browser's view.test.js reads all. `unsandboxedAttr` is the attribute value x-bind sets: \"\" for an unsandboxed row, null for any other. Read by web/src/modules/sessions/presentation/view.test.js and internal/adapter/in/web/sessions/view_test.go.",
+  "agent_names": { "go": "go-developer", "web": "web-developer" },
+  "cases": [
+    {
+      "name": "the architect: its badge says the mode, no detail",
+      "task_title": "AI Helper to write text",
+      "sessions": [
+        { "id": "arch", "agent_id": "go", "role": "architect", "mode": "architect", "model": "opus", "status": "idle", "ago": 9, "task": "AI Helper to write text" }
+      ],
+      "row": "arch",
+      "expect": {
+        "agent": "go-developer", "leadsWithTitle": false, "mode": "", "model": "opus", "badge": "architect",
+        "chip": { "word": "your turn", "tone": "attention" }, "word": "your turn", "state": "waiting", "when": "9m",
+        "detail": null,
+        "detailText": "go-developer · opus · your turn · 9m",
+        "resumeLabel": "Resume go-developer", "unsandboxedAttr": null
+      }
+    },
+    {
+      "name": "a delegate before the messages load: only its status check",
+      "task_title": "AI Helper to write text",
+      "sessions": [
+        { "id": "d1", "agent_id": "go", "role": "delegate", "parent": "arch", "mode": "implement", "model": "sonnet", "status": "running", "ago": 8, "task": "AI Helper to write text",
+          "check": { "state": "active", "every": 10, "next_in": 6 } }
+      ],
+      "row": "d1",
+      "expect": {
+        "agent": "go-developer", "leadsWithTitle": false, "mode": "implement", "model": "sonnet", "badge": "",
+        "chip": null, "word": "running", "state": "running", "when": "8m",
+        "detail": { "kind": "none", "lead": "", "text": "", "check": "check in 6m" },
+        "detailText": "go-developer · implement · sonnet · check in 6m · running · 8m",
+        "resumeLabel": "Resume go-developer", "unsandboxedAttr": null
+      }
+    },
+    {
+      "name": "a delegate with no check before the messages load has no detail",
+      "task_title": "AI Helper to write text",
+      "sessions": [
+        { "id": "d1", "agent_id": "go", "role": "delegate", "parent": "arch", "mode": "implement", "status": "running", "ago": 8, "task": "AI Helper to write text" }
+      ],
+      "row": "d1",
+      "expect": {
+        "agent": "go-developer", "leadsWithTitle": false, "mode": "implement", "model": "", "badge": "",
+        "chip": null, "word": "running", "state": "running", "when": "8m",
+        "detail": null,
+        "detailText": "go-developer · implement · running · 8m",
+        "resumeLabel": "Resume go-developer", "unsandboxedAttr": null
+      }
+    },
+    {
+      "name": "a delegate with a report: its state, its quote, its check and the report's time",
+      "task_title": "AI Helper to write text",
+      "messages_loaded": true,
+      "report": { "from": "d1", "status": "ready_for_review", "ago": 4, "body": "Port  and\nscheduler done." },
+      "sessions": [
+        { "id": "d1", "agent_id": "go", "role": "delegate", "parent": "arch", "mode": "implement", "model": "sonnet", "status": "running", "ago": 8, "task": "AI Helper to write text",
+          "check": { "state": "active", "every": 10, "next_in": 6 } }
+      ],
+      "row": "d1",
+      "expect": {
+        "agent": "go-developer", "leadsWithTitle": false, "mode": "implement", "model": "sonnet", "badge": "",
+        "chip": null, "word": "running", "state": "running", "when": "4m",
+        "detail": { "kind": "review", "lead": "ready for review", "text": "“Port and scheduler done.”", "check": "check in 6m" },
+        "detailText": "go-developer · implement · sonnet · ready for review “Port and scheduler done.” · check in 6m · running · 4m",
+        "resumeLabel": "Resume go-developer", "unsandboxedAttr": null
+      }
+    },
+    {
+      "name": "a delegate that reported blocked, with no check",
+      "task_title": "AI Helper to write text",
+      "messages_loaded": true,
+      "report": { "from": "d1", "status": "blocked", "ago": 0, "body": "Need the schema." },
+      "sessions": [
+        { "id": "d1", "agent_id": "go", "role": "delegate", "parent": "arch", "status": "running", "ago": 8, "task": "AI Helper to write text" }
+      ],
+      "row": "d1",
+      "expect": {
+        "agent": "go-developer", "leadsWithTitle": false, "mode": "", "model": "", "badge": "",
+        "chip": null, "word": "running", "state": "running", "when": "now",
+        "detail": { "kind": "blocked", "lead": "blocked", "text": "“Need the schema.”", "check": "" },
+        "detailText": "go-developer · blocked “Need the schema.” · running · now",
+        "resumeLabel": "Resume go-developer", "unsandboxedAttr": null
+      }
+    },
+    {
+      "name": "a delegate with no report yet",
+      "task_title": "AI Helper to write text",
+      "messages_loaded": true,
+      "sessions": [
+        { "id": "d1", "agent_id": "go", "role": "delegate", "parent": "arch", "status": "running", "ago": 7, "task": "AI Helper to write text" }
+      ],
+      "row": "d1",
+      "expect": {
+        "agent": "go-developer", "leadsWithTitle": false, "mode": "", "model": "", "badge": "",
+        "chip": null, "word": "running", "state": "running", "when": "7m",
+        "detail": { "kind": "none", "lead": "no report yet", "text": "", "check": "" },
+        "detailText": "go-developer · no report yet · running · 7m",
+        "resumeLabel": "Resume go-developer", "unsandboxedAttr": null
+      }
+    },
+    {
+      "name": "a peer started by a session says who",
+      "task_title": "AI Helper to write text",
+      "sessions": [
+        { "id": "lead", "agent_id": "web", "status": "running", "ago": 20, "task": "AI Helper to write text" },
+        { "id": "peer", "agent_id": "go", "parent": "lead", "mode": "implement", "model": "sonnet", "status": "running", "ago": 5, "task": "AI Helper to write text" }
+      ],
+      "row": "peer",
+      "expect": {
+        "agent": "go-developer", "leadsWithTitle": false, "mode": "implement", "model": "sonnet", "badge": "",
+        "chip": null, "word": "running", "state": "running", "when": "5m",
+        "detail": { "kind": "by", "lead": "started by", "text": "web-developer", "check": "" },
+        "detailText": "go-developer · implement · sonnet · started by web-developer · running · 5m",
+        "resumeLabel": "Resume go-developer", "unsandboxedAttr": null
+      }
+    },
+    {
+      "name": "a peer whose prompt differs from the task's title quotes it",
+      "task_title": "AI Helper to write text",
+      "sessions": [
+        { "id": "peer", "agent_id": "go", "mode": "implement", "status": "running", "ago": 5, "task": "refactor the store" }
+      ],
+      "row": "peer",
+      "expect": {
+        "agent": "go-developer", "leadsWithTitle": false, "mode": "implement", "model": "", "badge": "",
+        "chip": null, "word": "running", "state": "running", "when": "5m",
+        "detail": { "kind": "prompt", "lead": "prompt", "text": "“refactor the store”", "check": "" },
+        "detailText": "go-developer · implement · prompt “refactor the store” · running · 5m",
+        "resumeLabel": "Resume go-developer", "unsandboxedAttr": null
+      }
+    },
+    {
+      "name": "a peer whose prompt is the task's title has no detail",
+      "task_title": "AI Helper to write text",
+      "sessions": [
+        { "id": "peer", "agent_id": "go", "mode": "implement", "model": "sonnet", "status": "running", "ago": 5, "task": "AI Helper to write text" }
+      ],
+      "row": "peer",
+      "expect": {
+        "agent": "go-developer", "leadsWithTitle": false, "mode": "implement", "model": "sonnet", "badge": "",
+        "chip": null, "word": "running", "state": "running", "when": "5m",
+        "detail": null,
+        "detailText": "go-developer · implement · sonnet · running · 5m",
+        "resumeLabel": "Resume go-developer", "unsandboxedAttr": null
+      }
+    },
+    {
+      "name": "plain claude with no mode or model",
+      "task_title": "AI Helper to write text",
+      "sessions": [
+        { "id": "peer", "agent_id": "", "status": "done", "ago": 61, "task": "AI Helper to write text" }
+      ],
+      "row": "peer",
+      "expect": {
+        "agent": "plain claude", "leadsWithTitle": false, "mode": "", "model": "", "badge": "",
+        "chip": null, "word": "done", "state": "done", "when": "1h",
+        "detail": null,
+        "detailText": "plain claude · done · 1h",
+        "resumeLabel": "Resume plain claude", "unsandboxedAttr": null
+      }
+    },
+    {
+      "name": "a feature brainstorm leads with its title and never quotes its prompt",
+      "task_title": "",
+      "sessions": [
+        { "id": "b", "agent_id": "go", "mode": "product", "model": "opus", "status": "running", "ago": 5, "ticket_id": "", "task": "Plan the CSV import" }
+      ],
+      "row": "b",
+      "expect": {
+        "agent": "Plan the CSV import", "leadsWithTitle": true, "mode": "product", "model": "opus", "badge": "",
+        "chip": null, "word": "running", "state": "running", "when": "5m",
+        "detail": null,
+        "detailText": "Plan the CSV import · product · opus · running · 5m",
+        "resumeLabel": "Resume Plan the CSV import", "unsandboxedAttr": null
+      }
+    },
+    {
+      "name": "a brainstorm with no prompt",
+      "task_title": "",
+      "sessions": [
+        { "id": "b", "agent_id": "go", "mode": "product", "status": "idle", "ago": 5, "ticket_id": "", "task": "" }
+      ],
+      "row": "b",
+      "expect": {
+        "agent": "Feature brainstorm", "leadsWithTitle": true, "mode": "product", "model": "", "badge": "",
+        "chip": { "word": "your turn", "tone": "attention" }, "word": "your turn", "state": "waiting", "when": "5m",
+        "detail": null,
+        "detailText": "Feature brainstorm · product · your turn · 5m",
+        "resumeLabel": "Resume Feature brainstorm", "unsandboxedAttr": null
+      }
+    },
+    {
+      "name": "one approval pending",
+      "task_title": "AI Helper to write text",
+      "sessions": [
+        { "id": "peer", "agent_id": "go", "mode": "implement", "status": "running", "pending_approvals": 1, "ago": 5, "task": "AI Helper to write text" }
+      ],
+      "row": "peer",
+      "expect": {
+        "agent": "go-developer", "leadsWithTitle": false, "mode": "implement", "model": "", "badge": "",
+        "chip": { "word": "approval", "tone": "attention" }, "word": "approval", "state": "waiting", "when": "5m",
+        "detail": { "kind": "approval", "lead": "1 approval pending", "text": "", "check": "" },
+        "detailText": "go-developer · implement · 1 approval pending · approval · 5m",
+        "resumeLabel": "Resume go-developer", "unsandboxedAttr": null
+      }
+    },
+    {
+      "name": "approvals pending beat a delegate's check",
+      "task_title": "AI Helper to write text",
+      "sessions": [
+        { "id": "d1", "agent_id": "go", "role": "delegate", "parent": "arch", "status": "running", "pending_approvals": 2, "ago": 5, "task": "AI Helper to write text",
+          "check": { "state": "active", "every": 10, "next_in": 6 } }
+      ],
+      "row": "d1",
+      "expect": {
+        "agent": "go-developer", "leadsWithTitle": false, "mode": "", "model": "", "badge": "",
+        "chip": { "word": "approval", "tone": "attention" }, "word": "approval", "state": "waiting", "when": "5m",
+        "detail": { "kind": "approval", "lead": "2 approvals pending", "text": "", "check": "" },
+        "detailText": "go-developer · 2 approvals pending · approval · 5m",
+        "resumeLabel": "Resume go-developer", "unsandboxedAttr": null
+      }
+    },
+    {
+      "name": "thinking has a signal chip",
+      "task_title": "AI Helper to write text",
+      "sessions": [
+        { "id": "peer", "agent_id": "go", "status": "thinking", "ago": 1, "task": "AI Helper to write text" }
+      ],
+      "row": "peer",
+      "expect": {
+        "agent": "go-developer", "leadsWithTitle": false, "mode": "", "model": "", "badge": "",
+        "chip": { "word": "thinking", "tone": "signal" }, "word": "thinking", "state": "running", "when": "1m",
+        "detail": null,
+        "detailText": "go-developer · thinking · 1m",
+        "resumeLabel": "Resume go-developer", "unsandboxedAttr": null
+      }
+    },
+    {
+      "name": "failed has a danger chip",
+      "task_title": "AI Helper to write text",
+      "sessions": [
+        { "id": "peer", "agent_id": "go", "mode": "implement", "status": "failed", "ago": 20, "task": "AI Helper to write text" }
+      ],
+      "row": "peer",
+      "expect": {
+        "agent": "go-developer", "leadsWithTitle": false, "mode": "implement", "model": "", "badge": "",
+        "chip": { "word": "failed", "tone": "danger" }, "word": "failed", "state": "failed", "when": "20m",
+        "detail": null,
+        "detailText": "go-developer · implement · failed · 20m",
+        "resumeLabel": "Resume go-developer", "unsandboxedAttr": null
+      }
+    },
+    {
+      "name": "paused has a neutral chip",
+      "task_title": "AI Helper to write text",
+      "sessions": [
+        { "id": "peer", "agent_id": "go", "status": "paused", "ago": 30, "task": "AI Helper to write text" }
+      ],
+      "row": "peer",
+      "expect": {
+        "agent": "go-developer", "leadsWithTitle": false, "mode": "", "model": "", "badge": "",
+        "chip": { "word": "paused", "tone": null }, "word": "paused", "state": "idle", "when": "30m",
+        "detail": null,
+        "detailText": "go-developer · paused · 30m",
+        "resumeLabel": "Resume go-developer", "unsandboxedAttr": null
+      }
+    },
+    {
+      "name": "a session that ran without the sandbox says so",
+      "task_title": "AI Helper to write text",
+      "sessions": [
+        { "id": "peer", "agent_id": "go", "mode": "implement", "model": "sonnet", "status": "running", "ago": 5, "task": "AI Helper to write text", "sandboxed": false }
+      ],
+      "row": "peer",
+      "expect": {
+        "agent": "go-developer", "leadsWithTitle": false, "mode": "implement", "model": "sonnet", "badge": "",
+        "chip": null, "word": "running", "state": "running", "when": "5m",
+        "detail": null,
+        "detailText": "go-developer · implement · sonnet · unsandboxed · running · 5m",
+        "resumeLabel": "Resume go-developer", "unsandboxedAttr": ""
+      }
+    }
+  ]
+}

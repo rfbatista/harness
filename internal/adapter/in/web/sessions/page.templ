@@ -442,15 +442,44 @@ templ ssrRows(v PageView) {
 				@components.Badge(strconv.Itoa(g.Count), g.Tone)
 			</div>
 			for _, r := range g.Rows {
-				<div class="[ row ]" data-stacked role="option" data-session-id={ r.ID } aria-selected={ strconv.FormatBool(r.Selected) } { attentionAttrs(r.Attention)... } { roleAttrs(r.Role, r.Depth)... } { unsandboxedAttrs(r.Unsandboxed)... }>
-					@components.Status(r.State, r.Word)
-					<span class="[ title ]">
+				<div class="[ row ]" data-layout="session" role="option" tabindex="0" data-session-id={ r.ID } title={ r.DetailText } aria-selected={ strconv.FormatBool(r.Selected) } { attentionAttrs(r.Attention)... } { roleAttrs(r.Role, r.Depth)... } { unsandboxedAttrs(r.Unsandboxed)... } { leadAttrs(r.LeadsWithTitle)... }>
+					<span class="[ status ]" data-state={ r.State } data-dot-only>
+						<span class="[ visually-hidden ]">{ r.Word }</span>
+					</span>
+					<span class="[ who ]">
+						<span class="[ agent ]">{ r.Agent }</span>
 						if r.Badge != "" {
 							@components.Badge(r.Badge, "")
 						}
-						{ r.Title }
+						<span class="[ tokens ]">
+							if r.Mode != "" {
+								<span class="[ tag ]" data-kind="mode">{ r.Mode }</span>
+							}
+							if r.Model != "" {
+								<span class="[ tag ]" data-kind="model">{ r.Model }</span>
+							}
+							if r.Unsandboxed {
+								<span class="[ tag ]" data-kind="warn">unsandboxed</span>
+							}
+						</span>
+						if r.Chip != nil {
+							<span class="[ badge ]" { chipToneAttrs(r.Chip.Tone)... } aria-hidden="true">{ r.Chip.Word }</span>
+						}
 					</span>
-					<span class="[ meta ]" title={ r.Meta }>{ r.Meta }</span>
+					<time class="[ when ]">{ r.When }</time>
+					if r.Detail != nil {
+						<span class="[ detail ]" data-report={ r.Detail.Kind }>
+							if r.Detail.Lead != "" {
+								<span class="[ lead ]">{ r.Detail.Lead }</span>
+							}
+							if r.Detail.Text != "" {
+								<span class="[ quote ]">{ r.Detail.Text }</span>
+							}
+							if r.Detail.Check != "" {
+								<span class="[ check ]">{ r.Detail.Check }</span>
+							}
+						</span>
+					}
 				</div>
 			}
 		}
@@ -466,16 +495,45 @@ templ liveRows() {
 				<span class="[ badge ]" x-bind:data-tone="group.tone" x-text="group.count"></span>
 			</div>
 			<template x-for="row in group.rows" x-bind:key="row.id">
-				<div class="[ row ]" data-stacked role="option" x-bind:data-session-id="row.id" x-bind:aria-selected="row.selected" x-bind:data-attention="row.attention" x-bind:data-fresh="row.fresh" x-bind:data-role="row.roleAttr" x-bind:data-depth="row.depthAttr" x-bind:data-unsandboxed="row.unsandboxedAttr" x-on:click="open(row.id)">
-					<span class="[ status ]" x-bind:data-state="row.state" x-text="row.word"></span>
-					<span class="[ title ]">
+				<div class="[ row ]" data-layout="session" role="option" tabindex="0" x-bind:data-session-id="row.id" x-bind:title="row.detailText" x-bind:aria-selected="row.selected" x-bind:data-attention="row.attention" x-bind:data-fresh="row.fresh" x-bind:data-role="row.roleAttr" x-bind:data-depth="row.depthAttr" x-bind:data-unsandboxed="row.unsandboxedAttr" x-bind:data-lead="row.leadAttr" x-on:click="open(row.id)">
+					<span class="[ status ]" x-bind:data-state="row.state" data-dot-only>
+						<span class="[ visually-hidden ]" x-text="row.word"></span>
+					</span>
+					<span class="[ who ]">
+						<span class="[ agent ]" x-text="row.agent"></span>
 						<template x-if="row.badge">
-							<span><span class="[ badge ]" x-text="row.badge"></span>{ " " }</span>
+							<span class="[ badge ]" x-text="row.badge"></span>
 						</template>
-						<span x-text="row.title"></span>
+						<span class="[ tokens ]">
+							<template x-if="row.mode">
+								<span class="[ tag ]" data-kind="mode" x-text="row.mode"></span>
+							</template>
+							<template x-if="row.model">
+								<span class="[ tag ]" data-kind="model" x-text="row.model"></span>
+							</template>
+							<template x-if="row.unsandboxed">
+								<span class="[ tag ]" data-kind="warn">unsandboxed</span>
+							</template>
+						</span>
+						<template x-if="row.chip">
+							<span class="[ badge ]" x-bind:data-tone="row.chip.tone" aria-hidden="true" x-text="row.chip.word"></span>
+						</template>
 						@pullrequests.Badge("row.workspaceId")
 					</span>
-					<span class="[ meta ]" x-bind:title="row.meta" x-text="row.meta"></span>
+					<time class="[ when ]" x-text="row.when"></time>
+					<template x-if="row.detail">
+						<span class="[ detail ]" x-bind:data-report="row.detail.kind">
+							<template x-if="row.detail.lead">
+								<span class="[ lead ]" x-text="row.detail.lead"></span>
+							</template>
+							<template x-if="row.detail.text">
+								<span class="[ quote ]" x-text="row.detail.text"></span>
+							</template>
+							<template x-if="row.detail.check">
+								<span class="[ check ]" x-text="row.detail.check"></span>
+							</template>
+						</span>
+					</template>
 					<template x-if="row.resumable">
 						<button type="button" class="[ button action ]" data-variant="ghost" data-size="sm" x-bind:aria-label="row.resumeLabel" x-bind:disabled="cannotResume" x-on:click.stop="resume(row.id)">Resume</button>
 					</template>
