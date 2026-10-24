@@ -173,3 +173,43 @@ func TestBuildSandboxPolicy_ReadAllReposCoversRepositoriesUnderAndOutsideTheHome
 		t.Errorf("off: hidden %v readable %v", off.Hidden, off.Readable)
 	}
 }
+
+func TestReadAllRepos_FactsOffRecordTheModesOwnVisibilityAndOnRecordAllRepos(t *testing.T) {
+	own := map[string]string{"implement": domain.SandboxOwnRepo, "design": domain.SandboxOwnRepo, "": domain.SandboxOwnRepo, "architect": domain.SandboxAllReposReadOnly, "product": domain.SandboxAllReposReadOnly}
+	for mode, want := range own {
+		w := newSandboxWorld(t)
+		sess, _ := w.startWithReadAll(t, mode, false)
+		if got := w.svc.sessions.Get(sess.ID).Sandbox; got == nil || got.Visibility != want {
+			t.Errorf("%q off: facts %+v, want %q", mode, got, want)
+		}
+	}
+}
+
+func TestReadAllRepos_AResumeAfterAChangeRecordsTheNewValueAndARunningSessionKeepsItsRecord(t *testing.T) {
+	w := newSandboxWorld(t)
+	w.svc.Transcripts = fakeTranscripts{}
+	sess, _ := w.startWithReadAll(t, "implement", false)
+	w.readAll = true // a running session keeps what it recorded
+	if got := w.svc.sessions.Get(sess.ID).Sandbox; got == nil || got.Visibility != domain.SandboxOwnRepo {
+		t.Fatalf("running session's facts changed: %+v", got)
+	}
+	if _, err := w.svc.EndInteractive(t.Context(), sess.ID, 0, false); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := w.svc.ResumeInteractive(t.Context(), ports.ResumeRequest{SessionID: sess.ID}); err != nil {
+		t.Fatal(err)
+	}
+	if got := w.svc.sessions.Get(sess.ID).Sandbox; got == nil || got.Visibility != domain.SandboxAllReposReadOnly {
+		t.Errorf("after resuming with the setting on: %+v", got)
+	}
+	if _, err := w.svc.EndInteractive(t.Context(), sess.ID, 0, false); err != nil {
+		t.Fatal(err)
+	}
+	w.readAll = false
+	if _, _, err := w.svc.ResumeInteractive(t.Context(), ports.ResumeRequest{SessionID: sess.ID}); err != nil {
+		t.Fatal(err)
+	}
+	if got := w.svc.sessions.Get(sess.ID).Sandbox; got == nil || got.Visibility != domain.SandboxOwnRepo {
+		t.Errorf("after resuming with the setting off: %+v", got)
+	}
+}
