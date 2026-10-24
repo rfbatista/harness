@@ -46,6 +46,7 @@ func NewRouter(h *Handler, opts ...Option) *echo.Echo {
 	g.POST("/delete_project", h.handleDeleteProject)
 	g.POST("/add_ignored_path", h.handleAddIgnoredPath)
 	g.POST("/remove_ignored_path", h.handleRemoveIgnoredPath)
+	g.POST("/set_project_agents_read_all_repos", h.handleSetProjectAgentsReadAllRepos)
 
 	// repositories
 	g.GET("/list_repositories", h.handleListRepositories)

@@ -24,6 +24,14 @@ type SandboxPolicy struct {
 	WorkingDir string   `json:"working_dir"`
 	Readable   []string `json:"readable,omitempty"`
 	Writable   []string `json:"writable,omitempty"`
+	// CreateOnly are directories the process may add new entries to but whose
+	// entries that exist when the policy is built it may not change: those are
+	// listed in Readable by the builder, and a driver renders the directory
+	// writable with each of them read-only on top (a deeper path wins). The
+	// common git directory's worktrees directory, so a session can run
+	// `git worktree add` without being able to prune or rewrite another
+	// worktree's admin entry.
+	CreateOnly []string `json:"create_only,omitempty"`
 	// Hidden are paths the process may neither read nor write: the project
 	// repository checkouts and the workspaces root its mode does not grant,
 	// wherever they lie. A Readable or Writable path inside a hidden one stays

@@ -34,7 +34,7 @@ export function memoryProjects({
 } = {}) {
   /** repository id → path → env file */
   const envStore = new Map();
-  const projectStore = new Map(projects.map((p) => [p.id, freeze({ ignoredPaths: [], ...p })]));
+  const projectStore = new Map(projects.map((p) => [p.id, freeze({ ignoredPaths: [], agentsReadAllRepos: true, ...p })]));
   const repoStore = new Map(repositories.map((r) => [r.id, r]));
   const sessionStore = new Map(sessions.map((s) => [s.id, { ...s }]));
   const existing = new Set([...dirs, ...Object.keys(disk)].map(clean));
@@ -117,7 +117,7 @@ export function memoryProjects({
       if (!trimmed) throw new StructuredError(Codes.INVALID_INPUT, "project name is required", 400);
       const root = resolveRoot(rootDir);
       claimName(trimmed, "");
-      return save({ id: `proj-${next++}`, name: trimmed, rootDir: root, ignoredPaths: [] });
+      return save({ id: `proj-${next++}`, name: trimmed, rootDir: root, ignoredPaths: [], agentsReadAllRepos: true });
     },
 
     async updateProject({ projectId, name, rootDir }) {
@@ -163,6 +163,10 @@ export function memoryProjects({
       const project = find(projectId);
       const p = normalizeIgnored(path);
       return save({ ...project, ignoredPaths: project.ignoredPaths.filter((x) => x !== p) });
+    },
+
+    async setAgentsReadAllRepos(projectId, enabled) {
+      return save({ ...find(projectId), agentsReadAllRepos: enabled === true });
     },
 
     async listProjectSummaries() {

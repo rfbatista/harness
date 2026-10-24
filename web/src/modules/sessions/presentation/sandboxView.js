@@ -26,8 +26,11 @@ export function factsView(session) {
 
 function repositoriesOf(mode, visibility) {
   if (visibility === "own repo") return [{ name: "this worktree", access: "read and write" }];
-  if (mode === "architect") return [{ name: "this worktree", access: "read and write" }, { name: "every other repository of the project", access: "read-only" }];
-  return [{ name: "every repository of the project", access: "read-only" }];
+  if (mode === "product") return [{ name: "every repository of the project", access: "read-only" }];
+  // Architect, and any mode with the project's setting on: its own worktree,
+  // and the main checkout of every repository, read-only.
+  const others = mode === "architect" ? "every other repository of the project" : "every repository of the project";
+  return [{ name: "this worktree", access: "read and write" }, { name: others, access: "read-only" }];
 }
 
 const TIME = new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false });

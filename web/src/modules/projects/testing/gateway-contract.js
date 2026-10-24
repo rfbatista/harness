@@ -214,6 +214,21 @@ export function projectGatewayContract(name, makeSubject) {
     await assert.rejects(gateway.addIgnoredPath("ghost", "x"), Codes.PROJECT_NOT_FOUND);
   });
 
+  contract("agents read every repository unless turned off, and the feed tells it", async () => {
+    const { gateway } = make({ projects: [p1], repositories: [] });
+    const changes = [];
+    const stop = gateway.followCatalog((c) => changes.push(c));
+    await flush();
+    assert.equal((await gateway.createProject({ name: "fresh", rootDir: "/src/harness" })).agentsReadAllRepos, true);
+    assert.equal((await gateway.setAgentsReadAllRepos("p1", false)).agentsReadAllRepos, false);
+    assert.equal((await gateway.listProjectSummaries()).find((s) => s.project.id === "p1").project.agentsReadAllRepos, false);
+    assert.equal((await gateway.setAgentsReadAllRepos("p1", true)).agentsReadAllRepos, true);
+    await assert.rejects(gateway.setAgentsReadAllRepos("ghost", false), Codes.PROJECT_NOT_FOUND);
+    await flush();
+    assert.deepEqual(changes.slice(1).map((c) => c.project.agentsReadAllRepos), [false, true]);
+    stop();
+  });
+
   contract("the catalog feed tells each create, update, ignored path and delete, in order", async () => {
     const { gateway } = make({ projects: [p1], repositories: [] });
     const changes = [];

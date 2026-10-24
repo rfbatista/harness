@@ -152,7 +152,6 @@ templ SettingsPage(v SettingsView) {
 							<span class="[ text-sm color-ink-muted ]" role="status" x-text="notice"></span>
 						</div>
 					</form>
-
 					<section class="[ flow ] [ flow-space-m ]" aria-labelledby="settings-ignored">
 						<h2 id="settings-ignored">Ignored paths</h2>
 						<p class="[ text-sm color-ink-muted ]">Hidden from the project's file tree, with everything inside them. Relative to the project's directory.</p>
@@ -188,14 +187,22 @@ templ SettingsPage(v SettingsView) {
 							<button type="submit" class="[ button ]" disabled x-bind:disabled="cannotAddPath" x-bind:aria-busy="addingPath">Add path</button>
 						</form>
 						<template x-if="ignoredError">
-							<span class="[ error ] [ text-sm ]" id="ignored-path-error"><span x-text="ignoredError.message"></span><template x-if="ignoredError.code"><span> <span class="[ font-mono ]" x-text="ignoredError.code"></span> · <span x-text="ignoredError.next"></span></span></template></span>
+							<span class="[ error ] [ text-sm ]" id="ignored-path-error"><span x-text="ignoredError.message"></span><template x-if="ignoredError.code"><span><span class="[ font-mono ]" x-text="ignoredError.code"></span> · <span x-text="ignoredError.next"></span></span></template></span>
 						</template>
 					</section>
-
+					<section class="[ flow ] [ flow-space-s ]" aria-labelledby="settings-agent-read">
+						<h2 id="settings-agent-read">Agents</h2>
+						<div class="[ field ]">
+							<label for="agents-read-all-repos"><input id="agents-read-all-repos" type="checkbox" checked?={ v.Project.AgentsReadAllRepos } x-bind:checked="readAll" x-bind:disabled="cannotChooseReadAll" x-bind:aria-busy="savingReadAll" x-bind:aria-invalid="readAllError !== null" aria-describedby="agents-read-all-repos-hint" x-on:change="chooseReadAll"/> Agents can read every repository of this project</label>
+							<span class="[ hint ]" id="agents-read-all-repos-hint">Lets an agent's sandbox read all of the project's repositories, not only its own; it applies to sessions started afterwards.</span>
+							<template x-if="readAllError">
+								<span class="[ error ]" id="agents-read-all-repos-error" role="alert"><span x-text="readAllError.message"></span> <span class="[ font-mono ]" x-text="readAllError.code"></span> · <span x-text="readAllError.next"></span></span>
+							</template>
+						</div>
+					</section>
 					if v.TokenSavers != nil {
 						@tokensavers.Section(*v.TokenSavers)
 					}
-
 					<section class="[ flow ] [ flow-space-s ]" aria-labelledby="settings-repositories">
 						<h2 id="settings-repositories">Repositories and their settings</h2>
 						<div class="[ pane ]">
@@ -211,7 +218,6 @@ templ SettingsPage(v SettingsView) {
 							}
 						</div>
 					</section>
-
 					@dangerZone(v)
 				</div>
 			</div>

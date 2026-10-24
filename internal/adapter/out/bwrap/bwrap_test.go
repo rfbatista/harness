@@ -188,3 +188,45 @@ func TestOtherWorktreeEntriesAreBoundReadOnlyAndTheOwnEntryReadWriteAfterIt(t *t
 		t.Fatalf("want common < ro worktrees < own entry, got %d %d %d: %v", common, ro, own, args)
 	}
 }
+
+func TestACreateOnlyWorktreesDirIsBoundWritableWithEachExistingEntryReadOnlyOnTopAndTheOwnReadWrite(t *testing.T) {
+	git := "/srv/repo/.git"
+	args := Render(ports.SandboxPolicy{
+		Writable:   []string{git, git + "/worktrees/own"},
+		CreateOnly: []string{git + "/worktrees"},
+		Readable:   []string{git + "/worktrees/a", git + "/worktrees/b"},
+	}, "/home/u")
+	common := index(args, "--bind-try", git, git)
+	dir := index(args, "--bind-try", git+"/worktrees", git+"/worktrees")
+	a := index(args, "--ro-bind-try", git+"/worktrees/a", git+"/worktrees/a")
+	b := index(args, "--ro-bind-try", git+"/worktrees/b", git+"/worktrees/b")
+	own := index(args, "--bind-try", git+"/worktrees/own", git+"/worktrees/own")
+	if common < 0 || dir < 0 || a < 0 || b < 0 || own < 0 || !(common < dir && dir < a && dir < b && dir < own) {
+		t.Fatalf("want common < dir < entries, got %d %d %d %d %d: %v", common, dir, a, b, own, args)
+	}
+	if has(args, "--ro-bind-try", git+"/worktrees", git+"/worktrees") {
+		t.Errorf("the worktrees dir is read-only as a whole: %v", args)
+	}
+}
+
+func TestEveryRepositoryCheckoutIsBoundReadOnlyWhileTheWorkspacesRootAndHiddenPathsStayMasked(t *testing.T) {
+	args := Render(ports.SandboxPolicy{
+		WorkingDir: "/var/ws/own",
+		Writable:   []string{"/var/ws/own", "/opt/proj/.git"},
+		Readable:   []string{"/opt/proj", "/opt/other", "/home/me/repo2"},
+		Hidden:     []string{"/var/ws"},
+	}, "/home/me")
+	for _, r := range []string{"/opt/proj", "/opt/other", "/home/me/repo2"} {
+		if !has(args, "--ro-bind-try", r, r) || has(args, "--bind-try", r, r) {
+			t.Errorf("%s not bound read-only: %v", r, args)
+		}
+	}
+	mask := index(args, "--tmpfs", "/var/ws")
+	own := index(args, "--bind-try", "/var/ws/own", "/var/ws/own")
+	if mask < 0 || own < mask {
+		t.Errorf("workspaces root not masked before the own worktree is bound: %d %d: %v", mask, own, args)
+	}
+	if index(args, "--ro-bind-try", "/opt/proj", "/opt/proj") > index(args, "--bind-try", "/opt/proj/.git", "/opt/proj/.git") {
+		t.Errorf("the checkout is bound over its writable git dir: %v", args)
+	}
+}

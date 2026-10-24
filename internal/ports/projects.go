@@ -23,6 +23,10 @@ type ProjectCatalog interface {
 	DeleteProject(ctx context.Context, projectID string) error
 	AddIgnoredPath(ctx context.Context, projectID, path string) (*domain.Project, error)
 	RemoveIgnoredPath(ctx context.Context, projectID, path string) (*domain.Project, error)
+	// SetProjectAgentsReadAllRepos turns on or off whether agents can read
+	// every repository of the project; it applies to sessions started
+	// afterwards. PROJECT_NOT_FOUND for an unknown project.
+	SetProjectAgentsReadAllRepos(ctx context.Context, projectID string, on bool) (*domain.Project, error)
 }
 
 // FoundRepository is a git checkout found on disk, not yet (necessarily)
@@ -172,7 +176,7 @@ type ProjectSummaries interface {
 }
 
 // ProjectCatalogChange is one change to the set of projects: a project
-// created or updated (its ignored paths included), or deleted.
+// created or updated (its ignored paths and agent-read setting included), or deleted.
 type ProjectCatalogChange struct {
 	Project *domain.Project
 	Deleted bool

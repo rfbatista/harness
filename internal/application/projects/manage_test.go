@@ -357,3 +357,38 @@ func TestFollowProjects_DropsAFollowerThatFellBehind(t *testing.T) {
 		t.Fatalf("slow follower got %d changes before its channel closed, want %d", n, followerBuffer)
 	}
 }
+
+func TestSetProjectAgentsReadAllRepos_StoresAnswersAndAnnounces(t *testing.T) {
+	f := newManageFixture(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	p, err := f.svc.CreateProject(ctx, "Reach", t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !p.AgentsReadAllRepos {
+		t.Fatal("a new project must read ON")
+	}
+	changes, _ := f.svc.FollowProjects(ctx)
+
+	saved, err := f.svc.SetProjectAgentsReadAllRepos(ctx, p.ID, false)
+	if err != nil || saved.AgentsReadAllRepos {
+		t.Fatalf("saved = %+v, %v", saved, err)
+	}
+	got, _ := f.svc.GetProject(ctx, p.ID) // the project reader answers it
+	if got.AgentsReadAllRepos {
+		t.Fatal("GetProject still reads ON")
+	}
+	select {
+	case c := <-changes:
+		if c.Project.ID != p.ID || c.Project.AgentsReadAllRepos {
+			t.Fatalf("change = %+v, want the project with the setting OFF", c.Project)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("the change was not announced")
+	}
+	_, err = f.svc.SetProjectAgentsReadAllRepos(ctx, "ghost", true)
+	wantErrCode(t, err, "PROJECT_NOT_FOUND")
+	_, err = f.svc.SetProjectAgentsReadAllRepos(ctx, "", true)
+	wantErrCode(t, err, "INVALID_INPUT")
+}

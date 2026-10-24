@@ -7,7 +7,13 @@ import { Codes, StructuredError } from "../../../shared/domain/errors.js";
 export function toProject(dto) {
   if (!dto || typeof dto.id !== "string" || dto.id === "") bad("project without an id");
   const ignored = Array.isArray(dto.ignored_paths) ? dto.ignored_paths.filter((p) => typeof p === "string") : [];
-  return Object.freeze({ id: dto.id, name: dto.name ?? "", rootDir: dto.root_dir ?? "", ignoredPaths: Object.freeze(ignored) });
+  return Object.freeze({
+    id: dto.id,
+    name: dto.name ?? "",
+    rootDir: dto.root_dir ?? "",
+    ignoredPaths: Object.freeze(ignored),
+    agentsReadAllRepos: dto.agents_read_all_repos !== false,
+  });
 }
 
 /** One of GET /api/list_project_summaries' summaries. @returns {import("../domain/project.js").ProjectSummary} */

@@ -105,6 +105,23 @@ templ sandboxSection(v SandboxView) {
 					<button type="submit" class="[ button ]" x-bind:disabled="busy">Add path</button>
 				</form>
 			</div>
+			<div class="[ flow ] [ flow-space-s ]" id="sandbox-read-access">
+				<h3 id="sandbox-read-access-title">Agents can read every repository of the project</h3>
+				<p class="[ hint ]">Set per project. It applies to sessions started afterwards.</p>
+				if len(v.Projects) == 0 {
+					<p class="[ color-ink-muted ]">No projects yet.</p>
+				} else {
+					<ul role="list" class="[ list ]" aria-labelledby="sandbox-read-access-title">
+						for _, r := range v.Projects {
+							<li class="[ row ] [ project-read-all ]" data-project={ r.ID }>
+								<span>{ r.Name }</span>
+								<span class="[ value ]">{ r.Value }</span>
+								<a href={ templ.SafeURL(r.Href) }>Project settings</a>
+							</li>
+						}
+					</ul>
+				}
+			</div>
 			<details id="sandbox-builtin" class="[ flow ] [ flow-space-s ]">
 				<summary>{ v.BuiltinSummary() }</summary>
 				<p class="[ hint ]">Every agent session may touch these besides its own worktree and the extra paths. The paths a session gets from its own environment (its PATH shims and git credential files) are made per session and not listed.</p>

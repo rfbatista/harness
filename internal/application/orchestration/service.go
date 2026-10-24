@@ -520,8 +520,12 @@ func (s *Service) withAgentCredential(cfg *llmkit.SessionConfig) {
 // claude never reaches the person's keychain. Without a dir it changes
 // nothing.
 func (s *Service) withKeychainShim(cfg *llmkit.SessionConfig) {
-	if env := keychainpath.Env(cfg.Env, s.KeychainShimDir); env != nil {
-		cfg.Env = append(slices.Clone(cfg.Env), env...)
+	for _, kv := range keychainpath.Env(cfg.Env, s.KeychainShimDir) {
+		if path, ok := strings.CutPrefix(kv, "PATH="); ok {
+			setPath(cfg, path)
+		} else {
+			cfg.Env = append(slices.Clone(cfg.Env), kv)
+		}
 	}
 }
 
@@ -643,7 +647,8 @@ func (s *Service) withShims(id string, cfg *llmkit.SessionConfig, cleanup func()
 	if inherited := os.Getenv("PATH"); inherited != "" {
 		path += string(os.PathListSeparator) + inherited
 	}
-	cfg.Env = append(slices.Clone(cfg.Env), "PATH="+path, ports.ShimDirEnv+"="+dir)
+	setPath(cfg, path)
+	cfg.Env = append(cfg.Env, ports.ShimDirEnv+"="+dir)
 	if s.SessionShellURL != nil {
 		cfg.Env = append(cfg.Env, ports.ShellURLEnv+"="+s.SessionShellURL(id))
 	}
@@ -681,7 +686,15 @@ func (s *Service) withDeveloperBin(cfg *llmkit.SessionConfig) {
 	if inherited := os.Getenv("PATH"); inherited != "" {
 		path += string(os.PathListSeparator) + inherited
 	}
-	cfg.Env = append(slices.Clone(cfg.Env), "PATH="+path, ports.DeveloperBinEnv+"="+bin)
+	setPath(cfg, path)
+	cfg.Env = append(cfg.Env, ports.DeveloperBinEnv+"="+bin)
+}
+
+// setPath makes path cfg's one PATH entry: a process takes the last PATH of
+// its env while an edit in place finds the first, so a second entry would
+// leave a directory added later where it has no effect.
+func setPath(cfg *llmkit.SessionConfig, path string) {
+	cfg.Env = append(slices.DeleteFunc(slices.Clone(cfg.Env), func(e string) bool { return strings.HasPrefix(e, "PATH=") }), "PATH="+path)
 }
 
 // ticketIn loads a ticket and checks it belongs to the project.

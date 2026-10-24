@@ -12,6 +12,10 @@ type Project struct {
 	RootDir      string       `json:"root_dir"`
 	IgnoredPaths []string     `json:"ignored_paths,omitempty"`
 	Repositories []Repository `json:"repositories,omitempty"`
+	// AgentsReadAllRepos lets an agent's sandbox read every repository of the
+	// project, not only the one its session works in. On for a new project and
+	// for one stored before the setting existed.
+	AgentsReadAllRepos bool `json:"agents_read_all_repos"`
 }
 
 // CleanProjectName trims a project name; an empty one is INVALID_INPUT.

@@ -49,6 +49,9 @@ type Handler struct {
 	HomeExposed func() bool
 	// HasLogin says the agent home holds a Claude login; nil: none.
 	HasLogin func() bool
+	// Projects is read at each page load for each project's read-access row;
+	// nil lists none.
+	Projects ports.ProjectReader
 	Layout   shell.Layout
 	Render   shell.Renderer
 }
@@ -87,6 +90,7 @@ func (h Handler) View(ctx context.Context) View {
 	if h.Builtin != nil {
 		v.Sandbox.Builtin = h.Builtin()
 	}
+	v.Sandbox.Projects = ReadAccessRows(ctx, h.Projects)
 	v.Summary = NewSummary(v.Credential, v.Claude, v.Sandbox)
 	return v
 }

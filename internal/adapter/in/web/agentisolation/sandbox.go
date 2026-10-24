@@ -1,6 +1,7 @@
 package agentisolation
 
 import (
+	"context"
 	"runtime"
 	"strconv"
 
@@ -21,6 +22,37 @@ type SandboxView struct {
 	// AllowPath is a path an "Allow this path" link brought: it opens in the
 	// add-path field and is not saved.
 	AllowPath string
+	// Projects is each project's "agents can read every repository" value.
+	Projects []ReadAccessRow
+}
+
+// ReadAccessRow is one project's read access as the server paints it.
+type ReadAccessRow struct {
+	ID    string
+	Name  string
+	Value string // "On" or "Off"
+	Href  string // the project's settings, at the Agents section
+}
+
+// ReadAccessRows reads every project's setting; none without a reader or on
+// an error.
+func ReadAccessRows(ctx context.Context, projects ports.ProjectReader) []ReadAccessRow {
+	if projects == nil {
+		return nil
+	}
+	all, err := projects.ListProjects(ctx)
+	if err != nil {
+		return nil
+	}
+	rows := make([]ReadAccessRow, 0, len(all))
+	for _, p := range all {
+		value := "Off"
+		if p.AgentsReadAllRepos {
+			value = "On"
+		}
+		rows = append(rows, ReadAccessRow{ID: p.ID, Name: p.Name, Value: value, Href: "/projects/" + p.ID + "/settings#agents-read-all-repos"})
+	}
+	return rows
 }
 
 // SandboxSeed is what the section's component takes over from: the body of

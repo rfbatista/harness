@@ -94,3 +94,30 @@ func TestTheBuiltinAllowlistOfNoSandboxIsEmpty(t *testing.T) {
 		t.Fatalf("Builtin = %+v", got)
 	}
 }
+
+func TestTheBuiltinAllowlistListsTheReadEveryRepositoryRuleAsTheBuilderGrantsIt(t *testing.T) {
+	b := &Sandbox{Home: "/data/agent-home"}
+	entries := builtinEntries(t, b.Builtin(), "Repositories when agents can read every repository (default)")
+	for _, c := range []struct {
+		prefix string
+		policy ports.SandboxPolicy
+	}{
+		{"Implement, design and default sessions: ", BuildSandboxPolicy(SandboxSession{Mode: domain.SessionModeImplement, Worktree: "/w", GitCommonDir: "/g", Repositories: []string{"/r"}, ReadAllRepos: true})},
+		{"Architect sessions: ", BuildSandboxPolicy(SandboxSession{Mode: domain.SessionModeArchitect, Worktree: "/w", GitCommonDir: "/g", Repositories: []string{"/r"}, ReadAllRepos: true})},
+		{"Product sessions: ", BuildSandboxPolicy(SandboxSession{Mode: domain.SessionModeProduct, Worktree: "/w", Repositories: []string{"/r"}, ReadAllRepos: true})},
+		{"One-shot calls: ", BuildSandboxPolicy(SandboxSession{OneShot: true, Repositories: []string{"/r"}, ReadAllRepos: true})},
+	} {
+		if !slices.Contains(c.policy.Readable, "/r") || slices.Contains(c.policy.Writable, "/r") {
+			t.Fatalf("%s: the builder does not grant the checkout read-only: %+v", c.prefix, c.policy)
+		}
+		found := false
+		for _, e := range entries {
+			if strings.HasPrefix(e.Label, c.prefix) && strings.Contains(e.Label, "every repository of the project") {
+				found = !e.Write
+			}
+		}
+		if !found {
+			t.Errorf("the page does not list %q as read-only: %+v", c.prefix, entries)
+		}
+	}
+}

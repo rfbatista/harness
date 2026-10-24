@@ -8,6 +8,7 @@
  * @property {string} name
  * @property {string} rootDir
  * @property {string[]} ignoredPaths  hidden from the project's file tree, relative to rootDir
+ * @property {boolean} agentsReadAllRepos  agents can read every repository of the project (on unless the wire says false)
  *
  * @typedef {object} ProjectSummary  a project at a glance, as the projects list shows it
  * @property {Project} project

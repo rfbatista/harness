@@ -77,6 +77,12 @@ const ShimDirEnv = "HARNESS_SHIM_DIR"
 // after its profile.
 const DeveloperBinEnv = "HARNESS_DEVELOPER_BIN"
 
+// SaverBinDirsEnv names, in an agent process's environment, the directories
+// of the active token savers' binaries, a PATH-style list. They go on PATH
+// right after the shims, before the keychain shim; a login shell puts them
+// back there after its profile.
+const SaverBinDirsEnv = "HARNESS_SAVER_BIN_DIRS"
+
 // SecurityShimCommand is the macOS `security` shim, a link to the shim
 // binary: it answers "not found" for Claude's keychain item and passes every
 // other call to the real /usr/bin/security (ADR 0022).
