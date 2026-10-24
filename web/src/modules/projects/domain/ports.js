@@ -29,6 +29,9 @@
  * @property {(projectId: string, path: string) => Promise<Project>} addIgnoredPath
  *           Relative to the project's directory; adding it twice keeps one.
  * @property {(projectId: string, path: string) => Promise<Project>} removeIgnoredPath
+ * @property {(projectId: string, enabled: boolean) => Promise<Project>} setAgentsReadAllRepos
+ *           Whether agents can read every repository of the project; applies to
+ *           sessions started afterwards. Rejects with PROJECT_NOT_FOUND.
  * @property {(onChange: (change: CatalogChange) => void, onStatus?: (status: import("../../../shared/domain/feed.js").FeedStatus) => void) => () => void} followCatalog
  *           Each project created, updated, re-tuned or deleted anywhere, as it
  *           happens. Counts are not on it. Returns the function that stops it.

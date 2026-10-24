@@ -305,6 +305,18 @@ func (h *Handler) handleRemoveIgnoredPath(c echo.Context) error {
 	return c.JSON(http.StatusOK, mcp.RemoveIgnoredPathOut{Project: mcp.ProjectToDTO(p)})
 }
 
+func (h *Handler) handleSetProjectAgentsReadAllRepos(c echo.Context) error {
+	var in mcp.SetProjectAgentsReadAllReposIn
+	if err := bindJSON(c, &in); err != nil {
+		return err
+	}
+	p, err := h.projects.SetProjectAgentsReadAllRepos(c.Request().Context(), in.ProjectID, in.Enabled)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, mcp.SetProjectAgentsReadAllReposOut{Project: mcp.ProjectToDTO(p)})
+}
+
 func (h *Handler) handleListTree(c echo.Context) error {
 	tree, err := h.architecture.ListTree(c.QueryParam("root"), c.QueryParam("project_id"))
 	if err != nil {

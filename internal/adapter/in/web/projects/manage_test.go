@@ -60,13 +60,13 @@ func TestSummaryRowsReadLikeTheBrowser(t *testing.T) {
 func TestListViewLinksEachProjectAndSeedsTheAPIShape(t *testing.T) {
 	at := time.Date(2026, 10, 7, 11, 0, 0, 0, time.UTC)
 	v := NewListView(shell.Frame{}, []ports.ProjectSummary{
-		{Project: &domain.Project{ID: "p 1", Name: "harness", RootDir: "/src/harness"}, RepositoryCount: 1, LastActivityAt: &at},
+		{Project: &domain.Project{ID: "p 1", Name: "harness", RootDir: "/src/harness", AgentsReadAllRepos: true}, RepositoryCount: 1, LastActivityAt: &at},
 	}, at)
 	if r := v.Rows[0]; r.Href != "/projects/p%201" || r.SettingsHref != "/projects/p%201/settings" || r.RootDir != "/src/harness" {
 		t.Errorf("row = %+v", r)
 	}
 	seed, _ := json.Marshal(v.Seed)
-	want := `{"summaries":[{"project":{"id":"p 1","name":"harness","root_dir":"/src/harness"},"repository_count":1,"open_task_count":0,"running_session_count":0,"last_activity_at":"2026-10-07T11:00:00Z"}]}`
+	want := `{"summaries":[{"project":{"id":"p 1","name":"harness","root_dir":"/src/harness","agents_read_all_repos":true},"repository_count":1,"open_task_count":0,"running_session_count":0,"last_activity_at":"2026-10-07T11:00:00Z"}]}`
 	if string(seed) != want {
 		t.Errorf("seed =\n%s\nwant\n%s", seed, want)
 	}
@@ -77,13 +77,13 @@ func TestListViewLinksEachProjectAndSeedsTheAPIShape(t *testing.T) {
 }
 
 func TestSettingsViewSeedsTheProjectAndLinksItsEnvFiles(t *testing.T) {
-	p := &domain.Project{ID: "p1", Name: "harness", RootDir: "/src/harness", IgnoredPaths: []string{"dist"}, Repositories: []domain.Repository{{ID: "stale"}}}
+	p := &domain.Project{ID: "p1", Name: "harness", RootDir: "/src/harness", IgnoredPaths: []string{"dist"}, AgentsReadAllRepos: true, Repositories: []domain.Repository{{ID: "stale"}}}
 	v := NewSettingsView(shell.Frame{}, p, []*domain.Repository{{ID: "r1", ProjectID: "p1", RootDir: "/src/harness/api"}})
 	if v.RepositoriesHref != "/projects/p1/repositories" || len(v.Repositories) != 1 || v.Repositories[0] != (SettingsRepository{"api", "/projects/p1/repositories/r1/env"}) {
 		t.Errorf("view = %+v", v)
 	}
 	seed, _ := json.Marshal(v.Seed)
-	want := `{"project":{"id":"p1","name":"harness","root_dir":"/src/harness","ignored_paths":["dist"]},"repositories":[{"id":"r1","project_id":"p1","name":"","url":"","root_dir":"/src/harness/api"}]}`
+	want := `{"project":{"id":"p1","name":"harness","root_dir":"/src/harness","ignored_paths":["dist"],"agents_read_all_repos":true},"repositories":[{"id":"r1","project_id":"p1","name":"","url":"","root_dir":"/src/harness/api"}]}`
 	if string(seed) != want {
 		t.Errorf("seed =\n%s\nwant\n%s", seed, want)
 	}

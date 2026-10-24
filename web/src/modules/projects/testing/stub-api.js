@@ -51,6 +51,8 @@ export function stubProjectsApi(world) {
           return jsonResponse(200, { project: projectDTO(await gateway.addIgnoredPath(body.project_id, body.path)) });
         case "POST /api/remove_ignored_path":
           return jsonResponse(200, { project: projectDTO(await gateway.removeIgnoredPath(body.project_id, body.path)) });
+        case "POST /api/set_project_agents_read_all_repos":
+          return jsonResponse(200, { project: projectDTO(await gateway.setAgentsReadAllRepos(body.project_id, body.enabled)) });
         case "POST /api/create_repository": {
           const r = await gateway.addRepository({
             projectId: body.project_id,

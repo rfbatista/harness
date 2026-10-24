@@ -376,6 +376,17 @@ func (s *Service) RemoveIgnoredPath(_ context.Context, projectID, path string) (
 	return s.announced(s.projects.RemoveIgnoredPath(projectID, path))
 }
 
+// SetProjectAgentsReadAllRepos turns on or off whether agents can read every
+// repository of the project.
+func (s *Service) SetProjectAgentsReadAllRepos(_ context.Context, projectID string, on bool) (*domain.Project, error) {
+	if projectID == "" {
+		return nil, errProjectIDMissing
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.announced(s.projects.SetAgentsReadAllRepos(projectID, on))
+}
+
 // announced puts a written project on the feed and passes the write's result
 // through.
 func (s *Service) announced(p *domain.Project, err error) (*domain.Project, error) {

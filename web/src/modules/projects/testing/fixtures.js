@@ -6,12 +6,18 @@ export const HOME = "/home/you";
 export const DIRS = ["/src", "/src/harness", "/src/coding_pool", "/a", `${HOME}/work`];
 
 export function makeProject(overrides = {}) {
-  return Object.freeze({ id: "p1", name: "coding_pool", rootDir: "/src/coding_pool", ignoredPaths: [], ...overrides });
+  return Object.freeze({ id: "p1", name: "coding_pool", rootDir: "/src/coding_pool", ignoredPaths: [], agentsReadAllRepos: true, ...overrides });
 }
 
 /** The wire format of a project. */
 export function projectDTO(p) {
-  return { id: p.id, name: p.name, root_dir: p.rootDir, ignored_paths: p.ignoredPaths?.length ? [...p.ignoredPaths] : undefined };
+  return {
+    id: p.id,
+    name: p.name,
+    root_dir: p.rootDir,
+    ignored_paths: p.ignoredPaths?.length ? [...p.ignoredPaths] : undefined,
+    agents_read_all_repos: p.agentsReadAllRepos,
+  };
 }
 
 /** The wire format of a project summary. */
