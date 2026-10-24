@@ -23,7 +23,7 @@ const Href = "/models"
 type Handler struct {
 	Settings ports.SettingsReader
 	// Helper says whether the writing helper can run; nil reads as it can.
-	Helper func(ctx context.Context) ports.WritingHelperAvailability
+	Helper func(ctx context.Context) shell.Helper
 	Layout shell.Layout
 	Render shell.Renderer
 }
@@ -123,7 +123,7 @@ func NewView(settings ports.SettingsReader) View {
 
 // WithWritingHelper says on the writing helper's row why it cannot run, when
 // a is not available.
-func (v View) WithWritingHelper(a ports.WritingHelperAvailability) View {
+func (v View) WithWritingHelper(a shell.Helper) View {
 	assistants := slices.Clone(v.Assistants)
 	for i := range assistants {
 		if assistants[i].Key == domain.SettingModelWritingHelper && !a.Available {

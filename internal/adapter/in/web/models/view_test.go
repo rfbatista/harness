@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	"operators-mcp/internal/adapter/in/web/shell"
 	"operators-mcp/internal/domain"
-	"operators-mcp/internal/ports"
 )
 
 type settings map[string]string
@@ -91,12 +91,12 @@ func TestTheWritingHelperRowOffersTheFourModelsAndNeverDefault(t *testing.T) {
 }
 
 func TestAnUnavailableHelperPutsItsReasonAndFixURLOnTheRow(t *testing.T) {
-	v := NewView(settings{}).WithWritingHelper(ports.WritingHelperAvailability{Reason: "no agent credential", FixURL: "/agent-isolation#credential"})
+	v := NewView(settings{}).WithWritingHelper(shell.Helper{Reason: "no agent credential", FixURL: "/agent-isolation#credential"})
 	a := v.Assistants[0]
 	if a.UnavailableReason != "no agent credential" || a.FixURL != "/agent-isolation#credential" {
 		t.Fatalf("row = %+v", a)
 	}
-	ok := NewView(settings{}).WithWritingHelper(ports.WritingHelperAvailability{Available: true})
+	ok := NewView(settings{}).WithWritingHelper(shell.Helper{Available: true})
 	if ok.Assistants[0].UnavailableReason != "" {
 		t.Errorf("an available helper has no reason: %+v", ok.Assistants[0])
 	}
