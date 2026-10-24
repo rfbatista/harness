@@ -469,7 +469,7 @@ func (s *Service) prepare(ctx context.Context, in prepareInput) (*prepared, erro
 		_ = s.workspaces.Discard(ws.ID)
 		return nil, err
 	}
-	sb, err := s.sandbox(ctx, in, id, repo, ws.Path, cfg.Env)
+	sb, err := s.sandbox(ctx, in, id, repo, ws.Path, cfg.Env, ag.skillDirs)
 	if err != nil {
 		if cleanup != nil {
 			cleanup()
