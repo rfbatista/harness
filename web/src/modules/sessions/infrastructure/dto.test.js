@@ -65,6 +65,7 @@ test("the seed carries agent names for live updates", () => {
   const seed = toSeed({ project_id: "p1", ticket_id: "t1", sessions: [wire], agent_names: { a1: "Reviewer" } });
   assert.deepEqual(seed.agentNames, { a1: "Reviewer" });
   assert.deepEqual(toSeed({ project_id: "p1", sessions: [] }).agentNames, {});
+  assert.deepEqual([toSeed({ project_id: "p1", sessions: [], task_title: "Port" }).taskTitle, toSeed({ project_id: "p1", sessions: [] }).taskTitle], ["Port", ""]);
 });
 
 test("feed lines become upserts or deletions", () => {

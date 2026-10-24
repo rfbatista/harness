@@ -122,6 +122,8 @@ export function toSeed(body) {
     ticketId: body.ticket_id ?? "",
     sessions: toSessionList(body),
     agentNames: { ...(body.agent_names ?? {}) },
+    // The task's title; no row repeats it. Empty on the project's brainstorm page.
+    taskTitle: body.task_title ?? "",
     repositoryNames: { ...(body.repository_names ?? {}) },
     documentTitles: { ...(body.document_titles ?? {}) },
     // The Code tab: served at all, the session a code URL opened on it, and each worktree's base branch.

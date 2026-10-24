@@ -66,6 +66,8 @@ export const sessionsPage = ({
     selectedId: null,
     now: clock.now(),
     agentNames: {},
+    /** The task's title, so no row repeats it as its prompt. Empty on the project's brainstorm page. */
+    taskTitle: "",
     repositoryNames: {},
     error: null,
     stopping: false,
@@ -118,6 +120,7 @@ export const sessionsPage = ({
         selectedId: this.selectedId,
         now: this.now,
         agentNames: this.agentNames,
+        taskTitle: this.taskTitle,
         fresh: new Set(this.freshIds),
       });
     },
@@ -463,6 +466,7 @@ export const sessionsPage = ({
         this.projectId = seed.projectId;
         this.ticketId = seed.ticketId;
         this.agentNames = seed.agentNames;
+        this.taskTitle = seed.taskTitle ?? "";
         this.repositoryNames = seed.repositoryNames;
         this.documentTitles = seed.documentTitles;
         this.codeEnabled = seed.code === true;

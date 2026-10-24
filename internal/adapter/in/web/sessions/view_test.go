@@ -1,9 +1,12 @@
 package sessions
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
+	"reflect"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -83,7 +86,7 @@ func TestPageViewGroupsForTriageAndSelectsTheFirstRow(t *testing.T) {
 		t.Errorf("the first row of Needs you should start selected with an attention tone: %+v", v.Groups[0])
 	}
 	newRun := v.Groups[1].Rows[0]
-	if newRun.Title != "Untitled session" || newRun.Meta != "Backend dev · 5m" {
+	if newRun.Agent != "Backend dev" || newRun.When != "5m" || newRun.Detail != nil {
 		t.Errorf("row = %+v", newRun)
 	}
 	if v.Summary != "4 sessions · 1 waiting" {
@@ -187,9 +190,6 @@ func TestStartedByNamesTheParentsAgent(t *testing.T) {
 		if got := StartedBy(c.s, others, names); got != c.want {
 			t.Errorf("StartedBy(%+v) = %q, want %q", c.s, got, c.want)
 		}
-	}
-	if got := meta("plain claude", "Backend dev", "now"); got != "plain claude · started by Backend dev · now" {
-		t.Errorf("meta = %q", got)
 	}
 }
 
@@ -306,7 +306,7 @@ func TestStatusCheckViewMatchesTheSharedFixture(t *testing.T) {
 	}
 }
 
-func TestDelegateRowSaysItsNextCheckInsteadOfWhoStartedIt(t *testing.T) {
+func TestDelegateRowSaysItsNextCheckBeforeTheMessagesLoad(t *testing.T) {
 	now := time.Date(2026, 10, 2, 14, 0, 0, 0, time.UTC)
 	next := now.Add(6 * time.Minute)
 	list := []*domain.Session{
@@ -316,20 +316,119 @@ func TestDelegateRowSaysItsNextCheckInsteadOfWhoStartedIt(t *testing.T) {
 		{ID: "d2", AgentID: "go", Role: domain.RoleDelegate, ParentSessionID: "d1", Status: domain.SessionRunning, UpdatedAt: now.Add(-7 * time.Minute)},
 	}
 	v := NewPageView(shell.Frame{}, &domain.Project{ID: "p1"}, &domain.Ticket{ID: "t1"}, list, []*domain.Agent{{ID: "go", Name: "go-developer"}}, nil, now)
-	got := map[string]string{}
+	got := map[string]*Detail{}
 	for _, r := range v.Groups[0].Rows {
-		got[r.ID] = r.Meta
+		got[r.ID] = r.Detail
 	}
-	want := map[string]string{"arch": "go-developer as architect · 9m", "d1": "go-developer · check in 6m", "d2": "go-developer · 7m"}
-	for id, m := range want {
-		if got[id] != m {
-			t.Errorf("%s meta = %q, want %q", id, got[id], m)
+	want := map[string]*Detail{"arch": nil, "d1": {Kind: "none", Check: "check in 6m"}, "d2": nil}
+	for id, d := range want {
+		if !reflect.DeepEqual(got[id], d) {
+			t.Errorf("%s detail = %+v, want %+v", id, got[id], d)
 		}
 	}
 }
 
-// The new-session form's agents carry their Description, the second line of
-// each option in the Agent Listbox select.
+// The browser's view test reads the same fixture (view.test.js). The server
+// never has a task's messages, so the cases where they are loaded are the
+// browser's alone.
+func TestRowMatchesTheSharedFixture(t *testing.T) {
+	raw, err := os.ReadFile("../../../../../web/testdata/views/session-row.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fixture struct {
+		AgentNames map[string]string `json:"agent_names"`
+		Cases      []struct {
+			Name           string `json:"name"`
+			TaskTitle      string `json:"task_title"`
+			MessagesLoaded bool   `json:"messages_loaded"`
+			Row            string `json:"row"`
+			Sessions       []struct {
+				ID               string               `json:"id"`
+				AgentID          string               `json:"agent_id"`
+				Role             domain.SessionRole   `json:"role"`
+				Parent           string               `json:"parent"`
+				Mode             domain.SessionMode   `json:"mode"`
+				Model            string               `json:"model"`
+				Status           domain.SessionStatus `json:"status"`
+				PendingApprovals int                  `json:"pending_approvals"`
+				Ago              int                  `json:"ago"`
+				TicketID         *string              `json:"ticket_id"`
+				Task             string               `json:"task"`
+				Sandboxed        *bool                `json:"sandboxed"`
+				Check            *struct {
+					State  domain.StatusCheckState `json:"state"`
+					Every  int                     `json:"every"`
+					NextIn int                     `json:"next_in"`
+				} `json:"check"`
+			} `json:"sessions"`
+			Expect struct {
+				Agent          string `json:"agent"`
+				LeadsWithTitle bool   `json:"leadsWithTitle"`
+				Mode           string `json:"mode"`
+				Model          string `json:"model"`
+				Badge          string `json:"badge"`
+				Chip           *struct {
+					Word string  `json:"word"`
+					Tone *string `json:"tone"`
+				} `json:"chip"`
+				Word            string  `json:"word"`
+				State           string  `json:"state"`
+				When            string  `json:"when"`
+				Detail          *Detail `json:"detail"`
+				DetailText      string  `json:"detailText"`
+				ResumeLabel     string  `json:"resumeLabel"`
+				UnsandboxedAttr *string `json:"unsandboxedAttr"`
+			} `json:"expect"`
+		} `json:"cases"`
+	}
+	if err := json.Unmarshal(raw, &fixture); err != nil {
+		t.Fatal(err)
+	}
+	if len(fixture.Cases) == 0 {
+		t.Fatal("empty fixture")
+	}
+	now := time.Date(2026, 10, 2, 14, 0, 0, 0, time.UTC)
+	for _, c := range fixture.Cases {
+		if c.MessagesLoaded {
+			continue
+		}
+		others := map[string]*domain.Session{}
+		for _, f := range c.Sessions {
+			s := &domain.Session{ID: f.ID, AgentID: f.AgentID, Role: f.Role, ParentSessionID: f.Parent, Mode: f.Mode, Model: f.Model,
+				Status: f.Status, PendingApprovals: f.PendingApprovals, Task: f.Task, TicketID: "t1", UpdatedAt: now.Add(-time.Duration(f.Ago) * time.Minute)}
+			if f.TicketID != nil {
+				s.TicketID = *f.TicketID
+			}
+			if f.Sandboxed != nil {
+				s.Sandbox = &domain.SandboxFacts{Sandboxed: *f.Sandboxed, Visibility: domain.SandboxUnrestricted}
+			}
+			if f.Check != nil {
+				next := now.Add(time.Duration(f.Check.NextIn) * time.Minute)
+				s.StatusCheck = &domain.StatusCheck{State: f.Check.State, EveryMinutes: f.Check.Every, NextAt: &next}
+			}
+			others[f.ID] = s
+		}
+		got := toRow(others[c.Row], "", fixture.AgentNames, now, others, 0, c.TaskTitle)
+		want := c.Expect
+		var wantChip *Chip
+		if want.Chip != nil {
+			wantChip = &Chip{Word: want.Chip.Word}
+			if want.Chip.Tone != nil {
+				wantChip.Tone = *want.Chip.Tone
+			}
+		}
+		if got.Agent != want.Agent || got.LeadsWithTitle != want.LeadsWithTitle || got.Mode != want.Mode || got.Model != want.Model ||
+			got.Badge != want.Badge || got.Word != want.Word || got.State != want.State || got.When != want.When ||
+			got.DetailText != want.DetailText || got.ResumeLabel != want.ResumeLabel || got.Unsandboxed != (want.UnsandboxedAttr != nil) {
+			t.Errorf("%s: got %+v, want %+v", c.Name, got, want)
+		}
+		if !reflect.DeepEqual(got.Chip, wantChip) || !reflect.DeepEqual(got.Detail, want.Detail) {
+			t.Errorf("%s: chip %+v detail %+v, want chip %+v detail %+v", c.Name, got.Chip, got.Detail, wantChip, want.Detail)
+		}
+	}
+}
+
 func TestNewSessionFormCarriesEachAgentsDescription(t *testing.T) {
 	agents := []*domain.Agent{
 		{ID: "ux", Name: "ux-designer", Description: "Variants, behaviour, wireframes"},
@@ -387,7 +486,7 @@ func TestProjectPageViewHasNoTaskAndLocksTheFormToProduct(t *testing.T) {
 	if !strings.Contains(string(b), `"ticket_id":""`) {
 		t.Errorf("the seed must carry an empty ticket id, so the browser keeps ticket-less sessions only: %s", b)
 	}
-	if v.Groups[0].Rows[0].Title != "Feature brainstorm" {
+	if v.Groups[0].Rows[0].Agent != "Feature brainstorm" || !v.Groups[0].Rows[0].LeadsWithTitle {
 		t.Errorf("row = %+v", v.Groups[0].Rows[0])
 	}
 	task := NewPageView(shell.Frame{}, &domain.Project{ID: "p1"}, &domain.Ticket{ID: "t1", Title: "Add SSE feed"}, nil, nil, nil, now)
@@ -402,7 +501,7 @@ func TestOnlyAnUnsandboxedSessionsRowSaysSo(t *testing.T) {
 	now := time.Now()
 	row := func(f *domain.SandboxFacts) Row {
 		s := &domain.Session{ID: "s", UpdatedAt: now, Sandbox: f}
-		return toRow(s, "", nil, now, map[string]*domain.Session{"s": s}, 0)
+		return toRow(s, "", nil, now, map[string]*domain.Session{"s": s}, 0, "")
 	}
 	for name, tc := range map[string]struct {
 		facts *domain.SandboxFacts
@@ -413,8 +512,51 @@ func TestOnlyAnUnsandboxedSessionsRowSaysSo(t *testing.T) {
 		"sandbox off":        {&domain.SandboxFacts{Visibility: domain.SandboxUnrestricted}, true},
 	} {
 		r := row(tc.facts)
-		if r.Unsandboxed != tc.want || strings.HasSuffix(r.Meta, " · unsandboxed") != tc.want {
-			t.Errorf("%s: unsandboxed=%v meta=%q, want %v", name, r.Unsandboxed, r.Meta, tc.want)
+		if r.Unsandboxed != tc.want || strings.Contains(r.DetailText, " · unsandboxed") != tc.want {
+			t.Errorf("%s: unsandboxed=%v meta=%q, want %v", name, r.Unsandboxed, r.DetailText, tc.want)
+		}
+	}
+}
+
+// The server's first paint renders the contract's session row: the agent
+// leads, the facts are tags, the detail sits under it, and no row repeats
+// the task's title.
+func TestFirstPaintRendersTheSessionRowMarkup(t *testing.T) {
+	now := time.Date(2026, 10, 2, 14, 0, 0, 0, time.UTC)
+	next := now.Add(6 * time.Minute)
+	list := []*domain.Session{
+		{ID: "arch", AgentID: "go", Role: domain.RoleArchitect, Mode: domain.SessionModeArchitect, Model: "opus", Status: domain.SessionRunning, Task: "AI Helper", TicketID: "t1", UpdatedAt: now.Add(-9 * time.Minute)},
+		{ID: "d1", AgentID: "go", Role: domain.RoleDelegate, ParentSessionID: "arch", Mode: domain.SessionModeImplement, Model: "sonnet", Status: domain.SessionRunning, Task: "AI Helper", TicketID: "t1", UpdatedAt: now.Add(-8 * time.Minute),
+			StatusCheck: &domain.StatusCheck{State: domain.StatusCheckActive, EveryMinutes: 10, NextAt: &next}},
+		{ID: "peer", AgentID: "go", Status: domain.SessionFailed, Task: "fix the flake", TicketID: "t1", UpdatedAt: now.Add(-20 * time.Minute)},
+	}
+	v := NewPageView(shell.Frame{}, &domain.Project{ID: "p1"}, &domain.Ticket{ID: "t1", Title: "AI Helper"}, list, []*domain.Agent{{ID: "go", Name: "go-developer"}}, nil, now)
+	var buf strings.Builder
+	if err := ssrRows(v).Render(context.Background(), &buf); err != nil {
+		t.Fatal(err)
+	}
+	// The classes read "[ agent ]" in the source (the design system's
+	// bracket convention), and templ leaves a space between sibling elements.
+	html := regexp.MustCompile(`>\s+<`).ReplaceAllString(strings.NewReplacer(`"[ `, `"`, ` ]"`, `"`).Replace(buf.String()), "><")
+	for _, want := range []string{
+		`data-layout="session"`,
+		`<span class="agent">go-developer</span>`,
+		`<span class="tag" data-kind="mode">implement</span>`,
+		`<span class="tag" data-kind="model">sonnet</span>`,
+		`<span class="badge" data-tone="danger" aria-hidden="true">failed</span>`,
+		`<span class="detail" data-report="none"><span class="check">check in 6m</span></span>`,
+		`<span class="detail" data-report="prompt"><span class="lead">prompt</span><span class="quote">“fix the flake”</span></span>`,
+		`data-dot-only`,
+		`<time class="when">9m</time>`,
+		`title="go-developer · implement · sonnet · check in 6m · running · 8m"`,
+	} {
+		if !strings.Contains(html, want) {
+			t.Errorf("first paint lacks %s\n%s", want, html)
+		}
+	}
+	for _, unwanted := range []string{`class="title"`, `class="meta"`, `data-stacked`, `AI Helper`} {
+		if strings.Contains(html, unwanted) {
+			t.Errorf("first paint has %s", unwanted)
 		}
 	}
 }
