@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"image"
+	"image/png"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -138,6 +140,12 @@ func (a *scopedArtifactsAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		a.list = slices.Delete(a.list, i, i+1)
 		w.WriteHeader(http.StatusNoContent)
 	case strings.HasSuffix(r.URL.Path, "/view/"):
+		id := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/api/artifacts/"), "/view/")
+		if x := a.find(id); x != nil && x["kind"] == "image" {
+			w.Header().Set("Content-Type", "image/png")
+			_ = png.Encode(w, image.NewRGBA(image.Rect(0, 0, 3000, 2000)))
+			return
+		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.Header().Set("Content-Security-Policy", "sandbox allow-scripts; default-src 'self' data: blob:; frame-ancestors 'self'")
 		fmt.Fprint(w, "<!doctype html><title>artifact</title><p>asset</p>")

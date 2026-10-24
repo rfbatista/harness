@@ -38,12 +38,9 @@ import (
 
 // Deps are the driving ports the pages read. Each page takes the narrowest.
 type Deps struct {
-	// WritingHelper says whether the magic pens can run (the readiness check
-	// behind WRITING_HELPER_UNAVAILABLE); nil leaves every pen unavailable.
-	WritingHelper func(ctx context.Context) shell.Helper
-	Projects      ports.ProjectReader
-	Tasks         ports.TicketReader
-	Sessions      ports.SessionReader
+	Projects ports.ProjectReader
+	Tasks    ports.TicketReader
+	Sessions ports.SessionReader
 	// Agents and Repositories fill the new-session form.
 	Agents       ports.AgentLister
 	Repositories ports.RepositoryLister
@@ -137,6 +134,10 @@ type Deps struct {
 	// ArchivedList lists the project's archived tasks for the Archived view;
 	// nil lists none.
 	ArchivedList tasks.ArchivedLister
+	// WritingHelper reads whether the writing helper can run, for the pens of
+	// every page and the Models page's row. It must not start anything; nil
+	// reads as unavailable.
+	WritingHelper func(ctx context.Context) shell.Helper
 	// Now defaults to time.Now.
 	Now func() time.Time
 }
@@ -218,7 +219,7 @@ func NewHandler(deps Deps, assets *Assets, fallback http.Handler) http.Handler {
 		mux.Handle("GET "+tokensavers.Href, s.page(savers.Page))
 	}
 	if deps.Settings != nil {
-		modelsPage := models.Handler{Settings: deps.Settings, Layout: s.layout, Render: render}
+		modelsPage := models.Handler{Settings: deps.Settings, Helper: s.helper, Layout: s.layout, Render: render}
 		mux.Handle("GET "+models.Href, s.page(modelsPage.Page))
 	}
 	if deps.SandboxSettings != nil {
@@ -309,9 +310,7 @@ func switchProject(w http.ResponseWriter, r *http.Request) {
 func (s *server) layout(ctx context.Context, title, projectID, taskID string) (shell.Frame, error) {
 	frame := s.bareFrame(title)
 	frame.Notifications = s.bell(ctx)
-	if s.deps.WritingHelper != nil {
-		frame.Helper = s.deps.WritingHelper(ctx)
-	}
+	frame.Helper = s.helper(ctx)
 	all, err := s.deps.Projects.ListProjects(ctx)
 	if err != nil {
 		return shell.Frame{}, err
@@ -377,6 +376,14 @@ func (s *server) bell(ctx context.Context) *shell.Bell {
 	return b
 }
 
+// helper is the writing helper's readiness: unavailable without a reader.
+func (s *server) helper(ctx context.Context) shell.Helper {
+	if s.deps.WritingHelper == nil {
+		return shell.Helper{}
+	}
+	return s.deps.WritingHelper(ctx)
+}
+
 // bareFrame is a frame without the rail, for when the rail cannot be read.
 func (s *server) bareFrame(title string) shell.Frame {
 	f := shell.Frame{
@@ -385,6 +392,7 @@ func (s *server) bareFrame(title string) shell.Frame {
 		JS:    s.assets.URL("app.js"),
 		Built: s.assets.Built(),
 	}
+	f.Helper = s.helper(context.Background())
 	if s.deps.GitCredentials != nil {
 		f.Top.CredentialsHref = credentials.Href
 	}

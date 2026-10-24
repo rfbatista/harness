@@ -11,6 +11,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 
@@ -107,7 +108,9 @@ func (s *Service) Record(ctx context.Context, r ports.UsageRequest) {
 		CacheCreationInputTokens: r.CacheCreationInputTokens, CacheReadInputTokens: r.CacheReadInputTokens,
 		Error: r.Error,
 	}
-	if r.Attribution != "" && r.Attribution != ports.UsageSystemAttribution {
+	if project, ok := strings.CutPrefix(r.Attribution, writingHelperAttribution+":"); ok {
+		rec.ProjectID, rec.Attribution = project, writingHelperAttribution
+	} else if r.Attribution != "" && r.Attribution != ports.UsageSystemAttribution {
 		if sess := s.readers.Sessions.Get(r.Attribution); sess != nil {
 			rec.SessionID, rec.TaskID, rec.ProjectID = sess.ID, sess.TicketID, sess.ProjectID
 		}

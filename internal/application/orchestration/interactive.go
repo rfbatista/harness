@@ -211,7 +211,7 @@ func (s *Service) ResumeInteractive(ctx context.Context, req ports.ResumeRequest
 	if err != nil {
 		return nil, ports.AgentSpec{}, err
 	}
-	sb, err := s.resumeSandbox(ctx, sess, cfg.Env)
+	sb, err := s.resumeSandbox(ctx, sess, cfg.Env, ag.skillDirs)
 	if err != nil {
 		if cleanup != nil {
 			cleanup()
@@ -247,7 +247,7 @@ func (s *Service) ResumeInteractive(ctx context.Context, req ports.ResumeRequest
 
 // resumeSandbox is the sandbox step of a resume: the session's policy under
 // the current settings.
-func (s *Service) resumeSandbox(ctx context.Context, sess *domain.Session, env []string) (sandboxed, error) {
+func (s *Service) resumeSandbox(ctx context.Context, sess *domain.Session, env, skillDirs []string) (sandboxed, error) {
 	repo := &domain.Repository{}
 	if s.Sandbox != nil && sess.RepositoryID != "" {
 		r, err := s.catalog.Repositories.GetRepository(ctx, sess.RepositoryID)
@@ -256,7 +256,7 @@ func (s *Service) resumeSandbox(ctx context.Context, sess *domain.Session, env [
 		}
 		repo = r
 	}
-	return s.sandbox(ctx, prepareInput{ProjectID: sess.ProjectID, Mode: sess.Mode}, sess.ID, repo, sess.WorkingDir, env)
+	return s.sandbox(ctx, prepareInput{ProjectID: sess.ProjectID, Mode: sess.Mode}, sess.ID, repo, sess.WorkingDir, env, skillDirs)
 }
 
 // claimResume marks id as being resumed; false when another call already is.

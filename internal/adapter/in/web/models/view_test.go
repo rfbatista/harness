@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"operators-mcp/internal/adapter/in/web/shell"
 	"operators-mcp/internal/domain"
 )
 
@@ -52,78 +53,51 @@ func TestTiersShowTheStoredModels(t *testing.T) {
 	}
 }
 
-// options is the select's options as "value=label", in order.
-func options(t *testing.T, tier Tier) []string {
-	t.Helper()
-	var b bytes.Buffer
-	if err := tierRow(tier).Render(context.Background(), &b); err != nil {
-		t.Fatal(err)
-	}
-	var out []string
-	rest := b.String()
-	for {
-		i := strings.Index(rest, `<option value="`)
-		if i < 0 {
-			return out
-		}
-		rest = rest[i+len(`<option value="`):]
-		value := rest[:strings.Index(rest, `"`)]
-		label := rest[strings.Index(rest, ">")+1:]
-		label = label[:strings.Index(label, "<")]
-		out = append(out, value+"="+label)
-	}
-}
-
-func TestTheWritingHelperIsAnAssistantAtHaikuWhileUnset(t *testing.T) {
+func TestTheAssistantsPaneHasTheWritingHelperRowAtHaikuWhileUnset(t *testing.T) {
 	v := NewView(settings{})
 	if len(v.Assistants) != 1 {
-		t.Fatalf("assistants = %d, want the writing helper only", len(v.Assistants))
+		t.Fatalf("assistants = %+v, want one row", v.Assistants)
 	}
 	a := v.Assistants[0]
-	if a.Key != "models.assistants.writing_helper" || a.Title != "Writing helper" {
-		t.Errorf("assistant = %+v", a)
+	if a.Key != domain.SettingModelWritingHelper || a.Title != "Writing helper" || a.Current != "haiku" || a.BuiltIn != "haiku" || !a.NoDefault {
+		t.Errorf("row = %+v", a)
 	}
-	if got := selected(t, a); got != "haiku" {
-		t.Errorf("writing helper selects %q, want haiku", got)
+	if !strings.HasPrefix(a.Lead, "The magic pen in task titles, descriptions and comments.") {
+		t.Errorf("lead = %q", a.Lead)
 	}
-	want := []string{"haiku=haiku (default)", "sonnet=sonnet", "opus=opus", "fable=fable"}
-	if got := options(t, a); strings.Join(got, ",") != strings.Join(want, ",") {
-		t.Errorf("choices = %v, want %v: no \"default: the CLI chooses\", haiku marked as the default", got, want)
-	}
-}
-
-func TestTheWritingHelperShowsItsStoredModel(t *testing.T) {
-	v := NewView(settings{"models.assistants.writing_helper": "opus"})
-	if got := selected(t, v.Assistants[0]); got != "opus" {
-		t.Errorf("writing helper selects %q, want opus", got)
+	if a.UnavailableReason != "" || a.FixURL != "" {
+		t.Errorf("an unchecked row is available: %+v", a)
 	}
 }
 
-func TestSessionTiersStillOfferTheCLIDefault(t *testing.T) {
-	got := options(t, NewView(settings{}).Tiers[0])
-	if got[0] != "default=default: the CLI chooses" {
-		t.Errorf("architect choices start with %q", got[0])
+func TestTheWritingHelperRowShowsTheStoredModel(t *testing.T) {
+	v := NewView(settings{domain.SettingModelWritingHelper: "sonnet"})
+	if got := selected(t, v.Assistants[0]); got != "sonnet" {
+		t.Errorf("selects %q, want sonnet", got)
 	}
 }
 
-func TestAnUnavailableHelperSaysWhyAndWhereToFixIt(t *testing.T) {
-	a := NewView(settings{}).Assistants[0]
-	a.UnavailableReason, a.FixURL = "the harness's Claude is not signed in", "/agent-isolation#credential"
-	var b bytes.Buffer
-	if err := tierRow(a).Render(context.Background(), &b); err != nil {
-		t.Fatal(err)
+func TestTheWritingHelperRowOffersTheFourModelsAndNeverDefault(t *testing.T) {
+	var got []string
+	for _, c := range NewView(settings{}).Assistants[0].Choices() {
+		got = append(got, c.Value+"|"+c.Label)
 	}
-	html := b.String()
-	for _, want := range []string{`data-tone="attention"`, "Pens are disabled: the harness&#39;s Claude is not signed in", `href="/agent-isolation#credential"`} {
-		if !strings.Contains(html, want) {
-			t.Errorf("row lacks %q:\n%s", want, html)
-		}
+	if strings.Join(got, ",") != "haiku|haiku (default),sonnet|sonnet,opus|opus,fable|fable" {
+		t.Fatalf("choices = %v", got)
 	}
-	var ok bytes.Buffer
-	if err := tierRow(NewView(settings{}).Assistants[0]).Render(context.Background(), &ok); err != nil {
-		t.Fatal(err)
+	if n := len(NewView(settings{}).Tiers[0].Choices()); n != len(domain.ModelChoices) {
+		t.Errorf("the session tiers still offer default: %d choices", n)
 	}
-	if strings.Contains(ok.String(), "Pens are disabled") {
-		t.Error("an available helper shows the unavailable banner")
+}
+
+func TestAnUnavailableHelperPutsItsReasonAndFixURLOnTheRow(t *testing.T) {
+	v := NewView(settings{}).WithWritingHelper(shell.Helper{Reason: "no agent credential", FixURL: "/agent-isolation#credential"})
+	a := v.Assistants[0]
+	if a.UnavailableReason != "no agent credential" || a.FixURL != "/agent-isolation#credential" {
+		t.Fatalf("row = %+v", a)
+	}
+	ok := NewView(settings{}).WithWritingHelper(shell.Helper{Available: true})
+	if ok.Assistants[0].UnavailableReason != "" {
+		t.Errorf("an available helper has no reason: %+v", ok.Assistants[0])
 	}
 }
