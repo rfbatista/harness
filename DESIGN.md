@@ -196,7 +196,7 @@ Lowest measured ratios: light `line-number` and `tok-comment` 4.86 on the target
 
 **The Letter Beside the Colour Rule.** In code, a change is a letter (A M D R C T U), a diff line is a sign (+ −), a zone is its name. Colour only repeats them.
 
-**The Word Beside the Dot Rule.** Every colored status ships with its word (`running`, `waiting`, `failed`) or an accessible name. A dot alone is allowed only where the word is adjacent in the same row.
+**The Word Beside the Dot Rule.** Every colored status ships with its word (`running`, `waiting`, `failed`) or an accessible name. A dot alone is allowed only where the word is adjacent in the same row. Session rows (`.row[data-layout="session"]`) are a recorded exception (ADR 0029): they show a dot only for running and done, with the word in the group heading and in a visually hidden label; uncommon states keep a visible status chip.
 
 ## 3. Typography
 

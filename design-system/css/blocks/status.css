@@ -2,7 +2,8 @@
  * Status — a dot plus its word. Color is never the only carrier.
  * Exceptions: data-state="running|waiting|failed|done|idle|queued|live|
  * reconnecting|offline"; data-signal (one-shot ring when a state arrives);
- * data-dot-only (word given elsewhere in the row).
+ * data-dot-only (word given elsewhere in the row, or kept as a visually-hidden
+ * label: the dot reserves no width).
  */
 
 @layer blocks {

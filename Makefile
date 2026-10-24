@@ -125,6 +125,9 @@ test: ## run the tests
 test-race: ## run the tests with the race detector
 	go test -race $(PKGS)
 
+test-design-system: ## run the design system's CSS invariant tests
+	node --test design-system/session-row.test.mjs
+
 vet: ## run go vet
 	go vet $(PKGS)
 
@@ -132,6 +135,7 @@ check: web ## what to run before calling work done: build, vet, race tests
 	go build $(PKGS)
 	go vet $(PKGS)
 	go test -race $(PKGS)
+	$(MAKE) test-design-system
 
 deps: ## download Go modules
 	go mod download
