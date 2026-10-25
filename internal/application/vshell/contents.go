@@ -24,6 +24,10 @@ func (s *Service) contents(ctx context.Context, sh *shell, tk *domain.Ticket) (*
 	sessionID := sh.sessionID
 	b.fixed(ports.ShellFile{Path: "README.md", Kind: ports.ShellReadme, Title: "README", UpdatedAt: b.now}, []byte(readmeFor(s.agentsMove())))
 
+	if err := b.architectures(ctx, s.src.Architectures, sh.projID); err != nil {
+		return nil, err
+	}
+
 	if tk == nil {
 		if err := b.documents(ctx, s.src.Tickets, s.src.Documents, sh.projID, nil); err != nil {
 			return nil, err
@@ -352,4 +356,28 @@ func oldestFirst(list []*domain.Artifact) []*domain.Artifact {
 		return strings.Compare(a.ID, c.ID)
 	})
 	return out
+}
+
+// architectureDir is the folder of the repositories' architecture files.
+const architectureDir = "project/architecture"
+
+// architectures: one read-only YAML file per repository that has a record,
+// named after the repository, with -<short id> on a clash. Its version is
+// the record's.
+func (b *builder) architectures(ctx context.Context, src ports.ArchitectureFileReader, projectID string) error {
+	if src == nil {
+		return nil
+	}
+	list, err := src.ListArchitectureFiles(ctx, projectID)
+	if err != nil {
+		return err
+	}
+	for _, a := range list {
+		b.named(architectureDir+"/", slugOr(a.Repository, "repository")+".yaml", &file{
+			meta: ports.ShellFile{Kind: ports.ShellArchitecture, ID: a.RepositoryID, Scope: "repository",
+				Version: strconv.Itoa(a.Version), Title: a.Repository, UpdatedAt: a.UpdatedAt, Repository: a.Repository},
+			content: a.YAML, readOnly: true,
+		})
+	}
+	return nil
 }

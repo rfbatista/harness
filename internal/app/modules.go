@@ -104,6 +104,9 @@ func newWorktreeManager(cfg Config) *gitcli.WorktreeManager {
 func newArchitectureGit(cfg Config) *gitcli.Architecture {
 	return gitcli.NewArchitecture(cfg.gitOptions()...)
 }
+func newCommitGuard(cfg Config) *gitcli.CommitGuard {
+	return gitcli.NewCommitGuard(cfg.gitOptions()...)
+}
 func newEnvFiles(cfg Config) *gitcli.EnvFiles  { return gitcli.NewEnvFiles(cfg.gitOptions()...) }
 func newGitHistory(cfg Config) *gitcli.History { return gitcli.NewHistory(cfg.gitOptions()...) }
 func newBranchPublisher(cfg Config) *gitcli.BranchPublisher {
@@ -179,6 +182,7 @@ var CatalogModule = fx.Module("catalog",
 		asPort(skillfs.NewPublisher, new(ports.SkillPublisher)),
 		asPort(newRepositoryFinder, new(ports.RepositoryFinder)),
 		asPort(newEnvFiles, new(ports.EnvFileIO)),
+		asPort(newCommitGuard, new(ports.CommitGuard)),
 		asPort(newArchitectureGit, new(ports.ArchitectureGit)),
 		newCatalog,
 	),
@@ -450,8 +454,12 @@ func newArtifactsService(cfg Config, repo ports.ArtifactRepository, sessions por
 // and stores the documents and comments agents write in them through
 // planning and their designs through the artifacts.
 func newVirtualShells(plan *planning.Service, art *artifacts.Service, sessions ports.SessionRepository, cat catalog.Catalog) *vshell.Service {
-	return vshell.New(vshell.Sources{Tickets: plan, Documents: plan, Comments: plan, Resources: plan, Artifacts: art, Writes: plan,
-		Designs: art, Sessions: sessions, Agents: cat.Agents, Settings: cat.Settings})
+	src := vshell.Sources{Tickets: plan, Documents: plan, Comments: plan, Resources: plan, Artifacts: art, Writes: plan,
+		Designs: art, Sessions: sessions, Agents: cat.Agents, Settings: cat.Settings}
+	if cat.RepositoryArchitectures != nil {
+		src.Architectures = cat.RepositoryArchitectures
+	}
+	return vshell.New(src)
 }
 
 // bindVirtualShells gives every session with a task its virtual shell, and
@@ -463,6 +471,10 @@ func bindVirtualShells(orch *orchestration.Service, shells *vshell.Service, plan
 	shells.Subscribe(cat.Bus)
 	plan.Feed = changeSinks{plan.Feed, shells}
 	plan.Announcer = ticketAnnouncers{plan.Announcer, shells}
+	// A saved architecture reaches the shells as well as the project feed.
+	if cat.RepositoryArchitectures != nil {
+		cat.RepositoryArchitectures.UseFeed(changeSinks{orch, shells})
+	}
 }
 
 // ticketAnnouncers tells every announcer of each task change in turn.
@@ -628,7 +640,7 @@ func newHub() *orchestration.Hub { return orchestration.NewHub(256) }
 // announcing every failed rule on the orchestration's project feed.
 func newArchitectureRules(cat catalog.Catalog, sessions ports.SessionRepository, events ports.ArchitectureRuleEventStore, orch *orchestration.Service) *archrules.Service {
 	svc := archrules.NewService(archrules.Deps{
-		Sessions: sessions, Agents: cat.Agents, Records: cat.RepositoryArchitectures, Events: events, Feed: orch,
+		Sessions: sessions, Agents: cat.Agents, Records: cat.RepositoryArchitectures, Events: events, Feed: orch, EnvFiles: cat.Projects,
 	})
 	svc.Subscribe(cat.Bus)
 	return svc
@@ -636,6 +648,7 @@ func newArchitectureRules(cat catalog.Catalog, sessions ports.SessionRepository,
 
 func newOrchestrationService(
 	cfg Config,
+	commitGuard ports.CommitGuard,
 	manager llmkit.Manager,
 	broker *approval.Broker,
 	hub *orchestration.Hub,
@@ -663,6 +676,10 @@ func newOrchestrationService(
 	if cat.RepositoryArchitectures != nil {
 		// Saves, deletes and exports reach open pages on the project feed.
 		cat.RepositoryArchitectures.UseFeed(svc)
+		// Briefs name the record and the layers the session's agent may change.
+		svc.Architectures = cat.RepositoryArchitectures
+		// A commit in a session worktree is checked against the layers.
+		svc.CommitGuard = commitGuard
 	}
 	base := cfg.loopbackBaseURL()
 	// The route belongs to an inbound adapter, so the application layer is
