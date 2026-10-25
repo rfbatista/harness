@@ -1,0 +1,142 @@
+package architecture
+
+import (
+	"operators-mcp/internal/adapter/in/web/components"
+	"operators-mcp/internal/adapter/in/web/shell"
+)
+
+// PageView is a repository's Architecture page. The tabs, their panels and
+// the counts are drawn by architecturePage (web/src/modules/architecture)
+// from the record the browser loads; the server renders the frame around them.
+templ PageView(v View) {
+	@shell.AppShell(v.Frame) {
+		<main id="main" class="[ frame ]" x-data="architecturePage" data-seed="architecture-seed">
+			@templ.JSONScript("architecture-seed", v.Seed)
+			<header class="[ toolbar ]">
+				<a class="[ crumb ]" href={ templ.SafeURL(v.SettingsHref) }>{ v.ProjectName } / repositories / { v.RepositoryName } /</a>
+				<h1>Architecture</h1>
+				<span class="[ actions ]">
+					<template x-if="exportBadge">
+						<span class="[ badge ]" data-export-state x-bind:data-tone="exportBadge.tone" x-text="exportBadge.label"></span>
+					</template>
+				</span>
+			</header>
+			<div data-scroll>
+				<div class="[ wrapper flow ] [ region ]" style="--wrapper-max: 64rem">
+					<p class="[ color-ink-muted ]">
+						How agents are set up in this repository: what they read, what they can call, where they run, who hands off to whom, and which rules guard its layers. It is saved in the database and every session brief points to it. Saving never touches the repository; exporting is a separate step.
+					</p>
+					<template x-if="error">
+						<div class="[ banner ]" data-tone="danger" role="alert">
+							<div class="[ flow ] [ flow-space-3xs grow ]">
+								<span x-text="error.message"></span>
+								<span class="[ code ]"><span x-text="error.code"></span> · <span x-text="error.next"></span></span>
+							</div>
+							<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-on:click="dismissError">Dismiss</button>
+						</div>
+					</template>
+					<template x-if="isNew">
+						<div id="architecture-empty">
+							@components.Empty("This repository has no architecture yet", "Define its layers, the rules that guard them and what its agents work with. Nothing is stored until you save.")
+						</div>
+					</template>
+					<div class="[ cluster ]" role="list" aria-label="Parts of the architecture" id="architecture-summary">
+						<template x-for="c in summary" x-bind:key="c.key">
+							<span role="listitem" class="[ cluster ] [ gutter-2xs ]">
+								<span class="[ color-ink-faint text-sm ]" x-text="c.label"></span>
+								<span class="[ text-sm weight-medium ]" x-bind:data-count="c.key" x-text="c.text"></span>
+							</span>
+						</template>
+					</div>
+					<template x-if="draft">
+						<div class="[ field ]">
+							<label for="architecture-pattern">Pattern</label>
+							<input id="architecture-pattern" class="[ text-sm ]" autocomplete="off" placeholder="hexagonal, layered, library…" x-model="draft.pattern" x-bind:aria-invalid="isInvalid('/pattern')"/>
+							<template x-if="errorFor('/pattern')">
+								<span class="[ error ]" data-error-for="/pattern" x-text="errorFor('/pattern')"></span>
+							</template>
+						</div>
+					</template>
+					<div class="[ tabs ]" role="tablist" aria-label="Architecture sections">
+						<template x-for="t in tabs" x-bind:key="t.slug">
+							<button type="button" role="tab" x-bind:id="t.id" x-bind:aria-selected="t.selected" x-bind:aria-controls="t.panelId" x-on:click="openTab(t.slug)" x-text="t.label"></button>
+						</template>
+					</div>
+					<section role="tabpanel" id="architecture-panel-instructions" aria-labelledby="architecture-tab-instructions" x-show="isTab('instructions')">
+						<h2>Instructions &amp; rules</h2>
+						<p class="[ color-ink-muted ]">The files that define who the agents are, what they care about and what they must not do. Their text is never copied here, only their path.</p>
+					</section>
+					<section role="tabpanel" id="architecture-panel-tools" aria-labelledby="architecture-tab-tools" x-show="isTab('tools')">
+						<h2>Tools</h2>
+						<p class="[ color-ink-muted ]">The functions, MCP servers and APIs agents can call, and when and how to call them.</p>
+					</section>
+					<section role="tabpanel" id="architecture-panel-sandboxes" aria-labelledby="architecture-tab-sandboxes" x-show="isTab('sandboxes')">
+						<h2>Sandboxes</h2>
+						<p class="[ color-ink-muted ]">Where agent code runs, what it can reach and what it cannot.</p>
+					</section>
+					<section role="tabpanel" id="architecture-panel-orchestration" aria-labelledby="architecture-tab-orchestration" x-show="isTab('orchestration')">
+						<h2>Orchestration</h2>
+						<p class="[ color-ink-muted ]">Which model each agent uses, and who hands off to whom.</p>
+					</section>
+					<section role="tabpanel" id="architecture-panel-hooks" aria-labelledby="architecture-tab-hooks" x-show="isTab('hooks')">
+						<h2>Hooks</h2>
+						<p class="[ color-ink-muted ]">Rules that run at fixed points in an agent's work, blocking or only warning.</p>
+					</section>
+					<section role="tabpanel" id="architecture-panel-layers" aria-labelledby="architecture-tab-layers" x-show="isTab('layers')">
+						<h2>Layers</h2>
+						<p class="[ color-ink-muted ]">The parts of the repository, by folder or by pattern, and which agents may read and change each.</p>
+					</section>
+					<section role="tabpanel" id="architecture-panel-output" aria-labelledby="architecture-tab-output" x-show="isTab('output')">
+						<h2>Output</h2>
+						<p class="[ color-ink-muted ]">The architecture file in the repository, and a diagram of the architecture.</p>
+					</section>
+					<template x-if="showDiff">
+						<section class="[ pane ]" data-diff aria-label="Review diff">
+							<header><span x-text="diffTitle"></span></header>
+							<template x-if="!hasDiff">
+								<p class="[ pad-m color-ink-muted ]">Nothing differs.</p>
+							</template>
+							<template x-for="d in diffRows" x-bind:key="d.pointer">
+								<div class="[ row ]" style="--row-columns: minmax(0, 12rem) minmax(0, 1fr) minmax(0, 1fr)">
+									<span class="[ weight-medium ]" x-text="d.label"></span>
+									<span class="[ font-mono text-sm color-ink-muted ]" x-text="d.before || '(none)'"></span>
+									<span class="[ font-mono text-sm ]" x-text="d.after || '(none)'"></span>
+								</div>
+							</template>
+						</section>
+					</template>
+					<div class="[ flow ] [ flow-space-xs ]" x-show="saveBarVisible">
+						<template x-if="conflict">
+							<div class="[ banner ]" data-tone="attention" role="alert" data-conflict>
+								<span class="[ grow ]" x-text="conflictText"></span>
+								<button type="button" class="[ button ]" data-size="sm" x-on:click="reload">Reload</button>
+								<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-on:click="reviewDiff">Review diff</button>
+							</div>
+						</template>
+						<template x-if="hasProblems">
+							<div class="[ banner ]" data-tone="danger" role="alert" data-problems>
+								<div class="[ flow ] [ flow-space-3xs grow ]">
+									<span x-text="problemsText"></span>
+									<ul class="[ flow ] [ flow-space-3xs text-sm ]">
+										<template x-for="p in problems" x-bind:key="p.path">
+											<li><span x-text="p.tabLabel"></span> › <span x-text="p.label"></span>: <span x-text="p.message"></span></li>
+										</template>
+									</ul>
+								</div>
+							</div>
+						</template>
+						<div class="[ save-bar ]" data-save-bar role="region" aria-label="Unsaved changes">
+							<span class="[ badge ]" data-tone="attention">Unsaved changes</span>
+							<span class="[ summary ]" x-text="barSummary"></span>
+							<span class="[ actions ]">
+								<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-on:click="discard">Discard</button>
+								<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-bind:aria-pressed="showDiff" x-on:click="reviewDiff">Review diff</button>
+								<button type="button" class="[ button ]" data-variant="primary" data-size="sm" x-bind:disabled="saving || !dirty" x-bind:aria-busy="saving" x-on:click="save">Save</button>
+							</span>
+						</div>
+					</div>
+				</div>
+			</div>
+		</main>
+	}
+}
