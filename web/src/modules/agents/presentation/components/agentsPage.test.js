@@ -120,3 +120,32 @@ test("going back follows the address to the earlier tab", async () => {
   instance.popped();
   assert.deepEqual([instance.tab, instance.item, instance.mode], ["skills", "tdd", "edit"]);
 });
+
+test("choosing an agent shows its detail and moves the address; a bundle group opens and closes; Copy path copies the file's path", async () => {
+  const { gateway, server } = memoryCatalog(makeWorld());
+  const seed = await server.api.get("/get_agent_catalog");
+  const copied = [];
+  const el = seededElement(seed);
+  const route = fakeHistory("/agents");
+  const { instance } = mount(agentsPage({ gateway, history: route.history, location: route.location, clipboard: { writeText: async (t) => { copied.push(t); } } }), { el });
+  await instance.init();
+  assert.deepEqual(instance.agentRowsView.map((r) => r.name), ["ux-designer", "backend"]);
+  assert.equal(instance.detail, null);
+
+  const link = { dataset: { key: "ux-designer" }, getAttribute: () => "/agents/ux-designer" };
+  instance.openAgent({ preventDefault() {}, button: 0, currentTarget: link });
+  assert.deepEqual(route.pushed, ["/agents/ux-designer"]);
+  assert.equal(instance.detail.key, "ux-designer");
+  assert.equal(instance.agentRowsView[0].current, true);
+
+  assert.equal(instance.groups[0].expanded, true, "a lone bundle starts open");
+  instance.toggleGroup({ currentTarget: { dataset: { group: "@ux" } } });
+  assert.equal(instance.groups[0].expanded, false);
+
+  await instance.menuSelect({ detail: { action: "copy-path" } });
+  assert.deepEqual(copied, ["/data/agents/agents.json"]);
+  assert.equal(instance.notice, "Path copied");
+
+  instance.filter = "problems";
+  assert.deepEqual(instance.agentRowsView.map((r) => r.name), ["backend"]);
+});

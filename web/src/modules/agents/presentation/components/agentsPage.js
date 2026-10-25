@@ -9,6 +9,7 @@
 
 import { describeError } from "../../../../shared/presentation/errors.js";
 import { readSeed } from "../../../../shared/presentation/seed.js";
+import { AGENT_FILTERS, agentDetail, agentRows, agentsFooter } from "../../domain/library.js";
 import { TABS, routeOf, tabAfterKey } from "../../domain/tabs.js";
 
 const DEFAULT_ROOT = "<data dir>/agents/";
@@ -27,9 +28,10 @@ const COUNTS = {
  *   gateway: Pick<import("../../domain/ports.js").CatalogGateway, "decodeCatalog" | "getCatalog">,
  *   history: Pick<History, "pushState">,
  *   location: Pick<Location, "pathname">,
+ *   clipboard?: Pick<Clipboard, "writeText">,
  * }} deps
  */
-export const agentsPage = ({ gateway, history, location }) => () => ({
+export const agentsPage = ({ gateway, history, location, clipboard }) => () => ({
   /** @type {import("../../domain/tabs.js").TabId} */
   tab: "agents",
   item: "",
@@ -38,6 +40,13 @@ export const agentsPage = ({ gateway, history, location }) => () => ({
   catalog: null,
   error: null,
   loading: false,
+  /** The Agents tab's text filter and quick filter ("all", "mcp", "problems"). */
+  query: "",
+  filter: "all",
+  /** Bundle groups the person opened or closed in the open agent's detail, by "@name". */
+  opened: {},
+  /** What the last action said ("Path copied"), for the live region. */
+  notice: "",
 
   async init() {
     this.route(location.pathname, this.$el.dataset);
@@ -66,6 +75,7 @@ export const agentsPage = ({ gateway, history, location }) => () => ({
     this.tab = r?.tab ?? fallback.tab ?? "agents";
     this.item = r?.item ?? fallback.item ?? "";
     this.mode = r?.mode ?? fallback.mode ?? "";
+    this.opened = {};
   },
 
   /** The browser's back and forward. */
@@ -86,6 +96,7 @@ export const agentsPage = ({ gateway, history, location }) => () => ({
     this.tab = tab.id;
     this.item = "";
     this.mode = "";
+    this.opened = {};
     history.pushState({}, "", tab.href);
   },
 
@@ -139,5 +150,101 @@ export const agentsPage = ({ gateway, history, location }) => () => ({
   get itemNote() {
     if (!this.item) return "";
     return this.mode ? `${this.mode === "new" ? "New" : "Edit"} ${this.item}` : this.item;
+  },
+
+  // The Agents tab: the list, its filters and the open agent's detail.
+
+  get agentRowsView() {
+    if (!this.catalog) return [];
+    return agentRows(this.catalog, { query: this.query, filter: this.filter }).map((r) => ({
+      ...r,
+      current: r.name === this.item && this.mode === "",
+      hasBadge: r.badge !== null,
+      noBadge: r.badge === null,
+      badgeLabel: r.badge?.label ?? "",
+      badgeTone: r.badge?.tone ?? "",
+    }));
+  },
+
+  get agentFilters() {
+    return AGENT_FILTERS.map((f) => ({ ...f, pressed: f.id === this.filter, variant: f.id === this.filter ? "" : "ghost" }));
+  },
+
+  get agentsFoot() {
+    return this.catalog ? agentsFooter(this.catalog) : "";
+  },
+
+  get noAgentRows() {
+    return this.catalog !== null && this.agentRowsView.length === 0;
+  },
+  get emptyTitle() {
+    const q = this.query.trim();
+    return q ? `No agents match \u201c${q}\u201d.` : "No agents.";
+  },
+
+  /** The open agent's detail, or null: no item, an editor, or a name the catalog lacks. */
+  get detail() {
+    if (!this.catalog || this.tab !== "agents" || !this.item || this.mode) return null;
+    return agentDetail(this.catalog, this.item);
+  },
+  get noDetail() {
+    return this.detail === null;
+  },
+  /** An item the catalog does not have. */
+  get unknownAgent() {
+    return this.catalog !== null && this.tab === "agents" && this.item !== "" && this.mode === "" && this.detail === null;
+  },
+  get detailProblems() {
+    return (this.detail?.problems ?? []).filter((p) => p.code !== "NO_DESCRIPTION");
+  },
+  /** The detail's bundle groups, each open or closed: one bundle starts open. */
+  get groups() {
+    const d = this.detail;
+    if (!d) return [];
+    return d.groups.map((g) => {
+      const expanded = this.opened[g.name] ?? d.groups.length === 1;
+      return { ...g, expanded, closed: !expanded };
+    });
+  },
+  /** Narrow screens show the list, or with an agent open the detail. */
+  get detailOpenAttr() {
+    return this.detail !== null || this.unknownAgent ? "" : null;
+  },
+
+  setFilter(event) {
+    this.filter = event.currentTarget.dataset.filter;
+  },
+
+  /** A click on an agent's row: show its detail and move the address, unless the click opens a new window. */
+  openAgent(event) {
+    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button > 0) return;
+    event.preventDefault();
+    this.item = event.currentTarget.dataset.key;
+    this.mode = "";
+    this.opened = {};
+    history.pushState({}, "", event.currentTarget.getAttribute("href"));
+  },
+
+  /** The narrow screens' way back from the detail to the list. */
+  backToList(event) {
+    event.preventDefault();
+    this.show("agents");
+  },
+
+  toggleGroup(event) {
+    const name = event.currentTarget.dataset.group;
+    const now = this.groups.find((g) => g.name === name)?.expanded ?? false;
+    this.opened = { ...this.opened, [name]: !now };
+  },
+
+  /** The actions menu chose an item. */
+  async menuSelect(event) {
+    if (event.detail.action !== "copy-path" || !this.detail) return;
+    try {
+      await clipboard?.writeText(this.detail.copyPath);
+      this.notice = "Path copied";
+    } catch {
+      this.notice = "Could not copy the path";
+    }
   },
 });

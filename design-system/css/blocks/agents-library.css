@@ -1,0 +1,180 @@
+/*
+ * Agents library — the Agents page's list beside the detail of the agent
+ * selected in it (UX spec section 3), over .split-view.
+ * <div class="split-view agents-split"><div class="library-list">
+ *   <div class="library-tools">filter, quick filters</div>
+ *   <ul class="library-rows"><li><a class="library-row" aria-current="true"><span class="name"/><span class="meta"/><span class="desc"/></a></li></ul>
+ *   <p class="library-foot"/></div>
+ * <section class="library-detail"><div class="library-detail-inner">…</div></section></div>
+ * Exceptions: .library-row[aria-current="true"] (the open agent), .desc[data-dim]
+ * (a missing description, in italics), .skill-link[data-missing] (a skill with
+ * no folder).
+ */
+
+@layer blocks {
+  .agents-panel { block-size: 100%; min-block-size: 0; }
+  .agents-split { block-size: 100%; }
+
+  .library-list {
+    display: flex;
+    flex-direction: column;
+    background: var(--color-panel);
+    border-inline-end: var(--border-width) solid var(--color-line);
+  }
+
+  .library-tools {
+    position: sticky;
+    inset-block-start: 0;
+    z-index: var(--z-base);
+    display: grid;
+    gap: var(--space-s);
+    padding: var(--space-m);
+    background: var(--color-panel);
+    border-block-end: var(--border-width) solid var(--color-line);
+  }
+
+  .library-rows {
+    flex: 1 1 auto;
+    margin: 0;
+    padding: var(--space-xs);
+    list-style: none;
+  }
+
+  .library-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 2px var(--space-s);
+    padding: var(--space-s) var(--space-m);
+    border-radius: var(--radius-sm);
+    color: var(--color-ink);
+    text-decoration: none;
+
+    &:hover { background: var(--color-hover); }
+    &[aria-current="true"] { background: var(--color-selected); box-shadow: inset 2px 0 0 var(--color-signal); }
+
+    & > .name { font-weight: var(--weight-medium); font-size: var(--text-sm); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    & > .meta { font-size: var(--text-xs); color: var(--color-ink-faint); display: flex; gap: var(--space-xs); align-items: center; white-space: nowrap; }
+    & > .desc { grid-column: 1 / -1; font-size: var(--text-xs); color: var(--color-ink-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    & > .desc[data-dim] { font-style: italic; }
+  }
+
+  .library-empty {
+    display: grid;
+    gap: var(--space-xs);
+    justify-items: center;
+    padding: var(--space-xl);
+    text-align: center;
+    color: var(--color-ink-muted);
+  }
+
+  .library-foot {
+    position: sticky;
+    inset-block-end: 0;
+    margin: 0;
+    padding: var(--space-s) var(--space-m);
+    background: var(--color-panel);
+    border-block-start: var(--border-width) solid var(--color-line);
+    font-size: var(--text-xs);
+    color: var(--color-ink-faint);
+  }
+
+  .library-detail { padding: var(--space-xl); }
+
+  .library-detail-inner {
+    display: grid;
+    gap: var(--space-xl);
+    max-inline-size: 54rem;
+
+    & .detail-head { display: grid; gap: var(--space-s); }
+    & .section-title { margin-block-end: var(--space-s); }
+    & h3 { font-size: var(--text-sm); text-transform: uppercase; letter-spacing: 0.04em; color: var(--color-ink-muted); }
+  }
+
+  .library-path {
+    justify-self: start;
+    padding: 1px var(--space-xs);
+    border-radius: var(--radius-xs);
+    background: var(--color-sunken);
+    color: var(--color-ink-muted);
+    font-size: var(--text-xs);
+  }
+
+  .bundle-group {
+    border: var(--border-width) solid var(--color-line);
+    border-radius: var(--radius-md);
+    background: var(--color-raised);
+
+    & + & { margin-block-start: var(--space-s); }
+
+    & > .bundle-head {
+      display: flex;
+      align-items: center;
+      gap: var(--space-s);
+      padding-inline-end: var(--space-m);
+
+      & > button {
+        display: flex;
+        flex: 1 1 auto;
+        align-items: center;
+        gap: var(--space-s);
+        padding: var(--space-s) var(--space-m);
+        border: 0;
+        background: none;
+        color: inherit;
+        text-align: start;
+        cursor: pointer;
+      }
+    }
+
+    & .caret {
+      inline-size: 0.4rem;
+      block-size: 0.4rem;
+      border-inline-end: var(--border-icon-width) solid var(--color-ink-faint);
+      border-block-end: var(--border-icon-width) solid var(--color-ink-faint);
+      rotate: -45deg;
+      transition: rotate var(--duration-quick) var(--ease-out);
+    }
+    & button[aria-expanded="true"] .caret { rotate: 45deg; }
+
+    & > .bundle-entries {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--space-xs);
+      padding: 0 var(--space-m) var(--space-m) var(--space-xl);
+    }
+  }
+
+  .chip[data-kind="bundle"] { border-style: dashed; border-color: var(--color-signal); color: var(--color-signal); }
+
+  .skill-link {
+    padding: 2px var(--space-xs);
+    border-radius: var(--radius-xs);
+    background: var(--color-sunken);
+    color: var(--color-ink);
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    text-decoration: none;
+
+    &:hover { background: var(--color-selected); color: var(--color-signal); }
+    &[data-missing] { background: var(--color-danger-wash); color: var(--color-danger); text-decoration: line-through dotted; }
+  }
+
+  .server-list {
+    display: grid;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    border: var(--border-width) solid var(--color-line);
+    border-radius: var(--radius-md);
+    background: var(--color-raised);
+
+    & > li {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: var(--space-s);
+      padding: var(--space-s) var(--space-m);
+    }
+    & > li + li { border-block-start: var(--border-width) solid var(--color-line); }
+  }
+}

@@ -8,6 +8,7 @@ import { agentsPage } from "./components/agentsPage.js";
  *   gateway: import("../domain/ports.js").CatalogGateway,
  *   history: Pick<History, "pushState">,
  *   location: Pick<Location, "pathname">,
+ *   clipboard?: Pick<Clipboard, "writeText">,
  * }} deps
  */
 export function registerAgents(Alpine, deps) {
