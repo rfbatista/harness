@@ -7,7 +7,6 @@ import { describeError } from "../../../../shared/presentation/errors.js";
 import { PLAIN, buildDiagram } from "../../domain/diagram.js";
 import { diagramToMermaid } from "../../domain/mermaid.js";
 import { diagramToSvg } from "../../domain/svg.js";
-import { copyText } from "../../infrastructure/clipboard.js";
 
 /** The agent names a record mentions on its own (the catalog may not have loaded). */
 function mentioned(record) {
@@ -28,7 +27,7 @@ function mentioned(record) {
 const list = (xs) => (xs.length === 0 ? "nothing" : xs.join(", "));
 
 /** @param { gateway: ReturnType<typeof import("../../infrastructure/architecture-gateway.js").architectureGateway> } deps */
-export const outputDiagram = ({ gateway }) => () => ({
+export const outputDiagram = ({ gateway, clipboard }) => () => ({
   /** The agent catalog's names; empty until discovery answers. */
   catalog: [],
   focus: "",
@@ -135,7 +134,7 @@ export const outputDiagram = ({ gateway }) => () => ({
 
   async copyMermaid() {
     try {
-      const ok = await copyText(diagramToMermaid(this.model));
+      const ok = await clipboard.copyText(diagramToMermaid(this.model));
       this.notice = ok ? "Copied the diagram as Mermaid." : "The browser would not copy. Select the text and copy it by hand.";
     } catch (err) {
       this.notice = describeError(err).message;

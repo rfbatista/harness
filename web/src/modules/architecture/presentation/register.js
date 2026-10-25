@@ -14,7 +14,7 @@ import { outputDiagram } from "./tabs/outputDiagram.js";
 
 /**
  * @param {import("alpinejs").Alpine} Alpine
- * @param {{ gateway: ReturnType<typeof import("../infrastructure/architecture-gateway.js").architectureGateway> }} deps
+ * @param {{ gateway: ReturnType<typeof import("../infrastructure/architecture-gateway.js").architectureGateway>, clipboard: { copyText: (text: string) => Promise<boolean> } }} deps
  */
 export function registerArchitecture(Alpine, deps) {
   Alpine.data("architecturePage", architecturePage(deps));

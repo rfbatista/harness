@@ -8,12 +8,11 @@ import { describeError } from "../../../../shared/presentation/errors.js";
 import { ARCHITECTURE_CHANGED } from "../../domain/record.js";
 import { describeExport, describeRefusal } from "../../domain/export.js";
 import { recordToYaml } from "../../domain/yaml.js";
-import { copyText } from "../../infrastructure/clipboard.js";
 
 const shortSha = (sha) => String(sha).slice(0, 7);
 
 /** @param { gateway: ReturnType<typeof import("../../infrastructure/architecture-gateway.js").architectureGateway> } deps */
-export const outputTab = ({ gateway }) => () => ({
+export const outputTab = ({ gateway, clipboard }) => () => ({
   exporting: false,
   /** What the last export did: { commit, path }, or null. */
   result: null,
@@ -129,7 +128,7 @@ export const outputTab = ({ gateway }) => () => ({
   },
 
   async copyYaml() {
-    this.copied = await copyText(this.yaml);
+    this.copied = await clipboard.copyText(this.yaml);
     if (this.copied) setTimeout(() => (this.copied = false), 2000);
   },
 });

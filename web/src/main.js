@@ -35,6 +35,7 @@ import { projectsGateway } from "./modules/projects/infrastructure/projects-gate
 import { pullRequestsGateway } from "./modules/pullrequests/infrastructure/pullrequests-gateway.js";
 import { registerPullRequests } from "./modules/pullrequests/presentation/register.js";
 import { architectureGateway } from "./modules/architecture/infrastructure/architecture-gateway.js";
+import { copyText } from "./modules/architecture/infrastructure/clipboard.js";
 import { registerArchitecture } from "./modules/architecture/presentation/register.js";
 import { registerProjects } from "./modules/projects/presentation/register.js";
 import { artifactsGateway } from "./modules/sessions/infrastructure/artifacts-gateway.js";
@@ -75,7 +76,7 @@ const reload = () => window.location.reload();
 startSwapRegions(htmx, { navigate });
 
 const architecture = architectureGateway(api, events);
-registerArchitecture(Alpine, { gateway: architecture });
+registerArchitecture(Alpine, { gateway: architecture, clipboard: { copyText } });
 registerProjects(Alpine, { gateway: projectsGateway(api, events), architecture, navigate, clock: systemClock });
 registerTasks(Alpine, {
   gateway: tasksGateway(api),

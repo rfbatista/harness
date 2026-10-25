@@ -1,7 +1,6 @@
 // Rule events as the overview lists them: a rule of the architecture that
 // failed in a session, newest first. Pure.
 
-import { relativeTime } from "../../../shared/presentation/format.js";
 
 /** How many events the overview keeps. */
 export const EVENTS_SHOWN = 50;
@@ -14,7 +13,7 @@ export const EVENTS_SHOWN = 50;
 export function ruleEventRow(ev, projectId, now) {
   const blocked = ev.outcome === "blocked";
   const when = new Date(ev.at);
-  const ago = Number.isNaN(when.getTime()) ? "" : relativeTime(when, now);
+  const ago = Number.isNaN(when.getTime()) ? "" : compact(now.getTime() - when.getTime());
   return {
     id: ev.id,
     agent: ev.agent || "plain",
@@ -35,4 +34,13 @@ export function ruleEventRow(ev, projectId, now) {
 export function prependEvent(events, ev) {
   if (events.some((e) => e.id === ev.id)) return events;
   return [ev, ...events].slice(0, EVENTS_SHOWN);
+}
+
+/** "now", "4m", "3h", "2d": how long ago, compactly. */
+function compact(ms) {
+  const minutes = Math.floor(Math.max(0, ms) / 60_000);
+  if (minutes < 1) return "now";
+  if (minutes < 60) return `${minutes}m`;
+  if (minutes < 24 * 60) return `${Math.floor(minutes / 60)}h`;
+  return `${Math.floor(minutes / (24 * 60))}d`;
 }
