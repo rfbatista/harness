@@ -102,6 +102,10 @@ type TopBar struct {
 	ProjectsHref string
 	// OnProjects marks the projects list as the current page.
 	OnProjects bool
+	// AgentsHref is the Agents page; "" when it is not served.
+	AgentsHref string
+	// OnAgents marks the Agents page as the current page.
+	OnAgents bool
 	// CredentialsHref is the Git credentials page; "" when it is not served.
 	CredentialsHref string
 	// OnCredentials marks the Git credentials page as the current page.

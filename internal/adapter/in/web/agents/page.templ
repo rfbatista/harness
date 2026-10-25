@@ -1,0 +1,111 @@
+package agents
+
+import "operators-mcp/internal/adapter/in/web/shell"
+
+// Page is /agents and the pages under it. The server paints the header, the
+// tabs and the open tab's panel; agentsPage
+// (web/src/modules/agents/presentation/components/agentsPage.js) takes over
+// from the seed with the same markup, binding what changes with the tab.
+templ Page(frame shell.Frame, v View) {
+	@shell.AppShell(frame) {
+		if v.Seed != nil {
+			@templ.JSONScript("agent-catalog-seed", v.Seed)
+		}
+		<main id="main" class="[ frame ]" x-data="agentsPage" data-seed="agent-catalog-seed" data-tab={ v.Route.Tab } data-item={ v.Route.Item } data-mode={ v.Route.Mode }>
+			<header class="[ toolbar ]">
+				<div class="[ flow ] [ flow-space-3xs grow ]" style="min-inline-size: 0">
+					<h1>Agents</h1>
+					<p class="[ text-sm color-ink-muted ]">
+						Templates sessions run as, and the skills, MCP servers and tools they get. Agents are shared by every project. They live in the catalog,
+						<code class="[ font-mono ]" x-text="root">{ v.Root() }</code>,
+						a folder in the harness data directory, not in git.
+					</p>
+				</div>
+				<a
+					class="[ button ]"
+					data-variant="primary"
+					data-new
+					href={ templ.SafeURL(v.Current().NewHref) }
+					x-bind:href="newHref"
+					x-bind:hidden="newHidden"
+					if v.Current().NewLabel == "" {
+						hidden
+					}
+				><span x-text="newLabel">{ v.Current().NewLabel }</span></a>
+			</header>
+			<template x-if="error">
+				<div class="[ banner ]" data-tone="danger" role="alert">
+					<div class="[ flow ] [ flow-space-3xs grow ]">
+						<span x-text="error.message"></span>
+						<span class="[ code ]"><span x-text="error.code"></span> · <span x-text="error.next"></span></span>
+					</div>
+					<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-bind:disabled="loading" x-on:click="load">Check again</button>
+				</div>
+			</template>
+			<div class="[ tabs ]" role="tablist" aria-label="Library sections" x-on:popstate.window="popped">
+				for _, t := range Tabs {
+					@tab(t, v)
+				}
+			</div>
+			<div data-scroll>
+				for _, t := range Tabs {
+					@panel(t, v)
+				}
+			</div>
+		</main>
+	}
+}
+
+templ tab(t Tab, v View) {
+	<a
+		role="tab"
+		id={ "agents-tab-" + t.ID }
+		href={ templ.SafeURL(t.Href) }
+		data-tab={ t.ID }
+		aria-controls={ "agents-panel-" + t.ID }
+		x-bind:aria-selected={ "tabState." + t.ID + ".selected" }
+		x-bind:tabindex={ "tabState." + t.ID + ".tabindex" }
+		x-on:click="select"
+		x-on:keydown="tabKey"
+		if v.Selected(t.ID) {
+			aria-selected="true"
+			tabindex="0"
+		} else {
+			aria-selected="false"
+			tabindex="-1"
+		}
+	>
+		{ t.Label }
+		<span class="[ text-xs color-ink-faint ]" data-count={ t.ID } x-text={ "tabState." + t.ID + ".count" }>{ v.Count(t.ID) }</span>
+	</a>
+}
+
+// panel is one tab's body: the list and detail of the later tickets go here.
+templ panel(t Tab, v View) {
+	<div
+		role="tabpanel"
+		id={ "agents-panel-" + t.ID }
+		aria-labelledby={ "agents-tab-" + t.ID }
+		tabindex="0"
+		x-bind:hidden={ "tabState." + t.ID + ".hidden" }
+		if !v.Selected(t.ID) {
+			hidden
+		}
+	>
+		<div class="[ wrapper flow ] [ region ]" style="--wrapper-max: 52rem">
+			<p
+				class="[ weight-medium font-mono ]"
+				data-item
+				x-text="itemNote"
+				x-bind:hidden="noItem"
+				if !v.Selected(t.ID) || v.ItemNote() == "" {
+					hidden
+				}
+			>
+				if v.Selected(t.ID) {
+					{ v.ItemNote() }
+				}
+			</p>
+		</div>
+	</div>
+}

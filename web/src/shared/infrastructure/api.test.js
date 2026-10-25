@@ -51,3 +51,9 @@ test("an error's details travel on the StructuredError; errors without them have
   const other = await assert.rejects(apiClient({ base: "", fetch: plain.fetch }).get("/x"), Codes.PROJECT_NOT_FOUND);
   assert.equal(other.details, undefined);
 });
+
+test("the fields a coded error carries beyond error and code are its details", async () => {
+  const refused = fakeFetch(() => jsonResponse(409, { error: "skill tdd exists", code: "NAME_TAKEN", suggestion: "tdd-2" }));
+  const err = await assert.rejects(apiClient({ base: "", fetch: refused.fetch }).post("/save_catalog_skill", {}), "NAME_TAKEN");
+  assert.deepEqual(err.details, { suggestion: "tdd-2" });
+});

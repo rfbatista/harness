@@ -18,6 +18,8 @@ import { registerNotifications } from "./modules/notifications/presentation/regi
 import { codeGateway } from "./modules/code/infrastructure/code-gateway.js";
 import { credentialsGateway } from "./modules/credentials/infrastructure/credentials-gateway.js";
 import { sandboxGateway } from "./modules/sandbox/infrastructure/sandbox-gateway.js";
+import { catalogGateway } from "./modules/agents/infrastructure/catalog-gateway.js";
+import { registerAgents } from "./modules/agents/presentation/register.js";
 import { claudeGateway } from "./modules/claude/infrastructure/claude-gateway.js";
 import { registerAgentIsolation } from "./modules/agentisolation/presentation/register.js";
 import { registerClaude } from "./modules/claude/presentation/register.js";
@@ -111,6 +113,7 @@ registerCode(Alpine, { gateway: codeGateway(api, events), highlighter: hljsHighl
 registerNotifications(Alpine, { gateway: notificationsGateway(api, events), alerts: desktopAlerts(), prefs, clock: systemClock, navigate });
 registerCredentials(Alpine, { gateway: credentialsGateway(api, events), clock: systemClock });
 registerUsage(Alpine, { gateway: usageGateway(api, events) });
+registerAgents(Alpine, { gateway: catalogGateway(api), history: window.history, location: window.location });
 registerTokenSavers(Alpine, { gateway: tokenSaversGateway(api), clock: systemClock });
 registerModels(Alpine, { gateway: modelsGateway(api) });
 registerSandbox(Alpine, { gateway: sandboxGateway(api) });

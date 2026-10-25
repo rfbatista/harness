@@ -11,6 +11,16 @@ import { Codes, StructuredError } from "../domain/errors.js";
  */
 
 /**
+ * The fields of a coded error body beyond error and code (the catalog's
+ * `field`, `suggestion`, `names`, …), or undefined when it has none.
+ */
+function extraFields(body) {
+  if (!body || typeof body !== "object") return undefined;
+  const { error, code, details, ...rest } = body;
+  return Object.keys(rest).length > 0 ? rest : undefined;
+}
+
+/**
  * @param {{ base: string, fetch?: typeof globalThis.fetch }} options
  * @returns {ApiClient}
  */
@@ -39,7 +49,7 @@ export function apiClient({ base, fetch = globalThis.fetch.bind(globalThis) }) {
         body?.code ?? Codes.UNKNOWN,
         body?.error ?? `${res.status} ${res.statusText}`.trim(),
         res.status,
-        body?.details,
+        body?.details ?? extraFields(body),
       );
     }
     return body;
