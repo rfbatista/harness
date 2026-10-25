@@ -29,6 +29,12 @@ export function architectureGateway(api, feed) {
       return toState(await api.post("/get_repository_architecture", { repository_id: repositoryId }));
     },
 
+    /** The newest rule events of a repository, newest first. */
+    async listRuleEvents(repositoryId, limit = 50) {
+      const body = await api.post("/list_architecture_rule_events", { repository_id: repositoryId, limit });
+      return Array.isArray(body?.events) ? body.events : [];
+    },
+
     /** Whether a repository has a saved architecture. */
     async has(repositoryId) {
       return (await this.get(repositoryId)).exists;

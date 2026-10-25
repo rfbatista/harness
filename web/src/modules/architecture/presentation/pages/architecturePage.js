@@ -21,6 +21,8 @@ import {
   tabOfPointer,
 } from "../../domain/record.js";
 
+import { prependEvent, ruleEventRow } from "../../domain/events.js";
+
 const ARCHITECTURE_CHANGED = "ARCHITECTURE_CHANGED";
 const ARCHITECTURE_INVALID = "ARCHITECTURE_INVALID";
 
@@ -51,6 +53,16 @@ export const architecturePage = ({ gateway }) => () => ({
   diffRows: [],
   showDiff: false,
   unfollow: null,
+  /** Recent rule events of the repository, newest first, as the API names them. */
+  events: [],
+
+  get eventRows() {
+    const now = new Date();
+    return this.events.map((e) => ruleEventRow(e, this.projectId, now));
+  },
+  get hasEvents() {
+    return this.events.length > 0;
+  },
 
   get isNew() {
     return this.loaded && !this.exists;
@@ -128,11 +140,24 @@ export const architecturePage = ({ gateway }) => () => ({
     this.load();
     this.unfollow = gateway.follow(this.projectId, this.repositoryId, {
       onChanged: (change) => this.followed(change),
+      onRuleEvent: (ev) => {
+        this.events = prependEvent(this.events, ev);
+      },
     });
+    this.loadEvents();
   },
 
   destroy() {
     this.unfollow?.();
+  },
+
+  /** The overview's recent rule events; a failure leaves the list empty, the page still works. */
+  async loadEvents() {
+    try {
+      this.events = await gateway.listRuleEvents(this.repositoryId);
+    } catch {
+      this.events = [];
+    }
   },
 
   /** A save, delete or export announced on the project feed. */

@@ -48,6 +48,29 @@ templ PageView(v View) {
 							</span>
 						</template>
 					</div>
+					<section class="[ pane ]" aria-label="Recent rule events">
+						<header><span>Recent rule events</span></header>
+						<template x-if="!hasEvents">
+							<p class="[ pad-m color-ink-muted text-sm ]">No rule has fired yet. Only failed rules are recorded.</p>
+						</template>
+						<ol role="list" class="[ flow ] [ flow-space-3xs ]">
+							<template x-for="e in eventRows" x-bind:key="e.id">
+								<li class="[ row ]" data-rule-event style="--row-columns: auto minmax(0, 1fr) auto">
+									<span class="[ badge ]" x-bind:data-tone="e.tone"><span aria-hidden="true" x-text="e.glyph"></span> <span x-text="e.word"></span></span>
+									<span class="[ flow ] [ flow-space-3xs pad-block-xs ]">
+										<span><span class="[ weight-medium ]" x-text="e.agent"></span> · <span class="[ font-mono text-sm ]" x-text="e.rule"></span></span>
+										<span class="[ font-mono text-xs color-ink-faint ]"><span x-text="e.path"></span> · <span x-text="e.layer"></span></span>
+									</span>
+									<span class="[ cluster ] [ gutter-xs ]">
+										<span class="[ text-xs color-ink-faint ]" x-text="e.when"></span>
+										<template x-if="e.sessionHref">
+											<a class="[ button ]" data-variant="ghost" data-size="sm" x-bind:href="e.sessionHref">Session</a>
+										</template>
+									</span>
+								</li>
+							</template>
+						</ol>
+					</section>
 					<template x-if="draft">
 						<div class="[ field ]">
 							<label for="architecture-pattern">Pattern</label>
