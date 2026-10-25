@@ -21,8 +21,11 @@ var _ ports.RepositoryArchitectures = (*Service)(nil)
 // Deps are the Service's collaborators.
 type Deps struct {
 	Store        ports.ArchitectureRecordStore
-	Repositories ports.RepositoryReader
-	Agents       ports.AgentLister
+	Repositories interface {
+		ports.RepositoryReader
+		ports.RepositoryLister
+	}
+	Agents ports.AgentLister
 	// Contexts lists a project's bounded contexts; nil knows none.
 	Contexts interface {
 		ListBoundedContexts(projectID string) []*domain.BoundedContext
@@ -38,8 +41,11 @@ type Deps struct {
 
 // Service implements the repository architecture use cases.
 type Service struct {
-	store    ports.ArchitectureRecordStore
-	repos    ports.RepositoryReader
+	store ports.ArchitectureRecordStore
+	repos interface {
+		ports.RepositoryReader
+		ports.RepositoryLister
+	}
 	agents   ports.AgentLister
 	contexts interface {
 		ListBoundedContexts(projectID string) []*domain.BoundedContext
@@ -239,6 +245,6 @@ func (s *Service) known(ctx context.Context, projectID string) (knownNames, erro
 func invalidArchitecture(problems []domain.ArchFieldError) error {
 	return &domain.DetailedError{
 		StructuredError: &domain.StructuredError{Code: "ARCHITECTURE_INVALID", Message: "the architecture record is invalid"},
-		Details:         problems,
+		Details:         map[string]any{"errors": problems},
 	}
 }

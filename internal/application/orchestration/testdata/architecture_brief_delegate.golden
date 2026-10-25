@@ -1,0 +1,9 @@
+## Repository architecture
+
+The repository widgets has an architecture record: project/architecture/widgets.yaml in your virtual shell. Read it before you change code.
+
+You work as go-developer. You may change these layers: domain, ports. You may not change paths that are in no layer.
+
+Architecture rules guard your edits and your commits. A blocking rule denies the action and tells you why; a warning reaches you as context. Ask your architect (or the person, when you have no architect) before you work around a rule.
+
+You may not read these layers: secrets. This is not enforced, but respect it.

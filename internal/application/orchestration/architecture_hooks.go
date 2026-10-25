@@ -18,6 +18,10 @@ const (
 	ArchitectureUnreachable = "Architecture rules could not be checked: the harness could not be reached."
 )
 
+// architectureHookTimeout is how long claude lets an architecture hook run:
+// a command rule may take its longest timeout (300 s), and the call around it.
+const architectureHookTimeout = 330
+
 // ArchitectureHooks are the claude settings hooks of a session whose
 // architecture endpoints are under archURL (…/api/sessions/{id}/architecture):
 // PreToolUse checks the file tools and Bash, PostToolUse the edits. Each posts
@@ -26,10 +30,10 @@ const (
 // as context.
 func ArchitectureHooks(archURL string) map[claude.HookEvent][]claude.HookMatcher {
 	hook := func(event string) []claude.Hook {
-		curl := "curl -fsS -m 5 -X POST -H 'Content-Type: application/json'" +
+		curl := "curl -fsS -m 330 -X POST -H 'Content-Type: application/json'" +
 			" --data-binary @- '" + archURL + "/check?hook=" + event + "' 2>/dev/null"
 		down := `{"hookSpecificOutput":{"hookEventName":"` + event + `","additionalContext":"` + ArchitectureUnreachable + `"}}`
-		return []claude.Hook{{Type: "command", Command: curl + " || printf '%s\\n' '" + down + "'"}}
+		return []claude.Hook{{Type: "command", Command: curl + " || printf '%s\\n' '" + down + "'", Timeout: architectureHookTimeout}}
 	}
 	return map[claude.HookEvent][]claude.HookMatcher{
 		claude.HookPreToolUse:  {{Matcher: ArchitectureBeforeTools, Hooks: hook("PreToolUse")}},
