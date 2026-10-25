@@ -36,6 +36,8 @@ type fakeArchitectureAPI struct {
 	calls     []string
 	// refuseSaveWith, when set, makes the next save fail with ARCHITECTURE_INVALID and these errors.
 	refuseSaveWith []archError
+	// saveDelay, when set, holds each save's answer back after the save is stored and announced.
+	saveDelay time.Duration
 	// saved is every record a save stored, newest last.
 	saved []map[string]any
 }
@@ -107,6 +109,9 @@ func (f *fakeArchitectureAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 	}
 	var in map[string]any
 	_ = json.NewDecoder(r.Body).Decode(&in)
+	if r.URL.Path == "/api/save_repository_architecture" {
+		defer f.delaySaveAnswer() // runs after the lock below is released
+	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.calls = append(f.calls, strings.TrimPrefix(r.URL.Path, "/api/"))
@@ -129,6 +134,13 @@ func (f *fakeArchitectureAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 	default:
 		http.NotFound(w, r)
 	}
+}
+
+func (f *fakeArchitectureAPI) delaySaveAnswer() {
+	f.mu.Lock()
+	d := f.saveDelay
+	f.mu.Unlock()
+	time.Sleep(d)
 }
 
 func (f *fakeArchitectureAPI) state() map[string]any {

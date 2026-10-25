@@ -95,13 +95,9 @@ export const repositoriesPage = ({ gateway, architecture }) => () => ({
   /** Which repositories have an architecture; a failure leaves the link saying Set up. */
   async findArchitectures() {
     if (!architecture) return;
-    for (const r of this.repositories) {
-      try {
-        if (await architecture.has(r.id)) this.withArchitecture = [...this.withArchitecture, r.id];
-      } catch {
-        // the link keeps its first words
-      }
-    }
+    const asked = await Promise.allSettled(this.repositories.map((r) => architecture.has(r.id)));
+    // a failure keeps the link's first words
+    this.withArchitecture = this.repositories.filter((r, i) => asked[i].status === "fulfilled" && asked[i].value).map((r) => r.id);
   },
 
   /** Finds the checkouts inside the project's directory; a failure only means no suggestions. */

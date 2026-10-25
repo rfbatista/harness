@@ -1,11 +1,12 @@
 // Layers and who may read and change them, as the record holds them (the
 // contract "Repository architecture record and architecture file"). Pure.
 
+import { PLAIN } from "./diagram.js";
+
+export { PLAIN };
+
 /** The levels of access, in the order a cell cycles through them. */
 export const ACCESS_LEVELS = Object.freeze(["none", "read", "change"]);
-
-/** The reserved agent name of a session with no agent. */
-export const PLAIN = "plain";
 
 /** The column of the matrix that is no layer: what applies to paths in none. */
 export const UNLAYERED = "unlayered";

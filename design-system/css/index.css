@@ -34,6 +34,8 @@
 @import url("./utilities/tokens.css");
 @import url("./utilities/visually-hidden.css");
 @import url("./utilities/truncate.css");
+@import url("./utilities/pre-wrap.css");
+@import url("./utilities/pre-scroll.css");
 @import url("./utilities/region.css");
 @import url("./utilities/divide.css");
 @import url("./utilities/flex-item.css");

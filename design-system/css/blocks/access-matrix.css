@@ -78,6 +78,8 @@
     font: inherit;
     transition: background-color var(--duration-instant) var(--ease-out);
 
+    @media (prefers-reduced-motion: reduce) { transition: none; }
+
     &:hover { background: var(--color-hover); }
 
     &[data-value="read"] {
@@ -100,7 +102,7 @@
     @media (pointer: coarse) { min-block-size: var(--size-touch); }
 
     @media (forced-colors: active) {
-      &[data-value="change"] { outline: 2px solid CanvasText; }
+      &[data-value="change"] { outline: calc(var(--border-width) * 2) solid CanvasText; }
     }
   }
 }

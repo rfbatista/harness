@@ -156,3 +156,11 @@ test("Mermaid marks a draft and escapes names that would break the syntax", () =
   assert.ok(!text.includes('dom"ain'), "a quote must not survive raw");
   assert.ok(text.includes("dom#quot;ain"));
 });
+
+test("a layer with no default access is read everywhere, so only an explicit change draws an edge", () => {
+  const r = { layers: [{ name: "docs", match: { folder: "docs" }, access: { agents: { devops: "change" } } }], unlayered: { default: "none" } };
+  const d = buildDiagram(r, { agents: AGENTS, focus: "go-developer" });
+  assert.deepEqual(d.edges, [{ agent: "go-developer", layer: "docs", access: "read" }]);
+  const all = buildDiagram(r, { agents: AGENTS });
+  assert.deepEqual(all.edges, [{ agent: "devops", layer: "docs", access: "change" }]);
+});

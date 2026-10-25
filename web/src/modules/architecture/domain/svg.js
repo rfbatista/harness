@@ -16,11 +16,22 @@ const LEFT = 96; // room for hand-off arcs, then the region padding
 const GAP = 280; // between the agent and layer columns
 const TOP = 40;
 
-const INK = "#1f2937";
-const MUTED = "#6b7280";
-const CHANGE = "#2563eb";
-const BLOCK = { fill: "#fde8e8", stroke: "#b42318", ink: "#7a1d14" };
-const WARN = { fill: "#fff1cc", stroke: "#b54708", ink: "#7a3b05" };
+// The picture's colours as literals, on purpose: the same text is downloaded as
+// a standalone SVG file, which cannot read the page's CSS variables (no design
+// tokens outside the page), so every colour is gathered here and nowhere else.
+const PALETTE = {
+  ink: "#1f2937",
+  muted: "#6b7280",
+  change: "#2563eb",
+  read: "#94a3b8",
+  paper: "#ffffff",
+  sandbox: "#f4f6fa",
+  layer: "#f8fafc",
+  focused: "#dbeafe",
+  block: { fill: "#fde8e8", stroke: "#b42318", ink: "#7a1d14" },
+  warn: { fill: "#fff1cc", stroke: "#b54708", ink: "#7a3b05" },
+};
+const { ink: INK, muted: MUTED, change: CHANGE, block: BLOCK, warn: WARN } = PALETTE;
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 const num = (n) => Math.round(n * 10) / 10;
@@ -64,7 +75,7 @@ export function diagramToSvg(d) {
   out.push(
     `<defs><marker id="hand" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="${MUTED}"/></marker></defs>`,
   );
-  out.push(`<rect width="${w}" height="${h}" fill="#ffffff"/>`);
+  out.push(`<rect width="${w}" height="${h}" fill="${PALETTE.paper}"/>`);
 
   // Sandboxes: a region around the agents that run in it.
   d.regions.forEach((r) => {
@@ -74,7 +85,7 @@ export function diagramToSvg(d) {
     const bottom = Math.max(...boxes.map((b) => b.y + b.h));
     out.push(
       `<g data-region="${esc(r.name)}"><title>${esc(`sandbox ${r.name}: ${r.agents.join(", ")}`)}</title>` +
-        `<rect x="${LEFT - 14}" y="${top - 26}" width="${AGENT_W + 28}" height="${bottom - top + 36}" rx="12" fill="#f4f6fa" stroke="${MUTED}" stroke-width="1.2" stroke-dasharray="6 4"/>` +
+        `<rect x="${LEFT - 14}" y="${top - 26}" width="${AGENT_W + 28}" height="${bottom - top + 36}" rx="12" fill="${PALETTE.sandbox}" stroke="${MUTED}" stroke-width="1.2" stroke-dasharray="6 4"/>` +
         `<text x="${LEFT - 4}" y="${top - 10}" font-size="11" fill="${MUTED}">sandbox: ${esc(r.name)}</text></g>`,
     );
   });
@@ -92,7 +103,7 @@ export function diagramToSvg(d) {
     const mx = (x1 + x2) / 2;
     const read = e.access === "read";
     out.push(
-      `<path data-edge="${esc(e.agent)}>${esc(e.layer)}" data-access="${e.access}" d="M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}" fill="none" stroke="${read ? "#94a3b8" : CHANGE}" stroke-width="${read ? 1.5 : 2}"${read ? ' stroke-dasharray="6 4"' : ""}><title>${esc(`${e.agent} may ${e.access} ${e.layer}`)}</title></path>`,
+      `<path data-edge="${esc(e.agent)}>${esc(e.layer)}" data-access="${e.access}" d="M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}" fill="none" stroke="${read ? PALETTE.read : CHANGE}" stroke-width="${read ? 1.5 : 2}"${read ? ' stroke-dasharray="6 4"' : ""}><title>${esc(`${e.agent} may ${e.access} ${e.layer}`)}</title></path>`,
     );
     const here = d.guards.filter((g) => g.agent === e.agent && g.layer === e.layer);
     const modes = ["blocking", "warning"].filter((m) => here.some((g) => g.mode === m));
@@ -122,8 +133,8 @@ export function diagramToSvg(d) {
     const b = L.agents.get(ag.name);
     const dim = d.focus && !ag.focused;
     out.push(
-      `<g data-agent="${esc(ag.name)}"${ag.focused ? ' data-focused="true"' : ""}${dim ? ' opacity="0.55"' : ""}>` +
-        `<rect x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" rx="8" fill="${ag.focused ? "#dbeafe" : "#ffffff"}" stroke="${ag.focused ? CHANGE : INK}" stroke-width="${ag.focused ? 2.5 : 1.2}"/>` +
+      `<g data-agent="${esc(ag.name)}" tabindex="0" role="button" aria-label="Focus ${esc(ag.name)}" aria-pressed="${ag.focused}"${ag.focused ? ' data-focused="true"' : ""}${dim ? ' opacity="0.55"' : ""}>` +
+        `<rect x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" rx="8" fill="${ag.focused ? PALETTE.focused : PALETTE.paper}" stroke="${ag.focused ? CHANGE : INK}" stroke-width="${ag.focused ? 2.5 : 1.2}"/>` +
         `<text x="${b.x + b.w / 2}" y="${b.y + b.h / 2 + 4.5}" text-anchor="middle" fill="${INK}">${esc(ag.name)}</text></g>`,
     );
   }
@@ -131,7 +142,7 @@ export function diagramToSvg(d) {
     const b = L.layers.get(ly.name);
     out.push(
       `<g data-layer="${esc(ly.name)}">` +
-        `<rect x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" rx="8" fill="#f8fafc" stroke="${INK}" stroke-width="1.2"/>` +
+        `<rect x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" rx="8" fill="${PALETTE.layer}" stroke="${INK}" stroke-width="1.2"/>` +
         `<text x="${b.x + 14}" y="${b.y + 19}" font-weight="600" fill="${INK}">${esc(ly.name)}</text>` +
         `<text x="${b.x + 14}" y="${b.y + 35}" font-size="11" fill="${MUTED}">${esc(ly.pattern)}</text></g>`,
     );
@@ -149,7 +160,7 @@ export function diagramToSvg(d) {
 
   if (d.draft) {
     out.push(
-      `<g data-draft="true"><rect x="${w - 168}" y="10" width="152" height="24" rx="12" fill="#fff1cc" stroke="${WARN.stroke}"/>` +
+      `<g data-draft="true"><rect x="${w - 168}" y="10" width="152" height="24" rx="12" fill="${WARN.fill}" stroke="${WARN.stroke}"/>` +
         `<text x="${w - 92}" y="26" text-anchor="middle" font-weight="600" fill="${WARN.ink}">Draft · not saved</text></g>`,
     );
   }

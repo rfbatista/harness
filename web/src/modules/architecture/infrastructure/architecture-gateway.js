@@ -84,8 +84,7 @@ export function architectureGateway(api, feed) {
 
     /** The agent catalog's names, for the access matrix's rows. */
     async agents(repositoryId) {
-      const body = await api.post("/discover_repository_architecture", { repository_id: repositoryId });
-      return Array.isArray(body?.agents) ? body.agents.filter((a) => typeof a === "string") : [];
+      return (await this.discover(repositoryId)).agents.filter((a) => typeof a === "string");
     },
 
     /**

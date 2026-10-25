@@ -67,3 +67,15 @@ test("agents in a sandbox sit together, and no two nodes overlap", () => {
   const boxes = [...L.agents.values()].sort((a, b) => a.y - b.y);
   for (let i = 1; i < boxes.length; i++) assert.ok(boxes[i].y >= boxes[i - 1].y + boxes[i - 1].h);
 });
+
+test("each agent drawn is a keyboard-focusable button named for what it does", () => {
+  const doc = parse(diagramToSvg(buildDiagram(record, { agents: AGENTS, focus: "devops" })));
+  const nodes = [...doc.querySelectorAll("g[data-agent]")];
+  assert.equal(nodes.length, 4); // three agents and plain
+  for (const g of nodes) {
+    assert.equal(g.getAttribute("tabindex"), "0");
+    assert.equal(g.getAttribute("role"), "button");
+    assert.equal(g.getAttribute("aria-label"), `Focus ${g.getAttribute("data-agent")}`);
+  }
+  assert.equal(doc.querySelector('g[data-agent="devops"]').getAttribute("aria-pressed"), "true");
+});

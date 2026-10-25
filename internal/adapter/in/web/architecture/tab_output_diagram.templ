@@ -40,7 +40,7 @@ templ tabOutputDiagram() {
 					</section>
 				</template>
 				<div class="[ diagram-canvas ]" role="region" aria-label="Architecture diagram, scrolls sideways when narrow" tabindex="0" data-diagram-scroll>
-					<div data-diagram-picture x-effect="paint" x-on:click="pickFromPicture"></div>
+					<div data-diagram-picture x-effect="paint" x-on:click="pickFromPicture" x-on:keydown="pickFromKey"></div>
 				</div>
 				<ul class="[ cluster ] [ text-sm color-ink-muted ]" aria-label="How to read the diagram" data-guard-legend>
 					<li>Solid line: may change</li>

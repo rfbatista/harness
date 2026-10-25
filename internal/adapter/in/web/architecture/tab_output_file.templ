@@ -61,6 +61,6 @@ templ tabOutputFile() {
 		<template x-if="dirty">
 			<p class="[ pad-m text-sm color-ink-muted ]" data-yaml-note>This is the saved version. Your unsaved changes are not in it.</p>
 		</template>
-		<pre class="[ pad-m font-mono text-sm ]" data-yaml style="overflow:auto;margin:0" tabindex="0" x-text="yaml"></pre>
+		<pre class="[ pad-m font-mono text-sm pre-scroll ]" data-yaml tabindex="0" x-text="yaml"></pre>
 	</section>
 }

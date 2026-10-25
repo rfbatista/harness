@@ -2,6 +2,7 @@
 
 import "../src/modules/agentisolation/presentation/components/isolationSummary.test.js";
 import "../src/modules/architecture/domain/diagram.test.js";
+import "../src/modules/architecture/domain/events.test.js";
 import "../src/modules/architecture/domain/export.test.js";
 import "../src/modules/architecture/domain/layers.test.js";
 import "../src/modules/architecture/domain/svg.test.js";

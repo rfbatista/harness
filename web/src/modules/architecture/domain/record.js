@@ -19,6 +19,10 @@ export const TABS = Object.freeze([
   { slug: "output", label: "Output", paths: ["file", "diagram"] },
 ]);
 
+/** The codes the architecture endpoints refuse with that the page acts on. */
+export const ARCHITECTURE_CHANGED = "ARCHITECTURE_CHANGED";
+export const ARCHITECTURE_INVALID = "ARCHITECTURE_INVALID";
+
 /** The tab a deep link opens; the first tab for one that is unknown. */
 export function tabForPath(path) {
   return TABS.find((t) => t.paths.includes(path)) ?? TABS[0];

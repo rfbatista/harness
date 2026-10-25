@@ -8,6 +8,8 @@
 import { describeError } from "../../../../shared/presentation/errors.js";
 import { readSeed } from "../../../../shared/presentation/seed.js";
 import {
+  ARCHITECTURE_CHANGED,
+  ARCHITECTURE_INVALID,
   TABS,
   cleanRecord,
   cloneRecord,
@@ -22,9 +24,6 @@ import {
 } from "../../domain/record.js";
 
 import { prependEvent, ruleEventRow } from "../../domain/events.js";
-
-const ARCHITECTURE_CHANGED = "ARCHITECTURE_CHANGED";
-const ARCHITECTURE_INVALID = "ARCHITECTURE_INVALID";
 
 /** @param {{ gateway: ReturnType<typeof import("../../infrastructure/architecture-gateway.js").architectureGateway> }} deps */
 export const architecturePage = ({ gateway }) => () => ({
@@ -44,6 +43,8 @@ export const architecturePage = ({ gateway }) => () => ({
   exists: false,
   exportInfo: null,
   saving: false,
+  /** The highest version the feed announced while our own save was in flight (0: none). */
+  announced: 0,
   /** What ARCHITECTURE_INVALID last said, one entry per field: { path, code, message }. */
   errors: [],
   /** Why the draft is out of date: "" when it is not, "save" (a save was refused) or "feed" (a save elsewhere was announced). */
@@ -162,7 +163,11 @@ export const architecturePage = ({ gateway }) => () => ({
 
   /** A save, delete or export announced on the project feed. */
   followed(change) {
-    if (this.saving) return; // our own save
+    if (this.saving) {
+      // Probably our own save, but possibly another one that landed after it: keep the highest and judge once the save answers.
+      this.announced = Math.max(this.announced, change.version);
+      return;
+    }
     if (change.version === this.version) {
       this.refreshExport(); // an export announces the version it exported, unchanged
       return;
@@ -237,6 +242,7 @@ export const architecturePage = ({ gateway }) => () => ({
   async save() {
     if (this.saving || !this.dirty) return;
     this.saving = true;
+    this.announced = 0;
     try {
       this.take(await gateway.save(this.repositoryId, this.version, cleanRecord(this.draft)));
       this.clearProblems();
@@ -252,6 +258,10 @@ export const architecturePage = ({ gateway }) => () => ({
       }
     } finally {
       this.saving = false;
+      const seen = this.announced;
+      this.announced = 0;
+      // A version beyond the one we hold was saved elsewhere while ours was in flight.
+      if (seen > this.version) this.followed({ version: seen });
     }
   },
 

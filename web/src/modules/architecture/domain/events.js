@@ -25,7 +25,7 @@ export function ruleEventRow(ev, projectId, now) {
     path: ev.path || "",
     layer: ev.layer || "no layer",
     when: ago === "now" ? "now" : ago ? `${ago} ago` : "",
-    sessionHref: ev.session_id
+    sessionHref: ev.session_id && ev.task_id
       ? `/projects/${encodeURIComponent(projectId)}/tasks/${encodeURIComponent(ev.task_id)}?session=${encodeURIComponent(ev.session_id)}`
       : "",
   };

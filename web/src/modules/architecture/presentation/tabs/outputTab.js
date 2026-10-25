@@ -5,6 +5,7 @@
 // links (`/architecture/file`, `/architecture/diagram`); the page opens them.
 
 import { describeError } from "../../../../shared/presentation/errors.js";
+import { ARCHITECTURE_CHANGED } from "../../domain/record.js";
 import { describeExport, describeRefusal } from "../../domain/export.js";
 import { recordToYaml } from "../../domain/yaml.js";
 import { copyText } from "../../infrastructure/clipboard.js";
@@ -92,7 +93,7 @@ export const outputTab = ({ gateway }) => () => ({
     return this.refusal !== null;
   },
   get refusalIsStale() {
-    return this.refusal?.code === "ARCHITECTURE_CHANGED";
+    return this.refusal?.code === ARCHITECTURE_CHANGED;
   },
   get copyLabel() {
     return this.copied ? "Copied" : "Copy";

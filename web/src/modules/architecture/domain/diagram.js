@@ -82,9 +82,9 @@ export function buildDiagram(record, { agents = [], focus = "", draft = false } 
   };
 }
 
-/** An agent's access to a layer: its entry, else the layer's default. @returns {Access} */
+/** An agent's access to a layer: its entry, else the layer's default; a layer with no default means read everywhere. @returns {Access} */
 export function accessOf(access, agent) {
-  return access?.agents?.[agent] ?? access?.default ?? "none";
+  return access?.agents?.[agent] ?? access?.default ?? "read";
 }
 
 /** Whether a scope list (agent names, "all", or none given) covers an agent. */

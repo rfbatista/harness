@@ -90,9 +90,12 @@ export const outputDiagram = ({ gateway }) => () => ({
     return [...seen.values()].map((g) => `${g.glyph} ${g.mode === "blocking" ? "blocking" : "warning"}: ${g.rule}`);
   },
 
-  /** Draws the SVG into the element it is set on; x-html is not in the CSP build. */
+  /** Draws the SVG into the element it is set on; x-html is not in the CSP build. A redraw keeps the keyboard on the agent it was on. */
   paint() {
+    const held = this.$el.contains(document.activeElement) ? document.activeElement.closest?.("g[data-agent]") : null;
+    const name = held?.getAttribute("data-agent");
     this.$el.innerHTML = this.svg;
+    if (name) [...this.$el.querySelectorAll("g[data-agent]")].find((g) => g.getAttribute("data-agent") === name)?.focus();
   },
 
   pick(name) {
@@ -103,6 +106,15 @@ export const outputDiagram = ({ gateway }) => () => ({
     const node = event.target.closest?.("g[data-agent]");
     const name = node?.getAttribute("data-agent");
     if (name && node.closest("[data-diagram]")) this.pick(name);
+  },
+  /** Enter or Space on an agent drawn in the picture focuses it. */
+  pickFromKey(event) {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    const node = event.target.closest?.("g[data-agent]");
+    const name = node?.getAttribute("data-agent");
+    if (!name || !node.closest("[data-diagram]")) return;
+    event.preventDefault();
+    this.pick(name);
   },
   clearFocus() {
     this.focus = "";
