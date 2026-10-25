@@ -179,7 +179,7 @@ func isRead(sql string) bool {
 
 func migrate(db *gorm.DB) error {
 	if err := db.AutoMigrate(&ProjectModel{}, &RepositoryModel{}, &ZoneModel{}, &AgentModel{}, &PromptModel{}, &SkillModel{}, &SkillFileModel{}, &SettingModel{}, &MCPServerModel{}, &ToolModel{}, &TaskModel{}, &SessionModel{}, &SessionEventModel{}, &SandboxViolationModel{}, &TicketModel{}, &DocumentModel{}, &TicketDocumentModel{}, &WorkspaceModel{}, &BoundedContextModel{}, &EnvFileModel{}, &RunCommandModel{}, &ArtifactModel{}, &ArtifactTicketModel{}, &TaskMessageModel{}, &ReviewRequestModel{}, &StatusCheckModel{}, &TicketStatusChangeModel{}, &TicketResourceModel{}, &TicketCommentModel{}, &PullRequestModel{}, &NotificationModel{}, &GitCredentialModel{}, &GitIdentityModel{},
-		&AgentCredentialModel{}, &RepositoryCredentialModel{}, &UsageRecordModel{}, &ActivationModel{}, &TokenSaverInstallationModel{}, &ArchitectureRecordModel{}); err != nil {
+		&AgentCredentialModel{}, &RepositoryCredentialModel{}, &UsageRecordModel{}, &ActivationModel{}, &TokenSaverInstallationModel{}, &ArchitectureRecordModel{}, &ArchitectureRuleEventModel{}); err != nil {
 		return fmt.Errorf("sqlite migrate: %w", err)
 	}
 	if err := migrateAgentPromptsToEntities(db); err != nil {

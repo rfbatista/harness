@@ -228,6 +228,10 @@ func NewRouter(h *Handler, opts ...Option) *echo.Echo {
 	// to its virtual shell's files
 	g.POST(strings.TrimPrefix(ShellCheckRoute, "/api"), h.handleShellCheck)
 	g.POST(strings.TrimPrefix(ShellCommitRoute, "/api"), h.handleShellCommit)
+	// the architecture rules: the same sessions' hooks, shims and commits ask
+	// whether an action keeps to the repository's layers
+	g.POST(strings.TrimPrefix(ArchitectureCheckRoute, "/api"), h.handleArchitectureCheck)
+	g.POST(strings.TrimPrefix(ArchitectureCommitRoute, "/api"), h.handleArchitectureCommit)
 
 	// the architect channel: what passes between a task's architect and its
 	// delegates, and the reviews it asks the person for
@@ -298,6 +302,7 @@ func NewRouter(h *Handler, opts ...Option) *echo.Echo {
 	g.POST("/delete_repository_architecture", h.handleDeleteRepositoryArchitecture)
 	g.POST("/preview_layers", h.handlePreviewLayers)
 	g.POST("/export_repository_architecture", h.handleExportRepositoryArchitecture)
+	g.POST("/list_architecture_rule_events", h.handleListArchitectureRuleEvents)
 	g.POST("/discover_repository_architecture", h.handleDiscoverRepositoryArchitecture)
 	g.GET("/architecture.schema.json", h.handleArchitectureSchema)
 

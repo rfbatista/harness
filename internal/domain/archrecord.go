@@ -571,3 +571,34 @@ type ArchitectureExportResult struct {
 const (
 	ArchitectureSchemaPath = ".harness/architecture.schema.json"
 )
+
+// ArchitectureRuleEvent is a rule that failed in a session: what fired, where
+// and how it ended. A passing rule leaves none.
+type ArchitectureRuleEvent struct {
+	ID           string    `json:"id"`
+	At           time.Time `json:"at"`
+	SessionID    string    `json:"session_id"`
+	TaskID       string    `json:"task_id"`
+	Agent        string    `json:"agent"`
+	RuleID       string    `json:"rule_id"`
+	Kind         string    `json:"kind"`
+	AtPoint      string    `json:"at_point"`
+	Mode         string    `json:"mode"`
+	Outcome      string    `json:"outcome"` // blocked | warned
+	Path         string    `json:"path"`
+	Layer        string    `json:"layer"`
+	Tool         string    `json:"tool"`
+	Detail       string    `json:"detail"`
+	RepositoryID string    `json:"-"`
+	ProjectID    string    `json:"-"`
+}
+
+// Outcomes of a failed rule.
+const (
+	OutcomeBlocked = "blocked"
+	OutcomeWarned  = "warned"
+)
+
+// MaxRuleEventDetail is how much of a command's output an event and the agent
+// keep.
+const MaxRuleEventDetail = 4096

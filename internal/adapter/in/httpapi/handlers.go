@@ -103,6 +103,9 @@ type Services struct {
 	// RepositoryArchitectures keeps repositories' architecture records; nil
 	// answers 503.
 	RepositoryArchitectures ports.RepositoryArchitectures
+	// ArchitectureRules checks sessions' hooks, shims and commits against
+	// their repository's rules; nil allows everything.
+	ArchitectureRules ports.ArchitectureRules
 }
 
 // Handler serves the application's driving ports as HTTP endpoints (the same
@@ -156,7 +159,8 @@ type Handler struct {
 
 	writingHelper ports.WritingHelper
 
-	repoArch ports.RepositoryArchitectures
+	repoArch  ports.RepositoryArchitectures
+	archRules ports.ArchitectureRules
 
 	streams streamRegistry // the browser tabs' live streams (stream.go)
 }
@@ -188,6 +192,7 @@ func NewHandler(s Services) *Handler {
 		pullRequests:   s.PullRequests,
 		merges:         s.Merges,
 		repoArch:       s.RepositoryArchitectures,
+		archRules:      s.ArchitectureRules,
 		notifications:  s.Notifications,
 		usage:          s.Usage,
 		liveCalls:      s.LiveCalls,

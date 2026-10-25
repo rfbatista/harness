@@ -32,6 +32,8 @@ type Deps struct {
 	Git ports.ArchitectureGit
 	// MCPServers is the harness MCP catalog; nil offers no tool from it.
 	MCPServers interface{ ListMCPServers() []*domain.MCPServer }
+	// Events keeps the rule events the API lists; nil lists none.
+	Events ports.ArchitectureRuleEventStore
 }
 
 // Service implements the repository architecture use cases.
@@ -42,15 +44,19 @@ type Service struct {
 	contexts interface {
 		ListBoundedContexts(projectID string) []*domain.BoundedContext
 	}
-	feed ports.ProjectChangeSink // nil until the orchestration is wired
-	git  ports.ArchitectureGit
-	mcp  interface{ ListMCPServers() []*domain.MCPServer }
+	feed   ports.ProjectChangeSink // nil until the orchestration is wired
+	git    ports.ArchitectureGit
+	events ports.ArchitectureRuleEventStore
+	mcp    interface{ ListMCPServers() []*domain.MCPServer }
 
 	sandboxDriver   func() ports.SandboxDriver
 	sandboxSettings SandboxSource
 
 	mu        sync.Mutex
 	checkouts map[string]*sync.Mutex
+
+	cacheMu sync.RWMutex
+	cache   map[string]*Current // by repository id; nil value: no record
 }
 
 // SandboxSource is the person's sandbox configuration, as far as discovery
@@ -68,7 +74,7 @@ func (s *Service) UseSandbox(driver func() ports.SandboxDriver, settings Sandbox
 
 // NewService returns the repository architecture context.
 func NewService(d Deps) *Service {
-	return &Service{store: d.Store, repos: d.Repositories, agents: d.Agents, contexts: d.Contexts, git: d.Git, mcp: d.MCPServers, checkouts: map[string]*sync.Mutex{}}
+	return &Service{store: d.Store, repos: d.Repositories, agents: d.Agents, contexts: d.Contexts, git: d.Git, mcp: d.MCPServers, events: d.Events, checkouts: map[string]*sync.Mutex{}, cache: map[string]*Current{}}
 }
 
 // UseFeed sets where saves, deletes and exports are announced: the project
@@ -79,14 +85,18 @@ func (s *Service) UseFeed(feed ports.ProjectChangeSink) { s.feed = feed }
 // repository's record goes with it, so no orphan rules keep firing.
 func (s *Service) Subscribe(sub ports.EventSubscriber) {
 	ports.On(sub, func(ctx context.Context, ev domain.RepositoryDeleted) error {
-		if err := s.store.Delete(ctx, ev.RepositoryID); err != nil {
+		err := s.store.Delete(ctx, ev.RepositoryID)
+		s.forget(ev.RepositoryID)
+		if err != nil {
 			return err
 		}
 		s.announce(ev.ProjectID, ev.RepositoryID, 0)
 		return nil
 	})
 	ports.On(sub, func(ctx context.Context, ev domain.ProjectDeleted) error {
-		return s.store.DeleteByProject(ctx, ev.ProjectID)
+		err := s.store.DeleteByProject(ctx, ev.ProjectID)
+		s.forget("")
+		return err
 	})
 }
 
@@ -175,6 +185,7 @@ func (s *Service) SaveRepositoryArchitecture(ctx context.Context, repositoryID s
 		zones[i].BoundedContextID = known.contextIDs[l.BoundedContext]
 	}
 	stored, err := s.store.Save(ctx, repositoryID, repo.ProjectID, baseVersion, record, zones)
+	s.forget(repositoryID)
 	if err != nil {
 		return nil, err
 	}
@@ -188,7 +199,9 @@ func (s *Service) DeleteRepositoryArchitecture(ctx context.Context, repositoryID
 	if err != nil {
 		return err
 	}
-	if err := s.store.Delete(ctx, repositoryID); err != nil {
+	err = s.store.Delete(ctx, repositoryID)
+	s.forget(repositoryID)
+	if err != nil {
 		return err
 	}
 	s.announce(repo.ProjectID, repositoryID, 0)

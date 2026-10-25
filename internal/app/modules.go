@@ -33,6 +33,7 @@ import (
 	"operators-mcp/internal/app/catalog"
 	"operators-mcp/internal/application/agentcredential"
 	"operators-mcp/internal/application/apps"
+	"operators-mcp/internal/application/archrules"
 	"operators-mcp/internal/application/artifacts"
 	"operators-mcp/internal/application/execution"
 	"operators-mcp/internal/application/gitcredentials"
@@ -77,6 +78,7 @@ var PersistenceModule = fx.Module("persistence",
 		asPort(sqlite.NewBoundedContextRepository, new(ports.BoundedContextRepository)),
 		asPort(sqlite.NewPullRequestRepository, new(ports.PullRequestRepository)),
 		asPort(sqlite.NewArchitectureRecordRepository, new(ports.ArchitectureRecordStore)),
+		asPort(sqlite.NewArchitectureRuleEventRepository, new(ports.ArchitectureRuleEventStore)),
 	),
 )
 
@@ -192,6 +194,7 @@ type catalogParams struct {
 	BoundedContexts ports.BoundedContextRepository
 	ArchRecords     ports.ArchitectureRecordStore
 	ArchGit         ports.ArchitectureGit
+	ArchEvents      ports.ArchitectureRuleEventStore
 	Agents          ports.AgentRepository
 	Prompts         ports.PromptRepository
 	Skills          ports.SkillRepository
@@ -217,6 +220,7 @@ func newCatalog(p catalogParams) catalog.Catalog {
 		BoundedContexts:  p.BoundedContexts,
 		ArchRecords:      p.ArchRecords,
 		ArchGit:          p.ArchGit,
+		ArchEvents:       p.ArchEvents,
 		Agents:           p.Agents,
 		Prompts:          p.Prompts,
 		Skills:           p.Skills,
@@ -359,6 +363,7 @@ var AgentRuntimeModule = fx.Module("agentruntime",
 		asPort(newClaudeTranscripts, new(ports.ClaudeTranscripts)),
 		asPort(newClaudeTranscriptReader, new(ports.ClaudeTranscriptReader)),
 		newOrchestrationService,
+		newArchitectureRules,
 		platformSandboxDriver,
 		platformSandboxViolations,
 		newSandboxSettings,
@@ -371,7 +376,7 @@ var AgentRuntimeModule = fx.Module("agentruntime",
 		newVirtualShells,
 	),
 	fx.Invoke(registerRuntimeShutdown, registerServerSessions, bindVirtualShells, bindSandboxSettings,
-		bindAgentReadiness),
+		bindAgentReadiness, func(*archrules.Service) {}),
 )
 
 // TaskChannelModule wires the architect channel: its tables, the service,
@@ -618,6 +623,17 @@ func newHub() *orchestration.Hub { return orchestration.NewHub(256) }
 
 // newOrchestrationService hands the orchestration the catalog contexts it
 // reads to set sessions up.
+// newArchitectureRules checks sessions' actions against their repository's
+// architecture rules, reading each repository's current saved record and
+// announcing every failed rule on the orchestration's project feed.
+func newArchitectureRules(cat catalog.Catalog, sessions ports.SessionRepository, events ports.ArchitectureRuleEventStore, orch *orchestration.Service) *archrules.Service {
+	svc := archrules.NewService(archrules.Deps{
+		Sessions: sessions, Agents: cat.Agents, Records: cat.RepositoryArchitectures, Events: events, Feed: orch,
+	})
+	svc.Subscribe(cat.Bus)
+	return svc
+}
+
 func newOrchestrationService(
 	cfg Config,
 	manager llmkit.Manager,
@@ -659,6 +675,9 @@ func newOrchestrationService(
 	}
 	svc.SessionShellURL = func(sessionID string) string {
 		return base + httpapi.SessionShellPath(sessionID)
+	}
+	svc.SessionArchitectureURL = func(sessionID string) string {
+		return base + httpapi.SessionArchitecturePath(sessionID)
 	}
 	svc.ShimBinary = cfg.ShimBinary
 	svc.DeveloperBin = developerdir.Bin

@@ -38,6 +38,7 @@ type RepositoryArchitectures interface {
 	// and CHECKOUT_DIRTY. Files that already hold the version's content commit
 	// nothing and answer the commit that has them.
 	ExportRepositoryArchitecture(ctx context.Context, repositoryID string, version int) (*domain.ArchitectureExportResult, error)
+	ArchitectureRuleEvents
 }
 
 // StoredArchitecture is a repository's record row.
@@ -96,4 +97,51 @@ type ArchitectureGit interface {
 	// without running the checkout's hooks. It never pushes. On failure the
 	// checkout is as it was. It answers the new commit.
 	CommitFiles(ctx context.Context, dir string, files map[string][]byte, message string) (string, error)
+}
+
+// ArchitectureRuleEventStore keeps the rules that failed (driven). Events are
+// kept as long as their session is.
+type ArchitectureRuleEventStore interface {
+	Add(ctx context.Context, ev *domain.ArchitectureRuleEvent) error
+	// List answers the repository's events newest first: those after since
+	// (all when zero), at most limit.
+	List(ctx context.Context, repositoryID string, since time.Time, limit int) ([]domain.ArchitectureRuleEvent, error)
+	DeleteBySession(ctx context.Context, sessionID string) error
+}
+
+// ArchitectureRuleEvents lists a repository's rule events: the driving side
+// of the store, for the API.
+type ArchitectureRuleEvents interface {
+	// ListArchitectureRuleEvents is the newest first, after since when it is
+	// set, at most limit (default 50, at most 500).
+	ListArchitectureRuleEvents(ctx context.Context, repositoryID string, since time.Time, limit int) ([]domain.ArchitectureRuleEvent, error)
+}
+
+// ArchitectureCheck is what a hook, a shim or the commit check asks about:
+// the session, the lifecycle point, the tool, and the paths it touches or has
+// staged (absolute, or relative to the session's worktree).
+type ArchitectureCheck struct {
+	SessionID string
+	// Point is domain.PointBeforeTool, PointAfterEdit or PointBeforeCommit.
+	Point string
+	Tool  string
+	Paths []string
+	// Command is the Bash command line of a before-tool check of Bash.
+	Command string
+}
+
+// ArchitectureVerdict is the answer: Deny is the text of a blocking rule that
+// failed (the action must not go on); Context is everything else the agent
+// should be told (warnings, and a blocking rule's text after an edit). Both
+// empty means every rule passed.
+type ArchitectureVerdict struct {
+	Deny    string `json:"deny,omitempty"`
+	Context string `json:"context,omitempty"`
+}
+
+// ArchitectureRules checks architecture rules against the repository's
+// current saved record (driving). It never errors: a check it cannot make is a
+// pass, so a harness failure never blocks an agent.
+type ArchitectureRules interface {
+	CheckArchitecture(ctx context.Context, check ArchitectureCheck) ArchitectureVerdict
 }

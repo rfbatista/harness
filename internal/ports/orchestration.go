@@ -96,7 +96,17 @@ type ProjectChange struct {
 	// ArchitectureChanged says a repository's architecture record was saved,
 	// deleted or exported.
 	ArchitectureChanged *ArchitectureChange `json:"repository_architecture_changed,omitempty"`
-	Deleted             bool                `json:"deleted,omitempty"`
+	// ArchitectureRuleEvent is a rule that failed in a session.
+	ArchitectureRuleEvent *ArchitectureRuleEventChange `json:"architecture_rule_event,omitempty"`
+	Deleted               bool                         `json:"deleted,omitempty"`
+}
+
+// ArchitectureRuleEventChange is a rule event on the project feed. ProjectID
+// routes it and is not on the wire.
+type ArchitectureRuleEventChange struct {
+	RepositoryID string                        `json:"repository_id"`
+	Event        *domain.ArchitectureRuleEvent `json:"event"`
+	ProjectID    string                        `json:"-"`
 }
 
 // ArchitectureChange is a repository whose architecture record changed and
@@ -143,6 +153,8 @@ func (c ProjectChange) ProjectID() string {
 		return c.CodeChanged.ProjectID
 	case c.ArchitectureChanged != nil:
 		return c.ArchitectureChanged.ProjectID
+	case c.ArchitectureRuleEvent != nil:
+		return c.ArchitectureRuleEvent.ProjectID
 	}
 	return ""
 }
