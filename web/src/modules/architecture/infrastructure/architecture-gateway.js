@@ -3,6 +3,7 @@
 // record". The wire shapes are read here and nowhere else.
 
 import { StructuredError, Codes } from "../../../shared/domain/errors.js";
+import { readPreview } from "../domain/layers.js";
 
 /**
  * @param {import("../../../shared/infrastructure/api.js").ApiClient} api
@@ -42,6 +43,21 @@ export function architectureGateway(api, feed) {
           record,
         }),
       );
+    },
+
+    /**
+     * What the layers of an unsaved draft would match: per layer a file count
+     * and a sample (or the reason its pattern is invalid), the files in no
+     * layer, and the overlaps with their winner. It never saves.
+     */
+    async previewLayers(repositoryId, layers, unlayered) {
+      return readPreview(await api.post("/preview_layers", { repository_id: repositoryId, layers, unlayered }));
+    },
+
+    /** The agent catalog's names, for the access matrix's rows. */
+    async agents(repositoryId) {
+      const body = await api.post("/discover_repository_architecture", { repository_id: repositoryId });
+      return Array.isArray(body?.agents) ? body.agents.filter((a) => typeof a === "string") : [];
     },
 
     /**

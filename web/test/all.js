@@ -2,6 +2,7 @@
 
 import "../src/modules/agentisolation/presentation/components/isolationSummary.test.js";
 import "../src/modules/architecture/domain/diagram.test.js";
+import "../src/modules/architecture/domain/layers.test.js";
 import "../src/modules/claude/infrastructure/claude-gateway.test.js";
 import "../src/modules/claude/presentation/components/managedClaude.test.js";
 import "../src/modules/code/domain/domain.test.js";
