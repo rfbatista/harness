@@ -175,6 +175,38 @@ func newAgentCatalog(cfg Config, cat catalog.Catalog) (*agentcatalog.Catalog, er
 	return agentcatalog.New(dir, agentcatalog.WithProjects(cat.Projects), agentcatalog.WithProber(mcpprobe.NewProber())), nil
 }
 
+// importSourceDir is the repository agents/ folder the one-time catalog import
+// reads: the one Config.DotfilesAgentsDir names, else agents/ under the
+// default project root when it holds an agents.json. "" when there is none.
+func importSourceDir(cfg Config) string {
+	if cfg.DotfilesAgentsDir != "" {
+		return cfg.DotfilesAgentsDir
+	}
+	dir := filepath.Join(cfg.Root, "agents")
+	if _, err := os.Stat(filepath.Join(dir, "agents.json")); err == nil {
+		return dir
+	}
+	return ""
+}
+
+// importAgentCatalog fills the agent catalog from the repository's agents/
+// folder and the database's old catalog, once: only when the catalog folder
+// is missing or empty (ADR 0030). It runs before the HTTP server serves. A
+// failed import is logged and leaves the catalog as it was, so the next start
+// tries again.
+func importAgentCatalog(cfg Config, db *gorm.DB, cat *agentcatalog.Catalog) {
+	ctx := context.Background()
+	src := agentcatalog.ImportSource{
+		RepoDir:    importSourceDir(cfg),
+		Agents:     sqlite.NewAgentRepository(db).List(ctx),
+		Skills:     sqlite.NewSkillRepository(db).List(),
+		MCPServers: sqlite.NewMCPServerRepository(db).List(),
+	}
+	if _, err := cat.Import(src); err != nil {
+		slog.Error("agent catalog import failed", "dir", cat.Root(), "error", err)
+	}
+}
+
 // CatalogModule provides the filesystem adapters (as their ports) and the five
 // catalog bounded contexts — projects, architecture, agents, capabilities,
 // settings — wired over one event bus by catalog.New.
@@ -188,6 +220,7 @@ var CatalogModule = fx.Module("catalog",
 		asPort(newEnvFiles, new(ports.EnvFileIO)),
 		newCatalog,
 	),
+	fx.Invoke(importAgentCatalog),
 )
 
 // catalogParams collects the driven ports the catalog contexts are built on.
