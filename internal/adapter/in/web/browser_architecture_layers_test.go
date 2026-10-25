@@ -177,3 +177,135 @@ func TestALayerHasAnOptionalBoundedContextAndPurpose(t *testing.T) {
 		t.Fatalf("saved layer = %v", l)
 	}
 }
+
+func cellSel(label string) string {
+	return fmt.Sprintf(`#architecture-panel-layers [data-access-matrix] button[aria-label=%q]`, label)
+}
+
+func hasCell(label string) string {
+	return fmt.Sprintf(`!!document.querySelector('%s')`, cellSel(label))
+}
+
+func savedLayer(t *testing.T, rig *archRig, i int) map[string]any {
+	t.Helper()
+	layers, _ := rig.api.lastSaved()["layers"].([]any)
+	if i >= len(layers) {
+		t.Fatalf("saved layers = %v", layers)
+	}
+	l, _ := layers[i].(map[string]any)
+	return l
+}
+
+func accessAgents(access any) map[string]any {
+	a, _ := access.(map[string]any)
+	m, _ := a["agents"].(map[string]any)
+	return m
+}
+
+func saveFromBar() chromedp.Action {
+	return chromedp.Tasks{
+		chromedp.Click(`[data-save-bar] [data-variant=primary]`, chromedp.ByQuery),
+		poll(`!document.querySelector('[data-save-bar]')?.checkVisibility()`),
+	}
+}
+
+// A new layer shows the default access; changed cells are stored by a save.
+func TestANewLayerShowsTheDefaultAccessAndChangedCellsAreSaved(t *testing.T) {
+	rig := newArchRig(t)
+	openLayersTab(t, rig)
+	rig.run(t,
+		addLayerBy("folder"),
+		setLayerField(0, "name", "domain"),
+		setLayerField(0, "pattern", "internal/domain"),
+		poll(hasCell("software-architect on domain: change")),
+		poll(hasCell("go-developer on domain: read")),
+		poll(hasCell("devops on domain: read")),
+		poll(hasCell("default on domain: read")),
+		chromedp.Click(cellSel("go-developer on domain: read"), chromedp.ByQuery),
+		poll(hasCell("go-developer on domain: change")),
+		chromedp.Click(cellSel("devops on domain: read"), chromedp.ByQuery),
+		poll(hasCell("devops on domain: change")),
+		chromedp.Click(cellSel("default on domain: read"), chromedp.ByQuery),
+		poll(hasCell("default on domain: change")),
+		saveFromBar(),
+	)
+	l := savedLayer(t, rig, 0)
+	a, _ := l["access"].(map[string]any)
+	if a["default"] != "change" {
+		t.Errorf("saved default = %v", a["default"])
+	}
+	ag := accessAgents(l["access"])
+	if ag["go-developer"] != "change" || ag["software-architect"] != "change" || ag["devops"] != "change" {
+		t.Errorf("saved agents = %v", ag)
+	}
+}
+
+// The unlayered and plain-session rows exist and can be set.
+func TestTheUnlayeredAndPlainRowsExistAndCanBeSet(t *testing.T) {
+	rig := newArchRig(t)
+	openLayersTab(t, rig)
+	rig.run(t,
+		addLayerBy("folder"),
+		setLayerField(0, "name", "domain"),
+		setLayerField(0, "pattern", "internal/domain"),
+		poll(hasCell("plain on domain: read")),
+		poll(hasCell("plain on unlayered: read")),
+		poll(hasCell("devops on unlayered: change")), // the unlayered default: the architect and devops change
+		chromedp.Click(cellSel("plain on unlayered: read"), chromedp.ByQuery),
+		poll(hasCell("plain on unlayered: change")),
+		chromedp.Click(cellSel("plain on domain: read"), chromedp.ByQuery),
+		poll(hasCell("plain on domain: change")),
+		saveFromBar(),
+	)
+	saved := rig.api.lastSaved()
+	if ag := accessAgents(saved["unlayered"]); ag["plain"] != "change" {
+		t.Errorf("saved unlayered = %v", saved["unlayered"])
+	}
+	if ag := accessAgents(savedLayer(t, rig, 0)["access"]); ag["plain"] != "change" {
+		t.Errorf("saved layer access = %v", ag)
+	}
+}
+
+// A cell is a button with a label and works with the keyboard.
+func TestAnAccessCellExposesItsLabelAndWorksWithTheKeyboard(t *testing.T) {
+	rig := newArchRig(t)
+	openLayersTab(t, rig)
+	var tag, kind string
+	rig.run(t,
+		addLayerBy("folder"),
+		setLayerField(0, "name", "domain"),
+		setLayerField(0, "pattern", "internal/domain"),
+		poll(hasCell("go-developer on domain: read")),
+		chromedp.Evaluate(`document.querySelector('`+cellSel("go-developer on domain: read")+`').tagName`, &tag),
+		chromedp.Evaluate(`document.querySelector('`+cellSel("go-developer on domain: read")+`').type`, &kind),
+		chromedp.Focus(cellSel("go-developer on domain: read"), chromedp.ByQuery),
+		chromedp.KeyEvent("\r"),
+		poll(hasCell("go-developer on domain: change")),
+		chromedp.KeyEvent(" "),
+		poll(hasCell("go-developer on domain: none")),
+	)
+	if tag != "BUTTON" || kind != "button" {
+		t.Fatalf("a cell is %s[type=%s]", tag, kind)
+	}
+}
+
+// Read restrictions are marked as shown to agents, not enforced.
+func TestReadRestrictionsAreMarkedAsNotEnforced(t *testing.T) {
+	rig := newArchRig(t)
+	openLayersTab(t, rig)
+	var note string
+	rig.run(t,
+		addLayerBy("folder"),
+		setLayerField(0, "name", "secrets"),
+		setLayerField(0, "pattern", "secrets"),
+		poll(hasCell("default on secrets: read")),
+		chromedp.Click(cellSel("default on secrets: read"), chromedp.ByQuery),
+		chromedp.Click(cellSel("default on secrets: change"), chromedp.ByQuery),
+		poll(hasCell("default on secrets: none")),
+		poll(`document.querySelector('#architecture-panel-layers [data-read-note]')?.checkVisibility()`),
+		layerTextOf(`#architecture-panel-layers [data-read-note]`, &note),
+	)
+	if !strings.Contains(note, "shown to agents, not enforced") {
+		t.Fatalf("note = %q", note)
+	}
+}

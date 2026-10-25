@@ -7,6 +7,7 @@ import { sandboxesTab } from "./tabs/sandboxesTab.js";
 import { orchestrationTab } from "./tabs/orchestrationTab.js";
 import { hooksTab } from "./tabs/hooksTab.js";
 import { layersTab } from "./tabs/layersTab.js";
+import { accessMatrix } from "./tabs/accessMatrix.js";
 import { outputTab } from "./tabs/outputTab.js";
 
 /**
@@ -21,5 +22,6 @@ export function registerArchitecture(Alpine, deps) {
   Alpine.data("architectureOrchestrationTab", orchestrationTab(deps));
   Alpine.data("architectureHooksTab", hooksTab(deps));
   Alpine.data("architectureLayersTab", layersTab(deps));
+  Alpine.data("architectureAccessMatrix", accessMatrix(deps));
   Alpine.data("architectureOutputTab", outputTab(deps));
 }
