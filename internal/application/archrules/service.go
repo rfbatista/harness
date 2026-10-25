@@ -82,6 +82,8 @@ func (s *Service) resolve(ctx context.Context, sessionID string) (who, bool) {
 	if err != nil || cur == nil {
 		return who{}, false
 	}
+	// An agent that cannot be read is treated as plain: a lookup failure never
+	// stops the check, and plain is the narrowest agent.
 	agent := domain.PlainAgent
 	if sess.AgentID != "" {
 		if a, err := s.d.Agents.GetAgent(ctx, sess.AgentID); err == nil && a != nil && a.Name != "" {

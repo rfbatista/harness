@@ -245,6 +245,6 @@ func (s *Service) known(ctx context.Context, projectID string) (knownNames, erro
 func invalidArchitecture(problems []domain.ArchFieldError) error {
 	return &domain.DetailedError{
 		StructuredError: &domain.StructuredError{Code: "ARCHITECTURE_INVALID", Message: "the architecture record is invalid"},
-		Details:         problems,
+		Details:         map[string]any{"errors": problems},
 	}
 }

@@ -109,8 +109,8 @@ func (r *ArchitectureRecordRepository) Save(ctx context.Context, repositoryID, p
 				return err
 			}
 		}
-		stored2, err := m.toStored()
-		out = stored2
+		saved, err := m.toStored()
+		out = saved
 		return err
 	})
 	return out, err

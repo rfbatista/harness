@@ -155,7 +155,8 @@ func clone(m map[string]any) map[string]any {
 
 func errorPaths(body map[string]any) map[string]string {
 	out := map[string]string{}
-	list, _ := body["errors"].([]any)
+	details, _ := body["details"].(map[string]any)
+	list, _ := details["errors"].([]any)
 	for _, e := range list {
 		m := e.(map[string]any)
 		out[m["path"].(string)] = m["code"].(string)
