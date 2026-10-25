@@ -26,6 +26,7 @@ import (
 	"operators-mcp/internal/application/architecture"
 	"operators-mcp/internal/application/capabilities"
 	"operators-mcp/internal/application/projects"
+	"operators-mcp/internal/application/repoarch"
 	"operators-mcp/internal/application/settings"
 	"operators-mcp/internal/application/tooling"
 	"operators-mcp/internal/ports"
@@ -38,6 +39,12 @@ type Deps struct {
 	Repositories    ports.RepositoryRepository
 	Zones           ports.ZoneRepository
 	BoundedContexts ports.BoundedContextRepository
+	// ArchRecords keeps repositories' architecture records; nil disables them.
+	ArchRecords ports.ArchitectureRecordStore
+	// ArchGit reads checkouts for previews and discovery; nil disables them.
+	ArchGit ports.ArchitectureGit
+	// ArchEvents keeps the architecture rule events the API lists.
+	ArchEvents ports.ArchitectureRuleEventStore
 	Agents          ports.AgentRepository
 	Prompts         ports.PromptRepository
 	Skills          ports.SkillRepository
@@ -66,6 +73,8 @@ type Catalog struct {
 	Bus          *eventbus.Bus
 	Projects     *projects.Service
 	Architecture *architecture.Service
+	// RepositoryArchitectures is nil without Deps.ArchRecords.
+	RepositoryArchitectures *repoarch.Service
 	Agents       *agents.Service
 	Capabilities *capabilities.Service
 	Settings     *settings.Service
@@ -112,11 +121,17 @@ func New(d Deps) Catalog {
 		Prompts:         ag,
 	})
 
+	var repoArch *repoarch.Service
+	if d.ArchRecords != nil {
+		repoArch = repoarch.NewService(repoarch.Deps{Store: d.ArchRecords, Repositories: pr, Agents: ag, Contexts: arch, Git: d.ArchGit, MCPServers: caps, Events: d.ArchEvents})
+		repoArch.Subscribe(bus)
+	}
+
 	arch.Subscribe(bus)
 	ag.Subscribe(bus)
 	caps.Subscribe(bus)
 
-	return Catalog{Bus: bus, Projects: pr, Architecture: arch, Agents: ag, Capabilities: caps, Settings: st}
+	return Catalog{Bus: bus, Projects: pr, Architecture: arch, RepositoryArchitectures: repoArch, Agents: ag, Capabilities: caps, Settings: st}
 }
 
 // Tooling is the catalog as the built-in tool groups need it.

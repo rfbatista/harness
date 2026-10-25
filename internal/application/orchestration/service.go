@@ -96,6 +96,10 @@ type Service struct {
 	// commits its shell's files (…/api/sessions/{id}/shell); a session with
 	// a shell gets ShellHooks aimed at it.
 	SessionShellURL func(sessionID string) string
+	// SessionArchitectureURL returns where a session's architecture rules are
+	// checked (…/api/sessions/{id}/architecture). Nil: sessions get no
+	// architecture hooks.
+	SessionArchitectureURL func(sessionID string) string
 	// Terminals hosts RunnerServer interactive sessions. Nil means this
 	// server does not run agents itself; such sessions answer
 	// SERVER_HOSTING_UNAVAILABLE.
@@ -603,6 +607,11 @@ func (s *Service) withShell(id string, subject sessionSubject, cfg *llmkit.Sessi
 	cfg.AppendSystem = appendSection(cfg.AppendSystem, shellSection(dir))
 	if s.SessionShellURL != nil {
 		if dc, ok := withHooks(cfg.Driver, ShellHooks(s.SessionShellURL(id))); ok {
+			cfg.Driver = dc
+		}
+	}
+	if s.SessionArchitectureURL != nil {
+		if dc, ok := withHooks(cfg.Driver, ArchitectureHooks(s.SessionArchitectureURL(id))); ok {
 			cfg.Driver = dc
 		}
 	}
