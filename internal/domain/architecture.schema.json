@@ -1,0 +1,132 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://harness.local/architecture.schema.json",
+  "title": "Repository architecture",
+  "description": "A repository's architecture: instructions, tools, sandboxes and orchestration (descriptive), and layers, access and rules (operative).",
+  "type": "object",
+  "required": ["version", "layers", "unlayered", "rules"],
+  "additionalProperties": false,
+  "properties": {
+    "version": { "const": 1, "description": "The schema version." },
+    "repository": { "type": "string", "description": "The repository name; informational." },
+    "pattern": { "type": "string", "description": "The architectural pattern, such as hexagonal, layered or library." },
+    "instructions": { "type": "array", "items": { "$ref": "#/$defs/instruction" } },
+    "tools": { "type": "array", "items": { "$ref": "#/$defs/tool" } },
+    "sandboxes": { "type": "array", "items": { "$ref": "#/$defs/sandbox" } },
+    "orchestration": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "routing": { "type": "array", "items": { "$ref": "#/$defs/route" } },
+        "handoffs": { "type": "array", "items": { "$ref": "#/$defs/handoff" } }
+      }
+    },
+    "layers": { "type": "array", "maxItems": 100, "items": { "$ref": "#/$defs/layer" } },
+    "unlayered": { "$ref": "#/$defs/access", "description": "Access to paths in no layer." },
+    "rules": { "type": "array", "maxItems": 100, "items": { "$ref": "#/$defs/rule" } }
+  },
+  "$defs": {
+    "name": { "type": "string", "pattern": "^[a-z0-9-]+$" },
+    "agents": { "type": "array", "items": { "type": "string" }, "description": "Agent names from the harness catalog, plus plain, or all." },
+    "level": { "enum": ["none", "read", "change"] },
+    "access": {
+      "type": "object",
+      "required": ["default"],
+      "additionalProperties": false,
+      "properties": {
+        "default": { "$ref": "#/$defs/level" },
+        "agents": { "type": "object", "additionalProperties": { "$ref": "#/$defs/level" } }
+      }
+    },
+    "layer": {
+      "type": "object",
+      "required": ["name", "match"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "$ref": "#/$defs/name" },
+        "match": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "folder": { "type": "string", "minLength": 1, "description": "Repository-relative folder, no leading / and no .." },
+            "regex": { "type": "string", "minLength": 1, "description": "RE2, unanchored, matched against repository-relative paths." }
+          },
+          "oneOf": [{ "required": ["folder"] }, { "required": ["regex"] }]
+        },
+        "bounded_context": { "type": "string" },
+        "purpose": { "type": "string" },
+        "access": { "$ref": "#/$defs/access" }
+      }
+    },
+    "rule": {
+      "type": "object",
+      "required": ["id", "kind", "mode", "message"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/name" },
+        "kind": { "enum": ["edit_outside_layer", "command"] },
+        "at": { "enum": ["before_tool", "after_edit", "before_commit"] },
+        "mode": { "enum": ["blocking", "warning"] },
+        "message": { "type": "string", "minLength": 1 },
+        "agents": { "$ref": "#/$defs/agents" },
+        "command": { "type": "string" },
+        "paths": { "type": "string" },
+        "tools": { "type": "array", "items": { "type": "string" } },
+        "timeout_seconds": { "type": "integer", "minimum": 1, "maximum": 300 }
+      },
+      "allOf": [
+        { "if": { "properties": { "kind": { "const": "command" } } }, "then": { "required": ["at", "command"] } }
+      ]
+    },
+    "instruction": {
+      "type": "object",
+      "required": ["path", "kind"],
+      "additionalProperties": false,
+      "properties": {
+        "path": { "type": "string", "minLength": 1 },
+        "kind": { "enum": ["rules", "skill", "subagent_prompt"] },
+        "applies_to": { "$ref": "#/$defs/agents" },
+        "loaded": { "enum": ["always", "on_demand"] },
+        "note": { "type": "string" }
+      }
+    },
+    "tool": {
+      "type": "object",
+      "required": ["name", "kind"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "kind": { "enum": ["mcp", "function", "api", "cli"] },
+        "used_by": { "$ref": "#/$defs/agents" },
+        "writes": { "type": "boolean" },
+        "usage": { "type": "string" }
+      },
+      "if": { "properties": { "writes": { "const": true } }, "required": ["writes"] },
+      "then": { "required": ["usage"] }
+    },
+    "sandbox": {
+      "type": "object",
+      "required": ["name"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "runs": { "type": "string" },
+        "can_reach": { "type": "array", "items": { "type": "string" } },
+        "cannot_reach": { "type": "array", "items": { "type": "string" } },
+        "used_by": { "$ref": "#/$defs/agents" }
+      }
+    },
+    "route": {
+      "type": "object",
+      "required": ["agent", "model"],
+      "additionalProperties": false,
+      "properties": { "agent": { "type": "string" }, "model": { "type": "string" }, "note": { "type": "string" } }
+    },
+    "handoff": {
+      "type": "object",
+      "required": ["from", "to", "when"],
+      "additionalProperties": false,
+      "properties": { "from": { "type": "string" }, "to": { "type": "string" }, "when": { "type": "string" } }
+    }
+  }
+}
