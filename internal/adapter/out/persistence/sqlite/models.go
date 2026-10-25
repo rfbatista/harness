@@ -1,6 +1,7 @@
 package sqlite
 
 import (
+	"encoding/json"
 	"time"
 
 	"operators-mcp/internal/domain"
@@ -278,6 +279,12 @@ type ZoneModel struct {
 	Rules            promptSlice `gorm:"column:rules"`
 	AssignedAgents   agentSlice  `gorm:"column:assigned_agents"`
 	ExplicitPaths    stringSlice `gorm:"column:explicit_paths"`
+	// RepositoryID, Position and AccessJSON are set on a layer: a zone that
+	// belongs to a repository's architecture. Zones with no repository leave
+	// them empty.
+	RepositoryID string `gorm:"column:repository_id;index"`
+	Position     int    `gorm:"column:position"`
+	AccessJSON   string `gorm:"column:access_json"`
 }
 
 // TableName overrides the table name.
@@ -298,7 +305,47 @@ func (m *ZoneModel) ToDomain() *domain.Zone {
 		Rules:            slicePromptsOrNil([]domain.Prompt(m.Rules)),
 		AssignedAgents:   sliceAgentsOrNil([]domain.Agent(m.AssignedAgents)),
 		ExplicitPaths:    sliceOrNil([]string(m.ExplicitPaths)),
+		RepositoryID:     m.RepositoryID,
+		Position:         m.Position,
+		Access:           accessFromJSON(m.AccessJSON),
 	}
+}
+
+// zoneModelOf is the model of a layer zone.
+func zoneModelOf(z *domain.Zone) ZoneModel {
+	return ZoneModel{
+		ID:               z.ID,
+		ProjectID:        z.ProjectID,
+		BoundedContextID: z.BoundedContextID,
+		Name:             z.Name,
+		Pattern:          z.Pattern,
+		Purpose:          z.Purpose,
+		Rules:            promptSlice(clonePrompts(z.Rules)),
+		AssignedAgents:   agentSlice(cloneAgents(z.AssignedAgents)),
+		ExplicitPaths:    stringSlice(z.ExplicitPaths),
+		RepositoryID:     z.RepositoryID,
+		Position:         z.Position,
+		AccessJSON:       accessToJSON(z.Access),
+	}
+}
+
+func accessToJSON(a *domain.LayerAccess) string {
+	if a == nil {
+		return ""
+	}
+	b, _ := json.Marshal(a)
+	return string(b)
+}
+
+func accessFromJSON(s string) *domain.LayerAccess {
+	if s == "" {
+		return nil
+	}
+	var a domain.LayerAccess
+	if json.Unmarshal([]byte(s), &a) != nil {
+		return nil
+	}
+	return &a
 }
 
 // BoundedContextModel is the GORM model for domain.BoundedContext.
