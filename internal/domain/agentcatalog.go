@@ -173,6 +173,9 @@ type CatalogFileWrite struct {
 	Path   string  `json:"path"`
 	Before *string `json:"before"`
 	After  *string `json:"after"`
+	// Encoding is "base64" when a binary file's text is base64; omitted for
+	// text.
+	Encoding string `json:"encoding,omitempty"`
 }
 
 // CatalogChange is what one save did to the catalog's files.
@@ -235,4 +238,37 @@ type UndoCatalogChange struct {
 // CatalogChanged says which catalog files a write changed.
 type CatalogChanged struct {
 	Paths []string `json:"paths"`
+}
+
+// CatalogSkillInput is a skill as the editor saves it. Files are the files
+// to write besides SKILL.md; DeletedFiles are paths to remove.
+type CatalogSkillInput struct {
+	Name         string                  `json:"name"`
+	Description  string                  `json:"description"`
+	Body         string                  `json:"body"`
+	Files        []CatalogSkillFileInput `json:"files"`
+	DeletedFiles []string                `json:"deleted_files"`
+}
+
+// CatalogSkillFileInput is one file of a skill to write. Encoding is
+// "base64" for binary content, otherwise text.
+type CatalogSkillFileInput struct {
+	Path     string `json:"path"`
+	Content  string `json:"content"`
+	Encoding string `json:"encoding"`
+}
+
+// CatalogAddTo is the full list of agents and bundles that get a skill.
+type CatalogAddTo struct {
+	Agents  []string `json:"agents"`
+	Bundles []string `json:"bundles"`
+}
+
+// SaveCatalogSkill creates, updates or renames a skill. AddTo nil leaves who
+// gets the skill as it is.
+type SaveCatalogSkill struct {
+	CatalogWriteOptions
+	PreviousName string            `json:"previous_name"`
+	Skill        CatalogSkillInput `json:"skill"`
+	AddTo        *CatalogAddTo     `json:"add_to"`
 }

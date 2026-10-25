@@ -34,6 +34,15 @@ func (f *catalogFixture) post(path string, body any, status int) map[string]any 
 	return out
 }
 
+// postRaw calls a POST endpoint and returns the recorded answer.
+func (f *catalogFixture) postRaw(path string, body any) *httptest.ResponseRecorder {
+	f.t.Helper()
+	raw, _ := json.Marshal(body)
+	rec := httptest.NewRecorder()
+	f.router.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, path, bytes.NewReader(raw)))
+	return rec
+}
+
 func (f *catalogFixture) read(rel string) string {
 	f.t.Helper()
 	b, err := os.ReadFile(filepath.Join(f.dir, filepath.FromSlash(rel)))

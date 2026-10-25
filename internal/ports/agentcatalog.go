@@ -29,6 +29,8 @@ type CatalogEditor interface {
 	DeleteCatalogAgent(in domain.DeleteCatalogItem) (*domain.CatalogWriteResult, error)
 	SaveCatalogBundle(in domain.SaveCatalogBundle) (*domain.CatalogWriteResult, error)
 	DeleteCatalogBundle(in domain.DeleteCatalogItem) (*domain.CatalogWriteResult, error)
+	SaveCatalogSkill(in domain.SaveCatalogSkill) (*domain.CatalogWriteResult, error)
+	DeleteCatalogSkill(in domain.DeleteCatalogItem) (*domain.CatalogWriteResult, error)
 	UndoCatalogChange(in domain.UndoCatalogChange) (*domain.CatalogWriteResult, error)
 }
 

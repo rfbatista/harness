@@ -173,6 +173,8 @@ func NewRouter(h *Handler, opts ...Option) *echo.Echo {
 	g.POST("/delete_catalog_agent", h.handleDeleteCatalogAgent)
 	g.POST("/save_catalog_bundle", h.handleSaveCatalogBundle)
 	g.POST("/delete_catalog_bundle", h.handleDeleteCatalogBundle)
+	g.POST("/save_catalog_skill", h.handleSaveCatalogSkill)
+	g.POST("/delete_catalog_skill", h.handleDeleteCatalogSkill)
 	g.POST("/undo_catalog_change", h.handleUndoCatalogChange)
 
 	// mcp servers

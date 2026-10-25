@@ -98,3 +98,15 @@ func (h *Handler) handleUndoCatalogChange(c echo.Context) error {
 		return h.catalog.UndoCatalogChange(in)
 	})
 }
+
+func (h *Handler) handleSaveCatalogSkill(c echo.Context) error {
+	return catalogWrite(h, c, func(in domain.SaveCatalogSkill) (*domain.CatalogWriteResult, error) {
+		return h.catalog.SaveCatalogSkill(in)
+	})
+}
+
+func (h *Handler) handleDeleteCatalogSkill(c echo.Context) error {
+	return catalogWrite(h, c, func(in domain.DeleteCatalogItem) (*domain.CatalogWriteResult, error) {
+		return h.catalog.DeleteCatalogSkill(in)
+	})
+}

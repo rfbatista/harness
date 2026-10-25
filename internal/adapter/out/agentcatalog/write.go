@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"encoding/base64"
 	"encoding/hex"
 	"errors"
 	"os"
@@ -12,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"unicode/utf8"
 
 	"operators-mcp/internal/domain"
 )
@@ -189,7 +191,7 @@ func (t *txn) commit(opts domain.CatalogWriteOptions, summary string) (*domain.C
 	}
 	change := domain.CatalogChange{Summary: summary, Writes: []domain.CatalogFileWrite{}}
 	for _, e := range t.edits {
-		change.Writes = append(change.Writes, domain.CatalogFileWrite{Path: e.path, Before: text(e.before), After: text(e.after)})
+		change.Writes = append(change.Writes, fileWrite(e))
 	}
 	if opts.DryRun || len(t.edits) == 0 {
 		return &domain.CatalogWriteResult{Change: change, Versions: c.versionsAfter(t.l, keys, false)}, nil
@@ -203,12 +205,31 @@ func (t *txn) commit(opts domain.CatalogWriteOptions, summary string) (*domain.C
 	return &domain.CatalogWriteResult{Change: change, Versions: c.versionsAfter(t.l, keys, true)}, nil
 }
 
-func text(b []byte) *string {
-	if b == nil {
-		return nil
+// fileWrite is a file's before and after as the answer shows them: text, or
+// base64 when either side is binary.
+func fileWrite(e *fileEdit) domain.CatalogFileWrite {
+	w := domain.CatalogFileWrite{Path: e.path}
+	if (e.before != nil && !utf8.Valid(e.before)) || (e.after != nil && !utf8.Valid(e.after)) {
+		w.Encoding = "base64"
+		if e.before != nil {
+			s := base64.StdEncoding.EncodeToString(e.before)
+			w.Before = &s
+		}
+		if e.after != nil {
+			s := base64.StdEncoding.EncodeToString(e.after)
+			w.After = &s
+		}
+		return w
 	}
-	s := string(b)
-	return &s
+	if e.before != nil {
+		s := string(e.before)
+		w.Before = &s
+	}
+	if e.after != nil {
+		s := string(e.after)
+		w.After = &s
+	}
+	return w
 }
 
 func newChangeID() string {
@@ -334,7 +355,7 @@ func (c *Catalog) UndoCatalogChange(in domain.UndoCatalogChange) (*domain.Catalo
 	change := domain.CatalogChange{Summary: "Undid: " + c.last.summary, Writes: []domain.CatalogFileWrite{}}
 	for _, e := range edits {
 		keys[versionKey(e.path)] = true
-		change.Writes = append(change.Writes, domain.CatalogFileWrite{Path: e.path, Before: text(e.before), After: text(e.after)})
+		change.Writes = append(change.Writes, fileWrite(e))
 	}
 	if in.DryRun {
 		return &domain.CatalogWriteResult{Change: change, Versions: c.versionsAfter(l, keys, false)}, nil
