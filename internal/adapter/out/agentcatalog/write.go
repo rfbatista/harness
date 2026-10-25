@@ -27,9 +27,16 @@ type fileEdit struct {
 
 // storedChange is the latest change, kept for an undo.
 type storedChange struct {
-	id      string
-	summary string
-	edits   []*fileEdit
+	id       string
+	summary  string
+	edits    []*fileEdit
+	projects []*projectEdit
+}
+
+// projectEdit is a project's MCP server list a change sets.
+type projectEdit struct {
+	id, name      string
+	before, after []string
 }
 
 // txn is one write being built. Its nodes are copies: nothing on disk or in
@@ -40,6 +47,9 @@ type txn struct {
 	agents      *node
 	serversRoot *node
 	edits       []*fileEdit
+	projects    []*projectEdit
+	// projectList is every project, read once.
+	projectList []*domain.Project
 }
 
 // begin starts a write. The caller holds c.wmu.
@@ -148,6 +158,12 @@ func (c *Catalog) conflict(edits []*fileEdit, moved map[string]bool) error {
 	current := map[string]string{}
 	var changed []map[string]any
 	for key := range moved {
+		if id, ok := strings.CutPrefix(key, "projects/"); ok {
+			names, _ := c.projectNames(id)
+			current[key] = strings.Join(names, ",")
+			changed = append(changed, map[string]any{"path": key, "theirs": strings.Join(names, "\n")})
+			continue
+		}
 		current[key] = c.currentVersion(key)
 	}
 	for _, e := range edits {
@@ -170,6 +186,7 @@ func (t *txn) commit(opts domain.CatalogWriteOptions, summary string) (*domain.C
 	if err := t.finishJSON(); err != nil {
 		return nil, err
 	}
+	t.dropUnchangedProjects()
 	keys := map[string]bool{}
 	for _, e := range t.edits {
 		keys[versionKey(e.path)] = true
@@ -193,14 +210,21 @@ func (t *txn) commit(opts domain.CatalogWriteOptions, summary string) (*domain.C
 	for _, e := range t.edits {
 		change.Writes = append(change.Writes, fileWrite(e))
 	}
-	if opts.DryRun || len(t.edits) == 0 {
+	for _, p := range t.projects {
+		change.Projects = append(change.Projects, domain.CatalogProjectChange{ID: p.id, Name: p.name, Before: p.before, After: p.after})
+		keys["projects/"+p.id] = true
+	}
+	if change.Projects == nil {
+		change.Projects = []domain.CatalogProjectChange{}
+	}
+	if opts.DryRun || len(t.edits) == 0 && len(t.projects) == 0 {
 		return &domain.CatalogWriteResult{Change: change, Versions: c.versionsAfter(t.l, keys, false)}, nil
 	}
-	if err := c.apply(t.edits); err != nil {
+	if err := c.applyAll(t.edits, t.projects); err != nil {
 		return nil, err
 	}
 	change.ID = newChangeID()
-	c.last = &storedChange{id: change.ID, summary: summary, edits: t.edits}
+	c.last = &storedChange{id: change.ID, summary: summary, edits: t.edits, projects: t.projects}
 	c.publish(sortedKeys(keys))
 	return &domain.CatalogWriteResult{Change: change, Versions: c.versionsAfter(t.l, keys, true)}, nil
 }
@@ -249,6 +273,9 @@ func (c *Catalog) versionsAfter(l *loaded, touched map[string]bool, written bool
 		return out
 	}
 	for k := range touched {
+		if strings.HasPrefix(k, "projects/") {
+			continue
+		}
 		if v := c.currentVersion(k); v != "" {
 			out[k] = v
 		} else {
@@ -264,6 +291,26 @@ func (c *Catalog) apply(edits []*fileEdit) error {
 	for i, e := range edits {
 		if err := c.writeFile(e.path, e.after); err != nil {
 			for j := i; j >= 0; j-- {
+				_ = c.writeFile(edits[j].path, edits[j].before)
+			}
+			return err
+		}
+	}
+	return nil
+}
+
+// applyAll writes the files, then the project lists. A failure puts back
+// whatever was already written.
+func (c *Catalog) applyAll(edits []*fileEdit, projects []*projectEdit) error {
+	if err := c.apply(edits); err != nil {
+		return err
+	}
+	for i, p := range projects {
+		if err := c.setProjectNames(p.id, p.after); err != nil {
+			for j := i - 1; j >= 0; j-- {
+				_ = c.setProjectNames(projects[j].id, projects[j].before)
+			}
+			for j := len(edits) - 1; j >= 0; j-- {
 				_ = c.writeFile(edits[j].path, edits[j].before)
 			}
 			return err
@@ -348,11 +395,23 @@ func (c *Catalog) UndoCatalogChange(in domain.UndoCatalogChange) (*domain.Catalo
 		}
 		edits = append(edits, &fileEdit{path: e.path, before: e.after, after: e.before})
 	}
+	var projects []*projectEdit
+	for i := len(c.last.projects) - 1; i >= 0; i-- {
+		p := c.last.projects[i]
+		if cur, ok := c.projectNames(p.id); !ok || !sameNames(cur, p.after) {
+			moved["projects/"+p.id] = true
+		}
+		projects = append(projects, &projectEdit{id: p.id, name: p.name, before: p.after, after: p.before})
+	}
 	if len(moved) > 0 && !in.Force {
 		return nil, c.conflict(edits, moved)
 	}
 	keys := map[string]bool{}
-	change := domain.CatalogChange{Summary: "Undid: " + c.last.summary, Writes: []domain.CatalogFileWrite{}}
+	change := domain.CatalogChange{Summary: "Undid: " + c.last.summary, Writes: []domain.CatalogFileWrite{}, Projects: []domain.CatalogProjectChange{}}
+	for _, p := range projects {
+		change.Projects = append(change.Projects, domain.CatalogProjectChange{ID: p.id, Name: p.name, Before: p.before, After: p.after})
+		keys["projects/"+p.id] = true
+	}
 	for _, e := range edits {
 		keys[versionKey(e.path)] = true
 		change.Writes = append(change.Writes, fileWrite(e))
@@ -360,11 +419,11 @@ func (c *Catalog) UndoCatalogChange(in domain.UndoCatalogChange) (*domain.Catalo
 	if in.DryRun {
 		return &domain.CatalogWriteResult{Change: change, Versions: c.versionsAfter(l, keys, false)}, nil
 	}
-	if err := c.apply(edits); err != nil {
+	if err := c.applyAll(edits, projects); err != nil {
 		return nil, err
 	}
 	change.ID = newChangeID()
-	c.last = &storedChange{id: change.ID, summary: change.Summary, edits: edits}
+	c.last = &storedChange{id: change.ID, summary: change.Summary, edits: edits, projects: projects}
 	c.publish(sortedKeys(keys))
 	return &domain.CatalogWriteResult{Change: change, Versions: c.versionsAfter(l, keys, true)}, nil
 }

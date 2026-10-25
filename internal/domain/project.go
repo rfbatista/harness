@@ -16,6 +16,9 @@ type Project struct {
 	// project, not only the one its session works in. On for a new project and
 	// for one stored before the setting existed.
 	AgentsReadAllRepos bool `json:"agents_read_all_repos"`
+	// MCPServers names the catalog's MCP servers every session of the
+	// project gets, on top of its agent's (ADR 0031).
+	MCPServers []string `json:"mcp_servers,omitempty"`
 }
 
 // CleanProjectName trims a project name; an empty one is INVALID_INPUT.

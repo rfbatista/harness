@@ -267,8 +267,15 @@ func (c *Catalog) ReadCatalog() (*domain.CatalogView, error) {
 		})
 	}
 
+	projects := c.listProjects()
 	for _, name := range serverNames {
-		v.MCPServers = append(v.MCPServers, c.serverView(name, l.servers.get(name), agentsOfServer[name]))
+		srv := c.serverView(name, l.servers.get(name), agentsOfServer[name])
+		for _, p := range projects {
+			if contains(p.MCPServers, name) {
+				srv.Projects = append(srv.Projects, domain.CatalogProjectRef{ID: p.ID, Name: p.Name})
+			}
+		}
+		v.MCPServers = append(v.MCPServers, srv)
 	}
 	return v, nil
 }

@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -10,27 +11,54 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/rfbatista/harnesskit/mcpserver"
+
 	"operators-mcp/internal/adapter/out/agentcatalog"
+	"operators-mcp/internal/adapter/out/persistence/sqlite"
+	"operators-mcp/internal/app/catalog"
+	"operators-mcp/internal/application/projects"
 )
 
 // catalogFixture is an agent catalog folder in a temporary directory, served
 // over the HTTP API.
 type catalogFixture struct {
-	t      *testing.T
-	dir    string
-	router http.Handler
-	env    map[string]string
+	t        *testing.T
+	dir      string
+	router   http.Handler
+	env      map[string]string
+	projects *projects.Service
+	prober   *fakeProber
 }
 
 func newCatalogFixture(t *testing.T) *catalogFixture {
 	t.Helper()
-	f := &catalogFixture{t: t, dir: filepath.Join(t.TempDir(), "agents"), env: map[string]string{}}
-	cat := agentcatalog.New(f.dir, agentcatalog.WithEnv(func(k string) (string, bool) {
-		v, ok := f.env[k]
-		return v, ok
-	}))
+	db, err := sqlite.Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	app := catalog.New(catalog.SQLiteDeps(db))
+	f := &catalogFixture{t: t, dir: filepath.Join(t.TempDir(), "agents"), env: map[string]string{}, projects: app.Projects, prober: &fakeProber{}}
+	cat := agentcatalog.New(f.dir,
+		agentcatalog.WithEnv(func(k string) (string, bool) {
+			v, ok := f.env[k]
+			return v, ok
+		}),
+		agentcatalog.WithProjects(app.Projects),
+		agentcatalog.WithProber(f.prober))
 	f.router = NewRouter(NewHandler(Services{Catalog: cat}))
 	return f
+}
+
+// fakeProber answers a probe with what a test set, and keeps what it was asked.
+type fakeProber struct {
+	got    mcpserver.Server
+	result mcpserver.ProbeResult
+	err    error
+}
+
+func (p *fakeProber) Probe(_ context.Context, s mcpserver.Server) (mcpserver.ProbeResult, error) {
+	p.got = s
+	return p.result, p.err
 }
 
 func (f *catalogFixture) write(rel, content string) {

@@ -110,3 +110,56 @@ func (h *Handler) handleDeleteCatalogSkill(c echo.Context) error {
 		return h.catalog.DeleteCatalogSkill(in)
 	})
 }
+
+func (h *Handler) handleSaveCatalogMCPServer(c echo.Context) error {
+	return catalogWrite(h, c, func(in domain.SaveCatalogMCPServer) (*domain.CatalogWriteResult, error) {
+		return h.catalog.SaveCatalogMCPServer(in)
+	})
+}
+
+func (h *Handler) handleDeleteCatalogMCPServer(c echo.Context) error {
+	return catalogWrite(h, c, func(in domain.DeleteCatalogItem) (*domain.CatalogWriteResult, error) {
+		return h.catalog.DeleteCatalogMCPServer(in)
+	})
+}
+
+func (h *Handler) handleTestCatalogMCPServer(c echo.Context) error {
+	if err := h.catalogOrUnavailable(); err != nil {
+		return err
+	}
+	var in domain.TestCatalogMCPServer
+	if err := bindJSON(c, &in); err != nil {
+		return err
+	}
+	out, err := h.catalog.TestCatalogMCPServer(c.Request().Context(), in)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, out)
+}
+
+func (h *Handler) handleGetProjectMCPServers(c echo.Context) error {
+	if err := h.catalogOrUnavailable(); err != nil {
+		return err
+	}
+	out, err := h.catalog.GetProjectMCPServers(c.Request().Context(), c.QueryParam("project_id"))
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, out)
+}
+
+func (h *Handler) handleSetProjectMCPServers(c echo.Context) error {
+	if err := h.catalogOrUnavailable(); err != nil {
+		return err
+	}
+	var in domain.SetCatalogProjectMCPServers
+	if err := bindJSON(c, &in); err != nil {
+		return err
+	}
+	out, err := h.catalog.SetProjectMCPServers(c.Request().Context(), in)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, out)
+}

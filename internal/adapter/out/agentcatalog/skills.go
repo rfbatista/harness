@@ -272,25 +272,9 @@ func (t *txn) applyAddTo(skillName string, addTo *domain.CatalogAddTo) (int, err
 	}
 	changed := 0
 	set := func(list *node, wanted bool) {
-		has := false
-		var items []*node
-		for _, it := range list.items {
-			if it.str() == skillName && it.kind == 's' {
-				has = true
-				if !wanted {
-					continue
-				}
-			}
-			items = append(items, it)
-		}
-		switch {
-		case wanted && !has:
-			items = append(items, scalarOf(skillName))
-			changed++
-		case !wanted && has:
+		if setMembership(list, skillName, wanted) {
 			changed++
 		}
-		list.items = items
 	}
 	inList := func(names []string, n string) bool {
 		for _, x := range names {
@@ -316,6 +300,31 @@ func (t *txn) applyAddTo(skillName string, addTo *domain.CatalogAddTo) (int, err
 		set(m.val, inList(addTo.Bundles, m.key))
 	}
 	return changed, nil
+}
+
+// setMembership makes item present in or absent from a list of strings. It
+// says whether the list changed.
+func setMembership(list *node, item string, wanted bool) bool {
+	has := false
+	var items []*node
+	for _, it := range list.items {
+		if it.kind == 's' && it.str() == item {
+			has = true
+			if !wanted {
+				continue
+			}
+		}
+		items = append(items, it)
+	}
+	list.items = items
+	switch {
+	case wanted && !has:
+		list.items = append(list.items, scalarOf(item))
+		return true
+	case !wanted && has:
+		return true
+	}
+	return false
 }
 
 // DeleteCatalogSkill removes a skill's folder and every entry that names it.

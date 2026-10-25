@@ -185,6 +185,8 @@ type ProjectModel struct {
 	// AgentsReadAllRepos is null for a row stored before the setting existed,
 	// which reads as on.
 	AgentsReadAllRepos *bool `gorm:"column:agents_read_all_repos"`
+	// MCPServers are the catalog MCP servers every session of the project gets.
+	MCPServers stringSlice `gorm:"column:mcp_servers"`
 }
 
 // TableName overrides the table name.
@@ -206,6 +208,7 @@ func (m *ProjectModel) ToDomain() *domain.Project {
 		IgnoredPaths: paths,
 
 		AgentsReadAllRepos: m.AgentsReadAllRepos == nil || *m.AgentsReadAllRepos,
+		MCPServers:         append([]string(nil), m.MCPServers...),
 	}
 }
 

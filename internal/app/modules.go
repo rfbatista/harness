@@ -12,6 +12,7 @@ import (
 
 	"go.uber.org/fx"
 
+	"github.com/rfbatista/harnesskit/mcpprobe"
 	"github.com/rfbatista/harnesskit/skillfs"
 	"github.com/rfbatista/llmkit"
 	"github.com/rfbatista/llmkit/approval"
@@ -20,10 +21,10 @@ import (
 
 	"operators-mcp/internal/adapter/in/httpapi"
 	"operators-mcp/internal/adapter/in/mcpsession"
+	"operators-mcp/internal/adapter/out/agentcatalog"
 	"operators-mcp/internal/adapter/out/agents/claudehome"
 	"operators-mcp/internal/adapter/out/agents/claudetext"
 	"operators-mcp/internal/adapter/out/blobstore"
-	"operators-mcp/internal/adapter/out/agentcatalog"
 	"operators-mcp/internal/adapter/out/configrepo"
 	"operators-mcp/internal/adapter/out/developerdir"
 	"operators-mcp/internal/adapter/out/filesystem"
@@ -166,12 +167,12 @@ func newAgentRepository(cfg Config, db *gorm.DB) ports.AgentRepository {
 
 // newAgentCatalog is the agent catalog: the "agents" folder of the data dir
 // (ADR 0030). The folder is made on the first write, not here.
-func newAgentCatalog(cfg Config) (*agentcatalog.Catalog, error) {
+func newAgentCatalog(cfg Config, cat catalog.Catalog) (*agentcatalog.Catalog, error) {
 	dir, err := dataDir(cfg, "agents")
 	if err != nil {
 		return nil, err
 	}
-	return agentcatalog.New(dir), nil
+	return agentcatalog.New(dir, agentcatalog.WithProjects(cat.Projects), agentcatalog.WithProber(mcpprobe.NewProber())), nil
 }
 
 // CatalogModule provides the filesystem adapters (as their ports) and the five

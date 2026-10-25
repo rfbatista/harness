@@ -161,6 +161,22 @@ func (r *ProjectRepository) RemoveIgnoredPath(projectID, path string) (*domain.P
 	return m.ToDomain(), nil
 }
 
+// SetMCPServers stores the catalog MCP servers every session of the project gets.
+func (r *ProjectRepository) SetMCPServers(projectID string, names []string) (*domain.Project, error) {
+	var m ProjectModel
+	if err := r.db.First(&m, "id = ?", projectID).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, &domain.StructuredError{Code: "PROJECT_NOT_FOUND", Message: "project not found"}
+		}
+		return nil, err
+	}
+	m.MCPServers = stringSlice(append([]string{}, names...))
+	if err := r.db.Model(&m).Update("mcp_servers", m.MCPServers).Error; err != nil {
+		return nil, err
+	}
+	return m.ToDomain(), nil
+}
+
 // SetAgentsReadAllRepos stores whether agents may read every repository of the project.
 func (r *ProjectRepository) SetAgentsReadAllRepos(projectID string, on bool) (*domain.Project, error) {
 	var m ProjectModel

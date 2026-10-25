@@ -388,6 +388,17 @@ func (s *Service) SetProjectAgentsReadAllRepos(_ context.Context, projectID stri
 	return s.announced(s.projects.SetAgentsReadAllRepos(projectID, on))
 }
 
+// SetProjectMCPServers stores the catalog MCP servers every session of the
+// project gets. The catalog checks the names; this stores them.
+func (s *Service) SetProjectMCPServers(_ context.Context, projectID string, names []string) (*domain.Project, error) {
+	if projectID == "" {
+		return nil, errProjectIDMissing
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.projects.SetMCPServers(projectID, names)
+}
+
 // announced puts a written project on the feed and passes the write's result
 // through.
 func (s *Service) announced(p *domain.Project, err error) (*domain.Project, error) {

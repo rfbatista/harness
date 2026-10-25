@@ -184,6 +184,8 @@ type CatalogChange struct {
 	ID      string             `json:"id"`
 	Summary string             `json:"summary"`
 	Writes  []CatalogFileWrite `json:"writes"`
+	// Projects are the project MCP server lists the change sets.
+	Projects []CatalogProjectChange `json:"projects"`
 }
 
 // CatalogWriteResult is the answer of every catalog write.
@@ -271,4 +273,70 @@ type SaveCatalogSkill struct {
 	PreviousName string            `json:"previous_name"`
 	Skill        CatalogSkillInput `json:"skill"`
 	AddTo        *CatalogAddTo     `json:"add_to"`
+}
+
+// CatalogProjectChange is the MCP server list of one project a change sets.
+type CatalogProjectChange struct {
+	ID     string   `json:"id"`
+	Name   string   `json:"name"`
+	Before []string `json:"before"`
+	After  []string `json:"after"`
+}
+
+// CatalogServerInput is an MCP server as the editor saves or tests it.
+// Transport is stdio, http or sse; empty reads as stdio.
+type CatalogServerInput struct {
+	Name      string            `json:"name"`
+	Transport string            `json:"transport"`
+	Command   string            `json:"command"`
+	Args      []string          `json:"args"`
+	Env       map[string]string `json:"env"`
+	URL       string            `json:"url"`
+	Headers   map[string]string `json:"headers"`
+}
+
+// SaveCatalogMCPServer creates, updates or renames an MCP server. Agents and
+// Projects are the full lists of who gets it; nil leaves them as they are.
+type SaveCatalogMCPServer struct {
+	CatalogWriteOptions
+	PreviousName string             `json:"previous_name"`
+	Server       CatalogServerInput `json:"server"`
+	Agents       []string           `json:"agents"`
+	Projects     []string           `json:"projects"`
+}
+
+// TestCatalogMCPServer probes an unsaved MCP server.
+type TestCatalogMCPServer struct {
+	Server CatalogServerInput `json:"server"`
+}
+
+// CatalogProbeTool is a tool an MCP server answered with.
+type CatalogProbeTool struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+}
+
+// CatalogProbe is what probing an MCP server found.
+type CatalogProbe struct {
+	Status string             `json:"status"`
+	Tools  []CatalogProbeTool `json:"tools"`
+	Error  string             `json:"error"`
+	Hint   string             `json:"hint"`
+}
+
+// CatalogProbeResult is the answer of a probe.
+type CatalogProbeResult struct {
+	Probe CatalogProbe `json:"probe"`
+}
+
+// SetCatalogProjectMCPServers replaces the MCP servers a project gives its
+// sessions.
+type SetCatalogProjectMCPServers struct {
+	ProjectID  string   `json:"project_id"`
+	MCPServers []string `json:"mcp_servers"`
+}
+
+// CatalogProjectMCPServers is a project's MCP server names.
+type CatalogProjectMCPServers struct {
+	MCPServers []string `json:"mcp_servers"`
 }

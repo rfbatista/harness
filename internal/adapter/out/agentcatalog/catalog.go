@@ -15,7 +15,10 @@ import (
 	"regexp"
 	"sync"
 
+	"github.com/rfbatista/harnesskit/mcpserver"
+
 	"operators-mcp/internal/domain"
+	"operators-mcp/internal/ports"
 )
 
 // File names inside the catalog folder.
@@ -36,6 +39,8 @@ var (
 type Catalog struct {
 	root      string
 	lookupEnv func(string) (string, bool)
+	projects  Projects
+	prober    mcpserver.Prober
 
 	// wmu serializes writes: one change is built and applied at a time.
 	wmu sync.Mutex
@@ -60,6 +65,20 @@ type Option func(*Catalog)
 func WithEnv(lookup func(string) (string, bool)) Option {
 	return func(c *Catalog) { c.lookupEnv = lookup }
 }
+
+// Projects is what the catalog needs of projects: their names and MCP server
+// lists, and a way to set a list (ADR 0031).
+type Projects interface {
+	ports.ProjectReader
+	ports.ProjectMCPServers
+}
+
+// WithProjects gives the catalog the projects whose MCP server lists it reads
+// and writes. Without it, no project has any.
+func WithProjects(p Projects) Option { return func(c *Catalog) { c.projects = p } }
+
+// WithProber sets how an MCP server is tested.
+func WithProber(p mcpserver.Prober) Option { return func(c *Catalog) { c.prober = p } }
 
 // New is the catalog in the folder root. The folder need not exist yet: a
 // missing catalog is an empty one.
