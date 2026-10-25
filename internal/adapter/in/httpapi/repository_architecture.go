@@ -129,3 +129,21 @@ func (h *Handler) handleDiscoverRepositoryArchitecture(c echo.Context) error {
 	}
 	return c.JSON(http.StatusOK, d)
 }
+
+func (h *Handler) handleExportRepositoryArchitecture(c echo.Context) error {
+	if err := h.repositoryArchitectures(); err != nil {
+		return err
+	}
+	var in struct {
+		RepositoryID string `json:"repository_id"`
+		Version      int    `json:"version"`
+	}
+	if err := bindJSON(c, &in); err != nil {
+		return err
+	}
+	res, err := h.repoArch.ExportRepositoryArchitecture(c.Request().Context(), in.RepositoryID, in.Version)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, res)
+}

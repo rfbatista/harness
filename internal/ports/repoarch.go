@@ -31,6 +31,13 @@ type RepositoryArchitectures interface {
 	// sandboxes in the checkout and the harness, for the person to confirm.
 	// It never writes.
 	DiscoverRepositoryArchitecture(ctx context.Context, repositoryID string) (*domain.ArchitectureDiscovery, error)
+	// ExportRepositoryArchitecture writes .harness/architecture.yaml and its
+	// schema into the repository's local checkout and commits them on the
+	// default branch, without pushing. It refuses with ARCHITECTURE_CHANGED
+	// (version is not the current one), ARCHITECTURE_NOT_FOUND, WRONG_BRANCH
+	// and CHECKOUT_DIRTY. Files that already hold the version's content commit
+	// nothing and answer the commit that has them.
+	ExportRepositoryArchitecture(ctx context.Context, repositoryID string, version int) (*domain.ArchitectureExportResult, error)
 }
 
 // StoredArchitecture is a repository's record row.
@@ -62,6 +69,9 @@ type ArchitectureRecordStore interface {
 	Delete(ctx context.Context, repositoryID string) error
 	// DeleteByProject does the same for every repository of the project.
 	DeleteByProject(ctx context.Context, projectID string) error
+	// SetExport records the last export: its version, commit, time and the
+	// SHA-256 of the YAML it wrote. It is not a new version of the record.
+	SetExport(ctx context.Context, repositoryID string, version int, commit string, at time.Time, sha string) (*StoredArchitecture, error)
 }
 
 // ArchitectureGit reads a checkout's default branch for the architecture
@@ -75,4 +85,15 @@ type ArchitectureGit interface {
 	// ReadFile reads path as the branch has it; false when it has no such
 	// file.
 	ReadFile(ctx context.Context, dir, branch, path string) ([]byte, bool, error)
+	// Checkout reads where the checkout is: its branch and what is
+	// uncommitted.
+	Checkout(ctx context.Context, dir string) (CheckoutState, error)
+	// LastCommit is the newest commit of branch that touched path; "" when
+	// none did.
+	LastCommit(ctx context.Context, dir, branch, path string) (string, error)
+	// CommitFiles writes files into the checkout (which is on branch and
+	// clean) and commits only them with message, authored by the harness and
+	// without running the checkout's hooks. It never pushes. On failure the
+	// checkout is as it was. It answers the new commit.
+	CommitFiles(ctx context.Context, dir string, files map[string][]byte, message string) (string, error)
 }

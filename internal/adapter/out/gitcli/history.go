@@ -220,6 +220,21 @@ func (d config) gitOutput(ctx context.Context, dir string, args ...string) (stri
 	return stdout.String(), nil
 }
 
+// gitRun runs git args in dir under ctx, which carries the caller's deadline,
+// and answers its stdout.
+func (d config) gitRun(ctx context.Context, dir string, args ...string) (string, error) {
+	cmd := d.gitCmd(ctx, dir, args...)
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout, cmd.Stderr = &stdout, &stderr
+	if err := cmd.Run(); err != nil {
+		if err := cut(ctx, args[0], err); timedOut(err) {
+			return "", err
+		}
+		return "", fmt.Errorf("git %s: %w: %s", args[0], err, strings.TrimSpace(stderr.String()))
+	}
+	return stdout.String(), nil
+}
+
 // gitOK reports whether git args in dir succeeds, under the read deadline.
 // Only a run that ends with ctx (or the deadline) is an error: a git that
 // answers no is false.

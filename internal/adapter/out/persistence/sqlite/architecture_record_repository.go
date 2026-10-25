@@ -132,3 +132,19 @@ func (r *ArchitectureRecordRepository) DeleteByProject(ctx context.Context, proj
 		return tx.Where("project_id = ?", projectID).Delete(&ArchitectureRecordModel{}).Error
 	})
 }
+
+// SetExport implements ports.ArchitectureRecordStore.
+func (r *ArchitectureRecordRepository) SetExport(ctx context.Context, repositoryID string, version int, commit string, at time.Time, sha string) (*ports.StoredArchitecture, error) {
+	m, err := findRecord(r.db.WithContext(ctx), repositoryID)
+	if err != nil {
+		return nil, err
+	}
+	if m == nil {
+		return nil, &domain.StructuredError{Code: "ARCHITECTURE_NOT_FOUND", Message: "there is no saved architecture"}
+	}
+	m.ExportedVersion, m.ExportedCommit, m.ExportedAt, m.ExportedSHA = version, commit, &at, sha
+	if err := r.db.WithContext(ctx).Model(m).Select("exported_version", "exported_commit", "exported_at", "exported_sha").Updates(m).Error; err != nil {
+		return nil, err
+	}
+	return m.toStored()
+}

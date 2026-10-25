@@ -10,6 +10,7 @@ package repoarch
 
 import (
 	"context"
+	"sync"
 
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
@@ -47,6 +48,9 @@ type Service struct {
 
 	sandboxDriver   func() ports.SandboxDriver
 	sandboxSettings SandboxSource
+
+	mu        sync.Mutex
+	checkouts map[string]*sync.Mutex
 }
 
 // SandboxSource is the person's sandbox configuration, as far as discovery
@@ -64,7 +68,7 @@ func (s *Service) UseSandbox(driver func() ports.SandboxDriver, settings Sandbox
 
 // NewService returns the repository architecture context.
 func NewService(d Deps) *Service {
-	return &Service{store: d.Store, repos: d.Repositories, agents: d.Agents, contexts: d.Contexts, git: d.Git, mcp: d.MCPServers}
+	return &Service{store: d.Store, repos: d.Repositories, agents: d.Agents, contexts: d.Contexts, git: d.Git, mcp: d.MCPServers, checkouts: map[string]*sync.Mutex{}}
 }
 
 // UseFeed sets where saves, deletes and exports are announced: the project
@@ -118,23 +122,35 @@ func (s *Service) GetRepositoryArchitecture(ctx context.Context, repositoryID st
 			Export: domain.ArchitectureExport{State: domain.ExportNeverExported, Path: domain.ArchitectureFilePath},
 		}, nil
 	}
-	return s.architectureOf(repo, stored), nil
+	return s.architectureOf(ctx, repo, stored), nil
 }
 
-func (s *Service) architectureOf(repo *domain.Repository, st *ports.StoredArchitecture) *domain.RepositoryArchitecture {
+func (s *Service) architectureOf(ctx context.Context, repo *domain.Repository, st *ports.StoredArchitecture) *domain.RepositoryArchitecture {
 	return &domain.RepositoryArchitecture{
 		RepositoryID: st.RepositoryID, ProjectID: st.ProjectID, Exists: true, Version: st.Version, UpdatedAt: st.UpdatedAt,
-		Record: st.Record, Export: s.exportOf(st),
+		Record: st.Record, Export: s.exportOf(ctx, repo, st),
 	}
 }
 
-// exportOf is the export block of a stored record. The file's state is told
-// by the export, which reads the checkout.
-func (s *Service) exportOf(st *ports.StoredArchitecture) domain.ArchitectureExport {
+// exportOf is the export block of a stored record.
+func (s *Service) exportOf(ctx context.Context, repo *domain.Repository, st *ports.StoredArchitecture) domain.ArchitectureExport {
 	return domain.ArchitectureExport{
-		State: domain.ExportNeverExported, Path: domain.ArchitectureFilePath,
+		State: s.exportState(ctx, repo, st), Path: domain.ArchitectureFilePath,
 		ExportedVersion: st.ExportedVersion, ExportedCommit: st.ExportedCommit, ExportedAt: st.ExportedAt,
 	}
+}
+
+// lockCheckout serializes the writes to one checkout.
+func (s *Service) lockCheckout(root string) func() {
+	s.mu.Lock()
+	l, ok := s.checkouts[root]
+	if !ok {
+		l = &sync.Mutex{}
+		s.checkouts[root] = l
+	}
+	s.mu.Unlock()
+	l.Lock()
+	return l.Unlock
 }
 
 // SaveRepositoryArchitecture implements ports.RepositoryArchitectures.
@@ -163,7 +179,7 @@ func (s *Service) SaveRepositoryArchitecture(ctx context.Context, repositoryID s
 		return nil, err
 	}
 	s.announce(repo.ProjectID, repositoryID, stored.Version)
-	return s.architectureOf(repo, stored), nil
+	return s.architectureOf(ctx, repo, stored), nil
 }
 
 // DeleteRepositoryArchitecture implements ports.RepositoryArchitectures.

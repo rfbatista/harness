@@ -4,6 +4,9 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
+	"sort"
 	"strings"
 
 	"operators-mcp/internal/ports"
@@ -82,4 +85,71 @@ func (a Architecture) ReadFile(ctx context.Context, dir, branch, path string) ([
 		return nil, false, fmt.Errorf("git cat-file: %w: %s", err, strings.TrimSpace(stderr.String()))
 	}
 	return stdout.Bytes(), true, nil
+}
+
+// Checkout reads the checkout with one git status.
+func (a Architecture) Checkout(ctx context.Context, dir string) (ports.CheckoutState, error) {
+	return Merger{d: a.d}.Checkout(ctx, dir)
+}
+
+// LastCommit is the newest commit of branch that touched path.
+func (a Architecture) LastCommit(ctx context.Context, dir, branch, path string) (string, error) {
+	out, err := a.d.gitOutput(ctx, dir, "log", "-1", "--format=%H", "--end-of-options", "refs/heads/"+branch, "--", path)
+	return strings.TrimSpace(out), err
+}
+
+// harnessIdentity is who an export commits as.
+var harnessIdentity = []string{"-c", "user.name=harness", "-c", "user.email=harness@harness.local"}
+
+// CommitFiles writes files and commits just them.
+func (a Architecture) CommitFiles(ctx context.Context, dir string, files map[string][]byte, message string) (head string, err error) {
+	paths := make([]string, 0, len(files))
+	for p := range files {
+		paths = append(paths, p)
+	}
+	sort.Strings(paths)
+	existed := map[string]bool{}
+	for _, p := range paths {
+		if _, err := os.Stat(filepath.Join(dir, p)); err == nil {
+			existed[p] = true
+		}
+	}
+	undo := func() {
+		uctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), a.d.worktree())
+		defer cancel()
+		_, _ = a.d.gitOutput(uctx, dir, append([]string{"reset", "-q", "--"}, paths...)...)
+		for _, p := range paths {
+			if existed[p] {
+				_, _ = a.d.gitOutput(uctx, dir, "checkout", "-q", "--", p)
+			} else {
+				_ = os.Remove(filepath.Join(dir, p))
+			}
+		}
+		// Drop the folder when the export made it and it is empty again.
+		_ = os.Remove(filepath.Join(dir, filepath.Dir(paths[0])))
+	}
+	for _, p := range paths {
+		full := filepath.Join(dir, p)
+		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+			undo()
+			return "", err
+		}
+		if err := os.WriteFile(full, files[p], 0o644); err != nil {
+			undo()
+			return "", err
+		}
+	}
+	cctx, cancel := context.WithTimeout(ctx, a.d.worktree())
+	defer cancel()
+	if _, err := a.d.gitRun(cctx, dir, append([]string{"add", "--"}, paths...)...); err != nil {
+		undo()
+		return "", err
+	}
+	args := append(append([]string{}, harnessIdentity...), "commit", "-q", "--no-verify", "-m", message, "--")
+	if _, err := a.d.gitRun(cctx, dir, append(args, paths...)...); err != nil {
+		undo()
+		return "", err
+	}
+	out, err := a.d.gitOutput(ctx, dir, "rev-parse", "--verify", "HEAD")
+	return strings.TrimSpace(out), err
 }

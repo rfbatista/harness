@@ -559,3 +559,15 @@ type ArchitectureExport struct {
 	ExportedCommit  string     `json:"exported_commit,omitempty"`
 	ExportedAt      *time.Time `json:"exported_at,omitempty"`
 }
+
+// ArchitectureExportResult is an export's commit and the state afterwards.
+type ArchitectureExportResult struct {
+	Commit string             `json:"commit"`
+	Path   string             `json:"path"`
+	Export ArchitectureExport `json:"export"`
+}
+
+// Paths the export writes.
+const (
+	ArchitectureSchemaPath = ".harness/architecture.schema.json"
+)

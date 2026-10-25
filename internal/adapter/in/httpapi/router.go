@@ -297,6 +297,7 @@ func NewRouter(h *Handler, opts ...Option) *echo.Echo {
 	g.POST("/save_repository_architecture", h.handleSaveRepositoryArchitecture)
 	g.POST("/delete_repository_architecture", h.handleDeleteRepositoryArchitecture)
 	g.POST("/preview_layers", h.handlePreviewLayers)
+	g.POST("/export_repository_architecture", h.handleExportRepositoryArchitecture)
 	g.POST("/discover_repository_architecture", h.handleDiscoverRepositoryArchitecture)
 	g.GET("/architecture.schema.json", h.handleArchitectureSchema)
 
