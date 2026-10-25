@@ -1,0 +1,11 @@
+package architecture
+
+// tabLayers is the Layers tab's panel. It is its own Alpine component,
+// architectureLayersTab, nested in architecturePage: it reads and edits the
+// page's draft and errors through the page's scope.
+templ tabLayers() {
+	<section role="tabpanel" id="architecture-panel-layers" aria-labelledby="architecture-tab-layers" x-show="isTab('layers')" x-data="architectureLayersTab" class="[ flow ]">
+		<h2>Layers</h2>
+		<p class="[ color-ink-muted ]">The parts of the repository, by folder or by pattern, and which agents may read and change each.</p>
+	</section>
+}

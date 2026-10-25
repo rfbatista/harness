@@ -1,0 +1,11 @@
+package architecture
+
+// tabHooks is the Hooks tab's panel. It is its own Alpine component,
+// architectureHooksTab, nested in architecturePage: it reads and edits the
+// page's draft and errors through the page's scope.
+templ tabHooks() {
+	<section role="tabpanel" id="architecture-panel-hooks" aria-labelledby="architecture-tab-hooks" x-show="isTab('hooks')" x-data="architectureHooksTab" class="[ flow ]">
+		<h2>Hooks</h2>
+		<p class="[ color-ink-muted ]">Rules that run at fixed points in an agent's work, blocking or only warning.</p>
+	</section>
+}

@@ -1,0 +1,11 @@
+package architecture
+
+// tabOrchestration is the Orchestration tab's panel. It is its own Alpine component,
+// architectureOrchestrationTab, nested in architecturePage: it reads and edits the
+// page's draft and errors through the page's scope.
+templ tabOrchestration() {
+	<section role="tabpanel" id="architecture-panel-orchestration" aria-labelledby="architecture-tab-orchestration" x-show="isTab('orchestration')" x-data="architectureOrchestrationTab" class="[ flow ]">
+		<h2>Orchestration</h2>
+		<p class="[ color-ink-muted ]">Which model each agent uses, and who hands off to whom.</p>
+	</section>
+}

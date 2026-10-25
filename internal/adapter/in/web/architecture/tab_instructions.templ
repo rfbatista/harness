@@ -1,0 +1,11 @@
+package architecture
+
+// tabInstructions is the Instructions &amp; rules tab's panel. It is its own Alpine component,
+// architectureInstructionsTab, nested in architecturePage: it reads and edits the
+// page's draft and errors through the page's scope.
+templ tabInstructions() {
+	<section role="tabpanel" id="architecture-panel-instructions" aria-labelledby="architecture-tab-instructions" x-show="isTab('instructions')" x-data="architectureInstructionsTab" class="[ flow ]">
+		<h2>Instructions &amp; rules</h2>
+		<p class="[ color-ink-muted ]">The files that define who the agents are, what they care about and what they must not do. Their text is never copied here, only their path.</p>
+	</section>
+}

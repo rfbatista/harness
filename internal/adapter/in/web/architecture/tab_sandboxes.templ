@@ -1,0 +1,11 @@
+package architecture
+
+// tabSandboxes is the Sandboxes tab's panel. It is its own Alpine component,
+// architectureSandboxesTab, nested in architecturePage: it reads and edits the
+// page's draft and errors through the page's scope.
+templ tabSandboxes() {
+	<section role="tabpanel" id="architecture-panel-sandboxes" aria-labelledby="architecture-tab-sandboxes" x-show="isTab('sandboxes')" x-data="architectureSandboxesTab" class="[ flow ]">
+		<h2>Sandboxes</h2>
+		<p class="[ color-ink-muted ]">Where agent code runs, what it can reach and what it cannot.</p>
+	</section>
+}

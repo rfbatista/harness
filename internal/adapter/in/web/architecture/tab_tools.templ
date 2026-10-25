@@ -1,0 +1,11 @@
+package architecture
+
+// tabTools is the Tools tab's panel. It is its own Alpine component,
+// architectureToolsTab, nested in architecturePage: it reads and edits the
+// page's draft and errors through the page's scope.
+templ tabTools() {
+	<section role="tabpanel" id="architecture-panel-tools" aria-labelledby="architecture-tab-tools" x-show="isTab('tools')" x-data="architectureToolsTab" class="[ flow ]">
+		<h2>Tools</h2>
+		<p class="[ color-ink-muted ]">The functions, MCP servers and APIs agents can call, and when and how to call them.</p>
+	</section>
+}
