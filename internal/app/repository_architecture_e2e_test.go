@@ -852,3 +852,47 @@ func TestRepositoryArchitecture_ExportStateTellsWhetherTheFileMatchesTheRecord(t
 		t.Errorf("after restoring the exported file: %s", state)
 	}
 }
+
+func TestLayerZonesAreNotEditableThroughTheZoneEndpoints(t *testing.T) {
+	s := startArchRecordServer(t)
+	for _, a := range []string{"software-architect", "devops", "go-developer"} {
+		s.agent(a)
+	}
+	free, err := s.cat.Architecture.CreateZone(s.repo.ProjectID, "Legacy", "^legacy/", "", nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bc, err := s.cat.Architecture.CreateBoundedContext(s.repo.ProjectID, "core", "", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status, body := s.save(0, sample()); status != http.StatusOK {
+		t.Fatalf("%d %v", status, body)
+	}
+	layer := s.layerZones()[0]
+
+	for verb, in := range map[string]map[string]any{
+		"update_zone":                        {"zone_id": layer.ID, "name": layer.Name, "pattern": ".*"},
+		"assign_path_to_zone":                {"zone_id": layer.ID, "path": "cmd"},
+		"remove_path_from_zone":              {"zone_id": layer.ID, "path": "internal/domain"},
+		"assign_zone_to_bounded_context":     {"zone_id": layer.ID, "bounded_context_id": bc.ID},
+		"unassign_zone_from_bounded_context": {"zone_id": layer.ID},
+	} {
+		status, body := s.post(verb, in)
+		msg, _ := body["error"].(string)
+		if status != http.StatusConflict || body["code"] != "ZONE_IS_LAYER" || !strings.Contains(msg, "Architecture page") {
+			t.Errorf("%s: %d %v", verb, status, body)
+		}
+	}
+	if z := s.cat.Architecture.GetZone(layer.ID); z.Pattern != layer.Pattern || len(z.ExplicitPaths) != len(layer.ExplicitPaths) || z.Access == nil {
+		t.Errorf("a refused call changed the layer: %+v", z)
+	}
+
+	// A zone with no repository behaves as before.
+	if status, body := s.post("assign_path_to_zone", map[string]any{"zone_id": free.ID, "path": "legacy/old"}); status != http.StatusOK {
+		t.Errorf("a free zone: %d %v", status, body)
+	}
+	if status, body := s.post("assign_zone_to_bounded_context", map[string]any{"zone_id": free.ID, "bounded_context_id": bc.ID}); status != http.StatusOK {
+		t.Errorf("a free zone and a bounded context: %d %v", status, body)
+	}
+}
