@@ -51,7 +51,7 @@ func errorHandler(err error, c echo.Context) {
 			"RESOURCE_NOT_FOUND", "COMMENT_NOT_FOUND", "NOTIFICATION_NOT_FOUND",
 			"COMMIT_NOT_FOUND", "REF_NOT_FOUND", "PATH_NOT_FOUND", "GIT_CREDENTIAL_NOT_FOUND",
 			"STREAM_NOT_FOUND", "TOKEN_SAVER_NOT_FOUND", "SANDBOX_PATH_NOT_FOUND",
-			"MANAGED_CLAUDE_VERSION_NOT_FOUND":
+			"MANAGED_CLAUDE_VERSION_NOT_FOUND", "BUNDLE_NOT_FOUND":
 			writeCoded(c, http.StatusNotFound, err, se)
 			return
 		case "INVALID_PATTERN", "INVALID_NAME", "INVALID_ROOT", "INVALID_PATH",
@@ -63,7 +63,7 @@ func errorHandler(err error, c echo.Context) {
 			"ARTIFACT_NOT_PROMOTABLE", "PROJECT_ROOT_INVALID",
 			"PR_NO_REMOTE", "PR_BASE_NOT_FOUND", "TASK_NOT_ON_PROJECT",
 			"GIT_CREDENTIAL_INVALID_KEY", "GIT_CREDENTIAL_HOST_MISMATCH", "GIT_CREDENTIAL_KIND_MISMATCH",
-			"GIT_CREDENTIAL_MISSING":
+			"GIT_CREDENTIAL_MISSING", "UNKNOWN_REFERENCE", "BUNDLE_CYCLE":
 			writeCoded(c, http.StatusBadRequest, err, se)
 			return
 		case "ARTIFACT_NOT_YOURS", "ARCHITECT_ONLY", "TASK_STATUS_OWNED_BY_ARCHITECT", "TASK_DONE_IS_THE_PERSONS", "SESSION_NOT_ON_TASK",
@@ -94,6 +94,7 @@ func errorHandler(err error, c echo.Context) {
 			// request is fine, the state is in the way.
 			"MERGE_NO_BRANCH", "MERGE_NO_CHECKOUT", "MERGE_CHECKOUT_DIRTY", "MERGE_WRONG_BRANCH",
 			"MERGE_ALREADY_MERGED", "MERGE_CONFLICT", "MERGE_BRANCH_NOT_FOUND",
+			"NAME_TAKEN", "CATALOG_CHANGED", "CATALOG_BROKEN", "CHANGE_NOT_UNDOABLE",
 			"MANAGED_CLAUDE_BUSY", "MANAGED_CLAUDE_VERSION_INSTALLED", "MANAGED_CLAUDE_VERSION_CURRENT", "AGENT_OAUTH_BUSY", "AGENT_OAUTH_NOT_WAITING":
 			writeCoded(c, http.StatusConflict, err, se)
 			return
@@ -141,6 +142,14 @@ func writeCoded(c echo.Context, status int, err error, se *domain.StructuredErro
 	var de *domain.DetailedError
 	if errors.As(err, &de) && de.Details != nil {
 		body["details"] = de.Details
+	}
+	// A catalog refusal carries its fields (field, names, suggestion, …) at
+	// the top of the body, beside the code.
+	var ce *domain.CatalogError
+	if errors.As(err, &ce) {
+		for k, v := range ce.Fields {
+			body[k] = v
+		}
 	}
 	_ = c.JSON(status, body)
 }

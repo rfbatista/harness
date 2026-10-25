@@ -165,6 +165,11 @@ func NewRouter(h *Handler, opts ...Option) *echo.Echo {
 	g.GET("/get_agent_auth_status", h.handleGetAgentAuthStatus)
 	g.POST("/sign_out_agent_auth", h.handleSignOutAgentAuth)
 
+	// the agent catalog
+	g.GET("/get_agent_catalog", h.handleGetAgentCatalog)
+	g.GET("/get_catalog_skill", h.handleGetCatalogSkill)
+	g.GET("/check_env_vars", h.handleCheckEnvVars)
+
 	// mcp servers
 	g.GET("/list_mcp_servers", h.handleListMCPServers)
 	g.GET("/get_mcp_server", h.handleGetMCPServer)

@@ -100,6 +100,9 @@ type Services struct {
 	AgentAuth ports.AgentAuth
 	// WritingHelper runs the writing helper's steps; nil answers 503.
 	WritingHelper ports.WritingHelper
+	// Catalog is the agent catalog folder: agents, bundles, skills and MCP
+	// servers; nil answers 503.
+	Catalog ports.CatalogReader
 }
 
 // Handler serves the application's driving ports as HTTP endpoints (the same
@@ -152,6 +155,7 @@ type Handler struct {
 	agentAuth        ports.AgentAuth
 
 	writingHelper ports.WritingHelper
+	catalog       ports.CatalogReader
 
 	streams streamRegistry // the browser tabs' live streams (stream.go)
 }
@@ -202,6 +206,7 @@ func NewHandler(s Services) *Handler {
 		agentAuth:        s.AgentAuth,
 
 		writingHelper: s.WritingHelper,
+		catalog:       s.Catalog,
 	}
 }
 
