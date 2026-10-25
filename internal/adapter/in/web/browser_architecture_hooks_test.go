@@ -154,5 +154,4 @@ func TestHooksTabEmptyMessageShowsAnErrorOnItsField(t *testing.T) {
 	if msg != "A rule needs a message." {
 		t.Fatalf("error = %q", msg)
 	}
-	_ = ruleText
 }
