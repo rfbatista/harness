@@ -55,6 +55,9 @@ type Sources struct {
 	Designs   ports.ShellDesignWriter
 	Sessions  ports.SessionRepository
 	Agents    ports.AgentLister
+	// Architectures lists the repositories architecture files; nil shows
+	// none.
+	Architectures ports.ArchitectureFileReader
 	// Settings holds "Agents move documents to project"; nil reads it as off.
 	Settings ports.SettingsReader
 }
@@ -158,7 +161,7 @@ func (s *Service) Open(ctx context.Context, sessionID string, scope ports.ShellS
 // fill makes the layout's folders and writes every file; a shell with no
 // task (tk nil) gets no task/ folder. The caller holds sh.mu.
 func (s *Service) fill(ctx context.Context, sh *shell, tk *domain.Ticket) error {
-	dirs := []string{"project/docs", "project/designs", tasksDir}
+	dirs := []string{"project/docs", "project/designs", architectureDir, tasksDir}
 	if tk != nil {
 		dirs = append(dirs, "task/docs", "task/comments", "task/resources", "task/designs")
 	}
@@ -340,6 +343,8 @@ func (s *Service) AnnounceChange(c ports.ProjectChange) {
 		s.changed(c.ProjectID(), c.TicketComment.Comment.TicketID)
 	case c.TicketResource != nil && c.TicketResource.Resource != nil:
 		s.changed(c.ProjectID(), c.TicketResource.Resource.TicketID)
+	case c.ArchitectureChanged != nil:
+		s.changed(c.ProjectID(), "")
 	}
 }
 

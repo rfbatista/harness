@@ -450,8 +450,12 @@ func newArtifactsService(cfg Config, repo ports.ArtifactRepository, sessions por
 // and stores the documents and comments agents write in them through
 // planning and their designs through the artifacts.
 func newVirtualShells(plan *planning.Service, art *artifacts.Service, sessions ports.SessionRepository, cat catalog.Catalog) *vshell.Service {
-	return vshell.New(vshell.Sources{Tickets: plan, Documents: plan, Comments: plan, Resources: plan, Artifacts: art, Writes: plan,
-		Designs: art, Sessions: sessions, Agents: cat.Agents, Settings: cat.Settings})
+	src := vshell.Sources{Tickets: plan, Documents: plan, Comments: plan, Resources: plan, Artifacts: art, Writes: plan,
+		Designs: art, Sessions: sessions, Agents: cat.Agents, Settings: cat.Settings}
+	if cat.RepositoryArchitectures != nil {
+		src.Architectures = cat.RepositoryArchitectures
+	}
+	return vshell.New(src)
 }
 
 // bindVirtualShells gives every session with a task its virtual shell, and
@@ -463,6 +467,10 @@ func bindVirtualShells(orch *orchestration.Service, shells *vshell.Service, plan
 	shells.Subscribe(cat.Bus)
 	plan.Feed = changeSinks{plan.Feed, shells}
 	plan.Announcer = ticketAnnouncers{plan.Announcer, shells}
+	// A saved architecture reaches the shells as well as the project feed.
+	if cat.RepositoryArchitectures != nil {
+		cat.RepositoryArchitectures.UseFeed(changeSinks{orch, shells})
+	}
 }
 
 // ticketAnnouncers tells every announcer of each task change in turn.

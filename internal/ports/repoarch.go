@@ -70,6 +70,8 @@ type ArchitectureRecordStore interface {
 	Delete(ctx context.Context, repositoryID string) error
 	// DeleteByProject does the same for every repository of the project.
 	DeleteByProject(ctx context.Context, projectID string) error
+	// ListByProject answers the records of the project's repositories.
+	ListByProject(ctx context.Context, projectID string) ([]*StoredArchitecture, error)
 	// SetExport records the last export: its version, commit, time and the
 	// SHA-256 of the YAML it wrote. It is not a new version of the record.
 	SetExport(ctx context.Context, repositoryID string, version int, commit string, at time.Time, sha string) (*StoredArchitecture, error)

@@ -148,3 +148,20 @@ func (r *ArchitectureRecordRepository) SetExport(ctx context.Context, repository
 	}
 	return m.toStored()
 }
+
+// ListByProject implements ports.ArchitectureRecordStore.
+func (r *ArchitectureRecordRepository) ListByProject(ctx context.Context, projectID string) ([]*ports.StoredArchitecture, error) {
+	var rows []ArchitectureRecordModel
+	if err := r.db.WithContext(ctx).Where("project_id = ?", projectID).Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	out := make([]*ports.StoredArchitecture, 0, len(rows))
+	for i := range rows {
+		st, err := rows[i].toStored()
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, st)
+	}
+	return out, nil
+}

@@ -22,6 +22,8 @@ type ShellFile struct {
 	Version   string    `json:"version"`
 	Title     string    `json:"title"`
 	UpdatedAt time.Time `json:"updated_at"`
+	// Repository names the repository of an architecture file.
+	Repository string `json:"repository,omitempty"`
 }
 
 // The kinds of file a virtual shell holds.
@@ -35,6 +37,8 @@ const (
 	ShellArtifact  = "artifact"
 	ShellAttached  = "attached"
 	ShellDesignURL = "urls"
+	// ShellArchitecture is a repository architecture record as YAML.
+	ShellArchitecture = "architecture"
 )
 
 // VirtualShells makes and removes task sessions' virtual shells.
@@ -163,4 +167,20 @@ type ShellDocumentWriter interface {
 type ShellScope struct {
 	ProjectID string
 	TicketID  string
+}
+
+// ArchitectureFile is a repository architecture record as the virtual shell
+// shows it: its YAML form and its version.
+type ArchitectureFile struct {
+	RepositoryID string
+	Repository   string
+	Version      int
+	YAML         []byte
+	UpdatedAt    time.Time
+}
+
+// ArchitectureFileReader lists the architecture files of a project's
+// repositories that have a record, in the repositories' order.
+type ArchitectureFileReader interface {
+	ListArchitectureFiles(ctx context.Context, projectID string) ([]ArchitectureFile, error)
 }
