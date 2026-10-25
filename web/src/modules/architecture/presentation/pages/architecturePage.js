@@ -283,9 +283,9 @@ export const architecturePage = ({ gateway }) => () => ({
   },
 });
 
-/** The field errors of an ARCHITECTURE_INVALID refusal: its details are { errors: [...] } or the list itself. */
+/** The field errors of an ARCHITECTURE_INVALID refusal: its details are { errors: [...] }. */
 function invalidEntries(details) {
-  const list = Array.isArray(details) ? details : Array.isArray(details?.errors) ? details.errors : [];
+  const list = Array.isArray(details?.errors) ? details.errors : [];
   return list
     .filter((e) => typeof e?.path === "string")
     .map((e) => ({ path: e.path, code: e.code ?? "", message: e.message ?? "" }));
