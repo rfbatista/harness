@@ -19,7 +19,7 @@ templ tabOrchestration() {
 						<div class="[ field ]">
 							<label>
 								Agent
-								<input data-field="agent" class="[ text-sm ]" autocomplete="off" placeholder="go-developer" x-model="row.agent" x-bind:aria-invalid="routeBad(i, 'agent')"/>
+								@agentSelect("agent", "routeBad(i, 'agent')")
 							</label>
 							<template x-if="routeErr(i, 'agent')">
 								<span class="[ error ]" x-bind:data-error-for="routePtr(i, 'agent')"><span aria-hidden="true">✕</span> <span x-text="routeErr(i, 'agent')"></span></span>
@@ -59,7 +59,7 @@ templ tabOrchestration() {
 						<div class="[ field ]">
 							<label>
 								From
-								<input data-field="from" class="[ text-sm ]" autocomplete="off" placeholder="software-architect" x-model="row.from" x-bind:aria-invalid="handoffBad(i, 'from')"/>
+								@agentSelect("from", "handoffBad(i, 'from')")
 							</label>
 							<template x-if="handoffErr(i, 'from')">
 								<span class="[ error ]" x-bind:data-error-for="handoffPtr(i, 'from')"><span aria-hidden="true">✕</span> <span x-text="handoffErr(i, 'from')"></span></span>
@@ -68,7 +68,7 @@ templ tabOrchestration() {
 						<div class="[ field ]">
 							<label>
 								To
-								<input data-field="to" class="[ text-sm ]" autocomplete="off" placeholder="go-developer" x-model="row.to" x-bind:aria-invalid="handoffBad(i, 'to')"/>
+								@agentSelect("to", "handoffBad(i, 'to')")
 							</label>
 							<template x-if="handoffErr(i, 'to')">
 								<span class="[ error ]" x-bind:data-error-for="handoffPtr(i, 'to')"><span aria-hidden="true">✕</span> <span x-text="handoffErr(i, 'to')"></span></span>

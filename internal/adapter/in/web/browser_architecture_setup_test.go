@@ -21,10 +21,11 @@ func archFill(tab string, n int, field, value string) chromedp.Action {
 		if (!e) return false;
 		if (e.type === 'checkbox') { if (e.checked !== (%q === 'on')) e.click(); return true; }
 		e.value = %q;
+		if (e.tagName === 'SELECT' && e.value !== %q) return false; // its options have not arrived yet
 		e.dispatchEvent(new Event('input', { bubbles: true }));
 		e.dispatchEvent(new Event('change', { bubbles: true }));
 		return true;
-	})()`, tab, n, field, value, value))
+	})()`, tab, n, field, value, value, value))
 }
 
 func archCounts() string {
@@ -102,14 +103,14 @@ func TestEntriesAddedInTheDescriptiveTabsAreSavedAndReloaded(t *testing.T) {
 		archFill("instructions", 2, "path", "docs/ARCH.md"),
 		archFill("instructions", 2, "kind", "skill"),
 		archFill("instructions", 2, "loaded", "on_demand"),
-		archFill("instructions", 2, "applies_to", "go-developer, devops"),
+		archPick("instructions", 2, "applies_to", "go-developer", "devops"),
 		archFill("instructions", 2, "note", "Read before a refactor."),
 		// Tools
 		clickTab("Tools"),
 		archClick(`#architecture-panel-tools button[data-size=sm]:not([data-variant])`),
 		archFill("tools", 1, "name", "gh"),
 		archFill("tools", 1, "kind", "cli"),
-		archFill("tools", 1, "used_by", "devops"),
+		archPick("tools", 1, "used_by", "devops"),
 		archFill("tools", 1, "writes", "on"),
 		archFill("tools", 1, "usage", "Open a pull request."),
 		// Sandboxes
@@ -119,7 +120,7 @@ func TestEntriesAddedInTheDescriptiveTabsAreSavedAndReloaded(t *testing.T) {
 		archFill("sandboxes", 1, "runs", "Integration tests."),
 		archFill("sandboxes", 1, "can_reach", "the test network"),
 		archFill("sandboxes", 1, "cannot_reach", "~/.ssh, the host"),
-		archFill("sandboxes", 1, "used_by", "all"),
+		archPick("sandboxes", 1, "used_by", "all"),
 		// Orchestration: a route and a hand-off
 		clickTab("Orchestration"),
 		archClick(`#architecture-panel-orchestration button[data-size=sm]:not([data-variant])`),
@@ -180,9 +181,11 @@ func archFillHandoff(n int, field, value string) chromedp.Action {
 		const e = document.querySelectorAll('#architecture-panel-orchestration [data-entry=handoff]')[%d]?.querySelector('[data-field=%s]');
 		if (!e) return false;
 		e.value = %q;
+		if (e.tagName === 'SELECT' && e.value !== %q) return false;
 		e.dispatchEvent(new Event('input', { bubbles: true }));
+		e.dispatchEvent(new Event('change', { bubbles: true }));
 		return true;
-	})()`, n, field, value))
+	})()`, n, field, value, value))
 }
 
 // A tool that writes needs usage prose: the save is refused, the error shows on

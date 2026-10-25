@@ -1,0 +1,32 @@
+/*
+ * Agent picker — a list of agent names chosen from the catalog: a <details>
+ * whose summary says what is chosen and whose body is a group of checkboxes.
+ * <details class="agent-picker"><summary>…</summary><div class="agent-picker-options">
+ *   <label><input type="checkbox"> name</label>…</div></details>
+ */
+
+@layer blocks {
+  .agent-picker {
+    border: var(--border-width) solid var(--color-line);
+    border-radius: var(--radius-md);
+    padding: var(--space-2xs) var(--space-xs);
+
+    & > summary { cursor: pointer; }
+
+    & .agent-picker-options {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-2xs);
+      margin-block-start: var(--space-xs);
+    }
+
+    & .agent-picker-options label {
+      display: flex;
+      align-items: center;
+      gap: var(--space-xs);
+      font-weight: var(--weight-regular);
+    }
+
+    &[aria-invalid="true"] { border-color: var(--color-danger); }
+  }
+}

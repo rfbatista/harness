@@ -40,10 +40,8 @@ templ tabTools() {
 						</div>
 					</div>
 					<div class="[ field ]">
-						<label>
-							Used by
-							<input data-field="used_by" class="[ text-sm ]" autocomplete="off" placeholder="all, or agent names separated by commas" x-bind:value="csv(row, 'used_by')" x-on:change="setCsv(row, 'used_by', $event)" x-bind:aria-invalid="bad(i, 'used_by')"/>
-						</label>
+						<span class="[ text-sm weight-medium ]">Used by</span>
+						@agentList("used_by", "Used by", "bad(i, 'used_by')")
 						<template x-if="err(i, 'used_by')">
 							<span class="[ error ]" x-bind:data-error-for="ptr(i, 'used_by')"><span aria-hidden="true">✕</span> <span x-text="err(i, 'used_by')"></span></span>
 						</template>

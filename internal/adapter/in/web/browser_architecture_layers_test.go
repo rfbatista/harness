@@ -167,6 +167,7 @@ func TestALayerHasAnOptionalBoundedContextAndPurpose(t *testing.T) {
 	rig.run(t,
 		addLayerBy("folder"),
 		setLayerField(0, "pattern", "internal/domain"),
+		poll(`!!document.querySelector('select[data-field=bounded_context] option[value=sessions]')`),
 		setLayerField(0, "bounded_context", "sessions"),
 		setLayerField(0, "purpose", "Pure domain types."),
 		chromedp.Click(`[data-save-bar] [data-variant=primary]`, chromedp.ByQuery),

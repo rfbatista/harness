@@ -3,9 +3,11 @@
 // reach the page's draft and its field errors.
 
 import { blankSandbox } from "../../domain/descriptive.js";
+import { agentPicker } from "./agentPicker.js";
 import { listEditing } from "./listEditing.js";
 
 /** @param { gateway: ReturnType<typeof import("../../infrastructure/architecture-gateway.js").architectureGateway> } deps */
 export const sandboxesTab = ({ gateway }) => () => ({
+  ...agentPicker({ gateway }),
   ...listEditing(["sandboxes"], blankSandbox),
 });
