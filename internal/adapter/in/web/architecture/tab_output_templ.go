@@ -12,7 +12,7 @@ import templruntime "github.com/a-h/templ/runtime"
 // architectureOutputTab, nested in architecturePage: it reads the page's
 // saved record, draft and export state through the page's scope. Its two
 // views are the architecture file (tabOutputFile, …/architecture/file) and
-// the diagram (…/architecture/diagram).
+// the diagram (tabOutputDiagram, …/architecture/diagram).
 func tabOutput() templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
@@ -34,7 +34,7 @@ func tabOutput() templ.Component {
 			templ_7745c5c3_Var1 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<section role=\"tabpanel\" id=\"architecture-panel-output\" aria-labelledby=\"architecture-tab-output\" x-show=\"isTab('output')\" x-data=\"architectureOutputTab\" class=\"[ flow ]\"><h2>Output</h2><p class=\"[ color-ink-muted ]\">The architecture file in the repository, and a diagram of the architecture.</p><div class=\"[ flow ]\" data-view=\"file\" x-show=\"isFile\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<section role=\"tabpanel\" id=\"architecture-panel-output\" aria-labelledby=\"architecture-tab-output\" x-show=\"isTab('output')\" x-data=\"architectureOutputTab\" class=\"[ flow ]\"><h2>Output</h2><p class=\"[ color-ink-muted ]\">The architecture file in the repository, and a diagram of the architecture.</p><nav class=\"[ segmented ]\" aria-label=\"Output views\" data-size=\"sm\"><template x-for=\"v in views\" x-bind:key=\"v.slug\"><button type=\"button\" x-bind:aria-pressed=\"v.pressed\" x-bind:data-view-button=\"v.slug\" x-on:click=\"openView(v.slug)\" x-text=\"v.label\"></button></template></nav><div class=\"[ flow ]\" data-view=\"file\" x-show=\"isFile\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -42,7 +42,15 @@ func tabOutput() templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, "</div></section>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, "</div><template x-if=\"isDiagram\"><div class=\"[ flow ]\" data-view=\"diagram\">")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = tabOutputDiagram().Render(ctx, templ_7745c5c3_Buffer)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, "</div></template></section>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

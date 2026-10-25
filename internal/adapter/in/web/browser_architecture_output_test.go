@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/chromedp/cdproto/runtime"
 	"github.com/chromedp/chromedp"
 )
 
@@ -230,4 +231,213 @@ func TestArchitectureOutputOpensOnTheFile(t *testing.T) {
 		poll(`location.pathname.endsWith('/architecture/file')`),
 		poll(`!!document.querySelector('[data-view=file]')?.checkVisibility()`),
 	)
+}
+
+// ---- The diagram view ----
+
+const (
+	nAgents  = `document.querySelectorAll('[data-diagram-picture] svg g[data-agent]').length`
+	nLayers  = `document.querySelectorAll('[data-diagram-picture] svg g[data-layer]').length`
+	nEdges   = `document.querySelectorAll('[data-diagram-picture] svg [data-edge]').length`
+	nGuards  = `document.querySelectorAll('[data-diagram-picture] svg g[data-guard]').length`
+	nRegions = `document.querySelectorAll('[data-diagram-picture] svg g[data-region]').length`
+)
+
+func awaitPromise(p *runtime.EvaluateParams) *runtime.EvaluateParams { return p.WithAwaitPromise(true) }
+
+func diagramReady() chromedp.Action {
+	return poll(`!!document.querySelector('[data-diagram-picture] svg g[data-layer]')`)
+}
+
+func textOf(sel string) string {
+	return `(document.querySelector(` + "`" + sel + "`" + `)?.textContent ?? '').replace(/\s+/g, ' ').trim()`
+}
+
+// The diagram shows the layers, the agents, the change edges, the guards on
+// them and the sandbox regions of a saved record.
+func TestArchitectureDiagramDrawsLayersAgentsEdgesGuardsAndRegions(t *testing.T) {
+	rig := newArchRig(t)
+	rig.api.seed(savedRecord())
+	var agents, layers, edges, guards, regions int
+	var blocking, warning string
+	var draft bool
+	rig.run(t,
+		chromedp.EmulateViewport(1280, 900),
+		chromedp.Navigate(rig.url("/diagram")),
+		diagramReady(),
+		chromedp.Evaluate(nAgents, &agents),
+		chromedp.Evaluate(nLayers, &layers),
+		chromedp.Evaluate(nEdges, &edges),
+		chromedp.Evaluate(nGuards, &guards),
+		chromedp.Evaluate(nRegions, &regions),
+		chromedp.Evaluate(`[...document.querySelectorAll('svg g[data-guard][data-mode=blocking] text')].map(g => g.textContent.trim()).join('')`, &blocking),
+		chromedp.Evaluate(`[...document.querySelectorAll('svg g[data-guard][data-mode=warning] text')].map(g => g.textContent.trim()).join('')`, &warning),
+		chromedp.Evaluate(`!!document.querySelector('[data-draft]')`, &draft),
+	)
+	// Three agents of the catalog and "plain"; two layers and the unlayered paths.
+	if agents != 4 || layers != 3 {
+		t.Errorf("agents = %d, layers = %d, want 4 and 3", agents, layers)
+	}
+	// Only change edges when no agent is focused: architect on domain, adapters, unlayered; devops on unlayered.
+	if edges != 4 {
+		t.Errorf("edges = %d, want 4", edges)
+	}
+	// Each change edge has a blocking and a warning guard.
+	if guards != 8 || regions != 1 {
+		t.Errorf("guards = %d, regions = %d, want 8 and 1", guards, regions)
+	}
+	if strings.Trim(blocking, "✕") != "" || blocking == "" || strings.Trim(warning, "!") != "" || warning == "" {
+		t.Errorf("guard glyphs: blocking %q, warning %q", blocking, warning)
+	}
+	if draft {
+		t.Error("a saved record is marked as a draft")
+	}
+}
+
+// An agent is a button; clicking it or pressing Enter on it shows what it can
+// change and read, its tools and its hand-offs.
+func TestArchitectureDiagramFocusShowsReachToolsAndHandoffs(t *testing.T) {
+	rig := newArchRig(t)
+	rig.api.seed(savedRecord())
+	var name, change, read, tools, handoffs, instr string
+	var edges int
+	agentButton := func(n string) string { return `[data-focus-agent][data-agent-name="` + n + `"]` }
+	rig.run(t,
+		chromedp.EmulateViewport(1280, 900),
+		chromedp.Navigate(rig.url("/diagram")),
+		diagramReady(),
+		poll(`document.querySelectorAll('[data-focus-agent]').length === 4`),
+		chromedp.Click(agentButton("go-developer"), chromedp.ByQuery),
+		poll(`!!document.querySelector('[data-focus-panel]')`),
+		chromedp.Evaluate(textOf("[data-focus-name]"), &name),
+		chromedp.Evaluate(textOf("[data-focus-change]"), &change),
+		chromedp.Evaluate(textOf("[data-focus-read]"), &read),
+		chromedp.Evaluate(textOf("[data-focus-tools]"), &tools),
+		chromedp.Evaluate(textOf("[data-focus-handoffs]"), &handoffs),
+		chromedp.Evaluate(textOf("[data-focus-instructions]"), &instr),
+		chromedp.Evaluate(nEdges, &edges),
+	)
+	if name != "go-developer" || change != "nothing" || read != "domain, adapters, unlayered" {
+		t.Errorf("go-developer: name %q, change %q, read %q", name, change, read)
+	}
+	if !strings.Contains(tools, "codegraph (mcp)") || !strings.Contains(handoffs, "software-architect → go-developer") || instr != "2 files" {
+		t.Errorf("tools %q, handoffs %q, instructions %q", tools, handoffs, instr)
+	}
+	if edges != 3 { // its read edges only
+		t.Errorf("focused edges = %d, want 3", edges)
+	}
+	// By keyboard: focus the button and press Enter.
+	rig.run(t,
+		chromedp.Evaluate(`document.querySelector('`+agentButton("software-architect")+`').focus()`, nil),
+		chromedp.KeyEvent("\r"),
+		poll(`document.querySelector('[data-focus-name]')?.textContent.trim() === 'software-architect'`),
+		chromedp.Evaluate(textOf("[data-focus-change]"), &change),
+		chromedp.Evaluate(`document.querySelector('`+agentButton("software-architect")+`').getAttribute('aria-pressed')`, &name),
+	)
+	if change != "domain, adapters, unlayered" || name != "true" {
+		t.Errorf("software-architect: change %q, pressed %q", change, name)
+	}
+}
+
+// An unsaved change shows in the diagram, marked as a draft.
+func TestArchitectureDiagramMarksUnsavedChangesAsDraft(t *testing.T) {
+	rig := newArchRig(t)
+	rig.api.seed(savedRecord())
+	var layers int
+	var badge string
+	rig.run(t,
+		chromedp.EmulateViewport(1280, 900),
+		chromedp.Navigate(rig.url("/diagram")),
+		diagramReady(),
+		chromedp.Evaluate(`document.querySelector('main')._x_dataStack[0].draft.layers.push({ name: 'extra', match: { folder: 'extra' }, access: { default: 'read', agents: { devops: 'change' } } })`, nil),
+		poll(`!!document.querySelector('svg g[data-layer="extra"]')`),
+		poll(`!!document.querySelector('[data-draft]')`),
+		chromedp.Evaluate(nLayers, &layers),
+		chromedp.Evaluate(textOf("[data-draft]"), &badge),
+	)
+	if layers != 4 || !strings.Contains(badge, "Draft") {
+		t.Errorf("layers = %d, badge = %q", layers, badge)
+	}
+	var inSvg bool
+	rig.run(t, chromedp.Evaluate(`!!document.querySelector('svg [data-draft]')`, &inSvg))
+	if !inSvg {
+		t.Error("the picture itself does not say it is a draft")
+	}
+}
+
+// Copy as Mermaid puts the model's Mermaid text on the clipboard; Download SVG yields an SVG.
+func TestArchitectureDiagramCopiesMermaidAndDownloadsSvg(t *testing.T) {
+	rig := newArchRig(t)
+	rig.api.seed(savedRecord())
+	var clip, svg, name string
+	rig.run(t,
+		chromedp.EmulateViewport(1280, 900),
+		chromedp.Navigate(rig.url("/diagram")),
+		diagramReady(),
+		chromedp.Evaluate(`Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async (t) => { window.__clip = t } } })`, nil),
+		chromedp.Click(`[data-copy-mermaid]`, chromedp.ByQuery),
+		poll(`typeof window.__clip === 'string'`),
+		chromedp.Evaluate(`window.__clip`, &clip),
+		poll(`document.querySelector('[data-diagram-notice]').textContent.includes('Mermaid')`),
+		chromedp.Evaluate(`(() => {
+			const create = URL.createObjectURL.bind(URL);
+			URL.createObjectURL = (b) => { window.__blob = b; return create(b) };
+			HTMLAnchorElement.prototype.click = function () { window.__download = this.download };
+		})()`, nil),
+		chromedp.Click(`[data-download-svg]`, chromedp.ByQuery),
+		poll(`!!window.__blob`),
+		chromedp.Evaluate(`window.__blob.text()`, &svg, awaitPromise),
+		chromedp.Evaluate(`window.__download`, &name),
+	)
+	for _, want := range []string{
+		"flowchart LR\n",
+		`subgraph S0["sandbox: seatbelt"]`,
+		`["software-architect"]`,
+		"-->|\"change<br/>✕ stay-in-your-layer<br/>! archtest\"|",
+	} {
+		if !strings.Contains(clip, want) {
+			t.Errorf("the Mermaid text lacks %q:\n%s", want, clip)
+		}
+	}
+	if !strings.HasPrefix(svg, "<svg ") || !strings.Contains(svg, `xmlns="http://www.w3.org/2000/svg"`) || !strings.HasSuffix(strings.TrimSpace(svg), "</svg>") {
+		t.Errorf("the download is not an SVG: %.200s", svg)
+	}
+	if !strings.HasSuffix(name, ".svg") {
+		t.Errorf("download name = %q", name)
+	}
+}
+
+// The views are deep links, switched without a reload; at a narrow width the
+// diagram pans inside its own box instead of widening the page.
+func TestArchitectureDiagramViewsAreDeepLinksAndPanWhenNarrow(t *testing.T) {
+	rig := newArchRig(t)
+	rig.api.seed(savedRecord())
+	var marker string
+	var pans, pageFits bool
+	rig.run(t,
+		chromedp.EmulateViewport(1280, 900),
+		chromedp.Navigate(rig.url("/file")),
+		poll(`!!document.querySelector('[data-view-button=diagram]')`),
+		chromedp.Evaluate(`window.__marker = 'same-page'`, nil),
+		chromedp.Click(`[data-view-button=diagram]`, chromedp.ByQuery),
+		poll(`location.pathname.endsWith('/architecture/diagram')`),
+		diagramReady(),
+		poll(`document.querySelector('[data-view=file]').checkVisibility() === false`),
+		chromedp.Click(`[data-view-button=file]`, chromedp.ByQuery),
+		poll(`location.pathname.endsWith('/architecture/file')`),
+		poll(`document.querySelector('[data-view=file]').checkVisibility()`),
+		chromedp.Evaluate(`window.__marker`, &marker),
+		chromedp.Click(`[data-view-button=diagram]`, chromedp.ByQuery),
+		diagramReady(),
+		chromedp.EmulateViewport(390, 800),
+		poll(`(() => { const s = document.querySelector('[data-diagram-scroll]'); return s.scrollWidth > s.clientWidth })()`),
+		chromedp.Evaluate(`(() => { const s = document.querySelector('[data-diagram-scroll]'); return s.scrollWidth > s.clientWidth })()`, &pans),
+		chromedp.Evaluate(`document.documentElement.scrollWidth <= window.innerWidth`, &pageFits),
+	)
+	if marker != "same-page" {
+		t.Error("switching views reloaded the page")
+	}
+	if !pans || !pageFits {
+		t.Errorf("narrow: diagram pans %v, page fits %v", pans, pageFits)
+	}
 }

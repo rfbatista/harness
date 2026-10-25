@@ -8,6 +8,7 @@ import { orchestrationTab } from "./tabs/orchestrationTab.js";
 import { hooksTab } from "./tabs/hooksTab.js";
 import { layersTab } from "./tabs/layersTab.js";
 import { outputTab } from "./tabs/outputTab.js";
+import { outputDiagram } from "./tabs/outputDiagram.js";
 
 /**
  * @param {import("alpinejs").Alpine} Alpine
@@ -22,4 +23,5 @@ export function registerArchitecture(Alpine, deps) {
   Alpine.data("architectureHooksTab", hooksTab(deps));
   Alpine.data("architectureLayersTab", layersTab(deps));
   Alpine.data("architectureOutputTab", outputTab(deps));
+  Alpine.data("architectureOutputDiagram", outputDiagram(deps));
 }
