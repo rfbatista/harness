@@ -62,8 +62,9 @@ func TestLegacyReads_KeepTheirShapesOverTheCatalog(t *testing.T) {
 	if a.ID != "ux" || a.Name != "ux" || a.Description != "UX" {
 		t.Fatalf("agent = %+v", a)
 	}
-	// Its resolved skills that exist, and its servers that exist.
-	if !reflect.DeepEqual(a.SkillIDs, []string{"tdd", "design"}) || !reflect.DeepEqual(a.MCPServerIDs, []string{"nb"}) {
+	// Its resolved skills and its servers, by name; get_agent resolves the ones
+	// that exist.
+	if !reflect.DeepEqual(a.SkillIDs, []string{"tdd", "design", "ghost"}) || !reflect.DeepEqual(a.MCPServerIDs, []string{"nb", "gone"}) {
 		t.Fatalf("agent refs = %v %v", a.SkillIDs, a.MCPServerIDs)
 	}
 

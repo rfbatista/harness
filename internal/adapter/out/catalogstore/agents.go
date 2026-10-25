@@ -21,57 +21,36 @@ func NewAgents(cat ports.CatalogEditor) *Agents { return &Agents{cat: cat} }
 func (r *Agents) UnlinksItself() bool { return true }
 
 // domainAgent is a catalog agent as the legacy shape holds it: its resolved
-// skills and its servers, those that exist. Its aliases and allowed tools are
-// not part of the shape.
-func domainAgent(a domain.CatalogAgent, servers map[string]bool) *domain.Agent {
-	missing := map[string]bool{}
-	for _, m := range a.MissingSkills {
-		missing[m] = true
+// skills and its servers, by name. Its aliases are not part of the shape.
+func domainAgent(a domain.CatalogAgent) *domain.Agent {
+	return &domain.Agent{
+		ID: a.Name, Name: a.Name, Description: a.Description,
+		SkillIDs:     append([]string(nil), a.ResolvedSkills...),
+		MCPServerIDs: append([]string(nil), a.MCPServers...),
+		AllowedTools: append([]string(nil), a.AllowedTools...),
 	}
-	var skills []string
-	for _, s := range a.ResolvedSkills {
-		if !missing[s] {
-			skills = append(skills, s)
-		}
-	}
-	var names []string
-	for _, s := range a.MCPServers {
-		if servers[s] {
-			names = append(names, s)
-		}
-	}
-	return &domain.Agent{ID: a.Name, Name: a.Name, Description: a.Description, SkillIDs: skills, MCPServerIDs: names}
 }
 
-// serverNames is the set of the catalog's MCP server names.
-func serverNames(view *domain.CatalogView) map[string]bool {
-	out := map[string]bool{}
-	for _, s := range view.MCPServers {
-		out[s.Name] = true
-	}
-	return out
-}
-
-func (r *Agents) find(id string) (*domain.CatalogAgent, map[string]bool, error) {
+func (r *Agents) find(id string) (*domain.CatalogAgent, error) {
 	view, err := r.cat.ReadCatalog()
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	for i := range view.Agents {
 		if view.Agents[i].Name == id {
-			return &view.Agents[i], serverNames(view), nil
+			return &view.Agents[i], nil
 		}
 	}
-	return nil, nil, nil
+	return nil, nil
 }
 
 // Get returns the agent named id, or nil.
 func (r *Agents) Get(id string) *domain.Agent {
-	a, servers, err := r.find(id)
+	a, err := r.find(id)
 	if err != nil || a == nil {
 		return nil
 	}
-	return domainAgent(*a, servers)
+	return domainAgent(*a)
 }
 
 // List returns every agent.
@@ -80,10 +59,9 @@ func (r *Agents) List(context.Context) []*domain.Agent {
 	if err != nil {
 		return nil
 	}
-	servers := serverNames(view)
 	out := make([]*domain.Agent, 0, len(view.Agents))
 	for _, a := range view.Agents {
-		out = append(out, domainAgent(a, servers))
+		out = append(out, domainAgent(a))
 	}
 	return out
 }
@@ -117,7 +95,7 @@ func (r *Agents) Update(id, name, description, promptID string, skillIDs, mcpSer
 	if err := refusePrompt(promptID); err != nil {
 		return nil, err
 	}
-	cur, servers, err := r.find(id)
+	cur, err := r.find(id)
 	if err != nil {
 		return nil, err
 	}
@@ -131,7 +109,7 @@ func (r *Agents) Update(id, name, description, promptID string, skillIDs, mcpSer
 		description = cur.Description
 	}
 	entries := cur.Entries
-	if skillIDs != nil && !sameSet(skillIDs, domainAgent(*cur, servers).SkillIDs) {
+	if skillIDs != nil && !sameSet(skillIDs, domainAgent(*cur).SkillIDs) {
 		entries = skillIDs
 	}
 	if mcpServerIDs == nil {

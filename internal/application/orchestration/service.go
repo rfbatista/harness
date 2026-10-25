@@ -764,7 +764,7 @@ func (s *Service) sessionConfig(id, dir, model string, allowedTools []string, pe
 		ID:           id,
 		WorkingDir:   dir,
 		Model:        model,
-		AllowedTools: allowedTools,
+		AllowedTools: sessionAllowedTools(allowedTools, ag.agent),
 		Permission:   permission,
 		Env:          s.DefaultEnv,
 		AppendSystem: ag.appendSystem,
@@ -794,7 +794,7 @@ func (s *Service) sessionConfig(id, dir, model string, allowedTools []string, pe
 		cfg.AppendSystem = appendSection(cfg.AppendSystem, section)
 	}
 
-	for _, m := range resolveAttachedMCPServers(ag.agent, s.catalog.MCPServers.ListMCPServers()) {
+	for _, m := range resolveAttachedMCPServers(ag.agent, subject.project, s.catalog.MCPServers.ListMCPServers()) {
 		cfg.MCPServers = append(cfg.MCPServers, llmkit.MCPServerSpec{
 			Name:      domain.Slug(m.Name),
 			Transport: m.Transport,

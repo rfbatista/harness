@@ -37,6 +37,7 @@ type launched struct {
 	SessionID string
 	Dir       string
 	Args      []string
+	Env       []string // what the shell adds to its own environment
 	Spec      ports.AgentSpec
 }
 
@@ -47,7 +48,7 @@ func launchOf(t *testing.T, spec ports.AgentSpec) launched {
 	if !errors.Is(err, errCaptured) {
 		t.Fatalf("claude command for %+v: %v", spec, err)
 	}
-	return launched{SessionID: spec.SessionID, Dir: sh.got.Dir, Args: sh.got.Args, Spec: spec}
+	return launched{SessionID: spec.SessionID, Dir: sh.got.Dir, Args: sh.got.Args, Env: sh.got.Env, Spec: spec}
 }
 
 // errCaptured stops a launch once the shell has the command.
