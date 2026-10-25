@@ -26,9 +26,6 @@ export function registerArchitecture(Alpine, deps) {
   Alpine.data("architectureLayersTab", layersTab(deps));
   Alpine.data("architectureAccessMatrix", accessMatrix(deps));
   Alpine.data("architectureOutputTab", outputTab(deps));
-<<<<<<< HEAD
   Alpine.data("architectureOutputDiagram", outputDiagram(deps));
-=======
   Alpine.data("architectureSetup", architectureSetup(deps));
->>>>>>> agent/ui-for-repository-architecture-f1fe34c9
 }
