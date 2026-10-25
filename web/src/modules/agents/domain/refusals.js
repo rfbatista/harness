@@ -23,7 +23,7 @@ const GONE = {
  * @property {string} suggestion  NAME_TAKEN: a free name; else ""
  * @property {string[]} names  UNKNOWN_REFERENCE: what does not exist
  * @property {Record<string, string>} currentVersions  CATALOG_CHANGED
- * @property {{ path: string, theirs: string }[]} changed  CATALOG_CHANGED: each file's current text
+ * @property {{ path: string, theirs: string | null }[]} changed  CATALOG_CHANGED: each file's current text, null if gone
  */
 
 /**

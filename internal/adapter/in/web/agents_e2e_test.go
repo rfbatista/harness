@@ -3,7 +3,6 @@
 package web_test
 
 import (
-	"net/http"
 	"os"
 	"path/filepath"
 	"testing"
@@ -15,22 +14,8 @@ import (
 // server and a temporary catalog (spec "Web UI — the Agents page"): the page
 // shows the catalog folder the read names and what it lists, from the first
 // paint and from the browser's own read.
-//
-// It needs the server's catalog endpoints. On a branch without them
-// /api/get_agent_catalog answers 404 and the test skips. Once the branch is
-// rebased onto the server's, pass the catalog service to httpapi.Services in
-// newTokenSaverWorld (and web.Deps.AgentCatalog for the seed) and it runs.
 func TestAgentsPageShowsTheCatalogInTheBrowser_EndToEnd(t *testing.T) {
 	w := newTokenSaverWorld(t)
-	res, err := w.srv.Client().Get(w.srv.URL + "/api/get_agent_catalog")
-	if err != nil {
-		t.Fatal(err)
-	}
-	_ = res.Body.Close()
-	if res.StatusCode == http.StatusNotFound {
-		t.Skip("the server's catalog endpoints are not on this branch yet: /api/get_agent_catalog answers 404")
-	}
-
 	catalogDir := filepath.Join(w.root, "agents")
 	write := func(rel, text string) {
 		t.Helper()

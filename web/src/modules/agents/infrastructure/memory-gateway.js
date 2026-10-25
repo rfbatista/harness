@@ -220,7 +220,7 @@ export function memoryCatalogServer({ catalog, projects = {}, projectNames = {},
     if (!body.force && body.base_versions) {
       const changed = files.filter((f) => f in body.base_versions && body.base_versions[f] !== cat.versions[f]);
       if (changed.length) {
-        fail("CATALOG_CHANGED", "a file changed on disk", 409, { current_versions: clone(cat.versions), changed: changed.map((path) => ({ path, theirs: textOf[path]?.(cat) ?? "" })) });
+        fail("CATALOG_CHANGED", "a file changed on disk", 409, { current_versions: clone(cat.versions), changed: changed.map((path) => ({ path, theirs: textOf[path]?.(cat) ?? null })) });
       }
     }
     const writes = files.map((path) => ({ path, before: textOf[path]?.(cat) ?? null, after: textOf[path]?.(draft) ?? null }));
@@ -243,7 +243,7 @@ export function memoryCatalogServer({ catalog, projects = {}, projectNames = {},
     "POST undo_catalog_change": ({ change_id: id }) => {
       if (!latest || latest.id !== id) fail("CHANGE_NOT_UNDOABLE", "only the latest change can be undone", 409);
       const moved = latest.files.filter((f) => cat.versions[f] !== latest.after[f]);
-      if (moved.length) fail("CATALOG_CHANGED", "a file changed since", 409, { current_versions: clone(cat.versions), changed: moved.map((path) => ({ path, theirs: textOf[path]?.(cat) ?? "" })) });
+      if (moved.length) fail("CATALOG_CHANGED", "a file changed since", 409, { current_versions: clone(cat.versions), changed: moved.map((path) => ({ path, theirs: textOf[path]?.(cat) ?? null })) });
       const files = latest.files;
       const writes = files.map((path) => ({ path, before: textOf[path]?.(cat) ?? null, after: textOf[path]?.(latest.before.cat) ?? null }));
       const versions = cat.versions;

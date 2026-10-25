@@ -4,7 +4,7 @@
 export function catalogDTO() {
   return {
     root: "/data/agents",
-    versions: { "agents.json": "sha256:a1", "mcp-servers.json": "sha256:m1", "skills/tdd": "sha256:s1", "skills/lint": "sha256:s2" },
+    versions: { "agents.json": "sha256:a1", "mcp-servers.json": "sha256:m1" },
     broken: null,
     agents: [
       {

@@ -6,6 +6,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"testing"
 
 	"github.com/chromedp/chromedp"
@@ -13,6 +14,7 @@ import (
 
 	"operators-mcp/internal/adapter/in/httpapi"
 	"operators-mcp/internal/adapter/in/web"
+	"operators-mcp/internal/adapter/out/agentcatalog"
 	"operators-mcp/internal/app"
 	"operators-mcp/internal/app/catalog"
 	"operators-mcp/internal/application/orchestration"
@@ -24,15 +26,16 @@ import (
 // the HTTP API and the pages, over an in-memory database) on one test
 // server, with a project that has one repository and one task.
 type tokenSaverWorld struct {
-	t       *testing.T
-	ctx     context.Context
-	cat     catalog.Catalog
-	plan    *planning.Service
-	srv     *httptest.Server
-	root    string
-	project *domain.Project
-	repo    *domain.Repository
-	task    *domain.Ticket
+	t        *testing.T
+	ctx      context.Context
+	cat      catalog.Catalog
+	plan     *planning.Service
+	srv      *httptest.Server
+	agentCat *agentcatalog.Catalog
+	root     string
+	project  *domain.Project
+	repo     *domain.Repository
+	task     *domain.Ticket
 }
 
 func newTokenSaverWorld(t *testing.T) *tokenSaverWorld {
@@ -67,14 +70,16 @@ func newTokenSaverWorld(t *testing.T) *tokenSaverWorld {
 	w.repo = w.addRepository()
 	w.task = w.addTask()
 
+	w.agentCat = agentcatalog.New(filepath.Join(w.root, "agents"), agentcatalog.WithProjects(w.cat.Projects))
 	mux := http.NewServeMux()
 	mux.Handle("/api/", httpapi.NewRouter(httpapi.NewHandler(httpapi.Services{
 		Projects: w.cat.Projects, ProjectFeed: w.cat.Projects, Agents: w.cat.Agents, Sessions: orch, Planning: w.plan,
-		TokenSavers: w.cat.Capabilities,
+		TokenSavers: w.cat.Capabilities, Catalog: w.agentCat,
 	})))
 	mux.Handle("/", web.NewHandler(web.Deps{
 		Projects: w.cat.Projects, Tasks: w.plan, Sessions: orch, Agents: w.cat.Agents, Repositories: w.cat.Projects,
 		EnvFiles: w.cat.Projects, ProjectSummaries: w.cat.Projects, TokenSavers: w.cat.Capabilities,
+		AgentCatalog: app.CatalogSeed(w.agentCat),
 	}, assets, nil))
 	// Over HTTP/2: each page keeps an event stream open, and HTTP/1.1's six
 	// connections per host run out across the navigations.
