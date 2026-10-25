@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"slices"
+	"time"
 
 	"operators-mcp/internal/ports"
 )
@@ -17,6 +18,9 @@ import (
 // be checked: the command then runs, as the check never blocks on its own
 // failure.
 const Unreachable = "Architecture rules could not be checked: the harness could not be reached."
+
+// archClient waits as long as a command rule may run (300 s) and a bit more.
+var archClient = &http.Client{Timeout: 330 * time.Second}
 
 // written is the paths an edit writes: a cp only its destination, anything
 // else every path it names (an mv changes its source and its destination).
@@ -62,7 +66,7 @@ func checkArchitecture(base, tool string, edits []edit) (code int, stop bool) {
 
 func askArchitecture(base, tool string, e edit) (ports.ArchitectureVerdict, error) {
 	body, _ := json.Marshal(map[string]any{"op": e.op, "paths": written(e), "tool": tool})
-	res, err := client.Post(base+"/check", "application/json", bytes.NewReader(body))
+	res, err := archClient.Post(base+"/check", "application/json", bytes.NewReader(body))
 	if err != nil {
 		return ports.ArchitectureVerdict{}, err
 	}

@@ -86,7 +86,7 @@ func (h *Handler) handleArchitectureCheck(c echo.Context) error {
 		return c.JSON(http.StatusOK, ports.ArchitectureVerdict{})
 	}
 	return c.JSON(http.StatusOK, h.archRules.CheckArchitecture(ctx, ports.ArchitectureCheck{
-		SessionID: sessionID, Point: domain.PointBeforeTool, Tool: in.Tool, Paths: in.Paths,
+		SessionID: sessionID, Point: domain.PointBeforeTool, Tool: in.Tool, Paths: in.Paths, Shim: true,
 	}))
 }
 

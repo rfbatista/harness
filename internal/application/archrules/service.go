@@ -34,6 +34,11 @@ type Deps struct {
 	// Feed announces each event; nil announces none.
 	Feed ports.ProjectChangeSink
 	Now  func() time.Time
+	// EnvFiles are the repositories' saved env files, whose root .env a
+	// command rule sees; nil gives it the server's environment alone.
+	EnvFiles ports.EnvFileLister
+	// Run runs command rules; nil runs them with sh.
+	Run Runner
 }
 
 // Service checks architecture rules.
@@ -43,6 +48,9 @@ type Service struct{ d Deps }
 func NewService(d Deps) *Service {
 	if d.Now == nil {
 		d.Now = time.Now
+	}
+	if d.Run == nil {
+		d.Run = ShellRunner
 	}
 	return &Service{d: d}
 }
@@ -93,6 +101,10 @@ func (s *Service) CheckArchitecture(ctx context.Context, c ports.ArchitectureChe
 	var v verdict
 	if c.Point == domain.PointBeforeTool || c.Point == domain.PointBeforeCommit {
 		s.editOutsideLayer(ctx, w, c, paths, &v)
+	}
+	// A commit the layers already fail runs no command: it is failing.
+	if len(v.deny) == 0 || c.Point != domain.PointBeforeCommit {
+		s.commandRules(ctx, w, c, paths, &v)
 	}
 	return v.out()
 }

@@ -130,6 +130,10 @@ type ArchitectureCheck struct {
 	Paths []string
 	// Command is the Bash command line of a before-tool check of Bash.
 	Command string
+	// Shim says a PATH shim asked, about the file it is about to write. The
+	// Bash tool's own hook has already run the command rules that name no
+	// paths, so only those with a paths filter run again.
+	Shim bool
 }
 
 // ArchitectureVerdict is the answer: Deny is the text of a blocking rule that

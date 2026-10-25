@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
@@ -432,5 +433,166 @@ func TestAnUnreachableHarnessLetsTheCommitGoAndSaysSo(t *testing.T) {
 	}
 	if !strings.Contains(out, "Architecture rules could not be checked: the harness could not be reached.") {
 		t.Errorf("git printed %q", out)
+	}
+}
+
+// commandRule is a command rule of the saved record; fields override it.
+func commandRule(id, at, mode, command string, extra map[string]any) map[string]any {
+	r := map[string]any{"id": id, "kind": "command", "at": at, "mode": mode, "command": command, "message": "The architecture test failed; see its output."}
+	for k, v := range extra {
+		r[k] = v
+	}
+	return r
+}
+
+// withRules saves the sample record with every agent changing every path (so
+// no edit_outside_layer rule can fire) and just the command rules.
+func (h *archHooks) withRules(rules ...map[string]any) {
+	h.t.Helper()
+	h.save(func(r map[string]any) {
+		list := []any{}
+		for _, rule := range rules {
+			list = append(list, rule)
+		}
+		r["rules"] = list
+		r["layers"].([]any)[0].(map[string]any)["access"] = map[string]any{"default": "change"}
+		r["unlayered"] = map[string]any{"default": "change"}
+	})
+}
+
+func TestACommandRuleAtBeforeToolDeniesOrWarnsWithTheMessageAndTheOutput(t *testing.T) {
+	h := newArchHooks(t, "blocking")
+	a := h.as("go-developer")
+	file := filepath.Join(a.worktree, "internal", "domain", "zone.go")
+
+	h.withRules(commandRule("archtest", "before_tool", "blocking", "echo archtest output; exit 1", map[string]any{"paths": "^internal/", "tools": []any{"Edit"}}))
+	want := denied("Architecture rule archtest (blocking): The architecture test failed; see its output.\narchtest output")
+	if out := runHook(t, a, h.srv.URL, "PreToolUse", archPreMatcher, editInput("Edit", file)); !sameJSON(out, want) {
+		t.Errorf("blocking = %s, want %s", out, want)
+	}
+	// A rule that passes says nothing.
+	h.withRules(commandRule("archtest", "before_tool", "blocking", "exit 0", nil))
+	if out := runHook(t, a, h.srv.URL, "PreToolUse", archPreMatcher, editInput("Edit", file)); out != "" {
+		t.Errorf("a passing rule = %s", out)
+	}
+	h.withRules(commandRule("archtest", "before_tool", "warning", "echo archtest output; exit 1", nil))
+	wantWarn := additionalContext("PreToolUse", "Architecture rule archtest (warning): The architecture test failed; see its output.\narchtest output")
+	if out := runHook(t, a, h.srv.URL, "PreToolUse", archPreMatcher, editInput("Write", file)); !sameJSON(out, wantWarn) {
+		t.Errorf("warning = %s, want %s", out, wantWarn)
+	}
+	// By default the rule covers Bash too.
+	if out := runHook(t, a, h.srv.URL, "PreToolUse", archPreMatcher, bashInput(a.worktree, "ls")); !sameJSON(out, wantWarn) {
+		t.Errorf("Bash = %s, want %s", out, wantWarn)
+	}
+	events := h.events()
+	if len(events) == 0 || events[0]["kind"] != "command" || events[0]["rule_id"] != "archtest" || events[0]["detail"] != "archtest output\n" || events[0]["at_point"] != "before_tool" {
+		t.Errorf("events = %v", events)
+	}
+}
+
+func TestACommandRuleAtAfterEditGivesTheOutputAsContextAndABlockingOneAsksForAnUndo(t *testing.T) {
+	h := newArchHooks(t, "blocking")
+	a := h.as("go-developer")
+	file := filepath.Join(a.worktree, "internal", "domain", "zone.go")
+	h.withRules(commandRule("archtest", "after_edit", "blocking", "echo broke; exit 1", map[string]any{"paths": "zone[.]go$"}))
+	want := additionalContext("PostToolUse", "Architecture rule archtest (blocking): The architecture test failed; see its output.\nbroke\nUndo or fix this change before you go on.")
+	if out := runHook(t, a, h.srv.URL, "PostToolUse", archPostMatcher, editInput("Edit", file)); !sameJSON(out, want) {
+		t.Errorf("blocking = %s, want %s", out, want)
+	}
+	h.withRules(commandRule("archtest", "after_edit", "warning", "echo broke; exit 1", nil))
+	wantWarn := additionalContext("PostToolUse", "Architecture rule archtest (warning): The architecture test failed; see its output.\nbroke")
+	if out := runHook(t, a, h.srv.URL, "PostToolUse", archPostMatcher, editInput("MultiEdit", file)); !sameJSON(out, wantWarn) {
+		t.Errorf("warning = %s, want %s", out, wantWarn)
+	}
+}
+
+func TestACommandRuleAtBeforeCommitRunsAfterTheCommitCheck(t *testing.T) {
+	h := newArchHooks(t, "blocking")
+	a := h.as("go-developer")
+	pointCommitCheckAt(t, a.worktree, h.srv.URL)
+	h.withRules(commandRule("archtest", "before_commit", "blocking", "echo no good; exit 1", map[string]any{"paths": "^internal/"}))
+	head, _ := gitIn(a.worktree, "rev-parse", "HEAD")
+	out, err := stageAndCommit(t, a.worktree, map[string]string{"internal/domain/zone.go": "package domain\n"})
+	if err == nil || !strings.Contains(out, "Architecture rule archtest (blocking): The architecture test failed; see its output.\nno good") {
+		t.Fatalf("a failing blocking rule: %v %s", err, out)
+	}
+	if now, _ := gitIn(a.worktree, "rev-parse", "HEAD"); now != head {
+		t.Error("the commit went through")
+	}
+	h.withRules(commandRule("archtest", "before_commit", "warning", "echo no good; exit 1", nil))
+	out, err = gitIn(a.worktree, "commit", "-q", "-m", "agent change")
+	if err != nil || !strings.Contains(out, "Architecture rule archtest (warning): The architecture test failed; see its output.\nno good") {
+		t.Errorf("a failing warning rule: %v %s", err, out)
+	}
+	if events := h.events(); len(events) < 2 || events[0]["at_point"] != "before_commit" || events[0]["detail"] != "no good\n" {
+		t.Errorf("events = %v", events)
+	}
+
+	// The commit check runs first: when it fails the commit, no command runs.
+	h.save(func(r map[string]any) {
+		r["rules"] = []any{
+			map[string]any{"id": "stay-in-your-layer", "kind": "edit_outside_layer", "mode": "blocking", "message": "Ask the architect."},
+			commandRule("archtest", "before_commit", "warning", "echo no good; exit 1", nil),
+		}
+	})
+	out, err = stageAndCommit(t, a.worktree, map[string]string{"internal/domain/more.go": "package domain\n"})
+	if err == nil || !strings.Contains(out, "stay-in-your-layer") || strings.Contains(out, "archtest") {
+		t.Errorf("a commit the check fails should not run the commands: %v %s", err, out)
+	}
+}
+
+func TestACommandRuleRunsOnlyWhereItsFiltersMatchAndFailsOnATimeout(t *testing.T) {
+	h := newArchHooks(t, "blocking")
+	a := h.as("go-developer")
+	marker := filepath.Join(t.TempDir(), "ran")
+	file := filepath.Join(a.worktree, "internal", "domain", "zone.go")
+	touch := "touch " + marker + "; exit 1"
+	h.withRules(commandRule("archtest", "before_tool", "blocking", touch, map[string]any{"paths": "^cmd/", "tools": []any{"Edit"}}))
+	for name, in := range map[string]map[string]any{
+		"another path": editInput("Edit", file),
+		"another tool": editInput("Write", filepath.Join(a.worktree, "cmd", "main.go")),
+	} {
+		if out := runHook(t, a, h.srv.URL, "PreToolUse", archPreMatcher, in); out != "" {
+			t.Errorf("%s: %s", name, out)
+		}
+	}
+	if _, err := os.Stat(marker); err == nil {
+		t.Error("a rule ran with filters that do not match")
+	}
+	if out := runHook(t, a, h.srv.URL, "PreToolUse", archPreMatcher, editInput("Edit", filepath.Join(a.worktree, "cmd", "main.go"))); out == "" {
+		t.Error("the rule did not run where its filters match")
+	}
+	if _, err := os.Stat(marker); err != nil {
+		t.Error("the command did not run")
+	}
+
+	// A timeout fails the rule.
+	h.withRules(commandRule("slow", "before_tool", "blocking", "sleep 10", map[string]any{"timeout_seconds": 1}))
+	start := time.Now()
+	out := runHook(t, a, h.srv.URL, "PreToolUse", archPreMatcher, editInput("Edit", file))
+	if !strings.Contains(out, "Architecture rule slow (blocking): The architecture test failed; see its output.") || time.Since(start) > 8*time.Second {
+		t.Errorf("a timeout: %s after %v", out, time.Since(start))
+	}
+}
+
+func TestACommandRulesOutputIsCutAt4KBAndItRunsInTheWorktreeWithTheSessionsEnv(t *testing.T) {
+	h := newArchHooks(t, "blocking")
+	a := h.as("go-developer")
+	file := filepath.Join(a.worktree, "internal", "domain", "zone.go")
+	h.withRules(commandRule("big", "before_tool", "warning", "head -c 6000 /dev/zero | tr '\\0' x; exit 1", nil))
+	runHook(t, a, h.srv.URL, "PreToolUse", archPreMatcher, editInput("Edit", file))
+	events := h.events()
+	if len(events) != 1 || len(events[0]["detail"].(string)) != 4096 {
+		t.Fatalf("detail = %d bytes: %v", len(events[0]["detail"].(string)), events[0]["detail"])
+	}
+
+	if _, err := h.cat.Projects.SaveEnvFile(h.ctx, h.repo, ".env", "ARCH_TOKEN=from-the-env-file\n"); err != nil {
+		t.Fatal(err)
+	}
+	h.withRules(commandRule("where", "before_tool", "warning", "pwd; echo $ARCH_TOKEN; exit 1", nil))
+	out := runHook(t, a, h.srv.URL, "PreToolUse", archPreMatcher, editInput("Edit", file))
+	real, _ := filepath.EvalSymlinks(a.worktree)
+	if !strings.Contains(out, real) || !strings.Contains(out, "from-the-env-file") {
+		t.Errorf("the command ran elsewhere or without the env file: %s", out)
 	}
 }

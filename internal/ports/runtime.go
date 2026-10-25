@@ -94,6 +94,8 @@ type HookGroup struct {
 type HookCommand struct {
 	Type    string `json:"type"` // "command"
 	Command string `json:"command"`
+	// Timeout is the most seconds the hook may run; zero for the CLI's default.
+	Timeout int `json:"timeout,omitempty"`
 }
 
 // MCPServerSpec is an MCP server attached to a session.

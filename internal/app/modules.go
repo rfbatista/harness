@@ -640,7 +640,7 @@ func newHub() *orchestration.Hub { return orchestration.NewHub(256) }
 // announcing every failed rule on the orchestration's project feed.
 func newArchitectureRules(cat catalog.Catalog, sessions ports.SessionRepository, events ports.ArchitectureRuleEventStore, orch *orchestration.Service) *archrules.Service {
 	svc := archrules.NewService(archrules.Deps{
-		Sessions: sessions, Agents: cat.Agents, Records: cat.RepositoryArchitectures, Events: events, Feed: orch,
+		Sessions: sessions, Agents: cat.Agents, Records: cat.RepositoryArchitectures, Events: events, Feed: orch, EnvFiles: cat.Projects,
 	})
 	svc.Subscribe(cat.Bus)
 	return svc
