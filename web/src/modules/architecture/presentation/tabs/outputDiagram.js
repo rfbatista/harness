@@ -37,7 +37,7 @@ export const outputDiagram = ({ gateway }) => () => ({
 
   async init() {
     try {
-      this.catalog = (await gateway.discover(this.repositoryId)).agents;
+      this.catalog = await gateway.agents(this.repositoryId);
     } catch {
       this.catalog = []; // the record's own agent names still draw
     }

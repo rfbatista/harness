@@ -63,12 +63,6 @@ export function architectureGateway(api, feed) {
       );
     },
 
-    /** What discovery found in the checkout and the harness; `agents` is the catalog's names. */
-    async discover(repositoryId) {
-      const body = await api.post("/discover_repository_architecture", { repository_id: repositoryId });
-      return { agents: Array.isArray(body?.agents) ? body.agents.filter((a) => typeof a === "string") : [] };
-    },
-
     /** Commits the saved version as the architecture file; refusals (CHECKOUT_DIRTY, WRONG_BRANCH, ARCHITECTURE_CHANGED) arrive as errors. */
     async exportArchitecture(repositoryId, version) {
       const body = await api.post("/export_repository_architecture", { repository_id: repositoryId, version });
