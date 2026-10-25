@@ -41,6 +41,8 @@ type Deps struct {
 	BoundedContexts ports.BoundedContextRepository
 	// ArchRecords keeps repositories' architecture records; nil disables them.
 	ArchRecords ports.ArchitectureRecordStore
+	// ArchGit reads checkouts for previews and discovery; nil disables them.
+	ArchGit ports.ArchitectureGit
 	Agents          ports.AgentRepository
 	Prompts         ports.PromptRepository
 	Skills          ports.SkillRepository
@@ -119,7 +121,7 @@ func New(d Deps) Catalog {
 
 	var repoArch *repoarch.Service
 	if d.ArchRecords != nil {
-		repoArch = repoarch.NewService(repoarch.Deps{Store: d.ArchRecords, Repositories: pr, Agents: ag, Contexts: arch})
+		repoArch = repoarch.NewService(repoarch.Deps{Store: d.ArchRecords, Repositories: pr, Agents: ag, Contexts: arch, Git: d.ArchGit, MCPServers: caps})
 		repoArch.Subscribe(bus)
 	}
 

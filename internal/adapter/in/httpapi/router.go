@@ -296,6 +296,8 @@ func NewRouter(h *Handler, opts ...Option) *echo.Echo {
 	g.POST("/get_repository_architecture", h.handleGetRepositoryArchitecture)
 	g.POST("/save_repository_architecture", h.handleSaveRepositoryArchitecture)
 	g.POST("/delete_repository_architecture", h.handleDeleteRepositoryArchitecture)
+	g.POST("/preview_layers", h.handlePreviewLayers)
+	g.POST("/discover_repository_architecture", h.handleDiscoverRepositoryArchitecture)
 	g.GET("/architecture.schema.json", h.handleArchitectureSchema)
 
 	// code views: read-only file trees, contents, diffs and the zone map

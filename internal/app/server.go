@@ -77,6 +77,11 @@ func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRun
 		notes, noteReader, notifier = inbox.Service, inbox.Service, inbox.Service
 	}
 
+	// Discovery offers the platform's sandbox and what the person added to it.
+	if cat.RepositoryArchitectures != nil {
+		cat.RepositoryArchitectures.UseSandbox(sandboxDriver(orch), sandboxStore)
+	}
+
 	mux := http.NewServeMux()
 	apiRouter := httpapi.NewRouter(httpapi.NewHandler(httpapi.Services{
 		Projects:     cat.Projects,

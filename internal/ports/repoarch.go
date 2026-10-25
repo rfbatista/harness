@@ -24,6 +24,13 @@ type RepositoryArchitectures interface {
 	SaveRepositoryArchitecture(ctx context.Context, repositoryID string, baseVersion int, record domain.ArchitectureRecord) (*domain.RepositoryArchitecture, error)
 	// DeleteRepositoryArchitecture removes the record and its layer zones.
 	DeleteRepositoryArchitecture(ctx context.Context, repositoryID string) error
+	// PreviewLayers says what an unsaved draft of the layers would catch in
+	// the checkout's default branch. It stores nothing.
+	PreviewLayers(ctx context.Context, repositoryID string, layers []domain.ArchLayer) (*domain.LayersPreview, error)
+	// DiscoverRepositoryArchitecture finds instruction files, tools and
+	// sandboxes in the checkout and the harness, for the person to confirm.
+	// It never writes.
+	DiscoverRepositoryArchitecture(ctx context.Context, repositoryID string) (*domain.ArchitectureDiscovery, error)
 }
 
 // StoredArchitecture is a repository's record row.
@@ -55,4 +62,17 @@ type ArchitectureRecordStore interface {
 	Delete(ctx context.Context, repositoryID string) error
 	// DeleteByProject does the same for every repository of the project.
 	DeleteByProject(ctx context.Context, projectID string) error
+}
+
+// ArchitectureGit reads a checkout's default branch for the architecture
+// (driven; gitcli implements it).
+type ArchitectureGit interface {
+	// DefaultBranch is the checkout's default branch: origin's HEAD, main,
+	// master, else the branch checked out. "" when it has none.
+	DefaultBranch(ctx context.Context, dir string) (string, error)
+	// Files lists the files the branch tracks.
+	Files(ctx context.Context, dir, branch string) ([]string, error)
+	// ReadFile reads path as the branch has it; false when it has no such
+	// file.
+	ReadFile(ctx context.Context, dir, branch, path string) ([]byte, bool, error)
 }

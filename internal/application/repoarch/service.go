@@ -26,6 +26,11 @@ type Deps struct {
 	Contexts interface {
 		ListBoundedContexts(projectID string) []*domain.BoundedContext
 	}
+	// Git reads the checkout's default branch; nil leaves previews and
+	// discovery unavailable.
+	Git ports.ArchitectureGit
+	// MCPServers is the harness MCP catalog; nil offers no tool from it.
+	MCPServers interface{ ListMCPServers() []*domain.MCPServer }
 }
 
 // Service implements the repository architecture use cases.
@@ -37,11 +42,29 @@ type Service struct {
 		ListBoundedContexts(projectID string) []*domain.BoundedContext
 	}
 	feed ports.ProjectChangeSink // nil until the orchestration is wired
+	git  ports.ArchitectureGit
+	mcp  interface{ ListMCPServers() []*domain.MCPServer }
+
+	sandboxDriver   func() ports.SandboxDriver
+	sandboxSettings SandboxSource
+}
+
+// SandboxSource is the person's sandbox configuration, as far as discovery
+// reads it.
+type SandboxSource interface {
+	Enabled() bool
+	Paths() []ports.SandboxPath
+}
+
+// UseSandbox tells discovery which sandbox the platform has (the driver may
+// be nil) and what the person added to it.
+func (s *Service) UseSandbox(driver func() ports.SandboxDriver, settings SandboxSource) {
+	s.sandboxDriver, s.sandboxSettings = driver, settings
 }
 
 // NewService returns the repository architecture context.
 func NewService(d Deps) *Service {
-	return &Service{store: d.Store, repos: d.Repositories, agents: d.Agents, contexts: d.Contexts}
+	return &Service{store: d.Store, repos: d.Repositories, agents: d.Agents, contexts: d.Contexts, git: d.Git, mcp: d.MCPServers}
 }
 
 // UseFeed sets where saves, deletes and exports are announced: the project

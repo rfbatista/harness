@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"slices"
 	"testing"
@@ -20,6 +21,7 @@ import (
 	"operators-mcp/internal/app/catalog"
 	"operators-mcp/internal/application/orchestration"
 	"operators-mcp/internal/domain"
+	"operators-mcp/internal/ports"
 )
 
 // archRecordServer is the server as it runs, on a real git repository, with
@@ -450,4 +452,197 @@ func TestRepositoryArchitecture_SavesAndDeletesAreOnTheProjectFeed(t *testing.T)
 	s.sawOnFeed("repository_architecture_changed", `"repository_id":"`+s.repo.ID+`"`, `"version":1`)
 	s.mustPost("delete_repository_architecture", map[string]any{"repository_id": s.repo.ID})
 	s.sawOnFeed("repository_architecture_changed", `"repository_id":"`+s.repo.ID+`"`, `"version":0`)
+}
+
+// commitFiles writes files into the checkout and commits them on main.
+func (s *archRecordServer) commitFiles(files map[string]string) {
+	s.t.Helper()
+	for name, body := range files {
+		path := filepath.Join(s.checkout, name)
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			s.t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+			s.t.Fatal(err)
+		}
+	}
+	gitE2E(s.t, s.checkout, "add", ".")
+	gitE2E(s.t, s.checkout, "commit", "-q", "-m", "add files")
+}
+
+func numbered(prefix string, n int) map[string]string {
+	out := map[string]string{}
+	for i := 0; i < n; i++ {
+		out[prefix+string(rune('a'+i/26))+string(rune('a'+i%26))+".go"] = "package x\n"
+	}
+	return out
+}
+
+func merge(maps ...map[string]string) map[string]string {
+	out := map[string]string{}
+	for _, m := range maps {
+		for k, v := range m {
+			out[k] = v
+		}
+	}
+	return out
+}
+
+func TestRepositoryArchitecture_PreviewCountsSamplesAndOverlapsOfADraft(t *testing.T) {
+	s := startArchRecordServer(t)
+	s.commitFiles(merge(
+		numbered("internal/domain/", 60),
+		numbered("internal/ports/", 3),
+		map[string]string{"cmd/main.go": "package main\n", "README.md": "# widgets\n", "vendor/lib/a.go": "package a\n"},
+	))
+	if _, err := s.cat.Projects.AddRepositoryIgnoredPath(context.Background(), s.repo.ID, "vendor"); err != nil {
+		t.Fatal(err)
+	}
+	// Uncommitted files are not in the default branch.
+	if err := os.WriteFile(filepath.Join(s.checkout, "scratch.go"), []byte("package x\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	layers := []any{
+		map[string]any{"name": "domain", "match": map[string]any{"folder": "internal/domain"}},
+		map[string]any{"name": "ports", "match": map[string]any{"regex": "^internal/(domain|ports)/"}},
+		map[string]any{"name": "cmd", "match": map[string]any{"folder": "cmd"}},
+		map[string]any{"name": "nothing", "match": map[string]any{"folder": "no/such"}},
+		map[string]any{"name": "broken", "match": map[string]any{"regex": "("}},
+		map[string]any{"name": "escape", "match": map[string]any{"folder": "../x"}},
+	}
+	got := s.mustPost("preview_layers", map[string]any{
+		"repository_id": s.repo.ID, "layers": layers, "unlayered": map[string]any{"default": "read"},
+	})
+
+	byName := map[string]map[string]any{}
+	for _, l := range got["layers"].([]any) {
+		m := l.(map[string]any)
+		byName[m["name"].(string)] = m
+	}
+	count := func(name string) float64 { return byName[name]["file_count"].(float64) }
+	if count("domain") != 0 || count("ports") != 63 || count("cmd") != 1 || count("nothing") != 0 {
+		t.Errorf("counts: domain %v ports %v cmd %v nothing %v", count("domain"), count("ports"), count("cmd"), count("nothing"))
+	}
+	if sample := byName["ports"]["sample"].([]any); len(sample) != 20 {
+		t.Errorf("a sample has at most 20 paths: %d", len(sample))
+	}
+	if sample := byName["cmd"]["sample"].([]any); len(sample) != 1 || sample[0] != "cmd/main.go" {
+		t.Errorf("cmd sample = %v", sample)
+	}
+	if byName["ports"]["error"] != nil || byName["cmd"]["error"] != nil {
+		t.Error("a good layer has an error")
+	}
+	if e, _ := byName["broken"]["error"].(map[string]any); e["code"] != "INVALID_REGEX" || count("broken") != 0 {
+		t.Errorf("broken = %v", byName["broken"])
+	}
+	if e, _ := byName["escape"]["error"].(map[string]any); e["code"] != "INVALID_FOLDER" || count("escape") != 0 {
+		t.Errorf("escape = %v", byName["escape"])
+	}
+
+	// Paths in no layer: the README and the root's .gitignore-free files, not
+	// the ignored vendor folder and not the uncommitted file.
+	un := got["unlayered"].(map[string]any)
+	if un["file_count"] != float64(1) || un["sample"].([]any)[0] != "README.md" {
+		t.Errorf("unlayered = %v", un)
+	}
+
+	overlaps := got["overlaps"].([]any)
+	if len(overlaps) != 50 {
+		t.Fatalf("overlaps are capped at 50: %d", len(overlaps))
+	}
+	o := overlaps[0].(map[string]any)
+	if o["winner"] != "ports" || len(o["layers"].([]any)) != 2 || o["layers"].([]any)[0] != "ports" || o["layers"].([]any)[1] != "domain" {
+		t.Errorf("overlap = %v", o)
+	}
+	if p, _ := o["path"].(string); len(p) < len("internal/domain/") || p[:16] != "internal/domain/" {
+		t.Errorf("overlap path = %v", o["path"])
+	}
+	if s.get()["exists"] != false {
+		t.Error("a preview stored something")
+	}
+}
+
+func TestRepositoryArchitecture_DiscoveryFindsInstructionsToolsAndSandboxesWithoutWriting(t *testing.T) {
+	s := startArchRecordServer(t)
+	s.agent("go-developer")
+	s.agent("software-architect")
+	s.cat.RepositoryArchitectures.UseSandbox(func() ports.SandboxDriver { return fakeSandboxDriver{} }, fakeSandboxSettings{})
+	if _, err := s.cat.Capabilities.CreateMCPServer(domain.MCPServerInput{Name: "playwright", Transport: domain.MCPTransportStdio, Command: "npx"}); err != nil {
+		t.Fatal(err)
+	}
+	s.commitFiles(map[string]string{
+		"CLAUDE.md":                      "x",
+		"AGENTS.md":                      "x",
+		"web/GEMINI.md":                  "x",
+		"services/api/AGENTS.md":         "x",
+		".claude/skills/review/SKILL.md": "x",
+		".claude/agents/reviewer.md":     "x",
+		".claude/agents/notes.txt":       "x",
+		"docs/CLAUDE.md.bak":             "x",
+		".mcp.json":                      `{"mcpServers":{"codegraph":{"command":"codegraph"},"browser":{"url":"http://localhost:1"}}}`,
+		"main.go":                        "package main\n",
+	})
+	before := gitE2E(t, s.checkout, "rev-parse", "HEAD")
+
+	got := s.mustPost("discover_repository_architecture", map[string]any{"repository_id": s.repo.ID})
+
+	type cand struct{ kind, loaded, source string }
+	instr := map[string]cand{}
+	for _, c := range got["instructions"].([]any) {
+		m := c.(map[string]any)
+		instr[m["path"].(string)] = cand{m["kind"].(string), m["loaded"].(string), ""}
+	}
+	want := map[string]cand{
+		"CLAUDE.md": {"rules", "always", ""}, "AGENTS.md": {"rules", "always", ""}, "web/GEMINI.md": {"rules", "always", ""},
+		"services/api/AGENTS.md": {"rules", "always", ""}, ".claude/skills/review/SKILL.md": {"skill", "on_demand", ""},
+		".claude/agents/reviewer.md": {"subagent_prompt", "on_demand", ""},
+	}
+	for path, c := range want {
+		if instr[path] != c {
+			t.Errorf("instruction %s = %+v, want %+v", path, instr[path], c)
+		}
+	}
+	if _, ok := instr["docs/CLAUDE.md.bak"]; ok || len(instr) < len(want) {
+		t.Errorf("instructions = %v", instr)
+	}
+
+	tools := map[string]string{}
+	for _, c := range got["tools"].([]any) {
+		m := c.(map[string]any)
+		tools[m["name"].(string)] = m["kind"].(string) + "/" + m["source"].(string)
+	}
+	for name, w := range map[string]string{"codegraph": "mcp/.mcp.json", "browser": "mcp/.mcp.json", "playwright": "mcp/mcp catalog"} {
+		if tools[name] != w {
+			t.Errorf("tool %s = %q, want %q (all: %v)", name, tools[name], w, tools)
+		}
+	}
+	if sb := got["sandboxes"].([]any); len(sb) != 1 || sb[0].(map[string]any)["name"] != "fake-sandbox" || sb[0].(map[string]any)["source"] != "sandbox settings" {
+		t.Errorf("sandboxes = %v", sb)
+	}
+	agents := got["agents"].([]any)
+	if len(agents) != 2 || agents[0] != "go-developer" || agents[1] != "software-architect" {
+		t.Errorf("agents = %v", agents)
+	}
+
+	if after := gitE2E(t, s.checkout, "rev-parse", "HEAD"); after != before || gitE2E(t, s.checkout, "status", "--porcelain") != "" {
+		t.Error("discovery changed the checkout")
+	}
+	if s.get()["exists"] != false {
+		t.Error("discovery stored a record")
+	}
+}
+
+type fakeSandboxDriver struct{}
+
+func (fakeSandboxDriver) Name() string { return "fake-sandbox" }
+func (fakeSandboxDriver) Wrap(_ ports.SandboxPolicy, cmd ports.SandboxCommand) (ports.SandboxCommand, error) {
+	return cmd, nil
+}
+
+type fakeSandboxSettings struct{}
+
+func (fakeSandboxSettings) Enabled() bool { return true }
+func (fakeSandboxSettings) Paths() []ports.SandboxPath {
+	return []ports.SandboxPath{{Path: "/opt/tools", Write: false}}
 }

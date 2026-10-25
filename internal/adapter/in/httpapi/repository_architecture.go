@@ -94,3 +94,38 @@ func (h *Handler) handleDeleteRepositoryArchitecture(c echo.Context) error {
 func (h *Handler) handleArchitectureSchema(c echo.Context) error {
 	return c.Blob(http.StatusOK, "application/schema+json", domain.ArchitectureSchemaJSON)
 }
+
+func (h *Handler) handlePreviewLayers(c echo.Context) error {
+	if err := h.repositoryArchitectures(); err != nil {
+		return err
+	}
+	var in struct {
+		RepositoryID string             `json:"repository_id"`
+		Layers       []domain.ArchLayer `json:"layers"`
+	}
+	if err := bindJSON(c, &in); err != nil {
+		return err
+	}
+	p, err := h.repoArch.PreviewLayers(c.Request().Context(), in.RepositoryID, in.Layers)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, p)
+}
+
+func (h *Handler) handleDiscoverRepositoryArchitecture(c echo.Context) error {
+	if err := h.repositoryArchitectures(); err != nil {
+		return err
+	}
+	var in struct {
+		RepositoryID string `json:"repository_id"`
+	}
+	if err := bindJSON(c, &in); err != nil {
+		return err
+	}
+	d, err := h.repoArch.DiscoverRepositoryArchitecture(c.Request().Context(), in.RepositoryID)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, d)
+}

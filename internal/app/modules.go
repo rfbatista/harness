@@ -99,6 +99,9 @@ func newRepositoryFinder(cfg Config) *gitcli.RepositoryFinder {
 func newWorktreeManager(cfg Config) *gitcli.WorktreeManager {
 	return gitcli.NewWorktreeManager(cfg.gitOptions()...)
 }
+func newArchitectureGit(cfg Config) *gitcli.Architecture {
+	return gitcli.NewArchitecture(cfg.gitOptions()...)
+}
 func newEnvFiles(cfg Config) *gitcli.EnvFiles  { return gitcli.NewEnvFiles(cfg.gitOptions()...) }
 func newGitHistory(cfg Config) *gitcli.History { return gitcli.NewHistory(cfg.gitOptions()...) }
 func newBranchPublisher(cfg Config) *gitcli.BranchPublisher {
@@ -174,6 +177,7 @@ var CatalogModule = fx.Module("catalog",
 		asPort(skillfs.NewPublisher, new(ports.SkillPublisher)),
 		asPort(newRepositoryFinder, new(ports.RepositoryFinder)),
 		asPort(newEnvFiles, new(ports.EnvFileIO)),
+		asPort(newArchitectureGit, new(ports.ArchitectureGit)),
 		newCatalog,
 	),
 )
@@ -187,6 +191,7 @@ type catalogParams struct {
 	Zones           ports.ZoneRepository
 	BoundedContexts ports.BoundedContextRepository
 	ArchRecords     ports.ArchitectureRecordStore
+	ArchGit         ports.ArchitectureGit
 	Agents          ports.AgentRepository
 	Prompts         ports.PromptRepository
 	Skills          ports.SkillRepository
@@ -211,6 +216,7 @@ func newCatalog(p catalogParams) catalog.Catalog {
 		Zones:            p.Zones,
 		BoundedContexts:  p.BoundedContexts,
 		ArchRecords:      p.ArchRecords,
+		ArchGit:          p.ArchGit,
 		Agents:           p.Agents,
 		Prompts:          p.Prompts,
 		Skills:           p.Skills,
