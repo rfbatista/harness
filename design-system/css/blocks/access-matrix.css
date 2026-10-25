@@ -1,7 +1,7 @@
 /*
  * Access matrix — who may read and change each part of a repository: a table
- * of agents (rows) by layers (columns) whose cells are buttons cycling
- * none, read, change. The row names stay pinned at the start and the layer
+ * of layers (rows) by agents (columns) whose cells are buttons cycling
+ * none, read, change. The layer names stay pinned at the start and the agent
  * names at the top while it scrolls; it scrolls sideways when narrow.
  * <div class="access-matrix" role="region" aria-label="…" tabindex="0">
  *   <table><thead>…</thead><tbody><tr><th scope="row">agent</th><td>
@@ -52,13 +52,13 @@
     & tbody th {
       background: var(--color-panel);
       font-weight: var(--weight-medium);
+    }
 
-      & .hint {
-        display: block;
-        font-size: var(--text-xs);
-        font-weight: var(--weight-regular);
-        color: var(--color-ink-faint);
-      }
+    & .hint {
+      display: block;
+      font-size: var(--text-xs);
+      font-weight: var(--weight-regular);
+      color: var(--color-ink-faint);
     }
 
     & td { text-align: center; }

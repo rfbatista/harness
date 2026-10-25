@@ -17,25 +17,25 @@ templ accessMatrix() {
 				<span class="[ badge ]" data-tone="attention">! Not enforced</span>
 				Read restrictions are shown to agents, not enforced: an agent set to none is told it may not read a layer, but nothing stops it. Change is enforced by the rules.
 			</p>
-			<div class="[ access-matrix ]" role="region" aria-label="Access by agent and layer, scrolls sideways" tabindex="0">
+			<div class="[ access-matrix ]" role="region" aria-label="Access by layer and agent, scrolls sideways" tabindex="0">
 				<table>
 					<thead>
 						<tr>
-							<th scope="col">Agent</th>
+							<th scope="col">Layer</th>
 							<template x-for="c in columns" x-bind:key="c.key">
-								<th scope="col" x-bind:data-column="c.name" x-text="c.name"></th>
+								<th scope="col" x-bind:data-column="c.who">
+									<span x-text="c.label"></span>
+									<template x-if="c.note">
+										<span class="[ hint ]" x-text="c.note"></span>
+									</template>
+								</th>
 							</template>
 						</tr>
 					</thead>
 					<tbody>
 						<template x-for="row in rows" x-bind:key="row.key">
-							<tr x-bind:data-row="row.who">
-								<th scope="row">
-									<span x-text="row.label"></span>
-									<template x-if="row.note">
-										<span class="[ hint ]" x-text="row.note"></span>
-									</template>
-								</th>
+							<tr x-bind:data-row="row.name">
+								<th scope="row" x-text="row.name"></th>
 								<template x-for="cell in row.cells" x-bind:key="cell.key">
 									<td>
 										<button type="button" class="[ access-cell ]" x-bind:data-value="cell.value" x-bind:aria-label="cell.label" x-on:click="press(cell.col, cell.who)">

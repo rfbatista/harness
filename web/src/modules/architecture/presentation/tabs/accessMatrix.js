@@ -2,7 +2,7 @@
 // architectureLayersTab, so it edits `draft.layers[i].access` and
 // `draft.unlayered` through the page's scope.
 //
-// Columns are the layers, then the paths in none. Rows are the layer's
+// Rows are the layers, then the paths in none. Columns are the layer's
 // default (for agents it does not list), each agent of the catalog, and plain
 // sessions. A cell is a button that cycles none, read, change.
 
@@ -30,28 +30,25 @@ export const accessMatrix = ({ gateway }) => () => ({
     }
   },
 
+  /** The agents across the top: the layer's default first, then the catalog's agents, then plain. */
   get columns() {
-    const layers = (this.draft?.layers ?? []).map((l, i) => ({ key: `layer-${i}`, index: i, name: l.name || "unnamed" }));
-    return [...layers, { key: UNLAYERED, index: -1, name: UNLAYERED }];
+    const agents = this.draft ? matrixAgents(this.catalog, this.draft) : [PLAIN];
+    return [
+      { key: DEFAULT_ROW, who: DEFAULT_ROW, label: "Default", note: "agents not listed" },
+      ...agents.map((a) => ({ key: a, who: a, label: a, note: a === PLAIN ? "a session with no agent" : "" })),
+    ];
   },
 
+  /** The layers down the side, then the unlayered paths. */
   get rows() {
     const columns = this.columns;
-    const agents = this.draft ? matrixAgents(this.catalog, this.draft) : [];
-    const who = [
-      { key: DEFAULT_ROW, who: DEFAULT_ROW, label: "Default", note: "agents not listed" },
-      ...agents.map((a) => ({
-        key: a,
-        who: a,
-        label: a === PLAIN ? "plain" : a,
-        note: a === PLAIN ? "a session with no agent" : "",
-      })),
-    ];
-    return who.map((row) => ({
-      ...row,
+    const layers = (this.draft?.layers ?? []).map((l, i) => ({ key: `layer-${i}`, index: i, name: l.name || "unnamed" }));
+    return [...layers, { key: UNLAYERED, index: -1, name: UNLAYERED }].map((row) => ({
+      key: row.key,
+      name: row.name,
       cells: columns.map((c) => {
-        const value = this.valueAt(c.index, row.who);
-        return { key: `${row.key}|${c.key}`, who: row.who, col: c.index, where: c.name, value, label: cellLabel(row.who, c.name, value) };
+        const value = this.valueAt(row.index, c.who);
+        return { key: `${row.key}|${c.key}`, who: c.who, col: row.index, where: row.name, value, label: cellLabel(c.who, row.name, value) };
       }),
     }));
   },
