@@ -3,6 +3,7 @@
 // record". The wire shapes are read here and nowhere else.
 
 import { StructuredError, Codes } from "../../../shared/domain/errors.js";
+import { readPreview } from "../domain/layers.js";
 
 /**
  * @param {import("../../../shared/infrastructure/api.js").ApiClient} api
@@ -27,6 +28,24 @@ export function architectureGateway(api, feed) {
   return {
     async get(repositoryId) {
       return toState(await api.post("/get_repository_architecture", { repository_id: repositoryId }));
+    },
+
+    /** What the harness found for the person to confirm; it never writes. */
+    async discover(repositoryId) {
+      const body = await api.post("/discover_repository_architecture", { repository_id: repositoryId });
+      const list = (xs) => (Array.isArray(xs) ? xs : []);
+      return {
+        instructions: list(body?.instructions),
+        tools: list(body?.tools),
+        sandboxes: list(body?.sandboxes),
+        agents: list(body?.agents),
+      };
+    },
+
+    /** The newest rule events of a repository, newest first. */
+    async listRuleEvents(repositoryId, limit = 50) {
+      const body = await api.post("/list_architecture_rule_events", { repository_id: repositoryId, limit });
+      return Array.isArray(body?.events) ? body.events : [];
     },
 
     /** Whether a repository has a saved architecture. */
@@ -58,6 +77,21 @@ export function architectureGateway(api, feed) {
         path: body?.path ?? "",
         export: body?.export ?? { state: "in_sync", path: body?.path ?? ".harness/architecture.yaml" },
       };
+    },
+
+    /**
+     * What the layers of an unsaved draft would match: per layer a file count
+     * and a sample (or the reason its pattern is invalid), the files in no
+     * layer, and the overlaps with their winner. It never saves.
+     */
+    async previewLayers(repositoryId, layers, unlayered) {
+      return readPreview(await api.post("/preview_layers", { repository_id: repositoryId, layers, unlayered }));
+    },
+
+    /** The agent catalog's names, for the access matrix's rows. */
+    async agents(repositoryId) {
+      const body = await api.post("/discover_repository_architecture", { repository_id: repositoryId });
+      return Array.isArray(body?.agents) ? body.agents.filter((a) => typeof a === "string") : [];
     },
 
     /**

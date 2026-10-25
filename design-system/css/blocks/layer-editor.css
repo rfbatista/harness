@@ -1,0 +1,17 @@
+/*
+ * Layer editor — the fields of one layer: name, how it matches, its pattern,
+ * its bounded context and purpose, laid out in a grid that stacks when narrow.
+ * <div class="layer-fields"><div class="field">…</div>…</div>
+ * Exception: .layer-pattern spans the full row.
+ */
+
+@layer blocks {
+  .layer-fields {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr));
+    gap: var(--space-m);
+    align-items: start;
+
+    & > .layer-pattern { grid-column: 1 / -1; }
+  }
+}

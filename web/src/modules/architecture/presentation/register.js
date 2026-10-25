@@ -7,6 +7,8 @@ import { sandboxesTab } from "./tabs/sandboxesTab.js";
 import { orchestrationTab } from "./tabs/orchestrationTab.js";
 import { hooksTab } from "./tabs/hooksTab.js";
 import { layersTab } from "./tabs/layersTab.js";
+import { accessMatrix } from "./tabs/accessMatrix.js";
+import { architectureSetup } from "./setup/architectureSetup.js";
 import { outputTab } from "./tabs/outputTab.js";
 import { outputDiagram } from "./tabs/outputDiagram.js";
 
@@ -22,6 +24,11 @@ export function registerArchitecture(Alpine, deps) {
   Alpine.data("architectureOrchestrationTab", orchestrationTab(deps));
   Alpine.data("architectureHooksTab", hooksTab(deps));
   Alpine.data("architectureLayersTab", layersTab(deps));
+  Alpine.data("architectureAccessMatrix", accessMatrix(deps));
   Alpine.data("architectureOutputTab", outputTab(deps));
+<<<<<<< HEAD
   Alpine.data("architectureOutputDiagram", outputDiagram(deps));
+=======
+  Alpine.data("architectureSetup", architectureSetup(deps));
+>>>>>>> agent/ui-for-repository-architecture-f1fe34c9
 }
