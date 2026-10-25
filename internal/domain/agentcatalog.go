@@ -130,6 +130,9 @@ type CatalogSkill struct {
 	Agents      []string           `json:"agents"`
 	Bundles     []string           `json:"bundles"`
 	AgentCount  int                `json:"agent_count"`
+	// Markdown is SKILL.md as it is on disk, frontmatter included. It is not
+	// part of the HTTP answer.
+	Markdown string `json:"-"`
 }
 
 // CatalogSkillView is the answer of a skill read.
@@ -273,6 +276,10 @@ type SaveCatalogSkill struct {
 	PreviousName string            `json:"previous_name"`
 	Skill        CatalogSkillInput `json:"skill"`
 	AddTo        *CatalogAddTo     `json:"add_to"`
+	// RawMarkdown, when set, is written as SKILL.md as it is, instead of
+	// being built from the skill's name, description and body. The legacy
+	// skill endpoints send whole trees. Not part of the HTTP body.
+	RawMarkdown *string `json:"-"`
 }
 
 // CatalogProjectChange is the MCP server list of one project a change sets.

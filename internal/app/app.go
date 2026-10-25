@@ -84,11 +84,10 @@ type Config struct {
 	// user may take to answer, so it is measured in hours, not seconds.
 	ApprovalTimeout time.Duration
 	// DotfilesAgentsDir is the path to a dotfiles-style agents/ directory
-	// (agents.json + skills/). When set, Agent/Skill/MCPServer data from it is
-	// read live on every request and merged alongside the database-backed
-	// catalog (config wins on a name collision) — see
-	// internal/adapter/out/configrepo. Empty disables this entirely; the
-	// catalog is then exactly what's in the database, as before.
+	// (agents.json + skills/ + per-agent .mcp.json). It is only the source of
+	// the one-time agent catalog import (ADR 0030): the catalog itself is the
+	// "agents" folder of the data dir. Empty: agents/ under Root, when it has
+	// an agents.json.
 	DotfilesAgentsDir string
 	// TokenSaverReleaseBase is where token savers' pinned releases are
 	// downloaded from, in place of https://github.com (a mirror, or a test's

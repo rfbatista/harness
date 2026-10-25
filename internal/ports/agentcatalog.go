@@ -16,6 +16,10 @@ type CatalogReader interface {
 	// ReadCatalogSkill reads one skill's full content. SKILL_NOT_FOUND when
 	// there is none.
 	ReadCatalogSkill(name string) (*domain.CatalogSkillView, error)
+	// ReadCatalogSkillContent is ReadCatalogSkill without who gets the
+	// skill: it does not scan the catalog, so it is cheap to call for each
+	// skill of an agent. The answer's Markdown holds SKILL.md as written.
+	ReadCatalogSkillContent(name string) (*domain.CatalogSkillView, error)
 	// CheckEnvVars says whether each variable is set in the harness server's
 	// environment. Never a value.
 	CheckEnvVars(names []string) map[string]bool

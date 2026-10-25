@@ -5,6 +5,7 @@
 package agentcatalog
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -18,7 +19,6 @@ import (
 	"github.com/rfbatista/harnesskit/mcpserver"
 
 	"operators-mcp/internal/domain"
-	"operators-mcp/internal/ports"
 )
 
 // File names inside the catalog folder.
@@ -69,8 +69,10 @@ func WithEnv(lookup func(string) (string, bool)) Option {
 // Projects is what the catalog needs of projects: their names and MCP server
 // lists, and a way to set a list (ADR 0031).
 type Projects interface {
-	ports.ProjectReader
-	ports.ProjectMCPServers
+	ListProjects(ctx context.Context) ([]*domain.Project, error)
+	// SetProjectMCPServers replaces a project's server names. PROJECT_NOT_FOUND
+	// for an unknown project.
+	SetProjectMCPServers(ctx context.Context, projectID string, names []string) (*domain.Project, error)
 }
 
 // WithProjects gives the catalog the projects whose MCP server lists it reads

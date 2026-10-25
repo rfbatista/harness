@@ -344,8 +344,28 @@ func (c *Catalog) CheckEnvVars(names []string) map[string]bool {
 	return out
 }
 
-// ReadCatalogSkill reads one skill with its body and every other file.
+// ReadCatalogSkill reads one skill with its body and every other file, and
+// who gets it.
 func (c *Catalog) ReadCatalogSkill(name string) (*domain.CatalogSkillView, error) {
+	view, err := c.ReadCatalogSkillContent(name)
+	if err != nil {
+		return nil, err
+	}
+	cat, err := c.ReadCatalog()
+	if err != nil {
+		return nil, err
+	}
+	for _, s := range cat.Skills {
+		if s.Name == name {
+			view.Skill.Agents, view.Skill.Bundles, view.Skill.AgentCount = s.Agents, s.Bundles, s.AgentCount
+		}
+	}
+	return view, nil
+}
+
+// ReadCatalogSkillContent reads one skill with its body and every other
+// file. It does not say who gets the skill.
+func (c *Catalog) ReadCatalogSkillContent(name string) (*domain.CatalogSkillView, error) {
 	if !slugRe.MatchString(name) {
 		return nil, domain.NewCatalogError("INVALID_INPUT", "a skill name is lower-case letters, digits and dashes", map[string]any{"field": "name"})
 	}
@@ -355,7 +375,8 @@ func (c *Catalog) ReadCatalogSkill(name string) (*domain.CatalogSkillView, error
 		return nil, &domain.StructuredError{Code: "SKILL_NOT_FOUND", Message: "skill " + name + " not found"}
 	}
 	doc, _ := skill.ParseDocument(data)
-	sk := domain.CatalogSkill{Name: name, Description: doc.Description, Body: doc.Body, Files: []domain.CatalogSkillFile{}}
+	sk := domain.CatalogSkill{Name: name, Description: doc.Description, Body: doc.Body, Files: []domain.CatalogSkillFile{}, Markdown: string(data),
+		Agents: []string{}, Bundles: []string{}}
 	if !strings.HasPrefix(string(data), "---") {
 		sk.Body = strings.TrimSpace(string(data))
 	}
@@ -364,16 +385,6 @@ func (c *Catalog) ReadCatalogSkill(name string) (*domain.CatalogSkillView, error
 		return nil, err
 	}
 	sk.Files = files
-	cat, err := c.ReadCatalog()
-	if err != nil {
-		return nil, err
-	}
-	for _, s := range cat.Skills {
-		if s.Name == name {
-			sk.Agents, sk.Bundles, sk.AgentCount = s.Agents, s.Bundles, s.AgentCount
-		}
-	}
-	sk.Agents, sk.Bundles = nonNil(sk.Agents), nonNil(sk.Bundles)
 	return &domain.CatalogSkillView{Skill: sk, Versions: map[string]string{"skills/" + name: version}}, nil
 }
 

@@ -180,8 +180,10 @@ func (c *Catalog) SaveCatalogSkill(in domain.SaveCatalogSkill) (*domain.CatalogW
 		files[clean] = append([]byte{}, data...)
 		given[clean] = true
 	}
-	md, err := skillMarkdown(sk.Name, sk.Description, sk.Body, oldFiles[skillFileName])
-	if err != nil {
+	var md []byte
+	if in.RawMarkdown != nil {
+		md = []byte(*in.RawMarkdown)
+	} else if md, err = skillMarkdown(sk.Name, sk.Description, sk.Body, oldFiles[skillFileName]); err != nil {
 		return nil, err
 	}
 	files[skillFileName] = md
