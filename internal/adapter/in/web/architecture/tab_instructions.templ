@@ -51,10 +51,8 @@ templ tabInstructions() {
 						</div>
 					</div>
 					<div class="[ field ]">
-						<label>
-							Applies to
-							<input data-field="applies_to" class="[ text-sm ]" autocomplete="off" placeholder="all, or agent names separated by commas" x-bind:value="csv(row, 'applies_to')" x-on:change="setCsv(row, 'applies_to', $event)" x-bind:aria-invalid="bad(i, 'applies_to')"/>
-						</label>
+						<span class="[ text-sm weight-medium ]">Applies to</span>
+						@agentList("applies_to", "Applies to", "bad(i, 'applies_to')")
 						<template x-if="err(i, 'applies_to')">
 							<span class="[ error ]" x-bind:data-error-for="ptr(i, 'applies_to')"><span aria-hidden="true">✕</span> <span x-text="err(i, 'applies_to')"></span></span>
 						</template>

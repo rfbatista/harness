@@ -3,6 +3,7 @@
 // and `this.isInvalid(path)` reach the page's draft and its field errors.
 
 import { blankHandoff, blankRoute } from "../../domain/descriptive.js";
+import { agentPicker } from "./agentPicker.js";
 import { listEditing } from "./listEditing.js";
 
 const routing = listEditing(["orchestration", "routing"], blankRoute);
@@ -10,6 +11,7 @@ const handoffs = listEditing(["orchestration", "handoffs"], blankHandoff);
 
 /** @param { gateway: ReturnType<typeof import("../../infrastructure/architecture-gateway.js").architectureGateway> } deps */
 export const orchestrationTab = ({ gateway }) => () => ({
+  ...agentPicker({ gateway }),
   routes: routing.rows,
   addRoute: routing.add,
   removeRoute: routing.remove,

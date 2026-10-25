@@ -57,12 +57,16 @@ templ tabLayers() {
 							</div>
 							<div class="[ field ]">
 								<label x-bind:for="row.ids.context">Bounded context (optional)</label>
-								<input x-bind:id="row.ids.context" data-field="bounded_context" class="[ text-sm ]" autocomplete="off" spellcheck="false" x-model="row.context" x-bind:aria-invalid="row.contextError !== ''"/>
+								<select x-bind:id="row.ids.context" data-field="bounded_context" class="[ text-sm ]" x-on:change="setContext(row.i, $event)" x-bind:aria-invalid="row.contextError !== ''">
+									<template x-for="o in row.contextOptions" x-bind:key="o.value">
+										<option x-bind:value="o.value" x-bind:selected="o.selected" x-text="o.label"></option>
+									</template>
+								</select>
 								<template x-if="row.contextError">
 									<span class="[ error ]" x-bind:data-error-for="row.contextPath" x-text="row.contextError"></span>
 								</template>
 								<template x-if="!row.contextError">
-									<span class="[ hint ]">Type the name of one of the project's bounded contexts.</span>
+									<span class="[ hint ]">One of the project's bounded contexts, or none.</span>
 								</template>
 							</div>
 							<div class="[ field ]">

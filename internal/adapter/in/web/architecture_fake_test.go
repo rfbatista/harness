@@ -40,6 +40,10 @@ type fakeArchitectureAPI struct {
 	saveDelay time.Duration
 	// saved is every record a save stored, newest last.
 	saved []map[string]any
+	// contexts are the project's bounded context names (nil: sessions, billing);
+	// contextProjects are the project ids list_bounded_contexts was asked for.
+	contexts        []string
+	contextProjects []string
 }
 
 func newFakeArchitectureAPI(feed *sseFeed) *fakeArchitectureAPI {
@@ -129,6 +133,8 @@ func (f *fakeArchitectureAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		f.json(w, map[string]any{})
 	case "/api/export_repository_architecture":
 		f.doExport(w, in)
+	case "/api/list_bounded_contexts":
+		f.listBoundedContexts(w, r.URL.Query().Get("project_id"))
 	case "/api/list_architecture_rule_events":
 		f.json(w, map[string]any{"events": append([]map[string]any{}, f.events...)})
 	default:
@@ -221,7 +227,9 @@ var nameRe = regexp.MustCompile(`^[a-z0-9-]+$`)
 // tests reach: missing fields, a bad regex, duplicate names.
 func validateArchitecture(rec map[string]any) []archError {
 	var errs []archError
-	add := func(path, code, msg string) { errs = append(errs, archError{"path": path, "code": code, "message": msg}) }
+	add := func(path, code, msg string) {
+		errs = append(errs, archError{"path": path, "code": code, "message": msg})
+	}
 	seen := map[string]bool{}
 	layers, _ := rec["layers"].([]any)
 	for i, raw := range layers {
@@ -397,4 +405,30 @@ func (f *fakeArchitectureAPI) lastSaved() map[string]any {
 		return nil
 	}
 	return f.saved[len(f.saved)-1]
+}
+
+// listBoundedContexts answers GET /api/list_bounded_contexts?project_id=…
+// with { "bounded_contexts": [ { id, name } ] }.
+func (f *fakeArchitectureAPI) listBoundedContexts(w http.ResponseWriter, projectID string) {
+	f.contextProjects = append(f.contextProjects, projectID)
+	names := f.contexts
+	if names == nil {
+		names = []string{"sessions", "billing"}
+	}
+	out := []any{}
+	for i, n := range names {
+		out = append(out, map[string]any{"id": fmt.Sprintf("bc%d", i+1), "name": n, "description": ""})
+	}
+	f.json(w, map[string]any{"bounded_contexts": out})
+}
+
+// discoverCalls is how many times the page asked for the agent catalog.
+func (f *fakeArchitectureAPI) discoverCalls() int {
+	n := 0
+	for _, c := range f.called() {
+		if c == "discover_repository_architecture" {
+			n++
+		}
+	}
+	return n
 }

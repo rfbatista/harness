@@ -30,6 +30,8 @@ export const layersTab = ({ gateway }) => () => ({
   previewFailed: "",
   seq: 0,
   timer: 0,
+  /** The project's bounded context names, once the server answered. */
+  contexts: [],
 
   get layers() {
     return this.draft?.layers ?? [];
@@ -108,13 +110,7 @@ export const layersTab = ({ gateway }) => () => ({
         set pattern(text) {
           layer.match = { [kind]: text };
         },
-        get context() {
-          return layer.bounded_context ?? "";
-        },
-        set context(text) {
-          if (text === "") delete layer.bounded_context;
-          else layer.bounded_context = text;
-        },
+        contextOptions: tab.contextOptions(layer),
         get purpose() {
           return layer.purpose ?? "";
         },
@@ -126,9 +122,31 @@ export const layersTab = ({ gateway }) => () => ({
     });
   },
 
-  init() {
+  async init() {
     this.$watch("previewKey", () => this.schedulePreview());
     this.schedulePreview();
+    try {
+      this.contexts = await gateway.boundedContexts(this.projectId);
+    } catch {
+      this.contexts = []; // the select still offers none and the name the layer holds
+    }
+  },
+
+  /** The choices for a layer's bounded context: none, the project's contexts, then a saved name that is no longer among them. */
+  contextOptions(layer) {
+    const saved = layer.bounded_context ?? "";
+    const stray = saved !== "" && !this.contexts.includes(saved);
+    return [
+      { value: "", label: "None", selected: saved === "" },
+      ...this.contexts.map((name) => ({ value: name, label: name, selected: name === saved })),
+      ...(stray ? [{ value: saved, label: `${saved} (not in the list)`, selected: true }] : []),
+    ];
+  },
+
+  setContext(i, event) {
+    const name = event.target.value;
+    if (name === "") delete this.draft.layers[i].bounded_context;
+    else this.draft.layers[i].bounded_context = name;
   },
 
   destroy() {

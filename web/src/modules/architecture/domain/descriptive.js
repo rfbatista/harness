@@ -103,3 +103,34 @@ export function addCandidates(record, candidates) {
   }
   return added;
 }
+
+export const ALL = "all";
+const PLAIN_AGENT = "plain";
+
+/**
+ * The choices of an agent picker: "all" when the field is a list, the catalog's
+ * agents, plain (a session with no agent), then any name the record has that the
+ * catalog lacks, marked so it is never silently dropped.
+ * @param {string[]} catalog @param {string[]} chosen the names the record holds @param {boolean} withAll
+ * @returns {{ value: string, label: string, checked: boolean }[]}
+ */
+export function agentChoices(catalog, chosen, withAll) {
+  const known = [...(withAll ? [ALL] : []), ...catalog, ...(catalog.includes(PLAIN_AGENT) ? [] : [PLAIN_AGENT])];
+  const label = (n) => (n === PLAIN_AGENT && !catalog.includes(PLAIN_AGENT) ? "plain (a session with no agent)" : n);
+  const strays = chosen.filter((n, i) => typeof n === "string" && n !== "" && !known.includes(n) && chosen.indexOf(n) === i);
+  return [
+    ...known.map((n) => ({ value: n, label: label(n), checked: chosen.includes(n) })),
+    ...strays.map((n) => ({ value: n, label: `${n} (not in the catalog)`, checked: true })),
+  ];
+}
+
+/** The list after ticking or unticking a name: "all" excludes the agents, an agent excludes "all". */
+export function toggled(list, name, on) {
+  const rest = list.filter((n) => n !== name);
+  if (!on) return rest;
+  if (name === ALL) return [ALL];
+  return [...rest.filter((n) => n !== ALL), name];
+}
+
+/** What a closed agent picker says. */
+export const agentSummary = (list) => (list.length === 0 ? "No agents chosen" : list.join(", "));

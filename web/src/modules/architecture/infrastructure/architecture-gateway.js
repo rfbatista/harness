@@ -25,6 +25,9 @@ export function architectureGateway(api, feed) {
     };
   };
 
+  /** One discovery per repository for the page's life: every tab and the matrix share the answer. */
+  const catalogs = new Map();
+
   return {
     async get(repositoryId) {
       return toState(await api.post("/get_repository_architecture", { repository_id: repositoryId }));
@@ -82,9 +85,21 @@ export function architectureGateway(api, feed) {
       return readPreview(await api.post("/preview_layers", { repository_id: repositoryId, layers, unlayered }));
     },
 
-    /** The agent catalog's names, for the access matrix's rows. */
-    async agents(repositoryId) {
-      return (await this.discover(repositoryId)).agents.filter((a) => typeof a === "string");
+    /** The agent catalog's names, for the matrix's rows and the agent pickers. Asked once per repository; a failure is not remembered. */
+    agents(repositoryId) {
+      if (!catalogs.has(repositoryId)) {
+        const asked = this.discover(repositoryId).then((found) => found.agents.filter((a) => typeof a === "string"));
+        asked.catch(() => catalogs.delete(repositoryId));
+        catalogs.set(repositoryId, asked);
+      }
+      return catalogs.get(repositoryId);
+    },
+
+    /** The names of a project's bounded contexts, in the order the server lists them. */
+    async boundedContexts(projectId) {
+      const body = await api.get("/list_bounded_contexts", { project_id: projectId });
+      const list = Array.isArray(body?.bounded_contexts) ? body.bounded_contexts : [];
+      return list.map((c) => c?.name).filter((n) => typeof n === "string" && n !== "");
     },
 
     /**
