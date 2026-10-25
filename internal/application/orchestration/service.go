@@ -682,6 +682,9 @@ func (s *Service) withShims(id string, cfg *llmkit.SessionConfig, cleanup func()
 	if s.SessionShellURL != nil {
 		cfg.Env = append(cfg.Env, ports.ShellURLEnv+"="+s.SessionShellURL(id))
 	}
+	if s.SessionArchitectureURL != nil && cfg.WorkingDir != "" {
+		cfg.Env = append(cfg.Env, ports.ArchitectureURLEnv+"="+s.SessionArchitectureURL(id), ports.WorktreeEnv+"="+cfg.WorkingDir)
+	}
 	return func() {
 		if cleanup != nil {
 			cleanup()

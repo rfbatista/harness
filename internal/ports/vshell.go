@@ -105,6 +105,15 @@ const (
 	ShellURLEnv = "HARNESS_SHELL_URL"
 )
 
+// The environment the architecture rules reach the PATH shims by:
+// ArchitectureURLEnv is the session's architecture endpoints' base
+// (…/api/sessions/{id}/architecture), WorktreeEnv the worktree whose writes
+// they check.
+const (
+	ArchitectureURLEnv = "HARNESS_ARCHITECTURE_URL"
+	WorktreeEnv        = "HARNESS_WORKTREE"
+)
+
 // ShellUnavailable is the refusal when the harness cannot be reached before
 // a change is made (contract §6).
 const ShellUnavailable = "SHELL_UNAVAILABLE: the harness could not be reached; nothing was written"
