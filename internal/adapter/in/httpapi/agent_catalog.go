@@ -52,3 +52,49 @@ func (h *Handler) handleCheckEnvVars(c echo.Context) error {
 	}
 	return c.JSON(http.StatusOK, h.catalog.CheckEnvVars(names))
 }
+
+// catalogWrite binds a write's body, runs it and answers its result.
+func catalogWrite[T any](h *Handler, c echo.Context, run func(T) (*domain.CatalogWriteResult, error)) error {
+	if err := h.catalogOrUnavailable(); err != nil {
+		return err
+	}
+	var in T
+	if err := bindJSON(c, &in); err != nil {
+		return err
+	}
+	out, err := run(in)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, out)
+}
+
+func (h *Handler) handleSaveCatalogAgent(c echo.Context) error {
+	return catalogWrite(h, c, func(in domain.SaveCatalogAgent) (*domain.CatalogWriteResult, error) {
+		return h.catalog.SaveCatalogAgent(in)
+	})
+}
+
+func (h *Handler) handleDeleteCatalogAgent(c echo.Context) error {
+	return catalogWrite(h, c, func(in domain.DeleteCatalogItem) (*domain.CatalogWriteResult, error) {
+		return h.catalog.DeleteCatalogAgent(in)
+	})
+}
+
+func (h *Handler) handleSaveCatalogBundle(c echo.Context) error {
+	return catalogWrite(h, c, func(in domain.SaveCatalogBundle) (*domain.CatalogWriteResult, error) {
+		return h.catalog.SaveCatalogBundle(in)
+	})
+}
+
+func (h *Handler) handleDeleteCatalogBundle(c echo.Context) error {
+	return catalogWrite(h, c, func(in domain.DeleteCatalogItem) (*domain.CatalogWriteResult, error) {
+		return h.catalog.DeleteCatalogBundle(in)
+	})
+}
+
+func (h *Handler) handleUndoCatalogChange(c echo.Context) error {
+	return catalogWrite(h, c, func(in domain.UndoCatalogChange) (*domain.CatalogWriteResult, error) {
+		return h.catalog.UndoCatalogChange(in)
+	})
+}

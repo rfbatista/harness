@@ -153,3 +153,86 @@ func (e *CatalogError) Unwrap() error { return e.StructuredError }
 func NewCatalogError(code, message string, fields map[string]any) *CatalogError {
 	return &CatalogError{StructuredError: &StructuredError{Code: code, Message: message}, Fields: fields}
 }
+
+// CatalogWriteOptions are what every catalog write takes besides its own
+// fields: the file versions the editor read, whether to write over a change
+// made since, and whether to only preview.
+type CatalogWriteOptions struct {
+	// BaseVersions are the versions of the files the write changes, as the
+	// editor read them. A file missing from the map is not checked.
+	BaseVersions map[string]string `json:"base_versions"`
+	// Force writes over a change made since BaseVersions.
+	Force bool `json:"force"`
+	// DryRun answers what would be written and writes nothing.
+	DryRun bool `json:"dry_run"`
+}
+
+// CatalogFileWrite is one file a change writes: its text before and after.
+// Before is nil for a new file and After is nil for a deleted one.
+type CatalogFileWrite struct {
+	Path   string  `json:"path"`
+	Before *string `json:"before"`
+	After  *string `json:"after"`
+}
+
+// CatalogChange is what one save did to the catalog's files.
+type CatalogChange struct {
+	// ID names the change for an undo. Empty for a dry run.
+	ID      string             `json:"id"`
+	Summary string             `json:"summary"`
+	Writes  []CatalogFileWrite `json:"writes"`
+}
+
+// CatalogWriteResult is the answer of every catalog write.
+type CatalogWriteResult struct {
+	Change   CatalogChange     `json:"change"`
+	Versions map[string]string `json:"versions"`
+}
+
+// CatalogAgentInput is an agent as the editor saves it.
+type CatalogAgentInput struct {
+	Name         string   `json:"name"`
+	Description  string   `json:"description"`
+	Aliases      []string `json:"aliases"`
+	Entries      []string `json:"entries"`
+	MCPServers   []string `json:"mcp_servers"`
+	AllowedTools []string `json:"allowed_tools"`
+}
+
+// CatalogBundleInput is a bundle as the editor saves it.
+type CatalogBundleInput struct {
+	Name    string   `json:"name"`
+	Entries []string `json:"entries"`
+}
+
+// SaveCatalogAgent creates or updates an agent. PreviousName, when set,
+// names the agent being updated or renamed.
+type SaveCatalogAgent struct {
+	CatalogWriteOptions
+	PreviousName string            `json:"previous_name"`
+	Agent        CatalogAgentInput `json:"agent"`
+}
+
+// SaveCatalogBundle creates or updates a bundle.
+type SaveCatalogBundle struct {
+	CatalogWriteOptions
+	PreviousName string             `json:"previous_name"`
+	Bundle       CatalogBundleInput `json:"bundle"`
+}
+
+// DeleteCatalogItem deletes the item of that name and every reference to it.
+type DeleteCatalogItem struct {
+	CatalogWriteOptions
+	Name string `json:"name"`
+}
+
+// UndoCatalogChange undoes the latest change.
+type UndoCatalogChange struct {
+	CatalogWriteOptions
+	ChangeID string `json:"change_id"`
+}
+
+// CatalogChanged says which catalog files a write changed.
+type CatalogChanged struct {
+	Paths []string `json:"paths"`
+}

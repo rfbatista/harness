@@ -317,3 +317,18 @@ func (n *node) write(b *bytes.Buffer, depth int) {
 		b.Write(n.raw)
 	}
 }
+
+// clone is a deep copy: the copy can change without touching the original.
+func (n *node) clone() *node {
+	if n == nil {
+		return nil
+	}
+	c := &node{kind: n.kind, raw: n.raw}
+	for _, m := range n.members {
+		c.members = append(c.members, &member{key: m.key, val: m.val.clone()})
+	}
+	for _, it := range n.items {
+		c.items = append(c.items, it.clone())
+	}
+	return c
+}

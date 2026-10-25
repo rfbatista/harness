@@ -169,6 +169,11 @@ func NewRouter(h *Handler, opts ...Option) *echo.Echo {
 	g.GET("/get_agent_catalog", h.handleGetAgentCatalog)
 	g.GET("/get_catalog_skill", h.handleGetCatalogSkill)
 	g.GET("/check_env_vars", h.handleCheckEnvVars)
+	g.POST("/save_catalog_agent", h.handleSaveCatalogAgent)
+	g.POST("/delete_catalog_agent", h.handleDeleteCatalogAgent)
+	g.POST("/save_catalog_bundle", h.handleSaveCatalogBundle)
+	g.POST("/delete_catalog_bundle", h.handleDeleteCatalogBundle)
+	g.POST("/undo_catalog_change", h.handleUndoCatalogChange)
 
 	// mcp servers
 	g.GET("/list_mcp_servers", h.handleListMCPServers)

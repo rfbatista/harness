@@ -102,7 +102,7 @@ type Services struct {
 	WritingHelper ports.WritingHelper
 	// Catalog is the agent catalog folder: agents, bundles, skills and MCP
 	// servers; nil answers 503.
-	Catalog ports.CatalogReader
+	Catalog ports.CatalogEditor
 }
 
 // Handler serves the application's driving ports as HTTP endpoints (the same
@@ -155,7 +155,7 @@ type Handler struct {
 	agentAuth        ports.AgentAuth
 
 	writingHelper ports.WritingHelper
-	catalog       ports.CatalogReader
+	catalog       ports.CatalogEditor
 
 	streams streamRegistry // the browser tabs' live streams (stream.go)
 }

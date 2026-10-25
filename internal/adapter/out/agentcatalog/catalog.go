@@ -37,11 +37,19 @@ type Catalog struct {
 	root      string
 	lookupEnv func(string) (string, bool)
 
+	// wmu serializes writes: one change is built and applied at a time.
+	wmu sync.Mutex
+
 	mu sync.Mutex
 	// The last version of each file that parsed, shown while the file on disk
 	// is broken.
 	lastAgents  *node
 	lastServers *node
+
+	// last is the latest change, the only one that can be undone. It lives
+	// in memory: a restart clears it.
+	last *storedChange
+	subs *subscribers
 }
 
 // Option configures New.
@@ -56,7 +64,7 @@ func WithEnv(lookup func(string) (string, bool)) Option {
 // New is the catalog in the folder root. The folder need not exist yet: a
 // missing catalog is an empty one.
 func New(root string, opts ...Option) *Catalog {
-	c := &Catalog{root: root, lookupEnv: os.LookupEnv}
+	c := &Catalog{root: root, lookupEnv: os.LookupEnv, subs: &subscribers{}}
 	for _, o := range opts {
 		o(c)
 	}
@@ -73,10 +81,12 @@ func hashBytes(b []byte) string {
 
 // loaded is the two JSON files as read, parsed, with their versions.
 type loaded struct {
-	agents   *node // never nil: an empty object when there is no usable file
-	servers  *node // the "mcpServers" object, never nil
-	versions map[string]string
-	broken   *domain.CatalogBroken
+	agents  *node // never nil: an empty object when there is no usable file
+	servers *node // the "mcpServers" object, never nil
+	// serversRoot is the whole mcp-servers.json object, never nil.
+	serversRoot *node
+	versions    map[string]string
+	broken      *domain.CatalogBroken
 	// text is each file's bytes as read, nil when missing.
 	text map[string][]byte
 }
@@ -120,12 +130,16 @@ func (c *Catalog) load() (*loaded, error) {
 				c.lastServers = n
 			}
 			if c.lastServers != nil {
+				l.serversRoot = c.lastServers
 				l.servers = c.lastServers.get("mcpServers")
 			}
 		}
 	}
 	if l.agents == nil {
 		l.agents = newObject()
+	}
+	if l.serversRoot == nil {
+		l.serversRoot = newObject()
 	}
 	if l.servers == nil {
 		l.servers = newObject()

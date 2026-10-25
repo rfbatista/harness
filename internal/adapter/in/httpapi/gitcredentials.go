@@ -192,9 +192,10 @@ func gitCredentialEvent(ch ports.GitCredentialChange) any {
 }
 
 // catalogEvents merges the project catalog feed with the credential feed
-// into one stream of wire events. It closes when ctx ends or either feed
-// closes (its follower fell behind), so the client reloads both.
-func catalogEvents(ctx context.Context, projects <-chan ports.ProjectCatalogChange, creds <-chan ports.GitCredentialChange) <-chan any {
+// and the agent catalog's writes into one stream of wire events. It closes
+// when ctx ends or any feed closes (its follower fell behind), so the client
+// reloads. A nil feed is never read.
+func catalogEvents(ctx context.Context, projects <-chan ports.ProjectCatalogChange, creds <-chan ports.GitCredentialChange, agentCatalog <-chan domain.CatalogChanged) <-chan any {
 	out := make(chan any)
 	go func() {
 		defer close(out)
@@ -213,6 +214,11 @@ func catalogEvents(ctx context.Context, projects <-chan ports.ProjectCatalogChan
 					return
 				}
 				ev = gitCredentialEvent(ch)
+			case ch, ok := <-agentCatalog:
+				if !ok {
+					return
+				}
+				ev = map[string]any{"agent_catalog_changed": ch}
 			}
 			select {
 			case out <- ev:
