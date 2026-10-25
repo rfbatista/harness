@@ -2,8 +2,10 @@ package httpapi
 
 import (
 	"encoding/json"
+	"io"
 	"net/http"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/labstack/echo/v4"
@@ -84,26 +86,44 @@ func (h *Handler) handleArchitectureCheck(c echo.Context) error {
 		return c.JSON(http.StatusOK, ports.ArchitectureVerdict{})
 	}
 	return c.JSON(http.StatusOK, h.archRules.CheckArchitecture(ctx, ports.ArchitectureCheck{
-		SessionID: sessionID, Point: domain.PointBeforeTool, Tool: in.Tool, Paths: in.Paths,
+		SessionID: sessionID, Point: domain.PointBeforeTool, Tool: in.Tool, Paths: in.Paths, Shim: true,
 	}))
 }
 
+// handleArchitectureCommit answers a session's pre-commit hook: the body is the
+// staged paths, NUL separated, and the answer is text for git to print: 409
+// when a blocking rule fails the commit, 200 with the warnings (or nothing).
 func (h *Handler) handleArchitectureCommit(c echo.Context) error {
 	if !isLoopback(c.Request().RemoteAddr) {
 		return echo.NewHTTPError(http.StatusForbidden, "loopback only")
 	}
-	var in struct {
-		Paths []string `json:"paths"`
-	}
-	if err := bindJSON(c, &in); err != nil {
+	raw, err := io.ReadAll(io.LimitReader(c.Request().Body, 8<<20))
+	if err != nil {
 		return err
 	}
-	if h.archRules == nil {
-		return c.JSON(http.StatusOK, ports.ArchitectureVerdict{})
+	var paths []string
+	for _, p := range strings.Split(string(raw), "\x00") {
+		if p != "" {
+			paths = append(paths, p)
+		}
 	}
-	return c.JSON(http.StatusOK, h.archRules.CheckArchitecture(c.Request().Context(), ports.ArchitectureCheck{
-		SessionID: c.Param("id"), Point: domain.PointBeforeCommit, Tool: "git commit", Paths: in.Paths,
-	}))
+	if h.archRules == nil {
+		return c.NoContent(http.StatusOK)
+	}
+	v := h.archRules.CheckArchitecture(c.Request().Context(), ports.ArchitectureCheck{
+		SessionID: c.Param("id"), Point: domain.PointBeforeCommit, Tool: "git commit", Paths: paths,
+	})
+	if v.Deny != "" {
+		text := v.Deny
+		if v.Context != "" {
+			text += "\n" + v.Context
+		}
+		return c.String(http.StatusConflict, text+"\n")
+	}
+	if v.Context == "" {
+		return c.NoContent(http.StatusOK)
+	}
+	return c.String(http.StatusOK, v.Context+"\n")
 }
 
 // hookAnswer renders a verdict in claude's hook output format: nothing when

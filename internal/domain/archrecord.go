@@ -115,13 +115,13 @@ type ArchRule struct {
 	ID             string   `json:"id" yaml:"id"`
 	Kind           string   `json:"kind" yaml:"kind"`
 	At             string   `json:"at,omitempty" yaml:"at,omitempty"`
-	Mode           string   `json:"mode" yaml:"mode"`
-	Message        string   `json:"message" yaml:"message"`
-	Agents         []string `json:"agents,omitempty" yaml:"agents,omitempty"`
 	Command        string   `json:"command,omitempty" yaml:"command,omitempty"`
 	Paths          string   `json:"paths,omitempty" yaml:"paths,omitempty"`
 	Tools          []string `json:"tools,omitempty" yaml:"tools,omitempty"`
 	TimeoutSeconds int      `json:"timeout_seconds,omitempty" yaml:"timeout_seconds,omitempty"`
+	Mode           string   `json:"mode" yaml:"mode"`
+	Message        string   `json:"message" yaml:"message"`
+	Agents         []string `json:"agents,omitempty" yaml:"agents,omitempty"`
 }
 
 // ArchFieldError is one problem of a refused record: a JSON pointer to the
@@ -400,7 +400,9 @@ func (r *ArchitectureRecord) Validate(known ArchitectureKnown) []ArchFieldError 
 		if strings.TrimSpace(rl.Message) == "" {
 			add(p+"/message", ArchMissingField, "message is required")
 		}
-		agentList(p+"/agents", rl.Agents)
+		for j, n := range rl.Agents {
+			agent(fmt.Sprintf("%s/agents/%d", p, j), n)
+		}
 		switch rl.Kind {
 		case RuleEditOutsideLayer:
 			if outside++; outside > 1 {

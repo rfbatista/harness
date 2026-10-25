@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"strings"
 
 	"github.com/labstack/echo/v4"
 
@@ -142,13 +141,6 @@ func writeCoded(c echo.Context, status int, err error, se *domain.StructuredErro
 	var de *domain.DetailedError
 	if errors.As(err, &de) && de.Details != nil {
 		body["details"] = de.Details
-		if se.Code == "ARCHITECTURE_INVALID" {
-			// The record's field errors, as { path, code, message }.
-			body["errors"] = de.Details
-		}
-	}
-	if strings.HasPrefix(se.Code, "ARCHITECTURE_") {
-		body["message"] = se.Message
 	}
 	_ = c.JSON(status, body)
 }

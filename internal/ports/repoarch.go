@@ -70,6 +70,8 @@ type ArchitectureRecordStore interface {
 	Delete(ctx context.Context, repositoryID string) error
 	// DeleteByProject does the same for every repository of the project.
 	DeleteByProject(ctx context.Context, projectID string) error
+	// ListByProject answers the records of the project's repositories.
+	ListByProject(ctx context.Context, projectID string) ([]*StoredArchitecture, error)
 	// SetExport records the last export: its version, commit, time and the
 	// SHA-256 of the YAML it wrote. It is not a new version of the record.
 	SetExport(ctx context.Context, repositoryID string, version int, commit string, at time.Time, sha string) (*StoredArchitecture, error)
@@ -128,6 +130,10 @@ type ArchitectureCheck struct {
 	Paths []string
 	// Command is the Bash command line of a before-tool check of Bash.
 	Command string
+	// Shim says a PATH shim asked, about the file it is about to write. The
+	// Bash tool's own hook has already run the command rules that name no
+	// paths, so only those with a paths filter run again.
+	Shim bool
 }
 
 // ArchitectureVerdict is the answer: Deny is the text of a blocking rule that
@@ -144,4 +150,37 @@ type ArchitectureVerdict struct {
 // pass, so a harness failure never blocks an agent.
 type ArchitectureRules interface {
 	CheckArchitecture(ctx context.Context, check ArchitectureCheck) ArchitectureVerdict
+}
+
+// ArchitectureRef is a repository that has a record and where its file is in
+// a virtual shell.
+type ArchitectureRef struct {
+	RepositoryID string
+	Repository   string
+	// Path is project/architecture/<name>.yaml.
+	Path string
+}
+
+// ArchitectureBriefSource is what a session's brief reads of the
+// architecture (driven by the orchestration).
+type ArchitectureBriefSource interface {
+	// ListArchitectureRefs lists the project's repositories that have a
+	// record, in the repositories' order.
+	ListArchitectureRefs(ctx context.Context, projectID string) ([]ArchitectureRef, error)
+	// SavedArchitecture is the repository's saved record; nil when none.
+	SavedArchitecture(ctx context.Context, repositoryID string) (*domain.ArchitectureRecord, error)
+}
+
+// CommitGuard installs and removes a git hooks directory for one worktree
+// (driven; gitcli implements it): through the worktree's own git
+// configuration, never the repository's tracked files and never the main
+// checkout's commits.
+type CommitGuard interface {
+	// Install makes hooksDir the worktree's hooks. It answers the directory
+	// the worktree's hooks were in before (the repository's own), so the
+	// guard can run them after its check.
+	Install(ctx context.Context, worktree, hooksDir string) (previous string, err error)
+	// Remove puts the worktree's hooks back as they were. A worktree that is
+	// gone is not an error.
+	Remove(ctx context.Context, worktree string) error
 }
