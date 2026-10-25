@@ -169,7 +169,7 @@ func (f *fakeArchitectureAPI) save(w http.ResponseWriter, in map[string]any) {
 		errs, f.refuseSaveWith = f.refuseSaveWith, nil
 	}
 	if len(errs) > 0 {
-		f.fail(w, http.StatusUnprocessableEntity, "ARCHITECTURE_INVALID", "The architecture breaks validation.", map[string]any{"errors": errs})
+		f.fail(w, http.StatusBadRequest, "ARCHITECTURE_INVALID", "The architecture breaks validation.", map[string]any{"errors": errs})
 		return
 	}
 	f.exists, f.record = true, rec

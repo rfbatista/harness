@@ -18,6 +18,14 @@ type Zone struct {
 	Rules            []Prompt `json:"rules"`
 	AssignedAgents   []Agent  `json:"assigned_agents"`
 	ExplicitPaths    []string `json:"explicit_paths"`
+	// RepositoryID is set on a layer: a zone that belongs to one repository's
+	// architecture, with the Access its agents have. Zones with no
+	// repository are not layers and carry no access.
+	RepositoryID string `json:"repository_id,omitempty"`
+	// Position is the layer's place in its record, so equal rivals resolve
+	// the same way after a round trip through the database.
+	Position int          `json:"position,omitempty"`
+	Access   *LayerAccess `json:"access,omitempty"`
 }
 
 // Contains reports whether a repository-relative path belongs to the zone:
