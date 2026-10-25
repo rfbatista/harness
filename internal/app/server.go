@@ -128,6 +128,8 @@ func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRun
 		AgentAuth:  agentCred.auth(),
 		// The magic pen's steps, streamed.
 		WritingHelper: helper,
+		// One structured record per repository: layers, access, rules.
+		RepositoryArchitectures: cat.RepositoryArchitectures,
 	}), httpapi.WithToken(cfg.APIToken))
 	// Requests slower than the threshold are logged with their query count.
 	// An approval waits on a person, so it is never a slow request.

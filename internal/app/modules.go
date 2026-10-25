@@ -76,6 +76,7 @@ var PersistenceModule = fx.Module("persistence",
 		asPort(sqlite.NewWorkspaceRepository, new(ports.WorkspaceRepository)),
 		asPort(sqlite.NewBoundedContextRepository, new(ports.BoundedContextRepository)),
 		asPort(sqlite.NewPullRequestRepository, new(ports.PullRequestRepository)),
+		asPort(sqlite.NewArchitectureRecordRepository, new(ports.ArchitectureRecordStore)),
 	),
 )
 
@@ -185,6 +186,7 @@ type catalogParams struct {
 	Repositories    ports.RepositoryRepository
 	Zones           ports.ZoneRepository
 	BoundedContexts ports.BoundedContextRepository
+	ArchRecords     ports.ArchitectureRecordStore
 	Agents          ports.AgentRepository
 	Prompts         ports.PromptRepository
 	Skills          ports.SkillRepository
@@ -208,6 +210,7 @@ func newCatalog(p catalogParams) catalog.Catalog {
 		Repositories:     p.Repositories,
 		Zones:            p.Zones,
 		BoundedContexts:  p.BoundedContexts,
+		ArchRecords:      p.ArchRecords,
 		Agents:           p.Agents,
 		Prompts:          p.Prompts,
 		Skills:           p.Skills,
@@ -635,6 +638,10 @@ func newOrchestrationService(
 		Zones:        cat.Architecture,
 		Contexts:     cat.Architecture,
 	}, tickets, ws)
+	if cat.RepositoryArchitectures != nil {
+		// Saves, deletes and exports reach open pages on the project feed.
+		cat.RepositoryArchitectures.UseFeed(svc)
+	}
 	base := cfg.loopbackBaseURL()
 	// The route belongs to an inbound adapter, so the application layer is
 	// handed the URL rather than importing the adapter to build it.

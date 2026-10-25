@@ -292,6 +292,12 @@ func NewRouter(h *Handler, opts ...Option) *echo.Echo {
 	g.GET("/list_repository_credentials", h.handleListRepositoryCredentials)
 	g.POST("/set_repository_credential", h.handleSetRepositoryCredential)
 
+	// repository architecture: one structured record per repository
+	g.POST("/get_repository_architecture", h.handleGetRepositoryArchitecture)
+	g.POST("/save_repository_architecture", h.handleSaveRepositoryArchitecture)
+	g.POST("/delete_repository_architecture", h.handleDeleteRepositoryArchitecture)
+	g.GET("/architecture.schema.json", h.handleArchitectureSchema)
+
 	// code views: read-only file trees, contents, diffs and the zone map
 	g.GET("/code/tree", h.handleCodeTree)
 	g.GET("/code/paths", h.handleCodePaths)

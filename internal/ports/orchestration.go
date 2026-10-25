@@ -93,7 +93,19 @@ type ProjectChange struct {
 	// CodeChanged says a running session's worktree moved: its HEAD or its
 	// working tree. Clients re-read the code they show.
 	CodeChanged *CodeChange `json:"code_changed,omitempty"`
-	Deleted     bool        `json:"deleted,omitempty"`
+	// ArchitectureChanged says a repository's architecture record was saved,
+	// deleted or exported.
+	ArchitectureChanged *ArchitectureChange `json:"repository_architecture_changed,omitempty"`
+	Deleted             bool                `json:"deleted,omitempty"`
+}
+
+// ArchitectureChange is a repository whose architecture record changed and
+// the version it has now (0 once deleted). ProjectID routes it to the
+// project's followers and is not on the wire.
+type ArchitectureChange struct {
+	RepositoryID string `json:"repository_id"`
+	Version      int    `json:"version"`
+	ProjectID    string `json:"-"`
 }
 
 // CodeChange is a workspace whose code changed and its HEAD now. ProjectID
@@ -129,6 +141,8 @@ func (c ProjectChange) ProjectID() string {
 		return c.PullRequest.ProjectID
 	case c.CodeChanged != nil:
 		return c.CodeChanged.ProjectID
+	case c.ArchitectureChanged != nil:
+		return c.ArchitectureChanged.ProjectID
 	}
 	return ""
 }
