@@ -1,0 +1,132 @@
+// The diagram view of the Output tab: the diagram model built from the page's
+// draft (so an unsaved change shows, marked as a draft), drawn as SVG, with
+// agents that can be focused. A component nested in architectureOutputTab; it
+// exists only while the diagram view is open.
+
+import { describeError } from "../../../../shared/presentation/errors.js";
+import { PLAIN, buildDiagram } from "../../domain/diagram.js";
+import { diagramToMermaid } from "../../domain/mermaid.js";
+import { diagramToSvg } from "../../domain/svg.js";
+import { copyText } from "../../infrastructure/clipboard.js";
+
+/** The agent names a record mentions on its own (the catalog may not have loaded). */
+function mentioned(record) {
+  const names = new Set();
+  const scope = (xs) => (xs ?? []).forEach((n) => n !== "all" && names.add(n));
+  const access = (a) => Object.keys(a?.agents ?? {}).forEach((n) => names.add(n));
+  (record.layers ?? []).forEach((l) => access(l.access));
+  access(record.unlayered);
+  (record.rules ?? []).forEach((r) => scope(r.agents));
+  (record.tools ?? []).forEach((t) => scope(t.used_by));
+  (record.sandboxes ?? []).forEach((s) => scope(s.used_by));
+  (record.instructions ?? []).forEach((i) => scope(i.applies_to));
+  (record.orchestration?.routing ?? []).forEach((r) => r.agent && names.add(r.agent));
+  (record.orchestration?.handoffs ?? []).forEach((h) => (names.add(h.from), names.add(h.to)));
+  return [...names];
+}
+
+const list = (xs) => (xs.length === 0 ? "nothing" : xs.join(", "));
+
+/** @param { gateway: ReturnType<typeof import("../../infrastructure/architecture-gateway.js").architectureGateway> } deps */
+export const outputDiagram = ({ gateway }) => () => ({
+  /** The agent catalog's names; empty until discovery answers. */
+  catalog: [],
+  focus: "",
+  /** What Copy as Mermaid or Download last did, for a status line. */
+  notice: "",
+
+  async init() {
+    try {
+      this.catalog = await gateway.agents(this.repositoryId);
+    } catch {
+      this.catalog = []; // the record's own agent names still draw
+    }
+  },
+
+  get model() {
+    if (!this.draft) return null;
+    const agents = [...new Set([...this.catalog, ...mentioned(this.draft)])].filter((n) => n !== PLAIN);
+    const focus = agents.includes(this.focus) || this.focus === PLAIN ? this.focus : "";
+    return buildDiagram(this.draft, { agents, focus, draft: this.dirty });
+  },
+  get ready() {
+    return this.model !== null;
+  },
+  get isDraft() {
+    return !!this.model?.draft;
+  },
+  get svg() {
+    return this.model ? diagramToSvg(this.model) : "";
+  },
+  get agentButtons() {
+    return (this.model?.nodes.agents ?? []).map((a) => ({ name: a.name, pressed: a.focused }));
+  },
+  get hasFocus() {
+    return !!this.model?.focus;
+  },
+  get focusName() {
+    return this.model?.focus ?? "";
+  },
+  get focusChange() {
+    return list((this.model?.edges ?? []).filter((e) => e.access === "change").map((e) => e.layer));
+  },
+  get focusRead() {
+    return list((this.model?.edges ?? []).filter((e) => e.access === "read").map((e) => e.layer));
+  },
+  get focusTools() {
+    const tools = this.model?.tools ?? [];
+    return list(tools.map((t) => `${t.name} (${t.kind}${t.writes ? ", writes" : ""})`));
+  },
+  get focusHandoffs() {
+    return list((this.model?.handoffs ?? []).map((h) => `${h.from} → ${h.to}: ${h.when}`));
+  },
+  get focusInstructions() {
+    const n = this.model?.instructionCount ?? 0;
+    return `${n} ${n === 1 ? "file" : "files"}`;
+  },
+  get guardRules() {
+    const seen = new Map();
+    for (const g of this.model?.guards ?? []) seen.set(g.rule, g);
+    return [...seen.values()].map((g) => `${g.glyph} ${g.mode === "blocking" ? "blocking" : "warning"}: ${g.rule}`);
+  },
+
+  /** Draws the SVG into the element it is set on; x-html is not in the CSP build. */
+  paint() {
+    this.$el.innerHTML = this.svg;
+  },
+
+  pick(name) {
+    this.focus = this.focus === name ? "" : name;
+  },
+  /** A click on an agent drawn in the picture focuses it too. */
+  pickFromPicture(event) {
+    const node = event.target.closest?.("g[data-agent]");
+    const name = node?.getAttribute("data-agent");
+    if (name && node.closest("[data-diagram]")) this.pick(name);
+  },
+  clearFocus() {
+    this.focus = "";
+  },
+
+  downloadSvg() {
+    const blob = new Blob([this.svg], { type: "image/svg+xml" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = this.isDraft ? "architecture-diagram-draft.svg" : "architecture-diagram.svg";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    this.notice = "Downloaded the diagram as SVG.";
+  },
+
+  async copyMermaid() {
+    try {
+      const ok = await copyText(diagramToMermaid(this.model));
+      this.notice = ok ? "Copied the diagram as Mermaid." : "The browser would not copy. Select the text and copy it by hand.";
+    } catch (err) {
+      this.notice = describeError(err).message;
+    }
+  },
+});

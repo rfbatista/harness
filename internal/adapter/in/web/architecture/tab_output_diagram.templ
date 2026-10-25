@@ -1,0 +1,55 @@
+package architecture
+
+// tabOutputDiagram is the Output tab's diagram view: layers, agents with
+// their change edges, guards on those edges and sandboxes as regions, drawn
+// in the browser from the page's draft. Agents are buttons that focus them.
+// It is the component architectureOutputDiagram, which exists only while this
+// view is open.
+templ tabOutputDiagram() {
+	<div class="[ flow ]" x-data="architectureOutputDiagram">
+		<template x-if="ready">
+			<div class="[ flow ]">
+				<div class="[ cluster ]">
+					<template x-if="isDraft">
+						<span class="[ badge ]" data-tone="attention" data-draft>Draft · unsaved changes</span>
+					</template>
+					<span class="[ grow ]"></span>
+					<button type="button" class="[ button ]" data-size="sm" data-download-svg x-on:click="downloadSvg">Download SVG</button>
+					<button type="button" class="[ button ]" data-size="sm" data-copy-mermaid x-on:click="copyMermaid">Copy as Mermaid</button>
+				</div>
+				<p class="[ text-sm color-ink-muted ]" role="status" data-diagram-notice x-show="notice" x-text="notice"></p>
+				<div class="[ cluster ]" role="group" aria-label="Focus an agent">
+					<template x-for="a in agentButtons" x-bind:key="a.name">
+						<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" data-focus-agent x-bind:data-agent-name="a.name" x-bind:aria-pressed="a.pressed" x-on:click="pick(a.name)" x-text="a.name"></button>
+					</template>
+				</div>
+				<template x-if="hasFocus">
+					<section class="[ pane ]" aria-label="Focused agent" data-focus-panel>
+						<header>
+							<span data-focus-name x-text="focusName"></span>
+							<span class="[ grow ]"></span>
+							<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-on:click="clearFocus">Show everyone</button>
+						</header>
+						<dl class="[ content ] [ flow ] [ flow-space-2xs text-sm ]">
+							<div><dt class="[ weight-medium ]">Can change</dt><dd data-focus-change x-text="focusChange"></dd></div>
+							<div><dt class="[ weight-medium ]">Can read only</dt><dd data-focus-read x-text="focusRead"></dd></div>
+							<div><dt class="[ weight-medium ]">Tools</dt><dd data-focus-tools x-text="focusTools"></dd></div>
+							<div><dt class="[ weight-medium ]">Hand-offs</dt><dd data-focus-handoffs x-text="focusHandoffs"></dd></div>
+							<div><dt class="[ weight-medium ]">Instructions</dt><dd data-focus-instructions x-text="focusInstructions"></dd></div>
+						</dl>
+					</section>
+				</template>
+				<div class="[ diagram-canvas ]" role="region" aria-label="Architecture diagram, scrolls sideways when narrow" tabindex="0" data-diagram-scroll>
+					<div data-diagram-picture x-effect="paint" x-on:click="pickFromPicture"></div>
+				</div>
+				<ul class="[ cluster ] [ text-sm color-ink-muted ]" aria-label="How to read the diagram" data-guard-legend>
+					<li>Solid line: may change</li>
+					<li>Dashed line (focused agent): may read</li>
+					<li>✕ blocking hook</li>
+					<li>! warning hook</li>
+					<li>Dashed box: sandbox</li>
+				</ul>
+			</div>
+		</template>
+	</div>
+}

@@ -162,12 +162,31 @@ export const architecturePage = ({ gateway }) => () => ({
 
   /** A save, delete or export announced on the project feed. */
   followed(change) {
-    if (this.saving || change.version === this.version) return; // our own save, or nothing new
+    if (this.saving) return; // our own save
+    if (change.version === this.version) {
+      this.refreshExport(); // an export announces the version it exported, unchanged
+      return;
+    }
     if (!this.dirty) {
       this.load();
       return;
     }
     this.conflict = "feed";
+  },
+
+  /** Reads the export state again, leaving the draft and the saved version alone. */
+  async refreshExport() {
+    try {
+      const state = await gateway.get(this.repositoryId);
+      if (state.version === this.version) this.takeExport(state.export);
+    } catch {
+      // the feed will say again; the state shown stays as it was
+    }
+  },
+
+  /** The export state after an export, or a refresh. */
+  takeExport(info) {
+    this.exportInfo = info;
   },
 
   pathFromLocation() {
@@ -187,6 +206,14 @@ export const architecturePage = ({ gateway }) => () => ({
     this.view = "";
     const path = pathForTab(slug);
     window.history.pushState(null, "", path ? `${this.base}/${path}` : this.base);
+  },
+
+  /** Opens one of a tab's views (Output: file or diagram) and puts it in the address. */
+  openView(view) {
+    if (view === this.view && this.tab === "output") return;
+    this.tab = tabForPath(view).slug;
+    this.view = view;
+    window.history.pushState(null, "", `${this.base}/${pathForTab(this.tab, view)}`);
   },
 
   async load() {

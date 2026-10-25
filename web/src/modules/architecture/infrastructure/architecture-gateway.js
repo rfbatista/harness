@@ -63,6 +63,16 @@ export function architectureGateway(api, feed) {
       );
     },
 
+    /** Commits the saved version as the architecture file; refusals (CHECKOUT_DIRTY, WRONG_BRANCH, ARCHITECTURE_CHANGED) arrive as errors. */
+    async exportArchitecture(repositoryId, version) {
+      const body = await api.post("/export_repository_architecture", { repository_id: repositoryId, version });
+      return {
+        commit: body?.commit ?? "",
+        path: body?.path ?? "",
+        export: body?.export ?? { state: "in_sync", path: body?.path ?? ".harness/architecture.yaml" },
+      };
+    },
+
     /**
      * What the layers of an unsaved draft would match: per layer a file count
      * and a sample (or the reason its pattern is invalid), the files in no

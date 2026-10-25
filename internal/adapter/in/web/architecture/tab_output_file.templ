@@ -1,0 +1,66 @@
+package architecture
+
+// tabOutputFile is the Output tab's file view: where the file is, how it
+// stands against the saved architecture, the Export action with its refusals
+// in words, and the YAML the export writes (always the saved version).
+templ tabOutputFile() {
+	<section class="[ pane ]" aria-label="Architecture file" data-file-state>
+		<header>
+			<code class="[ font-mono ]" data-file-path x-text="filePath"></code>
+			<span class="[ badge ]" data-file-state-title x-show="hasState" x-text="stateTitle"></span>
+		</header>
+		<div class="[ content ] [ flow ]">
+			<template x-if="hasState">
+				<div class="[ flow ] [ flow-space-3xs ]">
+					<p data-file-state-text x-text="stateText"></p>
+					<template x-if="stateNext">
+						<p class="[ color-ink-muted ]" data-file-state-next x-text="stateNext"></p>
+					</template>
+				</div>
+			</template>
+			<template x-if="!exists">
+				<p class="[ color-ink-muted ]" data-file-state-text>Nothing is saved yet, so there is nothing to export.</p>
+			</template>
+			<template x-if="hasLastExport">
+				<p class="[ text-sm color-ink-muted ]" data-last-export>Last export: <span x-text="lastExport"></span></p>
+			</template>
+			<template x-if="!hasLastExport">
+				<p class="[ text-sm color-ink-muted ]" data-last-export>Not exported yet.</p>
+			</template>
+			<div class="[ cluster ]">
+				<button type="button" class="[ button ]" data-variant="primary" data-size="sm" data-export x-bind:disabled="!canExport" x-bind:aria-busy="exporting" x-on:click="exportFile" x-text="exportLabel"></button>
+				<template x-if="hasBlocked">
+					<span class="[ text-sm color-ink-muted ]" data-export-blocked x-text="exportBlocked"></span>
+				</template>
+			</div>
+			<template x-if="hasResult">
+				<div class="[ banner ]" role="status" data-export-result>
+					<span x-text="resultText"></span>
+				</div>
+			</template>
+			<template x-if="hasRefusal">
+				<div class="[ banner ]" data-tone="attention" role="alert" data-export-refusal x-bind:data-code="refusal.code">
+					<div class="[ flow ] [ flow-space-3xs grow ]">
+						<span class="[ weight-medium ]" x-text="refusal.title"></span>
+						<span x-text="refusal.text"></span>
+						<span x-text="refusal.next"></span>
+					</div>
+					<template x-if="refusalIsStale">
+						<button type="button" class="[ button ]" data-size="sm" x-on:click="reloadPage">Reload</button>
+					</template>
+				</div>
+			</template>
+		</div>
+	</section>
+	<section class="[ pane ]" aria-label="YAML preview">
+		<header>
+			<span>What the export writes</span>
+			<span class="[ grow ]"></span>
+			<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" data-copy-yaml x-on:click="copyYaml" x-text="copyLabel"></button>
+		</header>
+		<template x-if="dirty">
+			<p class="[ pad-m text-sm color-ink-muted ]" data-yaml-note>This is the saved version. Your unsaved changes are not in it.</p>
+		</template>
+		<pre class="[ pad-m font-mono text-sm ]" data-yaml style="overflow:auto;margin:0" tabindex="0" x-text="yaml"></pre>
+	</section>
+}
