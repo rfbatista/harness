@@ -9,8 +9,10 @@ import "github.com/a-h/templ"
 import templruntime "github.com/a-h/templ/runtime"
 
 // tabOutput is the Output tab's panel. It is its own Alpine component,
-// architectureOutputTab, nested in architecturePage: it reads and edits the
-// page's draft and errors through the page's scope.
+// architectureOutputTab, nested in architecturePage: it reads the page's
+// saved record, draft and export state through the page's scope. Its two
+// views are the architecture file (tabOutputFile, …/architecture/file) and
+// the diagram (…/architecture/diagram).
 func tabOutput() templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
@@ -32,7 +34,15 @@ func tabOutput() templ.Component {
 			templ_7745c5c3_Var1 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<section role=\"tabpanel\" id=\"architecture-panel-output\" aria-labelledby=\"architecture-tab-output\" x-show=\"isTab('output')\" x-data=\"architectureOutputTab\" class=\"[ flow ]\"><h2>Output</h2><p class=\"[ color-ink-muted ]\">The architecture file in the repository, and a diagram of the architecture.</p></section>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<section role=\"tabpanel\" id=\"architecture-panel-output\" aria-labelledby=\"architecture-tab-output\" x-show=\"isTab('output')\" x-data=\"architectureOutputTab\" class=\"[ flow ]\"><h2>Output</h2><p class=\"[ color-ink-muted ]\">The architecture file in the repository, and a diagram of the architecture.</p><div class=\"[ flow ]\" data-view=\"file\" x-show=\"isFile\">")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = tabOutputFile().Render(ctx, templ_7745c5c3_Buffer)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, "</div></section>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
