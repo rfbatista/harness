@@ -104,6 +104,9 @@ func newWorktreeManager(cfg Config) *gitcli.WorktreeManager {
 func newArchitectureGit(cfg Config) *gitcli.Architecture {
 	return gitcli.NewArchitecture(cfg.gitOptions()...)
 }
+func newCommitGuard(cfg Config) *gitcli.CommitGuard {
+	return gitcli.NewCommitGuard(cfg.gitOptions()...)
+}
 func newEnvFiles(cfg Config) *gitcli.EnvFiles  { return gitcli.NewEnvFiles(cfg.gitOptions()...) }
 func newGitHistory(cfg Config) *gitcli.History { return gitcli.NewHistory(cfg.gitOptions()...) }
 func newBranchPublisher(cfg Config) *gitcli.BranchPublisher {
@@ -179,6 +182,7 @@ var CatalogModule = fx.Module("catalog",
 		asPort(skillfs.NewPublisher, new(ports.SkillPublisher)),
 		asPort(newRepositoryFinder, new(ports.RepositoryFinder)),
 		asPort(newEnvFiles, new(ports.EnvFileIO)),
+		asPort(newCommitGuard, new(ports.CommitGuard)),
 		asPort(newArchitectureGit, new(ports.ArchitectureGit)),
 		newCatalog,
 	),
@@ -644,6 +648,7 @@ func newArchitectureRules(cat catalog.Catalog, sessions ports.SessionRepository,
 
 func newOrchestrationService(
 	cfg Config,
+	commitGuard ports.CommitGuard,
 	manager llmkit.Manager,
 	broker *approval.Broker,
 	hub *orchestration.Hub,
@@ -671,6 +676,10 @@ func newOrchestrationService(
 	if cat.RepositoryArchitectures != nil {
 		// Saves, deletes and exports reach open pages on the project feed.
 		cat.RepositoryArchitectures.UseFeed(svc)
+		// Briefs name the record and the layers the session's agent may change.
+		svc.Architectures = cat.RepositoryArchitectures
+		// A commit in a session worktree is checked against the layers.
+		svc.CommitGuard = commitGuard
 	}
 	base := cfg.loopbackBaseURL()
 	// The route belongs to an inbound adapter, so the application layer is

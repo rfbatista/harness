@@ -293,6 +293,10 @@ check back on its own. Use `set_status_check` to lengthen the interval for long
 implementation work, or pass 0 to pause it while you wait on the person.
 `list_status_checks` shows every loop.
 
+## Repository architecture
+
+A repository can have an architecture record: layers, which agent may change each, and the rules that guard them. It is a read-only file in your virtual shell, `project/architecture/<repo>.yaml`. While you grill, read the record of each affected application. Name it in each spec. When the design changes layers, access or rules, write the proposed change as a section of the spec, for the person to apply in the web UI. Never edit the record: only the person does.
+
 ## Sequencing Rules
 
 1. **Design first** if UX is undecided and will constrain both frontend and backend.

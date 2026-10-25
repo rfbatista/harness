@@ -4,7 +4,10 @@ package app
 
 import (
 	"encoding/json"
+	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"operators-mcp/internal/domain"
@@ -253,5 +256,181 @@ func TestEveryFailedRuleIsRecordedAndAnnounced(t *testing.T) {
 	h.post("list_architecture_rule_events", map[string]any{"repository_id": h.repo, "limit": 1}, &out)
 	if len(out.Events) != 1 || out.Events[0]["path"] != "README.md" {
 		t.Errorf("limit 1 = %v", out.Events)
+	}
+}
+
+// gitIn runs git in dir and answers its combined output and error.
+func gitIn(dir string, args ...string) (string, error) {
+	cmd := exec.Command("git", append([]string{"-c", "user.email=agent@test", "-c", "user.name=agent", "-c", "commit.gpgsign=false"}, args...)...)
+	cmd.Dir = dir
+	out, err := cmd.CombinedOutput()
+	return strings.TrimSpace(string(out)), err
+}
+
+// pointCommitCheckAt aims the session worktree's pre-commit hook at base
+// instead of the configured harness address, the way runHook does for the
+// claude hooks.
+func pointCommitCheckAt(t *testing.T, worktree, base string) {
+	t.Helper()
+	dir, err := gitIn(worktree, "config", "--get", "core.hooksPath")
+	if err != nil {
+		t.Fatalf("the worktree has no core.hooksPath: %v %s", err, dir)
+	}
+	hook := filepath.Join(dir, "pre-commit")
+	script, err := os.ReadFile(hook)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(script), configuredBase) {
+		t.Fatalf("the pre-commit hook does not call the harness at %s:\n%s", configuredBase, script)
+	}
+	if err := os.WriteFile(hook, []byte(strings.ReplaceAll(string(script), configuredBase, base)), 0o755); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// stageAndCommit stages files (path → content) in dir and commits them.
+func stageAndCommit(t *testing.T, dir string, files map[string]string) (string, error) {
+	t.Helper()
+	for p, body := range files {
+		full := filepath.Join(dir, p)
+		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(full, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if out, err := gitIn(dir, "add", "--", p); err != nil {
+			t.Fatalf("git add: %v %s", err, out)
+		}
+	}
+	return gitIn(dir, "commit", "-q", "-m", "agent change")
+}
+
+func TestABlockingRuleFailsACommitThatStagesAFileOutsideTheAgentsLayers(t *testing.T) {
+	h := newArchHooks(t, "blocking")
+	a := h.as("go-developer")
+	pointCommitCheckAt(t, a.worktree, h.srv.URL)
+	head, _ := gitIn(a.worktree, "rev-parse", "HEAD")
+
+	out, err := stageAndCommit(t, a.worktree, map[string]string{"internal/domain/zone.go": "package domain\n", "docs/notes.md": "hi\n"})
+	if err == nil {
+		t.Fatalf("the commit went through: %s", out)
+	}
+	for _, want := range []string{
+		"Architecture rule stay-in-your-layer (blocking): Ask the architect. — internal/domain/zone.go is in layer domain, which go-developer may not change.",
+		"Architecture rule stay-in-your-layer (blocking): Ask the architect. — docs/notes.md is in layer unlayered, which go-developer may not change.",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("git printed %q, want %q", out, want)
+		}
+	}
+	if now, _ := gitIn(a.worktree, "rev-parse", "HEAD"); now != head {
+		t.Error("HEAD moved")
+	}
+	events := h.events()
+	if len(events) != 2 || events[0]["at_point"] != "before_commit" || events[0]["tool"] != "git commit" || events[0]["outcome"] != "blocked" || events[0]["agent"] != "go-developer" {
+		t.Errorf("events = %v", events)
+	}
+}
+
+func TestAWarningRulePrintsItAndLetsTheCommitGo(t *testing.T) {
+	h := newArchHooks(t, "warning")
+	a := h.as("go-developer")
+	pointCommitCheckAt(t, a.worktree, h.srv.URL)
+	out, err := stageAndCommit(t, a.worktree, map[string]string{"internal/domain/zone.go": "package domain\n"})
+	if err != nil {
+		t.Fatalf("the commit failed: %v %s", err, out)
+	}
+	if want := "Architecture rule stay-in-your-layer (warning): Ask the architect. — internal/domain/zone.go is in layer domain, which go-developer may not change."; !strings.Contains(out, want) {
+		t.Errorf("git printed %q, want %q", out, want)
+	}
+	if events := h.events(); len(events) != 1 || events[0]["outcome"] != "warned" || events[0]["at_point"] != "before_commit" {
+		t.Errorf("events = %v", events)
+	}
+}
+
+func TestACommitThatStagesOnlyAllowedPathsPassesAndLeavesNoEvent(t *testing.T) {
+	h := newArchHooks(t, "blocking")
+	a := h.as("software-architect")
+	pointCommitCheckAt(t, a.worktree, h.srv.URL)
+	if out, err := stageAndCommit(t, a.worktree, map[string]string{"internal/domain/zone.go": "package domain\n", "docs/notes.md": "hi\n"}); err != nil {
+		t.Fatalf("the commit failed: %v %s", err, out)
+	}
+	if events := h.events(); len(events) != 0 {
+		t.Errorf("a passing commit left events: %v", events)
+	}
+	// A commit that names its paths (a temporary index) is checked too.
+	b := h.as("go-developer")
+	pointCommitCheckAt(t, b.worktree, h.srv.URL)
+	if err := os.MkdirAll(filepath.Join(b.worktree, "internal", "domain"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(b.worktree, "internal", "domain", "x.go"), []byte("package domain\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if out, err := gitIn(b.worktree, "add", "-N", "internal/domain/x.go"); err != nil {
+		t.Fatalf("%v %s", err, out)
+	}
+	if out, err := gitIn(b.worktree, "commit", "-q", "-m", "x", "internal/domain/x.go"); err == nil || !strings.Contains(out, "internal/domain/x.go is in layer domain") {
+		t.Errorf("commit with paths: %v %s", err, out)
+	}
+}
+
+func TestTheCommitCheckLeavesThePersonsAndTheServersCommitsAlone(t *testing.T) {
+	h := newArchHooks(t, "blocking")
+	a := h.as("go-developer")
+	repo, err := h.cat.Projects.GetRepository(h.ctx, h.repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The repository's own pre-commit hook still runs in the session worktree.
+	hooks, _ := gitIn(repo.RootDir, "rev-parse", "--git-path", "hooks")
+	if !filepath.IsAbs(hooks) {
+		hooks = filepath.Join(repo.RootDir, hooks)
+	}
+	marker := filepath.Join(t.TempDir(), "own-hook-ran")
+	if err := os.WriteFile(filepath.Join(hooks, "pre-commit"), []byte("#!/bin/sh\ntouch "+marker+"\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	pointCommitCheckAt(t, a.worktree, h.srv.URL)
+	head, _ := gitIn(repo.RootDir, "rev-parse", "HEAD")
+	status0, _ := gitIn(repo.RootDir, "status", "--porcelain")
+
+	// The person commits in the main checkout: not checked.
+	if out, err := stageAndCommit(t, repo.RootDir, map[string]string{"internal/domain/mine.go": "package domain\n"}); err != nil {
+		t.Fatalf("the person's commit failed: %v %s", err, out)
+	}
+	// The server's own export commit is not checked either.
+	h.post("export_repository_architecture", map[string]any{"repository_id": h.repo, "version": h.version}, nil)
+	if now, _ := gitIn(repo.RootDir, "rev-parse", "HEAD"); now == head {
+		t.Error("nothing was committed in the main checkout")
+	}
+	if events := h.events(); len(events) != 0 {
+		t.Errorf("commits outside the session worktrees left events: %v", events)
+	}
+	if status, _ := gitIn(repo.RootDir, "status", "--porcelain"); status != status0 {
+		t.Errorf("the checkout's tracked files or status changed: %q", status)
+	}
+	// An allowed-looking commit in the session worktree runs the repository's hook after the check.
+	h.save(func(r map[string]any) { r["rules"] = []any{} })
+	if out, err := stageAndCommit(t, a.worktree, map[string]string{"internal/domain/zone.go": "package domain\n"}); err != nil {
+		t.Fatalf("a warning-mode commit failed: %v %s", err, out)
+	}
+	if _, err := os.Stat(marker); err != nil {
+		t.Errorf("the repository's own pre-commit hook did not run: %v", err)
+	}
+}
+
+func TestAnUnreachableHarnessLetsTheCommitGoAndSaysSo(t *testing.T) {
+	h := newArchHooks(t, "blocking")
+	a := h.as("go-developer")
+	pointCommitCheckAt(t, a.worktree, "http://127.0.0.1:1")
+	out, err := stageAndCommit(t, a.worktree, map[string]string{"internal/domain/zone.go": "package domain\n"})
+	if err != nil {
+		t.Fatalf("the commit failed: %v %s", err, out)
+	}
+	if !strings.Contains(out, "Architecture rules could not be checked: the harness could not be reached.") {
+		t.Errorf("git printed %q", out)
 	}
 }
