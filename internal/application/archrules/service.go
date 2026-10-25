@@ -7,7 +7,10 @@ package archrules
 
 import (
 	"context"
+	"io/fs"
+	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -72,15 +75,19 @@ type who struct {
 }
 
 // resolve answers the session's record, or false when no rule applies to it:
-// no such session, no repository or worktree, or no saved record.
-func (s *Service) resolve(ctx context.Context, sessionID string) (who, bool) {
+// no such session, no repository or worktree, or no saved record. An error
+// says the record could not be read.
+func (s *Service) resolve(ctx context.Context, sessionID string) (who, bool, error) {
 	sess := s.d.Sessions.Get(sessionID)
 	if sess == nil || sess.RepositoryID == "" || sess.WorkingDir == "" {
-		return who{}, false
+		return who{}, false, nil
 	}
 	cur, err := s.d.Records.Current(ctx, sess.RepositoryID)
-	if err != nil || cur == nil {
-		return who{}, false
+	if err != nil {
+		return who{}, false, err
+	}
+	if cur == nil {
+		return who{}, false, nil
 	}
 	// An agent that cannot be read is treated as plain: a lookup failure never
 	// stops the check, and plain is the narrowest agent.
@@ -90,16 +97,22 @@ func (s *Service) resolve(ctx context.Context, sessionID string) (who, bool) {
 			agent = a.Name
 		}
 	}
-	return who{sess: sess, agent: agent, cur: cur}, true
+	return who{sess: sess, agent: agent, cur: cur}, true, nil
 }
 
 // CheckArchitecture implements ports.ArchitectureRules.
 func (s *Service) CheckArchitecture(ctx context.Context, c ports.ArchitectureCheck) ports.ArchitectureVerdict {
-	w, ok := s.resolve(ctx, c.SessionID)
+	w, ok, err := s.resolve(ctx, c.SessionID)
+	if err != nil {
+		return ports.ArchitectureVerdict{Context: "Architecture rules could not be checked: the saved architecture could not be read."}
+	}
 	if !ok {
 		return ports.ArchitectureVerdict{}
 	}
 	paths := inside(w.sess.WorkingDir, c.Paths)
+	if c.Shim {
+		paths = withContents(w.sess.WorkingDir, paths)
+	}
 	var v verdict
 	if c.Point == domain.PointBeforeTool || c.Point == domain.PointBeforeCommit {
 		s.editOutsideLayer(ctx, w, c, paths, &v)
@@ -221,4 +234,36 @@ func resolve(p string) string {
 		rest = filepath.Join(filepath.Base(dir), rest)
 		dir = parent
 	}
+}
+
+// maxExpanded caps the files a directory operation is expanded into.
+const maxExpanded = 5000
+
+// withContents adds, for each path (relative to the worktree) that is a
+// directory, the files under it: `rm -r internal` changes every layer inside
+// internal, not just the folder.
+func withContents(worktree string, paths []string) []string {
+	out := slices.Clone(paths)
+	for _, p := range paths {
+		root := filepath.Join(worktree, filepath.FromSlash(p))
+		if info, err := os.Stat(root); err != nil || !info.IsDir() {
+			continue
+		}
+		_ = filepath.WalkDir(root, func(f string, d fs.DirEntry, err error) error {
+			if err != nil || len(out) >= maxExpanded {
+				return filepath.SkipAll
+			}
+			if d.IsDir() {
+				if d.Name() == ".git" {
+					return filepath.SkipDir
+				}
+				return nil
+			}
+			if rel, err := filepath.Rel(worktree, f); err == nil {
+				out = append(out, filepath.ToSlash(rel))
+			}
+			return nil
+		})
+	}
+	return out
 }

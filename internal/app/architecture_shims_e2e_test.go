@@ -122,3 +122,15 @@ func TestAnUnreachableHarnessLetsAShimmedWriteRunAndSaysSo(t *testing.T) {
 		t.Errorf("%+v", r)
 	}
 }
+
+func TestRemovingAFolderThatHoldsAProtectedLayerIsRefused(t *testing.T) {
+	bin := buildServer(t)
+	h := newArchHooks(t, "blocking")
+	a := h.asWithShims(bin)
+	file := filepath.Join(a.worktree, "internal", "domain", "zone.go")
+	write(t, file, "old\n")
+	r := a.inWorktree(t, "rm -r internal")
+	if r.code != 1 || !strings.Contains(r.stderr, "internal/domain/zone.go is in layer domain") || read(t, file) != "old\n" {
+		t.Errorf("%+v", r)
+	}
+}

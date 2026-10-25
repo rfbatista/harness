@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/xeipuuv/gojsonschema"
@@ -715,6 +716,9 @@ func TestRepositoryArchitecture_ExportCommitsTheFileAndTheSchemaOnTheDefaultBran
 	res.Body.Close()
 	if written, _ := os.ReadFile(filepath.Join(s.checkout, ".harness", "architecture.schema.json")); !bytes.Equal(written, served) {
 		t.Error("the schema written is not the schema served")
+	}
+	if !strings.Contains(string(yamlText), "  - id: archtest\n    kind: command\n    at: before_commit\n    command: go test ./...\n    mode: warning\n    message: The architecture test failed.\n") {
+		t.Errorf("a command rule's keys are not in the contract's order:\n%s", yamlText)
 	}
 	if remote := gitE2E(t, bare, "rev-parse", "main"); remote != remoteBefore {
 		t.Error("the export pushed")
