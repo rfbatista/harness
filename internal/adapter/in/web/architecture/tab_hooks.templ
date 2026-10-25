@@ -21,13 +21,13 @@ templ tabHooks() {
 					<div class="[ pane ]" x-bind:data-rule-index="r.index">
 						<header>
 							<span class="[ weight-medium ]" x-text="r.rule.id"></span>
-							<span class="[ badge ]" data-mode x-bind:data-tone="r.rule.mode === 'blocking' ? 'danger' : 'attention'" x-text="r.modeText"></span>
+							<span class="[ badge ]" data-mode x-bind:data-tone="r.tone" x-text="r.modeText"></span>
 							<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-on:click="remove(r.index)">Delete</button>
 						</header>
 						<div class="[ flow ] [ pad-m ]">
 							<div class="[ field ]">
 								<label x-bind:for="'rule-' + r.index + '-id'">Rule id</label>
-								<input x-bind:id="'rule-' + r.index + '-id'" data-field="id" class="[ text-sm ]" autocomplete="off" placeholder="stay-in-your-layer" x-bind:value="r.rule.id ?? ''" x-bind:aria-invalid="fieldInvalid(r.index, 'id')" x-on:input="set(r.index, 'id', $event.target.value)"/>
+								<input x-bind:id="'rule-' + r.index + '-id'" data-field="id" class="[ text-sm ]" autocomplete="off" placeholder="stay-in-your-layer" x-bind:value="r.id" x-bind:aria-invalid="fieldInvalid(r.index, 'id')" x-on:input="set(r.index, 'id', $event.target.value)"/>
 								<template x-if="fieldError(r.index, 'id')">
 									<span class="[ error ]" x-bind:data-error-for="pointer(r.index, 'id')" x-text="fieldError(r.index, 'id')"></span>
 								</template>
@@ -59,7 +59,7 @@ templ tabHooks() {
 									</div>
 									<div class="[ field ]">
 										<label x-bind:for="'rule-' + r.index + '-command'">Command</label>
-										<input x-bind:id="'rule-' + r.index + '-command'" data-field="command" class="[ text-sm ]" autocomplete="off" placeholder="go test ./..." x-bind:value="r.rule.command ?? ''" x-bind:aria-invalid="fieldInvalid(r.index, 'command')" x-on:input="set(r.index, 'command', $event.target.value)"/>
+										<input x-bind:id="'rule-' + r.index + '-command'" data-field="command" class="[ text-sm ]" autocomplete="off" placeholder="go test ./..." x-bind:value="r.command" x-bind:aria-invalid="fieldInvalid(r.index, 'command')" x-on:input="set(r.index, 'command', $event.target.value)"/>
 										<template x-if="fieldError(r.index, 'command')">
 											<span class="[ error ]" x-bind:data-error-for="pointer(r.index, 'command')" x-text="fieldError(r.index, 'command')"></span>
 										</template>
@@ -98,7 +98,7 @@ templ tabHooks() {
 							</div>
 							<div class="[ field ]">
 								<label x-bind:for="'rule-' + r.index + '-message'">Message the agent sees</label>
-								<textarea x-bind:id="'rule-' + r.index + '-message'" data-field="message" rows="2" class="[ text-sm ]" x-bind:value="r.rule.message ?? ''" x-bind:aria-invalid="fieldInvalid(r.index, 'message')" x-on:input="set(r.index, 'message', $event.target.value)"></textarea>
+								<textarea x-bind:id="'rule-' + r.index + '-message'" data-field="message" rows="2" class="[ text-sm ]" x-bind:value="r.message" x-bind:aria-invalid="fieldInvalid(r.index, 'message')" x-on:input="set(r.index, 'message', $event.target.value)"></textarea>
 								<template x-if="fieldError(r.index, 'message')">
 									<span class="[ error ]" x-bind:data-error-for="pointer(r.index, 'message')" x-text="fieldError(r.index, 'message')"></span>
 								</template>

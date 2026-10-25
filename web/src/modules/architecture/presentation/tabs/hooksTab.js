@@ -36,6 +36,11 @@ export const hooksTab = ({ gateway }) => () => ({
         isEdit: rule.kind === "edit_outside_layer",
         atTool: rule.at === "before_tool",
         modeText: MODES[rule.mode]?.text ?? rule.mode,
+        // the Alpine CSP build has no ternary or ??, so the template reads these ready-made
+        tone: rule.mode === "blocking" ? "danger" : "attention",
+        id: rule.id ?? "",
+        command: rule.command ?? "",
+        message: rule.message ?? "",
         agents: joinList(rule.agents),
         paths: rule.paths ?? "",
         tools: joinList(rule.tools),

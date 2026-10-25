@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/chromedp/chromedp"
 
@@ -403,5 +404,24 @@ func TestArchitectureDraftSurvivesSwitchingTabs(t *testing.T) {
 	)
 	if value != "kept" {
 		t.Fatalf("draft = %q", value)
+	}
+}
+
+// Every tab opens without a script error, with a record to draw. The Alpine
+// CSP build rejects expressions it cannot parse (ternaries, ??) in the page
+// and its tabs, which only shows as a console error.
+func TestArchitectureEveryTabOpensWithoutAScriptError(t *testing.T) {
+	rig := newArchRig(t)
+	rig.api.seed(savedRecord())
+	for _, path := range []string{"", "/tools", "/sandboxes", "/orchestration", "/rules", "/layers", "/file", "/diagram"} {
+		rig.run(t,
+			chromedp.EmulateViewport(1280, 900),
+			chromedp.Navigate(rig.url(path)),
+			poll(`document.querySelectorAll('[role=tab]').length === 7`),
+			chromedp.Sleep(400*time.Millisecond),
+		)
+		if errs := rig.errs.all(); len(errs) > 0 {
+			t.Fatalf("%s: script errors: %v", path, errs)
+		}
 	}
 }
