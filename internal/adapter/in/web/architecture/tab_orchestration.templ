@@ -1,11 +1,94 @@
 package architecture
 
-// tabOrchestration is the Orchestration tab's panel. It is its own Alpine component,
-// architectureOrchestrationTab, nested in architecturePage: it reads and edits the
-// page's draft and errors through the page's scope.
+// tabOrchestration is the Orchestration tab's panel. It is its own Alpine
+// component, architectureOrchestrationTab, nested in architecturePage: it reads
+// and edits the page's draft and errors through the page's scope.
 templ tabOrchestration() {
 	<section role="tabpanel" id="architecture-panel-orchestration" aria-labelledby="architecture-tab-orchestration" x-show="isTab('orchestration')" x-data="architectureOrchestrationTab" class="[ flow ]">
 		<h2>Orchestration</h2>
-		<p class="[ color-ink-muted ]">Which model each agent uses, and who hands off to whom.</p>
+		<p class="[ color-ink-muted ]">Which model each agent runs on, and who hands work to whom. Use plain for a session with no agent.</p>
+		<h3>Model routing</h3>
+		<template x-for="(row, i) in routes()" x-bind:key="i">
+			<section class="[ pane ]" data-entry="route">
+				<header>
+					<span class="[ grow ]" x-text="row.agent || 'New route'"></span>
+					<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-bind:aria-label="removeLabel(row)" x-on:click="removeRoute(i)">Remove</button>
+				</header>
+				<div class="[ content flow ]">
+					<div class="[ cluster ]">
+						<div class="[ field ]">
+							<label>
+								Agent
+								<input data-field="agent" class="[ text-sm ]" autocomplete="off" placeholder="go-developer" x-model="row.agent" x-bind:aria-invalid="routeBad(i, 'agent')"/>
+							</label>
+							<template x-if="routeErr(i, 'agent')">
+								<span class="[ error ]" x-bind:data-error-for="routePtr(i, 'agent')"><span aria-hidden="true">✕</span> <span x-text="routeErr(i, 'agent')"></span></span>
+							</template>
+						</div>
+						<div class="[ field ]">
+							<label>
+								Model
+								<input data-field="model" class="[ text-sm font-mono ]" autocomplete="off" placeholder="claude-opus-5-5" x-model="row.model" x-bind:aria-invalid="routeBad(i, 'model')"/>
+							</label>
+							<template x-if="routeErr(i, 'model')">
+								<span class="[ error ]" x-bind:data-error-for="routePtr(i, 'model')"><span aria-hidden="true">✕</span> <span x-text="routeErr(i, 'model')"></span></span>
+							</template>
+						</div>
+					</div>
+					<div class="[ field ]">
+						<label>
+							Note
+							<input data-field="note" class="[ text-sm ]" autocomplete="off" placeholder="One line, optional" x-model="row.note"/>
+						</label>
+					</div>
+				</div>
+			</section>
+		</template>
+		<div>
+			<button type="button" class="[ button ]" data-size="sm" x-on:click="addRoute">Add a route</button>
+		</div>
+		<h3>Hand-offs</h3>
+		<template x-for="(row, i) in handoffRows()" x-bind:key="i">
+			<section class="[ pane ]" data-entry="handoff">
+				<header>
+					<span class="[ grow ]"><span x-text="row.from || '…'"></span> → <span x-text="row.to || '…'"></span></span>
+					<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-bind:aria-label="removeLabel(row)" x-on:click="removeHandoff(i)">Remove</button>
+				</header>
+				<div class="[ content flow ]">
+					<div class="[ cluster ]">
+						<div class="[ field ]">
+							<label>
+								From
+								<input data-field="from" class="[ text-sm ]" autocomplete="off" placeholder="software-architect" x-model="row.from" x-bind:aria-invalid="handoffBad(i, 'from')"/>
+							</label>
+							<template x-if="handoffErr(i, 'from')">
+								<span class="[ error ]" x-bind:data-error-for="handoffPtr(i, 'from')"><span aria-hidden="true">✕</span> <span x-text="handoffErr(i, 'from')"></span></span>
+							</template>
+						</div>
+						<div class="[ field ]">
+							<label>
+								To
+								<input data-field="to" class="[ text-sm ]" autocomplete="off" placeholder="go-developer" x-model="row.to" x-bind:aria-invalid="handoffBad(i, 'to')"/>
+							</label>
+							<template x-if="handoffErr(i, 'to')">
+								<span class="[ error ]" x-bind:data-error-for="handoffPtr(i, 'to')"><span aria-hidden="true">✕</span> <span x-text="handoffErr(i, 'to')"></span></span>
+							</template>
+						</div>
+					</div>
+					<div class="[ field ]">
+						<label>
+							When
+							<input data-field="when" class="[ text-sm ]" autocomplete="off" placeholder="A spec for the harness server is approved." x-model="row.when" x-bind:aria-invalid="handoffBad(i, 'when')"/>
+						</label>
+						<template x-if="handoffErr(i, 'when')">
+							<span class="[ error ]" x-bind:data-error-for="handoffPtr(i, 'when')"><span aria-hidden="true">✕</span> <span x-text="handoffErr(i, 'when')"></span></span>
+						</template>
+					</div>
+				</div>
+			</section>
+		</template>
+		<div>
+			<button type="button" class="[ button ]" data-size="sm" x-on:click="addHandoff">Add a hand-off</button>
+		</div>
 	</section>
 }

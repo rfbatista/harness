@@ -29,6 +29,18 @@ export function architectureGateway(api, feed) {
       return toState(await api.post("/get_repository_architecture", { repository_id: repositoryId }));
     },
 
+    /** What the harness found for the person to confirm; it never writes. */
+    async discover(repositoryId) {
+      const body = await api.post("/discover_repository_architecture", { repository_id: repositoryId });
+      const list = (xs) => (Array.isArray(xs) ? xs : []);
+      return {
+        instructions: list(body?.instructions),
+        tools: list(body?.tools),
+        sandboxes: list(body?.sandboxes),
+        agents: list(body?.agents),
+      };
+    },
+
     /** The newest rule events of a repository, newest first. */
     async listRuleEvents(repositoryId, limit = 50) {
       const body = await api.post("/list_architecture_rule_events", { repository_id: repositoryId, limit });
