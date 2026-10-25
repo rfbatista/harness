@@ -64,6 +64,9 @@ func (s *Service) DeleteBoundedContext(id string) error {
 
 // AssignZoneToBoundedContext links a zone to a bounded context of the same project.
 func (s *Service) AssignZoneToBoundedContext(zoneID, boundedContextID string) (*domain.Zone, error) {
+	if err := s.refuseLayer(zoneID); err != nil {
+		return nil, err
+	}
 	if s.boundedContexts == nil {
 		return nil, errNoBoundedContexts
 	}
@@ -83,5 +86,8 @@ func (s *Service) AssignZoneToBoundedContext(zoneID, boundedContextID string) (*
 
 // UnassignZoneFromBoundedContext clears a zone's bounded context link.
 func (s *Service) UnassignZoneFromBoundedContext(zoneID string) (*domain.Zone, error) {
+	if err := s.refuseLayer(zoneID); err != nil {
+		return nil, err
+	}
 	return s.zones.SetBoundedContext(zoneID, "")
 }
