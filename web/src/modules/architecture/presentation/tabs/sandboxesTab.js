@@ -2,5 +2,10 @@
 // architecturePage, so `this.draft`, `this.errorFor(path)` and `this.isInvalid(path)`
 // reach the page's draft and its field errors.
 
+import { blankSandbox } from "../../domain/descriptive.js";
+import { listEditing } from "./listEditing.js";
+
 /** @param { gateway: ReturnType<typeof import("../../infrastructure/architecture-gateway.js").architectureGateway> } deps */
-export const sandboxesTab = ({ gateway }) => () => ({});
+export const sandboxesTab = ({ gateway }) => () => ({
+  ...listEditing(["sandboxes"], blankSandbox),
+});

@@ -36,8 +36,45 @@ templ PageView(v View) {
 						</div>
 					</template>
 					<template x-if="isNew">
-						<div id="architecture-empty">
+						<div id="architecture-empty" class="[ flow ]" x-data="architectureSetup">
 							@components.Empty("This repository has no architecture yet", "Define its layers, the rules that guard them and what its agents work with. Nothing is stored until you save.")
+							<div class="[ pane ]" data-setup>
+								<header>Start from what the harness found</header>
+								<div class="[ content flow ]">
+									<template x-if="candidates === null">
+										<div class="[ flow ] [ flow-space-xs ]">
+											<p class="[ color-ink-muted ]">The harness can list this repository's instruction files, the tools it knows and its sandboxes for you to confirm. Nothing is added until you confirm, and nothing is stored until you save.</p>
+											<div>
+												<button type="button" class="[ button ]" data-variant="primary" data-size="sm" data-action="discover" x-bind:disabled="loading" x-bind:aria-busy="loading" x-on:click="discover">Look for what is here</button>
+											</div>
+										</div>
+									</template>
+									<template x-if="failure">
+										<p class="[ error ]" role="alert"><span aria-hidden="true">✕</span> <span x-text="failure"></span></p>
+									</template>
+									<template x-if="nothingFound">
+										<p class="[ color-ink-muted ]">Nothing was found. Add entries in the tabs.</p>
+									</template>
+									<template x-if="listing">
+										<div class="[ flow ] [ flow-space-xs ]">
+											<ul class="[ flow ] [ flow-space-2xs ]" data-candidates>
+												<template x-for="c in candidates" x-bind:key="c.key">
+													<li class="[ field ]" data-inline>
+														<label><input type="checkbox" x-bind:data-candidate="c.key" x-model="c.on"/> <span class="[ badge ]" x-text="c.section"></span> <span class="[ font-mono text-sm ]" x-text="c.label"></span> <span class="[ color-ink-faint text-sm ]" x-text="c.detail"></span></label>
+													</li>
+												</template>
+											</ul>
+											<p class="[ color-ink-faint text-sm ]" x-text="agentsText"></p>
+											<div>
+												<button type="button" class="[ button ]" data-variant="primary" data-size="sm" data-action="confirm" x-bind:disabled="picked === 0" x-on:click="confirm" x-text="confirmText"></button>
+											</div>
+										</div>
+									</template>
+									<template x-if="added >= 0">
+										<p role="status" data-setup-done x-text="addedText"></p>
+									</template>
+								</div>
+							</div>
 						</div>
 					</template>
 					<div class="[ cluster ]" role="list" aria-label="Parts of the architecture" id="architecture-summary">

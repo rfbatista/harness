@@ -29,6 +29,18 @@ export function architectureGateway(api, feed) {
       return toState(await api.post("/get_repository_architecture", { repository_id: repositoryId }));
     },
 
+    /** What the harness found for the person to confirm; it never writes. */
+    async discover(repositoryId) {
+      const body = await api.post("/discover_repository_architecture", { repository_id: repositoryId });
+      const list = (xs) => (Array.isArray(xs) ? xs : []);
+      return {
+        instructions: list(body?.instructions),
+        tools: list(body?.tools),
+        sandboxes: list(body?.sandboxes),
+        agents: list(body?.agents),
+      };
+    },
+
     /** Whether a repository has a saved architecture. */
     async has(repositoryId) {
       return (await this.get(repositoryId)).exists;
