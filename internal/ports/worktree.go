@@ -65,7 +65,12 @@ type BranchMergeReader interface {
 
 // BranchBase is a branch, the ref it was cut from ("" for HEAD) and the
 // commit it was cut at ("" when its workspace did not record it).
-type BranchBase struct{ Branch, Base, BaseSHA string }
+type BranchBase struct {
+	Branch, Base, BaseSHA string
+	// SquashedTip is the branch's tip at a session's successful squash into
+	// the default branch, which leaves no ancestry to read; "" when none.
+	SquashedTip string
+}
 
 // BranchMerges is the answer of BranchMergeReader.BranchMerges.
 type BranchMerges struct {
@@ -78,4 +83,6 @@ type BranchMerges struct {
 // branch contains its tip.
 type BranchMerge struct {
 	Exists, Ahead, Merged bool
+	// Tip is the branch's tip commit; "" when it does not exist.
+	Tip string
 }

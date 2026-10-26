@@ -33,7 +33,15 @@ type fakeGit struct {
 	onFetch func(branch string)
 	fetches []string
 	pushes  []string
-	envs    [][]string // the environment of each fetch and push
+	// What origin's branches were as last fetched, and when; a refresh runs
+	// onFetchOrigin, which may move them as origin moved.
+	originBranches []string
+	fetchedAt      time.Time
+	branchesErr    error
+	originFetches  int
+	fetchOriginErr error
+	onFetchOrigin  func()
+	envs           [][]string // the environment of each fetch and push
 }
 
 func (g *fakeGit) OriginURL(context.Context, string) (string, error) { return g.origin, nil }
@@ -66,6 +74,24 @@ func (g *fakeGit) Push(_ context.Context, _ string, branch string, env []string)
 	g.pushes = append(g.pushes, branch)
 	g.refs["refs/remotes/origin/"+branch] = true
 	return nil
+}
+
+func (g *fakeGit) OriginBranches(context.Context, string) ([]string, time.Time, error) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return append([]string{}, g.originBranches...), g.fetchedAt, g.branchesErr
+}
+
+func (g *fakeGit) FetchOrigin(_ context.Context, _ string, env []string) error {
+	g.mu.Lock()
+	g.originFetches++
+	g.envs = append(g.envs, env)
+	on := g.onFetchOrigin
+	g.mu.Unlock()
+	if on != nil {
+		on()
+	}
+	return g.fetchOriginErr
 }
 
 func (g *fakeGit) Subjects(_ context.Context, _, base, head string, limit int) ([]string, error) {

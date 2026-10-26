@@ -53,7 +53,9 @@ func Main() int {
 		return 127
 	}
 	shell := os.Getenv(ports.ShellDirEnv)
-	if shell == "" {
+	tree, archURL := os.Getenv(ports.WorktreeEnv), strings.TrimRight(os.Getenv(ports.ArchitectureURLEnv), "/")
+	guarded := tree != "" && archURL != ""
+	if shell == "" && !guarded {
 		return become(real)
 	}
 	cwd, err := os.Getwd()
@@ -61,7 +63,17 @@ func Main() int {
 		return become(real)
 	}
 	edits := parse(name, args, real, cwd)
-	if !inside(shell, edits) {
+	inShell := shell != "" && inside(shell, edits)
+	inTree := guarded && touches(tree, edits)
+	if !inShell && !inTree {
+		return become(real)
+	}
+	if inTree {
+		if code, stop := checkArchitecture(archURL, name, edits); stop {
+			return code
+		}
+	}
+	if !inShell {
 		return become(real)
 	}
 	h := harness{base: strings.TrimRight(os.Getenv(ports.ShellURLEnv), "/"), tool: name, shell: newShellDir(shell)}

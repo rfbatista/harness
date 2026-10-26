@@ -23,6 +23,7 @@ import (
 	"operators-mcp/internal/adapter/out/agentcatalog"
 	"operators-mcp/internal/app/catalog"
 	"operators-mcp/internal/application/apps"
+	"operators-mcp/internal/application/archrules"
 	"operators-mcp/internal/application/artifacts"
 	"operators-mcp/internal/application/execution"
 	"operators-mcp/internal/application/notifications"
@@ -54,7 +55,7 @@ var ServerModule = fx.Module("server",
 
 // registerHTTPServer mounts the UI and JSON API on a mux and serves it,
 // shutting down gracefully when fx stops.
-func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRunner *apps.Service, ts *tooling.Service, exec *execution.Service, orch *orchestration.Service, plan *planning.Service, ws *workspaces.Service, broker *approval.Broker, sessions ports.SessionRepository, art *artifacts.Service, channel *taskchannel.Service, prs *workspaces.PullRequests, merges *workspaces.Merges, code ports.CodeBrowser, inbox optionalNotifications, creds optionalGitCredentials, shells *vshell.Service, usageSvc *usage.Service, indexes optionalRepositoryIndexes, sandboxStore *sandboxsettings.Store, managedClaude *managedclaude.Service, claudeBin ports.ManagedClaudeBin, agentCred optionalAgentCredential, helper *writinghelper.Service, agentCat *agentcatalog.Catalog) error {
+func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRunner *apps.Service, ts *tooling.Service, exec *execution.Service, orch *orchestration.Service, plan *planning.Service, ws *workspaces.Service, broker *approval.Broker, sessions ports.SessionRepository, art *artifacts.Service, channel *taskchannel.Service, prs *workspaces.PullRequests, merges *workspaces.Merges, branchNames *workspaces.BranchNames, code ports.CodeBrowser, inbox optionalNotifications, creds optionalGitCredentials, shells *vshell.Service, usageSvc *usage.Service, indexes optionalRepositoryIndexes, sandboxStore *sandboxsettings.Store, managedClaude *managedclaude.Service, claudeBin ports.ManagedClaudeBin, agentCred optionalAgentCredential, helper *writinghelper.Service, rules *archrules.Service, agentCat *agentcatalog.Catalog) error {
 	uiHandler, err := ui.SPAHandler(ui.Dist)
 	if err != nil {
 		return err
@@ -78,6 +79,11 @@ func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRun
 		notes, noteReader, notifier = inbox.Service, inbox.Service, inbox.Service
 	}
 
+	// Discovery offers the platform's sandbox and what the person added to it.
+	if cat.RepositoryArchitectures != nil {
+		cat.RepositoryArchitectures.UseSandbox(sandboxDriver(orch), sandboxStore)
+	}
+
 	mux := http.NewServeMux()
 	apiRouter := httpapi.NewRouter(httpapi.NewHandler(httpapi.Services{
 		Projects:     cat.Projects,
@@ -99,15 +105,17 @@ func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRun
 		Artifacts:    art,
 		TaskChannel:  channel,
 		// What a person adds to a task: files, images, audio, links, comments.
-		TaskResources: plan,
-		TaskComments:  plan,
-		TaskArchive:   plan,
-		PullRequests:  prs,
-		Merges:        merges,
-		Notifications: notes,
-		Usage:         usageSvc,
-		LiveCalls:     usageSvc,
-		Code:          code,
+		TaskResources:    plan,
+		TaskComments:     plan,
+		TaskArchive:      plan,
+		PullRequests:     prs,
+		PullRequestBases: prs,
+		Merges:           merges,
+		BranchNames:      branchNames,
+		Notifications:    notes,
+		Usage:            usageSvc,
+		LiveCalls:        usageSvc,
+		Code:             code,
 		// The git credentials every remote operation authenticates with.
 		GitCredentials: creds.port(),
 		// What sessions write in their virtual shells.
@@ -129,6 +137,10 @@ func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRun
 		AgentAuth:  agentCred.auth(),
 		// The magic pen's steps, streamed.
 		WritingHelper: helper,
+		// One structured record per repository: layers, access, rules.
+		RepositoryArchitectures: cat.RepositoryArchitectures,
+		// What the architecture hooks, shims and commit check ask.
+		ArchitectureRules: rules,
 		// The agent catalog folder: agents, bundles, skills, MCP servers.
 		Catalog: agentCat,
 	}), httpapi.WithToken(cfg.APIToken))

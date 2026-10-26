@@ -1,0 +1,8 @@
+/* Preformatted text that keeps its line breaks and wraps long lines instead of scrolling. */
+
+@layer utilities {
+  .pre-wrap {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+}

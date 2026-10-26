@@ -88,7 +88,7 @@ func (c *Catalog) SaveCatalogAgent(in domain.SaveCatalogAgent) (*domain.CatalogW
 	if !slugRe.MatchString(a.Name) {
 		return nil, invalid("name", "an agent name is lower-case letters, digits and dashes, up to 64")
 	}
-	if strings.TrimSpace(a.Description) == "" {
+	if strings.TrimSpace(a.Description) == "" && !in.AllowNoDescription {
 		return nil, invalid("description", "an agent needs a description")
 	}
 	agents := t.agentsMap()

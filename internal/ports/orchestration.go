@@ -93,7 +93,29 @@ type ProjectChange struct {
 	// CodeChanged says a running session's worktree moved: its HEAD or its
 	// working tree. Clients re-read the code they show.
 	CodeChanged *CodeChange `json:"code_changed,omitempty"`
-	Deleted     bool        `json:"deleted,omitempty"`
+	// ArchitectureChanged says a repository's architecture record was saved,
+	// deleted or exported.
+	ArchitectureChanged *ArchitectureChange `json:"repository_architecture_changed,omitempty"`
+	// ArchitectureRuleEvent is a rule that failed in a session.
+	ArchitectureRuleEvent *ArchitectureRuleEventChange `json:"architecture_rule_event,omitempty"`
+	Deleted               bool                         `json:"deleted,omitempty"`
+}
+
+// ArchitectureRuleEventChange is a rule event on the project feed. ProjectID
+// routes it and is not on the wire.
+type ArchitectureRuleEventChange struct {
+	RepositoryID string                        `json:"repository_id"`
+	Event        *domain.ArchitectureRuleEvent `json:"event"`
+	ProjectID    string                        `json:"-"`
+}
+
+// ArchitectureChange is a repository whose architecture record changed and
+// the version it has now (0 once deleted). ProjectID routes it to the
+// project's followers and is not on the wire.
+type ArchitectureChange struct {
+	RepositoryID string `json:"repository_id"`
+	Version      int    `json:"version"`
+	ProjectID    string `json:"-"`
 }
 
 // CodeChange is a workspace whose code changed and its HEAD now. ProjectID
@@ -129,6 +151,10 @@ func (c ProjectChange) ProjectID() string {
 		return c.PullRequest.ProjectID
 	case c.CodeChanged != nil:
 		return c.CodeChanged.ProjectID
+	case c.ArchitectureChanged != nil:
+		return c.ArchitectureChanged.ProjectID
+	case c.ArchitectureRuleEvent != nil:
+		return c.ArchitectureRuleEvent.ProjectID
 	}
 	return ""
 }
@@ -245,6 +271,10 @@ type InteractiveRequest struct {
 	Model      string `json:"model,omitempty"`
 	AutoAccept string `json:"auto_accept,omitempty"` // "off" | "edits" | "all"
 	BaseBranch string `json:"base_branch,omitempty"`
+	// BranchName is the branch the session's worktree is cut on, as the person
+	// typed it; empty lets the server generate one. An existing branch is
+	// never reused (ADR 0036).
+	BranchName string `json:"branch_name,omitempty"`
 	// RunsOn is where the agent runs; empty means RunnerTUI. RunnerHost
 	// names the client machine for a RunnerTUI session.
 	RunsOn     domain.Runner `json:"runs_on,omitempty"`

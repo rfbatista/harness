@@ -116,4 +116,31 @@ export function pullRequestGatewayContract(name, makeSubject) {
     await flush();
     assert.equal(seen.length, 2, "nothing after close");
   });
+
+  contract("bases lists origin's branches as last fetched, by name, with the workspace's base as the default", async () => {
+    const fetchedAt = new Date("2026-10-26T12:00:00Z");
+    const { gateway } = makeSubject({ workspaces: [makeWorkspace({ baseBranch: "develop", originBranches: ["main", "develop", "release"], fetchedAt })] });
+    const bases = await gateway.bases("ws1");
+    assert.deepEqual([bases.workspaceId, [...bases.branches], bases.default, bases.fetchedAt.toISOString()], ["ws1", ["develop", "main", "release"], "develop", "2026-10-26T12:00:00.000Z"]);
+    const unknown = makeSubject({ workspaces: [makeWorkspace()] });
+    assert.equal((await unknown.gateway.bases("ws1")).fetchedAt, null, "null when origin was never fetched");
+    await assert.rejects(unknown.gateway.bases("ws-gone"), Codes.WORKSPACE_NOT_FOUND);
+  });
+
+  contract("refreshBases fetches origin and answers the new list; a failure keeps the old one readable", async () => {
+    const { gateway, world } = makeSubject({ workspaces: [makeWorkspace({ originBranches: ["main"], fetchableBranches: ["main", "feature/new"] })] });
+    const refreshed = await gateway.refreshBases("ws1");
+    assert.deepEqual([[...refreshed.branches], refreshed.fetchedAt instanceof Date], [["feature/new", "main"], true]);
+    assert.deepEqual([...(await gateway.bases("ws1")).branches], ["feature/new", "main"]);
+
+    world.update("ws1", { fetchableBranches: ["main"] });
+    world.failFetchNext(Codes.PR_FETCH_FAILED);
+    await assert.rejects(gateway.refreshBases("ws1"), Codes.PR_FETCH_FAILED);
+    assert.deepEqual([...(await gateway.bases("ws1")).branches], ["feature/new", "main"], "nothing is lost");
+  });
+
+  contract("refreshBases without a GitHub origin is PR_NO_REMOTE", async () => {
+    const { gateway } = makeSubject({ workspaces: [makeWorkspace({ remote: null })] });
+    await assert.rejects(gateway.refreshBases("ws1"), Codes.PR_NO_REMOTE);
+  });
 }

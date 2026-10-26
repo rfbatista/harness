@@ -174,6 +174,34 @@ export function sessionGatewayContract(name, makeSubject, makeSession) {
     await assert.rejects(gateway.listBranches("ghost"), Codes.REPOSITORY_NOT_FOUND);
   });
 
+  contract("checkBranchName suggests a name and says whether one is valid and free", async () => {
+    const branches = { r1: [{ name: "main", remote: false, isHead: true }, { name: "feature/login", remote: false, isHead: false }, { name: "feature/login-2", remote: false, isHead: false }, { name: "origin/new", remote: true, isHead: false }] };
+    const { gateway } = makeSubject({ projects: ["p1"], sessions: [], branches });
+    const none = await gateway.checkBranchName({ repositoryId: "r1", name: "", ticketId: "t1" });
+    assert.ok(none.generated.startsWith("agent/"), none.generated);
+    assert.deepEqual([none.name, none.valid, none.available, none.code], ["", true, true, ""]);
+    assert.deepEqual((({ valid, available, code }) => ({ valid, available, code }))(await gateway.checkBranchName({ repositoryId: "r1", name: " fix/ok " })), { valid: true, available: true, code: "" });
+    const taken = await gateway.checkBranchName({ repositoryId: "r1", name: "feature/login" });
+    assert.deepEqual([taken.valid, taken.available, taken.code, taken.suggestion], [true, false, "BRANCH_EXISTS", "feature/login-3"]);
+    const invalid = await gateway.checkBranchName({ repositoryId: "r1", name: "fix login" });
+    assert.deepEqual([invalid.valid, invalid.available, invalid.code], [false, false, "BRANCH_NAME_INVALID"]);
+    assert.ok(invalid.reason.length > 0);
+    assert.equal((await gateway.checkBranchName({ repositoryId: "r1", name: "new" })).available, true, "a remote-tracking ref is not a local branch");
+    await assert.rejects(gateway.checkBranchName({ repositoryId: "ghost", name: "" }), Codes.REPOSITORY_NOT_FOUND);
+  });
+
+  contract("start cuts the branch on the name it was given and refuses a taken or invalid one", async () => {
+    const branches = { r1: [{ name: "main", remote: false, isHead: true }, { name: "feature/login", remote: false, isHead: false }] };
+    const { gateway } = makeSubject({ projects: ["p1"], sessions: [], repositories: { r1: "p1" }, branches });
+    const base = { projectId: "p1", ticketId: "t1", repositoryId: "r1", prompt: "", size: { cols: 80, rows: 24 } };
+    await gateway.start({ ...base, branchName: "fix/login" });
+    await gateway.start({ ...base });
+    await assert.rejects(gateway.start({ ...base, branchName: "feature/login" }), Codes.BRANCH_EXISTS);
+    await assert.rejects(gateway.start({ ...base, branchName: "no way" }), Codes.BRANCH_NAME_INVALID);
+    const err = await gateway.start({ ...base, branchName: "feature/login" }).catch((e) => e);
+    assert.deepEqual(err.details, { name: "feature/login", suggestion: "feature/login-2" });
+  });
+
   contract("decodeSeed reads the API's JSON shape and rejects garbage", () => {
     const { gateway } = makeSubject({ projects: ["p1"], sessions: [] });
     const seed = gateway.decodeSeed({

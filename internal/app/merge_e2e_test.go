@@ -108,15 +108,17 @@ func TestMergeASessionsBranch_EndToEnd(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// A checkout on another branch.
+	// A checkout on another branch: the default branch is not checked out, so
+	// it is merged without touching the checkout (WRONG_BRANCH is retired here).
 	gitE2E(t, f.checkout, "checkout", "-q", "-b", "elsewhere")
 	snap = f.snapshot(t)
+	mainBefore := gitE2E(t, f.checkout, "rev-parse", "main")
 	status, body = merge("dirty")
-	if status != http.StatusConflict || body["code"] != domain.MergeWrongBranch || !strings.Contains(body["error"].(string), "is on elsewhere, not on the default branch main") {
-		t.Errorf("wrong branch: %d %v", status, body)
+	if status != http.StatusOK || body["merged"] != true || body["into"] != "main" || body["head"] != gitE2E(t, f.checkout, "rev-parse", "main") || body["head"] == mainBefore {
+		t.Errorf("merge while another branch is checked out: %d %v", status, body)
 	}
 	if f.snapshot(t) != snap {
-		t.Error("a refusal changed the checkout")
+		t.Error("a merge into a branch that is not checked out changed the checkout")
 	}
 	gitE2E(t, f.checkout, "checkout", "-q", "main")
 
@@ -158,9 +160,13 @@ func TestMergeASessionsBranch_EndToEnd(t *testing.T) {
 	if status != 200 || body["available"] != false || body["reason"] != domain.MergeNoBranch {
 		t.Errorf("offer without a branch: %d %v", status, body)
 	}
-	status, body = call(t, http.MethodGet, srv.URL+"/api/sessions/clean/merge")
-	if status != 200 || body["available"] != true || body["into"] != "main" {
+	status, body = call(t, http.MethodGet, srv.URL+"/api/sessions/conflict/merge")
+	if status != 200 || body["available"] != true || body["into"] != "main" || body["ahead"] != float64(1) || body["branch"] != "agent/conflict" {
 		t.Errorf("offer: %d %v", status, body)
+	}
+	status, body = call(t, http.MethodGet, srv.URL+"/api/sessions/clean/merge")
+	if status != 200 || body["available"] != false || body["reason"] != domain.MergeAlreadyMerged || body["ahead"] != float64(0) {
+		t.Errorf("offer of a merged branch: %d %v", status, body)
 	}
 	if status, _ = merge("nobody"); status != http.StatusNotFound {
 		t.Errorf("unknown session = %d", status)

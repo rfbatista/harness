@@ -1,23 +1,82 @@
 package sessions
 
-// mergePanel is the Merge tab: merge the session's branch with a merge commit
-// into the repository's default branch, in its local checkout, which the
-// harness server does (ADR 0021). The button is offered only where a merge
-// can apply and is disabled while one runs; the newest result, the new HEAD
-// or the refusal with its reason, shows below it and is the session's own, so
-// it survives a reload (sessionsMerge).
+// mergePanel is the Merge tab: merge the session's branch into a target the
+// person picks among the repository's local branches, by merge commit or
+// squash, in its local checkout, which the harness server does (ADR 0021,
+// ADR 0035). The form states what it will do before the button is pressed;
+// the button is offered only where a merge can apply and is disabled, with its
+// reason beside it, while it cannot run. The newest result, the new HEAD or
+// the refusal with its reason, shows below it and is the session's own, so it
+// survives a reload (sessionsMerge).
 templ mergePanel() {
 	<section class="[ frame ]" aria-label="Merge" x-data="sessionsMerge(panel)">
 		<div class="[ merge-tab ]" data-scroll>
 			<h3>Merge this branch</h3>
 			<p class="[ explain ]">
-				The harness server merges <span class="[ font-mono ]" x-text="branch"></span> into <span class="[ font-mono ]" x-text="into"></span> in the repository's local checkout, with a merge commit.
+				The harness server merges <span class="[ font-mono ]" x-text="branch"></span> into the branch you pick, in the repository's local checkout.
 				It never pushes, restarts nothing, and the task stays where it is.
 			</p>
-			<template x-if="offered">
-				<div class="[ actions ]">
-					<button type="button" class="[ button ]" data-variant="primary" data-merge x-bind:disabled="cannotMerge" x-bind:aria-busy="busyAttr" x-on:click="mergeNow" x-text="label"></button>
+			<template x-if="warning">
+				<div class="[ banner ]" data-tone="attention" data-merge-warning role="status">
+					<span x-text="warning"></span>
 				</div>
+			</template>
+			<template x-if="offer">
+				<form class="[ merge-form ]" x-on:submit.prevent="mergeNow" x-bind:aria-busy="busyAttr">
+					<fieldset class="[ merge-fields ]" x-bind:disabled="formBusy">
+						<div class="[ field ]">
+							<label for="merge-into">Into</label>
+							<template x-if="plain">
+								<div class="[ dropdown ]" x-data="dropdown" x-bind:aria-busy="refreshing">
+									<select id="merge-into" x-model="target" x-on:change="targetChanged">
+										<template x-for="o in targetOptions" x-bind:key="o.name">
+											<option x-bind:value="o.name" x-text="o.label"></option>
+										</template>
+									</select>
+								</div>
+							</template>
+							<template x-if="filterable">
+								<div class="[ dropdown ]" x-data="combobox" x-bind:aria-busy="refreshing">
+									<select id="merge-into" x-model="target" x-on:change="targetChanged">
+										<template x-for="o in targetOptions" x-bind:key="o.name">
+											<option x-bind:value="o.name" x-text="o.label"></option>
+										</template>
+									</select>
+								</div>
+							</template>
+						</div>
+						<fieldset class="[ field ] [ merge-methods ]">
+							<legend>Method</legend>
+							<template x-for="m in methods" x-bind:key="m.value">
+								<label class="[ merge-method ]">
+									<input type="radio" name="merge-method" x-bind:value="m.value" x-model="method"/>
+									<span class="[ flow ] [ flow-space-3xs ]">
+										<strong x-text="m.label"></strong>
+										<span class="[ hint ]" x-text="m.hint"></span>
+									</span>
+								</label>
+							</template>
+						</fieldset>
+						<template x-if="squash">
+							<div class="[ field ]">
+								<label for="merge-message">Commit message</label>
+								<textarea id="merge-message" class="[ font-mono text-sm ]" rows="4" x-model="message" x-on:input="messageTyped"></textarea>
+							</div>
+						</template>
+					</fieldset>
+					<template x-if="offered">
+						<p class="[ consequence ]" data-merge-consequence aria-live="polite">
+							<strong>What will happen.</strong>
+							<span x-text="consequence"></span>
+						</p>
+					</template>
+					<template x-if="showButton">
+						<div class="[ actions ]">
+							<button type="submit" class="[ button ]" data-variant="primary" data-merge x-bind:disabled="cannotMerge" x-bind:aria-busy="busyAttr" x-text="label"></button>
+							<span class="[ hint ]" data-merge-reason x-show="buttonReason" x-text="buttonReason"></span>
+						</div>
+					</template>
+				</form>
 			</template>
 			<template x-if="notOffered">
 				<div class="[ note ]" data-merge-unavailable>
@@ -30,10 +89,11 @@ templ mergePanel() {
 				</div>
 			</template>
 			<template x-if="hasResult">
-				<div class="[ banner ]" data-merge-result x-bind:data-tone="resultTone" role="status">
+				<div class="[ banner ]" data-merge-result x-bind:data-tone="resultTone" x-bind:role="resultRole">
 					<div class="[ flow ] [ flow-space-3xs ]">
 						<strong x-text="resultTitle"></strong>
 						<p x-text="resultDetail"></p>
+						<p x-show="resultNote" x-text="resultNote"></p>
 						<span class="[ code ]" x-show="resultCode" x-text="resultCode"></span>
 					</div>
 				</div>

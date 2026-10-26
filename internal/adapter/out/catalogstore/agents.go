@@ -78,7 +78,7 @@ func (r *Agents) Create(name, description, promptID string, skillIDs, mcpServerI
 	if err := refusePrompt(promptID); err != nil {
 		return nil, err
 	}
-	if _, err := r.cat.SaveCatalogAgent(domain.SaveCatalogAgent{Agent: domain.CatalogAgentInput{
+	if _, err := r.cat.SaveCatalogAgent(domain.SaveCatalogAgent{AllowNoDescription: true, Agent: domain.CatalogAgentInput{
 		Name: name, Description: description, Entries: skillIDs, MCPServers: mcpServerIDs,
 	}}); err != nil {
 		return nil, err
@@ -115,7 +115,7 @@ func (r *Agents) Update(id, name, description, promptID string, skillIDs, mcpSer
 	if mcpServerIDs == nil {
 		mcpServerIDs = cur.MCPServers
 	}
-	if _, err := r.cat.SaveCatalogAgent(domain.SaveCatalogAgent{PreviousName: id, Agent: domain.CatalogAgentInput{
+	if _, err := r.cat.SaveCatalogAgent(domain.SaveCatalogAgent{AllowNoDescription: true, PreviousName: id, Agent: domain.CatalogAgentInput{
 		Name: name, Description: description, Aliases: cur.Aliases, Entries: entries,
 		MCPServers: mcpServerIDs, AllowedTools: cur.AllowedTools,
 	}}); err != nil {

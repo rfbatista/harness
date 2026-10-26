@@ -16,6 +16,9 @@ const (
 	CodePRToolUnavailable = "PR_TOOL_UNAVAILABLE"
 	CodePRPushFailed      = "PR_PUSH_FAILED"
 	CodePRCreateFailed    = "PR_CREATE_FAILED"
+	// CodePRFetchFailed: refreshing origin's branches failed for a reason other
+	// than a credential the host refused.
+	CodePRFetchFailed = "PR_FETCH_FAILED"
 )
 
 // PullRequestError is a coded pull request error whose message starts with
@@ -127,4 +130,18 @@ func BranchFromRef(ref string) string {
 		}
 	}
 	return ref
+}
+
+// PullRequestBases is the branches a pull request of a workspace can be opened
+// against: origin's, as last fetched.
+type PullRequestBases struct {
+	WorkspaceID string `json:"workspace_id"`
+	// Branches are origin's branches without the origin/ prefix, HEAD
+	// excluded, by name; empty when there is no origin or it was never fetched.
+	Branches []string `json:"branches"`
+	// Default is the draft's base: the branch the workspace was cut from.
+	Default string `json:"default"`
+	// FetchedAt is when origin was last fetched for the repository; nil when
+	// it is not known.
+	FetchedAt *time.Time `json:"fetched_at"`
 }

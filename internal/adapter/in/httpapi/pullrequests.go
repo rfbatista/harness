@@ -48,3 +48,42 @@ func (h *Handler) handleCreatePullRequest(c echo.Context) error {
 	}
 	return c.JSON(http.StatusOK, map[string]any{"pull_request": pr})
 }
+
+// handlePullRequestBases lists origin's branches as last fetched, from local
+// git only, for the base picker of a workspace's pull request.
+func (h *Handler) handlePullRequestBases(c echo.Context) error {
+	if h.prBases == nil {
+		return echo.NewHTTPError(http.StatusServiceUnavailable, "pull requests not configured")
+	}
+	workspaceID := c.QueryParam("workspace_id")
+	if workspaceID == "" {
+		return domain.PullRequestError("INVALID_INPUT", "workspace_id is required")
+	}
+	bases, err := h.prBases.PullRequestBases(c.Request().Context(), workspaceID)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, bases)
+}
+
+// handleRefreshPullRequestBases fetches origin with the stored credentials and
+// answers the new list.
+func (h *Handler) handleRefreshPullRequestBases(c echo.Context) error {
+	if h.prBases == nil {
+		return echo.NewHTTPError(http.StatusServiceUnavailable, "pull requests not configured")
+	}
+	var in struct {
+		WorkspaceID string `json:"workspace_id"`
+	}
+	if err := bindJSON(c, &in); err != nil {
+		return err
+	}
+	if in.WorkspaceID == "" {
+		return domain.PullRequestError("INVALID_INPUT", "workspace_id is required")
+	}
+	bases, err := h.prBases.RefreshPullRequestBases(c.Request().Context(), in.WorkspaceID)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, bases)
+}

@@ -12,6 +12,12 @@
  * Below a 44rem container one side shows: the side, or with data-main the
  * main, which then carries a [data-code-back] control back to the side
  * (hidden while both show). data-side="none": no side (the map).
+ * A resizable side has div.separator[role=separator][aria-orientation=vertical]
+ * [tabindex=0] between the two, with aria-valuenow in percent of the layout.
+ * The person's width is the custom property --code-side (a percent) on the
+ * layout; without it the side is a third, between 14rem and 18rem. It never
+ * takes less than 12rem or more than half. The separator draws a 1px line
+ * and is 8px wide to grab; data-dragging while a pointer holds it.
  */
 
 @layer blocks {
@@ -31,8 +37,24 @@
     }
 
     & > .side {
-      flex: 0 0 clamp(14rem, 32%, var(--size-code-side));
+      flex: 0 0 var(--code-side, clamp(14rem, 32%, var(--size-code-side)));
+      min-inline-size: 12rem;
+      max-inline-size: 50%;
       border-inline-end: var(--border-width) solid var(--color-line);
+    }
+
+    & > .separator {
+      position: relative;
+      z-index: 1;
+      flex: none;
+      inline-size: 0.5rem;
+      margin-inline: -0.25rem;
+      cursor: col-resize;
+      touch-action: none;
+      background: linear-gradient(var(--_line, transparent), var(--_line, transparent)) center / var(--border-width) 100% no-repeat;
+
+      &:is(:hover, :focus-visible, [data-dragging]) { --_line: var(--color-signal); }
+      &:focus-visible { outline: none; }
     }
 
     & > .main {
@@ -41,14 +63,16 @@
       flex-direction: column;
     }
 
-    &[data-side="none"] > .side { display: none; }
+    &[data-side="none"] > .side,
+    &[data-side="none"] > .separator { display: none; }
 
     & [data-code-back] { flex: none; align-self: flex-start; margin: var(--space-xs) var(--space-s) 0; }
   }
 
   @container code (width < 44rem) {
     .code-layout:not([data-side="none"]) {
-      & > .side { flex: 1 1 0; border-inline-end: 0; }
+      & > .side { flex: 1 1 0; max-inline-size: none; border-inline-end: 0; }
+      & > .separator { display: none; }
     }
     .code-layout:not([data-main], [data-side="none"]) > .main,
     .code-layout[data-main]:not([data-side="none"]) > .side { display: none; }

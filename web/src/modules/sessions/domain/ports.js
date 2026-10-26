@@ -21,6 +21,16 @@
  * @property {string} prompt        the optional first message; "" opens claude waiting for you
  * @property {"off"|"edits"|"all"} autoAccept  which tool calls run without asking
  * @property {string} [baseBranch]  the branch its worktree branches off; "" means the checkout's HEAD
+ * @property {string} [branchName]  the name of the session's own branch; "" lets the server generate one
+ *
+ * @typedef {object} BranchNameCheck  what the server says about a branch name for a new session
+ * @property {string} name        the name checked, trimmed; "" when none was given
+ * @property {string} generated   the name the server would generate; the form prefills it
+ * @property {boolean} valid      a valid git branch name
+ * @property {boolean} available  valid and no branch of that name exists
+ * @property {""|"BRANCH_NAME_INVALID"|"BRANCH_EXISTS"} code
+ * @property {string} reason      what is wrong; "" when available
+ * @property {string} suggestion  the first free variant, when the name exists; else ""
  *
  * @typedef {object} Branch  a ref a session's worktree can branch off
  * @property {string} name     e.g. main, origin/main
@@ -38,12 +48,16 @@
  *           Starts an interactive session on the server's terminal host: cuts
  *           its worktree and branch, then runs claude in a PTY. Rejects with
  *           INVALID_INPUT (no repository, or no task in a mode other than
- *           product), PROJECT_NOT_FOUND, TICKET_NOT_FOUND,
+ *           product), BRANCH_NAME_INVALID or BRANCH_EXISTS (details name the
+ *           name and a free suggestion), PROJECT_NOT_FOUND, TICKET_NOT_FOUND,
  *           CROSS_PROJECT_ACCESS, CLAUDE_CLI_NOT_FOUND or
  *           SERVER_HOSTING_UNAVAILABLE.
  * @property {(repositoryId: string) => Promise<Branch[]>} listBranches
  *           The branches a new session can branch off: local ones, then
  *           remote ones. Rejects with REPOSITORY_NOT_FOUND.
+ * @property {(query: { repositoryId: string, name: string, baseBranch?: string, ticketId?: string }, signal?: AbortSignal) => Promise<BranchNameCheck>} checkBranchName
+ *           Reads git only: suggests the generated name and says whether a
+ *           name is valid and free. Rejects with REPOSITORY_NOT_FOUND.
  * @property {(sessionId: string, size?: { cols: number, rows: number }) => Promise<Session>} resume
  *           Brings an ended interactive session back on the server's terminal
  *           host: same id, branch, worktree and conversation. Followers see it
@@ -69,14 +83,23 @@
  * infrastructure/merge-gateway.js (GET and POST /api/sessions/{id}/merge).
  *
  * @typedef {import("./session.js").MergeResult} MergeResult
- * @typedef {{ available: boolean, into: string, reason: string }} MergeOffer
- *          whether a merge applies, into which branch, and the code saying why not
+ * @typedef {{ name: string, isDefault: boolean, checkedOut: boolean, dirty: boolean }} MergeTarget
+ *          a local branch a merge can go into; dirty: checked out in the main checkout with uncommitted changes
+ * @typedef {object} MergeOffer  whether a merge into `into` applies now, and what it would do
+ * @property {boolean} available
+ * @property {string} branch               the session's branch
+ * @property {string} into                 the target the offer is about
+ * @property {string} reason               the MERGE_* code saying why not; "" when available
+ * @property {number} ahead                commits the branch has that `into` lacks
+ * @property {number} uncommittedChanges   files changed in the session's worktree and not committed; a warning, never a block
+ * @property {string} suggestedMessage     the squash message suggestion
+ * @property {readonly MergeTarget[]} targets  every local branch but the session's own, the default first
  *
  * @typedef {object} MergeGateway
- * @property {(sessionId: string, signal?: AbortSignal) => Promise<MergeOffer>} offer
- *           Rejects with SESSION_NOT_FOUND.
- * @property {(sessionId: string) => Promise<MergeResult>} merge
- *           Merges with --no-ff. A refusal rejects with its code and reason
+ * @property {(sessionId: string, target?: string, signal?: AbortSignal) => Promise<MergeOffer>} offer
+ *           The offer for a target ("" is the default branch). Rejects with SESSION_NOT_FOUND.
+ * @property {(sessionId: string, request?: { target?: string, method?: "merge" | "squash", message?: string }) => Promise<MergeResult>} merge
+ *           Merges into the target with --no-ff, or squashes it into one commit with the message. A refusal rejects with its code and reason
  *           (MERGE_CHECKOUT_DIRTY, MERGE_WRONG_BRANCH, MERGE_ALREADY_MERGED,
  *           MERGE_CONFLICT, …); it is on the session's lastMerge too.
  */

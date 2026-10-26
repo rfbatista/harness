@@ -29,6 +29,7 @@ templ Page(v PageView) {
 			x-on:artifact-moved="artifactMoved"
 			x-on:code-files-counted="codeCounted"
 			x-on:code-expand="codeExpand"
+			x-on:code-fullscreen="codeFullscreenChanged"
 			x-on:terminal-status="terminalStatus"
 			x-on:run-shown="runShown"
 			x-on:menu-select="menuSelect"
@@ -686,6 +687,17 @@ templ newSessionForm(form NewSessionForm, lockedMode string) {
 				</div>
 				<span class="[ hint ]" x-text="baseHint"></span>
 			</div>
+			<div class="[ field ]">
+				<label for="new-session-branch-name">Branch name</label>
+				<input type="text" id="new-session-branch-name" class="[ font-mono text-sm ]" spellcheck="false" autocomplete="off" x-model="branchName" x-on:input="nameTyped" x-on:focus="selectName" x-bind:aria-invalid="nameInvalid" aria-describedby="new-session-branch-name-status new-session-branch-name-hint"/>
+				<div class="[ cluster ]" id="new-session-branch-name-status" aria-live="polite" data-branch-name-status x-bind:data-state="nameState">
+					<span x-bind:class="nameMessageClass" x-text="nameMessage"></span>
+					<template x-if="nameSuggestion">
+						<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" data-branch-name-suggestion x-on:click="useSuggestion">Use <code x-text="nameSuggestion"></code></button>
+					</template>
+				</div>
+				<span class="[ hint ]" id="new-session-branch-name-hint" x-text="nameHint"></span>
+			</div>
 			<fieldset class="[ field ]">
 				<legend>Permissions</legend>
 				<div class="[ field ]" data-inline>
@@ -714,6 +726,7 @@ templ newSessionForm(form NewSessionForm, lockedMode string) {
 		</template>
 		<div class="[ cluster ]">
 			<button type="submit" class="[ button ]" data-variant="primary" x-bind:disabled="cannotSubmit" x-bind:aria-busy="submitting">Start session</button>
+			<span class="[ hint ]" data-start-reason x-show="problem" x-text="problem"></span>
 			<button type="button" class="[ button ]" data-variant="ghost" x-on:click="cancel">Cancel</button>
 		</div>
 	</form>
@@ -925,7 +938,7 @@ templ taskBand(v PageView) {
 		</p>
 	</template>
 	<template x-if="showsDescription">
-		<div class="[ brief ]" x-bind:data-open="descriptionOpenAttr">
+		<div class="[ brief ]" x-bind:data-open="descriptionOpenAttr" x-effect="setSessionOpen(showingSession)">
 			<p x-ref="description" x-effect="measureDescription()" x-text="description">{ v.TaskDescription }</p>
 			<button type="button" class="[ more ]" x-show="descriptionOverflows" style="display: none" x-bind:aria-expanded="descriptionOpen" x-on:click="toggleDescription" x-text="descriptionToggleWord">More</button>
 		</div>

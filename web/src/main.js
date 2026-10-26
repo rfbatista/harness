@@ -34,6 +34,9 @@ import { registerRuns } from "./modules/runs/presentation/register.js";
 import { projectsGateway } from "./modules/projects/infrastructure/projects-gateway.js";
 import { pullRequestsGateway } from "./modules/pullrequests/infrastructure/pullrequests-gateway.js";
 import { registerPullRequests } from "./modules/pullrequests/presentation/register.js";
+import { architectureGateway } from "./modules/architecture/infrastructure/architecture-gateway.js";
+import { copyText } from "./modules/architecture/infrastructure/clipboard.js";
+import { registerArchitecture } from "./modules/architecture/presentation/register.js";
 import { registerProjects } from "./modules/projects/presentation/register.js";
 import { artifactsGateway } from "./modules/sessions/infrastructure/artifacts-gateway.js";
 import { channelGateway } from "./modules/sessions/infrastructure/channel-gateway.js";
@@ -72,12 +75,15 @@ const navigate = (url) => window.location.assign(url);
 const reload = () => window.location.reload();
 startSwapRegions(htmx, { navigate });
 
-registerProjects(Alpine, { gateway: projectsGateway(api, events), navigate, clock: systemClock });
+const architecture = architectureGateway(api, events);
+registerArchitecture(Alpine, { gateway: architecture, clipboard: { copyText } });
+registerProjects(Alpine, { gateway: projectsGateway(api, events), architecture, navigate, clock: systemClock });
 registerTasks(Alpine, {
   gateway: tasksGateway(api),
   rail: railGateway(api, events),
   railPrefs: cookieRailPrefs(),
   bandPrefs: cookieBandPrefs(),
+  prefs,
   resources: resourcesGateway(api, events, xhrUpload({ base: "/api" })),
   navigate,
   reload,

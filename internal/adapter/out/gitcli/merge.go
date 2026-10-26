@@ -176,7 +176,10 @@ func (m Merger) abort(ctx context.Context, dir, branch string, runErr error, rea
 		return domain.MergeError(domain.MergeFailed, "the merge of "+branch+" failed and was aborted, but the checkout at "+dir+" is not as it was; it needs a look")
 	}
 	if len(unmerged) > 0 {
-		return domain.MergeError(domain.MergeConflict, fmt.Sprintf("merging %s conflicts in %s; the merge was aborted and the checkout is as it was", branch, list(unmerged)))
+		return &domain.DetailedError{
+			StructuredError: &domain.StructuredError{Code: domain.MergeConflict, Message: fmt.Sprintf("merging %s conflicts in %s; the merge was aborted and the checkout is as it was", branch, list(unmerged))},
+			Details:         map[string]any{"files": unmerged},
+		}
 	}
 	if timedOut(runErr) {
 		return domain.MergeError(domain.MergeFailed, "the merge of "+branch+" took too long and was aborted; the checkout is as it was")

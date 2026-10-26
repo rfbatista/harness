@@ -57,13 +57,22 @@ type SessionModel struct {
 	MergeHead    string `gorm:"column:merge_head"`
 	MergeCode    string `gorm:"column:merge_code"`
 	MergeMessage string `gorm:"column:merge_message"`
+	// MergeMethod is how it was merged; empty reads as "merge", what every
+	// record from before squashes was. SquashedTip is the branch tip at the
+	// session's last squash into the repository's default branch.
+	MergeMethod     string `gorm:"column:merge_method"`
+	SquashedTip     string `gorm:"column:squashed_tip"`
 }
 
 func (m *SessionModel) lastMerge() *domain.MergeResult {
 	if m.MergeAtMs == 0 {
 		return nil
 	}
-	return &domain.MergeResult{At: time.UnixMilli(m.MergeAtMs), Merged: m.Merged, Into: m.MergeInto, Head: m.MergeHead, Code: m.MergeCode, Message: m.MergeMessage}
+	method := domain.MergeMethod(m.MergeMethod)
+	if method == "" {
+		method = domain.MergeMethodMerge
+	}
+	return &domain.MergeResult{At: time.UnixMilli(m.MergeAtMs), Merged: m.Merged, Into: m.MergeInto, Method: method, Head: m.MergeHead, Code: m.MergeCode, Message: m.MergeMessage}
 }
 
 func (m *SessionModel) setSandbox(f *domain.SandboxFacts) {
@@ -119,6 +128,7 @@ func (m *SessionModel) ToDomain() *domain.Session {
 		CavemanIntensity:         domain.CavemanIntensity(m.CavemanIntensity),
 		Sandbox:                  m.sandbox(),
 		LastMerge:                m.lastMerge(),
+		SquashedTip:              m.SquashedTip,
 		CreatedAt:                time.UnixMilli(m.CreatedAt),
 		UpdatedAt:                time.UnixMilli(m.UpdatedAt),
 	}

@@ -35,6 +35,7 @@ import (
 	"operators-mcp/internal/app/catalog"
 	"operators-mcp/internal/application/agentcredential"
 	"operators-mcp/internal/application/apps"
+	"operators-mcp/internal/application/archrules"
 	"operators-mcp/internal/application/artifacts"
 	"operators-mcp/internal/application/execution"
 	"operators-mcp/internal/application/gitcredentials"
@@ -78,6 +79,8 @@ var PersistenceModule = fx.Module("persistence",
 		asPort(sqlite.NewWorkspaceRepository, new(ports.WorkspaceRepository)),
 		asPort(sqlite.NewBoundedContextRepository, new(ports.BoundedContextRepository)),
 		asPort(sqlite.NewPullRequestRepository, new(ports.PullRequestRepository)),
+		asPort(sqlite.NewArchitectureRecordRepository, new(ports.ArchitectureRecordStore)),
+		asPort(sqlite.NewArchitectureRuleEventRepository, new(ports.ArchitectureRuleEventStore)),
 	),
 )
 
@@ -100,13 +103,22 @@ func newRepositoryFinder(cfg Config) *gitcli.RepositoryFinder {
 func newWorktreeManager(cfg Config) *gitcli.WorktreeManager {
 	return gitcli.NewWorktreeManager(cfg.gitOptions()...)
 }
+func newArchitectureGit(cfg Config) *gitcli.Architecture {
+	return gitcli.NewArchitecture(cfg.gitOptions()...)
+}
+func newCommitGuard(cfg Config) *gitcli.CommitGuard {
+	return gitcli.NewCommitGuard(cfg.gitOptions()...)
+}
 func newEnvFiles(cfg Config) *gitcli.EnvFiles  { return gitcli.NewEnvFiles(cfg.gitOptions()...) }
 func newGitHistory(cfg Config) *gitcli.History { return gitcli.NewHistory(cfg.gitOptions()...) }
 func newBranchPublisher(cfg Config) *gitcli.BranchPublisher {
 	return gitcli.NewBranchPublisher(cfg.gitOptions()...)
 }
 func newGitMerger(cfg Config) *gitcli.Merger { return gitcli.NewMerger(cfg.gitOptions()...) }
-func newGitCode(cfg Config) *gitcli.Code     { return gitcli.NewCode(cfg.gitOptions()...) }
+func newGitBranchNames(cfg Config) *gitcli.BranchNames {
+	return gitcli.NewBranchNames(cfg.gitOptions()...)
+}
+func newGitCode(cfg Config) *gitcli.Code { return gitcli.NewCode(cfg.gitOptions()...) }
 
 // newDB opens the SQLite database and registers a hook to close it on
 // shutdown. The database's folder is made first: the default data dir,
@@ -213,6 +225,8 @@ var CatalogModule = fx.Module("catalog",
 		asPort(skillfs.NewPublisher, new(ports.SkillPublisher)),
 		asPort(newRepositoryFinder, new(ports.RepositoryFinder)),
 		asPort(newEnvFiles, new(ports.EnvFileIO)),
+		asPort(newCommitGuard, new(ports.CommitGuard)),
+		asPort(newArchitectureGit, new(ports.ArchitectureGit)),
 		newCatalog,
 	),
 	fx.Invoke(importAgentCatalog),
@@ -226,6 +240,9 @@ type catalogParams struct {
 	Repositories    ports.RepositoryRepository
 	Zones           ports.ZoneRepository
 	BoundedContexts ports.BoundedContextRepository
+	ArchRecords     ports.ArchitectureRecordStore
+	ArchGit         ports.ArchitectureGit
+	ArchEvents      ports.ArchitectureRuleEventStore
 	Agents          ports.AgentRepository
 	Prompts         ports.PromptRepository
 	Skills          ports.SkillRepository
@@ -249,6 +266,9 @@ func newCatalog(p catalogParams) catalog.Catalog {
 		Repositories:     p.Repositories,
 		Zones:            p.Zones,
 		BoundedContexts:  p.BoundedContexts,
+		ArchRecords:      p.ArchRecords,
+		ArchGit:          p.ArchGit,
+		ArchEvents:       p.ArchEvents,
 		Agents:           p.Agents,
 		Prompts:          p.Prompts,
 		Skills:           p.Skills,
@@ -391,6 +411,7 @@ var AgentRuntimeModule = fx.Module("agentruntime",
 		asPort(newClaudeTranscripts, new(ports.ClaudeTranscripts)),
 		asPort(newClaudeTranscriptReader, new(ports.ClaudeTranscriptReader)),
 		newOrchestrationService,
+		newArchitectureRules,
 		platformSandboxDriver,
 		platformSandboxViolations,
 		newSandboxSettings,
@@ -403,7 +424,7 @@ var AgentRuntimeModule = fx.Module("agentruntime",
 		newVirtualShells,
 	),
 	fx.Invoke(registerRuntimeShutdown, registerServerSessions, bindVirtualShells, bindSandboxSettings,
-		bindAgentReadiness),
+		bindAgentReadiness, func(*archrules.Service) {}),
 )
 
 // TaskChannelModule wires the architect channel: its tables, the service,
@@ -477,8 +498,12 @@ func newArtifactsService(cfg Config, repo ports.ArtifactRepository, sessions por
 // and stores the documents and comments agents write in them through
 // planning and their designs through the artifacts.
 func newVirtualShells(plan *planning.Service, art *artifacts.Service, sessions ports.SessionRepository, cat catalog.Catalog) *vshell.Service {
-	return vshell.New(vshell.Sources{Tickets: plan, Documents: plan, Comments: plan, Resources: plan, Artifacts: art, Writes: plan,
-		Designs: art, Sessions: sessions, Agents: cat.Agents, Settings: cat.Settings})
+	src := vshell.Sources{Tickets: plan, Documents: plan, Comments: plan, Resources: plan, Artifacts: art, Writes: plan,
+		Designs: art, Sessions: sessions, Agents: cat.Agents, Settings: cat.Settings}
+	if cat.RepositoryArchitectures != nil {
+		src.Architectures = cat.RepositoryArchitectures
+	}
+	return vshell.New(src)
 }
 
 // bindVirtualShells gives every session with a task its virtual shell, and
@@ -490,6 +515,10 @@ func bindVirtualShells(orch *orchestration.Service, shells *vshell.Service, plan
 	shells.Subscribe(cat.Bus)
 	plan.Feed = changeSinks{plan.Feed, shells}
 	plan.Announcer = ticketAnnouncers{plan.Announcer, shells}
+	// A saved architecture reaches the shells as well as the project feed.
+	if cat.RepositoryArchitectures != nil {
+		cat.RepositoryArchitectures.UseFeed(changeSinks{orch, shells})
+	}
 }
 
 // ticketAnnouncers tells every announcer of each task change in turn.
@@ -650,8 +679,20 @@ func newHub() *orchestration.Hub { return orchestration.NewHub(256) }
 
 // newOrchestrationService hands the orchestration the catalog contexts it
 // reads to set sessions up.
+// newArchitectureRules checks sessions' actions against their repository's
+// architecture rules, reading each repository's current saved record and
+// announcing every failed rule on the orchestration's project feed.
+func newArchitectureRules(cat catalog.Catalog, sessions ports.SessionRepository, events ports.ArchitectureRuleEventStore, orch *orchestration.Service) *archrules.Service {
+	svc := archrules.NewService(archrules.Deps{
+		Sessions: sessions, Agents: cat.Agents, Records: cat.RepositoryArchitectures, Events: events, Feed: orch, EnvFiles: cat.Projects,
+	})
+	svc.Subscribe(cat.Bus)
+	return svc
+}
+
 func newOrchestrationService(
 	cfg Config,
+	commitGuard ports.CommitGuard,
 	manager llmkit.Manager,
 	broker *approval.Broker,
 	hub *orchestration.Hub,
@@ -667,6 +708,7 @@ func newOrchestrationService(
 	violationStore ports.SandboxViolationStore,
 	agentHome claudehome.Home,
 	claudeBin ports.ManagedClaudeBin,
+	branchNames *workspaces.BranchNames,
 ) *orchestration.Service {
 	svc := orchestration.NewService(manager, broker, hub, sessions, orchestration.Catalog{
 		Projects:     cat.Projects,
@@ -676,6 +718,15 @@ func newOrchestrationService(
 		Zones:        cat.Architecture,
 		Contexts:     cat.Architecture,
 	}, tickets, ws)
+	svc.UseBranchNames(branchNames)
+	if cat.RepositoryArchitectures != nil {
+		// Saves, deletes and exports reach open pages on the project feed.
+		cat.RepositoryArchitectures.UseFeed(svc)
+		// Briefs name the record and the layers the session's agent may change.
+		svc.Architectures = cat.RepositoryArchitectures
+		// A commit in a session worktree is checked against the layers.
+		svc.CommitGuard = commitGuard
+	}
 	base := cfg.loopbackBaseURL()
 	// The route belongs to an inbound adapter, so the application layer is
 	// handed the URL rather than importing the adapter to build it.
@@ -687,6 +738,9 @@ func newOrchestrationService(
 	}
 	svc.SessionShellURL = func(sessionID string) string {
 		return base + httpapi.SessionShellPath(sessionID)
+	}
+	svc.SessionArchitectureURL = func(sessionID string) string {
+		return base + httpapi.SessionArchitecturePath(sessionID)
 	}
 	svc.ShimBinary = cfg.ShimBinary
 	svc.DeveloperBin = developerdir.Bin
@@ -917,12 +971,14 @@ var WorkspacesModule = fx.Module("workspaces",
 		asPort(newGitHistory, new(ports.GitHistory)),
 		asPort(newBranchPublisher, new(ports.BranchPublisher)),
 		asPort(newGitMerger, new(ports.GitMerger)),
+		asPort(newGitBranchNames, new(ports.GitBranchNames)),
 		asPort(githubapi.New, new(ports.CodeHost)),
 		asPort(newGitCode, new(ports.GitCode)),
 		asPort(filesystem.NewWorktreeFiles, new(ports.WorktreeFiles)),
 		newWorkspacesService,
 		newPullRequestsService,
 		newMergesService,
+		newBranchNamesService,
 		newCodeBrowser,
 		newMergeStates,
 	),
@@ -1035,8 +1091,15 @@ func newMergesService(
 	repos ports.RepositoryRepository,
 	git ports.GitMerger,
 	orch *orchestration.Service,
+	states *workspaces.MergeStates,
 ) *workspaces.Merges {
-	return workspaces.NewMerges(workspaces.MergeDeps{Sessions: sessions, Workspaces: ws, Repositories: repos, Git: git, Announce: orch})
+	return workspaces.NewMerges(workspaces.MergeDeps{Sessions: sessions, Workspaces: ws, Repositories: repos, Git: git, Announce: orch, States: states})
+}
+
+// newBranchNamesService checks the names a person types for a session's
+// branch, against git's rules and the repository's local branches.
+func newBranchNamesService(repos ports.RepositoryRepository, tickets ports.TicketRepository, git ports.GitBranchNames) *workspaces.BranchNames {
+	return workspaces.NewBranchNames(repos, tickets, git)
 }
 
 // shortID is the part of a session id that names its temp dir: short enough

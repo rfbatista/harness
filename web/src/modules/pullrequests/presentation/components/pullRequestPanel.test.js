@@ -10,14 +10,14 @@ import { pullRequestPanel } from "./pullRequestPanel.js";
 file("pullrequests/presentation/pullRequestPanel");
 
 /** The history page as the server paints it: the seed carries the view unless painted = false. */
-async function setup({ workspace = {}, pullRequests = [], painted = true, ...world } = {}) {
+async function setup({ workspace = {}, pullRequests = [], painted = true, now, ...world } = {}) {
   const memory = memoryPullRequests({ workspaces: [makeWorkspace(workspace)], pullRequests, ...world });
   const seed = { project_id: "p1", workspace_id: "ws1" };
   if (painted) {
     const { draft, pullRequest } = await memory.gateway.get("ws1");
     Object.assign(seed, { draft: draftDTO(draft), pull_request: pullRequest ? pullRequestDTO(pullRequest) : null });
   }
-  const mounted = mount(pullRequestPanel({ gateway: memory.gateway }), { el: seededElement(seed) });
+  const mounted = mount(pullRequestPanel({ gateway: memory.gateway, ...(now ? { now } : {}) }), { el: seededElement(seed) });
   mounted.instance.init();
   await flush();
   return { ...mounted, memory, panel: mounted.instance };
@@ -232,4 +232,92 @@ test("an unreadable seed shows the error instead of the control", async () => {
   const { instance: panel } = mount(pullRequestPanel({ gateway: memory.gateway }), { el: seededElement({ project_id: "p1" }) });
   panel.init();
   assert.deepEqual([panel.error.code, panel.hidden], [Codes.BAD_RESPONSE, true]);
+});
+
+// ── the base picker, the draft button and what a create leaves alone ─────────
+
+const FETCHED = new Date("2026-10-26T12:00:00Z");
+const MINUTES_LATER = () => new Date("2026-10-26T12:03:00Z");
+
+test("the Base picker offers origin's branches with the one the session was cut from first", async () => {
+  const { panel } = await setup({ now: MINUTES_LATER, workspace: { baseBranch: "develop", originBranches: ["main", "develop", "release"], fetchedAt: FETCHED } });
+  assert.deepEqual(panel.baseChoices, ["develop"], "until the form loads the list, the draft's base is all there is");
+  panel.openForm();
+  await flush();
+  assert.deepEqual(panel.baseChoices, ["develop", "main", "release"]);
+  assert.equal(panel.form.baseBranch, "develop");
+  assert.equal(panel.fetchedLine, "Last fetched 3 min ago");
+  panel.destroy();
+});
+
+test("a branch origin was never fetched for says the list may be out of date", async () => {
+  const { panel } = await setup();
+  panel.openForm();
+  await flush();
+  assert.equal(panel.fetchedLine, "Not fetched yet. The list may be out of date.");
+  panel.destroy();
+});
+
+test("Refresh fetches origin, spins meanwhile, and shows the new list and time", async () => {
+  const { panel } = await setup({ delayMs: 10, now: MINUTES_LATER, workspace: { originBranches: ["main"], fetchableBranches: ["main", "feature/new"], fetchedAt: FETCHED } });
+  panel.openForm();
+  await flush();
+  const refreshing = panel.refreshBases();
+  assert.deepEqual([panel.refreshing, panel.refreshLabel, panel.refreshBusyAttr], [true, "Fetching branches…", "true"]);
+  await refreshing;
+  assert.deepEqual([panel.refreshing, panel.refreshLabel, panel.baseChoices], [false, "Fetch branches from origin", ["main", "feature/new"]]);
+  assert.equal(panel.fetchedLine, "Last fetched just now", "the memory server stamps the fetch with its own clock");
+  panel.destroy();
+});
+
+test("a failed Refresh says why in one line and keeps the old list and the pick", async () => {
+  const { panel, memory } = await setup({ workspace: { originBranches: ["main", "dev"] } });
+  panel.openForm();
+  await flush();
+  panel.form.baseBranch = "dev";
+  memory.failFetchNext(Codes.PR_FETCH_FAILED, "Could not resolve host: github.com");
+  await panel.refreshBases();
+  assert.deepEqual([panel.baseChoices, panel.form.baseBranch, panel.refreshing], [["main", "dev"], "dev", false]);
+  assert.equal(panel.refreshError, "Could not fetch origin. Could not resolve host: github.com");
+  assert.equal(panel.hasRefreshError, true);
+  await panel.refreshBases();
+  assert.equal(panel.hasRefreshError, false, "the next try clears it");
+  panel.destroy();
+});
+
+test("a pick that origin no longer has falls back to the default after a Refresh", async () => {
+  const { panel } = await setup({ workspace: { originBranches: ["main", "gone"], fetchableBranches: ["main"] } });
+  panel.openForm();
+  await flush();
+  panel.form.baseBranch = "gone";
+  await panel.refreshBases();
+  assert.equal(panel.form.baseBranch, "main");
+  panel.destroy();
+});
+
+test("Open as draft changes the button and the sentence, which names the push and the base", async () => {
+  const { panel } = await setup({ workspace: { originBranches: ["main", "develop"] } });
+  panel.openForm();
+  await flush();
+  assert.equal(panel.submitLabel, "Create pull request");
+  assert.equal(panel.consequence, "Pushes agent/create-pull-request-9d728ce8 to origin and opens a pull request into main.");
+  panel.form.draft = true;
+  panel.form.baseBranch = "develop";
+  assert.equal(panel.submitLabel, "Open draft PR");
+  assert.equal(panel.consequence, "Pushes agent/create-pull-request-9d728ce8 to origin and opens a draft pull request into develop.");
+  panel.destroy();
+});
+
+test("the create sends the picked base and draft, and says the session is unchanged", async () => {
+  const { panel, memory } = await setup({ workspace: { originBranches: ["main", "develop"] } });
+  panel.openForm();
+  await flush();
+  panel.form.baseBranch = "develop";
+  panel.form.draft = true;
+  await panel.submit();
+  const pr = memory.find("ws1");
+  assert.deepEqual([pr.baseBranch, pr.draft], ["develop", true]);
+  assert.equal(panel.createdNote, "The session, its worktree and the task status are unchanged.");
+  assert.equal(panel.notice, "", "the person's own PR is not news");
+  panel.destroy();
 });

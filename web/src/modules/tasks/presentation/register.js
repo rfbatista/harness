@@ -19,6 +19,7 @@ import { taskResources } from "./components/taskResources.js";
  *   rail: import("../domain/ports.js").RailGateway,
  *   railPrefs: import("../domain/ports.js").RailPrefs,
  *   bandPrefs: import("../domain/ports.js").BandPrefs,
+ *   prefs: import("../../../shared/infrastructure/storage.js").Preferences,  the browser's own choices (localStorage)
  *   navigate: (url: string) => void,
  *   reload: () => void,
  *   resources: import("../domain/ports.js").ResourceGateway,

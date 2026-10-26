@@ -420,3 +420,25 @@ func TestResumeInteractive_KeepsTheProductSkill(t *testing.T) {
 	}
 	pluginFile(t, launchOf(t, spec), "task-product", "PRD-FORMAT.md")
 }
+
+// Both mode skills tell the session how to use the repository architecture:
+// the architect reads it and proposes changes in a spec, the delegate keeps
+// its tickets inside the layers it may change.
+func TestModeSkillsExplainTheRepositoryArchitecture(t *testing.T) {
+	svc, _ := newInteractiveService(t)
+	for mode, c := range map[string]struct {
+		skill string
+		want  []string
+	}{
+		"architect": {"task-architecture", []string{"project/architecture/<repo>.yaml", "Name it in each spec", "proposed change as a section of the spec", "Never edit the record"}},
+		"implement": {"task-implement-spec", []string{"project/architecture/<repo>.yaml", "inside the layers your agent may", "kind `question`", "a rule blocks work the spec requires"}},
+	} {
+		_, launch := startInteractive(t, svc, InteractiveRequest{Mode: mode})
+		body := strings.Join(strings.Fields(pluginSkill(t, launch, c.skill)), " ")
+		for _, want := range c.want {
+			if !strings.Contains(body, strings.Join(strings.Fields(want), " ")) {
+				t.Errorf("%s SKILL.md lacks %q", c.skill, want)
+			}
+		}
+	}
+}

@@ -71,7 +71,7 @@ func specHooks(settings *claude.Settings) map[string][]ports.HookGroup {
 		for _, m := range matchers {
 			g := ports.HookGroup{Matcher: m.Matcher}
 			for _, h := range m.Hooks {
-				g.Hooks = append(g.Hooks, ports.HookCommand{Type: h.Type, Command: h.Command})
+				g.Hooks = append(g.Hooks, ports.HookCommand{Type: h.Type, Command: h.Command, Timeout: h.Timeout})
 			}
 			out[string(event)] = append(out[string(event)], g)
 		}

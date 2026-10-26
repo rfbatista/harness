@@ -632,13 +632,14 @@ function screenSetup({ sessions = [makeSession({ id: "live" }), makeSession({ id
     setFocus: (on) => (saved.focus = on),
   };
   const shellFocus = [];
+  const shellCodeFullscreen = [];
   const copied = [];
   const mounted = mount(
     sessionsPage({
       gateway: memory.gateway,
       clock: fixedClock(T0),
       prefs,
-      shell: { setFocus: (on) => shellFocus.push(on) },
+      shell: { setFocus: (on) => shellFocus.push(on), setCodeFullscreen: (on) => shellCodeFullscreen.push(on) },
       clipboard: { writeText: async (text) => copied.push(text) },
       isPhone: () => phone,
     }),
@@ -646,7 +647,7 @@ function screenSetup({ sessions = [makeSession({ id: "live" }), makeSession({ id
   );
   mounted.instance.init();
   mounted.instance.select("live");
-  return { ...mounted, memory, saved, shellFocus, copied };
+  return { ...mounted, memory, saved, shellFocus, shellCodeFullscreen, copied };
 }
 
 const status = (over) => ({ id: "live", kind: "agent", state: "live", title: "", exitCode: null, lostAt: null, scrolledUp: false, newLines: 0, ...over });
@@ -723,6 +724,25 @@ test("focus mode is remembered, and on only while a terminal's tools show: never
   instance.toggleFocus();
   instance.applyFocus();
   assert.deepEqual([saved.focus, shellFocus.at(-1)], [false, false]);
+  instance.destroy();
+});
+
+test("the Code tab's full screen hides the page's chrome only while the Code tab shows, and is not saved", () => {
+  const { instance, shellCodeFullscreen, saved } = screenSetup();
+  // This session has no worktree: the Code tab shows when it is the selected tab.
+  Object.defineProperty(instance, "showingCode", { get: () => instance.detailTab === "code" });
+  instance.codeFullscreenChanged({ detail: { on: true } });
+  instance.showCode();
+  instance.applyFocus();
+  assert.equal(shellCodeFullscreen.at(-1), true);
+  instance.showAgent();
+  instance.applyFocus();
+  assert.equal(shellCodeFullscreen.at(-1), false, "another tab shows the page normally");
+  instance.showCode();
+  instance.codeFullscreenChanged({ detail: { on: false } });
+  instance.applyFocus();
+  assert.equal(shellCodeFullscreen.at(-1), false);
+  assert.deepEqual(Object.keys(saved).sort(), ["focus", "textSize"].sort(), "nothing about it is saved");
   instance.destroy();
 });
 

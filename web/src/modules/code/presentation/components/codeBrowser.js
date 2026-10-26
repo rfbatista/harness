@@ -14,6 +14,7 @@ import { FeedStatus } from "../../../../shared/domain/feed.js";
 import { baseName, changeMark } from "../../domain/code.js";
 import { parseDiffHash, rowOfLine, rowOfNewLine, slugs } from "../../domain/diff.js";
 import { problemOf } from "../../domain/errors.js";
+import { clampSplit, defaultSplit, parseSplit, splitBounds, stepSplit } from "../../domain/split.js";
 import { clampRange, parseRange, parseRangeHash, rangeHash, scrollTopFor, splitLines, WRAP_UP_TO } from "../../domain/lines.js";
 import { markParts, rank, shiftRanges } from "../../domain/fuzzy.js";
 import { ANNOUNCE_CHANGED, FIXED, GONE, onChange, onEnded, onReload } from "../../domain/live.js";
@@ -127,9 +128,19 @@ export function codeBrowser({ gateway, highlighter, prefs, history = globalThis.
     loadingDiff: false,
     loadingFile: false,
     loadingMap: false,
-    layout: "unified",
+    layout: "split",
     wrap: false,
     narrow: false,
+    /** The layout's width in px and the root font size, as last measured. */
+    layoutWidth: 0,
+    layoutRem: 16,
+    /** The chosen width of the file list, in percent of the layout; null: the default. */
+    splitPercent: null,
+    splitDragging: false,
+    /** Full screen (⇧F): the page keeps only a thin bar over the diff. Never remembered. */
+    fullscreen: false,
+    /** In full screen, ⇧E hides the file list. */
+    listHidden: false,
     /** Below 44rem: the main side is shown instead of the side list. */
     showMain: false,
     /** The reader scrolled the main side since it loaded. */
@@ -228,6 +239,11 @@ export function codeBrowser({ gateway, highlighter, prefs, history = globalThis.
     get noChanges() {
       return !!this.diff && this.diff.files.length === 0;
     },
+    /** The empty diff's heading: what it was compared with. */
+    get noChangesTitle() {
+      if (this.scope === "working") return "No uncommitted changes";
+      return this.baseRef ? `No changes against ${this.baseRef} yet` : "No changes yet";
+    },
     get noChangesText() {
       return this.scope === "working" ? "No uncommitted changes." : "No changes on this branch yet. The agent's edits appear here as it makes them.";
     },
@@ -257,6 +273,13 @@ export function codeBrowser({ gateway, highlighter, prefs, history = globalThis.
     },
     get canSplit() {
       return !this.narrow;
+    },
+    get sideBySideDisabled() {
+      return this.canSplit ? null : "true";
+    },
+    /** Side by side's title while the window is too narrow for it. */
+    get sideBySideTitle() {
+      return this.canSplit ? null : "Side by side needs a wider window";
     },
     get unifiedPressed() {
       return String(this.layout !== "split");
@@ -392,9 +415,49 @@ export function codeBrowser({ gateway, highlighter, prefs, history = globalThis.
     get expandPressed() {
       return String(this.expanded);
     },
+    get fullscreenPressed() {
+      return String(this.fullscreen);
+    },
+    /** data-fullscreen on the view: present in full screen. */
+    get fullscreenAttr() {
+      return this.fullscreen ? "" : null;
+    },
+    /** data-list on the layout: "hidden" while full screen has put the file list away. */
+    get listAttr() {
+      return this.fullscreen && this.listHidden ? "hidden" : null;
+    },
+    get listToggleLabel() {
+      return this.listHidden ? "Show file list" : "Hide file list";
+    },
+    /**
+     * ⇧F and the Full screen / Exit buttons: the page hides everything but a
+     * thin bar (it listens to code-fullscreen); the diff takes the focus, and
+     * the button gets it back on exit. Same file, same scroll: nothing is redrawn.
+     */
+    toggleFullscreen() {
+      if (this.kind !== "session") return;
+      this.setFullscreen(!this.fullscreen);
+    },
+    setFullscreen(on) {
+      if (on === this.fullscreen) return;
+      this.fullscreen = on;
+      this.$dispatch?.("code-fullscreen", { on });
+      // Read before the page redraws: the Exit button that called this goes away, and a
+      // magic read from a removed element finds no root. Then focus once the bar's
+      // buttons have come or gone with the attribute.
+      const main = this.$refs?.main;
+      const root = this.$root;
+      this.$nextTick?.(() =>
+        setTimeout(() => (on ? main : root?.querySelector?.("[data-code-fullscreen]"))?.focus?.(), 0),
+      );
+    },
     /** ⇧E and the Expand button: the session list hides or comes back; the URL stays. */
     toggleExpand() {
       if (this.kind !== "session") return;
+      if (this.fullscreen) {
+        this.listHidden = !this.listHidden;
+        return;
+      }
       this.expanded = !this.expanded;
       this.$dispatch?.("code-expand", { expanded: this.expanded });
     },
@@ -471,8 +534,9 @@ export function codeBrowser({ gateway, highlighter, prefs, history = globalThis.
       this.baseRef = seed.baseRef;
       this.refs = seed.refs;
       this.historyHref = seed.historyHref;
-      this.layout = prefs.get("code.layout") === "split" ? "split" : "unified";
+      this.layout = prefs.get("code.layout") === "unified" ? "unified" : "split";
       this.wrap = prefs.get("code.wrap") === "1";
+      this.splitPercent = parseSplit(prefs.get("code.split"));
       if (seed.gone) this.markGone();
       this.baseGone = seed.baseGone;
       if (seed.map) this.setMap(seed.map);
@@ -858,7 +922,7 @@ export function codeBrowser({ gateway, highlighter, prefs, history = globalThis.
     setLayout(layout) {
       if (this.narrow && layout === "split") return;
       this.layout = layout;
-      prefs.set("code.layout", layout === "split" ? "split" : null);
+      prefs.set("code.layout", layout === "split" ? "split" : "unified");
     },
     toggleWrap() {
       if (!this.canWrap) return;
@@ -1303,6 +1367,8 @@ export function codeBrowser({ gateway, highlighter, prefs, history = globalThis.
           return this.isStale && run(() => this.reload());
         case "E":
           return this.kind === "session" && event.shiftKey && run(() => this.toggleExpand());
+        case "F":
+          return this.kind === "session" && event.shiftKey && run(() => this.toggleFullscreen());
         case "F6":
           return run(() => this.swapPane());
         case "Escape":
@@ -1338,8 +1404,66 @@ export function codeBrowser({ gateway, highlighter, prefs, history = globalThis.
       this.$root?.querySelector?.('.code-source-bar nav.segmented a[aria-current="page"]')?.focus();
     },
 
+    // ── the split between the file list and the diff ─────────────────────
+    /** Inline style of the layout: the chosen width of the list, if any. */
+    get splitStyle() {
+      return this.splitPercent === null ? null : `--code-side: ${this.splitPercent}%`;
+    },
+    get splitLimits() {
+      return splitBounds(this.layoutWidth || 1000, this.layoutRem);
+    },
+    /** aria-valuenow: the list's share of the layout, in whole percent. */
+    get splitNow() {
+      return Math.round(this.splitPercent ?? defaultSplit(this.layoutWidth || 1000, this.layoutRem));
+    },
+    get splitMin() {
+      return Math.round(this.splitLimits.min);
+    },
+    get splitMax() {
+      return Math.round(this.splitLimits.max);
+    },
+    get splitDraggingAttr() {
+      return this.splitDragging ? "" : null;
+    },
+    setSplit(percent) {
+      this.splitPercent = percent === null ? null : clampSplit(percent, this.layoutWidth || 1000, this.layoutRem);
+    },
+    storeSplit() {
+      prefs.set("code.split", this.splitPercent === null ? null : String(this.splitPercent));
+    },
+    /** The separator's keys: arrows move it, Home gives the default back. */
+    splitKey(event) {
+      const next = stepSplit(this.splitPercent ?? defaultSplit(this.layoutWidth || 1000, this.layoutRem), event.key, this.layoutWidth || 1000, this.layoutRem);
+      if (next === undefined) return;
+      event.preventDefault();
+      this.setSplit(next);
+      this.storeSplit();
+    },
+    resetSplit() {
+      this.setSplit(null);
+      this.storeSplit();
+    },
+    startSplit(event) {
+      event.preventDefault();
+      event.target.setPointerCapture?.(event.pointerId);
+      this.splitDragging = true;
+    },
+    moveSplit(event) {
+      if (!this.splitDragging) return;
+      const box = this.$refs.layout.getBoundingClientRect();
+      if (box.width > 0) this.setSplit(((event.clientX - box.left) / box.width) * 100);
+    },
+    endSplit(event) {
+      if (!this.splitDragging) return;
+      this.splitDragging = false;
+      event.target?.releasePointerCapture?.(event.pointerId);
+      this.storeSplit();
+    },
+
     /** The layout's container width decides one side or both (44rem, contract §4). */
     measure(width, rem = 16) {
+      this.layoutWidth = width;
+      this.layoutRem = rem;
       const narrow = width < 44 * rem;
       if (narrow !== this.narrow) this.narrow = narrow;
     },

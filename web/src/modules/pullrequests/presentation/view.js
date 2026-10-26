@@ -24,6 +24,22 @@ export function toChip(pr) {
   };
 }
 
+/** "Last fetched 3 min ago"; says so when origin's branches were never fetched by the harness. */
+export function fetchedText(fetchedAt, now = new Date()) {
+  if (!fetchedAt) return "Not fetched yet. The list may be out of date.";
+  const minutes = Math.floor((now.getTime() - fetchedAt.getTime()) / 60000);
+  if (minutes < 1) return "Last fetched just now";
+  if (minutes < 60) return `Last fetched ${minutes} min ago`;
+  if (minutes < 24 * 60) return `Last fetched ${Math.floor(minutes / 60)} h ago`;
+  return `Last fetched ${fetchedAt.toLocaleDateString()}`;
+}
+
+/** What Create does, before it is pressed: the push and the base. */
+export function consequenceLine(draft, form) {
+  const base = form.baseBranch.trim() || draft.baseBranch;
+  return `Pushes ${draft.headBranch} to origin and opens ${form.draft ? "a draft " : "a "}pull request into ${base}.`;
+}
+
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 
 /** "3 commits from agent/x into main on acme/harness" */
@@ -89,6 +105,7 @@ const LEADS = {
   [Codes.PR_TOOL_UNAVAILABLE]: "The server can't reach GitHub right now.",
   [Codes.GIT_CREDENTIAL_STORE_LOCKED]: "The server can't read its stored credentials: its encryption key is missing or wrong.",
   [Codes.PR_PUSH_FAILED]: "Git refused the push.",
+  [Codes.PR_FETCH_FAILED]: "Could not fetch origin.",
   [Codes.PR_CREATE_FAILED]: "GitHub refused the pull request.",
 };
 

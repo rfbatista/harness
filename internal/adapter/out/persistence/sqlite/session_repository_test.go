@@ -401,7 +401,7 @@ func TestSessionLastMerge(t *testing.T) {
 		t.Fatal("a session never merged has a result")
 	}
 	at := time.UnixMilli(1_760_000_000_000)
-	merged := domain.MergeResult{At: at, Merged: true, Into: "main", Head: "abc123"}
+	merged := domain.MergeResult{At: at, Merged: true, Into: "main", Method: domain.MergeMethodMerge, Head: "abc123"}
 	if err := repo.UpdateMerge("s", merged); err != nil {
 		t.Fatal(err)
 	}
@@ -418,5 +418,67 @@ func TestSessionLastMerge(t *testing.T) {
 	}
 	if err := repo.UpdateMerge("missing", merged); err == nil {
 		t.Fatal("UpdateMerge on a missing session succeeded")
+	}
+}
+
+// A record written before merge methods existed reads as a merge commit, and
+// the method of a new one persists.
+func TestSessionLastMergeKeepsItsMethod(t *testing.T) {
+	db, err := Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	repo := NewSessionRepository(db)
+	if err := db.Exec(`INSERT INTO sessions (id, status, merge_at_ms, merged, merge_into, merge_head) VALUES ('old', 'done', 1760000000000, 1, 'main', 'abc')`).Error; err != nil {
+		t.Fatal(err)
+	}
+	if got := repo.Get("old").LastMerge; got == nil || got.Method != domain.MergeMethodMerge {
+		t.Fatalf("an old record reads %+v", got)
+	}
+	if _, err := repo.Create(&domain.Session{ID: "s"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.UpdateMerge("s", domain.MergeResult{At: time.UnixMilli(1_760_000_000_000), Merged: true, Into: "dev", Method: domain.MergeMethodSquash, Head: "h"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := repo.Get("s").LastMerge; got == nil || got.Method != domain.MergeMethodSquash {
+		t.Fatalf("stored = %+v", got)
+	}
+}
+
+// A successful squash into the default branch is kept for good: a later
+// refusal, or another merge, does not erase it, and it is not on the record.
+func TestSessionKeepsASquashIntoTheDefaultBranch(t *testing.T) {
+	db, err := Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	repo := NewSessionRepository(db)
+	if _, err := repo.Create(&domain.Session{ID: "s"}); err != nil {
+		t.Fatal(err)
+	}
+	if repo.Get("s").SquashedTip != "" {
+		t.Fatal("a new session was squashed")
+	}
+	at := time.UnixMilli(1_760_000_000_000)
+	if err := repo.UpdateMerge("s", domain.MergeResult{At: at, Merged: true, Into: "dev", Method: domain.MergeMethodSquash}); err != nil {
+		t.Fatal(err)
+	}
+	if repo.Get("s").SquashedTip != "" {
+		t.Fatal("a squash into another target counts")
+	}
+	if err := repo.UpdateMerge("s", domain.MergeResult{At: at, Merged: true, Into: "main", Method: domain.MergeMethodSquash, SquashedTip: "abc123"}); err != nil {
+		t.Fatal(err)
+	}
+	for _, later := range []domain.MergeResult{
+		{At: at, Code: domain.MergeConflict, Into: "main", Method: domain.MergeMethodMerge},
+		{At: at, Merged: true, Into: "dev", Method: domain.MergeMethodMerge},
+	} {
+		if err := repo.UpdateMerge("s", later); err != nil {
+			t.Fatal(err)
+		}
+		if repo.Get("s").SquashedTip != "abc123" {
+			t.Fatalf("lost after %+v", later)
+		}
 	}
 }

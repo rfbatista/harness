@@ -98,6 +98,11 @@ type Session struct {
 	// branch into its repository's default branch (the merged commit, or the
 	// refusal and its reason); nil before any attempt.
 	LastMerge *MergeResult `json:"last_merge,omitempty"`
+	// SquashedTip is the branch's tip when the session last had a successful
+	// squash into the repository's default branch; empty when it never did. A
+	// squash leaves no git ancestry, so the task's merge state counts the
+	// branch as merged while it is still at this tip. Not on the wire.
+	SquashedTip string `json:"-"`
 	// Resumable says a resume call would be accepted now; ResumeBlocked is the
 	// error code it would answer otherwise. Derived on read, never stored.
 	Resumable     bool      `json:"resumable"`

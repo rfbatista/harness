@@ -78,11 +78,14 @@ func NewRouter(h *Handler, opts ...Option) *echo.Echo {
 	// workspaces
 	g.GET("/list_workspaces", h.handleListWorkspaces)
 	g.GET("/list_branches", h.handleListBranches)
+	g.GET("/check_branch_name", h.handleCheckBranchName)
 	g.POST("/create_workspace", h.handleCreateWorkspace)
 	g.POST("/delete_workspace", h.handleDeleteWorkspace)
 	// a workspace's branch as a pull request on its origin
 	g.GET("/pull_request", h.handlePullRequest)
 	g.POST("/create_pull_request", h.handleCreatePullRequest)
+	g.GET("/pull_request_bases", h.handlePullRequestBases)
+	g.POST("/refresh_pull_request_bases", h.handleRefreshPullRequestBases)
 
 	// bounded contexts
 	g.GET("/list_bounded_contexts", h.handleListBoundedContexts)
@@ -247,6 +250,10 @@ func NewRouter(h *Handler, opts ...Option) *echo.Echo {
 	// to its virtual shell's files
 	g.POST(strings.TrimPrefix(ShellCheckRoute, "/api"), h.handleShellCheck)
 	g.POST(strings.TrimPrefix(ShellCommitRoute, "/api"), h.handleShellCommit)
+	// the architecture rules: the same sessions' hooks, shims and commits ask
+	// whether an action keeps to the repository's layers
+	g.POST(strings.TrimPrefix(ArchitectureCheckRoute, "/api"), h.handleArchitectureCheck)
+	g.POST(strings.TrimPrefix(ArchitectureCommitRoute, "/api"), h.handleArchitectureCommit)
 
 	// the architect channel: what passes between a task's architect and its
 	// delegates, and the reviews it asks the person for
@@ -310,6 +317,16 @@ func NewRouter(h *Handler, opts ...Option) *echo.Echo {
 	g.GET("/get_repository_credential", h.handleGetRepositoryCredential)
 	g.GET("/list_repository_credentials", h.handleListRepositoryCredentials)
 	g.POST("/set_repository_credential", h.handleSetRepositoryCredential)
+
+	// repository architecture: one structured record per repository
+	g.POST("/get_repository_architecture", h.handleGetRepositoryArchitecture)
+	g.POST("/save_repository_architecture", h.handleSaveRepositoryArchitecture)
+	g.POST("/delete_repository_architecture", h.handleDeleteRepositoryArchitecture)
+	g.POST("/preview_layers", h.handlePreviewLayers)
+	g.POST("/export_repository_architecture", h.handleExportRepositoryArchitecture)
+	g.POST("/list_architecture_rule_events", h.handleListArchitectureRuleEvents)
+	g.POST("/discover_repository_architecture", h.handleDiscoverRepositoryArchitecture)
+	g.GET("/architecture.schema.json", h.handleArchitectureSchema)
 
 	// code views: read-only file trees, contents, diffs and the zone map
 	g.GET("/code/tree", h.handleCodeTree)

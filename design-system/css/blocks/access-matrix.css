@@ -1,0 +1,108 @@
+/*
+ * Access matrix — who may read and change each part of a repository: a table
+ * of layers (rows) by agents (columns) whose cells are buttons cycling
+ * none, read, change. The layer names stay pinned at the start and the agent
+ * names at the top while it scrolls; it scrolls sideways when narrow.
+ * <div class="access-matrix" role="region" aria-label="…" tabindex="0">
+ *   <table><thead>…</thead><tbody><tr><th scope="row">agent</th><td>
+ *     <button class="access-cell" data-value="none|read|change" aria-label="agent on layer: change">change</button>
+ *   </td>…</tr></tbody></table>
+ * </div>
+ * The level is a word on every cell; the weight and the glyph differ too, so
+ * colour is never the only signal. Not published as a design-system component.
+ */
+
+@layer blocks {
+  .access-matrix {
+    max-inline-size: 100%;
+    max-block-size: 28rem;
+    overflow: auto;
+    border: var(--border-width) solid var(--color-line);
+    border-radius: var(--radius-sm);
+
+    & table {
+      border-collapse: separate;
+      border-spacing: 0;
+      font-size: var(--text-sm);
+    }
+
+    & :is(th, td) {
+      padding: var(--space-2xs) var(--space-s);
+      border-block-end: var(--border-width) solid var(--color-line);
+      background: var(--color-canvas);
+      text-align: start;
+      white-space: nowrap;
+    }
+
+    & thead th {
+      position: sticky;
+      inset-block-start: 0;
+      z-index: 1;
+      background: var(--color-panel);
+      font-weight: var(--weight-medium);
+    }
+
+    & :is(thead th, tbody th):first-child {
+      position: sticky;
+      inset-inline-start: 0;
+      z-index: 2;
+      border-inline-end: var(--border-width) solid var(--color-line-strong);
+    }
+
+    & tbody th {
+      background: var(--color-panel);
+      font-weight: var(--weight-medium);
+    }
+
+    & .hint {
+      display: block;
+      font-size: var(--text-xs);
+      font-weight: var(--weight-regular);
+      color: var(--color-ink-faint);
+    }
+
+    & td { text-align: center; }
+  }
+
+  .access-cell {
+    --_ink: var(--color-ink-faint);
+    --_bg: transparent;
+
+    min-inline-size: 5rem;
+    min-block-size: var(--size-control-sm);
+    padding-inline: var(--space-s);
+    border: var(--border-width) dashed var(--color-line-control);
+    border-radius: var(--radius-xs);
+    background: var(--_bg);
+    color: var(--_ink);
+    font: inherit;
+    transition: background-color var(--duration-instant) var(--ease-out);
+
+    @media (prefers-reduced-motion: reduce) { transition: none; }
+
+    &:hover { background: var(--color-hover); }
+
+    &[data-value="read"] {
+      --_ink: var(--color-ink-muted);
+      border-style: solid;
+    }
+
+    &[data-value="change"] {
+      --_ink: var(--color-signal-ink);
+      --_bg: var(--color-signal-wash);
+      border-style: solid;
+      border-color: var(--color-signal);
+      font-weight: var(--weight-bold);
+
+      &::before { content: "✎ "; }
+    }
+
+    &[data-value="none"]::before { content: "– "; }
+
+    @media (pointer: coarse) { min-block-size: var(--size-touch); }
+
+    @media (forced-colors: active) {
+      &[data-value="change"] { outline: calc(var(--border-width) * 2) solid CanvasText; }
+    }
+  }
+}

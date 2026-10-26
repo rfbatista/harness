@@ -224,6 +224,10 @@ type SaveCatalogAgent struct {
 	// Projects is the full set of selected-mode projects that list the agent
 	// after the save. Nil leaves the lists as they are.
 	Projects []string `json:"projects"`
+	// AllowNoDescription lets an agent be saved without a description: the
+	// legacy create_agent never required one. The agent then shows a
+	// NO_DESCRIPTION problem. Not part of the HTTP body.
+	AllowNoDescription bool `json:"-"`
 }
 
 // SaveCatalogBundle creates or updates a bundle.
