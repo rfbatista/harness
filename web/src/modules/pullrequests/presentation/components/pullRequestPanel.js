@@ -16,8 +16,8 @@ import { Codes, codeOf } from "../../../../shared/domain/errors.js";
 import { FeedStatus } from "../../../../shared/domain/feed.js";
 import { describeError } from "../../../../shared/presentation/errors.js";
 import { readSeed } from "../../../../shared/presentation/seed.js";
-import { canCreate, formFromDraft, formProblems, hasProblems, isOpen, newerOf } from "../../domain/pullRequest.js";
-import { blockerLink, blockerText, refusalOf, summaryLine, toChip, uncommittedLine } from "../view.js";
+import { baseOptions, canCreate, formFromDraft, formProblems, hasProblems, isOpen, newerOf } from "../../domain/pullRequest.js";
+import { blockerLink, blockerText, consequenceLine, fetchedText, refusalOf, summaryLine, toChip, uncommittedLine } from "../view.js";
 
 /** Codes after which what the draft says has likely changed. */
 const STALE_DRAFT = [Codes.PR_NO_COMMITS, Codes.PR_NO_REMOTE, Codes.PR_BASE_NOT_FOUND];
@@ -25,7 +25,7 @@ const STALE_DRAFT = [Codes.PR_NO_COMMITS, Codes.PR_NO_REMOTE, Codes.PR_BASE_NOT_
 const NO_PROBLEMS = Object.freeze({ title: "", baseBranch: "" });
 
 /** @param {{ gateway: import("../../domain/ports.js").PullRequestGateway }} deps */
-export const pullRequestPanel = ({ gateway }) => () => {
+export const pullRequestPanel = ({ gateway, now = () => new Date() }) => () => {
   let unfollow = () => {};
   /** A PR for this workspace that arrived while the person's own create was in flight. */
   let held = null;
@@ -48,6 +48,14 @@ export const pullRequestPanel = ({ gateway }) => () => {
     formReady: false,
     problems: NO_PROBLEMS,
     creating: false,
+    /** @type {import("../../domain/pullRequest.js").PullRequestBases | null} origin's branches, as last fetched */
+    bases: null,
+    /** Origin is being fetched. */
+    refreshing: false,
+    /** Why the last fetch failed, in one line; the list is the one from before. */
+    refreshError: "",
+    /** Said beside the chip after the person's own create: what it did not touch. */
+    createdNote: "",
     /** @type {{ lead: string, reason: string, code: string } | null} the last create's refusal */
     refusal: null,
     /** What happened that the person did not do here (or that needs saying), above the form. */
@@ -109,6 +117,34 @@ export const pullRequestPanel = ({ gateway }) => () => {
     get buttonLabel() {
       return this.creating ? "Creating…" : "Create pull request";
     },
+    /** The form's own button: it says what it opens. */
+    get submitLabel() {
+      if (this.creating) return "Creating…";
+      return this.form.draft ? "Open draft PR" : "Create pull request";
+    },
+    /** What pressing it does: the push and the base. */
+    get consequence() {
+      return this.draft ? consequenceLine(this.draft, this.form) : "";
+    },
+    /** The Base picker's branches: the default first, then origin's. */
+    get baseChoices() {
+      return baseOptions(this.bases, this.draft?.baseBranch ?? "");
+    },
+    get fetchedLine() {
+      return fetchedText(this.bases?.fetchedAt ?? null, now());
+    },
+    get refreshLabel() {
+      return this.refreshing ? "Fetching branches…" : "Fetch branches from origin";
+    },
+    get refreshBusyAttr() {
+      return this.refreshing ? "true" : null;
+    },
+    get hasRefreshError() {
+      return this.refreshError !== "";
+    },
+    get hasCreatedNote() {
+      return this.createdNote !== "";
+    },
     get blockers() {
       if (!this.draft || isOpen(this.pullRequest)) return [];
       return this.draft.blockers.map((code) => {
@@ -124,7 +160,7 @@ export const pullRequestPanel = ({ gateway }) => () => {
     },
     /** The strip under the toolbar shows when it has something to say. */
     get showsStrip() {
-      return !this.gone && (this.blocked || this.hasNotice || this.showsForm || !!this.error);
+      return !this.gone && (this.blocked || this.hasNotice || this.hasCreatedNote || this.showsForm || !!this.error);
     },
     get hasNotice() {
       return this.notice !== "";
@@ -241,6 +277,39 @@ export const pullRequestPanel = ({ gateway }) => () => {
       this.notice = "";
       this.$nextTick(() => this.$refs.title?.focus?.());
       this.refreshDraft();
+      this.loadBases();
+    },
+
+    /** Origin's branches as git has them now; never fetches. */
+    async loadBases() {
+      try {
+        this.bases = await gateway.bases(this.workspaceId);
+      } catch (err) {
+        if (codeOf(err) === Codes.WORKSPACE_NOT_FOUND) this.gone = true;
+        // Otherwise the picker still offers the draft's base.
+      }
+    },
+
+    /** Fetches origin, then shows its branches; on a failure says why and keeps the list. */
+    async refreshBases() {
+      if (this.refreshing) return;
+      this.refreshing = true;
+      this.refreshError = "";
+      try {
+        this.bases = await gateway.refreshBases(this.workspaceId);
+        if (this.form.baseBranch && !this.baseChoices.includes(this.form.baseBranch)) this.form.baseBranch = this.bases.default;
+        this.say(`Fetched origin. ${this.bases.branches.length} branches.`);
+      } catch (err) {
+        if (codeOf(err) === Codes.WORKSPACE_NOT_FOUND) {
+          this.gone = true;
+        } else {
+          const r = refusalOf(err);
+          this.refreshError = `${r.lead} ${r.reason}`.trim();
+          this.say(this.refreshError);
+        }
+      } finally {
+        this.refreshing = false;
+      }
     },
 
     /** What git says now (commits ahead, uncommitted files, blockers), without touching the form. */
@@ -281,6 +350,7 @@ export const pullRequestPanel = ({ gateway }) => () => {
           draft: this.form.draft,
         });
         this.opened(pr);
+        this.createdNote = "The session, its worktree and the task status are unchanged.";
         this.say(`Opened pull request #${pr.number}.`);
       } catch (err) {
         this.refused(err);

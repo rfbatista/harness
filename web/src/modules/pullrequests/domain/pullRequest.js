@@ -34,6 +34,12 @@
  *
  * @typedef {{ draft: PullRequestDraft, pullRequest: PullRequest | null }} PullRequestView
  *
+ * @typedef {object} PullRequestBases  the branches a PR can be based on: origin's, as last fetched
+ * @property {string} workspaceId
+ * @property {readonly string[]} branches  by name, without the origin/ prefix
+ * @property {string} default              the branch the workspace was cut from; first in the picker
+ * @property {Date | null} fetchedAt       when origin was last fetched; null when unknown
+ *
  * @typedef {object} PullRequestForm
  * @property {string} title
  * @property {string} body
@@ -53,6 +59,18 @@ export const displayState = (pr) => (pr.state === "open" && pr.draft ? "draft" :
  * followed by another) and nothing the server knows of in the way.
  */
 export const canCreate = (draft, pr) => !!draft && !isOpen(pr) && draft.blockers.length === 0;
+
+/**
+ * The picker's options: the default first, then origin's branches by name. The
+ * default stays listed when origin was not fetched yet and does not show it.
+ * @param {PullRequestBases | null} bases
+ * @param {string} fallback  the draft's base, when there is no list yet
+ */
+export function baseOptions(bases, fallback = "") {
+  const first = bases?.default || fallback;
+  const rest = (bases?.branches ?? []).filter((b) => b !== first);
+  return [...(first ? [first] : []), ...rest];
+}
 
 /** The form as the draft suggests it. */
 export function formFromDraft(draft) {

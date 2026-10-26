@@ -1,7 +1,7 @@
 // PullRequestGateway over the harness HTTP API (the Web UI contract's
 // /api/pull_request and /api/create_pull_request) and the project feed.
 
-import { createBody, toCreated, toCreateError, toPanelSeed, toPullRequestEvent, toView, toWatchSeed } from "./dto.js";
+import { createBody, toBases, toCreated, toCreateError, toPanelSeed, toPullRequestEvent, toView, toWatchSeed } from "./dto.js";
 
 /**
  * @param {import("../../../shared/infrastructure/api.js").ApiClient} api
@@ -12,6 +12,14 @@ export function pullRequestsGateway(api, feed) {
   return {
     async get(workspaceId, signal) {
       return toView(await api.get("/pull_request", { workspace_id: workspaceId }, signal));
+    },
+
+    async bases(workspaceId, signal) {
+      return toBases(await api.get("/pull_request_bases", { workspace_id: workspaceId }, signal));
+    },
+
+    async refreshBases(workspaceId) {
+      return toBases(await api.post("/refresh_pull_request_bases", { workspace_id: workspaceId }));
     },
 
     async create(req) {

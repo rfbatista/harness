@@ -8,7 +8,7 @@ import { assert, file, test } from "../../../shared/testing/test.js";
 import { pullRequestGatewayContract } from "../testing/gateway-contract.js";
 import { draftDTO, makeDraft, makePullRequest, makeWorkspace, pullRequestDTO } from "../testing/fixtures.js";
 import { stubPullRequestsApi } from "../testing/stub-api.js";
-import { createBody, toCreateError, toDraft, toPanelSeed, toPullRequest, toPullRequestEvent, toView, toWatchSeed } from "./dto.js";
+import { createBody, toBases, toCreateError, toDraft, toPanelSeed, toPullRequest, toPullRequestEvent, toView, toWatchSeed } from "./dto.js";
 import { memoryPullRequests } from "./memory-gateway.js";
 import { pullRequestsGateway } from "./pullrequests-gateway.js";
 
@@ -28,6 +28,25 @@ function http(world) {
 pullRequestGatewayContract("http", (world) => {
   const { gateway, stub } = http(world);
   return { gateway, world: stub.memory };
+});
+
+test("http · the bases come from GET and the refresh from POST, both carrying the workspace", async () => {
+  const stub = stubPullRequestsApi({ workspaces: [makeWorkspace({ originBranches: ["main"], fetchableBranches: ["main", "dev"] })] });
+  const calls = [];
+  const fetch = (input, init = {}) => (calls.push([init.method ?? "GET", input, init.body]), stub.fetch(input, init));
+  const gateway = pullRequestsGateway(apiClient({ base: "/api", fetch }), feed({ base: "/api", EventSource: stub.EventSource }));
+  assert.deepEqual([...(await gateway.bases("ws1")).branches], ["main"]);
+  assert.deepEqual([...(await gateway.refreshBases("ws1")).branches], ["dev", "main"]);
+  assert.deepEqual(calls, [
+    ["GET", "/api/pull_request_bases?workspace_id=ws1", undefined],
+    ["POST", "/api/refresh_pull_request_bases", JSON.stringify({ workspace_id: "ws1" })],
+  ]);
+});
+
+test("a bases answer that is not a list is BAD_RESPONSE", () => {
+  assert.throws(() => toBases({ workspace_id: "ws1" }), Codes.BAD_RESPONSE);
+  assert.throws(() => toBases({ workspace_id: "ws1", branches: [], fetched_at: "yesterday" }), Codes.BAD_RESPONSE);
+  assert.equal(toBases({ workspace_id: "ws1", branches: ["main", ""], default: "main", fetched_at: null }).branches.length, 1);
 });
 
 test("http · create posts the contract's body; an empty base is left out", async () => {

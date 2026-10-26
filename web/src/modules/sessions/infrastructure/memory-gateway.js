@@ -8,6 +8,15 @@ import { FeedStatus } from "../../../shared/domain/feed.js";
 import { isTerminal, MODES, noTaskProblem, Status } from "../domain/session.js";
 import { toSeed } from "./dto.js";
 
+/** The first rule of git check-ref-format a name breaks, or "": enough for pages and tests. */
+function invalidReason(name) {
+  if (/\s/.test(name)) return "a branch name cannot contain spaces";
+  if (name.includes("..")) return "a branch name cannot contain ..";
+  if (/[~^:?*[\\]/.test(name)) return "a branch name cannot contain ~ ^ : ? * [ or a backslash";
+  if (/^[/.-]|[/.]$|\/\/|\.lock$/.test(name)) return "a branch name cannot start with / . or -, end with / or ., contain //, or end in .lock";
+  return "";
+}
+
 /**
  * @param {{
  *   projects?: string[],
@@ -23,6 +32,28 @@ export function memoryGateway({ projects = [], sessions = [], repositories = {},
   /** @type {Map<string, import("../domain/session.js").Session>} */
   const store = new Map(sessions.map((s) => [s.id, s]));
   const followers = new Set();
+
+  const taken = (repositoryId) => new Set((branches[repositoryId] ?? []).filter((b) => !b.remote).map((b) => b.name));
+
+  /** The name the server would generate: agent/<task>-<suffix>. */
+  const generatedName = (ticketId) => `agent/${ticketId || "session"}-${(nextId + 0x1000).toString(16)}`;
+
+  function check({ repositoryId, name = "", ticketId = "" }) {
+    if (!(repositoryId in branches) && !(repositoryId in repositories)) {
+      throw new StructuredError(Codes.REPOSITORY_NOT_FOUND, "repository not found", 404);
+    }
+    const trimmed = name.trim();
+    const generated = generatedName(ticketId);
+    const base = { name: trimmed, generated, valid: true, available: true, code: "", reason: "", suggestion: "" };
+    if (!trimmed) return base;
+    const reason = invalidReason(trimmed);
+    if (reason) return { ...base, valid: false, available: false, code: Codes.BRANCH_NAME_INVALID, reason };
+    const existing = taken(repositoryId);
+    if (!existing.has(trimmed)) return base;
+    let n = 2;
+    while (existing.has(`${trimmed}-${n}`)) n++;
+    return { ...base, available: false, code: Codes.BRANCH_EXISTS, reason: `${trimmed} already exists`, suggestion: `${trimmed}-${n}` };
+  }
 
   function find(sessionId) {
     const session = store.get(sessionId);
@@ -56,7 +87,11 @@ export function memoryGateway({ projects = [], sessions = [], repositories = {},
       return [...store.values()].filter((s) => s.projectId === projectId && (!ticketId || s.ticketId === ticketId));
     },
 
-    async start({ projectId, ticketId, repositoryId, agentId, prompt, mode }) {
+    async checkBranchName(query) {
+      return Object.freeze(check(query));
+    },
+
+    async start({ projectId, ticketId, repositoryId, agentId, prompt, mode, branchName }) {
       if (!knownProjects.has(projectId)) {
         throw new StructuredError(Codes.PROJECT_NOT_FOUND, `project ${projectId} not found`, 404);
       }
@@ -66,6 +101,15 @@ export function memoryGateway({ projects = [], sessions = [], repositories = {},
       }
       if (!MODES.includes(mode ?? "")) throw new StructuredError(Codes.INVALID_INPUT, `unknown mode "${mode}"`, 400);
       if (!ticketId && noTaskProblem(mode)) throw new StructuredError(Codes.INVALID_INPUT, "ticket_id is required unless mode is product", 400);
+      if (branchName?.trim()) {
+        const verdict = check({ repositoryId, name: branchName });
+        if (verdict.code === Codes.BRANCH_NAME_INVALID) {
+          throw new StructuredError(Codes.BRANCH_NAME_INVALID, `BRANCH_NAME_INVALID: ${verdict.reason}`, 400, { name: verdict.name, reason: verdict.reason });
+        }
+        if (verdict.code === Codes.BRANCH_EXISTS) {
+          throw new StructuredError(Codes.BRANCH_EXISTS, `BRANCH_EXISTS: ${verdict.name} already exists on this repository`, 409, { name: verdict.name, suggestion: verdict.suggestion });
+        }
+      }
       const session = Object.freeze({
         id: `mem-${nextId++}`,
         projectId,
