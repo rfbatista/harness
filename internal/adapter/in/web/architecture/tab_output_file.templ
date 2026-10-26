@@ -1,66 +1,122 @@
 package architecture
 
-// tabOutputFile is the Output tab's file view: where the file is, how it
-// stands against the saved architecture, the Export action with its refusals
-// in words, and the YAML the export writes (always the saved version).
+// tabOutputFile is the Output tab's file view, as the published export-file
+// design has it: the heading with Export, the Database / Sync state /
+// Repository nodes, the banner for the state, the Export refusals in words,
+// then the Format, how the architecture reaches sessions and the schema checks
+// beside the YAML the export writes (always the saved version, with Copy and
+// Download). What the build does not do is left out: other formats, importing
+// the file, overwriting it, and the conflict state.
 templ tabOutputFile() {
-	<section class="[ pane ]" aria-label="Architecture file" data-file-state>
-		<header>
-			<code class="[ font-mono ]" data-file-path x-text="filePath"></code>
-			<span class="[ badge ]" data-file-state-title x-show="hasState" x-text="stateTitle"></span>
-		</header>
-		<div class="[ content ] [ flow ]">
-			<template x-if="hasState">
-				<div class="[ flow ] [ flow-space-3xs ]">
-					<p data-file-state-text x-text="stateText"></p>
-					<template x-if="stateNext">
-						<p class="[ color-ink-muted ]" data-file-state-next x-text="stateNext"></p>
-					</template>
-				</div>
-			</template>
-			<template x-if="!exists">
-				<p class="[ color-ink-muted ]" data-file-state-text>Nothing is saved yet, so there is nothing to export.</p>
-			</template>
-			<template x-if="hasLastExport">
-				<p class="[ text-sm color-ink-muted ]" data-last-export>Last export: <span x-text="lastExport"></span></p>
-			</template>
-			<template x-if="!hasLastExport">
-				<p class="[ text-sm color-ink-muted ]" data-last-export>Not exported yet.</p>
-			</template>
-			<div class="[ cluster ]">
-				<button type="button" class="[ button ]" data-variant="primary" data-size="sm" data-export x-bind:disabled="!canExport" x-bind:aria-busy="exporting" x-on:click="exportFile" x-text="exportLabel"></button>
-				<template x-if="hasBlocked">
-					<span class="[ text-sm color-ink-muted ]" data-export-blocked x-text="exportBlocked"></span>
+	<div class="[ arch-head ]" data-file-head>
+		<div class="[ flow ] [ flow-space-3xs ]">
+			<h2>Architecture file</h2>
+			<p class="[ color-ink-muted text-sm ]">The architecture is stored in the database and exported to <code class="[ font-mono ]" data-file-path x-text="filePath"></code> in the repository, so it is reviewed in pull requests, readable offline and usable by other tools. The export is a commit on the default branch, made only when you ask.</p>
+		</div>
+		<div class="[ cluster ]">
+			<button type="button" class="[ button ]" data-size="sm" data-export x-bind:data-variant="exportVariant" x-bind:disabled="!canExport" x-bind:aria-busy="exporting" x-on:click="exportFile" x-text="exportLabel"></button>
+		</div>
+	</div>
+	<template x-if="hasBlocked">
+		<p class="[ text-sm color-ink-muted ]" data-export-blocked x-text="exportBlocked"></p>
+	</template>
+	<div class="[ export-nodes ]" data-nodes>
+		<div class="[ node ]" data-node="database">
+			<h3>Database</h3>
+			<b>Source of truth for sessions</b>
+			<span x-text="databaseText"></span>
+		</div>
+		<span class="[ arrow ]" data-arrow aria-hidden="true" x-text="arrowLeft"></span>
+		<div class="[ node ]" data-node="state" x-bind:data-tone="stateTone">
+			<h3>Sync state</h3>
+			<b data-file-state-title x-text="stateTitle"></b>
+			<span x-text="stateSummary"></span>
+		</div>
+		<span class="[ arrow ]" data-arrow aria-hidden="true" x-text="arrowRight"></span>
+		<div class="[ node ]" data-node="repository">
+			<h3>Repository</h3>
+			<b><code class="[ font-mono ]" x-text="filePath"></code></b>
+			<span data-last-export x-text="repositoryText"></span>
+		</div>
+	</div>
+	<template x-if="hasBanner">
+		<div class="[ banner ]" role="status" data-file-state-banner x-bind:data-tone="bannerTone">
+			<div class="[ flow ] [ flow-space-3xs ]">
+				<span class="[ weight-medium ]" data-file-state-text x-text="headline"></span>
+				<template x-if="stateNext">
+					<span class="[ color-ink-muted ]" data-file-state-next x-text="stateNext"></span>
 				</template>
 			</div>
-			<template x-if="hasResult">
-				<div class="[ banner ]" role="status" data-export-result>
-					<span x-text="resultText"></span>
-				</div>
-			</template>
-			<template x-if="hasRefusal">
-				<div class="[ banner ]" data-tone="attention" role="alert" data-export-refusal x-bind:data-code="refusal.code">
-					<div class="[ flow ] [ flow-space-3xs grow ]">
-						<span class="[ weight-medium ]" x-text="refusal.title"></span>
-						<span x-text="refusal.text"></span>
-						<span x-text="refusal.next"></span>
-					</div>
-					<template x-if="refusalIsStale">
-						<button type="button" class="[ button ]" data-size="sm" x-on:click="reloadPage">Reload</button>
-					</template>
-				</div>
+		</div>
+	</template>
+	<template x-if="hasResult">
+		<div class="[ banner ]" data-tone="signal" role="status" data-export-result>
+			<span x-text="resultText"></span>
+		</div>
+	</template>
+	<template x-if="hasRefusal">
+		<div class="[ banner ]" data-tone="attention" role="alert" data-export-refusal x-bind:data-code="refusal.code">
+			<div class="[ flow ] [ flow-space-3xs grow ]">
+				<span class="[ weight-medium ]" x-text="refusal.title"></span>
+				<span x-text="refusal.text"></span>
+				<span x-text="refusal.next"></span>
+			</div>
+			<template x-if="refusalIsStale">
+				<button type="button" class="[ button ]" data-size="sm" x-on:click="reloadPage">Reload</button>
 			</template>
 		</div>
-	</section>
-	<section class="[ pane ]" aria-label="YAML preview">
-		<header>
-			<span>What the export writes</span>
-			<span class="[ grow ]"></span>
-			<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" data-copy-yaml x-on:click="copyYaml" x-text="copyLabel"></button>
-		</header>
-		<template x-if="dirty">
-			<p class="[ pad-m text-sm color-ink-muted ]" data-yaml-note>This is the saved version. Your unsaved changes are not in it.</p>
-		</template>
-		<pre class="[ pad-m font-mono text-sm pre-scroll ]" data-yaml tabindex="0" x-text="yaml"></pre>
-	</section>
+	</template>
+	<div class="[ export-work ]" data-file-work>
+		<div class="[ flow ]">
+			<section class="[ pane ]" aria-label="Format" data-format>
+				<header>
+					<h3 class="[ grow ]">Format</h3>
+					<span class="[ badge ]" data-tone="signal">Recommended</span>
+				</header>
+				<div class="[ content ] [ flow ]">
+					<div class="[ format-option ]" data-selected>
+						<b>YAML + JSON Schema</b>
+						<span>One file, <code class="[ font-mono ]">.harness/architecture.yaml</code>, checked by <code class="[ font-mono ]">.harness/architecture.schema.json</code>. Diffs read well in a pull request, and editors can validate the file against the schema.</span>
+					</div>
+					<p class="[ text-xs color-ink-faint ]">Prose lives in the files it already lives in: AGENTS.md, skills, agent prompts. The YAML holds paths and structure, plus short tool usage prose. Never a copy of a long prompt.</p>
+				</div>
+			</section>
+			<section class="[ pane ]" aria-label="How it reaches sessions" data-reach>
+				<header>
+					<h3>How it reaches sessions</h3>
+				</header>
+				<ol class="[ content ] [ reach-steps ]">
+					<li data-session-step><b>Session start.</b> The server reads the saved architecture from the database. The file is not read at runtime.</li>
+					<li data-session-step><b>Brief.</b> A short summary goes into the session’s brief: the layers, who may change what, the hook modes, and the path of the record to read first.</li>
+					<li data-session-step><b>Worktree.</b> The record is shown read-only in the session’s virtual shell as <code class="[ font-mono ]">project/architecture/&lt;repository&gt;.yaml</code>, byte for byte what an export writes.</li>
+					<li data-session-step><b>Hooks.</b> The rules run in the harness’s own hooks and in a commit check in each session worktree. A saved change applies to running sessions at once.</li>
+					<li data-session-step><b>Merge.</b> The file on the default branch is compared with the saved version whenever this page loads, and the sync state above says how they stand.</li>
+				</ol>
+			</section>
+			<section class="[ pane ]" aria-label="Schema checks" data-schema-checks>
+				<header>
+					<h3 class="[ grow ]">Schema checks</h3>
+					<span class="[ badge ]" x-bind:data-tone="checks.tone" x-text="checks.badge"></span>
+				</header>
+				<ul class="[ content ] [ check-list ]">
+					<template x-for="item in checks.items" x-bind:key="item">
+						<li x-text="item"></li>
+					</template>
+				</ul>
+			</section>
+		</div>
+		<section class="[ pane ]" aria-label="YAML preview" data-yaml-pane>
+			<header>
+				<h3 x-text="filePath"></h3>
+				<span class="[ badge ]" x-bind:data-tone="yamlBadgeTone" x-text="yamlBadge"></span>
+				<span class="[ grow ]"></span>
+				<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" data-copy-yaml x-on:click="copyYaml" x-text="copyLabel"></button>
+				<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" data-download-yaml x-bind:disabled="!exists" x-on:click="downloadYaml">Download</button>
+			</header>
+			<template x-if="dirty">
+				<p class="[ pad-m text-sm color-ink-muted ]" data-yaml-note>This is the saved version. Your unsaved changes are not in it.</p>
+			</template>
+			<pre class="[ yaml-lines ] [ font-mono ]" data-yaml tabindex="0"><template x-for="l in yamlRows" x-bind:key="l.n"><span class="[ ln ]" x-bind:data-comment="l.comment"><span x-text="l.lead"></span><span class="[ k ]" x-text="l.key"></span><span x-text="l.rest"></span></span></template></pre>
+		</section>
+	</div>
 }

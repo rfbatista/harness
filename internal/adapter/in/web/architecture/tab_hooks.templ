@@ -2,120 +2,223 @@ package architecture
 
 // tabHooks is the Hooks tab's panel. It is its own Alpine component,
 // architectureHooksTab, nested in architecturePage: it reads and edits the
-// page's draft and errors through the page's scope.
+// page's draft and errors through the page's scope. It follows the published
+// hook-rules design: a head with Add rule, the empty state, and the rule list
+// beside the open rule's editor (name, trigger, condition, mode, message) and
+// its "What the agent sees" preview. Only what the record holds is offered:
+// a rule's kind, lifecycle point, tools, paths, agents, timeout, mode and message.
 templ tabHooks() {
 	<section role="tabpanel" id="architecture-panel-hooks" aria-labelledby="architecture-tab-hooks" x-show="isTab('hooks')" x-data="architectureHooksTab" class="[ flow ]">
-		<h2>Hooks</h2>
-		<p class="[ color-ink-muted ]">Rules that run at fixed points in an agent's work, blocking or only warning. They apply to every agent session in this repository, as soon as they are saved.</p>
-		<div class="[ cluster ]">
-			<button type="button" class="[ button ]" data-size="sm" x-bind:disabled="cannotAddEdit" x-on:click="addEdit">Add edit-outside-layer rule</button>
-			<button type="button" class="[ button ]" data-size="sm" x-on:click="addCommand">Add command rule</button>
-		</div>
+		@panelHead("Hook rules", "Deterministic checks that protect the layers. A rule runs at a lifecycle point, tests a condition and either blocks the action or only warns. Rules apply to every agent session in this repository, as soon as they are saved.") {
+			<button type="button" class="[ button ]" data-variant="primary" data-size="sm" data-add-rule x-on:click="addCommand">Add rule</button>
+		}
 		<template x-if="noRules">
-			<p class="[ color-ink-muted ]">No rules yet. Layers are only advice until a rule enforces them.</p>
+			<div class="[ arch-empty ]" data-no-rules>
+				<h3>No hook rules yet</h3>
+				<p>Layers are only advice until a rule enforces them. Start with the one rule most repositories need: block edits outside an agent’s change layers.</p>
+				<div class="[ actions ]">
+					<button type="button" class="[ button ]" data-variant="primary" data-add-edit x-on:click="addEdit">Add “Edit outside change layers” (blocking)</button>
+					<button type="button" class="[ button ]" data-add-scratch x-on:click="addCommand">Add a rule from scratch</button>
+				</div>
+			</div>
 		</template>
-		<template x-for="g in groups" x-bind:key="g.key">
-			<section class="[ flow ]" x-bind:data-group="g.key">
-				<h3 x-text="g.title"></h3>
-				<template x-for="r in g.rules" x-bind:key="r.index">
-					<div class="[ pane ]" x-bind:data-rule-index="r.index">
-						<header>
-							<span class="[ weight-medium ]" x-text="r.rule.id"></span>
-							<span class="[ badge ]" data-mode x-bind:data-tone="r.tone" x-text="r.modeText"></span>
-							<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-on:click="remove(r.index)">Delete</button>
-						</header>
-						<div class="[ flow ] [ pad-m ]">
-							<div class="[ field ]">
-								<label x-bind:for="'rule-' + r.index + '-id'">Rule id</label>
-								<input x-bind:id="'rule-' + r.index + '-id'" data-field="id" class="[ text-sm ]" autocomplete="off" placeholder="stay-in-your-layer" x-bind:value="r.id" x-bind:aria-invalid="fieldInvalid(r.index, 'id')" x-on:input="set(r.index, 'id', $event.target.value)"/>
-								<template x-if="fieldError(r.index, 'id')">
-									<span class="[ error ]" x-bind:data-error-for="pointer(r.index, 'id')" x-text="fieldError(r.index, 'id')"></span>
-								</template>
-							</div>
-							<div class="[ field ]" role="group" aria-label="Mode">
-								<span class="[ text-sm weight-medium ]">Mode</span>
-								<div class="[ cluster ]">
-									<template x-for="m in modes" x-bind:key="m.value">
-										<button type="button" class="[ button ]" data-size="sm" x-bind:aria-pressed="r.rule.mode === m.value" x-on:click="set(r.index, 'mode', m.value)" x-text="m.text"></button>
+		<div class="[ hooks-work ]" data-hooks-work x-show="!noRules">
+			<section class="[ pane ]" aria-label="Rules" data-rules-list>
+				<header>
+					<h3 class="[ grow ]">Rules</h3>
+					<span class="[ chip ]" data-rule-total x-text="rules.length"></span>
+				</header>
+				<template x-for="g in groups" x-bind:key="g.key">
+					<div x-bind:data-group="g.key">
+						<div class="[ rule-group ]">
+							<span x-text="g.title"></span>
+							<span x-text="g.count"></span>
+						</div>
+						<ul class="[ rule-list ]">
+							<template x-for="r in g.rules" x-bind:key="r.index">
+								<li>
+									<button type="button" x-bind:data-rule-item="r.index" x-bind:aria-current="r.current" x-on:click="select(r.index)">
+										<span class="[ name ]">
+											<b data-rule-name x-text="r.title"></b>
+											<span x-text="r.summary"></span>
+										</span>
+										<template x-if="r.hasError">
+											<span class="[ badge ]" data-tone="danger" data-badge="error">error</span>
+										</template>
+										<span class="[ badge ]" data-mode x-bind:data-tone="r.tone" x-text="r.modeText"></span>
+									</button>
+								</li>
+							</template>
+						</ul>
+					</div>
+				</template>
+			</section>
+			<div class="[ flow ] [ hooks-main ]">
+				<template x-if="hasProblems">
+					<div class="[ banner ]" data-tone="danger" role="alert" data-validation>
+						<span x-text="problemText"></span>
+					</div>
+				</template>
+				<template x-for="r in editing" x-bind:key="r.index">
+					<div class="[ flow ]" x-bind:data-rule-index="r.index">
+						<section class="[ pane ]" aria-label="Rule definition" data-editor>
+							<header>
+								<h3 x-text="r.title"></h3>
+								<span class="[ badge ]" data-mode x-bind:data-tone="r.tone" x-text="r.modeText"></span>
+								<span class="[ grow ]"></span>
+								<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" data-duplicate x-bind:disabled="r.isEdit" x-on:click="duplicate(r.index)">Duplicate</button>
+								<button type="button" class="[ button ]" data-variant="danger" data-size="sm" data-delete-rule x-bind:aria-label="r.removeLabel" x-on:click="remove(r.index)">Delete</button>
+							</header>
+							<div class="[ content ] [ flow ]">
+								<div class="[ field ]">
+									<label x-bind:for="'rule-' + r.index + '-id'">Name</label>
+									<input x-bind:id="'rule-' + r.index + '-id'" data-field="id" class="[ text-sm ]" autocomplete="off" placeholder="stay-in-your-layer" x-bind:value="r.id" x-bind:aria-invalid="fieldInvalid(r.index, 'id')" x-on:input="set(r.index, 'id', $event.target.value)"/>
+									<template x-if="fieldError(r.index, 'id')">
+										<span class="[ error ]" x-bind:data-error-for="pointer(r.index, 'id')" x-text="fieldError(r.index, 'id')"></span>
 									</template>
 								</div>
-								<template x-if="fieldError(r.index, 'mode')">
-									<span class="[ error ]" x-bind:data-error-for="pointer(r.index, 'mode')" x-text="fieldError(r.index, 'mode')"></span>
-								</template>
-							</div>
-							<template x-if="!r.isEdit">
-								<div class="[ flow ]">
-									<div class="[ field ]">
-										<label x-bind:for="'rule-' + r.index + '-at'">Lifecycle point</label>
-										<select x-bind:id="'rule-' + r.index + '-at'" data-field="at" x-bind:aria-invalid="fieldInvalid(r.index, 'at')" x-on:change="set(r.index, 'at', $event.target.value)">
-											<option value="" x-bind:selected="!r.rule.at">Choose a lifecycle point</option>
-											<template x-for="p in lifecyclePoints" x-bind:key="p.value">
-												<option x-bind:value="p.value" x-bind:selected="r.rule.at === p.value" x-text="p.label"></option>
-											</template>
-										</select>
-										<template x-if="fieldError(r.index, 'at')">
-											<span class="[ error ]" x-bind:data-error-for="pointer(r.index, 'at')" x-text="fieldError(r.index, 'at')"></span>
-										</template>
-									</div>
-									<div class="[ field ]">
-										<label x-bind:for="'rule-' + r.index + '-command'">Command</label>
-										<input x-bind:id="'rule-' + r.index + '-command'" data-field="command" class="[ text-sm ]" autocomplete="off" placeholder="go test ./..." x-bind:value="r.command" x-bind:aria-invalid="fieldInvalid(r.index, 'command')" x-on:input="set(r.index, 'command', $event.target.value)"/>
-										<template x-if="fieldError(r.index, 'command')">
-											<span class="[ error ]" x-bind:data-error-for="pointer(r.index, 'command')" x-text="fieldError(r.index, 'command')"></span>
-										</template>
-									</div>
-									<div class="[ field ]">
-										<label x-bind:for="'rule-' + r.index + '-paths'">Paths (regex)</label>
-										<input x-bind:id="'rule-' + r.index + '-paths'" data-field="paths" class="[ text-sm ]" autocomplete="off" placeholder="^internal/domain/" x-bind:value="r.paths" x-bind:aria-invalid="fieldInvalid(r.index, 'paths')" x-on:input="setText(r.index, 'paths', $event.target.value)"/>
-										<template x-if="fieldError(r.index, 'paths')">
-											<span class="[ error ]" x-bind:data-error-for="pointer(r.index, 'paths')" x-text="fieldError(r.index, 'paths')"></span>
-										</template>
-									</div>
-									<template x-if="r.atTool">
+								<div class="[ hook-cols ]">
+									<template x-if="r.isEdit">
 										<div class="[ field ]">
-											<label x-bind:for="'rule-' + r.index + '-tools'">Tools (comma separated)</label>
-											<input x-bind:id="'rule-' + r.index + '-tools'" data-field="tools" class="[ text-sm ]" autocomplete="off" placeholder="Edit, Write, MultiEdit" x-bind:value="r.tools" x-bind:aria-invalid="fieldInvalid(r.index, 'tools')" x-on:change="setList(r.index, 'tools', $event.target.value)"/>
+											<span class="[ text-sm weight-medium ]">Trigger — lifecycle point</span>
+											<p class="[ fixed-value ]" data-fixed="at" x-text="r.trigger"></p>
+										</div>
+									</template>
+									<template x-if="r.isCommand">
+										<div class="[ field ]">
+											<label x-bind:for="'rule-' + r.index + '-at'">Trigger — lifecycle point</label>
+											<select x-bind:id="'rule-' + r.index + '-at'" data-field="at" x-bind:aria-invalid="fieldInvalid(r.index, 'at')" x-on:change="set(r.index, 'at', $event.target.value)">
+												<option value="" x-bind:selected="!r.rule.at">Choose a lifecycle point</option>
+												<template x-for="p in lifecyclePoints" x-bind:key="p.value">
+													<option x-bind:value="p.value" x-bind:selected="r.rule.at === p.value" x-text="p.label"></option>
+												</template>
+											</select>
+											<template x-if="fieldError(r.index, 'at')">
+												<span class="[ error ]" x-bind:data-error-for="pointer(r.index, 'at')" x-text="fieldError(r.index, 'at')"></span>
+											</template>
+										</div>
+									</template>
+									<template x-if="r.isEdit">
+										<div class="[ field ]">
+											<span class="[ text-sm weight-medium ]">Tools it watches</span>
+											<p class="[ fixed-value font-mono ]">Edit | Write | MultiEdit</p>
+											<span class="[ text-xs color-ink-faint ]">Matches tool names. Shell writes are detected through the edit proxy (ADR 0002).</span>
+										</div>
+									</template>
+									<template x-if="r.isCommand">
+										<div class="[ field ]">
+											<label x-bind:for="'rule-' + r.index + '-tools'">Tools it watches</label>
+											<input x-bind:id="'rule-' + r.index + '-tools'" data-field="tools" class="[ text-sm font-mono ]" autocomplete="off" placeholder="Edit, Write, MultiEdit" x-bind:value="r.tools" x-bind:aria-invalid="fieldInvalid(r.index, 'tools')" x-on:change="setList(r.index, 'tools', $event.target.value)"/>
+											<span class="[ text-xs color-ink-faint ]">Tool names, separated by commas. Empty means Edit, Write, MultiEdit and Bash.</span>
 											<template x-if="fieldError(r.index, 'tools')">
 												<span class="[ error ]" x-bind:data-error-for="pointer(r.index, 'tools')" x-text="fieldError(r.index, 'tools')"></span>
 											</template>
 										</div>
 									</template>
-									<div class="[ field ]">
-										<label x-bind:for="'rule-' + r.index + '-timeout'">Timeout in seconds (default 30, at most 300)</label>
-										<input x-bind:id="'rule-' + r.index + '-timeout'" data-field="timeout_seconds" type="number" min="1" max="300" class="[ text-sm ]" placeholder="30" x-bind:value="r.timeout" x-bind:aria-invalid="fieldInvalid(r.index, 'timeout_seconds')" x-on:change="setTimeout(r.index, $event.target.value)"/>
-										<template x-if="fieldError(r.index, 'timeout_seconds')">
-											<span class="[ error ]" x-bind:data-error-for="pointer(r.index, 'timeout_seconds')" x-text="fieldError(r.index, 'timeout_seconds')"></span>
+									<template x-if="r.isCommand">
+										<div class="[ field ]">
+											<label x-bind:for="'rule-' + r.index + '-timeout'">Timeout in seconds</label>
+											<input x-bind:id="'rule-' + r.index + '-timeout'" data-field="timeout_seconds" type="number" min="1" max="300" class="[ text-sm ]" placeholder="30" x-bind:value="r.timeout" x-bind:aria-invalid="fieldInvalid(r.index, 'timeout_seconds')" x-on:change="setTimeout(r.index, $event.target.value)"/>
+											<span class="[ text-xs color-ink-faint ]">Default 30, at most 300.</span>
+											<template x-if="fieldError(r.index, 'timeout_seconds')">
+												<span class="[ error ]" x-bind:data-error-for="pointer(r.index, 'timeout_seconds')" x-text="fieldError(r.index, 'timeout_seconds')"></span>
+											</template>
+										</div>
+									</template>
+								</div>
+								<div class="[ field ]" role="group" aria-label="Condition">
+									<span class="[ text-sm weight-medium ]">Condition</span>
+									<div class="[ cond ]">
+										<span class="[ k ]" data-cond-key>When</span>
+										<div class="[ flow ] [ flow-space-2xs ]">
+											<select data-field="kind" aria-label="When" x-bind:aria-invalid="fieldInvalid(r.index, 'kind')" x-on:change="setKind(r.index, $event.target.value)">
+												<template x-for="k in r.kinds" x-bind:key="k.value">
+													<option x-bind:value="k.value" x-bind:selected="k.selected" x-bind:disabled="k.disabled" x-text="k.label"></option>
+												</template>
+											</select>
+											<template x-if="fieldError(r.index, 'kind')">
+												<span class="[ error ]" x-bind:data-error-for="pointer(r.index, 'kind')" x-text="fieldError(r.index, 'kind')"></span>
+											</template>
+											<template x-if="r.isCommand">
+												<div class="[ field ]">
+													<label class="[ visually-hidden ]" x-bind:for="'rule-' + r.index + '-command'">Command</label>
+													<input x-bind:id="'rule-' + r.index + '-command'" data-field="command" class="[ text-sm font-mono ]" autocomplete="off" placeholder="go test ./..." x-bind:value="r.command" x-bind:aria-invalid="fieldInvalid(r.index, 'command')" x-on:input="set(r.index, 'command', $event.target.value)"/>
+													<span class="[ text-xs color-ink-faint ]">Runs in the session’s worktree. A non-zero exit, or a timeout, fails the rule.</span>
+													<template x-if="fieldError(r.index, 'command')">
+														<span class="[ error ]" x-bind:data-error-for="pointer(r.index, 'command')" x-text="fieldError(r.index, 'command')"></span>
+													</template>
+												</div>
+											</template>
+										</div>
+										<template x-if="r.isCommand">
+											<div class="[ cond-row ]">
+												<span class="[ k ]" data-cond-key>In</span>
+												<div class="[ field ]">
+													<label class="[ visually-hidden ]" x-bind:for="'rule-' + r.index + '-paths'">Paths (regex)</label>
+													<input x-bind:id="'rule-' + r.index + '-paths'" data-field="paths" class="[ text-sm font-mono ]" autocomplete="off" placeholder="^internal/domain/" x-bind:value="r.paths" x-bind:aria-invalid="fieldInvalid(r.index, 'paths')" x-on:input="setText(r.index, 'paths', $event.target.value)"/>
+													<span class="[ text-xs color-ink-faint ]">A regex on the repository path. The rule runs only when a touched path matches; empty means any path.</span>
+													<template x-if="fieldError(r.index, 'paths')">
+														<span class="[ error ]" x-bind:data-error-for="pointer(r.index, 'paths')" x-text="fieldError(r.index, 'paths')"></span>
+													</template>
+												</div>
+											</div>
 										</template>
+										<span class="[ k ]" data-cond-key>By</span>
+										<div class="[ flow ] [ flow-space-2xs ]">
+											<div class="[ cluster ]" role="group" aria-label="Agents">
+												<template x-for="c in r.agentChips" x-bind:key="c.value">
+													<label class="[ agent-toggle ]" x-bind:data-agent-chip="c.value">
+														<input type="checkbox" x-bind:checked="c.checked" x-on:change="toggleChip(r.index, c.value, $event.target.checked)"/>
+														<span class="[ agent-chip ]" x-bind:data-slot="c.slot"><i></i><span x-text="c.label"></span></span>
+													</label>
+												</template>
+											</div>
+											<span class="[ text-xs color-ink-faint ]">No agent chosen means every agent. Who may change what is set on the Layers tab.</span>
+											<template x-if="fieldError(r.index, 'agents')">
+												<span class="[ error ]" x-bind:data-error-for="pointer(r.index, 'agents')" x-text="fieldError(r.index, 'agents')"></span>
+											</template>
+										</div>
 									</div>
 								</div>
-							</template>
-							<div class="[ field ]">
-								<label x-bind:for="'rule-' + r.index + '-agents'">Agents (comma separated; empty is every agent)</label>
-								<input x-bind:id="'rule-' + r.index + '-agents'" data-field="agents" class="[ text-sm ]" autocomplete="off" placeholder="go-developer, plain" x-bind:value="r.agents" x-bind:aria-invalid="fieldInvalid(r.index, 'agents')" x-on:change="setList(r.index, 'agents', $event.target.value)"/>
-								<template x-if="fieldError(r.index, 'agents')">
-									<span class="[ error ]" x-bind:data-error-for="pointer(r.index, 'agents')" x-text="fieldError(r.index, 'agents')"></span>
-								</template>
+								<div class="[ field ]" role="group" aria-label="Mode">
+									<span class="[ text-sm weight-medium ]">Mode</span>
+									<div class="[ mode-cards ]">
+										<template x-for="m in modes" x-bind:key="m.value">
+											<button type="button" x-bind:data-mode-card="m.value" x-bind:data-tone="m.tone" x-bind:aria-pressed="r.rule.mode === m.value" x-on:click="set(r.index, 'mode', m.value)">
+												<b><span class="[ dot ]" aria-hidden="true"></span><span x-text="m.label"></span></b>
+												<span x-text="m.hint"></span>
+											</button>
+										</template>
+									</div>
+									<template x-if="fieldError(r.index, 'mode')">
+										<span class="[ error ]" x-bind:data-error-for="pointer(r.index, 'mode')" x-text="fieldError(r.index, 'mode')"></span>
+									</template>
+								</div>
+								<div class="[ field ]">
+									<label x-bind:for="'rule-' + r.index + '-message'">Message the agent sees</label>
+									<textarea x-bind:id="'rule-' + r.index + '-message'" data-field="message" rows="3" class="[ text-sm ]" x-bind:value="r.message" x-bind:aria-invalid="fieldInvalid(r.index, 'message')" x-on:input="set(r.index, 'message', $event.target.value)"></textarea>
+									<template x-if="fieldError(r.index, 'message')">
+										<span class="[ error ]" x-bind:data-error-for="pointer(r.index, 'message')" x-text="fieldError(r.index, 'message')"></span>
+									</template>
+								</div>
 							</div>
-							<div class="[ field ]">
-								<label x-bind:for="'rule-' + r.index + '-message'">Message the agent sees</label>
-								<textarea x-bind:id="'rule-' + r.index + '-message'" data-field="message" rows="2" class="[ text-sm ]" x-bind:value="r.message" x-bind:aria-invalid="fieldInvalid(r.index, 'message')" x-on:input="set(r.index, 'message', $event.target.value)"></textarea>
-								<template x-if="fieldError(r.index, 'message')">
-									<span class="[ error ]" x-bind:data-error-for="pointer(r.index, 'message')" x-text="fieldError(r.index, 'message')"></span>
-								</template>
-							</div>
-							<template x-if="fieldError(r.index, 'kind')">
-								<span class="[ error ]" x-bind:data-error-for="pointer(r.index, 'kind')" x-text="fieldError(r.index, 'kind')"></span>
-							</template>
-							<div class="[ flow ] [ flow-space-3xs ]">
-								<span class="[ text-sm weight-medium ]">What the agent sees</span>
-								<pre class="[ font-mono text-sm pre-wrap ]" data-preview x-text="r.preview"></pre>
+						</section>
+						<section class="[ pane ]" aria-label="What the agent sees" data-preview-card>
+							<header>
+								<h3>What the agent sees</h3>
+							</header>
+							<div class="[ content ] [ flow ]">
+								<div class="[ hook-term ]">
+									<div class="[ bar ]" x-text="r.previewBar"></div>
+									<pre data-preview x-text="r.preview"></pre>
+								</div>
 								<p class="[ text-xs color-ink-faint ]" x-text="r.outcome"></p>
 							</div>
-						</div>
+						</section>
 					</div>
 				</template>
-			</section>
-		</template>
+			</div>
+		</div>
 		<p class="[ text-xs color-ink-faint ]">Rules also guard writes made through the shell (sed -i, tee, cp, mv, rm), but only as far as the edit proxy catches them: hook coverage of shell writes depends on the edit proxy (ADR 0002).</p>
 	</section>
 }
