@@ -87,6 +87,16 @@ test("the detail and the row both carry whether Resume shows", () => {
   assert.equal(running.rows[0].resumable, false);
 });
 
+test("the row and the detail say why the commit check is off, and nothing while it guards", () => {
+  const off = makeSession({ id: "c", commitCheckOff: "the hooks folder /x is missing" });
+  assert.equal(toDetailView(off, T0, {}).commitCheckOff, "the hooks folder /x is missing");
+  const [group] = toGroupViews([off], { selectedId: null, now: T0, agentNames: {} });
+  assert.equal(group.rows[0].commitCheckOff, "the hooks folder /x is missing");
+  assert.equal(toDetailView(makeSession(), T0, {}).commitCheckOff, "");
+  const [guarded] = toGroupViews([makeSession()], { selectedId: null, now: T0, agentNames: {} });
+  assert.equal(guarded.rows[0].commitCheckOff, "");
+});
+
 test("an agent reads as its name, its id when unknown, plain claude without one", () => {
   assert.equal(agentLabel("a1", { a1: "Reviewer" }), "Reviewer");
   assert.equal(agentLabel("gone", { a1: "Reviewer" }), "gone");

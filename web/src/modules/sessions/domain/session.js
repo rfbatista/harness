@@ -29,6 +29,7 @@
  * @property {string} architectSessionId the task's architect; "" when the task has none
  * @property {import("./channel.js").StatusCheck | null} statusCheck  the loop checking on it, on a delegate the architect started
  * @property {readonly string[]} tokenSavers              the token savers it runs with, fixed when it started
+ * @property {string} commitCheckOff  why its worktree is not guarded by the commit check; "" while it is
  * @property {readonly string[]} tokenSaversNotInstalled  savers on for it but not installed, so it runs without them
  * @property {{ sandboxed: boolean, visibility: string, driver: string } | null} sandbox  what its sandbox was when it started or last resumed; null for a session from before the sandbox
  * @property {MergeResult | null} lastMerge  how the newest merge of its branch ended; null when never tried

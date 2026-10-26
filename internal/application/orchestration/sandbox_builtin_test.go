@@ -121,3 +121,16 @@ func TestTheBuiltinAllowlistListsTheReadEveryRepositoryRuleAsTheBuilderGrantsIt(
 		}
 	}
 }
+
+func TestASessionsSandboxReadsItsOwnCommitCheckHooksDirAndNoOthers(t *testing.T) {
+	own, other := "/data/githooks/own", "/data/githooks/other"
+	for _, mode := range []domain.SessionMode{domain.SessionModeImplement, domain.SessionModeArchitect, domain.SessionModeProduct} {
+		p := BuildSandboxPolicy(SandboxSession{Mode: mode, Worktree: "/w", GitCommonDir: "/g", CommitCheckDir: own})
+		if !slices.Contains(p.Readable, own) || slices.Contains(p.Writable, own) {
+			t.Errorf("%s: readable %v, writable %v; want the own hooks dir read-only", mode, p.Readable, p.Writable)
+		}
+		if slices.Contains(p.Readable, other) || slices.Contains(p.Writable, other) {
+			t.Errorf("%s: another session's hooks dir is granted", mode)
+		}
+	}
+}
