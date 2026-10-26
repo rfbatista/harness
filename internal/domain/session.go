@@ -98,6 +98,10 @@ type Session struct {
 	// branch into its repository's default branch (the merged commit, or the
 	// refusal and its reason); nil before any attempt.
 	LastMerge *MergeResult `json:"last_merge,omitempty"`
+	// SquashedIntoDefault: the session ever had a successful squash into the
+	// repository's default branch. A squash leaves no git ancestry, so the
+	// task's merge state reads this next to it. Not on the wire.
+	SquashedIntoDefault bool `json:"-"`
 	// Resumable says a resume call would be accepted now; ResumeBlocked is the
 	// error code it would answer otherwise. Derived on read, never stored.
 	Resumable     bool      `json:"resumable"`

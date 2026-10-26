@@ -289,15 +289,21 @@ func (r *SessionRepository) UpdateMerge(id string, res domain.MergeResult) error
 	if at.IsZero() {
 		at = time.Now()
 	}
-	out := r.db.Model(&SessionModel{}).Where("id = ?", id).Updates(map[string]any{
+	fields := map[string]any{
 		"merge_at_ms":   at.UnixMilli(),
 		"merged":        res.Merged,
 		"merge_into":    res.Into,
+		"merge_method":  string(res.Method),
 		"merge_head":    res.Head,
 		"merge_code":    res.Code,
 		"merge_message": res.Message,
 		"updated_at":    time.Now().UnixMilli(),
-	})
+	}
+	if res.SquashedIntoDefault {
+		// Only ever set: a later refusal or merge does not erase it.
+		fields["squashed_default"] = true
+	}
+	out := r.db.Model(&SessionModel{}).Where("id = ?", id).Updates(fields)
 	if out.Error != nil {
 		return out.Error
 	}

@@ -93,7 +93,7 @@ func errorHandler(err error, c echo.Context) {
 			// A merge refused for what the checkout or the branch is: the
 			// request is fine, the state is in the way.
 			"MERGE_NO_BRANCH", "MERGE_NO_CHECKOUT", "MERGE_CHECKOUT_DIRTY", "MERGE_WRONG_BRANCH",
-			"MERGE_ALREADY_MERGED", "MERGE_CONFLICT", "MERGE_BRANCH_NOT_FOUND",
+			"MERGE_ALREADY_MERGED", "MERGE_CONFLICT", "MERGE_BRANCH_NOT_FOUND", "MERGE_TARGET_NOT_FOUND",
 			"MANAGED_CLAUDE_BUSY", "MANAGED_CLAUDE_VERSION_INSTALLED", "MANAGED_CLAUDE_VERSION_CURRENT", "AGENT_OAUTH_BUSY", "AGENT_OAUTH_NOT_WAITING":
 			writeCoded(c, http.StatusConflict, err, se)
 			return

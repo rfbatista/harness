@@ -33,6 +33,7 @@ type mergeFixture struct {
 	repoDir   string
 	worktrees map[string]string // by branch
 	wsIDs     map[string]string // workspace by branch
+	sessIDs   map[string]string // session by branch
 	feed      *ticketFeed
 	clock     *fakeClock
 }
@@ -71,7 +72,7 @@ func newMergeFixture(t *testing.T, defaultBranch string) *mergeFixture {
 	t.Cleanup(merges.Close)
 	plan.Decorator, plan.Announcer, plan.MergeRefresher = merges, feed, merges
 	return &mergeFixture{t: t, ctx: context.Background(), db: db, plan: plan, merges: merges, projectID: p.ID, repoID: repo.ID, repoDir: dir,
-		worktrees: map[string]string{}, wsIDs: map[string]string{}, feed: feed, clock: clock}
+		worktrees: map[string]string{}, wsIDs: map[string]string{}, sessIDs: map[string]string{}, feed: feed, clock: clock}
 }
 
 // ticketFeed is the project feed's ticket announcements.
@@ -189,13 +190,14 @@ func (f *mergeFixture) sessionAt(taskID, branch, base string, commits int, withB
 		f.t.Fatal(err)
 	}
 	f.wsIDs[branch] = ws.ID
-	_, err = sqlite.NewSessionRepository(f.db).Create(&domain.Session{
+	sess, err := sqlite.NewSessionRepository(f.db).Create(&domain.Session{
 		ProjectID: f.projectID, TicketID: taskID, RepositoryID: f.repoID, WorkspaceID: ws.ID, Branch: branch,
 		Status: domain.SessionDone, CreatedAt: time.Now(),
 	})
 	if err != nil {
 		f.t.Fatal(err)
 	}
+	f.sessIDs[branch] = sess.ID
 }
 
 // merge merges branch into the checkout's current branch, fast-forwarding

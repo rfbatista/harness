@@ -1050,8 +1050,9 @@ func newMergesService(
 	repos ports.RepositoryRepository,
 	git ports.GitMerger,
 	orch *orchestration.Service,
+	states *workspaces.MergeStates,
 ) *workspaces.Merges {
-	return workspaces.NewMerges(workspaces.MergeDeps{Sessions: sessions, Workspaces: ws, Repositories: repos, Git: git, Announce: orch})
+	return workspaces.NewMerges(workspaces.MergeDeps{Sessions: sessions, Workspaces: ws, Repositories: repos, Git: git, Announce: orch, States: states})
 }
 
 // newBranchNamesService checks the names a person types for a session's
