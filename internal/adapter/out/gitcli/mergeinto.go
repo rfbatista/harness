@@ -65,6 +65,15 @@ func (m Merger) Ahead(ctx context.Context, dir, target, branch string) (int, err
 	return n, nil
 }
 
+// Tip is the commit branch points at.
+func (m Merger) Tip(ctx context.Context, dir, branch string) (string, error) {
+	out, err := m.d.gitOutput(ctx, dir, "rev-parse", "--verify", "--end-of-options", "refs/heads/"+branch)
+	if err != nil {
+		return "", notAnswered(err, "reading "+branch)
+	}
+	return strings.TrimSpace(out), nil
+}
+
 // Subject is the subject line of branch's newest commit.
 func (m Merger) Subject(ctx context.Context, dir, branch string) (string, error) {
 	out, err := m.d.gitOutput(ctx, dir, "log", "-1", "--format=%s", "--end-of-options", "refs/heads/"+branch)

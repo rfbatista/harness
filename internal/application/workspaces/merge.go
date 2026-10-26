@@ -332,6 +332,13 @@ func (s *Merges) MergeInto(ctx context.Context, sessionID string, req ports.Merg
 			"the checkout at "+t.root+" is not clean: "+dirtyWords(st)+"; commit, stash or remove them first"))
 	}
 
+	squashedDefault := method == domain.MergeMethodSquash && into == bl.Default
+	tip := ""
+	if squashedDefault {
+		if tip, err = s.d.Git.Tip(ctx, t.root, t.sess.Branch); err != nil {
+			return nil, s.refuse(sessionID, into, method, err)
+		}
+	}
 	var head string
 	if checkedOut && method == domain.MergeMethodMerge {
 		head, err = s.d.Git.Merge(ctx, t.root, t.sess.Branch)
@@ -342,7 +349,7 @@ func (s *Merges) MergeInto(ctx context.Context, sessionID string, req ports.Merg
 		return nil, s.refuse(sessionID, into, method, err)
 	}
 	res := domain.MergeResult{At: s.d.Now(), Merged: true, Into: into, Method: method, Head: head,
-		SquashedIntoDefault: method == domain.MergeMethodSquash && into == bl.Default}
+		SquashedTip: tip}
 	if err := s.record(sessionID, res); err != nil {
 		return nil, err
 	}

@@ -457,17 +457,17 @@ func TestSessionKeepsASquashIntoTheDefaultBranch(t *testing.T) {
 	if _, err := repo.Create(&domain.Session{ID: "s"}); err != nil {
 		t.Fatal(err)
 	}
-	if repo.Get("s").SquashedIntoDefault {
+	if repo.Get("s").SquashedTip != "" {
 		t.Fatal("a new session was squashed")
 	}
 	at := time.UnixMilli(1_760_000_000_000)
 	if err := repo.UpdateMerge("s", domain.MergeResult{At: at, Merged: true, Into: "dev", Method: domain.MergeMethodSquash}); err != nil {
 		t.Fatal(err)
 	}
-	if repo.Get("s").SquashedIntoDefault {
+	if repo.Get("s").SquashedTip != "" {
 		t.Fatal("a squash into another target counts")
 	}
-	if err := repo.UpdateMerge("s", domain.MergeResult{At: at, Merged: true, Into: "main", Method: domain.MergeMethodSquash, SquashedIntoDefault: true}); err != nil {
+	if err := repo.UpdateMerge("s", domain.MergeResult{At: at, Merged: true, Into: "main", Method: domain.MergeMethodSquash, SquashedTip: "abc123"}); err != nil {
 		t.Fatal(err)
 	}
 	for _, later := range []domain.MergeResult{
@@ -477,7 +477,7 @@ func TestSessionKeepsASquashIntoTheDefaultBranch(t *testing.T) {
 		if err := repo.UpdateMerge("s", later); err != nil {
 			t.Fatal(err)
 		}
-		if !repo.Get("s").SquashedIntoDefault {
+		if repo.Get("s").SquashedTip != "abc123" {
 			t.Fatalf("lost after %+v", later)
 		}
 	}

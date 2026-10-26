@@ -4,7 +4,6 @@ import (
 	"context"
 	"log/slog"
 	"slices"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -74,7 +73,7 @@ func (b taskBranches) key() string {
 	var parts []string
 	for repo, branches := range b {
 		for _, br := range branches {
-			parts = append(parts, repo+"\x00"+br.Branch+"\x00"+br.Base+"\x00"+strconv.FormatBool(br.Squashed))
+			parts = append(parts, repo+"\x00"+br.Branch+"\x00"+br.Base+"\x00"+br.SquashedTip)
 		}
 	}
 	slices.Sort(parts)
@@ -165,12 +164,14 @@ func (s *MergeStates) store(ctx context.Context, taskID string, branches taskBra
 func (s *MergeStates) branches(ctx context.Context, taskIDs ...string) map[string]taskBranches {
 	var wsIDs []string
 	taskOf := map[string][]string{} // tasks by workspace
-	squashed := map[string]bool{}   // workspaces a session squashed into the default branch
+	squashed := map[string]string{} // workspace -> branch tip at its newest squash into the default branch
 	for _, sess := range s.d.Sessions.List(ctx, ports.SessionFilter{TicketIDs: taskIDs}) {
 		if sess.WorkspaceID == "" {
 			continue
 		}
-		squashed[sess.WorkspaceID] = squashed[sess.WorkspaceID] || sess.SquashedIntoDefault
+		if sess.SquashedTip != "" {
+			squashed[sess.WorkspaceID] = sess.SquashedTip
+		}
 		if _, ok := taskOf[sess.WorkspaceID]; !ok {
 			wsIDs = append(wsIDs, sess.WorkspaceID)
 		}
@@ -185,7 +186,7 @@ func (s *MergeStates) branches(ctx context.Context, taskIDs ...string) map[strin
 			if out[task] == nil {
 				out[task] = taskBranches{}
 			}
-			b := ports.BranchBase{Branch: ws.Branch, Base: ws.BaseRef, BaseSHA: ws.BaseSHA, Squashed: squashed[ws.ID]}
+			b := ports.BranchBase{Branch: ws.Branch, Base: ws.BaseRef, BaseSHA: ws.BaseSHA, SquashedTip: squashed[ws.ID]}
 			if !slices.Contains(out[task][ws.RepositoryID], b) {
 				out[task][ws.RepositoryID] = append(out[task][ws.RepositoryID], b)
 			}
@@ -215,9 +216,10 @@ func (s *MergeStates) compute(ctx context.Context, byRepo taskBranches) (domain.
 		}
 		for _, b := range branches {
 			m := res.Branches[b.Branch]
-			if b.Squashed {
+			if b.SquashedTip != "" && (!m.Exists || m.Tip == b.SquashedTip) {
 				// A squash leaves no ancestry: the record is what says it landed,
-				// whatever became of the branch since.
+				// for as long as the branch is at the tip that was squashed (or
+				// gone). A commit made after it is not in the default branch.
 				total++
 				merged++
 				continue

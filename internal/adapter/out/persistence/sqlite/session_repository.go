@@ -299,9 +299,10 @@ func (r *SessionRepository) UpdateMerge(id string, res domain.MergeResult) error
 		"merge_message": res.Message,
 		"updated_at":    time.Now().UnixMilli(),
 	}
-	if res.SquashedIntoDefault {
-		// Only ever set: a later refusal or merge does not erase it.
-		fields["squashed_default"] = true
+	if res.SquashedTip != "" {
+		// Only ever replaced by a newer squash: a later refusal or merge does
+		// not erase it.
+		fields["squashed_tip"] = res.SquashedTip
 	}
 	out := r.db.Model(&SessionModel{}).Where("id = ?", id).Updates(fields)
 	if out.Error != nil {

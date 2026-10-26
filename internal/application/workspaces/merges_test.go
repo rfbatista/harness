@@ -364,7 +364,23 @@ func TestMergeState_ASquashIntoTheDefaultBranchCountsAsMerged(t *testing.T) {
 	f.clock.advance(workspaces.MergeStateFreshFor + time.Second)
 	wantMerge(t, f.read(id), domain.MergeState{State: domain.MergeMerged, Merged: 1, Total: 1})
 
-	// A later refusal does not erase it.
+	// A squash is "merged" for the branch as it was squashed: a commit made
+	// after it is in no default branch.
+	if err := os.WriteFile(filepath.Join(f.worktrees["feat"], "later.txt"), []byte("l"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitRun(t, f.worktrees["feat"], "add", ".")
+	gitRun(t, f.worktrees["feat"], "commit", "-m", "work after the squash")
+	f.clock.advance(workspaces.MergeStateFreshFor + time.Second)
+	wantMerge(t, f.read(id), domain.MergeState{State: domain.MergeNotMerged, Merged: 0, Total: 1})
+
+	// Squashed again, it is merged again, and a later refusal does not erase it.
+	if _, err := f.merger().MergeInto(context.Background(), f.sessIDs["feat"], ports.MergeRequest{Target: "main", Method: domain.MergeMethodSquash, Message: "Ship the rest"}); err != nil {
+		t.Fatal(err)
+	}
+	f.clock.advance(workspaces.MergeStateFreshFor + time.Second)
+	wantMerge(t, f.read(id), domain.MergeState{State: domain.MergeMerged, Merged: 1, Total: 1})
+
 	if _, err := f.merger().MergeInto(context.Background(), f.sessIDs["feat"], ports.MergeRequest{Target: "nope"}); errs.Code(err) != domain.MergeTargetNotFound {
 		t.Fatalf("err = %v", err)
 	}

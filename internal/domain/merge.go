@@ -59,11 +59,12 @@ type MergeResult struct {
 	// reason.
 	Code    string `json:"code,omitempty"`
 	Message string `json:"message,omitempty"`
-	// SquashedIntoDefault is set on a successful squash into the repository's
-	// default branch. It is not part of the record on the wire: the session
-	// keeps it for good, so the task's merge state still counts the session as
-	// merged after a later refusal.
-	SquashedIntoDefault bool `json:"-"`
+	// SquashedTip is the session branch's tip, set on a successful squash into
+	// the repository's default branch. It is not part of the record on the
+	// wire: the session keeps it, so the task's merge state counts the session
+	// as merged while the branch is still at that tip, whatever is attempted
+	// later.
+	SquashedTip string `json:"-"`
 }
 
 // MergeError is a coded merge refusal.

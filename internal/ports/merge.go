@@ -120,6 +120,8 @@ type GitMerger interface {
 	Branches(ctx context.Context, dir string) (BranchList, error)
 	// Ahead counts the commits branch has that target lacks.
 	Ahead(ctx context.Context, dir, target, branch string) (int, error)
+	// Tip is the commit branch points at.
+	Tip(ctx context.Context, dir, branch string) (string, error)
 	// Subject is the subject line of branch's newest commit.
 	Subject(ctx context.Context, dir, branch string) (string, error)
 	// MergeInto merges branch into target without the main checkout's working

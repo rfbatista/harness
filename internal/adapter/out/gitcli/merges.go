@@ -73,7 +73,7 @@ func (m BranchMerges) BranchMerges(ctx context.Context, root string, branches []
 		if err != nil {
 			return ports.BranchMerges{}, err
 		}
-		res.Branches[b.Branch] = ports.BranchMerge{Exists: true, Ahead: ahead, Merged: merged[b.Branch]}
+		res.Branches[b.Branch] = ports.BranchMerge{Exists: true, Ahead: ahead, Merged: merged[b.Branch], Tip: tip}
 	}
 	return res, nil
 }
