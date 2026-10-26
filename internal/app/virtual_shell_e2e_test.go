@@ -26,6 +26,7 @@ import (
 	"operators-mcp/internal/app/catalog"
 	"operators-mcp/internal/application/archrules"
 	"operators-mcp/internal/application/artifacts"
+	"operators-mcp/internal/application/notifications"
 	"operators-mcp/internal/application/orchestration"
 	"operators-mcp/internal/application/planning"
 	"operators-mcp/internal/application/taskchannel"
@@ -47,9 +48,67 @@ type shellE2E struct {
 	cat     catalog.Catalog
 	project string
 	repo    string
+	// dataDir is the server's data directory.
+	dataDir string
+	// repoDir is the project's main checkout.
+	repoDir string
+	cfg     Config
+	app     *fx.App
+	// sessions, channel, art, shells and rules are what the server was built
+	// with, populated again at each boot.
+	sessions ports.SessionRepository
+	channel  *taskchannel.Service
+	art      *artifacts.Service
+	shells   *vshell.Service
+	rules    *archrules.Service
+	notes    *notifications.Service
 }
 
-func newShellE2E(t *testing.T) *shellE2E {
+// boot starts the server over e.cfg and fills e's services.
+func (e *shellE2E) boot() {
+	e.t.Helper()
+	e.app = fx.New(
+		fx.Supply(e.cfg),
+		PersistenceModule, CatalogModule, PlanningModule, WorkspacesModule,
+		AgentRuntimeModule, TaskChannelModule, TextProcessingModule, NotificationsModule,
+		fx.Populate(&e.orch, &e.plan, &e.channel, &e.art, &e.cat, &e.sessions, &e.shells, &e.rules, &e.notes),
+		fx.NopLogger,
+	)
+	if err := e.app.Start(e.ctx); err != nil {
+		e.t.Fatal(err)
+	}
+}
+
+// serve puts the HTTP API and the per-session MCP endpoint of the booted
+// server on a test server.
+func (e *shellE2E) serve() {
+	e.t.Helper()
+	mux := http.NewServeMux()
+	mux.Handle("/api/", httpapi.NewRouter(httpapi.NewHandler(httpapi.Services{
+		Sessions: e.orch, Planning: e.plan, TaskResources: e.plan, TaskComments: e.plan, Artifacts: e.art, Shells: e.shells,
+		RepositoryArchitectures: e.cat.RepositoryArchitectures, ArchitectureRules: e.rules,
+	})))
+	mux.Handle(mcpsession.PathPrefix, mcpsession.TaskHandler(sessionTaskTools(e.cat, e.orch, e.plan, e.sessions, e.art, e.channel, nil, nil)))
+	e.srv = httptest.NewServer(mux)
+	e.t.Cleanup(e.srv.Close)
+}
+
+// restart stops the server and starts it again over the same data.
+func (e *shellE2E) restart() {
+	e.t.Helper()
+	if err := e.app.Stop(e.ctx); err != nil {
+		e.t.Fatal(err)
+	}
+	e.srv.Close()
+	e.boot()
+	e.serve()
+}
+
+func newShellE2E(t *testing.T) *shellE2E { return newShellE2EWith(t, ":memory:") }
+
+// newShellE2EWith is newShellE2E over the database at db: a file keeps its
+// sessions across restart.
+func newShellE2EWith(t *testing.T, db string) *shellE2E {
 	t.Helper()
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git is required")
@@ -61,29 +120,17 @@ func newShellE2E(t *testing.T) *shellE2E {
 	if err := os.WriteFile(fake, []byte("#!/bin/sh\nexec cat\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-
-	e := &shellE2E{t: t, ctx: context.Background()}
-	var (
-		sessions ports.SessionRepository
-		channel  *taskchannel.Service
-		art      *artifacts.Service
-		shells   *vshell.Service
-		rules    *archrules.Service
-	)
-	app := fx.New(
-		fx.Supply(Config{HTTPAddr: "127.0.0.1:0", MCPAddr: "127.0.0.1:0", DBPath: ":memory:", Root: dir, ClaudeBin: fake, SessionShell: "direct"}),
-		PersistenceModule, CatalogModule, PlanningModule, WorkspacesModule,
-		AgentRuntimeModule, TaskChannelModule, TextProcessingModule,
-		fx.Populate(&e.orch, &e.plan, &channel, &art, &e.cat, &sessions, &shells, &rules),
-		fx.NopLogger,
-	)
-	if err := app.Start(e.ctx); err != nil {
-		t.Fatal(err)
+	if db != ":memory:" {
+		db = filepath.Join(dir, db)
 	}
-	t.Cleanup(func() { _ = app.Stop(context.Background()) })
+
+	e := &shellE2E{t: t, ctx: context.Background(), dataDir: filepath.Join(dir, "data"), repoDir: repoDir}
+	e.cfg = Config{HTTPAddr: "127.0.0.1:0", MCPAddr: "127.0.0.1:0", DBPath: db, DataDir: e.dataDir, Root: dir, ClaudeBin: fake, SessionShell: "direct"}
+	e.boot()
+	t.Cleanup(func() { _ = e.app.Stop(context.Background()) })
 
 	cat := e.cat
-	if _, err := cat.Settings.UpdateSettings(map[string]string{domain.SettingWorkspacesRoot: filepath.Join(dir, "worktrees")}); err != nil {
+	if _, err := cat.Settings.UpdateSettings(map[string]string{domain.SettingWorkspacesRoot: filepath.Join(e.cfg.Root, "worktrees")}); err != nil {
 		t.Fatal(err)
 	}
 	p, err := cat.Projects.CreateProject(e.ctx, "harness", repoDir)
@@ -96,14 +143,7 @@ func newShellE2E(t *testing.T) *shellE2E {
 	}
 	e.project, e.repo = p.ID, r.ID
 
-	mux := http.NewServeMux()
-	mux.Handle("/api/", httpapi.NewRouter(httpapi.NewHandler(httpapi.Services{
-		Sessions: e.orch, Planning: e.plan, TaskResources: e.plan, TaskComments: e.plan, Artifacts: art, Shells: shells,
-		RepositoryArchitectures: e.cat.RepositoryArchitectures, ArchitectureRules: rules,
-	})))
-	mux.Handle(mcpsession.PathPrefix, mcpsession.TaskHandler(sessionTaskTools(cat, e.orch, e.plan, sessions, art, channel, nil, nil)))
-	e.srv = httptest.NewServer(mux)
-	t.Cleanup(e.srv.Close)
+	e.serve()
 	return e
 }
 

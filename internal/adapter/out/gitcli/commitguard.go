@@ -2,7 +2,9 @@ package gitcli
 
 import (
 	"context"
+	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -64,4 +66,23 @@ func (g CommitGuard) Remove(ctx context.Context, worktree string) error {
 	}
 	_, _ = g.d.gitOutput(ctx, worktree, "config", "--worktree", "--unset", "core.hooksPath")
 	return nil
+}
+
+// HooksPath implements ports.CommitGuard.
+func (g CommitGuard) HooksPath(ctx context.Context, worktree string) (string, error) {
+	out, err := g.d.gitOutput(ctx, worktree, "config", "--path", "--get", "core.hooksPath")
+	if err != nil {
+		// git config exits 1 for a key that is not set; anything else (a
+		// broken repository, a git that did not start) is a real failure.
+		var exit *exec.ExitError
+		if errors.As(err, &exit) && exit.ExitCode() == 1 {
+			return "", nil
+		}
+		return "", err
+	}
+	p := strings.TrimSpace(out)
+	if p != "" && !filepath.IsAbs(p) {
+		p = filepath.Join(worktree, p)
+	}
+	return p, nil
 }

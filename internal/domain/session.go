@@ -105,10 +105,13 @@ type Session struct {
 	SquashedTip string `json:"-"`
 	// Resumable says a resume call would be accepted now; ResumeBlocked is the
 	// error code it would answer otherwise. Derived on read, never stored.
-	Resumable     bool      `json:"resumable"`
-	ResumeBlocked string    `json:"resume_blocked"`
-	CreatedAt     time.Time `json:"created_at"`
-	UpdatedAt     time.Time `json:"updated_at"`
+	Resumable     bool   `json:"resumable"`
+	ResumeBlocked string `json:"resume_blocked"`
+	// CommitCheckOff is why the session's worktree is not guarded by the commit
+	// check (ADR 0040); empty while it is guarded. Derived on read, never stored.
+	CommitCheckOff string    `json:"commit_check_off,omitempty"`
+	CreatedAt      time.Time `json:"created_at"`
+	UpdatedAt      time.Time `json:"updated_at"`
 
 	// Role, ArchitectSessionID and StatusCheck are derived from the task's
 	// sessions when a session is read, never stored: what the session is on

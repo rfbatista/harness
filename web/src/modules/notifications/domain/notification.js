@@ -5,7 +5,7 @@
 
 /**
  * @typedef {"system"|"agent"} Source
- * @typedef {"review_requested"|"session_waiting"|"task_review"|"session_failed"|"agent"} Kind
+ * @typedef {"review_requested"|"session_waiting"|"task_review"|"session_failed"|"commit_check_off"|"agent"} Kind
  * @typedef {"info"|"action"} Level  action: the person has to do something
  *
  * @typedef {object} Notification
@@ -40,7 +40,7 @@
  */
 
 export const SOURCES = Object.freeze(["system", "agent"]);
-export const KINDS = Object.freeze(["review_requested", "session_waiting", "task_review", "session_failed", "agent"]);
+export const KINDS = Object.freeze(["review_requested", "session_waiting", "task_review", "session_failed", "commit_check_off", "agent"]);
 export const LEVELS = Object.freeze(["info", "action"]);
 
 /** Unread: neither read nor resolved. */

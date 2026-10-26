@@ -568,6 +568,11 @@ func newRuntimeConfig(cfg Config, bin ports.ManagedClaudeBin, home claudehome.Ho
 func registerServerSessions(lc fx.Lifecycle, svc *orchestration.Service) {
 	lc.Append(fx.Hook{
 		OnStart: func(ctx context.Context) error {
+			// Every live worktree is guarded again before sessions are
+			// reported running: the commit check (ADR 0040).
+			if _, err := svc.RepairCommitChecks(ctx); err != nil {
+				slog.Warn("repair the commit checks at boot", "err", err)
+			}
 			n, err := svc.StopOrphanedServerSessions(ctx)
 			if n > 0 {
 				slog.Info("stopped server sessions left running by a previous run", "count", n)
@@ -726,6 +731,7 @@ func newOrchestrationService(
 		svc.Architectures = cat.RepositoryArchitectures
 		// A commit in a session worktree is checked against the layers.
 		svc.CommitGuard = commitGuard
+		svc.CommitCheckDir = commitCheckDirs(cfg)
 	}
 	base := cfg.loopbackBaseURL()
 	// The route belongs to an inbound adapter, so the application layer is
@@ -1119,4 +1125,11 @@ func shortID(id string) string {
 // temp dir may take 25 more. The name stays short, never "harness-session-".
 func sessionTempPrefix(base, id string) string {
 	return filepath.Join(base, "hs-"+id[:min(len(id), 8)])
+}
+
+// commitCheckDirs answers where each session's commit check hooks dir is:
+// githooks/<session id> in the data dir, the same on every start (ADR 0040).
+func commitCheckDirs(cfg Config) func(sessionID string) string {
+	root, _ := dataDir(cfg, "githooks")
+	return func(sessionID string) string { return filepath.Join(root, sessionID) }
 }

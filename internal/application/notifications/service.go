@@ -178,7 +178,12 @@ func (s *Service) Subscribe(bus ports.EventSubscriber) {
 		}
 		return nil
 	})
+	ports.On(bus, func(ctx context.Context, ev domain.SessionCommitCheckChanged) error {
+		s.onCommitCheck(ev)
+		return nil
+	})
 	ports.On(bus, func(ctx context.Context, ev domain.SessionDeleted) error {
+		s.resolve(commitCheckKey(ev.SessionID))
 		s.resolve(sessionWaitingKey(ev.SessionID))
 		return nil
 	})
@@ -205,6 +210,7 @@ func reviewKey(id string) string         { return "review:" + id }
 func sessionWaitingKey(id string) string { return "session_waiting:" + id }
 func sessionFailedKey(id string) string  { return "session_failed:" + id }
 func taskReviewKey(id string) string     { return "task_review:" + id }
+func commitCheckKey(id string) string    { return "commit_check_off:" + id }
 
 func (s *Service) onReview(ev domain.ReviewRequestChanged) {
 	if ev.State != domain.ReviewPending {
@@ -235,6 +241,27 @@ func (s *Service) onSessionStatus(ev domain.SessionStatusChanged) {
 		Title: "A session is waiting for your approval",
 		Body:  clip(sess.LastAction, domain.MaxNotificationBodyLen),
 		Link:  domain.TaskLink(sess.ProjectID, sess.TicketID), CauseKey: sessionWaitingKey(sess.ID),
+	}, false)
+}
+
+// onCommitCheck records one notification for a session whose commit check is
+// off, however often the check finds it off, and resolves it once the check
+// is repaired.
+func (s *Service) onCommitCheck(ev domain.SessionCommitCheckChanged) {
+	if !ev.Off {
+		s.resolve(commitCheckKey(ev.SessionID))
+		return
+	}
+	if ev.ProjectID == "" {
+		slog.Warn("notification for a session that is not recorded", "session", ev.SessionID)
+		return
+	}
+	s.record(&domain.Notification{
+		ProjectID: ev.ProjectID, TaskID: ev.TicketID, SessionID: ev.SessionID,
+		Kind: domain.NotificationCommitCheckOff, Level: domain.NotificationAction,
+		Title: "A session's commit check is off",
+		Body:  clip(ev.Reason, domain.MaxNotificationBodyLen),
+		Link:  domain.TaskLink(ev.ProjectID, ev.TicketID), CauseKey: commitCheckKey(ev.SessionID),
 	}, false)
 }
 

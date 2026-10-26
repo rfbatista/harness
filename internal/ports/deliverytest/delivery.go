@@ -48,7 +48,7 @@ func NotificationDeliveryConformance(t *testing.T, newProvider func(t *testing.T
 		var sent []string
 		for _, kind := range []domain.NotificationKind{
 			domain.NotificationReviewRequested, domain.NotificationSessionWaiting, domain.NotificationTaskReview,
-			domain.NotificationSessionFailed, domain.NotificationAgent,
+			domain.NotificationSessionFailed, domain.NotificationCommitCheckOff, domain.NotificationAgent,
 		} {
 			for _, level := range []domain.NotificationLevel{domain.NotificationInfo, domain.NotificationAction} {
 				n := Sample(string(kind) + "-" + string(level))

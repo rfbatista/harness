@@ -560,3 +560,27 @@ func TestFirstPaintRendersTheSessionRowMarkup(t *testing.T) {
 		}
 	}
 }
+
+// A session whose commit check is off shows it on its row, with the reason,
+// and shows nothing once the check is repaired (ADR 0040).
+func TestFirstPaintShowsCommitCheckOffWithItsReasonOnlyWhileItIsOff(t *testing.T) {
+	now := time.Date(2026, 10, 2, 14, 0, 0, 0, time.UTC)
+	render := func(off string) string {
+		list := []*domain.Session{{ID: "s1", AgentID: "go", Status: domain.SessionRunning, Task: "t", TicketID: "t1", UpdatedAt: now, CommitCheckOff: off}}
+		v := NewPageView(shell.Frame{}, &domain.Project{ID: "p1"}, &domain.Ticket{ID: "t1"}, list, []*domain.Agent{{ID: "go", Name: "go-developer"}}, nil, now)
+		var buf strings.Builder
+		if err := ssrRows(v).Render(context.Background(), &buf); err != nil {
+			t.Fatal(err)
+		}
+		return buf.String()
+	}
+	html := render("the hooks folder /x/githooks/s1 is missing")
+	for _, want := range []string{`data-commit-check-off`, `title="the hooks folder /x/githooks/s1 is missing"`, `Commit check off`} {
+		if !strings.Contains(html, want) {
+			t.Errorf("a row with the commit check off lacks %s\n%s", want, html)
+		}
+	}
+	if html := render(""); strings.Contains(html, "Commit check off") {
+		t.Errorf("a guarded session's row says the commit check is off\n%s", html)
+	}
+}

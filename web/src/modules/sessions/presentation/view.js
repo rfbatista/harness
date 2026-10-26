@@ -185,6 +185,8 @@ export function toRowView(session, { selectedId, now, agentNames, others = [], f
     // What x-bind sets: null leaves the attribute off a sandboxed row.
     unsandboxed: isUnsandboxed(session),
     unsandboxedAttr: isUnsandboxed(session) ? "" : null,
+    // Why the commit check is off ("" while it guards the worktree).
+    commitCheckOff: session.commitCheckOff ?? "",
     selected: session.id === selectedId,
     fresh,
     attention: needsYou(session),
@@ -262,6 +264,7 @@ export function toDetailView(session, now, agentNames) {
     repositoryId: session.repositoryId,
     workspaceId: session.workspaceId,
     branch: session.branch,
+    commitCheckOff: session.commitCheckOff ?? "",
     ...tokenSaversView(session),
     ...sandboxView(session),
     sandboxFacts: factsView(session),

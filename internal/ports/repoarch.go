@@ -183,4 +183,7 @@ type CommitGuard interface {
 	// Remove puts the worktree's hooks back as they were. A worktree that is
 	// gone is not an error.
 	Remove(ctx context.Context, worktree string) error
+	// HooksPath is the hooks directory the worktree's git uses now: its
+	// core.hooksPath, empty when none is set.
+	HooksPath(ctx context.Context, worktree string) (string, error)
 }
