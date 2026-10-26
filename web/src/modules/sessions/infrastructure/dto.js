@@ -42,7 +42,7 @@ export function toSession(dto) {
     tokenSavers: names(dto.token_savers),
     tokenSaversNotInstalled: names(dto.token_savers_not_installed),
     sandbox: toSandbox(dto.sandbox),
-    lastMerge: toMergeResult(dto.last_merge),
+    lastMerge: toMergeResult(dto.merge ?? dto.last_merge),
     updatedAt,
   });
 }
@@ -66,6 +66,7 @@ export function toMergeResult(dto) {
   return Object.freeze({
     at,
     merged: dto.merged === true,
+    method: dto.method === "squash" ? "squash" : "merge",
     into: dto.into ?? "",
     head: dto.head ?? "",
     code: dto.code ?? "",

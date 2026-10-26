@@ -217,7 +217,7 @@ export const sessionsPage = ({
       if (!this.showingMerge) return [];
       const session = this.sessions.find((s) => s.id === this.selectedId);
       const last = session.lastMerge;
-      return [{ key: `${session.id}:${last ? last.at.getTime() : 0}`, sessionId: session.id, branch: session.branch, last }];
+      return [{ key: `${session.id}:${last ? last.at.getTime() : 0}`, sessionId: session.id, branch: session.branch, last, target: last?.into ?? "" }];
     },
     get showingApp() {
       return this.showingSession && this.detailTab === "app";
