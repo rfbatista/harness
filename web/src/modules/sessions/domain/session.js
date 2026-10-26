@@ -37,10 +37,12 @@
  * @typedef {object} MergeResult  merged: the new HEAD of `into`; refused: the code and the reason
  * @property {Date} at
  * @property {boolean} merged
- * @property {string} into     the default branch merged into; "" when not known
+ * @property {"merge"|"squash"} method  how it was merged; "merge" for a record from before squash existed
+ * @property {string} into     the target merged into; "" when not known
  * @property {string} head     the new HEAD of `into`, "" for a refusal
- * @property {string} code     MERGE_NO_BRANCH, MERGE_NO_CHECKOUT, MERGE_CHECKOUT_DIRTY, MERGE_WRONG_BRANCH, MERGE_ALREADY_MERGED, MERGE_CONFLICT, MERGE_BRANCH_NOT_FOUND or MERGE_FAILED; "" when merged
+ * @property {string} code     MERGE_NO_BRANCH, MERGE_NO_CHECKOUT, MERGE_TARGET_NOT_FOUND, MERGE_CHECKOUT_DIRTY, MERGE_WRONG_BRANCH, MERGE_ALREADY_MERGED, MERGE_CONFLICT, MERGE_BRANCH_NOT_FOUND or MERGE_FAILED; "" when merged
  * @property {string} message  the reason, readable
+ * @property {readonly string[]} files  the files a MERGE_CONFLICT names, when known; from the refusal's answer only
  *
  * @typedef {"architect"|"delegate"|""} Role  "" is a peer: started by a person, or outside the architect's tree
  *

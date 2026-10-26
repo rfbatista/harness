@@ -57,6 +57,19 @@ export function toCreated(body) {
   return toPullRequest(body.pull_request);
 }
 
+/** GET /api/pull_request_bases and POST /api/refresh_pull_request_bases → PullRequestBases. */
+export function toBases(dto) {
+  if (!dto || typeof dto.workspace_id !== "string" || !Array.isArray(dto.branches)) bad("expected {workspace_id, branches}");
+  const fetchedAt = dto.fetched_at ? new Date(dto.fetched_at) : null;
+  if (fetchedAt && Number.isNaN(fetchedAt.getTime())) bad("fetched_at is not a time");
+  return Object.freeze({
+    workspaceId: dto.workspace_id,
+    branches: Object.freeze(dto.branches.filter((b) => typeof b === "string" && b !== "")),
+    default: dto.default ?? "",
+    fetchedAt,
+  });
+}
+
 /** The create request's body; an empty base is left out, so the server takes the draft's. */
 export function createBody({ workspaceId, title, body, baseBranch, draft }) {
   return { workspace_id: workspaceId, title, body, base_branch: baseBranch.trim() || undefined, draft };

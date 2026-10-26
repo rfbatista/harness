@@ -1,6 +1,6 @@
 import { Codes } from "../../../shared/domain/errors.js";
 import { assert, file, test } from "../../../shared/testing/test.js";
-import { toChange, toCreated, toResumeBody, toSeed, toSession, toSessionList, toStartBody, toStatusCheck } from "./dto.js";
+import { toBranchNameCheck, toChange, toCreated, toResumeBody, toSeed, toSession, toSessionList, toStartBody, toStatusCheck } from "./dto.js";
 
 file("sessions/infrastructure/dto");
 
@@ -59,6 +59,20 @@ test("the start request and the created session speak the API's shape", () => {
   assert.equal(toSession(wire).mode, "");
   assert.equal(toCreated({ session: wire }).id, "s1");
   assert.throws(() => toCreated({}), Codes.BAD_RESPONSE);
+});
+
+test("a start with a branch name sends it trimmed, and none when it is empty", () => {
+  const req = { projectId: "p1", ticketId: "t1", repositoryId: "r1", agentId: "", prompt: "", autoAccept: "off" };
+  assert.equal(toStartBody({ ...req, branchName: "  fix/login " }).branch_name, "fix/login");
+  assert.equal(toStartBody({ ...req, branchName: "" }).branch_name, undefined);
+  assert.equal(toStartBody(req).branch_name, undefined);
+});
+
+test("a branch name check reads the API's shape and rejects garbage", () => {
+  const check = toBranchNameCheck({ name: "a", generated: "agent/x-1", valid: true, available: false, code: "BRANCH_EXISTS", reason: "a already exists", suggestion: "a-2" });
+  assert.deepEqual([check.name, check.generated, check.available, check.code, check.suggestion], ["a", "agent/x-1", false, "BRANCH_EXISTS", "a-2"]);
+  assert.equal(toBranchNameCheck({ valid: true, available: true }).suggestion, "");
+  assert.throws(() => toBranchNameCheck({}), Codes.BAD_RESPONSE);
 });
 
 test("the seed carries agent names for live updates", () => {

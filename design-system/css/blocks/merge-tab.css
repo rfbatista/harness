@@ -4,9 +4,16 @@
  * <section class="frame" aria-label="Merge"><div class="merge-tab" data-scroll>
  *   <h3>…</h3><p class="explain">…</p>
  *   <div class="actions"><button class="button" data-variant="primary" data-merge>Merge into main</button></div>
+ *   <form class="merge-form"><fieldset class="merge-fields"> an Into picker, a .merge-methods radio group of .merge-method cards, the squash message </fieldset>
+ *     <p class="consequence" aria-live="polite">What will happen…</p><div class="actions">…</div></form>
+ *   <div class="banner" data-tone="attention" data-merge-warning>…</div>
  *   <div class="note" data-merge-unavailable>…</div>
  *   <div class="banner" data-merge-result data-tone="signal|danger" role="status">…</div></div></section>
  */
+
+@keyframes merge-result-in {
+  from { opacity: 0; transform: translateY(-0.25rem); }
+}
 
 @layer blocks {
   .merge-tab {
@@ -19,8 +26,37 @@
 
     & h3 { font-size: var(--text-md); }
     & .explain { color: var(--color-ink-muted); font-size: var(--text-sm); max-inline-size: 60ch; }
-    & .actions { display: flex; gap: var(--space-xs); }
+    & .actions { display: flex; gap: var(--space-xs); align-items: center; flex-wrap: wrap; }
     & .note { border: var(--border-width) dashed var(--color-line); border-radius: var(--radius-sm); padding: var(--space-s) var(--space-m); color: var(--color-ink-muted); }
     & [data-merge-result] { overflow-wrap: anywhere; }
+    & .actions > .hint { color: var(--color-ink-muted); font-size: var(--text-sm); }
+
+    & .merge-form { display: grid; gap: var(--space-m); max-inline-size: 60ch; }
+    & .merge-fields { display: grid; gap: var(--space-m); min-inline-size: 0; margin: 0; padding: 0; border: 0; }
+    & .consequence { color: var(--color-ink-muted); font-size: var(--text-sm); }
+    & .consequence > strong { color: var(--color-ink); }
+
+    /* The method: two cards, one radio each; the chosen one is outlined. */
+    & .merge-methods { display: grid; gap: var(--space-xs); }
+    & .merge-method {
+      display: flex;
+      align-items: flex-start;
+      gap: var(--space-s);
+      padding: var(--space-s) var(--space-m);
+      border: var(--border-width) solid var(--color-line);
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+
+      &:has(:checked) { border-color: var(--color-signal); background: var(--color-signal-wash); }
+      &:has(:focus-visible) { outline: 2px solid var(--color-signal); outline-offset: 2px; }
+    }
+    @media (forced-colors: active) {
+      & .merge-method:has(:checked) { border-color: Highlight; border-width: 2px; }
+    }
+
+    /* The result arrives with a short slide; reduced motion gets none. */
+    @media (prefers-reduced-motion: no-preference) {
+      & [data-merge-result] { animation: merge-result-in 160ms ease-out; }
+    }
   }
 }

@@ -286,12 +286,12 @@ func TestPullRequestsInTheWebUI_EndToEnd(t *testing.T) {
 		t.Errorf("the title is kept: %q", got)
 	}
 
-	// Origin lacks the base the person typed: said on the field.
+	// Origin lost the base after the picker listed it (the list is as last fetched): said on the field.
 	if _, err := s.creds.CreateGitCredential(ctx, ports.CreateGitCredential{Name: "GitHub, new", Kind: domain.GitHTTPSToken, Host: "github.com", Token: "ghp_e2eStoredToken0003", IsDefault: true}); err != nil {
 		t.Fatal(err)
 	}
 	author.run(t, "create into a base origin does not have",
-		chromedp.Evaluate(`(() => { const b = document.getElementById('pr-base'); b.value = 'release-9'; b.dispatchEvent(new Event('input')); })(); `+submit+`.click()`, nil),
+		chromedp.Evaluate(`document.querySelector('[x-data=pullRequestPanel]')._x_dataStack[0].form.baseBranch = 'release-9'; `+submit+`.click()`, nil),
 		waitFor(shown(`document.getElementById('pr-base-error')`)),
 	)
 	if got := author.text(t, `document.getElementById('pr-base-error').textContent + ' ' + document.getElementById('pr-base').getAttribute('aria-invalid')`); got != "release-9 is not a branch on origin. true" {

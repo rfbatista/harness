@@ -19,13 +19,15 @@ const STATUS = {
   INVALID_INPUT: 400,
   REPOSITORY_NOT_FOUND: 404,
   CROSS_PROJECT_ACCESS: 400,
+  BRANCH_NAME_INVALID: 400,
+  BRANCH_EXISTS: 409,
 };
 
 export function stubApi(world) {
   const memory = memoryGateway(world);
   const { gateway } = memory;
 
-  const fail = (err) => jsonResponse(STATUS[codeOf(err)] ?? 500, { error: err.message, code: codeOf(err) });
+  const fail = (err) => jsonResponse(STATUS[codeOf(err)] ?? 500, { error: err.message, code: codeOf(err), details: err.details });
 
   async function fetch(input, init = {}) {
     const url = new URL(input, "http://harness.test");
@@ -43,6 +45,10 @@ export function stubApi(world) {
         const list = await gateway.listBranches(url.searchParams.get("repository_id") ?? "");
         return jsonResponse(200, { branches: list.map((b) => ({ name: b.name, remote: b.remote, is_head: b.isHead })) });
       }
+      if (method === "GET" && url.pathname === "/api/check_branch_name") {
+        const q = url.searchParams;
+        return jsonResponse(200, await gateway.checkBranchName({ repositoryId: q.get("repository_id") ?? "", name: q.get("name") ?? "", baseBranch: q.get("base_branch") ?? "", ticketId: q.get("ticket_id") ?? "" }));
+      }
       if (method === "POST" && url.pathname === "/api/start_interactive_session") {
         if (body.runs_on !== "server") return jsonResponse(400, { error: "the web client runs sessions on the server", code: "INVALID_INPUT" });
         const session = await gateway.start({
@@ -53,6 +59,7 @@ export function stubApi(world) {
           mode: body.mode,
           prompt: body.prompt,
           autoAccept: body.auto_accept,
+          branchName: body.branch_name,
           size: body.size,
         });
         return jsonResponse(201, { session: toDTO(session), agent: {} });

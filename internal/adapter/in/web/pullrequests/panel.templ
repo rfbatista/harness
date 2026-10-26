@@ -98,6 +98,7 @@ templ Strip(p *Panel) {
 				<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-on:click="dismissNotice">Dismiss</button>
 			</div>
 		</div>
+		<p class="[ text-sm color-ink-muted ]" role="status" style="display: none" data-pr-created-note x-show="hasCreatedNote" x-text="createdNote"></p>
 		<div class="[ banner ]" data-tone="danger" role="alert" style="display: none" x-show="error">
 			<span x-text="errorLine"></span>
 		</div>
@@ -132,16 +133,30 @@ templ form() {
 		</div>
 		<div class="[ field ]">
 			<label for="pr-base">Base branch</label>
-			<input id="pr-base" class="[ font-mono text-sm ]" autocomplete="off" x-model="form.baseBranch" x-bind:readonly="creating" x-bind:aria-invalid="baseInvalid" aria-describedby="pr-base-hint pr-base-error"/>
+			<div class="[ dropdown ]" x-data="combobox" x-bind:aria-busy="refreshBusyAttr">
+				<select id="pr-base" x-model="form.baseBranch" x-bind:disabled="creating" x-bind:aria-invalid="baseInvalid" aria-describedby="pr-base-hint pr-base-error">
+					<template x-for="b in baseChoices" x-bind:key="b">
+						<option x-bind:value="b" x-text="b"></option>
+					</template>
+				</select>
+			</div>
+			<div class="[ cluster ] [ gutter-xs ]">
+				<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" data-refresh-bases x-bind:disabled="creating" x-bind:aria-busy="refreshBusyAttr" x-on:click="refreshBases">
+					<span x-text="refreshLabel">Fetch branches from origin</span>
+				</button>
+				<span class="[ hint ]" data-fetched x-text="fetchedLine"></span>
+			</div>
+			<span class="[ error ]" role="alert" data-refresh-error x-show="hasRefreshError" x-text="refreshError"></span>
 			<span class="[ hint ]" id="pr-base-hint">The branch it merges into, on origin.</span>
 			<span class="[ error ]" id="pr-base-error" x-show="baseInvalid" x-text="problems.baseBranch"></span>
 		</div>
 		<div class="[ field ]" data-inline>
 			<input id="pr-draft" type="checkbox" x-model="form.draft" x-bind:disabled="creating"/>
-			<label for="pr-draft">Open as a draft</label>
+			<label for="pr-draft">Open as draft</label>
 		</div>
+		<p class="[ text-sm color-ink-muted ]" data-span data-pr-consequence aria-live="polite" x-text="consequence"></p>
 		<div class="[ cluster ] [ gutter-xs ]" data-span>
-			<button type="submit" class="[ button ]" data-variant="primary" x-bind:aria-busy="busyAttr" x-bind:aria-disabled="busyAttr" x-text="buttonLabel">Create pull request</button>
+			<button type="submit" class="[ button ]" data-variant="primary" x-bind:aria-busy="busyAttr" x-bind:aria-disabled="busyAttr" x-text="submitLabel">Create pull request</button>
 			<button type="button" class="[ button ]" data-variant="ghost" x-bind:disabled="creating" x-on:click="cancel">Cancel</button>
 		</div>
 	</form>
