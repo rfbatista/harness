@@ -1,6 +1,6 @@
 // RunGateway over the harness HTTP API.
 
-import { toRun, toRunCommand, toRunCommandsSeed } from "./dto.js";
+import { toRun, toRunCommand, toRunCommandsSeed, toRunWorktree } from "./dto.js";
 
 /**
  * @param {import("../../../shared/infrastructure/api.js").ApiClient} api
@@ -24,8 +24,12 @@ export function runsGateway(api) {
       const body = await api.get("/list_runs", { session_id: sessionId });
       return (body?.runs ?? []).map(toRun);
     },
-    async start(sessionId, { name = "", command = "" }) {
-      const body = await api.post("/start_run", { session_id: sessionId, name, command });
+    async listWorktrees(sessionId) {
+      const body = await api.get("/list_run_worktrees", { session_id: sessionId });
+      return (body?.worktrees ?? []).map(toRunWorktree);
+    },
+    async start(sessionId, { name = "", command = "", worktree = "" }) {
+      const body = await api.post("/start_run", { session_id: sessionId, name, command, worktree });
       return toRun(body?.run);
     },
     async stop(runId) {

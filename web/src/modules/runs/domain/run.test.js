@@ -1,5 +1,5 @@
 import { assert, file, test } from "../../../shared/testing/test.js";
-import { preferredRun, runCommandNameProblem, runState } from "./run.js";
+import { preferredRun, runCommandNameProblem, runState, worktreeBadge, worktreeDescription, worktreeTone } from "./run.js";
 
 file("runs/domain/run");
 
@@ -31,4 +31,29 @@ test("a run command's name follows the server's rule", () => {
   assert.equal(runCommandNameProblem("web/app"), "Use only letters, digits, spaces and . _ -");
   assert.equal(runCommandNameProblem("-dev"), "Start with a letter or a digit.");
   assert.equal(runCommandNameProblem("   "), "A run command needs a name.");
+});
+
+const own = { key: "own", kind: "own", branch: "agent/feed", dir: "/w/own" };
+const main = { key: "main", kind: "main", branch: "main", dir: "/w/main" };
+const other = { key: "session:s2", kind: "session", branch: "agent/other", agent: "go-developer", sessionStatus: "running" };
+
+test("a run worktree reads as its kind, branch and, for a session, its agent and status", () => {
+  assert.equal(worktreeBadge(own), "This session · agent/feed");
+  assert.equal(worktreeBadge(main), "Main checkout · main");
+  assert.equal(worktreeBadge(other), "go-developer · agent/other");
+  assert.equal(worktreeBadge({ ...other, agent: "" }), "Session · agent/other");
+  assert.equal(worktreeBadge({ ...main, branch: "" }), "Main checkout · detached HEAD");
+  assert.equal(worktreeDescription(own), "This session's worktree");
+  assert.equal(worktreeDescription(main), "Main checkout · your own working copy");
+  assert.equal(worktreeDescription(other), "go-developer · running");
+  assert.equal(worktreeDescription({ ...other, agent: "", sessionStatus: "done" }), "no agent · ended");
+  assert.equal(worktreeDescription({ ...other, sessionStatus: "waiting_approval" }), "go-developer · waiting approval");
+});
+
+test("a session worktree's dot follows its status; own and main have none", () => {
+  assert.equal(worktreeTone(other), "signal");
+  assert.equal(worktreeTone({ ...other, sessionStatus: "waiting_approval" }), "attention");
+  assert.equal(worktreeTone({ ...other, sessionStatus: "failed" }), "danger");
+  assert.equal(worktreeTone({ ...other, sessionStatus: "done" }), "");
+  assert.equal(worktreeTone(own), "");
 });

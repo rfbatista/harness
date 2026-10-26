@@ -3,6 +3,7 @@ package web
 import (
 	"context"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -325,5 +326,185 @@ func TestAppTabShowsWhyItCannotRun(t *testing.T) {
 				t.Errorf("banner = %q, want it to say %q", shown, c.want)
 			}
 		})
+	}
+}
+
+// runRepos and runBranches answer the run worktree lookups of the apps service.
+type runRepos map[string]*domain.Repository
+
+func (r runRepos) Get(_ context.Context, id string) *domain.Repository { return r[id] }
+
+type runBranches map[string]string
+
+func (b runBranches) CurrentBranch(_ context.Context, dir string) (string, error) { return b[dir], nil }
+
+// TestAppTabRunsInThePickedRunWorktree picks the repository's main checkout
+// beside Run and runs a typed command there: the output names the main
+// directory, the run's header badge names the main checkout, the env note
+// shows, and the run stays in this session's tab. The picker lists this
+// session's worktree, the main checkout, then the other session's.
+// pickerServer serves a session s1 with a main checkout and another session
+// s2 of the same repository. Its App tab is at /projects/p1/tasks/t1.
+func pickerServer(t *testing.T) (srv *httptest.Server, runner *apps.Service, session *domain.Session, main string, ctx context.Context, errs *errorLog) {
+	t.Helper()
+	assets, err := NewAssets()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !assets.Built() {
+		t.Skip("browser test: web client not built; run `make web`")
+	}
+	ctx, errs = browser(t)
+
+	main = t.TempDir()
+	session = &domain.Session{
+		ID: "s1", ProjectID: "p1", TicketID: "t1", RepositoryID: "r1", Task: "implement this task",
+		Status: domain.SessionIdle, Interactive: true, RunsOn: domain.RunnerServer, UpdatedAt: time.Now(),
+		WorkingDir: t.TempDir(), Branch: "agent/add-sse-feed-1a2b",
+	}
+	other := &domain.Session{
+		ID: "s2", ProjectID: "p1", TicketID: "t2", RepositoryID: "r1", Task: "another task",
+		Status: domain.SessionRunning, UpdatedAt: time.Now(), CreatedAt: time.Now(),
+		WorkingDir: t.TempDir(), Branch: "agent/other-9z9z",
+	}
+	sessions := fakeSessions{[]*domain.Session{session, other}}
+	host := termhost.New(shell.Direct{}, ptyunix.New(), command.Agent{Shell: "/bin/sh"})
+	t.Cleanup(func() { _ = host.Shutdown(context.Background()) })
+	runner = apps.NewService(sessions, noRunCommands{}, host)
+	runner.UseRunWorktrees(runRepos{"r1": {ID: "r1", RootDir: main}}, nil, runBranches{main: "main"})
+
+	pages := NewHandler(Deps{
+		Projects:     fakeProjects{[]*domain.Project{{ID: "p1", Name: "coding_pool"}}},
+		Tasks:        fakeTickets{[]*domain.Ticket{{ID: "t1", ProjectID: "p1", Title: "Add SSE feed", Status: domain.TicketStatusInProgress}}},
+		Agents:       fakeAgents{},
+		Repositories: fakeRepos{[]*domain.Repository{{ID: "r1", ProjectID: "p1", Name: "harness"}}},
+		Sessions:     sessions,
+	}, assets, nil)
+	api := httpapi.NewRouter(httpapi.NewHandler(httpapi.Services{RunCommands: noRunCommands{}, Apps: runner}))
+	mux := http.NewServeMux()
+	mux.Handle("/api/sessions/s1/terminal", http.NotFoundHandler())
+	mux.Handle("/api/", api)
+	mux.Handle("/", pages)
+	srv = newBrowserServer(mux)
+	t.Cleanup(srv.Close)
+
+	return srv, runner, session, main, ctx, errs
+}
+
+func TestAppTabRunsInThePickedRunWorktree(t *testing.T) {
+	srv, runner, _, main, ctx, errs := pickerServer(t)
+	var err error
+
+	rows := `document.querySelector('[aria-label=Application] .terminal .xterm-rows')?.textContent ?? ''`
+	var trigger, options, listText, badge, note, source, screen string
+	err = chromedp.Run(ctx,
+		chromedp.EmulateViewport(1280, 800),
+		chromedp.Navigate(srv.URL+"/projects/p1/tasks/t1"),
+		chromedp.Poll(`!!document.querySelector('[role=tab]')`, nil, chromedp.WithPollingTimeout(10*time.Second)),
+		clickButton(`[role=tablist]`, "App"),
+		chromedp.Poll(`!!document.querySelector('#run-worktree-trigger') && document.querySelectorAll('#run-worktree option').length === 3`, nil, chromedp.WithPollingTimeout(10*time.Second)),
+		chromedp.Evaluate(`document.querySelector('#run-worktree-trigger').textContent.replace(/\s+/g, ' ').trim()`, &trigger),
+		chromedp.Evaluate(`document.querySelector('#run-worktree-trigger').click()`, nil),
+		chromedp.Poll(`document.querySelectorAll('#run-worktree-listbox [role=option]').length === 3`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Evaluate(`[...document.querySelectorAll('#run-worktree-listbox [role=option]')].map(o => o.textContent.replace(/\s+/g, ' ').trim()).join(' | ')`, &options),
+		chromedp.Evaluate(`document.querySelector('#run-worktree-listbox').textContent`, &listText),
+		chromedp.Evaluate(`[...document.querySelectorAll('#run-worktree-listbox [role=option]')].find(o => o.textContent.includes('main')).click()`, nil),
+		chromedp.Poll(`!!document.querySelector('#run-env-note')`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Evaluate(`document.querySelector('#run-env-note').textContent.replace(/\s+/g, ' ').trim()`, &note),
+		chromedp.Evaluate(`document.querySelector('[aria-label=Application] .source p').textContent.replace(/\s+/g, ' ').trim()`, &source),
+		setField(`#run-choice-input`, `echo in-$(basename "$PWD"); sleep 30`, "input"),
+		clickButton(`[aria-label=Application]`, "Run"),
+		chromedp.Poll(`document.querySelector('[aria-label=Application] .repel .badge')?.textContent.trim() === 'Main checkout · main'`, nil, chromedp.WithPollingTimeout(10*time.Second)),
+		chromedp.Evaluate(`document.querySelector('[aria-label=Application] .repel .badge').textContent.trim()`, &badge),
+		chromedp.Poll(strings.ReplaceAll(`(`+rows+`).includes('in-`+filepath.Base(main)+`')`, "\n", " "), nil, chromedp.WithPollingTimeout(10*time.Second)),
+		chromedp.Evaluate(rows, &screen),
+	)
+	if err != nil {
+		t.Fatalf("%v\nJS errors: %v", err, errs.all())
+	}
+	if !strings.Contains(trigger, "agent/add-sse-feed-1a2b") {
+		t.Errorf("the picker starts on this session's worktree: %q", trigger)
+	}
+	for i, want := range []string{"agent/add-sse-feed-1a2b", "main", "agent/other-9z9z"} {
+		if got := strings.Split(options, " | "); len(got) != 3 || !strings.Contains(got[i], want) {
+			t.Errorf("options = %q, want #%d to name %q", options, i, want)
+		}
+	}
+	if !strings.Contains(listText, "Other sessions in harness") || !strings.Contains(options, "Main checkout · your own working copy") {
+		t.Errorf("options = %q", options)
+	}
+	if !strings.HasPrefix(note, "Env files are not written to the main checkout.") {
+		t.Errorf("env note = %q", note)
+	}
+	if want := "Runs harness on branch main — the main checkout, your own working copy. No env files are written there."; source != want {
+		t.Errorf("source line = %q\nwant          %q", source, want)
+	}
+	if badge != "Main checkout · main" {
+		t.Errorf("badge = %q", badge)
+	}
+	runs, _ := runner.List(context.Background(), "s1")
+	if len(runs) != 1 || runs[0].Dir != main || runs[0].Worktree.Kind != domain.RunWorktreeMain {
+		t.Fatalf("runs = %+v", runs)
+	}
+	if !strings.Contains(screen, "in-"+filepath.Base(main)) {
+		t.Errorf("screen = %q", screen)
+	}
+}
+
+// TestAppTabRemembersThePickAcrossAReload keeps the pick per session in the
+// browser: after a reload the picker is on main again, and a remembered
+// worktree that is gone falls back to the session's own, once, and forgets it.
+func TestAppTabRemembersThePickAcrossAReload(t *testing.T) {
+	srv, _, _, _, ctx, errs := pickerServer(t)
+	const key = "harness:app-run-worktree:s1"
+	inApp := func() chromedp.Tasks {
+		return chromedp.Tasks{
+			chromedp.Navigate(srv.URL + "/projects/p1/tasks/t1"),
+			chromedp.Poll(`!!document.querySelector('[role=tab]')`, nil, chromedp.WithPollingTimeout(10*time.Second)),
+			clickButton(`[role=tablist]`, "App"),
+			chromedp.Poll(`document.querySelectorAll('#run-worktree option').length === 3`, nil, chromedp.WithPollingTimeout(10*time.Second)),
+		}
+	}
+	trigger := `document.querySelector('#run-worktree-trigger').textContent.replace(/\s+/g, ' ').trim()`
+	var first, remembered, restored, stale, fellBack, banner, stored string
+	err := chromedp.Run(ctx,
+		chromedp.EmulateViewport(1280, 800),
+		inApp(),
+		chromedp.Evaluate(`document.querySelector('#run-worktree-trigger').click()`, nil),
+		chromedp.Poll(`document.querySelectorAll('#run-worktree-listbox [role=option]').length === 3`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Evaluate(`[...document.querySelectorAll('#run-worktree-listbox [role=option]')].find(o => o.textContent.includes('Main checkout')).click()`, nil),
+		chromedp.Poll(`!!document.querySelector('#run-env-note')`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Evaluate(trigger, &first),
+		chromedp.Evaluate(`localStorage.getItem('`+key+`')`, &remembered),
+		// A reload: the picker comes back on main, with no fallback banner.
+		inApp(),
+		chromedp.Poll(`!!document.querySelector('#run-env-note')`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Evaluate(trigger, &restored),
+		chromedp.Evaluate(`document.querySelector('[aria-label=Application] .banner[data-tone=attention]') === null ? 'none' : 'banner'`, &banner),
+		// The remembered worktree is gone.
+		chromedp.Evaluate(`localStorage.setItem('`+key+`', 'session:gone')`, nil),
+		inApp(),
+		chromedp.Poll(`!!document.querySelector('[aria-label=Application] .banner[data-tone=attention]')`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Evaluate(trigger, &fellBack),
+		chromedp.Evaluate(`document.querySelector('[aria-label=Application] .banner[data-tone=attention]').textContent.replace(/\s+/g, ' ').trim()`, &stale),
+		chromedp.Evaluate(`String(localStorage.getItem('`+key+`'))`, &stored),
+	)
+	if err != nil {
+		t.Fatalf("%v\nJS errors: %v", err, errs.all())
+	}
+	if !strings.Contains(first, "main") || remembered != "main" {
+		t.Errorf("picking main: trigger %q, remembered %q", first, remembered)
+	}
+	if !strings.Contains(restored, "main") || banner != "none" {
+		t.Errorf("after a reload: trigger %q, banner %s", restored, banner)
+	}
+	if !strings.Contains(fellBack, "agent/add-sse-feed-1a2b") {
+		t.Errorf("a gone worktree falls back to the session's own: %q", fellBack)
+	}
+	if want := "Your last pick is gone. That worktree no longer exists. Running in this session's worktree. Dismiss"; stale != want {
+		t.Errorf("fallback banner = %q\nwant %q", stale, want)
+	}
+	if stored != "null" {
+		t.Errorf("the gone pick is forgotten, still stored: %q", stored)
 	}
 }

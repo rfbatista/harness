@@ -769,12 +769,12 @@ templ appPanel() {
 			<div class="[ source ]" aria-label="Where the code comes from">
 				<p>
 					Runs <strong x-text="repositoryLabel"></strong>{ " " }
-					<template x-if="hasBranch">
-						<span>on branch <code x-text="branch"></code>{ " " }</span>
+					<template x-if="hasPickBranch">
+						<span>on branch <code x-text="pickBranch"></code>{ " " }</span>
 					</template>
-					— this session's worktree, with the agent's changes, not your own checkout.
+					<span x-text="pickTail"></span>
 				</p>
-				<p class="[ code color-ink-faint truncate ]" x-text="worktree" x-bind:title="worktree"></p>
+				<p class="[ code color-ink-faint truncate ]" x-text="pickPath" x-bind:title="pickPath"></p>
 			</div>
 			<form class="[ cluster ] [ gutter-xs ]" x-on:submit.prevent="start">
 				<label class="[ visually-hidden ]" for="run-choice">Command</label>
@@ -785,6 +785,19 @@ templ appPanel() {
 						</template>
 					</select>
 				</div>
+				<label class="[ text-sm color-ink-muted ]" for="run-worktree">Run in</label>
+				<div class="[ dropdown ]" x-data="dropdown" data-fit x-bind:aria-busy="worktreesLoading" x-bind:data-error="worktreesError" x-on:dropdown-change="worktreePicked" x-on:dropdown-retry="reopened" x-on:click="reopened" x-on:keydown.down="reopened" x-on:keydown.enter="reopened" x-on:keydown.space="reopened">
+					<select id="run-worktree" x-bind:disabled="busy" x-bind:aria-describedby="pickIsMain ? 'run-env-note' : null">
+						<template x-for="o in ownAndMainOptions" x-bind:key="o.key">
+							<option x-bind:value="o.key" x-bind:data-description="o.description" x-text="o.label"></option>
+						</template>
+						<optgroup x-bind:label="sessionGroupLabel">
+							<template x-for="o in sessionOptions" x-bind:key="o.key">
+								<option x-bind:value="o.key" x-bind:data-description="o.description" x-bind:data-tone="o.tone" x-text="o.label"></option>
+							</template>
+						</optgroup>
+					</select>
+				</div>
 				<template x-if="canForget">
 					<span class="[ code color-ink-muted truncate grow ]" x-text="chosenCommand"></span>
 				</template>
@@ -793,6 +806,18 @@ templ appPanel() {
 					<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-on:click="forget">Remove</button>
 				</template>
 			</form>
+			<p class="[ visually-hidden ]" role="status" aria-live="polite" x-text="announced"></p>
+			<template x-if="pickIsMain">
+				<p id="run-env-note" class="[ text-sm color-ink-muted ]"><strong>Env files are not written to the main checkout.</strong>{ " " }The saved <code>.env</code> is still exported into the run; tools that read env files from disk see your own.</p>
+			</template>
+			<template x-if="hasFallback">
+				<div class="[ banner ]" data-tone="attention" role="status">
+					<div class="[ repel ]">
+						<span><strong>Your last pick is gone.</strong>{ " " }<span x-text="fallback.message"></span></span>
+						<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-on:click="dismissFallback">Dismiss</button>
+					</div>
+				</div>
+			</template>
 			<template x-if="typing">
 				<form class="[ cluster ] [ gutter-xs text-sm ]" x-on:submit.prevent="save">
 					<label for="run-save-name" class="[ color-ink-muted ]">Save for this repository as</label>
@@ -805,6 +830,7 @@ templ appPanel() {
 					<div class="[ cluster ] [ gutter-s text-sm ]">
 						<span class="[ status ]" x-bind:data-state="runStatusState" x-text="runStatusWord"></span>
 						<strong x-text="runLabel"></strong>
+						<span class="[ badge ]" x-bind:data-tone="runBadgeIsMain ? 'attention' : null" x-bind:title="runDir" x-text="runBadge"></span>
 						<span class="[ code color-ink-faint truncate ]" x-text="runCommandLine"></span>
 					</div>
 					<div class="[ cluster ] [ gutter-xs ]">
@@ -818,6 +844,7 @@ templ appPanel() {
 					<template x-for="h in history" x-bind:key="h.id">
 						<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-bind:aria-pressed="h.current" x-on:click="show(h.id)">
 							<span class="[ status ]" x-bind:data-state="h.state" x-text="h.label"></span>
+							<span class="[ color-ink-muted ]" x-show="h.tag" x-text="h.tag"></span>
 						</button>
 					</template>
 				</div>
@@ -851,7 +878,7 @@ templ appPanel() {
 			</div>
 		</template>
 		<template x-if="showsEmpty">
-			@components.Empty("Nothing running", "Pick a saved command or type one, then Run. It runs in this session's worktree, so the agent's changes and the repository's env files are there.")
+			@components.Empty("Nothing running", "Pick a saved command or type one, then Run. It runs in the worktree picked under Run in, this session's by default, so the agent's changes and the repository's env files are there.")
 		</template>
 	</section>
 }

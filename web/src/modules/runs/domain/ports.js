@@ -5,6 +5,7 @@
 /**
  * @typedef {import("./run.js").Run} Run
  * @typedef {import("./run.js").RunCommand} RunCommand
+ * @typedef {import("./run.js").RunWorktree} RunWorktree
  *
  * @typedef {object} RunGateway
  * @property {(seed: unknown) => { repositoryId: string, commands: RunCommand[] }} decodeCommandsSeed
@@ -18,11 +19,16 @@
  *           Rejects with RUN_COMMAND_NOT_FOUND.
  * @property {(sessionId: string) => Promise<Run[]>} listRuns
  *           The session's runs, newest first.
- * @property {(sessionId: string, what: { name?: string, command?: string }) => Promise<Run>} start
+ * @property {(sessionId: string) => Promise<RunWorktree[]>} listWorktrees
+ *           The run worktrees the session can pick, in the server's order:
+ *           its own, the main checkout, then other sessions'. Rejects with
+ *           SESSION_NOT_FOUND or INVALID_INPUT.
+ * @property {(sessionId: string, what: { name?: string, command?: string, worktree?: string }) => Promise<Run>} start
  *           Runs a saved command (name) or a command line (command) in the
- *           session's worktree. A saved command already running returns that
- *           run. Rejects with RUN_COMMAND_NOT_FOUND, INVALID_INPUT or
- *           SESSION_NOT_FOUND.
+ *           run worktree called worktree (empty: the session's own). A saved
+ *           command already running there returns that run. Rejects with
+ *           RUN_COMMAND_NOT_FOUND, INVALID_INPUT, SESSION_NOT_FOUND or
+ *           WORKTREE_NOT_AVAILABLE.
  * @property {(runId: string) => Promise<Run>} stop
  *           Rejects with RUN_NOT_FOUND.
  */

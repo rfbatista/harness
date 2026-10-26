@@ -33,6 +33,7 @@ const NEXT_STEP = {
   [Codes.ENV_FILE_NOT_FOUND]: "the checkout has no such file; add it empty and paste its variables instead",
   [Codes.RUN_NOT_FOUND]: "it is gone (the server restarted?); start it again",
   [Codes.RUN_COMMAND_NOT_FOUND]: "it was renamed or removed; reload the page",
+  [Codes.WORKTREE_NOT_AVAILABLE]: "nothing started; pick another worktree, then Run again",
   [Codes.INVALID_NAME]: "use a short name: letters, digits, spaces, . _ -",
   [Codes.ENV_FILE_TOO_LARGE]: "keep env files under 256 KB: they hold variables, not data",
   [Codes.INVALID_INPUT]: "fix the form and try again",

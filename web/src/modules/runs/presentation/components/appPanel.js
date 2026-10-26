@@ -10,14 +10,28 @@
 //       <template x-for="rid in runIds" x-bind:key="rid">
 //         <div x-data="sessionsRunTerminal(rid)" x-on:terminal-exited="refresh"> …
 
+import { Codes, codeOf } from "../../../../shared/domain/errors.js";
 import { describeError } from "../../../../shared/presentation/errors.js";
-import { isRunning, preferredRun, runState } from "../../domain/run.js";
+import {
+  OWN_WORKTREE, branchLabel, isRunning, preferredRun, runState, sessionStatusWord,
+  worktreeBadge, worktreeDescription, worktreeKindWord, worktreeTone,
+} from "../../domain/run.js";
 
 /** The choice that means "type a command". */
 export const TYPED = "";
 
-/** @param {{ gateway: import("../../domain/ports.js").RunGateway }} deps */
-export const appPanel = ({ gateway }) => (panel = {}) => {
+/** Where the pick is kept: per session, as the server's opaque key (ADR 0037). */
+const pickKeyOf = (sessionId) => `app-run-worktree:${sessionId}`;
+
+const noPrefs = { get: () => null, set() {} };
+
+/**
+ * @param {{
+ *   gateway: import("../../domain/ports.js").RunGateway,
+ *   prefs?: import("../../../../shared/infrastructure/storage.js").Preferences,  the browser's own choices
+ * }} deps
+ */
+export const appPanel = ({ gateway, prefs = noPrefs }) => (panel = {}) => {
   /**
    * The panel's element, kept from init. The command field's select is not
    * in the panel's $refs: its x-ref belongs to the combobox's own x-data.
@@ -42,6 +56,18 @@ export const appPanel = ({ gateway }) => (panel = {}) => {
     choice: TYPED,
     typed: "",
     saveName: "",
+    /** @type {import("../../domain/run.js").RunWorktree[]} */
+    worktrees: [],
+    /** "loading" until the first list arrives; "failed" keeps Run working in the session's own worktree. */
+    worktreesState: "loading",
+    /** The picked run worktree's key. */
+    pickedKey: OWN_WORKTREE,
+    /** Whether the remembered pick has been looked at: it waits for the first list that arrives. */
+    restored: false,
+    /** Says the remembered or current pick is gone; null for no banner. */
+    fallback: null,
+    /** The pick, said once for screen readers. */
+    announced: "",
     ready: false,
     busy: false,
     error: null,
@@ -53,6 +79,7 @@ export const appPanel = ({ gateway }) => (panel = {}) => {
         const [commands, runs] = await Promise.all([
           gateway.listCommands(this.repositoryId),
           gateway.listRuns(this.sessionId),
+          this.loadWorktrees(),
         ]);
         this.commands = commands;
         this.runs = runs;
@@ -77,6 +104,156 @@ export const appPanel = ({ gateway }) => (panel = {}) => {
     /** Where the run on screen runs; the session's worktree until there is one. */
     get runDir() {
       return this.run?.dir || this.worktree;
+    },
+
+    // --- the run worktree picker ---
+
+    /** The picker's options, in the server's order. */
+    get worktreeOptions() {
+      return this.worktrees.map((w) => ({
+        key: w.key,
+        label: branchLabel(w.branch),
+        description: worktreeDescription(w),
+        tone: worktreeTone(w),
+        session: w.kind === "session",
+      }));
+    },
+    get ownAndMainOptions() {
+      return this.worktreeOptions.filter((o) => !o.session);
+    },
+    get sessionOptions() {
+      return this.worktreeOptions.filter((o) => o.session);
+    },
+    get sessionGroupLabel() {
+      return `Other sessions in ${this.repositoryLabel}`;
+    },
+    /** The picked run worktree; the session's own until the list is in. */
+    get pick() {
+      return this.worktrees.find((w) => w.key === this.pickedKey) ?? null;
+    },
+    get pickIsMain() {
+      return this.pick?.kind === "main";
+    },
+    get pickKind() {
+      return this.pick?.kind ?? "own";
+    },
+    get pickBranch() {
+      return this.pick ? this.pick.branch : this.branch;
+    },
+    get hasPickBranch() {
+      return this.pickBranch !== "";
+    },
+    get pickPath() {
+      return this.pick?.dir || this.worktree;
+    },
+    /** The "where the code comes from" line's ending, after the branch. */
+    get pickTail() {
+      switch (this.pickKind) {
+        case "main":
+          return "— the main checkout, your own working copy. No env files are written there.";
+        case "session":
+          return `— the worktree of the ${this.pick.agent || "no-agent"} session (${sessionStatusWord(this.pick.sessionStatus)}).`;
+        default:
+          return "— this session's worktree, with the agent's changes, not your own checkout.";
+      }
+    },
+    get worktreesLoading() {
+      return this.worktreesState === "loading" ? "true" : null;
+    },
+    get worktreesError() {
+      return this.worktreesState === "failed" ? "Could not load worktrees." : null;
+    },
+    get hasFallback() {
+      return this.fallback !== null;
+    },
+    /** What a start sends: nothing until a list is in, which the server reads as the session's own. */
+    get startKey() {
+      return this.worktreesState === "ready" ? this.pickedKey : "";
+    },
+
+    /** The run worktree a run names, with its agent when the list still has it. */
+    worktreeOf(run) {
+      const known = this.worktrees.find((w) => w.key === run.worktree.key);
+      return known ?? { ...run.worktree, dir: run.dir, agent: "", sessionStatus: "" };
+    },
+    /** The badge in a run's header. */
+    get runBadge() {
+      return this.run ? worktreeBadge(this.worktreeOf(this.run)) : "";
+    },
+    get runBadgeIsMain() {
+      return this.run?.worktree.kind === "main";
+    },
+
+    /** Reads the list: on load (the first list that arrives restores the remembered pick), when the picker opens, and after a refusal. */
+    async loadWorktrees({ silent = false } = {}) {
+      if (this.worktreesState !== "ready") this.worktreesState = "loading";
+      const before = this.pick;
+      try {
+        this.worktrees = await gateway.listWorktrees(this.sessionId);
+      } catch {
+        // A list already read stays good enough: the pick must not silently turn into the session's own.
+        if (!this.restored) this.worktreesState = "failed";
+        return;
+      }
+      const restore = !this.restored;
+      this.restored = true;
+      this.worktreesState = "ready";
+      this.reconcilePick({ restore, silent, before });
+      this.showPick();
+    },
+
+    /** Puts the pick on a worktree that is on offer: the remembered one on load, the session's own when it is gone. */
+    reconcilePick({ restore, silent, before }) {
+      const offered = (key) => this.worktrees.some((w) => w.key === key);
+      if (restore) {
+        const stored = prefs.get(pickKeyOf(this.sessionId));
+        if (stored === null || stored === OWN_WORKTREE) return;
+        if (offered(stored)) {
+          this.pickedKey = stored;
+          return;
+        }
+        this.fall(null, silent);
+        return;
+      }
+      if (offered(this.pickedKey)) return;
+      this.fall(before, silent);
+    },
+
+    /** The pick is gone: back to the session's own worktree, said once. */
+    fall(gone, silent) {
+      this.pickedKey = OWN_WORKTREE;
+      prefs.set(pickKeyOf(this.sessionId), null);
+      if (silent) return;
+      const what = gone?.kind === "session" && gone.agent ? `The worktree of ${gone.agent}${gone.branch ? ` on ${gone.branch}` : ""}` : "That worktree";
+      this.fallback = { message: `${what} no longer exists. Running in this session's worktree.` };
+    },
+
+    dismissFallback() {
+      this.fallback = null;
+    },
+
+    /** The picker's dropdown-change: a worktree is picked; nothing starts. */
+    worktreePicked(e) {
+      const key = e.detail.value;
+      if (!this.worktrees.some((w) => w.key === key)) return;
+      this.pickedKey = key;
+      this.fallback = null;
+      prefs.set(pickKeyOf(this.sessionId), key === OWN_WORKTREE ? null : key);
+      const w = this.pick;
+      this.announced = `Runs in ${worktreeKindWord(w)}, branch ${branchLabel(w.branch)}.`;
+    },
+
+    /** The picker was touched to open: read the list again. */
+    reopened() {
+      return this.loadWorktrees();
+    },
+
+    /** Puts the picker's select on the pick once its options exist. */
+    showPick() {
+      this.$nextTick(() => {
+        const select = root?.querySelector("select#run-worktree");
+        if (select) select.value = this.pickedKey;
+      });
     },
 
     get typing() {
@@ -127,7 +304,11 @@ export const appPanel = ({ gateway }) => (panel = {}) => {
       return this.run ? runState(this.run).word : "";
     },
     get history() {
-      return this.runs.map((r) => ({ id: r.id, label: r.name, ...runState(r), current: r.id === this.runId }));
+      // A tag names where a run runs, only once the runs differ by worktree.
+      const tagged = new Set(this.runs.map((r) => r.worktree.key)).size > 1;
+      return this.runs.map((r) => ({
+        id: r.id, label: r.name, tag: tagged ? worktreeKindWord(this.worktreeOf(r)) : "", ...runState(r), current: r.id === this.runId,
+      }));
     },
     get hasHistory() {
       return this.runs.length > 1;
@@ -207,11 +388,15 @@ export const appPanel = ({ gateway }) => (panel = {}) => {
       this.error = null;
       this.notice = "";
       try {
-        const run = await gateway.start(this.sessionId, what);
+        const run = await gateway.start(this.sessionId, { ...what, worktree: this.startKey });
+        const reopened = what.name && this.runs.some((r) => r.id === run.id && isRunning(r));
         this.replace(run);
         this.runId = run.id;
+        if (reopened) this.notice = `“${what.name}” is already running in this worktree. Showing that run.`;
       } catch (err) {
         this.error = describeError(err);
+        // The pick may be gone: read the list again, and say it once, as the refusal.
+        if (codeOf(err) === Codes.WORKTREE_NOT_AVAILABLE) await this.loadWorktrees({ silent: true });
       } finally {
         this.busy = false;
       }
