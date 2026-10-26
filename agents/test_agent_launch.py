@@ -325,6 +325,10 @@ class SettingsTest(unittest.TestCase):
     def test_catalog_dir_comes_from_the_environment(self):
         with mock.patch.dict(os.environ, {al.AGENTS_DIR_ENV: "/somewhere"}):
             self.assertEqual(al.default_agents_dir(), "/somewhere")
+        with mock.patch.dict(os.environ, {al.DATA_DIR_ENV: "/data"}, clear=True):
+            self.assertEqual(al.default_agents_dir(), "/data/agents")
+        with mock.patch.dict(os.environ, {al.AGENTS_DIR_ENV: "/a", al.DATA_DIR_ENV: "/data"}, clear=True):
+            self.assertEqual(al.default_agents_dir(), "/a")
         with mock.patch.dict(os.environ, {}, clear=True):
             self.assertTrue(al.default_agents_dir().endswith(os.path.join(".harness", "agents")))
 

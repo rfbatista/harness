@@ -11,7 +11,7 @@ process runs here, in this terminal.
 
 The launcher's own settings (projects_root, plan_prompt, plans_dir, ...) are
 the "settings" key of the catalog's agents.json: it reads them from that file
-when it is on this machine (HARNESS_AGENTS_DIR, default ~/.harness/agents) and
+when it is on this machine (HARNESS_AGENTS_DIR, else <HARNESS_DATA_DIR or ~/.harness>/agents) and
 uses its defaults otherwise.
 
 Pure resolution/walk functions are unit-tested; the CLI wraps them and execs `claude`.
@@ -31,6 +31,7 @@ from dataclasses import dataclass, field
 HARNESS_GENERATED_DIRNAME = ".generated-harness"
 DEFAULT_HARNESS_BASE_URL = "http://127.0.0.1:8080"
 AGENTS_DIR_ENV = "HARNESS_AGENTS_DIR"
+DATA_DIR_ENV = "HARNESS_DATA_DIR"
 DEFAULT_PROJECTS_ROOT = "~/projetos"
 
 
@@ -376,9 +377,11 @@ def plan_prompt_text(path: str, settings: dict) -> str:
 
 def default_agents_dir() -> str:
     """Where the catalog is on this machine: HARNESS_AGENTS_DIR, else the
-    harness's default data dir."""
-    return os.environ.get(AGENTS_DIR_ENV) or os.path.join(
-        os.path.expanduser("~"), ".harness", "agents")
+    agents folder of the harness's data dir (HARNESS_DATA_DIR, else ~/.harness)."""
+    if os.environ.get(AGENTS_DIR_ENV):
+        return os.environ[AGENTS_DIR_ENV]
+    data = os.environ.get(DATA_DIR_ENV) or os.path.join(os.path.expanduser("~"), ".harness")
+    return os.path.join(data, "agents")
 
 
 def load_settings(agents_dir: str) -> dict:
