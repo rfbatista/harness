@@ -39,7 +39,10 @@ export function registerSessions(Alpine, deps) {
   Alpine.store("sessionsChannel", { messages: [], loaded: false });
   const channelStore = Alpine.store("sessionsChannel");
   const screen = deps.prefs ? screenPrefs(deps.prefs) : undefined;
-  const shell = { setFocus: (on) => globalThis.document?.querySelector(".app-shell")?.toggleAttribute("data-focus", on) };
+  const shell = {
+    setFocus: (on) => globalThis.document?.querySelector(".app-shell")?.toggleAttribute("data-focus", on),
+    setCodeFullscreen: (on) => globalThis.document?.querySelector(".app-shell")?.toggleAttribute("data-code-fullscreen", on),
+  };
   Alpine.data("sessionsPage", sessionsPage({ ...deps, channelStore, prefs: screen, shell }));
   Alpine.data("sessionsConversation", conversation({ ...deps, channelStore }));
   Alpine.data("sessionsStatusCheck", statusCheck(deps));

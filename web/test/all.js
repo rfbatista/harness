@@ -10,6 +10,7 @@ import "../src/modules/architecture/domain/yaml.test.js";
 import "../src/modules/claude/infrastructure/claude-gateway.test.js";
 import "../src/modules/claude/presentation/components/managedClaude.test.js";
 import "../src/modules/code/domain/domain.test.js";
+import "../src/modules/code/domain/split.test.js";
 import "../src/modules/code/domain/tree.test.js";
 import "../src/modules/code/infrastructure/gateways.test.js";
 import "../src/modules/code/infrastructure/highlighter.test.js";

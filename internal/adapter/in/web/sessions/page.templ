@@ -29,6 +29,7 @@ templ Page(v PageView) {
 			x-on:artifact-moved="artifactMoved"
 			x-on:code-files-counted="codeCounted"
 			x-on:code-expand="codeExpand"
+			x-on:code-fullscreen="codeFullscreenChanged"
 			x-on:terminal-status="terminalStatus"
 			x-on:run-shown="runShown"
 			x-on:menu-select="menuSelect"
@@ -937,7 +938,7 @@ templ taskBand(v PageView) {
 		</p>
 	</template>
 	<template x-if="showsDescription">
-		<div class="[ brief ]" x-bind:data-open="descriptionOpenAttr">
+		<div class="[ brief ]" x-bind:data-open="descriptionOpenAttr" x-effect="setSessionOpen(showingSession)">
 			<p x-ref="description" x-effect="measureDescription()" x-text="description">{ v.TaskDescription }</p>
 			<button type="button" class="[ more ]" x-show="descriptionOverflows" style="display: none" x-bind:aria-expanded="descriptionOpen" x-on:click="toggleDescription" x-text="descriptionToggleWord">More</button>
 		</div>

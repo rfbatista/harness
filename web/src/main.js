@@ -83,6 +83,7 @@ registerTasks(Alpine, {
   rail: railGateway(api, events),
   railPrefs: cookieRailPrefs(),
   bandPrefs: cookieBandPrefs(),
+  prefs,
   resources: resourcesGateway(api, events, xhrUpload({ base: "/api" })),
   navigate,
   reload,

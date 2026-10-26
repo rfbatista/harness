@@ -16,11 +16,11 @@ const memoryPrefs = () => {
 };
 
 /** A session's Code panel over the memory world, no seed painted; idle runs at once. */
-async function setup({ world = makeWorld(), live = true, shown = true } = {}) {
+async function setup({ world = makeWorld(), live = true, shown = true, prefs = memoryPrefs() } = {}) {
   const memory = memoryCode(world);
   const pushed = [];
   const history = { pushState: (_s, _t, url) => pushed.push(url), replaceState: (_s, _t, url) => pushed.push(url) };
-  const deps = { gateway: memory.gateway, highlighter: plainHighlighter(), prefs: memoryPrefs(), history, location: { pathname: "/", search: "", hash: "" }, idle: (cb) => cb() };
+  const deps = { gateway: memory.gateway, highlighter: plainHighlighter(), prefs, history, location: { pathname: "/", search: "", hash: "" }, idle: (cb) => cb() };
   const el = document.createElement("section");
   const mounted = mount(
     () => codePanel(deps)({
@@ -32,7 +32,7 @@ async function setup({ world = makeWorld(), live = true, shown = true } = {}) {
   mounted.instance.init();
   await flush();
   await flush();
-  return { ...mounted, panel: mounted.instance, memory, pushed };
+  return { ...mounted, panel: mounted.instance, memory, pushed, prefs };
 }
 
 test("the panel reads the diff for the badge, and the uncommitted count, without being asked", async () => {
@@ -196,4 +196,136 @@ test("keys: G then F switches view; ] steps through the diff's files; typing in 
   assert.equal(panel.view, "files");
   const typed = key("t", document.createElement("input"));
   assert.equal(typed.defaultPrevented, false);
+});
+
+test("Unified | Side by side is remembered; side by side is the default, also for a bad stored value (ADR 0037)", async () => {
+  const first = await setup();
+  assert.deepEqual([first.panel.unifiedPressed, first.panel.splitPressed], ["false", "true"]);
+  first.panel.setLayout("unified");
+  assert.equal(first.prefs.get("code.layout"), "unified");
+  const again = await setup({ prefs: first.prefs });
+  assert.deepEqual([again.panel.unifiedPressed, again.panel.splitPressed], ["true", "false"]);
+  const bad = await setup({ prefs: { get: () => "banana", set() {} } });
+  assert.equal(bad.panel.layout, "split");
+});
+
+test("Side by side is disabled below 44rem, with its reason, and cannot be chosen", async () => {
+  const { panel } = await setup();
+  assert.deepEqual([panel.canSplit, panel.sideBySideDisabled, panel.sideBySideTitle], [true, null, null]);
+  panel.narrow = true;
+  assert.deepEqual([panel.canSplit, panel.sideBySideDisabled, panel.sideBySideTitle], [false, "true", "Side by side needs a wider window"]);
+  panel.setLayout("unified");
+  panel.setLayout("split");
+  assert.equal(panel.layout, "unified");
+});
+
+test("an empty diff names the base it was compared with", async () => {
+  const { panel } = await setup();
+  panel.diff = { ...panel.diff, files: [] };
+  assert.equal(panel.noChangesTitle, "No changes against main yet");
+  panel.route = { ...panel.route, scope: "working" };
+  assert.equal(panel.noChangesTitle, "No uncommitted changes");
+});
+
+const keyEvent = (key) => ({ key, preventDefault() {}, stopPropagation() {} });
+
+test("the split: the default reads as percent, arrows and Home move it, and the width is remembered", async () => {
+  const first = await setup();
+  const { panel } = first;
+  panel.measure(1000);
+  assert.deepEqual([panel.splitNow, panel.splitMin, panel.splitMax, panel.splitStyle], [29, 19, 50, null]);
+  panel.splitKey(keyEvent("ArrowRight"));
+  assert.deepEqual([panel.splitNow, panel.splitStyle], [31, "--code-side: 30.8%"]);
+  assert.equal(first.prefs.get("code.split"), "30.8");
+  const again = await setup({ prefs: first.prefs });
+  again.panel.measure(1000);
+  assert.equal(again.panel.splitNow, 31, "a reload keeps it");
+  again.panel.splitKey(keyEvent("Home"));
+  assert.deepEqual([again.panel.splitNow, again.panel.splitStyle, first.prefs.get("code.split")], [29, null, null]);
+});
+
+test("a stored split that is not a width is ignored", async () => {
+  const { panel } = await setup({ prefs: { get: (k) => (k === "code.split" ? "wide" : null), set() {} } });
+  panel.measure(1000);
+  assert.equal(panel.splitStyle, null);
+});
+
+test("dragging the separator follows the pointer inside the bounds and stores once, on release", async () => {
+  const { panel, prefs } = await setup();
+  panel.measure(1000);
+  panel.$refs = { layout: { getBoundingClientRect: () => ({ left: 100, width: 1000 }) } };
+  const target = { setPointerCapture() {}, releasePointerCapture() {} };
+  panel.startSplit({ pointerId: 1, target, preventDefault() {} });
+  panel.moveSplit({ pointerId: 1, clientX: 100 + 400 });
+  assert.equal(panel.splitNow, 40);
+  panel.moveSplit({ pointerId: 1, clientX: 100 + 900 });
+  assert.equal(panel.splitNow, 50, "never past half");
+  panel.moveSplit({ pointerId: 1, clientX: 100 + 20 });
+  assert.equal(panel.splitNow, 19, "never under 12rem");
+  assert.equal(prefs.get("code.split"), null, "nothing stored while dragging");
+  panel.endSplit({ pointerId: 1, target });
+  assert.equal(prefs.get("code.split"), "19.2");
+  panel.moveSplit({ pointerId: 1, clientX: 100 + 400 });
+  assert.equal(panel.splitNow, 19, "a move after release is not a drag");
+});
+
+test("a double-click resets the split to the default", async () => {
+  const { panel, prefs } = await setup();
+  panel.measure(1000);
+  panel.splitKey(keyEvent("ArrowRight"));
+  panel.resetSplit();
+  assert.deepEqual([panel.splitStyle, prefs.get("code.split")], [null, null]);
+});
+
+const shiftKey = (key, target = document.createElement("div")) => ({ key, shiftKey: true, target, defaultPrevented: false, preventDefault() { this.defaultPrevented = true; } });
+
+test("⇧F enters and leaves full screen, tells the page, and is never remembered", async () => {
+  const stored = [];
+  const { panel, dispatched, tick } = await setup({ prefs: { get: () => null, set: (k, v) => stored.push([k, v]) } });
+  const focused = [];
+  const button = Object.assign(document.createElement("button"), { focus: () => focused.push("button") });
+  button.setAttribute("data-code-fullscreen", "");
+  panel.$root.append(button);
+  panel.$refs = { main: { focus: () => focused.push("diff") } };
+  const events = () => dispatched.filter((d) => d.name === "code-fullscreen").map((d) => d.detail.on);
+
+  panel.onKey(shiftKey("F"));
+  tick();
+  await flush();
+  assert.deepEqual([panel.fullscreen, panel.fullscreenPressed, panel.fullscreenAttr, events(), focused], [true, "true", "", [true], ["diff"]]);
+  panel.onKey(shiftKey("F"));
+  tick();
+  await flush();
+  assert.deepEqual([panel.fullscreen, panel.fullscreenAttr, events(), focused], [false, null, [true, false], ["diff", "button"]]);
+  assert.deepEqual(stored.filter(([k]) => /full/i.test(k)), [], "nothing about full screen is stored");
+});
+
+test("Esc is not the full-screen key", async () => {
+  const { panel } = await setup();
+  panel.toggleFullscreen();
+  panel.onKey({ key: "Escape", target: document.createElement("div"), preventDefault() {} });
+  assert.equal(panel.fullscreen, true);
+});
+
+test("⇧E in full screen hides the file list, and does not touch the session list", async () => {
+  const { panel, dispatched } = await setup();
+  panel.toggleFullscreen();
+  panel.onKey(shiftKey("E"));
+  assert.deepEqual([panel.listHidden, panel.listAttr, dispatched.some((d) => d.name === "code-expand")], [true, "hidden", false]);
+  panel.onKey(shiftKey("E"));
+  assert.deepEqual([panel.listHidden, panel.listAttr], [false, null]);
+});
+
+test("the full-screen bar says the session, branch to base, and the summary", async () => {
+  const { panel } = await setup();
+  assert.deepEqual([panel.branch, panel.baseRef, panel.title], ["agent/visualize-code", "main", ""]);
+  assert.equal(panel.totals.files, "5 files");
+});
+
+test("the Code tab leaving the front leaves full screen", async () => {
+  const { panel, dispatched } = await setup();
+  panel.toggleFullscreen();
+  panel.tabShown({ detail: { sessionId: "s1", shown: false } });
+  assert.equal(panel.fullscreen, false);
+  assert.deepEqual(dispatched.filter((d) => d.name === "code-fullscreen").map((d) => d.detail.on), [true, false]);
 });

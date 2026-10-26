@@ -13,6 +13,9 @@ import { statusChangeView } from "../statusChange.js";
 
 const TICK_MS = 30_000;
 
+/** The preference that keeps what the person chose for a task's description: "open" or "closed"; absent is no choice. */
+const descriptionKey = (taskId) => `task.description.${taskId}`;
+
 /**
  * @param {{
  *   gateway: import("../../domain/ports.js").TaskGateway,
@@ -20,10 +23,11 @@ const TICK_MS = 30_000;
  *   reload: () => void,
  *   store?: import("./rail.js").RailStore,  the rail's live model: the task as the feed has it, and its latest move
  *   clock?: { now: () => Date },
+ *   prefs?: import("../../../../shared/infrastructure/storage.js").Preferences,  remembers per task whether the description shows whole
  * }} deps
  */
 export const taskEditor =
-  ({ gateway, navigate, reload, store = { tasks: [], statusChanges: {} }, clock = { now: () => new Date() } }) =>
+  ({ gateway, navigate, reload, store = { tasks: [], statusChanges: {} }, clock = { now: () => new Date() }, prefs = { get: () => null, set: () => {} } }) =>
   () => {
     let ticker = null;
     let onResize = () => {};
@@ -45,9 +49,11 @@ export const taskEditor =
       taskError: null,
       /** Archive or Restore is on its way. */
       archiving: false,
-      /** The description shows whole, not clamped to two lines. */
-      descriptionOpen: false,
-      /** The clamped description is longer than its two lines: there is more to show. */
+      /** What the person chose for this task's description: true whole, false one line, null nothing yet. */
+      descriptionChoice: null,
+      /** A session is open on the page: the code needs the room, so the description is one line unless chosen otherwise. */
+      sessionOpen: true,
+      /** The collapsed description is wider than its line: there is more to show. */
       descriptionOverflows: false,
 
       get title() {
@@ -62,6 +68,10 @@ export const taskEditor =
       /** The description shows under the title, except while it is edited. */
       get showsDescription() {
         return this.hasDescription && !this.editingTask;
+      },
+      /** The description shows whole, not cut to one line: the choice, else whole while no session is open. */
+      get descriptionOpen() {
+        return this.descriptionChoice ?? !this.sessionOpen;
       },
       get descriptionToggleWord() {
         return this.descriptionOpen ? "Less" : "More";
@@ -112,6 +122,10 @@ export const taskEditor =
         try {
           this.task = gateway.decodeTask(readSeed(this.$el));
           this.status = this.task.status;
+          const stored = prefs.get(descriptionKey(this.task.id));
+          this.descriptionChoice = stored === "open" ? true : stored === "closed" ? false : null;
+          // It was open because it overflowed; an open one is not measured, and keeps its Less.
+          this.descriptionOverflows = this.descriptionChoice === true;
         } catch (err) {
           this.taskError = describeError(err);
           return;
@@ -129,20 +143,27 @@ export const taskEditor =
       },
 
       /**
-       * Whether the clamped description has more than its two lines. Measured
-       * while it is clamped (and again on a resize, which can make it fit or
+       * Whether the collapsed description is wider than its one line. Measured
+       * while it is collapsed (and again on a resize, which can make it fit or
        * not); an open one keeps its toggle so it can be closed.
        */
       measureDescription() {
+        const open = this.descriptionOpen; // read now, so the effect that calls this follows it
         this.$nextTick(() => {
           const text = this.$refs.description;
-          if (!text || this.descriptionOpen) return;
-          this.descriptionOverflows = text.scrollHeight > text.clientHeight + 1;
+          if (!text || open) return;
+          this.descriptionOverflows = text.scrollWidth > text.clientWidth + 1;
         });
       },
 
+      /** The page says whether a session is open (x-effect on the description). */
+      setSessionOpen(open) {
+        this.sessionOpen = open === true;
+      },
+
       toggleDescription() {
-        this.descriptionOpen = !this.descriptionOpen;
+        this.descriptionChoice = !this.descriptionOpen;
+        if (this.task) prefs.set(descriptionKey(this.task.id), this.descriptionChoice ? "open" : "closed");
       },
 
       /** The task's status changed over the feed: show it, unless this page is saving its own. */

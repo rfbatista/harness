@@ -1,6 +1,6 @@
 /*
  * Brief — a task's description under its title: prose as written (line
- * breaks kept), quieter than the work around it, clamped to two lines with a
+ * breaks kept), quieter than the work around it, one line (cut with an ellipsis) beside a
  * More / Less toggle that shows only when the text overflows (data-open: shown whole).
  * <div class="brief"><p>…</p><button class="more">More</button></div>
  * .status-change: who moved the task's status last and why, one line above
@@ -9,9 +9,9 @@
 
 @layer blocks {
   .brief {
-    display: grid;
-    gap: var(--space-3xs);
-    justify-items: start;
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-xs);
     max-inline-size: none;
     padding: var(--space-s) var(--space-l);
     border-block-end: var(--border-width) solid var(--color-line);
@@ -20,21 +20,22 @@
     font-size: var(--text-sm);
 
     & > p {
-      display: -webkit-box;
-      -webkit-box-orient: vertical;
-      -webkit-line-clamp: 2;
+      flex: 1 1 0;
+      min-inline-size: 0;
       max-inline-size: var(--size-measure);
       overflow: hidden;
-      overflow-wrap: anywhere;
-      white-space: pre-wrap;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
 
     &[data-open] > p {
-      display: block;
-      -webkit-line-clamp: unset;
+      overflow-wrap: anywhere;
+      text-overflow: clip;
+      white-space: pre-wrap;
     }
 
     & > .more {
+      flex: none;
       padding: 0;
       border: 0;
       background: none;

@@ -1,0 +1,54 @@
+/*
+ * Code full screen — the Code tab's thin bar, and what goes while it shows.
+ * <div class="frame" data-fullscreen>
+ *   <div class="fs-bar" role="toolbar" aria-label="Full screen diff">
+ *     <span class="title">Login rate limiting</span>
+ *     <span class="pair"><b>agent/login-fix</b> <span>→</span> <span>main</span></span>
+ *     <span class="sum">7 files <span class="added">+55</span> <span class="deleted">−11</span></span>
+ *     <span class="spacer"></span> [File list button] [.segmented layout] [Exit full screen button]
+ *   </div> …the code layout…
+ * </div>
+ * With data-fullscreen the source bar and the diff's own layout switch go (the
+ * thin bar has both). The page's chrome goes with app-shell.css's
+ * [data-code-fullscreen]. data-list="hidden" on the code-layout puts the file
+ * list and its separator away (⇧E in full screen).
+ */
+
+@layer blocks {
+  .fs-bar {
+    display: flex;
+    flex: none;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-s) var(--space-m);
+    min-block-size: var(--size-row);
+    padding: var(--space-2xs) var(--space-m);
+    border-block-end: var(--border-width) solid var(--color-line);
+    background: var(--color-panel);
+    font-size: var(--text-sm);
+
+    & .title { font-weight: var(--weight-bold); }
+    & .pair {
+      display: inline-flex;
+      gap: var(--space-xs);
+      align-items: center;
+      color: var(--color-ink-muted);
+      font-family: var(--font-mono);
+      white-space: nowrap;
+      & b { color: var(--color-ink); font-weight: var(--weight-medium); }
+    }
+    & .sum { color: var(--color-ink-muted); }
+    & .sum .added { color: var(--color-diff-add); }
+    & .sum .deleted { color: var(--color-diff-del); }
+    & .spacer { flex: 1 1 0; }
+    & kbd { margin-inline-start: var(--space-3xs); }
+  }
+
+  [data-fullscreen] {
+    & > .code-source-bar,
+    & .diff-view .bar [data-layout-switch] { display: none; }
+    & .code-layout > .main:focus-visible { outline-offset: -2px; }
+  }
+
+  .code-layout[data-list="hidden"] > :is(.side, .separator) { display: none; }
+}

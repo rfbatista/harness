@@ -195,6 +195,7 @@ type View struct {
 	Scopes         []Seg
 	Summary        []SummaryRow
 	NoChanges      string
+	NoChangesTitle string // the empty diff's heading: what it was compared with
 	Files          []DiffFile
 	DiffTruncated  bool
 	BaseGoneLine   string
@@ -377,8 +378,13 @@ func (v *View) buildDiff(s Seed, zones map[string]ZoneTag) {
 	}
 	if len(d.Files) == 0 {
 		v.NoChanges = "No changes on this branch yet. The agent's edits appear here as it makes them."
+		v.NoChangesTitle = "No changes yet"
+		if s.BaseRef != "" {
+			v.NoChangesTitle = "No changes against " + s.BaseRef + " yet"
+		}
 		if scope == "working" {
 			v.NoChanges = "No uncommitted changes."
+			v.NoChangesTitle = "No uncommitted changes"
 		}
 	}
 	slugs := slugsOf(d.Files)

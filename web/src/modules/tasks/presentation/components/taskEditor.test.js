@@ -7,12 +7,17 @@ import { taskEditor } from "./taskEditor.js";
 
 file("tasks/presentation/taskEditor");
 
-function setup({ task = makeTask(), sessions = [] } = {}) {
+function memoryPrefs(initial = {}) {
+  const map = new Map(Object.entries(initial));
+  return { map, get: (k) => map.get(k) ?? null, set: (k, v) => (v === null ? map.delete(k) : map.set(k, v)) };
+}
+
+function setup({ task = makeTask(), sessions = [], prefs = memoryPrefs() } = {}) {
   const memory = memoryTasks({ projects: ["p1"], tasks: [task], sessions });
   const visited = [];
   let reloads = 0;
   const el = seededElement(taskDTO(task));
-  const mounted = mount(taskEditor({ gateway: memory.gateway, navigate: (u) => visited.push(u), reload: () => reloads++ }), { el });
+  const mounted = mount(taskEditor({ gateway: memory.gateway, navigate: (u) => visited.push(u), reload: () => reloads++, prefs }), { el });
   mounted.instance.init();
   return { ...mounted, memory, visited, reloads: () => reloads };
 }
@@ -141,9 +146,9 @@ test("a refused archive shows the coded error and stays", async () => {
   assert.deepEqual([instance.taskError.code, reloads(), instance.archiving], [Codes.TASK_NOT_DONE, 0, false]);
 });
 
-test("the description toggle shows only when the clamped text overflows, and says More or Less", () => {
+test("the description toggle shows only when the one-line text overflows, and says More or Less", () => {
   const { instance, tick } = setup();
-  const text = { scrollHeight: 120, clientHeight: 40 };
+  const text = { scrollWidth: 120, clientWidth: 40 };
   instance.$refs = { description: text };
   const measure = () => {
     instance.measureDescription();
@@ -153,11 +158,39 @@ test("the description toggle shows only when the clamped text overflows, and say
   assert.deepEqual([instance.descriptionOverflows, instance.descriptionToggleWord, instance.descriptionOpen], [true, "More", false]);
   instance.toggleDescription();
   assert.deepEqual([instance.descriptionOpen, instance.descriptionToggleWord], [true, "Less"]);
-  text.clientHeight = 120; // open: nothing overflows, but the toggle stays to close it
+  text.clientWidth = 120; // open: nothing overflows, but the toggle stays to close it
   measure();
   assert.equal(instance.descriptionOverflows, true, "an open description keeps its Less");
   instance.toggleDescription();
-  text.scrollHeight = text.clientHeight = 30;
+  text.scrollWidth = text.clientWidth = 30;
   measure();
   assert.equal(instance.descriptionOverflows, false, "a short description has no toggle");
+});
+
+test("the description's More or Less is remembered per task", () => {
+  const prefs = memoryPrefs();
+  const first = setup({ prefs });
+  assert.equal(first.instance.descriptionOpen, false, "collapsed by default");
+  first.instance.toggleDescription();
+  assert.equal(prefs.get("task.description.t1"), "open");
+  const again = setup({ prefs }).instance;
+  assert.deepEqual([again.descriptionOpen, again.descriptionOverflows], [true, true], "the same task opens as it was left, with its Less");
+  assert.equal(setup({ prefs, task: makeTask({ id: "t2" }) }).instance.descriptionOpen, false, "another task keeps its own choice");
+  first.instance.toggleDescription();
+  assert.equal(prefs.get("task.description.t1"), "closed", "collapsing is a choice too");
+});
+
+test("with no session open the description shows whole, unless the person chose one line", () => {
+  const { instance } = setup();
+  instance.setSessionOpen(false);
+  assert.deepEqual([instance.descriptionOpen, instance.descriptionOpenAttr], [true, ""]);
+  instance.setSessionOpen(true);
+  assert.deepEqual([instance.descriptionOpen, instance.descriptionOpenAttr], [false, null]);
+  const chose = setup({ prefs: memoryPrefs({ "task.description.t1": "closed" }) }).instance;
+  chose.setSessionOpen(false);
+  assert.equal(chose.descriptionOpen, false, "a chosen one line wins");
+});
+
+test("a bad stored description choice means collapsed", () => {
+  assert.equal(setup({ prefs: memoryPrefs({ "task.description.t1": "banana" }) }).instance.descriptionOpen, false);
 });
