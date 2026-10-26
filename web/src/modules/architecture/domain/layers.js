@@ -37,11 +37,24 @@ export const hexagonalLayers = () => [
   { name: "docs", match: { folder: "docs" } },
 ].map((layer) => ({ ...layer, access: newAccess() }));
 
+/** The layers of the hexagonal preset a repository does not have yet, by name. */
+export function presetAdditions(existing) {
+  const taken = new Set((existing ?? []).map((l) => l.name));
+  return hexagonalLayers().filter((l) => !taken.has(l.name));
+}
+
 /** Which way a layer matches: "regex" or "folder". */
 export const matchKind = (layer) => (typeof layer?.match?.regex === "string" ? "regex" : "folder");
 
 /** The folder or regex a layer matches by. */
 export const matchText = (layer) => layer?.match?.[matchKind(layer)] ?? "";
+
+/** How the layer list shows a layer's pattern: a folder as folder/**, a regex between slashes. */
+export function layerPattern(layer) {
+  const text = matchText(layer);
+  if (text === "") return "";
+  return matchKind(layer) === "regex" ? `/${text}/` : `${text}/**`;
+}
 
 /** A layer matching by the same text the other way. */
 export const withMatchKind = (layer, kind) => ({ ...layer, match: { [kind]: matchText(layer) } });
@@ -106,6 +119,49 @@ export const nextAccess = (value) => ACCESS_LEVELS[(ACCESS_LEVELS.indexOf(value)
 
 /** What a cell is called to a screen reader: "go-developer on domain: change". */
 export const cellLabel = (who, where, value) => `${who} on ${where}: ${value}`;
+
+/** The access with every layer given `value` for `agent` (or the default), the input left alone. */
+export const withRowAccess = (layers, agent, value) =>
+  (layers ?? []).map((l) => ({ ...l, access: withAccess(l.access, agent, value) }));
+
+const joinNames = (names) => (names.length < 3 ? names.join(" and ") : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`);
+
+/** What an access says in words: "everyone reads, only software-architect and devops change". */
+export function accessSentence(access) {
+  const base = access?.default ?? "read";
+  const agents = Object.entries(access?.agents ?? {});
+  const named = (level) => agents.filter(([, v]) => v === level).map(([k]) => k);
+  if (base === "change") return "everyone reads and changes";
+  if (base === "read") {
+    const changers = named("change");
+    const blind = named("none");
+    const parts = [changers.length === 0 ? "everyone reads, nobody changes" : `everyone reads, only ${joinNames(changers)} change`];
+    if (blind.length > 0) parts.push(`${joinNames(blind)} cannot read`);
+    return parts.join("; ");
+  }
+  const readers = named("read");
+  const changers = named("change");
+  const parts = ["nobody reads"];
+  if (readers.length > 0) parts[0] += `, only ${joinNames(readers)} ${readers.length === 1 ? "reads" : "read"}`;
+  if (changers.length > 0) parts.push(`${joinNames(changers)} can change`);
+  return parts.join("; ");
+}
+
+/** The colour slots an agent chip picks from; the stylesheet has one colour for each. */
+export const AGENT_SLOTS = 8;
+
+/** The slot of an agent's colour, the same for the same name. */
+export function agentSlot(name) {
+  let h = 0;
+  for (const c of String(name ?? "")) h = (h * 31 + c.codePointAt(0)) >>> 0;
+  return h % AGENT_SLOTS;
+}
+
+/** The overlaps that name a layer. */
+export const overlapsOf = (overlaps, name) => (name === "" ? [] : (overlaps ?? []).filter((o) => o.layers.includes(name)));
+
+/** The other layers an overlap names, besides `name`. */
+export const otherLayers = (overlap, name) => overlap.layers.filter((l) => l !== name);
 
 /**
  * The agents the matrix has a row for: the catalog, then any the record names

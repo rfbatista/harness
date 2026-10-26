@@ -150,7 +150,7 @@ func TestAgentListsArePickedFromTheCatalogAndKeepUnknownNames(t *testing.T) {
 	if fmt.Sprint(in["applies_to"]) != "[go-developer ghost devops]" {
 		t.Fatalf("saved applies_to = %v", in["applies_to"])
 	}
-	rig.run(t, chromedp.Navigate(rig.url("/layers")), poll(`!!document.querySelector('[data-access-matrix] [data-column=devops]')`))
+	rig.run(t, chromedp.Navigate(rig.url("/layers")), poll(`!!document.querySelector('[data-access-matrix] [data-row=devops]')`))
 	if n := rig.api.discoverCalls(); n != 2 { // one per page load, shared by every tab and the matrix
 		t.Fatalf("discover called %d times over two page loads, want 2", n)
 	}
