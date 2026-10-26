@@ -3,6 +3,7 @@ package httpapi
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -220,5 +221,81 @@ func TestHTTP_StartRunNeverShowsAnEnvFileValue(t *testing.T) {
 	code, body = start()
 	if code == http.StatusOK || !strings.Contains(body, "ENV_FILE_WRITE_FAILED") || strings.Contains(body, "s3cr3t-value") {
 		t.Fatalf("refused start: %d %s", code, body)
+	}
+}
+
+// Run worktrees: the session's own comes first, and a session with no
+// worktree is refused.
+func TestHTTP_ListRunWorktrees(t *testing.T) {
+	host := termhost.New(shell.Direct{}, ptyunix.New(), command.Agent{Shell: "/bin/sh"})
+	t.Cleanup(func() { _ = host.Shutdown(context.Background()) })
+	own := t.TempDir()
+	services := Services{Apps: apps.NewService(oneSession{&domain.Session{ID: "s1", Branch: "agent/x", Status: domain.SessionRunning, WorkingDir: own}}, nil, host)}
+	srv := httptest.NewServer(NewRouter(NewHandler(services)))
+	defer srv.Close()
+
+	res, err := http.Get(srv.URL + "/api/list_run_worktrees?session_id=s1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	var out struct{ Worktrees []map[string]any }
+	_ = json.NewDecoder(res.Body).Decode(&out)
+	if res.StatusCode != http.StatusOK || len(out.Worktrees) != 1 {
+		t.Fatalf("list: %d %+v", res.StatusCode, out)
+	}
+	w := out.Worktrees[0]
+	if w["key"] != "own" || w["kind"] != "own" || w["branch"] != "agent/x" || w["dir"] != own || w["session_id"] != "s1" || w["session_status"] != "running" {
+		t.Fatalf("own = %+v", w)
+	}
+
+	res2, _ := http.Get(srv.URL + "/api/list_run_worktrees?session_id=ghost")
+	res2.Body.Close()
+	if res2.StatusCode != http.StatusNotFound {
+		t.Fatalf("unknown session: %d", res2.StatusCode)
+	}
+}
+
+// A run names its run worktree on every answer, and a key that is not on
+// offer is refused with WORKTREE_NOT_AVAILABLE.
+func TestHTTP_StartRunInARunWorktree(t *testing.T) {
+	host := termhost.New(shell.Direct{}, ptyunix.New(), command.Agent{Shell: "/bin/sh"})
+	t.Cleanup(func() { _ = host.Shutdown(context.Background()) })
+	own := t.TempDir()
+	services := Services{Apps: apps.NewService(oneSession{&domain.Session{ID: "s1", Branch: "agent/x", WorkingDir: own}}, nil, host)}
+	srv := httptest.NewServer(NewRouter(NewHandler(services)))
+	defer srv.Close()
+	post := func(path, body string) (int, map[string]any) {
+		res, err := http.Post(srv.URL+path, "application/json", strings.NewReader(body))
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer res.Body.Close()
+		var out map[string]any
+		_ = json.NewDecoder(res.Body).Decode(&out)
+		return res.StatusCode, out
+	}
+
+	code, out := post("/api/start_run", `{"session_id":"s1","command":"sleep 30","worktree":"own"}`)
+	run, _ := out["run"].(map[string]any)
+	wt, _ := run["worktree"].(map[string]any)
+	if code != http.StatusOK || run["dir"] != own || wt["key"] != "own" || wt["kind"] != "own" || wt["branch"] != "agent/x" || wt["session_id"] != "s1" {
+		t.Fatalf("start: %d %+v", code, out)
+	}
+	code, out = post("/api/stop_run", `{"run_id":"`+run["id"].(string)+`"}`)
+	if stopped, _ := out["run"].(map[string]any); code != http.StatusOK || stopped["worktree"] == nil {
+		t.Fatalf("stop: %d %+v", code, out)
+	}
+	res, _ := http.Get(srv.URL + "/api/list_runs?session_id=s1")
+	var listed struct{ Runs []map[string]any }
+	_ = json.NewDecoder(res.Body).Decode(&listed)
+	res.Body.Close()
+	if len(listed.Runs) != 1 || listed.Runs[0]["worktree"] == nil {
+		t.Fatalf("list = %+v", listed.Runs)
+	}
+
+	code, out = post("/api/start_run", `{"session_id":"s1","command":"sleep 30","worktree":"main"}`)
+	if code == http.StatusOK || !strings.Contains(fmt.Sprint(out), "WORKTREE_NOT_AVAILABLE") {
+		t.Fatalf("refusal: %d %+v", code, out)
 	}
 }

@@ -187,16 +187,36 @@ type PTYProcess interface {
 	Close() error
 }
 
+// What an app run's worktree lookups read: a repository's checkout, the name
+// of an agent, the branch a directory holds.
+type (
+	RunRepositoryGetter interface {
+		Get(ctx context.Context, id string) *domain.Repository
+	}
+	RunAgentGetter interface {
+		Get(id string) *domain.Agent
+	}
+	RunBranchReader interface {
+		CurrentBranch(ctx context.Context, dir string) (string, error)
+	}
+)
+
 // AppRunner runs a repository's application from a session's worktree, in a
 // terminal on the server, and keeps each run's output so it can be read
 // again. Runs live as long as the server does.
 type AppRunner interface {
-	// Start runs the session's repository's saved command called name, or,
-	// with name empty, the command line given. Starting a saved command that
-	// is already running for the session returns that run.
-	Start(ctx context.Context, sessionID, name, command string) (*domain.AppRun, error)
+	// StartIn runs the session's repository's saved command called name, or,
+	// with name empty, the command line given, in the run worktree called
+	// worktree (empty: the session's own); a key ListRunWorktrees does not
+	// offer is WORKTREE_NOT_AVAILABLE. Starting a saved command that is
+	// already running for the session in that run worktree returns that run.
+	StartIn(ctx context.Context, sessionID, name, command, worktree string) (*domain.AppRun, error)
 	// List returns the session's runs, newest first.
 	List(ctx context.Context, sessionID string) ([]*domain.AppRun, error)
+	// ListRunWorktrees returns the directories the session can run in: its
+	// own worktree, the repository's main checkout, then other sessions'
+	// worktrees of the repository that still exist, newest first.
+	ListRunWorktrees(ctx context.Context, sessionID string) ([]*domain.RunWorktree, error)
 	// Stop ends a run; RUN_NOT_FOUND when there is none.
 	Stop(ctx context.Context, runID string) (*domain.AppRun, error)
 	// Attach returns the run's terminal; its Subscribe replays the run's

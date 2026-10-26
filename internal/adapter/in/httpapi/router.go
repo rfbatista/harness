@@ -65,6 +65,7 @@ func NewRouter(h *Handler, opts ...Option) *echo.Echo {
 
 	// application runs: a repository's app run from a session's worktree
 	g.GET("/list_runs", h.handleListRuns)
+	g.GET("/list_run_worktrees", h.handleListRunWorktrees)
 	g.POST("/start_run", h.handleStartRun)
 	g.POST("/stop_run", h.handleStopRun)
 	g.GET("/runs/:id/terminal", h.handleRunTerminal) // WebSocket upgrade

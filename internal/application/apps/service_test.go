@@ -29,8 +29,14 @@ func (s sessions) Get(_ context.Context, id string) (*domain.Session, error) {
 	return nil, &domain.StructuredError{Code: "SESSION_NOT_FOUND", Message: "session not found"}
 }
 
-func (s sessions) List(context.Context, ports.SessionFilter) ([]*domain.Session, error) {
-	return nil, nil
+func (s sessions) List(_ context.Context, f ports.SessionFilter) ([]*domain.Session, error) {
+	var out []*domain.Session
+	for _, x := range s {
+		if f.ProjectID == "" || x.ProjectID == f.ProjectID {
+			out = append(out, x)
+		}
+	}
+	return out, nil
 }
 
 type commands map[string][]*domain.RunCommand
@@ -43,14 +49,19 @@ func (c commands) ListRunCommands(_ context.Context, repositoryID string) ([]*do
 func newRunner(t *testing.T) (*apps.Service, string) {
 	t.Helper()
 	worktree := t.TempDir()
+	return newRunnerWith(t, sessions{"s1": {ID: "s1", RepositoryID: "r1", WorkingDir: worktree}, "bare": {ID: "bare"}})
+}
+
+func newRunnerWith(t *testing.T, all sessions) (*apps.Service, string) {
+	t.Helper()
 	host := termhost.New(shell.Direct{}, ptyunix.New(), command.Agent{Shell: "/bin/sh"})
 	t.Cleanup(func() { _ = host.Shutdown(context.Background()) })
 	svc := apps.NewService(
-		sessions{"s1": {ID: "s1", RepositoryID: "r1", WorkingDir: worktree}, "bare": {ID: "bare"}},
+		all,
 		commands{"r1": {{RepositoryID: "r1", Name: "greet", Command: `printf 'hello from %s\n' "$(basename "$PWD")"; sleep 30`}}},
 		host,
 	)
-	return svc, worktree
+	return svc, all["s1"].WorkingDir
 }
 
 // readAll attaches and collects what the terminal shows for a moment.
