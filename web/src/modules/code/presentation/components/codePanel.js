@@ -154,10 +154,16 @@ export const codePanel = (deps) => (/** @type {PanelInput} */ panel) => {
         this.wide = wide.matches;
         wide.addEventListener?.("change", (e) => (this.wide = e.matches));
       }
-      const el = this.$refs?.layout;
+      // The panel itself is as wide as its layout, and is there from the start
+      // (the layout is drawn after init and may be redrawn). A hidden tab is
+      // 0 wide: that says nothing about the window.
+      const el = this.$el;
       if (!el || typeof ResizeObserver !== "function") return;
       const rem = parseFloat(getComputedStyle(el.ownerDocument.documentElement).fontSize) || 16;
-      observer = new ResizeObserver((entries) => this.measure(entries[0].contentRect.width, rem));
+      observer = new ResizeObserver((entries) => {
+        const width = entries[0].contentRect.width;
+        if (width > 0) this.measure(width, rem);
+      });
       observer.observe(el);
     },
   });

@@ -1,6 +1,6 @@
 /*
  * Segmented — two to five sibling views or scopes of one thing, each its own
- * URL: Changes / Files / Map, All / Branch / Working, Unified / Split.
+ * URL: Changes / Files / Map, All / Branch / Working, Unified / Side by side.
  * Links (or buttons) in a hairline box; the current one is pressed.
  * <nav class="segmented" aria-label="Code views">
  *   <a href="…" aria-current="page">Changes <span class="count">12</span></a><a href="…">Files</a>
@@ -47,6 +47,8 @@
       }
 
       &[aria-disabled="true"] { opacity: 0.45; pointer-events: none; }
+      /* A button ignores the click itself, so its title (the reason) still shows on hover. */
+      &:is(button)[aria-disabled="true"] { pointer-events: auto; cursor: not-allowed; background: none; color: var(--color-ink-muted); }
     }
 
     & .count {

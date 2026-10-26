@@ -228,6 +228,11 @@ export function codeBrowser({ gateway, highlighter, prefs, history = globalThis.
     get noChanges() {
       return !!this.diff && this.diff.files.length === 0;
     },
+    /** The empty diff's heading: what it was compared with. */
+    get noChangesTitle() {
+      if (this.scope === "working") return "No uncommitted changes";
+      return this.baseRef ? `No changes against ${this.baseRef} yet` : "No changes yet";
+    },
     get noChangesText() {
       return this.scope === "working" ? "No uncommitted changes." : "No changes on this branch yet. The agent's edits appear here as it makes them.";
     },
@@ -257,6 +262,13 @@ export function codeBrowser({ gateway, highlighter, prefs, history = globalThis.
     },
     get canSplit() {
       return !this.narrow;
+    },
+    get sideBySideDisabled() {
+      return this.canSplit ? null : "true";
+    },
+    /** Side by side's title while the window is too narrow for it. */
+    get sideBySideTitle() {
+      return this.canSplit ? null : "Side by side needs a wider window";
     },
     get unifiedPressed() {
       return String(this.layout !== "split");

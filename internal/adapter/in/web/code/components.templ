@@ -249,20 +249,20 @@ templ liveDiff() {
 			<div class="[ banner ]" role="status">Some files were not loaded: this diff is over 20,000 changed lines.</div>
 		</template>
 		<template x-if="noChanges">
-			@components.Empty("No changes yet", "The agent's edits appear here as it makes them.") {
+			<div class="[ empty ]">
+				<h2 x-text="noChangesTitle">No changes yet</h2>
+				<p>The agent's edits appear here as it makes them.</p>
 				<button type="button" class="[ button ]" data-size="sm" x-on:click="showView('files')">Browse files</button>
-			}
+			</div>
 		</template>
 		<template x-if="diff && !noChanges">
 			<div class="bar">
 				<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-on:click="toggleAll" x-text="collapseAllLabel"></button>
 				<span class="[ color-ink-faint text-xs ]">Files <kbd>[</kbd> <kbd>]</kbd></span>
-				<template x-if="canSplit">
-					<div class="segmented" data-layout-switch role="group" aria-label="Diff layout">
-						<button type="button" x-bind:aria-pressed="unifiedPressed" x-on:click="setLayout('unified')">Unified</button>
-						<button type="button" x-bind:aria-pressed="splitPressed" x-on:click="setLayout('split')">Split</button>
-					</div>
-				</template>
+				<div class="segmented" data-layout-switch role="group" aria-label="Diff layout">
+					<button type="button" x-bind:aria-pressed="unifiedPressed" x-on:click="setLayout('unified')">Unified</button>
+					<button type="button" x-bind:aria-pressed="splitPressed" x-bind:aria-disabled="sideBySideDisabled" x-bind:title="sideBySideTitle" x-on:click="setLayout('split')">Side by side</button>
+				</div>
 			</div>
 		</template>
 		<template x-for="f in diffFiles" x-bind:key="f.key">
@@ -727,7 +727,7 @@ templ staticDiff(v View) {
 			<div class="[ banner ]" role="status">Some files were not loaded: this diff is over 20,000 changed lines.</div>
 		}
 		if v.NoChanges != "" {
-			@components.Empty("No changes yet", "The agent's edits appear here as it makes them.")
+			@components.Empty(v.NoChangesTitle, "The agent's edits appear here as it makes them.")
 		}
 		for _, f := range v.Files {
 			<section class="file" id={ f.ID } aria-labelledby={ f.NameID } { collapsedAttrs(f.Collapsed)... }>

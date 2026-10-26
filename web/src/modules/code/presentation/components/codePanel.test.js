@@ -16,11 +16,11 @@ const memoryPrefs = () => {
 };
 
 /** A session's Code panel over the memory world, no seed painted; idle runs at once. */
-async function setup({ world = makeWorld(), live = true, shown = true } = {}) {
+async function setup({ world = makeWorld(), live = true, shown = true, prefs = memoryPrefs() } = {}) {
   const memory = memoryCode(world);
   const pushed = [];
   const history = { pushState: (_s, _t, url) => pushed.push(url), replaceState: (_s, _t, url) => pushed.push(url) };
-  const deps = { gateway: memory.gateway, highlighter: plainHighlighter(), prefs: memoryPrefs(), history, location: { pathname: "/", search: "", hash: "" }, idle: (cb) => cb() };
+  const deps = { gateway: memory.gateway, highlighter: plainHighlighter(), prefs, history, location: { pathname: "/", search: "", hash: "" }, idle: (cb) => cb() };
   const el = document.createElement("section");
   const mounted = mount(
     () => codePanel(deps)({
@@ -32,7 +32,7 @@ async function setup({ world = makeWorld(), live = true, shown = true } = {}) {
   mounted.instance.init();
   await flush();
   await flush();
-  return { ...mounted, panel: mounted.instance, memory, pushed };
+  return { ...mounted, panel: mounted.instance, memory, pushed, prefs };
 }
 
 test("the panel reads the diff for the badge, and the uncommitted count, without being asked", async () => {
@@ -196,4 +196,33 @@ test("keys: G then F switches view; ] steps through the diff's files; typing in 
   assert.equal(panel.view, "files");
   const typed = key("t", document.createElement("input"));
   assert.equal(typed.defaultPrevented, false);
+});
+
+test("Unified | Side by side is remembered, and a bad stored value is Unified", async () => {
+  const first = await setup();
+  assert.deepEqual([first.panel.unifiedPressed, first.panel.splitPressed], ["true", "false"]);
+  first.panel.setLayout("split");
+  const again = await setup({ prefs: first.prefs });
+  assert.deepEqual([again.panel.unifiedPressed, again.panel.splitPressed], ["false", "true"]);
+  first.panel.setLayout("unified");
+  assert.equal(first.prefs.get("code.layout"), null, "Unified is the default and stores nothing");
+  const bad = await setup({ prefs: { get: () => "banana", set() {} } });
+  assert.equal(bad.panel.layout, "unified");
+});
+
+test("Side by side is disabled below 44rem, with its reason, and cannot be chosen", async () => {
+  const { panel } = await setup();
+  assert.deepEqual([panel.canSplit, panel.sideBySideDisabled, panel.sideBySideTitle], [true, null, null]);
+  panel.narrow = true;
+  assert.deepEqual([panel.canSplit, panel.sideBySideDisabled, panel.sideBySideTitle], [false, "true", "Side by side needs a wider window"]);
+  panel.setLayout("split");
+  assert.equal(panel.layout, "unified");
+});
+
+test("an empty diff names the base it was compared with", async () => {
+  const { panel } = await setup();
+  panel.diff = { ...panel.diff, files: [] };
+  assert.equal(panel.noChangesTitle, "No changes against main yet");
+  panel.route = { ...panel.route, scope: "working" };
+  assert.equal(panel.noChangesTitle, "No uncommitted changes");
 });
