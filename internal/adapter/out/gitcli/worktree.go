@@ -43,15 +43,15 @@ func NewWorktreeManager(opts ...Option) *WorktreeManager {
 // exists: a failure to read it leaves it empty rather than undoing the
 // worktree, since the commit is only a hint for the merge state.
 func (w *WorktreeManager) Add(repoRoot, path, branch, baseRef string) (string, error) {
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return "", err
-	}
 	exists, err := w.branchExists(repoRoot, branch)
 	if err != nil {
 		return "", err
 	}
 	if exists {
 		return "", fmt.Errorf("%w: %s", ports.ErrBranchExists, branch)
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return "", err
 	}
 	args := []string{"worktree", "add", "-b", branch, "--", path}
 	if baseRef != "" {

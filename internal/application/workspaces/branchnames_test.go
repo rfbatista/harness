@@ -2,6 +2,7 @@ package workspaces_test
 
 import (
 	"context"
+	"os"
 	"strings"
 	"testing"
 
@@ -71,5 +72,45 @@ func TestCheckBranchNameOfAnUnknownRepository(t *testing.T) {
 	_, err := newBranchNames(f).CheckBranchName(context.Background(), "nope", "x", "")
 	if errs.Code(err) != "REPOSITORY_NOT_FOUND" {
 		t.Fatalf("err = %v", err)
+	}
+}
+
+// A start never reuses an existing branch, whatever its state, and a refused
+// start leaves no worktree, no workspace and no branch behind.
+func TestCreateRefusesAnExistingBranchAndCreatesNothing(t *testing.T) {
+	f := newMergeFixture(t, "main")
+	gitRun(t, f.repoDir, "branch", "feat")
+	settings := sqlite.NewSettingsRepository(f.db)
+	root := t.TempDir()
+	if err := settings.Set(domain.SettingWorkspacesRoot, root); err != nil {
+		t.Fatal(err)
+	}
+	svc := workspaces.NewService(sqlite.NewWorkspaceRepository(f.db), sqlite.NewRepositoryRepository(f.db), gitcli.NewWorktreeManager(), settings)
+	refs := gitOut(t, f.repoDir, "for-each-ref", "refs/")
+
+	for _, branch := range []string{"feat", "main"} {
+		if _, err := svc.Create(f.repoID, "x-"+branch, branch, "main"); errs.Code(err) != domain.BranchExists {
+			t.Fatalf("Create on existing %q = %v, want BRANCH_EXISTS", branch, err)
+		}
+	}
+	if got := gitOut(t, f.repoDir, "for-each-ref", "refs/"); got != refs {
+		t.Fatalf("refs changed:\n%s\n%s", refs, got)
+	}
+	if left := svc.ListByRepository(f.repoID); len(left) != 0 {
+		t.Fatalf("workspaces left: %v", left)
+	}
+	if entries, _ := os.ReadDir(root); len(entries) != 0 {
+		t.Fatalf("worktree directories left: %v", entries)
+	}
+	if wts := gitOut(t, f.repoDir, "worktree", "list", "--porcelain"); strings.Count(wts, "worktree ") != 1 {
+		t.Fatalf("worktrees: %s", wts)
+	}
+
+	ws, err := svc.Create(f.repoID, "fresh", "my/fresh", "main")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ws.Branch != "my/fresh" || gitOut(t, ws.Path, "rev-parse", "--abbrev-ref", "HEAD") != "my/fresh" {
+		t.Fatalf("workspace %+v", ws)
 	}
 }

@@ -2,7 +2,9 @@ package httpapi
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
+	"strings"
 	"testing"
 
 	"operators-mcp/internal/domain"
@@ -47,5 +49,49 @@ func TestHTTP_CheckBranchName_Refusals(t *testing.T) {
 	}
 	if code, _ := doJSON(t, NewHandler(Services{}), http.MethodGet, "/api/check_branch_name?repository_id=r", ""); code != 503 {
 		t.Errorf("unconfigured: %d", code)
+	}
+}
+
+func startWith(t *testing.T, url, body string) (int, map[string]any) {
+	t.Helper()
+	resp, err := http.Post(url+"/api/start_interactive_session", "application/json", strings.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	var out map[string]any
+	_ = json.NewDecoder(resp.Body).Decode(&out)
+	return resp.StatusCode, out
+}
+
+func TestHTTP_StartInteractiveSession_WithABranchName(t *testing.T) {
+	env := newSessionTestEnv(t)
+	defer env.srv.Close()
+	f := &fakeBranchNames{check: &domain.BranchNameCheck{Valid: true, Available: true}}
+	env.orch.UseBranchNames(f)
+
+	code, body := startWith(t, env.srv.URL, `{"project_id":"p1","repository_id":"r1","ticket_id":"tk1","branch_name":" my/work "}`)
+	if code != http.StatusCreated || body["session"].(map[string]any)["branch"] != "my/work" || f.name != "my/work" {
+		t.Fatalf("%d %v (checked %q)", code, body, f.name)
+	}
+
+	f.check = &domain.BranchNameCheck{Valid: true, Code: domain.BranchExists, Reason: "the branch feat already exists", Suggestion: "feat-2"}
+	code, body = startWith(t, env.srv.URL, `{"project_id":"p1","repository_id":"r1","ticket_id":"tk1","branch_name":"feat"}`)
+	d, _ := body["details"].(map[string]any)
+	if code != 409 || body["code"] != "BRANCH_EXISTS" || d["name"] != "feat" || d["suggestion"] != "feat-2" ||
+		!strings.HasPrefix(body["error"].(string), "BRANCH_EXISTS") {
+		t.Fatalf("exists: %d %v", code, body)
+	}
+
+	f.check = &domain.BranchNameCheck{Code: domain.BranchNameInvalid, Reason: "a branch name cannot contain spaces"}
+	code, body = startWith(t, env.srv.URL, `{"project_id":"p1","repository_id":"r1","ticket_id":"tk1","branch_name":"a b"}`)
+	d, _ = body["details"].(map[string]any)
+	if code != 400 || body["code"] != "BRANCH_NAME_INVALID" || d["name"] != "a b" || d["reason"] == "" {
+		t.Fatalf("invalid: %d %v", code, body)
+	}
+
+	code, body = startWith(t, env.srv.URL, `{"project_id":"p1","repository_id":"r1","ticket_id":"tk1"}`)
+	if code != http.StatusCreated || !strings.HasPrefix(body["session"].(map[string]any)["branch"].(string), "agent/ship-the-thing-") {
+		t.Fatalf("without a name: %d %v", code, body)
 	}
 }

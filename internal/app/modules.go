@@ -667,6 +667,7 @@ func newOrchestrationService(
 	violationStore ports.SandboxViolationStore,
 	agentHome claudehome.Home,
 	claudeBin ports.ManagedClaudeBin,
+	branchNames *workspaces.BranchNames,
 ) *orchestration.Service {
 	svc := orchestration.NewService(manager, broker, hub, sessions, orchestration.Catalog{
 		Projects:     cat.Projects,
@@ -676,6 +677,7 @@ func newOrchestrationService(
 		Zones:        cat.Architecture,
 		Contexts:     cat.Architecture,
 	}, tickets, ws)
+	svc.UseBranchNames(branchNames)
 	if cat.RepositoryArchitectures != nil {
 		// Saves, deletes and exports reach open pages on the project feed.
 		cat.RepositoryArchitectures.UseFeed(svc)
