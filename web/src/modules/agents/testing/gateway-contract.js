@@ -100,6 +100,36 @@ export function catalogGatewayContract(name, makeSubject) {
     await assert.rejects(gateway.deleteSkill("review"), "SKILL_NOT_FOUND");
   });
 
+  contract("deleting a bundle or an agent answers a change with an id; Undo puts it back, and a stale base is CATALOG_CHANGED", async () => {
+    const { gateway, server } = subject();
+    const { versions } = await gateway.getCatalog();
+    let r = await gateway.deleteBundle("ux", { baseVersions: { "agents.json": versions["agents.json"] } });
+    assert.ok(r.change.id !== "", "a delete has a change id");
+    assert.ok(r.change.summary.startsWith("Deleted"), r.change.summary);
+    let c = await gateway.getCatalog();
+    assert.deepEqual(c.bundles, []);
+    assert.deepEqual(c.agents[0].entries, ["tdd"], "the @ux entry left the agent");
+    await gateway.undoChange(r.change.id);
+    c = await gateway.getCatalog();
+    assert.deepEqual(c.bundles.map((b) => b.name), ["ux"]);
+    assert.deepEqual(c.agents[0].entries, ["@ux", "tdd"]);
+
+    r = await gateway.deleteAgent("backend");
+    assert.deepEqual((await gateway.getCatalog()).agents.map((a) => a.name), ["ux-designer"]);
+    await gateway.undoChange(r.change.id);
+    assert.deepEqual((await gateway.getCatalog()).agents.map((a) => a.name), ["ux-designer", "backend"]);
+    await assert.rejects(gateway.deleteAgent("ghost"), "AGENT_NOT_FOUND");
+    await assert.rejects(gateway.deleteBundle("ghost"), "BUNDLE_NOT_FOUND");
+
+    const stale = (await gateway.getCatalog()).versions;
+    server.editOnDisk("agents.json");
+    const err = await assert.rejects(gateway.deleteBundle("ux", { baseVersions: stale }), "CATALOG_CHANGED");
+    assert.equal(describeRefusal(err).changed[0].path, "agents.json");
+    assert.deepEqual((await gateway.getCatalog()).bundles.map((b) => b.name), ["ux"], "nothing was deleted");
+    await gateway.deleteBundle("ux", { baseVersions: stale, force: true });
+    assert.deepEqual((await gateway.getCatalog()).bundles, []);
+  });
+
   contract("an MCP server save sets which agents and projects get it; a delete takes it off them", async () => {
     const { gateway } = subject();
     const server = { name: "linear", transport: "http", url: "https://linear.example/mcp", headers: { Authorization: "Bearer ${LINEAR_TOKEN}" } };

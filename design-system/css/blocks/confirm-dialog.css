@@ -1,0 +1,64 @@
+/*
+ * Confirm dialog — a centred alertdialog over a scrim, for a destructive step
+ * the person confirms by typing a name (the Agents page's delete). A div, not a
+ * native modal <dialog>: the page keeps the focus inside it.
+ * <div class="confirm-scrim"><div class="confirm-dialog" role="alertdialog" aria-modal="true">
+ *   <div class="confirm-body">…</div><div class="confirm-foot">…</div></div></div>
+ */
+
+@layer blocks {
+  .confirm-scrim {
+    position: fixed;
+    inset: 0;
+    z-index: var(--z-dialog);
+    display: grid;
+    place-items: center;
+    padding: var(--space-m);
+    background: var(--color-scrim);
+  }
+
+  .confirm-dialog {
+    display: flex;
+    flex-direction: column;
+    inline-size: min(32rem, 100%);
+    max-block-size: min(40rem, 100%);
+    border: var(--border-width) solid var(--color-line);
+    border-radius: var(--radius-md);
+    background: var(--color-raised);
+    color: var(--color-ink);
+    box-shadow: var(--shadow-float);
+    overflow: hidden;
+
+    & > .confirm-body {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-m);
+      padding: var(--space-xl);
+      overflow-y: auto;
+    }
+
+    & > .confirm-foot {
+      display: flex;
+      justify-content: flex-end;
+      gap: var(--space-s);
+      padding: var(--space-m) var(--space-xl);
+      border-block-start: var(--border-width) solid var(--color-line);
+      background: var(--color-panel);
+    }
+
+    & .confirm-group {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-2xs);
+    }
+
+    & .confirm-items {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--space-xs);
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+  }
+}

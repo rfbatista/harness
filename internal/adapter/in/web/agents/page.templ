@@ -77,6 +77,7 @@ templ Page(frame shell.Frame, v View) {
 			@agentEditorPage(v)
 			@skillFormPage(v)
 			@mcpFormPage(v)
+			@deleteDialog()
 			@saveToast()
 		</main>
 	}
@@ -221,7 +222,7 @@ templ agentDetail() {
 							<a role="menuitem" data-duplicate x-bind:href="detail.duplicateHref">Duplicate…</a>
 							<button type="button" role="menuitem" data-action="copy-path">Copy path</button>
 							<hr role="separator"/>
-							<button type="button" role="menuitem" data-action="delete" data-tone="danger" aria-disabled="true" title="Deleting agents comes later">Delete…</button>
+							<button type="button" role="menuitem" data-action="delete" data-tone="danger">Delete…</button>
 						</div>
 					</div>
 				</div>
@@ -301,7 +302,7 @@ templ agentDetail() {
 }
 
 // actionsMenu is the detail's Edit link and overflow menu (Duplicate, Copy
-// path, Delete). Delete stays off until its dialog exists.
+// path, Delete). Delete opens its dialog.
 templ actionsMenu(what string) {
 	<div class="[ cluster ]">
 		<a
@@ -318,7 +319,7 @@ templ actionsMenu(what string) {
 				<a role="menuitem" data-duplicate x-bind:href={ what + ".duplicateHref" }>Duplicate…</a>
 				<button type="button" role="menuitem" data-action="copy-path">Copy path</button>
 				<hr role="separator"/>
-				<button type="button" role="menuitem" data-action="delete" data-tone="danger" aria-disabled="true" title="Deleting comes later">Delete…</button>
+				<button type="button" role="menuitem" data-action="delete" data-tone="danger">Delete…</button>
 			</div>
 		</div>
 	</div>

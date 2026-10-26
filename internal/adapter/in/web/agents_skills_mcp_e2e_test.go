@@ -95,10 +95,10 @@ func TestSkillsTabFiltersAndShowsASkillItsBodyFilesAndReach_EndToEnd(t *testing.
 		waitUntil(`[...`+detail+`.querySelectorAll('[data-reach="bundles"] a')].map(a => a.textContent.trim() + '=' + a.getAttribute('href')).join() === '@core=/agents/bundles/core'`),
 		waitUntil(detail+`.querySelector('[data-reach="total"]').textContent.trim() === '1 agent in total'`),
 	)
-	b.run("its actions link to the form and the copy, and Delete waits for its ticket",
+	b.run("its actions link to the form and the copy, and Delete is on",
 		waitUntil(detail+`.querySelector('a[data-edit]').getAttribute('href') === '/agents/skills/tdd/edit'`),
 		waitUntil(detail+`.querySelector('a[data-duplicate]').getAttribute('href') === '/agents/skills/new?from=tdd'`),
-		waitUntil(detail+`.querySelector('[data-action=delete]').getAttribute('aria-disabled') === 'true'`),
+		waitUntil(detail+`.querySelector('[data-action=delete]').getAttribute('aria-disabled') === null`),
 		bothSchemes("agents-skill-detail"),
 	)
 	b.run("a deep link to a skill loads it; a name the catalog lacks says so",
@@ -242,11 +242,11 @@ func TestMcpServersTabShowsEachServerAndChecksItsVariablesAgain_EndToEnd(t *test
 		waitUntil(`!`+detail+`.querySelector('[data-unset-banner]')?.checkVisibility()`),
 		waitUntil(`!`+text+`.includes('now-set')`),
 	)
-	b.run("Who gets it lists the agents; Edit, Duplicate and Copy path are there, Delete waits",
+	b.run("Who gets it lists the agents; Edit, Duplicate and Copy path are there, Delete is on",
 		waitUntil(`[...`+detail+`.querySelectorAll('[data-who="agents"] a')].map(a => a.textContent.trim() + '=' + a.getAttribute('href')).join() === 'dev=/agents/dev'`),
 		waitUntil(detail+`.querySelector('a[data-edit]').getAttribute('href') === '/agents/mcp/nb/edit'`),
 		waitUntil(detail+`.querySelector('a[data-duplicate]').getAttribute('href') === '/agents/mcp/new?from=nb'`),
-		waitUntil(detail+`.querySelector('[data-action=delete]').getAttribute('aria-disabled') === 'true'`),
+		waitUntil(detail+`.querySelector('[data-action=delete]').getAttribute('aria-disabled') === null`),
 		bothSchemes("agents-mcp-detail"),
 	)
 	b.run("an http server shows its URL and its headers with their references; its project links to the project's settings",

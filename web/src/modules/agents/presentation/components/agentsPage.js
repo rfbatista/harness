@@ -3,7 +3,7 @@
 // read (data-seed), and this takes over without a flash; with no seed it
 // reads the catalog itself. Choosing a tab moves the address to the tab's
 // route without a reload. The Bundles tab and its editor are mixed in from
-// bundlesTab.js, bundleEditor.js and saveUi.js; the other tabs' editors come
+// bundlesTab.js, bundleEditor.js, saveUi.js and deleteUi.js; the other tabs' editors come
 // with the later tickets.
 //
 //   <main x-data="agentsPage" data-seed="agent-catalog-seed" data-tab="skills" …>
@@ -20,6 +20,7 @@ import { agentEditor } from "./agentEditor.js";
 import { bundleEditor } from "./bundleEditor.js";
 import { bundlesTab } from "./bundlesTab.js";
 import { compose } from "./compose.js";
+import { deleteUi } from "./deleteUi.js";
 import { editors } from "./editors.js";
 import { mcpEditor } from "./mcpEditor.js";
 import { saveUi } from "./saveUi.js";
@@ -38,7 +39,7 @@ const COUNTS = {
 
 /**
  * @param {{
- *   gateway: Pick<import("../../domain/ports.js").CatalogGateway, "decodeCatalog" | "getCatalog" | "getSkill" | "checkEnvVars" | "saveAgent" | "saveBundle" | "saveSkill" | "saveMcpServer" | "testMcpServer" | "listProjects" | "undoChange">,
+ *   gateway: Pick<import("../../domain/ports.js").CatalogGateway, "decodeCatalog" | "getCatalog" | "getSkill" | "checkEnvVars" | "saveAgent" | "saveBundle" | "saveSkill" | "saveMcpServer" | "deleteAgent" | "deleteBundle" | "deleteSkill" | "deleteMcpServer" | "testMcpServer" | "listProjects" | "undoChange">,
  *   history: Pick<History, "pushState"> & Partial<Pick<History, "replaceState">>,
  *   location: Pick<Location, "pathname" | "search"> & Partial<Pick<Location, "hash" | "assign">>,
  *   clipboard?: Pick<Clipboard, "writeText">,
@@ -553,6 +554,10 @@ export const agentsPage = ({ gateway, history, location, clipboard, timers = glo
 
   /** The actions menu chose an item. */
   async menuSelect(event) {
+    if (event.detail.action === "delete") {
+      this.askDelete(event);
+      return;
+    }
     const open = this.detail ?? this.skill ?? this.mcp ?? this.bundle;
     if (event.detail.action !== "copy-path" || !open) return;
     try {
@@ -568,4 +573,4 @@ export const agentsPage = ({ gateway, history, location, clipboard, timers = glo
   { part: agentEditor({ gateway, location, history, timers }), isOpen: (p) => p.agentDraft !== null && !p.mfOpen },
   { part: skillEditor({ gateway, location, timers }), isOpen: (p) => p.sfOpen },
   { part: mcpEditor({ gateway, location, timers }), isOpen: (p) => p.mfOpen },
-), saveUi({ gateway }));
+), saveUi({ gateway }), deleteUi({ gateway, timers }));

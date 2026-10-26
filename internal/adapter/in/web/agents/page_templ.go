@@ -207,6 +207,10 @@ func Page(frame shell.Frame, v View) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
+			templ_7745c5c3_Err = deleteDialog().Render(ctx, templ_7745c5c3_Buffer)
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
 			templ_7745c5c3_Err = saveToast().Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
@@ -253,7 +257,7 @@ func tab(t Tab, v View) templ.Component {
 		var templ_7745c5c3_Var10 string
 		templ_7745c5c3_Var10, templ_7745c5c3_Err = templ.ResolveAttributeValue("agents-tab-" + t.ID)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `page.templ`, Line: 88, Col: 27}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `page.templ`, Line: 89, Col: 27}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var10)
 		if templ_7745c5c3_Err != nil {
@@ -266,7 +270,7 @@ func tab(t Tab, v View) templ.Component {
 		var templ_7745c5c3_Var11 templ.SafeURL
 		templ_7745c5c3_Var11, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL(t.Href))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `page.templ`, Line: 89, Col: 30}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `page.templ`, Line: 90, Col: 30}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var11))
 		if templ_7745c5c3_Err != nil {
@@ -279,7 +283,7 @@ func tab(t Tab, v View) templ.Component {
 		var templ_7745c5c3_Var12 string
 		templ_7745c5c3_Var12, templ_7745c5c3_Err = templ.ResolveAttributeValue(t.ID)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `page.templ`, Line: 90, Col: 17}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `page.templ`, Line: 91, Col: 17}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var12)
 		if templ_7745c5c3_Err != nil {
@@ -292,7 +296,7 @@ func tab(t Tab, v View) templ.Component {
 		var templ_7745c5c3_Var13 string
 		templ_7745c5c3_Var13, templ_7745c5c3_Err = templ.ResolveAttributeValue("agents-panel-" + t.ID)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `page.templ`, Line: 91, Col: 40}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `page.templ`, Line: 92, Col: 40}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var13)
 		if templ_7745c5c3_Err != nil {
@@ -305,7 +309,7 @@ func tab(t Tab, v View) templ.Component {
 		var templ_7745c5c3_Var14 string
 		templ_7745c5c3_Var14, templ_7745c5c3_Err = templ.ResolveAttributeValue("tabState." + t.ID + ".selected")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `page.templ`, Line: 92, Col: 57}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `page.templ`, Line: 93, Col: 57}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var14)
 		if templ_7745c5c3_Err != nil {
@@ -318,7 +322,7 @@ func tab(t Tab, v View) templ.Component {
 		var templ_7745c5c3_Var15 string
 		templ_7745c5c3_Var15, templ_7745c5c3_Err = templ.ResolveAttributeValue("tabState." + t.ID + ".tabindex")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `page.templ`, Line: 93, Col: 52}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `page.templ`, Line: 94, Col: 52}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var15)
 		if templ_7745c5c3_Err != nil {
@@ -346,7 +350,7 @@ func tab(t Tab, v View) templ.Component {
 		var templ_7745c5c3_Var16 string
 		templ_7745c5c3_Var16, templ_7745c5c3_Err = templ.JoinStringErrs(t.Label)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `page.templ`, Line: 104, Col: 11}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `page.templ`, Line: 105, Col: 11}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var16))
 		if templ_7745c5c3_Err != nil {
@@ -359,7 +363,7 @@ func tab(t Tab, v View) templ.Component {
 		var templ_7745c5c3_Var17 string
 		templ_7745c5c3_Var17, templ_7745c5c3_Err = templ.ResolveAttributeValue(t.ID)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `page.templ`, Line: 105, Col: 61}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `page.templ`, Line: 106, Col: 61}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var17)
 		if templ_7745c5c3_Err != nil {
@@ -372,7 +376,7 @@ func tab(t Tab, v View) templ.Component {
 		var templ_7745c5c3_Var18 string
 		templ_7745c5c3_Var18, templ_7745c5c3_Err = templ.ResolveAttributeValue("tabState." + t.ID + ".count")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `page.templ`, Line: 105, Col: 102}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `page.templ`, Line: 106, Col: 102}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var18)
 		if templ_7745c5c3_Err != nil {
@@ -385,7 +389,7 @@ func tab(t Tab, v View) templ.Component {
 		var templ_7745c5c3_Var19 string
 		templ_7745c5c3_Var19, templ_7745c5c3_Err = templ.JoinStringErrs(v.Count(t.ID))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `page.templ`, Line: 105, Col: 120}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `page.templ`, Line: 106, Col: 120}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var19))
 		if templ_7745c5c3_Err != nil {
@@ -430,7 +434,7 @@ func panel(t Tab, v View) templ.Component {
 		var templ_7745c5c3_Var21 string
 		templ_7745c5c3_Var21, templ_7745c5c3_Err = templ.ResolveAttributeValue("agents-panel-" + t.ID)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `page.templ`, Line: 115, Col: 29}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `page.templ`, Line: 116, Col: 29}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var21)
 		if templ_7745c5c3_Err != nil {
@@ -443,7 +447,7 @@ func panel(t Tab, v View) templ.Component {
 		var templ_7745c5c3_Var22 string
 		templ_7745c5c3_Var22, templ_7745c5c3_Err = templ.ResolveAttributeValue("agents-tab-" + t.ID)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `page.templ`, Line: 116, Col: 40}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `page.templ`, Line: 117, Col: 40}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var22)
 		if templ_7745c5c3_Err != nil {
@@ -456,7 +460,7 @@ func panel(t Tab, v View) templ.Component {
 		var templ_7745c5c3_Var23 string
 		templ_7745c5c3_Var23, templ_7745c5c3_Err = templ.ResolveAttributeValue("tabState." + t.ID + ".hidden")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `page.templ`, Line: 119, Col: 48}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `page.templ`, Line: 120, Col: 48}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var23)
 		if templ_7745c5c3_Err != nil {
@@ -520,7 +524,7 @@ func panel(t Tab, v View) templ.Component {
 			var templ_7745c5c3_Var24 string
 			templ_7745c5c3_Var24, templ_7745c5c3_Err = templ.JoinStringErrs(v.ItemNote())
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `page.templ`, Line: 145, Col: 18}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `page.templ`, Line: 146, Col: 18}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var24))
 			if templ_7745c5c3_Err != nil {
@@ -598,7 +602,7 @@ func agentDetail() templ.Component {
 			templ_7745c5c3_Var26 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 45, "<div class=\"[ library-detail-inner ]\" data-agent-detail><a href=\"/agents\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" data-split-back x-on:click=\"backToList\">All agents</a><div class=\"[ detail-head ]\"><div class=\"[ repel ]\"><div class=\"[ cluster ]\"><h2 x-text=\"detail.key\"></h2><template x-for=\"alias in detail.aliases\" x-bind:key=\"alias\"><span class=\"[ badge ]\">alias: <span x-text=\"alias\"></span></span></template><span class=\"[ badge ]\" data-tone=\"attention\" x-bind:hidden=\"!detail.noDescription\">No description</span></div><div class=\"[ cluster ]\"><a class=\"[ button ]\" data-edit x-bind:href=\"detail.editHref\">Edit</a><div class=\"[ menu ]\" x-data=\"menu\" data-align=\"end\" x-on:menu-select=\"menuSelect\"><button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" aria-label=\"More actions\">⋯</button><div class=\"[ popup ]\" role=\"menu\"><a role=\"menuitem\" data-duplicate x-bind:href=\"detail.duplicateHref\">Duplicate…</a> <button type=\"button\" role=\"menuitem\" data-action=\"copy-path\">Copy path</button><hr role=\"separator\"><button type=\"button\" role=\"menuitem\" data-action=\"delete\" data-tone=\"danger\" aria-disabled=\"true\" title=\"Deleting agents comes later\">Delete…</button></div></div></div></div><code class=\"[ library-path ]\" data-path x-text=\"detail.path\"></code></div><div class=\"[ banner ]\" data-tone=\"attention\" data-no-description x-bind:hidden=\"!detail.noDescription\"><div class=\"[ grow ]\"><strong>No description.</strong> The agent picker shows it, and the editor asks for one before it saves.</div><a class=\"[ button ]\" data-size=\"sm\" x-bind:href=\"detail.change.identity\">Add a description</a></div><p x-bind:hidden=\"detail.noDescription\" x-text=\"detail.description\"></p><template x-for=\"p in detailProblems\" x-bind:key=\"p.message\"><div class=\"[ banner ]\" data-tone=\"danger\"><div class=\"[ grow ]\" x-text=\"p.message\"></div></div></template><section aria-labelledby=\"agent-skills-h\"><div class=\"[ repel ] [ section-title ]\"><h3 id=\"agent-skills-h\" data-skills-heading x-text=\"detail.skillsHeading\"></h3><a class=\"[ text-sm ]\" data-change=\"skills\" x-bind:href=\"detail.change.skills\">Change</a></div><template x-for=\"group in groups\" x-bind:key=\"group.name\"><div class=\"[ bundle-group ]\" data-bundle-group><div class=\"[ bundle-head ]\"><button type=\"button\" x-bind:data-group=\"group.name\" x-bind:aria-expanded=\"group.expanded\" x-on:click=\"toggleGroup\"><span class=\"[ caret ]\" aria-hidden=\"true\"></span> <span class=\"[ chip ]\" data-kind=\"bundle\" x-text=\"group.name\"></span> <span class=\"[ text-sm color-ink-muted ]\" x-text=\"group.sizeLabel\"></span></button> <a class=\"[ text-xs ]\" x-bind:href=\"group.href\">Open bundle</a></div><div class=\"[ bundle-entries ]\" data-bundle-entries x-bind:hidden=\"group.closed\"><template x-for=\"e in group.entries\" x-bind:key=\"e.label\"><a class=\"[ skill-link ]\" x-bind:href=\"e.href\" x-bind:data-missing=\"e.missing\" x-text=\"e.label\"></a></template></div></div></template><div class=\"[ cluster ]\" style=\"--gutter: var(--space-xs)\"><template x-for=\"s in detail.singles\" x-bind:key=\"s.name\"><a class=\"[ skill-link ]\" data-single-skill x-bind:href=\"s.href\" x-bind:data-missing=\"s.missing\" x-text=\"s.name\"></a></template></div><p class=\"[ text-xs color-ink-muted ]\" x-bind:hidden=\"!detail.droppedNote\" x-text=\"detail.droppedNote\"></p></section><section aria-labelledby=\"agent-mcp-h\"><div class=\"[ repel ] [ section-title ]\"><h3 id=\"agent-mcp-h\" data-mcp-heading x-text=\"detail.mcpHeading\"></h3><a class=\"[ text-sm ]\" data-change=\"mcp\" x-bind:href=\"detail.change.mcp\">Change</a></div><p class=\"[ text-xs color-ink-muted ]\" data-no-servers x-bind:hidden=\"!detail.noServers\">No MCP servers. A session still gets its project's servers.</p><ul class=\"[ server-list ]\" x-bind:hidden=\"detail.noServers\"><template x-for=\"server in detail.servers\" x-bind:key=\"server.name\"><li data-mcp-server><a class=\"[ font-mono ]\" x-bind:href=\"server.href\" x-text=\"server.name\"></a> <span class=\"[ badge ]\" x-bind:hidden=\"!server.found\" x-text=\"server.transport\"></span> <span class=\"[ badge ]\" data-tone=\"danger\" x-bind:hidden=\"server.found\">not in the catalog</span><template x-for=\"ref in server.refs\" x-bind:key=\"ref.label\"><span class=\"[ badge ]\" x-bind:data-tone=\"ref.tone\"><code x-text=\"ref.label\"></code> <span x-text=\"ref.state\"></span></span></template></li></template></ul><p class=\"[ text-xs color-ink-muted ]\" x-bind:hidden=\"detail.noServers\">Servers are defined once, in the MCP servers tab. A session also gets its project's servers.</p></section><section aria-labelledby=\"agent-tools-h\"><div class=\"[ repel ] [ section-title ]\"><h3 id=\"agent-tools-h\">Allowed tools</h3><a class=\"[ text-sm ]\" data-change=\"tools\" x-bind:href=\"detail.change.tools\">Change</a></div><p class=\"[ color-ink-muted text-sm ]\" data-tools-default x-bind:hidden=\"!detail.toolsDefault\">None listed, so sessions get Claude's default tools.</p><div class=\"[ cluster ]\" style=\"--gutter: var(--space-xs)\"><template x-for=\"tool in detail.tools\" x-bind:key=\"tool\"><span class=\"[ chip font-mono ]\" data-tool x-text=\"tool\"></span></template></div></section></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 45, "<div class=\"[ library-detail-inner ]\" data-agent-detail><a href=\"/agents\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" data-split-back x-on:click=\"backToList\">All agents</a><div class=\"[ detail-head ]\"><div class=\"[ repel ]\"><div class=\"[ cluster ]\"><h2 x-text=\"detail.key\"></h2><template x-for=\"alias in detail.aliases\" x-bind:key=\"alias\"><span class=\"[ badge ]\">alias: <span x-text=\"alias\"></span></span></template><span class=\"[ badge ]\" data-tone=\"attention\" x-bind:hidden=\"!detail.noDescription\">No description</span></div><div class=\"[ cluster ]\"><a class=\"[ button ]\" data-edit x-bind:href=\"detail.editHref\">Edit</a><div class=\"[ menu ]\" x-data=\"menu\" data-align=\"end\" x-on:menu-select=\"menuSelect\"><button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" aria-label=\"More actions\">⋯</button><div class=\"[ popup ]\" role=\"menu\"><a role=\"menuitem\" data-duplicate x-bind:href=\"detail.duplicateHref\">Duplicate…</a> <button type=\"button\" role=\"menuitem\" data-action=\"copy-path\">Copy path</button><hr role=\"separator\"><button type=\"button\" role=\"menuitem\" data-action=\"delete\" data-tone=\"danger\">Delete…</button></div></div></div></div><code class=\"[ library-path ]\" data-path x-text=\"detail.path\"></code></div><div class=\"[ banner ]\" data-tone=\"attention\" data-no-description x-bind:hidden=\"!detail.noDescription\"><div class=\"[ grow ]\"><strong>No description.</strong> The agent picker shows it, and the editor asks for one before it saves.</div><a class=\"[ button ]\" data-size=\"sm\" x-bind:href=\"detail.change.identity\">Add a description</a></div><p x-bind:hidden=\"detail.noDescription\" x-text=\"detail.description\"></p><template x-for=\"p in detailProblems\" x-bind:key=\"p.message\"><div class=\"[ banner ]\" data-tone=\"danger\"><div class=\"[ grow ]\" x-text=\"p.message\"></div></div></template><section aria-labelledby=\"agent-skills-h\"><div class=\"[ repel ] [ section-title ]\"><h3 id=\"agent-skills-h\" data-skills-heading x-text=\"detail.skillsHeading\"></h3><a class=\"[ text-sm ]\" data-change=\"skills\" x-bind:href=\"detail.change.skills\">Change</a></div><template x-for=\"group in groups\" x-bind:key=\"group.name\"><div class=\"[ bundle-group ]\" data-bundle-group><div class=\"[ bundle-head ]\"><button type=\"button\" x-bind:data-group=\"group.name\" x-bind:aria-expanded=\"group.expanded\" x-on:click=\"toggleGroup\"><span class=\"[ caret ]\" aria-hidden=\"true\"></span> <span class=\"[ chip ]\" data-kind=\"bundle\" x-text=\"group.name\"></span> <span class=\"[ text-sm color-ink-muted ]\" x-text=\"group.sizeLabel\"></span></button> <a class=\"[ text-xs ]\" x-bind:href=\"group.href\">Open bundle</a></div><div class=\"[ bundle-entries ]\" data-bundle-entries x-bind:hidden=\"group.closed\"><template x-for=\"e in group.entries\" x-bind:key=\"e.label\"><a class=\"[ skill-link ]\" x-bind:href=\"e.href\" x-bind:data-missing=\"e.missing\" x-text=\"e.label\"></a></template></div></div></template><div class=\"[ cluster ]\" style=\"--gutter: var(--space-xs)\"><template x-for=\"s in detail.singles\" x-bind:key=\"s.name\"><a class=\"[ skill-link ]\" data-single-skill x-bind:href=\"s.href\" x-bind:data-missing=\"s.missing\" x-text=\"s.name\"></a></template></div><p class=\"[ text-xs color-ink-muted ]\" x-bind:hidden=\"!detail.droppedNote\" x-text=\"detail.droppedNote\"></p></section><section aria-labelledby=\"agent-mcp-h\"><div class=\"[ repel ] [ section-title ]\"><h3 id=\"agent-mcp-h\" data-mcp-heading x-text=\"detail.mcpHeading\"></h3><a class=\"[ text-sm ]\" data-change=\"mcp\" x-bind:href=\"detail.change.mcp\">Change</a></div><p class=\"[ text-xs color-ink-muted ]\" data-no-servers x-bind:hidden=\"!detail.noServers\">No MCP servers. A session still gets its project's servers.</p><ul class=\"[ server-list ]\" x-bind:hidden=\"detail.noServers\"><template x-for=\"server in detail.servers\" x-bind:key=\"server.name\"><li data-mcp-server><a class=\"[ font-mono ]\" x-bind:href=\"server.href\" x-text=\"server.name\"></a> <span class=\"[ badge ]\" x-bind:hidden=\"!server.found\" x-text=\"server.transport\"></span> <span class=\"[ badge ]\" data-tone=\"danger\" x-bind:hidden=\"server.found\">not in the catalog</span><template x-for=\"ref in server.refs\" x-bind:key=\"ref.label\"><span class=\"[ badge ]\" x-bind:data-tone=\"ref.tone\"><code x-text=\"ref.label\"></code> <span x-text=\"ref.state\"></span></span></template></li></template></ul><p class=\"[ text-xs color-ink-muted ]\" x-bind:hidden=\"detail.noServers\">Servers are defined once, in the MCP servers tab. A session also gets its project's servers.</p></section><section aria-labelledby=\"agent-tools-h\"><div class=\"[ repel ] [ section-title ]\"><h3 id=\"agent-tools-h\">Allowed tools</h3><a class=\"[ text-sm ]\" data-change=\"tools\" x-bind:href=\"detail.change.tools\">Change</a></div><p class=\"[ color-ink-muted text-sm ]\" data-tools-default x-bind:hidden=\"!detail.toolsDefault\">None listed, so sessions get Claude's default tools.</p><div class=\"[ cluster ]\" style=\"--gutter: var(--space-xs)\"><template x-for=\"tool in detail.tools\" x-bind:key=\"tool\"><span class=\"[ chip font-mono ]\" data-tool x-text=\"tool\"></span></template></div></section></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -607,7 +611,7 @@ func agentDetail() templ.Component {
 }
 
 // actionsMenu is the detail's Edit link and overflow menu (Duplicate, Copy
-// path, Delete). Delete stays off until its dialog exists.
+// path, Delete). Delete opens its dialog.
 func actionsMenu(what string) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
@@ -636,7 +640,7 @@ func actionsMenu(what string) templ.Component {
 		var templ_7745c5c3_Var28 string
 		templ_7745c5c3_Var28, templ_7745c5c3_Err = templ.ResolveAttributeValue(what + ".editHref")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `page.templ`, Line: 310, Col: 35}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `page.templ`, Line: 311, Col: 35}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var28)
 		if templ_7745c5c3_Err != nil {
@@ -659,13 +663,13 @@ func actionsMenu(what string) templ.Component {
 		var templ_7745c5c3_Var29 string
 		templ_7745c5c3_Var29, templ_7745c5c3_Err = templ.ResolveAttributeValue(what + ".duplicateHref")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `page.templ`, Line: 318, Col: 75}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `page.templ`, Line: 319, Col: 75}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var29)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 50, "\">Duplicate…</a> <button type=\"button\" role=\"menuitem\" data-action=\"copy-path\">Copy path</button><hr role=\"separator\"><button type=\"button\" role=\"menuitem\" data-action=\"delete\" data-tone=\"danger\" aria-disabled=\"true\" title=\"Deleting comes later\">Delete…</button></div></div></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 50, "\">Duplicate…</a> <button type=\"button\" role=\"menuitem\" data-action=\"copy-path\">Copy path</button><hr role=\"separator\"><button type=\"button\" role=\"menuitem\" data-action=\"delete\" data-tone=\"danger\">Delete…</button></div></div></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
