@@ -429,6 +429,14 @@ func (s *Service) prepare(ctx context.Context, in prepareInput) (*prepared, erro
 	if err != nil {
 		return nil, err
 	}
+	if ag.agent != nil && !proj.AgentEnabled(ag.agent.Name) {
+		if ag.cleanup != nil {
+			ag.cleanup()
+		}
+		// The code leads the message: MCP clients see only the message.
+		return nil, &domain.StructuredError{Code: "AGENT_NOT_ENABLED",
+			Message: "AGENT_NOT_ENABLED: agent " + ag.agent.Name + " is not enabled in project " + proj.Name}
+	}
 
 	if err := s.ready(ctx); err != nil {
 		if ag.cleanup != nil {

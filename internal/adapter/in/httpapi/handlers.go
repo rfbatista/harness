@@ -421,9 +421,21 @@ func (h *Handler) handleListAgents(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	out := make([]*mcp.AgentDTO, len(agents))
-	for i, a := range agents {
-		out[i] = mcp.AgentToDTO(a)
+	// With a project_id, only the agents the project enables (ADR 0038).
+	var project *domain.Project
+	if id := c.QueryParam("project_id"); id != "" {
+		if h.projects == nil {
+			return echo.NewHTTPError(http.StatusServiceUnavailable, "projects not configured")
+		}
+		if project, err = h.projects.GetProject(c.Request().Context(), id); err != nil {
+			return err
+		}
+	}
+	out := make([]*mcp.AgentDTO, 0, len(agents))
+	for _, a := range agents {
+		if project == nil || project.AgentEnabled(a.Name) {
+			out = append(out, mcp.AgentToDTO(a))
+		}
 	}
 	return c.JSON(http.StatusOK, mcp.ListAgentsOut{Agents: out})
 }

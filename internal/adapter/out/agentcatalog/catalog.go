@@ -84,6 +84,10 @@ type Projects interface {
 // and writes. Without it, no project has any.
 func WithProjects(p Projects) Option { return func(c *Catalog) { c.projects = p } }
 
+// UseProjects gives the catalog its projects after it was built, for wiring
+// where the projects need the catalog first.
+func (c *Catalog) UseProjects(p Projects) { c.projects = p }
+
 // WithProber sets how an MCP server is tested.
 func WithProber(p mcpserver.Prober) Option { return func(c *Catalog) { c.prober = p } }
 

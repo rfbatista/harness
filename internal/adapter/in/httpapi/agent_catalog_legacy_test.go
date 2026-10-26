@@ -25,13 +25,16 @@ func legacyFixture(t *testing.T) *catalogFixture {
 	}
 	f := &catalogFixture{t: t, env: map[string]string{}}
 	f.dir = t.TempDir() + "/agents"
+	f.projects = nil
 	cat := agentcatalog.New(f.dir)
 	deps := catalog.SQLiteDeps(db)
 	deps.Agents = catalogstore.NewAgents(cat)
 	deps.Skills = catalogstore.NewSkills(cat)
 	deps.MCPServers = catalogstore.NewMCPServers(cat)
 	app := catalog.New(deps)
-	f.router = NewRouter(NewHandler(Services{Catalog: cat, Agents: app.Agents, Capabilities: app.Capabilities}))
+	f.projects = app.Projects
+	cat.UseProjects(app.Projects)
+	f.router = NewRouter(NewHandler(Services{Catalog: cat, Agents: app.Agents, Capabilities: app.Capabilities, Projects: app.Projects}))
 	return f
 }
 
@@ -223,5 +226,37 @@ func (f *catalogFixture) del(path string, body any) {
 	f.t.Helper()
 	if rec := f.postRaw(path, body); rec.Code != http.StatusNoContent {
 		f.t.Fatalf("POST %s = %d: %s", path, rec.Code, rec.Body.String())
+	}
+}
+
+func TestListAgents_WithAProjectOffersOnlyItsEnabledAgents(t *testing.T) {
+	f := legacyFixture(t)
+	f.write("agents.json", `{"agents":{"a":{"description":"d"},"b":{"description":"d"}}}`)
+	all, sel := f.project("All"), f.project("Selected")
+	f.post("/api/set_project_agents", map[string]any{"project_id": sel, "mode": "selected", "agents": []string{"b"}}, 200)
+
+	names := func(path string) []string {
+		_, body := f.rawGet(path)
+		var out mcp.ListAgentsOut
+		if err := json.Unmarshal(body, &out); err != nil {
+			t.Fatal(err)
+		}
+		var n []string
+		for _, a := range out.Agents {
+			n = append(n, a.Name)
+		}
+		return n
+	}
+	if got := names("/api/list_agents"); !reflect.DeepEqual(got, []string{"a", "b"}) {
+		t.Fatalf("unfiltered = %v", got)
+	}
+	if got := names("/api/list_agents?project_id=" + all); !reflect.DeepEqual(got, []string{"a", "b"}) {
+		t.Fatalf("all project = %v", got)
+	}
+	if got := names("/api/list_agents?project_id=" + sel); !reflect.DeepEqual(got, []string{"b"}) {
+		t.Fatalf("selected project = %v", got)
+	}
+	if code, _ := f.rawGet("/api/list_agents?project_id=nope"); code != 404 {
+		t.Fatalf("unknown project = %d", code)
 	}
 }

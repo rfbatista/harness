@@ -126,3 +126,39 @@ func TestSessionStart_TheVariablesItsServersNameReachTheClaudeProcess(t *testing
 		}
 	}
 }
+
+// A project that enables a selected list refuses a session as any other agent
+// (ADR 0038), before anything is provisioned.
+func TestSessionStart_RefusesAnAgentTheProjectDoesNotEnable(t *testing.T) {
+	svc, res := catalogWorld(t)
+	prov := svc.workspaces.(*fakeProvisioner)
+	res.proj.EnabledAgentsMode = domain.AgentsSelected
+	res.proj.EnabledAgents = []string{"someone-else"}
+
+	_, _, err := svc.StartInteractive(t.Context(), InteractiveRequest{ProjectID: "p1", RepositoryID: "r1", TicketID: "tk1", AgentID: "a1"})
+	if codeOf(err) != "AGENT_NOT_ENABLED" || !strings.HasPrefix(err.Error(), "AGENT_NOT_ENABLED:") {
+		t.Fatalf("interactive err = %v", err)
+	}
+	_, err = svc.Start(t.Context(), StartRequest{ProjectID: "p1", RepositoryID: "r1", TicketID: "tk1", Task: "x", AgentID: "a1"})
+	if codeOf(err) != "AGENT_NOT_ENABLED" {
+		t.Fatalf("headless err = %v", err)
+	}
+	if len(prov.created) != 0 {
+		t.Fatalf("a refused start provisioned a worktree: %v", prov.created)
+	}
+
+	// Enabled, and plain claude, start.
+	res.proj.EnabledAgents = []string{"backend"}
+	if _, _, err := svc.StartInteractive(t.Context(), InteractiveRequest{ProjectID: "p1", RepositoryID: "r1", TicketID: "tk1", AgentID: "a1"}); err != nil {
+		t.Fatalf("enabled agent: %v", err)
+	}
+	res.proj.EnabledAgents = nil
+	if _, _, err := svc.StartInteractive(t.Context(), InteractiveRequest{ProjectID: "p1", RepositoryID: "r1", TicketID: "tk1"}); err != nil {
+		t.Fatalf("no agent: %v", err)
+	}
+	// All mode enables every agent.
+	res.proj.EnabledAgentsMode = domain.AgentsAll
+	if _, _, err := svc.StartInteractive(t.Context(), InteractiveRequest{ProjectID: "p1", RepositoryID: "r1", TicketID: "tk1", AgentID: "a1"}); err != nil {
+		t.Fatalf("all mode: %v", err)
+	}
+}
