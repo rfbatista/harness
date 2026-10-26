@@ -43,7 +43,7 @@ type CatalogAgent struct {
 	AllowedTools      []string `json:"allowed_tools"`
 	// EnabledIn are the projects where the agent is enabled (ADR 0038).
 	EnabledIn []CatalogEnabledIn `json:"enabled_in"`
-	Problems  []CatalogProblem    `json:"problems"`
+	Problems  []CatalogProblem   `json:"problems"`
 }
 
 // CatalogBundle is a named list of skills and other bundles.
