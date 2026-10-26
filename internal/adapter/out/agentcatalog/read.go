@@ -404,7 +404,7 @@ func readSkillFolder(dir string) ([]domain.CatalogSkillFile, string, error) {
 		if err != nil {
 			return err
 		}
-		if p != dir {
+		if p != dir && !strings.HasPrefix(d.Name(), tempPrefix) {
 			paths = append(paths, p)
 		}
 		return nil

@@ -44,7 +44,7 @@ func (c *Catalog) skillFiles(name string) (map[string][]byte, error) {
 		if err != nil {
 			return err
 		}
-		if d.IsDir() {
+		if d.IsDir() || strings.HasPrefix(d.Name(), tempPrefix) {
 			return nil
 		}
 		data, err := os.ReadFile(p)
@@ -135,7 +135,7 @@ func (c *Catalog) SaveCatalogSkill(in domain.SaveCatalogSkill) (*domain.CatalogW
 		return nil, invalid("description", fmt.Sprintf("a skill description is at most %d characters", maxSkillDescription))
 	}
 	prev := in.PreviousName
-	if prev != "" && !c.skillExists(prev) {
+	if prev != "" && !c.skillExists(prev) { // also false for a name that is not a slug
 		return nil, &domain.StructuredError{Code: "SKILL_NOT_FOUND", Message: "skill " + prev + " not found"}
 	}
 	if (prev == "" || prev != sk.Name) && c.skillExists(sk.Name) {

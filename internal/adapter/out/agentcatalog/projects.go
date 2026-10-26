@@ -131,6 +131,7 @@ func (c *Catalog) SetProjectMCPServers(_ context.Context, in domain.SetCatalogPr
 	if err := c.setProjectNames(in.ProjectID, names); err != nil {
 		return nil, err
 	}
+	c.last = nil // the latest change is no longer the latest write
 	c.publish([]string{"projects/" + in.ProjectID})
 	return &domain.CatalogProjectMCPServers{MCPServers: names}, nil
 }
@@ -186,6 +187,7 @@ func (c *Catalog) SetProjectAgents(ctx context.Context, in domain.SetCatalogProj
 	if _, err := c.projects.SetProjectAgents(ctx, in.ProjectID, in.Mode, names); err != nil {
 		return nil, err
 	}
+	c.last = nil
 	c.publish([]string{"projects/" + in.ProjectID})
 	return &domain.CatalogProjectAgents{Mode: in.Mode, Agents: names}, nil
 }

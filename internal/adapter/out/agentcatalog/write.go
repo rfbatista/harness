@@ -323,6 +323,9 @@ func (c *Catalog) applyAll(edits []*fileEdit, projects []*projectEdit) error {
 // the file when data is nil. Folders left empty by a removal go too.
 func (c *Catalog) writeFile(path string, data []byte) error {
 	full := filepath.Join(c.root, filepath.FromSlash(path))
+	if rel, err := filepath.Rel(c.root, full); err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return domain.NewCatalogError("INVALID_INPUT", "a path leaves the catalog folder: "+path, map[string]any{"field": "path"})
+	}
 	if data == nil {
 		if err := os.Remove(full); err != nil && !errors.Is(err, os.ErrNotExist) {
 			return err
@@ -333,13 +336,14 @@ func (c *Catalog) writeFile(path string, data []byte) error {
 	if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
 		return err
 	}
-	tmp, err := os.CreateTemp(filepath.Dir(full), ".catalog-*")
+	tmp, err := os.CreateTemp(filepath.Dir(full), tempPrefix+"*")
 	if err != nil {
 		return err
 	}
 	_, werr := tmp.Write(data)
+	serr := tmp.Sync()
 	cerr := tmp.Close()
-	if err := errors.Join(werr, cerr); err != nil {
+	if err := errors.Join(werr, serr, cerr); err != nil {
 		_ = os.Remove(tmp.Name())
 		return err
 	}

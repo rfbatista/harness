@@ -27,6 +27,8 @@ const (
 	mcpServersFile = "mcp-servers.json"
 	skillsDir      = "skills"
 	skillFileName  = "SKILL.md"
+	// tempPrefix starts the name of a file being written, before its rename.
+	tempPrefix = ".catalog-"
 )
 
 var (

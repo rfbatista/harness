@@ -5,11 +5,15 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/rfbatista/harnesskit/mcpserver"
 
 	"operators-mcp/internal/domain"
 )
+
+// probeTimeout bounds one test of an MCP server.
+const probeTimeout = 20 * time.Second
 
 // serverTransport is the transport of a saved server: stdio, http or sse.
 func serverTransport(s domain.CatalogServerInput) (string, error) {
@@ -161,9 +165,18 @@ func (c *Catalog) SaveCatalogMCPServer(in domain.SaveCatalogMCPServer) (*domain.
 		serverNode(servers.get(s.Name), s, transport)
 		refs := 0
 		for _, m := range t.agentsMap().members {
-			if list := m.val.get("mcp_servers"); list != nil && setMembership(list, prev, false) {
-				list.items = append(list.items, scalarOf(s.Name))
-				refs++
+			if list := m.val.get("mcp_servers"); list != nil {
+				for _, it := range list.items {
+					if it.kind == 's' && it.str() == prev {
+						if contains(list.strs(), s.Name) {
+							setMembership(list, prev, false)
+						} else {
+							*it = *scalarOf(s.Name)
+						}
+						refs++
+						break
+					}
+				}
 			}
 		}
 		for _, p := range t.projectLists() {
@@ -331,6 +344,8 @@ func (c *Catalog) TestCatalogMCPServer(ctx context.Context, in domain.TestCatalo
 		}
 	}
 
+	ctx, cancel := context.WithTimeout(ctx, probeTimeout)
+	defer cancel()
 	res, perr := c.prober.Probe(ctx, srv)
 	if perr != nil && res.Error == "" {
 		res.Error = perr.Error()

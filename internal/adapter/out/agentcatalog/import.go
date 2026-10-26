@@ -70,7 +70,13 @@ func (c *Catalog) catalogIsEmpty() (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	return len(entries) == 0, nil
+	// A stray .DS_Store is not content.
+	for _, e := range entries {
+		if !strings.HasPrefix(e.Name(), ".") {
+			return false, nil
+		}
+	}
+	return true, nil
 }
 
 // Import fills a missing or empty catalog from src, once. A catalog that has
@@ -170,11 +176,31 @@ func (c *Catalog) writeImport(files map[string]importFile) error {
 	if err := os.MkdirAll(filepath.Dir(c.root), 0o755); err != nil {
 		return err
 	}
-	// An empty folder is replaced by the rename on POSIX; remove it anyway.
-	if err := os.Remove(c.root); err != nil && !errors.Is(err, os.ErrNotExist) {
+	entries, err := os.ReadDir(c.root)
+	if errors.Is(err, os.ErrNotExist) {
+		return os.Rename(tmp, c.root)
+	}
+	if err != nil {
 		return err
 	}
-	return os.Rename(tmp, c.root)
+	// The folder exists with nothing but dotfiles in it: what was written moves
+	// in beside them.
+	if len(entries) == 0 {
+		if err := os.Remove(c.root); err != nil {
+			return err
+		}
+		return os.Rename(tmp, c.root)
+	}
+	moved, err := os.ReadDir(tmp)
+	if err != nil {
+		return err
+	}
+	for _, e := range moved {
+		if err := os.Rename(filepath.Join(tmp, e.Name()), filepath.Join(c.root, e.Name())); err != nil {
+			return err
+		}
+	}
+	return os.Remove(tmp)
 }
 
 // importRepo reads the repository's agents/ folder: agents.json kept as it
@@ -216,6 +242,10 @@ func (c *Catalog) importRepo(dir string, agentsRoot, servers *node, files map[st
 		if mcp != "self" {
 			folder = mcp
 		}
+		if folder != filepath.Base(folder) || folder == ".." || folder == "." {
+			rep.Dropped = append(rep.Dropped, "agent "+key+": its mcp folder "+folder+" is not a folder of agents/")
+			continue
+		}
 		path := filepath.Join(dir, folder, ".mcp.json")
 		names, seen := loadedFiles[path]
 		if !seen {
@@ -230,6 +260,9 @@ func (c *Catalog) importRepo(dir string, agentsRoot, servers *node, files map[st
 			continue
 		}
 		list := m.val.get("mcp_servers")
+		if list == nil {
+			list = newArray()
+		}
 		m.val.remove("mcp_servers")
 		m.val.rename("mcp", "mcp_servers")
 		m.val.set("mcp_servers", list)

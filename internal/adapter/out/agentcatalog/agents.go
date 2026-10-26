@@ -33,6 +33,9 @@ func nameTaken(kind, name string, taken func(string) bool) error {
 }
 
 func (c *Catalog) skillExists(name string) bool {
+	if !slugRe.MatchString(name) {
+		return false
+	}
 	info, err := os.Stat(filepath.Join(c.root, skillsDir, name))
 	return err == nil && info.IsDir()
 }
