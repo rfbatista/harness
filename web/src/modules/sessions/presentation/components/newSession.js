@@ -214,7 +214,7 @@ export const newSession = ({ gateway, debounceMs = 300 }) => (projectId = "", ti
       case "taken":
         return `${c.name} already exists on this repository. An existing branch is never reused.`;
       case "invalid":
-        return `Not a valid branch name: ${c.reason}.`;
+        return `Not a valid branch name: ${c.reason.replace(/\.$/, "")}.`;
       default:
         return "";
     }

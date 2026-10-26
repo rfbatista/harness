@@ -36,7 +36,7 @@ function make({ offers = {}, outcome, last = null, target } = {}) {
   const gateway = {
     async offer(id, target) {
       calls.push(["offer", id, target]);
-      return offers[target] ?? offers[""] ?? offerFor(target || "main");
+      return offers[target] ?? (target ? offerFor(target) : (offers[""] ?? offerFor("main")));
     },
     async merge(id, request) {
       calls.push(["merge", id, request]);
@@ -57,6 +57,13 @@ test("a session a merge applies to offers the button, named for the default bran
   await instance.init();
   assert.deepEqual([instance.offered, instance.label, instance.cannotMerge, calls], [true, "Merge into main", false, [["offer", "s1", ""]]]);
   assert.equal(instance.target, "main", "the first offer names the default branch");
+});
+
+test("the default branch is preselected and asked for by name when the server's first offer is about another", async () => {
+  const { instance, calls } = make({ offers: { "": offerFor("develop") } });
+  await instance.init();
+  assert.deepEqual(calls, [["offer", "s1", ""], ["offer", "s1", "main"]]);
+  assert.deepEqual([instance.target, instance.offer.into, instance.refreshing], ["main", "main", false]);
 });
 
 test("the Into picker lists the targets with their marks, the default first", async () => {
@@ -129,7 +136,7 @@ test("nothing to merge is a note, not a button", async () => {
 });
 
 test("a target that is not a local branch is a note that says to pick another", async () => {
-  const { instance } = make({ offers: { "": offerFor("gone", { available: false, reason: "MERGE_TARGET_NOT_FOUND" }) } });
+  const { instance } = make({ target: "gone", offers: { gone: offerFor("gone", { available: false, reason: "MERGE_TARGET_NOT_FOUND" }) } });
   await instance.init();
   assert.equal(instance.unavailable, "gone is not a local branch of this repository. Pick another target.");
 });

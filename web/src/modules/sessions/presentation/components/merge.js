@@ -153,8 +153,15 @@ export const merge = ({ merge: gateway }) => (panel = {}) => {
         if (gone || asked !== this.asked) return;
         this.offer = offer;
         this.error = "";
-        // The first offer names the default branch; a later one confirms the pick.
+        // With no pick yet the server's offer follows its old rule (the workspace's base),
+        // which may not be the default branch: preselect the default and ask for it by name.
+        const picked = this.target !== "";
         this.target = offer.into || this.target;
+        const preferred = offer.targets.find((t) => t.isDefault);
+        if (!picked && preferred && preferred.name !== offer.into) {
+          this.target = preferred.name;
+          return this.load();
+        }
         if (!this.messageEdited) this.message = offer.suggestedMessage;
       } catch (err) {
         if (!gone && asked === this.asked && err?.name !== "AbortError") this.error = describeError(err).message;
