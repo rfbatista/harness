@@ -75,3 +75,21 @@ type GitMerger interface {
 type SessionChangeAnnouncer interface {
 	AnnounceSession(sessionID string)
 }
+
+// GitBranchNames reads what a session's branch name is checked against
+// (driven; gitcli implements it).
+type GitBranchNames interface {
+	// RefFormatProblem is why name is not a valid branch name under git's own
+	// rules (git check-ref-format --branch); empty when it is valid.
+	RefFormatProblem(ctx context.Context, dir, name string) (string, error)
+	// LocalBranches names every local branch, in one git run.
+	LocalBranches(ctx context.Context, dir string) ([]string, error)
+}
+
+// BranchNameChecker checks a name a person typed for a session's branch
+// (driving; *workspaces.BranchNames implements it). A check reads git only.
+type BranchNameChecker interface {
+	// CheckBranchName: ticketID, when set, makes the generated name carry the
+	// task's slug. An unknown repository is REPOSITORY_NOT_FOUND.
+	CheckBranchName(ctx context.Context, repositoryID, name, ticketID string) (*domain.BranchNameCheck, error)
+}

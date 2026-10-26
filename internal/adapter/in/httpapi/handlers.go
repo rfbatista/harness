@@ -57,6 +57,9 @@ type Services struct {
 	// Merges merges a session's branch into its repository's default branch
 	// in the local checkout; nil answers 503.
 	Merges ports.BranchMerger
+	// BranchNames checks a name typed for a session's branch; nil answers
+	// 503.
+	BranchNames ports.BranchNameChecker
 	// Notifications is the person's inbox across every project; nil answers
 	// 503.
 	Notifications ports.Notifications
@@ -138,6 +141,7 @@ type Handler struct {
 	archive        ports.TicketArchiver
 	pullRequests   ports.PullRequests
 	merges         ports.BranchMerger
+	branchNames    ports.BranchNameChecker
 	notifications  ports.Notifications
 	usage          ports.UsageReader
 	liveCalls      ports.LiveCalls
@@ -191,6 +195,7 @@ func NewHandler(s Services) *Handler {
 		archive:        s.TaskArchive,
 		pullRequests:   s.PullRequests,
 		merges:         s.Merges,
+		branchNames:    s.BranchNames,
 		repoArch:       s.RepositoryArchitectures,
 		archRules:      s.ArchitectureRules,
 		notifications:  s.Notifications,

@@ -1394,16 +1394,7 @@ func truncate(s string, n int) string {
 // named none. It carries no random suffix, so two identical spawns collide with
 // BRANCH_EXISTS instead of silently sharing a branch; the UI always sends a
 // suffixed name of its own.
-func defaultBranchName(task string) string {
-	slug := domain.Slug(task)
-	if slug == "" {
-		slug = "session"
-	}
-	if len(slug) > 40 {
-		slug = strings.TrimRight(slug[:40], "-")
-	}
-	return "agent/" + slug
-}
+func defaultBranchName(task string) string { return domain.GeneratedBranchName(task) }
 
 // branchNameChars is every character validateBranchName allows in a branch
 // name: alphanumerics plus the punctuation a hierarchical git ref actually
