@@ -458,6 +458,14 @@ func (s *Service) prepare(ctx context.Context, in prepareInput) (*prepared, erro
 	if err != nil {
 		return nil, err
 	}
+	if ag.agent != nil && !proj.AgentEnabled(ag.agent.Name) {
+		if ag.cleanup != nil {
+			ag.cleanup()
+		}
+		// The code leads the message: MCP clients see only the message.
+		return nil, &domain.StructuredError{Code: "AGENT_NOT_ENABLED",
+			Message: "AGENT_NOT_ENABLED: agent " + ag.agent.Name + " is not enabled in project " + proj.Name}
+	}
 
 	if err := s.ready(ctx); err != nil {
 		if ag.cleanup != nil {
@@ -804,7 +812,7 @@ func (s *Service) sessionConfig(id, dir, model string, allowedTools []string, pe
 		ID:           id,
 		WorkingDir:   dir,
 		Model:        model,
-		AllowedTools: allowedTools,
+		AllowedTools: sessionAllowedTools(allowedTools, ag.agent),
 		Permission:   permission,
 		Env:          s.DefaultEnv,
 		AppendSystem: ag.appendSystem,
@@ -837,7 +845,7 @@ func (s *Service) sessionConfig(id, dir, model string, allowedTools []string, pe
 		cfg.AppendSystem = appendSection(cfg.AppendSystem, section)
 	}
 
-	for _, m := range resolveAttachedMCPServers(ag.agent, s.catalog.MCPServers.ListMCPServers()) {
+	for _, m := range resolveAttachedMCPServers(ag.agent, subject.project, s.catalog.MCPServers.ListMCPServers()) {
 		cfg.MCPServers = append(cfg.MCPServers, llmkit.MCPServerSpec{
 			Name:      domain.Slug(m.Name),
 			Transport: m.Transport,

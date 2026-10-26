@@ -54,9 +54,17 @@ func (s *Service) Subscribe(sub ports.EventSubscriber) {
 	})
 }
 
+// selfUnlinking is implemented by an agent repository whose store removes a
+// deleted skill or MCP server from its agents itself (the agent catalog does,
+// in the same change as the delete), so no unlinking is left to do here.
+type selfUnlinking interface{ UnlinksItself() bool }
+
 // unlink applies drop to every agent and saves the ones it changed.
 func (s *Service) unlink(drop func(a *domain.Agent) bool) error {
 	if s.agents == nil {
+		return nil
+	}
+	if m, ok := s.agents.(selfUnlinking); ok && m.UnlinksItself() {
 		return nil
 	}
 	for _, a := range s.agents.List(context.TODO()) {

@@ -209,8 +209,7 @@ app.*.symbols
 .gclient_previous_sync_commits
 
 
-# Agent launcher (agents/): generated skill trees, rebuilt by agent_launch.py --sync
-agents/.generated/
+# Agent launcher (agents/): skill trees it writes from the harness catalog
 agents/.generated-harness/
 agents/__pycache__/
 
