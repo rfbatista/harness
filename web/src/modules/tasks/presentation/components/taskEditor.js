@@ -13,6 +13,9 @@ import { statusChangeView } from "../statusChange.js";
 
 const TICK_MS = 30_000;
 
+/** The preference that keeps a task's description open; collapsed is the absence of it. */
+const descriptionKey = (taskId) => `task.description.${taskId}`;
+
 /**
  * @param {{
  *   gateway: import("../../domain/ports.js").TaskGateway,
@@ -20,10 +23,11 @@ const TICK_MS = 30_000;
  *   reload: () => void,
  *   store?: import("./rail.js").RailStore,  the rail's live model: the task as the feed has it, and its latest move
  *   clock?: { now: () => Date },
+ *   prefs?: import("../../../../shared/infrastructure/storage.js").Preferences,  remembers per task whether the description shows whole
  * }} deps
  */
 export const taskEditor =
-  ({ gateway, navigate, reload, store = { tasks: [], statusChanges: {} }, clock = { now: () => new Date() } }) =>
+  ({ gateway, navigate, reload, store = { tasks: [], statusChanges: {} }, clock = { now: () => new Date() }, prefs = { get: () => null, set: () => {} } }) =>
   () => {
     let ticker = null;
     let onResize = () => {};
@@ -45,9 +49,9 @@ export const taskEditor =
       taskError: null,
       /** Archive or Restore is on its way. */
       archiving: false,
-      /** The description shows whole, not clamped to two lines. */
+      /** The description shows whole, not cut to one line. */
       descriptionOpen: false,
-      /** The clamped description is longer than its two lines: there is more to show. */
+      /** The collapsed description is wider than its line: there is more to show. */
       descriptionOverflows: false,
 
       get title() {
@@ -112,6 +116,9 @@ export const taskEditor =
         try {
           this.task = gateway.decodeTask(readSeed(this.$el));
           this.status = this.task.status;
+          this.descriptionOpen = prefs.get(descriptionKey(this.task.id)) === "open";
+          // It was open because it overflowed; an open one is not measured, and keeps its Less.
+          this.descriptionOverflows = this.descriptionOpen;
         } catch (err) {
           this.taskError = describeError(err);
           return;
@@ -129,20 +136,21 @@ export const taskEditor =
       },
 
       /**
-       * Whether the clamped description has more than its two lines. Measured
-       * while it is clamped (and again on a resize, which can make it fit or
+       * Whether the collapsed description is wider than its one line. Measured
+       * while it is collapsed (and again on a resize, which can make it fit or
        * not); an open one keeps its toggle so it can be closed.
        */
       measureDescription() {
         this.$nextTick(() => {
           const text = this.$refs.description;
           if (!text || this.descriptionOpen) return;
-          this.descriptionOverflows = text.scrollHeight > text.clientHeight + 1;
+          this.descriptionOverflows = text.scrollWidth > text.clientWidth + 1;
         });
       },
 
       toggleDescription() {
         this.descriptionOpen = !this.descriptionOpen;
+        if (this.task) prefs.set(descriptionKey(this.task.id), this.descriptionOpen ? "open" : null);
       },
 
       /** The task's status changed over the feed: show it, unless this page is saving its own. */

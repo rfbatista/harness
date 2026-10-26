@@ -23,9 +23,9 @@ func noteDeps(description string) Deps {
 	return deps
 }
 
-// A long description clamps to two lines under a More toggle; More shows it
-// whole and Less clamps it again.
-func TestALongDescriptionClampsToTwoLinesWithAMoreToggle(t *testing.T) {
+// A long description shows one line beside a More toggle; More shows it
+// whole and Less cuts it to one line again.
+func TestALongDescriptionShowsOneLineWithAMoreToggle(t *testing.T) {
 	long := strings.Repeat("Line of the description that the person wrote.\n", 12)
 	url, _ := stripServer(t, noteDeps(long))
 	ctx, errs := browser(t)
@@ -52,17 +52,51 @@ func TestALongDescriptionClampsToTwoLinesWithAMoreToggle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("%v\nJS errors: %v", err, errs.all())
 	}
-	if clamped > 2*lineHeight+1 || word != "More" {
-		t.Errorf("clamped: %.0fpx high with a %.0fpx line (want at most two lines), toggle %q", clamped, lineHeight, word)
+	if clamped > lineHeight+1 || word != "More" {
+		t.Errorf("clamped: %.0fpx high with a %.0fpx line (want one line), toggle %q", clamped, lineHeight, word)
 	}
 	if whole < 10*lineHeight || openWord != "Less" || expanded != "true" {
 		t.Errorf("shown whole: %.0fpx high, toggle %q, aria-expanded %q", whole, openWord, expanded)
 	}
 	if again != clamped || closedAgain != "false" {
-		t.Errorf("clamped again: %.0fpx (was %.0fpx), aria-expanded %q", again, clamped, closedAgain)
+		t.Errorf("one line again: %.0fpx (was %.0fpx), aria-expanded %q", again, clamped, closedAgain)
 	}
 	if e := errs.all(); len(e) > 0 {
 		t.Errorf("JavaScript errors:\n%s", strings.Join(e, "\n"))
+	}
+}
+
+// Opening the description is remembered for that task, in the browser: a
+// reload shows it whole, and another task's description is still one line.
+func TestTheOpenDescriptionIsRememberedPerTask(t *testing.T) {
+	long := strings.Repeat("Line of the description that the person wrote.\n", 12)
+	deps := boardDeps()
+	deps.Tasks = fakeTickets{[]*domain.Ticket{
+		{ID: "t-feed", ProjectID: "p1", Title: "Add SSE feed", Description: long, Status: domain.TicketStatusInProgress},
+		{ID: "t-other", ProjectID: "p1", Title: "Other", Description: long, Status: domain.TicketStatusInProgress},
+	}}
+	url, _ := stripServer(t, deps)
+	ctx, errs := browser(t)
+
+	var word, other string
+	err := chromedp.Run(ctx,
+		chromedp.EmulateViewport(1280, 800),
+		chromedp.Navigate(url+"/projects/p1/tasks/t-feed"),
+		chromedp.Poll(pageReady+` && !!`+noteToggle+` && `+noteToggle+`.checkVisibility()`, nil, chromedp.WithPollingTimeout(10*time.Second)),
+		chromedp.Evaluate(noteToggle+`.click()`, nil),
+		chromedp.Poll(noteToggle+`.textContent.trim() === 'Less'`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Navigate(url+"/projects/p1/tasks/t-feed"),
+		chromedp.Poll(pageReady+` && !!`+noteToggle+` && `+noteToggle+`.checkVisibility()`, nil, chromedp.WithPollingTimeout(10*time.Second)),
+		chromedp.Evaluate(noteToggle+`.textContent.trim()`, &word),
+		chromedp.Navigate(url+"/projects/p1/tasks/t-other"),
+		chromedp.Poll(pageReady+` && !!`+noteToggle+` && `+noteToggle+`.checkVisibility()`, nil, chromedp.WithPollingTimeout(10*time.Second)),
+		chromedp.Evaluate(noteToggle+`.textContent.trim()`, &other),
+	)
+	if err != nil {
+		t.Fatalf("%v\nJS errors: %v", err, errs.all())
+	}
+	if word != "Less" || other != "More" {
+		t.Errorf("after a reload the toggle reads %q (want Less); another task's reads %q (want More)", word, other)
 	}
 }
 
