@@ -115,6 +115,27 @@ func (c *Catalog) SaveCatalogAgent(in domain.SaveCatalogAgent) (*domain.CatalogW
 		return nil, unknownRefs(unknown)
 	}
 
+	// Which selected projects enable it: each must exist and be selected.
+	if in.Projects != nil {
+		byID := map[string]*domain.Project{}
+		for _, p := range t.projectLists() {
+			byID[p.ID] = p
+		}
+		var unknown []string
+		for _, id := range in.Projects {
+			p := byID[id]
+			switch {
+			case p == nil:
+				unknown = append(unknown, id)
+			case p.EnabledAgentsMode != domain.AgentsSelected:
+				return nil, invalid("projects", "project "+p.Name+" enables all agents: change it in its own settings")
+			}
+		}
+		if len(unknown) > 0 {
+			return nil, unknownRefs(unknown)
+		}
+	}
+
 	verb := "Saved"
 	obj := agents.get(prev)
 	switch {
@@ -124,6 +145,13 @@ func (c *Catalog) SaveCatalogAgent(in domain.SaveCatalogAgent) (*domain.CatalogW
 		verb = "Created"
 	case prev != a.Name:
 		agents.rename(prev, a.Name)
+		for _, p := range t.projectLists() {
+			if p.EnabledAgentsMode == domain.AgentsSelected {
+				if cur := t.enabledAgents(p); contains(cur, prev) {
+					t.setEnabledAgents(p, replaceName(cur, prev, a.Name))
+				}
+			}
+		}
 		verb = "Renamed " + prev + " to " + a.Name + " and saved"
 	}
 	obj.set("description", scalarOf(a.Description))
@@ -137,6 +165,20 @@ func (c *Catalog) SaveCatalogAgent(in domain.SaveCatalogAgent) (*domain.CatalogW
 	setList("skills", a.Entries)
 	setList("mcp_servers", a.MCPServers)
 	setList("allowed_tools", a.AllowedTools)
+	if in.Projects != nil {
+		for _, p := range t.projectLists() {
+			if p.EnabledAgentsMode != domain.AgentsSelected {
+				continue
+			}
+			cur := t.enabledAgents(p)
+			switch wanted := contains(in.Projects, p.ID); {
+			case wanted && !contains(cur, a.Name):
+				t.setEnabledAgents(p, append(append([]string{}, cur...), a.Name))
+			case !wanted && contains(cur, a.Name):
+				t.setEnabledAgents(p, without(cur, a.Name))
+			}
+		}
+	}
 	summary := fmt.Sprintf("%s %s — %s now has %d skills", verb, agentsFile, a.Name, t.resolveCount(a.Entries))
 	return t.commit(in.CatalogWriteOptions, summary)
 }
@@ -153,6 +195,13 @@ func (c *Catalog) DeleteCatalogAgent(in domain.DeleteCatalogItem) (*domain.Catal
 		return nil, &domain.StructuredError{Code: "AGENT_NOT_FOUND", Message: "agent " + in.Name + " not found"}
 	}
 	t.agentsMap().remove(in.Name)
+	for _, p := range t.projectLists() {
+		if p.EnabledAgentsMode == domain.AgentsSelected {
+			if cur := t.enabledAgents(p); contains(cur, in.Name) {
+				t.setEnabledAgents(p, without(cur, in.Name))
+			}
+		}
+	}
 	return t.commit(in.CatalogWriteOptions, "Deleted "+in.Name+" from "+agentsFile)
 }
 

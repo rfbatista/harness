@@ -91,3 +91,106 @@ func contains2(list []string, s string) bool {
 	}
 	return false
 }
+
+func projectAgents(f *catalogFixture, id string) []string {
+	return strList(f.get("/api/get_project_agents?project_id="+id, 200)["agents"])
+}
+
+func selectProject(f *catalogFixture, id string, agents ...string) {
+	if agents == nil {
+		agents = []string{}
+	}
+	f.post("/api/set_project_agents", map[string]any{"project_id": id, "mode": "selected", "agents": agents}, 200)
+}
+
+func TestAgentSave_ProjectsIsTheFullSetOfSelectedProjectsThatListIt(t *testing.T) {
+	f := catalogWithSkills(t)
+	a, b := f.project("A"), f.project("B")
+	selectProject(f, a, "zeta")
+	selectProject(f, b)
+	body := func(projects any) map[string]any {
+		m := map[string]any{"previous_name": "zeta", "agent": map[string]any{"name": "zeta", "description": "d", "entries": []string{"tdd"}}}
+		if projects != nil {
+			m["projects"] = projects
+		}
+		return m
+	}
+	// Absent: nothing changes.
+	f.post("/api/save_catalog_agent", body(nil), 200)
+	if !reflect.DeepEqual(projectAgents(f, a), []string{"zeta"}) || len(projectAgents(f, b)) != 0 {
+		t.Fatalf("absent projects changed the lists: %v %v", projectAgents(f, a), projectAgents(f, b))
+	}
+	// [b]: added to b, removed from a.
+	out := f.post("/api/save_catalog_agent", body([]string{b}), 200)
+	if len(projectAgents(f, a)) != 0 || !reflect.DeepEqual(projectAgents(f, b), []string{"zeta"}) {
+		t.Fatalf("lists = %v %v", projectAgents(f, a), projectAgents(f, b))
+	}
+	if pc := list(out["change"].(map[string]any)["projects"]); len(pc) != 2 {
+		t.Fatalf("change.projects = %v", pc)
+	}
+	// []: removed everywhere.
+	f.post("/api/save_catalog_agent", body([]string{}), 200)
+	if len(projectAgents(f, b)) != 0 {
+		t.Fatal("not removed from b")
+	}
+}
+
+func TestAgentSave_NamingAnAllProjectIsRefused(t *testing.T) {
+	f := catalogWithSkills(t)
+	all := f.project("All")
+	before := f.read("agents.json")
+	got := f.post("/api/save_catalog_agent", map[string]any{"projects": []string{all}, "agent": map[string]any{"name": "fresh", "description": "d"}}, 400)
+	if got["code"] != "INVALID_INPUT" || got["field"] != "projects" {
+		t.Fatalf("body = %v", got)
+	}
+	if f.read("agents.json") != before {
+		t.Fatal("a refused save wrote the file")
+	}
+	bad := f.post("/api/save_catalog_agent", map[string]any{"projects": []string{"ghost"}, "agent": map[string]any{"name": "fresh", "description": "d"}}, 400)
+	if bad["code"] != "UNKNOWN_REFERENCE" {
+		t.Fatalf("body = %v", bad)
+	}
+}
+
+func TestAgentRenameAndDelete_RewriteTheSelectedListsAndUndoRestoresThem(t *testing.T) {
+	f := catalogWithSkills(t)
+	a, b := f.project("A"), f.project("B")
+	selectProject(f, a, "zeta")
+	selectProject(f, b)
+
+	out := f.post("/api/save_catalog_agent", map[string]any{"previous_name": "zeta", "agent": map[string]any{"name": "omega", "description": "d", "entries": []string{"tdd"}}}, 200)
+	if !reflect.DeepEqual(projectAgents(f, a), []string{"omega"}) {
+		t.Fatalf("a = %v", projectAgents(f, a))
+	}
+	pc := list(out["change"].(map[string]any)["projects"])
+	if len(pc) != 1 || !reflect.DeepEqual(strList(pc[0].(map[string]any)["enabled_agents_before"]), []string{"zeta"}) {
+		t.Fatalf("change.projects = %v", pc)
+	}
+	f.post("/api/undo_catalog_change", map[string]any{"change_id": out["change"].(map[string]any)["id"]}, 200)
+	if !reflect.DeepEqual(projectAgents(f, a), []string{"zeta"}) {
+		t.Fatalf("undo: a = %v", projectAgents(f, a))
+	}
+
+	del := f.post("/api/delete_catalog_agent", map[string]any{"name": "zeta"}, 200)
+	if len(projectAgents(f, a)) != 0 {
+		t.Fatalf("delete: a = %v", projectAgents(f, a))
+	}
+	f.post("/api/undo_catalog_change", map[string]any{"change_id": del["change"].(map[string]any)["id"]}, 200)
+	if !reflect.DeepEqual(projectAgents(f, a), []string{"zeta"}) {
+		t.Fatalf("undo delete: a = %v", projectAgents(f, a))
+	}
+}
+
+func TestAgentSave_DryRunShowsTheProjectChangeAndWritesNothing(t *testing.T) {
+	f := catalogWithSkills(t)
+	a := f.project("A")
+	selectProject(f, a)
+	out := f.post("/api/save_catalog_agent", map[string]any{"dry_run": true, "projects": []string{a}, "agent": map[string]any{"name": "fresh", "description": "d"}}, 200)
+	pc := list(out["change"].(map[string]any)["projects"])
+	if len(pc) != 1 || !reflect.DeepEqual(strList(pc[0].(map[string]any)["enabled_agents_after"]), []string{"fresh"}) {
+		t.Fatalf("change.projects = %v", pc)
+	}
+	if len(projectAgents(f, a)) != 0 {
+		t.Fatal("a dry run wrote")
+	}
+}

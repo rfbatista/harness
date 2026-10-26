@@ -221,6 +221,9 @@ type SaveCatalogAgent struct {
 	CatalogWriteOptions
 	PreviousName string            `json:"previous_name"`
 	Agent        CatalogAgentInput `json:"agent"`
+	// Projects is the full set of selected-mode projects that list the agent
+	// after the save. Nil leaves the lists as they are.
+	Projects []string `json:"projects"`
 }
 
 // SaveCatalogBundle creates or updates a bundle.
@@ -290,6 +293,10 @@ type CatalogProjectChange struct {
 	Name   string   `json:"name"`
 	Before []string `json:"before"`
 	After  []string `json:"after"`
+	// EnabledBefore and EnabledAfter are the project's selected agents, when
+	// the change sets them (an agent saved, renamed or deleted).
+	EnabledBefore []string `json:"enabled_agents_before,omitempty"`
+	EnabledAfter  []string `json:"enabled_agents_after,omitempty"`
 }
 
 // CatalogServerInput is an MCP server as the editor saves or tests it.

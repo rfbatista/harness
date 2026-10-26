@@ -37,6 +37,17 @@ type storedChange struct {
 type projectEdit struct {
 	id, name      string
 	before, after []string
+	// enBefore and enAfter are the selected-mode agent list.
+	enBefore, enAfter []string
+}
+
+// projectChange is the edit as the answer shows it.
+func (p *projectEdit) projectChange() domain.CatalogProjectChange {
+	ch := domain.CatalogProjectChange{ID: p.id, Name: p.name, Before: p.before, After: p.after}
+	if !sameNames(p.enBefore, p.enAfter) {
+		ch.EnabledBefore, ch.EnabledAfter = nonNil(p.enBefore), nonNil(p.enAfter)
+	}
+	return ch
 }
 
 // txn is one write being built. Its nodes are copies: nothing on disk or in
@@ -211,7 +222,7 @@ func (t *txn) commit(opts domain.CatalogWriteOptions, summary string) (*domain.C
 		change.Writes = append(change.Writes, fileWrite(e))
 	}
 	for _, p := range t.projects {
-		change.Projects = append(change.Projects, domain.CatalogProjectChange{ID: p.id, Name: p.name, Before: p.before, After: p.after})
+		change.Projects = append(change.Projects, p.projectChange())
 		keys["projects/"+p.id] = true
 	}
 	if change.Projects == nil {
@@ -306,9 +317,9 @@ func (c *Catalog) applyAll(edits []*fileEdit, projects []*projectEdit) error {
 		return err
 	}
 	for i, p := range projects {
-		if err := c.setProjectNames(p.id, p.after); err != nil {
+		if err := c.applyProject(p, true); err != nil {
 			for j := i - 1; j >= 0; j-- {
-				_ = c.setProjectNames(projects[j].id, projects[j].before)
+				_ = c.applyProject(projects[j], false)
 			}
 			for j := len(edits) - 1; j >= 0; j-- {
 				_ = c.writeFile(edits[j].path, edits[j].before)
@@ -402,10 +413,10 @@ func (c *Catalog) UndoCatalogChange(in domain.UndoCatalogChange) (*domain.Catalo
 	var projects []*projectEdit
 	for i := len(c.last.projects) - 1; i >= 0; i-- {
 		p := c.last.projects[i]
-		if cur, ok := c.projectNames(p.id); !ok || !sameNames(cur, p.after) {
+		if cur := c.projectOf(p.id); cur == nil || !sameNames(cur.MCPServers, p.after) || !sameNames(cur.EnabledAgents, p.enAfter) {
 			moved["projects/"+p.id] = true
 		}
-		projects = append(projects, &projectEdit{id: p.id, name: p.name, before: p.after, after: p.before})
+		projects = append(projects, &projectEdit{id: p.id, name: p.name, before: p.after, after: p.before, enBefore: p.enAfter, enAfter: p.enBefore})
 	}
 	if len(moved) > 0 && !in.Force {
 		return nil, c.conflict(edits, moved)
@@ -413,7 +424,7 @@ func (c *Catalog) UndoCatalogChange(in domain.UndoCatalogChange) (*domain.Catalo
 	keys := map[string]bool{}
 	change := domain.CatalogChange{Summary: "Undid: " + c.last.summary, Writes: []domain.CatalogFileWrite{}, Projects: []domain.CatalogProjectChange{}}
 	for _, p := range projects {
-		change.Projects = append(change.Projects, domain.CatalogProjectChange{ID: p.id, Name: p.name, Before: p.before, After: p.after})
+		change.Projects = append(change.Projects, p.projectChange())
 		keys["projects/"+p.id] = true
 	}
 	for _, e := range edits {

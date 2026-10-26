@@ -78,14 +78,68 @@ func (t *txn) setProject(p *domain.Project, names []string) {
 			return
 		}
 	}
-	t.projects = append(t.projects, &projectEdit{id: p.ID, name: p.Name, before: append([]string{}, p.MCPServers...), after: names})
+	e := t.editOf(p)
+	e.after = names
+}
+
+// editOf is the write's edit of a project, made when there is none.
+func (t *txn) editOf(p *domain.Project) *projectEdit {
+	for _, e := range t.projects {
+		if e.id == p.ID {
+			return e
+		}
+	}
+	e := &projectEdit{id: p.ID, name: p.Name,
+		before: append([]string{}, p.MCPServers...), after: append([]string{}, p.MCPServers...),
+		enBefore: append([]string{}, p.EnabledAgents...), enAfter: append([]string{}, p.EnabledAgents...)}
+	t.projects = append(t.projects, e)
+	return e
+}
+
+// enabledAgents are a selected project's agents with this write's edit applied.
+func (t *txn) enabledAgents(p *domain.Project) []string {
+	return t.editOf(p).enAfter
+}
+
+// setEnabledAgents records a selected project's new agent list.
+func (t *txn) setEnabledAgents(p *domain.Project, names []string) {
+	t.editOf(p).enAfter = names
+}
+
+// projectOf is the project now, or nil.
+func (c *Catalog) projectOf(id string) *domain.Project {
+	for _, p := range c.listProjects() {
+		if p.ID == id {
+			return p
+		}
+	}
+	return nil
+}
+
+// applyProject writes a project edit's lists, or puts the old ones back.
+func (c *Catalog) applyProject(p *projectEdit, forward bool) error {
+	mcp, en, prevMCP, prevEn := p.after, p.enAfter, p.before, p.enBefore
+	if !forward {
+		mcp, en, prevMCP, prevEn = p.before, p.enBefore, p.after, p.enAfter
+	}
+	if !sameNames(mcp, prevMCP) {
+		if err := c.setProjectNames(p.id, mcp); err != nil {
+			return err
+		}
+	}
+	if !sameNames(en, prevEn) {
+		if _, err := c.projects.SetProjectAgents(context.Background(), p.id, domain.AgentsSelected, en); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // dropUnchangedProjects forgets the edits that end where they began.
 func (t *txn) dropUnchangedProjects() {
 	kept := t.projects[:0]
 	for _, e := range t.projects {
-		if !sameNames(e.before, e.after) {
+		if !sameNames(e.before, e.after) || !sameNames(e.enBefore, e.enAfter) {
 			kept = append(kept, e)
 		}
 	}
