@@ -14,6 +14,7 @@ import { FeedStatus } from "../../../../shared/domain/feed.js";
 import { baseName, changeMark } from "../../domain/code.js";
 import { parseDiffHash, rowOfLine, rowOfNewLine, slugs } from "../../domain/diff.js";
 import { problemOf } from "../../domain/errors.js";
+import { clampSplit, defaultSplit, parseSplit, splitBounds, stepSplit } from "../../domain/split.js";
 import { clampRange, parseRange, parseRangeHash, rangeHash, scrollTopFor, splitLines, WRAP_UP_TO } from "../../domain/lines.js";
 import { markParts, rank, shiftRanges } from "../../domain/fuzzy.js";
 import { ANNOUNCE_CHANGED, FIXED, GONE, onChange, onEnded, onReload } from "../../domain/live.js";
@@ -130,6 +131,12 @@ export function codeBrowser({ gateway, highlighter, prefs, history = globalThis.
     layout: "unified",
     wrap: false,
     narrow: false,
+    /** The layout's width in px and the root font size, as last measured. */
+    layoutWidth: 0,
+    layoutRem: 16,
+    /** The chosen width of the file list, in percent of the layout; null: the default. */
+    splitPercent: null,
+    splitDragging: false,
     /** Below 44rem: the main side is shown instead of the side list. */
     showMain: false,
     /** The reader scrolled the main side since it loaded. */
@@ -485,6 +492,7 @@ export function codeBrowser({ gateway, highlighter, prefs, history = globalThis.
       this.historyHref = seed.historyHref;
       this.layout = prefs.get("code.layout") === "split" ? "split" : "unified";
       this.wrap = prefs.get("code.wrap") === "1";
+      this.splitPercent = parseSplit(prefs.get("code.split"));
       if (seed.gone) this.markGone();
       this.baseGone = seed.baseGone;
       if (seed.map) this.setMap(seed.map);
@@ -1350,8 +1358,66 @@ export function codeBrowser({ gateway, highlighter, prefs, history = globalThis.
       this.$root?.querySelector?.('.code-source-bar nav.segmented a[aria-current="page"]')?.focus();
     },
 
+    // ── the split between the file list and the diff ─────────────────────
+    /** Inline style of the layout: the chosen width of the list, if any. */
+    get splitStyle() {
+      return this.splitPercent === null ? null : `--code-side: ${this.splitPercent}%`;
+    },
+    get splitLimits() {
+      return splitBounds(this.layoutWidth || 1000, this.layoutRem);
+    },
+    /** aria-valuenow: the list's share of the layout, in whole percent. */
+    get splitNow() {
+      return Math.round(this.splitPercent ?? defaultSplit(this.layoutWidth || 1000, this.layoutRem));
+    },
+    get splitMin() {
+      return Math.round(this.splitLimits.min);
+    },
+    get splitMax() {
+      return Math.round(this.splitLimits.max);
+    },
+    get splitDraggingAttr() {
+      return this.splitDragging ? "" : null;
+    },
+    setSplit(percent) {
+      this.splitPercent = percent === null ? null : clampSplit(percent, this.layoutWidth || 1000, this.layoutRem);
+    },
+    storeSplit() {
+      prefs.set("code.split", this.splitPercent === null ? null : String(this.splitPercent));
+    },
+    /** The separator's keys: arrows move it, Home gives the default back. */
+    splitKey(event) {
+      const next = stepSplit(this.splitPercent ?? defaultSplit(this.layoutWidth || 1000, this.layoutRem), event.key, this.layoutWidth || 1000, this.layoutRem);
+      if (next === undefined) return;
+      event.preventDefault();
+      this.setSplit(next);
+      this.storeSplit();
+    },
+    resetSplit() {
+      this.setSplit(null);
+      this.storeSplit();
+    },
+    startSplit(event) {
+      event.preventDefault();
+      event.target.setPointerCapture?.(event.pointerId);
+      this.splitDragging = true;
+    },
+    moveSplit(event) {
+      if (!this.splitDragging) return;
+      const box = this.$refs.layout.getBoundingClientRect();
+      if (box.width > 0) this.setSplit(((event.clientX - box.left) / box.width) * 100);
+    },
+    endSplit(event) {
+      if (!this.splitDragging) return;
+      this.splitDragging = false;
+      event.target?.releasePointerCapture?.(event.pointerId);
+      this.storeSplit();
+    },
+
     /** The layout's container width decides one side or both (44rem, contract §4). */
     measure(width, rem = 16) {
+      this.layoutWidth = width;
+      this.layoutRem = rem;
       const narrow = width < 44 * rem;
       if (narrow !== this.narrow) this.narrow = narrow;
     },

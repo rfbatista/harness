@@ -40,7 +40,7 @@ templ Live() {
 			</div>
 		</template>
 		<template x-if="!emptyProblem">
-			<div class="code-layout" x-ref="layout" x-bind:data-main="mainAttr" x-bind:data-side="sideAttr">
+			<div class="code-layout" x-ref="layout" x-bind:data-main="mainAttr" x-bind:data-side="sideAttr" x-bind:style="splitStyle">
 				<aside class="side" x-ref="side" x-bind:aria-label="sideLabel">
 					<template x-if="showingChanges">
 						@liveSummary()
@@ -49,6 +49,7 @@ templ Live() {
 						@liveTree()
 					</template>
 				</aside>
+				<div class="separator" role="separator" aria-orientation="vertical" tabindex="0" aria-label="Resize the file list" aria-valuemin="12" aria-valuemax="50" aria-valuenow="30" x-bind:aria-valuemin="splitMin" x-bind:aria-valuemax="splitMax" x-bind:aria-valuenow="splitNow" x-bind:data-dragging="splitDraggingAttr" x-on:pointerdown="startSplit" x-on:pointermove="moveSplit" x-on:pointerup="endSplit" x-on:pointercancel="endSplit" x-on:dblclick="resetSplit" x-on:keydown="splitKey"></div>
 				<section class="main" x-ref="main" tabindex="0" x-bind:aria-label="mainLabel" x-on:scroll="mainScrolled" x-on:click="clickLine">
 					<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" data-code-back x-on:click="back" x-text="backLabel"></button>
 					<template x-if="goneEmpty">

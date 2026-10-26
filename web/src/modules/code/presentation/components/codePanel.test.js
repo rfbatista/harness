@@ -226,3 +226,53 @@ test("an empty diff names the base it was compared with", async () => {
   panel.route = { ...panel.route, scope: "working" };
   assert.equal(panel.noChangesTitle, "No uncommitted changes");
 });
+
+const keyEvent = (key) => ({ key, preventDefault() {}, stopPropagation() {} });
+
+test("the split: the default reads as percent, arrows and Home move it, and the width is remembered", async () => {
+  const first = await setup();
+  const { panel } = first;
+  panel.measure(1000);
+  assert.deepEqual([panel.splitNow, panel.splitMin, panel.splitMax, panel.splitStyle], [29, 19, 50, null]);
+  panel.splitKey(keyEvent("ArrowRight"));
+  assert.deepEqual([panel.splitNow, panel.splitStyle], [31, "--code-side: 30.8%"]);
+  assert.equal(first.prefs.get("code.split"), "30.8");
+  const again = await setup({ prefs: first.prefs });
+  again.panel.measure(1000);
+  assert.equal(again.panel.splitNow, 31, "a reload keeps it");
+  again.panel.splitKey(keyEvent("Home"));
+  assert.deepEqual([again.panel.splitNow, again.panel.splitStyle, first.prefs.get("code.split")], [29, null, null]);
+});
+
+test("a stored split that is not a width is ignored", async () => {
+  const { panel } = await setup({ prefs: { get: (k) => (k === "code.split" ? "wide" : null), set() {} } });
+  panel.measure(1000);
+  assert.equal(panel.splitStyle, null);
+});
+
+test("dragging the separator follows the pointer inside the bounds and stores once, on release", async () => {
+  const { panel, prefs } = await setup();
+  panel.measure(1000);
+  panel.$refs = { layout: { getBoundingClientRect: () => ({ left: 100, width: 1000 }) } };
+  const target = { setPointerCapture() {}, releasePointerCapture() {} };
+  panel.startSplit({ pointerId: 1, target, preventDefault() {} });
+  panel.moveSplit({ pointerId: 1, clientX: 100 + 400 });
+  assert.equal(panel.splitNow, 40);
+  panel.moveSplit({ pointerId: 1, clientX: 100 + 900 });
+  assert.equal(panel.splitNow, 50, "never past half");
+  panel.moveSplit({ pointerId: 1, clientX: 100 + 20 });
+  assert.equal(panel.splitNow, 19, "never under 12rem");
+  assert.equal(prefs.get("code.split"), null, "nothing stored while dragging");
+  panel.endSplit({ pointerId: 1, target });
+  assert.equal(prefs.get("code.split"), "19.2");
+  panel.moveSplit({ pointerId: 1, clientX: 100 + 400 });
+  assert.equal(panel.splitNow, 19, "a move after release is not a drag");
+});
+
+test("a double-click resets the split to the default", async () => {
+  const { panel, prefs } = await setup();
+  panel.measure(1000);
+  panel.splitKey(keyEvent("ArrowRight"));
+  panel.resetSplit();
+  assert.deepEqual([panel.splitStyle, prefs.get("code.split")], [null, null]);
+});
