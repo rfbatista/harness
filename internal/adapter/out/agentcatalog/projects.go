@@ -134,3 +134,58 @@ func (c *Catalog) SetProjectMCPServers(_ context.Context, in domain.SetCatalogPr
 	c.publish([]string{"projects/" + in.ProjectID})
 	return &domain.CatalogProjectMCPServers{MCPServers: names}, nil
 }
+
+// GetProjectAgents reads a project's enabled agents.
+func (c *Catalog) GetProjectAgents(_ context.Context, projectID string) (*domain.CatalogProjectAgents, error) {
+	for _, p := range c.listProjects() {
+		if p.ID == projectID {
+			if p.EnabledAgentsMode != domain.AgentsSelected {
+				return &domain.CatalogProjectAgents{Mode: domain.AgentsAll, Agents: []string{}}, nil
+			}
+			return &domain.CatalogProjectAgents{Mode: domain.AgentsSelected, Agents: nonNil(p.EnabledAgents)}, nil
+		}
+	}
+	return nil, &domain.StructuredError{Code: "PROJECT_NOT_FOUND", Message: "project " + projectID + " not found"}
+}
+
+// SetProjectAgents replaces a project's enabled agents. Each name must be a
+// catalog agent. In all mode the list is ignored and stored empty.
+func (c *Catalog) SetProjectAgents(ctx context.Context, in domain.SetCatalogProjectAgents) (*domain.CatalogProjectAgents, error) {
+	c.wmu.Lock()
+	defer c.wmu.Unlock()
+	if _, err := c.GetProjectAgents(ctx, in.ProjectID); err != nil {
+		return nil, err
+	}
+	var names []string
+	switch in.Mode {
+	case domain.AgentsAll:
+		names = []string{}
+	case domain.AgentsSelected:
+		l, err := c.load()
+		if err != nil {
+			return nil, err
+		}
+		var unknown []string
+		seen := map[string]bool{}
+		names = []string{}
+		for _, n := range in.Agents {
+			if l.agents.get("agents").get(n) == nil {
+				unknown = append(unknown, n)
+			}
+			if !seen[n] {
+				seen[n] = true
+				names = append(names, n)
+			}
+		}
+		if len(unknown) > 0 {
+			return nil, unknownRefs(unknown)
+		}
+	default:
+		return nil, invalid("mode", "mode is all or selected")
+	}
+	if _, err := c.projects.SetProjectAgents(ctx, in.ProjectID, in.Mode, names); err != nil {
+		return nil, err
+	}
+	c.publish([]string{"projects/" + in.ProjectID})
+	return &domain.CatalogProjectAgents{Mode: in.Mode, Agents: names}, nil
+}

@@ -152,6 +152,10 @@ func (p projectMCPServers) ListProjects(ctx context.Context) ([]*domain.Project,
 	return p.projects.List(ctx), nil
 }
 
+func (p projectMCPServers) SetProjectAgents(_ context.Context, id, mode string, names []string) (*domain.Project, error) {
+	return p.projects.SetEnabledAgents(id, mode, names)
+}
+
 func (p projectMCPServers) SetProjectMCPServers(_ context.Context, id string, names []string) (*domain.Project, error) {
 	return p.projects.SetMCPServers(id, names)
 }

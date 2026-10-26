@@ -73,6 +73,9 @@ type Projects interface {
 	// SetProjectMCPServers replaces a project's server names. PROJECT_NOT_FOUND
 	// for an unknown project.
 	SetProjectMCPServers(ctx context.Context, projectID string, names []string) (*domain.Project, error)
+	// SetProjectAgents replaces a project's enabled agents: mode all or
+	// selected, and the list of the selected mode.
+	SetProjectAgents(ctx context.Context, projectID, mode string, names []string) (*domain.Project, error)
 }
 
 // WithProjects gives the catalog the projects whose MCP server lists it reads

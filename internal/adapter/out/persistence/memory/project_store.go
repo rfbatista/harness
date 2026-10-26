@@ -102,6 +102,7 @@ func cloneProject(p *domain.Project) *domain.Project {
 	c := *p
 	c.IgnoredPaths = append([]string(nil), p.IgnoredPaths...)
 	c.MCPServers = append([]string(nil), p.MCPServers...)
+	c.EnabledAgents = append([]string(nil), p.EnabledAgents...)
 	return &c
 }
 
@@ -154,6 +155,18 @@ func (s *ProjectStore) SetMCPServers(projectID string, names []string) (*domain.
 		return nil, &domain.StructuredError{Code: "PROJECT_NOT_FOUND", Message: "project not found"}
 	}
 	p.MCPServers = append([]string{}, names...)
+	return cloneProject(p), nil
+}
+
+// SetEnabledAgents stores which agents the project's sessions may run as.
+func (s *ProjectStore) SetEnabledAgents(projectID, mode string, names []string) (*domain.Project, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	p, ok := s.projects[projectID]
+	if !ok {
+		return nil, &domain.StructuredError{Code: "PROJECT_NOT_FOUND", Message: "project not found"}
+	}
+	p.EnabledAgentsMode, p.EnabledAgents = mode, append([]string{}, names...)
 	return cloneProject(p), nil
 }
 

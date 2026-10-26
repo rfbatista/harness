@@ -32,16 +32,18 @@ type CatalogBroken struct {
 
 // CatalogAgent is one agent of the catalog, with its skills resolved.
 type CatalogAgent struct {
-	Name              string           `json:"name"`
-	Description       string           `json:"description"`
-	Aliases           []string         `json:"aliases"`
-	Entries           []string         `json:"entries"`
-	ResolvedSkills    []string         `json:"resolved_skills"`
-	DroppedDuplicates []string         `json:"dropped_duplicates"`
-	MissingSkills     []string         `json:"missing_skills"`
-	MCPServers        []string         `json:"mcp_servers"`
-	AllowedTools      []string         `json:"allowed_tools"`
-	Problems          []CatalogProblem `json:"problems"`
+	Name              string   `json:"name"`
+	Description       string   `json:"description"`
+	Aliases           []string `json:"aliases"`
+	Entries           []string `json:"entries"`
+	ResolvedSkills    []string `json:"resolved_skills"`
+	DroppedDuplicates []string `json:"dropped_duplicates"`
+	MissingSkills     []string `json:"missing_skills"`
+	MCPServers        []string `json:"mcp_servers"`
+	AllowedTools      []string `json:"allowed_tools"`
+	// EnabledIn are the projects where the agent is enabled (ADR 0038).
+	EnabledIn []CatalogProjectRef `json:"enabled_in"`
+	Problems  []CatalogProblem    `json:"problems"`
 }
 
 // CatalogBundle is a named list of skills and other bundles.
@@ -346,4 +348,18 @@ type SetCatalogProjectMCPServers struct {
 // CatalogProjectMCPServers is a project's MCP server names.
 type CatalogProjectMCPServers struct {
 	MCPServers []string `json:"mcp_servers"`
+}
+
+// SetCatalogProjectAgents replaces a project's enabled agents.
+type SetCatalogProjectAgents struct {
+	ProjectID string   `json:"project_id"`
+	Mode      string   `json:"mode"`
+	Agents    []string `json:"agents"`
+}
+
+// CatalogProjectAgents is a project's enabled agents: mode all (Agents is
+// empty) or selected.
+type CatalogProjectAgents struct {
+	Mode   string   `json:"mode"`
+	Agents []string `json:"agents"`
 }

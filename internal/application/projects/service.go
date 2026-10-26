@@ -399,6 +399,17 @@ func (s *Service) SetProjectMCPServers(_ context.Context, projectID string, name
 	return s.projects.SetMCPServers(projectID, names)
 }
 
+// SetProjectAgents stores the project's enabled agents. The catalog checks the
+// names; this stores them.
+func (s *Service) SetProjectAgents(_ context.Context, projectID, mode string, names []string) (*domain.Project, error) {
+	if projectID == "" {
+		return nil, errProjectIDMissing
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.projects.SetEnabledAgents(projectID, mode, names)
+}
+
 // announced puts a written project on the feed and passes the write's result
 // through.
 func (s *Service) announced(p *domain.Project, err error) (*domain.Project, error) {

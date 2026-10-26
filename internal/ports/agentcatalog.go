@@ -42,6 +42,8 @@ type CatalogEditor interface {
 	TestCatalogMCPServer(ctx context.Context, in domain.TestCatalogMCPServer) (*domain.CatalogProbeResult, error)
 	GetProjectMCPServers(ctx context.Context, projectID string) (*domain.CatalogProjectMCPServers, error)
 	SetProjectMCPServers(ctx context.Context, in domain.SetCatalogProjectMCPServers) (*domain.CatalogProjectMCPServers, error)
+	GetProjectAgents(ctx context.Context, projectID string) (*domain.CatalogProjectAgents, error)
+	SetProjectAgents(ctx context.Context, in domain.SetCatalogProjectAgents) (*domain.CatalogProjectAgents, error)
 	UndoCatalogChange(in domain.UndoCatalogChange) (*domain.CatalogWriteResult, error)
 }
 

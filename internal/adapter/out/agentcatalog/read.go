@@ -268,6 +268,14 @@ func (c *Catalog) ReadCatalog() (*domain.CatalogView, error) {
 	}
 
 	projects := c.listProjects()
+	for i := range v.Agents {
+		v.Agents[i].EnabledIn = []domain.CatalogProjectRef{}
+		for _, p := range projects {
+			if p.AgentEnabled(v.Agents[i].Name) {
+				v.Agents[i].EnabledIn = append(v.Agents[i].EnabledIn, domain.CatalogProjectRef{ID: p.ID, Name: p.Name})
+			}
+		}
+	}
 	for _, name := range serverNames {
 		srv := c.serverView(name, l.servers.get(name), agentsOfServer[name])
 		for _, p := range projects {

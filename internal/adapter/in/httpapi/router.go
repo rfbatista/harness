@@ -180,6 +180,8 @@ func NewRouter(h *Handler, opts ...Option) *echo.Echo {
 	g.POST("/test_catalog_mcp_server", h.handleTestCatalogMCPServer)
 	g.GET("/get_project_mcp_servers", h.handleGetProjectMCPServers)
 	g.POST("/set_project_mcp_servers", h.handleSetProjectMCPServers)
+	g.GET("/get_project_agents", h.handleGetProjectAgents)
+	g.POST("/set_project_agents", h.handleSetProjectAgents)
 	g.POST("/undo_catalog_change", h.handleUndoCatalogChange)
 
 	// mcp servers

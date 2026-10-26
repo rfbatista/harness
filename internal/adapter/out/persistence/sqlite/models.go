@@ -187,6 +187,10 @@ type ProjectModel struct {
 	AgentsReadAllRepos *bool `gorm:"column:agents_read_all_repos"`
 	// MCPServers are the catalog MCP servers every session of the project gets.
 	MCPServers stringSlice `gorm:"column:mcp_servers"`
+	// EnabledAgentsMode is "all" or "selected"; empty (a row from before the
+	// setting) reads as all.
+	EnabledAgentsMode string      `gorm:"column:enabled_agents_mode"`
+	EnabledAgents     stringSlice `gorm:"column:enabled_agents"`
 }
 
 // TableName overrides the table name.
@@ -201,6 +205,10 @@ func (m *ProjectModel) ToDomain() *domain.Project {
 	if paths == nil {
 		paths = []string{}
 	}
+	mode := m.EnabledAgentsMode
+	if mode != domain.AgentsSelected {
+		mode = domain.AgentsAll
+	}
 	return &domain.Project{
 		ID:           m.ID,
 		Name:         m.Name,
@@ -209,6 +217,8 @@ func (m *ProjectModel) ToDomain() *domain.Project {
 
 		AgentsReadAllRepos: m.AgentsReadAllRepos == nil || *m.AgentsReadAllRepos,
 		MCPServers:         append([]string(nil), m.MCPServers...),
+		EnabledAgentsMode:  mode,
+		EnabledAgents:      append([]string(nil), m.EnabledAgents...),
 	}
 }
 

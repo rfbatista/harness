@@ -19,6 +19,30 @@ type Project struct {
 	// MCPServers names the catalog's MCP servers every session of the
 	// project gets, on top of its agent's (ADR 0031).
 	MCPServers []string `json:"mcp_servers,omitempty"`
+	// EnabledAgentsMode is "all" (every catalog agent is enabled, new ones
+	// included; also what "" reads as) or "selected" (only EnabledAgents are),
+	// ADR 0038.
+	EnabledAgentsMode string   `json:"enabled_agents_mode,omitempty"`
+	EnabledAgents     []string `json:"enabled_agents,omitempty"`
+}
+
+// Enabled agent modes of a project.
+const (
+	AgentsAll      = "all"
+	AgentsSelected = "selected"
+)
+
+// AgentEnabled says whether the project lets its sessions run as the agent.
+func (p *Project) AgentEnabled(name string) bool {
+	if p.EnabledAgentsMode != AgentsSelected {
+		return true
+	}
+	for _, a := range p.EnabledAgents {
+		if a == name {
+			return true
+		}
+	}
+	return false
 }
 
 // CleanProjectName trims a project name; an empty one is INVALID_INPUT.
