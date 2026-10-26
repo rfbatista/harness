@@ -186,3 +186,29 @@ func TestTheSkillFormRoutesTakeThePageLikeTheAgentEditor(t *testing.T) {
 		t.Errorf("the agent editor shows on the skill form: %s", got)
 	}
 }
+
+// The MCP server form is the third full page: the server paints it with the
+// header and the tabs hidden. The same element is the agent editor's drawer, so
+// it is in every page, and hidden everywhere but on its own routes.
+func TestTheMcpServerFormRoutesTakeThePage(t *testing.T) {
+	hiddenTag := func(html, marker string) string {
+		return regexp.MustCompile(`<[a-z]+[^>]*` + marker + `[^>]*>`).FindString(html)
+	}
+	for path, form := range map[string]bool{
+		"/agents": false, "/agents/mcp": false, "/agents/mcp/github": false, "/agents/new": false, "/agents/skills/new": false,
+		"/agents/mcp/new": true, "/agents/mcp/github/edit": true,
+	} {
+		_, html := serve(t, Handler{}, path)
+		host := hiddenTag(html, "data-mcp-form-page")
+		if host == "" {
+			t.Fatalf("%s: the MCP form's element is not on the page", path)
+		}
+		if got := !strings.Contains(host, " hidden"); got != form {
+			t.Errorf("%s: the MCP form is shown = %v, want %v", path, got, form)
+		}
+		fullPage := form || path == "/agents/new" || path == "/agents/skills/new"
+		if got := strings.Contains(hiddenTag(html, `role="tablist"`), " hidden"); got != fullPage {
+			t.Errorf("%s: the tabs hidden = %v, want %v", path, got, fullPage)
+		}
+	}
+}

@@ -2,7 +2,7 @@
 
 import {
   agentBody, bundleBody, mcpServerBody, serverFields, skillBody,
-  toCatalog, toProbe, toServerNames, toSkillDetail, toWriteResult, writeFields,
+  toCatalog, toProbe, toProjectList, toServerNames, toSkillDetail, toWriteResult, writeFields,
 } from "./dto.js";
 
 /**
@@ -36,6 +36,9 @@ export function catalogGateway(api) {
     },
     async testMcpServer(server) {
       return toProbe(await api.post("/test_catalog_mcp_server", { server: serverFields(server) }));
+    },
+    async listProjects() {
+      return toProjectList(await api.get("/list_projects"));
     },
     async getProjectMcpServers(projectId) {
       return toServerNames(await api.get("/get_project_mcp_servers", { project_id: projectId }));

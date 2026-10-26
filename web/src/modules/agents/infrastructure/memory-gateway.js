@@ -211,9 +211,22 @@ export function memoryCatalogServer({ catalog, projects = {}, projectNames = {},
   };
 
   function write(verb, body) {
+    // A verb may set project lists as it goes; a dry run or a refusal puts them back.
+    const keep = clone(projectLists);
+    try {
+      return commit(verb, body, keep);
+    } catch (err) {
+      projectLists = keep;
+      throw err;
+    }
+  }
+
+  function commit(verb, body, keep) {
     const draft = clone(cat);
-    const { files, summary } = verbs[verb](draft, body);
+    let { files, summary } = verbs[verb](draft, body);
     derive(draft);
+    // A server's save writes agents.json only when an agent's list changed.
+    if (verb.endsWith("_mcp_server")) files = files.filter((f) => f !== "agents.json" || textOf[f](cat) !== textOf[f](draft));
     for (const f of files) {
       if (cat.broken && cat.broken.path === f) fail("CATALOG_BROKEN", `${f}: line ${cat.broken.line}, column ${cat.broken.column}: ${cat.broken.message}`, 409);
     }
@@ -224,13 +237,19 @@ export function memoryCatalogServer({ catalog, projects = {}, projectNames = {},
       }
     }
     const writes = files.map((path) => ({ path, before: textOf[path]?.(cat) ?? null, after: textOf[path]?.(draft) ?? null }));
-    if (body.dry_run) return { change: { id: "", summary: summary(draft), writes }, versions: clone(cat.versions) };
-    const before = { cat, projects: projectLists };
+    const projects = Object.keys(projectLists)
+      .filter((id) => JSON.stringify(keep[id]) !== JSON.stringify(projectLists[id]))
+      .map((id) => ({ id, name: projectNames[id] ?? id, before: keep[id] ?? [], after: [...projectLists[id]] }));
+    if (body.dry_run) {
+      projectLists = keep;
+      return { change: { id: "", summary: summary(draft), writes, projects }, versions: clone(cat.versions) };
+    }
+    const before = { cat, projects: keep };
     cat = draft;
     for (const f of files) cat.versions[f] = `sha256:${f}-${++counter}`;
     const id = `change-${++counter}`;
     latest = { id, before, files, after: Object.fromEntries(files.map((f) => [f, cat.versions[f]])) };
-    return { change: { id, summary: summary(cat), writes }, versions: clone(cat.versions) };
+    return { change: { id, summary: summary(cat), writes, projects }, versions: clone(cat.versions) };
   }
 
   const routes = {
@@ -239,6 +258,7 @@ export function memoryCatalogServer({ catalog, projects = {}, projectNames = {},
       const s = cat.skills.find((x) => x.name === name) ?? fail("SKILL_NOT_FOUND", `no skill ${name}`, 404);
       return { skill: { name, description: s.description, body: `# ${name}\n`, files: [], agents: s.agents, bundles: s.bundles, agent_count: s.agent_count }, versions: clone(cat.versions) };
     },
+    "GET list_projects": () => ({ projects: Object.keys(projectLists).map((id) => ({ id, name: projectNames[id] ?? id })) }),
     "GET check_env_vars": ({ names }) => Object.fromEntries(String(names ?? "").split(",").filter(Boolean).map((n) => [n, env[n] === true])),
     "POST undo_catalog_change": ({ change_id: id }) => {
       if (!latest || latest.id !== id) fail("CHANGE_NOT_UNDOABLE", "only the latest change can be undone", 409);

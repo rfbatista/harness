@@ -105,6 +105,7 @@ export function toWriteResult(body) {
       id: String(c.id ?? ""),
       summary: String(c.summary ?? ""),
       writes: list(c.writes, "writes").map((w) => ({ path: String(w?.path ?? ""), before: w?.before ?? null, after: w?.after ?? null, ...(w?.encoding === "base64" ? { encoding: "base64" } : {}) })),
+      projects: (Array.isArray(c.projects) ? c.projects : []).map((p) => ({ id: String(p?.id ?? ""), name: String(p?.name ?? ""), before: strings(p?.before ?? [], "before"), after: strings(p?.after ?? [], "after") })),
     },
     versions: object(body.versions),
   };
@@ -169,4 +170,9 @@ export function serverFields(s) {
 
 export function mcpServerBody(input) {
   return { ...withPrevious(input.previousName), server: serverFields(input.server), agents: input.agents ?? [], projects: input.projects ?? [] };
+}
+
+/** @param {unknown} body @returns {{ id: string, name: string }[]} */
+export function toProjectList(body) {
+  return list(/** @type {any} */ (body)?.projects, "projects").map((p) => ({ id: String(p?.id ?? ""), name: String(p?.name ?? "") }));
 }

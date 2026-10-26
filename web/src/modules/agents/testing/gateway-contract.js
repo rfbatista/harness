@@ -176,6 +176,27 @@ export function catalogGatewayContract(name, makeSubject) {
     assert.deepEqual([bad.status, bad.error, bad.hint], ["error", "executable not found", "Install it first."]);
   });
 
+  contract("lists the projects a server can be given to", async () => {
+    const { gateway } = subject();
+    assert.deepEqual(await gateway.listProjects(), [{ id: "p1", name: "harness" }]);
+  });
+
+  contract("an MCP server's dry run names the project lists it would set and changes nothing", async () => {
+    const { gateway } = subject();
+    const server = { name: "linear", transport: "http", url: "https://linear.example/mcp", headers: {} };
+    const dry = await gateway.saveMcpServer({ server, agents: [], projects: ["p1"] }, { dryRun: true });
+    assert.equal(dry.change.id, "");
+    assert.deepEqual(dry.change.projects, [{ id: "p1", name: "harness", before: ["github"], after: ["github", "linear"] }]);
+    assert.deepEqual(dry.change.writes.map((w) => w.path), ["mcp-servers.json"], "agents.json is untouched when no agent changes");
+    assert.deepEqual(await gateway.getProjectMcpServers("p1"), ["github"], "a dry run leaves the project alone");
+    assert.ok(!(await gateway.getCatalog()).mcpServers.some((m) => m.name === "linear"));
+    const real = await gateway.saveMcpServer({ server, agents: [], projects: ["p1"] });
+    assert.deepEqual(real.change.projects.map((p) => p.after), [["github", "linear"]]);
+    assert.deepEqual(await gateway.getProjectMcpServers("p1"), ["github", "linear"]);
+    const plain = await gateway.saveAgent({ agent: agent() });
+    assert.deepEqual(plain.change.projects, [], "a write with no project list says so");
+  });
+
   contract("sets a project's MCP servers; an unknown project or server is refused", async () => {
     const { gateway } = subject();
     assert.deepEqual(await gateway.setProjectMcpServers("p1", []), []);

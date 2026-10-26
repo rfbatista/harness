@@ -75,7 +75,8 @@ export function saveUi({ gateway }) {
     discardAndLeave() {
       const l = this.leaving;
       this.leaving = null;
-      this.closeEditor();
+      // A leave that is not a navigation (the MCP drawer) closes only itself: the editor under it stays.
+      if (!l?.inPlace) this.closeEditor();
       l?.go();
     },
 

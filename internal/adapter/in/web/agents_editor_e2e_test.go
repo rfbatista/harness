@@ -78,7 +78,7 @@ func TestAgentEditorCreatesEditsAndRenamesAnAgent_EndToEnd(t *testing.T) {
 		waitUntil(flat(`[data-agent-editor] [data-mcp-row][data-name=github]`)+`.includes('http') && `+flat(`[data-agent-editor] [data-mcp-row][data-name=github]`)+`.includes('${HARNESS_E2E_UNSET_TOKEN} not set')`),
 		waitUntil(`document.querySelectorAll('[data-agent-editor] [data-tool-row]').length > 0 && !!document.querySelector('[data-agent-editor] [data-tool-row][data-name=Read]')`),
 		waitUntil(flat(`[data-tools-summary]`)+` === 'None ticked · sessions get Claude’s default tools'`),
-		waitUntil(`[...document.querySelectorAll('[data-agent-editor] a')].some(a => a.dataset.newMcp !== undefined && a.getAttribute('href') === '/agents/mcp/new?return=%2Fagents%2Fnew%23mcp')`),
+		waitUntil(`[...document.querySelectorAll('[data-agent-editor] button')].some(b => b.dataset.newMcp !== undefined && b.getAttribute('aria-haspopup') === 'dialog')`),
 	)
 	run(b, "a name that is not a slug is linked to its field; an empty description turns Save off with the message and a banner",
 		setField(`#agent-name`, "iOS Designer"),

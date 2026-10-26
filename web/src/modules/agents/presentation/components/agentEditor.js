@@ -17,7 +17,7 @@ import {
   CREATE_SKILL, agentChanges, agentDraft, agentFieldErrors, agentPickerOptions, checkAgentDraft, createSkillHref,
   mcpChoices, resolvedSummary, tocCounts, toolChoices,
 } from "../../domain/agentDraft.js";
-import { isSlug } from "../../domain/names.js";
+import { isMcpName, isSlug } from "../../domain/names.js";
 import { openSave, saveView, savedToast } from "../../domain/savePipeline.js";
 import { entryPickerMixin } from "./entryPickerMixin.js";
 import { saveController } from "./saveController.js";
@@ -206,10 +206,15 @@ export function agentEditor({ gateway, location, history, storage = globalThis.s
         this.agentTouched = Boolean(kept.touched);
       }
       if (added) {
-        this.addEntry(added);
+        // Back from the skill form the address ends in #skills; back from the MCP server form, in #mcp.
+        if (/#mcp$/.test(location.hash ?? "")) this.addServer(added);
+        else this.addEntry(added);
         history?.replaceState?.({}, "", this.cleanUrl);
       }
       return mine || added !== "";
+    },
+    addServer(name) {
+      if (isMcpName(name) && !this.agentDraft.mcpServers.includes(name)) this.agentDraft.mcpServers.push(name);
     },
     addEntry(key) {
       if (isSlug(key) && !this.agentDraft.entries.includes(key)) this.agentDraft.entries.push(key);
@@ -250,7 +255,8 @@ export function agentEditor({ gateway, location, history, storage = globalThis.s
       return this.sv.conflictFiles;
     },
 
-    get fieldErrors() {
+    /** The editor's own errors: the MCP drawer, open over it, has its own, and the markup here must not show those. */
+    get agentErrors() {
       const server = this.agentDraft ? agentFieldErrors(this.agentSave.refusal, this.agentDraft) : { name: "", description: "", aliases: "", entries: "", mcp: "", tools: "", form: "" };
       return {
         name: this.agentCheck.nameProblem || server.name,
@@ -262,8 +268,11 @@ export function agentEditor({ gateway, location, history, storage = globalThis.s
         form: server.form,
       };
     },
+    get fieldErrors() {
+      return this.agentErrors;
+    },
     get formInvalid() {
-      return this.fieldErrors.form !== "";
+      return this.agentErrors.form !== "";
     },
     get refusalNext() {
       return this.agentSave.refusal?.next ?? "";
@@ -272,19 +281,23 @@ export function agentEditor({ gateway, location, history, storage = globalThis.s
       return this.agentSave.refusal?.code ?? "";
     },
     get agentNameInvalid() {
-      return this.fieldErrors.name !== "";
+      return this.agentErrors.name !== "";
     },
     get agentDescInvalid() {
-      return this.fieldErrors.description !== "";
+      return this.agentErrors.description !== "";
     },
     get agentAliasesInvalid() {
-      return this.fieldErrors.aliases !== "";
+      return this.agentErrors.aliases !== "";
     },
     get entriesInvalid() {
-      return this.fieldErrors.entries !== "";
+      return this.agentErrors.entries !== "";
+    },
+    // The skills picker's own names: entriesInvalid is shared with the bundle editor, and under the MCP drawer it would answer for that.
+    get agentEntriesInvalid() {
+      return this.agentErrors.entries !== "";
     },
     get agentMcpInvalid() {
-      return this.fieldErrors.mcp !== "";
+      return this.agentErrors.mcp !== "";
     },
     get agentNameDescribedBy() {
       return this.agentNameInvalid ? "agent-name-hint agent-name-error" : "agent-name-hint";
@@ -296,7 +309,10 @@ export function agentEditor({ gateway, location, history, storage = globalThis.s
       return this.agentAliasesInvalid ? "agent-aliases-hint agent-aliases-error" : "agent-aliases-hint";
     },
     get entriesDescribedBy() {
-      return this.entriesInvalid ? "agent-entries-hint agent-entries-error" : "agent-entries-hint";
+      return this.agentEntriesInvalid ? "agent-entries-hint agent-entries-error" : "agent-entries-hint";
+    },
+    get agentEntriesDescribedBy() {
+      return this.agentEntriesInvalid ? "agent-entries-hint agent-entries-error" : "agent-entries-hint";
     },
     get agentMcpDescribedBy() {
       return this.agentMcpInvalid ? "agent-mcp-hint agent-mcp-error" : "agent-mcp-hint";

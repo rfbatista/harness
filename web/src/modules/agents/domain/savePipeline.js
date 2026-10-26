@@ -23,7 +23,7 @@ import { conflictModel, diffModel } from "./diff.js";
  * @property {"clean"|"dirty"|"previewing"|"conflict"|"saved"|"error"} phase
  * @property {Record<string, string>} baseVersions
  * @property {number} seq  counts edits; a preview answer for an older one is dropped
- * @property {{ writes: WriteResult["change"]["writes"], summary: string } | null} preview
+ * @property {{ writes: WriteResult["change"]["writes"], summary: string, projects: WriteResult["change"]["projects"] } | null} preview
  * @property {Record<string, string | null>} seen  the text each file had when last previewed
  * @property {Refusal | null} refusal
  * @property {{ changed: Refusal["changed"], currentVersions: Record<string, string> } | null} conflict
@@ -60,10 +60,10 @@ export function reduceSave(s, e) {
       return { ...s, phase: "previewing" };
     case "preview-done": {
       if (e.seq !== s.seq) return s;
-      const { writes, summary } = e.result.change;
+      const { writes, summary, projects = [] } = e.result.change;
       const seen = { ...s.seen };
       for (const w of writes) seen[w.path] = w.before;
-      return { ...s, phase: s.phase === "conflict" ? "conflict" : "dirty", preview: { writes, summary }, seen, refusal: null };
+      return { ...s, phase: s.phase === "conflict" ? "conflict" : "dirty", preview: { writes, summary, projects }, seen, refusal: null };
     }
     case "preview-failed":
       if (e.seq !== s.seq) return s;

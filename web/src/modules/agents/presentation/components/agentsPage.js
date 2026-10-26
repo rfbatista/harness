@@ -21,6 +21,7 @@ import { bundleEditor } from "./bundleEditor.js";
 import { bundlesTab } from "./bundlesTab.js";
 import { compose } from "./compose.js";
 import { editors } from "./editors.js";
+import { mcpEditor } from "./mcpEditor.js";
 import { saveUi } from "./saveUi.js";
 import { skillEditor } from "./skillEditor.js";
 
@@ -37,7 +38,7 @@ const COUNTS = {
 
 /**
  * @param {{
- *   gateway: Pick<import("../../domain/ports.js").CatalogGateway, "decodeCatalog" | "getCatalog" | "getSkill" | "checkEnvVars" | "saveAgent" | "saveBundle" | "saveSkill" | "undoChange">,
+ *   gateway: Pick<import("../../domain/ports.js").CatalogGateway, "decodeCatalog" | "getCatalog" | "getSkill" | "checkEnvVars" | "saveAgent" | "saveBundle" | "saveSkill" | "saveMcpServer" | "testMcpServer" | "listProjects" | "undoChange">,
  *   history: Pick<History, "pushState"> & Partial<Pick<History, "replaceState">>,
  *   location: Pick<Location, "pathname" | "search"> & Partial<Pick<Location, "hash" | "assign">>,
  *   clipboard?: Pick<Clipboard, "writeText">,
@@ -208,7 +209,7 @@ export const agentsPage = ({ gateway, history, location, clipboard, timers = glo
 
   /** A full-page editor or form is open: it takes the place of the header, the tabs and the lists. */
   get fullPage() {
-    return this.agentEditing || this.skillEditing;
+    return this.agentEditing || this.skillEditing || this.mfOpen;
   },
 
   get noItem() {
@@ -563,6 +564,8 @@ export const agentsPage = ({ gateway, history, location, clipboard, timers = glo
   },
 }, bundlesTab({ history }), editors(
   { part: bundleEditor({ gateway, location, timers }) },
-  { part: agentEditor({ gateway, location, history, timers }), isOpen: (p) => p.agentDraft !== null },
+  // The MCP form's drawer opens over the agent editor: while it does, the shared members answer for the drawer.
+  { part: agentEditor({ gateway, location, history, timers }), isOpen: (p) => p.agentDraft !== null && !p.mfOpen },
   { part: skillEditor({ gateway, location, timers }), isOpen: (p) => p.sfOpen },
+  { part: mcpEditor({ gateway, location, timers }), isOpen: (p) => p.mfOpen },
 ), saveUi({ gateway }));

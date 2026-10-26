@@ -69,8 +69,9 @@
  * @property {boolean} [dryRun]  write nothing; answer what would be written
  *
  * @typedef {object} WriteResult
- * @property {{ id: string, summary: string, writes: { path: string, before: string | null, after: string | null, encoding?: "base64" }[] }} change
- *           id is "" for a dry run; before is null for a new file, after for a deleted one
+ * @property {{ id: string, summary: string, writes: { path: string, before: string | null, after: string | null, encoding?: "base64" }[], projects: { id: string, name: string, before: string[], after: string[] }[] }} change
+ *           id is "" for a dry run; before is null for a new file, after for a deleted one;
+ *           projects are the project MCP server lists the change sets
  * @property {Record<string, string>} versions
  *
  * @typedef {object} Probe
@@ -94,6 +95,7 @@
  * @property {(name: string, options?: WriteOptions) => Promise<WriteResult>} deleteMcpServer
  * @property {(changeId: string) => Promise<WriteResult>} undoChange  rejects CHANGE_NOT_UNDOABLE or CATALOG_CHANGED
  * @property {(server: object) => Promise<Probe>} testMcpServer  an unsaved server; stores nothing
+ * @property {() => Promise<{ id: string, name: string }[]>} listProjects  every project, for Who gets it
  * @property {(projectId: string) => Promise<string[]>} getProjectMcpServers
  * @property {(projectId: string, names: string[]) => Promise<string[]>} setProjectMcpServers
  *

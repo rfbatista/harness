@@ -38,7 +38,8 @@ type tokenSaverWorld struct {
 	task     *domain.Ticket
 }
 
-func newTokenSaverWorld(t *testing.T) *tokenSaverWorld {
+// opts shape the agent catalog the server reads (a fake MCP prober, say).
+func newTokenSaverWorld(t *testing.T, opts ...agentcatalog.Option) *tokenSaverWorld {
 	t.Helper()
 	if testing.Short() {
 		t.Skip("browser test: skipped in -short mode")
@@ -70,7 +71,7 @@ func newTokenSaverWorld(t *testing.T) *tokenSaverWorld {
 	w.repo = w.addRepository()
 	w.task = w.addTask()
 
-	w.agentCat = agentcatalog.New(filepath.Join(w.root, "agents"), agentcatalog.WithProjects(w.cat.Projects))
+	w.agentCat = agentcatalog.New(filepath.Join(w.root, "agents"), append([]agentcatalog.Option{agentcatalog.WithProjects(w.cat.Projects)}, opts...)...)
 	mux := http.NewServeMux()
 	mux.Handle("/api/", httpapi.NewRouter(httpapi.NewHandler(httpapi.Services{
 		Projects: w.cat.Projects, ProjectFeed: w.cat.Projects, Agents: w.cat.Agents, Sessions: orch, Planning: w.plan,
