@@ -137,6 +137,10 @@ export function codeBrowser({ gateway, highlighter, prefs, history = globalThis.
     /** The chosen width of the file list, in percent of the layout; null: the default. */
     splitPercent: null,
     splitDragging: false,
+    /** Full screen (⇧F): the page keeps only a thin bar over the diff. Never remembered. */
+    fullscreen: false,
+    /** In full screen, ⇧E hides the file list. */
+    listHidden: false,
     /** Below 44rem: the main side is shown instead of the side list. */
     showMain: false,
     /** The reader scrolled the main side since it loaded. */
@@ -411,9 +415,55 @@ export function codeBrowser({ gateway, highlighter, prefs, history = globalThis.
     get expandPressed() {
       return String(this.expanded);
     },
+    get fullscreenPressed() {
+      return String(this.fullscreen);
+    },
+    /** data-fullscreen on the view: present in full screen. */
+    get fullscreenAttr() {
+      return this.fullscreen ? "" : null;
+    },
+    /** data-list on the layout: "hidden" while full screen has put the file list away. */
+    get listAttr() {
+      return this.fullscreen && this.listHidden ? "hidden" : null;
+    },
+    get listToggleLabel() {
+      return this.listHidden ? "Show file list" : "Hide file list";
+    },
+    get fullscreenBranch() {
+      return this.branch;
+    },
+    get fullscreenBase() {
+      return this.baseRef;
+    },
+    /**
+     * ⇧F and the Full screen / Exit buttons: the page hides everything but a
+     * thin bar (it listens to code-fullscreen); the diff takes the focus, and
+     * the button gets it back on exit. Same file, same scroll: nothing is redrawn.
+     */
+    toggleFullscreen() {
+      if (this.kind !== "session") return;
+      this.setFullscreen(!this.fullscreen);
+    },
+    setFullscreen(on) {
+      if (on === this.fullscreen) return;
+      this.fullscreen = on;
+      this.$dispatch?.("code-fullscreen", { on });
+      // Read before the page redraws: the Exit button that called this goes away, and a
+      // magic read from a removed element finds no root. Then focus once the bar's
+      // buttons have come or gone with the attribute.
+      const main = this.$refs?.main;
+      const root = this.$root;
+      this.$nextTick?.(() =>
+        setTimeout(() => (on ? main : root?.querySelector?.("[data-code-fullscreen]"))?.focus?.(), 0),
+      );
+    },
     /** ⇧E and the Expand button: the session list hides or comes back; the URL stays. */
     toggleExpand() {
       if (this.kind !== "session") return;
+      if (this.fullscreen) {
+        this.listHidden = !this.listHidden;
+        return;
+      }
       this.expanded = !this.expanded;
       this.$dispatch?.("code-expand", { expanded: this.expanded });
     },
@@ -1323,6 +1373,8 @@ export function codeBrowser({ gateway, highlighter, prefs, history = globalThis.
           return this.isStale && run(() => this.reload());
         case "E":
           return this.kind === "session" && event.shiftKey && run(() => this.toggleExpand());
+        case "F":
+          return this.kind === "session" && event.shiftKey && run(() => this.toggleFullscreen());
         case "F6":
           return run(() => this.swapPane());
         case "Escape":

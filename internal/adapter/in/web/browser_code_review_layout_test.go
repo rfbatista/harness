@@ -2,6 +2,7 @@ package web
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -224,5 +225,101 @@ func TestADoubleClickOnTheCodeSplitResetsItInTheBrowser(t *testing.T) {
 	}
 	if draggedW <= startW+50 || resetW < startW-2 || resetW > startW+2 {
 		t.Errorf("list %.0f → dragged %.0f → double-clicked %.0fpx", startW, draggedW, resetW)
+	}
+}
+
+// Full screen (⇧F): the sidebar, the task header and description, the session
+// list, the session head and the tab row go, a thin bar stays; leaving brings
+// them back on the same scroll position with the focus on the button.
+func TestCodeFullScreenInTheBrowser(t *testing.T) {
+	w := runningCodeWorld(t)
+	ctx, errs := browser(t)
+	shown := func(sel string) string {
+		return `(() => { const e = document.querySelector('` + sel + `'); return !!e && e.checkVisibility() })()`
+	}
+	chrome := []string{".rail", "main .toolbar", ".split-view > :first-child", ".session-head", ".pane-tabs", codeSection + " .code-source-bar"}
+	anyChrome := func() string {
+		js := `[`
+		for i, c := range chrome {
+			if i > 0 {
+				js += ","
+			}
+			js += shown(c)
+		}
+		return js + `].some(Boolean)`
+	}
+	allChrome := `(() => [` + func() string {
+		js := ""
+		for i, c := range chrome {
+			if i > 0 {
+				js += ","
+			}
+			js += shown(c)
+		}
+		return js
+	}() + `].every(Boolean))()`
+	scroller := `document.querySelector('` + codeSection + ` .code-layout > .main')`
+
+	var before, during, after, barShown, listHidden, stillFull, listHidden2 bool
+	var barText, activeInFull, activeAfter string
+	var scrollBefore, scrollAfter float64
+	var summaryShown bool
+	err := chromedp.Run(ctx,
+		chromedp.EmulateViewport(1440, 500),
+		chromedp.Navigate(codeTabURL(w)),
+		chromedp.Poll(`document.querySelectorAll('[data-ssr]').length === 0 && document.querySelectorAll('`+codeSection+` .diff-view .code-lines .line').length > 0`, nil, chromedp.WithPollingTimeout(10*time.Second)),
+		chromedp.Evaluate(allChrome, &before),
+		chromedp.Evaluate(scroller+`.scrollTop = 60`, nil),
+		chromedp.Evaluate(scroller+`.scrollTop`, &scrollBefore),
+		chromedp.Focus(codeSection+` .main`, chromedp.ByQuery),
+		chromedp.KeyEvent("F", chromedp.KeyModifiers(input.ModifierShift)),
+		chromedp.Poll(shown(codeSection+` .fs-bar`), nil, chromedp.WithPollingTimeout(3*time.Second)),
+		chromedp.Evaluate(anyChrome(), &during),
+		chromedp.Evaluate(`document.querySelector('`+codeSection+` .fs-bar').textContent.replace(/\s+/g, ' ').trim()`, &barText),
+		chromedp.Evaluate(shown(codeSection+` .fs-bar [data-fs-layout]`)+` && `+shown(codeSection+` .fs-bar [data-code-exit-fullscreen]`), &barShown),
+		chromedp.Evaluate(`document.activeElement === `+scroller, &summaryShown),
+		chromedp.Evaluate(`document.activeElement.className`, &activeInFull),
+		// ⇧E in full screen hides the file list.
+		chromedp.KeyEvent("E", chromedp.KeyModifiers(input.ModifierShift)),
+		chromedp.Poll(`!`+shown(codeSection+` .code-layout > .side`), nil, chromedp.WithPollingTimeout(3*time.Second)),
+		chromedp.Evaluate(`!`+shown(codeSection+` .code-layout > .side`), &listHidden),
+		chromedp.KeyEvent("E", chromedp.KeyModifiers(input.ModifierShift)),
+		chromedp.Poll(shown(codeSection+` .code-layout > .side`), nil, chromedp.WithPollingTimeout(3*time.Second)),
+		// Esc is not the key: the thin bar is still there.
+		chromedp.KeyEvent(kb.Escape),
+		chromedp.Sleep(150*time.Millisecond),
+		chromedp.Evaluate(shown(codeSection+` .fs-bar`), &stillFull),
+		chromedp.Click(codeSection+` [data-code-exit-fullscreen]`, chromedp.ByQuery),
+		chromedp.Poll(allChrome, nil, chromedp.WithPollingTimeout(3*time.Second)),
+		chromedp.Sleep(150*time.Millisecond),
+		chromedp.Evaluate(allChrome, &after),
+		chromedp.Evaluate(scroller+`.scrollTop`, &scrollAfter),
+		chromedp.Evaluate(`document.activeElement.hasAttribute('data-code-fullscreen')`, &listHidden2),
+	)
+	_ = activeAfter
+	_ = summaryShown
+	if err != nil {
+		t.Fatalf("%v\nJS errors: %v", err, errs.all())
+	}
+	if !before || during || !after {
+		t.Errorf("chrome all shown before %v, any shown in full screen %v, all back after %v", before, during, after)
+	}
+	if !barShown || !strings.Contains(barText, w.f.Branch) || !strings.Contains(barText, "main") || !strings.Contains(barText, "Exit full screen") {
+		t.Errorf("the thin bar: layout and Exit shown %v, text %q", barShown, barText)
+	}
+	if !listHidden {
+		t.Error("⇧E in full screen did not hide the file list")
+	}
+	if !stillFull {
+		t.Error("Esc left full screen")
+	}
+	if scrollBefore != scrollAfter {
+		t.Errorf("scroll %.0f before, %.0f after full screen", scrollBefore, scrollAfter)
+	}
+	if !listHidden2 {
+		t.Error("the focus did not return to the Full screen button")
+	}
+	if e := errs.all(); len(e) > 0 {
+		t.Errorf("JS errors: %v", e)
 	}
 }

@@ -19,8 +19,11 @@ import (
 // Live is a code view's markup, bound to a codeBrowser component on an
 // ancestor (codePanel or codePage).
 templ Live() {
-	<div class="[ frame ]" x-on:keydown="onKey">
+	<div class="[ frame ]" x-on:keydown="onKey" x-bind:data-fullscreen="fullscreenAttr">
 		@liveSourceBar()
+		<template x-if="fullscreen">
+			@liveFullscreenBar()
+		</template>
 		<template x-if="problemLine">
 			<div class="[ banner ]" data-tone="danger" role="alert">
 				<div class="[ flow ] [ flow-space-3xs grow ]">
@@ -40,7 +43,7 @@ templ Live() {
 			</div>
 		</template>
 		<template x-if="!emptyProblem">
-			<div class="code-layout" x-ref="layout" x-bind:data-main="mainAttr" x-bind:data-side="sideAttr" x-bind:style="splitStyle">
+			<div class="code-layout" x-ref="layout" x-bind:data-main="mainAttr" x-bind:data-side="sideAttr" x-bind:data-list="listAttr" x-bind:style="splitStyle">
 				<aside class="side" x-ref="side" x-bind:aria-label="sideLabel">
 					<template x-if="showingChanges">
 						@liveSummary()
@@ -109,6 +112,9 @@ templ liveSourceBar() {
 				<button type="button" class="[ button ]" data-size="sm" data-reload x-on:click="reload">Reload <kbd>R</kbd></button>
 			</template>
 			<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-bind:disabled="gone" x-on:click="openFinder">Find file <kbd>T</kbd></button>
+			<template x-if="kind === 'session'">
+				<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" data-code-fullscreen title="Give the code the whole window" x-bind:aria-pressed="fullscreenPressed" x-on:click="toggleFullscreen">Full screen <kbd>⇧F</kbd></button>
+			</template>
 			<template x-if="kind === 'session' && canExpand">
 				<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" data-code-expand title="Give the code the whole width, hiding the session list" x-bind:aria-pressed="expandPressed" x-on:click="toggleExpand">Expand <kbd>⇧E</kbd></button>
 			</template>
@@ -121,6 +127,26 @@ templ liveSourceBar() {
 			</div>
 		</template>
 	</header>
+}
+
+// liveFullscreenBar is the thin bar that stays in full screen (the page hides
+// the rest): the session, its branch to its base, the diff's summary, the file
+// list's button, the layout switch and Exit.
+templ liveFullscreenBar() {
+	<div class="fs-bar" role="toolbar" aria-label="Full screen diff">
+		<span class="title" x-text="title"></span>
+		<span class="pair"><b x-text="fullscreenBranch"></b> <span aria-label="to">→</span> <span x-text="fullscreenBase"></span></span>
+		<template x-if="totals">
+			<span class="sum"><span x-text="totals.files"></span> <span class="added" x-text="totals.added"></span> <span class="deleted" x-text="totals.deleted"></span></span>
+		</template>
+		<span class="spacer"></span>
+		<button type="button" class="[ button ]" data-size="sm" data-fs-list x-bind:aria-pressed="listAttr === null" x-bind:title="listToggleLabel" x-on:click="toggleExpand">File list <kbd>⇧E</kbd></button>
+		<div class="segmented" data-fs-layout role="group" aria-label="Diff layout">
+			<button type="button" x-bind:aria-pressed="unifiedPressed" x-on:click="setLayout('unified')">Unified</button>
+			<button type="button" x-bind:aria-pressed="splitPressed" x-bind:aria-disabled="sideBySideDisabled" x-bind:title="sideBySideTitle" x-on:click="setLayout('split')">Side by side</button>
+		</div>
+		<button type="button" class="[ button ]" data-size="sm" data-code-exit-fullscreen title="Exit full screen" x-on:click="toggleFullscreen">Exit full screen <kbd>⇧F</kbd></button>
+	</div>
 }
 
 templ liveSummary() {

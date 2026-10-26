@@ -276,3 +276,57 @@ test("a double-click resets the split to the default", async () => {
   panel.resetSplit();
   assert.deepEqual([panel.splitStyle, prefs.get("code.split")], [null, null]);
 });
+
+const shiftKey = (key, target = document.createElement("div")) => ({ key, shiftKey: true, target, defaultPrevented: false, preventDefault() { this.defaultPrevented = true; } });
+
+test("⇧F enters and leaves full screen, tells the page, and is never remembered", async () => {
+  const stored = [];
+  const { panel, dispatched, tick } = await setup({ prefs: { get: () => null, set: (k, v) => stored.push([k, v]) } });
+  const focused = [];
+  const button = Object.assign(document.createElement("button"), { focus: () => focused.push("button") });
+  button.setAttribute("data-code-fullscreen", "");
+  panel.$root.append(button);
+  panel.$refs = { main: { focus: () => focused.push("diff") } };
+  const events = () => dispatched.filter((d) => d.name === "code-fullscreen").map((d) => d.detail.on);
+
+  panel.onKey(shiftKey("F"));
+  tick();
+  await flush();
+  assert.deepEqual([panel.fullscreen, panel.fullscreenPressed, panel.fullscreenAttr, events(), focused], [true, "true", "", [true], ["diff"]]);
+  panel.onKey(shiftKey("F"));
+  tick();
+  await flush();
+  assert.deepEqual([panel.fullscreen, panel.fullscreenAttr, events(), focused], [false, null, [true, false], ["diff", "button"]]);
+  assert.deepEqual(stored.filter(([k]) => /full/i.test(k)), [], "nothing about full screen is stored");
+});
+
+test("Esc is not the full-screen key", async () => {
+  const { panel } = await setup();
+  panel.toggleFullscreen();
+  panel.onKey({ key: "Escape", target: document.createElement("div"), preventDefault() {} });
+  assert.equal(panel.fullscreen, true);
+});
+
+test("⇧E in full screen hides the file list, and does not touch the session list", async () => {
+  const { panel, dispatched } = await setup();
+  panel.toggleFullscreen();
+  panel.onKey(shiftKey("E"));
+  assert.deepEqual([panel.listHidden, panel.listAttr, dispatched.some((d) => d.name === "code-expand")], [true, "hidden", false]);
+  panel.onKey(shiftKey("E"));
+  assert.deepEqual([panel.listHidden, panel.listAttr], [false, null]);
+});
+
+test("the full-screen bar says the session, branch to base, and the summary", async () => {
+  const { panel } = await setup();
+  assert.equal(panel.fullscreenBranch, "agent/visualize-code");
+  assert.equal(panel.fullscreenBase, "main");
+  assert.equal(panel.totals.files, "5 files");
+});
+
+test("the Code tab leaving the front leaves full screen", async () => {
+  const { panel, dispatched } = await setup();
+  panel.toggleFullscreen();
+  panel.tabShown({ detail: { sessionId: "s1", shown: false } });
+  assert.equal(panel.fullscreen, false);
+  assert.deepEqual(dispatched.filter((d) => d.name === "code-fullscreen").map((d) => d.detail.on), [true, false]);
+});

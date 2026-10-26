@@ -23,6 +23,7 @@ export const CODE_HINTS = Object.freeze([
   { keys: ["]", "["], label: "files" },
   { keys: ["G", "C/F/M"], label: "views" },
   { keys: ["⇧E"], label: "expand" },
+  { keys: ["⇧F"], label: "full screen" },
 ]);
 
 /**
@@ -33,6 +34,7 @@ export const CODE_HINTS = Object.freeze([
  * @property {string} sessionId
  * @property {string} workspaceId
  * @property {string} repositoryId
+ * @property {string} title       the session's name, for the full-screen bar
  * @property {string} repositoryName
  * @property {string} branch
  * @property {string} baseRef
@@ -50,6 +52,7 @@ export const codePanel = (deps) => (/** @type {PanelInput} */ panel) => {
   return compose(browser, {
     kind: "session",
     sessionId: "",
+    title: "",
     shown: false,
     /** The window is wide enough (64rem) for the split view to show the list beside the detail. */
     wide: true,
@@ -62,6 +65,7 @@ export const codePanel = (deps) => (/** @type {PanelInput} */ panel) => {
     init() {
       this.sessionId = panel.sessionId;
       this.shown = !!panel.shown;
+      this.title = panel.title ?? "";
       this.expanded = !!panel.expanded;
       const seedEl = panel.seedId ? this.$el.ownerDocument.getElementById(panel.seedId) : null;
       let seeded = false;
@@ -108,6 +112,7 @@ export const codePanel = (deps) => (/** @type {PanelInput} */ panel) => {
     destroy() {
       observer?.disconnect();
       this.stop();
+      if (this.fullscreen) this.$dispatch("code-fullscreen", { on: false });
       if (this.shown) this.$dispatch("stream-hints", null);
     },
 
@@ -127,6 +132,7 @@ export const codePanel = (deps) => (/** @type {PanelInput} */ panel) => {
       const { sessionId, shown } = event.detail ?? {};
       if (sessionId !== this.sessionId) return;
       this.shown = shown;
+      if (!shown) this.setFullscreen(false);
       // After a replaced panel's destroy has cleared them.
       this.$nextTick(() => this.$dispatch("stream-hints", shown ? CODE_HINTS : null));
       if (!shown) return;

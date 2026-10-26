@@ -35,7 +35,7 @@ export const FRESH_MS = 8_000;
  *   merge?: import("../../domain/ports.js").MergeGateway,  merging a session's branch; without it there is no Merge tab
  *   location?: { search: string },  ?session=<id> opens that session (a comment links to the session that wrote it)
  *   prefs?: ReturnType<typeof import("../screenPrefs.js").screenPrefs>,  this browser's text size and focus mode
- *   shell?: { setFocus: (on: boolean) => void },  the app shell around the page (focus mode hides the rail and more)
+ *   shell?: { setFocus: (on: boolean) => void, setCodeFullscreen: (on: boolean) => void },  the app shell around the page (focus mode and the Code tab's full screen hide the rail and more)
  *   clipboard?: { writeText: (text: string) => Promise<void> },
  *   isPhone?: () => boolean,
  * }} deps
@@ -50,7 +50,7 @@ export const sessionsPage = ({
   location = globalThis.location,
   history = globalThis.history,
   prefs = { textSize: () => DEFAULT_TEXT_SIZE, setTextSize() {}, focus: () => false, setFocus() {} },
-  shell = { setFocus() {} },
+  shell = { setFocus() {}, setCodeFullscreen() {} },
   clipboard = { writeText: (text) => globalThis.navigator.clipboard.writeText(text) },
   isPhone = () => globalThis.matchMedia?.("(width < 48rem)").matches ?? false,
 }) => () => {
@@ -112,6 +112,8 @@ export const sessionsPage = ({
     codeCounts: {},
     /** The Code tab asked for the whole width (⇧E): the session list hides while it is in front. */
     codeExpanded: false,
+    /** The Code tab is in full screen (⇧F): the page keeps only its thin bar while it is in front. Never remembered. */
+    codeFullscreen: false,
 
     // ── what the markup binds ────────────────────────────────────────────
     get groups() {
@@ -387,6 +389,7 @@ export const sessionsPage = ({
           live,
           shown: this.detailTab === "code",
           expanded: this.codeExpanded,
+          title: this.selected.title,
           seedId: "code-seed",
         },
       ];
@@ -644,6 +647,9 @@ export const sessionsPage = ({
       history?.replaceState?.(null, "", `/projects/${p}/tasks/${t}?session=${encodeURIComponent(this.selectedId)}`);
     },
     /** The Code panel's Expand (⇧E): a view preference, the URL stays. */
+    codeFullscreenChanged(event) {
+      this.codeFullscreen = event.detail?.on === true;
+    },
     codeExpand(event) {
       this.codeExpanded = event.detail?.expanded === true;
     },
@@ -884,6 +890,7 @@ export const sessionsPage = ({
     /** Puts focus mode on the shell (x-effect): only while a terminal's tools, and so its Exit focus, show. */
     applyFocus() {
       shell.setFocus(this.focusActive);
+      shell.setCodeFullscreen(this.codeFullscreen && this.showingCode);
     },
     async copySessionId() {
       const id = this.selectedId;
