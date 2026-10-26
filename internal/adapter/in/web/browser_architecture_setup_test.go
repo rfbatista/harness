@@ -43,7 +43,6 @@ func TestSettingUpAnArchitectureFromWhatTheHarnessFound(t *testing.T) {
 	rig.run(t,
 		chromedp.EmulateViewport(1280, 900),
 		chromedp.Navigate(rig.url("")),
-		archClick(`#architecture-empty [data-action=discover]`),
 		poll(`document.querySelectorAll('[data-candidates] input[type=checkbox]').length === 3`),
 		poll(`document.querySelector('#architecture-empty').textContent.includes('software-architect, go-developer, devops')`),
 		// the person unticks nothing: all three are confirmed
@@ -51,11 +50,11 @@ func TestSettingUpAnArchitectureFromWhatTheHarnessFound(t *testing.T) {
 		poll(`!!document.querySelector('[data-setup-done]')`),
 		poll(`!!document.querySelector('[data-save-bar]')?.checkVisibility()`),
 		archClick(archSave),
-		poll(`document.querySelector('[data-count=instructions]')?.textContent.trim() === '1 file'`),
+		poll(`document.querySelector('[data-count=instructions]')?.textContent.trim() === '1'`),
 		chromedp.Evaluate(archCounts(), &counts),
 		chromedp.Evaluate(`!document.querySelector('#architecture-empty')`, &empty),
 	)
-	want := `{"instructions":"1 file","tools":"1 tool","sandboxes":"1 sandbox","orchestration":"0 routes · 0 hand-offs","hooks":"1 rule · 0 blocking","layers":"0 layers"}`
+	want := `{"instructions":"1","tools":"1","sandboxes":"1","agents":"0","hooks":"1","layers":"0"}`
 	if counts != want {
 		t.Fatalf("counts = %s, want %s", counts, want)
 	}
@@ -78,13 +77,12 @@ func TestAnUntickedCandidateIsNotAdded(t *testing.T) {
 	rig.run(t,
 		chromedp.EmulateViewport(1280, 900),
 		chromedp.Navigate(rig.url("")),
-		archClick(`#architecture-empty [data-action=discover]`),
 		poll(`document.querySelectorAll('[data-candidates] input[type=checkbox]').length === 3`),
 		archClick(`[data-candidate="tools:0"]`),
 		poll(`document.querySelector('[data-action=confirm]').textContent.trim() === 'Add 2 to the architecture'`),
 		archClick(`#architecture-empty [data-action=confirm]`),
-		poll(`document.querySelector('[data-count=instructions]')?.textContent.trim() === '1 file'`),
-		poll(`document.querySelector('[data-count=tools]')?.textContent.trim() === '0 tools'`),
+		poll(`document.querySelector('[data-count=instructions]')?.textContent.trim() === '1'`),
+		poll(`document.querySelector('[data-count=tools]')?.textContent.trim() === '0'`),
 	)
 }
 
@@ -138,10 +136,11 @@ func TestEntriesAddedInTheDescriptiveTabsAreSavedAndReloaded(t *testing.T) {
 		poll(`document.querySelector('[data-save-bar]')?.checkVisibility() === false`),
 		chromedp.Navigate(rig.url("/orchestration")),
 		poll(`document.querySelectorAll('[data-count]').length === 6`),
-		poll(`document.querySelector('[data-count=orchestration]').textContent.trim() === '2 routes · 2 hand-offs'`),
+		poll(`document.querySelector('[data-count=agents]').textContent.trim() === '2'`),
+		poll(`document.querySelector('#architecture-tab-orchestration [data-tab-count]').textContent.trim() === '4'`),
 		chromedp.Evaluate(archCounts(), &counts),
 	)
-	want := `{"instructions":"3 files","tools":"2 tools","sandboxes":"2 sandboxes","orchestration":"2 routes · 2 hand-offs","hooks":"2 rules · 1 blocking","layers":"2 layers"}`
+	want := `{"instructions":"3","tools":"2","sandboxes":"2","agents":"2","hooks":"2","layers":"2"}`
 	if counts != want {
 		t.Fatalf("counts after reload = %s, want %s", counts, want)
 	}
@@ -217,7 +216,7 @@ func TestAToolThatWritesWithNoUsageShowsItsErrorOnTheField(t *testing.T) {
 	rig.run(t,
 		archFill("tools", 1, "usage", "Run only after the checks pass."),
 		archClick(archSave),
-		poll(`document.querySelector('[data-count=tools]').textContent.trim() === '2 tools' && !document.querySelector('[data-error-for="/tools/1/usage"]') && document.querySelector('[data-save-bar]').checkVisibility() === false`),
+		poll(`document.querySelector('[data-count=tools]').textContent.trim() === '2' && !document.querySelector('[data-error-for="/tools/1/usage"]') && document.querySelector('[data-save-bar]').checkVisibility() === false`),
 	)
 	if rig.api.lastSaved() == nil {
 		t.Fatal("the corrected tool was not saved")

@@ -25,6 +25,18 @@ export function newLayer(existing, kind = "folder") {
   return { name: `layer-${n}`, match: { [kind]: "" }, access: newAccess() };
 }
 
+/** The layers of a hexagonal repository, each with the default access. */
+export const hexagonalLayers = () => [
+  { name: "domain", match: { folder: "internal/domain" } },
+  { name: "ports", match: { folder: "internal/ports" } },
+  { name: "application", match: { folder: "internal/app" } },
+  { name: "adapters-in", match: { folder: "internal/adapter/in" } },
+  { name: "adapters-out", match: { folder: "internal/adapter/out" } },
+  { name: "web", match: { folder: "web" } },
+  { name: "tests", match: { regex: "(^tests/|_test\\.go$|\\.test\\.js$)" } },
+  { name: "docs", match: { folder: "docs" } },
+].map((layer) => ({ ...layer, access: newAccess() }));
+
 /** Which way a layer matches: "regex" or "folder". */
 export const matchKind = (layer) => (typeof layer?.match?.regex === "string" ? "regex" : "folder");
 

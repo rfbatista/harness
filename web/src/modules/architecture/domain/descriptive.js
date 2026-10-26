@@ -134,3 +134,28 @@ export function toggled(list, name, on) {
 
 /** What a closed agent picker says. */
 export const agentSummary = (list) => (list.length === 0 ? "No agents chosen" : list.join(", "));
+
+/**
+ * What the empty state says discovery found: rule files by name, the others
+ * counted. "" when nothing was found.
+ * @param {{ key: string, label: string, entry: { kind?: string } }[]} candidates
+ */
+export function discoveryText(candidates) {
+  const of = (section) => candidates.filter((c) => c.key.startsWith(`${section}:`));
+  const instructions = of("instructions");
+  const rules = instructions.filter((c) => c.entry.kind === "rules").map((c) => c.label);
+  const skills = instructions.filter((c) => c.entry.kind === "skill").length;
+  const prompts = instructions.filter((c) => c.entry.kind === "subagent_prompt").length;
+  const count = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+  const found = [
+    ...rules,
+    ...(skills ? [count(skills, "skill", "skills")] : []),
+    ...(prompts ? [count(prompts, "sub-agent prompt", "sub-agent prompts")] : []),
+    ...(of("tools").length ? [count(of("tools").length, "tool", "tools")] : []),
+    ...(of("sandboxes").length ? [count(of("sandboxes").length, "sandbox", "sandboxes")] : []),
+  ];
+  if (found.length === 0) return "";
+  const head = found.slice(0, -1).join(", ");
+  const list = found.length === 1 ? found[0] : `${head} and ${found[found.length - 1]}`;
+  return `We found ${list} in the repository. Confirm them to add them to the architecture.`;
+}

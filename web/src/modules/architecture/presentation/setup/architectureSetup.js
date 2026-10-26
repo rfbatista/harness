@@ -5,7 +5,7 @@
 // Nested in architecturePage, so `this.draft` and `this.repositoryId` are the page's.
 
 import { describeError } from "../../../../shared/presentation/errors.js";
-import { addCandidates, candidatesOf } from "../../domain/descriptive.js";
+import { addCandidates, candidatesOf, discoveryText } from "../../domain/descriptive.js";
 
 /** @param { gateway: ReturnType<typeof import("../../infrastructure/architecture-gateway.js").architectureGateway> } deps */
 export const architectureSetup = ({ gateway }) => () => ({
@@ -19,6 +19,9 @@ export const architectureSetup = ({ gateway }) => () => ({
 
   get listing() {
     return this.candidates !== null && this.added < 0;
+  },
+  get foundText() {
+    return discoveryText(this.candidates ?? []);
   },
   get nothingFound() {
     return this.listing && this.candidates.length === 0;
@@ -34,6 +37,10 @@ export const architectureSetup = ({ gateway }) => () => ({
   },
   get addedText() {
     return this.added === 1 ? "1 entry added. Review it in the tabs, then save." : `${this.added} entries added. Review them in the tabs, then save.`;
+  },
+
+  init() {
+    this.discover();
   },
 
   async discover() {

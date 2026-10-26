@@ -1,6 +1,6 @@
 // The repository architecture record as the page holds it (the contract
 // "Repository architecture record and architecture file"): its tabs, the
-// one-line count per part, and the export states in words. Pure.
+// stat cards and tab counts, and the export states in words. Pure.
 
 /**
  * A tab of the page. `slug` is the tab's own name and `path` the deep link
@@ -36,27 +36,61 @@ export function pathForTab(slug, view = "") {
 }
 
 const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+const list = (xs) => (Array.isArray(xs) ? xs : []);
 
 /**
- * The one-line count of each part, in the order the page lists them.
+ * The six stat cards of the overview, in the order the page lists them.
+ * `overlaps` is how many paths the layers preview says match more than one layer.
  * @param {any} record
- * @returns {{ key: string, label: string, text: string }[]}
+ * @param {number} overlaps
+ * @returns {{ key: string, value: number, label: string }[]}
  */
-export function summarize(record) {
+export function statCards(record, overlaps) {
   const r = record ?? {};
-  const list = (xs) => (Array.isArray(xs) ? xs : []);
   const rules = list(r.rules);
   const blocking = rules.filter((x) => x.mode === "blocking").length;
-  const routes = list(r.orchestration?.routing).length;
-  const handoffs = list(r.orchestration?.handoffs).length;
+  const routed = new Set(list(r.orchestration?.routing).map((x) => x.agent));
   return [
-    { key: "instructions", label: "Instructions & rules", text: plural(list(r.instructions).length, "file") },
-    { key: "tools", label: "Tools", text: plural(list(r.tools).length, "tool") },
-    { key: "sandboxes", label: "Sandboxes", text: plural(list(r.sandboxes).length, "sandbox", "sandboxes") },
-    { key: "orchestration", label: "Orchestration", text: `${plural(routes, "route")} · ${plural(handoffs, "hand-off")}` },
-    { key: "hooks", label: "Hooks", text: `${plural(rules.length, "rule")} · ${blocking} blocking` },
-    { key: "layers", label: "Layers", text: plural(list(r.layers).length, "layer") },
+    { key: "instructions", value: list(r.instructions).length, label: "instruction files" },
+    { key: "tools", value: list(r.tools).length, label: "tools" },
+    { key: "sandboxes", value: list(r.sandboxes).length, label: "sandboxes" },
+    { key: "agents", value: routed.size, label: "routed agents" },
+    { key: "hooks", value: rules.length, label: `hook rules · ${blocking} blocking` },
+    { key: "layers", value: list(r.layers).length, label: `layers · ${plural(overlaps, "overlap")}` },
   ];
+}
+
+/**
+ * The count on each tab (Output has none). Orchestration counts routes and hand-offs.
+ * @param {any} record
+ * @returns {Record<string, number | null>}
+ */
+export function tabCounts(record) {
+  const r = record ?? {};
+  return {
+    instructions: list(r.instructions).length,
+    tools: list(r.tools).length,
+    sandboxes: list(r.sandboxes).length,
+    orchestration: list(r.orchestration?.routing).length + list(r.orchestration?.handoffs).length,
+    hooks: list(r.rules).length,
+    layers: list(r.layers).length,
+    output: null,
+  };
+}
+
+/**
+ * The save bar's sum-up of a diff: "3 changes: 2 in Tools, 1 in Layers".
+ * @param {{ pointer: string }[]} rows
+ */
+export function changeSummary(rows) {
+  if (rows.length === 0) return "0 changes";
+  const byTab = new Map();
+  for (const row of rows) {
+    const tab = TABS.find((t) => t.slug === tabOfPointer(row.pointer));
+    byTab.set(tab.label, (byTab.get(tab.label) ?? 0) + 1);
+  }
+  const parts = [...byTab].map(([label, n]) => `${n} in ${label}`);
+  return `${plural(rows.length, "change")}: ${parts.join(", ")}`;
 }
 
 /**
@@ -66,7 +100,7 @@ export function summarize(record) {
 export function exportBadge(exportInfo) {
   switch (exportInfo?.state) {
     case "in_sync":
-      return { label: "In sync with the file", tone: "" };
+      return { label: `In sync with ${exportInfo.path || "the file"}`, tone: "success" };
     case "database_ahead":
       return { label: "Database ahead of the file", tone: "attention" };
     case "edited_outside":

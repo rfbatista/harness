@@ -202,6 +202,7 @@ export const layersTab = ({ gateway }) => () => ({
       const answer = await gateway.previewLayers(this.repositoryId, layers, unlayered);
       if (n !== this.seq) return; // a newer request was sent: this answer is out of date
       this.preview = { ...answer, keys: layers.map((l) => JSON.stringify(l.match)) };
+      this.overlapCount = answer.overlaps.length; // the page's overview counts them
       this.previewFailed = "";
     } catch (err) {
       if (n !== this.seq) return;

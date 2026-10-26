@@ -1,9 +1,6 @@
 package architecture
 
-import (
-	"operators-mcp/internal/adapter/in/web/components"
-	"operators-mcp/internal/adapter/in/web/shell"
-)
+import "operators-mcp/internal/adapter/in/web/shell"
 
 // PageView is a repository's Architecture page. The tabs, their panels and
 // the counts are drawn by architecturePage (web/src/modules/architecture)
@@ -14,18 +11,30 @@ templ PageView(v View) {
 			@templ.JSONScript("architecture-seed", v.Seed)
 			<header class="[ toolbar ]">
 				<a class="[ crumb ]" href={ templ.SafeURL(v.SettingsHref) }>{ v.ProjectName } / repositories / { v.RepositoryName } /</a>
-				<h1>Architecture</h1>
-				<span class="[ actions ]">
-					<template x-if="exportBadge">
-						<span class="[ badge ]" data-export-state x-bind:data-tone="exportBadge.tone" x-text="exportBadge.label"></span>
-					</template>
-				</span>
+				<span class="[ crumb ]" aria-current="page">Architecture</span>
 			</header>
-			<div data-scroll>
-				<div class="[ wrapper flow ] [ region ]" style="--wrapper-max: 64rem">
-					<p class="[ color-ink-muted ]">
-						How agents are set up in this repository: what they read, what they can call, where they run, who hands off to whom, and which rules guard its layers. It is saved in the database and every session brief points to it. Saving never touches the repository; exporting is a separate step.
-					</p>
+			<div data-scroll class="[ arch-scroll ]">
+				<div class="[ wrapper flow ] [ region ]" style="--wrapper-max: 72rem">
+					<div class="[ arch-head ]">
+						<div class="[ flow ] [ flow-space-2xs ]">
+							<h1>Repository architecture: { v.RepositoryName }</h1>
+							<p class="[ color-ink-muted ]">
+								How agents are set up in this repository: what they read, what they can call, where they run, who hands off to whom, and which hooks guard the layers. Saved in the database; every session brief points to it. Saving never touches the repository; exporting is a separate step.
+							</p>
+							<template x-if="draft">
+								<div class="[ field ] [ arch-pattern ]">
+									<label for="architecture-pattern">Pattern</label>
+									<input id="architecture-pattern" class="[ text-sm ]" autocomplete="off" placeholder="hexagonal, layered, library…" x-model="draft.pattern" x-bind:aria-invalid="isInvalid('/pattern')"/>
+									<template x-if="errorFor('/pattern')">
+										<span class="[ error ]" data-error-for="/pattern" x-text="errorFor('/pattern')"></span>
+									</template>
+								</div>
+							</template>
+						</div>
+						<template x-if="exportBadge">
+							<span class="[ badge sync ]" data-export-state x-bind:data-tone="exportBadge.tone" x-text="exportBadge.label"></span>
+						</template>
+					</div>
 					<template x-if="error">
 						<div class="[ banner ]" data-tone="danger" role="alert">
 							<div class="[ flow ] [ flow-space-3xs grow ]">
@@ -36,57 +45,92 @@ templ PageView(v View) {
 						</div>
 					</template>
 					<template x-if="isNew">
-						<div id="architecture-empty" class="[ flow ]" x-data="architectureSetup">
-							@components.Empty("This repository has no architecture yet", "Define its layers, the rules that guard them and what its agents work with. Nothing is stored until you save.")
-							<div class="[ pane ]" data-setup>
-								<header>Start from what the harness found</header>
-								<div class="[ content flow ]">
-									<template x-if="candidates === null">
-										<div class="[ flow ] [ flow-space-xs ]">
-											<p class="[ color-ink-muted ]">The harness can list this repository's instruction files, the tools it knows and its sandboxes for you to confirm. Nothing is added until you confirm, and nothing is stored until you save.</p>
-											<div>
-												<button type="button" class="[ button ]" data-variant="primary" data-size="sm" data-action="discover" x-bind:disabled="loading" x-bind:aria-busy="loading" x-on:click="discover">Look for what is here</button>
-											</div>
-										</div>
+						<div id="architecture-empty" class="[ arch-empty ]" x-data="architectureSetup">
+							<h2>No architecture for “{ v.RepositoryName }” yet</h2>
+							<p>An architecture tells every agent session which layers exist, who may change them, and which hooks stop a wrong edit. Start from the pattern the repository already follows. Nothing is stored until you save.</p>
+							<div class="[ actions ]">
+								<button type="button" class="[ button ]" data-variant="primary" data-action="hexagonal" x-bind:disabled="!canStartHexagonal" x-on:click="startHexagonal">Start from the hexagonal template</button>
+							</div>
+							<template x-if="loading">
+								<p data-found-loading role="status">Looking in the repository…</p>
+							</template>
+							<template x-if="failure">
+								<p class="[ error ]" role="alert"><span aria-hidden="true">✕</span> <span x-text="failure"></span> <button type="button" class="[ button ]" data-variant="ghost" data-size="sm" data-action="discover" x-bind:disabled="loading" x-on:click="discover">Try again</button></p>
+							</template>
+							<template x-if="nothingFound">
+								<p data-found>Nothing was found in the repository to add. Add entries in the tabs.</p>
+							</template>
+							<template x-if="listing">
+								<div class="[ flow ] [ flow-space-xs ]">
+									<template x-if="picked">
+										<p data-found x-text="foundText"></p>
 									</template>
-									<template x-if="failure">
-										<p class="[ error ]" role="alert"><span aria-hidden="true">✕</span> <span x-text="failure"></span></p>
-									</template>
-									<template x-if="nothingFound">
-										<p class="[ color-ink-muted ]">Nothing was found. Add entries in the tabs.</p>
-									</template>
-									<template x-if="listing">
-										<div class="[ flow ] [ flow-space-xs ]">
-											<ul class="[ flow ] [ flow-space-2xs ]" data-candidates>
-												<template x-for="c in candidates" x-bind:key="c.key">
-													<li class="[ field ]" data-inline>
-														<label><input type="checkbox" x-bind:data-candidate="c.key" x-model="c.on"/> <span class="[ badge ]" x-text="c.section"></span> <span class="[ font-mono text-sm ]" x-text="c.label"></span> <span class="[ color-ink-faint text-sm ]" x-text="c.detail"></span></label>
-													</li>
-												</template>
-											</ul>
-											<p class="[ color-ink-faint text-sm ]" x-text="agentsText"></p>
-											<div>
-												<button type="button" class="[ button ]" data-variant="primary" data-size="sm" data-action="confirm" x-bind:disabled="picked === 0" x-on:click="confirm" x-text="confirmText"></button>
-											</div>
-										</div>
-									</template>
-									<template x-if="added >= 0">
-										<p role="status" data-setup-done x-text="addedText"></p>
-									</template>
+									<ul class="[ flow ] [ flow-space-2xs ]" data-candidates>
+										<template x-for="c in candidates" x-bind:key="c.key">
+											<li class="[ field ]" data-inline>
+												<label><input type="checkbox" x-bind:data-candidate="c.key" x-model="c.on"/> <span class="[ badge ]" x-text="c.section"></span> <span class="[ font-mono text-sm ]" x-text="c.label"></span> <span class="[ color-ink-faint text-sm ]" x-text="c.detail"></span></label>
+											</li>
+										</template>
+									</ul>
+									<p class="[ color-ink-faint text-sm ]" x-text="agentsText"></p>
+									<div>
+										<button type="button" class="[ button ]" data-size="sm" data-action="confirm" x-bind:disabled="picked === 0" x-on:click="confirm" x-text="confirmText"></button>
+									</div>
 								</div>
+							</template>
+							<template x-if="added >= 0">
+								<p role="status" data-setup-done x-text="addedText"></p>
+							</template>
+						</div>
+					</template>
+					<template x-if="conflict">
+						<div class="[ banner ]" data-tone="attention" role="alert" data-conflict>
+							<span class="[ grow ]" x-text="conflictText"></span>
+							<button type="button" class="[ button ]" data-size="sm" x-on:click="reload">Reload</button>
+							<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-on:click="reviewDiff">Review diff</button>
+						</div>
+					</template>
+					<template x-if="hasProblems">
+						<div class="[ banner ]" data-tone="danger" role="alert" data-problems>
+							<div class="[ flow ] [ flow-space-3xs grow ]">
+								<span x-text="problemsText"></span>
+								<ul class="[ flow ] [ flow-space-3xs text-sm ]">
+									<template x-for="p in problems" x-bind:key="p.path">
+										<li><span x-text="p.tabLabel"></span> › <span x-text="p.label"></span>: <span x-text="p.message"></span></li>
+									</template>
+								</ul>
 							</div>
 						</div>
 					</template>
-					<div class="[ cluster ]" role="list" aria-label="Parts of the architecture" id="architecture-summary">
-						<template x-for="c in summary" x-bind:key="c.key">
-							<span role="listitem" class="[ cluster ] [ gutter-2xs ]">
-								<span class="[ color-ink-faint text-sm ]" x-text="c.label"></span>
-								<span class="[ text-sm weight-medium ]" x-bind:data-count="c.key" x-text="c.text"></span>
-							</span>
+					<div class="[ stat-cards ]" role="list" aria-label="Parts of the architecture" id="architecture-summary">
+						<template x-for="c in stats" x-bind:key="c.key">
+							<div class="[ stat ]" role="listitem" x-bind:data-stat="c.key">
+								<b x-bind:data-count="c.key" x-text="c.value"></b>
+								<span x-text="c.label"></span>
+							</div>
 						</template>
 					</div>
-					<section class="[ pane ]" aria-label="Recent rule events">
-						<header><span>Recent rule events</span></header>
+					<div class="[ arch-body ]">
+					<div id="architecture-tabs" class="[ tabs arch-tabs ]" role="tablist" aria-label="Architecture sections">
+						<template x-for="t in tabs" x-bind:key="t.slug">
+							<button type="button" role="tab" x-bind:id="t.id" x-bind:aria-selected="t.selected" x-bind:aria-controls="t.panelId" x-on:click="openTab(t.slug)">
+								<span data-tab-label x-text="t.label"></span>
+								<template x-if="t.hasCount">
+									<span class="[ count ]" data-tab-count x-text="t.count"></span>
+								</template>
+							</button>
+						</template>
+					</div>
+					@tabInstructions()
+					@tabTools()
+					@tabSandboxes()
+					@tabOrchestration()
+					@tabHooks()
+					@tabLayers()
+					@tabOutput()
+					</div>
+					<details class="[ events-panel ]" open aria-label="Recent rule events">
+						<summary>Recent rule events</summary>
 						<template x-if="!hasEvents">
 							<p class="[ pad-m color-ink-muted text-sm ]">No rule has fired yet. Only failed rules are recorded.</p>
 						</template>
@@ -107,28 +151,12 @@ templ PageView(v View) {
 								</li>
 							</template>
 						</ol>
-					</section>
-					<template x-if="draft">
-						<div class="[ field ]">
-							<label for="architecture-pattern">Pattern</label>
-							<input id="architecture-pattern" class="[ text-sm ]" autocomplete="off" placeholder="hexagonal, layered, library…" x-model="draft.pattern" x-bind:aria-invalid="isInvalid('/pattern')"/>
-							<template x-if="errorFor('/pattern')">
-								<span class="[ error ]" data-error-for="/pattern" x-text="errorFor('/pattern')"></span>
-							</template>
-						</div>
-					</template>
-					<div class="[ tabs ]" role="tablist" aria-label="Architecture sections">
-						<template x-for="t in tabs" x-bind:key="t.slug">
-							<button type="button" role="tab" x-bind:id="t.id" x-bind:aria-selected="t.selected" x-bind:aria-controls="t.panelId" x-on:click="openTab(t.slug)" x-text="t.label"></button>
+						<template x-if="hasMoreEvents">
+							<div class="[ more ]">
+								<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-bind:aria-pressed="allEvents" x-on:click="toggleEvents" x-text="eventsToggleText"></button>
+							</div>
 						</template>
-					</div>
-					@tabInstructions()
-					@tabTools()
-					@tabSandboxes()
-					@tabOrchestration()
-					@tabHooks()
-					@tabLayers()
-					@tabOutput()
+					</details>
 					<template x-if="showDiff">
 						<section class="[ pane ]" data-diff aria-label="Review diff">
 							<header><span x-text="diffTitle"></span></header>
@@ -144,35 +172,14 @@ templ PageView(v View) {
 							</template>
 						</section>
 					</template>
-					<div class="[ flow ] [ flow-space-xs ]" x-show="saveBarVisible">
-						<template x-if="conflict">
-							<div class="[ banner ]" data-tone="attention" role="alert" data-conflict>
-								<span class="[ grow ]" x-text="conflictText"></span>
-								<button type="button" class="[ button ]" data-size="sm" x-on:click="reload">Reload</button>
-								<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-on:click="reviewDiff">Review diff</button>
-							</div>
-						</template>
-						<template x-if="hasProblems">
-							<div class="[ banner ]" data-tone="danger" role="alert" data-problems>
-								<div class="[ flow ] [ flow-space-3xs grow ]">
-									<span x-text="problemsText"></span>
-									<ul class="[ flow ] [ flow-space-3xs text-sm ]">
-										<template x-for="p in problems" x-bind:key="p.path">
-											<li><span x-text="p.tabLabel"></span> › <span x-text="p.label"></span>: <span x-text="p.message"></span></li>
-										</template>
-									</ul>
-								</div>
-							</div>
-						</template>
-						<div class="[ save-bar ]" data-save-bar role="region" aria-label="Unsaved changes">
-							<span class="[ badge ]" data-tone="attention">Unsaved changes</span>
-							<span class="[ summary ]" x-text="barSummary"></span>
-							<span class="[ actions ]">
-								<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-on:click="discard">Discard</button>
-								<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-bind:aria-pressed="showDiff" x-on:click="reviewDiff">Review diff</button>
-								<button type="button" class="[ button ]" data-variant="primary" data-size="sm" x-bind:disabled="saving || !dirty" x-bind:aria-busy="saving" x-on:click="save">Save</button>
-							</span>
-						</div>
+					<div class="[ save-bar ]" data-save-bar role="region" aria-label="Unsaved changes" x-show="saveBarVisible">
+						<span class="[ badge ]" data-tone="attention">Unsaved changes</span>
+						<span class="[ summary ]" x-text="barSummary"></span>
+						<span class="[ actions ]">
+							<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-on:click="discard">Discard</button>
+							<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-bind:aria-pressed="showDiff" x-on:click="reviewDiff">Review diff</button>
+							<button type="button" class="[ button ]" data-variant="primary" data-size="sm" x-bind:disabled="saving || !dirty" x-bind:aria-busy="saving" x-on:click="save">Save to database</button>
+						</span>
 					</div>
 				</div>
 			</div>
