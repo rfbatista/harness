@@ -121,6 +121,8 @@ export function diffModel(writes) {
 export function conflictModel(changed, seen) {
   return changed.map((c) => {
     if (c.theirs === null) return file(c.path, "deleted", "deleted on disk", []);
+    // Found by a live re-read, which does not carry the text: only that the file changed.
+    if (typeof c.theirs !== "string") return file(c.path, "changed", "changed on disk", []);
     const before = seen[c.path];
     if (typeof before !== "string") return file(c.path, "current", "as it is now", linesOf(c.theirs).map((t) => line("same", t)));
     return diffModel([{ path: c.path, before, after: c.theirs }])[0];

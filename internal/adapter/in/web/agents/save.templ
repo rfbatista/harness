@@ -38,7 +38,7 @@ templ saveAlerts() {
 				</div>
 				<div class="[ cluster ] [ save-choices ]">
 					<button type="button" class="[ button ]" data-size="sm" data-reload x-on:click="reloadEditor">Reload (lose my edits)</button>
-					<button type="button" class="[ button ]" data-size="sm" data-variant="danger" data-overwrite x-on:click="overwrite">Overwrite</button>
+					<button type="button" class="[ button ]" data-size="sm" data-variant="danger" data-overwrite x-bind:disabled="isBroken" x-on:click="overwrite">Overwrite</button>
 				</div>
 			</div>
 		</template>
@@ -163,4 +163,44 @@ templ entryPicker(ns, label, placeholder, hintID, errorID, describedBy, invalid,
 		<span class="[ hint ]" id={ hintID }>{ "Bundles are listed first. Type to search, arrows to move, Enter to add, Backspace to remove the last one." }</span>
 		<span class="[ error ]" id={ errorID } x-bind:hidden={ "!" + invalid } x-text={ errorText }></span>
 	</div>
+}
+
+// diskBanner is the notice above an open item's detail when the item changed
+// on disk behind the page's back (liveCatalog.js): what changed, and the
+// detail below already shows what is on disk now. No value is ever listed.
+templ diskBanner() {
+	<template x-if="disk">
+		<div class="[ banner ]" data-tone="attention" data-disk-changed role="status">
+			<div class="[ flow ] [ flow-space-3xs grow ]">
+				<strong x-text="disk.sentence"></strong>
+				<ul class="[ entry-list ]" role="list">
+					<template x-for="l in disk.lines" x-bind:key="l.text">
+						<li x-text="l.text"></li>
+					</template>
+				</ul>
+				<span class="[ text-sm ]">What is shown below is what is on disk now.</span>
+			</div>
+			<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" data-disk-dismiss x-on:click="dismissDisk">Dismiss</button>
+		</div>
+	</template>
+}
+
+// brokenBanner is shown while agents.json or mcp-servers.json does not parse
+// (contract section 3, `broken`): the file, the line and column, and Check
+// again. The lists under it are the last version that parsed, and every save
+// and delete is off.
+templ brokenBanner() {
+	<template x-if="broken">
+		<div style="padding-inline: var(--space-m)">
+			<div class="[ banner ]" data-tone="danger" data-broken role="alert">
+				<div class="[ flow ] [ flow-space-3xs grow ]">
+					<strong data-broken-title x-text="broken.title"></strong>
+					<span class="[ font-mono text-sm ]" data-broken-where x-text="broken.where"></span>
+					<span class="[ font-mono text-sm ]" data-broken-message x-text="broken.message"></span>
+					<span class="[ text-sm ]" x-text="broken.note"></span>
+				</div>
+				<button type="button" class="[ button ]" data-size="sm" data-broken-check x-bind:disabled="refreshing" x-on:click="reloadFromDisk" x-text="checkCatalogLabel">Check again</button>
+			</div>
+		</div>
+	</template>
 }

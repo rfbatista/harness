@@ -11,6 +11,7 @@ import {
 } from "../../domain/bundles.js";
 import { openSave, saveView, savedToast } from "../../domain/savePipeline.js";
 import { entryPickerMixin } from "./entryPickerMixin.js";
+import { settleEditor } from "./liveCatalog.js";
 import { saveController } from "./saveController.js";
 
 const enc = encodeURIComponent;
@@ -67,6 +68,7 @@ export function bundleEditor({ gateway, location, timers }) {
       saver = saveController({
         run: (options) => gateway.saveBundle({ previousName: page.draft.previousName, bundle: { name: page.draft.name, entries: [...page.draft.entries] } }, options),
         onState: (state) => { page.save = state; },
+        blocked: () => page.brokenWhy !== "",
         timers,
       });
     },
@@ -125,7 +127,7 @@ export function bundleEditor({ gateway, location, timers }) {
     },
     /** The save pipeline's view: footer text, Save on or off, the review and the conflict. */
     get sv() {
-      return saveView(this.save, { valid: this.draftCheck.valid, changes: this.draftChanges, writes: FILES });
+      return saveView(this.save, { valid: this.draftCheck.valid, changes: this.draftChanges, writes: FILES, blocked: this.brokenWhy });
     },
     get reviewFiles() {
       return this.sv.files;
@@ -194,6 +196,7 @@ export function bundleEditor({ gateway, location, timers }) {
     /** The conflict banner's Reload: drop my edits and read the catalog again. */
     async reloadEditor() {
       const previous = this.draft.previousName;
+      this.clearDisk("bundle", previous);
       await this.load();
       const draft = this.catalog ? bundleDraft(this.catalog, previous) : null;
       if (!draft) {
@@ -205,6 +208,10 @@ export function bundleEditor({ gateway, location, timers }) {
       this.draft = draft;
       this.reviewOpen = false;
       saver.reload(versionsOf(this.catalog));
+    },
+    /** The catalog was read again: settle this editor against what is on disk now (liveCatalog.js). */
+    catalogMoved(ctx) {
+      if (this.draft !== null) settleEditor(saver, "bundle", this.draft.previousName, ctx);
     },
     cancelEditor(event) {
       event.preventDefault();

@@ -82,6 +82,7 @@
  *
  * @typedef {object} CatalogGateway
  * @property {(seed: unknown) => Catalog} decodeCatalog  the page's first paint, as the server seeded it
+ * @property {(handlers: { onEvent: (data: unknown) => void, onStatus?: (status: import("../../../shared/domain/feed.js").FeedStatus) => void }) => () => void} follow  the page feed (/api/project_events): every message, whatever it is, and the feed's status; returns the function that stops following
  * @property {() => Promise<Catalog>} getCatalog
  * @property {(name: string) => Promise<SkillDetail>} getSkill  rejects SKILL_NOT_FOUND
  * @property {(names: string[]) => Promise<Record<string, boolean>>} checkEnvVars  whether each is set on the server; never a value

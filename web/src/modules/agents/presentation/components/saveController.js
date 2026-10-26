@@ -21,11 +21,13 @@ export const PREVIEW_DELAY_MS = 350;
  *   onState?: (state: import("../../domain/savePipeline.js").SaveState) => void,
  *   timers?: { setTimeout: (fn: () => void, ms: number) => any, clearTimeout: (id: any) => void },
  *   delay?: number,
- * }} deps
+ *   blocked?: () => boolean,
+ * }} deps  blocked: saving is off (the catalog does not parse), so no preview is asked for
  */
-export function saveController({ run, onState = () => {}, timers = globalThis, delay = PREVIEW_DELAY_MS }) {
+export function saveController({ run, onState = () => {}, timers = globalThis, delay = PREVIEW_DELAY_MS, blocked = () => false }) {
   let state = openSave({});
   let timer = null;
+  let ready = false;
 
   const apply = (event) => {
     state = reduceSave(state, event);
@@ -62,7 +64,40 @@ export function saveController({ run, onState = () => {}, timers = globalThis, d
     edited({ dirty, valid }) {
       stop();
       apply({ type: "edit", dirty });
-      if (dirty && valid && state.phase !== "conflict") timer = timers.setTimeout(preview, delay);
+      ready = valid;
+      if (dirty && valid && state.phase !== "conflict" && !blocked()) timer = timers.setTimeout(preview, delay);
+    },
+    /**
+     * The file this editor writes changed on disk, and the open item did not:
+     * take the versions now, and ask again for the preview an edit was owed.
+     * @param {Record<string, string>} versions
+     */
+    rebase(versions) {
+      stop();
+      apply({ type: "rebase", versions });
+      if (state.phase === "dirty" && ready && !blocked()) timer = timers.setTimeout(preview, delay);
+    },
+    /** Saving was off and is on again: ask for the preview an edit was owed. */
+    resume() {
+      if (timer === null && state.phase === "dirty" && state.preview === null && ready && !blocked()) timer = timers.setTimeout(preview, delay);
+    },
+    /**
+     * The open item changed on disk. A dry run says what the server says (a
+     * CATALOG_CHANGED refusal carries the file's text); without that answer
+     * the editor still blocks Save and says the files changed.
+     * @param {Record<string, string>} currentVersions
+     */
+    async probe(currentVersions) {
+      stop();
+      const seq = state.seq;
+      try {
+        await run({ baseVersions: state.baseVersions, dryRun: true });
+      } catch (err) {
+        const refusal = describeRefusal(err);
+        if (seq !== state.seq) return;
+        if (refusal.code === "CATALOG_CHANGED") return apply({ type: "preview-failed", seq, refusal });
+      }
+      if (seq === state.seq) apply({ type: "outside", currentVersions });
     },
     /** @param {{ force?: boolean }} [o] @returns {Promise<{ ok: boolean, result?: import("../../domain/ports.js").WriteResult }>} */
     async save({ force = false } = {}) {

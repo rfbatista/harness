@@ -11,7 +11,7 @@ templ Page(frame shell.Frame, v View) {
 		if v.Seed != nil {
 			@templ.JSONScript("agent-catalog-seed", v.Seed)
 		}
-		<main id="main" class="[ frame ]" x-data="agentsPage" data-seed="agent-catalog-seed" data-tab={ v.Route.Tab } data-item={ v.Route.Item } data-mode={ v.Route.Mode } x-on:beforeunload.window="beforeUnload">
+		<main id="main" class="[ frame ]" x-data="agentsPage" data-seed="agent-catalog-seed" data-tab={ v.Route.Tab } data-item={ v.Route.Item } data-mode={ v.Route.Mode } x-on:beforeunload.window="beforeUnload" x-on:focus.window="windowFocused" x-bind:data-feed="feedStatus">
 			<header
 				class="[ toolbar ]"
 				x-bind:hidden="fullPage"
@@ -27,6 +27,7 @@ templ Page(frame shell.Frame, v View) {
 						a folder in the harness data directory, not in git.
 					</p>
 				</div>
+				<button type="button" class="[ button ]" data-variant="ghost" data-reload-disk x-bind:disabled="refreshing" x-on:click="reloadFromDisk" x-text="reloadLabel">Reload from disk</button>
 				<a
 					class="[ button ]"
 					data-variant="primary"
@@ -49,6 +50,7 @@ templ Page(frame shell.Frame, v View) {
 					<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-bind:disabled="loading" x-on:click="load">Check again</button>
 				</div>
 			</template>
+			@brokenBanner()
 			<div
 				class="[ tabs ]"
 				role="tablist"
@@ -205,6 +207,7 @@ templ agentsLibrary(v View) {
 templ agentDetail() {
 	<div class="[ library-detail-inner ]" data-agent-detail>
 		<a href="/agents" class="[ button ]" data-variant="ghost" data-size="sm" data-split-back x-on:click="backToList">All agents</a>
+		@diskBanner()
 		<div class="[ detail-head ]">
 			<div class="[ repel ]">
 				<div class="[ cluster ]">
@@ -384,6 +387,7 @@ templ skillsLibrary() {
 templ skillDetail() {
 	<div class="[ library-detail-inner ]" data-skill-detail>
 		<a href="/agents/skills" class="[ button ]" data-variant="ghost" data-size="sm" data-split-back x-on:click="backToList">All skills</a>
+		@diskBanner()
 		<div class="[ detail-head ]">
 			<div class="[ repel ]">
 				<div class="[ cluster ]">
@@ -498,6 +502,7 @@ templ mcpLibrary() {
 templ mcpDetail() {
 	<div class="[ library-detail-inner ]" data-mcp-detail>
 		<a href="/agents/mcp" class="[ button ]" data-variant="ghost" data-size="sm" data-split-back x-on:click="backToList">All servers</a>
+		@diskBanner()
 		<div class="[ detail-head ]">
 			<div class="[ repel ]">
 				<div class="[ cluster ]">

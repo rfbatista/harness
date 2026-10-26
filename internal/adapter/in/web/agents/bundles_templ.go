@@ -31,7 +31,7 @@ func bundlesLibrary() templ.Component {
 			templ_7745c5c3_Var1 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<div class=\"[ split-view ] [ agents-split ]\" x-bind:data-detail=\"detailOpenAttr\"><div class=\"[ library-list ]\"><div class=\"[ library-tools ]\"><input type=\"search\" class=\"[ field ]\" aria-label=\"Filter bundles\" placeholder=\"Filter bundles by name or entry\" autocomplete=\"off\" x-model=\"bundleQuery\"><div class=\"[ cluster ]\" role=\"group\" aria-label=\"Quick filters\" data-bundle-filters style=\"--gutter: var(--space-xs)\"><template x-for=\"f in bundleFilters\" x-bind:key=\"f.id\"><button type=\"button\" class=\"[ button ]\" data-size=\"sm\" x-bind:data-variant=\"f.variant\" x-bind:aria-pressed=\"f.pressed\" x-bind:data-filter=\"f.id\" x-on:click=\"setBundleFilter\" x-text=\"f.label\"></button></template></div></div><ul class=\"[ library-rows ]\" aria-label=\"Bundles\" data-bundle-list><template x-for=\"row in bundleRowsView\" x-bind:key=\"row.key\"><li><a class=\"[ library-row ]\" data-bundle-row x-bind:href=\"row.href\" x-bind:data-key=\"row.key\" x-bind:aria-current=\"row.current\" x-on:click=\"openBundleLink\"><span class=\"[ name font-mono ]\" x-text=\"row.name\"></span> <span class=\"[ meta ]\" x-text=\"row.meta\"></span> <span class=\"[ desc font-mono ]\" x-text=\"row.description\"></span></a></li></template></ul><template x-if=\"noBundleRows\"><div class=\"[ library-empty ]\" data-bundle-empty><strong x-text=\"bundleEmptyTitle\"></strong> <span class=\"[ text-sm ]\">Clear the filter, or <a href=\"/agents/bundles/new\" x-on:click=\"openNew\">create a bundle</a>.</span></div></template><p class=\"[ library-foot ]\" data-bundle-foot x-text=\"bundlesFoot\"></p></div><section class=\"[ library-detail ]\" aria-label=\"Bundle\"><p class=\"[ visually-hidden ]\" role=\"status\" aria-live=\"polite\" x-text=\"notice\"></p><template x-if=\"unknownBundle\"><div class=\"[ library-empty ]\" data-bundle-unknown><strong>That bundle is not in the catalog.</strong> <a href=\"/agents/bundles\" x-on:click=\"backToList\">Back to the bundles</a></div></template><template x-if=\"bundle\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<div class=\"[ split-view ] [ agents-split ]\" x-bind:data-detail=\"detailOpenAttr\"><div class=\"[ library-list ]\"><div class=\"[ library-tools ]\"><input type=\"search\" class=\"[ field ]\" aria-label=\"Filter bundles\" placeholder=\"Filter bundles by name or entry\" autocomplete=\"off\" x-model=\"bundleQuery\"><div class=\"[ cluster ]\" role=\"group\" aria-label=\"Quick filters\" data-bundle-filters style=\"--gutter: var(--space-xs)\"><template x-for=\"f in bundleFilters\" x-bind:key=\"f.id\"><button type=\"button\" class=\"[ button ]\" data-size=\"sm\" x-bind:data-variant=\"f.variant\" x-bind:aria-pressed=\"f.pressed\" x-bind:data-filter=\"f.id\" x-on:click=\"setBundleFilter\" x-text=\"f.label\"></button></template></div></div><ul class=\"[ library-rows ]\" aria-label=\"Bundles\" data-bundle-list><template x-for=\"row in bundleRowsView\" x-bind:key=\"row.key\"><li><a class=\"[ library-row ]\" data-bundle-row x-bind:href=\"row.href\" x-bind:data-key=\"row.key\" x-bind:aria-current=\"row.current\" x-on:click=\"openBundleLink\"><span class=\"[ name font-mono ]\" x-text=\"row.name\"></span> <span class=\"[ meta ]\"><span x-text=\"row.meta\"></span> <span class=\"[ badge ]\" data-tone=\"attention\" data-disk-badge x-bind:hidden=\"row.noDisk\" hidden>changed on disk</span></span> <span class=\"[ desc font-mono ]\" x-text=\"row.description\"></span></a></li></template></ul><template x-if=\"noBundleRows\"><div class=\"[ library-empty ]\" data-bundle-empty><strong x-text=\"bundleEmptyTitle\"></strong> <span class=\"[ text-sm ]\">Clear the filter, or <a href=\"/agents/bundles/new\" x-on:click=\"openNew\">create a bundle</a>.</span></div></template><p class=\"[ library-foot ]\" data-bundle-foot x-text=\"bundlesFoot\"></p></div><section class=\"[ library-detail ]\" aria-label=\"Bundle\"><p class=\"[ visually-hidden ]\" role=\"status\" aria-live=\"polite\" x-text=\"notice\"></p><template x-if=\"unknownBundle\"><div class=\"[ library-empty ]\" data-bundle-unknown><strong>That bundle is not in the catalog.</strong> <a href=\"/agents/bundles\" x-on:click=\"backToList\">Back to the bundles</a></div></template><template x-if=\"bundle\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -78,7 +78,15 @@ func bundleDetail() templ.Component {
 			templ_7745c5c3_Var2 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "<div class=\"[ library-detail-inner ]\" data-bundle-detail><a href=\"/agents/bundles\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" data-split-back x-on:click=\"backToList\">All bundles</a><div class=\"[ detail-head ]\"><div class=\"[ repel ]\"><div class=\"[ cluster ]\"><h2 class=\"[ font-mono ]\" x-text=\"bundle.title\"></h2><span class=\"[ badge ]\" data-tone=\"attention\" data-unused-badge x-bind:hidden=\"!bundle.unused\">unused</span></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "<div class=\"[ library-detail-inner ]\" data-bundle-detail><a href=\"/agents/bundles\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" data-split-back x-on:click=\"backToList\">All bundles</a>")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = diskBanner().Render(ctx, templ_7745c5c3_Buffer)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 5, "<div class=\"[ detail-head ]\"><div class=\"[ repel ]\"><div class=\"[ cluster ]\"><h2 class=\"[ font-mono ]\" x-text=\"bundle.title\"></h2><span class=\"[ badge ]\" data-tone=\"attention\" data-unused-badge x-bind:hidden=\"!bundle.unused\">unused</span></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -86,7 +94,7 @@ func bundleDetail() templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 5, "</div><div class=\"[ cluster ]\"><code class=\"[ library-path ]\" data-path x-text=\"bundle.path\"></code> <span class=\"[ text-xs color-ink-faint ]\" data-bundle-size x-text=\"bundle.sizeLabel\"></span></div></div><section aria-labelledby=\"bundle-contains-h\"><div class=\"[ section-title ]\"><h3 id=\"bundle-contains-h\" x-text=\"bundle.entriesHeading\"></h3></div><div class=\"[ cluster ]\" data-contains style=\"--gutter: var(--space-xs)\"><template x-for=\"e in bundle.entries\" x-bind:key=\"e.label\"><a class=\"[ skill-link ]\" x-bind:href=\"e.href\" x-bind:data-kind=\"e.kind\" x-bind:data-missing=\"e.missing\" x-on:click=\"openBundleLink\" x-text=\"e.label\"></a></template></div><p class=\"[ hint text-xs color-ink-muted ]\">A bundle expands in place wherever it is named. Duplicates are dropped; the first one seen stays.</p></section><section aria-labelledby=\"bundle-used-h\"><div class=\"[ section-title ]\"><h3 id=\"bundle-used-h\">Used by</h3></div><p class=\"[ color-ink-muted text-sm ]\" data-unused-note x-bind:hidden=\"!bundle.unused\">No agent and no bundle names it. Add it as <span class=\"font-mono\" x-text=\"bundle.title\"></span> in an agent's skills.</p><dl class=\"[ kv ]\" x-bind:hidden=\"bundle.unused\"><dt>Agents</dt><dd data-used=\"agents\"><template x-for=\"a in bundle.agents\" x-bind:key=\"a.name\"><a x-bind:href=\"a.href\" x-text=\"a.name\"></a></template><span class=\"[ color-ink-faint ]\" x-bind:hidden=\"bundleHasAgents\">None</span></dd><dt>Bundles</dt><dd data-used=\"bundles\"><template x-for=\"b in bundle.bundles\" x-bind:key=\"b.name\"><a class=\"[ chip ]\" data-kind=\"bundle\" x-bind:href=\"b.href\" x-on:click=\"openBundleLink\" x-text=\"b.name\"></a></template><span class=\"[ color-ink-faint ]\" x-bind:hidden=\"bundleHasBundles\">None</span></dd></dl></section></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 6, "</div><div class=\"[ cluster ]\"><code class=\"[ library-path ]\" data-path x-text=\"bundle.path\"></code> <span class=\"[ text-xs color-ink-faint ]\" data-bundle-size x-text=\"bundle.sizeLabel\"></span></div></div><section aria-labelledby=\"bundle-contains-h\"><div class=\"[ section-title ]\"><h3 id=\"bundle-contains-h\" x-text=\"bundle.entriesHeading\"></h3></div><div class=\"[ cluster ]\" data-contains style=\"--gutter: var(--space-xs)\"><template x-for=\"e in bundle.entries\" x-bind:key=\"e.label\"><a class=\"[ skill-link ]\" x-bind:href=\"e.href\" x-bind:data-kind=\"e.kind\" x-bind:data-missing=\"e.missing\" x-on:click=\"openBundleLink\" x-text=\"e.label\"></a></template></div><p class=\"[ hint text-xs color-ink-muted ]\">A bundle expands in place wherever it is named. Duplicates are dropped; the first one seen stays.</p></section><section aria-labelledby=\"bundle-used-h\"><div class=\"[ section-title ]\"><h3 id=\"bundle-used-h\">Used by</h3></div><p class=\"[ color-ink-muted text-sm ]\" data-unused-note x-bind:hidden=\"!bundle.unused\">No agent and no bundle names it. Add it as <span class=\"font-mono\" x-text=\"bundle.title\"></span> in an agent's skills.</p><dl class=\"[ kv ]\" x-bind:hidden=\"bundle.unused\"><dt>Agents</dt><dd data-used=\"agents\"><template x-for=\"a in bundle.agents\" x-bind:key=\"a.name\"><a x-bind:href=\"a.href\" x-text=\"a.name\"></a></template><span class=\"[ color-ink-faint ]\" x-bind:hidden=\"bundleHasAgents\">None</span></dd><dt>Bundles</dt><dd data-used=\"bundles\"><template x-for=\"b in bundle.bundles\" x-bind:key=\"b.name\"><a class=\"[ chip ]\" data-kind=\"bundle\" x-bind:href=\"b.href\" x-on:click=\"openBundleLink\" x-text=\"b.name\"></a></template><span class=\"[ color-ink-faint ]\" x-bind:hidden=\"bundleHasBundles\">None</span></dd></dl></section></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -118,7 +126,7 @@ func bundleEditorPane() templ.Component {
 			templ_7745c5c3_Var3 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 6, "<div class=\"[ library-detail-inner ] [ editor-pane ]\" data-bundle-editor><div class=\"[ detail-head ]\"><h2 x-text=\"editorTitle\"></h2><code class=\"[ library-path ]\" data-path x-text=\"editorPath\"></code></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 7, "<div class=\"[ library-detail-inner ] [ editor-pane ]\" data-bundle-editor><div class=\"[ detail-head ]\"><h2 x-text=\"editorTitle\"></h2><code class=\"[ library-path ]\" data-path x-text=\"editorPath\"></code></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -126,33 +134,33 @@ func bundleEditorPane() templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 7, "<div class=\"[ field ]\"><label for=\"bundle-name\">Name</label><div class=\"[ prefixed ]\"><span aria-hidden=\"true\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 8, "<div class=\"[ field ]\"><label for=\"bundle-name\">Name</label><div class=\"[ prefixed ]\"><span aria-hidden=\"true\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var4 string
 		templ_7745c5c3_Var4, templ_7745c5c3_Err = templ.JoinStringErrs("@")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `bundles.templ`, Line: 116, Col: 34}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `bundles.templ`, Line: 120, Col: 34}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var4))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 8, "</span> <input type=\"text\" id=\"bundle-name\" class=\"[ font-mono ]\" placeholder=\"e.g. ios-developer\" spellcheck=\"false\" autocomplete=\"off\" aria-describedby=\"bundle-name-hint\" x-model=\"draft.name\" x-on:input=\"draftChanged\" x-bind:aria-describedby=\"nameDescribedBy\" x-bind:aria-invalid=\"nameInvalid\"></div><span class=\"[ hint ]\" id=\"bundle-name-hint\">Lowercase letters, digits and dashes. Agents and bundles name it as <span class=\"font-mono\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 9, "</span> <input type=\"text\" id=\"bundle-name\" class=\"[ font-mono ]\" placeholder=\"e.g. ios-developer\" spellcheck=\"false\" autocomplete=\"off\" aria-describedby=\"bundle-name-hint\" x-model=\"draft.name\" x-on:input=\"draftChanged\" x-bind:aria-describedby=\"nameDescribedBy\" x-bind:aria-invalid=\"nameInvalid\"></div><span class=\"[ hint ]\" id=\"bundle-name-hint\">Lowercase letters, digits and dashes. Agents and bundles name it as <span class=\"font-mono\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var5 string
 		templ_7745c5c3_Var5, templ_7745c5c3_Err = templ.JoinStringErrs("@name")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `bundles.templ`, Line: 131, Col: 149}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `bundles.templ`, Line: 135, Col: 149}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var5))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 9, "</span>.</span> <span class=\"[ error ]\" id=\"bundle-name-error\" x-bind:hidden=\"!nameInvalid\" x-text=\"fieldErrors.name\"></span></div><div class=\"[ banner ]\" data-tone=\"attention\" data-rename-banner x-bind:hidden=\"!renameBanner.show\" hidden><div class=\"[ grow ]\"><strong>Renaming rewrites every <span class=\"font-mono\" x-text=\"renameBanner.from\"></span></strong> to <span class=\"font-mono\" x-text=\"renameBanner.to\"></span>: <span x-text=\"renameBanner.text\"></span>. One save changes them all.</div></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 10, "</span>.</span> <span class=\"[ error ]\" id=\"bundle-name-error\" x-bind:hidden=\"!nameInvalid\" x-text=\"fieldErrors.name\"></span></div><div class=\"[ banner ]\" data-tone=\"attention\" data-rename-banner x-bind:hidden=\"!renameBanner.show\" hidden><div class=\"[ grow ]\"><strong>Renaming rewrites every <span class=\"font-mono\" x-text=\"renameBanner.from\"></span></strong> to <span class=\"font-mono\" x-text=\"renameBanner.to\"></span>: <span x-text=\"renameBanner.text\"></span>. One save changes them all.</div></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -168,7 +176,7 @@ func bundleEditorPane() templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 10, "</div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 11, "</div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

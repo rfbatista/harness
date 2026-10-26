@@ -146,3 +146,32 @@ test("the toast carries the server's summary, Undo, and what running sessions ke
   assert.equal(t.tone, "");
   assert.equal(t.note, "Changes reach sessions from their next start. Running sessions keep what they started with.");
 });
+
+test("an outside change found by a live re-read is a conflict that names the files that moved", () => {
+  const s = run([{ type: "edit", dirty: true }, { type: "outside", currentVersions: { "agents.json": "sha256:b2", "mcp-servers.json": "sha256:m" } }]);
+  assert.equal(s.phase, "conflict");
+  assert.deepEqual(s.conflict.changed.map((c) => c.path), ["agents.json"]);
+  const v = saveView(s, { valid: true, changes: 1, writes: ["agents.json"] });
+  assert.equal(v.canSave, false);
+  assert.equal(v.conflictTitle, "agents.json changed on disk while you were editing.");
+  assert.equal(v.conflictFiles[0].label, "changed on disk");
+});
+
+test("a rebase keeps the edit, takes the new versions and drops a preview made against the old ones; a conflict stands", () => {
+  const previewed = run([{ type: "edit", dirty: true }, { type: "preview-start", seq: 1 }]);
+  const r = reduceSave(previewed, { type: "rebase", versions: { "agents.json": "sha256:b2" } });
+  assert.equal(r.phase, "dirty");
+  assert.equal(r.baseVersions["agents.json"], "sha256:b2");
+  assert.ok(r.seq > previewed.seq, "the answer to the old preview is dropped");
+  const conflict = run([{ type: "edit", dirty: true }, { type: "outside", currentVersions: { "agents.json": "x" } }]);
+  assert.equal(reduceSave(conflict, { type: "rebase", versions: { "agents.json": "y" } }), conflict);
+});
+
+test("a catalog that does not parse turns Save off and says why in the footer", () => {
+  const dirty = run([{ type: "edit", dirty: true }]);
+  const v = saveView(dirty, { valid: true, changes: 1, writes: ["agents.json"], blocked: "agents.json does not parse" });
+  assert.equal(v.canSave, false);
+  assert.equal(v.blocked, true);
+  assert.equal(v.footer, "Saving is off · agents.json does not parse");
+  assert.equal(saveView(dirty, { valid: true, changes: 1, writes: ["agents.json"] }).canSave, true);
+});

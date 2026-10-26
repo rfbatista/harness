@@ -133,3 +133,50 @@ test("a preview answer that arrives after the person typed on is dropped", async
   await firing;
   assert.equal(c.state.preview, null);
 });
+
+test("an open item that changed on disk is probed: the server's refusal gives the conflict its diff, even for a clean editor", async () => {
+  const { c, server } = setup();
+  c.open({ "agents.json": "sha256:a1" });
+  c.edited({ dirty: false, valid: true });
+  server.editOnDisk("agents.json");
+  await c.probe({ "agents.json": "sha256:now" });
+  assert.equal(c.state.phase, "conflict");
+  assert.equal(c.state.conflict.changed[0].path, "agents.json");
+  assert.equal(saveRequests(server, false).length, 0, "nothing was written");
+});
+
+test("a probe the server answers with another refusal still blocks Save and names the changed file", async () => {
+  const { c, set } = setup();
+  set({ previousName: "ghost" });
+  c.open({ "agents.json": "sha256:a1" });
+  await c.probe({ "agents.json": "sha256:now" });
+  assert.equal(c.state.phase, "conflict");
+  assert.deepEqual(c.state.conflict.changed, [{ path: "agents.json", theirs: undefined }]);
+});
+
+test("a rebase takes the new versions, drops the stale preview and asks for it again", async () => {
+  const { c, timers, server } = setup();
+  c.open({ "agents.json": "sha256:a1" });
+  c.edited({ dirty: true, valid: true });
+  await timers.fire();
+  assert.ok(c.state.preview);
+  c.rebase({ "agents.json": "sha256:other" });
+  assert.equal(c.state.preview, null);
+  assert.equal(c.state.baseVersions["agents.json"], "sha256:other");
+  assert.equal(timers.count, 1);
+  await timers.fire();
+  assert.equal(saveRequests(server, true).at(-1)[2].base_versions["agents.json"], "sha256:other");
+});
+
+test("no preview is asked for while saving is off, and a rebase after the file is fixed asks for the one owed", async () => {
+  let off = true;
+  const { gateway } = memoryCatalog(makeWorld());
+  const timers = fakeTimers();
+  const c = saveController({ run: (o) => gateway.saveBundle({ previousName: "ux", bundle: { name: "ux", entries: ["tdd"] } }, o), timers, blocked: () => off });
+  c.open({ "agents.json": "sha256:a1" });
+  c.edited({ dirty: true, valid: true });
+  assert.equal(timers.count, 0);
+  off = false;
+  c.rebase({ "agents.json": "sha256:a1" });
+  assert.equal(timers.count, 1);
+});

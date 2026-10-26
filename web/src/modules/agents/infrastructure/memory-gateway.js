@@ -27,6 +27,19 @@ export function memoryCatalogServer({ catalog, projects = {}, projectNames = {},
   let counter = 0;
   let latest = null;
   const requests = [];
+  /** The page feed's followers: what /api/project_events carries, as the page sees it. */
+  const followers = new Set();
+  const feed = {
+    follow(path, handlers) {
+      const f = { onStatus: () => {}, ...handlers };
+      followers.add(f);
+      f.onStatus("live");
+      return () => followers.delete(f);
+    },
+  };
+  const publish = (data) => {
+    for (const f of [...followers]) f.onMessage(structuredClone(data));
+  };
 
   const derive = (c) => {
     const skillNames = new Set(c.skills.map((s) => s.name));
@@ -249,6 +262,7 @@ export function memoryCatalogServer({ catalog, projects = {}, projectNames = {},
     for (const f of files) cat.versions[f] = `sha256:${f}-${++counter}`;
     const id = `change-${++counter}`;
     latest = { id, before, files, after: Object.fromEntries(files.map((f) => [f, cat.versions[f]])) };
+    publish({ agent_catalog_changed: { paths: [...files] } });
     return { change: { id, summary: summary(cat), writes, projects }, versions: clone(cat.versions) };
   }
 
@@ -301,6 +315,18 @@ export function memoryCatalogServer({ catalog, projects = {}, projectNames = {},
     },
     /** Every request: [method, path, body or query]. */
     requests,
+    /** The page feed this server publishes catalog changes on (a Feed, as shared-feed.js gives). */
+    feed,
+    /** A message on the page feed, as another tab's save or any other event would send it. */
+    publish,
+    /** The feed's status reaches its followers: "paused", "resynced", "live". */
+    setFeedStatus(status) {
+      for (const f of [...followers]) f.onStatus(status);
+    },
+    /** How many followers the page feed has now. */
+    get followerCount() {
+      return followers.size;
+    },
     /** The file changed on disk behind the page's back. */
     editOnDisk(path) {
       cat.versions[path] = `sha256:${path}-${++counter}`;
@@ -309,11 +335,16 @@ export function memoryCatalogServer({ catalog, projects = {}, projectNames = {},
     breakFile(path, line, column, message) {
       cat.broken = { path, line, column, message };
     },
+    /** The file parses again, by hand. */
+    fixFile() {
+      cat.broken = null;
+      for (const f of Object.keys(cat.versions)) cat.versions[f] = `sha256:${f}-${++counter}`;
+    },
   };
 }
 
 /** @param {Parameters<typeof memoryCatalogServer>[0]} world */
 export function memoryCatalog(world) {
   const server = memoryCatalogServer(world);
-  return { gateway: catalogGateway(/** @type {any} */ (server.api)), server };
+  return { gateway: catalogGateway(/** @type {any} */ (server.api), server.feed), server };
 }

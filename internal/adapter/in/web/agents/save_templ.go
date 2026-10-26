@@ -89,7 +89,7 @@ func saveAlerts() templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "<span class=\"[ text-sm ]\" x-text=\"sv.conflictNote\"></span></div><div class=\"[ cluster ] [ save-choices ]\"><button type=\"button\" class=\"[ button ]\" data-size=\"sm\" data-reload x-on:click=\"reloadEditor\">Reload (lose my edits)</button> <button type=\"button\" class=\"[ button ]\" data-size=\"sm\" data-variant=\"danger\" data-overwrite x-on:click=\"overwrite\">Overwrite</button></div></div></template><template x-if=\"formInvalid\"><div class=\"[ banner ]\" data-tone=\"danger\" data-form-error><div class=\"[ flow ] [ flow-space-3xs grow ]\"><span x-text=\"fieldErrors.form\"></span> <span class=\"[ code ]\"><span x-text=\"refusalCode\"></span> · <span x-text=\"refusalNext\"></span></span></div></div></template></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "<span class=\"[ text-sm ]\" x-text=\"sv.conflictNote\"></span></div><div class=\"[ cluster ] [ save-choices ]\"><button type=\"button\" class=\"[ button ]\" data-size=\"sm\" data-reload x-on:click=\"reloadEditor\">Reload (lose my edits)</button> <button type=\"button\" class=\"[ button ]\" data-size=\"sm\" data-variant=\"danger\" data-overwrite x-bind:disabled=\"isBroken\" x-on:click=\"overwrite\">Overwrite</button></div></div></template><template x-if=\"formInvalid\"><div class=\"[ banner ]\" data-tone=\"danger\" data-form-error><div class=\"[ flow ] [ flow-space-3xs grow ]\"><span x-text=\"fieldErrors.form\"></span> <span class=\"[ code ]\"><span x-text=\"refusalCode\"></span> · <span x-text=\"refusalNext\"></span></span></div></div></template></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -641,6 +641,71 @@ func entryPicker(ns, label, placeholder, hintID, errorID, describedBy, invalid, 
 			return templ_7745c5c3_Err
 		}
 		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 41, "\"></span></div>")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		return nil
+	})
+}
+
+// diskBanner is the notice above an open item's detail when the item changed
+// on disk behind the page's back (liveCatalog.js): what changed, and the
+// detail below already shows what is on disk now. No value is ever listed.
+func diskBanner() templ.Component {
+	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
+		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
+		if templ_7745c5c3_CtxErr := ctx.Err(); templ_7745c5c3_CtxErr != nil {
+			return templ_7745c5c3_CtxErr
+		}
+		templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
+		if !templ_7745c5c3_IsBuffer {
+			defer func() {
+				templ_7745c5c3_BufErr := templruntime.ReleaseBuffer(templ_7745c5c3_Buffer)
+				if templ_7745c5c3_Err == nil {
+					templ_7745c5c3_Err = templ_7745c5c3_BufErr
+				}
+			}()
+		}
+		ctx = templ.InitializeContext(ctx)
+		templ_7745c5c3_Var40 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var40 == nil {
+			templ_7745c5c3_Var40 = templ.NopComponent
+		}
+		ctx = templ.ClearChildren(ctx)
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 42, "<template x-if=\"disk\"><div class=\"[ banner ]\" data-tone=\"attention\" data-disk-changed role=\"status\"><div class=\"[ flow ] [ flow-space-3xs grow ]\"><strong x-text=\"disk.sentence\"></strong><ul class=\"[ entry-list ]\" role=\"list\"><template x-for=\"l in disk.lines\" x-bind:key=\"l.text\"><li x-text=\"l.text\"></li></template></ul><span class=\"[ text-sm ]\">What is shown below is what is on disk now.</span></div><button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" data-disk-dismiss x-on:click=\"dismissDisk\">Dismiss</button></div></template>")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		return nil
+	})
+}
+
+// brokenBanner is shown while agents.json or mcp-servers.json does not parse
+// (contract section 3, `broken`): the file, the line and column, and Check
+// again. The lists under it are the last version that parsed, and every save
+// and delete is off.
+func brokenBanner() templ.Component {
+	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
+		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
+		if templ_7745c5c3_CtxErr := ctx.Err(); templ_7745c5c3_CtxErr != nil {
+			return templ_7745c5c3_CtxErr
+		}
+		templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
+		if !templ_7745c5c3_IsBuffer {
+			defer func() {
+				templ_7745c5c3_BufErr := templruntime.ReleaseBuffer(templ_7745c5c3_Buffer)
+				if templ_7745c5c3_Err == nil {
+					templ_7745c5c3_Err = templ_7745c5c3_BufErr
+				}
+			}()
+		}
+		ctx = templ.InitializeContext(ctx)
+		templ_7745c5c3_Var41 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var41 == nil {
+			templ_7745c5c3_Var41 = templ.NopComponent
+		}
+		ctx = templ.ClearChildren(ctx)
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 43, "<template x-if=\"broken\"><div style=\"padding-inline: var(--space-m)\"><div class=\"[ banner ]\" data-tone=\"danger\" data-broken role=\"alert\"><div class=\"[ flow ] [ flow-space-3xs grow ]\"><strong data-broken-title x-text=\"broken.title\"></strong> <span class=\"[ font-mono text-sm ]\" data-broken-where x-text=\"broken.where\"></span> <span class=\"[ font-mono text-sm ]\" data-broken-message x-text=\"broken.message\"></span> <span class=\"[ text-sm ]\" x-text=\"broken.note\"></span></div><button type=\"button\" class=\"[ button ]\" data-size=\"sm\" data-broken-check x-bind:disabled=\"refreshing\" x-on:click=\"reloadFromDisk\" x-text=\"checkCatalogLabel\">Check again</button></div></div></template>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

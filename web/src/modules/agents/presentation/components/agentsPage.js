@@ -22,6 +22,7 @@ import { bundlesTab } from "./bundlesTab.js";
 import { compose } from "./compose.js";
 import { deleteUi } from "./deleteUi.js";
 import { editors } from "./editors.js";
+import { liveCatalog, trackWrites } from "./liveCatalog.js";
 import { mcpEditor } from "./mcpEditor.js";
 import { saveUi } from "./saveUi.js";
 import { skillEditor } from "./skillEditor.js";
@@ -39,14 +40,18 @@ const COUNTS = {
 
 /**
  * @param {{
- *   gateway: Pick<import("../../domain/ports.js").CatalogGateway, "decodeCatalog" | "getCatalog" | "getSkill" | "checkEnvVars" | "saveAgent" | "saveBundle" | "saveSkill" | "saveMcpServer" | "deleteAgent" | "deleteBundle" | "deleteSkill" | "deleteMcpServer" | "testMcpServer" | "listProjects" | "undoChange">,
+ *   gateway: Pick<import("../../domain/ports.js").CatalogGateway, "decodeCatalog" | "follow" | "getCatalog" | "getSkill" | "checkEnvVars" | "saveAgent" | "saveBundle" | "saveSkill" | "saveMcpServer" | "deleteAgent" | "deleteBundle" | "deleteSkill" | "deleteMcpServer" | "testMcpServer" | "listProjects" | "undoChange">,
  *   history: Pick<History, "pushState"> & Partial<Pick<History, "replaceState">>,
  *   location: Pick<Location, "pathname" | "search"> & Partial<Pick<Location, "hash" | "assign">>,
  *   clipboard?: Pick<Clipboard, "writeText">,
  *   timers?: { setTimeout: (fn: () => void, ms: number) => any, clearTimeout: (id: any) => void },
  * }} deps
  */
-export const agentsPage = ({ gateway, history, location, clipboard, timers = globalThis }) => () => compose({
+export const agentsPage = ({ gateway: raw, history, location, clipboard, timers = globalThis }) => () => {
+  // What this page writes itself is not a change from outside: the page watches its own writes.
+  const tracker = trackWrites(raw);
+  const gateway = tracker.gateway;
+  return compose({
   /** @type {import("../../domain/tabs.js").TabId} */
   tab: "agents",
   item: "",
@@ -57,6 +62,12 @@ export const agentsPage = ({ gateway, history, location, clipboard, timers = glo
   catalog: null,
   error: null,
   loading: false,
+  /** The fields a row's badge binds to: "changed on disk" takes the place of the problem it would show. */
+  badgeFields(kind, row) {
+    const badge = this.diskBadge(kind, row.name, row.badge);
+    return { hasBadge: badge !== null, noBadge: badge === null, badgeLabel: badge?.label ?? "", badgeTone: badge?.tone ?? "" };
+  },
+
   /** The Agents tab's text filter and quick filter ("all", "mcp", "problems"). */
   query: "",
   filter: "all",
@@ -93,6 +104,7 @@ export const agentsPage = ({ gateway, history, location, clipboard, timers = glo
     }
     this.syncEditor();
     this.toolItem = location.hash ? decodeURIComponent(location.hash.slice(1)) : "";
+    this.startLive();
     await this.loadSkill();
   },
 
@@ -118,6 +130,7 @@ export const agentsPage = ({ gateway, history, location, clipboard, timers = glo
     this.shown = pathname;
     this.opened = {};
     this.skillData = null;
+    this.skillVersion = "";
     this.skillError = null;
     this.syncEditor();
   },
@@ -234,10 +247,7 @@ export const agentsPage = ({ gateway, history, location, clipboard, timers = glo
     return agentRows(this.catalog, { query: this.query, filter: this.filter }).map((r) => ({
       ...r,
       current: r.name === this.item && this.mode === "",
-      hasBadge: r.badge !== null,
-      noBadge: r.badge === null,
-      badgeLabel: r.badge?.label ?? "",
-      badgeTone: r.badge?.tone ?? "",
+      ...this.badgeFields("agent", r),
     }));
   },
 
@@ -337,10 +347,7 @@ export const agentsPage = ({ gateway, history, location, clipboard, timers = glo
     return this.skillRowsResult.rows.map((r) => ({
       ...r,
       current: r.name === this.item && this.tab === "skills" && this.mode === "",
-      hasBadge: r.badge !== null,
-      noBadge: r.badge === null,
-      badgeLabel: r.badge?.label ?? "",
-      badgeTone: r.badge?.tone ?? "",
+      ...this.badgeFields("skill", r),
     }));
   },
   get skillFilters() {
@@ -428,8 +435,11 @@ export const agentsPage = ({ gateway, history, location, clipboard, timers = glo
     if (this.tab !== "skills" || !name || this.mode || this.skill === null) return;
     this.skillError = null;
     try {
-      const { skill } = await gateway.getSkill(name);
-      if (this.item === name && this.tab === "skills") this.skillData = skill;
+      const { skill, versions } = await gateway.getSkill(name);
+      if (this.item === name && this.tab === "skills") {
+        this.skillData = skill;
+        this.skillVersion = versions?.[`skills/${name}`] ?? "";
+      }
     } catch (err) {
       if (this.item === name) this.skillError = describeError(err);
     }
@@ -447,10 +457,7 @@ export const agentsPage = ({ gateway, history, location, clipboard, timers = glo
     return mcpRows(this.catalog, { query: this.mcpQuery, filter: this.mcpFilter }).map((r) => ({
       ...r,
       current: r.name === this.item && this.tab === "mcp" && this.mode === "",
-      hasBadge: r.badge !== null,
-      noBadge: r.badge === null,
-      badgeLabel: r.badge?.label ?? "",
-      badgeTone: r.badge?.tone ?? "",
+      ...this.badgeFields("mcp", r),
     }));
   },
   get mcpFilters() {
@@ -567,10 +574,11 @@ export const agentsPage = ({ gateway, history, location, clipboard, timers = glo
       this.notice = "Could not copy the path";
     }
   },
-}, bundlesTab({ history }), editors(
+}, bundlesTab({ history }), liveCatalog({ gateway, tracker, timers }), editors(
   { part: bundleEditor({ gateway, location, timers }) },
   // The MCP form's drawer opens over the agent editor: while it does, the shared members answer for the drawer.
   { part: agentEditor({ gateway, location, history, timers }), isOpen: (p) => p.agentDraft !== null && !p.mfOpen },
   { part: skillEditor({ gateway, location, timers }), isOpen: (p) => p.sfOpen },
   { part: mcpEditor({ gateway, location, timers }), isOpen: (p) => p.mfOpen },
 ), saveUi({ gateway }), deleteUi({ gateway, timers }));
+};

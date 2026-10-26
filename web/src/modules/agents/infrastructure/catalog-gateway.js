@@ -7,12 +7,17 @@ import {
 
 /**
  * @param {import("../../../shared/infrastructure/api.js").ApiClient} api
+ * @param {import("../../../shared/infrastructure/feed.js").Feed} [events]  the page feed, /api/project_events
  * @returns {import("../domain/ports.js").CatalogGateway}
  */
-export function catalogGateway(api) {
+export function catalogGateway(api, events) {
   const write = async (verb, body, options) => toWriteResult(await api.post(`/${verb}`, { ...body, ...writeFields(options) }));
   return {
     decodeCatalog: toCatalog,
+    follow({ onEvent, onStatus = () => {} }) {
+      if (!events) return () => {};
+      return events.follow("/project_events", { onMessage: onEvent, onStatus });
+    },
     async getCatalog() {
       return toCatalog(await api.get("/get_agent_catalog"));
     },

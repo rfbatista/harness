@@ -42,9 +42,14 @@ templ deleteDialog() {
 									<span class="[ text-sm ]" x-text="delConflictNote"></span>
 									<div class="[ cluster ]">
 										<button type="button" class="[ button ]" data-size="sm" data-delete-reload x-on:click="delReload">Reload</button>
-										<button type="button" class="[ button ]" data-size="sm" data-variant="danger" data-delete-overwrite x-on:click="delOverwrite">Delete anyway</button>
+										<button type="button" class="[ button ]" data-size="sm" data-variant="danger" data-delete-overwrite x-bind:disabled="isBroken" x-on:click="delOverwrite">Delete anyway</button>
 									</div>
 								</div>
+							</div>
+						</template>
+						<template x-if="isBroken">
+							<div class="[ banner ]" data-tone="danger" data-delete-blocked>
+								<span x-text="delBlockedNote"></span>
 							</div>
 						</template>
 						<template x-if="delHasError">

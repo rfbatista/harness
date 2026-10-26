@@ -18,7 +18,10 @@ templ bundlesLibrary() {
 					<li>
 						<a class="[ library-row ]" data-bundle-row x-bind:href="row.href" x-bind:data-key="row.key" x-bind:aria-current="row.current" x-on:click="openBundleLink">
 							<span class="[ name font-mono ]" x-text="row.name"></span>
-							<span class="[ meta ]" x-text="row.meta"></span>
+							<span class="[ meta ]">
+								<span x-text="row.meta"></span>
+								<span class="[ badge ]" data-tone="attention" data-disk-badge x-bind:hidden="row.noDisk" hidden>changed on disk</span>
+							</span>
 							<span class="[ desc font-mono ]" x-text="row.description"></span>
 						</a>
 					</li>
@@ -55,6 +58,7 @@ templ bundlesLibrary() {
 templ bundleDetail() {
 	<div class="[ library-detail-inner ]" data-bundle-detail>
 		<a href="/agents/bundles" class="[ button ]" data-variant="ghost" data-size="sm" data-split-back x-on:click="backToList">All bundles</a>
+		@diskBanner()
 		<div class="[ detail-head ]">
 			<div class="[ repel ]">
 				<div class="[ cluster ]">

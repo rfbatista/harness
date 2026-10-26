@@ -20,6 +20,7 @@ import {
 import { isMcpName, isSlug } from "../../domain/names.js";
 import { openSave, saveView, savedToast } from "../../domain/savePipeline.js";
 import { entryPickerMixin } from "./entryPickerMixin.js";
+import { settleEditor } from "./liveCatalog.js";
 import { saveController } from "./saveController.js";
 
 const enc = encodeURIComponent;
@@ -95,6 +96,7 @@ export function agentEditor({ gateway, location, history, storage = globalThis.s
       saver = saveController({
         run: (options) => gateway.saveAgent({ previousName: page.agentDraft.previousName || undefined, agent: { name: page.agentDraft.name, description: page.agentDraft.description.trim(), aliases: [...page.agentDraft.aliases], entries: [...page.agentDraft.entries], mcpServers: [...page.agentDraft.mcpServers], allowedTools: [...page.agentDraft.allowedTools] } }, options),
         onState: (state) => { page.agentSave = state; },
+        blocked: () => page.brokenWhy !== "",
         timers,
       });
     },
@@ -244,7 +246,8 @@ export function agentEditor({ gateway, location, history, storage = globalThis.s
       return this.agentDraft && this.catalog ? agentChanges(this.catalog, this.agentDraft) : 0;
     },
     get sv() {
-      const view = saveView(this.agentSave, { valid: this.agentCheck.valid, changes: this.agentChangeCount, writes: FILES });
+      const view = saveView(this.agentSave, { valid: this.agentCheck.valid, changes: this.agentChangeCount, writes: FILES, blocked: this.brokenWhy });
+      if (view.blocked) return view;
       if (view.dirty && !this.agentCheck.valid && this.agentCheck.descriptionProblem) return { ...view, footer: `1 error · description is required` };
       return view;
     },
@@ -468,6 +471,7 @@ export function agentEditor({ gateway, location, history, storage = globalThis.s
     },
     async reloadEditor() {
       const previous = this.agentDraft.previousName;
+      this.clearDisk("agent", previous);
       await this.load();
       const draft = this.catalog ? agentDraft(this.catalog, previous) : null;
       if (!draft) {
@@ -480,6 +484,10 @@ export function agentEditor({ gateway, location, history, storage = globalThis.s
       this.agentTouched = false;
       this.reviewOpen = false;
       saver.reload(versionsOf(this.catalog));
+    },
+    /** The catalog was read again: settle this editor against what is on disk now (liveCatalog.js). */
+    catalogMoved(ctx) {
+      if (this.agentDraft !== null) settleEditor(saver, "agent", this.agentDraft.previousName, ctx);
     },
     cancelEditor(event) {
       event.preventDefault();

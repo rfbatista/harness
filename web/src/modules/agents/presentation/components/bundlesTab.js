@@ -18,6 +18,8 @@ export function bundlesTab({ history }) {
       return bundleRows(this.catalog, { query: this.bundleQuery, filter: this.bundleFilter }).map((r) => ({
         ...r,
         current: r.key === this.item && this.tab === "bundles" && this.mode === "",
+        disk: this.diskBadge("bundle", r.key, null) !== null,
+        noDisk: this.diskBadge("bundle", r.key, null) === null,
       }));
     },
     get bundleFilters() {

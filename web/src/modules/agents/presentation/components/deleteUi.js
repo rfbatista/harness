@@ -48,7 +48,11 @@ export function deleteUi({ gateway, timers }) {
     },
     /** Delete is on once the name is typed exactly, and nothing is in flight or waiting on a choice. */
     get delReady() {
-      return this.del !== null && this.delTyped === this.del.typed && !this.delState.saving && this.delState.phase !== "conflict";
+      return this.del !== null && !this.isBroken && this.delTyped === this.del.typed && !this.delState.saving && this.delState.phase !== "conflict";
+    },
+    /** Deleting is off while the catalog does not parse. */
+    get delBlockedNote() {
+      return this.isBroken ? `Deleting is off · ${this.brokenWhy}. Fix the file by hand, then Check again.` : "";
     },
     get delNotReady() {
       return !this.delReady;
@@ -158,7 +162,7 @@ export function deleteUi({ gateway, timers }) {
 
     /** The conflict banner's Overwrite: the same delete again, with force. */
     async delOverwrite() {
-      if (!saver) return;
+      if (!saver || this.isBroken) return;
       const { ok, result } = await saver.save({ force: true });
       if (ok && result) await this.finishDelete(result);
     },

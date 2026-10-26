@@ -10,7 +10,7 @@ const SHARED = [
   "editorHref", "entriesInvalid", "entriesDescribedBy", "saveEditor", "overwrite", "reloadEditor", "cancelEditor",
 ];
 /** Members every route change must run on all of them. */
-const BOTH = ["setupEditor", "syncEditor", "closeEditor"];
+const BOTH = ["setupEditor", "syncEditor", "closeEditor", "catalogMoved"];
 
 /**
  * @param {{ part: object, isOpen?: (page: any) => boolean }[]} editors  the first is the default; the others say when they are the open one
@@ -24,7 +24,7 @@ export function editors(...editors) {
     if (holders.length === 1) {
       out[key] = holders[0].descriptors[key];
     } else if (BOTH.includes(key)) {
-      out[key] = { configurable: true, enumerable: true, writable: true, value() { for (const h of holders) h.descriptors[key].value.apply(this); } };
+      out[key] = { configurable: true, enumerable: true, writable: true, value(...args) { for (const h of holders) h.descriptors[key].value.apply(this, args); } };
     } else if (SHARED.includes(key)) {
       const pick = (self) => (holders.find((h) => h.isOpen(self)) ?? holders[0]).descriptors[key];
       out[key] = holders[0].descriptors[key].get

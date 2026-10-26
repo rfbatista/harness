@@ -85,6 +85,15 @@ export function reduceSave(s, e) {
       return refused(s, e.refusal);
     case "reload":
       return openSave(e.baseVersions);
+    case "outside": {
+      // The files the editor read changed on disk, found by a live re-read, not by a refused write.
+      const changed = Object.keys(e.currentVersions).filter((p) => p in s.baseVersions && e.currentVersions[p] !== s.baseVersions[p]).map((path) => ({ path, theirs: undefined }));
+      return { ...s, phase: "conflict", saving: false, refusal: null, preview: null, conflict: { changed, currentVersions: e.currentVersions } };
+    }
+    case "rebase":
+      // Another item changed in a file this editor writes; this one did not. Take the new versions, and ask for the preview again.
+      if (s.phase === "conflict" || s.phase === "saved") return s;
+      return { ...s, baseVersions: { ...s.baseVersions, ...e.versions }, seq: s.seq + 1, preview: null, phase: s.phase === "previewing" ? "dirty" : s.phase };
     default:
       return s;
   }
@@ -94,9 +103,10 @@ export function reduceSave(s, e) {
  * Whether Save is on: something valid to save, no conflict, nothing in flight.
  * @param {SaveState} s
  * @param {boolean} valid  whether the form itself is fit to send
+ * @param {boolean} [blocked]  saving is off for a reason outside the form: the catalog does not parse
  */
-export function canSave(s, valid) {
-  return valid && !s.saving && (s.phase === "dirty" || s.phase === "previewing");
+export function canSave(s, valid, blocked = false) {
+  return valid && !blocked && !s.saving && (s.phase === "dirty" || s.phase === "previewing");
 }
 
 // The diffs are worked out once per preview or conflict, not on every read of the view.
@@ -111,14 +121,15 @@ const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 /**
  * What the sticky footer, the Review change panel and the conflict banner show.
  * @param {SaveState} s
- * @param {{ valid: boolean, changes: number, writes: string[] }} form
+ * @param {{ valid: boolean, changes: number, writes: string[], blocked?: string }} form  blocked: why saving is off (a file that does not parse), or ""
  */
 export function saveView(s, form) {
   const paths = s.preview ? s.preview.writes.map((w) => w.path) : form.writes;
   const writes = paths.join(", ");
   const dirty = s.phase !== "clean" && s.phase !== "saved";
   let footer;
-  if (!dirty) footer = `No changes · writes ${writes}`;
+  if (form.blocked) footer = `Saving is off · ${form.blocked}`;
+  else if (!dirty) footer = `No changes · writes ${writes}`;
   else if (!form.valid) footer = `${plural(Math.max(form.changes, 1), "unsaved change", "unsaved changes")} · fix the form to save`;
   else footer = `${plural(Math.max(form.changes, 1), "unsaved change", "unsaved changes")} · writes ${writes}`;
   const conflict = s.phase === "conflict" && s.conflict !== null;
@@ -128,7 +139,7 @@ export function saveView(s, form) {
     saving: s.saving,
     previewing: s.phase === "previewing",
     footer,
-    canSave: canSave(s, form.valid),
+    canSave: canSave(s, form.valid, Boolean(form.blocked)),
     review: s.preview !== null,
     files: s.preview ? memo(s.preview, () => diffModel(s.preview.writes)) : [],
     conflict,
@@ -138,6 +149,7 @@ export function saveView(s, form) {
       ? "Reload shows the file as it is now and drops your unsaved changes. Overwrite saves your version over it, so what changed on disk is lost. There is no merge."
       : "",
     refusal: s.refusal,
+    blocked: Boolean(form.blocked),
   };
 }
 

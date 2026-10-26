@@ -23,6 +23,7 @@ import {
   previewModel, reachOf, renameNote, returnHref, safeReturn, sizeText, skillChanges, skillDraft, skillFieldErrors, skillSave,
   startFromBody,
 } from "../../domain/skillForm.js";
+import { settleEditor } from "./liveCatalog.js";
 import { saveController } from "./saveController.js";
 
 const enc = encodeURIComponent;
@@ -83,6 +84,7 @@ export function skillEditor({ gateway, location, timers }) {
           page.sfSave = state;
           if (state.preview) page.sfShown = state.preview;
         },
+        blocked: () => page.brokenWhy !== "",
         timers,
       });
     },
@@ -234,7 +236,8 @@ export function skillEditor({ gateway, location, timers }) {
       return [`skills/${d.name || "<name>"}/`, ...(readers || renamed ? ["agents.json"] : [])];
     },
     get sv() {
-      const view = saveView(this.sfSave, { valid: this.sfCheck.valid, changes: this.sfChangeCount, writes: this.sfWrites });
+      const view = saveView(this.sfSave, { valid: this.sfCheck.valid, changes: this.sfChangeCount, writes: this.sfWrites, blocked: this.brokenWhy });
+      if (view.blocked) return view;
       const verb = this.sfIsEdit ? "save" : "create";
       if (view.conflict) return { ...view, footer: "Saving is off until you choose Reload or Overwrite." };
       if (!view.dirty) return this.sfIsEdit ? view : { ...view, footer: "Nothing is written until you create the skill." };
@@ -643,8 +646,13 @@ export function skillEditor({ gateway, location, timers }) {
     },
     /** The conflict banner's Reload: drop my edits and read the skill again. */
     async reloadEditor() {
+      this.clearDisk("skill", this.sfDraft?.previousName ?? "");
       await this.load();
       await this.sfBegin();
+    },
+    /** The catalog was read again: settle this editor against what is on disk now (liveCatalog.js). */
+    catalogMoved(ctx) {
+      if (this.sfOpen && this.sfDraft) settleEditor(saver, "skill", this.sfDraft.previousName ?? "", ctx);
     },
     cancelEditor(event) {
       event.preventDefault();

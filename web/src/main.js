@@ -113,7 +113,7 @@ registerCode(Alpine, { gateway: codeGateway(api, events), highlighter: hljsHighl
 registerNotifications(Alpine, { gateway: notificationsGateway(api, events), alerts: desktopAlerts(), prefs, clock: systemClock, navigate });
 registerCredentials(Alpine, { gateway: credentialsGateway(api, events), clock: systemClock });
 registerUsage(Alpine, { gateway: usageGateway(api, events) });
-registerAgents(Alpine, { gateway: catalogGateway(api), history: window.history, location: window.location, clipboard: navigator.clipboard });
+registerAgents(Alpine, { gateway: catalogGateway(api, events), history: window.history, location: window.location, clipboard: navigator.clipboard });
 registerTokenSavers(Alpine, { gateway: tokenSaversGateway(api), clock: systemClock });
 registerModels(Alpine, { gateway: modelsGateway(api) });
 registerSandbox(Alpine, { gateway: sandboxGateway(api) });
