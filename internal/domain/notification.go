@@ -22,6 +22,7 @@ const (
 	NotificationSessionWaiting  NotificationKind = "session_waiting"
 	NotificationTaskReview      NotificationKind = "task_review"
 	NotificationSessionFailed   NotificationKind = "session_failed"
+	NotificationCommitCheckOff  NotificationKind = "commit_check_off"
 	NotificationAgent           NotificationKind = "agent"
 )
 

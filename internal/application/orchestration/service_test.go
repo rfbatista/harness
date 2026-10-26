@@ -25,6 +25,8 @@ type fakeResolver struct {
 	proj   *domain.Project
 	repo   *domain.Repository
 	agents map[string]*domain.Agent
+	// servers are the MCP servers of the catalog.
+	servers []*domain.MCPServer
 	// others are more repositories of the project.
 	others []*domain.Repository
 }
@@ -50,7 +52,7 @@ func (f *fakeResolver) GetAgent(_ context.Context, id string) (*domain.Agent, er
 }
 
 func (f *fakeResolver) ResolveAgentRelations(a *domain.Agent) {}
-func (f *fakeResolver) ListMCPServers() []*domain.MCPServer   { return nil }
+func (f *fakeResolver) ListMCPServers() []*domain.MCPServer   { return f.servers }
 func (f *fakeResolver) GetZone(id string) *domain.Zone        { return nil }
 
 func (f *fakeResolver) ListRepositories(_ context.Context, projectID string) ([]*domain.Repository, error) {

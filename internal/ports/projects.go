@@ -29,6 +29,15 @@ type ProjectCatalog interface {
 	SetProjectAgentsReadAllRepos(ctx context.Context, projectID string, on bool) (*domain.Project, error)
 }
 
+// ProjectMCPServers keeps which catalog MCP servers a project gives its
+// sessions (ADR 0031). *projects.Service satisfies it.
+type ProjectMCPServers interface {
+	// SetProjectMCPServers replaces the project's server names. The caller
+	// checks that each is in the catalog. PROJECT_NOT_FOUND for an unknown
+	// project.
+	SetProjectMCPServers(ctx context.Context, projectID string, names []string) (*domain.Project, error)
+}
+
 // FoundRepository is a git checkout found on disk, not yet (necessarily)
 // recorded as a repository.
 type FoundRepository struct {

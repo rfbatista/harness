@@ -111,8 +111,12 @@ type SandboxSession struct {
 	WorkspacesRoot string
 	// VirtualShell is the session's shell; empty without one.
 	VirtualShell string
-	TempDir      string
-	AgentHome    string
+	// CommitCheckDir is the session's own commit check hooks dir (ADR 0040):
+	// read-only and executable, so `git commit` runs the check inside the
+	// sandbox. Another session's dir is never granted. Empty: none.
+	CommitCheckDir string
+	TempDir        string
+	AgentHome      string
 	// UserHome and ConfigHome are the person's home and XDG config home; their
 	// git config is read-only in every mode, never their ssh folder.
 	UserHome, ConfigHome string
@@ -185,6 +189,7 @@ func BuildSandboxPolicy(s SandboxSession) ports.SandboxPolicy {
 		return policy
 	}
 	add(s.VirtualShell, true)
+	add(s.CommitCheckDir, false)
 	add(s.TempDir, true)
 	var createOnly string
 	switch s.Mode {
@@ -519,6 +524,9 @@ func (s *Service) sandbox(ctx context.Context, in prepareInput, id string, repo 
 	}
 	if sb.WorkspacesRoot != nil {
 		sess.WorkspacesRoot = sb.WorkspacesRoot()
+	}
+	if s.commitCheckEnabled() {
+		sess.CommitCheckDir = s.CommitCheckDir(id)
 	}
 	for _, e := range env {
 		if v, ok := strings.CutPrefix(e, ports.ShellDirEnv+"="); ok {

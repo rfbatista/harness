@@ -85,8 +85,10 @@ type Row struct {
 	ResumeLabel string
 	// Unsandboxed: the session started with the sandbox off.
 	Unsandboxed bool
-	Role        string
-	Depth       int
+	// CommitCheckOff is why the commit check does not guard the worktree; empty while it does.
+	CommitCheckOff string
+	Role           string
+	Depth          int
 }
 
 // Chip is a row's status word for the uncommon states, with its tone
@@ -501,6 +503,7 @@ func toRow(s *domain.Session, selectedID string, agentNames map[string]string, n
 		Selected:       s.ID == selectedID,
 		Attention:      NeedsYou(s),
 		Unsandboxed:    unsandboxed(s),
+		CommitCheckOff: s.CommitCheckOff,
 		Role:           string(s.Role),
 		Depth:          min(depth, MaxDepth),
 	}

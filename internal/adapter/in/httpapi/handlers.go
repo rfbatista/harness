@@ -106,6 +106,9 @@ type Services struct {
 	AgentAuth ports.AgentAuth
 	// WritingHelper runs the writing helper's steps; nil answers 503.
 	WritingHelper ports.WritingHelper
+	// Catalog is the agent catalog folder: agents, bundles, skills and MCP
+	// servers; nil answers 503.
+	Catalog ports.CatalogEditor
 	// RepositoryArchitectures keeps repositories' architecture records; nil
 	// answers 503.
 	RepositoryArchitectures ports.RepositoryArchitectures
@@ -166,6 +169,7 @@ type Handler struct {
 	agentAuth        ports.AgentAuth
 
 	writingHelper ports.WritingHelper
+	catalog       ports.CatalogEditor
 
 	repoArch  ports.RepositoryArchitectures
 	archRules ports.ArchitectureRules
@@ -223,6 +227,7 @@ func NewHandler(s Services) *Handler {
 		agentAuth:        s.AgentAuth,
 
 		writingHelper: s.WritingHelper,
+		catalog:       s.Catalog,
 	}
 }
 
@@ -437,9 +442,21 @@ func (h *Handler) handleListAgents(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	out := make([]*mcp.AgentDTO, len(agents))
-	for i, a := range agents {
-		out[i] = mcp.AgentToDTO(a)
+	// With a project_id, only the agents the project enables (ADR 0038).
+	var project *domain.Project
+	if id := c.QueryParam("project_id"); id != "" {
+		if h.projects == nil {
+			return echo.NewHTTPError(http.StatusServiceUnavailable, "projects not configured")
+		}
+		if project, err = h.projects.GetProject(c.Request().Context(), id); err != nil {
+			return err
+		}
+	}
+	out := make([]*mcp.AgentDTO, 0, len(agents))
+	for _, a := range agents {
+		if project == nil || project.AgentEnabled(a.Name) {
+			out = append(out, mcp.AgentToDTO(a))
+		}
 	}
 	return c.JSON(http.StatusOK, mcp.ListAgentsOut{Agents: out})
 }

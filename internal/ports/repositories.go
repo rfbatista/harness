@@ -19,6 +19,13 @@ type ProjectRepository interface {
 	AddIgnoredPath(projectID, path string) (*domain.Project, error)
 	RemoveIgnoredPath(projectID, path string) (*domain.Project, error)
 	SetAgentsReadAllRepos(projectID string, on bool) (*domain.Project, error)
+	// SetMCPServers stores the catalog MCP servers every session of the
+	// project gets. PROJECT_NOT_FOUND for an unknown project.
+	SetMCPServers(projectID string, names []string) (*domain.Project, error)
+	// SetEnabledAgents stores the project's enabled agents: mode all or
+	// selected, and the selected list. PROJECT_NOT_FOUND for an unknown
+	// project.
+	SetEnabledAgents(projectID, mode string, names []string) (*domain.Project, error)
 }
 
 // RepositoryRepository is the outbound port for persisting and retrieving

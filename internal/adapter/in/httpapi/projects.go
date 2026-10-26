@@ -7,6 +7,7 @@ import (
 	"github.com/labstack/echo/v4"
 
 	"operators-mcp/internal/adapter/in/mcp"
+	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
 )
 
@@ -53,12 +54,22 @@ func (h *Handler) followCatalog(ctx context.Context) (<-chan any, error) {
 	if err != nil {
 		return nil, err
 	}
-	if h.gitCredentials == nil {
+	var creds <-chan ports.GitCredentialChange
+	if h.gitCredentials != nil {
+		creds, err = h.gitCredentials.FollowGitCredentials(ctx)
+		if err != nil {
+			return nil, err
+		}
+	}
+	var catalogChanges <-chan domain.CatalogChanged
+	if feed, ok := h.catalog.(ports.CatalogChangeFeed); ok {
+		catalogChanges, err = feed.FollowCatalogChanges(ctx)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if creds == nil && catalogChanges == nil {
 		return relayAs(ctx, changes, func(ch ports.ProjectCatalogChange) any { return projectEventOf(ch) }), nil
 	}
-	creds, err := h.gitCredentials.FollowGitCredentials(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return catalogEvents(ctx, changes, creds), nil
+	return catalogEvents(ctx, changes, creds, catalogChanges), nil
 }

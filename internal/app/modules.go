@@ -12,6 +12,7 @@ import (
 
 	"go.uber.org/fx"
 
+	"github.com/rfbatista/harnesskit/mcpprobe"
 	"github.com/rfbatista/harnesskit/skillfs"
 	"github.com/rfbatista/llmkit"
 	"github.com/rfbatista/llmkit/approval"
@@ -20,10 +21,11 @@ import (
 
 	"operators-mcp/internal/adapter/in/httpapi"
 	"operators-mcp/internal/adapter/in/mcpsession"
+	"operators-mcp/internal/adapter/out/agentcatalog"
 	"operators-mcp/internal/adapter/out/agents/claudehome"
 	"operators-mcp/internal/adapter/out/agents/claudetext"
 	"operators-mcp/internal/adapter/out/blobstore"
-	"operators-mcp/internal/adapter/out/configrepo"
+	"operators-mcp/internal/adapter/out/catalogstore"
 	"operators-mcp/internal/adapter/out/developerdir"
 	"operators-mcp/internal/adapter/out/filesystem"
 	"operators-mcp/internal/adapter/out/gitcli"
@@ -137,42 +139,79 @@ func newDB(lc fx.Lifecycle, cfg Config) (*gorm.DB, error) {
 	return db, nil
 }
 
-// newSkillRepository binds the database-backed skill store, merged with a
-// live config-backed one (agents/skills/*/SKILL.md) when
-// Config.DotfilesAgentsDir is set — see internal/adapter/out/configrepo.
-func newSkillRepository(cfg Config, db *gorm.DB) ports.SkillRepository {
-	dbRepo := sqlite.NewSkillRepository(db)
-	if cfg.DotfilesAgentsDir == "" {
-		return dbRepo
-	}
-	cfgRepo := configrepo.NewSkillStore(filepath.Join(cfg.DotfilesAgentsDir, "skills"))
-	return configrepo.MergeSkills(dbRepo, cfgRepo)
+// newSkillRepository binds the skill store: the agent catalog's skills folder
+// (ADR 0030). The database's skills were imported into it once.
+func newSkillRepository(cat *agentcatalog.Catalog) ports.SkillRepository {
+	return catalogstore.NewSkills(cat)
 }
 
-// newMCPServerRepository is newSkillRepository's equivalent for MCP servers,
-// read from every agent's resolved .mcp.json.
-func newMCPServerRepository(cfg Config, db *gorm.DB) ports.MCPServerRepository {
-	dbRepo := sqlite.NewMCPServerRepository(db)
-	if cfg.DotfilesAgentsDir == "" {
-		return dbRepo
-	}
-	cfgRepo := configrepo.NewMCPServerStore(filepath.Join(cfg.DotfilesAgentsDir, "agents.json"), cfg.DotfilesAgentsDir)
-	return configrepo.MergeMCPServers(dbRepo, cfgRepo)
+// newMCPServerRepository binds the MCP server store: the catalog's
+// mcp-servers.json.
+func newMCPServerRepository(cat *agentcatalog.Catalog) ports.MCPServerRepository {
+	return catalogstore.NewMCPServers(cat)
 }
 
-// newAgentRepository is newSkillRepository's equivalent for agents.json's
-// "agents" map. It builds its own *configrepo.MCPServerStore rather than
-// depend on newMCPServerRepository's merged result: it needs
-// serverNamesFor's per-agent resolution, not the flattened, merged list.
-func newAgentRepository(cfg Config, db *gorm.DB) ports.AgentRepository {
-	dbRepo := sqlite.NewAgentRepository(db)
-	if cfg.DotfilesAgentsDir == "" {
-		return dbRepo
+// newAgentRepository binds the agent store: the catalog's agents.json.
+func newAgentRepository(cat *agentcatalog.Catalog) ports.AgentRepository {
+	return catalogstore.NewAgents(cat)
+}
+
+// projectMCPServers is the catalog's view of projects: their MCP server
+// lists, kept with the project in the database (ADR 0031).
+type projectMCPServers struct{ projects ports.ProjectRepository }
+
+func (p projectMCPServers) ListProjects(ctx context.Context) ([]*domain.Project, error) {
+	return p.projects.List(ctx), nil
+}
+
+func (p projectMCPServers) SetProjectAgents(_ context.Context, id, mode string, names []string) (*domain.Project, error) {
+	return p.projects.SetEnabledAgents(id, mode, names)
+}
+
+func (p projectMCPServers) SetProjectMCPServers(_ context.Context, id string, names []string) (*domain.Project, error) {
+	return p.projects.SetMCPServers(id, names)
+}
+
+// newAgentCatalog is the agent catalog: the "agents" folder of the data dir
+// (ADR 0030). The folder is made on the first write, not here.
+func newAgentCatalog(cfg Config, projects ports.ProjectRepository) (*agentcatalog.Catalog, error) {
+	dir, err := dataDir(cfg, "agents")
+	if err != nil {
+		return nil, err
 	}
-	manifestPath := filepath.Join(cfg.DotfilesAgentsDir, "agents.json")
-	cfgMCP := configrepo.NewMCPServerStore(manifestPath, cfg.DotfilesAgentsDir)
-	cfgRepo := configrepo.NewAgentRepository(manifestPath, cfgMCP)
-	return configrepo.MergeAgents(dbRepo, cfgRepo)
+	return agentcatalog.New(dir, agentcatalog.WithProjects(projectMCPServers{projects}), agentcatalog.WithProber(mcpprobe.NewProber())), nil
+}
+
+// importSourceDir is the repository agents/ folder the one-time catalog import
+// reads: the one Config.DotfilesAgentsDir names, else agents/ under the
+// default project root when it holds an agents.json. "" when there is none.
+func importSourceDir(cfg Config) string {
+	if cfg.DotfilesAgentsDir != "" {
+		return cfg.DotfilesAgentsDir
+	}
+	dir := filepath.Join(cfg.Root, "agents")
+	if _, err := os.Stat(filepath.Join(dir, "agents.json")); err == nil {
+		return dir
+	}
+	return ""
+}
+
+// importAgentCatalog fills the agent catalog from the repository's agents/
+// folder and the database's old catalog, once: only when the catalog folder
+// is missing or empty (ADR 0030). It runs before the HTTP server serves. A
+// failed import is logged and leaves the catalog as it was, so the next start
+// tries again.
+func importAgentCatalog(cfg Config, db *gorm.DB, cat *agentcatalog.Catalog) {
+	ctx := context.Background()
+	src := agentcatalog.ImportSource{
+		RepoDir:    importSourceDir(cfg),
+		Agents:     sqlite.NewAgentRepository(db).List(ctx),
+		Skills:     sqlite.NewSkillRepository(db).List(),
+		MCPServers: sqlite.NewMCPServerRepository(db).List(),
+	}
+	if _, err := cat.Import(src); err != nil {
+		slog.Error("agent catalog import failed", "dir", cat.Root(), "error", err)
+	}
 }
 
 // CatalogModule provides the filesystem adapters (as their ports) and the five
@@ -180,6 +219,7 @@ func newAgentRepository(cfg Config, db *gorm.DB) ports.AgentRepository {
 // settings — wired over one event bus by catalog.New.
 var CatalogModule = fx.Module("catalog",
 	fx.Provide(
+		newAgentCatalog,
 		asPort(filesystem.NewMatcher, new(ports.PathMatcher)),
 		asPort(filesystem.NewLister, new(ports.TreeLister)),
 		asPort(skillfs.NewPublisher, new(ports.SkillPublisher)),
@@ -189,6 +229,7 @@ var CatalogModule = fx.Module("catalog",
 		asPort(newArchitectureGit, new(ports.ArchitectureGit)),
 		newCatalog,
 	),
+	fx.Invoke(importAgentCatalog),
 )
 
 // catalogParams collects the driven ports the catalog contexts are built on.
@@ -528,6 +569,11 @@ func newRuntimeConfig(cfg Config, bin ports.ManagedClaudeBin, home claudehome.Ho
 func registerServerSessions(lc fx.Lifecycle, svc *orchestration.Service) {
 	lc.Append(fx.Hook{
 		OnStart: func(ctx context.Context) error {
+			// Every live worktree is guarded again before sessions are
+			// reported running: the commit check (ADR 0040).
+			if _, err := svc.RepairCommitChecks(ctx); err != nil {
+				slog.Warn("repair the commit checks at boot", "err", err)
+			}
 			n, err := svc.StopOrphanedServerSessions(ctx)
 			if n > 0 {
 				slog.Info("stopped server sessions left running by a previous run", "count", n)
@@ -686,6 +732,7 @@ func newOrchestrationService(
 		svc.Architectures = cat.RepositoryArchitectures
 		// A commit in a session worktree is checked against the layers.
 		svc.CommitGuard = commitGuard
+		svc.CommitCheckDir = commitCheckDirs(cfg)
 	}
 	base := cfg.loopbackBaseURL()
 	// The route belongs to an inbound adapter, so the application layer is
@@ -1079,4 +1126,11 @@ func shortID(id string) string {
 // temp dir may take 25 more. The name stays short, never "harness-session-".
 func sessionTempPrefix(base, id string) string {
 	return filepath.Join(base, "hs-"+id[:min(len(id), 8)])
+}
+
+// commitCheckDirs answers where each session's commit check hooks dir is:
+// githooks/<session id> in the data dir, the same on every start (ADR 0040).
+func commitCheckDirs(cfg Config) func(sessionID string) string {
+	root, _ := dataDir(cfg, "githooks")
+	return func(sessionID string) string { return filepath.Join(root, sessionID) }
 }

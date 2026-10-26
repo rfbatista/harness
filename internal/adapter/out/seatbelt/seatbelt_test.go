@@ -590,3 +590,32 @@ func TestACreateOnlyDirTakesNewEntriesWhileTheReadOnlyOnesOnTopStayUntouchable(t
 		t.Errorf("old entry = %q, %v", b, err)
 	}
 }
+
+// The commit check's pre-commit runs in the sandbox from the session's own
+// hooks dir in the data dir; another session's dir stays closed (ADR 0040).
+func TestAProcessExecutesAHookInItsOwnHooksDirButNotInAnotherSessionsDir(t *testing.T) {
+	d := requireSeatbelt(t)
+	root := homeDir(t)
+	work := filepath.Join(root, "work")
+	own, other := filepath.Join(root, "githooks", "own"), filepath.Join(root, "githooks", "other")
+	for _, dir := range []string{work, own, other} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "pre-commit"), []byte("#!/bin/sh\necho hook-ran\n"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	policy := ports.SandboxPolicy{WorkingDir: work, Writable: []string{work}, Readable: []string{own}}
+
+	if out, err := run(t, d, policy, own+"/pre-commit"); err != nil || !strings.Contains(out, "hook-ran") {
+		t.Errorf("own hooks dir: %v %q, want the hook to run", err, out)
+	}
+	out, err := run(t, d, policy, other+"/pre-commit")
+	if err == nil || strings.Contains(out, "hook-ran") {
+		t.Errorf("another session's hooks dir: %v %q, want it denied", err, out)
+	}
+	if _, err := run(t, d, policy, "echo x > "+own+"/pre-commit"); err == nil {
+		t.Error("the sandbox wrote its own hooks dir, want it read-only")
+	}
+}

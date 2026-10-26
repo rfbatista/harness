@@ -4,10 +4,10 @@
 # .env configures the server (HTTP_ADDR, DB_PATH, CLAUDE_BIN, ...); every
 # variable in it reaches the recipes.
 -include .env
-# The server reads agents, skills and MCP servers live from this repo's
-# agents/ (agents.json + skills/), merged with the database. Set it in .env or
-# the shell to read another directory, or to empty to use the database alone.
-DOTFILES_AGENTS_DIR ?= $(CURDIR)/agents
+# The agent catalog (agents, bundles, skills, MCP servers) lives in the data
+# dir's agents/ folder. On the first start with an empty catalog the server
+# imports the agents/ folder of a dotfiles checkout into it, once: set
+# DOTFILES_AGENTS_DIR in .env or the shell to name it.
 export
 
 .DEFAULT_GOAL := help

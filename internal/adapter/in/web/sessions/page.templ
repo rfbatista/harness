@@ -462,6 +462,9 @@ templ ssrRows(v PageView) {
 							if r.Unsandboxed {
 								<span class="[ tag ]" data-kind="warn">unsandboxed</span>
 							}
+							if r.CommitCheckOff != "" {
+								<span class="[ tag ]" data-kind="warn" data-commit-check-off title={ r.CommitCheckOff }>Commit check off</span>
+							}
 						</span>
 						if r.Chip != nil {
 							<span class="[ badge ]" { chipToneAttrs(r.Chip.Tone)... } aria-hidden="true">{ r.Chip.Word }</span>
@@ -514,6 +517,9 @@ templ liveRows() {
 							</template>
 							<template x-if="row.unsandboxed">
 								<span class="[ tag ]" data-kind="warn">unsandboxed</span>
+							</template>
+							<template x-if="row.commitCheckOff">
+								<span class="[ tag ]" data-kind="warn" data-commit-check-off x-bind:title="row.commitCheckOff">Commit check off</span>
 							</template>
 						</span>
 						<template x-if="row.chip">

@@ -169,6 +169,25 @@ func NewRouter(h *Handler, opts ...Option) *echo.Echo {
 	g.GET("/get_agent_auth_status", h.handleGetAgentAuthStatus)
 	g.POST("/sign_out_agent_auth", h.handleSignOutAgentAuth)
 
+	// the agent catalog
+	g.GET("/get_agent_catalog", h.handleGetAgentCatalog)
+	g.GET("/get_catalog_skill", h.handleGetCatalogSkill)
+	g.GET("/check_env_vars", h.handleCheckEnvVars)
+	g.POST("/save_catalog_agent", h.handleSaveCatalogAgent)
+	g.POST("/delete_catalog_agent", h.handleDeleteCatalogAgent)
+	g.POST("/save_catalog_bundle", h.handleSaveCatalogBundle)
+	g.POST("/delete_catalog_bundle", h.handleDeleteCatalogBundle)
+	g.POST("/save_catalog_skill", h.handleSaveCatalogSkill)
+	g.POST("/delete_catalog_skill", h.handleDeleteCatalogSkill)
+	g.POST("/save_catalog_mcp_server", h.handleSaveCatalogMCPServer)
+	g.POST("/delete_catalog_mcp_server", h.handleDeleteCatalogMCPServer)
+	g.POST("/test_catalog_mcp_server", h.handleTestCatalogMCPServer)
+	g.GET("/get_project_mcp_servers", h.handleGetProjectMCPServers)
+	g.POST("/set_project_mcp_servers", h.handleSetProjectMCPServers)
+	g.GET("/get_project_agents", h.handleGetProjectAgents)
+	g.POST("/set_project_agents", h.handleSetProjectAgents)
+	g.POST("/undo_catalog_change", h.handleUndoCatalogChange)
+
 	// mcp servers
 	g.GET("/list_mcp_servers", h.handleListMCPServers)
 	g.GET("/get_mcp_server", h.handleGetMCPServer)

@@ -161,6 +161,38 @@ func (r *ProjectRepository) RemoveIgnoredPath(projectID, path string) (*domain.P
 	return m.ToDomain(), nil
 }
 
+// SetMCPServers stores the catalog MCP servers every session of the project gets.
+func (r *ProjectRepository) SetMCPServers(projectID string, names []string) (*domain.Project, error) {
+	var m ProjectModel
+	if err := r.db.First(&m, "id = ?", projectID).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, &domain.StructuredError{Code: "PROJECT_NOT_FOUND", Message: "project not found"}
+		}
+		return nil, err
+	}
+	m.MCPServers = stringSlice(append([]string{}, names...))
+	if err := r.db.Model(&m).Update("mcp_servers", m.MCPServers).Error; err != nil {
+		return nil, err
+	}
+	return m.ToDomain(), nil
+}
+
+// SetEnabledAgents stores which agents the project's sessions may run as.
+func (r *ProjectRepository) SetEnabledAgents(projectID, mode string, names []string) (*domain.Project, error) {
+	var m ProjectModel
+	if err := r.db.First(&m, "id = ?", projectID).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, &domain.StructuredError{Code: "PROJECT_NOT_FOUND", Message: "project not found"}
+		}
+		return nil, err
+	}
+	m.EnabledAgentsMode, m.EnabledAgents = mode, stringSlice(append([]string{}, names...))
+	if err := r.db.Model(&m).Updates(map[string]any{"enabled_agents_mode": m.EnabledAgentsMode, "enabled_agents": m.EnabledAgents}).Error; err != nil {
+		return nil, err
+	}
+	return m.ToDomain(), nil
+}
+
 // SetAgentsReadAllRepos stores whether agents may read every repository of the project.
 func (r *ProjectRepository) SetAgentsReadAllRepos(projectID string, on bool) (*domain.Project, error) {
 	var m ProjectModel

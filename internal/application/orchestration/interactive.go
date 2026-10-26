@@ -138,6 +138,11 @@ func (s *Service) StartInteractive(ctx context.Context, req InteractiveRequest) 
 		// session's status-check loop in place when the start returns.
 		s.announce(domain.SessionStarted{SessionID: id, ProjectID: req.ProjectID, TicketID: req.TicketID,
 			ParentSessionID: req.ParentSessionID, Mode: mode, StatusCheckMinutes: req.StatusCheckMinutes})
+		// A guard that could not be put in at start is announced now that the
+		// session is recorded.
+		if s.commitCheckReason(id) != "" {
+			s.announceCommitCheck(id, false)
+		}
 		if runsOn == domain.RunnerServer {
 			if err := s.spawn(ctx, id, spec, req.Size); err != nil {
 				return nil, ports.AgentSpec{}, err
@@ -214,7 +219,7 @@ func (s *Service) ResumeInteractive(ctx context.Context, req ports.ResumeRequest
 	if err != nil {
 		return nil, ports.AgentSpec{}, err
 	}
-	cleanup = s.withCommitCheck(sess.ID, sess.WorkingDir, cleanup)
+	cleanup = s.withCommitCheck(sess.ID, sess.WorkingDir, &cfg, true, cleanup)
 	envFile, cleanup, err := s.withGit(sess.ID, sess.RepositoryID, &cfg, cleanup)
 	if err != nil {
 		return nil, ports.AgentSpec{}, err
@@ -327,6 +332,7 @@ func (s *Service) withResumability(ctx context.Context, sess *domain.Session) *d
 func (s *Service) fillResumability(sess *domain.Session) {
 	sess.ResumeBlocked = errs.Code(s.resumeBlock(sess))
 	sess.Resumable = sess.ResumeBlocked == ""
+	sess.CommitCheckOff = s.commitCheckReason(sess.ID)
 }
 
 // claudeID is the claude conversation sess resumes into.

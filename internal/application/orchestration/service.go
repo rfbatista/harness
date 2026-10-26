@@ -120,6 +120,9 @@ type Service struct {
 	// CommitGuard puts the architecture commit check into a session's
 	// worktree; nil installs none.
 	CommitGuard ports.CommitGuard
+	// CommitCheckDir returns the session's commit check hooks dir: a stable
+	// folder in the data directory (ADR 0040).
+	CommitCheckDir func(sessionID string) string
 	// Terminals hosts RunnerServer interactive sessions. Nil means this
 	// server does not run agents itself; such sessions answer
 	// SERVER_HOSTING_UNAVAILABLE.
@@ -224,6 +227,8 @@ type Service struct {
 	// its status check until the session is recorded running, so two calls at
 	// once cannot both pass the check.
 	resuming map[string]bool
+	// commitOff is why each session whose commit check is off is unguarded.
+	commitOff map[string]string
 
 	// DeveloperBin finds the active developer directory's usr/bin (macOS's
 	// xcode-select -p). It is asked once per server run; nil, an error or ""
@@ -238,7 +243,7 @@ func NewService(runtime llmkit.Manager, broker *approval.Broker, hub *Hub, sessi
 		runtime: runtime, broker: broker, hub: hub, sessions: sessions, catalog: catalog, tickets: tickets,
 		workspaces: workspaces,
 		seq:        map[string]int64{}, cleanups: map[string]func(){}, busy: map[string]bool{},
-		resuming: map[string]bool{}, statuses: map[string]domain.SessionStatus{},
+		resuming: map[string]bool{}, commitOff: map[string]string{}, statuses: map[string]domain.SessionStatus{},
 	}
 	go s.approvalLoop()
 	go s.expiryLoop()
@@ -348,6 +353,9 @@ func (s *Service) Start(ctx context.Context, req StartRequest) (*domain.Session,
 		return nil, fmt.Errorf("persist session: %w", err)
 	}
 	provisioned = nil
+	if s.commitCheckReason(sess.ID()) != "" {
+		s.announceCommitCheck(sess.ID(), false)
+	}
 	if stop := s.collectViolations(sess.ID(), p.cfg.WorkingDir, p.sandbox.facts); stop != nil {
 		s.mu.Lock()
 		s.cleanups[sess.ID()] = withViolations(s.cleanups[sess.ID()], stop)
@@ -458,6 +466,14 @@ func (s *Service) prepare(ctx context.Context, in prepareInput) (*prepared, erro
 	if err != nil {
 		return nil, err
 	}
+	if ag.agent != nil && !proj.AgentEnabled(ag.agent.Name) {
+		if ag.cleanup != nil {
+			ag.cleanup()
+		}
+		// The code leads the message: MCP clients see only the message.
+		return nil, &domain.StructuredError{Code: "AGENT_NOT_ENABLED",
+			Message: "AGENT_NOT_ENABLED: agent " + ag.agent.Name + " is not enabled in project " + proj.Name}
+	}
 
 	if err := s.ready(ctx); err != nil {
 		if ag.cleanup != nil {
@@ -482,7 +498,7 @@ func (s *Service) prepare(ctx context.Context, in prepareInput) (*prepared, erro
 	cfg := s.sessionConfig(id, ws.Path, in.Model, in.AllowedTools, permission, ag, subject, in.ZoneID, in.Role, in.RepositoryID)
 	cleanup, err := s.withShell(id, subject, &cfg, ag.cleanup)
 	if err == nil {
-		cleanup = s.withCommitCheck(id, ws.Path, cleanup)
+		cleanup = s.withCommitCheck(id, ws.Path, &cfg, false, cleanup)
 	}
 	if err != nil {
 		_ = s.workspaces.Discard(ws.ID)
@@ -804,7 +820,7 @@ func (s *Service) sessionConfig(id, dir, model string, allowedTools []string, pe
 		ID:           id,
 		WorkingDir:   dir,
 		Model:        model,
-		AllowedTools: allowedTools,
+		AllowedTools: sessionAllowedTools(allowedTools, ag.agent),
 		Permission:   permission,
 		Env:          s.DefaultEnv,
 		AppendSystem: ag.appendSystem,
@@ -837,7 +853,7 @@ func (s *Service) sessionConfig(id, dir, model string, allowedTools []string, pe
 		cfg.AppendSystem = appendSection(cfg.AppendSystem, section)
 	}
 
-	for _, m := range resolveAttachedMCPServers(ag.agent, s.catalog.MCPServers.ListMCPServers()) {
+	for _, m := range resolveAttachedMCPServers(ag.agent, subject.project, s.catalog.MCPServers.ListMCPServers()) {
 		cfg.MCPServers = append(cfg.MCPServers, llmkit.MCPServerSpec{
 			Name:      domain.Slug(m.Name),
 			Transport: m.Transport,
@@ -1234,6 +1250,10 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 		}
 	}
 	s.runCleanup(id)
+	// Deleting ends the session for good: its commit check goes with it.
+	if sess := s.sessions.Get(id); sess != nil {
+		s.RemoveCommitCheck(id, sess.WorkingDir)
+	}
 	if s.Events != nil {
 		// What else runs in the worktree stops before it is removed; a failure
 		// there must not keep the session undeletable.
