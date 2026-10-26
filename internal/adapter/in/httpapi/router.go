@@ -84,6 +84,8 @@ func NewRouter(h *Handler, opts ...Option) *echo.Echo {
 	// a workspace's branch as a pull request on its origin
 	g.GET("/pull_request", h.handlePullRequest)
 	g.POST("/create_pull_request", h.handleCreatePullRequest)
+	g.GET("/pull_request_bases", h.handlePullRequestBases)
+	g.POST("/refresh_pull_request_bases", h.handleRefreshPullRequestBases)
 
 	// bounded contexts
 	g.GET("/list_bounded_contexts", h.handleListBoundedContexts)

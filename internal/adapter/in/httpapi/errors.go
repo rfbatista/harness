@@ -109,7 +109,7 @@ func errorHandler(err error, c echo.Context) {
 		case "MERGE_FAILED", "AGENT_SIGN_OUT_FAILED":
 			writeCoded(c, http.StatusInternalServerError, err, se)
 			return
-		case "PR_PUSH_FAILED", "PR_CREATE_FAILED", "GIT_CREDENTIAL_REJECTED":
+		case "PR_PUSH_FAILED", "PR_CREATE_FAILED", "PR_FETCH_FAILED", "GIT_CREDENTIAL_REJECTED":
 			// The remote or the code host refused; its reason is in the message.
 			writeCoded(c, http.StatusBadGateway, err, se)
 			return

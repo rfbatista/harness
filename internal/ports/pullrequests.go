@@ -40,6 +40,18 @@ type PullRequests interface {
 	StoredPullRequests(ctx context.Context, workspaceIDs []string) ([]*domain.PullRequest, error)
 }
 
+// PullRequestBases lists the branches a workspace's pull request can be opened
+// against and refreshes them (driving). *workspaces.PullRequests satisfies it.
+type PullRequestBases interface {
+	// PullRequestBases answers from local git only, never fetching; an
+	// unknown workspace is WORKSPACE_NOT_FOUND.
+	PullRequestBases(ctx context.Context, workspaceID string) (*domain.PullRequestBases, error)
+	// RefreshPullRequestBases fetches origin with the stored credentials,
+	// then answers. It answers GIT_CREDENTIAL_MISSING, GIT_CREDENTIAL_REJECTED,
+	// PR_NO_REMOTE or PR_FETCH_FAILED when it cannot; the previous list stays.
+	RefreshPullRequestBases(ctx context.Context, workspaceID string) (*domain.PullRequestBases, error)
+}
+
 // ErrRemoteBranchNotFound is BranchPublisher.FetchBranch's answer for a
 // branch origin does not have.
 var ErrRemoteBranchNotFound = errors.New("branch not found on origin")
@@ -64,6 +76,14 @@ type BranchPublisher interface {
 	// its upstream. A rejection carries git's reason; an auth refusal wraps
 	// ErrRemoteAuthRejected.
 	Push(ctx context.Context, repoRoot, branch string, env []string) error
+	// OriginBranches names origin's branches as last fetched
+	// (refs/remotes/origin/*, HEAD excluded) by name, and when origin was last
+	// fetched; the zero time when that is not known. It runs one git command.
+	OriginBranches(ctx context.Context, repoRoot string) (branches []string, fetchedAt time.Time, err error)
+	// FetchOrigin updates every refs/remotes/origin/* from origin and prunes
+	// the ones origin no longer has. It touches no working tree and no local
+	// branch. ErrRemoteAuthRejected when origin refuses the credential.
+	FetchOrigin(ctx context.Context, repoRoot string, env []string) error
 	// Subjects are the subjects of the commits head has that base lacks,
 	// newest first, at most limit.
 	Subjects(ctx context.Context, repoRoot, base, head string, limit int) ([]string, error)
