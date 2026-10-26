@@ -160,7 +160,22 @@ export function toStartBody(req) {
     runs_on: "server",
     size: req.size,
     base_branch: req.baseBranch || undefined,
+    branch_name: req.branchName?.trim() || undefined,
   };
+}
+
+/** GET /api/check_branch_name → BranchNameCheck. */
+export function toBranchNameCheck(dto) {
+  if (typeof dto?.valid !== "boolean" || typeof dto?.available !== "boolean") bad("a branch name check without valid and available");
+  return Object.freeze({
+    name: dto.name ?? "",
+    generated: dto.generated ?? "",
+    valid: dto.valid,
+    available: dto.available,
+    code: dto.code ?? "",
+    reason: dto.reason ?? "",
+    suggestion: dto.suggestion ?? "",
+  });
 }
 
 /** POST /api/resume_interactive_session body: the web client resumes on the server's terminal host. */

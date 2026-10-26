@@ -21,6 +21,16 @@
  * @property {string} prompt        the optional first message; "" opens claude waiting for you
  * @property {"off"|"edits"|"all"} autoAccept  which tool calls run without asking
  * @property {string} [baseBranch]  the branch its worktree branches off; "" means the checkout's HEAD
+ * @property {string} [branchName]  the name of the session's own branch; "" lets the server generate one
+ *
+ * @typedef {object} BranchNameCheck  what the server says about a branch name for a new session
+ * @property {string} name        the name checked, trimmed; "" when none was given
+ * @property {string} generated   the name the server would generate; the form prefills it
+ * @property {boolean} valid      a valid git branch name
+ * @property {boolean} available  valid and no branch of that name exists
+ * @property {""|"BRANCH_NAME_INVALID"|"BRANCH_EXISTS"} code
+ * @property {string} reason      what is wrong; "" when available
+ * @property {string} suggestion  the first free variant, when the name exists; else ""
  *
  * @typedef {object} Branch  a ref a session's worktree can branch off
  * @property {string} name     e.g. main, origin/main
@@ -38,12 +48,16 @@
  *           Starts an interactive session on the server's terminal host: cuts
  *           its worktree and branch, then runs claude in a PTY. Rejects with
  *           INVALID_INPUT (no repository, or no task in a mode other than
- *           product), PROJECT_NOT_FOUND, TICKET_NOT_FOUND,
+ *           product), BRANCH_NAME_INVALID or BRANCH_EXISTS (details name the
+ *           name and a free suggestion), PROJECT_NOT_FOUND, TICKET_NOT_FOUND,
  *           CROSS_PROJECT_ACCESS, CLAUDE_CLI_NOT_FOUND or
  *           SERVER_HOSTING_UNAVAILABLE.
  * @property {(repositoryId: string) => Promise<Branch[]>} listBranches
  *           The branches a new session can branch off: local ones, then
  *           remote ones. Rejects with REPOSITORY_NOT_FOUND.
+ * @property {(query: { repositoryId: string, name: string, baseBranch?: string, ticketId?: string }, signal?: AbortSignal) => Promise<BranchNameCheck>} checkBranchName
+ *           Reads git only: suggests the generated name and says whether a
+ *           name is valid and free. Rejects with REPOSITORY_NOT_FOUND.
  * @property {(sessionId: string, size?: { cols: number, rows: number }) => Promise<Session>} resume
  *           Brings an ended interactive session back on the server's terminal
  *           host: same id, branch, worktree and conversation. Followers see it

@@ -16,17 +16,21 @@ const BRANCHES = {
   r2: [{ name: "develop", remote: false, isHead: true }],
 };
 
+const DEBOUNCE = 10;
+const pause = (ms = DEBOUNCE * 4) => new Promise((resolve) => setTimeout(resolve, ms));
+
 function setup({ defaultRepository = "r1", repositories = { r1: "p1", r2: "p1" }, branches = BRANCHES } = {}) {
   const memory = memoryGateway({ projects: ["p1"], repositories, branches });
   const form = document.createElement("form");
   if (defaultRepository !== null) form.dataset.defaultRepository = defaultRepository;
-  const mounted = mount(() => newSession({ gateway: memory.gateway })("p1", "t1"), { el: form });
+  const mounted = mount(() => newSession({ gateway: memory.gateway, debounceMs: DEBOUNCE })("p1", "t1"), { el: form });
   mounted.instance.init();
   return { ...mounted, memory };
 }
 
 test("starts an interactive session on the page's task and reports it", async () => {
   const { instance, dispatched, memory } = setup();
+  await flush();
   assert.equal(instance.repositoryId, "r1", "the default repository is preselected");
   assert.equal(instance.cannotSubmit, false, "the first message is optional");
   assert.equal(instance.autoAccept, "off", "approvals are answered in the terminal");
@@ -45,6 +49,7 @@ test("starts an interactive session on the page's task and reports it", async ()
 
 test("architect mode starts from the task without a first message", async () => {
   const { instance, dispatched } = setup();
+  await flush();
   assert.equal(instance.mode, "", "the default mode runs the agent as it is");
   instance.mode = "architect";
   assert.ok(instance.promptPlaceholder.includes("architect starts from the task"));
@@ -55,6 +60,7 @@ test("architect mode starts from the task without a first message", async () => 
 
 test("implement mode asks which spec and starts in that mode", async () => {
   const { instance, dispatched } = setup();
+  await flush();
   instance.mode = "implement";
   assert.ok(instance.implement);
   assert.ok(instance.promptPlaceholder.includes("Spec"), instance.promptPlaceholder);
@@ -65,6 +71,7 @@ test("implement mode asks which spec and starts in that mode", async () => {
 
 test("design mode tells the agent to publish as it goes", async () => {
   const { instance, dispatched } = setup();
+  await flush();
   instance.mode = "design";
   assert.ok(instance.design);
   assert.ok(instance.promptPlaceholder.includes("Design tab"), instance.promptPlaceholder);
@@ -75,6 +82,7 @@ test("design mode tells the agent to publish as it goes", async () => {
 
 test("a refused start shows the coded error and keeps the draft", async () => {
   const { instance, dispatched } = setup({ repositories: { r1: "another-project" } });
+  await flush();
   instance.prompt = "go";
   await instance.submit();
   assert.equal(instance.error.code, Codes.CROSS_PROJECT_ACCESS);
@@ -141,6 +149,7 @@ test("when branches cannot be listed the session still starts, off the checkout"
 
 test("product mode interviews first, writes no code, and starts on the page's task as the feature", async () => {
   const { instance, dispatched } = setup();
+  await flush();
   instance.mode = "product";
   assert.ok(instance.product);
   assert.ok(instance.promptPlaceholder.includes("interviews you"), instance.promptPlaceholder);
@@ -166,4 +175,180 @@ test("with no task the form is locked to product mode and starts a feature brain
   instance.mode = "";
   assert.ok(instance.problem.includes("without a task"), "no other mode starts without a task");
   assert.equal(instance.cannotSubmit, true);
+});
+
+// ── the session branch's name ────────────────────────────────────────
+
+/** Counts the checks the form puts to the server. */
+function watchChecks(memory) {
+  const asked = [];
+  const real = memory.gateway.checkBranchName;
+  memory.gateway.checkBranchName = async (query, signal) => (asked.push(query), real(query, signal));
+  return asked;
+}
+
+test("the branch name is prefilled with the generated one and free", async () => {
+  const { instance } = setup();
+  assert.equal(instance.nameState, "checking", "Start waits for the first answer");
+  assert.equal(instance.cannotSubmit, true);
+  assert.equal(instance.problem, "Checking the branch name…");
+  await flush();
+  assert.ok(instance.branchName.startsWith("agent/t1-"), instance.branchName);
+  assert.equal(instance.nameState, "generated");
+  assert.equal(instance.cannotSubmit, false);
+});
+
+test("a name is checked once, after typing pauses", async () => {
+  const { instance, memory } = setup();
+  await flush();
+  const asked = watchChecks(memory);
+  for (const name of ["f", "fe", "feat/feed"]) {
+    instance.branchName = name;
+    instance.nameTyped();
+  }
+  assert.equal(instance.nameState, "checking");
+  assert.equal(instance.cannotSubmit, true);
+  await pause();
+  assert.deepEqual(asked.map((q) => q.name), ["feat/feed"], "one request, for the last name");
+  assert.deepEqual([asked[0].repositoryId, asked[0].ticketId, asked[0].baseBranch], ["r1", "t1", ""]);
+  assert.equal(instance.nameState, "taken");
+});
+
+test("a taken name says so, offers the free one in a chip, and blocks Start with a reason", async () => {
+  const { instance } = setup();
+  await flush();
+  instance.branchName = "feat/feed";
+  instance.nameTyped();
+  await pause();
+  assert.equal(instance.nameMessage, "feat/feed already exists on this repository. An existing branch is never reused.");
+  assert.equal(instance.nameSuggestion, "feat/feed-2");
+  assert.equal(instance.cannotSubmit, true);
+  assert.equal(instance.problem, "The branch name is taken. Pick another.");
+
+  instance.useSuggestion();
+  await flush();
+  assert.equal(instance.branchName, "feat/feed-2");
+  assert.equal(instance.nameMessage, "Free on this repository");
+  assert.equal(instance.cannotSubmit, false);
+});
+
+test("an invalid name gives the server's reason and blocks Start", async () => {
+  const { instance } = setup();
+  await flush();
+  instance.branchName = "fix login";
+  instance.nameTyped();
+  await pause();
+  assert.equal(instance.nameState, "invalid");
+  assert.ok(instance.nameMessage.startsWith("Not a valid branch name: a branch name cannot contain spaces"), instance.nameMessage);
+  assert.equal(instance.nameSuggestion, "");
+  assert.equal(instance.cannotSubmit, true);
+});
+
+test("changing the repository or the base checks the name again", async () => {
+  const { instance, memory, set } = setup();
+  await flush();
+  instance.branchName = "develop";
+  instance.nameTyped();
+  await pause();
+  assert.equal(instance.nameState, "free", "r1 has no branch called develop");
+  const asked = watchChecks(memory);
+
+  instance.repositoryId = "r2";
+  instance.repositoryChanged();
+  await flush();
+  assert.equal(asked.at(-1).repositoryId, "r2");
+  assert.equal(instance.nameState, "taken", "r2 has a branch called develop");
+  assert.equal(instance.branchName, "develop", "a name the person typed stays");
+
+  const before = asked.length;
+  set("baseBranch", "feat/feed");
+  await pause();
+  assert.equal(asked.length, before + 1);
+  assert.equal(asked.at(-1).baseBranch, "feat/feed");
+});
+
+test("an answer to an older question is dropped", async () => {
+  const { instance, memory } = setup();
+  await flush();
+  const real = memory.gateway.checkBranchName;
+  let releaseFirst;
+  let calls = 0;
+  memory.gateway.checkBranchName = (query) => (++calls === 1 ? new Promise((r) => (releaseFirst = () => r(real(query)))) : real(query));
+  instance.branchName = "feat/feed";
+  instance.checkNameNow();
+  instance.branchName = "fresh";
+  await instance.checkNameNow();
+  releaseFirst();
+  await flush();
+  assert.equal(instance.nameCheck.name, "fresh");
+  assert.equal(instance.nameState, "free");
+});
+
+test("the session starts on the typed name, and on none when the field is emptied", async () => {
+  const { instance, memory } = setup();
+  await flush();
+  const started = [];
+  const realStart = memory.gateway.start;
+  memory.gateway.start = async (req) => (started.push(req), realStart(req));
+  instance.branchName = "  fix/login ";
+  instance.nameTyped();
+  await pause();
+  await instance.submit();
+  assert.equal(started[0].branchName, "fix/login");
+  instance.branchName = "";
+  instance.nameTyped();
+  await pause();
+  assert.equal(instance.cannotSubmit, false, "an empty name lets the server generate one");
+  await instance.submit();
+  assert.equal(started[1].branchName, "");
+});
+
+test("a start refused for the name shows on the field and keeps what was typed", async () => {
+  const { instance, memory } = setup();
+  await flush();
+  instance.prompt = "go";
+  instance.branchName = "feat/feed";
+  instance.nameTyped();
+  await pause();
+  // The name was taken since the check: the form was told it was free.
+  const realCheck = memory.gateway.checkBranchName;
+  memory.gateway.checkBranchName = async (q) => ({ ...(await realCheck(q)), available: true, code: "", reason: "", suggestion: "" });
+  instance.nameTyped();
+  await pause();
+  assert.equal(instance.nameState, "free");
+
+  await instance.submit();
+  assert.equal(instance.error, null, "no banner: the field says it");
+  assert.equal(instance.nameState, "taken");
+  assert.equal(instance.nameMessage, "feat/feed already exists on this repository. An existing branch is never reused.");
+  assert.equal(instance.nameSuggestion, "feat/feed-2");
+  assert.deepEqual([instance.prompt, instance.branchName], ["go", "feat/feed"]);
+  assert.equal(instance.submitting, false);
+});
+
+test("an invalid name refused at start shows the reason on the field", async () => {
+  const { instance, memory } = setup();
+  await flush();
+  memory.gateway.checkBranchName = async (q) => ({ name: q.name, generated: "agent/x", valid: true, available: true, code: "", reason: "", suggestion: "" });
+  instance.branchName = "no way";
+  instance.nameTyped();
+  await pause();
+  await instance.submit();
+  assert.equal(instance.error, null);
+  assert.equal(instance.nameState, "invalid");
+  assert.ok(instance.nameMessage.includes("cannot contain spaces"), instance.nameMessage);
+});
+
+test("when the name cannot be checked the form says so and still starts", async () => {
+  const { instance, memory, dispatched } = setup();
+  memory.gateway.checkBranchName = async () => {
+    throw new Error("down");
+  };
+  instance.branchName = "x/y";
+  instance.nameTyped();
+  await pause();
+  assert.equal(instance.nameState, "unchecked");
+  assert.equal(instance.cannotSubmit, false);
+  await instance.submit();
+  assert.equal(dispatched[0].name, "session-created");
 });

@@ -12,10 +12,11 @@
 //   <form x-data="sessionsNewSession(projectId, ticketId)" data-locked-mode="product" …>
 
 import { describeError } from "../../../../shared/presentation/errors.js";
+import { Codes } from "../../../../shared/domain/errors.js";
 import { INITIAL_TERMINAL_SIZE, noTaskProblem } from "../../domain/session.js";
 
 /** @param {{ gateway: import("../../domain/ports.js").SessionGateway }} deps */
-export const newSession = ({ gateway }) => (projectId = "", ticketId = "", lockedMode = "") => ({
+export const newSession = ({ gateway, debounceMs = 300 }) => (projectId = "", ticketId = "", lockedMode = "") => ({
   projectId,
   ticketId,
   prompt: "",
@@ -31,6 +32,19 @@ export const newSession = ({ gateway }) => (projectId = "", ticketId = "", locke
   baseBranch: "",
   loadingBranches: false,
   branchesFailed: false,
+  /** The session branch's name; prefilled with the generated one, replaced by what the person types. */
+  branchName: "",
+  /** True once the person typed in the field: a new repository no longer replaces it. */
+  branchNameEdited: false,
+  /** @type {import("../../domain/ports.js").BranchNameCheck | null} */
+  nameCheck: null,
+  /** A check is waiting to run or is in flight. */
+  checkingName: false,
+  /** The check could not be made (the server did not answer). */
+  nameCheckFailed: false,
+  /** The pending check's timer, and the id of the newest question put to the server. */
+  nameTimer: 0,
+  nameAsked: 0,
   submitting: false,
   error: null,
 
@@ -43,7 +57,9 @@ export const newSession = ({ gateway }) => (projectId = "", ticketId = "", locke
     }
     this.repositoryId = this.$el.dataset.defaultRepository ?? "";
     this.$nextTick(() => this.$refs.prompt?.focus());
+    this.$watch("baseBranch", () => this.scheduleNameCheck());
     this.loadBranches();
+    this.checkNameNow();
   },
 
   get localBranches() {
@@ -122,12 +138,125 @@ export const newSession = ({ gateway }) => (projectId = "", ticketId = "", locke
 
   repositoryChanged() {
     this.loadBranches();
+    this.checkNameNow();
+  },
+
+  // ── the session branch's name ────────────────────────────────────────
+  /** The person typed in the Branch name field. */
+  nameTyped() {
+    this.branchNameEdited = true;
+    this.scheduleNameCheck();
+  },
+  /** Checks the name once typing pauses; every call restarts the wait. */
+  scheduleNameCheck() {
+    if (!this.repositoryId) return;
+    clearTimeout(this.nameTimer);
+    this.checkingName = true;
+    this.nameTimer = setTimeout(() => this.checkNameNow(), debounceMs);
+  },
+  /** Asks the server about the name now; an answer to a superseded question is dropped. */
+  async checkNameNow() {
+    clearTimeout(this.nameTimer);
+    const repositoryId = this.repositoryId;
+    if (!repositoryId) return;
+    const asked = ++this.nameAsked;
+    const name = this.branchName.trim();
+    this.checkingName = true;
+    this.nameCheckFailed = false;
+    try {
+      const check = await gateway.checkBranchName({ repositoryId, name, baseBranch: this.baseBranch, ticketId: this.ticketId });
+      if (asked !== this.nameAsked) return;
+      this.nameCheck = check;
+      if (!this.branchNameEdited && check.generated) this.branchName = check.generated;
+    } catch {
+      if (asked !== this.nameAsked) return;
+      this.nameCheck = null;
+      this.nameCheckFailed = true;
+    } finally {
+      if (asked === this.nameAsked) this.checkingName = false;
+    }
+  },
+  /** One click on the chip: the suggested free name replaces the taken one. */
+  useSuggestion() {
+    const suggestion = this.nameCheck?.suggestion;
+    if (!suggestion) return;
+    this.branchName = suggestion;
+    this.branchNameEdited = true;
+    this.checkNameNow();
+  },
+  /** Selects the prefilled name when the field gets focus, so typing replaces it. */
+  selectName(event) {
+    event.target.select();
+  },
+
+  /** "checking", "unchecked", "generated", "free", "taken", "invalid", or "" before the first answer. */
+  get nameState() {
+    if (this.checkingName) return "checking";
+    if (this.nameCheckFailed) return "unchecked";
+    const c = this.nameCheck;
+    if (!c) return "";
+    if (c.code === Codes.BRANCH_EXISTS) return "taken";
+    if (c.code === Codes.BRANCH_NAME_INVALID) return "invalid";
+    return c.name === "" ? "generated" : "free";
+  },
+  /** The line under the field; the same words whether the check or the start said it. */
+  get nameMessage() {
+    const c = this.nameCheck;
+    switch (this.nameState) {
+      case "checking":
+        return "Checking the branch name…";
+      case "unchecked":
+        return "Could not check the name; the server checks it again when the session starts.";
+      case "free":
+        return "Free on this repository";
+      case "generated":
+        return "The server generates a name when this is empty.";
+      case "taken":
+        return `${c.name} already exists on this repository. An existing branch is never reused.`;
+      case "invalid":
+        return `Not a valid branch name: ${c.reason}.`;
+      default:
+        return "";
+    }
+  },
+  /** The design system's .error for a refused name, .hint otherwise. */
+  get nameMessageClass() {
+    return this.nameInvalid ? "error" : "hint";
+  },
+  get nameSuggestion() {
+    return this.nameState === "taken" ? this.nameCheck.suggestion : "";
+  },
+  get nameInvalid() {
+    return this.nameState === "taken" || this.nameState === "invalid";
+  },
+  /** What the field's hint says it becomes. */
+  get nameHint() {
+    return `Becomes the worktree's branch. Cut from ${this.baseBranch || "the checked-out branch"}.`;
+  },
+  /** A start refusal about the name lands on the field, not in the banner. */
+  nameRefusal(err) {
+    if (err?.code !== Codes.BRANCH_EXISTS && err?.code !== Codes.BRANCH_NAME_INVALID) return false;
+    this.nameCheck = Object.freeze({
+      name: err.details?.name ?? this.branchName.trim(),
+      generated: this.nameCheck?.generated ?? "",
+      valid: err.code === Codes.BRANCH_EXISTS,
+      available: false,
+      code: err.code,
+      reason: err.details?.reason ?? "",
+      suggestion: err.details?.suggestion ?? "",
+    });
+    this.checkingName = false;
+    this.nameCheckFailed = false;
+    return true;
   },
 
   /** Why the draft cannot start: no repository, or no task in a mode that needs one. */
   get problem() {
     if (this.repositoryId === "") return "Pick a repository.";
     if (this.ticketId === "") return noTaskProblem(this.mode);
+    if (this.nameState === "checking") return "Checking the branch name…";
+    if (this.nameState === "taken") return "The branch name is taken. Pick another.";
+    if (this.nameState === "invalid") return "The branch name is not valid.";
     return "";
   },
   get cannotSubmit() {
@@ -148,11 +277,12 @@ export const newSession = ({ gateway }) => (projectId = "", ticketId = "", locke
         prompt: this.prompt.trim(),
         autoAccept: this.autoAccept,
         baseBranch: this.baseBranch,
+        branchName: this.branchName.trim(),
         size: INITIAL_TERMINAL_SIZE,
       });
       this.$dispatch("session-created", { session });
     } catch (err) {
-      this.error = describeError(err);
+      if (!this.nameRefusal(err)) this.error = describeError(err);
     } finally {
       this.submitting = false;
     }
