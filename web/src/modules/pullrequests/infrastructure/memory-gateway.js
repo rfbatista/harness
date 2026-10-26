@@ -21,6 +21,7 @@ export const STATUS = Object.freeze({
   [Codes.GIT_CREDENTIAL_REJECTED]: 502,
   [Codes.GIT_CREDENTIAL_STORE_LOCKED]: 503,
   [Codes.PR_PUSH_FAILED]: 502,
+  [Codes.PR_FETCH_FAILED]: 502,
   [Codes.PR_CREATE_FAILED]: 502,
 });
 
@@ -31,6 +32,7 @@ const REASONS = {
   [Codes.GIT_CREDENTIAL_REJECTED]: "Bad credentials",
   [Codes.PR_PUSH_FAILED]: "! [rejected] (non-fast-forward)",
   [Codes.PR_CREATE_FAILED]: "GitHub refused the pull request",
+  [Codes.PR_FETCH_FAILED]: "fatal: unable to access 'https://github.com/acme/harness.git/': Could not resolve host: github.com",
 };
 
 const refusal = (code, reason = REASONS[code] ?? "refused", details) => new StructuredError(code, `${code}: ${reason}`, STATUS[code] ?? 500, details);
@@ -49,6 +51,8 @@ const refusal = (code, reason = REASONS[code] ?? "refused", details) => new Stru
  * @property {import("../domain/pullRequest.js").Remote | null} [remote]
  * @property {string[]} [blockers]      what the server would say locally
  * @property {string[]} [originBranches] the branches origin really has (default: the base)
+ * @property {string[]} [fetchableBranches] the branches origin has after the next fetch (default: originBranches)
+ * @property {Date | null} [fetchedAt]   when origin was last fetched; null when unknown
  */
 
 /**
@@ -67,6 +71,7 @@ export function memoryPullRequests({ workspaces = [], pullRequests = [], now = (
   const prs = new Map();
   const followers = new Set();
   let failure = null;
+  let fetchFailure = null;
   let delay = delayMs;
   let echoesFirst = echoFirst;
   let createCalls = 0;
@@ -87,6 +92,8 @@ export function memoryPullRequests({ workspaces = [], pullRequests = [], now = (
       remote: { host: "github.com", owner: "acme", repo: "harness" },
       blockers: [],
       originBranches: [base],
+      fetchableBranches: null,
+      fetchedAt: null,
       ...w,
       headBranch: head,
       baseBranch: base,
@@ -113,6 +120,15 @@ export function memoryPullRequests({ workspaces = [], pullRequests = [], now = (
       uncommittedChanges: w.uncommittedChanges,
       remote: w.remote,
       blockers: Object.freeze([...w.blockers]),
+    });
+  }
+
+  function basesOf(w) {
+    return Object.freeze({
+      workspaceId: w.id,
+      branches: Object.freeze([...w.originBranches].sort()),
+      default: w.baseBranch,
+      fetchedAt: w.fetchedAt,
     });
   }
 
@@ -156,6 +172,24 @@ export function memoryPullRequests({ workspaces = [], pullRequests = [], now = (
     async get(workspaceId) {
       const w = workspace(workspaceId);
       return { draft: draftOf(w), pullRequest: newest(workspaceId) };
+    },
+
+    async bases(workspaceId) {
+      return basesOf(workspace(workspaceId));
+    },
+
+    async refreshBases(workspaceId) {
+      const w = workspace(workspaceId);
+      if (delay > 0) await new Promise((resolve) => setTimeout(resolve, delay));
+      if (fetchFailure) {
+        const f = fetchFailure;
+        fetchFailure = null;
+        throw refusal(f.code, f.reason, f.details);
+      }
+      if (!w.remote) throw refusal(Codes.PR_NO_REMOTE);
+      if (w.fetchableBranches) w.originBranches = w.fetchableBranches;
+      w.fetchedAt = now();
+      return basesOf(w);
     },
 
     async create({ workspaceId, title, baseBranch = "", draft = false }) {
@@ -226,7 +260,11 @@ export function memoryPullRequests({ workspaces = [], pullRequests = [], now = (
     failNext(code, reason, details) {
       failure = { code, reason, details };
     },
-    /** A create takes this long (push + host). */
+    /** The next refresh of origin's branches fails with this code. */
+    failFetchNext(code, reason, details) {
+      fetchFailure = { code, reason, details };
+    },
+    /** A create or a fetch takes this long (push + host). */
     slow(ms) {
       delay = ms;
     },

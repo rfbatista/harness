@@ -7,6 +7,8 @@ import { jsonResponse } from "../../../shared/testing/doubles.js";
 import { memoryPullRequests } from "../infrastructure/memory-gateway.js";
 import { draftDTO, pullRequestDTO } from "./fixtures.js";
 
+const basesDTO = (b) => ({ workspace_id: b.workspaceId, branches: b.branches, default: b.default, fetched_at: b.fetchedAt ? b.fetchedAt.toISOString() : null });
+
 export function stubPullRequestsApi(world) {
   const memory = memoryPullRequests(world);
   const { gateway } = memory;
@@ -29,6 +31,12 @@ export function stubPullRequestsApi(world) {
         if (!id) return jsonResponse(400, { error: "INVALID_INPUT: workspace_id is required", code: "INVALID_INPUT" });
         const { draft, pullRequest } = await gateway.get(id);
         return jsonResponse(200, { draft: draftDTO(draft), pull_request: pullRequest ? pullRequestDTO(pullRequest) : null });
+      }
+      if (method === "GET" && url.pathname === "/api/pull_request_bases") {
+        return jsonResponse(200, basesDTO(await gateway.bases(url.searchParams.get("workspace_id") ?? "")));
+      }
+      if (method === "POST" && url.pathname === "/api/refresh_pull_request_bases") {
+        return jsonResponse(200, basesDTO(await gateway.refreshBases(body.workspace_id ?? "")));
       }
       if (method === "POST" && url.pathname === "/api/create_pull_request") {
         posted.push(body);

@@ -6,6 +6,7 @@
 /**
  * @typedef {import("./pullRequest.js").PullRequest} PullRequest
  * @typedef {import("./pullRequest.js").PullRequestView} PullRequestView
+ * @typedef {import("./pullRequest.js").PullRequestBases} PullRequestBases
  * @typedef {import("../../../shared/domain/feed.js").FeedStatus} FeedStatus
  *
  * @typedef {object} PanelSeed  the history page's: one workspace
@@ -23,6 +24,14 @@
  *           The draft and the newest PR stored for the workspace. Never waits
  *           on the host: what the host says arrives later on the feed.
  *           Rejects with WORKSPACE_NOT_FOUND once the workspace is gone.
+ * @property {(workspaceId: string, signal?: AbortSignal) => Promise<PullRequestBases>} bases
+ *           Origin's branches as last fetched, from local git: never fetches.
+ *           Rejects with WORKSPACE_NOT_FOUND.
+ * @property {(workspaceId: string) => Promise<PullRequestBases>} refreshBases
+ *           Fetches origin with the stored credentials, then answers. A failure
+ *           leaves the previous list readable through bases: rejects with
+ *           PR_NO_REMOTE, GIT_CREDENTIAL_MISSING, GIT_CREDENTIAL_REJECTED or
+ *           PR_FETCH_FAILED.
  * @property {(req: { workspaceId: string, title: string, body: string, baseBranch: string, draft: boolean }) => Promise<PullRequest>} create
  *           Pushes the branch and opens the PR. Rejects with INVALID_INPUT,
  *           WORKSPACE_NOT_FOUND or a PR_* code; PR_ALREADY_EXISTS carries the
