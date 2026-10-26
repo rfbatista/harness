@@ -270,6 +270,7 @@ func TestMergeInto_AConflictIsRecordedAndChangesNothing(t *testing.T) {
 	}
 	gitRun(t, rel, "add", ".")
 	gitRun(t, rel, "commit", "-m", "release has feat.txt too")
+	gitRun(t, f.repoDir, "worktree", "remove", "--force", rel)
 	before, refs := f.snapshot(), gitOut(t, f.repoDir, "for-each-ref")
 
 	for _, method := range []domain.MergeMethod{domain.MergeMethodMerge, domain.MergeMethodSquash} {
@@ -404,5 +405,31 @@ func TestMergeInto_ALandedMergeTellsTheMergeStates(t *testing.T) {
 	}
 	if len(log.got) != 1 || log.got[0].CodeChanged == nil || log.got[0].CodeChanged.WorkspaceID != f.wsIDs["feat"] || log.got[0].CodeChanged.ProjectID != f.projectID {
 		t.Fatalf("told %+v", log.got)
+	}
+}
+
+// A branch checked out in another session's worktree is no merge target: moving
+// it would pull the branch from under that session.
+func TestMergeInto_ABranchCheckedOutInAnotherWorktreeIsNoTarget(t *testing.T) {
+	f := newMergeFixture(t, "main")
+	id := f.task(domain.TicketStatusReview)
+	f.session(id, "one", "main", 1)
+	f.session(id, "two", "main", 1)
+	offer, err := f.merger().MergeOffer(context.Background(), f.sessIDs["one"], "two")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if offer.Available || offer.Reason != domain.MergeTargetNotFound {
+		t.Fatalf("offer into another session's branch = %+v", offer)
+	}
+	for _, tg := range offer.Targets {
+		if tg.Name == "two" {
+			t.Fatalf("targets list %+v", offer.Targets)
+		}
+	}
+	before := gitOut(t, f.repoDir, "rev-parse", "two")
+	_, err = f.merger().MergeInto(context.Background(), f.sessIDs["one"], ports.MergeRequest{Target: "two"})
+	if errs.Code(err) != domain.MergeTargetNotFound || gitOut(t, f.repoDir, "rev-parse", "two") != before {
+		t.Fatalf("err = %v", err)
 	}
 }

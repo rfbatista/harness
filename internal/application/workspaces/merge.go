@@ -151,7 +151,7 @@ func (s *Merges) MergeOffer(ctx context.Context, sessionID, target string) (*por
 	switch {
 	case !slices.Contains(bl.Names, t.sess.Branch):
 		offer.Reason = domain.MergeBranchNotFound
-	case into == "" || into == t.sess.Branch || !slices.Contains(bl.Names, into):
+	case into == "" || into == t.sess.Branch || !slices.Contains(bl.Names, into) || slices.Contains(bl.InOtherWorktrees, into):
 		offer.Reason = domain.MergeTargetNotFound
 	case into == st.Branch && !st.Clean():
 		offer.Reason = domain.MergeCheckoutDirty
@@ -186,7 +186,7 @@ func defaultTarget(t *mergeTarget, st ports.CheckoutState, bl ports.BranchList) 
 func mergeTargets(bl ports.BranchList, st ports.CheckoutState, own string) []ports.MergeTarget {
 	out := []ports.MergeTarget{}
 	for _, name := range bl.Names {
-		if name == own {
+		if name == own || slices.Contains(bl.InOtherWorktrees, name) {
 			continue
 		}
 		out = append(out, ports.MergeTarget{
@@ -322,7 +322,7 @@ func (s *Merges) MergeInto(ctx context.Context, sessionID string, req ports.Merg
 	switch {
 	case !slices.Contains(bl.Names, t.sess.Branch):
 		return nil, s.refuse(sessionID, into, method, domain.MergeError(domain.MergeBranchNotFound, "the branch "+t.sess.Branch+" no longer exists"))
-	case into == "" || into == t.sess.Branch || !slices.Contains(bl.Names, into):
+	case into == "" || into == t.sess.Branch || !slices.Contains(bl.Names, into) || slices.Contains(bl.InOtherWorktrees, into):
 		return nil, s.refuse(sessionID, into, method, domain.MergeError(domain.MergeTargetNotFound,
 			domain.MergeTargetNotFound+": "+targetWords(into)+" is not a local branch the session's branch can be merged into"))
 	}

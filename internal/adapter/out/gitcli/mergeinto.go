@@ -22,6 +22,10 @@ func (m Merger) Branches(ctx context.Context, dir string) (ports.BranchList, err
 	if err != nil {
 		return ports.BranchList{}, err
 	}
+	wts, err := m.d.gitOutput(ctx, dir, "worktree", "list", "--porcelain")
+	if err != nil {
+		return ports.BranchList{}, err
+	}
 	var res ports.BranchList
 	originHead := ""
 	for _, line := range strings.Split(out, "\n") {
@@ -33,6 +37,13 @@ func (m Merger) Branches(ctx context.Context, dir string) (ports.BranchList, err
 			res.Names = append(res.Names, name)
 		} else if len(f) == 2 {
 			originHead = strings.TrimPrefix(f[1], "refs/remotes/origin/")
+		}
+	}
+	// The first worktree listed is the main checkout; a branch checked out in
+	// any other is in use by someone, and cannot be moved from under them.
+	for i, block := range strings.Split(strings.TrimSpace(wts), "\n\n") {
+		if b, ok := strings.CutPrefix(worktreeBranchLine(block), "refs/heads/"); ok && i > 0 {
+			res.InOtherWorktrees = append(res.InOtherWorktrees, b)
 		}
 	}
 	for _, name := range []string{originHead, "main", "master"} {
@@ -76,7 +87,7 @@ func notAnswered(err error, doing string) error {
 // main checkout's working tree, index or HEAD being read or written. A
 // conflict is found by merge-tree before anything is written, and so changes
 // nothing. A target that is checked out (checkedOut) then has its files
-// brought along by reset --keep, which refuses rather than overwrite a change
+// brought along by merge --ff-only, which refuses rather than overwrite a change
 // of the person's. The merge commit's message is git's own; commit-tree runs
 // no hooks.
 func (m Merger) MergeInto(ctx context.Context, dir, target, branch string, method domain.MergeMethod, message string, checkedOut bool) (string, error) {
@@ -128,7 +139,9 @@ func (m Merger) MergeInto(ctx context.Context, dir, target, branch string, metho
 	wctx, cancel := context.WithTimeout(ctx, m.d.worktree())
 	defer cancel()
 	if checkedOut {
-		_, err = m.d.gitRun(wctx, dir, "reset", "--keep", "--quiet", commit)
+		// A fast-forward only: it refuses if HEAD moved since the tip was read,
+		// and keeps (or refuses over) the person's local changes.
+		_, err = m.d.gitRun(wctx, dir, "merge", "--ff-only", "--quiet", commit)
 	} else {
 		_, err = m.d.gitRun(wctx, dir, "update-ref", "-m", "merge "+branch+": "+string(method), tref, commit, targetTip)
 	}
@@ -180,4 +193,15 @@ func conflict(branch, target string, files []string) error {
 		StructuredError: &domain.StructuredError{Code: domain.MergeConflict, Message: msg},
 		Details:         map[string]any{"files": files},
 	}
+}
+
+// worktreeBranchLine is the "branch" value of one block of
+// git worktree list --porcelain.
+func worktreeBranchLine(block string) string {
+	for _, l := range strings.Split(block, "\n") {
+		if v, ok := strings.CutPrefix(l, "branch "); ok {
+			return v
+		}
+	}
+	return ""
 }

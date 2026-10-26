@@ -22,6 +22,11 @@ func (b BranchNames) RefFormatProblem(ctx context.Context, dir, name string) (st
 	if strings.TrimSpace(name) == "" {
 		return "a branch name cannot be empty", nil
 	}
+	// --branch also accepts what it expands (@, @{-1}) and a full ref name,
+	// none of which can name a new branch.
+	if name == "@" || strings.Contains(name, "@{") || strings.HasPrefix(name, "refs/") {
+		return refFormatReason(name), nil
+	}
 	ok, err := b.d.gitOK(ctx, dir, "check-ref-format", "--branch", name)
 	if err != nil {
 		return "", err
@@ -46,8 +51,10 @@ func refFormatReason(name string) string {
 		return "a branch name cannot start or end with '/' or hold an empty part"
 	case strings.HasSuffix(name, "."):
 		return "a branch name cannot end with '.'"
-	case strings.Contains(name, "@{"):
-		return "a branch name cannot contain '@{'"
+	case name == "@" || strings.Contains(name, "@{"):
+		return "a branch name cannot be '@' or contain '@{'"
+	case strings.HasPrefix(name, "refs/"):
+		return "a branch name cannot start with 'refs/'"
 	}
 	return "this is not a valid git branch name (see git check-ref-format)"
 }

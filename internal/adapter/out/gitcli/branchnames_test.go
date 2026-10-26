@@ -12,7 +12,7 @@ func TestBranchNames_RefFormatProblemFollowsGitsRules(t *testing.T) {
 	for name, valid := range map[string]bool{
 		"agent/fix-login": true, "feature_1.2": true, "ünïcode": true,
 		"": false, "has space": false, "a..b": false, "x.lock": false, "-lead": false,
-		"trail/": false, "a//b": false, "end.": false, "a~b": false, "a:b": false, "a@{b": false,
+		"trail/": false, "a//b": false, "end.": false, "a~b": false, "a:b": false, "a@{b": false, "@": false, "@{-1}": false, "refs/heads/x": false,
 	} {
 		got, err := b.RefFormatProblem(context.Background(), repo, name)
 		if err != nil {

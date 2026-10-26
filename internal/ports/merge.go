@@ -96,6 +96,9 @@ func (s CheckoutState) Clean() bool { return len(s.Tracked) == 0 && len(s.Untrac
 type BranchList struct {
 	Names   []string
 	Default string
+	// InOtherWorktrees are the branches checked out in a worktree other than
+	// the main checkout (a session's): not merge targets.
+	InOtherWorktrees []string
 }
 
 // GitMerger merges in a checkout (driven; gitcli implements it). Every run is
