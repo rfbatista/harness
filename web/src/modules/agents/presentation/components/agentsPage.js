@@ -2,15 +2,24 @@
 // five tabs, and the tab panels. The server paints all of it from the catalog
 // read (data-seed), and this takes over without a flash; with no seed it
 // reads the catalog itself. Choosing a tab moves the address to the tab's
-// route without a reload. The tab panels are filled by the lists and
-// editors of the later tickets.
+// route without a reload. The Bundles tab and its editor are mixed in from
+// bundlesTab.js, bundleEditor.js and saveUi.js; the other tabs' editors come
+// with the later tickets.
 //
 //   <main x-data="agentsPage" data-seed="agent-catalog-seed" data-tab="skills" …>
 
 import { describeError } from "../../../../shared/presentation/errors.js";
 import { readSeed } from "../../../../shared/presentation/seed.js";
 import { AGENT_FILTERS, agentDetail, agentRows, agentsFooter } from "../../domain/library.js";
+import { renderMarkdown } from "../../domain/markdown.js";
+import { MCP_FILTERS, mcpDetail, mcpFooter, mcpRows } from "../../domain/mcp.js";
+import { SKILL_FILTERS, SKILL_PAGE, skillFiles, skillReach, skillRows, skillSummary, skillsFooter } from "../../domain/skills.js";
 import { TABS, routeOf, tabAfterKey } from "../../domain/tabs.js";
+import { TOOL_FILTERS, toolDetail, toolRows, toolsFooter } from "../../domain/tools.js";
+import { bundleEditor } from "./bundleEditor.js";
+import { bundlesTab } from "./bundlesTab.js";
+import { compose } from "./compose.js";
+import { saveUi } from "./saveUi.js";
 
 const DEFAULT_ROOT = "<data dir>/agents/";
 
@@ -25,13 +34,14 @@ const COUNTS = {
 
 /**
  * @param {{
- *   gateway: Pick<import("../../domain/ports.js").CatalogGateway, "decodeCatalog" | "getCatalog">,
+ *   gateway: Pick<import("../../domain/ports.js").CatalogGateway, "decodeCatalog" | "getCatalog" | "getSkill" | "checkEnvVars" | "saveBundle" | "undoChange">,
  *   history: Pick<History, "pushState">,
- *   location: Pick<Location, "pathname">,
+ *   location: Pick<Location, "pathname" | "search">,
  *   clipboard?: Pick<Clipboard, "writeText">,
+ *   timers?: { setTimeout: (fn: () => void, ms: number) => any, clearTimeout: (id: any) => void },
  * }} deps
  */
-export const agentsPage = ({ gateway, history, location, clipboard }) => () => ({
+export const agentsPage = ({ gateway, history, location, clipboard, timers = globalThis }) => () => compose({
   /** @type {import("../../domain/tabs.js").TabId} */
   tab: "agents",
   item: "",
@@ -47,14 +57,36 @@ export const agentsPage = ({ gateway, history, location, clipboard }) => () => (
   opened: {},
   /** What the last action said ("Path copied"), for the live region. */
   notice: "",
+  /** The Skills tab: text filter, quick filter, how many rows are mounted, and the open skill as the server read it. */
+  skillQuery: "",
+  skillFilter: "all",
+  skillLimit: SKILL_PAGE,
+  /** @type {import("../../domain/ports.js").SkillDetail["skill"] | null} */
+  skillData: null,
+  skillLoading: false,
+  skillError: null,
+  /** The MCP servers tab: filters, and what Check again last answered per variable. */
+  mcpQuery: "",
+  mcpFilter: "all",
+  /** @type {Record<string, boolean>} */
+  checked: {},
+  checking: false,
+  /** The Tools tab: filters and the open tool (not in the address). */
+  toolQuery: "",
+  toolFilter: "all",
+  toolItem: "",
 
   async init() {
+    this.setupEditor();
     this.route(location.pathname, this.$el.dataset);
     try {
       this.catalog = gateway.decodeCatalog(readSeed(this.$el));
     } catch {
       await this.load();
     }
+    this.syncEditor();
+    this.toolItem = location.hash ? decodeURIComponent(location.hash.slice(1)) : "";
+    await this.loadSkill();
   },
 
   async load() {
@@ -62,6 +94,7 @@ export const agentsPage = ({ gateway, history, location, clipboard }) => () => (
     try {
       this.catalog = await gateway.getCatalog();
       this.error = null;
+      this.checked = {};
     } catch (err) {
       this.error = describeError(err);
     } finally {
@@ -76,11 +109,24 @@ export const agentsPage = ({ gateway, history, location, clipboard }) => () => (
     this.item = r?.item ?? fallback.item ?? "";
     this.mode = r?.mode ?? fallback.mode ?? "";
     this.opened = {};
+    this.skillData = null;
+    this.skillError = null;
+    this.syncEditor();
   },
 
-  /** The browser's back and forward. */
+  /** The browser's back and forward. A dirty editor puts the address back and asks first. */
   popped() {
-    this.route(location.pathname);
+    const target = location.pathname;
+    if (this.leaveGuarded) {
+      history.pushState({}, "", this.editorHref);
+      this.leaving = { go: () => this.landOn(target) };
+      return;
+    }
+    this.landOn(target);
+  },
+  landOn(pathname) {
+    this.route(pathname);
+    this.loadSkill();
   },
 
   /** A click on a tab: show it and move the address, unless the click opens a new window. */
@@ -93,11 +139,16 @@ export const agentsPage = ({ gateway, history, location, clipboard }) => () => (
   show(id) {
     const tab = TABS.find((t) => t.id === id);
     if (!tab) return;
-    this.tab = tab.id;
-    this.item = "";
-    this.mode = "";
-    this.opened = {};
-    history.pushState({}, "", tab.href);
+    this.guarded(() => {
+      this.tab = tab.id;
+      this.item = "";
+      this.mode = "";
+      this.opened = {};
+      this.toolItem = "";
+      this.skillData = null;
+      history.pushState({}, "", tab.href);
+      this.syncEditor();
+    });
   },
 
   /** Arrow keys, Home and End move to a tab, focus it and show it. */
@@ -144,6 +195,10 @@ export const agentsPage = ({ gateway, history, location, clipboard }) => () => (
 
   get noItem() {
     return this.item === "";
+  },
+  /** The deep link's note shows only until the catalog is known. */
+  get itemNoteHidden() {
+    return this.item === "" || this.catalog !== null;
   },
 
   /** What the open panel says about the item a deep link names, until its detail exists. */
@@ -206,29 +261,44 @@ export const agentsPage = ({ gateway, history, location, clipboard }) => () => (
       return { ...g, expanded, closed: !expanded };
     });
   },
-  /** Narrow screens show the list, or with an agent open the detail. */
+  /** Narrow screens show the list, or with an item open the detail. */
   get detailOpenAttr() {
-    return this.detail !== null || this.unknownAgent ? "" : null;
+    const open = {
+      agents: this.detail !== null || this.unknownAgent,
+      skills: this.skill !== null || this.unknownSkill,
+      mcp: this.mcp !== null || this.unknownMcp,
+      bundles: this.bundle !== null || this.unknownBundle || this.editing,
+      tools: this.toolItem !== "",
+    }[this.tab];
+    return open ? "" : null;
   },
 
   setFilter(event) {
     this.filter = event.currentTarget.dataset.filter;
   },
 
-  /** A click on an agent's row: show its detail and move the address, unless the click opens a new window. */
+  /** A click on a row: show its detail and move the address, unless the click opens a new window. */
   openAgent(event) {
     if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button > 0) return;
     event.preventDefault();
-    this.item = event.currentTarget.dataset.key;
-    this.mode = "";
-    this.opened = {};
-    history.pushState({}, "", event.currentTarget.getAttribute("href"));
+    const key = event.currentTarget.dataset.key;
+    const href = event.currentTarget.getAttribute("href");
+    this.guarded(() => {
+      this.item = key;
+      this.mode = "";
+      this.opened = {};
+      this.skillData = null;
+      this.skillError = null;
+      history.pushState({}, "", href);
+      this.syncEditor();
+      this.loadSkill();
+    });
   },
 
   /** The narrow screens' way back from the detail to the list. */
   backToList(event) {
     event.preventDefault();
-    this.show("agents");
+    this.show(this.tab);
   },
 
   toggleGroup(event) {
@@ -237,14 +307,240 @@ export const agentsPage = ({ gateway, history, location, clipboard }) => () => (
     this.opened = { ...this.opened, [name]: !now };
   },
 
+  // The Skills tab: the list a page at a time, and the open skill.
+
+  get skillRowsResult() {
+    if (!this.catalog) return { rows: [], total: 0, hidden: 0 };
+    return skillRows(this.catalog, { query: this.skillQuery, filter: this.skillFilter, limit: this.skillLimit });
+  },
+  get skillRowsView() {
+    return this.skillRowsResult.rows.map((r) => ({
+      ...r,
+      current: r.name === this.item && this.tab === "skills" && this.mode === "",
+      hasBadge: r.badge !== null,
+      noBadge: r.badge === null,
+      badgeLabel: r.badge?.label ?? "",
+      badgeTone: r.badge?.tone ?? "",
+    }));
+  },
+  get skillFilters() {
+    return SKILL_FILTERS.map((f) => ({ ...f, pressed: f.id === this.skillFilter, variant: f.id === this.skillFilter ? "" : "ghost" }));
+  },
+  get skillsFoot() {
+    return this.catalog ? skillsFooter(this.catalog) : "";
+  },
+  get noSkillRows() {
+    return this.catalog !== null && this.skillRowsResult.total === 0;
+  },
+  get skillEmptyTitle() {
+    const q = this.skillQuery.trim();
+    return q ? `No skills match \u201c${q}\u201d.` : "No skills.";
+  },
+  get skillsHidden() {
+    return this.skillRowsResult.hidden;
+  },
+  get noSkillsHidden() {
+    return this.skillRowsResult.hidden === 0;
+  },
+  get skillMoreLabel() {
+    return `Show ${Math.min(SKILL_PAGE, this.skillRowsResult.hidden)} more`;
+  },
+  get skillMoreNote() {
+    return `${this.skillRowsResult.hidden} more not shown`;
+  },
+
+  setSkillFilter(event) {
+    this.skillFilter = event.currentTarget.dataset.filter;
+    this.skillLimit = SKILL_PAGE;
+  },
+  /** The text filter changed: start again from the first page. */
+  skillQueryChanged() {
+    this.skillLimit = SKILL_PAGE;
+  },
+  showMoreSkills() {
+    this.skillLimit += SKILL_PAGE;
+  },
+
+  /** The open skill as the catalog read lists it, or null: no item, an editor, or a name the catalog lacks. */
+  get skill() {
+    if (!this.catalog || this.tab !== "skills" || !this.item || this.mode) return null;
+    return skillSummary(this.catalog, this.item);
+  },
+  get unknownSkill() {
+    return this.catalog !== null && this.tab === "skills" && this.item !== "" && this.mode === "" && this.skill === null;
+  },
+  get skillReady() {
+    return this.skillData !== null;
+  },
+  get skillPending() {
+    return this.skillData === null && this.skillError === null;
+  },
+  get skillErrorText() {
+    return this.skillError?.message ?? "";
+  },
+  get noSkillError() {
+    return this.skillError === null;
+  },
+  get skillFrontmatter() {
+    const s = this.skillData;
+    return s ? `---\nname: ${s.name}\ndescription: ${s.description}\n---` : "";
+  },
+  get skillFilesView() {
+    return skillFiles((this.skillData?.files ?? []).filter((f) => f.path !== "SKILL.md"));
+  },
+  get skillReach() {
+    return skillReach(this.skillData ?? { agents: [], bundles: [], agentCount: 0 });
+  },
+  get hasReachAgents() {
+    return this.skillReach.agents.length > 0;
+  },
+  get hasReachBundles() {
+    return this.skillReach.bundles.length > 0;
+  },
+  get skillFileHeading() {
+    const n = this.skillFilesView.length;
+    return `Files · ${n}`;
+  },
+
+  /** Reads the open skill's body, files and reach. Answers that arrive after the person moved on are dropped. */
+  async loadSkill() {
+    const name = this.item;
+    if (this.tab !== "skills" || !name || this.mode || this.skill === null) return;
+    this.skillError = null;
+    try {
+      const { skill } = await gateway.getSkill(name);
+      if (this.item === name && this.tab === "skills") this.skillData = skill;
+    } catch (err) {
+      if (this.item === name) this.skillError = describeError(err);
+    }
+  },
+
+  /** Puts the open skill's SKILL.md into its element. The text is escaped on the way: embedded HTML shows as text. Called from x-effect. */
+  paintBody(el) {
+    el.innerHTML = renderMarkdown(this.skillData?.body ?? "");
+  },
+
+  // The MCP servers tab.
+
+  get mcpRowsView() {
+    if (!this.catalog) return [];
+    return mcpRows(this.catalog, { query: this.mcpQuery, filter: this.mcpFilter }).map((r) => ({
+      ...r,
+      current: r.name === this.item && this.tab === "mcp" && this.mode === "",
+      hasBadge: r.badge !== null,
+      noBadge: r.badge === null,
+      badgeLabel: r.badge?.label ?? "",
+      badgeTone: r.badge?.tone ?? "",
+    }));
+  },
+  get mcpFilters() {
+    return MCP_FILTERS.map((f) => ({ ...f, pressed: f.id === this.mcpFilter, variant: f.id === this.mcpFilter ? "" : "ghost" }));
+  },
+  get mcpFoot() {
+    return this.catalog ? mcpFooter(this.catalog) : "";
+  },
+  get noMcpRows() {
+    return this.catalog !== null && this.mcpRowsView.length === 0;
+  },
+  get mcpEmptyTitle() {
+    const q = this.mcpQuery.trim();
+    return q ? `No MCP servers match \u201c${q}\u201d.` : "No MCP servers.";
+  },
+  setMcpFilter(event) {
+    this.mcpFilter = event.currentTarget.dataset.filter;
+  },
+  get mcp() {
+    if (!this.catalog || this.tab !== "mcp" || !this.item || this.mode) return null;
+    return mcpDetail(this.catalog, this.item, this.checked);
+  },
+  get unknownMcp() {
+    return this.catalog !== null && this.tab === "mcp" && this.item !== "" && this.mode === "" && this.mcp === null;
+  },
+  get mcpUnset() {
+    return (this.mcp?.unset.length ?? 0) > 0;
+  },
+  get mcpAllSet() {
+    return !this.mcpUnset;
+  },
+  get mcpUsed() {
+    return this.mcp !== null && !this.mcp.unused;
+  },
+  get mcpHasAgents() {
+    return (this.mcp?.agents.length ?? 0) > 0;
+  },
+  get mcpHasProjects() {
+    return (this.mcp?.projects.length ?? 0) > 0;
+  },
+  get mcpHasRefs() {
+    return (this.mcp?.refs.length ?? 0) > 0;
+  },
+  get mcpHasEntries() {
+    return (this.mcp?.entries.length ?? 0) > 0;
+  },
+  get checkLabel() {
+    return this.checking ? "Checking\u2026" : "Check again";
+  },
+
+  /** Asks the server which of the open server's variables are set now. Never a value. */
+  async checkAgain() {
+    const names = this.mcp?.refNames ?? [];
+    if (names.length === 0) return;
+    this.checking = true;
+    try {
+      this.checked = { ...this.checked, ...(await gateway.checkEnvVars(names)) };
+      this.notice = "Checked the variables again";
+    } catch (err) {
+      this.notice = describeError(err).message;
+    } finally {
+      this.checking = false;
+    }
+  },
+
+  // The Tools tab: read-only.
+
+  get toolRowsView() {
+    if (!this.catalog) return [];
+    return toolRows(this.catalog, { query: this.toolQuery, filter: this.toolFilter }).map((r) => ({ ...r, current: r.name === this.toolItem }));
+  },
+  get toolFilters() {
+    return TOOL_FILTERS.map((f) => ({ ...f, pressed: f.id === this.toolFilter, variant: f.id === this.toolFilter ? "" : "ghost" }));
+  },
+  get toolsFoot() {
+    return toolsFooter();
+  },
+  get noToolRows() {
+    return this.catalog !== null && this.toolRowsView.length === 0;
+  },
+  setToolFilter(event) {
+    this.toolFilter = event.currentTarget.dataset.filter;
+  },
+  get tool() {
+    if (!this.catalog || this.tab !== "tools" || !this.toolItem) return null;
+    return toolDetail(this.catalog, this.toolItem);
+  },
+  get noTool() {
+    return this.tool === null;
+  },
+  openTool(event) {
+    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button > 0) return;
+    event.preventDefault();
+    const key = event.currentTarget.dataset.key;
+    const href = event.currentTarget.getAttribute("href");
+    this.guarded(() => {
+      this.toolItem = key;
+      history.pushState({}, "", href);
+    });
+  },
+
   /** The actions menu chose an item. */
   async menuSelect(event) {
-    if (event.detail.action !== "copy-path" || !this.detail) return;
+    const open = this.detail ?? this.skill ?? this.mcp ?? this.bundle;
+    if (event.detail.action !== "copy-path" || !open) return;
     try {
-      await clipboard?.writeText(this.detail.copyPath);
+      await clipboard?.writeText(open.copyPath);
       this.notice = "Path copied";
     } catch {
       this.notice = "Could not copy the path";
     }
   },
-});
+}, bundlesTab({ history }), bundleEditor({ gateway, location, timers }), saveUi({ gateway }));

@@ -1,0 +1,166 @@
+package agents
+
+// The pieces every catalog editor shares around its form: the live region
+// with the conflict and refusal banners, the sticky footer with Review change,
+// Cancel and Save, the Review change diff, the leave warning, the saved toast
+// and the skill-and-bundle picker. They bind to what saveUi.js,
+// bundleEditor.js and entryPickerMixin.js give the Agents page.
+
+// diffFiles draws each file of a diff the page holds in list (a getter that
+// gives domain/diff.js's DiffFile list): a head with the path, then its lines.
+templ diffFiles(list string) {
+	<template x-for={ "f in " + list } x-bind:key="f.path">
+		<div class="[ diff-file ]" data-diff-file x-bind:data-path="f.path">
+			<div class="[ repel ] [ diff-file-head ]">
+				<code class="[ font-mono text-xs ]" x-text="f.path"></code>
+				<span class="[ badge ]" x-text="f.label"></span>
+			</div>
+			<div class="[ diff ]" tabindex="0" role="group" aria-label="Changed lines">
+				<template x-for="l in f.lines" x-bind:key="l.key">
+					<div data-diff-line x-bind:data-kind="l.kind"><span class="[ mark ]" x-text="l.mark"></span><span x-text="l.text"></span></div>
+				</template>
+			</div>
+		</div>
+	</template>
+}
+
+// saveAlerts is a live region (role alert) that is always on the page, so the
+// conflict banner and a refusal are announced when they appear.
+templ saveAlerts() {
+	<div class="[ flow ] [ flow-space-s ]" role="alert" data-save-alerts>
+		<template x-if="sv.conflict">
+			<div class="[ banner ]" data-tone="attention" data-conflict>
+				<div class="[ flow ] [ flow-space-xs grow ]">
+					<strong x-text="sv.conflictTitle"></strong>
+					<span>Saving is off, so nothing is lost silently. What changed on disk since you opened this page:</span>
+					@diffFiles("conflictFiles")
+					<span class="[ text-sm ]" x-text="sv.conflictNote"></span>
+				</div>
+				<div class="[ cluster ] [ save-choices ]">
+					<button type="button" class="[ button ]" data-size="sm" data-reload x-on:click="reloadEditor">Reload (lose my edits)</button>
+					<button type="button" class="[ button ]" data-size="sm" data-variant="danger" data-overwrite x-on:click="overwrite">Overwrite</button>
+				</div>
+			</div>
+		</template>
+		<template x-if="formInvalid">
+			<div class="[ banner ]" data-tone="danger" data-form-error>
+				<div class="[ flow ] [ flow-space-3xs grow ]">
+					<span x-text="fieldErrors.form"></span>
+					<span class="[ code ]"><span x-text="refusalCode"></span> · <span x-text="refusalNext"></span></span>
+				</div>
+			</div>
+		</template>
+	</div>
+}
+
+// reviewPanel is the diff of every file the save will write, as the server's
+// dry run answered. A panel, not a dialog: the form stays in reach.
+templ reviewPanel() {
+	<section class="[ review-panel ]" id="review-panel" data-review-panel aria-labelledby="review-panel-h" x-bind:hidden="!reviewShown" hidden>
+		<h3 id="review-panel-h">Review change</h3>
+		<p class="[ text-xs color-ink-muted ]">What Save will write, from the server's dry run. Nothing is written yet.</p>
+		@diffFiles("reviewFiles")
+	</section>
+}
+
+// saveFooter is the sticky footer: what is unsaved and where it writes, the
+// leave warning when the person tried to go, and the buttons.
+templ saveFooter() {
+	<div class="[ save-footer ]" data-save-footer>
+		<template x-if="leaving">
+			<div class="[ banner ]" data-tone="attention" data-leave role="alertdialog" aria-labelledby="leave-title" x-init="focusKeep($el)">
+				<div class="[ grow ]">
+					<strong id="leave-title">Leave without saving?</strong>
+					Your unsaved changes will be lost.
+				</div>
+				<button type="button" class="[ button ]" data-size="sm" data-keep x-on:click="keepEditing">Keep editing</button>
+				<button type="button" class="[ button ]" data-size="sm" data-variant="danger" data-discard x-on:click="discardAndLeave">Discard changes</button>
+			</div>
+		</template>
+		<div class="[ save-footer-in ]">
+			<span class="[ save-state ]" data-save-state>
+				<span class="[ dirty ]" aria-hidden="true" x-bind:hidden="!sv.dirty"></span>
+				<span x-text="sv.footer"></span>
+			</span>
+			<button type="button" class="[ button ]" data-variant="ghost" data-review aria-controls="review-panel" x-bind:aria-expanded="reviewShown" x-bind:disabled="!sv.review" x-on:click="toggleReview" x-text="reviewLabel">Review change</button>
+			<button type="button" class="[ button ]" data-variant="ghost" data-cancel x-on:click="cancelEditor">Cancel</button>
+			<button type="button" class="[ button ]" data-variant="primary" data-save x-bind:disabled="!sv.canSave" x-bind:aria-busy="sv.saving" x-on:click="saveEditor" x-text="saveButtonLabel">Save</button>
+		</div>
+	</div>
+}
+
+// saveToast is the report after a save or an Undo, in a polite live region
+// that is always on the page. It carries the server's summary, Undo while one
+// is possible, and what running sessions keep.
+templ saveToast() {
+	<div class="[ toast-region ]" role="status" aria-live="polite" aria-atomic="true">
+		<template x-if="toast">
+			<div class="[ toast ]" data-toast x-bind:data-tone="toast.tone">
+				<div class="[ flow ] [ flow-space-3xs grow ]">
+					<span x-text="toast.text"></span>
+					<span class="[ text-xs color-ink-muted ]" x-bind:hidden="!toast.hasNote" x-text="toast.note"></span>
+				</div>
+				<template x-if="toast.hasUndo">
+					<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" data-undo x-on:click="undoLast">Undo</button>
+				</template>
+				<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" aria-label="Dismiss" data-dismiss x-on:click="dismissToast">×</button>
+			</div>
+		</template>
+	</div>
+}
+
+// entryPicker is the skill-and-bundle search picker under the namespace ns
+// (entryPickerMixin.js): an input that searches, a list of options, and chips
+// for what is chosen. describedBy and invalid name the page getters that link
+// the field to its error.
+templ entryPicker(ns, label, placeholder, hintID, errorID, describedBy, invalid, errorText string) {
+	<div class="[ field ]">
+		<label for={ ns + "-input" }>{ label }</label>
+		<div class="[ entry-picker ]">
+			<input
+				type="text"
+				id={ ns + "-input" }
+				class="[ font-mono ]"
+				role="combobox"
+				aria-autocomplete="list"
+				aria-controls={ ns + "-list" }
+				aria-expanded="false"
+				autocomplete="off"
+				spellcheck="false"
+				placeholder={ placeholder }
+				x-bind:aria-expanded={ ns + "View.expanded" }
+				x-bind:aria-activedescendant={ ns + "View.activeId" }
+				x-bind:aria-describedby={ describedBy }
+				x-bind:aria-invalid={ invalid }
+				x-model={ ns + "Query" }
+				x-on:focus={ ns + "Focus" }
+				x-on:click={ ns + "Focus" }
+				x-on:blur={ ns + "Blur" }
+				x-on:input={ ns + "Input" }
+				x-on:keydown={ ns + "Key" }
+			/>
+			<div class="[ entry-options ]" id={ ns + "-list" } role="listbox" aria-multiselectable="true" aria-label={ label } x-bind:hidden={ "!" + ns + "View.expanded" } hidden>
+				<template x-for={ "o in " + ns + "View.options" } x-bind:key="o.key">
+					<div role="option" class="[ entry-option ]" x-bind:id="o.id" x-bind:data-key="o.key" x-bind:data-kind="o.kind" x-bind:data-active="o.active" x-bind:aria-selected="o.chosen" x-on:mousedown={ ns + "Pick" }>
+						<span aria-hidden="true" x-text="o.mark"></span>
+						<span class="[ font-mono ]" x-text="o.label"></span>
+						<span class="[ text-xs color-ink-faint ]" x-text="o.hint"></span>
+					</div>
+				</template>
+				<p class="[ entry-note text-xs color-ink-muted ]" x-bind:hidden={ "!" + ns + "View.empty" } x-text={ ns + "View.emptyNote" }></p>
+				<p class="[ entry-note text-xs color-ink-muted ]" x-bind:hidden={ "!" + ns + "View.hidden" } x-text={ ns + "View.hiddenNote" }></p>
+			</div>
+		</div>
+		<div class="[ cluster ] [ entry-chips ]" style="--gutter: var(--space-xs)" data-chips role="list" aria-label="Chosen">
+			<template x-for={ "c in " + ns + "View.chips" } x-bind:key="c.key">
+				<span class="[ chip ]" role="listitem" x-bind:data-chip="c.key" x-bind:data-kind="c.kind" x-bind:data-mono="c.mono" x-bind:data-missing="c.missing">
+					<span x-text="c.label"></span>
+					<button type="button" x-bind:aria-label="c.removeLabel" x-bind:data-key="c.key" x-on:click={ ns + "Unpick" }>×</button>
+				</span>
+			</template>
+			<span class="[ text-sm color-ink-muted ]" x-bind:hidden={ "!" + ns + "View.noChips" }>Nothing yet.</span>
+		</div>
+		<span class="[ hint ]" id={ hintID }>{ "Bundles are listed first. Type to search, arrows to move, Enter to add, Backspace to remove the last one." }</span>
+		<span class="[ error ]" id={ errorID } x-bind:hidden={ "!" + invalid } x-text={ errorText }></span>
+	</div>
+}

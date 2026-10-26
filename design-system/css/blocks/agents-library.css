@@ -9,6 +9,9 @@
  * Exceptions: .library-row[aria-current="true"] (the open agent), .desc[data-dim]
  * (a missing description, in italics), .skill-link[data-missing] (a skill with
  * no folder).
+ * Skills: .library-more (Show more under a long list), .skill-grid (the
+ * rendered SKILL.md beside .skill-side: .file-list and Reaches as a .kv).
+ * MCP: .detail-card around a .kv, .entry-list for env or header entries.
  */
 
 @layer blocks {
@@ -176,5 +179,101 @@
       padding: var(--space-s) var(--space-m);
     }
     & > li + li { border-block-start: var(--border-width) solid var(--color-line); }
+  }
+
+  .library-more {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-s);
+    padding: var(--space-s) var(--space-m);
+
+    &[hidden] { display: none; }
+  }
+
+  .skill-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 15rem;
+    gap: var(--space-xl);
+    align-items: start;
+
+    &[hidden] { display: none; }
+    @media (max-width: 64rem) { grid-template-columns: minmax(0, 1fr); }
+  }
+
+  .skill-doc {
+    min-inline-size: 0;
+    padding: var(--space-l) var(--space-xl);
+    border: var(--border-width) solid var(--color-line);
+    border-radius: var(--radius-md);
+    background: var(--color-raised);
+    font-size: var(--text-sm);
+  }
+
+  .frontmatter {
+    margin: 0 0 var(--space-l);
+    padding: var(--space-s) var(--space-m);
+    border-radius: var(--radius-sm);
+    background: var(--color-sunken);
+    color: var(--color-ink-muted);
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+
+  .skill-side {
+    display: grid;
+    gap: var(--space-xl);
+
+    & h3 { margin-block-end: var(--space-s); }
+  }
+
+  .file-list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    line-height: 1.9;
+
+    & > li { display: flex; gap: var(--space-xs); align-items: baseline; }
+    & > li[data-dir="true"] { color: var(--color-ink-muted); }
+    & > li[data-dir="true"] { gap: 0; }
+    & > li[data-dir="true"]::after { content: "/"; color: var(--color-ink-faint); }
+    & > li[data-depth="1"] { padding-inline-start: 1rem; }
+    & > li[data-depth="2"] { padding-inline-start: 2rem; }
+    & > li[data-depth="3"] { padding-inline-start: 3rem; }
+    & > li[data-depth="4"] { padding-inline-start: 4rem; }
+  }
+
+  .kv {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: var(--space-xs) var(--space-l);
+    margin: 0;
+    font-size: var(--text-sm);
+
+    & > dt { color: var(--color-ink-muted); }
+    & > dd { margin: 0; display: flex; flex-wrap: wrap; gap: var(--space-xs) var(--space-s); align-items: baseline; }
+    & > [hidden] { display: none; }
+  }
+
+  .detail-card {
+    padding: var(--space-m) var(--space-l);
+    border: var(--border-width) solid var(--color-line);
+    border-radius: var(--radius-md);
+    background: var(--color-raised);
+  }
+
+  .entry-list {
+    display: grid;
+    gap: var(--space-xs);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+
+    & > li { display: flex; flex-wrap: wrap; gap: var(--space-s); align-items: center; }
+    & code { overflow-wrap: anywhere; }
   }
 }

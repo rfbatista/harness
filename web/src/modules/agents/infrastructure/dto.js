@@ -104,7 +104,7 @@ export function toWriteResult(body) {
     change: {
       id: String(c.id ?? ""),
       summary: String(c.summary ?? ""),
-      writes: list(c.writes, "writes").map((w) => ({ path: String(w?.path ?? ""), before: w?.before ?? null, after: w?.after ?? null })),
+      writes: list(c.writes, "writes").map((w) => ({ path: String(w?.path ?? ""), before: w?.before ?? null, after: w?.after ?? null, ...(w?.encoding === "base64" ? { encoding: "base64" } : {}) })),
     },
     versions: object(body.versions),
   };

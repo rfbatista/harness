@@ -69,7 +69,7 @@
  * @property {boolean} [dryRun]  write nothing; answer what would be written
  *
  * @typedef {object} WriteResult
- * @property {{ id: string, summary: string, writes: { path: string, before: string | null, after: string | null }[] }} change
+ * @property {{ id: string, summary: string, writes: { path: string, before: string | null, after: string | null, encoding?: "base64" }[] }} change
  *           id is "" for a dry run; before is null for a new file, after for a deleted one
  * @property {Record<string, string>} versions
  *

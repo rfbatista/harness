@@ -103,11 +103,11 @@ func TestAgentsPageShellInTheBrowser(t *testing.T) {
 	// The deep link names its item.
 	var note string
 	err = chromedp.Run(ctx,
-		chromedp.Navigate(base+"/agents/skills/tdd"),
+		chromedp.Navigate(base+"/agents/bundles/ux"),
 		chromedp.Poll(alpineReady, nil, chromedp.WithPollingTimeout(5*time.Second)),
 		chromedp.Evaluate(`document.querySelector('[role=tabpanel]:not([hidden]) [data-item]').textContent.trim()`, &note),
 	)
-	if err != nil || note != "tdd" {
+	if err != nil || note != "ux" {
 		t.Errorf("deep link item = %q (%v)", note, err)
 	}
 

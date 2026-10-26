@@ -26,6 +26,7 @@ const enc = encodeURIComponent;
 export function problemBadge(problems) {
   if (problems.length === 0) return null;
   if (problems.some((p) => p.code === "NO_DESCRIPTION")) return { label: "No description", tone: "attention" };
+  if (problems.some((p) => p.code === "SECRET_NOT_SET")) return { label: "secret not set", tone: "attention" };
   const missing = problems.filter((p) => p.code === "MISSING_SKILL").length;
   if (missing > 0) return { label: `${plural(missing, "missing skill")}`, tone: "danger" };
   return { label: problems[0].message || problems[0].code, tone: "danger" };
