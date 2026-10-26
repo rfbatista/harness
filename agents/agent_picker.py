@@ -40,25 +40,16 @@ def _read_key(fd):
         return "quit"
     if ch in (b"p", b"P"):
         return "plan"
-    if ch in (b"s", b"S"):
-        return "skills"
     return "other"
 
 
-def _rows(manifest):
-    """One (key, label) per agent, in manifest order."""
+def _rows(agents):
+    """One (name, label) per agent, in the harness's order."""
     rows = []
-    for key, cfg in manifest.get("agents", {}).items():
-        name, detail = al.agent_summary_line(key, cfg, manifest)
-        rows.append((key, f"{name}   {DIM}{detail}{RESET}"))
+    for agent in agents:
+        label, detail = al.agent_summary_line(agent)
+        rows.append((agent["name"], f"{label}   {DIM}{detail}{RESET}"))
     return rows
-
-
-def _activate_rows(manifest):
-    """Targets for the global-activation sub-screen."""
-    return ([("none", "none   clear ~/.claude/skills"),
-             ("all", "all   every skill")]
-            + [(k, k) for k in manifest.get("agents", {})])
 
 
 def _rows_block(items, cursor):
@@ -117,36 +108,12 @@ def _pick_plan(out, fd, agent_name, plans):
             return None
 
 
-def _activate_frame(rows, cursor):
-    lines = [f"  {BOLD}activate globally{RESET}  {DIM}(~/.claude/skills){RESET}", ""]
-    lines += _rows_block([label for _key, label in rows], cursor)
-    lines += ["", f"  {DIM}enter select · esc back{RESET}"]
-    return lines
-
-
-def _pick_activate(out, fd, manifest):
-    rows = _activate_rows(manifest)
-    cursor = 0
-    while True:
-        _render(out, _activate_frame(rows, cursor))
-        key = _read_key(fd)
-        if key == "up":
-            cursor = (cursor - 1) % len(rows)
-        elif key == "down":
-            cursor = (cursor + 1) % len(rows)
-        elif key == "enter":
-            return rows[cursor][0]
-        elif key in ("quit", "esc"):
-            return None
-
-
-def pick(manifest, agents_root, cwd):
+def pick(agents, settings, cwd):
     out = sys.stderr
-    projects_root = al._projects_root(manifest)
+    projects_root = al._projects_root(settings)
     levels = al.scan_levels(cwd, projects_root)
     panel = al.render_context_panel(al.project_label(cwd, projects_root), levels)
-    settings = manifest.get("settings", {})
-    rows = _rows(manifest)
+    rows = _rows(agents)
     if not rows:
         return None
 
@@ -176,17 +143,6 @@ def pick(manifest, agents_root, cwd):
                     chosen = _pick_plan(out, fd, rows[cursor][0], plans)
                     if chosen:
                         return (rows[cursor][0], chosen)
-            elif key == "skills":
-                choice = _pick_activate(out, fd, manifest)
-                if choice:
-                    names = al.activation_names(choice, manifest, agents_root)
-                    n = al.activate_global(
-                        names,
-                        os.path.join(agents_root, al.SKILLS_DIRNAME),
-                        os.path.join(os.path.expanduser("~"), ".claude",
-                                     al.SKILLS_DIRNAME),
-                    )
-                    note = f"activated {choice} — {n} skills"
             elif key in ("quit", "esc"):
                 return None
     finally:

@@ -6,9 +6,8 @@
 -include .env
 # The agent catalog (agents, bundles, skills, MCP servers) lives in the data
 # dir's agents/ folder. On the first start with an empty catalog the server
-# imports this folder into it, once. Set it in .env or the shell to import
-# from another directory.
-DOTFILES_AGENTS_DIR ?= $(CURDIR)/agents
+# imports the agents/ folder of a dotfiles checkout into it, once: set
+# DOTFILES_AGENTS_DIR in .env or the shell to name it.
 export
 
 .DEFAULT_GOAL := help
