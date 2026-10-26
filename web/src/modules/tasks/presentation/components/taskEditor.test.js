@@ -177,7 +177,18 @@ test("the description's More or Less is remembered per task", () => {
   assert.deepEqual([again.descriptionOpen, again.descriptionOverflows], [true, true], "the same task opens as it was left, with its Less");
   assert.equal(setup({ prefs, task: makeTask({ id: "t2" }) }).instance.descriptionOpen, false, "another task keeps its own choice");
   first.instance.toggleDescription();
-  assert.equal(prefs.get("task.description.t1"), null, "collapsing forgets the choice");
+  assert.equal(prefs.get("task.description.t1"), "closed", "collapsing is a choice too");
+});
+
+test("with no session open the description shows whole, unless the person chose one line", () => {
+  const { instance } = setup();
+  instance.setSessionOpen(false);
+  assert.deepEqual([instance.descriptionOpen, instance.descriptionOpenAttr], [true, ""]);
+  instance.setSessionOpen(true);
+  assert.deepEqual([instance.descriptionOpen, instance.descriptionOpenAttr], [false, null]);
+  const chose = setup({ prefs: memoryPrefs({ "task.description.t1": "closed" }) }).instance;
+  chose.setSessionOpen(false);
+  assert.equal(chose.descriptionOpen, false, "a chosen one line wins");
 });
 
 test("a bad stored description choice means collapsed", () => {

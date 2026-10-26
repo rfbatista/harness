@@ -15,11 +15,20 @@ const (
 	noteToggle = `document.querySelector('.brief > button')`
 )
 
+// noteDeps is a task whose page has a session open (boardDeps's): the
+// description is one line.
 func noteDeps(description string) Deps {
 	deps := boardDeps()
 	deps.Tasks = fakeTickets{[]*domain.Ticket{
 		{ID: "t-feed", ProjectID: "p1", Title: "Add SSE feed", Description: description, Status: domain.TicketStatusInProgress},
 	}}
+	return deps
+}
+
+// noSessionDeps is the same task with no session: the task's overview.
+func noSessionDeps(description string) Deps {
+	deps := noteDeps(description)
+	deps.Sessions = fakeSessions{}
 	return deps
 }
 
@@ -70,10 +79,14 @@ func TestALongDescriptionShowsOneLineWithAMoreToggle(t *testing.T) {
 // reload shows it whole, and another task's description is still one line.
 func TestTheOpenDescriptionIsRememberedPerTask(t *testing.T) {
 	long := strings.Repeat("Line of the description that the person wrote.\n", 12)
-	deps := boardDeps()
+	deps := noteDeps(long)
 	deps.Tasks = fakeTickets{[]*domain.Ticket{
 		{ID: "t-feed", ProjectID: "p1", Title: "Add SSE feed", Description: long, Status: domain.TicketStatusInProgress},
 		{ID: "t-other", ProjectID: "p1", Title: "Other", Description: long, Status: domain.TicketStatusInProgress},
+	}}
+	deps.Sessions = fakeSessions{[]*domain.Session{
+		{ID: "s1", ProjectID: "p1", TicketID: "t-feed", Status: domain.SessionIdle, UpdatedAt: time.Now()},
+		{ID: "s2", ProjectID: "p1", TicketID: "t-other", Status: domain.SessionIdle, UpdatedAt: time.Now()},
 	}}
 	url, _ := stripServer(t, deps)
 	ctx, errs := browser(t)
@@ -97,6 +110,32 @@ func TestTheOpenDescriptionIsRememberedPerTask(t *testing.T) {
 	}
 	if word != "Less" || other != "More" {
 		t.Errorf("after a reload the toggle reads %q (want Less); another task's reads %q (want More)", word, other)
+	}
+}
+
+// With no session open on the task, its description shows whole (the task
+// overview): the room is for reading it, not for a diff.
+func TestWithNoSessionTheDescriptionShowsWholeInTheBrowser(t *testing.T) {
+	long := strings.Repeat("Line of the description that the person wrote.\n", 12)
+	url, _ := stripServer(t, noSessionDeps(long))
+	ctx, errs := browser(t)
+
+	var lineHeight, height float64
+	var toggleShown bool
+	err := chromedp.Run(ctx,
+		chromedp.EmulateViewport(1280, 800),
+		chromedp.Navigate(url+"/projects/p1/tasks/t-feed"),
+		chromedp.Poll(pageReady+` && !!`+noteText, nil, chromedp.WithPollingTimeout(10*time.Second)),
+		chromedp.Sleep(300*time.Millisecond),
+		chromedp.Evaluate(`parseFloat(getComputedStyle(`+noteText+`).lineHeight)`, &lineHeight),
+		chromedp.Evaluate(noteText+`.getBoundingClientRect().height`, &height),
+		chromedp.Evaluate(`!!`+noteToggle+` && `+noteToggle+`.checkVisibility()`, &toggleShown),
+	)
+	if err != nil {
+		t.Fatalf("%v\nJS errors: %v", err, errs.all())
+	}
+	if height < 10*lineHeight || toggleShown {
+		t.Errorf("no session: the description is %.0fpx high with a %.0fpx line (want it whole), toggle shown %v", height, lineHeight, toggleShown)
 	}
 }
 

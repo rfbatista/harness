@@ -31,8 +31,8 @@ func runningCodeWorld(t *testing.T) *codeWorld {
 	return newCodeWorld(t, withSession(domain.SessionRunning, func(w *codeWorld) string { return w.at.WorkspaceID }))
 }
 
-// Unified | Side by side is a segmented switch; Side by side is remembered
-// across a reload.
+// Unified | Side by side is a segmented switch; side by side is the default
+// (ADR 0037) and the person's choice of Unified is remembered across a reload.
 func TestTheDiffLayoutSwitchIsRememberedInTheBrowser(t *testing.T) {
 	w := runningCodeWorld(t)
 	ctx, errs := browser(t)
@@ -40,18 +40,20 @@ func TestTheDiffLayoutSwitchIsRememberedInTheBrowser(t *testing.T) {
 
 	var labels []string
 	var pressedBefore, pressedAfter string
+	unified := `[...document.querySelectorAll('` + layoutSwitch + ` button')].find(b => b.textContent.trim() === 'Unified')`
 	err := chromedp.Run(ctx,
 		chromedp.EmulateViewport(1440, 900),
 		chromedp.Navigate(codeTabURL(w)),
 		chromedp.Poll(ready, nil, chromedp.WithPollingTimeout(10*time.Second)),
 		chromedp.Evaluate(`[...document.querySelectorAll('`+layoutSwitch+` button')].map(b => b.textContent.trim())`, &labels),
 		chromedp.Evaluate(sideBySide+`.getAttribute('aria-pressed')`, &pressedBefore),
-		chromedp.Evaluate(sideBySide+`.click()`, nil),
 		chromedp.Poll(`document.querySelectorAll('`+codeSection+` .code-lines[data-layout=split] .line > .half').length > 0`, nil, chromedp.WithPollingTimeout(3*time.Second)),
+		chromedp.Evaluate(unified+`.click()`, nil),
+		chromedp.Poll(`document.querySelectorAll('`+codeSection+` .half').length === 0 && document.querySelectorAll('`+codeSection+` .diff-view .code-lines .line').length > 0`, nil, chromedp.WithPollingTimeout(3*time.Second)),
 		chromedp.Navigate(codeTabURL(w)),
 		chromedp.Poll(ready, nil, chromedp.WithPollingTimeout(10*time.Second)),
 		chromedp.Evaluate(sideBySide+`.getAttribute('aria-pressed')`, &pressedAfter),
-		chromedp.Poll(`document.querySelectorAll('`+codeSection+` .code-lines[data-layout=split] .line > .half').length > 0`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Poll(`document.querySelectorAll('`+codeSection+` .diff-view .code-lines .line').length > 0 && document.querySelectorAll('`+codeSection+` .half').length === 0`, nil, chromedp.WithPollingTimeout(5*time.Second)),
 	)
 	if err != nil {
 		t.Fatalf("%v\nJS errors: %v", err, errs.all())
@@ -59,8 +61,8 @@ func TestTheDiffLayoutSwitchIsRememberedInTheBrowser(t *testing.T) {
 	if len(labels) != 2 || labels[0] != "Unified" || labels[1] != "Side by side" {
 		t.Errorf("the switch reads %v, want [Unified Side by side]", labels)
 	}
-	if pressedBefore != "false" || pressedAfter != "true" {
-		t.Errorf("Side by side pressed %q before choosing it, %q after a reload", pressedBefore, pressedAfter)
+	if pressedBefore != "true" || pressedAfter != "false" {
+		t.Errorf("Side by side pressed %q at first, %q after choosing Unified and reloading", pressedBefore, pressedAfter)
 	}
 	if e := errs.all(); len(e) > 0 {
 		t.Errorf("JS errors: %v", e)

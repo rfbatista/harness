@@ -135,7 +135,7 @@ templ liveSourceBar() {
 templ liveFullscreenBar() {
 	<div class="fs-bar" role="toolbar" aria-label="Full screen diff">
 		<span class="title" x-text="title"></span>
-		<span class="pair"><b x-text="fullscreenBranch"></b> <span aria-label="to">→</span> <span x-text="fullscreenBase"></span></span>
+		<span class="pair"><b x-text="branch"></b> <span aria-label="to">→</span> <span x-text="baseRef"></span></span>
 		<template x-if="totals">
 			<span class="sum"><span x-text="totals.files"></span> <span class="added" x-text="totals.added"></span> <span class="deleted" x-text="totals.deleted"></span></span>
 		</template>

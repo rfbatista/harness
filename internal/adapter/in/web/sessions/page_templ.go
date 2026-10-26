@@ -2512,7 +2512,7 @@ func taskBand(v PageView) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 211, "— <span x-text=\"statusReason\"></span></span></template></p></template><template x-if=\"showsDescription\"><div class=\"[ brief ]\" x-bind:data-open=\"descriptionOpenAttr\"><p x-ref=\"description\" x-effect=\"measureDescription()\" x-text=\"description\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 211, "— <span x-text=\"statusReason\"></span></span></template></p></template><template x-if=\"showsDescription\"><div class=\"[ brief ]\" x-bind:data-open=\"descriptionOpenAttr\" x-effect=\"setSessionOpen(showingSession)\"><p x-ref=\"description\" x-effect=\"measureDescription()\" x-text=\"description\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

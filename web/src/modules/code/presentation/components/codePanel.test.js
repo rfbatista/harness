@@ -198,16 +198,15 @@ test("keys: G then F switches view; ] steps through the diff's files; typing in 
   assert.equal(typed.defaultPrevented, false);
 });
 
-test("Unified | Side by side is remembered, and a bad stored value is Unified", async () => {
+test("Unified | Side by side is remembered; side by side is the default, also for a bad stored value (ADR 0037)", async () => {
   const first = await setup();
-  assert.deepEqual([first.panel.unifiedPressed, first.panel.splitPressed], ["true", "false"]);
-  first.panel.setLayout("split");
-  const again = await setup({ prefs: first.prefs });
-  assert.deepEqual([again.panel.unifiedPressed, again.panel.splitPressed], ["false", "true"]);
+  assert.deepEqual([first.panel.unifiedPressed, first.panel.splitPressed], ["false", "true"]);
   first.panel.setLayout("unified");
-  assert.equal(first.prefs.get("code.layout"), null, "Unified is the default and stores nothing");
+  assert.equal(first.prefs.get("code.layout"), "unified");
+  const again = await setup({ prefs: first.prefs });
+  assert.deepEqual([again.panel.unifiedPressed, again.panel.splitPressed], ["true", "false"]);
   const bad = await setup({ prefs: { get: () => "banana", set() {} } });
-  assert.equal(bad.panel.layout, "unified");
+  assert.equal(bad.panel.layout, "split");
 });
 
 test("Side by side is disabled below 44rem, with its reason, and cannot be chosen", async () => {
@@ -215,6 +214,7 @@ test("Side by side is disabled below 44rem, with its reason, and cannot be chose
   assert.deepEqual([panel.canSplit, panel.sideBySideDisabled, panel.sideBySideTitle], [true, null, null]);
   panel.narrow = true;
   assert.deepEqual([panel.canSplit, panel.sideBySideDisabled, panel.sideBySideTitle], [false, "true", "Side by side needs a wider window"]);
+  panel.setLayout("unified");
   panel.setLayout("split");
   assert.equal(panel.layout, "unified");
 });
@@ -318,8 +318,7 @@ test("⇧E in full screen hides the file list, and does not touch the session li
 
 test("the full-screen bar says the session, branch to base, and the summary", async () => {
   const { panel } = await setup();
-  assert.equal(panel.fullscreenBranch, "agent/visualize-code");
-  assert.equal(panel.fullscreenBase, "main");
+  assert.deepEqual([panel.branch, panel.baseRef, panel.title], ["agent/visualize-code", "main", ""]);
   assert.equal(panel.totals.files, "5 files");
 });
 

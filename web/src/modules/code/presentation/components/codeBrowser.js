@@ -128,7 +128,7 @@ export function codeBrowser({ gateway, highlighter, prefs, history = globalThis.
     loadingDiff: false,
     loadingFile: false,
     loadingMap: false,
-    layout: "unified",
+    layout: "split",
     wrap: false,
     narrow: false,
     /** The layout's width in px and the root font size, as last measured. */
@@ -429,12 +429,6 @@ export function codeBrowser({ gateway, highlighter, prefs, history = globalThis.
     get listToggleLabel() {
       return this.listHidden ? "Show file list" : "Hide file list";
     },
-    get fullscreenBranch() {
-      return this.branch;
-    },
-    get fullscreenBase() {
-      return this.baseRef;
-    },
     /**
      * ⇧F and the Full screen / Exit buttons: the page hides everything but a
      * thin bar (it listens to code-fullscreen); the diff takes the focus, and
@@ -540,7 +534,7 @@ export function codeBrowser({ gateway, highlighter, prefs, history = globalThis.
       this.baseRef = seed.baseRef;
       this.refs = seed.refs;
       this.historyHref = seed.historyHref;
-      this.layout = prefs.get("code.layout") === "split" ? "split" : "unified";
+      this.layout = prefs.get("code.layout") === "unified" ? "unified" : "split";
       this.wrap = prefs.get("code.wrap") === "1";
       this.splitPercent = parseSplit(prefs.get("code.split"));
       if (seed.gone) this.markGone();
@@ -928,7 +922,7 @@ export function codeBrowser({ gateway, highlighter, prefs, history = globalThis.
     setLayout(layout) {
       if (this.narrow && layout === "split") return;
       this.layout = layout;
-      prefs.set("code.layout", layout === "split" ? "split" : null);
+      prefs.set("code.layout", layout === "split" ? "split" : "unified");
     },
     toggleWrap() {
       if (!this.canWrap) return;
