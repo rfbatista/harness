@@ -3,12 +3,15 @@ package web
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/chromedp/cdproto/emulation"
 	"github.com/chromedp/chromedp"
+	"github.com/chromedp/chromedp/kb"
 
 	"operators-mcp/internal/domain"
 )
@@ -170,5 +173,46 @@ func TestMergeTabNamesTheConflictingFiles(t *testing.T) {
 	}
 	if role != "alert" {
 		t.Errorf("a refusal is an alert, got role %q", role)
+	}
+}
+
+// The method cards work from the keyboard (arrows move the radio), the chosen
+// card is drawn thicker in forced colors, and the result banner does not
+// animate under reduced motion.
+func TestMergeTabKeyboardForcedColorsAndReducedMotion(t *testing.T) {
+	api := &fakeMergeAPI{}
+	url := mergeTabServer(t, api)
+	ctx, errs := browser(t)
+
+	var checked, border, animation string
+	err := chromedp.Run(ctx,
+		chromedp.EmulateViewport(1280, 900),
+		emulation.SetEmulatedMedia().WithFeatures([]*emulation.MediaFeature{
+			{Name: "forced-colors", Value: "active"},
+			{Name: "prefers-reduced-motion", Value: "reduce"},
+		}),
+		chromedp.Navigate(url+"/projects/p1/tasks/t1"),
+		clickButton(`.pane-tabs`, "Merge"),
+		chromedp.Poll(`!!document.querySelector('[data-merge]')`, nil, chromedp.WithPollingTimeout(10*time.Second)),
+		chromedp.Focus(`input[name=merge-method][value=merge]`, chromedp.ByQuery),
+		chromedp.KeyEvent(kb.ArrowDown),
+		chromedp.Poll(`document.querySelector('input[name=merge-method]:checked')?.value === 'squash'`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Evaluate(`document.querySelector('input[name=merge-method]:checked').value`, &checked),
+		chromedp.Evaluate(`getComputedStyle(document.querySelector('.merge-method:has(:checked)')).outlineWidth`, &border),
+		chromedp.Click(`[data-merge]`, chromedp.ByQuery),
+		chromedp.Poll(`!!document.querySelector('[data-merge-result]')`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Evaluate(`getComputedStyle(document.querySelector('[data-merge-result]')).animationName`, &animation),
+	)
+	if err != nil {
+		t.Fatalf("%v\nJS errors: %v", err, errs.all())
+	}
+	if checked != "squash" {
+		t.Errorf("ArrowDown on the method radios chose %q, want squash", checked)
+	}
+	if w, _ := strconv.ParseFloat(strings.TrimSuffix(border, "px"), 64); w < 2 {
+		t.Errorf("the chosen card's outline in forced colors = %q, want at least 2px", border)
+	}
+	if animation != "none" {
+		t.Errorf("the result banner animates under reduced motion: %q", animation)
 	}
 }
