@@ -16,9 +16,11 @@ import { MCP_FILTERS, mcpDetail, mcpFooter, mcpRows } from "../../domain/mcp.js"
 import { SKILL_FILTERS, SKILL_PAGE, skillFiles, skillReach, skillRows, skillSummary, skillsFooter } from "../../domain/skills.js";
 import { TABS, routeOf, tabAfterKey } from "../../domain/tabs.js";
 import { TOOL_FILTERS, toolDetail, toolRows, toolsFooter } from "../../domain/tools.js";
+import { agentEditor } from "./agentEditor.js";
 import { bundleEditor } from "./bundleEditor.js";
 import { bundlesTab } from "./bundlesTab.js";
 import { compose } from "./compose.js";
+import { editors } from "./editors.js";
 import { saveUi } from "./saveUi.js";
 
 const DEFAULT_ROOT = "<data dir>/agents/";
@@ -34,9 +36,9 @@ const COUNTS = {
 
 /**
  * @param {{
- *   gateway: Pick<import("../../domain/ports.js").CatalogGateway, "decodeCatalog" | "getCatalog" | "getSkill" | "checkEnvVars" | "saveBundle" | "undoChange">,
- *   history: Pick<History, "pushState">,
- *   location: Pick<Location, "pathname" | "search">,
+ *   gateway: Pick<import("../../domain/ports.js").CatalogGateway, "decodeCatalog" | "getCatalog" | "getSkill" | "checkEnvVars" | "saveAgent" | "saveBundle" | "undoChange">,
+ *   history: Pick<History, "pushState"> & Partial<Pick<History, "replaceState">>,
+ *   location: Pick<Location, "pathname" | "search"> & Partial<Pick<Location, "hash" | "assign">>,
  *   clipboard?: Pick<Clipboard, "writeText">,
  *   timers?: { setTimeout: (fn: () => void, ms: number) => any, clearTimeout: (id: any) => void },
  * }} deps
@@ -46,6 +48,8 @@ export const agentsPage = ({ gateway, history, location, clipboard, timers = glo
   tab: "agents",
   item: "",
   mode: "",
+  /** The path the page shows now: a move within one page (a #fragment) is not a navigation. */
+  shown: "",
   /** @type {import("../../domain/ports.js").Catalog | null} */
   catalog: null,
   error: null,
@@ -108,15 +112,23 @@ export const agentsPage = ({ gateway, history, location, clipboard, timers = glo
     this.tab = r?.tab ?? fallback.tab ?? "agents";
     this.item = r?.item ?? fallback.item ?? "";
     this.mode = r?.mode ?? fallback.mode ?? "";
+    this.shown = pathname;
     this.opened = {};
     this.skillData = null;
     this.skillError = null;
     this.syncEditor();
   },
 
+  /** Moves the address to a page of this page without a reload. */
+  push(href) {
+    history.pushState({}, "", href);
+    this.shown = href.split(/[?#]/)[0];
+  },
+
   /** The browser's back and forward. A dirty editor puts the address back and asks first. */
   popped() {
     const target = location.pathname;
+    if (target === this.shown) return;
     if (this.leaveGuarded) {
       history.pushState({}, "", this.editorHref);
       this.leaving = { go: () => this.landOn(target) };
@@ -146,7 +158,7 @@ export const agentsPage = ({ gateway, history, location, clipboard, timers = glo
       this.opened = {};
       this.toolItem = "";
       this.skillData = null;
-      history.pushState({}, "", tab.href);
+      this.push(tab.href);
       this.syncEditor();
     });
   },
@@ -247,7 +259,7 @@ export const agentsPage = ({ gateway, history, location, clipboard, timers = glo
   },
   /** An item the catalog does not have. */
   get unknownAgent() {
-    return this.catalog !== null && this.tab === "agents" && this.item !== "" && this.mode === "" && this.detail === null;
+    return this.catalog !== null && this.tab === "agents" && this.item !== "" && (this.mode === "" || this.mode === "edit") && this.detail === null && this.agentDraft === null;
   },
   get detailProblems() {
     return (this.detail?.problems ?? []).filter((p) => p.code !== "NO_DESCRIPTION");
@@ -289,7 +301,7 @@ export const agentsPage = ({ gateway, history, location, clipboard, timers = glo
       this.opened = {};
       this.skillData = null;
       this.skillError = null;
-      history.pushState({}, "", href);
+      this.push(href);
       this.syncEditor();
       this.loadSkill();
     });
@@ -528,7 +540,7 @@ export const agentsPage = ({ gateway, history, location, clipboard, timers = glo
     const href = event.currentTarget.getAttribute("href");
     this.guarded(() => {
       this.toolItem = key;
-      history.pushState({}, "", href);
+      this.push(href);
     });
   },
 
@@ -543,4 +555,4 @@ export const agentsPage = ({ gateway, history, location, clipboard, timers = glo
       this.notice = "Could not copy the path";
     }
   },
-}, bundlesTab({ history }), bundleEditor({ gateway, location, timers }), saveUi({ gateway }));
+}, bundlesTab({ history }), editors((p) => p.agentDraft !== null, bundleEditor({ gateway, location, timers }), agentEditor({ gateway, location, history, timers })), saveUi({ gateway }));

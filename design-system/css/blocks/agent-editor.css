@@ -1,0 +1,136 @@
+/*
+ * Agent editor — the full page at /agents/new and /agents/<key>/edit: a sticky
+ * contents list beside the form's sections, and the save pipeline's footer
+ * (save-pipeline.css) at the bottom.
+ * <div class="agent-editor"><div class="agent-editor-body">
+ *   <div class="agent-editor-head"/><nav class="agent-toc"><a aria-current="true"/></nav>
+ *   <form class="agent-form"><section><h2/>…</section></form></div>
+ *   <div class="save-footer"/></div>
+ * Parts: .agent-row (two fields side by side), .chip-box (chips and the input
+ * that adds one), .pick-list of .pick-row (a checkbox row), .summary-line.
+ * Exceptions: .agent-toc a[aria-current="true"] (the section in view).
+ */
+
+@layer blocks {
+  .agent-editor {
+    display: grid;
+    grid-template-rows: 1fr auto;
+    gap: var(--space-xl);
+    min-block-size: 100%;
+    padding: var(--space-xl);
+
+    /* The footer pins to the bottom edge of the scroll region, and rests over the padding at the end. */
+    & .save-footer { inset-block-end: 0; }
+    & .save-footer-in { max-inline-size: 70rem; margin-inline: auto; inline-size: 100%; }
+  }
+
+  .agent-editor-body {
+    display: grid;
+    grid-template-columns: 11rem minmax(0, 1fr);
+    grid-template-areas: "head head" "toc form";
+    align-content: start;
+    gap: var(--space-xl) var(--space-2xl);
+    inline-size: 100%;
+    max-inline-size: 70rem;
+    margin-inline: auto;
+
+    @media (max-width: 52rem) {
+      grid-template-columns: minmax(0, 1fr);
+      grid-template-areas: "head" "toc" "form";
+    }
+  }
+
+  .agent-editor-head { grid-area: head; display: grid; gap: var(--space-s); }
+
+  .agent-toc {
+    grid-area: toc;
+    position: sticky;
+    inset-block-start: 0;
+    align-self: start;
+    display: grid;
+    gap: 2px;
+    font-size: var(--text-sm);
+
+    & > a {
+      display: flex;
+      justify-content: space-between;
+      gap: var(--space-s);
+      padding: var(--space-2xs) var(--space-s);
+      border-inline-start: 2px solid transparent;
+      border-radius: var(--radius-xs);
+      color: var(--color-ink-muted);
+      text-decoration: none;
+
+      &:hover { background: var(--color-hover); color: var(--color-ink); }
+      &[aria-current="true"] { border-color: var(--color-signal); background: var(--color-hover); color: var(--color-ink); }
+      & > .count { color: var(--color-ink-faint); font-size: var(--text-xs); }
+    }
+
+    @media (max-width: 52rem) { position: static; grid-auto-flow: column; justify-content: start; }
+  }
+
+  .agent-form {
+    grid-area: form;
+    display: grid;
+    gap: var(--space-xl);
+    min-inline-size: 0;
+
+    & > section { display: grid; gap: var(--space-s); align-content: start; scroll-margin-block-start: var(--space-xl); }
+    & > section > h2 { font-size: var(--text-md); }
+    & .field > input, & .field > textarea { inline-size: 100%; }
+  }
+
+  .agent-row {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-l);
+
+    @media (max-width: 52rem) { grid-template-columns: minmax(0, 1fr); }
+  }
+
+  .chip-box {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-xs);
+    min-block-size: 2rem;
+    padding: 3px var(--space-xs);
+    border: var(--border-width) solid var(--color-line-control);
+    border-radius: var(--radius-sm);
+    background: var(--color-raised);
+
+    &:focus-within { outline: var(--border-focus-width) solid var(--color-focus); outline-offset: -1px; border-color: var(--color-focus); }
+    & > input { flex: 1 1 6rem; min-inline-size: 6rem; block-size: 1.5rem; padding: 0; border: 0; outline: none; background: transparent; }
+    &:has([aria-invalid="true"]) { border-color: var(--color-danger); }
+  }
+
+  .pick-list {
+    display: grid;
+    gap: var(--space-xs);
+  }
+
+  .pick-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-s);
+    padding: var(--space-s) var(--space-m);
+    border: var(--border-width) solid var(--color-line);
+    border-radius: var(--radius-sm);
+    background: var(--color-raised);
+    cursor: pointer;
+
+    &:has(input:checked) { border-color: var(--color-line-strong); background: var(--color-selected); }
+    & > input { accent-color: var(--color-signal); }
+    & > .desc { flex: 1 1 14rem; font-size: var(--text-xs); color: var(--color-ink-muted); }
+  }
+
+  .summary-line {
+    margin: 0;
+    padding: var(--space-s) var(--space-m);
+    border-radius: var(--radius-sm);
+    background: var(--color-sunken);
+    color: var(--color-ink-muted);
+    font-size: var(--text-xs);
+  }
+}

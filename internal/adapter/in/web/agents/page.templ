@@ -12,7 +12,13 @@ templ Page(frame shell.Frame, v View) {
 			@templ.JSONScript("agent-catalog-seed", v.Seed)
 		}
 		<main id="main" class="[ frame ]" x-data="agentsPage" data-seed="agent-catalog-seed" data-tab={ v.Route.Tab } data-item={ v.Route.Item } data-mode={ v.Route.Mode } x-on:beforeunload.window="beforeUnload">
-			<header class="[ toolbar ]">
+			<header
+				class="[ toolbar ]"
+				x-bind:hidden="agentEditing"
+				if v.Editing() {
+					hidden
+				}
+			>
 				<div class="[ flow ] [ flow-space-3xs grow ]" style="min-inline-size: 0">
 					<h1>Agents</h1>
 					<p class="[ text-sm color-ink-muted ]">
@@ -43,16 +49,32 @@ templ Page(frame shell.Frame, v View) {
 					<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-bind:disabled="loading" x-on:click="load">Check again</button>
 				</div>
 			</template>
-			<div class="[ tabs ]" role="tablist" aria-label="Library sections" x-on:popstate.window="popped">
+			<div
+				class="[ tabs ]"
+				role="tablist"
+				aria-label="Library sections"
+				x-on:popstate.window="popped"
+				x-bind:hidden="agentEditing"
+				if v.Editing() {
+					hidden
+				}
+			>
 				for _, t := range Tabs {
 					@tab(t, v)
 				}
 			</div>
-			<div data-scroll>
+			<div
+				data-scroll
+				x-bind:hidden="agentEditing"
+				if v.Editing() {
+					hidden
+				}
+			>
 				for _, t := range Tabs {
 					@panel(t, v)
 				}
 			</div>
+			@agentEditorPage(v)
 			@saveToast()
 		</main>
 	}

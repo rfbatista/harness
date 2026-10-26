@@ -16,10 +16,12 @@ export function saveUi({ gateway }) {
     /** Where the person was going when the warning stopped them: { go }. */
     leaving: null,
     reviewOpen: false,
+    /** The page is going to another form with the edit kept: the browser's prompt would be wrong. */
+    departing: false,
 
     /** Whether leaving would lose unsaved changes. */
     get leaveGuarded() {
-      return this.sv.dirty;
+      return this.sv.dirty && !this.departing;
     },
     get notLeaving() {
       return this.leaving === null;
@@ -59,6 +61,7 @@ export function saveUi({ gateway }) {
 
     toggleReview() {
       this.reviewOpen = !this.reviewOpen;
+      if (this.reviewOpen) this.$nextTick?.(() => document.getElementById("review-panel")?.scrollIntoView?.({ block: "nearest" }));
     },
 
     /** Runs `go` now, or after the person confirms when it would lose unsaved changes. */

@@ -1,0 +1,161 @@
+package agents
+
+// agentEditorPage is /agents/new and /agents/<key>/edit: a full page that takes
+// the place of the tabs while an agent editor is open (agentEditor.js). The
+// contents list is sticky, each section answers to a Change link of the agent's
+// detail, and the footer is the save pipeline's (save.templ).
+templ agentEditorPage(v View) {
+	<div
+		data-scroll
+		data-agent-editor-page
+		x-bind:hidden="!agentEditing"
+		if !v.Editing() {
+			hidden
+		}
+	>
+		<template x-if="agentEditing">
+			<div class="[ agent-editor ]" data-agent-editor x-init="watchSections($el)">
+				<div class="[ agent-editor-body ]">
+					<div class="[ agent-editor-head ]">
+						<a href="/agents" class="[ text-sm color-ink-muted ]" data-back x-on:click="cancelEditor">{ "← Agents" }</a>
+						<div class="[ cluster ]">
+							<h1 x-text="agentTitle"></h1>
+							<code class="[ library-path ]" data-path x-text="agentPath"></code>
+						</div>
+						@saveAlerts()
+						<div class="[ banner ]" data-tone="attention" data-description-banner x-bind:hidden="!noDescription" hidden>
+							<div class="[ grow ]">
+								<strong>No description yet.</strong>
+								The agent picker shows it, so add one before saving:
+								<a href="#agent-desc" x-on:click="focusDescription">Description</a>.
+							</div>
+						</div>
+					</div>
+					<nav class="[ agent-toc ]" aria-label="Sections">
+						<template x-for="s in toc" x-bind:key="s.id">
+							<a x-bind:href="s.href" x-bind:data-section="s.id" x-bind:aria-current="s.current" x-on:click="gotoSection">
+								<span x-text="s.label"></span>
+								<span class="[ count ]" x-bind:hidden="!s.hasCount" x-text="s.count"></span>
+							</a>
+						</template>
+					</nav>
+					<form class="[ agent-form ]" x-on:submit.prevent="saveEditor" novalidate>
+						<section id="identity" aria-labelledby="agent-identity-h">
+							<h2 id="agent-identity-h">Identity</h2>
+							<div class="[ flow ]">
+								<div class="[ agent-row ]">
+									<div class="[ field ]">
+										<label for="agent-name">Name</label>
+										<input
+											type="text"
+											id="agent-name"
+											class="[ font-mono ]"
+											placeholder="e.g. ios-designer"
+											spellcheck="false"
+											autocomplete="off"
+											aria-describedby="agent-name-hint"
+											x-model="agentDraft.name"
+											x-on:input="agentChanged"
+											x-bind:aria-describedby="agentNameDescribedBy"
+											x-bind:aria-invalid="agentNameInvalid"
+										/>
+										<span class="[ hint ]" id="agent-name-hint">The key in agents.json. Lowercase letters, digits and dashes. Renaming keeps what refers to it.</span>
+										<span class="[ error ]" id="agent-name-error" x-bind:hidden="!agentNameInvalid" x-text="fieldErrors.name" hidden></span>
+									</div>
+									<div class="[ field ]">
+										<label for="agent-aliases">Aliases <span class="[ color-ink-faint ]">(optional)</span></label>
+										<div class="[ chip-box ]" data-aliases>
+											<template x-for="a in aliasChips" x-bind:key="a.key">
+												<span class="[ chip font-mono ]" data-alias-chip x-bind:data-alias="a.key">
+													<span x-text="a.label"></span>
+													<button type="button" x-bind:aria-label="a.removeLabel" x-bind:data-alias="a.key" x-on:click="removeAlias">×</button>
+												</span>
+											</template>
+											<input
+												type="text"
+												id="agent-aliases"
+												class="[ font-mono ]"
+												placeholder="Add alias, press Enter"
+												spellcheck="false"
+												autocomplete="off"
+												aria-describedby="agent-aliases-hint"
+												x-model="aliasQuery"
+												x-on:keydown="aliasKey"
+												x-on:input="aliasInput"
+												x-on:blur="addAlias"
+												x-bind:aria-describedby="agentAliasesDescribedBy"
+												x-bind:aria-invalid="agentAliasesInvalid"
+											/>
+										</div>
+										<span class="[ hint ]" id="agent-aliases-hint">Shorter names the launcher accepts, like <code>ux</code>.</span>
+										<span class="[ error ]" id="agent-aliases-error" x-bind:hidden="!agentAliasesInvalid" x-text="fieldErrors.aliases" hidden></span>
+									</div>
+								</div>
+								<div class="[ field ]">
+									<label for="agent-desc">Description <span class="[ color-ink-faint ]">(required)</span></label>
+									<textarea
+										id="agent-desc"
+										rows="2"
+										placeholder="What is this agent for?"
+										aria-describedby="agent-desc-hint"
+										x-model="agentDraft.description"
+										x-on:input="agentChanged"
+										x-bind:aria-describedby="agentDescDescribedBy"
+										x-bind:aria-invalid="agentDescInvalid"
+									></textarea>
+									<span class="[ hint ]" id="agent-desc-hint">Required. Shown in the agent picker when a person or an architect chooses who runs a task. Say what it is for.</span>
+									<span class="[ error ]" id="agent-desc-error" x-bind:hidden="!agentDescInvalid" x-text="fieldErrors.description" hidden></span>
+								</div>
+							</div>
+						</section>
+						<section id="skills" aria-labelledby="agent-skills-h">
+							<h2 id="agent-skills-h">Skills</h2>
+							<p class="[ text-sm color-ink-muted ]">Pick skills one by one, or a <span class="[ chip ]" data-kind="bundle">{ "@bundle" }</span> to get a whole group that stays in step when the bundle changes.</p>
+							@entryPicker("skillPicker", "Add a skill or a bundle", "Search skills and bundles…", "agent-entries-hint", "agent-entries-error", "entriesDescribedBy", "entriesInvalid", "fieldErrors.entries")
+							<p class="[ summary-line ]" data-skills-summary role="status" x-text="skillsSummaryText"></p>
+						</section>
+						<section id="mcp" aria-labelledby="agent-mcp-h">
+							<h2 id="agent-mcp-h">MCP servers</h2>
+							<p class="[ text-sm color-ink-muted ]">Pick from the catalog's servers. Each is defined once, so a change to a server reaches every agent and project that has it.</p>
+							<div class="[ pick-list ]" role="group" aria-label="MCP servers" x-bind:aria-describedby="agentMcpDescribedBy" x-bind:aria-invalid="agentMcpInvalid" data-mcp-list>
+								<template x-for="r in mcpRowsChoice" x-bind:key="r.name">
+									<label class="[ pick-row ]" data-mcp-row x-bind:data-name="r.name">
+										<input type="checkbox" x-bind:checked="r.checked" x-bind:data-name="r.name" x-on:change="toggleServer"/>
+										<span class="[ font-mono text-sm ]" x-text="r.name"></span>
+										<span class="[ badge ]" x-bind:hidden="!r.hasTransport" x-text="r.transport"></span>
+										<span class="[ badge ]" data-tone="danger" x-bind:hidden="!r.notInCatalog">not in the catalog</span>
+										<template x-for="ref in r.refs" x-bind:key="ref.label">
+											<span class="[ badge ]" x-bind:data-tone="ref.tone"><code x-text="ref.label"></code> <span x-text="ref.state"></span></span>
+										</template>
+									</label>
+								</template>
+							</div>
+							<span class="[ hint ]" id="agent-mcp-hint">A session as this agent gets these servers plus the ones its project adds. None selected means no servers from the agent.</span>
+							<span class="[ error ]" id="agent-mcp-error" x-bind:hidden="!agentMcpInvalid" x-text="fieldErrors.mcp" hidden></span>
+							<div class="[ cluster ]">
+								<a class="[ button ]" data-new-mcp x-bind:href="newMcpHref" x-on:click="stashDraft">New MCP server…</a>
+								<span class="[ hint ]" data-mcp-summary x-text="mcpSummary"></span>
+							</div>
+						</section>
+						<section id="tools" aria-labelledby="agent-tools-h">
+							<h2 id="agent-tools-h">Allowed tools</h2>
+							<p class="[ text-sm color-ink-muted ]">Claude Code's built-in tools this agent may use. Tick none to get Claude's default tools.</p>
+							<div class="[ pick-list ]" role="group" aria-label="Allowed tools" data-tool-list>
+								<template x-for="t in toolRowsChoice" x-bind:key="t.name">
+									<label class="[ pick-row ]" data-tool-row x-bind:data-name="t.name">
+										<input type="checkbox" x-bind:checked="t.checked" x-bind:data-name="t.name" x-on:change="toggleTool"/>
+										<span class="[ font-mono text-sm ]" x-text="t.name"></span>
+										<span class="[ desc ]" x-text="t.description"></span>
+									</label>
+								</template>
+							</div>
+							<p class="[ summary-line ]" data-tools-summary x-text="toolsSummary"></p>
+						</section>
+						@reviewPanel()
+					</form>
+				</div>
+				@saveFooter()
+			</div>
+		</template>
+	</div>
+}

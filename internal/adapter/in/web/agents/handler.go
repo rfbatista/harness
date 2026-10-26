@@ -112,6 +112,10 @@ func (v View) Count(tab string) string {
 	return strconv.Itoa(n)
 }
 
+// Editing is whether the route is an agent editor, a full page that takes the
+// place of the tabs.
+func (v View) Editing() bool { return v.Route.Tab == TabAgents && v.Route.Mode != "" }
+
 // Selected is whether tab is the one the route names.
 func (v View) Selected(tab string) bool { return v.Route.Tab == tab }
 

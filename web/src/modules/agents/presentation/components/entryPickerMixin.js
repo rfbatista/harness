@@ -39,12 +39,12 @@ export function entryPickerMixin(ns, source) {
       const query = this[q];
       const found = source.options(this, query);
       const at = found.options.length ? Math.min(this[active], found.options.length - 1) : 0;
-      const chips = source.chips(this).map((c) => ({ ...c, mono: c.kind === "skill", removeLabel: `Remove ${c.label}` }));
+      const chips = source.chips(this).map((c) => ({ removeLabel: `Remove ${c.label}`, ...c, mono: c.kind === "skill" }));
       return {
         listId: `${ns}-list`,
         expanded: this[open],
         activeId: this[open] && found.options.length ? optionId(at) : null,
-        options: found.options.map((o, i) => ({ ...o, id: optionId(i), active: this[open] && i === at, mark: o.chosen ? "✓" : "" })),
+        options: found.options.map((o, i) => ({ ...o, id: optionId(i), active: this[open] && i === at, mark: o.chosen ? "✓" : o.kind === "create" ? "+" : "" })),
         hidden: found.hidden,
         hiddenNote: found.hidden ? `${found.hidden} more: keep typing to narrow the list` : "",
         empty: found.empty,
