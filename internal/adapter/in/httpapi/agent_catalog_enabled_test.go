@@ -73,6 +73,13 @@ func TestProjectAgents_EnabledInHoldsAllProjectsAndTheSelectedOnesThatListTheAge
 	f.post("/api/set_project_agents", map[string]any{"project_id": sel, "mode": "selected", "agents": []string{"zeta"}}, 200)
 	f.post("/api/set_project_agents", map[string]any{"project_id": other, "mode": "selected", "agents": []string{}}, 200)
 
+	for _, p := range list(byName(t, f.get("/api/get_agent_catalog", 200)["agents"], "zeta")["enabled_in"]) {
+		m := p.(map[string]any)
+		want := map[string]string{all: "all", sel: "selected"}[m["id"].(string)]
+		if m["mode"] != want || m["name"] == "" {
+			t.Fatalf("enabled_in entry = %v, want mode %s", m, want)
+		}
+	}
 	if got := enabledIn(t, f, "zeta"); len(got) != 2 || !contains2(got, all) || !contains2(got, sel) {
 		t.Fatalf("zeta enabled in %v", got)
 	}

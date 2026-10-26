@@ -269,10 +269,14 @@ func (c *Catalog) ReadCatalog() (*domain.CatalogView, error) {
 
 	projects := c.listProjects()
 	for i := range v.Agents {
-		v.Agents[i].EnabledIn = []domain.CatalogProjectRef{}
+		v.Agents[i].EnabledIn = []domain.CatalogEnabledIn{}
 		for _, p := range projects {
 			if p.AgentEnabled(v.Agents[i].Name) {
-				v.Agents[i].EnabledIn = append(v.Agents[i].EnabledIn, domain.CatalogProjectRef{ID: p.ID, Name: p.Name})
+				mode := domain.AgentsAll
+				if p.EnabledAgentsMode == domain.AgentsSelected {
+					mode = domain.AgentsSelected
+				}
+				v.Agents[i].EnabledIn = append(v.Agents[i].EnabledIn, domain.CatalogEnabledIn{ID: p.ID, Name: p.Name, Mode: mode})
 			}
 		}
 	}

@@ -42,7 +42,7 @@ type CatalogAgent struct {
 	MCPServers        []string `json:"mcp_servers"`
 	AllowedTools      []string `json:"allowed_tools"`
 	// EnabledIn are the projects where the agent is enabled (ADR 0038).
-	EnabledIn []CatalogProjectRef `json:"enabled_in"`
+	EnabledIn []CatalogEnabledIn `json:"enabled_in"`
 	Problems  []CatalogProblem    `json:"problems"`
 }
 
@@ -369,4 +369,12 @@ type SetCatalogProjectAgents struct {
 type CatalogProjectAgents struct {
 	Mode   string   `json:"mode"`
 	Agents []string `json:"agents"`
+}
+
+// CatalogEnabledIn is a project an agent is enabled in, and its mode: an
+// "all" project enables every agent and cannot be changed from the agent.
+type CatalogEnabledIn struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	Mode string `json:"mode"`
 }
