@@ -116,6 +116,13 @@ func (v View) Count(tab string) string {
 // place of the tabs.
 func (v View) Editing() bool { return v.Route.Tab == TabAgents && v.Route.Mode != "" }
 
+// SkillForm is whether the route is the skill form, the other full page.
+func (v View) SkillForm() bool { return v.Route.Tab == TabSkills && v.Route.Mode != "" }
+
+// FullPage is whether a full page, the agent editor or the skill form, takes
+// the place of the header, the tabs and the lists.
+func (v View) FullPage() bool { return v.Editing() || v.SkillForm() }
+
 // Selected is whether tab is the one the route names.
 func (v View) Selected(tab string) bool { return v.Route.Tab == tab }
 

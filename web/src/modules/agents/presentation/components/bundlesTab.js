@@ -56,7 +56,7 @@ export function bundlesTab({ history }) {
     /** Moves to an address of the page without a reload. */
     navigateTo(href) {
       history.pushState({}, "", href);
-      this.route(href.split("?")[0]);
+      this.route(href.split(/[?#]/)[0]);
       this.loadSkill();
     },
 

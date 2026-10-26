@@ -161,3 +161,28 @@ func TestAPathThatIsNoRouteIs404(t *testing.T) {
 		t.Errorf("err = %v, want a *_NOT_FOUND", err)
 	}
 }
+
+// The skill form is a full page, like the agent editor: the server paints the
+// page with the header and the tabs hidden and the form's place held, so there
+// is no flash of the library before the browser takes over.
+func TestTheSkillFormRoutesTakeThePageLikeTheAgentEditor(t *testing.T) {
+	hiddenTag := func(html, marker string) string {
+		return regexp.MustCompile(`<[a-z]+[^>]*` + marker + `[^>]*>`).FindString(html)
+	}
+	for path, form := range map[string]bool{
+		"/agents": false, "/agents/skills": false, "/agents/skills/tdd": false, "/agents/new": false,
+		"/agents/skills/new": true, "/agents/skills/tdd/edit": true, "/agents/ux/edit": false,
+	} {
+		_, html := serve(t, Handler{}, path)
+		if got := !strings.Contains(hiddenTag(html, "data-skill-form-page"), " hidden"); got != form {
+			t.Errorf("%s: the skill form is shown = %v, want %v", path, got, form)
+		}
+		fullPage := form || path == "/agents/new" || path == "/agents/ux/edit"
+		if got := strings.Contains(hiddenTag(html, `role="tablist"`), " hidden"); got != fullPage {
+			t.Errorf("%s: the tabs hidden = %v", path, got)
+		}
+	}
+	if got := hiddenTag(func() string { _, h := serve(t, Handler{}, "/agents/skills/new"); return h }(), "data-agent-editor-page"); !strings.Contains(got, " hidden") {
+		t.Errorf("the agent editor shows on the skill form: %s", got)
+	}
+}

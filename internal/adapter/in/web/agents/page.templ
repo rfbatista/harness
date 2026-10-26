@@ -14,8 +14,8 @@ templ Page(frame shell.Frame, v View) {
 		<main id="main" class="[ frame ]" x-data="agentsPage" data-seed="agent-catalog-seed" data-tab={ v.Route.Tab } data-item={ v.Route.Item } data-mode={ v.Route.Mode } x-on:beforeunload.window="beforeUnload">
 			<header
 				class="[ toolbar ]"
-				x-bind:hidden="agentEditing"
-				if v.Editing() {
+				x-bind:hidden="fullPage"
+				if v.FullPage() {
 					hidden
 				}
 			>
@@ -54,8 +54,8 @@ templ Page(frame shell.Frame, v View) {
 				role="tablist"
 				aria-label="Library sections"
 				x-on:popstate.window="popped"
-				x-bind:hidden="agentEditing"
-				if v.Editing() {
+				x-bind:hidden="fullPage"
+				if v.FullPage() {
 					hidden
 				}
 			>
@@ -65,8 +65,8 @@ templ Page(frame shell.Frame, v View) {
 			</div>
 			<div
 				data-scroll
-				x-bind:hidden="agentEditing"
-				if v.Editing() {
+				x-bind:hidden="fullPage"
+				if v.FullPage() {
 					hidden
 				}
 			>
@@ -75,6 +75,7 @@ templ Page(frame shell.Frame, v View) {
 				}
 			</div>
 			@agentEditorPage(v)
+			@skillFormPage(v)
 			@saveToast()
 		</main>
 	}

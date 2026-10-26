@@ -1,0 +1,203 @@
+/*
+ * Skill form — the full page at /agents/skills/new and /agents/skills/<name>/edit:
+ * the form on the left, What will be written (the server's dry run) on the
+ * right, and the save pipeline's footer (save-pipeline.css) at the bottom.
+ * <div class="skill-form"><div class="skill-form-body"><div class="skill-form-head"/>
+ *   <div class="skill-cols"><form class="skill-fields"><fieldset><legend/>…</fieldset></form>
+ *   <aside class="skill-preview"><div class="preview-file"/></aside></div></div>
+ *   <div class="save-footer"/></div>
+ * Parts: .meter (bar and count), .coach (the three-point list), .md-editor
+ * with .md-bar (Write and Preview), .file-rows of .file-row (extra files).
+ * Exceptions: .coach li[data-state="ok"], .meter [data-over], [data-stale]
+ * (a preview waiting for the next dry run).
+ */
+
+@layer blocks {
+  .skill-form {
+    display: grid;
+    grid-template-rows: 1fr auto;
+    gap: var(--space-xl);
+    min-block-size: 100%;
+    padding: var(--space-xl);
+
+    /* The footer pins to the bottom edge of the scroll region, and rests over the padding at the end. */
+    & .save-footer { inset-block-end: 0; }
+    & .save-footer-in { max-inline-size: 78rem; margin-inline: auto; inline-size: 100%; }
+  }
+
+  .skill-form-body {
+    display: grid;
+    align-content: start;
+    gap: var(--space-xl);
+    inline-size: 100%;
+    max-inline-size: 78rem;
+    margin-inline: auto;
+  }
+
+  .skill-form-head { display: grid; gap: var(--space-s); }
+
+  .skill-cols {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 27rem);
+    gap: var(--space-2xl);
+    align-items: start;
+
+    @media (max-width: 64rem) { grid-template-columns: minmax(0, 1fr); }
+  }
+
+  .skill-fields {
+    display: grid;
+    gap: var(--space-xl);
+    min-inline-size: 0;
+
+    & fieldset { display: grid; gap: var(--space-l); min-inline-size: 0; margin: 0; padding: 0; border: 0; }
+    & fieldset > legend { padding: 0; margin-block-end: var(--space-m); font-size: var(--text-md); font-weight: var(--weight-bold, 700); }
+    & fieldset.field { gap: var(--space-xs); }
+    & fieldset.field > legend { margin-block-end: var(--space-2xs); font-size: var(--text-sm); font-weight: var(--weight-medium); }
+    & .pick-list { max-block-size: 13rem; overflow-y: auto; }
+    & .pick-row { padding: var(--space-xs) var(--space-m); }
+  }
+
+  .skill-preview {
+    position: sticky;
+    inset-block-start: 0;
+    display: grid;
+    gap: var(--space-s);
+    min-inline-size: 0;
+    max-block-size: calc(100vh - 8rem);
+    overflow-y: auto;
+
+    & > .repel > h2 { font-size: var(--text-sm); text-transform: uppercase; letter-spacing: 0.04em; color: var(--color-ink-muted); }
+    & > p { margin: 0; }
+    & [data-stale="true"] { opacity: 0.55; transition: opacity var(--duration-quick) var(--ease-out); }
+
+    @media (max-width: 64rem) { position: static; max-block-size: none; }
+  }
+
+  .preview-file {
+    display: grid;
+    overflow: hidden;
+    border: var(--border-width) solid var(--color-line);
+    border-radius: var(--radius-md);
+    background: var(--color-sunken);
+
+    & .diff { max-block-size: 18rem; border-radius: 0; }
+  }
+
+  .preview-file-head {
+    gap: var(--space-s);
+    padding: var(--space-xs) var(--space-m);
+    border-block-end: var(--border-width) solid var(--color-line);
+    color: var(--color-ink-muted);
+    overflow-wrap: anywhere;
+  }
+
+  .preview-text {
+    max-block-size: 22rem;
+    margin: 0;
+    padding: var(--space-m);
+    overflow: auto;
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    line-height: 1.65;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+
+  .meter {
+    display: flex;
+    align-items: center;
+    gap: var(--space-s);
+    font-size: var(--text-xs);
+    color: var(--color-ink-faint);
+
+    & > .bar {
+      position: relative;
+      flex: 1;
+      block-size: 3px;
+      border-radius: 2px;
+      background: var(--color-line);
+      overflow: hidden;
+
+      & > i { position: absolute; inset: 0 auto 0 0; background: var(--color-signal); border-radius: 2px; }
+    }
+
+    & > [data-meter] { font-variant-numeric: tabular-nums; white-space: nowrap; }
+    & > [data-meter][data-over="true"] { color: var(--color-danger); font-weight: var(--weight-medium); }
+    &:has([data-over="true"]) > .bar > i { background: var(--color-danger); }
+  }
+
+  .coach {
+    display: grid;
+    gap: var(--space-2xs);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    font-size: var(--text-xs);
+
+    & > li { display: flex; gap: var(--space-xs); align-items: center; color: var(--color-ink-faint); }
+    & > li[data-state="ok"] { color: var(--color-success); }
+  }
+
+  .md-editor {
+    overflow: hidden;
+    border: var(--border-width) solid var(--color-line-control);
+    border-radius: var(--radius-sm);
+    background: var(--color-raised);
+
+    &:focus-within { outline: var(--border-focus-width) solid var(--color-focus); outline-offset: -1px; }
+
+    & > textarea {
+      min-block-size: 16rem;
+      max-block-size: 36rem;
+      border: 0;
+      border-radius: 0;
+      font-family: var(--font-mono);
+      font-size: var(--text-xs);
+      line-height: 1.65;
+      box-shadow: none;
+      outline: none;
+    }
+  }
+
+  .md-bar {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2xs);
+    padding: var(--space-2xs) var(--space-xs);
+    border-block-end: var(--border-width) solid var(--color-line);
+    background: var(--color-panel);
+
+    & > button {
+      all: unset;
+      cursor: pointer;
+      padding: 2px var(--space-s);
+      border-radius: var(--radius-xs);
+      font-size: var(--text-xs);
+      color: var(--color-ink-muted);
+
+      &:hover { background: var(--color-hover); }
+      &:focus-visible { outline: var(--border-focus-width) solid var(--color-focus); outline-offset: 1px; }
+      &[aria-pressed="true"] { background: var(--color-raised); color: var(--color-ink); box-shadow: 0 1px 2px oklch(0 0 0 / 0.08); }
+    }
+
+    & > span { margin-inline-start: auto; }
+  }
+
+  .md-preview { min-block-size: 16rem; max-block-size: 36rem; overflow: auto; padding: var(--space-m); }
+
+  .file-rows { display: grid; gap: 2px; }
+
+  .file-row {
+    display: grid;
+    gap: var(--space-xs);
+    padding: var(--space-xs) var(--space-m);
+    border: var(--border-width) solid var(--color-line);
+    border-radius: var(--radius-xs);
+    background: var(--color-raised);
+
+    & > .repel { gap: var(--space-s); }
+  }
+
+  .file-text { font-family: var(--font-mono); font-size: var(--text-xs); min-block-size: 8rem; max-block-size: 22rem; }
+}

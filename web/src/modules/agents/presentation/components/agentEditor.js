@@ -126,10 +126,14 @@ export function agentEditor({ gateway, location, history, storage = globalThis.s
     },
 
     closeEditor() {
-      try {
-        storage?.removeItem(STASH);
-      } catch {
-        // Nothing kept, nothing to drop.
+      // The stash is this editor's own half-done form. Another form closing (the skill form, which every
+      // editor shares closeEditor with) must leave it for the editor the person is going back to.
+      if (this.agentDraft !== null) {
+        try {
+          storage?.removeItem(STASH);
+        } catch {
+          // Nothing kept, nothing to drop.
+        }
       }
       saver.open({});
       this.agentDraft = null;

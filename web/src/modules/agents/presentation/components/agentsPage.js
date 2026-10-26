@@ -22,6 +22,7 @@ import { bundlesTab } from "./bundlesTab.js";
 import { compose } from "./compose.js";
 import { editors } from "./editors.js";
 import { saveUi } from "./saveUi.js";
+import { skillEditor } from "./skillEditor.js";
 
 const DEFAULT_ROOT = "<data dir>/agents/";
 
@@ -36,7 +37,7 @@ const COUNTS = {
 
 /**
  * @param {{
- *   gateway: Pick<import("../../domain/ports.js").CatalogGateway, "decodeCatalog" | "getCatalog" | "getSkill" | "checkEnvVars" | "saveAgent" | "saveBundle" | "undoChange">,
+ *   gateway: Pick<import("../../domain/ports.js").CatalogGateway, "decodeCatalog" | "getCatalog" | "getSkill" | "checkEnvVars" | "saveAgent" | "saveBundle" | "saveSkill" | "undoChange">,
  *   history: Pick<History, "pushState"> & Partial<Pick<History, "replaceState">>,
  *   location: Pick<Location, "pathname" | "search"> & Partial<Pick<Location, "hash" | "assign">>,
  *   clipboard?: Pick<Clipboard, "writeText">,
@@ -203,6 +204,11 @@ export const agentsPage = ({ gateway, history, location, clipboard, timers = glo
       };
     }
     return out;
+  },
+
+  /** A full-page editor or form is open: it takes the place of the header, the tabs and the lists. */
+  get fullPage() {
+    return this.agentEditing || this.skillEditing;
   },
 
   get noItem() {
@@ -555,4 +561,8 @@ export const agentsPage = ({ gateway, history, location, clipboard, timers = glo
       this.notice = "Could not copy the path";
     }
   },
-}, bundlesTab({ history }), editors((p) => p.agentDraft !== null, bundleEditor({ gateway, location, timers }), agentEditor({ gateway, location, history, timers })), saveUi({ gateway }));
+}, bundlesTab({ history }), editors(
+  { part: bundleEditor({ gateway, location, timers }) },
+  { part: agentEditor({ gateway, location, history, timers }), isOpen: (p) => p.agentDraft !== null },
+  { part: skillEditor({ gateway, location, timers }), isOpen: (p) => p.sfOpen },
+), saveUi({ gateway }));

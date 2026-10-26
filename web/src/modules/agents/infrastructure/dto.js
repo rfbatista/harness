@@ -155,7 +155,8 @@ export function skillBody(input) {
       name: s.name,
       description: s.description,
       body: s.body ?? "",
-      files: (s.files ?? []).map((f) => ({ path: f.path, content: f.content, encoding: f.encoding ?? "utf8" })),
+      // The server names text "utf-8"; the page says "utf8" and "base64".
+      files: (s.files ?? []).map((f) => ({ path: f.path, content: f.content, encoding: f.encoding === "base64" ? "base64" : "utf-8" })),
       deleted_files: s.deletedFiles ?? [],
     },
     add_to: { agents: input.addTo?.agents ?? [], bundles: input.addTo?.bundles ?? [] },
