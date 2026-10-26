@@ -44,16 +44,16 @@ type Deps struct {
 	// ArchGit reads checkouts for previews and discovery; nil disables them.
 	ArchGit ports.ArchitectureGit
 	// ArchEvents keeps the architecture rule events the API lists.
-	ArchEvents ports.ArchitectureRuleEventStore
-	Agents          ports.AgentRepository
-	Prompts         ports.PromptRepository
-	Skills          ports.SkillRepository
-	MCPServers      ports.MCPServerRepository
-	Tools           ports.ToolRepository
-	Settings        ports.SettingsRepository
-	Publisher       ports.SkillPublisher
-	PathMatcher     ports.PathMatcher
-	TreeLister      ports.TreeLister
+	ArchEvents  ports.ArchitectureRuleEventStore
+	Agents      ports.AgentRepository
+	Prompts     ports.PromptRepository
+	Skills      ports.SkillRepository
+	MCPServers  ports.MCPServerRepository
+	Tools       ports.ToolRepository
+	Settings    ports.SettingsRepository
+	Publisher   ports.SkillPublisher
+	PathMatcher ports.PathMatcher
+	TreeLister  ports.TreeLister
 	// RepositoryFinder lets projects discover git checkouts; nil disables it.
 	RepositoryFinder ports.RepositoryFinder
 	// EnvFiles and EnvFileIO keep repositories' env files; nil disables them.
@@ -75,9 +75,9 @@ type Catalog struct {
 	Architecture *architecture.Service
 	// RepositoryArchitectures is nil without Deps.ArchRecords.
 	RepositoryArchitectures *repoarch.Service
-	Agents       *agents.Service
-	Capabilities *capabilities.Service
-	Settings     *settings.Service
+	Agents                  *agents.Service
+	Capabilities            *capabilities.Service
+	Settings                *settings.Service
 }
 
 // New builds the contexts, subscribes each to the events it reacts to, and
