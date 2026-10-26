@@ -40,7 +40,7 @@ func newArchRig(t *testing.T) *archRig {
 		Sessions: fakeSessions{},
 		Agents:   fakeAgents{},
 		Repositories: fakeRepos{[]*domain.Repository{
-			{ID: "r1", ProjectID: "p1", Name: "harness", RootDir: "/src/harness"},
+			{ID: "r1", ProjectID: "p1", Name: "harness", RootDir: "/src/harness", IgnoredPaths: []string{"node_modules"}},
 			{ID: "r2", ProjectID: "p2", Name: "elsewhere", RootDir: "/src/elsewhere"},
 		}},
 		EnvFiles: fakeEnv{},

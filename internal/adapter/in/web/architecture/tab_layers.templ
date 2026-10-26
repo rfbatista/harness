@@ -97,7 +97,12 @@ templ tabLayers() {
 							</div>
 							<div class="[ field ] [ layer-pattern ]">
 								<label x-bind:for="current.ids.pattern" x-text="current.patternLabel"></label>
-								<input x-bind:id="current.ids.pattern" data-field="pattern" class="[ text-sm font-mono ]" autocomplete="off" spellcheck="false" x-bind:placeholder="current.placeholder" x-model="current.pattern" x-bind:aria-invalid="current.patternError !== ''"/>
+								<div class="[ layer-pattern-row ]">
+									<input x-bind:id="current.ids.pattern" data-field="pattern" class="[ text-sm font-mono ]" autocomplete="off" spellcheck="false" x-bind:placeholder="current.placeholder" x-model="current.pattern" x-bind:aria-invalid="current.patternError !== ''"/>
+									<template x-if="current.kind === 'folder'">
+										<button type="button" class="[ button ]" data-size="sm" data-pick-folder x-bind:aria-expanded="pickerOpen" x-bind:aria-controls="current.ids.tree" x-on:click="togglePicker()">Pick folder…</button>
+									</template>
+								</div>
 								<template x-if="current.patternError">
 									<span class="[ error ]" x-bind:data-error-for="current.patternPath" x-text="current.patternError"></span>
 								</template>
@@ -105,6 +110,31 @@ templ tabLayers() {
 									<span class="[ hint ]" x-text="current.patternHint"></span>
 								</template>
 							</div>
+							<template x-if="showPicker">
+								<div class="[ field ] [ layer-pattern ]" x-bind:id="current.ids.tree" data-folder-picker>
+									<span class="[ text-sm weight-medium ]" x-bind:id="current.ids.treeLabel">Pick folders (checked folders are included)</span>
+									<div class="[ folder-tree ]" role="group" data-folder-tree x-bind:aria-labelledby="current.ids.treeLabel">
+										<template x-if="foldersLoading">
+											<p class="[ hint ]" role="status">Reading the repository’s folders…</p>
+										</template>
+										<template x-if="foldersFailed">
+											<p class="[ error ]" role="alert" data-folder-tree-error>
+												<span x-text="foldersError"></span>
+												<span>You can still type the folder above.</span>
+											</p>
+										</template>
+										<template x-if="foldersNone">
+											<p class="[ hint ]">The repository has no folders to pick.</p>
+										</template>
+										<template x-for="f in folders" x-bind:key="f.path">
+											<label>
+												<input type="checkbox" x-bind:value="f.path" x-bind:checked="f.checked" x-on:change="pickFolder(f.path, $event)"/>
+												<span x-text="f.path"></span>
+											</label>
+										</template>
+									</div>
+								</div>
+							</template>
 							<div class="[ field ]">
 								<label x-bind:for="current.ids.context">Bounded context (optional)</label>
 								<select x-bind:id="current.ids.context" data-field="bounded_context" class="[ text-sm ]" x-on:change="setContext(current.i, $event)" x-bind:aria-invalid="current.contextError !== ''">

@@ -19,6 +19,9 @@ import {
   overlapsOf,
   layerPattern,
   patternProblem,
+  folderChoices,
+  isFolderPicked,
+  withFolderPicked,
   accessSentence,
   presetAdditions,
 } from "../../domain/layers.js";
@@ -40,6 +43,11 @@ export const layersTab = ({ gateway }) => () => ({
   contexts: [],
   /** The position of the layer whose editor is open. */
   selected: 0,
+  /** The folder picker: open or not, what loading the folders came to, and the folders. */
+  pickerOpen: false,
+  foldersState: "idle",
+  foldersError: "",
+  folderTree: null,
 
   get layers() {
     return this.draft?.layers ?? [];
@@ -80,6 +88,25 @@ export const layersTab = ({ gateway }) => () => ({
   /** One entry per layer, with what the list shows for it. */
   get rows() {
     return this.layers.map((layer, i) => this.rowFor(layer, i));
+  },
+  /** The folders to pick from: the checkout's directories, minus .git and the repository's ignored paths. */
+  get folders() {
+    return folderChoices(this.folderTree, this.ignoredPaths, this.rootDir).map((path) => ({
+      path,
+      checked: isFolderPicked(this.layers[this.selectedIndex], path),
+    }));
+  },
+  get showPicker() {
+    return this.pickerOpen && !!this.current && this.current.kind === "folder";
+  },
+  get foldersLoading() {
+    return this.foldersState === "loading";
+  },
+  get foldersFailed() {
+    return this.foldersState === "failed";
+  },
+  get foldersNone() {
+    return this.foldersState === "ready" && this.folders.length === 0;
   },
   get unlayeredSentence() {
     return `Unmatched paths use the repository default: ${accessSentence(this.draft?.unlayered)}.`;
@@ -151,6 +178,8 @@ export const layersTab = ({ gateway }) => () => ({
         pattern: `architecture-layer-${i}-pattern`,
         context: `architecture-layer-${i}-context`,
         purpose: `architecture-layer-${i}-purpose`,
+        tree: `architecture-layer-${i}-tree`,
+        treeLabel: `architecture-layer-${i}-tree-label`,
       },
       moveUpLabel: `Move ${title} up`,
       moveDownLabel: `Move ${title} down`,
@@ -239,6 +268,30 @@ export const layersTab = ({ gateway }) => () => ({
 
   select(i) {
     this.selected = i;
+  },
+
+  /** Opens or closes the folder tree; opening it reads the checkout's folders unless they are already here. */
+  togglePicker() {
+    this.pickerOpen = !this.pickerOpen;
+    if (this.pickerOpen && this.foldersState !== "ready") return this.loadFolders();
+  },
+
+  async loadFolders() {
+    this.foldersState = "loading";
+    this.foldersError = "";
+    try {
+      this.folderTree = await gateway.listTree(this.rootDir);
+      this.foldersState = "ready";
+    } catch (err) {
+      this.foldersState = "failed";
+      this.foldersError = `The folders could not be listed: ${describeError(err).message}`;
+    }
+  },
+
+  /** A folder was checked or unchecked in the tree: the layer's folder follows. */
+  pickFolder(path, event) {
+    const layer = this.layers[this.selectedIndex];
+    layer.match = withFolderPicked(layer, path, event.target.checked).match;
   },
 
   /** Adds a layer for a folder, with the default access, and opens its editor. */

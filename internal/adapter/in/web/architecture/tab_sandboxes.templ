@@ -2,18 +2,54 @@ package architecture
 
 // tabSandboxes is the Sandboxes tab's panel. It is its own Alpine component,
 // architectureSandboxesTab, nested in architecturePage: it reads and edits the
-// page's draft and errors through the page's scope.
+// page's draft and errors through the page's scope. Each environment is a card
+// as in the published design: its name and Edit, where it runs, who uses it and
+// what it can and cannot reach.
 templ tabSandboxes() {
 	<section role="tabpanel" id="architecture-panel-sandboxes" aria-labelledby="architecture-tab-sandboxes" x-show="isTab('sandboxes')" x-data="architectureSandboxesTab" class="[ flow ]">
-		<h2>Sandboxes</h2>
-		<p class="[ color-ink-muted ]">Where agents run, what they can reach from there and what they cannot.</p>
-		<template x-for="(row, i) in rows()" x-bind:key="i">
-			<section class="[ pane ]" data-entry="sandbox">
-				<header>
-					<span class="[ grow font-mono ]" x-text="row.name || 'New sandbox'"></span>
-					<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-bind:aria-label="removeLabel(row)" x-on:click="remove(i)">Remove</button>
-				</header>
-				<div class="[ content flow ]">
+		@panelHead("Sandboxes & execution environments", "Where agents run, what they can reach from there and what they cannot.") {
+			<button type="button" class="[ button ]" data-variant="primary" data-size="sm" data-add x-on:click="add">Add environment</button>
+		}
+		<div class="[ flow ]" data-entries>
+			<template x-for="(row, i) in rows()" x-bind:key="i">
+				<section class="[ entry-card ]" data-entry="sandbox" x-bind:data-open="isOpen(i)">
+					<div data-row>
+						<header>
+							<h3 class="[ grow font-mono ]" data-name x-text="row.name || 'New sandbox'"></h3>
+							@editButton("isOpen(i)", "edit(i)")
+						</header>
+						<div class="[ entry-card-body ] [ flow ]">
+							<div class="[ entry-kv ]">
+								<template x-if="row.runs">
+									<div data-meta="runs"><span class="[ entry-label ]">Runs where</span> <span x-text="row.runs"></span></div>
+								</template>
+								<div data-meta="used-by"><span class="[ entry-label ]">Used by</span> <span x-text="agentSummary(row, 'used_by')"></span></div>
+							</div>
+							<div class="[ reach-grid ]">
+								<template x-if="reaches(row, 'can_reach')">
+									<div data-reach="can">
+										<span class="[ entry-label ]">Can reach</span>
+										<ul class="[ reach ]">
+											<template x-for="item in row.can_reach" x-bind:key="item">
+												<li x-text="item"></li>
+											</template>
+										</ul>
+									</div>
+								</template>
+								<template x-if="reaches(row, 'cannot_reach')">
+									<div data-reach="cannot">
+										<span class="[ entry-label ]">Cannot reach</span>
+										<ul class="[ reach ]">
+											<template x-for="item in row.cannot_reach" x-bind:key="item">
+												<li x-text="item"></li>
+											</template>
+										</ul>
+									</div>
+								</template>
+							</div>
+						</div>
+					</div>
+				<div class="[ content flow ]" data-editor x-show="isOpen(i)">
 					<div class="[ field ]">
 						<label>
 							Name
@@ -51,11 +87,10 @@ templ tabSandboxes() {
 							<span class="[ error ]" x-bind:data-error-for="ptr(i, 'used_by')"><span aria-hidden="true">✕</span> <span x-text="err(i, 'used_by')"></span></span>
 						</template>
 					</div>
+									@entryEditorFoot("closeEditor()", "remove(i)")
 				</div>
-			</section>
-		</template>
-		<div>
-			<button type="button" class="[ button ]" data-size="sm" x-on:click="add">Add a sandbox</button>
+				</section>
+			</template>
 		</div>
 	</section>
 }

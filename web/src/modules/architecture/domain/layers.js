@@ -210,3 +210,48 @@ export const fileCountText = files;
 
 /** "internal/ports/x.go is in ports, domain; ports wins" as the parts a row shows. */
 export const overlapText = (o) => `${o.layers.join(", ")} · ${o.winner} wins`;
+
+const slashed = (path) => String(path ?? "").replace(/^\.\//, "").replace(/\/+$/, "");
+
+/** An ignored path as the tree knows it: relative to the checkout, without ./ or a trailing slash. */
+function relativeTo(rootDir, path) {
+  const root = slashed(rootDir);
+  const p = slashed(path);
+  return root !== "" && p.startsWith(`${root}/`) ? p.slice(root.length + 1) : p;
+}
+
+/**
+ * The folders the picker offers: the directories of a `list_tree` answer
+ * (relative paths, the root itself left out), sorted, without .git and without
+ * the repository's ignored paths or anything below them.
+ * @param {{ path: string, is_dir: boolean, children?: any[] } | null} tree
+ * @param {string[]} ignored the repository's ignored paths @param {string} rootDir the checkout, for absolute ignored paths
+ */
+export function folderChoices(tree, ignored, rootDir = "") {
+  const skip = (ignored ?? []).map((p) => relativeTo(rootDir, p)).filter((p) => p !== "");
+  const hidden = (path) =>
+    path.split("/").includes(".git") || skip.some((ig) => path === ig || path.startsWith(`${ig}/`));
+  const out = [];
+  const walk = (node) => {
+    for (const child of node?.children ?? []) {
+      if (!child?.is_dir || typeof child.path !== "string" || hidden(child.path)) continue;
+      out.push(child.path);
+      walk(child);
+    }
+  };
+  walk(tree);
+  return out.sort();
+}
+
+/** Whether a folder is the one a folder layer matches. */
+export const isFolderPicked = (layer, path) => matchKind(layer) === "folder" && matchText(layer) === path;
+
+/**
+ * The layer after a folder is checked or unchecked: a folder layer holds one
+ * folder, so checking sets it (replacing another) and unchecking the one it
+ * holds clears it. The input is left alone.
+ */
+export function withFolderPicked(layer, path, on) {
+  if (on) return { ...layer, match: { folder: path } };
+  return isFolderPicked(layer, path) ? { ...layer, match: { folder: "" } } : layer;
+}

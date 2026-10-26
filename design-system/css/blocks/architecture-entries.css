@@ -1,0 +1,168 @@
+/*
+ * Architecture entries — the rows of the Instructions, Tools, Sandboxes and
+ * Orchestration tabs, as the published architecture-overview design draws them.
+ * <ul class="arch-entries"><li data-entry>
+ *   <div class="entry-row"><div class="entry-main"><div class="entry-title"><code>…</code><span class="badge">…</span></div>
+ *     <p class="entry-note">…</p></div>
+ *     <div class="entry-meta"><span class="entry-label">Applies to</span> all</div><button class="button">Edit</button></div>
+ *   <div data-editor class="content flow">…the row's fields…</div></li></ul>
+ * <section class="entry-card"><header><h3>…</h3><button>Edit</button></header><div class="entry-card-body">
+ *   <div class="entry-kv"><div><span class="entry-label">Runs where</span> …</div></div><div class="reach-grid"><div><span class="entry-label">Can reach</span><ul class="reach">…</ul></div>…</div></div></section>
+ * <section class="entry-card"><header><h3>Model routing</h3></header><table class="entry-table">…</table></section>
+ * A row with data-open has its editor shown, with the signal bar on its edge.
+ */
+
+@layer blocks {
+  .arch-entries {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    background: var(--color-raised);
+    border: var(--border-width) solid var(--color-line);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+
+    & > li { max-inline-size: none; }
+    & > li + li { border-block-start: var(--border-width) solid var(--color-line); }
+    & > li[data-open="true"] { background: var(--color-selected); }
+  }
+
+  .entry-row {
+    display: flex;
+    gap: var(--space-m);
+    align-items: center;
+    min-block-size: var(--size-row);
+    padding: var(--space-s) var(--space-m);
+
+    @media (max-width: 40rem) { flex-wrap: wrap; }
+  }
+
+  .entry-main { flex: 1; min-inline-size: 0; }
+
+  .entry-title {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-s);
+    align-items: center;
+    font-weight: var(--weight-medium);
+    overflow-wrap: anywhere;
+  }
+
+  .entry-note {
+    margin-block-start: 2px;
+    font-size: var(--text-sm);
+    color: var(--color-ink-muted);
+
+    &[data-missing="true"] { font-style: italic; }
+  }
+
+  .entry-meta {
+    min-inline-size: 11rem;
+    font-size: var(--text-sm);
+
+    & > .entry-label { display: block; }
+  }
+
+  .entry-label {
+    font-size: var(--text-xs);
+    color: var(--color-ink-faint);
+  }
+
+  [data-entry] > [data-editor] {
+    padding: var(--space-m);
+    border-block-start: var(--border-width) solid var(--color-line);
+    background: var(--color-canvas);
+  }
+
+  .entry-card {
+    background: var(--color-raised);
+    border: var(--border-width) solid var(--color-line);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+
+    & + & { margin-block-start: var(--space-m); }
+
+    & header {
+      display: flex;
+      align-items: center;
+      gap: var(--space-s);
+      min-block-size: 2.5rem;
+      padding: var(--space-s) var(--space-m);
+      border-block-end: var(--border-width) solid var(--color-line);
+    }
+
+    &[data-open="true"] { box-shadow: inset 3px 0 0 var(--color-signal); }
+
+    & > [data-editor] {
+      padding: var(--space-m);
+      border-block-start: var(--border-width) solid var(--color-line);
+      background: var(--color-canvas);
+    }
+  }
+
+  .entry-card-body { padding: var(--space-m); }
+
+  .entry-kv {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2xs);
+    font-size: var(--text-sm);
+
+    & > div { display: flex; gap: var(--space-m); }
+    & .entry-label { flex: none; min-inline-size: 6rem; font-size: inherit; }
+  }
+
+  .reach-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
+    gap: var(--space-m);
+
+    & .entry-label { display: block; margin-block-end: var(--space-2xs); font-size: var(--text-sm); font-weight: var(--weight-medium); color: var(--color-ink); }
+  }
+
+  .reach {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2xs);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+
+    & > li {
+      display: flex;
+      gap: var(--space-xs);
+      align-items: baseline;
+      max-inline-size: none;
+      font-size: var(--text-sm);
+    }
+  }
+
+  [data-reach="can"] .reach > li::before { content: "✓"; color: var(--color-success); font-weight: var(--weight-bold); }
+  [data-reach="cannot"] .reach > li::before { content: "✕"; color: var(--color-danger); font-weight: var(--weight-bold); }
+
+  .entry-table {
+    border-collapse: collapse;
+    inline-size: 100%;
+    font-size: var(--text-sm);
+
+    & th {
+      padding: var(--space-xs) var(--space-m);
+      text-align: start;
+      font-size: var(--text-xs);
+      font-weight: var(--weight-medium);
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: var(--color-ink-faint);
+    }
+
+    & td {
+      padding: var(--space-s) var(--space-m);
+      border-block-start: var(--border-width) solid var(--color-line);
+      vertical-align: middle;
+    }
+
+    & > tbody[data-open="true"] > tr[data-row] > td { background: var(--color-selected); }
+    & > tbody > tr[data-editor-row] > td { background: var(--color-canvas); }
+    & .entry-action { inline-size: 1%; white-space: nowrap; text-align: end; }
+  }
+}

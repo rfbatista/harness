@@ -13,6 +13,27 @@ export const blankSandbox = () => ({ name: "", runs: "", can_reach: [], cannot_r
 export const blankRoute = () => ({ agent: "", model: "" });
 export const blankHandoff = () => ({ from: "", to: "", when: "" });
 
+const KIND_LABELS = {
+  instruction: { rules: "Rules", skill: "Skill", subagent_prompt: "Sub-agent prompt" },
+  tool: { mcp: "MCP server", function: "Function", api: "API", cli: "CLI" },
+};
+
+/** What a row's kind tag says: "subagent_prompt" as "Sub-agent prompt". @param {"instruction" | "tool"} of */
+export const kindLabel = (of, kind) => KIND_LABELS[of]?.[kind] ?? String(kind ?? "");
+
+/** What a row says about when an instruction file loads. */
+export const loadedLabel = (loaded) => (loaded === "on_demand" ? "On demand" : loaded === "always" ? "Always" : String(loaded ?? ""));
+
+/** Whether a tool that writes has no usage prose (the record refuses it). */
+export const noUsage = (tool) => tool?.writes === true && String(tool?.usage ?? "").trim() === "";
+
+/** The line under a tool: its usage prose, or what its absence means to the model. */
+export const usageText = (tool) =>
+  String(tool?.usage ?? "").trim() === "" ? "The model gets no guidance on when to call this." : tool.usage;
+
+/** Whether a sandbox's list (can_reach, cannot_reach) has anything to show. */
+export const reaches = (sandbox, field) => Array.isArray(sandbox?.[field]) && sandbox[field].length > 0;
+
 /** "a, b" as ["a", "b"]; blanks dropped. */
 export const fromCsv = (text) =>
   String(text ?? "")

@@ -44,6 +44,9 @@ type fakeArchitectureAPI struct {
 	// contextProjects are the project ids list_bounded_contexts was asked for.
 	contexts        []string
 	contextProjects []string
+	// treeRoots are the roots list_tree was asked for; treeFails makes it refuse.
+	treeRoots []string
+	treeFails bool
 }
 
 func newFakeArchitectureAPI(feed *sseFeed) *fakeArchitectureAPI {
@@ -135,6 +138,8 @@ func (f *fakeArchitectureAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		f.doExport(w, in)
 	case "/api/list_bounded_contexts":
 		f.listBoundedContexts(w, r.URL.Query().Get("project_id"))
+	case "/api/list_tree":
+		f.listTree(w, r.URL.Query().Get("root"))
 	case "/api/list_architecture_rule_events":
 		f.json(w, map[string]any{"events": append([]map[string]any{}, f.events...)})
 	default:
@@ -431,4 +436,31 @@ func (f *fakeArchitectureAPI) discoverCalls() int {
 		}
 	}
 	return n
+}
+
+// listTree answers GET /api/list_tree the way the server does: the whole
+// directory tree under root, files and .git included, paths relative to root.
+func (f *fakeArchitectureAPI) listTree(w http.ResponseWriter, root string) {
+	f.treeRoots = append(f.treeRoots, root)
+	if f.treeFails {
+		f.fail(w, http.StatusBadRequest, "ROOT_UNREADABLE", "stat "+root+": no such file or directory", nil)
+		return
+	}
+	dir := func(path string, kids ...any) map[string]any {
+		name := path[strings.LastIndex(path, "/")+1:]
+		return map[string]any{"path": path, "name": name, "is_dir": true, "children": kids}
+	}
+	file := func(path string) map[string]any {
+		return map[string]any{"path": path, "name": path[strings.LastIndex(path, "/")+1:], "is_dir": false}
+	}
+	f.json(w, map[string]any{"tree": map[string]any{"path": "", "name": ".", "is_dir": true, "children": []any{
+		dir(".git", dir(".git/hooks")),
+		file("README.md"),
+		dir("node_modules", dir("node_modules/left-pad")),
+		dir("internal",
+			dir("internal/domain", file("internal/domain/zone.go")),
+			dir("internal/ports"),
+		),
+		dir("web"),
+	}}})
 }

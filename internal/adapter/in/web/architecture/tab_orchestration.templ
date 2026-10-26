@@ -2,19 +2,34 @@ package architecture
 
 // tabOrchestration is the Orchestration tab's panel. It is its own Alpine
 // component, architectureOrchestrationTab, nested in architecturePage: it reads
-// and edits the page's draft and errors through the page's scope.
+// and edits the page's draft and errors through the page's scope. Model routing
+// and hand-offs are tables as in the published design; Edit opens a row's
+// editor in place, below it.
 templ tabOrchestration() {
 	<section role="tabpanel" id="architecture-panel-orchestration" aria-labelledby="architecture-tab-orchestration" x-show="isTab('orchestration')" x-data="architectureOrchestrationTab" class="[ flow ]">
-		<h2>Orchestration</h2>
-		<p class="[ color-ink-muted ]">Which model each agent runs on, and who hands work to whom. Use plain for a session with no agent.</p>
-		<h3>Model routing</h3>
-		<template x-for="(row, i) in routes()" x-bind:key="i">
-			<section class="[ pane ]" data-entry="route">
-				<header>
-					<span class="[ grow ]" x-text="row.agent || 'New route'"></span>
-					<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-bind:aria-label="removeLabel(row)" x-on:click="removeRoute(i)">Remove</button>
-				</header>
-				<div class="[ content flow ]">
+		@panelHead("Orchestration", "Which model each agent runs on, and who hands work to whom. Use plain for a session with no agent.") {
+			<button type="button" class="[ button ]" data-variant="primary" data-size="sm" data-add="route" x-on:click="addRoute">Add route</button>
+			<button type="button" class="[ button ]" data-size="sm" data-add="handoff" x-on:click="addHandoff">Add hand-off</button>
+		}
+		<section class="[ entry-card ]" data-card>
+			<header>
+				<h3 class="[ grow ]">Model routing</h3>
+			</header>
+			<table class="[ entry-table ]">
+				<thead>
+					<tr><th>Agent</th><th>Model</th><th>Used for</th><th><span class="[ visually-hidden ]">Actions</span></th></tr>
+				</thead>
+				<template x-for="(row, i) in routes()" x-bind:key="i">
+					<tbody data-entry="route" x-bind:data-open="isRouteOpen(i)">
+						<tr data-row>
+							<td><span class="[ agent-chip ]" data-agent x-bind:data-slot="slotOf(row.agent)"><i></i><span x-text="row.agent || 'New route'"></span></span></td>
+							<td><span class="[ badge ]" data-model x-text="row.model"></span></td>
+							<td class="[ color-ink-muted ]" data-note x-text="row.note"></td>
+							<td class="[ entry-action ]">@editButton("isRouteOpen(i)", "editRoute(i)")</td>
+						</tr>
+						<tr data-editor-row x-show="isRouteOpen(i)">
+							<td colspan="4">
+				<div class="[ content flow ]" data-editor>
 					<div class="[ cluster ]">
 						<div class="[ field ]">
 							<label>
@@ -41,20 +56,33 @@ templ tabOrchestration() {
 							<input data-field="note" class="[ text-sm ]" autocomplete="off" placeholder="One line, optional" x-model="row.note"/>
 						</label>
 					</div>
-				</div>
-			</section>
-		</template>
-		<div>
-			<button type="button" class="[ button ]" data-size="sm" x-on:click="addRoute">Add a route</button>
-		</div>
-		<h3>Hand-offs</h3>
-		<template x-for="(row, i) in handoffRows()" x-bind:key="i">
-			<section class="[ pane ]" data-entry="handoff">
-				<header>
-					<span class="[ grow ]"><span x-text="row.from || '…'"></span> → <span x-text="row.to || '…'"></span></span>
-					<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-bind:aria-label="removeLabel(row)" x-on:click="removeHandoff(i)">Remove</button>
-				</header>
-				<div class="[ content flow ]">
+														@entryEditorFoot("closeRoute()", "removeRoute(i)")
+									</div>
+							</td>
+						</tr>
+					</tbody>
+				</template>
+			</table>
+		</section>
+		<section class="[ entry-card ]" data-card>
+			<header>
+				<h3 class="[ grow ]">Hand-offs</h3>
+			</header>
+			<table class="[ entry-table ]">
+				<thead>
+					<tr><th>From</th><th>To</th><th>When</th><th><span class="[ visually-hidden ]">Actions</span></th></tr>
+				</thead>
+				<template x-for="(row, i) in handoffRows()" x-bind:key="i">
+					<tbody data-entry="handoff" x-bind:data-open="isHandoffOpen(i)">
+						<tr data-row>
+							<td><span class="[ agent-chip ]" data-agent x-bind:data-slot="slotOf(row.from)"><i></i><span x-text="row.from || '…'"></span></span></td>
+							<td><span class="[ agent-chip ]" data-agent x-bind:data-slot="slotOf(row.to)"><i></i><span x-text="row.to || '…'"></span></span></td>
+							<td class="[ color-ink-muted ]" data-note x-text="row.when"></td>
+							<td class="[ entry-action ]">@editButton("isHandoffOpen(i)", "editHandoff(i)")</td>
+						</tr>
+						<tr data-editor-row x-show="isHandoffOpen(i)">
+							<td colspan="4">
+				<div class="[ content flow ]" data-editor>
 					<div class="[ cluster ]">
 						<div class="[ field ]">
 							<label>
@@ -84,11 +112,13 @@ templ tabOrchestration() {
 							<span class="[ error ]" x-bind:data-error-for="handoffPtr(i, 'when')"><span aria-hidden="true">✕</span> <span x-text="handoffErr(i, 'when')"></span></span>
 						</template>
 					</div>
-				</div>
-			</section>
-		</template>
-		<div>
-			<button type="button" class="[ button ]" data-size="sm" x-on:click="addHandoff">Add a hand-off</button>
-		</div>
+														@entryEditorFoot("closeHandoff()", "removeHandoff(i)")
+									</div>
+							</td>
+						</tr>
+					</tbody>
+				</template>
+			</table>
+		</section>
 	</section>
 }

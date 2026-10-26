@@ -1,0 +1,35 @@
+package architecture
+
+// panelHead is the head of a descriptive tab: the title and what the tab is
+// for on the left, the "Add" button(s) on the right, as in the published
+// architecture-overview design. The buttons are passed as children.
+templ panelHead(title, text string) {
+	<div class="[ arch-head ]" data-panel-head>
+		<div class="[ flow ] [ flow-space-3xs ]">
+			<h2>{ title }</h2>
+			<p class="[ color-ink-muted text-sm ]">{ text }</p>
+		</div>
+		<div class="[ cluster ]">
+			{ children... }
+		</div>
+	</div>
+}
+
+// entryEditorFoot closes an entry's inline editor: Done hides it (the draft is
+// edited live, so there is nothing to apply) and Remove drops the entry.
+// close and remove are the tab's calls that close the editor of the entry at i
+// and remove it.
+templ entryEditorFoot(close, remove string) {
+	<div class="[ cluster ]">
+		<button type="button" class="[ button ]" data-size="sm" data-done x-on:click={ close }>Done</button>
+		<span class="[ grow ]"></span>
+		<button type="button" class="[ button ]" data-variant="danger" data-size="sm" x-bind:aria-label="removeLabel(row)" x-on:click={ remove }>Remove</button>
+	</div>
+}
+
+// editButton opens or closes an entry's inline editor. open is the tab's
+// expression for whether the editor of the entry at i is open, edit its call
+// that opens or closes it.
+templ editButton(open, edit string) {
+	<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" data-edit x-bind:aria-expanded={ open } x-bind:aria-label="editLabel(row)" x-on:click={ edit }>Edit</button>
+}

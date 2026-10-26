@@ -2,18 +2,32 @@ package architecture
 
 // tabInstructions is the Instructions & rules tab's panel. It is its own Alpine
 // component, architectureInstructionsTab, nested in architecturePage: it reads
-// and edits the page's draft and errors through the page's scope.
+// and edits the page's draft and errors through the page's scope. A row shows
+// the file as the published design does (path, kind, note, applies to, loaded,
+// Edit); Edit opens the row's editor in place.
 templ tabInstructions() {
 	<section role="tabpanel" id="architecture-panel-instructions" aria-labelledby="architecture-tab-instructions" x-show="isTab('instructions')" x-data="architectureInstructionsTab" class="[ flow ]">
-		<h2>Instructions &amp; rules</h2>
-		<p class="[ color-ink-muted ]">The files agents read: rules, skills and sub-agent prompts, who they apply to and when they load. Only the path is stored, never the prose.</p>
-		<template x-for="(row, i) in rows()" x-bind:key="i">
-			<section class="[ pane ]" data-entry="instruction">
-				<header>
-					<span class="[ grow font-mono ]" x-text="row.path || 'New instruction file'"></span>
-					<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-bind:aria-label="removeLabel(row)" x-on:click="remove(i)">Remove</button>
-				</header>
-				<div class="[ content flow ]">
+		@panelHead("Instructions & rule files", "The files agents read: rules, skills and sub-agent prompts, who they apply to and when they load. Only the path is stored, never the prose.") {
+			<button type="button" class="[ button ]" data-variant="primary" data-size="sm" data-add x-on:click="add">Add file</button>
+		}
+		<ul class="[ arch-entries ]" data-entries>
+			<template x-for="(row, i) in rows()" x-bind:key="i">
+				<li data-entry="instruction" x-bind:data-open="isOpen(i)">
+					<div class="[ entry-row ]" data-row>
+						<div class="[ entry-main ]">
+							<div class="[ entry-title ]">
+								<code class="[ font-mono ]" data-path x-text="row.path || 'New instruction file'"></code>
+								<span class="[ badge ]" data-kind x-text="kindLabel(row.kind)"></span>
+							</div>
+							<template x-if="row.note">
+								<p class="[ entry-note ]" data-note x-text="row.note"></p>
+							</template>
+						</div>
+						<div class="[ entry-meta ]" data-meta="applies"><span class="[ entry-label ]">Applies to</span> <span x-text="agentSummary(row, 'applies_to')"></span></div>
+						<div class="[ entry-meta ]" data-meta="loaded"><span class="[ entry-label ]">Loaded</span> <span x-text="loadedLabel(row.loaded)"></span></div>
+						@editButton("isOpen(i)", "edit(i)")
+					</div>
+				<div class="[ content flow ]" data-editor x-show="isOpen(i)">
 					<div class="[ field ]">
 						<label>
 							Path
@@ -63,11 +77,10 @@ templ tabInstructions() {
 							<input data-field="note" class="[ text-sm ]" autocomplete="off" placeholder="One line, optional" x-model="row.note"/>
 						</label>
 					</div>
+									@entryEditorFoot("closeEditor()", "remove(i)")
 				</div>
-			</section>
-		</template>
-		<div>
-			<button type="button" class="[ button ]" data-size="sm" x-on:click="add">Add an instruction file</button>
-		</div>
+				</li>
+			</template>
+		</ul>
 	</section>
 }

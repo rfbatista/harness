@@ -2,18 +2,34 @@ package architecture
 
 // tabTools is the Tools tab's panel. It is its own Alpine component,
 // architectureToolsTab, nested in architecturePage: it reads and edits the
-// page's draft and errors through the page's scope.
+// page's draft and errors through the page's scope. A row shows the tool as the
+// published design does (name, kind, usage prose, available to, Edit).
 templ tabTools() {
 	<section role="tabpanel" id="architecture-panel-tools" aria-labelledby="architecture-tab-tools" x-show="isTab('tools')" x-data="architectureToolsTab" class="[ flow ]">
-		<h2>Tools</h2>
-		<p class="[ color-ink-muted ]">The functions, MCP servers and APIs agents can call, and when and how to call them. A tool that writes needs usage prose.</p>
-		<template x-for="(row, i) in rows()" x-bind:key="i">
-			<section class="[ pane ]" data-entry="tool">
-				<header>
-					<span class="[ grow font-mono ]" x-text="row.name || 'New tool'"></span>
-					<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-bind:aria-label="removeLabel(row)" x-on:click="remove(i)">Remove</button>
-				</header>
-				<div class="[ content flow ]">
+		@panelHead("Tools", "The functions, MCP servers and APIs agents can call, and when and how to call them. A tool that writes needs usage prose.") {
+			<button type="button" class="[ button ]" data-variant="primary" data-size="sm" data-add x-on:click="add">Add tool</button>
+		}
+		<ul class="[ arch-entries ]" data-entries>
+			<template x-for="(row, i) in rows()" x-bind:key="i">
+				<li data-entry="tool" x-bind:data-open="isOpen(i)">
+					<div class="[ entry-row ]" data-row>
+						<div class="[ entry-main ]">
+							<div class="[ entry-title ]">
+								<code class="[ font-mono ]" data-name x-text="row.name || 'New tool'"></code>
+								<span class="[ badge ]" data-kind x-text="kindLabel(row.kind)"></span>
+								<template x-if="row.writes">
+									<span class="[ badge ]" data-tone="signal" data-flag="writes">writes</span>
+								</template>
+								<template x-if="noUsage(row)">
+									<span class="[ badge ]" data-tone="danger" data-flag="no-usage">no usage prose</span>
+								</template>
+							</div>
+							<p class="[ entry-note ]" data-note x-bind:data-missing="!row.usage" x-text="usageText(row)"></p>
+						</div>
+						<div class="[ entry-meta ]" data-meta="used-by"><span class="[ entry-label ]">Available to</span> <span x-text="agentSummary(row, 'used_by')"></span></div>
+						@editButton("isOpen(i)", "edit(i)")
+					</div>
+				<div class="[ content flow ]" data-editor x-show="isOpen(i)">
 					<div class="[ cluster ]">
 						<div class="[ field ]">
 							<label>
@@ -58,11 +74,10 @@ templ tabTools() {
 							<span class="[ error ]" x-bind:data-error-for="ptr(i, 'usage')"><span aria-hidden="true">✕</span> <span x-text="err(i, 'usage')"></span></span>
 						</template>
 					</div>
+									@entryEditorFoot("closeEditor()", "remove(i)")
 				</div>
-			</section>
-		</template>
-		<div>
-			<button type="button" class="[ button ]" data-size="sm" x-on:click="add">Add a tool</button>
-		</div>
+				</li>
+			</template>
+		</ul>
 	</section>
 }

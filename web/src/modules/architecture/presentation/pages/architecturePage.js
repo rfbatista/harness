@@ -32,6 +32,9 @@ import { hexagonalLayers } from "../../domain/layers.js";
 export const architecturePage = ({ gateway }) => () => ({
   projectId: "",
   repositoryId: "",
+  /** The repository's checkout and the paths it hides from trees, for the folder picker. */
+  rootDir: "",
+  ignoredPaths: [],
   base: "",
   /** The open tab's slug, and for Output its view (file or diagram). */
   tab: TABS[0].slug,
@@ -152,6 +155,8 @@ export const architecturePage = ({ gateway }) => () => ({
       const seed = readSeed(this.$el);
       this.projectId = seed.project_id;
       this.repositoryId = seed.repository_id;
+      this.rootDir = seed.root_dir ?? "";
+      this.ignoredPaths = Array.isArray(seed.ignored_paths) ? seed.ignored_paths : [];
       this.base = seed.base;
       this.deepLinked = (seed.tab ?? "") !== "";
       this.applyPath(seed.tab ?? "");

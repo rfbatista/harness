@@ -97,7 +97,7 @@ func TestEntriesAddedInTheDescriptiveTabsAreSavedAndReloaded(t *testing.T) {
 		chromedp.Navigate(rig.url("")),
 		poll(`document.querySelectorAll('[data-count]').length === 6`),
 		// Instructions & rules
-		archClick(`#architecture-panel-instructions button[data-size=sm]:not([data-variant])`),
+		archClick(`#architecture-panel-instructions [data-add]`),
 		archFill("instructions", 2, "path", "docs/ARCH.md"),
 		archFill("instructions", 2, "kind", "skill"),
 		archFill("instructions", 2, "loaded", "on_demand"),
@@ -105,7 +105,7 @@ func TestEntriesAddedInTheDescriptiveTabsAreSavedAndReloaded(t *testing.T) {
 		archFill("instructions", 2, "note", "Read before a refactor."),
 		// Tools
 		clickTab("Tools"),
-		archClick(`#architecture-panel-tools button[data-size=sm]:not([data-variant])`),
+		archClick(`#architecture-panel-tools [data-add]`),
 		archFill("tools", 1, "name", "gh"),
 		archFill("tools", 1, "kind", "cli"),
 		archPick("tools", 1, "used_by", "devops"),
@@ -113,7 +113,7 @@ func TestEntriesAddedInTheDescriptiveTabsAreSavedAndReloaded(t *testing.T) {
 		archFill("tools", 1, "usage", "Open a pull request."),
 		// Sandboxes
 		clickTab("Sandboxes"),
-		archClick(`#architecture-panel-sandboxes button[data-size=sm]:not([data-variant])`),
+		archClick(`#architecture-panel-sandboxes [data-add]`),
 		archFill("sandboxes", 1, "name", "docker"),
 		archFill("sandboxes", 1, "runs", "Integration tests."),
 		archFill("sandboxes", 1, "can_reach", "the test network"),
@@ -121,11 +121,11 @@ func TestEntriesAddedInTheDescriptiveTabsAreSavedAndReloaded(t *testing.T) {
 		archPick("sandboxes", 1, "used_by", "all"),
 		// Orchestration: a route and a hand-off
 		clickTab("Orchestration"),
-		archClick(`#architecture-panel-orchestration button[data-size=sm]:not([data-variant])`),
+		archClick(`#architecture-panel-orchestration [data-add=route]`),
 		archFill("orchestration", 1, "agent", "devops"),
 		archFill("orchestration", 1, "model", "claude-sonnet-5-5"),
 		poll(`document.querySelectorAll('#architecture-panel-orchestration [data-entry=route]').length === 2`),
-		poll(`(() => { const b = [...document.querySelectorAll('#architecture-panel-orchestration button')].find(b => b.textContent.trim() === 'Add a hand-off'); b.click(); return true; })()`),
+		archClick(`#architecture-panel-orchestration [data-add=handoff]`),
 		poll(`document.querySelectorAll('#architecture-panel-orchestration [data-entry=handoff]').length === 2`),
 	)
 	rig.run(t,
@@ -197,7 +197,7 @@ func TestAToolThatWritesWithNoUsageShowsItsErrorOnTheField(t *testing.T) {
 		chromedp.EmulateViewport(1280, 900),
 		chromedp.Navigate(rig.url("/tools")),
 		poll(`document.querySelectorAll('[data-count]').length === 6`),
-		archClick(`#architecture-panel-tools button[data-size=sm]:not([data-variant])`),
+		archClick(`#architecture-panel-tools [data-add]`),
 		archFill("tools", 1, "name", "deploy"),
 		archFill("tools", 1, "writes", "on"),
 		archClick(archSave),

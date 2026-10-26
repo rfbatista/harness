@@ -85,6 +85,18 @@ export function architectureGateway(api, feed) {
       return readPreview(await api.post("/preview_layers", { repository_id: repositoryId, layers, unlayered }));
     },
 
+    /**
+     * The directory tree of a checkout (GET /api/list_tree rooted at it): nodes of
+     * {path, is_dir, children}, paths relative to the root.
+     */
+    async listTree(rootDir) {
+      const body = await api.get("/list_tree", { root: rootDir });
+      if (!body || typeof body.tree !== "object" || body.tree === null) {
+        throw new StructuredError(Codes.BAD_RESPONSE, "The folders came back unreadable.");
+      }
+      return body.tree;
+    },
+
     /** The agent catalog's names, for the matrix's rows and the agent pickers. Asked once per repository; a failure is not remembered. */
     agents(repositoryId) {
       if (!catalogs.has(repositoryId)) {

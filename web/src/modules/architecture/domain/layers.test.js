@@ -2,6 +2,7 @@ import { assert, file, test } from "../../../shared/testing/test.js";
 import {
   cellLabel, matrixAgents, moved, newLayer, nextAccess, patternProblem, withAccess, withMatchKind, accessOf, DEFAULT_ROW,
   AGENT_SLOTS, accessSentence, agentSlot, layerPattern, otherLayers, overlapsOf, presetAdditions, withRowAccess,
+  folderChoices, isFolderPicked, withFolderPicked,
 } from "./layers.js";
 
 file("architecture/domain/layers");
@@ -87,4 +88,44 @@ test("the paths that overlap a layer are the overlaps naming it", () => {
   assert.deepEqual(overlapsOf(overlaps, "y").map((o) => o.path), ["a", "b"]);
   assert.deepEqual(overlapsOf(overlaps, "").map((o) => o.path), []);
   assert.deepEqual(otherLayers({ layers: ["x", "y"] }, "x"), ["y"]);
+});
+
+const tree = {
+  path: "", name: ".", is_dir: true,
+  children: [
+    { path: ".git", name: ".git", is_dir: true, children: [{ path: ".git/hooks", name: "hooks", is_dir: true, children: [] }] },
+    { path: "README.md", name: "README.md", is_dir: false },
+    { path: "node_modules", name: "node_modules", is_dir: true, children: [{ path: "node_modules/x", name: "x", is_dir: true, children: [] }] },
+    {
+      path: "internal", name: "internal", is_dir: true,
+      children: [
+        { path: "internal/domain", name: "domain", is_dir: true, children: [{ path: "internal/domain/zone.go", name: "zone.go", is_dir: false }] },
+        { path: "internal/app", name: "app", is_dir: true, children: [] },
+      ],
+    },
+    { path: "web", name: "web", is_dir: true, children: [] },
+  ],
+};
+
+test("the folder choices are the tree's directories, sorted, with no files, .git or ignored paths", () => {
+  assert.deepEqual(folderChoices(tree, ["node_modules"]), ["internal", "internal/app", "internal/domain", "web"]);
+  assert.deepEqual(folderChoices(tree, ["./internal/domain/", "node_modules"]), ["internal", "internal/app", "web"]);
+  assert.deepEqual(folderChoices(null, []), []);
+});
+
+test("an ignored path hides the folders below it and an absolute one is read from the checkout", () => {
+  assert.deepEqual(folderChoices(tree, ["internal"], "/src/harness"), ["node_modules", "node_modules/x", "web"]);
+  assert.deepEqual(folderChoices(tree, ["/src/harness/internal", "node_modules"], "/src/harness"), ["web"]);
+});
+
+test("checked folders map to and from the layer's folder pattern", () => {
+  const layer = { name: "core", match: { folder: "internal/domain" }, access: {} };
+  assert.equal(isFolderPicked(layer, "internal/domain"), true);
+  assert.equal(isFolderPicked(layer, "internal/app"), false);
+  assert.equal(isFolderPicked({ name: "t", match: { regex: "internal/domain" } }, "internal/domain"), false);
+  const moved = withFolderPicked(layer, "internal/app", true);
+  assert.deepEqual(moved.match, { folder: "internal/app" });
+  assert.equal(moved.name, "core");
+  assert.deepEqual(withFolderPicked(moved, "internal/app", false).match, { folder: "" });
+  assert.deepEqual(withFolderPicked(layer, "internal/app", false).match, { folder: "internal/domain" });
 });

@@ -1,0 +1,35 @@
+/*
+ * Folder picker — the layer editor's folder field with "Pick folder…" beside it,
+ * and the tree of checkboxes it opens.
+ * <div class="layer-pattern-row"><input><button class="button">Pick folder…</button></div>
+ * <div class="folder-tree" role="group"><label><input type="checkbox"> internal/domain</label>…</div>
+ * The tree is a bordered list that scrolls; folders are shown as full paths in mono.
+ */
+
+@layer blocks {
+  .layer-pattern-row {
+    display: flex;
+    gap: var(--space-s);
+    align-items: center;
+
+    & > input { flex: 1; min-inline-size: 0; }
+    & > button { flex: none; }
+  }
+
+  .folder-tree {
+    max-block-size: 14rem;
+    overflow: auto;
+    padding: var(--space-xs);
+    border: var(--border-width) solid var(--color-line);
+    border-radius: var(--radius-sm);
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+
+    & > label {
+      display: flex;
+      gap: var(--space-xs);
+      align-items: center;
+      padding-block: 1px;
+    }
+  }
+}
