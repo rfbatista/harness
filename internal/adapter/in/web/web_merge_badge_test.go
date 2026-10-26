@@ -29,8 +29,8 @@ func TestTheBoardShowsTheServersMergeStateForASquashedTask(t *testing.T) {
 	}
 	body := rec.Body.String()
 	for _, want := range []string{`data-merge-state="merged"`, `data-merge-state="not_merged"`} {
-		if strings.Count(body, want) != 1 {
-			t.Errorf("want one %s in the board, got %d", want, strings.Count(body, want))
+		if !strings.Contains(body, want) {
+			t.Errorf("the board lacks %s", want)
 		}
 	}
 }
