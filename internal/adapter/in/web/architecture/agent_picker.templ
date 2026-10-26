@@ -1,0 +1,34 @@
+package architecture
+
+// agentList is a list field of agent names (applies_to, used_by): a group of
+// checkboxes over the agent catalog plus all, inside a <details> that says what
+// is chosen when closed. It lives in a tab component that spreads agentPicker
+// and in an x-for whose variable is row. invalid is the tab's aria-invalid expression.
+templ agentList(field, label, invalid string) {
+	<details class="[ agent-picker ]" data-field={ field } x-bind:aria-invalid={ invalid }>
+		<summary class="[ text-sm ]">
+			<span class="[ visually-hidden ]">{ label }: </span>
+			<span x-text={ "agentSummary(row, '" + field + "')" }></span>
+		</summary>
+		<div role="group" aria-label={ label } class="[ agent-picker-options ]">
+			<template x-for={ "o in agentOptions(row, '" + field + "', true)" } x-bind:key="o.value">
+				<label class="[ text-sm ]">
+					<input type="checkbox" x-bind:value="o.value" x-bind:checked="o.checked" x-on:change={ "toggleAgent(row, '" + field + "', o.value, $event)" }/>
+					<span x-text="o.label"></span>
+				</label>
+			</template>
+		</div>
+	</details>
+}
+
+// agentSelect is a single agent field (a route's agent, a hand-off's from and
+// to): a select with a blank first option, the catalog, plain, and a name the
+// record holds that the catalog lacks, marked.
+templ agentSelect(field, invalid string) {
+	<select data-field={ field } class="[ text-sm ]" x-on:change={ "setAgent(row, '" + field + "', $event)" } x-bind:aria-invalid={ invalid }>
+		<option value="">Choose an agent</option>
+		<template x-for={ "o in agentOptions(row, '" + field + "', false)" } x-bind:key="o.value">
+			<option x-bind:value="o.value" x-bind:selected="o.checked" x-text="o.label"></option>
+		</template>
+	</select>
+}

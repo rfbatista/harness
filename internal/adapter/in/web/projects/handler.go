@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"operators-mcp/internal/adapter/in/web/architecture"
 	"operators-mcp/internal/adapter/in/web/credentials"
 	"operators-mcp/internal/adapter/in/web/shell"
 	"operators-mcp/internal/domain"
@@ -239,7 +240,7 @@ func (v RepositoriesView) CredentialLine(repositoryID string) (credentials.Bindi
 }
 
 // RepositoryRow is one repository as listed.
-type RepositoryRow struct{ ID, Name, RootDir, Remote, EnvHref, HistoryHref string }
+type RepositoryRow struct{ ID, Name, RootDir, Remote, EnvHref, HistoryHref, ArchitectureHref string }
 
 // Seed is what projectsRepositoriesPage starts from, in the API's shape.
 type Seed struct {
@@ -257,7 +258,7 @@ func NewRepositoriesView(frame shell.Frame, project *domain.Project, repos []*do
 	}
 	rows := make([]RepositoryRow, 0, len(repos))
 	for _, r := range repos {
-		rows = append(rows, RepositoryRow{ID: r.ID, Name: repositoryName(r), RootDir: rootDirLabel(r.RootDir), Remote: remoteLabel(r.URL), EnvHref: EnvFilesHref(project.ID, r.ID), HistoryHref: HistoryHref(project.ID, r.ID)})
+		rows = append(rows, RepositoryRow{ID: r.ID, Name: repositoryName(r), RootDir: rootDirLabel(r.RootDir), Remote: remoteLabel(r.URL), EnvHref: EnvFilesHref(project.ID, r.ID), HistoryHref: HistoryHref(project.ID, r.ID), ArchitectureHref: architecture.Href(project.ID, r.ID, "")})
 	}
 	return RepositoriesView{
 		Frame:       frame,

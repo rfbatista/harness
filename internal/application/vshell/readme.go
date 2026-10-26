@@ -34,6 +34,7 @@ stored: what others change appears here, and what you write here is stored.
     project/docs/             every project document
     project/designs/          every project design asset, file bytes
     project/designs/urls.md   project design assets that are URLs (read-only)
+    project/architecture/     <repository>.yaml: each repository's architecture, layers and rules (read-only)
     tasks/<task-id>/docs/     another task of the project: its documents, task scope
 
 File names are <slug of title>.<ext>, with -<short id> added only on a

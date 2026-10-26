@@ -19,6 +19,7 @@ import (
 	"github.com/rfbatista/harnesskit/errs"
 
 	"operators-mcp/internal/adapter/in/web/agentisolation"
+	"operators-mcp/internal/adapter/in/web/architecture"
 	"operators-mcp/internal/adapter/in/web/code"
 	"operators-mcp/internal/adapter/in/web/credentials"
 	"operators-mcp/internal/adapter/in/web/history"
@@ -194,6 +195,7 @@ func NewHandler(deps Deps, assets *Assets, fallback http.Handler) http.Handler {
 	if deps.Workspaces != nil {
 		codePages.Branches = deps.Workspaces
 	}
+	architecturePages := architecture.Handler{Projects: deps.Projects, Repositories: deps.Repositories, Layout: s.layout, Render: render}
 	toProject := func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/projects/"+url.PathEscape(r.PathValue("project")), http.StatusFound)
 	}
@@ -236,6 +238,9 @@ func NewHandler(deps Deps, assets *Assets, fallback http.Handler) http.Handler {
 	mux.Handle("GET /projects/{project}/settings", s.page(projectPages.Settings))
 	mux.Handle("GET /projects/{project}/repositories", s.page(projectPages.RepositoryList))
 	mux.Handle("GET /projects/{project}/repositories/{repository}/env", s.page(projectPages.EnvFileList))
+	for tab, slug := range map[string]string{"": "", "/instructions": "instructions", "/tools": "tools", "/sandboxes": "sandboxes", "/orchestration": "orchestration", "/rules": "rules", "/layers": "layers", "/file": "file", "/diagram": "diagram"} {
+		mux.Handle("GET /projects/{project}/repositories/{repository}/architecture"+tab, s.page(architecturePages.Page(slug)))
+	}
 	mux.Handle("GET /projects/{project}/repositories/{repository}/history", s.page(historyPages.Page))
 	mux.Handle("GET /projects/{project}/repositories/{repository}/history/{commit}", s.page(historyPages.Page))
 	if deps.Code != nil {

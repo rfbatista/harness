@@ -62,6 +62,17 @@ type sessionSubject struct {
 	mode    domain.SessionMode
 }
 
+// projectID is the project the session works in.
+func (sub sessionSubject) projectID() string {
+	switch {
+	case sub.ticket != nil:
+		return sub.ticket.ProjectID
+	case sub.project != nil:
+		return sub.project.ID
+	}
+	return ""
+}
+
 // projectLevel says the session has no task and works on its project: only
 // a mode that runs without a task does, and only with its project in hand.
 func (sub sessionSubject) projectLevel() bool {
@@ -96,6 +107,16 @@ type Service struct {
 	// commits its shell's files (…/api/sessions/{id}/shell); a session with
 	// a shell gets ShellHooks aimed at it.
 	SessionShellURL func(sessionID string) string
+	// SessionArchitectureURL returns where a session's architecture rules are
+	// checked (…/api/sessions/{id}/architecture). Nil: sessions get no
+	// architecture hooks.
+	SessionArchitectureURL func(sessionID string) string
+	// Architectures is what the brief reads of the repository architecture;
+	// nil adds no section to any brief.
+	Architectures ports.ArchitectureBriefSource
+	// CommitGuard puts the architecture commit check into a session's
+	// worktree; nil installs none.
+	CommitGuard ports.CommitGuard
 	// Terminals hosts RunnerServer interactive sessions. Nil means this
 	// server does not run agents itself; such sessions answer
 	// SERVER_HOSTING_UNAVAILABLE.
@@ -450,8 +471,11 @@ func (s *Service) prepare(ctx context.Context, in prepareInput) (*prepared, erro
 		id = llmkit.NewSessionID()
 	}
 	permission := parseAutoAccept(in.AutoAccept)
-	cfg := s.sessionConfig(id, ws.Path, in.Model, in.AllowedTools, permission, ag, subject, in.ZoneID, in.Role)
+	cfg := s.sessionConfig(id, ws.Path, in.Model, in.AllowedTools, permission, ag, subject, in.ZoneID, in.Role, in.RepositoryID)
 	cleanup, err := s.withShell(id, subject, &cfg, ag.cleanup)
+	if err == nil {
+		cleanup = s.withCommitCheck(id, ws.Path, cleanup)
+	}
 	if err != nil {
 		_ = s.workspaces.Discard(ws.ID)
 		return nil, err
@@ -606,6 +630,11 @@ func (s *Service) withShell(id string, subject sessionSubject, cfg *llmkit.Sessi
 			cfg.Driver = dc
 		}
 	}
+	if s.SessionArchitectureURL != nil {
+		if dc, ok := withHooks(cfg.Driver, ArchitectureHooks(s.SessionArchitectureURL(id))); ok {
+			cfg.Driver = dc
+		}
+	}
 	return s.withShims(id, cfg, func() {
 		if cleanup != nil {
 			cleanup()
@@ -652,6 +681,9 @@ func (s *Service) withShims(id string, cfg *llmkit.SessionConfig, cleanup func()
 	cfg.Env = append(cfg.Env, ports.ShimDirEnv+"="+dir)
 	if s.SessionShellURL != nil {
 		cfg.Env = append(cfg.Env, ports.ShellURLEnv+"="+s.SessionShellURL(id))
+	}
+	if s.SessionArchitectureURL != nil && cfg.WorkingDir != "" {
+		cfg.Env = append(cfg.Env, ports.ArchitectureURLEnv+"="+s.SessionArchitectureURL(id), ports.WorktreeEnv+"="+cfg.WorkingDir)
 	}
 	return func() {
 		if cleanup != nil {
@@ -758,7 +790,7 @@ func (s *Service) resolveAgent(agentID string, mode domain.SessionMode) (resolve
 // interactive sessions: the agent's prompt and skills, the task brief (or
 // a project-level session's project brief) and task MCP server, the
 // agent's MCP servers and the zone's extra dirs.
-func (s *Service) sessionConfig(id, dir, model string, allowedTools []string, permission llmkit.PermissionMode, ag resolvedAgent, subject sessionSubject, zoneID string, role domain.SessionRole) llmkit.SessionConfig {
+func (s *Service) sessionConfig(id, dir, model string, allowedTools []string, permission llmkit.PermissionMode, ag resolvedAgent, subject sessionSubject, zoneID string, role domain.SessionRole, repositoryID string) llmkit.SessionConfig {
 	ticket := subject.ticket
 	cfg := llmkit.SessionConfig{
 		ID:           id,
@@ -789,6 +821,9 @@ func (s *Service) sessionConfig(id, dir, model string, allowedTools []string, pe
 		counts := s.taskCounts(ticket)
 		counts.agentsMove = s.agentsMoveDocuments()
 		applyTaskContext(&cfg, ticket, taskURL, role, counts)
+	}
+	if section := s.architectureSection(context.TODO(), role, ag.agent, subject.projectID(), repositoryID); section != "" {
+		cfg.AppendSystem = appendSection(cfg.AppendSystem, section)
 	}
 	if section := attachedAssetsSection(s.attachedAssets(ticket)); section != "" {
 		cfg.AppendSystem = appendSection(cfg.AppendSystem, section)

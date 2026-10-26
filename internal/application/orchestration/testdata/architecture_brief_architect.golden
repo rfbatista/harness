@@ -1,0 +1,8 @@
+## Repository architecture
+
+These repositories of the project have an architecture record, a read-only file in your virtual shell:
+
+- project/architecture/widgets.yaml — widgets
+- project/architecture/docs-site.yaml — docs site
+
+Read the relevant ones while you grill the design. When the design changes a layer, its access or a rule, write the proposed change as a section of the spec, for the person to apply in the web UI. You never edit a record.

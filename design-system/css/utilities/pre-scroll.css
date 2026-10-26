@@ -1,0 +1,8 @@
+/* Preformatted text that scrolls inside its own box, flush with its container. */
+
+@layer utilities {
+  .pre-scroll {
+    margin: 0;
+    overflow: auto;
+  }
+}

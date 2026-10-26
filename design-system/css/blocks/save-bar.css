@@ -1,0 +1,43 @@
+/*
+ * Save bar — the one bar of a page whose edits are saved as a whole. It sticks
+ * to the bottom of the scrolling column and appears only while there is
+ * something to save. The mode is a word, never colour alone.
+ * <div class="save-bar" role="region" aria-label="Unsaved changes">
+ *   <span class="badge" data-tone="attention">Unsaved changes</span>
+ *   <span class="summary">…</span>
+ *   <span class="actions"><button class="button">Discard</button>…</span>
+ * </div>
+ */
+
+@layer blocks {
+  .save-bar {
+    position: sticky;
+    inset-block-end: 0;
+    z-index: 2;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-s);
+    padding: var(--space-s) var(--space-m);
+    border: var(--border-width) solid var(--color-line-strong);
+    border-radius: var(--radius-sm);
+    background: var(--color-raised);
+    box-shadow: 0 -0.5rem 1rem -0.75rem var(--color-line-strong);
+    font-size: var(--text-sm);
+
+    & > .summary {
+      flex: 1 1 12rem;
+      color: var(--color-ink-muted);
+      min-inline-size: 0;
+    }
+
+    & > .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--space-xs);
+      margin-inline-start: auto;
+    }
+
+    &[data-tone="danger"] { border-color: color-mix(in oklch, var(--color-danger) 45%, var(--color-line-strong)); }
+  }
+}

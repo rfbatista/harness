@@ -9,8 +9,13 @@ import { describeError } from "../../../../shared/presentation/errors.js";
 import { readSeed } from "../../../../shared/presentation/seed.js";
 import { baseName, isAbsolutePath, notYetAdded, relativeTo, repositoryURL } from "../../domain/project.js";
 
-/** @param {{ gateway: import("../../domain/ports.js").ProjectGateway }} deps */
-export const repositoriesPage = ({ gateway }) => () => ({
+/**
+ * @param {{
+ *   gateway: import("../../domain/ports.js").ProjectGateway,
+ *   architecture?: { has: (repositoryId: string) => Promise<boolean> },
+ * }} deps  architecture says whether a repository has a saved architecture, for its link's words.
+ */
+export const repositoriesPage = ({ gateway, architecture }) => () => ({
   projectId: "",
   projectRoot: "",
   /** Checkouts found inside the project's directory. @type {import("../../domain/project.js").FoundRepository[]} */
@@ -25,6 +30,8 @@ export const repositoriesPage = ({ gateway }) => () => ({
   adding: false,
   removingId: "",
   confirmingId: "",
+  /** Repository ids known to have an architecture. @type {string[]} */
+  withArchitecture: [],
   error: null,
   ready: false,
 
@@ -38,6 +45,8 @@ export const repositoriesPage = ({ gateway }) => () => ({
       removing: r.id === this.removingId,
       envHref: `/projects/${encodeURIComponent(this.projectId)}/repositories/${encodeURIComponent(r.id)}/env`,
       historyHref: `/projects/${encodeURIComponent(this.projectId)}/repositories/${encodeURIComponent(r.id)}/history`,
+      architectureHref: `/projects/${encodeURIComponent(this.projectId)}/repositories/${encodeURIComponent(r.id)}/architecture`,
+      architectureLabel: this.withArchitecture.includes(r.id) ? "Architecture" : "Set up architecture",
     }));
   },
   /** Found checkouts not added yet, to add with one click. */
@@ -80,6 +89,15 @@ export const repositoriesPage = ({ gateway }) => () => ({
       this.ready = true;
     });
     this.searchProject();
+    this.findArchitectures();
+  },
+
+  /** Which repositories have an architecture; a failure leaves the link saying Set up. */
+  async findArchitectures() {
+    if (!architecture) return;
+    const asked = await Promise.allSettled(this.repositories.map((r) => architecture.has(r.id)));
+    // a failure keeps the link's first words
+    this.withArchitecture = this.repositories.filter((r, i) => asked[i].status === "fulfilled" && asked[i].value).map((r) => r.id);
   },
 
   /** Finds the checkouts inside the project's directory; a failure only means no suggestions. */

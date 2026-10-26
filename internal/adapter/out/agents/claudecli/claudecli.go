@@ -213,7 +213,7 @@ func sessionSettings(url string, more map[string][]ports.HookGroup, extra map[st
 		for _, g := range groups {
 			m := claude.HookMatcher{Matcher: g.Matcher}
 			for _, h := range g.Hooks {
-				m.Hooks = append(m.Hooks, claude.Hook{Type: h.Type, Command: h.Command})
+				m.Hooks = append(m.Hooks, claude.Hook{Type: h.Type, Command: h.Command, Timeout: h.Timeout})
 			}
 			hooks[claude.HookEvent(event)] = append(hooks[claude.HookEvent(event)], m)
 		}
