@@ -4,6 +4,8 @@ import (
 	"net/http"
 
 	"github.com/labstack/echo/v4"
+
+	"operators-mcp/internal/domain"
 )
 
 func (h *Handler) handleListWorkspaces(c echo.Context) error {
@@ -54,4 +56,22 @@ func (h *Handler) handleDeleteWorkspace(c echo.Context) error {
 		return err
 	}
 	return c.NoContent(http.StatusNoContent)
+}
+
+// handleCheckBranchName says whether a name is usable for a session's branch,
+// and the name a start would generate. A bad or taken name is an answer, not
+// an error: the start is the one that refuses.
+func (h *Handler) handleCheckBranchName(c echo.Context) error {
+	if h.branchNames == nil {
+		return echo.NewHTTPError(http.StatusServiceUnavailable, "branch names are not configured")
+	}
+	repositoryID := c.QueryParam("repository_id")
+	if repositoryID == "" {
+		return &domain.StructuredError{Code: "INVALID_INPUT", Message: "repository_id is required"}
+	}
+	check, err := h.branchNames.CheckBranchName(c.Request().Context(), repositoryID, c.QueryParam("name"), c.QueryParam("ticket_id"))
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, check)
 }

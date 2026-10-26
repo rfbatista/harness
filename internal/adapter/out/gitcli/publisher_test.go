@@ -163,3 +163,65 @@ func TestPublisher_SubjectsAreTheCommitsAheadNewestFirst(t *testing.T) {
 		t.Fatalf("nothing ahead = %q, %v", got, err)
 	}
 }
+
+func TestPublisher_OriginBranchesAndFetchOrigin(t *testing.T) {
+	ctx := context.Background()
+	p := NewBranchPublisher()
+	repo, _, origin := publishRepo(t)
+
+	// A repository never fetched has no fetch time.
+	never := initRepo(t)
+	if got, at, err := p.OriginBranches(ctx, never); err != nil || len(got) != 0 || !at.IsZero() {
+		t.Fatalf("never fetched = %v %v %v", got, at, err)
+	}
+
+	got, at, err := p.OriginBranches(ctx, repo)
+	if err != nil || strings.Join(got, ",") != "main" || at.IsZero() {
+		t.Fatalf("branches = %v at %v err %v, want [main] and a fetch time", got, at, err)
+	}
+	mainTip := gitTrim(t, repo, "rev-parse", "main")
+	checkedOut := gitTrim(t, repo, "rev-parse", "--abbrev-ref", "HEAD")
+	readme, _ := os.ReadFile(filepath.Join(repo, "README.md"))
+
+	// Origin gains a branch (and a HEAD alias) and loses another, elsewhere.
+	other := filepath.Join(t.TempDir(), "other")
+	if out, err := exec.Command("git", "clone", "-q", origin, other).CombinedOutput(); err != nil {
+		t.Fatalf("clone: %v %s", err, out)
+	}
+	gitIn(t, other, "checkout", "-q", "-B", "main", "origin/main")
+	gitIn(t, other, "push", "-q", "origin", "main:release/1.0", "main:old")
+	gitIn(t, repo, "fetch", "-q", "origin")
+	gitIn(t, other, "push", "-q", "origin", "--delete", "old")
+	gitIn(t, other, "branch", "feature", "main")
+	gitIn(t, other, "push", "-q", "origin", "feature")
+	gitIn(t, repo, "remote", "set-head", "origin", "main")
+
+	if err := p.FetchOrigin(ctx, repo, nil); err != nil {
+		t.Fatal(err)
+	}
+	got, after, err := p.OriginBranches(ctx, repo)
+	if err != nil || strings.Join(got, ",") != "feature,main,release/1.0" {
+		t.Fatalf("after the fetch = %v err %v: HEAD is excluded, old is pruned, by name", got, err)
+	}
+	if after.Before(at) {
+		t.Fatalf("fetch time went back: %v then %v", at, after)
+	}
+	if gitTrim(t, repo, "rev-parse", "main") != mainTip || gitTrim(t, repo, "rev-parse", "--abbrev-ref", "HEAD") != checkedOut {
+		t.Fatal("a fetch moved a local branch or the checkout")
+	}
+	if now, _ := os.ReadFile(filepath.Join(repo, "README.md")); string(now) != string(readme) {
+		t.Fatal("a fetch touched the working tree")
+	}
+}
+
+func TestPublisher_FetchOriginWithoutACredentialIsRefusedAsAuth(t *testing.T) {
+	repo := initRepo(t)
+	gitIn(t, repo, "remote", "add", "origin", "https://127.0.0.1:1/nothing.git")
+	err := NewBranchPublisher().FetchOrigin(context.Background(), repo, nil)
+	if err == nil {
+		t.Fatal("a fetch from nowhere succeeded")
+	}
+	if errors.Is(err, ports.ErrRemoteAuthRejected) {
+		t.Fatalf("an unreachable origin is no auth refusal: %v", err)
+	}
+}

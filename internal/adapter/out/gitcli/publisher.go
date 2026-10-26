@@ -4,9 +4,13 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"operators-mcp/internal/ports"
 )
@@ -127,4 +131,34 @@ func authRefused(reason string) bool {
 		}
 	}
 	return false
+}
+
+// OriginBranches lists refs/remotes/origin/* in one for-each-ref, and reads
+// when origin was last fetched from the age of FETCH_HEAD (any fetch writes
+// it). A checkout whose .git is no directory has no known fetch time.
+func (p BranchPublisher) OriginBranches(ctx context.Context, repoRoot string) ([]string, time.Time, error) {
+	out, err := p.d.gitOutput(ctx, repoRoot, "for-each-ref", "--format=%(refname)", "refs/remotes/origin/")
+	if err != nil {
+		return nil, time.Time{}, err
+	}
+	branches := []string{}
+	for _, ref := range strings.Split(out, "\n") {
+		name, ok := strings.CutPrefix(strings.TrimSpace(ref), "refs/remotes/origin/")
+		if ok && name != "" && name != "HEAD" {
+			branches = append(branches, name)
+		}
+	}
+	slices.Sort(branches)
+	var fetchedAt time.Time
+	if fi, err := os.Stat(filepath.Join(repoRoot, ".git", "FETCH_HEAD")); err == nil {
+		fetchedAt = fi.ModTime()
+	}
+	return branches, fetchedAt, nil
+}
+
+// FetchOrigin fetches every branch of origin into refs/remotes/origin/*, with
+// --prune so a branch deleted there goes. No tags, no working tree.
+func (p BranchPublisher) FetchOrigin(ctx context.Context, repoRoot string, env []string) error {
+	_, err := p.d.gitNetwork(ctx, repoRoot, env, "fetch", "--quiet", "--no-tags", "--prune", "origin", "+refs/heads/*:refs/remotes/origin/*")
+	return err
 }

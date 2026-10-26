@@ -61,7 +61,7 @@ func errorHandler(err error, c echo.Context) {
 			"NO_ANSWERS", "ENV_FILE_TOO_LARGE",
 			"ARTIFACT_PATH_OUTSIDE_WORKTREE", "ARTIFACT_URL_NOT_LOCAL", "ARTIFACT_TOO_LARGE", "ARTIFACT_KIND_MISMATCH",
 			"ARTIFACT_NOT_PROMOTABLE", "PROJECT_ROOT_INVALID",
-			"PR_NO_REMOTE", "PR_BASE_NOT_FOUND", "TASK_NOT_ON_PROJECT",
+			"PR_NO_REMOTE", "PR_BASE_NOT_FOUND", "BRANCH_NAME_INVALID", "TASK_NOT_ON_PROJECT",
 			"GIT_CREDENTIAL_INVALID_KEY", "GIT_CREDENTIAL_HOST_MISMATCH", "GIT_CREDENTIAL_KIND_MISMATCH",
 			"GIT_CREDENTIAL_MISSING", "ARCHITECTURE_INVALID":
 			writeCoded(c, http.StatusBadRequest, err, se)
@@ -93,7 +93,7 @@ func errorHandler(err error, c echo.Context) {
 			// A merge refused for what the checkout or the branch is: the
 			// request is fine, the state is in the way.
 			"MERGE_NO_BRANCH", "MERGE_NO_CHECKOUT", "MERGE_CHECKOUT_DIRTY", "MERGE_WRONG_BRANCH",
-			"MERGE_ALREADY_MERGED", "MERGE_CONFLICT", "MERGE_BRANCH_NOT_FOUND",
+			"MERGE_ALREADY_MERGED", "MERGE_CONFLICT", "MERGE_BRANCH_NOT_FOUND", "MERGE_TARGET_NOT_FOUND",
 			"MANAGED_CLAUDE_BUSY", "MANAGED_CLAUDE_VERSION_INSTALLED", "MANAGED_CLAUDE_VERSION_CURRENT", "AGENT_OAUTH_BUSY", "AGENT_OAUTH_NOT_WAITING":
 			writeCoded(c, http.StatusConflict, err, se)
 			return
@@ -109,7 +109,7 @@ func errorHandler(err error, c echo.Context) {
 		case "MERGE_FAILED", "AGENT_SIGN_OUT_FAILED":
 			writeCoded(c, http.StatusInternalServerError, err, se)
 			return
-		case "PR_PUSH_FAILED", "PR_CREATE_FAILED", "GIT_CREDENTIAL_REJECTED":
+		case "PR_PUSH_FAILED", "PR_CREATE_FAILED", "PR_FETCH_FAILED", "GIT_CREDENTIAL_REJECTED":
 			// The remote or the code host refused; its reason is in the message.
 			writeCoded(c, http.StatusBadGateway, err, se)
 			return

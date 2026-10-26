@@ -94,6 +94,9 @@ type Service struct {
 	catalog    Catalog
 	tickets    ticketResolver
 	workspaces ports.WorkspaceProvisioner
+	// branchNames checks a name the person typed for a session's branch; nil
+	// checks nothing and the worktree's own refusal stands alone.
+	branchNames ports.BranchNameChecker
 
 	DefaultEnv []string // test-only: extra env for spawned sessions
 
@@ -386,6 +389,9 @@ type prepareInput struct {
 	// Headless is a session llmkit runs itself, wrapping its command with the
 	// session's sandbox; false is one a terminal runs.
 	Headless bool
+	// BranchChecked: Branch was a person's own name, already checked against
+	// git's rules, so the stricter generated-name check is skipped.
+	BranchChecked bool
 }
 
 // prepared is a session whose worktree exists and whose configuration is
@@ -439,8 +445,10 @@ func (s *Service) prepare(ctx context.Context, in prepareInput) (*prepared, erro
 	if s.workspaces == nil {
 		return nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "workspaces are not available"}
 	}
-	if err := validateBranchName(in.Branch); err != nil {
-		return nil, err
+	if !in.BranchChecked {
+		if err := validateBranchName(in.Branch); err != nil {
+			return nil, err
+		}
 	}
 
 	// Agent and skill resolution happen before provisioning: git worktree add
@@ -1394,16 +1402,7 @@ func truncate(s string, n int) string {
 // named none. It carries no random suffix, so two identical spawns collide with
 // BRANCH_EXISTS instead of silently sharing a branch; the UI always sends a
 // suffixed name of its own.
-func defaultBranchName(task string) string {
-	slug := domain.Slug(task)
-	if slug == "" {
-		slug = "session"
-	}
-	if len(slug) > 40 {
-		slug = strings.TrimRight(slug[:40], "-")
-	}
-	return "agent/" + slug
-}
+func defaultBranchName(task string) string { return domain.GeneratedBranchName(task) }
 
 // branchNameChars is every character validateBranchName allows in a branch
 // name: alphanumerics plus the punctuation a hierarchical git ref actually

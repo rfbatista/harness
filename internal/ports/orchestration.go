@@ -271,6 +271,10 @@ type InteractiveRequest struct {
 	Model      string `json:"model,omitempty"`
 	AutoAccept string `json:"auto_accept,omitempty"` // "off" | "edits" | "all"
 	BaseBranch string `json:"base_branch,omitempty"`
+	// BranchName is the branch the session's worktree is cut on, as the person
+	// typed it; empty lets the server generate one. An existing branch is
+	// never reused (ADR 0036).
+	BranchName string `json:"branch_name,omitempty"`
 	// RunsOn is where the agent runs; empty means RunnerTUI. RunnerHost
 	// names the client machine for a RunnerTUI session.
 	RunsOn     domain.Runner `json:"runs_on,omitempty"`

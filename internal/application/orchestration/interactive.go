@@ -67,6 +67,14 @@ func (s *Service) StartInteractive(ctx context.Context, req InteractiveRequest) 
 	if ticket != nil {
 		task, branch = ticket.Title, defaultBranchName(ticket.Title)
 	}
+	branch += "-" + id[:8]
+	named := strings.TrimSpace(req.BranchName)
+	if named != "" {
+		if err := s.checkNamedBranch(ctx, req.RepositoryID, named, req.TicketID); err != nil {
+			return nil, ports.AgentSpec{}, err
+		}
+		branch = named
+	}
 	p, err := s.prepare(ctx, prepareInput{
 		ID:           id,
 		ProjectID:    req.ProjectID,
@@ -74,14 +82,22 @@ func (s *Service) StartInteractive(ctx context.Context, req InteractiveRequest) 
 		AgentID:      req.AgentID,
 		ZoneID:       req.ZoneID,
 		TicketID:     req.TicketID,
-		Branch:       branch + "-" + id[:8],
+		Branch:       branch,
 		BaseBranch:   req.BaseBranch,
 		Model:        model,
 		AutoAccept:   req.AutoAccept,
 		Mode:         mode,
 		Role:         s.newSessionRole(ctx, mode, req.ParentSessionID),
+
+		BranchChecked: named != "" && s.branchNames != nil,
 	})
 	if err != nil {
+		if named != "" && errs.Code(err) == domain.BranchExists {
+			// Taken since the check: the worktree's own refusal, told as the check's.
+			if refusal := s.checkNamedBranch(ctx, req.RepositoryID, named, req.TicketID); refusal != nil {
+				return nil, ports.AgentSpec{}, refusal
+			}
+		}
 		return nil, ports.AgentSpec{}, err
 	}
 
@@ -607,4 +623,34 @@ func (s *Service) sessionModel(mode domain.SessionMode, parentSessionID, named s
 	return domain.ResolveSessionModel(mode, parentSessionID != "",
 		domain.TierModel(architect, domain.DefaultArchitectModel),
 		domain.TierModel(implementation, domain.DefaultImplementationModel))
+}
+
+// UseBranchNames makes a start with a branch name check it first.
+func (s *Service) UseBranchNames(c ports.BranchNameChecker) { s.branchNames = c }
+
+// checkNamedBranch refuses a name the person typed for a session's branch
+// when it is not a branch name, or is one already: with the reason, and for a
+// taken name the first free variant. Nothing is created either way. Without a
+// checker nothing is refused here.
+func (s *Service) checkNamedBranch(ctx context.Context, repositoryID, name, ticketID string) error {
+	if s.branchNames == nil {
+		return nil
+	}
+	c, err := s.branchNames.CheckBranchName(ctx, repositoryID, name, ticketID)
+	if err != nil {
+		return err
+	}
+	switch c.Code {
+	case domain.BranchNameInvalid:
+		return &domain.DetailedError{
+			StructuredError: &domain.StructuredError{Code: c.Code, Message: c.Code + ": " + c.Reason},
+			Details:         map[string]string{"name": name, "reason": c.Reason},
+		}
+	case domain.BranchExists:
+		return &domain.DetailedError{
+			StructuredError: &domain.StructuredError{Code: c.Code, Message: c.Code + ": " + c.Reason},
+			Details:         map[string]string{"name": name, "suggestion": c.Suggestion},
+		}
+	}
+	return nil
 }

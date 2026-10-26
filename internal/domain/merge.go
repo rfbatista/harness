@@ -22,9 +22,22 @@ const (
 	MergeConflict = "MERGE_CONFLICT"
 	// MergeBranchNotFound: the session's branch no longer exists.
 	MergeBranchNotFound = "MERGE_BRANCH_NOT_FOUND"
+	// MergeTargetNotFound: the target is not a local branch, or is the
+	// session's own branch.
+	MergeTargetNotFound = "MERGE_TARGET_NOT_FOUND"
 	// MergeFailed: git failed in a way none of the above names (an unknown
 	// committer identity, a failing hook, a timeout); the merge was aborted.
 	MergeFailed = "MERGE_FAILED"
+)
+
+// MergeMethod is how a branch is merged: a merge commit that keeps every
+// commit, or a squash into one new commit. Rebase is not offered because it
+// rewrites the agent's branch (ADR 0035).
+type MergeMethod string
+
+const (
+	MergeMethodMerge  MergeMethod = "merge"
+	MergeMethodSquash MergeMethod = "squash"
 )
 
 // MergeResult is how the newest attempt to merge a session's branch ended: it
@@ -37,12 +50,21 @@ type MergeResult struct {
 	// Into is the default branch the merge was made into (or, for a refusal
 	// before it was known, empty).
 	Into string `json:"into,omitempty"`
+	// Method is how it was merged, or tried: "merge" for every record written
+	// before squashes existed.
+	Method MergeMethod `json:"method"`
 	// Head is the default branch's HEAD after the merge.
 	Head string `json:"head,omitempty"`
 	// Code and Message are the refusal: one of the Merge codes and a readable
 	// reason.
 	Code    string `json:"code,omitempty"`
 	Message string `json:"message,omitempty"`
+	// SquashedTip is the session branch's tip, set on a successful squash into
+	// the repository's default branch. It is not part of the record on the
+	// wire: the session keeps it, so the task's merge state counts the session
+	// as merged while the branch is still at that tip, whatever is attempted
+	// later.
+	SquashedTip string `json:"-"`
 }
 
 // MergeError is a coded merge refusal.

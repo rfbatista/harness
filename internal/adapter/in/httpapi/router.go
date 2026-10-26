@@ -78,11 +78,14 @@ func NewRouter(h *Handler, opts ...Option) *echo.Echo {
 	// workspaces
 	g.GET("/list_workspaces", h.handleListWorkspaces)
 	g.GET("/list_branches", h.handleListBranches)
+	g.GET("/check_branch_name", h.handleCheckBranchName)
 	g.POST("/create_workspace", h.handleCreateWorkspace)
 	g.POST("/delete_workspace", h.handleDeleteWorkspace)
 	// a workspace's branch as a pull request on its origin
 	g.GET("/pull_request", h.handlePullRequest)
 	g.POST("/create_pull_request", h.handleCreatePullRequest)
+	g.GET("/pull_request_bases", h.handlePullRequestBases)
+	g.POST("/refresh_pull_request_bases", h.handleRefreshPullRequestBases)
 
 	// bounded contexts
 	g.GET("/list_bounded_contexts", h.handleListBoundedContexts)
