@@ -10,9 +10,25 @@
  * @property {string} name      the saved command's name, or the command line run ad hoc
  * @property {string} command
  * @property {string} dir       the worktree it runs in
+ * @property {RunWorktreeRef} worktree  which run worktree that is
  * @property {RunStatus} status
  * @property {number} exitCode
  * @property {Date} startedAt
+ *
+ * @typedef {object} RunWorktreeRef  how a run names its run worktree
+ * @property {string} key
+ * @property {"own"|"main"|"session"} kind
+ * @property {string} branch
+ * @property {string} sessionId
+ *
+ * @typedef {object} RunWorktree  a directory a session can run in (the server's order is the display order)
+ * @property {string} key        opaque: "own", "main" or "session:<id>"
+ * @property {"own"|"main"|"session"} kind
+ * @property {string} branch     "" when detached
+ * @property {string} dir
+ * @property {string} sessionId
+ * @property {string} agent      session kind only; "" for none
+ * @property {string} sessionStatus  session kind only
  *
  * @typedef {object} RunCommand  a saved way to run the repository's app
  * @property {string} name
@@ -55,4 +71,43 @@ export function runCommandNameProblem(name) {
   if (!/^[A-Za-z0-9 ._-]*$/.test(n)) return "Use only letters, digits, spaces and . _ -";
   if (!/^[A-Za-z0-9]/.test(n)) return "Start with a letter or a digit.";
   return "";
+}
+
+/** The key of the session's own worktree: what a run uses when none is picked. */
+export const OWN_WORKTREE = "own";
+
+const KIND_WORD = { own: "This session", main: "Main checkout" };
+
+/** Who a run worktree belongs to, in words: "This session", "Main checkout", the agent, or "Session". */
+export function worktreeKindWord(w) {
+  return KIND_WORD[w.kind] ?? (w.agent || "Session");
+}
+
+/** A branch as shown; a detached HEAD has none. */
+export const branchLabel = (branch) => branch || "detached HEAD";
+
+/** What a session's status reads as in a worktree option: ended sessions say so. */
+export function sessionStatusWord(status) {
+  return ["done", "failed", "stopped"].includes(status) ? "ended" : (status || "ended").replaceAll("_", " ");
+}
+
+/** An option's second line in the picker. */
+export function worktreeDescription(w) {
+  if (w.kind === "own") return "This session's worktree";
+  if (w.kind === "main") return "Main checkout · your own working copy";
+  return `${w.agent || "no agent"} · ${sessionStatusWord(w.sessionStatus)}`;
+}
+
+/** The status dot's tone for a session option ("" for none). */
+export function worktreeTone(w) {
+  if (w.kind !== "session") return "";
+  if (["running", "idle", "thinking", "starting"].includes(w.sessionStatus)) return "signal";
+  if (w.sessionStatus === "waiting_approval") return "attention";
+  if (w.sessionStatus === "failed") return "danger";
+  return "";
+}
+
+/** The trigger's and a run badge's words: "<kind word> · <branch>". */
+export function worktreeBadge(w) {
+  return `${worktreeKindWord(w)} · ${branchLabel(w.branch)}`;
 }

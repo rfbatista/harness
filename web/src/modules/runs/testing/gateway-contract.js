@@ -13,6 +13,14 @@ export function runGatewayContract(name, makeSubject) {
     sessions: ["s1"],
     commands: { r1: [{ name: "web", command: "npm run dev" }, { name: "server", command: "make air" }] },
     repositoryOf: { s1: "r1" },
+    dirOf: { s1: "/w/own" },
+    worktrees: {
+      s1: [
+        { key: "own", kind: "own", branch: "agent/feed", dir: "/w/own", sessionId: "s1", agent: "", sessionStatus: "running" },
+        { key: "main", kind: "main", branch: "main", dir: "/w/main", sessionId: "", agent: "", sessionStatus: "" },
+        { key: "session:s2", kind: "session", branch: "agent/other", dir: "/w/other", sessionId: "s2", agent: "go-developer", sessionStatus: "done" },
+      ],
+    },
   });
 
   contract("lists the repository's saved commands by name", async () => {
@@ -65,5 +73,38 @@ export function runGatewayContract(name, makeSubject) {
     await assert.rejects(gateway.start("s1", { name: "nope" }), Codes.RUN_COMMAND_NOT_FOUND);
     await assert.rejects(gateway.start("s1", { command: "  " }), Codes.INVALID_INPUT);
     await assert.rejects(gateway.stop("run-nope"), Codes.RUN_NOT_FOUND);
+  });
+
+  contract("lists the run worktrees a session can pick, in the server's order", async () => {
+    const { gateway } = makeSubject(world());
+    const list = await gateway.listWorktrees("s1");
+    assert.deepEqual(list.map((w) => `${w.key}:${w.kind}:${w.branch}`), ["own:own:agent/feed", "main:main:main", "session:s2:session:agent/other"]);
+    assert.deepEqual([list[2].agent, list[2].sessionStatus, list[2].sessionId], ["go-developer", "done", "s2"]);
+  });
+
+  contract("starts a run in the picked run worktree, which it names; empty means the session's own", async () => {
+    const { gateway } = makeSubject(world());
+    const own = await gateway.start("s1", { command: "pwd" });
+    assert.deepEqual([own.worktree.key, own.worktree.kind, own.dir], ["own", "own", "/w/own"]);
+    const main = await gateway.start("s1", { command: "pwd", worktree: "main" });
+    assert.deepEqual([main.worktree.key, main.worktree.branch, main.worktree.sessionId, main.dir], ["main", "main", "", "/w/main"]);
+    const other = await gateway.start("s1", { command: "pwd", worktree: "session:s2" });
+    assert.deepEqual([other.worktree.kind, other.worktree.sessionId, other.dir], ["session", "s2", "/w/other"]);
+    assert.equal((await gateway.listRuns("s1")).length, 3, "every run lists under the session that started it");
+  });
+
+  contract("a saved command runs once per run worktree", async () => {
+    const { gateway } = makeSubject(world());
+    const here = await gateway.start("s1", { name: "server" });
+    assert.equal((await gateway.start("s1", { name: "server", worktree: "own" })).id, here.id);
+    const there = await gateway.start("s1", { name: "server", worktree: "main" });
+    assert.ok(there.id !== here.id);
+    assert.equal((await gateway.start("s1", { name: "server", worktree: "main" })).id, there.id);
+  });
+
+  contract("refuses a run worktree that is not on offer; nothing starts", async () => {
+    const { gateway } = makeSubject(world());
+    await assert.rejects(gateway.start("s1", { command: "pwd", worktree: "session:gone" }), Codes.WORKTREE_NOT_AVAILABLE);
+    assert.deepEqual(await gateway.listRuns("s1"), []);
   });
 }

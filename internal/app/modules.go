@@ -546,9 +546,10 @@ func (s changeSinks) AnnounceChange(c ports.ProjectChange) {
 // newAppsService runs applications from session worktrees on the same
 // terminal host the sessions run on, with the repositories' saved commands,
 // refreshing their env files in the worktree before each run.
-func newAppsService(orch *orchestration.Service, cat catalog.Catalog, host ports.TerminalHost, envIO ports.EnvFileIO) *apps.Service {
+func newAppsService(orch *orchestration.Service, cat catalog.Catalog, host ports.TerminalHost, envIO ports.EnvFileIO, repos ports.RepositoryRepository, agents ports.AgentRepository, git ports.GitCode) *apps.Service {
 	svc := apps.NewService(orch, cat.Projects, host)
 	svc.UseEnvFiles(cat.Projects, envIO)
+	svc.UseRunWorktrees(repos, agents, git)
 	svc.Subscribe(cat.Bus)
 	return svc
 }

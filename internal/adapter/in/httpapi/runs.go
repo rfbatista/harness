@@ -67,6 +67,17 @@ func (h *Handler) handleListRuns(c echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]any{"runs": runs})
 }
 
+func (h *Handler) handleListRunWorktrees(c echo.Context) error {
+	if h.apps == nil {
+		return echo.NewHTTPError(http.StatusServiceUnavailable, "application runs not configured")
+	}
+	worktrees, err := h.apps.ListRunWorktrees(c.Request().Context(), c.QueryParam("session_id"))
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, map[string]any{"worktrees": worktrees})
+}
+
 // handleStartRun runs a saved command (name) or a command line (command).
 func (h *Handler) handleStartRun(c echo.Context) error {
 	if h.apps == nil {
@@ -76,11 +87,12 @@ func (h *Handler) handleStartRun(c echo.Context) error {
 		SessionID string `json:"session_id"`
 		Name      string `json:"name"`
 		Command   string `json:"command"`
+		Worktree  string `json:"worktree"`
 	}
 	if err := bindJSON(c, &in); err != nil {
 		return err
 	}
-	run, err := h.apps.Start(c.Request().Context(), in.SessionID, in.Name, in.Command)
+	run, err := h.apps.StartIn(c.Request().Context(), in.SessionID, in.Name, in.Command, in.Worktree)
 	if err != nil {
 		return err
 	}

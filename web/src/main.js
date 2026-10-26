@@ -104,7 +104,7 @@ registerSessions(Alpine, {
   navigate,
 });
 
-registerRuns(Alpine, { gateway: runsGateway(api) });
+registerRuns(Alpine, { gateway: runsGateway(api), prefs });
 registerReviews(Alpine, { gateway: reviewsGateway(api, events), clock: systemClock });
 registerPullRequests(Alpine, { gateway: pullRequestsGateway(api, events) });
 registerCode(Alpine, { gateway: codeGateway(api, events), highlighter: hljsHighlighter(createHljs()), prefs, navigate });

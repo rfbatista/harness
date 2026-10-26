@@ -14,9 +14,34 @@ export function toRun(dto) {
     name: dto.name ?? "",
     command: dto.command ?? "",
     dir: dto.dir ?? "",
+    worktree: toRunWorktreeRef(dto.worktree),
     status: dto.status,
     exitCode: Number(dto.exit_code ?? 0),
     startedAt: new Date(dto.started_at),
+  });
+}
+
+/** What a run says of its run worktree; an older server says nothing: the session's own. */
+function toRunWorktreeRef(dto) {
+  return Object.freeze({
+    key: dto?.key || "own",
+    kind: dto?.kind || "own",
+    branch: dto?.branch ?? "",
+    sessionId: dto?.session_id ?? "",
+  });
+}
+
+/** @returns {import("../domain/run.js").RunWorktree} */
+export function toRunWorktree(dto) {
+  if (!dto || typeof dto.key !== "string" || dto.key === "") bad("run worktree without a key");
+  return Object.freeze({
+    key: dto.key,
+    kind: dto.kind ?? "session",
+    branch: dto.branch ?? "",
+    dir: dto.dir ?? "",
+    sessionId: dto.session_id ?? "",
+    agent: dto.agent ?? "",
+    sessionStatus: dto.session_status ?? "",
   });
 }
 

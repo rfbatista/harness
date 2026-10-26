@@ -10,6 +10,8 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"os"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -46,6 +48,12 @@ type Service struct {
 	// before each run; nil leaves the worktree's copies as they are.
 	envFiles ports.EnvFileLister
 	envIO    ports.EnvFileIO
+	// repos, agents and branches describe the repository's main checkout and
+	// other sessions' worktrees to a run that picks one; nil offers only the
+	// session's own worktree.
+	repos    ports.RunRepositoryGetter
+	agents   ports.RunAgentGetter
+	branches ports.RunBranchReader
 
 	mu   sync.Mutex
 	runs map[string]*run
@@ -62,25 +70,40 @@ func (s *Service) UseEnvFiles(files ports.EnvFileLister, io ports.EnvFileIO) {
 	s.envFiles, s.envIO = files, io
 }
 
+// UseRunWorktrees lets a run pick the repository's main checkout and the
+// worktrees of other sessions of the repository (ADR 0039).
+func (s *Service) UseRunWorktrees(repos ports.RunRepositoryGetter, agents ports.RunAgentGetter, branches ports.RunBranchReader) {
+	s.repos, s.agents, s.branches = repos, agents, branches
+}
+
 type run struct {
 	rec  domain.AppRun
 	term ports.Terminal
 	log  *logBuffer
 }
 
-// Start runs the saved command called name, or the command line given.
+// Start runs the saved command called name, or the command line given, in the
+// session's own worktree.
 func (s *Service) Start(ctx context.Context, sessionID, name, command string) (*domain.AppRun, error) {
+	return s.StartIn(ctx, sessionID, name, command, "")
+}
+
+// StartIn is Start in the run worktree called worktree, one of the keys
+// ListRunWorktrees offers now; empty means the session's own. Any other key
+// is refused with WORKTREE_NOT_AVAILABLE.
+func (s *Service) StartIn(ctx context.Context, sessionID, name, command, worktree string) (*domain.AppRun, error) {
 	sess, err := s.sessions.Get(ctx, sessionID)
 	if err != nil {
 		return nil, err
 	}
-	if sess.WorkingDir == "" {
-		return nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "this session has no worktree to run the application in"}
+	wt, err := s.runWorktree(ctx, sess, worktree)
+	if err != nil {
+		return nil, err
 	}
 
 	name, command = strings.TrimSpace(name), strings.TrimSpace(command)
 	if name != "" {
-		if existing := s.running(sessionID, name); existing != nil {
+		if existing := s.running(sessionID, name, wt.Key); existing != nil {
 			return existing, nil
 		}
 		command, err = s.savedCommand(ctx, sess.RepositoryID, name)
@@ -94,7 +117,10 @@ func (s *Service) Start(ctx context.Context, sessionID, name, command string) (*
 		return nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "the command is too long"}
 	}
 
-	dotenv, err := s.writeEnvFiles(ctx, sess.RepositoryID, sess.WorkingDir)
+	// The main checkout is the person's own working copy: its env files are
+	// never written (ADR 0039), though the saved .env is still exported.
+	inMain := s.isMainCheckout(ctx, sess.RepositoryID, wt)
+	dotenv, err := s.writeEnvFiles(ctx, sess.RepositoryID, wt.Dir, !inMain)
 	if err != nil {
 		return nil, err
 	}
@@ -104,10 +130,13 @@ func (s *Service) Start(ctx context.Context, sessionID, name, command string) (*
 	id := "run-" + randomHex()
 	rec := domain.AppRun{
 		ID: id, SessionID: sessionID, Name: cmp.Or(name, command), Command: command,
-		Dir: sess.WorkingDir, Status: domain.AppRunRunning, StartedAt: s.now(),
+		Dir: wt.Dir, Worktree: wt.Ref(), Status: domain.AppRunRunning, StartedAt: s.now(),
 	}
 	// Recorded before it starts, so an exit that comes at once is recorded too.
 	r := &run{rec: rec, log: newLogBuffer()}
+	if inMain {
+		r.log.append([]byte("[harness] Main checkout: env files were not written here. The saved .env is still exported into this run.\r\n"))
+	}
 	if note := skippedNote(skipped); note != "" {
 		// Ahead of the command's output: viewers replay and follow the log.
 		r.log.append([]byte(note))
@@ -116,7 +145,7 @@ func (s *Service) Start(ctx context.Context, sessionID, name, command string) (*
 	s.runs[id] = r
 	s.mu.Unlock()
 
-	spec := ports.AgentSpec{Kind: CommandKind, SessionID: sessionID, Dir: sess.WorkingDir, Command: command, Dotenv: vars}
+	spec := ports.AgentSpec{Kind: CommandKind, SessionID: sessionID, Dir: wt.Dir, Command: command, Dotenv: vars}
 	if s.GitAuth != nil {
 		// The session's own git directory: a run is part of its session.
 		sg, err := s.GitAuth.SessionEnv(ctx, sessionID, sess.RepositoryID)
@@ -183,10 +212,11 @@ func (s *Service) savedCommand(ctx context.Context, repositoryID, name string) (
 	return "", &domain.StructuredError{Code: "RUN_COMMAND_NOT_FOUND", Message: "this repository has no run command called " + name}
 }
 
-// writeEnvFiles overwrites the worktree's env files with the saved ones and
-// returns the root .env's content (empty without one), the only one a run
-// exports. The error names the failure, never a file's content.
-func (s *Service) writeEnvFiles(ctx context.Context, repositoryID, worktree string) (dotenv string, err error) {
+// writeEnvFiles overwrites the worktree's env files with the saved ones, or
+// leaves the directory alone when write is false, and returns the root .env's
+// content (empty without one), the only one a run exports. The error names
+// the failure, never a file's content.
+func (s *Service) writeEnvFiles(ctx context.Context, repositoryID, worktree string, write bool) (dotenv string, err error) {
 	if s.envFiles == nil || s.envIO == nil || repositoryID == "" {
 		return "", nil
 	}
@@ -197,8 +227,10 @@ func (s *Service) writeEnvFiles(ctx context.Context, repositoryID, worktree stri
 	if len(files) == 0 {
 		return "", nil
 	}
-	if err := s.envIO.Write(worktree, files); err != nil {
-		return "", &domain.StructuredError{Code: "ENV_FILE_WRITE_FAILED", Message: "writing the repository's env files into the worktree failed: " + err.Error()}
+	if write {
+		if err := s.envIO.Write(worktree, files); err != nil {
+			return "", &domain.StructuredError{Code: "ENV_FILE_WRITE_FAILED", Message: "writing the repository's env files into the worktree failed: " + err.Error()}
+		}
 	}
 	for _, f := range files {
 		if f.Path == domain.DefaultEnvFilePath {
@@ -208,12 +240,13 @@ func (s *Service) writeEnvFiles(ctx context.Context, repositoryID, worktree stri
 	return dotenv, nil
 }
 
-// running is the session's live run of the saved command name, if any.
-func (s *Service) running(sessionID, name string) *domain.AppRun {
+// running is the session's live run of the saved command name in the run
+// worktree, if any.
+func (s *Service) running(sessionID, name, worktreeKey string) *domain.AppRun {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for _, r := range s.runs {
-		if r.rec.SessionID == sessionID && r.rec.Name == name && r.rec.Status == domain.AppRunRunning {
+		if r.rec.SessionID == sessionID && r.rec.Name == name && r.rec.Worktree.Key == worktreeKey && r.rec.Status == domain.AppRunRunning {
 			out := r.rec
 			return &out
 		}
@@ -343,4 +376,97 @@ func randomHex() string {
 	b := make([]byte, 8)
 	_, _ = rand.Read(b)
 	return hex.EncodeToString(b)
+}
+
+// ListRunWorktrees returns the run worktrees the session can pick. It is
+// computed fresh on each call: a session's directory is offered only while it
+// exists.
+func (s *Service) ListRunWorktrees(ctx context.Context, sessionID string) ([]*domain.RunWorktree, error) {
+	sess, err := s.sessions.Get(ctx, sessionID)
+	if err != nil {
+		return nil, err
+	}
+	return s.runWorktrees(ctx, sess)
+}
+
+func (s *Service) runWorktrees(ctx context.Context, sess *domain.Session) ([]*domain.RunWorktree, error) {
+	if sess.WorkingDir == "" {
+		return nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "this session has no worktree to run the application in"}
+	}
+	own := &domain.RunWorktree{
+		Key: "own", Kind: domain.RunWorktreeOwn, Branch: sess.Branch, Dir: sess.WorkingDir,
+		SessionID: sess.ID, SessionStatus: sess.Status,
+	}
+	out := []*domain.RunWorktree{own}
+	if sess.RepositoryID == "" || s.repos == nil {
+		return out, nil
+	}
+	repo := s.repos.Get(ctx, sess.RepositoryID)
+	if repo == nil {
+		return out, nil
+	}
+	root := filepath.Clean(repo.RootDir)
+	if repo.RootDir != "" && root != filepath.Clean(sess.WorkingDir) && dirExists(root) {
+		main := &domain.RunWorktree{Key: "main", Kind: domain.RunWorktreeMain, Dir: repo.RootDir}
+		if s.branches != nil {
+			main.Branch, _ = s.branches.CurrentBranch(ctx, repo.RootDir)
+		}
+		out = append(out, main)
+	}
+	others, err := s.sessions.List(ctx, ports.SessionFilter{ProjectID: sess.ProjectID})
+	if err != nil {
+		return nil, err
+	}
+	others = slices.DeleteFunc(slices.Clone(others), func(o *domain.Session) bool {
+		return o.ID == sess.ID || o.RepositoryID != sess.RepositoryID || o.WorkingDir == "" ||
+			filepath.Clean(o.WorkingDir) == root || filepath.Clean(o.WorkingDir) == filepath.Clean(sess.WorkingDir) || !dirExists(o.WorkingDir)
+	})
+	slices.SortFunc(others, func(a, b *domain.Session) int { return b.CreatedAt.Compare(a.CreatedAt) })
+	for _, o := range others {
+		w := &domain.RunWorktree{
+			Key: "session:" + o.ID, Kind: domain.RunWorktreeSession, Branch: o.Branch, Dir: o.WorkingDir,
+			SessionID: o.ID, SessionStatus: o.Status,
+		}
+		if s.agents != nil && o.AgentID != "" {
+			if a := s.agents.Get(o.AgentID); a != nil {
+				w.Agent = a.Name
+			}
+		}
+		out = append(out, w)
+	}
+	return out, nil
+}
+
+// isMainCheckout says the run worktree is the repository's main checkout,
+// also when it is a session's own worktree that happens to be that directory.
+func (s *Service) isMainCheckout(ctx context.Context, repositoryID string, wt *domain.RunWorktree) bool {
+	if wt.Kind == domain.RunWorktreeMain {
+		return true
+	}
+	if s.repos == nil || repositoryID == "" {
+		return false
+	}
+	repo := s.repos.Get(ctx, repositoryID)
+	return repo != nil && repo.RootDir != "" && filepath.Clean(repo.RootDir) == filepath.Clean(wt.Dir)
+}
+
+func dirExists(dir string) bool {
+	fi, err := os.Stat(dir)
+	return err == nil && fi.IsDir()
+}
+
+// runWorktree resolves key against the run worktrees on offer now. Nothing
+// in a request is trusted as a path.
+func (s *Service) runWorktree(ctx context.Context, sess *domain.Session, key string) (*domain.RunWorktree, error) {
+	all, err := s.runWorktrees(ctx, sess)
+	if err != nil {
+		return nil, err
+	}
+	key = cmp.Or(strings.TrimSpace(key), "own")
+	for _, w := range all {
+		if w.Key == key {
+			return w, nil
+		}
+	}
+	return nil, &domain.StructuredError{Code: "WORKTREE_NOT_AVAILABLE", Message: "that worktree is no longer available"}
 }
