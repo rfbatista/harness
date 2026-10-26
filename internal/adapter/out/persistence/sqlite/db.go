@@ -191,7 +191,50 @@ func migrate(db *gorm.DB) error {
 	if err := migrateInteractiveRunner(db); err != nil {
 		return fmt.Errorf("sqlite session runner migration: %w", err)
 	}
+	if err := migrateSessionAgentIDs(db); err != nil {
+		return fmt.Errorf("sqlite session agent migration: %w", err)
+	}
 	return nil
+}
+
+// migrateSessionAgentIDs rewrites the agent ids of sessions started before
+// the agent catalog (ADR 0030) to the catalog's ids, which are names: a
+// "cfg:<name>" id from the dotfiles config becomes <name>, and the row id of
+// an agent in the agents table becomes the slug of its name, as the catalog
+// import named it. Ids of neither kind are left alone, so it is safe to
+// re-run, and a session whose agent is gone still names what it had.
+func migrateSessionAgentIDs(db *gorm.DB) error {
+	if err := db.Exec("UPDATE sessions SET agent_id = substr(agent_id, 5) WHERE agent_id LIKE 'cfg:%'").Error; err != nil {
+		return err
+	}
+	type legacyAgent struct {
+		ID   string
+		Name string
+	}
+	var agents []legacyAgent
+	if err := db.Raw("SELECT id, name FROM agents").Scan(&agents).Error; err != nil {
+		return err
+	}
+	for _, a := range agents {
+		name := catalogSlug(a.Name)
+		if name == "" || name == a.ID {
+			continue
+		}
+		if err := db.Exec("UPDATE sessions SET agent_id = ? WHERE agent_id = ?", name, a.ID).Error; err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// catalogSlug is a name as the catalog import slugs it: domain.Slug, at most
+// 64 characters.
+func catalogSlug(name string) string {
+	s := domain.Slug(name)
+	if len(s) > 64 {
+		s = strings.Trim(s[:64], "-")
+	}
+	return s
 }
 
 // migrateInteractiveRunner marks interactive sessions recorded before
