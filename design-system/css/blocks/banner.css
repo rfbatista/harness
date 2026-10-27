@@ -28,7 +28,7 @@
     & .code {
       font-family: var(--font-mono);
       font-size: var(--text-xs);
-      color: var(--color-ink-faint);
+      color: var(--color-ink-muted);
     }
 
     &[data-tone="danger"] { --_tone: var(--color-danger); --_wash: var(--color-danger-wash); }

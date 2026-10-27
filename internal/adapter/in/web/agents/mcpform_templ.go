@@ -51,14 +51,14 @@ func mcpFormPage(v View) templ.Component {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "><template x-if=\"mfOpen\"><div class=\"[ skill-form mcp-form ]\" data-mcp-form aria-labelledby=\"mf-title\" x-bind:role=\"mfRole\" x-bind:aria-modal=\"mfModal\"><div class=\"[ skill-form-body ]\"><div class=\"[ skill-form-head ]\"><div class=\"[ repel ]\"><a href=\"/agents/mcp\" class=\"[ text-sm color-ink-muted ]\" data-mf-back x-bind:href=\"mfBackHref\" x-bind:hidden=\"mfDrawer\" x-on:click=\"mfBackClick\" x-text=\"mfBackLabel\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "><template x-if=\"mfOpen\"><div class=\"[ skill-form mcp-form ]\" data-mcp-form aria-labelledby=\"mf-title\" x-bind:role=\"mfRole\" x-bind:aria-modal=\"mfModal\" x-on:keydown=\"mfTrapTab\"><div class=\"[ skill-form-body ]\"><div class=\"[ skill-form-head ]\"><div class=\"[ repel ]\"><a href=\"/agents/mcp\" class=\"[ text-sm color-ink-muted ]\" data-mf-back x-bind:href=\"mfBackHref\" x-bind:hidden=\"mfDrawer\" x-on:click=\"mfBackClick\" x-text=\"mfBackLabel\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var2 string
 		templ_7745c5c3_Var2, templ_7745c5c3_Err = templ.JoinStringErrs("← MCP servers")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `mcpform.templ`, Line: 36, Col: 193}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `mcpform.templ`, Line: 37, Col: 193}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var2))
 		if templ_7745c5c3_Err != nil {
@@ -79,7 +79,7 @@ func mcpFormPage(v View) templ.Component {
 		var templ_7745c5c3_Var3 string
 		templ_7745c5c3_Var3, templ_7745c5c3_Err = templ.JoinStringErrs("The key in ")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `mcpform.templ`, Line: 75, Col: 66}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `mcpform.templ`, Line: 76, Col: 66}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var3))
 		if templ_7745c5c3_Err != nil {
@@ -92,7 +92,7 @@ func mcpFormPage(v View) templ.Component {
 		var templ_7745c5c3_Var4 string
 		templ_7745c5c3_Var4, templ_7745c5c3_Err = templ.JoinStringErrs(", unique in the catalog. Agents see its tools as ")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `mcpform.templ`, Line: 75, Col: 144}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `mcpform.templ`, Line: 76, Col: 144}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var4))
 		if templ_7745c5c3_Err != nil {
@@ -105,7 +105,7 @@ func mcpFormPage(v View) templ.Component {
 		var templ_7745c5c3_Var5 string
 		templ_7745c5c3_Var5, templ_7745c5c3_Err = templ.JoinStringErrs(". Renaming rewrites it in every agent and project that has it.")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `mcpform.templ`, Line: 75, Col: 239}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `mcpform.templ`, Line: 76, Col: 239}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var5))
 		if templ_7745c5c3_Err != nil {
@@ -118,7 +118,7 @@ func mcpFormPage(v View) templ.Component {
 		var templ_7745c5c3_Var6 string
 		templ_7745c5c3_Var6, templ_7745c5c3_Err = templ.JoinStringErrs("stdio — harness starts a process, like ")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `mcpform.templ`, Line: 93, Col: 77}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `mcpform.templ`, Line: 94, Col: 77}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var6))
 		if templ_7745c5c3_Err != nil {
@@ -131,7 +131,7 @@ func mcpFormPage(v View) templ.Component {
 		var templ_7745c5c3_Var7 string
 		templ_7745c5c3_Var7, templ_7745c5c3_Err = templ.JoinStringErrs(" or ")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `mcpform.templ`, Line: 93, Col: 103}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `mcpform.templ`, Line: 94, Col: 103}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var7))
 		if templ_7745c5c3_Err != nil {
@@ -144,7 +144,7 @@ func mcpFormPage(v View) templ.Component {
 		var templ_7745c5c3_Var8 string
 		templ_7745c5c3_Var8, templ_7745c5c3_Err = templ.JoinStringErrs(".")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `mcpform.templ`, Line: 93, Col: 126}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `mcpform.templ`, Line: 94, Col: 126}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var8))
 		if templ_7745c5c3_Err != nil {
@@ -197,7 +197,7 @@ func mcpFormPage(v View) templ.Component {
 		var templ_7745c5c3_Var9 string
 		templ_7745c5c3_Var9, templ_7745c5c3_Err = templ.JoinStringErrs("Starts or calls the server once, on the harness server and outside any agent sandbox, with a time limit of 20 seconds. ")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `mcpform.templ`, Line: 219, Col: 156}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `mcpform.templ`, Line: 220, Col: 156}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var9))
 		if templ_7745c5c3_Err != nil {
@@ -210,7 +210,7 @@ func mcpFormPage(v View) templ.Component {
 		var templ_7745c5c3_Var10 string
 		templ_7745c5c3_Var10, templ_7745c5c3_Err = templ.JoinStringErrs("${VAR}")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `mcpform.templ`, Line: 219, Col: 174}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `mcpform.templ`, Line: 220, Col: 174}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var10))
 		if templ_7745c5c3_Err != nil {
@@ -223,7 +223,7 @@ func mcpFormPage(v View) templ.Component {
 		var templ_7745c5c3_Var11 string
 		templ_7745c5c3_Var11, templ_7745c5c3_Err = templ.JoinStringErrs(" values come from the server's environment. Lists its tool names; nothing is saved.")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `mcpform.templ`, Line: 219, Col: 270}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `mcpform.templ`, Line: 220, Col: 270}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var11))
 		if templ_7745c5c3_Err != nil {
@@ -282,7 +282,7 @@ func mfRowMode(section string) templ.Component {
 		var templ_7745c5c3_Var13 string
 		templ_7745c5c3_Var13, templ_7745c5c3_Err = templ.ResolveAttributeValue(section)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `mcpform.templ`, Line: 311, Col: 64}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `mcpform.templ`, Line: 312, Col: 64}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var13)
 		if templ_7745c5c3_Err != nil {
@@ -327,7 +327,7 @@ func mfRowNotes(section string) templ.Component {
 		var templ_7745c5c3_Var15 string
 		templ_7745c5c3_Var15, templ_7745c5c3_Err = templ.ResolveAttributeValue(section)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `mcpform.templ`, Line: 327, Col: 93}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `mcpform.templ`, Line: 328, Col: 93}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var15)
 		if templ_7745c5c3_Err != nil {
@@ -340,7 +340,7 @@ func mfRowNotes(section string) templ.Component {
 		var templ_7745c5c3_Var16 string
 		templ_7745c5c3_Var16, templ_7745c5c3_Err = templ.ResolveAttributeValue(section)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `mcpform.templ`, Line: 328, Col: 115}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `mcpform.templ`, Line: 329, Col: 115}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var16)
 		if templ_7745c5c3_Err != nil {

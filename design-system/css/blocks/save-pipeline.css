@@ -159,8 +159,10 @@
 
     & > [data-diff-line] { display: block; padding-inline: var(--space-m); }
     & .mark { display: inline-block; inline-size: 1.25em; color: var(--color-ink-faint); user-select: none; }
-    & > [data-kind="add"] { background: var(--color-success-wash); color: var(--color-success); }
-    & > [data-kind="del"] { background: var(--color-danger-wash); color: var(--color-danger); }
-    & > [data-kind="gap"] { color: var(--color-ink-faint); }
+    /* The diff tokens are the darker pair: success and danger are under 4.5:1 on their washes. */
+    & > [data-kind="add"] { background: var(--color-success-wash); color: var(--color-diff-add); }
+    & > [data-kind="del"] { background: var(--color-danger-wash); color: var(--color-diff-del); }
+    & > :is([data-kind="add"], [data-kind="del"]) .mark { color: inherit; }
+    & > [data-kind="gap"] { color: var(--color-ink-muted); }
   }
 }

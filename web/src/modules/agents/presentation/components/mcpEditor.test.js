@@ -549,3 +549,19 @@ test("leaving the form with unsaved changes is guarded; closing the page's form 
   assert.equal(page.tab, "mcp");
   assert.equal(page.fullPage, false);
 });
+
+test("Tab wraps inside the drawer, and the full page leaves the keyboard alone", async () => {
+  const control = () => ({ focused: 0, focus() { this.focused++; } });
+  const [first, last] = [control(), control()];
+  const tab = () => ({ key: "Tab", shiftKey: false, prevented: false, currentTarget: { querySelectorAll: () => [first, last] }, preventDefault() { this.prevented = true; } });
+  const { page } = await open("/agents/backend/edit");
+  page.mfOpenDrawer();
+  const wrapped = tab();
+  page.mfTrapTab(wrapped);
+  assert.equal(wrapped.prevented, true, "the focus was not on a control of the drawer, so it is brought in");
+  assert.equal(first.focused, 1);
+  const full = await open("/agents/mcp/new");
+  const free = tab();
+  full.page.mfTrapTab(free);
+  assert.equal(free.prevented, false);
+});

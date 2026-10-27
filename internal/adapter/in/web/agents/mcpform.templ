@@ -29,6 +29,7 @@ templ mcpFormPage(v View) {
 				aria-labelledby="mf-title"
 				x-bind:role="mfRole"
 				x-bind:aria-modal="mfModal"
+				x-on:keydown="mfTrapTab"
 			>
 				<div class="[ skill-form-body ]">
 					<div class="[ skill-form-head ]">

@@ -120,7 +120,7 @@
     font-size: var(--text-sm);
     cursor: pointer;
 
-    &:has(input:checked) { border-color: var(--color-line-strong); background: var(--color-selected); }
+    &:has(input:checked) { border-color: var(--color-line-strong); background: var(--color-selected); & .color-ink-faint { color: var(--color-ink-muted); } }
     & > input { margin: 0; accent-color: var(--color-signal); }
   }
 

@@ -12,12 +12,12 @@
 
 import { deleteBaseVersions, deleteImpact } from "../../domain/deleteImpact.js";
 import { openSave, saveView, savedToast } from "../../domain/savePipeline.js";
+import { trapTab } from "./focusTrap.js";
 import { saveController } from "./saveController.js";
 
 const KIND_OF_TAB = { agents: "agent", skills: "skill", bundles: "bundle", mcp: "mcp" };
 const VERB_OF_KIND = { agent: "deleteAgent", skill: "deleteSkill", bundle: "deleteBundle", mcp: "deleteMcpServer" };
 const WORD_OF_KIND = { agent: "agent", skill: "skill", bundle: "bundle", mcp: "MCP server" };
-const FOCUSABLE = "input:not([disabled]), button:not([disabled]), a[href]";
 
 /**
  * @param {{
@@ -129,17 +129,7 @@ export function deleteUi({ gateway, timers }) {
         if (!this.delState.saving) this.cancelDelete();
         return;
       }
-      if (event.key !== "Tab") return;
-      const items = [...event.currentTarget.querySelectorAll(FOCUSABLE)];
-      if (items.length === 0) return;
-      const at = items.indexOf(doc.activeElement);
-      if (event.shiftKey && at <= 0) {
-        event.preventDefault();
-        items[items.length - 1].focus();
-      } else if (!event.shiftKey && (at === items.length - 1 || at < 0)) {
-        event.preventDefault();
-        items[0].focus();
-      }
+      trapTab(event, doc);
     },
 
     /** A press on the backdrop must not move the focus out of the dialog. @param {MouseEvent} event */

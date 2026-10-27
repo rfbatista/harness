@@ -27,6 +27,7 @@ import {
 } from "../../domain/mcpForm.js";
 import { openSave, saveView, savedToast } from "../../domain/savePipeline.js";
 import { returnHref, safeReturn } from "../../domain/skillForm.js";
+import { trapTab } from "./focusTrap.js";
 import { settleEditor } from "./liveCatalog.js";
 import { saveController } from "./saveController.js";
 
@@ -854,6 +855,10 @@ export function mcpEditor({ gateway, location, timers = globalThis }) {
     /** The back link: the same as Cancel. */
     mfBackClick(event) {
       this.cancelEditor(event);
+    },
+    /** The drawer is modal: Tab wraps inside it. The full page has no use for it. @param {KeyboardEvent} event */
+    mfTrapTab(event) {
+      if (this.mfDrawer) trapTab(event);
     },
     /** Escape closes the drawer as Cancel does; the full page has no use for it. */
     mfEscape(event) {
