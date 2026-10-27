@@ -59,6 +59,7 @@ test("the save bar sums up the changes by tab", () => {
   assert.equal(changeSummary(rows), "3 changes: 2 in Tools, 1 in Layers");
   assert.equal(changeSummary([rows[0]]), "1 change: 1 in Tools");
   assert.equal(changeSummary([]), "0 changes");
+  assert.equal(changeSummary([{ pointer: "/pattern" }]), "1 change: 1 in Pattern");
 });
 
 test("the events panel shows five rows until Show all", () => {

@@ -140,7 +140,7 @@ func TestArchitectureSaveBarIsStickyWithTheChangeSummary(t *testing.T) {
 		poll(`document.querySelector('[data-scroll]').getBoundingClientRect().bottom - document.querySelector('[data-save-bar]').getBoundingClientRect().bottom < 8`),
 		chromedp.Evaluate(`document.querySelector('[data-scroll]').getBoundingClientRect().bottom - document.querySelector('[data-save-bar]').getBoundingClientRect().bottom`, &gap),
 	)
-	for _, want := range []string{"1 change: 1 in Instructions & rules", "Discard", "Review diff", "Save to database"} {
+	for _, want := range []string{"1 change: 1 in Pattern", "Discard", "Review diff", "Save to database"} {
 		if !strings.Contains(bar, want) {
 			t.Errorf("save bar lacks %q: %q", want, bar)
 		}

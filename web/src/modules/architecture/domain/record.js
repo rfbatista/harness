@@ -86,8 +86,9 @@ export function changeSummary(rows) {
   if (rows.length === 0) return "0 changes";
   const byTab = new Map();
   for (const row of rows) {
-    const tab = TABS.find((t) => t.slug === tabOfPointer(row.pointer));
-    byTab.set(tab.label, (byTab.get(tab.label) ?? 0) + 1);
+    // The pattern lives in the page head, not in the tab its pointer maps to.
+    const label = row.pointer === "/pattern" ? "Pattern" : TABS.find((t) => t.slug === tabOfPointer(row.pointer)).label;
+    byTab.set(label, (byTab.get(label) ?? 0) + 1);
   }
   const parts = [...byTab].map(([label, n]) => `${n} in ${label}`);
   return `${plural(rows.length, "change")}: ${parts.join(", ")}`;
