@@ -10,7 +10,7 @@
  * <div class="hook-cols">…fields…</div>
  * <div class="cond"><span class="k">When</span><div>…</div><div class="cond-row"><span class="k">In</span><div>…</div></div>…</div>
  * <div class="mode-cards"><button aria-pressed="true" data-tone="danger"><b>…</b><span>…</span></button>…</div>
- * <label class="agent-toggle"><input type="checkbox"/><span class="agent-chip">…</span></label>
+ * <button type="button" class="agent-chip agent-toggle" aria-pressed="true"><i></i>agent</button>
  * The columns stack when narrow. Not published as a design-system component.
  */
 
@@ -197,18 +197,25 @@
     }
   }
 
-  /* An agent to pick: the agent chip with its checkbox. */
+  /* An agent to pick: the agent chip as a toggle button; pressed, it takes the agent's colour. */
   .agent-toggle {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-2xs);
+    font: inherit;
+    color: inherit;
     cursor: pointer;
+    transition: background-color var(--duration-instant) var(--ease-out);
 
-    & > input { inline-size: 1rem; block-size: 1rem; margin: 0; accent-color: var(--color-signal); }
+    @media (prefers-reduced-motion: reduce) { transition: none; }
 
-    &:has(input:checked) .agent-chip {
-      border-color: var(--color-signal);
-      background: var(--color-selected);
+    &:hover { background: var(--color-hover); }
+
+    &[aria-pressed="true"] {
+      border-color: var(--c);
+      background: color-mix(in oklch, var(--c) 16%, var(--color-panel));
+      font-weight: var(--weight-medium);
+    }
+
+    @media (forced-colors: active) {
+      &[aria-pressed="true"] { outline: calc(var(--border-width) * 2) solid CanvasText; }
     }
   }
 

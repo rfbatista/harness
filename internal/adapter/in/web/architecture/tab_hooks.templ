@@ -167,10 +167,7 @@ templ tabHooks() {
 										<div class="[ flow ] [ flow-space-2xs ]">
 											<div class="[ cluster ]" role="group" aria-label="Agents">
 												<template x-for="c in r.agentChips" x-bind:key="c.value">
-													<label class="[ agent-toggle ]" x-bind:data-agent-chip="c.value">
-														<input type="checkbox" x-bind:checked="c.checked" x-on:change="toggleChip(r.index, c.value, $event.target.checked)"/>
-														<span class="[ agent-chip ]" x-bind:data-slot="c.slot"><i></i><span x-text="c.label"></span></span>
-													</label>
+													<button type="button" class="[ agent-chip ] [ agent-toggle ]" x-bind:data-agent-chip="c.value" x-bind:data-slot="c.slot" x-bind:aria-pressed="c.checked" x-on:click="toggleChip(r.index, c.value, !c.checked)"><i></i><span x-text="c.label"></span></button>
 												</template>
 											</div>
 											<span class="[ text-xs color-ink-faint ]">No agent chosen means every agent. Who may change what is set on the Layers tab.</span>

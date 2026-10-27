@@ -697,41 +697,67 @@ func TestTheAccessMatrixScrollsSidewaysAtNarrowWidthsWithAgentNamesPinned(t *tes
 	}
 }
 
-// A rotated layer header shows its whole name: its text lies inside the header
-// row, and the header row inside the matrix box, at wide and narrow widths.
+// matrixHeaderProbe measures the matrix's rotated layer headers with the matrix
+// scrolled to `block` in the page scroller: the glyphs of each header must lie
+// inside its cell, inside every ancestor that clips (the matrix box, the pane,
+// the page scroller), and the cell must not overflow; the Agent header cell
+// stays compact.
+const matrixHeaderProbe = `((block) => {
+	const box = document.querySelector('[data-access-matrix] .access-matrix');
+	box.scrollIntoView({ block });
+	const out = [];
+	const slack = 0.5;
+	const cells = [...document.querySelectorAll('[data-access-matrix] thead th[data-column]')];
+	if (cells.length === 0) out.push('no rotated headers');
+	for (const th of cells) {
+		const span = th.querySelector('span');
+		const range = document.createRange();
+		range.selectNodeContents(span);
+		const g = range.getBoundingClientRect(); // the glyphs, after the rotation
+		const c = th.getBoundingClientRect();
+		const name = th.dataset.column;
+		if (g.top < c.top - slack || g.bottom > c.bottom + slack || g.left < c.left - slack || g.right > c.right + slack) out.push(name + ': glyphs ' + [g.top, g.bottom, g.left, g.right].map(Math.round) + ' outside the cell ' + [c.top, c.bottom, c.left, c.right].map(Math.round));
+		if (span.scrollHeight > span.clientHeight + 1 || span.scrollWidth > span.clientWidth + 1 || th.scrollHeight > th.clientHeight + 1) out.push(name + ': overflows its cell');
+		for (let e = th.parentElement; e; e = e.parentElement) {
+			const st = getComputedStyle(e);
+			if (st.overflowX === 'visible' && st.overflowY === 'visible') continue;
+			const b = e.getBoundingClientRect();
+			// a column scrolled out sideways is not clipped, only out of view: judge the vertical edges only
+			if (g.top < b.top - slack || g.bottom > b.bottom + slack) out.push(name + ': glyphs cut by ' + (e.className || e.tagName) + ' ' + [g.top, g.bottom].map(Math.round) + ' vs ' + [b.top, b.bottom].map(Math.round));
+		}
+	}
+	const agent = document.querySelector('[data-access-matrix] thead th:first-child').getBoundingClientRect();
+	if (agent.width > 15 * 16) out.push('the Agent header cell is ' + Math.round(agent.width) + ' px wide');
+	return out.join('; ');
+})`
+
+// A rotated layer header shows its whole name, at the wide and narrow widths,
+// with the matrix in the middle of the page scroller and at its bottom edge.
 func TestRotatedLayerHeadersShowTheirFullNames(t *testing.T) {
-	for _, width := range []int64{1440, 760} {
-		rig := newArchRig(t)
-		openLayersTabAt(t, rig, width)
-		var bad string
-		rig.run(t,
-			chromedp.Click(layersPanel+`[data-preset]`, chromedp.ByQuery),
-			poll(layerItemsJS+`.length === 8`),
-			addLayerBy("folder"),
-			setLayerField(8, "name", "a-rather-long-layer-name-for-a-header"),
-			poll(`!!document.querySelector('[data-access-matrix] thead th[data-column="a-rather-long-layer-name-for-a-header"]')`),
-			evalLayers(`(() => {
-				const box = document.querySelector('[data-access-matrix] .access-matrix');
-				box.scrollIntoView({ block: 'center' });
-				const b = box.getBoundingClientRect();
-				const row = document.querySelector('[data-access-matrix] thead tr').getBoundingClientRect();
-				const out = [];
-				for (const th of document.querySelectorAll('[data-access-matrix] thead th[data-column]')) {
-					const span = th.querySelector('span');
-					const range = document.createRange();
-					range.selectNodeContents(span);
-					const t = range.getBoundingClientRect(); // the glyphs, after the rotation
-					const th_ = th.getBoundingClientRect();
-					const slack = 0.5;
-					if (t.top < row.top - slack || t.bottom > row.bottom + slack || t.left < th_.left - slack || t.right > th_.right + slack) out.push(th.dataset.column + ' text ' + [t.top, t.bottom, t.left, t.right].map(Math.round) + ' header ' + [row.top, row.bottom, th_.left, th_.right].map(Math.round));
-					if (span.scrollHeight > span.clientHeight + 1 || th.scrollHeight > th.clientHeight + 1) out.push(th.dataset.column + ' overflows its cell');
+	for _, width := range []int64{1440, 1280, 760} {
+		for _, block := range []string{"center", "end"} {
+			for _, preset := range []bool{false, true} {
+				rig := newArchRig(t)
+				var steps chromedp.Tasks
+				if preset {
+					steps = chromedp.Tasks{
+						chromedp.Click(layersPanel+`[data-preset]`, chromedp.ByQuery),
+						poll(layerItemsJS + `.length === 8`),
+						addLayerBy("folder"),
+						setLayerField(8, "name", "a-rather-long-layer-name-for-a-header"),
+						poll(`!!document.querySelector('[data-access-matrix] thead th[data-column="a-rather-long-layer-name-for-a-header"]')`),
+					}
+				} else {
+					rig.api.seed(savedRecord())
 				}
-				if (row.top < b.top - 0.5) out.push('header row starts above the matrix box');
-				return out.join('; ');
-			})()`, &bad),
-		)
-		if bad != "" {
-			t.Errorf("at %d px a rotated header is clipped: %s", width, bad)
+				openLayersTabAt(t, rig, width)
+				var bad string
+				rig.run(t, steps, poll(`document.querySelectorAll('[data-access-matrix] thead th[data-column]').length >= 3`),
+					evalLayers(matrixHeaderProbe+`(`+fmt.Sprintf("%q", block)+`)`, &bad))
+				if bad != "" {
+					t.Errorf("at %d px, matrix at %s, preset %v: %s", width, block, preset, bad)
+				}
+			}
 		}
 	}
 }

@@ -60,6 +60,8 @@
       position: sticky;
       inset-inline-start: 0;
       z-index: 2;
+      /* 1% makes the column as wide as its content (never more): the layer columns share the rest. */
+      inline-size: 1%;
       min-inline-size: 11rem;
       padding-inline: var(--space-m);
       border-inline-end: var(--border-width) solid var(--color-line);

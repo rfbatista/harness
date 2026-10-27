@@ -371,7 +371,8 @@ func TestHooksTabAgentChipsWriteTheRulesAgents(t *testing.T) {
 		hooksOpen(),
 		poll(`document.querySelectorAll('#architecture-panel-hooks [data-agent-chip]').length >= 3`),
 		chromedp.Evaluate(`[...document.querySelectorAll('#architecture-panel-hooks [data-agent-chip]')].map(c => c.textContent.trim())`, &chips),
-		chromedp.Click(`#architecture-panel-hooks [data-agent-chip="go-developer"] input`, chromedp.ByQuery),
+		chromedp.Click(`#architecture-panel-hooks [data-agent-chip="go-developer"]`, chromedp.ByQuery),
+		poll(`document.querySelector('#architecture-panel-hooks [data-agent-chip="go-developer"]').getAttribute('aria-pressed') === 'true'`),
 		poll(barVisible()),
 		clickButton(saveBar, "Save"),
 		poll(`!`+barVisible()),
@@ -379,13 +380,24 @@ func TestHooksTabAgentChipsWriteTheRulesAgents(t *testing.T) {
 	if !contains(chips, "go-developer") || !contains(chips, "software-architect") {
 		t.Errorf("chips = %q", chips)
 	}
+	// each chip is one toggle button with the agent's colour, not a checkbox beside a chip
+	var shape string
+	rig.run(t, chromedp.Evaluate(`(() => {
+		const cs = [...document.querySelectorAll('#architecture-panel-hooks [data-agent-chip]')];
+		const dots = cs.map(c => getComputedStyle(c.querySelector('i')).backgroundColor);
+		return JSON.stringify({ buttons: cs.every(c => c.tagName === 'BUTTON' && c.type === 'button'), checkboxes: document.querySelectorAll('#architecture-panel-hooks [role=group][aria-label=Agents] input').length, distinct: new Set(dots).size > 1, pressed: cs.every(c => c.hasAttribute('aria-pressed')) });
+	})()`, &shape))
+	if shape != `{"buttons":true,"checkboxes":0,"distinct":true,"pressed":true}` {
+		t.Errorf("agent chips = %s", shape)
+	}
 	rules, _ := rig.api.lastSaved()["rules"].([]any)
 	agents, _ := rules[0].(map[string]any)["agents"].([]any)
 	if len(agents) != 1 || agents[0] != "go-developer" {
 		t.Errorf("agents = %v", agents)
 	}
 	rig.run(t,
-		chromedp.Click(`#architecture-panel-hooks [data-agent-chip="go-developer"] input`, chromedp.ByQuery),
+		chromedp.Click(`#architecture-panel-hooks [data-agent-chip="go-developer"]`, chromedp.ByQuery),
+		poll(`document.querySelector('#architecture-panel-hooks [data-agent-chip="go-developer"]').getAttribute('aria-pressed') === 'false'`),
 		poll(barVisible()),
 		clickButton(saveBar, "Save"),
 		poll(`!`+barVisible()),
