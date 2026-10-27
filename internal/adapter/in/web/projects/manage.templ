@@ -200,6 +200,7 @@ templ SettingsPage(v SettingsView) {
 							</template>
 						</div>
 					</section>
+					@mcpServersSection(v.Project.ID, v.Project.Name, SettingsHref(v.Project.ID))
 					if v.TokenSavers != nil {
 						@tokensavers.Section(*v.TokenSavers)
 					}

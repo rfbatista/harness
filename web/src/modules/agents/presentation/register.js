@@ -1,6 +1,8 @@
-// The agents module's Alpine components: the Agents page.
+// The agents module's Alpine components: the Agents page and the MCP servers
+// section of a project's settings.
 
 import { agentsPage } from "./components/agentsPage.js";
+import { projectMcpServers } from "./components/projectMcpServers.js";
 
 /**
  * @param {import("alpinejs").Alpine} Alpine
@@ -13,4 +15,5 @@ import { agentsPage } from "./components/agentsPage.js";
  */
 export function registerAgents(Alpine, deps) {
   Alpine.data("agentsPage", agentsPage(deps));
+  Alpine.data("projectMcpServers", projectMcpServers({ gateway: deps.gateway }));
 }
