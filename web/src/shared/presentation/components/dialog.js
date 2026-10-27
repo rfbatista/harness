@@ -13,7 +13,8 @@
 // Opened by `dialog-open` on window, with { id, anchor }. The focus goes to
 // [data-initial-focus], else the first control. Esc closes it and returns the
 // focus to the anchor, and goes no further, so a terminal behind it never sees
-// it. A dialog also closes on a press outside it; an alertdialog only by its
+// it. It tells the page it closed (`dialog-close` on window, { id }), however
+// it closed, and closes on `dialog-dismiss` ({ id }) from the page. A dialog also closes on a press outside it; an alertdialog only by its
 // own buttons or Esc. data-trap keeps Tab inside. On a phone it is a sheet.
 
 import { defaultEnv, floating } from "./popup.js";
@@ -24,10 +25,12 @@ export class AnchoredDialog {
   /**
    * @param {HTMLElement} el  the .popup
    * @param {import("./popup.js").Env} env
+   * @param {() => void} [onClose]  runs once each time it closes
    */
-  constructor(el, env = defaultEnv()) {
+  constructor(el, env = defaultEnv(), onClose = () => {}) {
     this.el = el;
     this.env = env;
+    this.onClose = onClose;
     this.anchor = null;
     this.floating = null;
     el.setAttribute("popover", "manual");
@@ -68,6 +71,7 @@ export class AnchoredDialog {
     this.floating = null;
     this.anchor?.setAttribute("aria-expanded", "false");
     if (wasOpen && refocus) this.anchor?.focus();
+    if (wasOpen) this.onClose();
   }
 
   controls() {
@@ -103,7 +107,7 @@ export const popupDialog = (env) => () => ({
   // the outermost scope (the page), shared by every dialog on it.
   _dialog: null,
   init() {
-    this._dialog = new AnchoredDialog(this.$el, env ?? defaultEnv());
+    this._dialog = new AnchoredDialog(this.$el, env ?? defaultEnv(), () => this.$dispatch("dialog-close", { id: this.$el.id }));
   },
   get isOpen() {
     return this._dialog?.isOpen ?? false;
@@ -116,6 +120,10 @@ export const popupDialog = (env) => () => ({
   },
   close() {
     this._dialog.close();
+  },
+  /** The page asked it closed (dialog-dismiss, { id }). */
+  dismissFrom(event) {
+    if (event.detail?.id === this._dialog.el.id) this._dialog.close();
   },
   /** A button inside it was pressed: tells the page, which owns what it does (dialog-action, { id, action }). */
   act(action) {

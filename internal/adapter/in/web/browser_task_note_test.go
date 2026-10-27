@@ -6,17 +6,19 @@ import (
 	"time"
 
 	"github.com/chromedp/chromedp"
+	"github.com/chromedp/chromedp/kb"
 
 	"operators-mcp/internal/domain"
 )
 
 const (
-	noteText   = `document.querySelector('.brief > p')`
-	noteToggle = `document.querySelector('.brief > button')`
+	noteButton = `document.querySelector('#task-note-button')`
+	notePopup  = `document.querySelector('#task-note')`
+	// The agents' area: the session list's box, which the page fixes to the viewport.
+	agentsBox = `(() => { const r = document.querySelector('.split-view > [role=listbox]').getBoundingClientRect(); return [r.top, r.height].map(Math.round).join(',') })()`
 )
 
-// noteDeps is a task whose page has a session open (boardDeps's): the
-// description is one line.
+// noteDeps is a task whose page has a session open (boardDeps's).
 func noteDeps(description string) Deps {
 	deps := boardDeps()
 	deps.Tasks = fakeTickets{[]*domain.Ticket{
@@ -25,175 +27,123 @@ func noteDeps(description string) Deps {
 	return deps
 }
 
-// noSessionDeps is the same task with no session: the task's overview.
-func noSessionDeps(description string) Deps {
-	deps := noteDeps(description)
-	deps.Sessions = fakeSessions{}
-	return deps
-}
-
-// A long description shows one line beside a More toggle; More shows it
-// whole and Less cuts it to one line again.
-func TestALongDescriptionShowsOneLineWithAMoreToggle(t *testing.T) {
+// The task note is a popover from the title row: with a long description the
+// agents' area keeps its place and height on load and while the note is open;
+// the popover shows the whole text; Esc closes it and the button has the
+// focus again; a reload starts closed.
+func TestTheTaskNoteOpensAsAPopoverThatMovesNothing(t *testing.T) {
 	long := strings.Repeat("Line of the description that the person wrote.\n", 12)
 	url, _ := stripServer(t, noteDeps(long))
 	ctx, errs := browser(t)
 
-	var lineHeight, clamped, whole, again float64
-	var word, openWord, expanded, closedAgain string
+	var before, open, expanded, text, focused, closed, reloaded string
+	var openAfterReload bool
+	var popupHeight, viewport float64
 	err := chromedp.Run(ctx,
 		chromedp.EmulateViewport(1280, 800),
 		chromedp.Navigate(url+"/projects/p1/tasks/t-feed"),
-		chromedp.Poll(pageReady+` && !!`+noteToggle+` && `+noteToggle+`.checkVisibility()`, nil, chromedp.WithPollingTimeout(10*time.Second)),
-		chromedp.Evaluate(`parseFloat(getComputedStyle(`+noteText+`).lineHeight)`, &lineHeight),
-		chromedp.Evaluate(noteText+`.getBoundingClientRect().height`, &clamped),
-		chromedp.Evaluate(noteToggle+`.textContent.trim()`, &word),
-		chromedp.Evaluate(noteToggle+`.click()`, nil),
-		chromedp.Poll(noteToggle+`.textContent.trim() === 'Less'`, nil, chromedp.WithPollingTimeout(5*time.Second)),
-		chromedp.Evaluate(noteText+`.getBoundingClientRect().height`, &whole),
-		chromedp.Evaluate(noteToggle+`.textContent.trim()`, &openWord),
-		chromedp.Evaluate(noteToggle+`.getAttribute('aria-expanded')`, &expanded),
-		chromedp.Evaluate(noteToggle+`.click()`, nil),
-		chromedp.Poll(noteToggle+`.textContent.trim() === 'More'`, nil, chromedp.WithPollingTimeout(5*time.Second)),
-		chromedp.Evaluate(noteText+`.getBoundingClientRect().height`, &again),
-		chromedp.Evaluate(noteToggle+`.getAttribute('aria-expanded')`, &closedAgain),
+		chromedp.Poll(pageReady+` && `+noteButton+`.checkVisibility()`, nil, chromedp.WithPollingTimeout(10*time.Second)),
+		chromedp.Evaluate(agentsBox, &before),
+		chromedp.Evaluate(noteButton+`.click()`, nil),
+		chromedp.Poll(notePopup+`.matches(':popover-open')`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Evaluate(agentsBox, &open),
+		chromedp.Evaluate(noteButton+`.getAttribute('aria-expanded')`, &expanded),
+		chromedp.Evaluate(notePopup+`.querySelector('.note-body').textContent`, &text),
+		chromedp.Evaluate(notePopup+`.getBoundingClientRect().height`, &popupHeight),
+		chromedp.Evaluate(`innerHeight`, &viewport),
+		chromedp.KeyEvent(kb.Escape),
+		chromedp.Poll(`!`+notePopup+`.matches(':popover-open')`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Evaluate(`document.activeElement === `+noteButton+` ? 'button' : document.activeElement.tagName`, &focused),
+		chromedp.Evaluate(noteButton+`.getAttribute('aria-expanded')`, &closed),
+		chromedp.Evaluate(noteButton+`.click()`, nil),
+		chromedp.Poll(notePopup+`.matches(':popover-open')`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Navigate(url+"/projects/p1/tasks/t-feed"),
+		chromedp.Poll(pageReady+` && `+noteButton+`.checkVisibility()`, nil, chromedp.WithPollingTimeout(10*time.Second)),
+		chromedp.Evaluate(notePopup+`.matches(':popover-open')`, &openAfterReload),
+		chromedp.Evaluate(agentsBox, &reloaded),
 	)
 	if err != nil {
 		t.Fatalf("%v\nJS errors: %v", err, errs.all())
 	}
-	if clamped > lineHeight+1 || word != "More" {
-		t.Errorf("clamped: %.0fpx high with a %.0fpx line (want one line), toggle %q", clamped, lineHeight, word)
+	if open != before || reloaded != before {
+		t.Errorf("the agents' area moved: before %s, with the note open %s, after a reload %s", before, open, reloaded)
 	}
-	if whole < 10*lineHeight || openWord != "Less" || expanded != "true" {
-		t.Errorf("shown whole: %.0fpx high, toggle %q, aria-expanded %q", whole, openWord, expanded)
+	if expanded != "true" || closed != "false" {
+		t.Errorf("aria-expanded: open %q, closed %q", expanded, closed)
 	}
-	if again != clamped || closedAgain != "false" {
-		t.Errorf("one line again: %.0fpx (was %.0fpx), aria-expanded %q", again, clamped, closedAgain)
+	if text != long[:len(long)-1] && strings.TrimSpace(text) != strings.TrimSpace(long) {
+		t.Errorf("the popover shows %q, want the whole description", text)
+	}
+	if popupHeight > 40*16 || popupHeight > viewport*0.7+1 {
+		t.Errorf("the popover is %.0fpx high in a %.0fpx viewport: want at most min(70dvh, 40rem)", popupHeight, viewport)
+	}
+	if focused != "button" {
+		t.Errorf("after Esc the focus is on %s, want the Description button", focused)
+	}
+	if openAfterReload {
+		t.Error("a reload opened the note: its state must never be stored")
 	}
 	if e := errs.all(); len(e) > 0 {
 		t.Errorf("JavaScript errors:\n%s", strings.Join(e, "\n"))
 	}
 }
 
-// Opening the description is remembered for that task, in the browser: a
-// reload shows it whole, and another task's description is still one line.
-func TestTheOpenDescriptionIsRememberedPerTask(t *testing.T) {
-	long := strings.Repeat("Line of the description that the person wrote.\n", 12)
-	deps := noteDeps(long)
-	deps.Tasks = fakeTickets{[]*domain.Ticket{
-		{ID: "t-feed", ProjectID: "p1", Title: "Add SSE feed", Description: long, Status: domain.TicketStatusInProgress},
-		{ID: "t-other", ProjectID: "p1", Title: "Other", Description: long, Status: domain.TicketStatusInProgress},
-	}}
-	deps.Sessions = fakeSessions{[]*domain.Session{
-		{ID: "s1", ProjectID: "p1", TicketID: "t-feed", Status: domain.SessionIdle, UpdatedAt: time.Now()},
-		{ID: "s2", ProjectID: "p1", TicketID: "t-other", Status: domain.SessionIdle, UpdatedAt: time.Now()},
-	}}
-	url, _ := stripServer(t, deps)
+// Edit shows the form in the same surface; the agents' area stays put; Save
+// closes it and the Description button then opens the new text.
+func TestTheTaskNoteEditsInTheSameSurface(t *testing.T) {
+	url, _ := stripServer(t, noteDeps("The first words."))
 	ctx, errs := browser(t)
 
-	var word, other string
+	var before, editing string
+	var formInPopup bool
 	err := chromedp.Run(ctx,
 		chromedp.EmulateViewport(1280, 800),
 		chromedp.Navigate(url+"/projects/p1/tasks/t-feed"),
-		chromedp.Poll(pageReady+` && !!`+noteToggle+` && `+noteToggle+`.checkVisibility()`, nil, chromedp.WithPollingTimeout(10*time.Second)),
-		chromedp.Evaluate(noteToggle+`.click()`, nil),
-		chromedp.Poll(noteToggle+`.textContent.trim() === 'Less'`, nil, chromedp.WithPollingTimeout(5*time.Second)),
-		chromedp.Navigate(url+"/projects/p1/tasks/t-feed"),
-		chromedp.Poll(pageReady+` && !!`+noteToggle+` && `+noteToggle+`.checkVisibility()`, nil, chromedp.WithPollingTimeout(10*time.Second)),
-		chromedp.Evaluate(noteToggle+`.textContent.trim()`, &word),
-		chromedp.Navigate(url+"/projects/p1/tasks/t-other"),
-		chromedp.Poll(pageReady+` && !!`+noteToggle+` && `+noteToggle+`.checkVisibility()`, nil, chromedp.WithPollingTimeout(10*time.Second)),
-		chromedp.Evaluate(noteToggle+`.textContent.trim()`, &other),
+		chromedp.Poll(pageReady+` && `+noteButton+`.checkVisibility()`, nil, chromedp.WithPollingTimeout(10*time.Second)),
+		chromedp.Evaluate(agentsBox, &before),
+		chromedp.Evaluate(noteButton+`.click()`, nil),
+		chromedp.Poll(notePopup+`.matches(':popover-open')`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Evaluate(`[...`+notePopup+`.querySelectorAll('button')].find(b => b.textContent.trim() === 'Edit').click()`, nil),
+		chromedp.Poll(`!!document.querySelector('#task-note #task-edit-description')`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Evaluate(`!!`+notePopup+`.querySelector('#task-edit-title') && `+notePopup+`.matches(':popover-open')`, &formInPopup),
+		chromedp.Evaluate(agentsBox, &editing),
+		chromedp.Evaluate(`[...`+notePopup+`.querySelectorAll('button')].find(b => b.textContent.trim() === 'Cancel').click()`, nil),
+		chromedp.Poll(`!`+notePopup+`.querySelector('#task-edit-description') && `+notePopup+`.matches(':popover-open')`, nil, chromedp.WithPollingTimeout(5*time.Second)),
 	)
 	if err != nil {
 		t.Fatalf("%v\nJS errors: %v", err, errs.all())
 	}
-	if word != "Less" || other != "More" {
-		t.Errorf("after a reload the toggle reads %q (want Less); another task's reads %q (want More)", word, other)
+	if !formInPopup || editing != before {
+		t.Errorf("form in the popover %v; agents' area before %s, while editing %s", formInPopup, before, editing)
+	}
+	if e := errs.all(); len(e) > 0 {
+		t.Errorf("JavaScript errors:\n%s", strings.Join(e, "\n"))
 	}
 }
 
-// With no session open on the task, its description shows whole (the task
-// overview): the room is for reading it, not for a diff.
-func TestWithNoSessionTheDescriptionShowsWholeInTheBrowser(t *testing.T) {
-	long := strings.Repeat("Line of the description that the person wrote.\n", 12)
-	url, _ := stripServer(t, noSessionDeps(long))
+// A task with no description has no Description button; the title row's Edit
+// opens the form in the surface.
+func TestATaskWithoutADescriptionHasNoButtonAndEditsFromTheTitleRow(t *testing.T) {
+	url, _ := stripServer(t, noteDeps(""))
 	ctx, errs := browser(t)
 
-	var lineHeight, height float64
-	var toggleShown bool
-	err := chromedp.Run(ctx,
-		chromedp.EmulateViewport(1280, 800),
-		chromedp.Navigate(url+"/projects/p1/tasks/t-feed"),
-		chromedp.Poll(pageReady+` && !!`+noteText, nil, chromedp.WithPollingTimeout(10*time.Second)),
-		chromedp.Sleep(300*time.Millisecond),
-		chromedp.Evaluate(`parseFloat(getComputedStyle(`+noteText+`).lineHeight)`, &lineHeight),
-		chromedp.Evaluate(noteText+`.getBoundingClientRect().height`, &height),
-		chromedp.Evaluate(`!!`+noteToggle+` && `+noteToggle+`.checkVisibility()`, &toggleShown),
-	)
-	if err != nil {
-		t.Fatalf("%v\nJS errors: %v", err, errs.all())
-	}
-	if height < 10*lineHeight || toggleShown {
-		t.Errorf("no session: the description is %.0fpx high with a %.0fpx line (want it whole), toggle shown %v", height, lineHeight, toggleShown)
-	}
-}
-
-// A description that fits has no toggle.
-func TestAShortDescriptionHasNoToggle(t *testing.T) {
-	url, _ := stripServer(t, noteDeps("One short line."))
-	ctx, errs := browser(t)
-
-	var text string
-	var toggleShown bool
-	err := chromedp.Run(ctx,
-		chromedp.EmulateViewport(1280, 800),
-		chromedp.Navigate(url+"/projects/p1/tasks/t-feed"),
-		chromedp.Poll(pageReady+` && !!`+noteText, nil, chromedp.WithPollingTimeout(10*time.Second)),
-		chromedp.Sleep(300*time.Millisecond), // the overflow is measured after the text is drawn
-		chromedp.Evaluate(noteText+`.textContent.trim()`, &text),
-		chromedp.Evaluate(`!!`+noteToggle+` && `+noteToggle+`.checkVisibility()`, &toggleShown),
-	)
-	if err != nil {
-		t.Fatalf("%v\nJS errors: %v", err, errs.all())
-	}
-	if text != "One short line." || toggleShown {
-		t.Errorf("text %q, toggle shown %v", text, toggleShown)
-	}
-}
-
-// What the person asked for is never cut off: the edit form and the delete
-// answer keep their whole height (here the answer is the coded error the
-// stubbed API gives: the editor's errors stay inline and whole too).
-func TestTheEditFormAndTheDeleteAnswerAreNeverClamped(t *testing.T) {
-	long := strings.Repeat("Line of the description that the person wrote.\n", 12)
-	url, _ := stripServer(t, noteDeps(long))
-	ctx, errs := browser(t)
-
-	var formHeight, textareaHeight, textareaScroll, bannerHeight, bannerScroll float64
+	var buttonShown, formOpen bool
 	err := chromedp.Run(ctx,
 		chromedp.EmulateViewport(1280, 800),
 		chromedp.Navigate(url+"/projects/p1/tasks/t-feed"),
 		chromedp.Poll(pageReady, nil, chromedp.WithPollingTimeout(10*time.Second)),
-		chromedp.Evaluate(`[...document.querySelectorAll('main button')].find(b => b.textContent.trim() === 'Edit').click()`, nil),
-		chromedp.Poll(`!!document.querySelector('#task-edit-description')`, nil, chromedp.WithPollingTimeout(5*time.Second)),
-		chromedp.Evaluate(`document.querySelector('#task-edit-description').closest('form').getBoundingClientRect().height`, &formHeight),
-		chromedp.Evaluate(`document.querySelector('#task-edit-description').getBoundingClientRect().height`, &textareaHeight),
-		chromedp.Evaluate(`document.querySelector('#task-edit-description').scrollHeight`, &textareaScroll),
-		chromedp.Evaluate(`[...document.querySelectorAll('main button')].find(b => b.textContent.trim() === 'Cancel').click()`, nil),
-		chromedp.Evaluate(`[...document.querySelectorAll('main button')].find(b => b.textContent.trim() === 'Delete task').click()`, nil),
-		chromedp.Poll(`!!document.querySelector('[role=alert]')`, nil, chromedp.WithPollingTimeout(5*time.Second)),
-		chromedp.Evaluate(`document.querySelector('[role=alert]').getBoundingClientRect().height`, &bannerHeight),
-		chromedp.Evaluate(`document.querySelector('[role=alert]').scrollHeight`, &bannerScroll),
+		chromedp.Evaluate(noteButton+`.checkVisibility()`, &buttonShown),
+		chromedp.Evaluate(`document.querySelector('#task-edit-button').click()`, nil),
+		chromedp.Poll(`!!`+notePopup+`.querySelector('#task-edit-title')`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Evaluate(notePopup+`.matches(':popover-open')`, &formOpen),
 	)
 	if err != nil {
 		t.Fatalf("%v\nJS errors: %v", err, errs.all())
 	}
-	if formHeight < 150 || textareaHeight < 40 {
-		t.Errorf("the edit form is %.0fpx high, its field %.0fpx: cut off", formHeight, textareaHeight)
+	if buttonShown || !formOpen {
+		t.Errorf("Description button shown %v, form open %v", buttonShown, formOpen)
 	}
-	if bannerHeight < bannerScroll {
-		t.Errorf("the delete answer is %.0fpx high but its content %.0fpx: cut off", bannerHeight, bannerScroll)
+	if e := errs.all(); len(e) > 0 {
+		t.Errorf("JavaScript errors:\n%s", strings.Join(e, "\n"))
 	}
-	_ = textareaScroll
 }

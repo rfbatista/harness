@@ -1,0 +1,67 @@
+/*
+ * Task note — a task's description, opened from the title row's Description
+ * button: a .popup (role="dialog", popover="manual", popup.css) in the top
+ * layer, so nothing in the page moves while it reads. 36rem wide, at most
+ * min(70dvh, 40rem) tall; the body scrolls, the head stays. Below 48rem the
+ * popup takes data-sheet (sheet.css) and the scrim.
+ * <div class="popup task-note" role="dialog" aria-labelledby="note-title" popover="manual">
+ *   <div class="task-note-view"><div class="note-head"><h3 id="note-title">Description</h3>
+ *     <button class="button" data-variant="ghost" data-size="sm">Edit</button>
+ *     <button class="button" data-variant="ghost" data-size="sm">Close</button></div>
+ *   <div class="note-body prose">…the text as written, line breaks kept…</div></div></div>
+ * The edit state is a form.task-note-form in the same popup: .note-head ("Edit
+ * task"), the Title and Description fields with their pens, Save and Cancel.
+ * The open state is browser-only and never stored.
+ * .status-change: who moved the task's status last and why, one line under the
+ * toolbar; the reason truncates (its full text is the title).
+ */
+
+@layer blocks {
+  .task-note {
+    inline-size: 36rem;
+    max-inline-size: min(36rem, calc(100vw - 2 * var(--space-l)));
+    max-block-size: min(70dvh, 40rem);
+
+    & > .task-note-view,
+    & > .task-note-form { display: flex; flex-direction: column; min-block-size: 0; }
+    & > .task-note-form { padding: 0 var(--space-l) var(--space-l); overflow: auto; }
+
+    & .note-head {
+      display: flex;
+      align-items: center;
+      gap: var(--space-xs);
+      min-block-size: var(--size-control-md);
+      padding: var(--space-xs) var(--space-s) var(--space-xs) var(--space-l);
+      border-block-end: var(--border-width) solid var(--color-line);
+      font-size: var(--text-md);
+
+      & > h3 { flex: 1 1 auto; font-size: inherit; font-weight: var(--weight-bold); }
+    }
+    .task-note-form > .note-head { margin-inline: calc(-1 * var(--space-l)); }
+
+    & .note-body {
+      padding: var(--space-m) var(--space-l);
+      overflow: auto;
+      overscroll-behavior: contain;
+      overflow-wrap: anywhere;
+      white-space: pre-wrap;
+      color: var(--color-ink);
+      font-size: var(--text-sm);
+      max-inline-size: none;
+    }
+
+    &[data-sheet] { inline-size: 100%; max-inline-size: none; }
+  }
+
+  .status-change {
+    display: flex;
+    max-inline-size: none;
+    padding: var(--space-xs) var(--space-l);
+    border-block-end: var(--border-width) solid var(--color-line);
+    color: var(--color-ink-muted);
+    font-size: var(--text-sm);
+    white-space: nowrap;
+
+    & > .truncate { min-inline-size: 0; white-space: pre; }
+  }
+}

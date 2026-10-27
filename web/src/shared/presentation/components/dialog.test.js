@@ -160,3 +160,18 @@ test("act tells the page which dialog a button belongs to, whatever element call
     outer.remove();
   }
 });
+
+test("it tells its owner when it closes, however it closed, and closes on a dismiss for its id", () => {
+  const f = fixture({ role: "dialog", trap: false });
+  try {
+    let closed = 0;
+    const d = new AnchoredDialog(f.el, env(), () => closed++);
+    d.open(f.anchor);
+    key(f.el, "Escape");
+    assert.deepEqual([d.isOpen, closed], [false, 1]);
+    d.close();
+    assert.equal(closed, 1, "closing a closed dialog is not a close");
+  } finally {
+    f.done();
+  }
+});
