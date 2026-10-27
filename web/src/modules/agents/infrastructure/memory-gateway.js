@@ -18,12 +18,14 @@ const without = (list, name) => list.filter((x) => x !== name);
 const swap = (list, from, to) => list.map((x) => (x === from ? to : x));
 
 /**
- * @param {{ catalog: object, projects?: Record<string, string[]>, projectNames?: Record<string, string>, env?: Record<string, boolean> }} world
+ * @param {{ catalog: object, projects?: Record<string, string[]>, projectNames?: Record<string, string>, projectAgents?: Record<string, { mode: string, agents: string[] }>, env?: Record<string, boolean> }} world
  *   catalog is the wire format of GET /api/get_agent_catalog
  */
-export function memoryCatalogServer({ catalog, projects = {}, projectNames = {}, env = {} }) {
+export function memoryCatalogServer({ catalog, projects = {}, projectNames = {}, projectAgents = {}, env = {} }) {
   let cat = clone(catalog);
   let projectLists = clone(projects);
+  /** Each project's enabled agents; a project not listed has mode all. */
+  const enabledAgents = clone(projectAgents);
   let counter = 0;
   let latest = null;
   const requests = [];
@@ -120,11 +122,14 @@ export function memoryCatalogServer({ catalog, projects = {}, projectNames = {},
       const next = { ...agent, aliases: agent.aliases ?? [], resolved_skills: [], dropped_duplicates: [], missing_skills: [], problems: [] };
       if (at < 0) c.agents.push(next);
       else c.agents[at] = next;
+      // A rename rewrites the Selected lists that name the agent (Undo does not put them back here).
+      if (prev && prev !== agent.name) for (const e of Object.values(enabledAgents)) e.agents = swap(e.agents, prev, agent.name);
       return { files: ["agents.json"], summary: (d) => `Saved agents.json — ${agent.name} now has ${d.agents.find((a) => a.name === agent.name).resolved_skills.length} skills` };
     },
     delete_catalog_agent(c, { name }) {
       if (!c.agents.some((a) => a.name === name)) fail("AGENT_NOT_FOUND", `no agent ${name}`, 404);
       c.agents = c.agents.filter((a) => a.name !== name);
+      for (const e of Object.values(enabledAgents)) e.agents = without(e.agents, name);
       return { files: ["agents.json"], summary: () => `Deleted agent ${name} from agents.json` };
     },
     save_catalog_bundle(c, { previous_name: prev, bundle }) {
@@ -296,6 +301,18 @@ export function memoryCatalogServer({ catalog, projects = {}, projectNames = {},
       projectLists[id] = [...names];
       derive(cat);
       return { mcp_servers: [...names] };
+    },
+    "GET get_project_agents": ({ project_id: id }) => {
+      if (!(id in projectLists)) fail("PROJECT_NOT_FOUND", `no project ${id}`, 404);
+      return clone(enabledAgents[id] ?? { mode: "all", agents: [] });
+    },
+    "POST set_project_agents": ({ project_id: id, mode, agents = [] }) => {
+      if (!(id in projectLists)) fail("PROJECT_NOT_FOUND", `no project ${id}`, 404);
+      if (mode !== "all" && mode !== "selected") invalid("mode", `mode ${JSON.stringify(mode)} is neither all nor selected`);
+      if (mode === "selected") mustExist(agents, namesOf(cat.agents));
+      enabledAgents[id] = { mode, agents: mode === "selected" ? [...new Set(agents)] : [] };
+      publish({ agent_catalog_changed: { paths: [`projects/${id}`] } });
+      return clone(enabledAgents[id]);
     },
   };
 

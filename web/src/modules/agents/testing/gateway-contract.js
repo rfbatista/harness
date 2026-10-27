@@ -234,4 +234,21 @@ export function catalogGatewayContract(name, makeSubject) {
     await assert.rejects(gateway.getProjectMcpServers("gone"), "PROJECT_NOT_FOUND");
     await assert.rejects(gateway.setProjectMcpServers("p1", ["nope"]), "UNKNOWN_REFERENCE");
   });
+
+  contract("a project's enabled agents default to all; Selected keeps its list, All stores none", async () => {
+    const { gateway } = subject();
+    assert.deepEqual(await gateway.getProjectAgents("p1"), { mode: "all", agents: [] });
+    assert.deepEqual(await gateway.setProjectAgents("p1", { mode: "selected", agents: ["backend"] }), { mode: "selected", agents: ["backend"] });
+    assert.deepEqual(await gateway.getProjectAgents("p1"), { mode: "selected", agents: ["backend"] });
+    assert.deepEqual(await gateway.setProjectAgents("p1", { mode: "selected", agents: [] }), { mode: "selected", agents: [] }, "an empty Selected list is allowed");
+    assert.deepEqual(await gateway.setProjectAgents("p1", { mode: "all", agents: ["backend"] }), { mode: "all", agents: [] });
+  });
+
+  contract("an unknown project or agent is refused when setting a project's agents", async () => {
+    const { gateway } = subject();
+    await assert.rejects(gateway.getProjectAgents("gone"), "PROJECT_NOT_FOUND");
+    await assert.rejects(gateway.setProjectAgents("gone", { mode: "all", agents: [] }), "PROJECT_NOT_FOUND");
+    const err = await assert.rejects(gateway.setProjectAgents("p1", { mode: "selected", agents: ["backend", "ghost"] }), "UNKNOWN_REFERENCE");
+    assert.deepEqual(err.details.names, ["ghost"]);
+  });
 }

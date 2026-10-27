@@ -128,6 +128,13 @@ export function toServerNames(body) {
   return strings(body?.mcp_servers, "mcp_servers");
 }
 
+/** @param {unknown} body @returns {import("../domain/projectAgents.js").ProjectAgents} */
+export function toProjectAgents(body) {
+  const mode = body?.mode;
+  if (mode !== "all" && mode !== "selected") bad("mode");
+  return { mode, agents: strings(body?.agents, "agents") };
+}
+
 /** The fields every write takes. @param {import("../domain/ports.js").WriteOptions} [o] */
 export function writeFields(o = {}) {
   const out = {};

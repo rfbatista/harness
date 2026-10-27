@@ -99,6 +99,8 @@
  * @property {() => Promise<{ id: string, name: string }[]>} listProjects  every project, for Who gets it
  * @property {(projectId: string) => Promise<string[]>} getProjectMcpServers
  * @property {(projectId: string, names: string[]) => Promise<string[]>} setProjectMcpServers
+ * @property {(projectId: string) => Promise<import("./projectAgents.js").ProjectAgents>} getProjectAgents  the project's enabled agents: mode all (agents empty) or selected
+ * @property {(projectId: string, enabled: import("./projectAgents.js").ProjectAgents) => Promise<import("./projectAgents.js").ProjectAgents>} setProjectAgents  answers no change id; rejects UNKNOWN_REFERENCE naming the agents
  *
  * Writes reject with INVALID_INPUT, NAME_TAKEN, UNKNOWN_REFERENCE,
  * BUNDLE_CYCLE, CATALOG_CHANGED, CATALOG_BROKEN or a *_NOT_FOUND; their
