@@ -696,3 +696,42 @@ func TestTheAccessMatrixScrollsSidewaysAtNarrowWidthsWithAgentNamesPinned(t *tes
 		t.Error("the page itself scrolls sideways at 760 px")
 	}
 }
+
+// A rotated layer header shows its whole name: its text lies inside the header
+// row, and the header row inside the matrix box, at wide and narrow widths.
+func TestRotatedLayerHeadersShowTheirFullNames(t *testing.T) {
+	for _, width := range []int64{1440, 760} {
+		rig := newArchRig(t)
+		openLayersTabAt(t, rig, width)
+		var bad string
+		rig.run(t,
+			chromedp.Click(layersPanel+`[data-preset]`, chromedp.ByQuery),
+			poll(layerItemsJS+`.length === 8`),
+			addLayerBy("folder"),
+			setLayerField(8, "name", "a-rather-long-layer-name-for-a-header"),
+			poll(`!!document.querySelector('[data-access-matrix] thead th[data-column="a-rather-long-layer-name-for-a-header"]')`),
+			evalLayers(`(() => {
+				const box = document.querySelector('[data-access-matrix] .access-matrix');
+				box.scrollIntoView({ block: 'center' });
+				const b = box.getBoundingClientRect();
+				const row = document.querySelector('[data-access-matrix] thead tr').getBoundingClientRect();
+				const out = [];
+				for (const th of document.querySelectorAll('[data-access-matrix] thead th[data-column]')) {
+					const span = th.querySelector('span');
+					const range = document.createRange();
+					range.selectNodeContents(span);
+					const t = range.getBoundingClientRect(); // the glyphs, after the rotation
+					const th_ = th.getBoundingClientRect();
+					const slack = 0.5;
+					if (t.top < row.top - slack || t.bottom > row.bottom + slack || t.left < th_.left - slack || t.right > th_.right + slack) out.push(th.dataset.column + ' text ' + [t.top, t.bottom, t.left, t.right].map(Math.round) + ' header ' + [row.top, row.bottom, th_.left, th_.right].map(Math.round));
+					if (span.scrollHeight > span.clientHeight + 1 || th.scrollHeight > th.clientHeight + 1) out.push(th.dataset.column + ' overflows its cell');
+				}
+				if (row.top < b.top - 0.5) out.push('header row starts above the matrix box');
+				return out.join('; ');
+			})()`, &bad),
+		)
+		if bad != "" {
+			t.Errorf("at %d px a rotated header is clipped: %s", width, bad)
+		}
+	}
+}
