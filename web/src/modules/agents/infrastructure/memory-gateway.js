@@ -25,7 +25,7 @@ export function memoryCatalogServer({ catalog, projects = {}, projectNames = {},
   let cat = clone(catalog);
   let projectLists = clone(projects);
   /** Each project's enabled agents; a project not listed has mode all. */
-  const enabledAgents = clone(projectAgents);
+  let enabledAgents = clone(projectAgents);
   let counter = 0;
   let latest = null;
   const requests = [];
@@ -65,6 +65,12 @@ export function memoryCatalogServer({ catalog, projects = {}, projectNames = {},
         ...(a.description.trim() ? [] : [{ code: "NO_DESCRIPTION", message: "no description" }]),
         ...a.missing_skills.map((s) => ({ code: "MISSING_SKILL", message: `skill ${s} does not exist` })),
       ];
+    }
+    // Where each agent is enabled: every All project, and each Selected project that lists it.
+    for (const a of c.agents) {
+      a.enabled_in = Object.keys(projectLists)
+        .filter((id) => (enabledAgents[id]?.mode ?? "all") === "all" || enabledAgents[id].agents.includes(a.name))
+        .map((id) => ({ id, name: projectNames[id] ?? id, mode: enabledAgents[id]?.mode ?? "all" }));
     }
     for (const b of c.bundles) {
       b.resolved_skills = [...new Set(expand(b.entries, new Set([b.name])))].filter((s) => skillNames.has(s));
@@ -111,7 +117,7 @@ export function memoryCatalogServer({ catalog, projects = {}, projectNames = {},
 
   /** Each verb edits the draft and answers the files it touches and its summary. */
   const verbs = {
-    save_catalog_agent(c, { previous_name: prev, agent }) {
+    save_catalog_agent(c, { previous_name: prev, agent, projects: listedIn }) {
       mustSlug(agent.name);
       if (!agent.description?.trim()) invalid("description", "description is required");
       const at = prev ? c.agents.findIndex((a) => a.name === prev) : -1;
@@ -124,6 +130,18 @@ export function memoryCatalogServer({ catalog, projects = {}, projectNames = {},
       else c.agents[at] = next;
       // A rename rewrites the Selected lists that name the agent (Undo does not put them back here).
       if (prev && prev !== agent.name) for (const e of Object.values(enabledAgents)) e.agents = swap(e.agents, prev, agent.name);
+      // `projects` is the full set of Selected projects that list the agent; absent, the lists stay.
+      if (listedIn !== undefined) {
+        mustExist(listedIn, Object.keys(projectLists));
+        for (const id of listedIn) {
+          if ((enabledAgents[id]?.mode ?? "all") === "all") invalid("projects", `${projectNames[id] ?? id} enables every agent (All agents): change it in the project's own settings`);
+        }
+        for (const [id, e] of Object.entries(enabledAgents)) {
+          if (e.mode !== "selected") continue;
+          e.agents = without(e.agents, agent.name);
+          if (listedIn.includes(id)) e.agents.push(agent.name);
+        }
+      }
       return { files: ["agents.json"], summary: (d) => `Saved agents.json — ${agent.name} now has ${d.agents.find((a) => a.name === agent.name).resolved_skills.length} skills` };
     },
     delete_catalog_agent(c, { name }) {
@@ -230,11 +248,12 @@ export function memoryCatalogServer({ catalog, projects = {}, projectNames = {},
 
   function write(verb, body) {
     // A verb may set project lists as it goes; a dry run or a refusal puts them back.
-    const keep = clone(projectLists);
+    const keep = { lists: clone(projectLists), enabled: clone(enabledAgents) };
     try {
       return commit(verb, body, keep);
     } catch (err) {
-      projectLists = keep;
+      projectLists = keep.lists;
+      enabledAgents = keep.enabled;
       throw err;
     }
   }
@@ -255,14 +274,17 @@ export function memoryCatalogServer({ catalog, projects = {}, projectNames = {},
       }
     }
     const writes = files.map((path) => ({ path, before: textOf[path]?.(cat) ?? null, after: textOf[path]?.(draft) ?? null }));
+    const enabledBefore = (id) => keep.enabled[id]?.agents ?? [];
+    const enabledAfter = (id) => enabledAgents[id]?.agents ?? [];
     const projects = Object.keys(projectLists)
-      .filter((id) => JSON.stringify(keep[id]) !== JSON.stringify(projectLists[id]))
-      .map((id) => ({ id, name: projectNames[id] ?? id, before: keep[id] ?? [], after: [...projectLists[id]] }));
+      .filter((id) => JSON.stringify(keep.lists[id]) !== JSON.stringify(projectLists[id]) || JSON.stringify(enabledBefore(id)) !== JSON.stringify(enabledAfter(id)))
+      .map((id) => ({ id, name: projectNames[id] ?? id, before: keep.lists[id] ?? [], after: [...projectLists[id]], enabled_agents_before: enabledBefore(id), enabled_agents_after: [...enabledAfter(id)] }));
     if (body.dry_run) {
-      projectLists = keep;
+      projectLists = keep.lists;
+      enabledAgents = keep.enabled;
       return { change: { id: "", summary: summary(draft), writes, projects }, versions: clone(cat.versions) };
     }
-    const before = { cat, projects: keep };
+    const before = { cat, projects: keep.lists, enabled: keep.enabled };
     cat = draft;
     for (const f of files) cat.versions[f] = `sha256:${f}-${++counter}`;
     const id = `change-${++counter}`;
@@ -288,6 +310,7 @@ export function memoryCatalogServer({ catalog, projects = {}, projectNames = {},
       const versions = cat.versions;
       cat = clone(latest.before.cat);
       projectLists = clone(latest.before.projects);
+      enabledAgents = clone(latest.before.enabled);
       cat.versions = versions;
       for (const f of files) cat.versions[f] = `sha256:${f}-${++counter}`;
       latest = null;
@@ -311,6 +334,7 @@ export function memoryCatalogServer({ catalog, projects = {}, projectNames = {},
       if (mode !== "all" && mode !== "selected") invalid("mode", `mode ${JSON.stringify(mode)} is neither all nor selected`);
       if (mode === "selected") mustExist(agents, namesOf(cat.agents));
       enabledAgents[id] = { mode, agents: mode === "selected" ? [...new Set(agents)] : [] };
+      derive(cat);
       publish({ agent_catalog_changed: { paths: [`projects/${id}`] } });
       return clone(enabledAgents[id]);
     },

@@ -175,3 +175,16 @@ test("a catalog that does not parse turns Save off and says why in the footer", 
   assert.equal(v.footer, "Saving is off · agents.json does not parse");
   assert.equal(saveView(dirty, { valid: true, changes: 1, writes: ["agents.json"] }).canSave, true);
 });
+
+test("the view carries the project lists a change sets, only where the enabled agents differ", () => {
+  const dirty = run([{ type: "edit", dirty: true }]);
+  const projects = [
+    { id: "p1", name: "atlas", before: [], after: [], enabledAgentsBefore: ["backend"], enabledAgentsAfter: ["backend", "reviewer"] },
+    { id: "p2", name: "lab", before: ["github"], after: [], enabledAgentsBefore: [], enabledAgentsAfter: [] },
+  ];
+  const done = reduceSave(reduceSave(dirty, { type: "preview-start", seq: dirty.seq }), { type: "preview-done", seq: dirty.seq, result: { change: { id: "", summary: "s", writes: [], projects }, versions: BASE } });
+  const v = saveView(done, { valid: true, changes: 1, writes: ["agents.json"] });
+  assert.deepEqual(v.projects.map((p) => [p.path, p.label]), [["atlas · enabled agents", "+1 −0"]]);
+  assert.deepEqual(saveView(dirty, { valid: true, changes: 1, writes: [] }).projects, []);
+  assert.equal(v.footer, "1 unsaved change · writes the project lists", "no catalog file is written, only project lists");
+});

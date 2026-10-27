@@ -4,10 +4,12 @@
 // resolves them for real when it saves), the skill-and-bundle picker's options,
 // the MCP server and tool choices, and where a refusal lands.
 
+import { projectsChanged } from "./enabledIn.js";
 import { slugProblem } from "./names.js";
 
 /** @typedef {import("./ports.js").Catalog} Catalog */
-/** @typedef {{ previousName: string, name: string, description: string, aliases: string[], entries: string[], mcpServers: string[], allowedTools: string[] }} AgentDraft */
+/** @typedef {{ previousName: string, name: string, description: string, aliases: string[], entries: string[], mcpServers: string[], allowedTools: string[], projects: string[] | null }} AgentDraft
+ *   projects: the Selected projects ticked as listing the agent, or null while the section is untouched (the catalog says, and a save leaves the lists alone) */
 
 /** The picker option that opens the skill form. */
 export const CREATE_SKILL = "+create";
@@ -29,10 +31,10 @@ export function agentDraft(catalog, name, from = "") {
   const copy = (a) => ({ description: a.description, aliases: [...a.aliases], entries: [...a.entries], mcpServers: [...a.mcpServers], allowedTools: [...a.allowedTools] });
   if (!name) {
     const source = from ? catalog.agents.find((a) => a.name === from) : undefined;
-    return { previousName: "", name: "", ...(source ? copy(source) : { description: "", aliases: [], entries: [], mcpServers: [], allowedTools: [] }) };
+    return { previousName: "", name: "", ...(source ? copy(source) : { description: "", aliases: [], entries: [], mcpServers: [], allowedTools: [] }), projects: null };
   }
   const a = catalog.agents.find((x) => x.name === name);
-  return a ? { previousName: a.name, name: a.name, ...copy(a) } : null;
+  return a ? { previousName: a.name, name: a.name, ...copy(a), projects: null } : null;
 }
 
 /**
@@ -68,6 +70,7 @@ export function agentChanges(catalog, draft) {
   if (draft.name !== base.name) n++;
   if (draft.description !== base.description) n++;
   for (const k of ["aliases", "entries", "mcpServers", "allowedTools"]) if (!same(draft[k], base[k])) n++;
+  if (projectsChanged(catalog, draft)) n++;
   return n;
 }
 
@@ -197,16 +200,17 @@ export function toolChoices(catalog, chosen) {
   };
 }
 
-/** What each section of the contents list counts. @param {Catalog} catalog @param {AgentDraft} draft */
-export function tocCounts(catalog, draft) {
+/** What each section of the contents list counts. @param {Catalog} catalog @param {AgentDraft} draft @param {string} [projects]  the Projects section's own count (enabledIn.js) */
+export function tocCounts(catalog, draft, projects = "") {
   return {
     skills: String(expandEntries(catalog, draft.entries).resolved.length),
     mcp: String(draft.mcpServers.length),
     tools: draft.allowedTools.length ? String(draft.allowedTools.length) : "default",
+    projects,
   };
 }
 
-const FIELD_OF = { name: "name", description: "description", aliases: "aliases", entries: "entries", skills: "entries", mcp_servers: "mcp", allowed_tools: "tools" };
+const FIELD_OF = { name: "name", description: "description", aliases: "aliases", entries: "entries", skills: "entries", mcp_servers: "mcp", allowed_tools: "tools", projects: "projects" };
 
 /**
  * Which form field a refusal belongs to. An UNKNOWN_REFERENCE names things
@@ -215,7 +219,7 @@ const FIELD_OF = { name: "name", description: "description", aliases: "aliases",
  * @param {AgentDraft} draft
  */
 export function agentFieldErrors(refusal, draft) {
-  const out = { name: "", description: "", aliases: "", entries: "", mcp: "", tools: "", form: "" };
+  const out = { name: "", description: "", aliases: "", entries: "", mcp: "", tools: "", projects: "", form: "" };
   if (!refusal) return out;
   if (refusal.code === "UNKNOWN_REFERENCE") {
     const say = (names) => `Not in the catalog: ${names.join(", ")}. Remove ${names.length === 1 ? "it" : "them"} and save again.`;

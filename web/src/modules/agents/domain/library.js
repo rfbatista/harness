@@ -8,6 +8,8 @@
  * @typedef {{ label: string, tone: "attention" | "danger" }} Badge
  */
 
+import { enabledInView } from "./enabledIn.js";
+
 export const AGENT_FILTERS = [
   { id: "all", label: "All" },
   { id: "mcp", label: "Has MCP" },
@@ -67,8 +69,9 @@ export function agentsFooter(catalog) {
  * The detail of the agent named `key`, or null when there is none.
  * @param {Catalog} catalog
  * @param {string} key
+ * @param {{ id: string, name: string }[]} [projects]  every project, for Enabled in
  */
-export function agentDetail(catalog, key) {
+export function agentDetail(catalog, key, projects = []) {
   const a = catalog.agents.find((x) => x.name === key);
   if (!a) return null;
   const bundles = new Map(catalog.bundles.map((b) => [b.name, b]));
@@ -120,8 +123,9 @@ export function agentDetail(catalog, key) {
     }),
     tools: a.allowedTools,
     toolsDefault: a.allowedTools.length === 0,
+    enabled: enabledInView(catalog, a, projects),
     editHref: edit,
     duplicateHref: `/agents/new?from=${enc(a.name)}`,
-    change: { identity: `${edit}#identity`, skills: `${edit}#skills`, mcp: `${edit}#mcp`, tools: `${edit}#tools` },
+    change: { identity: `${edit}#identity`, skills: `${edit}#skills`, mcp: `${edit}#mcp`, tools: `${edit}#tools`, projects: `${edit}#projects` },
   };
 }

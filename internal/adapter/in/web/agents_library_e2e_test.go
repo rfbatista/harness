@@ -100,7 +100,7 @@ func TestAgentsTabListsFiltersAndShowsEachAgentInTheBrowser_EndToEnd(t *testing.
 			return r.includes('notebooklm') && r.includes('stdio') && r.includes('${HARNESS_TEST_NB_TOKEN_UNSET}') && r.includes('not set'); })()`),
 		waitUntil(`[...`+detail+`.querySelectorAll('[data-tool]')].map(c => c.textContent.trim()).join(',') === 'Read'`),
 		waitUntil(`[...`+detail+`.querySelectorAll('a[data-change]')].map(a => a.dataset.change + '=' + a.getAttribute('href')).join(' ')
-			=== 'skills=/agents/ux-designer/edit#skills mcp=/agents/ux-designer/edit#mcp tools=/agents/ux-designer/edit#tools'`),
+			=== 'skills=/agents/ux-designer/edit#skills mcp=/agents/ux-designer/edit#mcp tools=/agents/ux-designer/edit#tools projects=/agents/ux-designer/edit#projects'`),
 		waitUntil(detail+`.querySelector('a[data-edit]').getAttribute('href') === '/agents/ux-designer/edit'`),
 		waitUntil(detail+`.querySelector('a[data-duplicate]').getAttribute('href') === '/agents/new?from=ux-designer'`),
 		bothSchemes("agents-library-detail"),

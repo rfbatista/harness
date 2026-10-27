@@ -17,6 +17,7 @@
  * @property {string[]} missingSkills
  * @property {string[]} mcpServers
  * @property {string[]} allowedTools  empty: Claude's default tool set
+ * @property {{ id: string, name: string, mode: "all" | "selected" }[]} enabledIn  every project the agent is enabled in: each All project, and each Selected project that lists it
  * @property {Problem[]} problems
  *
  * @typedef {object} CatalogBundle
@@ -69,9 +70,9 @@
  * @property {boolean} [dryRun]  write nothing; answer what would be written
  *
  * @typedef {object} WriteResult
- * @property {{ id: string, summary: string, writes: { path: string, before: string | null, after: string | null, encoding?: "base64" }[], projects: { id: string, name: string, before: string[], after: string[] }[] }} change
+ * @property {{ id: string, summary: string, writes: { path: string, before: string | null, after: string | null, encoding?: "base64" }[], projects: { id: string, name: string, before: string[], after: string[], enabledAgentsBefore: string[], enabledAgentsAfter: string[] }[] }} change
  *           id is "" for a dry run; before is null for a new file, after for a deleted one;
- *           projects are the project MCP server lists the change sets
+ *           projects are the project lists the change sets: MCP servers (before, after) and enabled agents (enabledAgentsBefore, enabledAgentsAfter)
  * @property {Record<string, string>} versions
  *
  * @typedef {object} Probe
@@ -86,7 +87,7 @@
  * @property {() => Promise<Catalog>} getCatalog
  * @property {(name: string) => Promise<SkillDetail>} getSkill  rejects SKILL_NOT_FOUND
  * @property {(names: string[]) => Promise<Record<string, boolean>>} checkEnvVars  whether each is set on the server; never a value
- * @property {(input: { previousName?: string, agent: { name: string, description: string, aliases: string[], entries: string[], mcpServers: string[], allowedTools: string[] } }, options?: WriteOptions) => Promise<WriteResult>} saveAgent
+ * @property {(input: { previousName?: string, agent: { name: string, description: string, aliases: string[], entries: string[], mcpServers: string[], allowedTools: string[] }, projects?: string[] }, options?: WriteOptions) => Promise<WriteResult>} saveAgent
  * @property {(name: string, options?: WriteOptions) => Promise<WriteResult>} deleteAgent
  * @property {(input: { previousName?: string, bundle: { name: string, entries: string[] } }, options?: WriteOptions) => Promise<WriteResult>} saveBundle
  * @property {(name: string, options?: WriteOptions) => Promise<WriteResult>} deleteBundle

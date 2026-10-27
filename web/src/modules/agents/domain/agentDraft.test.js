@@ -86,9 +86,9 @@ test("the create links carry the editor to come back to, and the name typed", ()
 
 test("an agent opens as the catalog read it, a new one empty, and Duplicate starts from a copy", () => {
   assert.deepEqual(agentDraft(catalog, "ux-designer"), {
-    previousName: "ux-designer", name: "ux-designer", description: "Designs.", aliases: ["ux"], entries: ["@ux", "tdd"], mcpServers: ["github"], allowedTools: ["Read"],
+    previousName: "ux-designer", name: "ux-designer", description: "Designs.", aliases: ["ux"], entries: ["@ux", "tdd"], mcpServers: ["github"], allowedTools: ["Read"], projects: null,
   });
-  assert.deepEqual(agentDraft(catalog, ""), { previousName: "", name: "", description: "", aliases: [], entries: [], mcpServers: [], allowedTools: [] });
+  assert.deepEqual(agentDraft(catalog, ""), { previousName: "", name: "", description: "", aliases: [], entries: [], mcpServers: [], allowedTools: [], projects: null });
   assert.equal(agentDraft(catalog, "nobody"), null);
   const copy = agentDraft(catalog, "", "ux-designer");
   assert.equal(copy.previousName, "");
@@ -118,6 +118,16 @@ test("how many things differ from what was read counts each field once", () => {
   assert.equal(agentChanges(catalog, { ...agentDraft(catalog, ""), name: "x", entries: ["tdd"] }), 2);
 });
 
+test("the Projects section counts as one change once its set differs from the catalog's, and not before", () => {
+  const withProjects = { ...catalog, agents: catalog.agents.map((a) => ({ ...a, enabledIn: a.name === "ux-designer" ? [{ id: "p1", name: "atlas", mode: "selected" }] : [] })) };
+  const read = agentDraft(withProjects, "ux-designer");
+  assert.equal(agentChanges(withProjects, read), 0);
+  assert.equal(agentChanges(withProjects, { ...read, projects: ["p1"] }), 0, "ticked as it was: no change");
+  assert.equal(agentChanges(withProjects, { ...read, projects: ["p1", "p2"] }), 1);
+  assert.equal(agentChanges(withProjects, { ...read, projects: [], entries: [] }), 2);
+  assert.equal(agentChanges(withProjects, { ...agentDraft(withProjects, ""), projects: ["p1"] }), 1, "a new agent ticked in a project");
+});
+
 test("MCP servers list with their transport and each variable set or not, and one the catalog lost stays tickable off", () => {
   const rows = mcpChoices(catalog, ["github", "gone"]);
   assert.deepEqual(rows.map((r) => [r.name, r.checked, r.transport, r.missing]), [["github", true, "stdio", false], ["docs", false, "http", false], ["gone", true, "", true]]);
@@ -134,7 +144,8 @@ test("allowed tools list the built-in ones with what they do; none ticked means 
 });
 
 test("the contents list counts what each section holds", () => {
-  assert.deepEqual(tocCounts(catalog, { ...agentDraft(catalog, "ux-designer"), allowedTools: [] }), { skills: "4", mcp: "1", tools: "default" });
+  assert.deepEqual(tocCounts(catalog, { ...agentDraft(catalog, "ux-designer"), allowedTools: [] }), { skills: "4", mcp: "1", tools: "default", projects: "" });
+  assert.equal(tocCounts(catalog, agentDraft(catalog, "ux-designer"), "3").projects, "3", "the Projects count is the section's own");
 });
 
 test("a refusal lands on the field it names; unknown names split between skills and servers", () => {
@@ -146,5 +157,6 @@ test("a refusal lands on the field it names; unknown names split between skills 
   assert.equal(agentFieldErrors(refuse("NAME_TAKEN", "x", { suggestion: "ux-designer-2" }), draft).name, "That name is taken. Try ux-designer-2.");
   assert.equal(agentFieldErrors(refuse("INVALID_INPUT", "Description is required", { field: "description" }), draft).description, "Description is required");
   assert.equal(agentFieldErrors(refuse("BUNDLE_CYCLE", "cycle", {}), draft).form, "Bundles cannot include each other, directly or through another bundle.");
-  assert.deepEqual(agentFieldErrors(null, draft), { name: "", description: "", aliases: "", entries: "", mcp: "", tools: "", form: "" });
+  assert.equal(agentFieldErrors(refuse("INVALID_INPUT", "harness enables every agent", { field: "projects" }), draft).projects, "harness enables every agent", "a refusal about `projects` shows at the Projects section");
+  assert.deepEqual(agentFieldErrors(null, draft), { name: "", description: "", aliases: "", entries: "", mcp: "", tools: "", projects: "", form: "" });
 });

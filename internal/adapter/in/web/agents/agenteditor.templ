@@ -153,6 +153,24 @@ templ agentEditorPage(v View) {
 							</div>
 							<p class="[ summary-line ]" data-tools-summary x-text="toolsSummary"></p>
 						</section>
+						<section id="projects" aria-labelledby="agent-projects-h">
+							<h2 id="agent-projects-h">Projects</h2>
+							<p class="[ text-sm color-ink-muted ]">Where sessions can start as this agent. A project in <strong>Selected agents</strong> mode lists its agents: tick it to add this agent to its list. A project in <strong>All agents</strong> mode already enables every agent, so it is shown fixed.</p>
+							<div class="[ pick-list ]" role="group" aria-label="Projects where this agent is enabled" tabindex="-1" x-bind:aria-describedby="agentProjectsDescribedBy" x-bind:aria-invalid="agentProjectsInvalid" data-project-list>
+								<template x-for="r in projectRowsChoice" x-bind:key="r.id">
+									<label class="[ pick-row ]" data-project-row x-bind:data-name="r.name" x-bind:data-fixed="r.fixed">
+										<input type="checkbox" x-bind:checked="r.checked" x-bind:disabled="r.fixed" x-bind:data-id="r.id" x-bind:aria-label="r.name" x-on:change="toggleProject"/>
+										<span class="[ font-mono text-sm ]" x-text="r.name"></span>
+										<span class="[ badge ]" x-bind:data-tone="r.tone" x-text="r.badge"></span>
+										<span class="[ desc ]" x-bind:hidden="!r.fixed">Enabled automatically. <a data-project-settings x-bind:href="r.href" x-text="r.linkLabel"></a> to switch it to Selected agents.</span>
+									</label>
+								</template>
+							</div>
+							<p class="[ text-xs color-ink-muted ]" data-no-projects x-bind:hidden="!noProjectRows" hidden>There are no projects yet.</p>
+							<span class="[ hint ]" id="agent-projects-hint">Saved with the agent. A new agent starts with nothing ticked, so it is enabled only in All-agents projects until you tick one. Renaming the agent keeps the lists that name it.</span>
+							<span class="[ error ]" id="agent-projects-error" x-bind:hidden="!agentProjectsInvalid" x-text="agentErrors.projects" hidden></span>
+							<p class="[ summary-line ]" data-projects-summary role="status" x-text="projectsSummary"></p>
+						</section>
 						<template x-if="mfNotDrawer">
 							@reviewPanel()
 						</template>

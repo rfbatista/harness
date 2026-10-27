@@ -35,6 +35,7 @@ export function catalogGatewayContract(name, makeSubject) {
     assert.deepEqual(c.mcpServers[0].envRefs, [{ name: "GITHUB_TOKEN", set: false }]);
     assert.deepEqual(c.mcpServers[0].projects, [{ id: "p1", name: "harness" }]);
     assert.deepEqual(c.builtInTools.map((t) => t.name), ["Read", "Bash"]);
+    assert.deepEqual(c.agents[0].enabledIn, [{ id: "p1", name: "harness", mode: "all" }], "an All project enables every agent");
     assert.deepEqual(gateway.decodeCatalog(JSON.parse(JSON.stringify(catalogDTO()))).agents.map((a) => a.name), ["ux-designer", "backend"]);
   });
 
@@ -216,7 +217,7 @@ export function catalogGatewayContract(name, makeSubject) {
     const server = { name: "linear", transport: "http", url: "https://linear.example/mcp", headers: {} };
     const dry = await gateway.saveMcpServer({ server, agents: [], projects: ["p1"] }, { dryRun: true });
     assert.equal(dry.change.id, "");
-    assert.deepEqual(dry.change.projects, [{ id: "p1", name: "harness", before: ["github"], after: ["github", "linear"] }]);
+    assert.deepEqual(dry.change.projects, [{ id: "p1", name: "harness", before: ["github"], after: ["github", "linear"], enabledAgentsBefore: [], enabledAgentsAfter: [] }]);
     assert.deepEqual(dry.change.writes.map((w) => w.path), ["mcp-servers.json"], "agents.json is untouched when no agent changes");
     assert.deepEqual(await gateway.getProjectMcpServers("p1"), ["github"], "a dry run leaves the project alone");
     assert.ok(!(await gateway.getCatalog()).mcpServers.some((m) => m.name === "linear"));
@@ -250,5 +251,48 @@ export function catalogGatewayContract(name, makeSubject) {
     await assert.rejects(gateway.setProjectAgents("gone", { mode: "all", agents: [] }), "PROJECT_NOT_FOUND");
     const err = await assert.rejects(gateway.setProjectAgents("p1", { mode: "selected", agents: ["backend", "ghost"] }), "UNKNOWN_REFERENCE");
     assert.deepEqual(err.details.names, ["ghost"]);
+  });
+
+  contract("enabled_in lists each All project and each Selected project that lists the agent, and follows set_project_agents", async () => {
+    const { gateway } = subject();
+    const where = async (name) => (await gateway.getCatalog()).agents.find((a) => a.name === name).enabledIn;
+    assert.deepEqual(await where("backend"), [{ id: "p1", name: "harness", mode: "all" }]);
+    await gateway.setProjectAgents("p1", { mode: "selected", agents: ["backend"] });
+    assert.deepEqual(await where("backend"), [{ id: "p1", name: "harness", mode: "selected" }]);
+    assert.deepEqual(await where("ux-designer"), [], "a Selected project that does not list it does not enable it");
+  });
+
+  contract("a save with `projects` sets the Selected lists that name the agent; without it the lists stay", async () => {
+    const { gateway } = subject();
+    await gateway.setProjectAgents("p1", { mode: "selected", agents: ["backend"] });
+    await gateway.saveAgent({ agent: agent() });
+    assert.deepEqual(await gateway.getProjectAgents("p1"), { mode: "selected", agents: ["backend"] }, "no `projects`: left as it was, so a new agent is not enabled there");
+    const dry = await gateway.saveAgent({ agent: agent({ name: "reviewer" }), previousName: "reviewer", projects: ["p1"] }, { dryRun: true });
+    assert.deepEqual(dry.change.projects, [{ id: "p1", name: "harness", before: ["github"], after: ["github"], enabledAgentsBefore: ["backend"], enabledAgentsAfter: ["backend", "reviewer"] }]);
+    assert.deepEqual(await gateway.getProjectAgents("p1"), { mode: "selected", agents: ["backend"] }, "a dry run changes nothing");
+    const real = await gateway.saveAgent({ agent: agent(), previousName: "reviewer", projects: ["p1"] });
+    assert.deepEqual(real.change.projects.map((p) => p.enabledAgentsAfter), [["backend", "reviewer"]]);
+    assert.deepEqual(await gateway.getProjectAgents("p1"), { mode: "selected", agents: ["backend", "reviewer"] });
+    await gateway.saveAgent({ agent: agent(), previousName: "reviewer", projects: [] });
+    assert.deepEqual(await gateway.getProjectAgents("p1"), { mode: "selected", agents: ["backend"] }, "an empty set takes the agent off every list");
+  });
+
+  contract("naming an All project in `projects` is INVALID_INPUT at the field; an unknown project is UNKNOWN_REFERENCE", async () => {
+    const { gateway } = subject();
+    const err = await assert.rejects(gateway.saveAgent({ agent: agent(), projects: ["p1"] }), Codes.INVALID_INPUT);
+    assert.equal(err.details.field, "projects");
+    assert.equal(describeRefusal(err).field, "projects");
+    assert.ok(!(await gateway.getCatalog()).agents.some((a) => a.name === "reviewer"), "a refused save writes nothing");
+    const gone = await assert.rejects(gateway.saveAgent({ agent: agent(), projects: ["nope"] }), "UNKNOWN_REFERENCE");
+    assert.deepEqual(gone.details.names, ["nope"]);
+  });
+
+  contract("renaming and deleting an agent show in change.projects with the enabled agents before and after", async () => {
+    const { gateway } = subject();
+    await gateway.setProjectAgents("p1", { mode: "selected", agents: ["backend"] });
+    const renamed = await gateway.saveAgent({ previousName: "backend", agent: agent({ name: "api", entries: ["tdd"] }) });
+    assert.deepEqual(renamed.change.projects.map((p) => [p.id, p.enabledAgentsBefore, p.enabledAgentsAfter]), [["p1", ["backend"], ["api"]]]);
+    const deleted = await gateway.deleteAgent("api");
+    assert.deepEqual(deleted.change.projects.map((p) => [p.enabledAgentsBefore, p.enabledAgentsAfter]), [[["api"], []]]);
   });
 }

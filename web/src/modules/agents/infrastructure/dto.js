@@ -36,6 +36,7 @@ export function toCatalog(body) {
       missingSkills: strings(a?.missing_skills, "missing_skills"),
       mcpServers: strings(a?.mcp_servers, "mcp_servers"),
       allowedTools: strings(a?.allowed_tools, "allowed_tools"),
+      enabledIn: list(a?.enabled_in, "enabled_in").map((e) => ({ id: String(e?.id ?? ""), name: String(e?.name ?? ""), mode: e?.mode === "selected" ? "selected" : "all" })),
       problems: problems(a?.problems),
     })),
     bundles: list(body.bundles, "bundles").map((b) => ({
@@ -105,7 +106,7 @@ export function toWriteResult(body) {
       id: String(c.id ?? ""),
       summary: String(c.summary ?? ""),
       writes: list(c.writes, "writes").map((w) => ({ path: String(w?.path ?? ""), before: w?.before ?? null, after: w?.after ?? null, ...(w?.encoding === "base64" ? { encoding: "base64" } : {}) })),
-      projects: (Array.isArray(c.projects) ? c.projects : []).map((p) => ({ id: String(p?.id ?? ""), name: String(p?.name ?? ""), before: strings(p?.before ?? [], "before"), after: strings(p?.after ?? [], "after") })),
+      projects: (Array.isArray(c.projects) ? c.projects : []).map((p) => ({ id: String(p?.id ?? ""), name: String(p?.name ?? ""), before: strings(p?.before ?? [], "before"), after: strings(p?.after ?? [], "after"), enabledAgentsBefore: strings(p?.enabled_agents_before ?? [], "enabled_agents_before"), enabledAgentsAfter: strings(p?.enabled_agents_after ?? [], "enabled_agents_after") })),
     },
     versions: object(body.versions),
   };
@@ -148,7 +149,12 @@ const withPrevious = (previousName) => (previousName ? { previous_name: previous
 
 export function agentBody(input) {
   const a = input.agent;
-  return { ...withPrevious(input.previousName), agent: { name: a.name, description: a.description, aliases: a.aliases ?? [], entries: a.entries ?? [], mcp_servers: a.mcpServers ?? [], allowed_tools: a.allowedTools ?? [] } };
+  // `projects` is the full set of Selected projects that list the agent; left out, the lists stay as they are.
+  return {
+    ...withPrevious(input.previousName),
+    agent: { name: a.name, description: a.description, aliases: a.aliases ?? [], entries: a.entries ?? [], mcp_servers: a.mcpServers ?? [], allowed_tools: a.allowedTools ?? [] },
+    ...(input.projects === undefined ? {} : { projects: input.projects }),
+  };
 }
 
 export function bundleBody(input) {

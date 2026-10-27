@@ -174,6 +174,9 @@ export function liveCatalog({ gateway, tracker, timers = globalThis }) {
           this.checked = {};
         }
         if (Object.keys(changes).length > 0) this.changed = { ...this.changed, ...changes };
+        // Where agents are enabled (a project's list, mode or name) shows in the detail, the editor and the delete dialog.
+        await this.refreshProjects?.();
+        this.refreshDelete?.();
         this.catalogMoved?.({ catalog: next, changes, versions: { ...next.versions, ...(skill?.versions ?? {}) } });
       } finally {
         this.refreshing = false;

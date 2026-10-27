@@ -301,6 +301,47 @@ templ agentDetail() {
 				</template>
 			</div>
 		</section>
+		<section aria-labelledby="agent-enabled-h" data-enabled-in>
+			<div class="[ repel ] [ section-title ]">
+				<h3 id="agent-enabled-h" data-enabled-heading x-text="detail.enabled.heading"></h3>
+				<a class="[ text-sm ]" data-change="projects" x-bind:href="detail.change.projects">Change</a>
+			</div>
+			<div class="[ banner ]" data-tone="attention" data-enabled-nowhere x-bind:hidden="!detail.enabled.nowhere" hidden>
+				<div class="[ grow text-sm ]">
+					<strong>Not enabled in any project.</strong>
+					<span x-text="detail.enabled.nowhereText"></span>
+				</div>
+				<a class="[ button ]" data-size="sm" data-enable-in-project x-bind:href="detail.change.projects">Enable in a project</a>
+			</div>
+			<p class="[ text-xs color-ink-muted ]" data-no-projects x-bind:hidden="!detail.enabled.noProjects" hidden>There are no projects yet.</p>
+			<div class="[ enabled-table ]" data-enabled-table x-bind:hidden="!detail.enabled.hasRows" hidden>
+				<table>
+					<thead>
+						<tr>
+							<th scope="col">Project</th>
+							<th scope="col">Setting</th>
+							<th scope="col">Note</th>
+						</tr>
+					</thead>
+					<tbody>
+						<template x-for="r in detail.enabled.rows" x-bind:key="r.id">
+							<tr data-enabled-row x-bind:data-mode="r.mode" x-bind:data-project="r.id">
+								<td><a class="[ font-mono ]" data-project-link x-bind:href="r.href" x-text="r.name"></a></td>
+								<td><span class="[ badge ]" x-bind:data-tone="r.tone" x-text="r.badge"></span></td>
+								<td class="[ text-xs color-ink-muted ]" x-text="r.note"></td>
+							</tr>
+						</template>
+					</tbody>
+				</table>
+			</div>
+			<p class="[ hint ]" data-enabled-hint x-bind:hidden="!detail.enabled.hasNotListed" hidden>
+				{ "Not enabled in " }
+				<template x-for="p in detail.enabled.notListed" x-bind:key="p.id">
+					<span><a class="[ font-mono ]" data-not-listed x-bind:href="p.href" x-text="p.name"></a><span x-text="p.sep"></span></span>
+				</template>
+				{ " (Selected agents)." }
+			</p>
+		</section>
 	</div>
 }
 

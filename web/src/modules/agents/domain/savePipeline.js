@@ -14,6 +14,7 @@
 // reloads. The page never computes file bytes: the preview is the dry run.
 
 import { conflictModel, diffModel } from "./diff.js";
+import { projectChangeFiles } from "./enabledIn.js";
 
 /**
  * @typedef {import("./refusals.js").Refusal} Refusal
@@ -125,7 +126,8 @@ const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
  */
 export function saveView(s, form) {
   const paths = s.preview ? s.preview.writes.map((w) => w.path) : form.writes;
-  const writes = paths.join(", ");
+  // A change that sets only project lists writes no catalog file: the dry run says so.
+  const writes = paths.join(", ") || (s.preview && s.preview.projects.length ? "the project lists" : "");
   const dirty = s.phase !== "clean" && s.phase !== "saved";
   let footer;
   if (form.blocked) footer = `Saving is off · ${form.blocked}`;
@@ -142,6 +144,8 @@ export function saveView(s, form) {
     canSave: canSave(s, form.valid, Boolean(form.blocked)),
     review: s.preview !== null,
     files: s.preview ? memo(s.preview, () => diffModel(s.preview.writes)) : [],
+    // The project lists the change sets (enabled agents), drawn under the files in Review change.
+    projects: s.preview ? memo(s.preview.projects, () => projectChangeFiles(s.preview.projects)) : [],
     conflict,
     conflictTitle: conflict ? `${s.conflict.changed.map((c) => c.path).join(", ") || "A file"} changed on disk while you were editing.` : "",
     conflictFiles: conflict ? memo(s.conflict, () => conflictModel(s.conflict.changed, s.seen)) : [],

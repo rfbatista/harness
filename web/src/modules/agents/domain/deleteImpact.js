@@ -6,7 +6,7 @@
 //   skill   the agents that list it and the bundles that hold it
 //   bundle  the agents and bundles that name it
 //   server  the agents and projects that get it
-//   agent   nothing: the catalog read does not say which projects enable it
+//   agent   the Selected projects that list it (and which of them it leaves with an empty list); All projects just stop offering it
 
 /** @typedef {import("./ports.js").Catalog} Catalog */
 /** @typedef {"agent"|"skill"|"bundle"|"mcp"} DeleteKind */
@@ -47,7 +47,7 @@ const bundleItems = (names) => names.map((n) => ({ name: `@${n}`, href: `/agents
  * @property {string} button
  * @property {string} path  what the catalog loses
  * @property {string} intro
- * @property {{ key: string, label: string, items: { name: string, href: string }[] }[]} groups  non-empty groups only
+ * @property {{ key: string, label: string, items: { name: string, href: string }[], note: string, hasNote: boolean }[]} groups  non-empty groups only; note: a line under the group, or ""
  * @property {boolean} reachesNothing
  * @property {string} nothing  said when it reaches nothing
  * @property {string} total  the sentence after the groups, or ""
@@ -63,16 +63,35 @@ const bundleItems = (names) => names.map((n) => ({ name: `@${n}`, href: `/agents
  */
 export function deleteImpact(catalog, kind, name) {
   const base = { kind, name, typed: name, note: DELETE_UNDO_NOTE, total: "", nothing: "" };
-  const done = (d) => ({ ...d, groups: d.groups.filter((g) => g.items.length > 0), reachesNothing: d.groups.every((g) => g.items.length === 0) });
+  const done = (d) => ({
+    ...d,
+    groups: d.groups.filter((g) => g.items.length > 0).map((g) => ({ note: "", ...g, hasNote: (g.note ?? "") !== "" })),
+    reachesNothing: d.groups.every((g) => g.items.length === 0),
+  });
   if (kind === "agent") {
-    if (!catalog.agents.some((a) => a.name === name)) return null;
+    const agent = catalog.agents.find((a) => a.name === name);
+    if (!agent) return null;
+    const enabledIn = agent.enabledIn ?? [];
+    const listing = enabledIn.filter((e) => e.mode === "selected");
+    const everyAll = enabledIn.filter((e) => e.mode === "all");
+    // A Selected project is left with an empty list when no other agent is listed in it.
+    const emptied = listing.filter((p) => !catalog.agents.some((o) => o.name !== name && (o.enabledIn ?? []).some((e) => e.id === p.id && e.mode === "selected")));
     return done({
       ...base,
       title: `Delete agent “${name}”?`,
       button: "Delete agent",
       path: `agents.json › agents.${name}`,
       intro: "This removes the agent from the catalog. Its skills, bundles and MCP servers stay in the catalog. Sessions already running keep what they started with.",
-      groups: [],
+      nothing: enabledIn.length === 0 ? "No project enables it." : "No Selected-agents project lists it.",
+      groups: [
+        {
+          key: "projects",
+          label: "Selected-agents projects that list it",
+          items: listing.map((p) => ({ name: p.name, href: `/projects/${enc(p.id)}/settings` })),
+          note: emptied.length ? `${emptied.map((p) => p.name).join(", ")} ${emptied.length === 1 ? "is" : "are"} left with no agent enabled: nothing can be picked there until an agent is added to its list.` : "",
+        },
+      ],
+      total: everyAll.length ? `Projects that use All agents (${everyAll.map((p) => p.name).join(", ")}) just stop offering it.` : "",
     });
   }
   if (kind === "skill") {

@@ -29,6 +29,10 @@ export function saveUi({ gateway }) {
     get reviewLabel() {
       return this.reviewOpen ? "Hide change" : "Review change";
     },
+    /** The project lists the change sets, under the files in Review change. */
+    get reviewProjects() {
+      return this.sv.projects;
+    },
     get reviewShown() {
       return this.reviewOpen && this.sv.review;
     },

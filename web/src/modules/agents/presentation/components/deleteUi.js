@@ -110,6 +110,13 @@ export function deleteUi({ gateway, timers }) {
       this.del = dialog;
     },
 
+    /** The catalog was read again: an open agent dialog lists the projects as they are now. */
+    refreshDelete() {
+      if (!this.del || this.del.kind !== "agent" || !this.catalog) return;
+      const dialog = deleteImpact(this.catalog, "agent", this.del.name);
+      if (dialog) this.del = dialog;
+    },
+
     /** The dialog appeared: the keyboard starts in the name field. @param {HTMLElement} el */
     focusDelete(el) {
       el.querySelector("[data-delete-name]")?.focus();

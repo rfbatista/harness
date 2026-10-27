@@ -72,7 +72,7 @@ func TestAgentEditorCreatesEditsAndRenamesAnAgent_EndToEnd(t *testing.T) {
 		waitUntil(visible(`[data-agent-editor]`)),
 		waitUntil(`document.querySelector('[data-agent-editor] h1').textContent.trim() === 'New agent'`),
 		waitUntil(`!document.querySelector('[role=tablist]')?.checkVisibility()`),
-		waitUntil(`[...document.querySelectorAll('.agent-toc a')].map(a => a.dataset.section + '=' + a.querySelector('.count').textContent.trim()).join() === 'identity=,skills=0,mcp=0,tools=default'`),
+		waitUntil(`[...document.querySelectorAll('.agent-toc a')].map(a => a.dataset.section + '=' + a.querySelector('.count').textContent.trim()).join() === 'identity=,skills=0,mcp=0,tools=default,projects=1'`),
 		waitUntil(save+`.disabled === true && `+save+`.textContent.trim() === 'Create agent'`),
 		waitUntil(`[...document.querySelectorAll('[data-agent-editor] [data-mcp-row]')].map(r => r.dataset.name).join() === 'github,notes'`),
 		waitUntil(flat(`[data-agent-editor] [data-mcp-row][data-name=github]`)+`.includes('http') && `+flat(`[data-agent-editor] [data-mcp-row][data-name=github]`)+`.includes('${HARNESS_E2E_UNSET_TOKEN} not set')`),

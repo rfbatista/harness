@@ -15,6 +15,7 @@ templ diffFiles(list string) {
 				<code class="[ font-mono text-xs ]" x-text="f.path"></code>
 				<span class="[ badge ]" x-text="f.label"></span>
 			</div>
+			<p class="[ text-xs color-ink-muted ]" data-diff-note x-bind:hidden="!f.emptyNote" x-text="f.emptyNote" hidden></p>
 			<div class="[ diff ]" tabindex="0" role="group" aria-label="Changed lines">
 				<template x-for="l in f.lines" x-bind:key="l.key">
 					<div data-diff-line x-bind:data-kind="l.kind"><span class="[ mark ]" x-text="l.mark"></span><span x-text="l.text"></span></div>
@@ -60,6 +61,7 @@ templ reviewPanel() {
 		<h3 id="review-panel-h">Review change</h3>
 		<p class="[ text-xs color-ink-muted ]">What Save will write, from the server's dry run. Nothing is written yet.</p>
 		@diffFiles("reviewFiles")
+		@diffFiles("reviewProjects")
 	</section>
 }
 

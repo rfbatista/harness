@@ -83,7 +83,7 @@ test("the detail names MCP servers with transport and what is set, tools, and th
   assert.deepEqual([d.servers[1].name, d.servers[1].found], ["gone", false]);
   assert.deepEqual(d.tools, ["Read"]);
   assert.equal(d.toolsDefault, false);
-  assert.deepEqual(d.change, { identity: "/agents/ux-designer/edit#identity", skills: "/agents/ux-designer/edit#skills", mcp: "/agents/ux-designer/edit#mcp", tools: "/agents/ux-designer/edit#tools" });
+  assert.deepEqual(d.change, { identity: "/agents/ux-designer/edit#identity", skills: "/agents/ux-designer/edit#skills", mcp: "/agents/ux-designer/edit#mcp", tools: "/agents/ux-designer/edit#tools", projects: "/agents/ux-designer/edit#projects" });
   assert.equal(d.editHref, "/agents/ux-designer/edit");
   assert.equal(d.duplicateHref, "/agents/new?from=ux-designer");
   assert.equal(d.path, "agents.json › agents.ux-designer");
@@ -105,4 +105,14 @@ test("a bundle the agent names that does not exist is shown as missing; an unkno
   const g = agentDetail(c, "x").groups[0];
   assert.deepEqual([g.name, g.missing, g.size], ["@gone", true, 0]);
   assert.equal(agentDetail(catalog, "nobody"), null);
+});
+
+test("the detail carries Enabled in: the agent's projects against every project, and the Change link to the editor's Projects section", () => {
+  const withProjects = { ...catalog, agents: catalog.agents.map((a) => (a.name === "ux-designer" ? { ...a, enabledIn: [{ id: "p1", name: "harness", mode: "all" }] } : a)) };
+  const projects = [{ id: "p1", name: "harness" }, { id: "p2", name: "atlas-api" }];
+  const d = agentDetail(withProjects, "ux-designer", projects);
+  assert.equal(d.enabled.heading, "Enabled in · 1 of 2 projects");
+  assert.deepEqual(d.enabled.notListed.map((p) => p.name), ["atlas-api"]);
+  assert.equal(d.change.projects, "/agents/ux-designer/edit#projects");
+  assert.equal(agentDetail(withProjects, "docs", projects).enabled.nowhere, true, "an agent with no enabled_in is enabled nowhere");
 });

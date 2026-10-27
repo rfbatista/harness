@@ -40,7 +40,7 @@ const COUNTS = {
 
 /**
  * @param {{
- *   gateway: Pick<import("../../domain/ports.js").CatalogGateway, "decodeCatalog" | "follow" | "getCatalog" | "getSkill" | "checkEnvVars" | "saveAgent" | "saveBundle" | "saveSkill" | "saveMcpServer" | "deleteAgent" | "deleteBundle" | "deleteSkill" | "deleteMcpServer" | "testMcpServer" | "listProjects" | "undoChange">,
+ *   gateway: Pick<import("../../domain/ports.js").CatalogGateway, "decodeCatalog" | "follow" | "getCatalog" | "getSkill" | "checkEnvVars" | "saveAgent" | "saveBundle" | "saveSkill" | "saveMcpServer" | "deleteAgent" | "deleteBundle" | "deleteSkill" | "deleteMcpServer" | "testMcpServer" | "listProjects" | "getProjectAgents" | "undoChange">,
  *   history: Pick<History, "pushState"> & Partial<Pick<History, "replaceState">>,
  *   location: Pick<Location, "pathname" | "search"> & Partial<Pick<Location, "hash" | "assign">>,
  *   clipboard?: Pick<Clipboard, "writeText">,
@@ -67,6 +67,17 @@ export const agentsPage = ({ gateway: raw, history, location, clipboard, timers 
     const badge = this.diskBadge(kind, row.name, row.badge);
     return { hasBadge: badge !== null, noBadge: badge === null, badgeLabel: badge?.label ?? "", badgeTone: badge?.tone ?? "" };
   },
+
+  /**
+   * Every project, for Enabled in and the editor's Projects section (the project list;
+   * which of them lists an agent is in the catalog read). `projectModesKnown` is each
+   * project's mode as the server said it, read only while the catalog holds no agent.
+   * @type {{ id: string, name: string }[]}
+   */
+  projectList: [],
+  projectsRead: false,
+  /** @type {Record<string, "all" | "selected">} */
+  projectModesKnown: {},
 
   /** The Agents tab's text filter and quick filter ("all", "mcp", "problems"). */
   query: "",
@@ -106,6 +117,33 @@ export const agentsPage = ({ gateway: raw, history, location, clipboard, timers 
     this.toolItem = location.hash ? decodeURIComponent(location.hash.slice(1)) : "";
     this.startLive();
     await this.loadSkill();
+  },
+
+  /** An agent's detail or editor is open: read the project list, once (the page's first paint needs no request for it). */
+  wantProjects() {
+    if (this.catalog === null || this.tab !== "agents" || this.item === "" || this.projectsRead) return;
+    void this.loadProjects();
+  },
+  /** The catalog was read again: the projects the page already reads are read again too. */
+  async refreshProjects() {
+    if (this.projectsRead) await this.loadProjects();
+  },
+
+  /** Reads the project list (and, with no agent in the catalog, each project's mode); a failed read keeps what the page had. */
+  async loadProjects() {
+    if (!gateway.listProjects) return;
+    this.projectsRead = true;
+    try {
+      const list = await gateway.listProjects();
+      if (JSON.stringify(list) !== JSON.stringify(this.projectList)) this.projectList = list;
+      if (this.catalog && this.catalog.agents.length === 0 && gateway.getProjectAgents) {
+        const known = {};
+        for (const p of list) known[p.id] = (await gateway.getProjectAgents(p.id)).mode;
+        if (JSON.stringify(known) !== JSON.stringify(this.projectModesKnown)) this.projectModesKnown = known;
+      }
+    } catch {
+      // The section still shows the projects the catalog names.
+    }
   },
 
   async load() {
@@ -270,7 +308,7 @@ export const agentsPage = ({ gateway: raw, history, location, clipboard, timers 
   /** The open agent's detail, or null: no item, an editor, or a name the catalog lacks. */
   get detail() {
     if (!this.catalog || this.tab !== "agents" || !this.item || this.mode) return null;
-    return agentDetail(this.catalog, this.item);
+    return agentDetail(this.catalog, this.item, this.projectList);
   },
   get noDetail() {
     return this.detail === null;

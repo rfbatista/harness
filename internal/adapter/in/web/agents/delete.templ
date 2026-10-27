@@ -23,6 +23,7 @@ templ deleteDialog() {
 									<li class="[ chip ] [ font-mono ]" data-delete-item x-text="i.name"></li>
 								</template>
 							</ul>
+							<p class="[ text-xs color-ink-muted ]" data-delete-group-note x-bind:hidden="!g.hasNote" x-text="g.note" hidden></p>
 						</div>
 					</template>
 					<p class="[ text-sm ]" data-delete-total x-bind:hidden="!delHasTotal" x-text="del.total"></p>

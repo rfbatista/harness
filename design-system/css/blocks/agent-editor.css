@@ -7,7 +7,7 @@
  *   <form class="agent-form"><section><h2/>…</section></form></div>
  *   <div class="save-footer"/></div>
  * Parts: .agent-row (two fields side by side), .chip-box (chips and the input
- * that adds one), .pick-list of .pick-row (a checkbox row), .summary-line.
+ * that adds one), .pick-list of .pick-row (a checkbox row; [data-fixed] is a fixed, ticked one), .summary-line.
  * Exceptions: .agent-toc a[aria-current="true"] (the section in view).
  */
 
@@ -122,6 +122,8 @@
 
     &:has(input:checked) { border-color: var(--color-line-strong); background: var(--color-selected); }
     & > input { accent-color: var(--color-signal); }
+    /* A project in All agents mode: ticked, and changed only in its own settings. */
+    &[data-fixed] { cursor: default; background: var(--color-sunken); }
     & > .desc { flex: 1 1 14rem; font-size: var(--text-xs); color: var(--color-ink-muted); }
   }
 

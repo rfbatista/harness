@@ -60,11 +60,44 @@ test("an MCP server reaches the agents and projects that get it, the project lin
   assert.equal(d.groups[1].items[0].href, "/projects/p1/settings");
 });
 
-test("an agent lists no projects: the catalog read does not say where it is enabled", () => {
-  const d = deleteImpact(toCatalog(catalogDTO()), "agent", "backend");
-  assert.equal(d.title, "Delete agent “backend”?");
-  assert.deepEqual(d.groups, []);
-  match(d.intro, /skills, bundles and MCP servers stay/);
+// atlas lists ux-designer and backend; lab lists only ux-designer; harness and notes use All agents.
+const withEnabledIn = () => {
+  const dto = catalogDTO();
+  const all = [{ id: "p1", name: "harness", mode: "all" }, { id: "p4", name: "notes-site", mode: "all" }];
+  dto.agents[0].enabled_in = [...all, { id: "p2", name: "atlas-api", mode: "selected" }, { id: "p3", name: "lab", mode: "selected" }];
+  dto.agents[1].enabled_in = [...all, { id: "p2", name: "atlas-api", mode: "selected" }];
+  return toCatalog(dto);
+};
+
+test("an agent reaches the Selected projects that list it, with a note naming the ones left with an empty list", () => {
+  const d = deleteImpact(withEnabledIn(), "agent", "ux-designer");
+  assert.equal(d.title, "Delete agent “ux-designer”?");
+  assert.deepEqual(d.groups.map((g) => [g.key, names(g)]), [["projects", ["atlas-api", "lab"]]]);
+  assert.equal(d.groups[0].items[0].href, "/projects/p2/settings");
+  assert.equal(d.groups[0].label, "Selected-agents projects that list it");
+  match(d.groups[0].note, /lab is left with no agent enabled/);
+  assert.ok(!/atlas-api/.test(d.groups[0].note), "atlas-api still lists backend");
+  const backend = deleteImpact(withEnabledIn(), "agent", "backend");
+  assert.equal(backend.groups[0].note, "", "nothing is left empty");
+  assert.equal(backend.groups[0].hasNote, false);
+});
+
+test("the dialog says in one line that All-agents projects just stop offering the agent", () => {
+  const d = deleteImpact(withEnabledIn(), "agent", "backend");
+  assert.equal(d.total, "Projects that use All agents (harness, notes-site) just stop offering it.");
+  const two = deleteImpact(withEnabledIn(), "agent", "ux-designer");
+  assert.equal(two.reachesNothing, false);
+  const onlyAll = withEnabledIn();
+  onlyAll.agents[1].enabledIn = onlyAll.agents[1].enabledIn.filter((e) => e.mode === "all");
+  const solo = deleteImpact(onlyAll, "agent", "backend");
+  assert.deepEqual([solo.reachesNothing, solo.nothing], [true, "No Selected-agents project lists it."]);
+  const cat = toCatalog(catalogDTO());
+  const bare = deleteImpact(cat, "agent", "backend");
+  assert.deepEqual(bare.groups, []);
+  assert.equal(bare.total, "", "an agent enabled in no project has nothing to say about All projects");
+  assert.equal(bare.reachesNothing, true);
+  assert.equal(bare.nothing, "No project enables it.");
+  match(bare.intro, /skills, bundles and MCP servers stay/);
 });
 
 test("an item the catalog lacks has no dialog", () => {
@@ -77,8 +110,8 @@ test("the dialog says the catalog is not in git, and never offers git as a backu
   match(DELETE_UNDO_NOTE, /next catalog change or a server restart/);
   match(DELETE_UNDO_NOTE, /not in git/);
   match(DELETE_UNDO_NOTE, /no other copy/);
-  const c = catalog();
-  for (const [kind, name] of [["agent", "backend"], ["skill", "tdd"], ["bundle", "ux"], ["mcp", "github"]]) {
+  const c = withEnabledIn();
+  for (const [kind, name] of [["agent", "backend"], ["agent", "ux-designer"], ["skill", "tdd"], ["bundle", "ux"], ["mcp", "github"]]) {
     const d = deleteImpact(c, kind, name);
     const text = JSON.stringify(d).toLowerCase();
     assert.ok(!/git (restore|checkout|history)|backup|commit|recover from git|in your repo/.test(text), `${kind}: ${text}`);

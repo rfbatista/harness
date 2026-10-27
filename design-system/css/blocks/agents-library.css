@@ -11,6 +11,7 @@
  * no folder).
  * Skills: .library-more (Show more under a long list), .skill-grid (the
  * rendered SKILL.md beside .skill-side: .file-list and Reaches as a .kv).
+ * Enabled in: .enabled-table (project, setting badge, note).
  * MCP: .detail-card around a .kv, .entry-list for env or header entries.
  */
 
@@ -179,6 +180,21 @@
       padding: var(--space-s) var(--space-m);
     }
     & > li + li { border-block-start: var(--border-width) solid var(--color-line); }
+  }
+
+  /* Enabled in: the agent's projects, a table of project, setting and note. */
+  .enabled-table {
+    overflow-x: auto;
+    border: var(--border-width) solid var(--color-line);
+    border-radius: var(--radius-md);
+    background: var(--color-raised);
+
+    &[hidden] { display: none; }
+    & table { inline-size: 100%; border-collapse: collapse; font-size: var(--text-sm); }
+    & :is(th, td) { padding: var(--space-s) var(--space-m); text-align: start; vertical-align: baseline; }
+    & thead th { font-size: var(--text-xs); font-weight: var(--weight-medium); color: var(--color-ink-muted); }
+    & tbody tr + tr > td { border-block-start: var(--border-width) solid var(--color-line); }
+    & td:first-child { white-space: nowrap; }
   }
 
   .library-more {
