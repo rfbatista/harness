@@ -201,3 +201,94 @@ func TestDiagramColoursFollowTheColourScheme(t *testing.T) {
 		t.Errorf("the downloaded SVG lost its literal colours:\n%.400s", svg)
 	}
 }
+
+// manySandboxesRecord has sandboxes that share agents, which used to draw
+// overlapping regions with a label under an agent.
+func manySandboxesRecord() map[string]any {
+	rec := savedRecord()
+	rec["sandboxes"] = []any{
+		map[string]any{"name": "seatbelt", "runs": "x", "can_reach": []any{}, "cannot_reach": []any{}, "used_by": []any{"go-developer", "devops"}},
+		map[string]any{"name": "docker", "runs": "y", "can_reach": []any{}, "cannot_reach": []any{}, "used_by": []any{"software-architect", "devops"}},
+	}
+	rec["tools"] = []any{
+		map[string]any{"name": "task", "kind": "mcp", "used_by": []any{"all"}, "writes": false},
+		map[string]any{"name": "make check", "kind": "function", "used_by": []any{"go-developer"}, "writes": false},
+	}
+	return rec
+}
+
+// Sandbox regions never overlap and no label is covered; an agent in two sandboxes stands in the first.
+func TestDiagramSandboxRegionsNeverOverlapAndTheirLabelsStayClear(t *testing.T) {
+	rig := newArchRig(t)
+	rig.api.seed(manySandboxesRecord())
+	var got string
+	rig.run(t,
+		chromedp.EmulateViewport(1440, 900),
+		chromedp.Navigate(rig.url("/diagram")),
+		diagramReady(),
+		chromedp.Evaluate(`(() => {
+			const box = (e) => { const r = e.getBoundingClientRect(); return { x: r.left, y: r.top, r: r.right, b: r.bottom } };
+			const hit = (a, b) => a.x < b.r && b.x < a.r && a.y < b.b && b.y < a.b;
+			const regions = [...document.querySelectorAll('[data-diagram-picture] svg g[data-region]')].map(g => ({ name: g.dataset.region, rect: box(g.querySelector('rect')), label: box(g.querySelector('text')) }));
+			const agents = [...document.querySelectorAll('[data-diagram-picture] svg g[data-agent] rect:first-child')].map(box);
+			const problems = [];
+			regions.forEach((a, i) => regions.slice(i + 1).forEach(b => { if (hit(a.rect, b.rect)) problems.push('regions ' + a.name + ' and ' + b.name + ' overlap') }));
+			regions.forEach(r => agents.forEach(a => { if (hit(r.label, a)) problems.push('the label of ' + r.name + ' is under an agent') }));
+			regions.forEach(r => { if (r.label.x < r.rect.x || r.label.r > r.rect.r || r.label.y < r.rect.y) problems.push('the label of ' + r.name + ' is outside its region') });
+			return JSON.stringify({ n: regions.length, problems });
+		})()`, &got),
+	)
+	if got != `{"n":2,"problems":[]}` {
+		t.Fatalf("regions: %s", got)
+	}
+}
+
+// Agents carry the same colour as their matrix chip; a layer shows its file count; one guard per edge; tools are a panel.
+func TestDiagramAgentColoursFileCountsGuardsAndToolsPanel(t *testing.T) {
+	rig := newArchRig(t)
+	rig.api.seed(manySandboxesRecord())
+	var got string
+	rig.run(t,
+		chromedp.EmulateViewport(1440, 900),
+		chromedp.Navigate(rig.url("/diagram")),
+		diagramReady(),
+		poll(`!!document.querySelector('[data-diagram-picture] svg [data-files]')`),
+		chromedp.Evaluate(`(() => {
+			const svg = document.querySelector('[data-diagram-picture] svg');
+			const chip = (s) => document.querySelector('.agent-chip[data-slot="' + s + '"] > i');
+			const edges = [...svg.querySelectorAll('rect.dg-agent-edge')].map(r => [r.dataset.slot, getComputedStyle(r).fill, chip(r.dataset.slot) ? getComputedStyle(chip(r.dataset.slot)).backgroundColor : null]);
+			const edgeCount = svg.querySelectorAll('path[data-edge]').length, guardCount = svg.querySelectorAll('g[data-guard]').length;
+			const tools = [...svg.querySelectorAll('g[data-tool]')].map(g => [...g.querySelectorAll('text')].map(t => t.textContent).join(' '));
+			const regions = [...svg.querySelectorAll('g[data-tool-region]')].map(g => g.dataset.toolRegion + ':' + g.querySelector('text').textContent);
+			const files = [...svg.querySelectorAll('g[data-layer] [data-files]')].map(t => t.textContent);
+			return JSON.stringify({ colours: edges.every(([, fill, chipBg]) => chipBg === null || fill === chipBg) && edges.some(([, , c]) => c !== null), edgeCount, guardCount, tools, regions, files });
+		})()`, &got),
+	)
+	want := `{"colours":true,"edgeCount":4,"guardCount":4,"tools":["task MCP server · all agents","make check function · 1 agent"],"regions":["host:Harness host","sandbox:Tools inside the sandbox"],"files":["2 files","1 file","3 files"]}`
+	if got != want {
+		t.Fatalf("diagram = %s\nwant       %s", got, want)
+	}
+}
+
+// The header and its buttons sit above the drawing; a focused agent lists the warnings a blocking guard hides.
+func TestDiagramHeaderIsAboveTheDrawingAndTheFocusCardListsHiddenWarnings(t *testing.T) {
+	rig := newArchRig(t)
+	rig.api.seed(savedRecord())
+	var above bool
+	var warnings string
+	rig.run(t,
+		chromedp.EmulateViewport(1440, 900),
+		chromedp.Navigate(rig.url("/diagram")),
+		diagramReady(),
+		chromedp.Evaluate(`document.querySelector('[data-diagram-head]').getBoundingClientRect().bottom <= document.querySelector('[data-diagram-scroll]').getBoundingClientRect().top`, &above),
+		chromedp.Click(`[data-focus-agent][data-agent-name="devops"]`, chromedp.ByQuery),
+		poll(`!!document.querySelector('[data-focus-warnings]')`),
+		chromedp.Evaluate(textOf("[data-focus-warnings]"), &warnings),
+	)
+	if !above {
+		t.Error("the header and its buttons are not above the drawing")
+	}
+	if warnings != "archtest on unlayered" {
+		t.Errorf("hidden warnings = %q", warnings)
+	}
+}

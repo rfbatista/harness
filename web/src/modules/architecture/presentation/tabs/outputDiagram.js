@@ -56,6 +56,7 @@ export const outputDiagram = ({ gateway, clipboard }) => () => ({
       draft: this.dirty,
       handoffs: this.showHandoffs,
       problems: { overlaps: this.overlapNames, unmatched: this.unmatchedCount },
+      files: this.fileCounts,
     });
   },
   /** The model as drawn: without the guards or the sandbox regions the person turned off. */
@@ -118,6 +119,12 @@ export const outputDiagram = ({ gateway, clipboard }) => () => ({
   },
   get focusRead() {
     return list((this.model?.edges ?? []).filter((e) => e.access === "read").map((e) => e.layer));
+  },
+  /** The warning rules a blocking one hides on the focused agent's edges: the picture shows one guard per edge. */
+  get focusWarnings() {
+    const guards = this.model?.guards ?? [];
+    const hidden = guards.filter((g) => g.mode === "warning" && guards.some((b) => b.mode === "blocking" && b.agent === g.agent && b.layer === g.layer));
+    return list(hidden.map((g) => `${g.rule} on ${g.layer}`));
   },
   get focusTools() {
     const tools = this.model?.tools ?? [];

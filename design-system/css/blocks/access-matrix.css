@@ -178,13 +178,13 @@
       background: var(--c);
     }
 
-    &[data-slot="0"] { --c: oklch(0.55 0.14 300); }
-    &[data-slot="1"] { --c: oklch(0.55 0.11 200); }
-    &[data-slot="2"] { --c: oklch(0.55 0.11 230); }
-    &[data-slot="3"] { --c: oklch(0.6 0.13 55); }
-    &[data-slot="4"] { --c: oklch(0.6 0.15 350); }
-    &[data-slot="5"] { --c: oklch(0.55 0.12 150); }
-    &[data-slot="6"] { --c: oklch(0.5 0.05 250); }
-    &[data-slot="7"] { --c: oklch(0.6 0.1 100); }
+    &[data-slot="0"] { --c: var(--color-agent-0); }
+    &[data-slot="1"] { --c: var(--color-agent-1); }
+    &[data-slot="2"] { --c: var(--color-agent-2); }
+    &[data-slot="3"] { --c: var(--color-agent-3); }
+    &[data-slot="4"] { --c: var(--color-agent-4); }
+    &[data-slot="5"] { --c: var(--color-agent-5); }
+    &[data-slot="6"] { --c: var(--color-agent-6); }
+    &[data-slot="7"] { --c: var(--color-agent-7); }
   }
 }

@@ -436,11 +436,11 @@ func TestArchitectureDiagramDrawsLayersAgentsEdgesGuardsAndRegions(t *testing.T)
 	if edges != 4 {
 		t.Errorf("edges = %d, want 4", edges)
 	}
-	// Each change edge has a blocking and a warning guard.
-	if guards != 8 || regions != 1 {
-		t.Errorf("guards = %d, regions = %d, want 8 and 1", guards, regions)
+	// Each change edge has one guard: both a blocking and a warning rule apply, so the blocking one shows.
+	if guards != 4 || regions != 1 {
+		t.Errorf("guards = %d, regions = %d, want 4 and 1", guards, regions)
 	}
-	if strings.Trim(blocking, "✕") != "" || blocking == "" || strings.Trim(warning, "!") != "" || warning == "" {
+	if strings.Trim(blocking, "✕") != "" || blocking == "" || warning != "" {
 		t.Errorf("guard glyphs: blocking %q, warning %q", blocking, warning)
 	}
 	if draft {

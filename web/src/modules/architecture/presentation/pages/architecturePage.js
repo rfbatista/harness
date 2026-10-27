@@ -72,6 +72,8 @@ export const architecturePage = ({ gateway }) => () => ({
   /** The layers whose paths overlap another layer's, and how many files match no layer: the Layers tab sets them too. */
   overlapNames: [],
   unmatchedCount: 0,
+  /** How many files each layer matches, by layer name, from the Layers tab's preview; null until it has answered. */
+  fileCounts: null,
   /** Whether the page was opened on a tab's deep link and has not yet scrolled to the tabs. */
   deepLinked: false,
 

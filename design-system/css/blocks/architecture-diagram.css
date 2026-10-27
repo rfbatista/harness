@@ -90,9 +90,20 @@
   .dg-region-title { fill: var(--color-signal-strong); font-weight: var(--weight-bold); }
   .dg-agent { fill: var(--color-raised); stroke: var(--color-line-control); }
   .dg-agent.dg-focused { fill: var(--color-selected); stroke: var(--color-signal); }
+  .dg-agent-edge[data-slot="0"] { fill: var(--color-agent-0); }
+  .dg-agent-edge[data-slot="1"] { fill: var(--color-agent-1); }
+  .dg-agent-edge[data-slot="2"] { fill: var(--color-agent-2); }
+  .dg-agent-edge[data-slot="3"] { fill: var(--color-agent-3); }
+  .dg-agent-edge[data-slot="4"] { fill: var(--color-agent-4); }
+  .dg-agent-edge[data-slot="5"] { fill: var(--color-agent-5); }
+  .dg-agent-edge[data-slot="6"] { fill: var(--color-agent-6); }
+  .dg-agent-edge[data-slot="7"] { fill: var(--color-agent-7); }
   .dg-layer { fill: var(--color-raised); stroke: var(--color-line-strong); }
   .dg-layer.dg-attention { stroke: var(--color-attention); }
-  .dg-edge-change { stroke: var(--color-signal); }
+  .dg-edge-change { stroke: var(--color-signal); opacity: 0.55; }
+  .dg-edge-tool { stroke: var(--color-ink-muted); }
+  .dg-host { fill: var(--color-sunken); stroke: var(--color-line-strong); }
+  .dg-host-title { fill: var(--color-ink-muted); }
   .dg-edge-read { stroke: var(--color-ink-faint); opacity: 0.7; }
   .dg-handoff { stroke: var(--dg-handoff, var(--color-ink-muted)); }
   .dg-handoff-head { fill: var(--dg-handoff, var(--color-ink-muted)); }

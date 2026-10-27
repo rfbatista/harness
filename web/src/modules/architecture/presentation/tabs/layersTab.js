@@ -351,6 +351,7 @@ export const layersTab = ({ gateway }) => () => ({
       this.overlapCount = answer.overlaps.length; // the page's overview counts them
       this.overlapNames = [...new Set(answer.overlaps.flatMap((o) => o.layers))]; // the diagram marks them
       this.unmatchedCount = answer.unlayered.fileCount;
+      this.fileCounts = Object.fromEntries(answer.layers.filter((l) => l.error === null).map((l) => [l.name, l.fileCount])); // the diagram shows them
       this.previewFailed = "";
     } catch (err) {
       if (n !== this.seq) return;
