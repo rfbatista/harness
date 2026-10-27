@@ -25,11 +25,36 @@ export function newLayer(existing, kind = "folder") {
   return { name: `layer-${n}`, match: { [kind]: "" }, access: newAccess() };
 }
 
+/** The layers of a hexagonal repository, each with the default access. */
+export const hexagonalLayers = () => [
+  { name: "domain", match: { folder: "internal/domain" } },
+  { name: "ports", match: { folder: "internal/ports" } },
+  { name: "application", match: { folder: "internal/app" } },
+  { name: "adapters-in", match: { folder: "internal/adapter/in" } },
+  { name: "adapters-out", match: { folder: "internal/adapter/out" } },
+  { name: "web", match: { folder: "web" } },
+  { name: "tests", match: { regex: "(^tests/|_test\\.go$|\\.test\\.js$)" } },
+  { name: "docs", match: { folder: "docs" } },
+].map((layer) => ({ ...layer, access: newAccess() }));
+
+/** The layers of the hexagonal preset a repository does not have yet, by name. */
+export function presetAdditions(existing) {
+  const taken = new Set((existing ?? []).map((l) => l.name));
+  return hexagonalLayers().filter((l) => !taken.has(l.name));
+}
+
 /** Which way a layer matches: "regex" or "folder". */
 export const matchKind = (layer) => (typeof layer?.match?.regex === "string" ? "regex" : "folder");
 
 /** The folder or regex a layer matches by. */
 export const matchText = (layer) => layer?.match?.[matchKind(layer)] ?? "";
+
+/** How the layer list shows a layer's pattern: a folder as folder/**, a regex between slashes. */
+export function layerPattern(layer) {
+  const text = matchText(layer);
+  if (text === "") return "";
+  return matchKind(layer) === "regex" ? `/${text}/` : `${text}/**`;
+}
 
 /** A layer matching by the same text the other way. */
 export const withMatchKind = (layer, kind) => ({ ...layer, match: { [kind]: matchText(layer) } });
@@ -95,6 +120,49 @@ export const nextAccess = (value) => ACCESS_LEVELS[(ACCESS_LEVELS.indexOf(value)
 /** What a cell is called to a screen reader: "go-developer on domain: change". */
 export const cellLabel = (who, where, value) => `${who} on ${where}: ${value}`;
 
+/** The access with every layer given `value` for `agent` (or the default), the input left alone. */
+export const withRowAccess = (layers, agent, value) =>
+  (layers ?? []).map((l) => ({ ...l, access: withAccess(l.access, agent, value) }));
+
+const joinNames = (names) => (names.length < 3 ? names.join(" and ") : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`);
+
+/** What an access says in words: "everyone reads, only software-architect and devops change". */
+export function accessSentence(access) {
+  const base = access?.default ?? "read";
+  const agents = Object.entries(access?.agents ?? {});
+  const named = (level) => agents.filter(([, v]) => v === level).map(([k]) => k).sort(); // sorted: the record keeps its agents in no set order
+  if (base === "change") return "everyone reads and changes";
+  if (base === "read") {
+    const changers = named("change");
+    const blind = named("none");
+    const parts = [changers.length === 0 ? "everyone reads, nobody changes" : `everyone reads, only ${joinNames(changers)} change`];
+    if (blind.length > 0) parts.push(`${joinNames(blind)} cannot read`);
+    return parts.join("; ");
+  }
+  const readers = named("read");
+  const changers = named("change");
+  const parts = ["nobody reads"];
+  if (readers.length > 0) parts[0] += `, only ${joinNames(readers)} ${readers.length === 1 ? "reads" : "read"}`;
+  if (changers.length > 0) parts.push(`${joinNames(changers)} can change`);
+  return parts.join("; ");
+}
+
+/** The colour slots an agent chip picks from; the stylesheet has one colour for each. */
+export const AGENT_SLOTS = 8;
+
+/** The slot of an agent's colour, the same for the same name. */
+export function agentSlot(name) {
+  let h = 0;
+  for (const c of String(name ?? "")) h = (h * 31 + c.codePointAt(0)) >>> 0;
+  return h % AGENT_SLOTS;
+}
+
+/** The overlaps that name a layer. */
+export const overlapsOf = (overlaps, name) => (name === "" ? [] : (overlaps ?? []).filter((o) => o.layers.includes(name)));
+
+/** The other layers an overlap names, besides `name`. */
+export const otherLayers = (overlap, name) => overlap.layers.filter((l) => l !== name);
+
 /**
  * The agents the matrix has a row for: the catalog, then any the record names
  * that the catalog lacks (so a stale one stays visible), then plain.
@@ -142,3 +210,48 @@ export const fileCountText = files;
 
 /** "internal/ports/x.go is in ports, domain; ports wins" as the parts a row shows. */
 export const overlapText = (o) => `${o.layers.join(", ")} · ${o.winner} wins`;
+
+const slashed = (path) => String(path ?? "").replace(/^\.\//, "").replace(/\/+$/, "");
+
+/** An ignored path as the tree knows it: relative to the checkout, without ./ or a trailing slash. */
+function relativeTo(rootDir, path) {
+  const root = slashed(rootDir);
+  const p = slashed(path);
+  return root !== "" && p.startsWith(`${root}/`) ? p.slice(root.length + 1) : p;
+}
+
+/**
+ * The folders the picker offers: the directories of a `list_tree` answer
+ * (relative paths, the root itself left out), sorted, without .git and without
+ * the repository's ignored paths or anything below them.
+ * @param {{ path: string, is_dir: boolean, children?: any[] } | null} tree
+ * @param {string[]} ignored the repository's ignored paths @param {string} rootDir the checkout, for absolute ignored paths
+ */
+export function folderChoices(tree, ignored, rootDir = "") {
+  const skip = (ignored ?? []).map((p) => relativeTo(rootDir, p)).filter((p) => p !== "");
+  const hidden = (path) =>
+    path.split("/").includes(".git") || skip.some((ig) => path === ig || path.startsWith(`${ig}/`));
+  const out = [];
+  const walk = (node) => {
+    for (const child of node?.children ?? []) {
+      if (!child?.is_dir || typeof child.path !== "string" || hidden(child.path)) continue;
+      out.push(child.path);
+      walk(child);
+    }
+  };
+  walk(tree);
+  return out.sort();
+}
+
+/** Whether a folder is the one a folder layer matches. */
+export const isFolderPicked = (layer, path) => matchKind(layer) === "folder" && matchText(layer) === path;
+
+/**
+ * The layer after a folder is checked or unchecked: a folder layer holds one
+ * folder, so checking sets it (replacing another) and unchecking the one it
+ * holds clears it. The input is left alone.
+ */
+export function withFolderPicked(layer, path, on) {
+  if (on) return { ...layer, match: { folder: path } };
+  return isFolderPicked(layer, path) ? { ...layer, match: { folder: "" } } : layer;
+}

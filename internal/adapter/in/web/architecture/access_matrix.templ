@@ -2,52 +2,61 @@ package architecture
 
 // accessMatrix is the agent × layer matrix under the Layers tab: its own
 // Alpine component, architectureAccessMatrix, nested in architectureLayersTab.
+// Agents are the rows and layers the columns, as in the layers-editor design.
 // Each cell is a button labelled like "go-developer on domain: change" that
-// cycles none, read, change.
+// cycles none, read, change; an agent's name sets its whole row.
 templ accessMatrix() {
 	<section class="[ pane ]" x-data="architectureAccessMatrix" aria-label="Agent access" data-access-matrix>
 		<header>
-			<span class="[ grow ]">Agent access</span>
+			<h3 class="[ grow ]">Agent access</h3>
+			<div class="[ access-legend ]" data-legend>
+				<span><span class="[ badge ]" data-tone="signal">Change</span> read + edit</span>
+				<span><span class="[ badge ]" data-tone="signal" data-quiet>Read</span></span>
+				<span><span class="[ badge ]">None</span></span>
+			</div>
 		</header>
-		<div class="[ content ] [ flow ]">
-			<p class="[ text-sm color-ink-muted ]">
-				Each cell is none, read or change; press it to cycle. Change implies read. Default is what an agent gets that a layer does not list. Unlayered is every path in no layer.
-			</p>
+		<div class="[ access-matrix ]" role="region" aria-label="Access by agent and layer, scrolls sideways" tabindex="0">
+			<table>
+				<thead>
+					<tr>
+						<th scope="col">Agent</th>
+						<template x-for="c in columns" x-bind:key="c.key">
+							<th scope="col" x-bind:data-column="c.name" x-bind:data-sel="c.selected">
+								<span x-text="c.label"></span>
+							</th>
+						</template>
+					</tr>
+				</thead>
+				<tbody>
+					<template x-for="row in rows" x-bind:key="row.key">
+						<tr x-bind:data-row="row.who">
+							<th scope="row">
+								<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-bind:data-set-row="row.who" x-bind:title="row.setLabel" x-bind:aria-label="row.setLabel" x-on:click="setRow(row.who)">
+									<span class="[ agent-chip ]" data-agent-chip x-bind:data-slot="row.slot"><i></i><span x-text="row.label"></span></span>
+								</button>
+								<template x-if="row.note">
+									<span class="[ hint ]" x-text="row.note"></span>
+								</template>
+							</th>
+							<template x-for="cell in row.cells" x-bind:key="cell.key">
+								<td x-bind:data-sel="cell.selected">
+									<button type="button" class="[ access-cell ]" x-bind:data-value="cell.value" x-bind:aria-label="cell.label" x-on:click="press(cell.col, cell.who)">
+										<b aria-hidden="true" x-text="cell.value"></b>
+									</button>
+								</td>
+							</template>
+						</tr>
+					</template>
+				</tbody>
+			</table>
+		</div>
+		<div class="[ matrix-notes ] [ flow ] [ flow-space-3xs ]">
+			<p class="[ text-sm color-ink-muted ]" data-matrix-hint>Click a cell to cycle none → read → change. Click an agent name to set a whole row. Unlisted agents keep the default.</p>
+			<p class="[ text-sm color-ink-muted ]">Change implies read. The Default row is what an agent gets that a layer does not list. Unlayered is every path in no layer. Setting a whole row copies the agent's access on the open layer to every layer.</p>
 			<p class="[ text-sm ]" data-read-note>
 				<span class="[ badge ]" data-tone="attention">! Not enforced</span>
 				Read restrictions are shown to agents, not enforced: an agent set to none is told it may not read a layer, but nothing stops it. Change is enforced by the rules.
 			</p>
-			<div class="[ access-matrix ]" role="region" aria-label="Access by layer and agent, scrolls sideways" tabindex="0">
-				<table>
-					<thead>
-						<tr>
-							<th scope="col">Layer</th>
-							<template x-for="c in columns" x-bind:key="c.key">
-								<th scope="col" x-bind:data-column="c.who">
-									<span x-text="c.label"></span>
-									<template x-if="c.note">
-										<span class="[ hint ]" x-text="c.note"></span>
-									</template>
-								</th>
-							</template>
-						</tr>
-					</thead>
-					<tbody>
-						<template x-for="row in rows" x-bind:key="row.key">
-							<tr x-bind:data-row="row.name">
-								<th scope="row" x-text="row.name"></th>
-								<template x-for="cell in row.cells" x-bind:key="cell.key">
-									<td>
-										<button type="button" class="[ access-cell ]" x-bind:data-value="cell.value" x-bind:aria-label="cell.label" x-on:click="press(cell.col, cell.who)">
-											<span aria-hidden="true" x-text="cell.value"></span>
-										</button>
-									</td>
-								</template>
-							</tr>
-						</template>
-					</tbody>
-				</table>
-			</div>
 		</div>
 	</section>
 }

@@ -10,7 +10,10 @@ import templruntime "github.com/a-h/templ/runtime"
 
 // tabOrchestration is the Orchestration tab's panel. It is its own Alpine
 // component, architectureOrchestrationTab, nested in architecturePage: it reads
-// and edits the page's draft and errors through the page's scope.
+// and edits the page's draft and errors through the page's scope. Model routing
+// and hand-offs are tables as in the published design, rows marked edited when
+// the draft differs from the saved version; Edit opens a row in the edit drawer
+// beside them. The Hand-off chain card draws the record's hand-offs as chains.
 func tabOrchestration() templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
@@ -32,31 +35,121 @@ func tabOrchestration() templ.Component {
 			templ_7745c5c3_Var1 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<section role=\"tabpanel\" id=\"architecture-panel-orchestration\" aria-labelledby=\"architecture-tab-orchestration\" x-show=\"isTab('orchestration')\" x-data=\"architectureOrchestrationTab\" class=\"[ flow ]\"><h2>Orchestration</h2><p class=\"[ color-ink-muted ]\">Which model each agent runs on, and who hands work to whom. Use plain for a session with no agent.</p><h3>Model routing</h3><template x-for=\"(row, i) in routes()\" x-bind:key=\"i\"><section class=\"[ pane ]\" data-entry=\"route\"><header><span class=\"[ grow ]\" x-text=\"row.agent || 'New route'\"></span> <button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" x-bind:aria-label=\"removeLabel(row)\" x-on:click=\"removeRoute(i)\">Remove</button></header><div class=\"[ content flow ]\"><div class=\"[ cluster ]\"><div class=\"[ field ]\"><label>Agent")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<section role=\"tabpanel\" id=\"architecture-panel-orchestration\" aria-labelledby=\"architecture-tab-orchestration\" x-show=\"isTab('orchestration')\" x-data=\"architectureOrchestrationTab\" x-on:architecture-draft-replaced.window=\"closeDrawers\" class=\"[ flow ]\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = agentSelect("agent", "routeBad(i, 'agent')").Render(ctx, templ_7745c5c3_Buffer)
+		templ_7745c5c3_Var2 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
+			templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
+			templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
+			if !templ_7745c5c3_IsBuffer {
+				defer func() {
+					templ_7745c5c3_BufErr := templruntime.ReleaseBuffer(templ_7745c5c3_Buffer)
+					if templ_7745c5c3_Err == nil {
+						templ_7745c5c3_Err = templ_7745c5c3_BufErr
+					}
+				}()
+			}
+			ctx = templ.InitializeContext(ctx)
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, "<button type=\"button\" class=\"[ button ]\" data-variant=\"primary\" data-size=\"sm\" data-add=\"route\" x-on:click=\"addRoute\">Add route</button> <button type=\"button\" class=\"[ button ]\" data-size=\"sm\" data-add=\"handoff\" x-on:click=\"addHandoff\">Add hand-off</button>")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			return nil
+		})
+		templ_7745c5c3_Err = panelHead("Orchestration", "Which model each agent runs on, and who hands work to whom. Use plain for a session with no agent.").Render(templ.WithChildren(ctx, templ_7745c5c3_Var2), templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, "</label><template x-if=\"routeErr(i, 'agent')\"><span class=\"[ error ]\" x-bind:data-error-for=\"routePtr(i, 'agent')\"><span aria-hidden=\"true\">✕</span> <span x-text=\"routeErr(i, 'agent')\"></span></span></template></div><div class=\"[ field ]\"><label>Model <input data-field=\"model\" class=\"[ text-sm font-mono ]\" autocomplete=\"off\" placeholder=\"claude-opus-5-5\" x-model=\"row.model\" x-bind:aria-invalid=\"routeBad(i, 'model')\"></label><template x-if=\"routeErr(i, 'model')\"><span class=\"[ error ]\" x-bind:data-error-for=\"routePtr(i, 'model')\"><span aria-hidden=\"true\">✕</span> <span x-text=\"routeErr(i, 'model')\"></span></span></template></div></div><div class=\"[ field ]\"><label>Note <input data-field=\"note\" class=\"[ text-sm ]\" autocomplete=\"off\" placeholder=\"One line, optional\" x-model=\"row.note\"></label></div></div></section></template><div><button type=\"button\" class=\"[ button ]\" data-size=\"sm\" x-on:click=\"addRoute\">Add a route</button></div><h3>Hand-offs</h3><template x-for=\"(row, i) in handoffRows()\" x-bind:key=\"i\"><section class=\"[ pane ]\" data-entry=\"handoff\"><header><span class=\"[ grow ]\"><span x-text=\"row.from || '…'\"></span> → <span x-text=\"row.to || '…'\"></span></span> <button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" x-bind:aria-label=\"removeLabel(row)\" x-on:click=\"removeHandoff(i)\">Remove</button></header><div class=\"[ content flow ]\"><div class=\"[ cluster ]\"><div class=\"[ field ]\"><label>From")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, "<div class=\"[ arch-split ]\" x-bind:data-open=\"anyDrawerOpen()\"><div class=\"[ flow ]\"><section class=\"[ entry-card ]\" data-card><header><h3 class=\"[ grow ]\">Model routing</h3></header><table class=\"[ entry-table ]\"><thead><tr><th>Agent</th><th>Model</th><th>Used for</th><th><span class=\"[ visually-hidden ]\">Actions</span></th></tr></thead><template x-for=\"(row, i) in rowsRoute()\" x-bind:key=\"i\"><tbody data-entry=\"route\" x-bind:data-open=\"isOpenRoute(i)\" x-bind:data-edited=\"isEditedRoute(i)\"><tr data-row><td><span class=\"[ agent-chip ]\" data-agent x-bind:data-slot=\"slotOf(row.agent)\"><i></i><span x-text=\"row.agent || 'New route'\"></span></span><template x-if=\"isEditedRoute(i)\"><span class=\"[ badge ]\" data-tone=\"attention\" data-flag=\"edited\">edited</span></template></td><td><span class=\"[ badge ]\" data-model x-text=\"row.model\"></span></td><td class=\"[ color-ink-muted ]\" data-note x-text=\"row.note\"></td><td class=\"[ entry-action ]\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = agentSelect("from", "handoffBad(i, 'from')").Render(ctx, templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = editButton("isOpenRoute(i)", "editRoute(i)").Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, "</label><template x-if=\"handoffErr(i, 'from')\"><span class=\"[ error ]\" x-bind:data-error-for=\"handoffPtr(i, 'from')\"><span aria-hidden=\"true\">✕</span> <span x-text=\"handoffErr(i, 'from')\"></span></span></template></div><div class=\"[ field ]\"><label>To")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "</td></tr></tbody></template></table></section><section class=\"[ entry-card ]\" data-card><header><h3 class=\"[ grow ]\">Hand-offs</h3></header><table class=\"[ entry-table ]\"><thead><tr><th>From</th><th>To</th><th>When</th><th><span class=\"[ visually-hidden ]\">Actions</span></th></tr></thead><template x-for=\"(row, i) in rowsHandoff()\" x-bind:key=\"i\"><tbody data-entry=\"handoff\" x-bind:data-open=\"isOpenHandoff(i)\" x-bind:data-edited=\"isEditedHandoff(i)\"><tr data-row><td><span class=\"[ agent-chip ]\" data-agent x-bind:data-slot=\"slotOf(row.from)\"><i></i><span x-text=\"row.from || '…'\"></span></span></td><td><span class=\"[ agent-chip ]\" data-agent x-bind:data-slot=\"slotOf(row.to)\"><i></i><span x-text=\"row.to || '…'\"></span></span><template x-if=\"isEditedHandoff(i)\"><span class=\"[ badge ]\" data-tone=\"attention\" data-flag=\"edited\">edited</span></template></td><td class=\"[ color-ink-muted ]\" data-note x-text=\"row.when\"></td><td class=\"[ entry-action ]\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = agentSelect("to", "handoffBad(i, 'to')").Render(ctx, templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = editButton("isOpenHandoff(i)", "editHandoff(i)").Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "</label><template x-if=\"handoffErr(i, 'to')\"><span class=\"[ error ]\" x-bind:data-error-for=\"handoffPtr(i, 'to')\"><span aria-hidden=\"true\">✕</span> <span x-text=\"handoffErr(i, 'to')\"></span></span></template></div></div><div class=\"[ field ]\"><label>When <input data-field=\"when\" class=\"[ text-sm ]\" autocomplete=\"off\" placeholder=\"A spec for the harness server is approved.\" x-model=\"row.when\" x-bind:aria-invalid=\"handoffBad(i, 'when')\"></label><template x-if=\"handoffErr(i, 'when')\"><span class=\"[ error ]\" x-bind:data-error-for=\"handoffPtr(i, 'when')\"><span aria-hidden=\"true\">✕</span> <span x-text=\"handoffErr(i, 'when')\"></span></span></template></div></div></section></template><div><button type=\"button\" class=\"[ button ]\" data-size=\"sm\" x-on:click=\"addHandoff\">Add a hand-off</button></div></section>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 5, "</td></tr></tbody></template></table></section><template x-if=\"hasChains()\"><section class=\"[ entry-card ]\" data-chain-card><header><h3 class=\"[ grow ]\">Hand-off chain</h3></header><div class=\"[ entry-card-body ] [ flow ]\"><template x-for=\"(chain, n) in chains()\" x-bind:key=\"n\"><div class=\"[ hand-chain ]\" data-handoff-chain><template x-for=\"(step, j) in chain\" x-bind:key=\"j\"><span class=\"[ hand-step ]\"><span class=\"[ agent-chip ]\" data-chain-agent x-bind:data-slot=\"slotOf(step.name)\"><i></i><span x-text=\"step.name\"></span></span><template x-if=\"step.arrow\"><span class=\"[ color-ink-faint ]\" aria-hidden=\"true\">→</span></template></span></template></div></template></div></section></template></div>")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Var3 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
+			templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
+			templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
+			if !templ_7745c5c3_IsBuffer {
+				defer func() {
+					templ_7745c5c3_BufErr := templruntime.ReleaseBuffer(templ_7745c5c3_Buffer)
+					if templ_7745c5c3_Err == nil {
+						templ_7745c5c3_Err = templ_7745c5c3_BufErr
+					}
+				}()
+			}
+			ctx = templ.InitializeContext(ctx)
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 6, "<div class=\"[ cluster ]\"><div class=\"[ field ]\"><label>Agent")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = agentSelect("agent", "badRoute(drawerIndexRoute(), 'agent')").Render(ctx, templ_7745c5c3_Buffer)
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 7, "</label><template x-if=\"errRoute(drawerIndexRoute(), 'agent')\"><span class=\"[ error ]\" x-bind:data-error-for=\"ptrRoute(drawerIndexRoute(), 'agent')\"><span aria-hidden=\"true\">✕</span> <span x-text=\"errRoute(drawerIndexRoute(), 'agent')\"></span></span></template></div><div class=\"[ field ]\"><label>Model <input data-field=\"model\" class=\"[ text-sm font-mono ]\" autocomplete=\"off\" placeholder=\"claude-opus-5-5\" x-model=\"row.model\" x-bind:aria-invalid=\"badRoute(drawerIndexRoute(), 'model')\"></label><template x-if=\"errRoute(drawerIndexRoute(), 'model')\"><span class=\"[ error ]\" x-bind:data-error-for=\"ptrRoute(drawerIndexRoute(), 'model')\"><span aria-hidden=\"true\">✕</span> <span x-text=\"errRoute(drawerIndexRoute(), 'model')\"></span></span></template></div></div><div class=\"[ field ]\"><label>Note <input data-field=\"note\" class=\"[ text-sm ]\" autocomplete=\"off\" placeholder=\"One line, optional\" x-model=\"row.note\"></label></div>")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			return nil
+		})
+		templ_7745c5c3_Err = entryDrawer("route", "Edit route", drawerFor("Route")).Render(templ.WithChildren(ctx, templ_7745c5c3_Var3), templ_7745c5c3_Buffer)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Var4 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
+			templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
+			templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
+			if !templ_7745c5c3_IsBuffer {
+				defer func() {
+					templ_7745c5c3_BufErr := templruntime.ReleaseBuffer(templ_7745c5c3_Buffer)
+					if templ_7745c5c3_Err == nil {
+						templ_7745c5c3_Err = templ_7745c5c3_BufErr
+					}
+				}()
+			}
+			ctx = templ.InitializeContext(ctx)
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 8, "<div class=\"[ cluster ]\"><div class=\"[ field ]\"><label>From")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = agentSelect("from", "badHandoff(drawerIndexHandoff(), 'from')").Render(ctx, templ_7745c5c3_Buffer)
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 9, "</label><template x-if=\"errHandoff(drawerIndexHandoff(), 'from')\"><span class=\"[ error ]\" x-bind:data-error-for=\"ptrHandoff(drawerIndexHandoff(), 'from')\"><span aria-hidden=\"true\">✕</span> <span x-text=\"errHandoff(drawerIndexHandoff(), 'from')\"></span></span></template></div><div class=\"[ field ]\"><label>To")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = agentSelect("to", "badHandoff(drawerIndexHandoff(), 'to')").Render(ctx, templ_7745c5c3_Buffer)
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 10, "</label><template x-if=\"errHandoff(drawerIndexHandoff(), 'to')\"><span class=\"[ error ]\" x-bind:data-error-for=\"ptrHandoff(drawerIndexHandoff(), 'to')\"><span aria-hidden=\"true\">✕</span> <span x-text=\"errHandoff(drawerIndexHandoff(), 'to')\"></span></span></template></div></div><div class=\"[ field ]\"><label>When <input data-field=\"when\" class=\"[ text-sm ]\" autocomplete=\"off\" placeholder=\"A spec for the harness server is approved.\" x-model=\"row.when\" x-bind:aria-invalid=\"badHandoff(drawerIndexHandoff(), 'when')\"></label><template x-if=\"errHandoff(drawerIndexHandoff(), 'when')\"><span class=\"[ error ]\" x-bind:data-error-for=\"ptrHandoff(drawerIndexHandoff(), 'when')\"><span aria-hidden=\"true\">✕</span> <span x-text=\"errHandoff(drawerIndexHandoff(), 'when')\"></span></span></template></div>")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			return nil
+		})
+		templ_7745c5c3_Err = entryDrawer("handoff", "Edit hand-off", drawerFor("Handoff")).Render(templ.WithChildren(ctx, templ_7745c5c3_Var4), templ_7745c5c3_Buffer)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 11, "</div></section>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

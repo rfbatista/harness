@@ -6,7 +6,7 @@
 
 import { describeError } from "../../../../shared/presentation/errors.js";
 import { ARCHITECTURE_CHANGED } from "../../domain/record.js";
-import { describeExport, describeRefusal } from "../../domain/export.js";
+import { describeExport, describeRefusal, exportNodes, schemaChecks, yamlLines } from "../../domain/export.js";
 import { recordToYaml } from "../../domain/yaml.js";
 
 const shortSha = (sha) => String(sha).slice(0, 7);
@@ -50,22 +50,61 @@ export const outputTab = ({ gateway, clipboard }) => () => ({
   get hasState() {
     return this.state !== null && this.exists;
   },
+  get nodes() {
+    return exportNodes(this.exportInfo, { exists: this.exists, version: this.version });
+  },
+  get databaseText() {
+    return this.nodes.database;
+  },
+  get repositoryText() {
+    return this.nodes.repository;
+  },
+  get arrowLeft() {
+    return this.nodes.arrows[0];
+  },
+  get arrowRight() {
+    return this.nodes.arrows[1];
+  },
   get stateTitle() {
+    if (!this.exists) return "Nothing saved";
     return this.state?.title ?? "";
   },
-  get stateText() {
-    return this.state?.text ?? "";
+  get stateSummary() {
+    if (!this.exists) return "Nothing to export";
+    return this.state?.summary ?? "";
+  },
+  get stateTone() {
+    return this.hasState ? this.state.tone : "";
+  },
+  /** The banner: every state but in sync says what it means; with nothing saved, that there is nothing to export. */
+  get hasBanner() {
+    return !this.exists || (this.hasState && this.state.tone !== "success");
+  },
+  get bannerTone() {
+    return this.hasState ? this.state.tone : "signal";
+  },
+  get headline() {
+    return this.hasState ? this.state.text : "Nothing is saved yet, so there is nothing to export.";
   },
   get stateNext() {
-    return this.state?.next ?? "";
+    return this.hasState ? this.state.next : "";
   },
-  get hasLastExport() {
-    return !!this.exportInfo?.exported_commit;
+  get checks() {
+    return schemaChecks(this.exportInfo, { exists: this.exists, version: this.version });
   },
-  get lastExport() {
-    const i = this.exportInfo ?? {};
-    const when = i.exported_at ? new Date(i.exported_at).toLocaleString() : "";
-    return [`version ${i.exported_version}`, `commit ${shortSha(i.exported_commit)}`, when].filter(Boolean).join(" · ");
+  get yamlRows() {
+    return yamlLines(this.yaml);
+  },
+  get yamlBadge() {
+    if (!this.exists) return "Nothing saved";
+    return this.exportInfo?.state === "in_sync" ? "Matches the repository file" : "What the export writes";
+  },
+  get yamlBadgeTone() {
+    if (!this.exists) return "";
+    return this.exportInfo?.state === "in_sync" ? "success" : "signal";
+  },
+  get exportVariant() {
+    return this.exportInfo?.state === "in_sync" ? "" : "primary";
   },
   get canExport() {
     return this.exists && !this.dirty && !this.exporting;
@@ -125,6 +164,18 @@ export const outputTab = ({ gateway, clipboard }) => () => ({
   async reloadPage() {
     this.refusal = null;
     await this.reload();
+  },
+
+  downloadYaml() {
+    const blob = new Blob([this.yaml], { type: "application/yaml" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = String(this.filePath).split("/").pop();
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
   },
 
   async copyYaml() {

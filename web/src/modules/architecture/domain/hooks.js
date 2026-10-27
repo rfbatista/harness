@@ -3,9 +3,27 @@
 // when a rule fires (the agent-sessions contract, word for word). Pure.
 
 export const MODES = Object.freeze({
-  blocking: { glyph: "✕", label: "Blocking", text: "✕ Blocking" },
-  warning: { glyph: "!", label: "Warning only", text: "! Warning only" },
+  blocking: {
+    glyph: "✕",
+    label: "Blocking",
+    text: "✕ Blocking",
+    tone: "danger",
+    hint: "The action does not run. The agent gets the message and must change course.",
+  },
+  warning: {
+    glyph: "!",
+    label: "Warning only",
+    text: "! Warning only",
+    tone: "attention",
+    hint: "The action runs. The agent sees the message and the event is logged for review.",
+  },
 });
+
+/** What the When select offers: the two kinds of rule the record holds. */
+export const RULE_KINDS = Object.freeze([
+  { value: "edit_outside_layer", label: "The agent edits a path outside the layers it may change" },
+  { value: "command", label: "A command exits with an error" },
+]);
 
 export const LIFECYCLE_POINTS = Object.freeze([
   { value: "before_tool", label: "Before a tool call" },
@@ -98,3 +116,54 @@ export function previewText(rule, layers) {
   if (rule.at === "after_edit" && rule.mode === "blocking") text += "\nUndo or fix this change before you go on.";
   return text;
 }
+
+export const NAME_REQUIRED = "Give the rule a name.";
+export const MESSAGE_REQUIRED = "A message is required. Say what was refused and what to do instead.";
+
+const blank = (v) => String(v ?? "").trim() === "";
+
+/** What a rule's list row and editor header call it. */
+export const ruleTitle = (rule) => (blank(rule?.id) ? "New rule" : String(rule.id).trim());
+
+/** The line under a rule's name in the list: what it does. */
+export function ruleSummary(rule) {
+  if (rule?.kind === "edit_outside_layer") return "Edits outside the layers the agent may change";
+  return blank(rule?.command) ? "No command yet" : String(rule.command).trim();
+}
+
+/** The lifecycle point's words; the edit-outside-layer rule has none of its own. */
+export function triggerLabel(rule) {
+  if (rule?.kind === "edit_outside_layer") return "Before a tool call and at commit";
+  return LIFECYCLE_POINTS.find((p) => p.value === rule?.at)?.label ?? "No lifecycle point yet";
+}
+
+const COMMAND_ONLY = ["at", "command", "paths", "tools", "timeout_seconds"];
+
+/** The rule as the other kind: what both kinds hold is kept, what only the old kind holds is dropped. */
+export function withKind(rule, kind) {
+  const next = { ...rule, kind };
+  if (kind === "edit_outside_layer") {
+    for (const k of COMMAND_ONLY) delete next[k];
+    return next;
+  }
+  return { ...next, at: rule.at ?? "before_commit", command: rule.command ?? "" };
+}
+
+/** A copy of a rule under a fresh id. */
+export function duplicateRule(rules, rule) {
+  // the draft's rules are reactive proxies, which structuredClone refuses
+  return { ...JSON.parse(JSON.stringify(rule)), id: freshId(rules, `${rule.id}-copy`) };
+}
+
+/**
+ * The words for a problem the server found on a rule's field: an empty name or
+ * message is said as the design says it, anything else keeps the server's text.
+ */
+export function issueText(rule, field, serverMessage) {
+  if (field === "id" && blank(rule?.id)) return NAME_REQUIRED;
+  if (field === "message" && blank(rule?.message)) return MESSAGE_REQUIRED;
+  return serverMessage;
+}
+
+/** The preview's title bar: whose session and when the rule runs. */
+export const previewBar = (rule) => `agent: ${rule?.agents?.[0] ?? "plain"} · ${triggerLabel(rule)}`;

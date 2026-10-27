@@ -164,3 +164,44 @@ test("a layer with no default access is read everywhere, so only an explicit cha
   const all = buildDiagram(r, { agents: AGENTS });
   assert.deepEqual(all.edges, [{ agent: "devops", layer: "docs", access: "change" }]);
 });
+
+test("hand-offs of everyone are in the model when asked for, not only the focused agent's", () => {
+  assert.equal(buildDiagram(record(), { agents: AGENTS }).handoffs.length, 0);
+  const all = buildDiagram({ ...record(), orchestration: { handoffs: [{ from: "devops", to: "go-developer", when: "w" }, { from: "software-architect", to: "devops", when: "w" }] } }, { agents: AGENTS, handoffs: true });
+  assert.equal(all.handoffs.length, 2);
+});
+
+test("layers with overlapping paths and the count of unmatched files are marked on the model", () => {
+  const d = buildDiagram(record(), { agents: AGENTS, problems: { overlaps: ["domain"], unmatched: 12 } });
+  assert.equal(d.nodes.layers.find((l) => l.name === "domain").overlap, true);
+  assert.equal(d.nodes.layers.find((l) => l.name === "adapters").overlap, false);
+  assert.equal(d.nodes.layers.find((l) => l.name === "unlayered").unmatched, 12);
+  assert.equal(buildDiagram(record(), { agents: AGENTS }).nodes.layers.every((l) => !l.overlap && !l.unmatched), true);
+});
+
+test("each agent counts the layers it may change, and a layer carries its file count when the preview is known", () => {
+  const d = buildDiagram(record(), { agents: AGENTS, files: { domain: 84, adapters: 176 }, problems: { unmatched: 12 } });
+  const byName = Object.fromEntries(d.nodes.agents.map((a) => [a.name, a.changeable]));
+  assert.deepEqual(byName, { "software-architect": 2, "go-developer": 1, devops: 0, plain: 0 }); // unlayered paths are not a layer
+  assert.deepEqual(d.nodes.layers.map((l) => l.files), [84, 176, 12]);
+  assert.deepEqual(buildDiagram(record(), { agents: AGENTS }).nodes.layers.map((l) => l.files), [null, null, null]);
+});
+
+test("tools are listed for the side panel: MCP servers and APIs on the host, functions and CLIs in the sandbox, each with who uses it", () => {
+  const rec = {
+    ...record(),
+    tools: [
+      { name: "task", kind: "mcp", used_by: ["all"] },
+      { name: "github", kind: "mcp", used_by: ["devops", "go-developer"] },
+      { name: "make check", kind: "function", used_by: ["go-developer"] },
+      { name: "gh", kind: "cli" },
+    ],
+  };
+  const d = buildDiagram(rec, { agents: AGENTS });
+  assert.deepEqual(
+    d.toolNodes.map((t) => [t.name, t.where, t.users]),
+    [["task", "host", "all agents"], ["github", "host", "2 agents"], ["make check", "sandbox", "1 agent"], ["gh", "sandbox", "all agents"]],
+  );
+  assert.deepEqual(d.toolNodes.map((t) => t.kindText), ["MCP server", "MCP server", "function", "CLI"]);
+  assert.equal(d.tools.length, 0); // the focused agent's list is still only for a focus
+});

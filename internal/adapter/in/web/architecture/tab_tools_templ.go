@@ -10,7 +10,10 @@ import templruntime "github.com/a-h/templ/runtime"
 
 // tabTools is the Tools tab's panel. It is its own Alpine component,
 // architectureToolsTab, nested in architecturePage: it reads and edits the
-// page's draft and errors through the page's scope.
+// page's draft and errors through the page's scope. A row shows the tool as the
+// published design does (name, kind, usage prose, available to, Edit), marked
+// edited when the draft differs from the saved version; Edit opens it in the
+// edit drawer beside the list.
 func tabTools() templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
@@ -32,15 +35,75 @@ func tabTools() templ.Component {
 			templ_7745c5c3_Var1 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<section role=\"tabpanel\" id=\"architecture-panel-tools\" aria-labelledby=\"architecture-tab-tools\" x-show=\"isTab('tools')\" x-data=\"architectureToolsTab\" class=\"[ flow ]\"><h2>Tools</h2><p class=\"[ color-ink-muted ]\">The functions, MCP servers and APIs agents can call, and when and how to call them. A tool that writes needs usage prose.</p><template x-for=\"(row, i) in rows()\" x-bind:key=\"i\"><section class=\"[ pane ]\" data-entry=\"tool\"><header><span class=\"[ grow font-mono ]\" x-text=\"row.name || 'New tool'\"></span> <button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" x-bind:aria-label=\"removeLabel(row)\" x-on:click=\"remove(i)\">Remove</button></header><div class=\"[ content flow ]\"><div class=\"[ cluster ]\"><div class=\"[ field ]\"><label>Name <input data-field=\"name\" class=\"[ text-sm font-mono ]\" autocomplete=\"off\" placeholder=\"codegraph\" x-model=\"row.name\" x-bind:aria-invalid=\"bad(i, 'name')\"></label><template x-if=\"err(i, 'name')\"><span class=\"[ error ]\" x-bind:data-error-for=\"ptr(i, 'name')\"><span aria-hidden=\"true\">✕</span> <span x-text=\"err(i, 'name')\"></span></span></template></div><div class=\"[ field ]\"><label>Kind <select data-field=\"kind\" class=\"[ text-sm ]\" x-model=\"row.kind\" x-bind:aria-invalid=\"bad(i, 'kind')\"><option value=\"mcp\">MCP server</option> <option value=\"function\">Function</option> <option value=\"api\">API</option> <option value=\"cli\">CLI</option></select></label><template x-if=\"err(i, 'kind')\"><span class=\"[ error ]\" x-bind:data-error-for=\"ptr(i, 'kind')\"><span aria-hidden=\"true\">✕</span> <span x-text=\"err(i, 'kind')\"></span></span></template></div></div><div class=\"[ field ]\"><span class=\"[ text-sm weight-medium ]\">Used by</span>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<section role=\"tabpanel\" id=\"architecture-panel-tools\" aria-labelledby=\"architecture-tab-tools\" x-show=\"isTab('tools')\" x-data=\"architectureToolsTab\" x-on:architecture-draft-replaced.window=\"closeDrawer\" class=\"[ flow ]\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = agentList("used_by", "Used by", "bad(i, 'used_by')").Render(ctx, templ_7745c5c3_Buffer)
+		templ_7745c5c3_Var2 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
+			templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
+			templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
+			if !templ_7745c5c3_IsBuffer {
+				defer func() {
+					templ_7745c5c3_BufErr := templruntime.ReleaseBuffer(templ_7745c5c3_Buffer)
+					if templ_7745c5c3_Err == nil {
+						templ_7745c5c3_Err = templ_7745c5c3_BufErr
+					}
+				}()
+			}
+			ctx = templ.InitializeContext(ctx)
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, "<button type=\"button\" class=\"[ button ]\" data-variant=\"primary\" data-size=\"sm\" data-add x-on:click=\"add\">Add tool</button>")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			return nil
+		})
+		templ_7745c5c3_Err = panelHead("Tools", "The functions, MCP servers and APIs agents can call, and when and how to call them. A tool that writes needs usage prose.").Render(templ.WithChildren(ctx, templ_7745c5c3_Var2), templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, "<template x-if=\"err(i, 'used_by')\"><span class=\"[ error ]\" x-bind:data-error-for=\"ptr(i, 'used_by')\"><span aria-hidden=\"true\">✕</span> <span x-text=\"err(i, 'used_by')\"></span></span></template></div><div class=\"[ field ]\" data-inline><label><input type=\"checkbox\" data-field=\"writes\" x-model=\"row.writes\"> Writes: it changes something outside the session</label></div><div class=\"[ field ]\"><label>Usage <textarea data-field=\"usage\" rows=\"3\" class=\"[ text-sm ]\" placeholder=\"When and how to call it\" x-model=\"row.usage\" x-bind:aria-invalid=\"bad(i, 'usage')\"></textarea></label><template x-if=\"err(i, 'usage')\"><span class=\"[ error ]\" x-bind:data-error-for=\"ptr(i, 'usage')\"><span aria-hidden=\"true\">✕</span> <span x-text=\"err(i, 'usage')\"></span></span></template></div></div></section></template><div><button type=\"button\" class=\"[ button ]\" data-size=\"sm\" x-on:click=\"add\">Add a tool</button></div></section>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, "<div class=\"[ arch-split ]\" x-bind:data-open=\"drawerOpen()\"><ul class=\"[ arch-entries ]\" data-entries><template x-for=\"(row, i) in rows()\" x-bind:key=\"i\"><li data-entry=\"tool\" x-bind:data-open=\"isOpen(i)\" x-bind:data-edited=\"isEdited(i)\"><div class=\"[ entry-row ]\" data-row><div class=\"[ entry-main ]\"><div class=\"[ entry-title ]\"><code class=\"[ font-mono ]\" data-name x-text=\"row.name || 'New tool'\"></code> <span class=\"[ badge ]\" data-kind x-text=\"kindLabel(row.kind)\"></span><template x-if=\"row.writes\"><span class=\"[ badge ]\" data-tone=\"signal\" data-flag=\"writes\">writes</span></template><template x-if=\"noUsage(row)\"><span class=\"[ badge ]\" data-tone=\"danger\" data-flag=\"no-usage\">no usage prose</span></template><template x-if=\"isEdited(i)\"><span class=\"[ badge ]\" data-tone=\"attention\" data-flag=\"edited\">edited</span></template></div><p class=\"[ entry-note ]\" data-note x-bind:data-missing=\"!row.usage\" x-text=\"usageText(row)\"></p></div><div class=\"[ entry-meta ]\" data-meta=\"used-by\"><span class=\"[ entry-label ]\">Available to</span> <span x-text=\"agentSummary(row, 'used_by')\"></span></div>")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = editButton("isOpen(i)", "edit(i)").Render(ctx, templ_7745c5c3_Buffer)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "</div></li></template></ul>")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Var3 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
+			templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
+			templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
+			if !templ_7745c5c3_IsBuffer {
+				defer func() {
+					templ_7745c5c3_BufErr := templruntime.ReleaseBuffer(templ_7745c5c3_Buffer)
+					if templ_7745c5c3_Err == nil {
+						templ_7745c5c3_Err = templ_7745c5c3_BufErr
+					}
+				}()
+			}
+			ctx = templ.InitializeContext(ctx)
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 5, "<div class=\"[ cluster ]\"><div class=\"[ field ]\"><label>Name <input data-field=\"name\" class=\"[ text-sm font-mono ]\" autocomplete=\"off\" placeholder=\"codegraph\" x-model=\"row.name\" x-bind:aria-invalid=\"bad(drawerIndex(), 'name')\"></label><template x-if=\"err(drawerIndex(), 'name')\"><span class=\"[ error ]\" x-bind:data-error-for=\"ptr(drawerIndex(), 'name')\"><span aria-hidden=\"true\">✕</span> <span x-text=\"err(drawerIndex(), 'name')\"></span></span></template></div><div class=\"[ field ]\"><label>Kind <select data-field=\"kind\" class=\"[ text-sm ]\" x-model=\"row.kind\" x-bind:aria-invalid=\"bad(drawerIndex(), 'kind')\"><option value=\"mcp\">MCP server</option> <option value=\"function\">Function</option> <option value=\"api\">API</option> <option value=\"cli\">CLI</option></select></label><template x-if=\"err(drawerIndex(), 'kind')\"><span class=\"[ error ]\" x-bind:data-error-for=\"ptr(drawerIndex(), 'kind')\"><span aria-hidden=\"true\">✕</span> <span x-text=\"err(drawerIndex(), 'kind')\"></span></span></template></div></div><div class=\"[ field ]\"><span class=\"[ text-sm weight-medium ]\">Used by</span>")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = agentList("used_by", "Used by", "bad(drawerIndex(), 'used_by')").Render(ctx, templ_7745c5c3_Buffer)
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 6, "<template x-if=\"err(drawerIndex(), 'used_by')\"><span class=\"[ error ]\" x-bind:data-error-for=\"ptr(drawerIndex(), 'used_by')\"><span aria-hidden=\"true\">✕</span> <span x-text=\"err(drawerIndex(), 'used_by')\"></span></span></template></div><div class=\"[ field ]\" data-inline><label><input type=\"checkbox\" data-field=\"writes\" x-model=\"row.writes\"> Writes: it changes something outside the session</label></div><div class=\"[ field ]\"><label>Usage <textarea data-field=\"usage\" rows=\"3\" class=\"[ text-sm ]\" placeholder=\"When and how to call it\" x-model=\"row.usage\" x-bind:aria-invalid=\"bad(drawerIndex(), 'usage')\"></textarea></label><template x-if=\"err(drawerIndex(), 'usage')\"><span class=\"[ error ]\" x-bind:data-error-for=\"ptr(drawerIndex(), 'usage')\"><span aria-hidden=\"true\">✕</span> <span x-text=\"err(drawerIndex(), 'usage')\"></span></span></template></div>")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			return nil
+		})
+		templ_7745c5c3_Err = entryDrawer("tool", "Edit tool", drawerFor("")).Render(templ.WithChildren(ctx, templ_7745c5c3_Var3), templ_7745c5c3_Buffer)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 7, "</div></section>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

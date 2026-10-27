@@ -40,6 +40,11 @@ type Seed struct {
 	Base string `json:"base"`
 	// Tab is the deep link that was opened, "" for the first tab.
 	Tab string `json:"tab"`
+	// RootDir is the repository's checkout and IgnoredPaths what it hides from
+	// trees: the Layers tab's folder picker lists RootDir's folders (GET
+	// /api/list_tree) without them.
+	RootDir      string   `json:"root_dir"`
+	IgnoredPaths []string `json:"ignored_paths"`
 }
 
 // View is what the page renders.
@@ -94,6 +99,8 @@ func (h Handler) Page(tab string) func(w http.ResponseWriter, r *http.Request) e
 				RepositoryID: repo.ID,
 				Base:         Href(project.ID, repo.ID, ""),
 				Tab:          tab,
+				RootDir:      repo.RootDir,
+				IgnoredPaths: append([]string{}, repo.IgnoredPaths...),
 			},
 		}))
 	}

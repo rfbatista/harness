@@ -40,7 +40,7 @@ func newArchRig(t *testing.T) *archRig {
 		Sessions: fakeSessions{},
 		Agents:   fakeAgents{},
 		Repositories: fakeRepos{[]*domain.Repository{
-			{ID: "r1", ProjectID: "p1", Name: "harness", RootDir: "/src/harness"},
+			{ID: "r1", ProjectID: "p1", Name: "harness", RootDir: "/src/harness", IgnoredPaths: []string{"node_modules"}},
 			{ID: "r2", ProjectID: "p2", Name: "elsewhere", RootDir: "/src/elsewhere"},
 		}},
 		EnvFiles: fakeEnv{},
@@ -94,8 +94,9 @@ func savedRecord() map[string]any {
 	return rec
 }
 
-const tabsText = `[...document.querySelectorAll('[role=tab]')].map(t => t.textContent.trim()).join('|')`
-const selectedTab = `document.querySelector('[role=tab][aria-selected=true]')?.textContent.trim() ?? ''`
+// A tab's name without its count.
+const tabsText = `[...document.querySelectorAll('[role=tab]')].map(t => t.querySelector('[data-tab-label]').textContent.trim()).join('|')`
+const selectedTab = `document.querySelector('[role=tab][aria-selected=true]')?.querySelector('[data-tab-label]').textContent.trim() ?? ''`
 
 // The Settings → Repositories row links to the Architecture page, or to Set up
 // architecture when the repository has none.
@@ -169,39 +170,7 @@ func TestArchitectureTabsAndDeepLinks(t *testing.T) {
 }
 
 func clickTab(name string) chromedp.Action {
-	return poll(fmt.Sprintf(`(() => { const t = [...document.querySelectorAll('[role=tab]')].find(t => t.textContent.trim() === %q); if (!t) return false; t.click(); return true; })()`, name))
-}
-
-// The overview: a one-line count per part and the export state badge.
-func TestArchitectureOverviewCountsEachPartAndShowsTheExportState(t *testing.T) {
-	rig := newArchRig(t)
-	rig.api.seed(savedRecord())
-	rig.api.export = map[string]any{"state": "database_ahead", "path": ".harness/architecture.yaml", "exported_version": 0}
-	var counts map[string]string
-	var badge string
-	rig.run(t,
-		chromedp.EmulateViewport(1280, 900),
-		chromedp.Navigate(rig.url("")),
-		poll(`document.querySelectorAll('[data-count]').length === 6`),
-		chromedp.Evaluate(`Object.fromEntries([...document.querySelectorAll('[data-count]')].map(e => [e.dataset.count, e.textContent.trim()]))`, &counts),
-		chromedp.Evaluate(`document.querySelector('[data-export-state]')?.textContent.trim() ?? ''`, &badge),
-	)
-	want := map[string]string{
-		"instructions":  "2 files",
-		"tools":         "1 tool",
-		"sandboxes":     "1 sandbox",
-		"orchestration": "1 route · 1 hand-off",
-		"hooks":         "2 rules · 1 blocking",
-		"layers":        "2 layers",
-	}
-	for k, v := range want {
-		if counts[k] != v {
-			t.Errorf("count %s = %q, want %q", k, counts[k], v)
-		}
-	}
-	if !strings.Contains(badge, "Database ahead") {
-		t.Errorf("export badge = %q", badge)
-	}
+	return poll(fmt.Sprintf(`(() => { const t = [...document.querySelectorAll('[role=tab]')].find(t => t.querySelector('[data-tab-label]').textContent.trim() === %q); if (!t) return false; t.click(); return true; })()`, name))
 }
 
 // A repository of another project is not found, as if it did not exist.

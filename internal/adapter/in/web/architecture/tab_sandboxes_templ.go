@@ -10,7 +10,10 @@ import templruntime "github.com/a-h/templ/runtime"
 
 // tabSandboxes is the Sandboxes tab's panel. It is its own Alpine component,
 // architectureSandboxesTab, nested in architecturePage: it reads and edits the
-// page's draft and errors through the page's scope.
+// page's draft and errors through the page's scope. Each environment is a card
+// as in the published design: its name and Edit, where it runs, who uses it and
+// what it can and cannot reach. A card is marked edited when the draft differs from
+// the saved version; Edit opens it in the edit drawer beside the list.
 func tabSandboxes() templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
@@ -32,15 +35,75 @@ func tabSandboxes() templ.Component {
 			templ_7745c5c3_Var1 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<section role=\"tabpanel\" id=\"architecture-panel-sandboxes\" aria-labelledby=\"architecture-tab-sandboxes\" x-show=\"isTab('sandboxes')\" x-data=\"architectureSandboxesTab\" class=\"[ flow ]\"><h2>Sandboxes</h2><p class=\"[ color-ink-muted ]\">Where agents run, what they can reach from there and what they cannot.</p><template x-for=\"(row, i) in rows()\" x-bind:key=\"i\"><section class=\"[ pane ]\" data-entry=\"sandbox\"><header><span class=\"[ grow font-mono ]\" x-text=\"row.name || 'New sandbox'\"></span> <button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" x-bind:aria-label=\"removeLabel(row)\" x-on:click=\"remove(i)\">Remove</button></header><div class=\"[ content flow ]\"><div class=\"[ field ]\"><label>Name <input data-field=\"name\" class=\"[ text-sm font-mono ]\" autocomplete=\"off\" placeholder=\"seatbelt\" x-model=\"row.name\" x-bind:aria-invalid=\"bad(i, 'name')\"></label><template x-if=\"err(i, 'name')\"><span class=\"[ error ]\" x-bind:data-error-for=\"ptr(i, 'name')\"><span aria-hidden=\"true\">✕</span> <span x-text=\"err(i, 'name')\"></span></span></template></div><div class=\"[ field ]\"><label>Runs <input data-field=\"runs\" class=\"[ text-sm ]\" autocomplete=\"off\" placeholder=\"What runs inside it\" x-model=\"row.runs\" x-bind:aria-invalid=\"bad(i, 'runs')\"></label><template x-if=\"err(i, 'runs')\"><span class=\"[ error ]\" x-bind:data-error-for=\"ptr(i, 'runs')\"><span aria-hidden=\"true\">✕</span> <span x-text=\"err(i, 'runs')\"></span></span></template></div><div class=\"[ field ]\"><label>Can reach <input data-field=\"can_reach\" class=\"[ text-sm ]\" autocomplete=\"off\" placeholder=\"Separated by commas\" x-bind:value=\"csv(row, 'can_reach')\" x-on:change=\"setCsv(row, 'can_reach', $event)\"></label></div><div class=\"[ field ]\"><label>Cannot reach <input data-field=\"cannot_reach\" class=\"[ text-sm ]\" autocomplete=\"off\" placeholder=\"Separated by commas\" x-bind:value=\"csv(row, 'cannot_reach')\" x-on:change=\"setCsv(row, 'cannot_reach', $event)\"></label></div><div class=\"[ field ]\"><span class=\"[ text-sm weight-medium ]\">Used by</span>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<section role=\"tabpanel\" id=\"architecture-panel-sandboxes\" aria-labelledby=\"architecture-tab-sandboxes\" x-show=\"isTab('sandboxes')\" x-data=\"architectureSandboxesTab\" x-on:architecture-draft-replaced.window=\"closeDrawer\" class=\"[ flow ]\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = agentList("used_by", "Used by", "bad(i, 'used_by')").Render(ctx, templ_7745c5c3_Buffer)
+		templ_7745c5c3_Var2 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
+			templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
+			templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
+			if !templ_7745c5c3_IsBuffer {
+				defer func() {
+					templ_7745c5c3_BufErr := templruntime.ReleaseBuffer(templ_7745c5c3_Buffer)
+					if templ_7745c5c3_Err == nil {
+						templ_7745c5c3_Err = templ_7745c5c3_BufErr
+					}
+				}()
+			}
+			ctx = templ.InitializeContext(ctx)
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, "<button type=\"button\" class=\"[ button ]\" data-variant=\"primary\" data-size=\"sm\" data-add x-on:click=\"add\">Add environment</button>")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			return nil
+		})
+		templ_7745c5c3_Err = panelHead("Sandboxes & execution environments", "Where agents run, what they can reach from there and what they cannot.").Render(templ.WithChildren(ctx, templ_7745c5c3_Var2), templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, "<template x-if=\"err(i, 'used_by')\"><span class=\"[ error ]\" x-bind:data-error-for=\"ptr(i, 'used_by')\"><span aria-hidden=\"true\">✕</span> <span x-text=\"err(i, 'used_by')\"></span></span></template></div></div></section></template><div><button type=\"button\" class=\"[ button ]\" data-size=\"sm\" x-on:click=\"add\">Add a sandbox</button></div></section>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, "<div class=\"[ arch-split ]\" x-bind:data-open=\"drawerOpen()\"><div class=\"[ flow ]\" data-entries><template x-for=\"(row, i) in rows()\" x-bind:key=\"i\"><section class=\"[ entry-card ]\" data-entry=\"sandbox\" x-bind:data-open=\"isOpen(i)\" x-bind:data-edited=\"isEdited(i)\"><div data-row><header><h3 class=\"[ font-mono ]\" data-name x-text=\"row.name || 'New sandbox'\"></h3><template x-if=\"isEdited(i)\"><span class=\"[ badge ]\" data-tone=\"attention\" data-flag=\"edited\">edited</span></template><span class=\"[ grow ]\"></span>")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = editButton("isOpen(i)", "edit(i)").Render(ctx, templ_7745c5c3_Buffer)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "</header><div class=\"[ entry-card-body ] [ flow ]\"><div class=\"[ entry-kv ]\"><template x-if=\"row.runs\"><div data-meta=\"runs\"><span class=\"[ entry-label ]\">Runs where</span> <span x-text=\"row.runs\"></span></div></template><div data-meta=\"used-by\"><span class=\"[ entry-label ]\">Used by</span> <span x-text=\"agentSummary(row, 'used_by')\"></span></div></div><div class=\"[ reach-grid ]\"><template x-if=\"reaches(row, 'can_reach')\"><div data-reach=\"can\"><span class=\"[ entry-label ]\">Can reach</span><ul class=\"[ reach ]\"><template x-for=\"item in row.can_reach\" x-bind:key=\"item\"><li x-text=\"item\"></li></template></ul></div></template><template x-if=\"reaches(row, 'cannot_reach')\"><div data-reach=\"cannot\"><span class=\"[ entry-label ]\">Cannot reach</span><ul class=\"[ reach ]\"><template x-for=\"item in row.cannot_reach\" x-bind:key=\"item\"><li x-text=\"item\"></li></template></ul></div></template></div></div></div></section></template></div>")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Var3 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
+			templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
+			templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
+			if !templ_7745c5c3_IsBuffer {
+				defer func() {
+					templ_7745c5c3_BufErr := templruntime.ReleaseBuffer(templ_7745c5c3_Buffer)
+					if templ_7745c5c3_Err == nil {
+						templ_7745c5c3_Err = templ_7745c5c3_BufErr
+					}
+				}()
+			}
+			ctx = templ.InitializeContext(ctx)
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 5, "<div class=\"[ field ]\"><label>Name <input data-field=\"name\" class=\"[ text-sm font-mono ]\" autocomplete=\"off\" placeholder=\"seatbelt\" x-model=\"row.name\" x-bind:aria-invalid=\"bad(drawerIndex(), 'name')\"></label><template x-if=\"err(drawerIndex(), 'name')\"><span class=\"[ error ]\" x-bind:data-error-for=\"ptr(drawerIndex(), 'name')\"><span aria-hidden=\"true\">✕</span> <span x-text=\"err(drawerIndex(), 'name')\"></span></span></template></div><div class=\"[ field ]\"><label>Runs <input data-field=\"runs\" class=\"[ text-sm ]\" autocomplete=\"off\" placeholder=\"What runs inside it\" x-model=\"row.runs\" x-bind:aria-invalid=\"bad(drawerIndex(), 'runs')\"></label><template x-if=\"err(drawerIndex(), 'runs')\"><span class=\"[ error ]\" x-bind:data-error-for=\"ptr(drawerIndex(), 'runs')\"><span aria-hidden=\"true\">✕</span> <span x-text=\"err(drawerIndex(), 'runs')\"></span></span></template></div><div class=\"[ field ]\"><label>Can reach <input data-field=\"can_reach\" class=\"[ text-sm ]\" autocomplete=\"off\" placeholder=\"Separated by commas\" x-bind:value=\"csv(row, 'can_reach')\" x-on:change=\"setCsv(row, 'can_reach', $event)\"></label></div><div class=\"[ field ]\"><label>Cannot reach <input data-field=\"cannot_reach\" class=\"[ text-sm ]\" autocomplete=\"off\" placeholder=\"Separated by commas\" x-bind:value=\"csv(row, 'cannot_reach')\" x-on:change=\"setCsv(row, 'cannot_reach', $event)\"></label></div><div class=\"[ field ]\"><span class=\"[ text-sm weight-medium ]\">Used by</span>")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = agentList("used_by", "Used by", "bad(drawerIndex(), 'used_by')").Render(ctx, templ_7745c5c3_Buffer)
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 6, "<template x-if=\"err(drawerIndex(), 'used_by')\"><span class=\"[ error ]\" x-bind:data-error-for=\"ptr(drawerIndex(), 'used_by')\"><span aria-hidden=\"true\">✕</span> <span x-text=\"err(drawerIndex(), 'used_by')\"></span></span></template></div>")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			return nil
+		})
+		templ_7745c5c3_Err = entryDrawer("sandbox", "Edit environment", drawerFor("")).Render(templ.WithChildren(ctx, templ_7745c5c3_Var3), templ_7745c5c3_Buffer)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 7, "</div></section>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

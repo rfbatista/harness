@@ -25,7 +25,7 @@ export function architectureGateway(api, feed) {
     };
   };
 
-  /** One discovery per repository for the page's life: every tab and the matrix share the answer. */
+  /** One discovery per repository for the page's life: every tab and the matrix share the answer (see discovered). */
   const catalogs = new Map();
 
   return {
@@ -85,14 +85,32 @@ export function architectureGateway(api, feed) {
       return readPreview(await api.post("/preview_layers", { repository_id: repositoryId, layers, unlayered }));
     },
 
-    /** The agent catalog's names, for the matrix's rows and the agent pickers. Asked once per repository; a failure is not remembered. */
-    agents(repositoryId) {
+    /**
+     * The directory tree of a checkout (GET /api/list_tree rooted at it): nodes of
+     * {path, is_dir, children}, paths relative to the root.
+     */
+    async listTree(rootDir) {
+      const body = await api.get("/list_tree", { root: rootDir });
+      if (!body || typeof body.tree !== "object" || body.tree === null) {
+        throw new StructuredError(Codes.BAD_RESPONSE, "The folders came back unreadable.");
+      }
+      return body.tree;
+    },
+
+    /** What discovery found, asked once per repository for the page's life and shared: the agent pickers and the Instructions tab's missing marks read it. A failure is not remembered. */
+    discovered(repositoryId) {
       if (!catalogs.has(repositoryId)) {
-        const asked = this.discover(repositoryId).then((found) => found.agents.filter((a) => typeof a === "string"));
+        const asked = this.discover(repositoryId);
         asked.catch(() => catalogs.delete(repositoryId));
         catalogs.set(repositoryId, asked);
       }
       return catalogs.get(repositoryId);
+    },
+
+    /** The agent catalog's names, for the matrix's rows and the agent pickers. */
+    async agents(repositoryId) {
+      const found = await this.discovered(repositoryId);
+      return found.agents.filter((a) => typeof a === "string");
     },
 
     /** The names of a project's bounded contexts, in the order the server lists them. */

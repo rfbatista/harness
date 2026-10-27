@@ -10,7 +10,7 @@
     overflow-x: auto;
     border: var(--border-width) solid var(--color-line);
     border-radius: var(--radius-md);
-    background: var(--color-canvas);
+    background: var(--color-raised);
 
     & svg {
       display: block;

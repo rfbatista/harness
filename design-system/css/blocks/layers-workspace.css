@@ -1,0 +1,125 @@
+/*
+ * Layers workspace — the Layers tab's three columns: the layer list, the open
+ * layer's editor, and matched paths with the repository coverage.
+ * <div class="layers-work">
+ *   <section class="pane"><ul class="layer-list"><li><button aria-current="true">
+ *     <span class="name">domain <span class="badge">overlap</span></span><span class="pattern">internal/domain/**</span>
+ *   </button></li></ul></section>
+ *   <section class="pane">…editor…</section>
+ *   <aside class="layers-preview"><section class="pane"><header>…</header><div class="tags">…</div><ul class="paths">…</ul></section></aside>
+ * </div>
+ * The columns stack when narrow. Not published as a design-system component.
+ */
+
+@layer blocks {
+  .layers-work {
+    display: grid;
+    grid-template-columns: 17rem minmax(0, 1fr) 22rem;
+    gap: var(--space-l);
+    align-items: start;
+
+    @media (max-width: 85rem) {
+      grid-template-columns: 15rem minmax(0, 1fr);
+
+      & > .layers-preview { grid-column: 1 / -1; }
+    }
+
+    @media (max-width: 55rem) {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    & .pane > header > h3 {
+      font-size: inherit;
+      font-weight: inherit;
+    }
+  }
+
+  .layer-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+
+    & > li { max-inline-size: none; }
+    & > li + li { border-block-start: var(--border-width) solid var(--color-line); }
+
+    & button {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: var(--space-3xs);
+      inline-size: 100%;
+      padding: var(--space-s) var(--space-m);
+      border: 0;
+      background: none;
+      color: inherit;
+      text-align: start;
+      cursor: pointer;
+
+      &:hover { background: var(--color-hover); }
+
+      &[aria-current="true"] {
+        background: var(--color-selected);
+        box-shadow: inset 3px 0 0 var(--color-signal);
+      }
+    }
+
+    & .name {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: var(--space-xs);
+      font-weight: var(--weight-medium);
+    }
+
+    & .pattern {
+      max-inline-size: 100%;
+      overflow-wrap: anywhere;
+      font-family: var(--font-mono);
+      font-size: var(--text-xs);
+      color: var(--color-ink-muted);
+    }
+  }
+
+  .layers-preview {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-m);
+    min-inline-size: 0;
+
+    & .tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--space-s);
+      padding: var(--space-m) var(--space-m) var(--space-s);
+    }
+
+    & .paths {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      max-block-size: 21rem;
+      overflow: auto;
+      font-family: var(--font-mono);
+      font-size: var(--text-xs);
+
+      & > li {
+        max-inline-size: none;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--space-s);
+        padding: var(--space-3xs) var(--space-m);
+        overflow-wrap: anywhere;
+      }
+
+      & > li + li { border-block-start: var(--border-width) solid var(--color-line); }
+      & > li[data-overlap-path="true"] { background: var(--color-attention-wash); }
+      & .badge { font-family: var(--font-sans); }
+    }
+
+    & .paths-empty {
+      padding: var(--space-m);
+      color: var(--color-ink-muted);
+    }
+  }
+}

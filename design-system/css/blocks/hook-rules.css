@@ -1,0 +1,245 @@
+/*
+ * Hook rules — the Hooks tab: the rule list beside the open rule's editor and
+ * its preview.
+ * <div class="hooks-work">
+ *   <section class="pane"><header>…</header>
+ *     <div class="rule-group"><span>Before a commit</span><span>2</span></div>
+ *     <ul class="rule-list"><li><button aria-current="true"><span class="name"><b>…</b><span>…</span></span><span class="badge">…</span></button></li></ul></section>
+ *   <div class="hooks-main">…editor pane…<div class="hook-term"><div class="bar">…</div><pre>…</pre></div></div>
+ * </div>
+ * <div class="hook-cols">…fields…</div>
+ * <div class="cond"><span class="k">When</span><div>…</div><div class="cond-row"><span class="k">In</span><div>…</div></div>…</div>
+ * <div class="mode-cards"><button aria-pressed="true" data-tone="danger"><b>…</b><span>…</span></button>…</div>
+ * <button type="button" class="agent-chip agent-toggle" aria-pressed="true"><i></i>agent</button>
+ * The columns stack when narrow. Not published as a design-system component.
+ */
+
+@layer blocks {
+  .hooks-work {
+    display: grid;
+    grid-template-columns: minmax(0, 22rem) minmax(0, 1fr);
+    gap: var(--space-l);
+    align-items: start;
+
+    @media (max-width: 75rem) {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    & .pane > header > h3 {
+      font-size: inherit;
+      font-weight: inherit;
+    }
+  }
+
+  .hooks-main { min-inline-size: 0; }
+
+  .rule-group {
+    display: flex;
+    justify-content: space-between;
+    padding: var(--space-xs) var(--space-m);
+    background: var(--color-panel);
+    border-block-start: var(--border-width) solid var(--color-line);
+    font-size: var(--text-xs);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--color-ink-faint);
+  }
+
+  .hooks-work .pane > header + div > .rule-group { border-block-start: 0; }
+
+  .rule-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+
+    & > li { max-inline-size: none; }
+    & > li + li { border-block-start: var(--border-width) solid var(--color-line); }
+
+    & button {
+      display: flex;
+      align-items: center;
+      gap: var(--space-s);
+      inline-size: 100%;
+      min-block-size: var(--size-row);
+      padding: var(--space-s) var(--space-m);
+      border: 0;
+      background: none;
+      color: inherit;
+      text-align: start;
+      cursor: pointer;
+
+      &:hover { background: var(--color-hover); }
+
+      &[aria-current="true"] {
+        background: var(--color-selected);
+        box-shadow: inset 3px 0 0 var(--color-signal);
+      }
+    }
+
+    & .name {
+      flex: 1;
+      min-inline-size: 0;
+
+      & > b {
+        display: block;
+        font-weight: var(--weight-medium);
+        overflow-wrap: anywhere;
+      }
+
+      & > span {
+        display: block;
+        font-size: var(--text-xs);
+        color: var(--color-ink-muted);
+        overflow-wrap: anywhere;
+      }
+    }
+  }
+
+  .hook-cols {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-m);
+    align-items: start;
+
+    @media (max-width: 60rem) {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+
+  /* A value the record fixes for this kind of rule: shown like a field, not editable. */
+  .fixed-value {
+    margin: 0;
+    padding: var(--space-2xs) var(--space-s);
+    min-block-size: var(--size-control-md);
+    display: flex;
+    align-items: center;
+    border: var(--border-width) solid var(--color-line);
+    border-radius: var(--radius-sm);
+    background: var(--color-panel);
+    font-size: var(--text-sm);
+  }
+
+  .cond {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: var(--space-xs) var(--space-s);
+    align-items: start;
+    padding: var(--space-m);
+    background: var(--color-panel);
+    border: var(--border-width) solid var(--color-line);
+    border-radius: var(--radius-sm);
+
+    & > .k,
+    & > .cond-row > .k {
+      padding-block-start: var(--space-xs);
+      font-size: var(--text-xs);
+      font-weight: var(--weight-bold);
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--color-signal-strong);
+    }
+
+    & > .cond-row { display: contents; }
+  }
+
+  .mode-cards {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-s);
+
+    @media (max-width: 40rem) {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    & > button {
+      --_tone: var(--color-ink-muted);
+
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-3xs);
+      padding: var(--space-s) var(--space-m);
+      border: var(--border-width) solid var(--color-line-control);
+      border-radius: var(--radius-sm);
+      background: var(--color-raised);
+      color: inherit;
+      text-align: start;
+      cursor: pointer;
+
+      &[data-tone="danger"] { --_tone: var(--color-danger); }
+      &[data-tone="attention"] { --_tone: var(--color-attention); }
+
+      &:hover { background: var(--color-hover); }
+
+      &[aria-pressed="true"] {
+        border-color: var(--_tone);
+        background: color-mix(in oklch, var(--_tone) 11%, var(--color-raised));
+        box-shadow: 0 0 0 1px var(--_tone);
+      }
+
+      & > b {
+        display: flex;
+        align-items: center;
+        gap: var(--space-xs);
+        font-weight: var(--weight-medium);
+      }
+
+      & > b > .dot {
+        inline-size: 0.5rem;
+        block-size: 0.5rem;
+        border-radius: 50%;
+        background: var(--_tone);
+      }
+
+      & > span {
+        font-size: var(--text-xs);
+        color: var(--color-ink-muted);
+      }
+    }
+  }
+
+  /* An agent to pick: the agent chip as a toggle button; pressed, it takes the agent's colour. */
+  .agent-toggle {
+    font: inherit;
+    color: inherit;
+    cursor: pointer;
+    transition: background-color var(--duration-instant) var(--ease-out);
+
+    @media (prefers-reduced-motion: reduce) { transition: none; }
+
+    &:hover { background: var(--color-hover); }
+
+    &[aria-pressed="true"] {
+      border-color: var(--c);
+      background: color-mix(in oklch, var(--c) 16%, var(--color-panel));
+      font-weight: var(--weight-medium);
+    }
+
+    @media (forced-colors: active) {
+      &[aria-pressed="true"] { outline: calc(var(--border-width) * 2) solid CanvasText; }
+    }
+  }
+
+  /* What the agent sees, drawn as the agent's terminal: the ink on the canvas, inverted. */
+  .hook-term {
+    overflow: hidden;
+    border-radius: var(--radius-md);
+    background: var(--color-ink);
+    color: var(--color-canvas);
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    line-height: 1.65;
+
+    & > .bar {
+      padding: var(--space-xs) var(--space-m);
+      background: color-mix(in oklch, var(--color-canvas) 14%, var(--color-ink));
+      opacity: 0.85;
+    }
+
+    & > pre {
+      margin: 0;
+      padding: var(--space-m);
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+  }
+}

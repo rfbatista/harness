@@ -2,121 +2,237 @@ package architecture
 
 // tabLayers is the Layers tab's panel. It is its own Alpine component,
 // architectureLayersTab, nested in architecturePage: it reads and edits the
-// page's draft and errors through the page's scope.
+// page's draft and errors through the page's scope. It follows the published
+// layers-editor design: a head with the preset and Add layer, three columns
+// (the layer list, the open layer's editor, matched paths with the repository
+// coverage), then the agent access matrix.
 templ tabLayers() {
 	<section role="tabpanel" id="architecture-panel-layers" aria-labelledby="architecture-tab-layers" x-show="isTab('layers')" x-data="architectureLayersTab" class="[ flow ]">
-		<h2>Layers</h2>
-		<p class="[ color-ink-muted ]">The parts of the repository, by folder or by pattern, and which agents may read and change each. A path belongs to one layer: when layers overlap, the narrower pattern wins (a regex over a folder, a deeper folder over a shallower one, the first regex over a later one).</p>
-		<div class="[ cluster ]">
-			<button type="button" class="[ button ]" data-add-layer="folder" x-on:click="add('folder')">Add layer by folder</button>
-			<button type="button" class="[ button ]" data-add-layer="regex" x-on:click="add('regex')">Add layer by regex</button>
+		<div class="[ arch-head ]">
+			<div class="[ flow ] [ flow-space-3xs ]">
+				<h2>Layers</h2>
+				<p class="[ color-ink-muted ]">Cut the repository into bounded contexts by folder or regex, then say which agents may read and which may change each one. Hooks enforce what you set here.</p>
+			</div>
+			<div class="[ cluster ]">
+				<button type="button" class="[ button ]" data-size="sm" data-preset x-on:click="addPreset()">Start from hexagonal preset</button>
+				<button type="button" class="[ button ]" data-variant="primary" data-size="sm" data-add-layer x-on:click="add('folder')">Add layer</button>
+			</div>
 		</div>
+		<template x-if="!hasProblems">
+			<div class="[ banner ]" data-tone="signal" data-default-note>
+				<span><strong>Default access: everyone reads, only listed agents change.</strong> A new layer starts with read for all agents and change for the software-architect alone. Reading stays open because agents need to see ports and domain to write correct adapters. Narrow reading only for layers with secrets or generated output.</span>
+			</div>
+		</template>
+		<template x-if="hasProblems">
+			<div class="[ banner ]" data-tone="danger" role="alert" data-validation>
+				<span x-text="problemText"></span>
+			</div>
+		</template>
 		<template x-if="previewFailed">
 			<div class="[ banner ]" data-tone="attention" role="status" data-preview-failed>
 				<span class="[ grow ]" x-text="previewFailed"></span>
 			</div>
 		</template>
 		<template x-if="isEmpty">
-			<p class="[ color-ink-muted ]" data-no-layers>No layers yet. Without layers, a rule cannot tell an edit inside an agent's area from one outside it.</p>
+			<div class="[ arch-empty ]" data-no-layers>
+				<h3>No layers yet</h3>
+				<p>Without layers, hooks cannot tell an edit inside an agent’s area from one outside it. Add the first one, or start from a preset.</p>
+				<div class="[ actions ]">
+					<button type="button" class="[ button ]" data-variant="primary" x-on:click="addPreset()">Start from hexagonal preset</button>
+					<button type="button" class="[ button ]" data-add-empty="folder" x-on:click="add('folder')">Add layer by folder</button>
+					<button type="button" class="[ button ]" data-add-empty="regex" x-on:click="add('regex')">Add layer by regex</button>
+				</div>
+			</div>
 		</template>
-		<div class="[ flow ]" role="list" aria-label="Layers">
-			<template x-for="row in rows" x-bind:key="row.i">
-				<section class="[ pane ]" role="listitem" x-bind:data-layer="row.i" x-bind:aria-label="row.title">
+		<div class="[ layers-work ]" data-layers-work x-show="!isEmpty">
+			<section class="[ pane ]" aria-label="Layers" data-layer-list>
+				<header>
+					<h3 class="[ grow ]">Layers</h3>
+					<span class="[ chip ]" data-layer-total x-text="layers.length"></span>
+				</header>
+				<ul class="[ layer-list ]">
+					<template x-for="row in rows" x-bind:key="row.i">
+						<li>
+							<button type="button" x-bind:data-layer-item="row.i" x-bind:aria-current="row.current" x-on:click="select(row.i)">
+								<span class="[ name ]">
+									<span data-layer-name x-text="row.title"></span>
+									<template x-if="row.hasOverlap">
+										<span class="[ badge ]" data-tone="attention" data-badge="overlap">overlap</span>
+									</template>
+									<template x-if="row.hasError">
+										<span class="[ badge ]" data-tone="danger" data-badge="error">error</span>
+									</template>
+								</span>
+								<span class="[ pattern ]" x-text="row.listPattern"></span>
+							</button>
+						</li>
+					</template>
+				</ul>
+			</section>
+			<section class="[ pane ]" aria-label="Layer definition" x-bind:data-layer="selectedIndex">
+				<template x-if="current">
 					<header>
-						<span class="[ grow ]" x-text="row.title"></span>
-						<span class="[ text-sm color-ink-muted ]" data-layer-count x-text="row.countText"></span>
-						<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" data-move="up" x-bind:disabled="row.first" x-bind:aria-label="row.moveUpLabel" x-on:click="move(row.i, -1)">Up</button>
-						<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" data-move="down" x-bind:disabled="row.last" x-bind:aria-label="row.moveDownLabel" x-on:click="move(row.i, 1)">Down</button>
-						<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" data-remove-layer x-bind:aria-label="row.removeLabel" x-on:click="remove(row.i)">Remove</button>
+						<h3 class="[ grow ]" x-text="current.title"></h3>
+						<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" data-move="up" x-bind:disabled="current.first" x-bind:aria-label="current.moveUpLabel" x-on:click="move(current.i, -1)">Up</button>
+						<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" data-move="down" x-bind:disabled="current.last" x-bind:aria-label="current.moveDownLabel" x-on:click="move(current.i, 1)">Down</button>
+						<button type="button" class="[ button ]" data-variant="danger-outline" data-size="sm" data-remove-layer x-bind:aria-label="current.removeLabel" x-on:click="removeCurrent()">Delete layer</button>
 					</header>
+				</template>
+				<template x-if="current">
 					<div class="[ content ] [ flow ]">
 						<div class="[ layer-fields ]">
 							<div class="[ field ]">
-								<label x-bind:for="row.ids.name">Name</label>
-								<input x-bind:id="row.ids.name" data-field="name" class="[ text-sm ]" autocomplete="off" spellcheck="false" x-model="row.layer.name" x-bind:aria-invalid="row.nameError !== ''"/>
-								<template x-if="row.nameError">
-									<span class="[ error ]" x-bind:data-error-for="row.namePath" x-text="row.nameError"></span>
+								<label x-bind:for="current.ids.name">Name</label>
+								<input x-bind:id="current.ids.name" data-field="name" class="[ text-sm ]" autocomplete="off" spellcheck="false" x-model="current.layer.name" x-bind:aria-invalid="current.nameError !== ''"/>
+								<template x-if="current.nameError">
+									<span class="[ error ]" x-bind:data-error-for="current.namePath" x-text="current.nameError"></span>
 								</template>
 							</div>
-							<div class="[ field ]" role="group" x-bind:aria-labelledby="row.ids.matchBy">
-								<span x-bind:id="row.ids.matchBy" class="[ text-sm weight-medium ]">Match by</span>
+							<div class="[ field ]" role="group" x-bind:aria-labelledby="current.ids.matchBy">
+								<span x-bind:id="current.ids.matchBy" class="[ text-sm weight-medium ]">Match by</span>
 								<span class="[ segmented ]">
-									<button type="button" data-match-kind="folder" x-bind:aria-pressed="row.kind === 'folder'" x-on:click="setKind(row.i, 'folder')">Folder</button>
-									<button type="button" data-match-kind="regex" x-bind:aria-pressed="row.kind === 'regex'" x-on:click="setKind(row.i, 'regex')">Regex</button>
+									<button type="button" data-match-kind="folder" x-bind:aria-pressed="current.kind === 'folder'" x-on:click="setKind(current.i, 'folder')">Folder</button>
+									<button type="button" data-match-kind="regex" x-bind:aria-pressed="current.kind === 'regex'" x-on:click="setKind(current.i, 'regex')">Regex</button>
 								</span>
 							</div>
 							<div class="[ field ] [ layer-pattern ]">
-								<label x-bind:for="row.ids.pattern" x-text="row.patternLabel"></label>
-								<input x-bind:id="row.ids.pattern" data-field="pattern" class="[ text-sm font-mono ]" autocomplete="off" spellcheck="false" x-bind:placeholder="row.placeholder" x-model="row.pattern" x-bind:aria-invalid="row.patternError !== ''"/>
-								<template x-if="row.patternError">
-									<span class="[ error ]" x-bind:data-error-for="row.patternPath" x-text="row.patternError"></span>
+								<label x-bind:for="current.ids.pattern" x-text="current.patternLabel"></label>
+								<div class="[ layer-pattern-row ]">
+									<input x-bind:id="current.ids.pattern" data-field="pattern" class="[ text-sm font-mono ]" autocomplete="off" spellcheck="false" x-bind:placeholder="current.placeholder" x-model="current.pattern" x-bind:aria-invalid="current.patternError !== ''"/>
+									<template x-if="current.kind === 'folder'">
+										<button type="button" class="[ button ]" data-size="sm" data-pick-folder x-bind:aria-expanded="pickerOpen" x-bind:aria-controls="current.ids.tree" x-on:click="togglePicker()">Pick folder…</button>
+									</template>
+								</div>
+								<template x-if="current.patternError">
+									<span class="[ error ]" x-bind:data-error-for="current.patternPath" x-text="current.patternError"></span>
 								</template>
-								<template x-if="!row.patternError">
-									<span class="[ hint ]" x-text="row.patternHint"></span>
+								<template x-if="!current.patternError">
+									<span class="[ hint ]" x-text="current.patternHint"></span>
 								</template>
 							</div>
+							<template x-if="showPicker">
+								<div class="[ field ] [ layer-pattern ]" x-bind:id="current.ids.tree" data-folder-picker>
+									<span class="[ text-sm weight-medium ]" x-bind:id="current.ids.treeLabel">Pick folders (checked folders are included)</span>
+									<div class="[ folder-tree ]" role="group" data-folder-tree x-bind:aria-labelledby="current.ids.treeLabel">
+										<template x-if="foldersLoading">
+											<p class="[ hint ]" role="status">Reading the repository’s folders…</p>
+										</template>
+										<template x-if="foldersFailed">
+											<p class="[ error ]" role="alert" data-folder-tree-error>
+												<span x-text="foldersError"></span>
+												<span>You can still type the folder above.</span>
+											</p>
+										</template>
+										<template x-if="foldersNone">
+											<p class="[ hint ]">The repository has no folders to pick.</p>
+										</template>
+										<template x-for="f in folders" x-bind:key="f.path">
+											<label>
+												<input type="checkbox" x-bind:value="f.path" x-bind:checked="f.checked" x-on:change="pickFolder(f.path, $event)"/>
+												<span x-text="f.path"></span>
+											</label>
+										</template>
+									</div>
+								</div>
+							</template>
 							<div class="[ field ]">
-								<label x-bind:for="row.ids.context">Bounded context (optional)</label>
-								<select x-bind:id="row.ids.context" data-field="bounded_context" class="[ text-sm ]" x-on:change="setContext(row.i, $event)" x-bind:aria-invalid="row.contextError !== ''">
-									<template x-for="o in row.contextOptions" x-bind:key="o.value">
+								<label x-bind:for="current.ids.context">Bounded context (optional)</label>
+								<select x-bind:id="current.ids.context" data-field="bounded_context" class="[ text-sm ]" x-on:change="setContext(current.i, $event)" x-bind:aria-invalid="current.contextError !== ''">
+									<template x-for="o in current.contextOptions" x-bind:key="o.value">
 										<option x-bind:value="o.value" x-bind:selected="o.selected" x-text="o.label"></option>
 									</template>
 								</select>
-								<template x-if="row.contextError">
-									<span class="[ error ]" x-bind:data-error-for="row.contextPath" x-text="row.contextError"></span>
+								<template x-if="current.contextError">
+									<span class="[ error ]" x-bind:data-error-for="current.contextPath" x-text="current.contextError"></span>
 								</template>
-								<template x-if="!row.contextError">
+								<template x-if="!current.contextError">
 									<span class="[ hint ]">One of the project's bounded contexts, or none.</span>
 								</template>
 							</div>
 							<div class="[ field ]">
-								<label x-bind:for="row.ids.purpose">Purpose (optional)</label>
-								<input x-bind:id="row.ids.purpose" data-field="purpose" class="[ text-sm ]" autocomplete="off" x-model="row.purpose"/>
+								<label x-bind:for="current.ids.purpose">Purpose (optional)</label>
+								<input x-bind:id="current.ids.purpose" data-field="purpose" class="[ text-sm ]" autocomplete="off" x-model="current.purpose"/>
 							</div>
 						</div>
-						<template x-if="row.sample.length > 0">
-							<div class="[ flow ] [ flow-space-3xs ]">
-								<span class="[ text-sm color-ink-faint ]">Matched paths</span>
-								<ul class="[ flow ] [ flow-space-3xs font-mono text-sm ]" data-layer-sample>
-									<template x-for="p in row.sample" x-bind:key="p">
-										<li x-text="p"></li>
-									</template>
-									<template x-if="row.more > 0">
-										<li class="[ color-ink-faint ]" x-text="row.moreText"></li>
-									</template>
-								</ul>
-							</div>
-						</template>
 					</div>
-				</section>
-			</template>
+				</template>
+			</section>
+			<aside class="[ layers-preview ]" aria-label="Live preview">
+				<template x-if="current">
+					<section class="[ pane ]" data-matched>
+						<header>
+							<h3 class="[ grow ]">Matched paths</h3>
+							<span class="[ chip ]" data-layer-count x-text="current.countText"></span>
+						</header>
+						<div class="[ tags ]">
+							<template x-if="current.cannotPreview">
+								<span class="[ badge ]" data-tag="cannot-preview">Cannot preview</span>
+							</template>
+							<template x-if="!current.cannotPreview && current.shownText">
+								<span class="[ badge ]" data-tone="success" data-tag="shown" x-text="current.shownText"></span>
+							</template>
+							<template x-if="current.hasOverlap">
+								<span class="[ badge ]" data-tone="attention" data-tag="overlap" x-text="current.overlapText"></span>
+							</template>
+							<template x-if="hasPreview">
+								<span class="[ badge ]" data-tag="unmatched" x-text="current.unmatchedText"></span>
+							</template>
+						</div>
+						<template x-if="current.sample.length > 0 && !current.cannotPreview">
+							<ul class="[ paths ]" data-layer-sample>
+								<template x-for="p in current.sample" x-bind:key="p.path">
+									<li x-bind:data-overlap-path="p.also !== ''">
+										<span x-text="p.path"></span>
+										<template x-if="p.also">
+											<span class="[ badge ]" data-tone="attention" x-text="p.also"></span>
+										</template>
+									</li>
+								</template>
+								<template x-if="current.more > 0">
+									<li class="[ color-ink-faint ]" x-text="current.moreText"></li>
+								</template>
+							</ul>
+						</template>
+						<template x-if="current.sample.length === 0 || current.cannotPreview">
+							<p class="[ paths-empty ]" x-text="current.emptyText"></p>
+						</template>
+					</section>
+				</template>
+				<template x-if="hasPreview">
+					<section class="[ pane ]" aria-label="Repository coverage" data-coverage>
+						<header>
+							<h3 class="[ grow ]">Repository coverage</h3>
+						</header>
+						<div class="[ content ] [ flow ]">
+							<div class="[ banner ]" x-bind:data-tone="overlapTone" data-callout="overlap">
+								<div class="[ flow ] [ flow-space-3xs ]">
+									<span><strong>Overlap.</strong> <span data-overlap-title x-text="overlapTitle"></span>.<template x-if="overlaps.length > 0"> <span x-text="overlapRule"></span></template></span>
+									<ul class="[ flow ] [ flow-space-3xs text-sm ]" data-overlaps>
+										<template x-for="o in overlapsShown" x-bind:key="o.path">
+											<li data-overlap><span class="[ font-mono ]" x-text="o.path"></span> <span x-text="o.text"></span></li>
+										</template>
+										<template x-if="overlapsMore > 0">
+											<li class="[ color-ink-faint ]" x-text="overlapsMoreText"></li>
+										</template>
+									</ul>
+								</div>
+							</div>
+							<div class="[ banner ]" data-callout="unmatched">
+								<div class="[ flow ] [ flow-space-3xs ]">
+									<span><strong>Unmatched.</strong> <span data-unmatched-count x-text="unmatchedText"></span> in no layer.</span>
+									<ul class="[ flow ] [ flow-space-3xs font-mono text-sm ]" data-unmatched>
+										<template x-for="p in unmatchedSample" x-bind:key="p">
+											<li x-text="p"></li>
+										</template>
+									</ul>
+									<span x-text="unlayeredSentence"></span>
+								</div>
+							</div>
+						</div>
+					</section>
+				</template>
+			</aside>
 		</div>
 		@accessMatrix()
-		<template x-if="hasPreview">
-			<section class="[ pane ]" aria-label="Repository coverage" data-coverage>
-				<header>
-					<span class="[ grow ]">Repository coverage</span>
-				</header>
-				<div class="[ content ] [ flow ]">
-					<div class="[ flow ] [ flow-space-3xs ]">
-						<span class="[ weight-medium ]">Unmatched: <span data-unmatched-count x-text="unmatchedText"></span></span>
-						<span class="[ text-sm color-ink-muted ]">Files in no layer fall to the access set for unlayered paths.</span>
-						<ul class="[ flow ] [ flow-space-3xs font-mono text-sm ]" data-unmatched>
-							<template x-for="p in unmatchedSample" x-bind:key="p">
-								<li x-text="p"></li>
-							</template>
-						</ul>
-					</div>
-					<div class="[ flow ] [ flow-space-3xs ]">
-						<span class="[ weight-medium ]" data-overlap-title x-text="overlapTitle"></span>
-						<ul class="[ flow ] [ flow-space-3xs text-sm ]" data-overlaps>
-							<template x-for="o in overlaps" x-bind:key="o.path">
-								<li data-overlap><span class="[ font-mono ]" x-text="o.path"></span> <span class="[ badge ]" data-tone="attention">! overlap</span> <span x-text="o.text"></span></li>
-							</template>
-						</ul>
-					</div>
-				</div>
-			</section>
-		</template>
 	</section>
 }

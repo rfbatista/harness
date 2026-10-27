@@ -233,6 +233,160 @@ func TestArchitectureOutputOpensOnTheFile(t *testing.T) {
 	)
 }
 
+// The file view follows the export-file design: the heading with Export, the
+// Database / Sync state / Repository nodes, the banner, then the Format, the
+// sessions list and the schema checks beside the file.
+func TestArchitectureOutputFollowsTheDesignsStructure(t *testing.T) {
+	rig := newArchRig(t)
+	rig.api.seed(savedRecord())
+	rig.api.export = map[string]any{"state": "database_ahead", "path": ".harness/architecture.yaml", "exported_version": 0, "exported_commit": "a41c9e2f00", "exported_at": "2026-10-20T10:00:00Z"}
+	var headings, steps, nodes []string
+	var text string
+	var nodesTop, bannerTop, workTop, fmtLeft, yamlLeft, fmtTop, reachTop, checksTop, exportTop, headTop float64
+	rig.run(t,
+		chromedp.EmulateViewport(1440, 1000),
+		chromedp.Navigate(rig.url("/file")),
+		poll(`!!document.querySelector('[data-file-state-title]')?.checkVisibility()`),
+		chromedp.Evaluate(`[...document.querySelectorAll('#architecture-panel-output h2, #architecture-panel-output h3')].filter(h => h.checkVisibility()).map(h => h.textContent.trim())`, &headings),
+		chromedp.Evaluate(`[...document.querySelectorAll('#architecture-panel-output [data-session-step]')].map(s => s.querySelector('b').textContent.trim())`, &steps),
+		chromedp.Evaluate(`[...document.querySelectorAll('#architecture-panel-output [data-node]')].map(n => n.textContent.replace(/\s+/g, ' ').trim())`, &nodes),
+		chromedp.Evaluate(`document.querySelector('#architecture-panel-output').textContent.replace(/\s+/g, ' ')`, &text),
+		chromedp.Evaluate(`document.querySelector('#architecture-panel-output [data-nodes]').getBoundingClientRect().top`, &nodesTop),
+		chromedp.Evaluate(`document.querySelector('#architecture-panel-output [data-file-state-banner]').getBoundingClientRect().top`, &bannerTop),
+		chromedp.Evaluate(`document.querySelector('#architecture-panel-output [data-file-work]').getBoundingClientRect().top`, &workTop),
+		chromedp.Evaluate(`document.querySelector('#architecture-panel-output [data-format]').getBoundingClientRect().left`, &fmtLeft),
+		chromedp.Evaluate(`document.querySelector('#architecture-panel-output [data-yaml-pane]').getBoundingClientRect().left`, &yamlLeft),
+		chromedp.Evaluate(`document.querySelector('#architecture-panel-output [data-format]').getBoundingClientRect().top`, &fmtTop),
+		chromedp.Evaluate(`document.querySelector('#architecture-panel-output [data-reach]').getBoundingClientRect().top`, &reachTop),
+		chromedp.Evaluate(`document.querySelector('#architecture-panel-output [data-schema-checks]').getBoundingClientRect().top`, &checksTop),
+		chromedp.Evaluate(`document.querySelector('#architecture-panel-output [data-export]').getBoundingClientRect().top`, &exportTop),
+		chromedp.Evaluate(`document.querySelector('#architecture-panel-output [data-file-head]').getBoundingClientRect().top`, &headTop),
+	)
+	want := "Architecture file|Database|Sync state|Repository|Format|How it reaches sessions|Schema checks|.harness/architecture.yaml"
+	if got := strings.Join(headings, "|"); got != want {
+		t.Errorf("headings = %q\nwant      %q", got, want)
+	}
+	if strings.Join(steps, "|") != "Session start.|Brief.|Worktree.|Hooks.|Merge." {
+		t.Errorf("steps = %q", steps)
+	}
+	if len(nodes) != 3 || !strings.Contains(nodes[0], "Saved version 1") || !strings.Contains(nodes[1], "Database ahead of the file") || !strings.Contains(nodes[2], "commit a41c9e2") {
+		t.Errorf("nodes = %q", nodes)
+	}
+	if !(headTop < nodesTop && nodesTop < bannerTop && bannerTop < workTop) || exportTop > nodesTop {
+		t.Errorf("vertical order: head %v, export %v, nodes %v, banner %v, work %v", headTop, exportTop, nodesTop, bannerTop, workTop)
+	}
+	if !(fmtLeft < yamlLeft) || !(fmtTop < reachTop && reachTop < checksTop) {
+		t.Errorf("columns: format left %v, yaml left %v; tops %v %v %v", fmtLeft, yamlLeft, fmtTop, reachTop, checksTop)
+	}
+	for _, left := range []string{"Import file into database", "Overwrite file from database", "Discard database change", "Resolve conflict", "Open in editor", "Markdown with front matter", "Conflict"} {
+		if strings.Contains(text, left) {
+			t.Errorf("the tab shows %q, which the build does not back", left)
+		}
+	}
+	for _, want := range []string{"YAML + JSON Schema", "Recommended", "Copy", "Download", "Export to repository"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("the tab lacks %q", want)
+		}
+	}
+}
+
+// Each state the build supports shows its banner and tone, and the nodes' arrows.
+func TestArchitectureOutputShowsEachStatesBanner(t *testing.T) {
+	for state, want := range map[string]struct{ tone, headline, arrows string }{
+		"database_ahead": {"signal", "The saved architecture has changes the file .harness/architecture.yaml does not have yet.", "→←"},
+		"edited_outside": {"attention", "The file .harness/architecture.yaml was changed outside the harness.", "→←"},
+		"file_invalid":   {"danger", "The file .harness/architecture.yaml is not valid YAML for the architecture schema", "→←"},
+		"never_exported": {"signal", "The architecture lives only in the database.", "→←"},
+		"in_sync":        {"", "", "=="},
+	} {
+		t.Run(state, func(t *testing.T) {
+			rig := newArchRig(t)
+			rig.api.seed(savedRecord())
+			rig.api.export = map[string]any{"state": state, "path": ".harness/architecture.yaml", "exported_version": 1, "exported_commit": "a41c9e2f00"}
+			var tone, banner, arrows, checks string
+			var hasBanner bool
+			rig.run(t,
+				chromedp.EmulateViewport(1440, 1000),
+				chromedp.Navigate(rig.url("/file")),
+				poll(`!!document.querySelector('[data-file-state-title]')?.checkVisibility()`),
+				chromedp.Evaluate(`document.querySelectorAll('[data-arrow]').length === 2 && [...document.querySelectorAll('[data-arrow]')].map(a => a.textContent.trim()).join('')`, &arrows),
+				chromedp.Evaluate(`!!document.querySelector('[data-file-state-banner]')`, &hasBanner),
+				chromedp.Evaluate(`document.querySelector('[data-file-state-banner]')?.dataset.tone ?? ''`, &tone),
+				chromedp.Evaluate(`(document.querySelector('[data-file-state-banner]')?.textContent ?? '').replace(/\s+/g, ' ').trim()`, &banner),
+				chromedp.Evaluate(`document.querySelector('[data-schema-checks]').textContent.replace(/\s+/g, ' ')`, &checks),
+			)
+			if hasBanner != (want.headline != "") || tone != want.tone || !strings.Contains(banner, want.headline) {
+				t.Errorf("banner %v tone %q = %q", hasBanner, tone, banner)
+			}
+			if arrows != want.arrows {
+				t.Errorf("arrows = %q", arrows)
+			}
+			if state == "file_invalid" != strings.Contains(checks, "File invalid") {
+				t.Errorf("schema checks = %q", checks)
+			}
+		})
+	}
+}
+
+// Nothing saved: no export to make, and the banner says so.
+func TestArchitectureOutputWithNothingSavedSaysSo(t *testing.T) {
+	rig := newArchRig(t)
+	var banner, db string
+	var disabled bool
+	rig.run(t,
+		chromedp.EmulateViewport(1440, 1000),
+		chromedp.Navigate(rig.url("/file")),
+		poll(`!!document.querySelector('[data-file-state-banner]')`),
+		chromedp.Evaluate(`document.querySelector('[data-file-state-banner]').textContent.replace(/\s+/g, ' ')`, &banner),
+		chromedp.Evaluate(`document.querySelector('[data-node=database]').textContent.replace(/\s+/g, ' ')`, &db),
+		chromedp.Evaluate(`document.querySelector('[data-export]').disabled`, &disabled),
+	)
+	if !strings.Contains(banner, "Nothing is saved yet, so there is nothing to export.") || !strings.Contains(db, "Nothing saved yet") || !disabled {
+		t.Errorf("banner %q, database %q, export disabled %v", banner, db, disabled)
+	}
+}
+
+// Copy puts the saved YAML on the clipboard and Download saves it as a file;
+// neither exports, and Export still commits only when asked.
+func TestArchitectureOutputCopyAndDownloadGiveTheSavedYamlAndExportWaitsToBeAsked(t *testing.T) {
+	rig := newArchRig(t)
+	rig.api.seed(savedRecord())
+	var clip, body, name, copyLabel string
+	rig.run(t,
+		chromedp.EmulateViewport(1440, 1000),
+		chromedp.Navigate(rig.url("/file")),
+		poll(`document.querySelector('[data-yaml]')?.textContent.includes('layers:')`),
+		chromedp.Evaluate(`Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async (t) => { window.__clip = t } } })`, nil),
+		chromedp.Click(`[data-copy-yaml]`, chromedp.ByQuery),
+		poll(`typeof window.__clip === 'string'`),
+		poll(`document.querySelector('[data-copy-yaml]').textContent.trim() === 'Copied'`),
+		chromedp.Evaluate(`window.__clip`, &clip),
+		chromedp.Evaluate(`document.querySelector('[data-copy-yaml]').textContent.trim()`, &copyLabel),
+		chromedp.Evaluate(`(() => {
+			const create = URL.createObjectURL.bind(URL);
+			URL.createObjectURL = (b) => { window.__blob = b; return create(b) };
+			HTMLAnchorElement.prototype.click = function () { window.__download = this.download };
+		})()`, nil),
+		chromedp.Click(`[data-download-yaml]`, chromedp.ByQuery),
+		poll(`!!window.__blob`),
+		chromedp.Evaluate(`window.__blob.text()`, &body, awaitPromise),
+		chromedp.Evaluate(`window.__download`, &name),
+	)
+	if !strings.HasPrefix(clip, "# Generated by the harness") || !strings.Contains(clip, "layers:\n  - name: domain\n") || clip != body {
+		t.Errorf("copied %.80q, downloaded %.80q", clip, body)
+	}
+	if name != "architecture.yaml" || copyLabel != "Copied" {
+		t.Errorf("download name %q, copy label %q", name, copyLabel)
+	}
+	if contains(rig.api.called(), "export_repository_architecture") {
+		t.Fatal("Copy or Download exported")
+	}
+	rig.run(t, chromedp.Click(`[data-export]`, chromedp.ByQuery), poll(`!!document.querySelector('[data-export-result]')`))
+	if !contains(rig.api.called(), "export_repository_architecture") {
+		t.Fatal("Export did not export when asked")
+	}
+}
+
 // ---- The diagram view ----
 
 const (
@@ -282,11 +436,11 @@ func TestArchitectureDiagramDrawsLayersAgentsEdgesGuardsAndRegions(t *testing.T)
 	if edges != 4 {
 		t.Errorf("edges = %d, want 4", edges)
 	}
-	// Each change edge has a blocking and a warning guard.
-	if guards != 8 || regions != 1 {
-		t.Errorf("guards = %d, regions = %d, want 8 and 1", guards, regions)
+	// Each change edge has one guard: both a blocking and a warning rule apply, so the blocking one shows.
+	if guards != 4 || regions != 1 {
+		t.Errorf("guards = %d, regions = %d, want 4 and 1", guards, regions)
 	}
-	if strings.Trim(blocking, "✕") != "" || blocking == "" || strings.Trim(warning, "!") != "" || warning == "" {
+	if strings.Trim(blocking, "✕") != "" || blocking == "" || warning != "" {
 		t.Errorf("guard glyphs: blocking %q, warning %q", blocking, warning)
 	}
 	if draft {

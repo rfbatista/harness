@@ -14,12 +14,21 @@ import {
   matchText,
   moved,
   newLayer,
+  otherLayers,
   overlapText,
+  overlapsOf,
+  layerPattern,
   patternProblem,
+  folderChoices,
+  isFolderPicked,
+  withFolderPicked,
+  accessSentence,
+  presetAdditions,
 } from "../../domain/layers.js";
 
 const PREVIEW_DELAY_MS = 250;
-const SAMPLE_SHOWN = 5;
+const SAMPLE_SHOWN = 20;
+const OVERLAPS_SHOWN = 5;
 const UNMATCHED_SHOWN = 10;
 const LAYER_NAME = /^[a-z0-9-]+$/;
 
@@ -32,6 +41,13 @@ export const layersTab = ({ gateway }) => () => ({
   timer: 0,
   /** The project's bounded context names, once the server answered. */
   contexts: [],
+  /** The position of the layer whose editor is open. */
+  selected: 0,
+  /** The folder picker: open or not, what loading the folders came to, and the folders. */
+  pickerOpen: false,
+  foldersState: "idle",
+  foldersError: "",
+  folderTree: null,
 
   get layers() {
     return this.draft?.layers ?? [];
@@ -60,66 +76,147 @@ export const layersTab = ({ gateway }) => () => ({
     return n === 0 ? "No overlaps" : `${n} ${n === 1 ? "path matches" : "paths match"} more than one layer`;
   },
 
-  /** One entry per layer, with what the editor shows for it. */
+  /** The position of the open layer, kept inside the list. */
+  get selectedIndex() {
+    return Math.max(0, Math.min(this.selected, this.layers.length - 1));
+  },
+  /** The open layer's entry, or null when there are no layers. */
+  get current() {
+    const layer = this.layers[this.selectedIndex];
+    return layer ? this.rowFor(layer, this.selectedIndex) : null;
+  },
+  /** One entry per layer, with what the list shows for it. */
   get rows() {
+    return this.layers.map((layer, i) => this.rowFor(layer, i));
+  },
+  /** The folders to pick from: the checkout's directories, minus .git and the repository's ignored paths. */
+  get folders() {
+    return folderChoices(this.folderTree, this.ignoredPaths, this.rootDir).map((path) => ({
+      path,
+      checked: isFolderPicked(this.layers[this.selectedIndex], path),
+    }));
+  },
+  get showPicker() {
+    return this.pickerOpen && !!this.current && this.current.kind === "folder";
+  },
+  get foldersLoading() {
+    return this.foldersState === "loading";
+  },
+  get foldersFailed() {
+    return this.foldersState === "failed";
+  },
+  get foldersNone() {
+    return this.foldersState === "ready" && this.folders.length === 0;
+  },
+  get unlayeredSentence() {
+    return `Unmatched paths use the repository default: ${accessSentence(this.draft?.unlayered)}.`;
+  },
+  get overlapTone() {
+    return this.overlaps.length === 0 ? undefined : "attention";
+  },
+  get overlapRule() {
+    return "Rule: when layers overlap, the narrower pattern wins (a regex over a folder, a deeper folder over a shallower one, the first regex over a later one).";
+  },
+  get overlapsShown() {
+    return this.overlaps.slice(0, OVERLAPS_SHOWN);
+  },
+  get overlapsMore() {
+    return Math.max(0, this.overlaps.length - OVERLAPS_SHOWN);
+  },
+  get overlapsMoreText() {
+    return `and ${this.overlapsMore} more`;
+  },
+  /** The layers with something wrong, each with what is wrong. */
+  get problems() {
+    return this.rows
+      .map((r) => ({ title: r.title, messages: [r.nameError, r.patternError, r.contextError].filter((m) => m !== "") }))
+      .filter((p) => p.messages.length > 0);
+  },
+  get hasProblems() {
+    return this.problems.length > 0;
+  },
+  /** The banner's words: the first layer that cannot be saved and why, then how many more. */
+  get problemText() {
+    const [first, ...rest] = this.problems;
+    if (!first) return "";
+    const more = rest.length === 0 ? "" : ` ${rest.length} more ${rest.length === 1 ? "layer has" : "layers have"} problems.`;
+    return `“${first.title}” cannot be saved. ${first.messages.join(" ")}${more}`;
+  },
+
+  /** What the list and the editor show for one layer. */
+  rowFor(layer, i) {
     const tab = this;
-    return this.layers.map((layer, i) => {
-      const kind = matchKind(layer);
-      const matchPath = `/layers/${i}/match/${kind}`;
-      const answer = tab.previewFor(layer, i);
-      const title = layer.name || "Unnamed layer";
-      const shown = answer ? answer.sample.slice(0, SAMPLE_SHOWN) : [];
-      const more = answer ? answer.fileCount - shown.length : 0;
-      return {
-        i,
-        layer,
-        kind,
-        title,
-        first: i === 0,
-        last: i === tab.layers.length - 1,
-        ids: {
-          name: `architecture-layer-${i}-name`,
-          matchBy: `architecture-layer-${i}-match-by`,
-          pattern: `architecture-layer-${i}-pattern`,
-          context: `architecture-layer-${i}-context`,
-          purpose: `architecture-layer-${i}-purpose`,
-        },
-        moveUpLabel: `Move ${title} up`,
-        moveDownLabel: `Move ${title} down`,
-        removeLabel: `Remove ${title}`,
-        namePath: `/layers/${i}/name`,
-        nameError: tab.nameError(i),
-        patternPath: matchPath,
-        patternError:
-          patternProblem(kind, matchText(layer)) ||
-          answer?.error?.message ||
-          tab.errorFor(matchPath) ||
-          tab.errorFor(`/layers/${i}/match`),
-        patternLabel: kind === "regex" ? "Regular expression (matched against the repository-relative path)" : "Folder (relative to the repository root)",
-        patternHint: kind === "regex" ? "RE2 syntax, not anchored." : "Includes everything below it.",
-        placeholder: kind === "regex" ? "^internal/(domain|ports)/" : "internal/domain",
-        contextPath: `/layers/${i}/bounded_context`,
-        contextError: tab.errorFor(`/layers/${i}/bounded_context`),
-        countText: !answer ? "" : answer.error ? "invalid" : fileCountText(answer.fileCount),
-        sample: shown,
-        more,
-        moreText: `and ${more} more`,
-        get pattern() {
-          return matchText(layer);
-        },
-        set pattern(text) {
-          layer.match = { [kind]: text };
-        },
-        contextOptions: tab.contextOptions(layer),
-        get purpose() {
-          return layer.purpose ?? "";
-        },
-        set purpose(text) {
-          if (text === "") delete layer.purpose;
-          else layer.purpose = text;
-        },
-      };
-    });
+    const kind = matchKind(layer);
+    const matchPath = `/layers/${i}/match/${kind}`;
+    const answer = tab.previewFor(layer, i);
+    const title = layer.name || "Unnamed layer";
+    const shown = answer ? answer.sample.slice(0, SAMPLE_SHOWN) : [];
+    const more = answer ? answer.fileCount - shown.length : 0;
+    const overlaps = overlapsOf(tab.preview?.overlaps, layer.name);
+    const nameError = tab.nameError(i);
+    const patternError =
+      patternProblem(kind, matchText(layer)) ||
+      answer?.error?.message ||
+      tab.errorFor(matchPath) ||
+      tab.errorFor(`/layers/${i}/match`);
+    const contextError = tab.errorFor(`/layers/${i}/bounded_context`);
+    const overlapPaths = new Map(overlaps.map((o) => [o.path, otherLayers(o, layer.name).join(", ")]));
+    return {
+      i,
+      layer,
+      kind,
+      title,
+      first: i === 0,
+      last: i === tab.layers.length - 1,
+      current: i === tab.selectedIndex,
+      listPattern: layerPattern(layer),
+      hasOverlap: overlaps.length > 0,
+      hasError: nameError !== "" || patternError !== "" || contextError !== "",
+      ids: {
+        name: `architecture-layer-${i}-name`,
+        matchBy: `architecture-layer-${i}-match-by`,
+        pattern: `architecture-layer-${i}-pattern`,
+        context: `architecture-layer-${i}-context`,
+        purpose: `architecture-layer-${i}-purpose`,
+        tree: `architecture-layer-${i}-tree`,
+        treeLabel: `architecture-layer-${i}-tree-label`,
+      },
+      moveUpLabel: `Move ${title} up`,
+      moveDownLabel: `Move ${title} down`,
+      removeLabel: `Delete layer ${title}`,
+      namePath: `/layers/${i}/name`,
+      nameError,
+      patternPath: matchPath,
+      patternError,
+      patternLabel: kind === "regex" ? "Regular expression (matched against the repository-relative path)" : "Folder (relative to the repository root)",
+      patternHint: kind === "regex" ? "RE2 syntax, not anchored." : "Includes everything below it.",
+      placeholder: kind === "regex" ? "^internal/(domain|ports)/" : "internal/domain",
+      contextPath: `/layers/${i}/bounded_context`,
+      contextError,
+      countText: !answer ? "" : answer.error ? "invalid" : fileCountText(answer.fileCount),
+      cannotPreview: patternError !== "",
+      shownText: shown.length === 0 ? "" : `${shown.length} of ${answer.fileCount} shown`,
+      overlapText: `${overlaps.length} overlap another layer`,
+      unmatchedText: `${tab.preview?.unlayered.fileCount ?? 0} unmatched`,
+      emptyText: patternError !== "" ? "Fix the pattern to see matches." : answer ? "No paths match." : "Looking for matches…",
+      sample: shown.map((path) => ({ path, also: overlapPaths.has(path) ? `also ${overlapPaths.get(path)}` : "" })),
+      more,
+      moreText: `and ${more} more`,
+      get pattern() {
+        return matchText(layer);
+      },
+      set pattern(text) {
+        layer.match = { [kind]: text };
+      },
+      contextOptions: tab.contextOptions(layer),
+      get purpose() {
+        return layer.purpose ?? "";
+      },
+      set purpose(text) {
+        if (text === "") delete layer.purpose;
+        else layer.purpose = text;
+      },
+    };
   },
 
   async init() {
@@ -169,17 +266,66 @@ export const layersTab = ({ gateway }) => () => ({
     return LAYER_NAME.test(layer.name) ? "" : "Use lower-case letters, digits and -.";
   },
 
-  add(kind) {
+  select(i) {
+    this.selected = i;
+  },
+
+  /** Opens or closes the folder tree; opening it reads the checkout's folders unless they are already here. */
+  togglePicker() {
+    this.pickerOpen = !this.pickerOpen;
+    if (this.pickerOpen && this.foldersState !== "ready") return this.loadFolders();
+  },
+
+  async loadFolders() {
+    this.foldersState = "loading";
+    this.foldersError = "";
+    try {
+      this.folderTree = await gateway.listTree(this.rootDir);
+      this.foldersState = "ready";
+    } catch (err) {
+      this.foldersState = "failed";
+      this.foldersError = `The folders could not be listed: ${describeError(err).message}`;
+    }
+  },
+
+  /** A folder was checked or unchecked in the tree: the layer's folder follows. */
+  pickFolder(path, event) {
+    const layer = this.layers[this.selectedIndex];
+    layer.match = withFolderPicked(layer, path, event.target.checked).match;
+  },
+
+  /** Adds a layer for a folder, with the default access, and opens its editor. */
+  add(kind = "folder") {
     if (!this.draft) return;
     this.draft.layers.push(newLayer(this.draft.layers, kind));
+    this.selected = this.draft.layers.length - 1;
+  },
+
+  /** Adds the hexagonal layers the repository lacks, each with the default access. */
+  addPreset() {
+    if (!this.draft) return;
+    const added = presetAdditions(this.draft.layers);
+    if (added.length === 0) return;
+    this.selected = this.draft.layers.length;
+    this.draft.layers.push(...added);
+  },
+
+  /** Deletes the open layer; the one now at its place (or the last) opens. */
+  removeCurrent() {
+    this.remove(this.selectedIndex);
   },
 
   remove(i) {
     this.draft.layers.splice(i, 1);
+    this.selected = Math.max(0, Math.min(this.selected, this.draft.layers.length - 1));
   },
 
+  /** Moves a layer by a place; the editor stays on it. */
   move(i, delta) {
-    this.draft.layers = moved(this.draft.layers, i, delta);
+    const layers = moved(this.draft.layers, i, delta);
+    if (layers === this.draft.layers) return;
+    this.draft.layers = layers;
+    if (this.selected === i) this.selected = i + delta;
   },
 
   /** Switches how a layer matches, keeping the text typed so far. */
@@ -202,6 +348,10 @@ export const layersTab = ({ gateway }) => () => ({
       const answer = await gateway.previewLayers(this.repositoryId, layers, unlayered);
       if (n !== this.seq) return; // a newer request was sent: this answer is out of date
       this.preview = { ...answer, keys: layers.map((l) => JSON.stringify(l.match)) };
+      this.overlapCount = answer.overlaps.length; // the page's overview counts them
+      this.overlapNames = [...new Set(answer.overlaps.flatMap((o) => o.layers))]; // the diagram marks them
+      this.unmatchedCount = answer.unlayered.fileCount;
+      this.fileCounts = Object.fromEntries(answer.layers.filter((l) => l.error === null).map((l) => [l.name, l.fileCount])); // the diagram shows them
       this.previewFailed = "";
     } catch (err) {
       if (n !== this.seq) return;

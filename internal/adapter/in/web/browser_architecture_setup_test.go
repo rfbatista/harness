@@ -13,19 +13,32 @@ func archClick(sel string) chromedp.Action {
 	return poll(fmt.Sprintf(`(() => { const e = document.querySelector(%q); if (!e || e.disabled) return false; e.click(); return true; })()`, sel))
 }
 
+// drawerKinds is the kind of entry each descriptive tab edits first.
+var drawerKinds = map[string]string{"instructions": "instruction", "tools": "tool", "sandboxes": "sandbox", "orchestration": "route"}
+
 // archFill types into a field of the nth entry of a tab, the way a person does:
-// an input event for the model, a change event for the comma-separated lists.
+// open the entry's edit drawer (when it is not open on it), an input event for
+// the model, a change event for the comma-separated lists, then Apply.
 func archFill(tab string, n int, field, value string) chromedp.Action {
-	return poll(fmt.Sprintf(`(() => {
-		const e = document.querySelectorAll('#architecture-panel-%s [data-entry]')[%d]?.querySelector('[data-field=%s]');
-		if (!e) return false;
-		if (e.type === 'checkbox') { if (e.checked !== (%q === 'on')) e.click(); return true; }
-		e.value = %q;
-		if (e.tagName === 'SELECT' && e.value !== %q) return false; // its options have not arrived yet
-		e.dispatchEvent(new Event('input', { bubbles: true }));
-		e.dispatchEvent(new Event('change', { bubbles: true }));
-		return true;
-	})()`, tab, n, field, value, value, value))
+	return archFillKind(tab, drawerKinds[tab], n, field, value)
+}
+
+func archFillKind(tab, kind string, n int, field, value string) chromedp.Action {
+	return chromedp.Tasks{
+		openDrawerOf(tab, kind, n),
+		poll(fmt.Sprintf(`(() => {
+			const e = document.querySelector('#architecture-panel-%s [data-drawer="%s"] [data-field=%s]');
+			if (!e) return false;
+			if (e.type === 'checkbox') { if (e.checked !== (%q === 'on')) e.click(); return true; }
+			e.value = %q;
+			if (e.tagName === 'SELECT' && e.value !== %q) return false; // its options have not arrived yet
+			e.dispatchEvent(new Event('input', { bubbles: true }));
+			e.dispatchEvent(new Event('change', { bubbles: true }));
+			return true;
+		})()`, tab, kind, field, value, value, value)),
+		archClick(drawerSel(tab, kind, "[data-apply]")),
+		poll(fmt.Sprintf(`!document.querySelector('#architecture-panel-%s [data-drawer="%s"]').checkVisibility()`, tab, kind)),
+	}
 }
 
 func archCounts() string {
@@ -43,7 +56,6 @@ func TestSettingUpAnArchitectureFromWhatTheHarnessFound(t *testing.T) {
 	rig.run(t,
 		chromedp.EmulateViewport(1280, 900),
 		chromedp.Navigate(rig.url("")),
-		archClick(`#architecture-empty [data-action=discover]`),
 		poll(`document.querySelectorAll('[data-candidates] input[type=checkbox]').length === 3`),
 		poll(`document.querySelector('#architecture-empty').textContent.includes('software-architect, go-developer, devops')`),
 		// the person unticks nothing: all three are confirmed
@@ -51,11 +63,11 @@ func TestSettingUpAnArchitectureFromWhatTheHarnessFound(t *testing.T) {
 		poll(`!!document.querySelector('[data-setup-done]')`),
 		poll(`!!document.querySelector('[data-save-bar]')?.checkVisibility()`),
 		archClick(archSave),
-		poll(`document.querySelector('[data-count=instructions]')?.textContent.trim() === '1 file'`),
+		poll(`document.querySelector('[data-count=instructions]')?.textContent.trim() === '1'`),
 		chromedp.Evaluate(archCounts(), &counts),
 		chromedp.Evaluate(`!document.querySelector('#architecture-empty')`, &empty),
 	)
-	want := `{"instructions":"1 file","tools":"1 tool","sandboxes":"1 sandbox","orchestration":"0 routes · 0 hand-offs","hooks":"1 rule · 0 blocking","layers":"0 layers"}`
+	want := `{"instructions":"1","tools":"1","sandboxes":"1","agents":"0","hooks":"1","layers":"0"}`
 	if counts != want {
 		t.Fatalf("counts = %s, want %s", counts, want)
 	}
@@ -78,13 +90,12 @@ func TestAnUntickedCandidateIsNotAdded(t *testing.T) {
 	rig.run(t,
 		chromedp.EmulateViewport(1280, 900),
 		chromedp.Navigate(rig.url("")),
-		archClick(`#architecture-empty [data-action=discover]`),
 		poll(`document.querySelectorAll('[data-candidates] input[type=checkbox]').length === 3`),
 		archClick(`[data-candidate="tools:0"]`),
 		poll(`document.querySelector('[data-action=confirm]').textContent.trim() === 'Add 2 to the architecture'`),
 		archClick(`#architecture-empty [data-action=confirm]`),
-		poll(`document.querySelector('[data-count=instructions]')?.textContent.trim() === '1 file'`),
-		poll(`document.querySelector('[data-count=tools]')?.textContent.trim() === '0 tools'`),
+		poll(`document.querySelector('[data-count=instructions]')?.textContent.trim() === '1'`),
+		poll(`document.querySelector('[data-count=tools]')?.textContent.trim() === '0'`),
 	)
 }
 
@@ -99,7 +110,7 @@ func TestEntriesAddedInTheDescriptiveTabsAreSavedAndReloaded(t *testing.T) {
 		chromedp.Navigate(rig.url("")),
 		poll(`document.querySelectorAll('[data-count]').length === 6`),
 		// Instructions & rules
-		archClick(`#architecture-panel-instructions button[data-size=sm]:not([data-variant])`),
+		archClick(`#architecture-panel-instructions [data-add]`),
 		archFill("instructions", 2, "path", "docs/ARCH.md"),
 		archFill("instructions", 2, "kind", "skill"),
 		archFill("instructions", 2, "loaded", "on_demand"),
@@ -107,7 +118,7 @@ func TestEntriesAddedInTheDescriptiveTabsAreSavedAndReloaded(t *testing.T) {
 		archFill("instructions", 2, "note", "Read before a refactor."),
 		// Tools
 		clickTab("Tools"),
-		archClick(`#architecture-panel-tools button[data-size=sm]:not([data-variant])`),
+		archClick(`#architecture-panel-tools [data-add]`),
 		archFill("tools", 1, "name", "gh"),
 		archFill("tools", 1, "kind", "cli"),
 		archPick("tools", 1, "used_by", "devops"),
@@ -115,7 +126,7 @@ func TestEntriesAddedInTheDescriptiveTabsAreSavedAndReloaded(t *testing.T) {
 		archFill("tools", 1, "usage", "Open a pull request."),
 		// Sandboxes
 		clickTab("Sandboxes"),
-		archClick(`#architecture-panel-sandboxes button[data-size=sm]:not([data-variant])`),
+		archClick(`#architecture-panel-sandboxes [data-add]`),
 		archFill("sandboxes", 1, "name", "docker"),
 		archFill("sandboxes", 1, "runs", "Integration tests."),
 		archFill("sandboxes", 1, "can_reach", "the test network"),
@@ -123,11 +134,11 @@ func TestEntriesAddedInTheDescriptiveTabsAreSavedAndReloaded(t *testing.T) {
 		archPick("sandboxes", 1, "used_by", "all"),
 		// Orchestration: a route and a hand-off
 		clickTab("Orchestration"),
-		archClick(`#architecture-panel-orchestration button[data-size=sm]:not([data-variant])`),
+		archClick(`#architecture-panel-orchestration [data-add=route]`),
 		archFill("orchestration", 1, "agent", "devops"),
 		archFill("orchestration", 1, "model", "claude-sonnet-5-5"),
 		poll(`document.querySelectorAll('#architecture-panel-orchestration [data-entry=route]').length === 2`),
-		poll(`(() => { const b = [...document.querySelectorAll('#architecture-panel-orchestration button')].find(b => b.textContent.trim() === 'Add a hand-off'); b.click(); return true; })()`),
+		archClick(`#architecture-panel-orchestration [data-add=handoff]`),
 		poll(`document.querySelectorAll('#architecture-panel-orchestration [data-entry=handoff]').length === 2`),
 	)
 	rig.run(t,
@@ -138,17 +149,18 @@ func TestEntriesAddedInTheDescriptiveTabsAreSavedAndReloaded(t *testing.T) {
 		poll(`document.querySelector('[data-save-bar]')?.checkVisibility() === false`),
 		chromedp.Navigate(rig.url("/orchestration")),
 		poll(`document.querySelectorAll('[data-count]').length === 6`),
-		poll(`document.querySelector('[data-count=orchestration]').textContent.trim() === '2 routes · 2 hand-offs'`),
+		poll(`document.querySelector('[data-count=agents]').textContent.trim() === '2'`),
+		poll(`document.querySelector('#architecture-tab-orchestration [data-tab-count]').textContent.trim() === '4'`),
 		chromedp.Evaluate(archCounts(), &counts),
 	)
-	want := `{"instructions":"3 files","tools":"2 tools","sandboxes":"2 sandboxes","orchestration":"2 routes · 2 hand-offs","hooks":"2 rules · 1 blocking","layers":"2 layers"}`
+	want := `{"instructions":"3","tools":"2","sandboxes":"2","agents":"2","hooks":"2","layers":"2"}`
 	if counts != want {
 		t.Fatalf("counts after reload = %s, want %s", counts, want)
 	}
 	var shown string
 	rig.run(t,
 		poll(`document.querySelectorAll('#architecture-panel-orchestration [data-entry=handoff]').length === 2`),
-		chromedp.Evaluate(`JSON.stringify([...document.querySelectorAll('#architecture-panel-orchestration [data-entry]')].map(e => [...e.querySelectorAll('[data-field]')].map(f => f.value)))`, &shown),
+		chromedp.Evaluate(`(() => { const o = document.querySelector('main')._x_dataStack[0].draft.orchestration; return JSON.stringify([...o.routing.map(r => [r.agent, r.model, r.note ?? '']), ...o.handoffs.map(h => [h.from, h.to, h.when])]) })()`, &shown),
 	)
 	if want := `[["go-developer","claude-opus-5-5",""],["devops","claude-sonnet-5-5",""],["software-architect","go-developer","A spec is approved."],["devops","software-architect","A deploy fails."]]`; shown != want {
 		t.Fatalf("orchestration fields after reload = %s, want %s", shown, want)
@@ -177,15 +189,7 @@ func TestEntriesAddedInTheDescriptiveTabsAreSavedAndReloaded(t *testing.T) {
 }
 
 func archFillHandoff(n int, field, value string) chromedp.Action {
-	return poll(fmt.Sprintf(`(() => {
-		const e = document.querySelectorAll('#architecture-panel-orchestration [data-entry=handoff]')[%d]?.querySelector('[data-field=%s]');
-		if (!e) return false;
-		e.value = %q;
-		if (e.tagName === 'SELECT' && e.value !== %q) return false;
-		e.dispatchEvent(new Event('input', { bubbles: true }));
-		e.dispatchEvent(new Event('change', { bubbles: true }));
-		return true;
-	})()`, n, field, value, value))
+	return archFillKind("orchestration", "handoff", n, field, value)
 }
 
 // A tool that writes needs usage prose: the save is refused, the error shows on
@@ -198,13 +202,13 @@ func TestAToolThatWritesWithNoUsageShowsItsErrorOnTheField(t *testing.T) {
 		chromedp.EmulateViewport(1280, 900),
 		chromedp.Navigate(rig.url("/tools")),
 		poll(`document.querySelectorAll('[data-count]').length === 6`),
-		archClick(`#architecture-panel-tools button[data-size=sm]:not([data-variant])`),
+		archClick(`#architecture-panel-tools [data-add]`),
 		archFill("tools", 1, "name", "deploy"),
 		archFill("tools", 1, "writes", "on"),
 		archClick(archSave),
 		poll(`!!document.querySelector('[data-error-for="/tools/1/usage"]')`),
 		chromedp.Evaluate(`document.querySelector('[data-error-for="/tools/1/usage"]').textContent.trim()`, &msg),
-		chromedp.Evaluate(`document.querySelectorAll('#architecture-panel-tools [data-entry]')[1].querySelector('[data-field=usage]').getAttribute('aria-invalid')`, &invalid),
+		chromedp.Evaluate(`document.querySelector('#architecture-panel-tools [data-drawer] [data-field=usage]').getAttribute('aria-invalid')`, &invalid),
 		poll(`!!document.querySelector('[data-problems]')`),
 	)
 	if msg != "✕ A tool that writes needs usage prose." || invalid != "true" {
@@ -217,7 +221,7 @@ func TestAToolThatWritesWithNoUsageShowsItsErrorOnTheField(t *testing.T) {
 	rig.run(t,
 		archFill("tools", 1, "usage", "Run only after the checks pass."),
 		archClick(archSave),
-		poll(`document.querySelector('[data-count=tools]').textContent.trim() === '2 tools' && !document.querySelector('[data-error-for="/tools/1/usage"]') && document.querySelector('[data-save-bar]').checkVisibility() === false`),
+		poll(`document.querySelector('[data-count=tools]').textContent.trim() === '2' && !document.querySelector('[data-error-for="/tools/1/usage"]') && document.querySelector('[data-save-bar]').checkVisibility() === false`),
 	)
 	if rig.api.lastSaved() == nil {
 		t.Fatal("the corrected tool was not saved")

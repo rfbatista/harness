@@ -13,6 +13,27 @@ export const blankSandbox = () => ({ name: "", runs: "", can_reach: [], cannot_r
 export const blankRoute = () => ({ agent: "", model: "" });
 export const blankHandoff = () => ({ from: "", to: "", when: "" });
 
+const KIND_LABELS = {
+  instruction: { rules: "Rules", skill: "Skill", subagent_prompt: "Sub-agent prompt" },
+  tool: { mcp: "MCP server", function: "Function", api: "API", cli: "CLI" },
+};
+
+/** What a row's kind tag says: "subagent_prompt" as "Sub-agent prompt". @param {"instruction" | "tool"} of */
+export const kindLabel = (of, kind) => KIND_LABELS[of]?.[kind] ?? String(kind ?? "");
+
+/** What a row says about when an instruction file loads. */
+export const loadedLabel = (loaded) => (loaded === "on_demand" ? "On demand" : loaded === "always" ? "Always" : String(loaded ?? ""));
+
+/** Whether a tool that writes has no usage prose (the record refuses it). */
+export const noUsage = (tool) => tool?.writes === true && String(tool?.usage ?? "").trim() === "";
+
+/** The line under a tool: its usage prose, or what its absence means to the model. */
+export const usageText = (tool) =>
+  String(tool?.usage ?? "").trim() === "" ? "The model gets no guidance on when to call this." : tool.usage;
+
+/** Whether a sandbox's list (can_reach, cannot_reach) has anything to show. */
+export const reaches = (sandbox, field) => Array.isArray(sandbox?.[field]) && sandbox[field].length > 0;
+
 /** "a, b" as ["a", "b"]; blanks dropped. */
 export const fromCsv = (text) =>
   String(text ?? "")
@@ -134,3 +155,88 @@ export function toggled(list, name, on) {
 
 /** What a closed agent picker says. */
 export const agentSummary = (list) => (list.length === 0 ? "No agents chosen" : list.join(", "));
+
+/**
+ * What the empty state says discovery found: rule files by name, the others
+ * counted. "" when nothing was found.
+ * @param {{ key: string, label: string, entry: { kind?: string } }[]} candidates
+ */
+export function discoveryText(candidates) {
+  const of = (section) => candidates.filter((c) => c.key.startsWith(`${section}:`));
+  const instructions = of("instructions");
+  const rules = instructions.filter((c) => c.entry.kind === "rules").map((c) => c.label);
+  const skills = instructions.filter((c) => c.entry.kind === "skill").length;
+  const prompts = instructions.filter((c) => c.entry.kind === "subagent_prompt").length;
+  const count = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+  const found = [
+    ...rules,
+    ...(skills ? [count(skills, "skill", "skills")] : []),
+    ...(prompts ? [count(prompts, "sub-agent prompt", "sub-agent prompts")] : []),
+    ...(of("tools").length ? [count(of("tools").length, "tool", "tools")] : []),
+    ...(of("sandboxes").length ? [count(of("sandboxes").length, "sandbox", "sandboxes")] : []),
+  ];
+  if (found.length === 0) return "";
+  const head = found.slice(0, -1).join(", ");
+  const list = found.length === 1 ? found[0] : `${head} and ${found[found.length - 1]}`;
+  return `We found ${list} in the repository. Confirm them to add them to the architecture.`;
+}
+
+/** A value as it is saved: without the empty strings, empty lists, nulls and false flags a draft grows while it is edited. */
+function plain(v) {
+  if (Array.isArray(v)) return v.map(plain);
+  if (v === null || typeof v !== "object") return v;
+  const out = {};
+  for (const k of Object.keys(v).sort()) {
+    const x = plain(v[k]);
+    const empty = x === "" || x === null || x === undefined || x === false || (Array.isArray(x) && x.length === 0);
+    if (!empty) out[k] = x;
+  }
+  return out;
+}
+const sameRow = (a, b) => JSON.stringify(plain(a)) === JSON.stringify(plain(b));
+
+/**
+ * Which rows of a draft list differ from the saved list. With as many rows as
+ * were saved, row n is compared with saved row n; after a row was added or
+ * removed, each row is compared with the saved row that has its key (a row
+ * with no such saved row is new, so edited).
+ * @param {any[] | undefined} saved @param {any[] | undefined} draft @param {(row: any) => string} keyOf
+ * @returns {boolean[]}
+ */
+export function editedRows(saved, draft, keyOf) {
+  const was = Array.isArray(saved) ? saved : [];
+  const now = Array.isArray(draft) ? draft : [];
+  if (was.length === now.length) return now.map((row, i) => !sameRow(row, was[i]));
+  const taken = new Set();
+  return now.map((row) => {
+    const key = keyOf(row);
+    const at = key === "" ? -1 : was.findIndex((r, i) => !taken.has(i) && keyOf(r) === key);
+    if (at < 0) return true;
+    taken.add(at);
+    return !sameRow(row, was[at]);
+  });
+}
+
+/**
+ * The record's hand-offs as chains of agents, in order: a hand-off that starts
+ * where the last one ended continues its chain, any other starts a new one.
+ * A hand-off missing its from or its to is not drawn.
+ * @param {{ from?: string, to?: string }[] | undefined} handoffs @returns {string[][]}
+ */
+export function handoffChains(handoffs) {
+  const chains = [];
+  for (const h of Array.isArray(handoffs) ? handoffs : []) {
+    if (!h?.from || !h?.to) continue;
+    const last = chains[chains.length - 1];
+    if (last && last[last.length - 1] === h.from) last.push(h.to);
+    else chains.push([h.from, h.to]);
+  }
+  return chains;
+}
+
+/** Whether an instruction path is one discovery did not list. Paths of harness:// are the harness's own, never in a checkout; null means discovery has not answered. @param {Set<string> | null} found */
+export function isMissingPath(path, found) {
+  const p = String(path ?? "").trim();
+  if (!found || p === "" || p.startsWith("harness://")) return false;
+  return !found.has(p);
+}

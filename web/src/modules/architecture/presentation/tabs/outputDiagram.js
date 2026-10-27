@@ -31,8 +31,12 @@ export const outputDiagram = ({ gateway, clipboard }) => () => ({
   /** The agent catalog's names; empty until discovery answers. */
   catalog: [],
   focus: "",
-  /** What Copy as Mermaid or Download last did, for a status line. */
+  /** What Copy Mermaid or Download last did, for a status line. */
   notice: "",
+  /** The Show options: what the drawing includes besides the layers and the change edges. */
+  showGuards: true,
+  showSandboxes: true,
+  showHandoffs: false,
 
   async init() {
     try {
@@ -46,7 +50,46 @@ export const outputDiagram = ({ gateway, clipboard }) => () => ({
     if (!this.draft) return null;
     const agents = [...new Set([...this.catalog, ...mentioned(this.draft)])].filter((n) => n !== PLAIN);
     const focus = agents.includes(this.focus) || this.focus === PLAIN ? this.focus : "";
-    return buildDiagram(this.draft, { agents, focus, draft: this.dirty });
+    return buildDiagram(this.draft, {
+      agents,
+      focus,
+      draft: this.dirty,
+      handoffs: this.showHandoffs,
+      problems: { overlaps: this.overlapNames, unmatched: this.unmatchedCount },
+      files: this.fileCounts,
+    });
+  },
+  /** The model as drawn: without the guards or the sandbox regions the person turned off. */
+  get shown() {
+    const m = this.model;
+    if (!m) return null;
+    return { ...m, guards: this.showGuards ? m.guards : [], regions: this.showSandboxes ? m.regions : [] };
+  },
+  /** Nothing to draw: the record has no layers. */
+  get isEmpty() {
+    return (this.draft?.layers ?? []).length === 0;
+  },
+  /** What is wrong with the layers, in words, from the Layers tab's preview. */
+  get problemList() {
+    const out = [];
+    const paths = this.overlapCount;
+    const files = this.unmatchedCount;
+    if (paths > 0) out.push(`${paths} ${paths === 1 ? "path matches" : "paths match"} more than one layer`);
+    if (files > 0) out.push(`${files} ${files === 1 ? "file matches" : "files match"} no layer`);
+    return out;
+  },
+  get hasProblems() {
+    return this.problemList.length > 0;
+  },
+  get problemsTitle() {
+    const n = this.problemList.length;
+    return `${n} ${n === 1 ? "problem" : "problems"} in the architecture.`;
+  },
+  get problemsText() {
+    return `${this.problemList.join("; ")}. The layers involved are marked on the diagram.`;
+  },
+  get focusTitle() {
+    return this.model?.focus || "All agents";
   },
   get ready() {
     return this.model !== null;
@@ -54,8 +97,13 @@ export const outputDiagram = ({ gateway, clipboard }) => () => ({
   get isDraft() {
     return !!this.model?.draft;
   },
+  /** The picture on the page: painted by the design tokens, so it follows light and dark. */
   get svg() {
-    return this.model ? diagramToSvg(this.model) : "";
+    return this.shown ? diagramToSvg(this.shown, { themed: true }) : "";
+  },
+  /** The picture as a file: literal colours, since a file has no page tokens. */
+  get fileSvg() {
+    return this.shown ? diagramToSvg(this.shown) : "";
   },
   get agentButtons() {
     return (this.model?.nodes.agents ?? []).map((a) => ({ name: a.name, pressed: a.focused }));
@@ -71,6 +119,12 @@ export const outputDiagram = ({ gateway, clipboard }) => () => ({
   },
   get focusRead() {
     return list((this.model?.edges ?? []).filter((e) => e.access === "read").map((e) => e.layer));
+  },
+  /** The warning rules a blocking one hides on the focused agent's edges: the picture shows one guard per edge. */
+  get focusWarnings() {
+    const guards = this.model?.guards ?? [];
+    const hidden = guards.filter((g) => g.mode === "warning" && guards.some((b) => b.mode === "blocking" && b.agent === g.agent && b.layer === g.layer));
+    return list(hidden.map((g) => `${g.rule} on ${g.layer}`));
   },
   get focusTools() {
     const tools = this.model?.tools ?? [];
@@ -118,9 +172,13 @@ export const outputDiagram = ({ gateway, clipboard }) => () => ({
   clearFocus() {
     this.focus = "";
   },
+  /** The empty state's button: the Layers tab, where the layers are defined. */
+  openLayers() {
+    this.openTab("layers");
+  },
 
   downloadSvg() {
-    const blob = new Blob([this.svg], { type: "image/svg+xml" });
+    const blob = new Blob([this.fileSvg], { type: "image/svg+xml" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;

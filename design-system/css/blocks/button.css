@@ -1,6 +1,6 @@
 /*
  * Button — one height, one radius, four variants.
- * Exceptions: data-variant="primary|ghost|danger", data-size="sm", data-icon,
+ * Exceptions: data-variant="primary|ghost|danger|danger-outline", data-size="sm", data-icon,
  * disabled / aria-disabled, aria-busy (ring slides in; replaces the icon on data-icon).
  */
 
@@ -54,6 +54,12 @@
       --_ink: var(--color-danger-ink);
       --_line: var(--color-danger);
       --_veil: oklch(0 0 0 / 0.08);
+    }
+
+    /* A destructive action that is not the page's main one: the danger colour as an outline. */
+    &[data-variant="danger-outline"] {
+      --_ink: var(--color-danger);
+      --_line: var(--color-danger);
     }
 
     &:is([data-variant="primary"], [data-variant="danger"]) > kbd {

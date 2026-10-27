@@ -1,0 +1,159 @@
+/*
+ * Export file — the Output tab's file view: the Database / Sync state /
+ * Repository nodes, and the Format, sessions and checks beside the YAML.
+ * <div class="export-nodes"><div class="node" data-tone="attention"><h3>…</h3><b>…</b><span>…</span></div><span class="arrow">→</span>…</div>
+ * <div class="export-work"><div class="flow">…panes…</div><section class="pane">…<pre class="yaml-lines"><span class="ln"><span>lead</span><span class="k">key</span><span>rest</span></span>…</pre></section></div>
+ * <div class="format-option" data-selected>…</div> <ol class="reach-steps">…</ol> <ul class="check-list">…</ul>
+ * The columns stack when narrow. Not published as a design-system component.
+ */
+
+@layer blocks {
+  .export-nodes {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr auto 1fr;
+    gap: var(--space-s);
+    align-items: stretch;
+
+    @media (max-width: 60rem) {
+      grid-template-columns: minmax(0, 1fr);
+
+      & > .arrow { display: none; }
+    }
+
+    & > .arrow {
+      align-self: center;
+      font-size: var(--text-lg);
+      color: var(--color-ink-faint);
+    }
+
+    & > .node {
+      --_tone: var(--color-line);
+
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-2xs);
+      min-inline-size: 0;
+      padding: var(--space-m);
+      border: var(--border-width) solid var(--_tone);
+      border-radius: var(--radius-md);
+      background: var(--color-raised);
+      font-size: var(--text-sm);
+      overflow-wrap: anywhere;
+
+      &[data-tone="success"] { --_tone: var(--color-success); }
+      &[data-tone="signal"] { --_tone: var(--color-signal); }
+
+      &[data-tone="attention"] {
+        --_tone: var(--color-attention);
+        background: var(--color-attention-wash);
+      }
+
+      &[data-tone="danger"] {
+        --_tone: var(--color-danger);
+        background: var(--color-danger-wash);
+      }
+
+      & > h3 {
+        font-size: var(--text-xs);
+        font-weight: var(--weight-medium);
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--color-ink-faint);
+      }
+
+      & code { font-size: var(--text-xs); }
+    }
+  }
+
+  .export-work {
+    display: grid;
+    grid-template-columns: minmax(0, 23rem) minmax(0, 1fr);
+    gap: var(--space-l);
+    align-items: start;
+
+    @media (max-width: 80rem) {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    & .pane > header > h3 {
+      font-size: inherit;
+      font-weight: inherit;
+    }
+  }
+
+  .format-option {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2xs);
+    padding: var(--space-s) var(--space-m);
+    border: var(--border-width) solid var(--color-line);
+    border-radius: var(--radius-sm);
+    font-size: var(--text-sm);
+    color: var(--color-ink-muted);
+
+    & > b { color: var(--color-ink); }
+
+    &[data-selected] {
+      border-color: var(--color-signal);
+      background: var(--color-signal-wash);
+    }
+  }
+
+  .reach-steps {
+    margin: 0;
+    padding-inline-start: 1.6rem;
+    list-style: decimal;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-s);
+    font-size: var(--text-sm);
+
+    & > li { max-inline-size: none; }
+  }
+
+  .check-list {
+    margin: 0;
+    padding-inline-start: 1.6rem;
+    list-style: disc;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2xs);
+    font-size: var(--text-sm);
+
+    & > li { max-inline-size: none; }
+  }
+
+  /* The file: one block per line, numbered by a counter so the text stays the file's own. */
+  .yaml-lines {
+    --_gutter: 2.2rem;
+
+    counter-reset: ln;
+    margin: 0;
+    padding-block: var(--space-s);
+    max-block-size: 44rem;
+    overflow: auto;
+    font-size: var(--text-xs);
+    line-height: 1.6;
+    tab-size: 2;
+
+    & .ln {
+      display: block;
+      counter-increment: ln;
+      white-space: pre;
+
+      &::before {
+        content: counter(ln);
+        display: inline-block;
+        inline-size: var(--_gutter);
+        padding-inline-end: var(--space-s);
+        text-align: end;
+        color: var(--color-ink-faint);
+        user-select: none;
+      }
+
+      &[data-comment="true"] { color: var(--color-ink-faint); }
+    }
+
+    & .k { color: var(--color-signal-strong); }
+  }
+}

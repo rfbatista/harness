@@ -10,7 +10,11 @@ import templruntime "github.com/a-h/templ/runtime"
 
 // tabInstructions is the Instructions & rules tab's panel. It is its own Alpine
 // component, architectureInstructionsTab, nested in architecturePage: it reads
-// and edits the page's draft and errors through the page's scope.
+// and edits the page's draft and errors through the page's scope. A row shows
+// the file as the published design does (path, kind, note, applies to, loaded,
+// Edit), marked edited when the draft differs from the saved version and
+// missing when discovery did not find the path; Edit opens the row in the edit
+// drawer beside the list.
 func tabInstructions() templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
@@ -32,15 +36,75 @@ func tabInstructions() templ.Component {
 			templ_7745c5c3_Var1 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<section role=\"tabpanel\" id=\"architecture-panel-instructions\" aria-labelledby=\"architecture-tab-instructions\" x-show=\"isTab('instructions')\" x-data=\"architectureInstructionsTab\" class=\"[ flow ]\"><h2>Instructions &amp; rules</h2><p class=\"[ color-ink-muted ]\">The files agents read: rules, skills and sub-agent prompts, who they apply to and when they load. Only the path is stored, never the prose.</p><template x-for=\"(row, i) in rows()\" x-bind:key=\"i\"><section class=\"[ pane ]\" data-entry=\"instruction\"><header><span class=\"[ grow font-mono ]\" x-text=\"row.path || 'New instruction file'\"></span> <button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" x-bind:aria-label=\"removeLabel(row)\" x-on:click=\"remove(i)\">Remove</button></header><div class=\"[ content flow ]\"><div class=\"[ field ]\"><label>Path <input data-field=\"path\" class=\"[ text-sm font-mono ]\" autocomplete=\"off\" placeholder=\"CLAUDE.md\" x-model=\"row.path\" x-bind:aria-invalid=\"bad(i, 'path')\"></label><template x-if=\"err(i, 'path')\"><span class=\"[ error ]\" x-bind:data-error-for=\"ptr(i, 'path')\"><span aria-hidden=\"true\">✕</span> <span x-text=\"err(i, 'path')\"></span></span></template></div><div class=\"[ cluster ]\"><div class=\"[ field ]\"><label>Kind <select data-field=\"kind\" class=\"[ text-sm ]\" x-model=\"row.kind\" x-bind:aria-invalid=\"bad(i, 'kind')\"><option value=\"rules\">Rules</option> <option value=\"skill\">Skill</option> <option value=\"subagent_prompt\">Sub-agent prompt</option></select></label><template x-if=\"err(i, 'kind')\"><span class=\"[ error ]\" x-bind:data-error-for=\"ptr(i, 'kind')\"><span aria-hidden=\"true\">✕</span> <span x-text=\"err(i, 'kind')\"></span></span></template></div><div class=\"[ field ]\"><label>Loaded <select data-field=\"loaded\" class=\"[ text-sm ]\" x-model=\"row.loaded\" x-bind:aria-invalid=\"bad(i, 'loaded')\"><option value=\"always\">Always</option> <option value=\"on_demand\">On demand</option></select></label><template x-if=\"err(i, 'loaded')\"><span class=\"[ error ]\" x-bind:data-error-for=\"ptr(i, 'loaded')\"><span aria-hidden=\"true\">✕</span> <span x-text=\"err(i, 'loaded')\"></span></span></template></div></div><div class=\"[ field ]\"><span class=\"[ text-sm weight-medium ]\">Applies to</span>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<section role=\"tabpanel\" id=\"architecture-panel-instructions\" aria-labelledby=\"architecture-tab-instructions\" x-show=\"isTab('instructions')\" x-data=\"architectureInstructionsTab\" x-on:architecture-draft-replaced.window=\"closeDrawer\" class=\"[ flow ]\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = agentList("applies_to", "Applies to", "bad(i, 'applies_to')").Render(ctx, templ_7745c5c3_Buffer)
+		templ_7745c5c3_Var2 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
+			templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
+			templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
+			if !templ_7745c5c3_IsBuffer {
+				defer func() {
+					templ_7745c5c3_BufErr := templruntime.ReleaseBuffer(templ_7745c5c3_Buffer)
+					if templ_7745c5c3_Err == nil {
+						templ_7745c5c3_Err = templ_7745c5c3_BufErr
+					}
+				}()
+			}
+			ctx = templ.InitializeContext(ctx)
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, "<button type=\"button\" class=\"[ button ]\" data-variant=\"primary\" data-size=\"sm\" data-add x-on:click=\"add\">Add file</button>")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			return nil
+		})
+		templ_7745c5c3_Err = panelHead("Instructions & rule files", "The files agents read: rules, skills and sub-agent prompts, who they apply to and when they load. Only the path is stored, never the prose.").Render(templ.WithChildren(ctx, templ_7745c5c3_Var2), templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, "<template x-if=\"err(i, 'applies_to')\"><span class=\"[ error ]\" x-bind:data-error-for=\"ptr(i, 'applies_to')\"><span aria-hidden=\"true\">✕</span> <span x-text=\"err(i, 'applies_to')\"></span></span></template></div><div class=\"[ field ]\"><label>Note <input data-field=\"note\" class=\"[ text-sm ]\" autocomplete=\"off\" placeholder=\"One line, optional\" x-model=\"row.note\"></label></div></div></section></template><div><button type=\"button\" class=\"[ button ]\" data-size=\"sm\" x-on:click=\"add\">Add an instruction file</button></div></section>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, "<div class=\"[ arch-split ]\" x-bind:data-open=\"drawerOpen()\"><ul class=\"[ arch-entries ]\" data-entries><template x-for=\"(row, i) in rows()\" x-bind:key=\"i\"><li data-entry=\"instruction\" x-bind:data-open=\"isOpen(i)\" x-bind:data-edited=\"isEdited(i)\"><div class=\"[ entry-row ]\" data-row><div class=\"[ entry-main ]\"><div class=\"[ entry-title ]\"><code class=\"[ font-mono ]\" data-path x-text=\"row.path || 'New instruction file'\"></code> <span class=\"[ badge ]\" data-kind x-text=\"kindLabel(row.kind)\"></span><template x-if=\"isMissing(row)\"><span class=\"[ badge ]\" data-tone=\"attention\" data-flag=\"missing\">missing</span></template><template x-if=\"isEdited(i)\"><span class=\"[ badge ]\" data-tone=\"attention\" data-flag=\"edited\">edited</span></template></div><template x-if=\"row.note\"><p class=\"[ entry-note ]\" data-note x-text=\"row.note\"></p></template><template x-if=\"isMissing(row)\"><p class=\"[ entry-note ]\" data-missing-note>Not in the repository</p></template></div><div class=\"[ entry-meta ]\" data-meta=\"applies\"><span class=\"[ entry-label ]\">Applies to</span> <span x-text=\"agentSummary(row, 'applies_to')\"></span></div><div class=\"[ entry-meta ]\" data-meta=\"loaded\"><span class=\"[ entry-label ]\">Loaded</span> <span x-text=\"loadedLabel(row.loaded)\"></span></div>")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = editButton("isOpen(i)", "edit(i)").Render(ctx, templ_7745c5c3_Buffer)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "</div></li></template></ul>")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Var3 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
+			templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
+			templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
+			if !templ_7745c5c3_IsBuffer {
+				defer func() {
+					templ_7745c5c3_BufErr := templruntime.ReleaseBuffer(templ_7745c5c3_Buffer)
+					if templ_7745c5c3_Err == nil {
+						templ_7745c5c3_Err = templ_7745c5c3_BufErr
+					}
+				}()
+			}
+			ctx = templ.InitializeContext(ctx)
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 5, "<div class=\"[ field ]\"><label>Path <input data-field=\"path\" class=\"[ text-sm font-mono ]\" autocomplete=\"off\" placeholder=\"CLAUDE.md\" x-model=\"row.path\" x-bind:aria-invalid=\"bad(drawerIndex(), 'path')\"></label><template x-if=\"err(drawerIndex(), 'path')\"><span class=\"[ error ]\" x-bind:data-error-for=\"ptr(drawerIndex(), 'path')\"><span aria-hidden=\"true\">✕</span> <span x-text=\"err(drawerIndex(), 'path')\"></span></span></template></div><div class=\"[ cluster ]\"><div class=\"[ field ]\"><label>Kind <select data-field=\"kind\" class=\"[ text-sm ]\" x-model=\"row.kind\" x-bind:aria-invalid=\"bad(drawerIndex(), 'kind')\"><option value=\"rules\">Rules</option> <option value=\"skill\">Skill</option> <option value=\"subagent_prompt\">Sub-agent prompt</option></select></label><template x-if=\"err(drawerIndex(), 'kind')\"><span class=\"[ error ]\" x-bind:data-error-for=\"ptr(drawerIndex(), 'kind')\"><span aria-hidden=\"true\">✕</span> <span x-text=\"err(drawerIndex(), 'kind')\"></span></span></template></div><div class=\"[ field ]\"><label>Loaded <select data-field=\"loaded\" class=\"[ text-sm ]\" x-model=\"row.loaded\" x-bind:aria-invalid=\"bad(drawerIndex(), 'loaded')\"><option value=\"always\">Always</option> <option value=\"on_demand\">On demand</option></select></label><template x-if=\"err(drawerIndex(), 'loaded')\"><span class=\"[ error ]\" x-bind:data-error-for=\"ptr(drawerIndex(), 'loaded')\"><span aria-hidden=\"true\">✕</span> <span x-text=\"err(drawerIndex(), 'loaded')\"></span></span></template></div></div><div class=\"[ field ]\"><span class=\"[ text-sm weight-medium ]\">Applies to</span>")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = agentList("applies_to", "Applies to", "bad(drawerIndex(), 'applies_to')").Render(ctx, templ_7745c5c3_Buffer)
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 6, "<template x-if=\"err(drawerIndex(), 'applies_to')\"><span class=\"[ error ]\" x-bind:data-error-for=\"ptr(drawerIndex(), 'applies_to')\"><span aria-hidden=\"true\">✕</span> <span x-text=\"err(drawerIndex(), 'applies_to')\"></span></span></template></div><div class=\"[ field ]\"><label>Note <input data-field=\"note\" class=\"[ text-sm ]\" autocomplete=\"off\" placeholder=\"One line, optional\" x-model=\"row.note\"></label></div>")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			return nil
+		})
+		templ_7745c5c3_Err = entryDrawer("instruction", "Edit instruction file", drawerFor("")).Render(templ.WithChildren(ctx, templ_7745c5c3_Var3), templ_7745c5c3_Buffer)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 7, "</div></section>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

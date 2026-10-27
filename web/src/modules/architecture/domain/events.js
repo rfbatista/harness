@@ -2,6 +2,12 @@
 // failed in a session, newest first. Pure.
 
 
+/** How many rows the overview's events panel shows before "Show all". */
+export const EVENTS_COMPACT = 5;
+
+/** The events the panel shows: the first few, or all of them. */
+export const shownEvents = (events, all) => (all ? events : events.slice(0, EVENTS_COMPACT));
+
 /** How many events the overview keeps. */
 export const EVENTS_SHOWN = 50;
 

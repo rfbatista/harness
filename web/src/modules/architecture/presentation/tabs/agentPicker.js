@@ -3,6 +3,7 @@
 // a tab's component; `this` is then the tab.
 
 import { agentChoices, agentSummary, toggled } from "../../domain/descriptive.js";
+import { agentSlot } from "../../domain/layers.js";
 
 /** @param { gateway: ReturnType<typeof import("../../infrastructure/architecture-gateway.js").architectureGateway> } deps */
 export const agentPicker = ({ gateway }) => ({
@@ -21,6 +22,10 @@ export const agentPicker = ({ gateway }) => ({
   agentOptions(row, field, withAll) {
     const v = row[field];
     return agentChoices(this.catalog, Array.isArray(v) ? v : v ? [v] : [], withAll);
+  },
+  /** The colour slot of an agent's chip. */
+  slotOf(name) {
+    return agentSlot(name);
   },
   agentSummary(row, field) {
     return agentSummary(Array.isArray(row[field]) ? row[field] : []);

@@ -1,0 +1,128 @@
+/*
+ * Architecture overview — the frame of a repository's Architecture page: the
+ * head (title, description, sync pill), the stat cards, the tab counts, the
+ * empty-state card and the compact events panel.
+ * <div class="arch-head"><div><h1>…</h1><p>…</p></div><span class="badge sync">…</span></div>
+ * <div class="stat-cards"><div class="stat"><b>8</b><span>tools</span></div>…</div>
+ * <div class="tabs arch-tabs" role="tablist"><button role="tab">Tools <span class="count">8</span></button>…</div>
+ * <div class="arch-empty"><h2>…</h2><p>…</p></div>
+ * <details class="events-panel" open><summary>…</summary><ol>…</ol></details>
+ */
+
+@layer blocks {
+  /* The sticky save bar must not cover what scrollIntoView brings into view. */
+  .arch-scroll { scroll-padding-block-end: 4.5rem; }
+
+  .arch-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--space-l);
+
+    & p { max-inline-size: 68ch; }
+  }
+
+  /* The sync pill: a dot and the file's state in words. */
+  .badge.sync {
+    border-radius: var(--radius-round);
+    padding-inline: var(--space-s);
+
+    &::before {
+      content: "";
+      inline-size: 0.5rem;
+      block-size: 0.5rem;
+      border-radius: 50%;
+      background: currentColor;
+    }
+  }
+
+  .arch-pattern { max-inline-size: 18rem; }
+
+  .stat-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+    gap: var(--space-m);
+
+    & > .stat {
+      padding: var(--space-m);
+      background: var(--color-raised);
+      border: var(--border-width) solid var(--color-line);
+      border-radius: var(--radius-md);
+
+      & > b {
+        display: block;
+        font-size: var(--text-xl);
+        line-height: 1.1;
+      }
+
+      & > span {
+        font-size: var(--text-sm);
+        color: var(--color-ink-muted);
+      }
+    }
+  }
+
+  .tabs.arch-tabs {
+    padding-inline: 0;
+
+    & .count {
+      padding-inline: 0.4rem;
+      border-radius: var(--radius-round);
+      background: var(--color-sunken);
+      color: var(--color-ink-faint);
+      font-size: var(--text-xs);
+    }
+  }
+
+  /* Tall enough that a deep link can bring the tab list to the top of the screen. */
+  .arch-body {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-m);
+    min-block-size: calc(100dvh - 7rem);
+  }
+
+  .arch-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-s);
+    padding: var(--space-2xl) var(--space-l);
+    border: var(--border-width) dashed var(--color-line-strong);
+    border-radius: var(--radius-md);
+    color: var(--color-ink-muted);
+    text-align: center;
+
+    & h2 { color: var(--color-ink); }
+    & p { max-inline-size: 44rem; }
+    & .actions { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--space-s); }
+    & [data-found] { font-size: var(--text-xs); color: var(--color-ink-faint); }
+    & [data-candidates] { text-align: start; }
+  }
+
+  .events-panel {
+    border: var(--border-width) solid var(--color-line);
+    border-radius: var(--radius-md);
+    background: var(--color-canvas);
+
+    & > summary {
+      display: flex;
+      align-items: center;
+      gap: var(--space-s);
+      min-block-size: var(--size-row);
+      padding-inline: var(--space-m);
+      font-size: var(--text-sm);
+      font-weight: var(--weight-medium);
+      cursor: pointer;
+    }
+
+    &[open] > summary { border-block-end: var(--border-width) solid var(--color-line); }
+
+    & > .more {
+      display: flex;
+      padding: var(--space-xs) var(--space-m);
+      border-block-start: var(--border-width) solid var(--color-line);
+    }
+  }
+}

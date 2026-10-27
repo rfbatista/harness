@@ -18,17 +18,26 @@ import {
   exportBadge,
   pathForTab,
   sameRecord,
-  summarize,
+  statCards,
+  tabCounts,
+  changeSummary,
   tabForPath,
   tabOfPointer,
 } from "../../domain/record.js";
 
-import { prependEvent, ruleEventRow } from "../../domain/events.js";
+import { EVENTS_COMPACT, prependEvent, ruleEventRow, shownEvents } from "../../domain/events.js";
+import { hexagonalLayers } from "../../domain/layers.js";
+
+/** What the page says on the window when it swaps the draft for another (a discard, a reload, a load): an open edit drawer holds a copy of a row that is gone. */
+export const DRAFT_REPLACED = "architecture-draft-replaced";
 
 /** @param {{ gateway: ReturnType<typeof import("../../infrastructure/architecture-gateway.js").architectureGateway> }} deps */
 export const architecturePage = ({ gateway }) => () => ({
   projectId: "",
   repositoryId: "",
+  /** The repository's checkout and the paths it hides from trees, for the folder picker. */
+  rootDir: "",
+  ignoredPaths: [],
   base: "",
   /** The open tab's slug, and for Output its view (file or diagram). */
   tab: TABS[0].slug,
@@ -56,20 +65,41 @@ export const architecturePage = ({ gateway }) => () => ({
   unfollow: null,
   /** Recent rule events of the repository, newest first, as the API names them. */
   events: [],
+  /** Whether the events panel shows every event, not only the first few. */
+  allEvents: false,
+  /** How many paths match more than one layer: the Layers tab sets it from its preview. */
+  overlapCount: 0,
+  /** The layers whose paths overlap another layer's, and how many files match no layer: the Layers tab sets them too. */
+  overlapNames: [],
+  unmatchedCount: 0,
+  /** How many files each layer matches, by layer name, from the Layers tab's preview; null until it has answered. */
+  fileCounts: null,
+  /** Whether the page was opened on a tab's deep link and has not yet scrolled to the tabs. */
+  deepLinked: false,
 
   get eventRows() {
     const now = new Date();
-    return this.events.map((e) => ruleEventRow(e, this.projectId, now));
+    return shownEvents(this.events, this.allEvents).map((e) => ruleEventRow(e, this.projectId, now));
   },
   get hasEvents() {
     return this.events.length > 0;
+  },
+  get hasMoreEvents() {
+    return this.events.length > EVENTS_COMPACT;
+  },
+  get eventsToggleText() {
+    return this.allEvents ? "Show fewer" : `Show all (${this.events.length})`;
   },
 
   get isNew() {
     return this.loaded && !this.exists;
   },
-  get summary() {
-    return this.draft ? summarize(this.draft) : [];
+  get stats() {
+    return this.draft ? statCards(this.draft, this.overlapCount) : [];
+  },
+  /** Whether the draft has no layers yet, so the hexagonal preset has nothing to replace. */
+  get canStartHexagonal() {
+    return !!this.draft && (this.draft.layers ?? []).length === 0;
   },
   get exportBadge() {
     return exportBadge(this.exportInfo);
@@ -78,8 +108,7 @@ export const architecturePage = ({ gateway }) => () => ({
     return !!this.draft && !!this.saved && !sameRecord(this.draft, this.saved.record);
   },
   get changeText() {
-    const n = this.dirty ? diffRecords(this.saved.record, this.draft).length : 0;
-    return n === 1 ? "1 change" : `${n} changes`;
+    return this.dirty ? changeSummary(diffRecords(this.saved.record, this.draft)) : "0 changes";
   },
   get barSummary() {
     const n = this.errors.length;
@@ -113,9 +142,12 @@ export const architecturePage = ({ gateway }) => () => ({
     return this.diffRows.length > 0;
   },
   get tabs() {
+    const counts = tabCounts(this.draft);
     return TABS.map((t) => ({
       slug: t.slug,
       label: t.label,
+      hasCount: this.draft !== null && counts[t.slug] !== null,
+      count: counts[t.slug],
       id: `architecture-tab-${t.slug}`,
       panelId: `architecture-panel-${t.slug}`,
       selected: t.slug === this.tab,
@@ -131,7 +163,10 @@ export const architecturePage = ({ gateway }) => () => ({
       const seed = readSeed(this.$el);
       this.projectId = seed.project_id;
       this.repositoryId = seed.repository_id;
+      this.rootDir = seed.root_dir ?? "";
+      this.ignoredPaths = Array.isArray(seed.ignored_paths) ? seed.ignored_paths : [];
       this.base = seed.base;
+      this.deepLinked = (seed.tab ?? "") !== "";
       this.applyPath(seed.tab ?? "");
     } catch (err) {
       this.error = describeError(err);
@@ -225,9 +260,28 @@ export const architecturePage = ({ gateway }) => () => ({
     try {
       this.take(await gateway.get(this.repositoryId));
       this.error = null;
+      this.revealDeepLink();
     } catch (err) {
       this.error = describeError(err);
     }
+  },
+
+  /** A deep link opens its tab with the tab list at the top of the viewport. */
+  revealDeepLink() {
+    if (!this.deepLinked) return;
+    this.deepLinked = false;
+    this.$nextTick(() => document.getElementById("architecture-tabs")?.scrollIntoView({ block: "start" }));
+  },
+
+  toggleEvents() {
+    this.allEvents = !this.allEvents;
+  },
+
+  /** The empty state's one-click start: the hexagonal layers with the default access. */
+  startHexagonal() {
+    if (!this.canStartHexagonal) return;
+    this.draft.layers = hexagonalLayers();
+    if (!this.draft.pattern) this.draft.pattern = "hexagonal";
   },
 
   errorFor(path) {
@@ -269,6 +323,7 @@ export const architecturePage = ({ gateway }) => () => ({
   discard() {
     this.draft = cloneRecord(this.saved.record);
     this.clearProblems();
+    window.dispatchEvent(new CustomEvent(DRAFT_REPLACED));
   },
 
   /** Shows what the draft changes against the saved version, or against the newest one after a conflict. */
@@ -313,6 +368,7 @@ export const architecturePage = ({ gateway }) => () => ({
     this.exportInfo = state.export;
     this.loaded = true;
     this.clearProblems();
+    window.dispatchEvent(new CustomEvent(DRAFT_REPLACED));
   },
 
   dismissError() {
