@@ -260,30 +260,31 @@ func TestOrchestrationTablesMatchThePublishedDesign(t *testing.T) {
 	}
 }
 
-// Edit opens the row's editor in place; typing in it updates the draft (the row, the counts and the save bar follow) and Done closes it.
-func TestEditingARowInlineUpdatesTheDraft(t *testing.T) {
+// Edit opens the row in the drawer; Apply writes its fields to the draft (the row, the counts and the save bar follow) and closes it.
+func TestEditingARowInTheDrawerUpdatesTheDraftOnApply(t *testing.T) {
 	rig := newArchRig(t)
 	rec := descRecord()
 	rec["tools"].([]any)[1].(map[string]any)["usage"] = "Run it last." // so the record saves
 	rig.api.seed(rec)
 	openDescTab(t, rig, "instructions", "instructions")
-	entry := `#architecture-panel-instructions [data-entry]:nth-child(2)`
+	entry := `#architecture-panel-instructions [data-entry]:nth-child(2)` // the x-for template is the first child, so this is the first entry
+	drawer := `#architecture-panel-instructions [data-drawer]`
 	var closed, open string
 	rig.run(t,
-		chromedp.Evaluate(fmt.Sprintf(`String(!!document.querySelector(%q + ' [data-editor]')?.checkVisibility())`, entry), &closed),
+		chromedp.Evaluate(fmt.Sprintf(`String(!!document.querySelector(%q)?.checkVisibility())`, drawer), &closed),
 		archClick(entry+` [data-row] button[data-edit]`),
-		poll(fmt.Sprintf(`document.querySelector(%q + ' [data-editor]').checkVisibility()`, entry)),
+		poll(fmt.Sprintf(`document.querySelector(%q).checkVisibility()`, drawer)),
 		chromedp.Evaluate(fmt.Sprintf(`document.querySelector(%q + ' [data-edit]').getAttribute('aria-expanded')`, entry), &open),
-		archFill("instructions", 0, "path", "AGENTS.md"),
-		archFill("instructions", 0, "note", "Read first."),
+		setDrawerField("instructions", "instruction", "path", "AGENTS.md"),
+		setDrawerField("instructions", "instruction", "note", "Read first."),
+		archClick(drawer+` [data-apply]`),
 		poll(fmt.Sprintf(`document.querySelector(%q + ' [data-row] [data-path]').textContent.trim() === 'AGENTS.md'`, entry)),
 		poll(fmt.Sprintf(`document.querySelector(%q + ' [data-row] [data-note]').textContent.trim() === 'Read first.'`, entry)),
 		poll(`!!document.querySelector('[data-save-bar]')?.checkVisibility()`),
-		archClick(entry+` [data-editor] [data-done]`),
-		poll(fmt.Sprintf(`!document.querySelector(%q + ' [data-editor]').checkVisibility()`, entry)),
+		poll(fmt.Sprintf(`!document.querySelector(%q).checkVisibility()`, drawer)),
 	)
 	if closed != "false" || open != "true" {
-		t.Fatalf("editor visible before Edit = %q, aria-expanded after = %q", closed, open)
+		t.Fatalf("drawer visible before Edit = %q, aria-expanded after = %q", closed, open)
 	}
 	rig.run(t, archClick(archSave), poll(`!document.querySelector('[data-save-bar]')?.checkVisibility()`))
 	if in := rig.api.lastSaved()["instructions"].([]any)[0].(map[string]any); in["path"] != "AGENTS.md" || in["note"] != "Read first." {
@@ -291,12 +292,12 @@ func TestEditingARowInlineUpdatesTheDraft(t *testing.T) {
 	}
 }
 
-// A validation error from the server opens the row's editor and shows on the marked field.
-func TestAValidationErrorOpensTheRowAndMarksItsField(t *testing.T) {
+// A validation error from the server opens the drawer on the row and shows on the marked field.
+func TestAValidationErrorOpensTheRowsDrawerAndMarksItsField(t *testing.T) {
 	rig := newArchRig(t)
 	rig.api.seed(descRecord())
 	openDescTab(t, rig, "tools", "tools")
-	var visible, invalid, inRow string
+	var visible, invalid, inDrawer, index string
 	rig.run(t,
 		archFill("tools", 1, "usage", ""),
 		archFill("tools", 1, "name", "deploy2"),
@@ -304,11 +305,12 @@ func TestAValidationErrorOpensTheRowAndMarksItsField(t *testing.T) {
 		poll(`!!document.querySelector('[data-error-for="/tools/1/usage"]')`),
 		poll(`document.querySelector('[data-error-for="/tools/1/usage"]').checkVisibility()`),
 		chromedp.Evaluate(`String(document.querySelector('[data-error-for="/tools/1/usage"]').checkVisibility())`, &visible),
-		chromedp.Evaluate(`document.querySelectorAll('#architecture-panel-tools [data-entry]')[1].querySelector('[data-field=usage]').getAttribute('aria-invalid')`, &invalid),
-		chromedp.Evaluate(`String(!!document.querySelectorAll('#architecture-panel-tools [data-entry]')[1].querySelector('[data-error-for="/tools/1/usage"]'))`, &inRow),
+		chromedp.Evaluate(`document.querySelector('#architecture-panel-tools [data-drawer] [data-field=usage]').getAttribute('aria-invalid')`, &invalid),
+		chromedp.Evaluate(`String(!!document.querySelector('#architecture-panel-tools [data-drawer] [data-error-for="/tools/1/usage"]'))`, &inDrawer),
+		chromedp.Evaluate(`document.querySelector('#architecture-panel-tools [data-drawer]').dataset.drawerIndex`, &index),
 	)
-	if visible != "true" || invalid != "true" || inRow != "true" {
-		t.Fatalf("error visible = %q, field aria-invalid = %q, inside its row = %q", visible, invalid, inRow)
+	if visible != "true" || invalid != "true" || inDrawer != "true" || index != "1" {
+		t.Fatalf("error visible = %q, field aria-invalid = %q, inside the drawer = %q, drawer on row %q", visible, invalid, inDrawer, index)
 	}
 }
 

@@ -164,3 +164,17 @@ test("a layer with no default access is read everywhere, so only an explicit cha
   const all = buildDiagram(r, { agents: AGENTS });
   assert.deepEqual(all.edges, [{ agent: "devops", layer: "docs", access: "change" }]);
 });
+
+test("hand-offs of everyone are in the model when asked for, not only the focused agent's", () => {
+  assert.equal(buildDiagram(record(), { agents: AGENTS }).handoffs.length, 0);
+  const all = buildDiagram({ ...record(), orchestration: { handoffs: [{ from: "devops", to: "go-developer", when: "w" }, { from: "software-architect", to: "devops", when: "w" }] } }, { agents: AGENTS, handoffs: true });
+  assert.equal(all.handoffs.length, 2);
+});
+
+test("layers with overlapping paths and the count of unmatched files are marked on the model", () => {
+  const d = buildDiagram(record(), { agents: AGENTS, problems: { overlaps: ["domain"], unmatched: 12 } });
+  assert.equal(d.nodes.layers.find((l) => l.name === "domain").overlap, true);
+  assert.equal(d.nodes.layers.find((l) => l.name === "adapters").overlap, false);
+  assert.equal(d.nodes.layers.find((l) => l.name === "unlayered").unmatched, 12);
+  assert.equal(buildDiagram(record(), { agents: AGENTS }).nodes.layers.every((l) => !l.overlap && !l.unmatched), true);
+});

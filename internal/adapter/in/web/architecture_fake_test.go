@@ -47,6 +47,8 @@ type fakeArchitectureAPI struct {
 	// treeRoots are the roots list_tree was asked for; treeFails makes it refuse.
 	treeRoots []string
 	treeFails bool
+	// discoverFails makes discover_repository_architecture refuse.
+	discoverFails bool
 }
 
 func newFakeArchitectureAPI(feed *sseFeed) *fakeArchitectureAPI {
@@ -126,6 +128,10 @@ func (f *fakeArchitectureAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 	case "/api/get_repository_architecture":
 		f.json(w, f.state())
 	case "/api/discover_repository_architecture":
+		if f.discoverFails {
+			f.fail(w, http.StatusInternalServerError, "DISCOVERY_FAILED", "the checkout could not be read", nil)
+			return
+		}
 		f.json(w, f.discovered)
 	case "/api/preview_layers":
 		f.json(w, f.preview(in))

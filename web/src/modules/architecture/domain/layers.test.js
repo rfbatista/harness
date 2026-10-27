@@ -76,7 +76,8 @@ test("setting a whole row gives an agent one level on every layer", () => {
 });
 
 test("the access of unlayered paths is told in words", () => {
-  assert.equal(accessSentence({ default: "read", agents: { "software-architect": "change", devops: "change" } }), "everyone reads, only software-architect and devops change");
+  assert.equal(accessSentence({ default: "read", agents: { "software-architect": "change", devops: "change" } }), "everyone reads, only devops and software-architect change"); // names sorted, whatever order the record keeps them in
+  assert.equal(accessSentence({ default: "read", agents: { devops: "change", "software-architect": "change" } }), "everyone reads, only devops and software-architect change");
   assert.equal(accessSentence({ default: "read", agents: {} }), "everyone reads, nobody changes");
   assert.equal(accessSentence({ default: "change", agents: {} }), "everyone reads and changes");
   assert.equal(accessSentence({ default: "none", agents: { plain: "read" } }), "nobody reads, only plain reads");

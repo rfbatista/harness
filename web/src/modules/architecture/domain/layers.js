@@ -130,7 +130,7 @@ const joinNames = (names) => (names.length < 3 ? names.join(" and ") : `${names.
 export function accessSentence(access) {
   const base = access?.default ?? "read";
   const agents = Object.entries(access?.agents ?? {});
-  const named = (level) => agents.filter(([, v]) => v === level).map(([k]) => k);
+  const named = (level) => agents.filter(([, v]) => v === level).map(([k]) => k).sort(); // sorted: the record keeps its agents in no set order
   if (base === "change") return "everyone reads and changes";
   if (base === "read") {
     const changers = named("change");

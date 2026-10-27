@@ -28,6 +28,9 @@ import {
 import { EVENTS_COMPACT, prependEvent, ruleEventRow, shownEvents } from "../../domain/events.js";
 import { hexagonalLayers } from "../../domain/layers.js";
 
+/** What the page says on the window when it swaps the draft for another (a discard, a reload, a load): an open edit drawer holds a copy of a row that is gone. */
+export const DRAFT_REPLACED = "architecture-draft-replaced";
+
 /** @param {{ gateway: ReturnType<typeof import("../../infrastructure/architecture-gateway.js").architectureGateway> }} deps */
 export const architecturePage = ({ gateway }) => () => ({
   projectId: "",
@@ -66,6 +69,9 @@ export const architecturePage = ({ gateway }) => () => ({
   allEvents: false,
   /** How many paths match more than one layer: the Layers tab sets it from its preview. */
   overlapCount: 0,
+  /** The layers whose paths overlap another layer's, and how many files match no layer: the Layers tab sets them too. */
+  overlapNames: [],
+  unmatchedCount: 0,
   /** Whether the page was opened on a tab's deep link and has not yet scrolled to the tabs. */
   deepLinked: false,
 
@@ -315,6 +321,7 @@ export const architecturePage = ({ gateway }) => () => ({
   discard() {
     this.draft = cloneRecord(this.saved.record);
     this.clearProblems();
+    window.dispatchEvent(new CustomEvent(DRAFT_REPLACED));
   },
 
   /** Shows what the draft changes against the saved version, or against the newest one after a conflict. */
@@ -359,6 +366,7 @@ export const architecturePage = ({ gateway }) => () => ({
     this.exportInfo = state.export;
     this.loaded = true;
     this.clearProblems();
+    window.dispatchEvent(new CustomEvent(DRAFT_REPLACED));
   },
 
   dismissError() {

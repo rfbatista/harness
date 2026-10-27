@@ -16,7 +16,7 @@ export const UNLAYERED = "unlayered";
  * @typedef {object} Diagram
  * @property {boolean} draft  Drawn from unsaved changes.
  * @property {string} focus  The focused agent, or "".
- * @property {{ layers: { name: string, pattern: string }[], agents: { name: string, focused: boolean }[] }} nodes
+ * @property {{ layers: { name: string, pattern: string, overlap: boolean, unmatched: number }[], agents: { name: string, focused: boolean }[] }} nodes
  * @property {{ agent: string, layer: string, access: "change" | "read" }[]} edges
  * @property {{ rule: string, kind: string, mode: "blocking" | "warning", glyph: string, agent: string, layer: string }[]} guards
  * @property {{ name: string, agents: string[] }[]} regions  Sandboxes, with who runs in each.
@@ -30,10 +30,14 @@ export const modeGlyph = (mode) => (mode === "blocking" ? "✕" : "!");
 
 /**
  * @param {object} record  The repository architecture record.
- * @param {{ agents?: string[], focus?: string, draft?: boolean }} [options]  agents is the catalog's names.
+ * @param {{ agents?: string[], focus?: string, draft?: boolean, handoffs?: boolean, problems?: { overlaps?: string[], unmatched?: number } }} [options]
+ *   agents is the catalog's names; handoffs asks for every hand-off, not only the focused agent's;
+ *   problems names the layers whose paths overlap and how many files match no layer.
  * @returns {Diagram}
  */
-export function buildDiagram(record, { agents = [], focus = "", draft = false } = {}) {
+export function buildDiagram(record, { agents = [], focus = "", draft = false, handoffs = false, problems = {} } = {}) {
+  const overlapping = problems.overlaps ?? [];
+  const unmatched = problems.unmatched ?? 0;
   const layers = record.layers ?? [];
   const names = [...new Set([...agents, PLAIN])];
   const targets = [
@@ -66,18 +70,19 @@ export function buildDiagram(record, { agents = [], focus = "", draft = false } 
     draft,
     focus,
     nodes: {
-      layers: targets.map((t) => ({ name: t.name, pattern: t.pattern })),
+      layers: targets.map((t) => ({ name: t.name, pattern: t.pattern, overlap: overlapping.includes(t.name), unmatched: t.name === UNLAYERED ? unmatched : 0 })),
       agents: names.map((name) => ({ name, focused: name === focus })),
     },
     edges,
     guards,
     regions: lists(record.sandboxes).map((s) => ({ name: s.name, agents: names.filter((a) => inScope(s.used_by, a)) })),
     tools: focus ? mine(lists(record.tools)).map((t) => ({ name: t.name, kind: t.kind, writes: !!t.writes })) : [],
-    handoffs: focus
-      ? lists(record.orchestration?.handoffs)
-          .filter((h) => h.from === focus || h.to === focus)
-          .map((h) => ({ from: h.from, to: h.to, when: h.when }))
-      : [],
+    handoffs:
+      focus || handoffs
+        ? lists(record.orchestration?.handoffs)
+            .filter((h) => !focus || h.from === focus || h.to === focus)
+            .map((h) => ({ from: h.from, to: h.to, when: h.when }))
+        : [],
     instructionCount: focus ? mine(record.instructions).length : 0,
   };
 }

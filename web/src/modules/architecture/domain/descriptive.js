@@ -180,3 +180,63 @@ export function discoveryText(candidates) {
   const list = found.length === 1 ? found[0] : `${head} and ${found[found.length - 1]}`;
   return `We found ${list} in the repository. Confirm them to add them to the architecture.`;
 }
+
+/** A value as it is saved: without the empty strings, empty lists, nulls and false flags a draft grows while it is edited. */
+function plain(v) {
+  if (Array.isArray(v)) return v.map(plain);
+  if (v === null || typeof v !== "object") return v;
+  const out = {};
+  for (const k of Object.keys(v).sort()) {
+    const x = plain(v[k]);
+    const empty = x === "" || x === null || x === undefined || x === false || (Array.isArray(x) && x.length === 0);
+    if (!empty) out[k] = x;
+  }
+  return out;
+}
+const sameRow = (a, b) => JSON.stringify(plain(a)) === JSON.stringify(plain(b));
+
+/**
+ * Which rows of a draft list differ from the saved list. With as many rows as
+ * were saved, row n is compared with saved row n; after a row was added or
+ * removed, each row is compared with the saved row that has its key (a row
+ * with no such saved row is new, so edited).
+ * @param {any[] | undefined} saved @param {any[] | undefined} draft @param {(row: any) => string} keyOf
+ * @returns {boolean[]}
+ */
+export function editedRows(saved, draft, keyOf) {
+  const was = Array.isArray(saved) ? saved : [];
+  const now = Array.isArray(draft) ? draft : [];
+  if (was.length === now.length) return now.map((row, i) => !sameRow(row, was[i]));
+  const taken = new Set();
+  return now.map((row) => {
+    const key = keyOf(row);
+    const at = key === "" ? -1 : was.findIndex((r, i) => !taken.has(i) && keyOf(r) === key);
+    if (at < 0) return true;
+    taken.add(at);
+    return !sameRow(row, was[at]);
+  });
+}
+
+/**
+ * The record's hand-offs as chains of agents, in order: a hand-off that starts
+ * where the last one ended continues its chain, any other starts a new one.
+ * A hand-off missing its from or its to is not drawn.
+ * @param {{ from?: string, to?: string }[] | undefined} handoffs @returns {string[][]}
+ */
+export function handoffChains(handoffs) {
+  const chains = [];
+  for (const h of Array.isArray(handoffs) ? handoffs : []) {
+    if (!h?.from || !h?.to) continue;
+    const last = chains[chains.length - 1];
+    if (last && last[last.length - 1] === h.from) last.push(h.to);
+    else chains.push([h.from, h.to]);
+  }
+  return chains;
+}
+
+/** Whether an instruction path is one discovery did not list. Paths of harness:// are the harness's own, never in a checkout; null means discovery has not answered. @param {Set<string> | null} found */
+export function isMissingPath(path, found) {
+  const p = String(path ?? "").trim();
+  if (!found || p === "" || p.startsWith("harness://")) return false;
+  return !found.has(p);
+}

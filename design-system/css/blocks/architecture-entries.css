@@ -9,7 +9,9 @@
  * <section class="entry-card"><header><h3>…</h3><button>Edit</button></header><div class="entry-card-body">
  *   <div class="entry-kv"><div><span class="entry-label">Runs where</span> …</div></div><div class="reach-grid"><div><span class="entry-label">Can reach</span><ul class="reach">…</ul></div>…</div></div></section>
  * <section class="entry-card"><header><h3>Model routing</h3></header><table class="entry-table">…</table></section>
- * A row with data-open has its editor shown, with the signal bar on its edge.
+ * A row with data-open is the one the edit drawer is on; one with data-edited differs from the saved version.
+ * <div class="arch-split" data-open><div>…the list…</div><aside class="arch-drawer"><section class="entry-card">…</section></aside></div>
+ * <div class="hand-chain"><span class="hand-step"><span class="agent-chip">…</span><span>→</span></span>…</div>
  */
 
 @layer blocks {
@@ -164,5 +166,45 @@
     & > tbody[data-open="true"] > tr[data-row] > td { background: var(--color-selected); }
     & > tbody > tr[data-editor-row] > td { background: var(--color-canvas); }
     & .entry-action { inline-size: 1%; white-space: nowrap; text-align: end; }
+  }
+
+  /* The edit drawer: beside the list, sticky, opening only when a row is being edited. */
+  .arch-split {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-l);
+    align-items: start;
+
+    @media (min-width: 75rem) {
+      &[data-open="true"] { grid-template-columns: minmax(0, 1fr) 26rem; }
+    }
+  }
+
+  .arch-drawer {
+    position: sticky;
+    inset-block-start: var(--space-3xl);
+    min-inline-size: 0;
+
+    & .entry-card { margin: 0; }
+    & .entry-card > [data-editor] { background: var(--color-raised); }
+  }
+
+  /* A row the draft changed: the amber edge on its left. */
+  .arch-entries > li[data-edited="true"],
+  .entry-card[data-edited="true"] { box-shadow: inset 3px 0 0 var(--color-attention); }
+  .entry-table > tbody[data-edited="true"] > tr[data-row] > td:first-child { box-shadow: inset 3px 0 0 var(--color-attention); }
+
+  /* The hand-off chain: agents in order, an arrow between each. */
+  .hand-chain {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-xs);
+  }
+
+  .hand-step {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-xs);
   }
 }

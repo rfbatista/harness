@@ -349,6 +349,8 @@ export const layersTab = ({ gateway }) => () => ({
       if (n !== this.seq) return; // a newer request was sent: this answer is out of date
       this.preview = { ...answer, keys: layers.map((l) => JSON.stringify(l.match)) };
       this.overlapCount = answer.overlaps.length; // the page's overview counts them
+      this.overlapNames = [...new Set(answer.overlaps.flatMap((o) => o.layers))]; // the diagram marks them
+      this.unmatchedCount = answer.unlayered.fileCount;
       this.previewFailed = "";
     } catch (err) {
       if (n !== this.seq) return;

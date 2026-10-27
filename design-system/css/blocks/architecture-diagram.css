@@ -1,0 +1,105 @@
+/*
+ * Architecture diagram — the Output tab's diagram view as the published
+ * architecture-diagram design draws it: the drawing, and beside it cards for
+ * Show, the focus and the Key. The drawing is an SVG the page paints with the
+ * dg-* classes below, so its colours are design tokens and follow light and
+ * dark; the same drawing downloaded as a file has literal colours instead.
+ * <div class="diagram-work"><div class="diagram-canvas">…<svg class="dg">…</svg></div>
+ *   <aside><section class="dg-card"><header><h3>Show</h3></header><div class="dg-body dg-options">…</div></section>…</aside></div>
+ */
+
+@layer blocks {
+  .diagram-canvas { --dg-handoff: oklch(0.55 0.14 300); }
+
+  .diagram-work {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-l);
+    align-items: start;
+
+    & > aside {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
+      gap: var(--space-l);
+      align-items: start;
+    }
+  }
+
+  .dg-card {
+    background: var(--color-raised);
+    border: var(--border-width) solid var(--color-line);
+    border-radius: var(--radius-md);
+
+    & > header {
+      display: flex;
+      align-items: center;
+      gap: var(--space-s);
+      min-block-size: 2.5rem;
+      padding: var(--space-s) var(--space-m);
+      border-block-end: var(--border-width) solid var(--color-line);
+
+      & > h3 { flex: 1; }
+    }
+  }
+
+  .dg-body {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-m);
+    padding: var(--space-m);
+  }
+
+  .dg-options > label {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-s);
+    font-size: var(--text-sm);
+
+    & small {
+      display: block;
+      font-size: var(--text-xs);
+      color: var(--color-ink-faint);
+    }
+  }
+
+  .dg-key {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-s);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    font-size: var(--text-sm);
+
+    & > li {
+      display: flex;
+      align-items: center;
+      gap: var(--space-s);
+      max-inline-size: none;
+    }
+
+    & svg { flex: none; min-inline-size: 0; inline-size: auto; }
+  }
+
+  /* The drawing. Every colour is a token; shapes keep the attributes they were drawn with. */
+  .dg { font-family: var(--font-sans); }
+  .dg-paper { fill: var(--color-raised); }
+  .dg-text { fill: var(--color-ink); }
+  .dg-sub { fill: var(--color-ink-muted); font-family: var(--font-mono); }
+  .dg-region { fill: var(--color-signal-wash); stroke: var(--color-signal); fill-opacity: 0.45; }
+  .dg-region-title { fill: var(--color-signal-strong); font-weight: var(--weight-bold); }
+  .dg-agent { fill: var(--color-raised); stroke: var(--color-line-control); }
+  .dg-agent.dg-focused { fill: var(--color-selected); stroke: var(--color-signal); }
+  .dg-layer { fill: var(--color-raised); stroke: var(--color-line-strong); }
+  .dg-layer.dg-attention { stroke: var(--color-attention); }
+  .dg-edge-change { stroke: var(--color-signal); }
+  .dg-edge-read { stroke: var(--color-ink-faint); opacity: 0.7; }
+  .dg-handoff { stroke: var(--dg-handoff, var(--color-ink-muted)); }
+  .dg-handoff-head { fill: var(--dg-handoff, var(--color-ink-muted)); }
+  .dg-guard-block { fill: var(--color-danger); stroke: var(--color-raised); }
+  .dg-guard-warn { fill: var(--color-raised); stroke: var(--color-attention); }
+  .dg-glyph-block { fill: var(--color-danger-ink); }
+  .dg-glyph-warn { fill: var(--color-attention); }
+  .dg-warn-box { fill: var(--color-attention-wash); stroke: var(--color-attention); }
+  .dg-warn-text { fill: var(--color-attention-strong); }
+}

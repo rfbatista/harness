@@ -129,6 +129,7 @@
 @import url("./blocks/layer-editor.css");
 @import url("./blocks/folder-picker.css");
 @import url("./blocks/architecture-entries.css");
+@import url("./blocks/architecture-diagram.css");
 @import url("./blocks/agent-picker.css");
 @import url("./blocks/access-matrix.css");
 @import url("./blocks/layers-workspace.css");

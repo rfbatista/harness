@@ -10,19 +10,25 @@ import (
 
 // archPick makes the checkboxes of an agent list field of the nth entry of a
 // tab match exactly the given names (a person ticks "all" or agents), through
-// the same clicks. It waits for the catalog's choices to be there.
+// the same clicks, in the entry's edit drawer, then applies. It waits for the
+// catalog's choices to be there.
 func archPick(tab string, n int, field string, names ...string) chromedp.Action {
-	return poll(fmt.Sprintf(`(() => {
-		const box = document.querySelectorAll('#architecture-panel-%s [data-entry]')[%d]?.querySelector('[data-field=%s]');
-		const want = %q.split(',').filter(Boolean);
-		if (!box) return false;
-		const all = [...box.querySelectorAll('input[type=checkbox]')];
-		if (!want.every(w => all.some(c => c.value === w))) return false;
-		// ticking "all" clears the others, ticking an agent clears "all": click the wanted ones in order
-		for (const w of want) { const c = all.find(c => c.value === w); if (!c.checked) c.click(); }
-		for (const c of all) { if (c.checked && !want.includes(c.value)) c.click(); }
-		return all.filter(c => c.checked).map(c => c.value).sort().join(',') === [...want].sort().join(',');
-	})()`, tab, n, field, strings.Join(names, ",")))
+	kind := drawerKinds[tab]
+	return chromedp.Tasks{
+		openDrawerOf(tab, kind, n),
+		poll(fmt.Sprintf(`(() => {
+			const box = document.querySelector('#architecture-panel-%s [data-drawer="%s"] [data-field=%s]');
+			const want = %q.split(',').filter(Boolean);
+			if (!box) return false;
+			const all = [...box.querySelectorAll('input[type=checkbox]')];
+			if (!want.every(w => all.some(c => c.value === w))) return false;
+			// ticking "all" clears the others, ticking an agent clears "all": click the wanted ones in order
+			for (const w of want) { const c = all.find(c => c.value === w); if (!c.checked) c.click(); }
+			for (const c of all) { if (c.checked && !want.includes(c.value)) c.click(); }
+			return all.filter(c => c.checked).map(c => c.value).sort().join(',') === [...want].sort().join(',');
+		})()`, tab, kind, field, strings.Join(names, ","))),
+		archClick(drawerSel(tab, kind, "[data-apply]")),
+	}
 }
 
 // archOptions reads a select's options as "value=label" strings.
@@ -131,9 +137,10 @@ func TestAgentListsArePickedFromTheCatalogAndKeepUnknownNames(t *testing.T) {
 	rig.run(t,
 		chromedp.EmulateViewport(1280, 900),
 		chromedp.Navigate(rig.url("/instructions")),
-		poll(`document.querySelectorAll('#architecture-panel-instructions [data-entry]')[1]?.querySelectorAll('[data-field=applies_to] input[type=checkbox]').length === 6`),
-		chromedp.Evaluate(`[...document.querySelectorAll('#architecture-panel-instructions [data-entry]')[1].querySelectorAll('[data-field=applies_to] label')].map(l => l.textContent.trim().replace(/\s+/g, ' ')).join('|')`, &labels),
-		chromedp.Evaluate(`[...document.querySelectorAll('#architecture-panel-instructions [data-entry]')[1].querySelectorAll('[data-field=applies_to] input:checked')].map(c => c.value).join(',')`, &checked),
+		openDrawerOf("instructions", "instruction", 1),
+		poll(`document.querySelectorAll('#architecture-panel-instructions [data-drawer] [data-field=applies_to] input[type=checkbox]').length === 6`),
+		chromedp.Evaluate(`[...document.querySelectorAll('#architecture-panel-instructions [data-drawer] [data-field=applies_to] label')].map(l => l.textContent.trim().replace(/\s+/g, ' ')).join('|')`, &labels),
+		chromedp.Evaluate(`[...document.querySelectorAll('#architecture-panel-instructions [data-drawer] [data-field=applies_to] input:checked')].map(c => c.value).join(',')`, &checked),
 	)
 	if want := "all|software-architect|go-developer|devops|plain (a session with no agent)|ghost (not in the catalog)"; labels != want {
 		t.Fatalf("labels = %q, want %q", labels, want)
@@ -161,19 +168,22 @@ func TestTickingAllAndAnAgentExcludeEachOther(t *testing.T) {
 	rig := newArchRig(t)
 	rig.api.seed(savedRecord())
 	var checked string
+	usedBy := `document.querySelector('main')._x_dataStack[0].draft.tools[0].used_by.join(',')` // Apply wrote the pick to the draft
 	rig.run(t,
 		chromedp.EmulateViewport(1280, 900),
 		chromedp.Navigate(rig.url("/tools")),
+		poll(`document.querySelectorAll('#architecture-panel-tools [data-entry]').length === 1`),
+		openDrawerOf("tools", "tool", 0),
 		poll(`!!document.querySelector('#architecture-panel-tools [data-field=used_by] input[value=devops]')`),
 		archPick("tools", 0, "used_by", "devops"),
-		chromedp.Evaluate(`[...document.querySelectorAll('#architecture-panel-tools [data-entry]')[0].querySelectorAll('[data-field=used_by] input:checked')].map(c => c.value).join(',')`, &checked),
+		chromedp.Evaluate(usedBy, &checked),
 	)
 	if checked != "devops" {
 		t.Fatalf("after ticking devops: %q, want devops alone", checked)
 	}
 	rig.run(t,
 		archPick("tools", 0, "used_by", "all"),
-		chromedp.Evaluate(`[...document.querySelectorAll('#architecture-panel-tools [data-entry]')[0].querySelectorAll('[data-field=used_by] input:checked')].map(c => c.value).join(',')`, &checked),
+		chromedp.Evaluate(usedBy, &checked),
 	)
 	if checked != "all" {
 		t.Fatalf("after ticking all: %q, want all alone", checked)
@@ -187,11 +197,13 @@ func TestRoutingAndHandoffAgentsAreSelectsAndKeepUnknownNames(t *testing.T) {
 	rec["orchestration"].(map[string]any)["routing"].([]any)[0].(map[string]any)["agent"] = "ghost"
 	rig.api.seed(rec)
 	rig.api.refuseSaveWith = []archError{{"path": "/orchestration/handoffs/0/to", "code": "UNKNOWN_AGENT", "message": "No agent is called nobody."}}
-	routeAgent := `#architecture-panel-orchestration [data-entry=route] select[data-field=agent]`
+	routeAgent := `#architecture-panel-orchestration [data-drawer=route] select[data-field=agent]`
 	var options, selected, msg string
 	rig.run(t,
 		chromedp.EmulateViewport(1280, 900),
 		chromedp.Navigate(rig.url("/orchestration")),
+		poll(`document.querySelectorAll('#architecture-panel-orchestration [data-entry=route]').length === 1`),
+		openDrawerOf("orchestration", "route", 0),
 		poll(fmt.Sprintf(`document.querySelector(%q)?.options.length === 6`, routeAgent)),
 		chromedp.Evaluate(archOptions(routeAgent), &options),
 		chromedp.Evaluate(fmt.Sprintf(`document.querySelector(%q).value`, routeAgent), &selected),

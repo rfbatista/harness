@@ -75,7 +75,7 @@ templ tabLayers() {
 						<h3 class="[ grow ]" x-text="current.title"></h3>
 						<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" data-move="up" x-bind:disabled="current.first" x-bind:aria-label="current.moveUpLabel" x-on:click="move(current.i, -1)">Up</button>
 						<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" data-move="down" x-bind:disabled="current.last" x-bind:aria-label="current.moveDownLabel" x-on:click="move(current.i, 1)">Down</button>
-						<button type="button" class="[ button ]" data-variant="danger" data-size="sm" data-remove-layer x-bind:aria-label="current.removeLabel" x-on:click="removeCurrent()">Delete layer</button>
+						<button type="button" class="[ button ]" data-variant="danger-outline" data-size="sm" data-remove-layer x-bind:aria-label="current.removeLabel" x-on:click="removeCurrent()">Delete layer</button>
 					</header>
 				</template>
 				<template x-if="current">

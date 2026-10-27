@@ -556,7 +556,7 @@ func TestRepositoryCoverageShowsOverlapAndUnmatchedCallouts(t *testing.T) {
 	if !strings.HasPrefix(overlap, "Overlap.") || !strings.Contains(overlap, "1 path matches more than one layer") || !strings.Contains(overlap, "narrower pattern wins") || !strings.Contains(overlap, "ports wins") {
 		t.Fatalf("overlap callout = %q", overlap)
 	}
-	if !strings.HasPrefix(unmatched, "Unmatched.") || !strings.Contains(unmatched, "2 files") || !strings.Contains(unmatched, "README.md") || !strings.Contains(unmatched, "Unmatched paths use the repository default: everyone reads, only software-architect and devops change.") {
+	if !strings.HasPrefix(unmatched, "Unmatched.") || !strings.Contains(unmatched, "2 files") || !strings.Contains(unmatched, "README.md") || !strings.Contains(unmatched, "Unmatched paths use the repository default: everyone reads, only devops and software-architect change.") {
 		t.Fatalf("unmatched callout = %q", unmatched)
 	}
 	// Matched paths tags the paths that also match another layer, and counts what overlaps and what is unmatched

@@ -79,3 +79,30 @@ test("each agent drawn is a keyboard-focusable button named for what it does", (
   }
   assert.equal(doc.querySelector('g[data-agent="devops"]').getAttribute("aria-pressed"), "true");
 });
+
+test("a themed SVG paints by class only, so the page's tokens colour it; the default keeps literal colours for the file", () => {
+  const d = buildDiagram(record, { agents: AGENTS, draft: true });
+  const themed = diagramToSvg(d, { themed: true });
+  assert.equal(/#[0-9a-fA-F]{3,6}"/.test(themed), false, "a literal colour is left in the themed picture");
+  const doc = parse(themed);
+  assert.equal(doc.querySelector("parsererror"), null);
+  assert.ok(doc.querySelector("g[data-layer] rect.dg-layer"));
+  assert.ok(doc.querySelector("g[data-agent] rect.dg-agent"));
+  assert.ok(doc.querySelector("path[data-edge].dg-edge-change"));
+  assert.ok(doc.querySelector("g[data-guard][data-mode=blocking] circle.dg-guard-block"));
+  const file = diagramToSvg(d);
+  assert.ok(file.includes("#2563eb") && file.includes('fill="#ffffff"'));
+});
+
+test("a layer with overlapping paths is marked, and the unlayered node says how many files match no layer", () => {
+  const d = buildDiagram(record, { agents: AGENTS, problems: { overlaps: ["domain"], unmatched: 12 } });
+  const doc = parse(diagramToSvg(d));
+  assert.equal(doc.querySelectorAll("g[data-layer][data-overlap]").length, 1);
+  assert.equal(doc.querySelector("g[data-layer][data-overlap]").getAttribute("data-layer"), "domain");
+  assert.ok(doc.querySelector("g[data-layer=unlayered]").textContent.includes("12 files match no layer"));
+});
+
+test("hand-offs asked for are drawn with nobody focused", () => {
+  const doc = parse(diagramToSvg(buildDiagram(record, { agents: AGENTS, handoffs: true })));
+  assert.equal(doc.querySelectorAll("[data-handoff]").length, 1);
+});

@@ -15,21 +15,57 @@ templ panelHead(title, text string) {
 	</div>
 }
 
-// entryEditorFoot closes an entry's inline editor: Done hides it (the draft is
-// edited live, so there is nothing to apply) and Remove drops the entry.
-// close and remove are the tab's calls that close the editor of the entry at i
-// and remove it.
-templ entryEditorFoot(close, remove string) {
-	<div class="[ cluster ]">
-		<button type="button" class="[ button ]" data-size="sm" data-done x-on:click={ close }>Done</button>
-		<span class="[ grow ]"></span>
-		<button type="button" class="[ button ]" data-variant="danger" data-size="sm" x-bind:aria-label="removeLabel(row)" x-on:click={ remove }>Remove</button>
-	</div>
+// drawerCalls are the tab's calls that drive one edit drawer: whether it is
+// open, the position of the row it is on, the one-row list its fields are drawn
+// from (the working copy), a key that changes with every opening, and Apply,
+// Cancel and Remove. A tab with two lists (Orchestration) has two sets.
+type drawerCalls struct {
+	Open, Index, Rows, Key, Apply, Cancel, Remove string
 }
 
-// editButton opens or closes an entry's inline editor. open is the tab's
-// expression for whether the editor of the entry at i is open, edit its call
-// that opens or closes it.
+// drawerFor names the drawer calls of a list; suffix is "" or the list's suffix (Route, Handoff).
+func drawerFor(suffix string) drawerCalls {
+	return drawerCalls{
+		Open:   "drawerOpen" + suffix + "()",
+		Index:  "drawerIndex" + suffix + "()",
+		Rows:   "drawerRows" + suffix + "()",
+		Key:    "drawerKey" + suffix + "()",
+		Apply:  "apply" + suffix,
+		Cancel: "cancel" + suffix,
+		Remove: "removeOpen" + suffix,
+	}
+}
+
+// entryDrawer is the edit drawer of a descriptive tab, as in the published
+// design: a card beside the list with the row's fields, Apply and Cancel.
+// Its fields edit a working copy; Apply writes it to the draft and Cancel
+// throws it away. kind is the entry kind it edits, as in data-entry. The
+// fields (the children) are drawn once per working copy, as the variable row,
+// and reach the row's position through the call named by calls.Index.
+templ entryDrawer(kind, title string, calls drawerCalls) {
+	<aside class="[ arch-drawer ]" data-drawer={ kind } aria-label={ title } x-show={ calls.Open } x-bind:data-drawer-index={ calls.Index }>
+		<template x-for={ "row in " + calls.Rows } x-bind:key={ calls.Key }>
+			<section class="[ entry-card ]">
+				<header>
+					<h3 class="[ grow ]">{ title }</h3>
+					<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" data-drawer-close aria-label="Close" x-on:click={ calls.Cancel }>✕</button>
+				</header>
+				<div class="[ content flow ]" data-editor>
+					{ children... }
+					<div class="[ cluster ]">
+						<button type="button" class="[ button ]" data-variant="primary" data-size="sm" data-apply x-on:click={ calls.Apply }>Apply</button>
+						<button type="button" class="[ button ]" data-size="sm" data-cancel x-on:click={ calls.Cancel }>Cancel</button>
+						<span class="[ grow ]"></span>
+						<button type="button" class="[ button ]" data-variant="danger-outline" data-size="sm" data-remove x-bind:aria-label="removeLabel(row)" x-on:click={ calls.Remove }>Remove</button>
+					</div>
+				</div>
+			</section>
+		</template>
+	</aside>
+}
+
+// editButton opens the edit drawer on an entry. open is the tab's expression
+// for whether the drawer is on the entry at i, edit its call that opens it.
 templ editButton(open, edit string) {
 	<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" data-edit x-bind:aria-expanded={ open } x-bind:aria-label="editLabel(row)" x-on:click={ edit }>Edit</button>
 }
