@@ -67,3 +67,17 @@ export function placeholderProblem(text) {
   if (open) return `${open[0]} is missing its closing brace.`;
   return "";
 }
+
+/**
+ * A catalog folder as the header names it: the last two folders behind an
+ * ellipsis ("…/data/agents/"), so a long absolute path never widens the
+ * page. A path of two folders or fewer, or a placeholder like
+ * "<data dir>/agents/", stays whole; the full path goes in the title.
+ * @param {unknown} path
+ */
+export function shortRoot(path) {
+  if (typeof path !== "string" || path === "") return "";
+  const parts = path.split("/").filter((p) => p !== "");
+  if (parts.length <= 2 || path.includes("<")) return path;
+  return `…/${parts.slice(-2).join("/")}/`;
+}

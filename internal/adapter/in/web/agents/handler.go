@@ -12,6 +12,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/rfbatista/harnesskit/errs"
 
@@ -101,6 +102,16 @@ func (v View) Root() string {
 		return DefaultRoot
 	}
 	return v.root
+}
+
+// RootShort is Root as the header shows it: the last two folders behind an
+// ellipsis, so a long absolute path never widens the page; Root is the title.
+func (v View) RootShort() string {
+	parts := strings.FieldsFunc(v.Root(), func(r rune) bool { return r == '/' })
+	if len(parts) <= 2 || strings.Contains(v.Root(), "<") {
+		return v.Root()
+	}
+	return "…/" + strings.Join(parts[len(parts)-2:], "/") + "/"
 }
 
 // Count is how many items tab lists, or "" before the catalog is known.

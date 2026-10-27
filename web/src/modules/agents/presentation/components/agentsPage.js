@@ -16,6 +16,7 @@ import { MCP_FILTERS, mcpDetail, mcpFooter, mcpRows } from "../../domain/mcp.js"
 import { SKILL_FILTERS, SKILL_PAGE, skillFiles, skillReach, skillRows, skillSummary, skillsFooter } from "../../domain/skills.js";
 import { TABS, routeOf, tabAfterKey } from "../../domain/tabs.js";
 import { TOOL_FILTERS, toolDetail, toolRows, toolsFooter } from "../../domain/tools.js";
+import { shortRoot } from "../../domain/names.js";
 import { agentEditor } from "./agentEditor.js";
 import { bundleEditor } from "./bundleEditor.js";
 import { bundlesTab } from "./bundlesTab.js";
@@ -228,6 +229,10 @@ export const agentsPage = ({ gateway: raw, history, location, clipboard, timers 
 
   get root() {
     return this.catalog?.root || DEFAULT_ROOT;
+  },
+
+  get rootShort() {
+    return shortRoot(this.root);
   },
 
   get current() {

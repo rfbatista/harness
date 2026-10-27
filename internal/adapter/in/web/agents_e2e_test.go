@@ -34,7 +34,11 @@ func TestAgentsPageShowsTheCatalogInTheBrowser_EndToEnd(t *testing.T) {
 	b.run("the page shows the catalog root and what each tab lists",
 		chromedp.EmulateViewport(1280, 900),
 		chromedp.Navigate(w.srv.URL+"/agents/skills/tdd"),
-		waitUntil(`document.querySelector('main[x-data="agentsPage"] code')?.textContent === `+quote(catalogDir)),
+		// A long absolute root is clipped to its last two folders in a chip, the full
+		// path is its title, and the header never covers the tab bar.
+		waitUntil(`document.querySelector('main[x-data="agentsPage"] code.catalog-root')?.textContent === `+quote("…/"+filepath.Base(w.root)+"/agents/")),
+		waitUntil(`document.querySelector('code.catalog-root').title === `+quote(catalogDir)),
+		waitUntil(`(() => { const tabs = document.querySelector('[role=tablist]'); const head = document.querySelector('main[x-data="agentsPage"] > header'); if (!tabs || !tabs.checkVisibility()) return false; const t = tabs.getBoundingClientRect(); const h = head.getBoundingClientRect(); const hit = document.elementFromPoint(t.left + 8, t.top + t.height / 2); return h.bottom <= t.top + 1 && tabs.contains(hit) && document.documentElement.scrollWidth <= innerWidth; })()`),
 		waitUntil(`document.querySelector('[data-count=agents]').textContent.trim() === '2'`),
 		waitUntil(`document.querySelector('[data-count=skills]').textContent.trim() === '1'`),
 		waitUntil(`document.querySelector('[data-count=bundles]').textContent.trim() === '1'`),

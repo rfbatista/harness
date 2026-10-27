@@ -23,7 +23,7 @@ templ Page(frame shell.Frame, v View) {
 					<h1>Agents</h1>
 					<p class="[ text-sm color-ink-muted ]">
 						Templates sessions run as, and the skills, MCP servers and tools they get. Agents are shared by every project. They live in the catalog,
-						<code class="[ font-mono ]" x-text="root">{ v.Root() }</code>,
+						<code class="[ font-mono ] [ catalog-root ]" title={ v.Root() } x-bind:title="root" x-text="rootShort">{ v.RootShort() }</code>,
 						a folder in the harness data directory, not in git.
 					</p>
 				</div>

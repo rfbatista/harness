@@ -1,5 +1,5 @@
 import { assert, file, test } from "../../../shared/testing/test.js";
-import { isMcpName, isSlug, mcpNameProblem, placeholderNames, placeholderProblem, isPlaceholder, slugProblem } from "./names.js";
+import { isMcpName, isSlug, mcpNameProblem, placeholderNames, placeholderProblem, isPlaceholder, shortRoot, slugProblem } from "./names.js";
 
 file("agents/domain/names");
 
@@ -57,4 +57,12 @@ test("placeholderProblem rejects a reference that is empty, badly named or never
   assert.equal(placeholderProblem("${}"), "${} names no variable.");
   assert.equal(placeholderProblem("${1ABC}"), "${1ABC} is not a variable name: use letters, digits and underscores, not starting with a digit.");
   assert.equal(placeholderProblem("x ${OPEN"), "${OPEN is missing its closing brace.");
+});
+
+test("a long catalog root is shortened to its last two folders; a short or placeholder one stays whole", () => {
+  assert.equal(shortRoot("/Users/me/.harness/agents"), "…/.harness/agents/");
+  assert.equal(shortRoot("/var/folders/jf/T/harness-data/agents/"), "…/harness-data/agents/");
+  assert.equal(shortRoot("<data dir>/agents/"), "<data dir>/agents/");
+  assert.equal(shortRoot("/data/agents"), "/data/agents");
+  assert.equal(shortRoot(""), "");
 });

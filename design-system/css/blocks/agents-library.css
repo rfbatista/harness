@@ -297,4 +297,17 @@
     & > li { display: flex; flex-wrap: wrap; gap: var(--space-s); align-items: center; }
     & code { overflow-wrap: anywhere; }
   }
+
+  /* The catalog folder in the header: a chip that clips with an ellipsis (its full path is the title), so a long path never overlaps the tabs. */
+  .catalog-root {
+    display: inline-block;
+    max-inline-size: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    vertical-align: bottom;
+    padding-inline: var(--space-2xs);
+    border-radius: var(--radius-sm);
+    background: var(--color-panel);
+  }
 }
