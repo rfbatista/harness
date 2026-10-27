@@ -49,6 +49,11 @@ type fakeArchitectureAPI struct {
 	treeFails bool
 	// discoverFails makes discover_repository_architecture refuse.
 	discoverFails bool
+	// enabled, when set, are the agents the project enables: list_agents?project_id=
+	// answers with them (nil: the route is missing, so the page offers the catalog);
+	// enabledProjects are the project ids it was asked for.
+	enabled         []string
+	enabledProjects []string
 }
 
 func newFakeArchitectureAPI(feed *sseFeed) *fakeArchitectureAPI {
@@ -146,6 +151,17 @@ func (f *fakeArchitectureAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		f.listBoundedContexts(w, r.URL.Query().Get("project_id"))
 	case "/api/list_tree":
 		f.listTree(w, r.URL.Query().Get("root"))
+	case "/api/list_agents":
+		if f.enabled == nil {
+			http.NotFound(w, r)
+			return
+		}
+		f.enabledProjects = append(f.enabledProjects, r.URL.Query().Get("project_id"))
+		list := []any{}
+		for _, n := range f.enabled {
+			list = append(list, map[string]any{"id": n, "name": n})
+		}
+		f.json(w, map[string]any{"agents": list})
 	case "/api/list_architecture_rule_events":
 		f.json(w, map[string]any{"events": append([]map[string]any{}, f.events...)})
 	default:

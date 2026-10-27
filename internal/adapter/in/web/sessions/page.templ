@@ -618,6 +618,11 @@ templ newSessionForm(form NewSessionForm, lockedMode string) {
 		x-data="sessionsNewSession(projectId, ticketId)"
 		data-default-repository={ form.DefaultRepository() }
 		data-locked-mode={ lockedMode }
+		data-agents={ form.AgentsSeed() }
+		data-agents-total={ form.AgentsTotalText() }
+		data-agents-mode={ form.AgentsMode }
+		data-project-name={ form.ProjectName }
+		data-project-id={ form.ProjectID }
 		x-on:submit.prevent="submit"
 		x-on:keydown.escape="cancel"
 	>
@@ -626,6 +631,9 @@ templ newSessionForm(form NewSessionForm, lockedMode string) {
 		} else {
 			<h2>New feature brainstorm</h2>
 		}
+		<template x-if="hasAgentRefusal">
+			@AgentRefusalBanner()
+		</template>
 		<div class="[ field ]">
 			<label for="new-session-prompt">First message <span class="[ color-ink-faint weight-regular ]">(optional)</span></label>
 			<textarea id="new-session-prompt" class="[ font-mono text-sm ]" x-bind:placeholder="promptPlaceholder" x-model="prompt" x-ref="prompt"></textarea>
@@ -636,16 +644,26 @@ templ newSessionForm(form NewSessionForm, lockedMode string) {
 			}
 		</div>
 		<div class="[ switcher ]">
-			<div class="[ field ]">
-				<label for="new-session-agent">Agent</label>
-				<div class="[ dropdown ]" x-data="dropdown">
+			<div class="[ field ]" x-ref="agentField" data-agent-field>
+				<div class="[ cluster ]" style="justify-content: space-between">
+					<label for="new-session-agent">Agent</label>
+					<span class="[ hint ]" data-agents-count x-text="agentCount"></span>
+				</div>
+				<div class="[ dropdown ]" x-data="dropdown" x-show="!noAgentEnabled">
 					<select id="new-session-agent" x-model="agentId">
 						<option value="" data-description="claude with no agent definition">Plain claude</option>
-						for _, a := range form.Agents {
-							<option value={ a.ID } { descriptionAttrs(a.Description)... }>{ a.Name }</option>
-						}
+						<template x-for="a in agentChoices" x-bind:key="a.id">
+							<option x-bind:value="a.id" x-bind:data-description="a.description" x-text="a.name"></option>
+						</template>
 					</select>
 				</div>
+				<template x-if="noAgentEnabled">
+					@NoAgentEnabled(form.AgentsSettingsHref(), form.ProjectName)
+				</template>
+				<span class="[ hint ]" data-agents-hint x-show="!noAgentEnabled">
+					<span x-text="agentHint"></span>
+					<a x-bind:href="agentsSettingsLink" href={ templ.SafeURL(form.AgentsSettingsHref()) } data-agents-settings-link>Change in project settings</a>
+				</span>
 			</div>
 			<div class="[ field ]">
 				if lockedMode == "" {
@@ -737,6 +755,34 @@ templ newSessionForm(form NewSessionForm, lockedMode string) {
 			<button type="button" class="[ button ]" data-variant="ghost" x-on:click="cancel">Cancel</button>
 		</div>
 	</form>
+}
+
+// NoAgentEnabled replaces the picker when the project's Selected list is empty.
+templ NoAgentEnabled(settingsHref, projectName string) {
+	<div class="[ banner ]" data-tone="attention" role="alert" data-no-agent-enabled>
+		<div class="[ grow ] [ text-sm ]">
+			<b>No agent can be picked in this project.</b> Its Selected-agents list is empty.
+			<a x-bind:href="agentsSettingsLink" href={ templ.SafeURL(settingsHref) } data-agents-settings-link>Open { projectName }'s Agents settings</a> to enable one.
+		</div>
+	</div>
+}
+
+// AgentRefusalBanner is the start refused with AGENT_NOT_ENABLED: the form
+// stays as it was, no agent is selected, and the person can open the project's
+// settings or pick another agent. Shared by the new-session form and the
+// brainstorm dialog.
+templ AgentRefusalBanner() {
+	<div class="[ banner ]" data-tone="danger" role="alert" data-agent-refusal>
+		<div class="[ flow ] [ flow-space-3xs ] [ grow ]">
+			<b x-text="agentRefusal.message"></b>
+			<span class="[ code ]" x-text="agentRefusal.code"></span>
+			<span class="[ text-sm color-ink-muted ]" x-text="agentRefusal.explanation"></span>
+			<div class="[ cluster ]">
+				<a class="[ button ]" data-size="sm" href="/projects" x-bind:href="agentRefusal.href" x-text="agentRefusal.linkText" data-agent-refusal-link></a>
+				<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-on:click="pickAnotherAgent" data-pick-another-agent>Pick another agent</button>
+			</div>
+		</div>
+	</div>
 }
 
 // terminalPane is the selected session's PTY, drawn by xterm.js. It is

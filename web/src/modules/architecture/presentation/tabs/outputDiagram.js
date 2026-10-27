@@ -40,7 +40,7 @@ export const outputDiagram = ({ gateway, clipboard }) => () => ({
 
   async init() {
     try {
-      this.catalog = await gateway.agents(this.repositoryId);
+      this.catalog = await gateway.agents(this.repositoryId, this.projectId);
     } catch {
       this.catalog = []; // the record's own agent names still draw
     }

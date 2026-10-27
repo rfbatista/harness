@@ -49,6 +49,7 @@ import "../src/modules/runs/infrastructure/gateways.test.js";
 import "../src/modules/runs/presentation/components/appPanel.test.js";
 import "../src/modules/sandbox/infrastructure/sandbox-gateway.test.js";
 import "../src/modules/sandbox/presentation/components/sandboxSettings.test.js";
+import "../src/modules/sessions/domain/agentPicker.test.js";
 import "../src/modules/sessions/domain/artifact.test.js";
 import "../src/modules/sessions/domain/brainstorm.test.js";
 import "../src/modules/sessions/domain/channel.test.js";

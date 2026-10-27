@@ -75,6 +75,20 @@
  *             onChange: (change: SessionChange) => void,
  *             onStatus: (status: FeedStatus) => void) => () => void} follow
  *           Follows the project's changes until the returned function is called.
+ * @property {(projectId: string) => Promise<AgentChoices>} agentChoices
+ *           The agents the project enables, its mode and the catalog size:
+ *           what the new-session and brainstorm pickers offer.
+ * @property {(handlers: { onEvent: (data: unknown) => void,
+ *             onStatus?: (status: FeedStatus) => void }) => () => void} followAgents
+ *           Follows the page feed messages (agent_catalog_changed among them)
+ *           until the returned function is called.
+ */
+
+/**
+ * @typedef {object} AgentChoices
+ * @property {"all" | "selected"} mode
+ * @property {{ id: string, name: string, description: string }[]} agents  the enabled agents
+ * @property {number} total  how many agents the catalog has
  */
 
 /**

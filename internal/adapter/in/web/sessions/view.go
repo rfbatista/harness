@@ -5,9 +5,12 @@ package sessions
 
 import (
 	"cmp"
+	"encoding/json"
 	"fmt"
+	"net/url"
 	"operators-mcp/internal/adapter/in/web/tokensavers"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -176,6 +179,54 @@ type Option struct{ ID, Name, Description string }
 type NewSessionForm struct {
 	Agents       []Option
 	Repositories []Option
+	// The pickers offer the project's enabled agents only (ADR 0038): Agents
+	// are those, AgentsTotal is how many the catalog has, AgentsMode is "all"
+	// or "selected", and the project is named in the hint and the refusal.
+	// A form built with NewSessionFormOf offers every agent of the catalog.
+	ProjectID, ProjectName, AgentsMode string
+	AgentsTotal                        int
+}
+
+// AgentsSeed is the enabled agents as the picker component reads them
+// (data-agents), then kept fresh by the browser.
+func (f NewSessionForm) AgentsSeed() string {
+	list := make([]map[string]string, 0, len(f.Agents))
+	for _, a := range f.Agents {
+		list = append(list, map[string]string{"id": a.ID, "name": a.Name, "description": a.Description})
+	}
+	raw, err := json.Marshal(list)
+	if err != nil {
+		return "[]"
+	}
+	return string(raw)
+}
+
+// AgentsSettingsHref is the project's Enabled agents section.
+func (f NewSessionForm) AgentsSettingsHref() string {
+	return "/projects/" + url.PathEscape(f.ProjectID) + "/settings#settings-agents-enabled"
+}
+
+// AgentsTotalText is AgentsTotal as the component reads it.
+func (f NewSessionForm) AgentsTotalText() string { return strconv.Itoa(f.AgentsTotal) }
+
+// NewSessionFormFor offers the agents the project enables and its
+// repositories: the pickers of the task page, the project's sessions page and
+// the board's brainstorm dialog. Existing sessions keep their agents; only
+// what a new session may pick narrows.
+func NewSessionFormFor(project *domain.Project, agents []*domain.Agent, repos []*domain.Repository) NewSessionForm {
+	enabled := make([]*domain.Agent, 0, len(agents))
+	for _, a := range agents {
+		if project.AgentEnabled(a.Name) {
+			enabled = append(enabled, a)
+		}
+	}
+	form := NewSessionFormOf(enabled, repos)
+	form.ProjectID, form.ProjectName, form.AgentsTotal = project.ID, project.Name, len(agents)
+	form.AgentsMode = domain.AgentsAll
+	if project.EnabledAgentsMode == domain.AgentsSelected {
+		form.AgentsMode = domain.AgentsSelected
+	}
+	return form
 }
 
 // NewSessionFormOf offers the agents and the project's repositories, in the
@@ -390,7 +441,7 @@ func NewPageView(frame shell.Frame, project *domain.Project, task *domain.Ticket
 	for _, r := range repos {
 		repoNames[r.ID] = r.Name
 	}
-	form := NewSessionFormOf(agents, repos)
+	form := NewSessionFormFor(project, agents, repos)
 
 	byID := make(map[string]*domain.Session, len(list))
 	for _, s := range list {

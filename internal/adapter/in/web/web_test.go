@@ -410,7 +410,8 @@ func TestTaskPageListsItsSessionsBesideTheDetail(t *testing.T) {
 		`x-data="sessionsNewSession(projectId, ticketId)"`,
 		`data-default-repository="r-harness"`,
 		`<option value="" data-description="claude with no agent definition">Plain claude</option>`,
-		`<option value="backend">Backend dev</option>`,
+		// The agent options are drawn in the browser from the enabled agents the server seeds.
+		`data-agents="[{&#34;description&#34;:&#34;&#34;,&#34;id&#34;:&#34;reviewer&#34;,&#34;name&#34;:&#34;Reviewer&#34;},{&#34;description&#34;:&#34;&#34;,&#34;id&#34;:&#34;backend&#34;,&#34;name&#34;:&#34;Backend dev&#34;}]"`,
 		`<option value="r-kit">harnesskit</option>`,
 		`<label for="new-session-permissions-edits">Accept file edits</label>`,
 		`<option value="product" data-description="Interviews you, writes the PRD on this task and creates one child task per piece of work, each with a brief">Product</option>`,
@@ -498,7 +499,8 @@ func TestProjectBoardOffersToBrainstormAFeature(t *testing.T) {
 		`role="dialog" id="brainstorm" popover="manual" data-trap aria-labelledby="brainstorm-title" x-data="popupDialog"`,
 		`x-on:submit.prevent="start"`,
 		`<option value="" data-description="claude with no agent definition">Plain claude</option>`,
-		`<option value="backend">Backend dev</option>`,
+		// The agent options are drawn in the browser from the enabled agents the server seeds.
+		`data-agents="[{&#34;description&#34;:&#34;&#34;,&#34;id&#34;:&#34;reviewer&#34;,&#34;name&#34;:&#34;Reviewer&#34;},{&#34;description&#34;:&#34;&#34;,&#34;id&#34;:&#34;backend&#34;,&#34;name&#34;:&#34;Backend dev&#34;}]"`,
 		`<option value="r-kit">harnesskit</option>`,
 		`x-bind:disabled="cannotStart"`,
 	} {

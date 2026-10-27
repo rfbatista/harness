@@ -584,3 +584,37 @@ func TestFirstPaintShowsCommitCheckOffWithItsReasonOnlyWhileItIsOff(t *testing.T
 		t.Errorf("a guarded session's row says the commit check is off\n%s", html)
 	}
 }
+
+func TestNewSessionFormOffersOnlyTheProjectsEnabledAgents(t *testing.T) {
+	agents := []*domain.Agent{{ID: "a1", Name: "designer"}, {ID: "a2", Name: "reviewer", Description: "Reviews."}, {ID: "a3", Name: "backend"}}
+	names := func(f NewSessionForm) string {
+		out := ""
+		for _, a := range f.Agents {
+			out += a.Name + ","
+		}
+		return out
+	}
+	all := NewSessionFormFor(&domain.Project{ID: "p1", Name: "atlas"}, agents, nil)
+	if names(all) != "designer,reviewer,backend," || all.AgentsMode != "all" || all.AgentsTotal != 3 {
+		t.Errorf("an All-agents project offers every agent: %s mode=%s total=%d", names(all), all.AgentsMode, all.AgentsTotal)
+	}
+	sel := NewSessionFormFor(&domain.Project{ID: "p1", Name: "atlas", EnabledAgentsMode: domain.AgentsSelected, EnabledAgents: []string{"reviewer"}}, agents, nil)
+	if names(sel) != "reviewer," || sel.AgentsMode != "selected" || sel.AgentsTotal != 3 {
+		t.Errorf("a Selected project offers its list: %s mode=%s total=%d", names(sel), sel.AgentsMode, sel.AgentsTotal)
+	}
+	if want := `[{"description":"Reviews.","id":"a2","name":"reviewer"}]`; sel.AgentsSeed() != want {
+		t.Errorf("seed = %s, want %s", sel.AgentsSeed(), want)
+	}
+	if sel.AgentsSettingsHref() != "/projects/p1/settings#settings-agents-enabled" {
+		t.Errorf("settings href = %s", sel.AgentsSettingsHref())
+	}
+	none := NewSessionFormFor(&domain.Project{ID: "p1", EnabledAgentsMode: domain.AgentsSelected}, agents, nil)
+	if len(none.Agents) != 0 || none.AgentsSeed() != "[]" {
+		t.Errorf("an empty Selected list offers nothing: %v %s", none.Agents, none.AgentsSeed())
+	}
+	// Sessions already running keep their agent's name, enabled or not.
+	v := NewPageView(shell.Frame{}, &domain.Project{ID: "p1", EnabledAgentsMode: domain.AgentsSelected}, nil, nil, agents, nil, time.Now())
+	if len(v.Seed.AgentNames) != 3 {
+		t.Errorf("agent names for existing sessions = %v, want all three", v.Seed.AgentNames)
+	}
+}

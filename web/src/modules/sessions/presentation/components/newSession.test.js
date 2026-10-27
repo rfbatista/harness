@@ -352,3 +352,89 @@ test("when the name cannot be checked the form says so and still starts", async 
   await instance.submit();
   assert.equal(dispatched[0].name, "session-created");
 });
+
+// ── the agent picker: enabled agents only (ADR 0038) ─────────────────────
+
+const REVIEWER = { id: "reviewer", name: "reviewer", description: "Reviews code." };
+const DESIGNER = { id: "designer", name: "designer", description: "" };
+
+function pickerSetup({ agents = [REVIEWER], total = 3, mode = "selected" } = {}) {
+  const memory = memoryGateway({ projects: ["p1"], repositories: { r1: "p1" }, branches: BRANCHES });
+  memory.setAgentChoices("p1", { mode, agents, total });
+  const form = document.createElement("form");
+  form.dataset.defaultRepository = "r1";
+  form.dataset.agents = JSON.stringify(agents);
+  form.dataset.agentsTotal = String(total);
+  form.dataset.agentsMode = mode;
+  form.dataset.projectName = "atlas-api";
+  const mounted = mount(() => newSession({ gateway: memory.gateway, debounceMs: DEBOUNCE })("p1", "t1"), { el: form });
+  mounted.instance.init();
+  return { ...mounted, memory };
+}
+
+test("the picker offers the project's enabled agents, with the count and the hint", async () => {
+  const { instance } = pickerSetup({ agents: [REVIEWER, DESIGNER], total: 10 });
+  await flush();
+  assert.deepEqual(instance.agentChoices.map((a) => a.name), ["reviewer", "designer"]);
+  assert.equal(instance.agentCount, "2 enabled");
+  assert.equal(instance.agentHint, "Showing the 2 agents enabled in atlas-api of 10 in the catalog.");
+  assert.equal(instance.agentsSettingsLink, "/projects/p1/settings#settings-agents-enabled");
+  assert.equal(instance.noAgentEnabled, false);
+});
+
+test("an All-agents project says new agents appear automatically", async () => {
+  const { instance } = pickerSetup({ agents: [REVIEWER, DESIGNER], total: 2, mode: "all" });
+  assert.ok(instance.agentHint.includes("new agents appear automatically"), instance.agentHint);
+});
+
+test("an empty Selected list replaces the picker with the warning and turns Start off", async () => {
+  const { instance, dispatched } = pickerSetup({ agents: [], total: 3 });
+  await flush();
+  assert.equal(instance.noAgentEnabled, true);
+  assert.equal(instance.cannotSubmit, true);
+  assert.equal(instance.problem, "No agent is enabled in atlas-api.");
+  await instance.submit();
+  assert.deepEqual(dispatched, [], "nothing was started");
+});
+
+test("the picker follows agent_catalog_changed for its project while the form is open", async () => {
+  const { instance, memory } = pickerSetup({ agents: [REVIEWER], total: 3 });
+  await flush();
+  memory.setAgentChoices("p1", { mode: "selected", agents: [REVIEWER, DESIGNER], total: 3 });
+  await flush();
+  assert.deepEqual(instance.agentChoices.map((a) => a.name), ["reviewer", "designer"]);
+  assert.equal(instance.agentCount, "2 enabled");
+
+  memory.publishCatalogEvent({ agent_catalog_changed: { paths: ["projects/p2"] } });
+  memory.setAgentChoices("p2", { mode: "selected", agents: [], total: 3 }); // not this project
+  await flush();
+  assert.equal(instance.agents.length, 2, "another project's list is none of its business");
+
+  instance.destroy();
+  memory.setAgentChoices("p1", { mode: "selected", agents: [], total: 3 });
+  await flush();
+  assert.equal(instance.agents.length, 2, "a closed form no longer follows");
+});
+
+test("a choice taken off the list while the form is open stays visible, marked, and Start is refused with the banner", async () => {
+  const { instance, memory, dispatched } = pickerSetup({ agents: [REVIEWER, DESIGNER], total: 3 });
+  await flush();
+  instance.agentId = "designer";
+  instance.prompt = "keep this";
+  memory.setAgentChoices("p1", { mode: "selected", agents: [REVIEWER], total: 3 });
+  await flush();
+  assert.deepEqual(instance.agentChoices.map((a) => a.name), ["reviewer", "designer (no longer enabled)"]);
+
+  await instance.submit();
+  assert.deepEqual(dispatched, [], "no session started");
+  assert.equal(instance.agentRefusal.message, "The session was not started: designer is not enabled in atlas-api.");
+  assert.equal(instance.agentRefusal.code, "AGENT_NOT_ENABLED");
+  assert.equal(instance.agentRefusal.linkText, "Open atlas-api's Agents settings");
+  assert.equal(instance.agentId, "", "no agent is selected");
+  assert.equal(instance.prompt, "keep this", "the form stays filled in");
+  assert.equal(instance.error, null, "the refusal has its own banner");
+  assert.deepEqual(instance.agentChoices.map((a) => a.name), ["reviewer"]);
+
+  instance.pickAnotherAgent();
+  assert.equal(instance.agentRefusal, null);
+});

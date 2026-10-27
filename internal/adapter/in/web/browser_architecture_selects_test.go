@@ -235,3 +235,35 @@ func TestRoutingAndHandoffAgentsAreSelectsAndKeepUnknownNames(t *testing.T) {
 		t.Fatalf("saved hand-off = %v", h)
 	}
 }
+
+// Zone assignment offers the project's enabled agents only (ADR 0038): an
+// agent the project does not enable is absent from the lists, and one the
+// record already names stays, ticked and marked, so nothing assigned is altered.
+func TestAgentListsOfferTheProjectsEnabledAgentsOnly(t *testing.T) {
+	rig := newArchRig(t)
+	rig.api.enabled = []string{"software-architect", "go-developer"}
+	rec := savedRecord()
+	rec["instructions"].([]any)[1].(map[string]any)["applies_to"] = []any{"go-developer", "devops"}
+	rig.api.seed(rec)
+	var labels, checked string
+	rig.run(t,
+		chromedp.EmulateViewport(1280, 900),
+		chromedp.Navigate(rig.url("/instructions")),
+		openDrawerOf("instructions", "instruction", 1),
+		poll(`document.querySelectorAll('#architecture-panel-instructions [data-drawer] [data-field=applies_to] input[type=checkbox]').length === 5`),
+		chromedp.Evaluate(`[...document.querySelector('#architecture-panel-instructions [data-drawer]').querySelectorAll('[data-field=applies_to] label')].map(l => l.textContent.trim().replace(/\s+/g, ' ')).join('|')`, &labels),
+		chromedp.Evaluate(`[...document.querySelector('#architecture-panel-instructions [data-drawer]').querySelectorAll('[data-field=applies_to] input:checked')].map(c => c.value).join(',')`, &checked),
+	)
+	if want := "all|software-architect|go-developer|plain (a session with no agent)|devops (not enabled in this project)"; labels != want {
+		t.Fatalf("labels = %q, want %q", labels, want)
+	}
+	if checked != "go-developer,devops" {
+		t.Fatalf("checked = %q; an existing assignment must stay", checked)
+	}
+	rig.api.mu.Lock()
+	asked := fmt.Sprint(rig.api.enabledProjects)
+	rig.api.mu.Unlock()
+	if asked != "[p1]" {
+		t.Fatalf("list_agents asked for projects %s, want [p1]", asked)
+	}
+}

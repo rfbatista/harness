@@ -14,9 +14,10 @@
 import { describeError } from "../../../../shared/presentation/errors.js";
 import { Codes } from "../../../../shared/domain/errors.js";
 import { INITIAL_TERMINAL_SIZE, noTaskProblem } from "../../domain/session.js";
+import { withAgentPicker } from "./agentPicker.js";
 
 /** @param {{ gateway: import("../../domain/ports.js").SessionGateway }} deps */
-export const newSession = ({ gateway, debounceMs = 300 }) => (projectId = "", ticketId = "", lockedMode = "") => ({
+export const newSession = ({ gateway, debounceMs = 300 }) => (projectId = "", ticketId = "", lockedMode = "") => withAgentPicker({
   projectId,
   ticketId,
   prompt: "",
@@ -56,10 +57,15 @@ export const newSession = ({ gateway, debounceMs = 300 }) => (projectId = "", ti
       this.mode = locked;
     }
     this.repositoryId = this.$el.dataset.defaultRepository ?? "";
+    this.startAgentPicker(this.$el.dataset);
     this.$nextTick(() => this.$refs.prompt?.focus());
     this.$watch("baseBranch", () => this.scheduleNameCheck());
     this.loadBranches();
     this.checkNameNow();
+  },
+
+  destroy() {
+    this.stopAgentPicker();
   },
 
   get localBranches() {
@@ -253,6 +259,7 @@ export const newSession = ({ gateway, debounceMs = 300 }) => (projectId = "", ti
   /** Why the draft cannot start: no repository, or no task in a mode that needs one. */
   get problem() {
     if (this.repositoryId === "") return "Pick a repository.";
+    if (this.noAgentEnabled) return this.noAgentLine;
     if (this.ticketId === "") return noTaskProblem(this.mode);
     if (this.nameState === "checking") return "Checking the branch name…";
     if (this.nameState === "taken") return "The branch name is taken. Pick another.";
@@ -267,6 +274,7 @@ export const newSession = ({ gateway, debounceMs = 300 }) => (projectId = "", ti
     if (this.cannotSubmit) return;
     this.submitting = true;
     this.error = null;
+    this.agentRefusal = null;
     try {
       const session = await gateway.start({
         projectId: this.projectId,
@@ -282,7 +290,7 @@ export const newSession = ({ gateway, debounceMs = 300 }) => (projectId = "", ti
       });
       this.$dispatch("session-created", { session });
     } catch (err) {
-      if (!this.nameRefusal(err)) this.error = describeError(err);
+      if (!this.refuseAgent(err) && !this.nameRefusal(err)) this.error = describeError(err);
     } finally {
       this.submitting = false;
     }
@@ -291,4 +299,4 @@ export const newSession = ({ gateway, debounceMs = 300 }) => (projectId = "", ti
   cancel() {
     this.$dispatch("new-session-cancelled");
   },
-});
+}, { gateway });

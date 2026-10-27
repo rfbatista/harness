@@ -25,10 +25,36 @@ export function architectureGateway(api, feed) {
     };
   };
 
-  /** One discovery per repository for the page's life: every tab and the matrix share the answer (see discovered). */
+  /** One discovery per repository for the page life: every tab and the matrix share the answer (see discovered). */
   const catalogs = new Map();
 
-  return {
+  /** The catalog agent names, from the shared discovery. */
+  const catalogNames = (repositoryId) => self.discovered(repositoryId).then((found) => found.agents.filter((a) => typeof a === "string"));
+  /** @type {Map<string, Promise<{ offered: string[], notEnabled: string[] }>>} */
+  const offered = new Map();
+  const names = (body) => (Array.isArray(body?.agents) ? body.agents.map((a) => a?.name).filter((n) => typeof n === "string") : []);
+  const offers = (repositoryId, projectId) => {
+    const key = `${repositoryId}\n${projectId}`;
+    if (!offered.has(key)) {
+      const asked = (async () => {
+        const catalog = await catalogNames(repositoryId);
+        if (!projectId) return { offered: catalog, notEnabled: [] };
+        let enabled;
+        try {
+          enabled = names(await api.get("/list_agents", { project_id: projectId }));
+        } catch {
+          return { offered: catalog, notEnabled: [] }; // the pickers fall back to the catalog
+        }
+        const set = new Set(enabled);
+        return { offered: enabled, notEnabled: catalog.filter((n) => !set.has(n)) };
+      })();
+      asked.catch(() => offered.delete(key));
+      offered.set(key, asked);
+    }
+    return offered.get(key);
+  };
+
+  const self = {
     async get(repositoryId) {
       return toState(await api.post("/get_repository_architecture", { repository_id: repositoryId }));
     },
@@ -107,10 +133,20 @@ export function architectureGateway(api, feed) {
       return catalogs.get(repositoryId);
     },
 
-    /** The agent catalog's names, for the matrix's rows and the agent pickers. */
-    async agents(repositoryId) {
-      const found = await this.discovered(repositoryId);
-      return found.agents.filter((a) => typeof a === "string");
+    /**
+     * The agent names the matrix's rows and the agent pickers offer: with a
+     * project, the agents it enables (ADR 0038; list_agents?project_id=), so a
+     * layer or rule is never assigned an agent the project cannot run; without
+     * one, or when that read fails, the whole catalog. Asked once per repository
+     * and project; a failure is not remembered.
+     */
+    agents(repositoryId, projectId = "") {
+      return offers(repositoryId, projectId).then((o) => o.offered);
+    },
+
+    /** The catalog agents the project does not enable, so a stray the record names can say why it is not offered. */
+    notEnabledAgents(repositoryId, projectId = "") {
+      return offers(repositoryId, projectId).then((o) => o.notEnabled);
     },
 
     /** The names of a project's bounded contexts, in the order the server lists them. */
@@ -139,4 +175,5 @@ export function architectureGateway(api, feed) {
       });
     },
   };
+  return self;
 }

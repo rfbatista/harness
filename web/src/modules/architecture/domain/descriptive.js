@@ -135,13 +135,13 @@ const PLAIN_AGENT = "plain";
  * @param {string[]} catalog @param {string[]} chosen the names the record holds @param {boolean} withAll
  * @returns {{ value: string, label: string, checked: boolean }[]}
  */
-export function agentChoices(catalog, chosen, withAll) {
+export function agentChoices(catalog, chosen, withAll, notEnabled = []) {
   const known = [...(withAll ? [ALL] : []), ...catalog, ...(catalog.includes(PLAIN_AGENT) ? [] : [PLAIN_AGENT])];
   const label = (n) => (n === PLAIN_AGENT && !catalog.includes(PLAIN_AGENT) ? "plain (a session with no agent)" : n);
   const strays = chosen.filter((n, i) => typeof n === "string" && n !== "" && !known.includes(n) && chosen.indexOf(n) === i);
   return [
     ...known.map((n) => ({ value: n, label: label(n), checked: chosen.includes(n) })),
-    ...strays.map((n) => ({ value: n, label: `${n} (not in the catalog)`, checked: true })),
+    ...strays.map((n) => ({ value: n, label: notEnabled.includes(n) ? `${n} (not enabled in this project)` : `${n} (not in the catalog)`, checked: true })),
   ];
 }
 
