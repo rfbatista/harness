@@ -13,7 +13,7 @@
 // Opened by `dialog-open` on window, with { id, anchor }. The focus goes to
 // [data-initial-focus], else the first control. Esc closes it and returns the
 // focus to the anchor, and goes no further, so a terminal behind it never sees
-// it. It tells the page it closed (`dialog-close` on window, { id }), however
+// it. data-align="auto" opens it under the anchor's left edge, else against its right. It tells the page it closed (`dialog-close` on window, { id }), however
 // it closed, and closes on `dialog-dismiss` ({ id }) from the page. A dialog also closes on a press outside it; an alertdialog only by its
 // own buttons or Esc. data-trap keeps Tab inside. On a phone it is a sheet.
 
@@ -52,7 +52,7 @@ export class AnchoredDialog {
     this.floating = floating(this.el, {
       anchor,
       env: this.env,
-      align: () => "end",
+      align: () => (this.el.dataset.align === "auto" ? "auto" : "end"),
       onDismiss: () => {
         if (!this.isAlert) this.close({ refocus: false });
       },

@@ -971,7 +971,7 @@ templ taskBand(v PageView) {
 			</template>
 		</p>
 	</template>
-	<div class="[ popup ] [ task-note ]" role="dialog" id="task-note" popover="manual" aria-labelledby="task-note-title" x-data="popupDialog" x-on:dialog-open.window="openFrom($event)" x-on:dialog-dismiss.window="dismissFrom($event)" x-on:dialog-close.window="noteClosed($event)">
+	<div class="[ popup ] [ task-note ]" role="dialog" id="task-note" popover="manual" data-align="auto" aria-labelledby="task-note-title" x-data="popupDialog" x-on:dialog-open.window="openFrom($event)" x-on:dialog-dismiss.window="dismissFrom($event)" x-on:dialog-close.window="noteClosed($event)">
 		<template x-if="!editingTask">
 			<div class="[ task-note-view ]">
 				<div class="[ note-head ]">

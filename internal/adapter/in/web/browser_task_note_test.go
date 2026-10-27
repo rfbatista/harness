@@ -147,3 +147,33 @@ func TestATaskWithoutADescriptionHasNoButtonAndEditsFromTheTitleRow(t *testing.T
 		t.Errorf("JavaScript errors:\n%s", strings.Join(e, "\n"))
 	}
 }
+
+// The popover hangs from the Description button, as the Checks panel does from
+// its button: its left edge under the button, or its right edge against the
+// button's when it would run off the viewport; always inside the viewport,
+// also when the toolbar wraps.
+func TestTheTaskNoteHangsFromTheDescriptionButton(t *testing.T) {
+	url, _ := stripServer(t, noteDeps(strings.Repeat("Line of the description that the person wrote.\n", 12)))
+	ctx, errs := browser(t)
+
+	for _, width := range []int64{1680, 1280, 1000, 800} {
+		var geometry string
+		err := chromedp.Run(ctx,
+			chromedp.EmulateViewport(width, 800),
+			chromedp.Navigate(url+"/projects/p1/tasks/t-feed"),
+			chromedp.Poll(pageReady+` && `+noteButton+`.checkVisibility()`, nil, chromedp.WithPollingTimeout(10*time.Second)),
+			chromedp.Evaluate(noteButton+`.click()`, nil),
+			chromedp.Poll(notePopup+`.matches(':popover-open')`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+			chromedp.Evaluate(`(() => { const b = `+noteButton+`.getBoundingClientRect(), p = `+notePopup+`.getBoundingClientRect();
+				const leftUnder = Math.abs(p.left - b.left) <= 2, rightAgainst = Math.abs(p.right - b.right) <= 2;
+				const clamped = p.left <= 9 || p.right >= innerWidth - 9 || p.left <= b.left && p.right >= b.right;
+				return JSON.stringify({ ok: (leftUnder || rightAgainst || clamped) && p.top >= b.bottom && p.left >= 0 && p.right <= innerWidth, b: [b.left, b.right, b.bottom], p: [p.left, p.right, p.top] }) })()`, &geometry),
+		)
+		if err != nil {
+			t.Fatalf("%dpx: %v\nJS errors: %v", width, err, errs.all())
+		}
+		if !strings.Contains(geometry, `"ok":true`) {
+			t.Errorf("at %dpx the popover does not hang from the button: %s", width, geometry)
+		}
+	}
+}
