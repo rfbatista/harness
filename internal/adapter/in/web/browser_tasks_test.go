@@ -132,8 +132,9 @@ func TestTaskManagementInTheBrowser(t *testing.T) {
 		chromedp.SendKeys(`#task-description`, "The TUI's live section.", chromedp.ByQuery),
 		clickButton(`main form`, "Create task"),
 		waitForPath(srv.URL+"/projects/p1/tasks/t-new", &at),
-		chromedp.Poll(`document.querySelector('.brief > p')?.textContent === "The TUI's live section."`, nil, chromedp.WithPollingTimeout(5*time.Second)),
-		chromedp.Evaluate(`document.querySelector('.brief > p').textContent`, &brief),
+		clickButton(`main header`, "Description"),
+		chromedp.Poll(`document.querySelector('#task-note .note-body')?.textContent === "The TUI's live section."`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Evaluate(`document.querySelector('#task-note .note-body').textContent`, &brief),
 	)
 	if err != nil {
 		t.Fatalf("create: %v\nAPI:\n%s\nJS errors: %v", err, api.log(), errs.all())

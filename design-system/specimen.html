@@ -812,6 +812,26 @@
         </div>
       </section>
 
+      <section class="[ flow ] [ flow-space-m ]" id="task-note">
+        <h2>Task note</h2>
+        <p class="[ color-ink-muted ]">The task's description, opened by the title row's <em>Description</em> button: a <code>.popup.task-note</code> in the top layer (36rem, at most <code>min(70dvh, 40rem)</code>, the body scrolls), so nothing on the page moves. Below 48rem it takes <code>data-sheet</code>. Shown here in place (<code>position: static</code>); the real one is <code>popover="manual"</code>.</p>
+        <div class="[ cluster ]" style="align-items: flex-start">
+          <div class="[ flow ] [ flow-space-2xs ]"><p class="[ font-mono text-xs color-ink-faint ]">popover · read</p>
+            <div class="[ popup task-note ]" role="dialog" aria-labelledby="specimen-note-title" style="position: static; display: flex">
+              <div class="[ task-note-view ]"><div class="[ note-head ]"><h3 id="specimen-note-title">Description</h3><button type="button" class="[ button ]" data-variant="ghost" data-size="sm">Edit</button><button type="button" class="[ button ]" data-variant="ghost" data-size="sm">Close</button></div>
+                <div class="[ note-body prose ]">Show the task description in a popover from the title row.
+
+- It opens under the button and moves nothing.
+- Esc, Close or a click outside closes it.</div></div>
+            </div></div>
+          <div class="[ flow ] [ flow-space-2xs ]"><p class="[ font-mono text-xs color-ink-faint ]">sheet · below 48rem</p>
+            <div class="[ popup task-note ]" data-sheet role="dialog" aria-labelledby="specimen-note-sheet-title" style="position: static; display: flex; inline-size: 22rem; animation: none">
+              <div class="[ task-note-view ]"><div class="[ note-head ]"><h3 id="specimen-note-sheet-title">Description</h3><button type="button" class="[ button ]" data-variant="ghost" data-size="sm">Close</button></div>
+                <div class="[ note-body prose ]">Show the task description in a popover from the title row.</div></div>
+            </div></div>
+        </div>
+      </section>
+
       <section class="[ flow ] [ flow-space-m ]" id="notifications">
         <h2>Notifications</h2>
         <p class="[ color-ink-muted ]">The bell ends the <code>topbar</code>, with an <code>attention</code> badge for the unread count across projects: none at 0, the number, then <em>99+</em> (the accessible name keeps the exact count). Each item is a <code>notification</code> row: an <code>action</code> one takes the amber rule and <em>Needs you</em>; unread is a filled dot and a bold title; <code>settled</code> is muted and says so. The panel clamps bodies to two lines; the inbox page shows them whole.</p>

@@ -72,6 +72,7 @@ templ Page(v PageView) {
 						<span class="[ usage-total ]" x-data="usageTotalsChip" x-show="hasTask" x-text="taskText" x-bind:title="taskTitle"></span>
 					}
 					<div class="[ actions ]">
+						<button type="button" class="[ button ]" id="task-note-button" data-variant="ghost" data-size="sm" aria-haspopup="dialog" aria-expanded="false" aria-controls="task-note" x-show="hasDescription" x-on:click="openNote" { hiddenUnless(v.TaskDescription != "")... }>Description</button>
 						if v.Documents != nil {
 							<a
 								class="[ button ]"
@@ -114,7 +115,7 @@ templ Page(v PageView) {
 								</a>
 							</span>
 						}
-						<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-on:click="startEditTask">Edit</button>
+						<button type="button" class="[ button ]" id="task-edit-button" data-variant="ghost" data-size="sm" x-on:click="startEditTask">Edit</button>
 						<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-bind:aria-busy="checkingTaskDelete" x-on:click="askDeleteTask">Delete task</button>
 						if v.NewSession.CanStart() {
 							<button type="button" class="[ button ]" data-variant="primary" data-size="sm" disabled x-bind:disabled="cannotCreate" x-on:click="startCreating">
@@ -970,42 +971,51 @@ templ taskBand(v PageView) {
 			</template>
 		</p>
 	</template>
-	<template x-if="showsDescription">
-		<div class="[ brief ]" x-bind:data-open="descriptionOpenAttr" x-effect="setSessionOpen(showingSession)">
-			<p x-ref="description" x-effect="measureDescription()" x-text="description">{ v.TaskDescription }</p>
-			<button type="button" class="[ more ]" x-show="descriptionOverflows" style="display: none" x-bind:aria-expanded="descriptionOpen" x-on:click="toggleDescription" x-text="descriptionToggleWord">More</button>
-		</div>
-	</template>
-	<template x-if="editingTask">
-		<form class="[ flow ] [ flow-space-s pad-l divide-bottom ]" x-on:submit.prevent="save" x-on:keydown.escape="cancelEditTask">
-			<div class="[ field ]">
-				<label for="task-edit-title">Title</label>
-				@components.WritingPen(components.Pen{
-					ID: "pen-task-edit-title", Kind: "task_title", Noun: "title", Label: "Title",
-					ProjectID: v.ProjectID, ProjectName: v.ProjectName,
-					Siblings:  []components.PenSibling{{Label: "Description", Selector: "#task-edit-description"}},
-					Available: v.Frame.Helper.Available, Reason: v.Frame.Helper.Reason, FixURL: v.Frame.Helper.FixURL,
-				}) {
-					<input id="task-edit-title" autocomplete="off" x-model="draftTitle"/>
-				}
+	<div class="[ popup ] [ task-note ]" role="dialog" id="task-note" popover="manual" data-align="auto" aria-labelledby="task-note-title" x-data="popupDialog" x-on:dialog-open.window="openFrom($event)" x-on:dialog-dismiss.window="dismissFrom($event)" x-on:dialog-close.window="noteClosed($event)">
+		<template x-if="!editingTask">
+			<div class="[ task-note-view ]">
+				<div class="[ note-head ]">
+					<h3 id="task-note-title">Description</h3>
+					<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-on:click="startEditTask">Edit</button>
+					<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" data-initial-focus x-on:click="close()">Close</button>
+				</div>
+				<div class="[ note-body ] [ prose ]" x-text="description">{ v.TaskDescription }</div>
 			</div>
-			<div class="[ field ]">
-				<label for="task-edit-description">Description</label>
-				@components.WritingPen(components.Pen{
-					ID: "pen-task-edit-description", Kind: "task_description", Noun: "description", Label: "Description",
-					ProjectID: v.ProjectID, ProjectName: v.ProjectName,
-					Siblings:  []components.PenSibling{{Label: "Title", Selector: "#task-edit-title"}},
-					Available: v.Frame.Helper.Available, Reason: v.Frame.Helper.Reason, FixURL: v.Frame.Helper.FixURL,
-				}) {
-					<textarea id="task-edit-description" x-model="draftDescription"></textarea>
-				}
-			</div>
-			<div class="[ cluster ]">
-				<button type="submit" class="[ button ]" data-variant="primary" data-size="sm" x-bind:disabled="cannotSaveTask" x-bind:aria-busy="savingTask">Save</button>
-				<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-on:click="cancelEditTask">Cancel</button>
-			</div>
-		</form>
-	</template>
+		</template>
+		<template x-if="editingTask">
+			<form class="[ task-note-form ] [ flow flow-space-s ]" aria-labelledby="task-note-title" x-on:submit.prevent="save">
+				<div class="[ note-head ]">
+					<h3 id="task-note-title">Edit task</h3>
+				</div>
+				<div class="[ field ]">
+					<label for="task-edit-title">Title</label>
+					@components.WritingPen(components.Pen{
+						ID: "pen-task-edit-title", Kind: "task_title", Noun: "title", Label: "Title",
+						ProjectID: v.ProjectID, ProjectName: v.ProjectName,
+						Siblings:  []components.PenSibling{{Label: "Description", Selector: "#task-edit-description"}},
+						Available: v.Frame.Helper.Available, Reason: v.Frame.Helper.Reason, FixURL: v.Frame.Helper.FixURL,
+					}) {
+						<input id="task-edit-title" autocomplete="off" x-model="draftTitle"/>
+					}
+				</div>
+				<div class="[ field ]">
+					<label for="task-edit-description">Description</label>
+					@components.WritingPen(components.Pen{
+						ID: "pen-task-edit-description", Kind: "task_description", Noun: "description", Label: "Description",
+						ProjectID: v.ProjectID, ProjectName: v.ProjectName,
+						Siblings:  []components.PenSibling{{Label: "Title", Selector: "#task-edit-title"}},
+						Available: v.Frame.Helper.Available, Reason: v.Frame.Helper.Reason, FixURL: v.Frame.Helper.FixURL,
+					}) {
+						<textarea id="task-edit-description" x-model="draftDescription"></textarea>
+					}
+				</div>
+				<div class="[ cluster ]">
+					<button type="submit" class="[ button ]" data-variant="primary" data-size="sm" x-bind:disabled="cannotSaveTask" x-bind:aria-busy="savingTask">Save</button>
+					<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-on:click="cancelEditTask">Cancel</button>
+				</div>
+			</form>
+		</template>
+	</div>
 	<template x-if="taskDeleteProblem">
 		<div class="[ pad-inline-l pad-block-s ]">
 			<div class="[ banner ]" data-tone="attention" role="alert">

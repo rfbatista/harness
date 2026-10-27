@@ -97,3 +97,10 @@ test("a click outside dismisses it; one inside does not", () => {
     outside.remove();
   }
 });
+
+test("align auto opens under the anchor's left edge, and against its right edge when that runs off the viewport", () => {
+  const size = { width: 300, height: 100 };
+  assert.equal(placement(rect(400, 100, 80, 32), size, view, { align: "auto" }).left, 400);
+  assert.equal(placement(rect(800, 100, 80, 32), size, view, { align: "auto" }).left, 880 - 300);
+  assert.equal(placement(rect(100, 100, 80, 32), { width: 1200, height: 100 }, view, { align: "auto" }).left, 8, "never outside the viewport");
+});

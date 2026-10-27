@@ -58,7 +58,9 @@ export function placement(anchor, size, view, { align = "start" } = {}) {
   const height = Math.min(size.height, room);
   const top = up ? anchor.top - GAP - height : anchor.bottom + GAP;
   const width = Math.max(size.width, anchor.width);
-  const wanted = align === "end" ? anchor.right - width : anchor.left;
+  // "auto": under the anchor's left edge, or against its right edge when that would run off the viewport.
+  const fitsAtStart = anchor.left + width <= view.width - EDGE;
+  const wanted = align === "end" || (align === "auto" && !fitsAtStart) ? anchor.right - width : anchor.left;
   const left = Math.max(EDGE, Math.min(wanted, view.width - width - EDGE));
   return { top, left, minWidth: anchor.width, maxHeight: room, placement: up ? "top" : "bottom" };
 }
@@ -66,7 +68,7 @@ export function placement(anchor, size, view, { align = "start" } = {}) {
 /**
  * Wires a .popup element to its anchor.
  * @param {HTMLElement} el  the .popup (popover="manual" is set here)
- * @param {{ anchor: HTMLElement, onDismiss: () => void, env: Env, align?: () => "start" | "end" }} options
+ * @param {{ anchor: HTMLElement, onDismiss: () => void, env: Env, align?: () => "start" | "end" | "auto" }} options
  */
 export function floating(el, { anchor, onDismiss, env, align = () => "start" }) {
   const { window: win, document: doc } = env;

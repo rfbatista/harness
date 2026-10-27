@@ -742,7 +742,7 @@ func TestWritingHelperInTheTaskEditDialogInTheBrowser(t *testing.T) {
 		whPoll(`document.querySelector('#task-edit-description').value.startsWith('Add a magic pen')`),
 		clickButton(`main`, "Save"),
 		whPoll(`!document.querySelector('#task-edit-description')`),
-		chromedp.Evaluate(`document.querySelector('.brief > p')?.textContent ?? ''`, &after),
+		chromedp.Evaluate(`document.querySelector('#task-note .note-body')?.textContent ?? ''`, &after),
 	)
 	if err != nil {
 		t.Fatalf("save: %v\nJS errors: %v", err, errs.all())
