@@ -22,7 +22,8 @@ import { ANNOUNCE_CHANGED, FIXED, GONE, onChange, onEnded, onReload } from "../.
 import { PERMALINK_TOAST, hrefOf, parseHref, permalink, repositoryHref } from "../../domain/routes.js";
 import { emptyTree, loadedOpenDirs, missingAncestors, openAction, revealPath, treeKey, typeAhead, visibleRows, withBusy, withExpanded, withLevel } from "../../domain/tree.js";
 import { mapView, zoneIndex, zoneTags } from "../../domain/zones.js";
-import { drawLines } from "../render/lines.js";
+import { clearPending, drawLines, showPending } from "../render/lines.js";
+import { intersectionProximity } from "../render/proximity.js";
 import {
   crumbsView,
   diffFileView,
@@ -39,6 +40,10 @@ import {
   viewsView,
 } from "../view.js";
 
+/** One frame spends at most this long drawing rows, a slice of this many at a time. */
+export const DRAW_BUDGET_MS = 8;
+export const SLICE_ROWS = 60;
+
 /** Above these a file is shown plain (approved limit). */
 export const HIGHLIGHT_BYTES = 256 * 1024;
 export const HIGHLIGHT_LINES = 10_000;
@@ -50,6 +55,9 @@ const SEQUENCE_MS = 1_500;
  * @property {import("../../domain/ports.js").CodeGateway} gateway
  * @property {import("../../domain/ports.js").Highlighter} highlighter  the Files view's; a diff's is highlighted by the code worker
  * @property {import("../../domain/ports.js").DiffPreparer} preparer
+ * @property {(root: Element|null, onChange: (changes: [Element, boolean][]) => void) => import("../render/proximity.js").Proximity} [proximity]  which file sections are near the viewport (an intersection observer by default)
+ * @property {(cb: () => void) => void} [frame]  when the next slice of rows is drawn (requestAnimationFrame by default)
+ * @property {number} [budgetMs]  how long one frame spends drawing rows
  * @property {import("../../../../shared/infrastructure/storage.js").Preferences} prefs
  * @property {{ pushState: Function, replaceState: Function }} [history]
  * @property {{ pathname: string, search: string, hash: string }} [location]
@@ -63,9 +71,18 @@ const SEQUENCE_MS = 1_500;
  * "repository"; the owner sets the identity fields before calling start().
  * @param {BrowserDeps} deps
  */
-export function codeBrowser({ gateway, highlighter, preparer, prefs, history = globalThis.history, location = globalThis.location, copy = defaultCopy, idle, setTimeout = globalThis.setTimeout.bind(globalThis) }) {
+export function codeBrowser({ gateway, highlighter, preparer, proximity = intersectionProximity, frame = (cb) => requestAnimationFrame(cb), budgetMs = DRAW_BUDGET_MS, prefs, history = globalThis.history, location = globalThis.location, copy = defaultCopy, idle, setTimeout = globalThis.setTimeout.bind(globalThis) }) {
   // Not reactive: controllers of drawn lines, in-flight requests, timers.
   const drawn = new Map();
+  // Lazy file sections: a section's lines are drawn when it comes near the viewport.
+  /** @type {Map<string, { el: HTMLElement, ctl: ReturnType<typeof drawLines> }>} the blocks waiting for, or in the middle of, their rows */
+  const blocks = new Map();
+  /** The paths of the sections near the viewport, and the section element of each. */
+  const near = new Set();
+  const sectionPath = new Map();
+  const queue = new Set();
+  let nearby = null;
+  let pumping = false;
   // The rows the code worker made for each diff read, by the read's id (Alpine
   // wraps the diff in a proxy, so the object itself is no key).
   /** @type {Map<number, { split: boolean, files: Map<string, import("../../domain/ports.js").PreparedFile> }>} */
@@ -99,7 +116,58 @@ export function codeBrowser({ gateway, highlighter, preparer, prefs, history = g
   let pinnedUntil = 0;
   let refreshAgain = false;
 
-  return {
+  /** The queued block nearest the middle of the viewport; blocks that left the near zone are dropped. */
+  function nearest(main) {
+    const mid = main ? main.getBoundingClientRect().top + main.clientHeight / 2 : 0;
+    let best = null;
+    let bestD = Infinity;
+    for (const path of queue) {
+      const b = blocks.get(path);
+      if (!b || !b.el.isConnected || b.ctl.complete) {
+        queue.delete(path);
+        continue;
+      }
+      if (!near.has(path)) {
+        queue.delete(path);
+        continue;
+      }
+      const d = Math.abs(b.el.getBoundingClientRect().top - mid);
+      if (d < bestD) {
+        best = path;
+        bestD = d;
+      }
+    }
+    return best;
+  }
+
+  function enqueue(path) {
+    queue.add(path);
+    if (!pumping) {
+      pumping = true;
+      frame(pump);
+    }
+  }
+
+  /** One frame's drawing: slices of rows, nearest block first, until the frame's budget is spent. */
+  function pump() {
+    const main = self_.mainScroller?.() ?? null;
+    const t0 = performance.now();
+    do {
+      const path = nearest(main);
+      if (path === null) break;
+      const b = blocks.get(path);
+      const done = b.ctl.step(SLICE_ROWS);
+      if (done) {
+        clearPending(b.el);
+        blocks.delete(path);
+        queue.delete(path);
+      }
+    } while (queue.size && performance.now() - t0 < budgetMs);
+    if (queue.size) frame(pump);
+    else pumping = false;
+  }
+
+  const self_ = {
     kind: "repository",
     projectId: "",
     /** @type {import("../../domain/routes.js").CodeRoute} */
@@ -127,6 +195,8 @@ export function codeBrowser({ gateway, highlighter, preparer, prefs, history = g
     /** A re-read diff held while the reader is in the middle of the old one. */
     heldDiff: null,
     diffRev: 0,
+    /** Files whose section is drawn again on its own (a withheld file loaded): their own counter. */
+    fileRevs: {},
     /** The layout the open diff's rows were made for (the worker makes them; a switch waits for it). */
     rowsSplit: false,
     /** The first paint's diff page is being prepared. */
@@ -305,7 +375,7 @@ export function codeBrowser({ gateway, highlighter, preparer, prefs, history = g
         return diffFileView(f, {
           slug: this.diffSlugs[f.path],
           // The layout changes the rows: a new key draws them again.
-          rev: `${this.diffRev}:${this.rowsSplit ? "split" : "unified"}`,
+          rev: `${this.diffRev}.${this.fileRevs[f.path] ?? 0}:${this.rowsSplit ? "split" : "unified"}`,
           collapsed: !!this.collapsed[f.path],
           busy: !!this.busyFiles[f.path],
           asked: !!this.askedFiles[f.path],
@@ -625,6 +695,12 @@ export function codeBrowser({ gateway, highlighter, preparer, prefs, history = g
     },
 
     stop() {
+      nearby?.disconnect();
+      nearby = null;
+      near.clear();
+      queue.clear();
+      blocks.clear();
+      sectionPath.clear();
       unfollow();
       for (const c of drawn.values()) c.destroy();
       drawn.clear();
@@ -673,6 +749,7 @@ export function codeBrowser({ gateway, highlighter, preparer, prefs, history = g
       this.collapsed = this.diff ? Object.fromEntries(diff.files.filter((f) => keep[f.path] ?? collapsed[f.path]).map((f) => [f.path, true])) : collapsed;
       this.diff = diff;
       this.diffRev += 1;
+      this.fileRevs = {};
       this.rowsSplit = rowsOf.get(diff)?.split ?? this.wantSplit;
       rowsOf.prune([diff, this.heldDiff]);
       this.askedFiles = {};
@@ -1106,7 +1183,8 @@ export function codeBrowser({ gateway, highlighter, preparer, prefs, history = g
           const next = Object.freeze({ ...this.diff, readId: ++reads, files: Object.freeze(this.diff.files.map((x) => (x.path === path ? f : x))) });
           rowsOf.set(next, { split: sets.split, files: new Map([...sets.files, ...rowsOf.get(one).files]) }, [this.heldDiff]);
           this.diff = next;
-          this.diffRev += 1;
+          // Only this file's section is drawn again.
+          this.fileRevs = { ...this.fileRevs, [path]: (this.fileRevs[path] ?? 0) + 1 };
           if (f.withheld) this.askedFiles = { ...this.askedFiles, [path]: true };
         }
       } catch (err) {
@@ -1121,10 +1199,39 @@ export function codeBrowser({ gateway, highlighter, preparer, prefs, history = g
       return {};
     },
 
-    /** Draws a file's hunks into its .code-lines (x-init on the element). */
+    /**
+     * A file's section is in the page (x-init on the section): watches whether it is
+     * near the viewport, and draws its lines then.
+     */
+    watchFile(el, path) {
+      nearby ??= proximity(this.mainScroller() ?? null, (changes) => {
+        for (const [target, isNear] of changes) {
+          const p = sectionPath.get(target);
+          if (p === undefined) continue;
+          if (!target.isConnected) {
+            nearby.unwatch(target);
+            sectionPath.delete(target);
+            continue;
+          }
+          if (isNear) {
+            near.add(p);
+            if (blocks.has(p)) enqueue(p);
+          } else near.delete(p);
+        }
+      });
+      sectionPath.set(el, path);
+      nearby.watch(el);
+    },
+
+    /**
+     * A file's .code-lines is in the page (x-init on it): it holds skeleton rows of
+     * the height its rows will have until its section is near, then the rows are
+     * drawn into it in slices.
+     */
     drawHunks(el, path) {
       const prepared = rowsOf.get(this.diff)?.files.get(path);
       drawn.get(`diff:${path}`)?.destroy();
+      blocks.delete(path);
       if (!prepared) return;
       const ctl = drawLines(el, {
         rows: prepared.rows,
@@ -1135,8 +1242,22 @@ export function codeBrowser({ gateway, highlighter, preparer, prefs, history = g
         target: this.currentFile === path ? this.target : null,
         targetSide: this.targetSide,
         idle,
+        deferred: true,
       });
       drawn.set(`diff:${path}`, ctl);
+      showPending(el, prepared.rows.length);
+      blocks.set(path, { el, ctl });
+      if (near.has(path)) enqueue(path);
+    },
+
+    /** Draws a file's rows now, whole (a link, a key or a line asked for them). */
+    drawNow(path) {
+      const b = blocks.get(path);
+      if (!b || b.ctl.complete) return;
+      b.ctl.finish();
+      clearPending(b.el);
+      blocks.delete(path);
+      queue.delete(path);
     },
 
     /** Draws the open file's lines (x-init on its .code-lines). */
@@ -1190,6 +1311,7 @@ export function codeBrowser({ gateway, highlighter, preparer, prefs, history = g
       if (!section) return;
       let top = topIn(main, section);
       if (line) {
+        this.drawNow(path);
         const ctl = drawn.get(`diff:${path}`);
         const row = rowOfLineIn(rowsOf.get(this.diff)?.files.get(path)?.rows ?? [], side, line);
         if (ctl && row >= 0) top = ctl.blockOffset() + ctl.offsetOf(row) - Math.floor(main.clientHeight / 3);
@@ -1230,13 +1352,18 @@ export function codeBrowser({ gateway, highlighter, preparer, prefs, history = g
       const main = this.mainScroller();
       if (!main || !this.diff) return;
       if (Date.now() >= pinnedUntil) {
+        // Only the sections near the viewport are measured, never every one.
         const y = main.scrollTop + 8;
-        let current = this.diff.files[0]?.path ?? "";
+        let current = "";
+        let seen = false;
         for (const f of this.diff.files) {
+          if (!near.has(f.path)) continue;
+          seen = true;
           const el = main.querySelector(`#diff-${cssEscape(this.diffSlugs[f.path])}`);
           if (el && topIn(main, el) <= y) current = f.path;
+          else if (el) break;
         }
-        this.currentFile = current;
+        if (seen) this.currentFile = current || this.diff.files.find((f) => near.has(f.path)).path;
       }
       if (main.scrollTop + main.clientHeight * 2 >= main.scrollHeight) await this.loadMore();
     },
@@ -1645,6 +1772,7 @@ export function codeBrowser({ gateway, highlighter, preparer, prefs, history = g
       }
     },
   };
+  return self_;
 }
 
 function focusSide(side) {

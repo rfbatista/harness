@@ -6,7 +6,7 @@ import { memoryCode } from "../../infrastructure/memory-gateway.js";
 import { inlinePreparer } from "../../infrastructure/preparer.js";
 import { plainHighlighter } from "../../infrastructure/plain-highlighter.js";
 import { makeWorld, manyChangedFilesWorld } from "../../testing/fixtures.js";
-import { finderRows } from "./codeBrowser.js";
+import { finderRows, SLICE_ROWS } from "./codeBrowser.js";
 import { codePanel } from "./codePanel.js";
 
 file("code/presentation/codePanel");
@@ -17,12 +17,12 @@ const memoryPrefs = () => {
 };
 
 /** A session's Code panel over the memory world, no seed painted; idle runs at once. */
-async function setup({ world = makeWorld(), live = true, shown = true, prefs = memoryPrefs(), seedId = "", slow = 0, settle = true } = {}) {
+async function setup({ world = makeWorld(), live = true, shown = true, prefs = memoryPrefs(), seedId = "", slow = 0, settle = true, depsExtra = {} } = {}) {
   const memory = memoryCode(world);
   if (slow) memory.slow(slow);
   const pushed = [];
   const history = { pushState: (_s, _t, url) => pushed.push(url), replaceState: (_s, _t, url) => pushed.push(url) };
-  const deps = { gateway: memory.gateway, highlighter: plainHighlighter(), preparer: inlinePreparer(plainHighlighter()), prefs, history, location: { pathname: "/", search: "", hash: "" }, idle: (cb) => cb() };
+  const deps = { gateway: memory.gateway, highlighter: plainHighlighter(), preparer: inlinePreparer(plainHighlighter()), prefs, history, location: { pathname: "/", search: "", hash: "" }, idle: (cb) => cb(), ...depsExtra };
   const el = document.createElement("section");
   const mounted = mount(
     () => codePanel(deps)({
@@ -467,4 +467,165 @@ test("opening a deleted file of a later page from Files loads pages up to it and
   assert.ok(panel.diff.files.some((f) => f.path === "zzz/deleted.md"));
   assert.equal(panel.view, "changes");
   assert.equal(panel.currentFile, "zzz/deleted.md");
+});
+
+/** Which sections are near, by the test's say-so; the page's frames run when the test lets them. */
+function lazyDeps() {
+  const watched = new Map();
+  const frames = [];
+  let onChange = () => {};
+  return {
+    deps: {
+      proximity: (_root, cb) => {
+        onChange = cb;
+        return { watch: (el) => watched.set(el, false), unwatch: (el) => watched.delete(el), disconnect() {} };
+      },
+      frame: (cb) => frames.push(cb),
+      budgetMs: 0,
+    },
+    /** Marks the sections of these paths near (and the others far). */
+    near(paths) {
+      const changes = [];
+      for (const [el, was] of watched) {
+        const isNear = paths.includes(el.dataset.path);
+        if (isNear !== was) changes.push([el, isNear]);
+        watched.set(el, isNear);
+      }
+      onChange(changes);
+    },
+    /** Runs the frames asked for so far, one batch. */
+    runFrames(max = 1) {
+      for (let i = 0; i < max && frames.length; i += 1) frames.splice(0).forEach((cb) => cb());
+    },
+    get pending() {
+      return frames.length;
+    },
+  };
+}
+
+/** Puts the panel's file sections in a detached page, as Alpine's x-for and x-init would. */
+function renderSections(panel) {
+  const main = document.createElement("div");
+  document.body.append(main);
+  panel.mainScroller = () => main;
+  const sections = new Map();
+  for (const f of panel.diffFiles) {
+    const section = document.createElement("section");
+    section.className = "file";
+    section.dataset.path = f.path;
+    main.append(section);
+    panel.watchFile(section, f.path);
+    if (f.hasLines) {
+      const hunks = document.createElement("div");
+      hunks.className = "hunks";
+      const lines = document.createElement("div");
+      lines.className = "code-lines";
+      lines.dataset.layout = f.layout ?? "";
+      hunks.append(lines);
+      section.append(hunks);
+      panel.drawHunks(lines, f.path);
+      sections.set(f.path, { section, hunks, lines });
+    }
+  }
+  return { main, sections };
+}
+
+const drawnLines = (parts) => parts.lines.querySelectorAll(".line").length;
+
+test("lazy sections: only the sections near the viewport hold lines; the rest hold skeleton rows of their height, aria-busy", async () => {
+  const lazy = lazyDeps();
+  const { panel } = await setup({ world: manyChangedFilesWorld(40), depsExtra: lazy.deps });
+  const { sections } = renderSections(panel);
+  const paths = [...sections.keys()];
+  const [first, second, far] = [paths[0], paths[1], paths.at(-1)];
+  for (const p of paths) {
+    const { hunks, lines } = sections.get(p);
+    assert.equal(hunks.getAttribute("aria-busy"), "true");
+    assert.equal(drawnLines({ lines }), 0);
+    assert.ok(Number(lines.querySelector(".skeleton-lines").style.getPropertyValue("--rows")) > 0, "its height is known before it is drawn");
+  }
+  lazy.near([first, second]);
+  lazy.runFrames(5);
+  assert.ok(drawnLines(sections.get(first)) > 0 && drawnLines(sections.get(second)) > 0);
+  assert.equal(sections.get(first).hunks.getAttribute("aria-busy"), null);
+  assert.equal(drawnLines(sections.get(far)), 0);
+  const keep = sections.get(first).lines.querySelector(".line");
+  lazy.near([second, far]);
+  lazy.runFrames(5);
+  assert.ok(drawnLines(sections.get(far)) > 0, "scrolling brings the next ones");
+  assert.ok(sections.get(first).lines.contains(keep), "a section drawn once keeps its lines");
+});
+
+test("lazy sections draw in both layouts: the rows are the layout's, and a switch draws again", async () => {
+  const lazy = lazyDeps();
+  const { panel } = await setup({ world: manyChangedFilesWorld(3), depsExtra: lazy.deps });
+  let page = renderSections(panel);
+  const path = panel.diff.files[1].path;
+  lazy.near([path]);
+  lazy.runFrames(3);
+  assert.ok(page.sections.get(path).lines.querySelectorAll(".line > .half").length > 0, "side by side");
+  panel.setLayout("unified");
+  await flush();
+  page = renderSections(panel);
+  assert.equal(page.sections.get(path).hunks.getAttribute("aria-busy"), "true", "skeleton again until near");
+  lazy.near([]);
+  lazy.near([path]);
+  lazy.runFrames(3);
+  assert.equal(page.sections.get(path).lines.querySelectorAll(".half").length, 0);
+  assert.ok(drawnLines(page.sections.get(path)) > 0, "unified");
+});
+
+test("a large file is drawn in slices across frames, in order, one slice per frame", async () => {
+  const lazy = lazyDeps();
+  const world = manyChangedFilesWorld(0, { lines: 0 });
+  world.workspaces.ws1.disk["web/huge.js"] = Array.from({ length: 700 }, (_, i) => `line ${i}`).join("\n") + "\n";
+  world.workspaces.ws1.untracked.push("web/huge.js");
+  world.limits = { perFile: 10_000, total: 10_000 };
+  const { panel } = await setup({ world, depsExtra: lazy.deps });
+  panel.setLayout("unified");
+  await flush();
+  const { sections } = renderSections(panel);
+  const huge = sections.get("web/huge.js");
+  lazy.near(["web/huge.js"]);
+  const sizes = [];
+  while (lazy.pending && sizes.length < 40) {
+    lazy.runFrames(1);
+    sizes.push(huge.lines.querySelectorAll(".line").length);
+  }
+  assert.ok(sizes.length > 5, "more than a few frames");
+  assert.deepEqual(sizes, [...sizes].sort((a, b) => a - b));
+  assert.ok(sizes.every((n, i) => n - (sizes[i - 1] ?? 0) <= SLICE_ROWS), `no frame draws more than ${SLICE_ROWS} rows: ${sizes}`);
+  assert.equal(sizes.at(-1), 700);
+  assert.equal(huge.hunks.getAttribute("aria-busy"), null);
+});
+
+test("Load diff on a withheld file draws that file's section again and no other", async () => {
+  const lazy = lazyDeps();
+  const { panel } = await setup({ world: makeWorld({ limits: { perFile: 1 } }), depsExtra: lazy.deps });
+  const before = Object.fromEntries(panel.diffFiles.map((f) => [f.path, f.key]));
+  await panel.loadWithheld("README.md");
+  const after = Object.fromEntries(panel.diffFiles.map((f) => [f.path, f.key]));
+  const changed = Object.keys(after).filter((p) => after[p] !== before[p]);
+  assert.deepEqual(changed, ["README.md"]);
+});
+
+test("the current file is read off the sections near the viewport only", async () => {
+  const lazy = lazyDeps();
+  const { panel } = await setup({ world: manyChangedFilesWorld(40), depsExtra: lazy.deps });
+  const { main, sections } = renderSections(panel);
+  const paths = [...sections.keys()];
+  let measured = 0;
+  for (const [path, { section }] of sections) {
+    section.id = `diff-${panel.diffSlugs[path]}`;
+    const real = section.getBoundingClientRect.bind(section);
+    section.getBoundingClientRect = () => {
+      measured += 1;
+      return real();
+    };
+  }
+  Object.defineProperties(main, { scrollTop: { value: 0, writable: true }, clientHeight: { value: 800 }, scrollHeight: { value: 100_000 } });
+  lazy.near([paths[10], paths[11], paths[12]]);
+  await panel.followScroll();
+  assert.ok(measured <= 3 + 3, `measured ${measured} sections`);
+  assert.equal(panel.currentFile, paths[10]);
 });

@@ -142,8 +142,9 @@ function targets(ctx, row) {
  * @param {import("../../domain/lines.js").LineRange|null} [opts.target]
  * @param {"R"|"L"} [opts.targetSide]
  * @param {(cb: () => void) => void} [opts.idle]  when to highlight (tests run it at once)
+ * @param {boolean} [opts.deferred]          draw nothing yet: the owner calls step() until it says done, or finish()
  */
-export function drawLines(el, { rows, scroller = null, slug = "", highlighter = null, language = "plaintext", virtual = true, target = null, targetSide = "R", idle = defaultIdle }) {
+export function drawLines(el, { rows, scroller = null, slug = "", highlighter = null, language = "plaintext", virtual = true, target = null, targetSide = "R", idle = defaultIdle, deferred = false }) {
   const doc = el.ownerDocument;
   let tokens = new Map();
   const ctx = {
@@ -158,7 +159,11 @@ export function drawLines(el, { rows, scroller = null, slug = "", highlighter = 
   let frame = 0;
   let destroyed = false;
 
+  // Rows drawn so far when not windowed; a deferred block fills in slices.
+  let next = 0;
+
   function drawAll() {
+    next = rows.length;
     el.replaceChildren(...rows.map((r) => rowElement(doc, r, ctx)));
   }
 
@@ -220,12 +225,16 @@ export function drawLines(el, { rows, scroller = null, slug = "", highlighter = 
     else drawAll();
   }
 
-  if (windowed) {
+  function startWindow() {
+    next = rows.length;
     measure();
     drawWindow(true);
     scroller.addEventListener("scroll", onScroll, { passive: true });
-  } else {
-    drawAll();
+  }
+
+  if (!deferred) {
+    if (windowed) startWindow();
+    else drawAll();
   }
 
   // Highlight after paint, then redraw what is on screen.
@@ -239,6 +248,33 @@ export function drawLines(el, { rows, scroller = null, slug = "", highlighter = 
 
   return {
     windowed,
+    /** Whether every row is drawn (a windowed block is, once its window is). */
+    get complete() {
+      return next >= rows.length;
+    },
+    /**
+     * Draws the next `count` rows of a deferred block, in order; true when
+     * nothing is left. A windowed block draws its window in one step.
+     */
+    step(count) {
+      if (destroyed || next >= rows.length) return true;
+      if (windowed) {
+        startWindow();
+        return true;
+      }
+      const end = Math.min(rows.length, next + count);
+      const slice = rows.slice(next, end).map((r) => rowElement(doc, r, ctx));
+      if (next === 0) el.replaceChildren(...slice);
+      else el.append(...slice);
+      next = end;
+      return next >= rows.length;
+    },
+    /** Draws what is left at once (a link or a key asked for this block). */
+    finish() {
+      if (destroyed || next >= rows.length) return;
+      if (windowed) startWindow();
+      else drawAll();
+    },
     get rowCount() {
       return rows.length;
     },
@@ -259,6 +295,7 @@ export function drawLines(el, { rows, scroller = null, slug = "", highlighter = 
     setTarget(range, side = "R") {
       ctx.target = range;
       ctx.targetSide = side;
+      if (deferred && next === 0) return; // the first rows are drawn with the target
       redraw();
     },
     /** Redraws the window after the scroller moved programmatically. */
@@ -271,6 +308,37 @@ export function drawLines(el, { rows, scroller = null, slug = "", highlighter = 
       scroller?.removeEventListener("scroll", onScroll);
     },
   };
+}
+
+/** The skeleton bars shown in a block whose rows are not drawn yet: at most this many, the rest is blank height. */
+const SKELETON_BARS = 10;
+
+/**
+ * Fills a .code-lines with skeleton rows for a block of `rowCount` rows, and
+ * its .hunks with aria-busy: the block keeps the height its rows will have
+ * (one code line each) so the scrollbar is true before they are drawn.
+ * The first rows drawn replace the placeholder.
+ * @param {HTMLElement} el
+ */
+export function showPending(el, rowCount) {
+  const doc = el.ownerDocument;
+  const holder = doc.createElement("div");
+  holder.className = "skeleton-lines";
+  holder.setAttribute("aria-hidden", "true");
+  holder.style.setProperty("--rows", String(rowCount));
+  for (let i = 0; i < Math.min(rowCount, SKELETON_BARS); i += 1) {
+    const bar = doc.createElement("span");
+    bar.className = "skeleton";
+    bar.style.setProperty("--skeleton-width", `${38 + ((i * 37) % 52)}%`);
+    holder.append(bar);
+  }
+  el.replaceChildren(holder);
+  el.closest(".hunks")?.setAttribute("aria-busy", "true");
+}
+
+/** The rows are drawn: the section is no longer busy. */
+export function clearPending(el) {
+  el.closest(".hunks")?.removeAttribute("aria-busy");
 }
 
 function defaultIdle(cb) {
