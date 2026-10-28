@@ -13,22 +13,23 @@
  * Exceptions: data-wrap and data-layout="split" (lines grow: do not
  * virtualise), data-target / :target, data-no-newline. A block whose lines
  * are not drawn yet holds one div.skeleton-lines (--rows: how many lines it
- * will have, so its height is already true) with a few .skeleton bars; the
- * .hunks around it carries aria-busy="true" until the lines replace it.
+ * will have, so its height is already true) drawing one skeleton bar per
+ * line; the .hunks around it carries aria-busy="true" until the lines replace it.
  */
 
 @layer blocks {
   .code-lines > .skeleton-lines {
-    display: grid;
-    grid-auto-rows: var(--size-code-line);
-    align-content: start;
-    align-items: center;
     block-size: calc(var(--rows, 1) * var(--size-code-line));
-    overflow: hidden;
-    padding-inline: var(--space-m);
-    background: var(--color-code);
-
-    & > .skeleton { block-size: 0.75em; }
+    /* One bar per line, drawn by the background: the block is a single element, whatever its height. */
+    background:
+      repeating-linear-gradient(
+        to bottom,
+        transparent 0 calc((var(--size-code-line) - 0.75em) / 2),
+        var(--color-pressed) 0 calc((var(--size-code-line) + 0.75em) / 2),
+        transparent 0 var(--size-code-line)
+      )
+      var(--space-m) 0 / 60% 100% no-repeat,
+      var(--color-code);
   }
 
   .code-lines {

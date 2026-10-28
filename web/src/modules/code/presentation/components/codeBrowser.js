@@ -44,7 +44,7 @@ import {
 export const DRAW_BUDGET_MS = 8;
 export const SLICE_ROWS = 60;
 /** The tree puts this many more rows in the page each frame, so a directory of a thousand entries opens without a stall. */
-export const TREE_CHUNK = 120;
+export const TREE_CHUNK = 50;
 
 /** Above these a file is shown plain (approved limit). */
 export const HIGHLIGHT_BYTES = 256 * 1024;
@@ -87,6 +87,10 @@ export function codeBrowser({ gateway, highlighter, preparer, proximity = inters
   let pumping = false;
   // The changed files' row views, kept while a file's data does not change: a selection redoes two.
   const rowViews = new Map();
+  // The same for the sections: a page that comes in leaves the sections already on screen alone.
+  const sectionViews = new Map();
+  // And the tree's rows: the chunks that follow leave the rows already in the page alone.
+  const treeViews = new Map();
   let heldSlugs = { readId: 0, slugs: {} };
   // The rows the code worker made for each diff read, by the read's id (Alpine
   // wraps the diff in a proxy, so the object itself is no key).
@@ -344,7 +348,20 @@ export function codeBrowser({ gateway, highlighter, preparer, proximity = inters
       const ctx = { state: this.tree, selected: this.file?.path ?? this.openEntry?.path ?? "", focused, zones, href: (p) => this.filesHref(p), fresh };
       const out = [];
       for (const row of rows.length > this.treeLimit ? rows.slice(0, this.treeLimit) : rows) {
-        out.push(treeRowView(row, ctx));
+        const e = row.entry;
+        const expanded = !!this.tree.expanded[e.path];
+        const busy = !!this.tree.busy[e.path];
+        const tabindex = focused === e.path;
+        const selected = ctx.selected === e.path;
+        const isFresh = fresh.has(e.path);
+        const hit = treeViews.get(e.path);
+        if (hit && hit.entry === e && hit.depth === row.depth && hit.pos === row.pos && hit.size === row.size && hit.expanded === expanded && hit.busy === busy && hit.tabindex === tabindex && hit.selected === selected && hit.fresh === isFresh && hit.zones === zones && hit.href === ctx.href(e.path)) {
+          out.push(hit.view);
+        } else {
+          const view = treeRowView(row, ctx);
+          treeViews.set(e.path, { entry: e, depth: row.depth, pos: row.pos, size: row.size, expanded, busy, tabindex, selected, fresh: isFresh, zones, href: ctx.href(e.path), view });
+          out.push(view);
+        }
         if (this.tree.busy[row.entry.path] && !this.tree.levels[row.entry.path]) {
           for (const s of skeletonRows(row.entry.path)) out.push({ ...s, skeleton: true, depthStyle: `--depth:${row.depth + 1}` });
         }
@@ -403,22 +420,24 @@ export function codeBrowser({ gateway, highlighter, preparer, proximity = inters
     // ── the main side ────────────────────────────────────────────────────
     get diffFiles() {
       if (!this.diff) return [];
-      const sets = rowsOf.get(this.diff);
-      return this.diff.files.map((f) => {
+      const diff = this.diff;
+      const sets = rowsOf.get(diff);
+      return diff.files.map((f) => {
         const split = !!sets?.files.get(f.path)?.split;
-        return diffFileView(f, {
-          slug: this.diffSlugs[f.path],
-          // The layout changes the rows: a new key draws them again.
-          rev: `${this.fileRevs[f.path] ?? 0}:${this.rowsSplit ? "split" : "unified"}`,
-          collapsed: !!this.collapsed[f.path],
-          busy: !!this.busyFiles[f.path],
-          asked: !!this.askedFiles[f.path],
-          zones,
-          diff: this.diff,
-          viewHref: this.viewFileHref(f.path),
-          size: undefined,
-          splitAllowed: split,
-        });
+        const slug = this.diffSlugs[f.path];
+        // The layout changes the rows: a new key draws them again.
+        const rev = `${this.fileRevs[f.path] ?? 0}:${this.rowsSplit ? "split" : "unified"}`;
+        const collapsed = !!this.collapsed[f.path];
+        const busy = !!this.busyFiles[f.path];
+        const asked = !!this.askedFiles[f.path];
+        const viewHref = this.viewFileHref(f.path);
+        const hit = sectionViews.get(f.path);
+        if (hit && hit.f === f && hit.slug === slug && hit.rev === rev && hit.collapsed === collapsed && hit.busy === busy && hit.asked === asked && hit.split === split && hit.viewHref === viewHref && hit.zones === zones && hit.scope === diff.scope && hit.base === diff.base && hit.head === diff.source.commit) {
+          return hit.view;
+        }
+        const view = diffFileView(f, { slug, rev, collapsed, busy, asked, zones, diff, viewHref, size: undefined, splitAllowed: split });
+        sectionViews.set(f.path, { f, slug, rev, collapsed, busy, asked, split, viewHref, zones, scope: diff.scope, base: diff.base, head: diff.source.commit, view });
+        return view;
       });
     },
     /** Whether the layout switch and the window ask for side by side rows. */

@@ -310,14 +310,12 @@ export function drawLines(el, { rows, scroller = null, slug = "", highlighter = 
   };
 }
 
-/** The skeleton bars shown in a block whose rows are not drawn yet: at most this many, the rest is blank height. */
-const SKELETON_BARS = 10;
-
 /**
- * Fills a .code-lines with skeleton rows for a block of `rowCount` rows, and
- * its .hunks with aria-busy: the block keeps the height its rows will have
- * (one code line each) so the scrollbar is true before they are drawn.
- * The first rows drawn replace the placeholder.
+ * Fills a .code-lines with a skeleton block of `rowCount` rows, and its
+ * .hunks with aria-busy: the block keeps the height its rows will have (one
+ * code line each) so the scrollbar is true before they are drawn. It is one
+ * element, however many rows: hundreds of sections wait at once. The first rows
+ * drawn replace it.
  * @param {HTMLElement} el
  */
 export function showPending(el, rowCount) {
@@ -326,12 +324,6 @@ export function showPending(el, rowCount) {
   holder.className = "skeleton-lines";
   holder.setAttribute("aria-hidden", "true");
   holder.style.setProperty("--rows", String(rowCount));
-  for (let i = 0; i < Math.min(rowCount, SKELETON_BARS); i += 1) {
-    const bar = doc.createElement("span");
-    bar.className = "skeleton";
-    bar.style.setProperty("--skeleton-width", `${38 + ((i * 37) % 52)}%`);
-    holder.append(bar);
-  }
   el.replaceChildren(holder);
   el.closest(".hunks")?.setAttribute("aria-busy", "true");
 }
