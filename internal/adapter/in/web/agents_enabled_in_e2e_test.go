@@ -71,8 +71,12 @@ func TestAnAgentIsEnabledPerProjectFromItsDetailEditorAndDeleteDialog_EndToEnd(t
 	enabledInSetAgents(t, w, atlas.ID, "selected", "backend")
 	enabledInSetAgents(t, w, lab.ID, "selected")
 
-	flat := func(sel string) string { return `(document.querySelector(` + quote(sel) + `)?.textContent ?? '').replace(/\s+/g, ' ').trim()` }
-	visible := func(sel string) string { return `document.querySelector(` + quote(sel) + `)?.checkVisibility() === true` }
+	flat := func(sel string) string {
+		return `(document.querySelector(` + quote(sel) + `)?.textContent ?? '').replace(/\s+/g, ' ').trim()`
+	}
+	visible := func(sel string) string {
+		return `document.querySelector(` + quote(sel) + `)?.checkVisibility() === true`
+	}
 	rows := `[...document.querySelectorAll('[data-enabled-row]')].map(r => r.querySelector('[data-project-link]').textContent + ':' + r.dataset.mode).join()`
 	row := func(name string) string { return `[data-project-row][data-name="` + name + `"]` }
 	checked := func(name string) string { return `document.querySelector('` + row(name) + ` input').checked` }

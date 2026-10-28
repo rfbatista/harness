@@ -130,9 +130,15 @@ func TestMcpServerFormCreatesATestedServerFromAPastedCommandLine_EndToEnd(t *tes
 		return strings.TrimSpace(string(raw))
 	}
 
-	flat := func(sel string) string { return `(document.querySelector(` + quote(sel) + `)?.textContent ?? '').replace(/\s+/g, ' ').trim()` }
-	visible := func(sel string) string { return `document.querySelector(` + quote(sel) + `)?.checkVisibility() === true` }
-	attr := func(sel, name string) string { return `document.querySelector(` + quote(sel) + `)?.getAttribute(` + quote(name) + `)` }
+	flat := func(sel string) string {
+		return `(document.querySelector(` + quote(sel) + `)?.textContent ?? '').replace(/\s+/g, ' ').trim()`
+	}
+	visible := func(sel string) string {
+		return `document.querySelector(` + quote(sel) + `)?.checkVisibility() === true`
+	}
+	attr := func(sel, name string) string {
+		return `document.querySelector(` + quote(sel) + `)?.getAttribute(` + quote(name) + `)`
+	}
 	save := `document.querySelector('[data-mcp-form] [data-save-footer] [data-save]')`
 	cell := func(section string, n int, field string) string {
 		return fmt.Sprintf(`[data-mf-%s] > div:nth-of-type(%d) [data-field=%s]`, section, n, field)
@@ -288,9 +294,15 @@ func TestMcpServerFormKeepsATokenAsTextOnlyWhenTold_EndToEnd(t *testing.T) {
 		raw, _ := os.ReadFile(filepath.Join(w.root, "agents", "mcp-servers.json"))
 		return string(raw)
 	}
-	flat := func(sel string) string { return `(document.querySelector(` + quote(sel) + `)?.textContent ?? '').replace(/\s+/g, ' ').trim()` }
-	visible := func(sel string) string { return `document.querySelector(` + quote(sel) + `)?.checkVisibility() === true` }
-	attr := func(sel, name string) string { return `document.querySelector(` + quote(sel) + `)?.getAttribute(` + quote(name) + `)` }
+	flat := func(sel string) string {
+		return `(document.querySelector(` + quote(sel) + `)?.textContent ?? '').replace(/\s+/g, ' ').trim()`
+	}
+	visible := func(sel string) string {
+		return `document.querySelector(` + quote(sel) + `)?.checkVisibility() === true`
+	}
+	attr := func(sel, name string) string {
+		return `document.querySelector(` + quote(sel) + `)?.getAttribute(` + quote(name) + `)`
+	}
 	save := `document.querySelector('[data-mcp-form] [data-save-footer] [data-save]')`
 	header := func(n int, field string) string {
 		return fmt.Sprintf(`[data-mf-headers] > div:nth-of-type(%d) [data-field=%s]`, n, field)
@@ -399,8 +411,12 @@ func TestAgentEditorsNewMcpServerDrawerSavesTheServerAndKeepsTheEdit_EndToEnd(t 
 		raw, _ := os.ReadFile(filepath.Join(w.root, "agents", rel))
 		return string(raw)
 	}
-	visible := func(sel string) string { return `document.querySelector(` + quote(sel) + `)?.checkVisibility() === true` }
-	attr := func(sel, name string) string { return `document.querySelector(` + quote(sel) + `)?.getAttribute(` + quote(name) + `)` }
+	visible := func(sel string) string {
+		return `document.querySelector(` + quote(sel) + `)?.checkVisibility() === true`
+	}
+	attr := func(sel, name string) string {
+		return `document.querySelector(` + quote(sel) + `)?.getAttribute(` + quote(name) + `)`
+	}
 	drawer := `[data-mcp-form-page][data-mode=drawer]`
 	drawerSave := `document.querySelector('` + drawer + ` [data-save-footer] [data-save]')`
 	run := func(b *browser, name string, actions ...chromedp.Action) {

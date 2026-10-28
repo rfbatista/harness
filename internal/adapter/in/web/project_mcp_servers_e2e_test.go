@@ -30,8 +30,12 @@ func TestAProjectsSettingsPickAndSaveItsMcpServers_EndToEnd(t *testing.T) {
 }}
 `)
 	settings := "/projects/" + w.project.ID + "/settings"
-	flat := func(sel string) string { return `(document.querySelector(` + quote(sel) + `)?.textContent ?? '').replace(/\s+/g, ' ').trim()` }
-	visible := func(sel string) string { return `document.querySelector(` + quote(sel) + `)?.checkVisibility() === true` }
+	flat := func(sel string) string {
+		return `(document.querySelector(` + quote(sel) + `)?.textContent ?? '').replace(/\s+/g, ' ').trim()`
+	}
+	visible := func(sel string) string {
+		return `document.querySelector(` + quote(sel) + `)?.checkVisibility() === true`
+	}
 	const names = `[...document.querySelectorAll('[data-mcp-row]')].map(r => r.dataset.name).join()`
 	const ticked = `[...document.querySelectorAll('[data-mcp-row] input:checked')].map(i => i.closest('[data-mcp-row]').dataset.name).join()`
 	row := func(n string) string { return `[data-mcp-row][data-name="` + n + `"]` }
@@ -149,7 +153,9 @@ func TestAProjectsSettingsPickAndSaveItsMcpServers_EndToEnd(t *testing.T) {
 func TestAProjectsMcpSectionShowsTheEmptyStateAndTurnsSaveOffWhenTheCatalogIsBroken_EndToEnd(t *testing.T) {
 	w := newTokenSaverWorld(t)
 	settings := "/projects/" + w.project.ID + "/settings"
-	visible := func(sel string) string { return `document.querySelector(` + quote(sel) + `)?.checkVisibility() === true` }
+	visible := func(sel string) string {
+		return `document.querySelector(` + quote(sel) + `)?.checkVisibility() === true`
+	}
 
 	b := newTLSBrowser(t)
 	b.run("with no server in the catalog the section says so and links to New MCP server",

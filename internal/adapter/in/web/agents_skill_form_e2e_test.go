@@ -47,9 +47,15 @@ func TestSkillFormCreatesPreviewsAndEditsASkill_EndToEnd(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	flat := func(sel string) string { return `(document.querySelector(` + quote(sel) + `)?.textContent ?? '').replace(/\s+/g, ' ').trim()` }
-	visible := func(sel string) string { return `document.querySelector(` + quote(sel) + `)?.checkVisibility() === true` }
-	attr := func(sel, name string) string { return `document.querySelector(` + quote(sel) + `)?.getAttribute(` + quote(name) + `)` }
+	flat := func(sel string) string {
+		return `(document.querySelector(` + quote(sel) + `)?.textContent ?? '').replace(/\s+/g, ' ').trim()`
+	}
+	visible := func(sel string) string {
+		return `document.querySelector(` + quote(sel) + `)?.checkVisibility() === true`
+	}
+	attr := func(sel, name string) string {
+		return `document.querySelector(` + quote(sel) + `)?.getAttribute(` + quote(name) + `)`
+	}
 	form := `[data-skill-form]`
 	save := `document.querySelector('[data-save-footer] [data-save]')`
 	coach := `[...document.querySelectorAll('[data-coach-item]')].map(c => c.dataset.coachItem + '=' + c.dataset.state).join()`
@@ -124,7 +130,7 @@ func TestSkillFormCreatesPreviewsAndEditsASkill_EndToEnd(t *testing.T) {
 		waitUntil(`document.querySelector('[data-body-preview] h2')?.textContent === 'Steps' && document.querySelectorAll('[data-body-preview] li').length === 2`),
 		waitUntil(`!`+visible(`#sf-body`)),
 		clickButton(`document.querySelector('.md-bar')`, "Write"),
-		waitUntil(visible(`#sf-body`) + ` && !` + visible(`[data-body-preview]`)),
+		waitUntil(visible(`#sf-body`)+` && !`+visible(`[data-body-preview]`)),
 	)
 	run(b, "extra files: a new file is named and written, and an uploaded one joins it",
 		chromedp.Click(`[data-new-file]`, chromedp.ByQuery),

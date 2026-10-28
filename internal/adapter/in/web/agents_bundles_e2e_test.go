@@ -40,8 +40,12 @@ func TestBundleEditorRenamesPreviewsSavesUndoesAndGuardsLeaving_EndToEnd(t *test
 	const rows = `[...document.querySelectorAll('[data-bundle-row]')].map(r => r.dataset.key).join(',')`
 	const detail = `document.querySelector('[data-bundle-detail]')`
 	const editor = `document.querySelector('[data-bundle-editor]')`
-	flat := func(sel string) string { return `(document.querySelector(` + quote(sel) + `)?.textContent ?? '').replace(/\s+/g, ' ').trim()` }
-	visible := func(sel string) string { return `document.querySelector(` + quote(sel) + `)?.checkVisibility() === true` }
+	flat := func(sel string) string {
+		return `(document.querySelector(` + quote(sel) + `)?.textContent ?? '').replace(/\s+/g, ' ').trim()`
+	}
+	visible := func(sel string) string {
+		return `document.querySelector(` + quote(sel) + `)?.checkVisibility() === true`
+	}
 	save := `document.querySelector('[data-save-footer] [data-save]')`
 	nameField := `#bundle-name`
 

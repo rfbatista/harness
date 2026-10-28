@@ -117,12 +117,20 @@ func TestAccessibilityAgentIsCreatedByKeyboardAlone_EndToEnd(t *testing.T) {
 	}
 	enabledInSetAgents(t, w, atlas.ID, "selected", "designer")
 
-	flat := func(sel string) string { return `(document.querySelector(` + quote(sel) + `)?.textContent ?? '').replace(/\s+/g, ' ').trim()` }
-	visible := func(sel string) string { return `document.querySelector(` + quote(sel) + `)?.checkVisibility() === true` }
-	attr := func(sel, name string) string { return `document.querySelector(` + quote(sel) + `)?.getAttribute(` + quote(name) + `)` }
+	flat := func(sel string) string {
+		return `(document.querySelector(` + quote(sel) + `)?.textContent ?? '').replace(/\s+/g, ' ').trim()`
+	}
+	visible := func(sel string) string {
+		return `document.querySelector(` + quote(sel) + `)?.checkVisibility() === true`
+	}
+	attr := func(sel, name string) string {
+		return `document.querySelector(` + quote(sel) + `)?.getAttribute(` + quote(name) + `)`
+	}
 	is := func(js, want string) chromedp.Action { return waitUntil(`(` + js + `) === ` + quote(want)) }
 	active := `document.activeElement?.id`
-	onSel := func(sel string) string { return `document.activeElement === document.querySelector(` + quote(sel) + `)` }
+	onSel := func(sel string) string {
+		return `document.activeElement === document.querySelector(` + quote(sel) + `)`
+	}
 	chips := `[...document.querySelectorAll('[data-agent-editor] [data-chips] [data-chip]')].map(c => c.dataset.chip).join()`
 	typeText := func(s string) chromedp.Action { return chromedp.KeyEvent(s) }
 	tab := func() chromedp.Action { return a11yPress("Tab", 9, 0) }

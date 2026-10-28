@@ -41,8 +41,12 @@ func TestAProjectsSettingsSwitchBetweenAllAndSelectedAgents_EndToEnd(t *testing.
 	w := newTokenSaverWorld(t)
 	writeCatalogFile(t, w, "agents.json", projAgentsCatalog)
 	settings := "/projects/" + w.project.ID + "/settings"
-	flat := func(sel string) string { return `(document.querySelector(` + quote(sel) + `)?.textContent ?? '').replace(/\s+/g, ' ').trim()` }
-	visible := func(sel string) string { return `document.querySelector(` + quote(sel) + `)?.checkVisibility() === true` }
+	flat := func(sel string) string {
+		return `(document.querySelector(` + quote(sel) + `)?.textContent ?? '').replace(/\s+/g, ' ').trim()`
+	}
+	visible := func(sel string) string {
+		return `document.querySelector(` + quote(sel) + `)?.checkVisibility() === true`
+	}
 	const ticked = `[...document.querySelectorAll('[data-agent-row] input:checked')].map(i => i.closest('[data-agent-row]').dataset.name).join()`
 	const pressed = `document.querySelector('[data-agents-mode] [aria-pressed=true]')?.textContent.trim()`
 	row := func(n string) string { return `[data-agent-row][data-name="` + n + `"]` }
@@ -153,7 +157,9 @@ func TestAnAgentTakenOutOfTheCatalogIsNamedAtTheChecklistWhenSaving_EndToEnd(t *
 	writeCatalogFile(t, w, "agents.json", projAgentsCatalog)
 	writeCatalogFile(t, w, "mcp-servers.json", `{"mcpServers": {"linear": {"command": "npx"}}}`)
 	settings := "/projects/" + w.project.ID + "/settings"
-	visible := func(sel string) string { return `document.querySelector(` + quote(sel) + `)?.checkVisibility() === true` }
+	visible := func(sel string) string {
+		return `document.querySelector(` + quote(sel) + `)?.checkVisibility() === true`
+	}
 	root := `document.querySelector('[data-mcp-section]')`
 
 	b := newTLSBrowser(t)
@@ -196,7 +202,9 @@ func TestAProjectWithManyAgentsShowsASearchComboboxWithChips_EndToEnd(t *testing
 	}
 	writeCatalogFile(t, w, "agents.json", `{"agents": {`+strings.Join(agents, ",")+`}}`)
 	settings := "/projects/" + w.project.ID + "/settings"
-	visible := func(sel string) string { return `document.querySelector(` + quote(sel) + `)?.checkVisibility() === true` }
+	visible := func(sel string) string {
+		return `document.querySelector(` + quote(sel) + `)?.checkVisibility() === true`
+	}
 
 	b := newTLSBrowser(t)
 	b.run("past fifteen agents Selected shows a combobox, not a checklist",

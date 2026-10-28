@@ -47,9 +47,15 @@ func TestAgentEditorCreatesEditsAndRenamesAnAgent_EndToEnd(t *testing.T) {
 	}
 
 	const editor = `document.querySelector('[data-agent-editor]')`
-	flat := func(sel string) string { return `(document.querySelector(` + quote(sel) + `)?.textContent ?? '').replace(/\s+/g, ' ').trim()` }
-	visible := func(sel string) string { return `document.querySelector(` + quote(sel) + `)?.checkVisibility() === true` }
-	attr := func(sel, name string) string { return `document.querySelector(` + quote(sel) + `)?.getAttribute(` + quote(name) + `)` }
+	flat := func(sel string) string {
+		return `(document.querySelector(` + quote(sel) + `)?.textContent ?? '').replace(/\s+/g, ' ').trim()`
+	}
+	visible := func(sel string) string {
+		return `document.querySelector(` + quote(sel) + `)?.checkVisibility() === true`
+	}
+	attr := func(sel, name string) string {
+		return `document.querySelector(` + quote(sel) + `)?.getAttribute(` + quote(name) + `)`
+	}
 	chips := `[...document.querySelectorAll('[data-agent-editor] [data-chips] [data-chip]')].map(c => c.dataset.chip).join()`
 	active := `document.activeElement?.id`
 	save := `document.querySelector('[data-save-footer] [data-save]')`

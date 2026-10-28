@@ -140,7 +140,9 @@ func TestAccessibilityStatesReadInBothColourSchemes_EndToEnd(t *testing.T) {
 	}
 	enabledInSetAgents(t, w, atlas.ID, "selected")
 	pid := w.project.ID
-	visible := func(sel string) string { return `document.querySelector(` + quote(sel) + `)?.checkVisibility() === true` }
+	visible := func(sel string) string {
+		return `document.querySelector(` + quote(sel) + `)?.checkVisibility() === true`
+	}
 	settle := chromedp.Sleep(400 * time.Millisecond)
 	focus := chromedp.Evaluate(`window.dispatchEvent(new Event('focus'))`, nil)
 	onDisk := func(from, to string) {

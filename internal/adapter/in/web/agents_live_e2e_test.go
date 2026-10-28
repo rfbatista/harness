@@ -46,8 +46,12 @@ func TestAnOpenAgentsPageFollowsTheCatalogInAnotherTab_EndToEnd(t *testing.T) {
 	writeCatalogFile(t, w, "skills/tdd/SKILL.md", "---\nname: tdd\ndescription: Test first.\n---\nbody\n")
 
 	const rows = `[...document.querySelectorAll('[data-agent-row]')].map(r => r.dataset.key).join(',')`
-	flat := func(sel string) string { return `(document.querySelector(` + quote(sel) + `)?.textContent ?? '').replace(/\s+/g, ' ').trim()` }
-	visible := func(sel string) string { return `document.querySelector(` + quote(sel) + `)?.checkVisibility() === true` }
+	flat := func(sel string) string {
+		return `(document.querySelector(` + quote(sel) + `)?.textContent ?? '').replace(/\s+/g, ' ').trim()`
+	}
+	visible := func(sel string) string {
+		return `document.querySelector(` + quote(sel) + `)?.checkVisibility() === true`
+	}
 	row := func(key string) string { return `[data-agent-row][data-key="` + key + `"]` }
 
 	mine := newTLSBrowser(t)
@@ -152,8 +156,12 @@ func TestABrokenAgentsFileShowsItsLineAndTurnsSavesOffUntilItIsFixed_EndToEnd(t 
 	writeCatalogFile(t, w, "skills/lint/SKILL.md", "---\nname: lint\ndescription: Lint it.\n---\nbody\n")
 	writeCatalogFile(t, w, "skills/tdd/SKILL.md", "---\nname: tdd\ndescription: Test first.\n---\nbody\n")
 
-	flat := func(sel string) string { return `(document.querySelector(` + quote(sel) + `)?.textContent ?? '').replace(/\s+/g, ' ').trim()` }
-	visible := func(sel string) string { return `document.querySelector(` + quote(sel) + `)?.checkVisibility() === true` }
+	flat := func(sel string) string {
+		return `(document.querySelector(` + quote(sel) + `)?.textContent ?? '').replace(/\s+/g, ' ').trim()`
+	}
+	visible := func(sel string) string {
+		return `document.querySelector(` + quote(sel) + `)?.checkVisibility() === true`
+	}
 	save := `document.querySelector('[data-save-footer] [data-save]')`
 
 	b := newTLSBrowser(t)

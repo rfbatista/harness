@@ -67,8 +67,12 @@ func TestDeleteDialogForABundleAsksForTheNameAndUndoPutsItBack_EndToEnd(t *testi
 	const detail = `[data-bundle-detail]`
 	const confirm = `document.querySelector('[data-delete-confirm]')`
 	const typed = `#delete-name`
-	flat := func(sel string) string { return `(document.querySelector(` + quote(sel) + `)?.textContent ?? '').replace(/\s+/g, ' ').trim()` }
-	visible := func(sel string) string { return `document.querySelector(` + quote(sel) + `)?.checkVisibility() === true` }
+	flat := func(sel string) string {
+		return `(document.querySelector(` + quote(sel) + `)?.textContent ?? '').replace(/\s+/g, ' ').trim()`
+	}
+	visible := func(sel string) string {
+		return `document.querySelector(` + quote(sel) + `)?.checkVisibility() === true`
+	}
 	menuButton := `document.querySelector('[data-bundle-detail] .menu > button')`
 
 	b := newTLSBrowser(t)
@@ -189,8 +193,12 @@ func TestDeleteDialogListsWhatEachKindReachesAndRefusesAnOutsideEdit_EndToEnd(t 
 
 	const typed = `#delete-name`
 	const confirm = `document.querySelector('[data-delete-confirm]')`
-	flat := func(sel string) string { return `(document.querySelector(` + quote(sel) + `)?.textContent ?? '').replace(/\s+/g, ' ').trim()` }
-	visible := func(sel string) string { return `document.querySelector(` + quote(sel) + `)?.checkVisibility() === true` }
+	flat := func(sel string) string {
+		return `(document.querySelector(` + quote(sel) + `)?.textContent ?? '').replace(/\s+/g, ' ').trim()`
+	}
+	visible := func(sel string) string {
+		return `document.querySelector(` + quote(sel) + `)?.checkVisibility() === true`
+	}
 	closeDialog := chromedp.Tasks{
 		clickButton(`document.querySelector('[data-delete-dialog]')`, "Cancel"),
 		waitUntil(`!document.querySelector('[data-delete-dialog]')`),

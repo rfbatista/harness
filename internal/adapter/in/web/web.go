@@ -20,8 +20,8 @@ import (
 	"github.com/rfbatista/harnesskit/errs"
 
 	"operators-mcp/internal/adapter/in/web/agentisolation"
-	"operators-mcp/internal/adapter/in/web/architecture"
 	"operators-mcp/internal/adapter/in/web/agents"
+	"operators-mcp/internal/adapter/in/web/architecture"
 	"operators-mcp/internal/adapter/in/web/code"
 	"operators-mcp/internal/adapter/in/web/credentials"
 	"operators-mcp/internal/adapter/in/web/history"
