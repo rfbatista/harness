@@ -87,6 +87,8 @@ func NewRouter(h *Handler, opts ...Option) *echo.Echo {
 	g.POST("/create_pull_request", h.handleCreatePullRequest)
 	g.GET("/pull_request_bases", h.handlePullRequestBases)
 	g.POST("/refresh_pull_request_bases", h.handleRefreshPullRequestBases)
+	// where a worktree's branch stands against its base and its upstream
+	g.GET("/worktree_git_state", h.handleWorktreeGitState)
 
 	// bounded contexts
 	g.GET("/list_bounded_contexts", h.handleListBoundedContexts)

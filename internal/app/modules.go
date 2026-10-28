@@ -982,12 +982,14 @@ var WorkspacesModule = fx.Module("workspaces",
 		asPort(newGitBranchNames, new(ports.GitBranchNames)),
 		asPort(githubapi.New, new(ports.CodeHost)),
 		asPort(newGitCode, new(ports.GitCode)),
+		asPort(newGitCode, new(ports.GitWorktreeReader)),
 		asPort(filesystem.NewWorktreeFiles, new(ports.WorktreeFiles)),
 		newWorkspacesService,
 		newPullRequestsService,
 		newMergesService,
 		newBranchNamesService,
 		newCodeBrowser,
+		asPort(newWorktreeGit, new(ports.WorktreeGit)),
 		newMergeStates,
 	),
 	fx.Invoke(registerCodeWatcher),
@@ -999,6 +1001,14 @@ var WorkspacesModule = fx.Module("workspaces",
 func newCodeBrowser(ws ports.WorkspaceRepository, repos ports.RepositoryRepository, git ports.GitCode, files ports.WorktreeFiles, cat catalog.Catalog) ports.CodeBrowser {
 	return workspaces.NewCode(workspaces.CodeDeps{
 		Workspaces: ws, Repositories: repos, Git: git, Files: files, Architecture: cat.Architecture,
+	})
+}
+
+// newWorktreeGit reads where each session worktree's branch stands against
+// its base and its upstream, from local git only.
+func newWorktreeGit(ws ports.WorkspaceRepository, repos ports.RepositoryRepository, sessions ports.SessionRepository, git ports.GitWorktreeReader, files ports.WorktreeFiles) *workspaces.WorktreeGit {
+	return workspaces.NewWorktreeGit(workspaces.WorktreeGitDeps{
+		Workspaces: ws, Repositories: repos, Sessions: sessions, Git: git, Files: files,
 	})
 }
 

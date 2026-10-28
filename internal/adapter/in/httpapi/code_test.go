@@ -148,3 +148,10 @@ func TestHTTP_Events_StreamsCodeChanged(t *testing.T) {
 	}
 	t.Fatalf("no event: %v", scan.Err())
 }
+
+func TestHTTP_WorktreeGitState_NotConfigured(t *testing.T) {
+	h := NewHandler(Services{})
+	if code, body := doJSON(t, h, http.MethodGet, "/api/worktree_git_state?workspace_id=w1", ""); code != http.StatusServiceUnavailable || body["code"] != "UNAVAILABLE" {
+		t.Errorf("worktree_git_state = %d %v", code, body)
+	}
+}
