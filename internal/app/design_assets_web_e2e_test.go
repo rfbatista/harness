@@ -205,8 +205,8 @@ func TestDesignAssetsAttachedToTasksInTheWebUI_EndToEnd(t *testing.T) {
 	var count string
 	task.run("the toolbar counts the task's assets",
 		chromedp.Navigate(srv.URL+"/projects/"+p.ID+"/tasks/"+brand.ID),
-		waitFor(`!!document.querySelector('[data-design-assets] .badge')`),
-		chromedp.Evaluate(`document.querySelector('[data-design-assets] .badge').textContent`, &count),
+		waitFor(`!!document.querySelector('[data-design-assets] .meta')`),
+		chromedp.Evaluate(`document.querySelector('[data-design-assets] .meta').textContent`, &count),
 	)
 	if count != "1" {
 		t.Errorf("Brand refresh's design assets count = %q, want its logo", count)

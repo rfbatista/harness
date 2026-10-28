@@ -363,3 +363,13 @@ test("a task that fails to save writes no saver", async () => {
   await instance.save();
   assert.deepEqual(order, [], "the form refuses a blank title before anything is sent");
 });
+
+test("Delete task in the task menu asks the same confirmation as before; other menu items are not the editor's", async () => {
+  const { instance } = setup();
+  await instance.taskMenuSelect({ detail: { action: "delete-task" } });
+  assert.equal(instance.confirmingTaskDelete, true);
+  instance.cancelDeleteTask();
+  await instance.taskMenuSelect({ detail: { action: "copy-id" } });
+  await instance.taskMenuSelect({ detail: undefined });
+  assert.equal(instance.confirmingTaskDelete, false);
+});

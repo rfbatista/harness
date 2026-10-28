@@ -93,17 +93,6 @@ templ Page(v PageView) {
 								Documents <span class="[ badge ]" x-text="count">{ strconv.Itoa(v.Documents.Count) }</span>
 							</a>
 						}
-						<a
-							class="[ button ]"
-							data-variant="ghost"
-							data-size="sm"
-							href={ templ.SafeURL(taskDesignHref(v.ProjectID, v.Seed.TicketID)) }
-							x-data="sessionsDesignWatch"
-							data-seed="sessions-seed"
-							data-design-assets
-						>
-							Design assets <span class="[ badge ]" x-text="count">{ strconv.Itoa(len(v.Seed.Artifacts)) }</span>
-						</a>
 						if v.Resources != nil {
 							<span
 								style="display: contents"
@@ -113,16 +102,12 @@ templ Page(v PageView) {
 								data-resource-ids={ v.Resources.ResourceIDs }
 								data-comment-ids={ v.Resources.CommentIDs }
 							>
-								<a class="[ button ]" data-variant="ghost" data-size="sm" href={ templ.SafeURL(v.Resources.Href) } data-task-resources>
-									Resources <span class="[ badge ]" x-text="resourceCount">{ strconv.Itoa(v.Resources.Resources) }</span>
-								</a>
 								<a class="[ button ]" data-variant="ghost" data-size="sm" href={ templ.SafeURL(v.Resources.Href + "#comments") } data-task-comments>
 									Comments <span class="[ badge ]" x-text="commentCount">{ strconv.Itoa(v.Resources.Comments) }</span>
 								</a>
 							</span>
 						}
 						<button type="button" class="[ button ]" id="task-edit-button" data-variant="ghost" data-size="sm" x-on:click="startEditTask">Edit</button>
-						<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-bind:aria-busy="checkingTaskDelete" x-on:click="askDeleteTask">Delete task</button>
 						if v.NewSession.CanStart() {
 							<button type="button" class="[ button ]" data-variant="primary" data-size="sm" disabled x-bind:disabled="cannotCreate" x-on:click="startCreating">
 								New session <kbd>N</kbd>
@@ -133,6 +118,7 @@ templ Page(v PageView) {
 								New session
 							</button>
 						}
+						@taskMenu(v)
 					</div>
 				</header>
 				if v.Archived() {
@@ -1092,4 +1078,43 @@ templ taskSaversSection(seed tokensavers.Seed) {
 			</div>
 		</template>
 	</section>
+}
+
+// taskMenu is the ⋯ at the end of the title row: Design assets and Resources
+// with their counts (kept live over the feed), then Delete task after a
+// separator, which asks its confirmation as before (tasksTaskEditor). It is
+// the session ⋯ menu's Menu button pattern, and an action sheet below 48rem.
+templ taskMenu(v PageView) {
+	<div class="[ menu ]" x-data="menu" data-align="end" x-on:menu-select="taskMenuSelect">
+		<button type="button" class="[ button ]" id="task-menu-button" data-variant="ghost" data-size="sm" data-icon aria-label="More task actions" x-bind:aria-busy="checkingTaskDelete">
+			@icon("more")
+		</button>
+		<div class="[ popup ]" role="menu" popover="manual">
+			<a
+				role="menuitem"
+				href={ templ.SafeURL(taskDesignHref(v.ProjectID, v.Seed.TicketID)) }
+				x-data="sessionsDesignWatch"
+				data-seed="sessions-seed"
+				data-design-assets
+			>
+				Design assets <span class="[ meta ]" x-text="count">{ strconv.Itoa(len(v.Seed.Artifacts)) }</span>
+			</a>
+			if v.Resources != nil {
+				<span
+					style="display: contents"
+					x-data="tasksResourceWatch"
+					data-project-id={ v.Resources.ProjectID }
+					data-ticket-id={ v.Resources.TicketID }
+					data-resource-ids={ v.Resources.ResourceIDs }
+					data-comment-ids={ v.Resources.CommentIDs }
+				>
+					<a role="menuitem" href={ templ.SafeURL(v.Resources.Href) } data-task-resources>
+						Resources <span class="[ meta ]" x-text="resourceCount">{ strconv.Itoa(v.Resources.Resources) }</span>
+					</a>
+				</span>
+			}
+			<hr role="separator"/>
+			<button type="button" role="menuitem" data-action="delete-task" data-tone="danger">Delete task</button>
+		</div>
+	</div>
 }

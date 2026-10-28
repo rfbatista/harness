@@ -392,7 +392,7 @@ func TestTaskPageListsItsSessionsBesideTheDetail(t *testing.T) {
 		`x-data="tasksTaskEditor" data-seed="task-seed"`,
 		`<script id="task-seed" type="application/json">`,
 		`<option value="in_progress" selected>In progress</option>`,
-		`x-on:click="askDeleteTask"`,
+		`x-on:menu-select="taskMenuSelect"`,
 		`href="/projects/p1/tasks/t-feed" data-task-id="t-feed" aria-current="page"`,
 		`data-current-task="t-feed"`,
 		`x-data="sessionsPage"`,
@@ -415,7 +415,9 @@ func TestTaskPageListsItsSessionsBesideTheDetail(t *testing.T) {
 		`<option value="r-kit">harnesskit</option>`,
 		`<label for="new-session-permissions-edits">Accept file edits</label>`,
 		`<option value="product" data-description="Interviews you, writes the PRD on this task and creates one child task per piece of work, each with a brief">Product</option>`,
-		`data-action="ask-delete"`, // ⋯ → the confirm
+		`data-action="ask-delete"`,  // ⋯ → the confirm
+		`data-action="delete-task"`, // the task menu's Delete task
+		`id="task-menu-button"`,
 		`x-on:click="act('delete')"`,
 		`"agent_names":{`,
 		`src="/static/app.js?v=`,

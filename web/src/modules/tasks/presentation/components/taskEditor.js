@@ -305,6 +305,11 @@ export const taskEditor =
         return true;
       },
 
+      /** An item of the task menu (the title row's ⋯): Delete task asks for confirmation; the links go where they point. */
+      taskMenuSelect(event) {
+        if (event.detail?.action === "delete-task") return this.askDeleteTask();
+      },
+
       /** Checks the task can go (no sessions), then asks for confirmation. */
       async askDeleteTask() {
         if (!this.task || this.checkingTaskDelete) return;
