@@ -178,7 +178,7 @@ templ ssrCard(c Card, column string) {
 					<span class="[ status ]" data-state={ c.LiveState }>{ c.LiveWord }</span>
 				}
 				if c.Reviews > 0 {
-					<span class="[ badge reviews ]">
+					<span class="[ badge ]" data-reviews>
 						@cardGlyph("review")
 						{ reviewsWord(c.Reviews) }
 					</span>
@@ -252,7 +252,7 @@ templ liveBoard() {
 									</template>
 									<span class="[ status ]" x-show="card.hasLive" x-bind:data-state="card.liveState" x-text="card.liveWord"></span>
 									<template x-if="card.hasReviews">
-										<span class="[ badge reviews ]">
+										<span class="[ badge ]" data-reviews>
 											@cardGlyph("review")
 											<span x-text="card.reviews"></span>
 										</span>
