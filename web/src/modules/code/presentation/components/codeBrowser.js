@@ -218,6 +218,10 @@ export function codeBrowser({ gateway, highlighter, preparer, proximity = inters
     /** @type {import("../../domain/errors.js").CodeProblem|null} */
     problem: null,
     loadingDiff: false,
+    /** The whole diff's file count as the last totals read gave it, while no page is loaded (a hidden panel). */
+    totalCount: null,
+    /** The open diff (or none) is older than the worktree: a code_changed came while nobody looked at it. */
+    diffStale: false,
     /** A later page of the diff is being read. */
     loadingPage: false,
     loadingFile: false,
@@ -302,7 +306,7 @@ export function codeBrowser({ gateway, highlighter, preparer, proximity = inters
       return this.liveState === GONE;
     },
     get views() {
-      return viewsView(this.route, { count: this.listDiff ? this.listDiff.fileCount : null, kind: this.kind, current: this.view });
+      return viewsView(this.route, { count: this.listDiff ? this.listDiff.fileCount : this.totalCount, kind: this.kind, current: this.view });
     },
     get scopes() {
       return scopesView(this.route, { scope: this.scope, gone: this.gone, baseGone: this.baseGone, baseRef: this.baseRef });
@@ -847,7 +851,26 @@ export function codeBrowser({ gateway, highlighter, preparer, proximity = inters
 
     /** The session's tab badge follows the changed files. */
     countFiles() {
-      if (this.kind === "session" && this.diff) this.$dispatch?.("code-files-counted", { count: this.diff.fileCount });
+      const count = this.diff ? this.diff.fileCount : this.totalCount;
+      if (this.kind === "session" && count !== null) this.$dispatch?.("code-files-counted", { count });
+    },
+
+    /** Nobody is looking at the diff (the owner overrides: a panel behind another tab). */
+    get background() {
+      return false;
+    },
+
+    /** The diff totals alone (limit 0): what a hidden panel reads for the tab's count. */
+    async readTotals() {
+      if (this.gone || !this.source.workspaceId) return;
+      try {
+        const t = await gateway.diff({ workspaceId: this.source.workspaceId, scope: this.scope, limit: 0 }, this.request("totals"));
+        this.totalCount = t.fileCount;
+        if (!this.diff) this.countFiles();
+      } catch (err) {
+        if (codeOf(err) === Codes.WORKSPACE_MISSING) this.markGone();
+        // the count is a hint; the tab goes without it
+      }
     },
 
     setFile(file) {
@@ -883,6 +906,7 @@ export function codeBrowser({ gateway, highlighter, preparer, proximity = inters
 
     async showDiff() {
       if (this.seedPending) return;
+      this.diffStale = false;
       const diff = await this.loadDiff();
       if (diff) {
         this.setDiff(diff);
@@ -954,7 +978,7 @@ export function codeBrowser({ gateway, highlighter, preparer, proximity = inters
     },
     /** Loads what the view on screen needs. */
     enterView() {
-      if (this.showingChanges && !this.diff && !this.seedPending) this.showDiff();
+      if (this.showingChanges && (!this.diff || this.diffStale) && !this.seedPending) this.showDiff();
       if (this.showingFiles && !this.tree.levels[""] && !this.gone) this.loadDirectory("");
       if (this.showingMap || this.showingFiles || this.showingChanges) this.ensureMap();
     },
@@ -1426,6 +1450,12 @@ export function codeBrowser({ gateway, highlighter, preparer, proximity = inters
     },
 
     async refreshSide() {
+      if (this.background) {
+        // Nobody looks at the diff: the count follows, the diff loads fresh when the tab comes back.
+        this.diffStale = true;
+        await Promise.all([this.readTotals(), this.readWorking()]);
+        return;
+      }
       const decision = onChange(this.liveState, { untouched: this.untouched });
       // The changed files and their counts follow in place.
       const diff = await this.loadDiff({ quiet: true });

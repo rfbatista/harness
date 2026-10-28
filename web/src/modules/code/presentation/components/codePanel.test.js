@@ -39,9 +39,9 @@ async function setup({ world = makeWorld(), live = true, shown = true, prefs = m
   return { ...mounted, panel: mounted.instance, memory, pushed, prefs };
 }
 
-test("the panel reads the diff for the badge, and the uncommitted count, without being asked", async () => {
+test("the panel counts the changed files for the badge, and the uncommitted count, without being asked", async () => {
   const { panel, dispatched } = await setup({ shown: false });
-  assert.equal(panel.diff.files.length, 5);
+  assert.equal(panel.diff, null, "no page while hidden");
   assert.deepEqual(dispatched.find((d) => d.name === "code-files-counted").detail, { sessionId: "s1", count: 5 });
   assert.equal(panel.dirty, 2);
   assert.deepEqual([panel.bar.state, panel.bar.word, panel.bar.dirty], ["live", "live", "2 uncommitted"]);
@@ -628,4 +628,52 @@ test("the current file is read off the sections near the viewport only", async (
   await panel.followScroll();
   assert.ok(measured <= 3 + 3, `measured ${measured} sections`);
   assert.equal(panel.currentFile, paths[10]);
+});
+
+const diffReads = (memory) => memory.calls.filter((c) => c.name === "diff").map((c) => c.args.q);
+
+test("a hidden Code panel with 500 changed files reads only totals, counts them for the tab, and draws nothing", async () => {
+  const { panel, memory, dispatched } = await setup({ world: manyChangedFilesWorld(500), shown: false });
+  assert.ok(diffReads(memory).length > 0);
+  assert.ok(diffReads(memory).every((q) => q.limit === 0), "no page is read");
+  assert.equal(panel.diff, null);
+  assert.deepEqual(dispatched.filter((d) => d.name === "code-files-counted").map((d) => d.detail), [{ sessionId: "s1", count: 505 }]);
+  assert.equal(panel.dirty, 502, "the uncommitted count is a totals read too");
+});
+
+test("a code_changed while the panel is hidden re-reads the totals only, and marks the diff stale", async () => {
+  const { panel, memory, dispatched } = await setup({ world: manyChangedFilesWorld(60), shown: false });
+  const reads = diffReads(memory).length;
+  memory.change("ws1", { "web/new.js": "x\n" }, { untracked: ["web/new.js"] });
+  await flush();
+  await flush();
+  const after = diffReads(memory).slice(reads);
+  assert.ok(after.length > 0 && after.every((q) => q.limit === 0));
+  assert.equal(panel.diff, null);
+  assert.equal(dispatched.filter((d) => d.name === "code-files-counted").at(-1).detail.count, 66);
+  assert.equal(panel.diffStale, true);
+});
+
+test("the first page loads when the tab comes to the front, fresh when a change came while it was hidden", async () => {
+  const { panel, memory, tick } = await setup({ world: manyChangedFilesWorld(60), shown: false });
+  assert.equal(panel.diff, null);
+  panel.tabShown({ detail: { sessionId: "s1", shown: true } });
+  await flush();
+  await flush();
+  assert.equal(panel.diff.files.length, 50);
+  assert.equal(panel.diffStale, false);
+  panel.tabShown({ detail: { sessionId: "s1", shown: false } });
+  memory.change("ws1", { "web/new.js": "x\n" }, { untracked: ["web/new.js"] });
+  await flush();
+  await flush();
+  assert.equal(panel.diffStale, true);
+  const pages = () => diffReads(memory).filter((q) => q.limit === undefined).length;
+  const before = pages();
+  panel.tabShown({ detail: { sessionId: "s1", shown: true } });
+  await flush();
+  await flush();
+  assert.equal(pages() - before, 1, "one fresh first page");
+  assert.equal(panel.totals.files, "66 files");
+  assert.equal(panel.diffStale, false);
+  tick();
 });
