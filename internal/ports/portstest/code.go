@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"reflect"
 	"slices"
 	"strings"
@@ -21,6 +23,9 @@ import (
 // BaseRef.
 type CodeTarget struct {
 	RepositoryID, WorkspaceID, GoneWorkspaceID string
+	// PassInterval lets the watch interval go by on the clock the server's
+	// tree snapshot ages by, so a tree read after it reads the worktree again.
+	PassInterval func()
 }
 
 // CodeConformance runs the code browsing contract against the port newPort
@@ -498,6 +503,145 @@ func CodeConformance(t *testing.T, newPort func(t *testing.T, f *CodeFixture) (p
 		}
 		_, err = p.CodeDiff(ctx, ports.CodeDiffQuery{WorkspaceID: at.WorkspaceID, Path: "docs/new.md"})
 		wantCode(t, err, "PATH_NOT_FOUND")
+	})
+
+	t.Run("a diff is read one page at a time", func(t *testing.T) {
+		rng := ports.CodeDiffQuery{RepositoryID: at.RepositoryID, Base: f.Root, Head: f.ManyBranch}
+		first, err := p.CodeDiff(ctx, rng)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(first.Files) != domain.DiffPageFiles || first.FileCount != fixtureManyFiles || first.Added != fixtureManyFiles || first.Deleted != 0 {
+			t.Fatalf("default page = %d files, count %d, +%d -%d", len(first.Files), first.FileCount, first.Added, first.Deleted)
+		}
+		if first.Next == nil || *first.Next != first.Files[len(first.Files)-1].Path || first.Files[0].Path != "many/f000.txt" {
+			t.Fatalf("default page runs %s to %s, next %v", first.Files[0].Path, first.Files[len(first.Files)-1].Path, first.Next)
+		}
+		if first.Files[0].Hunks == nil {
+			t.Error("a page's files carry their hunks")
+		}
+
+		// Every page reads the same totals; the pages hold each file once, in path order.
+		var seen []string
+		q := rng
+		for pages := 0; ; pages++ {
+			if pages > 10 {
+				t.Fatal("paging does not end")
+			}
+			d, err := p.CodeDiff(ctx, q)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if d.FileCount != fixtureManyFiles || d.Added != fixtureManyFiles {
+				t.Errorf("page %d totals = %d files +%d", pages, d.FileCount, d.Added)
+			}
+			for _, fd := range d.Files {
+				seen = append(seen, fd.Path)
+			}
+			if d.Next == nil {
+				if len(d.Files) == 0 || len(seen) != fixtureManyFiles {
+					t.Errorf("the last page has %d files, %d seen", len(d.Files), len(seen))
+				}
+				break
+			}
+			q.After = *d.Next
+		}
+		if len(seen) != fixtureManyFiles || !slices.IsSorted(seen) || len(slices.Compact(slices.Clone(seen))) != len(seen) {
+			t.Errorf("pages read %d paths, sorted %v", len(seen), slices.IsSorted(seen))
+		}
+
+		// An explicit limit; a limit over the most reads as the most.
+		small, err := p.CodeDiff(ctx, ports.CodeDiffQuery{RepositoryID: at.RepositoryID, Base: f.Root, Head: f.ManyBranch, Limit: 7})
+		if err != nil || len(small.Files) != 7 {
+			t.Fatalf("limit 7 = %v, %v", small, err)
+		}
+		big, err := p.CodeDiff(ctx, ports.CodeDiffQuery{RepositoryID: at.RepositoryID, Base: f.Root, Head: f.ManyBranch, Limit: 5000})
+		if err != nil || len(big.Files) != fixtureManyFiles || big.Next != nil {
+			t.Fatalf("limit 5000 = %d files, next %v, %v", len(big.Files), big.Next, err)
+		}
+
+		// A cursor that is not a changed path starts at the next path.
+		after, err := p.CodeDiff(ctx, ports.CodeDiffQuery{RepositoryID: at.RepositoryID, Base: f.Root, Head: f.ManyBranch, After: "many/f0505", Limit: 2})
+		if err != nil || len(after.Files) != 2 || after.Files[0].Path != "many/f051.txt" {
+			t.Fatalf("after a path that is not changed = %s, %v", show(after), err)
+		}
+		past, err := p.CodeDiff(ctx, ports.CodeDiffQuery{RepositoryID: at.RepositoryID, Base: f.Root, Head: f.ManyBranch, After: "zzz"})
+		if err != nil || len(past.Files) != 0 || past.Next != nil || past.FileCount != fixtureManyFiles {
+			t.Fatalf("after the last path = %d files, next %v, count %d, %v", len(past.Files), past.Next, past.FileCount, err)
+		}
+
+		// The diff totals read has no files and no next.
+		totals, err := p.CodeDiff(ctx, ports.CodeDiffQuery{RepositoryID: at.RepositoryID, Base: f.Root, Head: f.ManyBranch, TotalsOnly: true})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if totals.Files == nil || len(totals.Files) != 0 || totals.Next != nil || totals.FileCount != fixtureManyFiles || totals.Added != fixtureManyFiles {
+			t.Errorf("totals read = %d files, next %v, count %d, +%d", len(totals.Files), totals.Next, totals.FileCount, totals.Added)
+		}
+
+		// A commit and a workspace page the same way.
+		c1, err := p.CodeDiff(ctx, ports.CodeDiffQuery{RepositoryID: at.RepositoryID, Commit: f.ManyTip, Limit: 100})
+		if err != nil || len(c1.Files) != 100 || c1.Next == nil || c1.FileCount != fixtureManyFiles {
+			t.Fatalf("commit page = %d files, next %v, %v", len(c1.Files), c1.Next, err)
+		}
+		w1, err := p.CodeDiff(ctx, ports.CodeDiffQuery{WorkspaceID: at.WorkspaceID, Limit: 2})
+		if err != nil || len(w1.Files) != 2 || w1.Next == nil || w1.FileCount < 5 {
+			t.Fatalf("workspace page = %s, %v", show(w1), err)
+		}
+		w2, err := p.CodeDiff(ctx, ports.CodeDiffQuery{WorkspaceID: at.WorkspaceID, Limit: 2, After: *w1.Next})
+		if err != nil || len(w2.Files) != 2 || w2.Files[0].Path <= *w1.Next || w2.FileCount != w1.FileCount || w2.Added != w1.Added {
+			t.Fatalf("workspace page 2 = %s, %v", show(w2), err)
+		}
+
+		// The totals limit is about one page: the bulk files that pass it on
+		// one page are read on a page of their own.
+		bulk, err := p.CodeDiff(ctx, ports.CodeDiffQuery{RepositoryID: at.RepositoryID, Commit: f.Root, After: "bulk/f.txt", Limit: 1})
+		if err != nil || len(bulk.Files) != 1 || bulk.Files[0].Path != "bulk/g.txt" || bulk.Files[0].Withheld != nil || bulk.Truncated {
+			t.Fatalf("bulk/g.txt on a page of its own = %d files, truncated %v, %v", len(bulk.Files), bulk.Truncated, err)
+		}
+
+		for name, q := range map[string]ports.CodeDiffQuery{
+			"after with a path":  {WorkspaceID: at.WorkspaceID, Path: "README.md", After: "a"},
+			"limit with a path":  {WorkspaceID: at.WorkspaceID, Path: "README.md", Limit: 5},
+			"totals with a path": {WorkspaceID: at.WorkspaceID, Path: "README.md", TotalsOnly: true},
+			"negative limit":     {WorkspaceID: at.WorkspaceID, Limit: -1},
+		} {
+			_, err := p.CodeDiff(ctx, q)
+			if !hasCode(err, "INVALID_INPUT") {
+				t.Errorf("%s: err = %v, want INVALID_INPUT", name, err)
+			}
+		}
+	})
+
+	t.Run("a tree read shows a change once the watch interval has passed", func(t *testing.T) {
+		ws := ports.CodeSourceQuery{WorkspaceID: at.WorkspaceID}
+		if _, err := p.CodeTree(ctx, ws, "docs"); err != nil {
+			t.Fatal(err)
+		}
+		fresh := filepath.Join(f.Worktree, "docs", "fresh.md")
+		if err := os.WriteFile(fresh, []byte("new\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { os.Remove(fresh) })
+		at.PassInterval()
+		tree, err := p.CodeTree(ctx, ws, "docs")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if e := entries(tree.Entries)["fresh.md"]; e.Change == nil || *e.Change != domain.ChangeUntracked {
+			t.Errorf("fresh.md = %s, want untracked after the interval", show(e))
+		}
+		if err := os.Remove(fresh); err != nil {
+			t.Fatal(err)
+		}
+		at.PassInterval()
+		tree, err = p.CodeTree(ctx, ws, "docs")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, there := entries(tree.Entries)["fresh.md"]; there {
+			t.Error("fresh.md is still listed after it was removed and the interval passed")
+		}
 	})
 
 	t.Run("bad diff sources", func(t *testing.T) {

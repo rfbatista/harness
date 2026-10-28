@@ -144,14 +144,14 @@ func (s *Seed) loadDiff(ctx context.Context, cb ports.CodeBrowser, rt Route) {
 	if scope == "" {
 		scope = "all"
 	}
-	d, err := cb.CodeDiff(ctx, ports.CodeDiffQuery{WorkspaceID: ws, Scope: scope})
+	d, err := cb.CodeDiff(ctx, ports.CodeDiffQuery{WorkspaceID: ws, Scope: scope, Limit: domain.DiffPageFiles})
 	if errs.Code(err) == "WORKSPACE_MISSING" {
 		s.Gone = true
-		d, err = cb.CodeDiff(ctx, ports.CodeDiffQuery{WorkspaceID: ws, Scope: "branch"})
+		d, err = cb.CodeDiff(ctx, ports.CodeDiffQuery{WorkspaceID: ws, Scope: "branch", Limit: domain.DiffPageFiles})
 	}
 	if errs.Code(err) == "REF_NOT_FOUND" && scope != "working" {
 		s.BaseGone = true
-		d, err = cb.CodeDiff(ctx, ports.CodeDiffQuery{WorkspaceID: ws, Scope: "working"})
+		d, err = cb.CodeDiff(ctx, ports.CodeDiffQuery{WorkspaceID: ws, Scope: "working", Limit: domain.DiffPageFiles})
 	}
 	if d != nil && d.Source.Gone {
 		s.Gone = true
@@ -214,7 +214,7 @@ func (s *Seed) loadFiles(ctx context.Context, cb ports.CodeBrowser, q ports.Code
 func LoadCommit(ctx context.Context, cb ports.CodeBrowser, projectID, repositoryID, commit string) Seed {
 	// View file opens the repository's code page at the commit.
 	rt := Route{Kind: "repository", ProjectID: projectID, RepositoryID: repositoryID, View: ViewChanges, Ref: commit}
-	d, err := cb.CodeDiff(ctx, ports.CodeDiffQuery{RepositoryID: repositoryID, Commit: commit})
+	d, err := cb.CodeDiff(ctx, ports.CodeDiffQuery{RepositoryID: repositoryID, Commit: commit, Limit: domain.DiffPageFiles})
 	return Seed{ProjectID: projectID, Route: rt, Source: SourceQuery{RepositoryID: repositoryID}, Diff: d, Error: toSeedError(err), Commit: commit}
 }
 
@@ -223,6 +223,6 @@ func LoadCommit(ctx context.Context, cb ports.CodeBrowser, projectID, repository
 func LoadWorking(ctx context.Context, cb ports.CodeBrowser, projectID, repositoryID, workspaceID string) Seed {
 	// Kind "history": uncommitted files have no code page to open them on.
 	rt := Route{Kind: "history", ProjectID: projectID, RepositoryID: repositoryID, View: ViewChanges}
-	d, err := cb.CodeDiff(ctx, ports.CodeDiffQuery{WorkspaceID: workspaceID, Scope: "working"})
+	d, err := cb.CodeDiff(ctx, ports.CodeDiffQuery{WorkspaceID: workspaceID, Scope: "working", Limit: domain.DiffPageFiles})
 	return Seed{ProjectID: projectID, Route: rt, Source: SourceQuery{WorkspaceID: workspaceID}, Diff: d, Error: toSeedError(err)}
 }

@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"net/http"
+	"strconv"
 
 	"github.com/labstack/echo/v4"
 
@@ -65,7 +66,19 @@ func (h *Handler) handleCodeDiff(c echo.Context) error {
 	if err := h.codeOr503(); err != nil {
 		return err
 	}
+	var limit int
+	totalsOnly := false
+	if raw := c.QueryParam("limit"); raw != "" {
+		n, err := strconv.Atoi(raw)
+		if err != nil {
+			return &domain.StructuredError{Code: "INVALID_INPUT", Message: "limit must be an integer"}
+		}
+		limit, totalsOnly = n, n == 0
+	}
 	diff, err := h.code.CodeDiff(c.Request().Context(), ports.CodeDiffQuery{
+		After:        c.QueryParam("after"),
+		Limit:        limit,
+		TotalsOnly:   totalsOnly,
 		WorkspaceID:  c.QueryParam("workspace_id"),
 		Scope:        c.QueryParam("scope"),
 		RepositoryID: c.QueryParam("repository_id"),

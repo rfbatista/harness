@@ -13,12 +13,20 @@ import (
 // and so the least time between two code_changed of one workspace.
 const CodeWatchInterval = 2 * time.Second
 
+// TreeRefresher keeps tree snapshots (*Code satisfies it).
+type TreeRefresher interface {
+	RefreshTree(ctx context.Context, workspaceID string) error
+}
+
 // CodeWatcherDeps is what the watcher needs.
 type CodeWatcherDeps struct {
 	Sessions   ports.SessionRepository
 	Workspaces ports.WorkspaceRepository
 	Git        ports.GitCode
 	Feed       ports.ProjectChangeSink
+	// Tree, when set, is told to read a workspace's tree snapshot again
+	// whenever a change is seen, before code_changed goes out (*Code).
+	Tree TreeRefresher
 	// Interval is CodeWatchInterval when zero.
 	Interval time.Duration
 	// Now is the clock the interval is measured with; nil is time.Now.
@@ -241,7 +249,18 @@ func (w *CodeWatcher) Poll(ctx context.Context) {
 			change = &ports.CodeChange{WorkspaceID: t.id, Head: head, ProjectID: wt.projectID}
 		}
 		w.mu.Unlock()
-		if change != nil && w.d.Feed != nil {
+		if change == nil {
+			continue
+		}
+		// The snapshot first: a client that re-reads the tree on the event
+		// must never get the listing from before the change. A refresh that
+		// fails leaves the snapshot to age out; the event still goes.
+		if w.d.Tree != nil {
+			refreshCtx, cancel := context.WithTimeout(ctx, w.d.Interval)
+			_ = w.d.Tree.RefreshTree(refreshCtx, change.WorkspaceID)
+			cancel()
+		}
+		if w.d.Feed != nil {
 			w.d.Feed.AnnounceChange(ports.ProjectChange{CodeChanged: change})
 		}
 	}

@@ -69,6 +69,26 @@ func TestHTTP_Code_ReadsTheQuery(t *testing.T) {
 	}
 }
 
+func TestHTTP_Code_DiffPageQuery(t *testing.T) {
+	f := &fakeCode{}
+	h := NewHandler(Services{Code: f})
+	for target, want := range map[string]ports.CodeDiffQuery{
+		"/api/code/diff?workspace_id=w":                        {WorkspaceID: "w"},
+		"/api/code/diff?workspace_id=w&after=a%2Fb.go&limit=7": {WorkspaceID: "w", After: "a/b.go", Limit: 7},
+		"/api/code/diff?workspace_id=w&limit=0":                {WorkspaceID: "w", TotalsOnly: true},
+	} {
+		if code, _ := doJSON(t, h, http.MethodGet, target, ""); code != http.StatusOK || f.diff != want {
+			t.Errorf("%s: %d, %+v", target, code, f.diff)
+		}
+	}
+	f.called = ""
+	for _, target := range []string{"/api/code/diff?workspace_id=w&limit=many", "/api/code/diff?workspace_id=w&limit=1.5"} {
+		if code, _ := doJSON(t, h, http.MethodGet, target, ""); code != http.StatusBadRequest || f.called != "" {
+			t.Errorf("%s: %d, want 400 with no read", target, code)
+		}
+	}
+}
+
 func TestHTTP_Code_ErrorStatuses(t *testing.T) {
 	for code, status := range map[string]int{
 		"INVALID_INPUT": 400, "REPOSITORY_NOT_FOUND": 404, "WORKSPACE_NOT_FOUND": 404, "COMMIT_NOT_FOUND": 404,

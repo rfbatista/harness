@@ -17,7 +17,12 @@ type CodeSourceQuery struct {
 
 // CodeDiffQuery names a diff: WorkspaceID with Scope (all when empty),
 // RepositoryID with Commit, or RepositoryID with Base and Head. Path narrows
-// it to one file.
+// it to one file. Without Path the answer is one diff page: After is the
+// cursor (the page starts at the first changed path greater than it), Limit
+// the files in the page (zero is the default, above domain.MaxDiffPageFiles
+// reads as that, negative is INVALID_INPUT) and TotalsOnly reads the diff
+// totals with no files. After, Limit and TotalsOnly with Path are
+// INVALID_INPUT.
 type CodeDiffQuery struct {
 	WorkspaceID  string
 	Scope        string
@@ -26,6 +31,9 @@ type CodeDiffQuery struct {
 	Base         string
 	Head         string
 	Path         string
+	After        string
+	Limit        int
+	TotalsOnly   bool
 }
 
 // CodeBrowser reads code, read-only: a repository at a ref or a session's

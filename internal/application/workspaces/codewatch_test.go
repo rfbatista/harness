@@ -70,7 +70,22 @@ func (l *changeLog) take() []ports.CodeChange {
 	return out
 }
 
+// orderedTree records how many changes had been announced when each
+// snapshot refresh ran.
+type orderedTree struct {
+	feed        *changeLog
+	announcedAt []int
+}
+
+func (t *orderedTree) RefreshTree(context.Context, string) error {
+	t.feed.mu.Lock()
+	defer t.feed.mu.Unlock()
+	t.announcedAt = append(t.announcedAt, len(t.feed.changes))
+	return nil
+}
+
 type watchFixture struct {
+	tree     *orderedTree
 	watcher  *workspaces.CodeWatcher
 	bus      *eventbus.Bus
 	git      *scriptedSnapshots
@@ -103,8 +118,9 @@ func newUnfollowedWatchFixture(t *testing.T) *watchFixture {
 		feed: &changeLog{}, sessions: sqlite.NewSessionRepository(db), ws: ws, ws2: ws2,
 		now: time.Date(2026, 10, 10, 12, 0, 0, 0, time.UTC),
 	}
+	f.tree = &orderedTree{feed: f.feed}
 	f.watcher = workspaces.NewCodeWatcher(workspaces.CodeWatcherDeps{
-		Sessions: f.sessions, Workspaces: wsRepo, Git: f.git, Feed: f.feed, Now: func() time.Time { return f.now },
+		Sessions: f.sessions, Workspaces: wsRepo, Git: f.git, Feed: f.feed, Tree: f.tree, Now: func() time.Time { return f.now },
 	})
 	f.watcher.Subscribe(f.bus)
 	return f
@@ -146,6 +162,26 @@ func TestCodeWatcherAnnouncesAChangeOncePerChange(t *testing.T) {
 	}
 	if got := f.poll(); len(got) != 0 {
 		t.Fatalf("an unchanged worktree announced %v", got)
+	}
+}
+
+func TestCodeWatcherRefreshesTheTreeSnapshotBeforeItAnnouncesTheChange(t *testing.T) {
+	f := newWatchFixture(t)
+	f.session(t, "s1", f.ws.ID, domain.SessionStarting)
+	f.publish(t, domain.SessionStarted{SessionID: "s1", ProjectID: "p1"})
+	f.poll()
+	if len(f.tree.announcedAt) != 0 {
+		t.Fatalf("the first look refreshed the snapshot %v", f.tree.announcedAt)
+	}
+	f.git.set("/wt/a", "2")
+	if got := f.poll(); len(got) != 1 {
+		t.Fatalf("changes = %+v", got)
+	}
+	if !slices.Equal(f.tree.announcedAt, []int{0}) {
+		t.Errorf("the snapshot was refreshed when %v changes had been announced, want once, before the first", f.tree.announcedAt)
+	}
+	if f.poll(); len(f.tree.announcedAt) != 1 {
+		t.Errorf("an unchanged worktree refreshed the snapshot again: %v", f.tree.announcedAt)
 	}
 }
 

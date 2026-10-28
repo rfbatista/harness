@@ -3,7 +3,9 @@
 package workspacestest
 
 import (
+	"sync"
 	"testing"
+	"time"
 
 	"operators-mcp/internal/adapter/out/filesystem"
 	"operators-mcp/internal/adapter/out/gitcli"
@@ -36,9 +38,29 @@ func NewCode(t *testing.T, f *portstest.CodeFixture) (*workspaces.Code, portstes
 	if err != nil {
 		t.Fatal(err)
 	}
+	clock := &passingClock{now: time.Now()}
 	code := workspaces.NewCode(workspaces.CodeDeps{
 		Workspaces: wsRepo, Repositories: repos, Git: gitcli.NewCode(), Files: filesystem.NewWorktreeFiles(),
-		Architecture: f.Architecture(),
+		Architecture: f.Architecture(), Now: clock.Now,
 	})
-	return code, portstest.CodeTarget{RepositoryID: repo.ID, WorkspaceID: ws.ID, GoneWorkspaceID: gone.ID}
+	return code, portstest.CodeTarget{RepositoryID: repo.ID, WorkspaceID: ws.ID, GoneWorkspaceID: gone.ID, PassInterval: clock.Pass}
+}
+
+// passingClock is the clock tree snapshots age by: it stands still until
+// Pass moves it past the watch interval.
+type passingClock struct {
+	mu  sync.Mutex
+	now time.Time
+}
+
+func (c *passingClock) Now() time.Time {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.now
+}
+
+func (c *passingClock) Pass() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.now = c.now.Add(workspaces.CodeWatchInterval + time.Second)
 }

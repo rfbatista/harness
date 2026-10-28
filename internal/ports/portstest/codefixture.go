@@ -34,6 +34,9 @@ type CodeFixture struct {
 
 	// Commits on main, newest last, and the tips of the other branches.
 	Root, Rename, Merge, SideTip, SessionHead, GoneHead string
+	// ManyBranch holds fixtureManyFiles added files on top of Root, more
+	// than one diff page; ManyTip is its tip.
+	ManyBranch, ManyTip string
 	// EmptyTree is the empty tree's hash, a root commit's base.
 	EmptyTree string
 
@@ -80,6 +83,7 @@ const (
 	fixtureBulkFiles = 7    // × fixtureBulkLines lines: past domain.MaxDiffLines together
 	fixtureBulkLines = 2990 // each under domain.MaxDiffFileLines
 	fixtureBigLines  = 40_000
+	fixtureManyFiles = 120 // one-line files on ManyBranch: three diff pages
 )
 
 // NewCodeFixture builds the fixture repository under t.TempDir().
@@ -89,7 +93,7 @@ func NewCodeFixture(t *testing.T) *CodeFixture {
 	repo := filepath.Join(base, "repo")
 	f := &CodeFixture{
 		RepoDir: repo, Worktree: filepath.Join(base, "wt-session"), GoneWorktree: filepath.Join(base, "wt-gone"),
-		Branch: "session", GoneBranch: "gone", BaseRef: "main", ProjectID: "code-project",
+		ManyBranch: "many", Branch: "session", GoneBranch: "gone", BaseRef: "main", ProjectID: "code-project",
 		Zones: []*domain.Zone{
 			{ID: "zone-adapters", ProjectID: "code-project", Name: "Adapters", Pattern: "^internal/", BoundedContextID: "ctx-core"},
 			{ID: "zone-web", ProjectID: "code-project", Name: "Web", ExplicitPaths: []string{"web"}},
@@ -171,6 +175,15 @@ func NewCodeFixture(t *testing.T) *CodeFixture {
 	git(repo, "checkout", "-q", "main")
 	git(repo, "merge", "-q", "--no-ff", "-m", "merge side", "side")
 	f.Merge = git(repo, "rev-parse", "HEAD")
+
+	git(repo, "checkout", "-q", "-b", f.ManyBranch, f.Root)
+	for i := range fixtureManyFiles {
+		write(repo, fmt.Sprintf("many/f%03d.txt", i), fmt.Sprintf("file %d\n", i))
+	}
+	git(repo, "add", "-A")
+	git(repo, "commit", "-q", "-m", "many files")
+	f.ManyTip = git(repo, "rev-parse", "HEAD")
+	git(repo, "checkout", "-q", "main")
 
 	git(repo, "worktree", "add", "-q", "-b", f.Branch, f.Worktree, "main")
 	wt := f.Worktree

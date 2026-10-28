@@ -119,9 +119,58 @@ func (c *Code) planWorkspaceDiff(ctx context.Context, q ports.CodeDiffQuery) (*d
 	return plan, nil
 }
 
-// CodeDiff reads the changed files with hunks within the diff limits.
+// diffPage is which changed files a read answers: those after the cursor,
+// at most limit of them.
+type diffPage struct {
+	after string
+	limit int
+}
+
+// pageOf resolves the query's page, INVALID_INPUT when it asks for one with
+// a path or with a negative limit.
+func pageOf(q ports.CodeDiffQuery) (diffPage, error) {
+	if q.Path != "" {
+		if q.After != "" || q.Limit != 0 || q.TotalsOnly {
+			return diffPage{}, invalid("after and limit are for a diff without a path")
+		}
+		return diffPage{}, nil
+	}
+	switch {
+	case q.Limit < 0:
+		return diffPage{}, invalid("limit must not be negative")
+	case q.TotalsOnly:
+		return diffPage{after: q.After}, nil
+	case q.Limit == 0:
+		return diffPage{after: q.After, limit: domain.DiffPageFiles}, nil
+	}
+	return diffPage{after: q.After, limit: min(q.Limit, domain.MaxDiffPageFiles)}, nil
+}
+
+// cut is the page of the path-sorted changes, and whether more follow it.
+func (pg diffPage) cut(changes []ports.GitChange) (page []ports.GitChange, more bool) {
+	if pg.limit == 0 { // the totals-only read
+		return nil, false
+	}
+	start, _ := slices.BinarySearchFunc(changes, pg.after, func(ch ports.GitChange, after string) int {
+		if ch.Path <= after {
+			return -1
+		}
+		return 1
+	})
+	end := min(start+pg.limit, len(changes))
+	return changes[start:end], end < len(changes)
+}
+
+// CodeDiff reads one diff page: the changed files in path order with hunks
+// within the diff limits, and the totals of the whole diff. The page is cut
+// from the stat listing, so patch text is read for its files only.
 func (c *Code) CodeDiff(ctx context.Context, q ports.CodeDiffQuery) (*domain.CodeDiff, error) {
 	only, err := cleanPath(q.Path)
+	if err != nil {
+		return nil, err
+	}
+	paged := only == ""
+	pg, err := pageOf(q)
 	if err != nil {
 		return nil, err
 	}
@@ -162,7 +211,20 @@ func (c *Code) CodeDiff(ctx context.Context, q ports.CodeDiffQuery) (*domain.Cod
 	}
 	slices.SortFunc(changes, func(a, b ports.GitChange) int { return strings.Compare(a.Path, b.Path) })
 
-	out := &domain.CodeDiff{Source: plan.src.src, Base: plan.base, Scope: plan.scope, Files: make([]domain.FileDiff, 0, len(changes))}
+	out := &domain.CodeDiff{Source: plan.src.src, Base: plan.base, Scope: plan.scope, FileCount: len(changes)}
+	for _, ch := range changes {
+		if ch.Added >= 0 && ch.Deleted >= 0 {
+			out.Added += ch.Added
+			out.Deleted += ch.Deleted
+		}
+	}
+	if paged {
+		var more bool
+		if changes, more = pg.cut(changes); more {
+			out.Next = strp(changes[len(changes)-1].Path)
+		}
+	}
+	out.Files = make([]domain.FileDiff, 0, len(changes))
 	var tracked, untracked []string
 	total := 0
 	for _, ch := range changes {
@@ -185,10 +247,6 @@ func (c *Code) CodeDiff(ctx context.Context, q ports.CodeDiffQuery) (*domain.Cod
 			fd.Withheld, out.Truncated = strp(domain.WithheldTooLarge), true
 		default:
 			total += changed
-		}
-		if !fd.Binary {
-			out.Added += fd.Added
-			out.Deleted += fd.Deleted
 		}
 		if fd.Withheld == nil {
 			if ch.Status == domain.ChangeUntracked {
