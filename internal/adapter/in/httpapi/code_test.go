@@ -69,6 +69,14 @@ func TestHTTP_Code_ReadsTheQuery(t *testing.T) {
 	}
 }
 
+func TestHTTP_Code_DiffHunksMustBeNone(t *testing.T) {
+	f := &fakeCode{}
+	h := NewHandler(Services{Code: f})
+	if code, _ := doJSON(t, h, http.MethodGet, "/api/code/diff?workspace_id=w&hunks=all", ""); code != http.StatusBadRequest || f.called != "" {
+		t.Errorf("hunks=all: %d, called %q", code, f.called)
+	}
+}
+
 func TestHTTP_Code_DiffPageQuery(t *testing.T) {
 	f := &fakeCode{}
 	h := NewHandler(Services{Code: f})
@@ -76,6 +84,7 @@ func TestHTTP_Code_DiffPageQuery(t *testing.T) {
 		"/api/code/diff?workspace_id=w":                        {WorkspaceID: "w"},
 		"/api/code/diff?workspace_id=w&after=a%2Fb.go&limit=7": {WorkspaceID: "w", After: "a/b.go", Limit: 7},
 		"/api/code/diff?workspace_id=w&limit=0":                {WorkspaceID: "w", TotalsOnly: true},
+		"/api/code/diff?workspace_id=w&hunks=none":             {WorkspaceID: "w", NoHunks: true},
 	} {
 		if code, _ := doJSON(t, h, http.MethodGet, target, ""); code != http.StatusOK || f.diff != want {
 			t.Errorf("%s: %d, %+v", target, code, f.diff)

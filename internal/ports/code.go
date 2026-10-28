@@ -21,8 +21,9 @@ type CodeSourceQuery struct {
 // cursor (the page starts at the first changed path greater than it), Limit
 // the files in the page (zero is the default, above domain.MaxDiffPageFiles
 // reads as that, negative is INVALID_INPUT) and TotalsOnly reads the diff
-// totals with no files. After, Limit and TotalsOnly with Path are
-// INVALID_INPUT.
+// totals with no files. NoHunks lists the page's files without their hunks
+// (no patch is read). After, Limit and TotalsOnly with Path are
+// INVALID_INPUT, and so is NoHunks.
 type CodeDiffQuery struct {
 	WorkspaceID  string
 	Scope        string
@@ -34,6 +35,7 @@ type CodeDiffQuery struct {
 	After        string
 	Limit        int
 	TotalsOnly   bool
+	NoHunks      bool
 }
 
 // CodeBrowser reads code, read-only: a repository at a ref or a session's

@@ -607,6 +607,41 @@ func CodeConformance(t *testing.T, newPort func(t *testing.T, f *CodeFixture) (p
 		}
 	})
 
+	t.Run("a diff page can be read without hunks", func(t *testing.T) {
+		with, err := p.CodeDiff(ctx, ports.CodeDiffQuery{WorkspaceID: at.WorkspaceID, Scope: "working", Limit: 2})
+		if err != nil {
+			t.Fatal(err)
+		}
+		bare, err := p.CodeDiff(ctx, ports.CodeDiffQuery{WorkspaceID: at.WorkspaceID, Scope: "working", Limit: 2, NoHunks: true})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if bare.Truncated || bare.Counts != with.Counts || bare.FileCount != with.FileCount || bare.Added != with.Added ||
+			(bare.Next == nil) != (with.Next == nil) || (bare.Next != nil && *bare.Next != *with.Next) {
+			t.Errorf("without hunks = %s, with = %s", show(bare), show(with))
+		}
+		if len(bare.Files) != len(with.Files) {
+			t.Fatalf("without hunks = %d files, with = %d", len(bare.Files), len(with.Files))
+		}
+		for i, fd := range bare.Files {
+			if fd.Hunks != nil || fd.Withheld != nil || fd.Path != with.Files[i].Path || fd.Status != with.Files[i].Status ||
+				fd.Added != with.Files[i].Added || fd.Section == nil || fd.Staged != with.Files[i].Staged {
+				t.Errorf("%s without hunks = %s", fd.Path, show(fd))
+			}
+		}
+		binary, err := p.CodeDiff(ctx, ports.CodeDiffQuery{RepositoryID: at.RepositoryID, Commit: f.Root, After: "bulk/g.txt", NoHunks: true})
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, fd := range binary.Files {
+			if fd.Hunks != nil || fd.Withheld != nil {
+				t.Errorf("%s keeps hunks or a withheld reason without hunks: %s", fd.Path, show(fd))
+			}
+		}
+		_, err = p.CodeDiff(ctx, ports.CodeDiffQuery{WorkspaceID: at.WorkspaceID, Path: "README.md", NoHunks: true})
+		wantCode(t, err, "INVALID_INPUT")
+	})
+
 	t.Run("a diff is read one page at a time", func(t *testing.T) {
 		rng := ports.CodeDiffQuery{RepositoryID: at.RepositoryID, Base: f.Root, Head: f.ManyBranch}
 		first, err := p.CodeDiff(ctx, rng)

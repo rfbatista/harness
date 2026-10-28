@@ -130,6 +130,9 @@ type diffPage struct {
 // a path or with a negative limit.
 func pageOf(q ports.CodeDiffQuery) (diffPage, error) {
 	if q.Path != "" {
+		if q.NoHunks {
+			return diffPage{}, invalid("hunks=none is for a diff without a path")
+		}
 		if q.After != "" || q.Limit != 0 || q.TotalsOnly {
 			return diffPage{}, invalid("after and limit are for a diff without a path")
 		}
@@ -295,6 +298,8 @@ func (c *Code) CodeDiff(ctx context.Context, q ports.CodeDiffQuery) (*domain.Cod
 		}
 		changed := ch.Added + ch.Deleted
 		switch {
+		case q.NoHunks:
+			fd.Binary = ch.Added < 0 || ch.Deleted < 0
 		case ch.Added < 0 || ch.Deleted < 0:
 			fd.Binary, fd.Added, fd.Deleted, fd.Withheld = true, -1, -1, strp(domain.WithheldBinary)
 		case only != "":
@@ -306,7 +311,7 @@ func (c *Code) CodeDiff(ctx context.Context, q ports.CodeDiffQuery) (*domain.Cod
 		default:
 			total += changed
 		}
-		if fd.Withheld == nil {
+		if fd.Withheld == nil && !q.NoHunks {
 			if ch.Status == domain.ChangeUntracked {
 				untracked = append(untracked, ch.Path)
 			} else {
@@ -321,6 +326,9 @@ func (c *Code) CodeDiff(ctx context.Context, q ports.CodeDiffQuery) (*domain.Cod
 	maxLines := domain.MaxDiffFileLines
 	if only != "" {
 		maxLines = domain.MaxDiffLines
+	}
+	if q.NoHunks {
+		return out, nil
 	}
 	patches := map[string]*domain.FileDiff{}
 	if len(tracked) > 0 {
