@@ -79,6 +79,7 @@
 @import url("./blocks/pane-tabs.css");
 @import url("./blocks/banner.css");
 @import url("./blocks/task-note.css");
+@import url("./blocks/context-popover.css");
 @import url("./blocks/prose.css");
 @import url("./blocks/source.css");
 @import url("./blocks/history.css");

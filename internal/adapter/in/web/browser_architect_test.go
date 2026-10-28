@@ -3,6 +3,7 @@ package web
 import (
 	"context"
 	"encoding/json"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -320,9 +321,10 @@ func TestPersonPausesAndResumesADelegatesStatusChecks(t *testing.T) {
 	}
 }
 
-// TestPersonAnswersTheArchitectsReviewRequests: the band shows what waits on
-// the person; requesting changes needs a note; an answer settles the request
-// under Earlier reviews and says when the architect will get it.
+// TestPersonAnswersTheArchitectsReviewRequests: the title row's Reviews button
+// shows what waits on the person; its popover holds every waiting request in
+// full; requesting changes opens a note and needs it; an answer settles the
+// request (counted in the foot) and the last one closes the popover.
 func TestPersonAnswersTheArchitectsReviewRequests(t *testing.T) {
 	now := time.Now()
 	review := func(id, subject string, minutes int) *domain.ReviewRequest {
@@ -334,55 +336,72 @@ func TestPersonAnswersTheArchitectsReviewRequests(t *testing.T) {
 	srv, feed := architectServer(t, nil, review("rv1", "Spec set ready for sign-off", 12), review("rv2", "Server API shape", 3))
 	ctx, errs := browser(t)
 
-	band := `(document.querySelector('[aria-label="Review requests"]')?.textContent ?? '').replace(/\s+/g, ' ').trim()`
-	cards := `[...document.querySelectorAll('[aria-label="Review requests"] .review')]`
-	var first, problem, after string
+	const popover = `document.getElementById('task-reviews')`
+	const open = popover + `.matches(':popover-open')`
+	const button = `document.getElementById('task-reviews-button')`
+	text := `(` + popover + `.textContent).replace(/\s+/g, ' ').trim()`
+	cards := `[...` + popover + `.querySelectorAll('.review')]`
+	card := func(subject string) string { return cards + `.find(c => c.textContent.includes('` + subject + `'))` }
+	var label, first, problem, foot, focused string
+	var closedAtStart, inRow bool
 	if err := chromedp.Run(ctx,
 		chromedp.EmulateViewport(1280, 900),
 		chromedp.Navigate(srv.URL+"/projects/p1/tasks/t1"),
-		chromedp.Poll(`!!document.querySelector('[data-band="reviews"]:not([hidden])')`, nil, chromedp.WithPollingTimeout(10*time.Second)),
-		// A waiting request opens the panel; the second one is folded behind "1 more waiting".
+		chromedp.Poll(`!!`+button+` && !`+button+`.hidden && `+button+`.checkVisibility()`, nil, chromedp.WithPollingTimeout(10*time.Second)),
+		chromedp.Evaluate(`!!`+button+`.closest('.toolbar .actions')`, &inRow),
+		chromedp.Evaluate(button+`.textContent.replace(/\s+/g, ' ').trim()`, &label),
+		chromedp.Evaluate(`!`+open, &closedAtStart),
+		// Every waiting request is in the popover, in full: nothing is folded.
+		chromedp.Evaluate(button+`.click()`, nil),
+		chromedp.Poll(open+` && `+cards+`.length === 2`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Evaluate(text, &first),
+		shot("reviews-popover"),
+		// Request changes… opens the note; Send without it is stopped at the field.
+		chromedp.Evaluate(card("Spec set")+`.querySelectorAll('button')[1].click()`, nil),
+		chromedp.Poll(`!!`+popover+`.querySelector('textarea')`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Evaluate(card("Spec set")+`.querySelectorAll('button')[1].click()`, nil),
+		chromedp.Poll(`!!`+popover+`.querySelector('textarea[aria-invalid=true]')`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Evaluate(popover+`.querySelector('textarea[aria-invalid=true]').closest('.field').querySelector('.error').textContent`, &problem),
+		// With a note it is sent: the card leaves, the other stays.
+		chromedp.SendKeys(`#task-reviews textarea[aria-invalid=true]`, "Split the contract in two.", chromedp.ByQuery),
+		chromedp.Evaluate(card("Spec set")+`.querySelectorAll('button')[1].click()`, nil),
 		chromedp.Poll(cards+`.length === 1`, nil, chromedp.WithPollingTimeout(5*time.Second)),
-		chromedp.Evaluate(`document.querySelector('[aria-label="Review requests"] [data-more]').click()`, nil),
-		chromedp.Poll(cards+`.length === 2`, nil, chromedp.WithPollingTimeout(5*time.Second)),
-		chromedp.Evaluate(band, &first),
-		shot("reviews-band"),
-		// Request changes without a note: stopped at the field.
-		chromedp.Evaluate(cards+`.find(c => c.textContent.includes('Spec set')).querySelectorAll('button')[1].click()`, nil),
-		chromedp.Poll(`!!document.querySelector('[aria-label="Review requests"] textarea[aria-invalid=true]')`, nil, chromedp.WithPollingTimeout(5*time.Second)),
-		chromedp.Evaluate(`document.querySelector('[aria-label="Review requests"] textarea[aria-invalid=true]').closest('.field').querySelector('.error').textContent`, &problem),
-		// With a note it is sent.
-		chromedp.SendKeys(`[aria-label="Review requests"] textarea[aria-invalid=true]`, "Split the contract in two.", chromedp.ByQuery),
-		chromedp.Evaluate(cards+`.find(c => c.textContent.includes('Spec set')).querySelectorAll('button')[1].click()`, nil),
-		chromedp.Poll(cards+`.filter(c => !c.closest('details')).length === 1`, nil, chromedp.WithPollingTimeout(5*time.Second)),
-		chromedp.Evaluate(`document.querySelector('[aria-label="Review requests"] details summary').click()`, nil),
-		chromedp.Evaluate(band, &after),
-		shot("reviews-answered"),
+		chromedp.Evaluate(`document.querySelector('#task-reviews .pop-foot').textContent.replace(/\s+/g, ' ').trim()`, &foot),
+		// Approving the last one closes the popover, and the button goes with it.
+		chromedp.Evaluate(card("Server API")+`.querySelectorAll('button')[0].click()`, nil),
+		chromedp.Poll(`!`+open+` && !`+button+`.checkVisibility()`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Poll(`document.activeElement.closest('.toolbar .actions') !== null`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Evaluate(`document.activeElement.closest('.toolbar .actions') !== null`, &inRow),
+		chromedp.Evaluate(`document.activeElement.id || document.activeElement.tagName`, &focused),
 	); err != nil {
-		var dump, html string
-		_ = chromedp.Run(ctx, chromedp.Evaluate(band, &dump), chromedp.Evaluate(cards+`[0]?.outerHTML ?? ''`, &html))
-		t.Fatalf("%v\nband: %s\nfirst card: %s\nJS errors: %v", err, dump, html, errs.all())
+		var dump, active string
+		_ = chromedp.Run(ctx, chromedp.Evaluate(text, &dump), chromedp.Evaluate(`document.activeElement.outerHTML.slice(0, 80) + ' | ' + [...document.querySelectorAll('.toolbar .actions a, .toolbar .actions button')].map(c => c.textContent.trim().slice(0,12) + ':' + c.checkVisibility()).join(',')`, &active))
+		t.Fatalf("%v\npopover: %s\nfocus: %s\nJS errors: %v", err, dump, active, errs.all())
+	}
+	if label != "Reviews 2" || !closedAtStart {
+		t.Errorf("the button reads %q, popover closed at start: %v", label, closedAtStart)
 	}
 	for _, c := range []struct{ got, want string }{
-		{first, "2 reviews wait on you"},
+		{first, "Reviews waiting on you"},
 		{first, "from the architect · about go-developer · Server: architect channel"},
+		{first, "Three specs and two contracts."},
+		{first, "Review requests page"},
 		{problem, "Say what should change"},
-		{after, "1 review waits on you"},
-		{after, "Earlier reviews (1)"},
-		{after, "changes requested"},
-		{after, "Your note: Split the contract in two."},
-		{after, "Saved. The architect gets your answer when its current turn ends."},
+		{foot, "1 settled on this task"},
 	} {
 		if !strings.Contains(c.got, c.want) {
 			t.Errorf("%q lacks %q", c.got, c.want)
 		}
 	}
+	if !inRow {
+		t.Errorf("the focus is on %q: it should stay in the title row", focused)
+	}
 
-	// The architect raises another over the feed: it shows and is announced.
+	// The architect raises another over the feed: the button comes back and it is announced.
 	feed.pushRaw(t, map[string]any{"review_request": review("rv3", "Board badge wording", 0)})
 	var announced string
 	if err := chromedp.Run(ctx,
-		chromedp.Poll(cards+`.filter(c => !c.closest('details')).length === 2`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Poll(button+`.checkVisibility() && `+button+`.textContent.includes('1')`, nil, chromedp.WithPollingTimeout(5*time.Second)),
 		chromedp.Evaluate(`document.querySelector('[role=status][aria-live=polite]').textContent`, &announced),
 	); err != nil {
 		t.Fatalf("%v\nJS errors: %v", err, errs.all())
@@ -393,6 +412,76 @@ func TestPersonAnswersTheArchitectsReviewRequests(t *testing.T) {
 	noBanner(t, ctx)
 	if e := errs.all(); len(e) > 0 {
 		t.Errorf("JS errors: %v", e)
+	}
+}
+
+// A task with no waiting request shows no Reviews button; below 48rem the
+// popover is a bottom sheet with a scrim; Esc closes it and the focus returns
+// to the button; a link to #reviews opens it.
+func TestReviewsPopoverIsASheetOnAPhoneAndClosesWithEsc(t *testing.T) {
+	at := time.Now().Add(-time.Minute)
+	waiting := &domain.ReviewRequest{ID: "rv1", TaskID: "t1", ProjectID: "p1", ArchitectSessionID: "s-arch", Subject: "Spec set ready",
+		Body: "Please sign off.", DocumentIDs: []string{}, ArtifactIDs: []string{}, State: domain.ReviewPending, CreatedAt: at, UpdatedAt: at}
+	srv, _ := architectServer(t, nil, waiting)
+	ctx, errs := browser(t)
+
+	const button = `document.getElementById('task-reviews-button')`
+	const popover = `document.getElementById('task-reviews')`
+	var sheet bool
+	var width, innerWidth, bottom, innerHeight float64
+	var focusedID string
+	var openByLink bool
+	if err := chromedp.Run(ctx,
+		chromedp.EmulateViewport(390, 800),
+		chromedp.Navigate(srv.URL+"/projects/p1/tasks/t1"),
+		chromedp.Poll(`!!`+button+` && `+button+`.checkVisibility()`, nil, chromedp.WithPollingTimeout(10*time.Second)),
+		chromedp.Evaluate(button+`.click()`, nil),
+		chromedp.Poll(popover+`.matches(':popover-open')`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Evaluate(popover+`.hasAttribute('data-sheet')`, &sheet),
+		chromedp.Evaluate(popover+`.getBoundingClientRect().width`, &width),
+		chromedp.Poll(`Math.round(`+popover+`.getBoundingClientRect().bottom) === window.innerHeight`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Evaluate(popover+`.getBoundingClientRect().bottom`, &bottom),
+		chromedp.Evaluate(`window.innerWidth`, &innerWidth),
+		chromedp.Evaluate(`window.innerHeight`, &innerHeight),
+		chromedp.KeyEvent("\x1b"),
+		chromedp.Poll(`!`+popover+`.matches(':popover-open')`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Evaluate(`document.activeElement.id`, &focusedID),
+		chromedp.Navigate("about:blank"),
+		chromedp.Navigate(srv.URL+"/projects/p1/tasks/t1#reviews"),
+		chromedp.Poll(popover+`.matches(':popover-open')`, nil, chromedp.WithPollingTimeout(10*time.Second)),
+		chromedp.Evaluate(popover+`.matches(':popover-open')`, &openByLink),
+	); err != nil {
+		t.Fatalf("%v\nJS errors: %v", err, errs.all())
+	}
+	if !sheet || width != innerWidth || math.Abs(bottom-innerHeight) > 1 {
+		t.Errorf("below 48rem the popover is a bottom sheet: sheet %v, width %v of %v, bottom %v of %v", sheet, width, innerWidth, bottom, innerHeight)
+	}
+	if focusedID != "task-reviews-button" {
+		t.Errorf("Esc leaves the focus on %q, want the Reviews button", focusedID)
+	}
+	if !openByLink {
+		t.Error("a link to #reviews opens the popover")
+	}
+	if e := errs.all(); len(e) > 0 {
+		t.Errorf("JS errors: %v", e)
+	}
+}
+
+// A task with nothing waiting shows no Reviews button.
+func TestNoReviewsButtonWhenNothingWaits(t *testing.T) {
+	srv, _ := architectServer(t, nil)
+	ctx, errs := browser(t)
+	var shown bool
+	if err := chromedp.Run(ctx,
+		chromedp.EmulateViewport(1280, 900),
+		chromedp.Navigate(srv.URL+"/projects/p1/tasks/t1"),
+		chromedp.Poll(pageReady, nil, chromedp.WithPollingTimeout(10*time.Second)),
+		chromedp.Evaluate(`(() => { const b = document.getElementById('task-reviews-button'); return !!b && b.checkVisibility(); })()`, &shown),
+	); err != nil {
+		t.Fatalf("%v\nJS errors: %v", err, errs.all())
+	}
+	if shown {
+		t.Error("no request waits: no Reviews button")
 	}
 }
 

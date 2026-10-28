@@ -88,9 +88,6 @@ func TestTheServerPaintsTheOpenPanelFromTheCookieAndTheDefault(t *testing.T) {
 					t.Errorf("the %s button's aria-expanded is %v, with %q open", band, isOpen, c.want)
 				}
 			}
-			if c.pending > 0 && tagAt(body, `data-band="reviews"`) == "" {
-				t.Error("a waiting review has no button on the strip")
-			}
 		})
 	}
 }

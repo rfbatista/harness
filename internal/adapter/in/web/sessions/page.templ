@@ -72,6 +72,7 @@ templ Page(v PageView) {
 						<span class="[ usage-total ]" x-data="usageTotalsChip" x-show="hasTask" x-text="taskText" x-bind:title="taskTitle"></span>
 					}
 					<div class="[ actions ]">
+						@reviewsButton(v)
 						<button type="button" class="[ button ]" id="task-note-button" data-variant="ghost" data-size="sm" aria-haspopup="dialog" aria-expanded="false" aria-controls="task-note" x-show="hasDescription" x-on:click="openNote" { hiddenUnless(v.TaskDescription != "")... }>Description</button>
 						if v.Documents != nil {
 							<a
@@ -181,24 +182,25 @@ templ Page(v PageView) {
 // that has nothing is painted hidden and appears once it has.
 templ contextStrip(v PageView) {
 	<div class="[ context-strip ]" role="group" aria-label="Task context" x-data="tasksContextStrip" data-open={ v.OpenBand() } data-stored={ v.Band } x-on:keydown="key" x-on:reviews-read="reviewsRead">
-		@reviewsBand(v)
 		@featureBand(v)
 		@tokenSaversBand(v)
 	</div>
 }
 
-// reviewsBand is the requests the task's architect raised for the person
-// (reviewsInbox, scoped to the task): its button says how many wait, in the
-// amber waiting tone, and its panel shows the newest first, the others
-// behind "N more waiting", then the settled ones under "Earlier reviews".
-// The server paints how many wait (task.pending_reviews) until the browser
-// has read them; a task with none paints the button hidden, and it appears
-// once the architect raises one. Its announcements go to the page's live
-// region (the announce event), so the page keeps one.
-templ reviewsBand(v PageView) {
+// reviewsButton is the requests the task's architect raised for the person
+// (reviewsInbox, scoped to the task): a ghost button in the title row with an
+// amber count, there only while a request waits, and the Reviews popover it
+// opens (task-reviews, the task note's popup surface): every waiting request
+// in full, newest first, and a foot that counts the settled ones and links to
+// the project's Review requests page. The server paints how many wait
+// (task.pending_reviews) until the browser has read them; a task with none
+// paints the button hidden, and it appears once the architect raises one. Its
+// announcements go to the page's live region (the announce event), so the
+// page keeps one.
+templ reviewsButton(v PageView) {
 	if v.Reviews != nil {
 		@templ.JSONScript("reviews-seed", v.Reviews)
-		<div
+		<span
 			style="display: contents"
 			x-data="reviewsInbox"
 			data-seed="reviews-seed"
@@ -210,80 +212,56 @@ templ reviewsBand(v PageView) {
 		>
 			<button
 				type="button"
-				class="[ cs-btn ]"
-				id="band-reviews-button"
-				data-band="reviews"
-				aria-controls="band-reviews"
-				aria-expanded={ strconv.FormatBool(v.OpenBand() == "reviews") }
-				x-bind:aria-expanded="expanded('reviews')"
-				x-on:click="toggle('reviews')"
-				x-bind:hidden="!summary.has"
-				x-bind:data-tone="summary.tone"
-				x-bind:aria-label="summary.name"
+				class="[ button ]"
+				id="task-reviews-button"
+				data-variant="ghost"
+				data-size="sm"
+				aria-haspopup="dialog"
+				aria-expanded="false"
+				aria-controls="task-reviews"
+				x-show="buttonShown"
+				x-on:click="openPopover"
+				x-bind:aria-label="buttonName"
 				{ reviewsButtonAttrs(v.PendingReviews)... }
 			>
-				<span class="[ label ]">Reviews</span>
-				{ " " }
-				<span class="[ badge ]" x-text="summary.count" x-show="summary.count !== ''" x-bind:data-tone="summary.tone" { toneAttrs(v.PendingReviews > 0)... } { shownIf(v.PendingReviews > 0)... }>{ strconv.Itoa(v.PendingReviews) }</span>
-				{ " " }
-				<span class="[ phrase ]" x-text="summary.phrase">{ reviewsPhrase(v.PendingReviews) }</span>
-				<span class="[ chevron ]" aria-hidden="true"></span>
+				Reviews <span class="[ badge ]" data-tone="attention" x-text="buttonCount">{ strconv.Itoa(v.PendingReviews) }</span>
 			</button>
-			<section
-				class="[ band-panel ]"
-				id="band-reviews"
-				aria-label="Review requests"
-				data-band-panel="reviews"
-				x-show="expanded('reviews') && summary.has"
-				{ shownIf(v.OpenBand() == "reviews")... }
+			<div
+				class="[ popup ] [ context-popover ]"
+				role="dialog"
+				id="task-reviews"
+				popover="manual"
+				data-align="auto"
+				data-kind="reviews"
+				aria-labelledby="task-reviews-title"
+				x-data="popupDialog"
+				x-on:dialog-open.window="openFrom($event)"
+				x-on:dialog-dismiss.window="dismissFrom($event)"
+				x-on:dialog-close.window="popoverClosed($event)"
 			>
-				<div class="[ reviews ]" data-band-scroll tabindex="0" aria-labelledby="band-reviews-button" x-bind:data-attention="attentionAttr">
+				<div class="[ pop-head ]">
+					<h3 id="task-reviews-title">Reviews waiting on you</h3>
+					<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" data-initial-focus x-on:click="close()">Close</button>
+				</div>
+				<div class="[ pop-body ] [ reviews ]" data-attention tabindex="0" aria-labelledby="task-reviews-title">
 					if v.PendingReviews > 0 {
 						<div class="[ flow ] [ flow-space-s ]" x-show="notLoaded">
-							<p class="[ reviews-head ]">
-								@components.Status("waiting", "waiting")
-								<span>{ waitingLine(v.PendingReviews) }</span>
-							</p>
 							<span class="[ skeleton ]" style="--skeleton-width: 50%"></span>
 							<span class="[ skeleton ]" style="--skeleton-width: 80%"></span>
 						</div>
 					}
 					@components.ReviewsError()
-					<template x-if="hasPending">
-						<div class="[ flow ] [ flow-space-2xs ]">
-							<h2 class="[ reviews-head ]" tabindex="-1" data-reviews-heading>
-								<span class="[ status ]" data-state="waiting">waiting</span>
-								<span x-text="headline"></span>
-							</h2>
-							<template x-for="card in firstCards" x-bind:key="card.id">
-								@components.ReviewCard()
-							</template>
-							<template x-if="hasMore">
-								<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" data-more x-bind:aria-expanded="moreOpen" x-on:click="toggleMore" x-text="moreLabel"></button>
-							</template>
-							<template x-if="moreOpen">
-								<div class="[ flow ] [ flow-space-2xs ]">
-									<template x-for="card in moreCards" x-bind:key="card.id">
-										@components.ReviewCard()
-									</template>
-								</div>
-							</template>
-						</div>
-					</template>
-					<template x-if="nothingWaits">
-						<p>Nothing waits on you.</p>
-					</template>
-					<template x-if="hasSettled">
-						<details>
-							<summary x-text="settledLabel"></summary>
-							<template x-for="card in settledCards" x-bind:key="card.id">
-								@components.SettledReviewCard()
-							</template>
-						</details>
+					<h4 class="[ visually-hidden ]" tabindex="-1" data-reviews-heading x-text="headline"></h4>
+					<template x-for="card in pendingCards" x-bind:key="card.id">
+						@components.ReviewPopoverCard()
 					</template>
 				</div>
-			</section>
-		</div>
+				<div class="[ pop-foot ]">
+					<span x-text="settledLine">{ " " }</span>
+					<a href={ templ.SafeURL("/projects/" + v.ProjectID + "/reviews") } data-review-requests-page>Review requests page ↗</a>
+				</div>
+			</div>
+		</span>
 	}
 }
 

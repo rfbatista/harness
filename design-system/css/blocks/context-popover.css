@@ -1,0 +1,60 @@
+/*
+ * Context popover — what hangs from the task page's title row without taking
+ * room from the agents: the Reviews popover (a request per card) and the
+ * Feature popover (the PRD over the child tasks). A .popup (role="dialog",
+ * popover="manual", popup.css) in the top layer, opened from a ghost button of
+ * the title row, like the task note (task-note.css). 34rem wide (data-kind
+ * "feature": 32rem), at most min(70dvh, 40rem) tall: the head and the foot
+ * stay, the body scrolls. Below 48rem the popup takes data-sheet (sheet.css)
+ * and the scrim. The open state is browser-only and never stored.
+ * <div class="popup context-popover" role="dialog" data-kind="reviews" aria-labelledby="t" popover="manual">
+ *   <div class="pop-head"><h3 id="t">Reviews waiting on you</h3><button class="button" data-variant="ghost" data-size="sm">Close</button></div>
+ *   <div class="pop-body">…</div>
+ *   <div class="pop-foot"><span>5 settled on this task</span><a href="…">Review requests page ↗</a></div></div>
+ */
+
+@layer blocks {
+  .context-popover {
+    --_width: 34rem;
+    inline-size: var(--_width);
+    max-inline-size: min(var(--_width), calc(100vw - 2 * var(--space-l)));
+    max-block-size: min(70dvh, 40rem);
+    flex-direction: column;
+
+    &[data-kind="feature"] { --_width: 32rem; }
+
+    & > .pop-head {
+      display: flex;
+      align-items: center;
+      gap: var(--space-xs);
+      flex: none;
+      min-block-size: var(--size-control-md);
+      padding: var(--space-xs) var(--space-s) var(--space-xs) var(--space-l);
+      border-block-end: var(--border-width) solid var(--color-line);
+      font-size: var(--text-md);
+
+      & > h3 { flex: 1 1 auto; font-size: inherit; font-weight: var(--weight-bold); }
+    }
+
+    & > .pop-body {
+      flex: 1 1 auto;
+      min-block-size: 0;
+      overflow: auto;
+      overscroll-behavior: contain;
+    }
+
+    & > .pop-foot {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-s);
+      flex: none;
+      padding: var(--space-xs) var(--space-l);
+      border-block-start: var(--border-width) solid var(--color-line);
+      color: var(--color-ink-muted);
+      font-size: var(--text-sm);
+    }
+
+    &[data-sheet] { inline-size: 100%; max-inline-size: none; }
+  }
+}
