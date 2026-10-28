@@ -1008,8 +1008,13 @@ func newCodeBrowser(ws ports.WorkspaceRepository, repos ports.RepositoryReposito
 // newOriginFetcher is the one fetch of a repository's origin: the pull
 // request base refresh and the worktree git state both run it, with the stored
 // credentials, one at a time per repository.
-func newOriginFetcher(git ports.BranchPublisher, creds *gitcredentials.Service) *workspaces.OriginFetcher {
-	return workspaces.NewOriginFetcher(git, creds)
+// Graphs built without the credentials context (some tests) have none, and
+// then nothing is fetched or pushed.
+func newOriginFetcher(git ports.BranchPublisher, creds optionalGitCredentials) *workspaces.OriginFetcher {
+	if creds.Service == nil {
+		return nil
+	}
+	return workspaces.NewOriginFetcher(git, creds.Service)
 }
 
 // newWorktreeGit reads where each session worktree's branch stands against
