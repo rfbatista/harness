@@ -52,8 +52,11 @@ templ Page(v PageView) {
 			if !v.HasTask() {
 				@brainstormsHeader(v)
 			} else {
-			<div x-data="tasksTaskEditor" data-seed="task-seed">
+			<div x-data="tasksTaskEditor" data-seed="task-seed" if v.TokenSavers != nil { data-savers-seed="task-savers-seed" }>
 				@templ.JSONScript("task-seed", v.Task)
+				if v.TokenSavers != nil {
+					@templ.JSONScript("task-savers-seed", v.TokenSavers)
+				}
 				<header class="[ toolbar ]">
 					<a class="[ crumb ]" href={ templ.SafeURL("/projects/" + v.ProjectID) }>{ v.ProjectName } /</a>
 					if v.Parent != nil {
@@ -184,7 +187,6 @@ templ Page(v PageView) {
 templ contextStrip(v PageView) {
 	<div class="[ context-strip ]" role="group" aria-label="Task context" x-data="tasksContextStrip" data-open={ v.OpenBand() } data-stored={ v.Band } x-on:keydown="key" x-on:reviews-read="reviewsRead">
 		@featureBand(v)
-		@tokenSaversBand(v)
 	</div>
 }
 
@@ -263,44 +265,6 @@ templ reviewsButton(v PageView) {
 				</div>
 			</div>
 		</span>
-	}
-}
-
-// tokenSaversBand is the task's Token savers control: a quiet last button
-// whose panel is the control itself. Left out when the server sends none.
-templ tokenSaversBand(v PageView) {
-	if v.TokenSavers != nil {
-		<div style="display: contents">
-			<button
-				type="button"
-				class="[ cs-btn ]"
-				id="band-token-savers-button"
-				data-band="token-savers"
-				data-quiet
-				aria-controls="band-token-savers"
-				aria-expanded={ strconv.FormatBool(v.OpenBand() == "token-savers") }
-				x-bind:aria-expanded="expanded('token-savers')"
-				x-on:click="toggle('token-savers')"
-			>
-				<span class="[ label ]" data-short="Savers">Token savers</span>
-				<span class="[ chevron ]" aria-hidden="true"></span>
-			</button>
-			<section
-				class="[ band-panel ]"
-				id="band-token-savers"
-				aria-labelledby="band-token-savers-button"
-				data-band-panel="token-savers"
-				data-token-savers
-				x-show="expanded('token-savers')"
-				{ shownIf(v.OpenBand() == "token-savers")... }
-			>
-				<div class="[ pad-inline-l pad-block-s ]" data-band-scroll tabindex="0" aria-labelledby="band-token-savers-button">
-					<div style="max-inline-size: 44rem">
-						@tokensavers.Section(*v.TokenSavers)
-					</div>
-				</div>
-			</section>
-		</div>
 	}
 }
 
@@ -1034,7 +998,10 @@ templ taskBand(v PageView) {
 						<textarea id="task-edit-description" x-model="draftDescription"></textarea>
 					}
 				</div>
-				<div class="[ cluster ]">
+				if v.TokenSavers != nil {
+					@taskSaversSection(*v.TokenSavers)
+				}
+				<div class="[ cluster ] [ note-actions ]">
 					<button type="submit" class="[ button ]" data-variant="primary" data-size="sm" x-bind:disabled="cannotSaveTask" x-bind:aria-busy="savingTask">Save</button>
 					<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-on:click="cancelEditTask">Cancel</button>
 				</div>
@@ -1077,4 +1044,35 @@ templ taskBand(v PageView) {
 			</div>
 		</div>
 	</template>
+}
+
+// taskSaversSection is the Edit form's third section, under Title and
+// Description: one row per token saver with its inherit / on / off choice,
+// held in the form (tasksTaskEditor) and written on Save, and the server's
+// line on what it resolves to and from which level. The choices are painted,
+// not looped: a select's options are not walked inside x-for.
+templ taskSaversSection(seed tokensavers.Seed) {
+	<section class="[ task-savers ]" aria-labelledby="task-edit-savers-title" x-show="hasSavers" style="display: none">
+		<h4 id="task-edit-savers-title">Token savers</h4>
+		<p class="[ text-sm color-ink-muted ]">{ seed.Lead() }</p>
+		<template x-if="saversError">
+			<div class="[ banner ]" data-tone="danger" role="alert">
+				<div class="[ flow ] [ flow-space-3xs grow ]">
+					<span x-text="saversError.message"></span>
+					<span class="[ code ]"><span x-text="saversError.code"></span> · <span x-text="saversError.next"></span></span>
+				</div>
+			</div>
+		</template>
+		<template x-for="s in savers" x-bind:key="s.saver">
+			<div class="[ row ]" style="--row-columns: 7rem auto minmax(0, 1fr)" x-bind:data-saver="s.saver">
+				<label class="[ title ] [ font-mono ]" x-bind:for="s.inputId" x-text="s.saver"></label>
+				<select data-size="sm" data-fit x-bind:id="s.inputId" x-model="s.draft" x-bind:disabled="savingTask">
+					for _, c := range seed.Choices() {
+						<option value={ c.Value }>{ c.Label }</option>
+					}
+				</select>
+				<span class="[ text-sm color-ink-muted ]" data-resolved x-text="s.summary"></span>
+			</div>
+		</template>
+	</section>
 }

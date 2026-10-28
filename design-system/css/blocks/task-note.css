@@ -10,7 +10,9 @@
  *     <button class="button" data-variant="ghost" data-size="sm">Close</button></div>
  *   <div class="note-body prose">…the text as written, line breaks kept…</div></div></div>
  * The edit state is a form.task-note-form in the same popup: .note-head ("Edit
- * task"), the Title and Description fields with their pens, Save and Cancel.
+ * task"), the Title and Description fields with their pens, the task's Token
+ * savers (.task-savers: a row per saver, written on Save), then Save and Cancel
+ * (.note-actions: sticky, so Save stays in reach while the form scrolls).
  * The open state is browser-only and never stored.
  * .status-change: who moved the task's status last and why, one line under the
  * toolbar; the reason truncates (its full text is the title).
@@ -38,6 +40,24 @@
       & > h3 { flex: 1 1 auto; font-size: inherit; font-weight: var(--weight-bold); }
     }
     .task-note-form > .note-head { margin-inline: calc(-1 * var(--space-l)); }
+
+    /* The form's third section, the task's Token savers, and Save kept in reach while the form scrolls. */
+    & .task-savers {
+      display: grid;
+      gap: var(--space-xs);
+      padding-block-start: var(--space-s);
+      border-block-start: var(--border-width) solid var(--color-line);
+
+      & > h4 { font-size: var(--text-md); font-weight: var(--weight-bold); }
+    }
+    & .note-actions {
+      position: sticky;
+      inset-block-end: calc(-1 * var(--space-l));
+      margin-inline: calc(-1 * var(--space-l));
+      padding: var(--space-s) var(--space-l);
+      border-block-start: var(--border-width) solid var(--color-line);
+      background: var(--color-raised);
+    }
 
     & .note-body {
       padding: var(--space-m) var(--space-l);

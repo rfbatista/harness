@@ -23,6 +23,7 @@ import { taskResources } from "./components/taskResources.js";
  *   navigate: (url: string) => void,
  *   reload: () => void,
  *   resources: import("../domain/ports.js").ResourceGateway,
+ *   tokenSavers: import("../../tokensavers/domain/ports.js").TokenSaverGateway,  the task editor writes the task's savers
  *   clock: import("../../../shared/infrastructure/clock.js").Clock,
  * }} deps
  */

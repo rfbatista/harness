@@ -172,6 +172,43 @@ func selected(saver, value string) chromedp.Action {
 	return waitUntil(`(` + saverRow(saver) + `?.querySelector('select')?.value ?? '') === ` + quote(value))
 }
 
+// The task page's Token savers are the third section of its Edit form: opened
+// from the title row's Edit button, held in the form and written on Save.
+const taskSavers = `document.querySelector('#task-note .task-savers')`
+
+func taskSaverRow(saver string) string {
+	return taskSavers + `?.querySelector('[data-saver="` + saver + `"]')`
+}
+
+// taskSaversReady opens the Edit form when it is closed and waits for the savers.
+func taskSaversReady() chromedp.Action {
+	return chromedp.Tasks{
+		chromedp.Evaluate(`(() => { if (!document.getElementById('task-note').matches(':popover-open')) document.getElementById('task-edit-button').click() })()`, nil),
+		waitUntil(`!!` + taskSaverRow("rtk") + ` && ` + taskSaverRow("rtk") + `.checkVisibility()`),
+	}
+}
+
+func taskSummaryIs(saver, want string) chromedp.Action {
+	return waitUntil(`(` + taskSaverRow(saver) + `?.querySelector('[data-resolved]')?.textContent.trim() ?? '') === ` + quote(want))
+}
+
+func taskSelected(saver, value string) chromedp.Action {
+	return waitUntil(`(` + taskSaverRow(saver) + `?.querySelector('select')?.value ?? '') === ` + quote(value))
+}
+
+func taskChoose(saver, value string) chromedp.Action {
+	return chromedp.Evaluate(`(() => { const s = `+taskSaverRow(saver)+`.querySelector('select');
+		s.value = `+quote(value)+`; s.dispatchEvent(new Event('change', { bubbles: true })); })()`, nil)
+}
+
+// taskSaveForm presses Save and waits for the form to close.
+func taskSaveForm() chromedp.Action {
+	return chromedp.Tasks{
+		chromedp.Evaluate(`document.querySelector('#task-note form button[type=submit]').click()`, nil),
+		waitUntil(`!document.getElementById('task-note').matches(':popover-open')`),
+	}
+}
+
 // TestTokenSaverActivationsInTheWebUI_EndToEnd sets rtk at each level on its
 // page: on for the project, which the repository inherits; off for the
 // repository, on for the task. Each page shows the saver's own value, what
@@ -210,21 +247,30 @@ func TestTokenSaverActivationsInTheWebUI_EndToEnd(t *testing.T) {
 
 	b.run("the task inherits the repository's",
 		chromedp.Navigate(w.taskURL()),
-		tokenSaversReady(),
-		selected("rtk", "inherit"),
-		summaryIs("rtk", "inherit — resolves off (repository)"),
+		taskSaversReady(),
+		taskSelected("rtk", "inherit"),
+		taskSummaryIs("rtk", "inherit — resolves off (repository)"),
 	)
-	b.run("turn rtk on for the task",
-		choose("rtk", "on"),
-		summaryIs("rtk", "on — resolves on (task)"),
+	b.run("turn rtk on for the task: nothing is written until Save",
+		taskChoose("rtk", "on"),
+		taskSummaryIs("rtk", "inherit — resolves off (repository)"),
 		bothSchemes("token-savers-task"),
+	)
+	if got := w.resolved(domain.TokenSaverRTK, w.project.ID, w.repo.ID, w.task.ID); got != "off (repository)" {
+		t.Errorf("before Save, the task's rtk resolves %s, want off (repository)", got)
+	}
+	b.run("Save writes it",
+		taskSaveForm(),
+		taskSaversReady(),
+		taskSelected("rtk", "on"),
+		taskSummaryIs("rtk", "on — resolves on (task)"),
 	)
 
 	b.run("after a reload, the task keeps it",
 		chromedp.Reload(),
-		tokenSaversReady(),
-		selected("rtk", "on"),
-		summaryIs("rtk", "on — resolves on (task)"),
+		taskSaversReady(),
+		taskSelected("rtk", "on"),
+		taskSummaryIs("rtk", "on — resolves on (task)"),
 	)
 	b.run("so does the repository",
 		chromedp.Navigate(w.repositoryURL()),
@@ -265,9 +311,11 @@ func TestTokenSaverActivationsGoWithTheirOwner_EndToEnd(t *testing.T) {
 		choose("rtk", "off"),
 		summaryIs("rtk", "off — resolves off (repository)"),
 		chromedp.Navigate(w.taskURL()),
-		tokenSaversReady(),
-		choose("rtk", "on"),
-		summaryIs("rtk", "on — resolves on (task)"),
+		taskSaversReady(),
+		taskChoose("rtk", "on"),
+		taskSaveForm(),
+		taskSaversReady(),
+		taskSummaryIs("rtk", "on — resolves on (task)"),
 	)
 
 	project, repo, task := w.project, w.repo, w.task
@@ -280,9 +328,9 @@ func TestTokenSaverActivationsGoWithTheirOwner_EndToEnd(t *testing.T) {
 	w.task = w.addTask()
 	b.run("a new task starts inheriting",
 		chromedp.Navigate(w.taskURL()),
-		tokenSaversReady(),
-		selected("rtk", "inherit"),
-		summaryIs("rtk", "inherit — resolves off (repository)"),
+		taskSaversReady(),
+		taskSelected("rtk", "inherit"),
+		taskSummaryIs("rtk", "inherit — resolves off (repository)"),
 	)
 
 	if err := w.cat.Projects.DeleteRepository(w.ctx, repo.ID); err != nil {
@@ -301,9 +349,11 @@ func TestTokenSaverActivationsGoWithTheirOwner_EndToEnd(t *testing.T) {
 
 	b.run("rtk on for the new task, off for the repository added again",
 		chromedp.Navigate(w.taskURL()),
-		tokenSaversReady(),
-		choose("rtk", "on"),
-		summaryIs("rtk", "on — resolves on (task)"),
+		taskSaversReady(),
+		taskChoose("rtk", "on"),
+		taskSaveForm(),
+		taskSaversReady(),
+		taskSummaryIs("rtk", "on — resolves on (task)"),
 		chromedp.Navigate(w.repositoryURL()),
 		tokenSaversReady(),
 		choose("rtk", "off"),

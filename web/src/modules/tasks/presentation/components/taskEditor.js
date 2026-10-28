@@ -4,7 +4,11 @@
 // a text edit does not resend the status. A task with sessions is not deleted (they would be left
 // under no task); the editor asks the server right before deleting it.
 //
-//   <div x-data="tasksTaskEditor" data-seed="task-seed"> … </div>
+//   <div x-data="tasksTaskEditor" data-seed="task-seed" data-savers-seed="task-savers-seed"> … </div>
+//
+// The edit form's third section is the task's Token savers: the choices are
+// held in the form (savers[].draft) and written on Save, one activation per
+// changed saver, after the task itself; Cancel drops them.
 
 import { describeError } from "../../../../shared/presentation/errors.js";
 import { readSeed } from "../../../../shared/presentation/seed.js";
@@ -21,12 +25,13 @@ const NOTE_ID = "task-note";
  *   gateway: import("../../domain/ports.js").TaskGateway,
  *   navigate: (url: string) => void,
  *   reload: () => void,
+ *   tokenSavers?: import("../../../tokensavers/domain/ports.js").TokenSaverGateway,  the task's Token savers, written on Save
  *   store?: import("./rail.js").RailStore,  the rail's live model: the task as the feed has it, and its latest move
  *   clock?: { now: () => Date },
  * }} deps
  */
 export const taskEditor =
-  ({ gateway, navigate, reload, store = { tasks: [], statusChanges: {} }, clock = { now: () => new Date() } }) =>
+  ({ gateway, tokenSavers, navigate, reload, store = { tasks: [], statusChanges: {} }, clock = { now: () => new Date() } }) =>
   () => {
     let ticker = null;
     return {
@@ -47,11 +52,26 @@ export const taskEditor =
       taskError: null,
       /** Archive or Restore is on its way. */
       archiving: false,
+      /**
+       * The task's Token savers as the Edit form holds them: value is what is
+       * saved, draft what the person chose, summary the server's line on what it resolves to.
+       * @type {{ saver: string, value: string, draft: string, summary: string, inputId: string }[]}
+       */
+      savers: [],
+      /** The owner the savers are written to (the task, at task level). */
+      saversLevel: "",
+      saversOwner: "",
+      /** A saver write that failed: the form stays open and shows it. */
+      saversError: null,
       /** The task note popover is open (browser-only, never stored: a page loads with it closed). */
       noteOpen: false,
 
       get title() {
         return this.task?.title ?? "";
+      },
+      /** The task has a Token savers control to show. */
+      get hasSavers() {
+        return this.savers.length > 0;
       },
       get description() {
         return this.task?.description ?? "";
@@ -110,6 +130,7 @@ export const taskEditor =
           this.taskError = describeError(err);
           return;
         }
+        this.readSavers();
         ticker = setInterval(() => (this.now = clock.now()), TICK_MS);
         // Moved elsewhere (the architect, another tab): the picker follows.
         this.$watch("storedStatus", (status) => this.follow(status));
@@ -118,6 +139,31 @@ export const taskEditor =
 
       destroy() {
         clearInterval(ticker);
+      },
+
+      /** The savers the server painted, if it serves them and the page carries them. */
+      readSavers() {
+        const id = this.$el.dataset.saversSeed;
+        const script = id ? this.$el.ownerDocument.getElementById(id) : null;
+        if (!script || !tokenSavers) return;
+        try {
+          this.applySavers(tokenSavers.decodeActivations(JSON.parse(script.textContent ?? "null")));
+        } catch (err) {
+          this.saversError = describeError(err);
+        }
+      },
+
+      /** @param {import("../../../tokensavers/domain/ports.js").Activations} a  as the server now has them */
+      applySavers(a) {
+        this.saversLevel = a.level;
+        this.saversOwner = a.ownerId;
+        this.savers = a.activations.map((x) => ({ saver: x.saver, value: x.value, draft: x.value, summary: x.summary, inputId: `task-saver-${x.saver}` }));
+      },
+
+      /** Back to what is saved: every choice dropped, no error. */
+      resetSavers() {
+        for (const s of this.savers) s.draft = s.value;
+        this.saversError = null;
       },
 
       /** Opens the note under the Description button; the dialog hands the focus back to it. */
@@ -196,6 +242,7 @@ export const taskEditor =
         this.draftTitle = this.title;
         this.draftDescription = this.description;
         this.confirmingTaskDelete = false;
+        this.resetSavers();
         this.editingTask = true;
         if (!this.noteOpen) this.openNote();
         // By id, not x-ref: the title sits inside the writing helper's own x-data.
@@ -204,6 +251,7 @@ export const taskEditor =
 
       /** Back to the read view; a task with no description has none, so the surface closes. */
       cancelEditTask() {
+        this.resetSavers();
         this.editingTask = false;
         if (!this.hasDescription) this.closeNote();
       },
@@ -218,13 +266,43 @@ export const taskEditor =
             title: this.draftTitle.trim(),
             description: this.draftDescription.trim(),
           });
-          this.editingTask = false;
-          this.closeNote();
         } catch (err) {
           this.taskError = describeError(err);
+          this.savingTask = false;
+          return;
+        }
+        try {
+          if (await this.saveSavers()) {
+            this.editingTask = false;
+            this.closeNote();
+          }
         } finally {
           this.savingTask = false;
         }
+      },
+
+      /**
+       * One activation per saver the person changed; the first refusal stops
+       * the rest and keeps the form open. The others keep the person's choice.
+       * @returns {Promise<boolean>} every change landed
+       */
+      async saveSavers() {
+        for (const row of this.savers.filter((s) => s.draft !== s.value)) {
+          try {
+            const answer = await tokenSavers.setActivation(this.saversLevel, this.saversOwner, row.saver, row.draft);
+            for (const x of answer.activations) {
+              const r = this.savers.find((s) => s.saver === x.saver);
+              if (!r) continue;
+              if (r === row) r.draft = x.value;
+              r.value = x.value;
+              r.summary = x.summary;
+            }
+          } catch (err) {
+            this.saversError = describeError(err);
+            return false;
+          }
+        }
+        return true;
       },
 
       /** Checks the task can go (no sessions), then asks for confirmation. */
