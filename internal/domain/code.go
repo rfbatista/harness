@@ -21,6 +21,10 @@ const (
 	MaxDiffFileLines = 3_000
 	// MaxDiffFileBytes caps one file's patch text.
 	MaxDiffFileBytes = 4 << 20
+	// DiffPageFiles is the files in a diff page when the reader names no
+	// limit; MaxDiffPageFiles is the most a reader may ask for.
+	DiffPageFiles    = 50
+	MaxDiffPageFiles = 200
 )
 
 // CodeSourceKind says what a code view reads: a repository at a ref, or a
@@ -124,12 +128,21 @@ const (
 type CodeDiff struct {
 	Source CodeSource `json:"source"`
 	// Base is the full hash of the base side.
-	Base    string     `json:"base"`
-	Scope   string     `json:"scope"`
-	Files   []FileDiff `json:"files"`
-	Added   int        `json:"added"`
-	Deleted int        `json:"deleted"`
-	// Truncated: hunks were withheld from some file by the totals limit.
+	Base  string `json:"base"`
+	Scope string `json:"scope"`
+	// Files is one diff page: the changed files in path order, at most the
+	// page limit of them (none for a totals-only read).
+	Files []FileDiff `json:"files"`
+	// Next is the last path of the page when more changed files follow it;
+	// nil on the last page, with a path, and on a totals-only read.
+	Next *string `json:"next"`
+	// FileCount, Added and Deleted cover the whole diff, whichever page is
+	// answered (Added and Deleted leave binary files out).
+	FileCount int `json:"file_count"`
+	Added     int `json:"added"`
+	Deleted   int `json:"deleted"`
+	// Truncated: hunks were withheld from some file of this page by the
+	// totals limit.
 	Truncated bool `json:"truncated"`
 }
 
