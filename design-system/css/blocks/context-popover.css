@@ -55,6 +55,17 @@
       font-size: var(--text-sm);
     }
 
+    /* The Feature popover's pinned PRD, over the child rows (list.css, row.css). */
+    & .prd-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-s);
+      padding: var(--space-s) var(--space-l);
+      border-block-end: var(--border-width) solid var(--color-line);
+      background: var(--color-panel);
+    }
+
     &[data-sheet] { inline-size: 100%; max-inline-size: none; }
   }
 }

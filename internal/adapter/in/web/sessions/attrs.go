@@ -134,7 +134,7 @@ func doneAttr(done bool) templ.Attributes {
 	return templ.Attributes{}
 }
 
-// featurePhrase is what the strip's Feature button says beside the count:
+// featurePhrase is what the Feature button's accessible name adds to the count:
 // "3 in review · 2 in progress", "all done", or nothing. The browser's
 // featureSummary (tasks/presentation/featureView.js) says the same.
 func featurePhrase(f *FeatureView) string {
@@ -173,13 +173,29 @@ func featureName(f *FeatureView) string {
 	return name
 }
 
-// featureShowing is the Feature panel's header line: "Showing 16 tasks".
-func featureShowing(f *FeatureView) string {
-	n := len(childrenOf(f))
-	if n == 1 {
-		return "Showing 1 task"
+// featureFoot is the Feature popover's foot before the browser takes over:
+// how many children are in each status, in the popover's order. The
+// browser's statusLine (tasks/presentation/featureView.js) says the same.
+func featureFoot(f *FeatureView) string {
+	count := map[string]int{}
+	for _, c := range childrenOf(f) {
+		count[c.Status]++
 	}
-	return "Showing " + strconv.Itoa(n) + " tasks"
+	var parts []string
+	for _, st := range []struct{ status, word string }{{"review", "in review"}, {"in_progress", "in progress"}, {"todo", "todo"}, {"backlog", "backlog"}, {"done", "done"}} {
+		if n := count[st.status]; n > 0 {
+			parts = append(parts, strconv.Itoa(n)+" "+st.word)
+		}
+	}
+	return strings.Join(parts, " · ")
+}
+
+// featureButtonAttrs hides the Feature button until the task has children.
+func featureButtonAttrs(f *FeatureView) templ.Attributes {
+	if len(childrenOf(f)) == 0 {
+		return templ.Attributes{"style": "display: none"}
+	}
+	return templ.Attributes{}
 }
 
 // featureScrollLabel names the Feature panel's scroll region: "Child tasks, 16".

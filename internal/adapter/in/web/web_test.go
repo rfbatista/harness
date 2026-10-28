@@ -454,14 +454,17 @@ func TestFeatureTaskPageShowsItsPRDAndChildren(t *testing.T) {
 	body := get(t, newTestHandler(t, featureBoard()), "/projects/p1/tasks/t-feed").Body.String()
 	for _, want := range []string{
 		`x-data="tasksFeature"`,
-		`data-band="feature"`,
-		`role="group" aria-label="Task context"`,
+		`id="task-feature-button"`,
+		`id="task-feature"`,
 		`<script id="feature-seed" type="application/json">`,
 		`"documents":{"t-docs":[{"Title":"Brief: Write docs","Href":"/projects/p1/tasks/t-docs/documents/d-brief","Updated":"1m"}]}`,
 		`x-text="count">1</span>`,
-		`x-text="showing">Showing 1 task</span>`,
+		`<span x-text="footLine">1 todo</span>`,
+		`<a href="/projects/p1" data-board-link>See on the board ↗</a>`,
 		`aria-label="Child tasks, 1"`,
-		`href="/projects/p1/tasks/t-feed/documents/d-prd" data-prd title="updated 1h">PRD: SSE feed</a>`,
+		`<strong>PRD: SSE feed</strong>`,
+		`Product requirements · updated 1h`,
+		`href="/projects/p1/tasks/t-feed/documents/d-prd"`,
 		`data-child-id="t-docs"`,
 		`<a href="/projects/p1/tasks/t-docs">Write docs</a>`,
 		`data-status="todo">todo</span>`,
@@ -482,7 +485,7 @@ func TestChildTaskPageLinksItsParentAndHidesTheFeatureSection(t *testing.T) {
 	if !strings.Contains(body, `<a class="[ crumb ]" href="/projects/p1/tasks/t-feed" data-parent-task="t-feed" title="The feature task this task belongs to">Add SSE feed /</a>`) {
 		t.Error("a child's crumbs must lead to its feature task")
 	}
-	if !strings.Contains(body, `data-children="0"`) || !strings.Contains(body, `data-band="feature"`) || strings.Contains(body, ` data-child-id="`) { // the live x-bind stays
+	if !strings.Contains(body, `data-children="0"`) || !strings.Contains(body, `id="task-feature-button"`) || strings.Contains(body, ` data-child-id="`) { // the live x-bind stays
 		t.Error("a task without children mounts the section hidden, with no rows")
 	}
 	plain := get(t, newTestHandler(t, board()), "/projects/p1/tasks/t-feed").Body.String()
