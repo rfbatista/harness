@@ -192,7 +192,7 @@ test("rows match the shared fixture (parity with the BFF)", () => {
     const sessions = c.sessions.map((f) =>
       makeSession({
         id: f.id, agentId: f.agent_id, role: f.role ?? "", mode: f.mode ?? "", model: f.model ?? "", status: f.status,
-        pendingApprovals: f.pending_approvals ?? 0, task: f.task, ticketId: f.ticket_id ?? "t1", parentSessionId: f.parent ?? "",
+        pendingApprovals: f.pending_approvals ?? 0, task: f.task, ticketId: f.ticket_id ?? "t1", parentSessionId: f.parent ?? "", broughtUnder: f.brought_under === true,
         updatedAt: ago(f.ago), sandbox: f.sandboxed === false ? { sandboxed: false, visibility: "unrestricted", driver: "" } : null,
         statusCheck: f.check ? makeCheck({ state: f.check.state, everyMinutes: f.check.every, nextAt: new Date(T0.getTime() + f.check.next_in * 60_000) }) : null,
       }),

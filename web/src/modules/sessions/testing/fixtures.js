@@ -22,6 +22,7 @@ export function makeSession(overrides = {}) {
     resumable: false,
     resumeBlocked: "SESSION_ALREADY_RUNNING",
     parentSessionId: "",
+    broughtUnder: false,
     role: "",
     architectSessionId: "",
     statusCheck: null,

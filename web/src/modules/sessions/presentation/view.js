@@ -119,7 +119,7 @@ const REPORT_KIND = { working: "working", ready_for_review: "review", blocked: "
 
 /**
  * The detail under a row's first line: approvals pending, a delegate's report
- * and check, who started it, or a prompt that is not the task's title; null
+ * and check (a delegate brought under the architect says so until it reports), who started it, or a prompt that is not the task's title; null
  * when there is none. The BFF's rowDetail (view.go) says the same before the
  * messages load; web/testdata/views/session-row.json pins both.
  * @returns {{ kind: string, lead: string, text: string, check: string } | null}
@@ -131,8 +131,9 @@ function detailOf(session, { now, agentNames, others, taskTitle, report, loaded 
   }
   if (session.role === "delegate") {
     const check = session.statusCheck ? statusCheckView(session.statusCheck, now).short : "";
-    if (!loaded) return check ? { kind: "none", lead: "", text: "", check } : null;
-    if (!report) return { kind: "none", lead: "no report yet", text: "", check };
+    const broughtUnder = { kind: "by", lead: "brought under", text: startedBy(session, others, agentNames), check };
+    if (!loaded) return session.broughtUnder ? broughtUnder : check ? { kind: "none", lead: "", text: "", check } : null;
+    if (!report) return session.broughtUnder ? broughtUnder : { kind: "none", lead: "no report yet", text: "", check };
     return {
       kind: REPORT_KIND[report.status] ?? "working",
       lead: REPORT_WORD[report.status] ?? "reported",
@@ -141,7 +142,7 @@ function detailOf(session, { now, agentNames, others, taskTitle, report, loaded 
     };
   }
   const by = startedBy(session, others, agentNames);
-  if (by) return { kind: "by", lead: "started by", text: by, check: "" };
+  if (by) return { kind: "by", lead: session.broughtUnder ? "brought under" : "started by", text: by, check: "" };
   if (session.role !== "architect" && taskTitle && session.task && session.task !== taskTitle) {
     return { kind: "prompt", lead: "prompt", text: quoted(session.task), check: "" };
   }

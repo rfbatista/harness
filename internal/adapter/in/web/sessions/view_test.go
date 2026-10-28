@@ -348,6 +348,7 @@ func TestRowMatchesTheSharedFixture(t *testing.T) {
 				AgentID          string               `json:"agent_id"`
 				Role             domain.SessionRole   `json:"role"`
 				Parent           string               `json:"parent"`
+				BroughtUnder     bool                 `json:"brought_under"`
 				Mode             domain.SessionMode   `json:"mode"`
 				Model            string               `json:"model"`
 				Status           domain.SessionStatus `json:"status"`
@@ -395,7 +396,7 @@ func TestRowMatchesTheSharedFixture(t *testing.T) {
 		}
 		others := map[string]*domain.Session{}
 		for _, f := range c.Sessions {
-			s := &domain.Session{ID: f.ID, AgentID: f.AgentID, Role: f.Role, ParentSessionID: f.Parent, Mode: f.Mode, Model: f.Model,
+			s := &domain.Session{ID: f.ID, AgentID: f.AgentID, Role: f.Role, ParentSessionID: f.Parent, BroughtUnder: f.BroughtUnder, Mode: f.Mode, Model: f.Model,
 				Status: f.Status, PendingApprovals: f.PendingApprovals, Task: f.Task, TicketID: "t1", UpdatedAt: now.Add(-time.Duration(f.Ago) * time.Minute)}
 			if f.TicketID != nil {
 				s.TicketID = *f.TicketID

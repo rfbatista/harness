@@ -36,6 +36,7 @@ export function toSession(dto) {
     architectSessionId: dto.architect_session_id ?? "",
     statusCheck: dto.status_check ? toStatusCheck(dto.status_check) : null,
     parentSessionId: dto.parent_session_id ?? "",
+    broughtUnder: dto.brought_under === true,
     branch: dto.branch ?? "",
     workspaceId: dto.workspace_id ?? "",
     workingDir: dto.working_dir ?? "",

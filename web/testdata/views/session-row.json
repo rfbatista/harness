@@ -100,6 +100,74 @@
       }
     },
     {
+      "name": "a delegate brought under the architect says so before its messages load, with its check",
+      "task_title": "AI Helper to write text",
+      "sessions": [
+        { "id": "arch", "agent_id": "web", "role": "architect", "mode": "architect", "status": "running", "ago": 3, "task": "AI Helper to write text" },
+        { "id": "d1", "agent_id": "go", "role": "delegate", "parent": "arch", "brought_under": true, "model": "sonnet", "status": "running", "ago": 8, "task": "AI Helper to write text",
+          "check": { "state": "active", "every": 10, "next_in": 6 } }
+      ],
+      "row": "d1",
+      "expect": {
+        "agent": "go-developer", "leadsWithTitle": false, "mode": "", "model": "sonnet", "badge": "",
+        "chip": null, "word": "running", "state": "running", "when": "8m",
+        "detail": { "kind": "by", "lead": "brought under", "text": "web-developer", "check": "check in 6m" },
+        "detailText": "go-developer · sonnet · brought under web-developer · check in 6m · running · 8m",
+        "resumeLabel": "Resume go-developer", "unsandboxedAttr": null
+      }
+    },
+    {
+      "name": "an ended session brought under the architect has no check and still says so",
+      "task_title": "AI Helper to write text",
+      "sessions": [
+        { "id": "arch", "agent_id": "web", "role": "architect", "mode": "architect", "status": "running", "ago": 3, "task": "AI Helper to write text" },
+        { "id": "d1", "agent_id": "go", "role": "delegate", "parent": "arch", "brought_under": true, "status": "done", "ago": 30, "task": "AI Helper to write text" }
+      ],
+      "row": "d1",
+      "expect": {
+        "agent": "go-developer", "leadsWithTitle": false, "mode": "", "model": "", "badge": "",
+        "chip": null, "word": "done", "state": "done", "when": "30m",
+        "detail": { "kind": "by", "lead": "brought under", "text": "web-developer", "check": "" },
+        "detailText": "go-developer · brought under web-developer · done · 30m",
+        "resumeLabel": "Resume go-developer", "unsandboxedAttr": null
+      }
+    },
+    {
+      "name": "a brought-under delegate that has not reported yet still says who it was brought under",
+      "task_title": "AI Helper to write text",
+      "messages_loaded": true,
+      "sessions": [
+        { "id": "arch", "agent_id": "web", "role": "architect", "mode": "architect", "status": "running", "ago": 3, "task": "AI Helper to write text" },
+        { "id": "d1", "agent_id": "go", "role": "delegate", "parent": "arch", "brought_under": true, "status": "running", "ago": 8, "task": "AI Helper to write text" }
+      ],
+      "row": "d1",
+      "expect": {
+        "agent": "go-developer", "leadsWithTitle": false, "mode": "", "model": "", "badge": "",
+        "chip": null, "word": "running", "state": "running", "when": "8m",
+        "detail": { "kind": "by", "lead": "brought under", "text": "web-developer", "check": "" },
+        "detailText": "go-developer · brought under web-developer · running · 8m",
+        "resumeLabel": "Resume go-developer", "unsandboxedAttr": null
+      }
+    },
+    {
+      "name": "a brought-under delegate that reported shows its report, as any delegate",
+      "task_title": "AI Helper to write text",
+      "messages_loaded": true,
+      "report": { "from": "d1", "status": "blocked", "ago": 2, "body": "Need the schema." },
+      "sessions": [
+        { "id": "arch", "agent_id": "web", "role": "architect", "mode": "architect", "status": "running", "ago": 3, "task": "AI Helper to write text" },
+        { "id": "d1", "agent_id": "go", "role": "delegate", "parent": "arch", "brought_under": true, "status": "running", "ago": 8, "task": "AI Helper to write text" }
+      ],
+      "row": "d1",
+      "expect": {
+        "agent": "go-developer", "leadsWithTitle": false, "mode": "", "model": "", "badge": "",
+        "chip": null, "word": "running", "state": "running", "when": "2m",
+        "detail": { "kind": "blocked", "lead": "blocked", "text": "“Need the schema.”", "check": "" },
+        "detailText": "go-developer · blocked “Need the schema.” · running · 2m",
+        "resumeLabel": "Resume go-developer", "unsandboxedAttr": null
+      }
+    },
+    {
       "name": "a peer started by a session says who",
       "task_title": "AI Helper to write text",
       "sessions": [

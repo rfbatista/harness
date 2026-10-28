@@ -9,6 +9,7 @@
  * @property {string} projectId
  * @property {string} repositoryId      the repository its worktree was cut from; "" for none
  * @property {string} parentSessionId   the session that started it on its task; "" when a person did
+ * @property {boolean} broughtUnder      the parent became so by a person bringing it under an architect, not by starting it
  * @property {string} workspaceId       its git worktree; "" when it was not started on a repository
  * @property {string} branch            the branch its worktree holds; "" for none
  * @property {string} workingDir        where it runs: its worktree
