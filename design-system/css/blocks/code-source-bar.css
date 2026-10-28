@@ -18,6 +18,12 @@
  * dot, "Changed on disk", a Reload button with kbd R), gone (the worktree was
  * removed: a second line .gone explains, says what is shown instead and
  * offers the branch). Without data-state the source is fixed (a ref).
+ * Revision 6: after .commit, span.sync-slot holds the sync-state chip (a
+ * button there, sync-state.css). Under pressure the branch gives way first,
+ * then .dirty; the chip never does. data-state="stopped": the session sent its
+ * last event, .state reads "stopped" then span.asof "as of 12:41" (the list
+ * is read on open and on Reload). stale's text names the count ("3 files
+ * changed since loaded").
  * .state[data-loading] while a diff or a page of it loads: the inline spinner
  * in place of the dot, before the text ("Loading changes").
  */
@@ -46,6 +52,7 @@
 
       & > * { flex: none; }
       & > * + :not(select)::before { content: "·" / ""; margin-inline-end: var(--space-xs); color: var(--color-ink-faint); }
+      & .sync-slot { flex: none; }
       & .repo { color: var(--color-ink); font-weight: var(--weight-medium); }
       /* The branch gives way first, then the uncommitted count. */
       & .dirty { flex: 0 0.01 auto; min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; }
@@ -106,6 +113,10 @@
       & .code { font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-ink-faint); }
       & > :last-child { margin-inline-start: auto; }
     }
+
+    &[data-state="stopped"] > .state { color: var(--color-ink-muted); }
+    & .asof { color: var(--color-ink-faint); font-variant-numeric: tabular-nums; }
+    & .asof::before { content: "· " / ""; }
 
     &[data-state="gone"] > .state::before {
       background: none;
