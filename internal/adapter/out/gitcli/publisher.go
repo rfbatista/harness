@@ -86,7 +86,7 @@ func (e rejectedPush) Is(target error) bool { return target == ports.ErrPushReje
 
 // pushRefusals are how git says the remote refused what was pushed: a ref that
 // is not a fast-forward, or one a hook turned down.
-var pushRefusals = []string{"[rejected]", "[remote rejected]", "non-fast-forward", "fetch first", "hook declined"}
+var pushRefusals = []string{"[rejected]", "non-fast-forward", "fetch first", "hook declined"}
 
 func pushRefused(reason string) bool {
 	r := strings.ToLower(reason)

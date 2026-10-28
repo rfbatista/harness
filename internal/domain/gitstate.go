@@ -7,7 +7,7 @@ import "time"
 const (
 	UpstreamNone     = "none"     // no upstream configured, or a detached HEAD
 	UpstreamGone     = "gone"     // configured, but its remote-tracking ref no longer exists
-	UpstreamUnknown  = "unknown"  // configured and present, but the repository was never fetched
+	UpstreamUnknown  = "unknown"  // configured and present, but neither fetched nor pushed by this server
 	UpstreamInSync   = "in_sync"  // ahead 0, behind 0
 	UpstreamAhead    = "ahead"    // ahead only
 	UpstreamBehind   = "behind"   // behind only
@@ -31,15 +31,20 @@ type GitState struct {
 	Upstream UpstreamState `json:"upstream"`
 	// FetchedAt is when the repository's origin was last fetched; nil when
 	// never.
-	FetchedAt   *time.Time  `json:"fetched_at"`
+	FetchedAt *time.Time `json:"fetched_at"`
+	// PushedAt is when the server last pushed the branch successfully; nil
+	// when never. A push writes the remote-tracking ref, so it lifts unknown.
+	PushedAt    *time.Time  `json:"pushed_at"`
 	Uncommitted Uncommitted `json:"uncommitted"`
 	ReadAt      time.Time   `json:"read_at"`
 }
 
 // BaseState compares the branch with the ref the workspace was cut from. Ref
-// is "" when it no longer resolves, with 0 and 0.
+// is the configured name even when it no longer resolves; Gone says so, with
+// 0 and 0.
 type BaseState struct {
 	Ref    string `json:"ref"`
+	Gone   bool   `json:"gone"`
 	Ahead  int    `json:"ahead"`
 	Behind int    `json:"behind"`
 }

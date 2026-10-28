@@ -3,6 +3,7 @@ package workspaces
 import (
 	"context"
 	"errors"
+	"regexp"
 	"sync"
 	"time"
 
@@ -17,7 +18,7 @@ const OriginFetchTimeout = 60 * time.Second
 // credential: Err carries git's reason. Each caller words it in its own code.
 type OriginFetchError struct{ Err error }
 
-func (e *OriginFetchError) Error() string { return e.Err.Error() }
+func (e *OriginFetchError) Error() string { return redactURLs(e.Err.Error()) }
 func (e *OriginFetchError) Unwrap() error { return e.Err }
 
 // OriginFetcher fetches a repository's origin with the stored credential:
@@ -146,7 +147,7 @@ type OriginPushError struct {
 	Rejected bool
 }
 
-func (e *OriginPushError) Error() string { return e.Err.Error() }
+func (e *OriginPushError) Error() string { return redactURLs(e.Err.Error()) }
 func (e *OriginPushError) Unwrap() error { return e.Err }
 
 // Push publishes branch to origin with the stored credential and sets its
@@ -172,3 +173,10 @@ func (f *OriginFetcher) Push(ctx context.Context, repositoryID, root, originURL,
 	}
 	return nil
 }
+
+// urlUserinfo is the user and password of a URL in git's output
+// ("unable to access 'https://user:token@host/…'"): never shown.
+var urlUserinfo = regexp.MustCompile(`(://)[^/\s@'"]+@`)
+
+// redactURLs is msg without the credentials a URL in it carries.
+func redactURLs(msg string) string { return urlUserinfo.ReplaceAllString(msg, "$1") }

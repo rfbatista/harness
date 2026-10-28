@@ -214,3 +214,13 @@ func newFetchRig(t *testing.T) *fetchRig {
 	})
 	return r
 }
+
+// git's own words in a failure never carry the credential of an https origin.
+func TestAFailedFetchNeverShowsTheCredentialOfItsOrigin(t *testing.T) {
+	r := newFetchRig(t)
+	r.git.fetchErr = errors.New("git fetch: exit status 128: fatal: unable to access 'https://user:tok_secretvalue123@example.com/acme/widgets.git/': Could not resolve host")
+	_, err := r.svc.FetchRemote(context.Background(), r.repoID)
+	if errs.Code(err) != domain.CodeFetchFailed || containsSecret(err.Error()) {
+		t.Fatalf("err = %v, want FETCH_FAILED without the secret", err)
+	}
+}

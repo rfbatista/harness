@@ -4,6 +4,7 @@ import (
 	"context"
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
+	"time"
 
 	"gorm.io/gorm"
 )
@@ -79,6 +80,18 @@ func (r *WorkspaceRepository) Create(w domain.Workspace) (*domain.Workspace, err
 		return nil, err
 	}
 	return m.ToDomain(), nil
+}
+
+// SetPushedAt records when the workspace's branch was last pushed.
+func (r *WorkspaceRepository) SetPushedAt(id string, at time.Time) error {
+	res := r.db.Model(&WorkspaceModel{}).Where("id = ?", id).Update("pushed_at", at)
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		return &domain.StructuredError{Code: "WORKSPACE_NOT_FOUND", Message: "workspace not found"}
+	}
+	return nil
 }
 
 // Delete removes a workspace by id.

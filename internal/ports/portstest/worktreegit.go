@@ -66,6 +66,35 @@ func WorktreeGitConformance(t *testing.T, newPort func(t *testing.T, f *Worktree
 		}
 	}
 
+	t.Run("a push lifts unknown on a repository never fetched", func(t *testing.T) {
+		f2 := NewWorktreeGitFixture(t)
+		p2, at2 := newPort(t, f2)
+		before, err := p2.GitState(ctx, at2.Workspaces["nopush"])
+		if err != nil || before.PushedAt != nil || before.FetchedAt != nil {
+			t.Fatalf("before the push: %+v, %v", before, err)
+		}
+		if st, _ := p2.GitState(ctx, at2.Workspaces["insync"]); st.Upstream.State != domain.UpstreamUnknown || st.PushedAt != nil {
+			t.Fatalf("a branch nobody pushed through the server is unknown: %+v", st)
+		}
+		start := time.Now().Add(-time.Minute)
+		st, err := p2.PushBranch(ctx, at2.Workspaces["nopush"], before.Head)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if st.Upstream.State != domain.UpstreamInSync || st.FetchedAt != nil || st.PushedAt == nil || st.PushedAt.Before(start) {
+			t.Errorf("after the push: upstream %s, fetched_at %v, pushed_at %v; want in_sync, no fetch, pushed now", st.Upstream.State, st.FetchedAt, st.PushedAt)
+		}
+		at2.PassInterval()
+		if again, _ := p2.GitState(ctx, at2.Workspaces["nopush"]); again.Upstream.State != domain.UpstreamInSync || again.PushedAt == nil {
+			t.Errorf("the pushed time is kept: %+v", again)
+		}
+		// The other branches have neither time.
+		at2.PassInterval()
+		if other, _ := p2.GitState(ctx, at2.Workspaces["ahead"]); other.PushedAt != nil || other.Upstream.State != domain.UpstreamUnknown {
+			t.Errorf("another workspace: %+v", other)
+		}
+	})
+
 	t.Run("a repository never fetched says unknown where it has an upstream", func(t *testing.T) {
 		for _, branch := range []string{"insync", "ahead", "behind", "diverged", "deleted", "gone"} {
 			st := wantUpstream(t, branch, domain.UpstreamUnknown)
@@ -127,7 +156,7 @@ func WorktreeGitConformance(t *testing.T, newPort func(t *testing.T, f *Worktree
 		}
 		want := map[string]int{"nopush": 1, "insync": 0, "ahead": 1, "behind": 0, "diverged": 1}
 		for branch, ahead := range want {
-			if b := state(t, branch).Base; b.Ref != f.BaseRef || b.Ahead != ahead || b.Behind != 0 {
+			if b := state(t, branch).Base; b.Ref != f.BaseRef || b.Gone || b.Ahead != ahead || b.Behind != 0 {
 				t.Errorf("%s: base = %+v, want %s %d/0", branch, b, f.BaseRef, ahead)
 			}
 		}
@@ -152,13 +181,13 @@ func WorktreeGitConformance(t *testing.T, newPort func(t *testing.T, f *Worktree
 		}
 	})
 
-	t.Run("a base that no longer resolves has no counts", func(t *testing.T) {
+	t.Run("a base that no longer resolves keeps its name and says so", func(t *testing.T) {
 		f.Git(t, f.RepoDir, "branch", "-m", "main", "trunk") // the workspaces were cut from "main"
 		defer f.Git(t, f.RepoDir, "branch", "-m", "trunk", "main")
 		at.PassInterval()
 		st := state(t, "ahead")
-		if st.Base.Ref != "" || st.Base.Ahead != 0 || st.Base.Behind != 0 {
-			t.Errorf("base = %+v, want none", st.Base)
+		if st.Base.Ref != f.BaseRef || !st.Base.Gone || st.Base.Ahead != 0 || st.Base.Behind != 0 {
+			t.Errorf("base = %+v, want the name %s, gone, 0/0", st.Base, f.BaseRef)
 		}
 		at.PassInterval()
 	})

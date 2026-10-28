@@ -307,12 +307,9 @@ func (s *WorktreeGit) FetchRemote(ctx context.Context, repositoryID string) (tim
 	if s.d.Fetcher == nil || s.d.Publisher == nil {
 		return time.Time{}, &domain.StructuredError{Code: "UNAVAILABLE", Message: "fetching is not available"}
 	}
-	origin, err := s.d.Publisher.OriginURL(ctx, repo.RootDir)
+	origin, err := s.originOf(ctx, repo)
 	if err != nil {
 		return time.Time{}, err
-	}
-	if origin == "" {
-		return time.Time{}, &domain.StructuredError{Code: domain.CodeNoRemote, Message: "the repository has no origin remote"}
 	}
 	err = s.d.Fetcher.Fetch(ctx, repo.ID, repo.RootDir, origin)
 	var failed *OriginFetchError
@@ -351,12 +348,9 @@ func (s *WorktreeGit) PushBranch(ctx context.Context, workspaceID, expectedHead 
 	if !s.d.Files.Exists(ws.Path) {
 		return nil, worktreeMissing(ws)
 	}
-	origin, err := s.d.Publisher.OriginURL(ctx, repo.RootDir)
+	origin, err := s.originOf(ctx, repo)
 	if err != nil {
 		return nil, err
-	}
-	if origin == "" {
-		return nil, &domain.StructuredError{Code: domain.CodeNoRemote, Message: "the repository has no origin remote"}
 	}
 
 	lock := s.pushLock(ws.ID)
@@ -390,6 +384,16 @@ func (s *WorktreeGit) PushBranch(ctx context.Context, workspaceID, expectedHead 
 	case err != nil:
 		return nil, err
 	}
+	// The push wrote the remote-tracking ref: the counts hold even when the
+	// repository was never fetched. A record that cannot be kept only costs
+	// the lift, so the push still answers.
+	pushedAt := s.d.Now().UTC()
+	if err := s.d.Workspaces.SetPushedAt(ws.ID, pushedAt); err != nil {
+		slog.Warn("push time not recorded", "workspace", ws.ID, "err", err)
+	} else {
+		ws.PushedAt = &pushedAt
+	}
+	s.forget(ws.ID)
 	after, err := s.stateOf(ctx, ws, repo)
 	if err != nil {
 		return nil, err
@@ -420,6 +424,18 @@ func (s *WorktreeGit) pushLock(workspaceID string) *sync.Mutex {
 		s.pushLocks[workspaceID] = l
 	}
 	return l
+}
+
+// originOf is the repository's origin URL, NO_REMOTE when it has none.
+func (s *WorktreeGit) originOf(ctx context.Context, repo *domain.Repository) (string, error) {
+	origin, err := s.d.Publisher.OriginURL(ctx, repo.RootDir)
+	if err != nil {
+		return "", err
+	}
+	if origin == "" {
+		return "", &domain.StructuredError{Code: domain.CodeNoRemote, Message: "the repository has no origin remote"}
+	}
+	return origin, nil
 }
 
 // announceParallelism bounds the status passes an announcement runs at once.
@@ -531,7 +547,11 @@ func (s *WorktreeGit) read(ctx context.Context, ws *domain.Workspace, repo *doma
 			st.Head = head
 		}
 	}
-	st.Upstream = up.state(st.FetchedAt != nil)
+	if ws.PushedAt != nil {
+		pushed := ws.PushedAt.UTC()
+		st.PushedAt = &pushed
+	}
+	st.Upstream = up.state(st.FetchedAt != nil || st.PushedAt != nil)
 	st.Base = s.baseOf(ctx, ws, repo.RootDir, st.Branch)
 	st.ReadAt = s.d.Now().UTC()
 	var src *ports.GitWorktreeStatus
@@ -553,11 +573,11 @@ func (s *WorktreeGit) baseOf(ctx context.Context, ws *domain.Workspace, root, br
 		}
 	}
 	if ref == "" || branch == "" {
-		return domain.BaseState{}
+		return domain.BaseState{Ref: ref}
 	}
 	ahead, behind, err := s.d.Git.Divergence(ctx, root, ref, branch)
 	if err != nil {
-		return domain.BaseState{}
+		return domain.BaseState{Ref: ref, Gone: true}
 	}
 	return domain.BaseState{Ref: ref, Ahead: ahead, Behind: behind}
 }

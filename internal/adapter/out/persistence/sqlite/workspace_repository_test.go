@@ -3,6 +3,7 @@ package sqlite
 import (
 	"context"
 	"testing"
+	"time"
 
 	"operators-mcp/internal/domain"
 )
@@ -63,5 +64,31 @@ func TestWorkspaceRepo_CRUD(t *testing.T) {
 	}
 	if err := r.Delete("missing"); err == nil {
 		t.Fatal("expected error deleting missing workspace")
+	}
+}
+
+func TestWorkspaceRepository_KeepsWhenItsBranchWasLastPushed(t *testing.T) {
+	db, err := Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	repo := NewWorkspaceRepository(db)
+	ws, err := repo.Create(domain.Workspace{RepositoryID: "r1", Name: "a", Branch: "a", Path: "/wt/a"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := repo.Get(context.Background(), ws.ID); got.PushedAt != nil {
+		t.Fatalf("a new workspace was pushed at %v", got.PushedAt)
+	}
+	at := time.Date(2026, 10, 28, 12, 0, 0, 0, time.UTC)
+	if err := repo.SetPushedAt(ws.ID, at); err != nil {
+		t.Fatal(err)
+	}
+	// Another repository over the same database, as after a restart.
+	if got := NewWorkspaceRepository(db).Get(context.Background(), ws.ID); got.PushedAt == nil || !got.PushedAt.Equal(at) {
+		t.Errorf("pushed_at = %v, want %v", got.PushedAt, at)
+	}
+	if err := repo.SetPushedAt("nope", at); err == nil {
+		t.Error("an unknown workspace was recorded")
 	}
 }
