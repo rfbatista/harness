@@ -37,6 +37,8 @@ import { registerRuns } from "./modules/runs/presentation/register.js";
 import { projectsGateway } from "./modules/projects/infrastructure/projects-gateway.js";
 import { pullRequestsGateway } from "./modules/pullrequests/infrastructure/pullrequests-gateway.js";
 import { registerPullRequests } from "./modules/pullrequests/presentation/register.js";
+import { syncGateway } from "./modules/sync/infrastructure/sync-gateway.js";
+import { registerSync } from "./modules/sync/presentation/register.js";
 import { architectureGateway } from "./modules/architecture/infrastructure/architecture-gateway.js";
 import { copyText } from "./modules/architecture/infrastructure/clipboard.js";
 import { registerArchitecture } from "./modules/architecture/presentation/register.js";
@@ -113,6 +115,7 @@ registerSessions(Alpine, {
 registerRuns(Alpine, { gateway: runsGateway(api), prefs });
 registerReviews(Alpine, { gateway: reviewsGateway(api, events), clock: systemClock });
 registerPullRequests(Alpine, { gateway: pullRequestsGateway(api, events) });
+registerSync(Alpine, { gateway: syncGateway(api, events) });
 registerCode(Alpine, { gateway: codeGateway(api, events), highlighter: hljsHighlighter(createHljs()), preparer: lazyPreparer(() => workerPreparer(codeWorkerUrl())), prefs, navigate });
 registerNotifications(Alpine, { gateway: notificationsGateway(api, events), alerts: desktopAlerts(), prefs, clock: systemClock, navigate });
 registerCredentials(Alpine, { gateway: credentialsGateway(api, events), clock: systemClock });
