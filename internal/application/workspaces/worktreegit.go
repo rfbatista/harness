@@ -2,6 +2,7 @@ package workspaces
 
 import (
 	"context"
+	"log/slog"
 	"strings"
 	"sync"
 	"time"
@@ -21,8 +22,10 @@ type WorktreeGitDeps struct {
 	Workspaces   ports.WorkspaceRepository
 	Repositories ports.RepositoryRepository
 	Sessions     ports.SessionRepository
-	Git          ports.GitWorktreeReader
-	Files        ports.WorktreeFiles
+	// Tickets checks a task exists for TaskGitStates; nil skips the check.
+	Tickets ports.TicketRepository
+	Git     ports.GitWorktreeReader
+	Files   ports.WorktreeFiles
 	// Now is the clock the state's age is measured with; nil is time.Now.
 	Now func() time.Time
 }
@@ -73,18 +76,127 @@ func (s *WorktreeGit) GitState(ctx context.Context, workspaceID string) (*domain
 	if ws == nil {
 		return nil, &domain.StructuredError{Code: "WORKSPACE_NOT_FOUND", Message: "workspace not found"}
 	}
+	repo, err := s.repository(ctx, ws.RepositoryID)
+	if err != nil {
+		return nil, err
+	}
+	st, err := s.stateOf(ctx, ws, repo)
+	if err != nil {
+		return nil, err
+	}
+	if s.d.Sessions != nil {
+		if found, err := s.d.Sessions.Query(ctx, ports.SessionFilter{WorkspaceID: ws.ID}); err == nil && len(found) > 0 {
+			st.SessionID = found[0].ID
+		}
+	}
+	return st, nil
+}
+
+func (s *WorktreeGit) repository(ctx context.Context, id string) (*domain.Repository, error) {
+	repo := s.d.Repositories.Get(ctx, id)
+	if repo == nil {
+		return nil, &domain.StructuredError{Code: "REPOSITORY_NOT_FOUND", Message: "repository not found"}
+	}
+	if repo.RootDir == "" {
+		return nil, &domain.StructuredError{Code: "INVALID_ROOT", Message: "repository has no root_dir"}
+	}
+	return repo, nil
+}
+
+// stateOf is a copy of the workspace's state, the held one when it is fresh.
+// It names no session.
+func (s *WorktreeGit) stateOf(ctx context.Context, ws *domain.Workspace, repo *domain.Repository) (*domain.GitState, error) {
 	sl := s.slot(ws.ID)
 	sl.mu.Lock()
 	defer sl.mu.Unlock()
 	if sl.state != nil && s.d.Now().Sub(sl.state.ReadAt) < CodeWatchInterval {
 		return copyState(sl.state), nil
 	}
-	st, err := s.read(ctx, ws)
+	st, err := s.read(ctx, ws, repo)
 	if err != nil {
 		return nil, err
 	}
 	sl.state = st
 	return copyState(st), nil
+}
+
+// TaskGitStates reads the state of each session workspace of a task, all at
+// once: a workspace costs at most one status pass per watch interval, and the
+// reads run side by side, bound by ctx.
+func (s *WorktreeGit) TaskGitStates(ctx context.Context, taskID string) ([]domain.GitState, error) {
+	if strings.TrimSpace(taskID) == "" {
+		return nil, invalid("task_id is required")
+	}
+	if s.d.Sessions == nil {
+		return nil, &domain.StructuredError{Code: "UNAVAILABLE", Message: "sessions are not available"}
+	}
+	if s.d.Tickets != nil && s.d.Tickets.Get(ctx, taskID) == nil {
+		return nil, &domain.StructuredError{Code: "TASK_NOT_FOUND", Message: "task not found"}
+	}
+	found, err := s.d.Sessions.Query(ctx, ports.SessionFilter{TicketID: taskID})
+	if err != nil {
+		return nil, err
+	}
+	var rows []*domain.Session
+	var ids []string
+	for _, sess := range found {
+		if sess.WorkspaceID != "" {
+			rows = append(rows, sess)
+			ids = append(ids, sess.WorkspaceID)
+		}
+	}
+	// The rows are read at once, not one query each.
+	byID := map[string]*domain.Workspace{}
+	for _, ws := range s.d.Workspaces.ListByIDs(ctx, ids) {
+		byID[ws.ID] = ws
+	}
+	repos := map[string]*domain.Repository{}
+	repoErr := map[string]error{}
+	for _, ws := range byID {
+		if _, seen := repos[ws.RepositoryID]; !seen && repoErr[ws.RepositoryID] == nil {
+			repos[ws.RepositoryID], repoErr[ws.RepositoryID] = s.repository(ctx, ws.RepositoryID)
+		}
+	}
+	states := make([]*domain.GitState, len(rows))
+	failures := make([]error, len(rows))
+	var wg sync.WaitGroup
+	for i, sess := range rows {
+		ws := byID[sess.WorkspaceID]
+		if ws == nil { // the workspace row was deleted
+			failures[i] = &domain.StructuredError{Code: "WORKSPACE_NOT_FOUND", Message: "workspace not found"}
+			continue
+		}
+		if err := repoErr[ws.RepositoryID]; err != nil {
+			failures[i] = err
+			continue
+		}
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			st, err := s.stateOf(ctx, ws, repos[ws.RepositoryID])
+			if err == nil {
+				st.SessionID = sess.ID
+			}
+			states[i], failures[i] = st, err
+		}()
+	}
+	wg.Wait()
+	out := make([]domain.GitState, 0, len(rows))
+	for i := range rows {
+		switch {
+		case errs.Code(failures[i]) == "WORKSPACE_NOT_FOUND": // the workspace row was deleted
+		case failures[i] != nil:
+			// One worktree git cannot read does not take the task's other
+			// states with it; the client has no state for that row.
+			if ctx.Err() != nil {
+				return nil, ctx.Err()
+			}
+			slog.Warn("git state not read", "workspace", rows[i].WorkspaceID, "err", failures[i])
+		default:
+			out = append(out, *states[i])
+		}
+	}
+	return out, nil
 }
 
 // forget drops the state held for workspaces, so the next read reads git.
@@ -103,20 +215,8 @@ func copyState(st *domain.GitState) *domain.GitState {
 }
 
 // read computes a workspace's state from git.
-func (s *WorktreeGit) read(ctx context.Context, ws *domain.Workspace) (*domain.GitState, error) {
-	repo := s.d.Repositories.Get(ctx, ws.RepositoryID)
-	if repo == nil {
-		return nil, &domain.StructuredError{Code: "REPOSITORY_NOT_FOUND", Message: "repository not found"}
-	}
-	if repo.RootDir == "" {
-		return nil, &domain.StructuredError{Code: "INVALID_ROOT", Message: "repository has no root_dir"}
-	}
+func (s *WorktreeGit) read(ctx context.Context, ws *domain.Workspace, repo *domain.Repository) (*domain.GitState, error) {
 	st := &domain.GitState{WorkspaceID: ws.ID, RepositoryID: repo.ID, Branch: ws.Branch}
-	if s.d.Sessions != nil {
-		if found, err := s.d.Sessions.Query(ctx, ports.SessionFilter{WorkspaceID: ws.ID}); err == nil && len(found) > 0 {
-			st.SessionID = found[0].ID
-		}
-	}
 	fetched := s.d.Git.FetchedAt(repo.RootDir)
 	if !fetched.IsZero() {
 		st.FetchedAt = &fetched

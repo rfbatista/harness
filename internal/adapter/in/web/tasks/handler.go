@@ -36,6 +36,8 @@ type Handler struct {
 	Comments  ports.TaskCommentReader
 	// PullRequests seeds the session rows' pull request badges; nil seeds none.
 	PullRequests ports.PullRequests
+	// WorktreeGit seeds each session worktree's git state; nil seeds none.
+	WorktreeGit ports.WorktreeGit
 	// Usage seeds the task's and its sessions' token totals; nil leaves them out.
 	Usage ports.UsageDashboard
 	// Code serves the sessions' Code tab; nil leaves it out. Workspaces
@@ -288,6 +290,7 @@ func (h Handler) task(w http.ResponseWriter, r *http.Request, codeRoute *code.Ro
 	if h.Usage != nil {
 		view.Usage = h.usageTotals(ctx, project.ID, task.ID, list)
 	}
+	view.Seed.GitStates = h.gitStates(ctx, task.ID)
 	view.TokenSavers = tokensavers.Read(ctx, h.TokenSavers, domain.ActivationOwner{Level: domain.ActivationLevelTask, ID: task.ID})
 	for _, st := range Statuses {
 		view.StatusChoices = append(view.StatusChoices, sessions.StatusChoice{Value: st.Value, Label: st.Label, Selected: st.Value == string(task.Status)})
@@ -321,6 +324,21 @@ func (h Handler) usageTotals(ctx context.Context, projectID, taskID string, list
 		return nil
 	}
 	return &sessions.UsageTotalsSeed{ProjectID: projectID, TaskID: taskID, Task: task, Sessions: bySession}
+}
+
+// gitStates reads the git state of each session worktree of the task, in the
+// session list's order. Never null; empty when they cannot be read: the chips
+// are not worth the page.
+func (h Handler) gitStates(ctx context.Context, taskID string) []domain.GitState {
+	if h.WorktreeGit == nil {
+		return []domain.GitState{}
+	}
+	states, err := h.WorktreeGit.TaskGitStates(ctx, taskID)
+	if err != nil {
+		slog.Warn("task page: git states not read", "task", taskID, "err", err)
+		return []domain.GitState{}
+	}
+	return states
 }
 
 // baseRefs names each session worktree's base branch, by workspace.

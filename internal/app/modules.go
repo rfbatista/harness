@@ -1006,9 +1006,9 @@ func newCodeBrowser(ws ports.WorkspaceRepository, repos ports.RepositoryReposito
 
 // newWorktreeGit reads where each session worktree's branch stands against
 // its base and its upstream, from local git only.
-func newWorktreeGit(ws ports.WorkspaceRepository, repos ports.RepositoryRepository, sessions ports.SessionRepository, git ports.GitWorktreeReader, files ports.WorktreeFiles) *workspaces.WorktreeGit {
+func newWorktreeGit(ws ports.WorkspaceRepository, repos ports.RepositoryRepository, sessions ports.SessionRepository, tickets ports.TicketRepository, git ports.GitWorktreeReader, files ports.WorktreeFiles) *workspaces.WorktreeGit {
 	return workspaces.NewWorktreeGit(workspaces.WorktreeGitDeps{
-		Workspaces: ws, Repositories: repos, Sessions: sessions, Git: git, Files: files,
+		Workspaces: ws, Repositories: repos, Sessions: sessions, Tickets: tickets, Git: git, Files: files,
 	})
 }
 

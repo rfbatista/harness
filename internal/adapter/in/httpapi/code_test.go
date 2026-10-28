@@ -154,4 +154,7 @@ func TestHTTP_WorktreeGitState_NotConfigured(t *testing.T) {
 	if code, body := doJSON(t, h, http.MethodGet, "/api/worktree_git_state?workspace_id=w1", ""); code != http.StatusServiceUnavailable || body["code"] != "UNAVAILABLE" {
 		t.Errorf("worktree_git_state = %d %v", code, body)
 	}
+	if code, body := doJSON(t, h, http.MethodGet, "/api/list_worktree_git_states?task_id=t1", ""); code != http.StatusServiceUnavailable || body["code"] != "UNAVAILABLE" {
+		t.Errorf("list_worktree_git_states = %d %v", code, body)
+	}
 }

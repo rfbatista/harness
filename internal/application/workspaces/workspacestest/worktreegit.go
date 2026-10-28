@@ -1,6 +1,7 @@
 package workspacestest
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -9,6 +10,7 @@ import (
 	"operators-mcp/internal/adapter/out/persistence/sqlite"
 	"operators-mcp/internal/application/workspaces"
 	"operators-mcp/internal/domain"
+	"operators-mcp/internal/ports"
 	"operators-mcp/internal/ports/portstest"
 )
 
@@ -27,7 +29,7 @@ func NewWorktreeGit(t *testing.T, f *portstest.WorktreeGitFixture) (*workspaces.
 		t.Fatal(err)
 	}
 	wsRepo := sqlite.NewWorkspaceRepository(db)
-	at := portstest.WorktreeGitTarget{RepositoryID: repo.ID, Workspaces: map[string]string{}}
+	at := portstest.WorktreeGitTarget{RepositoryID: repo.ID, Workspaces: map[string]string{}, Sessions: map[string]string{}}
 	for _, branch := range portstest.WorktreeGitBranches {
 		ws, err := wsRepo.Create(domain.Workspace{RepositoryID: repo.ID, Name: branch, Branch: branch, Path: f.Worktrees[branch], BaseRef: f.BaseRef})
 		if err != nil {
@@ -35,9 +37,40 @@ func NewWorktreeGit(t *testing.T, f *portstest.WorktreeGitFixture) (*workspaces.
 		}
 		at.Workspaces[branch] = ws.ID
 	}
+	// One task with a session on each workspace, started in turn.
+	tickets := sqlite.NewTicketRepository(db)
+	task, err := tickets.Create("git-project", "task", "", domain.TicketStatusInProgress, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	at.TaskID = task.ID
+	sessions := sqlite.NewSessionRepository(db)
+	for _, branch := range portstest.WorktreeGitBranches {
+		sess, err := sessions.Create(&domain.Session{
+			ProjectID: "git-project", RepositoryID: repo.ID, TicketID: task.ID, Status: domain.SessionRunning,
+			WorkspaceID: at.Workspaces[branch], Branch: branch,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		at.Sessions[branch] = sess.ID
+	}
+	// A session with no workspace is not listed.
+	if _, err := sessions.Create(&domain.Session{ProjectID: "git-project", RepositoryID: repo.ID, TicketID: task.ID, Status: domain.SessionRunning}); err != nil {
+		t.Fatal(err)
+	}
+	listed, err := sessions.Query(context.Background(), ports.SessionFilter{TicketID: task.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, sess := range listed {
+		if sess.WorkspaceID != "" {
+			at.TaskOrder = append(at.TaskOrder, sess.Branch)
+		}
+	}
 	clock := &passingClock{now: time.Now()}
 	svc := workspaces.NewWorktreeGit(workspaces.WorktreeGitDeps{
-		Workspaces: wsRepo, Repositories: repos, Sessions: sqlite.NewSessionRepository(db),
+		Workspaces: wsRepo, Repositories: repos, Sessions: sessions, Tickets: tickets,
 		Git: gitcli.NewCode(), Files: filesystem.NewWorktreeFiles(), Now: clock.Now,
 	})
 	at.PassInterval = clock.Pass

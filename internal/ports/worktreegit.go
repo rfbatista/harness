@@ -18,6 +18,10 @@ type WorktreeGit interface {
 	// GitState is the state of one workspace; a gone worktree answers with
 	// Gone set.
 	GitState(ctx context.Context, workspaceID string) (*domain.GitState, error)
+	// TaskGitStates is the state of the workspace of every session of the
+	// task that has one, in the task page's session order (newest session
+	// first); a gone worktree is included, marked Gone.
+	TaskGitStates(ctx context.Context, taskID string) ([]domain.GitState, error)
 }
 
 // GitWorktreeStatus is what one status pass over a worktree reads.

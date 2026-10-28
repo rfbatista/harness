@@ -28,3 +28,14 @@ func (h *Handler) handleWorktreeGitState(c echo.Context) error {
 	}
 	return c.JSON(http.StatusOK, map[string]any{"state": st})
 }
+
+func (h *Handler) handleListWorktreeGitStates(c echo.Context) error {
+	if err := h.worktreeGitOr503(); err != nil {
+		return err
+	}
+	states, err := h.worktreeGit.TaskGitStates(c.Request().Context(), c.QueryParam("task_id"))
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, map[string]any{"states": states})
+}

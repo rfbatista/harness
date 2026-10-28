@@ -14,6 +14,12 @@ import (
 type WorktreeGitTarget struct {
 	RepositoryID string
 	Workspaces   map[string]string
+	// TaskID names a task with one running session per workspace (Sessions by
+	// branch) and one session with no workspace. TaskOrder is the branches of
+	// its sessions in the order the task page lists them.
+	TaskID    string
+	Sessions  map[string]string
+	TaskOrder []string
 	// PassInterval lets the watch interval go by on the clock the port's held
 	// states age by, so the next read reads git again.
 	PassInterval func()
@@ -157,6 +163,45 @@ func WorktreeGitConformance(t *testing.T, newPort func(t *testing.T, f *Worktree
 		if later.Head == first.Head || later.Upstream.State != domain.UpstreamAhead || later.ReadAt.Before(first.ReadAt) {
 			t.Errorf("after the interval = head %s, upstream %s", later.Head, later.Upstream.State)
 		}
+	})
+
+	t.Run("a task's states come in one read, in the session list's order", func(t *testing.T) {
+		at.PassInterval()
+		states, err := p.TaskGitStates(ctx, at.TaskID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		want := at.TaskOrder
+		if len(states) != len(want) {
+			t.Fatalf("task states = %d, want %d", len(states), len(want))
+		}
+		for i, branch := range want {
+			st := states[i]
+			if st.WorkspaceID != at.Workspaces[branch] || st.SessionID != at.Sessions[branch] || st.Branch != branch {
+				t.Errorf("state %d = workspace %s session %s branch %s, want %s", i, st.WorkspaceID, st.SessionID, st.Branch, branch)
+			}
+			if one := state(t, branch); one.Upstream.State != st.Upstream.State || one.Gone != st.Gone || one.Uncommitted != st.Uncommitted {
+				t.Errorf("%s: the task read and the workspace read differ: %+v / %+v", branch, st, one)
+			}
+		}
+		for _, st := range states {
+			if st.Gone != (st.Branch == "gone") {
+				t.Errorf("%s: gone = %v", st.Branch, st.Gone)
+			}
+		}
+		if len(want) != len(WorktreeGitBranches) {
+			t.Errorf("the task order names %d branches, want all %d, the gone one included", len(want), len(WorktreeGitBranches))
+		}
+		if one := state(t, "ahead"); one.SessionID != at.Sessions["ahead"] {
+			t.Errorf("a workspace read names its session %q, want %q", one.SessionID, at.Sessions["ahead"])
+		}
+	})
+
+	t.Run("a task read needs a known task", func(t *testing.T) {
+		_, err := p.TaskGitStates(ctx, "")
+		wantCode(t, err, "INVALID_INPUT")
+		_, err = p.TaskGitStates(ctx, "no-such-task")
+		wantCode(t, err, "TASK_NOT_FOUND")
 	})
 
 	t.Run("bad requests", func(t *testing.T) {

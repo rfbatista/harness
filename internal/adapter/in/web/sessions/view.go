@@ -160,6 +160,9 @@ type Seed struct {
 	Code     bool              `json:"code,omitempty"`
 	OpenCode string            `json:"open_code,omitempty"`
 	BaseRefs map[string]string `json:"base_refs,omitempty"`
+	// GitStates are the sessions' worktrees' git state, in the session list's
+	// order, as GET /api/list_worktree_git_states answers them. Never null.
+	GitStates []domain.GitState `json:"git_states"`
 }
 
 // TaskLink is a task of the project with its page, as the design seeds
