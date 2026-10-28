@@ -298,3 +298,20 @@ test("each card carries the id a link to it targets", async () => {
   assert.deepEqual(instance.pendingCards.map((c) => c.anchor), ["review-rv2", "review-rv1"]);
   instance.destroy();
 });
+
+test("the page is told how many reviews wait, from the painted count on: the phone's back button follows it", async () => {
+  const el = seededElement(seed);
+  el.dataset.ticketId = "t1";
+  el.dataset.architect = "";
+  el.dataset.pending = "2";
+  const memory = memoryReviews({ reviews: waiting(2), now: () => at(5) });
+  const { instance, dispatched } = mount(reviewsInbox({ gateway: memory.gateway, clock: fixedClock(at(5)) }), { el });
+  instance.init();
+  const told = () => dispatched.filter((d) => d.name === "reviews-waiting").map((d) => d.detail.count);
+  assert.deepEqual(told(), [2], "the server's count, before the requests are read");
+  await flush();
+  await instance.approve("rv1");
+  instance.tellPage(); // the page's $watch on buttonCount does this
+  assert.equal(told().at(-1), 1);
+  instance.destroy();
+});

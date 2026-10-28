@@ -887,3 +887,15 @@ test("the project's sessions page has no task: it keeps the ticket-less sessions
   assert.ok(instance.sessions.some((s) => s.id === "second"), "another brainstorm arrives");
   instance.destroy();
 });
+
+test("the back button carries a dot and says how many reviews wait, while one does", () => {
+  const { instance } = setup();
+  assert.deepEqual([instance.backName, instance.backDot], ["Sessions", null]);
+  instance.reviewsWaiting({ detail: { count: 1 } });
+  assert.deepEqual([instance.backName, instance.backDot], ["Sessions, 1 review waiting", ""]);
+  instance.reviewsWaiting({ detail: { count: 3 } });
+  assert.equal(instance.backName, "Sessions, 3 reviews waiting");
+  instance.reviewsWaiting({ detail: { count: 0 } });
+  assert.deepEqual([instance.backName, instance.backDot], ["Sessions", null]);
+  instance.destroy();
+});

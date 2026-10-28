@@ -467,6 +467,49 @@ func TestReviewsPopoverIsASheetOnAPhoneAndClosesWithEsc(t *testing.T) {
 	}
 }
 
+// Below 48rem with a session open the title row is hidden: the session head's
+// back button carries the amber dot and says how many reviews wait, and loses
+// both once the last is answered elsewhere.
+func TestBackButtonCarriesTheWaitingReviewsDotOnAPhone(t *testing.T) {
+	at := time.Now().Add(-time.Minute)
+	waiting := &domain.ReviewRequest{ID: "rv1", TaskID: "t1", ProjectID: "p1", ArchitectSessionID: "s-arch", Subject: "Spec set ready",
+		Body: "Please sign off.", DocumentIDs: []string{}, ArtifactIDs: []string{}, State: domain.ReviewPending, CreatedAt: at, UpdatedAt: at}
+	srv, feed := architectServer(t, nil, waiting)
+	ctx, errs := browser(t)
+
+	const back = `document.querySelector('[data-split-back]')`
+	var name string
+	var dot, shown bool
+	if err := chromedp.Run(ctx,
+		chromedp.EmulateViewport(390, 800),
+		chromedp.Navigate(srv.URL+"/projects/p1/tasks/t1"),
+		chromedp.Poll(`!!document.querySelector('[role=listbox] .row[data-role=architect]')`, nil, chromedp.WithPollingTimeout(10*time.Second)),
+		chromedp.Evaluate(`document.querySelector('[role=listbox] .row[data-role=architect]').click()`, nil),
+		chromedp.Poll(`!!`+back+` && `+back+`.checkVisibility() && `+back+`.getAttribute('aria-label') === 'Sessions, 1 review waiting'`, nil, chromedp.WithPollingTimeout(10*time.Second)),
+		chromedp.Evaluate(back+`.hasAttribute('data-dot')`, &dot),
+		chromedp.Evaluate(`getComputedStyle(`+back+`, '::after').content !== 'none'`, &shown),
+		shot("reviews-phone-dot"),
+	); err != nil {
+		t.Fatalf("%v\nJS errors: %v", err, errs.all())
+	}
+	if !dot || !shown {
+		t.Errorf("the back button carries the dot: attribute %v, drawn %v", dot, shown)
+	}
+	answered := *waiting
+	answered.State, answered.UpdatedAt = domain.ReviewApproved, time.Now()
+	feed.pushRaw(t, map[string]any{"review_request": &answered})
+	if err := chromedp.Run(ctx,
+		chromedp.Poll(back+`.getAttribute('aria-label') === 'Sessions'`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Evaluate(back+`.hasAttribute('data-dot')`, &dot),
+		chromedp.Evaluate(back+`.getAttribute('aria-label')`, &name),
+	); err != nil {
+		t.Fatalf("%v\nJS errors: %v", err, errs.all())
+	}
+	if dot || name != "Sessions" {
+		t.Errorf("nothing waits: dot %v, name %q", dot, name)
+	}
+}
+
 // A task with nothing waiting shows no Reviews button.
 func TestNoReviewsButtonWhenNothingWaits(t *testing.T) {
 	srv, _ := architectServer(t, nil)

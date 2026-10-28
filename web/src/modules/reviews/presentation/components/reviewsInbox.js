@@ -176,6 +176,16 @@ export const reviewsInbox = ({ gateway, clock, hash = () => globalThis.location?
         (status) => status === FeedStatus.RESYNCED && this.load(),
       );
       ticker = setInterval(() => (this.now = clock.now()), TICK_MS);
+      // The page keeps the phone's back button in step with how many wait.
+      if (this.forTask) {
+        this.$watch("buttonCount", () => this.tellPage());
+        this.tellPage();
+      }
+    },
+
+    /** How many requests wait, for the session head's back button (the title row is hidden on a phone). */
+    tellPage() {
+      this.$dispatch("reviews-waiting", { count: Number(this.buttonCount) });
     },
 
     destroy() {

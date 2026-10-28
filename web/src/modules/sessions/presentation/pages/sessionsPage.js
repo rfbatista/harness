@@ -97,6 +97,8 @@ export const sessionsPage = ({
     freshIds: [],
     /** Read out by a polite live region when one arrives. */
     announcement: "",
+    /** How many review requests wait on the person: the phone's back button says so. */
+    waitingReviews: 0,
     /** Publishes that arrived while the Design tab was not in front. */
     unseenArtifacts: 0,
     /** Messages to or from the selected session that arrived while its Conversation tab was not in front. */
@@ -668,6 +670,19 @@ export const sessionsPage = ({
     /** Another part of the page (the review band) has something to say in the live region. */
     announce(event) {
       this.announcement = event.detail.text;
+    },
+
+    /** How many review requests wait on the person (the Reviews button's count). */
+    reviewsWaiting(event) {
+      this.waitingReviews = event.detail.count;
+    },
+    /** The back button's name and amber dot (a phone's title row is hidden while a session is open). */
+    get backName() {
+      const n = this.waitingReviews;
+      return n > 0 ? `Sessions, ${n} ${n === 1 ? "review" : "reviews"} waiting` : "Sessions";
+    },
+    get backDot() {
+      return this.waitingReviews > 0 ? "" : null;
     },
 
     /** @param {CustomEvent<{ check: import("../../domain/channel.js").StatusCheck }>} event */
