@@ -206,7 +206,7 @@ templ liveMark(expr string) {
 }
 
 templ liveTree() {
-	<ul class="file-tree" role="tree" aria-label="Files" x-bind:aria-busy="treeBusy" x-on:keydown="treeKeydown">
+	<ul class="file-tree" role="tree" aria-label="Files" x-bind:aria-busy="treeBusy" x-on:keydown="treeKeydown" x-effect="growTree">
 		<template x-for="row in treeRows" x-bind:key="row.key">
 			<li
 				x-bind:role="row.skeleton ? 'none' : 'treeitem'"

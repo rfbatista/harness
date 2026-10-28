@@ -20,7 +20,7 @@ import { clampRange, parseRange, parseRangeHash, rangeHash, scrollTopFor, SPLIT_
 import { markParts, rank, shiftRanges } from "../../domain/fuzzy.js";
 import { ANNOUNCE_CHANGED, FIXED, GONE, onChange, onEnded, onReload } from "../../domain/live.js";
 import { PERMALINK_TOAST, hrefOf, parseHref, permalink, repositoryHref } from "../../domain/routes.js";
-import { emptyTree, loadedOpenDirs, missingAncestors, openAction, revealPath, treeKey, typeAhead, visibleRows, withBusy, withExpanded, withLevel } from "../../domain/tree.js";
+import { emptyTree, entryAt, loadedOpenDirs, missingAncestors, openAction, revealPath, treeKey, typeAhead, visibleRows, withBusy, withExpanded, withLevel } from "../../domain/tree.js";
 import { mapView, zoneIndex, zoneTags } from "../../domain/zones.js";
 import { clearPending, drawLines, showPending } from "../render/lines.js";
 import { intersectionProximity } from "../render/proximity.js";
@@ -43,6 +43,8 @@ import {
 /** One frame spends at most this long drawing rows, a slice of this many at a time. */
 export const DRAW_BUDGET_MS = 8;
 export const SLICE_ROWS = 60;
+/** The tree puts this many more rows in the page each frame, so a directory of a thousand entries opens without a stall. */
+export const TREE_CHUNK = 120;
 
 /** Above these a file is shown plain (approved limit). */
 export const HIGHLIGHT_BYTES = 256 * 1024;
@@ -192,6 +194,8 @@ export function codeBrowser({ gateway, highlighter, preparer, proximity = inters
 
     tree: emptyTree(),
     focusedPath: "",
+    /** How many of the tree's rows are in the page; it grows a chunk per frame while rows wait. */
+    treeLimit: TREE_CHUNK,
     freshPaths: [],
     /** @type {import("../../domain/code.js").CodeDiff|null} */
     diff: null,
@@ -335,16 +339,26 @@ export function codeBrowser({ gateway, highlighter, preparer, proximity = inters
      */
     get treeRows() {
       const fresh = new Set(this.freshPaths);
-      const focused = this.focusedPath || visibleRows(this.tree)[0]?.entry.path || "";
+      const rows = visibleRows(this.tree);
+      const focused = this.focusedPath || rows[0]?.entry.path || "";
       const ctx = { state: this.tree, selected: this.file?.path ?? this.openEntry?.path ?? "", focused, zones, href: (p) => this.filesHref(p), fresh };
       const out = [];
-      for (const row of visibleRows(this.tree)) {
+      for (const row of rows.length > this.treeLimit ? rows.slice(0, this.treeLimit) : rows) {
         out.push(treeRowView(row, ctx));
         if (this.tree.busy[row.entry.path] && !this.tree.levels[row.entry.path]) {
           for (const s of skeletonRows(row.entry.path)) out.push({ ...s, skeleton: true, depthStyle: `--depth:${row.depth + 1}` });
         }
       }
       return out;
+    },
+    /** More rows wait than the page holds: the tree's x-effect asks for the next chunk. */
+    growTree() {
+      if (this.treeLimit < visibleRows(this.tree).length) frame(() => (this.treeLimit += TREE_CHUNK));
+    },
+    /** Puts the row of a path in the page now (a key moved the focus to it), and the chunk after it. */
+    showTreeRow(path) {
+      const i = visibleRows(this.tree).findIndex((r) => r.entry.path === path);
+      if (i >= this.treeLimit) this.treeLimit = i + TREE_CHUNK;
     },
     get treeBusy() {
       return this.tree.busy[""] ? "true" : null;
@@ -1087,11 +1101,7 @@ export function codeBrowser({ gateway, highlighter, preparer, proximity = inters
     },
 
     entryOf(path) {
-      for (const entries of Object.values(this.tree.levels)) {
-        const e = entries.find((x) => x.path === path);
-        if (e) return e;
-      }
-      return null;
+      return entryAt(this.tree, path);
     },
 
     async loadFile(path) {
@@ -1217,6 +1227,7 @@ export function codeBrowser({ gateway, highlighter, preparer, proximity = inters
     },
 
     focusRow(path) {
+      this.showTreeRow(path);
       this.focusedPath = path;
       this.$nextTick?.(() => {
         const el = this.$root?.querySelector?.(`[role="treeitem"][title="${cssEscape(path)}"] > .item`);
@@ -1512,6 +1523,8 @@ export function codeBrowser({ gateway, highlighter, preparer, proximity = inters
         return;
       }
       const decision = onChange(this.liveState, { untouched: this.untouched });
+      // The tree's marks follow too, asked at the same time as the diff.
+      const trees = this.refreshTree();
       // The changed files and their counts follow in place.
       const diff = await this.loadLoaded({ quiet: true });
       if (diff) {
@@ -1525,15 +1538,7 @@ export function codeBrowser({ gateway, highlighter, preparer, proximity = inters
         }
       }
       this.readWorking();
-      // The tree's marks follow too.
-      for (const dir of loadedOpenDirs(this.tree)) {
-        try {
-          const t = await gateway.tree(this.source, dir, this.request(`tree:${dir}`));
-          this.tree = withLevel(this.tree, dir, t.entries);
-        } catch (err) {
-          if (codeOf(err) === Codes.WORKSPACE_MISSING) this.markGone();
-        }
-      }
+      await trees;
       if (decision.apply) {
         if (this.showingFiles && this.file) await this.loadFile(this.file.path);
         if (this.showingMap) {
@@ -1543,6 +1548,24 @@ export function codeBrowser({ gateway, highlighter, preparer, proximity = inters
       }
       if (this.liveState !== decision.state && this.liveState !== GONE) this.liveState = decision.state;
       if (decision.announce) this.say(ANNOUNCE_CHANGED);
+    },
+
+    /** Re-reads every open directory at once and applies them, parents first. */
+    async refreshTree() {
+      const levels = await Promise.all(
+        loadedOpenDirs(this.tree).map(async (dir) => {
+          try {
+            return [dir, await gateway.tree(this.source, dir, this.request(`tree:${dir}`))];
+          } catch (err) {
+            if (codeOf(err) === Codes.WORKSPACE_MISSING) this.markGone();
+            return null;
+          }
+        }),
+      );
+      for (const level of levels) {
+        // A directory a parent's new level dropped stays dropped.
+        if (level && level[0] in this.tree.levels) this.tree = withLevel(this.tree, level[0], level[1].entries);
+      }
     },
 
     countHeld(diff) {

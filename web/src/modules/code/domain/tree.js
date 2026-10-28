@@ -10,7 +10,8 @@ import { ancestors } from "./code.js";
 
 /**
  * @typedef {{ levels: Record<string, import("./code.js").TreeEntry[]>, expanded: Record<string, boolean>, busy: Record<string, boolean> }} TreeState
- * @typedef {{ entry: import("./code.js").TreeEntry, depth: number, parent: string }} TreeRow
+ * @typedef {{ entry: import("./code.js").TreeEntry, depth: number, parent: string, pos: number, size: number }} TreeRow
+ *   pos and size: the row's place among its siblings (aria-posinset and -setsize)
  */
 
 /** @returns {TreeState} */
@@ -32,22 +33,46 @@ export function openAction(entry) {
   return entry.change === "deleted" ? "diff" : "file";
 }
 
+// Computed once per change of the state, not once per row or key: each
+// change builds new levels and expanded objects, so they are the memo's keys.
+const rowsMemo = new WeakMap();
+const entriesMemo = new WeakMap();
+
 /**
  * The rows on screen, in order: the root's entries and, under each open
- * directory, its loaded entries.
+ * directory, its loaded entries. The same array until the levels or the
+ * open directories change.
  * @param {TreeState} state
  * @returns {TreeRow[]}
  */
 export function visibleRows(state) {
+  let byExpanded = rowsMemo.get(state.levels);
+  if (!byExpanded) rowsMemo.set(state.levels, (byExpanded = new WeakMap()));
+  const known = byExpanded.get(state.expanded);
+  if (known) return known;
   const rows = [];
   const walk = (dir, depth) => {
-    for (const entry of state.levels[dir] ?? []) {
-      rows.push({ entry, depth, parent: dir });
+    const entries = state.levels[dir] ?? [];
+    for (let i = 0; i < entries.length; i += 1) {
+      const entry = entries[i];
+      rows.push({ entry, depth, parent: dir, pos: i + 1, size: entries.length });
       if (entry.kind === "dir" && state.expanded[entry.path]) walk(entry.path, depth + 1);
     }
   };
   walk("", 0);
+  byExpanded.set(state.expanded, rows);
   return rows;
+}
+
+/** The loaded entry at a path (any level), or null; the index is built once per change of the levels. */
+export function entryAt(state, path) {
+  let index = entriesMemo.get(state.levels);
+  if (!index) {
+    index = new Map();
+    for (const entries of Object.values(state.levels)) for (const e of entries) index.set(e.path, e);
+    entriesMemo.set(state.levels, index);
+  }
+  return index.get(path) ?? null;
 }
 
 /**
@@ -111,7 +136,7 @@ export const loadedOpenDirs = (state) => ["", ...Object.keys(state.expanded).fil
 export function treeKey(state, current, key) {
   const rows = visibleRows(state);
   if (rows.length === 0) return {};
-  let i = rows.findIndex((r) => r.entry.path === current);
+  const i = rows.findIndex((r) => r.entry.path === current);
   if (i < 0) return { focus: rows[0].entry.path };
   const row = rows[i];
   const isDir = expandable(row.entry);

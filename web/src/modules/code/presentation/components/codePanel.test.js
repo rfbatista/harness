@@ -6,7 +6,8 @@ import { memoryCode } from "../../infrastructure/memory-gateway.js";
 import { inlinePreparer } from "../../infrastructure/preparer.js";
 import { plainHighlighter } from "../../infrastructure/plain-highlighter.js";
 import { makeWorld, manyChangedFilesWorld } from "../../testing/fixtures.js";
-import { finderRows, SLICE_ROWS } from "./codeBrowser.js";
+import { visibleRows } from "../../domain/tree.js";
+import { finderRows, SLICE_ROWS, TREE_CHUNK } from "./codeBrowser.js";
 import { codePanel } from "./codePanel.js";
 
 file("code/presentation/codePanel");
@@ -741,3 +742,41 @@ test("selecting a file touches no other row of 500", async () => {
   assert.deepEqual(touched.map((r) => r.path).sort(), [rows.find((r) => r.current)?.path, panel.currentFile].filter(Boolean).sort());
   assert.equal(next.filter((r) => r.current).length, 1);
 });
+
+test("a refresh asks for every open directory at once, and applies them parents first", async () => {
+  const { panel, memory } = await setup();
+  panel.showView("files");
+  await flush();
+  await panel.toggleDir("internal");
+  await panel.toggleDir("web");
+  await flush();
+  memory.slow(40);
+  const before = memory.calls.length;
+  memory.ping("ws1");
+  await new Promise((r) => setTimeout(r, 15));
+  const trees = memory.calls.slice(before).filter((c) => c.name === "tree").map((c) => c.args.dir);
+  assert.deepEqual([...new Set(trees)].sort(), ["", "internal", "web"], "all three reads are out before any answered");
+  await new Promise((r) => setTimeout(r, 120));
+  assert.ok(panel.tree.levels.internal && panel.tree.levels.web);
+});
+
+test("a directory of 1 000 entries puts its rows in the page a chunk at a time; a key to a far row puts that row in", async () => {
+  const world = makeWorld();
+  for (let i = 0; i < 1000; i += 1) world.workspaces.ws1.disk[`big/file${String(i).padStart(4, "0")}.txt`] = `${i}\n`;
+  world.workspaces.ws1.committed = { ...world.workspaces.ws1.committed, ...Object.fromEntries(Object.keys(world.workspaces.ws1.disk).filter((p) => p.startsWith("big/")).map((p) => [p, "x\n"])) };
+  const frames = [];
+  const { panel } = await setup({ world, depsExtra: { frame: (cb) => frames.push(cb) } });
+  panel.showView("files");
+  await flush();
+  await panel.toggleDir("big");
+  assert.ok(visibleCount(panel) > 1000);
+  assert.equal(panel.treeRows.length, TREE_CHUNK);
+  panel.growTree();
+  frames.splice(0).forEach((cb) => cb());
+  assert.equal(panel.treeRows.length, 2 * TREE_CHUNK);
+  panel.focusRow("big/file0900.txt");
+  assert.ok(panel.treeRows.some((r) => r.path === "big/file0900.txt"), "the focused row is in the page");
+  assert.equal(panel.treeRows.find((r) => r.path === "big/file0900.txt").posinset, "901");
+});
+
+const visibleCount = (panel) => visibleRows(panel.tree).length;
