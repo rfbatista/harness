@@ -16,7 +16,8 @@
  * When the column is tight: agent and age hide first (< 46rem), then the
  * [data-wide] actions leave for their ⋯ items ([data-narrow], < 40rem), then
  * the check button drops its "next" (< 34rem). The title truncates last.
- * [data-split-back] shows in split-view's narrow mode only (split-view.css).
+ * [data-split-back] shows in split-view's narrow mode only (split-view.css); with data-dot it
+ * carries an amber dot, while a review waits on the person.
  * Phone (< 48rem): two lines, back · title · ⋯ over state · agent · age ·
  * checks; every other action is in the ⋯ sheet (sheet.css).
  */
@@ -32,6 +33,19 @@
     background: var(--color-canvas);
 
     & > [data-split-back] { order: -2; align-self: center; margin-inline-start: calc(var(--space-xs) * -1); }
+    /* data-dot: a review waits on the person (the title row, with its Reviews button, is hidden on a phone). */
+    & > [data-split-back][data-dot] { position: relative; }
+    & > [data-split-back][data-dot]::after {
+      content: "";
+      position: absolute;
+      inset-block-start: 0.375rem;
+      inset-inline-end: 0.375rem;
+      inline-size: 0.5rem;
+      block-size: 0.5rem;
+      border-radius: var(--radius-round);
+      background: var(--color-attention);
+      box-shadow: 0 0 0 2px var(--color-canvas);
+    }
 
     & > h2 {
       flex: 0 1 auto;

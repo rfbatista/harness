@@ -51,9 +51,13 @@ func ReviewCard() templ.Component {
 	})
 }
 
-// SettledReviewCard is a request answered or withdrawn: its state in words,
-// and the person's note.
-func SettledReviewCard() templ.Component {
+// ReviewPopoverCard is one waiting request in the task page's Reviews
+// popover, bound to reviewsInbox's `card`: the subject, who and when, the
+// whole text and what it names, then Approve and Request changes…, which
+// opens the note field and its Send. One the architect withdrew while the
+// person was writing keeps the note on screen, read-only, until dismissed.
+// The body is the architect's text: x-text, never HTML.
+func ReviewPopoverCard() templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 		if templ_7745c5c3_CtxErr := ctx.Err(); templ_7745c5c3_CtxErr != nil {
@@ -74,7 +78,7 @@ func SettledReviewCard() templ.Component {
 			templ_7745c5c3_Var2 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, "<article class=\"[ review ]\"><h3 x-text=\"card.subject\"></h3><p class=\"[ meta ]\"><span x-text=\"card.stateWord\"></span> · <span x-text=\"card.byline\"></span> · <span x-text=\"card.age\"></span></p><template x-if=\"card.note\"><p class=\"[ body ]\">Your note: <span x-text=\"card.note\"></span></p></template><template x-if=\"card.draft.notice\"><p class=\"[ aside ]\" x-text=\"card.draft.notice\"></p></template>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, "<article class=\"[ review ]\" x-bind:id=\"card.anchor\" x-bind:data-withdrawn=\"card.withdrawn\"><h3 tabindex=\"-1\" data-review-heading x-text=\"card.subject\"></h3><p class=\"[ meta ]\"><span x-text=\"card.byline\"></span> · <span x-text=\"card.age\"></span></p><p class=\"[ body ]\" x-text=\"card.body\"></p>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -82,7 +86,46 @@ func SettledReviewCard() templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "</article>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "<template x-if=\"card.withdrawn\"><div class=\"[ flow ] [ flow-space-xs ]\"><p class=\"[ aside ]\">The architect withdrew this request. Your note was not sent:</p><p class=\"[ body ]\" x-text=\"card.draft.note\"></p><button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" x-on:click=\"dismiss(card.id)\">Dismiss</button></div></template><template x-if=\"!card.withdrawn\"><div class=\"[ flow ] [ flow-space-s ]\"><template x-if=\"card.draft.expanded\"><div class=\"[ field ]\"><label x-bind:for=\"card.noteId\">What should change <span class=\"[ color-ink-faint weight-regular ]\">(the architect passes it on)</span></label> <textarea x-bind:id=\"card.noteId\" rows=\"3\" x-model=\"card.draft.note\" x-bind:aria-invalid=\"card.invalid\" x-bind:aria-describedby=\"card.errorId\"></textarea> <span class=\"[ error ]\" x-bind:id=\"card.errorId\" x-text=\"card.draft.problem\"></span></div></template><div class=\"[ actions ] [ cluster ] [ gutter-xs ]\"><button type=\"button\" class=\"[ button ]\" x-bind:data-variant=\"card.approveVariant\" data-size=\"sm\" x-bind:aria-busy=\"card.draft.busy\" x-bind:disabled=\"card.draft.busy\" x-on:click=\"approve(card.id)\">Approve</button><template x-if=\"!card.draft.expanded\"><button type=\"button\" class=\"[ button ]\" data-size=\"sm\" x-on:click=\"expandNote(card.id)\">Request changes…</button></template><template x-if=\"card.draft.expanded\"><button type=\"button\" class=\"[ button ]\" data-size=\"sm\" x-bind:disabled=\"card.draft.busy\" x-on:click=\"requestChanges(card.id)\">Send</button></template></div></div></template></article>")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		return nil
+	})
+}
+
+// SettledReviewCard is a request answered or withdrawn: its state in words,
+// and the person's note.
+func SettledReviewCard() templ.Component {
+	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
+		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
+		if templ_7745c5c3_CtxErr := ctx.Err(); templ_7745c5c3_CtxErr != nil {
+			return templ_7745c5c3_CtxErr
+		}
+		templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
+		if !templ_7745c5c3_IsBuffer {
+			defer func() {
+				templ_7745c5c3_BufErr := templruntime.ReleaseBuffer(templ_7745c5c3_Buffer)
+				if templ_7745c5c3_Err == nil {
+					templ_7745c5c3_Err = templ_7745c5c3_BufErr
+				}
+			}()
+		}
+		ctx = templ.InitializeContext(ctx)
+		templ_7745c5c3_Var3 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var3 == nil {
+			templ_7745c5c3_Var3 = templ.NopComponent
+		}
+		ctx = templ.ClearChildren(ctx)
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 5, "<article class=\"[ review ]\"><h3 x-text=\"card.subject\"></h3><p class=\"[ meta ]\"><span x-text=\"card.stateWord\"></span> · <span x-text=\"card.byline\"></span> · <span x-text=\"card.age\"></span></p><template x-if=\"card.note\"><p class=\"[ body ]\">Your note: <span x-text=\"card.note\"></span></p></template><template x-if=\"card.draft.notice\"><p class=\"[ aside ]\" x-text=\"card.draft.notice\"></p></template>")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = reviewLinks().Render(ctx, templ_7745c5c3_Buffer)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 6, "</article>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -106,12 +149,12 @@ func reviewLinks() templ.Component {
 			}()
 		}
 		ctx = templ.InitializeContext(ctx)
-		templ_7745c5c3_Var3 := templ.GetChildren(ctx)
-		if templ_7745c5c3_Var3 == nil {
-			templ_7745c5c3_Var3 = templ.NopComponent
+		templ_7745c5c3_Var4 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var4 == nil {
+			templ_7745c5c3_Var4 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 5, "<template x-if=\"card.hasLinks\"><p class=\"[ links ]\"><template x-for=\"d in card.documents\" x-bind:key=\"d.id\"><a x-bind:href=\"d.href\" x-text=\"d.title\"></a></template><template x-for=\"a in card.artifacts\" x-bind:key=\"a.id\"><a x-bind:href=\"a.href\" target=\"_blank\" rel=\"noopener noreferrer\" x-text=\"a.title\"></a></template></p></template>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 7, "<template x-if=\"card.hasLinks\"><p class=\"[ links ]\"><template x-for=\"d in card.documents\" x-bind:key=\"d.id\"><a x-bind:href=\"d.href\" x-text=\"d.title\"></a></template><template x-for=\"a in card.artifacts\" x-bind:key=\"a.id\"><a x-bind:href=\"a.href\" target=\"_blank\" rel=\"noopener noreferrer\" x-text=\"a.title\"></a></template></p></template>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -136,12 +179,12 @@ func ReviewsError() templ.Component {
 			}()
 		}
 		ctx = templ.InitializeContext(ctx)
-		templ_7745c5c3_Var4 := templ.GetChildren(ctx)
-		if templ_7745c5c3_Var4 == nil {
-			templ_7745c5c3_Var4 = templ.NopComponent
+		templ_7745c5c3_Var5 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var5 == nil {
+			templ_7745c5c3_Var5 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 6, "<template x-if=\"error\"><div class=\"[ banner ]\" data-tone=\"danger\" role=\"alert\"><div class=\"[ flow ] [ flow-space-3xs grow ]\"><span x-text=\"error.message\"></span> <span class=\"[ code ]\"><span x-text=\"error.code\"></span> · <span x-text=\"error.next\"></span></span></div><button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" x-on:click=\"dismissError\">Dismiss</button></div></template>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 8, "<template x-if=\"error\"><div class=\"[ banner ]\" data-tone=\"danger\" role=\"alert\"><div class=\"[ flow ] [ flow-space-3xs grow ]\"><span x-text=\"error.message\"></span> <span class=\"[ code ]\"><span x-text=\"error.code\"></span> · <span x-text=\"error.next\"></span></span></div><button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" x-on:click=\"dismissError\">Dismiss</button></div></template>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

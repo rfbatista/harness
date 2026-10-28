@@ -786,29 +786,55 @@
         </div>
       </section>
 
-      <section class="[ flow ] [ flow-space-m ]" id="context-strip">
-        <h2>Context strip</h2>
-        <p class="[ color-ink-muted ]">One row of summary buttons above the agents, one <code>band-panel</code> open at a time, capped at <code>--size-band-cap</code> and scrolling inside. <code>data-tone="attention"</code> is the one loud button; <code>data-quiet</code> the quiet one.</p>
-        <div style="border: 1px solid var(--color-line); border-radius: var(--radius-md); overflow: hidden; max-inline-size: 52rem">
-          <div class="[ context-strip ]" role="group" aria-label="Task context">
-            <div style="display: contents">
-              <button type="button" class="[ cs-btn ]" data-tone="attention" aria-expanded="false" aria-label="Reviews, 3 waiting"><span class="[ label ]">Reviews</span> <span class="[ badge ]" data-tone="attention">3</span> <span class="[ phrase ]">waiting</span><span class="[ chevron ]" aria-hidden="true"></span></button>
-            </div>
-            <div style="display: contents">
-              <button type="button" class="[ cs-btn ]" aria-expanded="true" aria-controls="specimen-band" aria-label="Feature, 3 children, 1 in review"><span class="[ label ]">Feature</span> <span class="[ badge ]">3</span> <span class="[ phrase ]">1 in review</span><span class="[ chevron ]" aria-hidden="true"></span></button>
-              <section class="[ band-panel ]" id="specimen-band" aria-label="Feature">
-                <header class="[ band-head ]"><span>Showing 3 tasks</span><a class="[ button ]" data-variant="ghost" data-size="sm" href="#">PRD: Exports</a></header>
-                <div class="[ list ]" data-band-scroll tabindex="0" role="list" aria-label="Child tasks, 3">
+      <section class="[ flow ] [ flow-space-m ]" id="task-context">
+        <h2>Task context</h2>
+        <p class="[ color-ink-muted ]">Nothing but the agents sits in the task page's vertical stack. What the old context strip showed hangs from the title row as ghost buttons that open <code>.popup.context-popover</code>s in the top layer (below 48rem, bottom sheets): the <em>Reviews</em> popover (34rem), the <em>Feature</em> popover (32rem), both at most <code>min(70dvh, 40rem)</code> tall, the head and foot staying while the body scrolls. The task-level Token savers are the third section of the Edit form; <em>Design assets</em>, <em>Resources</em> and <em>Delete task</em> are one ⋯ menu.</p>
+        <div class="[ cluster ]" style="align-items: flex-start">
+          <div class="[ flow ] [ flow-space-2xs ]"><p class="[ font-mono text-xs color-ink-faint ]">Reviews popover</p>
+            <div class="[ popup context-popover ]" role="dialog" data-kind="reviews" aria-labelledby="specimen-reviews-title" style="position: static; display: flex; animation: none">
+              <div class="[ pop-head ]"><h3 id="specimen-reviews-title">Reviews waiting on you</h3><button type="button" class="[ button ]" data-variant="ghost" data-size="sm">Close</button></div>
+              <div class="[ pop-body reviews ]" data-attention>
+                <article class="[ review ]"><h3>Spec set ready for sign-off</h3><p class="[ meta ]">from the architect · about go-developer · 12m</p><p class="[ body ]">Three specs and two contracts. Please check the status authority rule.</p><p class="[ links ]"><a href="#">Spec: server</a></p>
+                  <div class="[ actions ] [ cluster ] [ gutter-xs ]"><button type="button" class="[ button ]" data-variant="primary" data-size="sm">Approve</button><button type="button" class="[ button ]" data-size="sm">Request changes…</button></div></article>
+                <article class="[ review ]"><h3>Server API shape</h3><p class="[ meta ]">from the architect · 3m</p><p class="[ body ]">The note field is open:</p>
+                  <div class="[ field ]"><label for="specimen-review-note">What should change</label><textarea id="specimen-review-note" rows="3"></textarea></div>
+                  <div class="[ actions ] [ cluster ] [ gutter-xs ]"><button type="button" class="[ button ]" data-size="sm">Approve</button><button type="button" class="[ button ]" data-size="sm">Send</button></div></article>
+              </div>
+              <div class="[ pop-foot ]"><span>5 settled on this task</span><a href="#">Review requests page ↗</a></div>
+            </div></div>
+          <div class="[ flow ] [ flow-space-2xs ]"><p class="[ font-mono text-xs color-ink-faint ]">Feature popover</p>
+            <div class="[ popup context-popover ]" role="dialog" data-kind="feature" aria-labelledby="specimen-feature-title" style="position: static; display: flex; animation: none">
+              <div class="[ pop-head ]"><h3 id="specimen-feature-title">Feature · Exports</h3><button type="button" class="[ button ]" data-variant="ghost" data-size="sm">Close</button></div>
+              <div class="[ pop-body ]">
+                <div class="[ prd-row ]"><span class="[ flow ] [ flow-space-3xs ]"><strong>PRD: Exports</strong><span class="[ text-sm color-ink-muted ]">Product requirements · updated 2d</span></span><a class="[ button ]" data-variant="ghost" data-size="sm" href="#">Open ↗</a></div>
+                <div class="[ list ]" role="list" aria-label="Child tasks, 3">
                   <div class="[ row ]" role="listitem"><span class="[ badge ]" data-status="review">review</span><span class="[ title ]"><a href="#">CSV export</a></span><span class="[ meta ]">2 docs</span></div>
                   <div class="[ row ]" role="listitem"><span class="[ badge ]" data-status="todo">todo</span><span class="[ title ]"><a href="#">PDF export</a></span><span class="[ meta ]"></span></div>
                   <div class="[ row ]" role="listitem" data-done><span class="[ badge ]" data-status="done">done</span><span class="[ title ]"><a href="#">Export button</a></span><span class="[ meta ]">1 doc</span></div>
                 </div>
-              </section>
-            </div>
-            <div style="display: contents">
-              <button type="button" class="[ cs-btn ]" data-quiet aria-expanded="false"><span class="[ label ]" data-short="Savers">Token savers</span><span class="[ chevron ]" aria-hidden="true"></span></button>
-            </div>
-          </div>
+              </div>
+              <div class="[ pop-foot ]"><span>1 in review · 1 todo · 1 done</span><a href="#">See on the board ↗</a></div>
+            </div></div>
+          <div class="[ flow ] [ flow-space-2xs ]"><p class="[ font-mono text-xs color-ink-faint ]">Edit form · Token savers section</p>
+            <div class="[ popup task-note ]" role="dialog" aria-labelledby="specimen-savers-title" style="position: static; display: flex; animation: none">
+              <form class="[ task-note-form ] [ flow flow-space-s ]" aria-labelledby="specimen-savers-title">
+                <div class="[ note-head ]"><h3 id="specimen-savers-title">Edit task</h3></div>
+                <div class="[ field ]"><label for="specimen-savers-name">Title</label><input id="specimen-savers-name" value="Add SSE feed"/></div>
+                <section class="[ task-savers ]" aria-labelledby="specimen-savers-h"><h4 id="specimen-savers-h">Token savers</h4>
+                  <p class="[ text-sm color-ink-muted ]">Whether this task's sessions use each token saver. A change reaches sessions started afterwards.</p>
+                  <div class="[ row ]" style="--row-columns: 7rem auto minmax(0, 1fr)"><label class="[ title font-mono ]" for="specimen-saver-rtk">rtk</label><select id="specimen-saver-rtk" data-size="sm" data-fit><option>inherit</option><option>on</option><option>off</option></select><span class="[ text-sm color-ink-muted ]">inherit — resolves off (repository)</span></div>
+                  <div class="[ row ]" style="--row-columns: 7rem auto minmax(0, 1fr)"><label class="[ title font-mono ]" for="specimen-saver-cg">codegraph</label><select id="specimen-saver-cg" data-size="sm" data-fit><option>inherit</option><option selected>on</option><option>off</option></select><span class="[ text-sm color-ink-muted ]">on — resolves on (task)</span></div>
+                </section>
+                <div class="[ cluster note-actions ]"><button type="submit" class="[ button ]" data-variant="primary" data-size="sm">Save</button><button type="button" class="[ button ]" data-variant="ghost" data-size="sm">Cancel</button></div>
+              </form>
+            </div></div>
+          <div class="[ flow ] [ flow-space-2xs ]"><p class="[ font-mono text-xs color-ink-faint ]">Task menu</p>
+            <div class="[ menu ]"><div class="[ popup ]" role="menu" style="position: static; display: flex; animation: none">
+              <a role="menuitem" href="#">Design assets <span class="[ meta ]">3</span></a>
+              <a role="menuitem" href="#">Resources <span class="[ meta ]">2</span></a>
+              <hr role="separator"/>
+              <button type="button" role="menuitem" data-tone="danger">Delete task</button>
+            </div></div></div>
         </div>
       </section>
 

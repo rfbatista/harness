@@ -339,24 +339,26 @@ func TestArchitectChannelInTheWebUI_EndToEnd(t *testing.T) {
 	)
 	e.checkState(domain.StatusCheckActive, 10)
 
-	// The architect asks the person for a review: the band shows it live.
+	// The architect asks the person for a review: the title row's Reviews button shows it live.
 	e.as(arch.ID, "request_user_review", map[string]any{"subject": "Server plan ready for sign-off", "body": "Please check the status authority rule\nand the status-check defaults.", "about_session_id": server})
-	band := `document.querySelector('[aria-label="Review requests"]')`
-	button := `document.querySelector('[data-band="reviews"]')`
+	band := `document.getElementById("task-reviews")`
+	button := `document.getElementById("task-reviews-button")`
 	p.run(t, "a review request arrives",
-		poll(`!!`+button+` && !`+button+`.hidden && `+band+`.querySelectorAll('.review').length === 1`),
-		chromedp.Evaluate(button+`.click()`, nil), // an arriving request does not open the panel
-		poll(band+`.checkVisibility()`),
+		poll(`!!`+button+` && !`+button+`.hidden && `+button+`.checkVisibility() && `+band+`.querySelectorAll('.review').length === 1`),
+		chromedp.Evaluate(button+`.click()`, nil), // an arriving request does not open the popover
+		poll(band+`.matches(':popover-open')`),
 		both("3-review-band"),
 	)
-	if got := p.text(t, band+`.innerText`); !strings.Contains(got, "1 review waits on you") || !strings.Contains(got, "about plain claude · Architect highlights") {
-		t.Errorf("the band reads:\n%s", got)
+	if got := p.text(t, band+`.innerText`); !strings.Contains(got, "Reviews waiting on you") || !strings.Contains(got, "about plain claude · Architect highlights") {
+		t.Errorf("the popover reads:\n%s", got)
 	}
 
 	// Changes without a note are stopped at the field; with one, the
 	// architect gets them.
 	p.run(t, "request changes without a note",
-		chromedp.Evaluate(band+`.querySelectorAll('.review button')[1].click()`, nil),
+		chromedp.Evaluate(band+`.querySelectorAll('.review button')[1].click()`, nil), // Request changes… opens the note
+		poll(`!!`+band+`.querySelector('textarea')`),
+		chromedp.Evaluate(band+`.querySelectorAll('.review button')[1].click()`, nil), // Send
 		poll(`!!`+band+`.querySelector('textarea[aria-invalid=true]')`),
 	)
 	if got := p.text(t, band+`.querySelector('.field .error').textContent`); got != "Say what should change: the architect passes it on." {
@@ -366,10 +368,9 @@ func TestArchitectChannelInTheWebUI_EndToEnd(t *testing.T) {
 		t.Errorf("nothing should have been sent: %+v", reviews)
 	}
 	p.run(t, "request changes",
-		chromedp.SendKeys(`[aria-label="Review requests"] textarea`, "Split step 6 in two.", chromedp.ByQuery),
+		chromedp.SendKeys(`#task-reviews textarea`, "Split step 6 in two.", chromedp.ByQuery),
 		chromedp.Evaluate(band+`.querySelectorAll('.review button')[1].click()`, nil),
-		poll(band+`.querySelector('details summary')?.textContent === 'Earlier reviews (1)'`),
-		chromedp.Evaluate(band+`.querySelector('details summary').click()`, nil),
+		poll(`!`+band+`.matches(':popover-open')`), // the last request answered closes the popover
 		both("4-review-answered"),
 	)
 	reviews, err := e.channel.ListReviewRequests(e.ctx, e.ticket, "")

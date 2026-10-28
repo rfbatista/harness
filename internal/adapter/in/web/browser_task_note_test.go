@@ -33,7 +33,7 @@ func noteDeps(description string) Deps {
 // focus again; a reload starts closed.
 func TestTheTaskNoteOpensAsAPopoverThatMovesNothing(t *testing.T) {
 	long := strings.Repeat("Line of the description that the person wrote.\n", 12)
-	url, _ := stripServer(t, noteDeps(long))
+	url, _ := pageServer(t, noteDeps(long))
 	ctx, errs := browser(t)
 
 	var before, open, expanded, text, focused, closed, reloaded string
@@ -91,7 +91,7 @@ func TestTheTaskNoteOpensAsAPopoverThatMovesNothing(t *testing.T) {
 // Edit shows the form in the same surface; the agents' area stays put; Save
 // closes it and the Description button then opens the new text.
 func TestTheTaskNoteEditsInTheSameSurface(t *testing.T) {
-	url, _ := stripServer(t, noteDeps("The first words."))
+	url, _ := pageServer(t, noteDeps("The first words."))
 	ctx, errs := browser(t)
 
 	var before, editing string
@@ -124,7 +124,7 @@ func TestTheTaskNoteEditsInTheSameSurface(t *testing.T) {
 // A task with no description has no Description button; the title row's Edit
 // opens the form in the surface.
 func TestATaskWithoutADescriptionHasNoButtonAndEditsFromTheTitleRow(t *testing.T) {
-	url, _ := stripServer(t, noteDeps(""))
+	url, _ := pageServer(t, noteDeps(""))
 	ctx, errs := browser(t)
 
 	var buttonShown, formOpen bool
@@ -153,7 +153,7 @@ func TestATaskWithoutADescriptionHasNoButtonAndEditsFromTheTitleRow(t *testing.T
 // button's when it would run off the viewport; always inside the viewport,
 // also when the toolbar wraps.
 func TestTheTaskNoteHangsFromTheDescriptionButton(t *testing.T) {
-	url, _ := stripServer(t, noteDeps(strings.Repeat("Line of the description that the person wrote.\n", 12)))
+	url, _ := pageServer(t, noteDeps(strings.Repeat("Line of the description that the person wrote.\n", 12)))
 	ctx, errs := browser(t)
 
 	for _, width := range []int64{1680, 1280, 1000, 800} {

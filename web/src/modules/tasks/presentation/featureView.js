@@ -9,7 +9,7 @@ import { taskHref } from "./boardView.js";
  * @typedef {{ title: string, href: string, updated: string }} DocLink
  */
 
-/** The order the strip's panel lists children in: what waits on the person first. */
+/** The order the Feature popover lists children in: what waits on the person first. */
 const ORDER = ["review", "in_progress", "todo", "backlog", "done"];
 const rank = (status) => {
   const i = ORDER.indexOf(status);
@@ -42,11 +42,24 @@ export function toChildRows(children, { projectId, documents }) {
   });
 }
 
+const WORD = { review: "in review", in_progress: "in progress", todo: "todo", backlog: "backlog", done: "done" };
+
 /**
- * What the strip's Feature button says: how many children, and the phrase
- * for what needs the person or is moving ("3 in review · 2 in progress",
- * "all done", or nothing). name is the button's accessible name: a narrow
- * strip drops the phrase from sight, not from the name.
+ * The popover's foot: how many children are in each status, in list order
+ * ("3 in review · 2 in progress · 11 todo").
+ * @param {{ status: string }[]} rows
+ */
+export function statusLine(rows) {
+  return ORDER.map((st) => [st, rows.filter((r) => r.status === st).length])
+    .filter(([, n]) => n > 0)
+    .map(([st, n]) => `${n} ${WORD[st]}`)
+    .join(" · ");
+}
+
+/**
+ * What the Feature button says: how many children (its badge), and its
+ * accessible name, which adds what needs the person or is moving
+ * ("Feature, 5 children, 3 in review, 2 in progress"). phrase is that part alone.
  * @param {{ status: string }[]} rows
  */
 export function featureSummary(rows) {

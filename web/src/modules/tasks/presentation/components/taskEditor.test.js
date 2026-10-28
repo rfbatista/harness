@@ -1,6 +1,7 @@
 import { Codes, StructuredError } from "../../../../shared/domain/errors.js";
 import { mount, seededElement } from "../../../../shared/testing/alpine.js";
 import { assert, file, test } from "../../../../shared/testing/test.js";
+import { memoryTokenSavers } from "../../../tokensavers/infrastructure/memory-gateway.js";
 import { memoryTasks } from "../../infrastructure/memory-gateway.js";
 import { makeTask, taskDTO } from "../../testing/fixtures.js";
 import { taskEditor } from "./taskEditor.js";
@@ -261,4 +262,114 @@ test("a description or title changed over the feed shows in the open note, but n
   store.tasks = [makeTask({ description: "Another rewrite." })];
   instance.followText(instance.storedText);
   assert.deepEqual([instance.description, instance.draftDescription], ["Rewritten by a session.", "my words"], "the person's draft is not clobbered");
+});
+
+// ── the Token savers section of the Edit form ─────────────────────────────
+
+const activationsOf = (values = {}) => ({
+  level: "task",
+  ownerId: "t1",
+  activations: ["rtk", "caveman", "codegraph"].map((saver) => ({ saver, value: values[saver] ?? "inherit", summary: `${values[saver] ?? "inherit"} — resolves on (project)` })),
+});
+
+function saversSetup({ values, failOn = "" } = {}) {
+  const task = makeTask();
+  const memory = memoryTasks({ projects: ["p1"], tasks: [task] });
+  const tokens = memoryTokenSavers({ activations: [activationsOf(values)] });
+  const order = [];
+  const tasksGateway = { ...memory.gateway, updateTask: (...a) => (order.push("task"), memory.gateway.updateTask(...a)) };
+  const tokenSavers = {
+    ...tokens.gateway,
+    setActivation: (level, owner, saver, value) => {
+      order.push(`${saver}=${value}`);
+      if (saver === failOn) return Promise.reject(new StructuredError(Codes.INVALID_INPUT, "INVALID_INPUT: nope", 400));
+      return tokens.gateway.setActivation(level, owner, saver, value);
+    },
+  };
+  const el = seededElement(taskDTO(task));
+  const script = el.ownerDocument.createElement("script");
+  script.id = "savers-seed";
+  script.textContent = JSON.stringify({ level: "task", owner_id: "t1", activations: activationsOf(values).activations });
+  el.ownerDocument.body.append(script);
+  el.dataset.saversSeed = "savers-seed";
+  const mounted = mount(taskEditor({ gateway: tasksGateway, tokenSavers, navigate: () => {}, reload: () => {} }), { el });
+  mounted.instance.init();
+  return { ...mounted, order, tokens };
+}
+
+test("the Edit form lists the task's savers with what each resolves to; a task without them has no section", () => {
+  const { instance } = saversSetup({ values: { caveman: "on" } });
+  assert.equal(instance.hasSavers, true);
+  assert.deepEqual(instance.savers.map((s) => [s.saver, s.value, s.draft, s.summary]), [
+    ["rtk", "inherit", "inherit", "inherit — resolves on (project)"],
+    ["caveman", "on", "on", "on — resolves on (project)"],
+    ["codegraph", "inherit", "inherit", "inherit — resolves on (project)"],
+  ]);
+  assert.equal(setup().instance.hasSavers, false);
+});
+
+test("choosing a saver writes nothing until Save; Save writes the task, then only the changed savers", async () => {
+  const { instance, order } = saversSetup();
+  instance.startEditTask();
+  instance.savers[0].draft = "on";
+  instance.savers[2].draft = "off";
+  instance.draftTitle = "Add the SSE feed";
+  assert.deepEqual(order, [], "nothing is written on change");
+  await instance.save();
+  assert.deepEqual(order, ["task", "rtk=on", "codegraph=off"], "the task first; caveman is unchanged and writes nothing");
+  assert.deepEqual(instance.savers.map((s) => [s.value, s.draft]), [["on", "on"], ["inherit", "inherit"], ["off", "off"]]);
+  assert.equal(instance.savers[0].summary, "on (task)", "the line follows the server's answer");
+  assert.equal(instance.editingTask, false);
+});
+
+test("Save with no saver changed writes no activation", async () => {
+  const { instance, order } = saversSetup();
+  instance.startEditTask();
+  await instance.save();
+  assert.deepEqual(order, ["task"]);
+});
+
+test("Cancel drops every change, the savers' too", () => {
+  const { instance, order } = saversSetup();
+  instance.startEditTask();
+  instance.savers[1].draft = "off";
+  instance.cancelEditTask();
+  assert.deepEqual(instance.savers.map((s) => s.draft), ["inherit", "inherit", "inherit"]);
+  instance.startEditTask();
+  assert.equal(instance.savers[1].draft, "inherit", "reopening starts from what is saved");
+  assert.deepEqual(order, []);
+});
+
+test("a saver write that fails leaves the form open with its error; what was written stays written", async () => {
+  const { instance, order } = saversSetup({ failOn: "caveman" });
+  instance.startEditTask();
+  instance.savers[0].draft = "on";
+  instance.savers[1].draft = "off";
+  await instance.save();
+  assert.deepEqual(order, ["task", "rtk=on", "caveman=off"]);
+  assert.equal(instance.editingTask, true, "the form stays open");
+  assert.equal(instance.saversError.code, Codes.INVALID_INPUT);
+  assert.deepEqual(instance.savers.map((s) => [s.value, s.draft]), [["on", "on"], ["inherit", "off"], ["inherit", "inherit"]], "rtk landed, caveman keeps the person's choice");
+  instance.cancelEditTask();
+  assert.equal(instance.saversError, null, "Cancel clears the error");
+});
+
+test("a task that fails to save writes no saver", async () => {
+  const { instance, order, memory } = saversSetup();
+  void memory;
+  instance.startEditTask();
+  instance.savers[0].draft = "on";
+  instance.draftTitle = " ";
+  await instance.save();
+  assert.deepEqual(order, [], "the form refuses a blank title before anything is sent");
+});
+
+test("Delete task in the task menu asks the same confirmation as before; other menu items are not the editor's", async () => {
+  const { instance } = setup();
+  await instance.taskMenuSelect({ detail: { action: "delete-task" } });
+  assert.equal(instance.confirmingTaskDelete, true);
+  instance.cancelDeleteTask();
+  await instance.taskMenuSelect({ detail: { action: "copy-id" } });
+  await instance.taskMenuSelect({ detail: undefined });
+  assert.equal(instance.confirmingTaskDelete, false);
 });

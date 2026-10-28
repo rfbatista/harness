@@ -3,7 +3,6 @@
 import { archived } from "./components/archived.js";
 import { board } from "./components/board.js";
 import { documentScope } from "./components/documentScope.js";
-import { contextStrip } from "./components/contextStrip.js";
 import { documentWatch } from "./components/documentWatch.js";
 import { feature } from "./components/feature.js";
 import { newTask } from "./components/newTask.js";
@@ -18,11 +17,11 @@ import { taskResources } from "./components/taskResources.js";
  *   gateway: import("../domain/ports.js").TaskGateway,
  *   rail: import("../domain/ports.js").RailGateway,
  *   railPrefs: import("../domain/ports.js").RailPrefs,
- *   bandPrefs: import("../domain/ports.js").BandPrefs,
  *   prefs: import("../../../shared/infrastructure/storage.js").Preferences,  the browser's own choices (localStorage)
  *   navigate: (url: string) => void,
  *   reload: () => void,
  *   resources: import("../domain/ports.js").ResourceGateway,
+ *   tokenSavers: import("../../tokensavers/domain/ports.js").TokenSaverGateway,  the task editor writes the task's savers
  *   clock: import("../../../shared/infrastructure/clock.js").Clock,
  * }} deps
  */
@@ -42,5 +41,4 @@ export function registerTasks(Alpine, deps) {
   Alpine.data("tasksBoard", board({ gateway: deps.gateway, store, clock: deps.clock }));
   Alpine.data("tasksArchived", archived({ gateway: deps.gateway }));
   Alpine.data("tasksFeature", feature({ store }));
-  Alpine.data("tasksContextStrip", contextStrip({ prefs: deps.bandPrefs }));
 }

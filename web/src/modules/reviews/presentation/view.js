@@ -51,17 +51,5 @@ export function toCard(r, { names, projectId, now }) {
 /** "1 review waits on you", "3 reviews wait on you". */
 export const waitingLine = (n) => `${count(n, "review")} ${n === 1 ? "waits" : "wait"} on you`;
 
-/**
- * What the strip's Reviews button says. Until the list is read, the server's
- * count of waiting requests stands; a list that cannot be read says so.
- * @param {{ loaded: boolean, error: unknown, pending: number, settled: number, painted: number }} state
- * @returns {{ has: boolean, tone: "attention" | null, count: string, phrase: string, name: string }}
- */
-export function reviewsSummary({ loaded, error, pending, settled, painted }) {
-  const say = (has, tone, count, phrase) => ({ has, tone, count, phrase, name: has ? `Reviews, ${count ? `${count} ` : ""}${phrase}` : "" });
-  if (!loaded && error) return say(true, null, "", "couldn't load");
-  const waiting = loaded ? pending : painted;
-  if (waiting > 0) return say(true, "attention", String(waiting), "waiting");
-  if (loaded && settled > 0) return say(true, null, String(settled), "settled");
-  return say(false, null, "", "");
-}
+/** "5 settled on this task": the popover's foot. */
+export const settledLine = (n) => `${n} settled on this task`;

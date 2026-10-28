@@ -85,7 +85,7 @@ func sessionHead(usage bool) templ.Component {
 			templ_7745c5c3_Var2 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<header class=\"[ session-head ]\" x-on:click.capture=\"moreCapture($event)\" x-on:keydown.capture=\"moreCapture($event)\"><button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" data-icon data-split-back aria-label=\"Sessions\" x-on:click=\"closeDetail\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<header class=\"[ session-head ]\" x-on:click.capture=\"moreCapture($event)\" x-on:keydown.capture=\"moreCapture($event)\"><button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" data-icon data-split-back aria-label=\"Sessions\" x-bind:aria-label=\"backName\" x-bind:data-dot=\"backDot\" x-on:click=\"closeDetail\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

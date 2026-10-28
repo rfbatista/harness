@@ -72,39 +72,16 @@ func descriptionAttrs(description string) templ.Attributes {
 	return templ.Attributes{}
 }
 
-// reviewsButtonAttrs paints the strip's Reviews button before the browser
-// reads the requests: amber when some wait on the person, hidden when none do.
+// reviewsButtonAttrs paints the title row's Reviews button before the browser
+// reads the requests: named with the count when some wait on the person,
+// hidden when none do.
+// The button's own display rule would beat the hidden attribute, so it is
+// hidden with an inline display: none that Alpine's x-show then takes over.
 func reviewsButtonAttrs(pending int) templ.Attributes {
 	if pending > 0 {
-		return templ.Attributes{"data-tone": "attention", "aria-label": "Reviews, " + strconv.Itoa(pending) + " waiting"}
+		return templ.Attributes{"aria-label": "Reviews, " + strconv.Itoa(pending) + " waiting"}
 	}
-	return templ.Attributes{"hidden": true}
-}
-
-// toneAttrs paints the amber tone on what waits on the person.
-func toneAttrs(attention bool) templ.Attributes {
-	if attention {
-		return templ.Attributes{"data-tone": "attention"}
-	}
-	return templ.Attributes{}
-}
-
-// reviewsPhrase is the Reviews button's state phrase before the browser
-// reads the requests.
-func reviewsPhrase(pending int) string {
-	if pending > 0 {
-		return "waiting"
-	}
-	return ""
-}
-
-// waitingLine is how many requests wait: "1 review waits on you". The
-// browser's waitingLine (reviews/presentation/view.js) says the same.
-func waitingLine(n int) string {
-	if n == 1 {
-		return "1 review waits on you"
-	}
-	return strconv.Itoa(n) + " reviews wait on you"
+	return templ.Attributes{"style": "display: none"}
 }
 
 // hiddenUnless paints an element hidden until the live page shows it.
@@ -133,15 +110,6 @@ func featureCount(f *FeatureView) string {
 	return strconv.Itoa(len(f.Children))
 }
 
-// hiddenIf paints an element hidden until the browser decides to show it
-// (x-bind:hidden), like shownIf but for the hidden attribute.
-func hiddenIf(hidden bool) templ.Attributes {
-	if hidden {
-		return templ.Attributes{"hidden": true}
-	}
-	return templ.Attributes{}
-}
-
 // doneAttr marks a child row whose task is done: its title is muted.
 func doneAttr(done bool) templ.Attributes {
 	if done {
@@ -150,7 +118,7 @@ func doneAttr(done bool) templ.Attributes {
 	return templ.Attributes{}
 }
 
-// featurePhrase is what the strip's Feature button says beside the count:
+// featurePhrase is what the Feature button's accessible name adds to the count:
 // "3 in review · 2 in progress", "all done", or nothing. The browser's
 // featureSummary (tasks/presentation/featureView.js) says the same.
 func featurePhrase(f *FeatureView) string {
@@ -189,13 +157,29 @@ func featureName(f *FeatureView) string {
 	return name
 }
 
-// featureShowing is the Feature panel's header line: "Showing 16 tasks".
-func featureShowing(f *FeatureView) string {
-	n := len(childrenOf(f))
-	if n == 1 {
-		return "Showing 1 task"
+// featureFoot is the Feature popover's foot before the browser takes over:
+// how many children are in each status, in the popover's order. The
+// browser's statusLine (tasks/presentation/featureView.js) says the same.
+func featureFoot(f *FeatureView) string {
+	count := map[string]int{}
+	for _, c := range childrenOf(f) {
+		count[c.Status]++
 	}
-	return "Showing " + strconv.Itoa(n) + " tasks"
+	var parts []string
+	for _, st := range []struct{ status, word string }{{"review", "in review"}, {"in_progress", "in progress"}, {"todo", "todo"}, {"backlog", "backlog"}, {"done", "done"}} {
+		if n := count[st.status]; n > 0 {
+			parts = append(parts, strconv.Itoa(n)+" "+st.word)
+		}
+	}
+	return strings.Join(parts, " · ")
+}
+
+// featureButtonAttrs hides the Feature button until the task has children.
+func featureButtonAttrs(f *FeatureView) templ.Attributes {
+	if len(childrenOf(f)) == 0 {
+		return templ.Attributes{"style": "display: none"}
+	}
+	return templ.Attributes{}
 }
 
 // featureScrollLabel names the Feature panel's scroll region: "Child tasks, 16".

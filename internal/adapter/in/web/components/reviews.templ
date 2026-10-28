@@ -35,6 +35,48 @@ templ ReviewCard() {
 	</article>
 }
 
+// ReviewPopoverCard is one waiting request in the task page's Reviews
+// popover, bound to reviewsInbox's `card`: the subject, who and when, the
+// whole text and what it names, then Approve and Request changes…, which
+// opens the note field and its Send. One the architect withdrew while the
+// person was writing keeps the note on screen, read-only, until dismissed.
+// The body is the architect's text: x-text, never HTML.
+templ ReviewPopoverCard() {
+	<article class="[ review ]" x-bind:id="card.anchor" x-bind:data-withdrawn="card.withdrawn">
+		<h3 tabindex="-1" data-review-heading x-text="card.subject"></h3>
+		<p class="[ meta ]"><span x-text="card.byline"></span> · <span x-text="card.age"></span></p>
+		<p class="[ body ]" x-text="card.body"></p>
+		@reviewLinks()
+		<template x-if="card.withdrawn">
+			<div class="[ flow ] [ flow-space-xs ]">
+				<p class="[ aside ]">The architect withdrew this request. Your note was not sent:</p>
+				<p class="[ body ]" x-text="card.draft.note"></p>
+				<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-on:click="dismiss(card.id)">Dismiss</button>
+			</div>
+		</template>
+		<template x-if="!card.withdrawn">
+			<div class="[ flow ] [ flow-space-s ]">
+				<template x-if="card.draft.expanded">
+					<div class="[ field ]">
+						<label x-bind:for="card.noteId">What should change <span class="[ color-ink-faint weight-regular ]">(the architect passes it on)</span></label>
+						<textarea x-bind:id="card.noteId" rows="3" x-model="card.draft.note" x-bind:aria-invalid="card.invalid" x-bind:aria-describedby="card.errorId"></textarea>
+						<span class="[ error ]" x-bind:id="card.errorId" x-text="card.draft.problem"></span>
+					</div>
+				</template>
+				<div class="[ actions ] [ cluster ] [ gutter-xs ]">
+					<button type="button" class="[ button ]" x-bind:data-variant="card.approveVariant" data-size="sm" x-bind:aria-busy="card.draft.busy" x-bind:disabled="card.draft.busy" x-on:click="approve(card.id)">Approve</button>
+					<template x-if="!card.draft.expanded">
+						<button type="button" class="[ button ]" data-size="sm" x-on:click="expandNote(card.id)">Request changes…</button>
+					</template>
+					<template x-if="card.draft.expanded">
+						<button type="button" class="[ button ]" data-size="sm" x-bind:disabled="card.draft.busy" x-on:click="requestChanges(card.id)">Send</button>
+					</template>
+				</div>
+			</div>
+		</template>
+	</article>
+}
+
 // SettledReviewCard is a request answered or withdrawn: its state in words,
 // and the person's note.
 templ SettledReviewCard() {

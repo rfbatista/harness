@@ -1,8 +1,8 @@
 /*
  * Review — the requests the task's architect raised for the person. .reviews
- * is the list in the task page's reviews panel (and the project inbox's):
- * amber, because it waits on the person (data-attention); the panel caps and
- * scrolls it (context-strip.css). .review is one request:
+ * is the list in the task page's Reviews popover (context-popover.css) and the
+ * project inbox: amber, because it waits on the person (data-attention).
+ * .review is one request:
  * subject, byline, the architect's text, links, then the note and the answer.
  * Exceptions: data-withdrawn (a request withdrawn while answered: quiet).
  * .reviews-inbox: the project inbox's scroll region, one .reviews per task.

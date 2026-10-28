@@ -392,7 +392,7 @@ func TestTaskPageListsItsSessionsBesideTheDetail(t *testing.T) {
 		`x-data="tasksTaskEditor" data-seed="task-seed"`,
 		`<script id="task-seed" type="application/json">`,
 		`<option value="in_progress" selected>In progress</option>`,
-		`x-on:click="askDeleteTask"`,
+		`x-on:menu-select="taskMenuSelect"`,
 		`href="/projects/p1/tasks/t-feed" data-task-id="t-feed" aria-current="page"`,
 		`data-current-task="t-feed"`,
 		`x-data="sessionsPage"`,
@@ -415,7 +415,9 @@ func TestTaskPageListsItsSessionsBesideTheDetail(t *testing.T) {
 		`<option value="r-kit">harnesskit</option>`,
 		`<label for="new-session-permissions-edits">Accept file edits</label>`,
 		`<option value="product" data-description="Interviews you, writes the PRD on this task and creates one child task per piece of work, each with a brief">Product</option>`,
-		`data-action="ask-delete"`, // ⋯ → the confirm
+		`data-action="ask-delete"`,  // ⋯ → the confirm
+		`data-action="delete-task"`, // the task menu's Delete task
+		`id="task-menu-button"`,
 		`x-on:click="act('delete')"`,
 		`"agent_names":{`,
 		`src="/static/app.js?v=`,
@@ -454,14 +456,17 @@ func TestFeatureTaskPageShowsItsPRDAndChildren(t *testing.T) {
 	body := get(t, newTestHandler(t, featureBoard()), "/projects/p1/tasks/t-feed").Body.String()
 	for _, want := range []string{
 		`x-data="tasksFeature"`,
-		`data-band="feature"`,
-		`role="group" aria-label="Task context"`,
+		`id="task-feature-button"`,
+		`id="task-feature"`,
 		`<script id="feature-seed" type="application/json">`,
 		`"documents":{"t-docs":[{"Title":"Brief: Write docs","Href":"/projects/p1/tasks/t-docs/documents/d-brief","Updated":"1m"}]}`,
 		`x-text="count">1</span>`,
-		`x-text="showing">Showing 1 task</span>`,
+		`<span x-text="footLine">1 todo</span>`,
+		`<a href="/projects/p1" data-board-link>See on the board ↗</a>`,
 		`aria-label="Child tasks, 1"`,
-		`href="/projects/p1/tasks/t-feed/documents/d-prd" data-prd title="updated 1h">PRD: SSE feed</a>`,
+		`<strong>PRD: SSE feed</strong>`,
+		`Product requirements · updated 1h`,
+		`href="/projects/p1/tasks/t-feed/documents/d-prd"`,
 		`data-child-id="t-docs"`,
 		`<a href="/projects/p1/tasks/t-docs">Write docs</a>`,
 		`data-status="todo">todo</span>`,
@@ -482,7 +487,7 @@ func TestChildTaskPageLinksItsParentAndHidesTheFeatureSection(t *testing.T) {
 	if !strings.Contains(body, `<a class="[ crumb ]" href="/projects/p1/tasks/t-feed" data-parent-task="t-feed" title="The feature task this task belongs to">Add SSE feed /</a>`) {
 		t.Error("a child's crumbs must lead to its feature task")
 	}
-	if !strings.Contains(body, `data-children="0"`) || !strings.Contains(body, `data-band="feature"`) || strings.Contains(body, ` data-child-id="`) { // the live x-bind stays
+	if !strings.Contains(body, `data-children="0"`) || !strings.Contains(body, `id="task-feature-button"`) || strings.Contains(body, ` data-child-id="`) { // the live x-bind stays
 		t.Error("a task without children mounts the section hidden, with no rows")
 	}
 	plain := get(t, newTestHandler(t, board()), "/projects/p1/tasks/t-feed").Body.String()

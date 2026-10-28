@@ -2,8 +2,10 @@
 // person's answers: approve, or request changes with a note (the architect
 // passes it on). One component, two scopes:
 //
-//   the task page's band   <section x-data="reviewsInbox" data-seed="reviews-seed" data-ticket-id="t1">
-//                          pending first, the settled ones under "Earlier reviews"
+//   the task page         <span x-data="reviewsInbox" data-seed="reviews-seed" data-ticket-id="t1">
+//                          a Reviews button in the title row while a request waits, and its
+//                          popover (task-reviews, the page's popupDialog): every waiting request;
+//                          the settled ones are only counted, in the popover's foot
 //   the project's inbox    <main x-data="reviewsInbox" data-seed="reviews-seed">
 //                          every pending request of the project, by task
 //
@@ -16,9 +18,13 @@ import { FeedStatus } from "../../../../shared/domain/feed.js";
 import { describeError } from "../../../../shared/presentation/errors.js";
 import { readSeed } from "../../../../shared/presentation/seed.js";
 import { isPending, noteProblem, upsertReview } from "../../domain/review.js";
-import { reviewsSummary, toCard, waitingLine } from "../view.js";
+import { settledLine, toCard, waitingLine } from "../view.js";
 
 const TICK_MS = 30_000;
+
+/** The Reviews popover: a dialog in the top layer (the page's popupDialog). Its open state is never stored. */
+const POPOVER_ID = "task-reviews";
+const BUTTON_ID = "task-reviews-button";
 
 const ANSWERED = { approved: "You approved", changes_requested: "You asked for changes on" };
 
@@ -55,8 +61,8 @@ export const reviewsInbox = ({ gateway, clock, hash = () => globalThis.location?
     hasArchitect: false,
     /** The request whose answer is in flight: its echo is not news. */
     answeringId: "",
-    /** The panel shows every waiting request, not just the first. */
-    moreOpen: false,
+    /** The Reviews popover is open (browser-only: a page loads with it closed). */
+    popoverOpen: false,
     /** The page's link to a review has been followed, once the requests were read. */
     linkFollowed: false,
 
@@ -78,28 +84,22 @@ export const reviewsInbox = ({ gateway, clock, hash = () => globalThis.location?
       if (!this.forTask) return [];
       return this.reviews.filter((r) => !isPending(r) && !this.withdrawnWhileWriting(r)).map((r) => this.card(r));
     },
-    /** The strip's Reviews button. */
-    get summary() {
-      return reviewsSummary({ loaded: this.loaded, error: this.error, pending: this.pendingCount, settled: this.settledCards.length, painted: this.paintedPending });
+    /** The title row's Reviews button: while a request waits; until the list is read, the server's count stands. */
+    get buttonShown() {
+      return this.loaded ? this.pendingCount > 0 : !this.error && this.paintedPending > 0;
     },
-    /** The panel: the first waiting request in full, the others behind "N more waiting". */
-    get firstCards() {
-      return this.pendingCards.slice(0, 1);
+    get buttonCount() {
+      return String(this.loaded ? this.pendingCount : this.paintedPending);
     },
-    get moreCards() {
-      return this.pendingCards.slice(1);
+    get buttonName() {
+      return `Reviews, ${this.buttonCount} waiting`;
     },
-    get hasMore() {
-      return this.moreCards.length > 0;
-    },
-    get moreLabel() {
-      return this.moreOpen ? `Hide ${this.moreCards.length}` : `${this.moreCards.length} more waiting`;
+    /** The popover's foot: how many requests are settled on this task. */
+    get settledLine() {
+      return settledLine(this.settledCards.length);
     },
     get nothingWaits() {
       return this.loaded && !this.hasPending;
-    },
-    toggleMore() {
-      this.moreOpen = !this.moreOpen;
     },
     get pendingCount() {
       return this.reviews.filter(isPending).length;
@@ -113,23 +113,11 @@ export const reviewsInbox = ({ gateway, clock, hash = () => globalThis.location?
     get hasSettled() {
       return this.settledCards.length > 0;
     },
-    get settledLabel() {
-      return `Earlier reviews (${this.settledCards.length})`;
-    },
     get isEmpty() {
       return this.loaded && !this.hasPending;
     },
     get notLoaded() {
       return !this.loaded;
-    },
-    /** The task's band hides when there is nothing to show; until loaded, the server's paint stands. */
-    get hidesBand() {
-      if (!this.loaded) return this.paintedPending === 0;
-      return !this.hasPending && !this.hasSettled;
-    },
-    /** What x-bind sets on the band: amber while requests wait; null leaves it off. */
-    get attentionAttr() {
-      return this.hasPending ? "" : null;
     },
     /** The project's inbox: pending requests by task, in the order their newest arrived. */
     get groups() {
@@ -157,7 +145,7 @@ export const reviewsInbox = ({ gateway, clock, hash = () => globalThis.location?
       };
     },
     draftOf(id) {
-      return this.drafts[id] ?? { note: "", problem: "", busy: false, notice: "", dismissed: false };
+      return this.drafts[id] ?? { note: "", problem: "", busy: false, notice: "", dismissed: false, expanded: false };
     },
     withdrawnWhileWriting(r) {
       const d = this.drafts[r.id];
@@ -188,6 +176,16 @@ export const reviewsInbox = ({ gateway, clock, hash = () => globalThis.location?
         (status) => status === FeedStatus.RESYNCED && this.load(),
       );
       ticker = setInterval(() => (this.now = clock.now()), TICK_MS);
+      // The page keeps the phone's back button in step with how many wait.
+      if (this.forTask) {
+        this.$watch("buttonCount", () => this.tellPage());
+        this.tellPage();
+      }
+    },
+
+    /** How many requests wait, for the session head's back button (the title row is hidden on a phone). */
+    tellPage() {
+      this.$dispatch("reviews-waiting", { count: Number(this.buttonCount) });
     },
 
     destroy() {
@@ -204,7 +202,6 @@ export const reviewsInbox = ({ gateway, clock, hash = () => globalThis.location?
         for (const r of this.reviews) this.ensureDraft(r.id);
         this.loaded = true;
         this.now = clock.now();
-        this.$dispatch("reviews-read", { has: this.hasPending || this.hasSettled });
         this.followLink();
       } catch (err) {
         this.error = describeError(err);
@@ -213,25 +210,40 @@ export const reviewsInbox = ({ gateway, clock, hash = () => globalThis.location?
 
     /**
      * The page was opened on a link to #reviews or to one review (#review-{id}):
-     * show that review, unfolded, and focus it (its panel was opened by the strip).
+     * open the popover and focus that review (or the popover's heading).
      */
     followLink() {
       if (this.linkFollowed || !this.forTask) return;
       this.linkFollowed = true;
       const target = hash();
-      if (target === "#reviews") return this.$nextTick(() => root?.querySelector("[data-reviews-heading]")?.focus?.());
-      if (!target.startsWith("#review-")) return;
-      const id = decodeURIComponent(target.slice("#review-".length));
-      if (this.moreCards.some((c) => c.id === id)) this.moreOpen = true;
+      const id = target.startsWith("#review-") ? decodeURIComponent(target.slice("#review-".length)) : "";
+      if ((target !== "#reviews" && !id) || !this.hasPending) return;
+      this.openPopover();
       this.$nextTick(() => {
-        const heading = [...(root?.querySelectorAll("article.review") ?? [])].find((a) => a.id === `review-${id}`)?.querySelector("[data-review-heading]");
+        const card = [...(root?.querySelectorAll("article.review") ?? [])].find((a) => a.id === `review-${id}`);
+        const heading = card?.querySelector("[data-review-heading]") ?? root?.querySelector("[data-reviews-heading]");
         heading?.scrollIntoView?.({ block: "nearest" });
         heading?.focus?.();
       });
     },
 
+    /** Opens the popover under the Reviews button; the dialog hands the focus back to it. */
+    openPopover() {
+      this.popoverOpen = true;
+      this.$dispatch("dialog-open", { id: POPOVER_ID, anchor: document.getElementById(BUTTON_ID) });
+    },
+
+    closePopover() {
+      this.$dispatch("dialog-dismiss", { id: POPOVER_ID });
+    },
+
+    /** The dialog closed (Esc, Close, a press outside, or the last answer). */
+    popoverClosed(event) {
+      if (event?.detail?.id === POPOVER_ID) this.popoverOpen = false;
+    },
+
     ensureDraft(id) {
-      if (!this.drafts[id]) this.drafts = { ...this.drafts, [id]: { note: "", problem: "", busy: false, notice: "", dismissed: false } };
+      if (!this.drafts[id]) this.drafts = { ...this.drafts, [id]: { note: "", problem: "", busy: false, notice: "", dismissed: false, expanded: false } };
     },
 
     /** A request raised or changed, on the feed. */
@@ -249,6 +261,11 @@ export const reviewsInbox = ({ gateway, clock, hash = () => globalThis.location?
     // ── the person's answer ──────────────────────────────────────────────
     approve(id) {
       return this.answer(id, "approved");
+    },
+    /** "Request changes…": opens the note field in the card; Send then sends it. */
+    expandNote(id) {
+      if (this.drafts[id]) this.drafts[id].expanded = true;
+      this.$nextTick(() => document.getElementById(`review-note-${id}`)?.focus?.());
     },
     requestChanges(id) {
       return this.answer(id, "changes_requested");
@@ -268,7 +285,8 @@ export const reviewsInbox = ({ gateway, clock, hash = () => globalThis.location?
         this.reviews = upsertReview(this.reviews, answered);
         draft.notice = delivered ? "" : "Saved. The architect gets your answer when its current turn ends.";
         this.say(`${ANSWERED[decision]} “${review.subject}”`);
-        this.$nextTick(() => this.focusNext());
+        if (this.popoverOpen && !this.hasPending) this.closeAfterLast();
+        else this.$nextTick(() => this.focusNext());
       } catch (err) {
         this.error = describeError(err);
         if (codeOf(err) === Codes.REVIEW_NOT_PENDING || codeOf(err) === Codes.REVIEW_NOT_FOUND) this.load();
@@ -278,10 +296,19 @@ export const reviewsInbox = ({ gateway, clock, hash = () => globalThis.location?
       }
     },
 
-    /** After an answer: the next request waiting, or the band's heading when none is. */
+    /** After an answer: the next request waiting, or the popover's heading when none is. */
     focusNext() {
       const target = root?.querySelector("[data-review-heading]") ?? root?.querySelector("[data-reviews-heading]");
       target?.focus?.();
+    },
+
+    /**
+     * The last waiting request was answered: the popover closes, the Reviews
+     * button goes with it, and the focus stays in the title row, on its first control besides it.
+     */
+    closeAfterLast() {
+      this.closePopover();
+      this.$nextTick(() => [...(root?.parentElement?.querySelectorAll("a, button") ?? [])].find((c) => !root.contains(c) && c.checkVisibility?.())?.focus?.());
     },
 
     /** Hides a withdrawn request the person was answering. */

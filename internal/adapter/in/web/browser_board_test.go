@@ -370,13 +370,13 @@ func TestAChildArrivingOverTheFeedJoinsTheFeatureSection(t *testing.T) {
 	srv := newBrowserServer(mux)
 	defer srv.Close()
 
-	rows := `[...document.querySelectorAll('.feature .row[data-child-id]')].map(r => r.dataset.childId + ':' + r.querySelector('.badge').textContent + ':' + r.querySelector('.meta').textContent.trim())`
+	rows := `[...document.querySelectorAll('#task-feature .row[data-child-id]')].map(r => r.dataset.childId + ':' + r.querySelector('.badge').textContent + ':' + r.querySelector('.meta').textContent.trim())`
 	var painted, after []string
 	var count string
 	err = chromedp.Run(ctx,
 		chromedp.EmulateViewport(1280, 800),
 		chromedp.Navigate(srv.URL+"/projects/p1/tasks/t-feed"),
-		chromedp.Poll(`document.querySelector('.feature [data-ssr]') === null`, nil, chromedp.WithPollingTimeout(10*time.Second)),
+		chromedp.Poll(`document.querySelector('#task-feature [data-ssr]') === null`, nil, chromedp.WithPollingTimeout(10*time.Second)),
 		chromedp.Evaluate(rows, &painted),
 		chromedp.ActionFunc(func(context.Context) error {
 			for feed.followers() == 0 {
@@ -386,9 +386,9 @@ func TestAChildArrivingOverTheFeedJoinsTheFeatureSection(t *testing.T) {
 			feed.pushRaw(t, map[string]any{"ticket": map[string]any{"id": "t-docs", "project_id": "p1", "title": "Write docs", "status": "in_progress", "parent_id": "t-feed"}})
 			return nil
 		}),
-		chromedp.Poll(`document.querySelector('.feature .row[data-child-id="t-new"]') !== null && document.querySelector('.feature .row[data-child-id="t-docs"] .badge')?.textContent === 'In progress'`, nil, chromedp.WithPollingTimeout(10*time.Second)),
+		chromedp.Poll(`document.querySelector('#task-feature .row[data-child-id="t-new"]') !== null && document.querySelector('#task-feature .row[data-child-id="t-docs"] .badge')?.textContent === 'In progress'`, nil, chromedp.WithPollingTimeout(10*time.Second)),
 		chromedp.Evaluate(rows, &after),
-		chromedp.Evaluate(`document.querySelector('[data-band="feature"] .badge').textContent`, &count),
+		chromedp.Evaluate(`document.querySelector('#task-feature-button .badge').textContent`, &count),
 	)
 	if err != nil {
 		t.Fatalf("%v\nJS errors: %v", err, errs.all())

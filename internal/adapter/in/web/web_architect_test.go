@@ -80,21 +80,26 @@ func TestTaskPagePaintsTheReviewsWaitingOnThePerson(t *testing.T) {
 	w := architectWorld()
 	w.tickets[0].PendingReviews = 2
 	body := get(t, newTestHandler(t, w), "/projects/p1/tasks/t-feed").Body.String()
-	band := tagAt(body, `x-data="reviewsInbox"`)
+	holder := tagAt(body, `x-data="reviewsInbox"`)
 	for _, want := range []string{`data-ticket-id="t-feed"`, `data-pending="2"`} {
-		if !strings.Contains(band, want) {
-			t.Errorf("the band %q lacks %s", band, want)
+		if !strings.Contains(holder, want) {
+			t.Errorf("the Reviews component %q lacks %s", holder, want)
 		}
 	}
-	button := tagAt(body, `data-band="reviews"`)
-	if !strings.Contains(button, `data-tone="attention"`) || strings.Contains(button, " hidden") {
-		t.Errorf("the Reviews button of a task with reviews waiting is amber and shown: %q", button)
+	button := tagAt(body, `id="task-reviews-button"`)
+	if !strings.Contains(button, `aria-label="Reviews, 2 waiting"`) || strings.Contains(button, "display: none") {
+		t.Errorf("the Reviews button of a task with reviews waiting is shown and says how many: %q", button)
 	}
-	if !strings.Contains(body, `x-text="summary.count"`) || !strings.Contains(body, `x-text="summary.phrase">waiting</span>`) {
+	if !strings.Contains(body, `x-text="buttonCount">2</span>`) {
 		t.Error("the button paints how many wait before the browser reads them")
 	}
+	if inRow := body[strings.Index(body, `<div class="[ actions ]">`):]; strings.Index(inRow, `id="task-reviews-button"`) > strings.Index(inRow, `id="task-note-button"`) {
+		t.Error("the Reviews button leads the title row's actions")
+	}
 	for _, want := range []string{
-		"2 reviews wait on you",
+		`id="task-reviews"`,
+		"Review requests page",
+		`href="/projects/p1/reviews"`,
 		`<script id="reviews-seed" type="application/json">`,
 		`"s-server":"plain claude · build the server"`,
 		`"t-feed":{"title":"Add SSE feed","href":"/projects/p1/tasks/t-feed"}`,
@@ -105,11 +110,11 @@ func TestTaskPagePaintsTheReviewsWaitingOnThePerson(t *testing.T) {
 	}
 }
 
-func TestTaskPageWithNoReviewsPaintsTheBandHidden(t *testing.T) {
+func TestTaskPageWithNoReviewsPaintsTheButtonHidden(t *testing.T) {
 	body := get(t, newTestHandler(t, board()), "/projects/p1/tasks/t-feed").Body.String()
-	button := tagAt(body, `data-band="reviews"`)
-	if !strings.Contains(button, " hidden") || strings.Contains(button, `data-tone="attention"`) {
-		t.Errorf("a Reviews button with nothing waiting should be painted hidden and quiet: %q", button)
+	button := tagAt(body, `id="task-reviews-button"`)
+	if button != "" && !strings.Contains(button, "display: none") {
+		t.Errorf("a Reviews button with nothing waiting should be painted hidden: %q", button)
 	}
 	if strings.Contains(body, "wait on you") {
 		t.Error("nothing waits, yet the page says something does")

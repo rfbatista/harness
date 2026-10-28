@@ -79,6 +79,7 @@
 @import url("./blocks/pane-tabs.css");
 @import url("./blocks/banner.css");
 @import url("./blocks/task-note.css");
+@import url("./blocks/context-popover.css");
 @import url("./blocks/prose.css");
 @import url("./blocks/source.css");
 @import url("./blocks/history.css");
@@ -103,8 +104,6 @@
 @import url("./blocks/chat.css");
 @import url("./blocks/message.css");
 @import url("./blocks/review.css");
-@import url("./blocks/context-strip.css");
-@import url("./blocks/band-panel.css");
 @import url("./blocks/notification.css");
 @import url("./blocks/terminal.css");
 @import url("./blocks/pane-note.css");

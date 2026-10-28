@@ -39,11 +39,11 @@ test("the task's band: its pending requests, named and linked, under how many wa
   instance.destroy();
 });
 
-test("approving settles the request, announces it, and moves it under Earlier reviews", async () => {
+test("approving settles the request, announces it, and counts it in the foot", async () => {
   const { instance, memory } = await setup();
   await instance.approve("rv1");
   assert.equal(memory.find("rv1").state, "approved");
-  assert.deepEqual([instance.hasPending, instance.settledLabel, instance.settledCards[0].stateWord], [false, "Earlier reviews (1)", "approved"]);
+  assert.deepEqual([instance.hasPending, instance.settledLine, instance.settledCards[0].stateWord], [false, "1 settled on this task", "approved"]);
   assert.equal(instance.announcement, "You approved “Spec set ready for sign-off”");
   instance.destroy();
 });
@@ -147,7 +147,7 @@ test("empty once loaded", async () => {
   instance.destroy();
 });
 
-test("the band keeps the server's paint until the list is read, then hides when there is nothing", async () => {
+test("the button keeps the server's paint until the list is read, then follows the requests", async () => {
   const memory = memoryReviews({ reviews: [] });
   const el = seededElement(seed);
   el.dataset.ticketId = "t1";
@@ -155,12 +155,15 @@ test("the band keeps the server's paint until the list is read, then hides when 
   el.dataset.architect = "";
   const { instance } = mount(reviewsInbox({ gateway: memory.gateway, clock: fixedClock(at(5)) }), { el });
   instance.init();
-  assert.deepEqual([instance.notLoaded, instance.hidesBand], [true, true], "painted hidden, stays hidden while loading");
+  assert.deepEqual([instance.notLoaded, instance.buttonShown], [true, false], "painted hidden, stays hidden while loading");
   await flush();
-  assert.deepEqual([instance.notLoaded, instance.hidesBand, instance.attentionAttr], [false, true, null]);
-  memory.request({ subject: "Now one" });
+  assert.deepEqual([instance.notLoaded, instance.buttonShown], [false, false]);
+  const raised = memory.request({ subject: "Now one" });
   await flush();
-  assert.deepEqual([instance.hidesBand, instance.attentionAttr], [false, ""]);
+  assert.deepEqual([instance.buttonShown, instance.buttonCount, instance.buttonName], [true, "1", "Reviews, 1 waiting"]);
+  memory.withdraw(raised.id);
+  await flush();
+  assert.equal(instance.buttonShown, false, "gone when the last waiting request is withdrawn");
   instance.destroy();
 
   const painted = seededElement(seed);
@@ -168,7 +171,7 @@ test("the band keeps the server's paint until the list is read, then hides when 
   painted.dataset.pending = "2";
   const second = mount(reviewsInbox({ gateway: memoryReviews({ reviews: [] }).gateway, clock: fixedClock(at(5)) }), { el: painted }).instance;
   second.init();
-  assert.equal(second.hidesBand, false, "painted with two waiting, it shows while it reads them");
+  assert.deepEqual([second.buttonShown, second.buttonCount, second.buttonName], [true, "2", "Reviews, 2 waiting"], "painted with two waiting, it shows while it reads them");
   second.destroy();
 });
 
@@ -188,7 +191,7 @@ test("a task that never had an architect reads nothing, yet shows a request that
   const { instance, dispatched } = mount(reviewsInbox({ gateway: counting, clock: fixedClock(at(5)) }), { el });
   instance.init();
   await flush();
-  assert.deepEqual([reads, instance.loaded, instance.hidesBand], [0, true, true]);
+  assert.deepEqual([reads, instance.loaded, instance.buttonShown], [0, true, false]);
   memory.request({ subject: "First one" });
   await flush();
   assert.deepEqual(instance.pendingCards.map((c) => c.subject), ["First one"]);
@@ -198,33 +201,16 @@ test("a task that never had an architect reads nothing, yet shows a request that
 
 const waiting = (n) => Array.from({ length: n }, (_, i) => makeReview({ id: `rv${i + 1}`, subject: `Review ${i + 1}`, createdAt: at(i) }));
 
-test("the strip's button: how many wait, in the waiting tone, and the server's count until the list is read", async () => {
-  const { instance } = await setup({ reviews: waiting(3) });
-  assert.deepEqual([instance.summary.has, instance.summary.tone, instance.summary.count, instance.summary.phrase], [true, "attention", "3", "waiting"]);
-  assert.equal(instance.summary.name, "Reviews, 3 waiting");
-  instance.destroy();
-
-  const el = seededElement(seed);
-  el.dataset.ticketId = "t1";
-  el.dataset.architect = "";
-  el.dataset.pending = "2";
-  const memory = memoryReviews({ reviews: [], now: () => at(5) });
-  const painted = mount(reviewsInbox({ gateway: memory.gateway, clock: fixedClock(at(5)) }), { el });
-  painted.instance.init(); // not read yet
-  assert.deepEqual([painted.instance.summary.has, painted.instance.summary.tone, painted.instance.summary.count, painted.instance.summary.phrase], [true, "attention", "2", "waiting"]);
-  painted.instance.destroy();
-});
-
-test("with nothing waiting the button counts the settled requests in a neutral tone, and is gone when there are none", async () => {
+test("a settled request alone shows no button: settled ones live in the popover's foot", async () => {
   const { instance } = await setup({ reviews: [makeReview({ state: "approved" })] });
-  assert.deepEqual([instance.summary.has, instance.summary.tone, instance.summary.count, instance.summary.phrase], [true, null, "1", "settled"]);
+  assert.deepEqual([instance.buttonShown, instance.hasPending, instance.settledLine], [false, false, "1 settled on this task"]);
   instance.destroy();
-  const none = await setup({ reviews: [] });
-  assert.equal(none.instance.summary.has, false);
-  none.instance.destroy();
+  const many = await setup({ reviews: [1, 2, 3, 4, 5].map((n) => makeReview({ id: `s${n}`, state: "approved" })) });
+  assert.equal(many.instance.settledLine, "5 settled on this task");
+  many.instance.destroy();
 });
 
-test("a request list that cannot be read says so on the button", async () => {
+test("a request list that cannot be read shows no button", async () => {
   const el = seededElement(seed);
   el.dataset.ticketId = "t1";
   el.dataset.architect = "";
@@ -232,43 +218,79 @@ test("a request list that cannot be read says so on the button", async () => {
   const { instance } = mount(reviewsInbox({ gateway, clock: fixedClock(at(5)) }), { el });
   instance.init();
   await flush();
-  assert.deepEqual([instance.summary.has, instance.summary.count, instance.summary.phrase], [true, "", "couldn't load"]);
-  assert.equal(instance.summary.name, "Reviews, couldn't load");
+  assert.deepEqual([instance.buttonShown, instance.error !== null], [false, true]);
   instance.destroy();
 });
 
-test("the panel shows the first waiting request in full and folds the others behind a button", async () => {
+test("the popover lists every waiting request in full, newest first", async () => {
   const { instance } = await setup({ reviews: waiting(3) });
-  assert.deepEqual([instance.firstCards.length, instance.moreCards.length, instance.hasMore, instance.moreLabel], [1, 2, true, "2 more waiting"]);
-  assert.equal(instance.firstCards[0].subject, "Review 3", "newest first");
-  instance.toggleMore();
-  assert.deepEqual([instance.moreOpen, instance.moreLabel], [true, "Hide 2"]);
-  instance.toggleMore();
-  assert.equal(instance.moreLabel, "2 more waiting");
-  const one = await setup({ reviews: waiting(1) });
-  assert.deepEqual([one.instance.hasMore, one.instance.moreCards.length], [false, 0]);
+  assert.deepEqual(instance.pendingCards.map((c) => c.subject), ["Review 3", "Review 2", "Review 1"]);
+  assert.equal(instance.headline, "3 reviews wait on you");
   instance.destroy();
-  one.instance.destroy();
 });
 
-test("the panel says nothing waits when only settled requests are left", async () => {
-  const { instance } = await setup({ reviews: [makeReview({ state: "approved" })] });
-  assert.deepEqual([instance.nothingWaits, instance.hasSettled], [true, true]);
-  const waits = await setup({ reviews: waiting(1) });
-  assert.equal(waits.instance.nothingWaits, false);
+test("the button opens the popover under itself; Close or Esc leaves it closed and nothing is remembered", async () => {
+  const { instance, dispatched } = await setup({ reviews: waiting(1) });
+  const anchor = document.createElement("button");
+  anchor.id = "task-reviews-button";
+  document.body.append(anchor);
+  instance.openPopover();
+  assert.equal(instance.popoverOpen, true);
+  assert.deepEqual(dispatched.at(-1), { name: "dialog-open", detail: { id: "task-reviews", anchor } });
+  instance.closePopover();
+  assert.deepEqual(dispatched.at(-1), { name: "dialog-dismiss", detail: { id: "task-reviews" } });
+  instance.popoverClosed({ detail: { id: "task-reviews" } });
+  assert.equal(instance.popoverOpen, false);
+  anchor.remove();
   instance.destroy();
-  waits.instance.destroy();
 });
 
-test("a link to a review that is folded unfolds it; a link to #reviews or to another page leaves the fold", async () => {
-  const folded = await setup({ reviews: waiting(3), hash: () => "#review-rv1" });
-  assert.equal(folded.instance.moreOpen, true);
-  folded.instance.destroy();
-  for (const hash of ["#reviews", "#review-rv3", "#comments", ""]) {
+test("Request changes… expands the note field; Send then needs the note", async () => {
+  const { instance, memory } = await setup();
+  instance.expandNote("rv1");
+  assert.equal(instance.pendingCards[0].draft.expanded, true);
+  await instance.requestChanges("rv1");
+  assert.equal(instance.drafts.rv1.problem, "Say what should change: the architect passes it on.");
+  assert.equal(memory.find("rv1").state, "pending");
+  instance.destroy();
+});
+
+const dismissals = (dispatched) => dispatched.filter((d) => d.name === "dialog-dismiss").length;
+
+test("answering the last waiting request closes the popover; answering one of two leaves it open", async () => {
+  const { instance, dispatched } = await setup({ reviews: waiting(2) });
+  instance.popoverOpen = true;
+  await instance.approve("rv2");
+  assert.deepEqual([instance.pendingCards.map((c) => c.id), dismissals(dispatched)], [["rv1"], 0]);
+  await instance.approve("rv1");
+  assert.deepEqual([instance.pendingCards, dismissals(dispatched)], [[], 1]);
+  instance.destroy();
+});
+
+test("a request withdrawn while the person writes keeps the popover open", async () => {
+  const { instance, memory, dispatched } = await setup({ reviews: waiting(1) });
+  instance.popoverOpen = true;
+  instance.drafts.rv1.note = "wait";
+  memory.withdraw("rv1");
+  await flush();
+  assert.equal(dismissals(dispatched), 0);
+  instance.destroy();
+});
+
+test("a link to #reviews or to a review opens the popover once the requests are read; other links and no link leave it closed", async () => {
+  for (const hash of ["#reviews", "#review-rv1"]) {
     const { instance } = await setup({ reviews: waiting(3), hash: () => hash });
-    assert.equal(instance.moreOpen, false, hash);
+    assert.equal(instance.popoverOpen, true, hash);
     instance.destroy();
   }
+  for (const hash of ["#comments", ""]) {
+    const { instance } = await setup({ reviews: waiting(3), hash: () => hash });
+    assert.equal(instance.popoverOpen, false, hash);
+    instance.destroy();
+  }
+  const none = await setup({ reviews: [], hash: () => "#reviews" });
+  assert.equal(none.instance.popoverOpen, false, "nothing waits: nothing to open");
+  none.instance.destroy();
 });
 
 test("each card carries the id a link to it targets", async () => {
@@ -277,14 +299,19 @@ test("each card carries the id a link to it targets", async () => {
   instance.destroy();
 });
 
-test("once the requests are read the strip is told whether there are any, settled ones included", async () => {
+test("the page is told how many reviews wait, from the painted count on: the phone's back button follows it", async () => {
   const el = seededElement(seed);
   el.dataset.ticketId = "t1";
   el.dataset.architect = "";
-  const memory = memoryReviews({ reviews: [makeReview({ state: "approved" })], now: () => at(5) });
+  el.dataset.pending = "2";
+  const memory = memoryReviews({ reviews: waiting(2), now: () => at(5) });
   const { instance, dispatched } = mount(reviewsInbox({ gateway: memory.gateway, clock: fixedClock(at(5)) }), { el });
   instance.init();
+  const told = () => dispatched.filter((d) => d.name === "reviews-waiting").map((d) => d.detail.count);
+  assert.deepEqual(told(), [2], "the server's count, before the requests are read");
   await flush();
-  assert.deepEqual(dispatched.filter((d) => d.name === "reviews-read").map((d) => d.detail), [{ has: true }]);
+  await instance.approve("rv1");
+  instance.tellPage(); // the page's $watch on buttonCount does this
+  assert.equal(told().at(-1), 1);
   instance.destroy();
 });

@@ -125,17 +125,19 @@ func TestTaskResourcesAndCommentsInTheWebUI_EndToEnd(t *testing.T) {
 	p.run("the task page links its resources and comments with their counts",
 		chromedp.EmulateViewport(1280, 800),
 		chromedp.Navigate(taskURL),
-		waitUntil(`document.querySelector('[data-task-resources] .badge')?.textContent === '1'`),
+		waitUntil(`document.querySelector('[data-task-resources] .meta')?.textContent === '1'`),
 		waitUntil(`document.querySelector('[data-task-comments] .badge')?.textContent === '1'`),
 	)
 	if _, err := plan.AddTicketLink(ctx, task.ID, "https://example.com/spec", "Spec"); err != nil {
 		t.Fatal(err)
 	}
 	p.run("a resource added elsewhere counts on the task page live",
-		waitUntil(`document.querySelector('[data-task-resources] .badge')?.textContent === '2'`),
+		waitUntil(`document.querySelector('[data-task-resources] .meta')?.textContent === '2'`),
 	)
 
 	p.run("open the resources page from the toolbar",
+		chromedp.Evaluate(`document.getElementById('task-menu-button').click()`, nil),
+		waitUntil(`document.querySelector('[data-task-resources]').checkVisibility()`),
 		chromedp.Evaluate(`document.querySelector('[data-task-resources]').click()`, nil),
 		atPath(pageURL),
 		waitUntil(main+` !== null && (`+titles+`) === 'wireframe.png|Spec'`),

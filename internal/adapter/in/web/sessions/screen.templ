@@ -33,7 +33,7 @@ templ icon(name string) {
 // the selected session's token totals (usageTotalsChip) after agent · age.
 templ sessionHead(usage bool) {
 	<header class="[ session-head ]" x-on:click.capture="moreCapture($event)" x-on:keydown.capture="moreCapture($event)">
-		<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" data-icon data-split-back aria-label="Sessions" x-on:click="closeDetail">
+		<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" data-icon data-split-back aria-label="Sessions" x-bind:aria-label="backName" x-bind:data-dot="backDot" x-on:click="closeDetail">
 			@icon("back")
 		</button>
 		<h2 x-text="selected.title"></h2>
