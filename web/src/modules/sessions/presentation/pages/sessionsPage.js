@@ -852,9 +852,6 @@ export const sessionsPage = ({
     selectableAttr(id) {
       return this.canPick(id) ? "" : null;
     },
-    get pickedCount() {
-      return this.picked.length;
-    },
     get pickedText() {
       return this.picked.length === 1 ? "1 selected" : `${this.picked.length} selected`;
     },
