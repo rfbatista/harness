@@ -56,6 +56,12 @@
       &:has(.split-view[data-detail]) main > :is(.toolbar, :has(> .toolbar)) { display: none; }
     }
 
+    /* A page that belongs to no project (the Agents page): top bar only, full width. */
+    &[data-no-rail] {
+      grid-template-columns: minmax(0, 1fr);
+      grid-template-areas: "top" "main" "stream";
+    }
+
     &[data-code-fullscreen] {
       grid-template-columns: minmax(0, 1fr);
       grid-template-rows: minmax(0, 1fr) auto;

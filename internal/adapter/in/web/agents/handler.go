@@ -48,6 +48,7 @@ func (h Handler) Page(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	frame.Top.OnAgents = true
+	frame.NoRail = true
 	return h.Render(w, r, http.StatusOK, Page(frame, NewView(route, h.read(r))))
 }
 
