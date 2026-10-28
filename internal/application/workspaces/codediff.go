@@ -232,7 +232,7 @@ func (c *Code) CodeDiff(ctx context.Context, q ports.CodeDiffQuery) (*domain.Cod
 	working := plan.scope == domain.ScopeWorking
 	var staged map[string]bool
 	if working {
-		paths, err := c.d.Git.StagedPaths(ctx, plan.dir)
+		paths, err := c.stagedPaths(ctx, plan)
 		if err != nil {
 			return nil, err
 		}
@@ -400,4 +400,15 @@ func sectionRank(status string) int {
 		return 1
 	}
 	return 0
+}
+
+// stagedPaths are the worktree's staged files: from the code watcher's last
+// look when it keeps the worktree, else from git.
+func (c *Code) stagedPaths(ctx context.Context, plan *diffPlan) ([]string, error) {
+	if c.d.Staged != nil && plan.src.ws != nil {
+		if paths, ok := c.d.Staged.ObservedStagedPaths(plan.src.ws.ID); ok {
+			return paths, nil
+		}
+	}
+	return c.d.Git.StagedPaths(ctx, plan.dir)
 }

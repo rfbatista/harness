@@ -64,7 +64,8 @@ func parseStatusV2(out string) (*ports.GitWorktreeStatus, []string) {
 			}
 		case strings.HasPrefix(rec, "1 "), strings.HasPrefix(rec, "2 "), strings.HasPrefix(rec, "u "):
 			st.Tracked++
-			if rec[0] != 'u' && len(rec) > 3 && rec[2] != '.' {
+			staged := rec[0] != 'u' && len(rec) > 3 && rec[2] != '.'
+			if staged {
 				st.Staged++
 			}
 			// "1 XY sub mH mI mW hH hI path"; "2" adds the rename score,
@@ -72,6 +73,9 @@ func parseStatusV2(out string) (*ports.GitWorktreeStatus, []string) {
 			n := map[byte]int{'1': 9, '2': 10, 'u': 11}[rec[0]]
 			if f := strings.SplitN(rec, " ", n); len(f) == n {
 				paths = append(paths, f[n-1])
+				if staged {
+					st.StagedPaths = append(st.StagedPaths, f[n-1])
+				}
 			}
 			if rec[0] == '2' {
 				i++ // the original path follows

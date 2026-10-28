@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log/slog"
 	"reflect"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -183,7 +184,7 @@ func (s *WorktreeGit) ObserveGitState(ctx context.Context, workspaceID string, w
 	sl.mu.Lock()
 	defer sl.mu.Unlock()
 	now := s.d.Now()
-	if sl.state != nil && sl.src != nil && *sl.src == *wt && sl.fetched.Equal(s.d.Git.FetchedAt(repo.RootDir)) && now.Sub(sl.baseAt) < baseRecheck {
+	if sl.state != nil && sl.src != nil && sl.src.Equal(wt) && sl.fetched.Equal(s.d.Git.FetchedAt(repo.RootDir)) && now.Sub(sl.baseAt) < baseRecheck {
 		sl.state.ReadAt, sl.observed = now.UTC(), true
 		return s.named(ctx, sl), false, nil
 	}
@@ -206,6 +207,19 @@ func (s *WorktreeGit) named(ctx context.Context, sl *stateSlot) *domain.GitState
 	}
 	cp.SessionID = sl.sessionID
 	return cp
+}
+
+// ObservedStagedPaths are the staged files of a running session's worktree as
+// its code watcher last read them, with no git run; false when the watcher does
+// not keep the workspace's state current.
+func (s *WorktreeGit) ObservedStagedPaths(workspaceID string) ([]string, bool) {
+	sl := s.slot(workspaceID)
+	sl.mu.Lock()
+	defer sl.mu.Unlock()
+	if sl.state == nil || sl.src == nil || !sl.observed || s.d.Now().Sub(sl.state.ReadAt) >= 3*CodeWatchInterval {
+		return nil, false
+	}
+	return slices.Clone(sl.src.StagedPaths), true
 }
 
 // sameState: two reads say the same, whenever they were made.

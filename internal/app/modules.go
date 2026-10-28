@@ -999,9 +999,11 @@ var WorkspacesModule = fx.Module("workspaces",
 // newCodeBrowser serves the code views: repositories and worktrees read
 // through git and the filesystem, zoned by the architecture context's read
 // port.
-func newCodeBrowser(ws ports.WorkspaceRepository, repos ports.RepositoryRepository, git ports.GitCode, files ports.WorktreeFiles, cat catalog.Catalog) ports.CodeBrowser {
+func newCodeBrowser(ws ports.WorkspaceRepository, repos ports.RepositoryRepository, git ports.GitCode, files ports.WorktreeFiles, cat catalog.Catalog, worktreeGit ports.WorktreeGit) ports.CodeBrowser {
+	// A running session's staged files come from the code watcher's look.
+	staged, _ := worktreeGit.(workspaces.ObservedStaged)
 	return workspaces.NewCode(workspaces.CodeDeps{
-		Workspaces: ws, Repositories: repos, Git: git, Files: files, Architecture: cat.Architecture,
+		Workspaces: ws, Repositories: repos, Git: git, Files: files, Architecture: cat.Architecture, Staged: staged,
 	})
 }
 

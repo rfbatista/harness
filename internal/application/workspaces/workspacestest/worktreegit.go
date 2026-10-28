@@ -3,6 +3,7 @@ package workspacestest
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -141,6 +142,13 @@ func NewWorktreeGitWithFeed(t *testing.T, f *portstest.WorktreeGitFixture, opts 
 		Publisher: o.publisher, Fetcher: workspaces.NewOriginFetcher(o.publisher, gitcredentialstest.New()).WithTimeout(o.timeout), Feed: feed,
 	})
 	at.PassInterval = clock.Pass
+	if o.codeOut != nil {
+		counting := &countingStaged{GitCode: code}
+		o.codeOut.StagedRuns = &counting.runs
+		o.codeOut.Code = workspaces.NewCode(workspaces.CodeDeps{
+			Workspaces: wsRepo, Repositories: repos, Git: counting, Files: filesystem.NewWorktreeFiles(), Staged: svc, Now: clock.Now,
+		})
+	}
 	if o.watched != nil {
 		// Every session runs; someone follows the project's feed.
 		wclock := &passingClock{now: time.Now()}
@@ -157,6 +165,29 @@ func NewWorktreeGitWithFeed(t *testing.T, f *portstest.WorktreeGitFixture, opts 
 	return svc, at, feed
 }
 
+// CodeHandle is a code browser over the fixture's workspaces, sharing the
+// worktree git state's observations.
+type CodeHandle struct {
+	Code *workspaces.Code
+	// StagedRuns counts the git runs that listed a worktree's staged files.
+	StagedRuns *atomic.Int64
+}
+
+type countingStaged struct {
+	ports.GitCode
+	runs atomic.Int64
+}
+
+func (c *countingStaged) StagedPaths(ctx context.Context, dir string) ([]string, error) {
+	c.runs.Add(1)
+	return c.GitCode.StagedPaths(ctx, dir)
+}
+
+// WithCode builds a code browser beside the service and hands it to h.
+func WithCode(h *CodeHandle) WorktreeGitOption {
+	return func(o *worktreeGitOptions) { o.codeOut = h }
+}
+
 // Watched drives a code watcher built over the fixture's sessions.
 type Watched struct {
 	// Poll looks at every worktree once, an interval after the last look;
@@ -169,6 +200,7 @@ type worktreeGitOptions struct {
 	timeout   time.Duration
 	reader    func(*gitcli.Code) ports.GitWorktreeReader
 	watched   *Watched
+	codeOut   *CodeHandle
 }
 
 // WithCodeWatcher builds a code watcher over the fixture's running sessions,

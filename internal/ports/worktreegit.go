@@ -2,6 +2,7 @@ package ports
 
 import (
 	"context"
+	"slices"
 	"time"
 
 	"operators-mcp/internal/domain"
@@ -58,6 +59,16 @@ type GitWorktreeStatus struct {
 	Ahead, Behind int
 	// Tracked, Untracked and Staged count the uncommitted files.
 	Tracked, Untracked, Staged int
+	// StagedPaths are the tracked files with a change in the index (a renamed
+	// one by its new path), in git's order.
+	StagedPaths []string
+}
+
+// Equal says two status passes read the same.
+func (s *GitWorktreeStatus) Equal(o *GitWorktreeStatus) bool {
+	return s.Head == o.Head && s.Branch == o.Branch && s.Upstream == o.Upstream && s.UpstreamGone == o.UpstreamGone &&
+		s.Ahead == o.Ahead && s.Behind == o.Behind && s.Tracked == o.Tracked && s.Untracked == o.Untracked &&
+		s.Staged == o.Staged && slices.Equal(s.StagedPaths, o.StagedPaths)
 }
 
 // GitBranchUpstream is a branch's upstream as its repository holds it.

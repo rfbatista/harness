@@ -158,3 +158,41 @@ func TestAReadOfARunningSessionsGitStateRunsNoGit(t *testing.T) {
 		}
 	}
 }
+
+// The staged files of a running session's working diff come from the
+// watcher's look: the diff runs no git for them. Without a watcher it does.
+func TestTheWorkingDiffOfARunningSessionTakesItsStagedFilesFromTheWatcher(t *testing.T) {
+	f := portstest.NewWorktreeGitFixture(t)
+	var (
+		watched workspacestest.Watched
+		code    workspacestest.CodeHandle
+	)
+	_, at, _ := workspacestest.NewWorktreeGitWithFeed(t, f, workspacestest.WithCodeWatcher(&watched), workspacestest.WithCode(&code))
+	ctx := context.Background()
+	read := func() *domain.CodeDiff {
+		t.Helper()
+		d, err := code.Code.CodeDiff(ctx, ports.CodeDiffQuery{WorkspaceID: at.Workspaces["ahead"], Scope: "working"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return d
+	}
+
+	// Nobody has looked yet: git lists them.
+	if d := read(); d.Sections == nil || d.Sections.Staged != 1 || code.StagedRuns.Load() != 1 {
+		t.Fatalf("unwatched: sections %+v, %d git runs for the staged files, want 1 staged and 1 run", d.Sections, code.StagedRuns.Load())
+	}
+	watched.Poll() // the first look records the status
+	runs := code.StagedRuns.Load()
+	d := read()
+	if code.StagedRuns.Load() != runs {
+		t.Errorf("a watched worktree's diff ran git for its staged files")
+	}
+	staged := map[string]bool{}
+	for _, fd := range d.Files {
+		staged[fd.Path] = fd.Staged
+	}
+	if d.Sections == nil || d.Sections.Staged != 1 || !staged["staged.txt"] || staged["tracked.txt"] {
+		t.Errorf("staged from the watcher: sections %+v, files %v", d.Sections, staged)
+	}
+}
