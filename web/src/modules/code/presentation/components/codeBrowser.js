@@ -24,6 +24,7 @@ import { emptyTree, entryAt, loadedOpenDirs, missingAncestors, openAction, revea
 import { mapView, zoneIndex, zoneTags } from "../../domain/zones.js";
 import { clearPending, drawLines, showPending } from "../render/lines.js";
 import { intersectionProximity } from "../render/proximity.js";
+import { changesList, mergeFiles } from "../changes.js";
 import {
   crumbsView,
   diffFileView,
@@ -33,7 +34,6 @@ import {
   scopesView,
   skeletonRows,
   sourceBarView,
-  summaryRowView,
   totalsView,
   treeRowView,
   truncatedNotice,
@@ -43,6 +43,9 @@ import {
 /** One frame spends at most this long drawing rows, a slice of this many at a time. */
 export const DRAW_BUDGET_MS = 8;
 export const SLICE_ROWS = 60;
+const NO_FILTER = Object.freeze([]);
+/** The Changes list before any diff is read. */
+const EMPTY_CHANGES = Object.freeze({ head: Object.freeze({ text: "", note: "", files: "", added: "", deleted: "" }), legend: NO_FILTER, sections: NO_FILTER, empty: true });
 /** The tree puts this many more rows in the page each frame, so a directory of a thousand entries opens without a stall. */
 export const TREE_CHUNK = 50;
 
@@ -88,6 +91,7 @@ export function codeBrowser({ gateway, highlighter, preparer, proximity = inters
   let pageRead = null;
   // The changed files' row views, kept while a file's data does not change: a selection redoes two.
   const rowViews = new Map();
+  let changesMemo = null;
   // The same for the sections: a page that comes in leaves the sections already on screen alone.
   const sectionViews = new Map();
   // And the tree's rows: the chunks that follow leave the rows already in the page alone.
@@ -207,6 +211,8 @@ export function codeBrowser({ gateway, highlighter, preparer, proximity = inters
     /** A re-read diff held while the reader is in the middle of the old one. */
     heldDiff: null,
     diffRev: 0,
+    /** The statuses pressed in the legend, for the scope they were pressed in. */
+    legendFilter: { scope: "", statuses: [] },
     /** A file's section is drawn again when its counter moves: its content changed, or its withheld diff was loaded. */
     fileRevs: {},
     /** The paths that changed in reads the reader has not been shown yet (a held diff). */
@@ -323,7 +329,7 @@ export function codeBrowser({ gateway, highlighter, preparer, proximity = inters
       return viewsView(this.route, { count: this.listDiff ? this.listDiff.fileCount : this.totalCount, kind: this.kind, current: this.view });
     },
     get scopes() {
-      return scopesView(this.route, { scope: this.scope, gone: this.gone, baseGone: this.baseGone, baseRef: this.baseRef });
+      return scopesView(this.route, { scope: this.scope, gone: this.gone, baseGone: this.baseGone, baseRef: this.baseRef, working: this.gone ? 0 : this.dirty });
     },
     get scope() {
       if (this.gone) return "branch";
@@ -385,23 +391,64 @@ export function codeBrowser({ gateway, highlighter, preparer, proximity = inters
     get listDiff() {
       return this.heldDiff ?? this.diff;
     },
-    get summaryRows() {
+    /** The Changes list: groups, the legend with its counts, the Working scope's sections (see presentation/changes.js). */
+    get changes() {
       const list = this.listDiff;
-      if (!list) return [];
+      if (!list) return EMPTY_CHANGES;
       if (list !== this.diff && heldSlugs.readId !== list.readId) heldSlugs = { readId: list.readId, slugs: Object.fromEntries(slugs(list.files.map((f) => f.path))) };
       const bySlug = list === this.diff ? this.diffSlugs : heldSlugs.slugs;
-      const fresh = new Set(this.freshPaths);
-      const current = this.currentFile;
-      return list.files.map((f) => {
-        const slug = bySlug[f.path];
-        const isFresh = fresh.has(f.path);
-        const isCurrent = f.path === current;
-        const hit = rowViews.get(f.path);
-        if (hit && hit.f === f && hit.slug === slug && hit.fresh === isFresh && hit.current === isCurrent) return hit.view;
-        const view = summaryRowView(f, { slug, current: isCurrent, fresh: isFresh });
-        rowViews.set(f.path, { f, slug, fresh: isFresh, current: isCurrent, view });
-        return view;
+      const filter = this.legendFilter.scope === this.scope ? this.legendFilter.statuses : NO_FILTER;
+      const memo = changesMemo;
+      if (memo && memo.list === list && memo.bySlug === bySlug && memo.filter === filter && memo.current === this.currentFile && memo.fresh === this.freshPaths && memo.scope === this.scope) return memo.model;
+      const model = changesList({
+        files: mergeFiles([list.files]),
+        totals: list,
+        scope: this.scope,
+        filter,
+        slugMap: new Map(Object.entries(bySlug)),
+        current: this.currentFile,
+        fresh: this.freshPaths,
+        href: (slug) => this.summaryHref(slug),
+        cache: rowViews,
       });
+      changesMemo = { list, bySlug, filter, current: this.currentFile, fresh: this.freshPaths, scope: this.scope, model };
+      return model;
+    },
+    /** Where a row of the list links; the History tab's list links into the Code tab instead. */
+    summaryHref(slug) {
+      return `#diff-${slug}`;
+    },
+    /** The rows of every group, flat, in list order. */
+    get summaryRows() {
+      return this.changes.sections.flatMap((s) => s.groups.flatMap((g) => g.rows));
+    },
+    /** The list's head: the whole diff's totals, and the note a pressed legend status adds. */
+    get changesHead() {
+      return this.changes.head;
+    },
+    get legend() {
+      return this.changes.legend;
+    },
+    get sections() {
+      return this.changes.sections;
+    },
+    /** The sections that carry a title (the Working scope's), each over its own groups. */
+    get titledSections() {
+      return this.sections.filter((s) => s.title);
+    },
+    /** The groups of a list with no sections, straight under the head. */
+    get plainGroups() {
+      return this.sections.filter((s) => !s.title).flatMap((s) => s.groups);
+    },
+    /** The workspace whose sync chip the source bar shows after the commit; none for a repository or a removed worktree. */
+    get syncWorkspace() {
+      return this.kind === "session" && !this.gone ? (this.source?.workspaceId ?? "") : "";
+    },
+    /** A legend status was pressed or released: the list shows the pressed statuses only. */
+    toggleLegend(status) {
+      const held = this.legendFilter.scope === this.scope ? this.legendFilter.statuses : [];
+      const statuses = held.includes(status) ? held.filter((s) => s !== status) : [...held, status];
+      this.legendFilter = { scope: this.scope, statuses };
     },
     get totals() {
       return this.listDiff ? totalsView(this.listDiff) : null;

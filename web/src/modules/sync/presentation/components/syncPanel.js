@@ -10,7 +10,7 @@
 // wiring's (they need a browser); the open state is never stored.
 
 import { syncChip } from "./syncChip.js";
-import { panelOf } from "../view.js";
+import { fetchedPhrase, panelOf } from "../view.js";
 
 /**
  * @param {{ store: import("./syncStore.js").SyncStore, actions: ReturnType<typeof import("./syncStore.js").syncActions>, now?: () => Date }} deps
@@ -21,6 +21,13 @@ export const syncPanel = (deps) => (workspaceId = "") => {
 
   const panel = {
     open: false,
+    init() {
+      actions.ensure(this.workspaceId);
+    },
+    /** The id of the panel's dialog (`.popup`), the one its chip opens. */
+    get dialogId() {
+      return `sync-panel-${this.workspaceId}`;
+    },
     /** The push question is showing in place of the Push button. */
     confirming: false,
 
@@ -113,6 +120,19 @@ export const syncPanel = (deps) => (workspaceId = "") => {
     },
     get refusalLinkText() {
       return this.refusal?.linkText ?? "";
+    },
+
+    /** The chip was pressed: the dialog (placement, focus trap, Escape and the phone's sheet are its) opens under it. */
+    openPanel(event) {
+      this.show();
+      this.$dispatch("dialog-open", { id: this.dialogId, anchor: event.currentTarget });
+    },
+    /** The dialog closed (Escape, a press outside, or Close). */
+    panelClosed(event) {
+      if (event.detail?.id === this.dialogId) this.close();
+    },
+    get fetchedPhrase() {
+      return fetchedPhrase(this.gitState?.fetchedAt ?? null, now(), this.gitState?.pushedAt ?? null);
     },
 
     toggle() {

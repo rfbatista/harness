@@ -66,8 +66,22 @@ export function syncActions({ gateway, store }) {
     }
   }
 
+  /** Workspaces already asked for, so a page of many chips reads each once. */
+  const asked = new Set();
+
   return {
     keep,
+
+    /**
+     * Reads a workspace's state when the page holds none for it: a chip the
+     * page's seed did not cover (the Code tab and the History page ask for
+     * their own worktree). Asked once; unreachable or gone leaves it without a chip.
+     */
+    async ensure(workspaceId) {
+      if (!workspaceId || store.byWorkspace[workspaceId] || asked.has(workspaceId)) return;
+      asked.add(workspaceId);
+      await reread(workspaceId);
+    },
 
     /** What is running for the workspace: "pushing", "fetching" or "". */
     busy(state) {

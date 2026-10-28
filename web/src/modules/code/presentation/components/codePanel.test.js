@@ -780,3 +780,39 @@ test("a directory of 1 000 entries puts its rows in the page a chunk at a time; 
 });
 
 const visibleCount = (panel) => visibleRows(panel.tree).length;
+
+test("the Working segment carries the uncommitted count, and no count when there is none or the worktree is gone", async () => {
+  const { panel } = await setup();
+  assert.deepEqual(panel.scopes.map((s) => [s.label, s.count]), [["All", ""], ["Branch", ""], ["Working", "2"]]);
+  panel.gone = true;
+  assert.equal(panel.scopes.find((s) => s.key === "working").count, "");
+});
+
+test("the Working scope draws Tracked changes and Untracked, each grouped by directory, with the head naming the new files", async () => {
+  const { panel } = await setup();
+  panel.clickScope({ preventDefault() {}, currentTarget: { getAttribute: () => null } }, "working");
+  await flush();
+  assert.deepEqual(panel.sections.map((s) => [s.title, s.count, s.groups.map((g) => [g.dir, g.rows.map((r) => r.name)])]), [
+    ["Tracked changes", 1, [["", ["README.md"]]]],
+    ["Untracked", 1, [["notes/", ["todo.md"]]]],
+  ]);
+  assert.equal(panel.changesHead.text, `2 files · ${panel.changesHead.text.split(" · ")[1]} · 1 new file`);
+});
+
+test("a legend toggle filters the list, is pressed, adds the head's note and is forgotten when the scope changes", async () => {
+  const { panel } = await setup();
+  assert.ok(panel.legend.length > 1 && panel.legend.every((b) => !b.pressed));
+  const before = panel.changesHead.text;
+  panel.toggleLegend("deleted");
+  assert.deepEqual(panel.summaryRows.map((r) => r.path), ["docs/old.md"]);
+  assert.equal(panel.legend.find((b) => b.status === "deleted").pressed, true);
+  assert.equal(panel.changesHead.text, before, "the totals stay the whole diff's");
+  assert.equal(panel.changesHead.note, "· showing deleted");
+  panel.toggleLegend("deleted");
+  assert.equal(panel.summaryRows.length, 5);
+  assert.equal(panel.changesHead.note, "");
+  panel.toggleLegend("deleted");
+  panel.clickScope({ preventDefault() {}, currentTarget: { getAttribute: () => null } }, "working");
+  await flush();
+  assert.equal(panel.changesHead.note, "");
+});

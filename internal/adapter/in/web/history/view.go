@@ -32,7 +32,25 @@ type PageView struct {
 	// PullRequest is the session branch's pull request control; nil on a
 	// repository's page, or when the server cannot open pull requests.
 	PullRequest *pullrequests.Panel
+	// Git is what the head needs to show the session branch's sync state
+	// (the browser's sync module paints it); nil on a repository's page.
+	Git *GitHead
 }
+
+// GitHead names the worktree whose git state the head shows beside the
+// branch: the chip, the second comparison with Fetch, and the panel.
+type GitHead struct {
+	ProjectID, WorkspaceID, Branch string
+}
+
+// gitSeed is the head's seed for the sync module: the project to follow.
+// The states are read by the browser (the page paints none yet).
+type gitSeed struct {
+	ProjectID string `json:"project_id"`
+	States    []any  `json:"git_states"`
+}
+
+func (g GitHead) seed() gitSeed { return gitSeed{ProjectID: g.ProjectID, States: []any{}} }
 
 // Crumb is one step back in the toolbar.
 type Crumb struct{ Label, Href string }
@@ -79,6 +97,9 @@ type CommitView struct {
 type WorkingView struct {
 	Summary string
 	Files   []FileView
+	// CodeHref is the session's Code tab at its Working scope: where the
+	// uncommitted changes are read, file by file.
+	CodeHref string
 	// Diff is the uncommitted patch (scope working); nil without a code browser.
 	Diff *code.View
 }

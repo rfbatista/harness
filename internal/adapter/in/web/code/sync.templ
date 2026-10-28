@@ -1,0 +1,119 @@
+package code
+
+// The sync module's markup where a worktree's code is shown: the chip after
+// the commit in the Code tab's source bar and the History head, and the panel
+// the chip opens. They bind the sync module's syncPanel component (read-only
+// getters over the page's shared store; see web/src/modules/sync), which the
+// design system's sync-state and sync-panel blocks style. The browser paints
+// them; until a state is held the slot is hidden.
+
+// SyncSlot is the chip as a button in a .sync-slot, with its panel. workspace
+// is an Alpine expression that names the worktree (a string literal on a page
+// that knows it, a property of the code view on the Code tab).
+templ SyncSlot(workspace string) {
+	<span class="sync-slot" x-data={ "syncPanel(" + workspace + ")" } x-show="shown" x-on:dialog-close.window="panelClosed($event)">
+		<button type="button" class="sync-state" aria-haspopup="dialog" x-bind:data-state="state" x-bind:data-loading="loadingAttr" x-bind:data-old="oldAttr" x-bind:aria-expanded="expandedAttr" x-bind:title="title" x-bind:aria-label="describe" x-on:click="openPanel($event)">
+			@syncStateBody(true)
+		</button>
+		@SyncPopup()
+	</span>
+}
+
+// SyncPopup is the sync panel: both comparisons, the age of the last fetch,
+// Fetch and Push (asked in place, never forced). A dialog in the top layer
+// under the chip (a bottom sheet on a phone) that traps Tab and closes on Esc.
+templ SyncPopup() {
+	<div class="[ popup sync-panel ]" role="dialog" aria-label="Git state" data-trap x-bind:id="dialogId" x-bind:aria-busy="busyAttr" x-data="popupDialog" x-on:dialog-open.window="openFrom($event)" x-on:dialog-dismiss.window="dismissFrom($event)">
+		<header><code class="branch" x-text="panelBranch"></code><code class="commit" x-text="commit"></code></header>
+		<div class="row">
+			<span class="name">vs base <code x-text="baseRef"></code></span>
+			@SyncBaseState()
+			<span class="hint" x-text="baseHint"></span>
+		</div>
+		<div class="row">
+			<span class="name">vs upstream <code x-text="upstreamRef"></code></span>
+			<span class="sync-state" x-bind:data-state="state" x-bind:data-loading="loadingAttr" x-bind:data-old="oldAttr">
+				@syncStateBody(false)
+			</span>
+			<span class="hint" x-text="upstreamHint"></span>
+		</div>
+		<template x-if="refusalIsBanner">
+			<div class="banner" data-tone="attention" role="status">
+				<div class="[ flow ]"><span x-text="refusalLead"></span> <a x-bind:href="refusalHref" x-text="refusalLinkText"></a></div>
+			</div>
+		</template>
+		<p class="fresh" x-bind:data-old="freshOldAttr">
+			<span x-text="freshLine"></span>
+			<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" data-fetch x-bind:aria-disabled="fetchDisabledAttr" x-on:click="fetch" x-text="fetchLabel"></button>
+		</p>
+		<template x-if="showsQuestion">
+			<div class="confirm-strip" data-confirm="push">
+				<h3 x-text="question"></h3>
+				<p>This publishes them to origin. It is never a force push.</p>
+				<div class="actions">
+					<button type="button" class="[ button ]" data-variant="primary" data-size="sm" data-initial-focus x-bind:aria-disabled="pushDisabledAttr" x-on:click="confirmPush" x-text="pushLabel"></button>
+					<button type="button" class="[ button ]" data-size="sm" x-on:click="cancelPush">Cancel</button>
+				</div>
+			</div>
+		</template>
+		<template x-if="refusalIsStrip">
+			<div class="confirm-strip" data-confirm="push-refused" data-tone="danger">
+				<h3 x-text="refusalLead"></h3>
+				<template x-if="refusalReason">
+					<p x-text="refusalReason"></p>
+				</template>
+				<span class="code" x-text="refusalCode"></span>
+				<div class="actions">
+					<button type="button" class="[ button ]" data-size="sm" x-on:click="dismissRefusal">Close</button>
+				</div>
+			</div>
+		</template>
+		<template x-if="showsPush">
+			<footer>
+				<button type="button" class="[ button ]" data-variant="primary" data-size="sm" data-push x-bind:aria-disabled="pushDisabledAttr" x-on:click="askPush" x-text="pushLabel"></button>
+			</footer>
+		</template>
+	</div>
+}
+
+// SyncState is the upstream chip as a span in a head line, bound to a
+// syncPanel (or syncChip) component on an ancestor.
+templ SyncState() {
+	<span class="sync-state" x-bind:data-state="state" x-bind:data-loading="loadingAttr" x-bind:data-old="oldAttr" x-bind:title="title" x-bind:aria-label="describe">
+		@syncStateBody(true)
+	</span>
+}
+
+// SyncBaseState is the base comparison's chip as a span in a head line.
+templ SyncBaseState() {
+	<span class="sync-state" x-bind:data-state="baseState" x-bind:data-loading="loadingAttr" x-bind:data-old="oldAttr">
+		<template x-if="baseHasCounts">
+			<span class="counts">
+				<span class="ahead"><span aria-hidden="true">↑</span><span x-text="baseAhead"></span><span class="visually-hidden">ahead</span></span>
+				<span class="behind"><span aria-hidden="true">↓</span><span x-text="baseBehind"></span><span class="visually-hidden">behind</span></span>
+			</span>
+		</template>
+		<template x-if="baseHasWord">
+			<span class="word" x-text="baseWord"></span>
+		</template>
+	</span>
+}
+
+// syncStateBody is what a chip holds: the remote's name (when named), the
+// counted arrows or the word.
+templ syncStateBody(named bool) {
+	if named {
+		<template x-if="hasUpstream">
+			<span class="upstream" x-text="upstream"></span>
+		</template>
+	}
+	<template x-if="hasCounts">
+		<span class="counts">
+			<span class="ahead"><span aria-hidden="true">↑</span><span x-text="ahead"></span><span class="visually-hidden">ahead</span></span>
+			<span class="behind"><span aria-hidden="true">↓</span><span x-text="behind"></span><span class="visually-hidden">behind</span></span>
+		</span>
+	</template>
+	<template x-if="hasWord">
+		<span class="word" x-text="word"></span>
+	</template>
+}

@@ -238,3 +238,46 @@ test("a state older than the one held never replaces it", async () => {
   assert.deepEqual([chip().state, chip().gitState.uncommitted.tracked], ["ahead", 9]);
   watch.destroy();
 });
+
+test("a panel for a workspace the page did not seed reads its state once, and a page with no state for it shows no chip", async () => {
+  const memory = memorySync({ workspaces: [{ state: makeState({ upstream: "ahead" }) }], now: () => clock });
+  const store = emptyStore();
+  const actions = syncActions({ gateway: memory.gateway, store });
+  const deps = { store, actions, now: () => clock };
+  const known = mount(() => syncPanel(deps)("ws1"), { el: {} }).instance;
+  const unknown = mount(() => syncPanel(deps)("ws9"), { el: {} }).instance;
+  assert.equal(known.has, false);
+  known.init();
+  unknown.init();
+  await flush();
+  assert.deepEqual([known.has, known.state, known.ahead], [true, "ahead", 3]);
+  assert.equal(unknown.has, false);
+  const again = mount(() => syncPanel(deps)("ws1"), { el: {} }).instance;
+  again.init();
+  await flush();
+  assert.equal(memory.calls.get, 2, "ws1 was read once, ws9 once; a state already held is not read again");
+});
+
+test("the panel opens from its chip through the dialog, and closing it for any reason forgets the push question", async () => {
+  const { panel, watch } = await setup();
+  const mounted = panel();
+  const p = mounted.instance;
+  const anchor = { id: "chip" };
+  p.openPanel({ currentTarget: anchor });
+  assert.deepEqual([p.open, p.expandedAttr], [true, "true"]);
+  assert.deepEqual(mounted.dispatched.at(-1), { name: "dialog-open", detail: { id: p.dialogId, anchor } });
+  p.askPush();
+  assert.equal(p.confirming, true);
+  p.panelClosed({ detail: { id: "somebody-else" } });
+  assert.equal(p.open, true, "another dialog's close is not ours");
+  p.panelClosed({ detail: { id: p.dialogId } });
+  assert.deepEqual([p.open, p.confirming, p.expandedAttr], [false, false, "false"]);
+  watch.destroy();
+});
+
+test("the History head's phrase says how long ago the remote was fetched, or that it never was", async () => {
+  const { panel, watch } = await setup({ states: [makeState({ upstream: "ahead", fetchedAt: new Date(clock.getTime() - 12 * 60000) }), makeState({ workspaceId: "ws2", upstream: "unknown", fetchedAt: null })] });
+  assert.equal(panel("ws1").instance.fetchedPhrase, "fetched 12 min ago");
+  assert.equal(panel("ws2").instance.fetchedPhrase, "not fetched yet");
+  watch.destroy();
+});

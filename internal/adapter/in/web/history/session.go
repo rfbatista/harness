@@ -23,6 +23,11 @@ func SessionHref(projectID, taskID, sessionID string) string {
 	return tasks.Href(projectID, taskID) + "/sessions/" + url.PathEscape(sessionID) + "/history"
 }
 
+// SessionWorkingHref is a session's Code tab at its Working scope.
+func SessionWorkingHref(projectID, taskID, sessionID string) string {
+	return tasks.Href(projectID, taskID) + "/sessions/" + url.PathEscape(sessionID) + "/code/changes?scope=working"
+}
+
 // Session serves GET /projects/{project}/tasks/{task}/sessions/{session}/history
 // and …/history/{commit}: the session's branch beside the one it was cut
 // from, how far it is ahead, and — as the graph's first row — what it has
@@ -95,6 +100,7 @@ func (h Handler) Session(w http.ResponseWriter, r *http.Request) error {
 		},
 		Heading: "Git history",
 		Meta:    branchMeta(hist),
+		Git:     &GitHead{ProjectID: project.ID, WorkspaceID: sess.WorkspaceID, Branch: hist.Branch},
 	}
 	if hist.Gone {
 		view.Notice = "This session's worktree was removed, so there is nothing uncommitted to show; its branch and commits are kept."
@@ -121,6 +127,7 @@ func (h Handler) Session(w http.ResponseWriter, r *http.Request) error {
 		view.Working = &WorkingRow{Href: base + "/" + workingID + q.encode(), Summary: changesSummary(hist.Changes), Current: open == workingID, Graph: *wg}
 		if open == workingID {
 			view.OpenWorking = workingView(hist.Changes)
+			view.OpenWorking.CodeHref = SessionWorkingHref(project.ID, task.ID, sess.ID)
 			if h.Code != nil {
 				v := code.Build(code.LoadWorking(ctx, h.Code, project.ID, hist.RepositoryID, sess.WorkspaceID))
 				view.OpenWorking.Diff = &v

@@ -208,7 +208,7 @@ export function viewsView(route, { count, kind, current }) {
 }
 
 /** The scope switch: All, Branch, Working, with the ones that cannot answer disabled and titled why. */
-export function scopesView(route, { scope, gone, baseGone, baseRef }) {
+export function scopesView(route, { scope, gone, baseGone, baseRef, working = 0 }) {
   const base = baseRef ? `The base branch ${baseRef} no longer exists` : "The base branch no longer exists";
   const why = {
     all: gone ? "The worktree was removed, so its uncommitted work is gone" : baseGone ? base : "",
@@ -222,6 +222,8 @@ export function scopesView(route, { scope, gone, baseGone, baseRef }) {
     current: s === scope ? "page" : null,
     disabled: why[s] ? "true" : null,
     title: why[s] || null,
+    /** The Working scope carries its count, so uncommitted work shows without opening it. */
+    count: s === "working" && working > 0 ? formatCount(working) : "",
   }));
 }
 

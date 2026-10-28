@@ -137,3 +137,63 @@ test("rows of a list that moved keep their slug anchors unique and in path order
   assert.equal(new Set(rows.map((r) => r.slug)).size, rows.length);
   assert.ok(rows.every((r) => r.href === `#diff-${r.slug}`));
 });
+
+test("the head keeps the whole diff's totals and, with a legend status pressed, ends with a note naming the pressed words", async () => {
+  const pages = await read(setup());
+  const files = mergeFiles(pages.map((p) => p.files));
+  const apply = (filter) => changesList({ files, totals: pages.at(-1), scope: "working", filter });
+  const none = apply([]);
+  assert.equal(none.head.note, "");
+  const one = apply(["untracked"]);
+  assert.equal(one.head.text, none.head.text, "the totals stay the whole diff's");
+  assert.equal(one.head.note, "· showing untracked");
+  assert.equal(apply(["deleted", "modified"]).head.note, "· showing modified and deleted", "in the legend's order");
+  assert.equal(apply(["untracked", "deleted", "modified"]).head.note, "· showing modified, deleted and untracked");
+});
+
+test("rows carry the current file, the fresh files and the slugs the diff sections use", async () => {
+  const pages = await read(setup());
+  const files = mergeFiles(pages.map((p) => p.files));
+  const slugMap = new Map(files.map((f, i) => [f.path, `s${i}`]));
+  const list = changesList({ files, totals: pages.at(-1), scope: "working", filter: [], slugMap, current: "README.md", fresh: ["web/new.js"] });
+  const rows = Object.fromEntries(list.sections.flatMap((s) => s.groups.flatMap((g) => g.rows)).map((r) => [r.path, r]));
+  assert.equal(rows["README.md"].current, "location");
+  assert.equal(rows["web/new.js"].current, null);
+  assert.equal(rows["web/new.js"].fresh, "");
+  assert.equal(rows["README.md"].fresh, null);
+  assert.equal(rows["README.md"].href, `#diff-${slugMap.get("README.md")}`);
+});
+
+test("a row is the same object while its file, slug, current and fresh state did not change (a selection redoes two)", async () => {
+  const pages = await read(setup());
+  const files = mergeFiles(pages.map((p) => p.files));
+  const cache = new Map();
+  const make = (current) => changesList({ files, totals: pages.at(-1), scope: "working", filter: [], current, cache });
+  const rowsOf = (l) => Object.fromEntries(l.sections.flatMap((s) => s.groups.flatMap((g) => g.rows)).map((r) => [r.path, r]));
+  const a = rowsOf(make("README.md"));
+  const b = rowsOf(make("web/new.js"));
+  const same = Object.keys(a).filter((p) => a[p] === b[p]);
+  assert.equal(same.length, Object.keys(a).length - 2);
+});
+
+test("without the server's counts the legend and sections count the files read", async () => {
+  const pages = await read(setup(), { scope: "working", limit: 50 });
+  const total = { ...pages.at(-1), counts: { modified: 0, added: 0, deleted: 0, renamed: 0, copied: 0, type_changed: 0, untracked: 0 }, sections: null };
+  const list = changesList({ files: mergeFiles(pages.map((p) => p.files)), totals: total, scope: "working", filter: [] });
+  assert.deepEqual(list.legend.map((b) => [b.letter, b.count]), [["M", 2], ["D", 1], ["U", 4]]);
+  assert.deepEqual(list.sections.map((s) => [s.key, s.count]), [["tracked", 3], ["untracked", 4]]);
+  assert.equal(list.head.text, `7 files · +${total.added} −${total.deleted} · 4 new files`);
+});
+
+test("a list can link its rows elsewhere than the diff's anchors", async () => {
+  const pages = await read(setup());
+  const files = mergeFiles(pages.map((p) => p.files));
+  const list = changesList({ files, totals: pages.at(-1), scope: "working", filter: [], href: (slug) => `/code/changes?scope=working#diff-${slug}` });
+  const rows = list.sections.flatMap((s) => s.groups.flatMap((g) => g.rows));
+  assert.ok(rows.every((r) => r.href === `/code/changes?scope=working#diff-${r.slug}`));
+});
+
+test("the files at the top level sit under a head named ./ and the other groups under their directory", async () => {
+  const list = model(await read(setup()));
+  assert.deepEqual(list.sections[0].groups.map((g) => g.label), ["./", "internal/code/", "internal/feed/"]);
+});
