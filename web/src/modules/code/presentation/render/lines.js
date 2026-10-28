@@ -13,42 +13,10 @@
 // once, and the rows on screen are redrawn with their tokens.
 
 import { VIRTUALISE_FROM, inRange, windowOf } from "../../domain/lines.js";
-import { lineAnchor, sidesOf, splitRows } from "../../domain/diff.js";
+import { lineAnchor } from "../../domain/diff.js";
+import { diffRows, fileRows, tokenise } from "../../domain/rows.js";
 
-/**
- * @typedef {{ type: "line", n: number, text: string }} FileRow
- * @typedef {{ type: "hunk", range: string, header: string }} HunkRow
- * @typedef {{ type: "diff", kind: string, old: number|null, new: number|null, text: string, noNewline: boolean, tokens?: any }} DiffRow
- * @typedef {{ type: "split", left: DiffRow|null, right: DiffRow|null }} SplitRow
- * @typedef {FileRow|HunkRow|DiffRow|SplitRow} Row
- */
-
-/** Rows of a file: one per line, numbered from 1. */
-export function fileRows(lines) {
-  return lines.map((text, i) => ({ type: "line", n: i + 1, text }));
-}
-
-const rangeOf = (h) => `@@ -${h.oldStart},${h.oldLines} +${h.newStart},${h.newLines} @@`;
-
-/** Rows of a file diff's hunks, unified or split. */
-export function diffRows(hunks, layout = "unified") {
-  const rows = [];
-  for (const h of hunks ?? []) {
-    rows.push({ type: "hunk", range: rangeOf(h), header: h.header });
-    if (layout === "split") {
-      for (const { left, right } of splitRows(h.lines)) {
-        const l = left && toDiffRow(left);
-        // A context line is one row on both sides, so it is highlighted once.
-        rows.push({ type: "split", left: l, right: right === left ? l : right && toDiffRow(right) });
-      }
-    } else {
-      for (const l of h.lines) rows.push(toDiffRow(l));
-    }
-  }
-  return rows;
-}
-
-const toDiffRow = (l) => ({ type: "diff", kind: l.kind, old: l.old, new: l.new, text: l.text, noNewline: l.noNewline });
+export { diffRows, fileRows };
 
 // ── row elements ─────────────────────────────────────────────────────────
 
@@ -96,7 +64,7 @@ function gutter(doc, ...nums) {
 
 /**
  * @param {Document} doc
- * @param {Row} row
+ * @param {import("../../domain/rows.js").Row} row
  * @param {{ slug: string, tokens: (row: Row) => any, target: import("../../domain/lines.js").LineRange|null, targetSide: string }} ctx
  */
 function rowElement(doc, row, ctx) {
@@ -165,7 +133,7 @@ function targets(ctx, row) {
  * scrolls.
  * @param {HTMLElement} el  the .code-lines element (empty; the caller sets --digits and data attributes)
  * @param {object} opts
- * @param {Row[]} opts.rows
+ * @param {import("../../domain/rows.js").Row[]} opts.rows
  * @param {HTMLElement|null} opts.scroller  what scrolls (the code view's .scroll, or the diff's main side)
  * @param {string} [opts.slug]               a diff file's slug, for its line anchors
  * @param {import("../../domain/ports.js").Highlighter} [opts.highlighter]
@@ -182,7 +150,7 @@ export function drawLines(el, { rows, scroller = null, slug = "", highlighter = 
     slug,
     target,
     targetSide,
-    tokens: (row) => tokens.get(row) ?? null,
+    tokens: (row) => row.tokens ?? tokens.get(row) ?? null,
   };
   const windowed = virtual && rows.length > VIRTUALISE_FROM && scroller !== null;
   let tops = null; // prefix sums of row heights, windowed only
@@ -303,42 +271,6 @@ export function drawLines(el, { rows, scroller = null, slug = "", highlighter = 
       scroller?.removeEventListener("scroll", onScroll);
     },
   };
-}
-
-/**
- * Tokens per row: a file's lines in one pass; a diff's hunks per side (the
- * new side for context and additions, the old side for deletions).
- * @returns {Map<object, any>}
- */
-function tokenise(rows, highlighter, language) {
-  const out = new Map();
-  if (rows.every((r) => r.type === "line")) {
-    const lines = highlighter.tokenize(language, rows.map((r) => r.text).join("\n"));
-    rows.forEach((r, i) => out.set(r, lines[i] ?? null));
-    return out;
-  }
-  // Group the diff rows back into hunks to highlight each side as text.
-  let hunk = [];
-  const flush = () => {
-    if (!hunk.length) return;
-    const lines = hunk.map((d) => ({ kind: d.kind, text: d.text }));
-    const { newText, oldText, at } = sidesOf({ lines });
-    const newT = highlighter.tokenize(language, newText);
-    const oldT = highlighter.tokenize(language, oldText);
-    hunk.forEach((d, i) => out.set(d, d.kind === "del" ? oldT[at[i].old] : newT[at[i].new]));
-    hunk = [];
-  };
-  for (const r of rows) {
-    if (r.type === "hunk") flush();
-    else if (r.type === "diff") hunk.push(r);
-    else if (r.type === "split") {
-      // Old side then new side, in order, without repeating a context line.
-      if (r.left) hunk.push(r.left);
-      if (r.right && r.right !== r.left) hunk.push(r.right);
-    }
-  }
-  flush();
-  return out;
 }
 
 function defaultIdle(cb) {

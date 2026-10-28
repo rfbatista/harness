@@ -24,6 +24,10 @@ export function codeGateway(api, feed) {
     async diff(q, signal) {
       return toDiff(await api.get("/code/diff", diffQuery(q), signal));
     },
+    /** The diff as the server answered it: the code worker maps it, not this thread. */
+    async diffPage(q, signal) {
+      return api.get("/code/diff", diffQuery(q), signal);
+    },
     async map(src, signal) {
       return toMap(await api.get("/code/map", sourceQuery(src), signal));
     },

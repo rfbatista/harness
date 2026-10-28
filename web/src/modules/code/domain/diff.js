@@ -60,7 +60,7 @@ export const notLoaded = (f) => f.withheld === "too_large";
  * @returns {{ reason: string, title: string, detail: string, action: string } | null}
  */
 export function withheldCopy(f, { size, asked = false } = {}) {
-  if (f.withheld === "binary" || (f.binary && !f.hunks)) {
+  if (f.withheld === "binary" || (f.binary && !(f.hasHunks ?? !!f.hunks))) {
     return {
       reason: "binary",
       title: "Binary file",

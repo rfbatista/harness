@@ -12,16 +12,17 @@
 import { Codes, codeOf } from "../../../../shared/domain/errors.js";
 import { FeedStatus } from "../../../../shared/domain/feed.js";
 import { baseName, changeMark } from "../../domain/code.js";
-import { parseDiffHash, rowOfLine, rowOfNewLine, slugs } from "../../domain/diff.js";
+import { parseDiffHash, slugs } from "../../domain/diff.js";
+import { fileRows, rowOfLineIn } from "../../domain/rows.js";
 import { problemOf } from "../../domain/errors.js";
 import { clampSplit, defaultSplit, parseSplit, splitBounds, stepSplit } from "../../domain/split.js";
-import { clampRange, parseRange, parseRangeHash, rangeHash, scrollTopFor, splitLines, WRAP_UP_TO } from "../../domain/lines.js";
+import { clampRange, parseRange, parseRangeHash, rangeHash, scrollTopFor, SPLIT_UP_TO, splitLines, WRAP_UP_TO } from "../../domain/lines.js";
 import { markParts, rank, shiftRanges } from "../../domain/fuzzy.js";
 import { ANNOUNCE_CHANGED, FIXED, GONE, onChange, onEnded, onReload } from "../../domain/live.js";
 import { PERMALINK_TOAST, hrefOf, parseHref, permalink, repositoryHref } from "../../domain/routes.js";
 import { emptyTree, loadedOpenDirs, missingAncestors, openAction, revealPath, treeKey, typeAhead, visibleRows, withBusy, withExpanded, withLevel } from "../../domain/tree.js";
 import { mapView, zoneIndex, zoneTags } from "../../domain/zones.js";
-import { diffRows, drawLines, fileRows } from "../render/lines.js";
+import { drawLines } from "../render/lines.js";
 import {
   crumbsView,
   diffFileView,
@@ -41,15 +42,14 @@ import {
 /** Above these a file is shown plain (approved limit). */
 export const HIGHLIGHT_BYTES = 256 * 1024;
 export const HIGHLIGHT_LINES = 10_000;
-/** Split renders a file of at most this many changed lines. */
-export const SPLIT_UP_TO = 3_000;
 const TYPEAHEAD_MS = 500;
 const SEQUENCE_MS = 1_500;
 
 /**
  * @typedef {object} BrowserDeps
  * @property {import("../../domain/ports.js").CodeGateway} gateway
- * @property {import("../../domain/ports.js").Highlighter} highlighter
+ * @property {import("../../domain/ports.js").Highlighter} highlighter  the Files view's; a diff's is highlighted by the code worker
+ * @property {import("../../domain/ports.js").DiffPreparer} preparer
  * @property {import("../../../../shared/infrastructure/storage.js").Preferences} prefs
  * @property {{ pushState: Function, replaceState: Function }} [history]
  * @property {{ pathname: string, search: string, hash: string }} [location]
@@ -63,9 +63,27 @@ const SEQUENCE_MS = 1_500;
  * "repository"; the owner sets the identity fields before calling start().
  * @param {BrowserDeps} deps
  */
-export function codeBrowser({ gateway, highlighter, prefs, history = globalThis.history, location = globalThis.location, copy = defaultCopy, idle, setTimeout = globalThis.setTimeout.bind(globalThis) }) {
+export function codeBrowser({ gateway, highlighter, preparer, prefs, history = globalThis.history, location = globalThis.location, copy = defaultCopy, idle, setTimeout = globalThis.setTimeout.bind(globalThis) }) {
   // Not reactive: controllers of drawn lines, in-flight requests, timers.
   const drawn = new Map();
+  // The rows the code worker made for each diff read, by the read's id (Alpine
+  // wraps the diff in a proxy, so the object itself is no key).
+  /** @type {Map<number, { split: boolean, files: Map<string, import("../../domain/ports.js").PreparedFile> }>} */
+  const rowsByRead = new Map();
+  let reads = 0;
+  const rowsOf = {
+    get: (diff) => rowsByRead.get(diff?.readId),
+    /** Keeps the rows of a diff, and drops those of reads nobody shows any more. */
+    set(diff, sets, keep = []) {
+      rowsByRead.set(diff.readId, sets);
+      this.prune([diff, ...keep]);
+    },
+    /** Reads are numbered as they complete, and a read that completes later is shown later: only older ones than what is shown can go. */
+    prune(shown) {
+      const lowest = Math.min(...shown.map((d) => d?.readId).filter(Number.isInteger));
+      for (const id of rowsByRead.keys()) if (id < lowest) rowsByRead.delete(id);
+    },
+  };
   let aborts = new Map();
   let zones = new Map();
   let unfollow = () => {};
@@ -109,6 +127,10 @@ export function codeBrowser({ gateway, highlighter, prefs, history = globalThis.
     /** A re-read diff held while the reader is in the middle of the old one. */
     heldDiff: null,
     diffRev: 0,
+    /** The layout the open diff's rows were made for (the worker makes them; a switch waits for it). */
+    rowsSplit: false,
+    /** The first paint's diff page is being prepared. */
+    seedPending: false,
     diffSlugs: {},
     collapsed: {},
     busyFiles: {},
@@ -251,12 +273,13 @@ export function codeBrowser({ gateway, highlighter, prefs, history = globalThis.
     // ── the main side ────────────────────────────────────────────────────
     get diffFiles() {
       if (!this.diff) return [];
-      const splitAllowed = this.layout === "split" && !this.narrow;
-      return this.diff.files.map((f) =>
-        diffFileView(f, {
+      const sets = rowsOf.get(this.diff);
+      return this.diff.files.map((f) => {
+        const split = !!sets?.files.get(f.path)?.split;
+        return diffFileView(f, {
           slug: this.diffSlugs[f.path],
           // The layout changes the rows: a new key draws them again.
-          rev: `${this.diffRev}:${splitAllowed && f.added + f.deleted <= SPLIT_UP_TO ? "split" : "unified"}`,
+          rev: `${this.diffRev}:${this.rowsSplit ? "split" : "unified"}`,
           collapsed: !!this.collapsed[f.path],
           busy: !!this.busyFiles[f.path],
           asked: !!this.askedFiles[f.path],
@@ -264,9 +287,13 @@ export function codeBrowser({ gateway, highlighter, prefs, history = globalThis.
           diff: this.diff,
           viewHref: this.viewFileHref(f.path),
           size: undefined,
-          splitAllowed: splitAllowed && (f.added + f.deleted) <= SPLIT_UP_TO,
-        }),
-      );
+          splitAllowed: split,
+        });
+      });
+    },
+    /** Whether the layout switch and the window ask for side by side rows. */
+    get wantSplit() {
+      return this.layout === "split" && !this.narrow;
     },
     get truncatedDiff() {
       return !!this.diff?.truncated;
@@ -546,11 +573,24 @@ export function codeBrowser({ gateway, highlighter, prefs, history = globalThis.
       if (seed.trees[0]) this.commit = seed.trees[0].source.commit;
       // A repository page's ref as the server resolved it (its checkout's branch by default).
       if (this.kind === "repository" && !this.branch) this.branch = (seed.trees[0] ?? seed.file ?? seed.map)?.source.ref ?? "";
-      if (seed.diff) this.setDiff(seed.diff);
+      if (seed.diffPage) this.adoptSeed(seed.diffPage);
       if (seed.file) this.setFile(seed.file);
       if (seed.error) this.fail(seed.error, { path: seed.route.path, ref: seed.route.ref });
       if (seed.route.view === "files" && seed.route.path && !seed.file && !seed.error) this.openPath(seed.route.path, { push: false });
       this.readHash(location?.hash ?? "");
+    },
+
+    /** The server painted the first diff page: the worker prepares it, no first read. */
+    adoptSeed(page) {
+      this.seedPending = true;
+      this.loadingDiff = true;
+      this.prepareDiff(page)
+        .then((diff) => this.setDiff(diff))
+        .catch((err) => this.fail(err, {}))
+        .finally(() => {
+          this.seedPending = false;
+          this.loadingDiff = false;
+        });
     },
 
     stop() {
@@ -602,11 +642,42 @@ export function codeBrowser({ gateway, highlighter, prefs, history = globalThis.
       this.collapsed = this.diff ? Object.fromEntries(diff.files.filter((f) => keep[f.path] ?? collapsed[f.path]).map((f) => [f.path, true])) : collapsed;
       this.diff = diff;
       this.diffRev += 1;
+      this.rowsSplit = rowsOf.get(diff)?.split ?? this.wantSplit;
+      rowsOf.prune([diff, this.heldDiff]);
       this.askedFiles = {};
       if (diff.source.gone) this.markGone();
       if (!this.commit || diff.source.kind === "workspace") this.commit = diff.source.commit;
       if (!this.currentFile || !diff.files.some((f) => f.path === this.currentFile)) this.currentFile = diff.files[0]?.path ?? "";
       this.countFiles();
+      this.syncRows();
+    },
+
+    /** Reads a diff as the server answers it and has the code worker prepare it; its rows are kept beside it. */
+    async prepareDiff(raw) {
+      const files = new Map();
+      const split = this.wantSplit;
+      const read = await preparer.prepare(raw, { split }, { onFile: (f) => files.set(f.path, f) });
+      const diff = Object.freeze({ ...read, readId: ++reads });
+      rowsByRead.set(diff.readId, { split, files });
+      return diff;
+    },
+
+    /** The open diff's rows follow the layout: asked of the worker again when they were made for the other one. */
+    async syncRows() {
+      const want = this.wantSplit;
+      const open = this.diff;
+      const sets = open && rowsOf.get(open);
+      // A held diff is not the worker's last read; its rows stay as they are until it is applied.
+      if (!sets || this.heldDiff || sets.split === want) return;
+      const files = new Map(sets.files);
+      try {
+        await preparer.relayout({ split: want }, { onFile: (f) => open.files.some((x) => x.path === f.path) && files.set(f.path, f) });
+      } catch {
+        return;
+      }
+      if (this.diff !== open || this.wantSplit !== want) return;
+      rowsOf.set(open, { split: want, files }, [this.heldDiff]);
+      this.rowsSplit = want;
     },
 
     /** The session's tab badge follows the changed files. */
@@ -627,8 +698,7 @@ export function codeBrowser({ gateway, highlighter, prefs, history = globalThis.
       const signal = this.request("diff");
       if (!quiet) this.loadingDiff = true;
       try {
-        const diff = await gateway.diff({ workspaceId: this.source.workspaceId, scope: this.scope }, signal);
-        return diff;
+        return await this.prepareDiff(await gateway.diffPage({ workspaceId: this.source.workspaceId, scope: this.scope }, signal));
       } catch (err) {
         if (err?.name === "AbortError") return null;
         if (codeOf(err) === Codes.WORKSPACE_MISSING) {
@@ -647,6 +717,7 @@ export function codeBrowser({ gateway, highlighter, prefs, history = globalThis.
     },
 
     async showDiff() {
+      if (this.seedPending) return;
       const diff = await this.loadDiff();
       if (diff) {
         this.setDiff(diff);
@@ -718,7 +789,7 @@ export function codeBrowser({ gateway, highlighter, prefs, history = globalThis.
     },
     /** Loads what the view on screen needs. */
     enterView() {
-      if (this.showingChanges && !this.diff) this.showDiff();
+      if (this.showingChanges && !this.diff && !this.seedPending) this.showDiff();
       if (this.showingFiles && !this.tree.levels[""] && !this.gone) this.loadDirectory("");
       if (this.showingMap || this.showingFiles || this.showingChanges) this.ensureMap();
     },
@@ -923,6 +994,7 @@ export function codeBrowser({ gateway, highlighter, prefs, history = globalThis.
       if (this.narrow && layout === "split") return;
       this.layout = layout;
       prefs.set("code.layout", layout === "split" ? "split" : "unified");
+      this.syncRows();
     },
     toggleWrap() {
       if (!this.canWrap) return;
@@ -936,10 +1008,13 @@ export function codeBrowser({ gateway, highlighter, prefs, history = globalThis.
       this.busyFiles = { ...this.busyFiles, [path]: true };
       try {
         const q = this.kind === "history" ? this.historyQuery() : { workspaceId: this.source.workspaceId, scope: this.scope };
-        const one = await gateway.diff({ ...q, path }, this.request(`diff:${path}`));
+        const one = await this.prepareDiff(await gateway.diffPage({ ...q, path }, this.request(`diff:${path}`)));
         const f = one.files[0];
         if (f) {
-          this.diff = Object.freeze({ ...this.diff, files: Object.freeze(this.diff.files.map((x) => (x.path === path ? f : x))) });
+          const sets = rowsOf.get(this.diff);
+          const next = Object.freeze({ ...this.diff, readId: ++reads, files: Object.freeze(this.diff.files.map((x) => (x.path === path ? f : x))) });
+          rowsOf.set(next, { split: sets.split, files: new Map([...sets.files, ...rowsOf.get(one).files]) }, [this.heldDiff]);
+          this.diff = next;
           this.diffRev += 1;
           if (f.withheld) this.askedFiles = { ...this.askedFiles, [path]: true };
         }
@@ -957,17 +1032,15 @@ export function codeBrowser({ gateway, highlighter, prefs, history = globalThis.
 
     /** Draws a file's hunks into its .code-lines (x-init on the element). */
     drawHunks(el, path) {
-      const f = this.diff?.files.find((x) => x.path === path);
+      const prepared = rowsOf.get(this.diff)?.files.get(path);
       drawn.get(`diff:${path}`)?.destroy();
-      if (!f?.hunks) return;
-      const split = el.dataset.layout === "split";
+      if (!prepared) return;
       const ctl = drawLines(el, {
-        rows: diffRows(f.hunks, split ? "split" : "unified"),
+        rows: prepared.rows,
         scroller: this.mainScroller() ?? null,
         slug: this.diffSlugs[path],
-        highlighter,
-        language: f.language,
-        virtual: !split,
+        // The worker put the tokens on the rows.
+        virtual: !prepared.split,
         target: this.currentFile === path ? this.target : null,
         targetSide: this.targetSide,
         idle,
@@ -1026,8 +1099,7 @@ export function codeBrowser({ gateway, highlighter, prefs, history = globalThis.
       let top = topIn(main, section);
       if (line) {
         const ctl = drawn.get(`diff:${path}`);
-        const f = this.diff.files.find((x) => x.path === path);
-        const row = rowOfLine(f?.hunks, side, line);
+        const row = rowOfLineIn(rowsOf.get(this.diff)?.files.get(path)?.rows ?? [], side, line);
         if (ctl && row >= 0) top = ctl.blockOffset() + ctl.offsetOf(row) - Math.floor(main.clientHeight / 3);
       }
       main.scrollTop = Math.max(0, top);
@@ -1277,7 +1349,8 @@ export function codeBrowser({ gateway, highlighter, prefs, history = globalThis.
       }
       if (this.showingChanges) {
         const f = this.diff?.files.find((x) => x.path === this.currentFile);
-        if (!f?.hunks || rowOfNewLine(f.hunks, range.start) < 0) {
+        const rows = rowsOf.get(this.diff)?.files.get(this.currentFile)?.rows;
+        if (!f?.hasHunks || !rows || rowOfLineIn(rows, "R", range.start) < 0) {
           this.paletteNote = `Line ${range.start} is not in the diff of ${baseName(this.currentFile)}.`;
           return;
         }
@@ -1465,7 +1538,10 @@ export function codeBrowser({ gateway, highlighter, prefs, history = globalThis.
       this.layoutWidth = width;
       this.layoutRem = rem;
       const narrow = width < 44 * rem;
-      if (narrow !== this.narrow) this.narrow = narrow;
+      if (narrow !== this.narrow) {
+        this.narrow = narrow;
+        this.syncRows();
+      }
     },
   };
 }

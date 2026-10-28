@@ -101,7 +101,7 @@ export const codePanel = (deps) => (/** @type {PanelInput} */ panel) => {
       this.watchWidth();
       // The diff counts the badge whatever the view; read it once the page is idle.
       const first = () => {
-        if (!this.diff) this.showDiff();
+        if (!this.diff && !this.seedPending) this.showDiff();
         this.readWorking();
         if (this.shown) this.enterView();
       };

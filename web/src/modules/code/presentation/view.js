@@ -105,11 +105,11 @@ export function diffFileView(f, { slug, rev, collapsed, busy, asked, zones, diff
     expanded: String(!collapsed),
     toggleLabel: `${collapsed ? "Expand" : "Collapse"} ${name}`,
     busy: busy ? "true" : null,
-    hasLines: !!f.hunks && !collapsed,
+    hasLines: (f.hasHunks ?? !!f.hunks) && !collapsed,
     withheld,
     command: withheld?.action === "view" ? gitCommand({ scope: diff.scope, base: diff.base, head: diff.source.commit, path: f.path }) : "",
     viewHref: canView ? viewHref : "",
-    digitsStyle: `--digits:${digits(largestLine(f.hunks))}`,
+    digitsStyle: `--digits:${digits(f.largest ?? largestLine(f.hunks))}`,
     layout: splitAllowed ? "split" : null,
   };
 }

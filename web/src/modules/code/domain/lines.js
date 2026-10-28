@@ -91,3 +91,8 @@ export function windowOf({ count, rowHeight, scrollTop, viewport, offset = 0, ov
 export function scrollTopFor({ index, rowHeight, viewport, offset = 0 }) {
   return Math.max(0, offset + index * rowHeight - Math.floor(viewport / 3));
 }
+
+/** Split renders a file of at most this many changed lines. */
+export const SPLIT_UP_TO = 3_000;
+/** A diff file with more rows than this is drawn plain: one huge file must not hold the worker. */
+export const HIGHLIGHT_DIFF_ROWS = 10_000;

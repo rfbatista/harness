@@ -384,6 +384,10 @@ export function memoryCode(world) {
       await pause("diff", { q });
       return toDiff(diff(q));
     },
+    async diffPage(q) {
+      await pause("diff", { q });
+      return diff(q);
+    },
     async map(src) {
       await pause("map", { src });
       return toMap(map(src));

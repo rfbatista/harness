@@ -85,7 +85,8 @@ func TestBrowserCodeRespectsTheLayers(t *testing.T) {
 			if to.layer == "testing" && !isTest && from.layer != "testing" {
 				fail("only tests import testing/")
 			}
-			if isTest || rel == "main.js" {
+			// main.js and the code worker are composition roots: each wires modules for its own realm.
+			if isTest || rel == "main.js" || rel == "code-worker.js" {
 				continue
 			}
 			if from.module != to.module && to.module != "shared" {

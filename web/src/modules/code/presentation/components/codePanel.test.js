@@ -3,6 +3,7 @@ import { mount } from "../../../../shared/testing/alpine.js";
 import { flush } from "../../../../shared/testing/doubles.js";
 import { assert, file, test } from "../../../../shared/testing/test.js";
 import { memoryCode } from "../../infrastructure/memory-gateway.js";
+import { inlinePreparer } from "../../infrastructure/preparer.js";
 import { plainHighlighter } from "../../infrastructure/plain-highlighter.js";
 import { makeWorld, manyChangedFilesWorld } from "../../testing/fixtures.js";
 import { finderRows } from "./codeBrowser.js";
@@ -20,7 +21,7 @@ async function setup({ world = makeWorld(), live = true, shown = true, prefs = m
   const memory = memoryCode(world);
   const pushed = [];
   const history = { pushState: (_s, _t, url) => pushed.push(url), replaceState: (_s, _t, url) => pushed.push(url) };
-  const deps = { gateway: memory.gateway, highlighter: plainHighlighter(), prefs, history, location: { pathname: "/", search: "", hash: "" }, idle: (cb) => cb() };
+  const deps = { gateway: memory.gateway, highlighter: plainHighlighter(), preparer: inlinePreparer(plainHighlighter()), prefs, history, location: { pathname: "/", search: "", hash: "" }, idle: (cb) => cb() };
   const el = document.createElement("section");
   const mounted = mount(
     () => codePanel(deps)({
@@ -161,7 +162,10 @@ test("Load diff asks for one withheld file with path= and swaps its hunks in", a
   const f = panel.diffFiles.find((x) => x.path === "README.md");
   assert.equal(f.withheld.action, "load");
   await panel.loadWithheld("README.md");
-  assert.ok(panel.diff.files.find((x) => x.path === "README.md").hunks.length > 0);
+  const loaded = panel.diff.files.find((x) => x.path === "README.md");
+  assert.deepEqual([loaded.hasHunks, loaded.withheld], [true, null]);
+  assert.equal(panel.diffFiles.find((x) => x.path === "README.md").hasLines, true);
+  assert.equal(panel.diffFiles.find((x) => x.path === "docs/old.md").hasLines, false, "the other files stay withheld");
 });
 
 test("errors from a read show their code and next step", async () => {
