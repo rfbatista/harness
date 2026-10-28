@@ -1,7 +1,10 @@
 package httpapi
 
 import (
+	"errors"
 	"net/http"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/labstack/echo/v4"
@@ -111,4 +114,46 @@ func (h *Handler) handleSetStatusCheck(c echo.Context) error {
 		return err
 	}
 	return c.JSON(http.StatusOK, map[string]any{"status_check": check})
+}
+
+// handleBringSessionsUnder moves the selected sessions of a task under its
+// running architect (ADR 0045; "Contract: Harness server ↔ Web UI — bring
+// sessions under the architect", §3).
+func (h *Handler) handleBringSessionsUnder(c echo.Context) error {
+	if err := h.channelOr503(); err != nil {
+		return err
+	}
+	var in struct {
+		TicketID   string   `json:"ticket_id"`
+		SessionIDs []string `json:"session_ids"`
+	}
+	if err := bindJSON(c, &in); err != nil {
+		return err
+	}
+	if in.TicketID == "" {
+		return invalidInput("INVALID_INPUT: ticket_id is required")
+	}
+	if len(in.SessionIDs) == 0 || slices.Contains(in.SessionIDs, "") {
+		return invalidInput("INVALID_INPUT: session_ids needs at least one session id")
+	}
+	res, err := h.channel.BringSessionsUnder(c.Request().Context(), in.TicketID, in.SessionIDs)
+	if err != nil {
+		var se *domain.StructuredError
+		if errors.As(err, &se) && se.Code == "NO_ARCHITECT" {
+			// Elsewhere a missing architect is a missing thing; here the task
+			// exists and its state is in the way.
+			writeCoded(c, http.StatusConflict, err, se)
+			return nil
+		}
+		if errors.As(err, &se) && se.Code == "TICKET_NOT_FOUND" && !strings.HasPrefix(se.Message, se.Code) {
+			// This contract's messages start with their code.
+			writeCoded(c, http.StatusNotFound, err, &domain.StructuredError{Code: se.Code, Message: "TICKET_NOT_FOUND: " + se.Message})
+			return nil
+		}
+		return err
+	}
+	if res.Skipped == nil {
+		res.Skipped = []ports.BringUnderSkipped{}
+	}
+	return c.JSON(http.StatusOK, res)
 }

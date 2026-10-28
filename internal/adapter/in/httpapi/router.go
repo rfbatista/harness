@@ -262,6 +262,7 @@ func NewRouter(h *Handler, opts ...Option) *echo.Echo {
 	g.GET("/review_requests", h.handleReviewRequests)
 	g.POST("/respond_review_request", h.handleRespondReviewRequest)
 	g.POST("/set_status_check", h.handleSetStatusCheck)
+	g.POST("/bring_sessions_under", h.handleBringSessionsUnder)
 
 	// tickets & documents
 	g.GET("/list_tickets", h.handleListTickets)

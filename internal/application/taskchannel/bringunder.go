@@ -67,7 +67,7 @@ func (s *Service) BringSessionsUnder(ctx context.Context, taskID string, session
 	onTask := s.taskSessions(ctx, taskID)
 	arch := runningArchitect(onTask)
 	if arch == nil {
-		return nil, errNoArchitect
+		return nil, &domain.StructuredError{Code: "NO_ARCHITECT", Message: "NO_ARCHITECT: this task has no running architect session"}
 	}
 	plan, err := s.split(ctx, taskID, arch, onTask, sessionIDs)
 	if err != nil {
