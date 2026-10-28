@@ -1,0 +1,88 @@
+/*
+ * Sync panel — the popover a sync-state button opens: both comparisons of one
+ * worktree (its base and its upstream), how old the last fetch is, Fetch and
+ * Push. A .popup (popup.css) in the top layer under the chip, 24rem wide;
+ * below 48rem it takes data-sheet (sheet.css). Push is in the footer only when
+ * there is something to push; it opens a confirm-strip naming the remote
+ * branch and the commit count, never a modal.
+ * <div class="popup sync-panel" role="dialog" aria-label="Git state" popover="manual">
+ *   <header><code class="branch">agent/x</code><code class="commit">ab6f51b</code></header>
+ *   <div class="row"><span class="name">vs base <code>main</code></span><span class="sync-state">…</span><span class="hint">…</span></div>
+ *   <p class="fresh">Remote last fetched 12 min ago <button class="button" data-variant="ghost" data-size="sm" data-fetch>↻ Fetch</button></p>
+ *   <footer><button class="button" data-variant="primary" data-size="sm" data-push>Push 3 commits</button></footer></div>
+ * Exceptions: .fresh[data-old] (over an hour: amber, and the word "stale"
+ * after the age), aria-busy="true" on the panel (fetching or pushing: the
+ * counts dim; the button reads "Fetching…" or "Pushing…"), a .banner inside
+ * (no credential), a .confirm-strip inside (the push question; data-tone
+ * "danger" for a refusal with its code).
+ */
+
+@layer blocks {
+  .sync-panel {
+    --_width: 24rem;
+
+    inline-size: var(--_width);
+    max-inline-size: min(var(--_width), calc(100vw - 2 * var(--space-l)));
+    max-block-size: min(70dvh, 36rem);
+    overflow: auto;
+    font-size: var(--text-sm);
+
+    &.popup > header {
+      display: flex;
+      align-items: baseline;
+      gap: var(--space-xs);
+      padding: var(--space-s) var(--space-m);
+      border-block-end: var(--border-width) solid var(--color-line);
+      font-size: var(--text-sm);
+      font-weight: var(--weight-medium);
+
+      & > .branch { min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-mono); font-size: var(--text-xs); }
+      & > .commit { flex: none; margin-inline-start: auto; font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-ink-faint); }
+    }
+
+    & > .row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: var(--space-2xs) var(--space-m);
+      align-items: baseline;
+      padding: var(--space-s) var(--space-m) 0;
+
+      & > .name { min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--text-xs); & code { font-family: var(--font-mono); } }
+      & > .hint { grid-column: 1 / -1; color: var(--color-ink-muted); font-size: var(--text-xs); line-height: var(--leading-snug); }
+    }
+
+    & > .fresh {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-s);
+      margin: var(--space-s) var(--space-m) 0;
+      padding-block-start: var(--space-xs);
+      border-block-start: var(--border-width) solid var(--color-line);
+      color: var(--color-ink-muted);
+      font-size: var(--text-xs);
+
+      &[data-old] { color: var(--color-attention-strong); }
+      &[data-old]::after { content: "stale"; order: 1; margin-inline-start: calc(-1 * var(--space-2xs)); font-weight: var(--weight-medium); }
+      &[data-old] > .button { order: 2; }
+    }
+
+    & > .banner,
+    & > .confirm-strip { margin: var(--space-s) var(--space-m) 0; }
+    & > .confirm-strip { margin-inline: var(--space-m); }
+
+    &.popup > footer {
+      justify-content: flex-end;
+      padding: var(--space-s) var(--space-m);
+      font-size: var(--text-sm);
+
+      &:empty { display: none; }
+    }
+    & > :last-child:not(footer) { margin-block-end: var(--space-s); }
+
+    &[aria-busy="true"] .counts { opacity: 0.55; }
+
+    &[data-sheet] { inline-size: 100%; max-inline-size: none; max-block-size: 72dvh; }
+    &[data-sheet] > .row > .name { white-space: normal; }
+  }
+}
