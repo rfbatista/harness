@@ -502,3 +502,21 @@ func TestSessionRepo_UpdateParentStoresTheMarkAndChangesNothingElse(t *testing.T
 		t.Fatal("expected an error for an unknown session")
 	}
 }
+
+// Sessions stored before sessions could be brought under an architect have no
+// brought_under column; opening the database adds it, and they read false.
+func TestOpenAddsTheBroughtUnderMarkToOlderSessions(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "data.db")
+	db := openFile(t, path)
+	mustExec(t, db, "ALTER TABLE sessions DROP COLUMN brought_under")
+	mustExec(t, db, "INSERT INTO sessions (id, project_id, status) VALUES ('old', 'p1', 'done')")
+	if err := Close(db); err != nil {
+		t.Fatal(err)
+	}
+
+	db = openFile(t, path)
+	got := NewSessionRepository(db).Get("old")
+	if got == nil || got.BroughtUnder {
+		t.Fatalf("an older session reads brought_under false: %+v", got)
+	}
+}
