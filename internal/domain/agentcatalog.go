@@ -43,7 +43,17 @@ type CatalogAgent struct {
 	AllowedTools      []string `json:"allowed_tools"`
 	// EnabledIn are the projects where the agent is enabled (ADR 0038).
 	EnabledIn []CatalogEnabledIn `json:"enabled_in"`
-	Problems  []CatalogProblem   `json:"problems"`
+	// Usage counts the sessions that ran as the agent and the zones that
+	// assign it.
+	Usage    AgentUsage       `json:"usage"`
+	Problems []CatalogProblem `json:"problems"`
+}
+
+// AgentUsage is where an agent is used: every session that ever ran as it, in
+// any project and any status, and the architecture zones that assign it.
+type AgentUsage struct {
+	Sessions int `json:"sessions"`
+	Zones    int `json:"zones"`
 }
 
 // CatalogBundle is a named list of skills and other bundles.

@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/rfbatista/harnesskit/mcpserver"
+	"gorm.io/gorm"
 
 	"operators-mcp/internal/adapter/out/agentcatalog"
 	"operators-mcp/internal/adapter/out/persistence/sqlite"
@@ -28,6 +29,7 @@ type catalogFixture struct {
 	env      map[string]string
 	projects *projects.Service
 	prober   *fakeProber
+	db       *gorm.DB
 }
 
 func newCatalogFixture(t *testing.T) *catalogFixture {
@@ -37,13 +39,14 @@ func newCatalogFixture(t *testing.T) *catalogFixture {
 		t.Fatal(err)
 	}
 	app := catalog.New(catalog.SQLiteDeps(db))
-	f := &catalogFixture{t: t, dir: filepath.Join(t.TempDir(), "agents"), env: map[string]string{}, projects: app.Projects, prober: &fakeProber{}}
+	f := &catalogFixture{t: t, dir: filepath.Join(t.TempDir(), "agents"), env: map[string]string{}, projects: app.Projects, prober: &fakeProber{}, db: db}
 	cat := agentcatalog.New(f.dir,
 		agentcatalog.WithEnv(func(k string) (string, bool) {
 			v, ok := f.env[k]
 			return v, ok
 		}),
 		agentcatalog.WithProjects(app.Projects),
+		agentcatalog.WithUsage(sqlite.NewAgentUsageRepository(db)),
 		agentcatalog.WithProber(f.prober))
 	f.router = NewRouter(NewHandler(Services{Catalog: cat}))
 	return f

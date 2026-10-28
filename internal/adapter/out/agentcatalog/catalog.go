@@ -42,6 +42,7 @@ type Catalog struct {
 	root      string
 	lookupEnv func(string) (string, bool)
 	projects  Projects
+	usage     Usage
 	prober    mcpserver.Prober
 
 	// wmu serializes writes: one change is built and applied at a time.
@@ -83,6 +84,18 @@ type Projects interface {
 // WithProjects gives the catalog the projects whose MCP server lists it reads
 // and writes. Without it, no project has any.
 func WithProjects(p Projects) Option { return func(c *Catalog) { c.projects = p } }
+
+// Usage counts where agents are used, by agent name.
+type Usage interface {
+	AgentUsage(ctx context.Context) (map[string]domain.AgentUsage, error)
+}
+
+// WithUsage gives the catalog the counts its agent read shows. Without it
+// every agent counts zero.
+func WithUsage(u Usage) Option { return func(c *Catalog) { c.usage = u } }
+
+// UseUsage gives the catalog its usage counts after it was built, for wiring.
+func (c *Catalog) UseUsage(u Usage) { c.usage = u }
 
 // UseProjects gives the catalog its projects after it was built, for wiring
 // where the projects need the catalog first.
