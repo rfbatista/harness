@@ -4,6 +4,7 @@
 package sessions
 
 import (
+	"context"
 	"cmp"
 	"encoding/json"
 	"fmt"
@@ -160,6 +161,9 @@ type Seed struct {
 	Code     bool              `json:"code,omitempty"`
 	OpenCode string            `json:"open_code,omitempty"`
 	BaseRefs map[string]string `json:"base_refs,omitempty"`
+	// GitStates are the git states of the task's worktrees, for the sync
+	// module's chips and popover on first paint.
+	GitStates []any `json:"git_states,omitempty"`
 }
 
 // TaskLink is a task of the project with its page, as the design seeds
@@ -331,6 +335,25 @@ type PageView struct {
 	// Parent links a child task's feature task in the crumbs; nil when
 	// top-level.
 	Parent *ParentLink
+	// GitSync turns on the sync module's chips and the Git popover; the
+	// states themselves are Seed.GitStates.
+	GitSync bool
+}
+
+// GitStateSeeder reads the git states of the given worktrees for the page's
+// seed (Seed.GitStates, each a GitState in the contract's wire shape: Contract:
+// worktree git state, fetch and push). An error leaves the page without them.
+type GitStateSeeder func(ctx context.Context, projectID string, workspaceIDs []string) ([]any, error)
+
+// HasWorkspace reports whether the task has a session with a worktree: the Git
+// button's first paint (the browser takes over from the sessions it holds).
+func (v PageView) HasWorkspace() bool {
+	for _, s := range v.Seed.Sessions {
+		if s.WorkspaceID != "" {
+			return true
+		}
+	}
+	return false
 }
 
 // FeatureView is the task page's feature section (ADR 0016): the feature

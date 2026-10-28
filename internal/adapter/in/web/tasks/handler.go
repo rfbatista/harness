@@ -36,6 +36,9 @@ type Handler struct {
 	Comments  ports.TaskCommentReader
 	// PullRequests seeds the session rows' pull request badges; nil seeds none.
 	PullRequests ports.PullRequests
+	// GitStates seeds the session rows' sync chips and the Git popover; nil
+	// leaves both out.
+	GitStates sessions.GitStateSeeder
 	// Usage seeds the task's and its sessions' token totals; nil leaves them out.
 	Usage ports.UsageDashboard
 	// Code serves the sessions' Code tab; nil leaves it out. Workspaces
@@ -284,6 +287,12 @@ func (h Handler) task(w http.ResponseWriter, r *http.Request, codeRoute *code.Ro
 	view.Reviews = reviewsSeed(project.ID, task.ID, list, agents, []*domain.Ticket{task}, docs)
 	if h.PullRequests != nil {
 		view.PullRequests = pullrequests.NewWatchSeed(ctx, h.PullRequests, project.ID, workspaceIDs(list))
+	}
+	if h.GitStates != nil {
+		view.GitSync = true
+		if states, err := h.GitStates(ctx, project.ID, workspaceIDs(list)); err == nil {
+			view.Seed.GitStates = states
+		}
 	}
 	if h.Usage != nil {
 		view.Usage = h.usageTotals(ctx, project.ID, task.ID, list)

@@ -123,6 +123,8 @@ import "../src/modules/settings/presentation/components/settingFlag.test.js";
 import "../src/modules/sync/domain/gitState.test.js";
 import "../src/modules/sync/infrastructure/gateways.test.js";
 import "../src/modules/sync/presentation/components/syncPanel.test.js";
+import "../src/modules/sync/presentation/components/syncPopover.test.js";
+import "../src/modules/sync/presentation/popoverView.test.js";
 import "../src/modules/sync/presentation/view.test.js";
 import "../src/modules/tasks/domain/activity.test.js";
 import "../src/modules/tasks/domain/board.test.js";

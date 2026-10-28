@@ -30,6 +30,10 @@ export const syncChip = ({ store, actions, now = () => new Date() }) => (workspa
   get has() {
     return !!this.gitState;
   },
+  /** The session row shows the chip: a state is held and its worktree is on disk. */
+  get shown() {
+    return !!this.gitState && !this.gitState.gone;
+  },
   get state() {
     return this.chip?.state ?? "";
   },

@@ -6,6 +6,7 @@ import { emptyStore, syncActions } from "./components/syncStore.js";
 import { syncChip } from "./components/syncChip.js";
 import { syncFetch } from "./components/syncFetch.js";
 import { syncPanel } from "./components/syncPanel.js";
+import { syncPopover } from "./components/syncPopover.js";
 import { syncWatch } from "./components/syncWatch.js";
 
 /**
@@ -19,4 +20,5 @@ export function registerSync(Alpine, { gateway, now = () => new Date() }) {
   Alpine.data("syncChip", syncChip({ store, actions, now }));
   Alpine.data("syncPanel", syncPanel({ store, actions, now }));
   Alpine.data("syncFetch", syncFetch({ store, actions, now }));
+  Alpine.data("syncPopover", syncPopover({ store, actions, now }));
 }
