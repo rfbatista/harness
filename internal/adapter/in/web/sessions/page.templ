@@ -129,7 +129,6 @@ templ Page(v PageView) {
 				}
 				@taskBand(v)
 			</div>
-			@contextStrip(v)
 			}
 			<template x-if="error">
 				<div class="[ banner ] [ pad-s ]" data-tone="danger" role="alert">
@@ -165,15 +164,6 @@ templ Page(v PageView) {
 			</div>
 		</main>
 	}
-}
-
-// contextStrip is what the page says about the task's context, in one row
-// above the agents: a summary button per band with something to show, and
-// the one open band's panel under it (tasksContextStrip owns which). A band
-// that has nothing is painted hidden and appears once it has.
-templ contextStrip(v PageView) {
-	<div class="[ context-strip ]" role="group" aria-label="Task context" x-data="tasksContextStrip" data-open={ v.OpenBand() } data-stored={ v.Band } x-on:keydown="key" x-on:reviews-read="reviewsRead">
-	</div>
 }
 
 // reviewsButton is the requests the task's architect raised for the person

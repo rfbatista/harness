@@ -49,7 +49,6 @@ import { sandboxGateway as sessionSandboxGateway } from "./modules/sessions/infr
 import { transcriptGateway } from "./modules/sessions/infrastructure/transcript-gateway.js";
 import { registerSessions } from "./modules/sessions/presentation/register.js";
 import { railGateway } from "./modules/tasks/infrastructure/rail-gateway.js";
-import { cookieBandPrefs } from "./modules/tasks/infrastructure/band-prefs.js";
 import { cookieRailPrefs } from "./modules/tasks/infrastructure/rail-prefs.js";
 import { resourcesGateway } from "./modules/tasks/infrastructure/resources-gateway.js";
 import { tasksGateway } from "./modules/tasks/infrastructure/tasks-gateway.js";
@@ -86,7 +85,6 @@ registerTasks(Alpine, {
   tokenSavers,
   rail: railGateway(api, events),
   railPrefs: cookieRailPrefs(),
-  bandPrefs: cookieBandPrefs(),
   prefs,
   resources: resourcesGateway(api, events, xhrUpload({ base: "/api" })),
   navigate,

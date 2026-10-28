@@ -82,15 +82,6 @@ func reviewsButtonAttrs(pending int) templ.Attributes {
 	return templ.Attributes{"style": "display: none"}
 }
 
-// waitingLine is how many requests wait: "1 review waits on you". The
-// browser's waitingLine (reviews/presentation/view.js) says the same.
-func waitingLine(n int) string {
-	if n == 1 {
-		return "1 review waits on you"
-	}
-	return strconv.Itoa(n) + " reviews wait on you"
-}
-
 // hiddenUnless paints an element hidden until the live page shows it.
 func hiddenUnless(shown bool) templ.Attributes {
 	if shown {
@@ -115,15 +106,6 @@ func featureCount(f *FeatureView) string {
 		return "0"
 	}
 	return strconv.Itoa(len(f.Children))
-}
-
-// hiddenIf paints an element hidden until the browser decides to show it
-// (x-bind:hidden), like shownIf but for the hidden attribute.
-func hiddenIf(hidden bool) templ.Attributes {
-	if hidden {
-		return templ.Attributes{"hidden": true}
-	}
-	return templ.Attributes{}
 }
 
 // doneAttr marks a child row whose task is done: its title is muted.

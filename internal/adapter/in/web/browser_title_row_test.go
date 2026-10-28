@@ -70,30 +70,76 @@ func stripServer(t *testing.T, deps Deps) (string, *sseFeed) {
 }
 
 const (
-	stripBtn   = `document.querySelector('[data-band="feature"]')`
-	stripPanel = `document.querySelector('[data-band-panel="feature"]')`
-	pageReady  = `document.querySelector('[data-ssr]') === null`
+	pageReady = `document.querySelector('[data-ssr]') === null`
 	// Text measures differently before the webfonts arrive.
 	fontsLoaded = `document.fonts.status === 'loaded'`
 )
 
-// A task with no children, no reviews and no token savers draws no strip.
+// listGap is how far the agent list starts below the title row.
+const listGap = `(document.querySelector('[role=listbox]').getBoundingClientRect().top - document.querySelector('.toolbar').getBoundingClientRect().bottom)`
+
+// A task with no request, no children and no token savers shows a title row
+// with no Reviews or Feature button, and nothing between it and the agents:
+// no context strip, and no task_band cookie is ever written.
 func TestATaskWithNothingToSummariseDrawsNoContextStrip(t *testing.T) {
 	url, _ := stripServer(t, boardDeps())
 	ctx, errs := browser(t)
 
-	var drawn bool
+	var strip, buttons bool
+	var gap float64
+	var cookies string
 	err := chromedp.Run(ctx,
 		chromedp.EmulateViewport(1280, 800),
 		chromedp.Navigate(url+"/projects/p1/tasks/t-feed"),
 		chromedp.Poll(pageReady, nil, chromedp.WithPollingTimeout(10*time.Second)),
-		chromedp.Evaluate(`[...document.querySelectorAll('[aria-label="Task context"]')].some(e => e.checkVisibility())`, &drawn),
+		chromedp.Evaluate(`!!document.querySelector('.context-strip, [aria-label="Task context"]')`, &strip),
+		chromedp.Evaluate(`['task-reviews-button', 'task-feature-button'].some(id => document.getElementById(id)?.checkVisibility())`, &buttons),
+		chromedp.Evaluate(listGap, &gap),
+		chromedp.Evaluate(`document.cookie`, &cookies),
 	)
 	if err != nil {
 		t.Fatalf("%v\nJS errors: %v", err, errs.all())
 	}
-	if drawn {
-		t.Error("the strip is drawn with nothing to show")
+	if strip || buttons {
+		t.Errorf("a context strip (%v) or a Reviews or Feature button (%v) with nothing to show", strip, buttons)
+	}
+	if gap > 4 {
+		t.Errorf("the agents start %.0fpx under the title row, want them right under it", gap)
+	}
+	if strings.Contains(cookies, "task_band") {
+		t.Errorf("the page wrote the retired task_band cookie: %q", cookies)
+	}
+}
+
+// With a waiting request and a feature's children the agents still start
+// right under the title row, and opening either popover leaves them where they are.
+func TestTheAgentsKeepTheWholeHeightUnderTheTitleRow(t *testing.T) {
+	srv, _ := architectServerWith(t, featureChildren(16), nil, pendingReviews(2)...)
+	ctx, errs := browser(t)
+
+	var closed, withReviews, withFeature float64
+	err := chromedp.Run(ctx,
+		chromedp.EmulateViewport(1280, 800),
+		chromedp.Navigate(srv.URL+"/projects/p1/tasks/t1"),
+		chromedp.Poll(pageReady, nil, chromedp.WithPollingTimeout(10*time.Second)),
+		chromedp.Poll(`document.getElementById('task-reviews-button').checkVisibility() && document.getElementById('task-feature-button').checkVisibility()`, nil, chromedp.WithPollingTimeout(10*time.Second)),
+		chromedp.Evaluate(listGap, &closed),
+		chromedp.Evaluate(`document.getElementById('task-reviews-button').click()`, nil),
+		chromedp.Poll(`document.getElementById('task-reviews').matches(':popover-open')`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Evaluate(listGap, &withReviews),
+		chromedp.Evaluate(`document.getElementById('task-reviews').hidePopover()`, nil),
+		chromedp.Evaluate(`document.getElementById('task-feature-button').click()`, nil),
+		chromedp.Poll(`document.getElementById('task-feature').matches(':popover-open')`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Evaluate(listGap, &withFeature),
+	)
+	if err != nil {
+		t.Fatalf("%v\nJS errors: %v", err, errs.all())
+	}
+	if closed > 4 || withReviews != closed || withFeature != closed {
+		t.Errorf("the agents start %.0fpx under the title row, %.0f with the Reviews popover open, %.0f with the Feature popover open", closed, withReviews, withFeature)
+	}
+	if e := errs.all(); len(e) > 0 {
+		t.Errorf("JavaScript errors:\n%s", strings.Join(e, "\n"))
 	}
 }
 
@@ -138,11 +184,6 @@ func TestTheFeatureButtonDoesNotJumpWhenTheLivePageTakesOver(t *testing.T) {
 	}
 }
 
-const (
-	reviewsBtn   = `document.querySelector('[data-band="reviews"]')`
-	reviewsPanel = `document.querySelector('[data-band-panel="reviews"]')`
-)
-
 // pendingReviews are n requests waiting on the person, the first the oldest.
 func pendingReviews(n int) []*domain.ReviewRequest {
 	now := time.Now()
@@ -171,50 +212,4 @@ func (fakeSaverActivations) ListTokenSaverActivations(context.Context, domain.Ac
 		{Saver: domain.TokenSaverRTK, Value: domain.ActivationInherit, Summary: "inherit — resolves off (project)"},
 		{Saver: domain.TokenSaverCodegraph, Value: domain.ActivationOn, Summary: "on — resolves on (task)"},
 	}, nil
-}
-
-const bandCookie = `(document.cookie.split('; ').find(c => c.startsWith('task_band=')) ?? '').slice('task_band='.length)`
-
-func panelOpen(sel string) string { return `(` + sel + `.checkVisibility())` }
-
-// The panel left open is remembered: after a reload the server's paint
-// already has it open (scripts off), and so does the live page.
-func TestTheOpenPanelSurvivesAReloadAndTheServerPaintsItOpen(t *testing.T) {
-	url, _ := stripServer(t, bandedDeps())
-	ctx, errs := browser(t)
-
-	page := url + "/projects/p1/tasks/t-feed"
-	var cookie string
-	var painted, paintedExpanded, live bool
-	err := chromedp.Run(ctx,
-		chromedp.EmulateViewport(1280, 800),
-		chromedp.Navigate(page),
-		chromedp.Poll(pageReady, nil, chromedp.WithPollingTimeout(10*time.Second)),
-		chromedp.Evaluate(stripBtn+`.click()`, nil),
-		chromedp.Poll(panelOpen(stripPanel), nil, chromedp.WithPollingTimeout(5*time.Second)),
-		chromedp.Evaluate(bandCookie, &cookie),
-		emulation.SetScriptExecutionDisabled(true),
-		chromedp.Navigate(page),
-		chromedp.Evaluate(panelOpen(stripPanel), &painted),
-		chromedp.Evaluate(stripBtn+`.getAttribute('aria-expanded') === 'true'`, &paintedExpanded),
-		emulation.SetScriptExecutionDisabled(false),
-		chromedp.Navigate(page),
-		chromedp.Poll(pageReady, nil, chromedp.WithPollingTimeout(10*time.Second)),
-		chromedp.Evaluate(panelOpen(stripPanel), &live),
-	)
-	if err != nil {
-		t.Fatalf("%v\nJS errors: %v", err, errs.all())
-	}
-	if cookie != "feature" {
-		t.Errorf("task_band = %q after opening Feature, want feature", cookie)
-	}
-	if !painted || !paintedExpanded {
-		t.Errorf("the server's paint has Feature open: panel %v, aria-expanded %v", painted, paintedExpanded)
-	}
-	if !live {
-		t.Error("the live page lost the open panel")
-	}
-	if e := errs.all(); len(e) > 0 {
-		t.Errorf("JavaScript errors:\n%s", strings.Join(e, "\n"))
-	}
 }
