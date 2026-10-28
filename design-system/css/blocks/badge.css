@@ -4,7 +4,8 @@
  * never colour alone. Merged stays neutral (Done goes quiet); partial and not
  * merged take the attention tone; unknown is dashed. It holds every glyph
  * (svg[data-glyph]) and shows the one its state names.
- * .badge.reviews is the reviews waiting on the person, in the attention tone.
+ * .badge[data-reviews] is the reviews waiting on the person, in the attention tone
+ * (an attribute, not a .reviews class: .reviews is the review list block).
  */
 
 @layer blocks {
@@ -41,7 +42,7 @@
     flex-shrink: 0;
   }
 
-  .badge:is(.merge[data-merge-state="partial"], .merge[data-merge-state="not_merged"], .reviews) {
+  .badge:is(.merge[data-merge-state="partial"], .merge[data-merge-state="not_merged"], [data-reviews]) {
     --_tone: var(--color-attention-strong);
 
     border-color: color-mix(in oklch, var(--_tone) 38%, transparent);

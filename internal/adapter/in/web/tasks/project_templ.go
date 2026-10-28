@@ -779,7 +779,7 @@ func ssrCard(c Card, column string) templ.Component {
 				}
 			}
 			if c.Reviews > 0 {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 61, "<span class=\"[ badge reviews ]\">")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 61, "<span class=\"[ badge ]\" data-reviews>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -1012,7 +1012,7 @@ func liveBoard() templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 84, "</div><div class=\"[ signals ]\" x-show=\"card.hasSignals\"><template x-if=\"card.hasChildren\"><span class=\"[ badge ]\" data-children x-text=\"card.children\"></span></template><span class=\"[ status ]\" x-show=\"card.hasLive\" x-bind:data-state=\"card.liveState\" x-text=\"card.liveWord\"></span><template x-if=\"card.hasReviews\"><span class=\"[ badge reviews ]\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 84, "</div><div class=\"[ signals ]\" x-show=\"card.hasSignals\"><template x-if=\"card.hasChildren\"><span class=\"[ badge ]\" data-children x-text=\"card.children\"></span></template><span class=\"[ status ]\" x-show=\"card.hasLive\" x-bind:data-state=\"card.liveState\" x-text=\"card.liveWord\"></span><template x-if=\"card.hasReviews\"><span class=\"[ badge ]\" data-reviews>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
