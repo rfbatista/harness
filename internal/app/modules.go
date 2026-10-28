@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -1004,9 +1005,13 @@ func newCodeBrowser(ws ports.WorkspaceRepository, repos ports.RepositoryReposito
 // registerCodeWatcher announces code_changed on the orchestration's project
 // feed while a workspace's session runs and someone follows its project's
 // feed, polling from start to stop. The merge states hear each change too.
-func registerCodeWatcher(lc fx.Lifecycle, sessions ports.SessionRepository, ws ports.WorkspaceRepository, git ports.GitCode, code ports.CodeBrowser, orch *orchestration.Service, merges *workspaces.MergeStates, cat catalog.Catalog) {
-	// The code browser keeps the tree snapshots the watcher refreshes.
-	tree, _ := code.(workspaces.TreeRefresher)
+func registerCodeWatcher(lc fx.Lifecycle, sessions ports.SessionRepository, ws ports.WorkspaceRepository, git ports.GitCode, code ports.CodeBrowser, orch *orchestration.Service, merges *workspaces.MergeStates, cat catalog.Catalog) error {
+	// The code browser keeps the tree snapshots the watcher refreshes; one
+	// that cannot would send code_changed before its snapshot is current.
+	tree, ok := code.(workspaces.TreeRefresher)
+	if !ok {
+		return errors.New("the code browser does not keep tree snapshots the code watcher can refresh")
+	}
 	w := workspaces.NewCodeWatcher(workspaces.CodeWatcherDeps{Sessions: sessions, Workspaces: ws, Git: git, Feed: changeSinks{orch, merges}, Tree: tree})
 	w.Subscribe(cat.Bus)
 	orch.ObserveFeedFollowers(w)
@@ -1020,6 +1025,7 @@ func registerCodeWatcher(lc fx.Lifecycle, sessions ports.SessionRepository, ws p
 			return nil
 		},
 	})
+	return nil
 }
 
 // newMergeStates reads how much of each review or done task's code landed

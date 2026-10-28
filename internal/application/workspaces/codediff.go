@@ -148,6 +148,9 @@ func pageOf(q ports.CodeDiffQuery) (diffPage, error) {
 
 // cut is the page of the path-sorted changes, and whether more follow it.
 func (pg diffPage) cut(changes []ports.GitChange) (page []ports.GitChange, more bool) {
+	if pg.limit == 0 { // the totals-only read
+		return nil, false
+	}
 	start, _ := slices.BinarySearchFunc(changes, pg.after, func(ch ports.GitChange, after string) int {
 		if ch.Path <= after {
 			return -1
@@ -217,7 +220,7 @@ func (c *Code) CodeDiff(ctx context.Context, q ports.CodeDiffQuery) (*domain.Cod
 	}
 	if paged {
 		var more bool
-		if changes, more = pg.cut(changes); more && len(changes) > 0 {
+		if changes, more = pg.cut(changes); more {
 			out.Next = strp(changes[len(changes)-1].Path)
 		}
 	}
