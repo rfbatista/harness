@@ -174,12 +174,12 @@ func (p projectMCPServers) SetProjectMCPServers(_ context.Context, id string, na
 
 // newAgentCatalog is the agent catalog: the "agents" folder of the data dir
 // (ADR 0030). The folder is made on the first write, not here.
-func newAgentCatalog(cfg Config, projects ports.ProjectRepository) (*agentcatalog.Catalog, error) {
+func newAgentCatalog(cfg Config, db *gorm.DB, projects ports.ProjectRepository) (*agentcatalog.Catalog, error) {
 	dir, err := dataDir(cfg, "agents")
 	if err != nil {
 		return nil, err
 	}
-	return agentcatalog.New(dir, agentcatalog.WithProjects(projectMCPServers{projects}), agentcatalog.WithProber(mcpprobe.NewProber())), nil
+	return agentcatalog.New(dir, agentcatalog.WithProjects(projectMCPServers{projects}), agentcatalog.WithUsage(sqlite.NewAgentUsageRepository(db)), agentcatalog.WithProber(mcpprobe.NewProber())), nil
 }
 
 // importSourceDir is the repository agents/ folder the one-time catalog import

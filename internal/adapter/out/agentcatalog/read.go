@@ -1,6 +1,7 @@
 package agentcatalog
 
 import (
+	"context"
 	"encoding/base64"
 	"io/fs"
 	"os"
@@ -268,7 +269,12 @@ func (c *Catalog) ReadCatalog() (*domain.CatalogView, error) {
 	}
 
 	projects := c.listProjects()
+	var usage map[string]domain.AgentUsage
+	if c.usage != nil {
+		usage, _ = c.usage.AgentUsage(context.Background())
+	}
 	for i := range v.Agents {
+		v.Agents[i].Usage = usage[v.Agents[i].Name]
 		v.Agents[i].EnabledIn = []domain.CatalogEnabledIn{}
 		for _, p := range projects {
 			if p.AgentEnabled(v.Agents[i].Name) {
