@@ -50,6 +50,8 @@
       color: var(--color-ink-muted);
       white-space: nowrap;
 
+      /* With a chip, the origin wraps to its own line before the chip can be clipped. */
+      &:has(.sync-slot) { min-inline-size: min(100%, 22rem); }
       & > * { flex: none; }
       & > * + :not(select)::before { content: "·" / ""; margin-inline-end: var(--space-xs); color: var(--color-ink-faint); }
       & .sync-slot { flex: none; }
