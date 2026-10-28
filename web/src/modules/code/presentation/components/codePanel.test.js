@@ -383,3 +383,88 @@ test("while a diff loads the bar's status spins and the changed files list skele
   assert.equal(panel.hasState || panel.busyAttr !== null, true, "the live word is back");
   assert.equal(panel.stateText, "live");
 });
+
+const scrollerOf = (el, { top = 0, height = 800, content = 10_000 } = {}) => {
+  Object.defineProperties(el, {
+    scrollTop: { value: top, writable: true },
+    clientHeight: { value: height },
+    scrollHeight: { value: content },
+  });
+  return el;
+};
+
+test("Show more reads the next page with the held cursor, the count left falls, and the foot goes at the last page", async () => {
+  const { panel, memory } = await setup({ world: manyChangedFilesWorld(120) });
+  assert.deepEqual([panel.moreShown, panel.moreCount], [true, "75"]);
+  await panel.loadMore();
+  assert.deepEqual([panel.diff.files.length, panel.moreCount, panel.totals.files], [100, "25", "125 files"]);
+  const pages = () => memory.calls.filter((c) => c.name === "diff" && c.args.q.after);
+  assert.deepEqual(pages().map((c) => c.args.q.after), [panel.diff.files[49].path]);
+  await panel.loadMore();
+  assert.deepEqual([panel.diff.files.length, panel.moreShown, panel.diff.next], [125, false, null]);
+  await panel.loadMore();
+  assert.equal(pages().length, 2, "no read past the last page");
+  assert.equal(panel.summaryRows.length, 125);
+  assert.equal(new Set(panel.diffFiles.map((f) => f.slug)).size, 125, "slugs stay unique across pages");
+});
+
+test("while a later page loads the list ends with skeleton rows; a click on Show more twice reads once", async () => {
+  const { panel, memory } = await setup({ world: manyChangedFilesWorld(120) });
+  memory.slow(30);
+  const a = panel.loadMore();
+  const b = panel.loadMore();
+  await flush();
+  assert.deepEqual([panel.listBusy, panel.listSkeleton.length], ["true", 3]);
+  await Promise.all([a, b]);
+  assert.equal(panel.diff.files.length, 100);
+  assert.equal(panel.listBusy, null);
+});
+
+test("scrolling near the end of the loaded sections reads the next page once", async () => {
+  const { panel, memory } = await setup({ world: manyChangedFilesWorld(120) });
+  const main = scrollerOf(document.createElement("div"), { top: 9_000, height: 800, content: 10_000 });
+  panel.mainScroller = () => main;
+  const before = memory.calls.length;
+  await Promise.all([panel.followScroll(), panel.followScroll()]);
+  assert.equal(memory.calls.length - before, 1);
+  assert.equal(panel.diff.files.length, 100);
+  main.scrollTop = 100;
+  await panel.followScroll();
+  assert.equal(panel.diff.files.length, 100, "far from the end: no read");
+});
+
+test("a deep link to a file on a later page loads pages up to it and selects it", async () => {
+  const { panel } = await setup({ world: manyChangedFilesWorld(120) });
+  const path = "bulk/d0007/f0075.js";
+  assert.ok(!panel.diff.files.some((f) => f.path === path));
+  const slug = "diff-bulk-d0007-f0075-js";
+  await panel.readHash(`#${slug}`);
+  assert.equal(panel.currentFile, path);
+  assert.ok(panel.diff.files.some((f) => f.path === path));
+  assert.equal(panel.diff.files.length, 100, "only the pages up to it");
+});
+
+test("] on the last loaded file reads the next page and steps into it, instead of wrapping", async () => {
+  const { panel } = await setup({ world: manyChangedFilesWorld(120) });
+  panel.currentFile = panel.diff.files[49].path;
+  await panel.stepFile(1);
+  assert.equal(panel.diff.files.length, 100);
+  assert.equal(panel.currentFile, panel.diff.files[50].path);
+});
+
+test("opening a deleted file of a later page from Files loads pages up to it and shows its diff", async () => {
+  const world = manyChangedFilesWorld(120);
+  world.repositories.r1.refs.main.files["zzz/deleted.md"] = "bye\n";
+  world.workspaces.ws1.committed["zzz/deleted.md"] = "bye\n";
+  world.workspaces.ws1.disk["zzz/deleted.md"] = "bye\n";
+  delete world.workspaces.ws1.disk["zzz/deleted.md"];
+  const { panel, tick } = await setup({ world });
+  panel.showView("files");
+  await flush();
+  assert.ok(!panel.diff.files.some((f) => f.path === "zzz/deleted.md"));
+  await panel.openPath("zzz/deleted.md");
+  tick();
+  assert.ok(panel.diff.files.some((f) => f.path === "zzz/deleted.md"));
+  assert.equal(panel.view, "changes");
+  assert.equal(panel.currentFile, "zzz/deleted.md");
+});

@@ -12,7 +12,7 @@
 import { Codes, codeOf } from "../../../../shared/domain/errors.js";
 import { FeedStatus } from "../../../../shared/domain/feed.js";
 import { baseName, changeMark } from "../../domain/code.js";
-import { parseDiffHash, slugs } from "../../domain/diff.js";
+import { parseDiffHash, slugs, startsCollapsed } from "../../domain/diff.js";
 import { fileRows, rowOfLineIn } from "../../domain/rows.js";
 import { problemOf } from "../../domain/errors.js";
 import { clampSplit, defaultSplit, parseSplit, splitBounds, stepSplit } from "../../domain/split.js";
@@ -148,6 +148,8 @@ export function codeBrowser({ gateway, highlighter, preparer, prefs, history = g
     /** @type {import("../../domain/errors.js").CodeProblem|null} */
     problem: null,
     loadingDiff: false,
+    /** A later page of the diff is being read. */
+    loadingPage: false,
     loadingFile: false,
     loadingMap: false,
     layout: "split",
@@ -201,7 +203,15 @@ export function codeBrowser({ gateway, highlighter, preparer, prefs, history = g
     },
     /** A diff or a page of it is being read: the bar's status spins and the changed files show skeleton rows. */
     get busy() {
-      return this.loadingDiff;
+      return this.loadingDiff || this.loadingPage;
+    },
+    /** The changed files list ends with Show more while pages remain. */
+    get moreShown() {
+      return !!this.diff?.next && !this.heldDiff;
+    },
+    /** The files left: the whole diff's count minus the files loaded. */
+    get moreCount() {
+      return this.diff ? String(Math.max(0, this.diff.fileCount - this.diff.files.length)) : "";
     },
     get busyAttr() {
       return this.busy ? "" : null;
@@ -527,9 +537,10 @@ export function codeBrowser({ gateway, highlighter, preparer, prefs, history = g
     changesHref(path) {
       return hrefOf({ ...this.route, view: "changes", path: "" }, `#diff-${this.diffSlugs[path] ?? ""}`);
     },
-    openChanges(event, path) {
+    async openChanges(event, path) {
       if (event.metaKey || event.ctrlKey) return;
       event.preventDefault();
+      await this.loadThrough(() => this.pathReached(path));
       this.go({ ...this.route, view: "changes", path: "" }, { hash: `diff-${this.diffSlugs[path] ?? ""}` });
       this.enterView();
       this.$nextTick?.(() => this.scrollToFile(path));
@@ -601,7 +612,11 @@ export function codeBrowser({ gateway, highlighter, preparer, prefs, history = g
       this.seedPending = true;
       this.loadingDiff = true;
       this.prepareDiff(page)
-        .then((diff) => this.setDiff(diff))
+        .then((diff) => {
+          this.setDiff(diff);
+          // A link to a file arrives with the page, before its files are known.
+          this.readHash(location?.hash ?? "");
+        })
         .catch((err) => this.fail(err, {}))
         .finally(() => {
           this.seedPending = false;
@@ -676,6 +691,63 @@ export function codeBrowser({ gateway, highlighter, preparer, prefs, history = g
       const diff = Object.freeze({ ...read, readId: ++reads });
       rowsByRead.set(diff.readId, { split, files });
       return diff;
+    },
+
+    /** What the diff is read by: the worktree's scope, or the history page's commit. */
+    pageQuery() {
+      return this.kind === "history" ? this.historyQuery() : { workspaceId: this.source.workspaceId, scope: this.scope };
+    },
+
+    /** Show more, and the scroll near the end: reads the next page and appends it. False when nothing was read. */
+    async loadMore() {
+      const open = this.diff;
+      if (!open?.next || this.loadingPage || this.heldDiff) return false;
+      this.loadingPage = true;
+      try {
+        const page = await this.prepareDiff(await gateway.diffPage({ ...this.pageQuery(), after: open.next }, this.request("page")));
+        // A refresh or a scope change replaced the diff while the page was on its way.
+        if (this.diff !== open) return false;
+        this.appendPage(page);
+        return true;
+      } catch (err) {
+        if (err?.name !== "AbortError") this.fail(err, {});
+        return false;
+      } finally {
+        this.loadingPage = false;
+      }
+    },
+
+    /** Adds a page's files after the loaded ones; a file seen twice (the worktree moved between reads, P6) takes the newer. */
+    appendPage(page) {
+      const open = this.diff;
+      const sets = rowsOf.get(open);
+      const at = new Map(open.files.map((f, i) => [f.path, i]));
+      const files = [...open.files];
+      for (const f of page.files) {
+        if (at.has(f.path)) files[at.get(f.path)] = f;
+        else files.push(f);
+      }
+      const next = Object.freeze({ ...open, files: Object.freeze(files), next: page.next, fileCount: page.fileCount, added: page.added, deleted: page.deleted, truncated: open.truncated || page.truncated, readId: ++reads });
+      rowsOf.set(next, { split: sets.split, files: new Map([...sets.files, ...rowsOf.get(page).files]) }, [this.heldDiff]);
+      const { slugs: bySlug, collapsed } = diffSetup(next);
+      this.diffSlugs = Object.fromEntries(bySlug);
+      this.collapsed = { ...Object.fromEntries(page.files.filter((f) => collapsed[f.path] && !(f.path in this.collapsed) && !at.has(f.path)).map((f) => [f.path, true])), ...this.collapsed };
+      this.diff = next;
+      this.countFiles();
+      this.syncRows();
+    },
+
+    /** Reads pages until `loaded()` holds or there are no more. */
+    async loadThrough(loaded) {
+      while (this.diff?.next && !loaded()) if (!(await this.loadMore())) break;
+    },
+    /** Whether the path is among the loaded files, or past where its place would be (it is not changed). */
+    pathReached(path) {
+      const files = this.diff?.files ?? [];
+      return files.some((f) => f.path === path) || (files.length > 0 && files.at(-1).path > path);
+    },
+    pathOfSlug(slug) {
+      return Object.keys(this.diffSlugs).find((p) => this.diffSlugs[p] === slug);
     },
 
     /** The open diff's rows follow the layout: asked of the worker again when they were made for the other one. */
@@ -842,9 +914,10 @@ export function codeBrowser({ gateway, highlighter, preparer, prefs, history = g
       }
       if (action === "diff") {
         // A deleted file is not on disk (C8): its diff, not /file.
-        this.go({ ...this.route, view: "changes", path: "", scope: this.route.scope }, { push, hash: `diff-${this.diffSlugs[path] ?? ""}` });
         if (!this.diff) await this.showDiff();
-        this.scrollToFile(path);
+        await this.loadThrough(() => this.pathReached(path));
+        this.go({ ...this.route, view: "changes", path: "", scope: this.route.scope }, { push, hash: `diff-${this.diffSlugs[path] ?? ""}` });
+        this.$nextTick?.(() => this.scrollToFile(path));
         return;
       }
       this.go({ ...this.route, view: "files", path }, { push, hash });
@@ -912,10 +985,12 @@ export function codeBrowser({ gateway, highlighter, preparer, prefs, history = g
       this.readHash(location.hash);
     },
 
-    readHash(hash) {
+    async readHash(hash) {
       const diffHash = parseDiffHash(hash);
       if (diffHash) {
-        const path = Object.keys(this.diffSlugs).find((p) => this.diffSlugs[p] === diffHash.slug);
+        // A file on a page not loaded yet: read pages up to it.
+        await this.loadThrough(() => !!this.pathOfSlug(diffHash.slug));
+        const path = this.pathOfSlug(diffHash.slug);
         if (path) {
           this.currentFile = path;
           if (diffHash.line) {
@@ -1106,8 +1181,9 @@ export function codeBrowser({ gateway, highlighter, preparer, prefs, history = g
     scrollToFile(path, line = 0, side = "R") {
       const main = this.mainScroller();
       const slug = this.diffSlugs[path];
-      if (!main || !slug) return;
+      if (!slug) return;
       this.currentFile = path;
+      if (!main) return;
       pinnedUntil = Date.now() + 400;
       if (this.collapsed[path] && line) this.toggleFile(path);
       const section = main.querySelector?.(`#diff-${cssEscape(slug)}`);
@@ -1141,14 +1217,19 @@ export function codeBrowser({ gateway, highlighter, preparer, prefs, history = g
       if (this.urlOwned()) history?.replaceState?.(null, "", hrefOf(this.route, `#diff-${this.diffSlugs[path]}`));
     },
 
-    /** The main side scrolled: the file under the sticky head becomes current. */
+    /** The main side scrolled: the file under the sticky head becomes current, and the end of the loaded files reads the next page. */
     mainScrolled() {
       this.touched = true;
-      if (scrollFrame || !this.showingChanges || Date.now() < pinnedUntil) return;
+      if (scrollFrame || !this.showingChanges) return;
       scrollFrame = requestAnimationFrame(() => {
         scrollFrame = 0;
-        const main = this.mainScroller();
-        if (!main || !this.diff) return;
+        this.followScroll();
+      });
+    },
+    async followScroll() {
+      const main = this.mainScroller();
+      if (!main || !this.diff) return;
+      if (Date.now() >= pinnedUntil) {
         const y = main.scrollTop + 8;
         let current = this.diff.files[0]?.path ?? "";
         for (const f of this.diff.files) {
@@ -1156,18 +1237,21 @@ export function codeBrowser({ gateway, highlighter, preparer, prefs, history = g
           if (el && topIn(main, el) <= y) current = f.path;
         }
         this.currentFile = current;
-      });
+      }
+      if (main.scrollTop + main.clientHeight * 2 >= main.scrollHeight) await this.loadMore();
     },
     fileScrolled() {
       this.touched = true;
     },
 
     /** ] and [: the next or previous file of the diff, wrapping. */
-    stepFile(delta) {
+    async stepFile(delta) {
       if (!this.diff?.files.length) return;
-      const files = this.diff.files;
+      let files = this.diff.files;
       const i = files.findIndex((f) => f.path === this.currentFile);
       let j = i + delta;
+      // Past the last loaded file: the next page, not the first file again.
+      if (j >= files.length && (await this.loadMore())) files = this.diff.files;
       if (j >= files.length) {
         j = 0;
         this.say("First file again");
@@ -1180,10 +1264,11 @@ export function codeBrowser({ gateway, highlighter, preparer, prefs, history = g
     },
 
     /** J/K in the changed files. */
-    stepSummary(delta) {
+    async stepSummary(delta) {
       if (!this.diff?.files.length) return;
-      const files = this.diff.files;
+      let files = this.diff.files;
       const i = files.findIndex((f) => f.path === this.currentFile);
+      if (i + delta >= files.length && (await this.loadMore())) files = this.diff.files;
       const j = Math.max(0, Math.min(files.length - 1, i + delta));
       this.currentFile = files[j].path;
       this.$nextTick?.(() => this.$root?.querySelector?.(`.diff-summary a[href="#diff-${cssEscape(this.diffSlugs[files[j].path])}"]`)?.focus());
