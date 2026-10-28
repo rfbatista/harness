@@ -285,7 +285,7 @@ func buildBar(s Seed, view string) Bar {
 		case ViewChanges:
 			seg.Href = rt.With(ViewChanges, "").Href("")
 			if s.Diff != nil {
-				seg.Count = strconv.Itoa(len(s.Diff.Files))
+				seg.Count = strconv.Itoa(max(s.Diff.FileCount, len(s.Diff.Files)))
 			}
 		default:
 			seg.Href = rt.With(name, "").Href("")
@@ -350,7 +350,7 @@ func problemOf(s Seed, e SeedError) *Problem {
 func (v *View) buildDiff(s Seed, zones map[string]ZoneTag) {
 	d := s.Diff
 	rt := s.Route
-	v.Totals = plural(len(d.Files), "file")
+	v.Totals = plural(max(d.FileCount, len(d.Files)), "file")
 	v.Added, v.Deleted = "+"+count(d.Added), "−"+count(d.Deleted)
 	v.DiffTruncated = d.Truncated
 	if s.BaseGone {
