@@ -22,6 +22,12 @@
  * @property {"off"|"edits"|"all"} autoAccept  which tool calls run without asking
  * @property {string} [baseBranch]  the branch its worktree branches off; "" means the checkout's HEAD
  * @property {string} [branchName]  the name of the session's own branch; "" lets the server generate one
+ * @property {readonly string[]} [bringUnderSessionIds]  with mode "architect": sessions of the task to move under the new architect as it starts
+ *
+ * @typedef {object} Brought  what bringing sessions under the architect did
+ * @property {Session} architect
+ * @property {readonly Session[]} moved  now its delegates, in request order
+ * @property {readonly { sessionId: string, reason: "not_on_task"|"is_architect"|"already_under"|"not_found" }[]} skipped
  *
  * @typedef {object} BranchNameCheck  what the server says about a branch name for a new session
  * @property {string} name        the name checked, trimmed; "" when none was given
@@ -58,6 +64,11 @@
  * @property {(query: { repositoryId: string, name: string, baseBranch?: string, ticketId?: string }, signal?: AbortSignal) => Promise<BranchNameCheck>} checkBranchName
  *           Reads git only: suggests the generated name and says whether a
  *           name is valid and free. Rejects with REPOSITORY_NOT_FOUND.
+ * @property {(request: { ticketId: string, sessionIds: readonly string[] }) => Promise<Brought>} bringUnder
+ *           Moves the sessions under the task's running architect; the ones
+ *           that cannot move are skipped. Rejects with NO_ARCHITECT,
+ *           NOTHING_TO_MOVE (details: the skipped list), TICKET_NOT_FOUND or
+ *           INVALID_INPUT.
  * @property {(sessionId: string, size?: { cols: number, rows: number }) => Promise<Session>} resume
  *           Brings an ended interactive session back on the server's terminal
  *           host: same id, branch, worktree and conversation. Followers see it

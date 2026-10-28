@@ -319,6 +319,21 @@
       inline-size: calc(var(--_step) - var(--_dot) / 2 - var(--space-3xs));
       block-size: var(--border-width);
     }
+
+    /* Select mode (ADR 0045): a row that can move gets a gutter for its checkbox; every other row keeps its layout. */
+    &[data-selectable] {
+      padding-inline-start: calc(var(--_pad) + var(--_depth, 0) * var(--_step) + var(--space-l) + var(--space-s));
+    }
+
+    & > .pick {
+      position: absolute;
+      inset-block-start: var(--space-s);
+      inset-inline-start: calc(var(--_pad) + var(--_depth, 0) * var(--_step));
+      display: flex;
+      align-items: center;
+      min-block-size: var(--_line);
+      cursor: pointer;
+    }
   }
   /* session-variant:end */
 

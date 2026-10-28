@@ -502,6 +502,7 @@ func StatusLabel(s domain.TicketStatus) string {
 
 // StartedBy is how the session that started s reads — its agent, or
 // "another session" when it is not among others — and "" when a person did.
+// For a session brought under its parent it names the parent all the same.
 // The browser's startedBy (view.js) says the same.
 func StartedBy(s *domain.Session, others map[string]*domain.Session, agentNames map[string]string) string {
 	if s.ParentSessionID == "" {
@@ -592,13 +593,24 @@ func rowDetail(s *domain.Session, others map[string]*domain.Session, agentNames 
 		return &Detail{Kind: "approval", Lead: lead}
 	}
 	if s.Role == domain.RoleDelegate {
-		if s.StatusCheck == nil {
+		check := ""
+		if s.StatusCheck != nil {
+			check = StatusCheckOf(s.StatusCheck, now).Short
+		}
+		if s.BroughtUnder {
+			return &Detail{Kind: "by", Lead: "brought under", Text: StartedBy(s, others, agentNames), Check: check}
+		}
+		if check == "" {
 			return nil
 		}
-		return &Detail{Kind: "none", Check: StatusCheckOf(s.StatusCheck, now).Short}
+		return &Detail{Kind: "none", Check: check}
 	}
 	if by := StartedBy(s, others, agentNames); by != "" {
-		return &Detail{Kind: "by", Lead: "started by", Text: by}
+		lead := "started by"
+		if s.BroughtUnder {
+			lead = "brought under"
+		}
+		return &Detail{Kind: "by", Lead: lead, Text: by}
 	}
 	if s.Role != domain.RoleArchitect && taskTitle != "" && s.Task != "" && s.Task != taskTitle {
 		return &Detail{Kind: "prompt", Lead: "prompt", Text: "“" + strings.Join(strings.Fields(s.Task), " ") + "”"}

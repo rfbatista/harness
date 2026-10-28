@@ -164,23 +164,34 @@ func (s *Service) sessionStarted(ev domain.SessionStarted) error {
 	if err := domain.ValidStatusCheckMinutes(minutes); err != nil {
 		return err
 	}
+	c, err := s.startLoop(ev.TicketID, ev.ProjectID, arch.ID, ev.SessionID, minutes)
+	if err != nil || c == nil {
+		return err
+	}
+	s.emitCheck(c, nil, nil)
+	return nil
+}
+
+// startLoop stores an active loop of everyMinutes on a delegate of the
+// architect and wakes the scheduler; it announces nothing. Zero minutes
+// makes no loop.
+func (s *Service) startLoop(taskID, projectID, architectID, delegateID string, minutes int) (*domain.StatusCheck, error) {
 	if minutes == 0 {
-		return nil
+		return nil, nil
 	}
 	next := s.now().Add(time.Duration(minutes) * time.Minute)
 	c := &domain.StatusCheck{
-		TaskID: ev.TicketID, ProjectID: ev.ProjectID, ArchitectSessionID: arch.ID, DelegateSessionID: ev.SessionID,
+		TaskID: taskID, ProjectID: projectID, ArchitectSessionID: architectID, DelegateSessionID: delegateID,
 		EveryMinutes: minutes, NextAt: &next, State: domain.StatusCheckActive,
 	}
 	s.mu.Lock()
 	err := s.checks.Save(c)
 	s.mu.Unlock()
 	if err != nil {
-		return err
+		return nil, err
 	}
 	s.wake()
-	s.emitCheck(c, nil, nil)
-	return nil
+	return c, nil
 }
 
 // finish ends a loop and announces it; it reports whether it ended one.
@@ -345,13 +356,4 @@ func (s *Service) checkTurn(c *domain.StatusCheck, ending string) string {
 		s.agentName(d), c.DelegateSessionID, status, last, report, strconv.Itoa(s.reviews.CountPending(c.TaskID)))
 }
 
-func age(d time.Duration) string {
-	switch {
-	case d < time.Minute:
-		return strconv.Itoa(int(d.Seconds())) + "s"
-	case d < time.Hour:
-		return strconv.Itoa(int(d.Minutes())) + "m"
-	default:
-		return strconv.Itoa(int(d.Hours())) + "h"
-	}
-}
+func age(d time.Duration) string { return domain.ShortAge(d) }

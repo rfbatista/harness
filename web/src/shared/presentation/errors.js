@@ -4,6 +4,9 @@
 import { Codes, codeOf } from "../domain/errors.js";
 
 const NEXT_STEP = {
+  [Codes.NO_ARCHITECT]: "the architect has ended; start one over these sessions instead",
+  [Codes.ARCHITECT_EXISTS]: "the task already has an architect; bring the sessions under it instead",
+  [Codes.NOTHING_TO_MOVE]: "pick sessions that are not already under the architect",
   [Codes.NETWORK]: "check that `make air` is running, then retry",
   [Codes.SESSION_NOT_FOUND]: "it was deleted; the list will refresh",
   [Codes.SESSION_NOT_RUNNING]: "the session has ended; start a new one to continue",

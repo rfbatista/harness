@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -96,7 +97,7 @@ func TestStartTaskSession_StartsAPeerOnTheCallersTask(t *testing.T) {
 		ProjectID: req.ProjectID, RepositoryID: "r-web", TicketID: taskID, AgentID: "a-rev", Prompt: "write the tests for feed.go",
 		BaseBranch: "task/me", RunsOn: domain.RunnerServer, ParentSessionID: "me", AutoAccept: "off",
 	}
-	if req != want {
+	if !reflect.DeepEqual(req, want) {
 		t.Fatalf("request = %+v\nwant      %+v", req, want)
 	}
 	if out["session_id"] != "peer-1" || out["agent"] != "Reviewer" || out["repository"] != "web" {

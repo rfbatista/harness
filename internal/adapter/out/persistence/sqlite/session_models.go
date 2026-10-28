@@ -33,6 +33,7 @@ type SessionModel struct {
 	RunsOn                   string  `gorm:"column:runs_on;index"`
 	RunnerHost               string  `gorm:"column:runner_host"`
 	ParentSessionID          string  `gorm:"column:parent_session_id"`
+	BroughtUnder             bool    `gorm:"column:brought_under"`
 	Mode                     string  `gorm:"column:mode"`
 	CreatedAt                int64   `gorm:"autoCreateTime:milli"`
 	UpdatedAt                int64   `gorm:"autoUpdateTime:milli"`
@@ -60,8 +61,8 @@ type SessionModel struct {
 	// MergeMethod is how it was merged; empty reads as "merge", what every
 	// record from before squashes was. SquashedTip is the branch tip at the
 	// session's last squash into the repository's default branch.
-	MergeMethod     string `gorm:"column:merge_method"`
-	SquashedTip     string `gorm:"column:squashed_tip"`
+	MergeMethod string `gorm:"column:merge_method"`
+	SquashedTip string `gorm:"column:squashed_tip"`
 }
 
 func (m *SessionModel) lastMerge() *domain.MergeResult {
@@ -122,6 +123,7 @@ func (m *SessionModel) ToDomain() *domain.Session {
 		RunsOn:                   domain.Runner(m.RunsOn),
 		RunnerHost:               m.RunnerHost,
 		ParentSessionID:          m.ParentSessionID,
+		BroughtUnder:             m.BroughtUnder,
 		Mode:                     domain.SessionMode(m.Mode),
 		TokenSavers:              splitSavers(m.TokenSavers),
 		TokenSaversNotInstalled:  splitSavers(m.TokenSaversNotInstalled),

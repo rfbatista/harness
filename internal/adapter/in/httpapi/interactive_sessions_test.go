@@ -301,3 +301,51 @@ func TestHTTP_AStartRefusedForMissingPrerequisitesAnswersTheirNamesAndAnchors(t 
 		t.Errorf("a refused start left %d sessions", len(got))
 	}
 }
+
+// planFake answers the plan an architect start over a selection asks for.
+type planFake struct {
+	fakeChannel
+	plan    *ports.BringUnderPlan
+	planErr error
+	movedTo string
+}
+
+func (f *planFake) PlanBringUnder(context.Context, string, []string) (*ports.BringUnderPlan, error) {
+	return f.plan, f.planErr
+}
+
+func (f *planFake) BringUnderNewArchitect(_ context.Context, architectID string, _ []string) (*ports.BringUnderResult, error) {
+	f.movedTo = architectID
+	return &ports.BringUnderResult{}, nil
+}
+
+func TestHTTP_StartInteractiveSessionOverASelection(t *testing.T) {
+	env := newSessionTestEnv(t)
+	defer env.srv.Close()
+	fake := &planFake{plan: &ports.BringUnderPlan{Eligible: []*domain.Session{{ID: "s-a", Status: domain.SessionRunning, Task: "x", Branch: "feat/a"}}}}
+	env.orch.BringUnder = fake
+	url := env.srv.URL + "/api/start_interactive_session"
+
+	status, ok := post(t, url, `{"project_id":"p1","repository_id":"r1","ticket_id":"tk1","mode":"architect","bring_under_session_ids":["s-a"],"prompt":"Go."}`)
+	if status != http.StatusCreated || !strings.Contains(ok.Agent.Prompt, "Your delegates:") || !strings.HasSuffix(ok.Agent.Prompt, "\n\nGo.") {
+		t.Fatalf("start over a selection = %d prompt %q", status, ok.Agent.Prompt)
+	}
+	if fake.movedTo != ok.Session.ID || ok.Session.Mode != domain.SessionModeArchitect {
+		t.Fatalf("moved to %q, architect %+v", fake.movedTo, ok.Session)
+	}
+
+	if status, out := post(t, url, `{"project_id":"p1","repository_id":"r1","ticket_id":"tk1","mode":"implement","bring_under_session_ids":["s-a"]}`); status != http.StatusBadRequest || out.Code != "INVALID_INPUT" {
+		t.Fatalf("a selection needs architect mode: %d %q", status, out.Code)
+	}
+
+	before := len(env.sessions.List(context.Background(), ports.SessionFilter{TicketID: "tk1"}))
+	for code := range map[string]bool{"ARCHITECT_EXISTS": true, "NOTHING_TO_MOVE": true} {
+		fake.planErr = &domain.StructuredError{Code: code, Message: code + ": x"}
+		if status, out := post(t, url, `{"project_id":"p1","repository_id":"r1","ticket_id":"tk1","mode":"architect","bring_under_session_ids":["s-a"]}`); status != http.StatusConflict || out.Code != code {
+			t.Errorf("%s: %d %q, want 409", code, status, out.Code)
+		}
+	}
+	if after := len(env.sessions.List(context.Background(), ports.SessionFilter{TicketID: "tk1"})); after != before {
+		t.Fatalf("a refused start created a session: %d -> %d", before, after)
+	}
+}

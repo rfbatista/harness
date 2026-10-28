@@ -1,0 +1,33 @@
+/*
+ * Pickbar — the header of a list that can select rows: a toggle, and while
+ * selecting, how many rows are ticked and the one button that acts on them.
+ * <div class="list"><div class="pickbar" role="toolbar">
+ *   <button class="button">Select</button><span class="pickbar-count">2 selected</span>
+ *   <button class="button">Bring under the architect</button></div>…</div>
+ * An error sits under the buttons, as the page's other banners do.
+ */
+
+@layer blocks {
+  .pickbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-s);
+    padding-block: var(--space-xs);
+    padding-inline: var(--space-m);
+    border-block-end: var(--border-width) solid var(--color-line);
+
+    & .pickbar-count {
+      color: var(--color-ink-muted);
+      font-size: var(--text-sm);
+      font-variant-numeric: tabular-nums;
+    }
+
+    & .pickbar-error {
+      flex-basis: 100%;
+      margin: 0;
+      color: var(--color-danger-strong);
+      font-size: var(--text-sm);
+    }
+  }
+}

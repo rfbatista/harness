@@ -158,6 +158,9 @@ type Service struct {
 	Roles interface {
 		SessionRole(ctx context.Context, sessionID string) (domain.SessionRole, error)
 	}
+	// BringUnder moves the sessions a person selected under a new architect
+	// (ADR 0045). Nil: a start with a selection is refused.
+	BringUnder ports.BringUnder
 	// Decorator fills a session's derived role fields (role, the task's
 	// architect, its status check) as it leaves the service. Nil leaves them
 	// empty.

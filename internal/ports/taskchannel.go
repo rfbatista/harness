@@ -107,6 +107,7 @@ type TaskChannel interface {
 // TaskChannelUI is the person's side, served over HTTP (see "Contract:
 // Harness server ↔ Web UI — architect channel API").
 type TaskChannelUI interface {
+	BringUnder
 	ListTaskMessages(ctx context.Context, taskID string, f TaskMessageFilter) ([]*domain.TaskMessage, error)
 	ListReviewRequests(ctx context.Context, taskID string, state domain.ReviewState) ([]*domain.ReviewRequest, error)
 	// ListProjectReviewRequests is a project's review requests in one state,
@@ -221,4 +222,41 @@ type TaskStatusChangeRepository interface {
 	// LatestByTasks is each task's most recent move, by task, read in one
 	// query however many tasks it is given. A task never moved is absent.
 	LatestByTasks(ctx context.Context, taskIDs []string) map[string]*domain.TaskStatusChange
+}
+
+// BringUnderSkipped is a session a bring-under request left out, and why.
+type BringUnderSkipped struct {
+	SessionID string                `json:"session_id"`
+	Reason    domain.BringUnderSkip `json:"reason"`
+}
+
+// BringUnderResult is what a bring-under request did: the architect, the
+// sessions moved under it in request order, and those left out.
+type BringUnderResult struct {
+	Architect *domain.Session     `json:"architect"`
+	Moved     []*domain.Session   `json:"moved"`
+	Skipped   []BringUnderSkipped `json:"skipped"`
+}
+
+// BringUnderPlan is who a request would move: the eligible sessions in request
+// order, and the rest with their reasons.
+type BringUnderPlan struct {
+	Eligible []*domain.Session
+	Skipped  []BringUnderSkipped
+}
+
+// BringUnder moves peer sessions of a task under its architect (ADR 0045).
+type BringUnder interface {
+	// BringSessionsUnder moves the sessions under the task's running
+	// architect. TICKET_NOT_FOUND, NO_ARCHITECT, NOTHING_TO_MOVE (its details
+	// are the skipped list).
+	BringSessionsUnder(ctx context.Context, taskID string, sessionIDs []string) (*BringUnderResult, error)
+	// PlanBringUnder judges the sessions for an architect about to be started
+	// on the task, creating nothing. ARCHITECT_EXISTS when the task has a
+	// running architect, NOTHING_TO_MOVE when none is eligible.
+	PlanBringUnder(ctx context.Context, taskID string, sessionIDs []string) (*BringUnderPlan, error)
+	// BringUnderNewArchitect moves the sessions under architectID, an architect
+	// just started: it gets no turn here (its opening lists them), and each
+	// running session gets its own.
+	BringUnderNewArchitect(ctx context.Context, architectID string, sessionIDs []string) (*BringUnderResult, error)
 }

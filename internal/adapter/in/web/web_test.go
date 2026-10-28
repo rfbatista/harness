@@ -407,7 +407,7 @@ func TestTaskPageListsItsSessionsBesideTheDetail(t *testing.T) {
 		`<span class="[ agent ]">Reviewer</span>`, // the agent's name, not its id
 		`2 sessions · 1 waiting`,                  // one task, several sessions
 		`x-on:click="startCreating"`,
-		`x-data="sessionsNewSession(projectId, ticketId)"`,
+		`x-data="sessionsNewSession(projectId, ticketId, formLockedMode, bringUnderIds)"`,
 		`data-default-repository="r-harness"`,
 		`<option value="" data-description="claude with no agent definition">Plain claude</option>`,
 		// The agent options are drawn in the browser from the enabled agents the server seeds.
@@ -545,7 +545,7 @@ func TestProjectSessionsPageListsTheFeatureBrainstorms(t *testing.T) {
 		`Feature brainstorm</span>`, // the ticket-less session's row, with no prompt
 		`1 session · 1 waiting`,
 		`x-on:click="startCreating"`,
-		`x-data="sessionsNewSession(projectId, ticketId)"`,
+		`x-data="sessionsNewSession(projectId, ticketId, formLockedMode, bringUnderIds)"`,
 		`data-locked-mode="product"`,
 		`<h2>New feature brainstorm</h2>`,
 		`Product — the only mode that runs without a task.`,

@@ -482,3 +482,41 @@ func TestSessionKeepsASquashIntoTheDefaultBranch(t *testing.T) {
 		}
 	}
 }
+
+func TestSessionRepo_UpdateParentStoresTheMarkAndChangesNothingElse(t *testing.T) {
+	r := newTestDB(t)
+	if _, err := r.Create(&domain.Session{ID: "s1", ProjectID: "p1", TicketID: "t1", Task: "do", Status: domain.SessionRunning, Branch: "b", Model: "m"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := r.Get("s1"); got.BroughtUnder || got.ParentSessionID != "" {
+		t.Fatalf("a new session is not brought under: %+v", got)
+	}
+	if err := r.UpdateParent("s1", "arch", true); err != nil {
+		t.Fatal(err)
+	}
+	got := r.Get("s1")
+	if got.ParentSessionID != "arch" || !got.BroughtUnder || got.Branch != "b" || got.Model != "m" || got.Status != domain.SessionRunning {
+		t.Fatalf("parent move wrong or touched other fields: %+v", got)
+	}
+	if err := r.UpdateParent("nope", "arch", true); err == nil {
+		t.Fatal("expected an error for an unknown session")
+	}
+}
+
+// Sessions stored before sessions could be brought under an architect have no
+// brought_under column; opening the database adds it, and they read false.
+func TestOpenAddsTheBroughtUnderMarkToOlderSessions(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "data.db")
+	db := openFile(t, path)
+	mustExec(t, db, "ALTER TABLE sessions DROP COLUMN brought_under")
+	mustExec(t, db, "INSERT INTO sessions (id, project_id, status) VALUES ('old', 'p1', 'done')")
+	if err := Close(db); err != nil {
+		t.Fatal(err)
+	}
+
+	db = openFile(t, path)
+	got := NewSessionRepository(db).Get("old")
+	if got == nil || got.BroughtUnder {
+		t.Fatalf("an older session reads brought_under false: %+v", got)
+	}
+}

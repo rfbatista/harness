@@ -73,6 +73,9 @@ type Session struct {
 	// ParentSessionID is the session that started this one on its task
 	// (through the start_task_session tool); empty when a person did.
 	ParentSessionID string `json:"parent_session_id,omitempty"`
+	// BroughtUnder says the parent became so by a person bringing the session
+	// under an architect, not by starting it (ADR 0045). Stored, never derived.
+	BroughtUnder bool `json:"brought_under"`
 	// Mode is what the session was started to do beyond its agent; it brings
 	// its own skills, and they come back when the session is resumed.
 	Mode SessionMode `json:"mode,omitempty"`

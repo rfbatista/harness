@@ -17,15 +17,17 @@ import { INITIAL_TERMINAL_SIZE, noTaskProblem } from "../../domain/session.js";
 import { withAgentPicker } from "./agentPicker.js";
 
 /** @param {{ gateway: import("../../domain/ports.js").SessionGateway }} deps */
-export const newSession = ({ gateway, debounceMs = 300, location = globalThis.location }) => (projectId = "", ticketId = "", lockedMode = "") => withAgentPicker({
+export const newSession = ({ gateway, debounceMs = 300, location = globalThis.location }) => (projectId = "", ticketId = "", lockedMode = "", bringUnder = []) => withAgentPicker({
   projectId,
   ticketId,
   prompt: "",
   agentId: "",
   /** "", "architect", "implement", "design" or "product": a role on top of the agent. */
   mode: lockedMode,
-  /** The mode the page fixed ("product" with no task); "" when the form offers every mode. */
+  /** The mode the page fixed ("product" with no task, "architect" over a selection); "" when the form offers every mode. */
   lockedMode,
+  /** The sessions of the task the page selected: starting the architect moves them under it. */
+  bringUnder: [...bringUnder],
   repositoryId: "",
   autoAccept: "off",
   /** @type {import("../../domain/ports.js").Branch[]} */
@@ -147,7 +149,19 @@ export const newSession = ({ gateway, debounceMs = 300, location = globalThis.lo
   get product() {
     return this.mode === "product";
   },
+  /** The form starts an architect over sessions the page selected. */
+  get bringingUnder() {
+    return this.bringUnder.length > 0;
+  },
+  get heading() {
+    return this.bringingUnder ? "Start an architect" : "New session";
+  },
+  get lockedModeWord() {
+    const n = this.bringUnder.length;
+    return `Architect — it supervises the ${n === 1 ? "session" : `${n} sessions`} you selected.`;
+  },
   get promptPlaceholder() {
+    if (this.bringingUnder) return "Optional — added after the architect's opening, which names the sessions you selected. Add anything it should know.";
     if (this.architect) return "Optional — the architect starts from the task's title and description. Add anything it should know.";
     if (this.implement) return "Which spec should it implement? Name its Spec task document, e.g. \"Spec: backend — CSV export\".";
     if (this.design) return "What should it design? Components, screens, images or videos: each one it publishes appears in the Design tab.";
@@ -155,6 +169,7 @@ export const newSession = ({ gateway, debounceMs = 300, location = globalThis.lo
     return "What should the agent do on this task? Leave empty to open claude and type in its terminal.";
   },
   get modeHint() {
+    if (this.bringingUnder) return "The sessions you selected move under it: each keeps its branch, worktree and conversation, and reports to the architect from now on. It supervises them instead of grilling you and writing specs.";
     if (this.architect) return "Adds the task-architecture skill: it grills you on the design, writes per-application specs as task documents and starts an implement session for each.";
     if (this.implement) return "Adds the task-implement-spec skill: it writes tickets for the architect to review, then implements them test first on its branch.";
     if (this.design) return "Adds the design skill: the agent publishes pages, images and videos as it works; they show live in the Design tab.";
@@ -307,6 +322,7 @@ export const newSession = ({ gateway, debounceMs = 300, location = globalThis.lo
         baseBranch: this.baseBranch,
         branchName: this.branchName.trim(),
         size: INITIAL_TERMINAL_SIZE,
+        bringUnderSessionIds: this.bringingUnder ? this.bringUnder : undefined,
       });
       this.$dispatch("session-created", { session });
     } catch (err) {

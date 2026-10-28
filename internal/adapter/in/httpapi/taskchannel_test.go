@@ -23,6 +23,24 @@ type fakeChannel struct {
 	respond  error
 	minutes  int
 	delegate string
+
+	bringTask string
+	bringIDs  []string
+	bring     *ports.BringUnderResult
+	bringErr  error
+}
+
+func (f *fakeChannel) BringSessionsUnder(_ context.Context, taskID string, ids []string) (*ports.BringUnderResult, error) {
+	f.bringTask, f.bringIDs = taskID, ids
+	return f.bring, f.bringErr
+}
+
+func (f *fakeChannel) PlanBringUnder(context.Context, string, []string) (*ports.BringUnderPlan, error) {
+	return nil, nil
+}
+
+func (f *fakeChannel) BringUnderNewArchitect(context.Context, string, []string) (*ports.BringUnderResult, error) {
+	return nil, nil
 }
 
 func (f *fakeChannel) ListTaskMessages(_ context.Context, taskID string, flt ports.TaskMessageFilter) ([]*domain.TaskMessage, error) {
@@ -136,5 +154,50 @@ func TestHTTP_ArchitectChannelUnconfigured(t *testing.T) {
 	defer srv.Close()
 	if status, _ := callJSON(t, "GET", srv.URL+"/api/task_messages?ticket_id=tk1", ""); status != 503 {
 		t.Fatalf("no channel: %d", status)
+	}
+}
+
+func TestHTTP_BringSessionsUnder(t *testing.T) {
+	ch := &fakeChannel{bring: &ports.BringUnderResult{
+		Architect: &domain.Session{ID: "arch"},
+		Moved:     []*domain.Session{{ID: "a", ParentSessionID: "arch", BroughtUnder: true, Role: domain.RoleDelegate}},
+		Skipped:   []ports.BringUnderSkipped{{SessionID: "x", Reason: domain.SkipNotOnTask}},
+	}}
+	srv := httptest.NewServer(NewRouter(NewHandler(Services{TaskChannel: ch})))
+	defer srv.Close()
+	url := srv.URL + "/api/bring_sessions_under"
+
+	status, out := callJSON(t, "POST", url, `{"ticket_id":"tk1","session_ids":["a","x"]}`)
+	if status != 200 || ch.bringTask != "tk1" || len(ch.bringIDs) != 2 || ch.bringIDs[0] != "a" {
+		t.Fatalf("bring: %d %+v %+v", status, out, ch)
+	}
+	moved := out["moved"].([]any)
+	if out["architect"].(map[string]any)["id"] != "arch" || len(moved) != 1 || moved[0].(map[string]any)["brought_under"] != true {
+		t.Fatalf("answer: %+v", out)
+	}
+	if sk := out["skipped"].([]any); len(sk) != 1 || sk[0].(map[string]any)["reason"] != "not_on_task" || sk[0].(map[string]any)["session_id"] != "x" {
+		t.Fatalf("skipped: %+v", out["skipped"])
+	}
+
+	for _, body := range []string{`{"session_ids":["a"]}`, `{"ticket_id":"tk1"}`, `{"ticket_id":"tk1","session_ids":[]}`, `{"ticket_id":"tk1","session_ids":[""]}`} {
+		status, out := callJSON(t, "POST", url, body)
+		if status != 400 || out["code"] != "INVALID_INPUT" || !strings.HasPrefix(out["error"].(string), "INVALID_INPUT") {
+			t.Errorf("%s: %d %+v", body, status, out)
+		}
+	}
+
+	cases := map[string]int{"TICKET_NOT_FOUND": 404, "NO_ARCHITECT": 409, "NOTHING_TO_MOVE": 409}
+	for code, want := range cases {
+		ch.bringErr = &domain.StructuredError{Code: code, Message: code + ": x"}
+		status, out := callJSON(t, "POST", url, `{"ticket_id":"tk1","session_ids":["a"]}`)
+		if status != want || out["code"] != code || !strings.HasPrefix(out["error"].(string), code) {
+			t.Errorf("%s: %d %+v, want %d", code, status, out, want)
+		}
+	}
+	skipped := []ports.BringUnderSkipped{{SessionID: "x", Reason: domain.SkipAlreadyUnder}}
+	ch.bringErr = &domain.DetailedError{StructuredError: &domain.StructuredError{Code: "NOTHING_TO_MOVE", Message: "NOTHING_TO_MOVE: none"}, Details: skipped}
+	status, out = callJSON(t, "POST", url, `{"ticket_id":"tk1","session_ids":["x"]}`)
+	if d, _ := out["details"].([]any); status != 409 || len(d) != 1 || d[0].(map[string]any)["reason"] != "already_under" {
+		t.Fatalf("NOTHING_TO_MOVE details: %d %+v", status, out)
 	}
 }

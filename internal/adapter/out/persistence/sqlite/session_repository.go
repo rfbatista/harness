@@ -48,6 +48,7 @@ func (r *SessionRepository) Create(s *domain.Session) (*domain.Session, error) {
 		RunsOn:          string(s.RunsOn),
 		RunnerHost:      s.RunnerHost,
 		ParentSessionID: s.ParentSessionID,
+		BroughtUnder:    s.BroughtUnder,
 		Mode:            string(s.Mode),
 
 		TokenSavers:             joinSavers(s.TokenSavers),
@@ -229,6 +230,21 @@ func (r *SessionRepository) UpdateAutoRun(id string, autoRun bool) error {
 	res := r.db.Model(&SessionModel{}).Where("id = ?", id).Updates(map[string]any{
 		"auto_run":   autoRun,
 		"updated_at": time.Now().UnixMilli(),
+	})
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		return &domain.StructuredError{Code: "SESSION_NOT_FOUND", Message: "session not found"}
+	}
+	return nil
+}
+
+func (r *SessionRepository) UpdateParent(id, parentID string, broughtUnder bool) error {
+	res := r.db.Model(&SessionModel{}).Where("id = ?", id).Updates(map[string]any{
+		"parent_session_id": parentID,
+		"brought_under":     broughtUnder,
+		"updated_at":        time.Now().UnixMilli(),
 	})
 	if res.Error != nil {
 		return res.Error

@@ -36,6 +36,7 @@ export function toSession(dto) {
     architectSessionId: dto.architect_session_id ?? "",
     statusCheck: dto.status_check ? toStatusCheck(dto.status_check) : null,
     parentSessionId: dto.parent_session_id ?? "",
+    broughtUnder: dto.brought_under === true,
     branch: dto.branch ?? "",
     workspaceId: dto.workspace_id ?? "",
     workingDir: dto.working_dir ?? "",
@@ -163,7 +164,23 @@ export function toStartBody(req) {
     size: req.size,
     base_branch: req.baseBranch || undefined,
     branch_name: req.branchName?.trim() || undefined,
+    bring_under_session_ids: req.bringUnderSessionIds?.length ? req.bringUnderSessionIds : undefined,
   };
+}
+
+/** POST /api/bring_sessions_under body. */
+export function toBringUnderBody(ticketId, sessionIds) {
+  return { ticket_id: ticketId, session_ids: sessionIds };
+}
+
+/** POST /api/bring_sessions_under → the architect, the sessions moved under it and the ones skipped, with why. */
+export function toBrought(body) {
+  if (!body?.architect || !Array.isArray(body.moved)) bad("expected {architect, moved, skipped}");
+  return Object.freeze({
+    architect: toSession(body.architect),
+    moved: Object.freeze(body.moved.map(toSession)),
+    skipped: Object.freeze((body.skipped ?? []).map((s) => Object.freeze({ sessionId: s.session_id, reason: s.reason }))),
+  });
 }
 
 /** GET /api/check_branch_name → BranchNameCheck. */

@@ -12,7 +12,7 @@ import { mergeMessages, newestAt, upsertMessage } from "../../domain/channel.js"
 import { applyChange, displayOrder, group, INITIAL_TERMINAL_SIZE, isTerminal, ofTask } from "../../domain/session.js";
 import { artifactTitle, taskDesignHref } from "../artifactView.js";
 import { announceMessage } from "../channelView.js";
-import { delegateOption, rowTitle, startedBy, statusCheckView, summary, toDetailView, toGroupViews } from "../view.js";
+import { agentLabel, delegateOption, rowTitle, startedBy, statusCheckView, summary, toDetailView, toGroupViews } from "../view.js";
 import { DEFAULT_TEXT_SIZE, nextTextSize, TEXT_SIZES } from "../screenPrefs.js";
 
 const TICK_MS = 30_000;
@@ -116,6 +116,16 @@ export const sessionsPage = ({
     codeExpanded: false,
     /** The Code tab is in full screen (⇧F): the page keeps only its thin bar while it is in front. Never remembered. */
     codeFullscreen: false,
+    /** Select mode (ADR 0045): rows that can move under the architect show a checkbox. Browser state only. */
+    selecting: false,
+    /** The ids ticked in select mode. */
+    picked: [],
+    /** The ids the open new-session form carries to start an architect over; empty for an ordinary form. */
+    bringUnderIds: [],
+    /** A bring-under call is in flight. */
+    bringing: false,
+    /** The select bar's error, as a message; "" when there is none. */
+    pickError: "",
 
     // ── what the markup binds ────────────────────────────────────────────
     get groups() {
@@ -798,6 +808,7 @@ export const sessionsPage = ({
 
     cancelCreating() {
       this.creating = false;
+      this.bringUnderIds = [];
     },
 
     /** @param {CustomEvent<{ session: import("../../domain/session.js").Session }>} event */
@@ -808,6 +819,126 @@ export const sessionsPage = ({
       this.selectedId = session.id;
       this.creating = false;
       this.error = null;
+      // The architect started over the selection: the feed moves the rows.
+      if (this.bringUnderIds.length > 0) {
+        this.bringUnderIds = [];
+        this.endSelecting();
+      }
+    },
+
+    // ── bring sessions under the architect (ADR 0045) ────────────────────
+    /** The task's architect while it still runs; an ended one counts as none. */
+    get runningArchitect() {
+      return this.sessions.find((s) => s.role === "architect" && !isTerminal(s)) ?? null;
+    },
+    /** The Select toggle shows on a task's page that has a session that could move. */
+    get canSelect() {
+      return this.hasTask && this.ready && (this.selecting || this.sessions.some((s) => this.eligible(s)));
+    },
+    /** Whether a session may move: not the architect, and not already its delegate while one runs. The server judges again. */
+    eligible(session) {
+      if (session.role === "architect" || session.ticketId !== this.ticketId) return false;
+      return !(session.role === "delegate" && this.runningArchitect !== null);
+    },
+    /** The row shows a checkbox: select mode is on and the session can move. */
+    canPick(id) {
+      const session = this.sessions.find((s) => s.id === id);
+      return this.selecting && !!session && this.eligible(session);
+    },
+    isPicked(id) {
+      return this.picked.includes(id);
+    },
+    /** data-selectable on a row: present only on rows that carry a checkbox, so no other row changes. */
+    selectableAttr(id) {
+      return this.canPick(id) ? "" : null;
+    },
+    get pickedText() {
+      return this.picked.length === 1 ? "1 selected" : `${this.picked.length} selected`;
+    },
+    get selectLabel() {
+      return this.selecting ? "Cancel" : "Select";
+    },
+    get cannotBring() {
+      return this.bringing || this.picked.length === 0;
+    },
+    get bringLabel() {
+      return this.runningArchitect ? "Bring under the architect" : "Start an architect over these";
+    },
+    get hasPickError() {
+      return this.pickError !== "";
+    },
+    /** What a row's checkbox says to assistive technology. */
+    pickLabel(id) {
+      const session = this.sessions.find((s) => s.id === id);
+      return session ? `Select ${agentLabel(session.agentId, this.agentNames)}: ${rowTitle(session)}` : "Select";
+    },
+    /** What the new-session form locks its mode to while it carries a selection. */
+    get formLockedMode() {
+      return this.bringUnderIds.length > 0 ? "architect" : "";
+    },
+
+    toggleSelecting() {
+      if (this.selecting) return this.endSelecting();
+      this.selecting = true;
+      this.pickError = "";
+    },
+    endSelecting() {
+      this.selecting = false;
+      this.picked = [];
+      this.pickError = "";
+    },
+    pick(id) {
+      this.picked = this.isPicked(id) ? this.picked.filter((x) => x !== id) : [...this.picked, id];
+      this.pickError = "";
+    },
+
+    /** The one button: moves the ticked sessions at once under a running architect, or opens the form to start one over them. */
+    async bringSelected() {
+      if (this.cannotBring) return;
+      const ids = this.picked.filter((id) => this.canPick(id));
+      if (ids.length === 0) {
+        this.pickError = "None of the selected sessions can move any more.";
+        return;
+      }
+      if (!this.runningArchitect) {
+        this.bringUnderIds = ids;
+        this.creating = true;
+        this.detailOpen = true;
+        return;
+      }
+      this.bringing = true;
+      this.pickError = "";
+      try {
+        const brought = await gateway.bringUnder({ ticketId: this.ticketId, sessionIds: ids });
+        // The feed may have carried them already (its echo can beat this answer): only what it has not is upserted.
+        for (const s of [...brought.moved, brought.architect]) {
+          const have = this.sessions.find((x) => x.id === s.id);
+          if (!have || (s.id !== brought.architect.id && !have.broughtUnder)) {
+            this.sessions = applyChange(this.sessions, { kind: "upsert", session: s }, ofTask(this.ticketId));
+          }
+        }
+        this.now = clock.now();
+        this.announcement = `${brought.moved.length} session${brought.moved.length === 1 ? "" : "s"} brought under the architect`;
+        this.endSelecting();
+        this.followChannel();
+      } catch (err) {
+        this.pickError = this.bringErrorText(err);
+      } finally {
+        this.bringing = false;
+      }
+    },
+
+    /** The bar's words for a refusal; NOTHING_TO_MOVE names the skipped sessions by their agent. */
+    bringErrorText(err) {
+      const skipped = Array.isArray(err?.details) ? err.details : [];
+      if (codeOf(err) === Codes.NOTHING_TO_MOVE && skipped.length > 0) {
+        const who = skipped.map((k) => {
+          const session = this.sessions.find((s) => s.id === k.session_id);
+          return session ? agentLabel(session.agentId, this.agentNames) : "a session that is gone";
+        });
+        return `None of these can be brought under the architect: ${who.join(", ")}.`;
+      }
+      return describeError(err).message;
     },
 
     // Delete: asked in the confirm on ⋯ (session-delete), then removed. The
