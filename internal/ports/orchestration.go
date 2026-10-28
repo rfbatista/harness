@@ -290,6 +290,10 @@ type InteractiveRequest struct {
 	// on the session it starts: nil for the default (10 minutes), 0 for none,
 	// otherwise 2–240. Ignored when the starter is not the architect.
 	StatusCheckMinutes *int `json:"status_check_minutes,omitempty"`
+	// BringUnderSessionIDs starts an architect (Mode "architect") over these
+	// sessions of the task: they are moved under it as it starts (ADR 0045).
+	// Empty is a plain start.
+	BringUnderSessionIDs []string `json:"bring_under_session_ids,omitempty"`
 }
 
 // ResumeRequest reopens an ended interactive session, on RunsOn — which need

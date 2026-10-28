@@ -448,7 +448,7 @@ func newTaskChannelService(db *gorm.DB, sessions ports.SessionRepository, plan *
 	})
 	svc.Delivery, svc.Announcer, svc.Feed, svc.Artifacts, svc.Agents = orch, orch, orch, art, cat.Agents
 	svc.Subscribe(cat.Bus)
-	orch.Roles, orch.Decorator = svc, svc
+	orch.Roles, orch.Decorator, orch.BringUnder = svc, svc, svc
 	plan.Decorator = ports.TicketDecorators{svc, merges}
 	plan.MergeRefresher = merges
 	plan.StatusHistory = sqlite.NewTaskStatusChangeRepository(db) // plan.Events is the bus already

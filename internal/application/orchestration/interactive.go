@@ -3,6 +3,7 @@ package orchestration
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -58,6 +59,15 @@ func (s *Service) StartInteractive(ctx context.Context, req InteractiveRequest) 
 		}
 	}
 
+	// A selection to bring under the new architect is judged before anything
+	// is created: nothing exists yet to clean up when it is refused.
+	var plan *ports.BringUnderPlan
+	if len(req.BringUnderSessionIDs) > 0 {
+		if plan, err = s.planBringUnder(ctx, mode, ticket, req.BringUnderSessionIDs); err != nil {
+			return nil, ports.AgentSpec{}, err
+		}
+	}
+
 	// A task can hold several sessions at once, so the branch carries part of
 	// the session id: two sessions on one task must never race for one branch.
 	// A session with no task is named after the product work on its project.
@@ -101,7 +111,11 @@ func (s *Service) StartInteractive(ctx context.Context, req InteractiveRequest) 
 		return nil, ports.AgentSpec{}, err
 	}
 
-	spec := s.agentSpec(p.cfg, ports.Conversation{ID: id}, modePrompt(mode, ticket, project, req.Prompt))
+	opening := modePrompt(mode, ticket, project, req.Prompt)
+	if plan != nil {
+		opening = s.architectOverPrompt(ctx, ticket, plan.Eligible, req.Prompt)
+	}
+	spec := s.agentSpec(p.cfg, ports.Conversation{ID: id}, opening)
 	spec.EnvFile = p.envFile
 	confineSpec(&spec, p.sandbox.policy)
 	created, err := s.sessions.Create(&domain.Session{
@@ -146,6 +160,14 @@ func (s *Service) StartInteractive(ctx context.Context, req InteractiveRequest) 
 		if runsOn == domain.RunnerServer {
 			if err := s.spawn(ctx, id, spec, req.Size); err != nil {
 				return nil, ports.AgentSpec{}, err
+			}
+		}
+		if plan != nil {
+			// The architect is running: the sessions move under it, and each
+			// running one is told. A session that stopped being eligible since
+			// the check is skipped; the architect is started either way.
+			if _, err := s.BringUnder.BringUnderNewArchitect(context.WithoutCancel(ctx), id, req.BringUnderSessionIDs); err != nil {
+				slog.Warn("bring sessions under the new architect", "architect", id, "err", err)
 			}
 		}
 		return s.withResumability(ctx, created), spec, nil

@@ -1,15 +1,18 @@
 package orchestration
 
 import (
+	"context"
 	"embed"
 	"fmt"
 	"io/fs"
 	"path"
 	"strings"
+	"time"
 
 	"github.com/rfbatista/harnesskit/skill"
 
 	"operators-mcp/internal/domain"
+	"operators-mcp/internal/ports"
 )
 
 // modeFS holds the skills each session mode brings. They ship with the
@@ -172,6 +175,44 @@ func projectPrompt(project *domain.Project, typed string) string {
 		"Write documents only in your virtual shell, no other local files.\n\n" +
 		"Never write code, and never start implementation sessions: the person or an architect decides who implements each " +
 		"child and when.")
+	if typed = strings.TrimSpace(typed); typed != "" {
+		b.WriteString("\n\n" + typed)
+	}
+	return b.String()
+}
+
+// planBringUnder judges the sessions a person selected for the architect
+// about to start on ticket: only an architect-mode start takes a selection.
+func (s *Service) planBringUnder(ctx context.Context, mode domain.SessionMode, ticket *domain.Ticket, ids []string) (*ports.BringUnderPlan, error) {
+	if mode != domain.SessionModeArchitect || ticket == nil {
+		return nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "INVALID_INPUT: bring_under_session_ids needs mode architect on a task"}
+	}
+	if s.BringUnder == nil {
+		return nil, &domain.StructuredError{Code: "UNAVAILABLE", Message: "UNAVAILABLE: the architect channel is not configured"}
+	}
+	return s.BringUnder.PlanBringUnder(ctx, ticket.ID, ids)
+}
+
+// architectOverPrompt opens an architect started over sessions the person
+// brought under it: the work is underway, so it supervises instead of
+// grilling and writing specs (see "Contract: Harness server ↔ Agent sessions —
+// turns when sessions are brought under", §3). The typed prompt follows.
+func (s *Service) architectOverPrompt(ctx context.Context, tk *domain.Ticket, delegates []*domain.Session, typed string) string {
+	var b strings.Builder
+	b.WriteString("Use the task-architecture skill on task " + tk.ID + ": " + tk.Title + "\n")
+	if d := strings.TrimSpace(tk.Description); d != "" {
+		b.WriteString("\n" + d + "\n")
+	}
+	b.WriteString("\nYou were started to supervise sessions the person brought under you; the work is already underway, so do not grill the person on a design and do not write specs or start new delegates unless they ask. Your delegates:\n\n")
+	now := time.Now()
+	for _, d := range delegates {
+		name := s.agentName(ctx, d.AgentID)
+		if name == "" {
+			name = "claude"
+		}
+		b.WriteString(domain.BroughtUnderLine(name, d, now) + "\n")
+	}
+	b.WriteString("\nStart by reading list_task_sessions and list_task_messages. Supervise them: answer what they report with reply_to_session, tune or pause each loop with set_status_check (the running ones have one at the default interval), ask the person for review with request_user_review when their work is ready, and move the task status with update_task_status and a reason as the work moves; the person moves it to done. When the person adds a resource or a comment to the task, a turn starting with [task update · …] names its file; read it. Leave the person a comment for decisions and summaries they should see by writing a file in task/comments/; talk to your delegates with task messages, not comments.")
 	if typed = strings.TrimSpace(typed); typed != "" {
 		b.WriteString("\n\n" + typed)
 	}
