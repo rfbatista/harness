@@ -70,3 +70,20 @@ export function makeWorld(overrides = {}) {
 
 /** A worktree file of `n` lines, for virtualisation and the large-diff states. */
 export const longFile = (n) => many(n, "row");
+
+/**
+ * A worktree that changed `n` files (about `lines` changed lines each), in
+ * directories of ten, for the paging and responsiveness states. File names
+ * are zero-padded so path order is index order.
+ */
+export function manyChangedFilesWorld(n, { lines = 4, base = makeWorld() } = {}) {
+  const world = base;
+  const ws = world.workspaces.ws1;
+  const pad = (i) => String(i).padStart(4, "0");
+  for (let i = 0; i < n; i += 1) {
+    const path = `bulk/d${pad(Math.floor(i / 10))}/f${pad(i)}.js`;
+    ws.disk[path] = Array.from({ length: lines }, (_, k) => `export const v${k} = ${i};`).join("\n") + "\n";
+    ws.untracked = [...ws.untracked, path];
+  }
+  return world;
+}

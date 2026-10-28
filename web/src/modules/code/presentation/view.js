@@ -228,5 +228,5 @@ export function scopesView(route, { scope, gone, baseGone, baseRef }) {
 
 /** The changed files' head: "12 files +214 −38". */
 export function totalsView(diff) {
-  return { files: plural(diff.files.length, "file"), added: `+${formatCount(diff.added)}`, deleted: `−${formatCount(diff.deleted)}` };
+  return { files: plural(diff.fileCount, "file"), added: `+${formatCount(diff.added)}`, deleted: `−${formatCount(diff.deleted)}` };
 }

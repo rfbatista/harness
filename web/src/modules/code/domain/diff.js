@@ -108,7 +108,7 @@ export function statOf(f) {
 /** "12 files" with "+214 −38" totals for the summary head. */
 export function totals(diff) {
   return {
-    files: `${formatCount(diff.files.length)} ${diff.files.length === 1 ? "file" : "files"}`,
+    files: `${formatCount(diff.fileCount)} ${diff.fileCount === 1 ? "file" : "files"}`,
     added: `+${formatCount(diff.added)}`,
     deleted: `−${formatCount(diff.deleted)}`,
   };

@@ -128,6 +128,8 @@ export function toDiff(dto) {
     added: int(dto.added),
     deleted: int(dto.deleted),
     truncated: dto.truncated === true,
+    next: typeof dto.next === "string" && dto.next !== "" ? dto.next : null,
+    fileCount: int(dto.file_count, dto.files.length),
   });
 }
 
@@ -173,8 +175,9 @@ export function sourceQuery(src) {
 
 /** The wire query of a diff. */
 export function diffQuery(q) {
-  if (q.workspaceId) return { workspace_id: q.workspaceId, scope: q.scope, path: q.path };
-  return { repository_id: q.repositoryId, commit: q.commit, base: q.base, head: q.head, path: q.path };
+  const page = { after: q.after, limit: q.limit === undefined ? undefined : String(q.limit) };
+  if (q.workspaceId) return { workspace_id: q.workspaceId, scope: q.scope, path: q.path, ...page };
+  return { repository_id: q.repositoryId, commit: q.commit, base: q.base, head: q.head, path: q.path, ...page };
 }
 
 /**

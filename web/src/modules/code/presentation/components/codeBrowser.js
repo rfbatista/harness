@@ -160,7 +160,7 @@ export function codeBrowser({ gateway, highlighter, prefs, history = globalThis.
     get view() {
       const v = this.route?.view;
       if (v) return v;
-      return this.kind === "session" ? (this.diff && this.diff.files.length === 0 ? "files" : "changes") : "files";
+      return this.kind === "session" ? (this.diff && this.diff.fileCount === 0 ? "files" : "changes") : "files";
     },
     get showingChanges() {
       return this.view === "changes";
@@ -184,7 +184,7 @@ export function codeBrowser({ gateway, highlighter, prefs, history = globalThis.
       return this.liveState === GONE;
     },
     get views() {
-      return viewsView(this.route, { count: this.listDiff ? this.listDiff.files.length : null, kind: this.kind, current: this.view });
+      return viewsView(this.route, { count: this.listDiff ? this.listDiff.fileCount : null, kind: this.kind, current: this.view });
     },
     get scopes() {
       return scopesView(this.route, { scope: this.scope, gone: this.gone, baseGone: this.baseGone, baseRef: this.baseRef });
@@ -237,7 +237,7 @@ export function codeBrowser({ gateway, highlighter, prefs, history = globalThis.
       return this.listDiff ? totalsView(this.listDiff) : null;
     },
     get noChanges() {
-      return !!this.diff && this.diff.files.length === 0;
+      return !!this.diff && this.diff.fileCount === 0;
     },
     /** The empty diff's heading: what it was compared with. */
     get noChangesTitle() {
@@ -611,7 +611,7 @@ export function codeBrowser({ gateway, highlighter, prefs, history = globalThis.
 
     /** The session's tab badge follows the changed files. */
     countFiles() {
-      if (this.kind === "session" && this.diff) this.$dispatch?.("code-files-counted", { count: this.diff.files.length });
+      if (this.kind === "session" && this.diff) this.$dispatch?.("code-files-counted", { count: this.diff.fileCount });
     },
 
     setFile(file) {
@@ -1160,15 +1160,15 @@ export function codeBrowser({ gateway, highlighter, prefs, history = globalThis.
     },
 
     countHeld(diff) {
-      if (this.kind === "session") this.$dispatch?.("code-files-counted", { count: diff.files.length });
+      if (this.kind === "session") this.$dispatch?.("code-files-counted", { count: diff.fileCount });
     },
 
     /** The uncommitted count in the source bar. */
     async readWorking() {
       if (this.kind !== "session" || this.gone || !this.source.workspaceId) return;
       try {
-        const w = await gateway.diff({ workspaceId: this.source.workspaceId, scope: "working" }, this.request("working"));
-        this.dirty = w.files.length;
+        const w = await gateway.diff({ workspaceId: this.source.workspaceId, scope: "working", limit: 0 }, this.request("working"));
+        this.dirty = w.fileCount;
       } catch {
         // the count is a hint; the bar goes without it
       }

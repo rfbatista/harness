@@ -6,7 +6,7 @@
 import { Codes } from "../../../shared/domain/errors.js";
 import { flush } from "../../../shared/testing/doubles.js";
 import { assert, test } from "../../../shared/testing/test.js";
-import { C2, HEAD, MAIN, makeWorld } from "./fixtures.js";
+import { C2, HEAD, MAIN, makeWorld, manyChangedFilesWorld } from "./fixtures.js";
 
 /**
  * @typedef {object} Subject
@@ -131,6 +131,53 @@ export function codeGatewayContract(name, makeSubject) {
     assert.deepEqual([old.withheld, old.hunks, old.deleted], ["too_large", null, 60]);
     const one = await gateway.diff({ workspaceId: "ws1", scope: "branch", path: "docs/old.md" });
     assert.equal(one.files[0].hunks.length, 1);
+  });
+
+  contract("diff pages: 50 files by default, a cursor to the next, whole-diff totals on every page (P1–P3)", async () => {
+    const { gateway } = makeSubject(manyChangedFilesWorld(120));
+    const first = await gateway.diff({ workspaceId: "ws1", scope: "working" });
+    assert.equal(first.files.length, 50);
+    assert.deepEqual([first.fileCount, first.next], [122, first.files.at(-1).path]);
+    const sorted = first.files.map((f) => f.path);
+    assert.deepEqual(sorted, [...sorted].sort());
+    const second = await gateway.diff({ workspaceId: "ws1", scope: "working", after: first.next, limit: 50 });
+    assert.ok(second.files[0].path > first.next);
+    assert.deepEqual([second.fileCount, second.added, second.deleted], [first.fileCount, first.added, first.deleted]);
+    const third = await gateway.diff({ workspaceId: "ws1", scope: "working", after: second.next });
+    assert.deepEqual([third.files.length, third.next], [22, null]);
+    const gone = await gateway.diff({ workspaceId: "ws1", scope: "working", after: "bulk/not-a-changed-path" });
+    assert.ok(gone.files.length > 0, "a cursor that is not a changed path is no error");
+  });
+
+  contract("diff totals: limit 0 answers no files and the whole diff's counts (P4)", async () => {
+    const { gateway } = makeSubject(manyChangedFilesWorld(120));
+    const totals = await gateway.diff({ workspaceId: "ws1", scope: "working", limit: 0 });
+    const page = await gateway.diff({ workspaceId: "ws1", scope: "working", limit: 200 });
+    assert.deepEqual([totals.files.length, totals.next], [0, null]);
+    assert.deepEqual([totals.fileCount, totals.added, totals.deleted], [page.fileCount, page.added, page.deleted]);
+    assert.equal(page.files.length, 122);
+  });
+
+  contract("diff pages: the hunk budget is one page's, so a later page starts fresh (P5)", async () => {
+    const { gateway } = makeSubject(manyChangedFilesWorld(120, { base: makeWorld({ limits: { total: 100 } }) }));
+    const first = await gateway.diff({ workspaceId: "ws1", scope: "working", limit: 30 });
+    assert.ok(first.truncated, "30 files of 4 lines pass a 100-line budget");
+    const later = await gateway.diff({ workspaceId: "ws1", scope: "working", after: first.next, limit: 30 });
+    assert.ok(later.files.some((f) => f.hunks), "the later page has its own budget");
+  });
+
+  contract("diff pages: a commit and a range page too (P7)", async () => {
+    const world = manyChangedFilesWorld(0);
+    const files = Object.fromEntries(Array.from({ length: 60 }, (_, i) => [`c/f${String(i).padStart(3, "0")}.txt`, `${i}\n`]));
+    world.commits[C2].files = { ...world.commits[C2].files, ...files };
+    const { gateway } = makeSubject(world);
+    const first = await gateway.diff({ repositoryId: "r1", commit: C2 });
+    assert.equal(first.fileCount, 62);
+    assert.deepEqual([first.files.length, first.next === null], [50, false]);
+    const rest = await gateway.diff({ repositoryId: "r1", commit: C2, after: first.next });
+    assert.deepEqual([rest.files.length, rest.next], [12, null]);
+    const totals = await gateway.diff({ repositoryId: "r1", commit: C2, limit: 0 });
+    assert.deepEqual([totals.files.length, totals.fileCount], [0, 62]);
   });
 
   contract("a gone worktree: browsing is WORKSPACE_MISSING; branch still answers, marked gone", async () => {

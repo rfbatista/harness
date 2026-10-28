@@ -41,6 +41,8 @@ export function stubCodeApi(world) {
               base: q.get("base") ?? "",
               head: q.get("head") ?? "",
               path: q.get("path") ?? "",
+              after: q.get("after") ?? "",
+              limit: q.has("limit") ? Number(q.get("limit")) : undefined,
             }),
           );
         default:

@@ -4,7 +4,7 @@ import { flush } from "../../../../shared/testing/doubles.js";
 import { assert, file, test } from "../../../../shared/testing/test.js";
 import { memoryCode } from "../../infrastructure/memory-gateway.js";
 import { plainHighlighter } from "../../infrastructure/plain-highlighter.js";
-import { makeWorld } from "../../testing/fixtures.js";
+import { makeWorld, manyChangedFilesWorld } from "../../testing/fixtures.js";
 import { finderRows } from "./codeBrowser.js";
 import { codePanel } from "./codePanel.js";
 
@@ -16,7 +16,7 @@ const memoryPrefs = () => {
 };
 
 /** A session's Code panel over the memory world, no seed painted; idle runs at once. */
-async function setup({ world = makeWorld(), live = true, shown = true, prefs = memoryPrefs() } = {}) {
+async function setup({ world = makeWorld(), live = true, shown = true, prefs = memoryPrefs(), seedId = "" } = {}) {
   const memory = memoryCode(world);
   const pushed = [];
   const history = { pushState: (_s, _t, url) => pushed.push(url), replaceState: (_s, _t, url) => pushed.push(url) };
@@ -25,7 +25,7 @@ async function setup({ world = makeWorld(), live = true, shown = true, prefs = m
   const mounted = mount(
     () => codePanel(deps)({
       key: "s1", projectId: "p1", taskId: "t1", sessionId: "s1", workspaceId: "ws1", repositoryId: "r1",
-      repositoryName: "harness", branch: "agent/visualize-code", baseRef: "main", live, shown, seedId: "",
+      repositoryName: "harness", branch: "agent/visualize-code", baseRef: "main", live, shown, seedId,
     }),
     { el },
   );
@@ -328,4 +328,39 @@ test("the Code tab leaving the front leaves full screen", async () => {
   panel.tabShown({ detail: { sessionId: "s1", shown: false } });
   assert.equal(panel.fullscreen, false);
   assert.deepEqual(dispatched.filter((d) => d.name === "code-fullscreen").map((d) => d.detail.on), [true, false]);
+});
+
+test("a diff of 120 changed files lists the first page and heads it with the whole diff's totals", async () => {
+  const { panel, dispatched } = await setup({ world: manyChangedFilesWorld(120) });
+  assert.equal(panel.diff.files.length, 50);
+  assert.equal(panel.summaryRows.length, 50);
+  assert.equal(panel.totals.files, "125 files");
+  assert.ok(panel.totals.added !== "+0");
+  assert.deepEqual(panel.views.map((v) => v.count), ["125", "", ""]);
+  assert.deepEqual(dispatched.find((d) => d.name === "code-files-counted").detail, { sessionId: "s1", count: 125 });
+  assert.equal(panel.dirty, 122, "the uncommitted count is the whole working diff's");
+});
+
+test("a first paint's page is used as read: the panel asks for no first page, only the uncommitted totals", async () => {
+  const world = manyChangedFilesWorld(120);
+  const memory = memoryCode(world);
+  const seed = document.createElement("script");
+  seed.id = "seed-s1";
+  seed.type = "application/json";
+  seed.textContent = JSON.stringify({
+    project_id: "p1",
+    route: { kind: "session", project_id: "p1", task_id: "t1", session_id: "s1", view: "changes" },
+    source: { workspace_id: "ws1" },
+    repository_name: "harness",
+    diff: memory.wire.diff({ workspaceId: "ws1", scope: "all", limit: 50 }),
+  });
+  document.body.append(seed);
+  try {
+    const { panel, memory: m } = await setup({ world, seedId: "seed-s1" });
+    assert.equal(panel.diff.files.length, 50);
+    assert.equal(panel.totals.files, "125 files");
+    assert.deepEqual(m.calls.filter((c) => c.name === "diff").map((c) => c.args.q.limit), [0], "one totals read for the count in the bar");
+  } finally {
+    seed.remove();
+  }
 });

@@ -11,8 +11,9 @@
  * @typedef {{ repositoryId?: string, ref?: string, workspaceId?: string }} SourceQuery
  *   exactly one of repositoryId (at ref, the checkout's branch when empty) or workspaceId
  *
- * @typedef {{ workspaceId?: string, scope?: string, repositoryId?: string, commit?: string, base?: string, head?: string, path?: string }} DiffQuery
- *   workspaceId with scope (all when empty), repositoryId with commit, or repositoryId with base and head; path narrows it to one file
+ * @typedef {{ workspaceId?: string, scope?: string, repositoryId?: string, commit?: string, base?: string, head?: string, path?: string, after?: string, limit?: number }} DiffQuery
+ *   workspaceId with scope (all when empty), repositoryId with commit, or repositoryId with base and head; path narrows it to one file.
+ *   Without path it is a diff page: `limit` files (50 when unset, 0 for the totals only) after the cursor `after`.
  *
  * @typedef {object} CodeGateway
  * @property {(src: SourceQuery, dir: string, signal?: AbortSignal) => Promise<import("./code.js").CodeTree>} tree

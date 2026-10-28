@@ -121,10 +121,10 @@ export const codePanel = (deps) => (/** @type {PanelInput} */ panel) => {
     },
 
     countFiles() {
-      if (this.diff) this.$dispatch("code-files-counted", { sessionId: this.sessionId, count: this.diff.files.length });
+      if (this.diff) this.$dispatch("code-files-counted", { sessionId: this.sessionId, count: this.diff.fileCount });
     },
     countHeld(diff) {
-      this.$dispatch("code-files-counted", { sessionId: this.sessionId, count: diff.files.length });
+      this.$dispatch("code-files-counted", { sessionId: this.sessionId, count: diff.fileCount });
     },
 
     /** The sessions page brought the Code tab to the front, or left it. */
