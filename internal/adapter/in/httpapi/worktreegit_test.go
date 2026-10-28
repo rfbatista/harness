@@ -20,6 +20,12 @@ type fakeWorktreeGit struct {
 	err    error
 	fetch  string
 	pushed []string
+	state  *domain.GitState
+}
+
+func (f *fakeWorktreeGit) PushBranch(_ context.Context, workspaceID, expectedHead string) (*domain.GitState, error) {
+	f.pushed = append(f.pushed, workspaceID+"@"+expectedHead)
+	return f.state, f.err
 }
 
 func (f *fakeWorktreeGit) FetchRemote(_ context.Context, repositoryID string) (time.Time, error) {
@@ -39,6 +45,19 @@ func TestHTTP_FetchRemote_AnswersWhenItFetched(t *testing.T) {
 	}
 }
 
+func TestHTTP_PushBranch_AnswersTheStateAfterThePush(t *testing.T) {
+	f := &fakeWorktreeGit{state: &domain.GitState{WorkspaceID: "w1", Head: "abc", Upstream: domain.UpstreamState{State: domain.UpstreamInSync}}}
+	h := NewHandler(Services{WorktreeGit: f})
+	code, body := doJSON(t, h, http.MethodPost, "/api/push_branch", `{"workspace_id":"w1","expected_head":"abc"}`)
+	state, _ := body["state"].(map[string]any)
+	if code != http.StatusOK || len(f.pushed) != 1 || f.pushed[0] != "w1@abc" || state["head"] != "abc" {
+		t.Fatalf("push_branch = %d %v (asked %v)", code, body, f.pushed)
+	}
+	if code, body := doJSON(t, NewHandler(Services{}), http.MethodPost, "/api/push_branch", `{"workspace_id":"w1","expected_head":"abc"}`); code != http.StatusServiceUnavailable || body["code"] != "UNAVAILABLE" {
+		t.Errorf("not configured: %d %v", code, body)
+	}
+}
+
 // Each refusal of the worktree git state, fetch and push has its status, with
 // the details the contract names.
 func TestHTTP_WorktreeGit_EachRefusalIsCodedAtItsStatus(t *testing.T) {
@@ -50,7 +69,7 @@ func TestHTTP_WorktreeGit_EachRefusalIsCodedAtItsStatus(t *testing.T) {
 		state := &domain.GitState{WorkspaceID: "w1", Upstream: domain.UpstreamState{State: domain.UpstreamBehind}}
 		f := &fakeWorktreeGit{err: domain.GitStateError(code, code+": because", state)}
 		h := NewHandler(Services{WorktreeGit: f})
-		got, body := doJSON(t, h, http.MethodPost, "/api/fetch_remote", `{"repository_id":"r1"}`)
+		got, body := doJSON(t, h, http.MethodPost, "/api/push_branch", `{"workspace_id":"w1","expected_head":"abc"}`)
 		if got != status || body["code"] != code || body["error"] != code+": because" {
 			t.Errorf("%s: %d %v, want %d", code, got, body, status)
 		}

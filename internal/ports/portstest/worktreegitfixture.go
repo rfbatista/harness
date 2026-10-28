@@ -166,3 +166,29 @@ func (f *WorktreeGitFixture) PushFromOtherClone(t *testing.T, branch, file strin
 	f.git(f.other, "commit", "-q", "-m", "remote "+file)
 	f.git(f.other, "push", "-q", "origin", branch)
 }
+
+// OriginRev is the commit origin holds for branch ("" when it has none).
+func (f *WorktreeGitFixture) OriginRev(t *testing.T, branch string) string {
+	t.Helper()
+	cmd := exec.Command("git", "rev-parse", "--verify", "--quiet", "refs/heads/"+branch)
+	cmd.Dir = f.OriginDir
+	cmd.Env = append(os.Environ(), "GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL=/dev/null")
+	out, _ := cmd.Output()
+	return strings.TrimSpace(string(out))
+}
+
+// RefuseInOrigin installs a pre-receive hook in origin that declines pushes to
+// branch, so a push of it is refused for what it carries; the returned func
+// removes it.
+func (f *WorktreeGitFixture) RefuseInOrigin(t *testing.T, branch string) (remove func()) {
+	t.Helper()
+	hook := filepath.Join(f.OriginDir, "hooks", "pre-receive")
+	script := "#!/bin/sh\nwhile read old new ref; do\n  if [ \"$ref\" = \"refs/heads/" + branch + "\" ]; then echo \"declined by the fixture's hook\" >&2; exit 1; fi\ndone\nexit 0\n"
+	if err := os.MkdirAll(filepath.Dir(hook), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(hook, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return func() { _ = os.Remove(hook) }
+}

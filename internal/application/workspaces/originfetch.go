@@ -82,37 +82,90 @@ func (f *OriginFetcher) Fetch(ctx context.Context, repositoryID, root, originURL
 	return nil
 }
 
+// credential opens the credentials of one remote operation. A remote that
+// needs one and has none stored is GIT_CREDENTIAL_MISSING; a remote that needs
+// none (a file path) is served without one. The caller releases the operation.
+func (f *OriginFetcher) credential(ctx context.Context, repositoryID, originURL string) (*ports.GitOperation, error) {
+	op, err := f.auth.Operation(ctx, repositoryID, originURL)
+	if err != nil {
+		return nil, err
+	}
+	if op.Push == nil {
+		res, err := f.auth.Resolve(ctx, repositoryID, originURL)
+		if err != nil {
+			op.Release()
+			return nil, err
+		}
+		if res.Remote != nil && res.Remote.Kind != "" {
+			op.Release()
+			return nil, domain.GitCredentialMissing(res.Remote.Host, res.Remote.Kind)
+		}
+	}
+	return op, nil
+}
+
+// refused is the error a remote's refusal of the credential is.
+func refused(op *ports.GitOperation, err error) error {
+	host, id := "", ""
+	if op.Push != nil {
+		host, id = op.Push.Host, op.Push.ID
+	}
+	return domain.GitCredentialRejected(host, id, reasonAfter(err, ports.ErrRemoteAuthRejected))
+}
+
 func (f *OriginFetcher) fetch(ctx context.Context, repositoryID, root, originURL string) error {
 	lock := f.lock(root)
 	lock.Lock()
 	defer lock.Unlock()
 
-	op, err := f.auth.Operation(ctx, repositoryID, originURL)
+	op, err := f.credential(ctx, repositoryID, originURL)
 	if err != nil {
 		return err
 	}
 	defer op.Release()
-	if op.Push == nil {
-		res, err := f.auth.Resolve(ctx, repositoryID, originURL)
-		if err != nil {
-			return err
-		}
-		if res.Remote != nil && res.Remote.Kind != "" {
-			return domain.GitCredentialMissing(res.Remote.Host, res.Remote.Kind)
-		}
-	}
 	fetchCtx, cancel := context.WithTimeout(ctx, f.timeout)
 	err = f.git.FetchOrigin(fetchCtx, root, op.Env)
 	cancel()
 	switch {
 	case errors.Is(err, ports.ErrRemoteAuthRejected):
-		host, id := "", ""
-		if op.Push != nil {
-			host, id = op.Push.Host, op.Push.ID
-		}
-		return domain.GitCredentialRejected(host, id, reasonAfter(err, ports.ErrRemoteAuthRejected))
+		return refused(op, err)
 	case err != nil:
 		return &OriginFetchError{Err: err}
+	}
+	if op.Push != nil {
+		f.auth.Used(op.Push.ID)
+	}
+	return nil
+}
+
+// OriginPushError is a push that failed for a reason other than the
+// credential. Rejected says the remote refused what was pushed (not a
+// fast-forward, a hook); Err carries git's reason.
+type OriginPushError struct {
+	Err      error
+	Rejected bool
+}
+
+func (e *OriginPushError) Error() string { return e.Err.Error() }
+func (e *OriginPushError) Unwrap() error { return e.Err }
+
+// Push publishes branch to origin with the stored credential and sets its
+// upstream; never forced. Credential refusals are as Fetch's, any other
+// failure an *OriginPushError.
+func (f *OriginFetcher) Push(ctx context.Context, repositoryID, root, originURL, branch string) error {
+	op, err := f.credential(ctx, repositoryID, originURL)
+	if err != nil {
+		return err
+	}
+	defer op.Release()
+	pushCtx, cancel := context.WithTimeout(ctx, f.timeout)
+	err = f.git.Push(pushCtx, root, branch, op.Env)
+	cancel()
+	switch {
+	case errors.Is(err, ports.ErrRemoteAuthRejected):
+		return refused(op, err)
+	case err != nil:
+		return &OriginPushError{Err: err, Rejected: errors.Is(err, ports.ErrPushRejected)}
 	}
 	if op.Push != nil {
 		f.auth.Used(op.Push.ID)

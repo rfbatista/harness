@@ -52,8 +52,12 @@ func (r *FeedRecorder) GitStates() []ports.GitStateChange {
 
 // NewWorktreeGitWithFeed is NewWorktreeGit with the feed it announces on, and
 // the shared origin fetch a pull request refresh would run.
-func NewWorktreeGitWithFeed(t *testing.T, f *portstest.WorktreeGitFixture) (*workspaces.WorktreeGit, portstest.WorktreeGitTarget, *FeedRecorder) {
+func NewWorktreeGitWithFeed(t *testing.T, f *portstest.WorktreeGitFixture, opts ...WorktreeGitOption) (*workspaces.WorktreeGit, portstest.WorktreeGitTarget, *FeedRecorder) {
 	t.Helper()
+	o := worktreeGitOptions{publisher: gitcli.NewBranchPublisher(), timeout: workspaces.OriginFetchTimeout}
+	for _, opt := range opts {
+		opt(&o)
+	}
 	db, err := sqlite.Open(":memory:")
 	if err != nil {
 		t.Fatal(err)
@@ -68,7 +72,11 @@ func NewWorktreeGitWithFeed(t *testing.T, f *portstest.WorktreeGitFixture) (*wor
 		t.Fatal(err)
 	}
 	wsRepo := sqlite.NewWorkspaceRepository(db)
-	at := portstest.WorktreeGitTarget{RepositoryID: repo.ID, NoRemoteRepositoryID: alone.ID, Workspaces: map[string]string{}, Sessions: map[string]string{}}
+	aloneWS, err := wsRepo.Create(domain.Workspace{RepositoryID: alone.ID, Name: "alone", Branch: "main", Path: f.NoOriginDir})
+	if err != nil {
+		t.Fatal(err)
+	}
+	at := portstest.WorktreeGitTarget{RepositoryID: repo.ID, NoRemoteRepositoryID: alone.ID, NoRemoteWorkspaceID: aloneWS.ID, Workspaces: map[string]string{}, Sessions: map[string]string{}}
 	for _, branch := range portstest.WorktreeGitBranches {
 		ws, err := wsRepo.Create(domain.Workspace{RepositoryID: repo.ID, Name: branch, Branch: branch, Path: f.Worktrees[branch], BaseRef: f.BaseRef})
 		if err != nil {
@@ -109,12 +117,29 @@ func NewWorktreeGitWithFeed(t *testing.T, f *portstest.WorktreeGitFixture) (*wor
 	}
 	clock := &passingClock{now: time.Now()}
 	feed := &FeedRecorder{}
-	publisher := gitcli.NewBranchPublisher()
 	svc := workspaces.NewWorktreeGit(workspaces.WorktreeGitDeps{
 		Workspaces: wsRepo, Repositories: repos, Sessions: sessions, Tickets: tickets,
 		Git: gitcli.NewCode(), Files: filesystem.NewWorktreeFiles(), Now: clock.Now,
-		Publisher: publisher, Fetcher: workspaces.NewOriginFetcher(publisher, gitcredentialstest.New()), Feed: feed,
+		Publisher: o.publisher, Fetcher: workspaces.NewOriginFetcher(o.publisher, gitcredentialstest.New()).WithTimeout(o.timeout), Feed: feed,
 	})
 	at.PassInterval = clock.Pass
 	return svc, at, feed
+}
+
+type worktreeGitOptions struct {
+	publisher ports.BranchPublisher
+	timeout   time.Duration
+}
+
+// WorktreeGitOption changes how NewWorktreeGitWithFeed is built.
+type WorktreeGitOption func(*worktreeGitOptions)
+
+// WithPublisher serves fetch and push through p instead of real git.
+func WithPublisher(p ports.BranchPublisher) WorktreeGitOption {
+	return func(o *worktreeGitOptions) { o.publisher = p }
+}
+
+// WithRemoteTimeout bounds each fetch and push to d.
+func WithRemoteTimeout(d time.Duration) WorktreeGitOption {
+	return func(o *worktreeGitOptions) { o.timeout = d }
 }

@@ -50,3 +50,13 @@ func (w *WorktreeGit) FetchRemote(ctx context.Context, repositoryID string) (tim
 	}
 	return out.FetchedAt, nil
 }
+
+func (w *WorktreeGit) PushBranch(ctx context.Context, workspaceID, expectedHead string) (*domain.GitState, error) {
+	var out struct {
+		State *domain.GitState `json:"state"`
+	}
+	if err := w.c.post(ctx, "/api/push_branch", map[string]string{"workspace_id": workspaceID, "expected_head": expectedHead}, &out); err != nil {
+		return nil, err
+	}
+	return out.State, nil
+}

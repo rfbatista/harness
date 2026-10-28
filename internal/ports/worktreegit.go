@@ -32,6 +32,17 @@ type WorktreeGit interface {
 	// GIT_CREDENTIAL_MISSING, GIT_CREDENTIAL_REJECTED,
 	// GIT_CREDENTIAL_STORE_LOCKED, FETCH_FAILED.
 	FetchRemote(ctx context.Context, repositoryID string) (time.Time, error)
+	// PushBranch pushes the workspace's branch to origin with the stored
+	// credential, setting its upstream, never forced, and answers the state
+	// after it. expectedHead is the head the person confirmed: another HEAD
+	// now is PUSH_STALE and nothing is pushed. One push per workspace runs at
+	// a time and each is bounded in time. The worktree is not touched.
+	//
+	// Errors: INVALID_INPUT, WORKSPACE_NOT_FOUND, REPOSITORY_NOT_FOUND,
+	// WORKSPACE_MISSING, NO_REMOTE, GIT_CREDENTIAL_MISSING,
+	// GIT_CREDENTIAL_REJECTED, GIT_CREDENTIAL_STORE_LOCKED, PUSH_STALE and
+	// PUSH_REJECTED (both with the state in their details), PUSH_FAILED.
+	PushBranch(ctx context.Context, workspaceID, expectedHead string) (*domain.GitState, error)
 }
 
 // GitWorktreeStatus is what one status pass over a worktree reads.

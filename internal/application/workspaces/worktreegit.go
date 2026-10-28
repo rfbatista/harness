@@ -44,8 +44,9 @@ type WorktreeGitDeps struct {
 type WorktreeGit struct {
 	d WorktreeGitDeps
 
-	mu    sync.Mutex
-	slots map[string]*stateSlot // by workspace
+	mu        sync.Mutex
+	slots     map[string]*stateSlot  // by workspace
+	pushLocks map[string]*sync.Mutex // per workspace: one push at a time
 }
 
 // stateSlot is the state held for one workspace; its mutex lets one read run
@@ -60,7 +61,7 @@ func NewWorktreeGit(d WorktreeGitDeps) *WorktreeGit {
 	if d.Now == nil {
 		d.Now = time.Now
 	}
-	s := &WorktreeGit{d: d, slots: map[string]*stateSlot{}}
+	s := &WorktreeGit{d: d, slots: map[string]*stateSlot{}, pushLocks: map[string]*sync.Mutex{}}
 	if d.Fetcher != nil {
 		d.Fetcher.OnFetched(s.afterFetch)
 	}
@@ -237,6 +238,101 @@ func (s *WorktreeGit) FetchRemote(ctx context.Context, repositoryID string) (tim
 		return at.UTC(), nil
 	}
 	return s.d.Now().UTC(), nil
+}
+
+// PushBranch pushes a workspace's branch to origin, and announces the state it
+// left. The HEAD is read again under the workspace's lock, so a commit made
+// since the person confirmed is never pushed.
+func (s *WorktreeGit) PushBranch(ctx context.Context, workspaceID, expectedHead string) (*domain.GitState, error) {
+	switch {
+	case strings.TrimSpace(workspaceID) == "":
+		return nil, invalid("workspace_id is required")
+	case strings.TrimSpace(expectedHead) == "":
+		return nil, invalid("expected_head is required")
+	}
+	ws := s.d.Workspaces.Get(ctx, workspaceID)
+	if ws == nil {
+		return nil, &domain.StructuredError{Code: "WORKSPACE_NOT_FOUND", Message: "workspace not found"}
+	}
+	repo, err := s.repository(ctx, ws.RepositoryID)
+	if err != nil {
+		return nil, err
+	}
+	if s.d.Fetcher == nil || s.d.Publisher == nil {
+		return nil, &domain.StructuredError{Code: "UNAVAILABLE", Message: "pushing is not available"}
+	}
+	if !s.d.Files.Exists(ws.Path) {
+		return nil, worktreeMissing(ws)
+	}
+	origin, err := s.d.Publisher.OriginURL(ctx, repo.RootDir)
+	if err != nil {
+		return nil, err
+	}
+	if origin == "" {
+		return nil, &domain.StructuredError{Code: domain.CodeNoRemote, Message: "the repository has no origin remote"}
+	}
+
+	lock := s.pushLock(ws.ID)
+	lock.Lock()
+	defer lock.Unlock()
+	s.forget(ws.ID)
+	now, err := s.stateOf(ctx, ws, repo)
+	if err != nil {
+		return nil, err
+	}
+	s.nameSession(ctx, now)
+	switch {
+	case now.Gone:
+		return nil, worktreeMissing(ws)
+	case now.Branch == "":
+		return nil, invalid("the worktree's HEAD is detached; there is no branch to push")
+	case now.Head != expectedHead:
+		return nil, domain.GitStateError(domain.CodePushStale, "the branch moved since you confirmed: its HEAD is now "+now.Head, now)
+	}
+
+	err = s.d.Fetcher.Push(ctx, repo.ID, repo.RootDir, origin, now.Branch)
+	s.forget(ws.ID)
+	var failed *OriginPushError
+	switch {
+	case errors.As(err, &failed):
+		after := s.reread(ctx, ws, repo, now)
+		if failed.Rejected {
+			return nil, domain.GitStateError(domain.CodePushRejected, "the remote rejected the push: "+failed.Error(), after)
+		}
+		return nil, &domain.StructuredError{Code: domain.CodePushFailed, Message: "pushing " + now.Branch + " to origin failed: " + failed.Error()}
+	case err != nil:
+		return nil, err
+	}
+	after, err := s.stateOf(ctx, ws, repo)
+	if err != nil {
+		return nil, err
+	}
+	s.nameSession(ctx, after)
+	if s.d.Feed != nil {
+		s.d.Feed.AnnounceChange(ports.ProjectChange{GitState: &ports.GitStateChange{GitState: copyState(after), ProjectID: repo.ProjectID}})
+	}
+	return after, nil
+}
+
+// reread is the workspace's state now, or before when it cannot be read.
+func (s *WorktreeGit) reread(ctx context.Context, ws *domain.Workspace, repo *domain.Repository, before *domain.GitState) *domain.GitState {
+	st, err := s.stateOf(ctx, ws, repo)
+	if err != nil {
+		return before
+	}
+	s.nameSession(ctx, st)
+	return st
+}
+
+func (s *WorktreeGit) pushLock(workspaceID string) *sync.Mutex {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	l, ok := s.pushLocks[workspaceID]
+	if !ok {
+		l = &sync.Mutex{}
+		s.pushLocks[workspaceID] = l
+	}
+	return l
 }
 
 // announceParallelism bounds the status passes an announcement runs at once.

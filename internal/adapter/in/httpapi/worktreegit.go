@@ -56,3 +56,21 @@ func (h *Handler) handleFetchRemote(c echo.Context) error {
 	}
 	return c.JSON(http.StatusOK, map[string]any{"fetched_at": at})
 }
+
+func (h *Handler) handlePushBranch(c echo.Context) error {
+	if err := h.worktreeGitOr503(); err != nil {
+		return err
+	}
+	var in struct {
+		WorkspaceID  string `json:"workspace_id"`
+		ExpectedHead string `json:"expected_head"`
+	}
+	if err := bindJSON(c, &in); err != nil {
+		return err
+	}
+	st, err := h.worktreeGit.PushBranch(c.Request().Context(), in.WorkspaceID, in.ExpectedHead)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, map[string]any{"state": st})
+}

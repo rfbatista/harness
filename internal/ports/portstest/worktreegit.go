@@ -2,6 +2,7 @@ package portstest
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -15,7 +16,9 @@ type WorktreeGitTarget struct {
 	RepositoryID string
 	// NoRemoteRepositoryID is the fixture's repository with no origin.
 	NoRemoteRepositoryID string
-	Workspaces   map[string]string
+	// NoRemoteWorkspaceID is a workspace of that repository.
+	NoRemoteWorkspaceID string
+	Workspaces          map[string]string
 	// TaskID names a task with one running session per workspace (Sessions by
 	// branch) and one session with no workspace. TaskOrder is the branches of
 	// its sessions in the order the task page lists them.
@@ -244,6 +247,103 @@ func WorktreeGitConformance(t *testing.T, newPort func(t *testing.T, f *Worktree
 		wantCode(t, err, "REPOSITORY_NOT_FOUND")
 		_, err = p.FetchRemote(ctx, at.NoRemoteRepositoryID)
 		wantCode(t, err, "NO_REMOTE")
+	})
+
+	t.Run("a push the remote refuses for what it carries is PUSH_REJECTED", func(t *testing.T) {
+		// A hook declining the branch.
+		defer f.RefuseInOrigin(t, "nopush")()
+		head := state(t, "nopush").Head
+		_, err := p.PushBranch(ctx, at.Workspaces["nopush"], head)
+		wantCode(t, err, "PUSH_REJECTED")
+		if got := f.OriginRev(t, "nopush"); got != "" {
+			t.Errorf("origin holds nopush at %s after a refused push", got)
+		}
+		if st, _ := detailsOf(t, err)["state"].(map[string]any); st["workspace_id"] != at.Workspaces["nopush"] {
+			t.Errorf("details = %v, want the state", detailsOf(t, err))
+		}
+
+		// Never forced: a branch diverged from its upstream is refused, and origin keeps its commit.
+		before := f.OriginRev(t, "diverged")
+		_, err = p.PushBranch(ctx, at.Workspaces["diverged"], state(t, "diverged").Head)
+		wantCode(t, err, "PUSH_REJECTED")
+		if got := f.OriginRev(t, "diverged"); got != before {
+			t.Errorf("origin's diverged moved from %s to %s: the push was forced", before, got)
+		}
+		details := detailsOf(t, err)
+		st, _ := details["state"].(map[string]any)
+		if up, _ := st["upstream"].(map[string]any); up["state"] != domain.UpstreamDiverged {
+			t.Errorf("details state = %v, want the re-read state, diverged", details)
+		}
+		if !strings.Contains(strings.ToLower(err.Error()), "reject") {
+			t.Errorf("the message does not carry git's reason: %v", err)
+		}
+	})
+
+	t.Run("a push of a branch whose head moved is PUSH_STALE and pushes nothing", func(t *testing.T) {
+		before := f.OriginRev(t, "ahead")
+		_, err := p.PushBranch(ctx, at.Workspaces["ahead"], "0000000000000000000000000000000000000000")
+		wantCode(t, err, "PUSH_STALE")
+		if st, _ := detailsOf(t, err)["state"].(map[string]any); st["head"] != f.Heads["ahead"] {
+			t.Errorf("details = %v, want the state with the head now", detailsOf(t, err))
+		}
+		if got := f.OriginRev(t, "ahead"); got != before {
+			t.Errorf("origin's ahead moved from %s to %s", before, got)
+		}
+	})
+
+	t.Run("a push publishes the branch and sets its upstream", func(t *testing.T) {
+		// Never pushed: origin gets the branch, and it tracks it.
+		head := state(t, "nopush").Head
+		st, err := p.PushBranch(ctx, at.Workspaces["nopush"], head)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if st.Upstream.State != domain.UpstreamInSync || st.Upstream.Ref == nil || *st.Upstream.Ref != "origin/nopush" || st.Upstream.Remote == nil || *st.Upstream.Remote != "origin" {
+			t.Errorf("after the first push: %+v", st.Upstream)
+		}
+		if got := f.OriginRev(t, "nopush"); got != head {
+			t.Errorf("origin holds nopush at %q, want %s", got, head)
+		}
+		if again := state(t, "nopush"); again.Upstream.State != domain.UpstreamInSync {
+			t.Errorf("the state read after the push = %s", again.Upstream.State)
+		}
+
+		// Ahead, with uncommitted work: the commits go, the worktree stays as it was.
+		wt := f.Worktrees["ahead"]
+		statusBefore := f.Git(t, wt, "status", "--porcelain")
+		head = state(t, "ahead").Head
+		st, err = p.PushBranch(ctx, at.Workspaces["ahead"], head)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if st.Upstream.State != domain.UpstreamInSync || st.Uncommitted != (domain.Uncommitted{Tracked: 2, Untracked: 1, Staged: 1}) {
+			t.Errorf("after pushing ahead: %+v, uncommitted %+v", st.Upstream, st.Uncommitted)
+		}
+		if got := f.OriginRev(t, "ahead"); got != head {
+			t.Errorf("origin holds ahead at %q, want %s", got, head)
+		}
+		if after := f.Git(t, wt, "status", "--porcelain"); after != statusBefore || f.Git(t, wt, "rev-parse", "HEAD") != head {
+			t.Errorf("the push touched the worktree:\n%s\nthen\n%s", statusBefore, after)
+		}
+
+		// A branch whose upstream was deleted is published again.
+		st, err = p.PushBranch(ctx, at.Workspaces["deleted"], state(t, "deleted").Head)
+		if err != nil || st.Upstream.State != domain.UpstreamInSync {
+			t.Errorf("deleted upstream pushed again = %+v, %v", st, err)
+		}
+	})
+
+	t.Run("a push needs a worktree on disk and a repository with an origin", func(t *testing.T) {
+		_, err := p.PushBranch(ctx, at.Workspaces["gone"], f.Heads["gone"])
+		wantCode(t, err, "WORKSPACE_MISSING")
+		_, err = p.PushBranch(ctx, at.NoRemoteWorkspaceID, "abc")
+		wantCode(t, err, "NO_REMOTE")
+		_, err = p.PushBranch(ctx, "", "abc")
+		wantCode(t, err, "INVALID_INPUT")
+		_, err = p.PushBranch(ctx, at.Workspaces["ahead"], "")
+		wantCode(t, err, "INVALID_INPUT")
+		_, err = p.PushBranch(ctx, "no-such-workspace", "abc")
+		wantCode(t, err, "WORKSPACE_NOT_FOUND")
 	})
 
 	t.Run("bad requests", func(t *testing.T) {
