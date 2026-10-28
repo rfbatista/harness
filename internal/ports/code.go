@@ -116,6 +116,9 @@ type GitCode interface {
 	WorktreeEntries(ctx context.Context, dir string, deleted bool) ([]GitEntry, error)
 	// UntrackedFiles lists a worktree's untracked files git does not ignore.
 	UntrackedFiles(ctx context.Context, dir string) ([]string, error)
+	// StagedPaths lists the paths whose change from HEAD is in the index (a
+	// renamed file by its new path); none when HEAD does not exist yet.
+	StagedPaths(ctx context.Context, dir string) ([]string, error)
 	// Blob reads at most max bytes of the blob object.
 	Blob(ctx context.Context, dir, object string, max int64) ([]byte, error)
 	// Changes lists the files changed from base to head; head "" is the

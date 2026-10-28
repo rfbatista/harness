@@ -483,7 +483,7 @@ func CodeConformance(t *testing.T, newPort func(t *testing.T, f *CodeFixture) (p
 		if working.Scope != domain.ScopeWorking || working.Base != f.SessionHead {
 			t.Errorf("working = scope %s base %s", working.Scope, working.Base)
 		}
-		wantDiffPaths(t, working, []string{"README.md", "new.txt", "nonl.txt"})
+		wantDiffPaths(t, working, []string{"README.md", "nonl.txt", "new.txt"})
 		for _, fd := range working.Files {
 			if fd.Path == "nonl.txt" {
 				lines := fd.Hunks[0].Lines
@@ -503,6 +503,108 @@ func CodeConformance(t *testing.T, newPort func(t *testing.T, f *CodeFixture) (p
 		}
 		_, err = p.CodeDiff(ctx, ports.CodeDiffQuery{WorkspaceID: at.WorkspaceID, Path: "docs/new.md"})
 		wantCode(t, err, "PATH_NOT_FOUND")
+	})
+
+	t.Run("the working scope tells tracked from untracked, flags staged, and counts", func(t *testing.T) {
+		// Tracked files first in path order, then untracked; README.md sorts
+		// before new.txt before nonl.txt, so the order is not plain path order.
+		wantOrder := []string{"README.md", "nonl.txt", "new.txt"}
+		working, err := p.CodeDiff(ctx, ports.CodeDiffQuery{WorkspaceID: at.WorkspaceID, Scope: "working"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		var got []string
+		for _, fd := range working.Files {
+			got = append(got, fd.Path)
+			wantSection := domain.SectionTracked
+			if fd.Path == "new.txt" {
+				wantSection = domain.SectionUntracked
+			}
+			if fd.Section == nil || *fd.Section != wantSection {
+				t.Errorf("%s section = %v, want %s", fd.Path, fd.Section, wantSection)
+			}
+			if fd.Staged != (fd.Path == "README.md") {
+				t.Errorf("%s staged = %v", fd.Path, fd.Staged)
+			}
+		}
+		if !slices.Equal(got, wantOrder) {
+			t.Errorf("working order = %v, want %v", got, wantOrder)
+		}
+		wantCounts := domain.DiffCounts{Modified: 1, Deleted: 1, Untracked: 1}
+		if working.Counts != wantCounts {
+			t.Errorf("counts = %+v, want %+v", working.Counts, wantCounts)
+		}
+		if working.Sections == nil || *working.Sections != (domain.DiffSections{Tracked: 2, Untracked: 1, Staged: 1}) {
+			t.Errorf("sections = %+v", working.Sections)
+		}
+
+		// The cursor follows that order, one file a page.
+		var paged []string
+		q := ports.CodeDiffQuery{WorkspaceID: at.WorkspaceID, Scope: "working", Limit: 1}
+		for pages := 0; pages < 5; pages++ {
+			d, err := p.CodeDiff(ctx, q)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if d.Counts != wantCounts || d.FileCount != 3 {
+				t.Errorf("page %d counts = %+v, file_count %d", pages, d.Counts, d.FileCount)
+			}
+			for _, fd := range d.Files {
+				paged = append(paged, fd.Path)
+			}
+			if d.Next == nil {
+				break
+			}
+			q.After = *d.Next
+		}
+		if !slices.Equal(paged, wantOrder) {
+			t.Errorf("paged order = %v, want %v", paged, wantOrder)
+		}
+		// A cursor on a tracked path with no tracked path after it starts at the untracked ones;
+		// one on an untracked path leaves only untracked paths.
+		after, err := p.CodeDiff(ctx, ports.CodeDiffQuery{WorkspaceID: at.WorkspaceID, Scope: "working", After: "nonl.txt"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		wantDiffPaths(t, after, []string{"new.txt"})
+		after, err = p.CodeDiff(ctx, ports.CodeDiffQuery{WorkspaceID: at.WorkspaceID, Scope: "working", After: "new.txt"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		wantDiffPaths(t, after, nil)
+
+		// The counts come with no page at all.
+		totals, err := p.CodeDiff(ctx, ports.CodeDiffQuery{WorkspaceID: at.WorkspaceID, Scope: "working", TotalsOnly: true})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(totals.Files) != 0 || totals.Counts != wantCounts || totals.Sections == nil || totals.Sections.Tracked != 2 {
+			t.Errorf("totals-only = %s", show(totals))
+		}
+
+		// Other scopes carry no section and no staged flag, and no sections.
+		for _, scope := range []string{"all", "branch"} {
+			d, err := p.CodeDiff(ctx, ports.CodeDiffQuery{WorkspaceID: at.WorkspaceID, Scope: scope})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if d.Sections != nil {
+				t.Errorf("scope %s sections = %+v, want null", scope, d.Sections)
+			}
+			sum := d.Counts.Added + d.Counts.Modified + d.Counts.Deleted + d.Counts.Renamed + d.Counts.Copied + d.Counts.TypeChanged + d.Counts.Untracked
+			if sum != d.FileCount {
+				t.Errorf("scope %s counts %+v do not sum to %d", scope, d.Counts, d.FileCount)
+			}
+			for _, fd := range d.Files {
+				if fd.Section != nil || fd.Staged {
+					t.Errorf("scope %s %s section %v staged %v", scope, fd.Path, fd.Section, fd.Staged)
+				}
+			}
+		}
+		c, err := p.CodeDiff(ctx, ports.CodeDiffQuery{RepositoryID: at.RepositoryID, Commit: f.Rename})
+		if err != nil || c.Counts.Renamed != 1 || c.Counts.Modified != 1 || c.Sections != nil {
+			t.Errorf("commit counts = %+v sections %v, %v", c.Counts, c.Sections, err)
+		}
 	})
 
 	t.Run("a diff is read one page at a time", func(t *testing.T) {

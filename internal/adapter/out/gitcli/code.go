@@ -369,6 +369,21 @@ func (c Code) UntrackedFiles(ctx context.Context, dir string) ([]string, error) 
 	return paths, nil
 }
 
+// StagedPaths lists the paths with a change in the index against HEAD.
+func (c Code) StagedPaths(ctx context.Context, dir string) ([]string, error) {
+	out, err := c.d.codeOutput(ctx, dir, "diff", "--cached", "--name-only", "-z", "--no-renames", "--no-ext-diff", "--")
+	if err != nil {
+		return nil, err
+	}
+	var paths []string
+	for p := range strings.SplitSeq(out, "\x00") {
+		if p != "" {
+			paths = append(paths, p)
+		}
+	}
+	return paths, nil
+}
+
 // Blob reads at most max bytes of the blob, stopping git once it has them.
 func (c Code) Blob(ctx context.Context, dir, object string, max int64) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(ctx, c.d.read())

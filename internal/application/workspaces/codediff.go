@@ -147,11 +147,28 @@ func pageOf(q ports.CodeDiffQuery) (diffPage, error) {
 }
 
 // cut is the page of the path-sorted changes, and whether more follow it.
-func (pg diffPage) cut(changes []ports.GitChange) (page []ports.GitChange, more bool) {
+//
+// In the working scope the order is tracked files, then untracked ones, each
+// by path; the cursor is a path, placed in that order by its own section.
+func (pg diffPage) cut(changes []ports.GitChange, working bool) (page []ports.GitChange, more bool) {
 	if pg.limit == 0 { // the totals-only read
 		return nil, false
 	}
+	afterRank := 0 // a cursor that is no untracked change continues in the tracked ones
+	if working {
+		for _, ch := range changes {
+			if ch.Path == pg.after && sectionRank(ch.Status) == 1 {
+				afterRank = 1
+				break
+			}
+		}
+	}
 	start, _ := slices.BinarySearchFunc(changes, pg.after, func(ch ports.GitChange, after string) int {
+		if working {
+			if d := cmp.Compare(sectionRank(ch.Status), afterRank); d != 0 {
+				return d
+			}
+		}
 		if ch.Path <= after {
 			return -1
 		}
@@ -209,10 +226,44 @@ func (c *Code) CodeDiff(ctx context.Context, q ports.CodeDiffQuery) (*domain.Cod
 			return nil, &domain.StructuredError{Code: "PATH_NOT_FOUND", Message: only + " did not change"}
 		}
 	}
-	slices.SortFunc(changes, func(a, b ports.GitChange) int { return strings.Compare(a.Path, b.Path) })
+	working := plan.scope == domain.ScopeWorking
+	var staged map[string]bool
+	if working {
+		paths, err := c.d.Git.StagedPaths(ctx, plan.dir)
+		if err != nil {
+			return nil, err
+		}
+		staged = make(map[string]bool, len(paths))
+		for _, p := range paths {
+			staged[p] = true
+		}
+	}
+	slices.SortFunc(changes, func(a, b ports.GitChange) int {
+		if working { // tracked files first, then untracked ones
+			if d := cmp.Compare(sectionRank(a.Status), sectionRank(b.Status)); d != 0 {
+				return d
+			}
+		}
+		return strings.Compare(a.Path, b.Path)
+	})
 
 	out := &domain.CodeDiff{Source: plan.src.src, Base: plan.base, Scope: plan.scope, FileCount: len(changes)}
+	if working {
+		out.Sections = &domain.DiffSections{}
+	}
 	for _, ch := range changes {
+		out.Counts.Add(ch.Status)
+		if working {
+			switch {
+			case ch.Status == domain.ChangeUntracked:
+				out.Sections.Untracked++
+			case staged[ch.Path]:
+				out.Sections.Tracked++
+				out.Sections.Staged++
+			default:
+				out.Sections.Tracked++
+			}
+		}
 		if ch.Added >= 0 && ch.Deleted >= 0 {
 			out.Added += ch.Added
 			out.Deleted += ch.Deleted
@@ -220,7 +271,7 @@ func (c *Code) CodeDiff(ctx context.Context, q ports.CodeDiffQuery) (*domain.Cod
 	}
 	if paged {
 		var more bool
-		if changes, more = pg.cut(changes); more {
+		if changes, more = pg.cut(changes, working); more {
 			out.Next = strp(changes[len(changes)-1].Path)
 		}
 	}
@@ -231,6 +282,13 @@ func (c *Code) CodeDiff(ctx context.Context, q ports.CodeDiffQuery) (*domain.Cod
 		fd := domain.FileDiff{
 			Path: ch.Path, Status: ch.Status, Added: ch.Added, Deleted: ch.Deleted,
 			Language: domain.LanguageOf(ch.Path), Zones: plan.src.zonesOf(ch.Path, false),
+		}
+		if working {
+			fd.Section = strp(domain.SectionTracked)
+			if ch.Status == domain.ChangeUntracked {
+				fd.Section = strp(domain.SectionUntracked)
+			}
+			fd.Staged = staged[ch.Path]
 		}
 		if ch.OldPath != "" {
 			fd.OldPath = strp(ch.OldPath)
@@ -326,4 +384,12 @@ func (c *Code) untrackedHunk(dir string, fd *domain.FileDiff, maxLines int) erro
 	h.Lines[len(lines)-1].NoNewline = noNewline
 	fd.Hunks = []domain.Hunk{h}
 	return nil
+}
+
+// sectionRank orders the working scope: tracked changes before untracked.
+func sectionRank(status string) int {
+	if status == domain.ChangeUntracked {
+		return 1
+	}
+	return 0
 }
