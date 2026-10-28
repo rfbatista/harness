@@ -75,6 +75,8 @@ func descriptionAttrs(description string) templ.Attributes {
 // reviewsButtonAttrs paints the title row's Reviews button before the browser
 // reads the requests: named with the count when some wait on the person,
 // hidden when none do.
+// The button's own display rule would beat the hidden attribute, so it is
+// hidden with an inline display: none that Alpine's x-show then takes over.
 func reviewsButtonAttrs(pending int) templ.Attributes {
 	if pending > 0 {
 		return templ.Attributes{"aria-label": "Reviews, " + strconv.Itoa(pending) + " waiting"}

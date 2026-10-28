@@ -127,7 +127,7 @@ templ Page(v PageView) {
 						<button type="button" class="[ button ]" data-size="sm" x-bind:aria-busy="archiving" x-on:click="restoreTask">Restore</button>
 					</div>
 				}
-				@taskBand(v)
+				@taskNote(v)
 			</div>
 			}
 			<template x-if="error">
@@ -337,7 +337,7 @@ templ featureButton(v PageView) {
 
 // brainstormsHeader heads the project's sessions page: its feature
 // brainstorms, the product-mode sessions that run with no task. There is no
-// task to edit, so no task band.
+// task to edit, so no task note.
 templ brainstormsHeader(v PageView) {
 	<header class="[ toolbar ]">
 		<a class="[ crumb ]" href={ templ.SafeURL("/projects/" + v.ProjectID) }>{ v.ProjectName } /</a>
@@ -941,10 +941,10 @@ templ designPanel() {
 	</div>
 }
 
-// taskBand sits under the toolbar, in the task editor's scope: who moved
+// taskNote sits under the toolbar, in the task editor's scope: who moved
 // the task's status last and why (seen live, over the feed), the
 // description, the edit form, the delete confirmation, the editor's errors.
-templ taskBand(v PageView) {
+templ taskNote(v PageView) {
 	<template x-if="statusLine">
 		<p class="[ status-change ]">
 			<span x-text="statusLine"></span>

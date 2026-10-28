@@ -19,7 +19,7 @@ const controls = `[...document.querySelectorAll('.toolbar a, .toolbar button, .t
 // and Delete task (last, after a separator); the row holds nine controls on a
 // plain task; Delete task keeps its confirmation.
 func TestTheTaskMenuHoldsDesignAssetsResourcesAndDeleteTask(t *testing.T) {
-	url, _ := stripServer(t, resourcesDeps())
+	url, _ := pageServer(t, resourcesDeps())
 	ctx, errs := browser(t)
 
 	const popup = `document.querySelector('#task-menu-button').parentElement.querySelector('[role=menu]')`
@@ -69,7 +69,7 @@ func TestTheTaskMenuHoldsDesignAssetsResourcesAndDeleteTask(t *testing.T) {
 
 // Below 48rem the task menu is an action sheet.
 func TestTheTaskMenuIsAnActionSheetOnAPhone(t *testing.T) {
-	url, _ := stripServer(t, resourcesDeps())
+	url, _ := pageServer(t, resourcesDeps())
 	ctx, errs := browser(t)
 
 	const popup = `document.querySelector('#task-menu-button').parentElement.querySelector('[role=menu]')`
@@ -96,7 +96,7 @@ func TestTheTaskMenuIsAnActionSheetOnAPhone(t *testing.T) {
 // A resource or a design asset arriving over the feed counts in the menu;
 // Documents and Comments keep counting in the row.
 func TestTheTaskMenuCountsFollowTheFeed(t *testing.T) {
-	url, feed := stripServer(t, resourcesDeps())
+	url, feed := pageServer(t, resourcesDeps())
 	ctx, errs := browser(t)
 
 	menuCount := func(sel string) string {

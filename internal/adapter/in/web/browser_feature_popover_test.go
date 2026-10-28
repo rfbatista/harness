@@ -20,7 +20,7 @@ const (
 // featureWorld is a feature task with n children: the first three in review,
 // the next two in progress, the rest todo.
 func featureWorld(n int) Deps {
-	deps := bandedDeps()
+	deps := taskPageDeps()
 	tickets := []*domain.Ticket{{ID: "t-feed", ProjectID: "p1", Title: "Add SSE feed", Status: domain.TicketStatusInProgress}}
 	for i := 0; i < n; i++ {
 		status := domain.TicketStatusTodo
@@ -43,7 +43,7 @@ func featureWorld(n int) Deps {
 // min(70dvh, 40rem); a headless window's dvh is its real size, not the
 // emulated one, so forty children make sure the cap is reached.)
 func TestTheFeaturePopoverScrollsInsideItsCapAndTheAgentsKeepTheirHeight(t *testing.T) {
-	url, _ := stripServer(t, featureWorld(40))
+	url, _ := pageServer(t, featureWorld(40))
 	ctx, errs := browser(t)
 
 	var label, foot, order string
@@ -111,7 +111,7 @@ func TestTheFeaturePopoverScrollsInsideItsCapAndTheAgentsKeepTheirHeight(t *test
 // Children move and arrive over the feed: the count, the foot and the row
 // order follow while the popover is open.
 func TestTheFeaturePopoverFollowsTheChildrenLive(t *testing.T) {
-	url, feed := stripServer(t, bandedDeps())
+	url, feed := pageServer(t, taskPageDeps())
 	ctx, errs := browser(t)
 
 	label := featureBtn + `.textContent.replace(/\s+/g, ' ').trim()`
@@ -160,7 +160,7 @@ func TestTheFeaturePopoverFollowsTheChildrenLive(t *testing.T) {
 // A task with no children shows no Feature button, and none appears for a
 // task with nothing to summarise.
 func TestATaskWithNoChildrenShowsNoFeatureButton(t *testing.T) {
-	url, _ := stripServer(t, boardDeps())
+	url, _ := pageServer(t, boardDeps())
 	ctx, errs := browser(t)
 
 	var shown bool

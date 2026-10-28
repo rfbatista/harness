@@ -68,9 +68,6 @@ export const feature = ({ store, hash = () => globalThis.location?.hash ?? "" })
   get count() {
     return this.summary.count;
   },
-  get phrase() {
-    return this.summary.phrase;
-  },
   get buttonName() {
     return this.summary.name;
   },

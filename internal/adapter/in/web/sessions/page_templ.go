@@ -526,7 +526,7 @@ func Page(v PageView) templ.Component {
 						return templ_7745c5c3_Err
 					}
 				}
-				templ_7745c5c3_Err = taskBand(v).Render(ctx, templ_7745c5c3_Buffer)
+				templ_7745c5c3_Err = taskNote(v).Render(ctx, templ_7745c5c3_Buffer)
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -1059,7 +1059,7 @@ func featureButton(v PageView) templ.Component {
 
 // brainstormsHeader heads the project's sessions page: its feature
 // brainstorms, the product-mode sessions that run with no task. There is no
-// task to edit, so no task band.
+// task to edit, so no task note.
 func brainstormsHeader(v PageView) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
@@ -2390,10 +2390,10 @@ func designPanel() templ.Component {
 	})
 }
 
-// taskBand sits under the toolbar, in the task editor's scope: who moved
+// taskNote sits under the toolbar, in the task editor's scope: who moved
 // the task's status last and why (seen live, over the feed), the
 // description, the edit form, the delete confirmation, the editor's errors.
-func taskBand(v PageView) templ.Component {
+func taskNote(v PageView) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 		if templ_7745c5c3_CtxErr := ctx.Err(); templ_7745c5c3_CtxErr != nil {

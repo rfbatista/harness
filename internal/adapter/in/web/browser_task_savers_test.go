@@ -11,9 +11,9 @@ import (
 // wide, and on a short narrow screen the form scrolls inside its popover while
 // Save stays in reach.
 func TestTheEditFormShowsTheTokenSaversAndKeepsSaveInReach(t *testing.T) {
-	deps := bandedDeps()
+	deps := taskPageDeps()
 	deps.TokenSavers = fakeSaverActivations{}
-	url, _ := stripServer(t, deps)
+	url, _ := pageServer(t, deps)
 	ctx, errs := browser(t)
 
 	const section = `document.querySelector('#task-note .task-savers')`
@@ -68,7 +68,7 @@ func TestTheEditFormShowsTheTokenSaversAndKeepsSaveInReach(t *testing.T) {
 
 // With no token savers served the Edit form has no such section.
 func TestTheEditFormHasNoTokenSaversSectionWhenNoneAreServed(t *testing.T) {
-	url, _ := stripServer(t, bandedDeps())
+	url, _ := pageServer(t, taskPageDeps())
 	ctx, errs := browser(t)
 	var present bool
 	if err := chromedp.Run(ctx,

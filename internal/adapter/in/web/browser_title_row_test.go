@@ -14,10 +14,10 @@ import (
 	"operators-mcp/internal/domain"
 )
 
-// bandedWorld is a feature task with sixteen children (3 in review, 2 in
-// progress, 11 todo) and one session: the page whose bands used to fill the
+// taskPageDeps is a feature task with sixteen children (3 in review, 2 in
+// progress, 11 todo) and one session: the page whose context used to fill the
 // screen.
-func bandedDeps() Deps {
+func taskPageDeps() Deps {
 	deps := boardDeps()
 	tickets := []*domain.Ticket{{ID: "t-feed", ProjectID: "p1", Title: "Add SSE feed", Status: domain.TicketStatusInProgress}}
 	for i := 0; i < 16; i++ {
@@ -47,7 +47,7 @@ var waitForFonts = chromedp.ActionFunc(func(ctx context.Context) error {
 	return fmt.Errorf("the webfonts did not load")
 })
 
-func stripServer(t *testing.T, deps Deps) (string, *sseFeed) {
+func pageServer(t *testing.T, deps Deps) (string, *sseFeed) {
 	t.Helper()
 	assets, err := NewAssets()
 	if err != nil {
@@ -81,8 +81,8 @@ const listGap = `(document.querySelector('[role=listbox]').getBoundingClientRect
 // A task with no request, no children and no token savers shows a title row
 // with no Reviews or Feature button, and nothing between it and the agents:
 // no context strip, and no task_band cookie is ever written.
-func TestATaskWithNothingToSummariseDrawsNoContextStrip(t *testing.T) {
-	url, _ := stripServer(t, boardDeps())
+func TestATaskWithNothingToSummariseDrawsNoStripAndNoCookie(t *testing.T) {
+	url, _ := pageServer(t, boardDeps())
 	ctx, errs := browser(t)
 
 	var strip, buttons bool
@@ -146,7 +146,7 @@ func TestTheAgentsKeepTheWholeHeightUnderTheTitleRow(t *testing.T) {
 // The Feature button the server paints and the one the live page draws sit in
 // the same place: the handover does not move the agents.
 func TestTheFeatureButtonDoesNotJumpWhenTheLivePageTakesOver(t *testing.T) {
-	url, _ := stripServer(t, bandedDeps())
+	url, _ := pageServer(t, taskPageDeps())
 	geometry := `(() => { const b = ` + featureBtn + `.getBoundingClientRect(), l = document.querySelector('[role=listbox]').getBoundingClientRect(); return [b.top, b.left, b.width, b.height, l.top].map(Math.round).join(',') })()`
 
 	// The server's paint: scripts off.
