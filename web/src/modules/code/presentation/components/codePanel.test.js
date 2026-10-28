@@ -17,8 +17,9 @@ const memoryPrefs = () => {
 };
 
 /** A session's Code panel over the memory world, no seed painted; idle runs at once. */
-async function setup({ world = makeWorld(), live = true, shown = true, prefs = memoryPrefs(), seedId = "" } = {}) {
+async function setup({ world = makeWorld(), live = true, shown = true, prefs = memoryPrefs(), seedId = "", slow = 0, settle = true } = {}) {
   const memory = memoryCode(world);
+  if (slow) memory.slow(slow);
   const pushed = [];
   const history = { pushState: (_s, _t, url) => pushed.push(url), replaceState: (_s, _t, url) => pushed.push(url) };
   const deps = { gateway: memory.gateway, highlighter: plainHighlighter(), preparer: inlinePreparer(plainHighlighter()), prefs, history, location: { pathname: "/", search: "", hash: "" }, idle: (cb) => cb() };
@@ -31,8 +32,10 @@ async function setup({ world = makeWorld(), live = true, shown = true, prefs = m
     { el },
   );
   mounted.instance.init();
-  await flush();
-  await flush();
+  if (settle) {
+    await flush();
+    await flush();
+  }
   return { ...mounted, panel: mounted.instance, memory, pushed, prefs };
 }
 
@@ -367,4 +370,16 @@ test("a first paint's page is used as read: the panel asks for no first page, on
   } finally {
     seed.remove();
   }
+});
+
+test("while a diff loads the bar's status spins and the changed files list skeleton rows, both aria-busy; neither stays", async () => {
+  const { panel } = await setup({ slow: 40, settle: false });
+  await flush();
+  assert.deepEqual([panel.busyAttr, panel.stateText, panel.listBusy], ["", "Loading changes", "true"]);
+  assert.equal(panel.listSkeleton.length, 3);
+  assert.equal(panel.summaryRows.length, 0, "no file yet");
+  await new Promise((r) => setTimeout(r, 150));
+  assert.deepEqual([panel.busyAttr, panel.listBusy, panel.listSkeleton.length], [null, null, 0]);
+  assert.equal(panel.hasState || panel.busyAttr !== null, true, "the live word is back");
+  assert.equal(panel.stateText, "live");
 });

@@ -16,7 +16,9 @@
  * Exceptions: aria-current="location" (the file on screen), .stat .note (a
  * faint word in place of or after the counts: "binary", "not loaded"), .old
  * (a rename's old path under the new one), and in place of .changed a .none
- * sentence ("No changes on this branch yet.").
+ * sentence ("No changes on this branch yet"). While a page loads, .changed
+ * carries aria-busy="true" and ends with li.skeleton-row placeholders (each
+ * holds one .skeleton bar).
  */
 
 @layer blocks {
@@ -46,6 +48,14 @@
 
     & .changed { padding: var(--space-2xs) 0; list-style: none; }
     & li { max-inline-size: none; }
+
+    /* A page is loading: the list ends with placeholder rows, one file row high. */
+    & .changed > .skeleton-row {
+      display: flex;
+      align-items: center;
+      min-block-size: var(--size-nav-row);
+      padding-inline: var(--space-s) var(--space-m);
+    }
 
     & .changed a {
       display: grid;

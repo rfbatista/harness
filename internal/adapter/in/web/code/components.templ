@@ -104,8 +104,8 @@ templ liveSourceBar() {
 				<span class="dirty" x-text="bar.dirty"></span>
 			</template>
 		</div>
-		<template x-if="hasState">
-			<p class="state" role="status" x-text="bar.word"></p>
+		<template x-if="hasState || busy">
+			<p class="state" role="status" x-bind:data-loading="busyAttr" x-text="stateText"></p>
 		</template>
 		<div class="actions">
 			<template x-if="isStale">
@@ -166,10 +166,7 @@ templ liveSummary() {
 		<template x-if="noChanges">
 			<p class="none" x-text="noChangesText"></p>
 		</template>
-		<template x-if="loadingDiff && !diff">
-			<div class="[ pad-s ] [ flow ]" aria-busy="true"><div class="[ skeleton ]"></div><div class="[ skeleton ]"></div></div>
-		</template>
-		<ol class="changed">
+		<ol class="changed" x-bind:aria-busy="listBusy">
 			<template x-for="row in summaryRows" x-bind:key="row.key">
 				<li x-bind:data-fresh="row.fresh">
 					<a x-bind:href="row.href" x-bind:aria-current="row.current" x-bind:aria-label="row.label" x-on:click="clickSummary($event, row.path)">
@@ -188,6 +185,9 @@ templ liveSummary() {
 						</template>
 					</a>
 				</li>
+			</template>
+			<template x-for="s in listSkeleton" x-bind:key="s.key">
+				<li class="skeleton-row" aria-hidden="true"><span class="skeleton"></span></li>
 			</template>
 		</ol>
 	</nav>

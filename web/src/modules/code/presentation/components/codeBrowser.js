@@ -199,6 +199,22 @@ export function codeBrowser({ gateway, highlighter, preparer, prefs, history = g
     get hasState() {
       return this.liveState !== FIXED;
     },
+    /** A diff or a page of it is being read: the bar's status spins and the changed files show skeleton rows. */
+    get busy() {
+      return this.loadingDiff;
+    },
+    get busyAttr() {
+      return this.busy ? "" : null;
+    },
+    get stateText() {
+      return this.busy ? "Loading changes" : this.bar.word;
+    },
+    get listBusy() {
+      return this.busy ? "true" : null;
+    },
+    get listSkeleton() {
+      return this.busy ? skeletonRows("changed") : [];
+    },
     get isStale() {
       return this.liveState === "stale";
     },
