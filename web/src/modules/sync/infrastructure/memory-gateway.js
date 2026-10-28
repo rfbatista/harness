@@ -131,7 +131,7 @@ export function memorySync({ workspaces = [], now = () => new Date(), delayMs = 
         const ref = up.ref;
         const ahead = remote ? remote.ahead : (up.ahead ?? 0);
         const behind = remote ? remote.behind : (up.behind ?? 0);
-        const state = upstreamStateOf({ ref, ahead, behind, fetchedAt, exists: up.state !== "gone" });
+        const state = upstreamStateOf({ ref, ahead, behind, fetchedAt, pushedAt: w.state.pushedAt, exists: up.state !== "gone" });
         const counted = state !== "none" && state !== "gone" && state !== "unknown";
         reread(w, { fetchedAt, upstream: Object.freeze({ ...up, state, ahead: counted ? ahead : null, behind: counted ? behind : null }) });
       }
@@ -159,7 +159,7 @@ export function memorySync({ workspaces = [], now = () => new Date(), delayMs = 
       if (up.state === "behind" || up.state === "diverged") throw refusal(Codes.PUSH_REJECTED, undefined, { state: reread(w, {}) });
       pushed.push({ workspaceId, expectedHead });
       const ref = up.ref ?? `origin/${w.state.branch}`;
-      reread(w, { upstream: Object.freeze({ state: "in_sync", ref, remote: "origin", ahead: 0, behind: 0 }) });
+      reread(w, { pushedAt: now(), upstream: Object.freeze({ state: "in_sync", ref, remote: "origin", ahead: 0, behind: 0 }) });
       if (echoesFirst) {
         announce(w);
         await macrotask();

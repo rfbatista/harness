@@ -19,9 +19,10 @@
  * @property {string} branch         "" when detached
  * @property {string} head           full hash; "" before the first commit
  * @property {boolean} gone          the worktree is no longer on disk
- * @property {{ ref: string, ahead: number, behind: number }} base  ref "" when it no longer resolves
+ * @property {{ ref: string, gone: boolean, ahead: number, behind: number }} base  gone when ref no longer resolves
  * @property {Upstream} upstream
  * @property {Date | null} fetchedAt when the repository's origin was last fetched
+ * @property {Date | null} pushedAt  when this server last pushed the branch
  * @property {{ tracked: number, untracked: number, staged: number }} uncommitted
  * @property {Date} readAt           when the server read this state
  */
@@ -34,13 +35,13 @@ export const OLD_AFTER_MS = 60 * 60 * 1000;
 /**
  * The upstream state git's counts and the fetch time mean, as the contract's table says.
  * Used by the in-memory gateway; the server's answer is always taken as it comes.
- * @param {{ ref: string | null, ahead: number, behind: number, fetchedAt: Date | null, exists?: boolean }} facts
+ * @param {{ ref: string | null, ahead: number, behind: number, fetchedAt: Date | null, pushedAt?: Date | null, exists?: boolean }} facts
  * @returns {UpstreamState}
  */
-export function upstreamStateOf({ ref, ahead, behind, fetchedAt, exists = true }) {
+export function upstreamStateOf({ ref, ahead, behind, fetchedAt, pushedAt = null, exists = true }) {
   if (!ref) return "none";
   if (!exists) return "gone";
-  if (!fetchedAt) return "unknown";
+  if (!fetchedAt && !pushedAt) return "unknown";
   if (ahead > 0 && behind > 0) return "diverged";
   if (ahead > 0) return "ahead";
   if (behind > 0) return "behind";
@@ -62,7 +63,7 @@ export function fresher(held, incoming) {
 export function commitsToPush(state) {
   const { upstream } = state;
   if (upstream.state === "ahead") return upstream.ahead ?? null;
-  if (upstream.state === "none") return state.base.ref === "" ? null : state.base.ahead;
+  if (upstream.state === "none") return state.base.gone ? null : state.base.ahead;
   return null;
 }
 
@@ -76,7 +77,7 @@ export function canPush(state) {
   if (state.gone || state.branch === "" || state.head === "") return false;
   if (state.upstream.state === "ahead") return true;
   if (state.upstream.state !== "none") return false;
-  return state.base.ref === "" ? true : state.base.ahead > 0;
+  return state.base.gone ? true : state.base.ahead > 0;
 }
 
 /** The remote branch a push writes: the upstream's ref, or origin/<branch> when there is none. */

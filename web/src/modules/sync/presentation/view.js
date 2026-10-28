@@ -21,29 +21,35 @@ const COUNTED = ["ahead", "behind", "diverged"];
 
 /**
  * How long ago origin was last fetched, in words, and whether that is old
- * (over an hour; never fetched counts as old).
- * @returns {{ ago: string, never: boolean, old: boolean }}
+ * (over an hour; never fetched counts as old). A branch this server pushed
+ * while the repository was never fetched is known as of the push: `pushed`
+ * then says so, `ago` is the push's age and the counts are old only when the
+ * push is.
+ * @returns {{ ago: string, never: boolean, pushed: boolean, old: boolean }}
  */
-export function fetchAge(fetchedAt, now = new Date()) {
-  if (!fetchedAt) return { ago: "", never: true, old: true };
-  const minutes = Math.max(0, Math.floor((now.getTime() - fetchedAt.getTime()) / 60000));
+export function fetchAge(fetchedAt, now = new Date(), pushedAt = null) {
+  if (!fetchedAt && !pushedAt) return { ago: "", never: true, pushed: false, old: true };
+  const since = fetchedAt ?? pushedAt;
+  const minutes = Math.max(0, Math.floor((now.getTime() - since.getTime()) / 60000));
   let ago;
   if (minutes < 1) ago = "just now";
   else if (minutes < 60) ago = `${minutes} min ago`;
   else if (minutes < 24 * 60) ago = `${Math.floor(minutes / 60)} h ago`;
   else ago = `${plural(Math.floor(minutes / (24 * 60)), "day", "days")} ago`;
-  return { ago, never: false, old: isOld(fetchedAt, now) };
+  return { ago, never: false, pushed: !fetchedAt, old: isOld(since, now) };
 }
 
 /** The panel's age line: "Remote last fetched 12 min ago". */
-export function freshLine(fetchedAt, now = new Date()) {
-  const age = fetchAge(fetchedAt, now);
+export function freshLine(fetchedAt, now = new Date(), pushedAt = null) {
+  const age = fetchAge(fetchedAt, now, pushedAt);
+  if (age.pushed) return `Pushed ${age.ago} · never fetched`;
   return age.never ? "Remote not fetched yet" : `Remote last fetched ${age.ago}`;
 }
 
 /** The History head's tail: "fetched 12 min ago". */
-export function fetchedPhrase(fetchedAt, now = new Date()) {
-  const age = fetchAge(fetchedAt, now);
+export function fetchedPhrase(fetchedAt, now = new Date(), pushedAt = null) {
+  const age = fetchAge(fetchedAt, now, pushedAt);
+  if (age.pushed) return `pushed ${age.ago} · never fetched`;
   return age.never ? "not fetched yet" : `fetched ${age.ago}`;
 }
 
@@ -68,7 +74,7 @@ export function chipOf(state, { now = new Date(), busy = "" } = {}) {
   const behind = hasCounts ? (up.behind ?? 0) : 0;
   const word = busy === "fetching" ? "Fetching…" : busy === "pushing" ? "Pushing…" : (WORDS[up.state] ?? "");
   const label = upstreamLabel(state);
-  const age = fetchAge(state.fetchedAt, now);
+  const age = fetchAge(state.fetchedAt, now, state.pushedAt);
   const what = up.ref ? `Upstream ${up.ref}` : "No upstream";
   const facts = hasCounts ? `${plural(ahead, "commit", "commits")} ahead, ${plural(behind, "commit", "commits")} behind` : (WORDS[up.state] ?? "");
   return {
@@ -83,7 +89,7 @@ export function chipOf(state, { now = new Date(), busy = "" } = {}) {
     hasWord: word !== "",
     loading: busy !== "",
     old: hasCounts && age.old,
-    describe: `${what}: ${facts}${age.never ? "" : `, fetched ${age.ago}`}.`,
+    describe: `${what}: ${facts}${age.never ? "" : `, ${age.pushed ? "pushed" : "fetched"} ${age.ago}`}.`,
   };
 }
 
@@ -91,8 +97,8 @@ export function chipOf(state, { now = new Date(), busy = "" } = {}) {
 
 /** The base comparison as a chip: counts against the branch it was cut from. */
 function baseChip(state) {
-  const { ref, ahead, behind } = state.base;
-  if (ref === "") return { state: "gone", hasCounts: false, ahead: 0, behind: 0, word: "base gone", hasWord: true };
+  const { gone, ahead, behind } = state.base;
+  if (gone) return { state: "gone", hasCounts: false, ahead: 0, behind: 0, word: "base gone", hasWord: true };
   const kind = ahead > 0 && behind > 0 ? "diverged" : ahead > 0 ? "ahead" : behind > 0 ? "behind" : "in-sync";
   const hasCounts = kind !== "in-sync";
   return { state: kind, hasCounts, ahead, behind, word: hasCounts ? "" : "in sync", hasWord: !hasCounts };
@@ -120,8 +126,8 @@ function upstreamHint(state) {
 }
 
 function baseHint(state) {
-  const { ref, ahead, behind } = state.base;
-  if (ref === "") return "The base branch no longer exists.";
+  const { ref, gone, ahead, behind } = state.base;
+  if (gone) return `The base branch ${ref} no longer exists.`;
   return `${plural(ahead, "commit", "commits")} ahead of ${ref}, ${behind} behind.`;
 }
 
@@ -145,14 +151,14 @@ export function pushQuestion(state) {
  * @param {{ now?: Date, busy?: "" | "fetching" | "pushing" }} [ctx]
  */
 export function panelOf(state, { now = new Date(), busy = "" } = {}) {
-  const age = fetchAge(state.fetchedAt, now);
+  const age = fetchAge(state.fetchedAt, now, state.pushedAt);
   const offered = canPush(state);
   return {
     branch: state.branch || "detached HEAD",
     commit: state.head.slice(0, 7),
     base: { prefix: "vs base", ref: state.base.ref, chip: baseChip(state), hint: baseHint(state) },
     upstream: { prefix: "vs upstream", ref: state.upstream.ref ?? "", chip: chipOf(state, { now, busy }), hint: upstreamHint(state) },
-    fresh: { line: freshLine(state.fetchedAt, now), old: age.old },
+    fresh: { line: freshLine(state.fetchedAt, now, state.pushedAt), old: age.old },
     fetchLabel: busy === "fetching" ? "Fetching…" : "↻ Fetch",
     offersPush: offered,
     pushLabel: busy === "pushing" ? "Pushing…" : pushLabel(state),

@@ -21,7 +21,7 @@ test("push is offered when ahead of the upstream, or with no upstream and commit
 test("with no upstream push needs commits: none ahead of the base, a detached HEAD or a gone worktree offer nothing", () => {
   const none = (o) => canPush(makeState({ upstream: "none", ...o }));
   assert.equal(none({ base: { ref: "main", ahead: 0, behind: 2 } }), false, "nothing the base lacks");
-  assert.equal(none({ base: { ref: "", ahead: 0, behind: 0 } }), true, "the base is gone: the head decides");
+  assert.equal(none({ base: { ref: "main", gone: true, ahead: 0, behind: 0 } }), true, "the base is gone: the head decides");
   assert.equal(none({ head: "" }), false, "before the first commit");
   assert.equal(none({ branch: "" }), false, "detached");
   assert.equal(none({ gone: true }), false, "worktree gone");
@@ -31,7 +31,7 @@ test("with no upstream push needs commits: none ahead of the base, a detached HE
 test("the commits a push publishes: ahead of the upstream, or of the base with no upstream", () => {
   assert.equal(commitsToPush(makeState({ upstream: "ahead" })), 3);
   assert.equal(commitsToPush(makeState({ upstream: "none", base: { ref: "main", ahead: 5, behind: 0 } })), 5);
-  assert.equal(commitsToPush(makeState({ upstream: "none", base: { ref: "", ahead: 0, behind: 0 } })), null);
+  assert.equal(commitsToPush(makeState({ upstream: "none", base: { ref: "main", gone: true, ahead: 0, behind: 0 } })), null);
 });
 
 test("the push target is the upstream's ref, or origin/<branch> when there is none", () => {

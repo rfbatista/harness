@@ -32,7 +32,7 @@ export function toGitState(dto) {
     branch: text(dto.branch),
     head: text(dto.head),
     gone: dto.gone === true,
-    base: Object.freeze({ ref: text(base.ref), ahead: count(base.ahead), behind: count(base.behind) }),
+    base: Object.freeze({ ref: text(base.ref), gone: base.gone === true, ahead: count(base.ahead), behind: count(base.behind) }),
     upstream: Object.freeze({
       state: up.state,
       ref: nullableText(up.ref),
@@ -41,6 +41,7 @@ export function toGitState(dto) {
       behind: nullableCount(up.behind),
     }),
     fetchedAt: dto.fetched_at ? time(dto.fetched_at, `${at}: fetched_at`) : null,
+    pushedAt: dto.pushed_at ? time(dto.pushed_at, `${at}: pushed_at`) : null,
     uncommitted: Object.freeze({ tracked: count(dirty.tracked), untracked: count(dirty.untracked), staged: count(dirty.staged) }),
     readAt: time(dto.read_at, `${at}: read_at`),
   });
@@ -55,9 +56,10 @@ export function toGitStateDTO(s) {
     branch: s.branch,
     head: s.head,
     gone: s.gone,
-    base: { ref: s.base.ref, ahead: s.base.ahead, behind: s.base.behind },
+    base: { ref: s.base.ref, gone: s.base.gone, ahead: s.base.ahead, behind: s.base.behind },
     upstream: { state: s.upstream.state, ref: s.upstream.ref, remote: s.upstream.remote, ahead: s.upstream.ahead, behind: s.upstream.behind },
     fetched_at: s.fetchedAt ? s.fetchedAt.toISOString() : null,
+    pushed_at: s.pushedAt ? s.pushedAt.toISOString() : null,
     uncommitted: { tracked: s.uncommitted.tracked, untracked: s.uncommitted.untracked, staged: s.uncommitted.staged },
     read_at: s.readAt.toISOString(),
   };

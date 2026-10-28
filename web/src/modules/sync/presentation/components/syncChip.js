@@ -109,6 +109,6 @@ export const syncChip = ({ store, actions, now = () => new Date() }) => (workspa
   },
   /** The fetch age is old (amber). */
   get old() {
-    return !!this.gitState && isOld(this.gitState.fetchedAt, now());
+    return !!this.gitState && isOld(this.gitState.fetchedAt ?? this.gitState.pushedAt, now());
   },
 });

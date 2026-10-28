@@ -64,6 +64,12 @@ export function syncGatewayContract(name, makeSubject) {
     assert.equal((await gateway.get("ws1")).upstream.state, "in_sync");
   });
 
+  contract("a push on a never fetched repository leaves it in sync with pushed_at set and fetched_at null", async () => {
+    const { gateway } = makeSubject({ workspaces: [ws("none", {}, { fetchedAt: null })], now });
+    const after = await gateway.push({ workspaceId: "ws1", expectedHead: (await gateway.get("ws1")).head });
+    assert.deepEqual([after.upstream.state, after.fetchedAt, after.pushedAt.toISOString()], ["in_sync", null, now().toISOString()]);
+  });
+
   contract("fetchRemote refusals: no repository, no origin, no credential (naming the host), a failed fetch", async () => {
     const { gateway, world } = makeSubject({ workspaces: [ws("in_sync")] });
     await assert.rejects(gateway.fetchRemote("r-gone"), Codes.REPOSITORY_NOT_FOUND);

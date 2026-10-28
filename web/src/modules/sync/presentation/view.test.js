@@ -46,6 +46,15 @@ test("the fetch age reads in minutes, hours and days, and is amber only past an 
   assert.equal(fetchedPhrase(minutesAgo(12), T0), "fetched 12 min ago");
 });
 
+test("a branch pushed on a never fetched repository reads as pushed, not as unknown", () => {
+  assert.equal(freshLine(null, T0, minutesAgo(3)), "Pushed 3 min ago · never fetched");
+  assert.equal(fetchedPhrase(null, T0, minutesAgo(3)), "pushed 3 min ago · never fetched");
+  assert.equal(freshLine(minutesAgo(12), T0, minutesAgo(3)), "Remote last fetched 12 min ago", "both set: the fetch age as before");
+  assert.deepEqual([fetchAge(null, T0, minutesAgo(3)).old, fetchAge(null, T0, minutesAgo(90)).old], [false, true]);
+  const state = makeState({ upstream: "in_sync", fetchedAt: null, pushedAt: minutesAgo(3) });
+  assert.deepEqual([chipOf(state, { now: T0 }).word, panelOf(state, { now: T0 }).fresh.line], ["in sync", "Pushed 3 min ago · never fetched"]);
+});
+
 test("counts are underlined as old only when there are counts and the fetch is over an hour old", () => {
   assert.equal(chip("ahead", { fetchedAt: minutesAgo(180) }).old, true);
   assert.equal(chip("ahead", { fetchedAt: minutesAgo(12) }).old, false);
@@ -63,7 +72,7 @@ test("the push button and its question name the commits and the remote branch", 
   assert.equal(pushQuestion(makeState({ upstream: "ahead" })), "Push 3 commits to origin/agent/sync-1234?");
   const unpushed = makeState({ upstream: "none", base: { ref: "main", ahead: 2, behind: 0 } });
   assert.equal(pushQuestion(unpushed), "Push 2 commits to origin/agent/sync-1234?");
-  assert.equal(pushQuestion(makeState({ upstream: "none", base: { ref: "", ahead: 0, behind: 0 } })), "Push the branch to origin/agent/sync-1234?");
+  assert.equal(pushQuestion(makeState({ upstream: "none", base: { ref: "main", gone: true, ahead: 0, behind: 0 } })), "Push the branch to origin/agent/sync-1234?");
 });
 
 test("the panel has the branch and short commit, a row per comparison, the age and Push only when offered", () => {
@@ -85,7 +94,8 @@ test("the panel reads Fetching… and Pushing… on its buttons while busy", () 
 
 test("the base row reads in sync, missing or by its counts", () => {
   assert.equal(panelOf(makeState({ base: { ref: "main", ahead: 0, behind: 0 } }), { now: T0 }).base.chip.word, "in sync");
-  assert.equal(panelOf(makeState({ base: { ref: "", ahead: 0, behind: 0 } }), { now: T0 }).base.chip.state, "gone");
+  assert.equal(panelOf(makeState({ base: { ref: "main", gone: true, ahead: 0, behind: 0 } }), { now: T0 }).base.chip.state, "gone");
+  assert.deepEqual([panelOf(makeState({ base: { ref: "main", gone: true, ahead: 0, behind: 0 } }), { now: T0 }).base.chip.word, panelOf(makeState({ base: { ref: "main", gone: true, ahead: 0, behind: 0 } }), { now: T0 }).base.hint], ["base gone", "The base branch main no longer exists."]);
 });
 
 test("uncommitted work reads 3 changed · 2 new, or clean", () => {
