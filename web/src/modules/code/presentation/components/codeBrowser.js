@@ -83,6 +83,9 @@ export function codeBrowser({ gateway, highlighter, preparer, proximity = inters
   const queue = new Set();
   let nearby = null;
   let pumping = false;
+  // The changed files' row views, kept while a file's data does not change: a selection redoes two.
+  const rowViews = new Map();
+  let heldSlugs = { readId: 0, slugs: {} };
   // The rows the code worker made for each diff read, by the read's id (Alpine
   // wraps the diff in a proxy, so the object itself is no key).
   /** @type {Map<number, { split: boolean, files: Map<string, import("../../domain/ports.js").PreparedFile> }>} */
@@ -195,8 +198,10 @@ export function codeBrowser({ gateway, highlighter, preparer, proximity = inters
     /** A re-read diff held while the reader is in the middle of the old one. */
     heldDiff: null,
     diffRev: 0,
-    /** Files whose section is drawn again on its own (a withheld file loaded): their own counter. */
+    /** A file's section is drawn again when its counter moves: its content changed, or its withheld diff was loaded. */
     fileRevs: {},
+    /** The paths that changed in reads the reader has not been shown yet (a held diff). */
+    heldDirty: new Set(),
     /** The layout the open diff's rows were made for (the worker makes them; a switch waits for it). */
     rowsSplit: false,
     /** The first paint's diff page is being prepared. */
@@ -351,9 +356,20 @@ export function codeBrowser({ gateway, highlighter, preparer, proximity = inters
     get summaryRows() {
       const list = this.listDiff;
       if (!list) return [];
+      if (list !== this.diff && heldSlugs.readId !== list.readId) heldSlugs = { readId: list.readId, slugs: Object.fromEntries(slugs(list.files.map((f) => f.path))) };
+      const bySlug = list === this.diff ? this.diffSlugs : heldSlugs.slugs;
       const fresh = new Set(this.freshPaths);
-      const s = slugs(list.files.map((f) => f.path));
-      return list.files.map((f) => summaryRowView(f, { slug: s.get(f.path), current: f.path === this.currentFile, fresh: fresh.has(f.path) }));
+      const current = this.currentFile;
+      return list.files.map((f) => {
+        const slug = bySlug[f.path];
+        const isFresh = fresh.has(f.path);
+        const isCurrent = f.path === current;
+        const hit = rowViews.get(f.path);
+        if (hit && hit.f === f && hit.slug === slug && hit.fresh === isFresh && hit.current === isCurrent) return hit.view;
+        const view = summaryRowView(f, { slug, current: isCurrent, fresh: isFresh });
+        rowViews.set(f.path, { f, slug, fresh: isFresh, current: isCurrent, view });
+        return view;
+      });
     },
     get totals() {
       return this.listDiff ? totalsView(this.listDiff) : null;
@@ -379,7 +395,7 @@ export function codeBrowser({ gateway, highlighter, preparer, proximity = inters
         return diffFileView(f, {
           slug: this.diffSlugs[f.path],
           // The layout changes the rows: a new key draws them again.
-          rev: `${this.diffRev}.${this.fileRevs[f.path] ?? 0}:${this.rowsSplit ? "split" : "unified"}`,
+          rev: `${this.fileRevs[f.path] ?? 0}:${this.rowsSplit ? "split" : "unified"}`,
           collapsed: !!this.collapsed[f.path],
           busy: !!this.busyFiles[f.path],
           asked: !!this.askedFiles[f.path],
@@ -748,15 +764,27 @@ export function codeBrowser({ gateway, highlighter, preparer, proximity = inters
 
     setDiff(diff) {
       const { slugs: bySlug, collapsed } = diffSetup(diff);
+      // The files whose content differs from what the reader has: only their sections are drawn again.
+      const prior = this.diff;
+      const dirty = new Set(this.heldDirty);
+      for (const path of changedPaths(rowsOf.get(diff))) dirty.add(path);
+      this.heldDirty = new Set();
+      if (prior) {
+        const revs = { ...this.fileRevs };
+        for (const f of diff.files) if (dirty.has(f.path)) revs[f.path] = (revs[f.path] ?? 0) + 1;
+        this.fileRevs = revs;
+        this.askedFiles = Object.fromEntries(Object.entries(this.askedFiles).filter(([p]) => !dirty.has(p)));
+      } else {
+        this.fileRevs = {};
+        this.askedFiles = {};
+      }
       const keep = this.diff ? { ...this.collapsed } : {};
       this.diffSlugs = Object.fromEntries(bySlug);
       this.collapsed = this.diff ? Object.fromEntries(diff.files.filter((f) => keep[f.path] ?? collapsed[f.path]).map((f) => [f.path, true])) : collapsed;
       this.diff = diff;
       this.diffRev += 1;
-      this.fileRevs = {};
       this.rowsSplit = rowsOf.get(diff)?.split ?? this.wantSplit;
       rowsOf.prune([diff, this.heldDiff]);
-      this.askedFiles = {};
       if (diff.source.gone) this.markGone();
       if (!this.commit || diff.source.kind === "workspace") this.commit = diff.source.commit;
       if (!this.currentFile || !diff.files.some((f) => f.path === this.currentFile)) this.currentFile = diff.files[0]?.path ?? "";
@@ -798,9 +826,8 @@ export function codeBrowser({ gateway, highlighter, preparer, proximity = inters
       }
     },
 
-    /** Adds a page's files after the loaded ones; a file seen twice (the worktree moved between reads, P6) takes the newer. */
-    appendPage(page) {
-      const open = this.diff;
+    /** A diff with a page's files after its own; a file seen twice (the worktree moved between reads, P6) takes the newer. */
+    mergeDiff(open, page) {
       const sets = rowsOf.get(open);
       const at = new Map(open.files.map((f, i) => [f.path, i]));
       const files = [...open.files];
@@ -808,11 +835,23 @@ export function codeBrowser({ gateway, highlighter, preparer, proximity = inters
         if (at.has(f.path)) files[at.get(f.path)] = f;
         else files.push(f);
       }
-      const next = Object.freeze({ ...open, files: Object.freeze(files), next: page.next, fileCount: page.fileCount, added: page.added, deleted: page.deleted, truncated: open.truncated || page.truncated, readId: ++reads });
-      rowsOf.set(next, { split: sets.split, files: new Map([...sets.files, ...rowsOf.get(page).files]) }, [this.heldDiff]);
+      const merged = Object.freeze({ ...open, files: Object.freeze(files), next: page.next, fileCount: page.fileCount, added: page.added, deleted: page.deleted, truncated: open.truncated || page.truncated, readId: ++reads });
+      rowsByRead.set(merged.readId, { split: sets.split, files: new Map([...sets.files, ...rowsOf.get(page).files]) });
+      return merged;
+    },
+
+    /** Adds a page's files after the loaded ones. */
+    appendPage(page) {
+      const open = this.diff;
+      const at = new Set(open.files.map((f) => f.path));
+      const next = this.mergeDiff(open, page);
+      rowsOf.prune([next, this.heldDiff]);
       const { slugs: bySlug, collapsed } = diffSetup(next);
       this.diffSlugs = Object.fromEntries(bySlug);
       this.collapsed = { ...Object.fromEntries(page.files.filter((f) => collapsed[f.path] && !(f.path in this.collapsed) && !at.has(f.path)).map((f) => [f.path, true])), ...this.collapsed };
+      // A file the worktree changed between two page reads is drawn again.
+      const again = page.files.filter((f) => at.has(f.path) && rowsOf.get(page)?.files.get(f.path)?.changed);
+      if (again.length) this.fileRevs = { ...this.fileRevs, ...Object.fromEntries(again.map((f) => [f.path, (this.fileRevs[f.path] ?? 0) + 1])) };
       this.diff = next;
       this.countFiles();
       this.syncRows();
@@ -902,6 +941,22 @@ export function codeBrowser({ gateway, highlighter, preparer, proximity = inters
       } finally {
         if (!quiet) this.loadingDiff = false;
       }
+    },
+
+    /** The loaded pages again, first page first: a refresh reads as far as the reader had read, and no further. */
+    async loadLoaded({ quiet = false } = {}) {
+      const want = this.diff?.files.length ?? 0;
+      let acc = await this.loadDiff({ quiet });
+      try {
+        while (acc && acc.next && acc.files.length < want) {
+          const page = await this.prepareDiff(await gateway.diffPage({ ...this.pageQuery(), after: acc.next }, this.request("diff")));
+          acc = this.mergeDiff(acc, page);
+        }
+      } catch (err) {
+        // The pages after the first are read again when reached.
+        if (err?.name === "AbortError") return null;
+      }
+      return acc;
     },
 
     async showDiff() {
@@ -1458,12 +1513,13 @@ export function codeBrowser({ gateway, highlighter, preparer, proximity = inters
       }
       const decision = onChange(this.liveState, { untouched: this.untouched });
       // The changed files and their counts follow in place.
-      const diff = await this.loadDiff({ quiet: true });
+      const diff = await this.loadLoaded({ quiet: true });
       if (diff) {
         const before = new Map((this.diff?.files ?? []).map((f) => [f.path, `${f.status}:${f.added}:${f.deleted}`]));
         this.freshPaths = diff.files.filter((f) => before.get(f.path) !== `${f.status}:${f.added}:${f.deleted}`).map((f) => f.path);
         if (!this.showingChanges || decision.apply || !this.diff) this.setDiff(diff);
         else {
+          this.heldDirty = new Set([...this.heldDirty, ...changedPaths(rowsOf.get(diff))]);
           this.heldDiff = diff;
           this.countHeld(diff);
         }
@@ -1803,6 +1859,13 @@ export function codeBrowser({ gateway, highlighter, preparer, proximity = inters
     },
   };
   return self_;
+}
+
+/** The paths a read says changed since the read before it. */
+function changedPaths(sets) {
+  const out = [];
+  for (const [path, f] of sets?.files ?? []) if (f.changed) out.push(path);
+  return out;
 }
 
 function focusSide(side) {

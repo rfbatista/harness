@@ -677,3 +677,67 @@ test("the first page loads when the tab comes to the front, fresh when a change 
   assert.equal(panel.diffStale, false);
   tick();
 });
+
+const keysOf = (panel) => Object.fromEntries(panel.diffFiles.map((f) => [f.path, f.key]));
+
+test("a refresh re-reads the loaded pages and redraws only the files whose content changed; selection and loaded pages stay", async () => {
+  const { panel, memory } = await setup({ world: manyChangedFilesWorld(120) });
+  await panel.loadMore();
+  assert.equal(panel.diff.files.length, 100);
+  const selected = panel.diff.files[70].path;
+  panel.currentFile = selected;
+  const before = keysOf(panel);
+  const callsBefore = memory.calls.length;
+  memory.change("ws1", { "bulk/d0003/f0035.js": "export const changed = 1;\n" });
+  await flush();
+  await flush();
+  const reads = memory.calls.slice(callsBefore).filter((c) => c.name === "diff" && c.args.q.limit === undefined).map((c) => c.args.q.after ?? null);
+  assert.equal(reads.length, 2, "the two loaded pages, first page first");
+  assert.equal(reads[0], null);
+  assert.equal(panel.diff.files.length, 100, "the loaded pages stay loaded");
+  const after = keysOf(panel);
+  const redrawn = Object.keys(after).filter((p) => after[p] !== before[p]);
+  assert.deepEqual(redrawn, ["bulk/d0003/f0035.js"]);
+  assert.equal(panel.currentFile, selected);
+});
+
+test("a refresh reads a page that was never loaded only when it is reached", async () => {
+  const { panel, memory } = await setup({ world: manyChangedFilesWorld(120) });
+  const callsBefore = memory.calls.length;
+  memory.change("ws1", { "bulk/d0003/f0035.js": "x\n" });
+  await flush();
+  await flush();
+  const pages = memory.calls.slice(callsBefore).filter((c) => c.name === "diff" && c.args.q.limit === undefined);
+  assert.deepEqual(pages.map((c) => c.args.q.after ?? null), [null]);
+  assert.equal(panel.diff.files.length, 50);
+  assert.equal(panel.moreShown, true);
+});
+
+test("a diff held while the reader is in the middle comes in with every file that changed since the open one", async () => {
+  const { panel, memory } = await setup({ world: manyChangedFilesWorld(20) });
+  const before = keysOf(panel);
+  panel.touched = true;
+  memory.change("ws1", { "bulk/d0000/f0001.js": "one\n" });
+  await flush();
+  await flush();
+  memory.change("ws1", { "bulk/d0000/f0002.js": "two\n" });
+  await flush();
+  await flush();
+  assert.equal(panel.liveState, "stale");
+  assert.deepEqual(keysOf(panel), before, "the open diff does not move");
+  await panel.reload();
+  const after = keysOf(panel);
+  assert.deepEqual(Object.keys(after).filter((p) => after[p] !== before[p]).sort(), ["bulk/d0000/f0001.js", "bulk/d0000/f0002.js"]);
+});
+
+test("selecting a file touches no other row of 500", async () => {
+  const { panel } = await setup({ world: manyChangedFilesWorld(500) });
+  while (panel.diff.next) await panel.loadMore();
+  assert.equal(panel.diff.files.length, 505);
+  const rows = panel.summaryRows;
+  panel.currentFile = panel.diff.files[300].path;
+  const next = panel.summaryRows;
+  const touched = next.filter((r, i) => r !== rows[i]);
+  assert.deepEqual(touched.map((r) => r.path).sort(), [rows.find((r) => r.current)?.path, panel.currentFile].filter(Boolean).sort());
+  assert.equal(next.filter((r) => r.current).length, 1);
+});
