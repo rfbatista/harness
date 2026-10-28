@@ -39,3 +39,20 @@ func (h *Handler) handleListWorktreeGitStates(c echo.Context) error {
 	}
 	return c.JSON(http.StatusOK, map[string]any{"states": states})
 }
+
+func (h *Handler) handleFetchRemote(c echo.Context) error {
+	if err := h.worktreeGitOr503(); err != nil {
+		return err
+	}
+	var in struct {
+		RepositoryID string `json:"repository_id"`
+	}
+	if err := bindJSON(c, &in); err != nil {
+		return err
+	}
+	at, err := h.worktreeGit.FetchRemote(c.Request().Context(), in.RepositoryID)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, map[string]any{"fetched_at": at})
+}

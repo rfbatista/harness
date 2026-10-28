@@ -27,6 +27,8 @@ import (
 type WorktreeGitFixture struct {
 	// RepoDir is the main checkout, on main; OriginDir the bare origin.
 	RepoDir, OriginDir string
+	// NoOriginDir is a second repository with no origin remote at all.
+	NoOriginDir string
 	// Worktrees are the session worktrees by branch name.
 	Worktrees map[string]string
 	// BaseRef is what every workspace was cut from.
@@ -47,7 +49,7 @@ func NewWorktreeGitFixture(t *testing.T) *WorktreeGitFixture {
 	t.Helper()
 	base := t.TempDir()
 	f := &WorktreeGitFixture{
-		RepoDir: filepath.Join(base, "repo"), OriginDir: filepath.Join(base, "origin.git"), other: filepath.Join(base, "other"),
+		NoOriginDir: filepath.Join(base, "no-origin"), RepoDir: filepath.Join(base, "repo"), OriginDir: filepath.Join(base, "origin.git"), other: filepath.Join(base, "other"),
 		Worktrees: map[string]string{}, Heads: map[string]string{}, BaseRef: "main",
 	}
 	f.git = func(dir string, args ...string) string {
@@ -78,11 +80,15 @@ func NewWorktreeGitFixture(t *testing.T) *WorktreeGitFixture {
 		f.git(dir, "commit", "-q", "-m", "add "+name)
 	}
 
-	for _, d := range []string{f.RepoDir, f.OriginDir} {
+	for _, d := range []string{f.RepoDir, f.OriginDir, f.NoOriginDir} {
 		if err := os.MkdirAll(d, 0o755); err != nil {
 			t.Fatal(err)
 		}
 	}
+	f.git(f.NoOriginDir, "init", "-q", "-b", "main")
+	write(f.NoOriginDir, "README.md", "alone\n")
+	f.git(f.NoOriginDir, "add", "-A")
+	f.git(f.NoOriginDir, "commit", "-q", "-m", "root")
 	f.git(f.OriginDir, "init", "-q", "--bare", "-b", "main")
 	f.git(f.RepoDir, "init", "-q", "-b", "main")
 	write(f.RepoDir, "README.md", "hello\n")
@@ -145,4 +151,18 @@ func (f *WorktreeGitFixture) Fetch(t *testing.T) {
 func (f *WorktreeGitFixture) Git(t *testing.T, dir string, args ...string) string {
 	t.Helper()
 	return f.git(dir, args...)
+}
+
+// PushFromOtherClone makes origin's branch move: another clone adds file to it
+// and pushes, so the repository's remote-tracking ref is stale until a fetch.
+func (f *WorktreeGitFixture) PushFromOtherClone(t *testing.T, branch, file string) {
+	t.Helper()
+	f.git(f.other, "fetch", "-q", "origin")
+	f.git(f.other, "checkout", "-q", "-B", branch, "origin/"+branch)
+	if err := os.WriteFile(filepath.Join(f.other, file), []byte("remote\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	f.git(f.other, "add", file)
+	f.git(f.other, "commit", "-q", "-m", "remote "+file)
+	f.git(f.other, "push", "-q", "origin", branch)
 }

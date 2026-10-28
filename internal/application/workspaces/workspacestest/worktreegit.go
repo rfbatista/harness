@@ -2,12 +2,14 @@ package workspacestest
 
 import (
 	"context"
+	"sync"
 	"testing"
 	"time"
 
 	"operators-mcp/internal/adapter/out/filesystem"
 	"operators-mcp/internal/adapter/out/gitcli"
 	"operators-mcp/internal/adapter/out/persistence/sqlite"
+	"operators-mcp/internal/application/gitcredentials/gitcredentialstest"
 	"operators-mcp/internal/application/workspaces"
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
@@ -19,6 +21,39 @@ import (
 // git and the real filesystem.
 func NewWorktreeGit(t *testing.T, f *portstest.WorktreeGitFixture) (*workspaces.WorktreeGit, portstest.WorktreeGitTarget) {
 	t.Helper()
+	svc, at, _ := NewWorktreeGitWithFeed(t, f)
+	return svc, at
+}
+
+// FeedRecorder keeps what a service announced on the project feed.
+type FeedRecorder struct {
+	mu      sync.Mutex
+	changes []ports.ProjectChange
+}
+
+func (r *FeedRecorder) AnnounceChange(c ports.ProjectChange) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.changes = append(r.changes, c)
+}
+
+// GitStates are the git states announced so far, in order.
+func (r *FeedRecorder) GitStates() []ports.GitStateChange {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	var out []ports.GitStateChange
+	for _, c := range r.changes {
+		if c.GitState != nil {
+			out = append(out, *c.GitState)
+		}
+	}
+	return out
+}
+
+// NewWorktreeGitWithFeed is NewWorktreeGit with the feed it announces on, and
+// the shared origin fetch a pull request refresh would run.
+func NewWorktreeGitWithFeed(t *testing.T, f *portstest.WorktreeGitFixture) (*workspaces.WorktreeGit, portstest.WorktreeGitTarget, *FeedRecorder) {
+	t.Helper()
 	db, err := sqlite.Open(":memory:")
 	if err != nil {
 		t.Fatal(err)
@@ -28,8 +63,12 @@ func NewWorktreeGit(t *testing.T, f *portstest.WorktreeGitFixture) (*workspaces.
 	if err != nil {
 		t.Fatal(err)
 	}
+	alone, err := repos.Create("git-project", "alone", "", "https://example.com/alone.git", f.NoOriginDir)
+	if err != nil {
+		t.Fatal(err)
+	}
 	wsRepo := sqlite.NewWorkspaceRepository(db)
-	at := portstest.WorktreeGitTarget{RepositoryID: repo.ID, Workspaces: map[string]string{}, Sessions: map[string]string{}}
+	at := portstest.WorktreeGitTarget{RepositoryID: repo.ID, NoRemoteRepositoryID: alone.ID, Workspaces: map[string]string{}, Sessions: map[string]string{}}
 	for _, branch := range portstest.WorktreeGitBranches {
 		ws, err := wsRepo.Create(domain.Workspace{RepositoryID: repo.ID, Name: branch, Branch: branch, Path: f.Worktrees[branch], BaseRef: f.BaseRef})
 		if err != nil {
@@ -69,10 +108,13 @@ func NewWorktreeGit(t *testing.T, f *portstest.WorktreeGitFixture) (*workspaces.
 		}
 	}
 	clock := &passingClock{now: time.Now()}
+	feed := &FeedRecorder{}
+	publisher := gitcli.NewBranchPublisher()
 	svc := workspaces.NewWorktreeGit(workspaces.WorktreeGitDeps{
 		Workspaces: wsRepo, Repositories: repos, Sessions: sessions, Tickets: tickets,
 		Git: gitcli.NewCode(), Files: filesystem.NewWorktreeFiles(), Now: clock.Now,
+		Publisher: publisher, Fetcher: workspaces.NewOriginFetcher(publisher, gitcredentialstest.New()), Feed: feed,
 	})
 	at.PassInterval = clock.Pass
-	return svc, at
+	return svc, at, feed
 }

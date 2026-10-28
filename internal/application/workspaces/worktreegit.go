@@ -2,6 +2,7 @@ package workspaces
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"strings"
 	"sync"
@@ -26,6 +27,12 @@ type WorktreeGitDeps struct {
 	Tickets ports.TicketRepository
 	Git     ports.GitWorktreeReader
 	Files   ports.WorktreeFiles
+	// Publisher reads the origin's URL, Fetcher fetches it (shared with the
+	// pull request base refresh) and Feed announces states; each may be nil:
+	// FetchRemote then answers UNAVAILABLE, and nothing is announced.
+	Publisher ports.BranchPublisher
+	Fetcher   *OriginFetcher
+	Feed      ports.ProjectChangeSink
 	// Now is the clock the state's age is measured with; nil is time.Now.
 	Now func() time.Time
 }
@@ -53,7 +60,11 @@ func NewWorktreeGit(d WorktreeGitDeps) *WorktreeGit {
 	if d.Now == nil {
 		d.Now = time.Now
 	}
-	return &WorktreeGit{d: d, slots: map[string]*stateSlot{}}
+	s := &WorktreeGit{d: d, slots: map[string]*stateSlot{}}
+	if d.Fetcher != nil {
+		d.Fetcher.OnFetched(s.afterFetch)
+	}
+	return s
 }
 
 func (s *WorktreeGit) slot(workspaceID string) *stateSlot {
@@ -84,11 +95,7 @@ func (s *WorktreeGit) GitState(ctx context.Context, workspaceID string) (*domain
 	if err != nil {
 		return nil, err
 	}
-	if s.d.Sessions != nil {
-		if found, err := s.d.Sessions.Query(ctx, ports.SessionFilter{WorkspaceID: ws.ID}); err == nil && len(found) > 0 {
-			st.SessionID = found[0].ID
-		}
-	}
+	s.nameSession(ctx, st)
 	return st, nil
 }
 
@@ -197,6 +204,94 @@ func (s *WorktreeGit) TaskGitStates(ctx context.Context, taskID string) ([]domai
 		}
 	}
 	return out, nil
+}
+
+// FetchRemote fetches the repository's origin, and announces the state of each
+// of its workspaces (the fetch's observers do, so a base refresh does too).
+func (s *WorktreeGit) FetchRemote(ctx context.Context, repositoryID string) (time.Time, error) {
+	if strings.TrimSpace(repositoryID) == "" {
+		return time.Time{}, invalid("repository_id is required")
+	}
+	repo, err := s.repository(ctx, repositoryID)
+	if err != nil {
+		return time.Time{}, err
+	}
+	if s.d.Fetcher == nil || s.d.Publisher == nil {
+		return time.Time{}, &domain.StructuredError{Code: "UNAVAILABLE", Message: "fetching is not available"}
+	}
+	origin, err := s.d.Publisher.OriginURL(ctx, repo.RootDir)
+	if err != nil {
+		return time.Time{}, err
+	}
+	if origin == "" {
+		return time.Time{}, &domain.StructuredError{Code: domain.CodeNoRemote, Message: "the repository has no origin remote"}
+	}
+	err = s.d.Fetcher.Fetch(ctx, repo.ID, repo.RootDir, origin)
+	var failed *OriginFetchError
+	if errors.As(err, &failed) {
+		return time.Time{}, &domain.StructuredError{Code: domain.CodeFetchFailed, Message: "fetching origin failed: " + failed.Error()}
+	} else if err != nil {
+		return time.Time{}, err
+	}
+	if at := s.d.Git.FetchedAt(repo.RootDir); !at.IsZero() {
+		return at.UTC(), nil
+	}
+	return s.d.Now().UTC(), nil
+}
+
+// announceParallelism bounds the status passes an announcement runs at once.
+const announceParallelism = 8
+
+// afterFetch re-reads and announces the state of every workspace of the
+// repository whose origin was just fetched: its counts are new.
+func (s *WorktreeGit) afterFetch(ctx context.Context, repositoryID string) {
+	if s.d.Feed == nil {
+		return
+	}
+	repo, err := s.repository(ctx, repositoryID)
+	if err != nil {
+		return
+	}
+	all := s.d.Workspaces.ListByRepository(repositoryID)
+	ids := make([]string, len(all))
+	for i, ws := range all {
+		ids[i] = ws.ID
+	}
+	s.forget(ids...)
+	sem := make(chan struct{}, announceParallelism)
+	var wg sync.WaitGroup
+	for _, ws := range all {
+		wg.Add(1)
+		sem <- struct{}{}
+		go func() {
+			defer wg.Done()
+			defer func() { <-sem }()
+			s.announce(ctx, ws, repo)
+		}()
+	}
+	wg.Wait()
+}
+
+// announce reads a workspace's state and puts it on its project's feed. A
+// workspace git cannot read is left out.
+func (s *WorktreeGit) announce(ctx context.Context, ws *domain.Workspace, repo *domain.Repository) {
+	st, err := s.stateOf(ctx, ws, repo)
+	if err != nil {
+		slog.Warn("git state not announced", "workspace", ws.ID, "err", err)
+		return
+	}
+	s.nameSession(ctx, st)
+	s.d.Feed.AnnounceChange(ports.ProjectChange{GitState: &ports.GitStateChange{GitState: st, ProjectID: repo.ProjectID}})
+}
+
+// nameSession sets the session that runs in the state's workspace.
+func (s *WorktreeGit) nameSession(ctx context.Context, st *domain.GitState) {
+	if s.d.Sessions == nil {
+		return
+	}
+	if found, err := s.d.Sessions.Query(ctx, ports.SessionFilter{WorkspaceID: st.WorkspaceID}); err == nil && len(found) > 0 {
+		st.SessionID = found[0].ID
+	}
 }
 
 // forget drops the state held for workspaces, so the next read reads git.

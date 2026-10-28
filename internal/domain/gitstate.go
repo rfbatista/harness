@@ -62,3 +62,18 @@ type Uncommitted struct {
 	Untracked int `json:"untracked"`
 	Staged    int `json:"staged"`
 }
+
+// Codes of fetching and pushing a worktree's branch.
+const (
+	CodeNoRemote     = "NO_REMOTE"     // the repository has no origin remote
+	CodeFetchFailed  = "FETCH_FAILED"  // a fetch failed for a reason other than the credential
+	CodePushRejected = "PUSH_REJECTED" // the remote refused: not a fast-forward, or a hook
+	CodePushStale    = "PUSH_STALE"    // the branch's HEAD is not the one the person confirmed
+	CodePushFailed   = "PUSH_FAILED"   // any other push failure
+)
+
+// GitStateError is a coded refusal that carries the worktree's state as it is
+// now, so a client can show it without another read.
+func GitStateError(code, message string, state *GitState) error {
+	return &DetailedError{StructuredError: &StructuredError{Code: code, Message: message}, Details: map[string]any{"state": state}}
+}

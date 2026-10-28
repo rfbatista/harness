@@ -90,6 +90,7 @@ func NewRouter(h *Handler, opts ...Option) *echo.Echo {
 	// where a worktree's branch stands against its base and its upstream
 	g.GET("/worktree_git_state", h.handleWorktreeGitState)
 	g.GET("/list_worktree_git_states", h.handleListWorktreeGitStates)
+	g.POST("/fetch_remote", h.handleFetchRemote)
 
 	// bounded contexts
 	g.GET("/list_bounded_contexts", h.handleListBoundedContexts)

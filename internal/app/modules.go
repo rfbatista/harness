@@ -989,6 +989,7 @@ var WorkspacesModule = fx.Module("workspaces",
 		newMergesService,
 		newBranchNamesService,
 		newCodeBrowser,
+		newOriginFetcher,
 		asPort(newWorktreeGit, new(ports.WorktreeGit)),
 		newMergeStates,
 	),
@@ -1004,11 +1005,20 @@ func newCodeBrowser(ws ports.WorkspaceRepository, repos ports.RepositoryReposito
 	})
 }
 
+// newOriginFetcher is the one fetch of a repository's origin: the pull
+// request base refresh and the worktree git state both run it, with the stored
+// credentials, one at a time per repository.
+func newOriginFetcher(git ports.BranchPublisher, creds *gitcredentials.Service) *workspaces.OriginFetcher {
+	return workspaces.NewOriginFetcher(git, creds)
+}
+
 // newWorktreeGit reads where each session worktree's branch stands against
-// its base and its upstream, from local git only.
-func newWorktreeGit(ws ports.WorkspaceRepository, repos ports.RepositoryRepository, sessions ports.SessionRepository, tickets ports.TicketRepository, git ports.GitWorktreeReader, files ports.WorktreeFiles) *workspaces.WorktreeGit {
+// its base and its upstream, from local git only, fetches origin on request
+// and announces the states a fetch moved on the project feed.
+func newWorktreeGit(ws ports.WorkspaceRepository, repos ports.RepositoryRepository, sessions ports.SessionRepository, tickets ports.TicketRepository, git ports.GitWorktreeReader, files ports.WorktreeFiles, publisher ports.BranchPublisher, fetcher *workspaces.OriginFetcher, orch *orchestration.Service) *workspaces.WorktreeGit {
 	return workspaces.NewWorktreeGit(workspaces.WorktreeGitDeps{
 		Workspaces: ws, Repositories: repos, Sessions: sessions, Tickets: tickets, Git: git, Files: files,
+		Publisher: publisher, Fetcher: fetcher, Feed: orch,
 	})
 }
 
@@ -1094,10 +1104,11 @@ func newPullRequestsService(
 	merges *workspaces.MergeStates,
 	cat catalog.Catalog,
 	creds *gitcredentials.Service,
+	fetcher *workspaces.OriginFetcher,
 ) *workspaces.PullRequests {
 	svc := workspaces.NewPullRequests(workspaces.PullRequestDeps{
 		Workspaces: ws, Repositories: repos, History: history, Git: git, Host: host, Store: store,
-		Sessions: sessions, Tickets: plan, Feed: changeSinks{orch, merges}, Auth: creds,
+		Sessions: sessions, Tickets: plan, Feed: changeSinks{orch, merges}, Auth: creds, Fetcher: fetcher,
 	})
 	svc.Subscribe(cat.Bus)
 	lc.Append(fx.Hook{OnStop: func(context.Context) error {

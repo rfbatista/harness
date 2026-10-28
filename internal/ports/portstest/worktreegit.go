@@ -13,6 +13,8 @@ import (
 // and one workspace per branch of WorktreeGitBranches (by branch name).
 type WorktreeGitTarget struct {
 	RepositoryID string
+	// NoRemoteRepositoryID is the fixture's repository with no origin.
+	NoRemoteRepositoryID string
 	Workspaces   map[string]string
 	// TaskID names a task with one running session per workspace (Sessions by
 	// branch) and one session with no workspace. TaskOrder is the branches of
@@ -80,8 +82,15 @@ func WorktreeGitConformance(t *testing.T, newPort func(t *testing.T, f *Worktree
 		}
 	})
 
-	f.Fetch(t)
+	// The fetch is the port's: no credential is needed for a file remote.
 	fetchedBefore := time.Now().Add(-time.Minute)
+	fetchedAt, err := p.FetchRemote(ctx, at.RepositoryID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fetchedAt.Before(fetchedBefore) || fetchedAt.After(time.Now().Add(time.Minute)) {
+		t.Fatalf("fetch answered %v", fetchedAt)
+	}
 	at.PassInterval()
 
 	t.Run("every upstream state after a fetch", func(t *testing.T) {
@@ -202,6 +211,39 @@ func WorktreeGitConformance(t *testing.T, newPort func(t *testing.T, f *Worktree
 		wantCode(t, err, "INVALID_INPUT")
 		_, err = p.TaskGitStates(ctx, "no-such-task")
 		wantCode(t, err, "TASK_NOT_FOUND")
+	})
+
+	t.Run("a fetch moves the fetch age and the counts it answers", func(t *testing.T) {
+		// origin moves again behind the repository's back; nothing shows until a fetch.
+		f.PushFromOtherClone(t, "insync", "more-remote.txt")
+		at.PassInterval()
+		if st := state(t, "insync"); st.Upstream.State != domain.UpstreamAhead {
+			t.Fatalf("before the fetch: %s", st.Upstream.State) // ahead by its own extra commit only
+		}
+		again, err := p.FetchRemote(ctx, at.RepositoryID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if again.Before(fetchedAt) {
+			t.Errorf("fetched_at went back: %v then %v", fetchedAt, again)
+		}
+		at.PassInterval()
+		st := state(t, "insync")
+		if st.Upstream.State != domain.UpstreamDiverged {
+			t.Errorf("after the fetch: %s, want diverged (a local commit and a remote one)", st.Upstream.State)
+		}
+		if st.FetchedAt == nil || st.FetchedAt.Before(fetchedAt) {
+			t.Errorf("fetch age = %v after %v", st.FetchedAt, fetchedAt)
+		}
+	})
+
+	t.Run("a fetch needs a repository with an origin", func(t *testing.T) {
+		_, err := p.FetchRemote(ctx, "")
+		wantCode(t, err, "INVALID_INPUT")
+		_, err = p.FetchRemote(ctx, "no-such-repository")
+		wantCode(t, err, "REPOSITORY_NOT_FOUND")
+		_, err = p.FetchRemote(ctx, at.NoRemoteRepositoryID)
+		wantCode(t, err, "NO_REMOTE")
 	})
 
 	t.Run("bad requests", func(t *testing.T) {

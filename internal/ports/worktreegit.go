@@ -22,6 +22,16 @@ type WorktreeGit interface {
 	// task that has one, in the task page's session order (newest session
 	// first); a gone worktree is included, marked Gone.
 	TaskGitStates(ctx context.Context, taskID string) ([]domain.GitState, error)
+	// FetchRemote fetches the repository's origin (git fetch origin --prune)
+	// with the stored credential, one at a time per repository and bounded in
+	// time, and answers when it was fetched. Every workspace's state of the
+	// repository is announced on the project feed after it. It is the fetch
+	// the pull request base refresh runs.
+	//
+	// Errors: INVALID_INPUT, REPOSITORY_NOT_FOUND, NO_REMOTE,
+	// GIT_CREDENTIAL_MISSING, GIT_CREDENTIAL_REJECTED,
+	// GIT_CREDENTIAL_STORE_LOCKED, FETCH_FAILED.
+	FetchRemote(ctx context.Context, repositoryID string) (time.Time, error)
 }
 
 // GitWorktreeStatus is what one status pass over a worktree reads.

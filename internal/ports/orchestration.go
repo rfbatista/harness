@@ -93,6 +93,10 @@ type ProjectChange struct {
 	// CodeChanged says a running session's worktree moved: its HEAD or its
 	// working tree. Clients re-read the code they show.
 	CodeChanged *CodeChange `json:"code_changed,omitempty"`
+	// GitState is a session worktree's git state, whole, as it is after a
+	// fetch, a push or a change to a running worktree. It is the state itself
+	// on the wire (GitStateChange only carries the project it routes to).
+	GitState *GitStateChange `json:"git_state,omitempty"`
 	// ArchitectureChanged says a repository's architecture record was saved,
 	// deleted or exported.
 	ArchitectureChanged *ArchitectureChange `json:"repository_architecture_changed,omitempty"`
@@ -116,6 +120,13 @@ type ArchitectureChange struct {
 	RepositoryID string `json:"repository_id"`
 	Version      int    `json:"version"`
 	ProjectID    string `json:"-"`
+}
+
+// GitStateChange is a git state on the feed; ProjectID routes it to the
+// project's followers and is not on the wire.
+type GitStateChange struct {
+	*domain.GitState
+	ProjectID string `json:"-"`
 }
 
 // CodeChange is a workspace whose code changed and its HEAD now. ProjectID
@@ -151,6 +162,8 @@ func (c ProjectChange) ProjectID() string {
 		return c.PullRequest.ProjectID
 	case c.CodeChanged != nil:
 		return c.CodeChanged.ProjectID
+	case c.GitState != nil:
+		return c.GitState.ProjectID
 	case c.ArchitectureChanged != nil:
 		return c.ArchitectureChanged.ProjectID
 	case c.ArchitectureRuleEvent != nil:

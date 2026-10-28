@@ -3,6 +3,7 @@ package httpclient
 import (
 	"context"
 	"net/url"
+	"time"
 
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
@@ -38,4 +39,14 @@ func (w *WorktreeGit) TaskGitStates(ctx context.Context, taskID string) ([]domai
 		return nil, err
 	}
 	return out.States, nil
+}
+
+func (w *WorktreeGit) FetchRemote(ctx context.Context, repositoryID string) (time.Time, error) {
+	var out struct {
+		FetchedAt time.Time `json:"fetched_at"`
+	}
+	if err := w.c.post(ctx, "/api/fetch_remote", map[string]string{"repository_id": repositoryID}, &out); err != nil {
+		return time.Time{}, err
+	}
+	return out.FetchedAt, nil
 }
