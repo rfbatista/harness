@@ -85,6 +85,7 @@ export function codeBrowser({ gateway, highlighter, preparer, proximity = inters
   const queue = new Set();
   let nearby = null;
   let pumping = false;
+  let pageRead = null;
   // The changed files' row views, kept while a file's data does not change: a selection redoes two.
   const rowViews = new Map();
   // The same for the sections: a page that comes in leaves the sections already on screen alone.
@@ -843,8 +844,15 @@ export function codeBrowser({ gateway, highlighter, preparer, proximity = inters
     /** Show more, and the scroll near the end: reads the next page and appends it. False when nothing was read. */
     async loadMore() {
       const open = this.diff;
-      if (!open?.next || this.loadingPage || this.heldDiff) return false;
+      // Another trigger is already reading the page: wait for it, so a caller that needs more pages goes on from there.
+      if (this.loadingPage) {
+        await pageRead;
+        return true;
+      }
+      if (!open?.next || this.heldDiff) return false;
       this.loadingPage = true;
+      let done;
+      pageRead = new Promise((resolve) => (done = resolve));
       try {
         const page = await this.prepareDiff(await gateway.diffPage({ ...this.pageQuery(), after: open.next }, this.request("page")));
         // A refresh or a scope change replaced the diff while the page was on its way.
@@ -856,6 +864,7 @@ export function codeBrowser({ gateway, highlighter, preparer, proximity = inters
         return false;
       } finally {
         this.loadingPage = false;
+        done();
       }
     },
 
@@ -958,7 +967,7 @@ export function codeBrowser({ gateway, highlighter, preparer, proximity = inters
       const signal = this.request("diff");
       if (!quiet) this.loadingDiff = true;
       try {
-        return await this.prepareDiff(await gateway.diffPage({ workspaceId: this.source.workspaceId, scope: this.scope }, signal));
+        return await this.prepareDiff(await gateway.diffPage(this.pageQuery(), signal));
       } catch (err) {
         if (err?.name === "AbortError") return null;
         if (codeOf(err) === Codes.WORKSPACE_MISSING) {
@@ -978,10 +987,11 @@ export function codeBrowser({ gateway, highlighter, preparer, proximity = inters
 
     /** The loaded pages again, first page first: a refresh reads as far as the reader had read, and no further. */
     async loadLoaded({ quiet = false } = {}) {
-      const want = this.diff?.files.length ?? 0;
+      let want = this.diff?.files.length ?? 0;
       let acc = await this.loadDiff({ quiet });
       try {
-        while (acc && acc.next && acc.files.length < want) {
+        // Pages the reader asked for while this read was on its way count too.
+        while (acc && acc.next && acc.files.length < (want = Math.max(want, this.diff?.files.length ?? 0))) {
           const page = await this.prepareDiff(await gateway.diffPage({ ...this.pageQuery(), after: acc.next }, this.request("diff")));
           acc = this.mergeDiff(acc, page);
         }

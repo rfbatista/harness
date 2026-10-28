@@ -151,38 +151,6 @@ export function largestLine(hunks) {
 /** Lines in a file's hunks, hunk header rows included: what a unified layout renders. */
 export const unifiedRowCount = (hunks) => (hunks ?? []).reduce((n, h) => n + 1 + h.lines.length, 0);
 
-/**
- * The index of the unified row (hunk headers counted) that shows new-side
- * line n, or the nearest one after it; -1 when the file shows no such line.
- */
-export function rowOfNewLine(hunks, n) {
-  let row = 0;
-  let after = -1;
-  for (const h of hunks ?? []) {
-    row += 1;
-    for (const line of h.lines) {
-      if (line.new === n) return row;
-      if (after < 0 && line.new !== null && line.new > n) after = row;
-      row += 1;
-    }
-  }
-  return after;
-}
-
-/** The index of the unified row showing a line on one side ("R" new, "L" old); -1 when absent. */
-export function rowOfLine(hunks, side, n) {
-  if (side === "R") return rowOfNewLine(hunks, n);
-  let row = 0;
-  for (const h of hunks ?? []) {
-    row += 1;
-    for (const line of h.lines) {
-      if (line.old === n) return row;
-      row += 1;
-    }
-  }
-  return -1;
-}
-
 /** The new side's text of a hunk, the old side's, and which line of each a hunk line is. */
 export function sidesOf(hunk) {
   const newSide = [];

@@ -1,6 +1,6 @@
 import { assert, file, test } from "../../../shared/testing/test.js";
 import { ancestors, changeMark, dirMark, formatSize, languageName } from "./code.js";
-import { gitCommand, lineAnchor, parseDiffHash, rowOfLine, rowOfNewLine, sidesOf, slugOf, slugs, splitRows, startsCollapsed, statOf, withheldCopy } from "./diff.js";
+import { gitCommand, lineAnchor, parseDiffHash, sidesOf, slugOf, slugs, splitRows, startsCollapsed, statOf, withheldCopy } from "./diff.js";
 import { bannerLine, problemOf } from "./errors.js";
 import { clampRange, digits, parseRange, parseRangeHash, rangeHash, splitLines, windowOf, scrollTopFor } from "./lines.js";
 import { onChange, onEnded, onReload, stateWord } from "./live.js";
@@ -107,16 +107,11 @@ test("split pairs each run of deletions with the additions after it", () => {
   );
 });
 
-test("a line's row in the unified layout counts hunk headers", () => {
+test("a hunk's sides are the text of each side", () => {
   const hunks = [
     { oldStart: 1, oldLines: 2, newStart: 1, newLines: 2, header: "", lines: [line("context", 1, 1), line("del", 2, null), line("add", null, 2)] },
     { oldStart: 40, oldLines: 1, newStart: 40, newLines: 1, header: "", lines: [line("context", 40, 40)] },
   ];
-  assert.equal(rowOfNewLine(hunks, 2), 3);
-  assert.equal(rowOfNewLine(hunks, 40), 5);
-  assert.equal(rowOfNewLine(hunks, 10), 5, "a line between hunks goes to the next one shown");
-  assert.equal(rowOfNewLine(hunks, 99), -1);
-  assert.equal(rowOfLine(hunks, "L", 2), 2);
   const { newText, oldText, at } = sidesOf(hunks[0]);
   assert.deepEqual([newText, oldText], ["x\nx", "x\nx"]);
   assert.deepEqual(at, [{ old: 0, new: 0 }, { old: 1, new: -1 }, { old: -1, new: 1 }]);
