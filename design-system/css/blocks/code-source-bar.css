@@ -18,6 +18,8 @@
  * dot, "Changed on disk", a Reload button with kbd R), gone (the worktree was
  * removed: a second line .gone explains, says what is shown instead and
  * offers the branch). Without data-state the source is fixed (a ref).
+ * .state[data-loading] while a diff or a page of it loads: the inline spinner
+ * in place of the dot, before the text ("Loading changes").
  */
 
 @layer blocks {
@@ -72,6 +74,16 @@
 
     &[data-state="live"] > .state::before { background: var(--color-signal); }
 
+    /* A diff or a page is loading: the dot gives way to the inline spinner. */
+    & > .state[data-loading]::before {
+      inline-size: 0.875rem;
+      block-size: 0.875rem;
+      background: none;
+      border: 2px solid var(--color-ink-faint);
+      border-inline-end-color: transparent;
+      animation: button-spin 700ms linear infinite;
+    }
+
     &[data-state="stale"] {
       & > .state { color: var(--color-attention-strong); font-weight: var(--weight-medium); }
       & > .state::before { background: var(--color-attention); }
@@ -100,8 +112,13 @@
       box-shadow: inset 0 0 0 1.5px var(--color-ink-faint);
     }
 
+    @media (prefers-reduced-motion: reduce) {
+      & > .state[data-loading]::before { animation-duration: 2.4s; }
+    }
+
     @media (forced-colors: active) {
       & > .state::before { background: CanvasText; }
+      & > .state[data-loading]::before { background: none; border-color: CanvasText; border-inline-end-color: transparent; }
     }
   }
 }

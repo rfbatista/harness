@@ -4,6 +4,7 @@
 //	web/src/main.js       → internal/adapter/in/web/static/app.js
 //	web/src/app.css       → internal/adapter/in/web/static/app.css (design system + xterm.css)
 //	web/src/document.css  → internal/adapter/in/web/static/document.css (what an HTML task document may link)
+//	web/src/code-worker.js → internal/adapter/in/web/static/code-worker.js (the code view's worker, a classic script)
 //
 // Bare imports resolve to the vendored files in web/vendor (vendors). It also writes
 // web/test/all.js, the list of every *.test.js the browser test page runs.
@@ -81,14 +82,18 @@ func run(watch, dev bool) error {
 
 	opts := options(root, dev)
 	docOpts := documentOptions(root, dev)
+	workerOpts := workerOptions(root, dev)
 	if !watch {
 		if err := report(api.Build(opts)); err != nil {
 			return err
 		}
-		return report(api.Build(docOpts))
+		if err := report(api.Build(docOpts)); err != nil {
+			return err
+		}
+		return report(api.Build(workerOpts))
 	}
 
-	for _, o := range []api.BuildOptions{opts, docOpts} {
+	for _, o := range []api.BuildOptions{opts, docOpts, workerOpts} {
 		o.Plugins = append(o.Plugins, rebuildLogger())
 		ctx, ctxErr := api.Context(o)
 		if ctxErr != nil {
@@ -139,6 +144,17 @@ func documentOptions(root string, dev bool) api.BuildOptions {
 	o := options(root, dev)
 	o.EntryPoints = []string{"web/src/document.css"}
 	o.EntryNames = "document"
+	return o
+}
+
+// workerOptions builds the code worker as its own script: a worker is a
+// separate realm, so it bundles what it needs (highlight.js) and is served
+// beside app.js, from the same origin.
+func workerOptions(root string, dev bool) api.BuildOptions {
+	o := options(root, dev)
+	o.EntryPoints = []string{"web/src/code-worker.js"}
+	o.EntryNames = "code-worker"
+	o.Format = api.FormatIIFE
 	return o
 }
 

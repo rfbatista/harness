@@ -4,6 +4,8 @@ import (
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/evanw/esbuild/pkg/api"
 )
 
 // web/test/all.js must list every *.test.js, or the browser suite silently
@@ -49,5 +51,19 @@ func TestDocumentStylesheetIsBuilt(t *testing.T) {
 	}
 	if _, err := os.Stat("../../web/src/document.css"); err != nil {
 		t.Fatalf("web/src/document.css missing: %v", err)
+	}
+}
+
+// The code worker is a second bundle, a classic script built beside app.js.
+func TestCodeWorkerIsBuiltBesideTheApp(t *testing.T) {
+	opts := workerOptions("/repo", false)
+	if len(opts.EntryPoints) != 1 || opts.EntryPoints[0] != "web/src/code-worker.js" || opts.EntryNames != "code-worker" || opts.Outdir != outDir {
+		t.Fatalf("worker build options = %+v", opts)
+	}
+	if opts.Format != api.FormatIIFE {
+		t.Fatalf("a worker started with new Worker(url) is a classic script, got format %v", opts.Format)
+	}
+	if _, err := os.Stat("../../web/src/code-worker.js"); err != nil {
+		t.Fatalf("worker entry missing: %v", err)
 	}
 }

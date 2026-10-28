@@ -16,8 +16,7 @@ import { zoneDot, zoneTags } from "../domain/zones.js";
  * @param {import("../domain/tree.js").TreeRow} row
  * @param {{ state: import("../domain/tree.js").TreeState, selected: string, focused: string, zones: Map<string, any>, href: (path: string) => string, fresh: Set<string> }} ctx
  */
-export function treeRowView({ entry, depth, parent }, ctx) {
-  const siblings = ctx.state.levels[parent] ?? [];
+export function treeRowView({ entry, depth, pos, size }, ctx) {
   const isDir = entry.kind === "dir";
   const mark = isDir ? dirMark(entry.change) : entry.change ? changeMark(entry.change) : null;
   const dot = isDir ? null : zoneDot(entry.zones, ctx.zones);
@@ -30,8 +29,8 @@ export function treeRowView({ entry, depth, parent }, ctx) {
     isDir,
     isLink: entry.kind === "file",
     level: String(depth + 1),
-    setsize: String(siblings.length),
-    posinset: String(siblings.indexOf(entry) + 1),
+    setsize: String(size),
+    posinset: String(pos),
     skeleton: false,
     depthStyle: `--depth:${depth}`,
     expanded: isDir ? String(!!ctx.state.expanded[entry.path]) : null,
@@ -105,11 +104,11 @@ export function diffFileView(f, { slug, rev, collapsed, busy, asked, zones, diff
     expanded: String(!collapsed),
     toggleLabel: `${collapsed ? "Expand" : "Collapse"} ${name}`,
     busy: busy ? "true" : null,
-    hasLines: !!f.hunks && !collapsed,
+    hasLines: (f.hasHunks ?? !!f.hunks) && !collapsed,
     withheld,
     command: withheld?.action === "view" ? gitCommand({ scope: diff.scope, base: diff.base, head: diff.source.commit, path: f.path }) : "",
     viewHref: canView ? viewHref : "",
-    digitsStyle: `--digits:${digits(largestLine(f.hunks))}`,
+    digitsStyle: `--digits:${digits(f.largest ?? largestLine(f.hunks))}`,
     layout: splitAllowed ? "split" : null,
   };
 }
@@ -228,5 +227,5 @@ export function scopesView(route, { scope, gone, baseGone, baseRef }) {
 
 /** The changed files' head: "12 files +214 −38". */
 export function totalsView(diff) {
-  return { files: plural(diff.files.length, "file"), added: `+${formatCount(diff.added)}`, deleted: `−${formatCount(diff.deleted)}` };
+  return { files: plural(diff.fileCount, "file"), added: `+${formatCount(diff.added)}`, deleted: `−${formatCount(diff.deleted)}` };
 }

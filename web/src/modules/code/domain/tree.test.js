@@ -1,6 +1,6 @@
 import { assert, file, test } from "../../../shared/testing/test.js";
 import { markParts, matchPath, rank, shiftRanges } from "./fuzzy.js";
-import { emptyTree, loadedOpenDirs, missingAncestors, openAction, revealPath, treeKey, typeAhead, visibleRows, withExpanded, withLevel } from "./tree.js";
+import { emptyTree, entryAt, loadedOpenDirs, missingAncestors, openAction, revealPath, treeKey, typeAhead, visibleRows, withExpanded, withLevel } from "./tree.js";
 
 file("code/domain/tree");
 
@@ -98,4 +98,28 @@ test("fuzzy ranks 50,000 paths quickly", () => {
   const ms = performance.now() - t0;
   assert.ok(total > 0 && matches.length <= 100);
   assert.ok(ms < 1000, `took ${ms.toFixed(0)} ms`);
+});
+
+test("a directory of 1 000 entries: rows, keys and type-ahead stay linear (and a repeat of the same state costs nothing)", () => {
+  const entries = Array.from({ length: 1000 }, (_, i) => e(`big/file${String(i).padStart(4, "0")}.go`));
+  let s = withLevel(emptyTree(), "", [e("big", "dir"), e("z.go")]);
+  s = withLevel(s, "big", entries);
+  s = withExpanded(s, "big", true);
+  const t0 = performance.now();
+  const rows = visibleRows(s);
+  for (let i = 0; i < 200; i += 1) {
+    treeKey(s, "big/file0500.go", "ArrowDown");
+    typeAhead(s, "big/file0500.go", "file09");
+    entryAt(s, "big/file0999.go");
+  }
+  const ms = performance.now() - t0;
+  assert.equal(rows.length, 1002);
+  assert.deepEqual([rows[500].pos, rows[500].size, rows[500].depth], [500, 1000, 1]);
+  assert.equal(visibleRows(s), rows, "the same rows until the state changes");
+  assert.equal(entryAt(s, "big/file0999.go").name, "file0999.go");
+  assert.equal(entryAt(s, "nowhere"), null);
+  assert.ok(ms < 400, `${ms.toFixed(0)} ms for 200 keys, type-aheads and lookups over 1 000 entries`);
+  const closed = withExpanded(s, "big", false);
+  assert.equal(visibleRows(closed).length, 2);
+  assert.equal(visibleRows(s).length, 1002, "the open state is untouched");
 });

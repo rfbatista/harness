@@ -28,6 +28,7 @@ import { agentCredentialGateway } from "./modules/agentcredential/infrastructure
 import { registerAgentCredential } from "./modules/agentcredential/presentation/register.js";
 import { registerCredentials } from "./modules/credentials/presentation/register.js";
 import { hljsHighlighter } from "./modules/code/infrastructure/hljs-highlighter.js";
+import { lazyPreparer, workerPreparer } from "./modules/code/infrastructure/preparer.js";
 import { registerCode } from "./modules/code/presentation/register.js";
 import { runsGateway } from "./modules/runs/infrastructure/runs-gateway.js";
 import { reviewsGateway } from "./modules/reviews/infrastructure/reviews-gateway.js";
@@ -66,6 +67,9 @@ import { registerWritingHelper } from "./modules/writinghelper/presentation/regi
 import { createHljs } from "./highlight.js";
 import { createScreen } from "./xterm-screen.js";
 import { startSwapRegions } from "./swap-regions.js";
+
+/** The code worker's bundle (web/src/code-worker.js) is served beside this one. */
+const codeWorkerUrl = () => new URL("code-worker.js", import.meta.url);
 
 const api = apiClient({ base: "/api" });
 const events = sharedFeed({ base: "/api", api });
@@ -109,7 +113,7 @@ registerSessions(Alpine, {
 registerRuns(Alpine, { gateway: runsGateway(api), prefs });
 registerReviews(Alpine, { gateway: reviewsGateway(api, events), clock: systemClock });
 registerPullRequests(Alpine, { gateway: pullRequestsGateway(api, events) });
-registerCode(Alpine, { gateway: codeGateway(api, events), highlighter: hljsHighlighter(createHljs()), prefs, navigate });
+registerCode(Alpine, { gateway: codeGateway(api, events), highlighter: hljsHighlighter(createHljs()), preparer: lazyPreparer(() => workerPreparer(codeWorkerUrl())), prefs, navigate });
 registerNotifications(Alpine, { gateway: notificationsGateway(api, events), alerts: desktopAlerts(), prefs, clock: systemClock, navigate });
 registerCredentials(Alpine, { gateway: credentialsGateway(api, events), clock: systemClock });
 registerUsage(Alpine, { gateway: usageGateway(api, events) });

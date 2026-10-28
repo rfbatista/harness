@@ -104,8 +104,8 @@ templ liveSourceBar() {
 				<span class="dirty" x-text="bar.dirty"></span>
 			</template>
 		</div>
-		<template x-if="hasState">
-			<p class="state" role="status" x-text="bar.word"></p>
+		<template x-if="hasState || busy">
+			<p class="state" role="status" x-bind:data-loading="busyAttr" x-text="stateText"></p>
 		</template>
 		<div class="actions">
 			<template x-if="isStale">
@@ -166,10 +166,7 @@ templ liveSummary() {
 		<template x-if="noChanges">
 			<p class="none" x-text="noChangesText"></p>
 		</template>
-		<template x-if="loadingDiff && !diff">
-			<div class="[ pad-s ] [ flow ]" aria-busy="true"><div class="[ skeleton ]"></div><div class="[ skeleton ]"></div></div>
-		</template>
-		<ol class="changed">
+		<ol class="changed" x-bind:aria-busy="listBusy">
 			<template x-for="row in summaryRows" x-bind:key="row.key">
 				<li x-bind:data-fresh="row.fresh">
 					<a x-bind:href="row.href" x-bind:aria-current="row.current" x-bind:aria-label="row.label" x-on:click="clickSummary($event, row.path)">
@@ -189,7 +186,15 @@ templ liveSummary() {
 					</a>
 				</li>
 			</template>
+			<template x-for="s in listSkeleton" x-bind:key="s.key">
+				<li class="skeleton-row" aria-hidden="true"><span class="skeleton"></span></li>
+			</template>
 		</ol>
+		<template x-if="moreShown">
+			<footer class="more">
+				<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-bind:aria-busy="listBusy" x-on:click="loadMore">Show more <span class="count" x-text="moreCount"></span></button>
+			</footer>
+		</template>
 	</nav>
 }
 
@@ -201,7 +206,7 @@ templ liveMark(expr string) {
 }
 
 templ liveTree() {
-	<ul class="file-tree" role="tree" aria-label="Files" x-bind:aria-busy="treeBusy" x-on:keydown="treeKeydown">
+	<ul class="file-tree" role="tree" aria-label="Files" x-bind:aria-busy="treeBusy" x-on:keydown="treeKeydown" x-effect="growTree">
 		<template x-for="row in treeRows" x-bind:key="row.key">
 			<li
 				x-bind:role="row.skeleton ? 'none' : 'treeitem'"
@@ -293,7 +298,7 @@ templ liveDiff() {
 			</div>
 		</template>
 		<template x-for="f in diffFiles" x-bind:key="f.key">
-			<section class="file" x-bind:id="f.id" x-bind:aria-labelledby="f.nameId" x-bind:data-collapsed="f.collapsed" x-bind:aria-busy="f.busy">
+			<section class="file" x-bind:id="f.id" x-bind:aria-labelledby="f.nameId" x-bind:data-collapsed="f.collapsed" x-bind:aria-busy="f.busy" x-init="watchFile($el, f.path)">
 				<header class="head">
 					<button type="button" class="toggle" x-bind:aria-expanded="f.expanded" x-bind:aria-controls="f.bodyId" x-bind:aria-label="f.toggleLabel" x-on:click="toggleFile(f.path)">
 						@chevron("")

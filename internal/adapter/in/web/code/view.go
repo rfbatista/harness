@@ -17,7 +17,7 @@ import (
 // First-paint caps: the browser renders the rest once it takes over.
 const (
 	paintFileLines = 400
-	paintDiffLines = 1200
+	paintDiffLines = 300
 )
 
 // Mark is a change-mark: its letter and the word that names it.

@@ -110,6 +110,7 @@ export function toFileDiff(dto) {
     added: int(dto.added, -1),
     deleted: int(dto.deleted, -1),
     hunks: Array.isArray(dto.hunks) ? Object.freeze(dto.hunks.map((h) => toHunk(h, dto.path))) : null,
+    hasHunks: Array.isArray(dto.hunks),
     withheld: dto.withheld ?? null,
     language: str(dto.language) || "plaintext",
     zones: strings(dto.zones),
@@ -128,6 +129,8 @@ export function toDiff(dto) {
     added: int(dto.added),
     deleted: int(dto.deleted),
     truncated: dto.truncated === true,
+    next: typeof dto.next === "string" && dto.next !== "" ? dto.next : null,
+    fileCount: int(dto.file_count, dto.files.length),
   });
 }
 
@@ -173,8 +176,9 @@ export function sourceQuery(src) {
 
 /** The wire query of a diff. */
 export function diffQuery(q) {
-  if (q.workspaceId) return { workspace_id: q.workspaceId, scope: q.scope, path: q.path };
-  return { repository_id: q.repositoryId, commit: q.commit, base: q.base, head: q.head, path: q.path };
+  const page = { after: q.after, limit: q.limit === undefined ? undefined : String(q.limit) };
+  if (q.workspaceId) return { workspace_id: q.workspaceId, scope: q.scope, path: q.path, ...page };
+  return { repository_id: q.repositoryId, commit: q.commit, base: q.base, head: q.head, path: q.path, ...page };
 }
 
 /**
@@ -210,7 +214,7 @@ export function toSeed(raw) {
     worktrees: Object.freeze((Array.isArray(raw.worktrees) ? raw.worktrees : []).map((w) => Object.freeze({ id: str(w?.id), name: str(w?.name) }))),
     trees: Object.freeze((Array.isArray(raw.trees) ? raw.trees : []).map(toTree)),
     file: raw.file ? toFile(raw.file) : null,
-    diff: raw.diff ? toDiff(raw.diff) : null,
+    diffPage: raw.diff && typeof raw.diff === "object" ? raw.diff : null,
     map: raw.map ? toMap(raw.map) : null,
     error: raw.error && typeof raw.error.code === "string" ? Object.freeze({ code: raw.error.code, message: str(raw.error.message) }) : null,
     refs: strings(raw.refs),

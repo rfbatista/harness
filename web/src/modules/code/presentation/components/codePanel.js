@@ -101,9 +101,10 @@ export const codePanel = (deps) => (/** @type {PanelInput} */ panel) => {
       this.watchWidth();
       // The diff counts the badge whatever the view; read it once the page is idle.
       const first = () => {
-        if (!this.diff) this.showDiff();
         this.readWorking();
+        // Behind another tab the panel only counts; the first page loads when the tab comes to the front.
         if (this.shown) this.enterView();
+        if (!this.diff && !this.seedPending && !this.loadingDiff) this.readTotals();
       };
       (deps.idle ?? ((cb) => setTimeout(cb, 0)))(first);
       if (this.shown) this.tabShown({ detail: { sessionId: this.sessionId, shown: true } });
@@ -121,10 +122,15 @@ export const codePanel = (deps) => (/** @type {PanelInput} */ panel) => {
     },
 
     countFiles() {
-      if (this.diff) this.$dispatch("code-files-counted", { sessionId: this.sessionId, count: this.diff.files.length });
+      const count = this.diff ? this.diff.fileCount : this.totalCount;
+      if (count !== null) this.$dispatch("code-files-counted", { sessionId: this.sessionId, count });
+    },
+    /** Behind another tab: nobody looks at the diff. */
+    get background() {
+      return !this.shown;
     },
     countHeld(diff) {
-      this.$dispatch("code-files-counted", { sessionId: this.sessionId, count: diff.files.length });
+      this.$dispatch("code-files-counted", { sessionId: this.sessionId, count: diff.fileCount });
     },
 
     /** The sessions page brought the Code tab to the front, or left it. */

@@ -16,7 +16,11 @@
  * Exceptions: aria-current="location" (the file on screen), .stat .note (a
  * faint word in place of or after the counts: "binary", "not loaded"), .old
  * (a rename's old path under the new one), and in place of .changed a .none
- * sentence ("No changes on this branch yet.").
+ * sentence ("No changes on this branch yet"). While a page loads, .changed
+ * carries aria-busy="true" and ends with li.skeleton-row placeholders (each
+ * holds one .skeleton bar). When more files follow the loaded pages, a
+ * footer.more after .changed holds one ghost button "Show more" with a
+ * span.count of the files left.
  */
 
 @layer blocks {
@@ -46,6 +50,24 @@
 
     & .changed { padding: var(--space-2xs) 0; list-style: none; }
     & li { max-inline-size: none; }
+
+    /* Files remain past the loaded pages: one ghost button ends the list. */
+    & > footer.more {
+      display: flex;
+      justify-content: center;
+      padding: var(--space-xs) var(--space-m) var(--space-m);
+
+      & .count { color: var(--color-ink-faint); font-variant-numeric: tabular-nums; }
+      & .count::before { content: "· " / ""; }
+    }
+
+    /* A page is loading: the list ends with placeholder rows, one file row high. */
+    & .changed > .skeleton-row {
+      display: flex;
+      align-items: center;
+      min-block-size: var(--size-nav-row);
+      padding-inline: var(--space-s) var(--space-m);
+    }
 
     & .changed a {
       display: grid;

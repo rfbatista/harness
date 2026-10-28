@@ -13,42 +13,10 @@
 // once, and the rows on screen are redrawn with their tokens.
 
 import { VIRTUALISE_FROM, inRange, windowOf } from "../../domain/lines.js";
-import { lineAnchor, sidesOf, splitRows } from "../../domain/diff.js";
+import { lineAnchor } from "../../domain/diff.js";
+import { diffRows, fileRows, tokenise } from "../../domain/rows.js";
 
-/**
- * @typedef {{ type: "line", n: number, text: string }} FileRow
- * @typedef {{ type: "hunk", range: string, header: string }} HunkRow
- * @typedef {{ type: "diff", kind: string, old: number|null, new: number|null, text: string, noNewline: boolean, tokens?: any }} DiffRow
- * @typedef {{ type: "split", left: DiffRow|null, right: DiffRow|null }} SplitRow
- * @typedef {FileRow|HunkRow|DiffRow|SplitRow} Row
- */
-
-/** Rows of a file: one per line, numbered from 1. */
-export function fileRows(lines) {
-  return lines.map((text, i) => ({ type: "line", n: i + 1, text }));
-}
-
-const rangeOf = (h) => `@@ -${h.oldStart},${h.oldLines} +${h.newStart},${h.newLines} @@`;
-
-/** Rows of a file diff's hunks, unified or split. */
-export function diffRows(hunks, layout = "unified") {
-  const rows = [];
-  for (const h of hunks ?? []) {
-    rows.push({ type: "hunk", range: rangeOf(h), header: h.header });
-    if (layout === "split") {
-      for (const { left, right } of splitRows(h.lines)) {
-        const l = left && toDiffRow(left);
-        // A context line is one row on both sides, so it is highlighted once.
-        rows.push({ type: "split", left: l, right: right === left ? l : right && toDiffRow(right) });
-      }
-    } else {
-      for (const l of h.lines) rows.push(toDiffRow(l));
-    }
-  }
-  return rows;
-}
-
-const toDiffRow = (l) => ({ type: "diff", kind: l.kind, old: l.old, new: l.new, text: l.text, noNewline: l.noNewline });
+export { diffRows, fileRows };
 
 // ── row elements ─────────────────────────────────────────────────────────
 
@@ -96,7 +64,7 @@ function gutter(doc, ...nums) {
 
 /**
  * @param {Document} doc
- * @param {Row} row
+ * @param {import("../../domain/rows.js").Row} row
  * @param {{ slug: string, tokens: (row: Row) => any, target: import("../../domain/lines.js").LineRange|null, targetSide: string }} ctx
  */
 function rowElement(doc, row, ctx) {
@@ -165,7 +133,7 @@ function targets(ctx, row) {
  * scrolls.
  * @param {HTMLElement} el  the .code-lines element (empty; the caller sets --digits and data attributes)
  * @param {object} opts
- * @param {Row[]} opts.rows
+ * @param {import("../../domain/rows.js").Row[]} opts.rows
  * @param {HTMLElement|null} opts.scroller  what scrolls (the code view's .scroll, or the diff's main side)
  * @param {string} [opts.slug]               a diff file's slug, for its line anchors
  * @param {import("../../domain/ports.js").Highlighter} [opts.highlighter]
@@ -174,15 +142,16 @@ function targets(ctx, row) {
  * @param {import("../../domain/lines.js").LineRange|null} [opts.target]
  * @param {"R"|"L"} [opts.targetSide]
  * @param {(cb: () => void) => void} [opts.idle]  when to highlight (tests run it at once)
+ * @param {boolean} [opts.deferred]          draw nothing yet: the owner calls step() until it says done, or finish()
  */
-export function drawLines(el, { rows, scroller = null, slug = "", highlighter = null, language = "plaintext", virtual = true, target = null, targetSide = "R", idle = defaultIdle }) {
+export function drawLines(el, { rows, scroller = null, slug = "", highlighter = null, language = "plaintext", virtual = true, target = null, targetSide = "R", idle = defaultIdle, deferred = false }) {
   const doc = el.ownerDocument;
   let tokens = new Map();
   const ctx = {
     slug,
     target,
     targetSide,
-    tokens: (row) => tokens.get(row) ?? null,
+    tokens: (row) => row.tokens ?? tokens.get(row) ?? null,
   };
   const windowed = virtual && rows.length > VIRTUALISE_FROM && scroller !== null;
   let tops = null; // prefix sums of row heights, windowed only
@@ -190,7 +159,11 @@ export function drawLines(el, { rows, scroller = null, slug = "", highlighter = 
   let frame = 0;
   let destroyed = false;
 
+  // Rows drawn so far when not windowed; a deferred block fills in slices.
+  let next = 0;
+
   function drawAll() {
+    next = rows.length;
     el.replaceChildren(...rows.map((r) => rowElement(doc, r, ctx)));
   }
 
@@ -252,12 +225,16 @@ export function drawLines(el, { rows, scroller = null, slug = "", highlighter = 
     else drawAll();
   }
 
-  if (windowed) {
+  function startWindow() {
+    next = rows.length;
     measure();
     drawWindow(true);
     scroller.addEventListener("scroll", onScroll, { passive: true });
-  } else {
-    drawAll();
+  }
+
+  if (!deferred) {
+    if (windowed) startWindow();
+    else drawAll();
   }
 
   // Highlight after paint, then redraw what is on screen.
@@ -271,6 +248,33 @@ export function drawLines(el, { rows, scroller = null, slug = "", highlighter = 
 
   return {
     windowed,
+    /** Whether every row is drawn (a windowed block is, once its window is). */
+    get complete() {
+      return next >= rows.length;
+    },
+    /**
+     * Draws the next `count` rows of a deferred block, in order; true when
+     * nothing is left. A windowed block draws its window in one step.
+     */
+    step(count) {
+      if (destroyed || next >= rows.length) return true;
+      if (windowed) {
+        startWindow();
+        return true;
+      }
+      const end = Math.min(rows.length, next + count);
+      const slice = rows.slice(next, end).map((r) => rowElement(doc, r, ctx));
+      if (next === 0) el.replaceChildren(...slice);
+      else el.append(...slice);
+      next = end;
+      return next >= rows.length;
+    },
+    /** Draws what is left at once (a link or a key asked for this block). */
+    finish() {
+      if (destroyed || next >= rows.length) return;
+      if (windowed) startWindow();
+      else drawAll();
+    },
     get rowCount() {
       return rows.length;
     },
@@ -291,6 +295,7 @@ export function drawLines(el, { rows, scroller = null, slug = "", highlighter = 
     setTarget(range, side = "R") {
       ctx.target = range;
       ctx.targetSide = side;
+      if (deferred && next === 0) return; // the first rows are drawn with the target
       redraw();
     },
     /** Redraws the window after the scroller moved programmatically. */
@@ -306,39 +311,26 @@ export function drawLines(el, { rows, scroller = null, slug = "", highlighter = 
 }
 
 /**
- * Tokens per row: a file's lines in one pass; a diff's hunks per side (the
- * new side for context and additions, the old side for deletions).
- * @returns {Map<object, any>}
+ * Fills a .code-lines with a skeleton block of `rowCount` rows, and its
+ * .hunks with aria-busy: the block keeps the height its rows will have (one
+ * code line each) so the scrollbar is true before they are drawn. It is one
+ * element, however many rows: hundreds of sections wait at once. The first rows
+ * drawn replace it.
+ * @param {HTMLElement} el
  */
-function tokenise(rows, highlighter, language) {
-  const out = new Map();
-  if (rows.every((r) => r.type === "line")) {
-    const lines = highlighter.tokenize(language, rows.map((r) => r.text).join("\n"));
-    rows.forEach((r, i) => out.set(r, lines[i] ?? null));
-    return out;
-  }
-  // Group the diff rows back into hunks to highlight each side as text.
-  let hunk = [];
-  const flush = () => {
-    if (!hunk.length) return;
-    const lines = hunk.map((d) => ({ kind: d.kind, text: d.text }));
-    const { newText, oldText, at } = sidesOf({ lines });
-    const newT = highlighter.tokenize(language, newText);
-    const oldT = highlighter.tokenize(language, oldText);
-    hunk.forEach((d, i) => out.set(d, d.kind === "del" ? oldT[at[i].old] : newT[at[i].new]));
-    hunk = [];
-  };
-  for (const r of rows) {
-    if (r.type === "hunk") flush();
-    else if (r.type === "diff") hunk.push(r);
-    else if (r.type === "split") {
-      // Old side then new side, in order, without repeating a context line.
-      if (r.left) hunk.push(r.left);
-      if (r.right && r.right !== r.left) hunk.push(r.right);
-    }
-  }
-  flush();
-  return out;
+export function showPending(el, rowCount) {
+  const doc = el.ownerDocument;
+  const holder = doc.createElement("div");
+  holder.className = "skeleton-lines";
+  holder.setAttribute("aria-hidden", "true");
+  holder.style.setProperty("--rows", String(rowCount));
+  el.replaceChildren(holder);
+  el.closest(".hunks")?.setAttribute("aria-busy", "true");
+}
+
+/** The rows are drawn: the section is no longer busy. */
+export function clearPending(el) {
+  el.closest(".hunks")?.removeAttribute("aria-busy");
 }
 
 function defaultIdle(cb) {

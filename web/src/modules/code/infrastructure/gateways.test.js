@@ -36,11 +36,15 @@ test("http · reads send the contract's query: one source, ref only with a repos
   await gateway.file({ workspaceId: "ws1" }, "README.md");
   await gateway.diff({ workspaceId: "ws1", scope: "working" });
   await gateway.diff({ repositoryId: "r1", commit: "abcd" }).catch(() => {});
+  await gateway.diff({ workspaceId: "ws1", scope: "working", after: "a/b.go", limit: 50 });
+  await gateway.diff({ workspaceId: "ws1", scope: "working", limit: 0 });
   assert.deepEqual(stub.requested, [
     "/api/code/tree?repository_id=r1&ref=v0.9.0",
     "/api/code/file?workspace_id=ws1&path=README.md",
     "/api/code/diff?workspace_id=ws1&scope=working",
     "/api/code/diff?repository_id=r1&commit=abcd",
+    "/api/code/diff?workspace_id=ws1&scope=working&after=a%2Fb.go&limit=50",
+    "/api/code/diff?workspace_id=ws1&scope=working&limit=0",
   ]);
 });
 

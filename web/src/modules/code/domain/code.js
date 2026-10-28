@@ -64,6 +64,8 @@
  * @property {number} added
  * @property {number} deleted
  * @property {boolean} truncated     hunks were withheld from some file by the totals limit
+ * @property {string|null} next      the cursor of the next page (its last path), null on the last page
+ * @property {number} fileCount      changed files of the whole diff, whichever page this is; added and deleted cover the whole diff too
  *
  * @typedef {{ id: string, name: string, pattern: string, fileCount: number }} ZoneCount
  * @typedef {{ id: string, name: string, purpose: string, zones: ZoneCount[], fileCount: number }} ContextCount

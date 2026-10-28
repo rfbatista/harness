@@ -11,14 +11,18 @@
  * @typedef {{ repositoryId?: string, ref?: string, workspaceId?: string }} SourceQuery
  *   exactly one of repositoryId (at ref, the checkout's branch when empty) or workspaceId
  *
- * @typedef {{ workspaceId?: string, scope?: string, repositoryId?: string, commit?: string, base?: string, head?: string, path?: string }} DiffQuery
- *   workspaceId with scope (all when empty), repositoryId with commit, or repositoryId with base and head; path narrows it to one file
+ * @typedef {{ workspaceId?: string, scope?: string, repositoryId?: string, commit?: string, base?: string, head?: string, path?: string, after?: string, limit?: number }} DiffQuery
+ *   workspaceId with scope (all when empty), repositoryId with commit, or repositoryId with base and head; path narrows it to one file.
+ *   Without path it is a diff page: `limit` files (50 when unset, 0 for the totals only) after the cursor `after`.
  *
  * @typedef {object} CodeGateway
  * @property {(src: SourceQuery, dir: string, signal?: AbortSignal) => Promise<import("./code.js").CodeTree>} tree
  * @property {(src: SourceQuery, signal?: AbortSignal) => Promise<import("./code.js").CodePaths>} paths
  * @property {(src: SourceQuery, path: string, signal?: AbortSignal) => Promise<import("./code.js").CodeFile>} file
  * @property {(q: DiffQuery, signal?: AbortSignal) => Promise<import("./code.js").CodeDiff>} diff
+ * @property {(q: DiffQuery, signal?: AbortSignal) => Promise<unknown>} diffPage
+ *           The same read as diff, undecoded (the contract's wire shape): the
+ *           code view hands it to the code worker (DiffPreparer) to map.
  * @property {(src: SourceQuery, signal?: AbortSignal) => Promise<import("./code.js").CodeMap>} map
  *           Each rejects with a StructuredError carrying the contract's code
  *           (INVALID_INPUT, REPOSITORY_NOT_FOUND, WORKSPACE_NOT_FOUND,
@@ -42,7 +46,7 @@
  * @property {{ id: string, name: string }[]} worktrees  a session's, when it has several
  * @property {import("./code.js").CodeTree[]} trees      the tree levels painted, root first
  * @property {import("./code.js").CodeFile|null} file
- * @property {import("./code.js").CodeDiff|null} diff
+ * @property {unknown|null} diffPage            the first diff page, in the wire shape (the code worker maps it)
  * @property {import("./code.js").CodeMap|null} map
  * @property {{ code: string, message: string } | null} error   what the first paint hit
  * @property {string[]} refs                 the ref select's options (repository page)
