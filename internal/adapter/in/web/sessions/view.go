@@ -468,7 +468,7 @@ func NewPageView(frame shell.Frame, project *domain.Project, task *domain.Ticket
 		Summary:     summary(list),
 		Groups:      views,
 		Seed: Seed{ProjectID: project.ID, Sessions: list, AgentNames: names, RepositoryNames: repoNames,
-			Artifacts: []*domain.Artifact{}, Tasks: []TaskLink{}},
+			Artifacts: []*domain.Artifact{}, Tasks: []TaskLink{}, GitStates: []domain.GitState{}},
 		NewSession: form,
 	}
 	if task != nil {
