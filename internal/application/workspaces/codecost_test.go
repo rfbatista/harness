@@ -165,3 +165,38 @@ func TestReadingManyDirectoriesWithinTheWatchIntervalListsTheWorktreeOnce(t *tes
 		t.Errorf("a read after the interval listed the worktree %d times in all, want twice", got)
 	}
 }
+
+func TestATreeReadAfterTheWatcherRefreshedTheSnapshotListsNothingItself(t *testing.T) {
+	f := newCostFixture(t)
+	ctx := context.Background()
+	src := ports.CodeSourceQuery{WorkspaceID: f.workspaceID}
+	if _, err := f.code.CodeTree(ctx, src, ""); err != nil {
+		t.Fatal(err)
+	}
+
+	// The worktree changes after the snapshot; the watcher sees it and
+	// refreshes the snapshot, well within the interval of the first read.
+	changed := filepath.Join(f.worktree, "d0", "added.txt")
+	if err := os.WriteFile(changed, []byte("new\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.code.RefreshTree(ctx, f.workspaceID); err != nil {
+		t.Fatal(err)
+	}
+	f.git.listings.Store(0)
+
+	tree, err := f.code.CodeTree(ctx, src, "d0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, e := range tree.Entries {
+		found = found || e.Name == "added.txt"
+	}
+	if !found {
+		t.Error("the read after the refresh does not list the file added before it")
+	}
+	if got := f.git.listings.Load(); got != 0 {
+		t.Errorf("the read after the refresh listed the worktree %d times, want none", got)
+	}
+}
