@@ -2,6 +2,8 @@ package gitcli
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -28,14 +30,17 @@ func (c Code) WorktreeStatus(ctx context.Context, dir string) (*ports.GitWorktre
 	if err != nil {
 		return nil, err
 	}
-	return parseStatusV2(out), nil
+	st, _ := parseStatusV2(out)
+	return st, nil
 }
 
 // parseStatusV2 reads `git status --porcelain=v2 --branch -z`: "# branch.*"
 // header records, then one record per changed path ("2" records, renames and
-// copies, are followed by the original path).
-func parseStatusV2(out string) *ports.GitWorktreeStatus {
+// copies, are followed by the original path). It answers the counts and every
+// changed path.
+func parseStatusV2(out string) (*ports.GitWorktreeStatus, []string) {
 	st := &ports.GitWorktreeStatus{}
+	var paths []string
 	hasAB := false
 	recs := strings.Split(out, "\x00")
 	for i := 0; i < len(recs); i++ {
@@ -62,17 +67,24 @@ func parseStatusV2(out string) *ports.GitWorktreeStatus {
 			if rec[0] != 'u' && len(rec) > 3 && rec[2] != '.' {
 				st.Staged++
 			}
+			// "1 XY sub mH mI mW hH hI path"; "2" adds the rename score,
+			// "u" three more modes and hashes; the path has the rest.
+			n := map[byte]int{'1': 9, '2': 10, 'u': 11}[rec[0]]
+			if f := strings.SplitN(rec, " ", n); len(f) == n {
+				paths = append(paths, f[n-1])
+			}
 			if rec[0] == '2' {
 				i++ // the original path follows
 			}
 		case strings.HasPrefix(rec, "? "):
 			st.Untracked++
+			paths = append(paths, rec[2:])
 		}
 	}
 	// An upstream that is configured but has no counts is a remote-tracking
 	// ref that is gone.
 	st.UpstreamGone = st.Upstream != "" && !hasAB
-	return st
+	return st, paths
 }
 
 // BranchUpstream reads a local branch's upstream in the main checkout.
@@ -123,4 +135,29 @@ func (c Code) FetchedAt(repoRoot string) time.Time {
 		return fi.ModTime()
 	}
 	return time.Time{}
+}
+
+// SnapshotStatus is Snapshot with the status pass it read: one git run gives
+// HEAD, the upstream and counts, and the changed paths the fingerprint is
+// made of. The fingerprint covers HEAD and the working tree only, not the
+// upstream, so a push or a fetch does not look like a code change.
+func (c Code) SnapshotStatus(ctx context.Context, dir string) (string, string, *ports.GitWorktreeStatus, error) {
+	out, err := c.d.codeOutput(ctx, dir, "status", "--porcelain=v2", "--branch", "-z", "--untracked-files=all")
+	if err != nil {
+		return "", "", nil, err
+	}
+	st, paths := parseStatusV2(out)
+	h := sha256.New()
+	fmt.Fprintf(h, "%s\x00", st.Head)
+	for _, rec := range strings.Split(out, "\x00") {
+		if !strings.HasPrefix(rec, "# ") {
+			fmt.Fprintf(h, "%s\x00", rec)
+		}
+	}
+	for _, p := range paths {
+		if info, err := os.Lstat(filepath.Join(dir, filepath.FromSlash(p))); err == nil {
+			fmt.Fprintf(h, "%s %d %d\x00", p, info.Size(), info.ModTime().UnixNano())
+		}
+	}
+	return st.Head, hex.EncodeToString(h.Sum(nil)), st, nil
 }

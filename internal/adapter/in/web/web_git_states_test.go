@@ -8,17 +8,15 @@ import (
 	"github.com/rfbatista/harnesskit/errs"
 
 	"operators-mcp/internal/domain"
+	"operators-mcp/internal/ports"
 )
 
 // fakeGitStates answers the states it holds for the task it is asked about.
 type fakeGitStates struct {
+	ports.WorktreeGit
 	byTask map[string][]domain.GitState
 	err    error
 	asked  []string
-}
-
-func (f *fakeGitStates) GitState(context.Context, string) (*domain.GitState, error) {
-	return nil, errs.Newf("UNAVAILABLE", "not used by the pages")
 }
 
 func (f *fakeGitStates) TaskGitStates(_ context.Context, taskID string) ([]domain.GitState, error) {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"reflect"
 	"strings"
 	"sync"
 	"time"
@@ -54,6 +55,18 @@ type WorktreeGit struct {
 type stateSlot struct {
 	mu    sync.Mutex
 	state *domain.GitState
+	// src is the status pass the state was composed from, and fetched the
+	// repository's fetch time then; a watcher that sees both unchanged knows
+	// the state still holds. baseAt is when the base comparison was last read.
+	src     *ports.GitWorktreeStatus
+	fetched time.Time
+	baseAt  time.Time
+	// observed: the code watcher keeps the state current, so it is served
+	// while the watcher's polls keep confirming it.
+	observed bool
+	// sessionID is the session running in the workspace, read once for the
+	// states a watcher announces.
+	sessionID string
 }
 
 // NewWorktreeGit returns the use case.
@@ -111,21 +124,95 @@ func (s *WorktreeGit) repository(ctx context.Context, id string) (*domain.Reposi
 	return repo, nil
 }
 
-// stateOf is a copy of the workspace's state, the held one when it is fresh.
-// It names no session.
+// stateOf is a copy of the workspace's state, the held one when it is fresh:
+// read within the watch interval, or confirmed by the code watcher within
+// three. It names no session.
 func (s *WorktreeGit) stateOf(ctx context.Context, ws *domain.Workspace, repo *domain.Repository) (*domain.GitState, error) {
 	sl := s.slot(ws.ID)
 	sl.mu.Lock()
 	defer sl.mu.Unlock()
-	if sl.state != nil && s.d.Now().Sub(sl.state.ReadAt) < CodeWatchInterval {
-		return copyState(sl.state), nil
+	if sl.state != nil {
+		window := CodeWatchInterval
+		if sl.observed {
+			window = 3 * CodeWatchInterval
+		}
+		if s.d.Now().Sub(sl.state.ReadAt) < window {
+			return copyState(sl.state), nil
+		}
 	}
-	st, err := s.read(ctx, ws, repo)
+	st, src, err := s.read(ctx, ws, repo, nil)
 	if err != nil {
 		return nil, err
 	}
-	sl.state = st
+	s.hold(sl, st, src, repo)
 	return copyState(st), nil
+}
+
+// hold keeps a state just read in its slot. The slot is locked.
+func (s *WorktreeGit) hold(sl *stateSlot, st *domain.GitState, src *ports.GitWorktreeStatus, repo *domain.Repository) {
+	sl.state, sl.src, sl.baseAt, sl.observed = st, src, st.ReadAt, false
+	sl.fetched = s.d.Git.FetchedAt(repo.RootDir)
+}
+
+// baseRecheck is how long a held base comparison is trusted while the code
+// watcher confirms the rest: the base branch may move with the worktree idle.
+const baseRecheck = 30 * time.Second
+
+// StateObserver is what the code watcher tells of a running worktree: the
+// status pass of its poll, with no git run of its own.
+type StateObserver interface {
+	// ObserveGitState brings the workspace's held state up to the status the
+	// watcher just read, and answers it, and whether it changed. Nothing is
+	// read when the status, the fetch time and the base comparison still hold:
+	// the state is only confirmed, so a read of it stays free of git.
+	ObserveGitState(ctx context.Context, workspaceID string, st *ports.GitWorktreeStatus) (*domain.GitState, bool, error)
+}
+
+var _ StateObserver = (*WorktreeGit)(nil)
+
+func (s *WorktreeGit) ObserveGitState(ctx context.Context, workspaceID string, wt *ports.GitWorktreeStatus) (*domain.GitState, bool, error) {
+	ws := s.d.Workspaces.Get(ctx, workspaceID)
+	if ws == nil {
+		return nil, false, &domain.StructuredError{Code: "WORKSPACE_NOT_FOUND", Message: "workspace not found"}
+	}
+	repo, err := s.repository(ctx, ws.RepositoryID)
+	if err != nil {
+		return nil, false, err
+	}
+	sl := s.slot(ws.ID)
+	sl.mu.Lock()
+	defer sl.mu.Unlock()
+	now := s.d.Now()
+	if sl.state != nil && sl.src != nil && *sl.src == *wt && sl.fetched.Equal(s.d.Git.FetchedAt(repo.RootDir)) && now.Sub(sl.baseAt) < baseRecheck {
+		sl.state.ReadAt, sl.observed = now.UTC(), true
+		return s.named(ctx, sl), false, nil
+	}
+	st, src, err := s.read(ctx, ws, repo, wt)
+	if err != nil {
+		return nil, false, err
+	}
+	changed := sl.state == nil || !sameState(sl.state, st)
+	s.hold(sl, st, src, repo)
+	sl.observed = true
+	return s.named(ctx, sl), changed, nil
+}
+
+// named is a copy of the slot's state with its session; the slot is locked.
+func (s *WorktreeGit) named(ctx context.Context, sl *stateSlot) *domain.GitState {
+	cp := copyState(sl.state)
+	if sl.sessionID == "" {
+		s.nameSession(ctx, cp)
+		sl.sessionID = cp.SessionID
+	}
+	cp.SessionID = sl.sessionID
+	return cp
+}
+
+// sameState: two reads say the same, whenever they were made.
+func sameState(a, b *domain.GitState) bool {
+	x, y := *a, *b
+	x.ReadAt, y.ReadAt = time.Time{}, time.Time{}
+	return reflect.DeepEqual(x, y)
 }
 
 // TaskGitStates reads the state of each session workspace of a task, all at
@@ -395,7 +482,7 @@ func (s *WorktreeGit) forget(workspaceIDs ...string) {
 	for _, id := range workspaceIDs {
 		sl := s.slot(id)
 		sl.mu.Lock()
-		sl.state = nil
+		sl.state, sl.src = nil, nil
 		sl.mu.Unlock()
 	}
 }
@@ -405,8 +492,10 @@ func copyState(st *domain.GitState) *domain.GitState {
 	return &cp
 }
 
-// read computes a workspace's state from git.
-func (s *WorktreeGit) read(ctx context.Context, ws *domain.Workspace, repo *domain.Repository) (*domain.GitState, error) {
+// read computes a workspace's state: from git, or from the status pass wt
+// when the caller has one already. It answers the status it used (nil for a
+// worktree that is gone).
+func (s *WorktreeGit) read(ctx context.Context, ws *domain.Workspace, repo *domain.Repository, wt *ports.GitWorktreeStatus) (*domain.GitState, *ports.GitWorktreeStatus, error) {
 	st := &domain.GitState{WorkspaceID: ws.ID, RepositoryID: repo.ID, Branch: ws.Branch}
 	fetched := s.d.Git.FetchedAt(repo.RootDir)
 	if !fetched.IsZero() {
@@ -414,27 +503,28 @@ func (s *WorktreeGit) read(ctx context.Context, ws *domain.Workspace, repo *doma
 	}
 
 	var up upstreamCounts
-	st.Gone = !s.d.Files.Exists(ws.Path)
-	if !st.Gone {
-		wt, err := s.d.Git.WorktreeStatus(ctx, ws.Path)
-		switch {
-		case errs.Code(err) == "WORKSPACE_MISSING":
-			st.Gone = true // removed since the check
-		case err != nil:
-			return nil, err
-		default:
-			st.Branch, st.Head = wt.Branch, wt.Head
-			st.Uncommitted = domain.Uncommitted{Tracked: wt.Tracked, Untracked: wt.Untracked, Staged: wt.Staged}
-			up = upstreamCounts{ref: wt.Upstream, gone: wt.UpstreamGone, ahead: wt.Ahead, behind: wt.Behind}
-			if i := strings.Index(wt.Upstream, "/"); i > 0 {
-				up.remote = wt.Upstream[:i]
-			}
+	st.Gone = wt == nil && !s.d.Files.Exists(ws.Path)
+	if !st.Gone && wt == nil {
+		var err error
+		wt, err = s.d.Git.WorktreeStatus(ctx, ws.Path)
+		if errs.Code(err) == "WORKSPACE_MISSING" {
+			st.Gone, wt = true, nil // removed since the check
+		} else if err != nil {
+			return nil, nil, err
+		}
+	}
+	if wt != nil {
+		st.Branch, st.Head = wt.Branch, wt.Head
+		st.Uncommitted = domain.Uncommitted{Tracked: wt.Tracked, Untracked: wt.Untracked, Staged: wt.Staged}
+		up = upstreamCounts{ref: wt.Upstream, gone: wt.UpstreamGone, ahead: wt.Ahead, behind: wt.Behind}
+		if i := strings.Index(wt.Upstream, "/"); i > 0 {
+			up.remote = wt.Upstream[:i]
 		}
 	}
 	if st.Gone {
 		bu, err := s.d.Git.BranchUpstream(ctx, repo.RootDir, ws.Branch)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		up = upstreamCounts{ref: bu.Ref, remote: bu.Remote, gone: bu.Gone, ahead: bu.Ahead, behind: bu.Behind}
 		if head, err := s.d.Git.ResolveCommit(ctx, repo.RootDir, "refs/heads/"+ws.Branch); err == nil {
@@ -444,7 +534,12 @@ func (s *WorktreeGit) read(ctx context.Context, ws *domain.Workspace, repo *doma
 	st.Upstream = up.state(st.FetchedAt != nil)
 	st.Base = s.baseOf(ctx, ws, repo.RootDir, st.Branch)
 	st.ReadAt = s.d.Now().UTC()
-	return st, nil
+	var src *ports.GitWorktreeStatus
+	if wt != nil {
+		cp := *wt
+		src = &cp
+	}
+	return st, src, nil
 }
 
 // baseOf compares the branch with the ref the workspace was cut from, or with

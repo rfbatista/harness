@@ -1025,14 +1025,20 @@ func newWorktreeGit(ws ports.WorkspaceRepository, repos ports.RepositoryReposito
 // registerCodeWatcher announces code_changed on the orchestration's project
 // feed while a workspace's session runs and someone follows its project's
 // feed, polling from start to stop. The merge states hear each change too.
-func registerCodeWatcher(lc fx.Lifecycle, sessions ports.SessionRepository, ws ports.WorkspaceRepository, git ports.GitCode, code ports.CodeBrowser, orch *orchestration.Service, merges *workspaces.MergeStates, cat catalog.Catalog) error {
+func registerCodeWatcher(lc fx.Lifecycle, sessions ports.SessionRepository, ws ports.WorkspaceRepository, git ports.GitCode, code ports.CodeBrowser, worktreeGit ports.WorktreeGit, orch *orchestration.Service, merges *workspaces.MergeStates, cat catalog.Catalog) error {
 	// The code browser keeps the tree snapshots the watcher refreshes; one
 	// that cannot would send code_changed before its snapshot is current.
 	tree, ok := code.(workspaces.TreeRefresher)
 	if !ok {
 		return errors.New("the code browser does not keep tree snapshots the code watcher can refresh")
 	}
-	w := workspaces.NewCodeWatcher(workspaces.CodeWatcherDeps{Sessions: sessions, Workspaces: ws, Git: git, Feed: changeSinks{orch, merges}, Tree: tree})
+	// The watcher's status pass also keeps each running worktree's git state,
+	// so a read of it costs no git and git_state follows every code_changed.
+	state, ok := worktreeGit.(workspaces.StateObserver)
+	if !ok {
+		return errors.New("the worktree git state cannot be observed by the code watcher")
+	}
+	w := workspaces.NewCodeWatcher(workspaces.CodeWatcherDeps{Sessions: sessions, Workspaces: ws, Git: git, Feed: changeSinks{orch, merges}, Tree: tree, State: state})
 	w.Subscribe(cat.Bus)
 	orch.ObserveFeedFollowers(w)
 	lc.Append(fx.Hook{

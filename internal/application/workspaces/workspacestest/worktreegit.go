@@ -37,6 +37,23 @@ func (r *FeedRecorder) AnnounceChange(c ports.ProjectChange) {
 	r.changes = append(r.changes, c)
 }
 
+// Kinds names what was announced so far, in order: "code_changed" or
+// "git_state".
+func (r *FeedRecorder) Kinds() []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	var out []string
+	for _, c := range r.changes {
+		switch {
+		case c.CodeChanged != nil:
+			out = append(out, "code_changed")
+		case c.GitState != nil:
+			out = append(out, "git_state")
+		}
+	}
+	return out
+}
+
 // GitStates are the git states announced so far, in order.
 func (r *FeedRecorder) GitStates() []ports.GitStateChange {
 	r.mu.Lock()
@@ -54,7 +71,7 @@ func (r *FeedRecorder) GitStates() []ports.GitStateChange {
 // the shared origin fetch a pull request refresh would run.
 func NewWorktreeGitWithFeed(t *testing.T, f *portstest.WorktreeGitFixture, opts ...WorktreeGitOption) (*workspaces.WorktreeGit, portstest.WorktreeGitTarget, *FeedRecorder) {
 	t.Helper()
-	o := worktreeGitOptions{publisher: gitcli.NewBranchPublisher(), timeout: workspaces.OriginFetchTimeout}
+	o := worktreeGitOptions{publisher: gitcli.NewBranchPublisher(), timeout: workspaces.OriginFetchTimeout, reader: func(g *gitcli.Code) ports.GitWorktreeReader { return g }}
 	for _, opt := range opts {
 		opt(&o)
 	}
@@ -117,18 +134,56 @@ func NewWorktreeGitWithFeed(t *testing.T, f *portstest.WorktreeGitFixture, opts 
 	}
 	clock := &passingClock{now: time.Now()}
 	feed := &FeedRecorder{}
+	code := gitcli.NewCode()
 	svc := workspaces.NewWorktreeGit(workspaces.WorktreeGitDeps{
 		Workspaces: wsRepo, Repositories: repos, Sessions: sessions, Tickets: tickets,
-		Git: gitcli.NewCode(), Files: filesystem.NewWorktreeFiles(), Now: clock.Now,
+		Git: o.reader(code), Files: filesystem.NewWorktreeFiles(), Now: clock.Now,
 		Publisher: o.publisher, Fetcher: workspaces.NewOriginFetcher(o.publisher, gitcredentialstest.New()).WithTimeout(o.timeout), Feed: feed,
 	})
 	at.PassInterval = clock.Pass
+	if o.watched != nil {
+		// Every session runs; someone follows the project's feed.
+		wclock := &passingClock{now: time.Now()}
+		w := workspaces.NewCodeWatcher(workspaces.CodeWatcherDeps{
+			Sessions: sessions, Workspaces: wsRepo, Git: code, Feed: feed, State: svc, Now: wclock.Now,
+		})
+		for _, id := range at.Sessions {
+			w.Track(id)
+		}
+		w.ProjectFollowers("git-project", 1)
+		o.watched.Poll = func() { wclock.Pass(); w.Poll(context.Background()) }
+		o.watched.PollNow = func() { w.Poll(context.Background()) }
+	}
 	return svc, at, feed
+}
+
+// Watched drives a code watcher built over the fixture's sessions.
+type Watched struct {
+	// Poll looks at every worktree once, an interval after the last look;
+	// PollNow looks without letting any time pass.
+	Poll, PollNow func()
 }
 
 type worktreeGitOptions struct {
 	publisher ports.BranchPublisher
 	timeout   time.Duration
+	reader    func(*gitcli.Code) ports.GitWorktreeReader
+	watched   *Watched
+}
+
+// WithCodeWatcher builds a code watcher over the fixture's running sessions,
+// announcing on the same feed and keeping the same states, and hands its
+// controls to w.
+func WithCodeWatcher(w *Watched) WorktreeGitOption {
+	return func(o *worktreeGitOptions) { o.watched = w }
+}
+
+// WithGitReader serves the git state's reads through wrap(real git), so a
+// test can count them.
+func WithGitReader(wrap func(ports.GitWorktreeReader) ports.GitWorktreeReader) WorktreeGitOption {
+	return func(o *worktreeGitOptions) {
+		o.reader = func(g *gitcli.Code) ports.GitWorktreeReader { return wrap(g) }
+	}
 }
 
 // WorktreeGitOption changes how NewWorktreeGitWithFeed is built.

@@ -3,13 +3,9 @@ package gitcli
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
 	"io"
-	"os"
 	"os/exec"
-	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -420,32 +416,6 @@ func (c Code) Blob(ctx context.Context, dir, object string, max int64) ([]byte, 
 // modification time of every path status lists, since status alone does
 // not change when an already modified file is edited again.
 func (c Code) Snapshot(ctx context.Context, dir string) (string, string, error) {
-	head, err := c.d.codeOutput(ctx, dir, "rev-parse", "--verify", "--quiet", "HEAD")
-	if err != nil && ctx.Err() != nil {
-		return "", "", ctx.Err()
-	}
-	if timedOut(err) {
-		return "", "", err
-	}
-	head = strings.TrimSpace(head)
-	status, err := c.d.codeOutput(ctx, dir, "status", "--porcelain=v1", "-z", "--untracked-files=all")
-	if err != nil {
-		return "", "", err
-	}
-	h := sha256.New()
-	fmt.Fprintf(h, "%s\x00%s\x00", head, status)
-	recs := strings.Split(status, "\x00")
-	for i := 0; i < len(recs); i++ {
-		rec := recs[i]
-		if len(rec) < 4 {
-			continue
-		}
-		if rec[0] == 'R' || rec[0] == 'C' {
-			i++ // the original path follows
-		}
-		if info, err := os.Lstat(filepath.Join(dir, filepath.FromSlash(rec[3:]))); err == nil {
-			fmt.Fprintf(h, "%s %d %d\x00", rec[3:], info.Size(), info.ModTime().UnixNano())
-		}
-	}
-	return head, hex.EncodeToString(h.Sum(nil)), nil
+	head, fingerprint, _, err := c.SnapshotStatus(ctx, dir)
+	return head, fingerprint, err
 }

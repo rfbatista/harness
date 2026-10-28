@@ -87,3 +87,10 @@ type GitWorktreeReader interface {
 	// repoRoot; the zero time when never.
 	FetchedAt(repoRoot string) time.Time
 }
+
+// GitStatusSnapshotter is GitCode.Snapshot with the status pass it read, so
+// the code watcher's one git run also gives the worktree's git state (driven;
+// gitcli implements it).
+type GitStatusSnapshotter interface {
+	SnapshotStatus(ctx context.Context, dir string) (head, fingerprint string, st *GitWorktreeStatus, err error)
+}
