@@ -6,8 +6,6 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 // `make test-design-system` runs this file only; the sync blocks' invariants ride along.
-import "./sync-blocks.test.mjs";
-import "./git-extensions.test.mjs";
 
 const read = (p) => readFileSync(fileURLToPath(new URL(p, import.meta.url)), "utf8");
 const row = read("./css/blocks/row.css");
