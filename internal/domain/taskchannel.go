@@ -267,3 +267,47 @@ type TaskStatusChange struct {
 }
 
 func invalidInput(msg string) error { return &StructuredError{Code: "INVALID_INPUT", Message: msg} }
+
+// BringUnderSkip is why a session cannot be brought under its task's
+// architect; empty means it can.
+type BringUnderSkip string
+
+const (
+	SkipNotOnTask    BringUnderSkip = "not_on_task"
+	SkipIsArchitect  BringUnderSkip = "is_architect"
+	SkipAlreadyUnder BringUnderSkip = "already_under"
+	SkipNotFound     BringUnderSkip = "not_found"
+)
+
+// BringUnderEligibility judges target (nil when it no longer exists) against
+// the task ticketID, its architect arch and every session onTask. Any state
+// qualifies: only where the session stands in the task decides.
+func BringUnderEligibility(ticketID string, arch *Session, onTask []*Session, target *Session) BringUnderSkip {
+	switch {
+	case target == nil:
+		return SkipNotFound
+	case target.TicketID != ticketID:
+		return SkipNotOnTask
+	case target.ID == arch.ID:
+		return SkipIsArchitect
+	}
+	if role, _ := RoleOf(target.ID, onTask); role == RoleDelegate {
+		return SkipAlreadyUnder
+	}
+	return ""
+}
+
+// DelegateStatusSection is the part of a delegate's brief about the task
+// status and the architect; the turn a session brought under an architect
+// gets repeats everything after its first line.
+const DelegateStatusSection = `This task has an architect: the session that shaped it and delegated your part.
+It owns the task status, and only the person moves it to done.
+Do not call update_task_status; it is refused.
+Talk to the architect instead:
+
+- mcp__task__message_architect — kind review_request when your plan or work is ready for review (attach the documents and artifacts by id, from .index.json); kind status_report at each milestone, when you finish, and as soon as you are blocked (status working, blocked, ready_for_review or done); kind question when you need a decision
+- mcp__task__list_task_messages — your messages with the architect, to catch up on a reply you missed
+
+Its replies arrive as a new turn starting with [task message … · reply …]. A reply
+with verdict changes_requested means: make the changes, then ask for review again.
+Sessions you start on this task also report to the architect.`

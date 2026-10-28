@@ -482,3 +482,23 @@ func TestSessionKeepsASquashIntoTheDefaultBranch(t *testing.T) {
 		}
 	}
 }
+
+func TestSessionRepo_UpdateParentStoresTheMarkAndChangesNothingElse(t *testing.T) {
+	r := newTestDB(t)
+	if _, err := r.Create(&domain.Session{ID: "s1", ProjectID: "p1", TicketID: "t1", Task: "do", Status: domain.SessionRunning, Branch: "b", Model: "m"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := r.Get("s1"); got.BroughtUnder || got.ParentSessionID != "" {
+		t.Fatalf("a new session is not brought under: %+v", got)
+	}
+	if err := r.UpdateParent("s1", "arch", true); err != nil {
+		t.Fatal(err)
+	}
+	got := r.Get("s1")
+	if got.ParentSessionID != "arch" || !got.BroughtUnder || got.Branch != "b" || got.Model != "m" || got.Status != domain.SessionRunning {
+		t.Fatalf("parent move wrong or touched other fields: %+v", got)
+	}
+	if err := r.UpdateParent("nope", "arch", true); err == nil {
+		t.Fatal("expected an error for an unknown session")
+	}
+}

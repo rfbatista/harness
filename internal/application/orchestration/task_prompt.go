@@ -202,17 +202,7 @@ func appendSection(base, section string) string {
 func statusSection(role domain.SessionRole) string {
 	switch role {
 	case domain.RoleDelegate:
-		return `This task has an architect: the session that shaped it and delegated your part.
-It owns the task status, and only the person moves it to done.
-Do not call update_task_status; it is refused.
-Talk to the architect instead:
-
-- mcp__task__message_architect — kind review_request when your plan or work is ready for review (attach the documents and artifacts by id, from .index.json); kind status_report at each milestone, when you finish, and as soon as you are blocked (status working, blocked, ready_for_review or done); kind question when you need a decision
-- mcp__task__list_task_messages — your messages with the architect, to catch up on a reply you missed
-
-Its replies arrive as a new turn starting with [task message … · reply …]. A reply
-with verdict changes_requested means: make the changes, then ask for review again.
-Sessions you start on this task also report to the architect.`
+		return domain.DelegateStatusSection
 	case domain.RoleArchitect:
 		return `You are this task's architect. You own its status: no other session started
 under you can move it. Move it as the work moves, always with a reason, based on

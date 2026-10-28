@@ -124,3 +124,38 @@ func TestSessionAndTicketWireCarryDerivedFields(t *testing.T) {
 		t.Errorf("queued is server bookkeeping, not wire: %s", b)
 	}
 }
+
+func TestBringUnderSkip(t *testing.T) {
+	arch := sess("arch", "", SessionModeArchitect, SessionRunning, 10)
+	delegate := sess("del", "arch", "", SessionRunning, 5)
+	grand := sess("grand", "del", "", SessionRunning, 4)
+	peer := sess("peer", "", "", SessionRunning, 3)
+	done := sess("done", "", "", SessionDone, 2)
+	headless := sess("hl", "", "", SessionFailed, 1)
+	for _, s := range []*Session{arch, delegate, grand, peer, done, headless} {
+		s.TicketID = "t1"
+	}
+	other := sess("other", "", "", SessionRunning, 1)
+	other.TicketID = "t2"
+	onTask := []*Session{arch, delegate, grand, peer, done, headless}
+
+	cases := []struct {
+		name   string
+		target *Session
+		want   BringUnderSkip
+	}{
+		{"peer", peer, ""},
+		{"done", done, ""},
+		{"failed", headless, ""},
+		{"architect", arch, SkipIsArchitect},
+		{"delegate", delegate, SkipAlreadyUnder},
+		{"delegate of a delegate", grand, SkipAlreadyUnder},
+		{"other task", other, SkipNotOnTask},
+		{"gone", nil, SkipNotFound},
+	}
+	for _, c := range cases {
+		if got := BringUnderEligibility("t1", arch, onTask, c.target); got != c.want {
+			t.Errorf("%s: %q, want %q", c.name, got, c.want)
+		}
+	}
+}

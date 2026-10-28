@@ -209,18 +209,19 @@ func SessionTaskTools(planningSvc ports.Planning, sessions ports.SessionReposito
 // peerSession is another session on the same task, as list_task_sessions
 // reports it: enough to know who is doing what, and where.
 type peerSession struct {
-	SessionID   string               `json:"session_id"`
-	AgentID     string               `json:"agent_id,omitempty"`
-	AgentName   string               `json:"agent_name"`
-	Status      domain.SessionStatus `json:"status"`
-	Running     bool                 `json:"running"`
-	Brief       string               `json:"brief,omitempty"`
-	LastAction  string               `json:"last_action,omitempty"`
-	Branch      string               `json:"branch,omitempty"`
-	Worktree    string               `json:"worktree,omitempty"`
-	Interactive bool                 `json:"interactive"`
-	Role        domain.SessionRole   `json:"role"`
-	UpdatedAt   time.Time            `json:"updated_at"`
+	SessionID    string               `json:"session_id"`
+	AgentID      string               `json:"agent_id,omitempty"`
+	AgentName    string               `json:"agent_name"`
+	Status       domain.SessionStatus `json:"status"`
+	Running      bool                 `json:"running"`
+	Brief        string               `json:"brief,omitempty"`
+	LastAction   string               `json:"last_action,omitempty"`
+	Branch       string               `json:"branch,omitempty"`
+	Worktree     string               `json:"worktree,omitempty"`
+	Interactive  bool                 `json:"interactive"`
+	Role         domain.SessionRole   `json:"role"`
+	BroughtUnder bool                 `json:"brought_under"`
+	UpdatedAt    time.Time            `json:"updated_at"`
 }
 
 // taskPeers is every session on the scoped task but the caller's own, live
@@ -250,18 +251,19 @@ func taskPeers(ctx context.Context, scope *taskScope, list []*domain.Session, in
 			name = cmp.Or(names[s.AgentID], s.AgentID)
 		}
 		peers = append(peers, peerSession{
-			SessionID:   s.ID,
-			AgentID:     s.AgentID,
-			AgentName:   name,
-			Status:      s.Status,
-			Running:     running,
-			Brief:       s.Task,
-			LastAction:  s.LastAction,
-			Branch:      s.Branch,
-			Worktree:    s.WorkingDir,
-			Interactive: s.Interactive,
-			Role:        roleOf(s.ID),
-			UpdatedAt:   s.UpdatedAt,
+			SessionID:    s.ID,
+			AgentID:      s.AgentID,
+			AgentName:    name,
+			Status:       s.Status,
+			Running:      running,
+			Brief:        s.Task,
+			LastAction:   s.LastAction,
+			Branch:       s.Branch,
+			Worktree:     s.WorkingDir,
+			Interactive:  s.Interactive,
+			Role:         roleOf(s.ID),
+			BroughtUnder: s.BroughtUnder,
+			UpdatedAt:    s.UpdatedAt,
 		})
 	}
 	slices.SortStableFunc(peers, func(a, b peerSession) int {

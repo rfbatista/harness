@@ -121,6 +121,9 @@ type SessionRepository interface {
 	// readable copy, so a client does not have to replay the event log to
 	// learn the session's current mode.
 	UpdateAutoRun(id string, autoRun bool) error
+	// UpdateParent moves the session under parentID; broughtUnder marks that a
+	// person did it rather than the parent starting the session.
+	UpdateParent(id, parentID string, broughtUnder bool) error
 	// UpdateClaudeSessionID records which claude conversation an interactive
 	// session resumes into.
 	UpdateClaudeSessionID(id, claudeSessionID string) error

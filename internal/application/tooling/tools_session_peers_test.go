@@ -37,7 +37,7 @@ func peersFixture(t *testing.T) (call func(sessionID string, args map[string]any
 		{ID: "me", ProjectID: proj.ID, TicketID: task.ID, Task: "implement", Status: domain.SessionRunning, Branch: "feat/me"},
 		{ID: "reviewer", ProjectID: proj.ID, TicketID: task.ID, AgentID: "a-rev", Task: "review the plan", Status: domain.SessionIdle,
 			LastAction: "Read plan.md", Branch: "feat/review", WorkingDir: "/w/review", Interactive: true},
-		{ID: "plain", ProjectID: proj.ID, TicketID: task.ID, Task: "write tests", Status: domain.SessionThinking, Branch: "feat/tests"},
+		{ID: "plain", ProjectID: proj.ID, TicketID: task.ID, Task: "write tests", Status: domain.SessionThinking, Branch: "feat/tests", BroughtUnder: true},
 		{ID: "finished", ProjectID: proj.ID, TicketID: task.ID, AgentID: "a-gone", Task: "spike", Status: domain.SessionDone},
 		{ID: "elsewhere", ProjectID: proj.ID, TicketID: other.ID, Task: "docs", Status: domain.SessionRunning},
 	} {
@@ -99,12 +99,15 @@ func TestListTaskSessions_ShowsTheOtherLiveSessionsOnTheTask(t *testing.T) {
 		switch peer["session_id"] {
 		case "reviewer":
 			if peer["agent_name"] != "Reviewer" || peer["brief"] != "review the plan" || peer["last_action"] != "Read plan.md" ||
-				peer["branch"] != "feat/review" || peer["worktree"] != "/w/review" || peer["running"] != true || peer["interactive"] != true {
+				peer["branch"] != "feat/review" || peer["worktree"] != "/w/review" || peer["running"] != true || peer["interactive"] != true || peer["brought_under"] != false {
 				t.Errorf("reviewer = %v", peer)
 			}
 		case "plain":
 			if peer["agent_name"] != "plain claude" {
 				t.Errorf("a session without an agent reads as plain claude: %v", peer)
+			}
+			if peer["brought_under"] != true {
+				t.Errorf("a brought-under session says so: %v", peer)
 			}
 		}
 	}
