@@ -68,9 +68,8 @@ test("a feed message carries a state under git_state; any other key is ignored",
 });
 
 test("a page's seed carries the project and its states", () => {
-  const seed = toSeed({ project_id: "p1", states: [toGitStateDTO(makeState()), toGitStateDTO(makeState({ workspaceId: "ws2" }))] });
+  const seed = toSeed({ project_id: "p1", git_states: [toGitStateDTO(makeState()), toGitStateDTO(makeState({ workspaceId: "ws2" }))] });
   assert.deepEqual([seed.projectId, seed.states.map((s) => s.workspaceId)], ["p1", ["ws1", "ws2"]]);
-  assert.deepEqual(toSeed({ project_id: "p1", state: toGitStateDTO(makeState()) }).states.length, 1);
   assert.throws(() => toSeed(null), Codes.BAD_RESPONSE);
 });
 

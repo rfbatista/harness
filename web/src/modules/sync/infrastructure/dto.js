@@ -104,13 +104,14 @@ export function toGitStateEvent(dto) {
 }
 
 /**
- * A page's seed: {project_id, states: [GitState]} (the session page seeds its
- * own, the task page every session row's). A single {state} is read too.
+ * What the task page's `sessions-seed` carries for the chips: its project and
+ * `git_states`, one GitState per session of the task that has a workspace (a
+ * session page is a view of the same seed).
  * @returns {{ projectId: string, states: import("../domain/gitState.js").GitState[] }}
  */
 export function toSeed(raw) {
   if (!raw || typeof raw !== "object") bad("expected a git state seed");
-  const list = Array.isArray(raw.states) ? raw.states : raw.state ? [raw.state] : [];
+  const list = Array.isArray(raw.git_states) ? raw.git_states : [];
   return { projectId: text(raw.project_id), states: list.map(toGitState) };
 }
 

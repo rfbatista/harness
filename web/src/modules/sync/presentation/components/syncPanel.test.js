@@ -23,7 +23,7 @@ async function setup({ states = [makeState({ upstream: "ahead" })], world = {}, 
   const memory = memorySync({ workspaces: states.map((state) => ({ state })), now, ...world });
   const store = emptyStore();
   const actions = syncActions({ gateway: memory.gateway, store });
-  const seed = { project_id: "p1", states: states.map(toGitStateDTO) };
+  const seed = { project_id: "p1", git_states: states.map(toGitStateDTO) };
   const watch = mount(syncWatch({ gateway: memory.gateway, actions }), { el: seedEl(seed) });
   watch.instance.init();
   await flush();
