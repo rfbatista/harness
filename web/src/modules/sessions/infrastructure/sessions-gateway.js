@@ -1,6 +1,6 @@
 // SessionGateway over the harness HTTP API and its SSE feed.
 
-import { toAgentChoices, toBranches, toBranchNameCheck, toChange, toCreated, toResumeBody, toSeed, toSessionList, toStartBody } from "./dto.js";
+import { toAgentChoices, toBranches, toBringUnderBody, toBrought, toBranchNameCheck, toChange, toCreated, toResumeBody, toSeed, toSessionList, toStartBody } from "./dto.js";
 
 /**
  * @param {import("../../../shared/infrastructure/api.js").ApiClient} api
@@ -17,6 +17,10 @@ export function sessionsGateway(api, feed) {
 
     async start(request) {
       return toCreated(await api.post("/start_interactive_session", toStartBody(request)));
+    },
+
+    async bringUnder({ ticketId, sessionIds }) {
+      return toBrought(await api.post("/bring_sessions_under", toBringUnderBody(ticketId, sessionIds)));
     },
 
     async resume(sessionId, size) {

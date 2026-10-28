@@ -139,6 +139,22 @@ export function memoryGateway({ projects = [], sessions = [], repositories = {},
       return session;
     },
 
+    async bringUnder({ ticketId, sessionIds }) {
+      const onTask = [...store.values()].filter((s) => s.ticketId === ticketId);
+      const architect = onTask.filter((s) => s.role === "architect" && !isTerminal(s)).at(-1);
+      if (!architect) throw new StructuredError(Codes.NO_ARCHITECT, "NO_ARCHITECT: this task has no running architect session", 409);
+      const moved = [];
+      const skipped = [];
+      for (const id of sessionIds) {
+        const s = store.get(id);
+        const reason = !s ? "not_found" : s.ticketId !== ticketId ? "not_on_task" : s.id === architect.id ? "is_architect" : s.role === "delegate" ? "already_under" : "";
+        if (reason) skipped.push({ sessionId: id, reason });
+        else moved.push(update(id, { role: "delegate", parentSessionId: architect.id, architectSessionId: architect.id, broughtUnder: true }));
+      }
+      if (moved.length === 0) throw new StructuredError(Codes.NOTHING_TO_MOVE, "NOTHING_TO_MOVE: none of the sessions can be brought under the architect", 409, skipped.map((k) => ({ session_id: k.sessionId, reason: k.reason })));
+      return Object.freeze({ architect: update(architect.id, {}), moved, skipped });
+    },
+
     async listBranches(repositoryId) {
       const list = branches[repositoryId];
       if (!list) throw new StructuredError(Codes.REPOSITORY_NOT_FOUND, "repository not found", 404);

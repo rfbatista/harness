@@ -1,6 +1,6 @@
 import { Codes } from "../../../shared/domain/errors.js";
 import { assert, file, test } from "../../../shared/testing/test.js";
-import { toBranchNameCheck, toChange, toCreated, toResumeBody, toSeed, toSession, toSessionList, toStartBody, toStatusCheck } from "./dto.js";
+import { toBranchNameCheck, toChange, toCreated, toResumeBody, toSeed, toSession, toSessionList, toStartBody, toStatusCheck, toBringUnderBody, toBrought } from "./dto.js";
 
 file("sessions/infrastructure/dto");
 
@@ -158,4 +158,27 @@ test("a start with no task sends no ticket_id at all: the server reads an empty 
   assert.ok(!("ticket_id" in JSON.parse(JSON.stringify(body))), "ticket_id left out");
   assert.equal(body.mode, "product");
   assert.equal(toSession({ ...wire, ticket_id: undefined, mode: "product" }).ticketId, "");
+});
+
+test("a session carries whether it was brought under its parent; sessions stored before read false", () => {
+  assert.equal(toSession({ ...wire, brought_under: true }).broughtUnder, true);
+  assert.equal(toSession(wire).broughtUnder, false);
+});
+
+test("a start over a selection sends the ids; any other start sends none", () => {
+  const base = { projectId: "p1", ticketId: "t1", repositoryId: "r1", agentId: "", mode: "architect", prompt: "", autoAccept: "off" };
+  assert.deepEqual(toStartBody({ ...base, bringUnderSessionIds: ["a", "b"] }).bring_under_session_ids, ["a", "b"]);
+  assert.equal(toStartBody({ ...base, bringUnderSessionIds: [] }).bring_under_session_ids, undefined);
+  assert.equal(toStartBody(base).bring_under_session_ids, undefined);
+});
+
+test("the bring-under request and its answer: the architect, the moved sessions, the skipped with why", () => {
+  assert.deepEqual(toBringUnderBody("t1", ["a"]), { ticket_id: "t1", session_ids: ["a"] });
+  const got = toBrought({
+    architect: { ...wire, id: "arch" },
+    moved: [{ ...wire, id: "a", brought_under: true }],
+    skipped: [{ session_id: "x", reason: "not_on_task" }],
+  });
+  assert.deepEqual([got.architect.id, got.moved.map((s) => [s.id, s.broughtUnder]), got.skipped], ["arch", [["a", true]], [{ sessionId: "x", reason: "not_on_task" }]]);
+  assert.throws(() => toBrought({}), Codes.BAD_RESPONSE);
 });

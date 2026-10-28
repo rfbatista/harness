@@ -154,6 +154,7 @@ templ Page(v PageView) {
 					x-on:keydown.k.prevent="previous"
 					x-on:keydown.up.prevent="previous"
 				>
+					@pickBar()
 					@ssrRows(v)
 					@liveRows()
 					<template x-if="isEmpty">
@@ -367,6 +368,27 @@ templ emptyList(v PageView) {
 	}
 }
 
+// pickBar is the list's header on a task's page: the Select toggle, and in
+// select mode the count and the one button that brings the ticked sessions
+// under the architect (ADR 0045). Browser state only: the server paints none
+// of it.
+templ pickBar() {
+	<template x-if="canSelect">
+		<div class="[ pickbar ]" role="toolbar" aria-label="Select sessions" data-pickbar>
+			<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" aria-pressed="false" x-bind:aria-pressed="selecting" x-on:click="toggleSelecting" x-text="selectLabel" data-select-toggle>Select</button>
+			<template x-if="selecting">
+				<span class="[ pickbar-count ]" aria-live="polite" x-text="pickedText" data-picked-count>0 selected</span>
+			</template>
+			<template x-if="selecting">
+				<button type="button" class="[ button ]" data-variant="primary" data-size="sm" disabled x-bind:disabled="cannotBring" x-bind:aria-busy="bringing" x-on:click="bringSelected" x-text="bringLabel" data-bring-under></button>
+			</template>
+			<template x-if="hasPickError">
+				<p class="[ pickbar-error ]" role="alert" x-text="pickError" data-pick-error></p>
+			</template>
+		</div>
+	</template>
+}
+
 // ssrRows is the first paint: complete without JavaScript, ignored by Alpine,
 // removed once the live template renders.
 templ ssrRows(v PageView) {
@@ -436,7 +458,12 @@ templ liveRows() {
 				<span class="[ badge ]" x-bind:data-tone="group.tone" x-text="group.count"></span>
 			</div>
 			<template x-for="row in group.rows" x-bind:key="row.id">
-				<div class="[ row ]" data-layout="session" role="option" tabindex="0" x-bind:data-session-id="row.id" x-bind:title="row.detailText" x-bind:aria-selected="row.selected" x-bind:data-attention="row.attention" x-bind:data-fresh="row.fresh" x-bind:data-role="row.roleAttr" x-bind:data-depth="row.depthAttr" x-bind:data-unsandboxed="row.unsandboxedAttr" x-bind:data-lead="row.leadAttr" x-on:click="open(row.id)">
+				<div class="[ row ]" data-layout="session" role="option" tabindex="0" x-bind:data-session-id="row.id" x-bind:title="row.detailText" x-bind:aria-selected="row.selected" x-bind:data-attention="row.attention" x-bind:data-fresh="row.fresh" x-bind:data-role="row.roleAttr" x-bind:data-depth="row.depthAttr" x-bind:data-unsandboxed="row.unsandboxedAttr" x-bind:data-lead="row.leadAttr" x-bind:data-selectable="selectableAttr(row.id)" x-on:click="open(row.id)">
+					<template x-if="canPick(row.id)">
+						<label class="[ pick ]" x-on:click.stop>
+							<input type="checkbox" x-bind:checked="isPicked(row.id)" x-bind:aria-label="pickLabel(row.id)" x-on:change="pick(row.id)"/>
+						</label>
+					</template>
 					<span class="[ status ]" x-bind:data-state="row.state" data-dot-only>
 						<span class="[ visually-hidden ]" x-text="row.word"></span>
 					</span>
@@ -551,7 +578,7 @@ templ detail(form NewSessionForm, paint *code.View, usage bool, lockedMode strin
 templ newSessionForm(form NewSessionForm, lockedMode string) {
 	<form
 		class="[ flow ] [ pad-l ]"
-		x-data="sessionsNewSession(projectId, ticketId)"
+		x-data="sessionsNewSession(projectId, ticketId, formLockedMode, bringUnderIds)"
 		data-default-repository={ form.DefaultRepository() }
 		data-locked-mode={ lockedMode }
 		data-agents={ form.AgentsSeed() }
@@ -563,7 +590,7 @@ templ newSessionForm(form NewSessionForm, lockedMode string) {
 		x-on:keydown.escape="cancel"
 	>
 		if lockedMode == "" {
-			<h2>New session</h2>
+			<h2 x-text="heading">New session</h2>
 		} else {
 			<h2>New feature brainstorm</h2>
 		}
@@ -604,7 +631,10 @@ templ newSessionForm(form NewSessionForm, lockedMode string) {
 			<div class="[ field ]">
 				if lockedMode == "" {
 					<label for="new-session-mode">Mode</label>
-					<div class="[ dropdown ]" x-data="dropdown">
+					<template x-if="bringingUnder">
+						<span data-locked-mode-word x-text="lockedModeWord"></span>
+					</template>
+					<div class="[ dropdown ]" x-data="dropdown" x-show="!bringingUnder">
 						<select id="new-session-mode" x-model="mode">
 							<option value="" data-description="Runs the agent as it is">Default</option>
 							<option value="architect" data-description="Grills you on the design, writes per-application specs and delegates them">Architect</option>

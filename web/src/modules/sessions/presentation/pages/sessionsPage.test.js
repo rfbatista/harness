@@ -899,3 +899,87 @@ test("the back button carries a dot and says how many reviews wait, while one do
   assert.deepEqual([instance.backName, instance.backDot], ["Sessions", null]);
   instance.destroy();
 });
+
+// ── select mode: bring sessions under the architect (ADR 0045) ──────────────
+
+const selectable = () => [
+  makeSession({ id: "arch", role: "architect", mode: "architect", architectSessionId: "arch" }),
+  makeSession({ id: "kid", role: "delegate", parentSessionId: "arch", architectSessionId: "arch" }),
+  makeSession({ id: "peer-a", role: "", task: "alpha" }),
+  makeSession({ id: "peer-b", role: "", status: "done", resumable: true, task: "beta" }),
+];
+
+test("select mode ticks only rows that can move: not the architect, not a delegate of the running one; ended ones can", async () => {
+  const { instance, tick } = setup(selectable());
+  tick();
+  assert.equal(instance.canSelect, true);
+  assert.equal(instance.canPick("peer-a"), false, "nothing shows a checkbox before Select");
+  instance.toggleSelecting();
+  assert.deepEqual(["arch", "kid", "peer-a", "peer-b"].map((id) => instance.canPick(id)), [false, false, true, true]);
+  assert.equal(instance.selectableAttr("peer-a"), "");
+  assert.equal(instance.selectableAttr("kid"), null, "a row without a checkbox keeps its layout");
+  instance.toggleSelecting();
+  assert.equal(instance.selecting, false, "the same toggle cancels");
+  instance.destroy();
+});
+
+test("the button says what it does, and a running architect is moved under at once, with no dialog", async () => {
+  const { instance, tick } = setup(selectable());
+  tick();
+  instance.toggleSelecting();
+  assert.equal(instance.bringLabel, "Bring under the architect");
+  assert.equal(instance.cannotBring, true, "nothing ticked yet");
+  instance.pick("peer-a");
+  instance.pick("peer-b");
+  assert.equal(instance.pickedText, "2 selected");
+  await instance.bringSelected();
+  const moved = instance.sessions.filter((s) => s.broughtUnder);
+  assert.deepEqual(moved.map((s) => s.id).sort(), ["peer-a", "peer-b"]);
+  assert.ok(moved.every((s) => s.role === "delegate" && s.parentSessionId === "arch"));
+  assert.equal(instance.selecting, false, "select mode ends after the action");
+  assert.deepEqual(instance.picked, []);
+  instance.destroy();
+});
+
+test("with no running architect the button starts one: it opens the form locked to architect mode carrying the selection", async () => {
+  const sessions = [makeSession({ id: "peer-a", task: "alpha" }), makeSession({ id: "old", role: "architect", mode: "architect", status: "stopped" })];
+  const { instance, tick } = setup(sessions);
+  tick();
+  instance.toggleSelecting();
+  assert.equal(instance.canPick("old"), false);
+  instance.pick("peer-a");
+  assert.equal(instance.bringLabel, "Start an architect over these", "an ended architect counts as none");
+  await instance.bringSelected();
+  assert.deepEqual([instance.creating, instance.bringUnderIds, instance.formLockedMode], [true, ["peer-a"], "architect"]);
+  instance.sessionCreated({ detail: { session: makeSession({ id: "new-arch", role: "architect", mode: "architect" }) } });
+  assert.deepEqual([instance.creating, instance.selecting, instance.bringUnderIds], [false, false, []]);
+  instance.destroy();
+});
+
+test("cancelling the form drops its selection but keeps select mode", async () => {
+  const { instance, tick } = setup([makeSession({ id: "peer-a" })]);
+  tick();
+  instance.toggleSelecting();
+  instance.pick("peer-a");
+  await instance.bringSelected();
+  instance.cancelCreating();
+  assert.deepEqual([instance.creating, instance.bringUnderIds, instance.selecting, instance.picked], [false, [], true, ["peer-a"]]);
+  instance.destroy();
+});
+
+test("a refusal shows in the bar; NOTHING_TO_MOVE names the skipped sessions by their agent", async () => {
+  const sessions = selectable();
+  const { instance, tick, memory } = setup(sessions);
+  tick();
+  instance.toggleSelecting();
+  instance.pick("peer-a");
+  // Another tab moved it first: the server skips it and has nothing left to move.
+  memory.update("peer-a", { role: "delegate", parentSessionId: "arch", broughtUnder: true });
+  instance.sessions = instance.sessions.map((s) => (s.id === "peer-a" ? { ...s, role: "", parentSessionId: "" } : s));
+  await instance.bringSelected();
+  assert.equal(instance.pickError, "None of these can be brought under the architect: Backend dev.");
+  assert.equal(instance.selecting, true, "select mode stays so the person can pick again");
+  instance.pick("peer-a");
+  assert.equal(instance.pickError, "", "picking clears the error");
+  instance.destroy();
+});
