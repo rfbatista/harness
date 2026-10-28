@@ -3,6 +3,7 @@ package httpclient
 import (
 	"context"
 	"net/url"
+	"strconv"
 
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
@@ -68,6 +69,13 @@ func (c *Code) CodeDiff(ctx context.Context, q ports.CodeDiffQuery) (*domain.Cod
 	set(v, "base", q.Base)
 	set(v, "head", q.Head)
 	set(v, "path", q.Path)
+	set(v, "after", q.After)
+	switch {
+	case q.TotalsOnly:
+		v.Set("limit", "0")
+	case q.Limit != 0:
+		v.Set("limit", strconv.Itoa(q.Limit))
+	}
 	var out domain.CodeDiff
 	if err := c.c.get(ctx, "/api/code/diff", v, &out); err != nil {
 		return nil, err
