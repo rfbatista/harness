@@ -110,20 +110,19 @@ test("a credential error names the host and links to the credentials page, with 
 test("a push refused because the branch is behind or diverged says which, and nothing is forced", () => {
   const rejected = (upstream) => refusalOf(refused(Codes.PUSH_REJECTED, { state: makeState({ upstream }) }, "! [rejected] (non-fast-forward)"));
   const behind = rejected("behind");
-  assert.deepEqual([behind.tone, behind.code, behind.lead, behind.reason], ["danger", "PUSH_REJECTED", "origin/agent/sync-1234 has 2 commits this branch does not have, so nothing was pushed.", "! [rejected] (non-fast-forward)"]);
-  assert.equal(rejected("diverged").lead, "This branch and origin/agent/sync-1234 have each moved on (↑3 ↓2), so nothing was pushed.");
-  assert.equal(refusalOf(refused(Codes.PUSH_REJECTED, undefined, "pre-receive hook declined")).lead, "The remote refused the push, so nothing was pushed.");
-  for (const r of [behind, rejected("diverged")]) assert.ok(!/force/i.test(r.lead), "no force is offered or named");
+  assert.deepEqual([behind.tone, behind.code, behind.lead, behind.reason], ["danger", "PUSH_REJECTED", "The remote refused the push: ! [rejected] (non-fast-forward). Nothing was pushed.", ""]);
+  assert.equal(refusalOf(refused(Codes.PUSH_REJECTED, undefined, "pre-receive hook declined\nsecond line")).lead, "The remote refused the push: pre-receive hook declined. Nothing was pushed.");
+  for (const r of [behind]) assert.ok(!/force/i.test(r.lead), "no force is offered or named");
 });
 
 test("each other refusal code maps to its words and keeps its code", () => {
   const of = (code, reason) => refusalOf(refused(code, undefined, reason));
-  assert.deepEqual([of(Codes.PUSH_STALE).lead, of(Codes.PUSH_STALE).code], ["The branch moved since you looked, so nothing was pushed. Check its new state, then push again.", "PUSH_STALE"]);
-  assert.deepEqual([of(Codes.PUSH_FAILED, "remote hung up").lead, of(Codes.PUSH_FAILED, "remote hung up").reason], ["Git could not push the branch.", "remote hung up"]);
-  assert.deepEqual([of(Codes.FETCH_FAILED, "no route").lead, of(Codes.FETCH_FAILED, "no route").reason], ["Could not fetch the remote.", "no route"]);
-  assert.equal(of(Codes.NO_REMOTE).lead, "This repository has no origin remote, so there is nothing to fetch or push.");
+  assert.deepEqual([of(Codes.PUSH_STALE).lead, of(Codes.PUSH_STALE).code], ["The branch moved since you confirmed. Check the new commits and push again.", "PUSH_STALE"]);
+  assert.deepEqual([of(Codes.PUSH_FAILED, "remote hung up").lead, of(Codes.PUSH_FAILED, "remote hung up").reason], ["The push failed: remote hung up.", ""]);
+  assert.deepEqual([of(Codes.FETCH_FAILED, "no route").lead, of(Codes.FETCH_FAILED, "no route").reason], ["The fetch failed: no route. Counts are as of the last fetch.", ""]);
+  assert.equal(of(Codes.NO_REMOTE).lead, "This repository has no origin remote.");
   assert.equal(of(Codes.WORKSPACE_MISSING).lead, "The worktree is gone, so its branch cannot be pushed from here.");
-  assert.equal(of(Codes.UNAVAILABLE).lead, "This server was started without git support for worktrees.");
+  assert.equal(of(Codes.UNAVAILABLE).lead, "Git actions are not available on this server.");
   assert.equal(of(Codes.PUSH_STALE).tone, "danger");
 });
 

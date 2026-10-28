@@ -92,7 +92,7 @@ export function chipOf(state, { now = new Date(), busy = "" } = {}) {
 /** The base comparison as a chip: counts against the branch it was cut from. */
 function baseChip(state) {
   const { ref, ahead, behind } = state.base;
-  if (ref === "") return { state: "gone", hasCounts: false, ahead: 0, behind: 0, word: "base missing", hasWord: true };
+  if (ref === "") return { state: "gone", hasCounts: false, ahead: 0, behind: 0, word: "base gone", hasWord: true };
   const kind = ahead > 0 && behind > 0 ? "diverged" : ahead > 0 ? "ahead" : behind > 0 ? "behind" : "in-sync";
   const hasCounts = kind !== "in-sync";
   return { state: kind, hasCounts, ahead, behind, word: hasCounts ? "" : "in sync", hasWord: !hasCounts };
@@ -107,21 +107,21 @@ function upstreamHint(state) {
     case "ahead":
       return `${plural(up.ahead ?? 0, "commit", "commits")} not pushed yet.`;
     case "behind":
-      return `${plural(up.behind ?? 0, "commit", "commits")} on ${ref} that this branch does not have.`;
+      return `The remote has ${plural(up.behind ?? 0, "commit", "commits")} this branch lacks. A push would be refused.`;
     case "diverged":
-      return `${plural(up.ahead ?? 0, "commit", "commits")} not pushed, ${up.behind ?? 0} only on ${ref}. A push would be refused.`;
+      return "Both sides have commits. A push would be refused.";
     case "none":
-      return "This branch has not been pushed.";
+      return `Never pushed. Push sets origin/${state.branch} as the upstream.`;
     case "gone":
-      return `${ref} no longer exists on the remote.`;
+      return "The remote branch was deleted. Push creates it again.";
     default:
-      return `Fetch to compare with ${ref}.`;
+      return "Fetch to read the counts.";
   }
 }
 
 function baseHint(state) {
   const { ref, ahead, behind } = state.base;
-  if (ref === "") return "The branch this one was cut from no longer exists.";
+  if (ref === "") return "The base branch no longer exists.";
   return `${plural(ahead, "commit", "commits")} ahead of ${ref}, ${behind} behind.`;
 }
 
@@ -179,6 +179,9 @@ const credentialsLink = (params = {}) => {
   return q.size ? `${CREDENTIALS_HREF}?${q}` : CREDENTIALS_HREF;
 };
 
+/** The first line of git's reason, trimmed. */
+const firstLine = (reason) => reason.split("\n")[0].trim().replace(/[.]+$/, "");
+
 /** The server's reason without the code its messages start with. */
 export function reasonOf(err) {
   const message = err instanceof Error ? err.message : "";
@@ -210,31 +213,22 @@ export function refusalOf(err) {
     case Codes.GIT_CREDENTIAL_STORE_LOCKED:
       return credential("The server can't read its stored credentials.", CREDENTIALS_HREF, "See Git credentials");
     case Codes.PUSH_REJECTED:
-      return danger(rejectedLead(err), reasonOf(err));
+      return danger(`The remote refused the push: ${firstLine(reasonOf(err))}. Nothing was pushed.`);
     case Codes.PUSH_STALE:
-      return danger("The branch moved since you looked, so nothing was pushed. Check its new state, then push again.");
+      return danger("The branch moved since you confirmed. Check the new commits and push again.");
     case Codes.PUSH_FAILED:
-      return danger("Git could not push the branch.", reasonOf(err));
+      return danger(`The push failed: ${firstLine(reasonOf(err))}.`);
     case Codes.FETCH_FAILED:
-      return danger("Could not fetch the remote.", reasonOf(err));
+      return danger(`The fetch failed: ${firstLine(reasonOf(err))}. Counts are as of the last fetch.`);
     case Codes.NO_REMOTE:
-      return danger("This repository has no origin remote, so there is nothing to fetch or push.");
+      return danger("This repository has no origin remote.");
     case Codes.WORKSPACE_MISSING:
       return danger("The worktree is gone, so its branch cannot be pushed from here.");
     case Codes.UNAVAILABLE:
-      return danger("This server was started without git support for worktrees.");
+      return danger("Git actions are not available on this server.");
     default: {
       const d = describeError(err);
       return danger(d.message, d.next);
     }
   }
-}
-
-/** Why the remote refused: behind, diverged, or (no state to say) a refusal of its own such as a hook. */
-function rejectedLead(err) {
-  const up = err?.details?.state?.upstream;
-  const ref = up?.ref ?? "the remote branch";
-  if (up?.state === "behind") return `${ref} has ${plural(up.behind ?? 0, "commit", "commits")} this branch does not have, so nothing was pushed.`;
-  if (up?.state === "diverged") return `This branch and ${ref} have each moved on (↑${up.ahead ?? 0} ↓${up.behind ?? 0}), so nothing was pushed.`;
-  return "The remote refused the push, so nothing was pushed.";
 }

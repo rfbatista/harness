@@ -149,7 +149,7 @@ test("a refused push shows its reason and the state the server re-read, with no 
   p.askPush(); // the page still shows ahead: the person confirms what they saw
   await p.confirmPush();
   assert.deepEqual([p.hasRefusal, p.refusalIsStrip, p.refusalIsBanner, p.refusalCode], [true, true, false, "PUSH_REJECTED"]);
-  assert.equal(p.refusalLead, "This branch and origin/agent/sync-1234 have each moved on (↑3 ↓2), so nothing was pushed.");
+  assert.equal(p.refusalLead, "The remote refused the push: ! [rejected] (non-fast-forward). Nothing was pushed.");
   assert.deepEqual([p.state, p.showsPush, p.confirming], ["diverged", false, false], "the re-read state replaces the old one");
   assert.ok(!/force/i.test(`${p.refusalLead} ${p.refusalReason} ${p.pushLabel}`));
   p.dismissRefusal();
@@ -182,7 +182,7 @@ test("a failed fetch says so with git's reason and keeps the counts it had", asy
   memory.failNext(Codes.FETCH_FAILED, "Could not resolve host");
   const p = panel().instance;
   await p.fetch();
-  assert.deepEqual([p.refusalLead, p.refusalReason, p.refusalCode, p.ahead], ["Could not fetch the remote.", "Could not resolve host", "FETCH_FAILED", 3]);
+  assert.deepEqual([p.refusalLead, p.refusalReason, p.refusalCode, p.ahead], ["The fetch failed: Could not resolve host. Counts are as of the last fetch.", "", "FETCH_FAILED", 3]);
   watch.destroy();
 });
 
