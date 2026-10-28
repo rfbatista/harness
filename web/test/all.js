@@ -51,6 +51,7 @@ import "../src/modules/code/domain/tree.test.js";
 import "../src/modules/code/infrastructure/diff-prep.test.js";
 import "../src/modules/code/infrastructure/gateways.test.js";
 import "../src/modules/code/infrastructure/highlighter.test.js";
+import "../src/modules/code/presentation/changes.test.js";
 import "../src/modules/code/presentation/components/codePanel.test.js";
 import "../src/modules/credentials/domain/credential.test.js";
 import "../src/modules/credentials/infrastructure/gateways.test.js";

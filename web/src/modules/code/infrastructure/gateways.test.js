@@ -99,3 +99,18 @@ test("dto · a seed carries the route, the source and what was painted", () => {
   assert.equal(seed.file.path, "README.md");
   assert.deepEqual(toSeed({ error: { code: "UNAVAILABLE", message: "off" } }).error, { code: "UNAVAILABLE", message: "off" });
 });
+
+test("revision 4: working pages list tracked then untracked, carry section, staged, counts and sections, and hunks=none leaves the hunks out", async () => {
+  const world = makeWorld();
+  world.workspaces.ws1.staged = ["README.md"];
+  const memory = memoryCode(world);
+  const page = toDiff(memory.wire.diff({ workspaceId: "ws1", scope: "working" }));
+  assert.deepEqual(page.files.map((f) => [f.path, f.section, f.staged]), [["README.md", "tracked", true], ["notes/todo.md", "untracked", false]]);
+  assert.deepEqual([page.counts.modified, page.counts.untracked, page.sections], [1, 1, { tracked: 1, untracked: 1, staged: 1 }]);
+  const after = toDiff(memory.wire.diff({ workspaceId: "ws1", scope: "working", limit: 1, after: "README.md" }));
+  assert.deepEqual(after.files.map((f) => f.path), ["notes/todo.md"], "a tracked cursor continues into the untracked files");
+  const bare = toDiff(memory.wire.diff({ workspaceId: "ws1", scope: "working", hunks: "none" }));
+  assert.ok(bare.files.every((f) => f.hunks === null && f.withheld === null && !f.hasHunks));
+  const all = toDiff(memory.wire.diff({ workspaceId: "ws1", scope: "all" }));
+  assert.ok(all.files.every((f) => f.section === null && f.staged === false) && all.sections === null);
+});

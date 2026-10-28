@@ -114,8 +114,13 @@ export function toFileDiff(dto) {
     withheld: dto.withheld ?? null,
     language: str(dto.language) || "plaintext",
     zones: strings(dto.zones),
+    section: dto.section === "tracked" || dto.section === "untracked" ? dto.section : null,
+    staged: dto.staged === true,
   });
 }
+
+const toCounts = (c) => Object.freeze(Object.fromEntries(STATUSES.map((s) => [s, int(c?.[s])])));
+const toSections = (s) => (s && typeof s === "object" ? Object.freeze({ tracked: int(s.tracked), untracked: int(s.untracked), staged: int(s.staged) }) : null);
 
 /** @returns {import("../domain/code.js").CodeDiff} */
 export function toDiff(dto) {
@@ -131,6 +136,8 @@ export function toDiff(dto) {
     truncated: dto.truncated === true,
     next: typeof dto.next === "string" && dto.next !== "" ? dto.next : null,
     fileCount: int(dto.file_count, dto.files.length),
+    counts: toCounts(dto.counts),
+    sections: toSections(dto.sections),
   });
 }
 
@@ -176,7 +183,7 @@ export function sourceQuery(src) {
 
 /** The wire query of a diff. */
 export function diffQuery(q) {
-  const page = { after: q.after, limit: q.limit === undefined ? undefined : String(q.limit) };
+  const page = { after: q.after, limit: q.limit === undefined ? undefined : String(q.limit), hunks: q.hunks };
   if (q.workspaceId) return { workspace_id: q.workspaceId, scope: q.scope, path: q.path, ...page };
   return { repository_id: q.repositoryId, commit: q.commit, base: q.base, head: q.head, path: q.path, ...page };
 }

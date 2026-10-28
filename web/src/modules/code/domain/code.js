@@ -53,6 +53,8 @@
  * @property {"too_large"|"binary"|null} withheld
  * @property {string} language
  * @property {string[]} zones
+ * @property {"tracked"|"untracked"|null} section  scope working only (revision 4), otherwise null
+ * @property {boolean} staged        scope working only: the change is in the index
  *
  * @typedef {"all"|"branch"|"working"|"commit"|"range"} DiffScope
  *
@@ -66,6 +68,8 @@
  * @property {boolean} truncated     hunks were withheld from some file by the totals limit
  * @property {string|null} next      the cursor of the next page (its last path), null on the last page
  * @property {number} fileCount      changed files of the whole diff, whichever page this is; added and deleted cover the whole diff too
+ * @property {Record<ChangeStatus, number>} counts  files per status over the whole diff, the same on every page
+ * @property {{ tracked: number, untracked: number, staged: number }|null} sections  scope working only
  *
  * @typedef {{ id: string, name: string, pattern: string, fileCount: number }} ZoneCount
  * @typedef {{ id: string, name: string, purpose: string, zones: ZoneCount[], fileCount: number }} ContextCount
