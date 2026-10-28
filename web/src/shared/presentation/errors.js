@@ -52,6 +52,7 @@ const NEXT_STEP = {
   [Codes.GIT_CREDENTIAL_REJECTED]: "replace its secret in Git credentials, then retry",
   [Codes.GIT_CREDENTIAL_STORE_LOCKED]: "give the server its key (HARNESS_SECRET_KEY or secret.key in its data directory), then retry",
   [Codes.AGENT_CREDENTIAL_MISSING]: "add the credential in Agent isolation, then start again",
+  [Codes.AGENT_NOT_ENABLED]: "pick another agent, or enable this one in the project's settings",
   [Codes.MANAGED_CLAUDE_MISSING]: "install it in Agent isolation, then start again",
   [Codes.MANAGED_CLAUDE_INSTALLING]: "it installs on its own; start again when it is done",
   [Codes.MANAGED_CLAUDE_INSTALL_FAILED]: "retry the install in Agent isolation, then start again",

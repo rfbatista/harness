@@ -48,3 +48,33 @@ test("without a repository it cannot start; a refused start shows the coded erro
   assert.deepEqual(wrong.navigated, [], "a refusal stays in the dialog");
   assert.equal(wrong.instance.starting, false);
 });
+
+test("the dialog offers the project's enabled agents, warns when none is, and shows the refusal", async () => {
+  const memory = memoryGateway({ projects: ["p1"], repositories: { r1: "p1" } });
+  memory.setAgentChoices("p1", { mode: "selected", agents: [{ id: "pm", name: "pm", description: "" }], total: 4 });
+  const el = document.createElement("span");
+  el.dataset.projectId = "p1";
+  el.dataset.defaultRepository = "r1";
+  el.dataset.projectName = "atlas-api";
+  el.dataset.agents = JSON.stringify([{ id: "pm", name: "pm", description: "" }]);
+  el.dataset.agentsTotal = "4";
+  el.dataset.agentsMode = "selected";
+  const navigated = [];
+  const { instance } = mount(brainstorm({ gateway: memory.gateway, navigate: (url) => navigated.push(url) }), { el });
+  instance.init();
+  assert.equal(instance.agentHint, "Showing the 1 agent enabled in atlas-api of 4 in the catalog.");
+
+  instance.agentId = "pm";
+  memory.setAgentChoices("p1", { mode: "selected", agents: [], total: 4 });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(instance.noAgentEnabled, true);
+  assert.equal(instance.cannotStart, true, "Start is off with nothing to pick");
+
+  memory.setAgentChoices("p1", { mode: "selected", agents: [{ id: "other", name: "other", description: "" }], total: 4 });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  await instance.start();
+  assert.deepEqual(navigated, []);
+  assert.equal(instance.agentRefusal.message, "The session was not started: pm is not enabled in atlas-api.");
+  assert.equal(instance.error, null);
+  assert.equal(instance.agentId, "");
+});

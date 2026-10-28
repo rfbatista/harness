@@ -101,7 +101,7 @@ func (h Handler) Project(w http.ResponseWriter, r *http.Request) error {
 	if frame.Rail.Seed != nil {
 		board.ArchivedCount = frame.Rail.Seed.ArchivedCount
 	}
-	return h.Render(w, r, http.StatusOK, ProjectPage(frame, project.ID, project.Name, board, sessions.NewSessionFormOf(agents, repos)))
+	return h.Render(w, r, http.StatusOK, ProjectPage(frame, project.ID, project.Name, board, sessions.NewSessionFormFor(project, agents, repos)))
 }
 
 // ProjectSessions serves GET /projects/{project}/sessions: the project's

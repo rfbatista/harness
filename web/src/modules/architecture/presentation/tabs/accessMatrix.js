@@ -27,7 +27,7 @@ export const accessMatrix = ({ gateway }) => () => ({
 
   async init() {
     try {
-      this.catalog = await gateway.agents(this.repositoryId);
+      this.catalog = await gateway.agents(this.repositoryId, this.projectId);
     } catch {
       this.catalog = []; // the rows fall back to the agents the record names
     }

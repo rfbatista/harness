@@ -11,12 +11,13 @@
 import { describeError } from "../../../../shared/presentation/errors.js";
 import { brainstormProblem, brainstormRequest } from "../../domain/brainstorm.js";
 import { projectSessionsHref } from "../view.js";
+import { withAgentPicker } from "./agentPicker.js";
 
 /** The dialog's element id, which dialog-open names. */
 export const BRAINSTORM_DIALOG = "brainstorm";
 
 /** @param {{ gateway: import("../../domain/ports.js").SessionGateway, navigate: (url: string) => void }} deps */
-export const brainstorm = ({ gateway, navigate }) => () => ({
+export const brainstorm = ({ gateway, navigate }) => () => withAgentPicker({
   projectId: "",
   agentId: "",
   repositoryId: "",
@@ -26,6 +27,11 @@ export const brainstorm = ({ gateway, navigate }) => () => ({
   init() {
     this.projectId = this.$el.dataset.projectId ?? "";
     this.repositoryId = this.$el.dataset.defaultRepository ?? "";
+    this.startAgentPicker(this.$el.dataset);
+  },
+
+  destroy() {
+    this.stopAgentPicker();
   },
 
   /** The trigger was pressed: opens the dialog anchored to it. */
@@ -34,6 +40,7 @@ export const brainstorm = ({ gateway, navigate }) => () => ({
   },
 
   get problem() {
+    if (this.noAgentEnabled) return this.noAgentLine;
     return brainstormProblem({ repositoryId: this.repositoryId });
   },
   get cannotStart() {
@@ -45,13 +52,14 @@ export const brainstorm = ({ gateway, navigate }) => () => ({
     if (this.cannotStart) return;
     this.starting = true;
     this.error = null;
+    this.agentRefusal = null;
     try {
       const session = await gateway.start(brainstormRequest({ projectId: this.projectId, agentId: this.agentId, repositoryId: this.repositoryId }));
       navigate(projectSessionsHref(this.projectId, session.id));
     } catch (err) {
-      this.error = describeError(err);
+      if (!this.refuseAgent(err)) this.error = describeError(err);
     } finally {
       this.starting = false;
     }
   },
-});
+}, { gateway });

@@ -66,22 +66,32 @@ templ brainstormAction(projectID string, form sessions.NewSessionForm) {
 	if !form.CanStart() {
 		<a class="[ button ]" data-variant="ghost" data-size="sm" href={ templ.SafeURL(projects.RepositoriesHref(projectID)) } title="Add a repository to this project first: a session runs in one." data-brainstorm-needs-repository>Brainstorm a feature</a>
 	} else {
-		<span style="display: contents" x-data="sessionsBrainstorm" data-project-id={ projectID } data-default-repository={ form.DefaultRepository() }>
+		<span style="display: contents" x-data="sessionsBrainstorm" data-project-id={ projectID } data-default-repository={ form.DefaultRepository() } data-agents={ form.AgentsSeed() } data-agents-total={ form.AgentsTotalText() } data-agents-mode={ form.AgentsMode } data-project-name={ form.ProjectName }>
 			<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" id="brainstorm-open" aria-haspopup="dialog" aria-controls="brainstorm" x-on:click="open">Brainstorm a feature</button>
 			<div class="[ popup ]" role="dialog" id="brainstorm" popover="manual" data-trap aria-labelledby="brainstorm-title" x-data="popupDialog" x-on:dialog-open.window="openFrom($event)">
 				<form class="[ confirm-panel ] [ flow ]" x-on:submit.prevent="start">
 					<h3 id="brainstorm-title" class="[ color-ink ]">Brainstorm a feature</h3>
 					<p>A product-mode session with no task. The agent interviews you, writes the PRD on a new feature task and creates one child task per piece of work, each with a brief.</p>
-					<div class="[ field ]">
-						<label for="brainstorm-agent">Agent</label>
-						<div class="[ dropdown ]" x-data="dropdown">
+					<div class="[ field ]" x-ref="agentField" data-agent-field>
+						<div class="[ cluster ]" style="justify-content: space-between">
+							<label for="brainstorm-agent">Agent</label>
+							<span class="[ hint ]" data-agents-count x-text="agentCount"></span>
+						</div>
+						<div class="[ dropdown ]" x-data="dropdown" x-show="!noAgentEnabled">
 							<select id="brainstorm-agent" x-model="agentId" data-initial-focus>
 								<option value="" data-description="claude with no agent definition">Plain claude</option>
-								for _, a := range form.Agents {
-									<option value={ a.ID } { descriptionAttrs(a.Description)... }>{ a.Name }</option>
-								}
+								<template x-for="a in agentChoices" x-bind:key="a.id">
+									<option x-bind:value="a.id" x-bind:data-description="a.description" x-text="a.name"></option>
+								</template>
 							</select>
 						</div>
+						<template x-if="noAgentEnabled">
+							@sessions.NoAgentEnabled(form.AgentsSettingsHref(), form.ProjectName)
+						</template>
+						<span class="[ hint ]" data-agents-hint x-show="!noAgentEnabled">
+							<span x-text="agentHint"></span>
+							<a x-bind:href="agentsSettingsLink" href={ templ.SafeURL(form.AgentsSettingsHref()) } data-agents-settings-link>Change in project settings</a>
+						</span>
 					</div>
 					<div class="[ field ]">
 						<label for="brainstorm-repository">Repository</label>
@@ -91,6 +101,9 @@ templ brainstormAction(projectID string, form sessions.NewSessionForm) {
 							}
 						</select>
 					</div>
+					<template x-if="hasAgentRefusal">
+						@sessions.AgentRefusalBanner()
+					</template>
 					<template x-if="error">
 						<div class="[ banner ]" data-tone="danger" role="alert">
 							<div class="[ flow ] [ flow-space-3xs ]">

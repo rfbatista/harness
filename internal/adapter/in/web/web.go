@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"cmp"
 	"context"
+	"encoding/json"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -19,6 +20,7 @@ import (
 	"github.com/rfbatista/harnesskit/errs"
 
 	"operators-mcp/internal/adapter/in/web/agentisolation"
+	"operators-mcp/internal/adapter/in/web/agents"
 	"operators-mcp/internal/adapter/in/web/architecture"
 	"operators-mcp/internal/adapter/in/web/code"
 	"operators-mcp/internal/adapter/in/web/credentials"
@@ -82,6 +84,10 @@ type Deps struct {
 	// TokenSaverInstalls lists the token savers for their page; nil leaves
 	// the page and its top bar link out.
 	TokenSaverInstalls ports.TokenSaverInstallReader
+	// AgentCatalog reads the agent catalog for the Agents page's first paint;
+	// nil, or a failed read, renders the page without a seed and the browser
+	// reads the catalog itself. The page and its top bar link are always served.
+	AgentCatalog CatalogReader
 	// Settings reads each session tier's model for the Models page; nil
 	// leaves the page and its top bar link out.
 	Settings ports.SettingsReader
@@ -141,6 +147,12 @@ type Deps struct {
 	WritingHelper func(ctx context.Context) shell.Helper
 	// Now defaults to time.Now.
 	Now func() time.Time
+}
+
+// CatalogReader reads the whole agent catalog as GET /api/get_agent_catalog
+// answers it, for the Agents page's first paint.
+type CatalogReader interface {
+	GetAgentCatalog(ctx context.Context) (json.RawMessage, error)
 }
 
 // CodeWorkspaces is what the code pages read of the workspaces:
@@ -220,6 +232,12 @@ func NewHandler(deps Deps, assets *Assets, fallback http.Handler) http.Handler {
 		savers.Indexes, savers.Now = deps.RepositoryIndexes, deps.Now
 		mux.Handle("GET "+tokensavers.Href, s.page(savers.Page))
 	}
+	agentPages := agents.Handler{Layout: s.layout, Render: render}
+	if deps.AgentCatalog != nil {
+		agentPages.Catalog = deps.AgentCatalog
+	}
+	mux.Handle("GET "+agents.Href, s.page(agentPages.Page))
+	mux.Handle("GET "+agents.Href+"/{path...}", s.page(agentPages.Page))
 	if deps.Settings != nil {
 		modelsPage := models.Handler{Settings: deps.Settings, Helper: s.helper, Layout: s.layout, Render: render}
 		mux.Handle("GET "+models.Href, s.page(modelsPage.Page))
@@ -398,6 +416,7 @@ func (s *server) bareFrame(title string) shell.Frame {
 		Built: s.assets.Built(),
 	}
 	f.Helper = s.helper(context.Background())
+	f.Top.AgentsHref = agents.Href
 	if s.deps.GitCredentials != nil {
 		f.Top.CredentialsHref = credentials.Href
 	}

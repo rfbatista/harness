@@ -1,0 +1,24 @@
+{
+  "routes": [
+    { "path": "/agents", "tab": "agents", "item": "", "mode": "" },
+    { "path": "/agents/", "tab": "agents", "item": "", "mode": "" },
+    { "path": "/agents/skills", "tab": "skills", "item": "", "mode": "" },
+    { "path": "/agents/bundles", "tab": "bundles", "item": "", "mode": "" },
+    { "path": "/agents/mcp", "tab": "mcp", "item": "", "mode": "" },
+    { "path": "/agents/tools", "tab": "tools", "item": "", "mode": "" },
+    { "path": "/agents/skills/tdd", "tab": "skills", "item": "tdd", "mode": "" },
+    { "path": "/agents/ux-designer", "tab": "agents", "item": "ux-designer", "mode": "" },
+    { "path": "/agents/bundles/ux", "tab": "bundles", "item": "ux", "mode": "" },
+    { "path": "/agents/mcp/github", "tab": "mcp", "item": "github", "mode": "" },
+    { "path": "/agents/new", "tab": "agents", "item": "", "mode": "new" },
+    { "path": "/agents/ux-designer/edit", "tab": "agents", "item": "ux-designer", "mode": "edit" },
+    { "path": "/agents/skills/new", "tab": "skills", "item": "", "mode": "new" },
+    { "path": "/agents/skills/tdd/edit", "tab": "skills", "item": "tdd", "mode": "edit" },
+    { "path": "/agents/bundles/new", "tab": "bundles", "item": "", "mode": "new" },
+    { "path": "/agents/bundles/ux/edit", "tab": "bundles", "item": "ux", "mode": "edit" },
+    { "path": "/agents/mcp/new", "tab": "mcp", "item": "", "mode": "new" },
+    { "path": "/agents/mcp/github/edit", "tab": "mcp", "item": "github", "mode": "edit" },
+    { "path": "/agents/skills/a%2Fb", "tab": "skills", "item": "a/b", "mode": "" }
+  ],
+  "none": ["/projects", "/agentsx", "/agents/skills/tdd/extra/more", "/agents/tools/read", "/agents/tools/new"]
+}

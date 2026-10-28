@@ -1,0 +1,152 @@
+/*
+ * MCP server form — the full page at /agents/mcp/new and /agents/mcp/<name>/edit,
+ * and the same form as a side drawer over the agent editor. It borrows the skill
+ * form's layout (skill-form.css) and the save pipeline's footer, and adds what an
+ * MCP server needs: the two transport cards, argument / variable / header rows,
+ * the targets lists of Who gets it, and the connection test's result.
+ * <div class="mcp-form-host" data-mode="page|drawer"><div class="skill-form mcp-form">…</div></div>
+ * <div class="transport" role="radiogroup"><label><input type="radio"/><b/><span class="d"/></label>…</div>
+ * <div class="mf-rows"><div class="mf-row-wrap"><div class="mf-row" data-kind="arg|env|header">…</div><div class="banner"/></div></div>
+ * <div class="targets"><label class="target"><input type="checkbox"/>…</label></div>
+ * <div class="result" data-tone="success|danger|busy">…</div>
+ * Exceptions: .mcp-form-host[data-mode="drawer"] (a fixed panel over a scrim),
+ * .result[data-stale] (an answer for an older form).
+ */
+
+@layer blocks {
+  .mcp-form-host {
+    &[hidden] { display: none; }
+
+    &[data-mode="drawer"] {
+      position: fixed;
+      inset: 0;
+      z-index: var(--z-overlay);
+      display: flex;
+      justify-content: flex-end;
+      background: var(--color-scrim);
+      overflow: hidden;
+
+      & > .mcp-form {
+        inline-size: min(48rem, 100%);
+        block-size: 100%;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        background: var(--color-canvas);
+        border-inline-start: var(--border-width) solid var(--color-line-strong);
+        box-shadow: var(--shadow-float);
+      }
+
+      & .skill-cols { grid-template-columns: minmax(0, 1fr); gap: var(--space-xl); }
+      & .skill-preview { position: static; max-block-size: none; overflow: visible; }
+      & .skill-form-body { max-inline-size: none; }
+      & .save-footer-in { max-inline-size: none; }
+      & .skill-form-head > .repel { justify-content: flex-end; }
+    }
+  }
+
+  .transport {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-s);
+
+    @media (max-width: 40rem) { grid-template-columns: minmax(0, 1fr); }
+
+    & > label {
+      display: grid;
+      grid-template-columns: 1.25rem 1fr;
+      gap: 2px var(--space-s);
+      padding: var(--space-m);
+      border: var(--border-width) solid var(--color-line-strong);
+      border-radius: var(--radius-md);
+      background: var(--color-raised);
+      cursor: pointer;
+
+      &:has(input:checked) { border-color: var(--color-signal); box-shadow: inset 0 0 0 1px var(--color-signal); }
+      &:has(input:focus-visible) { outline: var(--border-focus-width) solid var(--color-focus); outline-offset: 2px; }
+    }
+
+    & input { margin: 3px 0 0; accent-color: var(--color-signal); }
+    & .d { grid-column: 2; font-size: var(--text-xs); color: var(--color-ink-muted); }
+  }
+
+  .mf-rows { display: grid; gap: var(--space-s); }
+  .mf-row-wrap { display: grid; gap: var(--space-xs); min-inline-size: 0; }
+
+  .mf-row {
+    display: grid;
+    gap: var(--space-xs);
+    align-items: center;
+    min-inline-size: 0;
+
+    &[data-kind="arg"] { grid-template-columns: minmax(0, 1fr) auto; }
+    &[data-kind="env"] { grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr) auto auto; }
+    &[data-kind="header"] { grid-template-columns: minmax(0, 1fr) minmax(0, 1.6fr) auto auto; }
+
+    @media (max-width: 40rem) {
+      &[data-kind="env"], &[data-kind="header"] { grid-template-columns: minmax(0, 1fr) auto auto; }
+      &[data-kind="env"] > input:first-child, &[data-kind="header"] > input:first-child { grid-column: 1 / -1; }
+    }
+  }
+
+  .valmode {
+    inline-size: auto;
+    block-size: var(--size-control-md);
+    font-size: var(--text-xs);
+  }
+
+  .addrow { align-self: flex-start; }
+
+  .mf-refs {
+    display: grid;
+    gap: var(--space-2xs);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+
+    & > li { display: flex; align-items: center; gap: var(--space-s); }
+  }
+
+  .targets { display: grid; gap: var(--space-xs); }
+
+  .target {
+    display: grid;
+    grid-template-columns: 1.25rem 1fr auto;
+    gap: 0 var(--space-s);
+    align-items: center;
+    padding: var(--space-s) var(--space-m);
+    border: var(--border-width) solid var(--color-line);
+    border-radius: var(--radius-sm);
+    background: var(--color-raised);
+    font-size: var(--text-sm);
+    cursor: pointer;
+
+    &:has(input:checked) { border-color: var(--color-line-strong); background: var(--color-selected); & .color-ink-faint { color: var(--color-ink-muted); } }
+    & > input { margin: 0; accent-color: var(--color-signal); }
+  }
+
+  .result {
+    display: flex;
+    gap: var(--space-s);
+    align-items: flex-start;
+    padding: var(--space-s) var(--space-m);
+    border-radius: var(--radius-sm);
+    background: var(--color-sunken);
+    font-size: var(--text-sm);
+    overflow-wrap: anywhere;
+
+    &[hidden] { display: none; }
+    &[data-tone="success"] { background: var(--color-success-wash); }
+    &[data-tone="danger"] { background: var(--color-danger-wash); }
+    &[data-tone="busy"] { color: var(--color-ink-muted); }
+    &[data-stale="true"] { opacity: 0.6; }
+
+    & .tool {
+      display: inline-block;
+      margin: 0 var(--space-xs) var(--space-2xs) 0;
+      padding: 0 var(--space-xs);
+      border-radius: var(--radius-xs);
+      background: var(--color-raised);
+      border: var(--border-width) solid var(--color-line);
+    }
+  }
+}

@@ -28,7 +28,7 @@
       border: 0;
       border-radius: var(--radius-xs);
       background: none;
-      color: var(--color-ink-faint);
+      color: var(--color-ink-muted);
       line-height: 1;
       cursor: pointer;
 

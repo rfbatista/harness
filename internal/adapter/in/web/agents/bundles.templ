@@ -1,0 +1,149 @@
+package agents
+
+// bundlesLibrary is the Bundles tab: the list with its filters and footer,
+// and in the detail pane the open bundle, or its editor (UX spec section 3).
+templ bundlesLibrary() {
+	<div class="[ split-view ] [ agents-split ]" x-bind:data-detail="detailOpenAttr">
+		<div class="[ library-list ]">
+			<div class="[ library-tools ]">
+				<input type="search" class="[ field ]" aria-label="Filter bundles" placeholder="Filter bundles by name or entry" autocomplete="off" x-model="bundleQuery"/>
+				<div class="[ cluster ]" role="group" aria-label="Quick filters" data-bundle-filters style="--gutter: var(--space-xs)">
+					<template x-for="f in bundleFilters" x-bind:key="f.id">
+						<button type="button" class="[ button ]" data-size="sm" x-bind:data-variant="f.variant" x-bind:aria-pressed="f.pressed" x-bind:data-filter="f.id" x-on:click="setBundleFilter" x-text="f.label"></button>
+					</template>
+				</div>
+			</div>
+			<ul class="[ library-rows ]" aria-label="Bundles" data-bundle-list>
+				<template x-for="row in bundleRowsView" x-bind:key="row.key">
+					<li>
+						<a class="[ library-row ]" data-bundle-row x-bind:href="row.href" x-bind:data-key="row.key" x-bind:aria-current="row.current" x-on:click="openBundleLink">
+							<span class="[ name font-mono ]" x-text="row.name"></span>
+							<span class="[ meta ]">
+								<span x-text="row.meta"></span>
+								<span class="[ badge ]" data-tone="attention" data-disk-badge x-bind:hidden="row.noDisk" hidden>changed on disk</span>
+							</span>
+							<span class="[ desc font-mono ]" x-text="row.description"></span>
+						</a>
+					</li>
+				</template>
+			</ul>
+			<template x-if="noBundleRows">
+				<div class="[ library-empty ]" data-bundle-empty>
+					<strong x-text="bundleEmptyTitle"></strong>
+					<span class="[ text-sm ]">Clear the filter, or <a href="/agents/bundles/new" x-on:click="openNew">create a bundle</a>.</span>
+				</div>
+			</template>
+			<p class="[ library-foot ]" data-bundle-foot x-text="bundlesFoot"></p>
+		</div>
+		<section class="[ library-detail ]" aria-label="Bundle">
+			<p class="[ visually-hidden ]" role="status" aria-live="polite" x-text="notice"></p>
+			<template x-if="unknownBundle">
+				<div class="[ library-empty ]" data-bundle-unknown>
+					<strong>That bundle is not in the catalog.</strong>
+					<a href="/agents/bundles" x-on:click="backToList">Back to the bundles</a>
+				</div>
+			</template>
+			<template x-if="bundle">
+				@bundleDetail()
+			</template>
+			<template x-if="editing">
+				@bundleEditorPane()
+			</template>
+		</section>
+	</div>
+}
+
+// bundleDetail is one bundle: what it contains, its size after nested
+// bundles, and who names it, or the unused badge.
+templ bundleDetail() {
+	<div class="[ library-detail-inner ]" data-bundle-detail>
+		<a href="/agents/bundles" class="[ button ]" data-variant="ghost" data-size="sm" data-split-back x-on:click="backToList">All bundles</a>
+		@diskBanner()
+		<div class="[ detail-head ]">
+			<div class="[ repel ]">
+				<div class="[ cluster ]">
+					<h2 class="[ font-mono ]" x-text="bundle.title"></h2>
+					<span class="[ badge ]" data-tone="attention" data-unused-badge x-bind:hidden="!bundle.unused">unused</span>
+				</div>
+				@actionsMenu("bundle")
+			</div>
+			<div class="[ cluster ]">
+				<code class="[ library-path ]" data-path x-text="bundle.path"></code>
+				<span class="[ text-xs color-ink-faint ]" data-bundle-size x-text="bundle.sizeLabel"></span>
+			</div>
+		</div>
+		<section aria-labelledby="bundle-contains-h">
+			<div class="[ section-title ]"><h3 id="bundle-contains-h" x-text="bundle.entriesHeading"></h3></div>
+			<div class="[ cluster ]" data-contains style="--gutter: var(--space-xs)">
+				<template x-for="e in bundle.entries" x-bind:key="e.label">
+					<a class="[ skill-link ]" x-bind:href="e.href" x-bind:data-kind="e.kind" x-bind:data-missing="e.missing" x-on:click="openBundleLink" x-text="e.label"></a>
+				</template>
+			</div>
+			<p class="[ hint text-xs color-ink-muted ]">A bundle expands in place wherever it is named. Duplicates are dropped; the first one seen stays.</p>
+		</section>
+		<section aria-labelledby="bundle-used-h">
+			<div class="[ section-title ]"><h3 id="bundle-used-h">Used by</h3></div>
+			<p class="[ color-ink-muted text-sm ]" data-unused-note x-bind:hidden="!bundle.unused">No agent and no bundle names it. Add it as <span class="font-mono" x-text="bundle.title"></span> in an agent's skills.</p>
+			<dl class="[ kv ]" x-bind:hidden="bundle.unused">
+				<dt>Agents</dt>
+				<dd data-used="agents">
+					<template x-for="a in bundle.agents" x-bind:key="a.name">
+						<a x-bind:href="a.href" x-text="a.name"></a>
+					</template>
+					<span class="[ color-ink-faint ]" x-bind:hidden="bundleHasAgents">None</span>
+				</dd>
+				<dt>Bundles</dt>
+				<dd data-used="bundles">
+					<template x-for="b in bundle.bundles" x-bind:key="b.name">
+						<a class="[ chip ]" data-kind="bundle" x-bind:href="b.href" x-on:click="openBundleLink" x-text="b.name"></a>
+					</template>
+					<span class="[ color-ink-faint ]" x-bind:hidden="bundleHasBundles">None</span>
+				</dd>
+			</dl>
+		</section>
+	</div>
+}
+
+// bundleEditorPane is New bundle and Edit, in the detail pane: the name with
+// its @ prefix, the rename banner, the picker with its chips, and the save
+// pipeline's banners, review and footer.
+templ bundleEditorPane() {
+	<div class="[ library-detail-inner ] [ editor-pane ]" data-bundle-editor>
+		<div class="[ detail-head ]">
+			<h2 x-text="editorTitle"></h2>
+			<code class="[ library-path ]" data-path x-text="editorPath"></code>
+		</div>
+		@saveAlerts()
+		<div class="[ field ]">
+			<label for="bundle-name">Name</label>
+			<div class="[ prefixed ]">
+				<span aria-hidden="true">{ "@" }</span>
+				<input
+					type="text"
+					id="bundle-name"
+					class="[ font-mono ]"
+					placeholder="e.g. ios-developer"
+					spellcheck="false"
+					autocomplete="off"
+					aria-describedby="bundle-name-hint"
+					x-model="draft.name"
+					x-on:input="draftChanged"
+					x-bind:aria-describedby="nameDescribedBy"
+					x-bind:aria-invalid="nameInvalid"
+				/>
+			</div>
+			<span class="[ hint ]" id="bundle-name-hint">Lowercase letters, digits and dashes. Agents and bundles name it as <span class="font-mono">{ "@name" }</span>.</span>
+			<span class="[ error ]" id="bundle-name-error" x-bind:hidden="!nameInvalid" x-text="fieldErrors.name"></span>
+		</div>
+		<div class="[ banner ]" data-tone="attention" data-rename-banner x-bind:hidden="!renameBanner.show" hidden>
+			<div class="[ grow ]">
+				<strong>Renaming rewrites every <span class="font-mono" x-text="renameBanner.from"></span></strong>
+				to <span class="font-mono" x-text="renameBanner.to"></span>:
+				<span x-text="renameBanner.text"></span>. One save changes them all.
+			</div>
+		</div>
+		@entryPicker("bundlePicker", "Skills and bundles in it", "Search skills and bundles…", "bundle-entries-hint", "bundle-entries-error", "entriesDescribedBy", "entriesInvalid", "fieldErrors.entries")
+		@reviewPanel()
+		@saveFooter()
+	</div>
+}

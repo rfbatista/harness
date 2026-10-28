@@ -1,0 +1,240 @@
+package projects
+
+import "net/url"
+
+// mcpServersSection is the Enabled agents and MCP servers sections of a
+// project's settings (projectMcpServers, web/src/modules/agents/presentation/components/projectMcpServers.js):
+// the agents sessions can run as, and the servers every session gets, picked
+// from the catalog. One component holds both, so they share one Save, Cancel
+// and "Unsaved change" footer. The catalog is defined on the Agents page; here
+// the person only chooses. The page paints it after reading the catalog, so
+// nothing renders server-side.
+templ mcpServersSection(projectID, projectName, settingsHref string) {
+	<div class="[ flow ] [ flow-space-m ]" data-mcp-section x-data="projectMcpServers" data-project-id={ projectID } data-project-name={ projectName } x-bind:data-feed="feedStatus" x-on:focus.window="windowFocused">
+		<template x-if="error">
+			<div class="[ banner ]" data-tone="danger" role="alert" data-mcp-error>
+				<span x-text="error.message"></span>
+			</div>
+		</template>
+		<template x-if="isBroken">
+			<div class="[ banner ]" data-tone="attention" role="alert" data-mcp-broken>
+				<span class="[ text-sm ]" x-text="brokenNote"></span>
+			</div>
+		</template>
+		<section class="[ flow ] [ flow-space-s ]" aria-labelledby="settings-agents-enabled" data-agents-section>
+			<div class="[ flow ] [ flow-space-3xs ]">
+				<div class="[ repel ]">
+					<h2 id="settings-agents-enabled">Enabled agents</h2>
+					<span class="[ text-xs color-ink-faint ]" data-agents-count x-text="agentsCount"></span>
+				</div>
+				<p class="[ text-sm color-ink-muted ]">
+					Which agents sessions in <b>{ projectName }</b> can run as. Only enabled agents are offered in the new-session picker, to <code>list_agents</code> and <code>start_task_session</code>, and for zone assignment. Agents are defined on the
+					<a href="/agents">Agents page</a>.
+				</p>
+			</div>
+			<template x-if="hasAgentBanner">
+				<div class="[ banner ]" data-tone="attention" role="alert" data-agents-removed>
+					<div class="[ grow ] [ text-sm ]"><b>The catalog changed.</b> <span x-text="agentBannerText"></span></div>
+					<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-on:click="dismissAgentBanner">Dismiss</button>
+				</div>
+			</template>
+			<p class="[ text-sm color-ink-faint ]" x-bind:hidden="!isLoading" data-agents-loading>Loading agents…</p>
+			<div class="[ flow ] [ flow-space-s ]" x-bind:hidden="isLoading">
+				<div class="[ segmented ]" role="group" aria-label="Enabled agents mode" style="justify-self: start" data-agents-mode>
+					<button type="button" data-mode="all" aria-pressed="true" x-bind:aria-pressed="isAllMode" x-bind:disabled="saving" x-on:click="chooseAll">All agents</button>
+					<button type="button" data-mode="selected" aria-pressed="false" x-bind:aria-pressed="isSelectedMode" x-bind:disabled="saving" x-on:click="chooseSelected">Selected agents</button>
+				</div>
+				<p class="[ hint ]" id="settings-agents-hint" data-agents-hint x-text="agentsHint"></p>
+				<template x-if="showEmptyAgents">
+					<div class="[ banner ]" data-tone="attention" role="alert" data-agents-empty>
+						<div class="[ grow ] [ text-sm ]"><b>No agent can be picked in this project.</b> The list is empty, so the new-session picker has nothing to offer and starting a session as any agent is refused (<code>AGENT_NOT_ENABLED</code>). Tick at least one agent, or switch to All agents.</div>
+						<template x-if="hasAgentRows">
+							<button type="button" class="[ button ]" data-size="sm" data-agents-tick-all x-on:click="tickAll" x-text="tickAllLabel">Tick all</button>
+						</template>
+					</div>
+				</template>
+				<template x-if="showAgentChecklist">
+					<fieldset class="[ targets ]" aria-labelledby="settings-agents-enabled" x-bind:aria-describedby="agentsDescribedBy" data-agents-list style="border: 0; padding: 0; margin: 0; min-inline-size: 0">
+						<template x-for="r in agentRows" x-bind:key="r.name">
+							<label class="[ target ]" data-agent-row x-bind:data-name="r.name">
+								<input type="checkbox" x-bind:checked="r.checked" x-bind:disabled="saving" x-on:change="toggleAgent(r.name)"/>
+								<div class="[ flow ] [ flow-space-3xs ]">
+									<span class="[ font-mono text-sm ]" x-text="r.name"></span>
+									<span class="[ text-xs color-ink-faint ]" data-agent-description x-text="r.description"></span>
+								</div>
+							</label>
+						</template>
+					</fieldset>
+				</template>
+				<template x-if="showAgentCombobox">
+					<fieldset class="[ field ]" aria-labelledby="settings-agents-enabled" x-bind:aria-describedby="agentsDescribedBy" data-agents-combobox style="border: 0; padding: 0; margin: 0; min-inline-size: 0">
+						<label for="settings-agents-input" class="[ text-sm ]">Add an agent</label>
+						<div class="[ entry-picker ]">
+							<input
+								type="text"
+								id="settings-agents-input"
+								class="[ font-mono ]"
+								role="combobox"
+								aria-autocomplete="list"
+								aria-controls="settings-agents-options"
+								aria-expanded="false"
+								autocomplete="off"
+								spellcheck="false"
+								placeholder="Search agents…"
+								x-bind:aria-expanded="agentPick.expanded"
+								x-bind:aria-activedescendant="agentPick.activeId"
+								x-model="agentQuery"
+								x-on:focus="agentFocus"
+								x-on:click="agentFocus"
+								x-on:blur="agentBlur"
+								x-on:input="agentInput"
+								x-on:keydown="agentKey"
+							/>
+							<div class="[ entry-options ]" id="settings-agents-options" role="listbox" aria-multiselectable="true" aria-label="Agents" x-bind:hidden="!agentPick.expanded" hidden>
+								<template x-for="o in agentPick.options" x-bind:key="o.key">
+									<div role="option" class="[ entry-option ]" x-bind:id="o.id" x-bind:data-key="o.key" x-bind:data-active="o.active" aria-selected="false" x-on:mousedown="agentPickOption">
+										<span class="[ font-mono ]" x-text="o.label"></span>
+										<span class="[ text-xs color-ink-faint ]" x-text="o.hint"></span>
+									</div>
+								</template>
+								<p class="[ entry-note text-xs color-ink-muted ]" x-bind:hidden="!agentPick.empty" x-text="agentPick.emptyNote"></p>
+								<p class="[ entry-note text-xs color-ink-muted ]" x-bind:hidden="!agentPick.hasHidden" x-text="agentPick.hiddenNote"></p>
+							</div>
+						</div>
+						<div class="[ cluster ] [ entry-chips ]" style="--gutter: var(--space-xs)" data-chips role="list" aria-label="Enabled agents">
+							<template x-for="c in agentPick.chips" x-bind:key="c.name">
+								<span class="[ chip ] [ font-mono ]" role="listitem" x-bind:data-chip="c.name">
+									<span x-text="c.name"></span>
+									<button type="button" x-bind:aria-label="c.removeLabel" x-bind:data-key="c.name" x-on:click="agentUnpick">×</button>
+								</span>
+							</template>
+							<span class="[ text-sm color-ink-muted ]" x-bind:hidden="!agentPick.noChips">No agent ticked.</span>
+						</div>
+					</fieldset>
+				</template>
+				<template x-if="agentsRefusal">
+					<span class="[ error ] [ text-sm ]" id="settings-agents-refusal" role="alert" data-agents-refusal><span x-text="agentsRefusal.message"></span> <span x-text="agentsRefusal.next"></span></span>
+				</template>
+			</div>
+		</section>
+		<section class="[ flow ] [ flow-space-m ]" aria-labelledby="settings-mcp">
+		<div class="[ flow ] [ flow-space-3xs ]">
+			<h2 id="settings-mcp">MCP servers</h2>
+			<p class="[ text-sm color-ink-muted ]">
+				The servers every session in <b>{ projectName }</b> gets, whichever agent runs it. Servers are defined once, on the
+				<a href="/agents/mcp">Agents page</a>, under MCP servers. Here you only choose which of them this project gives.
+			</p>
+		</div>
+		<template x-if="hasBanner">
+			<div class="[ banner ]" data-tone="attention" role="alert" data-mcp-removed>
+				<div class="[ grow ] [ text-sm ]"><b>The catalog changed.</b> <span x-text="bannerText"></span></div>
+				<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-on:click="dismissBanner">Dismiss</button>
+			</div>
+		</template>
+		<p class="[ text-sm color-ink-faint ]" x-bind:hidden="!isLoading" data-mcp-loading>Loading MCP servers…</p>
+		<template x-if="isEmpty">
+			<div class="[ empty ]" data-mcp-empty>
+				<b>No MCP servers in the catalog yet.</b>
+				<span class="[ text-sm ]">Create one on the Agents page, then give it to this project here.</span>
+				<a class="[ button ]" data-variant="primary" href={ templ.SafeURL(newMCPServerHref(settingsHref)) }>New MCP server…</a>
+			</div>
+		</template>
+		<template x-if="hasRows">
+			<div class="[ flow ] [ flow-space-s ]">
+				<div class="[ repel ]">
+					<h3 id="settings-mcp-pick">Servers this project gives</h3>
+					<span class="[ text-xs color-ink-faint ]" data-mcp-count x-text="count"></span>
+				</div>
+				<div class="[ targets ]" role="group" aria-labelledby="settings-mcp-pick" x-bind:aria-describedby="mcpDescribedBy" data-mcp-list>
+					<template x-for="r in rows" x-bind:key="r.name">
+						<label class="[ target ]" data-mcp-row x-bind:data-name="r.name">
+							<input type="checkbox" x-bind:checked="r.checked" x-bind:disabled="saving" x-on:change="toggle(r.name)"/>
+							<div class="[ flow ] [ flow-space-3xs ]">
+								<div class="[ cluster ] [ gutter-xs ]">
+									<span class="[ font-mono text-sm ]" x-text="r.name"></span>
+									<span class="[ badge ]" x-text="r.transport"></span>
+									<template x-for="v in r.vars" x-bind:key="v.label">
+										<span class="[ badge ]" data-mcp-var x-bind:data-tone="v.tone"><span class="[ font-mono ]" x-text="v.label"></span> <span x-text="v.state"></span></span>
+									</template>
+								</div>
+								<div class="[ text-xs color-ink-faint ]">
+									<span data-mcp-who x-text="r.who"></span>
+									<span x-bind:hidden="!r.warning" x-text="r.warningText"></span>
+								</div>
+							</div>
+						</label>
+					</template>
+				</div>
+			</div>
+		</template>
+		<div class="[ cluster ]" x-bind:hidden="isLoading">
+			<a class="[ button ]" data-variant="ghost" href="/agents/mcp" data-mcp-manage>Manage servers on the Agents page →</a>
+			<a class="[ button ]" data-variant="ghost" href={ templ.SafeURL(newMCPServerHref(settingsHref)) } data-mcp-new>New MCP server…</a>
+		</div>
+		<template x-if="refusal">
+			<span class="[ error ] [ text-sm ]" id="settings-mcp-refusal" role="alert" data-mcp-refusal><span x-text="refusal.message"></span> <span x-text="refusal.next"></span></span>
+		</template>
+		<template x-if="hasRows">
+			<div class="[ flow ] [ flow-space-s ]" data-mcp-example>
+				<h3 id="settings-mcp-eff">What a session gets</h3>
+				<div class="[ pane ] [ flow ] [ flow-space-xs ]" style="padding: var(--space-m)">
+					<template x-if="example.hasAgent">
+						<div class="[ flow ] [ flow-space-3xs ]" data-mcp-with-agent>
+							<div><b x-text="example.asAgent"></b> <span class="[ text-xs color-ink-faint ]">agent’s servers + this project’s</span></div>
+							<div class="[ cluster ]">
+								<template x-for="s in example.withAgent" x-bind:key="s.name">
+									<span class="[ chip ] [ font-mono ]">
+										<span x-text="s.name"></span>
+										<span class="[ color-ink-faint ]" x-text="s.origin"></span>
+									</span>
+								</template>
+								<span class="[ text-sm color-ink-muted ]" x-bind:hidden="!example.noneWithAgent" hidden>No MCP servers</span>
+							</div>
+						</div>
+					</template>
+					<div class="[ flow ] [ flow-space-3xs ]" data-mcp-no-agent>
+						<div><b>With no agent</b></div>
+						<div class="[ cluster ]">
+							<template x-for="n in example.withoutAgent" x-bind:key="n">
+								<span class="[ chip ] [ font-mono ]" x-text="n"></span>
+							</template>
+							<span class="[ text-sm color-ink-muted ]" x-bind:hidden="!example.noneWithoutAgent" hidden>No MCP servers</span>
+						</div>
+					</div>
+				</div>
+				<p class="[ hint ]">A session gets its agent’s servers plus these, a name that appears twice counted once. A session with no agent gets only these. Running sessions keep the servers they started with.</p>
+			</div>
+		</template>
+		</section>
+		<template x-if="hasPartial">
+			<div class="[ banner ]" data-tone="attention" role="alert" data-save-partial>
+				<span class="[ text-sm ]" x-text="partial.text"></span>
+			</div>
+		</template>
+		<div class="[ cluster ]" x-bind:hidden="isLoading" data-settings-footer>
+			<span class="[ text-xs color-ink-muted ] [ grow ]" x-bind:hidden="unchanged" hidden>Unsaved change · saved with the project</span>
+			<button type="button" class="[ button ]" data-variant="ghost" data-mcp-cancel x-bind:hidden="unchanged" hidden x-on:click="cancel">Cancel</button>
+			<button type="button" class="[ button ]" data-variant="primary" data-mcp-save disabled x-bind:disabled="cannotSave" x-bind:aria-busy="saving" x-on:click="save" x-text="saveLabel">Save</button>
+		</div>
+		<div class="[ toast-region ]" role="status" aria-live="polite" aria-atomic="true">
+			<template x-if="hasToast">
+				<div class="[ toast ]" data-toast x-bind:data-tone="toast.tone">
+					<div class="[ flow ] [ flow-space-3xs grow ]">
+						<span x-text="toast.text"></span>
+						<span class="[ text-xs color-ink-muted ]" x-bind:hidden="!toast.note" x-text="toast.note"></span>
+					</div>
+					<template x-if="toast.hasUndo">
+						<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" data-undo x-on:click="undoSave">Undo</button>
+					</template>
+					<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" aria-label="Dismiss" data-dismiss x-on:click="dismissToast">×</button>
+				</div>
+			</template>
+		</div>
+	</div>
+}
+
+// newMCPServerHref opens the New MCP server form, which returns to the
+// project's settings when it saves or is cancelled.
+func newMCPServerHref(settingsHref string) string {
+	return "/agents/mcp/new?return=" + url.QueryEscape(settingsHref)
+}

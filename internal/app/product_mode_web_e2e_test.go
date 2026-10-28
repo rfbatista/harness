@@ -97,7 +97,7 @@ func TestProductModeWeb_EndToEnd(t *testing.T) {
 
 	// The board offers the dialog, with the real agent and repository choices.
 	board := getBody(t, srv.URL+"/projects/"+p.ID)
-	for _, want := range []string{`x-data="sessionsBrainstorm"`, `<option value="` + agent.ID + `">product-manager</option>`, `<option value="` + repo.ID + `">harness</option>`} {
+	for _, want := range []string{`x-data="sessionsBrainstorm"`, `data-agents=`, `&#34;id&#34;:&#34;` + agent.ID + `&#34;,&#34;name&#34;:&#34;product-manager&#34;`, `<option value="` + repo.ID + `">harness</option>`} {
 		if !strings.Contains(board, want) {
 			t.Errorf("board lacks %q", want)
 		}

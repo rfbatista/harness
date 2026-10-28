@@ -31,10 +31,12 @@ templ Document(f Frame) {
 // region, and the stream bar.
 templ AppShell(f Frame) {
 	@Document(f) {
-		<div class="[ app-shell ]">
+		<div class="[ app-shell ]" { noRailAttrs(f.NoRail)... }>
 			<a class="[ skip-link ] [ button ]" data-size="sm" href="#main">Skip to content</a>
 			@topBar(f)
-			@taskRail(f)
+			if !f.NoRail {
+				@taskRail(f)
+			}
 			{ children... }
 			@streamBar(f.Live, f.Hints)
 		</div>
@@ -49,7 +51,7 @@ templ AppShell(f Frame) {
 // that opens the rail as a drawer (a link to the board without JavaScript).
 templ topBar(f Frame) {
 	<header class="[ topbar ]">
-		if f.Rail.Seed != nil {
+		if f.Rail.Seed != nil && !f.NoRail {
 			@tasksToggle(f.Rail)
 		}
 		<a class="[ brand ]" href="/">harness</a>
@@ -71,6 +73,10 @@ templ topBar(f Frame) {
 			<a class="[ button ]" data-variant="ghost" data-size="sm" href={ templ.SafeURL(f.Top.ProjectsHref) } { currentAttrs(f.Top.OnProjects)... }>Projects</a>
 		} else {
 			<a class="[ button ]" data-variant="ghost" data-size="sm" href="/projects/new">New project</a>
+		}
+		if f.Top.AgentsHref != "" {
+			<a class="[ button ]" data-variant="ghost" data-size="sm" href={ templ.SafeURL(f.Top.AgentsHref) } title="Agents are shared by every project" aria-describedby="agents-link-note" { currentAttrs(f.Top.OnAgents)... }>Agents</a>
+			<span id="agents-link-note" class="[ visually-hidden ]">Agents are shared by every project</span>
 		}
 		if f.Top.CredentialsHref != "" {
 			<a class="[ button ]" data-variant="ghost" data-icon href={ templ.SafeURL(f.Top.CredentialsHref) } aria-label="Git credentials" title="Git credentials" { currentAttrs(f.Top.OnCredentials)... }>

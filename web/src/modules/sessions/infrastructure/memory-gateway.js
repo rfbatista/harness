@@ -32,6 +32,9 @@ export function memoryGateway({ projects = [], sessions = [], repositories = {},
   /** @type {Map<string, import("../domain/session.js").Session>} */
   const store = new Map(sessions.map((s) => [s.id, s]));
   const followers = new Set();
+  /** project id to what its agent picker offers; followers of the page feed catalog events. */
+  const choices = new Map();
+  const catalogFollowers = new Set();
 
   const taken = (repositoryId) => new Set((branches[repositoryId] ?? []).filter((b) => !b.remote).map((b) => b.name));
 
@@ -101,6 +104,10 @@ export function memoryGateway({ projects = [], sessions = [], repositories = {},
       }
       if (!MODES.includes(mode ?? "")) throw new StructuredError(Codes.INVALID_INPUT, `unknown mode "${mode}"`, 400);
       if (!ticketId && noTaskProblem(mode)) throw new StructuredError(Codes.INVALID_INPUT, "ticket_id is required unless mode is product", 400);
+      const offered = choices.get(projectId);
+      if (agentId && offered && !offered.agents.some((x) => x.id === agentId)) {
+        throw new StructuredError(Codes.AGENT_NOT_ENABLED, `AGENT_NOT_ENABLED: agent ${agentId} is not enabled in project ${projectId}`, 409);
+      }
       if (branchName?.trim()) {
         const verdict = check({ repositoryId, name: branchName });
         if (verdict.code === Codes.BRANCH_NAME_INVALID) {
@@ -169,6 +176,20 @@ export function memoryGateway({ projects = [], sessions = [], repositories = {},
       publish(projectId, { kind: "deleted", id: sessionId });
     },
 
+    async agentChoices(projectId) {
+      if (!knownProjects.has(projectId)) {
+        throw new StructuredError(Codes.PROJECT_NOT_FOUND, `project ${projectId} not found`, 404);
+      }
+      return choices.get(projectId) ?? { mode: "all", agents: [], total: 0 };
+    },
+
+    followAgents({ onEvent, onStatus = () => {} }) {
+      const follower = { onEvent, onStatus };
+      catalogFollowers.add(follower);
+      queueMicrotask(() => catalogFollowers.has(follower) && onStatus(FeedStatus.LIVE));
+      return () => catalogFollowers.delete(follower);
+    },
+
     follow(projectId, onChange, onStatus) {
       const follower = { projectId, onChange, onStatus };
       followers.add(follower);
@@ -191,6 +212,15 @@ export function memoryGateway({ projects = [], sessions = [], repositories = {},
       publish(projectId, { kind: "deleted", id: sessionId });
     },
     update,
+    /** The picker of the project now offers `choice` ({ mode, agents, total }); followers hear agent_catalog_changed on projects/<id>. */
+    setAgentChoices(projectId, choice) {
+      choices.set(projectId, choice);
+      for (const f of catalogFollowers) f.onEvent({ agent_catalog_changed: { paths: [`projects/${projectId}`] } });
+    },
+    /** A page feed message, as the server would send it. */
+    publishCatalogEvent(data) {
+      for (const f of catalogFollowers) f.onEvent(data);
+    },
     feedStatus(status) {
       for (const f of followers) f.onStatus(status);
     },

@@ -19,6 +19,9 @@ type Frame struct {
 	Title string
 	Top   TopBar
 	Rail  Rail
+	// NoRail renders the page full width with the top bar only: no task rail,
+	// no Tasks toggle. For pages that belong to no project (the Agents page).
+	NoRail bool
 	// Asset URLs, content-hashed (web.Assets.URL).
 	CSS, JS string
 	// Built is false when `make web` has not produced the bundles yet.
@@ -102,6 +105,10 @@ type TopBar struct {
 	ProjectsHref string
 	// OnProjects marks the projects list as the current page.
 	OnProjects bool
+	// AgentsHref is the Agents page; "" when it is not served.
+	AgentsHref string
+	// OnAgents marks the Agents page as the current page.
+	OnAgents bool
 	// CredentialsHref is the Git credentials page; "" when it is not served.
 	CredentialsHref string
 	// OnCredentials marks the Git credentials page as the current page.
@@ -474,4 +481,12 @@ func (f Frame) ProjectName() string {
 		}
 	}
 	return ""
+}
+
+// noRailAttrs marks the app shell of a page that has no rail, for the layout.
+func noRailAttrs(noRail bool) templ.Attributes {
+	if !noRail {
+		return nil
+	}
+	return templ.Attributes{"data-no-rail": true}
 }
