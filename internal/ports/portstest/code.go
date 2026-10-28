@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"reflect"
 	"slices"
 	"strings"
@@ -21,6 +23,9 @@ import (
 // BaseRef.
 type CodeTarget struct {
 	RepositoryID, WorkspaceID, GoneWorkspaceID string
+	// PassInterval lets the watch interval go by on the clock the server's
+	// tree snapshot ages by, so a tree read after it reads the worktree again.
+	PassInterval func()
 }
 
 // CodeConformance runs the code browsing contract against the port newPort
@@ -605,6 +610,37 @@ func CodeConformance(t *testing.T, newPort func(t *testing.T, f *CodeFixture) (p
 			if !hasCode(err, "INVALID_INPUT") {
 				t.Errorf("%s: err = %v, want INVALID_INPUT", name, err)
 			}
+		}
+	})
+
+	t.Run("a tree read shows a change once the watch interval has passed", func(t *testing.T) {
+		ws := ports.CodeSourceQuery{WorkspaceID: at.WorkspaceID}
+		if _, err := p.CodeTree(ctx, ws, "docs"); err != nil {
+			t.Fatal(err)
+		}
+		fresh := filepath.Join(f.Worktree, "docs", "fresh.md")
+		if err := os.WriteFile(fresh, []byte("new\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { os.Remove(fresh) })
+		at.PassInterval()
+		tree, err := p.CodeTree(ctx, ws, "docs")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if e := entries(tree.Entries)["fresh.md"]; e.Change == nil || *e.Change != domain.ChangeUntracked {
+			t.Errorf("fresh.md = %s, want untracked after the interval", show(e))
+		}
+		if err := os.Remove(fresh); err != nil {
+			t.Fatal(err)
+		}
+		at.PassInterval()
+		tree, err = p.CodeTree(ctx, ws, "docs")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, there := entries(tree.Entries)["fresh.md"]; there {
+			t.Error("fresh.md is still listed after it was removed and the interval passed")
 		}
 	})
 

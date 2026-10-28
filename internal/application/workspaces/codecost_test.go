@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"operators-mcp/internal/adapter/out/filesystem"
 	"operators-mcp/internal/adapter/out/gitcli"
@@ -43,7 +44,12 @@ type costFixture struct {
 	git         *countingGit
 	workspaceID string
 	worktree    string
+	clock       *costClock
 }
+
+type costClock struct{ now time.Time }
+
+func (c *costClock) Now() time.Time { return c.now }
 
 // newCostFixture is a repository of costFiles files in ten directories and a
 // session worktree that has modified every one of them.
@@ -98,10 +104,11 @@ func newCostFixture(t *testing.T) *costFixture {
 		t.Fatal(err)
 	}
 	counting := &countingGit{GitCode: gitcli.NewCode()}
+	clock := &costClock{now: time.Now()}
 	code := workspaces.NewCode(workspaces.CodeDeps{
-		Workspaces: wsRepo, Repositories: repos, Git: counting, Files: filesystem.NewWorktreeFiles(),
+		Workspaces: wsRepo, Repositories: repos, Git: counting, Files: filesystem.NewWorktreeFiles(), Now: clock.Now,
 	})
-	return &costFixture{code: code, git: counting, workspaceID: ws.ID, worktree: wt}
+	return &costFixture{code: code, git: counting, workspaceID: ws.ID, worktree: wt, clock: clock}
 }
 
 func TestADiffPageReadsPatchesForItsOwnFilesOnly(t *testing.T) {
@@ -129,5 +136,32 @@ func TestADiffPageReadsPatchesForItsOwnFilesOnly(t *testing.T) {
 	}
 	if got := f.git.patchCalls.Load(); got != 0 {
 		t.Errorf("a totals-only read ran %d patch reads, want none", got)
+	}
+}
+
+func TestReadingManyDirectoriesWithinTheWatchIntervalListsTheWorktreeOnce(t *testing.T) {
+	f := newCostFixture(t)
+	ctx := context.Background()
+	src := ports.CodeSourceQuery{WorkspaceID: f.workspaceID}
+
+	for i := range 10 {
+		tree, err := f.code.CodeTree(ctx, src, fmt.Sprintf("d%d", i))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(tree.Entries) != 50 || tree.Entries[0].Change == nil || *tree.Entries[0].Change != domain.ChangeModified {
+			t.Fatalf("d%d = %d entries, first change %v", i, len(tree.Entries), tree.Entries[0].Change)
+		}
+	}
+	if got := f.git.listings.Load(); got != 1 {
+		t.Errorf("ten directory reads listed the worktree %d times, want once", got)
+	}
+
+	f.clock.now = f.clock.now.Add(workspaces.CodeWatchInterval + time.Millisecond)
+	if _, err := f.code.CodeTree(ctx, src, "d0"); err != nil {
+		t.Fatal(err)
+	}
+	if got := f.git.listings.Load(); got != 2 {
+		t.Errorf("a read after the interval listed the worktree %d times in all, want twice", got)
 	}
 }

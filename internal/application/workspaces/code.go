@@ -7,6 +7,7 @@ import (
 	"path"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/rfbatista/harnesskit/errs"
 
@@ -24,12 +25,17 @@ type CodeDeps struct {
 	Git          ports.GitCode
 	Files        ports.WorktreeFiles
 	Architecture ports.ArchitectureMap
+	// Now is the clock tree snapshots age by; nil is time.Now.
+	Now func() time.Time
 }
 
 // Code reads code for a person, read-only: a repository at a ref or a
 // session's worktree on disk, the diffs of a session, a commit or a range,
 // and how the files divide into zones.
-type Code struct{ d CodeDeps }
+type Code struct {
+	d     CodeDeps
+	snaps treeSnapshots
+}
 
 // NewCode returns the use case.
 func NewCode(d CodeDeps) *Code { return &Code{d: d} }
@@ -307,10 +313,11 @@ func (c *Code) mergeBase(ctx context.Context, s *source) (string, error) {
 }
 
 func (c *Code) worktreeTree(ctx context.Context, s *source, dir string) ([]domain.TreeEntry, error) {
-	list, err := c.d.Git.WorktreeEntries(ctx, s.ws.Path, false)
+	snap, err := c.treeSnapshot(ctx, s, false)
 	if err != nil {
 		return nil, err
 	}
+	list := snap.list
 	prefix := ""
 	if dir != "" {
 		prefix = dir + "/"
@@ -343,10 +350,7 @@ func (c *Code) worktreeTree(ctx context.Context, s *source, dir string) ([]domai
 		}
 		return nil, pathNotFound(dir)
 	}
-	changes, err := c.worktreeChanges(ctx, s, list)
-	if err != nil {
-		return nil, err
-	}
+	changes := snap.changes
 	entries := make([]domain.TreeEntry, 0, len(children))
 	for name, ch := range children {
 		p := prefix + name
