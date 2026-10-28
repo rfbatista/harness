@@ -1,6 +1,8 @@
 package domain
 
 import (
+	"fmt"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -281,13 +283,17 @@ const (
 
 // BringUnderEligibility judges target (nil when it no longer exists) against
 // the task ticketID, its architect arch and every session onTask. Any state
-// qualifies: only where the session stands in the task decides.
+// qualifies: only where the session stands in the task decides. A nil arch
+// is a task about to get its architect: nothing is the architect yet and no
+// session is a delegate.
 func BringUnderEligibility(ticketID string, arch *Session, onTask []*Session, target *Session) BringUnderSkip {
 	switch {
 	case target == nil:
 		return SkipNotFound
 	case target.TicketID != ticketID:
 		return SkipNotOnTask
+	case arch == nil:
+		return ""
 	case target.ID == arch.ID:
 		return SkipIsArchitect
 	}
@@ -311,3 +317,38 @@ Talk to the architect instead:
 Its replies arrive as a new turn starting with [task message … · reply …]. A reply
 with verdict changes_requested means: make the changes, then ask for review again.
 Sessions you start on this task also report to the architect.`
+
+// ShortAge is a duration as the turn headers print it: 12s, 7m or 3h.
+func ShortAge(d time.Duration) string {
+	switch {
+	case d < 0:
+		return "0s"
+	case d < time.Minute:
+		return strconv.Itoa(int(d.Seconds())) + "s"
+	case d < time.Hour:
+		return strconv.Itoa(int(d.Minutes())) + "m"
+	default:
+		return strconv.Itoa(int(d.Hours())) + "h"
+	}
+}
+
+// BroughtUnderBriefClip is how many characters of a session's prompt the
+// lists of brought-under sessions keep.
+const BroughtUnderBriefClip = 120
+
+// BroughtUnderLine is the line a turn gives a session brought under an
+// architect: who it is, where it stands, what it was asked to do. agent names
+// its agent; now dates its age.
+func BroughtUnderLine(agent string, s *Session, now time.Time) string {
+	return fmt.Sprintf("- %s session %s · status %s · branch %s · brief %q · last action %q · started %s ago",
+		agent, s.ID, s.Status, s.Branch, clipLine(s.Task, BroughtUnderBriefClip), s.LastAction, ShortAge(now.Sub(s.CreatedAt)))
+}
+
+// clipLine is text on one line, cut to max runes with an ellipsis.
+func clipLine(text string, max int) string {
+	line := strings.Join(strings.Fields(text), " ")
+	if r := []rune(line); len(r) > max {
+		return string(r[:max]) + "…"
+	}
+	return line
+}
