@@ -36,6 +36,8 @@ export function catalogGatewayContract(name, makeSubject) {
     assert.deepEqual(c.mcpServers[0].projects, [{ id: "p1", name: "harness" }]);
     assert.deepEqual(c.builtInTools.map((t) => t.name), ["Read", "Bash"]);
     assert.deepEqual(c.agents[0].enabledIn, [{ id: "p1", name: "harness", mode: "all" }], "an All project enables every agent");
+    assert.deepEqual(c.agents[0].usage, { sessions: 3, zones: 1 }, "agents[].usage is carried (contract section 3)");
+    assert.equal(c.agents[1].usage, null, "an agent the server sends no usage for has none");
     assert.deepEqual(gateway.decodeCatalog(JSON.parse(JSON.stringify(catalogDTO()))).agents.map((a) => a.name), ["ux-designer", "backend"]);
   });
 

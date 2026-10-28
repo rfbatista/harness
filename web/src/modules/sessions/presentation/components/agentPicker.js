@@ -9,7 +9,8 @@
 //
 // Mixed into a component with withAgentPicker; the component calls
 // startAgentPicker(this.$el.dataset) from init and stopAgentPicker from destroy,
-// and hands a refused start to refuseAgent.
+// and hands a refused start to refuseAgent. A component may define
+// agentsChanged(), called after the list was read again.
 
 import { FeedStatus } from "../../../../shared/domain/feed.js";
 import { agentsSettingsHref, catalogChangeTouches, notEnabledRefusal, pickerCount, pickerHint } from "../../domain/agentPicker.js";
@@ -84,6 +85,7 @@ export function withAgentPicker(component, { gateway }) {
         this.agentTotal = choice.total;
         this.agentMode = choice.mode;
         this.noteAgentNames(choice.agents);
+        this.agentsChanged?.();
       } catch {
         // The list on screen stays; a start the server refuses says why.
       }

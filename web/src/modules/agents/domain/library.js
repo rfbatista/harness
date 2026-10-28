@@ -8,7 +8,8 @@
  * @typedef {{ label: string, tone: "attention" | "danger" }} Badge
  */
 
-import { enabledInView } from "./enabledIn.js";
+import { allProjects, enabledInView } from "./enabledIn.js";
+import { detectToken, HIDDEN } from "./tokens.js";
 
 export const AGENT_FILTERS = [
   { id: "all", label: "All" },
@@ -65,6 +66,52 @@ export function agentsFooter(catalog) {
   return `agents.json · ${plural(catalog.agents.length, "agent")}, ${plural(catalog.bundles.length, "bundle")}`;
 }
 
+const hide = (text) => {
+  const found = detectToken(text);
+  return found ? text.replace(found.secret, () => HIDDEN) : text;
+};
+
+/**
+ * Where a server connects, as text: the URL of a remote server, the command
+ * line of a local one. ${VAR} stays as written. Nothing else of the server is
+ * here (no env, no header), and a plain token that sits in the URL (its
+ * password or a query value) or in an argument shows as ••••••.
+ * @param {{ transport?: string, command?: string, args?: string[], url?: string }} s
+ */
+export function mcpTarget(s) {
+  if (s.transport === "stdio") return [s.command ?? "", ...(s.args ?? []).map(hide)].filter((p) => p !== "").join(" ");
+  return (s.url ?? "")
+    .replace(/(\/\/[^/:@?#\s]*:)([^@/?#\s]+)(@)/, (m, a, pass, b) => (pass.includes("${") ? m : a + HIDDEN + b))
+    .replace(/([?&][^=&#\s]*=)([^&#\s]+)/g, (m, key, value) => key + hide(value));
+}
+
+/** "Used by 31 sessions · 2 zones" (contract section 3); "" while the server sends no usage. @param {{ sessions: number, zones: number } | null | undefined} usage */
+export function usageLine(usage) {
+  return usage ? `Used by ${plural(usage.sessions, "session")} · ${plural(usage.zones, "zone")}` : "";
+}
+
+/**
+ * Start a session as the agent: the projects that enable it, each linking to
+ * that project's sessions page, which opens its new-session form with the agent
+ * chosen (?agent=<name>). With none, the button is off, says why, and links to
+ * the editor's Projects section.
+ * @param {{ name: string, enabledIn?: { id: string, name: string, mode: string }[] }} agent
+ * @param {number} projectCount  every project there is
+ */
+export function startMenu(agent, projectCount) {
+  const projects = [...(agent.enabledIn ?? [])]
+    .sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id))
+    .map((p) => ({ id: p.id, name: p.name, href: `/projects/${enc(p.id)}/sessions?agent=${enc(agent.name)}`, note: p.mode === "all" ? "All agents" : "Selected agents" }));
+  const disabled = projects.length === 0;
+  return {
+    label: `Start a session as ${agent.name}`,
+    disabled,
+    projects,
+    reason: !disabled ? "" : projectCount === 0 ? "There are no projects yet." : "Not enabled in any project.",
+    enableHref: `/agents/${enc(agent.name)}/edit#projects`,
+  };
+}
+
 /**
  * The detail of the agent named `key`, or null when there is none.
  * @param {Catalog} catalog
@@ -118,9 +165,12 @@ export function agentDetail(catalog, key, projects = []) {
         href: `/agents/mcp/${enc(n)}`,
         found: s !== undefined,
         transport: s?.transport ?? "",
+        target: s ? mcpTarget(s) : "",
         refs: (s?.envRefs ?? []).map((r) => ({ label: "${" + r.name + "}", set: r.set, state: r.set ? "set" : "not set", tone: r.set ? "success" : "attention" })),
       };
     }),
+    usage: usageLine(a.usage),
+    start: startMenu(a, allProjects(catalog, projects).length),
     tools: a.allowedTools,
     toolsDefault: a.allowedTools.length === 0,
     enabled: enabledInView(catalog, a, projects),

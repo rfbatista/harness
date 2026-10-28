@@ -49,6 +49,26 @@ test("?session= opens that session; one not on the task falls back to what needs
   gone.instance.destroy();
 });
 
+test("?agent= on the project's sessions page opens the new-session form; a task's page, or a page without the New session button, does not", () => {
+  const brainstorms = (search, { button = true, ticket = "" } = {}) => {
+    const memory = memoryGateway({ projects: ["p1"], sessions: [], now: () => T0 });
+    const el = seededElement({ project_id: "p1", ticket_id: ticket, sessions: [], agent_names: {}, repository_names: {} });
+    if (button) {
+      const b = el.ownerDocument.createElement("button");
+      b.dataset.newSession = "";
+      el.append(b);
+    }
+    const mounted = mount(sessionsPage({ gateway: memory.gateway, clock: fixedClock(T0), location: { search } }), { el });
+    mounted.instance.init();
+    return mounted.instance;
+  };
+  const open = brainstorms("?agent=reviewer");
+  assert.deepEqual([open.creating, open.detailOpenAttr], [true, ""], "the form is open, and on a narrow screen it is the pane shown");
+  assert.equal(brainstorms("").creating, false);
+  assert.equal(brainstorms("?agent=reviewer", { button: false }).creating, false, "no repository: no form to open");
+  assert.equal(brainstorms("?agent=reviewer", { ticket: "t1" }).creating, false, "a task's page keeps its list");
+});
+
 test("removes the server-rendered rows once Alpine has rendered", () => {
   const { instance, el, tick } = setup();
   const ssr = el.ownerDocument.createElement("div");

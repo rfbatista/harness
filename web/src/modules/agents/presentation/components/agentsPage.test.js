@@ -149,3 +149,14 @@ test("choosing an agent shows its detail and moves the address; a bundle group o
   instance.filter = "problems";
   assert.deepEqual(instance.agentRowsView.map((r) => r.name), ["backend"]);
 });
+
+test("an agent's detail carries its usage line, its servers' targets and the Start menu from the catalog read; an agent without usage has no line", async () => {
+  const { instance } = page({ path: "/agents/ux-designer" });
+  await instance.init();
+  assert.equal(instance.detail.usage, "Used by 3 sessions · 1 zone");
+  assert.deepEqual(instance.detail.servers.map((s) => [s.name, s.transport, s.target]), [["github", "stdio", "npx -y gh-mcp"]]);
+  assert.deepEqual(instance.detail.start.projects.map((p) => [p.name, p.href]), [["harness", "/projects/p1/sessions?agent=ux-designer"]]);
+  const backend = page({ path: "/agents/backend" });
+  await backend.instance.init();
+  assert.equal(backend.instance.detail.usage, "", "the memory gateway sends none for backend, as an older server");
+});

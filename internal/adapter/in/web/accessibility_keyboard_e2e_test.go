@@ -313,7 +313,7 @@ func TestAccessibilityAgentIsCreatedByKeyboardAlone_EndToEnd(t *testing.T) {
 	b.run("the agent's menu opens by keyboard and Delete… opens an alert dialog named for what it deletes, with the focus in",
 		a11yTabUntil(`document.activeElement?.getAttribute('aria-label') === 'More actions' && !!document.activeElement.closest('[data-agent-detail]')`, false),
 		chromedp.KeyEvent(kb.Enter),
-		waitUntil(`document.querySelector('[data-agent-detail] [role=menu]')?.checkVisibility() === true`),
+		waitUntil(`document.querySelector('[data-agent-detail] [role=menu]:has([data-duplicate])')?.checkVisibility() === true`),
 		waitUntil(`document.activeElement?.getAttribute('role') === 'menuitem'`),
 		a11yPress("ArrowDown", 40, 0),
 		a11yPress("ArrowDown", 40, 0),

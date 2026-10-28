@@ -10,7 +10,7 @@ export function catalogDTO() {
       {
         name: "ux-designer", description: "Designs screens.", aliases: ["ux"],
         entries: ["@ux", "tdd"], resolved_skills: ["lint", "tdd"], dropped_duplicates: [], missing_skills: [],
-        mcp_servers: ["github"], allowed_tools: ["Read"], problems: [],
+        mcp_servers: ["github"], allowed_tools: ["Read"], usage: { sessions: 3, zones: 1 }, problems: [],
       },
       {
         name: "backend", description: "", aliases: [],

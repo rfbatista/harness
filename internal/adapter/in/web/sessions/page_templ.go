@@ -1415,7 +1415,7 @@ func brainstormsHeader(v PageView) templ.Component {
 			return templ_7745c5c3_Err
 		}
 		if v.NewSession.CanStart() {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 119, "<button type=\"button\" class=\"[ button ]\" data-variant=\"primary\" data-size=\"sm\" disabled x-bind:disabled=\"cannotCreate\" x-on:click=\"startCreating\">New session <kbd>N</kbd></button>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 119, "<button type=\"button\" class=\"[ button ]\" data-new-session data-variant=\"primary\" data-size=\"sm\" disabled x-bind:disabled=\"cannotCreate\" x-on:click=\"startCreating\">New session <kbd>N</kbd></button>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

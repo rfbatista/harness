@@ -358,7 +358,7 @@ test("when the name cannot be checked the form says so and still starts", async 
 const REVIEWER = { id: "reviewer", name: "reviewer", description: "Reviews code." };
 const DESIGNER = { id: "designer", name: "designer", description: "" };
 
-function pickerSetup({ agents = [REVIEWER], total = 3, mode = "selected" } = {}) {
+function pickerSetup({ agents = [REVIEWER], total = 3, mode = "selected", search = "" } = {}) {
   const memory = memoryGateway({ projects: ["p1"], repositories: { r1: "p1" }, branches: BRANCHES });
   memory.setAgentChoices("p1", { mode, agents, total });
   const form = document.createElement("form");
@@ -367,10 +367,36 @@ function pickerSetup({ agents = [REVIEWER], total = 3, mode = "selected" } = {})
   form.dataset.agentsTotal = String(total);
   form.dataset.agentsMode = mode;
   form.dataset.projectName = "atlas-api";
-  const mounted = mount(() => newSession({ gateway: memory.gateway, debounceMs: DEBOUNCE })("p1", "t1"), { el: form });
+  const mounted = mount(() => newSession({ gateway: memory.gateway, debounceMs: DEBOUNCE, location: { search } })("p1", "t1"), { el: form });
   mounted.instance.init();
   return { ...mounted, memory };
 }
+
+test("a link's ?agent=<name> chooses that agent when the project enables it; any other name leaves Plain claude", async () => {
+  const asked = pickerSetup({ agents: [REVIEWER, DESIGNER], search: "?agent=designer" });
+  await flush();
+  assert.equal(asked.instance.agentId, "designer");
+  assert.equal(asked.instance.chosenAgentName, "designer");
+  const unknown = pickerSetup({ agents: [REVIEWER], search: "?agent=designer" });
+  await flush();
+  assert.equal(unknown.instance.agentId, "", "an agent the project does not enable is ignored");
+  const none = pickerSetup({ agents: [REVIEWER] });
+  await flush();
+  assert.equal(none.instance.agentId, "");
+});
+
+test("a wanted agent that the project enables only after the list refreshes is chosen then, once", async () => {
+  const { instance, memory } = pickerSetup({ agents: [REVIEWER], search: "?agent=designer" });
+  await flush();
+  assert.equal(instance.agentId, "");
+  memory.setAgentChoices("p1", { mode: "selected", agents: [REVIEWER, DESIGNER], total: 3 });
+  await instance.refreshAgents();
+  assert.equal(instance.agentId, "designer");
+  instance.agentId = "";
+  memory.setAgentChoices("p1", { mode: "selected", agents: [REVIEWER, DESIGNER], total: 3 });
+  await instance.refreshAgents();
+  assert.equal(instance.agentId, "", "the person's own choice is not overridden");
+});
 
 test("the picker offers the project's enabled agents, with the count and the hint", async () => {
   const { instance } = pickerSetup({ agents: [REVIEWER, DESIGNER], total: 10 });

@@ -409,7 +409,7 @@ templ brainstormsHeader(v PageView) {
 		<span class="[ color-ink-faint text-sm ]" x-text="summary">{ v.Summary }</span>
 		<div class="[ actions ]">
 			if v.NewSession.CanStart() {
-				<button type="button" class="[ button ]" data-variant="primary" data-size="sm" disabled x-bind:disabled="cannotCreate" x-on:click="startCreating">
+				<button type="button" class="[ button ]" data-new-session data-variant="primary" data-size="sm" disabled x-bind:disabled="cannotCreate" x-on:click="startCreating">
 					New session <kbd>N</kbd>
 				</button>
 			} else {

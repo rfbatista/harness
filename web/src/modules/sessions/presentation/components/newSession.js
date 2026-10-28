@@ -17,7 +17,7 @@ import { INITIAL_TERMINAL_SIZE, noTaskProblem } from "../../domain/session.js";
 import { withAgentPicker } from "./agentPicker.js";
 
 /** @param {{ gateway: import("../../domain/ports.js").SessionGateway }} deps */
-export const newSession = ({ gateway, debounceMs = 300 }) => (projectId = "", ticketId = "", lockedMode = "") => withAgentPicker({
+export const newSession = ({ gateway, debounceMs = 300, location = globalThis.location }) => (projectId = "", ticketId = "", lockedMode = "") => withAgentPicker({
   projectId,
   ticketId,
   prompt: "",
@@ -49,6 +49,9 @@ export const newSession = ({ gateway, debounceMs = 300 }) => (projectId = "", ti
   submitting: false,
   error: null,
 
+  /** The agent a link asked for (?agent=<name>); "" when none, or once it is chosen. */
+  wantedAgent: "",
+
   init() {
     // The markup may lock the mode (data-locked-mode="product" on the project's sessions page).
     const locked = this.$el.dataset.lockedMode ?? "";
@@ -58,6 +61,9 @@ export const newSession = ({ gateway, debounceMs = 300 }) => (projectId = "", ti
     }
     this.repositoryId = this.$el.dataset.defaultRepository ?? "";
     this.startAgentPicker(this.$el.dataset);
+    // A link such as the Agents page's Start a session as <agent> names the agent: chosen once it is one the project enables.
+    this.wantedAgent = new URLSearchParams(location?.search ?? "").get("agent") ?? "";
+    this.chooseWantedAgent();
     this.$nextTick(() => this.$refs.prompt?.focus());
     this.$watch("baseBranch", () => this.scheduleNameCheck());
     this.loadBranches();
@@ -66,6 +72,20 @@ export const newSession = ({ gateway, debounceMs = 300 }) => (projectId = "", ti
 
   destroy() {
     this.stopAgentPicker();
+  },
+
+  /** The picker read the project's enabled agents again. */
+  agentsChanged() {
+    this.chooseWantedAgent();
+  },
+
+  /** Selects the wanted agent when the project's enabled list has it; any other name is ignored. */
+  chooseWantedAgent() {
+    if (!this.wantedAgent) return;
+    const match = this.agents.find((a) => a.name === this.wantedAgent);
+    if (!match) return;
+    this.agentId = match.id;
+    this.wantedAgent = "";
   },
 
   get localBranches() {

@@ -12,6 +12,7 @@
  * Skills: .library-more (Show more under a long list), .skill-grid (the
  * rendered SKILL.md beside .skill-side: .file-list and Reaches as a .kv).
  * Enabled in: .enabled-table (project, setting badge, note).
+ * Agent MCP servers: .enabled-table.server-table (server, transport, target, secrets).
  * MCP: .detail-card around a .kv, .entry-list for env or header entries.
  */
 
@@ -201,6 +202,10 @@
     & tbody tr + tr > td { border-block-start: var(--border-width) solid var(--color-line); }
     & td:first-child { white-space: nowrap; }
   }
+
+  /* The agent detail's MCP table: a Target is a URL or a command line, so it breaks anywhere. */
+  .server-table [data-target] { overflow-wrap: anywhere; }
+  .server-table td { vertical-align: top; }
 
   .library-more {
     display: flex;

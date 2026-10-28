@@ -17,6 +17,7 @@
  * @property {string[]} missingSkills
  * @property {string[]} mcpServers
  * @property {string[]} allowedTools  empty: Claude's default tool set
+ * @property {{ sessions: number, zones: number } | null} usage  sessions that ever ran as the agent, and zones (architecture records) that assign it; null when the server does not say
  * @property {{ id: string, name: string, mode: "all" | "selected" }[]} enabledIn  every project the agent is enabled in: each All project, and each Selected project that lists it
  * @property {Problem[]} problems
  *

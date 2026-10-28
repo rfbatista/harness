@@ -219,6 +219,14 @@ templ agentDetail() {
 				</div>
 				<div class="[ cluster ]">
 					<a class="[ button ]" data-edit x-bind:href="detail.editHref">Edit</a>
+					<div class="[ menu ]" x-data="menu" data-align="end" data-start-session>
+						<button type="button" class="[ button ]" data-variant="ghost" data-start-button x-bind:disabled="detail.start.disabled" x-bind:aria-describedby="detail.start.disabled ? 'agent-start-reason' : null" x-text="detail.start.label"></button>
+						<div class="[ popup ]" role="menu">
+							<template x-for="p in detail.start.projects" x-bind:key="p.id">
+								<a role="menuitem" data-start-project x-bind:data-project="p.id" x-bind:href="p.href"><span x-text="p.name"></span> <span class="[ text-xs color-ink-muted ]" x-text="p.note"></span></a>
+							</template>
+						</div>
+					</div>
 					<div class="[ menu ]" x-data="menu" data-align="end" x-on:menu-select="menuSelect">
 						<button type="button" class="[ button ]" data-variant="ghost" aria-label="More actions">⋯</button>
 						<div class="[ popup ]" role="menu">
@@ -230,7 +238,14 @@ templ agentDetail() {
 					</div>
 				</div>
 			</div>
-			<code class="[ library-path ]" data-path x-text="detail.path"></code>
+			<div class="[ cluster ]">
+				<code class="[ library-path ]" data-path x-text="detail.path"></code>
+				<span class="[ color-ink-faint text-xs ]" data-usage x-bind:hidden="detail.usage === ''" x-text="detail.usage" hidden></span>
+			</div>
+			<p class="[ text-xs color-ink-muted ]" id="agent-start-reason" data-start-reason x-bind:hidden="!detail.start.disabled" hidden>
+				<span x-text="detail.start.reason"></span>
+				<a data-start-enable x-bind:href="detail.start.enableHref">Enable in a project</a>
+			</p>
 		</div>
 		<div class="[ banner ]" data-tone="attention" data-no-description x-bind:hidden="!detail.noDescription">
 			<div class="[ grow ]"><strong>No description.</strong> The agent picker shows it, and the editor asks for one before it saves.</div>
@@ -275,18 +290,35 @@ templ agentDetail() {
 				<a class="[ text-sm ]" data-change="mcp" x-bind:href="detail.change.mcp">Change</a>
 			</div>
 			<p class="[ text-xs color-ink-muted ]" data-no-servers x-bind:hidden="!detail.noServers">No MCP servers. A session still gets its project's servers.</p>
-			<ul class="[ server-list ]" x-bind:hidden="detail.noServers">
-				<template x-for="server in detail.servers" x-bind:key="server.name">
-					<li data-mcp-server>
-						<a class="[ font-mono ]" x-bind:href="server.href" x-text="server.name"></a>
-						<span class="[ badge ]" x-bind:hidden="!server.found" x-text="server.transport"></span>
-						<span class="[ badge ]" data-tone="danger" x-bind:hidden="server.found">not in the catalog</span>
-						<template x-for="ref in server.refs" x-bind:key="ref.label">
-							<span class="[ badge ]" x-bind:data-tone="ref.tone"><code x-text="ref.label"></code> <span x-text="ref.state"></span></span>
+			<div class="[ enabled-table server-table ]" data-mcp-table x-bind:hidden="detail.noServers">
+				<table>
+					<thead>
+						<tr>
+							<th scope="col">Server</th>
+							<th scope="col">Transport</th>
+							<th scope="col">Target</th>
+							<th scope="col"><span class="[ visually-hidden ]">Secrets</span></th>
+						</tr>
+					</thead>
+					<tbody>
+						<template x-for="server in detail.servers" x-bind:key="server.name">
+							<tr data-mcp-server>
+								<td><a class="[ font-mono ]" x-bind:href="server.href" x-text="server.name"></a></td>
+								<td>
+									<span class="[ badge ]" data-transport x-bind:hidden="!server.found" x-text="server.transport"></span>
+									<span class="[ badge ]" data-tone="danger" x-bind:hidden="server.found">not in the catalog</span>
+								</td>
+								<td class="[ font-mono text-xs color-ink-muted ]" data-target x-text="server.target"></td>
+								<td>
+									<template x-for="ref in server.refs" x-bind:key="ref.label">
+										<span class="[ badge ]" x-bind:data-tone="ref.tone"><code x-text="ref.label"></code> <span x-text="ref.state"></span></span>
+									</template>
+								</td>
+							</tr>
 						</template>
-					</li>
-				</template>
-			</ul>
+					</tbody>
+				</table>
+			</div>
 			<p class="[ text-xs color-ink-muted ]" x-bind:hidden="detail.noServers">Servers are defined once, in the MCP servers tab. A session also gets its project's servers.</p>
 		</section>
 		<section aria-labelledby="agent-tools-h">

@@ -18,6 +18,9 @@ const object = (v) => (v && typeof v === "object" && !Array.isArray(v) ? v : {})
 
 const problems = (v) => list(v, "problems").map((p) => ({ code: String(p?.code ?? ""), message: String(p?.message ?? "") }));
 
+/** An agent's usage {sessions, zones}; null while the server sends none. */
+const usage = (u) => (u && typeof u === "object" && !Array.isArray(u) ? { sessions: Number(u.sessions ?? 0), zones: Number(u.zones ?? 0) } : null);
+
 /** @returns {import("../domain/ports.js").Catalog} */
 export function toCatalog(body) {
   if (!body || typeof body !== "object" || Array.isArray(body)) bad("expected an object");
@@ -37,6 +40,7 @@ export function toCatalog(body) {
       mcpServers: strings(a?.mcp_servers, "mcp_servers"),
       allowedTools: strings(a?.allowed_tools, "allowed_tools"),
       enabledIn: list(a?.enabled_in, "enabled_in").map((e) => ({ id: String(e?.id ?? ""), name: String(e?.name ?? ""), mode: e?.mode === "selected" ? "selected" : "all" })),
+      usage: usage(a?.usage),
       problems: problems(a?.problems),
     })),
     bundles: list(body.bundles, "bundles").map((b) => ({

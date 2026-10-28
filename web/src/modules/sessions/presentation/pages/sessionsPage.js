@@ -33,7 +33,7 @@ export const FRESH_MS = 8_000;
  *   channel?: import("../../domain/ports.js").ChannelGateway,  the architect channel; without it the page shows none
  *   channelStore?: ChannelStore,
  *   merge?: import("../../domain/ports.js").MergeGateway,  merging a session's branch; without it there is no Merge tab
- *   location?: { search: string },  ?session=<id> opens that session (a comment links to the session that wrote it)
+ *   location?: { search: string },  ?session=<id> opens that session (a comment links to the session that wrote it); ?agent=<name> opens the project's new-session form with that agent
  *   prefs?: ReturnType<typeof import("../screenPrefs.js").screenPrefs>,  this browser's text size and focus mode
  *   shell?: { setFocus: (on: boolean) => void, setCodeFullscreen: (on: boolean) => void },  the app shell around the page (focus mode and the Code tab's full screen hide the rail and more)
  *   clipboard?: { writeText: (text: string) => Promise<void> },
@@ -486,6 +486,11 @@ export const sessionsPage = ({
       // A link to a session opens it: on a narrow screen its detail, not the list.
       this.detailOpen = this.sessions.some((s) => s.id === asked);
       this.selectedId = this.detailOpen ? asked : (group(this.sessions)[0]?.sessions[0]?.id ?? null);
+      // ?agent=<name> on the project's sessions page (the Agents page's Start a session as) opens the new-session form, which chooses that agent; without the page's New session button (no repository) there is no form to open.
+      if (!this.hasTask && new URLSearchParams(location?.search ?? "").get("agent") && this.$el.querySelector("[data-new-session]")) {
+        this.creating = true;
+        this.detailOpen = true;
+      }
 
       unfollow = gateway.follow(
         this.projectId,
