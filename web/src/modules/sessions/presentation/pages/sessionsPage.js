@@ -379,7 +379,7 @@ export const sessionsPage = ({
       const session = this.sessions.find((s) => s.id === this.selectedId);
       return [
         {
-          key: `${this.selected.id}:${this.selected.stoppable ? "live" : "ended"}`,
+          key: this.selected.id, // not its liveness: the panel follows the session ending, and keeps its tree and open file
           projectId: this.projectId,
           taskId: this.ticketId,
           sessionId: this.selected.id,

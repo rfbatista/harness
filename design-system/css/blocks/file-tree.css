@@ -110,8 +110,7 @@
     & .item:is(:hover, :focus-within, [data-hover]) .actions .button,
     & .actions .button:focus-visible,
     & .actions .button[aria-busy="true"] { opacity: 1; }
-    @media (pointer: coarse) { & .actions .button { opacity: 1; min-block-size: var(--size-touch); min-inline-size: var(--size-touch); } }
-    @media (width < 48rem) { & .actions .button { opacity: 1; min-block-size: var(--size-touch); min-inline-size: var(--size-touch); } }
+    @media (pointer: coarse), (width < 48rem) { & .actions .button { opacity: 1; min-block-size: var(--size-touch); min-inline-size: var(--size-touch); } }
     & [data-ignored] > .item > .name { color: var(--color-ink-faint); }
     & [data-ignored] > .item > .icon { opacity: 0.6; }
     & [data-kind="root"] { border-block-end: var(--border-width) solid var(--color-line); }

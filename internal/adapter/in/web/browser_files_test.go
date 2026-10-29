@@ -346,3 +346,24 @@ func TestFilesTabDividerResizesAndTheViewerExpands(t *testing.T) {
 		t.Errorf("JS errors: %v", e)
 	}
 }
+
+// TestASessionWithoutAWorktreeHasNoFilesTab: nothing to browse, no tab.
+func TestASessionWithoutAWorktreeHasNoFilesTab(t *testing.T) {
+	w := newCodeWorld(t, withSession(domain.SessionRunning, func(*codeWorld) string { return "" }))
+	ctx, errs := browser(t)
+	var tabs []string
+	err := chromedp.Run(ctx,
+		chromedp.EmulateViewport(1440, 900),
+		chromedp.Navigate(w.srv.URL+"/projects/"+w.f.ProjectID+"/tasks/t1?session=s1"),
+		chromedp.Poll(`document.querySelectorAll('.pane-tabs [role=tab]').length > 2`, nil, chromedp.WithPollingTimeout(10*time.Second)),
+		chromedp.Evaluate(`[...document.querySelectorAll('.pane-tabs [role=tab]')].map(b => b.firstChild.textContent.trim())`, &tabs),
+	)
+	if err != nil {
+		t.Fatalf("%v\nJS errors: %v", err, errs.all())
+	}
+	for _, name := range tabs {
+		if name == "Files" {
+			t.Errorf("tabs %v include Files", tabs)
+		}
+	}
+}
