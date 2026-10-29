@@ -1,4 +1,4 @@
-package vshell
+package vfs
 
 import (
 	"mime"

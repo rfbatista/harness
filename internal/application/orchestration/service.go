@@ -20,6 +20,7 @@ import (
 	"github.com/rfbatista/llmkit/approval"
 	"github.com/rfbatista/llmkit/claude"
 
+	"operators-mcp/internal/application/vshell"
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
 )
@@ -108,7 +109,7 @@ type Service struct {
 	SessionHookURL func(sessionID string) string
 	// SessionShellURL returns where a session's edit proxy checks and
 	// commits its shell's files (…/api/sessions/{id}/shell); a session with
-	// a shell gets ShellHooks aimed at it.
+	// a shell gets vshell.Hooks aimed at it.
 	SessionShellURL func(sessionID string) string
 	// SessionArchitectureURL returns where a session's architecture rules are
 	// checked (…/api/sessions/{id}/architecture). Nil: sessions get no
@@ -181,11 +182,11 @@ type Service struct {
 	// Shells gives each session with a task its virtual shell (see
 	// "Contract: Harness server ↔ Agent sessions — virtual shell"). Nil:
 	// sessions get none.
-	Shells ports.VirtualShells
+	Shells ports.ResourcesRoots
 	// ShellIndex is what each running shell holds, so a [task update]
 	// turn names the path the session's shell holds the new file at. Nil:
 	// turns name the path the shell gives such a file.
-	ShellIndex ports.ShellBaseVersions
+	ShellIndex ports.BaseVersions
 	// ShimBinary is what a task session's shim commands (sed, tee, cp, mv,
 	// rm, touch, mkdir) link to, first on its PATH; they call the session's
 	// SessionShellURL. Empty: sessions get no shims.
@@ -642,18 +643,18 @@ func (s *Service) withShell(id string, subject sessionSubject, cfg *llmkit.Sessi
 	} else {
 		scope.ProjectID = subject.project.ID
 	}
-	dir, err := s.Shells.Open(context.TODO(), id, scope)
+	sh, err := vshell.Start(context.TODO(), s.Shells, id, scope)
 	if err != nil {
 		if cleanup != nil {
 			cleanup()
 		}
-		return nil, fmt.Errorf("make the session's virtual shell: %w", err)
+		return nil, err
 	}
-	cfg.AddDirs = append(slices.Clone(cfg.AddDirs), dir)
-	cfg.Env = append(slices.Clone(cfg.Env), ports.ShellDirEnv+"="+dir)
-	cfg.AppendSystem = appendSection(cfg.AppendSystem, shellSection(dir))
+	cfg.AddDirs = append(slices.Clone(cfg.AddDirs), sh.Dir)
+	cfg.Env = append(slices.Clone(cfg.Env), sh.Env()...)
+	cfg.AppendSystem = appendSection(cfg.AppendSystem, shellSection(sh.Dir))
 	if s.SessionShellURL != nil {
-		if dc, ok := withHooks(cfg.Driver, ShellHooks(s.SessionShellURL(id))); ok {
+		if dc, ok := withHooks(cfg.Driver, vshell.Hooks(s.SessionShellURL(id))); ok {
 			cfg.Driver = dc
 		}
 	}
@@ -666,7 +667,7 @@ func (s *Service) withShell(id string, subject sessionSubject, cfg *llmkit.Sessi
 		if cleanup != nil {
 			cleanup()
 		}
-		s.Shells.Close(id, dir)
+		sh.Stop()
 	})
 }
 

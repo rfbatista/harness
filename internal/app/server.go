@@ -32,7 +32,7 @@ import (
 	"operators-mcp/internal/application/taskchannel"
 	"operators-mcp/internal/application/tooling"
 	"operators-mcp/internal/application/usage"
-	"operators-mcp/internal/application/vshell"
+	"operators-mcp/internal/application/vfs"
 	"operators-mcp/internal/application/workspaces"
 	"operators-mcp/internal/application/writinghelper"
 	"operators-mcp/internal/domain"
@@ -55,7 +55,7 @@ var ServerModule = fx.Module("server",
 
 // registerHTTPServer mounts the UI and JSON API on a mux and serves it,
 // shutting down gracefully when fx stops.
-func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRunner *apps.Service, ts *tooling.Service, exec *execution.Service, orch *orchestration.Service, plan *planning.Service, ws *workspaces.Service, broker *approval.Broker, sessions ports.SessionRepository, art *artifacts.Service, channel *taskchannel.Service, prs *workspaces.PullRequests, merges *workspaces.Merges, branchNames *workspaces.BranchNames, code ports.CodeBrowser, inbox optionalNotifications, creds optionalGitCredentials, shells *vshell.Service, usageSvc *usage.Service, indexes optionalRepositoryIndexes, sandboxStore *sandboxsettings.Store, managedClaude *managedclaude.Service, claudeBin ports.ManagedClaudeBin, agentCred optionalAgentCredential, helper *writinghelper.Service, rules *archrules.Service, agentCat *agentcatalog.Catalog) error {
+func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRunner *apps.Service, ts *tooling.Service, exec *execution.Service, orch *orchestration.Service, plan *planning.Service, ws *workspaces.Service, broker *approval.Broker, sessions ports.SessionRepository, art *artifacts.Service, channel *taskchannel.Service, prs *workspaces.PullRequests, merges *workspaces.Merges, branchNames *workspaces.BranchNames, code ports.CodeBrowser, inbox optionalNotifications, creds optionalGitCredentials, shells *vfs.Service, usageSvc *usage.Service, indexes optionalRepositoryIndexes, sandboxStore *sandboxsettings.Store, managedClaude *managedclaude.Service, claudeBin ports.ManagedClaudeBin, agentCred optionalAgentCredential, helper *writinghelper.Service, rules *archrules.Service, agentCat *agentcatalog.Catalog) error {
 	uiHandler, err := ui.SPAHandler(ui.Dist)
 	if err != nil {
 		return err

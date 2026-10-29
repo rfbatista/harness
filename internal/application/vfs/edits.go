@@ -1,4 +1,4 @@
-package vshell
+package vfs
 
 import (
 	"context"
@@ -19,7 +19,7 @@ import (
 	"operators-mcp/internal/ports"
 )
 
-// What agents do to their shells' files, checked before and stored after,
+// What agents do to their resources roots' files, checked before and stored after,
 // through the edit proxy (contract §4–6). Documents are stored here;
 // comments and designs in comment_edits.go and design_edits.go.
 
@@ -30,12 +30,12 @@ var _ ports.ShellEdits = (*Service)(nil)
 // before it is stored, and lose it.
 const pendingFor = time.Minute
 
-// The shell's areas, by what a write there means.
+// The resources root's areas, by what a write there means.
 type area int
 
 const (
-	outside     area = iota // not in this shell: none of the harness's business
-	layout                  // the shell's own folders
+	outside     area = iota // not in this resources root: none of the harness's business
+	layout                  // the resources root's own folders
 	readOnly                // README, index, task.json, resources, attached.md, urls.md
 	taskDocs                // task/docs/…: task documents
 	tasksDocs               // tasks/<id>/docs/…: another task's documents
@@ -43,7 +43,7 @@ const (
 	taskDesigns             // task/designs/…: the task's designs
 	projDesigns             // project/designs/…: project assets, changed only by mv
 	comments                // task/comments/…: comments
-	unstored                // anywhere else in the shell
+	unstored                // anywhere else in the resources root
 )
 
 var layoutDirs = map[string]bool{
@@ -116,8 +116,8 @@ func (a area) scope() domain.DocumentScope {
 	return domain.DocumentScopeProject
 }
 
-// edit is one operation resolved against a shell: its kind and its paths
-// relative to the shell ("" for the shell itself), each with whether it is
+// edit is one operation resolved against a resources root: its kind and its paths
+// relative to the resources root ("" for the resources root itself), each with whether it is
 // inside.
 type edit struct {
 	op  string // write, rm, mv or mkdir
@@ -136,7 +136,7 @@ func (e edit) anyInside() bool {
 
 // resolve normalises e's op and places its paths in sh. ok is false for an
 // op the proxy does not know.
-func (sh *shell) resolve(e ports.ShellEdit) (edit, bool) {
+func (sh *root) resolve(e ports.ShellEdit) (edit, bool) {
 	var out edit
 	paths := e.Paths
 	switch strings.ToLower(e.Op) {
@@ -171,10 +171,10 @@ func (sh *shell) resolve(e ports.ShellEdit) (edit, bool) {
 	return out, false
 }
 
-// rel is p relative to the shell, slash separated, and whether p is in it.
-// p must be absolute; the shell is matched as made and with its symlinks
+// rel is p relative to the resources root, slash separated, and whether p is in it.
+// p must be absolute; the resources root is matched as made and with its symlinks
 // resolved.
-func (sh *shell) rel(p string) (string, bool) {
+func (sh *root) rel(p string) (string, bool) {
 	if !filepath.IsAbs(p) {
 		return "", false
 	}
@@ -241,7 +241,7 @@ func refuseOwnTask(rel string) ports.ShellAnswer {
 	return refuse("NOT_STORED", rel+" is this session's own task: its documents are in task/docs; nothing was written")
 }
 
-// refuseNoTask: the shell belongs to a session with no task, so it has no
+// refuseNoTask: the resources root belongs to a session with no task, so it has no
 // task/ folder; documents go onto a task under tasks/<id>/docs.
 func refuseNoTask(rel string) ports.ShellAnswer {
 	return refuse("NOT_STORED", rel+": this session has no task, so there is no task/ folder; write documents under tasks/<id>/docs (create_task first) or project/docs; nothing was written")
@@ -260,7 +260,7 @@ func refuseOtherTaskMove(rel string) ports.ShellAnswer {
 // movesToProject says whether row, moved to dst, may become a project
 // document: while the setting is on, a document of the session's own task
 // (in task/docs) may. ok false answers the refusal.
-func movesToProject(sh *shell, row ports.ShellFile, src, dst string, agentsMove bool) (ports.ShellAnswer, bool) {
+func movesToProject(sh *root, row ports.ShellFile, src, dst string, agentsMove bool) (ports.ShellAnswer, bool) {
 	if classify(dst) != projDocs || row.Scope == string(domain.DocumentScopeProject) {
 		return ports.ShellAnswer{}, true
 	}
@@ -308,10 +308,10 @@ func refuseErr(err error) ports.ShellAnswer {
 
 // CheckShellEdit says whether the session may make e. A document path
 // whose base version is no longer the stored one is BASE_VERSION_STALE,
-// and the shell's copy is refreshed. Paths it allows are kept from
+// and the resources root's copy is refreshed. Paths it allows are kept from
 // refreshes until the commit.
 func (s *Service) CheckShellEdit(ctx context.Context, sessionID string, e ports.ShellEdit) ports.ShellAnswer {
-	return s.withShell(sessionID, e, func(sh *shell, ed edit) ports.ShellAnswer {
+	return s.withShell(sessionID, e, func(sh *root, ed edit) ports.ShellAnswer {
 		return s.check(ctx, sh, ed)
 	})
 }
@@ -320,7 +320,7 @@ func (s *Service) CheckShellEdit(ctx context.Context, sessionID string, e ports.
 // disk. A path whose operation did not happen (the file it wrote is not
 // there, the file it removed still is) stores nothing.
 func (s *Service) CommitShellEdit(ctx context.Context, sessionID string, e ports.ShellEdit) ports.ShellAnswer {
-	return s.withShell(sessionID, e, func(sh *shell, ed edit) ports.ShellAnswer {
+	return s.withShell(sessionID, e, func(sh *root, ed edit) ports.ShellAnswer {
 		for _, rel := range ed.rel {
 			sh.release(rel)
 		}
@@ -341,10 +341,10 @@ func (s *Service) CommitShellEdit(ctx context.Context, sessionID string, e ports
 	})
 }
 
-// withShell runs do on the session's shell, held, for an edit with a path
+// withShell runs do on the session's resources root, held, for an edit with a path
 // inside it; anything else is allowed with nothing said.
-func (s *Service) withShell(sessionID string, e ports.ShellEdit, do func(*shell, edit) ports.ShellAnswer) ports.ShellAnswer {
-	sh := s.shell(sessionID)
+func (s *Service) withShell(sessionID string, e ports.ShellEdit, do func(*root, edit) ports.ShellAnswer) ports.ShellAnswer {
+	sh := s.root(sessionID)
 	if sh == nil {
 		return allow
 	}
@@ -367,10 +367,10 @@ func (s *Service) withShell(sessionID string, e ports.ShellEdit, do func(*shell,
 }
 
 // refuseAreas refuses an edit of a read-only path, of one whose writes are
-// not stored, of task/ in a shell that has no task, of a task folder that
+// not stored, of task/ in a resources root that has no task, of a task folder that
 // is not another task of the project, or a move of a document to another
 // task's docs.
-func (s *Service) refuseAreas(ctx context.Context, sh *shell, ed edit) ports.ShellAnswer {
+func (s *Service) refuseAreas(ctx context.Context, sh *root, ed edit) ports.ShellAnswer {
 	if sh.ticketID == "" {
 		for i, rel := range ed.rel {
 			if ed.in[i] && (rel == "task" || strings.HasPrefix(rel, "task/")) {
@@ -399,7 +399,7 @@ func (s *Service) refuseAreas(ctx context.Context, sh *shell, ed edit) ports.She
 
 // refuseTask refuses a path under tasks/ that names no other task of the
 // session's project.
-func (s *Service) refuseTask(ctx context.Context, sh *shell, rel string) ports.ShellAnswer {
+func (s *Service) refuseTask(ctx context.Context, sh *root, rel string) ports.ShellAnswer {
 	id := taskNamed(rel)
 	switch {
 	case id == "":
@@ -463,7 +463,7 @@ func refuseOpArea(op, rel string) ports.ShellAnswer {
 	return refuseUnstored(rel, a)
 }
 
-// refuseMoveArea: a move into or out of the shell writes or removes; one
+// refuseMoveArea: a move into or out of the resources root writes or removes; one
 // within it stays among documents or among designs.
 func refuseMoveArea(ed edit) ports.ShellAnswer {
 	src, dst := ed.rel[0], ed.rel[1]
@@ -489,7 +489,7 @@ func refuseMoveArea(ed edit) ports.ShellAnswer {
 
 // check is CheckShellEdit with sh held: the paths' areas, then the
 // session's copies of what the edit touches.
-func (s *Service) check(ctx context.Context, sh *shell, ed edit) ports.ShellAnswer {
+func (s *Service) check(ctx context.Context, sh *root, ed edit) ports.ShellAnswer {
 	if ans := s.refuseAreas(ctx, sh, ed); !ans.Allow {
 		return ans
 	}
@@ -518,7 +518,7 @@ func (s *Service) check(ctx context.Context, sh *shell, ed edit) ports.ShellAnsw
 }
 
 // checkAt: what is at rel, or in the folder rel, may be written or removed.
-func (s *Service) checkAt(sh *shell, rel string) ports.ShellAnswer {
+func (s *Service) checkAt(sh *root, rel string) ports.ShellAnswer {
 	switch classify(rel) {
 	case comments:
 		return s.checkCommentAt(sh, rel)
@@ -531,7 +531,7 @@ func (s *Service) checkAt(sh *shell, rel string) ports.ShellAnswer {
 // checkDocsAt: the documents at rel, or in the folder rel, may be written
 // or removed while the session's copies are the stored ones; a new file
 // becomes a document.
-func (s *Service) checkDocsAt(sh *shell, rel string) ports.ShellAnswer {
+func (s *Service) checkDocsAt(sh *root, rel string) ports.ShellAnswer {
 	for _, row := range sh.under(rel, ports.ShellDocument) {
 		if ans := s.stale(sh, row); !ans.Allow {
 			return ans
@@ -544,7 +544,7 @@ func (s *Service) checkDocsAt(sh *shell, rel string) ports.ShellAnswer {
 // checkMove: from project/docs to a task's docs a document changes scope,
 // only when linked to that task; a person moves documents to project/docs,
 // so that move is refused; within a folder it is only renamed.
-func (s *Service) checkMove(ctx context.Context, sh *shell, src, dst string) ports.ShellAnswer {
+func (s *Service) checkMove(ctx context.Context, sh *root, src, dst string) ports.ShellAnswer {
 	agentsMove := classify(dst) == projDocs && s.agentsMove()
 	for _, row := range sh.under(src, ports.ShellDocument) {
 		if ans := s.stale(sh, row); !ans.Allow {
@@ -567,10 +567,10 @@ func (s *Service) checkMove(ctx context.Context, sh *shell, src, dst string) por
 	return allow
 }
 
-// stale answers BASE_VERSION_STALE, and refreshes the shell, when the
+// stale answers BASE_VERSION_STALE, and refreshes the resources root, when the
 // stored document, comment or design is no longer the version row was
 // given at.
-func (s *Service) stale(sh *shell, row ports.ShellFile) ports.ShellAnswer {
+func (s *Service) stale(sh *root, row ports.ShellFile) ports.ShellAnswer {
 	now := s.storedVersion(sh, row)
 	if now == row.Version {
 		return allow
@@ -582,7 +582,7 @@ func (s *Service) stale(sh *shell, row ports.ShellFile) ports.ShellAnswer {
 
 // storedVersion is the version of what row holds as stored now, "deleted"
 // once it is gone.
-func (s *Service) storedVersion(sh *shell, row ports.ShellFile) string {
+func (s *Service) storedVersion(sh *root, row ports.ShellFile) string {
 	switch row.Kind {
 	case ports.ShellDocument:
 		if d := s.src.Writes.GetDocument(row.ID); d != nil {
@@ -613,7 +613,7 @@ func (s *Service) onTask(ctx context.Context, ticketID, docID string) bool {
 }
 
 // commit stores ed, checked; sh is held.
-func (s *Service) commit(ctx context.Context, sh *shell, ed edit) ports.ShellAnswer {
+func (s *Service) commit(ctx context.Context, sh *root, ed edit) ports.ShellAnswer {
 	switch ed.op {
 	case "write":
 		for i, rel := range ed.rel {
@@ -647,7 +647,7 @@ func (s *Service) commit(ctx context.Context, sh *shell, ed edit) ports.ShellAns
 }
 
 // commitWrite stores the file written at rel.
-func (s *Service) commitWrite(sh *shell, rel string) ports.ShellAnswer {
+func (s *Service) commitWrite(sh *root, rel string) ports.ShellAnswer {
 	switch classify(rel) {
 	case comments:
 		return s.commitCommentWrite(sh, rel)
@@ -658,7 +658,7 @@ func (s *Service) commitWrite(sh *shell, rel string) ports.ShellAnswer {
 }
 
 // commitRemove stores the removal of what was at rel, or in the folder rel.
-func (s *Service) commitRemove(sh *shell, rel string) ports.ShellAnswer {
+func (s *Service) commitRemove(sh *root, rel string) ports.ShellAnswer {
 	switch classify(rel) {
 	case comments:
 		return s.commitCommentRemove(sh, rel)
@@ -671,7 +671,7 @@ func (s *Service) commitRemove(sh *shell, rel string) ports.ShellAnswer {
 // commitDocWrite stores the file at rel: the document's new content, or a
 // new document linked to the task. The file keeps the name the agent gave
 // it.
-func (s *Service) commitDocWrite(sh *shell, rel string) ports.ShellAnswer {
+func (s *Service) commitDocWrite(sh *root, rel string) ports.ShellAnswer {
 	content, err := os.ReadFile(sh.abs(rel))
 	if err != nil || !classify(rel).docs() {
 		return allow // nothing was written, or nothing to store
@@ -699,7 +699,7 @@ func (s *Service) commitDocWrite(sh *shell, rel string) ports.ShellAnswer {
 	return sh.record(rel, d)
 }
 
-func (s *Service) createDocument(sh *shell, rel, content string) ports.ShellAnswer {
+func (s *Service) createDocument(sh *root, rel, content string) ports.ShellAnswer {
 	d, err := s.src.Writes.CreateDocument(sh.projID, TitleOf(rel, content), content, DocumentFormatOf(rel), classify(rel).scope())
 	if err != nil {
 		return refuseErr(err)
@@ -712,7 +712,7 @@ func (s *Service) createDocument(sh *shell, rel, content string) ports.ShellAnsw
 
 // taskAt is the task a document file at rel belongs to: the one named in
 // tasks/<id>/docs, else the session's own.
-func (sh *shell) taskAt(rel string) string {
+func (sh *root) taskAt(rel string) string {
 	if id := taskOf(rel); id != "" {
 		return id
 	}
@@ -720,7 +720,7 @@ func (sh *shell) taskAt(rel string) string {
 }
 
 // commitDocRemove deletes the documents whose files under rel are gone.
-func (s *Service) commitDocRemove(sh *shell, rel string) ports.ShellAnswer {
+func (s *Service) commitDocRemove(sh *root, rel string) ports.ShellAnswer {
 	for _, row := range sh.under(rel, ports.ShellDocument) {
 		if _, err := os.Lstat(sh.abs(row.Path)); err == nil {
 			continue // the removal did not happen
@@ -740,7 +740,7 @@ func (s *Service) commitDocRemove(sh *shell, rel string) ports.ShellAnswer {
 // scope follows the folder, format the extension; a document the move
 // wrote over is deleted. A move of task documents to project/docs is put
 // back and refused before anything is stored.
-func (s *Service) commitMove(ctx context.Context, sh *shell, src, dst string) ports.ShellAnswer {
+func (s *Service) commitMove(ctx context.Context, sh *root, src, dst string) ports.ShellAnswer {
 	rows := sh.under(src, ports.ShellDocument)
 	if len(rows) == 0 {
 		return s.commitDocWrite(sh, dst)
@@ -795,25 +795,25 @@ func (s *Service) commitMove(ctx context.Context, sh *shell, src, dst string) po
 // putBack returns each of rows, moved from src to dst, to its place under
 // src, before anything is stored; restore then rewrites what the move wrote
 // over.
-func (sh *shell) putBack(rows []ports.ShellFile, src, dst string) {
+func (sh *root) putBack(rows []ports.ShellFile, src, dst string) {
 	for _, row := range rows {
 		from := sh.abs(moved(row.Path, src, dst))
 		if _, err := os.Lstat(from); err != nil {
 			continue
 		}
 		if err := os.MkdirAll(filepath.Dir(sh.abs(row.Path)), 0o755); err != nil {
-			slog.Warn("put back a refused move in a virtual shell", "session", sh.sessionID, "path", row.Path, "err", err)
+			slog.Warn("put back a refused move in a resources root", "session", sh.sessionID, "path", row.Path, "err", err)
 			continue
 		}
 		if err := os.Rename(from, sh.abs(row.Path)); err != nil {
-			slog.Warn("put back a refused move in a virtual shell", "session", sh.sessionID, "path", row.Path, "err", err)
+			slog.Warn("put back a refused move in a resources root", "session", sh.sessionID, "path", row.Path, "err", err)
 		}
 	}
 }
 
 // dropMoved removes the folders a refused move made under dst once they
 // are empty.
-func (sh *shell) dropMoved(dst string) {
+func (sh *root) dropMoved(dst string) {
 	for dir := dst; classify(dir) == projDocs; dir = path.Dir(dir) {
 		if info, err := os.Lstat(sh.abs(dir)); err != nil || !info.IsDir() || os.Remove(sh.abs(dir)) != nil {
 			break
@@ -830,7 +830,7 @@ func moved(p, src, dst string) string {
 }
 
 // under is the rows of kind (any kind when "") at rel or in the folder rel.
-func (sh *shell) under(rel, kind string) []ports.ShellFile {
+func (sh *root) under(rel, kind string) []ports.ShellFile {
 	var out []ports.ShellFile
 	for p, row := range sh.files {
 		if (kind == "" || row.Kind == kind) && (p == rel || strings.HasPrefix(p, rel+"/")) {
@@ -842,12 +842,12 @@ func (sh *shell) under(rel, kind string) []ports.ShellFile {
 
 // record makes d, stored from the file at rel, the session's base version
 // there, before any refresh can place it elsewhere.
-func (sh *shell) record(rel string, d *domain.Document) ports.ShellAnswer {
+func (sh *root) record(rel string, d *domain.Document) ports.ShellAnswer {
 	sh.files[rel] = docRow(rel, d)
 	return sh.saveIndex()
 }
 
-func (sh *shell) saveIndex() ports.ShellAnswer {
+func (sh *root) saveIndex() ports.ShellAnswer {
 	if err := sh.writeIndex(); err != nil {
 		return refuseErr(err)
 	}
@@ -861,17 +861,17 @@ func docRow(rel string, d *domain.Document) ports.ShellFile {
 
 // hold keeps rel, and the files under it, from refreshes until its commit
 // or pendingFor.
-func (sh *shell) hold(rel string) {
+func (sh *root) hold(rel string) {
 	if sh.pending == nil {
 		sh.pending = map[string]time.Time{}
 	}
 	sh.pending[rel] = time.Now()
 }
 
-func (sh *shell) release(rel string) { delete(sh.pending, rel) }
+func (sh *root) release(rel string) { delete(sh.pending, rel) }
 
 // held says a refresh must leave p as it is.
-func (sh *shell) held(p string) bool {
+func (sh *root) held(p string) bool {
 	for rel, at := range sh.pending {
 		if time.Since(at) < pendingFor && (p == rel || strings.HasPrefix(p, rel+"/")) {
 			return true

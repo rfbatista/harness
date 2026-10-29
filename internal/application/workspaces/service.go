@@ -34,7 +34,22 @@ type Service struct {
 	settings     ports.SettingsRepository
 	envFiles     ports.EnvFileRepository // nil: worktrees get no env files
 	envIO        ports.EnvFileIO
-	history      ports.GitHistory // nil: repository history unavailable
+	history      ports.GitHistory           // nil: repository history unavailable
+	removals     ports.WorkspaceRemovalSink // nil: nobody is told
+}
+
+// UseRemovalSink has sink told of each workspace the service removes.
+func (s *Service) UseRemovalSink(sink ports.WorkspaceRemovalSink) { s.removals = sink }
+
+// removed deletes ws's row and, only when that succeeds, tells the sink.
+func (s *Service) removed(ws *domain.Workspace) error {
+	if err := s.workspaces.Delete(ws.ID); err != nil {
+		return err
+	}
+	if s.removals != nil {
+		s.removals.WorkspaceRemoved(ws)
+	}
+	return nil
 }
 
 // UseHistory lets the service read repositories' commit graphs.
@@ -267,11 +282,15 @@ func (s *Service) WorkspaceHistory(ctx context.Context, workspaceID string, limi
 }
 
 // Get returns the workspace by id, or nil if not found.
-func (s *Service) Get(ctx context.Context, id string) *domain.Workspace { return s.workspaces.Get(ctx, id) }
+func (s *Service) Get(ctx context.Context, id string) *domain.Workspace {
+	return s.workspaces.Get(ctx, id)
+}
 
 // GetMany returns the given workspaces, read at once; unknown ids are left
 // out.
-func (s *Service) GetMany(ctx context.Context, ids []string) []*domain.Workspace { return s.workspaces.ListByIDs(ctx, ids) }
+func (s *Service) GetMany(ctx context.Context, ids []string) []*domain.Workspace {
+	return s.workspaces.ListByIDs(ctx, ids)
+}
 
 // ListByRepository returns all workspaces of the given repository.
 func (s *Service) ListByRepository(repositoryID string) []*domain.Workspace {
@@ -292,7 +311,7 @@ func (s *Service) Delete(id string) error {
 			return err
 		}
 	}
-	return s.workspaces.Delete(id)
+	return s.removed(ws)
 }
 
 // Discard removes the worktree, force-deletes its branch, then deletes the
@@ -314,5 +333,5 @@ func (s *Service) Discard(id string) error {
 			return err
 		}
 	}
-	return s.workspaces.Delete(id)
+	return s.removed(ws)
 }

@@ -1,10 +1,15 @@
-// Package vshell gives task sessions their virtual shell: a temporary folder
-// holding their task's and project's documents, comments, resources and
-// designs as files, and what each session was last given of each file, its
-// base version. Whoever changes one of those, every running shell that
+// Package vfs is the virtual file system of a task session: the files the
+// session has, as a tree with two roots. This package holds the resources
+// root: a temporary folder with the task's and project's documents,
+// comments, resources and designs as ordinary files, kept in sync with
+// SQLite, and what each session was last given of each file, its base
+// version. Whoever changes one of those, every running resources root that
 // should see it is brought up to date (see "Contract: Harness server ↔ Agent
-// sessions — virtual shell" §1–3).
-package vshell
+// sessions — virtual shell" §1–3; ADR 0050 renamed the folder).
+//
+// The package knows nothing of shells: the virtual shell domain depends on
+// it, never the reverse.
+package vfs
 
 import (
 	"context"
@@ -28,20 +33,20 @@ const (
 	modeWritable os.FileMode = 0o644
 )
 
-// indexFile is the shell's own index of every other file.
+// indexFile is the resources root's own index of every other file.
 const indexFile = ".index.json"
 
-// Service satisfies the virtual-shell ports, checked at compile time, and
-// hears every change a shell may have to show.
+// Service satisfies the virtual-resources root ports, checked at compile time, and
+// hears every change a resources root may have to show.
 var (
-	_ ports.VirtualShells     = (*Service)(nil)
-	_ ports.ShellBaseVersions = (*Service)(nil)
+	_ ports.ResourcesRoots    = (*Service)(nil)
+	_ ports.BaseVersions      = (*Service)(nil)
 	_ ports.ProjectChangeSink = (*Service)(nil)
 	_ ports.TicketAnnouncer   = (*Service)(nil)
 )
 
-// Sources is what a shell is filled from, and Writes, Comments and Designs
-// where what agents write in it is stored. Artifacts may be nil: the shell
+// Sources is what a resources root is filled from, and Writes, Comments and Designs
+// where what agents write in it is stored. Artifacts may be nil: the resources root
 // then has no designs; Designs may be nil: designs written in it are then
 // not stored. Sessions and Agents name a comment's writer; either may be
 // nil.
@@ -62,21 +67,32 @@ type Sources struct {
 	Settings ports.SettingsReader
 }
 
-// Service makes, fills, refreshes and removes sessions' shells, and keeps
-// each running shell's base versions in memory.
+// Service makes, fills, refreshes and removes sessions' resources roots, and keeps
+// each running resources root's base versions in memory.
 type Service struct {
 	src Sources
 
-	mu     sync.Mutex
-	shells map[string]*shell // by session id
+	mu    sync.Mutex
+	roots map[string]*root // by session id
+
+	// events says when a root comes and goes; nil: nobody listens.
+	events *RootEvents
+}
+
+// UseRootEvents has the service raise a RootEvent when a session's resources
+// root becomes available and when it goes away.
+func (s *Service) UseRootEvents(e *RootEvents) { s.events = e }
+
+func (s *Service) rootEvent(sessionID, path string, available bool) {
+	s.events.raise(RootEvent{SessionID: sessionID, Kind: ResourcesRoot, Path: path, Available: available})
 }
 
 func New(src Sources) *Service {
-	return &Service{src: src, shells: map[string]*shell{}}
+	return &Service{src: src, roots: map[string]*root{}}
 }
 
-// shell is one session's folder and what it was last given of each file.
-type shell struct {
+// resources root is one session's folder and what it was last given of each file.
+type root struct {
 	dir                         string
 	realDir                     string // dir with its symlinks resolved
 	sessionID, ticketID, projID string
@@ -101,11 +117,11 @@ type shell struct {
 	dirty, running bool
 }
 
-// Open makes the session's shell in a fresh temp dir and fills it before
-// answering its path. A session that had a shell gets a new one and the old
-// one is removed. The shell hears changes from the moment it is filled.
+// Open makes the session's resources root in a fresh temp dir and fills it before
+// answering its path. A session that had a resources root gets a new one and the old
+// one is removed. The resources root hears changes from the moment it is filled.
 //
-// A scope with no TicketID opens a project-level shell: project/ and the
+// A scope with no TicketID opens a project-level resources root: project/ and the
 // project's tasks under tasks/, no task/ (ADR 0016).
 func (s *Service) Open(ctx context.Context, sessionID string, scope ports.ShellScope) (string, error) {
 	var tk *domain.Ticket
@@ -128,39 +144,41 @@ func (s *Service) Open(ctx context.Context, sessionID string, scope ports.ShellS
 	if err != nil {
 		realDir = dir
 	}
-	sh := &shell{dir: dir, realDir: realDir, sessionID: sessionID, ticketID: scope.TicketID, projID: projID, files: map[string]ports.ShellFile{}}
+	sh := &root{dir: dir, realDir: realDir, sessionID: sessionID, ticketID: scope.TicketID, projID: projID, files: map[string]ports.ShellFile{}}
 	// Held until filled: a change heard meanwhile refreshes it after.
 	sh.mu.Lock()
 	s.mu.Lock()
-	old := s.shells[sessionID]
-	s.shells[sessionID] = sh
+	old := s.roots[sessionID]
+	s.roots[sessionID] = sh
 	s.mu.Unlock()
 
 	if err := s.fill(ctx, sh, tk); err != nil {
 		sh.closed = true
 		sh.mu.Unlock()
 		s.mu.Lock()
-		if s.shells[sessionID] == sh {
+		if s.roots[sessionID] == sh {
 			if old != nil {
-				s.shells[sessionID] = old
+				s.roots[sessionID] = old
 			} else {
-				delete(s.shells, sessionID)
+				delete(s.roots, sessionID)
 			}
 		}
 		s.mu.Unlock()
 		_ = os.RemoveAll(dir)
-		return "", fmt.Errorf("fill the virtual shell: %w", err)
+		return "", fmt.Errorf("fill the resources root: %w", err)
 	}
 	sh.mu.Unlock()
 	if old != nil {
 		old.remove()
+		s.rootEvent(sessionID, old.realDir, false)
 	}
+	s.rootEvent(sessionID, realDir, true)
 	return dir, nil
 }
 
-// fill makes the layout's folders and writes every file; a shell with no
+// fill makes the layout's folders and writes every file; a resources root with no
 // task (tk nil) gets no task/ folder. The caller holds sh.mu.
-func (s *Service) fill(ctx context.Context, sh *shell, tk *domain.Ticket) error {
+func (s *Service) fill(ctx context.Context, sh *root, tk *domain.Ticket) error {
 	dirs := []string{"project/docs", "project/designs", architectureDir, tasksDir}
 	if tk != nil {
 		dirs = append(dirs, "task/docs", "task/comments", "task/resources", "task/designs")
@@ -181,12 +199,12 @@ func (s *Service) fill(ctx context.Context, sh *shell, tk *domain.Ticket) error 
 // each named by its id, with its documents under docs.
 const tasksDir = "tasks"
 
-// TaskDocsDir is the shell folder of task id's documents.
+// TaskDocsDir is the resources root folder of task id's documents.
 func TaskDocsDir(id string) string { return tasksDir + "/" + id + "/docs" }
 
 // syncTasks makes each listed task's folder and removes the folder of a
 // task that is gone, once nothing indexed is left in it.
-func (sh *shell) syncTasks(ids []string) error {
+func (sh *root) syncTasks(ids []string) error {
 	want := map[string]bool{}
 	for _, id := range ids {
 		want[id] = true
@@ -209,33 +227,44 @@ func (sh *shell) syncTasks(ids []string) error {
 	return nil
 }
 
-// Close removes dir, and forgets the session's shell while dir is still it.
+// Close removes dir, and forgets the session's resources root while dir is still it.
 func (s *Service) Close(sessionID, dir string) {
 	s.mu.Lock()
-	sh := s.shells[sessionID]
+	sh := s.roots[sessionID]
 	if sh != nil && sh.dir == dir {
-		delete(s.shells, sessionID)
+		delete(s.roots, sessionID)
 	}
 	s.mu.Unlock()
 	if sh != nil && sh.dir == dir {
 		sh.remove()
+		s.rootEvent(sessionID, sh.realDir, false)
 		return
 	}
 	_ = os.RemoveAll(dir)
 }
 
-// remove closes the shell, so no refresh writes into it again, and deletes
+// remove closes the resources root, so no refresh writes into it again, and deletes
 // its folder.
-func (sh *shell) remove() {
+func (sh *root) remove() {
 	sh.mu.Lock()
 	sh.closed = true
 	sh.mu.Unlock()
 	_ = os.RemoveAll(sh.dir)
 }
 
+// RootDir is the real path of the session's resources root; false when the
+// session has none.
+func (s *Service) RootDir(sessionID string) (string, bool) {
+	r := s.root(sessionID)
+	if r == nil {
+		return "", false
+	}
+	return r.realDir, true
+}
+
 // BaseVersion is the file at path as the session last received it.
 func (s *Service) BaseVersion(sessionID, path string) (ports.ShellFile, bool) {
-	sh := s.shell(sessionID)
+	sh := s.root(sessionID)
 	if sh == nil {
 		return ports.ShellFile{}, false
 	}
@@ -245,9 +274,9 @@ func (s *Service) BaseVersion(sessionID, path string) (ports.ShellFile, bool) {
 	return f, ok
 }
 
-// ShellFiles is every file of the session's shell but the index, by path.
+// ShellFiles is every file of the session's resources root but the index, by path.
 func (s *Service) ShellFiles(sessionID string) []ports.ShellFile {
-	sh := s.shell(sessionID)
+	sh := s.root(sessionID)
 	if sh == nil {
 		return nil
 	}
@@ -256,19 +285,19 @@ func (s *Service) ShellFiles(sessionID string) []ports.ShellFile {
 	return sh.indexRows()
 }
 
-// Put writes one file into the session's shell, atomically, records f as its
+// Put writes one file into the session's resources root, atomically, records f as its
 // base version and rewrites the index: what the harness does when the file
-// changed elsewhere. f.Path is relative to the shell. A session with no
-// shell is SHELL_NOT_FOUND.
+// changed elsewhere. f.Path is relative to the resources root. A session with no
+// resources root is SHELL_NOT_FOUND.
 func (s *Service) Put(sessionID string, f ports.ShellFile, content []byte, readOnly bool) error {
-	sh := s.shell(sessionID)
+	sh := s.root(sessionID)
 	if sh == nil {
-		return shellNotFound()
+		return rootNotFound()
 	}
 	sh.mu.Lock()
 	defer sh.mu.Unlock()
 	if sh.closed {
-		return shellNotFound()
+		return rootNotFound()
 	}
 	if err := sh.write(&file{meta: f, content: content, readOnly: readOnly}); err != nil {
 		return err
@@ -276,17 +305,17 @@ func (s *Service) Put(sessionID string, f ports.ShellFile, content []byte, readO
 	return sh.writeIndex()
 }
 
-// Remove deletes one file from the session's shell, forgets its base
+// Remove deletes one file from the session's resources root, forgets its base
 // version and rewrites the index. A file already gone is not an error.
 func (s *Service) Remove(sessionID, path string) error {
-	sh := s.shell(sessionID)
+	sh := s.root(sessionID)
 	if sh == nil {
-		return shellNotFound()
+		return rootNotFound()
 	}
 	sh.mu.Lock()
 	defer sh.mu.Unlock()
 	if sh.closed {
-		return shellNotFound()
+		return rootNotFound()
 	}
 	if err := sh.drop(path); err != nil {
 		return err
@@ -295,7 +324,7 @@ func (s *Service) Remove(sessionID, path string) error {
 }
 
 // Subscribe hears the changes announced as domain events: documents' and
-// artifacts'. Comments and resources reach the shells through
+// artifacts'. Comments and resources reach the resources roots through
 // AnnounceChange.
 func (s *Service) Subscribe(sub ports.EventSubscriber) {
 	ports.On(sub, func(_ context.Context, ev domain.DocumentChanged) error {
@@ -315,11 +344,11 @@ func (s *Service) Subscribe(sub ports.EventSubscriber) {
 	})
 }
 
-// changedEverywhere brings up to date every running shell.
+// changedEverywhere brings up to date every running resources root.
 func (s *Service) changedEverywhere() {
 	s.mu.Lock()
-	due := make([]*shell, 0, len(s.shells))
-	for _, sh := range s.shells {
+	due := make([]*root, 0, len(s.roots))
+	for _, sh := range s.roots {
 		due = append(due, sh)
 	}
 	s.mu.Unlock()
@@ -350,7 +379,7 @@ func (s *Service) AnnounceChange(c ports.ProjectChange) {
 
 // AnnounceTicket hears a task change, its title, description or status
 // among them, or its creation or deletion, as planning announces it: the
-// task's shells rewrite task/task.json, and every shell of the project its
+// task's resources roots rewrite task/task.json, and every resources root of the project its
 // folder under tasks/ (ports.TicketAnnouncer).
 func (s *Service) AnnounceTicket(tk *domain.Ticket, deleted bool) {
 	if tk != nil {
@@ -358,16 +387,16 @@ func (s *Service) AnnounceTicket(tk *domain.Ticket, deleted bool) {
 	}
 }
 
-// changed brings up to date every running shell of the project, or of one
-// task of it when ticketID is set. It never waits: each shell is refreshed
+// changed brings up to date every running resources root of the project, or of one
+// task of it when ticketID is set. It never waits: each resources root is refreshed
 // on its own goroutine, after whatever refresh it is in.
 func (s *Service) changed(projectID, ticketID string) {
 	if projectID == "" {
 		return
 	}
 	s.mu.Lock()
-	var due []*shell
-	for _, sh := range s.shells {
+	var due []*root
+	for _, sh := range s.roots {
 		if sh.projID == projectID && (ticketID == "" || sh.ticketID == ticketID) {
 			due = append(due, sh)
 		}
@@ -380,7 +409,7 @@ func (s *Service) changed(projectID, ticketID string) {
 
 // kick refreshes sh, or, when a refresh is running, has it go round once
 // more, so the last change is always read after it was stored.
-func (s *Service) kick(sh *shell) {
+func (s *Service) kick(sh *root) {
 	sh.kickMu.Lock()
 	sh.dirty = true
 	if sh.running {
@@ -404,16 +433,16 @@ func (s *Service) kick(sh *shell) {
 	}()
 }
 
-// refresh reads what the shell should hold now and rewrites what differs.
-func (s *Service) refresh(sh *shell) {
+// refresh reads what the resources root should hold now and rewrites what differs.
+func (s *Service) refresh(sh *root) {
 	sh.mu.Lock()
 	defer sh.mu.Unlock()
 	s.refreshLocked(sh)
 }
 
 // refreshLocked is refresh with sh held. When it leaves out a file held for
-// an agent's change, the shell is refreshed again once the hold runs out.
-func (s *Service) refreshLocked(sh *shell) {
+// an agent's change, the resources root is refreshed again once the hold runs out.
+func (s *Service) refreshLocked(sh *root) {
 	if sh.closed {
 		return
 	}
@@ -422,7 +451,7 @@ func (s *Service) refreshLocked(sh *shell) {
 	if sh.ticketID != "" {
 		var err error
 		if tk, err = s.src.Tickets.GetTicket(ctx, sh.ticketID); err != nil {
-			slog.Warn("refresh a virtual shell", "session", sh.sessionID, "err", err)
+			slog.Warn("refresh a resources root", "session", sh.sessionID, "err", err)
 			return
 		}
 	}
@@ -431,7 +460,7 @@ func (s *Service) refreshLocked(sh *shell) {
 		err = sh.sync(b)
 	}
 	if err != nil {
-		slog.Warn("refresh a virtual shell", "session", sh.sessionID, "err", err)
+		slog.Warn("refresh a resources root", "session", sh.sessionID, "err", err)
 	}
 	if sh.skipped && !sh.rekick {
 		sh.rekick = true
@@ -444,22 +473,22 @@ func (s *Service) refreshLocked(sh *shell) {
 	}
 }
 
-func (s *Service) shell(sessionID string) *shell {
+func (s *Service) root(sessionID string) *root {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.shells[sessionID]
+	return s.roots[sessionID]
 }
 
-func shellNotFound() error {
+func rootNotFound() error {
 	return &domain.StructuredError{Code: "SHELL_NOT_FOUND", Message: "the session has no virtual shell"}
 }
 
-// sync makes the shell hold exactly b's files: each is placed (a file the
-// shell has keeps its path), written when the shell lacks that version,
-// atomically, and recorded as the session's base version; a file the shell
+// sync makes the resources root hold exactly b's files: each is placed (a file the
+// resources root has keeps its path), written when the resources root lacks that version,
+// atomically, and recorded as the session's base version; a file the resources root
 // should no longer hold is removed; the index is rewritten when anything
 // changed. The caller holds sh.mu.
-func (sh *shell) sync(b *builder) error {
+func (sh *root) sync(b *builder) error {
 	prev := map[string]string{}
 	for p, f := range sh.files {
 		if f.ID != "" {
@@ -486,7 +515,7 @@ func (sh *shell) sync(b *builder) error {
 		if f.load != nil {
 			content, err := f.load()
 			if err != nil {
-				slog.Warn("leave a file out of a virtual shell", "path", f.meta.Path, "id", f.meta.ID, "err", err)
+				slog.Warn("leave a file out of a resources root", "path", f.meta.Path, "id", f.meta.ID, "err", err)
 				f.dropped = true
 				return nil
 			}
@@ -535,7 +564,7 @@ func (sh *shell) sync(b *builder) error {
 	return sh.writeIndex()
 }
 
-// current says the shell's row cur already holds want: the same thing at
+// current says the resources root's row cur already holds want: the same thing at
 // the same version, or, while want's version is not known before reading
 // its bytes, last changed at the same time.
 func current(cur, want ports.ShellFile) bool {
@@ -548,11 +577,11 @@ func current(cur, want ports.ShellFile) bool {
 	return cur.Version == want.Version
 }
 
-func (sh *shell) abs(p string) string { return filepath.Join(sh.dir, filepath.FromSlash(p)) }
+func (sh *root) abs(p string) string { return filepath.Join(sh.dir, filepath.FromSlash(p)) }
 
 // write puts f on disk through a temp file and a rename, so a reader never
 // sees half of it, and records its row.
-func (sh *shell) write(f *file) error {
+func (sh *root) write(f *file) error {
 	if err := writeAtomic(sh.abs(f.meta.Path), f.content, f.readOnly); err != nil {
 		return err
 	}
@@ -563,7 +592,7 @@ func (sh *shell) write(f *file) error {
 }
 
 // drop deletes the file at p and forgets it; one already gone is fine.
-func (sh *shell) drop(p string) error {
+func (sh *root) drop(p string) error {
 	if err := os.Remove(sh.abs(p)); err != nil && !os.IsNotExist(err) {
 		return err
 	}
@@ -571,7 +600,7 @@ func (sh *shell) drop(p string) error {
 	return nil
 }
 
-func (sh *shell) indexRows() []ports.ShellFile {
+func (sh *root) indexRows() []ports.ShellFile {
 	rows := make([]ports.ShellFile, 0, len(sh.files))
 	for _, f := range sh.files {
 		rows = append(rows, f)
@@ -588,7 +617,7 @@ func (sh *shell) indexRows() []ports.ShellFile {
 	return rows
 }
 
-func (sh *shell) writeIndex() error {
+func (sh *root) writeIndex() error {
 	b, err := json.MarshalIndent(sh.indexRows(), "", "  ")
 	if err != nil {
 		return err
@@ -631,7 +660,7 @@ func firstErr(errs ...error) error {
 	return nil
 }
 
-// cleanRel is p as a path inside the shell folder it goes in: slash
+// cleanRel is p as a path inside the resources root folder it goes in: slash
 // separated, never absolute, never climbing out.
 func cleanRel(p string) string {
 	c := path.Clean("/" + filepath.ToSlash(p))
