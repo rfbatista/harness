@@ -16,6 +16,7 @@ import { desktopAlerts } from "./modules/notifications/infrastructure/desktop-al
 import { notificationsGateway } from "./modules/notifications/infrastructure/notifications-gateway.js";
 import { registerNotifications } from "./modules/notifications/presentation/register.js";
 import { codeGateway } from "./modules/code/infrastructure/code-gateway.js";
+import { filesGateway } from "./modules/code/infrastructure/files-gateway.js";
 import { credentialsGateway } from "./modules/credentials/infrastructure/credentials-gateway.js";
 import { sandboxGateway } from "./modules/sandbox/infrastructure/sandbox-gateway.js";
 import { catalogGateway } from "./modules/agents/infrastructure/catalog-gateway.js";
@@ -113,7 +114,7 @@ registerSessions(Alpine, {
 registerRuns(Alpine, { gateway: runsGateway(api), prefs });
 registerReviews(Alpine, { gateway: reviewsGateway(api, events), clock: systemClock });
 registerPullRequests(Alpine, { gateway: pullRequestsGateway(api, events) });
-registerCode(Alpine, { gateway: codeGateway(api, events), highlighter: hljsHighlighter(createHljs()), preparer: lazyPreparer(() => workerPreparer(codeWorkerUrl())), prefs, navigate });
+registerCode(Alpine, { gateway: codeGateway(api, events), files: filesGateway(api, events), highlighter: hljsHighlighter(createHljs()), preparer: lazyPreparer(() => workerPreparer(codeWorkerUrl())), prefs, navigate });
 registerNotifications(Alpine, { gateway: notificationsGateway(api, events), alerts: desktopAlerts(), prefs, clock: systemClock, navigate });
 registerCredentials(Alpine, { gateway: credentialsGateway(api, events), clock: systemClock });
 registerUsage(Alpine, { gateway: usageGateway(api, events) });

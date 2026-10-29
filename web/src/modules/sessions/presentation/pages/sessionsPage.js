@@ -363,6 +363,33 @@ export const sessionsPage = ({
     get designTabSelected() {
       return this.detailTab === "design";
     },
+    /** The selected session has a worktree: its Files tab shows the virtual file system. */
+    get hasFiles() {
+      return this.showingSession && !!this.selected?.workspaceId;
+    },
+    get showingFiles() {
+      return this.hasFiles && this.detailTab === "files";
+    },
+    get filesTabSelected() {
+      return this.detailTab === "files";
+    },
+    /** The selected session's Files panel, kept mounted behind the other tabs so it follows the roots. */
+    get filesPanels() {
+      if (!this.hasFiles) return [];
+      const session = this.sessions.find((s) => s.id === this.selectedId);
+      return [
+        {
+          key: `${this.selected.id}:${this.selected.stoppable ? "live" : "ended"}`,
+          projectId: this.projectId,
+          taskId: this.ticketId,
+          sessionId: this.selected.id,
+          workspaceId: session.workspaceId,
+          branch: session.branch ?? "",
+          title: this.selected.title,
+          shown: this.detailTab === "files",
+        },
+      ];
+    },
     /** The selected session has a worktree whose code the Code tab can read. */
     get hasCode() {
       return this.codeEnabled && this.hasTask && this.showingSession && !!this.selected?.workspaceId;
@@ -650,6 +677,11 @@ export const sessionsPage = ({
       this.unseenMessages = 0;
     },
 
+    showFiles() {
+      this.leaveCode();
+      this.detailTab = "files";
+    },
+
     /** The Code tab: its panel takes the address bar and the stream bar's keys. */
     showCode() {
       this.detailTab = "code";
@@ -749,6 +781,7 @@ export const sessionsPage = ({
       if (this.detailTab === "conversation" && this.selectedRole() === "") this.detailTab = "agent";
       if (this.detailTab === "code" && !this.hasCode) this.detailTab = "agent";
       if (this.detailTab === "design" && !this.hasTask) this.detailTab = "agent";
+      if (this.detailTab === "files" && !this.hasFiles) this.detailTab = "agent";
       this.creating = false;
       if (this.detailTab === "merge" && !this.hasMergeTab) this.detailTab = "agent";
       if (this.keptTerminalId !== id) this.keptTerminalId = null;

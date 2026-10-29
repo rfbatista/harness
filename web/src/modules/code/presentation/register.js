@@ -4,6 +4,7 @@
 import { codeDiff } from "./components/codeDiff.js";
 import { codePage } from "./components/codePage.js";
 import { codePanel } from "./components/codePanel.js";
+import { filesPanel } from "./components/filesPanel.js";
 
 /**
  * @param {import("alpinejs").Alpine} Alpine
@@ -11,6 +12,7 @@ import { codePanel } from "./components/codePanel.js";
  */
 export function registerCode(Alpine, deps) {
   Alpine.data("codePanel", codePanel(deps));
+  Alpine.data("filesPanel", filesPanel(deps));
   Alpine.data("codePage", codePage(deps));
   Alpine.data("codeDiff", codeDiff(deps));
 }

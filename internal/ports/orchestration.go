@@ -101,7 +101,7 @@ type ProjectChange struct {
 	// SessionFilesRoot says a root of a session's virtual file system went away
 	// or came back; the Files view follows it.
 	SessionFilesRoot *SessionFilesRootChange `json:"session_files_root,omitempty"`
-	Deleted               bool                         `json:"deleted,omitempty"`
+	Deleted          bool                    `json:"deleted,omitempty"`
 }
 
 // ArchitectureRuleEventChange is a rule event on the project feed. ProjectID

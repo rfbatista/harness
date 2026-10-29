@@ -1,0 +1,124 @@
+package code
+
+
+// Files is the session page's Files tab, bound to a filesPanel component on
+// an ancestor (filesPanel.js): the agent state strip above a code-layout of
+// the session's two-rooted tree and the Code tab's read-only viewer. Every
+// folder row and root carries an empty .actions slot, kept in the markup for
+// the person's terminal to fill.
+templ Files() {
+	<div class="files-pane">
+		<div class="files-strip" role="status" aria-live="polite" x-bind:data-state="agentState">
+			<span class="status" x-bind:data-state="strip.status" x-text="strip.word"></span>
+			<span class="text" x-text="strip.text"></span>
+			<template x-if="stripWaiting">
+				<button type="button" class="[ button ]" data-size="sm" data-variant="ghost" x-on:click="openAgentTab">Open Agent tab</button>
+			</template>
+		</div>
+		<template x-if="filesProblemLine">
+			<div class="[ banner ]" data-tone="danger" role="alert">
+				<div class="[ flow ] [ flow-space-3xs grow ]">
+					<span x-text="rootsProblem.text"></span>
+					<span class="[ code ]" x-text="rootsProblem.code"></span>
+				</div>
+				<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-on:click="loadRoots">Try again</button>
+			</div>
+		</template>
+		<template x-if="problemLine">
+			<div class="[ banner ]" data-tone="danger" role="alert">
+				<div class="[ flow ] [ flow-space-3xs grow ]">
+					<span x-text="problem.text"></span>
+					<span class="[ code ]" x-text="problem.code"></span>
+				</div>
+			</div>
+		</template>
+		<div class="code-layout" x-ref="layout" x-bind:data-main="mainAttr" x-bind:data-expanded="viewerExpandedAttr" x-bind:style="splitStyle">
+			<aside class="side" x-ref="side" aria-label="Session files">
+				<ul class="file-tree" role="tree" aria-label="Session files" x-bind:aria-busy="treeBusy" x-on:keydown="treeKeydown" x-effect="growRows">
+					<template x-for="row in rows" x-bind:key="row.key">
+						<li
+							x-bind:role="row.role"
+							x-bind:class="row.type === 'skeleton' ? 'skeleton-row' : (row.type === 'more' ? 'more' : null)"
+							x-bind:data-tone="row.failed ? 'danger' : null"
+							x-bind:style="row.depthStyle"
+							x-bind:aria-level="row.isRoot || row.isEntry ? row.level : null"
+							x-bind:aria-setsize="row.setsize"
+							x-bind:aria-posinset="row.posinset"
+							x-bind:aria-expanded="row.expanded"
+							x-bind:aria-selected="row.selected"
+							x-bind:aria-disabled="row.disabled"
+							x-bind:aria-busy="row.loading"
+							x-bind:data-kind="row.kind"
+							x-bind:data-key="row.key"
+							x-bind:data-root="row.root"
+							x-bind:data-ignored="row.ignoredAttr"
+							x-bind:title="row.title"
+						>
+							<template x-if="row.type === 'skeleton'">
+								<span class="[ skeleton ]"></span>
+							</template>
+							<template x-if="row.type === 'note'">
+								<p class="root-note" role="status" x-text="row.text"></p>
+							</template>
+							<template x-if="row.type === 'more' && row.state !== 'error'">
+								<span x-init="watchMore($el, row.root, row.dir)">
+									<span class="[ skeleton ]" style="--skeleton-width:55%"></span>
+									<span class="[ skeleton ]" style="--skeleton-width:40%"></span>
+									<span class="visually-hidden">Loading more entries</span>
+								</span>
+							</template>
+							<template x-if="row.type === 'more' && row.state === 'error'">
+								<span class="[ more-error ]">
+									<span x-text="row.text"></span>
+									<button type="button" class="[ button ]" data-size="sm" x-on:click="retryMore(row.root, row.dir)">Try again</button>
+								</span>
+							</template>
+							<template x-if="row.isRoot || row.isEntry">
+								<span class="item" x-bind:tabindex="row.tabindex" x-bind:aria-label="row.label" x-on:click="clickRow($event, row.key)">
+									<template x-if="row.isDir">
+										@chevron("chevron")
+									</template>
+									<template x-if="!row.isDir">
+										<span></span>
+									</template>
+									<template x-if="row.isDir && row.isEntry">
+										@entryIcon("dir")
+									</template>
+									<template x-if="row.isEntry && row.kind === 'file'">
+										@entryIcon("file")
+									</template>
+									<template x-if="row.isEntry && row.kind === 'symlink'">
+										@entryIcon("symlink")
+									</template>
+									<template x-if="row.isRoot && !row.gone && row.root === 'worktree'">
+										@entryIcon("worktree")
+									</template>
+									<template x-if="row.isRoot && !row.gone && row.root === 'resources'">
+										@entryIcon("resources")
+									</template>
+									<template x-if="row.isRoot && row.gone">
+										@entryIcon("gone")
+									</template>
+									<span class="name"><span x-text="row.name"></span><template x-if="row.meta"><span class="root-meta" x-text="row.meta"></span></template><template x-if="row.target"><span class="target" x-text="row.target"></span></template></span>
+									<template x-if="row.tag">
+										<span class="ignored" x-bind:data-tone="row.gone ? 'gone' : null" x-text="row.tag"></span>
+									</template>
+									<template x-if="row.isDir || row.isRoot">
+										<span class="actions"></span>
+									</template>
+								</span>
+							</template>
+						</li>
+					</template>
+				</ul>
+			</aside>
+			<div class="separator" role="separator" aria-orientation="vertical" tabindex="0" aria-label="Resize the file tree" x-bind:aria-valuemin="splitMin" x-bind:aria-valuemax="splitMax" x-bind:aria-valuenow="splitNow" x-bind:data-dragging="splitDraggingAttr" x-on:pointerdown="startSplit" x-on:pointermove="moveSplit" x-on:pointerup="endSplit" x-on:pointercancel="endSplit" x-on:dblclick="resetSplit" x-on:keydown="splitKey"></div>
+			<section class="main stack" x-ref="main" tabindex="0" aria-label="File" x-on:click="clickLine">
+				<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" data-code-back x-on:click="back">‹ Files</button>
+				@liveFileView(true)
+			</section>
+		</div>
+		<p class="[ visually-hidden ]" role="status" x-text="toast"></p>
+	</div>
+}
+

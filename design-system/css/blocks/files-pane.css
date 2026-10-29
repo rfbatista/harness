@@ -5,12 +5,13 @@
  *   <div class="files-strip" role="status" aria-live="polite" data-state="working|waiting|idle|ended">
  *     <span class="status" data-state="…">Working</span><span class="text">…</span></div>
  *   <div class="code-layout">…</div></section>
- * Exceptions: data-state="waiting" on the strip washes it with attention.
+ * Exceptions: data-state="waiting" on the strip washes it with attention;
+ * data-expanded on the .code-layout gives the whole tab to the viewer.
  */
 
 @layer blocks {
   /* The Files pane: a state strip above a code-layout. */
-  .files-pane { display: flex; flex-direction: column; min-block-size: 0; background: var(--color-canvas); }
+  .files-pane { display: flex; flex-direction: column; flex: 1 1 0; min-block-size: 0; background: var(--color-canvas); }
   .files-pane > .code-layout { flex: 1 1 0; }
   .files-strip {
     display: flex; align-items: center; gap: var(--space-s); flex: none;
@@ -22,6 +23,8 @@
     &[data-state="waiting"] { background: var(--color-attention-wash); }
     @media (width < 48rem) { flex-wrap: wrap; padding-block: var(--space-xs); & > .button { min-block-size: var(--size-touch); } }
   }
+  /* The viewer takes the whole tab: data-expanded on the layout hides the tree and its handle. */
+  .files-pane .code-layout[data-expanded] > :is(.side, .separator) { display: none; }
   /* In the Files tab the tree is the stage for the viewer. */
   .files-pane .code-layout > .main.stack { overflow: hidden; }
   .files-pane .code-layout > .main.stack > .code-view { flex: 1 1 0; }
