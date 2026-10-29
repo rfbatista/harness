@@ -17,7 +17,7 @@ type Services struct {
 	// PersonTerminals are the person's own shells on a session's virtual
 	// file system; nil answers 503.
 	PersonTerminals ports.PersonTerminals
-	Projects ports.Projects
+	Projects        ports.Projects
 	// ProjectFeed follows the set of projects; nil answers 503.
 	ProjectFeed ports.ProjectCatalogFeed
 	// Discovery finds git checkouts on disk; nil answers 503.

@@ -519,10 +519,18 @@ func newVirtualShells(plan *planning.Service, art *artifacts.Service, sessions p
 // newPersonTerminals are the person's own shells on the virtual file systems
 // (ADR 0050). They run on a terminal host of their own, never the agents':
 // no agent, session tool or run can list or reach one.
-func newPersonTerminals(lc fx.Lifecycle, pty ports.PTY, fsys *vfs.FileSystem, sessions ports.SessionRepository) *vshell.PersonTerminals {
-	host := termhost.New(shell.Direct{}, pty).WithLaunchers(personshell.New(pty, func() []string { return vshell.PersonEnv(os.Environ()) }))
-	lc.Append(fx.StopHook(func(ctx context.Context) error { return host.Shutdown(ctx) }))
-	return vshell.NewPersonTerminals(vshell.PersonDeps{Host: host, Folders: fsys, Sessions: sessions})
+func newPersonTerminals(lc fx.Lifecycle, pty ports.PTY, fsys *vfs.FileSystem, sessions ports.SessionRepository, driver ports.SandboxDriver, events *vfs.RootEvents, hub *orchestration.Hub) *vshell.PersonTerminals {
+	// The platform's sandbox makes the resources root read-only for them,
+	// whether or not the agent sandbox is switched on; without one a
+	// resources-root terminal is refused.
+	deny, _ := driver.(ports.DenyWritesDriver)
+	host := termhost.New(shell.Direct{}, pty).WithLaunchers(personshell.New(pty, func() []string { return vshell.PersonEnv(os.Environ()) }, deny))
+	persons := vshell.NewPersonTerminals(vshell.PersonDeps{Host: host, Folders: fsys, Sessions: sessions, RootEvents: events, Page: hub})
+	lc.Append(fx.StopHook(func(ctx context.Context) error {
+		_ = persons.Shutdown(ctx) // tells the page, best effort, then hangs up every shell
+		return host.Shutdown(ctx)
+	}))
+	return persons
 }
 
 // newVirtualFileSystem is the virtual file system of the sessions: their

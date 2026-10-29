@@ -126,3 +126,25 @@ func Render(policy ports.SandboxPolicy, home string) []string {
 func underAny(path string, dirs []string) bool {
 	return slices.ContainsFunc(dirs, func(d string) bool { return strings.HasPrefix(path, d+"/") })
 }
+
+var _ ports.DenyWritesDriver = (*Driver)(nil)
+
+// WrapDenyWrites answers bwrap running cmd under the deny-writes profile of a
+// person's terminal (ADR 0052): the whole file system as it is, writable,
+// with path bound read-only over itself.
+func (d *Driver) WrapDenyWrites(path string, cmd ports.SandboxCommand) (ports.SandboxCommand, error) {
+	if !filepath.IsAbs(path) {
+		return ports.SandboxCommand{}, errors.New("sandbox: path " + path + " is not absolute")
+	}
+	args := RenderDenyWrites(path)
+	args = append(args, "--", cmd.Path)
+	args = append(args, cmd.Args...)
+	return ports.SandboxCommand{Path: d.bin, Args: args, Dir: cmd.Dir, Env: cmd.Env}, nil
+}
+
+// RenderDenyWrites is the bwrap argument list (before the command) that makes
+// path read-only and leaves everything else as it is. Pure: it touches no file.
+func RenderDenyWrites(path string) []string {
+	path = filepath.Clean(path)
+	return []string{"--die-with-parent", "--dev-bind", "/", "/", "--ro-bind", path, path}
+}

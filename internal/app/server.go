@@ -103,10 +103,10 @@ func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRun
 		Sessions:     orch,
 		// The person's own terminals on a session's files.
 		PersonTerminals: persons,
-		Planning:     plan,
-		Workspaces:   ws,
-		Artifacts:    art,
-		TaskChannel:  channel,
+		Planning:        plan,
+		Workspaces:      ws,
+		Artifacts:       art,
+		TaskChannel:     channel,
 		// What a person adds to a task: files, images, audio, links, comments.
 		TaskResources:    plan,
 		TaskComments:     plan,

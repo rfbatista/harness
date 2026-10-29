@@ -332,7 +332,13 @@ type SessionEvent struct {
 	ReviewRequest *domain.ReviewRequest    `json:"review_request,omitempty"`
 	StatusCheck   *StatusCheckEvent        `json:"status_check,omitempty"`
 	TaskStatus    *domain.TaskStatusChange `json:"task_status,omitempty"`
-	At            time.Time                `json:"at"`
+	// ID, Reason and Message are a "person_terminal_ended" event's: which
+	// terminal of the person ended, why (exited, root_gone, server_stopped)
+	// and the sentence its pane shows. It is live only, never persisted.
+	ID      string    `json:"id,omitempty"`
+	Reason  string    `json:"reason,omitempty"`
+	Message string    `json:"message,omitempty"`
+	At      time.Time `json:"at"`
 }
 
 type Usage struct {

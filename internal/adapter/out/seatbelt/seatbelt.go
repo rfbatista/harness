@@ -184,3 +184,37 @@ func resolve(path string) string {
 		rest = filepath.Join(filepath.Base(cur), rest)
 	}
 }
+
+var _ ports.DenyWritesDriver = (*Driver)(nil)
+
+// WrapDenyWrites answers sandbox-exec running cmd under the deny-writes
+// profile of a person's terminal (ADR 0052): everything allowed, reading
+// included, except writing under path. Unlike Wrap it hides nothing: the home
+// and the temp dir stay the person's. The path reaches the profile as a -D
+// parameter, never as profile text.
+func (d *Driver) WrapDenyWrites(path string, cmd ports.SandboxCommand) (ports.SandboxCommand, error) {
+	pr := &profile{}
+	vs, err := pr.variants(path)
+	if err != nil {
+		return ports.SandboxCommand{}, err
+	}
+	var b strings.Builder
+	b.WriteString("(version 1)\n(allow default)\n")
+	fmt.Fprintf(&b, "(deny file-write* (with message %s)", pr.param("person-terminal-read-only"))
+	for _, v := range vs {
+		fmt.Fprintf(&b, " (subpath %s)", v)
+	}
+	b.WriteString(")\n")
+
+	args := []string{}
+	for i, v := range pr.values {
+		args = append(args, "-D", fmt.Sprintf("P%d=%s", i, v))
+	}
+	args = append(args, "-p", b.String(), "--", cmd.Path)
+	args = append(args, cmd.Args...)
+	exe := d.Exec
+	if exe == "" {
+		exe = "sandbox-exec"
+	}
+	return ports.SandboxCommand{Path: exe, Args: args, Dir: cmd.Dir, Env: cmd.Env}, nil
+}
