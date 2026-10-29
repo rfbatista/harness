@@ -1,0 +1,30 @@
+/*
+ * Files pane — the session's Files tab: an agent state strip above a
+ * code-layout (tree and viewer). The strip says whether the agent is mid-turn.
+ * <section class="files-pane">
+ *   <div class="files-strip" role="status" aria-live="polite" data-state="working|waiting|idle|ended">
+ *     <span class="status" data-state="…">Working</span><span class="text">…</span></div>
+ *   <div class="code-layout">…</div></section>
+ * Exceptions: data-state="waiting" on the strip washes it with attention.
+ */
+
+@layer blocks {
+  /* The Files pane: a state strip above a code-layout. */
+  .files-pane { display: flex; flex-direction: column; min-block-size: 0; background: var(--color-canvas); }
+  .files-pane > .code-layout { flex: 1 1 0; }
+  .files-strip {
+    display: flex; align-items: center; gap: var(--space-s); flex: none;
+    min-block-size: var(--size-row); padding: var(--space-2xs) var(--space-s) var(--space-2xs) var(--space-m);
+    border-block-end: var(--border-width) solid var(--color-line); background: var(--color-panel);
+    font-size: var(--text-sm); color: var(--color-ink-muted);
+    & > .status { color: var(--color-ink); font-weight: var(--weight-medium); }
+    & > .text { flex: 1 1 auto; min-inline-size: 0; }
+    &[data-state="waiting"] { background: var(--color-attention-wash); }
+    @media (width < 48rem) { flex-wrap: wrap; padding-block: var(--space-xs); & > .button { min-block-size: var(--size-touch); } }
+  }
+  /* In the Files tab the tree is the stage for the viewer. */
+  .files-pane .code-layout > .main.stack { overflow: hidden; }
+  .files-pane .code-layout > .main.stack > .code-view { flex: 1 1 0; }
+  .files-pane .code-layout > .main.stack > [data-code-back] { flex: none; }
+  .files-pane .code-view > .head > .ro { display: inline-flex; align-items: center; gap: var(--space-2xs); color: var(--color-ink-faint); font-size: var(--text-xs); white-space: nowrap; & > svg { inline-size: 0.75rem; block-size: 0.75rem; } }
+}
