@@ -513,8 +513,12 @@ func newVirtualShells(plan *planning.Service, art *artifacts.Service, sessions p
 
 // newVirtualFileSystem is the virtual file system of the sessions: their
 // resources roots and the worktrees of their workspaces.
-func newVirtualFileSystem(shells *vfs.Service, sessions ports.SessionRepository, ws ports.WorkspaceRepository, files ports.WorktreeFiles, events *vfs.RootEvents) *vfs.FileSystem {
-	return vfs.NewFileSystem(shells, sessions, ws, files, events)
+func newVirtualFileSystem(shells *vfs.Service, sessions ports.SessionRepository, ws ports.WorkspaceRepository, files ports.WorktreeFiles, git ports.GitCode, events *vfs.RootEvents) *vfs.FileSystem {
+	fsys := vfs.NewFileSystem(shells, sessions, ws, files, events)
+	if ignore, ok := git.(ports.GitIgnore); ok {
+		fsys.UseGitIgnore(ignore)
+	}
+	return fsys
 }
 
 // bindWorkspaceRemovals tells the virtual file system when a workspace is
