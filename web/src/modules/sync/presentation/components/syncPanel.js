@@ -15,14 +15,21 @@ import { fetchedPhrase, panelOf } from "../view.js";
 /**
  * @param {{ store: import("./syncStore.js").SyncStore, actions: ReturnType<typeof import("./syncStore.js").syncActions>, now?: () => Date }} deps
  */
-export const syncPanel = (deps) => (workspaceId = "") => {
+export const syncPanel = (deps) => (workspaceId = "", projectId = "") => {
   const { store, actions, now = () => new Date() } = deps;
   const chip = syncChip(deps)(workspaceId);
+
+  let unfollow = () => {};
 
   const panel = {
     open: false,
     init() {
       actions.ensure(this.workspaceId);
+      // The Code tab and the History page have no watch of their own on the project feed unless the page has one: the chip follows git_state itself.
+      unfollow = actions.watch(projectId);
+    },
+    destroy() {
+      unfollow();
     },
     /** The id of the panel's dialog (`.popup`), the one its chip opens. */
     get dialogId() {

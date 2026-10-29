@@ -17,8 +17,10 @@ import templruntime "github.com/a-h/templ/runtime"
 
 // SyncSlot is the chip as a button in a .sync-slot, with its panel. workspace
 // is an Alpine expression that names the worktree (a string literal on a page
-// that knows it, a property of the code view on the Code tab).
-func SyncSlot(workspace string) templ.Component {
+// that knows it, a property of the code view on the Code tab); project names
+// the project whose feed's git_state the chip follows itself (the Code tab,
+// which has no watch of its own), or is "" on a page whose watch does.
+func SyncSlot(workspace string, project string) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 		if templ_7745c5c3_CtxErr := ctx.Err(); templ_7745c5c3_CtxErr != nil {
@@ -44,9 +46,9 @@ func SyncSlot(workspace string) templ.Component {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var2 string
-		templ_7745c5c3_Var2, templ_7745c5c3_Err = templ.ResolveAttributeValue("syncPanel(" + workspace + ")")
+		templ_7745c5c3_Var2, templ_7745c5c3_Err = templ.ResolveAttributeValue("syncPanel(" + workspace + ", " + project + ")")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `code/sync.templ`, Line: 14, Col: 64}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `code/sync.templ`, Line: 16, Col: 81}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var2)
 		if templ_7745c5c3_Err != nil {

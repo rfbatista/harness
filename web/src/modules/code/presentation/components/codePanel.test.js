@@ -68,33 +68,160 @@ test("a scope change reads that scope and pushes its URL", async () => {
   assert.ok(pushed.at(-1).endsWith("/code/changes?scope=working"));
 });
 
-test("a change while the reader is at the top re-reads in place and stays live", async () => {
-  const { panel, memory } = await setup();
-  memory.change("ws1", { "web/new.js": "x\n" }, { untracked: ["web/new.js"] });
+test("a change refreshes the list by itself, leaves the hunks on screen alone, and says how many files changed since", async () => {
+  const { panel, memory, dispatched } = await setup();
+  const before = keysOf(panel);
+  const shown = panel.diff;
+  memory.change("ws1", { "web/new.js": "x\n", "README.md": "# harness\n\nchanged again\nand again\n" }, { untracked: ["web/new.js"] });
   await flush();
   await flush();
-  assert.equal(panel.liveState, "live");
-  assert.ok(panel.diff.files.some((f) => f.path === "web/new.js"));
-  assert.ok(panel.freshPaths.includes("web/new.js"));
+  assert.ok(panel.summaryRows.some((r) => r.path === "web/new.js"), "the list follows");
+  assert.equal(panel.changesHead.files, "6 files");
+  assert.equal(panel.diff, shown, "the open diff is the same read");
+  assert.ok(!panel.diff.files.some((f) => f.path === "web/new.js"), "no new section appears under the reader");
+  assert.deepEqual(keysOf(panel), before, "no section is redrawn");
+  assert.deepEqual(panel.summaryRows.filter((r) => r.fresh !== null).map((r) => r.path).sort(), ["README.md", "web/new.js"], "the rows whose hunks on screen are out of date carry the dot");
+  assert.equal(panel.liveState, "stale");
+  assert.deepEqual(panel.notice, { state: "", text: "2 files changed since loaded", reload: true });
+  assert.equal(panel.bar.word, "2 files changed");
+  assert.deepEqual(dispatched.filter((d) => d.name === "rail-announce").map((d) => d.detail), ["2 files changed since loaded"]);
 });
 
-test("a change after the reader scrolled holds the diff, lists the new file, and says so once; R applies it", async () => {
-  const { panel, memory, dispatched } = await setup();
-  panel.touched = true;
+test("the list refresh reads pages without hunks and the totals; it never reads a patch", async () => {
+  const { panel, memory } = await setup();
+  const calls = memory.calls.length;
   memory.change("ws1", { "web/new.js": "x\n" }, { untracked: ["web/new.js"] });
   await flush();
   await flush();
-  memory.change("ws1", { "web/other.js": "y\n" }, { untracked: ["web/other.js"] });
+  const reads = memory.calls.slice(calls).filter((c) => c.name === "diff").map((c) => c.args.q);
+  const list = reads.filter((q) => q.scope === panel.scope);
+  assert.ok(list.length > 0 && list.every((q) => q.hunks === "none"), `every read of the list is hunks=none: ${JSON.stringify(list)}`);
+  assert.ok(reads.every((q) => q.hunks === "none" || q.limit === 0), "the rest are the totals");
+});
+
+test("a change event is answered again and again without the hunks moving, and the dot and notice go when the file is back as loaded", async () => {
+  const { panel, memory } = await setup();
+  const original = panel.diff.files.find((f) => f.path === "README.md");
+  memory.change("ws1", { "README.md": "# harness\n\nA\nB\nC\n" });
+  await flush();
+  await flush();
+  assert.equal(panel.staleCount, 1);
+  memory.change("ws1", { "README.md": "# harness\n\nRead and follow code in the web UI.\n" });
+  await flush();
+  await flush();
+  assert.equal(panel.staleCount, 0, "the list says what the hunks say again");
+  assert.equal(panel.liveState, "live");
+  assert.equal(panel.notice, null);
+  assert.equal(panel.diff.files.find((f) => f.path === "README.md"), original);
+});
+
+test("a git_state event refreshes the list like a code_changed", async () => {
+  const { panel, memory } = await setup();
+  const world = memory.world.workspaces.ws1;
+  world.disk["web/new.js"] = "x\n";
+  world.untracked = [...world.untracked, "web/new.js"];
+  memory.ping("ws1");
+  await flush();
+  await flush();
+  assert.ok(panel.summaryRows.some((r) => r.path === "web/new.js"));
+});
+
+test("Reload re-reads the open files with hunks, redraws only the files that changed, keeps collapsed and scroll, and labels them updated", async () => {
+  let clock = 1_000_000;
+  const { panel, memory, tick } = await setup({ world: manyChangedFilesWorld(20), depsExtra: { now: () => clock } });
+  const main = { scrollTop: 400 };
+  panel.$refs = { main };
+  panel.toggleFile("bulk/d0000/f0003.js");
+  const before = keysOf(panel);
+  const viewsBefore = Object.fromEntries(panel.diffFiles.map((f) => [f.path, f]));
+  memory.change("ws1", { "bulk/d0000/f0001.js": "one\n", "bulk/d0000/f0002.js": "two\n" });
+  await flush();
+  await flush();
+  assert.equal(panel.staleCount, 0, "a same-size rewrite is not in the stat listing");
+  memory.change("ws1", { "bulk/d0001/f0010.js": null, "web/added.js": "a\nb\n" }, { untracked: ["web/added.js"] });
   await flush();
   await flush();
   assert.equal(panel.liveState, "stale");
-  assert.equal(panel.bar.word, "Changed on disk");
-  assert.ok(!panel.diff.files.some((f) => f.path === "web/new.js"), "the open diff does not move");
-  assert.ok(panel.summaryRows.some((r) => r.path === "web/other.js"), "the list follows");
-  assert.equal(dispatched.filter((d) => d.name === "rail-announce").length, 1);
+  assert.deepEqual(keysOf(panel), before, "nothing moved before Reload");
+  clock += 7_000;
+  const reads = memory.calls.length;
   await panel.reload();
+  tick();
+  const after = keysOf(panel);
+  const redrawn = Object.keys(after).filter((p) => after[p] !== before[p] || !(p in before)).sort();
+  assert.deepEqual(redrawn, ["bulk/d0000/f0001.js", "bulk/d0000/f0002.js", "bulk/d0001/f0010.js", "web/added.js"].filter((p) => p in after).sort(), "only changed files and the new one");
+  assert.ok(memory.calls.slice(reads).some((c) => c.name === "diff" && c.args.q.hunks === undefined && c.args.q.limit !== 0), "the hunks are read again");
+  const sameView = panel.diffFiles.filter((f) => viewsBefore[f.path] === f).length;
+  assert.equal(sameView, panel.diffFiles.length - 3, "every section of a file that did not change is the same view object, so nothing is bound again for it");
+  assert.equal(panel.collapsed["bulk/d0000/f0003.js"], true, "collapsed state is kept");
+  assert.equal(main.scrollTop, 400, "scroll is kept");
   assert.equal(panel.liveState, "live");
-  assert.ok(panel.diff.files.some((f) => f.path === "web/other.js"));
+  assert.equal(panel.staleCount, 0);
+  assert.equal(panel.notice, null, "nothing to say after a Reload that found changes: the heads say it");
+  assert.equal(panel.updatedLabel("bulk/d0000/f0001.js"), "updated 0 s ago");
+  assert.equal(panel.updatedLabel("bulk/d0000/f0004.js"), "");
+  clock += 4_000;
+  panel.nowMs = clock;
+  assert.equal(panel.updatedLabel("bulk/d0000/f0001.js"), "updated 4 s ago");
+  assert.equal(panel.diffFiles.find((f) => f.path === "bulk/d0000/f0001.js").updated, true);
+  assert.equal(panel.diffFiles.find((f) => f.path === "bulk/d0000/f0004.js").updated, false);
+});
+
+test("Reload with nothing changed says Up to date for a while, and re-reads without redrawing anything", async () => {
+  const timers = [];
+  const { panel } = await setup({ depsExtra: { setTimeout: (fn, ms) => timers.push({ fn, ms }) - 1 } });
+  const before = keysOf(panel);
+  assert.equal(panel.canReload, true, "R works on a live view too");
+  await panel.reload();
+  assert.deepEqual(panel.notice, { state: "current", text: "Up to date", reload: false });
+  assert.deepEqual(keysOf(panel), before);
+  assert.equal(panel.diffFiles.some((f) => f.updated), false);
+  timers.at(-1).fn();
+  assert.equal(panel.notice, null);
+});
+
+test("a file moved from Untracked to Tracked is one row, and its dot goes with the Reload", async () => {
+  const { panel, memory } = await setup();
+  panel.clickScope({ preventDefault() {}, currentTarget: { getAttribute: () => null } }, "working");
+  await flush();
+  assert.deepEqual(panel.sections.map((s) => s.key), ["tracked", "untracked"]);
+  const ws = memory.world.workspaces.ws1;
+  ws.committed["notes/todo.md"] = ws.disk["notes/todo.md"];
+  ws.untracked = [];
+  memory.ping("ws1");
+  await flush();
+  await flush();
+  assert.deepEqual(panel.sections.map((s) => s.key), ["tracked"], "committed: the section is gone");
+  assert.equal(panel.liveState, "stale");
+  assert.equal(panel.staleCount, 1, "the file that left the list is counted");
+  await panel.reload();
+  assert.equal(panel.diff.files.some((f) => f.path === "notes/todo.md"), false);
+  assert.equal(panel.liveState, "live");
+});
+
+test("a stopped session says stopped as of the read, reads on open and on Reload only, and follows no feed", async () => {
+  const at = new Date(2026, 9, 28, 12, 41, 9).getTime();
+  const { panel, memory } = await setup({ live: false, depsExtra: { now: () => at } });
+  assert.equal(panel.liveState, "stopped");
+  assert.deepEqual([panel.bar.state, panel.bar.word, panel.asOfText], ["stopped", "stopped", "as of 12:41"]);
+  assert.equal(memory.followerCount, 0, "no follower: nothing changes it but the person");
+  assert.equal(panel.canReload, true);
+  const reads = memory.calls.length;
+  memory.change("ws1", { "web/new.js": "x\n" }, { untracked: ["web/new.js"] });
+  await flush();
+  assert.equal(memory.calls.length, reads, "no read without an event");
+  assert.ok(!panel.summaryRows.some((r) => r.path === "web/new.js"));
+  await panel.reload();
+  assert.ok(panel.summaryRows.some((r) => r.path === "web/new.js"), "Reload reads the list and the hunks");
+  assert.ok(panel.diff.files.some((f) => f.path === "web/new.js"));
+  assert.equal(panel.liveState, "stopped");
+});
+
+test("a session that stops while its tab is open becomes stopped as of its last read", async () => {
+  const { panel } = await setup();
+  panel.ended();
+  assert.deepEqual([panel.liveState, panel.bar.word], ["stopped", "stopped"]);
+  assert.ok(/^as of \d\d:\d\d$/.test(panel.asOfText), panel.asOfText);
 });
 
 test("a gone worktree: Branch, with All and Working disabled and why", async () => {
@@ -681,25 +808,21 @@ test("the first page loads when the tab comes to the front, fresh when a change 
 
 const keysOf = (panel) => Object.fromEntries(panel.diffFiles.map((f) => [f.path, f.key]));
 
-test("a refresh re-reads the loaded pages and redraws only the files whose content changed; selection and loaded pages stay", async () => {
-  const { panel, memory } = await setup({ world: manyChangedFilesWorld(120) });
-  await panel.loadMore();
-  assert.equal(panel.diff.files.length, 100);
-  const selected = panel.diff.files[70].path;
-  panel.currentFile = selected;
+test("a refresh reads the loaded pages without hunks, in the server's pages, and reads no further than the reader has", async () => {
+  const { panel, memory } = await setup({ world: manyChangedFilesWorld(500) });
+  while (panel.diff.next) await panel.loadMore();
+  assert.equal(panel.diff.files.length, 505);
   const before = keysOf(panel);
   const callsBefore = memory.calls.length;
-  memory.change("ws1", { "bulk/d0003/f0035.js": "export const changed = 1;\n" });
+  memory.change("ws1", { "bulk/d0003/zz.js": "export const added = 1;\n" });
   await flush();
   await flush();
-  const reads = memory.calls.slice(callsBefore).filter((c) => c.name === "diff" && c.args.q.limit === undefined).map((c) => c.args.q.after ?? null);
-  assert.equal(reads.length, 2, "the two loaded pages, first page first");
-  assert.equal(reads[0], null);
-  assert.equal(panel.diff.files.length, 100, "the loaded pages stay loaded");
-  const after = keysOf(panel);
-  const redrawn = Object.keys(after).filter((p) => after[p] !== before[p]);
-  assert.deepEqual(redrawn, ["bulk/d0003/f0035.js"]);
-  assert.equal(panel.currentFile, selected);
+  const reads = memory.calls.slice(callsBefore).filter((c) => c.name === "diff" && c.args.q.scope === "all").map((c) => c.args.q);
+  assert.deepEqual(reads.map((q) => [q.hunks, q.limit, q.after ?? null]), [["none", 200, null], ["none", 200, reads[1].after], ["none", 200, reads[2].after]], "505 files: three pages of 200, none with a patch");
+  assert.equal(panel.diff.files.length, 505, "the loaded pages stay loaded");
+  assert.deepEqual(keysOf(panel), before, "no section is redrawn by a refresh");
+  assert.equal(panel.summaryRows.length, 506);
+  assert.deepEqual(panel.updatedPaths, ["bulk/d0003/zz.js"]);
 });
 
 test("a refresh reads a page that was never loaded only when it is reached", async () => {
@@ -708,27 +831,23 @@ test("a refresh reads a page that was never loaded only when it is reached", asy
   memory.change("ws1", { "bulk/d0003/f0035.js": "x\n" });
   await flush();
   await flush();
-  const pages = memory.calls.slice(callsBefore).filter((c) => c.name === "diff" && c.args.q.limit === undefined);
-  assert.deepEqual(pages.map((c) => c.args.q.after ?? null), [null]);
+  const pages = memory.calls.slice(callsBefore).filter((c) => c.name === "diff" && c.args.q.limit !== 0 && c.args.q.scope === "all");
+  assert.deepEqual(pages.map((c) => [c.args.q.hunks, c.args.q.limit, c.args.q.after ?? null]), [["none", 50, null]]);
   assert.equal(panel.diff.files.length, 50);
+  assert.equal(panel.summaryRows.length, 50);
   assert.equal(panel.moreShown, true);
+  assert.equal(panel.moreCount, "75", "the files left follow the list's totals");
 });
 
-test("a diff held while the reader is in the middle comes in with every file that changed since the open one", async () => {
-  const { panel, memory } = await setup({ world: manyChangedFilesWorld(20) });
-  const before = keysOf(panel);
-  panel.touched = true;
-  memory.change("ws1", { "bulk/d0000/f0001.js": "one\n" });
+test("a page read after a refresh joins the list and judges its files against the list read", async () => {
+  const { panel, memory } = await setup({ world: manyChangedFilesWorld(120) });
+  memory.change("ws1", { "bulk/d0010/f0105.js": "x\ny\nz\n" });
   await flush();
   await flush();
-  memory.change("ws1", { "bulk/d0000/f0002.js": "two\n" });
-  await flush();
-  await flush();
-  assert.equal(panel.liveState, "stale");
-  assert.deepEqual(keysOf(panel), before, "the open diff does not move");
-  await panel.reload();
-  const after = keysOf(panel);
-  assert.deepEqual(Object.keys(after).filter((p) => after[p] !== before[p]).sort(), ["bulk/d0000/f0001.js", "bulk/d0000/f0002.js"]);
+  assert.equal(panel.staleCount, 0, "a file on a page not loaded yet is not news");
+  await panel.loadMore();
+  assert.equal(panel.summaryRows.length, 100);
+  assert.equal(panel.staleCount, 0, "it came in with hunks, as the list says");
 });
 
 test("selecting a file touches no other row of 500", async () => {

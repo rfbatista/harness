@@ -176,6 +176,28 @@ test("a row is the same object while its file, slug, current and fresh state did
   assert.equal(same.length, Object.keys(a).length - 2);
 });
 
+test("a list read again shows the same rows, groups and sections as objects: only what differs is new", async () => {
+  const pages = await read(setup());
+  const files = mergeFiles(pages.map((p) => p.files));
+  const cache = new Map();
+  const make = (list) => changesList({ files: list, totals: pages.at(-1), scope: "working", filter: [], cache });
+  const a = make(files);
+  // the same files read again: new objects, the same content
+  const again = files.map((f) => ({ ...f }));
+  const b = make(again);
+  const rowsOf = (l) => l.sections.flatMap((s) => s.groups.flatMap((g) => g.rows));
+  assert.deepEqual(rowsOf(b).filter((r, i) => r !== rowsOf(a)[i]), [], "no row is new");
+  assert.deepEqual(b.sections.flatMap((s) => s.groups).filter((g, i) => g !== a.sections.flatMap((x) => x.groups)[i]), [], "no group is new");
+  assert.deepEqual(b.sections.filter((s, i) => s !== a.sections[i]), [], "no section is new");
+  // one file's counts changed: its row, its group and its section are new, and nothing else is
+  const edited = again.map((f) => (f.path === "internal/code/browser.go" ? { ...f, added: f.added + 3 } : f));
+  const c = make(edited);
+  const newRows = rowsOf(c).filter((r, i) => r !== rowsOf(b)[i]).map((r) => r.path);
+  assert.deepEqual(newRows, ["internal/code/browser.go"]);
+  const newGroups = c.sections.flatMap((s) => s.groups).filter((g) => !b.sections.flatMap((x) => x.groups).includes(g));
+  assert.deepEqual(newGroups.map((g) => g.label), ["internal/code/"]);
+});
+
 test("without the server's counts the legend and sections count the files read", async () => {
   const pages = await read(setup(), { scope: "working", limit: 50 });
   const total = { ...pages.at(-1), counts: { modified: 0, added: 0, deleted: 0, renamed: 0, copied: 0, type_changed: 0, untracked: 0 }, sections: null };

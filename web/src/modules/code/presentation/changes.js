@@ -6,7 +6,7 @@
 // or in another section, is one row.
 
 import { baseName, changeMark, dirName, formatCount, plural } from "../domain/code.js";
-import { slugs } from "../domain/diff.js";
+import { notLoaded, slugs } from "../domain/diff.js";
 import { summaryRowView } from "./view.js";
 
 /** The order of the legend's buttons (the mockup's): M A D R C T U, so modified leads. */
@@ -86,8 +86,21 @@ function rowOf(f, slug, current, fresh, href) {
   return { ...base, href: href(slug), dir: "", name: baseName(f.path), stat: isNew ? null : base.stat, note, staged: f.staged, flag, label };
 }
 
-/** Rows grouped by directory, the groups in directory order (the root first). */
-function groupsOf(rows) {
+/**
+ * What a row shows of its file: two reads of a file that show the same are one
+ * row (a refresh reads every file again, so the file's identity says nothing).
+ */
+const rowSignature = (f) => [f.status, f.oldPath ?? "", f.added, f.deleted, f.binary ? 1 : 0, f.staged ? 1 : 0, notLoaded(f) ? 1 : 0].join("|");
+
+const sameItems = (a, b) => a.length === b.length && a.every((x, i) => x === b[i]);
+
+/**
+ * Rows grouped by directory, the groups in directory order (the root first). A
+ * group whose rows are the same objects as last time is the same object, so
+ * what draws it does not run for it again. `cache` keeps the last ones, under
+ * keys that cannot be a path.
+ */
+function groupsOf(rows, sectionKey, cache) {
   const byDir = new Map();
   for (const r of rows) {
     const dir = dirName(r.path);
@@ -96,7 +109,14 @@ function groupsOf(rows) {
   }
   return [...byDir.entries()]
     .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
-    .map(([dir, list]) => ({ key: dir, dir: dir ? `${dir}/` : "", label: dir ? `${dir}/` : ROOT_LABEL, count: list.length, rows: list }));
+    .map(([dir, list]) => {
+      const key = `\0group\0${sectionKey}\0${dir}`;
+      const hit = cache?.get(key);
+      if (hit && sameItems(hit.rows, list)) return hit;
+      const group = { key: dir, dir: dir ? `${dir}/` : "", label: dir ? `${dir}/` : ROOT_LABEL, count: list.length, rows: list };
+      cache?.set(key, group);
+      return group;
+    });
 }
 
 /**
@@ -110,7 +130,7 @@ function groupsOf(rows) {
  * @param {string} [p.current]  the path of the file on screen
  * @param {Iterable<string>} [p.fresh]  the paths that changed since the reader last looked
  * @param {(slug: string, path: string) => string} [p.href]  where a row links; the diff section's anchor by default (the History tab links into the Code tab)
- * @param {Map<string, object>} [p.cache]  rows kept between calls: a row whose file, slug, current and fresh state are as before is the same object
+ * @param {Map<string, object>} [p.cache]  rows and groups kept between calls: a row whose file shows the same, and whose slug, current and fresh state are as before, is the same object, and so is a group of the same rows
  */
 export function changesList({ files, totals: given, scope, filter, slugMap, current = "", fresh = [], href = (slug) => `#diff-${slug}`, cache }) {
   const pressed = new Set(filter);
@@ -123,14 +143,20 @@ export function changesList({ files, totals: given, scope, filter, slugMap, curr
     const isCurrent = f.path === current;
     const isFresh = freshSet.has(f.path);
     const hit = cache?.get(f.path);
-    if (hit && hit.f === f && hit.slug === s && hit.current === isCurrent && hit.fresh === isFresh) return { f, row: hit.row };
+    const sig = rowSignature(f);
+    if (hit && hit.sig === sig && hit.slug === s && hit.current === isCurrent && hit.fresh === isFresh) return { f, row: hit.row };
     const row = rowOf(f, s, isCurrent, isFresh, (slug) => href(slug, f.path));
-    cache?.set(f.path, { f, slug: s, current: isCurrent, fresh: isFresh, row });
+    cache?.set(f.path, { sig, slug: s, current: isCurrent, fresh: isFresh, row });
     return { f, row };
   });
   const section = (key, title, note, list, whole) => {
-    const groups = groupsOf(list.map((x) => x.row));
-    return { key, title, note, count: pressed.size === 0 && whole !== undefined ? whole : list.length, groups };
+    const groups = groupsOf(list.map((x) => x.row), key, cache);
+    const count = pressed.size === 0 && whole !== undefined ? whole : list.length;
+    const hit = cache?.get(`\0section\0${key}`);
+    if (hit && hit.count === count && hit.title === title && sameItems(hit.groups, groups)) return hit;
+    const made = { key, title, note, count, groups };
+    cache?.set(`\0section\0${key}`, made);
+    return made;
   };
   const sections =
     scope === "working"

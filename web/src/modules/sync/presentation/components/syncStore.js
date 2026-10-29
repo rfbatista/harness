@@ -10,6 +10,7 @@
 // older count and ends on one consistent state.
 
 import { Codes, codeOf } from "../../../../shared/domain/errors.js";
+import { FeedStatus } from "../../../../shared/domain/feed.js";
 import { canPush, fresher } from "../../domain/gitState.js";
 import { refusalOf } from "../view.js";
 
@@ -69,8 +70,42 @@ export function syncActions({ gateway, store }) {
   /** Workspaces already asked for, so a page of many chips reads each once. */
   const asked = new Set();
 
-  return {
+  /** The project feeds followed, by project id, with how many hold each. */
+  const feeds = new Map();
+
+  const api = {
     keep,
+
+    /**
+     * Follows the project feed's git_state into the store, once per project
+     * however many hold it (the page's watch, each Code tab's chip); the
+     * returned function lets go, and the last one stops the feed. A reconnect
+     * reads every workspace held again.
+     */
+    watch(projectId) {
+      if (!projectId) return () => {};
+      let feed = feeds.get(projectId);
+      if (!feed) {
+        const stop = gateway.follow(
+          projectId,
+          (state) => keep(state),
+          (status) => status === FeedStatus.RESYNCED && api.rereadAll(),
+        );
+        feed = { holders: 0, stop };
+        feeds.set(projectId, feed);
+      }
+      feed.holders += 1;
+      let released = false;
+      return () => {
+        if (released) return;
+        released = true;
+        feed.holders -= 1;
+        if (feed.holders === 0) {
+          feed.stop();
+          feeds.delete(projectId);
+        }
+      };
+    },
 
     /**
      * Reads a workspace's state when the page holds none for it: a chip the
@@ -144,4 +179,5 @@ export function syncActions({ gateway, store }) {
       return ok;
     },
   };
+  return api;
 }

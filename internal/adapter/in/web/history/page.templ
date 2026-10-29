@@ -79,7 +79,7 @@ templ gitHead(v PageView) {
 			<span>vs <code x-text="baseRef"></code></span>
 			@code.SyncBaseState()
 			<span>vs upstream</span>
-			@code.SyncSlot(strconv.Quote(v.Git.WorkspaceID))
+			@code.SyncSlot(strconv.Quote(v.Git.WorkspaceID), `""`)
 			<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" data-fetch x-bind:aria-disabled="fetchDisabledAttr" x-on:click="fetch" x-text="fetchLabel"></button>
 			<span x-bind:data-old="freshOldAttr" x-text="fetchedPhrase"></span>
 		</div>

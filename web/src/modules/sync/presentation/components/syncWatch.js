@@ -8,7 +8,6 @@
 // again: GET is served from the code watcher's snapshot, and it is how a push
 // or a worktree change during the drop shows up.
 
-import { FeedStatus } from "../../../../shared/domain/feed.js";
 import { readSeed } from "../../../../shared/presentation/seed.js";
 
 /** @param {{ gateway: import("../../domain/ports.js").SyncGateway, actions: ReturnType<typeof import("./syncStore.js").syncActions> }} deps */
@@ -27,11 +26,7 @@ export const syncWatch = ({ gateway, actions }) => () => {
       }
       this.projectId = seed.projectId;
       for (const state of seed.states) actions.keep(state);
-      unfollow = gateway.follow(
-        this.projectId,
-        (state) => actions.keep(state),
-        (status) => status === FeedStatus.RESYNCED && actions.rereadAll(),
-      );
+      unfollow = actions.watch(this.projectId);
     },
 
     destroy() {

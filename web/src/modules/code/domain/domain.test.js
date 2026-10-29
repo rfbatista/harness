@@ -3,7 +3,7 @@ import { ancestors, changeMark, dirMark, formatSize, languageName } from "./code
 import { gitCommand, lineAnchor, parseDiffHash, sidesOf, slugOf, slugs, splitRows, startsCollapsed, statOf, withheldCopy } from "./diff.js";
 import { bannerLine, problemOf } from "./errors.js";
 import { clampRange, digits, parseRange, parseRangeHash, rangeHash, splitLines, windowOf, scrollTopFor } from "./lines.js";
-import { onChange, onEnded, onReload, stateWord } from "./live.js";
+import { canReload, onChange, onEnded, onReload, stateWord } from "./live.js";
 import { hrefOf, parseHref, permalink, repositoryHref, route } from "./routes.js";
 import { resolveTarget } from "./symlink.js";
 import { literalDir, mapView, zoneDot, zoneIndex, zoneTags } from "./zones.js";
@@ -140,9 +140,18 @@ test("live: a change never moves the code under a reader who scrolled", () => {
   assert.deepEqual(onChange("gone", { untouched: true }), { state: "gone", apply: false, announce: false });
   assert.deepEqual(onChange("", { untouched: true }), { state: "", apply: false, announce: false });
   assert.equal(onReload("stale"), "live");
-  assert.equal(onEnded("live"), "");
+  assert.equal(onEnded("live"), "stopped");
   assert.equal(onEnded("gone"), "gone");
   assert.equal(stateWord("stale"), "Changed on disk");
+  assert.equal(stateWord("stale", { count: 3 }), "3 files changed");
+  assert.equal(stateWord("stale", { count: 1 }), "1 file changed");
+  assert.equal(stateWord("stopped"), "stopped");
+});
+
+test("live: a stopped session sends no events, and Reload is how its view is read again", () => {
+  assert.deepEqual(onChange("stopped", { untouched: true }), { state: "stopped", apply: false, announce: false });
+  assert.equal(onReload("stopped"), "stopped");
+  assert.deepEqual(["live", "stale", "stopped", "gone", ""].map(canReload), [true, true, true, false, false]);
 });
 
 test("routes: session and repository URLs round-trip", () => {

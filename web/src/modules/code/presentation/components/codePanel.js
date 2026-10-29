@@ -12,7 +12,7 @@
 // front or leaves it; it answers with `code-files-counted` {sessionId, count}.
 // The panel owns the address bar while its tab is in front.
 
-import { FIXED, LIVE } from "../../domain/live.js";
+import { LIVE, STOPPED } from "../../domain/live.js";
 import { codeBrowser } from "./codeBrowser.js";
 import { compose } from "./compose.js";
 
@@ -96,7 +96,8 @@ export const codePanel = (deps) => (/** @type {PanelInput} */ panel) => {
       this.repositoryName ||= panel.repositoryName;
       this.branch ||= panel.branch;
       this.baseRef ||= panel.baseRef;
-      this.liveState = this.gone ? this.liveState : panel.live ? LIVE : FIXED;
+      // A session that is not running sends no events: its view says so, and is read on open and on Reload.
+      this.liveState = this.gone ? this.liveState : panel.live ? LIVE : STOPPED;
       if (panel.live && !this.gone) this.follow();
       this.watchWidth();
       // The diff counts the badge whatever the view; read it once the page is idle.
@@ -122,15 +123,12 @@ export const codePanel = (deps) => (/** @type {PanelInput} */ panel) => {
     },
 
     countFiles() {
-      const count = this.diff ? this.diff.fileCount : this.totalCount;
+      const count = this.diffStale && this.totalCount !== null ? this.totalCount : this.listDiff ? this.listDiff.fileCount : this.totalCount;
       if (count !== null) this.$dispatch("code-files-counted", { sessionId: this.sessionId, count });
     },
     /** Behind another tab: nobody looks at the diff. */
     get background() {
       return !this.shown;
-    },
-    countHeld(diff) {
-      this.$dispatch("code-files-counted", { sessionId: this.sessionId, count: diff.fileCount });
     },
 
     /** The sessions page brought the Code tab to the front, or left it. */

@@ -9,9 +9,11 @@ package code
 
 // SyncSlot is the chip as a button in a .sync-slot, with its panel. workspace
 // is an Alpine expression that names the worktree (a string literal on a page
-// that knows it, a property of the code view on the Code tab).
-templ SyncSlot(workspace string) {
-	<span class="sync-slot" x-data={ "syncPanel(" + workspace + ")" } x-show="shown" x-on:dialog-close.window="panelClosed($event)">
+// that knows it, a property of the code view on the Code tab); project names
+// the project whose feed's git_state the chip follows itself (the Code tab,
+// which has no watch of its own), or is "" on a page whose watch does.
+templ SyncSlot(workspace string, project string) {
+	<span class="sync-slot" x-data={ "syncPanel(" + workspace + ", " + project + ")" } x-show="shown" x-on:dialog-close.window="panelClosed($event)">
 		<button type="button" class="sync-state" aria-haspopup="dialog" x-bind:data-state="state" x-bind:data-loading="loadingAttr" x-bind:data-old="oldAttr" x-bind:aria-expanded="expandedAttr" x-bind:title="title" x-bind:aria-label="describe" x-on:click="openPanel($event)">
 			@syncStateBody(true)
 		</button>

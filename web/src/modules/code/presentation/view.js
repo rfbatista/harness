@@ -182,7 +182,7 @@ export function placeholderOf({ file = null, entry = null, href = (p) => p }) {
 }
 
 /** The source bar's origin and state (code-source-bar block). */
-export function sourceBarView({ repositoryName, ref, commit, dirty, state, kind }) {
+export function sourceBarView({ repositoryName, ref, commit, dirty, state, kind, count = 0 }) {
   return {
     repo: repositoryName,
     branch: ref,
@@ -190,7 +190,7 @@ export function sourceBarView({ repositoryName, ref, commit, dirty, state, kind 
     commitTitle: commit,
     dirty: kind === "session" && dirty > 0 ? `${formatCount(dirty)} uncommitted` : "",
     state: state || null,
-    word: stateWord(state),
+    word: stateWord(state, { count }),
   };
 }
 

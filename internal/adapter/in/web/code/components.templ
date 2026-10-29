@@ -101,17 +101,17 @@ templ liveSourceBar() {
 			</template>
 			<code class="commit" x-bind:title="bar.commitTitle" x-text="bar.commit"></code>
 			<template x-if="syncWorkspace">
-				@SyncSlot("syncWorkspace")
+				@SyncSlot("syncWorkspace", "projectId")
 			</template>
 			<template x-if="bar.dirty">
 				<span class="dirty" x-text="bar.dirty"></span>
 			</template>
 		</div>
 		<template x-if="hasState || busy">
-			<p class="state" role="status" x-bind:data-loading="busyAttr" x-text="stateText"></p>
+			<p class="state" role="status" x-bind:data-loading="busyAttr"><span x-text="stateText"></span><template x-if="asOfText"><span class="asof" x-text="asOfText"></span></template></p>
 		</template>
 		<div class="actions">
-			<template x-if="isStale">
+			<template x-if="showsReload">
 				<button type="button" class="[ button ]" data-size="sm" data-reload x-on:click="reload">Reload <kbd>R</kbd></button>
 			</template>
 			<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-bind:disabled="gone" x-on:click="openFinder">Find file <kbd>T</kbd></button>
@@ -224,7 +224,7 @@ templ liveGroup(g string) {
 		<header class="group-head"><span class="dirname"><bdi x-text={ g + ".label" }></bdi></span><span class="count" x-text={ g + ".count" }></span></header>
 		<ol>
 			<template x-for={ "row in " + g + ".rows" } x-bind:key="row.key">
-				<li x-bind:data-fresh="row.fresh">
+				<li x-bind:data-updated="row.fresh">
 					<a x-bind:href="row.href" x-bind:aria-current="row.current" x-bind:aria-label="row.label" x-on:click="clickSummary($event, row.path)">
 						@liveMark("row.mark")
 						<span class="path"><bdi><span class="name" x-text="row.name"></span></bdi></span>
@@ -348,6 +348,14 @@ templ liveDiff() {
 				</div>
 			</div>
 		</template>
+		<template x-if="notice">
+			<div class="notice" role="status" x-bind:data-state="notice.state">
+				<strong x-text="notice.text"></strong>
+				<template x-if="notice.reload">
+					<button type="button" class="[ button ]" data-size="sm" data-reload-hunks x-on:click="reload">Reload hunks <kbd>R</kbd></button>
+				</template>
+			</div>
+		</template>
 		<template x-for="f in diffFiles" x-bind:key="f.key">
 			<section class="file" x-bind:id="f.id" x-bind:aria-labelledby="f.nameId" x-bind:data-collapsed="f.collapsed" x-bind:aria-busy="f.busy" x-init="watchFile($el, f.path)">
 				<header class="head">
@@ -366,6 +374,9 @@ templ liveDiff() {
 					</template>
 					<template x-if="f.zoneMore">
 						<span class="[ text-xs color-ink-faint ]" x-bind:title="f.zoneMore.title" x-text="f.zoneMore.label"></span>
+					</template>
+					<template x-if="f.updated">
+						<span class="updated" x-text="updatedLabel(f.path)"></span>
 					</template>
 					<span class="stat">
 						<template x-if="f.stat">

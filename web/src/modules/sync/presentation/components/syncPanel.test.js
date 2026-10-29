@@ -281,3 +281,38 @@ test("the History head's phrase says how long ago the remote was fetched, or tha
   assert.equal(panel("ws2").instance.fetchedPhrase, "not fetched yet");
   watch.destroy();
 });
+
+test("the Code tab's chip follows the feed itself, with no page watch, and lets go when it goes", async () => {
+  const memory = memorySync({ workspaces: [{ state: makeState({ upstream: "ahead" }) }], now: () => clock });
+  const store = emptyStore();
+  const actions = syncActions({ gateway: memory.gateway, store });
+  const deps = { store, actions, now: () => clock };
+  const p = mount(() => syncPanel(deps)("ws1", "p1"), { el: {} });
+  p.instance.init();
+  await flush();
+  assert.equal(p.instance.state, "ahead", "read once for its own worktree");
+  memory.change("ws1", { upstream: { state: "behind", ref: "origin/agent/sync-1234", remote: "origin", ahead: 0, behind: 2 } });
+  await flush();
+  assert.deepEqual([p.instance.state, p.instance.behind], ["behind", 2], "the feed's git_state moves it without a page watch");
+  p.instance.destroy();
+  memory.change("ws1", { upstream: { state: "in_sync", ref: "origin/agent/sync-1234", remote: "origin", ahead: 0, behind: 0 } });
+  await flush();
+  assert.equal(p.instance.state, "behind", "no follower is left behind");
+});
+
+test("a page watch and a chip's own follow share one follower of the project", async () => {
+  const memory = memorySync({ workspaces: [{ state: makeState({ upstream: "ahead" }) }], now: () => clock });
+  let follows = 0;
+  const gateway = { ...memory.gateway, follow: (...a) => (follows += 1, memory.gateway.follow(...a)) };
+  const store = emptyStore();
+  const actions = syncActions({ gateway, store });
+  const one = actions.watch("p1");
+  const two = actions.watch("p1");
+  assert.equal(follows, 1);
+  one();
+  memory.change("ws1", { upstream: { state: "behind", ref: "origin/agent/sync-1234", remote: "origin", ahead: 0, behind: 1 } });
+  await flush();
+  assert.equal(store.byWorkspace.ws1.upstream.state, "behind", "still followed while one holder remains");
+  two();
+  assert.equal(memory.gateway.follow !== undefined, true);
+});

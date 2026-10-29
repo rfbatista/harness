@@ -9,7 +9,7 @@ import { codeGatewayContract } from "../testing/gateway-contract.js";
 import { makeWorld } from "../testing/fixtures.js";
 import { stubCodeApi } from "../testing/stub-api.js";
 import { codeGateway } from "./code-gateway.js";
-import { toCodeChanged, toDiff, toSeed, toTree } from "./dto.js";
+import { diffQuery, toCodeChanged, toDiff, toSeed, toTree } from "./dto.js";
 import { memoryCode } from "./memory-gateway.js";
 
 file("code/infrastructure/gateways");
@@ -59,6 +59,22 @@ test("http · other feed messages and a malformed code_changed are dropped; the 
   await flush();
   assert.deepEqual(seen, [{ workspaceId: "ws1", head: "h" }]);
   stop();
+});
+
+test("http · a git_state for a worktree is heard like a code_changed: the list reads again for either", async () => {
+  const { gateway, stub } = http(makeWorld());
+  const seen = [];
+  const stop = gateway.follow("p1", (c) => seen.push(c), () => {});
+  await flush();
+  stub.send({ git_state: { workspace_id: "ws1", head: "abc", branch: "b" } });
+  stub.send({ git_state: { head: "no workspace" } });
+  await flush();
+  assert.deepEqual(seen, [{ workspaceId: "ws1", head: "abc" }]);
+  stop();
+});
+
+test("dto · a list refresh asks for pages without hunks", () => {
+  assert.deepEqual(diffQuery({ workspaceId: "ws1", scope: "working", hunks: "none", limit: 200 }), { workspace_id: "ws1", scope: "working", path: undefined, after: undefined, limit: "200", hunks: "none" });
 });
 
 test("dto · unknown kinds and statuses are BAD_RESPONSE, not silently drawn", () => {
