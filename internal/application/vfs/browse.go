@@ -251,3 +251,19 @@ func workspaceOf(s *domain.Session) *string {
 	}
 	return &s.WorkspaceID
 }
+
+// AnnounceRoots puts each root coming or going on sink as a session_files_root
+// change of the session's project, and answers the call that stops it.
+func (f *FileSystem) AnnounceRoots(sink ports.ProjectChangeSink) (cancel func()) {
+	return f.events.Subscribe(func(ev RootEvent) {
+		sess := f.sessions.Get(ev.SessionID)
+		if sess == nil || sess.WorkspaceID == "" {
+			return
+		}
+		c := &ports.SessionFilesRootChange{Type: "session_files_root", SessionID: ev.SessionID, Root: string(ev.Kind), Available: ev.Available, ProjectID: sess.ProjectID}
+		if !ev.Available {
+			c.Note = rootNote(ev.Kind, sess)
+		}
+		sink.AnnounceChange(ports.ProjectChange{SessionFilesRoot: c})
+	})
+}

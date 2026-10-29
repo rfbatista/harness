@@ -426,7 +426,7 @@ var AgentRuntimeModule = fx.Module("agentruntime",
 		newVirtualShells,
 		newVirtualFileSystem,
 	),
-	fx.Invoke(registerRuntimeShutdown, registerServerSessions, bindVirtualShells, bindWorkspaceRemovals, bindSandboxSettings,
+	fx.Invoke(registerRuntimeShutdown, registerServerSessions, bindVirtualShells, bindWorkspaceRemovals, bindFilesRootFeed, bindSandboxSettings,
 		bindAgentReadiness, func(*archrules.Service) {}),
 )
 
@@ -524,6 +524,10 @@ func newVirtualFileSystem(shells *vfs.Service, sessions ports.SessionRepository,
 // bindWorkspaceRemovals tells the virtual file system when a workspace is
 // removed, so it raises the worktree root's going away.
 func bindWorkspaceRemovals(ws *workspaces.Service, fsys *vfs.FileSystem) { ws.UseRemovalSink(fsys) }
+
+// bindFilesRootFeed puts the roots of the virtual file system coming and going
+// on the project feed, for the Files view that follows them.
+func bindFilesRootFeed(fsys *vfs.FileSystem, orch *orchestration.Service) { fsys.AnnounceRoots(orch) }
 
 // bindVirtualShells gives every session with a task its virtual shell, and
 // has the shells hear every change they may have to show: documents' and
