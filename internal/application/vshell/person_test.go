@@ -341,7 +341,7 @@ func TestRemovingTheWorktreeClosesItsTerminals(t *testing.T) {
 	p.events.raise(vfs.RootEvent{SessionID: "s1", Kind: vfs.WorktreeRoot, Path: p.worktree})
 
 	ev := next(t, p)
-	if ev.ID != wt.ID || ev.Reason != "root_gone" || ev.Message != "The worktree was removed, and its terminals with it." {
+	if ev.ID != wt.ID || ev.Reason != "root_gone" || ev.Message != "The worktree was removed, and this terminal with it." {
 		t.Errorf("event = %+v", ev)
 	}
 	waitDone(t, term)

@@ -96,7 +96,7 @@ func (p *PersonTerminals) rootChanged(ev vfs.RootEvent) {
 	if ev.Available {
 		return
 	}
-	message := "The worktree was removed, and its terminals with it."
+	message := "The worktree was removed, and this terminal with it."
 	if ev.Kind == vfs.ResourcesRoot {
 		message = "The session ended, and its resources folder with it."
 	}

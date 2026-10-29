@@ -11,6 +11,7 @@ import { history } from "./components/history.js";
 import { merge } from "./components/merge.js";
 import { sandbox } from "./components/sandbox.js";
 import { newSession } from "./components/newSession.js";
+import { personTerms } from "./components/personTerms.js";
 import { terminal } from "./components/terminal.js";
 import { statusCheck } from "./components/statusCheck.js";
 import { sessionsPage } from "./pages/sessionsPage.js";
@@ -26,6 +27,8 @@ import { screenPrefs } from "./screenPrefs.js";
  *   merge?: import("../domain/ports.js").MergeGateway,  merging a session's branch, for the Merge tab
  *   artifacts: import("../domain/ports.js").ArtifactGateway,
  *   runTerminals?: import("../domain/ports.js").TerminalGateway,  application runs' terminals
+ *   persons?: import("../domain/ports.js").PersonTerminalGateway,  the person's own terminals, for the Files tab's dock
+ *   personTerminals?: import("../domain/ports.js").TerminalGateway,  their sockets
  *   createScreen: import("./components/terminal.js").CreateScreen,
  *   clock: import("../../../shared/infrastructure/clock.js").Clock,
  *   channel?: import("../domain/ports.js").ChannelGateway,  the architect channel
@@ -59,4 +62,9 @@ export function registerSessions(Alpine, deps) {
   Alpine.data("sessionsDesignWatch", designWatch(deps));
   // The same terminal, on an application run started from a session.
   if (deps.runTerminals) Alpine.data("sessionsRunTerminal", terminal({ ...deps, terminals: deps.runTerminals, kind: "run", textSize }));
+  // The person's own terminals: the dock, and a terminal in it.
+  if (deps.persons && deps.prefs && deps.personTerminals) {
+    Alpine.data("sessionsPersonTerms", personTerms({ persons: deps.persons, prefs: deps.prefs }));
+    Alpine.data("sessionsPersonTerminal", terminal({ ...deps, terminals: deps.personTerminals, kind: "person", textSize }));
+  }
 }
