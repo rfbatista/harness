@@ -11,7 +11,11 @@ import (
 // Option configures the router.
 type Option func(*options)
 
-type options struct{ token string }
+type options struct {
+	token string
+	// exposed: the HTTP server listens beyond this machine.
+	exposed bool
+}
 
 // WithToken requires `Authorization: Bearer <token>` on every /api route but
 // the open ones: /api/health, so a client or a probe can tell the server is

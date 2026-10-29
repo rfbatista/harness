@@ -33,6 +33,9 @@ import (
 	"operators-mcp/internal/adapter/out/githubapi"
 	"operators-mcp/internal/adapter/out/keychainshim"
 	"operators-mcp/internal/adapter/out/persistence/sqlite"
+	"operators-mcp/internal/adapter/out/personshell"
+	"operators-mcp/internal/adapter/out/shell"
+	"operators-mcp/internal/adapter/out/termhost"
 	"operators-mcp/internal/app/catalog"
 	"operators-mcp/internal/application/agentcredential"
 	"operators-mcp/internal/application/apps"
@@ -46,6 +49,7 @@ import (
 	"operators-mcp/internal/application/taskchannel"
 	"operators-mcp/internal/application/tooling"
 	"operators-mcp/internal/application/vfs"
+	"operators-mcp/internal/application/vshell"
 	"operators-mcp/internal/application/workspaces"
 	"operators-mcp/internal/application/writinghelper"
 	"operators-mcp/internal/domain"
@@ -425,6 +429,7 @@ var AgentRuntimeModule = fx.Module("agentruntime",
 		vfs.NewRootEvents,
 		newVirtualShells,
 		newVirtualFileSystem,
+		newPersonTerminals,
 	),
 	fx.Invoke(registerRuntimeShutdown, registerServerSessions, bindVirtualShells, bindWorkspaceRemovals, bindSandboxSettings,
 		bindAgentReadiness, func(*archrules.Service) {}),
@@ -509,6 +514,15 @@ func newVirtualShells(plan *planning.Service, art *artifacts.Service, sessions p
 	shells := vfs.New(src)
 	shells.UseRootEvents(events)
 	return shells
+}
+
+// newPersonTerminals are the person's own shells on the virtual file systems
+// (ADR 0050). They run on a terminal host of their own, never the agents':
+// no agent, session tool or run can list or reach one.
+func newPersonTerminals(lc fx.Lifecycle, pty ports.PTY, fsys *vfs.FileSystem, sessions ports.SessionRepository) *vshell.PersonTerminals {
+	host := termhost.New(shell.Direct{}, pty).WithLaunchers(personshell.New(pty, func() []string { return vshell.PersonEnv(os.Environ()) }))
+	lc.Append(fx.StopHook(func(ctx context.Context) error { return host.Shutdown(ctx) }))
+	return vshell.NewPersonTerminals(vshell.PersonDeps{Host: host, Folders: fsys, Sessions: sessions})
 }
 
 // newVirtualFileSystem is the virtual file system of the sessions: their
