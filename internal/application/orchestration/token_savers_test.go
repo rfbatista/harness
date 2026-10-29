@@ -15,6 +15,7 @@ import (
 	"operators-mcp/internal/adapter/out/persistence/sqlite"
 	"operators-mcp/internal/application/capabilities"
 	"operators-mcp/internal/application/settings"
+	"operators-mcp/internal/application/vshell"
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
 )
@@ -142,7 +143,7 @@ func checkRTKWired(t *testing.T, s claudeSettings, env map[string]string, rtk st
 	if !slices.ContainsFunc(bash, func(c string) bool { return strings.Contains(c, "/check?hook=PreToolUse") }) {
 		t.Errorf("the edit proxy's Bash hook is gone: %q", bash)
 	}
-	if _, ok := s.hookCommand("PostToolUse", ShellEditTools); !ok {
+	if _, ok := s.hookCommand("PostToolUse", vshell.EditTools); !ok {
 		t.Errorf("the edit proxy's commit hook is gone: %+v", s.Hooks)
 	}
 	if env["RTK_TELEMETRY_DISABLED"] != "1" || env["DO_NOT_TRACK"] != "1" {

@@ -8,6 +8,8 @@ import (
 	"testing"
 
 	"github.com/rfbatista/llmkit/claude"
+
+	"operators-mcp/internal/application/vshell"
 )
 
 const testShellBase = "http://127.0.0.1:8080/api/sessions/"
@@ -91,7 +93,7 @@ func TestTheEditProxyHooksJoinTheDriversOwnSettings(t *testing.T) {
 		},
 		Extra: map[string]json.RawMessage{"model": json.RawMessage(`"opus"`)},
 	}}
-	hooks := ShellHooks(testShellBase + "s1/shell")
+	hooks := vshell.Hooks(testShellBase + "s1/shell")
 	dc, ok := withHooks(own, hooks)
 	if !ok {
 		t.Fatal("a claude config was refused")
@@ -103,7 +105,7 @@ func TestTheEditProxyHooksJoinTheDriversOwnSettings(t *testing.T) {
 	for _, m := range dc.Settings.Hooks[claude.HookPreToolUse] {
 		matchers = append(matchers, m.Matcher)
 	}
-	if strings.Join(matchers, ",") != "Read,"+ShellEditTools+",Bash" {
+	if strings.Join(matchers, ",") != "Read,"+vshell.EditTools+",Bash" {
 		t.Fatalf("PreToolUse matchers = %v", matchers)
 	}
 	if len(dc.Settings.Hooks[claude.HookPostToolUse]) != 1 {

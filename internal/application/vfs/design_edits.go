@@ -1,4 +1,4 @@
-package vshell
+package vfs
 
 import (
 	"bytes"
@@ -34,7 +34,7 @@ func refuseNoDesigns(rel string) ports.ShellAnswer {
 // checkDesignsAt: the designs at rel, or in the folder rel, may be written
 // or removed while the session's copies are the stored revisions; a new
 // file becomes a design.
-func (s *Service) checkDesignsAt(sh *shell, rel string) ports.ShellAnswer {
+func (s *Service) checkDesignsAt(sh *root, rel string) ports.ShellAnswer {
 	if s.src.Designs == nil {
 		return refuseNoDesigns(rel)
 	}
@@ -51,7 +51,7 @@ func (s *Service) checkDesignsAt(sh *shell, rel string) ports.ShellAnswer {
 // changes scope, to task scope only when published on this task; within a
 // folder it is only renamed. A file new to the harness may only land in
 // task/designs.
-func (s *Service) checkDesignMove(sh *shell, src, dst string) ports.ShellAnswer {
+func (s *Service) checkDesignMove(sh *root, src, dst string) ports.ShellAnswer {
 	if s.src.Designs == nil {
 		return refuseNoDesigns(src)
 	}
@@ -81,7 +81,7 @@ func (s *Service) checkDesignMove(sh *shell, src, dst string) ports.ShellAnswer 
 
 // commitDesignWrite stores the file at rel: a new revision of its design,
 // or a new design published on the task.
-func (s *Service) commitDesignWrite(sh *shell, rel string) ports.ShellAnswer {
+func (s *Service) commitDesignWrite(sh *root, rel string) ports.ShellAnswer {
 	if s.src.Designs == nil {
 		return refuseNoDesigns(rel)
 	}
@@ -122,7 +122,7 @@ func (s *Service) commitDesignWrite(sh *shell, rel string) ports.ShellAnswer {
 
 // commitDesignRemove unpublishes the designs whose files under rel are
 // gone.
-func (s *Service) commitDesignRemove(sh *shell, rel string) ports.ShellAnswer {
+func (s *Service) commitDesignRemove(sh *root, rel string) ports.ShellAnswer {
 	if s.src.Designs == nil {
 		return refuseNoDesigns(rel)
 	}
@@ -144,7 +144,7 @@ func (s *Service) commitDesignRemove(sh *shell, rel string) ports.ShellAnswer {
 // there: scope follows the folder; a design the move wrote over is
 // unpublished. A file new to the harness moved into task/designs is
 // published.
-func (s *Service) commitDesignMove(sh *shell, src, dst string) ports.ShellAnswer {
+func (s *Service) commitDesignMove(sh *root, src, dst string) ports.ShellAnswer {
 	if s.src.Designs == nil {
 		return refuseNoDesigns(src)
 	}
@@ -192,7 +192,7 @@ func (s *Service) commitDesignMove(sh *shell, src, dst string) ports.ShellAnswer
 
 // undoMove puts a design the harness did not move back where it was, and
 // answers ans.
-func (s *Service) undoMove(sh *shell, from, to string, ans ports.ShellAnswer) ports.ShellAnswer {
+func (s *Service) undoMove(sh *root, from, to string, ans ports.ShellAnswer) ports.ShellAnswer {
 	if _, err := os.Lstat(sh.abs(from)); err != nil {
 		_ = os.MkdirAll(filepath.Dir(sh.abs(from)), 0o755)
 		_ = os.Rename(sh.abs(to), sh.abs(from))

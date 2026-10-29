@@ -1,4 +1,4 @@
-package vshell
+package vfs
 
 import (
 	"crypto/sha256"
@@ -14,7 +14,8 @@ func Version(content []byte) string {
 	return hex.EncodeToString(sum[:])[:12]
 }
 
-// readme is the shell's README.md: a short map of the layout and its rules.
+// readme is the resources root's README.md: a short map of the layout and its
+// rules. Agents read it, so its words stay the old ones (ADR 0050).
 const readmeTemplate = `# Virtual shell
 
 This folder holds your task's, your project's and the project's other
@@ -95,7 +96,7 @@ options after the file names, and cp -R src/ with a trailing slash are not,
 so write those another way.
 `
 
-// readmeFor is the shell's README at the current value of the setting
+// readmeFor is the resources root's README at the current value of the setting
 // "Agents move documents to project" (ADR 0020): which rule applies to a
 // move from task/docs to project/docs.
 func readmeFor(agentsMove bool) string {

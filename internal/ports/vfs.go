@@ -7,13 +7,14 @@ import (
 	"operators-mcp/internal/domain"
 )
 
-// A task session's virtual shell: a temporary folder holding its task's and
-// project's documents, comments, resources and designs as files (see
-// "Contract: Harness server ↔ Agent sessions — virtual shell").
+// A task session's resources root: a temporary folder holding its task's and
+// project's documents, comments, resources and designs as files, one root of
+// its virtual file system (ADR 0050; see "Contract: Harness server ↔ Agent
+// sessions — virtual shell").
 
-// ShellFile is one file of a virtual shell as the session last received it:
+// ShellFile is one file of a resources root as the session last received it:
 // a row of its .index.json, and the file's base version for that session.
-// Path is relative to the shell, with forward slashes.
+// Path is relative to the resources root, with forward slashes.
 type ShellFile struct {
 	Path      string    `json:"path"`
 	Kind      string    `json:"kind"`
@@ -26,7 +27,7 @@ type ShellFile struct {
 	Repository string `json:"repository,omitempty"`
 }
 
-// The kinds of file a virtual shell holds.
+// The kinds of file a resources root holds.
 const (
 	ShellReadme    = "readme"
 	ShellTask      = "task"
@@ -41,26 +42,26 @@ const (
 	ShellArchitecture = "architecture"
 )
 
-// VirtualShells makes and removes task sessions' virtual shells.
-type VirtualShells interface {
-	// Open makes the session's shell, fills it with its task's and
-	// project's resources (its project's alone for a shell with no task),
+// ResourcesRoots makes and removes task sessions' resources roots.
+type ResourcesRoots interface {
+	// Open makes the session's resources root, fills it with its task's and
+	// project's resources (its project's alone for a root with no task),
 	// records what it was filled with as the session's base versions, and
-	// answers the shell's absolute path. A session opened again gets a
-	// fresh shell; the old one is removed.
+	// answers the root's absolute path. A session opened again gets a
+	// fresh root; the old one is removed.
 	Open(ctx context.Context, sessionID string, scope ShellScope) (string, error)
-	// Close removes the shell at dir, and forgets the session's base
-	// versions while dir is still its shell, so closing an old shell never
-	// touches a newer one. A shell already gone is not an error.
+	// Close removes the root at dir, and forgets the session's base
+	// versions while dir is still its root, so closing an old root never
+	// touches a newer one. A root already gone is not an error.
 	Close(sessionID, dir string)
 }
 
-// ShellBaseVersions is what each running shell was last given, per session.
-type ShellBaseVersions interface {
+// BaseVersions is what each running resources root was last given, per session.
+type BaseVersions interface {
 	// BaseVersion is the file at path as the session last received it;
-	// false when the session has no shell or the shell no such file.
+	// false when the session has no root or the root no such file.
 	BaseVersion(sessionID, path string) (ShellFile, bool)
-	// ShellFiles is every file of the session's shell, by path; nil when it
+	// ShellFiles is every file of the session's root, by path; nil when it
 	// has none.
 	ShellFiles(sessionID string) []ShellFile
 }
@@ -97,8 +98,8 @@ const SecurityShimCommand = "security"
 // shims and before the developer bin; a login shell puts it back there.
 const KeychainShimDirEnv = "HARNESS_KEYCHAIN_SHIM_DIR"
 
-// The environment a task session's shell is named in: ShellDirEnv is the
-// shell's absolute path, ShellURLEnv its edit endpoints' base
+// The environment a task session's resources root is named in: ShellDirEnv
+// is the root's absolute path, ShellURLEnv its edit endpoints' base
 // (…/api/sessions/{id}/shell), which the PATH shims call.
 const (
 	ShellDirEnv = "HARNESS_SHELL"
@@ -127,8 +128,8 @@ func ShellUnavailableAfter(rel string) string {
 // ShellEdit is one file operation an agent makes in its shell, as the edit
 // proxy (hooks and PATH shims) reports it: Op is write (or create, modify,
 // touch), rm, mv or cp (Paths[0] the source, Paths[1] the destination), or
-// mkdir; redirect is a shell redirect into Paths, refused inside the shell
-// with REDIRECT_DENIED. Paths are absolute; a relative one is taken as outside the shell.
+// mkdir; redirect is a shell redirect into Paths, refused inside the resources root
+// with REDIRECT_DENIED. Paths are absolute; a relative one is taken as outside the resources root.
 // Tool names the tool or command that makes it.
 type ShellEdit struct {
 	Op    string   `json:"op"`
@@ -138,7 +139,7 @@ type ShellEdit struct {
 
 // ShellAnswer is the harness's answer to a check or a commit. Allow false
 // carries the refusal's code and its reason, which starts with the code
-// (contract §6). Paths outside the shell are always allowed, with nothing
+// (contract §6). Paths outside the resources root are always allowed, with nothing
 // else said.
 type ShellAnswer struct {
 	Allow  bool   `json:"allow"`
@@ -171,14 +172,14 @@ type ShellDocumentWriter interface {
 
 // ShellScope is what a session's shell is opened on: its task, or, with no
 // TicketID, its project alone (a project-level product session, ADR 0016).
-// ProjectID is read only when TicketID is empty; a task's shell is in the
+// ProjectID is read only when TicketID is empty; a task's root is in the
 // task's project.
 type ShellScope struct {
 	ProjectID string
 	TicketID  string
 }
 
-// ArchitectureFile is a repository architecture record as the virtual shell
+// ArchitectureFile is a repository architecture record as the resources root
 // shows it: its YAML form and its version.
 type ArchitectureFile struct {
 	RepositoryID string

@@ -1,4 +1,4 @@
-package vshell
+package vfs
 
 import (
 	"context"
@@ -14,12 +14,12 @@ import (
 	"operators-mcp/internal/ports"
 )
 
-// contents is every file a session's shell should hold but the index, in
+// contents is every file a session's resources root should hold but the index, in
 // the contract's layout. Files named after what they hold get their path
-// when the builder places them. A shell with no task (tk nil) holds the
+// when the builder places them. A resources root with no task (tk nil) holds the
 // project's documents and designs and every project task's documents under
 // tasks/, nothing under task/.
-func (s *Service) contents(ctx context.Context, sh *shell, tk *domain.Ticket) (*builder, error) {
+func (s *Service) contents(ctx context.Context, sh *root, tk *domain.Ticket) (*builder, error) {
 	b := &builder{now: time.Now()}
 	sessionID := sh.sessionID
 	b.fixed(ports.ShellFile{Path: "README.md", Kind: ports.ShellReadme, Title: "README", UpdatedAt: b.now}, []byte(readmeFor(s.agentsMove())))
@@ -69,28 +69,28 @@ func (s *Service) contents(ctx context.Context, sh *shell, tk *domain.Ticket) (*
 	return b, nil
 }
 
-// file is one file of a shell: its index row, and its bytes or how to get
+// file is one file of a resources root: its index row, and its bytes or how to get
 // them.
 type file struct {
 	meta     ports.ShellFile
 	content  []byte
 	readOnly bool
 
-	// load reads the bytes, only when the shell does not hold this version
+	// load reads the bytes, only when the resources root does not hold this version
 	// already; nil when content is in hand. meta.Version may be empty until
-	// then, and UpdatedAt then tells whether the shell's copy is current.
+	// then, and UpdatedAt then tells whether the resources root's copy is current.
 	load func() ([]byte, error)
 	// generate makes the bytes once every other file is placed and loaded.
 	generate func() []byte
 	// A named file's path is chosen in folder from name, or kept where the
-	// shell already has it while keep allows; a fixed one has meta.Path.
+	// resources root already has it while keep allows; a fixed one has meta.Path.
 	folder, name string
 	keep         func(path string) bool
 	// dropped: its bytes could not be read, so it is left out.
 	dropped bool
 }
 
-// builder collects a shell's files, and the other tasks of the project,
+// builder collects a resources root's files, and the other tasks of the project,
 // each of which has a folder under tasks/.
 type builder struct {
 	files []*file
@@ -118,7 +118,7 @@ func (b *builder) generated(meta ports.ShellFile, gen func() []byte) {
 	b.files = append(b.files, &file{meta: meta, readOnly: true, generate: gen})
 }
 
-// place gives each named file its path. One the shell already holds (prev:
+// place gives each named file its path. One the resources root already holds (prev:
 // fileKey to path) keeps that path while it is in the same folder and its
 // keep rule allows, so a file is not renamed under the agent; the rest are
 // named in the order they were added (oldest first), with -<short id> on a
@@ -224,7 +224,7 @@ func (b *builder) comments(ctx context.Context, src ports.TaskCommentReader, tic
 }
 
 // resources: uploads under their names, links listed in links.md; all
-// read-only. An upload's bytes are read only when the shell lacks them.
+// read-only. An upload's bytes are read only when the resources root lacks them.
 func (b *builder) resources(ctx context.Context, src ports.TaskResourceFiles, ticketID string) error {
 	list, err := src.ListTicketResources(ctx, ticketID)
 	if err != nil {
@@ -260,7 +260,7 @@ func readResource(ctx context.Context, src ports.TaskResourceFiles, id string) (
 // designs: the task's own artifacts in task/designs, every project asset in
 // project/designs (url ones listed in urls.md), and the assets attached to
 // the task listed in attached.md. An artifact's bytes are read only when the
-// shell lacks its revision. With no task (tk nil), only the project's
+// resources root lacks its revision. With no task (tk nil), only the project's
 // assets.
 func (b *builder) designs(ctx context.Context, src ports.ArtifactReader, projectID string, tk *domain.Ticket) error {
 	var onTask []*domain.Artifact
