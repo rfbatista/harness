@@ -139,6 +139,39 @@ func (f *OriginFetcher) fetch(ctx context.Context, repositoryID, root, originURL
 	return nil
 }
 
+// FetchBranch fetches the one branch of origin into its tracking ref, under the
+// same per-repository lock as Fetch, so a start from a remote base waits for a
+// running fetch and the two never overlap. A branch origin no longer has is
+// ports.ErrRemoteBranchNotFound, and the stale tracking ref stays as it was;
+// the other failures are Fetch's. Observers are not told: no other branch's
+// counts moved.
+func (f *OriginFetcher) FetchBranch(ctx context.Context, repositoryID, root, originURL, branch string) error {
+	lock := f.lock(root)
+	lock.Lock()
+	defer lock.Unlock()
+
+	op, err := f.credential(ctx, repositoryID, originURL)
+	if err != nil {
+		return err
+	}
+	defer op.Release()
+	fetchCtx, cancel := context.WithTimeout(ctx, f.timeout)
+	err = f.git.FetchBranch(fetchCtx, root, branch, op.Env)
+	cancel()
+	switch {
+	case errors.Is(err, ports.ErrRemoteAuthRejected):
+		return refused(op, err)
+	case errors.Is(err, ports.ErrRemoteBranchNotFound):
+		return err
+	case err != nil:
+		return &OriginFetchError{Err: err}
+	}
+	if op.Push != nil {
+		f.auth.Used(op.Push.ID)
+	}
+	return nil
+}
+
 // OriginPushError is a push that failed for a reason other than the
 // credential. Rejected says the remote refused what was pushed (not a
 // fast-forward, a hook); Err carries git's reason.

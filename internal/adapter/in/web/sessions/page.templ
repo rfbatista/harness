@@ -836,24 +836,28 @@ templ newSessionForm(form NewSessionForm, lockedMode string) {
 			</div>
 			<div class="[ field ]">
 				<label for="new-session-base">Branch off</label>
-				<div class="[ dropdown ]" x-data="combobox" x-bind:aria-busy="loadingBranches" x-bind:data-error="branchError" x-on:dropdown-retry="loadBranches">
-					<select id="new-session-base" x-model="baseBranch" x-bind:disabled="loadingBranches">
-						<option value="" data-pinned>The checked-out branch</option>
-						<optgroup label="Branches">
-							<template x-for="b in localBranches" x-bind:key="b.name">
-								<option x-bind:value="b.name" x-text="b.name"></option>
-							</template>
-						</optgroup>
-						<template x-if="hasRemoteBranches">
-							<optgroup label="Remote branches">
-								<template x-for="b in remoteBranches" x-bind:key="b.name">
+				<div class="[ cluster ]">
+					<div class="[ dropdown ]" x-data="combobox" x-bind:aria-busy="branchBusy" x-bind:data-error="branchError" x-on:dropdown-retry="retryBranches">
+						<select id="new-session-base" x-model="baseBranch" x-bind:disabled="branchBusy" x-bind:aria-invalid="baseInvalid" aria-describedby="new-session-base-status new-session-base-hint">
+							<option value="" data-pinned>The checked-out branch</option>
+							<optgroup label="Branches">
+								<template x-for="b in localBranches" x-bind:key="b.name">
 									<option x-bind:value="b.name" x-text="b.name"></option>
 								</template>
 							</optgroup>
-						</template>
-					</select>
+							<template x-if="hasRemoteBranches">
+								<optgroup label="Remote branches">
+									<template x-for="b in remoteBranches" x-bind:key="b.name">
+										<option x-bind:value="b.name" x-text="b.name"></option>
+									</template>
+								</optgroup>
+							</template>
+						</select>
+					</div>
+					<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" data-fetch-origin x-on:click="fetchOrigin" x-bind:aria-busy="fetching">Fetch from origin</button>
 				</div>
-				<span class="[ hint ]" x-text="baseHint"></span>
+				<span class="[ error ]" id="new-session-base-status" aria-live="polite" data-branch-base-status x-show="hasBaseStatus" x-text="baseStatus"></span>
+				<span class="[ hint ]" id="new-session-base-hint" aria-live="polite" x-text="baseHint"></span>
 			</div>
 			<div class="[ field ]">
 				<label for="new-session-branch-name">Branch name</label>

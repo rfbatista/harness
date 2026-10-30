@@ -33,7 +33,9 @@ func NewWorktreeManager(opts ...Option) *WorktreeManager {
 // Add creates a worktree at path with a new branch cut from baseRef, which may
 // be a local branch, a remote-tracking ref (origin/main), a tag or a SHA. An
 // empty baseRef branches from HEAD. An existing branch is an error, never a
-// checkout: two worktrees cannot hold the same branch.
+// checkout: two worktrees cannot hold the same branch. The branch has no
+// upstream whatever the base (--no-track): only a push sets one, under the
+// branch's own name.
 //
 // path and baseRef sit after a "--" so git's parse-options cannot reinterpret
 // either as a flag: without it, a baseRef like "--lock" would permute into an
@@ -53,7 +55,7 @@ func (w *WorktreeManager) Add(repoRoot, path, branch, baseRef string) (string, e
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return "", err
 	}
-	args := []string{"worktree", "add", "-b", branch, "--", path}
+	args := []string{"worktree", "add", "--no-track", "-b", branch, "--", path}
 	if baseRef != "" {
 		args = append(args, baseRef)
 	}

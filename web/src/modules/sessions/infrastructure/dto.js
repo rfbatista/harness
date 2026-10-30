@@ -211,6 +211,13 @@ export function toBranches(body) {
   });
 }
 
+/** POST /api/fetch_remote → {"fetched_at": RFC3339} */
+export function toFetched(body) {
+  const at = new Date(body?.fetched_at);
+  if (Number.isNaN(at.getTime())) bad("expected {fetched_at: RFC3339}");
+  return Object.freeze({ fetchedAt: at });
+}
+
 /**
  * What the agent picker offers (contract section 8): GET list_agents?project_id= (the enabled agents),
  * GET list_agents (the catalog) and GET get_project_agents (the project mode; null when it could not be read,

@@ -58,6 +58,11 @@
  *           name and a free suggestion), PROJECT_NOT_FOUND, TICKET_NOT_FOUND,
  *           CROSS_PROJECT_ACCESS, CLAUDE_CLI_NOT_FOUND or
  *           SERVER_HOSTING_UNAVAILABLE.
+ * @property {(repositoryId: string) => Promise<{ fetchedAt: Date }>} fetchRemote
+ *           Fetches the repository's origin with the stored credential, pruning what is gone
+ *           there; the next listBranches shows the result. Rejects with REPOSITORY_NOT_FOUND,
+ *           NO_REMOTE, GIT_CREDENTIAL_MISSING, GIT_CREDENTIAL_REJECTED,
+ *           GIT_CREDENTIAL_STORE_LOCKED or FETCH_FAILED.
  * @property {(repositoryId: string) => Promise<Branch[]>} listBranches
  *           The branches a new session can branch off: local ones, then
  *           remote ones. Rejects with REPOSITORY_NOT_FOUND.

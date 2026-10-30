@@ -656,6 +656,10 @@ func (s *Service) sessionModel(mode domain.SessionMode, parentSessionID, named s
 // UseBranchNames makes a start with a branch name check it first.
 func (s *Service) UseBranchNames(c ports.BranchNameChecker) { s.branchNames = c }
 
+// UseBaseBranches makes a start from a named base check it first, and fetch
+// it when it is origin's (ADR 0049).
+func (s *Service) UseBaseBranches(p ports.BaseBranchPreparer) { s.baseBranches = p }
+
 // checkNamedBranch refuses a name the person typed for a session's branch
 // when it is not a branch name, or is one already: with the reason, and for a
 // taken name the first free variant. Nothing is created either way. Without a

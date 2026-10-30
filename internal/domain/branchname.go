@@ -10,6 +10,15 @@ const (
 	BranchExists = "BRANCH_EXISTS"
 )
 
+// Codes of a base branch a session cannot be cut from (ADR 0049).
+const (
+	// BaseBranchNotFound: the base names neither a local branch nor a
+	// remote-tracking ref of the repository.
+	BaseBranchNotFound = "BASE_BRANCH_NOT_FOUND"
+	// RemoteBranchNotFound: the base is origin's and origin no longer has it.
+	RemoteBranchNotFound = "REMOTE_BRANCH_NOT_FOUND"
+)
+
 // BranchNameCheck is the answer to "can a session's branch be named this?".
 // It is advisory: the start checks again.
 type BranchNameCheck struct {

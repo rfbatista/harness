@@ -27,6 +27,16 @@ function invalidReason(name) {
  * }} [seed]
  */
 export function memoryGateway({ projects = [], sessions = [], repositories = {}, branches = {}, now = () => new Date() } = {}) {
+  // Fetching swaps a repository's list; the caller's seed stays as it was.
+  branches = { ...branches };
+  /** repository id → the remote branches origin has; unset means origin has what the checkout lists. */
+  const origin = {};
+  /** The repositories fetched, in order; a failure to throw on the next fetches; a gate to hold them. */
+  const fetches = [];
+  let fetchFailure = null;
+  let fetchGate = null;
+  /** The next start is refused with this error, once. */
+  let startRefusal = null;
   let nextId = 1;
   const knownProjects = new Set([...projects, ...sessions.map((s) => s.projectId)]);
   /** @type {Map<string, import("../domain/session.js").Session>} */
@@ -95,6 +105,11 @@ export function memoryGateway({ projects = [], sessions = [], repositories = {},
     },
 
     async start({ projectId, ticketId, repositoryId, agentId, prompt, mode, branchName }) {
+      if (startRefusal) {
+        const refusal = startRefusal;
+        startRefusal = null;
+        throw refusal;
+      }
       if (!knownProjects.has(projectId)) {
         throw new StructuredError(Codes.PROJECT_NOT_FOUND, `project ${projectId} not found`, 404);
       }
@@ -159,6 +174,19 @@ export function memoryGateway({ projects = [], sessions = [], repositories = {},
       const list = branches[repositoryId];
       if (!list) throw new StructuredError(Codes.REPOSITORY_NOT_FOUND, "repository not found", 404);
       return list;
+    },
+
+    async fetchRemote(repositoryId) {
+      if (!branches[repositoryId] && !(repositoryId in repositories)) throw new StructuredError(Codes.REPOSITORY_NOT_FOUND, "repository not found", 404);
+      fetches.push(repositoryId);
+      await fetchGate;
+      if (fetchFailure) throw fetchFailure;
+      if (origin[repositoryId] && branches[repositoryId]) {
+        const have = branches[repositoryId].filter((b) => !b.remote);
+        const remote = [...origin[repositoryId]].sort().map((name) => ({ name, remote: true, isHead: false }));
+        branches[repositoryId] = [...have, ...remote];
+      }
+      return Object.freeze({ fetchedAt: now() });
     },
 
     async resume(sessionId) {
@@ -236,6 +264,26 @@ export function memoryGateway({ projects = [], sessions = [], repositories = {},
     /** A page feed message, as the server would send it. */
     publishCatalogEvent(data) {
       for (const f of catalogFollowers) f.onEvent(data);
+    },
+    /** What origin has for a repository, as the remote-tracking names a fetch brings (`origin/x`). */
+    setOrigin(repositoryId, names) {
+      origin[repositoryId] = names;
+    },
+    /** The next start is refused with `error`, as the server refuses a base. */
+    refuseStart(error) {
+      startRefusal = error;
+    },
+    /** The repositories fetched so far. */
+    fetches,
+    /** The next fetches fail with `error`; null makes them succeed again. */
+    failFetch(error) {
+      fetchFailure = error;
+    },
+    /** Fetches wait until `release()`; returns the gate. */
+    holdFetch() {
+      let release = () => {};
+      fetchGate = new Promise((resolve) => (release = resolve));
+      return { release: () => { fetchGate = null; release(); } };
     },
     feedStatus(status) {
       for (const f of followers) f.onStatus(status);
