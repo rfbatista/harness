@@ -41,7 +41,7 @@ func PickerDialog(placeholder string) templ.Component {
 		var templ_7745c5c3_Var2 string
 		templ_7745c5c3_Var2, templ_7745c5c3_Err = templ.ResolveAttributeValue(placeholder)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `picker.templ`, Line: 18, Col: 28}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `sessions/picker.templ`, Line: 18, Col: 28}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var2)
 		if templ_7745c5c3_Err != nil {

@@ -44,7 +44,7 @@ func diffFiles(list string) templ.Component {
 		var templ_7745c5c3_Var2 string
 		templ_7745c5c3_Var2, templ_7745c5c3_Err = templ.ResolveAttributeValue("f in " + list)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `save.templ`, Line: 12, Col: 33}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `agents/save.templ`, Line: 12, Col: 33}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var2)
 		if templ_7745c5c3_Err != nil {
@@ -235,7 +235,7 @@ func entryPicker(ns, label, placeholder, hintID, errorID, describedBy, invalid, 
 		var templ_7745c5c3_Var8 string
 		templ_7745c5c3_Var8, templ_7745c5c3_Err = templ.ResolveAttributeValue(ns + "-input")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `save.templ`, Line: 120, Col: 28}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `agents/save.templ`, Line: 120, Col: 28}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var8)
 		if templ_7745c5c3_Err != nil {
@@ -248,7 +248,7 @@ func entryPicker(ns, label, placeholder, hintID, errorID, describedBy, invalid, 
 		var templ_7745c5c3_Var9 string
 		templ_7745c5c3_Var9, templ_7745c5c3_Err = templ.JoinStringErrs(label)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `save.templ`, Line: 120, Col: 38}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `agents/save.templ`, Line: 120, Col: 38}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var9))
 		if templ_7745c5c3_Err != nil {
@@ -261,7 +261,7 @@ func entryPicker(ns, label, placeholder, hintID, errorID, describedBy, invalid, 
 		var templ_7745c5c3_Var10 string
 		templ_7745c5c3_Var10, templ_7745c5c3_Err = templ.ResolveAttributeValue(ns + "-input")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `save.templ`, Line: 124, Col: 22}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `agents/save.templ`, Line: 124, Col: 22}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var10)
 		if templ_7745c5c3_Err != nil {
@@ -274,7 +274,7 @@ func entryPicker(ns, label, placeholder, hintID, errorID, describedBy, invalid, 
 		var templ_7745c5c3_Var11 string
 		templ_7745c5c3_Var11, templ_7745c5c3_Err = templ.ResolveAttributeValue(ns + "-list")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `save.templ`, Line: 128, Col: 32}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `agents/save.templ`, Line: 128, Col: 32}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var11)
 		if templ_7745c5c3_Err != nil {
@@ -287,7 +287,7 @@ func entryPicker(ns, label, placeholder, hintID, errorID, describedBy, invalid, 
 		var templ_7745c5c3_Var12 string
 		templ_7745c5c3_Var12, templ_7745c5c3_Err = templ.ResolveAttributeValue(placeholder)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `save.templ`, Line: 132, Col: 29}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `agents/save.templ`, Line: 132, Col: 29}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var12)
 		if templ_7745c5c3_Err != nil {
@@ -300,7 +300,7 @@ func entryPicker(ns, label, placeholder, hintID, errorID, describedBy, invalid, 
 		var templ_7745c5c3_Var13 string
 		templ_7745c5c3_Var13, templ_7745c5c3_Err = templ.ResolveAttributeValue(ns + "View.expanded")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `save.templ`, Line: 133, Col: 47}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `agents/save.templ`, Line: 133, Col: 47}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var13)
 		if templ_7745c5c3_Err != nil {
@@ -313,7 +313,7 @@ func entryPicker(ns, label, placeholder, hintID, errorID, describedBy, invalid, 
 		var templ_7745c5c3_Var14 string
 		templ_7745c5c3_Var14, templ_7745c5c3_Err = templ.ResolveAttributeValue(ns + "View.activeId")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `save.templ`, Line: 134, Col: 55}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `agents/save.templ`, Line: 134, Col: 55}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var14)
 		if templ_7745c5c3_Err != nil {
@@ -326,7 +326,7 @@ func entryPicker(ns, label, placeholder, hintID, errorID, describedBy, invalid, 
 		var templ_7745c5c3_Var15 string
 		templ_7745c5c3_Var15, templ_7745c5c3_Err = templ.ResolveAttributeValue(describedBy)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `save.templ`, Line: 135, Col: 41}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `agents/save.templ`, Line: 135, Col: 41}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var15)
 		if templ_7745c5c3_Err != nil {
@@ -339,7 +339,7 @@ func entryPicker(ns, label, placeholder, hintID, errorID, describedBy, invalid, 
 		var templ_7745c5c3_Var16 string
 		templ_7745c5c3_Var16, templ_7745c5c3_Err = templ.ResolveAttributeValue(invalid)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `save.templ`, Line: 136, Col: 33}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `agents/save.templ`, Line: 136, Col: 33}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var16)
 		if templ_7745c5c3_Err != nil {
@@ -352,7 +352,7 @@ func entryPicker(ns, label, placeholder, hintID, errorID, describedBy, invalid, 
 		var templ_7745c5c3_Var17 string
 		templ_7745c5c3_Var17, templ_7745c5c3_Err = templ.ResolveAttributeValue(ns + "Query")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `save.templ`, Line: 137, Col: 26}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `agents/save.templ`, Line: 137, Col: 26}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var17)
 		if templ_7745c5c3_Err != nil {
@@ -365,7 +365,7 @@ func entryPicker(ns, label, placeholder, hintID, errorID, describedBy, invalid, 
 		var templ_7745c5c3_Var18 string
 		templ_7745c5c3_Var18, templ_7745c5c3_Err = templ.ResolveAttributeValue(ns + "Focus")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `save.templ`, Line: 138, Col: 29}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `agents/save.templ`, Line: 138, Col: 29}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var18)
 		if templ_7745c5c3_Err != nil {
@@ -378,7 +378,7 @@ func entryPicker(ns, label, placeholder, hintID, errorID, describedBy, invalid, 
 		var templ_7745c5c3_Var19 string
 		templ_7745c5c3_Var19, templ_7745c5c3_Err = templ.ResolveAttributeValue(ns + "Focus")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `save.templ`, Line: 139, Col: 29}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `agents/save.templ`, Line: 139, Col: 29}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var19)
 		if templ_7745c5c3_Err != nil {
@@ -391,7 +391,7 @@ func entryPicker(ns, label, placeholder, hintID, errorID, describedBy, invalid, 
 		var templ_7745c5c3_Var20 string
 		templ_7745c5c3_Var20, templ_7745c5c3_Err = templ.ResolveAttributeValue(ns + "Blur")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `save.templ`, Line: 140, Col: 27}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `agents/save.templ`, Line: 140, Col: 27}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var20)
 		if templ_7745c5c3_Err != nil {
@@ -404,7 +404,7 @@ func entryPicker(ns, label, placeholder, hintID, errorID, describedBy, invalid, 
 		var templ_7745c5c3_Var21 string
 		templ_7745c5c3_Var21, templ_7745c5c3_Err = templ.ResolveAttributeValue(ns + "Input")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `save.templ`, Line: 141, Col: 29}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `agents/save.templ`, Line: 141, Col: 29}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var21)
 		if templ_7745c5c3_Err != nil {
@@ -417,7 +417,7 @@ func entryPicker(ns, label, placeholder, hintID, errorID, describedBy, invalid, 
 		var templ_7745c5c3_Var22 string
 		templ_7745c5c3_Var22, templ_7745c5c3_Err = templ.ResolveAttributeValue(ns + "Key")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `save.templ`, Line: 142, Col: 29}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `agents/save.templ`, Line: 142, Col: 29}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var22)
 		if templ_7745c5c3_Err != nil {
@@ -430,7 +430,7 @@ func entryPicker(ns, label, placeholder, hintID, errorID, describedBy, invalid, 
 		var templ_7745c5c3_Var23 string
 		templ_7745c5c3_Var23, templ_7745c5c3_Err = templ.ResolveAttributeValue(ns + "-list")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `save.templ`, Line: 144, Col: 51}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `agents/save.templ`, Line: 144, Col: 51}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var23)
 		if templ_7745c5c3_Err != nil {
@@ -443,7 +443,7 @@ func entryPicker(ns, label, placeholder, hintID, errorID, describedBy, invalid, 
 		var templ_7745c5c3_Var24 string
 		templ_7745c5c3_Var24, templ_7745c5c3_Err = templ.ResolveAttributeValue(label)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `save.templ`, Line: 144, Col: 115}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `agents/save.templ`, Line: 144, Col: 115}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var24)
 		if templ_7745c5c3_Err != nil {
@@ -456,7 +456,7 @@ func entryPicker(ns, label, placeholder, hintID, errorID, describedBy, invalid, 
 		var templ_7745c5c3_Var25 string
 		templ_7745c5c3_Var25, templ_7745c5c3_Err = templ.ResolveAttributeValue("!" + ns + "View.expanded")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `save.templ`, Line: 144, Col: 160}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `agents/save.templ`, Line: 144, Col: 160}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var25)
 		if templ_7745c5c3_Err != nil {
@@ -469,7 +469,7 @@ func entryPicker(ns, label, placeholder, hintID, errorID, describedBy, invalid, 
 		var templ_7745c5c3_Var26 string
 		templ_7745c5c3_Var26, templ_7745c5c3_Err = templ.ResolveAttributeValue("o in " + ns + "View.options")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `save.templ`, Line: 145, Col: 51}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `agents/save.templ`, Line: 145, Col: 51}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var26)
 		if templ_7745c5c3_Err != nil {
@@ -482,7 +482,7 @@ func entryPicker(ns, label, placeholder, hintID, errorID, describedBy, invalid, 
 		var templ_7745c5c3_Var27 string
 		templ_7745c5c3_Var27, templ_7745c5c3_Err = templ.ResolveAttributeValue(ns + "Pick")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `save.templ`, Line: 146, Col: 206}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `agents/save.templ`, Line: 146, Col: 206}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var27)
 		if templ_7745c5c3_Err != nil {
@@ -495,7 +495,7 @@ func entryPicker(ns, label, placeholder, hintID, errorID, describedBy, invalid, 
 		var templ_7745c5c3_Var28 string
 		templ_7745c5c3_Var28, templ_7745c5c3_Err = templ.ResolveAttributeValue("!" + ns + "View.empty")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `save.templ`, Line: 152, Col: 93}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `agents/save.templ`, Line: 152, Col: 93}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var28)
 		if templ_7745c5c3_Err != nil {
@@ -508,7 +508,7 @@ func entryPicker(ns, label, placeholder, hintID, errorID, describedBy, invalid, 
 		var templ_7745c5c3_Var29 string
 		templ_7745c5c3_Var29, templ_7745c5c3_Err = templ.ResolveAttributeValue(ns + "View.emptyNote")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `save.templ`, Line: 152, Col: 126}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `agents/save.templ`, Line: 152, Col: 126}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var29)
 		if templ_7745c5c3_Err != nil {
@@ -521,7 +521,7 @@ func entryPicker(ns, label, placeholder, hintID, errorID, describedBy, invalid, 
 		var templ_7745c5c3_Var30 string
 		templ_7745c5c3_Var30, templ_7745c5c3_Err = templ.ResolveAttributeValue("!" + ns + "View.hidden")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `save.templ`, Line: 153, Col: 94}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `agents/save.templ`, Line: 153, Col: 94}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var30)
 		if templ_7745c5c3_Err != nil {
@@ -534,7 +534,7 @@ func entryPicker(ns, label, placeholder, hintID, errorID, describedBy, invalid, 
 		var templ_7745c5c3_Var31 string
 		templ_7745c5c3_Var31, templ_7745c5c3_Err = templ.ResolveAttributeValue(ns + "View.hiddenNote")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `save.templ`, Line: 153, Col: 128}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `agents/save.templ`, Line: 153, Col: 128}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var31)
 		if templ_7745c5c3_Err != nil {
@@ -547,7 +547,7 @@ func entryPicker(ns, label, placeholder, hintID, errorID, describedBy, invalid, 
 		var templ_7745c5c3_Var32 string
 		templ_7745c5c3_Var32, templ_7745c5c3_Err = templ.ResolveAttributeValue("c in " + ns + "View.chips")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `save.templ`, Line: 157, Col: 48}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `agents/save.templ`, Line: 157, Col: 48}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var32)
 		if templ_7745c5c3_Err != nil {
@@ -560,7 +560,7 @@ func entryPicker(ns, label, placeholder, hintID, errorID, describedBy, invalid, 
 		var templ_7745c5c3_Var33 string
 		templ_7745c5c3_Var33, templ_7745c5c3_Err = templ.ResolveAttributeValue(ns + "Unpick")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `save.templ`, Line: 160, Col: 111}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `agents/save.templ`, Line: 160, Col: 111}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var33)
 		if templ_7745c5c3_Err != nil {
@@ -573,7 +573,7 @@ func entryPicker(ns, label, placeholder, hintID, errorID, describedBy, invalid, 
 		var templ_7745c5c3_Var34 string
 		templ_7745c5c3_Var34, templ_7745c5c3_Err = templ.ResolveAttributeValue("!" + ns + "View.noChips")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `save.templ`, Line: 163, Col: 86}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `agents/save.templ`, Line: 163, Col: 86}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var34)
 		if templ_7745c5c3_Err != nil {
@@ -586,7 +586,7 @@ func entryPicker(ns, label, placeholder, hintID, errorID, describedBy, invalid, 
 		var templ_7745c5c3_Var35 string
 		templ_7745c5c3_Var35, templ_7745c5c3_Err = templ.ResolveAttributeValue(hintID)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `save.templ`, Line: 165, Col: 36}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `agents/save.templ`, Line: 165, Col: 36}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var35)
 		if templ_7745c5c3_Err != nil {
@@ -599,7 +599,7 @@ func entryPicker(ns, label, placeholder, hintID, errorID, describedBy, invalid, 
 		var templ_7745c5c3_Var36 string
 		templ_7745c5c3_Var36, templ_7745c5c3_Err = templ.JoinStringErrs("Bundles are listed first. Type to search, arrows to move, Enter to add, Backspace to remove the last one.")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `save.templ`, Line: 165, Col: 148}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `agents/save.templ`, Line: 165, Col: 148}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var36))
 		if templ_7745c5c3_Err != nil {
@@ -612,7 +612,7 @@ func entryPicker(ns, label, placeholder, hintID, errorID, describedBy, invalid, 
 		var templ_7745c5c3_Var37 string
 		templ_7745c5c3_Var37, templ_7745c5c3_Err = templ.ResolveAttributeValue(errorID)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `save.templ`, Line: 166, Col: 38}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `agents/save.templ`, Line: 166, Col: 38}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var37)
 		if templ_7745c5c3_Err != nil {
@@ -625,7 +625,7 @@ func entryPicker(ns, label, placeholder, hintID, errorID, describedBy, invalid, 
 		var templ_7745c5c3_Var38 string
 		templ_7745c5c3_Var38, templ_7745c5c3_Err = templ.ResolveAttributeValue("!" + invalid)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `save.templ`, Line: 166, Col: 70}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `agents/save.templ`, Line: 166, Col: 70}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var38)
 		if templ_7745c5c3_Err != nil {
@@ -638,7 +638,7 @@ func entryPicker(ns, label, placeholder, hintID, errorID, describedBy, invalid, 
 		var templ_7745c5c3_Var39 string
 		templ_7745c5c3_Var39, templ_7745c5c3_Err = templ.ResolveAttributeValue(errorText)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `save.templ`, Line: 166, Col: 91}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `agents/save.templ`, Line: 166, Col: 91}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var39)
 		if templ_7745c5c3_Err != nil {

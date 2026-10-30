@@ -83,7 +83,7 @@ func PersonTerms(sid, ended string) templ.Component {
 		var templ_7745c5c3_Var3 string
 		templ_7745c5c3_Var3, templ_7745c5c3_Err = templ.ResolveAttributeValue("sessionsPersonTerms(" + sid + ")")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `person_terms.templ`, Line: 29, Col: 45}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `sessions/person_terms.templ`, Line: 29, Col: 45}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var3)
 		if templ_7745c5c3_Err != nil {
@@ -96,7 +96,7 @@ func PersonTerms(sid, ended string) templ.Component {
 		var templ_7745c5c3_Var4 string
 		templ_7745c5c3_Var4, templ_7745c5c3_Err = templ.ResolveAttributeValue("setSessionEnded(" + ended + ")")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `person_terms.templ`, Line: 30, Col: 45}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `sessions/person_terms.templ`, Line: 30, Col: 45}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var4)
 		if templ_7745c5c3_Err != nil {
