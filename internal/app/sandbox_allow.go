@@ -52,6 +52,9 @@ func sandboxAllowlist(src allowSources) []ports.SandboxPath {
 		{"Library", "Caches", "Homebrew"}, {".cache", "Homebrew"},
 		// rtk keeps its config and history where it always did.
 		{".config", "rtk"}, {".local", "share", "rtk"}, {"Library", "Application Support", "rtk"},
+		// uv's cache, tools and managed Pythons: stdio MCP servers run by
+		// uv or uvx need them.
+		{".cache", "uv"}, {".local", "share", "uv"},
 	} {
 		add(h(p...), true)
 	}
@@ -59,16 +62,34 @@ func sandboxAllowlist(src allowSources) []ports.SandboxPath {
 	for _, p := range [][]string{
 		{".rustup"}, {".nvm"}, {".asdf"}, {".local", "share", "mise"}, {"sdk"},
 		{".pyenv"}, {".local", "bin"}, {".volta"}, {".bun"},
+		// podman's config and its data, which holds the machine's SSH
+		// identity: stdio MCP servers run by podman need them.
+		{".config", "containers"}, {".local", "share", "containers"},
 	} {
 		add(h(p...), false)
 	}
 	if src.Getenv != nil {
-		for _, k := range []string{"GOPATH", "GOCACHE", "GOMODCACHE", "CARGO_HOME", "npm_config_cache", "PNPM_HOME", "YARN_CACHE_FOLDER", "PIP_CACHE_DIR"} {
+		for _, k := range []string{"GOPATH", "GOCACHE", "GOMODCACHE", "CARGO_HOME", "npm_config_cache", "PNPM_HOME", "YARN_CACHE_FOLDER", "PIP_CACHE_DIR", "UV_CACHE_DIR", "UV_TOOL_DIR", "UV_PYTHON_INSTALL_DIR"} {
 			add(src.Getenv(k), true)
 		}
-		for _, k := range []string{"RUSTUP_HOME", "NVM_DIR", "GOROOT"} {
+		for _, k := range []string{"RUSTUP_HOME", "NVM_DIR", "GOROOT", "CONTAINERS_CONF"} {
 			add(src.Getenv(k), false)
 		}
+		under := func(base, sub string, write bool) {
+			if b := src.Getenv(base); b != "" {
+				add(filepath.Join(b, sub), write)
+			}
+		}
+		under("XDG_CACHE_HOME", "uv", true)
+		under("XDG_DATA_HOME", "uv", true)
+		under("XDG_CONFIG_HOME", "containers", false)
+		under("XDG_DATA_HOME", "containers", false)
+		// The podman machine's API socket sits under the person's own
+		// temporary directory on macOS (the server's, not the session's) and
+		// under the runtime dir on Linux. A client connects to it, so it is
+		// writable.
+		under("TMPDIR", "podman", true)
+		under("XDG_RUNTIME_DIR", "podman", true)
 	}
 	return out
 }
