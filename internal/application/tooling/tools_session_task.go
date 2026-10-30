@@ -90,7 +90,9 @@ func SessionTaskTools(planningSvc ports.Planning, sessions ports.SessionReposito
 				"It runs on the server in its own git worktree and branch, with the task's brief, and sees you through " +
 				"list_task_sessions. Give it a prompt saying exactly what to do and what not to touch. Optionally pick the " +
 				"agent (by name), the repository (by name; default yours) and the branch to cut its worktree from " +
-				"(default the repository's default branch; pass your own branch to build on what you have committed). " +
+				"(default the repository's default branch; pass your own branch to build on what you have committed; " +
+				"pass origin/<name> to start from a branch on origin, which is fetched first so it starts at origin's current tip, " +
+				"and is refused with the reason if that branch is gone from origin or the fetch fails). " +
 				"It gets your permission mode. At most " + strconv.Itoa(MaxLiveTaskSessions) + " sessions run on a task at once. " +
 				"If you are the task's architect, a status-check loop wakes you every status_check_minutes (default 10, 0 for " +
 				"none) to check on the new session. A session you start while you are the architect or one of its delegates " +
@@ -99,7 +101,7 @@ func SessionTaskTools(planningSvc ports.Planning, sessions ports.SessionReposito
 				`"prompt":{"type":"string","description":"What the new session should do: its first message."},` +
 				`"agent":{"type":"string","description":"The agent to run, by name or id. Default: none (plain claude)."},` +
 				`"repository":{"type":"string","description":"The repository to work in, by name or id. Default: yours."},` +
-				`"base_branch":{"type":"string","description":"The branch its worktree branches off. Default: the repository's default branch."},` +
+				`"base_branch":{"type":"string","description":"The branch its worktree branches off: a local branch, or origin/<name> for a branch on origin, which is fetched first. Default: the repository's default branch."},` +
 				`"mode":{"type":"string","enum":["","architect","implement","design","product"],"description":"architect: the session grills the person on its prompt, shapes it into per-application specs and delegates them. implement: the session turns a Spec task document into tickets, has the architect review them, then implements them test first on its branch. design: the session produces components, images and videos and publishes each to the Design tab. product: the session interviews the person on a feature, writes its PRD on the task, creates one child task per piece of work with a brief each, and asks for review; it never writes code. Default: none."},` +
 				`"status_check_minutes":{"type":"integer","minimum":0,"maximum":240,"description":"Architect only: minutes between the checks that wake you about this session, 2–240; 0 for no loop. Default: 10."}}}`),
 			Source: "code",
