@@ -13,11 +13,15 @@ import { compose } from "./compose.js";
 /** @param {import("./codeBrowser.js").BrowserDeps} deps */
 export const codeDiff = (deps) => () => {
   let observer = null;
-  return compose(codeBrowser(deps), {
+  const browser = codeBrowser(deps);
+  const scrollToFile = browser.clickSummary;
+  return compose(browser, {
     kind: "history",
     commitHash: "",
     repositoryId: "",
     workspaceId: "",
+    /** The uncommitted changes' list reads them in the Code tab: its Working scope. */
+    codeHref: "",
 
     init() {
       try {
@@ -25,6 +29,7 @@ export const codeDiff = (deps) => () => {
         this.commitHash = seed.commit;
         this.repositoryId = seed.source.repositoryId;
         this.workspaceId = seed.source.workspaceId;
+        this.codeHref = this.$el.dataset?.codeHref ?? "";
         this.startFrom(seed);
         this.route = { ...this.route, view: "changes" };
       } catch (err) {
@@ -59,6 +64,14 @@ export const codeDiff = (deps) => () => {
       return this.commitHash ? repositoryHref(this.projectId, this.repositoryId, this.commitHash, path) : "";
     },
     enterView() {},
+    summaryHref(slug) {
+      return this.codeHref ? `${this.codeHref}#diff-${slug}` : `#diff-${slug}`;
+    },
+    /** With a Code tab to go to, a row is a plain link; without one, the diff below scrolls to the file. */
+    async clickSummary(event, path) {
+      if (this.codeHref) return;
+      await scrollToFile.call(this, event, path);
+    },
 
     watchWidth() {
       const el = this.$refs?.layout ?? this.$el;

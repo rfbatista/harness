@@ -100,6 +100,28 @@ export function gitCommand({ scope, base, head, path }) {
 
 const quotePath = (p) => (/^[A-Za-z0-9_./@+-]+$/.test(p) ? p : `'${p.replace(/'/g, `'\\''`)}'`);
 
+/**
+ * Whether two reads of a file say the same of it, as far as its section's head
+ * and body setup go (the lines are the worker's: its `changed` flag speaks for
+ * them). A refresh reads every file again as new objects.
+ * @param {import("./code.js").FileDiff} a
+ * @param {import("./code.js").FileDiff} b
+ */
+export function sameFileMeta(a, b) {
+  return (
+    a.status === b.status &&
+    a.oldPath === b.oldPath &&
+    a.added === b.added &&
+    a.deleted === b.deleted &&
+    !!a.binary === !!b.binary &&
+    (a.withheld ?? null) === (b.withheld ?? null) &&
+    (a.hasHunks ?? !!a.hunks) === (b.hasHunks ?? !!b.hunks) &&
+    (a.largest ?? 0) === (b.largest ?? 0) &&
+    a.language === b.language &&
+    (a.zones ?? []).join("\0") === (b.zones ?? []).join("\0")
+  );
+}
+
 /** The ⁠+N −M of a file head or a summary row; null for binary. */
 export function statOf(f) {
   return hasCounts(f) ? { added: `+${formatCount(f.added)}`, deleted: `−${formatCount(f.deleted)}` } : null;

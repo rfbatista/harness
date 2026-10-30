@@ -10,6 +10,7 @@ import (
 	"github.com/rfbatista/harnesskit/errs"
 
 	"operators-mcp/internal/adapter/in/web/code"
+	"operators-mcp/internal/adapter/in/web/gitsync"
 	"operators-mcp/internal/adapter/in/web/pullrequests"
 	"operators-mcp/internal/adapter/in/web/sessions"
 	"operators-mcp/internal/adapter/in/web/shell"
@@ -287,10 +288,12 @@ func (h Handler) task(w http.ResponseWriter, r *http.Request, codeRoute *code.Ro
 	if h.PullRequests != nil {
 		view.PullRequests = pullrequests.NewWatchSeed(ctx, h.PullRequests, project.ID, workspaceIDs(list))
 	}
+	view.GitSync = h.WorktreeGit != nil
 	if h.Usage != nil {
 		view.Usage = h.usageTotals(ctx, project.ID, task.ID, list)
 	}
 	view.Seed.GitStates = h.gitStates(ctx, task.ID)
+	view.PaintSync(view.Seed.GitStates, h.Now())
 	view.TokenSavers = tokensavers.Read(ctx, h.TokenSavers, domain.ActivationOwner{Level: domain.ActivationLevelTask, ID: task.ID})
 	for _, st := range Statuses {
 		view.StatusChoices = append(view.StatusChoices, sessions.StatusChoice{Value: st.Value, Label: st.Label, Selected: st.Value == string(task.Status)})
@@ -303,6 +306,12 @@ func (h Handler) task(w http.ResponseWriter, r *http.Request, codeRoute *code.Ro
 		paint, err := h.codePaint(ctx, *codeRoute, list, repos, view.Seed.BaseRefs)
 		if err != nil {
 			return err
+		}
+		for _, st := range view.Seed.GitStates {
+			if st.SessionID == codeRoute.SessionID && !st.Gone {
+				chip := gitsync.ChipOf(st, h.Now())
+				paint.Bar.Sync = &chip
+			}
 		}
 		view.Code = paint
 		view.Seed.OpenCode = codeRoute.SessionID

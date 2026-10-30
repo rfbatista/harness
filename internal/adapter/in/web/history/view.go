@@ -1,9 +1,13 @@
 package history
 
 import (
+	"time"
+
 	"operators-mcp/internal/adapter/in/web/code"
+	"operators-mcp/internal/adapter/in/web/gitsync"
 	"operators-mcp/internal/adapter/in/web/pullrequests"
 	"operators-mcp/internal/adapter/in/web/shell"
+	"operators-mcp/internal/domain"
 )
 
 // PageView is a history page: a repository's, or one session's branch.
@@ -32,6 +36,48 @@ type PageView struct {
 	// PullRequest is the session branch's pull request control; nil on a
 	// repository's page, or when the server cannot open pull requests.
 	PullRequest *pullrequests.Panel
+	// Git is what the head needs to show the session branch's sync state
+	// (the browser's sync module paints it); nil on a repository's page.
+	Git *GitHead
+}
+
+// GitHead names the worktree whose git state the head shows beside the
+// branch: the chip, the second comparison with Fetch, and the panel.
+type GitHead struct {
+	ProjectID, WorkspaceID, Branch string
+	// State is the worktree's git state when the server read it; nil leaves
+	// the head to the browser. Upstream, Base and Fetched are painted from it.
+	State            *domain.GitState
+	Upstream, Base   gitsync.Chip
+	BaseRef, Fetched string
+}
+
+// paint reads the chips and the fetch age off a state; nil or a gone worktree
+// paints nothing.
+func (g *GitHead) paint(s *domain.GitState, now time.Time) {
+	if s == nil || s.Gone {
+		return
+	}
+	g.State = s
+	g.Upstream = gitsync.ChipOf(*s, now)
+	g.Base = gitsync.BaseOf(*s)
+	g.BaseRef = s.Base.Ref
+	g.Fetched = g.Upstream.FetchedWord
+}
+
+// gitSeed is the head's seed for the sync module: the project to follow.
+// The state is the one the server read, when it did.
+type gitSeed struct {
+	ProjectID string            `json:"project_id"`
+	States    []domain.GitState `json:"git_states"`
+}
+
+func (g GitHead) seed() gitSeed {
+	seed := gitSeed{ProjectID: g.ProjectID, States: []domain.GitState{}}
+	if g.State != nil {
+		seed.States = append(seed.States, *g.State)
+	}
+	return seed
 }
 
 // Crumb is one step back in the toolbar.
@@ -79,6 +125,9 @@ type CommitView struct {
 type WorkingView struct {
 	Summary string
 	Files   []FileView
+	// CodeHref is the session's Code tab at its Working scope: where the
+	// uncommitted changes are read, file by file.
+	CodeHref string
 	// Diff is the uncommitted patch (scope working); nil without a code browser.
 	Diff *code.View
 }

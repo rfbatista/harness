@@ -146,6 +146,13 @@
       min-inline-size: 0;
     }
 
+    /* The upstream chip follows the pull-request badge: it wraps with the tokens, and neither it nor its remote name is ever cut. */
+    & > .who > .sync-state {
+      flex: none;
+      max-inline-size: none;
+    }
+    & > .who > .sync-state > .upstream { overflow: visible; text-overflow: clip; }
+
     & .agent {
       min-inline-size: 0;
       font-weight: var(--weight-medium);

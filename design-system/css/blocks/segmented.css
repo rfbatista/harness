@@ -56,6 +56,8 @@
       font-size: var(--text-xs);
       font-variant-numeric: tabular-nums;
     }
+    /* Faint ink is under 4.5:1 on the raised segment: the pressed one lifts it. */
+    & > :is([aria-current]:not([aria-current="false"]), [aria-pressed="true"]) .count { color: var(--color-ink-muted); }
 
     @media (pointer: coarse) { --_h: var(--size-touch); }
 

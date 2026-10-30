@@ -1,0 +1,86 @@
+/*
+ * Git popover — every worktree of a task and where it stands, from the task
+ * page's title row (the ghost Git button, beside Reviews and Feature; same
+ * surface as context-popover.css). A .popup in the top layer, 36rem wide, at
+ * most min(70dvh, 40rem) tall: the head and the foot stay, the body scrolls.
+ * Below 48rem it takes data-sheet (sheet.css). The open state is browser-only.
+ * <div class="popup git-popover" role="dialog" aria-labelledby="t" popover="manual">
+ *   <div class="pop-head"><h3 id="t">Git</h3><button class="button" data-variant="ghost" data-size="sm">Close</button></div>
+ *   <div class="pop-body"><div class="row">
+ *     <div class="who"><span class="agent">go-developer</span><code class="branch">agent/x</code></div>
+ *     <div class="states"><span class="sync-state">base</span><span class="sync-state">upstream</span><span class="uncommitted">3 changed · 2 new</span></div>
+ *     <div class="actions"><button class="button" data-variant="ghost" data-size="sm" data-push>Push</button><a href="…">Code</a></div></div></div>
+ *   <div class="pop-foot"><span class="fresh">Fetched 12 min ago</span><span class="fetches"><button class="button" data-variant="ghost" data-size="sm" data-fetch>↻ Fetch blog</button></span></div></div>
+ * Exceptions: .fresh[data-old] (over an hour: amber, "stale" after the age),
+ * aria-busy="true" on the popover (a fetch runs: counts dim, the button reads
+ * "Fetching…").
+ */
+
+@layer blocks {
+  .git-popover {
+    --_width: 36rem;
+
+    inline-size: var(--_width);
+    max-inline-size: min(var(--_width), calc(100vw - 2 * var(--space-l)));
+    max-block-size: min(70dvh, 40rem);
+    flex-direction: column;
+
+    & > .pop-head {
+      display: flex;
+      align-items: center;
+      gap: var(--space-xs);
+      flex: none;
+      min-block-size: var(--size-control-md);
+      padding: var(--space-xs) var(--space-s) var(--space-xs) var(--space-l);
+      border-block-end: var(--border-width) solid var(--color-line);
+      font-size: var(--text-md);
+
+      & > h3 { flex: 1 1 auto; font-size: inherit; font-weight: var(--weight-bold); }
+    }
+
+    & > .pop-body { flex: 1 1 auto; min-block-size: 0; overflow: auto; overscroll-behavior: contain; }
+
+    & .row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: var(--space-2xs) var(--space-m);
+      align-items: center;
+      padding: var(--space-s) var(--space-l);
+      border-block-end: var(--border-width) solid var(--color-line);
+      font-size: var(--text-sm);
+
+      &:last-child { border-block-end: 0; }
+
+      & > .who { display: flex; align-items: baseline; gap: var(--space-xs); min-inline-size: 0; }
+      & .agent { flex: none; font-weight: var(--weight-medium); }
+      & .branch { min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-ink-muted); }
+      & > .states { grid-column: 1; display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-xs); min-inline-size: 0; }
+      & .uncommitted { color: var(--color-ink-muted); font-size: var(--text-xs); }
+      & > .actions { grid-column: 2; grid-row: 1 / span 2; display: flex; align-items: center; gap: var(--space-xs); }
+      & > .actions > a { font-size: var(--text-xs); }
+      /* A push question or a refusal opens under the row, across both columns. */
+      & > .confirm-strip, & > .banner { grid-column: 1 / -1; margin: var(--space-xs) 0 0; }
+    }
+
+    & > .pop-foot {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: var(--space-xs) var(--space-s);
+      flex: none;
+      padding: var(--space-xs) var(--space-l);
+      border-block-start: var(--border-width) solid var(--color-line);
+      color: var(--color-ink-muted);
+      font-size: var(--text-sm);
+
+      & .fresh { font-size: var(--text-xs); &[data-old] { color: var(--color-attention-strong); } &[data-old]::after { content: " · stale"; font-weight: var(--weight-medium); } }
+      & .fetches { display: flex; flex-wrap: wrap; gap: var(--space-xs); }
+    }
+
+    &[aria-busy="true"] .counts { opacity: 0.55; }
+
+    &[data-sheet] { inline-size: 100%; max-inline-size: none; }
+    &[data-sheet] .row { grid-template-columns: minmax(0, 1fr); & > .actions { grid-column: 1; grid-row: auto; } }
+  }
+}

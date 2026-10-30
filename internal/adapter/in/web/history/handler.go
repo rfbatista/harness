@@ -1,6 +1,7 @@
 package history
 
 import (
+	"context"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -34,10 +35,13 @@ type Handler struct {
 	PullRequests ports.PullRequests
 	// Code paints the open commit's (or the uncommitted changes') diff; nil
 	// leaves the file list alone.
-	Code   ports.CodeBrowser
-	Layout shell.Layout
-	Render shell.Renderer
-	Now    func() time.Time
+	Code ports.CodeBrowser
+	// WorktreeGit seeds a session history's head with the worktree's git
+	// state; nil seeds none and the browser reads it.
+	WorktreeGit ports.WorktreeGit
+	Layout      shell.Layout
+	Render      shell.Renderer
+	Now         func() time.Time
 }
 
 // Href is a repository's history page.
@@ -286,4 +290,24 @@ func (h Handler) commitDiff(r *http.Request, projectID, repositoryID, hash strin
 	}
 	v := code.Build(code.LoadCommit(r.Context(), h.Code, projectID, repositoryID, hash))
 	return &v
+}
+
+// gitState reads the worktree's git state for the head's first paint; nil when
+// it cannot be read (the browser reads it then).
+func (h Handler) gitState(ctx context.Context, workspaceID string) *domain.GitState {
+	if h.WorktreeGit == nil {
+		return nil
+	}
+	state, err := h.WorktreeGit.GitState(ctx, workspaceID)
+	if err != nil {
+		return nil
+	}
+	return state
+}
+
+func (h Handler) now() time.Time {
+	if h.Now != nil {
+		return h.Now()
+	}
+	return time.Now()
 }

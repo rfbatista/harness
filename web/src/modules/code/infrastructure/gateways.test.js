@@ -9,7 +9,7 @@ import { codeGatewayContract } from "../testing/gateway-contract.js";
 import { makeWorld } from "../testing/fixtures.js";
 import { stubCodeApi } from "../testing/stub-api.js";
 import { codeGateway } from "./code-gateway.js";
-import { toCodeChanged, toDiff, toSeed, toTree } from "./dto.js";
+import { diffQuery, toCodeChanged, toDiff, toSeed, toTree } from "./dto.js";
 import { memoryCode } from "./memory-gateway.js";
 
 file("code/infrastructure/gateways");
@@ -61,6 +61,22 @@ test("http · other feed messages and a malformed code_changed are dropped; the 
   stop();
 });
 
+test("http · a git_state for a worktree is heard like a code_changed: the list reads again for either", async () => {
+  const { gateway, stub } = http(makeWorld());
+  const seen = [];
+  const stop = gateway.follow("p1", (c) => seen.push(c), () => {});
+  await flush();
+  stub.send({ git_state: { workspace_id: "ws1", head: "abc", branch: "b" } });
+  stub.send({ git_state: { head: "no workspace" } });
+  await flush();
+  assert.deepEqual(seen, [{ workspaceId: "ws1", head: "abc" }]);
+  stop();
+});
+
+test("dto · a list refresh asks for pages without hunks", () => {
+  assert.deepEqual(diffQuery({ workspaceId: "ws1", scope: "working", hunks: "none", limit: 200 }), { workspace_id: "ws1", scope: "working", path: undefined, after: undefined, limit: "200", hunks: "none" });
+});
+
 test("dto · unknown kinds and statuses are BAD_RESPONSE, not silently drawn", () => {
   const src = { kind: "ref", repository_id: "r1", workspace_id: null, ref: "main", commit: "a", gone: false };
   const err = assert.throws(() => toTree({ source: src, path: "", entries: [{ path: "x", kind: "socket" }] }), Codes.BAD_RESPONSE);
@@ -98,4 +114,19 @@ test("dto · a seed carries the route, the source and what was painted", () => {
   assert.equal(seed.trees[0].entries.length > 0, true);
   assert.equal(seed.file.path, "README.md");
   assert.deepEqual(toSeed({ error: { code: "UNAVAILABLE", message: "off" } }).error, { code: "UNAVAILABLE", message: "off" });
+});
+
+test("revision 4: working pages list tracked then untracked, carry section, staged, counts and sections, and hunks=none leaves the hunks out", async () => {
+  const world = makeWorld();
+  world.workspaces.ws1.staged = ["README.md"];
+  const memory = memoryCode(world);
+  const page = toDiff(memory.wire.diff({ workspaceId: "ws1", scope: "working" }));
+  assert.deepEqual(page.files.map((f) => [f.path, f.section, f.staged]), [["README.md", "tracked", true], ["notes/todo.md", "untracked", false]]);
+  assert.deepEqual([page.counts.modified, page.counts.untracked, page.sections], [1, 1, { tracked: 1, untracked: 1, staged: 1 }]);
+  const after = toDiff(memory.wire.diff({ workspaceId: "ws1", scope: "working", limit: 1, after: "README.md" }));
+  assert.deepEqual(after.files.map((f) => f.path), ["notes/todo.md"], "a tracked cursor continues into the untracked files");
+  const bare = toDiff(memory.wire.diff({ workspaceId: "ws1", scope: "working", hunks: "none" }));
+  assert.ok(bare.files.every((f) => f.hunks === null && f.withheld === null && !f.hasHunks));
+  const all = toDiff(memory.wire.diff({ workspaceId: "ws1", scope: "all" }));
+  assert.ok(all.files.every((f) => f.section === null && f.staged === false) && all.sections === null);
 });

@@ -21,6 +21,16 @@
  * holds one .skeleton bar). When more files follow the loaded pages, a
  * footer.more after .changed holds one ghost button "Show more" with a
  * span.count of the files left.
+ * Revision 6 adds, under header.head, div.legend[role="group"] of
+ * button[aria-pressed] (a change-mark, a span.count, a visually hidden word;
+ * a letter with no files is absent); p.totals may read "N files · +A −D · U
+ * new files". ol.changed may hold li.section (h4.title "Tracked changes" or
+ * "Untracked" with an optional span.hint and a span.count, then an ol) and
+ * li.group (header.group-head with span.dirname > bdi and span.count, then an
+ * ol of rows whose .path holds only the name). A row's .stat may start with
+ * span.flag "staged" (or a span.flag follows .stat); an untracked row's .stat
+ * holds span.note "new". data-updated on a row (the li or its a) draws a dot
+ * before the mark: its hunks on screen are older than the list.
  */
 
 @layer blocks {
@@ -118,10 +128,122 @@
     /* Faint ink drops under 4.5:1 on the hover veil and the selected wash: lift it. */
     & .changed a:is(:hover, [aria-current="location"]) :is(.dir, .old, .note) { color: var(--color-ink-muted); }
 
+    /* The legend: one toggle per kind of change with its count; it filters the list. */
+    & .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--space-2xs);
+      padding: var(--space-xs) var(--space-m);
+      border-block-end: var(--border-width) solid var(--color-line);
+
+      & button {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-2xs);
+        block-size: 1.375rem;
+        padding: 0 var(--space-xs) 0 var(--space-3xs);
+        border: var(--border-width) solid var(--color-line);
+        border-radius: var(--radius-sm);
+        background: var(--color-canvas);
+        color: var(--color-ink-muted);
+        font: inherit;
+        font-size: var(--text-xs);
+        font-variant-numeric: tabular-nums;
+        cursor: pointer;
+
+        &:hover { background: var(--color-hover); color: var(--color-ink); }
+        &:focus-visible { outline: var(--border-focus-width) solid var(--color-focus); outline-offset: 1px; }
+        & .count { color: inherit; }
+      }
+
+      /* Pressed: a wash, a signal edge and a medium weight; the toggle is also named by aria-pressed. */
+      & button[aria-pressed="true"] {
+        border-color: var(--color-signal);
+        background: var(--color-selected);
+        color: var(--color-ink);
+        font-weight: var(--weight-medium);
+      }
+    }
+
+    /* A section of the Working scope and a directory group inside it. */
+    & .changed :is(ol, li.section, li.group) { list-style: none; padding: 0; }
+    & li.section > .title {
+      display: flex;
+      align-items: baseline;
+      gap: var(--space-xs);
+      padding: var(--space-xs) var(--space-m) var(--space-xs) var(--space-s);
+      color: var(--color-ink);
+      font-size: var(--text-xs);
+      font-weight: var(--weight-medium);
+      text-transform: none;
+
+      & .hint { color: var(--color-ink-muted); font-weight: var(--weight-regular); }
+      & .count { margin-inline-start: auto; color: var(--color-ink-faint); font-weight: var(--weight-regular); font-variant-numeric: tabular-nums; }
+    }
+    & li.section + li.section { border-block-start: var(--border-width) solid var(--color-line); }
+
+    & .group-head {
+      display: flex;
+      align-items: center;
+      gap: var(--space-xs);
+      min-block-size: var(--size-nav-row);
+      padding-inline: var(--space-s) var(--space-m);
+      border-block: var(--border-width) solid var(--color-line);
+      background: var(--color-panel);
+      color: var(--color-ink-muted);
+      font-size: var(--text-xs);
+
+      /* rtl truncates from the start, so the directory's last segment stays. */
+      & .dirname {
+        flex: 1 1 auto;
+        min-inline-size: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        direction: rtl;
+        text-align: left;
+        font-family: var(--font-mono);
+        & > bdi { direction: ltr; }
+      }
+      & .count { margin-inline-start: auto; color: var(--color-ink-faint); font-variant-numeric: tabular-nums; }
+    }
+    & li.group + li.group > .group-head { border-block-start: 0; }
+
+    /* The staged word, and the new word on an untracked row. */
+    & .flag {
+      padding: 0 var(--space-2xs);
+      border: var(--border-width) solid var(--color-line-strong);
+      border-radius: var(--radius-xs);
+      color: var(--color-ink-muted);
+      font-size: var(--text-xs);
+      white-space: nowrap;
+    }
+    & .changed a:has(> .flag) { grid-template-columns: auto minmax(0, 1fr) auto auto; }
+
+    /* Out of date: a dot before the mark (drawn in the row's left padding) and a medium name. */
+    & .changed :is(a[data-updated], [data-updated] > a) {
+      position: relative;
+      &::before {
+        content: "";
+        position: absolute;
+        inset-block-start: 50%;
+        inset-inline-start: var(--space-3xs);
+        inline-size: 0.375rem;
+        block-size: 0.375rem;
+        margin-block-start: -0.1875rem;
+        border-radius: var(--radius-round);
+        background: var(--color-attention);
+      }
+      & .name { font-weight: var(--weight-medium); }
+    }
+
     & > .none { padding: var(--space-xl) var(--space-m); color: var(--color-ink-muted); }
 
     @media (pointer: coarse) { & .changed a { min-block-size: var(--size-touch); } }
+    @media (pointer: coarse) { & .legend button { block-size: var(--size-control-sm); } }
     @media (forced-colors: active) {
+      & .legend button[aria-pressed="true"] { outline: 2px solid Highlight; outline-offset: -2px; }
+      & .changed :is(a[data-updated], [data-updated] > a)::before { background: CanvasText; }
       & .changed a[aria-current]:not([aria-current="false"]) { outline: 2px solid Highlight; outline-offset: -2px; }
     }
   }

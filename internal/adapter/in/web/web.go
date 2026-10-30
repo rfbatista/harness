@@ -201,7 +201,7 @@ func NewHandler(deps Deps, assets *Assets, fallback http.Handler) http.Handler {
 	}
 	historyPages := history.Handler{
 		Projects: deps.Projects, Repositories: deps.Repositories, History: deps.History, Sessions: deps.Sessions, Tasks: deps.Tasks,
-		PullRequests: deps.PullRequests, Code: deps.Code, Layout: s.layout, Render: render, Now: deps.Now,
+		PullRequests: deps.PullRequests, Code: deps.Code, WorktreeGit: deps.WorktreeGit, Layout: s.layout, Render: render, Now: deps.Now,
 	}
 	codePages := code.Handler{
 		Projects: deps.Projects, Repositories: deps.Repositories, Code: deps.Code, History: deps.History,

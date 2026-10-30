@@ -204,3 +204,13 @@ func docCount(n int) string {
 	}
 	return strconv.Itoa(n) + " docs"
 }
+
+// gitButtonAttrs paints the Git button hidden until a session has a worktree.
+// The button's own display rule would beat the hidden attribute, so it is
+// hidden with an inline display: none that Alpine's x-show then takes over.
+func gitButtonAttrs(hasWorkspace bool) templ.Attributes {
+	if hasWorkspace {
+		return templ.Attributes{}
+	}
+	return templ.Attributes{"style": "display: none"}
+}

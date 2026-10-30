@@ -14,6 +14,9 @@
  *     <div class="hunks" id="…"><div class="code-lines">…</div></div>
  *   </section>
  * </div>
+ * Revision 6: under .bar, div.notice[role="status"] ("3 files changed since
+ * loaded" and a button "Reload hunks R"; data-state="current" for the quiet
+ * "Up to date"); in a file head, span.updated "updated 4 s ago" after a reload.
  * Exceptions: data-collapsed on .file; .withheld[data-reason="too_large|
  * binary"] in place of .hunks (a sentence, an action, optionally a .code
  * line with the git command); aria-busy on .file while its hunks load.
@@ -36,6 +39,27 @@
       align-items: center;
       gap: var(--space-xs);
       & > :last-child { margin-inline-start: auto; }
+    }
+
+    /* Files changed on disk since the hunks were loaded: told, never applied. */
+    & > .notice {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: var(--space-xs) var(--space-s);
+      padding: var(--space-xs) var(--space-s);
+      border: var(--border-width) solid color-mix(in oklch, var(--color-attention-strong) 40%, var(--color-line));
+      border-radius: var(--radius-sm);
+      background: var(--color-attention-wash);
+      color: var(--color-ink);
+
+      & strong { font-weight: var(--weight-medium); }
+      & > .button:last-child { margin-inline-start: auto; }
+    }
+    & > .notice[data-state="current"] {
+      border-color: var(--color-line);
+      background: none;
+      color: var(--color-ink-muted);
     }
 
     & > .file {
@@ -72,6 +96,7 @@
       & .added { color: var(--color-diff-add); }
       & .deleted { color: var(--color-diff-del); }
       & .actions { display: flex; gap: var(--space-3xs); margin-inline-start: auto; }
+      & .updated { color: var(--color-ink-muted); font-size: var(--text-xs); font-variant-numeric: tabular-nums; white-space: nowrap; }
     }
 
     & .hunks { overflow-x: auto; }
@@ -100,5 +125,6 @@
     }
 
     @media (prefers-reduced-motion: reduce) { & .toggle svg { transition: none; } }
+    @media (forced-colors: active) { & > .notice { border-color: CanvasText; } }
   }
 }

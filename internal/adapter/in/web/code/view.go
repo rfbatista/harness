@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"operators-mcp/internal/adapter/in/web/gitsync"
 	"operators-mcp/internal/domain"
 )
 
@@ -63,6 +64,9 @@ type Bar struct {
 	BrowseHref          string
 	Refs                []string
 	Ref                 string
+	// Sync is the chip of the session's worktree, painted after the commit
+	// until the browser's own takes over; nil for any other view.
+	Sync *gitsync.Chip
 }
 
 // ZoneTag is a zone-tag: its name and its context's hue.
@@ -396,7 +400,7 @@ func (v *View) buildDiff(s Seed, zones map[string]ZoneTag) {
 			row.Dir = dir + "/"
 		}
 		if f.OldPath != nil {
-			row.Old = "from " + *f.OldPath
+			row.Old = *f.OldPath
 		}
 		df := DiffFile{
 			Path: f.Path, Slug: slug, ID: "diff-" + slug, NameID: "diff-" + slug + "-name", BodyID: "diff-" + slug + "-body",

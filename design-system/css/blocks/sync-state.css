@@ -1,0 +1,94 @@
+/*
+ * Sync state — a branch against its upstream (or its base), as a chip: which
+ * remote, how many commits ahead and behind, and the word when there are no
+ * counts. It is a span (a row, a head line) or a button (opens the sync panel,
+ * sync-panel.css). The state is never colour alone: a counted arrow or a word
+ * says it, and the two states with nothing to count have a dashed edge.
+ * <span class="sync-state" data-state="ahead"><span class="upstream" title="origin/agent/x">origin</span>
+ *   <span class="counts"><span class="ahead"><span aria-hidden="true">↑</span>3<span class="visually-hidden"> ahead</span></span>
+ *   <span class="behind"><span aria-hidden="true">↓</span>0<span class="visually-hidden"> behind</span></span></span></span>
+ * <span class="sync-state" data-state="in-sync"><span class="upstream">origin/x</span><span class="word">in sync</span></span>
+ * data-state: in-sync (a check and "in sync"), ahead, behind, diverged (counts),
+ * none (dashed, "not pushed"), gone ("upstream deleted", keeps the name),
+ * unknown (dashed, "not fetched", no counts). Exceptions: data-loading (a ring
+ * before the word, counts dimmed), data-old (the fetch is over an hour old:
+ * the counts are underlined with a dot pattern).
+ */
+
+@layer blocks {
+  .sync-state {
+    --_tone: var(--color-ink-muted);
+
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-xs);
+    max-inline-size: 100%;
+    min-inline-size: 0;
+    block-size: 1.25rem;
+    padding: 0 var(--space-xs);
+    border: var(--border-width) solid var(--color-line-strong);
+    border-radius: var(--radius-xs);
+    background: var(--color-canvas);
+    color: var(--_tone);
+    font-family: inherit;
+    font-size: var(--text-xs);
+    line-height: 1;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+
+    & > .upstream {
+      min-inline-size: 4ch;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      font-family: var(--font-mono);
+      color: var(--color-ink);
+    }
+
+    & > .counts { display: inline-flex; gap: var(--space-xs); flex: none; }
+    & > .word { flex: none; }
+    & .ahead { color: var(--color-signal-strong); }
+    & .behind { color: var(--color-attention-strong); }
+
+    &[data-state="ahead"] { --_tone: var(--color-signal-strong); }
+    &[data-state="behind"],
+    &[data-state="diverged"],
+    &[data-state="gone"] {
+      --_tone: var(--color-attention-strong);
+      border-color: var(--color-attention);
+    }
+    &[data-state="none"],
+    &[data-state="unknown"] { border-style: dashed; }
+    &[data-state="in-sync"] > .word::before { content: "✓ " / ""; }
+
+    &[data-old] > .counts { text-decoration: underline dotted; text-underline-offset: 0.2em; }
+
+    &[data-loading] {
+      & > .counts { opacity: 0.55; }
+      & > .word::before {
+        content: "";
+        display: inline-block;
+        inline-size: 0.7rem;
+        block-size: 0.7rem;
+        margin-inline-end: var(--space-2xs);
+        border: 2px solid var(--color-ink-faint);
+        border-inline-end-color: transparent;
+        border-radius: var(--radius-round);
+        vertical-align: -1px;
+        animation: button-spin 700ms linear infinite;
+      }
+    }
+
+    /* As a button (it opens the panel). */
+    &:is(button) {
+      cursor: pointer;
+      &:hover { background: var(--color-hover); }
+      &:focus-visible { outline: var(--border-focus-width) solid var(--color-focus); outline-offset: 1px; }
+    }
+
+    @media (forced-colors: active) { border-color: CanvasText; }
+    @media (prefers-reduced-motion: reduce) { &[data-loading] > .word::before { animation: none; } }
+  }
+
+  /* The slot the chip takes in a bar or a row: it shrinks last (code-source-bar.css, row.css). */
+  .sync-slot { display: inline-flex; min-inline-size: 0; }
+}

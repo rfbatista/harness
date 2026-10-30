@@ -72,7 +72,7 @@ export function summaryRowView(f, { slug, current, fresh }) {
     name: baseName(f.path),
     stat,
     note: f.binary ? "binary" : notLoaded(f) ? "not loaded" : "",
-    old: f.oldPath ? `from ${f.oldPath}` : "",
+    old: f.oldPath ?? "",
     label: `${f.path}, ${mark?.word.toLowerCase() ?? f.status}${stat ? `, ${stat.added} ${stat.deleted}` : ""}`,
   };
 }
@@ -182,7 +182,7 @@ export function placeholderOf({ file = null, entry = null, href = (p) => p }) {
 }
 
 /** The source bar's origin and state (code-source-bar block). */
-export function sourceBarView({ repositoryName, ref, commit, dirty, state, kind }) {
+export function sourceBarView({ repositoryName, ref, commit, dirty, state, kind, count = 0 }) {
   return {
     repo: repositoryName,
     branch: ref,
@@ -190,7 +190,7 @@ export function sourceBarView({ repositoryName, ref, commit, dirty, state, kind 
     commitTitle: commit,
     dirty: kind === "session" && dirty > 0 ? `${formatCount(dirty)} uncommitted` : "",
     state: state || null,
-    word: stateWord(state),
+    word: stateWord(state, { count }),
   };
 }
 
@@ -208,7 +208,7 @@ export function viewsView(route, { count, kind, current }) {
 }
 
 /** The scope switch: All, Branch, Working, with the ones that cannot answer disabled and titled why. */
-export function scopesView(route, { scope, gone, baseGone, baseRef }) {
+export function scopesView(route, { scope, gone, baseGone, baseRef, working = 0 }) {
   const base = baseRef ? `The base branch ${baseRef} no longer exists` : "The base branch no longer exists";
   const why = {
     all: gone ? "The worktree was removed, so its uncommitted work is gone" : baseGone ? base : "",
@@ -222,6 +222,8 @@ export function scopesView(route, { scope, gone, baseGone, baseRef }) {
     current: s === scope ? "page" : null,
     disabled: why[s] ? "true" : null,
     title: why[s] || null,
+    /** The Working scope carries its count, so uncommitted work shows without opening it. */
+    count: s === "working" && working > 0 ? formatCount(working) : "",
   }));
 }
 
