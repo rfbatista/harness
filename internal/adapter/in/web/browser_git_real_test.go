@@ -149,6 +149,19 @@ func TestRealGitTaskPageFetchPushAndRefusals(t *testing.T) {
 		t.Error("the fetch did not run in the repository")
 	}
 
+	// The gone worktree reads "worktree gone", offers no Push and opens Code on the branch.
+	var goneText, goneHref string
+	var gonePush bool
+	b.run("the gone row", chromedp.Evaluate(textJS(r.popRow("gone")), &goneText),
+		chromedp.Evaluate(`(() => { const p = document.querySelector('`+r.popRow("gone")+` [data-push]'); return !!p && p.checkVisibility() })()`, &gonePush),
+		chromedp.Evaluate(`document.querySelector('`+r.popRow("gone")+` .actions a').getAttribute('href')`, &goneHref))
+	if !strings.Contains(goneText, "worktree gone") || strings.Contains(goneText, "clean") || gonePush {
+		t.Errorf("gone row = %q, push offered %v", goneText, gonePush)
+	}
+	if want := "/projects/p1/tasks/" + r.task + "/sessions/" + r.at.Sessions["gone"] + "/code/changes?scope=branch"; goneHref != want {
+		t.Errorf("gone Code link = %q, want %q", goneHref, want)
+	}
+
 	// A hook on origin declines the push: the strip names git's reason, the
 	// branch stays ahead, origin is untouched.
 	remove := r.f.RefuseInOrigin(t, "ahead")
