@@ -27,6 +27,12 @@ type CodeWatcherDeps struct {
 	// Tree, when set, is told to read a workspace's tree snapshot again
 	// whenever a change is seen, before code_changed goes out (*Code).
 	Tree TreeRefresher
+	// State, when set, is told the status of each poll and announces the
+	// worktree's git state (git_state) with every code_changed, and whenever
+	// the state moves alone (a push or a fetch seen in the worktree). It
+	// needs a Git that also reads the status in the poll's one run
+	// (ports.GitStatusSnapshotter); without one nothing is announced.
+	State StateObserver
 	// Interval is CodeWatchInterval when zero.
 	Interval time.Duration
 	// Now is the clock the interval is measured with; nil is time.Now.
@@ -57,6 +63,8 @@ type watchedWorktree struct {
 	sessions    int
 	fingerprint string // "" until first seen
 	announced   time.Time
+	// stateAnnounced is when a git_state last went out for the worktree.
+	stateAnnounced time.Time
 }
 
 // NewCodeWatcher returns a watcher; Start begins polling.
@@ -229,9 +237,19 @@ func (w *CodeWatcher) Poll(ctx context.Context) {
 	}
 	w.mu.Unlock()
 
+	snapshotter, _ := w.d.Git.(ports.GitStatusSnapshotter)
 	for _, t := range targets {
 		callCtx, cancel := context.WithTimeout(ctx, w.d.Interval)
-		head, fingerprint, err := w.d.Git.Snapshot(callCtx, t.path)
+		var (
+			head, fingerprint string
+			status            *ports.GitWorktreeStatus
+			err               error
+		)
+		if snapshotter != nil && w.d.State != nil {
+			head, fingerprint, status, err = snapshotter.SnapshotStatus(callCtx, t.path)
+		} else {
+			head, fingerprint, err = w.d.Git.Snapshot(callCtx, t.path)
+		}
 		cancel()
 		if err != nil {
 			continue
@@ -239,29 +257,61 @@ func (w *CodeWatcher) Poll(ctx context.Context) {
 		w.mu.Lock()
 		wt := w.watched[t.id]
 		var change *ports.CodeChange
+		recorded, live, stateDue := false, false, false
+		projectID := ""
 		switch {
 		case wt == nil: // untracked meanwhile
 		case !w.followed[wt.projectID]: // the last follower left meanwhile
 		case wt.fingerprint == "":
 			wt.fingerprint = fingerprint
+			recorded, live = true, true
 		case wt.fingerprint != fingerprint && w.d.Now().Sub(wt.announced) >= w.d.Interval:
 			wt.fingerprint, wt.announced = fingerprint, w.d.Now()
 			change = &ports.CodeChange{WorkspaceID: t.id, Head: head, ProjectID: wt.projectID}
+			live = true
+		default:
+			live = true
+		}
+		if live {
+			projectID = wt.projectID
+			stateDue = w.d.Now().Sub(wt.stateAnnounced) >= w.d.Interval
 		}
 		w.mu.Unlock()
-		if change == nil {
-			continue
+
+		// The state is observed on every look, so a read of it costs no git;
+		// it goes out with a code change, or alone when it moved by itself.
+		var state *domain.GitState
+		if live && status != nil && w.d.State != nil {
+			var moved bool
+			if observed, m, err := w.d.State.ObserveGitState(ctx, t.id, status); err == nil {
+				state, moved = observed, m
+			}
+			if state == nil || recorded || (change == nil && !(moved && stateDue)) {
+				state = nil
+			}
 		}
-		// The snapshot first: a client that re-reads the tree on the event
-		// must never get the listing from before the change. A refresh that
-		// fails leaves the snapshot to age out; the event still goes.
-		if w.d.Tree != nil {
-			refreshCtx, cancel := context.WithTimeout(ctx, w.d.Interval)
-			_ = w.d.Tree.RefreshTree(refreshCtx, change.WorkspaceID)
-			cancel()
-		}
-		if w.d.Feed != nil {
-			w.d.Feed.AnnounceChange(ports.ProjectChange{CodeChanged: change})
+		if change != nil || state != nil {
+			// The snapshot first: a client that re-reads the tree on the event
+			// must never get the listing from before the change. A refresh that
+			// fails leaves the snapshot to age out; the event still goes.
+			if change != nil && w.d.Tree != nil {
+				refreshCtx, cancel := context.WithTimeout(ctx, w.d.Interval)
+				_ = w.d.Tree.RefreshTree(refreshCtx, change.WorkspaceID)
+				cancel()
+			}
+			if w.d.Feed != nil {
+				if change != nil {
+					w.d.Feed.AnnounceChange(ports.ProjectChange{CodeChanged: change})
+				}
+				if state != nil {
+					w.d.Feed.AnnounceChange(ports.ProjectChange{GitState: &ports.GitStateChange{GitState: state, ProjectID: projectID}})
+					w.mu.Lock()
+					if wt := w.watched[t.id]; wt != nil {
+						wt.stateAnnounced = w.d.Now()
+					}
+					w.mu.Unlock()
+				}
+			}
 		}
 	}
 }

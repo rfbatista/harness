@@ -93,3 +93,14 @@ type BranchMerge struct {
 type WorkspaceRemovalSink interface {
 	WorkspaceRemoved(ws *domain.Workspace)
 }
+
+// BaseBranchPreparer readies the base a session's branch is cut from, before
+// anything is created (driving; *workspaces.BaseBranches implements it): a
+// base of origin's is fetched first, one branch, with the stored credential, so
+// the cut starts at origin's current tip. A local base and another remote's ref
+// are cut as they are, with no network. A refusal is coded (BASE_BRANCH_NOT_FOUND,
+// REMOTE_BRANCH_NOT_FOUND, NO_REMOTE, the GIT_CREDENTIAL_* codes, FETCH_FAILED)
+// and its message names the base. An empty base needs nothing.
+type BaseBranchPreparer interface {
+	PrepareBase(ctx context.Context, repositoryID, repoRoot, base string) error
+}

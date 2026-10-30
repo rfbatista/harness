@@ -760,6 +760,7 @@ func newOrchestrationService(
 	agentHome claudehome.Home,
 	claudeBin ports.ManagedClaudeBin,
 	branchNames *workspaces.BranchNames,
+	baseBranches *workspaces.BaseBranches,
 ) *orchestration.Service {
 	svc := orchestration.NewService(manager, broker, hub, sessions, orchestration.Catalog{
 		Projects:     cat.Projects,
@@ -770,6 +771,7 @@ func newOrchestrationService(
 		Contexts:     cat.Architecture,
 	}, tickets, ws)
 	svc.UseBranchNames(branchNames)
+	svc.UseBaseBranches(baseBranches)
 	if cat.RepositoryArchitectures != nil {
 		// Saves, deletes and exports reach open pages on the project feed.
 		cat.RepositoryArchitectures.UseFeed(svc)
@@ -1026,12 +1028,16 @@ var WorkspacesModule = fx.Module("workspaces",
 		asPort(newGitBranchNames, new(ports.GitBranchNames)),
 		asPort(githubapi.New, new(ports.CodeHost)),
 		asPort(newGitCode, new(ports.GitCode)),
+		asPort(newGitCode, new(ports.GitWorktreeReader)),
 		asPort(filesystem.NewWorktreeFiles, new(ports.WorktreeFiles)),
 		newWorkspacesService,
 		newPullRequestsService,
 		newMergesService,
 		newBranchNamesService,
+		newBaseBranches,
 		newCodeBrowser,
+		newOriginFetcher,
+		asPort(newWorktreeGit, new(ports.WorktreeGit)),
 		newMergeStates,
 	),
 	fx.Invoke(registerCodeWatcher),
@@ -1040,23 +1046,53 @@ var WorkspacesModule = fx.Module("workspaces",
 // newCodeBrowser serves the code views: repositories and worktrees read
 // through git and the filesystem, zoned by the architecture context's read
 // port.
-func newCodeBrowser(ws ports.WorkspaceRepository, repos ports.RepositoryRepository, git ports.GitCode, files ports.WorktreeFiles, cat catalog.Catalog) ports.CodeBrowser {
+func newCodeBrowser(ws ports.WorkspaceRepository, repos ports.RepositoryRepository, git ports.GitCode, files ports.WorktreeFiles, cat catalog.Catalog, worktreeGit ports.WorktreeGit) ports.CodeBrowser {
+	// A running session's staged files come from the code watcher's look.
+	staged, _ := worktreeGit.(workspaces.ObservedStaged)
 	return workspaces.NewCode(workspaces.CodeDeps{
-		Workspaces: ws, Repositories: repos, Git: git, Files: files, Architecture: cat.Architecture,
+		Workspaces: ws, Repositories: repos, Git: git, Files: files, Architecture: cat.Architecture, Staged: staged,
+	})
+}
+
+// newOriginFetcher is the one fetch of a repository's origin: the pull
+// request base refresh and the worktree git state both run it, with the stored
+// credentials, one at a time per repository.
+// Graphs built without the credentials context (some tests) have none, and
+// then nothing is fetched or pushed.
+func newOriginFetcher(git ports.BranchPublisher, creds optionalGitCredentials) *workspaces.OriginFetcher {
+	if creds.Service == nil {
+		return nil
+	}
+	return workspaces.NewOriginFetcher(git, creds.Service)
+}
+
+// newWorktreeGit reads where each session worktree's branch stands against
+// its base and its upstream, from local git only, fetches origin on request
+// and announces the states a fetch moved on the project feed.
+func newWorktreeGit(ws ports.WorkspaceRepository, repos ports.RepositoryRepository, sessions ports.SessionRepository, tickets ports.TicketRepository, git ports.GitWorktreeReader, files ports.WorktreeFiles, publisher ports.BranchPublisher, fetcher *workspaces.OriginFetcher, orch *orchestration.Service) *workspaces.WorktreeGit {
+	return workspaces.NewWorktreeGit(workspaces.WorktreeGitDeps{
+		Workspaces: ws, Repositories: repos, Sessions: sessions, Tickets: tickets, Git: git, Files: files,
+		Publisher: publisher, Fetcher: fetcher, Feed: orch,
 	})
 }
 
 // registerCodeWatcher announces code_changed on the orchestration's project
 // feed while a workspace's session runs and someone follows its project's
 // feed, polling from start to stop. The merge states hear each change too.
-func registerCodeWatcher(lc fx.Lifecycle, sessions ports.SessionRepository, ws ports.WorkspaceRepository, git ports.GitCode, code ports.CodeBrowser, orch *orchestration.Service, merges *workspaces.MergeStates, cat catalog.Catalog) error {
+func registerCodeWatcher(lc fx.Lifecycle, sessions ports.SessionRepository, ws ports.WorkspaceRepository, git ports.GitCode, code ports.CodeBrowser, worktreeGit ports.WorktreeGit, orch *orchestration.Service, merges *workspaces.MergeStates, cat catalog.Catalog) error {
 	// The code browser keeps the tree snapshots the watcher refreshes; one
 	// that cannot would send code_changed before its snapshot is current.
 	tree, ok := code.(workspaces.TreeRefresher)
 	if !ok {
 		return errors.New("the code browser does not keep tree snapshots the code watcher can refresh")
 	}
-	w := workspaces.NewCodeWatcher(workspaces.CodeWatcherDeps{Sessions: sessions, Workspaces: ws, Git: git, Feed: changeSinks{orch, merges}, Tree: tree})
+	// The watcher's status pass also keeps each running worktree's git state,
+	// so a read of it costs no git and git_state follows every code_changed.
+	state, ok := worktreeGit.(workspaces.StateObserver)
+	if !ok {
+		return errors.New("the worktree git state cannot be observed by the code watcher")
+	}
+	w := workspaces.NewCodeWatcher(workspaces.CodeWatcherDeps{Sessions: sessions, Workspaces: ws, Git: git, Feed: changeSinks{orch, merges}, Tree: tree, State: state})
 	w.Subscribe(cat.Bus)
 	orch.ObserveFeedFollowers(w)
 	lc.Append(fx.Hook{
@@ -1128,10 +1164,11 @@ func newPullRequestsService(
 	merges *workspaces.MergeStates,
 	cat catalog.Catalog,
 	creds *gitcredentials.Service,
+	fetcher *workspaces.OriginFetcher,
 ) *workspaces.PullRequests {
 	svc := workspaces.NewPullRequests(workspaces.PullRequestDeps{
 		Workspaces: ws, Repositories: repos, History: history, Git: git, Host: host, Store: store,
-		Sessions: sessions, Tickets: plan, Feed: changeSinks{orch, merges}, Auth: creds,
+		Sessions: sessions, Tickets: plan, Feed: changeSinks{orch, merges}, Auth: creds, Fetcher: fetcher,
 	})
 	svc.Subscribe(cat.Bus)
 	lc.Append(fx.Hook{OnStop: func(context.Context) error {
@@ -1159,6 +1196,12 @@ func newMergesService(
 // branch, against git's rules and the repository's local branches.
 func newBranchNamesService(repos ports.RepositoryRepository, tickets ports.TicketRepository, git ports.GitBranchNames) *workspaces.BranchNames {
 	return workspaces.NewBranchNames(repos, tickets, git)
+}
+
+// newBaseBranches readies the base a session is cut from: a base of origin's
+// is fetched, one branch, under the repository's fetch lock (ADR 0049).
+func newBaseBranches(wt ports.WorktreeManager, git ports.BranchPublisher, fetcher *workspaces.OriginFetcher) *workspaces.BaseBranches {
+	return workspaces.NewBaseBranches(wt, git, fetcher)
 }
 
 // shortID is the part of a session id that names its temp dir: short enough

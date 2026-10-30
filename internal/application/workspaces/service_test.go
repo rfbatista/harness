@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"operators-mcp/internal/adapter/out/persistence/sqlite"
 	"operators-mcp/internal/application/workspaces"
@@ -34,6 +35,7 @@ type fakeWorktree struct {
 	deletedBranches []string
 	lastBranch      string
 	lastBaseRef     string
+	cutAt           string // the commit Add answers
 }
 
 func (f *fakeWorktree) Add(repoRoot, path, branch, baseRef string) (string, error) {
@@ -42,7 +44,7 @@ func (f *fakeWorktree) Add(repoRoot, path, branch, baseRef string) (string, erro
 		return "", f.addErr
 	}
 	f.added = append(f.added, path)
-	return "", nil
+	return f.cutAt, nil
 }
 
 func (f *fakeWorktree) Remove(repoRoot, path string) error {
@@ -107,6 +109,13 @@ func (f *fakeWorkspaceRepo) Create(in domain.Workspace) (*domain.Workspace, erro
 	w.ID = "ws" + string(rune('0'+f.seq.Add(1)))
 	f.items[w.ID] = &w
 	return &w, nil
+}
+
+func (f *fakeWorkspaceRepo) SetPushedAt(id string, at time.Time) error {
+	if w := f.items[id]; w != nil {
+		w.PushedAt = &at
+	}
+	return nil
 }
 
 func (f *fakeWorkspaceRepo) Delete(id string) error {
@@ -457,6 +466,19 @@ func TestService_CreatePassesBaseRefToGit(t *testing.T) {
 	}
 	if wt.lastBranch != "feature/x" || wt.lastBaseRef != "origin/main" {
 		t.Fatalf("git got branch=%q base=%q", wt.lastBranch, wt.lastBaseRef)
+	}
+}
+
+func TestService_CreateRecordsTheRemoteBaseAsGivenAndTheCommitItWasCutAt(t *testing.T) {
+	svc, _, wt, repo := newService(t)
+	wt.cutAt = "abc123"
+
+	ws, err := svc.Create(repo.ID, "Feature X", "feature/x", "origin/feature-x")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ws.BaseRef != "origin/feature-x" || ws.BaseSHA != "abc123" {
+		t.Fatalf("workspace base = %q @ %q, want origin/feature-x @ abc123", ws.BaseRef, ws.BaseSHA)
 	}
 }
 

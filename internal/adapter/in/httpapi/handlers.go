@@ -76,6 +76,9 @@ type Services struct {
 	LiveCalls ports.LiveCalls
 	// Code reads code for the code views (/api/code/*); nil answers 503.
 	Code ports.CodeBrowser
+	// WorktreeGit reads a session worktree's git state and fetches and
+	// pushes (/api/worktree_git_state and kin); nil answers 503.
+	WorktreeGit ports.WorktreeGit
 	// SessionFiles reads a session's virtual file system for the Files view
 	// (/api/sessions/:id/files); nil answers 503.
 	SessionFiles ports.SessionFiles
@@ -160,6 +163,7 @@ type Handler struct {
 	usage          ports.UsageReader
 	liveCalls      ports.LiveCalls
 	code           ports.CodeBrowser
+	worktreeGit    ports.WorktreeGit
 	sessionFiles   ports.SessionFiles
 	gitCredentials ports.GitCredentials
 	shells         ports.ShellEdits
@@ -220,6 +224,7 @@ func NewHandler(s Services) *Handler {
 		usage:          s.Usage,
 		liveCalls:      s.LiveCalls,
 		code:           s.Code,
+		worktreeGit:    s.WorktreeGit,
 		sessionFiles:   s.SessionFiles,
 		gitCredentials: s.GitCredentials,
 		shells:         s.Shells,

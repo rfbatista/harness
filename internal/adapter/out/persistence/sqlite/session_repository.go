@@ -101,6 +101,9 @@ func (r *SessionRepository) Query(ctx context.Context, filter ports.SessionFilte
 	if filter.TicketID != "" {
 		q = q.Where("ticket_id = ?", filter.TicketID)
 	}
+	if filter.WorkspaceID != "" {
+		q = q.Where("workspace_id = ?", filter.WorkspaceID)
+	}
 	if len(filter.TicketIDs) > 0 {
 		q = q.Where("ticket_id IN ?", filter.TicketIDs)
 	}

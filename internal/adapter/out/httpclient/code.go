@@ -76,6 +76,9 @@ func (c *Code) CodeDiff(ctx context.Context, q ports.CodeDiffQuery) (*domain.Cod
 	case q.Limit != 0:
 		v.Set("limit", strconv.Itoa(q.Limit))
 	}
+	if q.NoHunks {
+		v.Set("hunks", "none")
+	}
 	var out domain.CodeDiff
 	if err := c.c.get(ctx, "/api/code/diff", v, &out); err != nil {
 		return nil, err

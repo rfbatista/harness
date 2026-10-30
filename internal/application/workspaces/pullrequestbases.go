@@ -52,30 +52,15 @@ func (s *PullRequests) RefreshPullRequestBases(ctx context.Context, workspaceID 
 	case !t.remote.IsGitHub():
 		return nil, domain.PullRequestError(domain.CodePRNoRemote, "origin is on "+t.remote.Host+", not GitHub; pull requests are opened on GitHub only")
 	}
-	lock := s.lock("fetch\x00" + t.root)
-	lock.Lock()
-	defer lock.Unlock()
-
 	if err := s.missingCredential(ctx, t); err != nil {
 		return nil, err
 	}
-	op, err := s.d.Auth.Operation(ctx, t.ws.RepositoryID, t.origin)
-	if err != nil {
+	err = s.fetcher.Fetch(ctx, t.ws.RepositoryID, t.root, t.origin)
+	var failed *OriginFetchError
+	if errors.As(err, &failed) {
+		return nil, domain.PullRequestError(domain.CodePRFetchFailed, "fetching origin failed: "+failed.Error())
+	} else if err != nil {
 		return nil, err
 	}
-	defer op.Release()
-	if op.Push == nil {
-		return nil, s.missingCredential(ctx, t)
-	}
-	fetchCtx, cancel := context.WithTimeout(ctx, fetchTimeout)
-	err = s.d.Git.FetchOrigin(fetchCtx, t.root, op.Env)
-	cancel()
-	switch {
-	case errors.Is(err, ports.ErrRemoteAuthRejected):
-		return nil, domain.GitCredentialRejected(op.Push.Host, op.Push.ID, reasonAfter(err, ports.ErrRemoteAuthRejected))
-	case err != nil:
-		return nil, domain.PullRequestError(domain.CodePRFetchFailed, "fetching origin failed: "+err.Error())
-	}
-	s.d.Auth.Used(op.Push.ID)
 	return s.bases(ctx, t)
 }

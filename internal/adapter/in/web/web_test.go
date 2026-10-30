@@ -134,6 +134,7 @@ type world struct {
 	prs       ports.PullRequests
 	creds     ports.GitCredentials
 	usage     ports.UsageDashboard
+	gitStates ports.WorktreeGit
 	archived  fakeArchivedCounts
 }
 
@@ -192,6 +193,9 @@ func newTestHandler(t *testing.T, w world) http.Handler {
 	}
 	if w.archived != nil {
 		deps.ArchivedTasks = w.archived
+	}
+	if w.gitStates != nil {
+		deps.WorktreeGit = w.gitStates
 	}
 	return NewHandler(deps, builtAssets(t), fallback)
 }

@@ -69,6 +69,9 @@ type Deps struct {
 	// PullRequests offers a session's branch as a pull request on its history
 	// page and badges the task page's rows; nil leaves both out.
 	PullRequests ports.PullRequests
+	// WorktreeGit seeds the task page's session rows (and the open session)
+	// with their worktrees' git state; nil seeds none.
+	WorktreeGit ports.WorktreeGit
 	// Code reads code for the code pages, the session's Code tab and the
 	// history pages' diffs; nil leaves all three out.
 	Code ports.CodeBrowser
@@ -185,7 +188,7 @@ func NewHandler(deps Deps, assets *Assets, fallback http.Handler) http.Handler {
 	homePage := home.Handler{Projects: deps.Projects, Layout: s.layout, Render: render}
 	taskPages := tasks.Handler{
 		Projects: deps.Projects, Tasks: deps.Tasks, Sessions: deps.Sessions,
-		Agents: deps.Agents, Repositories: deps.Repositories, Docs: deps.Documents, Artifacts: deps.Artifacts, PullRequests: deps.PullRequests,
+		Agents: deps.Agents, Repositories: deps.Repositories, Docs: deps.Documents, Artifacts: deps.Artifacts, PullRequests: deps.PullRequests, WorktreeGit: deps.WorktreeGit,
 		Resources: deps.Resources, Comments: deps.Comments, Code: deps.Code, Usage: deps.Usage, TokenSavers: deps.TokenSavers,
 		ArchivedTasks: deps.ArchivedList, Layout: s.layout, Render: render, Now: deps.Now,
 	}

@@ -144,7 +144,58 @@ type CodeDiff struct {
 	// Truncated: hunks were withheld from some file of this page by the
 	// totals limit.
 	Truncated bool `json:"truncated"`
+	// Counts are the files per status over the whole diff, whichever page
+	// is answered; Sections divides a worktree's working diff (nil in the
+	// other scopes).
+	Counts   DiffCounts    `json:"counts"`
+	Sections *DiffSections `json:"sections"`
 }
+
+// DiffCounts are a diff's files per status; they sum to its FileCount.
+type DiffCounts struct {
+	Added       int `json:"added"`
+	Modified    int `json:"modified"`
+	Deleted     int `json:"deleted"`
+	Renamed     int `json:"renamed"`
+	Copied      int `json:"copied"`
+	TypeChanged int `json:"type_changed"`
+	Untracked   int `json:"untracked"`
+}
+
+// Add counts one file of the given status.
+func (c *DiffCounts) Add(status string) {
+	switch status {
+	case ChangeAdded:
+		c.Added++
+	case ChangeDeleted:
+		c.Deleted++
+	case ChangeRenamed:
+		c.Renamed++
+	case ChangeCopied:
+		c.Copied++
+	case ChangeTypeChanged:
+		c.TypeChanged++
+	case ChangeUntracked:
+		c.Untracked++
+	default:
+		c.Modified++
+	}
+}
+
+// DiffSections divides the working diff: Tracked and Untracked sum to its
+// FileCount, Staged (tracked files with a change in the index) is part of
+// Tracked.
+type DiffSections struct {
+	Tracked   int `json:"tracked"`
+	Untracked int `json:"untracked"`
+	Staged    int `json:"staged"`
+}
+
+// The sections of the working scope.
+const (
+	SectionTracked   = "tracked"
+	SectionUntracked = "untracked"
+)
 
 // FileDiff is one changed file. Added and Deleted are -1 for a binary file;
 // Hunks is nil when withheld.
@@ -159,6 +210,10 @@ type FileDiff struct {
 	Withheld *string  `json:"withheld"`
 	Language string   `json:"language"`
 	Zones    []string `json:"zones"`
+	// Section is tracked or untracked in the working scope, nil in the
+	// others; Staged says the change is in the index (working scope only).
+	Section *string `json:"section"`
+	Staged  bool    `json:"staged"`
 }
 
 // Hunk is one @@ block of a unified diff.
