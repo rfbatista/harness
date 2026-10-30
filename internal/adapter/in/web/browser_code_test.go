@@ -35,6 +35,8 @@ type codeWorld struct {
 	srv    *httptest.Server
 	repoID string
 	feed   *fakeFeed
+	// files answers the Files view's routes when a test sets it in its deps.
+	files ports.SessionFiles
 }
 
 // fakeFeed is the project feed (/api/events) the test speaks for: every
@@ -118,7 +120,7 @@ func newCodeWorld(t *testing.T, deps func(w *codeWorld, d *Deps)) *codeWorld {
 	w.feed = newFakeFeed()
 	mux := http.NewServeMux()
 	mux.Handle("/api/events", w.feed)
-	mux.Handle("/api/", httpapi.NewRouter(httpapi.NewHandler(httpapi.Services{Code: code})))
+	mux.Handle("/api/", httpapi.NewRouter(httpapi.NewHandler(httpapi.Services{Code: code, SessionFiles: w.files})))
 	mux.Handle("/", NewHandler(d, assets, nil))
 	w.srv = newBrowserServer(mux)
 	t.Cleanup(w.srv.Close)
@@ -725,7 +727,7 @@ func TestSessionCodeTabOnAPhone(t *testing.T) {
 		t.Fatalf("%v\nJS errors: %v", err, errs.all())
 	}
 	saveShot("code-session-phone.jpg", shot)
-	if strings.Join(tabs, ",") != "Agent,History,App,Design,Code,Merge,Sandbox" {
+	if strings.Join(tabs, ",") != "Agent,History,App,Design,Code,Files,Merge,Sandbox" {
 		t.Errorf("tabs %v", tabs)
 	}
 	if expand {

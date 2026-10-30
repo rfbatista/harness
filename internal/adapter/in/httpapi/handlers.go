@@ -76,6 +76,9 @@ type Services struct {
 	LiveCalls ports.LiveCalls
 	// Code reads code for the code views (/api/code/*); nil answers 503.
 	Code ports.CodeBrowser
+	// SessionFiles reads a session's virtual file system for the Files view
+	// (/api/sessions/:id/files); nil answers 503.
+	SessionFiles ports.SessionFiles
 	// GitCredentials keeps the credentials git remote operations use; nil
 	// answers 503 and leaves them off /api/project_events.
 	GitCredentials ports.GitCredentials
@@ -157,6 +160,7 @@ type Handler struct {
 	usage          ports.UsageReader
 	liveCalls      ports.LiveCalls
 	code           ports.CodeBrowser
+	sessionFiles   ports.SessionFiles
 	gitCredentials ports.GitCredentials
 	shells         ports.ShellEdits
 
@@ -216,6 +220,7 @@ func NewHandler(s Services) *Handler {
 		usage:          s.Usage,
 		liveCalls:      s.LiveCalls,
 		code:           s.Code,
+		sessionFiles:   s.SessionFiles,
 		gitCredentials: s.GitCredentials,
 		shells:         s.Shells,
 

@@ -6,6 +6,7 @@ import (
 	"io"
 	"io/fs"
 	"os"
+	"slices"
 	"strings"
 	"syscall"
 	"unicode/utf8"
@@ -99,6 +100,54 @@ func stat(r *os.Root, p string) (ports.FileStat, error) {
 		}
 	}
 	return ports.FileStat{}, pathNotFound(p)
+}
+
+// ReadDir lists dir ("" the root) by name, each entry's kind as lstat sees
+// it. dir is walked like Stat does, so it is never reached through a symlink.
+func (WorktreeFiles) ReadDir(root, dir string) ([]ports.DirEntry, error) {
+	r, err := os.OpenRoot(root)
+	if err != nil {
+		return nil, missing(root, err)
+	}
+	defer r.Close()
+	st, err := stat(r, dir)
+	if err != nil {
+		return nil, err
+	}
+	if st.Kind != domain.EntryDir {
+		if st.Kind == domain.EntrySymlink && st.Escapes {
+			return nil, linkOutside(dir)
+		}
+		return nil, pathNotFound(dir)
+	}
+	name := dir
+	if name == "" {
+		name = "."
+	}
+	d, err := r.Open(name)
+	if err != nil {
+		return nil, pathNotFound(dir)
+	}
+	defer d.Close()
+	list, err := d.ReadDir(-1)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]ports.DirEntry, 0, len(list))
+	for _, e := range list {
+		kind := ""
+		switch t := e.Type(); {
+		case t&fs.ModeSymlink != 0:
+			kind = domain.EntrySymlink
+		case t.IsDir():
+			kind = domain.EntryDir
+		case t.IsRegular():
+			kind = domain.EntryFile
+		}
+		out = append(out, ports.DirEntry{Name: e.Name(), Kind: kind})
+	}
+	slices.SortFunc(out, func(a, b ports.DirEntry) int { return strings.Compare(a.Name, b.Name) })
+	return out, nil
 }
 
 // open opens the regular file path for reading, refusing anything else.

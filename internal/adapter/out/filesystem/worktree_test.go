@@ -97,3 +97,36 @@ func TestWorktreeFilesLines(t *testing.T) {
 		}
 	}
 }
+
+func TestWorktreeFilesReadDirListsNamesWithoutFollowingLinks(t *testing.T) {
+	root := worktree(t)
+	w := filesystem.NewWorktreeFiles()
+	got, err := w.ReadDir(root, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	kinds := map[string]string{}
+	for _, e := range got {
+		kinds[e.Name] = e.Kind
+	}
+	want := map[string]string{"dir": domain.EntryDir, "linkdir": domain.EntrySymlink, "out": domain.EntrySymlink, "outdir": domain.EntrySymlink, "in": domain.EntrySymlink}
+	for n, k := range want {
+		if kinds[n] != k {
+			t.Errorf("%s = %q, want %q", n, kinds[n], k)
+		}
+	}
+	for i := 1; i < len(got); i++ {
+		if got[i-1].Name > got[i].Name {
+			t.Errorf("not by name: %q before %q", got[i-1].Name, got[i].Name)
+		}
+	}
+	sub, err := w.ReadDir(root, "dir/sub")
+	if err != nil || len(sub) != 1 || sub[0].Name != "a.go" || sub[0].Kind != domain.EntryFile {
+		t.Fatalf("dir/sub = %+v, %v", sub, err)
+	}
+	for p, code := range map[string]string{"missing": "PATH_NOT_FOUND", "dir/sub/a.go": "PATH_NOT_FOUND", "linkdir": "PATH_NOT_FOUND", "outdir": "INVALID_INPUT"} {
+		if _, err := w.ReadDir(root, p); errs.Code(err) != code {
+			t.Errorf("ReadDir(%q) = %v, want %s", p, err, code)
+		}
+	}
+}
