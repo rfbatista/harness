@@ -256,7 +256,8 @@ test("the tab row has one entry per terminal, the one on show current, with a ro
   assert.equal(a.tabindex, "0");
   assert.equal(b.tabindex, "-1");
   assert.equal(b.locked, true);
-  assert.equal(b.where, "Resources");
+  assert.equal(b.where, "", "a root's own terminal is labelled by the root alone");
+  assert.equal(b.label, "Resources");
   assert.equal(a.closeLabel, "Close terminal: web/src");
   assert.equal(b.readonlyNote, true);
   instance.select(b.id);
@@ -329,4 +330,12 @@ test("Escape typed in a terminal is the shell's: it does not restore the dock", 
   assert.equal(instance.expanded, true);
   instance.escape({ key: "Escape", target: document.createElement("button") });
   assert.equal(instance.expanded, false);
+});
+
+test("a terminal on a folder is labelled by its root and the folder; on the root, by the root alone", async () => {
+  const { instance } = await setup({ existing: [open("worktree", "web/src"), open("worktree", ""), open("resources", "docs")] });
+  const [folder, root, res] = instance.tabs;
+  assert.deepEqual([folder.where, folder.label], ["Worktree", "web/src"]);
+  assert.deepEqual([root.where, root.label], ["", "Worktree"]);
+  assert.deepEqual([res.where, res.label], ["Resources", "docs"]);
 });

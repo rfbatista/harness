@@ -90,7 +90,8 @@ export const personTerms = ({ persons, prefs, measure = defaultMeasure, observeR
       return this.terms.map((t) => ({
         id: t.id,
         label: t.label,
-        where: t.where,
+        // A root's own terminal is labelled by the root alone; a folder's by the root and the folder.
+        where: t.dir ? t.where : "",
         locked: t.readonly,
         title: `${t.where} · ${t.dir || t.where}`,
         closeLabel: `Close terminal: ${t.label}`,
