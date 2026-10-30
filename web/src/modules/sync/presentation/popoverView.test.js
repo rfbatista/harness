@@ -58,7 +58,7 @@ test("a gone worktree has no Push and says so", () => {
   const row = popover([session()], [makeState({ gone: true })]).rows[0];
   assert.deepEqual([row.gone, row.offersPush], [true, false]);
   assert.equal(row.uncommitted, "worktree gone");
-  assert.match(row.codeHref, /\/sessions\/[^/]+\/code\/changes\?scope=branch$/);
+  assert.equal(row.codeHref, "/projects/p1/tasks/t1/sessions/s1/code/changes?scope=branch");
 });
 
 test("the foot has one Fetch per repository of the task, named, and the oldest fetch age", () => {
