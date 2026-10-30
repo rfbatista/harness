@@ -170,6 +170,15 @@ export const filesPanel = (deps) => (/** @type {FilesPanelInput} */ panel) => {
     },
     openRoot: "worktree",
 
+    /** "Open terminal here": asks the person's terminal dock for a terminal on the row's folder. */
+    openTerminal(key) {
+      const row = this.rows.find((r) => r.key === key);
+      if (!row?.root) return;
+      this.$dispatch("person-terminal-open-requested", { sessionId: this.sessionId, root: row.root, dir: row.path ?? "" });
+      // On a phone the tree and the main column take turns: the terminal is in the main one.
+      this.showMain = true;
+    },
+
     rowView(r) {
       const base = { key: r.key, type: r.type, depth: r.depth, depthStyle: `--depth:${r.depth}`, level: r.depth + 1 };
       switch (r.type) {
@@ -189,6 +198,7 @@ export const filesPanel = (deps) => (/** @type {FilesPanelInput} */ panel) => {
             disabled: gone ? "true" : null,
             tag: gone ? "unavailable" : "",
             label: r.root.label,
+            terminalLabel: `Open terminal here: ${r.root.label}`,
             title: r.root.label,
             root: r.root.root,
             dir: "",
@@ -218,6 +228,7 @@ export const filesPanel = (deps) => (/** @type {FilesPanelInput} */ panel) => {
             expanded: isDir ? String(r.open) : null,
             selected: this.selectedKey === `${r.root}:${r.path}` ? "true" : null,
             label: e.name,
+            terminalLabel: `Open terminal here: ${r.path}`,
             title: e.ignored ? `${r.path} (ignored by git)` : r.path,
             root: r.root,
             dir: r.dir,

@@ -110,6 +110,10 @@ export const sessionsPage = ({
     /** The Code tab is served (the server reads code), and each worktree's base branch. */
     codeEnabled: false,
     baseRefs: {},
+    /** Whether each session's terminal dock is expanded, as its dock said. */
+    personTerminalsExpanded: {},
+    /** Terminals the person runs per session, as each dock counted them, for the Files tab's badge. */
+    personTerminalCounts: {},
     /** Changed files per session, as each Code panel counted them, for the tab's badge. */
     codeCounts: {},
     /** The Code tab asked for the whole width (⇧E): the session list hides while it is in front. */
@@ -304,7 +308,11 @@ export const sessionsPage = ({
     },
     /** Focus mode is on, and there is a terminal's Exit focus to leave it by. */
     get focusActive() {
-      return this.focusMode && this.paneTools !== null;
+      return this.focusMode && (this.paneTools !== null || this.dockExpanded);
+    },
+    /** The person's terminal dock is expanded over the selected session's Files tab: a terminal that fills it, as focus mode asks. */
+    get dockExpanded() {
+      return this.showingFiles && this.personTerminalsExpanded[this.selectedId] === true;
     },
     get textSizes() {
       return TEXT_SIZES.map((s) => ({ ...s, value: String(s.px), checked: s.px === this.textSize }));
@@ -389,6 +397,15 @@ export const sessionsPage = ({
           shown: this.detailTab === "files",
         },
       ];
+    },
+    /** "2": the terminals the person has open on the selected session. */
+    get filesBadge() {
+      const n = this.personTerminalCounts[this.selectedId];
+      return n > 0 ? String(n) : "";
+    },
+    get filesBadgeTitle() {
+      const n = this.personTerminalCounts[this.selectedId];
+      return `${n} ${n === 1 ? "terminal" : "terminals"} open`;
     },
     /** The selected session has a worktree whose code the Code tab can read. */
     get hasCode() {
@@ -701,6 +718,16 @@ export const sessionsPage = ({
     },
     codeExpand(event) {
       this.codeExpanded = event.detail?.expanded === true;
+    },
+    /** The person's terminal dock was expanded or restored. */
+    personTerminalsExpandedChanged(event) {
+      const { sessionId, expanded } = event.detail ?? {};
+      if (sessionId) this.personTerminalsExpanded = { ...this.personTerminalsExpanded, [sessionId]: expanded === true };
+    },
+    /** The person's terminal dock of a session counted the terminals that run, for the Files tab's badge. */
+    personTerminalsCounted(event) {
+      const { sessionId, count } = event.detail ?? {};
+      if (sessionId) this.personTerminalCounts = { ...this.personTerminalCounts, [sessionId]: count };
     },
     /** A Code panel counted its session's changed files. */
     codeCounted(event) {

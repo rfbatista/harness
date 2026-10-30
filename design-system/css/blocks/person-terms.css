@@ -125,6 +125,11 @@
     }
   }
 
+  /* In a narrow Files pane the main column is the terminal's: no viewer above it. */
+  @container code (width < 44rem) {
+    .code-layout > .main:has(> .person-terms:not([style*="display: none"])) > :not(.person-terms, [data-code-back]) { display: none; }
+  }
+
   /* With the dock expanded the Files tab is the dock alone: the tree and the viewer hide. */
   .files-pane:has(.person-terms[data-expanded]) {
     & .code-layout > .side,

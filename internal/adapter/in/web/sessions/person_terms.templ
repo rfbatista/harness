@@ -34,6 +34,7 @@ templ PersonTerms(sid, ended string) {
 		x-on:person-terminal-open-requested.window="openRequested"
 		x-on:keydown.escape.window="escape"
 		x-on:terminal-status.stop="terminalStatus"
+		x-on:terminal-exited.stop="terminalExited"
 		data-person-terms
 	>
 		<div

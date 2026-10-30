@@ -16,7 +16,7 @@
 
 import { StructuredError } from "../../../../shared/domain/errors.js";
 import { FeedStatus } from "../../../../shared/domain/feed.js";
-import { clampDock, endedNote, nextDockHeight, refusalCopy, RESTART_NOTE, SESSION_ENDED_NOTE } from "../../domain/personTerms.js";
+import { clampDock, DOCK_MIN_PX, endedNote, nextDockHeight, refusalCopy, RESTART_NOTE, SESSION_ENDED_NOTE } from "../../domain/personTerms.js";
 
 const HEIGHT_KEY = "person-terms.height";
 const EXPANDED_KEY = "person-terms.expanded";
@@ -28,10 +28,12 @@ const WHERE = { worktree: "Worktree", resources: "Resources" };
  *   persons: import("../../domain/ports.js").PersonTerminalGateway,
  *   prefs: import("../../../../shared/infrastructure/storage.js").Preferences,
  *   measure?: (el: Element | undefined) => { height: number },  the tab the dock sits in
+ *   observeResize?: (el: Element, onResize: () => void) => () => void,
  * }} deps
  */
-export const personTerms = ({ persons, prefs, measure = defaultMeasure }) => (sessionId = "") => {
+export const personTerms = ({ persons, prefs, measure = defaultMeasure, observeResize = resizeObserver }) => (sessionId = "") => {
   let stopFollowing = () => {};
+  let stopObserving = () => {};
   let dragPointer = null;
 
   const toTab = (t) => ({
@@ -58,12 +60,15 @@ export const personTerms = ({ persons, prefs, measure = defaultMeasure }) => (se
     expanded: prefs.get(EXPANDED_KEY) === "1",
 
     init() {
+      this.refreshRoom();
+      if (this.$root?.parentElement) stopObserving = observeResize(this.$root.parentElement, () => this.refreshRoom());
       if (this.expanded) this.$dispatch("person-terminals-expanded", { sessionId, expanded: true });
       stopFollowing = persons.followEnded(sessionId, (e) => this.ended(e), (s) => this.feedStatus(s));
       return this.load();
     },
 
     destroy() {
+      stopObserving();
       stopFollowing();
     },
 
@@ -133,6 +138,20 @@ export const personTerms = ({ persons, prefs, measure = defaultMeasure }) => (se
     /** @param {import("../../domain/ports.js").PersonTerminalEnded} e */
     ended(e) {
       this.terms = this.terms.map((t) => (t.id === e.id ? { ...t, ended: endedNote(e) } : t));
+      this.report();
+    },
+
+    /**
+     * @param {CustomEvent<{ id: string, code: number }>} event  a shell's socket said exit. The server's event carries the
+     * sentence to show and overrides this one; until it comes (or if the page missed it) the pane says what is known.
+     */
+    terminalExited(event) {
+      const { id, code } = event.detail ?? {};
+      this.terms = this.terms.map((t) => {
+        if (t.id !== id || t.ended) return t;
+        if (this.sessionEnded && t.readonly) return { ...t, ended: endedNote({ reason: "root_gone", message: SESSION_ENDED_NOTE }) };
+        return { ...t, ended: endedNote({ reason: "exited", message: code ? `The shell exited with code ${code}.` : "The shell exited." }) };
+      });
       this.report();
     },
 
@@ -234,25 +253,32 @@ export const personTerms = ({ persons, prefs, measure = defaultMeasure }) => (se
 
     // ── the dock's size ───────────────────────────────────────────────────────
 
-    /** The tab the dock sits in, as far as it reaches. */
+    /** How tall the tab the dock sits in is, as last measured; 0 while it is hidden. */
+    tabHeight: 0,
+    /** The tab the dock sits in, as far as it reaches; unbounded while the tab is hidden and has no height to measure. */
     get room() {
-      return Math.max(1, measure(this.$el?.parentElement).height);
+      return this.tabHeight > 0 ? this.tabHeight : Number.POSITIVE_INFINITY;
+    },
+    refreshRoom() {
+      this.tabHeight = measure(this.$root?.parentElement).height;
     },
     /** The dock's height in px, within its tab; the CSS default (a share of the tab) until the person sets one. */
     get dockStyle() {
       return this.height === null ? "" : `--dock: ${clampDock(this.height, this.room)}px`;
     },
     get handleValue() {
-      return Math.round((clampDock(this.height ?? 0, this.room) / this.room) * 100);
+      const room = this.room;
+      return Number.isFinite(room) ? Math.round((clampDock(this.height ?? 0, room) / room) * 100) : 0;
     },
 
     setHeight(px) {
+      this.refreshRoom();
       this.height = clampDock(px, this.room);
       prefs.set(HEIGHT_KEY, String(Math.round(this.height)));
     },
 
     handleKey(event) {
-      const next = nextDockHeight(event.key, this.height ?? this.room * 0.48, this.room);
+      const next = nextDockHeight(event.key, this.height ?? (Number.isFinite(this.room) ? this.room * 0.48 : DOCK_MIN_PX), this.room);
       if (next === null) return;
       event.preventDefault();
       this.setHeight(next);
@@ -265,7 +291,7 @@ export const personTerms = ({ persons, prefs, measure = defaultMeasure }) => (se
     },
 
     /** @param {{ clientY: number }} event  @param {{ top: number, bottom: number }} [tab]  the tab's box; measured when not given */
-    dragMove(event, tab = this.$el?.parentElement?.getBoundingClientRect()) {
+    dragMove(event, tab = this.$root?.parentElement?.getBoundingClientRect()) {
       if (!this.dragging || !tab) return;
       this.setHeight(tab.bottom - event.clientY);
     },
@@ -293,6 +319,13 @@ export const personTerms = ({ persons, prefs, measure = defaultMeasure }) => (se
 function readHeight(prefs) {
   const n = Number(prefs.get(HEIGHT_KEY));
   return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+function resizeObserver(el, onResize) {
+  if (typeof ResizeObserver === "undefined") return () => {};
+  const observer = new ResizeObserver(() => onResize());
+  observer.observe(el);
+  return () => observer.disconnect();
 }
 
 function defaultMeasure(el) {

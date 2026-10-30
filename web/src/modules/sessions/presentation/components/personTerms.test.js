@@ -288,3 +288,32 @@ test("a dropped connection offers Reconnect for the terminal on show, and a term
   instance.terminalStatus({ detail: { id, state: "live" } });
   assert.equal(instance.down, "");
 });
+
+test("a shell that exits shows its note even when the server's event is missed, and the event's sentence wins when it comes", async () => {
+  const { instance, mem } = await setup({ existing: [open("worktree", ""), open("resources", "")] });
+  const [wt, res] = instance.terms.map((t) => t.id);
+  instance.terminalExited({ detail: { id: wt, code: 0 } });
+  assert.equal(instance.terms[0].ended.strong, "The shell exited.");
+  assert.equal(instance.terms[0].ended.reopen, true);
+  instance.terminalExited({ detail: { id: res, code: 2 } });
+  assert.equal(instance.terms[1].ended.strong, "The shell exited with code 2.");
+  mem.end(wt, "exited", "The shell exited.");
+  assert.equal(instance.terms[0].ended.strong, "The shell exited.");
+});
+
+test("a resources shell that exits after the session ended says the session ended", async () => {
+  const { instance } = await setup({ existing: [open("resources", "")] });
+  instance.sessionEnded = true;
+  instance.terminalExited({ detail: { id: instance.terms[0].id, code: 0 } });
+  assert.equal(instance.terms[0].ended.strong, SESSION_ENDED_NOTE);
+});
+
+test("while the tab is hidden and has no height, the person's height is kept as it is, not squeezed to nothing", async () => {
+  const storage = memoryStorage();
+  const first = await setup({ storage });
+  first.instance.setHeight(400);
+  const hidden = await setup({ storage, tabHeight: 0 });
+  assert.equal(hidden.instance.height, 400);
+  assert.equal(hidden.instance.dockStyle, "--dock: 400px");
+  assert.equal(hidden.instance.handleValue, 0);
+});
