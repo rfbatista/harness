@@ -43,6 +43,9 @@ type PullRequestDeps struct {
 	Sessions ports.SessionRepository
 	Tickets  ports.TicketReader
 	Feed     ports.ProjectChangeSink
+	// Fetcher is the fetch of origin a base refresh runs, shared with the
+	// worktree git state; nil builds one over Git and Auth.
+	Fetcher *OriginFetcher
 	// Now is the clock the refresh rate is measured with; nil is time.Now.
 	Now func() time.Time
 }
@@ -51,7 +54,8 @@ type PullRequestDeps struct {
 // It is apart from Service because it announces on the project feed, which
 // the orchestration owns, and the orchestration is built from Service.
 type PullRequests struct {
-	d PullRequestDeps
+	d       PullRequestDeps
+	fetcher *OriginFetcher
 
 	// Reads ask the host in the background, under ctx, which Close ends.
 	ctx    context.Context
@@ -69,8 +73,11 @@ func NewPullRequests(d PullRequestDeps) *PullRequests {
 	if d.Now == nil {
 		d.Now = time.Now
 	}
+	if d.Fetcher == nil {
+		d.Fetcher = NewOriginFetcher(d.Git, d.Auth)
+	}
 	ctx, cancel := context.WithCancel(context.Background())
-	return &PullRequests{d: d, ctx: ctx, cancel: cancel, locks: map[string]*sync.Mutex{}, refreshed: map[string]time.Time{}}
+	return &PullRequests{d: d, fetcher: d.Fetcher, ctx: ctx, cancel: cancel, locks: map[string]*sync.Mutex{}, refreshed: map[string]time.Time{}}
 }
 
 // Subscribe removes a deleted project's pull request records. A deleted

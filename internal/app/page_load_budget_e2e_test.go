@@ -132,6 +132,7 @@ func newBudgetProject(t *testing.T) *budgetProject {
 		ws      *workspaces.Service
 		prs     *workspaces.PullRequests
 		code    ports.CodeBrowser
+		wtGit   ports.WorktreeGit
 		art     *artifacts.Service
 		usageSv *usage.Service
 		inbox   optionalNotifications
@@ -143,7 +144,7 @@ func newBudgetProject(t *testing.T) *budgetProject {
 		fx.Supply(Config{HTTPAddr: "127.0.0.1:0", MCPAddr: "127.0.0.1:0", DBPath: filepath.Join(dir, "harness.db"), Root: dir, ClaudeBin: "/bin/true", SessionShell: "direct"}),
 		PersistenceModule, CatalogModule, PlanningModule, WorkspacesModule, GitCredentialsModule,
 		AgentRuntimeModule, TaskChannelModule, TextProcessingModule, UsageModule, NotificationsModule,
-		fx.Populate(&cat, &orch, &plan, &ws, &prs, &code, &art, &usageSv, &inbox, &creds, &b.db, &b.sessions),
+		fx.Populate(&cat, &orch, &plan, &ws, &prs, &code, &wtGit, &art, &usageSv, &inbox, &creds, &b.db, &b.sessions),
 		fx.NopLogger,
 	)
 	if err := app.Start(b.ctx); err != nil {
@@ -174,7 +175,7 @@ func newBudgetProject(t *testing.T) *budgetProject {
 	b.handler = web.NewHandler(web.Deps{
 		Projects: cat.Projects, Tasks: plan, Sessions: orch, Agents: cat.Agents, Repositories: cat.Projects, EnvFiles: cat.Projects,
 		RunCommands: cat.Projects, Documents: plan, History: ws, Code: code, Workspaces: ws, Artifacts: art, ProjectSummaries: cat.Projects,
-		PullRequests: prs, Resources: plan, Comments: plan, Notifications: notes, Usage: usageSv, TokenSavers: cat.Capabilities,
+		PullRequests: prs, WorktreeGit: wtGit, Resources: plan, Comments: plan, Notifications: notes, Usage: usageSv, TokenSavers: cat.Capabilities,
 		TokenSaverInstalls: cat.Capabilities, GitCredentials: creds.port(),
 	}, assets, nil)
 	return b

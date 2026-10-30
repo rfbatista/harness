@@ -75,7 +75,16 @@ func (h *Handler) handleCodeDiff(c echo.Context) error {
 		}
 		limit, totalsOnly = n, n == 0
 	}
+	noHunks := false
+	switch c.QueryParam("hunks") {
+	case "":
+	case "none":
+		noHunks = true
+	default:
+		return &domain.StructuredError{Code: "INVALID_INPUT", Message: "hunks must be none"}
+	}
 	diff, err := h.code.CodeDiff(c.Request().Context(), ports.CodeDiffQuery{
+		NoHunks:      noHunks,
 		After:        c.QueryParam("after"),
 		Limit:        limit,
 		TotalsOnly:   totalsOnly,

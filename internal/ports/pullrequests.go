@@ -56,6 +56,11 @@ type PullRequestBases interface {
 // branch origin does not have.
 var ErrRemoteBranchNotFound = errors.New("branch not found on origin")
 
+// ErrPushRejected is what BranchPublisher.Push wraps when the remote refused
+// the push for what it carries (not a fast-forward, a pre-receive hook), not
+// for the credential or the network. The error's text is git's own.
+var ErrPushRejected = errors.New("the remote rejected the push")
+
 // ErrRemoteAuthRejected wraps a fetch or push origin refused for its
 // credential; the error carries the remote's reason.
 var ErrRemoteAuthRejected = errors.New("origin refused the credential")

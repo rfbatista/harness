@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"operators-mcp/internal/adapter/out/persistence/sqlite"
 	"operators-mcp/internal/application/workspaces"
@@ -108,6 +109,13 @@ func (f *fakeWorkspaceRepo) Create(in domain.Workspace) (*domain.Workspace, erro
 	w.ID = "ws" + string(rune('0'+f.seq.Add(1)))
 	f.items[w.ID] = &w
 	return &w, nil
+}
+
+func (f *fakeWorkspaceRepo) SetPushedAt(id string, at time.Time) error {
+	if w := f.items[id]; w != nil {
+		w.PushedAt = &at
+	}
+	return nil
 }
 
 func (f *fakeWorkspaceRepo) Delete(id string) error {

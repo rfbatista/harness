@@ -19,8 +19,8 @@ import (
 //	         .gitignore, bulk/ files whose lines pass the diff total), then a
 //	         rename with an edit, then a merge of the branch side.
 //	session: a worktree cut from main (BaseRef "main") with a committed
-//	         change and addition, and on disk an edit, a deletion, an
-//	         untracked file and an ignored one.
+//	         change and addition, and on disk an edit (staged), a deletion,
+//	         an untracked file and an ignored one.
 //	gone:    a branch whose worktree was removed from disk.
 type CodeFixture struct {
 	// RepoDir is the main checkout, on main.
@@ -198,6 +198,7 @@ func NewCodeFixture(t *testing.T) *CodeFixture {
 	}
 	write(wt, "new.txt", "brand\nnew\n")
 	write(wt, "ignored.log", "noise\n")
+	git(wt, "add", "README.md") // staged: README.md's edit is in the index
 
 	git(repo, "worktree", "add", "-q", "-b", f.GoneBranch, f.GoneWorktree, "main")
 	write(f.GoneWorktree, "gone.txt", "committed before the worktree went\n")

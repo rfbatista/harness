@@ -3,6 +3,7 @@ package gitcli
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -70,7 +71,31 @@ func (p BranchPublisher) FetchBranch(ctx context.Context, repoRoot, branch strin
 func (p BranchPublisher) Push(ctx context.Context, repoRoot, branch string, env []string) error {
 	ref := "refs/heads/" + branch
 	_, err := p.d.gitNetwork(ctx, repoRoot, env, "push", "--porcelain", "--set-upstream", "origin", ref+":"+ref)
+	if err != nil && pushRefused(err.Error()) && !errors.Is(err, ports.ErrRemoteAuthRejected) {
+		return rejectedPush{err}
+	}
 	return err
+}
+
+// rejectedPush is a push error the remote's refusal caused; it keeps git's
+// text and answers errors.Is(err, ports.ErrPushRejected).
+type rejectedPush struct{ error }
+
+func (e rejectedPush) Unwrap() error        { return e.error }
+func (e rejectedPush) Is(target error) bool { return target == ports.ErrPushRejected }
+
+// pushRefusals are how git says the remote refused what was pushed: a ref that
+// is not a fast-forward, or one a hook turned down.
+var pushRefusals = []string{"[rejected]", "non-fast-forward", "fetch first", "hook declined"}
+
+func pushRefused(reason string) bool {
+	r := strings.ToLower(reason)
+	for _, s := range pushRefusals {
+		if strings.Contains(r, s) {
+			return true
+		}
+	}
+	return false
 }
 
 // Subjects lists base..head subjects, newest first.

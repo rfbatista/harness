@@ -3,6 +3,7 @@ package ports
 import (
 	"context"
 	"operators-mcp/internal/domain"
+	"time"
 
 	"github.com/rfbatista/harnesskit/mcpserver"
 	"github.com/rfbatista/harnesskit/skill"
@@ -161,5 +162,8 @@ type WorkspaceRepository interface {
 	ListByIDs(ctx context.Context, ids []string) []*domain.Workspace
 	// Create records w (its ID is generated) and returns it.
 	Create(w domain.Workspace) (*domain.Workspace, error)
+	// SetPushedAt records when the workspace's branch was last pushed by the
+	// server; WORKSPACE_NOT_FOUND for an unknown id.
+	SetPushedAt(id string, at time.Time) error
 	Delete(id string) error
 }
