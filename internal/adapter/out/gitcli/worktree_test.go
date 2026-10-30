@@ -1,6 +1,7 @@
 package gitcli
 
 import (
+	"context"
 	"errors"
 	"os"
 	"os/exec"
@@ -268,5 +269,38 @@ func TestWorktreeManager_AddFromARemoteRefAnswersItsTip(t *testing.T) {
 	}
 	if got != want {
 		t.Fatalf("cut commit = %s, want origin/main's %s", got, want)
+	}
+}
+
+// A remote base is fetched as one branch, and the cut then starts at origin's
+// current tip, not at the tracking ref as it was last fetched.
+func TestWorktreeManager_AddAfterFetchingOneBranchStartsAtOriginsCurrentTip(t *testing.T) {
+	ctx := context.Background()
+	repo, _, origin := publishRepo(t)
+	other := filepath.Join(t.TempDir(), "other")
+	if out, err := exec.Command("git", "clone", "-q", origin, other).CombinedOutput(); err != nil {
+		t.Fatalf("clone: %v %s", err, out)
+	}
+	gitIn(t, other, "checkout", "-q", "-b", "feature-x")
+	gitIn(t, other, "commit", "-q", "--allow-empty", "-m", "colleague's work")
+	gitIn(t, other, "push", "-q", "origin", "feature-x")
+	staleMain := strings.TrimSpace(gitOut(t, repo, "rev-parse", "refs/remotes/origin/main"))
+	gitIn(t, other, "checkout", "-q", "main")
+	gitIn(t, other, "commit", "-q", "--allow-empty", "-m", "main moved")
+	gitIn(t, other, "push", "-q", "origin", "main")
+
+	if err := NewBranchPublisher().FetchBranch(ctx, repo, "feature-x", nil); err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.TrimSpace(gitOut(t, repo, "rev-parse", "refs/remotes/origin/main")); got != staleMain {
+		t.Fatal("fetching one branch moved another's tracking ref")
+	}
+	want := strings.TrimSpace(gitOut(t, other, "rev-parse", "feature-x"))
+	got, err := NewWorktreeManager().Add(repo, filepath.Join(t.TempDir(), "ws", "session"), "session", "origin/feature-x")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != want {
+		t.Fatalf("session cut at %s, want origin's feature-x %s", got, want)
 	}
 }

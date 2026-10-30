@@ -98,6 +98,9 @@ type Service struct {
 	// branchNames checks a name the person typed for a session's branch; nil
 	// checks nothing and the worktree's own refusal stands alone.
 	branchNames ports.BranchNameChecker
+	// baseBranches readies a session's base branch before anything is
+	// created (a remote base is fetched); nil readies nothing.
+	baseBranches ports.BaseBranchPreparer
 
 	DefaultEnv []string // test-only: extra env for spawned sessions
 
@@ -459,6 +462,13 @@ func (s *Service) prepare(ctx context.Context, in prepareInput) (*prepared, erro
 	}
 	if !in.BranchChecked {
 		if err := validateBranchName(in.Branch); err != nil {
+			return nil, err
+		}
+	}
+	// A base that is refused (not a branch, gone from origin, a fetch that
+	// fails) is refused here: nothing exists yet to clean up.
+	if s.baseBranches != nil {
+		if err := s.baseBranches.PrepareBase(ctx, in.RepositoryID, repo.RootDir, in.BaseBranch); err != nil {
 			return nil, err
 		}
 	}
