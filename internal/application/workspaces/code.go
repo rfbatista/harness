@@ -17,6 +17,12 @@ import (
 
 var _ ports.CodeBrowser = (*Code)(nil)
 
+// ObservedStaged tells a worktree's staged files without running git, when
+// something watches the worktree.
+type ObservedStaged interface {
+	ObservedStagedPaths(workspaceID string) ([]string, bool)
+}
+
 // CodeDeps is what the code views need. Architecture (the project's zones
 // and bounded contexts) may be nil: then nothing is zoned.
 type CodeDeps struct {
@@ -25,6 +31,10 @@ type CodeDeps struct {
 	Git          ports.GitCode
 	Files        ports.WorktreeFiles
 	Architecture ports.ArchitectureMap
+	// Staged, when set, answers the staged files of a running session's
+	// worktree from its code watcher's last look, sparing a git run
+	// (*WorktreeGit satisfies it).
+	Staged ObservedStaged
 	// Now is the clock tree snapshots age by; nil is time.Now.
 	Now func() time.Time
 }

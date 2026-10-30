@@ -21,8 +21,9 @@ type CodeSourceQuery struct {
 // cursor (the page starts at the first changed path greater than it), Limit
 // the files in the page (zero is the default, above domain.MaxDiffPageFiles
 // reads as that, negative is INVALID_INPUT) and TotalsOnly reads the diff
-// totals with no files. After, Limit and TotalsOnly with Path are
-// INVALID_INPUT.
+// totals with no files. NoHunks lists the page's files without their hunks
+// (no patch is read). After, Limit and TotalsOnly with Path are
+// INVALID_INPUT, and so is NoHunks.
 type CodeDiffQuery struct {
 	WorkspaceID  string
 	Scope        string
@@ -34,6 +35,7 @@ type CodeDiffQuery struct {
 	After        string
 	Limit        int
 	TotalsOnly   bool
+	NoHunks      bool
 }
 
 // CodeBrowser reads code, read-only: a repository at a ref or a session's
@@ -116,6 +118,9 @@ type GitCode interface {
 	WorktreeEntries(ctx context.Context, dir string, deleted bool) ([]GitEntry, error)
 	// UntrackedFiles lists a worktree's untracked files git does not ignore.
 	UntrackedFiles(ctx context.Context, dir string) ([]string, error)
+	// StagedPaths lists the paths whose change from HEAD is in the index (a
+	// renamed file by its new path); none when HEAD does not exist yet.
+	StagedPaths(ctx context.Context, dir string) ([]string, error)
 	// Blob reads at most max bytes of the blob object.
 	Blob(ctx context.Context, dir, object string, max int64) ([]byte, error)
 	// Changes lists the files changed from base to head; head "" is the

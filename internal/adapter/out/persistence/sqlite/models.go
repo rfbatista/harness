@@ -636,6 +636,7 @@ type WorkspaceModel struct {
 	BaseRef      string `gorm:"column:base_ref"`
 	BaseSHA      string `gorm:"column:base_sha"`
 	CreatedAt    time.Time
+	PushedAt     *time.Time `gorm:"column:pushed_at"`
 }
 
 // TableName overrides the table name.
@@ -655,5 +656,6 @@ func (m *WorkspaceModel) ToDomain() *domain.Workspace {
 		BaseRef:      m.BaseRef,
 		BaseSHA:      m.BaseSHA,
 		CreatedAt:    m.CreatedAt,
+		PushedAt:     m.PushedAt,
 	}
 }

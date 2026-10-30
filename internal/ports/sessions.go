@@ -12,6 +12,8 @@ type SessionFilter struct {
 	ProjectID string
 	AgentID   string
 	TicketID  string
+	// WorkspaceID matches the sessions that run in the workspace.
+	WorkspaceID string
 	// TicketIDs matches the sessions of any of the listed tasks; empty
 	// matches all. It reads the sessions of many tasks in one query.
 	TicketIDs []string

@@ -137,6 +137,17 @@ func TestADiffPageReadsPatchesForItsOwnFilesOnly(t *testing.T) {
 	if got := f.git.patchCalls.Load(); got != 0 {
 		t.Errorf("a totals-only read ran %d patch reads, want none", got)
 	}
+
+	bare, err := f.code.CodeDiff(ctx, ports.CodeDiffQuery{WorkspaceID: f.workspaceID, NoHunks: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(bare.Files) != domain.DiffPageFiles || bare.FileCount != costFiles {
+		t.Errorf("a page without hunks = %d files, count %d", len(bare.Files), bare.FileCount)
+	}
+	if got := f.git.patchCalls.Load(); got != 0 {
+		t.Errorf("a read without hunks ran %d patch reads, want none", got)
+	}
 }
 
 func TestReadingManyDirectoriesWithinTheWatchIntervalListsTheWorktreeOnce(t *testing.T) {

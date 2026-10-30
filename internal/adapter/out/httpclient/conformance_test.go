@@ -202,6 +202,13 @@ func TestCodeConformance(t *testing.T) {
 	})
 }
 
+func TestWorktreeGitConformance(t *testing.T) {
+	portstest.WorktreeGitConformance(t, func(t *testing.T, f *portstest.WorktreeGitFixture) (ports.WorktreeGit, portstest.WorktreeGitTarget) {
+		svc, at := workspacestest.NewWorktreeGit(t, f)
+		return httpclient.NewWorktreeGit(serve(t, httpapi.Services{WorktreeGit: svc})), at
+	})
+}
+
 func TestSessionCommentsConformance(t *testing.T) {
 	portstest.SessionCommentsConformance(t, func(t *testing.T) (ports.TaskComments, string, portstest.SessionCommentSeed) {
 		c, tid, seed := sessionCommentsServer(t)

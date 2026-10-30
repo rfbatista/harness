@@ -18,4 +18,7 @@ type Workspace struct {
 	// before it was recorded.
 	BaseSHA   string    `json:"base_sha,omitempty"`
 	CreatedAt time.Time `json:"created_at"`
+	// PushedAt is when the server last pushed the workspace's branch
+	// successfully; nil when never.
+	PushedAt *time.Time `json:"pushed_at,omitempty"`
 }
