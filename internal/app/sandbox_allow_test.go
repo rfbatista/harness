@@ -76,3 +76,48 @@ func TestTheSandboxAllowlistFollowsTheToolchainEnvAndNeverReachesTheClaudeHomeOf
 		}
 	}
 }
+
+func TestTheSandboxAllowlistHoldsUvAndPodmanAtTheirDefaultPlaces(t *testing.T) {
+	home := "/home/p"
+	list := sandboxAllowlist(allowSources{
+		Home:   home,
+		Getenv: func(k string) string { return map[string]string{"TMPDIR": "/var/folders/xx/T/"}[k] },
+	})
+	for path, wantWrite := range map[string]bool{
+		filepath.Join(home, ".cache", "uv"):                  true,
+		filepath.Join(home, ".local", "share", "uv"):         true,
+		filepath.Join(home, ".config", "containers"):         false,
+		filepath.Join(home, ".local", "share", "containers"): false,
+		"/var/folders/xx/T/podman":                           true,
+	} {
+		found, write := allowed(list, path)
+		if !found || write != wantWrite {
+			t.Errorf("%s: found %v write %v, want write %v", path, found, write, wantWrite)
+		}
+	}
+	for _, p := range list {
+		if p.Path == filepath.Join(home, ".ssh") || p.Path == home {
+			t.Errorf("allowlist reaches %s", p.Path)
+		}
+	}
+}
+
+func TestTheSandboxAllowlistFollowsWhereUvAndPodmanAreMoved(t *testing.T) {
+	env := map[string]string{
+		"UV_CACHE_DIR": "/w/uvcache", "UV_TOOL_DIR": "/w/uvtools", "UV_PYTHON_INSTALL_DIR": "/w/uvpy",
+		"XDG_CACHE_HOME": "/x/cache", "XDG_DATA_HOME": "/x/data", "XDG_CONFIG_HOME": "/x/config",
+		"XDG_RUNTIME_DIR": "/run/user/1", "CONTAINERS_CONF": "/w/containers.conf",
+	}
+	list := sandboxAllowlist(allowSources{Home: "/home/p", Getenv: func(k string) string { return env[k] }})
+	for path, wantWrite := range map[string]bool{
+		"/w/uvcache": true, "/w/uvtools": true, "/w/uvpy": true,
+		"/x/cache/uv": true, "/x/data/uv": true,
+		"/x/config/containers": false, "/x/data/containers": false,
+		"/w/containers.conf": false, "/run/user/1/podman": true,
+	} {
+		found, write := allowed(list, path)
+		if !found || write != wantWrite {
+			t.Errorf("%s: found %v write %v, want write %v", path, found, write, wantWrite)
+		}
+	}
+}
