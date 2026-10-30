@@ -426,7 +426,7 @@ var AgentRuntimeModule = fx.Module("agentruntime",
 		newVirtualShells,
 		newVirtualFileSystem,
 	),
-	fx.Invoke(registerRuntimeShutdown, registerServerSessions, bindVirtualShells, bindWorkspaceRemovals, bindSandboxSettings,
+	fx.Invoke(registerRuntimeShutdown, registerServerSessions, bindVirtualShells, bindWorkspaceRemovals, bindFilesRootFeed, bindSandboxSettings,
 		bindAgentReadiness, func(*archrules.Service) {}),
 )
 
@@ -513,13 +513,21 @@ func newVirtualShells(plan *planning.Service, art *artifacts.Service, sessions p
 
 // newVirtualFileSystem is the virtual file system of the sessions: their
 // resources roots and the worktrees of their workspaces.
-func newVirtualFileSystem(shells *vfs.Service, sessions ports.SessionRepository, ws ports.WorkspaceRepository, files ports.WorktreeFiles, events *vfs.RootEvents) *vfs.FileSystem {
-	return vfs.NewFileSystem(shells, sessions, ws, files, events)
+func newVirtualFileSystem(shells *vfs.Service, sessions ports.SessionRepository, ws ports.WorkspaceRepository, files ports.WorktreeFiles, git ports.GitCode, events *vfs.RootEvents) *vfs.FileSystem {
+	fsys := vfs.NewFileSystem(shells, sessions, ws, files, events)
+	if ignore, ok := git.(ports.GitIgnore); ok {
+		fsys.UseGitIgnore(ignore)
+	}
+	return fsys
 }
 
 // bindWorkspaceRemovals tells the virtual file system when a workspace is
 // removed, so it raises the worktree root's going away.
 func bindWorkspaceRemovals(ws *workspaces.Service, fsys *vfs.FileSystem) { ws.UseRemovalSink(fsys) }
+
+// bindFilesRootFeed puts the roots of the virtual file system coming and going
+// on the project feed, for the Files view that follows them.
+func bindFilesRootFeed(fsys *vfs.FileSystem, orch *orchestration.Service) { fsys.AnnounceRoots(orch) }
 
 // bindVirtualShells gives every session with a task its virtual shell, and
 // has the shells hear every change they may have to show: documents' and

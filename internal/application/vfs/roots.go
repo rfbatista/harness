@@ -39,6 +39,7 @@ type FileSystem struct {
 	sessions   ports.SessionRepository
 	workspaces ports.WorkspaceRepository
 	files      ports.WorktreeFiles
+	ignore     ports.GitIgnore
 	events     *RootEvents
 }
 

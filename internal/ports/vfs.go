@@ -194,3 +194,73 @@ type ArchitectureFile struct {
 type ArchitectureFileReader interface {
 	ListArchitectureFiles(ctx context.Context, projectID string) ([]ArchitectureFile, error)
 }
+
+// The Files view's reads of a session's virtual file system (see "Contract:
+// Harness server ↔ Web UI — a session's virtual file system"). They are
+// read-only: nothing here creates, renames, deletes or uploads a file.
+
+// The agent states a session's Files view shows.
+const (
+	AgentWorking = "working"
+	AgentWaiting = "waiting"
+	AgentIdle    = "idle"
+	AgentEnded   = "ended"
+)
+
+// SessionRoot is one root of a session's virtual file system as the Files
+// view lists it. Note says why an unavailable root cannot be browsed.
+type SessionRoot struct {
+	Root      string `json:"root"`
+	Label     string `json:"label"`
+	Available bool   `json:"available"`
+	Note      string `json:"note"`
+}
+
+// SessionRoots is the answer of the roots route: both roots, the worktree
+// first.
+type SessionRoots struct {
+	SessionID  string        `json:"session_id"`
+	AgentState string        `json:"agent_state"`
+	Roots      []SessionRoot `json:"roots"`
+}
+
+// SessionEntriesQuery asks for one page of a folder's entries. Dir is
+// relative to the root ("" the root itself); After is the name the previous
+// page ended on; Limit is 0 for the default.
+type SessionEntriesQuery struct {
+	Root  string
+	Dir   string
+	After string
+	Limit int
+}
+
+// SessionEntry is one entry of a folder. Size is set on a file, Ignored on a
+// folder (git's ignore rules, worktree root only), Target on a symlink.
+type SessionEntry struct {
+	Name    string `json:"name"`
+	Kind    string `json:"kind"`
+	Ignored *bool  `json:"ignored,omitempty"`
+	Size    *int64 `json:"size,omitempty"`
+	Target  string `json:"target,omitempty"`
+}
+
+// SessionEntries is one page of a folder, directories first then files, each
+// by name. Next is the cursor of the following page, empty on the last.
+type SessionEntries struct {
+	Root    string         `json:"root"`
+	Dir     string         `json:"dir"`
+	Entries []SessionEntry `json:"entries"`
+	Next    string         `json:"next,omitempty"`
+}
+
+// SessionFiles is the virtual file system as the web UI browses it (driving;
+// the virtual file system domain implements it). Refusals: SESSION_NOT_FOUND,
+// FILES_NOT_AVAILABLE (no workspace), INVALID_INPUT (an unclean path, an
+// unknown root), ROOT_GONE (the root is not available), PATH_NOT_FOUND.
+type SessionFiles interface {
+	SessionRoots(ctx context.Context, sessionID string) (*SessionRoots, error)
+	SessionEntries(ctx context.Context, sessionID string, q SessionEntriesQuery) (*SessionEntries, error)
+	// SessionFile reads one file the way the Code tab does: its content up to
+	// the Code tab's cap, with its binary and truncated flags.
+	SessionFile(ctx context.Context, sessionID, root, path string) (*domain.CodeFile, error)
+}

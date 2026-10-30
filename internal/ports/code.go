@@ -142,6 +142,21 @@ type FileStat struct {
 	Escapes bool
 }
 
+// DirEntry is a name in a directory and what it is: domain.EntryDir,
+// EntryFile, EntrySymlink, or "" for anything else.
+type DirEntry struct {
+	Name string
+	Kind string
+}
+
+// GitIgnore says which paths of a worktree git ignores (driven; gitcli
+// implements it). One call answers for any number of paths.
+type GitIgnore interface {
+	// IgnoredPaths is the subset of paths (relative to dir, forward slashes)
+	// that git's ignore rules ignore.
+	IgnoredPaths(ctx context.Context, dir string, paths []string) (map[string]bool, error)
+}
+
 // WorktreeFiles reads a worktree's files on disk (driven; the filesystem
 // adapter implements it). No read leaves root, and no symlink is followed:
 // a path through a symlinked directory is PATH_NOT_FOUND, or INVALID_INPUT
@@ -153,6 +168,10 @@ type WorktreeFiles interface {
 	Stat(root, path string) (FileStat, error)
 	// Read reads at most max bytes of the regular file path and its size.
 	Read(root, path string, max int64) ([]byte, int64, error)
+	// ReadDir lists the directory dir ("" the root) by name, without
+	// following any symlink: each entry's kind only, a symlink as such. A dir
+	// that is not a directory is PATH_NOT_FOUND.
+	ReadDir(root, dir string) ([]DirEntry, error)
 	// Lines counts the lines of the regular file path, reading it through;
 	// binary says it holds a NUL byte or invalid UTF-8.
 	Lines(root, path string) (lines int, binary bool, err error)
